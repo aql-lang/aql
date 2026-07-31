@@ -6,8 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // attachHarness stands up a debugserve.Server over a fresh registry on an

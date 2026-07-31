@@ -2,7 +2,7 @@ package formatter
 
 import "testing"
 
-// TestScanNumber pins that scanNumber consumes each AQL numeric literal
+// TestScanNumber pins that scanNumber consumes each BORU numeric literal
 // whole — plain decimals, 0d BigInteger/BigDecimal, 0x/0o/0b base
 // literals, `_` separators, and `e` exponents — and stops correctly so a
 // following dot-access or word is left intact.

@@ -1,4 +1,4 @@
-# AQL Language Specification: lang-layer Node/Xml surface
+# BORU Language Specification: lang-layer Node/Xml surface
 # Format: input<TAB>expected<TAB>description
 #
 # The KERNEL literal grammar (parsing, rendering, entity escaping, ${} holes,

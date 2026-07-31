@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // Wave-7 (cluster B2) shared drivers for the *_seam7_test.go coverage
@@ -14,7 +14,7 @@ import (
 // through real dispatch or the static-analysis pass.
 
 // b2Reg returns a fresh default registry with the parser installed and
-// the aql:io words seeded (some behaviour uses print/trace).
+// the boru:io words seeded (some behaviour uses print/trace).
 func b2Reg(t *testing.T) *Registry {
 	t.Helper()
 	r, err := DefaultRegistry()

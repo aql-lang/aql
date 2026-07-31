@@ -1,4 +1,4 @@
-# `aql:csv` — Go `encoding/csv`
+# `boru:csv` — Go `encoding/csv`
 
 > **Status: design proposal, not implemented. OPTIONAL** — its core
 > happy-path overlaps the existing `parse csv` / `emit csv` words (see
@@ -13,7 +13,7 @@ RFC-4180 comma-separated values with configurable knobs:
 `Reader.ReadAll` decodes all rows, `Writer.WriteAll` encodes them, and
 `Comma` (delimiter), `Comment`, `FieldsPerRecord` (row-width policy),
 `LazyQuotes`, and `TrimLeadingSpace` tune non-standard dialects. This
-note specifies an idiomatic AQL surface over that package. Nothing is
+note specifies an idiomatic BORU surface over that package. Nothing is
 implemented yet.
 
 ## 2. Why curated
@@ -21,17 +21,17 @@ implemented yet.
 The raw `go:` reflection bridge would surface the stateful
 `*csv.Reader` / `*csv.Writer` objects, `io.Reader`/`io.Writer`
 constructors, the mutable knob fields, and a `([][]string, error)`
-boundary — none of which read well in AQL. The curated surface hides
+boundary — none of which read well in BORU. The curated surface hides
 the Reader/Writer objects entirely (whole-String in, whole-value out),
 turns the knobs into an options Map, and collapses `(value, error)`
-into value-or-error via `r.AqlError`. The value it adds over
+into value-or-error via `r.BoruError`. The value it adds over
 `parse csv` is **dialect control** (custom delimiter, comment char,
 lazy quotes) — see §8.
 
 ## 3. Import & namespace
 
 ```
-import "aql:csv"           # binds the Csv namespace
+import "boru:csv"           # binds the Csv namespace
 ```
 
 The bare package name `csv` does not clash with any builtin type
@@ -47,7 +47,7 @@ stack). All inner native sigs use `BarrierPos: -1` so the swap form
 dispatches. The options Map is the **top** arg so the swap form reads
 `source Csv.parse opts`; passing no opts uses RFC-4180 defaults.
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `Reader.ReadAll() ([][]string,err)` | `parse` | `[Map opts, String src] -> List[List[String]]` | Parse CSV text to a list of rows, each a list of String fields. | Reader object hidden; knobs → `opts` Map (§ below); fields are always String (no numeric coercion); `([][]string,err)` → value-or-error `parse`. |
 | `Reader.ReadAll()` + header zip | `parse-records` | `[Map opts, String src] -> List[Map]` | Parse CSV using the first row as headers, yielding one Map per data row. | No Go equivalent — a curated convenience that zips the header row against each data row; ragged rows error `parse`. |
@@ -83,7 +83,7 @@ needed. Convert at the boundary with `eng.FromNative` / `eng.ToNative`
 
 ## 6. Errors
 
-Go `error` returns unwrap to an `AqlError` via `r.AqlError(code,
+Go `error` returns unwrap to a `BoruError` via `r.BoruError(code,
 detail, word)` with a kebab-case code:
 
 | code | raised when |
@@ -105,30 +105,30 @@ None — pure in-memory string transformation, runs under any policy.
 **This is the load-bearing section — be candid.** CSV is already
 exposed twice in the tree:
 
-- `parse csv '<text>'` (the `aql:parselang` `parse_csv` export,
+- `parse csv '<text>'` (the `boru:parselang` `parse_csv` export,
   `docs_parselang.go`) — decodes CSV to a List of rows, each a List of
   fields, with **numeric fields coerced to numbers**, zero config.
-- `emit csv <table>` (the `aql:emitlang` `emit_csv` export,
+- `emit csv <table>` (the `boru:emitlang` `emit_csv` export,
   `docs_emitlang.go`) — RFC-4180 CSV from a Table or list of records,
   with a single `{separation:sep}` knob.
 
 **The dividing line:** `parse`/`emit csv` are the **zero-config
 convenience** for the standard comma dialect (and `emit` even infers
-CSV as a Table's natural format via `emit_auto`). `aql:csv` is the
+CSV as a Table's natural format via `emit_auto`). `boru:csv` is the
 **low-level reader/writer with dialect control** — custom `delimiter`,
 `comment` lines, `lazy-quotes`, `trim-leading-space`, strict field-count
 enforcement, and all-String fields (no numeric coercion) for callers who
-need faithful round-tripping of non-standard CSV/TSV/PSV. `aql:csv` does
+need faithful round-tripping of non-standard CSV/TSV/PSV. `boru:csv` does
 not move or change the existing words.
 
 If a project never touches a non-comma dialect or quirky quoting,
-`aql:csv` buys nothing over `parse`/`emit csv` — hence the **OPTIONAL**
+`boru:csv` buys nothing over `parse`/`emit csv` — hence the **OPTIONAL**
 flag (§10). Promote it only if real dialect-control demand appears.
 
 ## 9. Examples (args-before form)
 
 ```
-import "aql:csv"
+import "boru:csv"
 
 "a,b\n1,2" Csv.parse {}                         # [["a","b"],["1","2"]]
 "a;b\n1;2" Csv.parse {delimiter:";"}            # [["a","b"],["1","2"]]  (swap form: src word opts)
@@ -141,19 +141,19 @@ import "aql:csv"
 ## 10. Open questions / out of scope
 
 - **OPTIONAL / redundancy.** Per §8 the comma happy-path duplicates
-  `parse`/`emit csv`. Decide before implementing: ship `aql:csv` only if
+  `parse`/`emit csv`. Decide before implementing: ship `boru:csv` only if
   dialect control (custom delimiter/comment/lazy-quotes) is genuinely
   wanted; otherwise drop this module and let `parselang`/`emitlang`
   own CSV. Listed last in the roster's encoding block for that reason.
 - **`FieldsPerRecord` / ragged rows** — only Go's default (first row
   sets width) is exposed; a `{ragged:true}` opt to allow variable-width
   rows is deferred.
-- **Numeric coercion** — `aql:csv` deliberately keeps fields as String
+- **Numeric coercion** — `boru:csv` deliberately keeps fields as String
   (faithful round-trip); the numeric-coercion behaviour stays the
   exclusive province of `parse csv`.
 - **Streaming row-at-a-time** — Go's incremental `Reader.Read()` /
   `Writer.Write()` are out of scope; the whole-String words cover the
-  in-memory case, and streaming belongs with `aql:io`.
+  in-memory case, and streaming belongs with `boru:io`.
 
 ## 11. Implementation sketch
 
@@ -168,11 +168,11 @@ Wiring checklist — no Go code here. Reference: `lang/go/modules/math.go`
   Exports: {"Csv": …}}`.
 - Register `"csv": BuildCsvModule` in the `modules` map in
   `lang/go/modules/modules.go`.
-- `lang/go/modules/docs_csv.go` — `registerDocs("aql:csv",
+- `lang/go/modules/docs_csv.go` — `registerDocs("boru:csv",
   map[string]string{…})` with a one-line summary per export
   (`TestModuleExportDocs` enforces completeness).
 - `lang/spec/module-csv.tsv` — `input⇥expected⇥description` rows, each
-  leading with `import "aql:csv"`; every positive row paired with an
+  leading with `import "boru:csv"`; every positive row paired with an
   `ERROR:<substring>` negative sibling (Test discipline,
   `lang/go/CLAUDE.md`).
 - No FixedID entry (no external type), no policy wiring.

@@ -8,14 +8,14 @@ import (
 // Coverage for the Function-value dispatch paths in engine.go:
 // execFnDefLiteral (fn values at the pointer: forward collection, /r
 // dispatch mods, anonymous vs named, foreign sub-registry wrappers),
-// execFnDefSigStackMatch, execFnDefSig (body splice + CallAQL arms),
+// execFnDefSigStackMatch, execFnDefSig (body splice + CallBORU arms),
 // compileFnDef, sigParamsCorrespond, trivialDelegationTarget,
 // upcomingArgs, and the /u (stepWordUsurp) and /r (stepWordRef)
 // modifier paths. Reuses covRegistry/runDifferential from
 // compile_pipeline_cov_test.go.
 
 // anonFnVal builds an anonymous Function value the way `afn`/`=>` does:
-// Anonymous=true, authored sigs with an AQL body. compileFnDef attaches
+// Anonymous=true, authored sigs with a BORU body. compileFnDef attaches
 // the body-runner handler at dispatch time.
 func anonFnVal(params []FnParam, returns []*Type, body []Value) Value {
 	return NewFunction(FnDefInfo{
@@ -23,7 +23,7 @@ func anonFnVal(params []FnParam, returns []*Type, body []Value) Value {
 		Signatures: []Signature{{
 			Params:     params,
 			Returns:    returns,
-			Impl:       AQL(body),
+			Impl:       BORU(body),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -37,7 +37,7 @@ func namedFnVal(name string, params []FnParam, returns []*Type, body []Value) Va
 		Signatures: []Signature{{
 			Params:     params,
 			Returns:    returns,
-			Impl:       AQL(body),
+			Impl:       BORU(body),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -260,7 +260,7 @@ func TestNamedFnValueCapturedBindings(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "x", Type: TInteger}},
 			Returns:    []*Type{TInteger},
-			Impl:       AQL(parenBody(NewWord("cadd"), NewWord("x"), NewWord("k"))),
+			Impl:       BORU(parenBody(NewWord("cadd"), NewWord("x"), NewWord("k"))),
 			BarrierPos: BarrierAllForward,
 		}},
 		Captured: []CapturedBinding{{Name: "k", Value: NewInteger(100)}},
@@ -282,7 +282,7 @@ func TestMacroFnValueIsData(t *testing.T) {
 		Macro: true,
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "x", Type: TAny}},
-			Impl:       AQL([]Value{NewWord("x")}),
+			Impl:       BORU([]Value{NewWord("x")}),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -380,9 +380,9 @@ func TestAnonFnValueNoMatchStaysData(t *testing.T) {
 
 // --- foreign sub-registry dispatch ---------------------------------------------
 
-func TestForeignRegistryFnValueCallAQL(t *testing.T) {
+func TestForeignRegistryFnValueCallBORU(t *testing.T) {
 	// An UNNAMED body-bearing fn value carrying a foreign sub-registry:
-	// the body must run via CallAQL in THAT registry, where its
+	// the body must run via CallBORU in THAT registry, where its
 	// module-private word resolves.
 	sub := covRegistry(t, func(r *Registry) {
 		r.RegisterNativeFunc(NativeFunc{
@@ -403,13 +403,13 @@ func TestForeignRegistryFnValueCallAQL(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "x", Type: TInteger}},
 			Returns:    []*Type{TInteger},
-			Impl:       AQL(parenBody(NewWord("modonly"), NewWord("x"))),
+			Impl:       BORU(parenBody(NewWord("modonly"), NewWord("x"))),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
 	out, err := NewTop(main).Run([]Value{fnv, NewInteger(3)})
 	if err != nil {
-		t.Fatalf("foreign CallAQL: %v", err)
+		t.Fatalf("foreign CallBORU: %v", err)
 	}
 	if got := renderAll(out); got != "3000" {
 		t.Errorf("got %q, want 3000", got)
@@ -425,7 +425,7 @@ func TestForeignRegistryWrapperDispatch(t *testing.T) {
 	sig := Signature{
 		Params:     []FnParam{{Name: "n", Type: TInteger}},
 		Returns:    []*Type{TInteger},
-		Impl:       AQL(parenBody(NewWord("cmul"), NewWord("n"), NewInteger(7))),
+		Impl:       BORU(parenBody(NewWord("cmul"), NewWord("n"), NewInteger(7))),
 		BarrierPos: BarrierAllForward,
 	}
 	InstallFnDef(sub, "times7", FnDefInfo{Signatures: []Signature{sig}})
@@ -492,23 +492,23 @@ func TestSigParamsCorrespond(t *testing.T) {
 }
 
 func TestTrivialDelegationTarget(t *testing.T) {
-	sig := &FnSig{Impl: AQL([]Value{NewWord("inner")})}
+	sig := &FnSig{Impl: BORU([]Value{NewWord("inner")})}
 	name, ok := trivialDelegationTarget(sig)
 	if !ok || name != "inner" {
 		t.Errorf("delegation target = %q ok=%v", name, ok)
 	}
 	// Named param disqualifies.
-	sig2 := &FnSig{Params: []FnParam{{Name: "x"}}, Impl: AQL([]Value{NewWord("inner")})}
+	sig2 := &FnSig{Params: []FnParam{{Name: "x"}}, Impl: BORU([]Value{NewWord("inner")})}
 	if _, ok := trivialDelegationTarget(sig2); ok {
 		t.Error("named-param sig recognised as trivial delegation")
 	}
 	// Non-word single-token body disqualifies.
-	sig3 := &FnSig{Impl: AQL([]Value{NewInteger(1)})}
+	sig3 := &FnSig{Impl: BORU([]Value{NewInteger(1)})}
 	if _, ok := trivialDelegationTarget(sig3); ok {
 		t.Error("non-word body recognised as trivial delegation")
 	}
 	// Multi-token body disqualifies.
-	sig4 := &FnSig{Impl: AQL([]Value{NewWord("a"), NewWord("b")})}
+	sig4 := &FnSig{Impl: BORU([]Value{NewWord("a"), NewWord("b")})}
 	if _, ok := trivialDelegationTarget(sig4); ok {
 		t.Error("multi-token body recognised as trivial delegation")
 	}
@@ -522,7 +522,7 @@ func TestCompileFnDefIdempotent(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "x", Type: TInteger}},
 			Returns:    []*Type{TInteger},
-			Impl:       AQL(parenBody(NewWord("x"))),
+			Impl:       BORU(parenBody(NewWord("x"))),
 			BarrierPos: BarrierAllForward,
 		}},
 	}
@@ -772,7 +772,7 @@ func TestSwappedForwardArgsReorderHint(t *testing.T) {
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "n", Type: TInteger}, {Name: "s", Type: TString}},
 				Returns:    []*Type{TInteger},
-				Impl:       AQL(parenBody(NewWord("n"))),
+				Impl:       BORU(parenBody(NewWord("n"))),
 				BarrierPos: BarrierAllForward,
 			}},
 		})

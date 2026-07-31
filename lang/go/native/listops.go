@@ -1,6 +1,6 @@
 package native
 
-import "github.com/aql-lang/aql/eng/go"
+import "github.com/boru-lang/boru/eng/go"
 
 // The list-mutation words (push/pop/unshift/shift) are registered via the
 // consolidated Natives slice in natives.go.
@@ -37,7 +37,7 @@ func pushHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry)
 	// with flex inside is snapshot to its plain shape (AdoptIntoNode).
 	newElem, aerr := eng.AdoptIntoNode(tagged)
 	if aerr != nil {
-		return nil, r.AqlError("push_error", aerr.Error(), "push")
+		return nil, r.BoruError("push_error", aerr.Error(), "push")
 	}
 	// ReadList.Slice always allocates (make), so it never returns nil — a
 	// "list == nil" guard here would be dead (design/TEST-SEAMS.10.md,
@@ -62,7 +62,7 @@ func popHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) 
 	_lst, _ := AsList(args[0])
 	list := _lst.Slice()
 	if len(list) == 0 {
-		return nil, r.AqlError("pop_error", "pop: cannot pop from empty list", "pop")
+		return nil, r.BoruError("pop_error", "pop: cannot pop from empty list", "pop")
 	}
 
 	newList := make([]Value, len(list)-1)
@@ -86,7 +86,7 @@ func unshiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 	// pushHandler.
 	newElem, aerr := eng.AdoptIntoNode(tagged)
 	if aerr != nil {
-		return nil, r.AqlError("unshift_error", aerr.Error(), "unshift")
+		return nil, r.BoruError("unshift_error", aerr.Error(), "unshift")
 	}
 	// Dead "list == nil" guard removed: ReadList.Slice always allocates
 	// (design/TEST-SEAMS.10.md, ADR-005). See pushHandler.
@@ -109,7 +109,7 @@ func shiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry
 	_lst, _ := AsList(args[0])
 	list := _lst.Slice()
 	if len(list) == 0 {
-		return nil, r.AqlError("shift_error", "shift: cannot shift from empty list", "shift")
+		return nil, r.BoruError("shift_error", "shift: cannot shift from empty list", "shift")
 	}
 
 	shifted := list[0]
@@ -127,7 +127,7 @@ func shiftHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry
 func pushFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fd, err := AsFlexList(args[1])
 	if err != nil {
-		return nil, r.AqlError("push_error", "push: expected a FlexList, got "+args[1].Parent.String(), "push")
+		return nil, r.BoruError("push_error", "push: expected a FlexList, got "+args[1].Parent.String(), "push")
 	}
 	// A typed flex list ([:T]) enforces + recursively re-tags on a grow.
 	tagged, werr := d2AdoptTyped(r, args[1], args[0], "push")
@@ -138,7 +138,7 @@ func pushFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// flexed on the way in (eng.AdoptIntoFlex; flex handles share).
 	elem, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
-		return nil, r.AqlError("push_error", aerr.Error(), "push")
+		return nil, r.BoruError("push_error", aerr.Error(), "push")
 	}
 	fd.Elems = append(fd.Elems, elem)
 	return []Value{args[1]}, nil
@@ -147,10 +147,10 @@ func pushFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 func popFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fd, err := AsFlexList(args[0])
 	if err != nil {
-		return nil, r.AqlError("pop_error", "pop: expected a FlexList, got "+args[0].Parent.String(), "pop")
+		return nil, r.BoruError("pop_error", "pop: expected a FlexList, got "+args[0].Parent.String(), "pop")
 	}
 	if len(fd.Elems) == 0 {
-		return nil, r.AqlError("pop_error", "pop: cannot pop from empty list", "pop")
+		return nil, r.BoruError("pop_error", "pop: cannot pop from empty list", "pop")
 	}
 	popped := fd.Elems[len(fd.Elems)-1]
 	fd.Elems = fd.Elems[:len(fd.Elems)-1]
@@ -160,7 +160,7 @@ func popFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 func unshiftFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fd, err := AsFlexList(args[1])
 	if err != nil {
-		return nil, r.AqlError("unshift_error", "unshift: expected a FlexList, got "+args[1].Parent.String(), "unshift")
+		return nil, r.BoruError("unshift_error", "unshift: expected a FlexList, got "+args[1].Parent.String(), "unshift")
 	}
 	// A typed flex list ([:T]) enforces + recursively re-tags on a grow.
 	tagged, werr := d2AdoptTyped(r, args[1], args[0], "unshift")
@@ -170,7 +170,7 @@ func unshiftFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	// Entirely-mutable invariant: adopt a plain Node element into flex.
 	elem, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
-		return nil, r.AqlError("unshift_error", aerr.Error(), "unshift")
+		return nil, r.BoruError("unshift_error", aerr.Error(), "unshift")
 	}
 	fd.Elems = append([]Value{elem}, fd.Elems...)
 	return []Value{args[1]}, nil
@@ -179,10 +179,10 @@ func unshiftFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 func shiftFlexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fd, err := AsFlexList(args[0])
 	if err != nil {
-		return nil, r.AqlError("shift_error", "shift: expected a FlexList, got "+args[0].Parent.String(), "shift")
+		return nil, r.BoruError("shift_error", "shift: expected a FlexList, got "+args[0].Parent.String(), "shift")
 	}
 	if len(fd.Elems) == 0 {
-		return nil, r.AqlError("shift_error", "shift: cannot shift from empty list", "shift")
+		return nil, r.BoruError("shift_error", "shift: cannot shift from empty list", "shift")
 	}
 	shifted := fd.Elems[0]
 	fd.Elems = append([]Value(nil), fd.Elems[1:]...)

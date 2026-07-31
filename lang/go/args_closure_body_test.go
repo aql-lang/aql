@@ -45,9 +45,9 @@ func argsBothEngines(t *testing.T, src string) (interp, compiled string, wasComp
 // original miscompile const-baked the closure analysis frame's [].)
 func TestArgsInDoBodyCompilesWithParity(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	src := `def g fn [[n:Integer] [Any] [do [args]]]  g 7`
 	a, err := New()
 	if err != nil {

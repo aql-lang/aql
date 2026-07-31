@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -28,7 +28,7 @@ const (
 // `case` arm can dispatch on. policy.Denied has carried that code
 // (`permission_denied`, `capability_not_installed`, …) all along, and
 // `lang/go/policy/error.go` says an engine adapter copies it onto the
-// produced AqlError — this was the fileops half of that adapter, written
+// produced BoruError — this was the fileops half of that adapter, written
 // first because REFERENCE.md's codes table is mostly about fileops. The
 // general form now lives in policy_error.go and covers network, process,
 // vault and terminal too; this function is the one site that wants a
@@ -48,7 +48,7 @@ const (
 func fileOpError(r *Registry, def, word, detail string, err error, pos SrcPos) error {
 	var missing *notInstalledError
 	if errors.As(err, &missing) {
-		return r.AqlErrorAt("capability_not_installed", detail, word, pos)
+		return r.BoruErrorAt("capability_not_installed", detail, word, pos)
 	}
 	// The shared adapter (policy_error.go), so fileops and every other gated
 	// capability answer a refusal with the same code. This site passes its OWN
@@ -57,13 +57,13 @@ func fileOpError(r *Registry, def, word, detail string, err error, pos SrcPos) e
 	//
 	// A policy refusal keeps the adapter's UNPOSITIONED error: the adapter is
 	// shared by every gated capability, and threading a position through it is
-	// the rest of the positionless-error work (design note: the aql:io pilot
+	// the rest of the positionless-error work (design note: the boru:io pilot
 	// covers this word's OWN failures, not the policy layer's). The two arms
 	// either side of it do carry the call's position.
 	if coded, ok := policyRefusalCoded(r, word, detail, err); ok {
 		return coded
 	}
-	return r.AqlErrorAt(def, detail, word, pos)
+	return r.BoruErrorAt(def, detail, word, pos)
 }
 
 // DefaultExtensions returns the built-in file-extension→format-name map
@@ -144,7 +144,7 @@ func applyNL(content string, nl string) string {
 	}
 }
 
-// parseFileOpts extracts options from an AQL map value. fmtExplicit is
+// parseFileOpts extracts options from a BORU map value. fmtExplicit is
 // true if the user explicitly set the fmt option. parserOpts holds every
 // remaining (non-reserved) key, forwarded to an opts-aware decoder — e.g.
 // `read foo.csv {fmt:'csv' field:{separation:';'}}` yields
@@ -189,7 +189,7 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool, 
 	return
 }
 
-// jsonicToValue converts a jsonic parse result to an AQL Value.
+// jsonicToValue converts a jsonic parse result to a BORU Value.
 // This uses data context: all text becomes strings, not words.
 func jsonicToValue(v any) (Value, error) {
 	// A number-Sub-wrapped token (from parser.SafeParseData) carries its
@@ -263,7 +263,7 @@ func sortedMapKeys(m map[string]any) []string {
 	return sortedAnyMapKeys(m)
 }
 
-// valueToJsonic converts an AQL Value to a compact json/jsonic-compatible
+// valueToJsonic converts a BORU Value to a compact json/jsonic-compatible
 // string. It is a thin wrapper over the canonical walk-based json encoder
 // (emit.go) — the single emit code path — keeping its name and signature for
 // the existing callers/tests. Compact, double-quoted keys (the json profile),
@@ -278,7 +278,7 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 	var err error
 
 	if path == pathStdout || path == pathStderr {
-		return nil, r.AqlErrorAt("read_error", "read: cannot read from an output stream", "read", pos)
+		return nil, r.BoruErrorAt("read_error", "read: cannot read from an output stream", "read", pos)
 	}
 
 	// read_error, not a bare fmt.Errorf. These were the only UNCODED
@@ -288,7 +288,7 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 	// branch on, while the word's own decode/format failures below were
 	// already `read_error`. It also stops a compiled-mode read failure
 	// re-running the whole program on the interpreter: runtimeShouldFallback
-	// treats a FOREIGN error as "retry", an AqlError as "surface" — the
+	// treats a FOREIGN error as "retry", a BoruError as "surface" — the
 	// same reasoning the {exclusive} write path documents below.
 	if path == pathStdin {
 		// Through the SHARED buffered reader, not r.Input directly. IO.read-line
@@ -303,7 +303,7 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 		// way the line read did.
 		data, err = stdinReadAll(r)
 		if err != nil {
-			return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: stdin: %v", err), "read", pos)
+			return nil, r.BoruErrorAt("read_error", fmt.Sprintf("read: stdin: %v", err), "read", pos)
 		}
 	} else {
 		data, err = EffectiveFileOps(r).ReadFile(path)
@@ -316,13 +316,13 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 	// on the wire, so applyNL over the raw bytes would corrupt the stream.
 	text, err := decodeEnc(data, enc)
 	if err != nil {
-		return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", err), "read")
+		return nil, r.BoruError("read_error", fmt.Sprintf("read: %v", err), "read")
 	}
 	content := applyNL(text, nl)
 
 	f, ok := HostFormats(r)[format]
 	if !ok {
-		return nil, r.AqlError("read_error", fmt.Sprintf("read: unknown format: %s", format), "read")
+		return nil, r.BoruError("read_error", fmt.Sprintf("read: unknown format: %s", format), "read")
 	}
 
 	var result []Value
@@ -332,7 +332,7 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 		result, err = f.Decode(content)
 	}
 	if err != nil {
-		return nil, r.AqlErrorAt("read_error", fmt.Sprintf("read: %v", err), "read", pos)
+		return nil, r.BoruErrorAt("read_error", fmt.Sprintf("read: %v", err), "read", pos)
 	}
 
 	// Store table data in SQLite for formats that produce tables.
@@ -351,7 +351,7 @@ func doRead(r *Registry, path, enc, format, nl string, opts map[string]any, pos 
 			}
 
 			if err := HostSQLite(r).StoreTable(baseName, td); err != nil {
-				return nil, r.AqlErrorAt("read_error",
+				return nil, r.BoruErrorAt("read_error",
 					fmt.Sprintf("read: sqlite store: %v", err), "read", pos)
 			}
 			td.SQLite = true
@@ -367,7 +367,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 	content = applyNL(content, nl)
 
 	if exclusive && (atomic || mode == "append") {
-		return nil, r.AqlErrorAt("write_error", "write: {exclusive} cannot combine with {atomic} or append mode", "write", pos)
+		return nil, r.BoruErrorAt("write_error", "write: {exclusive} cannot combine with {atomic} or append mode", "write", pos)
 	}
 
 	// Handle stdout/stderr special paths.
@@ -379,7 +379,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 			w = r.ErrOutput
 		}
 		if _, err := fmt.Fprint(w, content); err != nil {
-			return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", err), "write", pos)
+			return nil, r.BoruErrorAt("write_error", fmt.Sprintf("write: %v", err), "write", pos)
 		}
 		return []Value{NewString(path)}, nil
 	}
@@ -392,7 +392,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 		if existing, rerr := EffectiveFileOps(r).ReadFile(path); rerr == nil {
 			prev, derr := decodeEnc(existing, enc)
 			if derr != nil {
-				return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: append: %v", derr), "write", pos)
+				return nil, r.BoruErrorAt("write_error", fmt.Sprintf("write: append: %v", derr), "write", pos)
 			}
 			content = prev + content
 		}
@@ -400,7 +400,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 
 	data, encErr := encodeEnc(content, enc)
 	if encErr != nil {
-		return nil, r.AqlErrorAt("write_error", fmt.Sprintf("write: %v", encErr), "write", pos)
+		return nil, r.BoruErrorAt("write_error", fmt.Sprintf("write: %v", encErr), "write", pos)
 	}
 
 	// C1 effect fence (eng effects.go): a filesystem write is an observable
@@ -414,7 +414,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 	// fence. writeExclusive notes the effect only once the create lands.
 	if exclusive {
 		if err := writeExclusive(r, path, data); err != nil {
-			// An AqlError (not a bare fmt.Errorf) so the compiled runtime
+			// A BoruError (not a bare fmt.Errorf) so the compiled runtime
 			// treats the refusal as intentional and does not attempt a
 			// fallback — which a prior statement's effect would block,
 			// surfacing as a spurious internal_error (compiled_fullcorpus).
@@ -424,7 +424,7 @@ func doWrite(r *Registry, path, content, enc, format, mode, nl string, atomic, e
 	}
 	r.NoteEffect()
 	// write_error for the same reason the {exclusive} branch above already
-	// gives: a coded AqlError is a deliberate refusal the compiled runtime
+	// gives: a coded BoruError is a deliberate refusal the compiled runtime
 	// surfaces, where a foreign error triggers an interpreter re-run that
 	// the effect just noted would block — reappearing as a spurious
 	// internal_error. It also gives the failure a code to dispatch on.
@@ -467,7 +467,7 @@ func writeExclusive(r *Registry, path string, data []byte) error {
 func writeAtomic(r *Registry, path string, data []byte) error {
 	ops := EffectiveFileOps(r)
 	dir := filepath.Dir(path)
-	tmp, err := ops.TempFile(dir, ".aql-atomic-*")
+	tmp, err := ops.TempFile(dir, ".boru-atomic-*")
 	if err != nil {
 		return fmt.Errorf("atomic: %w", err)
 	}

@@ -1,10 +1,10 @@
-# voxgig-aql `--force-compile` remaining leaves — roadmap
+# voxgig-boru `--force-compile` remaining leaves — roadmap
 
-Status snapshot (aql `71238d9`, libs pinned `7b1a4fb`):
+Status snapshot (boru `71238d9`, libs pinned `7b1a4fb`):
 
-- **`aql check`**: the entire voxgig-aql corpus (all modules + every test/spec
+- **`boru check`**: the entire voxgig-boru corpus (all modules + every test/spec
   file) checks at **0 errors / 0 warnings / 0 info**. Done.
-- **`aql --force-compile`**: 3 files compile (bloom/stats/decision `*_prop_test`);
+- **`boru --force-compile`**: 3 files compile (bloom/stats/decision `*_prop_test`);
   **~28 still refuse**. Each refusing file is a *chain* of distinct inner leaves
   — clearing one surfaces the next — so a file only flips once ALL its leaves
   are cleared. The refusal text usually names the surfacing code-body word
@@ -101,7 +101,7 @@ poly-dispatch / `OpCallDynamic` for these ops over a dynamic operand.
 `code-body word fold (Stage 2)` · `check diagnostics`
 
 `fold` body result provenance (trie_smoke); and `decision_smoke`/`tst_unit`
-refuse `check diagnostics` even though plain `aql check` is clean — the
+refuse `check diagnostics` even though plain `boru check` is clean — the
 force-compile check gate finds something the standalone checker doesn't
 (investigate that gate's stricter pass first).
 

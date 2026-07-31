@@ -1,4 +1,4 @@
-# AQL `for` Word — Design Review
+# BORU `for` Word — Design Review
 
 ## Current Specification (SAMPLES.md)
 

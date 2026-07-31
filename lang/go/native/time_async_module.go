@@ -1,7 +1,7 @@
 package native
 
 // TimeAsyncModuleNatives holds the clock / timer / async words that were moved
-// out of the core registry into the aql:time-util module (TimeUtil namespace):
+// out of the core registry into the boru:time-util module (TimeUtil namespace):
 //
 //	now       the current instant (host clock)
 //	sleep     block for N milliseconds

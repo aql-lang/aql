@@ -10,7 +10,7 @@ import (
 	"io"
 	"sync/atomic"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 // Server is the lifecycle-managed REPL. Construct with NewServer,
@@ -49,7 +49,7 @@ func (s *Server) Status() service.State {
 }
 
 // UsesStdio always returns true: the REPL reads/writes the streams
-// it was constructed with, which for `aql repl` standalone are the
+// it was constructed with, which for `boru repl` standalone are the
 // process's own stdin/stdout.
 func (s *Server) UsesStdio() bool { return true }
 

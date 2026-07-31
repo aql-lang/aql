@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 // nameRE matches a service name as specified in the OpenAPI spec.

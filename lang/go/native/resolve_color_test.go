@@ -5,7 +5,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // resolve_color_test.go — the colour cascade, both halves of the NO_COLOR

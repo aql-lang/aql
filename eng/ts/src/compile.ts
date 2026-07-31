@@ -1,4 +1,4 @@
-// Compile orchestration, ported from lang/go/aql.go::CompileCheck +
+// Compile orchestration, ported from lang/go/boru.go::CompileCheck +
 // RunCompiled. compileCheck runs the engine in check mode with an
 // EmitState installed (so the check pass doubles as the bytecode
 // recording pass) and finalises the trace into a Program. runCompiled
@@ -6,7 +6,7 @@
 // any source the compiler refuses.
 import { Engine } from './engine.ts'
 import { EmitState } from './emit.ts'
-import { AqlError } from './error.ts'
+import { BoruError } from './error.ts'
 import { finalize, type FinalizeResult } from './lower.ts'
 import type { Program } from './bytecode.ts'
 import type { Registry } from './registry.ts'
@@ -32,7 +32,7 @@ export function compileCheck(registry: Registry, input: Value[]): FinalizeResult
     // falls back to the interpreter (which runs the row faithfully), never
     // crashing runCompiled. Mirrors Go's RunCompiled always degrading to the
     // interpreter rather than propagating a compile-time panic.
-    return { refused: `check pass threw: ${e instanceof AqlError ? e.code : (e as Error).message}` }
+    return { refused: `check pass threw: ${e instanceof BoruError ? e.code : (e as Error).message}` }
   } finally {
     done()
     registry.check.emit = undefined

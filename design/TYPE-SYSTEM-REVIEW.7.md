@@ -1,7 +1,7 @@
-# AQL Type System Review — Algebraic and Dependent Aspects
+# BORU Type System Review — Algebraic and Dependent Aspects
 
 This report catalogues weaknesses, semantic gaps, implementation gaps,
-and developer-experience issues in the AQL type system. It started on
+and developer-experience issues in the BORU type system. It started on
 the `claude/document-q-modifier-rules-AGp0I` branch at commit `d154b3e`
 and tracks the type-system work that has landed since.
 
@@ -183,7 +183,7 @@ exits:
   returning 0.
 - `formatValueJSON` (`internal/engine/print.go`) — renders the
   constraint payload as a quoted JSON string.
-- `aql_error.go` stack-rendering — renders the constraint payload
+- `boru_error.go` stack-rendering — renders the constraint payload
   in the trace label.
 - `formatForPrint` (`internal/engine/print.go`) — already had a
   `v.IsDepScalar()` branch.
@@ -231,10 +231,10 @@ predicate accept and the runtime-still-rejects paths.
 ### 3.3 Predicate has full registry access (sandboxing gap) — RESOLVED
 
 `RunPredicate` snapshots `r.Types`, `r.ctxStack`, and `r.Check`
-before the `CallAQL` invocation and restores them on return — so a
+before the `CallBORU` invocation and restores them on return — so a
 predicate body that does `type Foo …` or `context set k v` cannot
 leak into the surrounding program. `r.DefStacks` is already
-protected by `CallAQL`'s own snapshot.
+protected by `CallBORU`'s own snapshot.
 
 Tests verify that a predicate body that defines `type Leaked …`
 during a `def x:Sneaky v` or `v is Sneaky` invocation does NOT
@@ -393,7 +393,7 @@ Tests in `lang/go/test/type_shadow_test.go`.
 short-circuit: when the body's Parent matches the dependent's base
 type, the binding is accepted symbolically (the per-value check
 stays runtime-only). Cross-base mismatches still reject. This makes
-`def x:G10 15` flow through `aql check` cleanly — runtime catches
+`def x:G10 15` flow through `boru check` cleanly — runtime catches
 genuine value-level violations later.
 
 Predicate-fn constraints route through `RunPredicate`'s CheckMode
@@ -439,9 +439,9 @@ runtime and check-mode behaviour on Unify failure:
   detail AND installs a constraint-typed carrier for `name` so
   downstream analysis doesn't cascade with "undefined word: n"
   noise. `type_error` is registered with `SeverityError` in
-  `checkCodeSeverity` so it surfaces in `aql check`'s error count.
+  `checkCodeSeverity` so it surfaces in `boru check`'s error count.
 
-Net effect: `aql check` now reports type-binding mismatches as
+Net effect: `boru check` now reports type-binding mismatches as
 errors but keeps flowing past them, finding more issues in a single
 pass. Runtime semantics unchanged.
 
@@ -451,7 +451,7 @@ pass. Runtime semantics unchanged.
 ### 7.1 No inline disjunct syntax — DECLINED
 
 A `Integer | String` shorthand for `Integer tor String` would save
-a few keystrokes, but AQL's design philosophy prefers words over
+a few keystrokes, but BORU's design philosophy prefers words over
 symbols: every operator in the language is a named word that
 participates in the same forward-collecting dispatch. Adding a
 punctuation operator for one type-algebra case introduces a
@@ -486,7 +486,7 @@ def m:Mapper double
     — did you mean `(quote double)`?
 ```
 
-The hint is added to the existing AqlError's `Hint` field so
+The hint is added to the existing BoruError's `Hint` field so
 downstream rendering picks it up automatically. False positives are
 gated by three constraints: the enclosing forward must be `def`,
 its sig must start with `TMap`, and the typed-name map's
@@ -596,7 +596,7 @@ order:
 1. **Forward planner narrowing** (6.3). When a typed-def constraint
    resolves to a static type literal at plan time, narrow the body's
    expected type so check-mode catches mismatches before runtime.
-   Mid-effort; meaningful UX win for `aql check` users.
+   Mid-effort; meaningful UX win for `boru check` users.
 
 2. **Better error for missing `(quote name)`** (7.2). ~10 lines to
    detect the typed-binding context and suggest the quote idiom.
@@ -645,7 +645,7 @@ canonical user-facing reference.
 
 ## 9. Items not in scope of this report
 
-- The bytecode AOT plan (`lang/doc/design/aql-bytecode-report.0.md`)
+- The bytecode AOT plan (`lang/doc/design/boru-bytecode-report.0.md`)
   intersects every type-system decision; weaknesses there are
   cataloged in that report.
 - The check-mode step-budget and recursion handling are orthogonal

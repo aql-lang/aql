@@ -122,7 +122,7 @@ export function finalize(emit: EmitState, residual: readonly Value[]): FinalizeR
         return
       }
       if (ev.kind === 'trap') {
-        // Terminal: raise the stored AqlError. Pushes nothing, stores
+        // Terminal: raise the stored BoruError. Pushes nothing, stores
         // nothing — execution never continues past it.
         code.emit(OpTrap, trapIdx(ev))
         continue

@@ -1,6 +1,6 @@
 // Package engine is a thin shim over the eng module: it re-exports
 // eng's types and functions so the surrounding lang codebase can import
-// "github.com/aql-lang/aql/lang/go/native" while the actual engine
+// "github.com/boru-lang/boru/lang/go/native" while the actual engine
 // machinery lives in the standalone eng module.
 //
 // Word-defining files (native_*.go, format.go, query.go, sqlite.go,
@@ -10,15 +10,15 @@
 package native
 
 import (
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
-// *Type aliases — every exported type from aqleng is re-exported here.
+// *Type aliases — every exported type from borueng is re-exported here.
 type (
 	BranchRecord       = eng.BranchRecord
 	DeqIndex           = eng.DeqIndex
 	EmitFragment       = eng.EmitFragment
-	AqlError           = eng.AqlError
+	BoruError          = eng.BoruError
 	RenderOpts         = eng.RenderOpts
 	DiagSpan           = eng.DiagSpan
 	DiagSuggestion     = eng.DiagSuggestion
@@ -77,10 +77,10 @@ type (
 	ModuleDesc           = eng.ModuleDesc
 	MoveInfo             = eng.MoveInfo
 	NativeFunc           = eng.NativeFunc
-	SigImpl              = eng.SigImpl // sealed run-impl sum (GoImpl | AQLImpl)
-	GoImpl               = eng.GoImpl  // native / internal Go-handler implementation
-	AQLImpl              = eng.AQLImpl // AQL body implementation (module ref / lambda / installed fn)
-	GoOpt                = eng.GoOpt   // optional dispatch knob for Go(...)
+	SigImpl              = eng.SigImpl  // sealed run-impl sum (GoImpl | BORUImpl)
+	GoImpl               = eng.GoImpl   // native / internal Go-handler implementation
+	BORUImpl             = eng.BORUImpl // BORU body implementation (module ref / lambda / installed fn)
+	GoOpt                = eng.GoOpt    // optional dispatch knob for Go(...)
 	CompileEffect        = eng.CompileEffect
 	CallableSpec         = eng.CallableSpec
 	StoredBodySpec       = eng.StoredBodySpec
@@ -263,7 +263,7 @@ const (
 	FlowContinue = eng.FlowContinue
 )
 
-// Function re-exports — every exported aqleng function.
+// Function re-exports — every exported borueng function.
 var (
 	AnalyseFnBody             = eng.AnalyseFnBody
 	AnalyseLoopBody           = eng.AnalyseLoopBody
@@ -451,7 +451,7 @@ var (
 	JoinCarrierStacks        = eng.JoinCarrierStacks
 	JoinCarriers             = eng.JoinCarriers
 	FoldVariadicArms         = eng.FoldVariadicArms
-	MakeAqlError             = eng.MakeAqlError
+	MakeBoruError            = eng.MakeBoruError
 	ExitCode                 = eng.ExitCode
 	NewExitError             = eng.NewExitError
 	RenderCheckDiagnostic    = eng.RenderCheckDiagnostic
@@ -572,7 +572,7 @@ var (
 	NewWord                = eng.NewWord
 	NewWordModified        = eng.NewWordModified
 	Go                     = eng.Go
-	AQL                    = eng.AQL
+	BORU                   = eng.BORU
 	RunInCheck             = eng.RunInCheck
 	Park                   = eng.Park
 	FullStack              = eng.FullStack

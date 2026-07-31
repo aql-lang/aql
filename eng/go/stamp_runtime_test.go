@@ -20,15 +20,15 @@ func stampReg(t *testing.T) *Registry {
 	return r
 }
 
-func aqlBodyFd(body ...Value) FnDefInfo {
-	return FnDefInfo{Signatures: []Signature{{Impl: AQL(body)}}}
+func boruBodyFd(body ...Value) FnDefInfo {
+	return FnDefInfo{Signatures: []Signature{{Impl: BORU(body)}}}
 }
 
 // Policy: a registry never armed (a plain interpreter run) must not stamp;
 // arming enables the attempt; forks inherit the armed flag.
 func TestStampDetachedFnPolicyGate(t *testing.T) {
 	r := stampReg(t)
-	fd := aqlBodyFd(NewInteger(1))
+	fd := boruBodyFd(NewInteger(1))
 	if _, ok := StampDetachedFn(r, fd, SrcPos{}); ok {
 		t.Fatalf("policy off: stamp must decline")
 	}
@@ -69,7 +69,7 @@ func (allowAllChecker) CheckWord(string) error { return nil }
 // produce the SAME stamp outcome for the same fd, and no policy-flavoured
 // reason is ever recorded.
 func TestStampDetachedFnWordPolicyGate(t *testing.T) {
-	fd := aqlBodyFd(NewInteger(1))
+	fd := boruBodyFd(NewInteger(1))
 
 	gated := stampReg(t)
 	gated.EnableRuntimeStamping()
@@ -106,7 +106,7 @@ func TestStampDetachedFnShapeGates(t *testing.T) {
 	// detached compile mints a fresh identity on a CLONE of the captured
 	// slice — the frozen snapshot keys its slot like any other capture,
 	// and the input value stays untouched (no shared-value mutation).
-	captured := aqlBodyFd(NewInteger(1))
+	captured := boruBodyFd(NewInteger(1))
 	captured.Captured = []CapturedBinding{{Name: "kv", Value: NewInteger(9)}}
 	ref, ok := StampDetachedFn(r, captured, SrcPos{})
 	if !ok || ref == nil {
@@ -124,8 +124,8 @@ func TestStampDetachedFnShapeGates(t *testing.T) {
 	// reaches each remaining overload — MatchFnSig at the invoke seam picks
 	// the sig, whose own Impl ref then runs.
 	multi := FnDefInfo{Signatures: []Signature{
-		{Impl: AQL([]Value{NewInteger(1)})},
-		{Impl: AQL([]Value{NewInteger(2)})},
+		{Impl: BORU([]Value{NewInteger(1)})},
+		{Impl: BORU([]Value{NewInteger(2)})},
 	}}
 	if ref0, ok := StampDetachedFn(r, multi, SrcPos{}); !ok || ref0 == nil {
 		t.Fatalf("multi-own-sig first overload must stamp (§7b)")
@@ -137,24 +137,24 @@ func TestStampDetachedFnShapeGates(t *testing.T) {
 		t.Fatalf("an out-of-range sig index must decline")
 	}
 
-	if _, ok := StampDetachedFn(r, aqlBodyFd(), SrcPos{}); ok {
+	if _, ok := StampDetachedFn(r, boruBodyFd(), SrcPos{}); ok {
 		t.Fatalf("empty body must decline")
 	}
 
-	sentinel := aqlBodyFd(NewWord("break"))
+	sentinel := boruBodyFd(NewWord("break"))
 	if _, ok := StampDetachedFn(r, sentinel, SrcPos{}); ok {
 		t.Fatalf("flow-sentinel body must decline")
 	}
 
 	fallbackOnly := FnDefInfo{Signatures: []Signature{
-		{Fallback: true, Impl: AQL([]Value{NewInteger(1)})},
+		{Fallback: true, Impl: BORU([]Value{NewInteger(1)})},
 	}}
 	if _, ok := StampDetachedFn(r, fallbackOnly, SrcPos{}); ok {
 		t.Fatalf("fallback-only fn (no own sig) must decline")
 	}
 }
 
-// StampFnValue value-level gates: non-fn input, Go-backed fns (no AQL own
+// StampFnValue value-level gates: non-fn input, Go-backed fns (no BORU own
 // sig), and already-stamped values decline and return the INPUT unchanged.
 func TestStampFnValueGates(t *testing.T) {
 	r := stampReg(t)
@@ -176,7 +176,7 @@ func TestStampFnValueGates(t *testing.T) {
 
 	pre := &CompiledFnRef{Unit: 0, Prog: &Program{Fns: []CompiledFn{{}}}}
 	stampedAlready := Value{Parent: TFunction, Data: FnDefInfo{Signatures: []Signature{
-		{Impl: &AQLImpl{Body: []Value{NewInteger(1)}, Compiled: pre}},
+		{Impl: &BORUImpl{Body: []Value{NewInteger(1)}, Compiled: pre}},
 	}}}
 	if _, ok := StampFnValue(r, stampedAlready); ok {
 		t.Fatalf("already-stamped fn must decline (first stamp wins)")
@@ -261,7 +261,7 @@ func TestDepsFresh(t *testing.T) {
 }
 
 // InvokeCallback consults depsFresh: a stale runtime-stamped ref must take
-// the interpreter (CallAQL over the AQL body), not the frozen unit.
+// the interpreter (CallBORU over the BORU body), not the frozen unit.
 func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 	r := stampReg(t)
 	r.Defs.Push("dep", NewInteger(1))
@@ -275,8 +275,8 @@ func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 			Debug: []SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
 		}},
 	}
-	// The AQL body the interpreter runs instead: a single literal 7.
-	sig := &Signature{Impl: &AQLImpl{
+	// The BORU body the interpreter runs instead: a single literal 7.
+	sig := &Signature{Impl: &BORUImpl{
 		Body: []Value{NewInteger(7)},
 		Compiled: &CompiledFnRef{Prog: p, Unit: 0, depSnap: map[string]depSnapEntry{
 			"dep": {Depth: 99, Gen: -1}, // never matches → stale
@@ -294,7 +294,7 @@ func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 	}
 
 	// The positive twin: a FRESH snapshot takes the VM unit (42).
-	sig.Impl.(*AQLImpl).Compiled.depSnap = map[string]depSnapEntry{
+	sig.Impl.(*BORUImpl).Compiled.depSnap = map[string]depSnapEntry{
 		"dep": {Depth: r.Defs.Depth("dep"), Gen: r.Defs.Gen("dep")},
 	}
 	out, err = InvokeCallback(r, sig, nil, nil)
@@ -312,7 +312,7 @@ func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 func TestStampFnValueInPlace(t *testing.T) {
 	r := stampReg(t)
 	r.EnableRuntimeStamping()
-	v := Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(1))}
+	v := Value{Parent: TFunction, Data: boruBodyFd(NewInteger(1))}
 	if !StampFnValueInPlace(r, v) {
 		t.Fatalf("first in-place stamp must succeed")
 	}
@@ -328,7 +328,7 @@ func TestStampFnValueInPlace(t *testing.T) {
 	}
 	// Policy off: untouched.
 	r2 := stampReg(t)
-	w := Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(2))}
+	w := Value{Parent: TFunction, Data: boruBodyFd(NewInteger(2))}
 	if StampFnValueInPlace(r2, w) {
 		t.Fatalf("an unarmed registry must not stamp in place")
 	}
@@ -345,14 +345,14 @@ func TestStampReportCollector(t *testing.T) {
 	r.EnableRuntimeStamping()
 
 	// A successful stamp records Stamped=true.
-	v := Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(1))}
+	v := Value{Parent: TFunction, Data: boruBodyFd(NewInteger(1))}
 	if _, ok := StampFnValue(r, v); !ok {
 		t.Fatalf("stamp failed")
 	}
 	// A capturing fn — even with an identity-less capture value — STAMPS
 	// since the §7a landing (the detached compile mints an identity on a
 	// clone), recording Stamped=true under its name.
-	captured := aqlBodyFd(NewInteger(1))
+	captured := boruBodyFd(NewInteger(1))
 	captured.Name = "grabby"
 	captured.Captured = []CapturedBinding{{Name: "kv", Value: NewInteger(9)}}
 	if _, ok := StampDetachedFn(r, captured, SrcPos{Row: 2, Col: 1}); !ok {
@@ -360,13 +360,13 @@ func TestStampReportCollector(t *testing.T) {
 	}
 	// A body the unit compile REFUSES (the context-dependent `args`, which
 	// reads the interpreter's per-call args stack) records its reason.
-	argsy := aqlBodyFd(NewWord("args"))
+	argsy := boruBodyFd(NewWord("args"))
 	argsy.Name = "argsy"
 	if _, ok := StampDetachedFn(r, argsy, SrcPos{Row: 3, Col: 7}); ok {
 		t.Fatalf("args-reading fn must decline")
 	}
 	// Shape noise (a fallback-only fn) records NOTHING.
-	noise := FnDefInfo{Signatures: []Signature{{Fallback: true, Impl: AQL([]Value{NewInteger(1)})}}}
+	noise := FnDefInfo{Signatures: []Signature{{Fallback: true, Impl: BORU([]Value{NewInteger(1)})}}}
 	if _, ok := StampDetachedFn(r, noise, SrcPos{}); ok {
 		t.Fatalf("a fallback-only fn must decline")
 	}
@@ -388,7 +388,7 @@ func TestStampReportCollector(t *testing.T) {
 
 	// Forks and module-style inheritance feed the SAME log.
 	fork := r.ForkConcurrent()
-	if _, ok := StampFnValue(fork, Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(2))}); !ok {
+	if _, ok := StampFnValue(fork, Value{Parent: TFunction, Data: boruBodyFd(NewInteger(2))}); !ok {
 		t.Fatalf("fork stamp failed")
 	}
 	child, err := NewRegistry()
@@ -397,7 +397,7 @@ func TestStampReportCollector(t *testing.T) {
 	}
 	child.InitRootContext()
 	child.InheritRuntimeStamping(r)
-	if _, ok := StampFnValue(child, Value{Parent: TFunction, Data: aqlBodyFd(NewInteger(3))}); !ok {
+	if _, ok := StampFnValue(child, Value{Parent: TFunction, Data: boruBodyFd(NewInteger(3))}); !ok {
 		t.Fatalf("inherited-child stamp failed")
 	}
 	if got := len(r.StampEvents()); got != 5 {
@@ -542,7 +542,7 @@ func TestInterpMemberInertMapArms(t *testing.T) {
 // REBOUND after the stamp re-compiles against the live binding at invoke
 // time — the fresh twin runs on the VM with the NEW value (parity with the
 // interpreter's live resolution) — instead of degrading permanently to
-// CallAQL. A second invoke under the same binding REUSES the twin (no
+// CallBORU. A second invoke under the same binding REUSES the twin (no
 // second compile); the try budget bounds a hot rebinding loop; and a
 // declined re-stamp (stamping disarmed) takes the interpreter.
 func TestInvokeCallbackJITRestamp(t *testing.T) {
@@ -550,13 +550,13 @@ func TestInvokeCallbackJITRestamp(t *testing.T) {
 	r.EnableRuntimeStamping()
 	r.Defs.Push("dep", NewInteger(1))
 
-	fd := aqlBodyFd(NewWord("dep"))
+	fd := boruBodyFd(NewWord("dep"))
 	fd.Name = "reader"
 	ref, ok := StampDetachedFn(r, fd, SrcPos{Row: 1, Col: 1})
 	if !ok {
 		t.Fatalf("initial stamp declined: %+v", r.StampEvents())
 	}
-	sig := &Signature{Impl: &AQLImpl{Body: []Value{NewWord("dep")}, Compiled: ref}}
+	sig := &Signature{Impl: &BORUImpl{Body: []Value{NewWord("dep")}, Compiled: ref}}
 
 	// Fresh: the frozen unit returns the stamp-time binding.
 	out, err := InvokeCallback(r, sig, nil, nil)
@@ -597,7 +597,7 @@ func TestInvokeCallbackJITRestamp(t *testing.T) {
 
 	// The try budget: each further rebind pays one re-stamp until the budget
 	// (restampMaxTries, one already spent) exhausts; after that the seam
-	// stays on CallAQL — which STILL resolves the live binding, so values
+	// stays on CallBORU — which STILL resolves the live binding, so values
 	// keep matching the interpreter (slow, not wrong).
 	for i := 3; i <= 6; i++ {
 		r.Defs.Pop("dep")
@@ -606,7 +606,7 @@ func TestInvokeCallbackJITRestamp(t *testing.T) {
 			t.Fatalf("rebind %d invoke: %v", i, err)
 		}
 		if n, _ := AsInteger(out[0]); n != int64(i) {
-			t.Fatalf("rebind %d: got %v, want the live value (VM twin or CallAQL alike)", i, out[0])
+			t.Fatalf("rebind %d: got %v, want the live value (VM twin or CallBORU alike)", i, out[0])
 		}
 	}
 	if tries := ref.restamp.tries; tries != restampMaxTries {
@@ -624,6 +624,6 @@ func TestInvokeCallbackJITRestamp(t *testing.T) {
 		t.Fatalf("disarmed invoke: %v", err)
 	}
 	if n, _ := AsInteger(out[0]); n != 9 {
-		t.Fatalf("disarmed re-stamp must fall to CallAQL's live resolution (9), got %v", out[0])
+		t.Fatalf("disarmed re-stamp must fall to CallBORU's live resolution (9), got %v", out[0])
 	}
 }

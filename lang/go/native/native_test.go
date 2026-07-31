@@ -544,9 +544,9 @@ func TestRegisterFunctions(t *testing.T) {
 	// one signature whose handler is non-nil.
 	// The voxgig-struct words (clone, getpath, setpath, inject, merge, walk,
 	// items, transform, validate, selector) moved out of core into the
-	// aql:struct module — see native/struct_module.go — so they are no
+	// boru:struct module — see native/struct_module.go — so they are no
 	// longer expected in the global registry.
-	// jsonify moved to aql:struct; fetch/prepare/direct moved to aql:net —
+	// jsonify moved to boru:struct; fetch/prepare/direct moved to boru:net —
 	// so they are no longer expected in the global registry.
 	names := []string{
 		"create", "filter", "flatten", "join", "list", "load",
@@ -666,7 +666,7 @@ func TestRemoveRecordHandler(t *testing.T) {
 
 // --- helpers for callback-based tests ---
 
-// makeTrueFilterFn creates an AQL function that takes one map arg and returns true.
+// makeTrueFilterFn creates a BORU function that takes one map arg and returns true.
 func makeTrueFilterFn() Value {
 	return NewFnDef(FnDefInfo{
 		Signatures: []FnSig{
@@ -674,7 +674,7 @@ func makeTrueFilterFn() Value {
 				Params: []FnParam{
 					{Name: "item", Type: TMap},
 				},
-				Impl: AQL([]Value{NewBoolean(true)}), BarrierPos: -1,
+				Impl: BORU([]Value{NewBoolean(true)}), BarrierPos: -1,
 			},
 		},
 	})
@@ -721,7 +721,7 @@ func TestFilterHandler(t *testing.T) {
 
 // --- walk with before callback ---
 
-// makeWalkValueFn creates an AQL function that extracts the "value" field
+// makeWalkValueFn creates a BORU function that extracts the "value" field
 // from the walk node map. Body: [getpath node "value"]
 func makeWalkValueFn() Value {
 	return NewFnDef(FnDefInfo{
@@ -730,7 +730,7 @@ func makeWalkValueFn() Value {
 				Params: []FnParam{
 					{Name: "node", Type: TMap},
 				},
-				Impl: AQL([]Value{
+				Impl: BORU([]Value{
 					NewWord("getpath"),
 					NewString("value"),
 					NewWord("node"),
@@ -743,7 +743,7 @@ func makeWalkValueFn() Value {
 func TestWalkBeforeHandler(t *testing.T) {
 	r := defaultRegistry(t)
 	Register(r)
-	// getpath moved to aql:struct; the walk callback body uses it, so make
+	// getpath moved to boru:struct; the walk callback body uses it, so make
 	// it resolvable in this handler-level test registry.
 	for _, n := range StructModuleNatives {
 		r.RegisterNativeFunc(n)

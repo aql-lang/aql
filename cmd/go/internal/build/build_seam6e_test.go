@@ -14,11 +14,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
+	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
 )
 
 // fakeModuleTree builds a directory shaped like a repo checkout containing
-// the cmd/go module (just its go.mod), suitable as an AQL_SRC target so
+// the cmd/go module (just its go.mod), suitable as a BORU_SRC target so
 // native-build tests never write inside the real module tree.
 func fakeModuleTree(t *testing.T) string {
 	t.Helper()
@@ -36,7 +36,7 @@ func fakeModuleTree(t *testing.T) string {
 func testCfg(t *testing.T) buildrt.Config {
 	t.Helper()
 	dir := t.TempDir()
-	src := write(t, dir, "p.aql", "add 1 2")
+	src := write(t, dir, "p.boru", "add 1 2")
 	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +48,7 @@ func testCfg(t *testing.T) buildrt.Config {
 
 func TestRunOptionsParseError(t *testing.T) {
 	dir := t.TempDir()
-	src := write(t, dir, "p.aql", "add 1 2")
+	src := write(t, dir, "p.boru", "add 1 2")
 	code, _, stderr := runBuild(t, "-options", "]", src)
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
@@ -61,15 +61,15 @@ func TestRunOptionsParseError(t *testing.T) {
 // --- Run: -native error and success arms ---
 
 func TestRunNativeError(t *testing.T) {
-	t.Setenv("AQL_SRC", filepath.Join(t.TempDir(), "nowhere"))
+	t.Setenv("BORU_SRC", filepath.Join(t.TempDir(), "nowhere"))
 	dir := t.TempDir()
-	src := write(t, dir, "p.aql", "add 1 2")
+	src := write(t, dir, "p.boru", "add 1 2")
 	code, _, stderr := runBuild(t, "-native", "-o", filepath.Join(dir, "p"), src)
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
 	}
-	if !strings.Contains(stderr, "AQL_SRC") {
-		t.Errorf("stderr = %q, want AQL_SRC error", stderr)
+	if !strings.Contains(stderr, "BORU_SRC") {
+		t.Errorf("stderr = %q, want BORU_SRC error", stderr)
 	}
 }
 
@@ -81,7 +81,7 @@ func TestRunNativeSuccess(t *testing.T) {
 		t.Skipf("no cmd/go module context: %v", err)
 	}
 	dir := t.TempDir()
-	src := write(t, dir, "p.aql", "add 1 2")
+	src := write(t, dir, "p.boru", "add 1 2")
 	out := filepath.Join(dir, "p")
 	code, stdout, stderr := runBuild(t, "-native", "-o", out, src)
 	if code != 0 {
@@ -103,7 +103,7 @@ func TestBuildConfigAbsError(t *testing.T) {
 	if err := os.Remove(gone); err != nil {
 		t.Skipf("cannot remove cwd on this platform: %v", err)
 	}
-	if _, err := buildConfig("rel.aql", "", 0, buildrt.CompileOff, "", nil); err == nil {
+	if _, err := buildConfig("rel.boru", "", 0, buildrt.CompileOff, "", nil); err == nil {
 		t.Fatal("buildConfig with deleted cwd: want error, got nil")
 	}
 }
@@ -113,8 +113,8 @@ func TestBuildConfigAbsError(t *testing.T) {
 func TestCollectImportsCycleAndNestedError(t *testing.T) {
 	dir := t.TempDir()
 	// a imports b, b imports a (cycle -> seen-skip arm).
-	a := write(t, dir, "a.aql", `import "./b.aql"`)
-	write(t, dir, "b.aql", `import "./a.aql"`)
+	a := write(t, dir, "a.boru", `import "./b.boru"`)
+	write(t, dir, "b.boru", `import "./a.boru"`)
 	cfg, err := buildConfig(a, "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatalf("cycle: %v", err)
@@ -124,8 +124,8 @@ func TestCollectImportsCycleAndNestedError(t *testing.T) {
 	}
 
 	// c imports d, d imports a missing file (recursive-error arm).
-	c := write(t, dir, "c.aql", `import "./d.aql"`)
-	write(t, dir, "d.aql", `import "./missing.aql"`)
+	c := write(t, dir, "c.boru", `import "./d.boru"`)
+	write(t, dir, "d.boru", `import "./missing.boru"`)
 	if _, err := buildConfig(c, "", 0, buildrt.CompileOff, "", nil); err == nil {
 		t.Fatal("nested missing import: want error, got nil")
 	}
@@ -195,16 +195,16 @@ func TestNativeNoGoToolchain(t *testing.T) {
 }
 
 func TestNativeModuleDirError(t *testing.T) {
-	t.Setenv("AQL_SRC", filepath.Join(t.TempDir(), "nowhere"))
+	t.Setenv("BORU_SRC", filepath.Join(t.TempDir(), "nowhere"))
 	var stdout, stderr bytes.Buffer
 	err := buildNative(buildrt.Config{}, "out", false, &stdout, &stderr)
-	if err == nil || !strings.Contains(err.Error(), "AQL_SRC") {
-		t.Fatalf("err = %v, want AQL_SRC error", err)
+	if err == nil || !strings.Contains(err.Error(), "BORU_SRC") {
+		t.Fatalf("err = %v, want BORU_SRC error", err)
 	}
 }
 
 func TestNativeAbsError(t *testing.T) {
-	t.Setenv("AQL_SRC", fakeModuleTree(t))
+	t.Setenv("BORU_SRC", fakeModuleTree(t))
 	gone := filepath.Join(t.TempDir(), "gone")
 	if err := os.Mkdir(gone, 0o755); err != nil {
 		t.Fatal(err)
@@ -220,7 +220,7 @@ func TestNativeAbsError(t *testing.T) {
 }
 
 func TestNativeMkdirTempError(t *testing.T) {
-	t.Setenv("AQL_SRC", fakeModuleTree(t))
+	t.Setenv("BORU_SRC", fakeModuleTree(t))
 	orig := osMkdirTemp
 	osMkdirTemp = func(dir, pattern string) (string, error) { return "", errors.New("mkdirtemp boom") }
 	t.Cleanup(func() { osMkdirTemp = orig })
@@ -232,7 +232,7 @@ func TestNativeMkdirTempError(t *testing.T) {
 }
 
 func TestNativeKeepPrintsDirAndMarshalError(t *testing.T) {
-	t.Setenv("AQL_SRC", fakeModuleTree(t))
+	t.Setenv("BORU_SRC", fakeModuleTree(t))
 	orig := jsonMarshal
 	jsonMarshal = func(any) ([]byte, error) { return nil, errors.New("marshal boom") }
 	t.Cleanup(func() { jsonMarshal = orig })
@@ -247,7 +247,7 @@ func TestNativeKeepPrintsDirAndMarshalError(t *testing.T) {
 }
 
 func TestNativeWriteConfigError(t *testing.T) {
-	t.Setenv("AQL_SRC", fakeModuleTree(t))
+	t.Setenv("BORU_SRC", fakeModuleTree(t))
 	orig := osWriteFile
 	osWriteFile = func(string, []byte, os.FileMode) error { return errors.New("write boom") }
 	t.Cleanup(func() { osWriteFile = orig })
@@ -259,7 +259,7 @@ func TestNativeWriteConfigError(t *testing.T) {
 }
 
 func TestNativeWriteMainError(t *testing.T) {
-	t.Setenv("AQL_SRC", fakeModuleTree(t))
+	t.Setenv("BORU_SRC", fakeModuleTree(t))
 	orig := osWriteFile
 	osWriteFile = func(path string, data []byte, perm os.FileMode) error {
 		if strings.HasSuffix(path, "main.go") {
@@ -276,7 +276,7 @@ func TestNativeWriteMainError(t *testing.T) {
 }
 
 func TestNativeGoBuildFails(t *testing.T) {
-	t.Setenv("AQL_SRC", fakeModuleTree(t))
+	t.Setenv("BORU_SRC", fakeModuleTree(t))
 	t.Setenv("GOOS", "bogus-goos") // rejected before any compilation
 	var stdout, stderr bytes.Buffer
 	err := buildNative(buildrt.Config{}, filepath.Join(t.TempDir(), "out"), false, &stdout, &stderr)
@@ -287,9 +287,9 @@ func TestNativeGoBuildFails(t *testing.T) {
 
 // --- findCmdGoModuleDir / isCmdGoModule arms ---
 
-func TestFindCmdGoModuleDirViaAQLSrc(t *testing.T) {
+func TestFindCmdGoModuleDirViaBORUSrc(t *testing.T) {
 	root := fakeModuleTree(t)
-	t.Setenv("AQL_SRC", root)
+	t.Setenv("BORU_SRC", root)
 	dir, err := findCmdGoModuleDir()
 	if err != nil {
 		t.Fatalf("err = %v", err)
@@ -300,7 +300,7 @@ func TestFindCmdGoModuleDirViaAQLSrc(t *testing.T) {
 }
 
 func TestFindCmdGoModuleDirNoContext(t *testing.T) {
-	t.Setenv("AQL_SRC", "")
+	t.Setenv("BORU_SRC", "")
 	t.Chdir(t.TempDir()) // outside any module: `go env GOMOD` -> /dev/null
 	if _, err := findCmdGoModuleDir(); err == nil {
 		t.Fatal("want error outside module context, got nil")

@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // User-defined refinement subtypes must dispatch like system types — a
@@ -13,7 +13,7 @@ import (
 //
 // **End-to-end dispatch tests live in lang/spec/user-types.tsv** —
 // run via test/go/langspec. They exercise the actual parser, dispatcher,
-// and rendering pipeline through AQL source code (the right level for
+// and rendering pipeline through BORU source code (the right level for
 // a *language* test).
 //
 // The Go tests below are unit-level: they probe internal Value-shape
@@ -52,7 +52,7 @@ func TestUserTypeBindingShape_ObjectRefinement(t *testing.T) {
 		t.Fatalf("registry: %v", err)
 	}
 	registerIOWords(r)
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("Foo"),
 		NewOpenParen(),
 		NewWord("class"), NewMap(NewOrderedMap()),
@@ -144,7 +144,7 @@ func TestResolveSigType_AllUserTypeKinds(t *testing.T) {
 				NewOpenParen(),
 			}, tc.defTail...)
 			input = append(input, NewCloseParen())
-			runAQL(t, r, input)
+			runBORU(t, r, input)
 
 			// The dedicated flag must be set.
 			def := r.LookupTypeName("X")
@@ -179,7 +179,7 @@ func TestResolveSigType_AllUserTypeKinds(t *testing.T) {
 func TestRefineNewtypeMembershipIsNominal(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("Pos"),
 		NewWord("refine"), NewWord("Integer"),
 	})
@@ -215,14 +215,14 @@ func TestRefineNewtypeMembershipIsNominal(t *testing.T) {
 func TestClassInstanceTaggedWithCanonicalLatticeNode(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("Foo"),
 		NewOpenParen(),
 		NewWord("class"), NewMap(NewOrderedMap()),
 		NewCloseParen(),
 	})
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewOpenParen(),
 		NewWord("make"), NewWord("Foo"), NewMap(NewOrderedMap()),
 		NewCloseParen(),
@@ -265,7 +265,7 @@ func TestClassInstanceTaggedWithCanonicalLatticeNode(t *testing.T) {
 func TestDisjunctMembershipRequiresCanonicalNode(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("Maybe"),
 		NewOpenParen(),
 		NewWord("Integer"), NewWord("tor"), NewWord("none"),

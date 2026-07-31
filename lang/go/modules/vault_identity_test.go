@@ -12,9 +12,9 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // mintTLSClientCert issues a self-signed client certificate that doubles
@@ -28,7 +28,7 @@ func mintTLSClientCert(t *testing.T) (certPEM, keyPEM []byte, pool *x509.CertPoo
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber: big.NewInt(3),
-		Subject:      pkix.Name{CommonName: "aql-vault-client"},
+		Subject:      pkix.Name{CommonName: "boru-vault-client"},
 		NotBefore:    time.Now().Add(-time.Hour),
 		NotAfter:     time.Now().Add(time.Hour),
 		KeyUsage:     x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
@@ -105,7 +105,7 @@ func TestVaultIdentityRegisterTypeDuplicate(t *testing.T) {
 }
 
 // A vault-held credential authenticates a real mutual-TLS handshake,
-// and the private key never becomes an AQL value at any point.
+// and the private key never becomes a BORU value at any point.
 func TestVaultIdentityMutualTLS(t *testing.T) {
 	certPEM, keyPEM, clientCAs := mintTLSClientCert(t)
 	addr, serverCA := mtlsEchoServer(t, clientCAs)

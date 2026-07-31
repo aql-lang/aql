@@ -3,11 +3,11 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// coverRun loads aql:test + aql:sift and runs src on a fresh registry in
+// coverRun loads boru:test + boru:sift and runs src on a fresh registry in
 // INTERPRETER mode (coverage is a tree-walk measurement).
 func coverRun(t *testing.T, src string) ([]native.Value, error) {
 	t.Helper()
@@ -30,13 +30,13 @@ func TestCoverAPIEndToEnd(t *testing.T) {
 	// The module-under-test is imported INSIDE Test.cover so its module-load
 	// def lines are counted alongside the runtime execution its ops drive.
 	out, err := coverRun(t, `
-import "aql:test"
+import "boru:test"
 Test.cover [
-  import "aql:sift"
+  import "boru:sift"
   Sift.families
   Sift.parse kv/q {sep:':'} "a: 1"
 ]
-Test.coverage "aql:sift"`)
+Test.coverage "boru:sift"`)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
@@ -76,7 +76,7 @@ Test.coverage "aql:sift"`)
 
 // Test.coverage on an unregistered id raises test_cover_no_source.
 func TestCoverAPINoSource(t *testing.T) {
-	_, err := coverRun(t, `import "aql:test"  Test.coverage "aql:nonesuch"`)
+	_, err := coverRun(t, `import "boru:test"  Test.coverage "boru:nonesuch"`)
 	if err == nil {
 		t.Fatalf("expected an error for an unregistered coverage id")
 	}
@@ -85,7 +85,7 @@ func TestCoverAPINoSource(t *testing.T) {
 	}
 }
 
-// CoverageFor + ArmCoverageCollector are the Go seams the `aql test --coverage`
+// CoverageFor + ArmCoverageCollector are the Go seams the `boru test --coverage`
 // runner uses: an unregistered id reports ok=false; a registered source reports
 // covered/total against the rows the armed collector recorded.
 func TestCoverageForAPI(t *testing.T) {

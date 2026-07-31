@@ -3,14 +3,14 @@ package modules
 import (
 	"fmt"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BuildTypeModule creates the "aql:type-util" native module — the second-
+// BuildTypeModule creates the "boru:type-util" native module — the second-
 // tier type-operation vocabulary. The core type ops (refine, pathof,
 // typeof, enum, is, teq, tpartial, guard, base, convert, tor, tand,
-// tany, tall) are AQL built-ins. This module covers the rest.
+// tany, tall) are BORU built-ins. This module covers the rest.
 //
 // After import, words are accessed via dot notation: TypeUtil.pick,
 // TypeUtil.exclude, TypeUtil.lca, etc. The `t` prefix is dropped because the
@@ -30,7 +30,7 @@ import (
 //
 // See design/TYPE-OPERATIONS.8.md.
 func BuildTypeModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := newModuleRegistry("aql:type-util", typeModuleNatives)
+	subReg, err := newModuleRegistry("boru:type-util", typeModuleNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -88,7 +88,7 @@ func BuildTypeModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 func typeBodyArg(v native.Value, opName string, r *native.Registry) (native.Value, error) {
 	if !native.IsTypeBody(v) {
-		return native.Value{}, r.AqlError("type_error",
+		return native.Value{}, r.BoruError("type_error",
 			fmt.Sprintf("%s: argument must be a type, got %s", opName, v.String()), opName)
 	}
 	return v, nil
@@ -214,14 +214,14 @@ func fnSigs(v native.Value, opName string, r *native.Registry) ([]native.FnSig, 
 		}
 		return out, nil
 	}
-	return nil, r.AqlError("type_error",
+	return nil, r.BoruError("type_error",
 		fmt.Sprintf("%s: expected a Function or FunctionSignature, got %s", opName, v.String()), opName)
 }
 
 // fieldNames decodes a list of field-name atoms/strings into []string.
 func fieldNames(list native.Value, opName string, r *native.Registry) ([]string, error) {
 	if !native.IsConcrete(list) {
-		return nil, r.AqlError("type_error",
+		return nil, r.BoruError("type_error",
 			opName+": expected a concrete list of field names", opName)
 	}
 	lst, _ := native.AsList(list)
@@ -236,7 +236,7 @@ func fieldNames(list native.Value, opName string, r *native.Registry) ([]string,
 			s, _ := native.AsString(e)
 			out = append(out, s)
 		default:
-			return nil, r.AqlError("type_error",
+			return nil, r.BoruError("type_error",
 				fmt.Sprintf("%s: field-name element must be Atom or String, got %s", opName, e.String()), opName)
 		}
 	}
@@ -347,7 +347,7 @@ var typeModuleNatives = []native.NativeFunc{
 				t := args[0]
 				fields := fieldsOf(t)
 				if fields == nil {
-					return nil, r.AqlError("type_error",
+					return nil, r.BoruError("type_error",
 						fmt.Sprintf("TypeUtil.required: argument must be a Record or Object type, got %s", t.String()), "required")
 				}
 				newFields := native.NewOrderedMap()
@@ -373,7 +373,7 @@ var typeModuleNatives = []native.NativeFunc{
 				t := args[1]
 				fields := fieldsOf(t)
 				if fields == nil {
-					return nil, r.AqlError("type_error",
+					return nil, r.BoruError("type_error",
 						fmt.Sprintf("TypeUtil.pick: first argument must be a Record or Object type, got %s", t.String()), "pick")
 				}
 				names, err := fieldNames(namesList, "TypeUtil.pick", r)
@@ -409,7 +409,7 @@ var typeModuleNatives = []native.NativeFunc{
 				t := args[1]
 				fields := fieldsOf(t)
 				if fields == nil {
-					return nil, r.AqlError("type_error",
+					return nil, r.BoruError("type_error",
 						fmt.Sprintf("TypeUtil.omit: first argument must be a Record or Object type, got %s", t.String()), "omit")
 				}
 				names, err := fieldNames(namesList, "TypeUtil.omit", r)
@@ -447,7 +447,7 @@ var typeModuleNatives = []native.NativeFunc{
 				af := fieldsOf(a)
 				bf := fieldsOf(b)
 				if af == nil || bf == nil {
-					return nil, r.AqlError("type_error",
+					return nil, r.BoruError("type_error",
 						fmt.Sprintf("TypeUtil.merge: both arguments must be Record or Object types, got %s and %s", a.String(), b.String()), "merge")
 				}
 				newFields := native.NewOrderedMap()
@@ -460,7 +460,7 @@ var typeModuleNatives = []native.NativeFunc{
 					if existing, ok := newFields.Get(k); ok {
 						unified, uok := eng.Unify(existing, vb)
 						if !uok {
-							return nil, r.AqlError("type_error",
+							return nil, r.BoruError("type_error",
 								fmt.Sprintf("TypeUtil.merge: field %q cannot unify (%s vs %s)", k, existing.String(), vb.String()), "merge")
 						}
 						newFields.Set(k, unified)
@@ -681,7 +681,7 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				base := latticeNode(t)
 				if base == nil { //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
-					return nil, r.AqlError("type_error",
+					return nil, r.BoruError("type_error",
 						"TypeUtil.nominal: argument must be a lattice-resident type", "nominal")
 				}
 				anon := r.Types.MintRefinePrefab(native.CanonicalType(r, base))
@@ -709,7 +709,7 @@ var typeModuleNatives = []native.NativeFunc{
 				}
 				base := latticeNode(t)
 				if base == nil { //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
-					return nil, r.AqlError("type_error",
+					return nil, r.BoruError("type_error",
 						"TypeUtil.brand: base must be a lattice-resident type", "brand")
 				}
 				anon := r.Types.MintRefinePrefab(native.CanonicalType(r, base))

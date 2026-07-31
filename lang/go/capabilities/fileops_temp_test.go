@@ -166,12 +166,12 @@ func TestOSTempStatfsErrorPaths(t *testing.T) {
 	}
 	// The "" dir arm needs no resolution (os.TempDir root).
 	good := &OSFileOps{}
-	p, err := good.TempFile("", "aql-cover-*")
+	p, err := good.TempFile("", "boru-cover-*")
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer os.Remove(p)
-	if !strings.HasPrefix(filepath.Base(p), "aql-cover-") {
+	if !strings.HasPrefix(filepath.Base(p), "boru-cover-") {
 		t.Errorf("default-root temp = %q", p)
 	}
 }
@@ -199,7 +199,7 @@ func TestOSTempCloseSeam(t *testing.T) {
 		_ = f.Close() // real close so no fd leaks; report the seam error
 		return errors.New("close boom")
 	}
-	if _, err := (&OSFileOps{}).TempFile("", "aql-close-*"); err == nil {
+	if _, err := (&OSFileOps{}).TempFile("", "boru-close-*"); err == nil {
 		t.Error("a Close failure should surface from TempFile")
 	}
 }

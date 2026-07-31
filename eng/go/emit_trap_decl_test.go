@@ -20,7 +20,7 @@ func TestSetUnitReturnPatternsGuard(t *testing.T) {
 	NewEmitState().SetUnitReturnPatterns(-1, nil) // out-of-range → no-op
 }
 
-// TestRecordTrapErrNil covers RecordTrapErr's nil-error guard: a nil AqlError
+// TestRecordTrapErrNil covers RecordTrapErr's nil-error guard: a nil BoruError
 // records nothing and reports "not owned here". Callers always pass a
 // freshly-built interpreter error, so this is the defensive floor.
 func TestRecordTrapErrNil(t *testing.T) {
@@ -57,14 +57,14 @@ func TestRecordTrapFirstWins(t *testing.T) {
 // white-box call pins the guard directly.
 func TestRecordTrapErrFirstWins(t *testing.T) {
 	es := NewEmitState() // fresh state is active with one frame and one unit
-	if !es.RecordTrapErr(&AqlError{Code: "first", Detail: "d1"}, SrcPos{}) {
+	if !es.RecordTrapErr(&BoruError{Code: "first", Detail: "d1"}, SrcPos{}) {
 		t.Fatal("first RecordTrapErr should be owned here")
 	}
 	firstAt := es.trapAt
 	if firstAt == 0 {
 		t.Fatal("first RecordTrapErr should have recorded a trap event")
 	}
-	if !es.RecordTrapErr(&AqlError{Code: "second", Detail: "d2"}, SrcPos{}) {
+	if !es.RecordTrapErr(&BoruError{Code: "second", Detail: "d2"}, SrcPos{}) {
 		t.Fatal("second RecordTrapErr should still report ownership")
 	}
 	if es.trapAt != firstAt {

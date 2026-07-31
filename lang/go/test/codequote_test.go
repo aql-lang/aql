@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // codequote is quote's code-capturing sibling (paren-nesting Step 4,

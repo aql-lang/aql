@@ -30,7 +30,7 @@ func TestW4CommandMethodsAndSetVersion(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Run(-version) = %d, want 0", code)
 	}
-	if !strings.Contains(stdout.String(), "aql 7.7.7-w4") {
+	if !strings.Contains(stdout.String(), "boru 7.7.7-w4") {
 		t.Errorf("stdout = %q, want the injected version", stdout.String())
 	}
 }
@@ -41,14 +41,14 @@ func TestW4ExecuteUsageOnHelp(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("Execute(-h) = %d, want 1", code)
 	}
-	if !strings.Contains(stderr.String(), "Usage: aql [options]") {
+	if !strings.Contains(stderr.String(), "Usage: boru [options]") {
 		t.Errorf("stderr = %q, want the usage text", stderr.String())
 	}
 }
 
 func TestW4ExecuteScriptFile(t *testing.T) {
 	dir := t.TempDir()
-	script := filepath.Join(dir, "w4.aql")
+	script := filepath.Join(dir, "w4.boru")
 	if err := os.WriteFile(script, []byte("4 mul 10"), 0644); err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestW4ExecuteScriptFile(t *testing.T) {
 
 func TestW4ExecuteScriptFileMissing(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := Execute([]string{filepath.Join(t.TempDir(), "zz-missing.aql")}, strings.NewReader(""), &stdout, &stderr)
+	code := Execute([]string{filepath.Join(t.TempDir(), "zz-missing.boru")}, strings.NewReader(""), &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("Execute(missing script) = %d, want 1", code)
 	}
@@ -125,7 +125,7 @@ func TestW4ExecuteREPLDropIn(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Execute(no source) = %d, want 0", code)
 	}
-	if !strings.Contains(stdout.String(), "aql ") {
+	if !strings.Contains(stdout.String(), "boru ") {
 		t.Errorf("stdout = %q, want the version banner", stdout.String())
 	}
 }

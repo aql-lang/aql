@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 func TestW4EvalCompileTry(t *testing.T) {

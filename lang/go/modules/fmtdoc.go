@@ -3,12 +3,12 @@ package modules
 import (
 	stdfmt "fmt"
 
-	"github.com/aql-lang/aql/lang/go/formatter"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/formatter"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // renderDocNative implements Fmt.render: lay out a declarative document
-// tree, built as AQL data, to a target width. It is the runtime entry to
+// tree, built as BORU data, to a target width. It is the runtime entry to
 // the Wadler/Prettier document algebra an XSLT-style rule set emits into
 // (design/fmt-module-and-xslt.0.md). The doc-tree vocabulary is
 // documented on buildDoc. Call form: `Fmt.render <width> <doc>`.
@@ -36,7 +36,7 @@ func renderDocHandler(args []native.Value, _ map[string]native.Value, _ []native
 	return []native.Value{native.NewString(formatter.RenderDoc(int(width), doc))}, nil
 }
 
-// buildDoc converts an AQL document value into a formatter.Doc. A concrete
+// buildDoc converts a BORU document value into a formatter.Doc. A concrete
 // string is literal text; a map keyed by `fmt` selects the node kind:
 //
 //	"hi"                          literal text (bare-string shorthand)

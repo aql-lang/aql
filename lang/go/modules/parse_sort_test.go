@@ -3,7 +3,7 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 	tabnas "github.com/tabnas/parser/go"
 )
 

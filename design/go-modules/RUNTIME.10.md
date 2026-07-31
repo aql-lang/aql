@@ -1,7 +1,7 @@
-# `runtime` → `aql:runtime` (`Runtime`)
+# `runtime` → `boru:runtime` (`Runtime`)
 
 > **Status: design proposal — not implemented.** This note specifies the
-> curated AQL surface for Go's `runtime` package. No Go code exists yet;
+> curated BORU surface for Go's `runtime` package. No Go code exists yet;
 > the note exists so the proposed surface — and its **policy gating** — is
 > auditable before any handler is written. Read
 > [`README.10.md`](README.10.md) first for the shared conventions this
@@ -12,7 +12,7 @@
 Go [`runtime`](https://pkg.go.dev/runtime) is the program's view of the
 **Go runtime and the machine it runs on**: the target OS/architecture,
 the CPU count, the scheduler's goroutine and `GOMAXPROCS` settings, and
-the toolchain version. `aql:runtime` curates the small, read-only,
+the toolchain version. `boru:runtime` curates the small, read-only,
 constant-style slice of that surface that a query/script might
 legitimately want — for capability probing, logging, or
 platform-conditional behaviour. The scheduler-tuning, GC, profiling, and
@@ -30,14 +30,14 @@ curated module:
   (`NumCPU`, `Version`, …) uniformly as words, hiding the const-vs-func
   distinction;
 - reads `GOMAXPROCS` **without mutating** it (Go's `GOMAXPROCS(-1)`
-  query convention is wrapped so the AQL word can never change the
+  query convention is wrapped so the BORU word can never change the
   setting — there is no setter); and
 - gates the whole module on `system-info` (§7), which the bridge cannot.
 
 ## 3. Import & namespace
 
 ```
-import "aql:runtime"     # binds the Runtime namespace
+import "boru:runtime"     # binds the Runtime namespace
 ```
 
 Namespace is the plain capitalized package name, **`Runtime`** — no
@@ -53,7 +53,7 @@ and return a single scalar. Their inner native sigs declare
 `math.go`), not `-1`: there is no arg to collect, so the stack-only
 boundary is correct.
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `runtime.GOOS` | `goos` | `→ String` | The target operating system (`"linux"`, `"darwin"`, …). | Go build *constant* exposed as a zero-arg word. |
 | `runtime.GOARCH` | `goarch` | `→ String` | The target architecture (`"amd64"`, `"arm64"`, …). | Go build constant exposed as a zero-arg word. |
@@ -66,8 +66,8 @@ boundary is correct.
 
 - **No setter for `max-procs`.** Go's `runtime.GOMAXPROCS(n)` both reads
   *and* sets (returning the previous value); passing `-1` is the
-  documented "query without changing" idiom. The AQL word wraps the
-  `-1` query form only, so `aql:runtime` cannot retune the host
+  documented "query without changing" idiom. The BORU word wraps the
+  `-1` query form only, so `boru:runtime` cannot retune the host
   scheduler. (Mutating the scheduler would be a `process`-class effect,
   not `system-info`; it is deliberately omitted — see §10.)
 - **No `(value, ok)` / `(value, error)` to collapse.** Every covered
@@ -102,7 +102,7 @@ Every word here **leaks host fingerprint** — OS, architecture, CPU
 count, toolchain version, live goroutine count all reveal the execution
 environment and vary by host and build. So the whole module gates on the
 **`system-info`** global cap (`policy.GlobalOps`), the same cap
-`aql:os`'s `hostname`/`home-dir`/`temp-dir` use.
+`boru:os`'s `hostname`/`home-dir`/`temp-dir` use.
 
 There is **no dedicated capability scope** in `policy.KnownScopes` for
 runtime info (no `runtime` scope exists, and none is proposed). Instead,
@@ -137,7 +137,7 @@ installing a policy that denies `system-info`.
 
 ## 8. Overlap
 
-- **`aql:os` (`Os`).** Shares the `system-info` cap and the
+- **`boru:os` (`Os`).** Shares the `system-info` cap and the
   fingerprint/determinism concern, but reports the **OS process**
   (hostname, pid, cwd, env) rather than the **Go runtime**
   (GOOS/GOARCH/NumCPU/version). No word overlap; the two are
@@ -150,7 +150,7 @@ installing a policy that denies `system-info`.
 Zero-arg words need no preceding stack value:
 
 ```
-import "aql:runtime"
+import "boru:runtime"
 
 Runtime.goos                          # → "linux"
 Runtime.goarch                        # → "amd64"
@@ -174,7 +174,7 @@ Runtime.num-goroutine                 # → <policy denied> when system-info den
   `LockOSThread`, the `MemStats` / `ReadMemStats` block, `Stack`,
   `Callers`, `runtime/debug`, `runtime/pprof`. These are either
   effectful (a `process`-class gate, not `system-info`) or deep
-  introspection with no clean AQL value shape.
+  introspection with no clean BORU value shape.
 - **Out of scope here:** `runtime.NumCgoCall`, `runtime.Compiler`,
   `runtime.GOROOT` (deprecated) — niche; can be added later if a
   use-case appears (each would also gate on `system-info`).
@@ -183,7 +183,7 @@ Runtime.num-goroutine                 # → <policy denied> when system-info den
   non-deterministic word. Proposal: ship it but document that a
   determinism sandbox should deny it; revisit if unused.
 - **Open:** memory stats (`MemStats.Alloc`, etc.) — a future
-  `aql:runtime` addition or a separate diagnostics module? Deferred;
+  `boru:runtime` addition or a separate diagnostics module? Deferred;
   the shape (a big options Map) and the gating both need their own
   design.
 
@@ -216,10 +216,10 @@ between `math.go` (pure) and `io.go` (capability-backed):
 4. Register `BuildRuntimeModule` in the `modules` map in
    `lang/go/modules/modules.go`.
 5. **Docs.** `lang/go/modules/docs_runtime.go` →
-   `registerDocs("aql:runtime", {…})`, one line per export
+   `registerDocs("boru:runtime", {…})`, one line per export
    (`TestModuleExportDocs` enforces).
 6. **Spec.** `lang/spec/module-runtime.tsv` — rows lead with
-   `import "aql:runtime"`; use a **fixed `system-info` provider** so
+   `import "boru:runtime"`; use a **fixed `system-info` provider** so
    `goos`/`num-cpu`/`version` are reproducible, and pair every positive
    row with an `ERROR:<substring>` sibling (deny-policy row + wrong-arity
    row). `describe` surfaces the module live via `stampExportProvenance`.

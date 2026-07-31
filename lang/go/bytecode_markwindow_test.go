@@ -72,7 +72,7 @@ func TestMarkWindowDoCatchCompiles(t *testing.T) {
 		// The branch-arm nesting: the raise sits inside a taken if arm.
 		mwDocMod + `do [(if true [M.boom 5] [7]) 8] error [dot code]`,
 		// The dry-pass-proven raising constant (the StructUtil chained leaf).
-		`import "aql:struct-util"  def g StructUtil.parse/r  do [(g "") 2] error [dot code]`,
+		`import "boru:struct-util"  def g StructUtil.parse/r  do [(g "") 2] error [dot code]`,
 	}
 	for i, src := range rows {
 		t.Run(fmt.Sprintf("row-%d", i), func(t *testing.T) {
@@ -88,9 +88,9 @@ func TestMarkWindowDoCatchCompiles(t *testing.T) {
 // (The module-export-in-region sibling graduated 2026-07-17 — §9.1.)
 func TestMarkWindowDeclinesKeepParity(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	// Re-diagnosed 2026-07-20 (PR #280 review): the promotion itself is now
 	// the refusal — a variadic catch region's stores would pop success-arity
 	// values the raising run never produced — caught at lowerCall's

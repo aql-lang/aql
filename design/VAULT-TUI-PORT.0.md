@@ -1,14 +1,14 @@
 # VAULT-TUI-PORT
 
-Design for porting the **interactive vault TUI** (`aql vault -i`) from its
+Design for porting the **interactive vault TUI** (`boru vault -i`) from its
 bubbletea implementation (`cmd/go/internal/vault/tui_*.go`, ~3,900 lines of
-Go) onto the **landed `aql:tui` surface** — the vault UI rewritten *in AQL*,
+Go) onto the **landed `boru:tui` surface** — the vault UI rewritten *in BORU*,
 running under `Tui.run` on the same actor substrate as
-`design/examples/apps/todo-tui.aql`.
+`design/examples/apps/todo-tui.boru`.
 
-The port is deliberately the first *real* application on `aql:tui`, and its
+The port is deliberately the first *real* application on `boru:tui`, and its
 planning phase doubles as a **gap audit**: every capability the vault TUI
-needs that AQL or its core modules cannot supply today is enumerated in §2
+needs that BORU or its core modules cannot supply today is enumerated in §2
 with a disposition — closed by this design, pushed to the app layer, or
 explicitly deferred with a spec sketch (§7).
 
@@ -18,20 +18,20 @@ updated to as-built at the end.
 
 > **Decisions proposed at design time** (the forks this RFC closes; a
 > reviewer ratifies or reopens them):
-> (1) the backend is a **bridge**: a native `aql:vault` module wraps the
+> (1) the backend is a **bridge**: a native `boru:vault` module wraps the
 > existing Go vault command layer; crypto, keyring, and storage stay in Go
-> (§1.2). Migrating vault *logic* into AQL is a specced future phase (§7);
-> (2) the AQL app ships **side-by-side opt-in** — `aql vault -i --aql`; the
+> (§1.2). Migrating vault *logic* into BORU is a specced future phase (§7);
+> (2) the BORU app ships **side-by-side opt-in** — `boru vault -i --boru`; the
 > bubbletea TUI stays the default until parity is proven (§1.3);
 > (3) the bridge host seam is **one generic `Do(op, params)` closure**
 > injected from `cmd/go`, mirroring `RegisterHostTui` (§3.1);
-> (4) the adapter — not AQL — owns the **session secrets**: active vault,
-> cached passphrase, authed flag. AQL sees `authed: Bool` (§5.1);
+> (4) the adapter — not BORU — owns the **session secrets**: active vault,
+> cached passphrase, authed flag. BORU sees `authed: Bool` (§5.1);
 > (5) screens are **data on a stack in app state**, folded by per-kind pure
 > functions — not objects, not processes (§4.2);
 > (6) vault operations run **inline in `update`** by default; only
 > potentially blocking ops use the spawn-and-send idiom (§4.4);
-> (7) forms are built **in AQL from `Tui.input` + `Tui.edit`** — no new
+> (7) forms are built **in BORU from `Tui.input` + `Tui.edit`** — no new
 > widget kinds; the only tuikit change is a `mask` option on `input` (§2.2);
 > (8) no env-var or exit-code words are added — the Go launcher and adapter
 > own both ends (§2.3).
@@ -40,7 +40,7 @@ updated to as-built at the end.
 
 ### 1.1 What is being ported
 
-`aql vault -i` (see `CLI.md` "Interactive TUI") is a screen-stack app:
+`boru vault -i` (see `CLI.md` "Interactive TUI") is a screen-stack app:
 Home menu → Secrets / Access / Passwords / Maintenance / Settings, plus a
 multi-vault picker, a passphrase gate, a `:` command palette, and a `?` help
 overlay. Every mutation is driven through the vault CLI's `Run()` entry
@@ -51,39 +51,39 @@ The full behavioural inventory is the parity matrix in §6.1.
 
 The vault's security core — scrypt/AES-GCM file keyring, HKDF keyslots,
 nacl/box namespace keys, OS keychain backends, atomic store writes,
-journal/audit — is battle-tested Go with **no AQL surface**. Rewriting it in
-AQL is neither possible today (no crypto words, §2.4) nor desirable in one
+journal/audit — is battle-tested Go with **no BORU surface**. Rewriting it in
+BORU is neither possible today (no crypto words, §2.4) nor desirable in one
 step (security-sensitive logic should not churn as a side effect of a UI
 port).
 
 So the port splits exactly where the Go TUI already splits:
 
-| Layer | Go TUI today | AQL port |
+| Layer | Go TUI today | BORU port |
 | --- | --- | --- |
-| Screens, navigation, keys, forms, chrome | bubbletea (`tui_model.go`, `tui_screens.go`, `tui_build.go`) | **AQL** (`lang/go/modules/vault_tui.aql`) on `aql:tui` |
-| Command layer (all reads + mutations) | `tuiController` → `vault.Run()` | **unchanged Go**, exposed as the `aql:vault` bridge (§3) |
+| Screens, navigation, keys, forms, chrome | bubbletea (`tui_model.go`, `tui_screens.go`, `tui_build.go`) | **BORU** (`lang/go/modules/vault_tui.boru`) on `boru:tui` |
+| Command layer (all reads + mutations) | `tuiController` → `vault.Run()` | **unchanged Go**, exposed as the `boru:vault` bridge (§3) |
 | Crypto / keyring / storage | Go (`keyring.go`, `keyslot.go`, `store.go`) | unchanged Go, behind the bridge |
 
-The bridge preserves the TUI↔CLI parity property: the AQL app drives the
+The bridge preserves the TUI↔CLI parity property: the BORU app drives the
 same command layer the CLI does.
 
 ### 1.3 Side-by-side launch (decision 2)
 
-`aql vault -i --aql` runs the AQL app; plain `aql vault -i` remains the
-bubbletea TUI, byte-identical. The flag flip (making AQL the default,
+`boru vault -i --boru` runs the BORU app; plain `boru vault -i` remains the
+bubbletea TUI, byte-identical. The flag flip (making BORU the default,
 retiring the bubbletea screens) is out of scope for this RFC and gated on
 the §6.1 parity matrix being demonstrably green.
 
 ## 2. Gap inventory
 
-The audit question: *what does a full-screen vault app need that AQL and its
+The audit question: *what does a full-screen vault app need that BORU and its
 core modules cannot do today?* Each gap carries a disposition.
 
 ### 2.1 Gaps closed by new native surface (this design)
 
 | # | Gap | Evidence | Disposition |
 | --- | --- | --- | --- |
-| G1 | **No vault surface in AQL.** The entire command layer is Go-only under `cmd/go/internal/vault/`. | no `vault` module in `lang/go/modules/modules.go` | New **`aql:vault` bridge module** (§3), host-injected — `lang/go` cannot import `cmd/go`, so the backend arrives via a `RegisterHostVault` seam exactly like `RegisterHostTui`. |
+| G1 | **No vault surface in BORU.** The entire command layer is Go-only under `cmd/go/internal/vault/`. | no `vault` module in `lang/go/modules/modules.go` | New **`boru:vault` bridge module** (§3), host-injected — `lang/go` cannot import `cmd/go`, so the backend arrives via a `RegisterHostVault` seam exactly like `RegisterHostTui`. |
 | G2 | **No clipboard word.** The Go TUI's `c` (copy exec recipe) and token copy use `clipboard.go` (pbcopy/xclip/…), Go-only. | no clipboard word in any module | `Vault.copy` rides the vault host spec; the adapter reuses `detectClipboard`. A general-purpose clipboard module is deferred (§7.4). |
 | G3 | **No masked text input.** `tuikit`'s input widget paints `value` verbatim (`render.go` `paintInput`); a passphrase form would echo the passphrase. | `lang/go/tuikit/render.go` | Add a **`mask: true` option** honored by the renderer (§2.2). `Tui.input` already passes unknown option keys into the widget map, so only the renderer (and its measure path) changes. |
 
@@ -91,33 +91,33 @@ core modules cannot do today?* Each gap carries a disposition.
 
 | # | Gap | Disposition |
 | --- | --- | --- |
-| G4 | **No list/table filtering.** bubbles' `list` has built-in `/` filtering; `Tui.list-view`/`Tui.table` take items+cursor only. | App-level: `/` toggles a filter input in the screen's state; visible rows are recomputed by the screen builder. Keeps match semantics in AQL, no widget change. |
-| G5 | **No form primitives.** The Go TUI leans on `huh` (fields, validation, password inputs, confirms). | A small **form model in AQL** (§4.5): fields as data, `Tui.edit` for editing, per-field validate fns, focus-as-state. This is the port's largest new AQL component and a deliberate dogfooding target. |
+| G4 | **No list/table filtering.** bubbles' `list` has built-in `/` filtering; `Tui.list-view`/`Tui.table` take items+cursor only. | App-level: `/` toggles a filter input in the screen's state; visible rows are recomputed by the screen builder. Keeps match semantics in BORU, no widget change. |
+| G5 | **No form primitives.** The Go TUI leans on `huh` (fields, validation, password inputs, confirms). | A small **form model in BORU** (§4.5): fields as data, `Tui.edit` for editing, per-field validate fns, focus-as-state. This is the port's largest new BORU component and a deliberate dogfooding target. |
 | G6 | **No focus manager; single `update` fn.** | Accepted framework property (TUI.0.md §3.4 "focus is app state"). Screens-as-data + `case` routing (§4.2). |
-| G7 | **No terminal background detection.** The Go TUI calls `lipgloss.HasDarkBackground()` once at launch; tuikit has no equivalent. | The launcher passes `{dark: Bool}` (still computed Go-side) into `VaultTui.run`; the theme palette (§4.6) derives from `theme` + `dark`. Prefs persist via `Vault.prefs`/`Vault.set-prefs` (`~/.aql/tui.jsonic`), keeping Tier-1 untouched. |
+| G7 | **No terminal background detection.** The Go TUI calls `lipgloss.HasDarkBackground()` once at launch; tuikit has no equivalent. | The launcher passes `{dark: Bool}` (still computed Go-side) into `VaultTui.run`; the theme palette (§4.6) derives from `theme` + `dark`. Prefs persist via `Vault.prefs`/`Vault.set-prefs` (`~/.boru/tui.jsonic`), keeping Tier-1 untouched. |
 
 ### 2.3 Non-gaps on inspection
 
 | # | Candidate gap | Why it is not one |
 | --- | --- | --- |
-| N1 | No env-var words (`AQL_VAULT_FOLDER/SUFFIX/PASSPHRASE`). | Launch-vault resolution and env promotion stay in the Go adapter (as `tuiController` does today). AQL never needs to read the environment. A general `Os.env` word set (gated by the existing-but-unused `env` policy scope) is deferred (§7.4). |
+| N1 | No env-var words (`BORU_VAULT_FOLDER/SUFFIX/PASSPHRASE`). | Launch-vault resolution and env promotion stay in the Go adapter (as `tuiController` does today). BORU never needs to read the environment. A general `Os.env` word set (gated by the existing-but-unused `env` policy scope) is deferred (§7.4). |
 | N2 | No `exit` / exit-code word. | `Tui.run` blocks and returns the final state; the Go launcher maps an error to exit code 1. Nothing in the app needs to set a code. |
-| N3 | No tick/timer primitive in `aql:tui`. | The Go TUI uses **no timers** (no `tea.Tick`, no subscriptions); the status line persists until replaced. Where the AQL app wants polish (status auto-expiry), `TimeUtil.timeout N [send {…} pid]` composes it — documented in §4.4, not required for parity. |
+| N3 | No tick/timer primitive in `boru:tui`. | The Go TUI uses **no timers** (no `tea.Tick`, no subscriptions); the status line persists until replaced. Where the BORU app wants polish (status auto-expiry), `TimeUtil.timeout N [send {…} pid]` composes it — documented in §4.4, not required for parity. |
 | N4 | No `while` loop. | The TEA fold needs none; iteration is `for`/`each`/`fold`/recursion throughout. |
 
 Everything else the app needs is **already well-covered**: file I/O with
-atomic writes and permissions (`aql:io`), JSON/jsonic
+atomic writes and permissions (`boru:io`), JSON/jsonic
 (`StructUtil.jsonify/parse`), error handling (`raise`, `do…error`), async
 (`TimeUtil`, `spawn`/`send`/`receive`), sorting/filtering, typed `fn` +
-closures, and testing (`aql:test`, TSV specs, the VirtualBackend e2e
+closures, and testing (`boru:test`, TSV specs, the VirtualBackend e2e
 harness).
 
 ### 2.4 Gaps found while building (the dogfooding yield)
 
-Writing `vault_tui.aql` surfaced six language- and compiler-level sharp
-edges (G8–G13). Because those are findings *about AQL* rather than about
+Writing `vault_tui.boru` surfaced six language- and compiler-level sharp
+edges (G8–G13). Because those are findings *about BORU* rather than about
 the vault port, they are written up in their own language-scoped doc —
-**[AQL-SHARP-EDGES.0.md](AQL-SHARP-EDGES.0.md)** — with minimal repros,
+**[BORU-SHARP-EDGES.0.md](BORU-SHARP-EDGES.0.md)** — with minimal repros,
 root-cause hypotheses, classifications (engine-bug / sharp-edge /
 latent-bug / compiler-limit), and a triage table. In brief:
 
@@ -126,7 +126,7 @@ latent-bug / compiler-limit), and a triage table. In brief:
 - **G9** a call in a `case` default slot mis-collects the case machinery's
   stack values (parenthesize defaults);
 - **G10** `def why (dot message)` in an `error` handler never works — a
-  latent bug in the shipped `todo-tui-client.aql`;
+  latent bug in the shipped `todo-tui-client.boru`;
 - **G11** a returned list literal evaluates lazily, after body teardown
   (def-bind eagerly);
 - **G12** an `/r`-parked fn does not satisfy a `Function`-typed param, yet
@@ -136,27 +136,27 @@ latent-bug / compiler-limit), and a triage table. In brief:
   the reason each builder def-binds its map.
 
 The app carries a workaround for each; the follow-ups are triaged in that
-doc. See also §3 there: `vault_tui.aql` runs **100% on the interpreter**
-(like every AQL app in the repo), so the compiler items have zero runtime
+doc. See also §3 there: `vault_tui.boru` runs **100% on the interpreter**
+(like every BORU app in the repo), so the compiler items have zero runtime
 impact.
 
-### 2.5 Deferred gaps — the vault-logic-in-AQL phase (§7)
+### 2.5 Deferred gaps — the vault-logic-in-BORU phase (§7)
 
 Blocking a *full* rewrite (not this port), confirmed absent from the
 language layer:
 
 - **Cryptography**: no AEAD (AES-GCM/XChaCha20-Poly1305), no KDFs
   (scrypt/argon2/HKDF), no SHA-256/512 or HMAC, no nacl/box, no
-  constant-time compare. `aql:bin-util` offers only base64/hex and
+  constant-time compare. `boru:bin-util` offers only base64/hex and
   non-cryptographic fnv hashes.
-- **Secure randomness**: `aql:rand` is `math/rand` — unusable for salts,
+- **Secure randomness**: `boru:rand` is `math/rand` — unusable for salts,
   nonces, keys, or tokens.
 - **OS keyring**: macOS Keychain / Secret Service / wincred / 1Password
   integrations are Go-only (`keyring.go`).
 
 §7 sketches the word surface for each so the migration path is on record.
 
-## 3. The `aql:vault` bridge module
+## 3. The `boru:vault` bridge module
 
 ### 3.1 Host seam (decision 3)
 
@@ -188,7 +188,7 @@ tests inject a trivial scripted fake.
 
 ### 3.2 Word surface
 
-Namespace **`Vault`**, import id **`aql:vault`**. All inner signatures use
+Namespace **`Vault`**, import id **`boru:vault`**. All inner signatures use
 `BarrierPos: -1` (the module-wrapper dispatch rule — see `lang/go/CLAUDE.md`
 "Module FnDef Wrappers"). Option-map arguments are validated lang-side
 *before* the backend lookup so usage errors are testable headlessly.
@@ -206,7 +206,7 @@ Namespace **`Vault`**, import id **`aql:vault`**. All inner signatures use
 
 `recipes` returns the provider-aware exec inject commands (the adapter
 reuses `injectCommands`/`recipeExampleCmd`) so the detail screen is
-parity-exact without duplicating provider knowledge in AQL.
+parity-exact without duplicating provider knowledge in BORU.
 
 **Error mapping**: bad/missing args → `vault_usage` (checked before backend
 lookup); no host → `no_backend`; adapter op failure → code `vault` with the
@@ -224,15 +224,15 @@ mirrors the tui module's `terminal` scope check.
 
 ### 3.4 The cmd-side adapter
 
-`cmd/go/internal/vault/aqlbridge.go` implements `VaultSpec.Do` as an
+`cmd/go/internal/vault/borubridge.go` implements `VaultSpec.Do` as an
 op-switch over the existing `tuiController` methods (and `Store` loads for
 reads), plus clipboard, recipes, prefs, and launch-vault resolution.
 
 **Every op runs under one `sync.Mutex`.** The controller promotes the
 active vault and cached passphrase into the *process environment*
-(`AQL_VAULT_FOLDER/SUFFIX/PASSPHRASE`) per op — safe in bubbletea because
+(`BORU_VAULT_FOLDER/SUFFIX/PASSPHRASE`) per op — safe in bubbletea because
 Cmds run on one goroutine, and made safe here by serializing the adapter,
-since the AQL app may call from spawned worker processes (§4.4).
+since the BORU app may call from spawned worker processes (§4.4).
 
 ## 4. Data flow and reactivity model
 
@@ -271,7 +271,7 @@ Screens carry identity (`table: "secrets"`, `pager: "audit"`, …) so
 `state.screens` (`push-screen` / `pop-screen` / `pop-to-root`, each followed
 by a reload of the new top). The Go code routes navigation through
 messages (`pushMsg`/`popMsg`) only because bubbletea commands are async; in
-AQL the update fn simply returns the new state — no round-trip.
+BORU the update fn simply returns the new state — no round-trip.
 
 ### 4.3 Event routing
 
@@ -295,11 +295,11 @@ One `update`, layered exactly like `rootModel.handleKey`:
 ### 4.4 Effects: inline by default, spawn-and-send when blocking (decision 6)
 
 Bridge ops are local file operations the Go TUI itself runs synchronously
-on its UI goroutine — so the AQL app calls them **inline in `update`**,
+on its UI goroutine — so the BORU app calls them **inline in `update`**,
 wrapped `do [ … ] error [ …status… ]`. The screen cannot repaint during an
-update (documented `aql:tui` contract), which for these ops is parity.
+update (documented `boru:tui` contract), which for these ops is parity.
 
-The **spawn-and-send idiom** (from `todo-tui-client.aql`) is reserved for
+The **spawn-and-send idiom** (from `todo-tui-client.boru`) is reserved for
 ops that may genuinely block — `verify`, `scan`, `create`, and
 `unlock`/`reveal` on OS-keyring backends (helper processes can prompt):
 
@@ -312,7 +312,7 @@ spawn [ do [ def out (Vault.verify {})
 Tagged results fold like the Go TUI's messages: `op-result`/`op-error`
 (= `opResultMsg`: set status, refresh `state.vault`, reload top),
 `granted` (push the one-time-token pager), `revealed` (lands on the detail
-screen). Any AQL process can drive the UI the same way —
+screen). Any BORU process can drive the UI the same way —
 `send msg (whereis "tui")`.
 
 The status line persists until replaced (parity with the Go TUI). Optional
@@ -370,15 +370,15 @@ persists via `Vault.set-prefs`.
 ### 5.1 The adapter owns session secrets (decision 4)
 
 The cached passphrase and the active-vault env promotion live in the Go
-adapter, exactly as in `tuiController`. AQL observes `authed: Bool` and
+adapter, exactly as in `tuiController`. BORU observes `authed: Bool` and
 `needs-passphrase: Bool`; it never holds a long-lived passphrase.
 
-### 5.2 Hygiene mandates in the AQL app
+### 5.2 Hygiene mandates in the BORU app
 
 Enforced by review and pinned by e2e frame assertions:
 
 - Passphrase and secret-value fields set `mask: true`.
-- A passphrase string exists in AQL only as the in-flight form-field value
+- A passphrase string exists in BORU only as the in-flight form-field value
   and is cleared **in the same update** that calls `Vault.authenticate`
   (success and failure paths both).
 - A revealed secret lives only in the detail screen's map and is deleted on
@@ -390,7 +390,7 @@ Enforced by review and pinned by e2e frame assertions:
 
 ## 6. Parity, testing, rollout
 
-### 6.1 Parity matrix (Go TUI → AQL app)
+### 6.1 Parity matrix (Go TUI → BORU app)
 
 Global keys: `enter` open · `esc` back · `/` filter · `:` palette · `?`
 help · `o`/`ctrl+o` switch vault · `T` theme · `q` quit · `ctrl+c` quit.
@@ -400,7 +400,7 @@ Palette words (from `runPalette`): `secrets|secret|s`,
 `history`, `providers`, `config`, `add`, `grant`, `lock`, `unlock`, `home`,
 `quit|exit|q`.
 
-| Go screen (constructor) | Keys / features | AQL phase |
+| Go screen (constructor) | Keys / features | BORU phase |
 | --- | --- | --- |
 | Home (`buildHome`) | 5-area menu | 2A |
 | Secrets (`buildSecrets`) | table, `/` filter, `enter` detail, `a` add (defaults memory) | 2A |
@@ -424,31 +424,31 @@ Palette words (from `runPalette`): `secrets|secret|s`,
 2. **TSV specs**: `lang/spec/module-vault.tsv` (usage + `no_backend`
    negatives, headless-safe because validation precedes backend lookup);
    `module-tui.tsv` mask rows.
-3. **Adapter tests**: `aqlbridge_test.go` on temp vaults (file backend,
+3. **Adapter tests**: `borubridge_test.go` on temp vaults (file backend,
    `t.TempDir()`), including a concurrent-ops env-promotion test.
 4. **E2E**: `lang/go/test/app_vault_tui_test.go` — VirtualBackend + fake
    spec, scripted keys: unlock → browse → filter → detail → reveal (frame
    shows value) → hide (later frames don't) → add → rotate → grant → quit.
-5. **AQL tests**: `vault_tui_test.aql` for the pure helpers (stack ops,
+5. **BORU tests**: `vault_tui_test.boru` for the pure helpers (stack ops,
    filter, form validation, palette resolver, theme palette).
-6. **Manual**: scratch vault (`AQL_VAULT_FOLDER=$(mktemp -d)`, file
-   backend) → `aql vault -i --aql`; walk this matrix; confirm plain
-   `aql vault -i` is unchanged.
+6. **Manual**: scratch vault (`BORU_VAULT_FOLDER=$(mktemp -d)`, file
+   backend) → `boru vault -i --boru`; walk this matrix; confirm plain
+   `boru vault -i` is unchanged.
 
 ### 6.3 Implementation phases — as built
 
-All phases landed on `claude/aql-vault-tui-port-3uz9dx`, each through the
+All phases landed on `claude/boru-vault-tui-port-3uz9dx`, each through the
 full `make fmt && make vet && make lint && make test && make cover-gate`
 gate:
 
 0. this RFC + kg catalog entries.
-1a. `aql:vault` bridge — 43 words, one op table, `RegisterHostVault` seam,
+1a. `boru:vault` bridge — 43 words, one op table, `RegisterHostVault` seam,
 `vault` policy scope, fake-backend suite.
 1b. tuikit `mask` option on the input widget.
-1c. cmd adapter (`aqlbridge.go`, mutex-serialized over `tuiController`) +
-the `aql vault -i --aql` launcher.
+1c. cmd adapter (`borubridge.go`, mutex-serialized over `tuiController`) +
+the `boru vault -i --boru` launcher.
 2A. secrets core — table + `/` filter, detail (reveal/hide/rotate/rename/
-expiry/delete/grant + recipe copy), the AQL form framework, passphrase gate.
+expiry/delete/grant + recipe copy), the BORU form framework, passphrase gate.
 2B. `:` palette (the full `runPalette` word table), `?` help overlay,
 `T` theme cycle with pref persistence.
 2C. Access + Passwords record tables with per-row action keys.
@@ -459,36 +459,36 @@ launch-into-picker when no vault exists.
 
 Each phase carries a live-driven VirtualBackend e2e flow in
 `lang/go/test/app_vault_tui_test.go`. The one deliberate parity deviation:
-`aql vault -i` (bubbletea) opened section landing screens as status pagers
-in the skeleton, whereas the AQL app opens the real Access/Passwords tables
-and Maintenance/Settings sub-menus — i.e. the AQL port reaches *past* the
+`boru vault -i` (bubbletea) opened section landing screens as status pagers
+in the skeleton, whereas the BORU app opens the real Access/Passwords tables
+and Maintenance/Settings sub-menus — i.e. the BORU port reaches *past* the
 skeleton to the same destinations the bubbletea TUI has.
 
-## 7. Deferred: vault logic in AQL (spec authored, not implemented)
+## 7. Deferred: vault logic in BORU (spec authored, not implemented)
 
 The bridge is the *first* step of a migration, not its end state. The
-follow-on phase — moving vault logic itself into AQL — is now specified in
+follow-on phase — moving vault logic itself into BORU — is now specified in
 three companion design docs; each subsection below is a one-line
 orientation pointing at the authoritative spec. The specs are pinned to
-the **real Go vault internals** (`cmd/go/internal/vault`) so an in-AQL
+the **real Go vault internals** (`cmd/go/internal/vault`) so an in-BORU
 vault can open a vault the Go path wrote — parity, not reinvention.
 
-### 7.1 `aql:crypto` — cryptographic primitives
+### 7.1 `boru:crypto` — cryptographic primitives
 
 AES-256-GCM AEAD, scrypt (the vault's `N=2¹⁵, r=8, p=1, len=32`),
 HKDF-SHA256, SHA-256/512, HMAC-SHA256, constant-time `eq`, and X25519
 anonymous sealed boxes — a pure-compute module (policy scope `crypto`,
 no global hard-cap). Every byte value is the first-class `Bytes` type
 ([BYTES.10](go-modules/BYTES.10.md)). **→ see
-[AQL-CRYPTO.0](AQL-CRYPTO.0.md)** (authoritative spec; defers
+[BORU-CRYPTO.0](BORU-CRYPTO.0.md)** (authoritative spec; defers
 `argon2id`/XChaCha20 as unused by the vault).
 
 ### 7.2 Secure randomness
 
 `Crypto.rand-bytes <n>` on `crypto/rand`, deliberately **not** in
-`aql:rand` (which stays `math/rand` and must never be reached for key
+`boru:rand` (which stays `math/rand` and must never be reached for key
 material). Specified alongside the primitives **→ see
-[AQL-CRYPTO.0](AQL-CRYPTO.0.md) §9**.
+[BORU-CRYPTO.0](BORU-CRYPTO.0.md) §9**.
 
 ### 7.3 OS keyring seam
 
@@ -497,7 +497,7 @@ material). Specified alongside the primitives **→ see
 Service / wincred / file / 1Password) — so keychain access stays
 host-injected. **→ see [OS-KEYRING.0](OS-KEYRING.0.md)**.
 
-### 7.4 `aql:os` — env read + clipboard
+### 7.4 `boru:os` — env read + clipboard
 
 The env read (N1) is the existing `Os.getenv` (value-or-None, `env`
 scope); the clipboard copy (G2) is a new seam-backed `Os.clipboard-copy`
@@ -506,5 +506,5 @@ gated on `process`. Both are specified in the canonical OS module doc
 additions).
 
 With those landed, `store.jsonic` read/write, keyslot envelopes, and
-capability bookkeeping become expressible in AQL (`aql:io` already covers
+capability bookkeeping become expressible in BORU (`boru:io` already covers
 atomic writes, locks, and permissions), and the bridge shrinks op by op.

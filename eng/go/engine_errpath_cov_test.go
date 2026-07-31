@@ -19,7 +19,7 @@ func TestFnReturnTypeMismatchErrors(t *testing.T) {
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "n", Type: TInteger}},
 				Returns:    []*Type{TInteger},
-				Impl:       AQL([]Value{NewString("oops")}),
+				Impl:       BORU([]Value{NewString("oops")}),
 				BarrierPos: BarrierAllForward,
 			}},
 		})
@@ -40,7 +40,7 @@ func TestFnReturnCountMismatchErrors(t *testing.T) {
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "n", Type: TInteger}},
 				Returns:    []*Type{TInteger},
-				Impl:       AQL([]Value{}),
+				Impl:       BORU([]Value{}),
 				BarrierPos: BarrierAllForward,
 			}},
 		})
@@ -59,7 +59,7 @@ func TestEvalLimitTripsCleanly(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "n", Type: TInteger}},
 			Returns:    []*Type{TInteger},
-			Impl:       AQL([]Value{NewOpenParen(), NewWord("spin2"), NewWord("n"), NewCloseParen()}),
+			Impl:       BORU([]Value{NewOpenParen(), NewWord("spin2"), NewWord("n"), NewCloseParen()}),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -186,35 +186,35 @@ func TestUndefinedWordErrorMentionsName(t *testing.T) {
 	}
 }
 
-// --- CallAQL -------------------------------------------------------------------
+// --- CallBORU -------------------------------------------------------------------
 
-func TestCallAQLDirect(t *testing.T) {
+func TestCallBORUDirect(t *testing.T) {
 	r := covRegistry(t, nil)
 	sig := &FnSig{
 		Params:  []FnParam{{Name: "n", Type: TInteger}},
 		Returns: []*Type{TInteger},
-		Impl:    AQL([]Value{NewOpenParen(), NewWord("cadd"), NewWord("n"), NewWord("n"), NewCloseParen()}),
+		Impl:    BORU([]Value{NewOpenParen(), NewWord("cadd"), NewWord("n"), NewWord("n"), NewCloseParen()}),
 	}
-	out, err := r.CallAQL(sig, []Value{NewInteger(6)}, nil)
+	out, err := r.CallBORU(sig, []Value{NewInteger(6)}, nil)
 	if err != nil {
-		t.Fatalf("CallAQL: %v", err)
+		t.Fatalf("CallBORU: %v", err)
 	}
 	if len(out) != 1 {
-		t.Fatalf("CallAQL results = %v", out)
+		t.Fatalf("CallBORU results = %v", out)
 	}
 	if got, _ := AsInteger(out[0]); got != 12 {
-		t.Errorf("CallAQL = %v, want 12", out[0])
+		t.Errorf("CallBORU = %v, want 12", out[0])
 	}
 
 	// Captures are visible to the body and shadowed by params.
 	capSig := &FnSig{
 		Params:  []FnParam{{Name: "n", Type: TInteger}},
 		Returns: []*Type{TInteger},
-		Impl:    AQL([]Value{NewOpenParen(), NewWord("cadd"), NewWord("n"), NewWord("base"), NewCloseParen()}),
+		Impl:    BORU([]Value{NewOpenParen(), NewWord("cadd"), NewWord("n"), NewWord("base"), NewCloseParen()}),
 	}
-	out, err = r.CallAQL(capSig, []Value{NewInteger(1)}, []CapturedBinding{{Name: "base", Value: NewInteger(100)}})
+	out, err = r.CallBORU(capSig, []Value{NewInteger(1)}, []CapturedBinding{{Name: "base", Value: NewInteger(100)}})
 	if err != nil {
-		t.Fatalf("CallAQL with capture: %v", err)
+		t.Fatalf("CallBORU with capture: %v", err)
 	}
 	if got, _ := AsInteger(out[0]); got != 101 {
 		t.Errorf("captured call = %v, want 101", out[0])
@@ -223,10 +223,10 @@ func TestCallAQLDirect(t *testing.T) {
 	// Negative: a body that errors propagates.
 	badSig := &FnSig{
 		Params: []FnParam{{Name: "n", Type: TInteger}},
-		Impl:   AQL([]Value{NewWord("no_such_word")}),
+		Impl:   BORU([]Value{NewWord("no_such_word")}),
 	}
-	if _, err := r.CallAQL(badSig, []Value{NewInteger(1)}, nil); err == nil {
-		t.Error("erroring body succeeded via CallAQL")
+	if _, err := r.CallBORU(badSig, []Value{NewInteger(1)}, nil); err == nil {
+		t.Error("erroring body succeeded via CallBORU")
 	}
 }
 
@@ -297,13 +297,13 @@ func TestNumOpNativeBuilders(t *testing.T) {
 	}))
 	r.RegisterNativeFunc(BinaryNumOpNative("cdiv", func(a, b float64) (float64, error) {
 		if b == 0 {
-			return 0, MakeAqlError("division_by_zero", "cdiv by zero", "cdiv", "", "")
+			return 0, MakeBoruError("division_by_zero", "cdiv by zero", "cdiv", "", "")
 		}
 		return a / b, nil
 	}))
 	r.RegisterNativeFunc(BinaryIntOpNative("cmod", func(a, b int64) (int64, error) {
 		if b == 0 {
-			return 0, MakeAqlError("division_by_zero", "cmod by zero", "cmod", "", "")
+			return 0, MakeBoruError("division_by_zero", "cmod by zero", "cmod", "", "")
 		}
 		return a % b, nil
 	}))

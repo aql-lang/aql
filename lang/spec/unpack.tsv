@@ -30,6 +30,6 @@ unpack [x] 42	ERROR:	non-map source is rejected
 unpack [x] Map	ERROR:	bare type-literal source is rejected
 #
 # §  unpack a module — bind its export words bare (no namespace prefix)
-unpack 'aql:math-util' sqrt 16.0	4.0	unpack a whole module's words into scope
-unpack MathUtil 'aql:math-util' sqrt 16.0	4.0	unpack only the named export namespace
-unpack 'aql:nope-util'	ERROR:unpack_error	unknown module errors
+unpack 'boru:math-util' sqrt 16.0	4.0	unpack a whole module's words into scope
+unpack MathUtil 'boru:math-util' sqrt 16.0	4.0	unpack only the named export namespace
+unpack 'boru:nope-util'	ERROR:unpack_error	unknown module errors

@@ -1,24 +1,24 @@
 
-# AQL Arrayification Design
+# BORU Arrayification Design
 
 How array-language ideas from APL, J, R, Julia, and similar languages
-can be applied to AQL — a concatenative, stack-based query language.
+can be applied to BORU — a concatenative, stack-based query language.
 
 
 ## Motivation
 
-AQL already operates on lists and maps as first-class values. It has
+BORU already operates on lists and maps as first-class values. It has
 `for` loops, `map`, `reduce`, and `filter` as listed operators, typed
 lists `[:type]`, and typed maps `{:type}`. The stack machine naturally
 composes operations.
 
-What AQL does not yet have is a systematic treatment of arrays as the
+What BORU does not yet have is a systematic treatment of arrays as the
 default unit of computation. Array languages differ from traditional
 languages not by having more library functions, but by making
 whole-array operations primitive, uniform across dimensions, and
 composable without explicit loops.
 
-This document explores how to bring those ideas into AQL while
+This document explores how to bring those ideas into BORU while
 respecting its concatenative nature.
 
 
@@ -27,7 +27,7 @@ respecting its concatenative nature.
 1. **Words, not methods.** Every array operation is a word with suffix
    precedence, composable on the stack. No dot-method syntax.
 
-2. **Lists are arrays.** AQL lists `[1,2,3]` are the array primitive.
+2. **Lists are arrays.** BORU lists `[1,2,3]` are the array primitive.
    Nested lists `[[1,2],[3,4]]` represent higher-rank arrays. Shape
    is inferred from structure.
 
@@ -41,16 +41,16 @@ respecting its concatenative nature.
    rather than requiring manual indexing.
 
 5. **Concatenative composition.** Pipelines of array transforms should
-   read left to right on the stack, as with all AQL code.
+   read left to right on the stack, as with all BORU code.
 
 
-## Packaging — core vs the `aql:array` module
+## Packaging — core vs the `boru:array` module
 
-Not every array word is globally available. Following the `aql:math`
+Not every array word is globally available. Following the `boru:math`
 precedent (everyday arithmetic is built-in; `sin`/`log`/… are gated
 behind the module), the array vocabulary is split:
 
-The split criterion is the `aql:math` precedent — *everyday* operations
+The split criterion is the `boru:math` precedent — *everyday* operations
 are built-in; *specialised* domain vocabulary is gated behind the
 module. It is about how commonly a word is reached for, not whether it
 takes a code body.
@@ -60,11 +60,11 @@ takes a code body.
   higher-order combinators `each`, `fold`, `scan`, `outer`, `inner`.
   These are reached for constantly and read naturally without a prefix.
 
-- **`aql:array` module** — the specialised, shape-aware data
+- **`boru:array` module** — the specialised, shape-aware data
   vocabulary: `shape`, `rank`, `reshape`, `transpose`, `where`,
   `grade`, `at`, `sortby`, `replicate`, `expand`, `compress`,
   `eachrank`, `foldaxis`, `member`, `unique`, `group`, `window`,
-  `pairs`. Imported with `import "aql:array"` and reached via the
+  `pairs`. Imported with `import "boru:array"` and reached via the
   `array.` prefix. Note `eachrank`/`foldaxis` take a quoted code body
   yet still live here — being specialised (J-style rank/axis control)
   outweighs taking a body; the wrapper preserves the body via
@@ -303,7 +303,7 @@ eachrank 0 [mul 2] [[1,2],[3,4]]
 
 Signature: `[integer, list, list] -> [list]`
 
-This is the AQL equivalent of J's rank operator or APL's rank
+This is the BORU equivalent of J's rank operator or APL's rank
 conjunction. It generalizes "map over rows" and "map over columns"
 to arbitrary nesting depths.
 
@@ -572,7 +572,7 @@ each [add 10] [1,2,3]                 => [11,12,13]
 ```
 
 
-## Integration with Existing AQL
+## Integration with Existing BORU
 
 ### Relationship to `for`
 
@@ -672,7 +672,7 @@ replicate: [list, list] -> [list]
 expand:    [list, list] -> [list]
 ```
 
-All use suffix precedence, consistent with AQL convention.
+All use suffix precedence, consistent with BORU convention.
 
 
 ## Implementation Priority
@@ -791,7 +791,7 @@ reshape [3,3] outer [eq] iota 3 iota 3
 ```
 
 
-## Contrast: Traditional vs Array Style in AQL
+## Contrast: Traditional vs Array Style in BORU
 
 ### Sum of squares (traditional)
 
@@ -830,7 +830,7 @@ a sequence of transforms: generate, select, apply, aggregate.
 
 The core insight from array languages is not any single operation but
 the discipline of expressing computation as shape-aware transforms
-composed without explicit loops. AQL's concatenative model is
+composed without explicit loops. BORU's concatenative model is
 naturally suited to this: the stack is already a pipeline, words
 already compose, and the type system already dispatches by structure.
 
@@ -848,6 +848,6 @@ Implicit broadcasting was considered and **rejected** (see
 [ADR-002](../ADR.md#adr-002)); scalar-over-array application is always
 explicit via `each`/`eachrank`.
 
-Together these give AQL a systematic, compositional approach to array
+Together these give BORU a systematic, compositional approach to array
 programming while staying true to its concatenative stack-machine
 identity.

@@ -165,10 +165,10 @@ func TestNameFromValueOther(t *testing.T) {
 }
 
 // ========================
-// aqlTypenameToSQLType / sqlTypeToAQLType tests
+// boruTypenameToSQLType / sqlTypeToBORUType tests
 // ========================
 
-func TestAqlTypenameToSQLType(t *testing.T) {
+func TestBoruTypenameToSQLType(t *testing.T) {
 	tests := map[string]string{
 		"Integer": "INTEGER", "int": "INTEGER",
 		"real": "REAL", "float": "REAL", "Number": "REAL",
@@ -176,23 +176,23 @@ func TestAqlTypenameToSQLType(t *testing.T) {
 		"Boolean": "INTEGER", "bool": "INTEGER",
 	}
 	for input, expected := range tests {
-		if got := aqlTypenameToSQLType(input); got != expected {
-			t.Errorf("aqlTypenameToSQLType(%q) = %q, want %q", input, got, expected)
+		if got := boruTypenameToSQLType(input); got != expected {
+			t.Errorf("boruTypenameToSQLType(%q) = %q, want %q", input, got, expected)
 		}
 	}
 }
 
-func TestSqlTypeToAQLType(t *testing.T) {
-	if got := sqlTypeToAQLType("INTEGER"); !got.Equal(TInteger) {
+func TestSqlTypeToBORUType(t *testing.T) {
+	if got := sqlTypeToBORUType("INTEGER"); !got.Equal(TInteger) {
 		t.Errorf("expected TInteger, got %v", got)
 	}
-	if got := sqlTypeToAQLType("REAL"); !got.Equal(TFloat) {
+	if got := sqlTypeToBORUType("REAL"); !got.Equal(TFloat) {
 		t.Errorf("expected TFloat, got %v", got)
 	}
-	if got := sqlTypeToAQLType("TEXT"); !got.Equal(TString) {
+	if got := sqlTypeToBORUType("TEXT"); !got.Equal(TString) {
 		t.Errorf("expected TString, got %v", got)
 	}
-	if got := sqlTypeToAQLType("UNKNOWN"); !got.Equal(TString) {
+	if got := sqlTypeToBORUType("UNKNOWN"); !got.Equal(TString) {
 		t.Errorf("expected TString (default), got %v", got)
 	}
 }
@@ -503,7 +503,7 @@ func TestPeekForwardValueInContext(t *testing.T) {
 	registerIOWords(r)
 	// Exercise curryOrPrefix and peekForwardValue through a word that uses forward arg collection
 	// e.g., "add" with forward: 1 add 2
-	result := runAQL(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
+	result := runBORU(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	_as54, _ := AsInteger(result[0])
 	if len(result) != 1 || _as54 != 3 {
 		t.Errorf("expected [3], got %v", result)
@@ -521,7 +521,7 @@ func TestStepEndWithMoveAndMark(t *testing.T) {
 	}
 	registerIOWords(r)
 	// def creates a mark; calling a def word triggers move
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("dbl"), NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("add")}),
 		NewInteger(5), NewWord("dbl"),
 	})
@@ -543,7 +543,7 @@ func TestBaseValueForConstraintCoverage(t *testing.T) {
 	}
 	registerIOWords(r)
 	// Create a typed list via the type system
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(1), NewWord("typeof"),
 	})
 	if len(result) != 1 {
@@ -663,10 +663,10 @@ func TestOrderedMapDeleteAll(t *testing.T) {
 }
 
 // ========================
-// CallAQL tests
+// CallBORU tests
 // ========================
 
-func TestCallAQLBasic(t *testing.T) {
+func TestCallBORUBasic(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -681,7 +681,7 @@ func TestCallAQLBasic(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("x")}),
 	})
-	_ = runAQL(t, r, []Value{
+	_ = runBORU(t, r, []Value{
 		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
@@ -696,24 +696,24 @@ func TestCallAQLBasic(t *testing.T) {
 	if sig == nil {
 		t.Fatal("no matching signature")
 	}
-	result, err := r.CallAQL(sig, args, nil)
+	result, err := r.CallBORU(sig, args, nil)
 	if err != nil {
-		t.Fatalf("CallAQL error: %v", err)
+		t.Fatalf("CallBORU error: %v", err)
 	}
 	_as56, _ := AsInteger(result[0])
 	if len(result) != 1 || _as56 != 10 {
-		t.Errorf("CallAQL(double, 5) = %v, want [10]", result)
+		t.Errorf("CallBORU(double, 5) = %v, want [10]", result)
 	}
 }
 
-func TestCallAQLNotAFunction(t *testing.T) {
+func TestCallBORUNotAFunction(t *testing.T) {
 	sig := MatchFnSig(NewInteger(42), []Value{})
 	if sig != nil {
 		t.Error("expected nil sig for non-function value")
 	}
 }
 
-func TestCallAQLNoMatchingSig(t *testing.T) {
+func TestCallBORUNoMatchingSig(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -728,7 +728,7 @@ func TestCallAQLNoMatchingSig(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
-	_ = runAQL(t, r, []Value{
+	_ = runBORU(t, r, []Value{
 		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
@@ -762,10 +762,10 @@ func TestArgsInsideFn(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("a"), NewWord("add"), NewWord("b")}),
 	})
-	_ = runAQL(t, r, []Value{
+	_ = runBORU(t, r, []Value{
 		NewWord("def"), NewWord("sum2"), NewWord("fn"), fnBody, NewEnd(),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("sum2"), NewInteger(3), NewInteger(7),
 	})
 	_as62, _ := AsInteger(result[0])
@@ -806,7 +806,7 @@ func TestArgsOutsideFnErrors(t *testing.T) {
 	}
 	registerIOWords(r)
 	// args outside of a function should error
-	err = runAQLError(t, r, []Value{NewWord("args")})
+	err = runBORUError(t, r, []Value{NewWord("args")})
 	if err == nil {
 		t.Error("expected error for args outside function")
 	}
@@ -872,7 +872,7 @@ func TestResolveFieldTypeString(t *testing.T) {
 	registerIOWords(r)
 
 	// Define a custom type: def MyNum Number
-	_ = runAQL(t, r, []Value{
+	_ = runBORU(t, r, []Value{
 		NewWord("def"), NewWord("MyNum"), NewWord("Number"),
 	})
 
@@ -1086,10 +1086,10 @@ func TestMatchSignaturePatternFallthrough(t *testing.T) {
 }
 
 // ========================
-// CallAQL pattern coverage
+// CallBORU pattern coverage
 // ========================
 
-func TestCallAQLMapPattern(t *testing.T) {
+func TestCallBORUMapPattern(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1106,7 +1106,7 @@ func TestCallAQLMapPattern(t *testing.T) {
 			{
 				Params:  []FnParam{{Name: "x", Type: TMap, Pattern: &patternVal}},
 				Returns: []*Type{TString},
-				Impl:    AQL([]Value{NewString("yes")}), BarrierPos: -1,
+				Impl:    BORU([]Value{NewString("yes")}), BarrierPos: -1,
 			},
 		},
 	}
@@ -1120,7 +1120,7 @@ func TestCallAQLMapPattern(t *testing.T) {
 	if matchSig == nil {
 		t.Fatal("expected matching signature")
 	}
-	result, callErr := r.CallAQL(matchSig, matchArgs, nil)
+	result, callErr := r.CallBORU(matchSig, matchArgs, nil)
 	if callErr != nil {
 		t.Fatalf("expected match, got error: %v", callErr)
 	}
@@ -1149,7 +1149,7 @@ func TestRegisterFnNonList(t *testing.T) {
 	}
 	registerIOWords(r)
 	// fn with a non-list argument should error.
-	err = runAQLError(t, r, []Value{NewInteger(42), NewWord("fn")})
+	err = runBORUError(t, r, []Value{NewInteger(42), NewWord("fn")})
 	if err == nil {
 		t.Error("expected error for fn with non-list argument")
 	}
@@ -1161,7 +1161,7 @@ func TestRegisterFnEmptyList(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	err = runAQLError(t, r, []Value{NewList([]Value{}), NewWord("fn")})
+	err = runBORUError(t, r, []Value{NewList([]Value{}), NewWord("fn")})
 	if err == nil {
 		t.Error("expected error for fn with empty list")
 	}
@@ -1174,7 +1174,7 @@ func TestRegisterFnBadTriple(t *testing.T) {
 	}
 	registerIOWords(r)
 	// Triple with invalid input sig (non-list, non-map param element).
-	err = runAQLError(t, r, []Value{
+	err = runBORUError(t, r, []Value{
 		NewList([]Value{
 			NewList([]Value{NewFloat(1.5)}), // invalid param type
 			NewTypeLiteral(TString),
@@ -1198,7 +1198,7 @@ func TestParseFnUndefSpecParamError(t *testing.T) {
 	}
 	registerIOWords(r)
 	// 4 elements = 2 pairs, first pair has bad input sig (invalid param type).
-	err = runAQLError(t, r, []Value{
+	err = runBORUError(t, r, []Value{
 		NewList([]Value{
 			NewList([]Value{NewFloat(1.5)}), // invalid param
 			NewTypeLiteral(TString),
@@ -1219,7 +1219,7 @@ func TestParseFnUndefSpecReturnError(t *testing.T) {
 	}
 	registerIOWords(r)
 	// 4 elements = 2 pairs, valid input sig but invalid return type.
-	err = runAQLError(t, r, []Value{
+	err = runBORUError(t, r, []Value{
 		NewList([]Value{
 			NewList([]Value{NewTypeLiteral(TString)}), // valid param
 			NewString("nonexistent_type"),             // invalid return type
@@ -1282,7 +1282,7 @@ func TestFnMapPatternViaEngine(t *testing.T) {
 	patternMap := NewOrderedMap()
 	patternMap.Set("x", NewInteger(99))
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewWord("fn"),
 		NewList([]Value{
 			// Overload 1: x matches {x:99}
@@ -1305,7 +1305,7 @@ func TestFnMapPatternViaEngine(t *testing.T) {
 	// Call with {x:100} — should match overload 2 (fallback)
 	noMatchMap := NewOrderedMap()
 	noMatchMap.Set("x", NewInteger(100))
-	result2 := runAQL(t, r, []Value{
+	result2 := runBORU(t, r, []Value{
 		NewMap(noMatchMap), NewWord("foo"),
 	})
 	_as69, _ := AsString(result2[0])

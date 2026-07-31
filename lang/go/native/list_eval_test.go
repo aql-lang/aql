@@ -7,7 +7,7 @@ import (
 // TestListEvalAsArg verifies that parser-created lists (Eval=true) have their
 // word elements resolved from DefStacks when consumed as a registered word's
 // argument. This is the fix for the "list literal eval" issue described in
-// AQL-DX-REPORT.md Issue 1.
+// BORU-DX-REPORT.md Issue 1.
 func TestListEvalAsArg(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
@@ -28,7 +28,7 @@ func TestListEvalAsArg(t *testing.T) {
 		-1,
 	})
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("c1"), NewInteger(10), NewEnd(),
 		NewWord("def"), NewWord("c2"), NewInteger(20), NewEnd(),
 		NewEvalList([]Value{NewWord("c1"), NewWord("c2")}),
@@ -70,7 +70,7 @@ func TestListEvalArithmetic(t *testing.T) {
 		-1,
 	})
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewEvalList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
 		NewWord("passlist"),
 	})
@@ -103,7 +103,7 @@ func TestListEvalQuotedSkipped(t *testing.T) {
 		-1,
 	})
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("quote"),
 		NewEvalList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
 		NewWord("passlist"),
@@ -132,7 +132,7 @@ func TestWordSplicePreservesCodeBody(t *testing.T) {
 
 	// def double word [dup add]
 	// 5 double → 10
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("double"), NewWord("word"),
 		NewEvalList([]Value{NewWord("dup"), NewWord("add")}),
 		NewEnd(),
@@ -169,7 +169,7 @@ func TestListEvalFnDefAutoInvoke(t *testing.T) {
 		-1,
 	})
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("a"), NewInteger(10), NewEnd(),
 		NewWord("def"), NewWord("b"), NewInteger(20), NewEnd(),
 		NewEvalList([]Value{NewWord("a"), NewWord("b")}),
@@ -210,7 +210,7 @@ func TestListEvalRuntimeListNotEvaluated(t *testing.T) {
 		-1,
 	})
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("makelist"), NewWord("passlist"),
 	})
 	if len(result) != 1 {

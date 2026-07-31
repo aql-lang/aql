@@ -1,23 +1,23 @@
 # Native Modules
 
-Native modules are internal AQL modules with Go implementations that are
-imported using names of the form `"aql:<name>"`. They produce a module
+Native modules are internal BORU modules with Go implementations that are
+imported using names of the form `"boru:<name>"`. They produce a module
 descriptor with exports, just like file-based modules, and their words
 are accessed via dot notation.
 
 ## Importing Native Modules
 
-Use the standard `import` word with an `aql:` prefixed string:
+Use the standard `import` word with a `boru:` prefixed string:
 
 ```
-import "aql:math-util"
+import "boru:math-util"
 ```
 
 This creates a `math` def containing all the module's words. Access
 them via dot notation:
 
 ```
-import "aql:math-util"
+import "boru:math-util"
 
 -5 math.abs           # 5
 0.5 math.sin          # 0.479...
@@ -53,19 +53,19 @@ To use a module word in a forward-argument position (e.g. inside a list
 body), place args before the dot expression:
 
 ```
-import "aql:math-util"
+import "boru:math-util"
 for 5 [i 2 math.min]     # 0 1 2 2 2
 for 3 [i math.negate]     # 0 -1 -2
 ```
 
 ## Available Native Modules
 
-### aql:math
+### boru:math
 
 Extended math operations beyond the built-in arithmetic (`add`, `sub`,
 `mul`, `div`, `mod`, `pow`).
 
-**Import:** `import "aql:math-util"`
+**Import:** `import "boru:math-util"`
 
 #### Unary Operations
 
@@ -124,14 +124,14 @@ All trigonometric functions use radians.
 | `math.pi` | Pi                       | 3.14159...    |
 | `math.e`  | Euler's number           | 2.71828...    |
 
-### aql:report
+### boru:report
 
 Pretty-printers for the kernel value types. Every word returns a
 String — none print directly — so callers compose with `print`,
 embed in error messages, or feed into further formatting. Useful
 beyond testing: any console-bound output of Records and Tables.
 
-**Import:** `import "aql:report"`
+**Import:** `import "boru:report"`
 
 | Word            | Description                                                |
 |-----------------|------------------------------------------------------------|
@@ -141,7 +141,7 @@ beyond testing: any console-bound output of Records and Tables.
 | `report.list`   | A List rendered one numbered element per line.             |
 
 ```
-import "aql:report"
+import "boru:report"
 {name:"alice" age:30} report.record print
 # name : alice
 # age  : 30
@@ -153,7 +153,7 @@ import "aql:report"
 # 3 | 4
 ```
 
-### aql:test
+### boru:test
 
 Test framework with two complementary surfaces:
 
@@ -172,7 +172,7 @@ Test framework with two complementary surfaces:
 Results accumulate into a `TestSet` Table that `test.results`
 returns; pipe through `report.table` to print.
 
-**Import:** `import "aql:test"`
+**Import:** `import "boru:test"`
 
 **Types** (exported via `test.TestCase`, `test.TestSet`, …):
 
@@ -195,7 +195,7 @@ returns; pipe through `report.table` to print.
 | `test.fail-count` | Return failure count as Integer.                         |
 | `test.reset`    | Clear the active TestRun.                                  |
 
-**Assertions** (raise `[aql/assertion_failure]` on failure; caught by enclosing `test`):
+**Assertions** (raise `[boru/assertion_failure]` on failure; caught by enclosing `test`):
 
 | Word                | Description                                |
 |---------------------|--------------------------------------------|
@@ -216,9 +216,9 @@ returns; pipe through `report.table` to print.
 | `test.invoke`     | `inputs subject test.invoke` — Go-side helper that dispatches a subject by name in the caller's registry. |
 
 ```
-import "aql:test"
-import "aql:report"
-import "aql:decision"
+import "boru:test"
+import "boru:report"
+import "boru:decision"
 
 def my-spec {
   name: "eval-cond"
@@ -239,7 +239,7 @@ dots (e.g. `"decision.eval-cond"`) are split into a `get` chain in
 the parent registry — flat imports aren't required.
 
 The decision module is exercised entirely via this mechanism in
-`modules/decision_spec.aql`; see `modules/decision_spec_test.go`
+`modules/decision_spec.boru`; see `modules/decision_spec_test.go`
 for the loader.
 
 ## Implementation
@@ -254,7 +254,7 @@ Native modules live in `modules/`. Each module:
 
 The resolver (`modules.Resolve`) maps module names to their builder
 functions and is wired into the registry via `Registry.NativeModResolver`
-in `aql.go`.
+in `boru.go`.
 
 ## Adding a New Native Module
 

@@ -1,16 +1,16 @@
-# Client-library verification against `aql` main — and the fixes to apply
+# Client-library verification against `boru` main — and the fixes to apply
 
 **Date:** 2026-06-24
-**aql verified:** `main` @ `0b010ae1b7123f4fbb72758dc0b65f32d2aadae0` (built from
-source, `GOFLAGS=-mod=mod go build ./aql`)
-**Libraries verified:** `voxgig-aql/trie`, `voxgig-aql/decision`,
-`voxgig-aql/bloom-filter` (downloaded as source tarballs from
-`codeload.github.com` and run from each repo root so `import "./*.aql"`
+**boru verified:** `main` @ `0b010ae1b7123f4fbb72758dc0b65f32d2aadae0` (built from
+source, `GOFLAGS=-mod=mod go build ./boru`)
+**Libraries verified:** `voxgig-boru/trie`, `voxgig-boru/decision`,
+`voxgig-boru/bloom-filter` (downloaded as source tarballs from
+`codeload.github.com` and run from each repo root so `import "./*.boru"`
 resolves).
 **Driven by** the three client verification reports:
-[trie/AQL-MAIN-VERIFICATION.md](https://github.com/voxgig-aql/trie/blob/main/AQL-MAIN-VERIFICATION.md),
-[decision/aql-main-verification-2026-06-23.md](https://github.com/voxgig-aql/decision/blob/main/aql-main-verification-2026-06-23.md),
-[bloom-filter/aql-backend-report.md](https://github.com/voxgig-aql/bloom-filter/blob/main/aql-backend-report.md).
+[trie/BORU-MAIN-VERIFICATION.md](https://github.com/voxgig-boru/trie/blob/main/BORU-MAIN-VERIFICATION.md),
+[decision/boru-main-verification-2026-06-23.md](https://github.com/voxgig-boru/decision/blob/main/boru-main-verification-2026-06-23.md),
+[bloom-filter/boru-backend-report.md](https://github.com/voxgig-boru/bloom-filter/blob/main/boru-backend-report.md).
 
 This is the follow-up to
 [`CLIENT-FIXES-2026-06-24.md`](CLIENT-FIXES-2026-06-24.md): it **re-verifies the
@@ -26,9 +26,9 @@ Across **all 21 test suites of all three libraries**, on `main @ 0b010ae`:
 
 | Mode | Result |
 |---|---|
-| **Interpreting** (`aql suite.aql`) | ✅ all 21 suites pass |
-| **Checking** (`aql check suite.aql`) | ✅ all 21 suites **0 errors** |
-| **`aql check module.aql`** (direct, all 6 modules) | ✅ **0 errors** each |
+| **Interpreting** (`boru suite.boru`) | ✅ all 21 suites pass |
+| **Checking** (`boru check suite.boru`) | ✅ all 21 suites **0 errors** |
+| **`boru check module.boru`** (direct, all 6 modules) | ✅ **0 errors** each |
 | **`--compile` == interpreter** | ✅ byte-identical on all 21 suites |
 | **`--force-compile`** (strict bytecode, no fallback) | ⚠️ partial — code-body words still refuse (enumerated below), all fall back correctly under `--compile` |
 
@@ -36,8 +36,8 @@ The checker false-positive classes the reports documented (`no_signature` on
 `Any`-typed dynamic dispatch, `undefined_word` on `do{}` params, `unused_def`
 on `/r` reference-exports, the `all`/`any` and `DTable`/`eval-table` namespace
 residue, the trie `mk-node`/`put-kid` cascades) are **gone** — including in the
-direct module checks (`aql check trie.aql` etc. now report **0 errors**, down
-from the 150–300 in the original `AQL-CHECK-REPORT.md`). The bloom-filter
+direct module checks (`boru check trie.boru` etc. now report **0 errors**, down
+from the 150–300 in the original `BORU-CHECK-REPORT.md`). The bloom-filter
 interpreter `None`-interpolation regression is fixed. Nothing in any of the
 three libraries needs a source change to pass interpret + check.
 
@@ -54,8 +54,8 @@ so this is a coverage gap, not a correctness bug.
 
 ## Full result matrix (`main @ 0b010ae`)
 
-`interp` = `aql X`; `check` = `aql check X` error count; `==interp` = `aql
---compile X` output equals `aql X`; `force-compile` = `aql --force-compile X`
+`interp` = `boru X`; `check` = `boru check X` error count; `==interp` = `boru
+--compile X` output equals `boru X`; `force-compile` = `boru --force-compile X`
 (the strict path).
 
 ### bloom-filter
@@ -94,7 +94,7 @@ so this is a coverage gap, not a correctness bug.
 | `burst_unit_test` | ✅ | 0 | ✅ | refuse: `do` |
 | `burst_prop_spec` | ✅ | 0 | ✅ | refuse: `each` (Stage 2) |
 
-† `check diagnostics` here is **not** a check-mode error you can see with `aql
+† `check diagnostics` here is **not** a check-mode error you can see with `boru
 check` — those three suites check **0 errors**. It is the compile path's
 internal check pass tripping the *dynamic-help example generator* (synthetic
 `{a:1,b:2}` args run through fn bodies at registration). See the gaps section.
@@ -105,7 +105,7 @@ internal check pass tripping the *dynamic-help example generator* (synthetic
 
 ### trie — the entire §3–§7 story is resolved
 
-The report's core finding was that `main`'s transitive `aql check` inherited the
+The report's core finding was that `main`'s transitive `boru check` inherited the
 library's `no_signature`/`undefined_word` cascades, gating both check and
 `--force-compile` for every consumer, and that even the client-side restructure
 (`mk-node` chained `set`, the `kids-of` accessor) could not drive the unit
@@ -113,18 +113,18 @@ suites to zero because of "emergent whole-program cascades."
 
 On `main @ 0b010ae` those cascades are gone. Every one of the 11 suites checks
 **0 errors**, and the four modules check **0 errors** directly
-(`aql check trie.aql / radix.aql / tst.aql / burst.aql`). The wishlist items
-1–4 from `AQL-CHECK-REPORT.md` all landed: `/r` reference-exports are traced as
+(`boru check trie.boru / radix.boru / tst.boru / burst.boru`). The wishlist items
+1–4 from `BORU-CHECK-REPORT.md` all landed: `/r` reference-exports are traced as
 uses (`unused_def` gone), `Any` unifies with concrete params (gradual carriers),
 the `do{}`-param and dynamic-`set` residue cleared, and the body re-parser no
 longer mis-reports `build-row`.
 
 ### decision — the residual 2 and the smoke 16 are both gone
 
-The report had `decision.aql` at 2 advisory false positives (`all`/`any`) and
+The report had `decision.boru` at 2 advisory false positives (`all`/`any`) and
 `decision_smoke_test` at 16 (the `DTable` / `eval-table` / `decide` namespace
-class). On `main @ 0b010ae`: `aql check decision.aql` = **0 errors**, and
-`aql check decision_smoke_test.aql` = **0 errors** (2 harmless `unused_def`
+class). On `main @ 0b010ae`: `boru check decision.boru` = **0 errors**, and
+`boru check decision_smoke_test.boru` = **0 errors** (2 harmless `unused_def`
 *warnings* on body-local `best-pri`/`done` remain — warnings, not errors, and
 do not gate).
 
@@ -144,13 +144,13 @@ landed checker work. Locations below are from the current `main` of each repo.
 
 ### bloom-filter
 
-1. **Re-pin (optional but recommended).** Bump `AQL_REF` from
+1. **Re-pin (optional but recommended).** Bump `BORU_REF` from
    `14036b4125a9ccbd9655503a1a4171c008d93d06` to
    `0b010ae1b7123f4fbb72758dc0b65f32d2aadae0` in:
-   - `ci/test.yml` (`env.AQL_REF`)
-   - `.claude/hooks/session-start.sh` (`AQL_REF=`)
-   - `test/divergence/run.sh` (`AQL_BYTECODE_REF=`)
-   - `api.json` (`"aql_ref": "0b010ae"`)
+   - `ci/test.yml` (`env.BORU_REF`)
+   - `.claude/hooks/session-start.sh` (`BORU_REF=`)
+   - `test/divergence/run.sh` (`BORU_BYTECODE_REF=`)
+   - `api.json` (`"boru_ref": "0b010ae"`)
    - and the prose refs in `AGENTS.md`, `docs/how-to.md`, `README.md`,
      `plugins/.../SKILL.md`, `.claude/skills/.../SKILL.md`.
 
@@ -163,14 +163,14 @@ landed checker work. Locations below are from the current `main` of each repo.
 
 ### decision
 
-1. **Promote `aql check` to a hard gate.** The existing "Static check
+1. **Promote `boru check` to a hard gate.** The existing "Static check
    (advisory, non-gating)" step in `.github/workflows/test.yml` runs
-   `aql check --soft decision.aql` with `continue-on-error: true`. `decision.aql`
+   `boru check --soft decision.boru` with `continue-on-error: true`. `decision.boru`
    now checks **0 errors**, so drop both `--soft` and `continue-on-error` to make
-   it a real gate. All five `test/*.aql` suites also check 0 (including
+   it a real gate. All five `test/*.boru` suites also check 0 (including
    `decision_smoke_test`, was 16), so optionally extend the step to a loop over
-   `test/*.aql` to guard the suites against regressions too.
-2. **Re-pin the interpreter baseline (optional).** `AQL_REF` is `958c379b`
+   `test/*.boru` to guard the suites against regressions too.
+2. **Re-pin the interpreter baseline (optional).** `BORU_REF` is `958c379b`
    (the interpreter baseline) in `.github/workflows/test.yml` +
    `.claude/hooks/session-start.sh` + `api.json`. It can move to `0b010ae`; the
    module only *requires* `≥ 958c379b` (`surface`/`exposes`, generics,
@@ -185,22 +185,22 @@ landed checker work. Locations below are from the current `main` of each repo.
 
 1. **Re-pin `14036b41` → `0b010ae`** in the five machine/prose locations the
    `ci/test.yml` consistency job checks and documents:
-   - `ci/test.yml` (`env.AQL_REF`)
-   - `.claude/hooks/session-start.sh` (`AQL_REF=`)
-   - `api.json` (`"aql_ref": "0b010ae"`)
-   - `AGENTS.md` ("Verified against `aql` commit …")
+   - `ci/test.yml` (`env.BORU_REF`)
+   - `.claude/hooks/session-start.sh` (`BORU_REF=`)
+   - `api.json` (`"boru_ref": "0b010ae"`)
+   - `AGENTS.md` ("Verified against `boru` commit …")
    - `docs/how-to.md` (the `git checkout …` line and the prose ref)
-2. **Promote the unit-suite `aql check` from advisory to a hard gate.** The
-   report set the `aql check` and `--force-compile` steps over the unit suites
+2. **Promote the unit-suite `boru check` from advisory to a hard gate.** The
+   report set the `boru check` and `--force-compile` steps over the unit suites
    to `continue-on-error: true` because each unit file inherited 5–31 transitive
    `no_signature` errors. Those are now **0**. Drop `continue-on-error` on the
-   **`aql check`** step (and the module-direct
-   `aql check trie.aql radix.aql tst.aql burst.aql` step — also 0 now). This
+   **`boru check`** step (and the module-direct
+   `boru check trie.boru radix.boru tst.boru burst.boru` step — also 0 now). This
    restores the three-way intent the report wanted to keep but couldn't.
 3. **Keep `--force-compile` advisory.** It still refuses (see gaps), so leave
    that one step `continue-on-error`.
 4. **Optional cleanup — the client-side workarounds can be revisited.** §7 of
-   the report restructured `trie.aql`'s `mk-node` to chained `set` and added a
+   the report restructured `trie.boru`'s `mk-node` to chained `set` and added a
    typed `kids-of` accessor to dodge the checker. The checker no longer needs
    either (dynamic dispatch and `do{}` params both check clean now). You *may*
    revert to the more idiomatic `do {end:[fin] val:[val] kids:[kids]}` form for
@@ -228,11 +228,11 @@ correct interpreter run under `--compile`.
 | `code-body word test-check-prop (Stage 2)` | `trie_prop_test` | the property-test framework's check word |
 | `unannotated or opaque word do` | `bloom_smoke`, `bloom_unit_spec`, `tst_unit_test`, `burst_unit_test` | a `do {key: [expr]}` computed-value **map body** |
 | `unmatched dispatch recovered at mk-node` | `trie_unit_test`/`_spec` | the chained-`set` `mk-node` builder dispatched over a gradual node — the emitter recovers but refuses to lower |
-| `check diagnostics` | `decision_smoke`, `radix_unit`, `trie_smoke` | **not** a real check error (these suites `aql check` clean). The compile path's internal check runs the **dynamic-help example generator** — each registered fn body is evaluated in check mode against a synthetic `{a:1,b:2}`, and those synthetic dispatch failures become error diagnostics that gate the emit. Diagnosed in `design/module-fn-checkstate-ownership.{5,6}.md` |
+| `check diagnostics` | `decision_smoke`, `radix_unit`, `trie_smoke` | **not** a real check error (these suites `boru check` clean). The compile path's internal check runs the **dynamic-help example generator** — each registered fn body is evaluated in check mode against a synthetic `{a:1,b:2}`, and those synthetic dispatch failures become error diagnostics that gate the emit. Diagnosed in `design/module-fn-checkstate-ownership.{5,6}.md` |
 
 **Why these are deferred, not quick fixes.** The test-framework / `each` / `do`
 code-body lowering is the named Stage-2 emitter cluster
-(`design/aql-bytecode-completion.0.md`, `COMPILABLE-SUBSET.md`). The
+(`design/boru-bytecode-completion.0.md`, `COMPILABLE-SUBSET.md`). The
 `check diagnostics` artifact is worse than a filter: the dynamic-help eval is
 *load-bearing twice over* — it doubles as the only construction-time check of a
 defined-but-never-called fn body, and the langspec compilation corpus (2830
@@ -247,7 +247,7 @@ fully-green paths.
 
 ---
 
-## aql-side status
+## boru-side status
 
 The report-listed issues are **already fixed on `main`** — the checker
 precision work (gradual-`Any` carriers, `/r` reference-export use-tracing,
@@ -256,7 +256,7 @@ merge / fold-seed matching, param narrowing) merged ahead of `0b010ae` and is
 captured in [`CLIENT-FIXES-2026-06-24.md`](CLIENT-FIXES-2026-06-24.md). This
 document is the independent re-verification that those fixes hold against the
 current HEAD across all three real client libraries, plus the precise,
-reproducible ledger of what `--force-compile` still defers. No further aql
+reproducible ledger of what `--force-compile` still defers. No further boru
 source change is proposed here: the remaining items are the deferred emitter /
 dynamic-help-eval projects above, where a partial change is known to regress the
 calibrated corpus.
@@ -267,16 +267,16 @@ calibrated corpus.
 
 ```bash
 REF=0b010ae1b7123f4fbb72758dc0b65f32d2aadae0
-mkdir -p /tmp/aql && curl -fsSL \
-  "https://codeload.github.com/aql-lang/aql/tar.gz/$REF" \
-  | tar -xz -C /tmp/aql --strip-components=1
-( cd /tmp/aql/cmd/go && GOFLAGS=-mod=mod go build -o /tmp/aql-bin ./aql )
+mkdir -p /tmp/boru && curl -fsSL \
+  "https://codeload.github.com/boru-lang/boru/tar.gz/$REF" \
+  | tar -xz -C /tmp/boru --strip-components=1
+( cd /tmp/boru/cmd/go && GOFLAGS=-mod=mod go build -o /tmp/boru-bin ./boru )
 
-# From each client repo ROOT (so ./*.aql imports resolve):
-for f in test/*.aql; do
-  /tmp/aql-bin "$f" >/dev/null            && echo "interp ok   $f"
-  /tmp/aql-bin check "$f"                 # 0 errors
-  /tmp/aql-bin --compile "$f" >/dev/null  # output matches interpreter
-  /tmp/aql-bin --force-compile "$f"       # strict: see the gaps table
+# From each client repo ROOT (so ./*.boru imports resolve):
+for f in test/*.boru; do
+  /tmp/boru-bin "$f" >/dev/null            && echo "interp ok   $f"
+  /tmp/boru-bin check "$f"                 # 0 errors
+  /tmp/boru-bin --compile "$f" >/dev/null  # output matches interpreter
+  /tmp/boru-bin --force-compile "$f"       # strict: see the gaps table
 done
 ```

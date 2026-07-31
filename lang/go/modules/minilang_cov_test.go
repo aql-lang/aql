@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // mcovReg builds a registry with the module resolver wired.
@@ -44,7 +44,7 @@ func mcovErr(t *testing.T, r *native.Registry, src string) error {
 	return rerr
 }
 
-const mcovImp = `import "aql:minilang"  `
+const mcovImp = `import "boru:minilang"  `
 
 // TestMiniCovHexBytes drives the hb kind: grouping, size, and the loud
 // odd-length / non-hex rejections.
@@ -361,7 +361,7 @@ func TestMiniCovNewMiniLangFnQuotedInput(t *testing.T) {
 		Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 			a, err := args[2].AsConcreteAtom()
 			if err != nil {
-				return nil, r.AqlError("mini_error", "ql: input: "+err.Error(), "ql")
+				return nil, r.BoruError("mini_error", "ql: input: "+err.Error(), "ql")
 			}
 			return []native.Value{native.NewString("q:" + a)}, nil
 		},

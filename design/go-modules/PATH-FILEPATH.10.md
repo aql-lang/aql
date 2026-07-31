@@ -1,4 +1,4 @@
-# `path/filepath` → `aql:filepath`
+# `path/filepath` → `boru:filepath`
 
 > **Status: design proposal — not implemented.** A curated, hand-written
 > native module wrapping Go's `path/filepath` (OS-aware paths). Read
@@ -9,15 +9,15 @@
 
 Go package: `path/filepath` — manipulation of **OS file paths** with the
 platform's separator (`/` on Unix, `\` on Windows) and volume names.
-This note specifies `aql:filepath` (namespace `FilePath`). It mirrors
-`aql:path-util` ([`PATH.10.md`](PATH.10.md)) word-for-word for the shared
+This note specifies `boru:filepath` (namespace `FilePath`). It mirrors
+`boru:path-util` ([`PATH.10.md`](PATH.10.md)) word-for-word for the shared
 ops but is platform-dependent, and adds the filepath-only words `rel`,
 `to-slash`, `from-slash`, `volume-name`, and `abs`. Design proposal; no
 Go code exists yet.
 
 ## 2. Why curated
 
-Same motivation as `aql:path-util`: kebab names, `Split`'s `(dir, file)`
+Same motivation as `boru:path-util`: kebab names, `Split`'s `(dir, file)`
 → a `Map`, `Join`'s variadic → a `List`, `Match`'s `(matched, error)` →
 a Boolean. The added value here is being explicit about the **one word
 with an environmental dependency** (`abs`, which resolves against the
@@ -27,12 +27,12 @@ transform — see Policy.
 ## 3. Import & namespace
 
 ```
-import "aql:filepath"        # binds the FilePath namespace
+import "boru:filepath"        # binds the FilePath namespace
 ```
 
 `FilePath` is not a builtin type and not an existing module namespace, so
 the **bare namespace is used (no `-util` suffix)**. Contrast its sibling
-`aql:path-util`, which *must* take `-util` because its bare namespace
+`boru:path-util`, which *must* take `-util` because its bare namespace
 `Path` collides with the builtin `Path` type. Words: `FilePath.join`,
 `FilePath.rel`, …
 
@@ -42,7 +42,7 @@ Signatures are **top-first, sig order** (position 0 = top of stack). All
 inner natives use `BarrierPos: -1` so the swap form `a FilePath.word b`
 dispatches.
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `filepath.Join` | `join` | `[List] -> [String]` | Join elements with the OS separator and clean. | Variadic `...string` → a single `List[String]`. |
 | `filepath.Split` | `split` | `[String] -> [Map]` | Split a path into directory and final element. | `(dir, file)` → `Map {dir, file}`. |
@@ -66,7 +66,7 @@ allocation.
 ## 6. Errors
 
 No panics — guard with `AsConcreteString` / `RequireConcreteList`. Failure
-via `r.AqlError(code, detail, word)`:
+via `r.BoruError(code, detail, word)`:
 
 - `rel` — Go `filepath.Rel` error (target not relative to base) → `rel`.
 - `match` — `filepath.ErrBadPattern` → `bad-pattern`.
@@ -83,7 +83,7 @@ input.
 exception is **`abs`**: it calls `os.Getwd()` to resolve a relative path,
 so it has an **environmental dependency**. It should gate on the
 `system-info` / `process` boundary (the same global cap that
-`aql:runtime` / `aql:os` process words use, per the README "Policy &
+`boru:runtime` / `boru:os` process words use, per the README "Policy &
 capabilities"), or — preferably — route the cwd through a **host cwd
 capability seam** (the same way file reads route through `FileOps` rather
 than direct OS calls in `io.go`), so the module stays pure and the host
@@ -93,14 +93,14 @@ word a restrictive policy can disable.
 
 ## 8. Overlap
 
-- `aql:path-util` (`PathUtil`, [`PATH.10.md`](PATH.10.md)) — the
+- `boru:path-util` (`PathUtil`, [`PATH.10.md`](PATH.10.md)) — the
   always-slash, always-pure sibling. Same word names for the shared ops;
-  the dividing line is *separator and purity*: use `aql:path-util` for
-  URLs and portable virtual paths, `aql:filepath` for real OS paths.
-- `aql:io` (`IO`) — owns all **filesystem access** (`read`, `write`,
+  the dividing line is *separator and purity*: use `boru:path-util` for
+  URLs and portable virtual paths, `boru:filepath` for real OS paths.
+- `boru:io` (`IO`) — owns all **filesystem access** (`read`, `write`,
   `folder`, …) through the `FileOps` capability. So `filepath.Glob` and
   `filepath.Walk` are **OUT of scope for this module** — they read the
-  filesystem and therefore belong to `aql:io`, not `aql:filepath`. This
+  filesystem and therefore belong to `boru:io`, not `boru:filepath`. This
   module is path-*string* algebra only (plus the cwd-dependent `abs`).
 
 ## 9. Examples
@@ -108,7 +108,7 @@ word a restrictive policy can disable.
 All args-before form; never `FilePath.word a b`.
 
 ```
-import "aql:filepath"
+import "boru:filepath"
 
 ["a" "b" "c.txt"] FilePath.join      # → "a/b/c.txt"  (OS separator)
 "a/b/c.txt" FilePath.split           # → {dir:"a/b/" file:"c.txt"}
@@ -124,11 +124,11 @@ import "aql:filepath"
 ## 10. Open questions / out of scope
 
 - Out of scope: `filepath.Glob`, `filepath.Walk` / `WalkDir`
-  (filesystem access → `aql:io`); `filepath.EvalSymlinks` (filesystem +
-  follows links → `aql:io`); `filepath.SplitList` (PATH-env splitting →
-  `aql:os` territory).
+  (filesystem access → `boru:io`); `filepath.EvalSymlinks` (filesystem +
+  follows links → `boru:io`); `filepath.SplitList` (PATH-env splitting →
+  `boru:os` territory).
 - Open: whether `abs` belongs in this module at all, or should move to
-  `aql:os` / `aql:io` so `aql:filepath` is *entirely* pure. Leaving it
+  `boru:os` / `boru:io` so `boru:filepath` is *entirely* pure. Leaving it
   here with an explicit gate is the current proposal; revisit once the
   cwd capability seam exists.
 
@@ -146,10 +146,10 @@ gated word) mirrors the capability-backed pattern in `io.go`:
   `os.Getwd()` directly.
 - Register `BuildFilePathModule` in the `modules` map in
   `lang/go/modules/modules.go`.
-- `lang/go/modules/docs_filepath.go` — `registerDocs("aql:filepath",
+- `lang/go/modules/docs_filepath.go` — `registerDocs("boru:filepath",
   {…})` with a one-liner per export.
 - `lang/spec/module-filepath.tsv` — rows leading with
-  `import "aql:filepath"`; every positive row paired with an
+  `import "boru:filepath"`; every positive row paired with an
   `ERROR:<substring>` negative sibling (`match` malformed →
   `ERROR:bad-pattern`, `rel` non-relative → `ERROR:rel`, plus a denied-
   policy row for `abs`).

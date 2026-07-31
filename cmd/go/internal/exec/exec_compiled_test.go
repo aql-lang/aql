@@ -4,8 +4,8 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	lang "github.com/aql-lang/aql/lang/go"
+	eng "github.com/boru-lang/boru/eng/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // The Phase 2 entry-point pin (plan p2 case): an exec request runs
@@ -16,7 +16,7 @@ func TestExecRunsCompiled(t *testing.T) {
 	var entries []string
 	prev := langNew
 	t.Cleanup(func() { langNew = prev })
-	langNew = func(opts ...lang.Options) (*lang.AQL, error) {
+	langNew = func(opts ...lang.Options) (*lang.BORU, error) {
 		a, err := prev(opts...)
 		if err != nil {
 			return nil, err

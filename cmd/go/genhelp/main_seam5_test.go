@@ -17,8 +17,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 func TestSeam5MainSuccess(t *testing.T) {

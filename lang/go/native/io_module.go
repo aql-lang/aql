@@ -3,11 +3,11 @@ package native
 import (
 	"sort"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // IOModuleNativeFuncs builds the input/output words that were moved out
-// of the core registry into the loadable `aql:io` module (namespace
+// of the core registry into the loadable `boru:io` module (namespace
 // `IO`). They are registered ONLY into that module's sub-registry by
 // modules.BuildIOModule — deliberately absent from the global registry.
 // Most handlers live in their feature files (native_print.go's
@@ -33,7 +33,7 @@ import (
 //
 // `list` and `remove` are NOT here: they are exported as POLYMORPHIC WORD
 // EXTENSIONS of the core `list` / `remove` words (built in modules/io.go via
-// NewWordExtensionAnchored), so after `import "aql:io"` the BARE words gain a
+// NewWordExtensionAnchored), so after `import "boru:io"` the BARE words gain a
 // Pathon overload — `list somePath` / `remove somePath` — rather than a
 // separate IO.list / IO.remove. Their handlers (listHandler / doRemoveWord)
 // live in io_fs.go and are shared with those extensions.
@@ -59,7 +59,7 @@ import (
 //	touch     create/update a Pathon and apply {mode,mtime,atime,size}
 //	watch     run a body per change event on a Pathon (returns a Watcher)
 //	unwatch   stop a Watcher, closing its event stream
-//	mount     install a map of AQL handler fns as the filesystem
+//	mount     install a map of BORU handler fns as the filesystem
 //	unmount   restore the filesystem that was active before mount
 //
 // IOModuleTypes bundles the per-import module-minted types the io words
@@ -306,11 +306,11 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 		},
 		{
 			// exit (exported as IO.exit) asks the DRIVER to terminate with a
-			// status. It raises the reserved `aql/exit` control error rather
+			// status. It raises the reserved `boru/exit` control error rather
 			// than calling os.Exit: the runtime does not own the process, and
 			// an embedded host must be able to decide for itself (it reads the
 			// code back with lang.ExitCode). The CLI, a built binary, and
-			// `aql test` each recognise it; a sub-engine boundary converts it
+			// `boru test` each recognise it; a sub-engine boundary converts it
 			// to an ordinary error so a sandbox cannot terminate its host.
 			//
 			// The range is 0..125, the shell convention: 126/127 mean
@@ -478,7 +478,7 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 		},
 		{
 			// mount installs a filesystem as the host FileOps; unmount
-			// restores the previous one. A handler MAP is the AQL→FileOps
+			// restores the previous one. A handler MAP is the BORU→FileOps
 			// bridge; a Pathon (a ".zip" path or {zip:true}) mounts a
 			// read-only ZIP archive, or a copy-on-write overlay over it with
 			// {writable:true}. See io_mount.go for both contracts.
@@ -537,15 +537,15 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 	}
 }
 
-// IOWordExtensions builds the WORD-EXTENSION clones the aql:io module exports
-// for the core `list` and `remove` words: after `import "aql:io"` the bare
+// IOWordExtensions builds the WORD-EXTENSION clones the boru:io module exports
+// for the core `list` and `remove` words: after `import "boru:io"` the bare
 // words gain a Pathon overload so `list somePath` enumerates a directory and
 // `remove somePath` deletes a filesystem path — polymorphism over the existing
 // verbs rather than a separate IO.list / IO.remove.
 //
 // These anchor on Pathon, a KERNEL builtin type. The module-scope safety rule
 // (requireUserTypedSigs) normally refuses a core-word extension whose tuple has
-// no user-minted type; NewWordExtensionAnchored waives it because aql:io ships
+// no user-minted type; NewWordExtensionAnchored waives it because boru:io ships
 // and versions WITH the kernel (see eng/go/word_extend.go). The core `list` /
 // `remove` sigs match only Map/ResourceEntity/List, disjoint from Pathon, so
 // dispatch is unambiguous. listHandler closes over fileType so a
@@ -586,7 +586,7 @@ func scriptArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([
 func envLookupHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlErrorAt("env_error", "env: name must be a String", "env", args[0].Pos())
+		return nil, r.BoruErrorAt("env_error", "env: name must be a String", "env", args[0].Pos())
 	}
 	ops := HostEnvOps(r)
 	if ops == nil {
@@ -622,11 +622,11 @@ func envAllHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 func exitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	code, err := args[0].AsConcreteInteger()
 	if err != nil {
-		return nil, r.AqlErrorAt("exit_error", "exit: code must be an Integer",
+		return nil, r.BoruErrorAt("exit_error", "exit: code must be an Integer",
 			"exit", args[0].Pos())
 	}
 	if code < 0 || code > 125 {
-		return nil, r.AqlErrorHintAt("exit_error",
+		return nil, r.BoruErrorHintAt("exit_error",
 			"exit: code must be 0..125", "exit",
 			"126 and 127 are reserved for the shell (not executable / not found) "+
 				"and 128+n means killed by signal n — a program that returns one "+

@@ -3,7 +3,7 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // TestModuleCatalogMatchesModules pins the help package's static module

@@ -1,6 +1,6 @@
 package vault
 
-// password.go — `aql vault password <add|assign|set|rm|list>`: scoped
+// password.go — `boru vault password <add|assign|set|rm|list>`: scoped
 // named passwords (keyslots) over the envelope (keyslot.go / session.go).
 //
 // The first `password add` on a legacy single-passphrase vault migrates
@@ -23,18 +23,18 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
 )
 
 // EnvNewPassphrase supplies the NEW password for `password add`/`set` in
-// non-interactive use (AQL_VAULT_PASSPHRASE remains the authenticating
+// non-interactive use (BORU_VAULT_PASSPHRASE remains the authenticating
 // passphrase).
-const EnvNewPassphrase = "AQL_VAULT_NEW_PASSPHRASE"
+const EnvNewPassphrase = "BORU_VAULT_NEW_PASSPHRASE"
 
 // runPassword dispatches the password sub-verbs.
 func runPassword(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "error: usage: aql vault password <add|assign|set|rm|list> [args...]")
+		fmt.Fprintln(stderr, "error: usage: boru vault password <add|assign|set|rm|list> [args...]")
 		return 1
 	}
 	sub, rest := args[0], args[1:]
@@ -119,7 +119,7 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 		return 1
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault password add [--scope=...] [--namespaces=...] [--ttl=DUR] [--generate] [--rotate] <name>")
+		fmt.Fprintln(stderr, "error: usage: boru vault password add [--scope=...] [--namespaces=...] [--ttl=DUR] [--generate] [--rotate] <name>")
 		return 1
 	}
 	name := fs.Arg(0)
@@ -155,7 +155,7 @@ func runPasswordAdd(args []string, homeDir string, stdin io.Reader, stdout, stde
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 	if resolveBackend(s) != BackendFile {
@@ -315,11 +315,11 @@ func printGeneratedPassword(stdout io.Writer, name, pass, expiresAt string) {
 	fmt.Fprintln(stdout)
 	fmt.Fprintf(stdout, "      %s\n", pass)
 	fmt.Fprintln(stdout)
-	fmt.Fprintln(stdout, "  use it non-interactively:  AQL_VAULT_PASSPHRASE='<password>' aql vault get <alias>")
+	fmt.Fprintln(stdout, "  use it non-interactively:  BORU_VAULT_PASSPHRASE='<password>' boru vault get <alias>")
 	if expiresAt != "" {
 		fmt.Fprintf(stdout, "  it stops working at %s\n", expiresAt)
 	}
-	fmt.Fprintf(stdout, "  revoke it early with:      aql vault password rm %s\n", name)
+	fmt.Fprintf(stdout, "  revoke it early with:      boru vault password rm %s\n", name)
 }
 
 // --- rm --------------------------------------------------------------------
@@ -349,7 +349,7 @@ func runPasswordRm(args []string, homeDir string, stdin io.Reader, stdout, stder
 		return runPasswordRmTemp(homeDir, *yes, stdin, stdout, stderr)
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault password rm [--rekey] [--yes] <name>   (or --temp to revoke all temporary passwords)")
+		fmt.Fprintln(stderr, "error: usage: boru vault password rm [--rekey] [--yes] <name>   (or --temp to revoke all temporary passwords)")
 		return 1
 	}
 	name := fs.Arg(0)
@@ -1006,7 +1006,7 @@ func runPasswordAssign(args []string, homeDir string, stdin io.Reader, stdout, s
 		return 1
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault password assign --namespaces=... <name>")
+		fmt.Fprintln(stderr, "error: usage: boru vault password assign --namespaces=... <name>")
 		return 1
 	}
 	if *scopeFlag != "" {
@@ -1029,7 +1029,7 @@ func runPasswordAssign(args []string, homeDir string, stdin io.Reader, stdout, s
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 	target, _ := s.FindPasswordSlot(name)
@@ -1110,7 +1110,7 @@ func runPasswordSet(args []string, homeDir string, stdin io.Reader, stdout, stde
 		return 1
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault password set <name>")
+		fmt.Fprintln(stderr, "error: usage: boru vault password set <name>")
 		return 1
 	}
 	name := fs.Arg(0)

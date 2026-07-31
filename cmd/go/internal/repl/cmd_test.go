@@ -1,4 +1,4 @@
-// Tests for the `aql repl` subcommand wrapper (cmd.go) plus the
+// Tests for the `boru repl` subcommand wrapper (cmd.go) plus the
 // remaining meta.go edges the existing meta tests do not reach.
 
 package repl
@@ -33,8 +33,8 @@ func TestCmdRunPrintsBannerAndEvaluates(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Run = %d, want 0", code)
 	}
-	if !strings.Contains(out.String(), "aql repl") {
-		t.Errorf("output = %q, want the aql repl banner", out.String())
+	if !strings.Contains(out.String(), "boru repl") {
+		t.Errorf("output = %q, want the boru repl banner", out.String())
 	}
 	if !strings.Contains(out.String(), "3") {
 		t.Errorf("output = %q, want the evaluated result 3", out.String())

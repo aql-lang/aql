@@ -14,7 +14,7 @@ piece lives. Pinned by `lang/spec/open-words.tsv` and
 `lang/go/test/reserved_words_test.go`. §6 migration 1 is DONE — the
 temporal add/sub overloads (and the duration/timezone/time-of-day
 TYPES, renamed CalendarDuration / ClockDuration) moved to
-aql:time-util via the transplant path; the MatrixUtil migration
+boru:time-util via the transplant path; the MatrixUtil migration
 remains follow-up work (host-registration route — see the
 Implementation notes). Discussion artifact per the ADR rule (design
 notes capture discovery; no ADR entry without explicit maintainer
@@ -36,18 +36,18 @@ import machinery recognises and transplants one level up.
 
 (unchanged from rev 0)
 
-AQL's dispatch is type-directed and openly polymorphic — `add`
+BORU's dispatch is type-directed and openly polymorphic — `add`
 already covers numeric addition, string concatenation, Bytes
 concatenation, and Date/Duration arithmetic through one signature
 list. But the *right to contribute to that list* is closed: only Go
 code in `lang/go/native`, at registry build time, can append
 signatures (`RegisterNativeFunc` — how `native_bytes.go` adds the
 Bytes `add` overload and `native_math.go:130-158` carries the
-temporal ones). Nothing at the AQL level can:
+temporal ones). Nothing at the BORU level can:
 
-- `def add …` raises `[aql/reserved_word]` — built-in words cannot
+- `def add …` raises `[boru/reserved_word]` — built-in words cannot
   be redefined, and there is no separate append path.
-- `aql:matrix-util` — a first-party module — could not give its own
+- `boru:matrix-util` — a first-party module — could not give its own
   flagship type addition: `(matrix) add (matrix)` is a
   `signature_error`, and the module ships **`mat-add`** instead. The
   `mat-` prefix is the workaround made visible.
@@ -106,7 +106,7 @@ proposal asks for falls out of machinery that already exists:
 Every natively registered signature carries `Locked`. Locked
 signatures can never be replaced or removed, and they keep **first
 position in match order** (see §4.2 for what that buys). Locking is
-not an AQL language ability — it is a property of the Go
+not a BORU language ability — it is a property of the Go
 registration layer, like capability flags.
 
 A second, stronger tier: a small set of **sealed words** cannot be
@@ -145,7 +145,7 @@ Properties that fall out:
 
   ```
   import module [
-    import "./foo.aql"
+    import "./foo.boru"
     export "Foo" { …just the things wanted… }
   ]
   ```
@@ -172,7 +172,7 @@ machinery that already exists and is already tested:
    sub-engine inheritance — all existing `DefTable` behaviour. rev 0
    had to invent a lifecycle; rev 1 inherits one.
 2. **Module-closure execution is free.** A transplanted signature's
-   handler is an AQL fn closed over the module sub-registry — the
+   handler is a BORU fn closed over the module sub-registry — the
    exact shape of today's exported FnDef wrappers, so module-private
    helpers work with no new dispatch path.
 3. **The locked-first ordering theorem.** With locked signatures
@@ -220,7 +220,7 @@ collected. This is inherent to type-directed collection and arguably
 the intent ("in my scope, add takes these shapes") — but it must be
 documented as a property, and it is the strongest argument for the
 scoping being *narrow by default* (fn > module > top level), which
-the model already provides. The `aql check` advisory machinery
+the model already provides. The `boru check` advisory machinery
 (`forward_strands_operand` precedent) can flag lines whose collection
 differs from the base word's.
 
@@ -245,7 +245,7 @@ A imports B and C; both export an extension of `add` with the same
 exact unlocked tuple. Pure def-stack semantics say the later import
 shadows (innermost/latest wins) — consistent, unwindable via
 `undef`, but *silent spooky action between two files that never
-mention each other*. Recommendation: **loud `[aql/extend_conflict]`
+mention each other*. Recommendation: **loud `[boru/extend_conflict]`
 at the second transplant** when the same tuple arrives from a
 different module than the one that installed it; identical
 provenance (diamond re-import) is idempotent and quiet.
@@ -343,8 +343,8 @@ exchanging Values across engines is out of scope.
 Once landed, in order of payoff:
 
 1. **Temporal `add`/`sub` overloads** (`native_math.go:130-158`) →
-   `def add fn …` merges in `aql:time-util`'s body + `export` of
-   `add`/`sub`. The Time *types* stay globally registered; `aql:io`
+   `def add fn …` merges in `boru:time-util`'s body + `export` of
+   `add`/`sub`. The Time *types* stay globally registered; `boru:io`
    imports time-util so mtime arithmetic keeps working.
 2. **`MatrixUtil.mat-add`/`mat-mul`/`mat-emul`** → merged `add`/
    `mul` signatures on `[Matrix Matrix]` (keep `mat-*` as deprecated
@@ -424,7 +424,7 @@ clone" is an ordinary def-stack entry:
 Resolved open questions: **4.1** locked-sig-bearing words only (module
 wrappers count — their rebindings carry locked sigs); **4.3** closures
 capture clones (uniform rule, pinned); **4.4** loud
-`[aql/extend_conflict]` module-vs-module, silent shadowing for direct
+`[boru/extend_conflict]` module-vs-module, silent shadowing for direct
 user defs, diamond re-import idempotent by module-ref provenance
 (inline modules get a per-instance `inline#<id>` origin, so two inline
 modules collide loudly); **Q4** `undef` unwinds in reverse install
@@ -436,9 +436,9 @@ instruction).** A MODULE may extend a CORE word only with at least one
 USER-MINTED argument type per signature — a type the module creates
 with `refine` / `class` (`Origin == OriginUserDef`). Builtin types do
 NOT qualify, neither the kernel ones (`add [Boolean Boolean]`,
-`add [Integer Map]`) nor the external builtins the aql: modules and
+`add [Integer Map]`) nor the external builtins the boru: modules and
 host plugins register globally (`Date`, `Matrix`, `Fetch`, `Timeout`);
-a builtin-only tuple raises `[aql/extend_user_type]`. Rationale: such
+a builtin-only tuple raises `[boru/extend_user_type]`. Rationale: such
 a tuple would change what core calls mean for every importer
 (`add 1 {}` suddenly working because of an import) and breaks forward
 compatibility the day core or a first-party module claims the tuple
@@ -460,13 +460,13 @@ TYPES. Both are DONE this way:
 
 - Migration 1: TimeOfDay / Duration / CalendarDuration /
   ClockDuration / Timezone moved out of the global builtin table
-  (former FixedIDs 1004-1008) into aql:time-util as per-import mints
+  (former FixedIDs 1004-1008) into boru:time-util as per-import mints
   (`MintTemporalModuleTypes`, the StreamKind pattern), and the
   temporal add/sub overloads ride the module's exported word-extension
   clones (`TemporalArithmeticExtensions` + `NewWordExtension`). Only
   Date / DateTime / Instant (and the Scalar/Time root) remain core.
 - Migration 2: the Tensor family (Tensor / Matrix / Vector, former
-  FixedIDs 2000-2002) moved into aql:matrix-util the same way
+  FixedIDs 2000-2002) moved into boru:matrix-util the same way
   (`MintTensorTypes` + `TensorArithmeticExtensions`): import
   transplants [Matrix Matrix] overloads onto bare add / sub / mul,
   with mat-add / mat-sub / mat-mul kept as aliases backed by the same
@@ -482,8 +482,8 @@ signatures) in the owning module's builder.
 
 The remaining module-owned globals followed (no word extensions
 needed — pure type moves): the Fetch family (3000-3002) →
-aql:net (`MintFetchTypes`, exported as Net.Fetch / Net.Request /
-Net.Response); Timeout / Interval (4000-4001) → aql:time-util
+boru:net (`MintFetchTypes`, exported as Net.Fetch / Net.Request /
+Net.Response); Timeout / Interval (4000-4001) → boru:time-util
 (joined `MintTemporalModuleTypes`, exported as TimeUtil.Timeout /
 TimeUtil.Interval); and the three self-registered module carriers
 MiniLangCompiled (5003) / ParseGrammar (5005) / Model (5006) →
@@ -499,8 +499,8 @@ modules re-RUN per import (no module cache), so a re-imported module
 re-mints its user types — a diamond import appends a fresh-minted
 tuple quietly, and two modules' same-shaped user-typed extensions
 COEXIST (each anchored to its own mint, per-tree mintID §5.2) rather
-than conflict. `[aql/extend_conflict]` is therefore unreachable from
-AQL source today; the guard is pinned at the API level
+than conflict. `[boru/extend_conflict]` is therefore unreachable from
+BORU source today; the guard is pinned at the API level
 (TestModuleExtendTransplantConflictDirect) because it must hold for a
 future module cache (shared mints across importers) and for
 host-constructed clones.
@@ -516,7 +516,7 @@ structs, so `BarrierPos`/`QuoteArgs`/`NoEvalArgs`/`RawParens`/
 
 §4.7 as observed: the checker follows scope through the ordinary
 registry lookup (a merged call type-checks in scope, flags out of
-scope); the bytecode recorder treats an added sig like any AQL fn —
+scope); the bytecode recorder treats an added sig like any BORU fn —
 local merges compile with interpreter parity, and a transplanted
 (foreign-registry) sig REFUSES under `-force-compile` ("user fn call")
 and falls back to the interpreter under `-compile`, which is exactly

@@ -15,7 +15,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 // Server is the lifecycle-managed LSP server. Construct with
@@ -56,7 +56,7 @@ func NewStdioServer(stdin io.Reader, stdout, stderr io.Writer) *Server {
 // current one closes.
 //
 // host should default to a loopback address: the server evaluates
-// arbitrary AQL buffers, so exposing it on all interfaces would let any
+// arbitrary BORU buffers, so exposing it on all interfaces would let any
 // reachable client drive the parser/evaluator unauthenticated. An empty
 // host falls back to 127.0.0.1 rather than the all-interfaces ":port".
 func NewTCPServer(host string, port int, stderr io.Writer) *Server {
@@ -131,7 +131,7 @@ func (s *Server) Start(ctx context.Context) error {
 		s.state.Store(int32(service.StateStopped))
 	}()
 
-	fmt.Fprintf(s.stderr, "aql lsp listening on %s\n", ln.Addr().String())
+	fmt.Fprintf(s.stderr, "boru lsp listening on %s\n", ln.Addr().String())
 
 	// Close the listener on cancel so Accept unblocks.
 	done := make(chan struct{})

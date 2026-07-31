@@ -5,15 +5,15 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// Wave-4 coverage for the aql:log machinery: log_module.go (levels,
+// Wave-4 coverage for the boru:log machinery: log_module.go (levels,
 // records, sinks, render), log_logger.go (contextual loggers),
 // log_span.go (traces), log_metrics.go (instruments), and log_sinks.go
-// (host / AQL sink registration). The natives are registered BARE
+// (host / BORU sink registration). The natives are registered BARE
 // (log-info, log-set-level, …) on a DefaultRegistry — the same
-// NativeFuncs the aql:log module wraps — so the handlers run in-package
+// NativeFuncs the boru:log module wraps — so the handlers run in-package
 // and count toward native coverage.
 
 // w4LogEnv builds a registry with the log natives bound to a fresh
@@ -337,7 +337,7 @@ func TestW4Metrics(t *testing.T) {
 		`1`)
 }
 
-// --- AQL fn sinks ----------------------------------------------------------------
+// --- BORU fn sinks ----------------------------------------------------------------
 
 func TestW4RegisterFnSink(t *testing.T) {
 	r, _, _ := w4LogEnv(t)

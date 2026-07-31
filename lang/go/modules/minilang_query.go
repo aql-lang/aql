@@ -3,17 +3,17 @@ package modules
 import (
 	"math/big"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/itchyny/gojq"
 	"github.com/ohler55/ojg/jp"
 )
 
 // The `jp` and `jq` mini-languages: query a document with JSONPath
 // (github.com/ohler55/ojg) or a jq filter (github.com/itchyny/gojq). The
-// document is the stack subject and may be any AQL data shape — a Node (Map /
+// document is the stack subject and may be any BORU data shape — a Node (Map /
 // List tree), an Object, an Array, a Table, or a Record — converted to generic
-// data for the query engine and the matches converted back to AQL values.
+// data for the query engine and the matches converted back to BORU values.
 //
 //	{store:{book:[{title:'A'} {title:'B'}]}} mini jp '$.store.book[*].title'  # → ['A' 'B']
 //	{a:1 b:2} mini jq '.a + .b'                                              # → [3]
@@ -22,7 +22,7 @@ import (
 // its output stream (a single-output filter therefore returns a one-element
 // list). Grab the first with `.0` / `get 0` when a scalar is wanted.
 
-// docToAny converts an AQL subject to the generic Go data (map[string]any /
+// docToAny converts a BORU subject to the generic Go data (map[string]any /
 // []any / scalars) the query engines operate on. Nodes (Map/List), Objects and
 // Records go through the standard value→any path; Arrays, Tables and other
 // Ideals are projected through their IdealConverter.
@@ -90,7 +90,7 @@ func sliceToAny(elems []native.Value) []any {
 	return out
 }
 
-// queryResultToValue converts a jsonpath / jq output value back to an AQL
+// queryResultToValue converts a jsonpath / jq output value back to a BORU
 // Value, reusing the shared any→Value conversion and handling gojq's big.Int.
 func queryResultToValue(v any) native.Value {
 	if bi, ok := v.(*big.Int); ok {
@@ -108,11 +108,11 @@ func queryResultToValue(v any) native.Value {
 func miniJsonPathHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", "jp: src: "+err.Error(), "lang_jp")
+		return nil, r.BoruError("mini_error", "jp: src: "+err.Error(), "lang_jp")
 	}
 	expr, perr := jp.ParseString(src)
 	if perr != nil {
-		return nil, r.AqlErrorHint("mini_parse_error", "jp: "+perr.Error(), "lang_jp",
+		return nil, r.BoruErrorHint("mini_parse_error", "jp: "+perr.Error(), "lang_jp",
 			"write a JSONPath like $.store.book[*].title")
 	}
 	matches := expr.Get(docToAny(args[2]))
@@ -128,11 +128,11 @@ func miniJsonPathHandler(args []native.Value, _ map[string]native.Value, _ []nat
 func miniJqHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", "jq: src: "+err.Error(), "lang_jq")
+		return nil, r.BoruError("mini_error", "jq: src: "+err.Error(), "lang_jq")
 	}
 	query, perr := gojq.Parse(src)
 	if perr != nil {
-		return nil, r.AqlErrorHint("mini_parse_error", "jq: "+perr.Error(), "lang_jq",
+		return nil, r.BoruErrorHint("mini_parse_error", "jq: "+perr.Error(), "lang_jq",
 			"write a jq filter like .store.book[].title")
 	}
 	var out []native.Value
@@ -143,7 +143,7 @@ func miniJqHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 			break
 		}
 		if e, ok := v.(error); ok {
-			return nil, r.AqlErrorHint("mini_eval_error", "jq: "+e.Error(), "lang_jq",
+			return nil, r.BoruErrorHint("mini_eval_error", "jq: "+e.Error(), "lang_jq",
 				"check the filter and that it matches the document shape")
 		}
 		out = append(out, queryResultToValue(v))

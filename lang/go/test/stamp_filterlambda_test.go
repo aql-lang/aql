@@ -3,9 +3,9 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestStampServiceFilterLambda pins the mini-s3 bucket-list wall: an

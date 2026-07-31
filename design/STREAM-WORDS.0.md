@@ -1,10 +1,10 @@
 # STREAM-WORDS
 
-Design for `aql:stream` — the streaming & concurrency module.
+Design for `boru:stream` — the streaming & concurrency module.
 
 ## Context
 
-AQL today has eager `list` and one-shot async primitives (`await`,
+BORU today has eager `list` and one-shot async primitives (`await`,
 `await-any`, `await-first`, `await-full` in
 `lang/go/native/native_temporal_await.go`), but no first-class story for:
 
@@ -19,14 +19,14 @@ either impossible or force everything into memory.
 
 This design adds a typed-pipe model — PowerShell / Nushell heritage, with
 bash kept only as a *reference* for ergonomics — landing as a single
-importable native module `aql:stream`. All new words, types, and
+importable native module `boru:stream`. All new words, types, and
 runtime support are scoped under that module so the global namespace
-stays clean and users opt in with `import "aql:stream"`.
+stays clean and users opt in with `import "boru:stream"`.
 
-The intended outcome: an AQL programmer can write
+The intended outcome: a BORU programmer can write
 
-```aql
-import "aql:stream"
+```boru
+import "boru:stream"
 
 "./events.log" stream.from-lines
     [ stream.parse-json ] stream.map
@@ -48,12 +48,12 @@ parallel enrichment.
    stages see a cancellation signal and must release resources.
 3. **External processes:** out-of-scope for implementation; a short
    "future extension" section appears below.
-4. **Framing:** typed pipes carrying AQL `Value`s end-to-end (no string
+4. **Framing:** typed pipes carrying BORU `Value`s end-to-end (no string
    serialisation between stages). Bash pipelines are the familiar
    mental model; PowerShell / Nushell are the actual reference for
    typed elements and pluggable framing.
 5. **Module:** every new word, type, and helper lives under
-   `aql:stream`. Nothing is added to the global / `core` namespace.
+   `boru:stream`. Nothing is added to the global / `core` namespace.
 
 ## Core model
 
@@ -78,8 +78,8 @@ All three are reference values with deterministic finalisers (see
 
 ### Words
 
-All exported under `aql:stream`. Names below are the dotted form a
-user sees after `import "aql:stream"`.
+All exported under `boru:stream`. Names below are the dotted form a
+user sees after `import "boru:stream"`.
 
 **Sources**
 
@@ -162,23 +162,23 @@ finish.
 `select` returns the first job to complete and cancels the rest.
 
 The existing global `await`, `await-any`, `await-first`, `await-full`
-words stay where they are, and `aql:stream` re-exports them so a user
+words stay where they are, and `boru:stream` re-exports them so a user
 who has imported the module finds a complete async toolkit in one
 place.
 
 ## Common patterns
 
 Side-by-side with the bash equivalent. Bash is shown as the reference
-mental model; the AQL versions are typed end-to-end and back-pressured.
+mental model; the BORU versions are typed end-to-end and back-pressured.
 
-Every AQL snippet assumes `import "aql:stream"` at the top. Words
-that appear inside filter / map blocks come from elsewhere in AQL and
+Every BORU snippet assumes `import "boru:stream"` at the top. Words
+that appear inside filter / map blocks come from elsewhere in BORU and
 are shown here for context: `contains` (string search,
 `lang/go/native/native_string.go`), `eq` (equality,
 `lang/go/native/native_compare.go`), and `.` (record / list field
 access, alias for `get`; see `lang/doc/design/SAMPLES.10.md`).
 Duration literals like `30s` do **not** exist — durations are built
-via `aql:time` constructors (`30 seconds`).
+via `boru:time` constructors (`30 seconds`).
 
 ### 1. Count error lines in a log
 
@@ -186,7 +186,7 @@ via `aql:time` constructors (`30 seconds`).
 grep ERROR ./app.log | wc -l
 ```
 
-```aql
+```boru
 "./app.log" stream.from-lines
     [ "ERROR" contains ] stream.filter
     stream.count
@@ -198,7 +198,7 @@ grep ERROR ./app.log | wc -l
 cat urls.txt | xargs -P 8 -I{} curl -sf {} -o /dev/null
 ```
 
-```aql
+```boru
 "./urls.txt" stream.from-lines
     8 [ http.get ] stream.pmap
     stream.to-list
@@ -220,7 +220,7 @@ wait -n
 kill %1 %2 %3 2>/dev/null
 ```
 
-```aql
+```boru
 [ [ "us-east"  fetch-region ] stream.spawn
   [ "eu-west"  fetch-region ] stream.spawn
   [ "ap-south" fetch-region ] stream.spawn
@@ -236,8 +236,8 @@ tokens — the in-flight HTTP requests abort instead of leaking.
 timeout 30s tail -f /var/log/events | grep DEPLOY
 ```
 
-```aql
-import "aql:time"   # for `seconds`
+```boru
+import "boru:time"   # for `seconds`
 
 "/var/log/events" stream.from-lines
     30 seconds stream.with-timeout
@@ -247,7 +247,7 @@ import "aql:time"   # for `seconds`
 
 `with-timeout` is per-element: if no new line arrives within 30s, the
 stream terminates with a `TimeoutError` and the file handle is
-released. Duration values are constructed by `aql:time` — there is no
+released. Duration values are constructed by `boru:time` — there is no
 `30s` shorthand.
 
 ### 5. Batch a JSONL stream into bulk inserts
@@ -259,7 +259,7 @@ for f in batch_*; do bulk-insert < "$f"; done
 rm batch_*
 ```
 
-```aql
+```boru
 "./events.jsonl" stream.from-lines
     [ parse-json ] stream.map
     100 stream.chunks-of
@@ -278,7 +278,7 @@ No temp files, constant memory, and `bulk-insert` sees a real
 tail -f a.log b.log | grep ERROR > errors.log
 ```
 
-```aql
+```boru
 [ "./a.log" stream.from-lines
   "./b.log" stream.from-lines
 ] stream.merge
@@ -304,7 +304,7 @@ cat events.log \
   > errors.jsonl
 ```
 
-```aql
+```boru
 "./events.log" stream.from-lines
     [ parse-json ] stream.map
     [ . status "error" eq ] stream.filter
@@ -335,13 +335,13 @@ cat events.log \
 - The first error wins; later errors are recorded in a debug trace
   but do not overwrite the primary cause.
 - The terminator (`to-list`, `for-each`, `fold`, …) re-raises the
-  primary error to the AQL caller.
+  primary error to the BORU caller.
 - A future `stream.try` combinator (not in v1) will let users opt into
   per-element error capture.
 
 ## Module layout (Go side)
 
-New files mirror the `aql:time` pattern in `lang/go/modules/`:
+New files mirror the `boru:time` pattern in `lang/go/modules/`:
 
 - `lang/go/modules/stream.go` — `BuildStreamModule` plus the exports
   table. Mirrors `BuildTimeModule` in `lang/go/modules/time.go`.
@@ -349,7 +349,7 @@ New files mirror the `aql:time` pattern in `lang/go/modules/`:
   `Job` implementations: goroutines, bounded channels, cancellation
   tokens. Internal to the module.
 - `lang/go/modules/stream_words.go` — native-word adapters that move
-  AQL `Value`s in and out of the runtime.
+  BORU `Value`s in and out of the runtime.
 - `lang/go/modules/stream_test.go` — unit tests (see Verification).
 
 Registration in `lang/go/modules/modules.go`:
@@ -374,7 +374,7 @@ stream module wraps but does not duplicate it.
 
 A future `stream.exec` would return a record:
 
-```aql
+```boru
 { stdin:  Channel<Bytes>
 , stdout: Stream<Bytes>
 , stderr: Stream<Bytes>
@@ -382,7 +382,7 @@ A future `stream.exec` would return a record:
 }
 ```
 
-letting AQL pipelines splice in shell commands the same way Nushell
+letting BORU pipelines splice in shell commands the same way Nushell
 does. Cancellation kills the child; `wait` joins it. The v1 types
 above are deliberately shaped to accommodate this, but no code lands
 in v1.
@@ -400,7 +400,7 @@ End-to-end checks before declaring v1 done:
    - `select` cancels the losing jobs;
    - `with-timeout` fires under a stalled source.
 
-2. **AQL-level integration test** under `lang/go/test/` (mirroring the
+2. **BORU-level integration test** under `lang/go/test/` (mirroring the
    existing `pipe_barrier_test.go` style) that runs the worked
    example from the Context section against a fixture file and
    checks the output.
@@ -409,10 +409,10 @@ End-to-end checks before declaring v1 done:
    (`go test ./...`) plus a one-liner REPL session driving each new
    word once.
 
-4. **Doc check:** confirm the new words show up in `aql:stream` help
+4. **Doc check:** confirm the new words show up in `boru:stream` help
    output and that `lang/doc/design/NATIVE-MODULES.10.md` is updated
    to list the new module.
 
-5. **No global-namespace leakage:** an `aql` REPL without
-   `import "aql:stream"` must not resolve `stream.map` — verified by
+5. **No global-namespace leakage:** a `boru` REPL without
+   `import "boru:stream"` must not resolve `stream.map` — verified by
    a negative test.

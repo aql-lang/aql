@@ -44,7 +44,7 @@ func TestFloatFormat(t *testing.T) {
 // problem") flips the expected string and the conversion is verified
 // by this test passing against the new payload.
 //
-// Until that port lands, the contract is: aqleng's TFloat IS a
+// Until that port lands, the contract is: borueng's TFloat IS a
 // float64. The engine does not silently round, does not display-trim,
 // and does not pretend the result is 0.3. Honest arithmetic, ugly
 // output for this specific input.

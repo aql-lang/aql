@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // === 1. var word ===
@@ -20,7 +20,7 @@ func TestIntegVarWithValueAssignment(t *testing.T) {
 		}),
 		NewWord("x"),
 	})
-	result := runAQL(t, r, []Value{NewWord("var"), varBody})
+	result := runBORU(t, r, []Value{NewWord("var"), varBody})
 	_as0, _ := AsInteger(result[0])
 	if len(result) != 1 || _as0 != 10 {
 		t.Errorf("var [[x 10]] x = %v, want 10", result)
@@ -37,7 +37,7 @@ func TestIntegVarWithTypeValue(t *testing.T) {
 		}),
 		NewWord("x"),
 	})
-	result := runAQL(t, r, []Value{NewWord("var"), varBody})
+	result := runBORU(t, r, []Value{NewWord("var"), varBody})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -54,7 +54,7 @@ func TestIntegVarMultipleDecls(t *testing.T) {
 		}),
 		NewWord("x"), NewWord("add"), NewWord("y"),
 	})
-	result := runAQL(t, r, []Value{NewWord("var"), varBody})
+	result := runBORU(t, r, []Value{NewWord("var"), varBody})
 	_as1, _ := AsNumber(result[0])
 	if len(result) != 1 || _as1 != 5 {
 		t.Errorf("var [[[x 2] [y 3]] x add y] = %v, want 5", result)
@@ -69,7 +69,7 @@ func TestIntegVarStringName(t *testing.T) {
 		NewList([]Value{NewString("myvar")}),
 		NewWord("myvar"),
 	})
-	result := runAQL(t, r, []Value{NewInteger(42), NewWord("var"), varBody})
+	result := runBORU(t, r, []Value{NewInteger(42), NewWord("var"), varBody})
 	_as2, _ := AsInteger(result[0])
 	if len(result) != 1 || _as2 != 42 {
 		t.Errorf("42 var [[\"myvar\"] myvar] = %v, want 42", result)
@@ -86,7 +86,7 @@ func TestIntegVarNestedDoBlock(t *testing.T) {
 		}),
 		NewWord("do"), NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(5)}),
 	})
-	result := runAQL(t, r, []Value{NewWord("var"), varBody})
+	result := runBORU(t, r, []Value{NewWord("var"), varBody})
 	_as3, _ := AsNumber(result[0])
 	if len(result) != 1 || _as3 != 15 {
 		t.Errorf("var [[[x 10]] do [x add 5]] = %v, want 15", result)
@@ -101,7 +101,7 @@ func TestIntegVarErrorInvalidDecl(t *testing.T) {
 		NewList([]Value{NewInteger(42)}),
 		NewWord("x"),
 	})
-	err := runAQLError(t, r, []Value{NewWord("var"), varBody})
+	err := runBORUError(t, r, []Value{NewWord("var"), varBody})
 	if err == nil {
 		t.Error("expected error for invalid var declaration")
 	}
@@ -112,7 +112,7 @@ func TestIntegVarEmptyList(t *testing.T) {
 	registerIOWords(r)
 	// var [] — empty list should fail
 	varBody := NewList([]Value{})
-	err := runAQLError(t, r, []Value{NewWord("var"), varBody})
+	err := runBORUError(t, r, []Value{NewWord("var"), varBody})
 	if err == nil {
 		t.Error("expected error for empty var list")
 	}
@@ -128,7 +128,7 @@ func TestIntegVarDeclListTooShort(t *testing.T) {
 		}),
 		NewWord("x"),
 	})
-	err := runAQLError(t, r, []Value{NewWord("var"), varBody})
+	err := runBORUError(t, r, []Value{NewWord("var"), varBody})
 	if err == nil {
 		t.Error("expected error for declaration list with only 1 element")
 	}
@@ -141,7 +141,7 @@ func TestIntegUndefRemovesDef(t *testing.T) {
 	registerIOWords(r)
 	// def my-val 99 end my-val undef my-val end
 	// After undef, my-val should not be found (error or just word)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("my-val"), NewInteger(99), NewEnd(),
 		NewWord("my-val"),
 	})
@@ -151,7 +151,7 @@ func TestIntegUndefRemovesDef(t *testing.T) {
 	}
 
 	// Now undef it and verify it's gone
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewWord("undef"), NewWord("my-val"),
 	})
 	// Should return nothing (undef returns nil)
@@ -164,7 +164,7 @@ func TestIntegUndefWithString(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// def my-val 42 end undef "my-val"
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("my-val"), NewInteger(42), NewEnd(),
 		NewWord("undef"), NewString("my-val"),
 	})
@@ -184,21 +184,21 @@ func TestIntegUndefFnTargeted(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TNumber)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("my-fn"),
 		NewWord("fn"), fnBody,
 		NewEnd(),
 	})
 
 	// Verify my-fn works: 5 my-fn => 6
-	result := runAQL(t, r, []Value{NewInteger(5), NewWord("my-fn")})
+	result := runBORU(t, r, []Value{NewInteger(5), NewWord("my-fn")})
 	_as5, _ := AsNumber(result[0])
 	if len(result) != 1 || _as5 != 6 {
 		t.Fatalf("5 my-fn = %v, want 6", result)
 	}
 
 	// undef my-fn (complete removal)
-	runAQL(t, r, []Value{NewWord("undef"), NewWord("my-fn")})
+	runBORU(t, r, []Value{NewWord("undef"), NewWord("my-fn")})
 }
 
 // === 3. fn word ===
@@ -216,14 +216,14 @@ func TestIntegFnMultipleParams(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TNumber)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("y")}),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("add-two"),
 		NewWord("fn"), fnBody,
 		NewEnd(),
 	})
 
 	// 3 5 add-two => 8
-	result := runAQL(t, r, []Value{NewInteger(3), NewInteger(5), NewWord("add-two")})
+	result := runBORU(t, r, []Value{NewInteger(3), NewInteger(5), NewWord("add-two")})
 	_as6, _ := AsNumber(result[0])
 	if len(result) != 1 || _as6 != 8 {
 		t.Errorf("3 5 add-two = %v, want 8", result)
@@ -239,7 +239,7 @@ func TestIntegFnUnnamedParams(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("add"), NewInteger(1)}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("inc"),
 		NewWord("fn"), fnBody,
 		NewEnd(),
@@ -248,7 +248,7 @@ func TestIntegFnUnnamedParams(t *testing.T) {
 		t.Fatalf("def should return nothing, got %v", result)
 	}
 
-	result = runAQL(t, r, []Value{NewInteger(10), NewWord("inc")})
+	result = runBORU(t, r, []Value{NewInteger(10), NewWord("inc")})
 	_as7, _ := AsNumber(result[0])
 	if len(result) != 1 || _as7 != 11 {
 		t.Errorf("10 inc = %v, want 11", result)
@@ -264,7 +264,7 @@ func TestIntegFnUndefSpecPairs(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("Number")}),
 	})
-	result := runAQL(t, r, []Value{NewWord("fnsig"), fnBody})
+	result := runBORU(t, r, []Value{NewWord("fnsig"), fnBody})
 	if len(result) != 1 {
 		t.Fatalf("fnsig should return 1 value, got %d", len(result))
 	}
@@ -276,7 +276,7 @@ func TestIntegFnUndefSpecPairs(t *testing.T) {
 func TestIntegFnEmptyListError(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	err := runAQLError(t, r, []Value{NewWord("fn"), NewList([]Value{})})
+	err := runBORUError(t, r, []Value{NewWord("fn"), NewList([]Value{})})
 	if err == nil {
 		t.Error("expected error for fn with empty list")
 	}
@@ -287,7 +287,7 @@ func TestIntegFnBadLengthError(t *testing.T) {
 	registerIOWords(r)
 	// fn with 4 elements (not a multiple of 3) — fn now requires
 	// strict triples; the 2-pair form moved to `fnsig`.
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("fn"), NewList([]Value{
 			NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4),
 		}),
@@ -307,13 +307,13 @@ func TestIntegFnSingleValueAbbreviation(t *testing.T) {
 		NewWord("Number"),
 		NewList([]Value{NewWord("add"), NewInteger(1)}),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("inc2"),
 		NewWord("fn"), fnBody,
 		NewEnd(),
 	})
 
-	result := runAQL(t, r, []Value{NewInteger(7), NewWord("inc2")})
+	result := runBORU(t, r, []Value{NewInteger(7), NewWord("inc2")})
 	_as8, _ := AsNumber(result[0])
 	if len(result) != 1 || _as8 != 8 {
 		t.Errorf("7 inc2 = %v, want 8", result)
@@ -334,7 +334,7 @@ func TestIntegModuleWithExport(t *testing.T) {
 		NewWord("export"), NewAtom("myExport"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
-	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
+	result := runBORU(t, r, []Value{NewWord("module"), moduleBody})
 	if len(result) != 1 {
 		t.Fatalf("module should return 1 value, got %d", len(result))
 	}
@@ -357,17 +357,17 @@ func TestIntegModuleImportAll(t *testing.T) {
 		NewWord("export"), NewAtom("stuff"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("mymod"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
 	// import mymod
-	runAQL(t, r, []Value{NewWord("import"), NewWord("mymod")})
+	runBORU(t, r, []Value{NewWord("import"), NewWord("mymod")})
 
 	// Now "stuff" should be defined as a map with val: 99
-	result := runAQL(t, r, []Value{NewWord("stuff")})
+	result := runBORU(t, r, []Value{NewWord("stuff")})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
 		t.Fatalf("stuff should be a ModuleExport, got %v", result)
 	}
@@ -386,7 +386,7 @@ func TestIntegModuleImportRename(t *testing.T) {
 		NewWord("export"), NewAtom("orig"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("mymod2"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
@@ -394,9 +394,9 @@ func TestIntegModuleImportRename(t *testing.T) {
 
 	// import [orig renamed] mymod2
 	renameList := NewList([]Value{NewAtom("orig"), NewAtom("renamed")})
-	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mymod2")})
+	runBORU(t, r, []Value{NewWord("import"), renameList, NewWord("mymod2")})
 
-	result := runAQL(t, r, []Value{NewWord("renamed")})
+	result := runBORU(t, r, []Value{NewWord("renamed")})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
 		t.Fatalf("renamed should be a ModuleExport, got %v", result)
 	}
@@ -413,7 +413,7 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 		NewWord("export"), NewAtom("expB"),
 		NewMap(singleMap("val", NewString("b"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("mm"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
@@ -424,9 +424,9 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 		NewList([]Value{NewAtom("expA"), NewAtom("newA")}),
 		NewList([]Value{NewAtom("expB"), NewAtom("newB")}),
 	})
-	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mm")})
+	runBORU(t, r, []Value{NewWord("import"), renameList, NewWord("mm")})
 
-	result := runAQL(t, r, []Value{NewWord("newA")})
+	result := runBORU(t, r, []Value{NewWord("newA")})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
 		t.Fatalf("newA should be a ModuleExport, got %v", result)
 	}
@@ -441,7 +441,7 @@ func TestIntegModuleExportWithAtomName(t *testing.T) {
 		NewWord("export"), NewAtom("wrdexp"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
-	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
+	result := runBORU(t, r, []Value{NewWord("module"), moduleBody})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -460,7 +460,7 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 		NewWord("export"), NewAtom("orig"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("wmod"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
@@ -468,9 +468,9 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 
 	// import with word names (instead of atoms/strings)
 	renameList := NewList([]Value{NewWord("orig"), NewWord("wordRenamed")})
-	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("wmod")})
+	runBORU(t, r, []Value{NewWord("import"), renameList, NewWord("wmod")})
 
-	result := runAQL(t, r, []Value{NewWord("wordRenamed")})
+	result := runBORU(t, r, []Value{NewWord("wordRenamed")})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
 		t.Fatalf("wordRenamed should be a ModuleExport, got %v", result)
 	}
@@ -484,7 +484,7 @@ func TestIntegImportSingleRenameWord(t *testing.T) {
 		NewWord("export"), NewAtom("Orig"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("mymod"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
@@ -492,9 +492,9 @@ func TestIntegImportSingleRenameWord(t *testing.T) {
 
 	// import NewName mymod — renames single export Orig to NewName
 	// (unknown word NewName becomes atom at runtime)
-	runAQL(t, r, []Value{NewWord("import"), NewAtom("NewName"), NewWord("mymod")})
+	runBORU(t, r, []Value{NewWord("import"), NewAtom("NewName"), NewWord("mymod")})
 
-	result := runAQL(t, r, []Value{NewWord("NewName")})
+	result := runBORU(t, r, []Value{NewWord("NewName")})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
 		t.Fatalf("NewName should be a ModuleExport, got %v", result)
 	}
@@ -508,16 +508,16 @@ func TestIntegImportSingleRenameAtom(t *testing.T) {
 		NewWord("export"), NewAtom("Orig"),
 		NewMap(singleMap("val", NewString("x"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("mymod"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
 	// import Renamed mymod — renames single export Orig to Renamed (atom)
-	runAQL(t, r, []Value{NewWord("import"), NewAtom("Renamed"), NewWord("mymod")})
+	runBORU(t, r, []Value{NewWord("import"), NewAtom("Renamed"), NewWord("mymod")})
 
-	result := runAQL(t, r, []Value{NewWord("Renamed")})
+	result := runBORU(t, r, []Value{NewWord("Renamed")})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
 		t.Fatalf("Renamed should be a ModuleExport, got %v", result)
 	}
@@ -532,7 +532,7 @@ func TestIntegImportSingleRenameMultiExportError(t *testing.T) {
 		NewWord("export"), NewAtom("X"), NewMap(singleMap("v", NewInteger(1))),
 		NewWord("export"), NewAtom("Y"), NewMap(singleMap("v", NewInteger(2))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("mm"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
@@ -550,7 +550,7 @@ func TestIntegConvertIntegerToString(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// 42 convert String
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(42), NewWord("convert"), NewTypeLiteral(TString),
 	})
 	_as10, _ := AsString(result[0])
@@ -562,7 +562,7 @@ func TestIntegConvertIntegerToString(t *testing.T) {
 func TestIntegConvertStringToInteger(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewString("123"), NewWord("convert"), NewTypeLiteral(TInteger),
 	})
 	_as11, _ := AsInteger(result[0])
@@ -574,7 +574,7 @@ func TestIntegConvertStringToInteger(t *testing.T) {
 func TestIntegConvertStringToFloat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewString("3.14"), NewWord("convert"), NewTypeLiteral(TFloat),
 	})
 	_as12, _ := AsFloat(result[0])
@@ -587,7 +587,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// integer to boolean
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(1), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
 	_as13, _ := AsBoolean(result[0])
@@ -596,7 +596,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	}
 
 	// 0 to boolean
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewInteger(0), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
 	_as14, _ := AsBoolean(result[0])
@@ -605,7 +605,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	}
 
 	// string "true" to boolean
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewString("true"), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
 	_as15, _ := AsBoolean(result[0])
@@ -615,7 +615,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 
 	// string "false" to boolean: coercion by presence, not content —
 	// a non-empty String is true, so the text "false" is true.
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewString("false"), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
 	_as16, _ := AsBoolean(result[0])
@@ -624,7 +624,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	}
 
 	// non-empty string to boolean (truthy)
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewString("hello"), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
 	_as17, _ := AsBoolean(result[0])
@@ -633,7 +633,7 @@ func TestIntegConvertToBoolean(t *testing.T) {
 	}
 
 	// empty string to boolean (falsy)
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewString(""), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
 	_as18, _ := AsBoolean(result[0])
@@ -648,7 +648,7 @@ func TestIntegConvertIntToHexString(t *testing.T) {
 	// 255 convert String {base: "hex"}
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("hex"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewTypeLiteral(TString), NewMap(hexOpts),
 	})
 	_as19, _ := AsString(result[0])
@@ -662,7 +662,7 @@ func TestIntegConvertIntToHEXString(t *testing.T) {
 	registerIOWords(r)
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("HEX"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewTypeLiteral(TString), NewMap(hexOpts),
 	})
 	_as20, _ := AsString(result[0])
@@ -676,7 +676,7 @@ func TestIntegConvertIntToBinString(t *testing.T) {
 	registerIOWords(r)
 	binOpts := NewOrderedMap()
 	binOpts.Set("base", NewString("bin"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(10), NewWord("convert"), NewTypeLiteral(TString), NewMap(binOpts),
 	})
 	_as21, _ := AsString(result[0])
@@ -690,7 +690,7 @@ func TestIntegConvertIntToOctString(t *testing.T) {
 	registerIOWords(r)
 	octOpts := NewOrderedMap()
 	octOpts.Set("base", NewString("oct"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(8), NewWord("convert"), NewTypeLiteral(TString), NewMap(octOpts),
 	})
 	_as22, _ := AsString(result[0])
@@ -705,7 +705,7 @@ func TestIntegConvertHexStringToNumber(t *testing.T) {
 	// "ff" convert Number {base: "hex"}
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("hex"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewString("ff"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(hexOpts),
 	})
 	_as23, _ := AsInteger(result[0])
@@ -719,7 +719,7 @@ func TestIntegConvertBinStringToNumber(t *testing.T) {
 	registerIOWords(r)
 	binOpts := NewOrderedMap()
 	binOpts.Set("base", NewString("bin"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewString("1010"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(binOpts),
 	})
 	_as24, _ := AsInteger(result[0])
@@ -733,7 +733,7 @@ func TestIntegConvertOctStringToNumber(t *testing.T) {
 	registerIOWords(r)
 	octOpts := NewOrderedMap()
 	octOpts.Set("base", NewString("oct"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewString("10"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(octOpts),
 	})
 	_as25, _ := AsInteger(result[0])
@@ -748,7 +748,7 @@ func TestIntegConvertWithSettingsMap(t *testing.T) {
 	// 255 convert String {base: "hex"}
 	opts := NewOrderedMap()
 	opts.Set("base", NewString("hex"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewTypeLiteral(TString), NewMap(opts),
 	})
 	if len(result) != 1 {
@@ -763,7 +763,7 @@ func TestIntegConvertWithSettingsMap(t *testing.T) {
 func TestIntegConvertBooleanPassthrough(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewBoolean(true), NewWord("convert"), NewTypeLiteral(TBoolean),
 	})
 	_as27, _ := AsBoolean(result[0])
@@ -775,7 +775,7 @@ func TestIntegConvertBooleanPassthrough(t *testing.T) {
 func TestIntegConvertErrorBadFloat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewString("notanumber"), NewWord("convert"), NewTypeLiteral(TFloat),
 	})
 	if err == nil {
@@ -786,7 +786,7 @@ func TestIntegConvertErrorBadFloat(t *testing.T) {
 func TestIntegConvertErrorBadNumber(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewString("notanumber"), NewWord("convert"), NewTypeLiteral(TNumber),
 	})
 	if err == nil {
@@ -799,7 +799,7 @@ func TestIntegConvertErrorBadVariant(t *testing.T) {
 	registerIOWords(r)
 	badOpts := NewOrderedMap()
 	badOpts.Set("base", NewString("badvariant"))
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewInteger(42), NewWord("convert"), NewTypeLiteral(TString), NewMap(badOpts),
 	})
 	if err == nil {
@@ -812,7 +812,7 @@ func TestIntegConvertErrorBadNumberVariant(t *testing.T) {
 	registerIOWords(r)
 	badOpts := NewOrderedMap()
 	badOpts.Set("base", NewString("badvariant"))
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewString("ff"), NewWord("convert"), NewTypeLiteral(TNumber), NewMap(badOpts),
 	})
 	if err == nil {
@@ -826,7 +826,7 @@ func TestIntegConvertErrorVariantNotInteger(t *testing.T) {
 	// Variant conversion only supported for integer to string
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("hex"))
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewString("hello"), NewWord("convert"), NewTypeLiteral(TString), NewMap(hexOpts),
 	})
 	if err == nil {
@@ -839,7 +839,7 @@ func TestIntegConvertErrorVariantNotInteger(t *testing.T) {
 func TestIntegDoList(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("do"), NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)}),
 	})
 	_as28, _ := AsNumber(result[0])
@@ -857,7 +857,7 @@ func TestIntegDoMap(t *testing.T) {
 	innerList := NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)})
 	m := NewOrderedMap()
 	m.Set("x", innerList)
-	result := runAQL(t, r, []Value{NewWord("do"), NewMap(m)})
+	result := runBORU(t, r, []Value{NewWord("do"), NewMap(m)})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("do map should return a map, got %v", result)
 	}
@@ -879,7 +879,7 @@ func TestIntegDoNestedMap(t *testing.T) {
 	innerMap.Set("inner", innerList)
 	outerMap := NewOrderedMap()
 	outerMap.Set("outer", NewMap(innerMap))
-	result := runAQL(t, r, []Value{NewWord("do"), NewMap(outerMap)})
+	result := runBORU(t, r, []Value{NewWord("do"), NewMap(outerMap)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -897,7 +897,7 @@ func TestIntegDoListMultipleResults(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// do [1 2 3] => returns list of all results
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("do"), NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 	})
 	// The sub-engine should return all 3 values
@@ -915,7 +915,7 @@ func TestIntegFileIOWriteAndRead(t *testing.T) {
 	SetHostFileOps(r, mem)
 
 	// write "test.txt" "hello world"
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("write"), pathV("test.txt"), NewString("hello world"),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) || result[0].String() != "test.txt" {
@@ -923,7 +923,7 @@ func TestIntegFileIOWriteAndRead(t *testing.T) {
 	}
 
 	// read "test.txt"
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewWord("read"), pathV("test.txt"),
 	})
 	_as32, _ := AsString(result[0])
@@ -939,19 +939,19 @@ func TestIntegFileIOWriteAppend(t *testing.T) {
 	SetHostFileOps(r, mem)
 
 	// write "test.txt" "hello"
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("write"), pathV("test.txt"), NewString("hello"),
 	})
 
 	// write "test.txt" " world" {mode:"append"}
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("write"), pathV("test.txt"), NewString(" world"), NewMap(opts),
 	})
 
 	// read back
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), pathV("test.txt"),
 	})
 	_as33, _ := AsString(result[0])
@@ -971,12 +971,12 @@ func TestIntegFileIOWriteJSON(t *testing.T) {
 	m.Set("x", NewInteger(1))
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("json"))
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("write"), pathV("data.json"), NewMap(m), NewMap(opts),
 	})
 
 	// Read it back
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), pathV("data.json"),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
@@ -997,7 +997,7 @@ func TestIntegFileIOWriteStdout(t *testing.T) {
 	r.Output = &buf
 
 	// write to stdout
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("write"), NewAtom("stdout"), NewString("printed text"),
 	})
 	a35, _ := result[0].AsConcreteAtom()
@@ -1015,7 +1015,7 @@ func TestIntegFileIOWriteStderr(t *testing.T) {
 	var buf bytes.Buffer
 	r.ErrOutput = &buf
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("write"), NewAtom("stderr"), NewString("error text"),
 	})
 	a36, _ := result[0].AsConcreteAtom()
@@ -1037,7 +1037,7 @@ func TestIntegFileIOReadWithFmtOption(t *testing.T) {
 	_ = mem.WriteFile("data.txt", []byte(`{"a":1}`), 0644)
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("json"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), pathV("data.txt"), NewMap(opts),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
@@ -1052,7 +1052,7 @@ func TestIntegFileIOReadJsonExtension(t *testing.T) {
 	SetHostFileOps(r, mem)
 
 	_ = mem.WriteFile("data.json", []byte(`{"b":2}`), 0644)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), pathV("data.json"),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
@@ -1069,7 +1069,7 @@ func TestIntegFileIOWriteStringWithOpts(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
 	opts.Set("nl", NewString("lf"))
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("write"), pathV("output.txt"), NewString("line1\nline2"), NewMap(opts),
 	})
 
@@ -1090,7 +1090,7 @@ func TestIntegCSVReadWrite(t *testing.T) {
 	csvContent := "name,age\nAlice,30\nBob,25\n"
 	_ = mem.WriteFile("people.csv", []byte(csvContent), 0644)
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), pathV("people.csv"),
 	})
 	if len(result) != 1 {
@@ -1111,7 +1111,7 @@ func TestIntegTSVRead(t *testing.T) {
 	tsvContent := "col1\tcol2\nval1\tval2\n"
 	_ = mem.WriteFile("data.tsv", []byte(tsvContent), 0644)
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), pathV("data.tsv"),
 	})
 	if len(result) != 1 {
@@ -1130,7 +1130,7 @@ func TestIntegCSVReadWithFmtOption(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("csv"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), pathV("data.txt"), NewMap(opts),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TList) {
@@ -1144,7 +1144,7 @@ func TestIntegTorDisjunctValues(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// 1 tor "hello" tor true
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(1), NewWord("tor"), NewString("hello"), NewWord("tor"), NewBoolean(true),
 	})
 	if len(result) != 1 || !IsDisjunct(result[0]) {
@@ -1160,7 +1160,7 @@ func TestIntegTorDisjunctValues(t *testing.T) {
 func TestIntegTorDisjunctTwoValues(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(42), NewWord("tor"), NewString("hello"),
 	})
 	if len(result) != 1 || !IsDisjunct(result[0]) {
@@ -1177,7 +1177,7 @@ func TestIntegTorDisjunctFlattensLeft(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// Build a disjunct then tor with another value
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(1), NewWord("tor"), NewInteger(2), NewWord("tor"), NewInteger(3),
 	})
 	if len(result) != 1 || !IsDisjunct(result[0]) {
@@ -1195,7 +1195,7 @@ func TestIntegTorDisjunctFlattensRight(t *testing.T) {
 	registerIOWords(r)
 	// Pre-build a disjunct on the right side
 	rightDisjunct := NewDisjunct([]Value{NewInteger(2), NewInteger(3)})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(1), NewWord("tor"), rightDisjunct,
 	})
 	if len(result) != 1 || !IsDisjunct(result[0]) {
@@ -1212,7 +1212,7 @@ func TestIntegOrBooleanStillWorks(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// Boolean or should still work as logical or
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewBoolean(false), NewWord("or"), NewBoolean(true),
 	})
 	_as41, _ := AsBoolean(result[0])
@@ -1225,7 +1225,7 @@ func TestIntegOrShortCircuitReturnsValue(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// 1 or 0 → 1 (first truthy wins)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(1), NewWord("or"), NewInteger(0),
 	})
 	if len(result) != 1 {
@@ -1235,21 +1235,21 @@ func TestIntegOrShortCircuitReturnsValue(t *testing.T) {
 		t.Errorf("1 or 0 = %v, want 1", result[0])
 	}
 	// 0 or 5 → 5 (second wins because first is falsy)
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewInteger(0), NewWord("or"), NewInteger(5),
 	})
 	if v, _ := AsInteger(result[0]); v != 5 {
 		t.Errorf("0 or 5 = %v, want 5", result[0])
 	}
 	// 0 or 0 → 0 (last falsy)
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewInteger(0), NewWord("or"), NewInteger(0),
 	})
 	if v, _ := AsInteger(result[0]); v != 0 {
 		t.Errorf("0 or 0 = %v, want 0", result[0])
 	}
 	// "" or "x" → "x"
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewString(""), NewWord("or"), NewString("x"),
 	})
 	if s, _ := AsString(result[0]); s != "x" {
@@ -1261,28 +1261,28 @@ func TestIntegAndShortCircuitReturnsValue(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// 1 and 2 → 2 (both truthy, last wins)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(1), NewWord("and"), NewInteger(2),
 	})
 	if v, _ := AsInteger(result[0]); v != 2 {
 		t.Errorf("1 and 2 = %v, want 2", result[0])
 	}
 	// 0 and 5 → 0 (first falsy short-circuits)
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewInteger(0), NewWord("and"), NewInteger(5),
 	})
 	if v, _ := AsInteger(result[0]); v != 0 {
 		t.Errorf("0 and 5 = %v, want 0", result[0])
 	}
 	// 1 and 0 → 0 (second is falsy)
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewInteger(1), NewWord("and"), NewInteger(0),
 	})
 	if v, _ := AsInteger(result[0]); v != 0 {
 		t.Errorf("1 and 0 = %v, want 0", result[0])
 	}
 	// "x" and "y" → "y"
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewString("x"), NewWord("and"), NewString("y"),
 	})
 	if s, _ := AsString(result[0]); s != "y" {
@@ -1300,7 +1300,7 @@ func TestIntegTandMergeMaps(t *testing.T) {
 	left.Set("x", NewInteger(1))
 	right := NewOrderedMap()
 	right.Set("y", NewTypeLiteral(TInteger))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewMap(left), NewWord("tand"), NewMap(right),
 	})
 	if len(result) != 1 {
@@ -1337,7 +1337,7 @@ func TestIntegTandMergeOverlap(t *testing.T) {
 	left.Set("x", NewInteger(1))
 	right := NewOrderedMap()
 	right.Set("x", NewTypeLiteral(TInteger))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewMap(left), NewWord("tand"), NewMap(right),
 	})
 	if len(result) != 1 {
@@ -1357,7 +1357,7 @@ func TestIntegTandUnifyScalars(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// 1 tand Integer -> 1
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(1), NewWord("tand"), NewTypeLiteral(TInteger),
 	})
 	if len(result) != 1 {
@@ -1374,7 +1374,7 @@ func TestIntegContextSetGet(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// set "key" 42 context get "key" context
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("mykey"), NewInteger(42),
 		NewWord("context"), NewWord("get"), NewString("mykey"),
 	})
@@ -1388,7 +1388,7 @@ func TestIntegContextGetMissing(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// get on non-existent key => error (unknown key)
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("context"), NewWord("get"), NewString("nonexistent"),
 	})
 	if err == nil {
@@ -1400,7 +1400,7 @@ func TestIntegContextSetWithWord(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// set wkey 99 context get wkey context
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("wkey"), NewInteger(99),
 		NewWord("context"), NewWord("dot"), NewWord("wkey"),
 	})
@@ -1414,7 +1414,7 @@ func TestIntegContextOverwrite(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// set, then overwrite, then get
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(1),
 		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(2),
 		NewWord("context"), NewWord("get"), NewString("k"),
@@ -1429,7 +1429,7 @@ func TestIntegContextPushesStore(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// context is a 0-arg word that pushes the context store onto the stack
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"),
 	})
 	if len(result) != 1 {
@@ -1449,7 +1449,7 @@ func TestIntegFileIOWriteListAsJSON(t *testing.T) {
 	list := NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("json"))
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("write"), pathV("list.json"), list, NewMap(opts),
 	})
 
@@ -1471,7 +1471,7 @@ func TestIntegFileIOReadLines(t *testing.T) {
 	_ = mem.WriteFile("lines.txt", []byte("a\nb\nc"), 0644)
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("lines"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), pathV("lines.txt"), NewMap(opts),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TList) {
@@ -1491,7 +1491,7 @@ func TestIntegDoMapWithNonListValues(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
 	m.Set("y", NewString("hello"))
-	result := runAQL(t, r, []Value{NewWord("do"), NewMap(m)})
+	result := runBORU(t, r, []Value{NewWord("do"), NewMap(m)})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
 		t.Fatalf("do map should return map, got %v", result)
 	}
@@ -1514,7 +1514,7 @@ func TestIntegVarWithDoBlock(t *testing.T) {
 		}),
 		NewWord("do"), NewList([]Value{NewWord("a"), NewWord("add"), NewWord("b")}),
 	})
-	result := runAQL(t, r, []Value{NewWord("var"), varBody})
+	result := runBORU(t, r, []Value{NewWord("var"), varBody})
 	_as46, _ := AsNumber(result[0])
 	if len(result) != 1 || _as46 != 7 {
 		t.Errorf("var [[[a 3] [b 4]] do [a add b]] = %v, want 7", result)
@@ -1528,7 +1528,7 @@ func TestIntegFileIOReadJsonicFormat(t *testing.T) {
 	SetHostFileOps(r, mem)
 
 	_ = mem.WriteFile("data.jsonic", []byte(`{x: 1, y: 2}`), 0644)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), pathV("data.jsonic"),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
@@ -1545,7 +1545,7 @@ func TestIntegFileIOWriteAppendNewFile(t *testing.T) {
 	// append to non-existent file should just write
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("write"), pathV("new.txt"), NewString("fresh"), NewMap(opts),
 	})
 

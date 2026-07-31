@@ -240,7 +240,7 @@ func TestP7_OpenValueArms(t *testing.T) {
 	// long enough but wrong magic.
 	wrongMagic := base64.StdEncoding.EncodeToString(make([]byte, 45))
 	if _, err := openValue(wrongMagic, "ns", "a", ndkByID); err == nil {
-		t.Fatal("openValue should reject a non-AQLE value")
+		t.Fatal("openValue should reject a non-BORUE value")
 	}
 	// correct magic, unsupported format byte.
 	badFmt := make([]byte, 45)
@@ -250,7 +250,9 @@ func TestP7_OpenValueArms(t *testing.T) {
 		t.Fatal("openValue should reject an unsupported format byte")
 	}
 	// valid header, but ndkByID hands back a bad-length key -> newGCM arm.
-	hdr := make([]byte, 41)
+	// Size it from the constants so a change to valueMagic cannot silently
+	// shrink this below the length gate and skip the arm under test.
+	hdr := make([]byte, len(valueMagic)+1+ndkIDLen+gcmNonceLen+16)
 	copy(hdr, valueMagic)
 	hdr[len(valueMagic)] = byte(valueFormat)
 	badKey := func([]byte) ([]byte, bool) { return []byte{1, 2, 3}, true }

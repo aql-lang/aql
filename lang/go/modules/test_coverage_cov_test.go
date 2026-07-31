@@ -3,8 +3,8 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // coverDenominator declines (nil) on a registry with no parser and on a source
@@ -24,7 +24,7 @@ func TestCoverDenominatorDeclines(t *testing.T) {
 		t.Fatal(err)
 	}
 	withParse.SetParseFunc(parser.Parse)
-	if d := coverDenominator(withParse, "((( not valid aql"); d != nil {
+	if d := coverDenominator(withParse, "((( not valid boru"); d != nil {
 		t.Fatalf("unparseable source must decline, got %v", d)
 	}
 	// A parseable source yields a non-empty denominator.
@@ -43,7 +43,7 @@ func TestCoverageBadSource(t *testing.T) {
 	r.SetParseFunc(parser.Parse)
 	InstallResolver(r)
 	r.RegisterCoverSource("bad", "((( unparseable")
-	vals, perr := parser.Parse(`import "aql:test"  Test.coverage "bad"`)
+	vals, perr := parser.Parse(`import "boru:test"  Test.coverage "bad"`)
 	if perr != nil {
 		t.Fatal(perr)
 	}

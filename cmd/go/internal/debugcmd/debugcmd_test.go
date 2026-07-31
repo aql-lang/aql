@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/debugserve"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/debugserve"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // attachToTestServer stands up a debugserve over a registry on an

@@ -46,7 +46,7 @@ func unifyNegation(neg NegationInfo, val Value) (Value, *UnifyError) {
 	// in Inner, which the lattice subtype check decides exactly for a
 	// plain-type Inner. For a refined or compound Inner (DepScalar /
 	// disjunct / negation) a plain abstract val is not wholly contained,
-	// so admit it: AQL has no positive representation for an exact set
+	// so admit it: BORU has no positive representation for an exact set
 	// difference, and admitting val is the sound over-approximation (it
 	// never wrongly proves emptiness).
 	// ConformsTo is the containment test (val is Inner or a descendant

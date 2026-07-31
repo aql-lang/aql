@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // Integration tests for the predicate-fn invocation path. The
@@ -20,7 +20,7 @@ func TestRunPredicate_TwoReturns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	_, err = a.Run(`def Two fn [x:Any Any [x x]]
 def n:Two 1`)
 	if err == nil {

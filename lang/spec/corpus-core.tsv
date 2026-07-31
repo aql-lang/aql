@@ -1,4 +1,4 @@
-# AQL corpus: core words (auto-generated from `aql describe` examples, verified interpret+check+compile)
+# BORU corpus: core words (auto-generated from `boru describe` examples, verified interpret+check+compile)
 # Format: input<TAB>expected<TAB>word
 'b' gt 'a'	true	gt
 'b' gte 'a'	true	gte
@@ -73,10 +73,10 @@ gt 2 3	true	gt
 gte 'a' 'b'	true	gte
 gte 2 3	true	gte
 if 2 3 4	3	if
-import "aql:emitlang"  emit json {pretty:true} {a:1}	'{\n  "a": 1\n}'	emit
-import "aql:emitlang"  emit {a:1 b:[2 3]}	'{"a":1,"b":[2,3]}'	emit
-import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m	'bc'	mini
-import "aql:minilang"  mini bf '++++++++[>++++++++<-]>+.'	'A'	mini
+import "boru:emitlang"  emit json {pretty:true} {a:1}	'{\n  "a": 1\n}'	emit
+import "boru:emitlang"  emit {a:1 b:[2 3]}	'{"a":1,"b":[2,3]}'	emit
+import "boru:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m	'bc'	mini
+import "boru:minilang"  mini bf '++++++++[>++++++++<-]>+.'	'A'	mini
 inspect 2	{type:'Integer' kind:literal}	inspect
 inspect a/q	{name:'a' kind:unknown signatures:[]}	inspect
 iota 4	[0 1 2 3]	iota

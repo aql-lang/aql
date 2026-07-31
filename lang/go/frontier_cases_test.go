@@ -17,7 +17,7 @@ import (
 // --- error-returning assertion helpers --------------------------------------
 
 // fcNew builds a fresh instance or reports why it could not.
-func fcNew() (*AQL, error) {
+func fcNew() (*BORU, error) {
 	a, err := New()
 	if err != nil {
 		return nil, fmt.Errorf("New: %w", err)
@@ -109,7 +109,7 @@ func fcStampedRun(src, name string) error {
 // fcNoUnattributedInterp arms the interp-entry hook, runs drive, and fails
 // when any interpreter entry lacks a C4 attribution — the end-state invariant
 // ("no interpreter execution of an accepted program on a default path").
-func fcNoUnattributedInterp(drive func(a *AQL) error) error {
+func fcNoUnattributedInterp(drive func(a *BORU) error) error {
 	a, err := fcNew()
 	if err != nil {
 		return err
@@ -168,7 +168,7 @@ func bailCensus(bails []BailEvent) string {
 // lJoinRepro is the L-JOIN minimal repro verbatim from
 // design/VOXGIG-COMPILE-LEAVES.2.md — the recursive branch-join accumulator
 // whose self-call operand loses provenance across fixpoint iterations. The
-// only library-code blocker (tst.aql / radix.aql).
+// only library-code blocker (tst.boru / radix.boru).
 const lJoinRepro = `def rec fn [
   [nd:Any key:Any consumed:Any best:Any] [Any] [
     if (nd eq none) [best] [
@@ -196,7 +196,7 @@ var frontierCases = []frontierCase{
 		return fcStampedRun(`def Pos fn [[n:Integer] [Boolean] [n gt 0]] def x:Pos 5 x`, "Pos")
 	}},
 	{"p6/model-action-stamps", func() error {
-		return fcStampedRun(`import "aql:model" def m (Model.new {src:'a: 1 b: 2', actions:{gen:([mod:Any] => [true])}}) (Model.run m) get 'ok'`, "gen")
+		return fcStampedRun(`import "boru:model" def m (Model.new {src:'a: 1 b: 2', actions:{gen:([mod:Any] => [true])}}) (Model.run m) get 'ok'`, "gen")
 	}},
 	// GRADUATED 2026-07-15: StampDetachedFn compiles capturing bodies —
 	// fd.Captured rides compileClosureBody's capture slots (the OpPushClosure
@@ -224,15 +224,15 @@ var frontierCases = []frontierCase{
 		// Module-scope check-prop with a DIRECT rand-call gen body: the gen
 		// body's member-fn-arrival dispatch declines (sound), so the
 		// per-iteration gen run adds unattributed interpreter entries.
-		src := "import \"aql:test\" end\ndef res (Test.check-prop \"x\" [r.int 1 9] [ var [[k] (`v${k}`) eq `v${k}` ] ] 5 1 0)\nres get \"ok\""
-		return fcNoUnattributedInterp(func(a *AQL) error {
+		src := "import \"boru:test\" end\ndef res (Test.check-prop \"x\" [r.int 1 9] [ var [[k] (`v${k}`) eq `v${k}` ] ] 5 1 0)\nres get \"ok\""
+		return fcNoUnattributedInterp(func(a *BORU) error {
 			_, err := a.RunCompiledStrict(src)
 			return err
 		})
 	}},
 	{"p6/concurrent-fork-bodies-on-vm", func() error {
-		return fcNoUnattributedInterp(func(a *AQL) error {
-			_, _, err := a.RunCompiled(`import "aql:time-util" TimeUtil.await [[1 add 2] [3 add 4]]`)
+		return fcNoUnattributedInterp(func(a *BORU) error {
+			_, _, err := a.RunCompiled(`import "boru:time-util" TimeUtil.await [[1 add 2] [3 add 4]]`)
 			return err
 		})
 	}},
@@ -242,8 +242,8 @@ var frontierCases = []frontierCase{
 	// composed sandbox policy is enforced per VM dispatch by gateWord).
 	// The case stays as a permanent pin.
 	{"p6/vm-run-on-vm", func() error {
-		return fcNoUnattributedInterp(func(a *AQL) error {
-			_, _, err := a.RunCompiled(`import "aql:vm" Vm.run "1 add 2"`)
+		return fcNoUnattributedInterp(func(a *BORU) error {
+			_, _, err := a.RunCompiled(`import "boru:vm" Vm.run "1 add 2"`)
 			return err
 		})
 	}},
@@ -253,7 +253,7 @@ var frontierCases = []frontierCase{
 		// A genuine whole-program refusal (the each variadic-if knownRefusals
 		// row): today the silent fallback re-runs the source unattributed.
 		// Target: every residual interpreter entry belongs to a named C4 seam.
-		return fcNoUnattributedInterp(func(a *AQL) error {
+		return fcNoUnattributedInterp(func(a *BORU) error {
 			_, _, _ = a.RunCompiled(zzRefusingRow) // the row raises; the entries are the assertion
 			return nil
 		})
@@ -286,7 +286,7 @@ var frontierCases = []frontierCase{
 	// pollution (no longer reproducible after it: 20 plain + 5 -race
 	// in-sequence ledger runs clean).
 	{"p11/public-run-is-compiled", func() error {
-		return fcNoUnattributedInterp(func(a *AQL) error {
+		return fcNoUnattributedInterp(func(a *BORU) error {
 			_, err := a.Run(`1 add 2`)
 			return err
 		})
@@ -295,7 +295,7 @@ var frontierCases = []frontierCase{
 		// GRADUATED 2026-07-15 (permanent pin): the Stage-J DEFAULT is
 		// compile_refused — a genuine refusal returns the reason as an
 		// error and never silently re-runs the source (the one-release
-		// AQL_COMPILE_FALLBACK=1 hatch restores the old behavior for the
+		// BORU_COMPILE_FALLBACK=1 hatch restores the old behavior for the
 		// legacy contracts that pin it explicitly).
 		// The probe must be a refusing program that SUCCEEDS interpreted (a
 		// raising one cannot distinguish the fallback's error from a
@@ -317,7 +317,7 @@ var frontierCases = []frontierCase{
 
 // zzShapedInstanceE is zzShapedInstance without the *testing.T (cases are
 // data): it returns nil if the fixture cannot be built.
-func zzShapedInstanceE() *AQL {
+func zzShapedInstanceE() *BORU {
 	a, err := New()
 	if err != nil {
 		return nil

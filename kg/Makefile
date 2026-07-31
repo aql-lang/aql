@@ -1,24 +1,24 @@
 # Makefile for the kg/ knowledge-graph pipeline.
 #
-# Everything runs FROM THIS DIRECTORY — AQL imports and fixture paths
-# resolve against the working directory. The `aql` binary comes from
+# Everything runs FROM THIS DIRECTORY — BORU imports and fixture paths
+# resolve against the working directory. The `boru` binary comes from
 # cmd/go (make -C ../cmd/go build).
 
-AQL ?= ../cmd/go/bin/aql
+BORU ?= ../cmd/go/bin/boru
 
 .PHONY: all build check fmt test graph
 
 all: fmt check test graph
 
-# Ensure the aql binary exists.
+# Ensure the boru binary exists.
 build:
 	$(MAKE) -C ../cmd/go build
 
 # Static type-check every pipeline module and every test.
 check:
-	@for f in *.aql tests/*.aql; do \
+	@for f in *.boru tests/*.boru; do \
 	  echo "check $$f"; \
-	  $(AQL) check $$f || exit 1; \
+	  $(BORU) check $$f || exit 1; \
 	done
 
 # Canonical formatting, in place.
@@ -28,24 +28,24 @@ check:
 # the tree and `make all` leaves nothing to commit.
 #
 # This target was a guarded no-op until 2026-07-29. It was disabled because
-# `aql fmt` corrupted template interpolations (`hi ${name}` re-parsed the
+# `boru fmt` corrupted template interpolations (`hi ${name}` re-parsed the
 # `${expr}` hole as a map literal) and because formatting these sources took
 # ~10 minutes. Both are fixed: the formatter scans backtick literals
 # verbatim (lang/go/formatter/format.go scanBacktick / scanInterpHole), and
-# emitNode is memoised, which took kg/validate.aql from 53s to 40ms — the
+# emitNode is memoised, which took kg/validate.boru from 53s to 40ms — the
 # whole kg tree now formats in well under a second.
 fmt:
-	@for f in *.aql tests/*.aql; do \
-	  $(AQL) fmt $$f || exit 1; \
+	@for f in *.boru tests/*.boru; do \
+	  $(BORU) fmt $$f || exit 1; \
 	done
 
 # Run the whole kg test suite (each file exits non-zero on failure).
 test:
-	@for f in tests/*_test.aql; do \
+	@for f in tests/*_test.boru; do \
 	  echo "== $$f"; \
-	  $(AQL) $$f || exit 1; \
+	  $(BORU) $$f || exit 1; \
 	done
 
 # Rebuild the committed project knowledge graph (out/graph.json + .sql).
 graph:
-	$(AQL) main.aql
+	$(BORU) main.boru

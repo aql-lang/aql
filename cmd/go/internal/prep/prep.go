@@ -1,5 +1,5 @@
-// Package prep implements `aql prep [dir]` — parse aql.jsonic and
-// write .aql/aql.json next to it.
+// Package prep implements `boru prep [dir]` — parse boru.jsonic and
+// write .boru/boru.json next to it.
 package prep
 
 import (
@@ -8,9 +8,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 type cmd struct{}
@@ -19,7 +19,7 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "prep" }
-func (*cmd) Synopsis() string { return "parse aql.jsonic and write .aql/aql.json" }
+func (*cmd) Synopsis() string { return "parse boru.jsonic and write .boru/boru.json" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdout, stderr)
 }
@@ -38,15 +38,15 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "%s\n", filepath.Join(dir, ".aql", "aql.json"))
+	fmt.Fprintf(stdout, "%s\n", filepath.Join(dir, ".boru", "boru.json"))
 	return 0
 }
 
-// Do parses aql.jsonic in dir and writes .aql/aql.json. It returns
+// Do parses boru.jsonic in dir and writes .boru/boru.json. It returns
 // the parsed map for downstream use (pack reads the file list,
 // install reads it for the version check).
 func Do(dir string) (map[string]any, error) {
-	src := filepath.Join(dir, "aql.jsonic")
+	src := filepath.Join(dir, "boru.jsonic")
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return nil, err
@@ -57,11 +57,11 @@ func Do(dir string) (map[string]any, error) {
 		return nil, fmt.Errorf("invalid jsonic: %w", err)
 	}
 
-	// aql.jsonic is order-agnostic project config; flatten the parser's
+	// boru.jsonic is order-agnostic project config; flatten the parser's
 	// ordered object node to a plain map.
 	m, ok := parser.Plainify(parsed).(map[string]any)
 	if !ok {
-		return nil, fmt.Errorf("aql.jsonic must be a map")
+		return nil, fmt.Errorf("boru.jsonic must be a map")
 	}
 
 	out, err := jsonMarshalIndent(m, "", "  ")
@@ -69,7 +69,7 @@ func Do(dir string) (map[string]any, error) {
 		return nil, err
 	}
 
-	dst := filepath.Join(dir, ".aql", "aql.json")
+	dst := filepath.Join(dir, ".boru", "boru.json")
 	if err := os.MkdirAll(filepath.Dir(dst), 0755); err != nil {
 		return nil, err
 	}

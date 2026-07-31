@@ -1,5 +1,5 @@
-// Package permsflags provides a shared flag set for AQL CLI
-// commands that build a lang.AQL instance and want to optionally
+// Package permsflags provides a shared flag set for BORU CLI
+// commands that build a lang.BORU instance and want to optionally
 // apply a permissions policy.
 //
 // Usage:
@@ -16,7 +16,7 @@
 //     (auto-detected when --perms is used).
 //  2. Incremental modifications via --allow / --deny /
 //     --allow-global / --deny-global / --no-install / --install.
-//  3. AQL_POLICY / AQL_POLICY_FILE env vars as fallback when no
+//  3. BORU_POLICY / BORU_POLICY_FILE env vars as fallback when no
 //     explicit --perms flag was set.
 //
 // Returns nil Policy when no flags or env vars are set — preserving
@@ -29,8 +29,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // Flags holds the parsed permission flag values. A zero-value
@@ -95,7 +95,7 @@ func (f *Flags) Resolve() (policy.Policy, error) {
 	var base policy.Policy
 	var err error
 	// A leading ~ in a policy path that the shell left verbatim (e.g.
-	// --perms-file=~/p.jsonic, a quoted path, or an AQL_POLICY_FILE env
+	// --perms-file=~/p.jsonic, a quoted path, or a BORU_POLICY_FILE env
 	// value) must resolve under the home folder. LoadAuto only treats a
 	// value as a file when it can stat it, so expanding first is also what
 	// makes ~ paths detectable; a leading ~ never names a profile or
@@ -109,9 +109,9 @@ func (f *Flags) Resolve() (policy.Policy, error) {
 		base, err = policy.LoadInline(f.PermsInline)
 	default:
 		// No explicit flag — try env fallbacks.
-		if v := os.Getenv("AQL_POLICY_FILE"); v != "" {
+		if v := os.Getenv("BORU_POLICY_FILE"); v != "" {
 			base, err = policy.LoadFile(pathutil.Expand(v))
-		} else if v := os.Getenv("AQL_POLICY"); v != "" {
+		} else if v := os.Getenv("BORU_POLICY"); v != "" {
 			base, err = policy.LoadAuto(pathutil.Expand(v))
 		}
 	}
@@ -200,7 +200,7 @@ func loadByName(base policy.Policy) func(string) (*policy.Profile, error) {
 }
 
 // ProfileFromPolicy flattens a compiled Policy back into a serialisable
-// Profile. Exported so `aql build` can BAKE the resolved policy into the
+// Profile. Exported so `boru build` can BAKE the resolved policy into the
 // executable: Policy is an interface and cannot be marshalled, Profile is
 // fully json-tagged and can.
 func ProfileFromPolicy(p policy.Policy) *policy.Profile { return profileFromPolicy(p) }
@@ -267,7 +267,7 @@ func setInstall(p *policy.Profile, raw string, v bool) {
 
 // splitScopeOp parses "scope.op" or "scope.subscope.op" into the
 // scope and op fields the rule wants. For module subscope addressing
-// the caller passes "modules.aql:math.sin" — the first dot splits
+// the caller passes "modules.boru:math.sin" — the first dot splits
 // scope from the rest; the rest is the op (for module exports,
 // callers should use --perms-inline since the where-predicate form
 // is required).

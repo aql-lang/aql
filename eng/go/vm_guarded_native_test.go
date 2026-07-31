@@ -8,7 +8,7 @@ import (
 // TestGuardedNativeCallContract pins the VM-level guarded CALL_NATIVE — the sound
 // compiled form of a single-overload native dispatch the checker could not
 // statically commit (the concrete-mismatch / Any-carrier recovery, e.g. the
-// aql:test framework's test-invoke). A SigRef with Guard=true re-checks the
+// boru:test framework's test-invoke). A SigRef with Guard=true re-checks the
 // concrete args against the committed sig: a matching arg dispatches the handler
 // (== the interpreter's sole-overload dispatch), a mismatching one raises the
 // byte-identical signature_error (== the interpreter finding no overload). This is
@@ -83,7 +83,7 @@ func TestGuardedNativeCallContract(t *testing.T) {
 		if err == nil {
 			t.Fatal("guarded mismatch dispatched instead of raising")
 		}
-		var ae *AqlError
+		var ae *BoruError
 		if !errors.As(err, &ae) || ae.Code != "signature_error" {
 			t.Fatalf("guarded mismatch = %v (%T), want code signature_error", err, err)
 		}

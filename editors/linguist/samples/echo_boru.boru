@@ -1,0 +1,40 @@
+# TCP echo round-trip benchmark in BORU.
+# One persistent connection; measures request/response round-trips over
+# a newline-framed TCP echo protocol.
+import "boru:net"
+import "boru:time-util"
+
+# Server: echo 20001 newline-framed lines (20000 timed + 1 warm-up).
+# The connection param is typed `Socket` for clarity (it documents the handler's
+# contract and rejects a non-socket caller), but `[sock:Any]` now compiles to the
+# VM just the same: an explicitly-`Any` handler param binds a GRADUAL carrier, so
+# the `Net.recv-until` / `Net.send-bytes` socket-word dispatch resolves
+# optimistically and the whole body lowers to a unit (the connection value IS a
+# Socket at runtime). Either way the handler runs compiled via the
+# callback-compilation seam (~95x over the interpreter). `Socket` is exported by
+# boru:net and resolves as a bare type name.
+def ln (Net.serve-raw {tcp: 19099} (fn [[sock:Socket] [Any] [
+  def nl (convert Bytes "\n")
+  for 20001 [
+    def line (Net.recv-until sock nl)
+    Net.send-bytes (convert Bytes (join "" [(convert String line) "\n"])) sock
+  ]
+]]))
+
+def sock (Net.connect-raw {tcp: "127.0.0.1:19099"})
+def nl (convert Bytes "\n")
+def msg (convert Bytes "hello world\n")
+
+# Warm-up exchange (not timed).
+Net.send-bytes msg sock
+Net.recv-until sock nl drop
+
+def start (TimeUtil.now)
+for 20000 [
+  Net.send-bytes msg sock
+  Net.recv-until sock nl drop
+]
+def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
+
+print (join "" ["BORU  20000 round-trips  " (convert String dur) " ms  " (convert String (div dur 20000000.0)) " req/s"])
+Net.close sock

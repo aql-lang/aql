@@ -6,12 +6,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// debugRegistry builds a registry with aql:debug installed and its Output
+// debugRegistry builds a registry with boru:debug installed and its Output
 // captured into the returned buffer so print/trace assertions can inspect
 // what reached the host writer.
 func debugRegistry(t *testing.T) (*native.Registry, *bytes.Buffer) {
@@ -263,7 +263,7 @@ func TestDebugBody(t *testing.T) {
 	} else {
 		t.Errorf("body of a native word should be `native`, got %v", res[len(res)-1])
 	}
-	// An AQL-defined word reports its quoted body list.
+	// A BORU-defined word reports its quoted body list.
 	r2, _ := debugRegistry(t)
 	res2 := runDebug(t, r2, `def double fn [[x:Integer] [Integer] [x mul 2]]  "double" Debug.body`)
 	if lst, err := native.AsList(res2[len(res2)-1]); err != nil || lst.IsNil() {
@@ -342,7 +342,7 @@ func (c *scriptedController) Controller() capabilities.StepController { return c
 
 func TestDebugStepDrivesController(t *testing.T) {
 	r, _ := debugRegistry(t)
-	r.BaseFile = "test.aql"
+	r.BaseFile = "test.boru"
 	// StepInto on every step → the controller is consulted at each engine step.
 	ctl := &scriptedController{actions: []capabilities.StepAction{capabilities.StepInto}}
 	native.SetHostDebugOps(r, ctl)
@@ -363,7 +363,7 @@ func TestDebugStepDrivesController(t *testing.T) {
 	// cannot survive (Col varies per token, Row must not).
 	sawRow := false
 	for i, f := range ctl.frames {
-		if f.File != "test.aql" {
+		if f.File != "test.boru" {
 			t.Errorf("frame %d File = %q, want the registry's BaseFile", i, f.File)
 		}
 		if f.Row == 0 {
@@ -410,7 +410,7 @@ func TestDebugStepNoControllerPrintsTrace(t *testing.T) {
 
 func TestDebugBreakPausesWithController(t *testing.T) {
 	r, _ := debugRegistry(t)
-	r.BaseFile = "brk.aql"
+	r.BaseFile = "brk.boru"
 	ctl := &scriptedController{actions: []capabilities.StepAction{capabilities.StepContinue}}
 	native.SetHostDebugOps(r, ctl)
 	// A bare Debug.break in ordinary execution pauses once (the controller
@@ -433,8 +433,8 @@ func TestDebugBreakPausesWithController(t *testing.T) {
 			t.Errorf("a one-shot break pause must carry no position; got %d:%d",
 				ctl.frames[0].Row, ctl.frames[0].Col)
 		}
-		if ctl.frames[0].File != "brk.aql" {
-			t.Errorf("break frame File = %q, want brk.aql", ctl.frames[0].File)
+		if ctl.frames[0].File != "brk.boru" {
+			t.Errorf("break frame File = %q, want brk.boru", ctl.frames[0].File)
 		}
 		if ctl.frames[0].Step != -1 {
 			t.Errorf("a one-shot break pause is Step -1, got %d", ctl.frames[0].Step)
@@ -545,12 +545,12 @@ func TestDebugWords(t *testing.T) {
 	}
 	// PR #190 review: words must reflect the LIVE registry, not the static
 	// help catalog. Words that are documented but moved to an unimported
-	// module (e.g. `trace`/`read`/`write`/`stdin` → aql:io) are NOT
+	// module (e.g. `trace`/`read`/`write`/`stdin` → boru:io) are NOT
 	// dispatchable here, so they must not appear — listing them would point
 	// at names that fail with undefined_word.
 	for _, moved := range []string{"trace", "read", "write", "stdin", "stdout", "stderr"} {
 		if got[moved] {
-			t.Errorf("words must not list %q — it is not registered without `import \"aql:io\"`", moved)
+			t.Errorf("words must not list %q — it is not registered without `import \"boru:io\"`", moved)
 		}
 	}
 	// Every listed word must actually be dispatchable (sample-check `add`).
@@ -595,12 +595,12 @@ func TestDebugModulesListsSelf(t *testing.T) {
 	}
 	found := false
 	for _, v := range lst.Slice() {
-		if s, _ := native.AsString(v); s == "aql:debug" {
+		if s, _ := native.AsString(v); s == "boru:debug" {
 			found = true
 		}
 	}
 	if !found {
-		t.Error("modules should include 'aql:debug'")
+		t.Error("modules should include 'boru:debug'")
 	}
 }
 
@@ -788,7 +788,7 @@ func TestDebugProfileAttributesModuleCalls(t *testing.T) {
 	// Stamp module provenance the way a real `import` does, so the dispatch
 	// carries its module origin (the signal the profiler attributes on).
 	InstallResolver(r)
-	runDebug(t, r, `import "aql:math-util"`)
+	runDebug(t, r, `import "boru:math-util"`)
 	counts := profileCounts(t, r, "[16.0 MathUtil.sqrt]")
 	if counts["sqrt"] < 1 {
 		t.Errorf("profile must attribute the MathUtil.sqrt dispatch to 'sqrt'; got %v", counts)

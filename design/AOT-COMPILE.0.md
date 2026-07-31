@@ -1,31 +1,31 @@
 # AOT-COMPILE
 
 Design for **ahead-of-time (AOT) bytecode compilation baked into the binary**:
-at Go build time, compile the AQL-implemented core modules (`aql:sift`,
-`aql:repl`, `aql:vault-tui`, and future AQL modules) to bytecode, store the
-compiled form inside the `aql` binary, and load it instead of parse+interpret
+at Go build time, compile the BORU-implemented core modules (`boru:sift`,
+`boru:repl`, `boru:vault-tui`, and future BORU modules) to bytecode, store the
+compiled form inside the `boru` binary, and load it instead of parse+interpret
 at startup — so those modules run on the VM, not the tree-walking interpreter.
-The **same mechanism generalizes to user AQL code built into a binary** via
-`aql build`.
+The **same mechanism generalizes to user BORU code built into a binary** via
+`boru build`.
 
 This is a **design RFC** — no implementation here. It builds on the landed
 bytecode compiler and the runtime-stamping machinery
-(`design/aql-bytecode-*.md`, `design/RUNTIME-STAMPING.0.md`,
+(`design/boru-bytecode-*.md`, `design/RUNTIME-STAMPING.0.md`,
 `design/NET-COMPILE-FRONTIER.0.md`). The claims below were adversarially
 verified against the code; the sharp edges that survived are called out inline.
 
 > **Decisions proposed at design time** (the forks this RFC closes; a reviewer
 > ratifies or reopens them):
 > (1) the baked artifact is an **optional, self-invalidating cache**, never a
-> correctness dependency — the `.aql` source stays embedded and any
+> correctness dependency — the `.boru` source stays embedded and any
 > version-mismatch or unresolvable reference falls back to today's
 > parse+interpret (§2);
 > (2) the artifact is **binary-baked and version-tagged** — the compiler and
 > the bytecode it produced normally ship in the same binary, driving the
 > version-mismatch fallback to ~never; the tag is what *guarantees* safety, so
-> this is a difference of *degree* from a persisted `.aqlc`, not of kind (§1);
+> this is a difference of *degree* from a persisted `.boruc`, not of kind (§1);
 > (3) the enabling change is **teaching fn-dispatch to prefer a compiled unit**
-> — today *nothing* dispatches an AQL-bodied fn to its compiled ref under an
+> — today *nothing* dispatches a BORU-bodied fn to its compiled ref under an
 > interpreted top-level, not even callbacks; stamping and AOT merely *feed*
 > that dispatch (§4, the load-bearing section);
 > (4) the compiled form is the **existing detached stamper's output**, moved to
@@ -35,7 +35,7 @@ verified against the code; the sharp edges that survived are called out inline.
 > artifact** (the `genhelp` convention), embedded in `lang/go` so one bake
 > serves both the native binary and the wasm build (§5);
 > (6) **ship compiled units only inside binaries, never in source packs** — a
-> registry `.aqlc` consumed by a different `aql` version reintroduces the
+> registry `.boruc` consumed by a different `boru` version reintroduces the
 > staleness class and is deferred (§7).
 
 ---
@@ -44,11 +44,11 @@ verified against the code; the sharp edges that survived are called out inline.
 
 The codebase deliberately decided **not** to persist compiled bytecode:
 "bytecode is an execution mode, not a build artifact… eager compile-at-load,
-**no build step, no persisted `.aqlc`**" (`design/aql-bytecode-plan.0.md:71-72`).
-The bytecode report evaluated an `aql compile → .aqlc` step explicitly and chose
-eager-at-load, warning: "`.aqlc` files baked across versions risk mismatches.
+**no build step, no persisted `.boruc`**" (`design/boru-bytecode-plan.0.md:71-72`).
+The bytecode report evaluated a `boru compile → .boruc` step explicitly and chose
+eager-at-load, warning: "`.boruc` files baked across versions risk mismatches.
 Either version-tag the file and recompile on mismatch, **or never persist**"
-(`aql-bytecode-report.0.md:1338-1556`).
+(`boru-bytecode-report.0.md:1338-1556`).
 
 The hazard was a compiled artifact that **outlives or crosses the compiler
 version that produced it**, silently miscompiling against a changed
@@ -58,14 +58,14 @@ impossible — it claims to make its mitigation *cheap and its trigger rare*:
 - **Version-tag + fallback (the actual guarantee).** A format-version tag (a
   hash of the opcode + `Program` schema + compiler version) is checked at load;
   on mismatch — or on any per-unit reference that fails to re-resolve — the
-  loader **ignores the artifact and falls back to parse+interpret**. The `.aql`
+  loader **ignores the artifact and falls back to parse+interpret**. The `.boru`
   source stays embedded. This is precisely the "version-tag and recompile on
   mismatch" mitigation the report named — the *same mechanism class* as a
-  version-tagged `.aqlc`, not a categorically different one.
+  version-tagged `.boruc`, not a categorically different one.
 - **Binary-baking makes the trigger rare (the difference of degree).** Because
   the bytecode ships in the same binary as the compiler that produced it, the
   common case is always consistent and the fallback effectively never fires.
-  For a user `aql build --native`, the guarantee holds only *because* the
+  For a user `boru build --native`, the guarantee holds only *because* the
   version gate catches a binary rebuilt against a different `lang/go` and
   silently drops the perf benefit — it is enforced by the gate, not by
   construction.
@@ -83,7 +83,7 @@ DX cost that a `go generate` bake (§5) does not impose on users.
 
 ## 2. The performance model — and the reason nothing is fast today
 
-**What runs today.** The AQL-implemented modules parse their embedded `.aql`
+**What runs today.** The BORU-implemented modules parse their embedded `.boru`
 source once per process (`sync.Once` around `ParseFunc`, `sift.go:48`) and
 install their `def … fn` bindings by interpreting the body
 (`native.New(modReg).Run(tokens)`, `sift.go:95-99`). They then run on the
@@ -91,7 +91,7 @@ install their `def … fn` bindings by interpreting the body
 path that would use a compiled unit even if one existed*:
 
 - The interpreter's ordinary fn-dispatch (`execFnDefLiteral` `engine.go:4927+`,
-  the sub-registry module-fn path `engine.go:5128-5227`, `CallAQL`
+  the sub-registry module-fn path `engine.go:5128-5227`, `CallBORU`
   `registry.go:1880`) contains **no** `CompiledRef`/`.Compiled` read
   (grep-confirmed). A normally-dispatched module word (`Sift.parse …`) runs its
   token body regardless of any attached unit.
@@ -101,12 +101,12 @@ path that would use a compiled unit even if one existed*:
   `vmRunning==0 && interpRunDepth==0`, `registry.go:505-517`) **or** a non-nil
   `r.nestedRunner` (set only inside a VM run, `vm.go:341`). `RunInterp`
   increments `interpRunDepth` for the whole activation (`registry.go:440-450`),
-  and the `aql:tui` driver fires `update`/`view` via `InvokeCallback` *mid-run*
+  and the `boru:tui` driver fires `update`/`view` via `InvokeCallback` *mid-run*
   on that same registry (`tui_run.go:375,418`). So `canHostVM()==false`,
-  `nestedRunner==nil` → `invokeCompiledUnit` returns `ran=false` → `CallAQL`,
+  `nestedRunner==nil` → `invokeCompiledUnit` returns `ran=false` → `CallBORU`,
   the interpreter (`invoke.go:88,102-117`).
 
-**The consequence sets up the whole design:** `aql vault -i --aql` runs via
+**The consequence sets up the whole design:** `boru vault -i --boru` runs via
 `RunInterp` (it never compiles), so even a stamped or baked `update`/`view` unit
 would be ignored — the callback fires inside the interpreter activation. **The
 foundational change is therefore not "produce compiled units" — it is "make
@@ -141,7 +141,7 @@ codec.
 ### 3.1 The unit: a co-compiled multi-unit `*Program`, attached fail-safe
 
 `StampDetachedSig` compiles one fn body and attaches the result as a
-`CompiledFnRef` on the signature's `AQLImpl.Compiled` (`stamp_runtime.go:35-171`,
+`CompiledFnRef` on the signature's `BORUImpl.Compiled` (`stamp_runtime.go:35-171`,
 `sigimpl.go:51-62`); `StampFnValue` loops every signature independently, and a
 body that refuses **silently stays interpreted** — per-signature, fail-safe
 (`stamp_runtime.go:231-266`).
@@ -171,7 +171,7 @@ The `CompiledRef` consumers today are `InvokeCallback` (`invoke.go:66`), `spawn`
 (which reads the ref and calls `RunUnit` directly, `native_process.go:218`),
 `await` (`native_temporal_await.go:47`), and the stampers; `RunUnit`
 (`vm.go:244`) is the *entry* that starts a run from `ref.Prog`, not a per-call
-opcode. AOT reuses this attach point: set `AQLImpl.Compiled = CompiledFnRef{Prog,
+opcode. AOT reuses this attach point: set `BORUImpl.Compiled = CompiledFnRef{Prog,
 Unit, Captures}` on each baked root sig.
 
 **Freshness — the one place AOT is strictly weaker than JIT stamping.** A
@@ -194,7 +194,7 @@ documented limit; it must **not** ship `depSnap == nil`.
 
 ### 3.2 Serialization: pointer → symbolic-reference rewriting (the net-new work)
 
-**No bytecode serialization exists today** (the only serializer, `aql build`'s
+**No bytecode serialization exists today** (the only serializer, `boru build`'s
 `buildrt.EncodePayload`, bakes *source text*, `cmd/go/internal/buildrt/buildrt.go:201-289`).
 A `*Program` (`bytecode.go:975-1120`) is a flat, pooled structure — `Code []Instr`
 of `{Op, Arg int32}` where every operand indexes a typed side-pool — but the
@@ -230,23 +230,23 @@ authority for the wire schema; a hash of that schema is the format-version tag
 is whitelist-clean — FixedID types + word names, no user-poly calls, no
 interpreter islands, no exotic const payloads. The three target modules mint
 **zero** user types (verified: no capitalized `def`/`refine`/`behave` in
-`sift.aql`/`vault_tui.aql`/`repl` preamble; params are only
+`sift.boru`/`vault_tui.boru`/`repl` preamble; params are only
 `Integer/String/Map/List/Any/Boolean`, all FixedID-stable,
 `fixedid_stability_test.go:32-151`). Units that hit any refuse-rule fall back to
 the interpreter — the mechanism degrades per-root, never miscompiles.
 
 ### 3.3 Re-resolution spans the whole import closure
 
-References do **not** all rebind to a single `modReg`. `sift.aql` imports
-`aql:string-util`, `aql:array-util`, `aql:minilang` and calls into all three
-(`sift.aql:20-22,76-79`); `vault_tui.aql` imports `aql:tui`/`aql:vault`/
-`aql:math-util`/`aql:string-util` (`vault_tui.aql:25-28`). A co-compiled unit's
+References do **not** all rebind to a single `modReg`. `sift.boru` imports
+`boru:string-util`, `boru:array-util`, `boru:minilang` and calls into all three
+(`sift.boru:20-22,76-79`); `vault_tui.boru` imports `boru:tui`/`boru:vault`/
+`boru:math-util`/`boru:string-util` (`vault_tui.boru:25-28`). A co-compiled unit's
 `SigRef`/`PolyRef.Reg`/`CompiledFn.Reg` therefore point at **several distinct
 foreign sub-registries** (`bytecode.go:519-524,1052-1062`). The loader must
 re-resolve **each reference against its owning module's live sub-registry across
 the entry's full import closure**, which imposes a **load-ordering constraint**:
 a dependent module's baked references can only be re-resolved after its imports
-are themselves loaded (and, if an import is AQL-implemented like `aql:minilang`,
+are themselves loaded (and, if an import is BORU-implemented like `boru:minilang`,
 itself loaded — baked or interpreted). The loader walks imports first, exactly
 as `import` resolution does today.
 
@@ -258,7 +258,7 @@ Per §2, *no* dispatch path uses a fn's compiled ref under an interpreted
 top-level — not ordinary dispatch, and not callbacks fired mid-`RunInterp`. So
 the single change that unlocks every tier is: **make the fn-dispatch path prefer
 `sig.CompiledRef()` when it can host the VM**, routing through
-`invokeCompiledUnit`/`RunUnit` with the same `internal_error → CallAQL`
+`invokeCompiledUnit`/`RunUnit` with the same `internal_error → CallBORU`
 fail-safe and effect fence `InvokeCallback` already uses (`invoke.go:88-117`).
 Two sub-parts:
 
@@ -295,7 +295,7 @@ bake is linked by both the native `cmd/go` binary and the `wpg/wasm` build**. A
 diffs against the committed artifact, failing CI on drift. The generator runs
 host-side (not under the `js/wasm` tag), as `genhelp` does.
 
-**User code → `aql build`.** `aql build` already bakes
+**User code → `boru build`.** `boru build` already bakes
 `buildrt.Config{Source, Files, Compile-mode}` and compiles at runtime inside the
 built binary (`buildrt.go:139-289`). Generalize by compiling the entry + import
 closure's entry-point fns at build time and storing the serialized units in
@@ -323,7 +323,7 @@ applies, plus new gates:
    byte-identical by (1) before default-on, with the soundness-bailout fallback
    exercised.
 5. **`make verify-bytecode`** (differential + whole-corpus + property fuzz +
-   `-race` + `-tags aqldebug`) and **`make cover-gate`** (ADR-008 100% on all new
+   `-race` + `-tags borudebug`) and **`make cover-gate`** (ADR-008 100% on all new
    Go — codec, loader, generator, dispatch change) must pass.
 
 The fail-safe design means a codec bug or an unresolved reference degrades to
@@ -332,17 +332,17 @@ oracle.
 
 ### Coverage-gate preservation
 
-Coverage for `aql:sift`/`aql:vault-tui` (ADR-008) is **source-row based**
+Coverage for `boru:sift`/`boru:vault-tui` (ADR-008) is **source-row based**
 (`coverage.go:44-155`). The denominator is the parsed **registered source text**
 (`RegisterCoverSource`, `sift.go:69`); the VM numerator is `noteVMCoverage(debug,
 pc) → noteCoverage(debug[pc])` over `Program.Debug` `SrcPos` (`coverage.go:126-135`).
-An AOT load is coverage-safe **iff** it (a) still embeds and registers the `.aql`
+An AOT load is coverage-safe **iff** it (a) still embeds and registers the `.boru`
 source (the denominator — even though it is no longer parsed for execution), (b)
 preserves original `SrcPos.Row`s on every baked unit (§3.2), **and** (c) runs the
 unit on a registry whose `coverID` is the module's — `noteVMCoverage` reads
 `r.coverID` on the *running* registry, so a baked `CompiledFn.Reg` must be the
 cover-tagged `modReg` for attribution to fire. Drop any of the three and the
-tagged modules can never reach 100%. `aql:repl` sets no cover ID and is
+tagged modules can never reach 100%. `boru:repl` sets no cover ID and is
 unaffected.
 
 ---
@@ -363,7 +363,7 @@ that attaches baked roots in place of the JIT compile — keeping parse+install 
 today (the safe MVP; it changes zero binding semantics, only overlays refs).
 Gated by differential + staleness + format-version + coverage gates.
 
-**Phase 3 — user `aql build` integration** (§5).
+**Phase 3 — user `boru build` integration** (§5).
 
 **Phase 4 (deferred).**
 - **Tier 3 skip-parse:** bake a per-fn binding manifest (name, signatures with
@@ -378,11 +378,11 @@ Gated by differential + staleness + format-version + coverage gates.
   consuming baked units there is a separate change this bake enables.
 
 **Explicitly declined: compiled units in source packs / the registry.** Shipping
-bytecode in an `aql pack` zip consumed by a *different* `aql` version reintroduces
+bytecode in a `boru pack` zip consumed by a *different* `boru` version reintroduces
 the cross-version staleness class (§1). `pack` stays source-only; compiled units
 live only inside version-pinned binaries. A registry that ever ships bytecode must
 carry the report's full version-header + recompile-on-mismatch machinery
-(`aql-bytecode-report.0.md:1542-1556`) — out of scope.
+(`boru-bytecode-report.0.md:1542-1556`) — out of scope.
 
 ---
 

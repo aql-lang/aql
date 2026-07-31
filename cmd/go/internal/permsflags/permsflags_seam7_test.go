@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // TestS7n_ResolveModsWithoutBaseLoadFullFailure drives Resolve's

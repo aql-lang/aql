@@ -41,11 +41,11 @@ func TestW8ModuleRegistryNilGuards(t *testing.T) {
 func TestW8ModuleRegistryLoadLifecycle(t *testing.T) {
 	// MarkLoaded on a zero registry lazily allocates the loaded map.
 	m := &ModuleRegistry{}
-	m.MarkLoaded("aql:foo", ModuleDesc{ID: "mod_x"})
-	if !m.IsLoaded("aql:foo") {
+	m.MarkLoaded("boru:foo", ModuleDesc{ID: "mod_x"})
+	if !m.IsLoaded("boru:foo") {
 		t.Fatal("module must report as loaded after MarkLoaded")
 	}
-	if d, ok := m.LoadedDesc("aql:foo"); !ok || d.ID != "mod_x" {
+	if d, ok := m.LoadedDesc("boru:foo"); !ok || d.ID != "mod_x" {
 		t.Fatalf("cached desc mismatch: %+v ok=%v", d, ok)
 	}
 	// NextID increments from a fresh registry.

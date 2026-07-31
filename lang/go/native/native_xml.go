@@ -61,7 +61,7 @@ var xmlNatives = []NativeFunc{
 func elemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	_, _, cren, ok := XmlParts(args[0])
 	if !ok {
-		return nil, r.AqlError("xml_elem_error", "xml-elem: expected an Xml element, got "+args[0].Parent.String(), "xml-elem")
+		return nil, r.BoruError("xml_elem_error", "xml-elem: expected an Xml element, got "+args[0].Parent.String(), "xml-elem")
 	}
 	out := make([]Value, 0, len(cren))
 	for _, c := range cren {
@@ -74,7 +74,7 @@ func elemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 
 func textHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsXmlValue(args[0]) {
-		return nil, r.AqlError("xml_text_error", "xml-text: expected an Xml element, got "+args[0].Parent.String(), "xml-text")
+		return nil, r.BoruError("xml_text_error", "xml-text: expected an Xml element, got "+args[0].Parent.String(), "xml-text")
 	}
 	var b strings.Builder
 	collectXmlText(&b, args[0])
@@ -106,7 +106,7 @@ func xmlAttrReturns(_ []Value, _ *Registry) []Value {
 func xmlAttrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	_, attr, _, ok := XmlParts(args[1])
 	if !ok {
-		return nil, r.AqlError("xml_attr_error", "xml-attr: expected an Xml element, got "+args[1].Parent.String(), "xml-attr")
+		return nil, r.BoruError("xml_attr_error", "xml-attr: expected an Xml element, got "+args[1].Parent.String(), "xml-attr")
 	}
 	if attr != nil {
 		if v, has := attr.Get(getKey(args[0])); has {

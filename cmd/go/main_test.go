@@ -1,4 +1,4 @@
-package aql
+package boru
 
 import (
 	"archive/zip"
@@ -16,7 +16,7 @@ func TestExecuteVersion(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "aql") {
+	if !strings.Contains(stdout.String(), "boru") {
 		t.Errorf("expected version output, got %q", stdout.String())
 	}
 }
@@ -45,7 +45,7 @@ func TestExecuteEvalEmptyResult(t *testing.T) {
 
 func TestExecuteScriptFile(t *testing.T) {
 	dir := t.TempDir()
-	script := filepath.Join(dir, "test.aql")
+	script := filepath.Join(dir, "test.boru")
 	os.WriteFile(script, []byte("10 mul 5"), 0644)
 
 	var stdout, stderr bytes.Buffer
@@ -60,7 +60,7 @@ func TestExecuteScriptFile(t *testing.T) {
 
 func TestExecuteMissingFile(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := execute([]string{"/nonexistent/file.aql"}, nil, &stdout, &stderr)
+	code := execute([]string{"/nonexistent/file.boru"}, nil, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -75,11 +75,11 @@ func TestExecuteParseError(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	// Parse failures surface as AQL-voice syntax_errors with the
+	// Parse failures surface as BORU-voice syntax_errors with the
 	// closing-quote help (design/DIAGNOSTICS.0.md phase 2).
-	if !strings.Contains(stderr.String(), "[aql/syntax_error]") ||
+	if !strings.Contains(stderr.String(), "[boru/syntax_error]") ||
 		!strings.Contains(stderr.String(), "this string is never closed") {
-		t.Errorf("expected an AQL-voice syntax_error in stderr, got %q", stderr.String())
+		t.Errorf("expected a BORU-voice syntax_error in stderr, got %q", stderr.String())
 	}
 }
 
@@ -103,8 +103,8 @@ func TestExecuteREPLWithEOF(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0", code)
 	}
 	// Should print version header.
-	if !strings.Contains(stdout.String(), "aql") {
-		t.Errorf("expected 'aql' version in output, got %q", stdout.String())
+	if !strings.Contains(stdout.String(), "boru") {
+		t.Errorf("expected 'boru' version in output, got %q", stdout.String())
 	}
 }
 
@@ -131,7 +131,7 @@ func TestExecuteDoSimple(t *testing.T) {
 
 func TestExecuteDoStringArgs(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := execute([]string{"do", `"aql:string-util"`, "import", "end", `"hello"`, "StringUtil.upper"}, nil, &stdout, &stderr)
+	code := execute([]string{"do", `"boru:string-util"`, "import", "end", `"hello"`, "StringUtil.upper"}, nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
@@ -175,7 +175,7 @@ func TestExecuteHelpShowsCommands(t *testing.T) {
 		t.Errorf("expected 'Commands:' header, got %q", out)
 	}
 	// Spot-check that subcommands are listed and that it points at describe.
-	for _, want := range []string{"run", "check", "describe", "aql describe <word>"} {
+	for _, want := range []string{"run", "check", "describe", "boru describe <word>"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected %q in help overview", want)
 		}
@@ -189,8 +189,8 @@ func TestExecuteHelpSubcommand(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "aql check —") {
-		t.Errorf("expected 'aql check —' summary, got %q", out)
+	if !strings.Contains(out, "boru check —") {
+		t.Errorf("expected 'boru check —' summary, got %q", out)
 	}
 }
 
@@ -245,8 +245,8 @@ func TestExecuteDescribeModule(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "aql:math-util") {
-		t.Errorf("expected 'aql:math' header, got %q", out)
+	if !strings.Contains(out, "boru:math-util") {
+		t.Errorf("expected 'boru:math' header, got %q", out)
 	}
 	if !strings.Contains(out, "MathUtil.sin") {
 		t.Errorf("expected 'MathUtil.sin' export, got %q", out)
@@ -275,8 +275,8 @@ func TestExecuteDescribeIndexIsCategorised(t *testing.T) {
 	out := stdout.String()
 	for _, want := range []string{
 		"math", "compare", "boolean", "type", // category headers
-		"aql describe <category>",          // drill-in guidance
-		"aql describe aql:<module>:<word>", // module-word guidance
+		"boru describe <category>",           // drill-in guidance
+		"boru describe boru:<module>:<word>", // module-word guidance
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected %q in categorised index, got:\n%s", want, out)
@@ -284,7 +284,7 @@ func TestExecuteDescribeIndexIsCategorised(t *testing.T) {
 	}
 }
 
-// `aql describe <category>` lists that category's words with summaries.
+// `boru describe <category>` lists that category's words with summaries.
 func TestExecuteDescribeCategory(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := execute([]string{"describe", "math"}, nil, &stdout, &stderr)
@@ -295,7 +295,7 @@ func TestExecuteDescribeCategory(t *testing.T) {
 	if !strings.Contains(out, "math —") {
 		t.Errorf("expected 'math —' category header, got:\n%s", out)
 	}
-	// `add` is core; `sqrt` and `pi` come from aql:math-util and are listed
+	// `add` is core; `sqrt` and `pi` come from boru:math-util and are listed
 	// under that import. `pi` was previously listed as `math-pi`, a name no
 	// word has ever had — the export is MathUtil.pi.
 	for _, want := range []string{"add", "sqrt", "pi"} {
@@ -305,7 +305,7 @@ func TestExecuteDescribeCategory(t *testing.T) {
 	}
 	// The module words must be shown under the import that binds them, not
 	// mixed in with the core words as though they were callable bare.
-	if !strings.Contains(out, "import \"aql:math-util\"") {
+	if !strings.Contains(out, "import \"boru:math-util\"") {
 		t.Errorf("math-util words listed without naming the import they need, got:\n%s", out)
 	}
 	// A word from another category must not leak into the listing. Anchor on
@@ -316,28 +316,28 @@ func TestExecuteDescribeCategory(t *testing.T) {
 	}
 }
 
-// `aql describe aql:<module>` describes a module via its prefixed id.
+// `boru describe boru:<module>` describes a module via its prefixed id.
 func TestExecuteDescribeModulePrefixed(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := execute([]string{"describe", "aql:type-util"}, nil, &stdout, &stderr)
+	code := execute([]string{"describe", "boru:type-util"}, nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 	out := stdout.String()
-	if !strings.Contains(out, "aql:type-util") || !strings.Contains(out, "TypeUtil.tpartial") {
+	if !strings.Contains(out, "boru:type-util") || !strings.Contains(out, "TypeUtil.tpartial") {
 		t.Errorf("expected module header and an export, got:\n%s", out)
 	}
 }
 
-// `aql describe aql:<module>:<word>` documents a single module export.
+// `boru describe boru:<module>:<word>` documents a single module export.
 func TestExecuteDescribeModuleWord(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := execute([]string{"describe", "aql:type-util:tpartial"}, nil, &stdout, &stderr)
+	code := execute([]string{"describe", "boru:type-util:tpartial"}, nil, &stdout, &stderr)
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 	out := stdout.String()
-	for _, section := range []string{"TypeUtil.tpartial —", "Module: aql:type-util", "Signatures:"} {
+	for _, section := range []string{"TypeUtil.tpartial —", "Module: boru:type-util", "Signatures:"} {
 		if !strings.Contains(out, section) {
 			t.Errorf("expected %q in module-word output, got:\n%s", section, out)
 		}
@@ -347,7 +347,7 @@ func TestExecuteDescribeModuleWord(t *testing.T) {
 // An unknown native module reports a load error, not "no description".
 func TestExecuteDescribeUnknownModule(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := execute([]string{"describe", "aql:nope"}, nil, &stdout, &stderr)
+	code := execute([]string{"describe", "boru:nope"}, nil, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -360,7 +360,7 @@ func TestExecuteDescribeUnknownModule(t *testing.T) {
 // hints at the words it does export.
 func TestExecuteDescribeModuleMissingWord(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	code := execute([]string{"describe", "aql:type-util:nosuchword"}, nil, &stdout, &stderr)
+	code := execute([]string{"describe", "boru:type-util:nosuchword"}, nil, &stdout, &stderr)
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
@@ -373,11 +373,11 @@ func TestExecuteDescribeModuleMissingWord(t *testing.T) {
 	}
 }
 
-// `aql describe <file.aql>` loads and describes a module that is not compiled
+// `boru describe <file.boru>` loads and describes a module that is not compiled
 // in — the "attempt to load a module if unknown" path.
 func TestExecuteDescribeLoadsFileModule(t *testing.T) {
 	dir := t.TempDir()
-	lib := filepath.Join(dir, "lib.aql")
+	lib := filepath.Join(dir, "lib.boru")
 	src := "def double fn [[n:Integer] [Integer] [n mul 2]]\n" +
 		"export \"Lib\" {double: double/r}\n"
 	if err := os.WriteFile(lib, []byte(src), 0o644); err != nil {
@@ -394,7 +394,7 @@ func TestExecuteDescribeLoadsFileModule(t *testing.T) {
 	}
 }
 
-// `aql help` introduces both help (the tool) and describe (the language).
+// `boru help` introduces both help (the tool) and describe (the language).
 func TestExecuteHelpGuidesHelpAndDescribe(t *testing.T) {
 	var stdout, stderr bytes.Buffer
 	code := execute([]string{"help"}, nil, &stdout, &stderr)
@@ -402,7 +402,7 @@ func TestExecuteHelpGuidesHelpAndDescribe(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 	out := stdout.String()
-	for _, want := range []string{"aql help vault", "aql describe <category>", "documents the language"} {
+	for _, want := range []string{"boru help vault", "boru describe <category>", "documents the language"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("expected %q in help overview, got:\n%s", want, out)
 		}
@@ -413,12 +413,12 @@ func TestExecuteHelpGuidesHelpAndDescribe(t *testing.T) {
 
 func TestExecutePrepBasic(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`
+	os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte(`
 name: foo
 major: 1
 minor: 2
 patch: 3
-files: [a.aql b.aql]
+files: [a.boru b.boru]
 `), 0644)
 
 	var stdout, stderr bytes.Buffer
@@ -427,7 +427,7 @@ files: [a.aql b.aql]
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	out := filepath.Join(dir, ".aql", "aql.json")
+	out := filepath.Join(dir, ".boru", "boru.json")
 	data, err := os.ReadFile(out)
 	if err != nil {
 		t.Fatalf("failed to read output: %s", err)
@@ -446,16 +446,16 @@ files: [a.aql b.aql]
 	}
 	files, ok := m["files"].([]any)
 	if !ok || len(files) != 2 {
-		t.Fatalf("files = %v, want [a.aql b.aql]", m["files"])
+		t.Fatalf("files = %v, want [a.boru b.boru]", m["files"])
 	}
-	if files[0] != "a.aql" || files[1] != "b.aql" {
-		t.Errorf("files = %v, want [a.aql b.aql]", files)
+	if files[0] != "a.boru" || files[1] != "b.boru" {
+		t.Errorf("files = %v, want [a.boru b.boru]", files)
 	}
 }
 
 func TestExecutePrepDefaultDir(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: bar major: 0 minor: 0 patch: 1 files: [index.aql]`), 0644)
+	os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte(`name: bar major: 0 minor: 0 patch: 1 files: [index.boru]`), 0644)
 
 	// Change to temp dir so default "." works.
 	orig, _ := os.Getwd()
@@ -468,7 +468,7 @@ func TestExecutePrepDefaultDir(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, ".aql", "aql.json"))
+	data, err := os.ReadFile(filepath.Join(dir, ".boru", "boru.json"))
 	if err != nil {
 		t.Fatalf("failed to read output: %s", err)
 	}
@@ -495,7 +495,7 @@ func TestExecutePrepMissingFile(t *testing.T) {
 
 func TestExecutePrepInvalidJsonic(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`{{{`), 0644)
+	os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte(`{{{`), 0644)
 
 	var stdout, stderr bytes.Buffer
 	code := execute([]string{"prep", dir}, nil, &stdout, &stderr)
@@ -511,15 +511,15 @@ func TestExecutePrepInvalidJsonic(t *testing.T) {
 
 func TestExecutePackBasic(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`
+	os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte(`
 name: mymod
 major: 1
 minor: 2
 patch: 3
-files: [main.aql helpers.aql]
+files: [main.boru helpers.boru]
 `), 0644)
-	os.WriteFile(filepath.Join(dir, "main.aql"), []byte("1 add 2"), 0644)
-	os.WriteFile(filepath.Join(dir, "helpers.aql"), []byte("def x 1"), 0644)
+	os.WriteFile(filepath.Join(dir, "main.boru"), []byte("1 add 2"), 0644)
+	os.WriteFile(filepath.Join(dir, "helpers.boru"), []byte("def x 1"), 0644)
 
 	var stdout, stderr bytes.Buffer
 	code := execute([]string{"pack", dir}, nil, &stdout, &stderr)
@@ -527,14 +527,14 @@ files: [main.aql helpers.aql]
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	zipPath := filepath.Join(dir, ".aql", "_pack", "mymod-1.2.3.zip")
+	zipPath := filepath.Join(dir, ".boru", "_pack", "mymod-1.2.3.zip")
 	if !strings.Contains(stdout.String(), "mymod-1.2.3.zip") {
 		t.Errorf("expected zip path in output, got %q", stdout.String())
 	}
 
-	// Verify aql.json was also created (prep ran).
-	if _, err := os.Stat(filepath.Join(dir, ".aql", "aql.json")); err != nil {
-		t.Errorf("expected .aql/aql.json to exist: %s", err)
+	// Verify boru.json was also created (prep ran).
+	if _, err := os.Stat(filepath.Join(dir, ".boru", "boru.json")); err != nil {
+		t.Errorf("expected .boru/boru.json to exist: %s", err)
 	}
 
 	// Verify zip contents.
@@ -549,7 +549,7 @@ files: [main.aql helpers.aql]
 		names[f.Name] = true
 	}
 
-	for _, want := range []string{"aql.jsonic", "main.aql", "helpers.aql"} {
+	for _, want := range []string{"boru.jsonic", "main.boru", "helpers.boru"} {
 		if !names[want] {
 			t.Errorf("zip missing %q, has %v", want, names)
 		}
@@ -561,8 +561,8 @@ files: [main.aql helpers.aql]
 
 func TestExecutePackOverwrites(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: x major: 0 minor: 0 patch: 1 files: [a.aql]`), 0644)
-	os.WriteFile(filepath.Join(dir, "a.aql"), []byte("old"), 0644)
+	os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte(`name: x major: 0 minor: 0 patch: 1 files: [a.boru]`), 0644)
+	os.WriteFile(filepath.Join(dir, "a.boru"), []byte("old"), 0644)
 
 	var stdout, stderr bytes.Buffer
 	code := execute([]string{"pack", dir}, nil, &stdout, &stderr)
@@ -571,7 +571,7 @@ func TestExecutePackOverwrites(t *testing.T) {
 	}
 
 	// Update file and re-pack.
-	os.WriteFile(filepath.Join(dir, "a.aql"), []byte("new content here"), 0644)
+	os.WriteFile(filepath.Join(dir, "a.boru"), []byte("new content here"), 0644)
 	stdout.Reset()
 	stderr.Reset()
 	code = execute([]string{"pack", dir}, nil, &stdout, &stderr)
@@ -580,7 +580,7 @@ func TestExecutePackOverwrites(t *testing.T) {
 	}
 
 	// Verify the zip contains the updated content.
-	zipPath := filepath.Join(dir, ".aql", "_pack", "x-0.0.1.zip")
+	zipPath := filepath.Join(dir, ".boru", "_pack", "x-0.0.1.zip")
 	zr, err := zip.OpenReader(zipPath)
 	if err != nil {
 		t.Fatalf("failed to open zip: %s", err)
@@ -588,7 +588,7 @@ func TestExecutePackOverwrites(t *testing.T) {
 	defer zr.Close()
 
 	for _, f := range zr.File {
-		if f.Name == "a.aql" {
+		if f.Name == "a.boru" {
 			rc, _ := f.Open()
 			var buf bytes.Buffer
 			buf.ReadFrom(rc)
@@ -602,7 +602,7 @@ func TestExecutePackOverwrites(t *testing.T) {
 
 func TestExecutePackMissingFile(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: x major: 0 minor: 0 patch: 0 files: [missing.aql]`), 0644)
+	os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte(`name: x major: 0 minor: 0 patch: 0 files: [missing.boru]`), 0644)
 
 	var stdout, stderr bytes.Buffer
 	code := execute([]string{"pack", dir}, nil, &stdout, &stderr)
@@ -618,18 +618,18 @@ func TestExecutePackMissingFile(t *testing.T) {
 
 func TestExecuteCleanBasic(t *testing.T) {
 	dir := t.TempDir()
-	aqlDir := filepath.Join(dir, ".aql")
-	os.MkdirAll(aqlDir, 0755)
+	boruDir := filepath.Join(dir, ".boru")
+	os.MkdirAll(boruDir, 0755)
 
 	// Create files and dirs that should be removed.
-	os.WriteFile(filepath.Join(aqlDir, "aql.json"), []byte(`{}`), 0644)
-	os.MkdirAll(filepath.Join(aqlDir, "_pack"), 0755)
-	os.WriteFile(filepath.Join(aqlDir, "_pack", "x.zip"), []byte("zip"), 0644)
-	os.MkdirAll(filepath.Join(aqlDir, "color"), 0755)
-	os.WriteFile(filepath.Join(aqlDir, "color", "color.aql"), []byte("1"), 0644)
+	os.WriteFile(filepath.Join(boruDir, "boru.json"), []byte(`{}`), 0644)
+	os.MkdirAll(filepath.Join(boruDir, "_pack"), 0755)
+	os.WriteFile(filepath.Join(boruDir, "_pack", "x.zip"), []byte("zip"), 0644)
+	os.MkdirAll(filepath.Join(boruDir, "color"), 0755)
+	os.WriteFile(filepath.Join(boruDir, "color", "color.boru"), []byte("1"), 0644)
 
 	// Create a dotfile that should survive.
-	os.WriteFile(filepath.Join(aqlDir, ".gitkeep"), []byte(""), 0644)
+	os.WriteFile(filepath.Join(boruDir, ".gitkeep"), []byte(""), 0644)
 
 	var stdout, stderr bytes.Buffer
 	code := execute([]string{"clean", dir}, nil, &stdout, &stderr)
@@ -638,19 +638,19 @@ func TestExecuteCleanBasic(t *testing.T) {
 	}
 
 	// Dotfile should still exist.
-	if _, err := os.Stat(filepath.Join(aqlDir, ".gitkeep")); err != nil {
+	if _, err := os.Stat(filepath.Join(boruDir, ".gitkeep")); err != nil {
 		t.Errorf("expected .gitkeep to survive: %s", err)
 	}
 
 	// Everything else should be gone.
-	for _, name := range []string{"aql.json", "_pack", "color"} {
-		if _, err := os.Stat(filepath.Join(aqlDir, name)); err == nil {
+	for _, name := range []string{"boru.json", "_pack", "color"} {
+		if _, err := os.Stat(filepath.Join(boruDir, name)); err == nil {
 			t.Errorf("expected %s to be removed", name)
 		}
 	}
 }
 
-func TestExecuteCleanNoAqlDir(t *testing.T) {
+func TestExecuteCleanNoBoruDir(t *testing.T) {
 	dir := t.TempDir()
 
 	var stdout, stderr bytes.Buffer
@@ -662,9 +662,9 @@ func TestExecuteCleanNoAqlDir(t *testing.T) {
 
 func TestExecuteCleanDefaultDir(t *testing.T) {
 	dir := t.TempDir()
-	aqlDir := filepath.Join(dir, ".aql")
-	os.MkdirAll(aqlDir, 0755)
-	os.WriteFile(filepath.Join(aqlDir, "aql.json"), []byte(`{}`), 0644)
+	boruDir := filepath.Join(dir, ".boru")
+	os.MkdirAll(boruDir, 0755)
+	os.WriteFile(filepath.Join(boruDir, "boru.json"), []byte(`{}`), 0644)
 
 	orig, _ := os.Getwd()
 	os.Chdir(dir)
@@ -676,12 +676,12 @@ func TestExecuteCleanDefaultDir(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0; stderr: %s", code, stderr.String())
 	}
 
-	if _, err := os.Stat(filepath.Join(aqlDir, "aql.json")); err == nil {
-		t.Error("expected aql.json to be removed")
+	if _, err := os.Stat(filepath.Join(boruDir, "boru.json")); err == nil {
+		t.Error("expected boru.json to be removed")
 	}
 }
 
-// TestCheckStrictExitNonZeroOnError verifies that `aql check` (the
+// TestCheckStrictExitNonZeroOnError verifies that `boru check` (the
 // default "strict" mode) returns a non-zero exit code when the
 // program produces an Error-severity diagnostic.
 func TestCheckStrictExitNonZeroOnError(t *testing.T) {
@@ -696,7 +696,7 @@ func TestCheckStrictExitNonZeroOnError(t *testing.T) {
 	}
 }
 
-// TestCheckSoftExitZeroOnError verifies that `aql check --soft` reports
+// TestCheckSoftExitZeroOnError verifies that `boru check --soft` reports
 // errors but still exits zero (advisory mode).
 func TestCheckSoftExitZeroOnError(t *testing.T) {
 	var stdout, stderr bytes.Buffer
@@ -710,7 +710,7 @@ func TestCheckSoftExitZeroOnError(t *testing.T) {
 	}
 }
 
-// TestCheckStrictExitZeroOnClean verifies that `aql check` exits zero
+// TestCheckStrictExitZeroOnClean verifies that `boru check` exits zero
 // when no error-severity diagnostics are emitted.
 func TestCheckStrictExitZeroOnClean(t *testing.T) {
 	var stdout, stderr bytes.Buffer
@@ -721,7 +721,7 @@ func TestCheckStrictExitZeroOnClean(t *testing.T) {
 	}
 }
 
-// TestCheckStrictReportsDynamicDispatch verifies that `aql check --strict`
+// TestCheckStrictReportsDynamicDispatch verifies that `boru check --strict`
 // surfaces the non-gating dynamic_dispatch advisory for a dispatch over a
 // dynamic operand, and that the same program is silent without the flag.
 func TestCheckStrictReportsDynamicDispatch(t *testing.T) {

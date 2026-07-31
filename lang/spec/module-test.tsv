@@ -1,10 +1,10 @@
-# AQL Language Specification: the aql:test module
+# BORU Language Specification: the boru:test module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable testing framework. Import binds TWO namespaces: `Test` (the
 # imperative API, declarative spec/case constructors, PBT driver, record
 # types and result accessors) and `Assert` (the assertion words used
-# inside test bodies). Usage: `import "aql:test"  Test.word args`.
+# inside test bodies). Usage: `import "boru:test"  Test.word args`.
 #
 # Test bodies run in a sub-engine; assertion words raise an
 # `assertion_failure` error on failure which `Test.test` catches and
@@ -15,55 +15,55 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  imperative API — test / it / describe accumulate TestResults
-import "aql:test"  Test.test "adds" [(1 add 1) 2 Assert.equal] end Test.fail-count	0	a passing test contributes 0 failures
-import "aql:test"  Test.test "ok" [true Assert.ok] end Test.summary	{total:1 passed:1 failed:0}	summary tallies pass/fail/total
-import "aql:test"  Test.it "adds" [(1 add 1) 2 Assert.equal] end Test.fail-count	0	`it` is an alias for `test`
-import "aql:test"  Test.describe "math" [Test.test "adds" [(1 add 1) 2 Assert.equal]] end Test.fail-count	0	`describe` groups nested tests
+import "boru:test"  Test.test "adds" [(1 add 1) 2 Assert.equal] end Test.fail-count	0	a passing test contributes 0 failures
+import "boru:test"  Test.test "ok" [true Assert.ok] end Test.summary	{total:1 passed:1 failed:0}	summary tallies pass/fail/total
+import "boru:test"  Test.it "adds" [(1 add 1) 2 Assert.equal] end Test.fail-count	0	`it` is an alias for `test`
+import "boru:test"  Test.describe "math" [Test.test "adds" [(1 add 1) 2 Assert.equal]] end Test.fail-count	0	`describe` groups nested tests
 #
 # §2  results accessors — results / report / reset
-import "aql:test"  Test.test "a" [1 1 Assert.equal] end Test.results size	1	`results` returns the accumulated TestResult table
-import "aql:test"  Test.test "a" [1 1 Assert.equal] end (Test.report) typeof	ProperString	`report` renders a one-line-per-case String summary
-import "aql:test"  Test.test "a" [1 1 Assert.equal] end Test.reset end Test.summary	{total:0 passed:0 failed:0}	`reset` clears the active run
+import "boru:test"  Test.test "a" [1 1 Assert.equal] end Test.results size	1	`results` returns the accumulated TestResult table
+import "boru:test"  Test.test "a" [1 1 Assert.equal] end (Test.report) typeof	ProperString	`report` renders a one-line-per-case String summary
+import "boru:test"  Test.test "a" [1 1 Assert.equal] end Test.reset end Test.summary	{total:0 passed:0 failed:0}	`reset` clears the active run
 #
 # §3  Assert words — equal / not-equal / ok / match / throws
-import "aql:test"  Test.test "eq" [(1 add 1) 2 Assert.equal] end Test.fail-count	0	Assert.equal passes when both sides are equal
-import "aql:test"  Test.test "neq" [1 2 Assert.not-equal] end Test.fail-count	0	Assert.not-equal passes when sides differ
-import "aql:test"  Test.test "ok-truthy" [5 Assert.ok] end Test.fail-count	0	Assert.ok passes on any truthy value
-import "aql:test"  Test.test "match" [Assert.match "ell" "hello"] end Test.fail-count	0	Assert.match passes when string contains substring
-import "aql:test"  Test.test "throws" [[1 0 div] Assert.throws] end Test.fail-count	0	Assert.throws passes when its body raises
-import "aql:test"  Test.test "no-throw" [[1] Assert.throws] end Test.fail-count	1	Assert.throws fails when the body does not raise
+import "boru:test"  Test.test "eq" [(1 add 1) 2 Assert.equal] end Test.fail-count	0	Assert.equal passes when both sides are equal
+import "boru:test"  Test.test "neq" [1 2 Assert.not-equal] end Test.fail-count	0	Assert.not-equal passes when sides differ
+import "boru:test"  Test.test "ok-truthy" [5 Assert.ok] end Test.fail-count	0	Assert.ok passes on any truthy value
+import "boru:test"  Test.test "match" [Assert.match "ell" "hello"] end Test.fail-count	0	Assert.match passes when string contains substring
+import "boru:test"  Test.test "throws" [[1 0 div] Assert.throws] end Test.fail-count	0	Assert.throws passes when its body raises
+import "boru:test"  Test.test "no-throw" [[1] Assert.throws] end Test.fail-count	1	Assert.throws fails when the body does not raise
 #
 # §4  spec runner — invoke / run-spec drive a subject under test
-import "aql:test"  def double fn [[n:Integer] [Integer] [n 2 mul]] end [3] Test.invoke double/q	6	`invoke` runs a subject word against an input list
-import "aql:test"  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary	{total:2 passed:2 failed:0}	`run-spec` checks every case against the subject
+import "boru:test"  def double fn [[n:Integer] [Integer] [n 2 mul]] end [3] Test.invoke double/q	6	`invoke` runs a subject word against an input list
+import "boru:test"  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary	{total:2 passed:2 failed:0}	`run-spec` checks every case against the subject
 #
 # §5  spec constructors — case / spec / spec-with-subs
-import "aql:test"  (Test.case 6 [3] "d3") get "name"	'd3'	`case` builds a TestCase (out, in, name)
-import "aql:test"  (Test.case 6 [3] "d3") get "out"	6	the case's expected output
-import "aql:test"  (Test.spec [] double/q "doubling") get "name"	'doubling'	`spec` builds a TestSpec (cases, subject, name)
-import "aql:test"  (Test.spec-with-subs [] [] double/q "outer") get "name"	'outer'	`spec-with-subs` adds nested sub-specs
+import "boru:test"  (Test.case 6 [3] "d3") get "name"	'd3'	`case` builds a TestCase (out, in, name)
+import "boru:test"  (Test.case 6 [3] "d3") get "out"	6	the case's expected output
+import "boru:test"  (Test.spec [] double/q "doubling") get "name"	'doubling'	`spec` builds a TestSpec (cases, subject, name)
+import "boru:test"  (Test.spec-with-subs [] [] double/q "outer") get "name"	'outer'	`spec-with-subs` adds nested sub-specs
 #
 # §6  property-based testing — prop / check-prop / run-property / skip
-import "aql:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end p get "runs"	100	`prop` builds a PropertySpec with default runs=100
-import "aql:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end (p Test.run-property) get "ok"	true	`run-property` dispatches a PropertySpec map
-import "aql:test"  (Test.check-prop "nonneg" [r.int 0 100] [0 gte] 20 1 0) get "ok"	true	`check-prop` runs the generator/property loop
-import "aql:test"  (Test.skip "wip" [r.int 0 9] [false] 10 1 0) get "skipped"	true	`skip` records a parked property without running it
+import "boru:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end p get "runs"	100	`prop` builds a PropertySpec with default runs=100
+import "boru:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end (p Test.run-property) get "ok"	true	`run-property` dispatches a PropertySpec map
+import "boru:test"  (Test.check-prop "nonneg" [r.int 0 100] [0 gte] 20 1 0) get "ok"	true	`check-prop` runs the generator/property loop
+import "boru:test"  (Test.skip "wip" [r.int 0 9] [false] 10 1 0) get "skipped"	true	`skip` records a parked property without running it
 #
 # §7  record / table types — constructed via make, asserted via istype
-import "aql:test"  (make Test.TestCase {name: "a" in: [1] out: 2}) get "out"	2	TestCase record carries name/in/out
-import "aql:test"  Test.TestCase istype	true	TestCase is a type
-import "aql:test"  (make Test.TestSpec {name: "s" subject: foo/q cases: [] subs: []}) get "name"	's'	TestSpec record carries name/subject/cases/subs
-import "aql:test"  Test.TestSpec istype	true	TestSpec is a type
-import "aql:test"  (make Test.TestResult {name: "t" path: [] ok: true expected: None actual: None error: None duration-ms: 0}) get "ok"	true	TestResult record records a case outcome
-import "aql:test"  Test.TestResult istype	true	TestResult is a type
-import "aql:test"  (make Test.PropertySpec {name: "p" gen: [] property: [] runs: 100 seed: 1 max-shrinks: 200}) get "runs"	100	PropertySpec record describes a property
-import "aql:test"  Test.PropertySpec istype	true	PropertySpec is a type
-import "aql:test"  (make Test.PropertyResult {name: "p" ok: true runs: 5 failing-input: None shrunk-input: None shrunk-source: "" shrunk-cost: 0 error: None}) get "ok"	true	PropertyResult record records a property outcome
-import "aql:test"  Test.PropertyResult istype	true	PropertyResult is a type
-import "aql:test"  (make Test.TestSet [[name: "a" in: [1] out: 2]]) is Test.TestSet	true	TestSet is a Table over TestCase
-import "aql:test"  Test.TestSet istype	true	TestSet is a type
+import "boru:test"  (make Test.TestCase {name: "a" in: [1] out: 2}) get "out"	2	TestCase record carries name/in/out
+import "boru:test"  Test.TestCase istype	true	TestCase is a type
+import "boru:test"  (make Test.TestSpec {name: "s" subject: foo/q cases: [] subs: []}) get "name"	's'	TestSpec record carries name/subject/cases/subs
+import "boru:test"  Test.TestSpec istype	true	TestSpec is a type
+import "boru:test"  (make Test.TestResult {name: "t" path: [] ok: true expected: None actual: None error: None duration-ms: 0}) get "ok"	true	TestResult record records a case outcome
+import "boru:test"  Test.TestResult istype	true	TestResult is a type
+import "boru:test"  (make Test.PropertySpec {name: "p" gen: [] property: [] runs: 100 seed: 1 max-shrinks: 200}) get "runs"	100	PropertySpec record describes a property
+import "boru:test"  Test.PropertySpec istype	true	PropertySpec is a type
+import "boru:test"  (make Test.PropertyResult {name: "p" ok: true runs: 5 failing-input: None shrunk-input: None shrunk-source: "" shrunk-cost: 0 error: None}) get "ok"	true	PropertyResult record records a property outcome
+import "boru:test"  Test.PropertyResult istype	true	PropertyResult is a type
+import "boru:test"  (make Test.TestSet [[name: "a" in: [1] out: 2]]) is Test.TestSet	true	TestSet is a Table over TestCase
+import "boru:test"  Test.TestSet istype	true	TestSet is a type
 #
 # §8  negative — a failed assertion raises assertion_failure
-import "aql:test"  Assert.equal 1 2	ERROR:assertion_failure	Assert.equal raises when sides differ
+import "boru:test"  Assert.equal 1 2	ERROR:assertion_failure	Assert.equal raises when sides differ
 # the namespaces are unbound until imported
 Assert.equal 1 1	ERROR:undefined_word	`Assert` is undefined without `import`

@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/debugserve"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/debugserve"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // stepServer runs src under a Session fronted by a Remote mounted on an
@@ -28,7 +28,7 @@ func stepServer(t *testing.T, src string) (*debugserve.Client, *Remote, *bytes.B
 	reg.Output = &progOut
 	sess := New(reg, Config{
 		In: strings.NewReader(""), Out: io.Discard,
-		File: "remote.aql", Source: src,
+		File: "remote.boru", Source: src,
 	})
 	rm := NewRemote(sess)
 	toks, perr := parser.Parse(src)
@@ -73,7 +73,7 @@ func TestRemoteFullSession(t *testing.T) {
 	// The program parks at the entry stop before any attach arrives.
 	st := waitPaused(t, c, 0)
 	if st.State != "paused" || st.Row != 1 || st.Kind != "step" ||
-		st.File != "remote.aql" || st.Line != "def n 41" {
+		st.File != "remote.boru" || st.Line != "def n 41" {
 		t.Fatalf("entry stop = %+v", st)
 	}
 

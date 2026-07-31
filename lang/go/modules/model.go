@@ -8,13 +8,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 	model "github.com/voxgig/model/go"
 )
 
-// The aql:model module — the Model namespace, a thin AQL surface over the
+// The boru:model module — the Model namespace, a thin BORU surface over the
 // upstream Go implementation of @voxgig/model (github.com/voxgig/model, the
 // repo's go/ module). voxgig/model unifies .jsonic source into a single
 // system model (via aontu — see native/aontu.go) and runs generator
@@ -24,9 +24,9 @@ import (
 // Build/Watch from the library's own exported building blocks (NewBuild,
 // NewWatch, ModelProducer, LocalProducer) — exactly what model.New does
 // internally — and drives Run / Start / Stop. The one thing it changes is
-// the filesystem seam: every file read and write goes through AQL's aql:io
+// the filesystem seam: every file read and write goes through BORU's boru:io
 // FileOps capability (native.EffectiveFileOps), so a test that installs an
-// in-memory FileOps (capabilities.NewMem, via AQL.SetFileOps) runs the whole
+// in-memory FileOps (capabilities.NewMem, via BORU.SetFileOps) runs the whole
 // model — source reads, the <base>/<name>.json write, inline source — entirely
 // in memory, touching no disk. model.New itself cannot do this: its ModelSpec
 // exposes no FS seam (only BuildSpec does), which is why the module assembles
@@ -63,15 +63,15 @@ var inlineSeq atomic.Int64
 
 // modelHandle is the Go state behind a Model value: the assembled Build and
 // Watch, the registry actions call back into (actionReg), action errors
-// collected during a build (CallAQL errors cannot flow through the
+// collected during a build (CallBORU errors cannot flow through the
 // model.Action signature, so they are stashed here and merged into the
 // result), and a mutex serialising action callbacks.
 //
-// actionReg is the registry an action's CallAQL runs on. For Model.run it is
+// actionReg is the registry an action's CallBORU runs on. For Model.run it is
 // the live foreground registry (the build runs synchronously on the calling
 // goroutine, so that is race-free). For Model.start it is a ForkConcurrent of
 // the registry, taken on the foreground goroutine before the watch begins, so
-// the watch goroutine's rebuilds run their AQL actions on an isolated registry
+// the watch goroutine's rebuilds run their BORU actions on an isolated registry
 // that can never race the main interpreter — the same pattern timeout /
 // interval / await use (see eng/go/fork.go).
 type modelHandle struct {
@@ -83,7 +83,7 @@ type modelHandle struct {
 	actErrs   []error
 }
 
-// BuildModelModule creates the "aql:model" native module.
+// BuildModelModule creates the "boru:model" native module.
 func BuildModelModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg, err := newDefaultRegistry()
 	if err != nil {
@@ -177,11 +177,11 @@ type parsedSpec struct {
 func modelNewHandlerFor(tModel *native.Type) native.Handler {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		if !native.IsConcrete(args[0]) {
-			return nil, r.AqlError("model_bad_spec", "new: spec must be a concrete Map", "new")
+			return nil, r.BoruError("model_bad_spec", "new: spec must be a concrete Map", "new")
 		}
 		specMap, merr := native.AsMap(args[0])
 		if merr != nil {
-			return nil, r.AqlError("model_bad_spec", "new: spec must be a Map", "new")
+			return nil, r.BoruError("model_bad_spec", "new: spec must be a Map", "new")
 		}
 
 		h := &modelHandle{reg: r, actionReg: r}
@@ -190,7 +190,7 @@ func modelNewHandlerFor(tModel *native.Type) native.Handler {
 			return nil, err
 		}
 
-		// Every file operation goes through the active aql:io FileOps so a test
+		// Every file operation goes through the active boru:io FileOps so a test
 		// can run the model on an in-memory FS (capabilities.NewMem).
 		// The note captures the LEDGER POINTER at construction (the writer-
 		// fence discipline): a watch-goroutine rebuild then marks the ledger
@@ -202,13 +202,13 @@ func modelNewHandlerFor(tModel *native.Type) native.Handler {
 
 		path, base := ps.path, ps.base
 		if ps.hasInline {
-			base = filepath.Join(os.TempDir(), fmt.Sprintf("aql-model-%d-%d", os.Getpid(), inlineSeq.Add(1)))
+			base = filepath.Join(os.TempDir(), fmt.Sprintf("boru-model-%d-%d", os.Getpid(), inlineSeq.Add(1)))
 			path = filepath.Join(base, "model.jsonic")
 			if mkErr := fs.MkdirAll(base, 0o755); mkErr != nil {
-				return nil, r.AqlError("model_io", "new: inline base dir: "+mkErr.Error(), "new")
+				return nil, r.BoruError("model_io", "new: inline base dir: "+mkErr.Error(), "new")
 			}
 			if wErr := fs.WriteFile(path, []byte(ps.inlineSrc), 0o600); wErr != nil {
-				return nil, r.AqlError("model_io", "new: write inline source: "+wErr.Error(), "new")
+				return nil, r.BoruError("model_io", "new: write inline source: "+wErr.Error(), "new")
 			}
 		} else if base == "" {
 			base = filepath.Dir(path)
@@ -237,7 +237,7 @@ func modelNewHandlerFor(tModel *native.Type) native.Handler {
 	}
 }
 
-// parseSpec decodes the spec Map, wiring AQL-function actions through
+// parseSpec decodes the spec Map, wiring BORU-function actions through
 // makeAction.
 func parseSpec(specMap native.ReadMap, h *modelHandle, r *native.Registry) (parsedSpec, error) {
 	var ps parsedSpec
@@ -254,7 +254,7 @@ func parseSpec(specMap native.ReadMap, h *modelHandle, r *native.Registry) (pars
 			ps.base = base
 		}
 	default:
-		return ps, r.AqlErrorHint("model_bad_spec",
+		return ps, r.BoruErrorHint("model_bad_spec",
 			"new: spec needs a 'src' (inline) or 'path' (file) String", "new",
 			"e.g. Model.new {src:'service: name: \"orders\"'}")
 	}
@@ -288,18 +288,18 @@ func parseSpec(specMap native.ReadMap, h *modelHandle, r *native.Registry) (pars
 }
 
 // buildActions reads the `actions` spec field into a map of model.ActionDef,
-// each wrapping an AQL Function.
+// each wrapping a BORU Function.
 func buildActions(specMap native.ReadMap, h *modelHandle, r *native.Registry) (map[string]model.ActionDef, error) {
 	av, ok := specMap.Get("actions")
 	if !ok {
 		return nil, nil
 	}
 	if !native.IsConcrete(av) {
-		return nil, r.AqlError("model_bad_action", "new: actions must be a Map", "new")
+		return nil, r.BoruError("model_bad_action", "new: actions must be a Map", "new")
 	}
 	am, aerr := native.AsMap(av)
 	if aerr != nil {
-		return nil, r.AqlError("model_bad_action", "new: actions must be a Map", "new")
+		return nil, r.BoruError("model_bad_action", "new: actions must be a Map", "new")
 	}
 	out := make(map[string]model.ActionDef, len(am.Keys()))
 	for _, name := range am.Keys() {
@@ -340,12 +340,12 @@ func actionFnAndStep(name string, entry native.Value, r *native.Registry) (nativ
 		if m, err := native.AsMap(entry); err == nil {
 			run, hasRun := m.Get("run")
 			if !hasRun {
-				return native.Value{}, "", r.AqlErrorHint("model_bad_action",
+				return native.Value{}, "", r.BoruErrorHint("model_bad_action",
 					fmt.Sprintf("new: action %q map needs a 'run' Function", name), "new",
 					"e.g. actions:{gen:{run:([m:Any] => [...]), step:'post'}}")
 			}
 			if _, ok := run.Data.(native.FnDefInfo); !ok {
-				return native.Value{}, "", r.AqlError("model_bad_action",
+				return native.Value{}, "", r.BoruError("model_bad_action",
 					fmt.Sprintf("new: action %q 'run' must be a Function", name), "new")
 			}
 			step := model.StepPost
@@ -355,7 +355,7 @@ func actionFnAndStep(name string, entry native.Value, r *native.Registry) (nativ
 			return run, step, nil
 		}
 	}
-	return native.Value{}, "", r.AqlErrorHint("model_bad_action",
+	return native.Value{}, "", r.BoruErrorHint("model_bad_action",
 		fmt.Sprintf("new: action %q must be a Function or {run:Function}", name), "new",
 		"e.g. actions:{summary:([m:Any] => [m size])}")
 }
@@ -371,15 +371,15 @@ func parseStep(s string) model.Step {
 	}
 }
 
-// makeAction wraps an AQL Function as a model.Action. The callback hands the
-// unified model (as an AQL Map) to the function via eng.InvokeCallback on
+// makeAction wraps a BORU Function as a model.Action. The callback hands the
+// unified model (as a BORU Map) to the function via eng.InvokeCallback on
 // h.actionReg — the foreground registry for Model.run, an isolated fork for
 // Model.start — and reads its result: a Boolean is the OK flag; a Map supplies
 // {ok, reload}; anything else (including no result) is treated as OK. An error
 // is stashed on the handle (the model.Action signature has no error return) and
 // surfaces in the build result. InvokeCallback is the uniform seam: the action
 // runs on the VM when its sig carries a compiled unit (stampActionFn stamps at
-// model build), else falls back to the interpreter (CallAQL) — captures and
+// model build), else falls back to the interpreter (CallBORU) — captures and
 // ineligible shapes decline the stamp and interpret unchanged.
 func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.ActionDef {
 	var caps []native.CapturedBinding
@@ -408,7 +408,7 @@ func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.Actio
 	}
 }
 
-// interpretActionResult maps an AQL action's result stack to an ActionResult.
+// interpretActionResult maps a BORU action's result stack to an ActionResult.
 func interpretActionResult(res []native.Value) model.ActionResult {
 	if len(res) == 0 {
 		return model.ActionResult{OK: true}
@@ -440,7 +440,7 @@ func interpretActionResult(res []native.Value) model.ActionResult {
 func modelRunHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	h, ok := asModelHandle(args[0])
 	if !ok {
-		return nil, r.AqlError("model_bad_handle", "run: not a Model", "run")
+		return nil, r.BoruError("model_bad_handle", "run: not a Model", "run")
 	}
 	// Model.run is synchronous on this (foreground) goroutine, so actions can
 	// call back into the live registry directly — re-entrant, single-threaded,
@@ -456,9 +456,9 @@ func modelRunHandler(args []native.Value, _ map[string]native.Value, _ []native.
 func modelStartHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	h, ok := asModelHandle(args[0])
 	if !ok {
-		return nil, r.AqlError("model_bad_handle", "start: not a Model", "start")
+		return nil, r.BoruError("model_bad_handle", "start: not a Model", "start")
 	}
-	// Watch rebuilds run on a background goroutine, so their AQL actions must
+	// Watch rebuilds run on a background goroutine, so their BORU actions must
 	// NOT touch the foreground registry. Fork an isolated registry HERE, on the
 	// foreground goroutine (ForkConcurrent's contract: fork while the parent is
 	// not concurrently mutating), and route action callbacks to it. Outputs are
@@ -478,7 +478,7 @@ func modelStartHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 func modelStopHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	h, ok := asModelHandle(args[0])
 	if !ok {
-		return nil, r.AqlError("model_bad_handle", "stop: not a Model", "stop")
+		return nil, r.BoruError("model_bad_handle", "stop: not a Model", "stop")
 	}
 	h.watch.Stop()
 	return nil, nil
@@ -487,17 +487,17 @@ func modelStopHandler(args []native.Value, _ map[string]native.Value, _ []native
 func modelModelHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	h, ok := asModelHandle(args[0])
 	if !ok {
-		return nil, r.AqlError("model_bad_handle", "model: not a Model", "model")
+		return nil, r.BoruError("model_bad_handle", "model: not a Model", "model")
 	}
 	if h.build == nil || h.build.Model == nil {
-		return nil, r.AqlErrorHint("model_not_built",
+		return nil, r.BoruErrorHint("model_not_built",
 			"model: the model has not been built yet", "model",
 			"call Model.run (or Model.start) first")
 	}
 	return []native.Value{native.AnyToValue(h.build.Model)}, nil
 }
 
-// buildResultValue marshals a *model.BuildResult to an AQL Map, merging any
+// buildResultValue marshals a *model.BuildResult to a BORU Map, merging any
 // action errors stashed on the handle during the build.
 func buildResultValue(br *model.BuildResult, h *modelHandle) native.Value {
 	om := native.NewOrderedMap()
@@ -531,7 +531,7 @@ func buildResultValue(br *model.BuildResult, h *modelHandle) native.Value {
 
 // ---- FileOps-backed model.FS ---------------------------------------------
 
-// fileOpsFS adapts AQL's aql:io FileOps to the model.FS seam, so the whole
+// fileOpsFS adapts BORU's boru:io FileOps to the model.FS seam, so the whole
 // model pipeline (source reads, the JSON-model write, inline source) runs on
 // whatever FileOps the registry has — disk for the OS backend, memory for a
 // test backend. In dryrun mode writes are kept in an in-memory overlay (and

@@ -17,7 +17,7 @@ and the residual **dotted-access** problem.
 
 ---
 
-## 1. The two representations AQL already has
+## 1. The two representations BORU already has
 
 The parser emits **different things** for parens in the two contexts
 (`eng/go/CLAUDE.md` calls this divergence a complexity source):
@@ -35,7 +35,7 @@ value, unifying the two.
 
 ## 2. Empirical semantics of a word-context paren (tested)
 
-Probed with `aql -e` on this branch. These are the contracts any new
+Probed with `boru -e` on this branch. These are the contracts any new
 representation must reproduce.
 
 | # | Probe | Result | Contract |
@@ -220,7 +220,7 @@ on `{a:[1 2 3]}` → `3`). The chain is **flat and left-composing**: each
 
 2. **It is a flat concatenative chain, not an access tree.** A Lisp-style
    walker wants `(get (get m a) b)` — explicit nesting that says *b accesses
-   the result of a accessing m*. AQL produces `m get a get b`, where that
+   the result of a accessing m*. BORU produces `m get a get b`, where that
    nesting is **implicit in left-to-right stack composition**, not in
    structure. So even after parens become sub-lists, a path lowers to a
    *flat* `[m get a get b]`, and "this is a path" is still an idiom to be

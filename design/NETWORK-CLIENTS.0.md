@@ -1,6 +1,6 @@
 # NETWORK-CLIENTS
 
-Design for the **network-client handling API** in AQL — the dial side of
+Design for the **network-client handling API** in BORU — the dial side of
 `NETWORK-SERVERS.0.md`, made deliberately **symmetric** with it so that a
 developer who has learned to write a server already knows how to write a client.
 
@@ -56,8 +56,8 @@ The same dial job at both tiers, mirroring `NETWORK-SERVERS.0.md` §1.
 
 **Low level (you own the bytes):**
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def sock ( connect-raw {tcp: "localhost:7"} )   # dial → a Socket (same type as accept's)
 send-bytes (utf8 "ping\n") sock
@@ -67,9 +67,9 @@ close sock
 
 **High level (a codec gives you a remote service):**
 
-```aql
-import "aql:net"
-import "aql:serve"
+```boru
+import "boru:net"
+import "boru:serve"
 
 def echo ( connect {tcp: "localhost:7"  codec: lines} )   # → an Endpoint (a Service)
 call {line: "ping"} echo                                    # → "ping"
@@ -118,8 +118,8 @@ The `Bytes` type and `pack`/`unpack`/`unpack-prefix` of `NETWORK-SERVERS.0.md`
 server. Where a server `unpack`s a request and `pack`s a reply, a client
 `pack`s a request and `unpack`s a reply:
 
-```aql
-import "aql:bin-util"
+```boru
+import "boru:bin-util"
 
 # build a request frame  [u8 op][u32 len][len bytes payload]
 def body  ( utf8 (jsonify {user: 42}) )
@@ -135,7 +135,7 @@ is a zero-copy value that can flow through `pool`s, `wrap` layers, and the
 mailbox exactly like any other value. No new binary machinery is needed on the
 client.
 
-## 4. Tier 1 — the low-level client API (`aql:net`)
+## 4. Tier 1 — the low-level client API (`boru:net`)
 
 For protocol authors and the tightest control. You dial a `Socket` and then use
 the **same socket words as the server** (`NETWORK-SERVERS.0.md` §4.1–4.3):
@@ -176,10 +176,10 @@ set from the bottom up.
 > fetch {url: "https://api.internal/v1"     tls: {identity: acme/q}}
 > ```
 >
-> The host registers with `(*AQL).RegisterClientIdentity(name, id)`, where
+> The host registers with `(*BORU).RegisterClientIdentity(name, id)`, where
 > `id` is a `ClientIdentity` — an interface returning a `*tls.Certificate`
 > **per handshake**, so the private key may live in a file, a vault slot, an
-> HSM or a SPIFFE agent that rotates hourly, and never becomes an AQL value.
+> HSM or a SPIFFE agent that rotates hourly, and never becomes a BORU value.
 > Guest source can SELECT an identity; it can never read or construct one.
 > Which identity a program may present, and against which host, is a policy
 > decision (`network`/`client-cert`), not the program's.
@@ -188,7 +188,7 @@ set from the bottom up.
 > in advance gets one from the vault:
 >
 > ```
-> import "aql:vault"
+> import "boru:vault"
 > fetch {url: "https://api.internal/v1"  tls: {identity: (Vault.identity "acme-mtls")}}
 > ```
 >
@@ -200,8 +200,8 @@ set from the bottom up.
 > read lazily, inside the handshake, so a rotated secret is picked up
 > without re-running the program.
 >
-> Explicit `cert:`/`key:` **`Bytes`** (obtained through `aql:io` or
-> `aql:pki` under their own gates) remain available as a deliberate escape
+> Explicit `cert:`/`key:` **`Bytes`** (obtained through `boru:io` or
+> `boru:pki` under their own gates) remain available as a deliberate escape
 > hatch — but never as a path the network layer dereferences.
 >
 > The holding principle: **a certificate is data, a private key is a
@@ -218,8 +218,8 @@ A spread mirroring `NETWORK-SERVERS.0.md` §5, all at the low level.
 
 ### 5.1 Line/text — a line client
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def line-rpc fn [[sock:Socket  msg:String] [String] [
   send-bytes (utf8 (str.concat [ msg "\n" ])) sock
@@ -234,8 +234,8 @@ close sock
 
 ### 5.2 JSON-over-TCP — newline-delimited JSON client
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def json-rpc fn [[sock:Socket  req:Map] [Map] [
   send-bytes (concat [ (utf8 (jsonify req))  (utf8 "\n") ]) sock
@@ -252,9 +252,9 @@ The exact dual of `NETWORK-SERVERS.0.md` §5.3: the client `pack`s the request
 and reads the reply with `recv-frame` (which pulls exactly one frame, using the
 reply's own length field).
 
-```aql
-import "aql:net"
-import "aql:bin-util"
+```boru
+import "boru:net"
+import "boru:bin-util"
 
 def bin-rpc fn [[sock:Socket  op:Integer  payload:Map] [Map] [
   def body ( utf8 (jsonify payload) )
@@ -274,8 +274,8 @@ The dual of the server's §5.4 chat *connection*: a client that must react to
 (delivered to the same actor). This is the Tier-1 case that needs **active
 mode**, exactly as the server's did.
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def chat-client fn [[sock:Socket] [Never] [
   set-active sock "once"                         # socket data arrives as messages
@@ -316,7 +316,7 @@ connect {tcp: <addr>  codec: <codec>  …opts} -> Endpoint      # network.connec
 `connect {tcp codec}` desugars to a connection actor over a `connect-raw`
 socket — the dual of the server's `conn-session`:
 
-```aql
+```boru
 # Conceptual desugaring of `connect {tcp:A codec:C}`:
 def ep ( endpoint C )                          # a Service that also tracks pending calls
 def sock ( connect-raw {tcp: A} )
@@ -381,9 +381,9 @@ on close (the latter is also what a supervised endpoint reconnects on, §6.6).
 
 **JSON-lines and the duals of §5.1–5.2 without the framing:**
 
-```aql
-import "aql:net"
-import "aql:serve"
+```boru
+import "boru:net"
+import "boru:serve"
 
 def api ( connect {tcp: "localhost:8002"  codec: json-lines} )
 call {op: "get" id: 7} api           # request/reply if the server echoes the id field
@@ -395,8 +395,8 @@ send {op: "log" line: "hi"} api      # fire-and-forget
 **sugar over a one-shot HTTP `connect`+`call`+close**, so there is one HTTP
 client model with two ergonomic front-ends (persistent endpoint vs. one-liner):
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def todos ( connect {tcp: "api.example.com:443"  tls: {} codec: http} )
 
@@ -413,9 +413,9 @@ carries the `SERVICES.0.md` §8.2 contract — a mandatory deadline and the clos
 retries — because a client is *always* remote. The §8.2 billing example *is* a
 client; restated here as the canonical client read:
 
-```aql
-import "aql:net"
-import "aql:time-util"
+```boru
+import "boru:net"
+import "boru:time-util"
 
 def billing ( connect {tcp: "billing.internal:443"  tls: {} codec: http} )
 
@@ -440,8 +440,8 @@ error [ case [
 
 **Binary RPC client — the §5.3 protocol declaratively (dual of server §6.5):**
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def rpc ( connect {
     tcp: "localhost:8003"
@@ -457,8 +457,8 @@ call {op: 2  payload: (utf8 (jsonify {echo:"hi"}))} rpc      # transport fills `
 `add`s a handler for broadcasts — on one `Endpoint`, no separate push API. This
 is the §5.4 raw client with the framing and the active-mode plumbing gone:
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def room ( connect {tcp: "chat.example.com:6667"  codec: lines} )
 
@@ -473,8 +473,8 @@ send {line: "hello everyone"} room
 *and* answers server→client requests — the case that flatly needs the unified
 endpoint:
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def lsp ( connect {tcp: "localhost:9999"  codec: jsonrpc} )
 
@@ -492,9 +492,9 @@ connections to one peer (or a set) are a `pool` of endpoints (`SERVICES.0.md`
 §9.2) — the same word, pointed outward. Being a `Service`, the pool is a drop-in
 for a single endpoint:
 
-```aql
-import "aql:net"
-import "aql:serve"
+```boru
+import "boru:net"
+import "boru:serve"
 
 # 16 pooled HTTP connections; `call` picks one by power-of-two-choices.
 def api ( pool [ [ connect {tcp:"api.example.com:443" tls:{} codec:http} ] ]
@@ -515,7 +515,7 @@ A long-lived client must survive the peer restarting. Symmetric with the
 server's `server [..] {restart}`, an endpoint opts into **automatic
 reconnection**:
 
-```aql
+```boru
 connect {tcp: addr  codec: c  reconnect: {retries: "forever"  backoff: "exponential"}} -> Endpoint
 ```
 
@@ -531,7 +531,7 @@ of the supervision tree.
 ## 7. Streaming data — directions swapped
 
 The streaming machinery of `NETWORK-SERVERS.0.md` §7 is reused with client and
-server roles swapped; ties to `aql:stream` (`STREAM-WORDS.0.md`) unchanged.
+server roles swapped; ties to `boru:stream` (`STREAM-WORDS.0.md`) unchanged.
 
 ### 7.1 Consuming a server stream (server → client)
 
@@ -540,14 +540,14 @@ lazily, in bounded memory, with TCP back-pressure pacing it — the dual of the
 server's streaming reply (server §7.1). SSE, chunked downloads, and WS message
 streams all surface this way:
 
-```aql
-import "aql:net"
-import "aql:stream"
+```boru
+import "boru:net"
+import "boru:stream"
 
 def feed ( connect {tcp: "market.example.com:443"  tls: {} codec: http} )
 
 # the reply is a Stream<Map> of SSE events; consume it like any stream
-call {method: "GET"  path: "/prices/stream?sym=AQL"} feed
+call {method: "GET"  path: "/prices/stream?sym=BORU"} feed
   [ [ev] => [ ev.data ] ] stream.map
   [ [px] => [ println px ] ] stream.for-each      # back-pressured; ends when server closes
 ```
@@ -562,9 +562,9 @@ A large upload is a streaming request body: pass a `Stream<Bytes>` as the body
 and the endpoint writes it with socket back-pressure — the dual of the server's
 streaming request body (server §7.2), and Tier-1 `send-stream` underneath:
 
-```aql
-import "aql:net"
-import "aql:stream"
+```boru
+import "boru:net"
+import "boru:stream"
 
 def store ( connect {tcp: "uploads.example.com:443"  tls: {} codec: http} )
 
@@ -588,9 +588,9 @@ The capstone that proves the symmetry: an **API gateway** is simply a `listen`
 of this design composed, which is exactly the `proxy` of `SERVICES.0.md` §6. One
 program, both directions, one vocabulary.
 
-```aql
-import "aql:net"
-import "aql:serve"
+```boru
+import "boru:net"
+import "boru:serve"
 
 # Client half: a pooled, auto-reconnecting endpoint to the upstream service.
 def upstream ( pool [ [ connect {
@@ -663,7 +663,7 @@ client just as on the server.
   (server §4), all built-in codecs (server §6.2), `pool`/supervision/uniform
   failure contract (`SERVICES.0.md`).
 - **Depends on:** `NETWORK-SERVERS.0.md` (Bytes, Socket, Codec), `PROCESSES.0.md`
-  phase 1, `SERVICES.0.md` phases 1–2, `aql:stream`.
+  phase 1, `SERVICES.0.md` phases 1–2, `boru:stream`.
 - **Still out of scope:** HTTP/2 & QUIC clients, UDP datagram clients
   (`recv-from`/`send-to`), a connection-multiplexing single socket (HTTP/2-style
   stream IDs over one connection — distinct from a `pool` of sockets), and
@@ -698,7 +698,7 @@ integration test for its server example).
    should the transport *synthesise* one (wrap every frame in an envelope with an
    id) so `call` works universally, or refuse `call` and force `send`+handler?
    (Leaning: refuse by default — a synthesised envelope changes the wire format
-   the peer sees — with an opt-in `{envelope: true}` for AQL-to-AQL links where
+   the peer sees — with an opt-in `{envelope: true}` for BORU-to-BORU links where
    both ends cooperate.)
 3. **`fetch` migration.** Make `fetch` literally call the new HTTP `connect`
    path (one implementation), or keep the existing `fetch` and merely *document*

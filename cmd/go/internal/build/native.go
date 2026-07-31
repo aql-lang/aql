@@ -9,14 +9,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
+	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
 )
 
 // cmdGoModulePath is the import path / module path of the CLI module that owns
 // internal/buildrt. A `--native` build must compile inside this module's tree
 // so the generated main can import the internal runtime and resolve the
 // dependency graph through the module's existing replace directives.
-const cmdGoModulePath = "github.com/aql-lang/aql/cmd/go"
+const cmdGoModulePath = "github.com/boru-lang/boru/cmd/go"
 
 // osMkdirTemp is a test seam (design/TEST-SEAMS.10.md); tests swap it to
 // drive buildNative's create-build-dir failure arm, which cannot be
@@ -55,7 +55,7 @@ func buildNative(cfg buildrt.Config, outPath string, keep bool, stdout, stderr i
 	// The temp package lives inside the module tree (required for the internal
 	// import) but is dot-prefixed so `go build ./...` / `go test ./...` over
 	// the module skip it.
-	tmpDir, err := osMkdirTemp(moduleDir, ".aqlbuild-")
+	tmpDir, err := osMkdirTemp(moduleDir, ".borubuild-")
 	if err != nil {
 		return fmt.Errorf("create build dir: %w", err)
 	}
@@ -89,18 +89,18 @@ func buildNative(cfg buildrt.Config, outPath string, keep bool, stdout, stderr i
 
 // findCmdGoModuleDir locates the directory of the cmd/go module so a --native
 // build can compile inside it. Resolution order:
-//  1. $AQL_SRC/cmd/go (AQL_SRC points at a repo checkout root),
+//  1. $BORU_SRC/cmd/go (BORU_SRC points at a repo checkout root),
 //  2. `go env GOMOD` from the current directory, if it is the cmd/go module.
 //
 // Returns a clear error when neither is available — a stock installed binary on
 // a machine without the source cannot self-build natively.
 func findCmdGoModuleDir() (string, error) {
-	if src := strings.TrimSpace(os.Getenv("AQL_SRC")); src != "" {
+	if src := strings.TrimSpace(os.Getenv("BORU_SRC")); src != "" {
 		dir := filepath.Join(src, "cmd", "go")
 		if isCmdGoModule(filepath.Join(dir, "go.mod")) {
 			return dir, nil
 		}
-		return "", fmt.Errorf("AQL_SRC=%q does not contain the cmd/go module (expected %s)", src, filepath.Join(dir, "go.mod"))
+		return "", fmt.Errorf("BORU_SRC=%q does not contain the cmd/go module (expected %s)", src, filepath.Join(dir, "go.mod"))
 	}
 
 	out, err := exec.Command("go", "env", "GOMOD").Output()
@@ -112,7 +112,7 @@ func findCmdGoModuleDir() (string, error) {
 	}
 
 	return "", fmt.Errorf(
-		"--native needs the aql source tree: set AQL_SRC to a repo checkout, or run from within the %s module (the default self-embedding build needs neither)",
+		"--native needs the boru source tree: set BORU_SRC to a repo checkout, or run from within the %s module (the default self-embedding build needs neither)",
 		cmdGoModulePath)
 }
 

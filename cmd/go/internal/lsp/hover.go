@@ -5,13 +5,13 @@ package lsp
 import (
 	"strings"
 
-	"github.com/aql-lang/aql/lang/go/native"
-	helppkg "github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/lang/go/native"
+	helppkg "github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // buildHover returns the Hover response for the word under pos in
 // src, or nil if no word is at that position. The lookup mirrors
-// `aql help <word>`: prefer dynamic registry info, fall back to
+// `boru help <word>`: prefer dynamic registry info, fall back to
 // static help, give up if neither has the word.
 func (s *server) buildHover(src string, pos Position) *Hover {
 	word, wordRange, ok := wordAt(src, pos)
@@ -43,10 +43,10 @@ func (s *server) buildHover(src string, pos Position) *Hover {
 	}
 }
 
-// wordAt locates the AQL "word" (run of identifier chars) covering
+// wordAt locates the BORU "word" (run of identifier chars) covering
 // the given LSP Position in src. Returns the word, its range, and
-// true on a hit. AQL identifiers can contain letters, digits, and
-// the characters typical of AQL words (e.g. `.`, `_`, `-`); we
+// true on a hit. BORU identifiers can contain letters, digits, and
+// the characters typical of BORU words (e.g. `.`, `_`, `-`); we
 // adopt a permissive isWordChar so dotted names like "Color.hex2rgb"
 // hover as one unit.
 func wordAt(src string, pos Position) (string, Range, bool) {
@@ -98,7 +98,7 @@ func wordAt(src string, pos Position) (string, Range, bool) {
 	}, true
 }
 
-// isWordChar reports whether c is part of an AQL word. We accept
+// isWordChar reports whether c is part of a BORU word. We accept
 // the union of identifier chars across the languages: ASCII
 // alphanumerics, '_', '-', and '.' (for namespaced words like
 // "Color.hex2rgb"). The set is deliberately a superset — the

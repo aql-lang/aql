@@ -39,7 +39,7 @@ func TestW9UnpackModuleHandlerArms(t *testing.T) {
 	w9wantErr(t, err, "module name must be a string")
 
 	// unpack ExportName 'mod': first arg must be an atom.
-	_, err = unpackModuleExportHandler([]Value{NewInteger(5), NewString("aql:x")}, nil, nil, r)
+	_, err = unpackModuleExportHandler([]Value{NewInteger(5), NewString("boru:x")}, nil, nil, r)
 	w9wantErr(t, err, "export name must be a word/atom")
 
 	// unpack ExportName 'mod': second arg must be a concrete string.

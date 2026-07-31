@@ -1,0 +1,17 @@
+import "boru:net"
+import "boru:time-util"
+def sock (Net.connect-raw {tcp:"127.0.0.1:19092"})
+def nl (convert Bytes "\n")
+def msg (convert Bytes "hello world\n")
+Net.send-bytes msg sock
+Net.recv-until sock nl drop
+def start (TimeUtil.now)
+for 20000 [Net.send-bytes msg sock Net.recv-until sock nl drop]
+def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
+print
+(join ""
+      ["boru-client  20000 RT  " (convert String dur) " ms  "
+          (convert String (div dur 20000000.0)) " req/s"
+      ]
+  )
+Net.close sock

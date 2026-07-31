@@ -7,7 +7,7 @@
 //     pi and e.
 //
 //   - A test case for the kernel boundary — calc imports only
-//     github.com/aql-lang/aql/eng/go (kernel + parser) and defines every
+//     github.com/boru-lang/boru/eng/go (kernel + parser) and defines every
 //     word it needs (see words.go). If calc compiles, runs, and tests
 //     pass, the eng module is a self-sufficient algorithm library.
 //
@@ -21,8 +21,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // Calc bundles the registry + engine plus the configured output writer

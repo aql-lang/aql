@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // Seam-7 coverage for log_logger.go (sub-registry init-error arms),

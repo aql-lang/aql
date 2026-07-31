@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
-// The ini PARSER ships built-in with aql:parselang (backed by
+// The ini PARSER ships built-in with boru:parselang (backed by
 // github.com/tabnas/ini/go). Unlike the calc host parser, no registration is
 // needed — importing the module is enough for `parse ini <text>` to resolve.
 
-const iniImp = `import "aql:parselang"  `
+const iniImp = `import "boru:parselang"  `
 
 // TestParseLangIniBuiltin pins the decode: top-level entries, a {src:…}
 // source, and a nested [section] whose recognised boolean decodes to a

@@ -11,7 +11,7 @@ import (
 // doc examples rely on. The comment's leading padding is still collapsed.
 func TestTrailingCommentNotDetached(t *testing.T) {
 	// A long annotated statement stays on one line.
-	src := "import \"aql:time-util\" TimeUtil.await [[add 1 2] [add 3 4]]    # returns [3 7]\n"
+	src := "import \"boru:time-util\" TimeUtil.await [[add 1 2] [add 3 4]]    # returns [3 7]\n"
 	got := Format(src)
 	if lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n"); len(lines) != 1 {
 		t.Errorf("annotated statement was wrapped into %d lines:\n%s", len(lines), got)

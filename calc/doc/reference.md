@@ -1,7 +1,7 @@
 # Reference — the eng API that calc consumes
 
 This is an exhaustive list of every symbol calc imports from
-`github.com/aql-lang/aql/eng/go` and `github.com/aql-lang/aql/eng/go/parser`,
+`github.com/boru-lang/boru/eng/go` and `github.com/boru-lang/boru/eng/go/parser`,
 with a one-line definition each. It exists to be looked up, not
 read in order.
 
@@ -9,7 +9,7 @@ The grouping mirrors how the symbols are used in calc's source.
 Where two symbols only differ in detail (e.g. `eng.New` vs
 `eng.NewTop`), they are listed together.
 
-## Module: `github.com/aql-lang/aql/eng/go`
+## Module: `github.com/boru-lang/boru/eng/go`
 
 ### Registry construction
 
@@ -85,13 +85,13 @@ vocabulary doesn't need them.
 | `eng.Engine` | The interpreter loop. Methods used: `Run`. |
 | `r.Defs.Names() []string` | All currently-defined word names. The REPL's `:words` meta-command calls this. |
 
-## Module: `github.com/aql-lang/aql/eng/go/parser`
+## Module: `github.com/boru-lang/boru/eng/go/parser`
 
 | Symbol | What it does |
 | --- | --- |
-| `parser.Parse(src string) ([]eng.Value, error)` | Parse AQL source into a token slice. Used both at `calc.New` setup (via `r.SetParseFunc`) and per-line by `Calc.Eval`. |
+| `parser.Parse(src string) ([]eng.Value, error)` | Parse BORU source into a token slice. Used both at `calc.New` setup (via `r.SetParseFunc`) and per-line by `Calc.Eval`. |
 
-The parser is configured for the canonical AQL syntax —
+The parser is configured for the canonical BORU syntax —
 parenthesised forms, dotted access, template strings, typed
 lists `[:T]`, typed maps `{:T}`, etc. Calc doesn't use most of
 this, but registering the parser keeps the door open for words
@@ -101,11 +101,11 @@ that take source strings at runtime.
 
 Worth listing because the absence is the whole point.
 
-- **`github.com/aql-lang/aql/lang/go`** — the language layer with
+- **`github.com/boru-lang/boru/lang/go`** — the language layer with
   the production word set. Calc deliberately avoids it.
-- **`github.com/aql-lang/aql/lang/go/native`** — the engine shim
+- **`github.com/boru-lang/boru/lang/go/native`** — the engine shim
   that lang re-exports through. Calc reaches the bare eng API.
-- **`github.com/aql-lang/aql/lang/go/native`** — array / fetch /
+- **`github.com/boru-lang/boru/lang/go/native`** — array / fetch /
   query natives. None of them belong in a calculator.
 - **`modernc.org/sqlite`, `voxgig/struct`, `csv`, `directive`** —
   lang's transitive deps. Calc avoids them by not depending on

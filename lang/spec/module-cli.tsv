@@ -1,9 +1,9 @@
-# AQL Language Specification: the aql:cli module
+# BORU Language Specification: the boru:cli module
 # Format: input<TAB>expected<TAB>description
 #
-# aql:cli — conventional command-line argument parsing (design/CLI-PROGRAMS.0.md
-# §8, design/CLI-PROGRAMS.1.md §2-3), implemented in AQL
-# (lang/go/modules/cli.aql). A spec map drives four words:
+# boru:cli — conventional command-line argument parsing (design/CLI-PROGRAMS.0.md
+# §8, design/CLI-PROGRAMS.1.md §2-3), implemented in BORU
+# (lang/go/modules/cli.boru). A spec map drives four words:
 #
 #   Cli.parse    (spec) (argv)  -> {ok flags args command} | {ok:false err usage}
 #   Cli.dispatch (spec) (argv)  -> {action code out err flags args command}
@@ -12,94 +12,94 @@
 #                                  arm ends in IO.exit, which would end the
 #                                  runner — hermeticExempt names the Go tests)
 #
-# argv is ALWAYS an explicit parameter, never an internal IO.args read: `aql
+# argv is ALWAYS an explicit parameter, never an internal IO.args read: `boru
 # test` and the spec runner cannot inject an argument vector, so a parser that
 # read it internally would be untestable by construction.
 #
-# Every row leads with `import "aql:cli"`. parse / dispatch / usage are PURE —
+# Every row leads with `import "boru:cli"`. parse / dispatch / usage are PURE —
 # no IO, no environment, no raising — so every row here runs with nothing
 # installed, which is what makes the flag grammar spec-pinnable at all.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  the flag grammar — long, short, clustered, =value, --no-X, --
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["--v"]).flags).v) eq true	true	a long bool flag sets true
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"verbose" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["-v"]).flags).verbose) eq true	true	the short spelling of the same flag
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["--kind" "csv"]).flags).kind) eq 'csv'	true	--long value takes the following token
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["--kind=csv"]).flags).kind) eq 'csv'	true	--long=value takes it inline
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["--kind="]).flags).kind) eq ''	true	an empty inline value is a real empty string
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["-k" "tsv"]).flags).kind) eq 'tsv'	true	-s value takes the following token
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"verbose" short:"v" kind:"count"}] args:{name:"f" min:0}} ["-vvv"]).flags).verbose) eq 3	true	a clustered count flag counts occurrences
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"a" short:"a" kind:"bool"} {name:"b" short:"b" kind:"bool"}] args:{name:"f" min:0}} ["-ab"]).flags).b) eq true	true	clustered shorts set each flag
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"watch" short:"w" kind:"bool" default:true}] args:{name:"f" min:0}} ["--no-watch"]).flags).watch) eq false	true	--no-X clears a bool
-import "aql:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["--" "-v" "x"]).args) deq ['-v' 'x']	true	a bare -- ends flag processing
-import "aql:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["-"]).args) deq ['-']	true	a lone - is a positional, not a flag
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["--kind" "a" "--kind" "b"]).flags).kind) deq ['a' 'b']	true	a repeated string flag collects into a List
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["--v"]).flags).v) eq true	true	a long bool flag sets true
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"verbose" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["-v"]).flags).verbose) eq true	true	the short spelling of the same flag
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["--kind" "csv"]).flags).kind) eq 'csv'	true	--long value takes the following token
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["--kind=csv"]).flags).kind) eq 'csv'	true	--long=value takes it inline
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["--kind="]).flags).kind) eq ''	true	an empty inline value is a real empty string
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["-k" "tsv"]).flags).kind) eq 'tsv'	true	-s value takes the following token
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"verbose" short:"v" kind:"count"}] args:{name:"f" min:0}} ["-vvv"]).flags).verbose) eq 3	true	a clustered count flag counts occurrences
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"a" short:"a" kind:"bool"} {name:"b" short:"b" kind:"bool"}] args:{name:"f" min:0}} ["-ab"]).flags).b) eq true	true	clustered shorts set each flag
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"watch" short:"w" kind:"bool" default:true}] args:{name:"f" min:0}} ["--no-watch"]).flags).watch) eq false	true	--no-X clears a bool
+import "boru:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["--" "-v" "x"]).args) deq ['-v' 'x']	true	a bare -- ends flag processing
+import "boru:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["-"]).args) deq ['-']	true	a lone - is a positional, not a flag
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["--kind" "a" "--kind" "b"]).flags).kind) deq ['a' 'b']	true	a repeated string flag collects into a List
 #
 # §2  defaults — a flag the argv never mentioned still answers
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"watch" short:"w" kind:"bool" default:true}] args:{name:"f" min:0}} []).flags).watch) eq true	true	a declared default fills an unmentioned flag
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} []).flags).kind) is None	true	an unmentioned string flag with no default is none
-import "aql:cli"  (((Cli.parse {name:"t" flags:[{name:"verbose" short:"v" kind:"count"}] args:{name:"f" min:0}} []).flags).verbose) eq 0	true	an unmentioned count flag is 0
-import "aql:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} []).ok) eq true	true	an empty argv parses cleanly
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"watch" short:"w" kind:"bool" default:true}] args:{name:"f" min:0}} []).flags).watch) eq true	true	a declared default fills an unmentioned flag
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} []).flags).kind) is None	true	an unmentioned string flag with no default is none
+import "boru:cli"  (((Cli.parse {name:"t" flags:[{name:"verbose" short:"v" kind:"count"}] args:{name:"f" min:0}} []).flags).verbose) eq 0	true	an unmentioned count flag is 0
+import "boru:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} []).ok) eq true	true	an empty argv parses cleanly
 #
 # §3  errors are DATA — the parse never raises
-import "aql:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["--wach"]).ok) eq false	true	an unknown long flag fails
-import "aql:cli"  ((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["--kind"]).ok) eq false	true	a value-taking flag with no value fails
-import "aql:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:1}} []).ok) eq false	true	fewer positionals than min fails
-import "aql:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0 max:1}} ["a" "b"]).ok) eq false	true	more positionals than max fails
-import "aql:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["--wach"]).err) neq ''	true	a failed parse carries a one-line error
-import "aql:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["--wach"]).usage) neq ''	true	and the usage text to print beside it
+import "boru:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["--wach"]).ok) eq false	true	an unknown long flag fails
+import "boru:cli"  ((Cli.parse {name:"t" flags:[{name:"kind" short:"k" kind:"string"}] args:{name:"f" min:0}} ["--kind"]).ok) eq false	true	a value-taking flag with no value fails
+import "boru:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:1}} []).ok) eq false	true	fewer positionals than min fails
+import "boru:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0 max:1}} ["a" "b"]).ok) eq false	true	more positionals than max fails
+import "boru:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["--wach"]).err) neq ''	true	a failed parse carries a one-line error
+import "boru:cli"  ((Cli.parse {name:"t" flags:[{name:"v" short:"v" kind:"bool"}] args:{name:"f" min:0}} ["--wach"]).usage) neq ''	true	and the usage text to print beside it
 #
 # §4  Cli.dispatch — the decision a driver acts on
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} []).action) eq 'run'	true	an ordinary argv dispatches to run
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} []).code) eq 0	true	whose exit code is 0
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--help"]).action) eq 'help'	true	--help is an action, not an error
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["-h"]).action) eq 'help'	true	and so is its short spelling
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--version"]).action) eq 'version'	true	--version likewise
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--version"]).code) eq 0	true	both exit 0
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--nope"]).action) eq 'error'	true	an unknown flag is the error action
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--nope"]).code) eq 2	true	with the conventional usage-error status 2
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--version"]).out) neq ''	true	the version action carries the text to print
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--nope"]).err) neq ''	true	the error action carries stderr text
-import "aql:cli"  (((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} []).out)) eq ''	true	the run action prints nothing of its own
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} []).action) eq 'run'	true	an ordinary argv dispatches to run
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} []).code) eq 0	true	whose exit code is 0
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--help"]).action) eq 'help'	true	--help is an action, not an error
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["-h"]).action) eq 'help'	true	and so is its short spelling
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--version"]).action) eq 'version'	true	--version likewise
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--version"]).code) eq 0	true	both exit 0
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--nope"]).action) eq 'error'	true	an unknown flag is the error action
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--nope"]).code) eq 2	true	with the conventional usage-error status 2
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--version"]).out) neq ''	true	the version action carries the text to print
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} ["--nope"]).err) neq ''	true	the error action carries stderr text
+import "boru:cli"  (((Cli.dispatch {name:"t" version:"1.0" flags:[] args:{name:"f" min:0}} []).out)) eq ''	true	the run action prints nothing of its own
 #
 # §5  Cli.usage — generated, and it names what the spec declared
-import "aql:cli"  import "aql:string-util"  (StringUtil.contains "tool" (Cli.usage {name:"tool" version:"2.1" summary:"does a thing" flags:[] args:{name:"f" min:0}}))	true	the usage text names the program
-import "aql:cli"  import "aql:string-util"  (StringUtil.contains "does a thing" (Cli.usage {name:"tool" version:"2.1" summary:"does a thing" flags:[] args:{name:"f" min:0}}))	true	and its summary
-import "aql:cli"  import "aql:string-util"  (StringUtil.contains "--kind" (Cli.usage {name:"tool" version:"2.1" flags:[{name:"kind" short:"k" kind:"string" value:"KIND" help:"the parser"}] args:{name:"f" min:0}}))	true	each declared flag appears
-import "aql:cli"  import "aql:string-util"  (StringUtil.contains "the parser" (Cli.usage {name:"tool" version:"2.1" flags:[{name:"kind" short:"k" kind:"string" value:"KIND" help:"the parser"}] args:{name:"f" min:0}}))	true	with its help text
-import "aql:cli"  import "aql:string-util"  (StringUtil.contains "--help" (Cli.usage {name:"tool" version:"2.1" flags:[] args:{name:"f" min:0}}))	true	the implicit --help is documented too
+import "boru:cli"  import "boru:string-util"  (StringUtil.contains "tool" (Cli.usage {name:"tool" version:"2.1" summary:"does a thing" flags:[] args:{name:"f" min:0}}))	true	the usage text names the program
+import "boru:cli"  import "boru:string-util"  (StringUtil.contains "does a thing" (Cli.usage {name:"tool" version:"2.1" summary:"does a thing" flags:[] args:{name:"f" min:0}}))	true	and its summary
+import "boru:cli"  import "boru:string-util"  (StringUtil.contains "--kind" (Cli.usage {name:"tool" version:"2.1" flags:[{name:"kind" short:"k" kind:"string" value:"KIND" help:"the parser"}] args:{name:"f" min:0}}))	true	each declared flag appears
+import "boru:cli"  import "boru:string-util"  (StringUtil.contains "the parser" (Cli.usage {name:"tool" version:"2.1" flags:[{name:"kind" short:"k" kind:"string" value:"KIND" help:"the parser"}] args:{name:"f" min:0}}))	true	with its help text
+import "boru:cli"  import "boru:string-util"  (StringUtil.contains "--help" (Cli.usage {name:"tool" version:"2.1" flags:[] args:{name:"f" min:0}}))	true	the implicit --help is documented too
 #
 # §6  the spec map is data — an absent field takes its default
-import "aql:cli"  ((Cli.parse {name:"t" args:{name:"f" min:0}} ["a"]).args) deq ['a']	true	a spec with no flags still parses positionals
-import "aql:cli"  ((Cli.parse {name:"t" flags:[]} ["a" "b"]).ok) eq true	true	a spec with no args block accepts any positionals
-import "aql:cli"  import "aql:string-util"  (StringUtil.contains "t" ((Cli.dispatch {name:"t" flags:[] args:{name:"f" min:0}} ["--version"]).out))	true	a spec with no version still answers --version
+import "boru:cli"  ((Cli.parse {name:"t" args:{name:"f" min:0}} ["a"]).args) deq ['a']	true	a spec with no flags still parses positionals
+import "boru:cli"  ((Cli.parse {name:"t" flags:[]} ["a" "b"]).ok) eq true	true	a spec with no args block accepts any positionals
+import "boru:cli"  import "boru:string-util"  (StringUtil.contains "t" ((Cli.dispatch {name:"t" flags:[] args:{name:"f" min:0}} ["--version"]).out))	true	a spec with no version still answers --version
 #
 # §7  Cli.usage {width color} — the terminal comes IN, it is never read
 #     (design/CLI-PROGRAMS.1.md §3). A pure renderer that consulted COLUMNS and
 #     is-tty would answer differently per terminal, which is the same thing as
 #     being untestable.
-import "aql:cli"  (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}}) eq (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}} {})	true	an empty options map renders exactly like the one-argument form
-import "aql:cli"  (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}}) eq (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}} {width: 0})	true	width 0 means no wrapping
-import "aql:cli"  (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}}) eq (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}} {color: false})	true	colour off is byte-identical
-import "aql:cli"  import "aql:string-util"  (size (StringUtil.split "\n" (Cli.usage {name:"t" flags:[{name:"kind" short:"k" kind:"string" value:"K" help:"force a particular parser kind for the input files"}] args:{name:"f" min:0}} {width: 40}) {keepEmpty:true})) gt 8	true	a narrow width splits a long help line onto more rows
-import "aql:cli"  import "aql:string-util"  StringUtil.contains "options:" (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}} {color: true})	true	colour still contains the header text it wraps
+import "boru:cli"  (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}}) eq (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}} {})	true	an empty options map renders exactly like the one-argument form
+import "boru:cli"  (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}}) eq (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}} {width: 0})	true	width 0 means no wrapping
+import "boru:cli"  (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}}) eq (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}} {color: false})	true	colour off is byte-identical
+import "boru:cli"  import "boru:string-util"  (size (StringUtil.split "\n" (Cli.usage {name:"t" flags:[{name:"kind" short:"k" kind:"string" value:"K" help:"force a particular parser kind for the input files"}] args:{name:"f" min:0}} {width: 40}) {keepEmpty:true})) gt 8	true	a narrow width splits a long help line onto more rows
+import "boru:cli"  import "boru:string-util"  StringUtil.contains "options:" (Cli.usage {name:"t" flags:[] args:{name:"f" min:0}} {color: true})	true	colour still contains the header text it wraps
 #
 # §8  Cli.term-opts — the terminal, as data. Cli.main reads COLUMNS, NO_COLOR
 #     and is-tty and hands them here; a driver that renders usage itself wants
 #     the same rule, so the rule is exported rather than hidden.
-import "aql:cli"  ((Cli.term-opts "80" none true) get "width") eq 80	true	a numeric COLUMNS becomes the wrap width
-import "aql:cli"  ((Cli.term-opts none none true) get "width") eq 0	true	an unset COLUMNS means no wrapping
-import "aql:cli"  ((Cli.term-opts "eighty" none true) get "width") eq 0	true	a COLUMNS that is not a number is ignored, not fatal
-import "aql:cli"  ((Cli.term-opts "80x" none true) get "width") eq 0	true	and it is rejected as a whole rather than partially read
-import "aql:cli"  ((Cli.term-opts none none true) get "color") eq true	true	a terminal with NO_COLOR unset gets colour
-import "aql:cli"  ((Cli.term-opts none "1" true) get "color") eq false	true	NO_COLOR turns it off
-import "aql:cli"  ((Cli.term-opts none none false) get "color") eq false	true	and so does a stream that is not a terminal
+import "boru:cli"  ((Cli.term-opts "80" none true) get "width") eq 80	true	a numeric COLUMNS becomes the wrap width
+import "boru:cli"  ((Cli.term-opts none none true) get "width") eq 0	true	an unset COLUMNS means no wrapping
+import "boru:cli"  ((Cli.term-opts "eighty" none true) get "width") eq 0	true	a COLUMNS that is not a number is ignored, not fatal
+import "boru:cli"  ((Cli.term-opts "80x" none true) get "width") eq 0	true	and it is rejected as a whole rather than partially read
+import "boru:cli"  ((Cli.term-opts none none true) get "color") eq true	true	a terminal with NO_COLOR unset gets colour
+import "boru:cli"  ((Cli.term-opts none "1" true) get "color") eq false	true	NO_COLOR turns it off
+import "boru:cli"  ((Cli.term-opts none none false) get "color") eq false	true	and so does a stream that is not a terminal
 #
 # §9  `--` and `-` around a subcommand, and the unknown-flag rule
-import "aql:cli"  ((Cli.parse {name:"c" commands:[{name:"build"}] args:{name:"f" min:0}} ["build" "x"]).command) eq 'build'	true	the first positional selects the command
-import "aql:cli"  ((Cli.parse {name:"c" commands:[{name:"build"}] args:{name:"f" min:0}} ["build" "x"]).args) deq ['x']	true	and is removed from the positionals
-import "aql:cli"  ((Cli.parse {name:"c" commands:[{name:"build"}] args:{name:"f" min:0}} ["--" "build" "x"]).ok) eq false	true	a positional ESCAPED by -- is not a command
-import "aql:cli"  ((Cli.parse {name:"c" commands:[{name:"build"}] args:{name:"f" min:0}} ["-" "build"]).args) deq ['-']	true	a lone - is a positional, never the command
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1" flags:[] args:{name:"f" min:0}} ["--nope" "--help"]).action) eq 'error'	true	an unknown flag is not rescued by a --help elsewhere in argv
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1" flags:[] args:{name:"f" min:0}} ["--nope" "--help"]).code) eq 2	true	and it still exits 2, not 0
-import "aql:cli"  ((Cli.dispatch {name:"t" version:"1" flags:[] args:{name:"f" min:1}} ["--version"]).action) eq 'version'	true	an ARITY failure does yield to the version the user asked for
+import "boru:cli"  ((Cli.parse {name:"c" commands:[{name:"build"}] args:{name:"f" min:0}} ["build" "x"]).command) eq 'build'	true	the first positional selects the command
+import "boru:cli"  ((Cli.parse {name:"c" commands:[{name:"build"}] args:{name:"f" min:0}} ["build" "x"]).args) deq ['x']	true	and is removed from the positionals
+import "boru:cli"  ((Cli.parse {name:"c" commands:[{name:"build"}] args:{name:"f" min:0}} ["--" "build" "x"]).ok) eq false	true	a positional ESCAPED by -- is not a command
+import "boru:cli"  ((Cli.parse {name:"c" commands:[{name:"build"}] args:{name:"f" min:0}} ["-" "build"]).args) deq ['-']	true	a lone - is a positional, never the command
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1" flags:[] args:{name:"f" min:0}} ["--nope" "--help"]).action) eq 'error'	true	an unknown flag is not rescued by a --help elsewhere in argv
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1" flags:[] args:{name:"f" min:0}} ["--nope" "--help"]).code) eq 2	true	and it still exits 2, not 0
+import "boru:cli"  ((Cli.dispatch {name:"t" version:"1" flags:[] args:{name:"f" min:1}} ["--version"]).action) eq 'version'	true	an ARITY failure does yield to the version the user asked for

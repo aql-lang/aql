@@ -4,15 +4,15 @@ import (
 	"fmt"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestPublicDefineTypeAPI exercises the embedding-API convergence: a host
-// defines types three ways — from AQL source (DefineTypeFromSource), from
+// defines types three ways — from BORU source (DefineTypeFromSource), from
 // a Go membership func (DefineMemberType), and as a union (DefineEnum) —
-// then both AQL source AND a host-registered signature use those types,
-// all on one lang.AQL instance. This is the external counterpart of `def`:
+// then both BORU source AND a host-registered signature use those types,
+// all on one lang.BORU instance. This is the external counterpart of `def`:
 // types defined from Go are first-class and interchangeable with
 // source-defined ones.
 func TestPublicDefineTypeAPI(t *testing.T) {
@@ -21,7 +21,7 @@ func TestPublicDefineTypeAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// (1) From AQL source — the host writes the body exactly as a script
+	// (1) From BORU source — the host writes the body exactly as a script
 	// would, and gets the *Type back.
 	point, err := a.DefineTypeFromSource("Point", "refine Record [x:Integer y:Integer]")
 	if err != nil {
@@ -46,7 +46,7 @@ func TestPublicDefineTypeAPI(t *testing.T) {
 		t.Fatalf("DefineEnum: %v", err)
 	}
 
-	// All three are bound and referenceable from AQL source on this
+	// All three are bound and referenceable from BORU source on this
 	// instance — just like `def`-installed types.
 	out, err := a.RunInterp(`[(4 is Even) (5 is Even) (3 is NumOrStr) ('x' is NumOrStr) (true is NumOrStr)]`)
 	if err != nil {

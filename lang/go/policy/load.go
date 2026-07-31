@@ -7,14 +7,14 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // Load resolves name to a Policy. Resolution order:
 //
 //  1. Built-in profile (full, trusted, sandbox, …).
-//  2. User profile at $XDG_CONFIG_HOME/aql/policies/<name>.jsonic
-//     (falls back to $HOME/.config/aql/policies/<name>.jsonic).
+//  2. User profile at $XDG_CONFIG_HOME/boru/policies/<name>.jsonic
+//     (falls back to $HOME/.config/boru/policies/<name>.jsonic).
 //
 // Returns an error if the name cannot be resolved or if the resolved
 // profile fails to compile.
@@ -109,7 +109,7 @@ func CompileProfile(p *Profile) (Policy, error) {
 }
 
 // FromMap constructs a Policy from a map (as produced by jsonic
-// parsing or by handcrafting in Go). Used by the aql:vm module to
+// parsing or by handcrafting in Go). Used by the boru:vm module to
 // accept policies as runtime data.
 func FromMap(m map[string]any) (Policy, error) {
 	data, err := json.Marshal(m)
@@ -167,15 +167,15 @@ func loadProfileByName(name string) (*Profile, error) {
 }
 
 // userPolicyDirs returns the candidate directories searched for
-// user-defined profiles. Order: $XDG_CONFIG_HOME/aql/policies first,
-// then $HOME/.config/aql/policies as the fallback.
+// user-defined profiles. Order: $XDG_CONFIG_HOME/boru/policies first,
+// then $HOME/.config/boru/policies as the fallback.
 func userPolicyDirs() []string {
 	var dirs []string
 	if x := os.Getenv("XDG_CONFIG_HOME"); x != "" {
-		dirs = append(dirs, filepath.Join(x, "aql", "policies"))
+		dirs = append(dirs, filepath.Join(x, "boru", "policies"))
 	}
 	if h, err := os.UserHomeDir(); err == nil {
-		dirs = append(dirs, filepath.Join(h, ".config", "aql", "policies"))
+		dirs = append(dirs, filepath.Join(h, ".config", "boru", "policies"))
 	}
 	return dirs
 }

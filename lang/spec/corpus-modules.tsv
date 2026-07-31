@@ -1,186 +1,186 @@
-# AQL corpus: native module words (auto-generated from `aql describe` examples, verified interpret+check+compile)
+# BORU corpus: native module words (auto-generated from `boru describe` examples, verified interpret+check+compile)
 # Format: input<TAB>expected<TAB>word
-import "aql:array-util" end ArrayUtil.at ['a','b'] ['c','d']	['c' 'c']	array-util:at
-import "aql:array-util" end ArrayUtil.compress ['a','b'] ['c','d']	['c' 'd']	array-util:compress
-import "aql:array-util" end ArrayUtil.expand ['a','b'] ['c','d']	['c' 'd']	array-util:expand
-import "aql:array-util" end ArrayUtil.grade ['a','b']	[0 1]	array-util:grade
-import "aql:array-util" end ArrayUtil.group ['a','b'] ['c','d']	{'a':['c'] 'b':['d']}	array-util:group
-import "aql:array-util" end ArrayUtil.group ['e','f']	{'e':[0] 'f':[1]}	array-util:group
-import "aql:array-util" end ArrayUtil.indices ['a','b'] ['c','d']	[-1 -1]	array-util:indices
-import "aql:array-util" end ArrayUtil.insert-at 2 2 ['a','b']	['a' 'b' 2]	array-util:insert-at
-import "aql:array-util" end ArrayUtil.member ['a','b'] ['c','d']	[false false]	array-util:member
-import "aql:array-util" end ArrayUtil.pairs ['a','b']	[['a' 'b']]	array-util:pairs
-import "aql:array-util" end ArrayUtil.rank ['a','b']	1	array-util:rank
-import "aql:array-util" end ArrayUtil.replicate ['a','b'] ['c','d']	[]	array-util:replicate
-import "aql:array-util" end ArrayUtil.shape ['a','b']	[2]	array-util:shape
-import "aql:array-util" end ArrayUtil.sortby ['a','b'] ['c','d']	['c' 'd']	array-util:sortby
-import "aql:array-util" end ArrayUtil.unique ['a','b']	['a' 'b']	array-util:unique
-import "aql:array-util" end ArrayUtil.where ['a','b']	[0 1]	array-util:where
-import "aql:array-util" end ArrayUtil.window 2 ['a','b']	[['a' 'b']]	array-util:window
-import "aql:bin-util" end BinUtil.band 2 3	2	bin-util:band
-import "aql:bin-util" end BinUtil.bitlen 2	2	bin-util:bitlen
-import "aql:bin-util" end BinUtil.bnot 2	-3	bin-util:bnot
-import "aql:bin-util" end BinUtil.bor 2 3	3	bin-util:bor
-import "aql:bin-util" end BinUtil.bsl 2 3	12	bin-util:bsl
-import "aql:bin-util" end BinUtil.bsr 2 3	0	bin-util:bsr
-import "aql:bin-util" end BinUtil.busr 2 3	0	bin-util:busr
-import "aql:bin-util" end BinUtil.bxor 2 3	1	bin-util:bxor
-import "aql:bin-util" end BinUtil.chr 2	''	bin-util:chr
-import "aql:bin-util" end BinUtil.clear 2 3	3	bin-util:clear
-import "aql:bin-util" end BinUtil.clz 2	62	bin-util:clz
-import "aql:bin-util" end BinUtil.ctz 2	1	bin-util:ctz
-import "aql:bin-util" end BinUtil.extract 2 3 4	1	bin-util:extract
-import "aql:bin-util" end BinUtil.fnv32 'a'	3826002220	bin-util:fnv32
-import "aql:bin-util" end BinUtil.fnv64 'a'	3414815163700866188	bin-util:fnv64
-import "aql:bin-util" end BinUtil.insert 2 3 4 5	1	bin-util:insert
-import "aql:bin-util" end BinUtil.mask 2	3	bin-util:mask
-import "aql:bin-util" end BinUtil.ord 'a'	97	bin-util:ord
-import "aql:bin-util" end BinUtil.parity 2	true	bin-util:parity
-import "aql:bin-util" end BinUtil.popcount 2	1	bin-util:popcount
-import "aql:bin-util" end BinUtil.reverse 2	4611686018427387904	bin-util:reverse
-import "aql:bin-util" end BinUtil.rotl 2 3	12	bin-util:rotl
-import "aql:bin-util" end BinUtil.rotr 2 3	-4611686018427387904	bin-util:rotr
-import "aql:bin-util" end BinUtil.set 2 3	7	bin-util:set
-import "aql:bin-util" end BinUtil.swap 2	144115188075855872	bin-util:swap
-import "aql:bin-util" end BinUtil.test 2 3	false	bin-util:test
-import "aql:bin-util" end BinUtil.toggle 2 3	7	bin-util:toggle
-import "aql:emitlang" end EmitLang.emit_auto 2 {}	'2'	emitlang:emit_auto
-import "aql:emitlang" end EmitLang.emit_json 2 {}	'2'	emitlang:emit_json
-import "aql:emitlang" end EmitLang.emit_jsonic 2 {}	'2'	emitlang:emit_jsonic
-import "aql:emitlang" end EmitLang.emit_yaml 2 {}	'2'	emitlang:emit_yaml
-import "aql:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'a') 'b' {a:1,b:2}	a	io:write
-import "aql:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'c') 2 {c:3,d:4}	c	io:write
-import "aql:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'd') 'e'	d	io:write
-import "aql:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'f') 3	f	io:write
-import "aql:logic-util" end LogicUtil.iff 2 3	true	logic-util:iff
-import "aql:logic-util" end LogicUtil.iff true false	false	logic-util:iff
-import "aql:logic-util" end LogicUtil.implies 2 3	true	logic-util:implies
-import "aql:logic-util" end LogicUtil.implies true false	true	logic-util:implies
-import "aql:logic-util" end LogicUtil.nand 2 3	false	logic-util:nand
-import "aql:logic-util" end LogicUtil.nand true false	true	logic-util:nand
-import "aql:logic-util" end LogicUtil.nor 2 3	false	logic-util:nor
-import "aql:logic-util" end LogicUtil.nor true false	false	logic-util:nor
-import "aql:logic-util" end LogicUtil.xnor 2 3	true	logic-util:xnor
-import "aql:logic-util" end LogicUtil.xnor true false	false	logic-util:xnor
-import "aql:math-util" end MathUtil.abs 2	2	math-util:abs
-import "aql:math-util" end MathUtil.acos 2	nan	math-util:acos
-import "aql:math-util" end MathUtil.asin 2	nan	math-util:asin
-import "aql:math-util" end MathUtil.atan 2	1.1071487177940904	math-util:atan
-import "aql:math-util" end MathUtil.atan2 2 3.5	1.0516502125483735	math-util:atan2
-import "aql:math-util" end MathUtil.cbrt 2	1.2599210498948732	math-util:cbrt
-import "aql:math-util" end MathUtil.copysign 2 3.5	3.5	math-util:copysign
-import "aql:math-util" end MathUtil.cos 2	-0.4161468365471424	math-util:cos
-import "aql:math-util" end MathUtil.exp 2	7.38905609893065	math-util:exp
-import "aql:math-util" end MathUtil.fma 2 3.5 4	11.0	math-util:fma
-import "aql:math-util" end MathUtil.hypot 2 3.5	4.031128874149275	math-util:hypot
-import "aql:math-util" end MathUtil.is-finite 2	true	math-util:is-finite
-import "aql:math-util" end MathUtil.is-inf 2	false	math-util:is-inf
-import "aql:math-util" end MathUtil.is-nan 2	false	math-util:is-nan
-import "aql:math-util" end MathUtil.log 2	0.6931471805599453	math-util:log
-import "aql:math-util" end MathUtil.log10 2	0.3010299956639812	math-util:log10
-import "aql:math-util" end MathUtil.log2 2	1.0	math-util:log2
-import "aql:math-util" end MathUtil.logb 2	1.0	math-util:logb
-import "aql:math-util" end MathUtil.max 2 3.5	3.5	math-util:max
-import "aql:math-util" end MathUtil.min 2 3.5	2.0	math-util:min
-import "aql:math-util" end MathUtil.negate 2	-2	math-util:negate
-import "aql:math-util" end MathUtil.nextafter 2 3.5	3.4999999999999996	math-util:nextafter
-import "aql:math-util" end MathUtil.remainder 2 3.5	-0.5	math-util:remainder
-import "aql:math-util" end MathUtil.scalb 2 3.5	14.0	math-util:scalb
-import "aql:math-util" end MathUtil.sign 2	1	math-util:sign
-import "aql:math-util" end MathUtil.signbit 2	false	math-util:signbit
-import "aql:math-util" end MathUtil.sin 2	0.9092974268256816	math-util:sin
-import "aql:math-util" end MathUtil.sqrt 2	1.4142135623730951	math-util:sqrt
-import "aql:math-util" end MathUtil.tan 2	-2.185039863261519	math-util:tan
-import "aql:matrix-util" end MatrixUtil.eye 2	Matrix(2x2)	matrix-util:eye
-import "aql:matrix-util" end MatrixUtil.fill 2 3 2	Matrix(2x3)	matrix-util:fill
-import "aql:matrix-util" end MatrixUtil.ones 2 3	Matrix(3x2)	matrix-util:ones
-import "aql:matrix-util" end MatrixUtil.zeros 2 3	Matrix(3x2)	matrix-util:zeros
-import "aql:minilang" end MiniLang.lang_bf 'a' {a:1,b:2} 'b'	''	minilang:lang_bf
-import "aql:minilang" end MiniLang.lang_bf 'c' {c:3,d:4}	''	minilang:lang_bf
-import "aql:minilang" end MiniLang.lang_gex 'a' {a:1,b:2} 2	None	minilang:lang_gex
-import "aql:minilang" end MiniLang.lang_jp 'a' {a:1,b:2} 2	[]	minilang:lang_jp
-import "aql:minilang" end MiniLang.lang_math 'a' {a:1,b:2}	1	minilang:lang_math
-import "aql:minilang" end MiniLang.lang_re 'a' {a:1,b:2} 'b'	{ok:false ms:[] n:0}	minilang:lang_re
-import "aql:query" end Query.select ['a','b']	[]	query:select
-import "aql:rand" end Rand.int 2 3	2	rand:int
-import "aql:rand" end Rand.list-of ['a','b'] 2	['b' 'b']	rand:list-of
-import "aql:rand" end Rand.string 'a' 2	'aa'	rand:string
-import "aql:rand" end Rand.with-seed 2	{int:fn rand-int[[:Integer :Integer][Integer][word(rand-int)]] bool:fn rand-bool[[][Boolean][word(rand-bool)]] float:fn rand-float[[][Float][word(rand-float)]] string:fn rand-string[[:String :Integer][String][word(rand-string)]] one-of:fn rand-one-of[[:List][Any][word(rand-one-of)]] list-of:fn rand-list-of[[:List :Integer][List][word(rand-list-of)]] map-from:fn rand-map-from[[:Map][Map][word(rand-map-from)]]}	rand:with-seed
-import "aql:report" end Report.list 2	'2'	report:list
-import "aql:report" end Report.record 2	'2'	report:record
-import "aql:report" end Report.table 2	'2'	report:table
-import "aql:report" end Report.value 2	'2'	report:value
-import "aql:string-util" end StringUtil.changecase 'a' {style:'lower'}	'a'	string-util:changecase
-import "aql:string-util" end StringUtil.changecase 'b'	'b'	string-util:changecase
-import "aql:string-util" end StringUtil.changecase a/q {style:'lower'}	'a'	string-util:changecase
-import "aql:string-util" end StringUtil.changecase b/q	'b'	string-util:changecase
-import "aql:string-util" end StringUtil.concat ['c','d']	'cd'	string-util:concat
-import "aql:string-util" end StringUtil.concat {sep:''} ['a','b']	'ab'	string-util:concat
-import "aql:string-util" end StringUtil.contains 'a' 'b' {cs:'sensitive'}	false	string-util:contains
-import "aql:string-util" end StringUtil.contains 'c' 'd'	false	string-util:contains
-import "aql:string-util" end StringUtil.escape 'a' {quote:'none'}	'a'	string-util:escape
-import "aql:string-util" end StringUtil.escape 'b'	'b'	string-util:escape
-import "aql:string-util" end StringUtil.indexof 'a' 'b' {cs:'sensitive'}	-1	string-util:indexof
-import "aql:string-util" end StringUtil.indexof 'c' 'd'	-1	string-util:indexof
-import "aql:string-util" end StringUtil.lower 'a'	'a'	string-util:lower
-import "aql:string-util" end StringUtil.lower a/q	'a'	string-util:lower
-import "aql:string-util" end StringUtil.match 'a' 'b' {cs:'sensitive'}	{ok:false ms:[] n:0}	string-util:match
-import "aql:string-util" end StringUtil.match 'c' 'd'	{ok:false ms:[] n:0}	string-util:match
-import "aql:string-util" end StringUtil.normalize 'a' {trim:false}	'a'	string-util:normalize
-import "aql:string-util" end StringUtil.normalize 'b'	'b'	string-util:normalize
-import "aql:string-util" end StringUtil.pad 2 {side:'right'} 'a'	'a '	string-util:pad
-import "aql:string-util" end StringUtil.pad 3	'3                                           '	string-util:pad
-import "aql:string-util" end StringUtil.pad 3 'b'	'b  '	string-util:pad
-import "aql:string-util" end StringUtil.pad 4 2	'2   '	string-util:pad
-import "aql:string-util" end StringUtil.repeat 2 'a' {sep:''}	'aa'	string-util:repeat
-import "aql:string-util" end StringUtil.repeat 3 'b'	'bbb'	string-util:repeat
-import "aql:string-util" end StringUtil.replace 'a' 'b' 'c' {scope:'first'}	'c'	string-util:replace
-import "aql:string-util" end StringUtil.replace 'd' 'e' 'f'	'f'	string-util:replace
-import "aql:string-util" end StringUtil.split 'a' 'b' {keepEmpty:false}	['b']	string-util:split
-import "aql:string-util" end StringUtil.split 'c' 'd'	['d']	string-util:split
-import "aql:string-util" end StringUtil.trim 'a' {side:'both'}	'a'	string-util:trim
-import "aql:string-util" end StringUtil.trim 'b'	'b'	string-util:trim
-import "aql:string-util" end StringUtil.trim a/q {side:'both'}	'a'	string-util:trim
-import "aql:string-util" end StringUtil.trim b/q	'b'	string-util:trim
-import "aql:string-util" end StringUtil.upper 'a'	'A'	string-util:upper
-import "aql:string-util" end StringUtil.upper a/q	'A'	string-util:upper
-import "aql:struct-util" end StructUtil.clone 2	2	struct-util:clone
-import "aql:struct-util" end StructUtil.getpath 'a' 2	None	struct-util:getpath
-import "aql:struct-util" end StructUtil.inject 2 3	2	struct-util:inject
-import "aql:struct-util" end StructUtil.items 2	[]	struct-util:items
-import "aql:struct-util" end StructUtil.jsonify 3	'3'	struct-util:jsonify
-import "aql:struct-util" end StructUtil.jsonify {a:1,b:2} 2	'2'	struct-util:jsonify
-import "aql:struct-util" end StructUtil.merge 2 3	3	struct-util:merge
-import "aql:struct-util" end StructUtil.merge ['a','b'] {a:1,b:2}	['a' 'b']	struct-util:merge
-import "aql:struct-util" end StructUtil.merge {c:3,d:4} ['c','d']	['c' 'd']	struct-util:merge
-import "aql:struct-util" end StructUtil.nodify 2	2	struct-util:nodify
-import "aql:struct-util" end StructUtil.parse 'a'	'a'	struct-util:parse
-import "aql:struct-util" end StructUtil.selector {a:1,b:2} 2	[]	struct-util:selector
-import "aql:struct-util" end StructUtil.setpath 'a' 2 3	{a:3}	struct-util:setpath
-import "aql:struct-util" end StructUtil.setpath 4 'b' 5	{b:5}	struct-util:setpath
-import "aql:struct-util" end StructUtil.transform {a:1,b:2} 2	{a:1 b:2}	struct-util:transform
-import "aql:struct-util" end StructUtil.walk 2	[{path:'' value:2}]	struct-util:walk
-import "aql:test" end Test.case 2 ['a','b'] 'a'	{name:'a' in:(quote ['a' 'b']) out:2}	test:case
-import "aql:test" end Test.check-prop 'a' ['a','b'] ['c','d'] 2 3 4	{name:'a' ok:false runs:1 failing-input:'b' shrunk-input:'b' shrunk-source:'"b"' shrunk-cost:2 error:error(property returned non-Boolean (ProperString))}	test:check-prop
-import "aql:test" end Test.invoke 'a' ['a','b']	error(undefined word: a)	test:invoke
-import "aql:test" end Test.invoke a/q ['c','d']	error(undefined word: a)	test:invoke
-import "aql:test" end Test.prop 'a' ['a','b'] ['c','d']	{name:'a' gen:(quote ['a' 'b']) property:(quote ['c' 'd']) runs:100 seed:1 max-shrinks:200}	test:prop
-import "aql:test" end Test.skip 'a' ['a','b'] ['c','d'] 2 3 4	{name:'a' ok:true skipped:true runs:0}	test:skip
-import "aql:test" end Test.spec ['a','b'] 2 'a'	{name:'a' subject:2 cases:(quote ['a' 'b']) subs:[]}	test:spec
-import "aql:test" end Test.spec-with-subs ['a','b'] ['c','d'] 2 'a'	{name:'a' subject:2 cases:(quote ['c' 'd']) subs:(quote ['a' 'b'])}	test:spec-with-subs
-import "aql:time-util" end TimeUtil.await ['a','b']	['a' 'b']	time-util:await
-import "aql:time-util" end TimeUtil.cal-dur 2 3 4	P4Y3M2D	time-util:cal-dur
-import "aql:time-util" end TimeUtil.days 2	P0Y0M2D	time-util:days
-import "aql:time-util" end TimeUtil.hours 2	2h0m0s	time-util:hours
-import "aql:time-util" end TimeUtil.minutes 2	2m0s	time-util:minutes
-import "aql:time-util" end TimeUtil.months 2	P0Y2M0D	time-util:months
-import "aql:time-util" end TimeUtil.ms 2	2ms	time-util:ms
-import "aql:time-util" end TimeUtil.ns 2	2ns	time-util:ns
-import "aql:time-util" end TimeUtil.seconds 2	2s	time-util:seconds
-import "aql:time-util" end TimeUtil.unix 2	1970-01-01T00:00:02Z	time-util:unix
-import "aql:time-util" end TimeUtil.unix-ms 2	1970-01-01T00:00:00.002Z	time-util:unix-ms
-import "aql:time-util" end TimeUtil.unix-ns 2	1970-01-01T00:00:00.000000002Z	time-util:unix-ns
-import "aql:time-util" end TimeUtil.us 2	2µs	time-util:us
-import "aql:time-util" end TimeUtil.weeks 2	P0Y0M14D	time-util:weeks
-import "aql:time-util" end TimeUtil.years 2	P2Y0M0D	time-util:years
-import "aql:vm" end Vm.parse 'a'	(quote [word(a)])	vm:parse
+import "boru:array-util" end ArrayUtil.at ['a','b'] ['c','d']	['c' 'c']	array-util:at
+import "boru:array-util" end ArrayUtil.compress ['a','b'] ['c','d']	['c' 'd']	array-util:compress
+import "boru:array-util" end ArrayUtil.expand ['a','b'] ['c','d']	['c' 'd']	array-util:expand
+import "boru:array-util" end ArrayUtil.grade ['a','b']	[0 1]	array-util:grade
+import "boru:array-util" end ArrayUtil.group ['a','b'] ['c','d']	{'a':['c'] 'b':['d']}	array-util:group
+import "boru:array-util" end ArrayUtil.group ['e','f']	{'e':[0] 'f':[1]}	array-util:group
+import "boru:array-util" end ArrayUtil.indices ['a','b'] ['c','d']	[-1 -1]	array-util:indices
+import "boru:array-util" end ArrayUtil.insert-at 2 2 ['a','b']	['a' 'b' 2]	array-util:insert-at
+import "boru:array-util" end ArrayUtil.member ['a','b'] ['c','d']	[false false]	array-util:member
+import "boru:array-util" end ArrayUtil.pairs ['a','b']	[['a' 'b']]	array-util:pairs
+import "boru:array-util" end ArrayUtil.rank ['a','b']	1	array-util:rank
+import "boru:array-util" end ArrayUtil.replicate ['a','b'] ['c','d']	[]	array-util:replicate
+import "boru:array-util" end ArrayUtil.shape ['a','b']	[2]	array-util:shape
+import "boru:array-util" end ArrayUtil.sortby ['a','b'] ['c','d']	['c' 'd']	array-util:sortby
+import "boru:array-util" end ArrayUtil.unique ['a','b']	['a' 'b']	array-util:unique
+import "boru:array-util" end ArrayUtil.where ['a','b']	[0 1]	array-util:where
+import "boru:array-util" end ArrayUtil.window 2 ['a','b']	[['a' 'b']]	array-util:window
+import "boru:bin-util" end BinUtil.band 2 3	2	bin-util:band
+import "boru:bin-util" end BinUtil.bitlen 2	2	bin-util:bitlen
+import "boru:bin-util" end BinUtil.bnot 2	-3	bin-util:bnot
+import "boru:bin-util" end BinUtil.bor 2 3	3	bin-util:bor
+import "boru:bin-util" end BinUtil.bsl 2 3	12	bin-util:bsl
+import "boru:bin-util" end BinUtil.bsr 2 3	0	bin-util:bsr
+import "boru:bin-util" end BinUtil.busr 2 3	0	bin-util:busr
+import "boru:bin-util" end BinUtil.bxor 2 3	1	bin-util:bxor
+import "boru:bin-util" end BinUtil.chr 2	''	bin-util:chr
+import "boru:bin-util" end BinUtil.clear 2 3	3	bin-util:clear
+import "boru:bin-util" end BinUtil.clz 2	62	bin-util:clz
+import "boru:bin-util" end BinUtil.ctz 2	1	bin-util:ctz
+import "boru:bin-util" end BinUtil.extract 2 3 4	1	bin-util:extract
+import "boru:bin-util" end BinUtil.fnv32 'a'	3826002220	bin-util:fnv32
+import "boru:bin-util" end BinUtil.fnv64 'a'	3414815163700866188	bin-util:fnv64
+import "boru:bin-util" end BinUtil.insert 2 3 4 5	1	bin-util:insert
+import "boru:bin-util" end BinUtil.mask 2	3	bin-util:mask
+import "boru:bin-util" end BinUtil.ord 'a'	97	bin-util:ord
+import "boru:bin-util" end BinUtil.parity 2	true	bin-util:parity
+import "boru:bin-util" end BinUtil.popcount 2	1	bin-util:popcount
+import "boru:bin-util" end BinUtil.reverse 2	4611686018427387904	bin-util:reverse
+import "boru:bin-util" end BinUtil.rotl 2 3	12	bin-util:rotl
+import "boru:bin-util" end BinUtil.rotr 2 3	-4611686018427387904	bin-util:rotr
+import "boru:bin-util" end BinUtil.set 2 3	7	bin-util:set
+import "boru:bin-util" end BinUtil.swap 2	144115188075855872	bin-util:swap
+import "boru:bin-util" end BinUtil.test 2 3	false	bin-util:test
+import "boru:bin-util" end BinUtil.toggle 2 3	7	bin-util:toggle
+import "boru:emitlang" end EmitLang.emit_auto 2 {}	'2'	emitlang:emit_auto
+import "boru:emitlang" end EmitLang.emit_json 2 {}	'2'	emitlang:emit_json
+import "boru:emitlang" end EmitLang.emit_jsonic 2 {}	'2'	emitlang:emit_jsonic
+import "boru:emitlang" end EmitLang.emit_yaml 2 {}	'2'	emitlang:emit_yaml
+import "boru:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'a') 'b' {a:1,b:2}	a	io:write
+import "boru:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'c') 2 {c:3,d:4}	c	io:write
+import "boru:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'd') 'e'	d	io:write
+import "boru:io" end context dot __sys dot fs set mem true end IO.write (make Pathon 'f') 3	f	io:write
+import "boru:logic-util" end LogicUtil.iff 2 3	true	logic-util:iff
+import "boru:logic-util" end LogicUtil.iff true false	false	logic-util:iff
+import "boru:logic-util" end LogicUtil.implies 2 3	true	logic-util:implies
+import "boru:logic-util" end LogicUtil.implies true false	true	logic-util:implies
+import "boru:logic-util" end LogicUtil.nand 2 3	false	logic-util:nand
+import "boru:logic-util" end LogicUtil.nand true false	true	logic-util:nand
+import "boru:logic-util" end LogicUtil.nor 2 3	false	logic-util:nor
+import "boru:logic-util" end LogicUtil.nor true false	false	logic-util:nor
+import "boru:logic-util" end LogicUtil.xnor 2 3	true	logic-util:xnor
+import "boru:logic-util" end LogicUtil.xnor true false	false	logic-util:xnor
+import "boru:math-util" end MathUtil.abs 2	2	math-util:abs
+import "boru:math-util" end MathUtil.acos 2	nan	math-util:acos
+import "boru:math-util" end MathUtil.asin 2	nan	math-util:asin
+import "boru:math-util" end MathUtil.atan 2	1.1071487177940904	math-util:atan
+import "boru:math-util" end MathUtil.atan2 2 3.5	1.0516502125483735	math-util:atan2
+import "boru:math-util" end MathUtil.cbrt 2	1.2599210498948732	math-util:cbrt
+import "boru:math-util" end MathUtil.copysign 2 3.5	3.5	math-util:copysign
+import "boru:math-util" end MathUtil.cos 2	-0.4161468365471424	math-util:cos
+import "boru:math-util" end MathUtil.exp 2	7.38905609893065	math-util:exp
+import "boru:math-util" end MathUtil.fma 2 3.5 4	11.0	math-util:fma
+import "boru:math-util" end MathUtil.hypot 2 3.5	4.031128874149275	math-util:hypot
+import "boru:math-util" end MathUtil.is-finite 2	true	math-util:is-finite
+import "boru:math-util" end MathUtil.is-inf 2	false	math-util:is-inf
+import "boru:math-util" end MathUtil.is-nan 2	false	math-util:is-nan
+import "boru:math-util" end MathUtil.log 2	0.6931471805599453	math-util:log
+import "boru:math-util" end MathUtil.log10 2	0.3010299956639812	math-util:log10
+import "boru:math-util" end MathUtil.log2 2	1.0	math-util:log2
+import "boru:math-util" end MathUtil.logb 2	1.0	math-util:logb
+import "boru:math-util" end MathUtil.max 2 3.5	3.5	math-util:max
+import "boru:math-util" end MathUtil.min 2 3.5	2.0	math-util:min
+import "boru:math-util" end MathUtil.negate 2	-2	math-util:negate
+import "boru:math-util" end MathUtil.nextafter 2 3.5	3.4999999999999996	math-util:nextafter
+import "boru:math-util" end MathUtil.remainder 2 3.5	-0.5	math-util:remainder
+import "boru:math-util" end MathUtil.scalb 2 3.5	14.0	math-util:scalb
+import "boru:math-util" end MathUtil.sign 2	1	math-util:sign
+import "boru:math-util" end MathUtil.signbit 2	false	math-util:signbit
+import "boru:math-util" end MathUtil.sin 2	0.9092974268256816	math-util:sin
+import "boru:math-util" end MathUtil.sqrt 2	1.4142135623730951	math-util:sqrt
+import "boru:math-util" end MathUtil.tan 2	-2.185039863261519	math-util:tan
+import "boru:matrix-util" end MatrixUtil.eye 2	Matrix(2x2)	matrix-util:eye
+import "boru:matrix-util" end MatrixUtil.fill 2 3 2	Matrix(2x3)	matrix-util:fill
+import "boru:matrix-util" end MatrixUtil.ones 2 3	Matrix(3x2)	matrix-util:ones
+import "boru:matrix-util" end MatrixUtil.zeros 2 3	Matrix(3x2)	matrix-util:zeros
+import "boru:minilang" end MiniLang.lang_bf 'a' {a:1,b:2} 'b'	''	minilang:lang_bf
+import "boru:minilang" end MiniLang.lang_bf 'c' {c:3,d:4}	''	minilang:lang_bf
+import "boru:minilang" end MiniLang.lang_gex 'a' {a:1,b:2} 2	None	minilang:lang_gex
+import "boru:minilang" end MiniLang.lang_jp 'a' {a:1,b:2} 2	[]	minilang:lang_jp
+import "boru:minilang" end MiniLang.lang_math 'a' {a:1,b:2}	1	minilang:lang_math
+import "boru:minilang" end MiniLang.lang_re 'a' {a:1,b:2} 'b'	{ok:false ms:[] n:0}	minilang:lang_re
+import "boru:query" end Query.select ['a','b']	[]	query:select
+import "boru:rand" end Rand.int 2 3	2	rand:int
+import "boru:rand" end Rand.list-of ['a','b'] 2	['b' 'b']	rand:list-of
+import "boru:rand" end Rand.string 'a' 2	'aa'	rand:string
+import "boru:rand" end Rand.with-seed 2	{int:fn rand-int[[:Integer :Integer][Integer][word(rand-int)]] bool:fn rand-bool[[][Boolean][word(rand-bool)]] float:fn rand-float[[][Float][word(rand-float)]] string:fn rand-string[[:String :Integer][String][word(rand-string)]] one-of:fn rand-one-of[[:List][Any][word(rand-one-of)]] list-of:fn rand-list-of[[:List :Integer][List][word(rand-list-of)]] map-from:fn rand-map-from[[:Map][Map][word(rand-map-from)]]}	rand:with-seed
+import "boru:report" end Report.list 2	'2'	report:list
+import "boru:report" end Report.record 2	'2'	report:record
+import "boru:report" end Report.table 2	'2'	report:table
+import "boru:report" end Report.value 2	'2'	report:value
+import "boru:string-util" end StringUtil.changecase 'a' {style:'lower'}	'a'	string-util:changecase
+import "boru:string-util" end StringUtil.changecase 'b'	'b'	string-util:changecase
+import "boru:string-util" end StringUtil.changecase a/q {style:'lower'}	'a'	string-util:changecase
+import "boru:string-util" end StringUtil.changecase b/q	'b'	string-util:changecase
+import "boru:string-util" end StringUtil.concat ['c','d']	'cd'	string-util:concat
+import "boru:string-util" end StringUtil.concat {sep:''} ['a','b']	'ab'	string-util:concat
+import "boru:string-util" end StringUtil.contains 'a' 'b' {cs:'sensitive'}	false	string-util:contains
+import "boru:string-util" end StringUtil.contains 'c' 'd'	false	string-util:contains
+import "boru:string-util" end StringUtil.escape 'a' {quote:'none'}	'a'	string-util:escape
+import "boru:string-util" end StringUtil.escape 'b'	'b'	string-util:escape
+import "boru:string-util" end StringUtil.indexof 'a' 'b' {cs:'sensitive'}	-1	string-util:indexof
+import "boru:string-util" end StringUtil.indexof 'c' 'd'	-1	string-util:indexof
+import "boru:string-util" end StringUtil.lower 'a'	'a'	string-util:lower
+import "boru:string-util" end StringUtil.lower a/q	'a'	string-util:lower
+import "boru:string-util" end StringUtil.match 'a' 'b' {cs:'sensitive'}	{ok:false ms:[] n:0}	string-util:match
+import "boru:string-util" end StringUtil.match 'c' 'd'	{ok:false ms:[] n:0}	string-util:match
+import "boru:string-util" end StringUtil.normalize 'a' {trim:false}	'a'	string-util:normalize
+import "boru:string-util" end StringUtil.normalize 'b'	'b'	string-util:normalize
+import "boru:string-util" end StringUtil.pad 2 {side:'right'} 'a'	'a '	string-util:pad
+import "boru:string-util" end StringUtil.pad 3	'3                                           '	string-util:pad
+import "boru:string-util" end StringUtil.pad 3 'b'	'b  '	string-util:pad
+import "boru:string-util" end StringUtil.pad 4 2	'2   '	string-util:pad
+import "boru:string-util" end StringUtil.repeat 2 'a' {sep:''}	'aa'	string-util:repeat
+import "boru:string-util" end StringUtil.repeat 3 'b'	'bbb'	string-util:repeat
+import "boru:string-util" end StringUtil.replace 'a' 'b' 'c' {scope:'first'}	'c'	string-util:replace
+import "boru:string-util" end StringUtil.replace 'd' 'e' 'f'	'f'	string-util:replace
+import "boru:string-util" end StringUtil.split 'a' 'b' {keepEmpty:false}	['b']	string-util:split
+import "boru:string-util" end StringUtil.split 'c' 'd'	['d']	string-util:split
+import "boru:string-util" end StringUtil.trim 'a' {side:'both'}	'a'	string-util:trim
+import "boru:string-util" end StringUtil.trim 'b'	'b'	string-util:trim
+import "boru:string-util" end StringUtil.trim a/q {side:'both'}	'a'	string-util:trim
+import "boru:string-util" end StringUtil.trim b/q	'b'	string-util:trim
+import "boru:string-util" end StringUtil.upper 'a'	'A'	string-util:upper
+import "boru:string-util" end StringUtil.upper a/q	'A'	string-util:upper
+import "boru:struct-util" end StructUtil.clone 2	2	struct-util:clone
+import "boru:struct-util" end StructUtil.getpath 'a' 2	None	struct-util:getpath
+import "boru:struct-util" end StructUtil.inject 2 3	2	struct-util:inject
+import "boru:struct-util" end StructUtil.items 2	[]	struct-util:items
+import "boru:struct-util" end StructUtil.jsonify 3	'3'	struct-util:jsonify
+import "boru:struct-util" end StructUtil.jsonify {a:1,b:2} 2	'2'	struct-util:jsonify
+import "boru:struct-util" end StructUtil.merge 2 3	3	struct-util:merge
+import "boru:struct-util" end StructUtil.merge ['a','b'] {a:1,b:2}	['a' 'b']	struct-util:merge
+import "boru:struct-util" end StructUtil.merge {c:3,d:4} ['c','d']	['c' 'd']	struct-util:merge
+import "boru:struct-util" end StructUtil.nodify 2	2	struct-util:nodify
+import "boru:struct-util" end StructUtil.parse 'a'	'a'	struct-util:parse
+import "boru:struct-util" end StructUtil.selector {a:1,b:2} 2	[]	struct-util:selector
+import "boru:struct-util" end StructUtil.setpath 'a' 2 3	{a:3}	struct-util:setpath
+import "boru:struct-util" end StructUtil.setpath 4 'b' 5	{b:5}	struct-util:setpath
+import "boru:struct-util" end StructUtil.transform {a:1,b:2} 2	{a:1 b:2}	struct-util:transform
+import "boru:struct-util" end StructUtil.walk 2	[{path:'' value:2}]	struct-util:walk
+import "boru:test" end Test.case 2 ['a','b'] 'a'	{name:'a' in:(quote ['a' 'b']) out:2}	test:case
+import "boru:test" end Test.check-prop 'a' ['a','b'] ['c','d'] 2 3 4	{name:'a' ok:false runs:1 failing-input:'b' shrunk-input:'b' shrunk-source:'"b"' shrunk-cost:2 error:error(property returned non-Boolean (ProperString))}	test:check-prop
+import "boru:test" end Test.invoke 'a' ['a','b']	error(undefined word: a)	test:invoke
+import "boru:test" end Test.invoke a/q ['c','d']	error(undefined word: a)	test:invoke
+import "boru:test" end Test.prop 'a' ['a','b'] ['c','d']	{name:'a' gen:(quote ['a' 'b']) property:(quote ['c' 'd']) runs:100 seed:1 max-shrinks:200}	test:prop
+import "boru:test" end Test.skip 'a' ['a','b'] ['c','d'] 2 3 4	{name:'a' ok:true skipped:true runs:0}	test:skip
+import "boru:test" end Test.spec ['a','b'] 2 'a'	{name:'a' subject:2 cases:(quote ['a' 'b']) subs:[]}	test:spec
+import "boru:test" end Test.spec-with-subs ['a','b'] ['c','d'] 2 'a'	{name:'a' subject:2 cases:(quote ['c' 'd']) subs:(quote ['a' 'b'])}	test:spec-with-subs
+import "boru:time-util" end TimeUtil.await ['a','b']	['a' 'b']	time-util:await
+import "boru:time-util" end TimeUtil.cal-dur 2 3 4	P4Y3M2D	time-util:cal-dur
+import "boru:time-util" end TimeUtil.days 2	P0Y0M2D	time-util:days
+import "boru:time-util" end TimeUtil.hours 2	2h0m0s	time-util:hours
+import "boru:time-util" end TimeUtil.minutes 2	2m0s	time-util:minutes
+import "boru:time-util" end TimeUtil.months 2	P0Y2M0D	time-util:months
+import "boru:time-util" end TimeUtil.ms 2	2ms	time-util:ms
+import "boru:time-util" end TimeUtil.ns 2	2ns	time-util:ns
+import "boru:time-util" end TimeUtil.seconds 2	2s	time-util:seconds
+import "boru:time-util" end TimeUtil.unix 2	1970-01-01T00:00:02Z	time-util:unix
+import "boru:time-util" end TimeUtil.unix-ms 2	1970-01-01T00:00:00.002Z	time-util:unix-ms
+import "boru:time-util" end TimeUtil.unix-ns 2	1970-01-01T00:00:00.000000002Z	time-util:unix-ns
+import "boru:time-util" end TimeUtil.us 2	2µs	time-util:us
+import "boru:time-util" end TimeUtil.weeks 2	P0Y0M14D	time-util:weeks
+import "boru:time-util" end TimeUtil.years 2	P2Y0M0D	time-util:years
+import "boru:vm" end Vm.parse 'a'	(quote [word(a)])	vm:parse

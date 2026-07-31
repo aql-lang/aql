@@ -1,5 +1,5 @@
-// Package registry is the aql registry HTTP server subcommand —
-// `aql registry -r <folder> -p <port>`.
+// Package registry is the boru registry HTTP server subcommand —
+// `boru registry -r <folder> -p <port>`.
 //
 // The server speaks three flavours of request:
 //
@@ -23,13 +23,13 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
-// cmd is the Command implementation for `aql registry`.
+// cmd is the Command implementation for `boru registry`.
 type cmd struct{}
 
 // New returns the registry subcommand.
@@ -43,12 +43,12 @@ func (*cmd) Synopsis() string {
 	return "serve modules and auth endpoints over HTTP"
 }
 
-// Run handles `aql registry -r <folder> -p <port>`.
+// Run handles `boru registry -r <folder> -p <port>`.
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return run(args, stdout, stderr)
 }
 
-// run handles `aql registry -r <folder> -p <port>`. It parses flags
+// run handles `boru registry -r <folder> -p <port>`. It parses flags
 // the same way standalone mode always has, then drives the lifecycle
 // through Server.Start with a SIGINT/SIGTERM-driven cancel so the
 // server shuts down gracefully on Ctrl-C.
@@ -76,7 +76,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "aql registry serving %s on %s\n", srv.Dir(), srv.Addr())
+	fmt.Fprintf(stdout, "boru registry serving %s on %s\n", srv.Dir(), srv.Addr())
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
@@ -88,7 +88,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-// Handler builds the http.Handler for an aql registry serving from
+// Handler builds the http.Handler for a boru registry serving from
 // registryDir. Exposed for tests that spin up an httptest server.
 //
 // GET /module/<name>-x.y.z returns <registryDir>/<name>-x.y.z.zip.
@@ -230,7 +230,7 @@ func handleLogin(store *auth.UserStore, w http.ResponseWriter, r *http.Request) 
 const maxPublishSize = 10 << 20
 
 // handlePublish validates an uploaded module zip and stores it in the registry.
-// The zip must contain aql.jsonic with name, major, minor, patch, and files.
+// The zip must contain boru.jsonic with name, major, minor, patch, and files.
 // All files listed in the files property must be present in the zip.
 // Versions are immutable — publishing an existing version is rejected.
 func handlePublish(registryDir string, w http.ResponseWriter, r *http.Request) {
@@ -263,33 +263,33 @@ func handlePublish(registryDir string, w http.ResponseWriter, r *http.Request) {
 		zipFiles[f.Name] = f
 	}
 
-	jf, ok := zipFiles["aql.jsonic"]
+	jf, ok := zipFiles["boru.jsonic"]
 	if !ok {
-		http.Error(w, "zip missing aql.jsonic", http.StatusBadRequest)
+		http.Error(w, "zip missing boru.jsonic", http.StatusBadRequest)
 		return
 	}
 
 	rc, err := jf.Open()
 	if err != nil {
-		http.Error(w, "cannot read aql.jsonic", http.StatusBadRequest)
+		http.Error(w, "cannot read boru.jsonic", http.StatusBadRequest)
 		return
 	}
 	jdata, err := io.ReadAll(rc)
 	rc.Close()
 	if err != nil {
-		http.Error(w, "cannot read aql.jsonic", http.StatusBadRequest)
+		http.Error(w, "cannot read boru.jsonic", http.StatusBadRequest)
 		return
 	}
 
 	meta, err := parseJsonic(jdata)
 	if err != nil {
-		http.Error(w, fmt.Sprintf("invalid aql.jsonic: %s", err), http.StatusBadRequest)
+		http.Error(w, fmt.Sprintf("invalid boru.jsonic: %s", err), http.StatusBadRequest)
 		return
 	}
 
 	name, _ := meta["name"].(string)
 	if name == "" {
-		http.Error(w, "aql.jsonic missing name", http.StatusBadRequest)
+		http.Error(w, "boru.jsonic missing name", http.StatusBadRequest)
 		return
 	}
 	if strings.Contains(name, "/") || strings.Contains(name, "..") {
@@ -301,14 +301,14 @@ func handlePublish(registryDir string, w http.ResponseWriter, r *http.Request) {
 	minor, minorOk := toInt(meta["minor"])
 	patch, patchOk := toInt(meta["patch"])
 	if !majorOk || !minorOk || !patchOk {
-		http.Error(w, "aql.jsonic missing or invalid version (major, minor, patch)", http.StatusBadRequest)
+		http.Error(w, "boru.jsonic missing or invalid version (major, minor, patch)", http.StatusBadRequest)
 		return
 	}
 	version := fmt.Sprintf("%d.%d.%d", major, minor, patch)
 
 	rawFiles, ok := meta["files"].([]any)
 	if !ok || len(rawFiles) == 0 {
-		http.Error(w, "aql.jsonic missing files list", http.StatusBadRequest)
+		http.Error(w, "boru.jsonic missing files list", http.StatusBadRequest)
 		return
 	}
 

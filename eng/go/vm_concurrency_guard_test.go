@@ -25,7 +25,7 @@ func TestRunProgramRejectsConcurrentInterpreterRun(t *testing.T) {
 		r.exitInterpRun()
 		t.Fatal("RunProgram succeeded while an interpreter run was active; want concurrency_error")
 	} else {
-		var ae *AqlError
+		var ae *BoruError
 		if !errors.As(err, &ae) || ae.Code != "concurrency_error" {
 			r.exitInterpRun()
 			t.Fatalf("wrong error while interpreter active: got %v, want concurrency_error", err)

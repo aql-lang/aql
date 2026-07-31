@@ -75,8 +75,8 @@ func TestReplayHazardTypedDefRefusesWithParity(t *testing.T) {
 // (their bodies compile to their own units, so no name lookup replays).
 func TestReplayHazardImportBodyCompilesNative(t *testing.T) {
 	for _, c := range []struct{ src, want string }{
-		{`do [import "aql:minilang"  +re/[a-z]+/ typeof]`, "[Function]"},
-		{`do [import "aql:string-util" StringUtil.upper 'ab']`, "[AB]"},
+		{`do [import "boru:minilang"  +re/[a-z]+/ typeof]`, "[Function]"},
+		{`do [import "boru:string-util" StringUtil.upper 'ab']`, "[AB]"},
 	} {
 		a, _ := New()
 		prog, reason, _, cerr := a.CompileCheck(c.src)
@@ -121,7 +121,7 @@ func TestReplayHazardValueDefStillCompiles(t *testing.T) {
 // regression: the first import happens inside a fn body (torn down at fn
 // exit), the second re-import takes the already-loaded path.
 func TestEnsureExportsBoundRebindsModuleExport(t *testing.T) {
-	src := `def f fn [[] [Integer] [import "aql:minilang" 0]]  (f)  import "aql:minilang"  MiniLang get "$name"`
+	src := `def f fn [[] [Integer] [import "boru:minilang" 0]]  (f)  import "boru:minilang"  MiniLang get "$name"`
 	a, _ := New()
 	got, err := a.RunInterp(src)
 	if err != nil {
@@ -132,7 +132,7 @@ func TestEnsureExportsBoundRebindsModuleExport(t *testing.T) {
 	}
 	// And the re-bound namespace serves kind lookups (the mini matcher
 	// dispatches through asModuleExportInfo — the exact read that broke).
-	src2 := `def f fn [[] [Integer] [import "aql:minilang" 0]]  (f)  import "aql:minilang"  +re/[a-z]+/ typeof`
+	src2 := `def f fn [[] [Integer] [import "boru:minilang" 0]]  (f)  import "boru:minilang"  +re/[a-z]+/ typeof`
 	b, _ := New()
 	got2, err2 := b.RunInterp(src2)
 	if err2 != nil {

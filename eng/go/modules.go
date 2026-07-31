@@ -3,12 +3,12 @@ package eng
 import "fmt"
 
 // ModuleRegistry tracks module-loading state for a Registry. It owns:
-//   - the load set for native modules (so `import aql:foo` is idempotent),
+//   - the load set for native modules (so `import boru:foo` is idempotent),
 //   - the module-ID sequence (so each loaded module gets a unique
 //     internal name),
 //   - the host's module-init callback (run when a sub-registry is
 //     created for a fresh module),
-//   - the native-module resolver (the bridge from `aql:<name>` to a
+//   - the native-module resolver (the bridge from `boru:<name>` to a
 //     ModuleDesc).
 //
 // Extracted from Registry so module-loading state lives in one place
@@ -21,7 +21,7 @@ type ModuleRegistry struct {
 	// per registry); the cached desc lets a re-import re-bind the module's
 	// namespace defs without re-resolving — needed because a fn-body /
 	// property-body import installs the namespace via InstallDef, which
-	// CallAQL's def-cleanup then strips, leaving the module marked loaded
+	// CallBORU's def-cleanup then strips, leaving the module marked loaded
 	// but its `pkg` name unbound. See resolveNativeMod (§11b.1).
 	loaded map[string]ModuleDesc
 	seq    int
@@ -31,7 +31,7 @@ type ModuleRegistry struct {
 	// the OnRegisterHook contract but fires once per sub-registry.
 	InitFunc func(*Registry)
 
-	// Resolver resolves `aql:<name>` native module imports to a
+	// Resolver resolves `boru:<name>` native module imports to a
 	// ModuleDesc. The kernel doesn't know how the host finds modules;
 	// it just calls this and uses the result.
 	Resolver func(name string, r *Registry) (ModuleDesc, error)
@@ -48,7 +48,7 @@ func NewModuleRegistry() *ModuleRegistry {
 // untouched. Module-body spin-up sites MUST call this instead of copying
 // the callback fields one at a time: the field-by-field copying is exactly
 // how the Resolver came to be silently dropped, which broke
-// `import "aql:math-util"` from file-imported modules (native-module imports
+// `import "boru:math-util"` from file-imported modules (native-module imports
 // only worked from the top-level script). A new config field added here is
 // then inherited at every spin-up site by default.
 func (m *ModuleRegistry) InheritConfig(parent *ModuleRegistry) {

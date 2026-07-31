@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // Wave-6 agent-D coverage for the modules package infrastructure: the
@@ -174,7 +174,7 @@ func TestSeam6DTransplantFailurePropagates(t *testing.T) {
 	if merr := InstallMatrixExports(r); !errors.Is(merr, errSeam6D) {
 		t.Errorf("InstallMatrixExports transplant failure: got %v, want errSeam6D", merr)
 	}
-	// aql:net gained transplantable extensions with the Fetch accessor
+	// boru:net gained transplantable extensions with the Fetch accessor
 	// overloads, so its install helper has the same arm.
 	if nerr := InstallNetExports(r); !errors.Is(nerr, errSeam6D) {
 		t.Errorf("InstallNetExports transplant failure: got %v, want errSeam6D", nerr)
@@ -188,7 +188,7 @@ func TestSeam6DResolvePerModuleInstallFalse(t *testing.T) {
 	pol, err := policy.LoadInline(`{
 		name: "no-math-module"
 		scopes: {
-			modules: { scopes: { "aql:math-util": { install: false } } }
+			modules: { scopes: { "boru:math-util": { install: false } } }
 		}
 	}`)
 	if err != nil {
@@ -214,13 +214,13 @@ func TestSeam6DStampExportProvenanceSkips(t *testing.T) {
 	om := native.NewOrderedMap()
 	pre := native.NewFnDef(native.FnDefInfo{
 		Name:   "w",
-		Module: "aql:already",
+		Module: "boru:already",
 		Export: "Already",
 		Doc:    "already documented",
 	})
 	om.Set("w", pre)
 	desc := native.ModuleDesc{
-		Ref: "aql:seam6d",
+		Ref: "boru:seam6d",
 		Exports: map[string]*native.OrderedMap{
 			"Nil":     nil,
 			"Already": om,
@@ -232,7 +232,7 @@ func TestSeam6DStampExportProvenanceSkips(t *testing.T) {
 	if !ok {
 		t.Fatal("export is no longer a FnDef")
 	}
-	if fn.Module != "aql:already" || fn.Export != "Already" || fn.Doc != "already documented" {
+	if fn.Module != "boru:already" || fn.Export != "Already" || fn.Doc != "already documented" {
 		t.Errorf("pre-populated provenance must be left untouched, got %+v", fn)
 	}
 }
@@ -326,7 +326,7 @@ func TestSeam6DMapStrListAtomElements(t *testing.T) {
 // weekday 0 → ISO 7). 2024-03-17 is a Sunday.
 func TestSeam6DWeekdaySunday(t *testing.T) {
 	r := timeRegistry(t)
-	res := runAQL(t, r, callTimeDot("weekday", native.NewDate(time.Date(2024, 3, 17, 0, 0, 0, 0, time.UTC))))
+	res := runBORU(t, r, callTimeDot("weekday", native.NewDate(time.Date(2024, 3, 17, 0, 0, 0, 0, time.UTC))))
 	got, err := res[len(res)-1].AsConcreteInteger()
 	if err != nil || got != 7 {
 		t.Errorf("weekday(2024-03-17) = %v (err %v), want 7", res[len(res)-1], err)

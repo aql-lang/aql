@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:parselang", map[string]string{
+	registerDocs("boru:parselang", map[string]string{
 		"parse_ini": "Built-in INI parser: `parse ini <text>` — decodes INI text to a Map " +
 			"(github.com/tabnas/ini/go). Top-level `key = value` lines become Map fields, a " +
 			"`[section]` header nests a Map (dotted `[a.b]` nests further), and a recognised " +
@@ -35,7 +35,7 @@ func init() {
 	// As with emit, the per-kind exports exist but `parse <kind> <src>` is
 	// the spelling people use, and it is the one the signatures cannot
 	// show. Results are from verified lang/spec/module-parselang.tsv rows.
-	registerExamples("aql:parselang", map[string][]string{
+	registerExamples("boru:parselang", map[string][]string{
 		"kinds": {`ParseLang.kinds                                  ;# [ini/q json/q jsonic/q json5/q … markdown/q feed/q]`},
 		"parse_ini": {
 			`(parse ini 'b = hello') get 'b'                  ;# 'hello'`,

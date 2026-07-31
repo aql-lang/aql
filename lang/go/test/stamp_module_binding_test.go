@@ -3,10 +3,10 @@ package test
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // stampEventsFor loads src as an inline module body (module load is the
@@ -181,14 +181,14 @@ module [
 }
 
 // lexModule is a module-exported custom-parser LEXER — the exact
-// voxgig-aql/template shape: a runtime-constructed parser (`def p
+// voxgig-boru/template shape: a runtime-constructed parser (`def p
 // (Parse.parser g)`) whose matcher accumulates tokens onto a module-scope
 // `flex`, dispatched from a fn body over the fn's `src:String` param. Loading
 // it as a module (with stamping armed) detached-stamps the lexer.
 const lexModule = `
 module [
-  import "aql:parse"
-  import "aql:parselang"
+  import "boru:parse"
+  import "boru:parselang"
   def acc (flex [])
   def g Parse.grammar
   Parse.matcher g lex 5 ([s:String] => [ def _ (acc push {v:s})  {src: s tin:'#TX' val:'t'} ]) end

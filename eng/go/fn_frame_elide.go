@@ -70,7 +70,7 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	// it can raise tape_exhausted at ~70-80k frames where the SAME program
 	// completes compiled. That is within the interpreter/compiler
 	// differential contract (the interpreter may hit a resource ceiling the
-	// compiler clears, never the reverse — lang/go/aql.go), the default and
+	// compiler clears, never the reverse — lang/go/boru.go), the default and
 	// `--force-compile` paths lower this recursion to O(1), and it is
 	// strictly better than the prior silent undefined_word miscompile. Note
 	// the asymmetry: a WORD-CONTEXT paren `(f n)` keeps TCO, because

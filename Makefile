@@ -6,13 +6,13 @@
         viz-callvis viz-callgraph viz-goda viz-godepgraph \
         viz-gomod viz-golds viz-plantuml viz-list viz-modgraph
 
-# Top-level Makefile for the whole AQL codebase.
+# Top-level Makefile for the whole BORU codebase.
 #
 # The repo is a collection of Go modules:
 #
 #   eng/go         — the kernel (parser, dispatch, types, signatures)
 #   lang/go        — the language layer (native_* words, engine shim)
-#   cmd/go         — the aql CLI command
+#   cmd/go         — the boru CLI command
 #   calc/go        — small calculator built directly on eng (learning example)
 #   wpg            — wasm playground (wasm build + serve)
 #   test/go        — shared TSV spec-runner scaffolding
@@ -27,14 +27,14 @@ MODULES := eng/go lang/go cmd/go calc/go wpg test/go test/solardemo
 
 all: test
 
-# ---- aql CLI binary ----------------------------------------------------
+# ---- boru CLI binary ----------------------------------------------------
 #
-# The `aql` CLI lives in cmd/go and has its own Makefile that handles
-# the LDFLAGS/version stamping and the bin/aql layout. These targets
+# The `boru` CLI lives in cmd/go and has its own Makefile that handles
+# the LDFLAGS/version stamping and the bin/boru layout. These targets
 # delegate so the binary can be built from the repo root:
 #
-#   make build    -> cmd/go/bin/aql
-#   make install  -> $GOBIN/aql
+#   make build    -> cmd/go/bin/boru
+#   make install  -> $GOBIN/boru
 
 build:
 	$(MAKE) -C cmd/go build
@@ -45,7 +45,7 @@ install:
 # ---- generated syntax-combination spec ---------------------------------
 #
 # Regenerate the two committed spec files under test/go/specgen/:
-#   syntax-matrix.tsv          — the exhaustive matrix of every AQL token
+#   syntax-matrix.tsv          — the exhaustive matrix of every BORU token
 #                                sequence up to length 4 over a fixed
 #                                alphabet, with the canonical interpreter
 #                                result (or stable error class) for each.
@@ -133,15 +133,15 @@ fmt:
 	  ( cd $$m && gofmt -w . ); \
 	done
 
-# fmt-docs applies `aql fmt` to the user-facing docs whose ```aql fenced
+# fmt-docs applies `boru fmt` to the user-facing docs whose ```boru fenced
 # blocks are pinned fmt-clean by test/go/docexamples (DOC_FILES mirrors
-# its docFiles list). `aql fmt` rewrites only the fences and
-# <!-- aqlfmt --> regions, leaving the prose untouched — run this when
+# its docFiles list). `boru fmt` rewrites only the fences and
+# <!-- borufmt --> regions, leaving the prose untouched — run this when
 # the fmt-clean gate flags a drifted block, or after editing examples.
 DOC_FILES := README.md REFERENCE.md TUTORIAL.md HOWTO.md EXPLANATION.md
 fmt-docs:
 	@echo "==> fmt-docs $(DOC_FILES)"
-	@cd cmd/go && go run ./aql fmt $(addprefix ../../,$(DOC_FILES))
+	@cd cmd/go && go run ./boru fmt $(addprefix ../../,$(DOC_FILES))
 
 lint:
 	@set -e; for m in $(MODULES); do \
@@ -180,7 +180,7 @@ bench:
 
 # ---- TypeScript engine port (eng/ts) -----------------------------------
 #
-# @voxgig/aqleng mirrors the Go kernel and must stay row-for-row green on
+# @voxgig/borueng mirrors the Go kernel and must stay row-for-row green on
 # the SAME eng/spec/*.tsv corpus as the Go engspec runner. Runs the
 # typechecker then the node:test suite (Node >= 24, type-stripping).
 test-ts:
@@ -208,13 +208,13 @@ crossdiff:
 # Run after any change that moves compiled coverage; TestCompiledStatus fails
 # if the committed surface is stale.
 status:
-	cd test/go && AQL_WRITE_STATUS=1 go test ./langspec/ -run TestCompiledStatus
+	cd test/go && BORU_WRITE_STATUS=1 go test ./langspec/ -run TestCompiledStatus
 	@echo "==> wrote test/go/langspec/COMPILED_STATUS.md"
 
 # ---- bytecode verification gate ----------------------------------------
 #
 # The strict, runnable regression gate for the bytecode compiler
-# (design/aql-bytecode-plan.0.md). It is the single command to validate a
+# (design/boru-bytecode-plan.0.md). It is the single command to validate a
 # change to the compiler/VM and catch regressions:
 #
 #   1. fmt / vet / lint across every module.
@@ -228,7 +228,7 @@ status:
 #      per-dispatch or island-reuse allocation regression).
 #   6. The -race concurrency gates (shared immutable Program across forks;
 #      island sub-engine reuse with no state leak; concurrent spec rows).
-#   7. The same parity gates under -tags aqldebug (a fresh args slice per
+#   7. The same parity gates under -tags borudebug (a fresh args slice per
 #      CALL_NATIVE), so a compiled-reachable native that retains its args
 #      slice — silently corrupting a later dispatch under the release build's
 #      buffer reuse — instead diverges cleanly here. Mirrors the CI lane.
@@ -244,15 +244,15 @@ verify-bytecode: fmt vet lint
 	@echo "==> bytecode: -race concurrency gates"
 	cd lang/go && go test . -run 'TestCompiledConcurrencyRaceFree|TestCompiledIslandReuseNoStateLeak' -race
 	cd test/go && go test ./langspec/ -run 'TestSpecCompiledConcurrentRowsRaceFree' -race
-	@echo "==> bytecode: args-aliasing gate (-tags aqldebug, fresh args slice per CALL_NATIVE)"
-	cd lang/go && go test -tags aqldebug . -run 'TestEmit|TestRunCompiled|TestCompiled|TestStepBudget'
-	cd test/go && go test -tags aqldebug ./langspec/ -run 'TestSpecCompiledDifferential|TestSpecCompiledOrFallback|TestCompiledCombinationParity|TestPropertyDifferential'
+	@echo "==> bytecode: args-aliasing gate (-tags borudebug, fresh args slice per CALL_NATIVE)"
+	cd lang/go && go test -tags borudebug . -run 'TestEmit|TestRunCompiled|TestCompiled|TestStepBudget'
+	cd test/go && go test -tags borudebug ./langspec/ -run 'TestSpecCompiledDifferential|TestSpecCompiledOrFallback|TestCompiledCombinationParity|TestPropertyDifferential'
 	@echo "==> bytecode: VERIFY PASSED"
 
 # Nightly / on-demand DEEP property fuzz of the compilable subset. The standard
 # verify-bytecode runs the lean deterministic default; this cranks the seed and
 # iteration budget (override on the command line) and re-runs the generated
-# corpus under BOTH the release build and the -tags aqldebug build (fresh args
+# corpus under BOTH the release build and the -tags borudebug build (fresh args
 # slice per CALL_NATIVE), so a deep run also exercises the args-aliasing invariant.
 #   make fuzz-bytecode                       # the cranked default below
 #   make fuzz-bytecode FUZZ_SEEDS=40 FUZZ_ITERS=20000
@@ -260,11 +260,11 @@ FUZZ_SEEDS ?= 20
 FUZZ_ITERS ?= 5000
 fuzz-bytecode:
 	@echo "==> bytecode: property fuzz ($(FUZZ_SEEDS) seeds x $(FUZZ_ITERS) iters), release build"
-	cd test/go && AQL_FUZZ_SEEDS=$(FUZZ_SEEDS) AQL_FUZZ_ITERS=$(FUZZ_ITERS) \
+	cd test/go && BORU_FUZZ_SEEDS=$(FUZZ_SEEDS) BORU_FUZZ_ITERS=$(FUZZ_ITERS) \
 	  go test ./langspec/ -run 'TestPropertyDifferential' -timeout 60m -v
-	@echo "==> bytecode: property fuzz, -tags aqldebug (args-aliasing build)"
-	cd test/go && AQL_FUZZ_SEEDS=$(FUZZ_SEEDS) AQL_FUZZ_ITERS=$(FUZZ_ITERS) \
-	  go test -tags aqldebug ./langspec/ -run 'TestPropertyDifferential' -timeout 60m
+	@echo "==> bytecode: property fuzz, -tags borudebug (args-aliasing build)"
+	cd test/go && BORU_FUZZ_SEEDS=$(FUZZ_SEEDS) BORU_FUZZ_ITERS=$(FUZZ_ITERS) \
+	  go test -tags borudebug ./langspec/ -run 'TestPropertyDifferential' -timeout 60m
 	@echo "==> bytecode: FUZZ PASSED"
 
 clean:
@@ -291,9 +291,9 @@ clean:
 #   make publish-cmd  V=0.2.0 ENG=0.1.0 LANG=0.2.0
 #
 # After publishing, consumers install with:
-#   go install github.com/aql-lang/aql/cmd/go/aql@v0.2.0   # aql CLI
-#   go get     github.com/aql-lang/aql/lang/go@v0.2.0  # lang library
-#   go get     github.com/aql-lang/aql/eng/go@v0.2.0   # eng kernel
+#   go install github.com/boru-lang/boru/cmd/go/boru@v0.2.0   # boru CLI
+#   go get     github.com/boru-lang/boru/lang/go@v0.2.0  # lang library
+#   go get     github.com/boru-lang/boru/eng/go@v0.2.0   # eng kernel
 
 publish:
 	@test -n "$(V)" || (echo "Usage: make publish V=x.y.z" && exit 1)
@@ -351,7 +351,7 @@ COVER_DIR := coverage
 # gate fails at the MODULE step (not the threshold check) on a loaded machine,
 # which reads as a coverage failure and is not one.
 GATE_FLOOR ?= 100
-GATE_PKGS := github.com/aql-lang/aql/...
+GATE_PKGS := github.com/boru-lang/boru/...
 cover-gate:
 	@mkdir -p $(COVER_DIR)
 	@set -e; for m in $(MODULES); do \
@@ -391,11 +391,11 @@ cover-html: cover
 	  ( cd $$m && go tool cover -html=$$f -o $$out ) || true; \
 	done
 	@{ \
-	  printf '<!doctype html>\n<html><head><meta charset="utf-8"><title>AQL coverage</title>'; \
+	  printf '<!doctype html>\n<html><head><meta charset="utf-8"><title>BORU coverage</title>'; \
 	  printf '<style>body{font:14px system-ui;margin:2em;max-width:1000px}h1{margin-bottom:.4em}'; \
 	  printf 'table{border-collapse:collapse;margin-top:1em}td,th{border:1px solid #ddd;padding:6px 12px;text-align:left}'; \
 	  printf 'a{color:#06c;text-decoration:none}a:hover{text-decoration:underline}</style></head><body>'; \
-	  printf '<h1>AQL coverage</h1>'; \
+	  printf '<h1>BORU coverage</h1>'; \
 	  printf '<p>Generated %s</p>' "$$(date '+%Y-%m-%d %H:%M:%S')"; \
 	  printf '<table><tr><th>Module</th><th>Coverage</th><th>Report</th></tr>'; \
 	  for f in $(COVER_DIR)/*.out; do \
@@ -440,8 +440,8 @@ GOLDS      := $(GOBIN)/golds
 GOPLANTUML := $(GOBIN)/goplantuml
 
 # PlantUML renders the goplantuml-generated .puml to SVG. It's a Java jar,
-# fetched once into ~/.cache/aql-viz and cached.
-PLANTUML_JAR := $(HOME)/.cache/aql-viz/plantuml.jar
+# fetched once into ~/.cache/boru-viz and cached.
+PLANTUML_JAR := $(HOME)/.cache/boru-viz/plantuml.jar
 PLANTUML_URL := https://github.com/plantuml/plantuml/releases/latest/download/plantuml.jar
 
 $(CALLVIS):
@@ -659,7 +659,7 @@ viz-index:
 	@mkdir -p $(VIZ_DIR)
 	@{ \
 	  printf '<!doctype html>\n<html><head><meta charset="utf-8">'; \
-	  printf '<title>AQL — code structure</title>'; \
+	  printf '<title>BORU — code structure</title>'; \
 	  printf '<style>'; \
 	  printf 'body{font:14px system-ui;margin:2em;max-width:1400px;color:#222}'; \
 	  printf 'h1{margin-bottom:.2em}'; \
@@ -674,7 +674,7 @@ viz-index:
 	  printf '</style>'; \
 	  printf '<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>'; \
 	  printf '</head><body>'; \
-	  printf '<h1>AQL — code structure</h1>'; \
+	  printf '<h1>BORU — code structure</h1>'; \
 	  printf '<p class="meta">Generated %s · drag to pan, scroll/pinch to zoom, double-click to reset</p>' "$$(date '+%Y-%m-%d %H:%M:%S')"; \
 	  printf '<nav>'; \
 	  for d in $(VIZ_DIR)/*/; do \

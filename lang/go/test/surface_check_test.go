@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
-// checkSrc runs src through lang.AQL.Check and returns the result +
+// checkSrc runs src through lang.BORU.Check and returns the result +
 // error. Shared by the S2 surface-checker tests below.
 func checkSrc(t *testing.T, src string) (lang.CheckResult, error) {
 	t.Helper()
@@ -15,7 +15,7 @@ func checkSrc(t *testing.T, src string) (lang.CheckResult, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	return a.Check(src)
 }
 
@@ -59,7 +59,7 @@ area x
 
 // TestCheckExposesStaticallyVerified pins that `exposes` runs its
 // completeness check in check mode: a missing operation and a
-// wrong-return overload both fail `aql check`, not just the runtime.
+// wrong-return overload both fail `boru check`, not just the runtime.
 func TestCheckExposesStaticallyVerified(t *testing.T) {
 	_, err := checkSrc(t, `
 def Shape surface {area: (fnsig [[Self] [Float]])}

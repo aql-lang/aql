@@ -1,4 +1,4 @@
-// Package lsp implements `aql lsp` — a Language Server Protocol
+// Package lsp implements `boru lsp` — a Language Server Protocol
 // server backed by the existing lang.Check, formatter.Format, and
 // help.Lookup APIs.
 //
@@ -22,7 +22,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
 )
 
 type cmd struct{}
@@ -33,7 +33,7 @@ func New() command.Command { return &cmd{} }
 func (*cmd) Name() string     { return "lsp" }
 func (*cmd) Synopsis() string { return "run a Language Server Protocol server on stdio or TCP" }
 
-// Run handles `aql lsp [-p <port>]`. With no flags the server
+// Run handles `boru lsp [-p <port>]`. With no flags the server
 // reads/writes stdio. Passing -p binds a TCP listener on the given
 // port and serves the first connection (LSP servers are single-
 // client).

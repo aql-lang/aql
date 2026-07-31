@@ -29,12 +29,12 @@ func registerDotWords(r *Registry) {
 			}
 			m, err := AsMap(args[1])
 			if err != nil {
-				return nil, r.AqlError("type_error", "dot: receiver is not a map", "dot")
+				return nil, r.BoruError("type_error", "dot: receiver is not a map", "dot")
 			}
 			v, ok := m.Get(key)
 			if !ok {
 				if strict {
-					return nil, r.AqlError("get_error", "dotr: missing key "+key, "dotr")
+					return nil, r.BoruError("get_error", "dotr: missing key "+key, "dotr")
 				}
 				return nil, nil
 			}

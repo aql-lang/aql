@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // TestDoEmptyResidualAgreesAcrossEngines pins the arity model for a `do` body
@@ -21,7 +21,7 @@ import (
 // value a consumer was supposed to keep goes missing:
 //
 //	[1 2 3] each [do [9 drop]]
-//	  compiled    → [aql/each_error]: element 0: body produced no result
+//	  compiled    → [boru/each_error]: element 0: body produced no result
 //	  interpreted → [1 2 3]        (the identity map — the element survives)
 //
 // Default mode, no fallback warning, silently different answers. The

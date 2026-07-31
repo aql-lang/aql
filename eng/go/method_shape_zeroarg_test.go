@@ -72,7 +72,7 @@ func TestShapedMethodApplyWindowZeroArgGates(t *testing.T) {
 	impl := Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewInteger(7)}, nil
 	})
-	memberSig := Signature{Returns: []*Type{TAny}, BarrierPos: -1, Impl: AQL([]Value{NewWord("z9x")})}
+	memberSig := Signature{Returns: []*Type{TAny}, BarrierPos: -1, Impl: BORU([]Value{NewWord("z9x")})}
 
 	// Inner 0-arg sig behind a NON-0-arg sibling: the loop skips the sibling
 	// (continue) and models the 0-arg one.
@@ -131,7 +131,7 @@ func TestShapedMethodApplyWindowZeroArgGates(t *testing.T) {
 	}
 	m4Sig := memberSig
 	m4Sig.Args = []*Type{TInteger}
-	m4Sig.Impl = AQL([]Value{NewWord("z9y")})
+	m4Sig.Impl = BORU([]Value{NewWord("z9y")})
 	m4 := z9Member("z9y", r4, m4Sig, m4Sig) // two 1-arg sigs: zeros < 2
 	e4 := z9Engine(t, r4, []Value{m4})
 	if _, _, ok := e4.shapedMethodApplyWindow(0, m4); ok {
@@ -146,7 +146,7 @@ func TestNoteMethodShapeDeclinesNonDelegation(t *testing.T) {
 	r.Check.Mode = true
 	realBody := NewFnDef(FnDefInfo{Name: "z9real", Registry: r, Signatures: []Signature{{
 		Params: []FnParam{{Name: "n", Type: TInteger}}, Returns: []*Type{TAny},
-		BarrierPos: -1, Impl: AQL([]Value{NewWord("n"), NewWord("n")}),
+		BarrierPos: -1, Impl: BORU([]Value{NewWord("n"), NewWord("n")}),
 	}}})
 	out := NewDynamicCarrier(TAny)
 	r.Check.NoteMethodShape(out, realBody)
@@ -240,7 +240,7 @@ func TestShapedMethodGuardOwnedDecline(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 	member := z9Member("z9g", r, Signature{
-		Returns: []*Type{TAny}, BarrierPos: -1, Impl: AQL([]Value{NewWord("z9g")}),
+		Returns: []*Type{TAny}, BarrierPos: -1, Impl: BORU([]Value{NewWord("z9g")}),
 	})
 	done := r.Check.BeginCompilePass()
 	defer done()
@@ -282,7 +282,7 @@ func TestShapedMethodGuardOwnedDecline(t *testing.T) {
 		t.Fatalf("register z9h: %v", err)
 	}
 	member2 := z9Member("z9h", r2, Signature{
-		Returns: []*Type{TAny}, BarrierPos: -1, Impl: AQL([]Value{NewWord("z9h")}),
+		Returns: []*Type{TAny}, BarrierPos: -1, Impl: BORU([]Value{NewWord("z9h")}),
 	})
 	done2 := r2.Check.BeginCompilePass()
 	defer done2()
@@ -309,7 +309,7 @@ func TestSeam7CallUserPolyRuntimeNoMatchAndDrift(t *testing.T) {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TInteger}},
 			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
-			Impl: AQL([]Value{NewWord("n")}),
+			Impl: BORU([]Value{NewWord("n")}),
 		}},
 	})
 	fd := r.Lookup("z9poly")
@@ -334,33 +334,33 @@ func TestSeam7CallUserPolyRuntimeNoMatchAndDrift(t *testing.T) {
 	vc := seam7VC(r)
 	drift := &UserPolyRef{
 		Word: "z9poly", Arity: 1,
-		SigIdx: []int{0}, Units: []int{0}, Impls: []SigImpl{AQL([]Value{NewWord("other")})},
+		SigIdx: []int{0}, Units: []int{0}, Impls: []SigImpl{BORU([]Value{NewWord("other")})},
 	}
 	_, _, derr := vc.matchUserPoly(drift, []Value{NewInteger(1)}, seam7Dbg, 0)
 	wantInternal(t, derr, "CALL_USER_POLY signature drift at z9poly")
 }
 
-// A delegation member whose inner overload is AQL-BODIED in a FOREIGN
+// A delegation member whose inner overload is BORU-BODIED in a FOREIGN
 // sub-registry declines tryNativeFnApply's fast path (the body's words
 // resolve in the module's own scope, which only the interpreter's
 // foreign-wrapper branch provides) — the caller then islands the apply.
-func TestTryNativeFnApplyForeignAQLBodyDeclines(t *testing.T) {
+func TestTryNativeFnApplyForeignBORUBodyDeclines(t *testing.T) {
 	main := seam7Reg(t)
 	foreign := seam7Reg(t)
-	// A module-preamble AQL fn: InstallFnDef registers the body-splicing
-	// dispatch handler, so the match succeeds and the AQL-impl probe is what
+	// A module-preamble BORU fn: InstallFnDef registers the body-splicing
+	// dispatch handler, so the match succeeds and the BORU-impl probe is what
 	// declines.
-	InstallFnDef(foreign, "z9aqlbody", FnDefInfo{Signatures: []Signature{
-		{Returns: []*Type{TAny}, BarrierPos: -1, Impl: AQL([]Value{NewInteger(42)})},
+	InstallFnDef(foreign, "z9borubody", FnDefInfo{Signatures: []Signature{
+		{Returns: []*Type{TAny}, BarrierPos: -1, Impl: BORU([]Value{NewInteger(42)})},
 	}})
-	member := z9Member("z9aqlbody", foreign, Signature{
-		Returns: []*Type{TAny}, BarrierPos: -1, Impl: AQL([]Value{NewWord("z9aqlbody")}),
+	member := z9Member("z9borubody", foreign, Signature{
+		Returns: []*Type{TAny}, BarrierPos: -1, Impl: BORU([]Value{NewWord("z9borubody")}),
 	})
 	vc := seam7VC(main)
 	fd, _ := member.Data.(FnDefInfo)
 	res, done, err := vc.tryNativeFnApply(fd, nil)
 	if done || err != nil || res != nil {
-		t.Errorf("foreign AQL-bodied inner must decline the fast path (island territory): res=%v done=%v err=%v",
+		t.Errorf("foreign BORU-bodied inner must decline the fast path (island territory): res=%v done=%v err=%v",
 			res, done, err)
 	}
 }

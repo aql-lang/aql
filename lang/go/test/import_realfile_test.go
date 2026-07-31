@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // testdataDir returns the absolute path to the testdata directory.
@@ -23,7 +23,7 @@ func testdataDir(t *testing.T) string {
 }
 
 // runRealFileSteps creates a registry backed by real OS file operations,
-// with the working directory set to dir, then executes AQL steps.
+// with the working directory set to dir, then executes BORU steps.
 func runRealFileSteps(t *testing.T, dir string, steps []string) ([]native.Value, error) {
 	t.Helper()
 
@@ -76,23 +76,23 @@ func runRealFileSteps(t *testing.T, dir string, steps []string) ([]native.Value,
 	return result, nil
 }
 
-// §4.3 — `aql check` on a file that imports a sibling and uses its
+// §4.3 — `boru check` on a file that imports a sibling and uses its
 // exports via dot-access must NOT emit spurious undefined_word /
 // no_signature diagnostics for the imported namespace. In check mode the
 // import path literal is preserved (StripToCarriers) and the target's
 // exports are loaded so `Pkg.word` resolves.
 func TestCheckSiblingImportResolvesNamespace(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "bloom.aql", `export "Bloom" {
+	writeFile(t, dir, "bloom.boru", `export "Bloom" {
   make: ([n:Integer] => [{n: n}])
   add:  ([b:Map s:String] => [b])
 }`)
-	writeFile(t, dir, "index.aql", `import "./bloom.aql" end
+	writeFile(t, dir, "index.boru", `import "./bloom.boru" end
 def bf (100 Bloom.make)
 def bf2 (bf "hello" Bloom.add)
 bf2`)
 
-	diags := checkRealFile(t, dir, "index.aql")
+	diags := checkRealFile(t, dir, "index.boru")
 	for _, d := range diags {
 		if d.Code == "undefined_word" && strings.Contains(d.Detail, "Bloom") {
 			t.Errorf("spurious undefined_word for imported namespace: %+v", d)
@@ -107,12 +107,12 @@ bf2`)
 // an opaque module rather than hard-failing the whole check.
 func TestCheckMissingSiblingImportDoesNotHardFail(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, dir, "index.aql", `import "./does-not-exist.aql" end
+	writeFile(t, dir, "index.boru", `import "./does-not-exist.boru" end
 def x 5
 x add 3`)
 	// checkRealFile fails the test on a hard run error; reaching the
 	// assertions means the missing import did not abort the check.
-	diags := checkRealFile(t, dir, "index.aql")
+	diags := checkRealFile(t, dir, "index.boru")
 	for _, d := range diags {
 		if strings.Contains(d.Detail, "not found") {
 			t.Errorf("missing sibling import should not surface a not-found error: %+v", d)
@@ -170,8 +170,8 @@ func checkRealFile(t *testing.T, dir, name string) []native.CheckDiagnostic {
 // --- Bare module with JSON import using relative paths ---
 
 func TestRealFileBareModuleImportsJsonRelative(t *testing.T) {
-	// testdata/.aql/planets/index.aql does: import "./data.json" def data end
-	// The "./data.json" must resolve relative to index.aql's directory,
+	// testdata/.boru/planets/index.boru does: import "./data.json" def data end
+	// The "./data.json" must resolve relative to index.boru's directory,
 	// NOT relative to the process CWD.
 	dir := testdataDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
@@ -196,11 +196,11 @@ func TestRealFileBareModuleJsonMarsField(t *testing.T) {
 	assertResult(t, result, "6792")
 }
 
-// --- Bare module with relative AQL import ---
+// --- Bare module with relative BORU import ---
 
-func TestRealFileBareModuleImportsAqlRelative(t *testing.T) {
-	// testdata/.aql/utils/index.aql does: import "./helpers.aql"
-	// helpers.aql must resolve relative to the utils/ directory.
+func TestRealFileBareModuleImportsBoruRelative(t *testing.T) {
+	// testdata/.boru/utils/index.boru does: import "./helpers.boru"
+	// helpers.boru must resolve relative to the utils/ directory.
 	dir := testdataDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`import "utils"`,
@@ -215,10 +215,10 @@ func TestRealFileBareModuleImportsAqlRelative(t *testing.T) {
 // --- File path import with relative path ---
 
 func TestRealFileRelativePathImport(t *testing.T) {
-	// Direct file path import: "./lib.aql" from the testdata directory.
+	// Direct file path import: "./lib.boru" from the testdata directory.
 	dir := testdataDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
-		`import "./lib.aql"`,
+		`import "./lib.boru"`,
 		`Lib.version`,
 	})
 	if err != nil {
@@ -230,7 +230,7 @@ func TestRealFileRelativePathImport(t *testing.T) {
 // --- Parent directory walk: CWD is a subdirectory ---
 
 func TestRealFileBareModuleFromSubdir(t *testing.T) {
-	// CWD = testdata/sub/deep, but "planets" is at testdata/.aql/planets/.
+	// CWD = testdata/sub/deep, but "planets" is at testdata/.boru/planets/.
 	// The walk should go: sub/deep -> sub -> testdata (found).
 	dir := filepath.Join(testdataDir(t), "sub", "deep")
 	result, err := runRealFileSteps(t, dir, []string{
@@ -244,7 +244,7 @@ func TestRealFileBareModuleFromSubdir(t *testing.T) {
 }
 
 func TestRealFileBareModuleChildShadows(t *testing.T) {
-	// CWD = testdata/sub. "local" is at testdata/sub/.aql/local/.
+	// CWD = testdata/sub. "local" is at testdata/sub/.boru/local/.
 	// It should be found at the child level, not walk further.
 	dir := filepath.Join(testdataDir(t), "sub")
 	result, err := runRealFileSteps(t, dir, []string{
@@ -258,7 +258,7 @@ func TestRealFileBareModuleChildShadows(t *testing.T) {
 }
 
 func TestRealFileBareModuleFromDeepSubdirFindsChild(t *testing.T) {
-	// CWD = testdata/sub/deep. "local" is at testdata/sub/.aql/local/.
+	// CWD = testdata/sub/deep. "local" is at testdata/sub/.boru/local/.
 	// Walk: sub/deep -> sub (found).
 	dir := filepath.Join(testdataDir(t), "sub", "deep")
 	result, err := runRealFileSteps(t, dir, []string{
@@ -277,7 +277,7 @@ func TestRealFileMixedBareAndRelative(t *testing.T) {
 	dir := testdataDir(t)
 	result, err := runRealFileSteps(t, dir, []string{
 		`import "planets"`,
-		`import "./lib.aql"`,
+		`import "./lib.boru"`,
 		`Lib.version`,
 	})
 	if err != nil {

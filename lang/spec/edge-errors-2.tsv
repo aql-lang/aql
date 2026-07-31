@@ -1,4 +1,4 @@
-# AQL Language Specification: error-taxonomy edge cases II
+# BORU Language Specification: error-taxonomy edge cases II
 # Format: input<TAB>expected<TAB>description
 #
 # Continuation of edge-errors-1.tsv: the catch-and-substitute idiom
@@ -34,16 +34,16 @@ def x:Integer "s"	ERROR:does not unify with declared type	a typed def rejects a 
 [1 2] getr -1	ERROR:out of bounds	a negative strict index misses loudly
 #
 # §4  the §5 uncalled_function residue check (design/ERRORS.8.md)
-import "aql:math-util" MathUtil.sqrt "x"	ERROR:uncalled_function	a wrapper call matching no signature leaves the fn as data — the end-of-run drain names it
-import "aql:string-util" StringUtil.upper 42	ERROR:uncalled_function	…same through any module wrapper
+import "boru:math-util" MathUtil.sqrt "x"	ERROR:uncalled_function	a wrapper call matching no signature leaves the fn as data — the end-of-run drain names it
+import "boru:string-util" StringUtil.upper 42	ERROR:uncalled_function	…same through any module wrapper
 #
 # §5  structural assertions and accumulation
-import "aql:test" Assert.equal [1 2] [1 2] end 7	7	Assert.equal compares lists structurally
-import "aql:test" Assert.equal {a:1} {a:1} end 7	7	…and maps
-import "aql:test" Assert.equal {a:1} {a:2}	ERROR:assertion_failure	a one-field difference fails
-import "aql:test" Assert.throws [raise x_c "x"] end 7	7	Assert.throws accepts a user raise, not just native errors
-import "aql:test" Test.test "a" [Assert.ok none] end Test.test "b" [Assert.ok none] end Test.fail-count	2	failures accumulate across recorded tests
-import "aql:test" Test.test "f" [Assert.ok none] end Test.test "p" [Assert.ok 1] end Test.summary	{total:2 passed:1 failed:1}	a failing test never stops a later passing one
+import "boru:test" Assert.equal [1 2] [1 2] end 7	7	Assert.equal compares lists structurally
+import "boru:test" Assert.equal {a:1} {a:1} end 7	7	…and maps
+import "boru:test" Assert.equal {a:1} {a:2}	ERROR:assertion_failure	a one-field difference fails
+import "boru:test" Assert.throws [raise x_c "x"] end 7	7	Assert.throws accepts a user raise, not just native errors
+import "boru:test" Test.test "a" [Assert.ok none] end Test.test "b" [Assert.ok none] end Test.fail-count	2	failures accumulate across recorded tests
+import "boru:test" Test.test "f" [Assert.ok none] end Test.test "p" [Assert.ok 1] end Test.summary	{total:2 passed:1 failed:1}	a failing test never stops a later passing one
 #
 # §6  the parse nesting guard — a deterministic evaluation_limit
 # (maxParseNestingDepth is a parser constant, so this is not budget-dependent)
@@ -63,9 +63,9 @@ do [raise {code: lim/q, message: "m", max: 10}] error [case [[dot code eq lim/q]
 def e (do [raise aa "x"]) (e dot code eq aa/q) and (e dot message eq "x")	true	a bound Error value reads repeatedly without being consumed
 #
 # §8  assertion equality semantics
-import "aql:test" Assert.ok "" end 7	7	the empty string is truthy — only none and false are falsy
-import "aql:test" Assert.equal 1.0 1 end 7	7	Assert.equal compares across the numeric tower
-import "aql:test" Assert.not-equal none none	ERROR:assertion_failure	two nones are equal — not-equal fails
+import "boru:test" Assert.ok "" end 7	7	the empty string is truthy — only none and false are falsy
+import "boru:test" Assert.equal 1.0 1 end 7	7	Assert.equal compares across the numeric tower
+import "boru:test" Assert.not-equal none none	ERROR:assertion_failure	two nones are equal — not-equal fails
 do [7] is Error	false	a success value is not an Error — is stays a clean discriminator
 do [true] error [drop false]	true	a Boolean success value passes through the no-op branch
 def h fn [[e:Error] [Atom] [e dot code]] h (do [raise hh_c "m"]) eq hh_c/q	true	Error is a first-class param type — handlers can be ordinary fns

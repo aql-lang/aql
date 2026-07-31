@@ -21,14 +21,14 @@ import "fmt"
 func recordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
 	if !list.Parent.Equal(TList) {
-		return nil, r.AqlError("record_error", "record: argument must be a list", "record")
+		return nil, r.BoruError("record_error", "record: argument must be a list", "record")
 	}
 	if !IsConcrete(list) {
-		return nil, r.AqlError("record_error", "record: argument must be a concrete list, got type literal", "record")
+		return nil, r.BoruError("record_error", "record: argument must be a concrete list, got type literal", "record")
 	}
 	elems, _ := AsList(list)
 	if elems.Len() == 0 {
-		return nil, r.AqlError("record_error", "record: list must have at least one field", "record")
+		return nil, r.BoruError("record_error", "record: list must have at least one field", "record")
 	}
 	fields := NewOrderedMap()
 	for _, elem := range elems.Slice() {
@@ -74,7 +74,7 @@ func classHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		if spec := r.TakePendingGen(); spec != nil {
 			PopGenBindings(r, spec)
 		}
-		return nil, r.AqlError("class_error",
+		return nil, r.BoruError("class_error",
 			fmt.Sprintf("class: argument must be a map of field definitions, got %s", fieldsVal.String()), "class")
 	}
 	m, err := AsMutableMap(fieldsVal)
@@ -82,7 +82,7 @@ func classHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		if spec := r.TakePendingGen(); spec != nil {
 			PopGenBindings(r, spec)
 		}
-		return nil, r.AqlError("class_error",
+		return nil, r.BoruError("class_error",
 			fmt.Sprintf("class: argument must be a concrete map, got %s", fieldsVal.String()), "class")
 	}
 	// A pending gen spec (`def Box gen [T] class {value:T}`) turns

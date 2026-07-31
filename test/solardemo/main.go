@@ -1,5 +1,5 @@
 // Command solardemo runs a minimal HTTP server implementing the Solar System API
-// used for testing AQL API operations against a real server.
+// used for testing BORU API operations against a real server.
 //
 // Usage (from the repo root):
 //

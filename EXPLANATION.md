@@ -1,6 +1,6 @@
-# AQL Explanation
+# BORU Explanation
 
-This document explains the ideas behind AQL — the *why* behind the
+This document explains the ideas behind BORU — the *why* behind the
 syntax, the type system, and the runtime. It complements the
 **[Tutorial](TUTORIAL.md)** (learning), **[How-To Guides](HOWTO.md)**
 (tasks), and **[Reference](REFERENCE.md)** (precise behaviour).
@@ -8,7 +8,7 @@ syntax, the type system, and the runtime. It complements the
 > **Notation.** In code, a `# returns …` comment shows what an
 > expression evaluates to (`square 4  # returns 16`); in prose we say
 > "`square 4` returns `16`". The comment is ordinary documentation, not
-> special syntax. (AQL has no result arrow — `=>` is the
+> special syntax. (BORU has no result arrow — `=>` is the
 > anonymous-function word `afn` — so results are written as comments.)
 
 ## Contents
@@ -58,7 +58,7 @@ combining operations — no parentheses, no `compose(...)`, no `.then`.
 
 ## The stack model
 
-AQL has a single data stack. Every literal pushes; every word pops
+BORU has a single data stack. Every literal pushes; every word pops
 its arguments and pushes its results. The stack is the implicit
 data flow.
 
@@ -94,7 +94,7 @@ naming actually helps readability, `def`, `var`, and named-parameter
 ## Forward collection: beyond reverse Polish
 
 Traditional concatenative languages (Forth, Factor) use strict
-reverse Polish notation: arguments always *precede* the word. AQL
+reverse Polish notation: arguments always *precede* the word. BORU
 extends this with **forward collection**: a word can gather
 arguments that appear *after* it.
 
@@ -108,12 +108,12 @@ All three are equivalent. The word `add` needs two arguments. If
 fewer are on the stack when it runs, it enters a forward-collecting
 mode and consumes following tokens until its signature is filled.
 
-This lets AQL read naturally in infix position. `10 sub 3` reads
+This lets BORU read naturally in infix position. `10 sub 3` reads
 "ten minus three"; `not true` reads "not true"; and with the string
 module imported, `StringUtil.upper "hello"` reads "uppercase hello".
 You never have to mentally reverse-engineer `10 3 -`. (String words
 like `upper`/`lower`/`split` are not built in — they live in
-`aql:string-util`; see the [Reference](REFERENCE.md). Only words such
+`boru:string-util`; see the [Reference](REFERENCE.md). Only words such
 as `add`, `sub`, `mul`, `not`, `dup` are available without an import.)
 
 ### Forward by default — a cultural rule
@@ -141,7 +141,7 @@ Two practical consequences:
 
 ### How collection works
 
-When a word executes, AQL fills its argument slots in this order:
+When a word executes, BORU fills its argument slots in this order:
 
 1. **Forward first.** Walk the tokens after the word in source
    order, left to right. Each token is evaluated and its type
@@ -212,10 +212,10 @@ Group the operands you actually mean to combine:
 (1 2 add) 3 mul                   # returns 9
 ```
 
-`aql check` surfaces the suspicious case as a non-gating advisory:
+`boru check` surfaces the suspicious case as a non-gating advisory:
 
 ```text
-$ aql check -e '1 2 add 3 mul'
+$ boru check -e '1 2 add 3 mul'
 check: [info] forward_strands_operand: add collected a forward argument
   while a Number operand was left unconsumed on the stack — it may be
   stranded; group the intended operands, e.g. (… add …)
@@ -235,7 +235,7 @@ ceases, any unfilled argument slots fall back to the stack, and the
 word runs with what it has:
 
 ```
-import "aql:math-util" MathUtil.sqrt 16        # returns 4.0
+import "boru:math-util" MathUtil.sqrt 16        # returns 4.0
 ```
 
 `import` accepts optional arguments after the module id — a rename
@@ -280,7 +280,7 @@ remaining argument slots — is left alone to run as its own expression. This
 is why an unterminated `import` no longer swallows the code that uses it:
 
 ```
-import "aql:string-util"          # no `end` needed…
+import "boru:string-util"          # no `end` needed…
 (StringUtil.upper "hi")           # …this paren runs on its own → 'HI'
 ```
 
@@ -292,7 +292,7 @@ still reach for `end` when the next token *could* legitimately be the word's
 argument — most commonly a second string path right after `import`:
 
 ```
-import "aql:math-util" "foo" print    # without `end`, import would load "foo"
+import "boru:math-util" "foo" print    # without `end`, import would load "foo"
 ```
 
 An empty paren `()` is the empty expression: it produces no value, so it
@@ -303,7 +303,7 @@ all parse.
 
 ## Type-directed dispatch
 
-Every value in AQL carries a hierarchical type. The type
+Every value in BORU carries a hierarchical type. The type
 `Scalar/Number/Integer` is a child of `Scalar/Number`, which is a
 child of `Scalar`, which is a child of `Any`. A child matches its
 parent; the reverse is false.
@@ -352,7 +352,7 @@ surprise.
 
 What "member of that type" *means* depends on the kind of type, and
 user types built with `refine` come in two kinds that answer it
-differently. AQL keeps both, because they correspond to two genuinely
+differently. BORU keeps both, because they correspond to two genuinely
 different intentions — and the rest of the world splits the same way.
 
 **A bare refinement is a newtype.** `def UserId (refine Integer)`
@@ -382,17 +382,17 @@ def Big (Integer gt 10)                   # subset — validation
 5  is Big                     # returns false — 5 does not
 ```
 
-The trap AQL avoids is treating these asymmetrically — lenient on the
+The trap BORU avoids is treating these asymmetrically — lenient on the
 way in, strict on the way out (or vice-versa). No mainstream language
 does that on purpose; each picks one discipline per kind and applies
-it at every boundary. AQL does the same: newtypes are nominal and
+it at every boundary. BORU does the same: newtypes are nominal and
 symmetric, subset types are value-sensitive and symmetric. The full
 rationale is in `design/REFINE-NEWTYPE-VS-SUBSET.10.md`.
 
 
 ## Tail calls and the tape
 
-AQL guarantees tail-call elimination — the precise conditions are in
+BORU guarantees tail-call elimination — the precise conditions are in
 **[Reference: Recursion and tail calls](REFERENCE.md#recursion-and-tail-calls)**.
 The mechanism falls out of the execution model rather than being
 bolted on.
@@ -417,7 +417,7 @@ caller's region. Frames replace instead of stacking, so depth never
 accumulates — elimination is a reordering of work the tape had
 already scheduled, not a new semantics.
 
-One AQL-specific boundary shapes the conditions. Name resolution is
+One BORU-specific boundary shapes the conditions. Name resolution is
 dynamic — an enclosing frame's bindings stay visible to everything it
 calls, until the frame exits. The locally-defined-recursive-fn idiom
 depends on that:
@@ -439,13 +439,13 @@ every name a deeper callee might still read.
 
 The failure taxonomy at the limits is a corollary. An infinite tail
 loop re-uses one frame forever — pure CPU, caught by the step budget
-as `[aql/evaluation_limit]`. Unbounded non-tail recursion grows the
-tape — caught by its growth ceiling as `[aql/tape_exhausted]`. Each
+as `[boru/evaluation_limit]`. Unbounded non-tail recursion grows the
+tape — caught by its growth ceiling as `[boru/tape_exhausted]`. Each
 guard names the resource the program actually consumed.
 
 ## Type ordering
 
-AQL has a single total order over every value, computed in two stages:
+BORU has a single total order over every value, computed in two stages:
 
 1. **LCA-Comparer.** Find the least common ancestor of the two
    types. If the ancestor declares a comparer, use it (so
@@ -465,7 +465,7 @@ mistake, so the everyday ordering words — `cmp`, `lt`, `lte`, `gt`,
 `gte` — are **family-restricted**. They compare only same-type values
 or values stage 1 can place with a real family comparer; a pair that
 would only order by the stage-2 Rank fallback (`1 lt "a"`,
-`List lt Map`) raises `[aql/incomparable]` and points you at `tcmp`:
+`List lt Map`) raises `[boru/incomparable]` and points you at `tcmp`:
 
 ```
 1 lt 2.0                          # returns true        — Integer and Float share Number
@@ -515,7 +515,7 @@ silently answered.
 
 ## Immutability and mutability
 
-AQL draws a deliberate line between immutable values and mutable
+BORU draws a deliberate line between immutable values and mutable
 objects:
 
 * **Scalars** (numbers, strings, booleans, atoms, times) are
@@ -532,7 +532,7 @@ parallel branches in separate sub-engines, immutable values are
 safe to share, mutable Ideals are not — changes inside a branch
 don't propagate to the parent.
 
-Mutable instances are deliberately rare in idiomatic AQL: prefer
+Mutable instances are deliberately rare in idiomatic BORU: prefer
 returning a new value to mutating, until a benchmark says otherwise.
 
 
@@ -572,7 +572,7 @@ To evaluate a held list at the point of use, use `do`:
   stack.
 
 The duality — lists as both data and code — is the homoiconic core
-that lets AQL do metaprogramming with no separate AST type.
+that lets BORU do metaprogramming with no separate AST type.
 
 
 ## Macros
@@ -582,7 +582,7 @@ it. A macro is a function the engine runs at **expansion time**, on its
 operands **as unevaluated code**, whose returned tokens are spliced into
 the call site in place of the call. Where a normal word receives
 *values*, a macro receives *forms* — so it can build new control
-structures and syntax in AQL itself, not in Go.
+structures and syntax in BORU itself, not in Go.
 
 ```
 def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
@@ -591,11 +591,11 @@ twice 5                           # returns 10
 
 `twice 5` does not pass `5` to a function; it rewrites the call to the
 code `5 add 5`, which then runs. The template is an ordinary `quote
-[ … ]` region — default-data, the polarity flip from AQL's default-eval
+[ … ]` region — default-data, the polarity flip from BORU's default-eval
 — and `unquote` / `splice` are the holes where operands flow back in:
 `unquote x` inserts one node, `splice xs` spreads a list's elements.
 
-This is the classic LISP dividend, and AQL builds it from parts it
+This is the classic LISP dividend, and BORU builds it from parts it
 already had — `quote`, the splice marker behind `word`, raw-form
 argument capture, and closure capture — rather than a new engine. Two
 LISP problems come along for free:
@@ -620,10 +620,10 @@ Most non-trivial words accept an optional trailing `Map` to carry
 named flags. This keeps the main signature small while leaving
 room for growth:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-# split/replace live in aql:string-util; shown unqualified here for
-# brevity (in real code: import "aql:string-util" StringUtil.split …).
+# split/replace live in boru:string-util; shown unqualified here for
+# brevity (in real code: import "boru:string-util" StringUtil.split …).
 "hello world" split " "                              # basic
 "hello world" split " " {trim: true}                 # with options
 "aaa" "a" "b" {scope:'all, count:2} replace          # returns 'bba'
@@ -642,7 +642,7 @@ field, dispatch **materializes** the default into the map the handler
 or `fn` param receives — so the receiver always sees a complete map
 and never re-derives defaults:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 def opts (make Options {x:1 y:2})
 def f fn [[m:opts] [Map] [m]]
@@ -659,11 +659,11 @@ default.
 
 ## Parallel execution model
 
-The `await` word bridges AQL's sequential stack model with Go's
+The `await` word bridges BORU's sequential stack model with Go's
 goroutines. Each element of the parallel list runs in its own
 goroutine with an independent sub-engine:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 await [[sleep 100 1] [sleep 100 2]]   # returns [1 2]
 ```
@@ -689,8 +689,8 @@ one is a data race; `await` rejects the program at the boundary rather
 than letting it corrupt state, the same answer `send` gives at a
 process boundary:
 
-<!-- aql-test: skip -->
-```aql
+<!-- boru-test: skip -->
+```boru
 def m (make FlexMap {})
 await [[m set a 1] [m set b 2]]
 # error: not_sendable — branch reaches `m`, a mutable FlexMap
@@ -700,8 +700,8 @@ Immutable values are unaffected: a plain `Map` or `List` returns a copy
 from `set`, so branches never share one. Build the container inside
 each branch and combine the results:
 
-<!-- aql-test: skip -->
-```aql
+<!-- boru-test: skip -->
+```boru
 await [
   [def a (make FlexMap {}) a set k 1]
     [def b (make FlexMap {}) b set k 2]
@@ -719,7 +719,7 @@ not detected. Building the container inside each branch is always safe.
 
 ## Errors as values
 
-AQL lets you treat errors as values rather than as exceptions — but
+BORU lets you treat errors as values rather than as exceptions — but
 this happens at a `do [...]` boundary, not automatically. When a word
 fails *in the open*, it unwinds: `1 div 0` on its own aborts the
 program (and `1 div 0 dup` never reaches `dup`). Wrap the failing code
@@ -815,7 +815,7 @@ dot is just field access on the module's exported map.
 
 File imports load source from disk; renaming on import (`import
 [helper as h] "..."`) prevents collisions; built-in modules
-(`aql:math-util`, `aql:time-util`, `aql:matrix-util`) are
+(`boru:math-util`, `boru:time-util`, `boru:matrix-util`) are
 host-provided and follow the same shape.
 
 There is no global namespace flattening: every imported binding
@@ -824,7 +824,7 @@ lives under the module's prefix until you alias it explicitly.
 
 ## Ideals and type-kinds
 
-AQL has a system for *type-kinds* called **Ideals**. An Ideal is
+BORU has a system for *type-kinds* called **Ideals**. An Ideal is
 the type-constructor turned into data — `Class`, `Record`, `Table`,
 `Store` are all instances. Each Ideal carries:
 
@@ -838,7 +838,7 @@ the type-constructor turned into data — `Class`, `Record`, `Table`,
 The practical consequence: a host program can register a *new*
 type-kind (e.g. `Graph`, `Tensor`, `Stream`) at runtime, and
 the kernel routes `refine`, `make`, `is`, and unification through
-it the same way it does for the built-ins. The `aql:matrix-util`
+it the same way it does for the built-ins. The `boru:matrix-util`
 module does exactly this for `Matrix` and `Vector`.
 
 You usually don't write Ideals — you use them via `class` / `refine`
@@ -896,7 +896,7 @@ Where a capability is a single on/off flag per system, a policy is a
 set of allow/deny rules over `scope.op` pairs (`disk.read`,
 `network`, `vault.get`, …) with optional quantitative caps. The CLI
 exposes them with `--perms <profile|file|inline>` plus ad-hoc
-`--allow`/`--deny` rules, and `aql policy {list,show,test,explain}`
+`--allow`/`--deny` rules, and `boru policy {list,show,test,explain}`
 inspects them — `explain` prints the blame chain for a decision, so
 "why was this denied?" is always answerable. Capabilities decide
 *whether a kind of effect is possible at all*; policy decides
@@ -906,7 +906,7 @@ and [CLI.md → Permissions](CLI.md#permissions) for the surface.
 
 ## The CLI: two surfaces
 
-The `aql` binary has two kinds of subcommand, and the split is
+The `boru` binary has two kinds of subcommand, and the split is
 deliberate.
 
 **One-shot commands** run, transform, or inspect and then exit:
@@ -921,7 +921,7 @@ HTTP module host), `lsp` (a Language Server for editors), `exec` (an
 HTTP code-execution endpoint), and the vault `proxy` (a credential
 broker). The umbrella `serve` command composes several of them into
 one process under a single graceful-shutdown lifecycle —
-`aql serve registry … + exec …` — and `ctl`/`tui` drive a running
+`boru serve registry … + exec …` — and `ctl`/`tui` drive a running
 supervisor through its `api` service. The reason services are a
 separate surface is that they each own a scarce resource (a port, or
 stdio) and a lifetime; making that explicit keeps the one-shot tools
@@ -931,7 +931,7 @@ free of server concerns and lets the supervisor reject conflicts
 The same permission model spans both surfaces: every execution path
 that runs user code (`run`, `do`, `exec`, the REPL) accepts the
 policy flags above, so an HTTP `exec` endpoint is sandboxed the same
-way a local `aql do` is.
+way a local `boru do` is.
 
 
 ## The vault: why a local credential store
@@ -977,7 +977,7 @@ Around that core: every mutation is **integrity-sealed** and written
 to an append-only **content history** (`vault history` /
 `restore`), and every read/grant/exec is recorded in a structured
 **audit log** that never contains secret values. The interactive
-**TUI** (`aql vault -i`) exists because the surface is large (~30
+**TUI** (`boru vault -i`) exists because the surface is large (~30
 modes, hidden-input prompts, typed confirmations) and hard to
 discover by flag alone; it always shows the available keys on
 screen.
@@ -995,7 +995,7 @@ a worked walkthrough is [Tutorial → the vault](TUTORIAL.md#21-manage-secrets-w
 
 ## Design influences
 
-AQL draws from several traditions:
+BORU draws from several traditions:
 
 * **Forth, Factor** — stack-based execution, word definitions,
   quotations, the basic "code is a sequence of words" feel.

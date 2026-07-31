@@ -3,7 +3,7 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // (The micron grammar-map / grammar-builder / finalize seams died with the

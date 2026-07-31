@@ -1,31 +1,31 @@
-# AQL Tutorial
+# BORU Tutorial
 
-This tutorial walks you through AQL from first principles. By the
+This tutorial walks you through BORU from first principles. By the
 end, you will be comfortable writing expressions, defining functions,
 and working with the type system.
 
 
 ## Getting Started
 
-Build and run the AQL REPL:
+Build and run the BORU REPL:
 
 ```bash
-cd aql
+cd boru
 make build
-./aql
+./boru
 ```
 
-You will see the `aql>` prompt. Type an expression and press Enter
+You will see the `boru>` prompt. Type an expression and press Enter
 to evaluate it.
 
 
 ## Your First Expression
 
-AQL is a stack machine. Values push onto the stack; words consume
+BORU is a stack machine. Values push onto the stack; words consume
 values and push results.
 
 ```
-aql> 1 2 add
+boru> 1 2 add
 3
 ```
 
@@ -34,13 +34,13 @@ We pushed `1`, then `2`, then `add` consumed both and pushed `3`.
 Try arithmetic:
 
 ```
-aql> 10 sub 3
+boru> 10 sub 3
 7
 
-aql> 4 mul 5
+boru> 4 mul 5
 20
 
-aql> 2 pow 10
+boru> 2 pow 10
 1024
 ```
 
@@ -54,24 +54,24 @@ stack (`10`) as its second.
 Strings use double or single quotes. Many words work on strings:
 
 ```
-aql> "hello" upper
+boru> "hello" upper
 'HELLO'
 
-aql> "hello world" split " "
+boru> "hello world" split " "
 ['hello','world']
 
-aql> "abc" concat "def"
+boru> "abc" concat "def"
 'abcdef'
 
-aql> "hello" contains "ell"
+boru> "hello" contains "ell"
 true
 ```
 
 Template strings use backticks with `${...}` interpolation:
 
 ```
-aql> def name "world"
-aql> `hello ${name}`
+boru> def name "world"
+boru> `hello ${name}`
 'hello world'
 ```
 
@@ -81,20 +81,20 @@ aql> `hello ${name}`
 Values that are not consumed remain on the stack:
 
 ```
-aql> 1 2 3
+boru> 1 2 3
 1 2 3
 ```
 
 Stack words let you manipulate values:
 
 ```
-aql> 5 dup
+boru> 5 dup
 5 5
 
-aql> 1 2 swap
+boru> 1 2 swap
 2 1
 
-aql> 1 2 3 drop
+boru> 1 2 3 drop
 1 2
 ```
 
@@ -104,24 +104,24 @@ aql> 1 2 3 drop
 Lists use square brackets:
 
 ```
-aql> [1, 2, 3]
+boru> [1, 2, 3]
 [1,2,3]
 ```
 
 Maps use braces with `key:value` pairs:
 
 ```
-aql> {name: "Alice", age: 30}
+boru> {name: "Alice", age: 30}
 {name:'Alice',age:30}
 ```
 
 Access values with the dot operator:
 
 ```
-aql> {name: "Alice"} . name
+boru> {name: "Alice"} . name
 'Alice'
 
-aql> [10, 20, 30] . 1
+boru> [10, 20, 30] . 1
 20
 ```
 
@@ -131,15 +131,15 @@ aql> [10, 20, 30] . 1
 Use `def` to name values or create reusable words:
 
 ```
-aql> def x 42
-aql> x
+boru> def x 42
+boru> x
 42
 
-aql> def double [dup add]
-aql> 5 double
+boru> def double [dup add]
+boru> 5 double
 10
 
-aql> 3 double double
+boru> 3 double double
 12
 ```
 
@@ -152,12 +152,12 @@ body executes: `dup` copies the top value, then `add` sums both.
 Use `fn` inside `def` for typed functions:
 
 ```
-aql> def square fn [Integer Integer [dup mul]]
-aql> square 5
+boru> def square fn [Integer Integer [dup mul]]
+boru> square 5
 25
 
-aql> def greet fn [String String [`hello ${args.0}`]]
-aql> greet "world"
+boru> def greet fn [String String [`hello ${args.0}`]]
+boru> greet "world"
 'hello world'
 ```
 
@@ -170,10 +170,10 @@ The `if` word takes a condition, a then-branch, and an optional
 else-branch:
 
 ```
-aql> 5 gt 3 if ["yes"] ["no"]
+boru> 5 gt 3 if ["yes"] ["no"]
 'yes'
 
-aql> 0 if ["truthy"] ["falsy"]
+boru> 0 if ["truthy"] ["falsy"]
 'falsy'
 ```
 
@@ -183,7 +183,7 @@ aql> 0 if ["truthy"] ["falsy"]
 Use `for` for iteration:
 
 ```
-aql> for 5 [dup mul]
+boru> for 5 [dup mul]
 0 1 4 9 16
 ```
 
@@ -193,7 +193,7 @@ pushes the counter, then executes the body.
 Use a range for more control:
 
 ```
-aql> for [1, 4] [dup mul]
+boru> for [1, 4] [dup mul]
 1 4 9
 ```
 
@@ -203,10 +203,10 @@ aql> for [1, 4] [dup mul]
 The `do` word evaluates a quoted list as a sub-program:
 
 ```
-aql> do [1 add 2]
+boru> do [1 add 2]
 3
 
-aql> do {x: [3 add 4], y: 5}
+boru> do {x: [3 add 4], y: 5}
 {x:7,y:5}
 ```
 
@@ -216,7 +216,7 @@ aql> do {x: [3 add 4], y: 5}
 Errors are values. The `error` word handles them:
 
 ```
-aql> do [1 div 0] error [drop 42]
+boru> do [1 div 0] error [drop 42]
 42
 ```
 
@@ -228,29 +228,29 @@ value.
 
 ## Types
 
-AQL has a hierarchical type system. Check types with `typeof`:
+BORU has a hierarchical type system. Check types with `typeof`:
 
 ```
-aql> typeof 42
+boru> typeof 42
 Integer
 
-aql> typeof "hello"
+boru> typeof "hello"
 String
 
-aql> typeof [1, 2]
+boru> typeof [1, 2]
 List
 ```
 
 Use `is` to test type compatibility:
 
 ```
-aql> 42 is Integer
+boru> 42 is Integer
 true
 
-aql> 42 is Number
+boru> 42 is Number
 true
 
-aql> 42 is String
+boru> 42 is String
 false
 ```
 
@@ -260,7 +260,7 @@ false
 Use `await` to run tasks concurrently:
 
 ```
-aql> await [[1 add 2] [3 add 4]]
+boru> await [[1 add 2] [3 add 4]]
 [3,7]
 ```
 
@@ -270,14 +270,14 @@ in order.
 Use `sleep` to add delays:
 
 ```
-aql> sleep 100
+boru> sleep 100
 ```
 
 Schedule deferred work with `timeout` and `interval`:
 
 ```
-aql> def t timeout 1000 [print "done"]
-aql> t cancel
+boru> def t timeout 1000 [print "done"]
+boru> t cancel
 ```
 
 

@@ -1,58 +1,58 @@
-# AQL Language Specification: the aql:bin module
+# BORU Language Specification: the boru:bin module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of bit/byte utilities. Import binds the `bin`
-# namespace: `import "aql:bin-util"  BinUtil.word args`.
+# namespace: `import "boru:bin-util"  BinUtil.word args`.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  bit population
-import "aql:bin-util"  BinUtil.popcount 7	3	count of set bits (0b111)
-import "aql:bin-util"  BinUtil.parity 7	true	odd number of set bits
+import "boru:bin-util"  BinUtil.popcount 7	3	count of set bits (0b111)
+import "boru:bin-util"  BinUtil.parity 7	true	odd number of set bits
 #
 # §2  leading / trailing zeros (64-bit)
-import "aql:bin-util"  BinUtil.clz 1	63	count leading zeros
-import "aql:bin-util"  BinUtil.ctz 8	3	count trailing zeros (0b1000)
+import "boru:bin-util"  BinUtil.clz 1	63	count leading zeros
+import "boru:bin-util"  BinUtil.ctz 8	3	count trailing zeros (0b1000)
 #
 # §3  character codes
-import "aql:bin-util"  BinUtil.ord 'A'	65	code point of a character
-import "aql:bin-util"  BinUtil.chr 65	'A'	character from a code point
+import "boru:bin-util"  BinUtil.ord 'A'	65	code point of a character
+import "boru:bin-util"  BinUtil.chr 65	'A'	character from a code point
 #
 # §4  swap form
-import "aql:bin-util"  3 BinUtil.popcount	2	swap form dispatches (0b11 → 2)
+import "boru:bin-util"  3 BinUtil.popcount	2	swap form dispatches (0b11 → 2)
 #
 # §5  bitwise operators (moved here from core)
-import "aql:bin-util"  BinUtil.band 12 10	8	bitwise AND (0b1100 & 0b1010)
-import "aql:bin-util"  BinUtil.bor 12 10	14	bitwise OR
-import "aql:bin-util"  BinUtil.bxor 12 10	6	bitwise XOR
-import "aql:bin-util"  8 BinUtil.bsl 2	32	left shift (8 << 2)
+import "boru:bin-util"  BinUtil.band 12 10	8	bitwise AND (0b1100 & 0b1010)
+import "boru:bin-util"  BinUtil.bor 12 10	14	bitwise OR
+import "boru:bin-util"  BinUtil.bxor 12 10	6	bitwise XOR
+import "boru:bin-util"  8 BinUtil.bsl 2	32	left shift (8 << 2)
 #
 # §6  negative — unbound without import
 BinUtil.popcount 7	ERROR:undefined_word	`bin` is unbound without `import`
 band 12 10	ERROR:undefined_word	bitwise ops are no longer core
 #
 # §7  second-tier bit utilities
-import "aql:bin-util"  BinUtil.bitlen 255	8	minimum bits to represent the value
-import "aql:bin-util"  BinUtil.mask 4	15	low-4-bit mask (0b1111)
-import "aql:bin-util"  BinUtil.reverse 1	-9223372036854775808	reverse all 64 bits
-import "aql:bin-util"  BinUtil.swap 1	72057594037927936	reverse the 8 bytes
-import "aql:bin-util"  255 BinUtil.rotl 8	65280	rotate left by 8 bits
-import "aql:bin-util"  65280 BinUtil.rotr 8	255	rotate right by 8 bits
-import "aql:bin-util"  0 BinUtil.set 3	8	set bit 3 (0b1000)
-import "aql:bin-util"  15 BinUtil.clear 0	14	clear bit 0
-import "aql:bin-util"  5 BinUtil.toggle 1	7	flip bit 1 (0b101 → 0b111)
-import "aql:bin-util"  5 BinUtil.test 0	true	bit 0 is set
-import "aql:bin-util"  5 BinUtil.test 1	false	bit 1 is clear
-import "aql:bin-util"  255 BinUtil.extract 0 4	15	bits [0,4) of the value
-import "aql:bin-util"  255 BinUtil.insert 0 4 0	240	replace bits [0,4) with zero
-import "aql:bin-util"  BinUtil.fnv32 'hello'	1335831723	32-bit FNV-1a string hash
-import "aql:bin-util"  BinUtil.fnv64 'hello'	2607821981565500683	64-bit FNV-1a hash (sign bit cleared)
+import "boru:bin-util"  BinUtil.bitlen 255	8	minimum bits to represent the value
+import "boru:bin-util"  BinUtil.mask 4	15	low-4-bit mask (0b1111)
+import "boru:bin-util"  BinUtil.reverse 1	-9223372036854775808	reverse all 64 bits
+import "boru:bin-util"  BinUtil.swap 1	72057594037927936	reverse the 8 bytes
+import "boru:bin-util"  255 BinUtil.rotl 8	65280	rotate left by 8 bits
+import "boru:bin-util"  65280 BinUtil.rotr 8	255	rotate right by 8 bits
+import "boru:bin-util"  0 BinUtil.set 3	8	set bit 3 (0b1000)
+import "boru:bin-util"  15 BinUtil.clear 0	14	clear bit 0
+import "boru:bin-util"  5 BinUtil.toggle 1	7	flip bit 1 (0b101 → 0b111)
+import "boru:bin-util"  5 BinUtil.test 0	true	bit 0 is set
+import "boru:bin-util"  5 BinUtil.test 1	false	bit 1 is clear
+import "boru:bin-util"  255 BinUtil.extract 0 4	15	bits [0,4) of the value
+import "boru:bin-util"  255 BinUtil.insert 0 4 0	240	replace bits [0,4) with zero
+import "boru:bin-util"  BinUtil.fnv32 'hello'	1335831723	32-bit FNV-1a string hash
+import "boru:bin-util"  BinUtil.fnv64 'hello'	2607821981565500683	64-bit FNV-1a hash (sign bit cleared)
 #
 # §11 binary-safe text encodings (base64 / hex, RFC 4648)
-import "aql:bin-util"  BinUtil.base64-encode 'hello'	'aGVsbG8='	base64 of a string (standard alphabet, padded)
-import "aql:bin-util"  BinUtil.base64-decode 'aGVsbG8='	'hello'	base64 decode round-trips back to the original
-import "aql:bin-util"  BinUtil.base64-encode (BinUtil.hex-decode '6162')	'YWI='	encode accepts decoded bytes ('ab') — composes through both codecs
-import "aql:bin-util"  BinUtil.hex-encode 'hi'	'6869'	hex of a string (lowercase)
-import "aql:bin-util"  BinUtil.hex-decode '6869'	'hi'	hex decode round-trips back to the original
-import "aql:bin-util"  BinUtil.base64-decode '!!notbase64'	ERROR:decode_error	malformed base64 is a decode_error, not silent garbage
-import "aql:bin-util"  BinUtil.hex-decode 'xyz'	ERROR:decode_error	non-hex input is a decode_error
-import "aql:bin-util"  BinUtil.hex-decode '6'	ERROR:decode_error	odd-length hex is a decode_error
+import "boru:bin-util"  BinUtil.base64-encode 'hello'	'aGVsbG8='	base64 of a string (standard alphabet, padded)
+import "boru:bin-util"  BinUtil.base64-decode 'aGVsbG8='	'hello'	base64 decode round-trips back to the original
+import "boru:bin-util"  BinUtil.base64-encode (BinUtil.hex-decode '6162')	'YWI='	encode accepts decoded bytes ('ab') — composes through both codecs
+import "boru:bin-util"  BinUtil.hex-encode 'hi'	'6869'	hex of a string (lowercase)
+import "boru:bin-util"  BinUtil.hex-decode '6869'	'hi'	hex decode round-trips back to the original
+import "boru:bin-util"  BinUtil.base64-decode '!!notbase64'	ERROR:decode_error	malformed base64 is a decode_error, not silent garbage
+import "boru:bin-util"  BinUtil.hex-decode 'xyz'	ERROR:decode_error	non-hex input is a decode_error
+import "boru:bin-util"  BinUtil.hex-decode '6'	ERROR:decode_error	odd-length hex is a decode_error

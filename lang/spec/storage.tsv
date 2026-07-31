@@ -2,7 +2,7 @@
 # =====================================================================		
 # get / set — universal container access		
 # =====================================================================		
-# `get` and `set` are AQL's container-access pair. Both are forward-		
+# `get` and `set` are BORU's container-access pair. Both are forward-		
 # precedence with a fan of signatures so the same word can drive		
 # Stores (copy-on-write), class instances (in-place mutation),
 # FlexMap/FlexList (in-place, returns the node), and plain Map / List / Options nodes
@@ -29,7 +29,7 @@
 # covers the cross-cutting surface: Store-side set/get via `context`,
 # class-instance set, and the None / error paths.
 #		
-# Runs against the production aql registry.		
+# Runs against the production boru registry.		
 		
 		
 # ====================================================================		

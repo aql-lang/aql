@@ -3,13 +3,13 @@
 Status: **both proposals LANDED (2026-06-10).** Source material:
 VOXGIG-DX-REPORT.5.md T9.7 ("no in-memory parser"), moved here so the
 report tracks status and this document owns the design. The trie
-author wanted to turn text into data (and AQL source into inspectable
+author wanted to turn text into data (and BORU source into inspectable
 structure) without touching the filesystem.
 
 > **Landed state (2026-06-10):** §2 `StructUtil.parse` decodes
 > jsonic/JSON text via `jsonic.Make().Parse` + the same data-context
 > conversion `read`/`import` use (text → strings, never words);
-> malformed AND empty input raise `[aql/parse_error]`. One leniency
+> malformed AND empty input raise `[boru/parse_error]`. One leniency
 > note: jsonic itself is forgiving (e.g. `"{a:"` repairs to
 > `{a:none}`), so "malformed" means what jsonic rejects — the same
 > contract as `import "data.jsonic"`. §3 `Vm.parse` returns the
@@ -20,7 +20,7 @@ structure) without touching the filesystem.
 
 ## 1. Current state
 
-- **Evaluation from a string exists:** `import "aql:vm"` then
+- **Evaluation from a string exists:** `import "boru:vm"` then
   `Vm.run "1 add 2"` → `3` (plus `run-with` / `run-sandbox` /
   `run-compute` variants). So "run this source" is covered; "parse
   this text into data *without* running it" is not.
@@ -38,7 +38,7 @@ The complement of `jsonify`, in the same module so the pair is
 discoverable together:
 
 ```
-import "aql:struct-util"
+import "boru:struct-util"
 StructUtil.parse "{a:1, b:[2,3]}"     # returns {a:1, b:[2 3]}
 StructUtil.parse "[1, 2, 3]"          # returns [1 2 3]
 ```
@@ -54,24 +54,24 @@ Design points:
 - **Accepts the jsonic superset** (unquoted keys, optional commas),
   hence strict JSON parses too. One word, not a `parse-json` /
   `parse-jsonic` split.
-- **Malformed input raises** `[aql/parse_error]` with the jsonic
+- **Malformed input raises** `[boru/parse_error]` with the jsonic
   message and offset — loud, never a silent `none` (the DX reports'
   central demand).
 - Name: `parse` is fine *inside* the namespace (`StructUtil.parse`);
   per ADR-001 it must not be a core word since the surface is already
-  module-scoped and `aql:time-util` has its own `TimeUtil.parse`
+  module-scoped and `boru:time-util` has its own `TimeUtil.parse`
   precedent for namespaced reuse.
 - Per ADR-003 it ships with `lang/spec/module-struct.tsv` rows
   (positive + malformed-input negative) in the same change.
 
-## 3. Proposal: `Vm.parse` — AQL source → inspectable structure
+## 3. Proposal: `Vm.parse` — BORU source → inspectable structure
 
 For tooling (formatters, linters, macro experiments) a step below
-`Vm.run`: parse AQL source and return the token/value sequence as
+`Vm.run`: parse BORU source and return the token/value sequence as
 data, without evaluating it.
 
 ```
-import "aql:vm"
+import "boru:vm"
 Vm.parse "1 add 2"        # returns a quoted list: [1 word(add)/q 2]
 ```
 
@@ -81,22 +81,22 @@ Design points:
   auto-evaluates; words appear as atoms carrying their referent
   (consistent with the `/r` referent machinery and the macro system's
   `quote`/`macroexpand` view of code-as-data).
-- Parse errors raise `[aql/parse_error]` with the span the CLI would
+- Parse errors raise `[boru/parse_error]` with the span the CLI would
   print — same loudness contract as §2.
-- This deliberately reuses what `aql fmt`, `check`, and the macro
+- This deliberately reuses what `boru fmt`, `check`, and the macro
   expander already have internally; the word is surface, not new
   machinery.
 - Open question: rendering of structural markers (paren groups,
   `end`) — recommend exposing exactly the engine's marker values,
   documented as implementation-defined for now, and stabilising the
-  shape when a first real consumer (e.g. an AQL-written linter)
+  shape when a first real consumer (e.g. a BORU-written linter)
   exists.
 
 ## 4. Non-goals
 
 - A streaming / incremental parser API (no use case yet).
 - CSV/XML/etc. decoders — separate modules if ever
-  (`jsonicjs/csv` is already linked by the CLI for `aql prep`;
+  (`jsonicjs/csv` is already linked by the CLI for `boru prep`;
   exposing it would be its own small proposal).
 - Changing `import "data.json"` — file-based decode stays as is.
 

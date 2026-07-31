@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	lang "github.com/aql-lang/aql/lang/go"
+	eng "github.com/boru-lang/boru/eng/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // PrintStampReport rendering: stamped lines, refusal lines (explicit and

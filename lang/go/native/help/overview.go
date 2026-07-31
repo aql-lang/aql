@@ -2,8 +2,8 @@ package help
 
 import "strings"
 
-// RepoURL is the canonical AQL source repository.
-const RepoURL = "https://github.com/aql-lang/aql"
+// RepoURL is the canonical BORU source repository.
+const RepoURL = "https://github.com/boru-lang/boru"
 
 // ReferenceURL points at the word/syntax reference in the repo.
 const ReferenceURL = RepoURL + "/blob/main/REFERENCE.md"
@@ -11,14 +11,14 @@ const ReferenceURL = RepoURL + "/blob/main/REFERENCE.md"
 // TutorialURL points at the step-by-step tutorial in the repo.
 const TutorialURL = RepoURL + "/blob/main/TUTORIAL.md"
 
-// Overview returns a short orientation to the AQL language: the
+// Overview returns a short orientation to the BORU language: the
 // basics of how words and values compose, and how to reach the
 // per-word/per-module documentation via `describe`. It is the single
 // source of truth shared by the `help` word and the REPL `/help`
 // meta-command.
 func Overview() string {
 	var b strings.Builder
-	b.WriteString("AQL — a concatenative query language.\n")
+	b.WriteString("BORU — a concatenative query language.\n")
 	b.WriteString("\n")
 	b.WriteString("Basics:\n")
 	b.WriteString("  - A program is a sequence of words and values, read left to right:\n")
@@ -43,9 +43,9 @@ func Overview() string {
 	b.WriteString("  \"concat\" describe      Same as `describe concat`, by string name.\n")
 	b.WriteString("\n")
 	b.WriteString("Modules add more words; import one, then describe what it exports:\n")
-	b.WriteString("  import \"aql:math-util\"\n")
+	b.WriteString("  import \"boru:math-util\"\n")
 	b.WriteString("  0.5 MathUtil.sin              ;# call an imported word\n")
-	b.WriteString("  describe \"aql:math-util\"      ;# or describe it without importing\n")
+	b.WriteString("  describe \"boru:math-util\"      ;# or describe it without importing\n")
 	b.WriteString("\n")
 	b.WriteString("At the REPL: type /help for the meta-command list, /describe <word> to\n")
 	b.WriteString("look one up.\n")

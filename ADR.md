@@ -1,6 +1,6 @@
 # Architecture Design Record (ADR)
 
-A running list of the key architectural decisions behind AQL — the ones
+A running list of the key architectural decisions behind BORU — the ones
 that shape the language and its implementation, with the reasoning that
 led to them. Each record is short, numbered, and dated. Newer decisions
 may supersede older ones; superseded records are kept (struck through in
@@ -22,7 +22,7 @@ to reverse-engineer from the code, add a record here.
 
 ### Decision
 
-A native module (`aql:math`, `aql:array-util`, `aql:matrix-util`, …) must **never
+A native module (`boru:math`, `boru:array-util`, `boru:matrix-util`, …) must **never
 export a name that collides with a core (built-in) word**. If an
 operation would naturally share a core word's name, do one of the
 following instead:
@@ -49,17 +49,17 @@ following instead:
 
 ### Context
 
-AQL resolves words by signature and has no implicit `Word → Atom`
+BORU resolves words by signature and has no implicit `Word → Atom`
 fallback. When a module exports a name that also exists as a core word,
 two different operations end up wearing the "same" name, distinguished
-only by an `aql:array-util`-style prefix. That is confusing in exactly the
+only by a `boru:array-util`-style prefix. That is confusing in exactly the
 case it matters most: when both apply to the *same* value type but mean
 different things.
 
 The motivating case was the array vocabulary. Three array operations had
 been given `arr-`-prefixed built-in names (`arr-flatten`,
 `arr-transpose`, `arr-indexof`) purely to dodge collisions with the core
-`flatten` and `indexof`, and the first cut of the `aql:array-util` module
+`flatten` and `indexof`, and the first cut of the `boru:array-util` module
 re-exported them as `ArrayUtil.flatten`/`ArrayUtil.indexof`. That meant
 `flatten` (core, one level) and `ArrayUtil.flatten` (deep) did *different
 things to the same list* — a foot-gun, and a symptom that the boundary
@@ -67,7 +67,7 @@ was drawn in the wrong place.
 
 ### Consequences
 
-For `aql:array-util` specifically:
+For `boru:array-util` specifically:
 
 - **Deep flatten** is now `flatten -1` — a negative depth on the core
   `flatten` word (which removes one level by default, or `N` levels with
@@ -78,22 +78,22 @@ For `aql:array-util` specifically:
 
   > **Amendment (2026-06-07).** This was originally folded into the core
   > `indexof` word as a `[List, List]` overload. Two later changes undid
-  > that: `indexof` itself moved out of core into `aql:string-util`
+  > that: `indexof` itself moved out of core into `boru:string-util`
   > (`StringUtil.indexof`, string-only), and overloading one word across
   > two unrelated domains proved a smell — the string form returns a
   > scalar with `-1`-when-absent, while the list form returns a vector
   > with a *different* absent sentinel. The list form is now its own word,
-  > `ArrayUtil.indices`, in `aql:array-util`, with `-1` for an absent
+  > `ArrayUtil.indices`, in `boru:array-util`, with `-1` for an absent
   > needle (consistent with the string form's not-found value). This still
   > honours the ADR: `indices` shadows no core word.
 - **`transpose`** has no core counterpart, so it keeps its plain name and
   remains `ArrayUtil.transpose`. The `arr-` workaround names are gone.
 
-After this, the `aql:array-util` export set shares no name with any core word.
+After this, the `boru:array-util` export set shares no name with any core word.
 
-### Applied to `aql:matrix-util`
+### Applied to `boru:matrix-util`
 
-The `aql:matrix-util` module predated this record and exported `size`,
+The `boru:matrix-util` module predated this record and exported `size`,
 `flatten`, and `transpose`. These have been reconciled:
 
 - **`size`** — dropped. The core `size` word already reports a tensor's
@@ -102,7 +102,7 @@ The `aql:matrix-util` module predated this record and exported `size`,
 - **`flatten`** — renamed to **`MatrixUtil.values`** (the row-major list of
   entries). The core `flatten` word remains the only `flatten`.
 - **`transpose`** — kept. `transpose` is *not* a core word; it lives in
-  the `aql:array-util` module. `MatrixUtil.transpose` and `ArrayUtil.transpose` are
+  the `boru:array-util` module. `MatrixUtil.transpose` and `ArrayUtil.transpose` are
   two namespaced module words, which this rule permits — the rule is
   about shadowing *core* words, not other module words.
 
@@ -116,7 +116,7 @@ After this, no module export shadows a core word.
 
 ### Decision
 
-AQL will **not** implement broadcasting — the implicit lifting of a
+BORU will **not** implement broadcasting — the implicit lifting of a
 scalar word over an array. Applying an operation across an array is
 always **explicit**, via a combinator (`each`, `eachrank`, `fold`, …).
 A scalar word applied to a list where it expects a scalar is a **type
@@ -132,7 +132,7 @@ each [add 10] [1,2,3]     #  # returns [11,12,13]   (the supported form)
 An earlier draft of `design/ARRAYIFICATION.6.md` proposed broadcasting:
 `add 10 [1,2,3]` returns `[11,12,13]`, with rules for scalar+list, equal-length
 list+list zip, and nested alignment. It is attractive (it reads like
-NumPy/APL) but a poor fit for AQL:
+NumPy/APL) but a poor fit for BORU:
 
 1. **It cannot be a word.** It would have to be a fallback wedged into
    the signature matcher (`eng/go/match.go`) — the most load-bearing
@@ -187,7 +187,7 @@ disambiguates the legitimate cross-module name reuse the language allows
 ### Context
 
 Of the seventeen native modules, four (`array-util`, `matrix-util`,
-`string-util` in part, and the AQL-implemented `decision`/`report`/`test`
+`string-util` in part, and the BORU-implemented `decision`/`report`/`test`
 /`vm`/`query` modules) had grown export sets with **zero** rows in the
 formal spec suite, and even the modules *with* a spec file
 (`math-util`, `type-util`, `time-util`, …) covered only a fraction of
@@ -229,7 +229,7 @@ exhaustive over the public export set, not a sample of it.
   (`coverage_test.go`) with a justification and remain covered by Go tests
   (e.g. `lang/go/native/folder_test.go`). The list is asserted to contain
   only live exports so it cannot rot, and is meant to stay tiny: prefer the
-  `mem://` scheme or a deterministic validation-error row (as the `aql:net`
+  `mem://` scheme or a deterministic validation-error row (as the `boru:net`
   `prepare`/`direct` rows do) before reaching for an exemption.
 
 ---
@@ -240,7 +240,7 @@ exhaustive over the public export set, not a sample of it.
 
 ### Decision
 
-Every AQL word is **forward-collecting by default**: a word looks ahead
+Every BORU word is **forward-collecting by default**: a word looks ahead
 for its arguments first, so the canonical call form is
 `word arg1 arg2 …` — written argument order matches declared parameter
 order, and code reads like a function call. The only standing exception
@@ -260,13 +260,13 @@ collection behaviour.
 
 ### Context
 
-AQL is a concatenative language with a stack, but it deliberately does
+BORU is a concatenative language with a stack, but it deliberately does
 not *read* like Forth. The §1.4 sig-order unification (see lang/go/
 CLAUDE.md "Argument Ordering") made one rule govern every word, with
 the forward phase first and the stack as fallback; the mirror
 equivalence `f a b ≡ b f a ≡ b a f` means pipeline code and call-style
 code are the same word. Both DX field reports
-(`design/VOXGIG-DX-REPORT.5.md`, `design/AQL-DX-REPORT.5.md`)
+(`design/VOXGIG-DX-REPORT.5.md`, `design/BORU-DX-REPORT.5.md`)
 confirmed the direction: the issues users hit were *edges* of forward
 collection (grouping, mixed forms), and the fixes that landed
 (structure-first lazy forward-argument resolution, FnDef forward
@@ -296,7 +296,7 @@ are stack-only").
   (`(1 add 1) print/s`), or the forward form (`print (1 add 1)`).
   The *residual* problem — chained un-separated forward calls
   evaluating right-to-left — is an evaluation-order question to fix
-  (or diagnose via `aql check`) without changing any word's default;
+  (or diagnose via `boru check`) without changing any word's default;
   see `design/ERRORS.8.md` §"Chained forward calls".
 - **Mixed-form calls are user error territory, diagnosed not blessed.**
   Forms that split one call's args across both sides without grouping
@@ -339,7 +339,7 @@ are stack-only").
 
 ### Decision
 
-The AQL implementation **never panics deliberately**. Every error
+The BORU implementation **never panics deliberately**. Every error
 condition — including build-time programmer errors such as a malformed
 type path or a duplicate `FixedID` — is reported as a returned `error`,
 surfaced at a checkable boundary, not raised as a `panic`. This is
@@ -422,7 +422,7 @@ backend-agnostic **envelope**, and the content-versioning/integrity layer
 
 1. **Envelope key hierarchy.** Each namespace has a random
    **namespace data key (NDK)**, identified by an 8-byte id. Every secret
-   *value* is sealed (`"AQLE" | format | ndkID | nonce | ct`, AES-256-GCM,
+   *value* is sealed (`"BORUE" | format | ndkID | nonce | ct`, AES-256-GCM,
    AAD binding `ndkID|namespace|alias`) under its namespace NDK *before*
    it reaches any storage backend — so backends become opaque ciphertext
    stores. Each **slot** owns an X25519 keypair: the private key is
@@ -454,7 +454,7 @@ backend-agnostic **envelope**, and the content-versioning/integrity layer
    NDKs, via the admin slot) **before** overwriting the keyring. New
    on-disk versions follow ADR-009: `storeVersion` 3 → 4 (with a no-op
    `migrateStoreV3ToV4` and a golden fixture), and the envelope keyring is
-   a self-describing `"AQLK" | format=2 | json` container distinct from
+   a self-describing `"BORUK" | format=2 | json` container distinct from
    the legacy format-1 encrypted blob.
 
 4. **Feature B (versioning/integrity/history/restore) activates only with
@@ -503,11 +503,11 @@ versioning and restore worth having.
   last-known-good recovery for `vault.jsonic`, not a secret-value rewind.
 - The scoped-password feature requires the file backend's envelope; a
   keychain-backed vault that gains slots double-wraps (OS store of
-  envelope ciphertext) and now requires an AQL passphrase to decrypt.
+  envelope ciphertext) and now requires a BORU passphrase to decrypt.
 
 ---
 
-## ADR-007 — No secondary parsing; every AQL structure is macro-constructable Node data {#adr-007}
+## ADR-007 — No secondary parsing; every BORU structure is macro-constructable Node data {#adr-007}
 
 **Status:** Accepted · **Date:** 2026-06-29
 
@@ -515,12 +515,12 @@ versioning and restore worth having.
 
 A word **must not** define a custom sub-language that it parses out of a
 captured token stream or out of the text of a value. Any structure a word
-consumes must be an ordinary AQL **Node** (a `List`/`Map` of plain scalars)
+consumes must be an ordinary BORU **Node** (a `List`/`Map` of plain scalars)
 that the word only **reads** — never re-lexes, re-parses, or string-splits.
 
 Concretely, the contract is: every structure accepted by a word must be
 
-1. **constructable by a macro** — a macro emits AQL data (`quote`/`unquote`),
+1. **constructable by a macro** — a macro emits BORU data (`quote`/`unquote`),
    so any structure a macro can produce is, by definition, plain Node data;
    and
 2. **JSON-representable** — expressible with maps, lists, strings, integers,
@@ -545,7 +545,7 @@ Secondary parsing is corrosive: the structure it accepts can't be built or
 inspected as data (so no macro can emit it, and it can't be serialised),
 its grammar drifts from the host language's, and its rules (here, "a numeric
 `/N` is the arity modifier so sizes must use parens") are accidents of the
-token stream rather than deliberate design. AQL already has exactly one
+token stream rather than deliberate design. BORU already has exactly one
 parser and a uniform type/`make`/`refine` model; a per-word DSL undercuts
 both.
 
@@ -688,12 +688,12 @@ the rules for reading one are fixed:
    version has an ordered, pure migration to the next. The store
    (`vault.jsonic`) uses the `storeMigrations` registry keyed by
    `Store.Version`; the encrypted keyring (`vault.keyring`) uses a
-   `"AQLK" | format-byte | …` header and dispatches on the byte.
+   `"BORUK" | format-byte | …` header and dispatches on the byte.
 2. **Newer than the running binary → refuse, never parse leniently.**
    Go's `encoding/json` silently drops unknown fields, so loading then
    saving a future-version store with an old binary would *erase* data
    it doesn't understand. A higher version than the binary supports is a
-   hard error that says "upgrade aql", for the store, the keyring, and
+   hard error that says "upgrade boru", for the store, the keyring, and
    `vault policy` files alike.
 3. **Bumping a format version is a three-part commit:** raise the
    constant (`storeVersion` / `keyringFormat` / `policyVersion`), add the
@@ -703,13 +703,13 @@ the rules for reading one are fixed:
    drift.
 
 The live wire protocols are versioned too: the credential broker
-advertises `X-AQL-Vault-Protocol` on every response and refuses a client
+advertises `X-BORU-Vault-Protocol` on every response and refuses a client
 that declares a newer one; the MCP server reports its protocol and
 server version from `initialize`.
 
 ### Context
 
-`aql` is under active development while the vault must keep working
+`boru` is under active development while the vault must keep working
 across binary upgrades and, increasingly, across machines. Three failure
 modes motivated formalizing this:
 
@@ -742,11 +742,11 @@ modes motivated formalizing this:
   vault is two self-describing files (`vault.jsonic` + `vault.keyring`)
   plus the passphrase, portable to any OS; keychain-backed vaults are
   not, because the secret values live in the host OS store rather than
-  under `~/.aql`.
+  under `~/.boru`.
 - For the keychain case — and for any cross-backend or cross-OS move —
-  `vault export` writes a passphrase-encrypted bundle (its own `"AQLX"`
+  `vault export` writes a passphrase-encrypted bundle (its own `"BORUX"`
   magic + format byte, same envelope discipline) carrying the aliases
   and their values, which `vault import` restores into any backend.
-  Because the bundle is versioned the same way, an older `aql` refuses a
+  Because the bundle is versioned the same way, an older `boru` refuses a
   newer bundle rather than mishandling it. `import` auto-detects whether
   its input is a bundle or a `.env` file.

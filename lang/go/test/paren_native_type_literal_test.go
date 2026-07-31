@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // =============================================================================
@@ -387,7 +387,7 @@ func TestTypeLiteralNoPanicNative(t *testing.T) {
 		expr string
 	}{
 		// clone/getpath/setpath/inject/merge/walk/items/transform/validate/
-		// selector moved to the aql:struct module; their type-literal
+		// selector moved to the boru:struct module; their type-literal
 		// no-panic coverage lives in the module tests (struct_module_test.go).
 		{"size-map", `size Map`},
 		{"size-list", `size List`},

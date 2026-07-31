@@ -6,7 +6,7 @@ import (
 )
 
 // This file owns the canonical fn-signature parser. Both the bare
-// aqleng `fn` (in core_words.go) and the production aql `def`/`fn`
+// borueng `fn` (in core_words.go) and the production boru `def`/`fn`
 // in lang/go/engine/native_definition_fn.go call into these
 // functions. Do NOT duplicate the parser logic anywhere else; the
 // optional-arg `?` rule, the barrier `|` rule, and the type-name
@@ -71,7 +71,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 	elems, _ := AsList(inputSig)
 	var params []FnParam
 	// -1 is the "no barrier seen" sentinel — consumers default
-	// it to len(params) so AQL fns without a `|` are all-forward,
+	// it to len(params) so BORU fns without a `|` are all-forward,
 	// matching the convention native registrations follow. A
 	// leading `|` overwrites with 0 (explicit all-stack).
 	barrierPos := -1
@@ -218,7 +218,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 			_as4, _ := AsWord(elem)
 			name := _as4.Name
 			// `name:*Type` colon-delimited form. Used by minimal
-			// tokenizers (e.g. the aqleng spec runner, whose
+			// tokenizers (e.g. the borueng spec runner, whose
 			// whitespace-only lexer produces a single Word for
 			// `n:Integer`). Production parsers using jsonic produce
 			// the `{name:*Type}` implicit-map form instead, handled
@@ -402,7 +402,7 @@ func PatternsFromParams(params []FnParam) map[int]Value {
 
 // keywordParam builds a KEYWORD-slot param: a /q slot whose concrete
 // Atom pattern (`kw`) admits exactly the literal word `kw` at dispatch
-// (patternsOk's keyword branch, eng/go/match.go). It is the AQL-source
+// (patternsOk's keyword branch, eng/go/match.go). It is the BORU-source
 // spelling of the def constructor forms' keyword slots — an atom `kw/q`
 // (or `name:kw/q`) whose name is NOT a type. Binding-agnostic like every
 // /q slot: the captured value is the Atom `kw`, bound to `name` when
@@ -695,7 +695,7 @@ func lookupTypeNameInRegistry(r *Registry, name string) (*Type, error) {
 			return def, nil
 		}
 	}
-	return nil, fmt.Errorf("aql: unknown type %q", name)
+	return nil, fmt.Errorf("boru: unknown type %q", name)
 }
 
 func ResolveTypeName(name string) (*Type, error) {

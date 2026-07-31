@@ -74,8 +74,8 @@ for 3 [1 2]	1 2 1 2 1 2
 # await branch bodies compile per element (CompileStoresBodyList, 2026-07-14):
 # each parallels element becomes its own 0-param unit run via RunUnit on its
 # branch fork; a raising branch surfaces as the mode's error value.
-import "aql:time-util" end TimeUtil.await [[1 add 2] [3 mul 4]]	[3 12]
-import "aql:time-util" end TimeUtil.await [[def x 5 x add 1] [3 mul 4]]	[6 12]
+import "boru:time-util" end TimeUtil.await [[1 add 2] [3 mul 4]]	[3 12]
+import "boru:time-util" end TimeUtil.await [[def x 5 x add 1] [3 mul 4]]	[6 12]
 # do-unit registry-replay rows GRADUATED to native compiles (2026-07-14):
 # do-def LEAK fidelity (the check pass keeps do-body defs, matching the
 # runtime) lets the typed-def bodies compile as closure units.
@@ -84,7 +84,7 @@ do [def Big (Integer gt 10) 15 is Big]	true
 def rec fn [ [nd:Any key:Any consumed:Any best:Any] [Any] [ if (nd eq none) [best] [ def pc (consumed "x" add) def best2 (if (nd "end" get) [pc] [best]) best2 consumed key (nd "mid" get) rec ] ] ] (rec none "hi" "" none)	none
 import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end do [(M.boom 5) "x"] error [dot code]	bad_input/q
 def f fn [[x:Any] [Any] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]	bad_input/q
-import "aql:struct-util"  def g StructUtil.parse/r  do [(g "") 2] error [dot code]	parse_error/q
+import "boru:struct-util"  def g StructUtil.parse/r  do [(g "") 2] error [dot code]	parse_error/q
 import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end do [(if true [M.boom 5] [7]) 8] error [dot code]	bad_input/q
 5 do [raise aa "x"] error [drop 9] add 1	5 10
 5 do [7] error [drop 9] add 1	5 8

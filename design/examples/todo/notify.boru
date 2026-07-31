@@ -1,0 +1,56 @@
+# notify.boru — the event sink: fan mutation events out to presence processes.
+#
+# DX probe: this ties the service layer and the process layer together and
+# exercises the two remaining SERVICES.0 features:
+#
+#   * fire-and-forget `send` into a BOUNDED, lossy mailbox (`overflow: 'drop`,
+#     §8.1) — a telemetry-style sink must never block the hot path. The todo
+#     store `send`s here and never waits.
+#   * a DEFERRED reply via `defer` + `reply req.@from` (§1) — `subscribe` cannot
+#     answer until it has confirmed the presence process exists, so the handler
+#     returns the `defer` sentinel and replies later off the request's `@from`
+#     reply handle. This is the one place a handler needs the caller's identity.
+
+import "boru:serve"
+import "sessions.boru"          # for the shared presence-name convention
+
+export "Notify" {
+  New: New/r
+}
+
+# `New {}` -> Service.  Place this in a server with `overflow: 'drop` (app.boru).
+def New fn [[opts:Map] [Service] [
+  def svc ( service {} )
+
+  # --- event: a mutation happened; push it to the user's presence proc ---
+  # Arrives via `send` (no reply expected). If the user is offline (`whereis`
+  # returns None), drop it — presence is best-effort. `send` to a dead/unknown
+  # pid is silently dropped anyway (PROCESSES.0 §3), so this stays simple.
+  add {tag: "created"} [ [req state] => [ push-to req.user req  None ] ] svc
+  add {tag: "toggled"} [ [req state] => [ push-to req.user req  None ] ] svc
+  add {tag: "removed"} [ [req state] => [ push-to req.user req  None ] ] svc
+  add {tag: "cleared"} [ [req state] => [ push-to req.user req  None ] ] svc
+
+  # --- subscribe: deferred reply ---------------------------------------
+  # A client asks to subscribe its sink to a user's events. We must ensure the
+  # presence process is live before confirming. Return `defer`, do the work,
+  # then `reply` to the caller via the reply handle on `req.@from`.
+  add {op: "subscribe"} [ [req state] => [
+      def pid ( whereis (Sessions.presence-name req.user) )
+      if (none? pid)
+        [ raise offline `${req.user} is not connected` ]
+        [ send {op: "subscribe"  sink: req.sink} pid   # wire sink into presence
+          reply req.@from {ok: true  user: req.user}   # deferred reply
+          defer ]                                       # sentinel: "answered out of band"
+  ] ] svc
+
+  svc
+]]
+
+# Look up the user's presence process by its registered name and forward the
+# event. Decoupled by NAME (not reference) so notify holds no pids itself.
+def push-to fn [[user:String ev:Map] [None] [
+  def pid ( whereis (Sessions.presence-name user) )
+  if (none? pid) [ None ]
+    [ send (set op "event" ev) pid  None ]    # {op:"event" tag:… id:… user:…}
+]]

@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 	voxgigstruct "github.com/voxgig/struct/go"
 )
 

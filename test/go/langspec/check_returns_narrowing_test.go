@@ -11,7 +11,7 @@ package langspec
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 func TestReturnsAnnotationNarrowing(t *testing.T) {
@@ -26,44 +26,44 @@ func TestReturnsAnnotationNarrowing(t *testing.T) {
 		wantFrontier bool
 	}{
 		// ---- mini re: record-shaped ReturnsFn ({ok ms fst lst n}) ----
-		{"re-n-narrows", `import "aql:minilang"  ("a1b2c3" mini re '\\d').n`, false, false},
-		{"re-nested-fst-m-narrows", `import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m`, false, false},
-		{"re-compiled-hook-narrows", `import "aql:minilang"  ("a1b2c3" +re/\d/).n`, false, false},
+		{"re-n-narrows", `import "boru:minilang"  ("a1b2c3" mini re '\\d').n`, false, false},
+		{"re-nested-fst-m-narrows", `import "boru:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m`, false, false},
+		{"re-compiled-hook-narrows", `import "boru:minilang"  ("a1b2c3" +re/\d/).n`, false, false},
 		// dynamic(Boolean) is now PROVABLY disjoint from add's operands —
 		// the old dynamic(Any) result matched silently.
-		{"re-ok-into-add-flags", `import "aql:minilang"  ("a1b2c3" mini re '\\d').ok add 1`, true, false},
+		{"re-ok-into-add-flags", `import "boru:minilang"  ("a1b2c3" mini re '\\d').ok add 1`, true, false},
 
 		// ---- mini gex: subject-shaped ReturnsFn ----
-		{"gex-scalar-narrows", `import "aql:minilang"  "ax" mini gex 'a*'`, false, false},
-		{"gex-list-narrows", `import "aql:minilang"  ["ab" "zz" "ac"] +gex/a*/`, false, false},
+		{"gex-scalar-narrows", `import "boru:minilang"  "ax" mini gex 'a*'`, false, false},
+		{"gex-list-narrows", `import "boru:minilang"  ["ab" "zz" "ac"] +gex/a*/`, false, false},
 
 		// ---- parselang: pure concrete-source fold ----
-		{"parse-json-field-narrows", `import "aql:parselang"  (parse json '{"a":1,"b":"hi"}') get 'b'`, false, false},
-		{"parse-aontu-field-narrows", `import "aql:parselang"  (parse aontu 'a:1 b:2') get 'b'`, false, false},
-		{"parse-json-field-into-keys-flags", `import "aql:parselang"  ((parse json '{"a":1}') get 'a') keys`, true, false},
+		{"parse-json-field-narrows", `import "boru:parselang"  (parse json '{"a":1,"b":"hi"}') get 'b'`, false, false},
+		{"parse-aontu-field-narrows", `import "boru:parselang"  (parse aontu 'a:1 b:2') get 'b'`, false, false},
+		{"parse-json-field-into-keys-flags", `import "boru:parselang"  ((parse json '{"a":1}') get 'a') keys`, true, false},
 
 		// ---- StructUtil: shaped/annotated returns ----
-		{"struct-parse-folds", `import "aql:struct-util" (StructUtil.parse "{a:1, b:[2,3]}") get 'a'`, false, false},
-		{"struct-merge-maps-narrows", `import "aql:struct-util" StructUtil.merge {a:1 b:2} {b:3 c:4}`, false, false},
-		{"struct-reify-class-field-narrows", `import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.reify Point {x:9}) dot y`, false, false},
-		{"struct-setpath-keeps-map", `import "aql:struct-util" StructUtil.setpath {a:1} "b" 99`, false, false},
+		{"struct-parse-folds", `import "boru:struct-util" (StructUtil.parse "{a:1, b:[2,3]}") get 'a'`, false, false},
+		{"struct-merge-maps-narrows", `import "boru:struct-util" StructUtil.merge {a:1 b:2} {b:3 c:4}`, false, false},
+		{"struct-reify-class-field-narrows", `import "boru:struct-util"  def Point class {x:1, y:2} (StructUtil.reify Point {x:9}) dot y`, false, false},
+		{"struct-setpath-keeps-map", `import "boru:struct-util" StructUtil.setpath {a:1} "b" 99`, false, false},
 		// getpath is genuinely unknowable — the declared Any must STAY
 		// gradual (no false precision).
-		{"struct-getpath-stays-gradual", `import "aql:struct-util" StructUtil.getpath "a.b" {a:{b:42}}`, false, true},
+		{"struct-getpath-stays-gradual", `import "boru:struct-util" StructUtil.getpath "a.b" {a:{b:42}}`, false, true},
 
 		// ---- make over a record type: schema rides the instance carrier ----
-		{"make-record-field-narrows", `import "aql:test"  (make Test.TestCase {name: "a" in: [1] out: 2}) get "name"`, false, false},
+		{"make-record-field-narrows", `import "boru:test"  (make Test.TestCase {name: "a" in: [1] out: 2}) get "name"`, false, false},
 		// The `out` field is DECLARED Any in the TestCase schema — the
 		// honest bound stays dynamic(Any).
-		{"make-record-any-field-stays", `import "aql:test"  (make Test.TestCase {name: "a" in: [1] out: 2}) get "out"`, false, true},
+		{"make-record-any-field-stays", `import "boru:test"  (make Test.TestCase {name: "a" in: [1] out: 2}) get "out"`, false, true},
 
 		// ---- Vm.check / Vm.compile report shapes ----
-		{"vm-check-ok-narrows", `import "aql:vm" (Vm.check "1 add 2").ok`, false, false},
-		{"vm-compile-reason-narrows", `import "aql:vm" (Vm.compile "1 add (((").reason`, false, false},
-		{"vm-check-ok-into-add-flags", `import "aql:vm" (Vm.check "1 add 2").ok add 1`, true, false},
+		{"vm-check-ok-narrows", `import "boru:vm" (Vm.check "1 add 2").ok`, false, false},
+		{"vm-compile-reason-narrows", `import "boru:vm" (Vm.compile "1 add (((").reason`, false, false},
+		{"vm-check-ok-into-add-flags", `import "boru:vm" (Vm.check "1 add 2").ok add 1`, true, false},
 
 		// ---- module descriptor reads ----
-		{"module-inst-name-narrows", `import "aql:math-util"  MathUtil.$module.name`, false, false},
+		{"module-inst-name-narrows", `import "boru:math-util"  MathUtil.$module.name`, false, false},
 
 		// ---- pop/shift edge-element narrowing ----
 		{"pop-elem-narrows", `pop [1 2 3]`, false, false},
@@ -135,8 +135,8 @@ func TestDeclaresCheckReturnsPredicate(t *testing.T) {
 	if !fullStack.DeclaresCheckReturns() {
 		t.Fatalf("CheckFullStack shape fn must count")
 	}
-	aqlBody := eng.Signature{Impl: eng.AQL([]eng.Value{eng.NewWord("dup")})}
-	if !aqlBody.DeclaresCheckReturns() {
-		t.Fatalf("an AQL body (analyser-derived returns) must count")
+	boruBody := eng.Signature{Impl: eng.BORU([]eng.Value{eng.NewWord("dup")})}
+	if !boruBody.DeclaresCheckReturns() {
+		t.Fatalf("a BORU body (analyser-derived returns) must count")
 	}
 }

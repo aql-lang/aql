@@ -1,4 +1,4 @@
-# AQL Language Specification: codequote (structural paren quotability)
+# BORU Language Specification: codequote (structural paren quotability)
 # Format: input<TAB>expected<TAB>description
 # =====================================================================
 # `codequote` is `quote`'s code-capturing sibling. It captures a forward

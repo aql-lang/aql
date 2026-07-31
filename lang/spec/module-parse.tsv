@@ -1,56 +1,56 @@
-# AQL Language Specification: the aql:parse module (custom parsers)
+# BORU Language Specification: the boru:parse module (custom parsers)
 # Format: input<TAB>expected<TAB>description
 #
-# aql:parse lets an AQL author DEFINE a parser and register it as a `parse`
-# kind (aql:parselang). A grammar is built from an ABNF source (Parse.abnf),
+# boru:parse lets a BORU author DEFINE a parser and register it as a `parse`
+# kind (boru:parselang). A grammar is built from an ABNF source (Parse.abnf),
 # declarative rules (Parse.rule, shaped by the Parse.RuleSpec / Parse.AltSpec
 # Map subtypes), fixed tokens (Parse.token) and custom lex matchers
-# (Parse.matcher); semantic actions (Parse.action) attach AQL fns to grammar
+# (Parse.matcher); semantic actions (Parse.action) attach BORU fns to grammar
 # marks so the parser can emit custom data. Parse.grammar mints the builder;
 # Parse.parser finalizes it into a ParseLang Function VALUE. The carrier is a
 # shared pointer threaded through each word and bound to a def; the finalized
 # parser is def-bound and run via the `parse` value form (`parse <name> …`).
 #
-# §1  ABNF grammar + a mark action — the action's AQL value is the result
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [7])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def op (Parse.parser g)  end  parse op 'inc'	7	Parse.grammar + Parse.action + Parse.abnf + Parse.parser: action value is the AST
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [{k:'inc'}])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def opm (Parse.parser g)  end  (parse opm 'inc').k	'inc'	an action can build a custom Map node that survives to the parse result
+# §1  ABNF grammar + a mark action — the action's BORU value is the result
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [7])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def op (Parse.parser g)  end  parse op 'inc'	7	Parse.grammar + Parse.action + Parse.abnf + Parse.parser: action value is the AST
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [{k:'inc'}])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def opm (Parse.parser g)  end  (parse opm 'inc').k	'inc'	an action can build a custom Map node that survives to the parse result
 #
 # §2  tokens, a declining matcher, and a declarative rule coexist with ABNF
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.token g '#PL' '+'  Parse.matcher g skip 1000000 ([s:String] => [None])  Parse.rule g extra {open:[{s:'#PL'}]}  Parse.action g '@op:o:INC' ([nd:Any] => [5])  Parse.abnf g 'op = "inc"' {start:'op'}  def op2 (Parse.parser g)  end  parse op2 'inc'	5	Parse.token, a declining Parse.matcher and a declarative Parse.rule build alongside the ABNF grammar
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.token g '#PL' '+'  Parse.matcher g skip 1000000 ([s:String] => [None])  Parse.rule g extra {open:[{s:'#PL'}]}  Parse.action g '@op:o:INC' ([nd:Any] => [5])  Parse.abnf g 'op = "inc"' {start:'op'}  def op2 (Parse.parser g)  end  parse op2 'inc'	5	Parse.token, a declining Parse.matcher and a declarative Parse.rule build alongside the ABNF grammar
 #
 # §3  the grammar-as-Map-subtypes type exports
-import "aql:parse"  import "aql:parselang"  typeof Parse.AltSpec	Map	Parse.AltSpec is a Map subtype describing one grammar alternate
-import "aql:parse"  import "aql:parselang"  typeof Parse.RuleSpec	Map	Parse.RuleSpec is a Map subtype describing a rule's open/close alternates
+import "boru:parse"  import "boru:parselang"  typeof Parse.AltSpec	Map	Parse.AltSpec is a Map subtype describing one grammar alternate
+import "boru:parse"  import "boru:parselang"  typeof Parse.RuleSpec	Map	Parse.RuleSpec is a Map subtype describing a rule's open/close alternates
 #
 # §4  loud failures (negative coverage)
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.abnf g '= = bad ='  def broke (Parse.parser g)	ERROR:parse_bad_grammar	a malformed ABNF grammar is a loud error at register, not a panic
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.action g 'noat' ([nd:Any] => [1])	ERROR:parse_bad_action	an action ref must start with '@' (a mark/phase selector)
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.abnf g 'x = "a"' {start:'x'}  def p (Parse.parser g)  def p2 (Parse.parser g)	ERROR:parse_grammar_done	a finalized grammar is single-use — a second Parse.parser is refused
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.abnf g '= = bad ='  def broke (Parse.parser g)	ERROR:parse_bad_grammar	a malformed ABNF grammar is a loud error at register, not a panic
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.action g 'noat' ([nd:Any] => [1])	ERROR:parse_bad_action	an action ref must start with '@' (a mark/phase selector)
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.abnf g 'x = "a"' {start:'x'}  def p (Parse.parser g)  def p2 (Parse.parser g)	ERROR:parse_grammar_done	a finalized grammar is single-use — a second Parse.parser is refused
 #
 # §5  Parse.spec — the WHOLE grammar as one declarative map, mirroring the
-#     tabnas GrammarSpec document: {options rule ref v} plus the AQL
+#     tabnas GrammarSpec document: {options rule ref v} plus the BORU
 #     extension sections abnf and matcher. options is the tabnas OptionsMap
 #     (fixed:{token:…} declares fixed tokens, rule:{start:…} the start rule)
 #     and applies FIRST, as tabnas does; ref is the named-action table
 #     (serving ABNF marks and rule-alt a:'@name' references); rule is the
 #     GrammarRuleSpec shape. Everything defers to Parse.parser, so the map
 #     form is equivalent to — and composes with — the chained builder words.
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {ref:{'@op:o:INC': ([nd:Any] => [7])} abnf:{src:'op = "inc" / "dec"' start:'op'}}  def sp1 (Parse.parser g)  end  parse sp1 'inc'	7	the §1 grammar as ONE map — ref + abnf sections
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {options:{fixed:{token:{'#PL':'+'}}} rule:{extra:{open:[{s:'#PL'}]}} ref:{'@op:o:INC': ([nd:Any] => [5])} abnf:{src:'op = "inc"' start:'op'}}  def sp2 (Parse.parser g)  end  parse sp2 'inc'	5	the §2 grammar as one map — fixed tokens are tabnas OPTIONS (options.fixed.token), exactly as in a serialized tabnas grammar
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {options:{rule:{start:'top'}} rule:{top:{open:[{s:'#TX' a:([nd:Any] => ['got'])}]}}}  def sp3 (Parse.parser g)  end  parse sp3 'hello'	'got'	a FULLY declarative grammar — options.rule.start + rules, no ABNF at all
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {options:{rule:{start:'top'}} ref:{'@w': ([nd:Any] => ['via-ref'])} rule:{top:{open:[{s:'#TX' a:'@w'}]}}}  def sp4 (Parse.parser g)  end  parse sp4 'hello'	'via-ref'	a rule-alt a:'@name' reference resolves through the ref section — tabnas Ref-table semantics
-import "aql:parse"  import "aql:parselang"  def f1 ([nd:Any] => [3])  def f2 ([nd:Any] => [nd add 4])  def g Parse.grammar  Parse.spec g {ref:{'@op:o:INC': [f1/r f2/r]} abnf:{src:'op = "inc"' start:'op'}}  def sp5 (Parse.parser g)  end  parse sp5 'inc'	7	a ref LIST runs in order, each fn seeing the previous one's node (/r keeps the fns inert in the list)
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {abnf:[{src:'op = "inc" / "dec"' start:'op'}]}  Parse.action g '@op:o:INC' ([nd:Any] => [9])  def sp6 (Parse.parser g)  end  parse sp6 'inc'	9	the abnf section takes a LIST of entries, and the map form composes with the chained builder words
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {matcher:{skip:{priority:1000000 fn:([s:String] => [None])}} ref:{'@op:o:INC': ([nd:Any] => [2])} abnf:{src:'op = "inc"' start:'op'}}  def sp7 (Parse.parser g)  end  parse sp7 'inc'	2	a declining custom matcher rides in the matcher section
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {v:1 options:{fixed:{token:{'#PL':'+'}}} rule:{extra:{open:[{s:'#PL' c:{dlist:0} u:{tag:'t'} k:{p:'q'} n:{x:1}}]}} ref:{'@op:o:INC': ([nd:Any] => [1])} abnf:{src:'op = "inc"' start:'op'}}  def sp8 (Parse.parser g)  end  parse sp8 'inc'	1	the v version gate plus the widened alternate fields — declarative condition c, custom props u/k, counters n — build and register cleanly
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.spec g {ref:{'@op:o:INC': ([nd:Any] => [7])} abnf:{src:'op = "inc" / "dec"' start:'op'}}  def sp1 (Parse.parser g)  end  parse sp1 'inc'	7	the §1 grammar as ONE map — ref + abnf sections
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.spec g {options:{fixed:{token:{'#PL':'+'}}} rule:{extra:{open:[{s:'#PL'}]}} ref:{'@op:o:INC': ([nd:Any] => [5])} abnf:{src:'op = "inc"' start:'op'}}  def sp2 (Parse.parser g)  end  parse sp2 'inc'	5	the §2 grammar as one map — fixed tokens are tabnas OPTIONS (options.fixed.token), exactly as in a serialized tabnas grammar
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.spec g {options:{rule:{start:'top'}} rule:{top:{open:[{s:'#TX' a:([nd:Any] => ['got'])}]}}}  def sp3 (Parse.parser g)  end  parse sp3 'hello'	'got'	a FULLY declarative grammar — options.rule.start + rules, no ABNF at all
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.spec g {options:{rule:{start:'top'}} ref:{'@w': ([nd:Any] => ['via-ref'])} rule:{top:{open:[{s:'#TX' a:'@w'}]}}}  def sp4 (Parse.parser g)  end  parse sp4 'hello'	'via-ref'	a rule-alt a:'@name' reference resolves through the ref section — tabnas Ref-table semantics
+import "boru:parse"  import "boru:parselang"  def f1 ([nd:Any] => [3])  def f2 ([nd:Any] => [nd add 4])  def g Parse.grammar  Parse.spec g {ref:{'@op:o:INC': [f1/r f2/r]} abnf:{src:'op = "inc"' start:'op'}}  def sp5 (Parse.parser g)  end  parse sp5 'inc'	7	a ref LIST runs in order, each fn seeing the previous one's node (/r keeps the fns inert in the list)
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.spec g {abnf:[{src:'op = "inc" / "dec"' start:'op'}]}  Parse.action g '@op:o:INC' ([nd:Any] => [9])  def sp6 (Parse.parser g)  end  parse sp6 'inc'	9	the abnf section takes a LIST of entries, and the map form composes with the chained builder words
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.spec g {matcher:{skip:{priority:1000000 fn:([s:String] => [None])}} ref:{'@op:o:INC': ([nd:Any] => [2])} abnf:{src:'op = "inc"' start:'op'}}  def sp7 (Parse.parser g)  end  parse sp7 'inc'	2	a declining custom matcher rides in the matcher section
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.spec g {v:1 options:{fixed:{token:{'#PL':'+'}}} rule:{extra:{open:[{s:'#PL' c:{dlist:0} u:{tag:'t'} k:{p:'q'} n:{x:1}}]}} ref:{'@op:o:INC': ([nd:Any] => [1])} abnf:{src:'op = "inc"' start:'op'}}  def sp8 (Parse.parser g)  end  parse sp8 'inc'	1	the v version gate plus the widened alternate fields — declarative condition c, custom props u/k, counters n — build and register cleanly
 # §5  negatives — each malformed section shape is a loud per-section error
-import "aql:parse"  def g Parse.grammar  Parse.spec g {bogus:{}}	ERROR:parse_bad_spec	an unknown section key is refused (the tabnas GrammarSpec sections plus abnf/matcher)
-import "aql:parse"  def g Parse.grammar  Parse.spec g {token:{'#PL':'+'}}	ERROR:parse_bad_spec	there is NO token section — fixed tokens are tabnas options: options:{fixed:{token:{…}}}
-import "aql:parse"  def g Parse.grammar  Parse.spec g {options:'x'}	ERROR:parse_bad_spec	the options section must be a map
-import "aql:parse"  def g Parse.grammar  Parse.spec g {v:'one'}	ERROR:parse_bad_spec	v must be an Integer
-import "aql:parse"  def g Parse.grammar  Parse.spec g {v:99}	ERROR:parse_bad_spec	the tabnas builtin config-schema version gate — a too-new v is refused at the spec itself (map-decidable, so the checker flags it too)
-import "aql:parse"  def g Parse.grammar  Parse.spec g {ref:{noat: ([nd:Any] => [1])}}	ERROR:parse_bad_action	a ref must start with '@' — same rule as Parse.action
-import "aql:parse"  def g Parse.grammar  Parse.spec g {matcher:{skip:{fn:([s:String] => [None])}}}	ERROR:parse_bad_matcher	a matcher entry needs an Integer priority
-import "aql:parse"  def g Parse.grammar  Parse.spec g {abnf:{start:'op'}}	ERROR:parse_bad_abnf	an abnf entry map must carry src
-import "aql:parse"  def g Parse.grammar  Parse.spec g {rule:{extra:'nope'}}	ERROR:parse_bad_rule	a rule entry must be a {open close} map
-import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {abnf:{src:'op = "inc"' start:'op'}}  def sp10 (Parse.parser g)  Parse.spec g {options:{}}	ERROR:parse_grammar_done	a builder is single-use — Parse.spec obeys the same seal as the chained words
+import "boru:parse"  def g Parse.grammar  Parse.spec g {bogus:{}}	ERROR:parse_bad_spec	an unknown section key is refused (the tabnas GrammarSpec sections plus abnf/matcher)
+import "boru:parse"  def g Parse.grammar  Parse.spec g {token:{'#PL':'+'}}	ERROR:parse_bad_spec	there is NO token section — fixed tokens are tabnas options: options:{fixed:{token:{…}}}
+import "boru:parse"  def g Parse.grammar  Parse.spec g {options:'x'}	ERROR:parse_bad_spec	the options section must be a map
+import "boru:parse"  def g Parse.grammar  Parse.spec g {v:'one'}	ERROR:parse_bad_spec	v must be an Integer
+import "boru:parse"  def g Parse.grammar  Parse.spec g {v:99}	ERROR:parse_bad_spec	the tabnas builtin config-schema version gate — a too-new v is refused at the spec itself (map-decidable, so the checker flags it too)
+import "boru:parse"  def g Parse.grammar  Parse.spec g {ref:{noat: ([nd:Any] => [1])}}	ERROR:parse_bad_action	a ref must start with '@' — same rule as Parse.action
+import "boru:parse"  def g Parse.grammar  Parse.spec g {matcher:{skip:{fn:([s:String] => [None])}}}	ERROR:parse_bad_matcher	a matcher entry needs an Integer priority
+import "boru:parse"  def g Parse.grammar  Parse.spec g {abnf:{start:'op'}}	ERROR:parse_bad_abnf	an abnf entry map must carry src
+import "boru:parse"  def g Parse.grammar  Parse.spec g {rule:{extra:'nope'}}	ERROR:parse_bad_rule	a rule entry must be a {open close} map
+import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.spec g {abnf:{src:'op = "inc"' start:'op'}}  def sp10 (Parse.parser g)  Parse.spec g {options:{}}	ERROR:parse_grammar_done	a builder is single-use — Parse.spec obeys the same seal as the chained words

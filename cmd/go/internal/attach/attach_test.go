@@ -16,7 +16,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // wireEnd is the scripted server's half of the pipe: a background

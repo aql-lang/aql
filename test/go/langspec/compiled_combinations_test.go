@@ -1,4 +1,4 @@
-// Curated bytecode combination matrix (design/aql-bytecode-plan.0.md
+// Curated bytecode combination matrix (design/boru-bytecode-plan.0.md
 // Stage 6 follow-on; the regression net for the residual work). Rather
 // than a generator over the full Cartesian product, this is a curated
 // set of high-value pairwise/triple feature combinations plus "stranger"
@@ -110,7 +110,7 @@ var comboParity = []string{
 	// fn-value-call boundary: a map field that is a method, applied to
 	// trailing args — the interpreter auto-applies; compiled must fall
 	// back (parity holds, value matches).
-	`import "aql:rand" def r (Rand.with-seed 42) r.int 0 100`,
+	`import "boru:rand" def r (Rand.with-seed 42) r.int 0 100`,
 	// CALL_DYNAMIC (plan P4): a fn-value applied to trailing args. A dynamic
 	// value that is NOT callable leaves value+args as the residual (parity).
 	`(do [iota 3]) 5`,
@@ -237,7 +237,7 @@ func TestCompiledCombinationPath(t *testing.T) {
 		// fn-value-call boundary, fully native now: the atom-keyed get polys
 		// (the method stays a value, no 0-arg sig), then OpCallDynamic applies
 		// it to 0 100 VM-native (a trivial-delegation method) — plan P3+P4.
-		{`import "aql:rand" def r (Rand.with-seed 42) r.int 0 100`, "native"},
+		{`import "boru:rand" def r (Rand.with-seed 42) r.int 0 100`, "native"},
 		// Sentinel inside a closure body must NOT compile (falls back so the
 		// interpreter can unwind break/continue across the boundary).
 		{`for 3 [each [break] [1 2]]`, "fallback"},

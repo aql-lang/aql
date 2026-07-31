@@ -267,7 +267,7 @@ paths both exercised.
   the `mutations` counter; keep that invariant.)
 - **Memoize the frame template.** Build the constant token skeleton
   (frame-open, body copy, tail shape) **once per signature** at
-  `compileFnSigs` time (alongside the existing `AQLImpl.FnFrame` /
+  `compileFnSigs` time (alongside the existing `BORUImpl.FnFrame` /
   `InstallNames`), and per call only splice it with arg values patched in
   — no re-`GenerateID`, no re-copy. Lazy IDs (#1B) makes the residual
   token mints free; Value shrink (#1A) makes the unavoidable body copy
@@ -281,7 +281,7 @@ the caller's `args`/def stacks on `break`/`continue` unwind
 (`unwindLiveFrames`). Mitigate: keep the snapshot path behind a flag and
 run the **full spec suite + recursion/closure/`break`-in-loop tests**
 differentially against it before deleting the old path. `execFnDefSig`
-(`engine.go:5073,5123`) and `CallAQL` (`registry.go:1569,1622`) take the
+(`engine.go:5073,5123`) and `CallBORU` (`registry.go:1569,1622`) take the
 same two snapshots — fix all three or none.
 
 **Coverage:** body-local `def` present vs absent; capture vs no-capture;
@@ -392,7 +392,7 @@ churn doesn't collide with #2–#5. Correctness oracle: the full
 
 **Win:** attacks the ~22% `duffcopy`+`duffzero` directly and shrinks GC
 scan across interp *and* the compiled VM — the one fix that also speeds
-compiled AQL.
+compiled BORU.
 
 ---
 

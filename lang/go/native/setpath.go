@@ -23,7 +23,7 @@ func setpathHandler(args []Value, ctx map[string]Value, stack []Value, r *Regist
 		}
 	}
 	if pathIdx < 0 {
-		return nil, r.AqlError("setpath_error", "setpath: path argument must be a string or a reach", "setpath")
+		return nil, r.BoruError("setpath_error", "setpath: path argument must be a string or a reach", "setpath")
 	}
 
 	// Collect the two non-path args.

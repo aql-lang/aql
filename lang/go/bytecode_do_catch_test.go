@@ -7,7 +7,7 @@ import "testing"
 // nets N values with no raise but 1 Error on a raise has a runtime-VARIABLE
 // count. The compiler used to seat the static N (via the closure / dyn-body /
 // generic RecordCall paths), which UNDERFLOWED on the caught path — a
-// STORE_LOCAL underflow (the voxgig-aql/trie `codec-roundtrip` shape:
+// STORE_LOCAL underflow (the voxgig-boru/trie `codec-roundtrip` shape:
 // `def msg (do [(s.decode) "x"] error […])`). doListReturnsFn now refuses a
 // fallible multi-value body so it rides the sound interpreter fallback, while a
 // pure / infallible multi-value body still compiles at its exact arity.
@@ -18,9 +18,9 @@ import "testing"
 // including the raised error) AND the native/fallback expectation per shape.
 func TestDoCatchMultiValueArity(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	// A module with a value-dependently-raising fn (map-decode-like) and an
 	// always-raising one, reached as `M.dec` / `M.boom` (a Reach dispatch).
 	const mod = `import module [
@@ -49,11 +49,11 @@ func TestDoCatchMultiValueArity(t *testing.T) {
 		// divisor so the body stays multi-value (div does not statically diverge):
 		// refuses on the fallible-native path, correct via fallback (y=5, no raise).
 		`def y 5  do [(10 div y) 2]`,
-		// A user (AQL-body) fn that raises, caught.
+		// A user (BORU-body) fn that raises, caught.
 		`def f fn [[x:Any] [Any] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]`,
-		// A NATIVE module fn bound to a NAME (Module set, no AQL body) — the
+		// A NATIVE module fn bound to a NAME (Module set, no BORU body) — the
 		// fnDefMayRaise Module!="" path. StructUtil.parse can raise on bad input.
-		`import "aql:struct-util"  def g StructUtil.parse/r  do [(g "x") 2] error [dot code]`,
+		`import "boru:struct-util"  def g StructUtil.parse/r  do [(g "x") 2] error [dot code]`,
 		// A bare module-export VALUE in the body — the wordMayRaise TModuleExport path.
 		mod + `do [M 3] error [dot code]`,
 		// A fallible call nested inside a branch-arm LIST within a paren — the

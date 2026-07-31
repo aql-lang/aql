@@ -12,7 +12,7 @@ import (
 // t7writeCorruptIndex drops an unparseable vaults.jsonic at the home index path.
 func t7writeCorruptIndex(t *testing.T, home string) {
 	t.Helper()
-	if err := os.MkdirAll(homeAQLDir(home), 0o700); err != nil {
+	if err := os.MkdirAll(homeBORUDir(home), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(vaultIndexPath(home), []byte("{ this is not json"), 0o600); err != nil {
@@ -35,7 +35,7 @@ func TestT7_LoadVaultIndexReadError(t *testing.T) {
 // TestT7_LoadVaultIndexVersionDefault drives the "version 0 -> default" arm.
 func TestT7_LoadVaultIndexVersionDefault(t *testing.T) {
 	home := t.TempDir()
-	if err := os.MkdirAll(homeAQLDir(home), 0o700); err != nil {
+	if err := os.MkdirAll(homeBORUDir(home), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(vaultIndexPath(home), []byte(`{"vaults":[]}`), 0o600); err != nil {
@@ -53,11 +53,11 @@ func TestT7_LoadVaultIndexVersionDefault(t *testing.T) {
 // TestT7_SaveVaultIndexMkdirError drives saveVaultIndex' MkdirAll error arm.
 func TestT7_SaveVaultIndexMkdirError(t *testing.T) {
 	home := t.TempDir()
-	if err := os.WriteFile(filepath.Join(home, ".aql"), []byte("x"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".boru"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := saveVaultIndex(home, &vaultIndex{Version: vaultIndexVersion}); err == nil {
-		t.Error("saveVaultIndex should fail when ~/.aql is a file")
+		t.Error("saveVaultIndex should fail when ~/.boru is a file")
 	}
 }
 
@@ -117,7 +117,7 @@ func TestT7_EnumerateBackendFill(t *testing.T) {
 	home := testHome(t)
 
 	// Scanned-and-indexed: metadata without a backend, index with one.
-	def := homeAQLDir(home)
+	def := homeBORUDir(home)
 	if err := os.MkdirAll(def, 0o700); err != nil {
 		t.Fatal(err)
 	}

@@ -28,9 +28,9 @@ import (
 // interpreter's documented dynamic-read result.
 func TestModuleReadRebindRefusesAndMatches(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	cases := []string{
 		// The documented module-dynamic case (scalar read baked as a const).
 		`def x 1  def f fn [[y:Integer] [Integer] [x add y]]  f 0  def x 2  f 0`,
@@ -142,9 +142,9 @@ func TestStaticSpliceBodiesCompile(t *testing.T) {
 // NoEvalArgs decline.
 func TestComputedEachBodyStaysRefused(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	src := `def op (quote [mul 2])  def f fn [[b:List] [List] [[1 2 3] each b]]  f op`
 	a, err := New()
 	if err != nil {

@@ -1,10 +1,10 @@
-# AQL Language Specification: Dispatch edge cases 2 — family-restricted
+# BORU Language Specification: Dispatch edge cases 2 — family-restricted
 # ordering vs tcmp totality, type-literal operand ordering, the left-side
 # predicate-construction gotcha, and the equality lattice.
 # Format: input<TAB>expected<TAB>description
 #
 # cmp / lt / lte / gt / gte are FAMILY-RESTRICTED (compare-restrict.tsv):
-# a cross-family pair raises [aql/incomparable]. tcmp is TOTAL: the same
+# a cross-family pair raises [boru/incomparable]. tcmp is TOTAL: the same
 # pair orders by the unified lattice Rank (compare.tsv). This file walks
 # the frontier BETWEEN those two suites: for each cross-family pair the
 # restricted word errors AND tcmp still answers — plus the asymmetric
@@ -137,10 +137,10 @@ sort [1.0 1 2]	[1.0 1 2]	the 1.0/1 magnitude tie is stable — original order ke
 sort [none 1 "a"]	[none 1 'a']	none ranks before every scalar
 sort ["b" "" "a"]	['' 'a' 'b']	EmptyString is just the smallest String
 sort [[2] [1 5] {a:1}]	[[2] [1 5] {a:1}]	Node branch: shorter list first, every list before every map
-import "aql:array-util" ArrayUtil.grade [true "a" 1]	[0 2 1]	grade returns sort indices over the same order
-import "aql:array-util" ArrayUtil.grade ["b" 2 cat/q true]	[2 3 1 0]	Atom, Boolean, Number, String again — as indices
+import "boru:array-util" ArrayUtil.grade [true "a" 1]	[0 2 1]	grade returns sort indices over the same order
+import "boru:array-util" ArrayUtil.grade ["b" 2 cat/q true]	[2 3 1 0]	Atom, Boolean, Number, String again — as indices
 # every sorting word is STABLE (NUR016): equal-comparing elements keep
 # input order, so grade/sortby agree with sort's tie handling.
-import "aql:array-util" ArrayUtil.grade [1 1.0 0]	[2 0 1]	stable: the equal-comparing 1 and 1.0 grade in input order
-import "aql:array-util" ArrayUtil.sortby [1 1.0] ["a","b"]	['a' 'b']	stable: equal keys keep the data order
-import "aql:array-util" ArrayUtil.sortby [1.0 1] ["a","b"]	['a' 'b']	…and never swap it, whichever key spelling comes first
+import "boru:array-util" ArrayUtil.grade [1 1.0 0]	[2 0 1]	stable: the equal-comparing 1 and 1.0 grade in input order
+import "boru:array-util" ArrayUtil.sortby [1 1.0] ["a","b"]	['a' 'b']	stable: equal keys keep the data order
+import "boru:array-util" ArrayUtil.sortby [1.0 1] ["a","b"]	['a' 'b']	…and never swap it, whichever key spelling comes first

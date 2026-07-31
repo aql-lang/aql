@@ -1,4 +1,4 @@
-# AQL Language Specification: Statement-boundary commit of parked forwards
+# BORU Language Specification: Statement-boundary commit of parked forwards
 #
 # The barrier-commit matrix (design/FORWARD-COLLECTION-PHASES.10.md).
 # Forward args are gathered in two phases — a plan-time token walk and
@@ -63,7 +63,7 @@ def n 0 if (n eq 0) [99] end add 1 2	99 3	explicit end
 def n 0 if (n eq 0) [99] ; add 1 2	99 3	; is end
 #
 # §6  the commit needs a REAL overload consuming EXACTLY the claimed
-#     args. An AQL fn with only a bigger arity keeps waiting for the
+#     args. A BORU fn with only a bigger arity keeps waiting for the
 #     next statement's result (its synthetic 0-arg fallback must never
 #     be committed — that would turn a waiting call into an error), and
 #     a smaller real overload fires at the boundary, mirroring the
@@ -79,8 +79,8 @@ add 1 def x 5 x	ERROR:signature	a typed 2-arg native with no smaller overload fa
 #     to arrival semantics shows up here loudly.
 def n 0 if (n eq 0) [99] [1 2] each [dup mul]	ERROR:signature	the [1 2] is consumed as the else — each starves
 def n 0 if (n eq 0) [99] [] [1 2] each [dup mul]	99 [1 4]	…the explicit [] keeps the pipeline intact
-import "aql:math-util" def n 0 if (n eq 0) [99] [] MathUtil.sqrt 16	99 4.0	module call after a guard needs the [] (the export VALUE would arrive as the else)
-import "aql:math-util" def n 5 if (n eq 0) [99] MathUtil.sqrt 16	4.0	false polarity: the export lands in the else and the chain proceeds
+import "boru:math-util" def n 0 if (n eq 0) [99] [] MathUtil.sqrt 16	99 4.0	module call after a guard needs the [] (the export VALUE would arrive as the else)
+import "boru:math-util" def n 5 if (n eq 0) [99] MathUtil.sqrt 16	4.0	false polarity: the export lands in the else and the chain proceeds
 #
 # §8  chained guards and end-of-program.
 def n 0 if (n eq 0) [98] [] if (n eq 0) [99] [] add 1 2	98 99 3	two guards, both silenced explicitly: every result survives

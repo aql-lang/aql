@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // The LOAD-BEARING app regression (design/RUNTIME-STAMPING.0.md): the REAL
-// design/examples/apps/mini-redis.aql, imported under an armed registry,
+// design/examples/apps/mini-redis.boru, imported under an armed registry,
 // must (a) stamp its module callbacks at load, and (b) answer a full driven
 // command battery over real sockets byte-identically to the unarmed
 // (pure-interpreter) build. This is the assertion that would have caught
@@ -50,8 +50,8 @@ func miniRedisSession(t *testing.T, armed bool, cmds []string) ([]string, *nativ
 		}
 		return out
 	}
-	run(`import "aql:net"`)
-	run(`import "./design/examples/apps/mini-redis.aql"`)
+	run(`import "boru:net"`)
+	run(`import "./design/examples/apps/mini-redis.boru"`)
 	run(`def ln (MiniRedis.serve {port: 0})`)
 	run(`def ep (MiniRedis.connect (join "" ["127.0.0.1:" (convert String (Net.addr ln).port)]))`)
 

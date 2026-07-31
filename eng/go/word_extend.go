@@ -18,7 +18,7 @@ import "fmt"
 //   - a signature whose argument-type tuple exactly matches an
 //     existing UNLOCKED signature REPLACES it;
 //   - a tuple matching a LOCKED signature is an error
-//     ([aql/locked_signature]) — locked sigs can never be replaced;
+//     ([boru/locked_signature]) — locked sigs can never be replaced;
 //   - any other signature APPENDS. Dispatch order among all sigs is
 //     the natural specificity order (CompareSignatures); admission is
 //     governed by the ownership-anchor rules (requireOwnedAnchor,
@@ -139,7 +139,7 @@ func mergeExtensionSigs(r *Registry, name string, base *FnDefInfo, incoming []Si
 			continue
 		}
 		if merged[at].Locked {
-			return nil, false, r.AqlErrorHint("locked_signature",
+			return nil, false, r.BoruErrorHint("locked_signature",
 				fmt.Sprintf("def %s: signature %s matches a locked built-in signature and cannot replace it",
 					name, sigTupleString(&ns)),
 				"def",
@@ -156,7 +156,7 @@ func mergeExtensionSigs(r *Registry, name string, base *FnDefInfo, incoming []Si
 				continue
 			}
 			if merged[at].Origin != "" {
-				return nil, false, r.AqlErrorHint("extend_conflict",
+				return nil, false, r.BoruErrorHint("extend_conflict",
 					fmt.Sprintf("import: modules %q and %q both extend %s with signature %s",
 						merged[at].Origin, origin, name, sigTupleString(&ns)),
 					"import",
@@ -247,7 +247,7 @@ func requireOwnedAnchor(r *Registry, name, word string, sigs []Signature, owner 
 		if allowModuleAnchors && sigHasModuleAnchor(&sigs[i]) {
 			continue
 		}
-		return r.AqlErrorHint("extend_owner",
+		return r.BoruErrorHint("extend_owner",
 			fmt.Sprintf("%s %s: a core word can be extended only with at least one NOMINAL argument type the extending scope owns per signature — %s has none",
 				word, name, sigTupleString(&sigs[i])),
 			word,
@@ -275,7 +275,7 @@ func sigTupleString(s *Signature) string {
 
 // NewWordExtension builds a HOST-authored word-extension clone — the
 // shape a Go module builder exports so `import` transplants extra
-// overloads onto a core word (aql:time-util's temporal add/sub). Each
+// overloads onto a core word (boru:time-util's temporal add/sub). Each
 // signature is normalised (Args→Params) and barrier-resolved at
 // construction, so the clone dispatches identically whether it is
 // reached as a VALUE (namespaced `TimeUtil.add …` dot-access, which
@@ -300,7 +300,7 @@ func NewWordExtension(owner, name string, sigs []Signature) FnDefInfo {
 		// ExtOwner is a HOST assertion (Go-only — source clones never
 		// set it): the author owner the transplant admission verifies
 		// anchors against. A kernel-shipped module may author sigs on
-		// kernel-owned types (aql:io's Pathon list/remove) by passing
+		// kernel-owned types (boru:io's Pathon list/remove) by passing
 		// OwnerKernel; third-party hosts pass their own owner id and
 		// anchor on types they registered.
 		ExtOwner: owner,
@@ -318,12 +318,12 @@ func NewWordExtension(owner, name string, sigs []Signature) FnDefInfo {
 // machinery. Sealed words refuse.
 func InstallWordExtension(r *Registry, name string, ext FnDefInfo) error {
 	if IsSealedWord(name) {
-		return r.AqlError("reserved_word",
+		return r.BoruError("reserved_word",
 			fmt.Sprintf("def %s: '%s' is a sealed word — the engine relies on its identity and it cannot be extended", name, name), "def")
 	}
 	base := r.Lookup(name)
 	if base == nil {
-		return r.AqlError("def_error",
+		return r.BoruError("def_error",
 			fmt.Sprintf("def %s: no existing word to extend", name), "def")
 	}
 	compiled := compileFnSigs(r, name, ext, false)
@@ -394,7 +394,7 @@ func TransplantExtension(r *Registry, ext FnDefInfo, origin, owner string) error
 	// without passing through InstallWordExtension, so the guard must
 	// hold here too — the engine relies on these words' identity.
 	if IsSealedWord(name) {
-		return r.AqlError("reserved_word",
+		return r.BoruError("reserved_word",
 			fmt.Sprintf("import: '%s' is a sealed word — the engine relies on its identity and it cannot be extended", name), "import")
 	}
 	base := r.Lookup(name)
@@ -415,7 +415,7 @@ func TransplantExtension(r *Registry, ext FnDefInfo, origin, owner string) error
 			continue
 		}
 		// Normalise host-authored clones: a Go module builder writes the
-		// Args/BarrierPos constructor-convenience form (e.g. aql:time-util's
+		// Args/BarrierPos constructor-convenience form (e.g. boru:time-util's
 		// arithmetic extensions), while a def-merge clone arrives already
 		// compiled. normalizeSig is idempotent, and the sentinel resolution
 		// mirrors upsertFnDef's so the sig dispatches like any registered one.

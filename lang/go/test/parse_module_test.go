@@ -4,16 +4,16 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
-// The aql:parse module lets an AQL author DEFINE a custom parser — from an
+// The boru:parse module lets a BORU author DEFINE a custom parser — from an
 // ABNF grammar, a declarative rule map, custom lex matchers, and semantic
 // actions that build custom data types — and finalize it into a ParseLang
 // Function VALUE (Parse.parser), run via the ordinary `parse` macro's value
 // form. These tests pin each capability and its loud failures.
 
-const parseImports = `import "aql:parse"  import "aql:parselang"  `
+const parseImports = `import "boru:parse"  import "boru:parselang"  `
 
 // runParse runs src on a fresh instance and returns the single result, failing
 // on error.
@@ -45,7 +45,7 @@ func runParseErr(t *testing.T, src string) error {
 }
 
 // TestParseABNFActionCustomType is the headline: an ABNF grammar plus a
-// semantic action whose AQL fn REPLACES the node with a custom AQL value —
+// semantic action whose BORU fn REPLACES the node with a custom BORU value —
 // proving the action bridge carries a user-built value to the parse result.
 func TestParseABNFActionCustomType(t *testing.T) {
 	build := parseImports + `
@@ -68,7 +68,7 @@ end  `
 }
 
 // TestParseABNFScalarResult pins that an action can set the node to a plain
-// scalar AQL value (the simplest custom result) and it survives.
+// scalar BORU value (the simplest custom result) and it survives.
 func TestParseABNFScalarResult(t *testing.T) {
 	build := parseImports + `
 def g Parse.grammar

@@ -1,16 +1,16 @@
 # Closing `--force-compile` for the client libraries — findings & plan
 
 **Date:** 2026-06-24
-**aql:** `main @ 407fedad` (built from source)
-**Scope:** make `aql --force-compile` succeed (no refusal, byte-identical to the
-interpreter) on every test suite of `voxgig-aql/{trie,decision,bloom-filter}`.
+**boru:** `main @ 407fedad` (built from source)
+**Scope:** make `boru --force-compile` succeed (no refusal, byte-identical to the
+interpreter) on every test suite of `voxgig-boru/{trie,decision,bloom-filter}`.
 **Status:** investigation + sequenced plan. The baseline gate
 (`TestSpecCompiledDifferential|…|TestPropertyDifferential`) is **green** at this
 commit. No emitter change is landed in this note — it scopes the work and
 **corrects the mental model** the driving brief was written against.
 
 Required reading first: `design/COMPILABLE-SUBSET.md` (the contract + refusal
-taxonomy), `design/aql-bytecode-completion.0.md` (the Stage-2 cluster),
+taxonomy), `design/boru-bytecode-completion.0.md` (the Stage-2 cluster),
 `design/module-fn-checkstate-ownership.{5,6}.md` (the dynamic-help artifact),
 `design/CLIENT-VERIFICATION-MAIN-2026-06-24.md` (the per-suite refusal ledger).
 
@@ -21,7 +21,7 @@ taxonomy), `design/aql-bytecode-completion.0.md` (the Stage-2 cluster),
 Building `main @ 407fedad` and reducing every distinct refusal across the 21
 client suites to a minimal repro turned up three facts that **revise** the
 brief's Project-A framing. These are reproducible with
-`aql --force-compile <file>`:
+`boru --force-compile <file>`:
 
 | Repro | Result | Implication |
 |---|---|---|
@@ -31,8 +31,8 @@ brief's Project-A framing. These are reproducible with
 | `[ (do {x:[1 1 add]}) {x:2} Assert.equal ] "t" Test.test` | ❌ `code-body word test-test (Stage 2)` | The refusal is the **leaf** `do{}` inside the body, **not** `test-test`. The outer code-body word just reports the generic reason when its closure probe (`tryRecordClosure`) declines because something in the body didn't lower. |
 | `{x:(1 add 2)}` (top level) | ✅ **compiles** → `{"x":3}` | Computed map literals lower at top level (`RecordMakeMap`→`OpMakeMap`, emit.go:2198). |
 | `fn [[a:Integer][Map][ def m {x:(a 1 add)} m ]]` | ❌ `fn f: body result of unknown provenance` (emit.go:1442) | A computed map built in a fn (value from a **frame-local**), bound to a local and returned as the **body result**, loses provenance. (NB: the *inline-tail* `[… {x:(a 1 add)}]` is not a valid target — a data-context paren doesn't see fn params, so it errors at runtime; the `def m … m` and `do {…}` forms are the real ones.) |
-| `fn [[bf:Map][Map][ do {n:[bf "n" get]} ]]` | ❌ `unannotated or opaque word do` (emit.go:2004) | The real client form (`bloom.aql:271`, `decision.aql:159`, `trie.aql:275`): runs `{"n":…}`, but `do` is declared `[Map] Any` (`aql describe do`), so its compiled **output** is a dynamic-Any carrier and the dynamic-output gate refuses it — even though the runtime value is a concrete Map. |
-| `[1 2] each [var [[x] {v:[x]}]]` | ❌ `check diagnostics` | The dynamic-help example generator (`module-fn-checkstate-ownership.6.md`) runs the body against a synthetic `{a:1,b:2}` at registration and leaks emit-gating diagnostics — **not** a real check error (`aql check` is clean). |
+| `fn [[bf:Map][Map][ do {n:[bf "n" get]} ]]` | ❌ `unannotated or opaque word do` (emit.go:2004) | The real client form (`bloom.boru:271`, `decision.boru:159`, `trie.boru:275`): runs `{"n":…}`, but `do` is declared `[Map] Any` (`boru describe do`), so its compiled **output** is a dynamic-Any carrier and the dynamic-output gate refuses it — even though the runtime value is a concrete Map. |
+| `[1 2] each [var [[x] {v:[x]}]]` | ❌ `check diagnostics` | The dynamic-help example generator (`module-fn-checkstate-ownership.6.md`) runs the body against a synthetic `{a:1,b:2}` at registration and leaks emit-gating diagnostics — **not** a real check error (`boru check` is clean). |
 
 **Corrected model.** The remaining `--force-compile` refusals across all 21
 suites reduce to **three leaf causes**, not the surface words the reasons name:
@@ -46,7 +46,7 @@ suites reduce to **three leaf causes**, not the surface words the reasons name:
   it sits inside the `test-test` / `each` / `do` / `unit_spec` refusals.
 - **L2 — the dynamic-help `check diagnostics` artifact.** Surfaces on
   `each`/`filter` over a computed-map body and on the `*_smoke` suites. Aligning
-  the compile-path check with standalone `aql check` (which is clean) removes
+  the compile-path check with standalone `boru check` (which is clean) removes
   the *misleading* reason; it does not by itself make a suite green (the L1 leaf
   underneath still refuses).
 - **L3 — trie `mk-node` gradual dispatch** (`unmatched dispatch recovered at
@@ -92,7 +92,7 @@ arg-evaluation callers): a DEFERRED residual — a bare computed-map fn-body tai
 auto-evaluated by `autoEvalStack` after its frame pops — must still refuse,
 because the interpreter evaluates it late (its param bindings gone) and
 compiling it in-frame would diverge. Verified: `make verify-bytecode` green
-(differential + property + race + aqldebug), full `eng/go` / `lang/go` / `cmd/go`
+(differential + property + race + borudebug), full `eng/go` / `lang/go` / `cmd/go`
 suites green, neutral on the langspec census. Pinned by
 `lang/go/bytecode_computedmap_test.go` (positive: byte-identical to the
 interpreter; negative: the deferred-residual tail still refuses, no divergence).
@@ -110,7 +110,7 @@ the `dynOutNativeOK` exemption, so no output-type change to `do` is needed.
 Verified against `--force-compile`.
 
 **L1b-ii (list quotation form) — LANDED.** The client libs write `do {n:[bf.n]}`
-(the **list** form — `bloom.aql:271`, `decision.aql:159`, `trie.aql:275`). A
+(the **list** form — `bloom.boru:271`, `decision.boru:159`, `trie.boru:275`). A
 list-valued map entry keeps its value AS a list (`{n:[3]}`); `do` evaluates each
 list later. The value list's elements DO carry provenance (their dispatches
 recorded during autoEvalMap), but the list WRAPPER was never recorded —
@@ -210,20 +210,20 @@ divergence" must be demonstrated per step, not assumed.
 
 ```bash
 REF=407fedad2ea2b30c3dde2f29cfbe60e55f94db4e
-mkdir -p /tmp/aql && curl -fsSL "https://codeload.github.com/aql-lang/aql/tar.gz/$REF" \
-  | tar -xz -C /tmp/aql --strip-components=1
-( cd /tmp/aql/cmd/go && GOFLAGS=-mod=mod go build -o /tmp/aql-bin ./aql )
-p(){ printf '%s\n' "$2" >/tmp/r.aql; printf '%-40s -> ' "$1"
-     /tmp/aql-bin --force-compile /tmp/r.aql 2>&1 | grep -o 'force-compile:.*' || echo COMPILES; }
+mkdir -p /tmp/boru && curl -fsSL "https://codeload.github.com/boru-lang/boru/tar.gz/$REF" \
+  | tar -xz -C /tmp/boru --strip-components=1
+( cd /tmp/boru/cmd/go && GOFLAGS=-mod=mod go build -o /tmp/boru-bin ./boru )
+p(){ printf '%s\n' "$2" >/tmp/r.boru; printf '%-40s -> ' "$1"
+     /tmp/boru-bin --force-compile /tmp/r.boru 2>&1 | grep -o 'force-compile:.*' || echo COMPILES; }
 p "each var-block"  '[1 2 3] each [var [[x] x 1 add]] print end'
-p "Test.test trivial" 'import "aql:test" end ([ 1 1 Assert.equal ] "t" Test.test) end'
+p "Test.test trivial" 'import "boru:test" end ([ 1 1 Assert.equal ] "t" Test.test) end'
 p "do computed map"  'def f fn [[a:Integer] [Map] [ do {x:[a]} ]] (f 5) print end'
 p "map body result"  'def f fn [[a:Integer] [Map] [ {x:[a]} ]] (f 5) print end'
 ```
 
 ---
 
-## Session-2 status (2026-06-24, branch `claude/aql-client-lib-issues-lev8cs`)
+## Session-2 status (2026-06-24, branch `claude/boru-client-lib-issues-lev8cs`)
 
 Landed since the note above (all gated: `make verify-bytecode` + full
 `eng/go`/`lang/go` suites green, no divergence):
@@ -232,7 +232,7 @@ Landed since the note above (all gated: `make verify-bytecode` + full
   form `do {k:(expr)}` now compiles). Commit `a730e7b`.
 - **L1b-ii** — list-valued map entries (`do {k:[expr]}`) record a nested
   `OpMakeList` inline in `autoEvalMap`. Commit `d9b41a6`. **This closes the
-  entire `do {map}` refusal class** (brief refusal class #2): bloom.aql:271 and
+  entire `do {map}` refusal class** (brief refusal class #2): bloom.boru:271 and
   :286 (`do {n:[bf.n] …}`) now compile.
 - Ratchet `TestOnlyMetaFallsBack` fixed (soundness-frontier rows attributed to
   the compute frontier, not tier-2). Commit `d633623`.
@@ -274,7 +274,7 @@ The `each` refusal is NOT "all code bodies." Empirically:
   and `test-test`/`test-check-prop` (the framework drivers) very likely fall out
   with it. Verify (1) and (2) as two sub-fixes of that one unit.
 
-`do [body]` (bloom.aql:310/318, `do [StructUtil.parse text] error […]`) is the
+`do [body]` (bloom.boru:310/318, `do [StructUtil.parse text] error […]`) is the
 LIST-body code form (with an `error` handler closure) — same code-body cluster,
 distinct from the now-compiled `do {map}`.
 
@@ -341,7 +341,7 @@ Set out to add "module-fn dispatch in a compiled closure body" (the assumed
 next blocker). **It already works** — verified compiling, byte-identical to the
 interpreter, for every shape probed:
 - a Go-native module fn in an each/var body (`MathUtil.sqrt`);
-- a cross-registry **AQL-bodied** module fn (`import module [def f … export …]`),
+- a cross-registry **BORU-bodied** module fn (`import module [def f … export …]`),
   including a **recursive, void-returning, `|`-barriered** export in a var body;
 - a top-level user fn, and a 2-overload (polymorphic) user fn, in a var body;
 - the bloom `bit-test` shape (capture `bits` + user-fn call + var loop var).
@@ -350,7 +350,7 @@ So the "Stage-3 / module-fn-in-closure" framing for the client `each` refusals
 is **wrong**. The actual blockers, found by reducing the real suites:
 
 1. **Mutual recursion through a closure body** (decision/trie — the dominant
-   `each` refusal). `decision.aql`'s `eval-pred-all`/`-any` are
+   `each` refusal). `decision.boru`'s `eval-pred-all`/`-any` are
    `[(children each [input swap eval-pred]) all]` — the each body calls
    `eval-pred`, which calls back into `eval-pred-all` (mutual recursion).
    Minimal repro that refuses `code-body word each (Stage 2)`:
@@ -379,7 +379,7 @@ is **wrong**. The actual blockers, found by reducing the real suites:
 
 2. **`Test.check-prop` with a lambda arg** → `fn call operand of unknown
    provenance` (a fn-VALUE operand to a module fn; Stage-3 fn-value territory).
-3. **`do [body]` list-body form** with an `error` handler (bloom.aql:310/318).
+3. **`do [body]` list-body form** with an `error` handler (bloom.boru:310/318).
 4. **`mk-node` dispatch recovery**, **`dynamic input at push`** (burst) — each
    needs its own trace.
 5. **Project B** (`check diagnostics`, 4 suites) — unchanged.
@@ -398,7 +398,7 @@ closure-probe seam and deserves a dedicated session.
 ## Session-2 cont. — TS parity check + smaller-unit recon
 
 **TS parity: VERIFIED GREEN.** Ran the TypeScript engine port (`eng/ts`,
-@voxgig/aqleng) against my Go changes: `npx tsc` clean, full `node --test`
+@voxgig/borueng) against my Go changes: `npx tsc` clean, full `node --test`
 suite **3622 pass / 0 fail**, and the cross-engine differential (Go kernel vs
 TS engine over the shared `eng/spec` value+check corpus) reports **0
 divergences**. My changes are parity-safe by construction: L1a/L1b-ii are
@@ -436,12 +436,12 @@ refusals dissolved on inspection (isolated forms already compile).
 Scoped the "gradual-dispatch runtime path" unit. The poly path
 (`tryRecordPoly`/`OpCallNativePoly`) already exists but is gated to REGISTERED
 BUILTINS; `mk-node` is a user fn. However, reducing the REAL trie refusal
-(`set-edge` → `mk-node`, radix.aql:108) shows the blocker is NOT gradual
+(`set-edge` → `mk-node`, radix.boru:108) shows the blocker is NOT gradual
 dispatch — it is the **Project B construction-check artifact**, now pinned
 precisely:
 
-`CompileCheck` (the force-compile check pass, `aql.go:255`, `Check.Compiling=
-true`) emits ERROR-severity diagnostics that standalone `aql check` does NOT, so
+`CompileCheck` (the force-compile check pass, `boru.go:255`, `Check.Compiling=
+true`) emits ERROR-severity diagnostics that standalone `boru check` does NOT, so
 Finalize is gated and `--force-compile` reports the generic `check diagnostics`.
 For `set-edge` the error diagnostics are:
 - `undefined_word: undefined word: kids2` (FnBody) — `kids2` is `def`'d two lines

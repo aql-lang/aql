@@ -3,7 +3,7 @@ package lang
 import "testing"
 
 // Stage-2 narrowing-through-use provenance pins (voxgig zero-refusals plan,
-// "quote of a computed get" leaf). The decision.aql eval-tree walker —
+// "quote of a computed get" leaf). The decision.boru eval-tree walker —
 // `def nodes quote (tree get "nodes")` … `(nodes next-id find-node)` — used
 // to refuse "fn call operand of unknown provenance". The quote was
 // incidental (its evaluated-paren sig is a RunInCheck identity, ID

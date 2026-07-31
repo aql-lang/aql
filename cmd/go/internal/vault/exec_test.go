@@ -582,7 +582,7 @@ func TestExecAskDryRunInjectsFillerWithoutPrompt(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exec --dry-run --ask: %s", errOut)
 	}
-	if out != "AQL-DRY-RUN-FILLER-NOT-A-REAL-SECRET" {
+	if out != "BORU-DRY-RUN-FILLER-NOT-A-REAL-SECRET" {
 		t.Errorf("expected filler, got %q", out)
 	}
 }
@@ -621,10 +621,10 @@ func TestExecAskPassphraseInjectsValidatedPassphrase(t *testing.T) {
 	mustInit(t)
 
 	// Passphrase comes from the prompt (env cleared), is validated against
-	// the store, and lands in the child env for nested aql calls.
+	// the store, and lands in the child env for nested boru calls.
 	t.Setenv(EnvPassphrase, "")
 	code, out, errOut := runVault(t, "test-pass\n",
-		"exec", "--ask-passphrase", "--", "sh", "-c", "printf %s \"$AQL_VAULT_PASSPHRASE\"")
+		"exec", "--ask-passphrase", "--", "sh", "-c", "printf %s \"$BORU_VAULT_PASSPHRASE\"")
 	if code != 0 {
 		t.Fatalf("exec --ask-passphrase: %s", errOut)
 	}
@@ -671,7 +671,7 @@ func TestExecAskPassphraseThenAskShareOneReader(t *testing.T) {
 	t.Setenv(EnvPassphrase, "")
 	code, out, errOut := runVault(t, "test-pass\ntoken-value\n",
 		"exec", "--ask-passphrase", "--ask", "TOKEN", "--",
-		"sh", "-c", "printf %s:%s \"$AQL_VAULT_PASSPHRASE\" \"$TOKEN\"")
+		"sh", "-c", "printf %s:%s \"$BORU_VAULT_PASSPHRASE\" \"$TOKEN\"")
 	if code != 0 {
 		t.Fatalf("exec --ask-passphrase --ask: %s", errOut)
 	}
@@ -719,7 +719,7 @@ func TestExecAskPassphraseAcceptsScopedSlotPassword(t *testing.T) {
 
 	t.Setenv(EnvPassphrase, "")
 	code, out, errOut := runVault(t, "slot-pass\n",
-		"exec", "--ask-passphrase", "--", "sh", "-c", "printf %s \"$AQL_VAULT_PASSPHRASE\"")
+		"exec", "--ask-passphrase", "--", "sh", "-c", "printf %s \"$BORU_VAULT_PASSPHRASE\"")
 	if code != 0 {
 		t.Fatalf("exec --ask-passphrase with scoped slot password: %s", errOut)
 	}

@@ -2,7 +2,7 @@
 # =====================================================================		
 # class — nominal type with fields, inheritance, and instantiation
 # =====================================================================
-# `class {field:Type …}` builds a class type — AQL's
+# `class {field:Type …}` builds a class type — BORU's
 # inheritance-aware type form. Class types can be:
 #
 #   - anonymous       — `class {a:String}` produces an unnamed

@@ -1,11 +1,11 @@
-// Package modules provides built-in native AQL modules that are imported
-// using names of the form "aql:<name>". Each native module contains both
-// Go-implemented words and AQL code definitions.
+// Package modules provides built-in native BORU modules that are imported
+// using names of the form "boru:<name>". Each native module contains both
+// Go-implemented words and BORU code definitions.
 //
 // Native modules produce a ModuleDesc with exports, just like file-based
 // modules. The exported words are accessed via dot notation:
 //
-//	import "aql:math-util"
+//	import "boru:math-util"
 //	0.5 MathUtil.sin          # access sin via the math export
 //	3 MathUtil.min 7          # min of 3 and 7
 package modules
@@ -13,8 +13,8 @@ package modules
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // modules maps native module names to their builder functions.
@@ -62,7 +62,7 @@ var modules = map[string]func(parent *native.Registry) (native.ModuleDesc, error
 // the policy has modules.install=false, all imports are refused with
 // modules_disabled.
 func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
-	moduleID := "aql:" + name
+	moduleID := "boru:" + name
 	if pol := native.HostPolicy(parent); pol != nil {
 		if !pol.Installed("modules") {
 			return native.ModuleDesc{}, fmt.Errorf("modules disabled by policy %q", pol.Name())
@@ -91,7 +91,7 @@ func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
 
 // stampExportProvenance records, for each exported function, its origin and
 // one-line doc so `describe Namespace.word` can show where the word comes
-// from and what it does: Module (the import id, e.g. "aql:array-util"),
+// from and what it does: Module (the import id, e.g. "boru:array-util"),
 // Export (the namespace, e.g. "ArrayUtil"), and Doc (from the central
 // moduleDocs table, see docs.go). Done once here rather than in every
 // per-module maker — the makers stay free of provenance/doc plumbing and the
@@ -139,11 +139,11 @@ func stampExportProvenance(desc native.ModuleDesc) {
 }
 
 // InstallResolver wires the native-module resolver onto reg — the single
-// production point where `import "aql:<name>"` is enabled. lang.New calls
+// production point where `import "boru:<name>"` is enabled. lang.New calls
 // it, and any test harness that wants to mirror production module
 // resolution must call it too. Centralising the wiring here keeps a test
 // registry from silently diverging from production, the gap that hid the
-// dropped sub-import Resolver: a file imported via "./lib.aql" could not
+// dropped sub-import Resolver: a file imported via "./lib.boru" could not
 // itself import a native module because RunModuleBody never propagated the
 // Resolver, and the test harnesses never installed one to begin with.
 func InstallResolver(reg *native.Registry) {
@@ -152,7 +152,7 @@ func InstallResolver(reg *native.Registry) {
 
 // InstallMathExports builds the math module and installs its exports as defs
 // in the given registry. This is a convenience for test setup — equivalent to
-// what happens when AQL code runs import "aql:math-util".
+// what happens when BORU code runs import "boru:math-util".
 func InstallMathExports(r *native.Registry) error {
 	desc, err := BuildMathModule(r)
 	if err != nil {
@@ -166,7 +166,7 @@ func InstallMathExports(r *native.Registry) error {
 
 // InstallArrayExports builds the array module and installs its exports as defs
 // in the given registry. This is a convenience for test setup — equivalent to
-// what happens when AQL code runs import "aql:array-util".
+// what happens when BORU code runs import "boru:array-util".
 func InstallArrayExports(r *native.Registry) error {
 	desc, err := BuildArrayModule(r)
 	if err != nil {
@@ -189,13 +189,13 @@ func InstallTimeExports(r *native.Registry) error {
 	}
 	// Transplant the module's word extensions (the temporal add / sub
 	// overloads) like the real import path does — this helper is the
-	// test/host shim for `import "aql:time-util"`, and bare add / sub
+	// test/host shim for `import "boru:time-util"`, and bare add / sub
 	// must gain the overloads under it too.
 	for _, exportMap := range desc.Exports {
 		for _, key := range exportMap.Keys() {
 			v, _ := exportMap.Get(key)
 			if ext, ok := native.IsWordExtension(v); ok {
-				if err := transplantExtension(r, ext, "aql:time-util", "aql:time-util"); err != nil {
+				if err := transplantExtension(r, ext, "boru:time-util", "boru:time-util"); err != nil {
 					return err
 				}
 			}
@@ -219,7 +219,7 @@ func InstallMatrixExports(r *native.Registry) error {
 		for _, key := range exportMap.Keys() {
 			v, _ := exportMap.Get(key)
 			if ext, ok := native.IsWordExtension(v); ok {
-				if err := transplantExtension(r, ext, "aql:matrix-util", "aql:matrix-util"); err != nil {
+				if err := transplantExtension(r, ext, "boru:matrix-util", "boru:matrix-util"); err != nil {
 					return err
 				}
 			}
@@ -253,7 +253,7 @@ func InstallTestExports(r *native.Registry) error {
 }
 
 // InstallStructExports builds the struct module and installs its exports as
-// defs — the convenience equivalent of running `import "aql:struct-util"` in test
+// defs — the convenience equivalent of running `import "boru:struct-util"` in test
 // setup, so `StructUtil.merge` etc. resolve without wiring the full resolver.
 func InstallStructExports(r *native.Registry) error {
 	desc, err := BuildStructModule(r)
@@ -267,7 +267,7 @@ func InstallStructExports(r *native.Registry) error {
 }
 
 // InstallIOExports builds the io module and installs its exports as defs —
-// the convenience equivalent of running `import "aql:io"` in test setup, so
+// the convenience equivalent of running `import "boru:io"` in test setup, so
 // `IO.read` etc. resolve without wiring the full resolver.
 func InstallIOExports(r *native.Registry) error {
 	desc, err := BuildIOModule(r)
@@ -281,7 +281,7 @@ func InstallIOExports(r *native.Registry) error {
 }
 
 // InstallNetExports builds the net module and installs its exports as defs —
-// the convenience equivalent of running `import "aql:net"` in test setup, so
+// the convenience equivalent of running `import "boru:net"` in test setup, so
 // `Net.fetch` etc. resolve without wiring the full resolver.
 func InstallNetExports(r *native.Registry) error {
 	desc, err := BuildNetModule(r)
@@ -293,13 +293,13 @@ func InstallNetExports(r *native.Registry) error {
 	}
 	// Transplant the module's word extensions (the Fetch accessor
 	// overloads) like the real import path does. Without this the shim
-	// and `import "aql:net"` would DISAGREE about whether a Response
+	// and `import "boru:net"` would DISAGREE about whether a Response
 	// answers `.status` — the same reason InstallTimeExports transplants.
 	for _, exportMap := range desc.Exports {
 		for _, key := range exportMap.Keys() {
 			v, _ := exportMap.Get(key)
 			if ext, ok := native.IsWordExtension(v); ok {
-				if err := transplantExtension(r, ext, "aql:net", "aql:net"); err != nil {
+				if err := transplantExtension(r, ext, "boru:net", "boru:net"); err != nil {
 					return err
 				}
 			}
@@ -309,7 +309,7 @@ func InstallNetExports(r *native.Registry) error {
 }
 
 // InstallLogExports builds the log module and installs its exports as defs —
-// the convenience equivalent of running `import "aql:log"` in test setup, so
+// the convenience equivalent of running `import "boru:log"` in test setup, so
 // `Log.info` etc. resolve without wiring the full resolver.
 func InstallLogExports(r *native.Registry) error {
 	desc, err := BuildLogModule(r)
@@ -323,7 +323,7 @@ func InstallLogExports(r *native.Registry) error {
 }
 
 // InstallDebugExports builds the debug module and installs its exports as
-// defs — the convenience equivalent of running `import "aql:debug"` in test
+// defs — the convenience equivalent of running `import "boru:debug"` in test
 // setup, so `Debug.tap` etc. resolve without wiring the full resolver.
 func InstallDebugExports(r *native.Registry) error {
 	desc, err := BuildDebugModule(r)

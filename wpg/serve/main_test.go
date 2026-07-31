@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 func testMux(t *testing.T) *http.ServeMux {
@@ -44,7 +44,7 @@ func TestIndexServed(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("GET /: Content-Type %q, want text/html", ct)
 	}
-	if !strings.Contains(rec.Body.String(), "AQL REPL") {
+	if !strings.Contains(rec.Body.String(), "BORU REPL") {
 		t.Error("GET /: index page missing the REPL shell")
 	}
 }
@@ -98,13 +98,13 @@ func TestEvalRejections(t *testing.T) {
 		t.Errorf("bad body error = %q, want invalid request body", resp.Error)
 	}
 
-	// AQL-level error surfaces in the error field, not as HTTP failure.
+	// BORU-level error surfaces in the error field, not as HTTP failure.
 	code, resp := postEval(t, mux, `{"code":"definitely-not-a-word"}`)
 	if code != 200 {
-		t.Fatalf("aql error eval: status %d, want 200", code)
+		t.Fatalf("boru error eval: status %d, want 200", code)
 	}
 	if resp.Error == "" {
-		t.Error("aql error eval: empty error field, want undefined-word error")
+		t.Error("boru error eval: empty error field, want undefined-word error")
 	}
 }
 

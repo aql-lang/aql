@@ -15,23 +15,23 @@ import (
 var importRe = regexp.MustCompile(`(?m)\bimport\b\s*["']([^"']+)["']`)
 
 // collectImports walks the file-import graph reachable from src (the contents
-// of the file at fileAbs) and adds every transitively-imported .aql file to
+// of the file at fileAbs) and adds every transitively-imported .boru file to
 // files, keyed by absolute path so the run-time in-memory file system resolves
-// it identically to the on-disk loader. Built-in `aql:` imports are skipped —
+// it identically to the on-disk loader. Built-in `boru:` imports are skipped —
 // they are compiled into the runtime. files is also the visited set, so import
 // cycles terminate.
 func collectImports(fileAbs string, src []byte, files map[string][]byte) error {
 	dir := filepath.Dir(fileAbs)
 	for _, m := range importRe.FindAllStringSubmatch(string(src), -1) {
 		ref := strings.TrimSpace(m[1])
-		if ref == "" || strings.HasPrefix(ref, "aql:") {
+		if ref == "" || strings.HasPrefix(ref, "boru:") {
 			continue // built-in module — already in the runtime
 		}
 
 		ext := filepath.Ext(ref)
-		if ext != ".aql" && ext != ".lang" {
+		if ext != ".boru" && ext != ".lang" {
 			return fmt.Errorf(
-				"cannot bundle import %q in %s: aql build supports built-in aql: modules and explicit .aql/.lang file imports; "+
+				"cannot bundle import %q in %s: boru build supports built-in boru: modules and explicit .boru/.lang file imports; "+
 					"inline the code or give an explicit file path",
 				ref, fileAbs)
 		}

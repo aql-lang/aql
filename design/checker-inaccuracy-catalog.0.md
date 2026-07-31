@@ -31,7 +31,7 @@ Reproduce the numbers with:
 ```bash
 cd test/go
 go test ./langspec/ -run TestCheckTypeSoundness -v      # bucket 1
-AQL_LOG_UNFLAGGED=1 go test ./langspec/ -run TestCheckAccuracyRatchet -v   # bucket 2
+BORU_LOG_UNFLAGGED=1 go test ./langspec/ -run TestCheckAccuracyRatchet -v   # bucket 2
 go test ./langspec/ -run TestCheckAnyFrontier -v         # bucket 3
 ```
 
@@ -46,8 +46,8 @@ checker is *wrong*, not merely silent or wide.
 
 ### 1.1 `else`-less `if` corrupts downstream dispatch
 
-```aql
-import "aql:math-util"
+```boru
+import "boru:math-util"
 def n 5
 if (n eq 0) [99] MathUtil.sqrt 16
 ```
@@ -63,7 +63,7 @@ checker cannot yet fold `n eq 0` to `false` and drop the dead branch.
 
 ### 1.2 Recursive void-declared fn leaks per-frame values
 
-```aql
+```boru
 def m fn [[n:Integer] [] [if (n lte 0) [] [n mul 2 m (n sub 1)]]]
 m 3
 ```
@@ -78,7 +78,7 @@ recursion unrolling. `recursion.tsv:53`. The second "hard straggler".
 
 ### 1.3 Field re-`set` widens past the declared singleton
 
-```aql
+```boru
 def S class {kind:(const 'point')}
 def s (make S {})
 s set kind 'point'
@@ -95,7 +95,7 @@ singleton the checker kept is not a supertype of the runtime value.
 
 ### 1.4 Predicate-refine (subset) return keeps its base tag
 
-```aql
+```boru
 def Big (Integer gt 10)
 def mk fn [[] [Big] [50]]
 mk
@@ -111,7 +111,7 @@ nominally `Integer ⊉ Big`. `user-types.tsv:124`.
 
 ### 1.5 / 1.6 Dynamic-dispatch containers — value pulled out of a store/matcher
 
-```aql
+```boru
 # patrun.tsv:40
 def api (patrun)
 add {cmd:"sum"} ([m:Map] => [m.x add m.y]) api
@@ -119,7 +119,7 @@ def h (find {cmd:"sum" x:3 y:4} api)
 h {x:3 y:4}                       # checked: [dynamic(Any) Map]  runtime: [Integer]
 
 # module-rand.tsv:37
-import "aql:rand"
+import "boru:rand"
 def r (Rand.with-seed 8)
 r.string "abc" 5                  # checked: [dynamic(Any) ProperString Integer]  runtime: [ProperString]
 ```
@@ -132,7 +132,7 @@ dynamic-dispatch limit, not a fixable bug.
 
 ### 1.7 Enum identity
 
-```aql
+```boru
 enum [a/q b/q c/q]
 ```
 
@@ -159,7 +159,7 @@ examples:
 
 **Value-dependent arithmetic (overflow / divide-by-zero):**
 
-```aql
+```boru
 20 div 0                          # ERROR at runtime; checker silent
 9223372036854775807 add 1         # int64 overflow
 2 pow 63                          # overflow
@@ -168,7 +168,7 @@ examples:
 
 **Missing keys / out-of-bounds (strict accessors):**
 
-```aql
+```boru
 {a:1} dotr missing                # no such field
 {a:1} getr 'missing'
 [10 20 30] getr 5                 # index out of range
@@ -178,7 +178,7 @@ def P class {x:1} end (make P {}) dotr zzz
 
 **Explicit / conditional raises:**
 
-```aql
+```boru
 raise "boom"
 def x 5 raise `bad: ${x}`
 raise {message: "no code"}
@@ -189,7 +189,7 @@ raise {message: "no code"}
 bad hex/base64, malformed XPath/jq/JSON, unification conflicts, all only
 detectable when the sub-parser runs.
 
-```aql
+```boru
 mini xp '//['                     # malformed XPath, runtime-only
 BinUtil.hex-decode 'xyz'          # not hex
 ```
@@ -198,7 +198,7 @@ BinUtil.hex-decode 'xyz'          # not hex
 register, ended-span mismatch, sealed-field writes). E.g. a loop re-running
 a `register`:
 
-```aql
+```boru
 for 2 [register …]                # genuine runtime double-register
 ```
 
@@ -221,7 +221,7 @@ Top offenders and why:
   largest unlock still pending (typed code values / `CodeEffectInfo`,
   designed in `checker-precision-fronts.0.md` §1, not built).
 
-  ```aql
+  ```boru
   def ops [[1 add] [2 mul]]
   ops get 0 do                    # result: Any  (body type unknown)
   ```

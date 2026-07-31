@@ -18,7 +18,7 @@ import (
 // writeUserFile stores a minimal logged-in user.jsonic under home.
 func writeUserFile(t *testing.T, home, content string) {
 	t.Helper()
-	dir := filepath.Join(home, ".aql")
+	dir := filepath.Join(home, ".boru")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}
@@ -31,10 +31,10 @@ func writeUserFile(t *testing.T, home, content string) {
 func writePublishableModule(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte("name: w4pub\nmajor: 0\nminor: 0\npatch: 1\nfiles: [index.aql]\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte("name: w4pub\nmajor: 0\nminor: 0\npatch: 1\nfiles: [index.boru]\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "index.aql"), []byte("1 add 2"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "index.boru"), []byte("1 add 2"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	return dir
@@ -83,10 +83,10 @@ func TestW4PublishEmptyToken(t *testing.T) {
 func TestW4PublishVaultReadError(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("AQL_HOME", "")
-	t.Setenv("AQL_VAULT_FOLDER", "")
-	t.Setenv("AQL_VAULT_SUFFIX", "")
-	t.Setenv("AQL_VAULT_PASSPHRASE", "vpw")
+	t.Setenv("BORU_HOME", "")
+	t.Setenv("BORU_VAULT_FOLDER", "")
+	t.Setenv("BORU_VAULT_SUFFIX", "")
+	t.Setenv("BORU_VAULT_PASSPHRASE", "vpw")
 	writeUserFile(t, home, "username: alice\nemail: a@b.c\ntoken: \nregistry: http://localhost:9\ntoken_vault: zz-missing-alias\n")
 
 	var out, errOut bytes.Buffer
@@ -104,10 +104,10 @@ func TestW4PublishVaultAliasFlagOverrides(t *testing.T) {
 	// plain token; a missing vault makes it fail.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("AQL_HOME", "")
-	t.Setenv("AQL_VAULT_FOLDER", "")
-	t.Setenv("AQL_VAULT_SUFFIX", "")
-	t.Setenv("AQL_VAULT_PASSPHRASE", "vpw")
+	t.Setenv("BORU_HOME", "")
+	t.Setenv("BORU_VAULT_FOLDER", "")
+	t.Setenv("BORU_VAULT_SUFFIX", "")
+	t.Setenv("BORU_VAULT_PASSPHRASE", "vpw")
 	writeUserFile(t, home, "username: alice\nemail: a@b.c\ntoken: plaintext\nregistry: http://localhost:9\n")
 
 	var out, errOut bytes.Buffer
@@ -124,10 +124,10 @@ func TestW4PublishVaultFlagDefaultAlias(t *testing.T) {
 	// --vault with no stored alias falls back to the default alias.
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("AQL_HOME", "")
-	t.Setenv("AQL_VAULT_FOLDER", "")
-	t.Setenv("AQL_VAULT_SUFFIX", "")
-	t.Setenv("AQL_VAULT_PASSPHRASE", "vpw")
+	t.Setenv("BORU_HOME", "")
+	t.Setenv("BORU_VAULT_FOLDER", "")
+	t.Setenv("BORU_VAULT_SUFFIX", "")
+	t.Setenv("BORU_VAULT_PASSPHRASE", "vpw")
 	writeUserFile(t, home, "username: alice\nemail: a@b.c\ntoken: plaintext\nregistry: http://localhost:9\n")
 
 	var out, errOut bytes.Buffer
@@ -135,7 +135,7 @@ func TestW4PublishVaultFlagDefaultAlias(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("Run = %d, want 1; stderr: %s", code, errOut.String())
 	}
-	if !strings.Contains(errOut.String(), "aql-registry-token") {
+	if !strings.Contains(errOut.String(), "boru-registry-token") {
 		t.Errorf("stderr = %q, want the default alias in the error", errOut.String())
 	}
 }
@@ -145,7 +145,7 @@ func TestW4PublishPackFails(t *testing.T) {
 	t.Setenv("HOME", home)
 	writeUserFile(t, home, "username: alice\nemail: a@b.c\ntoken: tok\nregistry: http://localhost:9\n")
 
-	empty := t.TempDir() // no aql.jsonic → pack fails
+	empty := t.TempDir() // no boru.jsonic → pack fails
 	var out, errOut bytes.Buffer
 	code := Run([]string{empty}, strings.NewReader(""), &out, &errOut)
 	if code != 1 {

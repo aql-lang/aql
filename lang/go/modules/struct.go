@@ -1,17 +1,17 @@
 package modules
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BuildStructModule creates the "aql:struct-util" native module. It registers the
+// BuildStructModule creates the "boru:struct-util" native module. It registers the
 // voxgig-struct data-manipulation words (formerly core words) into an
 // isolated sub-registry and returns a ModuleDesc with a "Struct" export
 // containing FnDef wrappers for each word.
 //
 // After import, the words are accessed via dot notation:
 //
-//	import "aql:struct-util"
+//	import "boru:struct-util"
 //	{a:1 b:2} {b:3 c:4} StructUtil.merge      # deep merge
 //	{a:1} StructUtil.clone                    # deep copy
 //	"a.b" {a:{b:42}} StructUtil.getpath        # path read
@@ -24,5 +24,5 @@ import (
 func BuildStructModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// The struct words are deliberately absent from the global registry, so
 	// the module's fresh sub-registry gains them here explicitly.
-	return buildDelegatingModule(parent, "aql:struct-util", "StructUtil", native.StructModuleNatives)
+	return buildDelegatingModule(parent, "boru:struct-util", "StructUtil", native.StructModuleNatives)
 }

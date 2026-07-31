@@ -11,10 +11,10 @@ the live census here.
 
 Companions: `CARRIER-STATIC-TYPECHECK-REPORT.10.md` (checker
 architecture), `checker-precision-fronts.0.md` (the two designed
-precision unlocks), `aql-bytecode-finish-line.0.md` +
-`aql-bytecode-next-stages.0.md` (compiler stage sequencing),
-`aql-bytecode-completion.0.md` (re-scoped P7),
-`local-reasoning-for-global-properties-in-aql-report.0.md` (proposals 3,
+precision unlocks), `boru-bytecode-finish-line.0.md` +
+`boru-bytecode-next-stages.0.md` (compiler stage sequencing),
+`boru-bytecode-completion.0.md` (re-scoped P7),
+`local-reasoning-for-global-properties-in-boru-report.0.md` (proposals 3,
 4, 10 referenced below), `module-fn-checkstate-ownership.7.md` (the
 module-body wall).
 
@@ -127,7 +127,7 @@ grows; the only hard coverage assertion is correct-error = 0.
 Fallback semantics: refusal and compiled-mode internal errors roll back
 the registry snapshot and silently re-run the interpreter ("slow, not
 wrong"); `--force-compile` turns refusal into a loud error. Compiled
-mode is **opt-in** (`--compile` / `AQL_COMPILE`), off by default.
+mode is **opt-in** (`--compile` / `BORU_COMPILE`), off by default.
 
 **Correctness debt (the part that is *wrong*, not just missing):**
 
@@ -153,7 +153,7 @@ compilation (`module-test.tsv:38` and everything shaped like it) is
 really **Stage-3 user-fn-call inlining with concrete-argument
 propagation** — very high risk, needs a corpus re-baseline, two
 attempts already reverted (`module-fn-checkstate-ownership.7.md`
-Step 3; `aql-bytecode-stage3-inlining-plan.0.md`). Every completion
+Step 3; `boru-bytecode-stage3-inlining-plan.0.md`). Every completion
 path (voxgig 48/48, refusals → 0) runs through it eventually.
 
 ---
@@ -175,7 +175,7 @@ goal.
 4. Any-frontier **ratio ceiling lowered stepwise** (12 → 10 → 8 %) as
    the two designed precision fronts (G4, G5) land; `do` over genuinely
    runtime-constructed code stays dynamic forever, by design.
-5. **Check-by-default**: `aql run` preflights with `--no-check` opt-out
+5. **Check-by-default**: `boru run` preflights with `--no-check` opt-out
    (gated on 1).
 
 **Compiler done = re-scoped P7:**
@@ -194,7 +194,7 @@ goal.
    growth-phase policy, not the end state).
 
 Out of scope of "finished" (recorded so nobody scope-creeps it in):
-bytecode serialization / interpreter-free `aql build` executables (no
+bytecode serialization / interpreter-free `boru build` executables (no
 doc proposes it; `build` today embeds source), multi-shot islands
 (reverted twice, wrong direction), and chasing the 172 unflagged rows
 to zero (explicitly never-zero by policy).
@@ -242,7 +242,7 @@ per-row landing tests, one commit per item with before/after deltas.
 
 ### Phase 3 — compiler frontier, tranche 1 (independent of Phase 2; ~1–2 weeks)
 
-Sequenced from `aql-bytecode-next-stages.0.md` (H, B, I already
+Sequenced from `boru-bytecode-next-stages.0.md` (H, B, I already
 landed):
 
 | # | Item (stage) | Rows it moves | Risk |
@@ -268,7 +268,7 @@ landed):
 | # | Item | Acceptance |
 |---|---|---|
 | 5.1 | Re-census after Phases 2–4: the 81-row dispatch-recovery bucket and the 12-row typed-def-reparent bucket are expected to collapse substantially from checker precision alone; refresh `COMPILED_STATUS.md`; lower every informational count that moved | census recorded; remaining refusals re-bucketed for Phase 6 |
-| 5.2 | **Check-by-default** (`aql run` preflights; `--no-check` opt-out) — now legal because 2.2 removed the known FP class | flip lands with release note; fuzz FP gate extended to the run path |
+| 5.2 | **Check-by-default** (`boru run` preflights; `--no-check` opt-out) — now legal because 2.2 removed the known FP class | flip lands with release note; fuzz FP gate extended to the run path |
 | 5.3 | Voxgig sweep re-run; ratchet the floor upward from 35/48 (must-not-drop becomes must-reach as Phase 3/6 items land) | recorded per-file with owning stage |
 
 ### Phase 6 — the hard wall: Stage 3 / Stage C (module bodies + user-fn inlining; the last big rock)
@@ -277,7 +277,7 @@ Sound cross-registry module-body compilation = user-fn-call inlining
 with concrete-argument propagation. Two attempts reverted; treat as a
 project, not a task:
 
-1. **Design round first** — reconcile `aql-bytecode-stage3-inlining-plan.0.md`
+1. **Design round first** — reconcile `boru-bytecode-stage3-inlining-plan.0.md`
    with `module-fn-checkstate-ownership.7.md`'s closing correction
    (closure-capture provenance is the root cause); decide the
    inlining boundary (per-call summaries vs body splice), the
@@ -299,9 +299,9 @@ Exit: refusals → 0 and islands tier-1-only **on the live corpus**.
 2. Re-arm ceilings as **gating** at 0 (refusals, non-tier-1 islands);
    `correct-error == 0` stays.
 3. Perf/alloc re-baseline; flip `--compile` default on (interpreter
-   remains behind `AQL_NO_COMPILE` until a full release cycle passes).
+   remains behind `BORU_NO_COMPILE` until a full release cycle passes).
 4. Record the end state in a `.10` doc; open a *separate* decision doc
-   if bytecode serialization for `aql build` is ever wanted — it is not
+   if bytecode serialization for `boru build` is ever wanted — it is not
    part of this plan.
 
 ### Dependency sketch
@@ -527,7 +527,7 @@ from everything; 7 is gated on 6's exit criteria.
     error rows 12 → 3 (the only permitted direction — the 9 M4 rows now
     COMPILE to byte-identical taxonomy); computeRefusalCeiling 29 → 17 with
     rationale. Full battery green before and after (differential +
-    or-fallback + combinations + property fuzz + -race + aqldebug: VERIFY
+    or-fallback + combinations + property fuzz + -race + borudebug: VERIFY
     PASSED; make test exit 0). Remaining 19 + 1 island against the design's
     §7 forecast: 8 fn-value shapes need the M2c shaped-instance-method
     feature, 4 sit on the sound auto-dispatch guard (permanent unless the
@@ -849,7 +849,7 @@ from everything; 7 is gated on 6's exit criteria.
   module-test 21→9; Vm 19→8; + make's record FIELD SCHEMA riding
   instance carriers with nested propagation enabling r.fst.m). The
   new TestNativeReturnsCoverage gate enumerates the default registry
-  AND every aql: module sub-registry: every sig must declare check
+  AND every boru: module sub-registry: every sig must declare check
   returns — allowlist EMPTY (512 raw shapes all annotated).
   pinnedAnyFrontierRows 345 → 220. Two incidents resolved per
   discipline (annotation fixed, never the pin): a tany Disjunct fold
@@ -938,7 +938,7 @@ from everything; 7 is gated on 6's exit criteria.
   a typo'd or wrong-typed key is now a HARD dispatch rejection at
   check AND run time, while a dynamic opts map still matches
   (Options vs non-concrete Map keeps the schema). Host-
-  (RegisterHostEmitter) and AQL-registered (EmitLang.register)
+  (RegisterHostEmitter) and BORU-registered (EmitLang.register)
   emitters keep a plain-Map opts slot — their key sets are their
   own. The data slot is untouched (`emit json {prety:true}` still
   emits `{"prety":true}`). The reserved `options_key_unchecked`
@@ -989,13 +989,13 @@ from everything; 7 is gated on 6's exit criteria.
   ceilings 3/0/66).
 - **2026-07-04 — Phase 4 CLOSED (4.4 + 4.5) and Phase 5 executed
   (5.1 re-census, 5.2 check-by-default; 5.3 voxgig stays
-  blocked-external).** 4.4: aql:emitlang gains a declared Options
+  blocked-external).** 4.4: boru:emitlang gains a declared Options
   schema — the {prety:true} typo is now a hard dispatch rejection
   (the G6 probe shape). 4.5: the checker talks to the compiler
   through the narrow recorder interface (eng/go/emit_recorder.go);
-  EmitState implements it; behavior-identical by gates. 5.2: aql run
+  EmitState implements it; behavior-identical by gates. 5.2: boru run
   pre-flights by DEFAULT — quiet gate (diagnostics only when
-  aborting), --check upgrades to verbose, --no-check / AQL_NO_CHECK
+  aborting), --check upgrades to verbose, --no-check / BORU_NO_CHECK
   opt out; TestCheckByDefault pins all five behaviors. Also landed
   from PR #225 review (P1s, both probe-confirmed real): the
   embedded-enclosing-binding literal refusal (fresh spine over
@@ -1014,7 +1014,7 @@ from everything; 7 is gated on 6's exit criteria.
   and perf baseline stand.
 - **2026-07-04 — Phase 7 executed; program closed.** Compiled mode
   flipped to default (ResolveCompileMode → CompileTry bare;
-  AQL_NO_COMPILE the kill switch, per the rollout contract's reserved
+  BORU_NO_COMPILE the kill switch, per the rollout contract's reserved
   Stage-7 language); the coverage frontier re-armed as a GATE at the
   documented-tier floor (refusalGate 11 / islandGate 1 in
   TestCompiledCoverage, tier decomposition in-comment); perf/alloc

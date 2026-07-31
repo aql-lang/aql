@@ -142,7 +142,7 @@ func TestModelResizeNoFeedbackLoop(t *testing.T) {
 func TestModelViewRenders(t *testing.T) {
 	m := newTestModel(t)
 	home := m.View()
-	if !strings.Contains(home, "aql vault") {
+	if !strings.Contains(home, "boru vault") {
 		t.Errorf("home view missing header: %q", home)
 	}
 	for _, want := range []string{"Secrets", "Access", "Passwords", "Maintenance", "Settings"} {
@@ -245,11 +245,11 @@ func TestModelHeaderShowsVersion(t *testing.T) {
 	if strings.Contains(h, "git") {
 		t.Errorf("title line should trim the VCS stamp: %q", h)
 	}
-	if !strings.Contains(h, "aql vault") {
+	if !strings.Contains(h, "boru vault") {
 		t.Errorf("title line missing app name: %q", h)
 	}
 	// The folder is shown on the vault line (home shortened to ~).
-	if vl := m.vaultLine(); !strings.Contains(vl, ".aql") {
+	if vl := m.vaultLine(); !strings.Contains(vl, ".boru") {
 		t.Errorf("vault line should show the folder: %q", vl)
 	}
 }

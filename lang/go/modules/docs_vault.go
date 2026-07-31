@@ -5,7 +5,7 @@ func init() {
 	// apart, and no signature line can tell them apart: both take an
 	// alias String, and only the examples show that one hands back a
 	// secret and the other deliberately does not.
-	registerExamples("aql:vault", map[string][]string{
+	registerExamples("boru:vault", map[string][]string{
 		// The operational words are almost all {alias …} option maps, and
 		// which keys each accepts is exactly what a signature of [Map]
 		// cannot say.
@@ -69,7 +69,7 @@ func init() {
 		},
 	})
 
-	registerDocs("aql:vault", map[string]string{
+	registerDocs("boru:vault", map[string]string{
 		"identity":             "An opaque handle to a vault-held TLS client credential, for `tls: {identity: …}`. Unlike `reveal` it never yields the secret as a value.",
 		"status":               "The active vault's status map: {ok backend locked aliases …} from the host backend.",
 		"needs-passphrase":     "Whether the active vault requires a passphrase that has not been collected this session.",

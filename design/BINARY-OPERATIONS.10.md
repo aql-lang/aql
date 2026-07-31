@@ -1,8 +1,8 @@
 # Binary (Bitwise) Operations
 
-Proposal and implementation for AQL's bitwise-operator surface. The
-core seven operators are AQL built-ins; the more specialized routines
-live in the `aql:bin` module.
+Proposal and implementation for BORU's bitwise-operator surface. The
+core seven operators are BORU built-ins; the more specialized routines
+live in the `boru:bin` module.
 
 ## Naming convention
 
@@ -17,7 +17,7 @@ live in the `aql:bin` module.
 
 ## Argument convention
 
-Two-operand binary ops follow AQL's standard swap-form convention
+Two-operand binary ops follow BORU's standard swap-form convention
 (`args[1] OP args[0]`). For shifts, the canonical surface reads as
 "value shifted by count":
 
@@ -37,7 +37,7 @@ bnot -1       => 0
 
 ## Integer width
 
-AQL `Integer` is signed `int64`. All bitwise ops operate on 64-bit
+BORU `Integer` is signed `int64`. All bitwise ops operate on 64-bit
 twos-complement representation:
 
 - `bsr` is **arithmetic** (sign-extending): the high bit is
@@ -49,7 +49,7 @@ twos-complement representation:
 ## Edge cases
 
 - **Shift count must be non-negative.** Negative counts raise
-  `[aql/binary_error]`. Use `busr` if logical right-shift is
+  `[boru/binary_error]`. Use `busr` if logical right-shift is
   intended.
 - **Shift count `>= 64` saturates.** `bsl` and `busr` return 0;
   `bsr` returns 0 for non-negative inputs and -1 for negative
@@ -69,12 +69,12 @@ twos-complement representation:
 | `bsr` | `Integer Integer -> Integer` | arithmetic shift right (sign-extending) |
 | `busr` | `Integer Integer -> Integer` | logical / unsigned shift right (zero-fill) |
 
-## `aql:bin` module words
+## `boru:bin` module words
 
-Loaded via `import "aql:bin-util"` and used with dot notation:
+Loaded via `import "boru:bin-util"` and used with dot notation:
 
 ```
-import "aql:bin-util"
+import "boru:bin-util"
 255 bin.popcount      => 8
 0xff bin.bitlen       => 8
 0xa5 5 bin.test       => true
@@ -126,9 +126,9 @@ replaced by the low `(hi - lo)` bits of `bits`.
 - `bin.bitlen 0` → 0 (no highest bit).
 - `bin.mask n` with `n <= 0` → 0; `n >= 64` → -1 (all bits set).
 - `bin.test` / `bin.set` / `bin.clear` / `bin.toggle` require
-  `0 <= n < 64`; otherwise `[aql:bin/range_error]`.
+  `0 <= n < 64`; otherwise `[boru:bin/range_error]`.
 - `bin.extract` / `bin.insert` require `0 <= lo <= hi <= 64`;
-  otherwise `[aql:bin/range_error]`.
+  otherwise `[boru:bin/range_error]`.
 - `bin.rotl x n` / `bin.rotr x n` mask `n` to `n mod 64` so very
   large rotates behave intuitively.
 
@@ -151,11 +151,11 @@ The chosen surface covers the C operator set + the Go `math/bits`
 package + the Java `Integer` static methods. Extras typically
 considered but **deliberately excluded** for now:
 
-- Arbitrary-width / arbitrary-precision: AQL Integer is fixed
+- Arbitrary-width / arbitrary-precision: BORU Integer is fixed
   `int64`; bigint is a separate proposal.
-- `wrapping_*` / `checked_*`: AQL's Integer arithmetic already
+- `wrapping_*` / `checked_*`: BORU's Integer arithmetic already
   wraps on overflow (no panic); explicit variants add API surface
   without new capability.
 - Saturating shifts: niche; add when needed.
 - Gray code / packing primitives: hot-path codec work that should
-  live in a dedicated `aql:codec` module.
+  live in a dedicated `boru:codec` module.

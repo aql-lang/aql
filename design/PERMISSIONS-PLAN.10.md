@@ -74,7 +74,7 @@ package policy
 func Load(name string) (Policy, error)                       // built-in or user profile
 func LoadFile(path string) (Policy, error)
 func LoadInline(jsonic string) (Policy, error)
-func FromMap(m map[string]any) (Policy, error)               // used by aql:vm
+func FromMap(m map[string]any) (Policy, error)               // used by boru:vm
 
 // Profile is the raw deserialised JSON. Compile resolves extends
 // and any inline references, producing the closed Policy.
@@ -85,7 +85,7 @@ func (p Profile) Compile() (Policy, error)
 type Policy interface { ... }
 
 // RequireSubset(child, parent) returns nil iff child grants no more
-// than parent. Used by aql:vm in Phase 7.
+// than parent. Used by boru:vm in Phase 7.
 func RequireSubset(child, parent Policy) error
 ```
 
@@ -122,7 +122,7 @@ registry; nothing yet enforces it.
 ```
 lang/go/native/capabilities.go  # add CapPolicy + HostPolicy/SetHostPolicy
 lang/go/native/setup.go         # accept Options.Policy in DefaultRegistry
-lang/go/aql.go                  # add Policy field to lang.Options
+lang/go/boru.go                  # add Policy field to lang.Options
 ```
 
 ### Changes
@@ -149,7 +149,7 @@ func DefaultRegistry(providers ...func(*Registry)) (*Registry, error) {
     // ... existing capability install ...
 }
 
-// aql.go
+// boru.go
 type Options struct {
     Registry string
     Seed     int64
@@ -329,14 +329,14 @@ sees a one-method shim.
 func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
     if pol := native.HostPolicy(parent); pol != nil {
         if err := pol.Check("modules", "import", policy.Args{
-            "module": "aql:" + name,
+            "module": "boru:" + name,
         }); err != nil {
             return native.ModuleDesc{}, err
         }
         if !pol.Scope("modules").Installed() {
             return native.ModuleDesc{}, ErrModulesDisabled
         }
-        sub := pol.Scope("modules").Scopes["aql:"+name]
+        sub := pol.Scope("modules").Scopes["boru:"+name]
         if !sub.Installed() {
             return native.ModuleDesc{}, fmt.Errorf("module %s: install=false", name)
         }
@@ -364,9 +364,9 @@ check themselves.
 - `engine`: policy with `engine.words.default = "deny"` + only
   `add` allowed → `1 add 2` works, `1 sub 2` returns
   permission-denied.
-- `modules`: policy denies `aql:math` import → `import "aql:math-util"`
+- `modules`: policy denies `boru:math` import → `import "boru:math-util"`
   fails before resolution.
-- `modules.scopes`: policy allows `aql:math` but denies `pow` →
+- `modules.scopes`: policy allows `boru:math` but denies `pow` →
   `pow 2 3` after import returns permission-denied; `sin 0` works.
 - `install: false` on a capability: `read "/tmp/x"` returns
   capability_not_installed.
@@ -386,7 +386,7 @@ check themselves.
 
 **Goal**: `--perms*`, `--allow`, `--deny`, `--no-install`,
 `--install`, `--allow-global`, `--deny-global` wired into every
-command that builds a `lang.AQL`. `aql policy` subcommand for
+command that builds a `lang.BORU`. `boru policy` subcommand for
 authoring.
 
 ### Touched files
@@ -399,7 +399,7 @@ cmd/go/internal/check/check.go               # same
 cmd/go/internal/exec/exec.go                 # same (server-bound at startup)
 cmd/go/internal/serve/factories.go           # baseline + per-segment perms
 cmd/go/internal/serve/serve.go               # baseline + intersection logic
-cmd/go/internal/policy/policy.go             # NEW — aql policy subcommand
+cmd/go/internal/policy/policy.go             # NEW — boru policy subcommand
 cmd/go/main.go                               # register policy subcommand
 ```
 
@@ -429,29 +429,29 @@ func Register(fs *flag.FlagSet, f *Flags) { ... }
 func (f *Flags) Resolve() (policy.Policy, error) { ... }
 ```
 
-Each subcommand that runs AQL code calls `permsflags.Register(fs,
+Each subcommand that runs BORU code calls `permsflags.Register(fs,
 &pf)` once during setup and `pf.Resolve()` once before constructing
-the AQL instance.
+the BORU instance.
 
-### `aql policy` subcommand
+### `boru policy` subcommand
 
 ```
-aql policy list                              # built-in + user profiles
-aql policy show <name> [--json]
-aql policy diff <a> <b>
-aql policy resolve <name> --allow=... --deny=...
-aql policy new <name> --extends <base>
-aql policy edit <name>
-aql policy validate <path>
-aql policy test <name> --check=<scope>.<op>
-aql policy explain <name> --check=<scope>.<op> [--args=k=v,...]
+boru policy list                              # built-in + user profiles
+boru policy show <name> [--json]
+boru policy diff <a> <b>
+boru policy resolve <name> --allow=... --deny=...
+boru policy new <name> --extends <base>
+boru policy edit <name>
+boru policy validate <path>
+boru policy test <name> --check=<scope>.<op>
+boru policy explain <name> --check=<scope>.<op> [--args=k=v,...]
 ```
 
 The `explain` output is the killer-feature DX surface; takes ~150
 lines and is well worth it. It walks the resolution chain, runs the
 evaluator with logging enabled, and emits a structured report.
 
-### `aql serve` baseline
+### `boru serve` baseline
 
 `splitSegments` already partitions argv by `+`. The top-level
 `--perms*` flags (consumed before the first segment) become the
@@ -472,17 +472,17 @@ an error before starting the service. (This is exactly the
 - `--perms-inline=@-` reads stdin, parses jsonic.
 - Auto-detect: `--perms=./x.jsonic` → file; `--perms=sandbox` →
   name; `--perms={...}` → inline.
-- `aql policy explain` produces deterministic output for known
+- `boru policy explain` produces deterministic output for known
   inputs.
-- `aql serve` baseline intersection: per-segment policy attempting
+- `boru serve` baseline intersection: per-segment policy attempting
   to lift a baseline deny is rejected at startup.
 
 ### Acceptance
 
 - All commands that take code work with `--perms=full` identically
   to without it.
-- `aql policy explain` output matches a golden file.
-- `aql serve --perms=baseline exec --perms=trusted` denies anything
+- `boru policy explain` output matches a golden file.
+- `boru serve --perms=baseline exec --perms=trusted` denies anything
   baseline denies, even though `trusted` would have allowed it.
 
 ---
@@ -497,7 +497,7 @@ from CLI.md.
 ```
 lang/go/policy/profiles/*.jsonic     # the 6 profiles (drafted in Phase 1)
 HOWTO.md                             # new section: "Restrict what code can do"
-CLI.md                               # add aql policy section
+CLI.md                               # add boru policy section
 REFERENCE.md                         # add policy file format reference
 ```
 
@@ -531,7 +531,7 @@ format decode-from-string only.
 
 ### HOWTO entry
 
-A new "How do I sandbox AQL code?" section walking through:
+A new "How do I sandbox BORU code?" section walking through:
 
 1. Pick a built-in profile.
 2. Run with `--perms=<name>`.
@@ -543,13 +543,13 @@ A new "How do I sandbox AQL code?" section walking through:
 
 - HOWTO example commands all execute successfully.
 - CLI.md updated.
-- `aql policy list` lists all 6 built-ins.
+- `boru policy list` lists all 6 built-ins.
 
 ---
 
-## Phase 7 — `aql:vm` native module
+## Phase 7 — `boru:vm` native module
 
-**Goal**: AQL code can spawn sandboxed sub-engines via `aql:vm`.
+**Goal**: BORU code can spawn sandboxed sub-engines via `boru:vm`.
 
 ### Touched files
 
@@ -580,7 +580,7 @@ For each word, the handler:
 3. Calls `policy.RequireSubset(inner, native.HostPolicy(parent))`.
    Returns attenuation error if violated.
 4. Calls `lang.New(lang.Options{Policy: inner})`.
-5. Runs the code via `(*lang.AQL).Run(code)`.
+5. Runs the code via `(*lang.BORU).Run(code)`.
 6. Marshals the result stack to parent-engine values (by-copy).
 7. Returns the last value (matching the HTTP exec service's "last
    value as result" semantic) or the full stack if asked.
@@ -604,16 +604,16 @@ For each word, the handler:
 
 ### Acceptance
 
-- `aql:vm` listed in `lang/go/modules/modules.go::modules`.
+- `boru:vm` listed in `lang/go/modules/modules.go::modules`.
 - Smoke tests pass.
-- Documentation: HOWTO entry on "Run untrusted AQL from AQL"; one
+- Documentation: HOWTO entry on "Run untrusted BORU from BORU"; one
   REFERENCE entry per word.
 
 ---
 
 ## Phase 8 — Exec service wiring
 
-**Goal**: `aql exec` accepts `--perms*` flags at startup; per-request
+**Goal**: `boru exec` accepts `--perms*` flags at startup; per-request
 policy is **rejected**.
 
 ### Touched files
@@ -661,24 +661,24 @@ ignore is fine since the consequences are zero).
 
 - Existing exec_test.go tests still pass.
 - New permission tests pass.
-- README/CLI.md updated for `aql exec --perms=...`.
+- README/CLI.md updated for `boru exec --perms=...`.
 
 ---
 
 ## Cross-phase: error messages
 
 A `Denied` error from policy must surface in the engine error
-machinery with structured fields. The standard `r.AqlError(code,
-detail, word)` builder grows a `r.AqlErrorWithBlame(code, detail,
+machinery with structured fields. The standard `r.BoruError(code,
+detail, word)` builder grows a `r.BoruErrorWithBlame(code, detail,
 word, blame *policy.Denied)` variant that includes the rule index,
 profile name, and resolved scope chain in the detail string.
 
 Error codes added:
 
-- `aql/permission_denied`
-- `aql/capability_not_installed`
-- `aql/modules_disabled`
-- `aql/policy_attenuation` (child policy exceeds parent in `vm.*`)
+- `boru/permission_denied`
+- `boru/capability_not_installed`
+- `boru/modules_disabled`
+- `boru/policy_attenuation` (child policy exceeds parent in `vm.*`)
 
 These appear in `REFERENCE.md` § Error codes alongside existing
 ones.
@@ -713,7 +713,7 @@ Total: ~5000 LOC + tests + docs, in 8 reviewable PRs.
 
 Phases 1–4 unlock everything: a developer using `lang.New` directly
 can specify a policy. Phases 5–6 add CLI ergonomics. Phase 7 unlocks
-in-AQL sandboxing. Phase 8 ties it into the new exec service.
+in-BORU sandboxing. Phase 8 ties it into the new exec service.
 
 After Phase 4 ships, the design document moves from "Proposed" to
 "Implemented (core)". After Phase 7 to "Implemented (full)".
@@ -737,7 +737,7 @@ After Phase 4 ships, the design document moves from "Proposed" to
    resolve_test.go cases covering single-extends, missing parent,
    conflicting defaults, override-and-extend interactions.
 
-4. **`aql:vm` recursion depth.** Mitigation: hard limit of 8 levels
+4. **`boru:vm` recursion depth.** Mitigation: hard limit of 8 levels
    in `policy.Limits.MaxSubEngineDepth`; check enforced in the vm
    module before construction.
 
@@ -756,7 +756,7 @@ After Phase 4 ships, the design document moves from "Proposed" to
 ## Out of scope (deliberately)
 
 - Runtime grant/revoke API. Profiles are immutable for the lifetime
-  of a `*lang.AQL`. To change, build a new instance. (This is the
+  of a `*lang.BORU`. To change, build a new instance. (This is the
   same lesson Deno's recent deprecation of `Deno.permissions.request`
   reaches.)
 - Per-user / multi-tenant identity. Bind users to profiles at the

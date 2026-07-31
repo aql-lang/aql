@@ -1,10 +1,10 @@
-# `aql:string-util` (expanded) — Unicode classification
+# `boru:string-util` (expanded) — Unicode classification
 
 > **Status: design proposal, not implemented.** This note specifies an
-> expansion of the existing `aql:string-util` module
+> expansion of the existing `boru:string-util` module
 > (`lang/go/modules/string.go`, namespace `StringUtil`) to **own all
 > Unicode functionality**: per-rune classification predicates and case
-> mapping. It supersedes the standalone `aql:unicode` note (now removed).
+> mapping. It supersedes the standalone `boru:unicode` note (now removed).
 > Read [README.10.md](README.10.md) first for the shared conventions.
 
 ## 1. Why fold Unicode into string-util
@@ -12,16 +12,16 @@
 `string-util` already owns text work and delegates to Go's `strings`,
 `regexp`, **and `unicode`** (it uses `unicode` today for `normalize` /
 NFC). Rune classification (`IsLetter`, `IsDigit`, …) is the same domain at
-a finer grain. Rather than a separate `aql:unicode` module the user's
+a finer grain. Rather than a separate `boru:unicode` module the user's
 decision is to **concentrate all Unicode in `string-util`**, so a single
-import (`import "aql:string-util"`) covers casing, normalization, search,
+import (`import "boru:string-util"`) covers casing, normalization, search,
 *and* character classification, discoverable together under `describe
 StringUtil`.
 
 ## 2. Import & namespace
 
 ```
-import "aql:string-util"     # binds the StringUtil namespace (unchanged)
+import "boru:string-util"     # binds the StringUtil namespace (unchanged)
 ```
 
 Unchanged existing module. New words dot-access flat: `StringUtil.is-alpha`,
@@ -29,7 +29,7 @@ Unchanged existing module. New words dot-access flat: `StringUtil.is-alpha`,
 
 ## 3. Design choice: whole-string predicates (the key refinement)
 
-The standalone `aql:unicode` note classified the **first rune** of a
+The standalone `boru:unicode` note classified the **first rune** of a
 String (`"abc" Unicode.is-letter` → tested `'a'`). `string-util` is
 **whole-string oriented**, so the folded surface adopts the idiomatic
 whole-string contract (the Python `str.isalpha()` / `isdigit()` model):
@@ -55,7 +55,7 @@ whole-string form is the primary, and recommended, surface.)
 Top-first sig order; inner native sigs `BarrierPos: -1`; invoked
 args-before-dot (single-arg words dispatch in forward and swap form).
 
-| Go per-rune symbol | aql word | one-line doc | refinement |
+| Go per-rune symbol | boru word | one-line doc | refinement |
 |---|---|---|---|
 | `unicode.IsLetter` | `is-alpha` | True if every rune is a letter (Unicode L). | whole-string "all"; empty → false. |
 | `unicode.IsDigit` | `is-digit` | True if every rune is a decimal digit 0–9. | whole-string. |
@@ -111,13 +111,13 @@ reconcile — the Unicode words now live alongside the existing
   `unicode`; the new predicates extend that same delegation.
 - No existing word is moved or renamed; the change is purely additive
   (new predicates + optional `title`).
-- Related: `aql:bin-util` has `ord` (String→Integer codepoint) / `chr`
+- Related: `boru:bin-util` has `ord` (String→Integer codepoint) / `chr`
   (Integer→String); code-point access stays there, classification here.
 
 ## 9. Examples (args-before form)
 
 ```
-import "aql:string-util"
+import "boru:string-util"
 
 "abc" StringUtil.is-alpha               # true
 "ab1" StringUtil.is-alpha               # false
@@ -157,7 +157,7 @@ table-driven `classifierNative` for the predicate generator.
 - `lang/go/modules/docs_string.go` — add a one-line `registerDocs`
   entry per new export (`TestModuleExportDocs` enforces completeness).
 - `lang/spec/module-string.tsv` — positive rows leading with `import
-  "aql:string-util"` plus an `ERROR:`/negative sibling where expressible
+  "boru:string-util"` plus an `ERROR:`/negative sibling where expressible
   (e.g. `is-alpha` on mixed/empty inputs returning `false`), per Test
   discipline (`lang/go/CLAUDE.md`).
 - No FixedID entry, no policy wiring (pure).

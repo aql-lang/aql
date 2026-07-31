@@ -2,9 +2,9 @@ package help
 
 import "sort"
 
-// Category groups related built-in words so the no-argument `aql describe`
+// Category groups related built-in words so the no-argument `boru describe`
 // listing reads as a guided tour rather than one long alphabetical dump, and
-// so `aql describe <category>` can show one group at a time.
+// so `boru describe <category>` can show one group at a time.
 //
 // Membership is data here — a central table rather than a field on each Entry
 // — so the whole taxonomy is reviewable in one place (the same approach the
@@ -13,13 +13,13 @@ import "sort"
 // word belongs to exactly one category and that every listed word is a real
 // Entry, so the table cannot silently drift away from the help registry.
 type Category struct {
-	Name    string   // short token used by `aql describe <category>`
+	Name    string   // short token used by `boru describe <category>`
 	Summary string   // one-line description shown in the index
 	Words   []string // CORE member words — callable with no import
 	// Module holds the words this category contributes that live in a
 	// loadable module, keyed by module id ("math-util" → its words).
 	// They are NOT callable bare: `abs 1` is undefined_word until
-	// `import "aql:math-util"` binds MathUtil.abs.
+	// `import "boru:math-util"` binds MathUtil.abs.
 	//
 	// Splitting them out is not cosmetic. The table listed 80 of its 249
 	// words as though they were builtins; every one of them errors as

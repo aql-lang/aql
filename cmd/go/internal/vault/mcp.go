@@ -63,7 +63,7 @@ type mcpError struct {
 	Message string `json:"message"`
 }
 
-// runMCP implements `aql vault mcp`. It reads JSON-RPC frames
+// runMCP implements `boru vault mcp`. It reads JSON-RPC frames
 // from stdin (one per line; clients that use the Content-Length
 // HTTP-style framing are not supported by this minimal server)
 // and writes responses to stdout. Diagnostic output goes to
@@ -81,7 +81,7 @@ func runMCP(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 	srv := &mcpServer{
@@ -159,7 +159,7 @@ func (s *mcpServer) dispatch(req *mcpRequest) *mcpResponse {
 		return ok(req, map[string]any{
 			"protocolVersion": mcpProtocolVersion,
 			"serverInfo": map[string]string{
-				"name":    "aql-vault",
+				"name":    "boru-vault",
 				"version": mcpServerVersion,
 			},
 			"capabilities": map[string]any{
@@ -334,7 +334,7 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 			Method: method, Path: path, Outcome: "no-cap",
 		})
 		return fail(req, -32603, fmt.Sprintf(
-			"no capability for alias %q granted to agent %q; run `aql vault grant --agent=%s %s`",
+			"no capability for alias %q granted to agent %q; run `boru vault grant --agent=%s %s`",
 			alias, s.agent, s.agent, alias))
 	}
 	if reason := capabilityDenial(capab, method, mustHost(prov.BaseURL), now); reason != "" {
@@ -403,7 +403,7 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 
 	// Debit the capability the same way the proxy does, so call and
 	// cost quotas are enforced across MCP invocations too.
-	cost := parseCostHeader(resp.Header.Get("X-AQL-Vault-Cost-Cents"))
+	cost := parseCostHeader(resp.Header.Get("X-BORU-Vault-Cost-Cents"))
 	if err := recordCapabilityUse(s.homeDir, capab.ID, cost); err != nil {
 		fmt.Fprintf(s.stderr, "vault mcp: persisting capability counters: %s\n", err)
 	}

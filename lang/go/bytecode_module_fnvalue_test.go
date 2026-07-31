@@ -7,13 +7,13 @@ import (
 )
 
 // TestModuleFnValueAsArg pins the off-corpus shape the langspec differential is
-// blind to: a MODULE fn value (a real-AQL-body export, e.g. a comparator
+// blind to: a MODULE fn value (a real-BORU-body export, e.g. a comparator
 // `M.by-num`) passed as an ARGUMENT to another fn. The value must bake as an inert
 // const (isInertConst FnDefInfo case) — the sub-registry pointer it carries is the
 // SAME object the compiled run shares, so check-pass and VM see one fn — and the VM
 // must apply it faithfully: the island sub-engine (callDynTrailTop's
 // `vc.island().Run([fn, args…])`) INTERPRETS the body in fnDef.Registry, so a
-// real-body module fn applies soundly (CallAQL + module-private scope). Before the
+// real-body module fn applies soundly (CallBORU + module-private scope). Before the
 // fn-dispatch unification + this bake relaxation, such a value refused at the call
 // ("fn call operand of unknown provenance"); the comparison sorts that thread a
 // `M.by-...` comparator into the sort fn all hit it.

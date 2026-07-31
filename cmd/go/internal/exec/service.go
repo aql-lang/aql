@@ -1,6 +1,6 @@
 // service.go provides the Service-shaped wrapper around the exec
 // HTTP server: a long-running unit that can be started, stopped,
-// and paused under the supervisor in `aql serve`. The pre-existing
+// and paused under the supervisor in `boru serve`. The pre-existing
 // Handler() function and request handlers in exec.go are reused
 // unchanged.
 
@@ -16,8 +16,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // Server is the lifecycle-managed exec HTTP server. Construct with
@@ -40,7 +40,7 @@ type Server struct {
 }
 
 // NewServer builds an exec Server bound to addr ("host:port"). The
-// registry path (may be empty) is forwarded to every AQL instance
+// registry path (may be empty) is forwarded to every BORU instance
 // the server creates per request. The policy (may be nil) is fixed
 // at construction; clients cannot override it via the request body.
 func NewServer(addr, registry string, pol policy.Policy) (*Server, error) {
@@ -77,7 +77,7 @@ func (s *Server) UsesStdio() bool { return false }
 // Addr returns the configured (or bound, post-Start) listen address.
 func (s *Server) Addr() string { return s.addr }
 
-// Registry returns the registry path forwarded to AQL instances.
+// Registry returns the registry path forwarded to BORU instances.
 func (s *Server) Registry() string { return s.registry }
 
 // Start binds the listener and serves requests until ctx is canceled

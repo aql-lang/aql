@@ -1,7 +1,7 @@
 package eng
 
 // Seam-5b wave E: unit tests that execute previously-unreached blocks in
-// aql_error.go, code_effect.go, core_helpers.go, core_ref.go, core_xml.go,
+// boru_error.go, code_effect.go, core_helpers.go, core_ref.go, core_xml.go,
 // fork.go, storage_helpers.go, surface.go, and util.go. All calls are
 // in-package and direct where possible (guard / error arms), per
 // design/TEST-SEAMS.10.md. Every test uses a fresh registry so no global
@@ -13,24 +13,24 @@ import (
 	"testing"
 )
 
-// --- aql_error.go ---------------------------------------------------------
+// --- boru_error.go ---------------------------------------------------------
 
-func TestS5bEAqlErrorColDefaultsToOne(t *testing.T) {
-	e := &AqlError{Code: "syntax_error", Detail: "boom", Row: 2, Col: 0}
+func TestS5bEBoruErrorColDefaultsToOne(t *testing.T) {
+	e := &BoruError{Code: "syntax_error", Detail: "boom", Row: 2, Col: 0}
 	msg := e.Error()
 	if !strings.Contains(msg, "--> 2:1") {
 		t.Errorf("expected '--> 2:1' in %q", msg)
 	}
 }
 
-func TestS5bEAqlErrSiteClampsRowCol(t *testing.T) {
+func TestS5bEBoruErrSiteClampsRowCol(t *testing.T) {
 	// row < 1 and col < 1 clamp to 1.
-	out := aqlErrSite("one\ntwo\nthree", "one", "msg", 0, 0)
+	out := boruErrSite("one\ntwo\nthree", "one", "msg", 0, 0)
 	if out == "" {
 		t.Fatal("expected a non-empty site extract")
 	}
 	// row beyond the line count clamps to the last line.
-	out = aqlErrSite("one\ntwo", "two", "msg", 99, 1)
+	out = boruErrSite("one\ntwo", "two", "msg", 99, 1)
 	if out == "" {
 		t.Fatal("expected a non-empty site extract for an out-of-range row")
 	}
@@ -158,7 +158,7 @@ func TestS5bEBuildFnBodyHandlerQuotesListParam(t *testing.T) {
 	r := newTestRegistry(t)
 	s := FnSig{
 		Params: []FnParam{{Name: "s5bex", Type: TList}},
-		Impl:   AQL([]Value{NewWord("s5bex")}),
+		Impl:   BORU([]Value{NewWord("s5bex")}),
 	}
 	meta := &FnFrameMeta{Name: "s5bef"}
 	h := buildFnBodyHandler(r, "s5bef", s, FnDefInfo{}, meta)
@@ -185,12 +185,12 @@ func TestS5bEBuildFnBodyHandlerForkDispatch(t *testing.T) {
 	s := FnSig{
 		Params:  []FnParam{{Name: "s5bev", Type: TInteger}},
 		Returns: []*Type{TInteger},
-		Impl:    AQL([]Value{NewWord("s5bev")}),
+		Impl:    BORU([]Value{NewWord("s5bev")}),
 	}
 	h := buildFnBodyHandler(r, "s5bevf", s, FnDefInfo{}, &FnFrameMeta{Name: "s5bevf"})
 	// A registry FORK shares the install registry's AnalysisScopeID, so
 	// the handler must run the body in the fork (branch-local bindings
-	// resolve there), via CallAQL.
+	// resolve there), via CallBORU.
 	fork := r.ForkConcurrent()
 	out, err := h([]Value{NewInteger(42)}, nil, nil, fork)
 	if err != nil {
@@ -209,7 +209,7 @@ func TestS5bEBuildFnBodyHandlerArgsPushError(t *testing.T) {
 	r.Args = nil // nil args stack: Push fails, the handler must unwind the baseline
 	s := FnSig{
 		Params: []FnParam{{Name: "s5bey", Type: TInteger}},
-		Impl:   AQL([]Value{NewWord("s5bey")}),
+		Impl:   BORU([]Value{NewWord("s5bey")}),
 	}
 	h := buildFnBodyHandler(r, "s5beg", s, FnDefInfo{}, &FnFrameMeta{Name: "s5beg"})
 	if _, err := h([]Value{NewInteger(1)}, nil, nil, r); err == nil {
@@ -268,7 +268,7 @@ func TestS5bEReturnsFnDeferredParamListPopsGenBindings(t *testing.T) {
 	inner.Eval = true
 	sig := FnSig{
 		Params: []FnParam{{Name: "s5bec1", Type: node}},
-		Impl:   AQL([]Value{inner}),
+		Impl:   BORU([]Value{inner}),
 	}
 	rf := buildFnBodyReturnsFn(r, "s5bemk", sig, FnDefInfo{Gen: spec})
 	out := rf([]Value{NewInteger(9)}, r)
@@ -290,7 +290,7 @@ func TestS5bEReturnsFnArmedRootCarrierArg(t *testing.T) {
 
 	sig := FnSig{
 		Params: []FnParam{{Name: "s5bez", Type: TAny}},
-		Impl:   AQL([]Value{NewInteger(1)}),
+		Impl:   BORU([]Value{NewInteger(1)}),
 	}
 	rf := buildFnBodyReturnsFn(r, "s5beh", sig, FnDefInfo{})
 	// A root-node arg (nil Parent): the armed generalisation must keep it
@@ -318,7 +318,7 @@ func TestS5bEReturnsFnUnboundReturnTypeParamDedupes(t *testing.T) {
 	sig := FnSig{
 		Params:  []FnParam{{Name: "s5bew", Type: TInteger}},
 		Returns: []*Type{node},
-		Impl:    AQL([]Value{NewInteger(1)}),
+		Impl:    BORU([]Value{NewInteger(1)}),
 	}
 	rf := buildFnBodyReturnsFn(r, "s5bei", sig, FnDefInfo{Gen: spec})
 
@@ -352,7 +352,7 @@ func TestS5bEInstallFnDefStackOnly(t *testing.T) {
 	InstallFnDef(r, "s5beso", FnDefInfo{
 		Signatures: []Signature{{
 			Params: []FnParam{{Name: "n", Type: TInteger}},
-			Impl:   AQL([]Value{NewWord("n")}),
+			Impl:   BORU([]Value{NewWord("n")}),
 		}},
 	}, true)
 	fn := r.Lookup("s5beso")
@@ -375,7 +375,7 @@ func TestS5bEUninstallFnSigsSkipsNonFnEntries(t *testing.T) {
 	InstallFnDef(r, "s5bemix", FnDefInfo{
 		Signatures: []Signature{{
 			Params: []FnParam{{Name: "a", Type: TInteger}},
-			Impl:   AQL([]Value{NewWord("a")}),
+			Impl:   BORU([]Value{NewWord("a")}),
 		}},
 	})
 	// A plain value entry ABOVE the fn: the top-down spec scan must skip
@@ -432,7 +432,7 @@ func TestS5bEExpandOptionalSigsUnnamedAndBarrierClamp(t *testing.T) {
 			{Name: "o", Type: TInteger, Optional: true},
 		},
 		BarrierPos: 2,
-		Impl:       AQL([]Value{NewInteger(1)}),
+		Impl:       BORU([]Value{NewInteger(1)}),
 	}})
 	if len(sigs) != 2 {
 		t.Fatalf("expected original + 1 expansion, got %d", len(sigs))

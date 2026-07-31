@@ -1,7 +1,7 @@
 # Go Modules (reflection bridge)
 
 > **Status: design proposal.** Nothing in this note is implemented yet.
-> It describes how AQL *could* expose arbitrary Go packages to AQL source
+> It describes how BORU *could* expose arbitrary Go packages to BORU source
 > via a reflection bridge, surfaced through the existing `import` word with
 > a `go:` prefix. It is written to be implementable as a later task; the
 > "Implementation" and "Open questions" sections mark the work and the
@@ -9,26 +9,26 @@
 
 ## Motivation
 
-AQL is **sealed at compile time**. Go reaches the language only through
+BORU is **sealed at compile time**. Go reaches the language only through
 host-wired native words (`RegisterNativeFunc`) and native modules
-(`BuildXxxModule` → `ModuleDesc`, imported as `import "aql:math-util"`,
+(`BuildXxxModule` → `ModuleDesc`, imported as `import "boru:math-util"`,
 see [NATIVE-MODULES.10.md](NATIVE-MODULES.10.md)). Every importable name is
 gated through a *static map* (`lang/go/modules/modules.go`'s `modules`).
 There is no FFI, no runtime `reflect`, no dynamic loading.
 
 The goal here is to let a host expose **any** Go package's functions and
-constants to AQL *without hand-writing a `NativeFunc` per function*.
+constants to BORU *without hand-writing a `NativeFunc` per function*.
 
 Go itself cannot load arbitrary packages at runtime (only the limited
 `plugin` package can, with severe constraints — see "Alternatives"). So
 "arbitrary" here means **any package the host chooses to wire in** — the
 host enumerates the Go symbols once at construction time, and the bridge
-exposes them to AQL *automatically via reflection* rather than per-function
+exposes them to BORU *automatically via reflection* rather than per-function
 boilerplate. The host registration list is the trust boundary.
 
 ## Surface
 
-A `go:` import sits alongside `aql:`:
+A `go:` import sits alongside `boru:`:
 
 ```
 import "go:net/url"
@@ -58,8 +58,8 @@ import [Strings Str] "go:strings"
 
 Go identifiers are exported in `CamelCase`; the bridge lower-kebab-cases
 the export name (`HasPrefix` → `has-prefix`, `ParseFloat` → `parse-float`)
-to read like the rest of AQL. The mapping is mechanical and documented per
-package via `aql describe` (below).
+to read like the rest of BORU. The mapping is mechanical and documented per
+package via `boru describe` (below).
 
 ## Calling convention
 
@@ -76,17 +76,17 @@ import "go:strings"
 "  hi  " Strings.trim-space              # → "hi"
 ```
 
-> **Note on argument form.** AQL's general guidance is to prefer *forward*
+> **Note on argument form.** BORU's general guidance is to prefer *forward*
 > form `f a b c` (see `eng/go/CLAUDE.md` "Signature Ordering"). Imported
 > module words are the documented exception: the dot-access desugars to a
 > `get`-chain that resolves the namespace from the stack, so the wrapper can
 > only auto-invoke on stack/swap-form arguments. Pure forward form
 > `Pkg.word a b` does **not** dispatch — the bare `Namespace` token leads
 > with nothing on the stack and errors as an undefined word (verified
-> against `aql:math-util`: `3 7 MathUtil.min` → `3`, but `MathUtil.min 3 7`
+> against `boru:math-util`: `3 7 MathUtil.min` → `3`, but `MathUtil.min 3 7`
 > faults). `go:` words inherit this from the shared module machinery; the
 > args-before spelling above is the canonical form for them, exactly as for
-> `aql:` modules.
+> `boru:` modules.
 
 A Go function's parameters map to sig positions **in declared order**
 (top-first, sig order — the one kernel convention). For a Go
@@ -97,8 +97,8 @@ dispatches (see the caveat under "Resolution path").
 ## Host registration (the "arbitrary" surface)
 
 The host enumerates the symbols it wants to expose. Proposed public entry
-point on the `lang` package (alongside the existing `lang.New`, `(*AQL).Run`,
-`(*AQL).Check`, `(*AQL).Register` in `lang/go/aql.go`):
+point on the `lang` package (alongside the existing `lang.New`, `(*BORU).Run`,
+`(*BORU).Check`, `(*BORU).Register` in `lang/go/boru.go`):
 
 ```go
 a, _ := lang.New()
@@ -121,7 +121,7 @@ a.Run(`import "go:strings"   "a,b,c" "," Strings.split`)
 This is deliberate: Go has no portable way to discover or load a package by
 name at runtime, and even reflection cannot enumerate a package's exported
 identifiers. The host map *is* the package surface. It doubles as the trust
-boundary — only registered symbols are reachable from AQL.
+boundary — only registered symbols are reachable from BORU.
 
 ## Type mapping
 
@@ -129,10 +129,10 @@ Values cross the boundary through an extension of the existing
 `eng.FromNative` / `eng.ToNative` helpers (`eng/go/gobridge.go`), which
 today cover only scalars, lists, and maps with a *fixed* mapping. The bridge
 needs **param-directed** conversion: the target Go type comes from the
-function's `reflect.Type`, so an AQL Integer becomes whatever width the
+function's `reflect.Type`, so a BORU Integer becomes whatever width the
 parameter declares.
 
-| AQL                     | Go (in)                         | Go (out) → AQL          |
+| BORU                     | Go (in)                         | Go (out) → BORU          |
 |-------------------------|---------------------------------|-------------------------|
 | `String`                | `string`                        | `string` → `String`     |
 | `Integer`               | `int`, `int8..64`, `uint8..64`  | integer kinds → `Integer` |
@@ -148,7 +148,7 @@ output; reused unchanged.
 
 ### Opaque values: the `Go/Object` type
 
-Go values that have no AQL counterpart (structs the host doesn't want
+Go values that have no BORU counterpart (structs the host doesn't want
 flattened, pointers, handles like `*os.File`, `*url.URL`) are wrapped in an
 `ExtensionPayload{Body: any}` — the kernel's explicit escape hatch
 (`eng/go/payload.go`, `eng.NewExtension`; see `eng/go/CLAUDE.md` "Sealed
@@ -166,19 +166,19 @@ Bodies that want to participate in deep cloning implement the optional
 ### Errors
 
 A trailing `error` return is the universal Go convention. The bridge
-**unwraps it**: on non-nil `error` it raises an AQL error (`ErrorInfo`,
-constructed via `r.AqlError`) instead of pushing the error as a value. So
-`func F(...) (T, error)` exposes a single `T` result to AQL and faults on
+**unwraps it**: on non-nil `error` it raises a BORU error (`ErrorInfo`,
+constructed via `r.BoruError`) instead of pushing the error as a value. So
+`func F(...) (T, error)` exposes a single `T` result to BORU and faults on
 failure, matching how native words signal errors.
 
 ## Resolution path (reuse existing module machinery)
 
 The `import` word already dispatches on the reference shape in
-`lang/go/native/native_module_module.go`: `isNativeModImport` (`aql:`),
+`lang/go/native/native_module_module.go`: `isNativeModImport` (`boru:`),
 `isDataFile`, `isFilePath`, bare module. The `go:` form adds one parallel
 branch.
 
-| Concern            | Native modules (`aql:`)                          | Go modules (`go:`) — proposed |
+| Concern            | Native modules (`boru:`)                          | Go modules (`go:`) — proposed |
 |--------------------|--------------------------------------------------|-------------------------------|
 | Prefix test        | `isNativeModImport` (`native_module_module.go`)  | `isGoModImport`               |
 | Resolve            | `resolveNativeMod` → `r.Modules.Resolver`        | `resolveGoMod` → a Go-package resolver |
@@ -207,7 +207,7 @@ over the func's `reflect.Value`:
 
 1. Inspect `reflect.Type` `In`/`Out`, including `IsVariadic`.
 2. For each parameter, convert `args[i]` → a Go value of the declared param
-   type (param-directed `FromNative`); fault with a clear `AqlError` on an
+   type (param-directed `FromNative`); fault with a clear `BoruError` on an
    inconvertible shape.
 3. `fn.Call(in)`.
 4. Split results: a trailing `error` is unwrapped (raise on non-nil); the
@@ -218,10 +218,10 @@ converted value, matching how `math.pi` / `math.e` work today.
 
 ## Static checking & `describe`
 
-Reflected words cannot be expressed precisely in AQL's type lattice
+Reflected words cannot be expressed precisely in BORU's type lattice
 (`int`, `*url.URL`, etc. have no lattice node). They are declared with
-`TAny` arg and return types (mapping the obvious scalar kinds to their AQL
-type where 1:1 is safe). Consequently `aql check` treats them as gradual
+`TAny` arg and return types (mapping the obvious scalar kinds to their BORU
+type where 1:1 is safe). Consequently `boru check` treats them as gradual
 boundaries — values flowing through a `go:` word carry `Any` forward. This
 is the same conservative stance anonymous lambdas take (`Returns=[Any]`,
 see `lang/go/CLAUDE.md` "Lambda Syntax").
@@ -242,7 +242,7 @@ describe Strings.split           # synthesized sig + "→ strings.Split"
 Two gates, in order:
 
 1. **Host registration** is primary and absolute: a package is reachable
-   only if the host called `RegisterGoPackage` for it. AQL source cannot
+   only if the host called `RegisterGoPackage` for it. BORU source cannot
    name an unregistered package, and reflection cannot reach a symbol the
    host did not hand over.
 2. **Policy** gates the `go:` import op the same way native-module imports
@@ -259,14 +259,14 @@ registered; behaviour is deterministic across runs.
 
 | Approach            | Why not |
 |---------------------|---------|
-| Go `plugin` (.so)   | The only mechanism that loads truly *new* code at runtime, but Linux/macOS-only, requires an identical toolchain and dependency graph, cannot be unloaded, and breaks AQL's sealed/deterministic model. |
+| Go `plugin` (.so)   | The only mechanism that loads truly *new* code at runtime, but Linux/macOS-only, requires an identical toolchain and dependency graph, cannot be unloaded, and breaks BORU's sealed/deterministic model. |
 | Subprocess / RPC    | Fully isolated and language-agnostic, but heavyweight, serialization-bound, and an operational burden (process lifecycle, transport). Overkill for in-process Go interop. |
 | Build-time codegen  | Type-safe with no runtime `reflect`, but every package must be chosen and generated *before* the binary is built — no host-time flexibility, more build machinery. |
 | **Reflection bridge** (chosen) | Host wires in any package at construction time; words are generated automatically; stays in-process, deterministic, and sealed. Cost is runtime `reflect` and `Any`-typed boundaries. |
 
 ## Open questions
 
-- **Variadics.** Map an AQL `List` tail to the variadic slot, or accept
+- **Variadics.** Map a BORU `List` tail to the variadic slot, or accept
   trailing forward args? (Lean: a single `List` argument.)
 - **Struct methods / pointer receivers.** Expose methods on a `Go/Object`
   (e.g. `urlObj Url.string` → `(*url.URL).String`)? Needs a method-dispatch
@@ -277,11 +277,11 @@ registered; behaviour is deterministic across runs.
 - **`(T, error)` vs `(T, U)` disambiguation.** The "trailing error" rule is
   unambiguous only because `error` is an interface; confirm the bridge keys
   on the concrete `error` type, not arity.
-- **Funcs as arguments / closures.** Marshaling an AQL `Function` into a Go
+- **Funcs as arguments / closures.** Marshaling a BORU `Function` into a Go
   `func(...)` param is possible via reflection but needs a defined calling
   convention; likely out of scope for v1 (reject with a clear error).
 - **Generics & channels.** `reflect` cannot instantiate generic functions;
-  channels and `context.Context` have no AQL representation. All rejected at
+  channels and `context.Context` have no BORU representation. All rejected at
   registration time with a clear error rather than failing at call time.
 
 ## Implementation checklist (for the later task)
@@ -298,7 +298,7 @@ registered; behaviour is deterministic across runs.
    `BarrierPos: -1`).
 5. `lang/go/native/native_module_module.go` — `isGoModImport` / `resolveGoMod`
    branches in `import` and `ResolveAnyModule`.
-6. `lang/go/aql.go` — `(*AQL).RegisterGoPackage` (or an `Options` field) and
+6. `lang/go/boru.go` — `(*BORU).RegisterGoPackage` (or an `Options` field) and
    wiring of the new resolver, parallel to `modules.InstallResolver`.
 7. `lang/go/policy/` — a `go`/`go-modules` scope gating the import op.
 8. `lang/go/native/describe.go` — synthesize help from `reflect.Type` for
@@ -312,7 +312,7 @@ registered; behaviour is deterministic across runs.
 
 1. Host calls `a.RegisterGoPackage("<import path>", map[string]any{…})` with
    the funcs/constants to expose.
-2. AQL source runs `import "go:<import path>"`, optionally renaming the
+2. BORU source runs `import "go:<import path>"`, optionally renaming the
    namespace (`import [Derived New] "go:…"`).
 3. Call the words: `arg1 arg2 Namespace.word-name`.
 4. `describe "go:<import path>"` lists what's available.

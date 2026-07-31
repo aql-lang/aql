@@ -5,7 +5,7 @@ import (
 	"io"
 	"math"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // RegisterWords installs the calculator's word vocabulary on r. The set is

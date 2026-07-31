@@ -1,5 +1,5 @@
-// Package check implements `aql check [--json] [--soft] [--strict] [script.aql]`
-// — run the static type-checker over an AQL source file or -e
+// Package check implements `boru check [--json] [--soft] [--strict] [script.boru]`
+// — run the static type-checker over a BORU source file or -e
 // expression and report diagnostics.
 //
 // Without --soft, the presence of any Error-severity diagnostic
@@ -14,9 +14,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	lang "github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // langNew is a test seam (design/TEST-SEAMS.10.md); tests swap it to
@@ -75,14 +75,14 @@ func RunCLI(args []string, stdout, stderr io.Writer) int {
 	}
 done:
 	if len(args) == 0 {
-		fmt.Fprintf(stderr, "error: aql check requires a script file or -e expression\n")
+		fmt.Fprintf(stderr, "error: boru check requires a script file or -e expression\n")
 		return 1
 	}
 
 	var source string
 	if args[0] == "-e" {
 		if len(args) < 2 {
-			fmt.Fprintf(stderr, "error: aql check -e requires an expression\n")
+			fmt.Fprintf(stderr, "error: boru check -e requires an expression\n")
 			return 1
 		}
 		source = args[1]
@@ -113,7 +113,7 @@ done:
 // Emit runs the bytecode recording pass over source and prints the
 // Program disassembly to stdout, or the precise refusal reason when
 // the emitter cannot lower the program (debug/tooling surface —
-// design/aql-bytecode-plan.0.md, Stage 1 gate and the DX section).
+// design/boru-bytecode-plan.0.md, Stage 1 gate and the DX section).
 func Emit(stdout, stderr io.Writer, source string) error {
 	a, err := langNew()
 	if err != nil {
@@ -141,7 +141,7 @@ func Emit(stdout, stderr io.Writer, source string) error {
 	return nil
 }
 
-// writeSiteReport prints the compile report (design/aql-bytecode-plan.0.md
+// writeSiteReport prints the compile report (design/boru-bytecode-plan.0.md
 // DX section): the per-class dispatch-site tally that answers "why didn't
 // this compile to a single path?", plus the interpreter islands a
 // compiled program falls back into for each fallback span.
@@ -249,7 +249,7 @@ func printDiagnostics(w io.Writer, diags []lang.CheckDiagnostic, source string, 
 }
 
 // Preflight runs the static checker as a pre-execution gate for
-// `aql run --check`: it prints any diagnostics to stderr and returns a
+// `boru run --check`: it prints any diagnostics to stderr and returns a
 // non-nil error when an Error-severity diagnostic is present, so the
 // caller aborts before executing. Unlike Run it prints no summary or
 // result-stack line — stdout is left entirely for the program.

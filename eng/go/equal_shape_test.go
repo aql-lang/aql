@@ -6,7 +6,7 @@ import "testing"
 // minted per container and every carrier copy aliases it (store_shape.go),
 // so equality is shape-pointer identity. Before the fix the Map branch fell
 // through to AsMap (which cannot read a *StoreShapeInfo payload), ignored
-// the error, and walked a nil ReadMap — the aql-check nil-deref panic over
+// the error, and walked a nil ReadMap — the boru-check nil-deref panic over
 // any module using `flex {}` locals in narrowed branches.
 func TestValuesEqualStoreShapedCarriers(t *testing.T) {
 	shapedA := NewStoreShapeCarrier(TFlexMap, 0)

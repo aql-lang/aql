@@ -20,7 +20,7 @@ func TestDynScopeCaptureDef(t *testing.T) {
 	// `mk` returns an under-annotated Any carrier (a `do {…}` computed map), so
 	// `fixture` is a non-concrete module-scope carrier captured into the code
 	// body; the `do {…}` arms dynEnv; `get2` reads over the dynamic receiver.
-	const src = `import "aql:test"
+	const src = `import "boru:test"
 def mk fn [ [] [Any] [ do {a: [1] b: [2]} ] ]
 def get2 fn [ [k:String m:Any] [Any] [ m k get ] ]
 def fixture (mk)

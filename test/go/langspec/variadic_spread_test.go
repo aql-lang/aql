@@ -3,7 +3,7 @@ package langspec
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // TestVariadicSpreadOracle pins the soundness-oracle contract for a

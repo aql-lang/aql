@@ -91,23 +91,23 @@ func TestS7IsRecordableLiteral(t *testing.T) {
 
 func TestS7TrivialDelegationTarget(t *testing.T) {
 	// A one-word body with unnamed params → delegation.
-	sig := &FnSig{Impl: AQL([]Value{NewWord("inner")})}
+	sig := &FnSig{Impl: BORU([]Value{NewWord("inner")})}
 	name, ok := trivialDelegationTarget(sig)
 	if !ok || name != "inner" {
 		t.Errorf("got (%q,%v), want (inner,true)", name, ok)
 	}
 	// A named param disqualifies.
-	sig2 := &FnSig{Params: []FnParam{{Name: "a", Type: TInteger}}, Impl: AQL([]Value{NewWord("inner")})}
+	sig2 := &FnSig{Params: []FnParam{{Name: "a", Type: TInteger}}, Impl: BORU([]Value{NewWord("inner")})}
 	if _, ok := trivialDelegationTarget(sig2); ok {
 		t.Error("named param must disqualify delegation shape")
 	}
 	// A non-word body element disqualifies.
-	sig3 := &FnSig{Impl: AQL([]Value{NewInteger(1)})}
+	sig3 := &FnSig{Impl: BORU([]Value{NewInteger(1)})}
 	if _, ok := trivialDelegationTarget(sig3); ok {
 		t.Error("non-word body must disqualify")
 	}
 	// Wrong body length.
-	sig4 := &FnSig{Impl: AQL([]Value{NewWord("a"), NewWord("b")})}
+	sig4 := &FnSig{Impl: BORU([]Value{NewWord("a"), NewWord("b")})}
 	if _, ok := trivialDelegationTarget(sig4); ok {
 		t.Error("two-element body must disqualify")
 	}
@@ -135,7 +135,7 @@ func TestS7SingleOverloadRecoverableGuards(t *testing.T) {
 	delSig := Signature{
 		Params:    []FnParam{{Type: TInteger}},
 		ReturnsFn: rf,
-		Impl:      AQL([]Value{NewWord("inner")}),
+		Impl:      BORU([]Value{NewWord("inner")}),
 	}
 	delSig.BarrierPos = -1
 	fn2 := &FnDefInfo{Signatures: []Signature{delSig}}

@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // TestXmlLiteralEndToEnd runs embedded XML literals through the full
@@ -114,7 +114,7 @@ func TestXmlFlexEndToEnd(t *testing.T) {
 // element — the same shape an embedded literal produces — so it renders
 // back to well-formed XML and is the same type. See XML-LITERAL.0.md §5.6.
 func TestXmlParseAlignment(t *testing.T) {
-	const imp = `import "aql:parselang"  `
+	const imp = `import "boru:parselang"  `
 	cases := []struct {
 		src  string
 		want any
@@ -156,7 +156,7 @@ func TestXmlAccessors(t *testing.T) {
 		{`xml-attr 'x' <a x="1"/>`, "1"},
 		{`typeof (xml-attr 'z' <a x="1"/>)`, "None"},
 		// the words work on a parsed element too (same Node/Xml shape)
-		{`import "aql:parselang"  xml-text (parse xml '<a>hi<b>!</b></a>')`, "hi!"},
+		{`import "boru:parselang"  xml-text (parse xml '<a>hi<b>!</b></a>')`, "hi!"},
 	}
 	for _, c := range cases {
 		a, err := lang.New()
@@ -211,7 +211,7 @@ func TestXmlReviewFixes(t *testing.T) {
 	}
 
 	// Check mode must not strip a Word/__XI literal to a payload-less
-	// carrier (it stays evaluable): `aql check` succeeds and infers Xml.
+	// carrier (it stays evaluable): `boru check` succeeds and infers Xml.
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)

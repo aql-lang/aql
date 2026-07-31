@@ -11,7 +11,7 @@ Status: design draft, no implementation.
 Branch: `claude/review-architecture-go-practices-SoLNa` (parked here;
 move to a dedicated branch when implementation starts).
 
-This document captures a converged design for collapsing AQL's
+This document captures a converged design for collapsing BORU's
 type-definition vocabulary — `type`, `object`, `record`, `table`,
 `untype` — onto **three words**: `def`, `make`, `type`. It records the
 reasoning, the surface design, the migration path, and the open
@@ -19,7 +19,7 @@ questions. It does **not** change behaviour by itself.
 
 ## 1. Motivation
 
-AQL today has more type-construction surface than the underlying model
+BORU today has more type-construction surface than the underlying model
 needs. To define and instantiate types a user reaches for:
 
 - `type Name body` — name a type (binds onto the type stack;
@@ -34,7 +34,7 @@ needs. To define and instantiate types a user reaches for:
 Several observations, established by working through the model:
 
 1. **`type`-as-a-binder is redundant with `def`.** Both push a
-   name→value entry onto a shadowing stack. AQL types are first-class
+   name→value entry onto a shadowing stack. BORU types are first-class
    values (a type literal is a `Value` with `Data == nil`), so
    `def Foo Integer` already binds a type. The only thing `type` does
    that `def` cannot is *mint a named lattice node* for objects and
@@ -118,7 +118,7 @@ Two incidental wins fall out:
   (record unification is order-strict — `unifyRecordTypes` requires
   the same keys in the same order), so the list keeps the ordering
   explicit and intentional. A map body (`{a:T b:U}`) would render
-  fine — AQL maps are ordered internally — but it visually implies
+  fine — BORU maps are ordered internally — but it visually implies
   order-independence, which records do not have. Objects take a map
   body (`type Object {a:T b:U}`); the kinds differ deliberately —
   objects match nominally, records match structurally on an ordered
@@ -130,7 +130,7 @@ It is tempting to drop `type` entirely and let `def Foo Object
 {x:Integer}` mean "apply `Object` to `{x:Integer}`." **This does not
 work**, for a structural reason.
 
-AQL is space-separated and concatenative: **juxtaposition already
+BORU is space-separated and concatenative: **juxtaposition already
 means "a sequence of values"** — list elements, stack values.
 `[1 2 3]` is three values; `[Object Integer String]` *must* therefore
 be three type-values. So `Object Integer` cannot *also* silently mean
@@ -164,7 +164,7 @@ def n:Account …                  # `Account` bare = a type-value
 x is Savings                     # `Savings` bare
 ```
 
-The parenthesised constructor matches AQL's existing idiom — the spec
+The parenthesised constructor matches BORU's existing idiom — the spec
 suite already writes `def opts (make Options {x:Integer})`.
 
 ## 4. What is removed, what stays
@@ -357,7 +357,7 @@ The change is additive-first so the test suite stays green throughout.
     applying a *user* record type is not yet supported (deferred —
     §7.1).
   - Tests: `lang/go/test/maketype_test.go`.
-  - Incidental fix found via the prototype: nine `r.AqlError` call
+  - Incidental fix found via the prototype: nine `r.BoruError` call
     sites in `native_definition.go` / `native_type.go` /
     `native_behave.go` had a literal `%s` in the error *code* and
     *word* (e.g. `"def %s_error"`) — a defect from the May-2026
@@ -421,7 +421,7 @@ The change is additive-first so the test suite stays green throughout.
     `maketype Table X`, `untype X` → `undef X`, `type Foo PlainType`
     → `def Foo PlainType`. Migrated across `lang/spec`, `eng/spec`,
     the `lang/go/test` TSV suites, and the Go test suites — in both
-    representations (AQL source strings and `NewWord(...)` token
+    representations (BORU source strings and `NewWord(...)` token
     slices). The migration is semantics-preserving: the legacy words
     still exist (the Phase-1 additive guarantee), `maketype Record`
     takes the same list body the old `record` did, and `def`/`undef`

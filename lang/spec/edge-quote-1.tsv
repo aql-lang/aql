@@ -1,4 +1,4 @@
-# AQL Language Specification: edge-quote-1 — eval-by-default duality
+# BORU Language Specification: edge-quote-1 — eval-by-default duality
 # Format: input<TAB>expected<TAB>description
 # =====================================================================
 # Edge cases for the quotation system's FIRST principle: lists are

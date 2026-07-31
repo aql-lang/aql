@@ -63,7 +63,7 @@ func TestSkeletonPerCallCopyIsolated(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "n", Type: TInteger}},
 			Returns:    []*Type{TInteger},
-			Impl:       AQL([]Value{NewWord("n")}),
+			Impl:       BORU([]Value{NewWord("n")}),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -120,7 +120,7 @@ func TestSkeletonInterleavedParams(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "a", Type: TInteger}, {Type: TAny}, {Name: "b", Type: TInteger}},
 			Returns:    []*Type{TAny},
-			Impl:       AQL([]Value{NewWord("a")}),
+			Impl:       BORU([]Value{NewWord("a")}),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -158,7 +158,7 @@ func TestSkeletonArgsElision(t *testing.T) {
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "n", Type: TInteger}},
 				Returns:    []*Type{TAny},
-				Impl:       AQL(body),
+				Impl:       BORU(body),
 				BarrierPos: BarrierAllForward,
 			}},
 		})
@@ -280,7 +280,7 @@ func TestSlowPathArgsPushError(t *testing.T) {
 	r := covRegistry(t, nil)
 	s := FnSig{
 		Params: []FnParam{{Name: "n", Type: TInteger}},
-		Impl:   AQL([]Value{NewWord("def"), NewWord("loc"), NewWord("n")}),
+		Impl:   BORU([]Value{NewWord("def"), NewWord("loc"), NewWord("n")}),
 	}
 	h := buildFnBodyHandler(r, "slowerr", s, FnDefInfo{}, &FnFrameMeta{Name: "slowerr"})
 	r.Args = nil // Push fails; the handler must unwind the baseline
@@ -296,7 +296,7 @@ func TestSlowPathListParamQuoted(t *testing.T) {
 	r := covRegistry(t, nil)
 	s := FnSig{
 		Params: []FnParam{{Name: "xs", Type: TList}},
-		Impl:   AQL([]Value{NewWord("def"), NewWord("loc"), NewInteger(1), NewWord("xs")}),
+		Impl:   BORU([]Value{NewWord("def"), NewWord("loc"), NewInteger(1), NewWord("xs")}),
 	}
 	h := buildFnBodyHandler(r, "slowlist", s, FnDefInfo{}, &FnFrameMeta{Name: "slowlist"})
 	if _, err := h([]Value{NewList([]Value{NewInteger(7)})}, nil, nil, r); err != nil {
@@ -316,7 +316,7 @@ func TestSlowPathUnnamedParamSpan(t *testing.T) {
 	r := covRegistry(t, nil)
 	s := FnSig{
 		Params: []FnParam{{Type: TInteger}},
-		Impl:   AQL([]Value{NewWord("def"), NewWord("loc"), NewInteger(1)}),
+		Impl:   BORU([]Value{NewWord("def"), NewWord("loc"), NewInteger(1)}),
 	}
 	h := buildFnBodyHandler(r, "slowspan", s, FnDefInfo{}, &FnFrameMeta{Name: "slowspan"})
 	out, err := h([]Value{NewInteger(9)}, nil, nil, r)

@@ -14,8 +14,8 @@ import (
 
 const drSource = "def x 5\nbadword x\nprint x"
 
-func drBaseError() *AqlError {
-	return &AqlError{
+func drBaseError() *BoruError {
+	return &BoruError{
 		Code:       "signature_error",
 		Detail:     "no matching signature for badword",
 		Row:        2,
@@ -29,7 +29,7 @@ func TestRenderLegacyByteIdentity(t *testing.T) {
 	e := drBaseError()
 	e.Hint = "stack: 5"
 	want := strings.Join([]string{
-		"[aql/signature_error]: no matching signature for badword",
+		"[boru/signature_error]: no matching signature for badword",
 		"  --> 2:1",
 		"  1 | def x 5",
 		"  2 | badword x",
@@ -47,15 +47,15 @@ func TestRenderLegacyByteIdentity(t *testing.T) {
 
 func TestRenderPositionVariants(t *testing.T) {
 	// Unknown position: honest marker, no excerpt.
-	e := &AqlError{Code: "type_error", Detail: "boom"}
-	want := "[aql/type_error]: boom\n  --> source position unknown"
+	e := &BoruError{Code: "type_error", Detail: "boom"}
+	want := "[boru/type_error]: boom\n  --> source position unknown"
 	if got := e.Error(); got != want {
 		t.Fatalf("unknown-position rendering: got %q want %q", got, want)
 	}
 
 	// File-qualified position with an unknown column (falls back to 1).
-	e = &AqlError{Code: "type_error", Detail: "boom", Row: 3, File: "/tmp/mod.aql"}
-	if got := e.Error(); !strings.Contains(got, "--> /tmp/mod.aql:3:1") {
+	e = &BoruError{Code: "type_error", Detail: "boom", Row: 3, File: "/tmp/mod.boru"}
+	if got := e.Error(); !strings.Contains(got, "--> /tmp/mod.boru:3:1") {
 		t.Fatalf("file-qualified position missing: %q", got)
 	}
 
@@ -71,13 +71,13 @@ func TestRenderSecondarySpans(t *testing.T) {
 		// Same-source span: own arrow header + one-line excerpt with --- label.
 		{Pos: SrcPos{Row: 1, Col: 5, Src: "x"}, Label: "`x` was defined here"},
 		// Cross-file span: its own file and source text.
-		{Pos: SrcPos{Row: 1, Col: 1, Src: "export"}, Label: "exported from the module", File: "/lib/m.aql", Source: "export 'X' {}"},
+		{Pos: SrcPos{Row: 1, Col: 1, Src: "export"}, Label: "exported from the module", File: "/lib/m.boru", Source: "export 'X' {}"},
 		// Position-less span: degrades to a note (no guessed locations).
 		{Label: "a related constraint applies"},
 	}
 	got := e.Error()
 	want := strings.Join([]string{
-		"[aql/signature_error]: no matching signature for badword",
+		"[boru/signature_error]: no matching signature for badword",
 		"  --> 2:1",
 		"  1 | def x 5",
 		"  2 | badword x",
@@ -86,7 +86,7 @@ func TestRenderSecondarySpans(t *testing.T) {
 		"  --> 1:5",
 		"  1 | def x 5",
 		"          - `x` was defined here",
-		"  --> /lib/m.aql:1:1",
+		"  --> /lib/m.boru:1:1",
 		"  1 | export 'X' {}",
 		"      ------ exported from the module",
 		"  = note: a related constraint applies",
@@ -99,7 +99,7 @@ func TestRenderSecondarySpans(t *testing.T) {
 func TestRenderSpanWithoutSourceOrLabel(t *testing.T) {
 	// A located span with NO source text anywhere renders its label as a
 	// note; with no label either, only the arrow header appears.
-	e := &AqlError{Code: "x", Detail: "d", Row: 1, Col: 1, Src: "d"}
+	e := &BoruError{Code: "x", Detail: "d", Row: 1, Col: 1, Src: "d"}
 	e.Spans = []DiagSpan{
 		{Pos: SrcPos{Row: 4, Col: 2, Src: "y"}, Label: "over here"},
 		{Pos: SrcPos{Row: 9, Col: 1, Src: "z"}},
@@ -120,11 +120,11 @@ func TestRenderNotesAndSuggestions(t *testing.T) {
 	e.Notes = []string{"candidate `(Integer)` needs 1 argument, but 2 were supplied"}
 	e.Suggestions = []DiagSuggestion{
 		{Message: "group the call in parens", Replacement: &repl},
-		{Message: "see `aql describe badword`"},
+		{Message: "see `boru describe badword`"},
 	}
 	got := e.Error()
 	want := strings.Join([]string{
-		"[aql/signature_error]: no matching signature for badword",
+		"[boru/signature_error]: no matching signature for badword",
 		"  --> 2:1",
 		"  1 | def x 5",
 		"  2 | badword x",
@@ -134,7 +134,7 @@ func TestRenderNotesAndSuggestions(t *testing.T) {
 		"  = note: candidate `(Integer)` needs 1 argument, but 2 were supplied",
 		"  = help: group the call in parens",
 		"          (badword x)",
-		"  = help: see `aql describe badword`",
+		"  = help: see `boru describe badword`",
 	}, "\n")
 	if got != want {
 		t.Fatalf("notes/suggestions rendering drifted.\ngot:\n%s\nwant:\n%s", got, want)
@@ -143,7 +143,7 @@ func TestRenderNotesAndSuggestions(t *testing.T) {
 
 func TestRenderColorGolden(t *testing.T) {
 	repl := "(f 1)"
-	e := &AqlError{
+	e := &BoruError{
 		Code: "type_error", Detail: "boom", Row: 1, Col: 1, Src: "f",
 		fullSource:  "f 1",
 		Hint:        "h",
@@ -153,7 +153,7 @@ func TestRenderColorGolden(t *testing.T) {
 	}
 	got := e.Render(RenderOpts{Color: true})
 	want := strings.Join([]string{
-		cBold + cRed + "[aql/type_error]:" + cReset + " boom",
+		cBold + cRed + "[boru/type_error]:" + cReset + " boom",
 		cBlue + "  --> 1:1" + cReset,
 		cBlue + "  1 |" + cReset + " f 1",
 		"      " + cBold + cRed + "^ boom" + cReset,

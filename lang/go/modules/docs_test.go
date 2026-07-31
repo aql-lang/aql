@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestModuleExportDocs asserts that every native-module FUNCTION export has a
@@ -23,8 +23,8 @@ func TestModuleExportDocs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultRegistry: %v", err)
 	}
-	reg.SetParseFunc(parser.Parse) // AQL modules parse their source on import
-	InstallResolver(reg)           // aql:repl's AQL preamble imports aql:net / aql:vm
+	reg.SetParseFunc(parser.Parse) // BORU modules parse their source on import
+	InstallResolver(reg)           // boru:repl's BORU preamble imports boru:net / boru:vm
 
 	var missing []string
 	names := Names()
@@ -166,7 +166,7 @@ func TestModuleExamples(t *testing.T) {
 
 // Authored examples must actually REPLACE the generated permutations in
 // the rendered output, for both the qualified-name path (an imported
-// namespace) and the module-path path (describe "aql:net:fetch"). This is
+// namespace) and the module-path path (describe "boru:net:fetch"). This is
 // the behaviour the whole registry exists to produce.
 func TestDescribeUsesAuthoredExamples(t *testing.T) {
 	reg, err := native.DefaultRegistry()
@@ -177,7 +177,7 @@ func TestDescribeUsesAuthoredExamples(t *testing.T) {
 	InstallResolver(reg)
 
 	var b strings.Builder
-	native.DescribeName(reg, &b, "aql:net:fetch")
+	native.DescribeName(reg, &b, "boru:net:fetch")
 	out := b.String()
 	if !strings.Contains(out, `Net.fetch "https://api.example.com/v1/orders"`) {
 		t.Errorf("describe did not show the authored fetch examples:\n%s", out)
@@ -191,13 +191,13 @@ func TestDescribeUsesAuthoredExamples(t *testing.T) {
 	// An export with no authored examples keeps the generated ones —
 	// opt-in, not a silent loss of the existing output.
 	b.Reset()
-	native.DescribeName(reg, &b, "aql:array-util:reshape")
+	native.DescribeName(reg, &b, "boru:array-util:reshape")
 	if got := b.String(); !strings.Contains(got, ";#") {
 		t.Errorf("an export without authored examples lost its generated ones:\n%s", got)
 	}
 }
 
-// exampleSource reassembles a word's example lines into parseable AQL:
+// exampleSource reassembles a word's example lines into parseable BORU:
 // the `;#` commentary comes off (it is prose, and a multi-line example
 // puts it mid-literal), and lines that were only a comment drop out.
 func exampleSource(lines []string) string {

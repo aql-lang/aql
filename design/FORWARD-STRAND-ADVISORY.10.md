@@ -1,7 +1,7 @@
 # Forward-greediness "stranded operand" advisory
 
 **Status:** accepted. Check-mode advisory, info severity, non-gating; enabled
-by default under `aql check`.
+by default under `boru check`.
 
 ## The gotcha
 
@@ -43,13 +43,13 @@ fails a check).
 
 ## Measured impact (false-positive rate)
 
-Run `aql check` across real corpora and count `forward_strands_operand`:
+Run `boru check` across real corpora and count `forward_strands_operand`:
 
 | Corpus | Size | Advisories | Notes |
 |---|---|---|---|
 | Spec `.tsv` inputs | 5,713 expressions | **8 (0.14%)** | every hit is a genuine `X Y op Z …` forward-greedy pattern |
-| Repo `.aql` files | 65 files | **0** | |
-| voxgig trie + bloom `.aql` | 20 files, ~4.4k LOC | **0** | (these libs deliberately avoid the gotcha) |
+| Repo `.boru` files | 65 files | **0** | |
+| voxgig trie + bloom `.boru` | 20 files, ~4.4k LOC | **0** | (these libs deliberately avoid the gotcha) |
 
 All 8 spec hits classified:
 - `1 2 add 3`, `1 2 add 3 add` — the canonical pattern at the call site.

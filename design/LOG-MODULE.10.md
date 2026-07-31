@@ -1,4 +1,4 @@
-# `aql:log` — logging, OpenTelemetry abstraction, and provider hooks
+# `boru:log` — logging, OpenTelemetry abstraction, and provider hooks
 
 > **Status: all phases (1–5) implemented.** Phase 1 (traditional logging
 > — levels, fields, threshold, console/memory/null sinks, the `log` policy
@@ -17,12 +17,12 @@
 > `Log.end-span` with the Span method `finish`; and statements that share
 > mutable logging state must be sequenced with `;` (newline is not a
 > separator), as the spec rows show. This note specifies the
-> capability module `aql:log` (namespace `Log`) that gives AQL programs
+> capability module `boru:log` (namespace `Log`) that gives BORU programs
 > three layers on one surface: (1) **traditional logging** backed by Go's
 > standard `log` package, (2) a vendor-neutral **OpenTelemetry abstraction**
 > (logs, spans, and metrics) that never pulls the OTel SDK into
 > the sealed runtime, and (3) **provider hooks** — a registry of named
-> *sinks* that hosts (in Go) or AQL code (via a `register` word) attach at
+> *sinks* that hosts (in Go) or BORU code (via a `register` word) attach at
 > runtime, modelled on the existing parse/emit host-registration pattern.
 > Read [NATIVE-MODULES.10.md](NATIVE-MODULES.10.md),
 > [EXTENSION-MODULES.10.md](EXTENSION-MODULES.10.md) §2, and
@@ -43,8 +43,8 @@ Where the shipped surface differs from the design sketch below:
   plain Records via `Log.dump` / `Log.traces` / `Log.measurements`.
 - **Trace context propagates via a per-registry active-span stack**, not
   the `ctx-set`/`ctx-get` context stack — simpler and equivalent for
-  single-threaded AQL (§3.5).
-- **`Log.register` registers *and* attaches** the AQL function sink (the
+  single-threaded BORU (§3.5).
+- **`Log.register` registers *and* attaches** the BORU function sink (the
   common intent); `remove-sink`/`add-sink` toggle thereafter.
 - **Host-owned trace ids** ship via `OnSpanStart func(Span) SpanContext`
   (the §4 sketch's `SpanToken`/error shape simplified to a returned
@@ -67,12 +67,12 @@ Where the shipped surface differs from the design sketch below:
 
 ## 1. Motivation
 
-AQL today has exactly one output path: `print` / `IO.printstr` write a
+BORU today has exactly one output path: `print` / `IO.printstr` write a
 value's formatted form to `Registry.Output`, and `IO.stderr` to
 `Registry.ErrOutput` (`native/native_print.go`, `native/io_module.go`).
 That is fine for REPL results; it is not logging. There is no severity, no
 structured fields, no logger names, no way to fan a record out to more than
-one destination, and no way for an embedding host to route AQL diagnostics
+one destination, and no way for an embedding host to route BORU diagnostics
 into the observability stack it already runs (OpenTelemetry, Datadog,
 stdout-JSON shipped to Loki, …).
 
@@ -83,14 +83,14 @@ Three needs, one module:
    package. Works with zero host wiring, like `print` does.
 2. **An OpenTelemetry abstraction** — a vendor-neutral in-memory shape for
    the OTel **logs**, **traces**, and **metrics** signals, so
-   AQL code emits *records* and *spans* without naming OTel, and a host
+   BORU code emits *records* and *spans* without naming OTel, and a host
    translates them to the OTel SDK at the boundary. The OTel SDK must stay
-   a **host dependency**, never a runtime one — the AQL runtime is sealed
+   a **host dependency**, never a runtime one — the BORU runtime is sealed
    ([GO-MODULES.10.md](GO-MODULES.10.md)) and must not grow a transitive
    `go.opentelemetry.io/*` graph.
-3. **Provider hooks** — the same *pluggable named-handler* shape AQL already
+3. **Provider hooks** — the same *pluggable named-handler* shape BORU already
    uses for parse/emit: a registry of **sinks**, extensible at runtime from
-   the host (`RegisterHostLogSink`) **and** from AQL (`Log.register`),
+   the host (`RegisterHostLogSink`) **and** from BORU (`Log.register`),
    gated by policy.
 
 The design reuses every existing seam — the native-module sub-registry
@@ -103,7 +103,7 @@ pattern (§7), the host-capability key pattern (`CapFileOps`/`CapClock`/…,
 ## 2. Design principles
 
 - **Neutral core, OTel at the edge.** The module produces a `LogRecord`
-  Record and a `Span` object in plain AQL value space. Translation to the
+  Record and a `Span` object in plain BORU value space. Translation to the
   OTel data model happens *inside a host-installed sink*, so the module
   imports nothing from `go.opentelemetry.io`. The OTel data model (severity
   number + text, body, attributes, timestamp, trace/span id) is the *shape*
@@ -120,7 +120,7 @@ pattern (§7), the host-capability key pattern (`CapFileOps`/`CapClock`/…,
   built-in `memory` sink captures records for assertions. No `time.Now()`,
   no global logger state.
 - **No panics, policy-gated.** Every handler guards with `AsConcrete*`
-  and errors via `r.AqlError` (CLAUDE.md Panic Prevention). Sink
+  and errors via `r.BoruError` (CLAUDE.md Panic Prevention). Sink
   attachment and emission gate on a new `log` policy scope, so a sandbox
   can disable telemetry egress without disabling computation.
 
@@ -130,7 +130,7 @@ Import binds the `Log` namespace (capability module — plain name, not
 `-util`, per the lang/go/CLAUDE.md naming rule):
 
 ```
-import "aql:log"
+import "boru:log"
 ```
 
 ### 3.1 Severity levels
@@ -245,7 +245,7 @@ any error as a span status), which is the form to prefer:
 | `Log.current-span` | `→ Span` / `None` | The active span from context, if any. |
 
 ```
-import "aql:log"
+import "boru:log"
 "handle-request" {route:"/x"} [
   "validating" Log.debug
   "db.query" ["select" Log.debug] Log.with-span      # nested child span
@@ -275,7 +275,7 @@ the global level threshold does not apply — only the `log` policy scope
 gates them.
 
 ```
-import "aql:log"
+import "boru:log"
 def reqs (Log.counter "requests")
 reqs.add 1 {route:"/x"}                  # a counter measurement
 def temp (Log.gauge "cpu-temp")
@@ -288,7 +288,7 @@ Log.measurements                          # [{instrument,kind,value,attributes,t
 ### 4.1 Why neutral-core / edge-translation
 
 OTel's value is its *data model*, not its Go SDK. By targeting the data
-model in plain AQL values and translating only inside a host sink, we get
+model in plain BORU values and translating only inside a host sink, we get
 OTel interop **without** a runtime dependency:
 
 - The sealed runtime's `go.mod` stays free of `go.opentelemetry.io/*`
@@ -302,7 +302,7 @@ OTel interop **without** a runtime dependency:
 ### 4.2 The host OTel bridge (illustrative, lives in host code)
 
 ```go
-// Host code — NOT in the aql runtime module. Imports the OTel SDK here.
+// Host code — NOT in the boru runtime module. Imports the OTel SDK here.
 import (
     "go.opentelemetry.io/otel"
     otellog "go.opentelemetry.io/otel/log"
@@ -319,7 +319,7 @@ modules.RegisterHostLogSink(reg, modules.LogSinkSpec{
         r.SetSeverity(otellog.Severity(rec.Severity))
         r.SetBody(otellog.StringValue(rec.BodyString()))
         for k, v := range rec.Attributes { r.AddAttributes(kv(k, v)) }
-        provider.Logger("aql").Emit(rec.Ctx, r)
+        provider.Logger("boru").Emit(rec.Ctx, r)
         return nil
     },
     // Traces: neutral Span -> OTel span (sampling/ids owned by OTel).
@@ -329,11 +329,11 @@ modules.RegisterHostLogSink(reg, modules.LogSinkSpec{
 ```
 
 The bridge is the *only* place OTel is named. Swapping OTel for Datadog or
-slog is swapping this adapter — the AQL programs are untouched.
+slog is swapping this adapter — the BORU programs are untouched.
 
 ### 4.3 Signal coverage
 
-| OTel signal | Neutral AQL shape | v1? |
+| OTel signal | Neutral BORU shape | v1? |
 |---|---|---|
 | **Logs** | `Log.LogRecord` Record (severity #, body, attrs, timestamp, trace context) | ✅ |
 | **Traces** | `Span` object + context-stack propagation; events, status, attributes | ✅ |
@@ -371,7 +371,7 @@ type LogSinkSpec struct {
 // recipe — the frozen kind namespaces retired those, but the
 // validate/store/gate shape lives on here:
 //  - validates (lowercase name, non-nil OnRecord, no duplicate)
-//  - stores under CapLogSinks, working before AND after `import "aql:log"`
+//  - stores under CapLogSinks, working before AND after `import "boru:log"`
 //  - gates on the "log" policy scope
 func RegisterHostLogSink(reg *native.Registry, spec LogSinkSpec) error
 ```
@@ -380,24 +380,24 @@ State lives under a new capability key `CapLogSinks = "engine.logsinks"`
 holding a `*LogSinkRegistry` (the attached sinks, the global level, and the
 console format) — the same "pending pre-import + live" storage parselang
 uses (`engine.parselang.host`), so a host can register a sink before the
-AQL program runs `import "aql:log"`.
+BORU program runs `import "boru:log"`.
 
-### 5.2 AQL-level registration (`Log.register`)
+### 5.2 BORU-level registration (`Log.register`)
 
-So AQL code — not just the host — can add a sink, exactly as
-`ParseLang.register` installs an AQL fn as a parser:
+So BORU code — not just the host — can add a sink, exactly as
+`ParseLang.register` installs a BORU fn as a parser:
 
 | word | signature | meaning |
 |---|---|---|
-| `Log.register` | `[fn handler, Atom name, Log.Level min] →` | Install an AQL fn `record →` as a sink. |
+| `Log.register` | `[fn handler, Atom name, Log.Level min] →` | Install a BORU fn `record →` as a sink. |
 | `Log.add-sink` | `[Atom name] →` | Attach a *registered* sink to the active pipeline. |
 | `Log.remove-sink` | `[Atom name] →` | Detach it. |
 | `Log.sinks` | `→ List[Atom]` | Names of attached sinks. |
 
 ```
-import "aql:log"
+import "boru:log"
 def capture (fn [[rec:Log.LogRecord] [] [ rec.body my-collector.push ]])
-capture errors/q Log.error/q Log.register     # AQL sink, ERROR+ only
+capture errors/q Log.error/q Log.register     # BORU sink, ERROR+ only
 errors/q Log.add-sink
 ```
 
@@ -414,12 +414,12 @@ Built-in sinks (always registered, attachable by name):
 
 To satisfy "traditional logging via the go `log` package" literally: the
 `console` sink holds a `*log.Logger` constructed with
-`log.New(r.ErrOutput, "", 0)` (AQL owns timestamp/level formatting, so the
+`log.New(r.ErrOutput, "", 0)` (BORU owns timestamp/level formatting, so the
 std flags are off) and calls `logger.Output(...)` per record. `text`
 format renders `2026-06-23T12:00:00Z INFO  [http] request method=GET …`;
 `json` renders the `LogRecord` as a one-line JSON object (reusing the
 `emit json` path) for log shippers. This is the zero-config path — present
-the moment `aql:log` is imported, no host code.
+the moment `boru:log` is imported, no host code.
 
 ## 6. Capability, policy, and determinism
 
@@ -462,7 +462,7 @@ it. Default (no policy) = allow-everything, the established opt-in posture.
   fixed clock; replaced by a host OTel sink when present (§4.3).
 - **No global logger.** All state (attached sinks, level, format) lives on
   `CapLogSinks` per registry, so concurrent registries and table tests are
-  isolated — the same discipline `aql:rand` follows for its PRNG.
+  isolated — the same discipline `boru:rand` follows for its PRNG.
 
 ## 7. Implementation shape (Go)
 
@@ -480,10 +480,10 @@ crossed with `modules/io.go` (host capability reach-through):
 2. `lang/go/native/log_module.go` — `LogModuleNativeFuncs(...)`: the Go
    handlers. Emission walks `HostLogSinks(r)`; the `console` sink uses the
    std `log` package against `r.ErrOutput`. All handlers guard with
-   `AsConcrete*` and error via `r.AqlError("log_error", …, word)`.
+   `AsConcrete*` and error via `r.BoruError("log_error", …, word)`.
 3. `lang/go/modules/modules.go` — add `"log": BuildLogModule` to the
    `modules` map and an `InstallLogExports` test helper.
-4. `lang/go/modules/docs_log.go` — `registerDocs("aql:log", {...})` for
+4. `lang/go/modules/docs_log.go` — `registerDocs("boru:log", {...})` for
    every export (asserted by `TestModuleExportDocs`).
 5. `native/capabilities.go` — `CapLogSinks` + `HostLogSinks` /
    `SetHostLogSinks`; `policy/policy.go` — the `log` scope.
@@ -495,7 +495,7 @@ The module imports **only** `native`, the std `log`, and `policy` — no
 
 ## 8. Errors
 
-Kebab `r.AqlError` codes, no panics (CLAUDE.md):
+Kebab `r.BoruError` codes, no panics (CLAUDE.md):
 
 - `log_error` — generic (bad level atom, malformed fields).
 - `unknown-sink` — `Log.add-sink` / `register` names an unregistered kind.
@@ -525,8 +525,8 @@ Per the test discipline (always pair positive with negative):
 
 - **Metrics in v1 or later?** RESOLVED — shipped as phase 5 (§3.6).
 - **`fatal` semantics.** Emit-and-`os.Exit` (classic), or emit at FATAL
-  severity and *return* (let the program decide)? Lean: **emit + raise an
-  AQL error** (`log_fatal`), so control flow stays in AQL and the sealed
+  severity and *return* (let the program decide)? Lean: **emit + raise a
+  BORU error** (`log_fatal`), so control flow stays in BORU and the sealed
   runtime never calls `os.Exit`. Confirm.
 - **One `log` scope, or split `log.emit` / `log.sinks`?** Proposed: one
   scope, two ops (§6.2). Sufficient for the sandbox-can't-redirect case.

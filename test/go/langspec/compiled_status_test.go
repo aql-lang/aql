@@ -9,7 +9,7 @@
 // Refresh after any change that moves coverage:
 //
 //	make status
-//	# or: AQL_WRITE_STATUS=1 go test ./langspec/ -run TestCompiledStatus
+//	# or: BORU_WRITE_STATUS=1 go test ./langspec/ -run TestCompiledStatus
 //
 // The numbers come from exactly the same walk the ceiling gates use, so a
 // refreshed status and a green TestCompiledCoverage / TestOnlyMetaFallsBack
@@ -30,7 +30,7 @@ func TestCompiledStatus(t *testing.T) {
 	c := gatherCensus(t)
 	want := renderCompiledStatus(c)
 
-	if os.Getenv("AQL_WRITE_STATUS") != "" {
+	if os.Getenv("BORU_WRITE_STATUS") != "" {
 		if err := os.WriteFile(compiledStatusFile, []byte(want), 0o644); err != nil {
 			t.Fatalf("write %s: %v", compiledStatusFile, err)
 		}

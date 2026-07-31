@@ -5,7 +5,7 @@
 # =====================================================================		
 #		
 # A natural-looking form like `addq 1 mulq 2 3` (read as		
-# `addq(1, mulq(2, 3))`) does NOT work in aqleng. The matchSignature		
+# `addq(1, mulq(2, 3))`) does NOT work in borueng. The matchSignature		
 # loop (eng/go/match.go) explicitly treats a registered function		
 # word inside the forward scan as a structural BOUNDARY:		
 #		

@@ -1,5 +1,5 @@
 // service.go provides the Service-shaped wrapper around the vault
-// proxy so it can be composed under `aql serve` and controlled via
+// proxy so it can be composed under `boru serve` and controlled via
 // the api service. The pre-existing Proxy type (and its ServeHTTP
 // method) is reused unchanged — this file only adds lifecycle, a
 // pause gate, and the metadata accessor.
@@ -16,7 +16,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 // ProxyService is the lifecycle-managed wrapper around Proxy.
@@ -32,9 +32,9 @@ type ProxyService struct {
 }
 
 // NewProxyService constructs a vault-proxy Service ready to Start.
-// homeDir defaults to the standard $HOME (honoring AQL_HOME) if
+// homeDir defaults to the standard $HOME (honoring BORU_HOME) if
 // empty. defaultPass is the file-keyring passphrase, typically read
-// from AQL_VAULT_PASSPHRASE; pass "" to skip.
+// from BORU_VAULT_PASSPHRASE; pass "" to skip.
 func NewProxyService(listen, homeDirArg, defaultPass string) (*ProxyService, error) {
 	if listen == "" {
 		listen = "127.0.0.1:8787"
@@ -51,7 +51,7 @@ func NewProxyService(listen, homeDirArg, defaultPass string) (*ProxyService, err
 		return nil, fmt.Errorf("vault-proxy: %w", err)
 	}
 	if s.Locked {
-		return nil, errors.New("vault-proxy: vault is locked; run `aql vault unlock`")
+		return nil, errors.New("vault-proxy: vault is locked; run `boru vault unlock`")
 	}
 
 	ps := &ProxyService{

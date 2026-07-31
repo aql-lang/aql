@@ -8,7 +8,7 @@ import (
 )
 
 // HTTPOps is the host capability that supplies the outbound HTTP
-// transport used by aql:net's `fetch`. It exists so the transport —
+// transport used by boru:net's `fetch`. It exists so the transport —
 // and therefore TLS configuration, the connection pool, and protocol
 // negotiation — is chosen by the host rather than hard-wired into the
 // word handler.
@@ -91,7 +91,7 @@ func (DefaultHTTPOps) Transport(p TLSProfile, id ClientIdentity) (http.RoundTrip
 
 // TLSConfigFor builds the crypto/tls configuration a profile
 // describes. It is exported because BOTH transports need it — the HTTP
-// client here and the raw sockets in aql:net — and a second
+// client here and the raw sockets in boru:net — and a second
 // hand-written copy is exactly how the two would drift into disagreeing
 // about what `verify: false` or `ca:` mean.
 func TLSConfigFor(p TLSProfile, id ClientIdentity) (*tls.Config, error) {

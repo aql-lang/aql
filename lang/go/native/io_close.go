@@ -2,7 +2,7 @@ package native
 
 import "fmt"
 
-// io_close.go — the polymorphic IO.close. Like aql:net's one closeHandler
+// io_close.go — the polymorphic IO.close. Like boru:net's one closeHandler
 // over Socket/Listener/Service, it closes whichever resource the argument
 // holds: a File handle (IO.open) or a Watcher (IO.watch). IO.unwatch stays
 // as the Watcher-specific alias. The dispatch is structural (each asXxx
@@ -21,14 +21,14 @@ func doCloseWord(args []Value, r *Registry) ([]Value, error) {
 	if mi, ok := asMmapInfo(args[0]); ok {
 		return closeResult(r, mi.Close())
 	}
-	return nil, r.AqlError("close_error",
+	return nil, r.BoruError("close_error",
 		fmt.Sprintf("close: not a closable handle (got %s)", args[0].Parent), "close")
 }
 
 // closeResult maps a resource's close error onto the close word's result.
 func closeResult(r *Registry, err error) ([]Value, error) {
 	if err != nil {
-		return nil, r.AqlError("close_error", fmt.Sprintf("close: %v", err), "close")
+		return nil, r.BoruError("close_error", fmt.Sprintf("close: %v", err), "close")
 	}
 	return nil, nil
 }

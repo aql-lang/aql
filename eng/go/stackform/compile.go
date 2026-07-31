@@ -1,7 +1,7 @@
 package stackform
 
 import (
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // Compile runs `tokens` through an Engine with a StackForm-recording
@@ -9,7 +9,7 @@ import (
 // and the recorded StackForm.
 //
 // The recording side effect is exactly the architecture proposed by
-// design/aql-bytecode-report.0.md §1.2 ("the compiler is the
+// design/boru-bytecode-report.0.md §1.2 ("the compiler is the
 // checker with a recording side effect") — except we record on the
 // normal-execution path, not the carrier-only check path, so the
 // values stored in PushLit ops are the actual data the engine saw.

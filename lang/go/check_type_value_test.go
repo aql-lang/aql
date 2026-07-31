@@ -3,10 +3,10 @@ package lang_test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
-// checkErrs counts error-severity diagnostics from `aql check` over src.
+// checkErrs counts error-severity diagnostics from `boru check` over src.
 func checkErrs(t *testing.T, src string) int {
 	t.Helper()
 	a, _ := lang.New()
@@ -133,14 +133,14 @@ func TestStoredFnRefModifierCheck(t *testing.T) {
 
 // A module's exports are statically DECLARED, so the checker resolves them in
 // check mode — for `import` (qualified) it already did, and now `unpack` binds
-// them UNQUALIFIED too. `unpack 'aql:mod'` / `unpack Export 'aql:mod'` gained
+// them UNQUALIFIED too. `unpack 'boru:mod'` / `unpack Export 'boru:mod'` gained
 // RunInCheckMode + a kept-concrete module-name string, so a later bare word
 // (`sqrt`) resolves instead of flagging undefined_word. NOT a runtime-only
 // effect — the same declared exports `import` reads. (module-struct / unpack.tsv)
 func TestUnpackModuleCheck(t *testing.T) {
 	clean := []string{
-		`unpack 'aql:math-util' sqrt 16.0`,
-		`unpack MathUtil 'aql:math-util' sqrt 16.0`,
+		`unpack 'boru:math-util' sqrt 16.0`,
+		`unpack MathUtil 'boru:math-util' sqrt 16.0`,
 	}
 	for _, src := range clean {
 		if n := checkErrs(t, src); n != 0 {
@@ -155,14 +155,14 @@ func TestUnpackModuleCheck(t *testing.T) {
 // is flagged AT CHECK TIME (its DryPassWrap ReturnsFn mirrors the
 // unconditional mini_registry_frozen raise).
 func TestMiniLangRegisterCheck(t *testing.T) {
-	clean := `import "aql:minilang"  def poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]])  mini poly 'x^2 + 3*y' {x:10, y:2}`
+	clean := `import "boru:minilang"  def poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]])  mini poly 'x^2 + 3*y' {x:10, y:2}`
 	if n := checkErrs(t, clean); n != 0 {
 		t.Errorf("minilang value form: expected 0 errors, got %d", n)
 	}
 	// The tombstone surfaces statically as a guaranteed-error mirror
 	// diagnostic (its DryPassWrap ReturnsFn re-raises under the dry pass).
 	a, _ := lang.New()
-	cr, _ := a.Check(`import "aql:minilang"  MiniLang.register`)
+	cr, _ := a.Check(`import "boru:minilang"  MiniLang.register`)
 	found := false
 	for _, d := range cr.Diagnostics {
 		if d.Code == "mini_registry_frozen" {
@@ -182,11 +182,11 @@ func TestMiniLangRegisterCheck(t *testing.T) {
 func TestMiniEmitComputedBindingCheck(t *testing.T) {
 	// NB the binding must not collide with a built-in kind name (a name
 	// like `m` is the micron short form, and a registered kind wins).
-	miniSrc := `import "aql:minilang"  def mk fn [[] [Function] [fn [[src:String opts:Map] [Any] [src add src]]]]  def myml (mk)  mini myml 'x'`
+	miniSrc := `import "boru:minilang"  def mk fn [[] [Function] [fn [[src:String opts:Map] [Any] [src add src]]]]  def myml (mk)  mini myml 'x'`
 	if n := checkErrs(t, miniSrc); n != 0 {
 		t.Errorf("computed mini binding: expected 0 check errors, got %d", n)
 	}
-	emitSrc := `import "aql:emitlang"  def mke fn [[] [Function] [fn [[value:Any opts:Map] [String] ['E']]]]  def mye (mke)  emit mye {a:1}`
+	emitSrc := `import "boru:emitlang"  def mke fn [[] [Function] [fn [[value:Any opts:Map] [String] ['E']]]]  def mye (mke)  emit mye {a:1}`
 	if n := checkErrs(t, emitSrc); n != 0 {
 		t.Errorf("computed emit binding: expected 0 check errors, got %d", n)
 	}

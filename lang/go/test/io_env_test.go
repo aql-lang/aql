@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // io_env_test.go — IO.env's HOST-DEPENDENT surface. The spec rows
@@ -27,9 +27,9 @@ func envFake() capabilities.EnvOps {
 	}}
 }
 
-func runEnv(t *testing.T, a *lang.AQL, src string) any {
+func runEnv(t *testing.T, a *lang.BORU, src string) any {
 	t.Helper()
-	res, err := a.Run(`import "aql:io"  ` + src)
+	res, err := a.Run(`import "boru:io"  ` + src)
 	if err != nil {
 		t.Fatalf("%s: %v", src, err)
 	}
@@ -39,7 +39,7 @@ func runEnv(t *testing.T, a *lang.AQL, src string) any {
 	return res[0]
 }
 
-func newEnvAQL(t *testing.T, opts lang.Options) *lang.AQL {
+func newEnvBORU(t *testing.T, opts lang.Options) *lang.BORU {
 	t.Helper()
 	a, err := lang.New(opts)
 	if err != nil {
@@ -50,7 +50,7 @@ func newEnvAQL(t *testing.T, opts lang.Options) *lang.AQL {
 
 // The lookup form returns the installed value.
 func TestIOEnvLookup(t *testing.T) {
-	a := newEnvAQL(t, lang.Options{Env: envFake()})
+	a := newEnvBORU(t, lang.Options{Env: envFake()})
 	if got := runEnv(t, a, `IO.env "HOME"`); got != "/home/ada" {
 		t.Errorf(`IO.env "HOME" = %#v, want /home/ada`, got)
 	}
@@ -59,7 +59,7 @@ func TestIOEnvLookup(t *testing.T) {
 // "" is a value, not absence: it must come back as the empty String and
 // NOT as none, or a caller can never tell `X=` from an unset X.
 func TestIOEnvEmptyValueIsNotUnset(t *testing.T) {
-	a := newEnvAQL(t, lang.Options{Env: envFake()})
+	a := newEnvBORU(t, lang.Options{Env: envFake()})
 	if got := runEnv(t, a, `IO.env "EMPTY"`); got != "" {
 		t.Errorf(`IO.env "EMPTY" = %#v, want ""`, got)
 	}
@@ -73,7 +73,7 @@ func TestIOEnvEmptyValueIsNotUnset(t *testing.T) {
 
 // The bare form snapshots everything visible, sorted by name.
 func TestIOEnvAll(t *testing.T) {
-	a := newEnvAQL(t, lang.Options{Env: envFake()})
+	a := newEnvBORU(t, lang.Options{Env: envFake()})
 	if got := runEnv(t, a, `size (IO.env-all)`); got != int64(4) {
 		t.Errorf("size (IO.env-all) = %#v, want 4", got)
 	}
@@ -94,7 +94,7 @@ func TestIOEnvAll(t *testing.T) {
 // that choice (a paren expression resolving to a function word does not
 // induce a call), but every call form still has to work, so this stays.
 func TestIOEnvCallForms(t *testing.T) {
-	a := newEnvAQL(t, lang.Options{Env: envFake()})
+	a := newEnvBORU(t, lang.Options{Env: envFake()})
 	for _, src := range []string{
 		`IO.env "HOME"`,          // forward form (canonical)
 		`"HOME" IO.env`,          // stack form
@@ -113,7 +113,7 @@ func TestIOEnvCallForms(t *testing.T) {
 // No installation is not "read the real process environment": the runtime
 // never reaches for ambient state the host did not hand it.
 func TestIOEnvUninstalledSeesNothing(t *testing.T) {
-	a := newEnvAQL(t, lang.Options{})
+	a := newEnvBORU(t, lang.Options{})
 	if got := runEnv(t, a, `typeof (IO.env "HOME")`); got != "None" {
 		t.Errorf(`uninstalled IO.env "HOME" = %#v, want None`, got)
 	}
@@ -124,7 +124,7 @@ func TestIOEnvUninstalledSeesNothing(t *testing.T) {
 
 // SetHostEnvOps(nil) clears a previously-installed view.
 func TestSetHostEnvOpsNilClears(t *testing.T) {
-	a := newEnvAQL(t, lang.Options{Env: envFake()})
+	a := newEnvBORU(t, lang.Options{Env: envFake()})
 	reg := a.NativeRegistry()
 	if native.HostEnvOps(reg) == nil {
 		t.Fatal("expected an installed EnvOps")
@@ -141,7 +141,7 @@ func TestSetHostEnvOpsNilClears(t *testing.T) {
 // SetHostEnvOps with no policy installed leaves the ops unwrapped — the
 // nil-policy arm of the policy-aware installer.
 func TestSetHostEnvOpsNoPolicyUnwrapped(t *testing.T) {
-	a := newEnvAQL(t, lang.Options{})
+	a := newEnvBORU(t, lang.Options{})
 	reg := a.NativeRegistry()
 	native.SetHostEnvOps(reg, envFake())
 	// MapEnvOps is uncomparable (it holds a map), so identity is asserted
@@ -165,12 +165,12 @@ func envPolicy(t *testing.T, name string) policy.Policy {
 	return pol
 }
 
-// read-only allows env.read for an ALLOWLIST (LANG, TZ, AQL_*). A denied
+// read-only allows env.read for an ALLOWLIST (LANG, TZ, BORU_*). A denied
 // name reads as UNSET rather than raising: a program probing for an
 // optional variable must take its default path, and an error would leak
 // which names exist.
 func TestIOEnvPolicyAllowlist(t *testing.T) {
-	a := newEnvAQL(t, lang.Options{Env: envFake(), Policy: envPolicy(t, "read-only")})
+	a := newEnvBORU(t, lang.Options{Env: envFake(), Policy: envPolicy(t, "read-only")})
 	if got := runEnv(t, a, `IO.env "LANG"`); got != "en_GB.UTF-8" {
 		t.Errorf(`allowed IO.env "LANG" = %#v, want en_GB.UTF-8`, got)
 	}
@@ -190,7 +190,7 @@ func TestIOEnvPolicyAllowlist(t *testing.T) {
 // sandbox denies the whole env scope: every name reads as unset and the
 // snapshot is empty.
 func TestIOEnvPolicyDeniesAll(t *testing.T) {
-	a := newEnvAQL(t, lang.Options{Env: envFake(), Policy: envPolicy(t, "sandbox")})
+	a := newEnvBORU(t, lang.Options{Env: envFake(), Policy: envPolicy(t, "sandbox")})
 	if got := runEnv(t, a, `typeof (IO.env "HOME")`); got != "None" {
 		t.Errorf(`sandboxed IO.env "HOME" = %#v, want None`, got)
 	}
@@ -202,7 +202,7 @@ func TestIOEnvPolicyDeniesAll(t *testing.T) {
 // `env: {install: false}` UNINSTALLS the scope. That is stronger than
 // denying it: the capability slot is cleared, so there is nothing
 // installed to refuse. (The shipped compute/gen profiles do this, but
-// they also forbid importing aql:io, so the arm is exercised through an
+// they also forbid importing boru:io, so the arm is exercised through an
 // inline profile that uninstalls env and nothing else.)
 func TestIOEnvPolicyUninstalls(t *testing.T) {
 	pol, err := policy.LoadInline(`{version:1 name:"env-off" scopes:{
@@ -213,7 +213,7 @@ func TestIOEnvPolicyUninstalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := newEnvAQL(t, lang.Options{Env: envFake(), Policy: pol})
+	a := newEnvBORU(t, lang.Options{Env: envFake(), Policy: pol})
 	if ops := native.HostEnvOps(a.NativeRegistry()); ops != nil {
 		t.Errorf("compute uninstalls env: HostEnvOps = %T, want nil", ops)
 	}
@@ -226,25 +226,25 @@ func TestIOEnvPolicyUninstalls(t *testing.T) {
 // environment, so the assertions are shape-only: whatever Go's os package
 // reports for a name, IO.env reports the same.
 func TestOSEnvOpsMatchesProcess(t *testing.T) {
-	t.Setenv("AQL_ENV_PROBE", "probe-value")
+	t.Setenv("BORU_ENV_PROBE", "probe-value")
 	ops := capabilities.OSEnvOps{}
-	if v, ok := ops.Get("AQL_ENV_PROBE"); !ok || v != "probe-value" {
+	if v, ok := ops.Get("BORU_ENV_PROBE"); !ok || v != "probe-value" {
 		t.Errorf("OSEnvOps.Get = (%q, %v), want (probe-value, true)", v, ok)
 	}
-	if _, ok := ops.Get("AQL_DEFINITELY_UNSET_XYZZY"); ok {
+	if _, ok := ops.Get("BORU_DEFINITELY_UNSET_XYZZY"); ok {
 		t.Error("OSEnvOps.Get reported an unset name as set")
 	}
 	var found bool
 	for _, n := range ops.All() {
-		if n == "AQL_ENV_PROBE" {
+		if n == "BORU_ENV_PROBE" {
 			found = true
 		}
 	}
 	if !found {
 		t.Error("OSEnvOps.All omitted a name that Get reports as set")
 	}
-	a := newEnvAQL(t, lang.Options{Env: ops})
-	if got := runEnv(t, a, `IO.env "AQL_ENV_PROBE"`); got != "probe-value" {
+	a := newEnvBORU(t, lang.Options{Env: ops})
+	if got := runEnv(t, a, `IO.env "BORU_ENV_PROBE"`); got != "probe-value" {
 		t.Errorf(`IO.env through OSEnvOps = %#v, want probe-value`, got)
 	}
 }
@@ -258,12 +258,12 @@ func TestOSEnvOpsMatchesProcess(t *testing.T) {
 // was handed, read an EMPTY environment and an empty vector while its
 // importer read the real ones. A capability the host DID install must not
 // disappear one import deep — that is a wrong answer, not a refusal, and it
-// is exactly the shape aql:cli depends on.
+// is exactly the shape boru:cli depends on.
 func TestEnvAndArgsReachModuleBodies(t *testing.T) {
-	a := newEnvAQL(t, lang.Options{Env: envFake(), ScriptArgs: []string{"alpha", "beta"}})
-	res, err := a.Run(`import "aql:io"
+	a := newEnvBORU(t, lang.Options{Env: envFake(), ScriptArgs: []string{"alpha", "beta"}})
+	res, err := a.Run(`import "boru:io"
 import module [
-  import "aql:io"
+  import "boru:io"
   def m-home fn [[] [Any] [ IO.env "HOME" ]]
   def m-argv fn [[] [List] [ IO.args ]]
   export "M" {home: m-home/r, argv: m-argv/r}
@@ -278,10 +278,10 @@ IO.env "HOME"`)
 		t.Errorf("top-level IO.env = %#v, want /home/ada", got)
 	}
 	var out strings.Builder
-	a2 := newEnvAQL(t, lang.Options{Env: envFake(), ScriptArgs: []string{"alpha", "beta"}})
+	a2 := newEnvBORU(t, lang.Options{Env: envFake(), ScriptArgs: []string{"alpha", "beta"}})
 	a2.SetOutput(&out)
 	if _, err := a2.Run(`import module [
-  import "aql:io"
+  import "boru:io"
   def m-home fn [[] [Any] [ IO.env "HOME" ]]
   def m-argv fn [[] [List] [ IO.args ]]
   export "M" {home: m-home/r, argv: m-argv/r}
@@ -306,10 +306,10 @@ func TestModuleBodyEnvStaysPolicyWrapped(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out strings.Builder
-	a := newEnvAQL(t, lang.Options{Env: envFake(), Policy: pol})
+	a := newEnvBORU(t, lang.Options{Env: envFake(), Policy: pol})
 	a.SetOutput(&out)
 	if _, err := a.Run(`import module [
-  import "aql:io"
+  import "boru:io"
   def m-home fn [[] [Any] [ IO.env "HOME" ]]
   export "M" {home: m-home/r}
 ] end

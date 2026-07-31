@@ -5,14 +5,14 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
 // The tabnas jsonic engine exposes RuleSpec alternates and actions through
 // accessor methods (AddOpen/ClearOpen/OpenAlts, AddBO/ClearActions, …) rather
 // than the exported Open/Close/BO/BC slice fields the legacy jsonicjs parser
-// used. These helpers re-create the field-assignment idioms the AQL grammar is
+// used. These helpers re-create the field-assignment idioms the BORU grammar is
 // written against, so the rule definitions read the same:
 //
 //	setOpen(rs, alts)      — replace the open alternates       (was rs.Open = alts)
@@ -63,7 +63,7 @@ func setAC(rs *jsonic.RuleSpec, actions []jsonic.StateAction) {
 // addMatcher re-creates jsonicjs's AddMatcher(name, priority, fn): it appends a
 // priority-ordered custom lex matcher. The tabnas lexer interleaves
 // Config.CustomMatchers by priority against the built-in matchers using the
-// SAME bands (match=1e6, fixed=2e6, space=3e6, …), so the AQL matchers keep
+// SAME bands (match=1e6, fixed=2e6, space=3e6, …), so the BORU matchers keep
 // their exact relative ordering.
 func addMatcher(j *jsonic.Jsonic, name string, priority int, fn jsonic.LexMatcher) {
 	cfg := j.Config()
@@ -74,7 +74,7 @@ func addMatcher(j *jsonic.Jsonic, name string, priority int, fn jsonic.LexMatche
 	})
 }
 
-// parserTokens holds the custom jsonic token IDs registered for AQL grammar.
+// parserTokens holds the custom jsonic token IDs registered for BORU grammar.
 // Passed between grammar setup stages so token IDs are defined once.
 type parserTokens struct {
 	OP  jsonic.Tin // (
@@ -94,7 +94,7 @@ type parserTokens struct {
 	XML jsonic.Tin // embedded XML literal <tag>…</tag> (matcher-produced)
 }
 
-// setupBaseTokens registers the fixed AQL tokens and removes backtick from
+// setupBaseTokens registers the fixed BORU tokens and removes backtick from
 // jsonic's string/multi chars so template strings are handled by custom rules.
 func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 	// Remove backtick from string chars so jsonic doesn't consume backtick
@@ -145,7 +145,7 @@ func setupBigNumberMatcher(j *jsonic.Jsonic, t parserTokens) {
 	isDigit := func(c byte) bool { return (c >= '0' && c <= '9') || c == '_' }
 	addMatcher(j, "big_number", 1000001, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 		if rule != nil {
-			if _, ok := rule.K["aql_tpl"]; ok {
+			if _, ok := rule.K["boru_tpl"]; ok {
 				return nil // inside a template string: leave to the literal matcher
 			}
 		}
@@ -244,7 +244,7 @@ func setupMiniLitMatcher(j *jsonic.Jsonic, t parserTokens) {
 	isSpace := func(c byte) bool { return c == ' ' || c == '\t' || c == '\n' || c == '\r' }
 	addMatcher(j, "minilang_literal", 1000002, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 		if rule != nil {
-			if _, ok := rule.K["aql_tpl"]; ok {
+			if _, ok := rule.K["boru_tpl"]; ok {
 				return nil // inside a template string: not a minilang literal
 			}
 		}
@@ -321,13 +321,13 @@ func setupMiniLitMatcher(j *jsonic.Jsonic, t parserTokens) {
 
 // setupTemplateLiteralMatcher registers a high-priority lex matcher that
 // produces #TL tokens for literal text inside template strings. Active only
-// when rule.K["aql_tpl"] is set (inside a backtick-opened interp rule).
+// when rule.K["boru_tpl"] is set (inside a backtick-opened interp rule).
 func setupTemplateLiteralMatcher(j *jsonic.Jsonic, t parserTokens) {
 	addMatcher(j, "template_literal", 1000000, func(lex *jsonic.Lex, rule *jsonic.Rule) *jsonic.Token {
 		if rule == nil {
 			return nil
 		}
-		if _, ok := rule.K["aql_tpl"]; !ok {
+		if _, ok := rule.K["boru_tpl"]; !ok {
 			return nil
 		}
 		cursor := lex.Cursor()
@@ -380,7 +380,7 @@ func setupTemplateLiteralMatcher(j *jsonic.Jsonic, t parserTokens) {
 	})
 }
 
-// setupValRule extends the jsonic "val" rule with AQL-specific alternates:
+// setupValRule extends the jsonic "val" rule with BORU-specific alternates:
 // parens, template strings, close-paren markers, semicolons, ?, !, |, and dots.
 func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 	j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
@@ -849,16 +849,16 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 		prependOpen(rs, []*jsonic.AltSpec{
 			// Match KEY ? — save key via K (propagated), push to pair.
 			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {t.QM}},
-				P: "pair", K: map[string]any{"aql_qm": true},
+				P: "pair", K: map[string]any{"boru_qm": true},
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					pairkey(r, ctx)
 					// Propagate key to inner pair via K.
 					r.EnsureK()["key"] = r.U["key"]
 				}},
-			// Match : when aql_qm flag is set — copy key from K, proceed as pair value.
+			// Match : when boru_qm flag is set — copy key from K, proceed as pair value.
 			{S: [][]jsonic.Tin{{jsonic.TinCL}},
 				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
-					_, ok := r.K["aql_qm"]
+					_, ok := r.K["boru_qm"]
 					return ok
 				},
 				P: "val", U: map[string]any{"pair": true},
@@ -874,7 +874,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 			// an empty pushed pair on the brace implicitly; tabnas does not.)
 			{S: [][]jsonic.Tin{{jsonic.TinCB}},
 				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
-					_, ok := r.K["aql_qm"]
+					_, ok := r.K["boru_qm"]
 					return ok
 				},
 				B: 1,
@@ -882,7 +882,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 					if k, ok := r.K["key"]; ok {
 						r.EnsureU()["key"] = k
 						if ks, ok := k.(string); ok {
-							r.EnsureU()["aql_sh"] = ks
+							r.EnsureU()["boru_sh"] = ks
 						}
 					}
 				}},
@@ -892,7 +892,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 	// Record optional keys in MapRef.Meta via pair.BC callback.
 	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
-			if _, ok := r.K["aql_qm"]; !ok {
+			if _, ok := r.K["boru_qm"]; !ok {
 				return
 			}
 			key, _ := r.U["key"].(string)
@@ -918,11 +918,11 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 		prependOpen(rs, []*jsonic.AltSpec{
 			// Step 1: match [ — set computed key flag, push to pair.
 			{S: [][]jsonic.Tin{{jsonic.TinOS}},
-				P: "pair", K: map[string]any{"aql_ck": true}},
-			// Step 2: match KEY ] when aql_ck — save key, push to pair.
+				P: "pair", K: map[string]any{"boru_ck": true}},
+			// Step 2: match KEY ] when boru_ck — save key, push to pair.
 			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {jsonic.TinCS}},
 				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
-					_, ok := r.K["aql_ck"]
+					_, ok := r.K["boru_ck"]
 					return ok
 				},
 				P: "pair",
@@ -930,10 +930,10 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 					pairkey(r, ctx)
 					r.EnsureK()["key"] = r.U["key"]
 				}},
-			// Step 3: match : when aql_ck and key is set — proceed as pair value.
+			// Step 3: match : when boru_ck and key is set — proceed as pair value.
 			{S: [][]jsonic.Tin{{jsonic.TinCL}},
 				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
-					_, hasCK := r.K["aql_ck"]
+					_, hasCK := r.K["boru_ck"]
 					_, hasKey := r.K["key"]
 					return hasCK && hasKey
 				},
@@ -947,15 +947,15 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 	// Record computed keys in MapRef.Meta via pair.BC callback.
 	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
-			if _, ok := r.K["aql_ck"]; !ok {
+			if _, ok := r.K["boru_ck"]; !ok {
 				return
 			}
 			// Clear the computed-key flag as this pair closes so it cannot
 			// LEAK to the sibling pair. tabnas's K map is shared across the
-			// sibling pairs of a map, so a lingering aql_ck made a later bare
+			// sibling pairs of a map, so a lingering boru_ck made a later bare
 			// key (`{[k]:1 aa:2}`) wrongly parse as computed — the pre-existing
 			// leak the D1 order channel sits on (design/FLEX-ATTRS.1.md §2.6).
-			defer delete(r.K, "aql_ck")
+			defer delete(r.K, "boru_ck")
 			key, _ := r.U["key"].(string)
 			if key == "" {
 				return
@@ -989,7 +989,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 			S: [][]jsonic.Tin{{jsonic.TinTX}},
 			A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				if raw, ok := r.O0.Val.(string); ok {
-					r.EnsureU()["aql_sh"] = raw
+					r.EnsureU()["boru_sh"] = raw
 				}
 			},
 		})
@@ -998,7 +998,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 	// Record shorthand keys in MapRef.Meta["sh"] via pair.BC callback.
 	j.Rule("pair", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
-			raw, ok := r.U["aql_sh"].(string)
+			raw, ok := r.U["boru_sh"].(string)
 			if !ok || raw == "" {
 				return
 			}
@@ -1052,8 +1052,8 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
 			var key string
 			switch {
-			case r.U["aql_sh"] != nil:
-				if raw, ok := r.U["aql_sh"].(string); ok {
+			case r.U["boru_sh"] != nil:
+				if raw, ok := r.U["boru_sh"].(string); ok {
 					key = wordBaseName(raw)
 				}
 			case r.U["key"] != nil:
@@ -1090,16 +1090,16 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 		prependOpen(rs, []*jsonic.AltSpec{
 			// Step 1: match KEY ? — save key, push to elem.
 			{S: [][]jsonic.Tin{jsonic.TinSetKEY, {t.QM}},
-				P: "elem", K: map[string]any{"aql_qm": true},
+				P: "elem", K: map[string]any{"boru_qm": true},
 				U: map[string]any{"done": true},
 				A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 					pairkey(r, ctx)
 					r.EnsureK()["key"] = r.U["key"]
 				}},
-			// Step 2: match : when aql_qm is set — proceed as list pair.
+			// Step 2: match : when boru_qm is set — proceed as list pair.
 			{S: [][]jsonic.Tin{{jsonic.TinCL}},
 				C: func(r *jsonic.Rule, ctx *jsonic.Context) bool {
-					_, ok := r.K["aql_qm"]
+					_, ok := r.K["boru_qm"]
 					return ok
 				},
 				P: "val",
@@ -1114,7 +1114,7 @@ func setupPairGrammar(j *jsonic.Jsonic, t parserTokens) {
 	// Propagate the outer elem's updated Node to grandparent (list rule).
 	j.Rule("elem", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		rs.AddBC(func(r *jsonic.Rule, ctx *jsonic.Context) {
-			if _, ok := r.K["aql_qm"]; !ok {
+			if _, ok := r.K["boru_qm"]; !ok {
 				return
 			}
 			// Only propagate from the OUTER elem (which has done=true).
@@ -1258,7 +1258,7 @@ func setupParenGrammar(j *jsonic.Jsonic, t parserTokens) {
 // rules for template string interpolation (`hello ${name}`).
 func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 	// Interp rule: collects template string parts between backticks.
-	// K["aql_tpl"] is set in BO so the custom matcher produces #TL tokens
+	// K["boru_tpl"] is set in BO so the custom matcher produces #TL tokens
 	// for literal text segments. Parts are accumulated in Node as an interpGroup.
 	j.Rule("interp", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		setBO(rs, []jsonic.StateAction{
@@ -1266,7 +1266,7 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 				r.Node = interpGroup{}
 				// Set K so the custom matcher knows we're inside a template.
 				// K propagates to child rules.
-				r.EnsureK()["aql_tpl"] = true
+				r.EnsureK()["boru_tpl"] = true
 			},
 		})
 		setOpen(rs, []*jsonic.AltSpec{
@@ -1329,14 +1329,14 @@ func setupInterpGrammar(j *jsonic.Jsonic, t parserTokens) {
 
 	// Iexpr rule: collects expression values between ${ and }.
 	// Pushes to val for each value, collects into a list.
-	// Clears aql_tpl in BO so that expression content is parsed normally
+	// Clears boru_tpl in BO so that expression content is parsed normally
 	// (the custom matcher won't fire inside expressions).
 	j.Rule("iexpr", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
 		setBO(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = make([]any, 0)
 				// Clear template mode so expressions parse normally.
-				delete(r.K, "aql_tpl")
+				delete(r.K, "boru_tpl")
 				// Increment dlist and dmap so val.Close won't create
 				// implicit lists or maps inside interpolation expressions.
 				if v, ok := r.N["dlist"]; ok {

@@ -1,6 +1,6 @@
-// Package publish implements `aql publish [-r <url>] [dir]` — pack
+// Package publish implements `boru publish [-r <url>] [dir]` — pack
 // the current module into a zip, then upload it to the registry
-// server using the locally-stored auth token from `aql login`.
+// server using the locally-stored auth token from `boru login`.
 package publish
 
 import (
@@ -13,10 +13,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/cmd/go/internal/vault"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/vault"
 )
 
 type cmd struct{}
@@ -25,17 +25,17 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "publish" }
-func (*cmd) Synopsis() string { return "upload the current module to an aql registry" }
+func (*cmd) Synopsis() string { return "upload the current module to a boru registry" }
 func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdin, stdout, stderr)
 }
 
-// Run handles `aql publish [-r <url>] [--vault] [dir]`.
+// Run handles `boru publish [-r <url>] [--vault] [dir]`.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("publish", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	registryURL := fs.String("r", "", "registry server URL")
-	useVault := fs.Bool("vault", false, "read the registry token from the aql vault")
+	useVault := fs.Bool("vault", false, "read the registry token from the boru vault")
 	vaultAlias := fs.String("vault-alias", "", "vault alias for the token (overrides the stored token_vault)")
 
 	if err := fs.Parse(args); err != nil {
@@ -56,7 +56,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	cu, err := auth.LoadClientUser(homeDir)
 	if err != nil {
-		fmt.Fprintf(stderr, "error: not logged in (run 'aql login' first)\n")
+		fmt.Fprintf(stderr, "error: not logged in (run 'boru login' first)\n")
 		return 1
 	}
 	// Resolve the bearer token. By default it's the plaintext Token from
@@ -78,7 +78,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		token = t
 	}
 	if token == "" {
-		fmt.Fprintf(stderr, "error: not logged in (run 'aql login' first)\n")
+		fmt.Fprintf(stderr, "error: not logged in (run 'boru login' first)\n")
 		return 1
 	}
 

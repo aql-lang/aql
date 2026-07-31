@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// runWithSource parses and runs AQL source, returning the error.
+// runWithSource parses and runs BORU source, returning the error.
 // Sets source on the engine for error reporting.
 func runWithSource(t *testing.T, src string) error {
 	t.Helper()
@@ -43,15 +43,15 @@ func assertErrorContains(t *testing.T, err error, substrings ...string) {
 	}
 }
 
-// assertAqlError checks that the error is an *AqlError with the given code.
-func assertAqlError(t *testing.T, err error, code string) *native.AqlError {
+// assertBoruError checks that the error is an *BoruError with the given code.
+func assertBoruError(t *testing.T, err error, code string) *native.BoruError {
 	t.Helper()
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
-	ae, ok := err.(*native.AqlError)
+	ae, ok := err.(*native.BoruError)
 	if !ok {
-		t.Fatalf("expected *AqlError, got %T: %v", err, err)
+		t.Fatalf("expected *BoruError, got %T: %v", err, err)
 	}
 	if ae.Code != code {
 		t.Errorf("expected code %q, got %q", code, ae.Code)
@@ -66,10 +66,10 @@ func assertAqlError(t *testing.T, err error, code string) *native.AqlError {
 func TestErrorFormatSignatureWrongType(t *testing.T) {
 	// 99 upper → signature error (integer doesn't match string)
 	err := runWithSource(t, `99 upper`)
-	ae := assertAqlError(t, err, "signature_error")
+	ae := assertBoruError(t, err, "signature_error")
 
 	assertErrorContains(t, err,
-		"[aql/signature_error]",
+		"[boru/signature_error]",
 		"cannot call `upper`",
 		"no signature matches the arguments",
 		"-->",
@@ -102,9 +102,9 @@ func TestErrorFormatSignatureWrongType(t *testing.T) {
 func TestErrorFormatSignatureMissingArg(t *testing.T) {
 	// add with no arguments
 	err := runWithSource(t, `add`)
-	ae := assertAqlError(t, err, "signature_error")
+	ae := assertBoruError(t, err, "signature_error")
 	assertErrorContains(t, err,
-		"[aql/signature_error]",
+		"[boru/signature_error]",
 		"cannot call `add`",
 		"candidate `add ",
 		"were supplied",
@@ -114,14 +114,14 @@ func TestErrorFormatSignatureMissingArg(t *testing.T) {
 	}
 	// add carries many overloads — the error must point at describe
 	// rather than listing them all.
-	assertErrorContains(t, err, "more signatures", "aql describe add")
+	assertErrorContains(t, err, "more signatures", "boru describe add")
 }
 
 func TestErrorFormatSignatureMultiLine(t *testing.T) {
 	// Multi-line source — error should show source extract.
 	src := "def x 1\ndef y 2\n99 upper"
 	err := runWithSource(t, src)
-	ae := assertAqlError(t, err, "signature_error")
+	ae := assertBoruError(t, err, "signature_error")
 
 	// Should point to line 3
 	if ae.Row != 3 {
@@ -141,7 +141,7 @@ func TestErrorFormatSignatureMultiLine(t *testing.T) {
 func TestErrorFormatSignatureFnDef(t *testing.T) {
 	// Function signature mismatch at call time
 	err := runWithSource(t, `def f fn [[n:Integer] Integer [n]] "hello" f`)
-	ae := assertAqlError(t, err, "signature_error")
+	ae := assertBoruError(t, err, "signature_error")
 	assertErrorContains(t, err, "cannot call `f`")
 	_ = ae
 }
@@ -153,7 +153,7 @@ func TestErrorFormatSignaturePointsAtCallSiteNotLastMatch(t *testing.T) {
 	// textual occurrence (line 3), which is what findWordInSource returns.
 	src := "99 upper\ndef ok 1\nupper \"fine\""
 	err := runWithSource(t, src)
-	ae := assertAqlError(t, err, "signature_error")
+	ae := assertBoruError(t, err, "signature_error")
 	if ae.Row != 1 {
 		t.Errorf("expected Row=1 (the executed `upper`), got %d — "+
 			"a wrong row means the text-search fallback fired instead of the parser position", ae.Row)
@@ -170,7 +170,7 @@ func TestErrorFormatSignatureSameWordTwoBodies(t *testing.T) {
 		"def g fn [[b:Integer] Integer [b upper]]\n" +
 		"f 5"
 	err := runWithSource(t, src)
-	ae := assertAqlError(t, err, "signature_error")
+	ae := assertBoruError(t, err, "signature_error")
 	assertErrorContains(t, err, "cannot call `upper`")
 	if ae.Row != 1 {
 		t.Errorf("expected Row=1 (the failing `upper` in f's body), got %d", ae.Row)
@@ -185,7 +185,7 @@ func TestErrorFormatSignatureReceivedArg(t *testing.T) {
 	// `upper` is 1-arg, so it dispatches on 42; the unrelated 'hello'
 	// leftover below it is not the argument and is not reported.
 	err := runWithSource(t, `"hello" 42 upper`)
-	ae := assertAqlError(t, err, "signature_error")
+	ae := assertBoruError(t, err, "signature_error")
 	argNote := ""
 	for _, n := range ae.Notes {
 		if strings.HasPrefix(n, "the argument") {
@@ -212,8 +212,8 @@ func TestErrorFormatSignatureReceivedArg(t *testing.T) {
 
 func TestErrorFormatUndefinedWordDidYouMean(t *testing.T) {
 	err := runWithSource(t, "def counter 1\ncountr")
-	ae := assertAqlError(t, err, "undefined_word")
-	// The nearest binding leads the suggestion list; aql:io's `mount`
+	ae := assertBoruError(t, err, "undefined_word")
+	// The nearest binding leads the suggestion list; boru:io's `mount`
 	// (also edit-distance-close to "countr") may follow it.
 	assertErrorContains(t, err,
 		"undefined word: countr",
@@ -227,14 +227,14 @@ func TestErrorFormatUndefinedWordDidYouMean(t *testing.T) {
 func TestErrorFormatUndefinedWordBuiltinDescribe(t *testing.T) {
 	// A typo'd BUILTIN also points at its describe entry.
 	err := runWithSource(t, `filtr [1 2 3] [true]`)
-	assertAqlError(t, err, "undefined_word")
-	assertErrorContains(t, err, "did you mean", "aql describe ")
+	assertBoruError(t, err, "undefined_word")
+	assertErrorContains(t, err, "did you mean", "boru describe ")
 }
 
 func TestErrorFormatUndefinedWordNoWildGuess(t *testing.T) {
 	// Nothing plausible nearby → no did-you-mean at all (never guess).
 	err := runWithSource(t, `zzqzzqzz`)
-	assertAqlError(t, err, "undefined_word")
+	assertBoruError(t, err, "undefined_word")
 	if strings.Contains(err.Error(), "did you mean") {
 		t.Errorf("far name must not produce a guess:\n%s", err.Error())
 	}
@@ -243,7 +243,7 @@ func TestErrorFormatUndefinedWordNoWildGuess(t *testing.T) {
 func TestErrorFormatUndefinedTypeNameDidYouMean(t *testing.T) {
 	// A misspelt TYPE name in a binding suggests the type.
 	err := runWithSource(t, `def x:Intger 5`)
-	assertAqlError(t, err, "def_error")
+	assertBoruError(t, err, "def_error")
 	assertErrorContains(t, err,
 		"type annotation must be a type value",
 		"did you mean `Integer`",
@@ -256,7 +256,7 @@ func TestErrorFormatUndefinedTypeNameDidYouMean(t *testing.T) {
 
 func TestErrorFormatKeyMissDidYouMean(t *testing.T) {
 	err := runWithSource(t, `{color:1 size:2} "colour" getr`)
-	ae := assertAqlError(t, err, "not_found")
+	ae := assertBoruError(t, err, "not_found")
 	assertErrorContains(t, err,
 		`key "colour" not found in map`,
 		"did you mean `color`?",
@@ -266,7 +266,7 @@ func TestErrorFormatKeyMissDidYouMean(t *testing.T) {
 
 func TestErrorFormatKeyMissNoWildGuess(t *testing.T) {
 	err := runWithSource(t, `{color:1 size:2} "zzz" getr`)
-	assertAqlError(t, err, "not_found")
+	assertBoruError(t, err, "not_found")
 	if strings.Contains(err.Error(), "did you mean") {
 		t.Errorf("far key must not produce a guess:\n%s", err.Error())
 	}
@@ -279,7 +279,7 @@ func TestErrorFormatModuleExportMissDidYouMean(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.Run("import \"aql:math-util\"\nMathUtil \"sqrtt\" getr")
+	_, err = a.Run("import \"boru:math-util\"\nMathUtil \"sqrtt\" getr")
 	if err == nil {
 		t.Fatal("expected an export-miss error")
 	}
@@ -297,9 +297,9 @@ func TestErrorFormatModuleExportMissDidYouMean(t *testing.T) {
 func TestErrorFormatReturnType(t *testing.T) {
 	// Function returns wrong type
 	err := runWithSource(t, `def f fn [[n:Integer] String [n]] 42 f`)
-	ae := assertAqlError(t, err, "type_error")
+	ae := assertBoruError(t, err, "type_error")
 	assertErrorContains(t, err,
-		"[aql/type_error]",
+		"[boru/type_error]",
 		"return value 1",
 		"expected",
 		"got",
@@ -311,7 +311,7 @@ func TestErrorFormatReturnTypeTwoSpans(t *testing.T) {
 	// The rich report labels BOTH the declaration and the produced
 	// value alongside the primary call-site caret (phase 5).
 	err := runWithSource(t, "def f fn [[n:Integer] String [n]]\n42 f")
-	ae := assertAqlError(t, err, "type_error")
+	ae := assertBoruError(t, err, "type_error")
 	if len(ae.Spans) == 0 {
 		t.Fatalf("expected secondary spans, got none:\n%s", err.Error())
 	}
@@ -323,7 +323,7 @@ func TestErrorFormatReturnTypeTwoSpans(t *testing.T) {
 
 func TestErrorFormatReturnCountDeclSpan(t *testing.T) {
 	err := runWithSource(t, "def f fn [[n:Integer] [Integer Integer] [n]]\n42 f")
-	assertAqlError(t, err, "type_error")
+	assertBoruError(t, err, "type_error")
 	assertErrorContains(t, err, "the declaration of `f` expects 2 return value(s)")
 }
 
@@ -333,20 +333,20 @@ func TestErrorFormatReturnCountDeclSpan(t *testing.T) {
 
 func TestErrorFormatArithCode(t *testing.T) {
 	err := runWithSource(t, `20 div 0`)
-	assertAqlError(t, err, "arith_error")
-	assertErrorContains(t, err, "[aql/arith_error]", "division by zero")
+	assertBoruError(t, err, "arith_error")
+	assertErrorContains(t, err, "[boru/arith_error]", "division by zero")
 
 	err = runWithSource(t, `20 mod 0`)
-	assertAqlError(t, err, "arith_error")
+	assertBoruError(t, err, "arith_error")
 	assertErrorContains(t, err, "modulo by zero")
 }
 
 func TestErrorFormatReturnCount(t *testing.T) {
 	// Function returns wrong number of values
 	err := runWithSource(t, `def f fn [[n:Integer] [Integer Integer] [n]] 42 f`)
-	ae := assertAqlError(t, err, "type_error")
+	ae := assertBoruError(t, err, "type_error")
 	assertErrorContains(t, err,
-		"[aql/type_error]",
+		"[boru/type_error]",
 		"expected 2 return value(s)",
 		"got 1",
 	)
@@ -363,7 +363,7 @@ func TestErrorFormatReturnTypeAnonymousFn(t *testing.T) {
 		"def y 2\n" +
 		"42 (fn [[Integer] String [dup]])"
 	err := runWithSource(t, src)
-	ae := assertAqlError(t, err, "type_error")
+	ae := assertBoruError(t, err, "type_error")
 	assertErrorContains(t, err, "return value 1")
 	if ae.Row != 3 {
 		t.Errorf("expected Row=3 (the `fn [...]` construction), got %d", ae.Row)
@@ -379,7 +379,7 @@ func TestErrorFormatReturnTypePointsAtCallSite(t *testing.T) {
 		"42 f\n" +
 		"def ff 1"
 	err := runWithSource(t, src)
-	ae := assertAqlError(t, err, "type_error")
+	ae := assertBoruError(t, err, "type_error")
 	assertErrorContains(t, err, "return value 1")
 	if ae.Row != 2 {
 		t.Errorf("expected Row=2 (the call `42 f`), got %d — "+
@@ -392,7 +392,7 @@ func TestErrorFormatUnknownPositionSaysSo(t *testing.T) {
 	// source token to attribute it to. Rather than guess a location by
 	// text-searching, the error explicitly states the position is unknown.
 	err := runWithSource(t, "x add (1 2")
-	ae := assertAqlError(t, err, "syntax_error")
+	ae := assertBoruError(t, err, "syntax_error")
 	if ae.Row != 0 {
 		t.Errorf("expected no position (Row 0), got %d", ae.Row)
 	}
@@ -405,9 +405,9 @@ func TestErrorFormatUnknownPositionSaysSo(t *testing.T) {
 
 func TestErrorFormatSyntaxUnmatchedClose(t *testing.T) {
 	err := runWithSource(t, `)`)
-	ae := assertAqlError(t, err, "syntax_error")
+	ae := assertBoruError(t, err, "syntax_error")
 	assertErrorContains(t, err,
-		"[aql/syntax_error]",
+		"[boru/syntax_error]",
 		"unmatched closing parenthesis",
 	)
 	_ = ae
@@ -444,9 +444,9 @@ func TestErrorFormatStructure(t *testing.T) {
 		t.Fatalf("expected multi-line error, got: %s", msg)
 	}
 
-	// Line 1: [aql/<code>]: <detail>
-	if !strings.HasPrefix(lines[0], "[aql/") {
-		t.Errorf("line 1 should start with '[aql/', got: %s", lines[0])
+	// Line 1: [boru/<code>]: <detail>
+	if !strings.HasPrefix(lines[0], "[boru/") {
+		t.Errorf("line 1 should start with '[boru/', got: %s", lines[0])
 	}
 	if !strings.Contains(lines[0], "]:") {
 		t.Errorf("line 1 should contain ']:', got: %s", lines[0])

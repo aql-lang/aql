@@ -40,7 +40,7 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 
 // InvokeCallback runs a runtime fn VALUE (given its matched signature and the
 // per-call args) against the VM when the sig carries a compiled unit whose
-// program is stamped AND r can host a fresh run, else falling back to CallAQL —
+// program is stamped AND r can host a fresh run, else falling back to CallBORU —
 // the tree-walking interpreter — with the fn's captures. It is the single seam
 // every native callback word (serve-raw, spawn, service/codec endpoints)
 // dispatches through, so retiring the interpreter for reducible callback bodies
@@ -48,7 +48,7 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 //
 // Correctness is fail-safe: a nil CompiledRef, an un-stamped ref (a body the
 // compiler refused, or a run that never reached Finalize), or a busy registry
-// all fall to CallAQL, whose values and error taxonomy are unchanged. When the
+// all fall to CallBORU, whose values and error taxonomy are unchanged. When the
 // VM path IS taken, RunUnit executes the exact unit the differential gates prove
 // equivalent to the interpreter.
 //
@@ -58,8 +58,8 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 // therefore applies RunCompiled's own discipline itself: if the compiled unit
 // raises an internal_error (a VM/lowering soundness assertion or a recovered
 // handler panic, the class RunCompiled resolves by falling back), retry on
-// CallAQL so the peer sees the interpreter's canonical result/error instead of a
-// raw internal_error leaking to the network. Genuine AQL runtime errors
+// CallBORU so the peer sees the interpreter's canonical result/error instead of a
+// raw internal_error leaking to the network. Genuine BORU runtime errors
 // (signature_error, type_error, …) are the interpreter's answer too and are
 // returned as-is.
 func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []CapturedBinding) ([]Value, error) {
@@ -81,13 +81,13 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 		// not raise an internal_error: that class means a VM/lowering soundness
 		// bailout or a recovered handler panic, so — with no outer RunCompiled to
 		// catch it out here past the enclosing run — the seam itself falls back to
-		// CallAQL, exactly as RunCompiled does. Genuine AQL runtime errors are the
+		// CallBORU, exactly as RunCompiled does. Genuine BORU runtime errors are the
 		// interpreter's answer too and pass straight through.
 		//
 		// The writer fence is armed around the attempt because a DETACHED
 		// callback fires after the enclosing compiled run disarmed its own
 		// fence: without the wrap, a callback that PRINTS and then bails would
-		// leave the ledger untouched and the CallAQL retry below would emit
+		// leave the ledger untouched and the CallBORU retry below would emit
 		// the output a second time. Nested invocations (mid-compiled-run) are
 		// already armed; the second wrap only double-counts, and the fence
 		// reads deltas, not magnitudes.
@@ -110,9 +110,9 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 	}
 	// Observability seam (interp_entry.go): the callback seam's interpreter
 	// fallback — its own name so the C4 decline tag can attach later without
-	// conflating it with a direct CallAQL.
-	r.noteInterp("InvokeCallback:callaql")
-	return r.CallAQL(sig, args, captures)
+	// conflating it with a direct CallBORU.
+	r.noteInterp("InvokeCallback:callboru")
+	return r.CallBORU(sig, args, captures)
 }
 
 // invokeCompiledUnit runs a stamped callback unit on the VM and reports whether a
@@ -135,13 +135,13 @@ func invokeCompiledUnit(r *Registry, ref *CompiledFnRef, args []Value) (res []Va
 	return nil, nil, false
 }
 
-// isInternalErr reports whether err is an internal_error-class AqlError — the
+// isInternalErr reports whether err is an internal_error-class BoruError — the
 // signal runVMEntry stamps on a recovered VM panic / lowering soundness bailout,
 // and the exact class RunCompiled resolves by re-running on the interpreter. The
 // callback seam mirrors that decision so a post-program bailout degrades to the
 // interpreter rather than surfacing a raw compiler bug to a network peer.
 func isInternalErr(err error) bool {
-	var ae *AqlError
+	var ae *BoruError
 	return errors.As(err, &ae) && ae.Code == "internal_error"
 }
 

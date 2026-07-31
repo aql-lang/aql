@@ -11,10 +11,10 @@ func TestExtract_StrayResultLineSkipped(t *testing.T) {
 	}
 }
 
-// An error-code form whose bracket never closes (`[aql/foo` with no
+// An error-code form whose bracket never closes (`[boru/foo` with no
 // `]`) keeps the wantErr flag but carries no error code to match.
 func TestExtract_UnterminatedErrorBracket(t *testing.T) {
-	exp, wantErr, errSubstr := classifyRHS("[aql/undefined_word return value")
+	exp, wantErr, errSubstr := classifyRHS("[boru/undefined_word return value")
 	if !wantErr {
 		t.Error("unterminated error bracket: wantErr = false, want true")
 	}

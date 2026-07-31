@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // --- Command wrapper (New / Name / Synopsis / Run) ---
@@ -54,7 +54,7 @@ func TestRunCLIDashEWithoutExpression(t *testing.T) {
 
 func TestRunCLIMissingFile(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	missing := filepath.Join(t.TempDir(), "nope.aql")
+	missing := filepath.Join(t.TempDir(), "nope.boru")
 	if code := RunCLI([]string{missing}, &stdout, &stderr); code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
 	}
@@ -65,7 +65,7 @@ func TestRunCLIMissingFile(t *testing.T) {
 
 func TestRunCLICleanFile(t *testing.T) {
 	dir := t.TempDir()
-	src := filepath.Join(dir, "p.aql")
+	src := filepath.Join(dir, "p.boru")
 	if err := os.WriteFile(src, []byte("1 add 2"), 0o644); err != nil {
 		t.Fatal(err)
 	}

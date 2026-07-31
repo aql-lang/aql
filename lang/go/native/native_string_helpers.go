@@ -10,7 +10,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// strOpts holds common option fields parsed from an AQL options map.
+// strOpts holds common option fields parsed from a BORU options map.
 type strOpts struct {
 	normForm string // "", "NFC", "NFD", "NFKC", "NFKD"
 	cs       string // "sensitive" or "insensitive"
@@ -106,13 +106,13 @@ func validateStrOpts(r *Registry, v Value, word string) error {
 	}
 	allowed, ok := strOptKeys[word]
 	if !ok {
-		return r.AqlErrorAt("string_option_error",
+		return r.BoruErrorAt("string_option_error",
 			word+": no option key set is registered for this word", word, v.Pos())
 	}
 	m, _ := AsMap(v)
 	for _, k := range m.Keys() {
 		if !allowed[k] {
-			return r.AqlErrorHintAt("string_option_error",
+			return r.BoruErrorHintAt("string_option_error",
 				word+": unknown option "+quoteKey(k), word,
 				"known options: "+strings.Join(sortedKeys(allowed), ", "), v.Pos())
 		}
@@ -123,7 +123,7 @@ func validateStrOpts(r *Registry, v Value, word string) error {
 		val, _ := m.Get(k)
 		got := ValToString(val)
 		if !contains(legal, got) {
-			return r.AqlErrorHintAt("string_option_error",
+			return r.BoruErrorHintAt("string_option_error",
 				word+": option "+quoteKey(k)+" got "+quoteKey(got), word,
 				quoteKey(k)+" must be one of: "+strings.Join(legal, ", "), v.Pos())
 		}
@@ -151,7 +151,7 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// parseStrOpts extracts common string options from an AQL map value.
+// parseStrOpts extracts common string options from a BORU map value.
 func parseStrOpts(v Value) strOpts {
 	var o strOpts
 	o.cs = "sensitive"

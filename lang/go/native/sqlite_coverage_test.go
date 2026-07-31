@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-func TestAqlTypeToSQLType(t *testing.T) {
+func TestBoruTypeToSQLType(t *testing.T) {
 	tests := []struct {
 		typ  *Type
 		want string
@@ -17,9 +17,9 @@ func TestAqlTypeToSQLType(t *testing.T) {
 		{TAny, "TEXT"},
 	}
 	for _, tt := range tests {
-		got := aqlTypeToSQLType(tt.typ)
+		got := boruTypeToSQLType(tt.typ)
 		if got != tt.want {
-			t.Errorf("aqlTypeToSQLType(%s) = %s, want %s", tt.typ, got, tt.want)
+			t.Errorf("boruTypeToSQLType(%s) = %s, want %s", tt.typ, got, tt.want)
 		}
 	}
 }
@@ -84,101 +84,101 @@ func TestToString(t *testing.T) {
 	}
 }
 
-func TestAqlValueToSQLParam(t *testing.T) {
+func TestBoruValueToSQLParam(t *testing.T) {
 	// Integer column
-	got := aqlValueToSQLParam(NewInteger(42), TInteger)
+	got := boruValueToSQLParam(NewInteger(42), TInteger)
 	if got != int64(42) {
 		t.Errorf("expected 42, got %v", got)
 	}
 
 	// Integer column with string value
-	got = aqlValueToSQLParam(NewString("123"), TInteger)
+	got = boruValueToSQLParam(NewString("123"), TInteger)
 	if got != int64(123) {
 		t.Errorf("expected 123, got %v", got)
 	}
 
 	// Integer column with boolean
-	got = aqlValueToSQLParam(NewBoolean(true), TInteger)
+	got = boruValueToSQLParam(NewBoolean(true), TInteger)
 	if got != int64(1) {
 		t.Errorf("expected 1, got %v", got)
 	}
-	got = aqlValueToSQLParam(NewBoolean(false), TInteger)
+	got = boruValueToSQLParam(NewBoolean(false), TInteger)
 	if got != int64(0) {
 		t.Errorf("expected 0, got %v", got)
 	}
 
 	// Integer column with non-numeric string (fallback to text)
-	got = aqlValueToSQLParam(NewString("abc"), TInteger)
+	got = boruValueToSQLParam(NewString("abc"), TInteger)
 	if got != "abc" {
 		t.Errorf("expected abc, got %v", got)
 	}
 
 	// Number column with decimal
-	got = aqlValueToSQLParam(NewFloat(3.14), TNumber)
+	got = boruValueToSQLParam(NewFloat(3.14), TNumber)
 	if got != float64(3.14) {
 		t.Errorf("expected 3.14, got %v", got)
 	}
 
 	// Number column with integer
-	got = aqlValueToSQLParam(NewInteger(5), TNumber)
+	got = boruValueToSQLParam(NewInteger(5), TNumber)
 	if got != float64(5) {
 		t.Errorf("expected 5.0, got %v", got)
 	}
 
 	// Number column with numeric string
-	got = aqlValueToSQLParam(NewString("2.5"), TNumber)
+	got = boruValueToSQLParam(NewString("2.5"), TNumber)
 	if got != float64(2.5) {
 		t.Errorf("expected 2.5, got %v", got)
 	}
 
 	// Number column with non-numeric string
-	got = aqlValueToSQLParam(NewString("abc"), TNumber)
+	got = boruValueToSQLParam(NewString("abc"), TNumber)
 	if got != "abc" {
 		t.Errorf("expected abc, got %v", got)
 	}
 
 	// Boolean column with boolean
-	got = aqlValueToSQLParam(NewBoolean(true), TBoolean)
+	got = boruValueToSQLParam(NewBoolean(true), TBoolean)
 	if got != int64(1) {
 		t.Errorf("expected 1, got %v", got)
 	}
-	got = aqlValueToSQLParam(NewBoolean(false), TBoolean)
+	got = boruValueToSQLParam(NewBoolean(false), TBoolean)
 	if got != int64(0) {
 		t.Errorf("expected 0, got %v", got)
 	}
 
 	// Boolean column with string "true"
-	got = aqlValueToSQLParam(NewString("true"), TBoolean)
+	got = boruValueToSQLParam(NewString("true"), TBoolean)
 	if got != int64(1) {
 		t.Errorf("expected 1, got %v", got)
 	}
 
 	// Boolean column with string "false"
-	got = aqlValueToSQLParam(NewString("false"), TBoolean)
+	got = boruValueToSQLParam(NewString("false"), TBoolean)
 	if got != int64(0) {
 		t.Errorf("expected 0, got %v", got)
 	}
 
 	// Boolean column with non-boolean value
-	got = aqlValueToSQLParam(NewInteger(42), TBoolean)
+	got = boruValueToSQLParam(NewInteger(42), TBoolean)
 	if _, ok := got.(string); !ok {
 		t.Errorf("expected string fallback, got %T", got)
 	}
 
 	// Text column with string
-	got = aqlValueToSQLParam(NewString("hello"), TString)
+	got = boruValueToSQLParam(NewString("hello"), TString)
 	if got != "hello" {
 		t.Errorf("expected hello, got %v", got)
 	}
 
 	// Text column with non-string
-	got = aqlValueToSQLParam(NewInteger(42), TString)
+	got = boruValueToSQLParam(NewInteger(42), TString)
 	if _, ok := got.(string); !ok {
 		t.Errorf("expected string fallback, got %T", got)
 	}
 
 	// None type
-	got = aqlValueToSQLParam(Value{Parent: TNone}, TString)
+	got = boruValueToSQLParam(Value{Parent: TNone}, TString)
 	if got != nil {
 		t.Errorf("expected nil for None, got %v", got)
 	}
@@ -282,15 +282,15 @@ func TestSQLiteCloseNilDB(t *testing.T) {
 	}
 }
 
-func TestSqlResultToAQLValue(t *testing.T) {
+func TestSqlResultToBORUValue(t *testing.T) {
 	// nil
-	v := sqlResultToAQLValue(nil, TString)
+	v := sqlResultToBORUValue(nil, TString)
 	if !v.Parent.Equal(TNone) {
 		t.Errorf("expected none, got %s", v.Parent)
 	}
 
 	// Integer
-	v = sqlResultToAQLValue(int64(42), TInteger)
+	v = sqlResultToBORUValue(int64(42), TInteger)
 	_as0, _ := AsInteger(v)
 	if _as0 != 42 {
 		_as1, _ := AsInteger(v)
@@ -298,7 +298,7 @@ func TestSqlResultToAQLValue(t *testing.T) {
 	}
 
 	// Number
-	v = sqlResultToAQLValue(float64(3.14), TNumber)
+	v = sqlResultToBORUValue(float64(3.14), TNumber)
 	_as2, _ := AsNumber(v)
 	if _as2 != 3.14 {
 		_as3, _ := AsNumber(v)
@@ -306,14 +306,14 @@ func TestSqlResultToAQLValue(t *testing.T) {
 	}
 
 	// Boolean
-	v = sqlResultToAQLValue(int64(1), TBoolean)
+	v = sqlResultToBORUValue(int64(1), TBoolean)
 	_as4, _ := AsBoolean(v)
 	if !_as4 {
 		t.Error("expected true")
 	}
 
 	// String
-	v = sqlResultToAQLValue("hello", TString)
+	v = sqlResultToBORUValue("hello", TString)
 	_as5, _ := AsString(v)
 	if _as5 != "hello" {
 		_as6, _ := AsString(v)

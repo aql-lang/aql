@@ -1,16 +1,16 @@
 package test
 
 import (
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // runMemFSModuleSteps sets up an in-memory filesystem with pre-populated files,
-// enables __sys.fs.mem=true, and runs AQL steps against it.
+// enables __sys.fs.mem=true, and runs BORU steps against it.
 // This validates the full pipeline: folder + write + import on in-memory FS.
 func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
@@ -31,7 +31,7 @@ func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) 
 			registerIOWords(child)
 		}
 	}
-	registerIOWords(reg) // read/write moved to aql:io; expose bare for this suite
+	registerIOWords(reg) // read/write moved to boru:io; expose bare for this suite
 
 	// Create an in-memory FS and pre-populate it with module files.
 	mem := capabilities.NewMem()
@@ -71,10 +71,10 @@ func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) 
 
 func TestMemFSModuleBasicImport(t *testing.T) {
 	files := map[string]string{
-		"config.aql": `export "Config" {version:42,name:"myapp"}`,
+		"config.boru": `export "Config" {version:42,name:"myapp"}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./config.aql"`,
+		`import "./config.boru"`,
 		`Config.version`,
 	})
 	if err != nil {
@@ -85,10 +85,10 @@ func TestMemFSModuleBasicImport(t *testing.T) {
 
 func TestMemFSModuleStringExport(t *testing.T) {
 	files := map[string]string{
-		"config.aql": `export "Config" {version:42,name:"myapp"}`,
+		"config.boru": `export "Config" {version:42,name:"myapp"}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./config.aql"`,
+		`import "./config.boru"`,
 		`Config.name`,
 	})
 	if err != nil {
@@ -101,11 +101,11 @@ func TestMemFSModuleStringExport(t *testing.T) {
 
 func TestMemFSModuleFunctionExport(t *testing.T) {
 	files := map[string]string{
-		"math.aql": `def double fn [[n:Integer] [Integer] [n add n]]
+		"math.boru": `def double fn [[n:Integer] [Integer] [n add n]]
 export "Math" {double:double/r}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./math.aql"`,
+		`import "./math.boru"`,
 		`5 Math.double`,
 	})
 	if err != nil {
@@ -121,11 +121,11 @@ export "Math" {double:double/r}`,
 // /r ref is resolved to the fn value directly instead.
 func TestMemFSModuleZeroArgFunctionExport(t *testing.T) {
 	files := map[string]string{
-		"z.aql": `def zero fn [[] [Integer] [42]]
+		"z.boru": `def zero fn [[] [Integer] [42]]
 export "Z" {zero:zero/r}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./z.aql"`,
+		`import "./z.boru"`,
 		`Z.zero`,
 	})
 	if err != nil {
@@ -140,23 +140,23 @@ export "Z" {zero:zero/r}`,
 // a reference. Functions must be exported with /r.
 func TestMemFSModuleBareFunctionExportErrors(t *testing.T) {
 	files := map[string]string{
-		"math.aql": `def double fn [[n:Integer] [Integer] [n add n]]
+		"math.boru": `def double fn [[n:Integer] [Integer] [n add n]]
 export "Math" {double:double}`,
 	}
 	_, err := runMemFSModuleSteps(t, files, []string{
-		`import "./math.aql"`,
+		`import "./math.boru"`,
 	})
 	if err == nil {
 		t.Fatal("expected error: a bare fn export dispatches at build time; use /r")
 	}
 }
 
-// --- Module with directory structure (.aql/aql.json) ---
+// --- Module with directory structure (.boru/boru.json) ---
 
-func TestMemFSModuleWithAqlJson(t *testing.T) {
+func TestMemFSModuleWithBoruJson(t *testing.T) {
 	files := map[string]string{
-		"mymod/index.aql":     `export "API" {x:42}`,
-		"mymod/.aql/aql.json": `{"name":"mymod","main":"index.aql"}`,
+		"mymod/index.boru":      `export "API" {x:42}`,
+		"mymod/.boru/boru.json": `{"name":"mymod","main":"index.boru"}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./mymod"`,
@@ -172,8 +172,8 @@ func TestMemFSModuleWithAqlJson(t *testing.T) {
 
 func TestMemFSModuleCustomMain(t *testing.T) {
 	files := map[string]string{
-		"lib/core.aql":      `export "Core" {pi:3}`,
-		"lib/.aql/aql.json": `{"name":"lib","main":"core.aql"}`,
+		"lib/core.boru":       `export "Core" {pi:3}`,
+		"lib/.boru/boru.json": `{"name":"lib","main":"core.boru"}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
 		`import "./lib"`,
@@ -189,14 +189,14 @@ func TestMemFSModuleCustomMain(t *testing.T) {
 
 func TestMemFSModuleTwoImports(t *testing.T) {
 	files := map[string]string{
-		"math.aql": `def add1 fn [[n:Integer] [Integer] [n add 1]]
+		"math.boru": `def add1 fn [[n:Integer] [Integer] [n add 1]]
 export "Math" {add1:add1/r}`,
-		"strings.aql": `def greet fn [[s:String] [String] ["hello " add s]]
+		"strings.boru": `def greet fn [[s:String] [String] ["hello " add s]]
 export "Strings" {greet:greet/r}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./math.aql"`,
-		`import "./strings.aql"`,
+		`import "./math.boru"`,
+		`import "./strings.boru"`,
 		`9 Math.add1`,
 	})
 	if err != nil {
@@ -208,15 +208,15 @@ export "Strings" {greet:greet/r}`,
 // --- Module with folder + write (full pipeline) ---
 
 func TestMemFSModuleFolderWriteImport(t *testing.T) {
-	// Start with empty FS — use folder and write to create everything from AQL.
+	// Start with empty FS — use folder and write to create everything from BORU.
 	result, err := runMemFSModuleSteps(t, nil, []string{
 		// Create module directory structure using Pathon
 		`folder (make Pathon ["mymod"])`,
-		`folder (make Pathon ["mymod" ".aql"])`,
-		// Write aql.json using Pathon
-		`write (make Pathon ["mymod" ".aql" "aql.json"]) "{\"name\":\"mymod\",\"main\":\"index.aql\"}"`,
+		`folder (make Pathon ["mymod" ".boru"])`,
+		// Write boru.json using Pathon
+		`write (make Pathon ["mymod" ".boru" "boru.json"]) "{\"name\":\"mymod\",\"main\":\"index.boru\"}"`,
 		// Write module source using Pathon
-		`write (make Pathon ["mymod" "index.aql"]) "export \"API\" {answer:42}"`,
+		`write (make Pathon ["mymod" "index.boru"]) "export \"API\" {answer:42}"`,
 		// Import and use
 		`import "./mymod"`,
 		`API.answer`,
@@ -231,11 +231,11 @@ func TestMemFSModuleFolderWriteImport(t *testing.T) {
 
 func TestMemFSModuleExportIsolation(t *testing.T) {
 	files := map[string]string{
-		"mod.aql": `def secret 999
+		"mod.boru": `def secret 999
 export "Pub" {visible:1}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./mod.aql"`,
+		`import "./mod.boru"`,
 		`Pub.visible`,
 	})
 	if err != nil {

@@ -10,7 +10,7 @@ package native
 // members: Micron properties, class/record/table/resource fields, and
 // user-defined Micron kinds.
 
-import eng "github.com/aql-lang/aql/eng/go"
+import eng "github.com/boru-lang/boru/eng/go"
 
 // Member is one dot-accessible member of a value or type.
 type Member struct {

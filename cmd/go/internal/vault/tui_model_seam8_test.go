@@ -187,7 +187,7 @@ func TestW8_PasswordSlotsRowsAndRemove(t *testing.T) {
 // default) marker, MISSING (stale index entry) and locked state cells, plus the
 // per-item switch action's error arm for a vault whose store is absent.
 func TestW8_VaultItemsMarkersStatesAndSwitchError(t *testing.T) {
-	ctl, home := newTestController(t) // active default vault at ~/.aql
+	ctl, home := newTestController(t) // active default vault at ~/.boru
 	m := newRootModel(ctl)
 
 	// A second, suffixed vault in the same folder, marked default. Since it is

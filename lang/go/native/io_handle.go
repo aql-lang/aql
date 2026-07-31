@@ -7,8 +7,8 @@ import (
 	"os"
 	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // io_handle.go — stateful file handles. IO.open acquires a File resource
@@ -32,7 +32,7 @@ type FileHandleInfo struct {
 
 	// lines is the handle's line-read buffer, created on first IO.read-line.
 	// It lives HERE rather than registry-side because a handle already has a
-	// stable per-resource home: the payload is a pointer, so every AQL copy of
+	// stable per-resource home: the payload is a pointer, so every BORU copy of
 	// the File value shares this struct, and two handles on the same path each
 	// get their own cursor — which is what a caller reading two files line by
 	// line expects.
@@ -163,14 +163,14 @@ func doOpenWord(args []Value, r *Registry, fileType *Type) ([]Value, error) {
 	if len(args) > 1 {
 		parsed, err := openOptsFromMap(args[1])
 		if err != nil {
-			return nil, r.AqlError("open_error", fmt.Sprintf("open: %v", err), "open")
+			return nil, r.BoruError("open_error", fmt.Sprintf("open: %v", err), "open")
 		}
 		opts = parsed
 	}
 	r.NoteEffect()
 	h, err := EffectiveFileOps(r).Open(path, opts)
 	if err != nil {
-		return nil, r.AqlError("open_error", fmt.Sprintf("open: %v", err), "open")
+		return nil, r.BoruError("open_error", fmt.Sprintf("open: %v", err), "open")
 	}
 	info := &FileHandleInfo{ID: GenerateID("F_"), Path: path, h: h}
 	return []Value{eng.NewValueRaw(fileType, ExtensionPayload{Body: info})}, nil
@@ -180,11 +180,11 @@ func doOpenWord(args []Value, r *Registry, fileType *Type) ([]Value, error) {
 func doSeekWord(args []Value, r *Registry) ([]Value, error) {
 	fh, ok := asFileHandle(args[0])
 	if !ok {
-		return nil, r.AqlError("seek_error", fmt.Sprintf("seek: not a File handle (got %s)", args[0].Parent), "seek")
+		return nil, r.BoruError("seek_error", fmt.Sprintf("seek: not a File handle (got %s)", args[0].Parent), "seek")
 	}
 	n, err := args[1].AsConcreteInteger()
 	if err != nil {
-		return nil, r.AqlError("seek_error", fmt.Sprintf("seek: %v", err), "seek")
+		return nil, r.BoruError("seek_error", fmt.Sprintf("seek: %v", err), "seek")
 	}
 	whence := io.SeekStart
 	if len(args) > 2 {
@@ -197,13 +197,13 @@ func doSeekWord(args []Value, r *Registry) ([]Value, error) {
 			case "end":
 				whence = io.SeekEnd
 			default:
-				return nil, r.AqlError("seek_error", fmt.Sprintf("seek: unknown {from} %q (want start/current/end)", from), "seek")
+				return nil, r.BoruError("seek_error", fmt.Sprintf("seek: unknown {from} %q (want start/current/end)", from), "seek")
 			}
 		}
 	}
 	off, serr := fh.h.Seek(n, whence)
 	if serr != nil {
-		return nil, r.AqlError("seek_error", fmt.Sprintf("seek: %v", serr), "seek")
+		return nil, r.BoruError("seek_error", fmt.Sprintf("seek: %v", serr), "seek")
 	}
 	// A seek repositions the handle, so the line buffer's read-ahead is now
 	// bytes from somewhere else. Dropping it is the only defensible answer: a
@@ -219,17 +219,17 @@ func doSeekWord(args []Value, r *Registry) ([]Value, error) {
 func doFlushWord(args []Value, r *Registry) ([]Value, error) {
 	if fh, ok := asFileHandle(args[0]); ok {
 		if err := fh.h.Sync(); err != nil {
-			return nil, r.AqlError("flush_error", fmt.Sprintf("flush: %v", err), "flush")
+			return nil, r.BoruError("flush_error", fmt.Sprintf("flush: %v", err), "flush")
 		}
 		return []Value{args[0]}, nil
 	}
 	if mi, ok := asMmapInfo(args[0]); ok {
 		if err := mi.flush(); err != nil {
-			return nil, r.AqlError("flush_error", fmt.Sprintf("flush: %v", err), "flush")
+			return nil, r.BoruError("flush_error", fmt.Sprintf("flush: %v", err), "flush")
 		}
 		return []Value{args[0]}, nil
 	}
-	return nil, r.AqlError("flush_error", fmt.Sprintf("flush: not a File or Mmap handle (got %s)", args[0].Parent), "flush")
+	return nil, r.BoruError("flush_error", fmt.Sprintf("flush: not a File or Mmap handle (got %s)", args[0].Parent), "flush")
 }
 
 // readHandleWord reads from a File handle: {offset} positions the read
@@ -238,7 +238,7 @@ func doFlushWord(args []Value, r *Registry) ([]Value, error) {
 func readHandleWord(args []Value, r *Registry) ([]Value, error) {
 	fh, ok := asFileHandle(args[0])
 	if !ok {
-		return nil, r.AqlError("read_error", fmt.Sprintf("read: not a File handle (got %s)", args[0].Parent), "read")
+		return nil, r.BoruError("read_error", fmt.Sprintf("read: not a File handle (got %s)", args[0].Parent), "read")
 	}
 	enc := "utf8"
 	offset, length := int64(-1), int64(-1)
@@ -255,14 +255,14 @@ func readHandleWord(args []Value, r *Registry) ([]Value, error) {
 	}
 	data, err := readFromHandle(fh.h, offset, length)
 	if err != nil {
-		return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", err), "read")
+		return nil, r.BoruError("read_error", fmt.Sprintf("read: %v", err), "read")
 	}
 	if enc == "bytes" || enc == "binary" {
 		return []Value{NewBytesValue(data)}, nil
 	}
 	text, derr := decodeEnc(data, enc)
 	if derr != nil {
-		return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", derr), "read")
+		return nil, r.BoruError("read_error", fmt.Sprintf("read: %v", derr), "read")
 	}
 	return []Value{NewString(text)}, nil
 }
@@ -273,11 +273,11 @@ func readHandleWord(args []Value, r *Registry) ([]Value, error) {
 func writeHandleWord(args []Value, r *Registry) ([]Value, error) {
 	fh, ok := asFileHandle(args[0])
 	if !ok {
-		return nil, r.AqlError("write_error", fmt.Sprintf("write: not a File handle (got %s)", args[0].Parent), "write")
+		return nil, r.BoruError("write_error", fmt.Sprintf("write: not a File handle (got %s)", args[0].Parent), "write")
 	}
 	data, err := handleWriteBytes(args[1])
 	if err != nil {
-		return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", err), "write")
+		return nil, r.BoruError("write_error", fmt.Sprintf("write: %v", err), "write")
 	}
 	offset := int64(-1)
 	if len(args) > 2 {
@@ -292,7 +292,7 @@ func writeHandleWord(args []Value, r *Registry) ([]Value, error) {
 		_, err = fh.h.Write(data)
 	}
 	if err != nil {
-		return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", err), "write")
+		return nil, r.BoruError("write_error", fmt.Sprintf("write: %v", err), "write")
 	}
 	return []Value{args[0]}, nil
 }

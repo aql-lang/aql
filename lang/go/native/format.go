@@ -10,12 +10,12 @@ import (
 	jsonic "github.com/tabnas/jsonic/go"
 	multisource "github.com/tabnas/multisource/go"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // Format encodes and decodes file content for a named representation
-// (text, json, csv, …). The host package owns this interface — aqleng
+// (text, json, csv, …). The host package owns this interface — borueng
 // has no knowledge of file formats. Word handlers look formats up via
 // HostFormats(r) (see capabilities.go).
 type Format interface {
@@ -160,7 +160,7 @@ func (f *JsonicFormat) Decode(content string) ([]Value, error) {
 }
 
 // MakeFileOpsResolver creates a multisource.Resolver backed by a FileOps
-// implementation. This bridges the AQL file abstraction to multisource's
+// implementation. This bridges the BORU file abstraction to multisource's
 // path resolution so that @"path" references in .jsonic files work.
 func MakeFileOpsResolver(ops capabilities.FileOps) multisource.Resolver {
 	return func(spec multisource.PathSpec, opts *multisource.MultiSourceOptions, _ *jsonic.Context) multisource.Resolution {
@@ -325,7 +325,7 @@ func convertDelimitedRecords(records []any) Value {
 	}
 	recType := RecordTypeInfo{Fields: fields}
 
-	// Convert each data row into an AQL map value.
+	// Convert each data row into a BORU map value.
 	rows := make([]Value, 0, len(records)-1)
 	for _, rec := range records[1:] {
 		arr, ok := rec.([]any)
@@ -371,7 +371,7 @@ func delimitedCellValue(cell any) Value {
 	}
 }
 
-// TableData is re-exported by aliases.go (defined in aqleng).
+// TableData is re-exported by aliases.go (defined in borueng).
 
 // encodeDelimited converts a table value to CSV/TSV text. It is a thin
 // adapter over the canonical walk-based tabular encoder (emit.go) — the single

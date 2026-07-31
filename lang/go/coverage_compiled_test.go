@@ -10,7 +10,7 @@ import (
 // eng/go/vm.go): when a coverage run is armed and a module-under-test runs
 // COMPILED (its fns stamped to bytecode units on a coverID-tagged registry),
 // the executed source rows are recorded via the VM hook — the path the
-// `aql test --coverage` runner takes (arm the hook externally, run compiled).
+// `boru test --coverage` runner takes (arm the hook externally, run compiled).
 //
 // It also pins the HONEST relationship between the two engines' line coverage:
 // the compiled covered set is a SUBSET of the interpreter's. The tree-walking
@@ -23,7 +23,7 @@ import (
 // one to drive to 100%.)
 func TestCompiledCoverage(t *testing.T) {
 	dir := t.TempDir()
-	mod := filepath.Join(dir, "calc.aql")
+	mod := filepath.Join(dir, "calc.boru")
 	// add2's body is rows 2-3; triple's body is rows 6-7; the module never
 	// exercises triple, so triple's body must stay uncovered in BOTH engines.
 	src := "def add2 fn [[x:Integer] [Integer] [\n" +

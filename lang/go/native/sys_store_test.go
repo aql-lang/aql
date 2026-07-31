@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // --- __sys structure: all containers are Stores ---
@@ -81,7 +81,7 @@ func TestEffectiveFileOpsMemTrue(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 
-	// Set __sys.fs.mem = true via AQL
+	// Set __sys.fs.mem = true via BORU
 	e := New(r)
 	_, err := e.Run([]Value{
 		// Get the fs Store from __sys

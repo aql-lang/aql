@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// The aql:emitlang module — the EmitLang namespace of named emitters behind
-// the core `emit` macro word. It is the symmetric inverse of aql:parselang:
+// The boru:emitlang module — the EmitLang namespace of named emitters behind
+// the core `emit` macro word. It is the symmetric inverse of boru:parselang:
 // where a parser CONSUMES A SOURCE and yields a value, an emitter CONSUMES A
 // VALUE and yields a string.
 //
@@ -36,7 +36,7 @@ import (
 // `emit_auto` is the natural-format dispatcher: it resolves a value's natural
 // emit kind (Map/List→json, Table→csv, Xml→xml) and delegates to it.
 
-// BuildEmitLangModule creates the "aql:emitlang" native module: the FIXED
+// BuildEmitLangModule creates the "boru:emitlang" native module: the FIXED
 // built-in emit kinds from native.EmitKinds() plus the out-of-band framework
 // words (kinds / the register tombstone / emit_auto).
 func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
@@ -51,7 +51,7 @@ func BuildEmitLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// survives one release as an unconditional, hint-carrying raise so an
 	// existing program fails loudly with the migration path instead of a
 	// bare missing-export miss. DryPassWrap mirrors the raise statically, so
-	// `aql check` flags the use too (the unquote/splice tombstone pattern).
+	// `boru check` flags the use too (the unquote/splice tombstone pattern).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "emitlang-register",
 		Signatures: []native.Signature{{
@@ -213,16 +213,16 @@ func builtinEmitSpecs() []EmitLangSpec {
 }
 
 // emitKindHandler builds the emitter native for one kind: it runs the kind's
-// Encode over the value and opts, mapping an emit error to its AQL code.
+// Encode over the value and opts, mapping an emit error to its BORU code.
 func emitKindHandler(kind string, encode func(native.Value, map[string]any) (string, error)) native.Handler {
 	target := "emit_" + kind
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		s, err := encode(args[0], native.OptsToMap(args[1]))
 		if err != nil {
 			if code := native.EmitErrorCode(err); code != "" {
-				return nil, r.AqlError(code, err.Error(), target)
+				return nil, r.BoruError(code, err.Error(), target)
 			}
-			return nil, r.AqlError("emit_error", kind+": "+err.Error(), target)
+			return nil, r.BoruError("emit_error", kind+": "+err.Error(), target)
 		}
 		return []native.Value{native.NewString(s)}, nil
 	}
@@ -234,7 +234,7 @@ func emitKindHandler(kind string, encode func(native.Value, map[string]any) (str
 func emitAutoHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	name, ok := native.NaturalEmitKind(args[0])
 	if !ok {
-		return nil, r.AqlErrorHint("emit_no_natural",
+		return nil, r.BoruErrorHint("emit_no_natural",
 			"emit: this value has no natural emit format", "emit_auto",
 			"name a kind explicitly: emit <kind> <data>. Kinds: "+native.EmitKindNames())
 	}
@@ -243,14 +243,14 @@ func emitAutoHandler(args []native.Value, _ map[string]native.Value, _ []native.
 			s, err := k.Encode(args[0], native.OptsToMap(args[1]))
 			if err != nil {
 				if code := native.EmitErrorCode(err); code != "" {
-					return nil, r.AqlError(code, err.Error(), "emit_auto")
+					return nil, r.BoruError(code, err.Error(), "emit_auto")
 				}
-				return nil, r.AqlError("emit_error", name+": "+err.Error(), "emit_auto") //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
+				return nil, r.BoruError("emit_error", name+": "+err.Error(), "emit_auto") //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
 			}
 			return []native.Value{native.NewString(s)}, nil
 		}
 	}
-	return nil, r.AqlError("emit_no_natural", //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
+	return nil, r.BoruError("emit_no_natural", //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
 		"emit: no encoder for natural kind "+name, "emit_auto")
 }
 
@@ -259,7 +259,7 @@ func emitAutoHandler(args []native.Value, _ map[string]native.Value, _ []native.
 // was removed. An unconditional, hint-carrying raise — the DryPassWrap
 // mirror on its signature surfaces the same finding statically.
 func emitRegisterFrozenHandler(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	return nil, r.AqlErrorHint("emit_registry_frozen",
+	return nil, r.BoruErrorHint("emit_registry_frozen",
 		"register: the emit kind namespace is fixed — registration was removed", "register",
 		"pass the emitter as a Function value instead: def mye (fn [[value:Any opts:Map] [String] [...]])  emit mye <data> — Go hosts build one with NewEmitLangFn")
 }

@@ -19,7 +19,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
 )
 
 // errSlotExpired is returned when a supplied passphrase matches a
@@ -115,14 +115,14 @@ func authenticate(s *Store, homeDir string, stdin io.Reader, stdout io.Writer, p
 	return openSession(s, homeDir, pass)
 }
 
-// readPassphrase sources the passphrase from AQL_VAULT_PASSPHRASE or an
+// readPassphrase sources the passphrase from BORU_VAULT_PASSPHRASE or an
 // interactive prompt.
 func readPassphrase(stdin io.Reader, stdout io.Writer, prompt string) (string, error) {
 	if p := os.Getenv(EnvPassphrase); p != "" {
 		return p, nil
 	}
 	if stdin == nil {
-		return "", errors.New("vault requires a passphrase; set AQL_VAULT_PASSPHRASE for non-interactive use")
+		return "", errors.New("vault requires a passphrase; set BORU_VAULT_PASSPHRASE for non-interactive use")
 	}
 	ir := auth.NewInputReader(stdin)
 	p, err := ir.ReadPassword(prompt, stdout)

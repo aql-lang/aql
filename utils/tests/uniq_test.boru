@@ -1,0 +1,291 @@
+# ============================================================================
+# uniq — unit suite (boru:test), shaped like tests/cat_test.boru.
+#
+#   boru test tests/uniq_test.boru          (run from utils/)
+#
+# uniq's behaviour is the pure fn Uniq.apply — lines in, output text out — so
+# most cases call it directly. The run machine underneath (Uniq.start /
+# Uniq.step / Uniq.close) is exercised too, because the streaming loop drives
+# THAT rather than apply, and the two must agree: whatever the batch form does
+# to a list, the streaming form must do to the same lines arriving one at a
+# time. The last describe block asserts exactly that.
+#
+# The property this file exists to pin is ADJACENCY. uniq does not
+# de-duplicate a file; it collapses runs. Several cases below give it unsorted
+# input specifically to show the distant duplicate SURVIVING — that is the
+# difference between uniq and sort -u, and it is what makes `sort | uniq` the
+# idiom.
+# ============================================================================
+
+import "boru:test"
+import "boru:cli"
+import "boru:io"
+import "boru:string-util"
+import "./uniq.boru"
+
+def fixture "/tmp/boru-utils-uniq-test-fixture.txt"
+def missing "/tmp/boru-utils-uniq-test-no-such-file.txt"
+
+# ----------------------------------------------------------------------------
+# 1. Small pure fns.
+# ----------------------------------------------------------------------------
+Test.describe "uniq-bool" [
+  Test.test "a true flag reads true" [ Assert.equal true (Uniq.bool {count:true} "count") ]
+  Test.test "an absent flag reads false" [ Assert.equal false (Uniq.bool {} "count") ]
+  Test.test "a non-Boolean flag value reads false" [
+    Assert.equal false (Uniq.bool {count:1} "count")
+  ]
+]
+
+Test.describe "uniq-key" [
+  Test.test "without -i the line is its own key" [ Assert.equal "AbC" (Uniq.key "AbC" false) ]
+  Test.test "with -i the key is lowered" [ Assert.equal "abc" (Uniq.key "AbC" true) ]
+  Test.test "an empty line has an empty key" [ Assert.equal "" (Uniq.key "" true) ]
+]
+
+Test.describe "uniq-emit" [
+  # No selector: everything is printed once.
+  Test.test "a singleton prints by default" [ Assert.equal true (Uniq.emit 1 false false) ]
+  Test.test "a run prints by default too" [ Assert.equal true (Uniq.emit 3 false false) ]
+  # -d: only runs.
+  Test.test "-d prints a run" [ Assert.equal true (Uniq.emit 2 true false) ]
+  Test.test "-d SUPPRESSES a singleton" [ Assert.equal false (Uniq.emit 1 true false) ]
+  # -u: only singletons.
+  Test.test "-u prints a singleton" [ Assert.equal true (Uniq.emit 1 false true) ]
+  Test.test "-u SUPPRESSES a run" [ Assert.equal false (Uniq.emit 2 false true) ]
+  Test.test "a run of exactly 2 is a run, not a pair of singletons" [
+    Assert.equal [true false] [(Uniq.emit 2 true false) (Uniq.emit 2 false true)]
+  ]
+]
+
+Test.describe "uniq-line" [
+  Test.test "without -c the line is itself, terminated" [
+    Assert.equal "a\n" (Uniq.line "a" 3 false)
+  ]
+  Test.test "-c prefixes a 7-wide right-aligned count and a space" [
+    Assert.equal "      3 a\n" (Uniq.line "a" 3 true)
+  ]
+  Test.test "a count of 1 is still padded to the column" [
+    Assert.equal "      1 a\n" (Uniq.line "a" 1 true)
+  ]
+  Test.test "an over-wide count is never truncated" [
+    Assert.equal "12345678 a\n" (Uniq.line "a" 12345678 true)
+  ]
+  Test.test "an empty line still gets its count" [
+    Assert.equal "      2 \n" (Uniq.line "" 2 true)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 2. The whole transform.
+# ----------------------------------------------------------------------------
+Test.describe "uniq-apply" [
+  Test.test "no input produces no output" [
+    Assert.equal "" (Uniq.apply [] false false false false)
+  ]
+  Test.test "one line comes back" [
+    Assert.equal "a\n" (Uniq.apply ["a"] false false false false)
+  ]
+  Test.test "an ADJACENT run collapses to one line" [
+    Assert.equal "a\n" (Uniq.apply ["a" "a" "a"] false false false false)
+  ]
+  Test.test "distinct lines all survive" [
+    Assert.equal "a\nb\n" (Uniq.apply ["a" "b"] false false false false)
+  ]
+  # Adjacency — the point of the program.
+  Test.test "a NON-ADJACENT duplicate SURVIVES: uniq collapses runs, not files" [
+    Assert.equal "a\nb\na\n" (Uniq.apply ["a" "b" "a"] false false false false)
+  ]
+  Test.test "runs separated by another line each collapse independently" [
+    Assert.equal "a\nb\na\n" (Uniq.apply ["a" "a" "b" "a" "a"] false false false false)
+  ]
+  Test.test "THE LAST RUN is emitted — it has no successor to close it" [
+    Assert.equal "a\nb\n" (Uniq.apply ["a" "b" "b"] false false false false)
+  ]
+  Test.test "a file that is one long run yields exactly one line" [
+    Assert.equal "x\n" (Uniq.apply ["x" "x" "x" "x" "x"] false false false false)
+  ]
+  # -c
+  Test.test "-c counts the run" [
+    Assert.equal "      3 a\n" (Uniq.apply ["a" "a" "a"] false false false true)
+  ]
+  Test.test "-c counts each run separately" [
+    Assert.equal "      2 a\n      1 b\n" (Uniq.apply ["a" "a" "b"] false false false true)
+  ]
+  Test.test "-c counts the final run too" [
+    Assert.equal "      1 a\n      2 b\n" (Uniq.apply ["a" "b" "b"] false false false true)
+  ]
+  # -d
+  Test.test "-d prints only the repeated ones" [
+    Assert.equal "a\n" (Uniq.apply ["a" "a" "b"] false true false false)
+  ]
+  Test.test "-d on all-distinct input prints NOTHING" [
+    Assert.equal "" (Uniq.apply ["a" "b" "c"] false true false false)
+  ]
+  Test.test "-d catches a repeated FINAL run" [
+    Assert.equal "b\n" (Uniq.apply ["a" "b" "b"] false true false false)
+  ]
+  # -u
+  Test.test "-u prints only the non-repeated ones" [
+    Assert.equal "b\n" (Uniq.apply ["a" "a" "b"] false false true false)
+  ]
+  Test.test "-u on an all-run input prints nothing" [
+    Assert.equal "" (Uniq.apply ["a" "a"] false false true false)
+  ]
+  Test.test "-u and -d are exact complements over the same input" [
+    Assert.equal ["a\n" "b\nc\n"] [(Uniq.apply ["a" "a" "b" "c"] false true false false)
+                                   (Uniq.apply ["a" "a" "b" "c"] false false true false)]
+  ]
+  # -cd combines
+  Test.test "-cd counts the runs it keeps" [
+    Assert.equal "      2 a\n" (Uniq.apply ["a" "a" "b"] false true false true)
+  ]
+  # -i
+  Test.test "-i collapses a run that differs only in case" [
+    Assert.equal "A\n" (Uniq.apply ["A" "a"] true false false false)
+  ]
+  Test.test "and the FIRST line of the run is what prints, in its own case" [
+    Assert.equal "a\n" (Uniq.apply ["a" "A"] true false false false)
+  ]
+  Test.test "without -i the two are separate lines" [
+    Assert.equal "A\na\n" (Uniq.apply ["A" "a"] false false false false)
+  ]
+  Test.test "-ci counts across the case difference" [
+    Assert.equal "      2 A\n" (Uniq.apply ["A" "a"] true false false true)
+  ]
+  # empties and unicode
+  Test.test "a run of empty lines collapses like any other run" [
+    Assert.equal "\n" (Uniq.apply ["" "" ""] false false false false)
+  ]
+  Test.test "an empty line between two identical lines breaks the run" [
+    Assert.equal "a\n\na\n" (Uniq.apply ["a" "" "a"] false false false false)
+  ]
+  Test.test "multi-byte lines compare by content, not by byte length" [
+    Assert.equal "日本\n" (Uniq.apply ["日本" "日本"] false false false false)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 3. The run machine, and the batch/stream agreement.
+# ----------------------------------------------------------------------------
+Test.describe "the run machine" [
+  Test.test "a fresh state has started nothing" [
+    Assert.equal false ((Uniq.start) dot started)
+  ]
+  Test.test "closing a fresh state emits nothing" [
+    Assert.equal "" (Uniq.close (Uniq.start) false false false)
+  ]
+  Test.test "the first line starts a run of 1 and emits nothing yet" [
+    def st (Uniq.step (Uniq.start) "a" false false false false)
+    Assert.equal [1 ""] [(st.n) (st.out)]
+  ]
+  Test.test "a repeat extends the run without emitting" [
+    def s1 (Uniq.step (Uniq.start) "a" false false false false)
+    def s2 (Uniq.step s1 "a" false false false false)
+    Assert.equal [2 ""] [(s2.n) (s2.out)]
+  ]
+  Test.test "a DIFFERENT line closes the previous run and emits it" [
+    def s1 (Uniq.step (Uniq.start) "a" false false false false)
+    def s2 (Uniq.step s1 "b" false false false false)
+    Assert.equal ["a\n" 1] [(s2.out) (s2.n)]
+  ]
+  Test.test "closing after the last line emits the final run" [
+    def s1 (Uniq.step (Uniq.start) "a" false false false false)
+    Assert.equal "a\n" (Uniq.close s1 false false false)
+  ]
+  # This is the case that keeps the two forms honest: the streaming loop drives
+  # step/close, and apply drives its own walk. If they ever diverge, uniq would
+  # behave one way on a file and another way in a test.
+  Test.test "step/close over a sequence agrees with apply over the same list" [
+    def ls ["a" "a" "b" "c" "c" "c"]
+    def acc (flex [])
+    def s1 (Uniq.step (Uniq.start) "a" false false false true)
+    def s2 (Uniq.step s1 "a" false false false true)
+    def s3 (Uniq.step s2 "b" false false false true)
+    def s4 (Uniq.step s3 "c" false false false true)
+    def s5 (Uniq.step s4 "c" false false false true)
+    def s6 (Uniq.step s5 "c" false false false true)
+    def streamed (join "" [(s1.out) (s2.out) (s3.out) (s4.out) (s5.out) (s6.out)
+                           (Uniq.close s6 false false true)])
+    Assert.equal (Uniq.apply ls false false false true) streamed
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 4. Option validation.
+# ----------------------------------------------------------------------------
+Test.describe "uniq-opts" [
+  Test.test "no flags at all is fine" [ Assert.equal true ((Uniq.opts {} []) dot ok) ]
+  Test.test "the flags are carried through" [
+    Assert.equal [true true] [((Uniq.opts {count:true} []) dot counted)
+                              ((Uniq.opts {ignore-case:true} []) dot icase)]
+  ]
+  Test.test "-d alone is fine" [ Assert.equal true ((Uniq.opts {repeated:true} []) dot ok) ]
+  Test.test "-u alone is fine" [ Assert.equal true ((Uniq.opts {unique:true} []) dot ok) ]
+  Test.test "-d AND -u together is refused — they select disjoint sets" [
+    Assert.equal false ((Uniq.opts {repeated:true unique:true} []) dot ok)
+  ]
+  Test.test "one operand is fine" [ Assert.equal true ((Uniq.opts {} ["f"]) dot ok) ]
+  Test.test "TWO operands are refused rather than silently ignored" [
+    Assert.equal false ((Uniq.opts {} ["f" "g"]) dot ok)
+  ]
+  Test.test "every refusal carries a message" [
+    Assert.equal true ((size ((Uniq.opts {repeated:true unique:true} []) dot err)) gt 0)
+  ]
+]
+
+Test.describe "uniq-fail" [
+  Test.test "a read diagnostic yields 1" [ Assert.equal 1 (Uniq.fail "f" "boom") ]
+]
+
+# ----------------------------------------------------------------------------
+# 5. The argv contract.
+# ----------------------------------------------------------------------------
+Test.describe "argv" [
+  Test.test "no argv leaves every flag off" [
+    Assert.equal {count:false repeated:false unique:false ignore-case:false}
+                 ((Cli.parse (Uniq.spec) []) dot flags)
+  ]
+  Test.test "-c sets count" [
+    Assert.equal true ((Cli.parse (Uniq.spec) ["-c"]) dot flags dot count)
+  ]
+  Test.test "-cdi clusters into three flags" [
+    Assert.equal {count:true repeated:true unique:false ignore-case:true}
+                 ((Cli.parse (Uniq.spec) ["-cdi"]) dot flags)
+  ]
+  Test.test "an unknown flag names the offender" [
+    Assert.equal "unknown flag: -Z" ((Cli.parse (Uniq.spec) ["-Z"]) dot err)
+  ]
+  Test.test "--version prints the name and version" [
+    Assert.equal "uniq 0.1.0\n" ((Cli.dispatch (Uniq.spec) ["--version"]) dot out)
+  ]
+  Test.test "--help mentions the repeated flag" [
+    Assert.equal true ((StringUtil.indexof "--repeated" ((Cli.dispatch (Uniq.spec) ["--help"]) dot out)) gte 0)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 6. The program, over a real file.
+# ----------------------------------------------------------------------------
+Test.describe "exit codes" [
+  Test.test "a readable file exits 0" [
+    (IO.write (make Pathon fixture) "a\na\nb\n") drop
+    Assert.equal 0 (Uniq.main [fixture])
+  ]
+  Test.test "with flags, still 0" [ Assert.equal 0 (Uniq.main ["-c" fixture]) ]
+  Test.test "a missing file exits 1" [ Assert.equal 1 (Uniq.main [missing]) ]
+  Test.test "a directory exits 1 rather than raising" [ Assert.equal 1 (Uniq.main ["/tmp"]) ]
+  Test.test "-d and -u together exits 2, before any file is opened" [
+    Assert.equal 2 (Uniq.main ["-d" "-u" missing])
+  ]
+  Test.test "a second operand exits 2" [ Assert.equal 2 (Uniq.main [fixture fixture]) ]
+  Test.test "--help exits 0" [ Assert.equal 0 (Uniq.main ["--help"]) ]
+  Test.test "--version exits 0" [ Assert.equal 0 (Uniq.main ["--version"]) ]
+  Test.test "an unknown flag exits 2" [ Assert.equal 2 (Uniq.main ["-Z"]) ]
+  Test.test "-- makes a flag-looking operand a (missing) file, so 1 not 2" [
+    Assert.equal 1 (Uniq.main ["--" "-Z"])
+  ]
+  Test.test "uniq-one reports a missing input as 1" [
+    Assert.equal 1 (Uniq.one missing (Uniq.opts {} []))
+  ]
+]

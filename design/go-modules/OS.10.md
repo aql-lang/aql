@@ -1,7 +1,7 @@
-# `os` → `aql:os` (`Os`)
+# `os` → `boru:os` (`Os`)
 
 > **Status: design proposal — not implemented.** This note specifies the
-> curated AQL surface for Go's `os` package. No Go code exists yet; the
+> curated BORU surface for Go's `os` package. No Go code exists yet; the
 > note exists so the proposed surface — and especially its **policy
 > gating** — is auditable before any handler is written. Read
 > [`README.10.md`](README.10.md) first for the shared conventions this
@@ -12,7 +12,7 @@
 Go [`os`](https://pkg.go.dev/os) is the process's view of its host:
 environment variables, command-line arguments, identity (hostname, pid),
 the working directory, well-known directories (home, temp), and process
-termination. `aql:os` curates the **process/environment** slice of that
+termination. `boru:os` curates the **process/environment** slice of that
 surface. It is the first genuinely *side-effecting, host-fingerprinting*
 module in the curated family, so it is gated with care.
 
@@ -20,12 +20,12 @@ module in the curated family, so it is gated with care.
 filesystem-location getters. `os.Open`, `os.ReadFile`, `os.Create`,
 `os.Mkdir`, `os.Remove`, `os.Stat`, the `*os.File` handle, **and the
 location getters `os.Getwd` (cwd), `os.UserHomeDir` (home dir), and
-`os.TempDir` (temp dir)** all belong to `aql:io` (the `IO` namespace,
+`os.TempDir` (temp dir)** all belong to `boru:io` (the `IO` namespace,
 backed by the `FileOps` capability — see [`IO.10.md`](IO.10.md),
 `lang/go/native/io_module.go`, and
-[`../FILE-ACCESS.10.md`](../FILE-ACCESS.10.md)). `aql:os` exposes only the
+[`../FILE-ACCESS.10.md`](../FILE-ACCESS.10.md)). `boru:os` exposes only the
 **environment / process / identity** words below; anything that names or
-resolves a filesystem path is `aql:io`.
+resolves a filesystem path is `boru:io`.
 
 ## 2. Why curated
 
@@ -38,7 +38,7 @@ The raw `go:` reflection bridge would expose `os.LookupEnv` as
   variable is `None` (testable with `is None`) rather than an
   out-of-band boolean;
 - collapses the `(value, error)` return (`hostname`) to
-  **value-or-error** (`r.AqlError`);
+  **value-or-error** (`r.BoruError`);
 - renames to kebab idiom (`Getenv`→`getenv`, `Getpid`→`pid`);
 - shapes `Environ` (a `[]string` of `"K=V"`) into a **Map**, and `Args`
   into a **List[String]**;
@@ -49,7 +49,7 @@ The raw `go:` reflection bridge would expose `os.LookupEnv` as
 ## 3. Import & namespace
 
 ```
-import "aql:os"          # binds the Os namespace
+import "boru:os"          # binds the Os namespace
 ```
 
 Namespace is the plain capitalized package name, **`Os`** — no `-util`
@@ -65,7 +65,7 @@ Signatures are **top-first, sig order** (position 0 = top of stack).
 `BarrierPos: 0` in §4 notes); see `README.10.md` "Argument order &
 dispatch".
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `os.Getenv` / `os.LookupEnv` | `getenv` | `String → String\|None` | Value of an environment variable, or None if unset. | **Merges** `Getenv` and `LookupEnv`: refines `LookupEnv`'s `(value, ok)` to value-or-**None** so "unset" is a first-class None — distinct from the empty string `Getenv` returns for both. |
 | `os.Setenv` | `setenv` | `name:String value:String →` (nothing) | Set an environment variable for this process. | `(error)` → value-or-error; returns nothing on success. **Mutating + off by default** (§7). |
@@ -77,7 +77,7 @@ dispatch".
 | `os.Exit` | `exit` | `Integer → ` (never returns) | Terminate the host process with the given status code. | void → never-returns. **Dangerous** — terminates the whole host; off by default (§7). |
 
 The filesystem-location getters `cwd` (`os.Getwd`), `home-dir`
-(`os.UserHomeDir`), and `temp-dir` (`os.TempDir`) live in `aql:io`, not
+(`os.UserHomeDir`), and `temp-dir` (`os.TempDir`) live in `boru:io`, not
 here — see [`IO.10.md`](IO.10.md).
 
 Zero-arg words (`environ`, `args`, `hostname`, `pid`) read nothing from
@@ -91,13 +91,13 @@ form `Os.getenv "K"`-style dispatch resolve.
 
 - **`getenv` value-or-None.** Go forces a choice between `Getenv`
   (empty string for both "unset" and "set-to-empty") and `LookupEnv`
-  (the `ok` disambiguates). AQL exposes **one** word that returns the
+  (the `ok` disambiguates). BORU exposes **one** word that returns the
   string when set and `None` when unset, so `"X" Os.getenv is None`
   is the unset test and a present-but-empty var returns `""`.
 - **`environ` as a Map.** Go's `[]string{"K=V", …}` is split on the
   first `=` into an `*OrderedMap`. A line with no `=` (rare, malformed)
   maps the whole string to `""`.
-- **`exit` is a tail effect.** It returns no AQL value because the
+- **`exit` is a tail effect.** It returns no BORU value because the
   process is gone; document it as "never returns". In a sandbox it MUST
   be denied or stubbed (§7) — a guest must never be able to kill the
   host.
@@ -107,15 +107,15 @@ form `Os.getenv "K"`-style dispatch resolve.
 Scalars (`String`, `Integer`, `None`), `List[String]` (`args`), and
 `Map` (`environ`) only — all map through `eng.FromNative` /
 `eng.ToNative` (`eng/go/gobridge.go`). **No opaque external handle** is
-introduced: `aql:os` exposes no `*os.File`, `*os.Process`, or `os.FileInfo`
-(those would belong to `aql:io`). No `FixedID` from the `10000+`
+introduced: `boru:os` exposes no `*os.File`, `*os.Process`, or `os.FileInfo`
+(those would belong to `boru:io`). No `FixedID` from the `10000+`
 host/third-party range is needed, and no entry in
 `lang/go/test/fixedid_stability_test.go`.
 
 ## 6. Errors
 
-`r.AqlError(code, detail, word)` with kebab-case codes; a Go `error`
-return is unwrapped into the `AqlError`. Codes:
+`r.BoruError(code, detail, word)` with kebab-case codes; a Go `error`
+return is unwrapped into the `BoruError`. Codes:
 
 | code | raised by | when |
 |---|---|---|
@@ -132,7 +132,7 @@ sibling (`lang/go/CLAUDE.md` "Test discipline").
 
 ## 7. Policy / capabilities (CRITICAL)
 
-`aql:os` is the policy-heavy half of this family. **None of these words
+`boru:os` is the policy-heavy half of this family. **None of these words
 may call `os.*` directly from the handler.** Every effect routes through
 a **host-provided capability seam** mirroring `FileOps`
 (`lang/go/capabilities/capabilities.go`) and its wiring
@@ -143,7 +143,7 @@ a **host-provided capability seam** mirroring `FileOps`
   `lang/go/capabilities/` (`Getenv`, `LookupEnv`, `Setenv`, `Unsetenv`,
   `Environ`; `Args`, `Hostname`, `Pid`, `Exit` — the location getters
   `Getwd`/`UserHomeDir`/`TempDir` live on the `FileOps` seam used by
-  `aql:io`, not here) with an **OS-backed default** (delegates to `os.*`,
+  `boru:io`, not here) with an **OS-backed default** (delegates to `os.*`,
   the `OSFileOps` analogue) and an **in-memory / fake** implementation
   for specs and sandboxes (the `MemFileOps` analogue — fixed hostname,
   scripted env map, no real `Exit`);
@@ -182,11 +182,11 @@ Notes for the gate:
   while denying `write`.
 - **`process` scope + `system-info`.** `args`/`pid` identify the
   process; `hostname` additionally leaks host fingerprint, so it binds
-  the `system-info` global cap (shared with `aql:runtime`). A
+  the `system-info` global cap (shared with `boru:runtime`). A
   determinism-seeking sandbox denies/stubs them via the fake
   `HostEnv`/`HostProc`.
 - **`exit` is the dangerous one.** It terminates the **host** process,
-  not the AQL engine, so it MUST gate on `process` and be **off by
+  not the BORU engine, so it MUST gate on `process` and be **off by
   default** in every sandbox profile. The recommended default is
   `deny`; a host that genuinely wants guest-driven exit installs an
   explicit allow rule. The fake implementation never calls
@@ -200,25 +200,25 @@ Notes for the gate:
 
 ## 8. Overlap
 
-- **`aql:io` (`IO`).** Owns **all** filesystem functionality — content
+- **`boru:io` (`IO`).** Owns **all** filesystem functionality — content
   I/O, tree mutation, listing, `stat`, the existence/type predicates,
   and the filesystem-location getters `cwd`/`home-dir`/`temp-dir` (see
-  [`IO.10.md`](IO.10.md)) — via the `FileOps` capability. `aql:os` owns
+  [`IO.10.md`](IO.10.md)) — via the `FileOps` capability. `boru:os` owns
   only environment/process/identity and never names or resolves a
   filesystem path. Dividing line: anything filesystem (incl. a path
-  getter) is `aql:io`; a process/environment attribute is `aql:os`.
-- **`aql:runtime` (`Runtime`).** Shares the `system-info` cap and the
+  getter) is `boru:io`; a process/environment attribute is `boru:os`.
+- **`boru:runtime` (`Runtime`).** Shares the `system-info` cap and the
   "host fingerprint / determinism" concern, but reports the **Go
   runtime** (GOOS, NumCPU, …) rather than the OS process. No word
   overlap.
-- **`aql:filepath` / `aql:path-util`.** Pure path-string manipulation;
-  `aql:io` produces the location strings (`cwd`/`home-dir`/`temp-dir`)
-  those modules then manipulate. `aql:os` produces none. No word overlap.
+- **`boru:filepath` / `boru:path-util`.** Pure path-string manipulation;
+  `boru:io` produces the location strings (`cwd`/`home-dir`/`temp-dir`)
+  those modules then manipulate. `boru:os` produces none. No word overlap.
 
 ## 9. Examples (args-before form)
 
 ```
-import "aql:os"
+import "boru:os"
 
 # read a var, defaulting when unset (value-or-None)
 "EDITOR" Os.getenv (default "vi")              # → "vi" when EDITOR unset
@@ -245,9 +245,9 @@ Os.args len                                     # → arg count incl. program
 
 - **Out of scope:** all filesystem functionality — file ops
   (`Open`/`ReadFile`/`Create`/`Stat`/…) **and the location getters**
-  (`Getwd`/`UserHomeDir`/`TempDir`) — → `aql:io` ([`IO.10.md`](IO.10.md));
+  (`Getwd`/`UserHomeDir`/`TempDir`) — → `boru:io` ([`IO.10.md`](IO.10.md));
   `os/exec` process spawning (a separate, even more
-  dangerous capability — `aql:exec` with its own `process`
+  dangerous capability — `boru:exec` with its own `process`
   gate, now designed: [EXEC](EXEC.10.md)); `os.Getenv`-style `os.Expand`;
   signals (`os/signal`); user/group lookup (`os/user`).
 - **Open:** should `setenv`/`unsetenv` exist at all, given how rarely a
@@ -288,10 +288,10 @@ Follow `io.go` (the **capability-backed** reference), not `math.go`
 5. Register `BuildOsModule` in the `modules` map in
    `lang/go/modules/modules.go`.
 6. **Docs.** `lang/go/modules/docs_os.go` →
-   `registerDocs("aql:os", {…})` with a one-line summary per export
+   `registerDocs("boru:os", {…})` with a one-line summary per export
    (`TestModuleExportDocs` enforces).
 7. **Spec.** `lang/spec/module-os.tsv` — rows lead with
-   `import "aql:os"`; every positive row gets an `ERROR:<substring>`
+   `import "boru:os"`; every positive row gets an `ERROR:<substring>`
    sibling (esp. `os-denied` rows exercised under a deny policy, and a
    `Mem`-backed deterministic clock/env so `getenv`/`hostname` specs
    are reproducible). `describe` surfaces the module live via
@@ -299,7 +299,7 @@ Follow `io.go` (the **capability-backed** reference), not `math.go`
 
 ## 12. Vault-migration additions (VAULT-TUI-PORT §7.4)
 
-> The "vault logic in AQL" phase ([VAULT-TUI-PORT.0](../VAULT-TUI-PORT.0.md)
+> The "vault logic in BORU" phase ([VAULT-TUI-PORT.0](../VAULT-TUI-PORT.0.md)
 > §7.4) names two `Os.*` needs — a single-variable env read (**N1**) and a
 > clipboard copy (**G2**). This section is the spec for those two, added
 > here rather than in a fourth module so the OS surface stays in one place.
@@ -317,7 +317,7 @@ word.
 
 ### 12.2 `clipboard-copy` — a seam-backed effect
 
-| Go mechanism | aql word | signature (top-first) | one-line doc |
+| Go mechanism | boru word | signature (top-first) | one-line doc |
 |---|---|---|---|
 | platform clipboard CLI (see below) | `clipboard-copy` | `String → ` (nothing) | Place text on the host clipboard. |
 
@@ -326,7 +326,7 @@ implementation is a **process spawn** (the Go vault shells out to
 `pbcopy` / `wl-copy` / `xclip` / `xsel` / PowerShell `Set-Clipboard`,
 piping the text on **stdin, never argv** —
 `cmd/go/internal/vault/clipboard.go`). OS.10 deliberately pushes
-`os/exec` spawning out to [`aql:exec`](EXEC.10.md), so `clipboard-copy`
+`os/exec` spawning out to [`boru:exec`](EXEC.10.md), so `clipboard-copy`
 does **not** call `os/exec` from its handler either. Instead it routes
 through a **host clipboard seam**, exactly like every other effect here:
 
@@ -369,13 +369,13 @@ of empty text is a valid clear, not an error.
 **Robustness note (child-registry leak).** A dispatch-time `os-denied`
 gate would become allow-all inside an imported module body (see
 [PERMISSIONS.10 → Known gap](../PERMISSIONS.10.md#known-gap-child-module-registries-do-not-inherit-the-policy)),
-which is where the vault-in-AQL clipboard call runs. The
+which is where the vault-in-BORU clipboard call runs. The
 `permissioned*`-wrapper form recommended in §7 (policy baked into the
 capability object, inherited by value) is leak-resistant and is the
 required mechanism for `clipboard-copy`.
 
-**Overlap.** `aql:vault`'s own `clipboard` op (the recipe/secret copy)
+**Overlap.** `boru:vault`'s own `clipboard` op (the recipe/secret copy)
 delegates to `Os.clipboard-copy` after the migration rather than
-re-implementing the platform exec; [`aql:exec`](EXEC.10.md) owns
+re-implementing the platform exec; [`boru:exec`](EXEC.10.md) owns
 general process spawning, of which this is a single, curated, host-sealed
 instance.

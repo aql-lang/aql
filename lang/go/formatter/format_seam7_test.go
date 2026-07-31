@@ -150,7 +150,7 @@ func TestFormatListNonFirstGroupWrapSeam7(t *testing.T) {
 
 // TestFormatInlineCommentSeam7 covers emitNode's comment arm reached
 // naturally: a trailing comment renders inline through renderInline. A `##`
-// comment runs to end of line exactly like `#` (AQL has no bounded block
+// comment runs to end of line exactly like `#` (BORU has no bounded block
 // comment), so the whole tail is one comment and is emitted verbatim.
 func TestFormatInlineCommentSeam7(t *testing.T) {
 	for _, src := range []string{"foo bar # note\n", "foo bar ## note\n"} {

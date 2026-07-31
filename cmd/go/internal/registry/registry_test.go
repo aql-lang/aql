@@ -44,11 +44,11 @@ func TestRegistryHandlerServesZip(t *testing.T) {
 	for _, f := range zr.File {
 		names[f.Name] = true
 	}
-	if !names["aql.jsonic"] {
-		t.Error("zip missing aql.jsonic")
+	if !names["boru.jsonic"] {
+		t.Error("zip missing boru.jsonic")
 	}
-	if !names["color.aql"] {
-		t.Error("zip missing color.aql")
+	if !names["color.boru"] {
+		t.Error("zip missing color.boru")
 	}
 }
 
@@ -77,11 +77,11 @@ func TestRegistryHandlerServesColorScheme(t *testing.T) {
 	for _, f := range zr.File {
 		names[f.Name] = true
 	}
-	if !names["aql.jsonic"] {
-		t.Error("zip missing aql.jsonic")
+	if !names["boru.jsonic"] {
+		t.Error("zip missing boru.jsonic")
 	}
-	if !names["index.aql"] {
-		t.Error("zip missing index.aql")
+	if !names["index.boru"] {
+		t.Error("zip missing index.boru")
 	}
 }
 
@@ -390,8 +390,8 @@ func TestPublishRequiresAuth(t *testing.T) {
 	srvURL := setupAuthServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: test\nmajor: 1\nminor: 0\npatch: 0\nfiles: [test.aql]\n",
-		"test.aql":   "1",
+		"boru.jsonic": "name: test\nmajor: 1\nminor: 0\npatch: 0\nfiles: [test.boru]\n",
+		"test.boru":   "1",
 	})
 
 	resp, err := http.Post(srvURL+"/api/publish", "application/zip", bytes.NewReader(zipData))
@@ -408,8 +408,8 @@ func TestPublishRejectsInvalidToken(t *testing.T) {
 	srvURL := setupAuthServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: test\nmajor: 1\nminor: 0\npatch: 0\nfiles: [test.aql]\n",
-		"test.aql":   "1",
+		"boru.jsonic": "name: test\nmajor: 1\nminor: 0\npatch: 0\nfiles: [test.boru]\n",
+		"test.boru":   "1",
 	})
 
 	req, _ := http.NewRequest(http.MethodPost, srvURL+"/api/publish", bytes.NewReader(zipData))
@@ -430,8 +430,8 @@ func TestPublishValid(t *testing.T) {
 	srvURL, regDir, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: hello\nmain: hello.aql\nmajor: 1\nminor: 0\npatch: 0\nfiles: [hello.aql]\n",
-		"hello.aql":  `export Hello {greet: "hi"}`,
+		"boru.jsonic": "name: hello\nmain: hello.boru\nmajor: 1\nminor: 0\npatch: 0\nfiles: [hello.boru]\n",
+		"hello.boru":  `export Hello {greet: "hi"}`,
 	})
 
 	resp, err := authPublish(srvURL, token, zipData)
@@ -463,8 +463,8 @@ func TestPublishRejectsOverwrite(t *testing.T) {
 	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: mymod\nmajor: 0\nminor: 1\npatch: 0\nfiles: [mymod.aql]\n",
-		"mymod.aql":  `export Mymod {val: 1}`,
+		"boru.jsonic": "name: mymod\nmajor: 0\nminor: 1\npatch: 0\nfiles: [mymod.boru]\n",
+		"mymod.boru":  `export Mymod {val: 1}`,
 	})
 
 	resp, err := authPublish(srvURL, token, zipData)
@@ -505,12 +505,12 @@ func TestPublishMultipleVersions(t *testing.T) {
 	}
 
 	for _, v := range versions {
-		jContent := fmt.Sprintf("name: vmod\nmajor: %d\nminor: %d\npatch: %d\nfiles: [vmod.aql]\n",
+		jContent := fmt.Sprintf("name: vmod\nmajor: %d\nminor: %d\npatch: %d\nfiles: [vmod.boru]\n",
 			v.major, v.minor, v.patch)
 
 		zd := makeModuleZip(t, map[string]string{
-			"aql.jsonic": jContent,
-			"vmod.aql":   `export Vmod {v: 1}`,
+			"boru.jsonic": jContent,
+			"vmod.boru":   `export Vmod {v: 1}`,
 		})
 
 		resp, err := authPublish(srvURL, token, zd)
@@ -556,11 +556,11 @@ func TestPublishRejectsInvalidZip(t *testing.T) {
 	}
 }
 
-func TestPublishRejectsMissingAqlJsonic(t *testing.T) {
+func TestPublishRejectsMissingBoruJsonic(t *testing.T) {
 	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
-		"hello.aql": `export Hello {greet: "hi"}`,
+		"hello.boru": `export Hello {greet: "hi"}`,
 	})
 
 	resp, err := authPublish(srvURL, token, zipData)
@@ -572,8 +572,8 @@ func TestPublishRejectsMissingAqlJsonic(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", resp.StatusCode, body)
 	}
-	if !strings.Contains(string(body), "aql.jsonic") {
-		t.Errorf("expected aql.jsonic error, got %q", body)
+	if !strings.Contains(string(body), "boru.jsonic") {
+		t.Errorf("expected boru.jsonic error, got %q", body)
 	}
 }
 
@@ -581,8 +581,8 @@ func TestPublishRejectsMissingName(t *testing.T) {
 	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "major: 1\nminor: 0\npatch: 0\nfiles: [x.aql]\n",
-		"x.aql":      "1",
+		"boru.jsonic": "major: 1\nminor: 0\npatch: 0\nfiles: [x.boru]\n",
+		"x.boru":      "1",
 	})
 
 	resp, err := authPublish(srvURL, token, zipData)
@@ -603,8 +603,8 @@ func TestPublishRejectsMissingVersion(t *testing.T) {
 	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: noversion\nfiles: [x.aql]\n",
-		"x.aql":      "1",
+		"boru.jsonic": "name: noversion\nfiles: [x.boru]\n",
+		"x.boru":      "1",
 	})
 
 	resp, err := authPublish(srvURL, token, zipData)
@@ -625,7 +625,7 @@ func TestPublishRejectsMissingFiles(t *testing.T) {
 	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: nofiles\nmajor: 1\nminor: 0\npatch: 0\n",
+		"boru.jsonic": "name: nofiles\nmajor: 1\nminor: 0\npatch: 0\n",
 	})
 
 	resp, err := authPublish(srvURL, token, zipData)
@@ -646,7 +646,7 @@ func TestPublishRejectsMissingDeclaredFile(t *testing.T) {
 	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: broken\nmajor: 1\nminor: 0\npatch: 0\nfiles: [missing.aql]\n",
+		"boru.jsonic": "name: broken\nmajor: 1\nminor: 0\npatch: 0\nfiles: [missing.boru]\n",
 	})
 
 	resp, err := authPublish(srvURL, token, zipData)
@@ -658,7 +658,7 @@ func TestPublishRejectsMissingDeclaredFile(t *testing.T) {
 	if resp.StatusCode != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", resp.StatusCode, body)
 	}
-	if !strings.Contains(string(body), "missing.aql") {
+	if !strings.Contains(string(body), "missing.boru") {
 		t.Errorf("expected missing file error, got %q", body)
 	}
 }
@@ -680,8 +680,8 @@ func TestPublishWithValidToken(t *testing.T) {
 	srvURL, _, token := setupPublishServer(t)
 
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic":  "name: authmod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [authmod.aql]\n",
-		"authmod.aql": "1",
+		"boru.jsonic":  "name: authmod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [authmod.boru]\n",
+		"authmod.boru": "1",
 	})
 
 	resp, err := authPublish(srvURL, token, zipData)

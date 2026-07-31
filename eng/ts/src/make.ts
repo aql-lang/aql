@@ -5,9 +5,9 @@
 // increment.
 import { formatFloat } from './canon.ts'
 import { coerceBoolean } from './coretype.ts'
-import { AqlError } from './error.ts'
+import { BoruError } from './error.ts'
 import {
-  AqlType,
+  BoruType,
   TAtom,
   TBoolean,
   TFloat,
@@ -43,7 +43,7 @@ export function makeIdealHandler(args: Value[]): Value[] {
   if (target.data === null && target.vType.leaf() === 'Options' && src.data instanceof OrderedMap) {
     return [newOptions(src.data)]
   }
-  throw new AqlError('unsupported', `make: ${target.vType.leaf()} instances not yet ported`)
+  throw new BoruError('unsupported', `make: ${target.vType.leaf()} instances not yet ported`)
 }
 
 /** Render a concrete value as its scalar text. Mirrors ValToString. */
@@ -70,7 +70,7 @@ export function makePathon(src: Value, absOverride: boolean | undefined): Value[
   } else if (src.vType.matches(TString)) {
     text = valToString(src)
   } else {
-    throw new AqlError('type_error', `make: Pathon source must be a list or string, got ${src.toString()}`)
+    throw new BoruError('type_error', `make: Pathon source must be a list or string, got ${src.toString()}`)
   }
   let abs = text.startsWith('/')
   const segments = text.split('/').filter((s) => s !== '')
@@ -85,11 +85,11 @@ export function makePathon(src: Value, absOverride: boolean | undefined): Value[
  */
 export function makeEmailon(src: Value): Value[] {
   if (!src.vType.matches(TString) || src.data === null) {
-    throw new AqlError('type_error', `make: Emailon source must be a string or map, got ${src.toString()}`)
+    throw new BoruError('type_error', `make: Emailon source must be a string or map, got ${src.toString()}`)
   }
   const s = valToString(src)
   if (!/^[^@\s<>]+@[^@\s<>]+$/.test(s)) {
-    throw new AqlError('type_error', `make: invalid email address ${JSON.stringify(s)}`)
+    throw new BoruError('type_error', `make: invalid email address ${JSON.stringify(s)}`)
   }
   const at = s.lastIndexOf('@')
   return [newEmailon(s.slice(0, at), s.slice(at + 1))]
@@ -101,17 +101,17 @@ export function makeEmailon(src: Value): Value[] {
  */
 export function makeUrlon(src: Value): Value[] {
   if (!src.vType.matches(TString) || src.data === null) {
-    throw new AqlError('type_error', `make: Urlon source must be a string or map, got ${src.toString()}`)
+    throw new BoruError('type_error', `make: Urlon source must be a string or map, got ${src.toString()}`)
   }
   const s = valToString(src)
   let u: URL
   try {
     u = new URL(s)
   } catch {
-    throw new AqlError('type_error', `make: Urlon requires an absolute URL (scheme://host…), got ${JSON.stringify(s)}`)
+    throw new BoruError('type_error', `make: Urlon requires an absolute URL (scheme://host…), got ${JSON.stringify(s)}`)
   }
   if (!u.protocol || !u.hostname) {
-    throw new AqlError('type_error', `make: Urlon requires an absolute URL (scheme://host…), got ${JSON.stringify(s)}`)
+    throw new BoruError('type_error', `make: Urlon requires an absolute URL (scheme://host…), got ${JSON.stringify(s)}`)
   }
   const info: UrlonInfo = { scheme: u.protocol.replace(/:$/, ''), host: u.hostname }
   if (u.port !== '') info.port = Number(u.port)
@@ -126,7 +126,7 @@ export function makeUrlon(src: Value): Value[] {
 }
 
 /** Convert a source value to a target scalar type. Mirrors MakeConvert. */
-export function makeConvert(src: Value, targetType: AqlType): Value {
+export function makeConvert(src: Value, targetType: BoruType): Value {
   if (targetType.equal(TPathon)) {
     return makePathon(src, undefined)[0]!
   }
@@ -137,7 +137,7 @@ export function makeConvert(src: Value, targetType: AqlType): Value {
     const text = valToString(src)
     const f = Number(text)
     if (text.trim() === '' || Number.isNaN(f)) {
-      throw new AqlError('type_error', `make: cannot convert ${JSON.stringify(text)} to float`)
+      throw new BoruError('type_error', `make: cannot convert ${JSON.stringify(text)} to float`)
     }
     return newFloat(f)
   }
@@ -146,7 +146,7 @@ export function makeConvert(src: Value, targetType: AqlType): Value {
     if (/^-?\d+$/.test(text)) return newInteger(BigInt(text))
     const f = Number(text)
     if (text.trim() === '' || Number.isNaN(f)) {
-      throw new AqlError('type_error', `make: cannot convert ${JSON.stringify(text)} to number`)
+      throw new BoruError('type_error', `make: cannot convert ${JSON.stringify(text)} to number`)
     }
     return newInteger(BigInt(Math.trunc(f)))
   }
@@ -161,7 +161,7 @@ export function makeConvert(src: Value, targetType: AqlType): Value {
   if (targetType.equal(TAtom)) {
     return newAtom(valToString(src))
   }
-  throw new AqlError('type_error', `make: unsupported target type ${targetType.toString()}`)
+  throw new BoruError('type_error', `make: unsupported target type ${targetType.toString()}`)
 }
 
 /**
@@ -173,7 +173,7 @@ export function makeScalarHandler(args: Value[]): Value[] {
   const target = args[0]!
   const src = args[1]!
   if (target.data !== null) {
-    throw new AqlError('type_error', `make: expected a type literal, got ${target.toString()}`)
+    throw new BoruError('type_error', `make: expected a type literal, got ${target.toString()}`)
   }
   const targetType = target.vType
   if (targetType.equal(TPathon)) return makePathon(src, undefined)

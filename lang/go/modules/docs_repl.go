@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:repl", map[string]string{
+	registerDocs("boru:repl", map[string]string{
 		"serve":   "Start a line-protocol REPL server on {port: N}; returns the Listener.",
 		"connect": "Dial a REPL server (\"host:port\"); returns an Endpoint.",
 		"eval":    "Evaluate one source line against a connected REPL; returns the reply text.",
@@ -12,9 +12,9 @@ func init() {
 	// serve, connect, eval, close both — is what the four signatures
 	// cannot show. Results are from verified lang/spec/module-repl.tsv
 	// rows.
-	registerExamples("aql:repl", map[string][]string{
+	registerExamples("boru:repl", map[string][]string{
 		"serve": {
-			`import "aql:net"`,
+			`import "boru:net"`,
 			`def l (Repl.serve {port: 0})                     ;# 0 = an ephemeral port`,
 			`def a (Net.addr l)                               ;# read back the real one`,
 			`;# … Repl.close l when done; the listener holds the port until then.`,

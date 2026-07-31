@@ -3,7 +3,7 @@ package lang_test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // A fold whose SEED is gradual (a `(do {…})` result, a get-result threaded as

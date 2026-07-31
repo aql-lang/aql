@@ -4,7 +4,7 @@ import "errors"
 
 // Nodifier is an optional capability interface. Types implementing
 // it expose a "project to a Node or Scalar" transformation — used by
-// the `nodify` word to map a value into AQL's data subset (Integer,
+// the `nodify` word to map a value into BORU's data subset (Integer,
 // String, Boolean, Atom, List, Map, …) without going through a
 // serialised JSON string. The result is a Value, not a []byte;
 // callers that need a JSON-encoded string compose this with a

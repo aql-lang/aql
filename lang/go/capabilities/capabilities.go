@@ -1,5 +1,5 @@
 // Package capabilities provides the abstraction for host-side capabilities
-// the AQL engine needs to talk to the outside world. At present it covers
+// the BORU engine needs to talk to the outside world. At present it covers
 // file-system access (the FileOps interface and its OS-backed and
 // in-memory implementations); future host capabilities (network,
 // process spawn, …) go here too. All dangerous I/O routes through these
@@ -20,9 +20,9 @@ import (
 	"time"
 )
 
-// Clock is the host capability that supplies "the current time" to AQL's
-// temporal words (`now`, the aql:time `time-now*` family) and to the
-// default seed of aql:rand. The default implementation reads the wall
+// Clock is the host capability that supplies "the current time" to BORU's
+// temporal words (`now`, the boru:time `time-now*` family) and to the
+// default seed of boru:rand. The default implementation reads the wall
 // clock; a FixedClock can be installed for deterministic tests/specs so
 // `now` and time-dependent output are reproducible.
 type Clock interface {
@@ -63,8 +63,8 @@ type StepFrame struct {
 	// Row / Col locate the value about to execute in its source (1-based;
 	// 0 = unknown — synthetic tokens and one-shot break pauses carry no
 	// position), and File is the executing registry's resolved source
-	// file ("" if none). Additive widening (design/AQL-DEBUGGER.0.md §10
-	// Phase 1): source-aware hosts — the `aql debug` CLI, a future DAP
+	// file ("" if none). Additive widening (design/BORU-DEBUGGER.0.md §10
+	// Phase 1): source-aware hosts — the `boru debug` CLI, a future DAP
 	// adapter — need each pause located in source, and file identity must
 	// come from the registry, not the value (a SrcPos carries no file).
 	// Plain ints/string keep this package engine-agnostic.
@@ -83,7 +83,7 @@ type StepController interface {
 }
 
 // DebugOps is the host capability backing the effectful parts of
-// aql:debug that the in-process module cannot supply itself: the
+// boru:debug that the in-process module cannot supply itself: the
 // interactive step controller (and, in future, runtime hooks). Absent a
 // DebugOps, Debug.step falls back to printing the trace.
 type DebugOps interface {
@@ -92,7 +92,7 @@ type DebugOps interface {
 
 // FileInfo is the host-agnostic result of Stat / a ReadDir entry. It
 // carries only stdlib types so the capabilities package stays engine-
-// agnostic; the `aql:io` handlers turn it into an AQL FileInfo record.
+// agnostic; the `boru:io` handlers turn it into a BORU FileInfo record.
 type FileInfo struct {
 	Name    string      // base name (final path segment)
 	Size    int64       // length in bytes (0 for directories/symlinks)
@@ -102,7 +102,7 @@ type FileInfo struct {
 	Symlink bool        // true when the entry itself is a symlink (lstat view)
 	Target  string      // symlink target, when Symlink
 	// UID / GID are the owning user and group ids, or -1 where the
-	// backend cannot know them (Windows, a mounted AQL filesystem whose
+	// backend cannot know them (Windows, a mounted BORU filesystem whose
 	// stat handler omits them). Construct FileInfo values through a path
 	// that sets them explicitly — the Go zero value 0 is root's uid, so
 	// an accidental zero is a real (wrong) owner, not "unset".
@@ -170,7 +170,7 @@ type MmapRegion interface {
 	Close() error
 }
 
-// FileOps defines the file operations that AQL's io words use. The
+// FileOps defines the file operations that BORU's io words use. The
 // default implementation delegates to the os package. Replace with a
 // custom implementation for testing or sandboxing.
 //
@@ -1639,7 +1639,7 @@ func (m MapEnvOps) All() []string {
 }
 
 // StreamProbe is the host capability that answers "is this stream a
-// terminal?" for the aql:io `tty` word.
+// terminal?" for the boru:io `tty` word.
 //
 // It is a capability rather than a direct isatty call for the reason every
 // other one here is: the runtime must not decide by itself what the outside

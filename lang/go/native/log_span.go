@@ -3,10 +3,10 @@ package native
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// log_span.go — phase 4 of aql:log: the OpenTelemetry *traces* signal.
+// log_span.go — phase 4 of boru:log: the OpenTelemetry *traces* signal.
 //
 // `Log.span NAME [ATTRS]` starts a span and returns a Span instance (an
 // OrderedMap carrying the trace/span ids plus method closures). The span
@@ -210,7 +210,7 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					key, err := args[0].AsConcreteAtom()
 					if err != nil {
-						return nil, r.AqlError("log_error", "attribute key must be an atom", "Span.set-attr")
+						return nil, r.BoruError("log_error", "attribute key must be an atom", "Span.set-attr")
 					}
 					lsr.mu.Lock()
 					if !st.ended { // an ended span is frozen — its captured history is immutable
@@ -280,7 +280,7 @@ func spanNatives(st *spanState, lsr *LogSinkRegistry) []NativeFunc {
 func spanAddEvent(lsr *LogSinkRegistry, r *Registry, st *spanState, name, attrs Value) ([]Value, error) {
 	n, err := name.AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("log_error", "event name must be a string", "Span.add-event")
+		return nil, r.BoruError("log_error", "event name must be a string", "Span.add-event")
 	}
 	lsr.mu.Lock()
 	if !st.ended { // an ended span is frozen
@@ -297,7 +297,7 @@ func logSpanNative(lsr *LogSinkRegistry) NativeFunc {
 		st := lsr.startSpan(r, name, attrs)
 		inst, err := buildSpanInstance(st, lsr)
 		if err != nil {
-			return nil, r.AqlError("log_error", err.Error(), "Log.span")
+			return nil, r.BoruError("log_error", err.Error(), "Log.span")
 		}
 		return []Value{NewMap(inst)}, nil
 	}
@@ -312,7 +312,7 @@ func logSpanNative(lsr *LogSinkRegistry) NativeFunc {
 				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					name, err := args[0].AsConcreteString()
 					if err != nil {
-						return nil, r.AqlError("log_error", "span name must be a string", "Log.span")
+						return nil, r.BoruError("log_error", "span name must be a string", "Log.span")
 					}
 					return start(r, name, asConcreteOrderedMap(args[1]))
 				}),
@@ -325,7 +325,7 @@ func logSpanNative(lsr *LogSinkRegistry) NativeFunc {
 				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					name, err := args[0].AsConcreteString()
 					if err != nil {
-						return nil, r.AqlError("log_error", "span name must be a string", "Log.span")
+						return nil, r.BoruError("log_error", "span name must be a string", "Log.span")
 					}
 					return start(r, name, nil)
 				}),
@@ -336,7 +336,7 @@ func logSpanNative(lsr *LogSinkRegistry) NativeFunc {
 
 // withSpanReturnsFn is the check-mode shape for Log.with-span: it walks
 // the BODY through the static analyser (like `do`'s ReturnsFn) so
-// `aql check` catches undefined words / type errors inside a span body
+// `boru check` catches undefined words / type errors inside a span body
 // instead of only failing at runtime. The result is the body's top
 // residual, matching the runtime (with-span returns the body's last
 // value). args[1] is the body (args[0] is the span name).
@@ -368,7 +368,7 @@ func logWithSpanNative(lsr *LogSinkRegistry) NativeFunc {
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteString()
 				if err != nil {
-					return nil, r.AqlError("log_error", "span name must be a string", "Log.with-span")
+					return nil, r.BoruError("log_error", "span name must be a string", "Log.with-span")
 				}
 				body, err := RequireConcreteList(args[1], "Log.with-span body")
 				if err != nil {
@@ -410,7 +410,7 @@ func logEndNative(lsr *LogSinkRegistry) NativeFunc {
 				}
 				sidVal, ok := m.Get("span-id")
 				if !ok {
-					return nil, r.AqlError("log_error", "Log.end expects a span (no span-id field)", "Log.end")
+					return nil, r.BoruError("log_error", "Log.end expects a span (no span-id field)", "Log.end")
 				}
 				sid, _ := sidVal.AsConcreteString()
 				lsr.mu.Lock()
@@ -420,7 +420,7 @@ func logEndNative(lsr *LogSinkRegistry) NativeFunc {
 				}
 				lsr.mu.Unlock()
 				if target == nil {
-					return nil, r.AqlError("span-mismatch", "Log.end: span "+sid+" is not the active span", "Log.end")
+					return nil, r.BoruError("span-mismatch", "Log.end: span "+sid+" is not the active span", "Log.end")
 				}
 				lsr.endSpan(r, target)
 				return nil, nil
@@ -450,7 +450,7 @@ func logCurrentSpanNative(lsr *LogSinkRegistry) NativeFunc {
 				}
 				inst, err := buildSpanInstance(st, lsr)
 				if err != nil {
-					return nil, r.AqlError("log_error", err.Error(), "Log.current-span")
+					return nil, r.BoruError("log_error", err.Error(), "Log.current-span")
 				}
 				return []Value{NewMap(inst)}, nil
 			}),

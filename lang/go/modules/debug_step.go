@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// This file implements the interactive-stepping surface of aql:debug
+// This file implements the interactive-stepping surface of boru:debug
 // (design/DEBUG-MODULE.0.md §3 B, Phase 3): Debug.step / break / break-when
 // / run-stepped. Stepping is driven by the engine's per-step TraceCallback
 // (installed via Engine.SetTrace) and a host StepController obtained from
@@ -89,11 +89,11 @@ func stepNatives() []native.NativeFunc {
 						return nil, err
 					}
 					if r.ParseFunc == nil {
-						return nil, r.AqlError("debug_error", "Debug.run-stepped: parser not configured", "Debug.run-stepped")
+						return nil, r.BoruError("debug_error", "Debug.run-stepped: parser not configured", "Debug.run-stepped")
 					}
 					tokens, perr := r.ParseFunc(src)
 					if perr != nil {
-						return nil, r.AqlError("parse_error", fmt.Sprintf("Debug.run-stepped: %v", perr), "Debug.run-stepped")
+						return nil, r.BoruError("parse_error", fmt.Sprintf("Debug.run-stepped: %v", perr), "Debug.run-stepped")
 					}
 					return runStepped(r, tokens)
 				}),

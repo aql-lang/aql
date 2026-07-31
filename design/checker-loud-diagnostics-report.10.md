@@ -1,14 +1,14 @@
-# Making the AQL Type Checker Catch Silent-Dispatch Failures: Implementation Plan
+# Making the BORU Type Checker Catch Silent-Dispatch Failures: Implementation Plan
 
 ## Scope
 
-AQL's `aql check` is a capable flow-sensitive abstract interpreter
+BORU's `boru check` is a capable flow-sensitive abstract interpreter
 (`design/CARRIER-STATIC-TYPECHECK-REPORT.10.md`), yet the pain that
 dominates every DX report — dispatch that fails **quietly** instead of
 loudly — slips straight through it. This note plans the additive "loud
 diagnostics" layer that closes that gap. It is the operational companion
 to items 2 (`dynamic(T)`) and 3 (dead-overload detection) of
-`elixir-types-in-aql-report.10.md`; where that report argues *what* the
+`elixir-types-in-boru-report.10.md`; where that report argues *what* the
 type system should gain, this one plans *how* the checker starts catching
 the bugs users actually hit.
 
@@ -18,7 +18,7 @@ addition is gated behind `r.IsCheckMode()`.
 ## The problem (from the DX reports)
 
 Both voxgig reports (`VOXGIG-DX-REPORT.5.md`) and the decision-module
-report (`AQL-DX-REPORT.5.md`) independently reach the same diagnosis:
+report (`BORU-DX-REPORT.5.md`) independently reach the same diagnosis:
 **"nearly every hour lost went to behaviour that failed quietly rather
 than loudly."** The headline shapes, all ❌ open against current `main`:
 
@@ -51,13 +51,13 @@ reason it inherits the silent-dispatch blind spot. Confirmed in the tree:
   ("reffed wrapper is left on the stack as data"), `fn_arg_cleanup_test.go:8`
   ("Unconsumed unnamed args should be discarded").
 
-And the tell: **neither report's authors ever ran `aql check`** — it is
+And the tell: **neither report's authors ever ran `boru check`** — it is
 absent from the developer loop. A sophisticated checker that nobody
 reaches for has ~zero impact on the reported pain.
 
 ## Current checker baseline
 
-What `aql check` already does (so the plan only adds, never rebuilds):
+What `boru check` already does (so the plan only adds, never rebuilds):
 
 - Carrier-based abstract interpretation with runtime parity; flow typing
   / guard narrowing; branch join (`JoinCarriers`); recursion via memoised
@@ -81,11 +81,11 @@ overloads, and adoption.
 2. **Residual diagnostic — a residual Function/FnDef → error**, fired at
    the failed-match call site (high precision, not a residual-stack
    scan).
-3. **Dead-overload detection — both** user fns at `aql check` time **and**
+3. **Dead-overload detection — both** user fns at `boru check` time **and**
    native signature tables at registration (behind a dev/lint flag +
    whole-vocabulary regression test).
-4. **Adoption — opt-in.** Keep bare `aql run` unchanged; add a prominent
-   `run --check` flag, promote the existing `aql check`, and surface
+4. **Adoption — opt-in.** Keep bare `boru run` unchanged; add a prominent
+   `run --check` flag, promote the existing `boru check`, and surface
    diagnostics through the LSP. No latency change to `run`.
 
 ## Plan
@@ -177,7 +177,7 @@ args are available; a function export keeps its `FnDefInfo` (so it stays
 dispatchable/checkable downstream), a data export becomes a carrier of
 its real type, and anything unresolved degrades to `Any` as before. The
 precision win is immediate and independent of the flag: every imported
-member now checks with its real type — `import "aql:math-util" end 16.0
+member now checks with its real type — `import "boru:math-util" end 16.0
 MathUtil.sqrt` checks as `Decimal` (was `Any`), `Decision.cond age "gt"
 18` as `Map` (was `Any`). This also removes the spurious `missing_returns`
 that `getr` on an export used to emit in check mode. Covered by
@@ -226,7 +226,7 @@ sigs). This is the main correctness risk and the bulk of the effort.
 
 **Two surfaces (both, per the decision):**
 
-- *User fns at check time.* During `aql check`, run the check over each
+- *User fns at check time.* During `boru check`, run the check over each
   user `FnDef`'s sorted signatures; emit `unreachable_signature` (Warning)
   with the dead sig and the shadowing sig's positions.
 - *Natives at registration, behind a dev/lint flag.* Gate a pass over
@@ -256,38 +256,38 @@ unrelated here. Tests: `TestCheckUnreachableSignature`,
 
 ### Phase 3 — Adoption: get the checker into the loop
 
-`aql check [--json] [--soft]` already exists
+`boru check [--json] [--soft]` already exists
 (`cmd/go/internal/check/check.go`; `--soft` downgrades to advisory, else
 any Error-severity diagnostic exits non-zero for CI). The gap is reach,
 not capability.
 
-- **`aql run --check` flag.** Run the check pass first, print diagnostics,
-  then run (or abort on Error unless `--soft`). Bare `aql run` is
+- **`boru run --check` flag.** Run the check pass first, print diagnostics,
+  then run (or abort on Error unless `--soft`). Bare `boru run` is
   unchanged — opt-in only, no latency cost by default.
 - **LSP.** Ensure the `lsp` service (`cmd/go serve lsp`) runs the check
   pass and surfaces `CheckDiagnostic`s as editor diagnostics on change.
   Verify current wiring; fill the gap if diagnostics aren't already
   pushed.
-- **Docs.** A "Catch bugs early with `aql check`" section in `TUTORIAL` /
+- **Docs.** A "Catch bugs early with `boru check`" section in `TUTORIAL` /
   `CLI.md`, and the one-page "Gotchas / Idioms" reference the DX reports
   asked for (the still-load-bearing items: arg order, `fold` binding
   order, deep `merge`, `do`-evaluates-words, list `eq` identity,
-  forward-`get`). Promote the existing `aql check` so it stops being
+  forward-`get`). Promote the existing `boru check` so it stops being
   invisible.
 
 **Effort.** ~1.5 d.
 
 **Phase 3 — LANDED 2026-06-04.** Mostly already built, plus one fix:
-- **`aql run --check`** existed (`run.go`) but passed `soft=true`, so it
+- **`boru run --check`** existed (`run.go`) but passed `soft=true`, so it
   never aborted despite its "abort on error" help. Fixed to a clean
   pre-flight: a new `check.Preflight` prints diagnostics to stderr and
-  returns an error on any Error-severity finding, so `aql --check`
+  returns an error on any Error-severity finding, so `boru --check`
   aborts before executing while leaving stdout entirely for the program.
 - **LSP** already publishes the same `lang.Check` diagnostics on change
   (`cmd/go/internal/lsp/diagnostics.go`) — so `uncalled_function` and
   `unreachable_signature` surface in-editor for free.
-- **Docs.** The `CLI.md` `aql check` section now documents what the
-  checker catches (with the new codes), the `aql run --check`
+- **Docs.** The `CLI.md` `boru check` section now documents what the
+  checker catches (with the new codes), the `boru run --check`
   pre-flight, and the LSP pointer. (The standalone "Gotchas / Idioms"
   page remains a separate docs task.)
 

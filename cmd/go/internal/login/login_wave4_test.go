@@ -126,8 +126,8 @@ func TestW4LoginHomeDirError(t *testing.T) {
 func TestW4LoginSaveError(t *testing.T) {
 	srv := okLoginServer(t)
 	home := t.TempDir()
-	// $HOME/.aql exists as a FILE, so SaveClientUser fails.
-	if err := os.WriteFile(filepath.Join(home, ".aql"), []byte("x"), 0644); err != nil {
+	// $HOME/.boru exists as a FILE, so SaveClientUser fails.
+	if err := os.WriteFile(filepath.Join(home, ".boru"), []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
@@ -155,7 +155,7 @@ func TestW4LoginSuccessPlaintext(t *testing.T) {
 	if !strings.Contains(out.String(), "logged in as alice") {
 		t.Errorf("stdout = %q, want logged-in message", out.String())
 	}
-	data, err := os.ReadFile(filepath.Join(home, ".aql", "user.jsonic"))
+	data, err := os.ReadFile(filepath.Join(home, ".boru", "user.jsonic"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,16 +167,16 @@ func TestW4LoginSuccessPlaintext(t *testing.T) {
 func TestW4LoginVaultWriteError(t *testing.T) {
 	srv := okLoginServer(t)
 	home := t.TempDir()
-	// Block the vault folder: $HOME/.aql exists as a file, so the vault
+	// Block the vault folder: $HOME/.boru exists as a file, so the vault
 	// write (and everything after) fails.
-	if err := os.WriteFile(filepath.Join(home, ".aql"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".boru"), []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", home)
-	t.Setenv("AQL_HOME", "")
-	t.Setenv("AQL_VAULT_FOLDER", "")
-	t.Setenv("AQL_VAULT_SUFFIX", "")
-	t.Setenv("AQL_VAULT_PASSPHRASE", "vpw")
+	t.Setenv("BORU_HOME", "")
+	t.Setenv("BORU_VAULT_FOLDER", "")
+	t.Setenv("BORU_VAULT_SUFFIX", "")
+	t.Setenv("BORU_VAULT_PASSPHRASE", "vpw")
 
 	var out, errOut bytes.Buffer
 	code := Run([]string{"-r", srv.URL, "--vault"}, strings.NewReader("alice\npw\n"), &out, &errOut)

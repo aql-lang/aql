@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // This file implements the in-process, headless core of the live-dashboard
@@ -13,7 +13,7 @@ import (
 //
 //	{title: String  sample: String}
 //
-// where `sample` is AQL source that produces the value to display. Using a
+// where `sample` is BORU source that produces the value to display. Using a
 // String source (rather than a quoted code body) sidesteps map-literal
 // auto-evaluation, so widgets compose cleanly as ordinary data — and any
 // module can contribute widgets simply by exporting a function that returns

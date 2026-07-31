@@ -15,14 +15,14 @@ package native
 import (
 	"fmt"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 func getMicronHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	key := args[0]
 	recv := args[1]
 	if !IsConcrete(recv) {
-		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
+		return nil, r.BoruError("get_error", "get: cannot access property on type literal", "get")
 	}
 	if val, ok := eng.MicronProperty(recv, getKey(key)); ok {
 		return []Value{val}, nil
@@ -37,13 +37,13 @@ func getrMicronHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	key := args[0]
 	recv := args[1]
 	if !IsConcrete(recv) {
-		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
+		return nil, r.BoruError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	k := getKey(key)
 	if val, ok := eng.MicronProperty(recv, k); ok {
 		return []Value{val}, nil
 	}
-	return nil, r.AqlError("not_found",
+	return nil, r.BoruError("not_found",
 		fmt.Sprintf("getr: %s has no property %q", recv.Parent.Name(), k), "getr")
 }
 
@@ -60,7 +60,7 @@ func hasMicronHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 // erroring signature, chosen over sig-absence so the paired negative
 // spec rows pin a specific message.
 func setMicronHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return nil, r.AqlError("type_error", setMicronDetail(args), "set")
+	return nil, r.BoruError("type_error", setMicronDetail(args), "set")
 }
 
 func setMicronDetail(args []Value) string {

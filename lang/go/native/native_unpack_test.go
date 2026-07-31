@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
-// runUnpack parses and runs AQL source, returning the canonical render of the
+// runUnpack parses and runs BORU source, returning the canonical render of the
 // final stack. unpack is a source-level feature (forward collection of the
 // names list, def-binding into the current scope), so the tests exercise it
 // through the real parser.

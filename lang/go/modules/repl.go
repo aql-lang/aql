@@ -4,18 +4,18 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BuildReplModule creates the "aql:repl" native module — a socket REPL
-// server and client whose implementation is WRITTEN IN AQL (the
-// replAQLPreamble below), following the aql:test hybrid pattern. It is
+// BuildReplModule creates the "boru:repl" native module — a socket REPL
+// server and client whose implementation is WRITTEN IN BORU (the
+// replBORUPreamble below), following the boru:test hybrid pattern. It is
 // the first verification app of the networking stack
 // (design/NETWORK-IMPLEMENTATION-PLAN.0.md §1.5): a service over the
 // `lines` codec whose handler evaluates each received line and replies
 // with the rendered result.
 //
-//	import "aql:repl"
+//	import "boru:repl"
 //	def ln (Repl.serve {port: 4004})            # server: evaluate lines
 //	def ep (Repl.connect "127.0.0.1:4004")      # client: an Endpoint
 //	Repl.eval ep "def x 21 x mul 2"             # → "42"
@@ -31,7 +31,7 @@ func BuildReplModule(parent *native.Registry) (native.ModuleDesc, error) {
 		return native.ModuleDesc{}, fmt.Errorf("repl: parser not configured")
 	}
 	replParseOnce.Do(func() {
-		replParsed, replParseErr = parent.ParseFunc(replAQLPreamble)
+		replParsed, replParseErr = parent.ParseFunc(replBORUPreamble)
 	})
 	if replParseErr != nil {
 		return native.ModuleDesc{}, fmt.Errorf("repl: parse preamble: %w", replParseErr)
@@ -58,7 +58,7 @@ func BuildReplModule(parent *native.Registry) (native.ModuleDesc, error) {
 		native.Register(modReg)
 	}
 
-	// Collect `export "Repl" {…}` from the preamble (the aql:test-style
+	// Collect `export "Repl" {…}` from the preamble (the boru:test-style
 	// local exporter; see modules/test.go for why RunModuleBody cannot
 	// be reused directly).
 	exports := map[string]*native.OrderedMap{}
@@ -81,7 +81,7 @@ func BuildReplModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	tokens := append([]native.Value(nil), replParsed...)
 	sub := native.New(modReg)
-	// C4 attribution: the preamble run IS the module load (see aql:test).
+	// C4 attribution: the preamble run IS the module load (see boru:test).
 	restoreAtt := modReg.SetInterpAttribution("module-load")
 	_, runErr := sub.Run(tokens)
 	restoreAtt()
@@ -101,18 +101,18 @@ var (
 	replParseErr  error
 )
 
-// replAQLPreamble is the module's implementation — plain AQL over the
-// aql:net codec tier and the core service words.
-const replAQLPreamble = `
+// replBORUPreamble is the module's implementation — plain BORU over the
+// boru:net codec tier and the core service words.
+const replBORUPreamble = `
 
-import "aql:net"
-import "aql:vm"
+import "boru:net"
+import "boru:vm"
 
 # ============================================================
-# aql:repl — a socket REPL, written in AQL.
+# boru:repl — a socket REPL, written in BORU.
 #
 # The server is a service over the lines codec: each received line is
-# AQL source, evaluated in a sandboxed sub-engine (Vm.run) against the
+# BORU source, evaluated in a sandboxed sub-engine (Vm.run) against the
 # session's accumulated history, and the rendered result (canon) is
 # the reply line. Errors reply as "error: <message>" instead of
 # killing the connection.
@@ -160,7 +160,7 @@ def repl-eval fn [[ep:Any src:String] [String] [
 ]]
 
 # Close a REPL server or endpoint (re-exported so callers need no
-# separate aql:net import for teardown).
+# separate boru:net import for teardown).
 def repl-close fn [[h:Any] [] [ Net.close h ]]
 
 export "Repl" {

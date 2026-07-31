@@ -3,12 +3,12 @@ package modules
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// fmtFormatHandler returns the raw Go handler behind the aql:fmt "format"
+// fmtFormatHandler returns the raw Go handler behind the boru:fmt "format"
 // native so a test can drive both arms directly — the same seam the rand
 // module uses (rand_seam7_test.go).
 func fmtFormatHandler(t *testing.T) native.Handler {
@@ -22,7 +22,7 @@ func fmtFormatHandler(t *testing.T) native.Handler {
 			return gi.Handler
 		}
 	}
-	t.Fatal("aql:fmt native \"format\" not found")
+	t.Fatal("boru:fmt native \"format\" not found")
 	return nil
 }
 
@@ -55,7 +55,7 @@ func TestFmtFormatHandler(t *testing.T) {
 	}
 }
 
-// TestFmtModuleDispatch proves the runtime API end to end: `import "aql:fmt"`
+// TestFmtModuleDispatch proves the runtime API end to end: `import "boru:fmt"`
 // followed by `Fmt.format <src>` returns the formatted string through the
 // engine, exercising BuildFmtModule and the delegating-wrapper dispatch.
 func TestFmtModuleDispatch(t *testing.T) {
@@ -66,7 +66,7 @@ func TestFmtModuleDispatch(t *testing.T) {
 	reg.SetParseFunc(parser.Parse)
 	InstallResolver(reg)
 
-	values, perr := parser.Parse(`import "aql:fmt"` + "\n" + `Fmt.format "[ a  b  c ]"`)
+	values, perr := parser.Parse(`import "boru:fmt"` + "\n" + `Fmt.format "[ a  b  c ]"`)
 	if perr != nil {
 		t.Fatalf("parse: %v", perr)
 	}

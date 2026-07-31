@@ -7,7 +7,7 @@ import (
 )
 
 // The DAP end-to-end tests: a fixed byte stream of framed requests
-// drives `aql debug --dap` exactly as an editor would, and the framed
+// drives `boru debug --dap` exactly as an editor would, and the framed
 // responses/events are asserted by substring (Go marshals map bodies
 // with sorted keys, so the JSON is deterministic).
 
@@ -84,7 +84,7 @@ func TestDAPFullSession(t *testing.T) {
 }
 
 func TestDAPFunctionBreakpoints(t *testing.T) {
-	// DAP "function" breakpoints are AQL word breakpoints: the stop
+	// DAP "function" breakpoints are BORU word breakpoints: the stop
 	// fires when the named word is about to dispatch. The second
 	// setFunctionBreakpoints (while paused: the direct-mutate arm)
 	// REPLACES the set with nothing, so the program runs out.
@@ -135,7 +135,7 @@ func TestDAPMarkerPauseShowsFrameChain(t *testing.T) {
 	// A Debug.break inside nested fns: the stopped reason is
 	// "breakpoint" and stackTrace names the frame chain — the innermost
 	// fn on the top frame, the outer fn as a deeper frame.
-	path := writeProgram(t, `import "aql:debug"
+	path := writeProgram(t, `import "boru:debug"
 def zzdeep fn [[x:Integer] [Integer] [
 Debug.break
 x add 1

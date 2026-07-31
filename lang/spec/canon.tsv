@@ -1,6 +1,6 @@
-# AQL Language Specification: the `canon` word
+# BORU Language Specification: the `canon` word
 #
-# `canon v` renders any value as canonical AQL source — the same
+# `canon v` renders any value as canonical BORU source — the same
 # renderer (eng.CanonValue) the spec suites and the doc-example
 # harness compare against. For DATA values (scalars, atoms, paths,
 # none, type literals, plain and flex Node trees) the result is
@@ -36,10 +36,10 @@ canon (flex {a:{b:[1]}})	'(flex {a:(flex {b:(flex [1])})})'	an entirely-flex tre
 def h (flex [1]) canon [h 2]	'[(flex [1]) 2]'	a literal-embedded live handle is visible in the rendering
 #
 # §4  round-trips: evaluating the canon string reproduces the value
-import "aql:vm" def v (flex {a:[1]}) (Vm.run (canon v)) deq v	true	a flex tree round-trips structurally
-import "aql:vm" def v (flex {a:[1]}) typeof (Vm.run (canon v))	FlexMap	…and stays FLEX through the round-trip
-import "aql:vm" def s "it's \"q\" \\ ok" (Vm.run (canon s)) eq s	true	the escaped string round-trips exactly
-import "aql:vm" (Vm.run (canon [1 {a:none} x/q])) deq [1 {a:none} x/q]	true	mixed data (none, atom) round-trips
+import "boru:vm" def v (flex {a:[1]}) (Vm.run (canon v)) deq v	true	a flex tree round-trips structurally
+import "boru:vm" def v (flex {a:[1]}) typeof (Vm.run (canon v))	FlexMap	…and stays FLEX through the round-trip
+import "boru:vm" def s "it's \"q\" \\ ok" (Vm.run (canon s)) eq s	true	the escaped string round-trips exactly
+import "boru:vm" (Vm.run (canon [1 {a:none} x/q])) deq [1 {a:none} x/q]	true	mixed data (none, atom) round-trips
 #
 # §5  totality and limits
 canon	ERROR:signature	canon needs a value

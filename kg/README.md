@@ -3,40 +3,40 @@
 This directory holds two things:
 
 1. **A reusable, evidence-backed knowledge-graph pipeline written in
-   AQL** — ingest candidate facts, normalize entities, resolve identity,
+   BORU** — ingest candidate facts, normalize entities, resolve identity,
    validate every claim, preserve provenance, and query the result with
    bounded traversals.
 2. **The knowledge graph of this repository itself** — built by that
-   pipeline from [`project/aql-project.jsonic`](project/aql-project.jsonic)
+   pipeline from [`project/boru-project.jsonic`](project/boru-project.jsonic)
    and committed at [`out/graph.json`](out/graph.json). Agents and humans
    can read it to see, in one structured place, what the repo's modules,
    documents, tools, and concepts are and how they relate — with every
    assertion backed by a quoted passage from the repo's own docs.
 
 **Keep it fresh: when a PR changes the repository's structure, tooling,
-or documentation set, update `project/aql-project.jsonic` accordingly and
+or documentation set, update `project/boru-project.jsonic` accordingly and
 rebuild the committed bundle (`make graph` here, or
-`cd kg && ../cmd/go/bin/aql main.aql`).** The build is deterministic, so
+`cd kg && ../cmd/go/bin/boru main.boru`).** The build is deterministic, so
 an unchanged input produces a byte-identical bundle and a clean diff.
 
 ## Quick start
 
-Everything runs **from this directory** (AQL imports resolve against the
+Everything runs **from this directory** (BORU imports resolve against the
 working directory):
 
 ```bash
-make -C ../cmd/go build     # once: build the aql binary
+make -C ../cmd/go build     # once: build the boru binary
 cd kg
-make check                  # aql check every module and test
+make check                  # boru check every module and test
 make test                   # run the whole test suite
 make graph                  # rebuild out/graph.json + out/graph.sql
 ```
 
-Query the committed graph from AQL:
+Query the committed graph from BORU:
 
-```aql
-import "aql:io"
-import "./queries.aql"
+```boru
+import "boru:io"
+import "./queries.boru"
 def g (IO.read (make Pathon "out/graph.json"))
 KgQuery.entities-by-type g "Document"
 KgQuery.neighbors g "<entity id>"
@@ -47,40 +47,40 @@ KgQuery.two-hop-paths g "<id a>" "<id b>"
 
 ```
 candidate bundles (JSON / JSONic / CSV / TSV rows / text-derived facts)
-        │  ingest.aql      candidates -> typed records, deterministic ids
+        │  ingest.boru      candidates -> typed records, deterministic ids
         ▼
-entities + assertions + sources        (schema.aql: typed Records; every
+entities + assertions + sources        (schema.boru: typed Records; every
         │                               object built via checked mk-*)
-        │  resolve.aql     evidence-based identity decisions + safe merges
-        │  assertions.aql  conflict detection -> disputed, never dropped
+        │  resolve.boru     evidence-based identity decisions + safe merges
+        │  assertions.boru  conflict detection -> disputed, never dropped
         ▼
 draft bundle
-        │  validate.aql    bundle-level rules -> KgIssue records
-        │  report.aql      competency report, review queue, summary
+        │  validate.boru    bundle-level rules -> KgIssue records
+        │  report.boru      competency report, review queue, summary
         ▼
-aql-kg/1 bundle  ──►  storage.aql  ──►  out/graph.json  (+ out/graph.sql)
-                                        queries.aql — bounded graph queries
+boru-kg/1 bundle  ──►  storage.boru  ──►  out/graph.json  (+ out/graph.sql)
+                                          queries.boru — bounded graph queries
 ```
 
 | File | Responsibility |
 |------|----------------|
-| `schema.aql` | Closed vocabularies, typed `Record` shapes, checked constructors |
-| `identifiers.aql` | Deterministic FNV-1a ids, canonicalization, collision detection |
-| `normalize.aql` | Label normalization (NFC, trim, whitespace collapse, casefold) |
-| `ingest.aql` | Candidate bundles → graph objects; CSV/TSV and bundle re-ingest adapters |
-| `entities.aql` | Entity indexing, reversible merges, merge-chain resolution |
-| `assertions.aql` | Assertion construction (evidence required), conflict marking |
-| `resolve.aql` | Identity-resolution policy and automatic-merge rules |
-| `validate.aql` | Every bundle-level validation rule, reported as issues |
-| `queries.aql` | The query API — lookups, evidence, bounded 1/2-hop traversal, review views |
-| `storage.aql` | JSON bundle write/read, round-trip check, normalized SQL emission |
-| `report.aql` | Pipeline orchestration (`build-graph`), competency report, summary |
-| `main.aql` | Builds the project graph from `project/aql-project.jsonic` |
-| `util.aql` | Shared helpers (`get-or`, `list-at`, `starts-with`, `as-map`) |
+| `schema.boru` | Closed vocabularies, typed `Record` shapes, checked constructors |
+| `identifiers.boru` | Deterministic FNV-1a ids, canonicalization, collision detection |
+| `normalize.boru` | Label normalization (NFC, trim, whitespace collapse, casefold) |
+| `ingest.boru` | Candidate bundles → graph objects; CSV/TSV and bundle re-ingest adapters |
+| `entities.boru` | Entity indexing, reversible merges, merge-chain resolution |
+| `assertions.boru` | Assertion construction (evidence required), conflict marking |
+| `resolve.boru` | Identity-resolution policy and automatic-merge rules |
+| `validate.boru` | Every bundle-level validation rule, reported as issues |
+| `queries.boru` | The query API — lookups, evidence, bounded 1/2-hop traversal, review views |
+| `storage.boru` | JSON bundle write/read, round-trip check, normalized SQL emission |
+| `report.boru` | Pipeline orchestration (`build-graph`), competency report, summary |
+| `main.boru` | Builds the project graph from `project/boru-project.jsonic` |
+| `util.boru` | Shared helpers (`get-or`, `list-at`, `starts-with`, `as-map`) |
 
 ## The bundle (output contract)
 
-`out/graph.json` follows `schema_version: "aql-kg/1"`:
+`out/graph.json` follows `schema_version: "boru-kg/1"`:
 
 ```
 { schema_version, generated_at,
@@ -166,7 +166,7 @@ through a **bounded** resolver (8 hops max).
 
 ## Validation
 
-`validate.aql` reports (never hides, never auto-repairs) issues for:
+`validate.boru` reports (never hides, never auto-repairs) issues for:
 duplicate/missing ids everywhere; unknown source kinds/authorities;
 unknown entity types/statuses; empty labels; merged-entity pointer
 integrity (existing target, no self-merge); unknown predicates;
@@ -180,7 +180,7 @@ quotes on text/model evidence (warnings).
 
 ## Queries
 
-All pure functions over the bundle in `queries.aql`: `entity-by-id`,
+All pure functions over the bundle in `queries.boru`: `entity-by-id`,
 `entities-by-type`, `entities-by-label` (alias-aware, normalized),
 `assertions-for-subject`, `assertions-for-object`,
 `assertions-by-predicate`, `assertions-by-source`,
@@ -189,7 +189,7 @@ All pure functions over the bundle in `queries.aql`: `entity-by-id`,
 `unresolved-identities`, `conflicting-assertions`, `validation-errors`,
 `human-review-items`. Traversal depth is **bounded by construction** —
 one and two hops only; there is deliberately no recursive walker.
-(`aql:query`'s SQL pipeline resolves FROM-tables from the context
+(`boru:query`'s SQL pipeline resolves FROM-tables from the context
 store — a Go-registration fit — so the query layer uses plain
 `filter`/`fold`, which also reads clearer here.)
 
@@ -215,8 +215,8 @@ stability, and SQL emission (determinism + escaping). Fixtures:
 
 REFERENCE.md documents `sqlite-open`/`sqlite-exec`/`sqlite-query` behind
 a `sqlite` capability, but the current engine build does not register
-those words (`aql describe sqlite-open` → no description). Until it
-does, `storage.aql` emits the graph as **normalized SQL**
+those words (`boru describe sqlite-open` → no description). Until it
+does, `storage.boru` emits the graph as **normalized SQL**
 (`out/graph.sql` — sources, entities, entity_aliases,
 entity_external_ids, entity_attributes, assertions, assertion_evidence,
 identity_decisions, validation_issues, schema_proposals; one
@@ -236,14 +236,14 @@ bundles subject to the full evidence checks.
 
 ## Known limitations
 
-- ~~**`aql fmt` cannot be run on these sources.**~~ Fixed 2026-07-29.
+- ~~**`boru fmt` cannot be run on these sources.**~~ Fixed 2026-07-29.
   These sources were hand-formatted for two reasons, both now resolved:
   the formatter corrupted template interpolations (`` `hi ${name}` ``
   re-parsed the `${expr}` hole as a map literal), and formatting the tree
   took ~10 minutes. The formatter now scans backtick literals verbatim,
-  and `emitNode` is memoised — `validate.aql` went from 53s to 40ms, the
+  and `emitNode` is memoised — `validate.boru` went from 53s to 40ms, the
   whole kg tree formats in under a second. `make fmt` is live and part of
-  `make all`. Every file still passes `aql check` (`make check`).
+  `make all`. Every file still passes `boru check` (`make check`).
 - Native SQLite words are unavailable in the current build (see above) —
   `out/graph.sql` is the relational path; it loads cleanly into stock
   `sqlite3` with zero foreign-key violations.
@@ -251,8 +251,8 @@ bundles subject to the full evidence checks.
   repo's scale; add blocking (e.g. by normalized-label prefix) before
   pointing it at very large entity sets.
 - `text`-kind sources are ingested as *candidate assertion bundles*
-  (extraction happens outside AQL — by an agent, a rule, or a model);
-  AQL validates evidence and quotes but does not itself do NLP.
-- `generated_at`/`recorded_at` are pinned in `main.aql` (`run-stamp`)
+  (extraction happens outside BORU — by an agent, a rule, or a model);
+  BORU validates evidence and quotes but does not itself do NLP.
+- `generated_at`/`recorded_at` are pinned in `main.boru` (`run-stamp`)
   so rebuilds are byte-identical; bump the stamp when regenerating
   after a content change.

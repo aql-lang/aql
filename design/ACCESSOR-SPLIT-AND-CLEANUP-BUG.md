@@ -14,7 +14,7 @@ over-pop — with a ready-to-use next-session prompt.
 > in `lang/go/test/closures_test.go`
 > (`TestFrameParamShadowsCollidingFunctionParam` + `TestDefWordOverlapStillRedefines`).
 
-## Landed this session (branch `claude/aql-client-lib-issues-lev8cs`)
+## Landed this session (branch `claude/boru-client-lib-issues-lev8cs`)
 
 1. **`slice` element-type preservation** — `slice` no longer stringifies
    scalar list elements (`[3 1 2] slice 0 2` keeps `Integer`). Fix in
@@ -58,7 +58,7 @@ frame's `undef comp` tail then popped the only remaining entry, leaving
 The fix is at the **install** site, not the teardown: a new
 `InstallFrameBinding` performs a lexical **shadow** (a plain push that
 keeps the outer entry) and is used by all per-call binding sites
-(`buildFnBodyHandler`, `execFnDefSig`, `CallAQL`, and the macro
+(`buildFnBodyHandler`, `execFnDefSig`, `CallBORU`, and the macro
 expander). The existing `undef`/`DefCleanup` teardown is then already
 depth-correct (`comp` reaches depth 2, `undef` pops exactly one). No
 teardown rewrite, no TCO-twin change — the eager
@@ -81,7 +81,7 @@ than restoring the caller's).
 
 **Symptom** (client report §1.1, root-caused tighter than the report):
 
-```aql
+```boru
 def g ([x:Integer] => [x add 1])
 def h fn [[comp:Function v:Integer] [Integer] [v comp/r apply]]
 def t fn [[comp:Function] [Integer] [ def a (5 comp/r h)  def b (7 comp/r h)  a add b ]]
@@ -144,4 +144,4 @@ fuzz, `crossdiff`, `test-ts`), which needs a dedicated budget.
 > a caller param, via a `/r`-parked fn arg, reused after the call), plus a
 > spec row. Gate with `make test`, `verify-bytecode`, the recursion /
 > closure / TCO suites, `crossdiff`, and `test-ts`; nothing may regress.
-> Develop on `claude/aql-client-lib-issues-lev8cs`.
+> Develop on `claude/boru-client-lib-issues-lev8cs`.

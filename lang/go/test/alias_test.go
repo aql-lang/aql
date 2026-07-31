@@ -17,7 +17,7 @@ func stripErrPos(s string) string {
 	return s
 }
 
-// aliasCase defines a single alias test: an original AQL expression
+// aliasCase defines a single alias test: an original BORU expression
 // and the same expression using a def alias.
 type aliasCase struct {
 	name      string            // test name
@@ -478,7 +478,7 @@ func TestAliasGet(t *testing.T) {
 
 // (clone / merge / walk / transform / getpath / setpath / validate / inject
 // alias tests were removed when those voxgig-struct words moved out of core
-// into the aql:struct module — they are no longer unqualified words, so the
+// into the boru:struct module — they are no longer unqualified words, so the
 // `def myX word [X]` core-alias idiom no longer applies. Struct-module
 // behaviour is covered by struct_functions_test.go and the module tests.)
 

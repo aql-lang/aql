@@ -14,9 +14,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // tlsEchoServer starts a local TLS listener that echoes one line, and
@@ -46,7 +46,7 @@ func tlsEchoServerCAs(t *testing.T, clientCAs *x509.CertPool) (addr, caPEM strin
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(2),
-		Subject:               pkix.Name{CommonName: "aql-test-server"},
+		Subject:               pkix.Name{CommonName: "boru-test-server"},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
@@ -313,7 +313,7 @@ func TestParseNetAddrListenRejectsBadTLS(t *testing.T) {
 	}
 }
 
-// InstallNetExports is the test/host shim for `import "aql:net"`. It
+// InstallNetExports is the test/host shim for `import "boru:net"`. It
 // must transplant the accessor word extensions exactly as the real
 // import does — otherwise a test using the shim and a guest using
 // import would disagree about whether a Response answers .status.

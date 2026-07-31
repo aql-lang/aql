@@ -1,0 +1,7 @@
+name: formatter
+main: formatter.boru
+major: 2
+minor: 1
+patch: 1
+files: [formatter.boru]
+deps: {caser: 0.2.4 bracket: 1.3.0}

@@ -4,8 +4,8 @@ import (
 	"crypto/tls"
 	"net/http"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // HostClientIdents returns the registry's client-identity registry, or
@@ -55,10 +55,10 @@ func resolveIdentity(r *Registry, p capabilities.TLSProfile, word string) (capab
 	}
 	id, ok := HostClientIdents(r)[p.Identity]
 	if !ok || id == nil {
-		return nil, r.AqlErrorHint("net_error",
+		return nil, r.BoruErrorHint("net_error",
 			word+`: tls: no client identity named "`+p.Identity+`" is registered`, word,
-			"the host registers identities with (*AQL).RegisterClientIdentity; "+
-				"AQL source can name one but cannot create one")
+			"the host registers identities with (*BORU).RegisterClientIdentity; "+
+				"BORU source can name one but cannot create one")
 	}
 	return id, nil
 }

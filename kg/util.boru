@@ -1,0 +1,33 @@
+# util.boru — tiny shared helpers used across the kg modules.
+
+import "boru:string-util"
+
+# Read key k from m, with default d when the key is absent.
+def get-or fn [[m:Map k:String d:Any] [Any] [
+  def v (m get k)
+  if (v is None) [d] [v]
+]]
+
+# Read a list-valued key with a typed List result (helps `boru check`
+# prove push/fold pipelines over accumulator maps).
+def list-at fn [[m:Map k:String] [List] [
+  def v (m get k)
+  if (v is None) [[]] [v]
+]]
+
+def starts-with fn [[prefix:String s:String] [Boolean] [
+  (StringUtil.indexof prefix s) eq 0
+]]
+
+# Identity on a Map. A map literal in ARGUMENT position resolves local
+# fn/var bindings in its values, while a literal standing alone as a
+# body result may not — so result literals are written `KgUtil.as-map
+# {…}` throughout the kg modules to keep binding resolution uniform.
+def as-map fn m:Map Map [m]
+
+export "KgUtil" {
+  get-or:get-or/r
+  list-at:list-at/r
+  starts-with:starts-with/r
+  as-map:as-map/r
+}

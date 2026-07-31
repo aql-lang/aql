@@ -5,9 +5,9 @@ import (
 	"strconv"
 )
 
-// exit_error.go — the reserved `aql/exit` control error.
+// exit_error.go — the reserved `boru/exit` control error.
 //
-// `IO.exit <code>` does not call os.Exit. It raises an ordinary AqlError
+// `IO.exit <code>` does not call os.Exit. It raises an ordinary BoruError
 // carrying the reserved code below and `{code: N}` in Data, and the
 // program's DRIVER decides what that means: the CLI and a built binary
 // unwind, flush, and exit with the code printing nothing; an embedded host
@@ -33,13 +33,13 @@ const ExitCodeKey = "code"
 // does NOT recognise it (a sub-engine boundary, an embedded host that just
 // prints errors) still renders as a located diagnostic rather than a bare
 // string.
-func NewExitError(code int64, src string, pos SrcPos) *AqlError {
+func NewExitError(code int64, src string, pos SrcPos) *BoruError {
 	// The literal, not ExitErrorCode: the errorcodes gate reads MINTS from the
 	// construction sites and deliberately ignores constants that merely NAME a
 	// code, so a mint through the constant alone is invisible to it. The two
 	// cannot silently diverge — change either and the gate reports `exit` as
 	// registered-but-unminted or minted-but-unregistered.
-	e := makeAqlErrorAt("exit", "exit requested with code "+
+	e := makeBoruErrorAt("exit", "exit requested with code "+
 		strconv.FormatInt(code, 10), "exit", src, "", pos)
 	data := NewOrderedMap()
 	data.Set(ExitCodeKey, NewInteger(code))
@@ -54,7 +54,7 @@ func NewExitError(code int64, src string, pos SrcPos) *AqlError {
 // An exit error whose Data lost its code key reports 0: the request to stop
 // is what matters, and a missing status is not a reason to invent a failure.
 func ExitCode(err error) (int, bool) {
-	var ae *AqlError
+	var ae *BoruError
 	if !errors.As(err, &ae) || ae.Code != ExitErrorCode {
 		return 0, false
 	}

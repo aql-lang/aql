@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Stage-1 bytecode emitter goldens (design/aql-bytecode-plan.0.md
+// Stage-1 bytecode emitter goldens (design/boru-bytecode-plan.0.md
 // Stage 1 gate): the recording pass lowers straight-line monomorphic
 // code to the expected instruction stream, and everything beyond the
 // stage is refused with a precise reason — never lowered wrongly.
@@ -222,7 +222,7 @@ func TestEmitStage2CompletionShapes(t *testing.T) {
 	}
 }
 
-// P5 multi-result lowering (design/aql-bytecode-runtime-independence.0.md):
+// P5 multi-result lowering (design/boru-bytecode-runtime-independence.0.md):
 // 0-result side-effect words (set/raise/drop/…) and genuine multi-result
 // words now record and lower, where they previously refused "returns N
 // values". The (seq, idx) operand model distinguishes a multi-result call's
@@ -616,7 +616,7 @@ func TestEmitFnValueData(t *testing.T) {
 	const inc = `def f fn [[x:Integer] [Integer] [x add 1]] `
 	for _, c := range []struct{ src, want string }{
 		{inc + `f/r`, "[fn f(Integer)]"},
-		{`import "aql:type-util"  TypeUtil.arityof (fn [[a:Integer b:Integer] [Integer] [a]])`, "[2]"},
+		{`import "boru:type-util"  TypeUtil.arityof (fn [[a:Integer b:Integer] [Integer] [a]])`, "[2]"},
 	} {
 		dis, r := compile(t, c.src)
 		if r != "" {
@@ -652,8 +652,8 @@ func TestEmitFnValueData(t *testing.T) {
 // the main engine, so the baked call is identical.
 func TestEmitModuleInnerNative(t *testing.T) {
 	cases := []string{
-		`import "aql:struct-util" StructUtil.clone {a:1}`,
-		`import "aql:struct-util" StructUtil.jsonify {a:1}`,
+		`import "boru:struct-util" StructUtil.clone {a:1}`,
+		`import "boru:struct-util" StructUtil.jsonify {a:1}`,
 	}
 	for _, src := range cases {
 		if _, r := compile(t, src); r != "" {
@@ -1327,7 +1327,7 @@ func TestEmitMacroExpansionGolden(t *testing.T) {
 // trivial-delegation dispatch records the real call, through the same
 // engine/registry the interpreter's short-circuit uses).
 func TestEmitModuleCallLowering(t *testing.T) {
-	got, reason := compile(t, `import "aql:math-util" MathUtil.sqrt 16.0`)
+	got, reason := compile(t, `import "boru:math-util" MathUtil.sqrt 16.0`)
 	if reason != "" {
 		t.Fatalf("module call uncompilable: %s", reason)
 	}
@@ -1343,7 +1343,7 @@ func TestEmitModuleCallLowering(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	out, compiled, err := a.RunCompiled(`import "aql:math-util" MathUtil.max 5.0 9.0`)
+	out, compiled, err := a.RunCompiled(`import "boru:math-util" MathUtil.max 5.0 9.0`)
 	if err != nil || !compiled {
 		t.Fatalf("MathUtil.max: compiled=%v err=%v", compiled, err)
 	}
@@ -1432,7 +1432,7 @@ func TestEmitMultiOverloadMonomorphises(t *testing.T) {
 // is the F4 data-get case: the dynamic `mini` result threads into a
 // `get` island and re-dispatches faithfully (Stage-6 F4 follow-on).
 func TestEmitMinilangCompiles(t *testing.T) {
-	got, reason := compile(t, `import "aql:minilang" "a1b2c3" mini re "\\d"`)
+	got, reason := compile(t, `import "boru:minilang" "a1b2c3" mini re "\\d"`)
 	if reason != "" {
 		t.Fatalf("mini expansion uncompilable: %s", reason)
 	}
@@ -1445,7 +1445,7 @@ func TestEmitMinilangCompiles(t *testing.T) {
 	}
 	// The dynamic-result data accessor now islands (F4); the result
 	// must match the interpreter.
-	src := `import "aql:minilang" ("a1b2c3" mini re "\\d").n`
+	src := `import "boru:minilang" ("a1b2c3" mini re "\\d").n`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -1563,12 +1563,12 @@ func TestEmitFallbackIsland(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mout, _, merr := c.RunCompiled(`import "aql:array-util" ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
+	mout, _, merr := c.RunCompiled(`import "boru:array-util" ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
 	if merr != nil {
 		t.Fatalf("module group: %v", merr)
 	}
 	d, _ := New()
-	iout, _ := d.RunInterp(`import "aql:array-util" ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
+	iout, _ := d.RunInterp(`import "boru:array-util" ArrayUtil.group ['a' 'b' 'a'] [1 2 3]`)
 	if len(mout) != len(iout) || (len(mout) == 1 && mout[0] != iout[0]) {
 		t.Fatalf("module group compiled=%v interpreted=%v", mout, iout)
 	}
@@ -1669,9 +1669,9 @@ func TestEmitF4DynamicDispatch(t *testing.T) {
 // interpreter unwinds the sentinel correctly.
 func TestEmitIslandSentinelRefusal(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	// `each [break]` inside a compiled `for`: the break targets the for,
 	// not each — it must NOT be islanded.
 	src := `for 3 [each [break] [1 2]]`

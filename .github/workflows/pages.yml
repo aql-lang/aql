@@ -39,7 +39,7 @@ jobs:
 
       - name: Build wasm playground
         # Produces docs/index.html — a single self-contained HTML file with
-        # the aql + sql.js wasm blobs base64-embedded (see wpg/Makefile).
+        # the boru + sql.js wasm blobs base64-embedded (see wpg/Makefile).
         run: make -C wpg wasm
 
       - uses: actions/configure-pages@v5

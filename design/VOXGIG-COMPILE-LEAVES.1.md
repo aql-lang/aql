@@ -1,11 +1,11 @@
-# voxgig-aql interpret/check/compile completion — current leaf map (post-merge)
+# voxgig-boru interpret/check/compile completion — current leaf map (post-merge)
 
-Goal: every voxgig-aql repo (bloom-filter, decision, sort, stats, trie, **template**)
-fully `aql run` (interpret), `aql check`, AND `aql run --force-compile` clean.
+Goal: every voxgig-boru repo (bloom-filter, decision, sort, stats, trie, **template**)
+fully `boru run` (interpret), `boru check`, AND `boru run --force-compile` clean.
 
 Baseline on the merged binary (HEAD `53719f21`, my 22 commits + main `cc3fcf63`):
 - **interpret**: 44/48 OK (4 `*_prop_spec` are slow property GENERATORS that time out >60s — not errors; raise the timeout or treat as pass).
-- **check**: 47/48 OK — only `template.aql` (24 false-positive errors; see L8).
+- **check**: 47/48 OK — only `template.boru` (24 false-positive errors; see L8).
 - **compile** (`-force-compile`): 14 COMPILED, 34 REFUSE, **0 ERROR**. `--compile` == interpret for all 14 COMPILED (verified) and all 34 REFUSE fall back soundly. **Soundness is solid; the goal is COVERAGE.**
 
 KEY: each refusing file is a CHAIN of distinct leaves; the refusal text names only
@@ -99,7 +99,7 @@ blocker; `var` was a red herring.
 ### L0-OLD (WRONG) — `var` block hypothesis (kept for the record; var compiles)
 **Status: this is what actually blocks the 14 each + 8 test-test files** (L1 below
 cleared a different each-leaf but flipped 0 files — the chains hit `var`). The loop
-idiom `iota n each [ var [[t] <body with def/if> ] ]` (sort.aql:98 etc.) refuses
+idiom `iota n each [ var [[t] <body with def/if> ] ]` (sort.boru:98 etc.) refuses
 because `var` is a `CompileExecutesBody` macro: its handler desugars to `def t end;
 <body>; __varundef t` (native_definition.go:583-654; `__varundef` exists precisely
 "to let a var-body compile to a closure unit"). The desugared form IS compilable,
@@ -143,7 +143,7 @@ keep the chain.) Files: bloom_smoke, bloom_unit_spec, stats_smoke, trie_smoke.
 `(nd find-kid)` where `nd` is Any (from a user fn's `[Any]` return): no-signature
 recovery, `tryRecordPoly` declines because `find-kid` is a USER fn not a builtin
 (carrier.go:989) → MarkUncompilable (engine.go:6675). **Fix: compiler** — emit a
-normal user-fn call (CALL_AQL) to the best-fit candidate; SOUND because the
+normal user-fn call (CALL_BORU) to the best-fit candidate; SOUND because the
 CALL_USER param guard (added this session) re-checks the receiver at runtime, so a
 mismatch raises the same signature_error the interpreter does. Files: trie_unit_spec,
 trie_unit_test, tst_unit_test (find-kid/mk-tnode).
@@ -160,12 +160,12 @@ decision_smoke_test.
 
 ### L7 (CHECK track) — `parse <kind>` over a runtime-registered grammar (template)
 `Parse.register` is a runtime side effect invisible to the static check pass →
-false `parse_unknown_lang` → `fn_body_error` → 24 of template.aql's check errors
+false `parse_unknown_lang` → `fn_body_error` → 24 of template.boru's check errors
 (and its force-compile `check diagnostics` block + template_smoke `lex-mustache`).
 **Fix: compiler** — give `parse-register` (parse.go:275) a `ReturnsFn` that installs
 the kind at check time, mirroring `parselang-register`'s `parseRegisterReturns`
 (parselang.go:478), with idempotent registration for the compiled double-run.
-template.aql ALSO has residual `no_signature`/`unused_def` false positives (some
+template.boru ALSO has residual `no_signature`/`unused_def` false positives (some
 may resolve once `parse` resolves; the rest are separate checker-accuracy work).
 
 ## Recommended sequence
@@ -200,11 +200,11 @@ body must compile; non-closureable name-body must still refuse).
 ## CORRECTED RETEST (post-L0, run from each repo ROOT — CRITICAL methodology)
 
 Earlier "8 compiled / 23 check-diagnostics" was a MEASUREMENT ARTIFACT: the spec
-files do `import "./bloom.aql"` resolved relative to CWD, so running from the wrong
+files do `import "./bloom.boru"` resolved relative to CWD, so running from the wrong
 dir failed every import → spurious `undefined_word` check errors. Run each file FROM
-ITS REPO ROOT (`cd bloom-filter; aql check test/bloom_unit_spec.aql`). Correct state:
+ITS REPO ROOT (`cd bloom-filter; boru check test/bloom_unit_spec.boru`). Correct state:
 - **interpret 44/48** (4 `*_prop_spec` are slow property GENERATORS, >60s timeout — not errors).
-- **check 47/48** — only `template.aql` (one `fn_body_error`). THE CHECK TRACK IS FINE.
+- **check 47/48** — only `template.boru` (one `fn_body_error`). THE CHECK TRACK IS FINE.
 - **force-compile 14/48**. Refusal breakdown (by leaf, files):
   - 14× `code-body word each` — but the each PATTERN now compiles (L0); the residual
     cause is a MODULE CODE-BODY WORD in the body (`Test.run-spec`).
@@ -219,13 +219,13 @@ The each-body-local-value-def + var-loop patterns now compile (proven: `each [va
 [[s] (s get "name") 0]]` → COMPILES). Flips 0 voxgig FILES (chains), but is the
 foundation: the test-file eachs now refuse only on the MODULE code-body word inside.
 
-### DOMINANT REMAINING LEAF — the aql:test framework's code-body words
+### DOMINANT REMAINING LEAF — the boru:test framework's code-body words
 `Test.run-spec` / `test-test` / `test-describe` (lang/go/modules/test.go:227,275,1411)
 DECLARE a CallableSpec (BodyPos 1, BodyOut 0) — so they SHOULD compile via the
 closure path — yet refuse "Stage 2". The recursive describe/spec body (run-spec calls
 test-describe with a body that recursively calls run-spec) fails the closure compile.
 This blocks ~all test files. NOTE: the repos' OWN gate (test/divergence/run.sh) is
-INTERPRET + `aql --compile` (fallback-allowed) must SUCCEED AND AGREE — i.e.
+INTERPRET + `boru --compile` (fallback-allowed) must SUCCEED AND AGREE — i.e.
 compile==interpret, which HOLDS for all 48 (0 miscompiles). force-compile coverage of
 the test framework is a STRETCH beyond the repos' gate. Next pass: unmask test-
 describe's closure-body refusal (instrument recordClosureDispatch for word=="test-
@@ -234,20 +234,20 @@ describe") and compile the recursive spec body, OR accept fallback per the repos
 ### ROOT-CAUSED: the test-framework leaf IS the single-overload user-fn recovery leaf
 test-describe's closure body fails with Reason `unmatched dispatch recovered at
 run-cases` (instrumented compileClosureBody). `run-cases` (test.go:1403) is a
-SINGLE-overload AQL user fn `fn [[| subject:Scalar cases:List][]…]`. Called with
+SINGLE-overload BORU user fn `fn [[| subject:Scalar cases:List][]…]`. Called with
 Any-typed spec data, matchSignature can't statically commit → the engine.go:6664
 recovery branch runs. tryRecordPoly DECLINES because its gate (carrier.go ~line 26)
 is `if !matchReg.IsBuiltinWord(word) return false` — run-cases is a user `def fn`,
 not a registered builtin (test-record IS a sub-registry builtin, so it passes; that's
 the asymmetry the 6656 comment notes). So the recovery MarkUncompilable's.
 
-THIS ONE LEAF blocks: the aql:test framework (run-spec → test-describe → run-cases →
+THIS ONE LEAF blocks: the boru:test framework (run-spec → test-describe → run-cases →
 ~all test files) AND find-kid / mk-tnode / lex-mustache (the 5 direct recovery files).
 Highest-leverage remaining leaf by far.
 
 **Fix direction (soundness-critical, next focused pass):** in the engine.go:6664
 recovery, when tryRecordPoly declines AND the word is a SINGLE-overload user fn,
-record a user-fn dispatch (a plain CALL_AQL to its one sig — no poly re-match needed
+record a user-fn dispatch (a plain CALL_BORU to its one sig — no poly re-match needed
 since there's only one overload) GUARDED by checkParamContract (the param guard
 landed this session). Soundness: at run time the concrete args either match the sole
 sig (dispatch == interpreter) or fail the guard (raise == interpreter's no_signature).
@@ -284,20 +284,20 @@ force-compile 14/48. Compile leaves remaining: each/test-test (test framework, d
 chain), do/provenance (2+1), dynamic set/push (1+1), fold (1), gradual-Any multi-
 overload (1, correctly refused), template check (1). compile==interpret holds for all
 48 (0 miscompiles) — the repos' own gate passes; the gap is native force-compile
-COVERAGE, dominated by the recursive aql:test framework.
+COVERAGE, dominated by the recursive boru:test framework.
 
-### CHECK leaf (template.aql — the only check failure) ROOT-CAUSED
+### CHECK leaf (template.boru — the only check failure) ROOT-CAUSED
 All 24 errors are one cause: `fn_body_error` → `parse_unknown_lang: no parser
 "mustache"/"liquid"/"jinja" registered`, raised analysing lex-mustache/liquid/jinja's
 bodies (`def _ (parse mustache src)`). Mechanism: `parse <kind>` (native_macro.go:
 parseHandler) resolves the kind via parseKindRegistered → checks the ParseLang export's
-Fields for "parse_<kind>". The template registers with `Parse.register` (aql:parse,
+Fields for "parse_<kind>". The template registers with `Parse.register` (boru:parse,
 parse.go:276 parse-register) whose sig has ONLY a Handler — no ReturnsFn — so in CHECK
 mode the Handler never runs (carrier.go:489 uses ReturnsFn/static Returns, not the
 Handler), the kind is never injected into ParseLang exports, and the fn-body analysis
 fails. `ParseLang.register` works because it HAS a check-mode ReturnsFn
 (parselang.go:74 parseRegisterReturns → idempotent parseRegisterInstall). The template
-imports aql:parselang (required — removing it breaks interp + yields 18 other errors),
+imports boru:parselang (required — removing it breaks interp + yields 18 other errors),
 so parseNamespaceBound=true makes the check STRICT (no lenient degradation).
 
 **Fix (next pass, soundness-sensitive):** give parse-register a check-mode ReturnsFn
@@ -310,7 +310,7 @@ check_type_value_test.go (both already pin the parselang idempotent-ReturnsFn
 contract) + a new template-style Parse.register-in-fn-body check regression. This is
 the LAST check-track issue; landing it makes check 48/48.
 
-### template.aql — the 18 post-L7 check errors are ALL the gradual-dispatch limit
+### template.boru — the 18 post-L7 check errors are ALL the gradual-dispatch limit
 L7 cleared the 24 parse_unknown_lang FALSE POSITIVES (the kinds ARE registered at
 runtime), which unmasked 18 deeper errors — ALL rooted in statically analysing the
 template's DYNAMIC codegen (it lexes via a runtime-registered parser → List<Any>
@@ -325,7 +325,7 @@ tokens → dispatches codegen fns on them):
   sub-analysis (carrier.go:2921 sub.Run) and eats a `)`, leaving the `(` unmatched
   (engine.go:995 "phantom unmatched paren"). Analysis-state bleed across fns.
 Both are the language's KNOWN gradual-dispatch limit — exactly what sort/CLAUDE.md
-documents: "aql check is advisory … known false positives on first-class function
+documents: "boru check is advisory … known false positives on first-class function
 values, which this library threads through every sort." The template is a dynamic
 meta-compiler; full static check is structurally beyond targeted fixes. Paths:
 (a) a checker DESIGN decision — downgrade the recovery `no_signature` from ERROR to a
@@ -336,7 +336,7 @@ it as error), AND fix the recovery forward-collection/paren bleed (deep); or
 ### DEEP-COMPLETION PASS: the test framework can't be force-compiled via recovery
 Per the user's "deep compiler completion" choice, I extended the recovery (engine.go
 ~6700, the CONCRETE-mismatch fall-through) to try poly + the single-overload user-fn
-helper, to compile the aql:test chain (run-spec → test-describe → run-cases →
+helper, to compile the boru:test chain (run-spec → test-describe → run-cases →
 test-invoke → recursive test-describe). Result, level by level:
 - **run-cases** (single-overload USER fn): the guarded CALL_USER helper records it
   SOUNDLY (param contract raises == interpreter). ✓
@@ -351,7 +351,7 @@ test-invoke → recursive test-describe). Result, level by level:
 - **recursive test-describe** (a CODE-BODY word recovery): no sound recovery path
   (poly excludes code-body; not a user fn).
 
-**Conclusion:** the recursive, dynamic aql:test framework cannot be force-compiled via
+**Conclusion:** the recursive, dynamic boru:test framework cannot be force-compiled via
 recovery handling — that is fundamentally unsound (the differential proved it). The
 SOUND path is deeper: (a) TYPE-INFERENCE so the spec-data flow gives test-invoke /
 run-cases args their real types → they match statically → NO recovery; or (b) a
@@ -363,17 +363,17 @@ are multi-session features, NOT a recovery trick. The single-overload user-fn he
 
 ### dx-report reframing + paren fix + no_signature finding (this pass)
 **The template/dx-report.md is the key artifact** (§11–§13): it documents that
-template.aql's check errors are CHECKER LIMITATIONS not module defects ("treat aql
+template.boru's check errors are CHECKER LIMITATIONS not module defects ("treat boru
 check as advisory"), that soundness holds (compile==interpret byte-identical), and
 that `parse_unknown_lang` was "the single biggest blocker" — which **L7 fixed**.
 Confirmed: ALL 8 library deliverables across the repos check + force-compile CLEAN
-except template.aql; the test files' authors DOCUMENT the framework refusals as
-expected fallback. So the repos are correct; aql is the limitation.
+except template.boru; the test files' authors DOCUMENT the framework refusals as
+expected fallback. So the repos are correct; boru is the limitation.
 
-- **dx-report updated** (template repo, branch dx-report-aql-update) to reflect L7
+- **dx-report updated** (template repo, branch dx-report-boru-update) to reflect L7
   (24 → 18 check errors, parse_unknown_lang: 0).
 - **PAREN BLEED FIXED** (commit 016e9ffc): checkModeFallbackPositions gathered past
-  the enclosing `)`; depth-tracking break fixed it. template.aql 18 → **12** errors
+  the enclosing `)`; depth-tracking break fixed it. template.boru 18 → **12** errors
   (all 6 emergent fn_body_error unmatched-paren gone). Gated, regression added.
 - **no_signature severity downgrade — NOT VIABLE** (the user's listed final item).
   The template's 12 remaining no_signature are at the CONCRETE fall-through
@@ -414,7 +414,7 @@ DIFFERENT key and re-analyses imprecisely). Deep, multi-session — proper mutua
 recursion fixed-point / group handling.
 
 ### template's last 12 — narrowed further: recursive partner's result comes back as an ATOM
-Instrumented the `get` recovery in both the minimal mutual repro and template.aql: the
+Instrumented the `get` recovery in both the minimal mutual repro and template.boru: the
 recovering `get`'s RECEIVER is an `[Atom conc=T]` (key `[ProperString]`), NOT a `[Map]`.
 So `(blk get "next")` / `(more get "next")` recover because `blk`/`more` — bound to a
 recursive/mutual partner's result — are typed ATOM, not the partner's DECLARED `[Map]`.
@@ -442,7 +442,7 @@ still refuses → no miscompile; verify-bytecode PASSES). Cleared all 5 pipeline
 ### template's last 7 — root-caused to liquid-if/liquid-for return mis-inference
 The remaining: compile-tagged-seq(2) + get(4) + gen-program(1, a cascade). ROOT: `def blk
 (liquid-if toks i)` then `blk get "next"` fails because `blk` is typed **Atom**, not the
-declared **[Map]**. liquid-if/liquid-for are declared `[Map]` (template.aql:676,703) and
+declared **[Map]**. liquid-if/liquid-for are declared `[Map]` (template.boru:676,703) and
 EVERY body branch returns `do {…}` (a Map) or `raise` — the bodies are correct and the
 runtime is GREEN (5/5). The checker mis-infers the call RESULT as Atom under the
 compile-tagged-seq ↔ liquid-if/liquid-for mutual recursion. Confirmed by annotating `def
@@ -451,7 +451,7 @@ does not unify with declared type Map` (net 7→3), i.e. the checker genuinely b
 liquid-if returns non-Map. NOT located: which dispatch path produces liquid-if's Atom
 result — it does NOT reach stepWord's sig==nil recovery (2227), and wrapping
 carrierResults' ReturnsFn output (490) with an assume-guarantee reconciliation did NOT
-change it, so liquid-if's result is spliced via a third path (execFnDefSig/CallAQL residual
+change it, so liquid-if's result is spliced via a third path (execFnDefSig/CallBORU residual
 or spliceFnCheckTail). NEXT: instrument spliceFnCheckTail callers to find where the
 named-fn body residual becomes the dispatch result, then reconcile a divergent residual
 with the declared concrete return there (assume-guarantee). Gate: verify-bytecode +
@@ -494,16 +494,16 @@ the two paths — pin the def-value path specifically. Runtime GREEN 5/5; compil
 ### ROOT CAUSE CRACKED: the cluster was a FORWARD REFERENCE, not dynamic dispatch
 Instrumented the def handler (native_definition.go:237): `def blk (liquid-if toks i)` binds
 blk to a concrete Atom while `def more (compile-tagged-seq …)` binds a Map carrier. The
-difference: compile-tagged-seq (template.aql:628) calls liquid-if/liquid-for, which are
-defined LATER (676, 703) — FORWARD REFERENCES. aql analyses fn bodies at DEFINITION time, so
+difference: compile-tagged-seq (template.boru:628) calls liquid-if/liquid-for, which are
+defined LATER (676, 703) — FORWARD REFERENCES. boru analyses fn bodies at DEFINITION time, so
 compile-tagged-seq's call to the not-yet-registered liquid-if degraded to an undefined-word
 Atom, cascading false no_signature through `blk get …`. compile-tagged-seq's SELF-recursion
 resolves (in-flight), but a forward ref to a SEPARATE later def does not. The earlier
 "Dynamic-Any / dynamic-receiver" reading was a downstream symptom, not the cause.
 
 FIX SHIPPED (template repo): forward-declare liquid-if/liquid-for before compile-tagged-seq
-(real defs shadow; runtime unaffected). `aql check` 7 → 1; runtime 5/5 green. So template is
-24 → 1 across the session (7 aql fixes took 24→7; the gradual-Any fix 12→7; stubs 7→1).
+(real defs shadow; runtime unaffected). `boru check` 7 → 1; runtime 5/5 green. So template is
+24 → 1 across the session (7 boru fixes took 24→7; the gradual-Any fix 12→7; stubs 7→1).
 
 CHECKER TWO-PASS — explored + REJECTED as unsound. A pre-pass that registers all top-level
 fns (so forward refs resolve) made template 24→0 AND needs a per-pass FnSummaries/FnInflight
@@ -532,14 +532,14 @@ Distinct features required (first-refusal histogram over the 33): each×14, test
    and let OpCallNativePoly pick List-vs-Map at runtime. test-test×9 CASCADES from these (test-test HAS a
    Callable+compiled-closure path, test.go:294; it refuses only because its body contains the un-lowerable
    each/fold).
-2. do/error EXCEPTION-HANDLING lowering (emit.go:2041, bloom decode bloom.aql:306-310). `do [body] error
+2. do/error EXCEPTION-HANDLING lowering (emit.go:2041, bloom decode bloom.boru:306-310). `do [body] error
    [handler]` over a name-referencing body = try/catch in bytecode (body+handler closures + a catch op).
 3. NOT-STATICALLY-MATERIALISABLE collections (template×3) — a const-sized collection the const pool can't size.
 PROVEN NON-VIABLE this session: (a) disabling refusals → silent miscompiles (breaks the invariant); (b)
 per-construct source surgery → runtime-risky (a `def x:String` annotation broke a runtime test) + doesn't
 converge (libraries' intermediates are genuinely Any); (c) the features are multi-session VM/emitter work.
 The five library repos need NO source change — their deployable code is check- AND compile-clean; only the
-aql:test-driven test files hit the shared emitter gap. Template repo WAS updated (forward-decl + Any-param).
+boru:test-driven test files hit the shared emitter gap. Template repo WAS updated (forward-decl + Any-param).
 
 ### LANDED — gradual-Any each/fold/scan over a Dynamic collection (feature #1, the dominant leaf)
 The "SHAPE-AGNOSTIC CLOSURE BODIES" feature above was over-stated: for the TOKEN-quotation body
@@ -559,7 +559,7 @@ RUNTIME-ROBUST — when the value is the sibling collection (a Map) at run time 
 the overload by the runtime type). The cross-delegation is unreachable in the interpreter (matchSignature gates a
 Map away from a TList sig), so it is live ONLY on the compiled committed-overload path — zero interpreter change.
 
-**Gate:** `make verify-bytecode` GREEN (compile==interpret, 0 miscompiles, incl. -race + aqldebug). New off-corpus
+**Gate:** `make verify-bytecode` GREEN (compile==interpret, 0 miscompiles, incl. -race + borudebug). New off-corpus
 regression `lang/go/bytecode_gradual_each_test.go`: each/fold/scan over a Dynamic-Any collection compile NATIVE
 (no FALLBACK island) and RunCompiledStrict==Run for BOTH List and Map runtime shapes — incl. ONE compiled fn body
 driven by a List AND a Map (the strongest cross-delegation proof) — plus soundness (fallback-allowed) cases for a
@@ -604,7 +604,7 @@ User direction: build the multi-session features to flip the 33 test files, NOT 
   recovery-site trick. test-invoke is a 2-overload `{Atom|String, List}` native with DISTINCT closures (can't be proven
   handler-equivalent), so neither single-overload-guard nor same-handler-poly applies — type-inference is the only sound
   route. The guarded CALL_NATIVE infra remains the sound VM substrate for the residual recovery cases once type-inference
-  shrinks them. NEXT: the spec-data type-inference feature (flow concrete types through the aql:test run-spec/case data
+  shrinks them. NEXT: the spec-data type-inference feature (flow concrete types through the boru:test run-spec/case data
   so run-cases/test-invoke args match statically).
 
 ### CONCRETE-MISMATCH RECOVERY (engine.go:6787) IS UNSOUND TO GUARD — proven 3× by the differential. DO NOT RETRY.
@@ -632,9 +632,9 @@ Instrumented the throwaway closure probe (callable_words.go:262) to surface the 
 sort_unit_test's `test-test` body refuses on `code-body word each (Stage 2)` — but that `each` is NOT the test
 framework's: it is `Sort.bubble`'s INTERNAL comparison loop, surfaced when the test body calls the algorithm. The
 algorithms apply a captured comparator as a TRAILING fn-value: `def c ((arr get i) (arr get (i add 1)) comp)`
-(sort.aql bubble-sort:236) — the Stage-G "dynamic value precedes/trails args" leaf (apply a runtime Function operand,
+(sort.boru bubble-sort:236) — the Stage-G "dynamic value precedes/trails args" leaf (apply a runtime Function operand,
 OpCallDynamic ordering). So sort_smoke + sort_unit_test + sort_unit_spec are gated by the SAME comparator-each leaf,
-independent of the aql:test recursion. Fixing the trailing-fn-value apply (a bytecode LOWERING feature, plausibly more
+independent of the boru:test recursion. Fixing the trailing-fn-value apply (a bytecode LOWERING feature, plausibly more
 tractable than type-inference) would unblock the sort family — a better next target than the test framework for FIRST
 file flips. The test-test mask hid this: the recursion wall blocks the _spec files that drive run-spec/test-describe,
 but the imperative _test files and _smoke files bottom out at the library's own leaves (comparator / module-word-in-body

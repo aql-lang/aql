@@ -12,7 +12,7 @@ import (
 // operand is concrete and dispatches (or raises) exactly as the interpreter does, so
 // the static analysis stays advisory instead of emitting a spurious no_signature.
 //
-// This is the template.aql pipeline cluster: `gen-program`/`lex-mustache`/`engine-known`
+// This is the template.boru pipeline cluster: `gen-program`/`lex-mustache`/`engine-known`
 // recovered only because their String params were fed Any operands (engine/source/src
 // flowed from `opts get` over an Options receiver). Cleared the 5 pipeline errors
 // (template 12 -> 7) with compile==interpret intact (verify-bytecode PASSES — the

@@ -1,4 +1,4 @@
-// Package tuikit is the terminal-backend seam for the aql:tui module —
+// Package tuikit is the terminal-backend seam for the boru:tui module —
 // the executable slice of design/TUI.0.md §4.2. It is a LEAF package:
 // pure types and pure helpers, zero terminal dependencies, so lang/go
 // stays terminal-free (the layering rule) while both the module words
@@ -25,7 +25,7 @@ type Info struct {
 }
 
 // Event is one decoded input event. Tag selects which of the remaining
-// fields are meaningful; the value shapes delivered to AQL programs are
+// fields are meaningful; the value shapes delivered to BORU programs are
 // fixed by TUI.0.md §2.4 (this struct is their Go carrier).
 type Event struct {
 	// Tag is "key", "resize", "mouse", "paste" or "focus".

@@ -1204,7 +1204,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	// A VARIADIC-returning producer is EXCLUDED from both: at runtime it may leave
 	// 0 values (an empty if-arm, `maybe = if … [x] []`), so a STORE_LOCAL would
 	// UNDERFLOW the VM — it must stay on the stack and refuse at layout if
-	// unseatable, a sound interpreter fallback (the mk -1 crash, aql-lang/aql#261).
+	// unseatable, a sound interpreter fallback (the mk -1 crash, boru-lang/boru#261).
 	// `buried` is taken from the operand scans only, before the residual `extra`
 	// refs fold in below, so a RESIDUAL-only producer (a `def r (loop …) r`
 	// bind-then-return tail) is never buried and its tail call survives
@@ -1222,11 +1222,11 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	// Buried promotion applies to a DETACHED stamp (StampDetachedFn's isolated
 	// fork, storedGradualDepth > 0) exactly as to the whole-program / module-load
 	// compile: a recursive stored fn whose nested `if` arms read enclosing
-	// value-defs computed by its recursive calls (voxgig-aql/template's
+	// value-defs computed by its recursive calls (voxgig-boru/template's
 	// compile-hb-seq binds `head` and `tail` from recursive calls and reads both
 	// inside a deeper arm) seats those defs as frame locals and compiles, where it
 	// previously refused "branch reads enclosing computation". Validated by the
-	// langspec census and the voxgig-aql --compile==interpret differential (all 7
+	// langspec census and the voxgig-boru --compile==interpret differential (all 7
 	// libraries compile with zero divergences).
 	storeSrc := collectStoreSourceSeqs(events)
 	es.countRefsAndBurials(events, producerIndex, leaverPrefix, storeSrc,

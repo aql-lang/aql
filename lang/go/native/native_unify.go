@@ -1,6 +1,6 @@
 package native
 
-import "github.com/aql-lang/aql/eng/go"
+import "github.com/boru-lang/boru/eng/go"
 
 // unifyNatives covers the `unify` word — the surface-level entry
 // point to the engine's structural unification algorithm.
@@ -10,7 +10,7 @@ import "github.com/aql-lang/aql/eng/go"
 //
 // The algorithm (Unify and friends) lives in eng/go/unify.go; this
 // file owns the word name, dispatch wiring, and the Go-level adapter
-// (unifyHandler) that converts an eng.Unify result into the AQL
+// (unifyHandler) that converts an eng.Unify result into the BORU
 // stack shape.
 var unifyNatives = []NativeFunc{
 	{

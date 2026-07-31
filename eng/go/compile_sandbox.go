@@ -1,6 +1,6 @@
 package eng
 
-// Compile-pass state isolation (design/aql-bytecode-plan.0.md §Stage 5,
+// Compile-pass state isolation (design/boru-bytecode-plan.0.md §Stage 5,
 // fallback registry-isolation follow-on).
 //
 // CompileCheck executes the program in check mode, so its

@@ -3231,7 +3231,7 @@ func TestModuleBasic(t *testing.T) {
 		NewWord("def"), NewWord("inc"), NewList([]Value{NewWord("add"), NewInteger(1)}),
 		NewWord("export"), NewAtom("Foo"), makeMap("inc", NewWord("inc")),
 	})
-	result := runAQL(t, r, []Value{NewWord("module"), body})
+	result := runBORU(t, r, []Value{NewWord("module"), body})
 	if len(result) != 1 {
 		t.Fatalf("module: got %d results, want 1", len(result))
 	}
@@ -3269,7 +3269,7 @@ func TestModuleImportBasic(t *testing.T) {
 		NewWord("export"), NewAtom("Foo"), makeMap("inc", NewWord("inc")),
 	})
 	// Run: import module [...]
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("import"), NewWord("module"), body,
 	})
 	// import returns nothing
@@ -3279,7 +3279,7 @@ func TestModuleImportBasic(t *testing.T) {
 
 	// Now "Foo" should be defined and accessible.
 	// Foo should resolve to map {inc:[add 1]}
-	result2 := runAQL(t, r, []Value{NewWord("Foo")})
+	result2 := runBORU(t, r, []Value{NewWord("Foo")})
 	if len(result2) != 1 {
 		t.Fatalf("Foo: got %d results, want 1", len(result2))
 	}
@@ -3301,14 +3301,14 @@ func TestModuleImportDotAccess(t *testing.T) {
 		NewWord("export"), NewAtom("Foo"), makeMap("inc", NewWord("inc")),
 	})
 	// Step 1: import the module
-	runAQL(t, r, []Value{NewWord("import"), NewWord("module"), body})
+	runBORU(t, r, []Value{NewWord("import"), NewWord("module"), body})
 
 	// Step 2: Foo.inc 2 → "inc" key in Foo map → [add 1] → applied to 2 → 3
 	// Foo resolves to map {inc:[add 1]}
 	// dot with "inc" gives [add 1]
 	// do [add 1] with 2 on stack should give 3
 	// Actually let's test just Foo . inc to get the value
-	result := runAQL(t, r, []Value{NewWord("Foo"), NewAtom("inc"), NewWord("dot")})
+	result := runBORU(t, r, []Value{NewWord("Foo"), NewAtom("inc"), NewWord("dot")})
 	if len(result) != 1 {
 		t.Fatalf("Foo.inc: got %d results, want 1: %v", len(result), result)
 	}
@@ -3329,7 +3329,7 @@ func TestModuleIsolation(t *testing.T) {
 		NewWord("def"), NewWord("secret"), NewInteger(42),
 		NewWord("export"), NewAtom("M"), makeMap("x", NewInteger(1)),
 	})
-	runAQL(t, r, []Value{NewWord("import"), NewWord("module"), body})
+	runBORU(t, r, []Value{NewWord("import"), NewWord("module"), body})
 
 	// "secret" should NOT be defined in the parent registry.
 	if r.Lookup("secret") != nil {
@@ -3348,19 +3348,19 @@ func TestModuleDefSubject(t *testing.T) {
 	body := NewList([]Value{
 		NewWord("export"), NewAtom("M"), makeMap("x", NewInteger(1)),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("my-mod"), NewOpenParen(), NewWord("module"), body, NewCloseParen(),
 	})
 
 	// my-mod should resolve to a module descriptor.
-	result := runAQL(t, r, []Value{NewWord("my-mod")})
+	result := runBORU(t, r, []Value{NewWord("my-mod")})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleInst) {
 		t.Fatalf("def my-mod: expected module descriptor, got %v", result)
 	}
 
 	// import my-mod should work.
-	runAQL(t, r, []Value{NewWord("import"), NewWord("my-mod")})
-	result2 := runAQL(t, r, []Value{NewWord("M")})
+	runBORU(t, r, []Value{NewWord("import"), NewWord("my-mod")})
+	result2 := runBORU(t, r, []Value{NewWord("M")})
 	if len(result2) != 1 || !result2[0].Parent.Equal(TModuleExport) {
 		t.Errorf("import my-mod: M = %v, want ModuleExport", result2)
 	}
@@ -3377,17 +3377,17 @@ func TestModuleImportRename(t *testing.T) {
 	body := NewList([]Value{
 		NewWord("export"), NewAtom("Foo"), makeMap("x", NewInteger(1)),
 	})
-	modResult := runAQL(t, r, []Value{NewWord("module"), body})
+	modResult := runBORU(t, r, []Value{NewWord("module"), body})
 	if len(modResult) != 1 || !modResult[0].Parent.Equal(TModuleInst) {
 		t.Fatal("expected module descriptor")
 	}
 
 	// import [Foo Bar] <module-desc>
 	renameList := NewList([]Value{NewAtom("Foo"), NewAtom("Bar")})
-	runAQL(t, r, []Value{NewWord("import"), renameList, modResult[0]})
+	runBORU(t, r, []Value{NewWord("import"), renameList, modResult[0]})
 
 	// Bar should be defined.
-	result := runAQL(t, r, []Value{NewWord("Bar")})
+	result := runBORU(t, r, []Value{NewWord("Bar")})
 	if len(result) != 1 {
 		t.Fatalf("Bar: got %d results, want 1", len(result))
 	}
@@ -3403,14 +3403,14 @@ func TestModuleImportMultiRename(t *testing.T) {
 	body := NewList([]Value{
 		NewWord("export"), NewAtom("Foo"), makeMap("x", NewInteger(1)),
 	})
-	modResult := runAQL(t, r, []Value{NewWord("module"), body})
+	modResult := runBORU(t, r, []Value{NewWord("module"), body})
 
 	// import [[Foo Baz]] <module-desc>
 	pair := NewList([]Value{NewAtom("Foo"), NewAtom("Baz")})
 	renameList := NewList([]Value{pair})
-	runAQL(t, r, []Value{NewWord("import"), renameList, modResult[0]})
+	runBORU(t, r, []Value{NewWord("import"), renameList, modResult[0]})
 
-	result := runAQL(t, r, []Value{NewWord("Baz")})
+	result := runBORU(t, r, []Value{NewWord("Baz")})
 	if len(result) != 1 {
 		t.Fatalf("Baz: got %d results, want 1", len(result))
 	}
@@ -3424,7 +3424,7 @@ func TestModuleFreshRegistry(t *testing.T) {
 	}
 	registerIOWords(r)
 	// Define "foo" in parent.
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewInteger(99),
 	})
 
@@ -3433,7 +3433,7 @@ func TestModuleFreshRegistry(t *testing.T) {
 	body := NewList([]Value{
 		NewWord("export"), NewAtom("M"), makeMap("val", NewWord("foo")),
 	})
-	result := runAQL(t, r, []Value{NewWord("module"), body})
+	result := runBORU(t, r, []Value{NewWord("module"), body})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleInst) {
 		t.Fatal("expected module")
 	}

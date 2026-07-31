@@ -33,7 +33,7 @@ function goAvailable(): boolean {
 }
 
 function goRows(): Map<string, CrossRec> {
-  const outFile = path.join(os.tmpdir(), `aql-crossdump-go-${process.pid}.jsonl`)
+  const outFile = path.join(os.tmpdir(), `boru-crossdump-go-${process.pid}.jsonl`)
   try {
     execFileSync('go', ['test', './engspec/', '-run', 'TestCrossDump', '-count=1'], {
       cwd: goDir,

@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // notInstalledFileOps is the sentinel FileOps returned by the
@@ -111,7 +111,7 @@ func (notInstalledFileOps) ResolvePath(path string) (string, error) {
 // notInstalledError is the stub's refusal, as a TYPE.
 //
 // It used to be a bare fmt.Errorf with the code written into the message
-// as an `[aql/capability_not_installed]:` prefix — which errors.As cannot
+// as an `[boru/capability_not_installed]:` prefix — which errors.As cannot
 // find, so a handler wrapping this error had nothing structured to read
 // and the refusal reached the user carrying the WORD's code (or none at
 // all). A code inside prose is a code no `case` arm can match.

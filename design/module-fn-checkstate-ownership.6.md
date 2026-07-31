@@ -2,7 +2,7 @@
 
 Status: **`.6` — §6a-A (abstract-param carriers) implemented three ways; all
 break the compilation corpus.** The `.5` root cause is confirmed and the fix
-*works* for the target (decision.aql direct check 39 → 0–3), but it cannot be
+*works* for the target (decision.boru direct check 39 → 0–3), but it cannot be
 landed in isolation: the dynamic-help synthetic example eval's diagnostics are
 **load-bearing** for both construction-time checking and the bytecode
 compilation-coverage corpus. No code landed; the branch stays at §5a
@@ -16,7 +16,7 @@ Read `.5` first.
 
 `.5` located the cause as `get` over an example map (`{a:1,b:2}`) returning
 `None` for an absent key. Tracing the trigger to ground: the analysis that
-emits decision.aql's 39 direct-check errors is the **dynamic-help example
+emits decision.boru's 39 direct-check errors is the **dynamic-help example
 generator** (`native_help.go::EnableDynamicHelp` → `makeDynamicEval` →
 `GenerateDynamicExamples`). It fires from `OnRegisterHook` for every fn
 registered after `MarkReady`, runs `f <example-args>` through the body **in
@@ -26,7 +26,7 @@ stops only the bytecode RECORDING, not the diagnostics.
 
 So decision.aml's 39 "errors" are entirely synthetic-example artifacts — the
 module type-checks fine against real arguments (which is why importing it
-leaks **zero** diagnostics: `check decision_smoke_test.aql` = 0 errors, the
+leaks **zero** diagnostics: `check decision_smoke_test.boru` = 0 errors, the
 gate stays green). The §6a-A principle — an abstract `Map` param is a carrier,
 not the literal `{a:1,b:2}` — is correct.
 
@@ -114,10 +114,10 @@ testing.
 ## 6. Reproduction
 
 ```bash
-cd /home/user/aql/cmd/go && go build -o bin/aql ./aql
+cd /home/user/boru/cmd/go && go build -o bin/boru ./boru
 # the synthetic-eval source of the false positives:
-printf 'def g fn [[m:Map] [Any] [(m get "xs") all]]\n' > /tmp/d.aql
-./bin/aql check /tmp/d.aql            # → no_signature for all (from the help eval's {a:1,b:2})
+printf 'def g fn [[m:Map] [Any] [(m get "xs") all]]\n' > /tmp/d.boru
+./bin/boru check /tmp/d.boru            # → no_signature for all (from the help eval's {a:1,b:2})
 # isolating the eval (drop its diagnostics) clears decision but fails:
 #   lang/go/test  TestCheckUncalledFnBodyTypoStillFlagged, TestForwardStrandAdvisory
 # partial suppression clears those but fails:

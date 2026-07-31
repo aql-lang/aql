@@ -35,17 +35,17 @@ const (
 	ndkIDLen    = 8  // random per-NDK identifier
 	kekLen      = 32 // AES-256 key-encryption key
 	gcmNonceLen = 12 // AES-GCM nonce
-	valueMagic  = "AQLE"
+	valueMagic  = "BORUE"
 	valueFormat = 1
 
 	// Domain-separation labels. Every keyed-MAC / AEAD-AAD input below is
 	// the label followed by 0x00, then the fields joined with 0x00.
 	// Scope/Namespaces are attacker-visible plaintext, so unseparated
 	// concatenation is forbidden — the 0x00 boundaries are load-bearing.
-	labelKEK      = "AQL-slot-kek" // HKDF info for slot KEK derivation
-	labelVerifier = "AQL-verify"   // slot passphrase verifier
-	labelPriv     = "AQLP"         // EncPrivKey AAD
-	labelPubMAC   = "AQL-slot"     // public-key authentication MAC
+	labelKEK      = "BORU-slot-kek" // HKDF info for slot KEK derivation
+	labelVerifier = "BORU-verify"   // slot passphrase verifier
+	labelPriv     = "BORUP"         // EncPrivKey AAD
+	labelPubMAC   = "BORU-slot"     // public-key authentication MAC
 )
 
 // ErrNoKeyForValue is returned by openValue when the session holds no
@@ -262,7 +262,7 @@ func valueAAD(ndkID []byte, namespace, alias string) []byte {
 // sealValue seals a secret value under an NDK, producing the
 // self-describing base64 envelope the backend stores:
 //
-//	base64( "AQLE" | format(1) | ndkID(8) | nonce(12) | ciphertext|tag )
+//	base64( "BORUE" | format(1) | ndkID(8) | nonce(12) | ciphertext|tag )
 func sealValue(ndk, ndkID []byte, namespace, alias, plaintext string) (string, error) {
 	g, err := newGCM(ndk)
 	if err != nil {
@@ -291,7 +291,7 @@ func sealedValueNDKID(sealedB64 string) ([]byte, error) {
 	}
 	hdr := len(valueMagic) + 1 + ndkIDLen
 	if len(raw) < hdr+gcmNonceLen+16 || string(raw[:len(valueMagic)]) != valueMagic {
-		return nil, errors.New("vault: not an AQLE sealed value")
+		return nil, errors.New("vault: not a BORUE sealed value")
 	}
 	id := make([]byte, ndkIDLen)
 	copy(id, raw[len(valueMagic)+1:hdr])
@@ -311,7 +311,7 @@ func openValue(sealedB64, namespace, alias string, ndkByID func(id []byte) ([]by
 		return "", errors.New("vault: sealed value truncated")
 	}
 	if string(raw[:len(valueMagic)]) != valueMagic {
-		return "", errors.New("vault: not an AQLE sealed value")
+		return "", errors.New("vault: not a BORUE sealed value")
 	}
 	if f := raw[len(valueMagic)]; f != valueFormat {
 		return "", fmt.Errorf("vault: sealed value format %d unsupported", f)

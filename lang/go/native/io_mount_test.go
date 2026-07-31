@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // TestNestedMountUnwindsLIFO pins the PR-review fix: nested mounts unwind in
@@ -86,7 +86,7 @@ func TestUnmountRewiresJsonicResolver(t *testing.T) {
 	}
 }
 
-// mountFixture builds a registry with the io words and runs an AQL
+// mountFixture builds a registry with the io words and runs a BORU
 // program that mounts a handler set, returning the registry.
 func mountFixture(t *testing.T, src string) *Registry {
 	t.Helper()
@@ -107,8 +107,8 @@ func mountFixture(t *testing.T, src string) *Registry {
 
 // fullMountSrc is the database-style example: a flex-map "table" of
 // path → {data, mtime} rows, exposing read/write/stat/list/remove —
-// the minimal viable filesystem, implemented entirely in AQL. (A SQL
-// backing would swap the flex map for table queries; AQL currently has
+// the minimal viable filesystem, implemented entirely in BORU. (A SQL
+// backing would swap the flex map for table queries; BORU currently has
 // no SQL-execution surface, so the row store stands in for the table.)
 const fullMountSrc = `
 def rows (flex {})
@@ -129,11 +129,11 @@ mount {
 }
 `
 
-func TestMountedAqlFilesystemFullSurface(t *testing.T) {
+func TestMountedBoruFilesystemFullSurface(t *testing.T) {
 	r := mountFixture(t, fullMountSrc)
 	ops := HostFileOps(r)
 
-	// write / read round-trip through the AQL row store.
+	// write / read round-trip through the BORU row store.
 	if err := ops.WriteFile("a.txt", []byte("alpha"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -271,7 +271,7 @@ mount {
 	}
 	// The arity-mismatch arm: no signature matches a 1-arg call on a
 	// handler declared with 2 params.
-	a := &aqlFileOps{r: r, handlers: func() *OrderedMap {
+	a := &boruFileOps{r: r, handlers: func() *OrderedMap {
 		om := NewOrderedMap()
 		v, _ := HostFileOps(r).(*permissionedFileOps)
 		_ = v

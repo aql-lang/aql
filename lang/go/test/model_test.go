@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
-// The aql:model module is a thin AQL surface over the upstream Go
+// The boru:model module is a thin BORU surface over the upstream Go
 // implementation of @voxgig/model (github.com/voxgig/model): it unifies
-// .jsonic source into one system model (via aontu) and runs AQL-function
+// .jsonic source into one system model (via aontu) and runs BORU-function
 // actions over it. These tests drive Model.new / run / model / actions
 // through the live module.
 
-const modelImp = `import "aql:model"  `
+const modelImp = `import "boru:model"  `
 
 // TestModelRunInline pins the build-once path over inline source: the result
 // reports ok, and Model.model returns the unified model.
@@ -47,7 +47,7 @@ func TestModelType(t *testing.T) {
 	}
 }
 
-// TestModelActionSeesModel pins the action bridge: an AQL-function action
+// TestModelActionSeesModel pins the action bridge: a BORU-function action
 // receives the unified model Map and its result controls the build ok flag.
 func TestModelActionSeesModel(t *testing.T) {
 	a, err := lang.New()
@@ -121,12 +121,12 @@ func keysOf(m map[string][]byte) []string {
 }
 
 // TestModelWatchForkNoRace exercises the watch path: Model.start forks the
-// registry so the watch goroutine's rebuilds run their AQL actions on an
+// registry so the watch goroutine's rebuilds run their BORU actions on an
 // isolated registry, never racing the foreground interpreter. The test rewrites
 // the source (driving watch-goroutine rebuilds that run the action) while the
-// MAIN goroutine keeps executing AQL on the live registry; under `go test
+// MAIN goroutine keeps executing BORU on the live registry; under `go test
 // -race` this proves the two never touch the same registry. (Without the fork,
-// the action's CallAQL would run on the foreground registry and the race
+// the action's CallBORU would run on the foreground registry and the race
 // detector would fire.)
 func TestModelWatchForkNoRace(t *testing.T) {
 	a, err := lang.New()
@@ -140,7 +140,7 @@ func TestModelWatchForkNoRace(t *testing.T) {
 	}
 
 	// The action does a little work touching the model, so each watch-goroutine
-	// rebuild holds its registry through a real CallAQL — a wide window for the
+	// rebuild holds its registry through a real CallBORU — a wide window for the
 	// race detector to observe overlap if it ran on the foreground registry.
 	start := fmt.Sprintf("%sdef mdl (Model.new {path:'%s', base:'%s', actions:{tick:([mod:Any] => [((mod get 'n') add 1)])}}) (Model.start mdl) get 'ok'",
 		modelImp, src, dir)
@@ -158,12 +158,12 @@ func TestModelWatchForkNoRace(t *testing.T) {
 		}
 	}()
 
-	// Foreground: keep running AQL on the live registry for the whole window,
+	// Foreground: keep running BORU on the live registry for the whole window,
 	// concurrent with the watch goroutine's rebuilds.
 	deadline := time.Now().Add(900 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		if got := aStr(t, a, "6 mul 7"); got != "42" {
-			t.Fatalf("foreground AQL corrupted during watch: got %v, want 42", got)
+			t.Fatalf("foreground BORU corrupted during watch: got %v, want 42", got)
 		}
 	}
 	if _, err := a.Run("Model.stop mdl"); err != nil {

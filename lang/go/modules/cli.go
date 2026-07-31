@@ -5,16 +5,16 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// The aql:cli module — the Cli namespace, command-line argument parsing
+// The boru:cli module — the Cli namespace, command-line argument parsing
 // (design/CLI-PROGRAMS.0.md §8, design/CLI-PROGRAMS.1.md §2–3).
 //
-// cli is WRITTEN IN AQL (cliSource below, embedded from cli.aql), following the
-// aql:sift precedent: the module body is parsed once and run in a fresh
+// cli is WRITTEN IN BORU (cliSource below, embedded from cli.boru), following the
+// boru:sift precedent: the module body is parsed once and run in a fresh
 // sub-registry that collects its `export "Cli" {…}`. The flag grammar, the
-// usage renderer, and the dispatch decision are all AQL; the loader below is
+// usage renderer, and the dispatch decision are all BORU; the loader below is
 // the only Go.
 //
 // The surface splits along one line — what touches the world:
@@ -29,10 +29,10 @@ import (
 //	                                       colour support to hand to Cli.usage.
 //
 // argv is always an explicit PARAMETER rather than an internal `IO.args` read:
-// `aql test` cannot inject an argument vector (IO.args is empty there), so a
+// `boru test` cannot inject an argument vector (IO.args is empty there), so a
 // parser that read it internally would be untestable by construction.
 
-//go:embed cli.aql
+//go:embed cli.boru
 var cliSource string
 
 var (
@@ -41,8 +41,8 @@ var (
 	cliParseErr  error
 )
 
-// BuildCliModule loads the AQL-implemented aql:cli module: it parses the
-// embedded cli.aql once, runs it in a fresh sub-registry that inherits the
+// BuildCliModule loads the BORU-implemented boru:cli module: it parses the
+// embedded cli.boru once, runs it in a fresh sub-registry that inherits the
 // parser + module resolver (so the body's own `import`s resolve), and collects
 // the `export "Cli" {…}` map. Mirrors BuildSiftModule.
 func BuildCliModule(parent *native.Registry) (native.ModuleDesc, error) {
@@ -66,20 +66,20 @@ func BuildCliModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modReg.Effects = parent.Effects
 	modReg.InheritObserveHooks(parent)
 	// Coverage tagging (coverage.go): cli's fn bodies run on this registry, so
-	// a coverage run attributes their executed rows to "aql:cli", and
-	// registering the source gives aql:test the denominator. Inert unless a
-	// coverage hook is armed — but load-bearing when one is: the AQL-line
+	// a coverage run attributes their executed rows to "boru:cli", and
+	// registering the source gives boru:test the denominator. Inert unless a
+	// coverage hook is armed — but load-bearing when one is: the BORU-line
 	// coverage gate (cli_coverage_test.go) is the only thing standing between
-	// cli.aql and untested code, since nothing meta-tests that an AQL module
+	// cli.boru and untested code, since nothing meta-tests that a BORU module
 	// has such a gate at all.
-	modReg.SetCoverID("aql:cli")
-	parent.RegisterCoverSource("aql:cli", cliSource)
+	modReg.SetCoverID("boru:cli")
+	parent.RegisterCoverSource("boru:cli", cliSource)
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	modReg.Modules.InheritConfig(parent.Modules)
 	// Host seams that opted in (ModuleInheritedCaps) ride into the module's
 	// sub-registry: Cli.main reads the environment (COLUMNS, NO_COLOR) and the
-	// terminal probe through aql:io, and those are host capabilities, not
+	// terminal probe through boru:io, and those are host capabilities, not
 	// ambient state. Without the copy they would read as uninstalled here
 	// while the importing program saw the real ones.
 	if parent.Capabilities != nil && modReg.Capabilities != nil {
@@ -95,7 +95,7 @@ func BuildCliModule(parent *native.Registry) (native.ModuleDesc, error) {
 		native.Register(modReg)
 	}
 
-	// Collect `export "Cli" {…}` from the preamble (the aql:test-style local
+	// Collect `export "Cli" {…}` from the preamble (the boru:test-style local
 	// exporter; see modules/test.go for why RunModuleBody cannot be reused).
 	exports := map[string]*native.OrderedMap{}
 	modReg.Defs.Delete("export")

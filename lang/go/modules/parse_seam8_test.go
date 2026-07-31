@@ -3,8 +3,8 @@ package modules
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 	tabnasabnf "github.com/tabnas/abnf/go"
 	tabnas "github.com/tabnas/parser/go"
 )
@@ -101,7 +101,7 @@ func TestW8ParseHandlerSrcError(t *testing.T) {
 }
 
 // TestW8ApplySpecMapArms drives applySpecMap's error / string arms that the
-// AQL-run cov tests don't reach.
+// BORU-run cov tests don't reach.
 func TestW8ApplySpecMapArms(t *testing.T) {
 	r := mcovReg(t)
 

@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // Direct-handler cover tests for tui.go, driving the arms the engine
@@ -34,9 +34,9 @@ func tcErrContains(t *testing.T, err error, want string) {
 
 func tcCode(t *testing.T, err error) string {
 	t.Helper()
-	var ae *eng.AqlError
+	var ae *eng.BoruError
 	if !errors.As(err, &ae) {
-		t.Fatalf("not an AqlError: %v", err)
+		t.Fatalf("not a BoruError: %v", err)
 	}
 	return ae.Code
 }
@@ -127,8 +127,8 @@ func TestTuiPolicyArms(t *testing.T) {
 	_, oErr := tuiOpenHandler(nil, nil, nil, reg)
 	tcErrContains(t, oErr, "terminal")
 	// Coded by the gate (native/policy_error.go), so the refusal is
-	// dispatchable from AQL rather than an opaque foreign error.
-	var oAe *native.AqlError
+	// dispatchable from BORU rather than an opaque foreign error.
+	var oAe *native.BoruError
 	if !errors.As(oErr, &oAe) || oAe.Code != "capability_not_installed" {
 		t.Fatalf("sandbox open = %v", oErr)
 	}
@@ -402,7 +402,7 @@ func TestTuiTypeLiteralNoPanic(t *testing.T) {
 func TestTuiDeliverEvents(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(4, 2)
 	reg := trcRegWithBackend(t, vb)
-	out, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, `Tui.open {}`})
+	out, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, `Tui.open {}`})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -497,7 +497,7 @@ func TestTuiAltScreenReservation(t *testing.T) {
 		{`Tui.open {alt-screen: false}`, "reserved but not yet implemented"},
 		{`Tui.open {alt-screen: 5}`, "alt-screen: must be a Boolean"},
 	} {
-		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`, c.src})
+		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "boru:tui"`, c.src})
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Fatalf("%s = %v, want %q", c.src, err, c.want)
 		}
@@ -506,7 +506,7 @@ func TestTuiAltScreenReservation(t *testing.T) {
 	// run: same gate through the app config; alt-screen: true is the
 	// accepted spelling of today's behaviour
 	base := `update: ([s:Map e:Map] => [s])  view: ([s:Map] => [Tui.spacer])`
-	_, err := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`,
+	_, err := runTuiStepsOn(t, tcReg(t), []string{`import "boru:tui"`,
 		`Tui.run {alt-screen: false  ` + base + `}`})
 	if err == nil || !strings.Contains(err.Error(), "reserved but not yet implemented") {
 		t.Fatalf("run alt-screen false = %v", err)
@@ -514,7 +514,7 @@ func TestTuiAltScreenReservation(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(4, 2)
 	vb.Inject(tuikit.Event{Tag: "key", Key: "c", Char: "c", Mods: []string{"ctrl"}})
 	reg2 := trcRegWithBackend(t, vb)
-	out, rErr := runTuiStepsOn(t, reg2, []string{`import "aql:tui"`,
+	out, rErr := runTuiStepsOn(t, reg2, []string{`import "boru:tui"`,
 		`Tui.run {alt-screen: true  ` + base + `}`})
 	if rErr != nil || len(out) == 0 {
 		t.Fatalf("run alt-screen true = %v", rErr)

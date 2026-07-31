@@ -10,8 +10,8 @@ import (
 	"syscall/js"
 )
 
-// aqlTypeToSQLType maps an AQL field type to a SQLite column type.
-func aqlTypeToSQLType(t *Type) string {
+// boruTypeToSQLType maps a BORU field type to a SQLite column type.
+func boruTypeToSQLType(t *Type) string {
 	switch {
 	case t.ConformsTo(TInteger):
 		return "INTEGER"
@@ -93,7 +93,7 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 	for i, col := range columns {
 		fieldVal, _ := td.Record.Fields.Get(col)
 		colTypes[i] = fieldVal.Parent
-		colDefs[i] = quoteIdent(col) + " " + aqlTypeToSQLType(fieldVal.Parent)
+		colDefs[i] = quoteIdent(col) + " " + boruTypeToSQLType(fieldVal.Parent)
 	}
 	createSQL := fmt.Sprintf("CREATE TABLE %s (%s)", quoteIdent(name), strings.Join(colDefs, ", "))
 	s.db.Call("run", createSQL)
@@ -120,7 +120,7 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 				if !exists {
 					params.SetIndex(i, js.Null())
 				} else {
-					params.SetIndex(i, aqlValueToJSParam(v, colTypes[i]))
+					params.SetIndex(i, boruValueToJSParam(v, colTypes[i]))
 				}
 			}
 			s.db.Call("run", insertSQL, params)
@@ -190,7 +190,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 		om := NewOrderedMap()
 		for i, col := range cols {
 			jsVal := jsRow.Index(i)
-			om.Set(col, jsValueToAQL(jsVal, colTypes[i]))
+			om.Set(col, jsValueToBORU(jsVal, colTypes[i]))
 		}
 		resultRows = append(resultRows, NewMap(om))
 	}
@@ -214,8 +214,8 @@ func (s *SQLiteStore) DropTable(name string) {
 	delete(s.tables, name)
 }
 
-// aqlValueToJSParam converts an AQL Value to a JS value for sql.js binding.
-func aqlValueToJSParam(v Value, colType *Type) any {
+// boruValueToJSParam converts a BORU Value to a JS value for sql.js binding.
+func boruValueToJSParam(v Value, colType *Type) any {
 	if v.Parent.Equal(TNone) {
 		return js.Null()
 	}
@@ -280,8 +280,8 @@ func aqlValueToJSParam(v Value, colType *Type) any {
 	}
 }
 
-// jsValueToAQL converts a sql.js result value to an AQL Value.
-func jsValueToAQL(v js.Value, colType *Type) Value {
+// jsValueToBORU converts a sql.js result value to a BORU Value.
+func jsValueToBORU(v js.Value, colType *Type) Value {
 	if v.IsNull() || v.IsUndefined() {
 		return NewValueRaw(TNone, nil)
 	}

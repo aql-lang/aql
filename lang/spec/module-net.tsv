@@ -1,9 +1,9 @@
-# AQL Language Specification: the aql:net module
+# BORU Language Specification: the boru:net module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of HTTP / API access words that were moved out of the
 # core registry. They are reached only after `import`, under the `Net`
-# namespace: `import "aql:net" Net.word args`.
+# namespace: `import "boru:net" Net.word args`.
 #
 #   Net.fetch    — perform an HTTP request
 #   Net.prepare  — build a request from an API descriptor (no send)
@@ -15,7 +15,7 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  import binds the Net namespace (the module's exported namespace name)
-import "aql:net" convert List Net.$module	['Net']	import binds the Net namespace
+import "boru:net" convert List Net.$module	['Net']	import binds the Net namespace
 #
 # §2  negative — the words are gone from core (unbound without import)
 fetch "http://x"	ERROR:undefined_word	`fetch` is no longer a core word
@@ -27,15 +27,15 @@ Net.fetch "http://x"	ERROR:undefined_word	`Net` is unbound without `import`
 #     and deterministic: an "api"-kind descriptor missing its "spec" is
 #     rejected, exercising dispatch through the Net.prepare / Net.direct
 #     wrappers without any network.
-import "aql:net" Net.prepare {kind:"api"}	ERROR:missing required "spec" field	prepare validates the API descriptor
-import "aql:net" Net.direct {kind:"api"}	ERROR:missing required "spec" field	direct validates the API descriptor
+import "boru:net" Net.prepare {kind:"api"}	ERROR:missing required "spec" field	prepare validates the API descriptor
+import "boru:net" Net.direct {kind:"api"}	ERROR:missing required "spec" field	direct validates the API descriptor
 #
 # module-owned Fetch types — per-import mints, exported literals
 # (former global FixedIDs 3000-3002 retired; a fetch Response value
 # carries the module-minted Net.Response type).
-import "aql:net"  Net.Response is Net.Fetch	true	Response is a lattice child of the module's Fetch root
-import "aql:net"  Net.Request is Net.Fetch	true	Request is a lattice child of the module's Fetch root
-import "aql:net"  typeof Net.Response	Fetch	the exported literal IS its lattice node (typeof reports the parent)
+import "boru:net"  Net.Response is Net.Fetch	true	Response is a lattice child of the module's Fetch root
+import "boru:net"  Net.Request is Net.Fetch	true	Request is a lattice child of the module's Fetch root
+import "boru:net"  typeof Net.Response	Fetch	the exported literal IS its lattice node (typeof reports the parent)
 #
 # ─────────────────────────────────────────────────────────────────────
 # §4  Tier-1 sockets — Listener/Socket handles, bind/dial, passive reads.
@@ -43,66 +43,66 @@ import "aql:net"  typeof Net.Response	Fetch	the exported literal IS its lattice 
 #     Net.addr so outputs stay deterministic.
 #
 # listen / addr / close: bind, inspect the bound port, release
-import "aql:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) Net.close l; a.port gt 0	true	Net.listen binds; Net.addr reports the ephemeral port; Net.close releases
+import "boru:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) Net.close l; a.port gt 0	true	Net.listen binds; Net.addr reports the ephemeral port; Net.close releases
 # the exported handle types (module type literals)
-import "aql:net" canon Net.Socket	'Socket'	Net.Socket is the connection-handle type literal
-import "aql:net" canon Net.Listener	'Listener'	Net.Listener is the listen-socket type literal
+import "boru:net" canon Net.Socket	'Socket'	Net.Socket is the connection-handle type literal
+import "boru:net" canon Net.Listener	'Listener'	Net.Listener is the listen-socket type literal
 # listener identity: a bound listener IS a Net.Listener
-import "aql:net" def l (Net.listen {tcp: 0}) def ok (l is Net.Listener) Net.close l; ok	true	a bound listener is a Net.Listener
+import "boru:net" def l (Net.listen {tcp: 0}) def ok (l is Net.Listener) Net.close l; ok	true	a bound listener is a Net.Listener
 # accept: dial from this thread first — the kernel backlog holds the pending
 # connection, so the subsequent accept is deterministic (no spawn race); the
 # {within} deadline is belt-and-braces so the row can never hang the runner
-import "aql:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def c (Net.accept l {within: 5000}) Net.send-bytes (convert Bytes "x") s; def g (convert String (Net.recv-bytes c 1 {within: 5000})) Net.close s; Net.close c; Net.close l; g	'x'	Net.accept yields the pending connection and Net.recv-bytes reads exactly n
+import "boru:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def c (Net.accept l {within: 5000}) Net.send-bytes (convert Bytes "x") s; def g (convert String (Net.recv-bytes c 1 {within: 5000})) Net.close s; Net.close c; Net.close l; g	'x'	Net.accept yields the pending connection and Net.recv-bytes reads exactly n
 # negative — accept honours {within}: an idle listener raises `timeout`
-import "aql:net" def l (Net.listen {tcp: 0}) def code (do [ Net.accept l {within: 60} ] error [ dot code ]) Net.close l; code eq timeout/q	true	Net.accept with {within: ms} times out instead of blocking forever
+import "boru:net" def l (Net.listen {tcp: 0}) def code (do [ Net.accept l {within: 60} ] error [ dot code ]) Net.close l; code eq timeout/q	true	Net.accept with {within: ms} times out instead of blocking forever
 # serve-raw echo over connect-raw: recv-until frames a line, send-bytes replies
-import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.send-bytes (Net.recv-until c (convert Bytes "\n") {within: 5000}) c ])) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) Net.send-bytes (convert Bytes "ping\n") s; def r (convert String (Net.recv-bytes s 4 {within: 5000})) Net.close s; Net.close l; r	'ping'	serve-raw accept-loop + connect-raw dial + recv-until framing round-trip
+import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.send-bytes (Net.recv-until c (convert Bytes "\n") {within: 5000}) c ])) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) Net.send-bytes (convert Bytes "ping\n") s; def r (convert String (Net.recv-bytes s 4 {within: 5000})) Net.close s; Net.close l; r	'ping'	serve-raw accept-loop + connect-raw dial + recv-until framing round-trip
 # peer / shutdown / recv deadline: a silent peer raises `timeout`
-import "aql:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def p (Net.peer s) Net.shutdown s "write"; def code (do [ Net.recv s 1 {within: 60} ] error [ dot code ]) Net.close s; Net.close l; (p.port gt 0) and (code eq timeout/q)	true	Net.peer reports the remote; Net.shutdown half-closes; Net.recv honours {within}
+import "boru:net" def l (Net.listen {tcp: 0}) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def p (Net.peer s) Net.shutdown s "write"; def code (do [ Net.recv s 1 {within: 60} ] error [ dot code ]) Net.close s; Net.close l; (p.port gt 0) and (code eq timeout/q)	true	Net.peer reports the remote; Net.shutdown half-closes; Net.recv honours {within}
 # negative — malformed options are refused loudly
-import "aql:net" Net.listen {}	ERROR:net_error	listen needs a tcp: (or unix:) option
-import "aql:net" Net.listen {tcp: -1}	ERROR:net_error	listen rejects an out-of-range port
-import "aql:net" Net.connect-raw {tcp: 99}	ERROR:net_error	connect-raw wants a "host:port" String
+import "boru:net" Net.listen {}	ERROR:net_error	listen needs a tcp: (or unix:) option
+import "boru:net" Net.listen {tcp: -1}	ERROR:net_error	listen rejects an out-of-range port
+import "boru:net" Net.connect-raw {tcp: 99}	ERROR:net_error	connect-raw wants a "host:port" String
 #
 # §5  Tier-2 codecs — a codec is a {decode encode} map; built-ins are values.
-import "aql:net" Net.lines get "name"	'lines'	Net.lines is the newline-delimited text codec value
-import "aql:net" Net.json-lines get "name"	'json-lines'	Net.json-lines is the NDJSON codec value
-import "aql:net" Net.http get "name"	'http'	Net.http is the HTTP/1.1 codec value
+import "boru:net" Net.lines get "name"	'lines'	Net.lines is the newline-delimited text codec value
+import "boru:net" Net.json-lines get "name"	'json-lines'	Net.json-lines is the NDJSON codec value
+import "boru:net" Net.http get "name"	'http'	Net.http is the HTTP/1.1 codec value
 # listen {codec} service + connect → Endpoint: a lines echo round-trip
-import "aql:net" def svc (service {}) add {} ([r:Map state:Any] => [ r.line ]) svc def l (Net.listen {tcp: 0 codec: Net.lines} svc) def a (Net.addr l) def e (Net.connect {tcp: (join "" ["127.0.0.1:" (convert String a.port)]) codec: Net.lines}) def r (call {line: "ok"} e {timeout: 5000}) Net.close e; Net.close l; r.line	'ok'	listen exposes a service over a codec; connect returns a callable Endpoint
+import "boru:net" def svc (service {}) add {} ([r:Map state:Any] => [ r.line ]) svc def l (Net.listen {tcp: 0 codec: Net.lines} svc) def a (Net.addr l) def e (Net.connect {tcp: (join "" ["127.0.0.1:" (convert String a.port)]) codec: Net.lines}) def r (call {line: "ok"} e {timeout: 5000}) Net.close e; Net.close l; r.line	'ok'	listen exposes a service over a codec; connect returns a callable Endpoint
 # negative — a wire protocol is never implicit
-import "aql:net" def svc (service {}) Net.listen {tcp: 0} svc	ERROR:codec	listen over a service requires an explicit codec
-import "aql:net" Net.connect {tcp: "127.0.0.1:1"}	ERROR:codec	connect requires an explicit codec
+import "boru:net" def svc (service {}) Net.listen {tcp: 0} svc	ERROR:codec	listen over a service requires an explicit codec
+import "boru:net" Net.connect {tcp: "127.0.0.1:1"}	ERROR:codec	connect requires an explicit codec
 
 # --- Fetch accessor word extensions: import transplants these onto the
 # importer's bare dot/get/dotr/getr/has so a Response reads directly.
 # Behaviour rows use the bare spelling (what guests write); the
 # qualified rows pin the exports themselves (ADR-003) and that the
 # overloads stay anchored on Fetch rather than leaking to other types.
-import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (r.status) Net.close l; v	204	a Response answers .field directly — no convert Map step
-import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (r.nope) Net.close l; v	None	a missing Response field reads none (lenient, like a Map)
-import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (do [r!.nope] error [dot code]) Net.close l; v	key_error/q	the strict twin raises where the lenient read returns none
-import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (r has "status") Net.close l; v	true	has reports a present Response field (String key: a /q operand refuses to compile — a pre-existing limit, not specific to this overload)
-import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (convert Map r) Net.close l; v.status	204	the convert Map route still works — it was the only one before the accessors
-import "aql:net" Net.dot	fn dot[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.dot is exported as a Fetch-only accessor overload
-import "aql:net" Net.get	fn get[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.get likewise
-import "aql:net" Net.dotr	fn dotr[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.dotr likewise
-import "aql:net" Net.getr	fn getr[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.getr likewise
-import "aql:net" Net.has	fn has[[:String :Fetch][Boolean][] [:Atom :Fetch][Boolean][]]	Net.has likewise
-import "aql:net" {a:1} Net.dot a/q	ERROR:uncalled_function	the overloads are anchored on the Fetch type: a Map is NOT a receiver for the qualified form
+import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (r.status) Net.close l; v	204	a Response answers .field directly — no convert Map step
+import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (r.nope) Net.close l; v	None	a missing Response field reads none (lenient, like a Map)
+import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (do [r!.nope] error [dot code]) Net.close l; v	key_error/q	the strict twin raises where the lenient read returns none
+import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (r has "status") Net.close l; v	true	has reports a present Response field (String key: a /q operand refuses to compile — a pre-existing limit, not specific to this overload)
+import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv-until c (convert Bytes "\r\n\r\n") {within: 5000}; Net.send-bytes (convert Bytes "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n") c ])) def a (Net.addr l) def r (Net.fetch (join "" ["http://127.0.0.1:" (convert String a.port)])) def v (convert Map r) Net.close l; v.status	204	the convert Map route still works — it was the only one before the accessors
+import "boru:net" Net.dot	fn dot[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.dot is exported as a Fetch-only accessor overload
+import "boru:net" Net.get	fn get[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.get likewise
+import "boru:net" Net.dotr	fn dotr[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.dotr likewise
+import "boru:net" Net.getr	fn getr[[:String :Fetch][Any][] [:Atom :Fetch][Any][]]	Net.getr likewise
+import "boru:net" Net.has	fn has[[:String :Fetch][Boolean][] [:Atom :Fetch][Boolean][]]	Net.has likewise
+import "boru:net" {a:1} Net.dot a/q	ERROR:uncalled_function	the overloads are anchored on the Fetch type: a Map is NOT a receiver for the qualified form
 
 # --- Server-side TLS (design/NETWORK-TLS-PLAN.0.md §5 phase 6). A
 # listener PRESENTS a credential and may DEMAND one back; a dial
 # verifies one and may present one. Each side rejects the other's keys
 # by name — a `verify: false` quietly accepted on a listener would read
 # as configured while configuring nothing. The positive round trip needs
-# a host-registered credential, which AQL source cannot create by
+# a host-registered credential, which BORU source cannot create by
 # design, so it lives in net_socket_tlsserver_test.go.
-import "aql:net" Net.listen {tcp: 0  tls: {}}	ERROR:needs identity:	a TLS server with no certificate has nothing to present
-import "aql:net" Net.listen {tcp: 0  tls: {identity: nobody/q}}	ERROR:no client identity named "nobody"	guest source names a credential; only the host registers one
-import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  verify: false}}	ERROR:verify: is not available here	verify: is a dial option — a server verifies no server chain
-import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  ca: "x"}}	ERROR:ca: is not available here	a server names its client roots with require-client:
-import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  sni: "x"}}	ERROR:sni: is not available here	sni: is what a client sends, not what a server reads
-import "aql:net" Net.listen {tcp: 0  tls: {identity: srv/q  nope: 1}}	ERROR:unknown option "nope"	an unknown listen tls: key is refused, never ignored
-import "aql:net" Net.connect-raw {tcp: "127.0.0.1:1"  tls: {require-client: "x"}}	ERROR:require-client: is not available here	require-client: is a listen option
-import "aql:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv c 1 {within: 5000} ])) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def v (Net.peer-cert s) Net.close s; Net.close l; v	none	peer-cert on a plain socket is None — no TLS means no proven peer
+import "boru:net" Net.listen {tcp: 0  tls: {}}	ERROR:needs identity:	a TLS server with no certificate has nothing to present
+import "boru:net" Net.listen {tcp: 0  tls: {identity: nobody/q}}	ERROR:no client identity named "nobody"	guest source names a credential; only the host registers one
+import "boru:net" Net.listen {tcp: 0  tls: {identity: srv/q  verify: false}}	ERROR:verify: is not available here	verify: is a dial option — a server verifies no server chain
+import "boru:net" Net.listen {tcp: 0  tls: {identity: srv/q  ca: "x"}}	ERROR:ca: is not available here	a server names its client roots with require-client:
+import "boru:net" Net.listen {tcp: 0  tls: {identity: srv/q  sni: "x"}}	ERROR:sni: is not available here	sni: is what a client sends, not what a server reads
+import "boru:net" Net.listen {tcp: 0  tls: {identity: srv/q  nope: 1}}	ERROR:unknown option "nope"	an unknown listen tls: key is refused, never ignored
+import "boru:net" Net.connect-raw {tcp: "127.0.0.1:1"  tls: {require-client: "x"}}	ERROR:require-client: is not available here	require-client: is a listen option
+import "boru:net" def l (Net.serve-raw {tcp: 0} ([c:Any] => [ Net.recv c 1 {within: 5000} ])) def a (Net.addr l) def s (Net.connect-raw {tcp: (join "" ["127.0.0.1:" (convert String a.port)])}) def v (Net.peer-cert s) Net.close s; Net.close l; v	none	peer-cert on a plain socket is None — no TLS means no proven peer

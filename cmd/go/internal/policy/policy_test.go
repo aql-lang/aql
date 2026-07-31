@@ -55,7 +55,7 @@ func TestRunNoArgs(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit = %d, want 1", code)
 	}
-	if !strings.Contains(errOut, "Usage: aql policy") {
+	if !strings.Contains(errOut, "Usage: boru policy") {
 		t.Errorf("stderr should show usage; got %q", errOut)
 	}
 }
@@ -66,7 +66,7 @@ func TestRunHelp(t *testing.T) {
 		if code != 0 {
 			t.Errorf("%s: exit = %d, want 0", arg, code)
 		}
-		if !strings.Contains(out, "Usage: aql policy") {
+		if !strings.Contains(out, "Usage: boru policy") {
 			t.Errorf("%s: stdout should show usage; got %q", arg, out)
 		}
 	}
@@ -280,7 +280,7 @@ func TestSplitScopeOp(t *testing.T) {
 		wantErr   bool
 	}{
 		{"fileops.write", "fileops", "write", false},
-		{"modules.aql:math.sin", "modules", "aql:math.sin", false},
+		{"modules.boru:math.sin", "modules", "boru:math.sin", false},
 		{"nodot", "", "", true},
 		{".op", "", "", true},
 		{"scope.", "", "", true},

@@ -11,14 +11,14 @@ import (
 	"testing"
 )
 
-// End-to-end acceptance for utils/ — the coreutils subset written in AQL.
+// End-to-end acceptance for utils/ — the coreutils subset written in BORU.
 //
-// WHY THIS FILE EXISTS. utils/ is a top-level AQL directory with its own
+// WHY THIS FILE EXISTS. utils/ is a top-level BORU directory with its own
 // Makefile, outside the repo's Go MODULES fan-out and outside ci.yml, so
 // nothing in `make test` reaches it. kg/ is the standing proof that such a
 // directory rots: its `fmt` target sat disabled for months because nothing
 // executed it. This test is the tripwire — it builds real utils programs with
-// `aql build` and runs the produced executables, so a change that breaks them
+// `boru build` and runs the produced executables, so a change that breaks them
 // fails the ordinary Go suite.
 //
 // It is also the ONLY place several claims can be checked at all, because each
@@ -36,40 +36,40 @@ import (
 // build succeeding proves nothing either. Only the pair shows the baked
 // profile is what decided.
 //
-// HOW IT BUILDS. `aql build` without -native copies the RUNNING executable and
+// HOW IT BUILDS. `boru build` without -native copies the RUNNING executable and
 // appends a payload, so a plain call from inside a test would copy the test
 // binary. osExecutable is a test seam (design/TEST-SEAMS.10.md); these tests
-// point it at a freshly compiled aql, which makes the produced binaries real
+// point it at a freshly compiled boru, which makes the produced binaries real
 // standalone tools — the same artifact a user gets.
 
-// aqlOnce compiles cmd/go once per test binary; every subtest reuses it.
+// boruOnce compiles cmd/go once per test binary; every subtest reuses it.
 var (
-	aqlOnce sync.Once
-	aqlPath string
-	aqlDir  string
-	aqlErr  error
+	boruOnce sync.Once
+	boruPath string
+	boruDir  string
+	boruErr  error
 )
 
-// TestMain removes the shared aql build directory once every test in the
+// TestMain removes the shared boru build directory once every test in the
 // package has finished. Without it each run leaks ~42MB under the system temp
 // dir — the binary is ~42MB and the sync.Once means one per test binary, so a
 // repeated gauntlet quietly accumulates hundreds of megabytes.
 func TestMain(m *testing.M) {
 	code := m.Run()
-	if aqlDir != "" {
-		_ = os.RemoveAll(aqlDir)
+	if boruDir != "" {
+		_ = os.RemoveAll(boruDir)
 	}
 	os.Exit(code)
 }
 
-// buildAqlBinary compiles the aql CLI into a temp dir shared by all subtests
+// buildBoruBinary compiles the boru CLI into a temp dir shared by all subtests
 // and returns its path. The Go toolchain is required, so callers skip without.
-func buildAqlBinary(t *testing.T) string {
+func buildBoruBinary(t *testing.T) string {
 	t.Helper()
-	aqlOnce.Do(func() {
+	boruOnce.Do(func() {
 		moduleDir, err := findCmdGoModuleDir()
 		if err != nil {
-			aqlErr = err
+			boruErr = err
 			return
 		}
 		// NOT t.TempDir(): the binary is shared by every test in the file
@@ -77,33 +77,33 @@ func buildAqlBinary(t *testing.T) string {
 		// happened to trigger the build finishes — leaving later tests
 		// pointing at a deleted path. So it is an explicit MkdirTemp with an
 		// explicit removal registered below.
-		dir, err := os.MkdirTemp("", "aql-utils-e2e-")
+		dir, err := os.MkdirTemp("", "boru-utils-e2e-")
 		if err != nil {
-			aqlErr = err
+			boruErr = err
 			return
 		}
-		aqlDir = dir
-		out := filepath.Join(dir, "aql")
-		// The main package is ./aql inside the cmd/go module — building "."
+		boruDir = dir
+		out := filepath.Join(dir, "boru")
+		// The main package is ./boru inside the cmd/go module — building "."
 		// yields a library archive, which fails much later and much less
 		// legibly ("exec format error" from the produced util).
-		cmd := exec.Command("go", "build", "-o", out, "./aql")
+		cmd := exec.Command("go", "build", "-o", out, "./boru")
 		cmd.Dir = moduleDir
 		if b, err := cmd.CombinedOutput(); err != nil {
-			aqlErr = err
+			boruErr = err
 			t.Logf("go build: %s", b)
 			return
 		}
 		if !looksExecutable(out) {
-			aqlErr = fmt.Errorf("%s is not an executable image", out)
+			boruErr = fmt.Errorf("%s is not an executable image", out)
 			return
 		}
-		aqlPath = out
+		boruPath = out
 	})
-	if aqlErr != nil {
-		t.Skipf("cannot build aql: %v", aqlErr)
+	if boruErr != nil {
+		t.Skipf("cannot build boru: %v", boruErr)
 	}
-	return aqlPath
+	return boruPath
 }
 
 // looksExecutable reports whether path starts with an ELF or Mach-O magic
@@ -142,7 +142,7 @@ func utilsDir(t *testing.T) string {
 	}
 	for {
 		cand := filepath.Join(dir, "utils")
-		if st, err := os.Stat(filepath.Join(cand, "cat.aql")); err == nil && !st.IsDir() {
+		if st, err := os.Stat(filepath.Join(cand, "cat.boru")); err == nil && !st.IsDir() {
 			return cand
 		}
 		parent := filepath.Dir(dir)
@@ -153,15 +153,15 @@ func utilsDir(t *testing.T) string {
 	}
 }
 
-// buildUtil builds utils/<name>.aql into dir and returns the executable path.
+// buildUtil builds utils/<name>.boru into dir and returns the executable path.
 // extra carries build flags — the permissions pair is spelled here.
 func buildUtil(t *testing.T, dir, name string, extra ...string) string {
 	t.Helper()
-	self := buildAqlBinary(t)
-	src := filepath.Join(utilsDir(t), name+".aql")
+	self := buildBoruBinary(t)
+	src := filepath.Join(utilsDir(t), name+".boru")
 	out := filepath.Join(dir, name)
 
-	// Point the self-embed path at the real aql, not at this test binary.
+	// Point the self-embed path at the real boru, not at this test binary.
 	orig := osExecutable
 	osExecutable = func() (string, error) { return self, nil }
 	t.Cleanup(func() { osExecutable = orig })
@@ -169,7 +169,7 @@ func buildUtil(t *testing.T, dir, name string, extra ...string) string {
 	args := append([]string{src, "-o", out}, extra...)
 	var stdout, stderr bytes.Buffer
 	if rc := New().Run(args, nil, &stdout, &stderr); rc != 0 {
-		t.Fatalf("aql build %v: rc=%d\nstdout=%s\nstderr=%s", args, rc, stdout.String(), stderr.String())
+		t.Fatalf("boru build %v: rc=%d\nstdout=%s\nstderr=%s", args, rc, stdout.String(), stderr.String())
 	}
 	if st, err := os.Stat(out); err != nil || st.Mode()&0o111 == 0 {
 		t.Fatalf("produced file is not an executable (err=%v)", err)
@@ -343,17 +343,17 @@ func TestUtilsPrintenvSeesTheProcessEnvironment(t *testing.T) {
 	}
 	dir := t.TempDir()
 	bin := buildUtil(t, dir, "printenv")
-	env := []string{"AQL_E2E_ONE=first", "AQL_E2E_TWO=second"}
+	env := []string{"BORU_E2E_ONE=first", "BORU_E2E_TWO=second"}
 
 	t.Run("a named variable is printed", func(t *testing.T) {
-		got := runUtil(t, bin, "", env, "AQL_E2E_ONE")
+		got := runUtil(t, bin, "", env, "BORU_E2E_ONE")
 		if got.stdout != "first\n" || got.code != 0 {
 			t.Fatalf("stdout=%q code=%d, want first and 0", got.stdout, got.code)
 		}
 	})
 
 	t.Run("an unset variable exits 1 and prints nothing", func(t *testing.T) {
-		got := runUtil(t, bin, "", env, "AQL_E2E_MISSING")
+		got := runUtil(t, bin, "", env, "BORU_E2E_MISSING")
 		if got.code != 1 || got.stdout != "" {
 			t.Fatalf("stdout=%q code=%d, want nothing and 1", got.stdout, got.code)
 		}
@@ -367,7 +367,7 @@ func TestUtilsPrintenvSeesTheProcessEnvironment(t *testing.T) {
 		if got.code != 0 {
 			t.Fatalf("code=%d, want 0", got.code)
 		}
-		for _, want := range []string{"AQL_E2E_ONE=first\n", "AQL_E2E_TWO=second\n"} {
+		for _, want := range []string{"BORU_E2E_ONE=first\n", "BORU_E2E_TWO=second\n"} {
 			if !strings.Contains(got.stdout, want) {
 				t.Fatalf("listing %q is missing %q", got.stdout, want)
 			}
@@ -410,7 +410,7 @@ func TestUtilsGrepEndToEnd(t *testing.T) {
 
 	// stdout here is a PIPE, never a terminal, which is what makes these two
 	// assertable. --color=auto's true arm needs a real tty and is covered by
-	// the pure decision fn in utils/tests/grep_test.aql, which takes "is it a
+	// the pure decision fn in utils/tests/grep_test.boru, which takes "is it a
 	// tty" as a parameter for exactly this reason.
 	t.Run("--color=auto emits NO escapes into a pipe", func(t *testing.T) {
 		got := runUtil(t, bin, "alpha\n", nil, "--color=auto", "alp")
@@ -534,7 +534,7 @@ func TestUtilsBuiltBinaryIgnoresSameNamedHostFiles(t *testing.T) {
 	if testing.Short() {
 		t.Skip("skipping utils end-to-end build in -short mode")
 	}
-	self := buildAqlBinary(t)
+	self := buildBoruBinary(t)
 
 	proj := t.TempDir()
 	elsewhere := t.TempDir()
@@ -545,9 +545,9 @@ func TestUtilsBuiltBinaryIgnoresSameNamedHostFiles(t *testing.T) {
 		}
 		return p
 	}
-	lib := write(proj, "lib.aql", `export "Lib" { who: "BUNDLED" }`+"\n")
-	src := write(proj, "main.aql", "import \"./lib.aql\"\nprint (Lib.who)\n")
-	write(elsewhere, "lib.aql", `export "Lib" { who: "STRANGER" }`+"\n")
+	lib := write(proj, "lib.boru", `export "Lib" { who: "BUNDLED" }`+"\n")
+	src := write(proj, "main.boru", "import \"./lib.boru\"\nprint (Lib.who)\n")
+	write(elsewhere, "lib.boru", `export "Lib" { who: "STRANGER" }`+"\n")
 
 	out := filepath.Join(proj, "tool")
 	orig := osExecutable
@@ -555,7 +555,7 @@ func TestUtilsBuiltBinaryIgnoresSameNamedHostFiles(t *testing.T) {
 	t.Cleanup(func() { osExecutable = orig })
 	var so, se bytes.Buffer
 	if rc := New().Run([]string{src, "-o", out}, nil, &so, &se); rc != 0 {
-		t.Fatalf("aql build: rc=%d stderr=%s", rc, se.String())
+		t.Fatalf("boru build: rc=%d stderr=%s", rc, se.String())
 	}
 
 	run := func(cwd string) string {
@@ -584,7 +584,7 @@ func TestUtilsBuiltBinaryIgnoresSameNamedHostFiles(t *testing.T) {
 	// And a same-named file in the directory the tool is STARTED from must
 	// never be loaded in place of the bundled module.
 	if got := run(elsewhere); got != "BUNDLED" {
-		t.Errorf("run from a directory holding its own lib.aql the tool printed %q "+
+		t.Errorf("run from a directory holding its own lib.boru the tool printed %q "+
 			"— a stranger's file was executed in place of the bundled module", got)
 	}
 }

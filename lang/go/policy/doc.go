@@ -1,4 +1,4 @@
-// Package policy implements AQL's capability-scoped permissions model.
+// Package policy implements BORU's capability-scoped permissions model.
 //
 // A Policy is a compiled, evaluable permission profile: a set of
 // scopes (engine, modules, fileops, network, sqlite, formats, env,
@@ -17,7 +17,7 @@
 // is exported for the engine's dispatch hook so that eng/ doesn't
 // need to import the full Policy interface.
 //
-// Defaults are allow-everything: a *lang.AQL with no policy runs
+// Defaults are allow-everything: a *lang.BORU with no policy runs
 // without any check, and any absent scope in a policy is treated as
 // allow-all. Permissions are opt-in; existing callers are
 // unaffected. See design/PERMISSIONS.10.md for the full

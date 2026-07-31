@@ -88,8 +88,8 @@ func TestInterpEntryHookCheckModeAttribution(t *testing.T) {
 	}
 }
 
-// RunResolved and CallAQL are their own seams; InvokeCallback's interpreter
-// fallback reports its dedicated seam name BEFORE the CallAQL it delegates to.
+// RunResolved and CallBORU are their own seams; InvokeCallback's interpreter
+// fallback reports its dedicated seam name BEFORE the CallBORU it delegates to.
 func TestInterpEntryHookResolvedAndCallbackSeams(t *testing.T) {
 	r := runUnitReg(t)
 	var c entryCollector
@@ -103,13 +103,13 @@ func TestInterpEntryHookResolvedAndCallbackSeams(t *testing.T) {
 	}
 
 	c.entries = nil
-	// An unstamped callback sig falls to CallAQL through the callback seam.
-	sig := &Signature{Impl: &AQLImpl{Body: []Value{NewInteger(42)}}}
+	// An unstamped callback sig falls to CallBORU through the callback seam.
+	sig := &Signature{Impl: &BORUImpl{Body: []Value{NewInteger(42)}}}
 	if _, err := InvokeCallback(r, sig, nil, nil); err != nil {
 		t.Fatalf("InvokeCallback: %v", err)
 	}
 	seams := strings.Join(c.seams(), " ")
-	if !strings.Contains(seams, "InvokeCallback:callaql") || !strings.Contains(seams, "CallAQL") {
+	if !strings.Contains(seams, "InvokeCallback:callboru") || !strings.Contains(seams, "CallBORU") {
 		t.Fatalf("callback seams missing: %q", seams)
 	}
 }

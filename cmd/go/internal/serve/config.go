@@ -1,4 +1,4 @@
-// config.go loads a jsonic-formatted service list for `aql serve -c
+// config.go loads a jsonic-formatted service list for `boru serve -c
 // <file>`. The file's top level is a list of service specs; each
 // spec is a map with required key "name" (the service name) and
 // optional "flags" (an argv-style list forwarded to the service
@@ -20,7 +20,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // loadConfig parses path and returns the segment list that the

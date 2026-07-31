@@ -4,7 +4,7 @@ import (
 	"runtime"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // allocsPerOp runs fn a fixed number of times and returns the mean heap
@@ -33,7 +33,7 @@ func allocStatsPerOp(fn func()) (allocs, bytes int64) {
 	return int64(m1.Mallocs-m0.Mallocs) / iters, int64(m1.TotalAlloc-m0.TotalAlloc) / iters
 }
 
-// Compiled-mode allocation guard (design/aql-bytecode-plan.0.md Stage 6
+// Compiled-mode allocation guard (design/boru-bytecode-plan.0.md Stage 6
 // verification). Allocations per RunProgram are DETERMINISTIC, so they
 // are the hard regression signal (execution time is GC-noisy and only
 // advisory). Each compute/island shape has a ceiling pinned slightly
@@ -49,9 +49,9 @@ func TestCompiledAllocCeilings(t *testing.T) {
 	}
 	if eng.VMArgsDebugBuild {
 		// The ceilings are calibrated for the release build's per-run args
-		// scratch reuse; -tags aqldebug allocates a fresh args slice per
+		// scratch reuse; -tags borudebug allocates a fresh args slice per
 		// CALL_NATIVE on purpose, so its higher counts are expected.
-		t.Skip("alloc ceilings are release-build calibrated; skipped under -tags aqldebug")
+		t.Skip("alloc ceilings are release-build calibrated; skipped under -tags borudebug")
 	}
 	guards := []struct {
 		name    string

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 	"github.com/cockroachdb/apd/v3"
 )
 
@@ -332,7 +332,7 @@ var typeNatives = []NativeFunc{
 //     spec:String, entity:String
 //
 // These are registered via InstallDef so they get proper handler
-// resolution and can be referenced by name in AQL code (e.g. make
+// resolution and can be referenced by name in BORU code (e.g. make
 // Entity {...}).
 func installResourceTypes(r *Registry) {
 	resourceFields := NewOrderedMap()
@@ -411,16 +411,16 @@ func refinePlain(base, arg Value, r *Registry) ([]Value, error) {
 	if ideal == nil {
 		// Distinguish a disabled kind from an unknown base.
 		if m := r.Ideals.Match(base); m != nil {
-			return nil, r.AqlError("type_error",
+			return nil, r.BoruError("type_error",
 				fmt.Sprintf("refine: the %s type-kind is not available in this registry", m.Name),
 				"refine")
 		}
-		return nil, r.AqlError("type_error",
+		return nil, r.BoruError("type_error",
 			fmt.Sprintf("refine: base must be Record, Table, or a class type, got %s", base.String()),
 			"refine")
 	}
 	if ideal.Construct == nil {
-		return nil, r.AqlError("type_error",
+		return nil, r.BoruError("type_error",
 			fmt.Sprintf("refine: the %s type-kind cannot be constructed with `refine`", ideal.Name),
 			"refine")
 	}
@@ -437,7 +437,7 @@ func refinePlain(base, arg Value, r *Registry) ([]Value, error) {
 func refineBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	base := args[0]
 	if !IsTypeBody(base) {
-		return nil, r.AqlError("type_error",
+		return nil, r.BoruError("type_error",
 			fmt.Sprintf("refine: argument must be a type, got %s", base.String()),
 			"refine")
 	}
@@ -476,7 +476,7 @@ func installIdeals(r *Registry) {
 			if IsClassType(base) {
 				return objectWithParentHandler([]Value{arg, base}, nil, nil, r)
 			}
-			return nil, r.AqlErrorHint("refine_error",
+			return nil, r.BoruErrorHint("refine_error",
 				"refine Object is no longer the class form",
 				"refine",
 				"define a class instead: def Foo class {…}; subclass with def Bar refine Foo {…}")
@@ -487,14 +487,14 @@ func installIdeals(r *Registry) {
 			// Records have no subtyping — only the bare Record literal
 			// is a valid construction base.
 			if base.Data != nil {
-				return nil, r.AqlError("type_error",
+				return nil, r.BoruError("type_error",
 					"refine: a record type has no subtyping — construct a Record from the bare Record literal",
 					"refine")
 			}
 			// A record takes a LIST of field pairs — field order is
 			// part of a record type's identity.
 			if !arg.Parent.Equal(TList) {
-				return nil, r.AqlError("type_error",
+				return nil, r.BoruError("type_error",
 					"refine Record: a record takes a list of field pairs, e.g. [a:Integer b:String]",
 					"refine")
 			}
@@ -504,7 +504,7 @@ func installIdeals(r *Registry) {
 	if tbl := r.Ideals.Get("Table"); tbl != nil {
 		tbl.Construct = func(base, arg Value, r *Registry) ([]Value, error) {
 			if base.Data != nil {
-				return nil, r.AqlError("type_error",
+				return nil, r.BoruError("type_error",
 					"refine: a table type has no subtyping — construct a Table from the bare Table literal",
 					"refine")
 			}
@@ -584,7 +584,7 @@ func enumReturns(args []Value, _ *Registry) []Value {
 func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	list := args[0]
 	if !IsConcrete(list) {
-		return nil, &AqlError{Code: "type_error", Detail: "enum: argument must be a concrete list"}
+		return nil, &BoruError{Code: "type_error", Detail: "enum: argument must be a concrete list"}
 	}
 	var childType Value
 	hasChild := false
@@ -602,7 +602,7 @@ func enumHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 			e = NewAtom(w.Name)
 		}
 		if hasChild && !IsValueOfType(e, childType) {
-			return nil, &AqlError{
+			return nil, &BoruError{
 				Code:   "type_error",
 				Detail: "enum: element " + e.String() + " does not satisfy child type " + childType.String(),
 			}
@@ -639,7 +639,7 @@ func typeofReturns(args []Value, r *Registry) []Value {
 }
 
 func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	// Delegate to the canonical aqleng implementation, which returns
+	// Delegate to the canonical borueng implementation, which returns
 	// a Type literal: concrete value → exact Parent; type literal →
 	// its metatype (Type); implicit-map record shape → its metatype;
 	// the value `none` (unique inhabitant of None) → None.
@@ -655,7 +655,7 @@ func typeofHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 // as_error rather than silently ascribing something dispatch cannot walk.
 func asTargetType(r *Registry, t Value) (*Type, error) {
 	if !eng.IsTypeLiteral(t) {
-		return nil, r.AqlErrorHint("as_error",
+		return nil, r.BoruErrorHint("as_error",
 			"as needs a type to dispatch as, got "+t.String(),
 			"as", "spell the target type by name: value as FlexMap")
 	}
@@ -677,7 +677,7 @@ func asValidate(r *Registry, target *Type, v Value) error {
 		if v.Parent != nil {
 			own = v.Parent.Leaf()
 		}
-		return r.AqlErrorHint("as_error",
+		return r.BoruErrorHint("as_error",
 			"as: "+name+" is not a supertype of the value's type "+own+
 				" — as widens dispatch only",
 			"as", "ascribe an ancestor of the value's own type; to construct a subtype use def x:"+name+" instead")
@@ -730,7 +730,7 @@ func asReturns(args []Value, r *Registry) []Value {
 	degrade := func(err error) []Value {
 		if eng.CheckAtUncaughtTopLevel(r) {
 			code, detail := "as_error", err.Error()
-			var ae *eng.AqlError
+			var ae *eng.BoruError
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
@@ -805,7 +805,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	}
 	// A concrete function RHS is a PREDICATE (`3 is even?`). A bare
 	// type node whose Parent happens to be TFunction is NOT — it is a
-	// minted subtype of Function (the aql:minilang partial kinds,
+	// minted subtype of Function (the boru:minilang partial kinds,
 	// MiniLang.Re / …) and must fall through to the type-literal
 	// branch below, where a.Is(bNode) runs its member predicate.
 	if (b.Parent.Equal(TFnDef) || b.Parent.Equal(TFunction)) && !IsBareTypeNode(b) {
@@ -840,7 +840,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 			// doctrine, a.Is(bNode) — for the default-behavior kernel
 			// nodes this IS the old plain a.Parent.ConformsTo(bNode)
 			// subtype check (DefaultBehavior.Match delegates there),
-			// and a MEMBER type under the branch (the aql:minilang
+			// and a MEMBER type under the branch (the boru:minilang
 			// partial kinds, MiniLang.Re / …) runs its predicate.
 			return []Value{NewBoolean(a.Is(bNode))}, nil
 		}
@@ -865,7 +865,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		// a CONCRETE value against a bare-node RHS whose Behavior carries
 		// a CUSTOM matcher asks that Match first — the same predicate
 		// signature dispatch asks — so a type whose Match admits values
-		// beyond nominal ancestry (aql:matrix-util's per-import tensor
+		// beyond nominal ancestry (boru:matrix-util's per-import tensor
 		// mints match structurally across imports) answers `is`
 		// consistently with dispatch. Gated OFF DefaultBehavior nodes:
 		// their Match is plain conformance, whose `is` nuances the paths
@@ -957,7 +957,7 @@ func tisNode(v Value) *Type {
 // ---- tpartial ----
 
 // TPartialModuleNatives holds `tpartial`, moved out of core into the
-// aql:type-util module (TypeUtil.tpartial). Its handler stays here.
+// boru:type-util module (TypeUtil.tpartial). Its handler stays here.
 var TPartialModuleNatives = []NativeFunc{
 	{
 		Name: "tpartial",
@@ -974,7 +974,7 @@ var TPartialModuleNatives = []NativeFunc{
 // is left unchanged. For Object types, inherited fields are flattened
 // into the result's own field map and the result is registered as a
 // fresh anonymous Object type (lattice parent: Object root) — the
-// partial is NOT a subtype of the input because AQL's lattice runs
+// partial is NOT a subtype of the input because BORU's lattice runs
 // the other way (a child requires more, not less).
 func tpartialHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	t := args[0]
@@ -994,7 +994,7 @@ func tpartialHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		def := r.Types.MintType(id, TClass)
 		return []Value{NewClassType(def, newInfo)}, nil
 	default:
-		return nil, r.AqlError("type_error",
+		return nil, r.BoruError("type_error",
 			fmt.Sprintf("tpartial: argument must be a Record or Object type, got %s", t.String()),
 			"tpartial")
 	}
@@ -1118,7 +1118,7 @@ func typeAlgebraListFold(handler Handler) ReturnsFunc {
 
 func tanyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("tany_error", "tany: expected a concrete list", "tany")
+		return nil, r.BoruError("tany_error", "tany: expected a concrete list", "tany")
 	}
 	list, _ := AsList(args[0])
 	n := list.Len()
@@ -1144,7 +1144,7 @@ func tanyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 
 func tallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("tall_error", "tall: expected a concrete list", "tall")
+		return nil, r.BoruError("tall_error", "tall: expected a concrete list", "tall")
 	}
 	list, _ := AsList(args[0])
 	n := list.Len()
@@ -1560,7 +1560,7 @@ const maxFloatFractionDigits = 1074
 // applyFloatSign restores a negative sign bit that big.Rat drops for a
 // zero: big.Rat has no signed zero, so the exact/round expansions of
 // -0.0 (and of a negative value that rounds to zero) come back as a
-// positive 0d0. apd's BigDecimal can represent signed zero, and AQL
+// positive 0d0. apd's BigDecimal can represent signed zero, and BORU
 // treats -0.0 as a first-class Float, so we preserve math.Signbit here
 // to stay consistent with the shortest mode (which keeps it natively).
 func applyFloatSign(f float64, d *apd.Decimal) *apd.Decimal {
@@ -1574,24 +1574,24 @@ func convertIdealHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	target := args[0]
 	src := args[1]
 	if target.Data != nil {
-		return nil, r.AqlError("convert_error", "convert: first argument must be a type literal (Map or List)", "convert")
+		return nil, r.BoruError("convert_error", "convert: first argument must be a type literal (Map or List)", "convert")
 	}
 	t := ValueType(target)
 	switch {
 	case t.Equal(TMap):
 		m, err := eng.ConvertIdealToMap(src)
 		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
-			return nil, r.AqlError("convert_error", "convert to Map: "+err.Error(), "convert")
+			return nil, r.BoruError("convert_error", "convert to Map: "+err.Error(), "convert")
 		}
 		return []Value{m}, nil
 	case t.Equal(TList):
 		l, err := eng.ConvertIdealToList(src)
 		if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
-			return nil, r.AqlError("convert_error", "convert to List: "+err.Error(), "convert")
+			return nil, r.BoruError("convert_error", "convert to List: "+err.Error(), "convert")
 		}
 		return []Value{l}, nil
 	default:
-		return nil, r.AqlError("convert_error", "convert: an Ideal converts only to Map or List, got "+t.String(), "convert")
+		return nil, r.BoruError("convert_error", "convert: an Ideal converts only to Map or List, got "+t.String(), "convert")
 	}
 }
 
@@ -1599,7 +1599,7 @@ func convert2Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	targetType := args[0]
 	src := args[1]
 	if targetType.Data != nil {
-		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.Parent), "convert")
+		return nil, r.BoruError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.Parent), "convert")
 	}
 	result, err := convertTo(src, ValueType(targetType), "")
 	if err != nil {
@@ -1613,7 +1613,7 @@ func convert3Handler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	opts := args[1]
 	src := args[2]
 	if targetType.Data != nil {
-		return nil, r.AqlError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.Parent), "convert")
+		return nil, r.BoruError("convert_error", fmt.Sprintf("convert: first argument must be a type literal, got %s", targetType.Parent), "convert")
 	}
 
 	base := ""

@@ -1,19 +1,19 @@
-# AQL Language Specification: the aql:string-util module — normalize
+# BORU Language Specification: the boru:string-util module — normalize
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable utility library. Import binds the `StringUtil` namespace:
-# `import "aql:string-util"  StringUtil.word args`. The broad string
+# `import "boru:string-util"  StringUtil.word args`. The broad string
 # vocabulary (concat, split, trim, contains, …) lives in string.tsv; this
 # file covers `normalize` — Unicode + whitespace normalisation.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  normalize — Unicode NFC by default; whitespace handling is opt-in
-import "aql:string-util" StringUtil.normalize 'hello'	'hello'	default applies Unicode NFC (already-composed text is unchanged)
-import "aql:string-util" StringUtil.normalize '  a   b  ' {collapseWs: true trim: true}	'a b'	{collapseWs}/{trim} collapse runs and strip the ends
+import "boru:string-util" StringUtil.normalize 'hello'	'hello'	default applies Unicode NFC (already-composed text is unchanged)
+import "boru:string-util" StringUtil.normalize '  a   b  ' {collapseWs: true trim: true}	'a b'	{collapseWs}/{trim} collapse runs and strip the ends
 #
 # §2  a couple of sibling words for context
-import "aql:string-util" StringUtil.upper 'abc'	'ABC'	uppercase
-import "aql:string-util" StringUtil.lower 'ABC'	'abc'	lowercase
+import "boru:string-util" StringUtil.upper 'abc'	'ABC'	uppercase
+import "boru:string-util" StringUtil.lower 'ABC'	'abc'	lowercase
 #
 # §3  negative — the namespace is unbound until imported
 StringUtil.normalize 'hello'	ERROR:undefined_word	`StringUtil` is undefined without `import`

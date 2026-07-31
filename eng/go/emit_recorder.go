@@ -65,7 +65,7 @@ type EmitRecorder interface {
 	RecordDynMethod(fn Value, args, outs []Value, word string, pos SrcPos) bool
 	RecordFallback(span FallbackSpan, ins []Value, out Value, pos SrcPos) bool
 	RecordTrap(code, detail, word, hint string, pos SrcPos) bool
-	RecordTrapErr(ae *AqlError, pos SrcPos) bool
+	RecordTrapErr(ae *BoruError, pos SrcPos) bool
 	RecordDispatchRematchValues(word string, vals []Value, writtenOff, nWritten int, pos SrcPos) bool
 	RecordTypedBind(spec TypedBindSpec, in, out Value, pos SrcPos) (Value, bool)
 	RecordMakeList(r *Registry, ins []Value, out Value, pos SrcPos) bool
@@ -175,7 +175,7 @@ func (inactiveEmit) RecordDynMethod(Value, []Value, []Value, string, SrcPos) boo
 }
 func (inactiveEmit) RecordFallback(FallbackSpan, []Value, Value, SrcPos) bool { return false }
 func (inactiveEmit) RecordTrap(string, string, string, string, SrcPos) bool   { return false }
-func (inactiveEmit) RecordTrapErr(*AqlError, SrcPos) bool                     { return false }
+func (inactiveEmit) RecordTrapErr(*BoruError, SrcPos) bool                    { return false }
 func (inactiveEmit) RecordDispatchRematchValues(string, []Value, int, int, SrcPos) bool {
 	return false
 }

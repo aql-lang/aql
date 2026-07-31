@@ -1,5 +1,5 @@
 // Package docexamples extracts and runs the `expr  # returns result`
-// examples embedded in AQL's prose documentation (README, REFERENCE,
+// examples embedded in BORU's prose documentation (README, REFERENCE,
 // TUTORIAL, HOWTO, EXPLANATION) so the docs can't silently drift from
 // real engine behavior. The extractor (this file) is pure
 // text→[]Example with no engine dependency, so it is unit-testable in
@@ -13,14 +13,14 @@
 // blocks:
 //
 //   - inline:        `expr            # returns result`   (all docs)
-//   - REPL prompt:    `aql> expr       # returns result`   (TUTORIAL), and
-//     the bare `aql> expr` continuation lines that set up state (e.g.
+//   - REPL prompt:    `boru> expr       # returns result`   (TUTORIAL), and
+//     the bare `boru> expr` continuation lines that set up state (e.g.
 //     `def`) consumed by a later `# returns` line in the same block.
 //
 // The expected value is the text after `returns`. An optional human
 // description may follow it after an em-dash, which the extractor
 // ignores: `# returns 5 5 — duplicate top` asserts `5 5`. A documented
-// result of `error` / `build error` / `error: …` / `[aql/…]` means the
+// result of `error` / `build error` / `error: …` / `[boru/…]` means the
 // example is expected to fail (loose substring match), not to equal a
 // rendered value.
 package docexamples
@@ -32,7 +32,7 @@ type Example struct {
 	File string // source file basename, e.g. "REFERENCE.md"
 	Line int    // 1-based line number of the `# returns` line in File
 
-	// Program is the full AQL source to evaluate: the block's preceding
+	// Program is the full BORU source to evaluate: the block's preceding
 	// setup lines (everything before this line that was not itself a
 	// `# returns` line) joined by newlines, then the expression on this
 	// line. Setup-only result lines are deliberately excluded so a block
@@ -59,7 +59,7 @@ type Example struct {
 // out of extraction (used for the handful of non-runnable examples:
 // fetch/network, time/random, file/import, ellipsis output, multi-value
 // stacks, and syntax-template fragments).
-const skipMarker = "<!-- aql-test: skip -->"
+const skipMarker = "<!-- boru-test: skip -->"
 
 // returnsKeyword introduces an asserted result inside a trailing
 // comment. A comment that does not begin with it is treated as an
@@ -68,7 +68,7 @@ const returnsKeyword = "returns"
 
 // descSep separates the asserted value from an optional human-readable
 // description in a `# returns` comment (`# returns 5 5 — duplicate top`).
-// Em-dash never appears in rendered AQL values, so splitting on it is
+// Em-dash never appears in rendered BORU values, so splitting on it is
 // unambiguous.
 const descSep = "—"
 
@@ -101,12 +101,10 @@ func Extract(file, src string) []Example {
 		// Fence boundary: a line whose first non-space content is ```.
 		if strings.HasPrefix(trimmed, "```") {
 			if !inFence {
-				// Opening fence. Only plain (untagged), ```aql, or ```boru
-				// blocks carry AQL examples (both language tags are live
-				// during the aql→boru rename); ```bash / ```text etc. are
-				// skipped.
+				// Opening fence. Only plain (untagged) or ```boru blocks
+				// carry BORU examples; ```bash / ```text etc. are skipped.
 				info := strings.TrimSpace(strings.TrimPrefix(trimmed, "```"))
-				skipBlock = (info != "" && info != "aql" && info != "boru") ||
+				skipBlock = (info != "" && info != "boru") ||
 					strings.Contains(prevNonBlank, skipMarker)
 				inFence = true
 				setup = setup[:0]
@@ -131,7 +129,7 @@ func Extract(file, src string) []Example {
 			continue
 		}
 
-		// Inside a runnable fence. Strip an `aql> ` / `aql>` prompt.
+		// Inside a runnable fence. Strip a `boru> ` / `boru>` prompt.
 		line := stripPrompt(raw)
 		code := strings.TrimSpace(line)
 		if code == "" {
@@ -244,11 +242,11 @@ func bracketDelta(code string) int {
 	return delta
 }
 
-// stripPrompt removes a leading `aql> ` (or bare `aql>`) REPL prompt,
+// stripPrompt removes a leading `boru> ` (or bare `boru>`) REPL prompt,
 // preserving the rest of the line verbatim.
 func stripPrompt(line string) string {
 	t := strings.TrimLeft(line, " \t")
-	if rest, ok := strings.CutPrefix(t, "aql>"); ok {
+	if rest, ok := strings.CutPrefix(t, "boru>"); ok {
 		return strings.TrimPrefix(rest, " ")
 	}
 	return line
@@ -300,7 +298,7 @@ func firstUnquotedHash(s string) int {
 
 // classifyRHS interprets the documented value. It decides whether the
 // example expects an error (`error`, `build error`, `error: …`, or an
-// `[aql/code]` notation) or an exact rendered value.
+// `[boru/code]` notation) or an exact rendered value.
 func classifyRHS(rhs string) (expected string, wantErr bool, errSubstr string) {
 	rhs = strings.TrimSpace(rhs)
 
@@ -310,10 +308,10 @@ func classifyRHS(rhs string) (expected string, wantErr bool, errSubstr string) {
 		return "", true, strings.TrimSpace(rhs[len("error:"):])
 	case low == "error" || low == "build error":
 		return "", true, ""
-	case strings.HasPrefix(rhs, "[aql/"):
+	case strings.HasPrefix(rhs, "[boru/"):
 		// Documented error-code notation, e.g.
-		// `[aql/type_error] return value 1: expected Integer got …`.
-		// Match on the bracketed code (`aql/type_error`) — the prose
+		// `[boru/type_error] return value 1: expected Integer got …`.
+		// Match on the bracketed code (`boru/type_error`) — the prose
 		// after it is illustrative and not the engine's exact wording.
 		if end := strings.IndexByte(rhs, ']'); end > 0 {
 			return "", true, rhs[1:end]

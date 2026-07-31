@@ -1,4 +1,4 @@
-# aql:debug — a debugging & introspection module
+# boru:debug — a debugging & introspection module
 
 Status: **implemented through Phase 3 (every in-process surface).** Built
 and shipping in `lang/go/modules/debug.go` + `debug_step.go`: all of
@@ -15,28 +15,28 @@ via a current-engine stack for `Debug.stack`, §6.2; the `DebugOps` /
 step controller), and an executable spec (`lang/spec/module-debug.tsv`).
 
 The **§7 cross-process features** now have a **working host-level
-implementation** that does not wait for the AQL `Service` model: attaching
+implementation** that does not wait for the BORU `Service` model: attaching
 to a running runtime and the serverless debug channel are realized on Go's
-`net/http` (`lang/go/debugserve`) with the `aql debug serve` / `aql debug
+`net/http` (`lang/go/debugserve`) with the `boru debug serve` / `boru debug
 attach` CLI — a debug server wraps a live `*native.Registry` behind
 authenticated HTTP introspection (`words`/`defs`/`heap`/`eval`) and an
 invocation-keyed event relay, with a Bearer token (static or a vault
 capability id) and a loopback-default bind. What remains is the *elegant
-unification* the design targets — routing these through a first-class AQL
-`Service`/`DebugTarget`, an AQL-level `Debug.attach` word over a `connect`
+unification* the design targets — routing these through a first-class BORU
+`Service`/`DebugTarget`, a BORU-level `Debug.attach` word over a `connect`
 transport, remote stepping, and a **live** (refreshing) TUI dashboard
 host. Those still want the `Service`/`Process` actor layer
 (`SERVICES.0.md`/`PROCESSES.0.md`, RFC-only) and a language-level socket
 primitive; the host-level core proves the capability and the auth model in
 the meantime (§7.2/§7.3/§7.6).
 
-This captures the design of the native module `aql:debug` (namespace
-`Debug`) that collects AQL's debugging affordances behind one import:
+This captures the design of the native module `boru:debug` (namespace
+`Debug`) that collects BORU's debugging affordances behind one import:
 simple printing, interactive stepping, and structural / memory /
 performance analysis of both a program and the running system.
 
 Per `lang/go/CLAUDE.md` this is a *framework / capability* module, so the
-id stays plain (`aql:debug`, not `-util`) and the namespace is `Debug`.
+id stays plain (`boru:debug`, not `-util`) and the namespace is `Debug`.
 
 
 ## 1. Why a module (and why not core)
@@ -46,22 +46,22 @@ The pieces of "debugging" already exist in scattered, partial forms:
 - `print` (core) writes a value and **consumes** it — no passthrough, so
   you cannot drop it into the middle of a pipeline without restructuring
   the code.
-- `IO.trace` (`aql:io`) runs a quoted body in a sub-engine and prints the
+- `IO.trace` (`boru:io`) runs a quoted body in a sub-engine and prints the
   full step-by-step stack evolution. This is the single richest debug
   affordance today, and it is buried in the I/O module.
-- `Vm.parse` (`aql:vm`) returns the parsed token/value list without
+- `Vm.parse` (`boru:vm`) returns the parsed token/value list without
   running it — a structural view, but framed as a VM concern.
 - `inspect`, `typeof`, `is`, `describe`, `help` (core) answer
   per-value / per-word structural questions.
-- `aql:report` pretty-prints records / tables / lists.
+- `boru:report` pretty-prints records / tables / lists.
 
 These were each added where they were first needed, not where a user
 *looks* for them. A developer who wants to debug should reach for one
-import — `import "aql:debug"` — and find printing, tracing, stepping, and
+import — `import "boru:debug"` — and find printing, tracing, stepping, and
 introspection together, composed and consistent. The module **reuses**
 the underlying machinery (it does not fork it): `Debug.trace` shares
 `eng.RunTrace`, `Debug.parse` shares the parser path `Vm.parse` uses,
-the pretty-printers delegate to `aql:report`, and the structural words
+the pretty-printers delegate to `boru:report`, and the structural words
 delegate to the existing `inspect` / `typeof` / `describe` algorithms.
 
 These words stay where they are for back-compat; `Debug.*` is the curated
@@ -71,7 +71,7 @@ stepping, profiling, memory stats) live only here.
 Keeping it a module also means **zero cost when unused** — debugging
 touches the host (stdout, the clock, the Go runtime, interactive input)
 and pokes at the registry, so it is naturally a *capability* gated by
-policy. A program that never imports `aql:debug` pays nothing and is
+policy. A program that never imports `boru:debug` pays nothing and is
 granted nothing.
 
 
@@ -99,7 +99,7 @@ granted nothing.
    (§6) that owns the step hook for stepping and profiling.
 5. **Sub-engine isolation, parent attenuation.** Words that *run* user
    code (`Debug.trace`, `Debug.time`, `Debug.bench`, `Debug.step`) run it
-   in a sub-engine composed under the parent policy, exactly as `aql:vm`
+   in a sub-engine composed under the parent policy, exactly as `boru:vm`
    does — a debug word can never grant the traced code more than the
    parent already had.
 
@@ -107,7 +107,7 @@ granted nothing.
 ## 3. The five surfaces
 
 Below, each surface lists its proposed words with signatures in
-forward form. `~>` denotes "returns". Types in `Capitalised` are AQL
+forward form. `~>` denotes "returns". Types in `Capitalised` are BORU
 lattice types; new module-owned types are defined in §5.
 
 ### (A) Printing & tracing — "what is flowing through here?"
@@ -119,8 +119,8 @@ lattice types; new module-owned types are defined in §5.
 | `Debug.dump` | `Any ~> Any` | Like `tap` but prints the *full* `inspect` view (type, structure, provenance) rather than the short form. Returns the value. |
 | `Debug.watch` | `Atom/q ~> None` | Print the current binding of a def each time control passes the word: `x/q Debug.watch`. Resolves the name in the live def stack. |
 | `Debug.trace` | `List ~> Any` | Run a quoted body in a sub-engine, printing the step-by-step stack evolution. Delegates to `eng.RunTrace` (the engine behind `IO.trace`); re-exported here as the discoverable home. |
-| `Debug.assert` | `Boolean String ~> None` | If the boolean is false, raise `[aql/assertion_failure]` with the message; else no-op. (Distinct from `aql:test`'s `assert.*`, which are suite-scoped.) |
-| `Debug.todo` | `String ~> Never` | Always raises `[aql/not_implemented]` with the message. A typed hole that the checker treats as `Never` so it unifies anywhere. |
+| `Debug.assert` | `Boolean String ~> None` | If the boolean is false, raise `[boru/assertion_failure]` with the message; else no-op. (Distinct from `boru:test`'s `assert.*`, which are suite-scoped.) |
+| `Debug.todo` | `String ~> Never` | Always raises `[boru/not_implemented]` with the message. A typed hole that the checker treats as `Never` so it unifies anywhere. |
 
 `Debug.tap` / `Debug.label` are the headline ergonomics win: printf-style
 debugging that doesn't force you to break a concatenative pipeline apart.
@@ -143,7 +143,7 @@ the next action (step / continue / step-over / inspect / quit).
 Non-interactive hosts (CI, wasm playground, tests) supply a *scripted*
 controller — a pre-recorded list of actions — so stepping is testable
 without a TTY. The REPL supplies a line-reading controller; a future
-`aql debug <file>` CLI subcommand (out of scope here, noted in §9) would
+`boru debug <file>` CLI subcommand (out of scope here, noted in §9) would
 supply a richer one.
 
 ### (C) Program structural analysis — "what is this code/word made of?"
@@ -153,7 +153,7 @@ supply a richer one.
 | `Debug.parse` | `String ~> List` | Parse source to the quoted token/value list without running it. Shares the path behind `Vm.parse`; re-exported as the natural home for "show me the AST". |
 | `Debug.disasm` | `List ~> List` | Compile a quoted body to its StackForm op list (the `Recorder` output) and return it as inspectable data — the "bytecode view". |
 | `Debug.sig` | `Atom/q ~> List` | The signatures of a word, as structured data (params, returns, barrier position) — the machine-readable form of what `describe` renders. |
-| `Debug.body` | `Atom/q ~> Any` | For an AQL-defined fn, the quoted body tokens; for a native, a descriptor noting it is host-implemented. |
+| `Debug.body` | `Atom/q ~> Any` | For a BORU-defined fn, the quoted body tokens; for a native, a descriptor noting it is host-implemented. |
 | `Debug.deps` | `List ~> List` | The set of word names a quoted body references (via the body-walker `WalkBodyWords` already used for closure capture). Useful for "what does this touch?". |
 | `Debug.explain` | `Atom/q ~> String` | The full `describe` text for a word, returned as a String (so it can be embedded, not just printed). |
 
@@ -184,7 +184,7 @@ seam.
 
 | Word | Signature | Behaviour |
 |------|-----------|-----------|
-| `Debug.sizeof` | `Any ~> Integer` | Estimated retained byte size of an AQL value (deep walk of lists/maps/strings/payloads). Pure — walks the value graph in-process. |
+| `Debug.sizeof` | `Any ~> Integer` | Estimated retained byte size of a BORU value (deep walk of lists/maps/strings/payloads). Pure — walks the value graph in-process. |
 | `Debug.shape` | `Any ~> Map` | Structural census of a value: counts by kind (ints, strings, lists, maps), max depth, total node count. Pure. |
 | `Debug.heap` | `None ~> Map` | Go-runtime heap stats (`runtime.MemStats`: alloc, total-alloc, heap-objects, num-GC) as a Map. **Host capability** — only meaningful with a real runtime; gated under `debug`. |
 | `Debug.gc` | `None ~> Map` | Force a GC and return before/after heap deltas. Capability-gated; useful for "is this leaking?". |
@@ -213,7 +213,7 @@ for real tuning.
 ## 4. Composition examples
 
 ```
-import "aql:debug"
+import "boru:debug"
 
 # (A) printf-debugging without breaking the pipeline
 [1 2 3 4] (each [dup mul]) Debug.tap (fold add 0) Debug.label "sum"
@@ -243,7 +243,7 @@ big-table Debug.shape      # ~> {maps:300 strings:1200 max-depth:4 ...}
 
 Registered into the sub-registry per import (module-scoped, *not* global
 builtins — they have no FixedID and reach the user via exports, exactly
-like `aql:io`'s `StreamKind`). Reach them as `Debug.TypeName`.
+like `boru:io`'s `StreamKind`). Reach them as `Debug.TypeName`.
 
 | Type | Shape | Used by |
 |------|-------|---------|
@@ -254,7 +254,7 @@ like `aql:io`'s `StreamKind`). Reach them as `Debug.TypeName`.
 | `StepRecord` | `refine Record [step:Integer pointer:Integer word:String stack-depth:Integer]` | stepping / profiling hook payloads |
 
 Returning structured records (rather than ad-hoc maps) lets callers pipe
-straight into `report.table`, assert with `aql:test`, or `getpath` into
+straight into `report.table`, assert with `boru:test`, or `getpath` into
 fields with type safety.
 
 
@@ -266,7 +266,7 @@ fields with type safety.
 - **`Engine.recorder Recorder`** (StackForm) — the compiled op stream behind `Debug.disasm`.
 - **`EffectiveClock(r)`** — the time source behind `Debug.time`/`Debug.bench`; honours an installed `FixedClock` for deterministic tests.
 - **`inspect` / `typeof` / `describe` / `WalkBodyWords`** — the algorithms behind surface (C).
-- **The `aql:vm` sub-engine pattern** (`runInSubEngine`, policy composition) — the isolation model every code-running debug word follows.
+- **The `boru:vm` sub-engine pattern** (`runInSubEngine`, policy composition) — the isolation model every code-running debug word follows.
 
 ### What is new
 
@@ -301,7 +301,7 @@ fields with type safety.
 
    Default OS-backed impl reads `runtime.MemStats` and wires a TTY
    controller; the wasm / sandbox impl stubs MemStats to zeroes and
-   supplies a no-op controller, so `aql:debug` *loads* everywhere but its
+   supplies a no-op controller, so `boru:debug` *loads* everywhere but its
    effectful words degrade gracefully (and are policy-refusable).
 
 3. **`Debug.stack` seam** — the single new engine-internal read. It is
@@ -335,7 +335,7 @@ callback.
 // shared scaffold for Debug.trace / steps / time / bench / profile / step
 func runUnderHook(parent *native.Registry, body []native.Value,
         hook native.TraceCallback) ([]native.Value, error) {
-    sub := native.New(parent)        // child engine; aql:vm policy-composition model
+    sub := native.New(parent)        // child engine; boru:vm policy-composition model
     sub.SetTrace(hook)               // thin exported setter over Engine.trace
     return sub.Run(append([]native.Value(nil), body...))
 }
@@ -445,7 +445,7 @@ state onto the registry for the `args` word.
 ```
 lang/go/modules/debug.go          # BuildDebugModule + sub-registry wiring
 lang/go/modules/debug_test.go     # word-level tests (incl. negative rows)
-lang/go/modules/docs_debug.go     # registerDocs("aql:debug", {...})
+lang/go/modules/docs_debug.go     # registerDocs("boru:debug", {...})
 lang/go/capabilities/debug.go     # DebugOps interface + OS / stub impls
 eng/go/debug_session.go           # DebugSession, StepController, profiling accumulators
 lang/spec/debug.tsv               # executable spec rows (positive + negative)
@@ -474,7 +474,7 @@ Surfaces (A)–(F) debug a program you are *running yourself*. This section
 adds the three surfaces for debugging a system that is **already running**
 — a live TUI dashboard of runtime state, attaching to a long-lived
 process, and interrogating ephemeral serverless invocations — and the
-authentication that makes them safe. All three reuse infrastructure AQL
+authentication that makes them safe. All three reuse infrastructure BORU
 already has rather than inventing transports: the `api` service + its
 discovery file, the bubbletea `tui` client, the `Service`/`call` model
 (`SERVICES.0.md`), and the vault capability-token broker.
@@ -490,7 +490,7 @@ Everything here rests on one decision. **A unit of debuggable state is a
 That single decision buys all three features at once, because `call`
 obeys the **uniform "assume-remote" contract** (`SERVICES.0.md` §8): the
 *same* `call {op:"sample"} src` works whether `src` is an in-process value,
-a process in a running `aql serve` reached over a socket, or a serverless
+a process in a running `boru serve` reached over a socket, or a serverless
 invocation reached through a relay. The dashboard is just a client that
 lays out a set of these services and polls each on a tick — exactly what
 `cmd/go/internal/tui` already does against the `api` service today. Attach
@@ -505,7 +505,7 @@ So the data model is wire-uniform and render-agnostic:
 | `WidgetMeta` | `refine Record [id:String title:String kind:String refresh-ms:Integer span:Integer]` | layout + cadence hints; `span` is grid columns. |
 | `DebugWidget` | a `Service` (or a constructor returning one) answering `{op:"meta"}` / `{op:"sample"}` | the contributable unit (§7.1). |
 
-The Go TUI host renders a `DebugCell` by `kind`; the AQL side only ever
+The Go TUI host renders a `DebugCell` by `kind`; the BORU side only ever
 produces **data**, never terminal escapes — which is precisely why the
 same cell renders locally and streams back from a remote/serverless
 target.
@@ -513,19 +513,19 @@ target.
 ### 7.1 Live runtime dashboard (`Debug.dashboard`) — extensible via module widgets
 
 ```
-Debug.dashboard [widgets] {refresh-ms:500 …} -> None     # AQL entry: run a TUI
-aql debug top [--attach <target>]                        # CLI entry (Phase 3)
+Debug.dashboard [widgets] {refresh-ms:500 …} -> None     # BORU entry: run a TUI
+boru debug top [--attach <target>]                        # CLI entry (Phase 3)
 ```
 
 `Debug.dashboard` takes a list of `DebugWidget`s, hands them to the
 bubbletea host (the existing `cmd/go/internal/tui` model, generalised
 from "a table of services" to "a grid of widget cells"), and polls each
 widget's `{op:"sample"}` on its `refresh-ms`. The host owns layout,
-input, and rendering; AQL owns the widget set and the sampled data.
+input, and rendering; BORU owns the widget set and the sampled data.
 
 **Extensibility — widgets are contributed by other modules.** A widget is
 just a `Service`-shaped value a module **exports**, so any module adds
-dashboard content with no change to `aql:debug`. Discovery is two-tier:
+dashboard content with no change to `boru:debug`. Discovery is two-tier:
 
 1. **Explicit (always works):** the caller passes the widget list —
    `Debug.dashboard [ (Debug.heap-widget) (Serve.supervision-widget app)
@@ -538,7 +538,7 @@ dashboard content with no change to `aql:debug`. Discovery is two-tier:
    `Debug.dashboard Debug.discover-widgets` shows everything the loaded
    modules offer.
 
-Built-in widgets shipped by `aql:debug` are thin wrappers over §3's
+Built-in widgets shipped by `boru:debug` are thin wrappers over §3's
 words: `stack`, `defs`, `heap`/`gc` (gauge), `profile` (table),
 `steps`/`time` (sparkline of a sampled body), `processes` (§7.2),
 `log` (a ring buffer the `Debug.tap`/`label` words can feed). Other
@@ -546,16 +546,16 @@ core modules are the obvious first contributors:
 
 | Module | Widget | Cell |
 |--------|--------|------|
-| `aql:serve` | supervision tree — services, states, restart counts, mailbox depth/high-water (`SERVICES.0.md` §8.1) | `table` |
-| `aql:net` | in-flight HTTP requests, status histogram, latency | `table` + `sparkline` |
-| `aql:rand` | active seeded instances (for reproducibility audits) | `record` |
+| `boru:serve` | supervision tree — services, states, restart counts, mailbox depth/high-water (`SERVICES.0.md` §8.1) | `table` |
+| `boru:net` | in-flight HTTP requests, status histogram, latency | `table` + `sparkline` |
+| `boru:rand` | active seeded instances (for reproducibility audits) | `record` |
 | user module | anything: queue depths, cache hit-rate, domain metrics | any `kind` |
 
 A user module exports a widget the same way it exports a service
 (`SERVICES.0.md` §2):
 
-```aql
-# metrics.aql — contribute a dashboard widget
+```boru
+# metrics.boru — contribute a dashboard widget
 export "debug-widgets" fn [[] [List] [
   [ ( Debug.widget {
         id: "cache" title: "Cache hit-rate" kind: "gauge" refresh-ms: 1000
@@ -572,17 +572,17 @@ widget — which they get for free because a widget *is* a service.
 
 ### 7.2 Attaching to a running process (`Debug.attach`)
 
-A long-lived `aql serve` (or any program that opted into a debug
+A long-lived `boru serve` (or any program that opted into a debug
 endpoint) exposes its processes/services as debug sources. Attaching is
 **obtaining authenticated `Service` handles to them from outside**.
 
 ```
 Debug.attach {target} {token:…} -> DebugTarget      # connect to a running runtime
-aql debug attach <target>                            # CLI: opens the dashboard attached
+boru debug attach <target>                            # CLI: opens the dashboard attached
 ```
 
 - **Target resolution** mirrors the existing `tui`/`api` story: a **local**
-  attach reads the `$TMPDIR/aql-api.json` discovery file (`{url, token,
+  attach reads the `$TMPDIR/boru-api.json` discovery file (`{url, token,
   pid}`, mode 0600) the `api` service already writes (`cmd/go/internal/api`);
   a **remote** attach takes an explicit `{http: "https://host:port"}` and a
   token. No new discovery mechanism.
@@ -601,7 +601,7 @@ aql debug attach <target>                            # CLI: opens the dashboard 
   resolve to remote `Service` calls under the uniform contract — so
   `Debug.dashboard (Debug.attach {…}).widgets` renders a **remote**
   runtime with the identical code path as a local one. Attaching the
-  stepper (`aql debug attach --step <pid>`) is the remote form of §3(B).
+  stepper (`boru debug attach --step <pid>`) is the remote form of §3(B).
 
 Attach is strictly **read-only by default**; stepping/pausing a remote
 process requires an elevated scope on the presented token (§7.4), because
@@ -622,8 +622,8 @@ Debug.channel {invocation: id  relay: "…"  token: …}    -> DebugChannel
 Debug.interrogate {relay:"…" invocation: id  token: …}  -> DebugTarget
 ```
 
-Two cooperating flows over the same relay (which is itself an
-`aql:serve` service — a `proxy`-shaped broker, `SERVICES.0.md` §6):
+Two cooperating flows over the same relay (which is itself a
+`boru:serve` service — a `proxy`-shaped broker, `SERVICES.0.md` §6):
 
 1. **Emit (always cheap).** When a channel is configured, `Debug.tap` /
    `label` / `assert` / `profile` and any widget `sample` **also** publish
@@ -646,13 +646,13 @@ Two cooperating flows over the same relay (which is itself an
 The relay decouples the two lifetimes: a function can emit and vanish; an
 interrogator can connect before, during, or after, addressing by
 invocation id. For live stepping, a thin synchronous wrapper
-(`aql debug invoke …`) holds the invocation open against the relay so a
+(`boru debug invoke …`) holds the invocation open against the relay so a
 human can step a single cold start — opt-in, since it defeats the
 scale-to-zero economics. Aggregating many invocations (one relay, many
 ids) is the natural extension and is where the dashboard's `log`/`table`
 widgets point in serverless mode.
 
-### 7.4 Authentication via `aql:vault` (the trust boundary)
+### 7.4 Authentication via `boru:vault` (the trust boundary)
 
 Attach and the serverless channel cross trust boundaries — a debug
 endpoint that exposes process bindings, lets you pause a production
@@ -661,9 +661,9 @@ target**. Authentication is therefore not a static `--token` but the
 **vault capability-token model** already proven by the credential proxy
 (`cmd/go/internal/vault/proxy.go`, `proxy_security_test.go`).
 
-- **Capability tokens, not passwords.** `aql vault` mints a scoped,
+- **Capability tokens, not passwords.** `boru vault` mints a scoped,
   revocable capability for debug access:
-  `aql vault grant debug --target <id> --scope debug.attach --expires 1h
+  `boru vault grant debug --target <id> --scope debug.attach --expires 1h
   --budget 500`. The holder presents `Authorization: Bearer
   <capability-id>`; the endpoint validates exactly as the proxy does today
   — hashed token → alias binding → **revoked / expired / method / budget /
@@ -683,8 +683,8 @@ target**. Authentication is therefore not a static `--token` but the
   in the error. Emergency revocation is the unified `call {op:"pause"}`
   control — a leaked debug token is killed centrally at the broker.
 - **Protocol versioning + transport hygiene, reused.** The debug wire
-  envelope carries `X-AQL-Debug-Protocol` (mirroring
-  `X-AQL-Vault-Protocol`); a stale agent fails loud. Local endpoints bind
+  envelope carries `X-BORU-Debug-Protocol` (mirroring
+  `X-BORU-Vault-Protocol`); a stale agent fails loud. Local endpoints bind
   loopback by default and require an explicit `--allow-public` to expose,
   exactly like the proxy. For the serverless relay, **both** legs
   authenticate: the function presents a *producer* capability (emit-only,
@@ -717,9 +717,9 @@ called out in phasing (§9) and the gap below.
 not-yet-built substrate. Concretely it needs: the `Service`/`call` model
 and the served-process layer (both RFC-only today —
 `SERVICES.0.md`/`PROCESSES.0.md`); a debug-introspection service on
-`aql serve`; the bubbletea host generalised from the services table to a
+`boru serve`; the bubbletea host generalised from the services table to a
 widget grid; a `connect`/transport for remote `call` (the **TCP server
-AQL still lacks** — `SERVICES.0.md` §10); and a relay service for the
+BORU still lacks** — `SERVICES.0.md` §10); and a relay service for the
 serverless channel. What it does **not** need to invent: the auth model
 (vault capabilities exist), the discovery/transport bones (the `api`
 service + discovery file exist), the renderer (the `tui` model exists),
@@ -738,7 +738,7 @@ A new policy scope **`debug`** governs the effectful surfaces:
 | `debug.step` | `Debug.step` / `break*` / `run-stepped` (blocks for input) |
 | `debug.introspect` | `Debug.words` / `defs` / `modules` / `types` / `stack` / `scope` (reads registry) |
 | `debug.runtime` | `Debug.heap` / `gc` (reads Go runtime) |
-| `debug.serve` | exposing a debug endpoint on `aql serve` (§7.2): the local introspection service is *installable* only with this scope |
+| `debug.serve` | exposing a debug endpoint on `boru serve` (§7.2): the local introspection service is *installable* only with this scope |
 | `debug.remote` | `Debug.attach` / `dashboard --attach` / `interrogate` (outbound — opening a debug connection to another runtime/relay) |
 
 The **remote** scopes (`debug.serve`, `debug.remote`) gate the
@@ -754,7 +754,7 @@ The **pure** words (`Debug.parse`, `disasm`, `sig`, `body`, `deps`,
 need no scope — they read source / in-memory values / the static word
 table and a clock that is itself already a capability. Code-running words
 (`trace`, `step`, `time`, `bench`, `profile`) compose the child engine
-under the parent policy (the `aql:vm` model), so traced code can never
+under the parent policy (the `boru:vm` model), so traced code can never
 exceed the parent's grants.
 
 Default profiles: `sandbox` denies `debug.runtime` and `debug.step`
@@ -781,7 +781,7 @@ value-per-effort:
 
 - **Phase 3 — interactive stepping** (`StepController` + `DebugOps`):
   `step`, `break`, `break-when`, `run-stepped`, plus a scripted controller
-  for tests. The TTY/REPL controller and a possible `aql debug <file>` CLI
+  for tests. The TTY/REPL controller and a possible `boru debug <file>` CLI
   subcommand are the host-side follow-on.
 - **Phase 4 — runtime memory** (`DebugOps.MemStats`): `heap`, `gc`.
 
@@ -824,29 +824,29 @@ sequenced after them, not after Phase 4 alone:
   `WidgetMeta` typing and the service-shaped widget form arrive with the
   `Service` layer.
 - **Phase 6 — attach.** **Host-level core shipped** (`lang/go/debugserve` +
-  `aql debug` CLI): rather than wait for the AQL `Service` model and a
+  `boru debug` CLI): rather than wait for the BORU `Service` model and a
   language-level socket, the attach surface is realized directly on Go's
   `net/http` — the substrate that already underpins the `api` service.
   `debugserve.Server` wraps a `*native.Registry` behind authenticated HTTP
   introspection (`/debug/words|defs|heap|eval`), `debugserve.Client`
-  attaches over HTTP, and `aql debug serve [file.aql]` / `aql debug attach
+  attaches over HTTP, and `boru debug serve [file.boru]` / `boru debug attach
   <words|defs|heap|eval|events>` are the user-facing front door (with a
-  `$TMPDIR/aql-debug.json` discovery file, mirroring `api`). Auth is an
+  `$TMPDIR/boru-debug.json` discovery file, mirroring `api`). Auth is an
   optional Bearer token — a static token *or* a vault capability id,
   validated as the vault proxy does (§7.4); loopback-by-default with an
-  explicit `--allow-public`. `lang.AQL.NativeRegistry()` is the one new
+  explicit `--allow-public`. `lang.BORU.NativeRegistry()` is the one new
   accessor it needed. **Remaining (the Service-model unification):**
-  routing through a first-class `Service`/`DebugTarget`, an AQL-level
+  routing through a first-class `Service`/`DebugTarget`, a BORU-level
   `Debug.attach` word over a `connect` transport, and remote
   widgets/stepping — these still want `SERVICES.0.md`/`PROCESSES.0.md`.
 - **Phase 7 — serverless channel.** **Host-level core shipped:** the
   `debugserve` relay carries the out-of-band channel — a function `Emit`s
   events keyed by invocation id (`POST /debug/emit?id=`), an interrogator
-  reads them back (`GET /debug/events?id=`, `aql debug attach events
+  reads them back (`GET /debug/events?id=`, `boru debug attach events
   <id>`), per-invocation isolated and ring-bounded. **Remaining:** the
-  drop-policy AQL-side emit wiring into `Debug.tap`/`label`, the
+  drop-policy BORU-side emit wiring into `Debug.tap`/`label`, the
   poll-for-commands live-control leg, and the producer/consumer capability
-  split — these layer on once the AQL-level transport/`Service` form lands.
+  split — these layer on once the BORU-level transport/`Service` form lands.
 
 The auth model (vault capabilities) is reused, not built — wired in at
 Phases 6–7 as the Bearer token the `debugserve` server validates.
@@ -869,7 +869,7 @@ Per `lang/go/CLAUDE.md`, every behaviour gets a paired negative test:
   `Debug.sizeof` / `shape` on a **type literal / carrier** must not panic
   (the `TestTypeLiteralNoPanic` discipline); effectful words refuse under
   a denying policy with the documented error; `Debug.assert false "msg"`
-  raises `[aql/assertion_failure]`, `Debug.assert true "msg"` does not.
+  raises `[boru/assertion_failure]`, `Debug.assert true "msg"` does not.
 - `Debug.step` is exercised with the `scriptedController` so the
   interactive path is covered headlessly; assert that `Debug.break`
   with **no active session** is a pure no-op (production safety).
@@ -893,7 +893,7 @@ policy refusal, no-panic, scripted stepping, capability rejection) in
 1. **Re-export vs relocate.** `Debug.trace` and `Debug.parse` duplicate
    `IO.trace` / `Vm.parse`. Re-export (keep both, `Debug.*` is an alias)
    is the back-compat-safe default proposed here. Do you instead want the
-   canonical home moved to `aql:debug` with `IO.trace`/`Vm.parse`
+   canonical home moved to `boru:debug` with `IO.trace`/`Vm.parse`
    deprecated? (Affects whether this is purely additive.)
 2. **`Debug.stack` engine seam.** §6.2 recommends the *gated-snapshot*
    read (one guarded field write in the Run loop, cost-free when no debug
@@ -901,7 +901,7 @@ policy refusal, no-panic, scripted stepping, capability rejection) in
    you prefer the body-wrapping `Debug.stack-of [body]` reframe (no engine
    change at all) — keeping native handlers strictly arg-scoped?
 3. **CLI surface.** Should interactive stepping get a first-class
-   `aql debug <file>` subcommand (a Phase-3 host follow-on), or stay
+   `boru debug <file>` subcommand (a Phase-3 host follow-on), or stay
    REPL-only for now?
 4. **Scope granularity.** Is the `debug` scope with six ops
    (§8, incl. the two remote ops) the right shape, or should `debug.runtime`
@@ -914,7 +914,7 @@ policy refusal, no-panic, scripted stepping, capability rejection) in
    discoverability for explicitness?
 6. **Widget = full `Service`, or a lighter record?** Modelling a widget as
    a `Service` (§7.0) buys `wrap`/`prior` + location-transparency for free
-   but couples `aql:debug`'s dashboard to the (unbuilt) service layer. Is a
+   but couples `boru:debug`'s dashboard to the (unbuilt) service layer. Is a
    lighter `{meta sample}` record contract worth defining for a Phase-5
    in-process dashboard that ships *before* services, with an upgrade path
    to the service form?
@@ -924,7 +924,7 @@ policy refusal, no-panic, scripted stepping, capability rejection) in
    sufficient for the serverless story, with live stepping deferred — or is
    interactive cold-start stepping a day-one requirement?
 8. **Where do debug capability tokens live in vault?** Should
-   `aql vault grant debug` be a first-class vault verb with its own
+   `boru vault grant debug` be a first-class vault verb with its own
    audit/scope surface, or a thin convention over the existing
    capability-token machinery (`proxy.go`) with `debug.*` aliases? (Leaning
    thin convention — reuse, don't fork.)

@@ -28,7 +28,7 @@ func TestPipeBarrierFnDef(t *testing.T) {
 		// Body: convert the integer to string then concatenate
 		NewList([]Value{NewWord("convert"), NewWord("String"), NewWord("add")}),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("f"),
 		NewWord("fn"), fnBody, NewEnd(),
 	})
@@ -36,7 +36,7 @@ func TestPipeBarrierFnDef(t *testing.T) {
 	// "hello" f 42 → "hello" is on stack, f forward-collects 42.
 	// Barrier stops at position 1 → String from stack.
 	// f(42, "hello") → "42" add "hello" → "42hello"
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewString("hello"), NewWord("f"), NewInteger(42),
 	})
 	_as0, _ := AsString(result[0])
@@ -45,7 +45,7 @@ func TestPipeBarrierFnDef(t *testing.T) {
 	}
 
 	// "world" 7 f → both on stack, reversed: top=7→sig[0], next="world"→sig[1]
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewString("world"), NewInteger(7), NewWord("f"),
 	})
 	_as1, _ := AsString(result[0])
@@ -73,7 +73,7 @@ func TestPipeBarrierPreventsGreedyForward(t *testing.T) {
 	// m1 get fn1 m2 get fn2
 	// Without barrier: get would forward-collect fn1 AND m2 (both match).
 	// With barrier: get collects fn1 forward, gets m1 from stack.
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewMap(m1), NewWord("dot"), NewWord("fn1"),
 		NewMap(m2), NewWord("dot"), NewWord("fn2"),
 	})

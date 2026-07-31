@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // fnDefWithProvenance builds a module-export-style FnDef value carrying
@@ -13,13 +13,13 @@ import (
 func fnDefWithProvenance() Value {
 	return NewFnDef(FnDefInfo{
 		Name:   "indices",
-		Module: "aql:array-util",
+		Module: "boru:array-util",
 		Export: "ArrayUtil",
 		Doc:    "Position of each needle in the haystack, -1 if absent.",
 		Signatures: []FnSig{{
 			Params:     []FnParam{{Type: TList}, {Type: TList}},
 			Returns:    []*Type{TList},
-			Impl:       AQL([]Value{NewWord("indices")}),
+			Impl:       BORU([]Value{NewWord("indices")}),
 			BarrierPos: -1,
 		}},
 	})
@@ -35,8 +35,8 @@ func TestFnDefFuncInfoProvenance(t *testing.T) {
 	if info.Name != "ArrayUtil.indices" {
 		t.Errorf("Name = %q, want ArrayUtil.indices", info.Name)
 	}
-	if info.Module != "aql:array-util" {
-		t.Errorf("Module = %q, want aql:array-util", info.Module)
+	if info.Module != "boru:array-util" {
+		t.Errorf("Module = %q, want boru:array-util", info.Module)
 	}
 	if !strings.HasPrefix(info.Doc, "Position of each needle") {
 		t.Errorf("Doc = %q, want the indices summary", info.Doc)
@@ -68,7 +68,7 @@ func TestBuildQualifiedFuncInfo(t *testing.T) {
 	if info == nil {
 		t.Fatal("BuildQualifiedFuncInfo returned nil for an imported export")
 	}
-	if info.Module != "aql:array-util" || info.Name != "ArrayUtil.indices" {
+	if info.Module != "boru:array-util" || info.Name != "ArrayUtil.indices" {
 		t.Errorf("got Name=%q Module=%q", info.Name, info.Module)
 	}
 
@@ -89,7 +89,7 @@ func TestFormatDynamicModuleHeader(t *testing.T) {
 	if !strings.Contains(out, "ArrayUtil.indices — Position of each needle") {
 		t.Errorf("header missing doc summary:\n%s", out)
 	}
-	if !strings.Contains(out, "Module: aql:array-util") {
+	if !strings.Contains(out, "Module: boru:array-util") {
 		t.Errorf("output missing Module provenance line:\n%s", out)
 	}
 	if !strings.Contains(out, "forward") {

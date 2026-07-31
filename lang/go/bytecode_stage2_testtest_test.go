@@ -2,7 +2,7 @@ package lang
 
 import "testing"
 
-// Stage-2 test-test pins (voxgig zero-refusals plan): the aql:test imperative
+// Stage-2 test-test pins (voxgig zero-refusals plan): the boru:test imperative
 // harness — `[ body… ] "name" Test.test end` — already declares its closure
 // shape (CallableSpec on test-test, lang/go/modules/test.go) and re-enters the
 // VM through InvokeBody, but every corpus body still refused as "code-body
@@ -28,9 +28,9 @@ import "testing"
 
 // The mechanism in isolation, no test body: a dynamic (declared-Any user-fn)
 // result feeding the module-native ref `Assert.equal` at module scope must
-// lower (OpCallNativePoly over the aql:test sub-registry) with no island.
+// lower (OpCallNativePoly over the boru:test sub-registry) with no island.
 func TestModuleNativeRefDynamicArgPolyCompiles(t *testing.T) {
-	loopCarriedCompilesClean(t, `import "aql:test" end
+	loopCarriedCompilesClean(t, `import "boru:test" end
 def blur fn [[v:Any] [Any] [v]]
 (blur (2 add 2)) 4 Assert.equal end
 Test.fail-count end`)
@@ -40,7 +40,7 @@ Test.fail-count end`)
 // assert-equal handler, so the assertion_failure is identical on both
 // surfaces (error parity, not just value parity).
 func TestModuleNativeRefDynamicArgPolyRaisesAlike(t *testing.T) {
-	stage1aSound(t, `import "aql:test" end
+	stage1aSound(t, `import "boru:test" end
 def blur fn [[v:Any] [Any] [v]]
 (blur 5) 4 Assert.equal end`)
 }
@@ -49,7 +49,7 @@ def blur fn [[v:Any] [Any] [v]]
 // to a closure unit, the harness runs it through InvokeBody, and
 // Test.fail-count reads 0 on both surfaces.
 func TestTestBodyPassingAssertCompiles(t *testing.T) {
-	loopCarriedCompilesClean(t, `import "aql:test" end
+	loopCarriedCompilesClean(t, `import "boru:test" end
 def blur fn [[v:Any] [Any] [v]]
 [ (blur (1 add 2)) 3 Assert.equal end ] "adds" Test.test end
 Test.fail-count end`)
@@ -60,7 +60,7 @@ Test.fail-count end`)
 // whole program's observable state — fail-count AND the report text with
 // the formatted failure row — is identical on both surfaces.
 func TestTestBodyFailingAssertParity(t *testing.T) {
-	loopCarriedCompilesClean(t, `import "aql:test" end
+	loopCarriedCompilesClean(t, `import "boru:test" end
 def blur fn [[v:Any] [Any] [v]]
 [ (blur 2) 3 Assert.equal end ] "bad" Test.test end
 [ (blur 3) 3 Assert.equal end ] "good" Test.test end
@@ -70,7 +70,7 @@ def blur fn [[v:Any] [Any] [v]]
 // A body calling a USER fn (the corpus shape: library calls inside the case
 // body): the call compiles inside the closure unit; fail-count parity after.
 func TestTestBodyUserFnCallCompiles(t *testing.T) {
-	loopCarriedCompilesClean(t, `import "aql:test" end
+	loopCarriedCompilesClean(t, `import "boru:test" end
 def triple fn [[n:Integer] [Integer] [n 3 mul]]
 [ (triple 4) 12 Assert.equal end ] "triples" Test.test end
 Test.fail-count end`)
@@ -82,10 +82,10 @@ Test.fail-count end`)
 // fail-count included.
 func TestTestBodyDotMethodStaysSound(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
-	stage1aSound(t, `import "aql:test" end
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
+	stage1aSound(t, `import "boru:test" end
 def mkrig fn [[] [Map] [ {int: ([a:Integer b:Integer] => [a b add])} ]]
 def rig (mkrig)
 [ (rig.int 1 6) 7 Assert.equal end ] "dotm" Test.test end

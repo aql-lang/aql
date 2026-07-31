@@ -1,4 +1,4 @@
-# AQL Language Specification: the aql:minilang module + the core `mini` word
+# BORU Language Specification: the boru:minilang module + the core `mini` word
 # Format: input<TAB>expected<TAB>description
 #
 # `mini <kind> <src> <opts?>` expands at the call site to the STANDARD
@@ -15,24 +15,24 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  re — Go regular expressions
-import "aql:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m	'bc'	first match text (the design doc's headline example)
-import "aql:minilang"  ("a1b2c3" mini re '\\d').n	3	all matches counted by default
-import "aql:minilang"  ("a1b2c3" mini re '\\d' {limit:2}).n	2	opts.limit caps the match count
-import "aql:minilang"  ("zz" mini re 'a+').ok	false	no match → ok:false
-import "aql:minilang"  def g ('abc-123' mini re '([a-z]+)-(\\d+)') end  g.fst.g	['abc' '123']	capture groups ride on each match as g
-import "aql:minilang"  def d ("AbcD" MiniLang.lang_re '[a-z]+' {} end) end  d.fst.m	'bc'	mini is pure sugar — the desugared standard call is equivalent
+import "boru:minilang"  def r ("AbcD" mini re '[a-z]+') end  r.fst.m	'bc'	first match text (the design doc's headline example)
+import "boru:minilang"  ("a1b2c3" mini re '\\d').n	3	all matches counted by default
+import "boru:minilang"  ("a1b2c3" mini re '\\d' {limit:2}).n	2	opts.limit caps the match count
+import "boru:minilang"  ("zz" mini re 'a+').ok	false	no match → ok:false
+import "boru:minilang"  def g ('abc-123' mini re '([a-z]+)-(\\d+)') end  g.fst.g	['abc' '123']	capture groups ride on each match as g
+import "boru:minilang"  def d ("AbcD" MiniLang.lang_re '[a-z]+' {} end) end  d.fst.m	'bc'	mini is pure sugar — the desugared standard call is equivalent
 #
 # §2  bf — brainfuck
-import "aql:minilang"  mini bf '++++++++[>++++++++<-]>+.'	'A'	generator form: 8*8+1 = 65 = 'A'
-import "aql:minilang"  "hi" mini bf ',.,.'	'hi'	filter form: `,` reads the STACK input (standard-sig stack input)
-import "aql:minilang"  mini bf ',.+.' {in:'A'}	'AB'	generator form reads opts.in
-import "aql:minilang"  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
+import "boru:minilang"  mini bf '++++++++[>++++++++<-]>+.'	'A'	generator form: 8*8+1 = 65 = 'A'
+import "boru:minilang"  "hi" mini bf ',.,.'	'hi'	filter form: `,` reads the STACK input (standard-sig stack input)
+import "boru:minilang"  mini bf ',.+.' {in:'A'}	'AB'	generator form reads opts.in
+import "boru:minilang"  "hi" MiniLang.lang_bf ',.,.' {} end	'hi'	desugared standard call, filter form
 #
 # §3  value forms / kinds — custom mini-languages are def-bound fn VALUES
 #     (the kind namespace is fixed; §fnv pins the value-form contract)
-import "aql:minilang"  MiniLang.kinds	[re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q sp/q]	the (fixed) kind atoms, in registration order
-import "aql:minilang"  def poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]])  mini poly 'x^2 + 3*y' {x:10, y:2}	106	a def-bound generator value: named params via opts
-import "aql:minilang"  import "aql:string-util"  def count (fn [[src:String opts:Map subject:String] [Integer] [(StringUtil.split src subject) size]])  "banana" mini count 'an'	2	a def-bound filter value: subject from the stack, src reaching the body dynamically
+import "boru:minilang"  MiniLang.kinds	[re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q sp/q]	the (fixed) kind atoms, in registration order
+import "boru:minilang"  def poly (fn [[src:String opts:Map] [Integer] [((opts.x pow 2) add (3 mul opts.y))]])  mini poly 'x^2 + 3*y' {x:10, y:2}	106	a def-bound generator value: named params via opts
+import "boru:minilang"  import "boru:string-util"  def count (fn [[src:String opts:Map subject:String] [Integer] [(StringUtil.split src subject) size]])  "banana" mini count 'an'	2	a def-bound filter value: subject from the stack, src reaching the body dynamically
 # Memoising a custom mini-language: built-in re/xp cache their compiled artifact
 # in a private Go map an author can't reach, so a fn-value language holds its OWN
 # cross-call cache — a mutable `flex` map (module-level or closure-captured),
@@ -41,47 +41,47 @@ import "aql:minilang"  import "aql:string-util"  def count (fn [[src:String opts
 # literal atom `src`). Here `calls.n` counts the compute path: 3 calls, 2
 # distinct srcs → the body runs twice, the repeat 'aa' is a cache hit. See
 # design/MINILANG.5.md §7.
-import "aql:minilang"  def calls (flex {n:0}) end  def cache (flex {}) end  def dbl (fn [[src:String opts:Map subject:String] [String] [if ((cache get (src)) is None) [set 'n' ((calls get 'n') add 1) calls drop  def r (add src src)  set (src) r cache drop  r] [cache get (src)]]])  def x ("z" mini dbl 'aa') end  def y ("z" mini dbl 'aa') end  def z2 ("z" mini dbl 'bb') end  calls get 'n'	2	a fn-value mini-language memoises per src in a flex map — 3 calls, 2 distinct srcs, body computes twice (the repeat is a hit)
+import "boru:minilang"  def calls (flex {n:0}) end  def cache (flex {}) end  def dbl (fn [[src:String opts:Map subject:String] [String] [if ((cache get (src)) is None) [set 'n' ((calls get 'n') add 1) calls drop  def r (add src src)  set (src) r cache drop  r] [cache get (src)]]])  def x ("z" mini dbl 'aa') end  def y ("z" mini dbl 'aa') end  def z2 ("z" mini dbl 'bb') end  calls get 'n'	2	a fn-value mini-language memoises per src in a flex map — 3 calls, 2 distinct srcs, body computes twice (the repeat is a hit)
 #
 # §4  the auto-`end` theft guard
-import "aql:minilang"  "x1" mini re '\\d' "ZZ"	{ok:true ms:[{m:'1' i:1 e:2 g:[]}] fst:{m:'1' i:1 e:2 g:[]} lst:{m:'1' i:1 e:2 g:[]} n:1} 'ZZ'	the token after the mini call is NOT stolen as the subject
-import "aql:minilang"  def a ("x1" mini re '\\d') end  def b ("y22" mini re '\\d+') end  b.fst.m	'22'	chained mini calls each bind their own stack subject
+import "boru:minilang"  "x1" mini re '\\d' "ZZ"	{ok:true ms:[{m:'1' i:1 e:2 g:[]}] fst:{m:'1' i:1 e:2 g:[]} lst:{m:'1' i:1 e:2 g:[]} n:1} 'ZZ'	the token after the mini call is NOT stolen as the subject
+import "boru:minilang"  def a ("x1" mini re '\\d') end  def b ("y22" mini re '\\d+') end  b.fst.m	'22'	chained mini calls each bind their own stack subject
 #
 # §5  negatives
-import "aql:minilang"  mini nope 'x'	ERROR:mini_unknown_lang	unknown kind: expansion-time error at the call site
+import "boru:minilang"  mini nope 'x'	ERROR:mini_unknown_lang	unknown kind: expansion-time error at the call site
 mini re 'a'	ERROR:mini_unknown_lang	mini is core but kinds need the import (no auto-import)
 MiniLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
-import "aql:minilang"  "x" mini re '('	ERROR:mini_parse_error	a malformed pattern fails when the kind runs
-import "aql:minilang"  mini bf '['	ERROR:mini_parse_error	unbalanced brackets
-import "aql:minilang"  mini bf '+[]' {steps:100}	ERROR:mini_eval_error	a runaway program hits the step budget instead of hanging
-import "aql:minilang"  mini bf '<'	ERROR:mini_eval_error	leaving the tape is loud
-import "aql:minilang"  MiniLang.register	ERROR:mini_registry_frozen	the kind namespace is fixed — registration was removed (tombstone)
-import "aql:minilang"  MiniLang.register poly (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_registry_frozen	a legacy register call fails loudly with the migration hint
+import "boru:minilang"  "x" mini re '('	ERROR:mini_parse_error	a malformed pattern fails when the kind runs
+import "boru:minilang"  mini bf '['	ERROR:mini_parse_error	unbalanced brackets
+import "boru:minilang"  mini bf '+[]' {steps:100}	ERROR:mini_eval_error	a runaway program hits the step budget instead of hanging
+import "boru:minilang"  mini bf '<'	ERROR:mini_eval_error	leaving the tape is loud
+import "boru:minilang"  MiniLang.register	ERROR:mini_registry_frozen	the kind namespace is fixed — registration was removed (tombstone)
+import "boru:minilang"  MiniLang.register poly (fn [[s:String o:Map] [Integer] [1]])	ERROR:mini_registry_frozen	a legacy register call fails loudly with the migration hint
 #
 # §6  the `+name<delim>src<delim>` shortcut — terse lexer sugar for `mini name 'src'`.
 #     The delimiter is the first char after the name; the same char closes. Backslash
 #     escapes the delimiter and itself; every OTHER backslash is raw (so `\d` stays `\d`,
 #     no doubling). Desugars to the identical token stream as the explicit call, so a
 #     stack subject, a trailing opts map, and the unknown-kind error all carry over.
-import "aql:minilang"  ("AbcD" +re/[a-z]+/).fst.m	'bc'	the shortcut: subject from the stack, / delimiter
-import "aql:minilang"  ("a1b2c3" +re/\d/).n	3	raw backslash — `\d` is the pattern, no doubling (vs the quoted '\\d')
-import "aql:minilang"  ("a1b2c3" +re/\d/ {limit:2}).n	2	a trailing opts map is collected by mini's 3-arg sig
-import "aql:minilang"  ("AbcD" +re|[a-z]+|).fst.m	'bc'	a custom delimiter — | here
-import "aql:minilang"  ("xa/by" +re#a/b#).fst.m	'a/b'	pick a delimiter (#) so the source can contain /
-import "aql:minilang"  ("xa/by" +re/a\/b/).fst.m	'a/b'	or escape the delimiter with a backslash
-import "aql:minilang"  +bf/++++++++[>++++++++<-]>+./	'A'	bf generator via the shortcut
-import "aql:minilang"  +hb/deadbeef/	Bytes<de ad be ef>	hex Bytes literal via the shortcut
-import "aql:minilang"  mini hb 'deadbeef'	Bytes<de ad be ef>	the explicit form is equivalent
-import "aql:minilang"  (MiniLang.lang_hb 'deadbeef' {} end)	Bytes<de ad be ef>	mini/+hb are sugar — the desugared standard call is equivalent
-import "aql:minilang"  +hb/de_ad_be_ef/	Bytes<de ad be ef>	underscores in the source are ignored (grouping)
-import "aql:minilang"  +hb/de\ ad\ be\ ef/	Bytes<de ad be ef>	whitespace must be escaped — a literal is a single whitespace-free span
-import "aql:minilang"  +bb/01001100/	Bytes<4c>	binary Bytes literal — 8 bits, MSB-first
-import "aql:minilang"  (MiniLang.lang_bb '01001100' {} end)	Bytes<4c>	the desugared standard call for bb
-import "aql:minilang"  +bb/01001100_11110000/	Bytes<4c f0>	binary grouping with underscores
-import "aql:minilang"  +hb/abc/	ERROR:mini_parse_error	an odd-length hex source is rejected
-import "aql:minilang"  +bb/0102/	ERROR:mini_parse_error	a non-binary digit is rejected
-import "aql:minilang"  +bb/0100110/	ERROR:mini_parse_error	a non-multiple-of-8 bit count is rejected
-import "aql:minilang"  +nope/x/	ERROR:mini_unknown_lang	an unknown kind is the same expansion-time error as `mini nope`
+import "boru:minilang"  ("AbcD" +re/[a-z]+/).fst.m	'bc'	the shortcut: subject from the stack, / delimiter
+import "boru:minilang"  ("a1b2c3" +re/\d/).n	3	raw backslash — `\d` is the pattern, no doubling (vs the quoted '\\d')
+import "boru:minilang"  ("a1b2c3" +re/\d/ {limit:2}).n	2	a trailing opts map is collected by mini's 3-arg sig
+import "boru:minilang"  ("AbcD" +re|[a-z]+|).fst.m	'bc'	a custom delimiter — | here
+import "boru:minilang"  ("xa/by" +re#a/b#).fst.m	'a/b'	pick a delimiter (#) so the source can contain /
+import "boru:minilang"  ("xa/by" +re/a\/b/).fst.m	'a/b'	or escape the delimiter with a backslash
+import "boru:minilang"  +bf/++++++++[>++++++++<-]>+./	'A'	bf generator via the shortcut
+import "boru:minilang"  +hb/deadbeef/	Bytes<de ad be ef>	hex Bytes literal via the shortcut
+import "boru:minilang"  mini hb 'deadbeef'	Bytes<de ad be ef>	the explicit form is equivalent
+import "boru:minilang"  (MiniLang.lang_hb 'deadbeef' {} end)	Bytes<de ad be ef>	mini/+hb are sugar — the desugared standard call is equivalent
+import "boru:minilang"  +hb/de_ad_be_ef/	Bytes<de ad be ef>	underscores in the source are ignored (grouping)
+import "boru:minilang"  +hb/de\ ad\ be\ ef/	Bytes<de ad be ef>	whitespace must be escaped — a literal is a single whitespace-free span
+import "boru:minilang"  +bb/01001100/	Bytes<4c>	binary Bytes literal — 8 bits, MSB-first
+import "boru:minilang"  (MiniLang.lang_bb '01001100' {} end)	Bytes<4c>	the desugared standard call for bb
+import "boru:minilang"  +bb/01001100_11110000/	Bytes<4c f0>	binary grouping with underscores
+import "boru:minilang"  +hb/abc/	ERROR:mini_parse_error	an odd-length hex source is rejected
+import "boru:minilang"  +bb/0102/	ERROR:mini_parse_error	a non-binary digit is rejected
+import "boru:minilang"  +bb/0100110/	ERROR:mini_parse_error	a non-multiple-of-8 bit count is rejected
+import "boru:minilang"  +nope/x/	ERROR:mini_unknown_lang	an unknown kind is the same expansion-time error as `mini nope`
 +re/[a-z]+/	ERROR:mini_unknown_lang	the shortcut needs the import too (no auto-import)
 #
 # §6b  the OPEN form — a literal is a single whitespace-free span, and the closing
@@ -91,16 +91,16 @@ import "aql:minilang"  +nope/x/	ERROR:mini_unknown_lang	an unknown kind is the s
 #      There is no scan-ahead past whitespace, so a stray delimiter char in a later
 #      token can never capture the literal, and a literal never spans lines. A source
 #      char equal to the delimiter CLOSES there (first occurrence wins) unless escaped.
-import "aql:minilang"  +hb:deadbeef	Bytes<de ad be ef>	open form: no closing delimiter needed at end of source
-import "aql:minilang"  ("a1b2c3" +re:\d {limit:2}).n	2	open form ends at whitespace — the opts map still collects, backslashes still raw
-import "aql:minilang"  ("a1b2c3" +re:\d {limit: 2}).n	2	a spaced map key's `:` cannot capture the literal (no scan-ahead)
-import "aql:minilang"  def r ("alice@example.com" +re:@example ) end  r.fst.m	'@example'	the motivating shape: a source full of punctuation, no delimiter collision
-import "aql:minilang"  ("xa:by" +re:a\:b ).fst.m	'a:b'	an escaped delimiter keeps the open form open
-import "aql:minilang"  ("aXbXc" +re:X:).n	2	a source char equal to the delimiter closes the literal — this is the CLOSED form, src 'X'
-import "aql:minilang"  (+hb/de_ad_be_ef/) typeof	Bytes	a closed literal abuts syntax — the delimiter closes before `)`
-import "aql:minilang"  +hb:dead beef	ERROR:undefined_word	the open source ends at whitespace: `beef` is a separate (undefined) word
-import "aql:minilang"  +hb/de ad be ef/	ERROR:undefined_word	whitespace no longer spans a literal — use `_` grouping, `\ ` escapes, or the quoted form
-import "aql:minilang"  +re:	ERROR:syntax_error	an empty open source is not a literal — `+re:` falls to normal lexing
+import "boru:minilang"  +hb:deadbeef	Bytes<de ad be ef>	open form: no closing delimiter needed at end of source
+import "boru:minilang"  ("a1b2c3" +re:\d {limit:2}).n	2	open form ends at whitespace — the opts map still collects, backslashes still raw
+import "boru:minilang"  ("a1b2c3" +re:\d {limit: 2}).n	2	a spaced map key's `:` cannot capture the literal (no scan-ahead)
+import "boru:minilang"  def r ("alice@example.com" +re:@example ) end  r.fst.m	'@example'	the motivating shape: a source full of punctuation, no delimiter collision
+import "boru:minilang"  ("xa:by" +re:a\:b ).fst.m	'a:b'	an escaped delimiter keeps the open form open
+import "boru:minilang"  ("aXbXc" +re:X:).n	2	a source char equal to the delimiter closes the literal — this is the CLOSED form, src 'X'
+import "boru:minilang"  (+hb/de_ad_be_ef/) typeof	Bytes	a closed literal abuts syntax — the delimiter closes before `)`
+import "boru:minilang"  +hb:dead beef	ERROR:undefined_word	the open source ends at whitespace: `beef` is a separate (undefined) word
+import "boru:minilang"  +hb/de ad be ef/	ERROR:undefined_word	whitespace no longer spans a literal — use `_` grouping, `\ ` escapes, or the quoted form
+import "boru:minilang"  +re:	ERROR:syntax_error	an empty open source is not a literal — `+re:` falls to normal lexing
 #
 # §mi  micron (short form: m) — Micron literals. The source parses through each
 #      ONE merged tabnas grammar (eng.MicronFromString): each builtin Micron
@@ -110,127 +110,127 @@ import "aql:minilang"  +re:	ERROR:syntax_error	an empty open source is not a lit
 #      literal never fails to parse. URL sources contain `:` and `/`, so
 #      pick a delimiter outside the source (`+m|https://…`) or the first
 #      occurrence closes the literal early (the standard closed-form rule).
-import "aql:minilang"  +m:alice@example.com typeof	Emailon	an email source parses first as Emailon
-import "aql:minilang"  +m:alice@example.com	alice@example.com
-import "aql:minilang"  (+m:alice@example.com:).host	'example.com'	a micron literal is a full Micron — properties work
-import "aql:minilang"  +m:bob@x.io eq (make Emailon 'bob@x.io')	true	the literal and the make form build the SAME value
-import "aql:minilang"  +m|https://x.com/a?q=1 typeof	Urlon	not an email → next constructor in turn: Urlon
-import "aql:minilang"  +m|https://x.com/a?q=1	https://x.com/a?q=1
-import "aql:minilang"  +m:a/b typeof	Pathon	neither email nor URL → the Pathon catch-all
-import "aql:minilang"  +m:9000 typeof	Pathon	any whitespace-free source is a valid (single-segment) Pathon
-import "aql:minilang"  +micron:bob@corp.io typeof	Emailon	the full kind name is the same transducer
-import "aql:minilang"  mini m 'bob@corp.io' typeof	Emailon	the explicit mini form is equivalent
-import "aql:minilang"  (MiniLang.lang_micron 'bob@corp.io' {} end) typeof	Emailon	as is the desugared standard call
-import "aql:minilang"  mini micron 5	ERROR:signature_error	the source must be a String
+import "boru:minilang"  +m:alice@example.com typeof	Emailon	an email source parses first as Emailon
+import "boru:minilang"  +m:alice@example.com	alice@example.com
+import "boru:minilang"  (+m:alice@example.com:).host	'example.com'	a micron literal is a full Micron — properties work
+import "boru:minilang"  +m:bob@x.io eq (make Emailon 'bob@x.io')	true	the literal and the make form build the SAME value
+import "boru:minilang"  +m|https://x.com/a?q=1 typeof	Urlon	not an email → next constructor in turn: Urlon
+import "boru:minilang"  +m|https://x.com/a?q=1	https://x.com/a?q=1
+import "boru:minilang"  +m:a/b typeof	Pathon	neither email nor URL → the Pathon catch-all
+import "boru:minilang"  +m:9000 typeof	Pathon	any whitespace-free source is a valid (single-segment) Pathon
+import "boru:minilang"  +micron:bob@corp.io typeof	Emailon	the full kind name is the same transducer
+import "boru:minilang"  mini m 'bob@corp.io' typeof	Emailon	the explicit mini form is equivalent
+import "boru:minilang"  (MiniLang.lang_micron 'bob@corp.io' {} end) typeof	Emailon	as is the desugared standard call
+import "boru:minilang"  mini micron 5	ERROR:signature_error	the source must be a String
 #
 # §7  compiled mini-languages — an optional expansion-time compile hook (design §13).
 #     A BUILT-IN kind keeps its transducer (the semantic reference + fallback) and
 #     may add a Go compiler that runs at the `mini` site when src is concrete,
 #     splicing tokens instead of the standard call. `re` ships one (precompiled-
 #     pattern carrier + run-re consumer). `mini` has no expansion cache, so hooks
-#     memoize (re does). The AQL hook surface (register-compiled) died with the
+#     memoize (re does). The BORU hook surface (register-compiled) died with the
 #     frozen kind namespace — the word survives as a tombstone.
-import "aql:minilang"  MiniLang.register-compiled	ERROR:mini_registry_frozen	the AQL compile-hook surface was removed with registration (tombstone)
+import "boru:minilang"  MiniLang.register-compiled	ERROR:mini_registry_frozen	the BORU compile-hook surface was removed with registration (tombstone)
 #
 # §8  the `gex` kind — glob-expression SELECT (not a match-extractor like re).
 #     Anchored whole-subject match: `*` any run, `?` one char, `**`/`*?` a literal
 #     `*`/`?`. A scalar returns itself when it matches else None; a List is filtered
 #     to matching elements, a Map to entries whose key matches. None / empty results
 #     are falsy, so the scalar value drops straight into `if`.
-import "aql:minilang"  "ax" mini gex 'a*'	'ax'	scalar match returns the subject (explicit mini form)
-import "aql:minilang"  "bx" mini gex 'a*'	None	no match → None
-import "aql:minilang"  "ax" MiniLang.lang_gex 'a*' {} end	'ax'	the desugared standard call — mini and +gex are sugar for this
-import "aql:minilang"  "ax" +gex/a*/	'ax'	the terse +literal form, subject from the stack
-import "aql:minilang"  "bx" +gex/a*/	None	+literal, no match → None
-import "aql:minilang"  "xab" +gex/a*/	None	anchored: the whole subject must match, not a substring
-import "aql:minilang"  ["ab" "zz" "ac"] +gex/a*/	['ab' 'ac']	a List subject is filtered to matching elements
-import "aql:minilang"  {ab:1 zz:2 ac:3} +gex/a*/ {}	{ab:1 ac:3}	a Map subject is filtered by key — needs an explicit {} (mini's opts is a Map, so a bare map subject is claimed as opts)
-import "aql:minilang"  {ab:1 zz:2 ac:3} +gex/a*/ typeof	Function	without the {} the map IS the opts, leaving no subject — the partial stays a storable Function value (see §fn)
-import "aql:minilang"  "a*b" +gex/a**b/	'a*b'	`**` is a literal `*` (matches the star verbatim)
-import "aql:minilang"  "axb" +gex/a**b/	None	`**` is literal, so the wildcard reading does not apply
-import "aql:minilang"  "axc" +gex/a?c/	'axc'	`?` matches exactly one character
-import "aql:minilang"  "ac" +gex/a?c/	None	`?` requires a character — zero won't do
-import "aql:minilang"  "a?c" +gex/a*?c/	'a?c'	`*?` is a literal `?`
-import "aql:minilang"  "axc" +gex/a*?c/	None	`*?` is literal, so a real char does not match it
-import "aql:minilang"  if ("ax" +gex/a*/) ['Y'] ['N']	'Y'	a matched subject is truthy
-import "aql:minilang"  if ("bx" +gex/a*/) ['Y'] ['N']	'N'	None is falsy, so a non-match takes the else branch
+import "boru:minilang"  "ax" mini gex 'a*'	'ax'	scalar match returns the subject (explicit mini form)
+import "boru:minilang"  "bx" mini gex 'a*'	None	no match → None
+import "boru:minilang"  "ax" MiniLang.lang_gex 'a*' {} end	'ax'	the desugared standard call — mini and +gex are sugar for this
+import "boru:minilang"  "ax" +gex/a*/	'ax'	the terse +literal form, subject from the stack
+import "boru:minilang"  "bx" +gex/a*/	None	+literal, no match → None
+import "boru:minilang"  "xab" +gex/a*/	None	anchored: the whole subject must match, not a substring
+import "boru:minilang"  ["ab" "zz" "ac"] +gex/a*/	['ab' 'ac']	a List subject is filtered to matching elements
+import "boru:minilang"  {ab:1 zz:2 ac:3} +gex/a*/ {}	{ab:1 ac:3}	a Map subject is filtered by key — needs an explicit {} (mini's opts is a Map, so a bare map subject is claimed as opts)
+import "boru:minilang"  {ab:1 zz:2 ac:3} +gex/a*/ typeof	Function	without the {} the map IS the opts, leaving no subject — the partial stays a storable Function value (see §fn)
+import "boru:minilang"  "a*b" +gex/a**b/	'a*b'	`**` is a literal `*` (matches the star verbatim)
+import "boru:minilang"  "axb" +gex/a**b/	None	`**` is literal, so the wildcard reading does not apply
+import "boru:minilang"  "axc" +gex/a?c/	'axc'	`?` matches exactly one character
+import "boru:minilang"  "ac" +gex/a?c/	None	`?` requires a character — zero won't do
+import "boru:minilang"  "a?c" +gex/a*?c/	'a?c'	`*?` is a literal `?`
+import "boru:minilang"  "axc" +gex/a*?c/	None	`*?` is literal, so a real char does not match it
+import "boru:minilang"  if ("ax" +gex/a*/) ['Y'] ['N']	'Y'	a matched subject is truthy
+import "boru:minilang"  if ("bx" +gex/a*/) ['Y'] ['N']	'N'	None is falsy, so a non-match takes the else branch
 #
 # §m  m — traditional maths formula evaluator (tabnas/expr). Variables are
 #     bound by the named params; operators + - * / % ^ (power, right-assoc),
-#     unary +/-, and parens. Numeric coercion follows AQL: all-integer operands
+#     unary +/-, and parens. Numeric coercion follows BORU: all-integer operands
 #     stay Integer (division truncates like `div`), any Float promotes to Float.
-import "aql:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2}	8	formula with variables from the named params
-import "aql:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2.0}	8.0	a Float param promotes the whole result to Float (AQL coercion)
-import "aql:minilang"  mini math '2^3^2' {}	512	`^` is right-associative: 2^(3^2) = 2^9
-import "aql:minilang"  mini math '-z^2' {z:3}	-9	`^` binds tighter than unary minus: -(3^2)
-import "aql:minilang"  mini math '(x+y)*z' {x:1 y:2 z:3}	9	parentheses group
-import "aql:minilang"  mini math 'x/y' {x:5 y:2}	2	integer operands → truncating integer division, like `div`
-import "aql:minilang"  mini math 'x/y' {x:5.0 y:2}	2.5	a Float operand → real division
-import "aql:minilang"  mini math 'x' {x:42}	42	a bare variable resolves to its param
-import "aql:minilang"  (MiniLang.lang_math 'x*y-z^2' {x:3 y:4 z:2} end)	8	mini is sugar — the desugared standard call is equivalent
+import "boru:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2}	8	formula with variables from the named params
+import "boru:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2.0}	8.0	a Float param promotes the whole result to Float (BORU coercion)
+import "boru:minilang"  mini math '2^3^2' {}	512	`^` is right-associative: 2^(3^2) = 2^9
+import "boru:minilang"  mini math '-z^2' {z:3}	-9	`^` binds tighter than unary minus: -(3^2)
+import "boru:minilang"  mini math '(x+y)*z' {x:1 y:2 z:3}	9	parentheses group
+import "boru:minilang"  mini math 'x/y' {x:5 y:2}	2	integer operands → truncating integer division, like `div`
+import "boru:minilang"  mini math 'x/y' {x:5.0 y:2}	2.5	a Float operand → real division
+import "boru:minilang"  mini math 'x' {x:42}	42	a bare variable resolves to its param
+import "boru:minilang"  (MiniLang.lang_math 'x*y-z^2' {x:3 y:4 z:2} end)	8	mini is sugar — the desugared standard call is equivalent
 #
 # §m  negatives
-import "aql:minilang"  mini math 'x+q' {x:1}	ERROR:mini_eval_error	an unbound variable is a loud error
-import "aql:minilang"  mini math 'x/y' {x:1 y:0}	ERROR:mini_eval_error	division by zero is a loud error
-import "aql:minilang"  mini math 'x +' {x:1}	ERROR:mini_syntax_error	a malformed formula is a loud parse error
+import "boru:minilang"  mini math 'x+q' {x:1}	ERROR:mini_eval_error	an unbound variable is a loud error
+import "boru:minilang"  mini math 'x/y' {x:1 y:0}	ERROR:mini_eval_error	division by zero is a loud error
+import "boru:minilang"  mini math 'x +' {x:1}	ERROR:mini_syntax_error	a malformed formula is a loud parse error
 #
 # §jpq  jp — JSONPath (github.com/ohler55/ojg) — and jq — jq filter
 #       (github.com/itchyny/gojq). The document is the stack subject and may be
-#       any AQL shape: a Node (Map/List), class instance, Table or Record. Both
+#       any BORU shape: a Node (Map/List), class instance, Table or Record. Both
 #       return a LIST of results (jp: matched nodes; jq: the output stream). A
 #       MAP/Record subject needs an explicit {} opts (a bare map is otherwise
 #       claimed as mini's opts — the same gotcha as gex).
-import "aql:minilang"  {store:{book:[{title:'A'} {title:'B'}]}} mini jp '$.store.book[*].title' {}	['A' 'B']	JSONPath over a Node — matched nodes as a List
-import "aql:minilang"  {a:1 b:2} mini jq '.a + .b' {}	[3]	a jq filter over a Node; jq's output stream is a List
-import "aql:minilang"  [{n:1} {n:2} {n:3}] mini jp '$[*].n'	[1 2 3]	a List subject needs no {} (only a Map subject is claimed as opts)
-import "aql:minilang"  [1 2 3 4] mini jq '.[] | select(. > 2)'	[3 4]	jq select over a List subject
-import "aql:minilang"  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jp '$.x'	[7]	a class instance projects to its field map
-import "aql:minilang"  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jq '.x + .y'	[16]	jq over a class instance
-import "aql:minilang"  def R (refine Record [{a:Integer b:String}])  (make R {a:5 b:'hi'}) mini jp '$.b' {}	['hi']	a Record (a Map) — needs the explicit {} like any Map subject
-import "aql:minilang"  def Row (refine Record [{a:Integer b:String}])  def T (refine Table Row)  (make T [[1 'x'] [2 'y']]) mini jp '$[*].a'	[1 2]	a Table projects to its rows (field maps)
-import "aql:minilang"  def Row (refine Record [{a:Integer}])  def T (refine Table Row)  (make T [[1] [2] [3]]) mini jq 'map(.a) | add'	[6]	jq over a Table's rows
-import "aql:minilang"  {a:1 b:2} MiniLang.lang_jp '$.a' {} end	[1]	mini is sugar — the desugared standard call is equivalent
-import "aql:minilang"  {a:1 b:2} MiniLang.lang_jq '.b' {} end	[2]	the desugared jq call
+import "boru:minilang"  {store:{book:[{title:'A'} {title:'B'}]}} mini jp '$.store.book[*].title' {}	['A' 'B']	JSONPath over a Node — matched nodes as a List
+import "boru:minilang"  {a:1 b:2} mini jq '.a + .b' {}	[3]	a jq filter over a Node; jq's output stream is a List
+import "boru:minilang"  [{n:1} {n:2} {n:3}] mini jp '$[*].n'	[1 2 3]	a List subject needs no {} (only a Map subject is claimed as opts)
+import "boru:minilang"  [1 2 3 4] mini jq '.[] | select(. > 2)'	[3 4]	jq select over a List subject
+import "boru:minilang"  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jp '$.x'	[7]	a class instance projects to its field map
+import "boru:minilang"  def Pt class {x:Integer y:Integer} end  (make Pt {x:7 y:9}) mini jq '.x + .y'	[16]	jq over a class instance
+import "boru:minilang"  def R (refine Record [{a:Integer b:String}])  (make R {a:5 b:'hi'}) mini jp '$.b' {}	['hi']	a Record (a Map) — needs the explicit {} like any Map subject
+import "boru:minilang"  def Row (refine Record [{a:Integer b:String}])  def T (refine Table Row)  (make T [[1 'x'] [2 'y']]) mini jp '$[*].a'	[1 2]	a Table projects to its rows (field maps)
+import "boru:minilang"  def Row (refine Record [{a:Integer}])  def T (refine Table Row)  (make T [[1] [2] [3]]) mini jq 'map(.a) | add'	[6]	jq over a Table's rows
+import "boru:minilang"  {a:1 b:2} MiniLang.lang_jp '$.a' {} end	[1]	mini is sugar — the desugared standard call is equivalent
+import "boru:minilang"  {a:1 b:2} MiniLang.lang_jq '.b' {} end	[2]	the desugared jq call
 #
 # §jpq  negatives
-import "aql:minilang"  {a:1} mini jp '$.[' {}	ERROR:mini_parse_error	a malformed JSONPath is a loud parse error
-import "aql:minilang"  {a:1} mini jq '.[' {}	ERROR:mini_parse_error	a malformed jq filter is a loud parse error
+import "boru:minilang"  {a:1} mini jp '$.[' {}	ERROR:mini_parse_error	a malformed JSONPath is a loud parse error
+import "boru:minilang"  {a:1} mini jq '.[' {}	ERROR:mini_parse_error	a malformed jq filter is a loud parse error
 #
 # §xp  xp — XPath (github.com/antchfx/xpath) over a Node/Xml document (the stack
 #       subject, an <tag>…</tag> literal). Returns a LIST: matched nodes for a
 #       node-set (an element as its Node/Xml value, an attribute/text node as a
 #       String) or a one-element list for a scalar count/string/boolean result.
-import "aql:minilang"  <r><a>1</a><a>2</a></r> mini xp '//a'	[<a>1</a> <a>2</a>]	a node-set of element matches comes back as Node/Xml values
-import "aql:minilang"  <r><a>1</a><a>2</a></r> mini xp '//a/text()'	['1' '2']	text nodes come back as Strings
-import "aql:minilang"  <r id="7"><a/></r> mini xp '//@id'	['7']	an attribute node comes back as its String value
-import "aql:minilang"  <r><a/><a/><a/></r> mini xp 'count(//a)'	[3]	a count() result is one Integer (integral number → Integer)
-import "aql:minilang"  <r><a/><a/></r> mini xp 'count(//a) > 1'	[true]	a boolean XPath result is one Boolean
-import "aql:minilang"  <lib><book><title>A</title></book><book><title>B</title></book></lib> mini xp '//book[2]/title/text()'	['B']	a positional predicate selects the second book
-import "aql:minilang"  def hits (<r><a>1</a><a>2</a></r> mini xp '//a') end  xml-text (hits.0)	'1'	an element match composes with the xml-* accessor words
-import "aql:minilang"  <r><a/></r> MiniLang.lang_xp '//a' {} end	[<a/>]	mini is sugar — the desugared standard call is equivalent
+import "boru:minilang"  <r><a>1</a><a>2</a></r> mini xp '//a'	[<a>1</a> <a>2</a>]	a node-set of element matches comes back as Node/Xml values
+import "boru:minilang"  <r><a>1</a><a>2</a></r> mini xp '//a/text()'	['1' '2']	text nodes come back as Strings
+import "boru:minilang"  <r id="7"><a/></r> mini xp '//@id'	['7']	an attribute node comes back as its String value
+import "boru:minilang"  <r><a/><a/><a/></r> mini xp 'count(//a)'	[3]	a count() result is one Integer (integral number → Integer)
+import "boru:minilang"  <r><a/><a/></r> mini xp 'count(//a) > 1'	[true]	a boolean XPath result is one Boolean
+import "boru:minilang"  <lib><book><title>A</title></book><book><title>B</title></book></lib> mini xp '//book[2]/title/text()'	['B']	a positional predicate selects the second book
+import "boru:minilang"  def hits (<r><a>1</a><a>2</a></r> mini xp '//a') end  xml-text (hits.0)	'1'	an element match composes with the xml-* accessor words
+import "boru:minilang"  <r><a/></r> MiniLang.lang_xp '//a' {} end	[<a/>]	mini is sugar — the desugared standard call is equivalent
 #
 # §xp  negatives
-import "aql:minilang"  <r/> mini xp '//['	ERROR:mini_parse_error	a malformed XPath is a loud parse error
+import "boru:minilang"  <r/> mini xp '//['	ERROR:mini_parse_error	a malformed XPath is a loud parse error
 # (a non-Xml subject leaves the partial as a VALUE next to the untouched subject —
 # pinned in lang/go/test as TestMiniXPathNonXmlSubject / TestMiniPartialParked; the
 # parked shapes are Go tests, not spec rows, because the compiled pipeline does not
 # lower an UNCONSUMED spliced partial yet)
 #
-# §sp  XPath over AQL structure (Map/List) — the same antchfx engine as
-#      xp, but over native AQL data. A Map subject needs an explicit {} opts
+# §sp  XPath over BORU structure (Map/List) — the same antchfx engine as
+#      xp, but over native BORU data. A Map subject needs an explicit {} opts
 #      (a bare Map is otherwise claimed as opts); a List subject does not.
-import "aql:minilang"  {a:1 b:2} mini sp '/a' {}	[1]	sp runs XPath over an AQL Map; a Map subject needs the explicit {} opts
-import "aql:minilang"  [{n:'x'} {n:'y'}] mini sp '//n'	['x' 'y']	a List subject needs no {} — descendant text values come back as Strings
-import "aql:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[p>20]/p' {}	[30]	a predicate filters list items by a child value
-import "aql:minilang"  {xs:[{v:1} {v:2} {v:3}]} mini sp 'sum(//v)' {}	[6]	an XPath function (sum) reduces over matched values
-import "aql:minilang"  {a:1 b:2 c:3} mini sp 'count(/*)' {}	[3]	count() of the top-level entries
-import "aql:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[2]' {}	[{p:30}]	a matched element comes back as its source AQL value
-import "aql:minilang"  {a:1} MiniLang.lang_sp '/a' {} end	[1]	mini is sugar — the desugared standard call is equivalent
-import "aql:minilang"  +sp|//n| is (MiniLang.Sp)	true	a stored sp query has its named type
+import "boru:minilang"  {a:1 b:2} mini sp '/a' {}	[1]	sp runs XPath over a BORU Map; a Map subject needs the explicit {} opts
+import "boru:minilang"  [{n:'x'} {n:'y'}] mini sp '//n'	['x' 'y']	a List subject needs no {} — descendant text values come back as Strings
+import "boru:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[p>20]/p' {}	[30]	a predicate filters list items by a child value
+import "boru:minilang"  {xs:[{v:1} {v:2} {v:3}]} mini sp 'sum(//v)' {}	[6]	an XPath function (sum) reduces over matched values
+import "boru:minilang"  {a:1 b:2 c:3} mini sp 'count(/*)' {}	[3]	count() of the top-level entries
+import "boru:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[2]' {}	[{p:30}]	a matched element comes back as its source BORU value
+import "boru:minilang"  {a:1} MiniLang.lang_sp '/a' {} end	[1]	mini is sugar — the desugared standard call is equivalent
+import "boru:minilang"  +sp|//n| is (MiniLang.Sp)	true	a stored sp query has its named type
 #
 # §sp  negatives
-import "aql:minilang"  {a:1} mini sp '//[' {}	ERROR:mini_parse_error	a malformed XPath is a loud parse error
-import "aql:minilang"  mini m 'x' {x:1} typeof	Pathon	the maths kind was renamed to `math`; `m` is now the MICRON short form, so a formula-looking source is just a Pathon literal — use `mini math`
+import "boru:minilang"  {a:1} mini sp '//[' {}	ERROR:mini_parse_error	a malformed XPath is a loud parse error
+import "boru:minilang"  mini m 'x' {x:1} typeof	Pathon	the maths kind was renamed to `math`; `m` is now the MICRON short form, so a formula-looking source is just a Pathon literal — use `mini math`
 #
 # §mi2  MiniLang.micron — TOMBSTONE. The +m literal grammar is FIXED to
 #       the builtin Micron leaves (Emailon, Urlon, Pathon); the user-shape
@@ -239,20 +239,20 @@ import "aql:minilang"  mini m 'x' {x:1} typeof	Pathon	the maths kind was renamed
 #       A user Micron TYPE (def Nameon refine Micron {…}) still works with
 #       make — only the literal sugar is builtin-only; parse custom sources
 #       with a parser fn value.
-import "aql:minilang"  MiniLang.micron	ERROR:mini_registry_frozen	the +m literal grammar is fixed — the user-shape hook was removed (tombstone)
-import "aql:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])	ERROR:mini_registry_frozen	a legacy shape registration fails loudly with the migration hint
-import "aql:minilang"  def Ticketon refine Micron {id:String}  (make Ticketon {id:'T-1'}) typeof	Ticketon	the user Micron TYPE itself is untouched — make still constructs instances
-import "aql:minilang"  def Ticketon refine Micron {id:String}  +m:T-123 typeof	Pathon	+m never claims a user span — an unclaimed literal is the Pathon catch-all
+import "boru:minilang"  MiniLang.micron	ERROR:mini_registry_frozen	the +m literal grammar is fixed — the user-shape hook was removed (tombstone)
+import "boru:minilang"  def Ticketon refine Micron {id:String}  MiniLang.micron Ticketon {options:{match:{token:{'#TK':'@/T-[0-9]+/'}}}} ([s:String] => [make Ticketon {id:s}])	ERROR:mini_registry_frozen	a legacy shape registration fails loudly with the migration hint
+import "boru:minilang"  def Ticketon refine Micron {id:String}  (make Ticketon {id:'T-1'}) typeof	Ticketon	the user Micron TYPE itself is untouched — make still constructs instances
+import "boru:minilang"  def Ticketon refine Micron {id:String}  +m:T-123 typeof	Pathon	+m never claims a user span — an unclaimed literal is the Pathon catch-all
 #
 # §mi3  variable and macro forms — the longer `mini micron <var>` form with
 #       variable Strings, computed sources, and microns inside macros (all
 #       over the FIXED builtin leaves).
-import "aql:minilang"  def s 'alice@example.com'  mini micron s typeof	Emailon	the longer `mini micron <var>` form: src is an evaluated String, so a def-bound variable works
-import "aql:minilang"  def s ('alice@' add 'example.com')  mini m s typeof	Emailon	a COMPUTED String src through the short form
-import "aql:minilang"  def as-m (macro [[x] [quote [mini m (unquote x)]]])  (as-m 'bob@corp.io') typeof	Emailon	a micron inside a MACRO: the template wraps `mini m` around the operand
-import "aql:minilang"  def home (macro [[u] [quote [mini m '192.168.0.1']]])  home 0 typeof	Pathon	a macro template carrying a fixed micron call expands and dispatches at the call site
+import "boru:minilang"  def s 'alice@example.com'  mini micron s typeof	Emailon	the longer `mini micron <var>` form: src is an evaluated String, so a def-bound variable works
+import "boru:minilang"  def s ('alice@' add 'example.com')  mini m s typeof	Emailon	a COMPUTED String src through the short form
+import "boru:minilang"  def as-m (macro [[x] [quote [mini m (unquote x)]]])  (as-m 'bob@corp.io') typeof	Emailon	a micron inside a MACRO: the template wraps `mini m` around the operand
+import "boru:minilang"  def home (macro [[u] [quote [mini m '192.168.0.1']]])  home 0 typeof	Pathon	a macro template carrying a fixed micron call expands and dispatches at the call site
 # §mi3  negatives
-import "aql:minilang"  def home (macro [[u] [quote [+m:192.168.0.1]]])  home 0	ERROR:syntax_error	a raw +m literal cannot ride in a quote template — it desugars to a paren group at parse time; spell the template with `mini m '…'` instead
+import "boru:minilang"  def home (macro [[u] [quote [+m:192.168.0.1]]])  home 0	ERROR:syntax_error	a raw +m literal cannot ride in a quote template — it desugars to a paren group at parse time; spell the template with `mini m '…'` instead
 #
 # §fn  minilangs are FUNCTIONS in place. Conceptually every mini expansion
 #      produces a partially-applied function (src and opts bound); a value
@@ -260,16 +260,16 @@ import "aql:minilang"  def home (macro [[u] [quote [+m:192.168.0.1]]])  home 0	E
 #      generator form), while a FILTER kind's function auto-dispatches when
 #      a matching subject is on the stack — and stays a VALUE when not, so
 #      it can be bound with def (or parked with /r) and applied later.
-import "aql:minilang"  +re/[a-z]+/ typeof	Function	a bare filter literal IS a function value
-import "aql:minilang"  def f (+re/[a-z]+/)  ("AbcD" f).fst.m	'bc'	store the partial, apply it later — the pattern rides inside
-import "aql:minilang"  def f (+re/[a-z]+/)  ("zQr" f).n	2	the stored partial is reusable across subjects ('z' and 'r' both match)
-import "aql:minilang"  def sel (mini gex 'a*')  ['aa' 'b' 'ab'] sel	['aa' 'ab']	the explicit mini form produces the same storable partial (gex select)
-import "aql:minilang"  def q (mini jp '$.a')  ({a:7} q) get 0	7	a stored JSONPath query
+import "boru:minilang"  +re/[a-z]+/ typeof	Function	a bare filter literal IS a function value
+import "boru:minilang"  def f (+re/[a-z]+/)  ("AbcD" f).fst.m	'bc'	store the partial, apply it later — the pattern rides inside
+import "boru:minilang"  def f (+re/[a-z]+/)  ("zQr" f).n	2	the stored partial is reusable across subjects ('z' and 'r' both match)
+import "boru:minilang"  def sel (mini gex 'a*')  ['aa' 'b' 'ab'] sel	['aa' 'ab']	the explicit mini form produces the same storable partial (gex select)
+import "boru:minilang"  def q (mini jp '$.a')  ({a:7} q) get 0	7	a stored JSONPath query
 # (/r parks the partial even with a subject on the stack — pinned in lang/go/test as
 # TestMiniPartialParked, not as a spec row: the compiled pipeline does not model a
 # /r-parked spliced partial yet)
-import "aql:minilang"  import "aql:string-util"  def count (fn [[src:String opts:Map subject:String] [Integer] [(StringUtil.split src subject) size]])  def c (mini count 'an')  "banana" c	2	a def-bound filter value gets the same storable-partial semantics
-import "aql:minilang"  +hb/deadbeef/ typeof	Bytes	a VALUE kind's function is called in place — the literal is the value, not a Function
+import "boru:minilang"  import "boru:string-util"  def count (fn [[src:String opts:Map subject:String] [Integer] [(StringUtil.split src subject) size]])  def c (mini count 'an')  "banana" c	2	a def-bound filter value gets the same storable-partial semantics
+import "boru:minilang"  +hb/deadbeef/ typeof	Bytes	a VALUE kind's function is called in place — the literal is the value, not a Function
 #
 # §fnty  every built-in filter kind's partial has a NAMED member type,
 #        exported under the capitalized kind name (MiniLang.Re, MiniLang.Gex,
@@ -278,20 +278,20 @@ import "aql:minilang"  +hb/deadbeef/ typeof	Bytes	a VALUE kind's function is cal
 #        `is`, or a typed fn param (`fn [[m:(MiniLang.Re) …] …]`), to require
 #        a specific kind's partial. (Member types are keyed to built-in kinds;
 #        a fn-value mini-language's partial carries no kind tag.)
-import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Re)	true	a re partial inhabits its named type
-import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Gex)	false	…and NOT a sibling kind's type
-import "aql:minilang"  (+gex/a*/) is (MiniLang.Gex)	true	each filter kind has its own
-import "aql:minilang"  (+re/[a-z]+/) is Function	true	the partial is still a plain Function to every existing check
-import "aql:minilang"  def p (+re/[a-z]+/)  p/r is (MiniLang.Re)	true	a def-bound partial keeps its kind tag through the binding
-import "aql:minilang"  def p (+re/[a-z]+/)  p/r is (MiniLang.Jq)	false	…and still refuses the wrong kind
-import "aql:minilang"  +jp/$.a/ is (MiniLang.Jp)	true	a stored JSONPath query has its named type
-import "aql:minilang"  +xp|//book/title| is (MiniLang.Xp)	true	an XPath partial too (| delimiter: the path contains /)
-import "aql:minilang"  ([x:Any] => [x])/r is (MiniLang.Re)	false	an ordinary lambda is a Function but NOT a re partial
-import "aql:minilang"  def Rex (MiniLang.Re)  (+re/[a-z]+/) is Rex	true	the exported type literal works as a def'd name too
-import "aql:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+re/[a-z]+/) "AbcD"	'AbcD'	the point: a typed fn param that requires specifically a regexp matcher (calling the partial inside the body is pinned in lang/go/test TestMiniPartialTypedParam — the checker's fn-value-call frontier)
-import "aql:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+gex/a*/) "AbcD"	ERROR:signature_error	a gex partial is refused by the m:(MiniLang.Re) slot
-import "aql:minilang"  def cnt (fn [[src:String opts:Map subject:String] [Integer] [1]])  def c (mini cnt 'a')  c/r is (MiniLang.Re)	false	a fn-value partial carries no kind tag — never a builtin kind's member type
-import "aql:minilang"  MiniLang.Gen	None	a missing export reads as None — the export map is fixed post-build
+import "boru:minilang"  (+re/[a-z]+/) is (MiniLang.Re)	true	a re partial inhabits its named type
+import "boru:minilang"  (+re/[a-z]+/) is (MiniLang.Gex)	false	…and NOT a sibling kind's type
+import "boru:minilang"  (+gex/a*/) is (MiniLang.Gex)	true	each filter kind has its own
+import "boru:minilang"  (+re/[a-z]+/) is Function	true	the partial is still a plain Function to every existing check
+import "boru:minilang"  def p (+re/[a-z]+/)  p/r is (MiniLang.Re)	true	a def-bound partial keeps its kind tag through the binding
+import "boru:minilang"  def p (+re/[a-z]+/)  p/r is (MiniLang.Jq)	false	…and still refuses the wrong kind
+import "boru:minilang"  +jp/$.a/ is (MiniLang.Jp)	true	a stored JSONPath query has its named type
+import "boru:minilang"  +xp|//book/title| is (MiniLang.Xp)	true	an XPath partial too (| delimiter: the path contains /)
+import "boru:minilang"  ([x:Any] => [x])/r is (MiniLang.Re)	false	an ordinary lambda is a Function but NOT a re partial
+import "boru:minilang"  def Rex (MiniLang.Re)  (+re/[a-z]+/) is Rex	true	the exported type literal works as a def'd name too
+import "boru:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+re/[a-z]+/) "AbcD"	'AbcD'	the point: a typed fn param that requires specifically a regexp matcher (calling the partial inside the body is pinned in lang/go/test TestMiniPartialTypedParam — the checker's fn-value-call frontier)
+import "boru:minilang"  def take-re fn [[m:(MiniLang.Re) s:String] [String] [s]]  take-re (+gex/a*/) "AbcD"	ERROR:signature_error	a gex partial is refused by the m:(MiniLang.Re) slot
+import "boru:minilang"  def cnt (fn [[src:String opts:Map subject:String] [Integer] [1]])  def c (mini cnt 'a')  c/r is (MiniLang.Re)	false	a fn-value partial carries no kind tag — never a builtin kind's member type
+import "boru:minilang"  MiniLang.Gen	None	a missing export reads as None — the export map is fixed post-build
 #
 # §fnv  a mini-language VALUE as the transducer — `mini <fn> <src> <opts?>`.
 #       The first operand may BE the transducer: a Function (or a word bound
@@ -302,13 +302,13 @@ import "aql:minilang"  MiniLang.Gen	None	a missing export reads as None — the 
 #       [src opts subject]) yields the same partially-applied Function a
 #       built-in filter kind yields — but with no MiniKind tag, so the
 #       name-keyed member types (MiniLang.Re, …) do not apply to it.
-import "aql:minilang"  def dbl fn [[src:String opts:Map] [String] [src add src]]  mini dbl 'ab'	'abab'	a word bound to a generator fn is the value form spelled by name
-import "aql:minilang"  mini (fn [[src:String opts:Map] [String] [src]]) 'zz'	'zz'	an anonymous transducer fn used inline
-import "aql:minilang"  def g fn [[src:String opts:Map] [String] [opts get 'p']]  mini g 'zz' {p:'q'}	'q'	3-arg form: the opts map reaches the fn
-import "aql:minilang"  def cnt fn [[src:String opts:Map subject:String] [Integer] [77]]  "banana" mini cnt 'an'	77	a filter-shaped fn partial-applies: the subject comes from the stack
-import "aql:minilang"  def cnt fn [[src:String opts:Map subject:String] [Integer] [77]]  def c (mini cnt 'an')  "hi" c	77	the filter partial is storable and applies later
+import "boru:minilang"  def dbl fn [[src:String opts:Map] [String] [src add src]]  mini dbl 'ab'	'abab'	a word bound to a generator fn is the value form spelled by name
+import "boru:minilang"  mini (fn [[src:String opts:Map] [String] [src]]) 'zz'	'zz'	an anonymous transducer fn used inline
+import "boru:minilang"  def g fn [[src:String opts:Map] [String] [opts get 'p']]  mini g 'zz' {p:'q'}	'q'	3-arg form: the opts map reaches the fn
+import "boru:minilang"  def cnt fn [[src:String opts:Map subject:String] [Integer] [77]]  "banana" mini cnt 'an'	77	a filter-shaped fn partial-applies: the subject comes from the stack
+import "boru:minilang"  def cnt fn [[src:String opts:Map subject:String] [Integer] [77]]  def c (mini cnt 'an')  "hi" c	77	the filter partial is storable and applies later
 #
 # §fnv  value-form negatives — the [src opts] prefix contract is enforced
-import "aql:minilang"  mini (fn [[a:Integer] [Integer] [a]]) 'x'	ERROR:mini_bad_signature	a non-transducer fn is rejected (bad prefix)
-import "aql:minilang"  def k 42  mini k 'x'	ERROR:mini_unknown_lang	a non-fn binding is not a transducer — unknown kind unchanged
-import "aql:minilang"  mini (Function) 'x'	ERROR:signature_error	the Function TYPE literal is not a transducer value
+import "boru:minilang"  mini (fn [[a:Integer] [Integer] [a]]) 'x'	ERROR:mini_bad_signature	a non-transducer fn is rejected (bad prefix)
+import "boru:minilang"  def k 42  mini k 'x'	ERROR:mini_unknown_lang	a non-fn binding is not a transducer — unknown kind unchanged
+import "boru:minilang"  mini (Function) 'x'	ERROR:signature_error	the Function TYPE literal is not a transducer value

@@ -1,0 +1,7 @@
+name: styler
+main: styler.boru
+major: 1
+minor: 0
+patch: 7
+files: [styler.boru]
+deps: {decorator: 0.5.3}

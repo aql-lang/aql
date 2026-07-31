@@ -86,7 +86,7 @@ func TestProxyExhaustsCostBudget(t *testing.T) {
 	// Make the upstream report a cost on each call so the proxy
 	// debits the capability budget.
 	fu.respond = func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("X-AQL-Vault-Cost-Cents", "30")
+		w.Header().Set("X-BORU-Vault-Cost-Cents", "30")
 		w.WriteHeader(200)
 	}
 	registerTestProvider(t, "fake", fu, "bearer")

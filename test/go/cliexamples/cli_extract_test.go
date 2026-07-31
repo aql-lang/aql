@@ -6,7 +6,7 @@ import (
 )
 
 func TestCLIExtract_PrintsForm(t *testing.T) {
-	src := "```bash\naql do '1 add 2'   # prints 3\n```\n"
+	src := "```bash\nboru do '1 add 2'   # prints 3\n```\n"
 	got := Extract("CLI.md", src)
 	if len(got) != 1 {
 		t.Fatalf("got %d, want 1: %+v", len(got), got)
@@ -20,7 +20,7 @@ func TestCLIExtract_PrintsForm(t *testing.T) {
 }
 
 func TestCLIExtract_QuoteStripped(t *testing.T) {
-	src := "```bash\naql do '1 add 2'   # prints \"3\"\n```\n"
+	src := "```bash\nboru do '1 add 2'   # prints \"3\"\n```\n"
 	got := Extract("CLI.md", src)
 	if len(got) != 1 || got[0].Expected != "3" {
 		t.Fatalf("Expected = %q", got[0].Expected)
@@ -28,7 +28,7 @@ func TestCLIExtract_QuoteStripped(t *testing.T) {
 }
 
 func TestCLIExtract_ArrowForm(t *testing.T) {
-	src := "```bash\naql do '\"hi\" upper'   # => HI\n```\n"
+	src := "```bash\nboru do '\"hi\" upper'   # => HI\n```\n"
 	got := Extract("CLI.md", src)
 	if len(got) != 1 {
 		t.Fatalf("got %d: %+v", len(got), got)
@@ -42,7 +42,7 @@ func TestCLIExtract_ArrowForm(t *testing.T) {
 }
 
 func TestCLIExtract_NoAssertionIgnored(t *testing.T) {
-	src := "```bash\naql                  # REPL\naql script.aql       # runs the file\n```\n"
+	src := "```bash\nboru                  # REPL\nboru script.boru       # runs the file\n```\n"
 	// "REPL" / "runs the file" don't start with a known output keyword,
 	// so neither line is an assertion.
 	if got := Extract("CLI.md", src); len(got) != 0 {
@@ -50,31 +50,31 @@ func TestCLIExtract_NoAssertionIgnored(t *testing.T) {
 	}
 }
 
-func TestCLIExtract_NonAQLIgnored(t *testing.T) {
+func TestCLIExtract_NonBORUIgnored(t *testing.T) {
 	src := "```bash\nls -la   # prints files\n```\n"
 	if got := Extract("CLI.md", src); len(got) != 0 {
-		t.Errorf("non-aql command should be ignored, got %+v", got)
+		t.Errorf("non-boru command should be ignored, got %+v", got)
 	}
 }
 
-func TestCLIExtract_AqlFenceIgnored(t *testing.T) {
-	// A ```aql block is AQL source, not shell — not a CLI example.
-	src := "```aql\naql do '1 add 2'   # prints 3\n```\n"
+func TestCLIExtract_BoruFenceIgnored(t *testing.T) {
+	// A ```boru block is BORU source, not shell — not a CLI example.
+	src := "```boru\nboru do '1 add 2'   # prints 3\n```\n"
 	if got := Extract("CLI.md", src); len(got) != 0 {
-		t.Errorf("aql fence should be ignored, got %+v", got)
+		t.Errorf("boru fence should be ignored, got %+v", got)
 	}
 }
 
 func TestCLIExtract_SkipMarker(t *testing.T) {
-	src := skipMarker + "\n```bash\naql do '1 add 2'   # prints 3\n```\n"
+	src := skipMarker + "\n```bash\nboru do '1 add 2'   # prints 3\n```\n"
 	if got := Extract("CLI.md", src); len(got) != 0 {
 		t.Errorf("skip-marked block ignored, got %+v", got)
 	}
 }
 
 func TestCLIExtract_HashInQuotesNotComment(t *testing.T) {
-	// A '#' inside the AQL string is not the output comment.
-	src := "```bash\naql do '\"a#b\" upper'   # prints A#B\n```\n"
+	// A '#' inside the BORU string is not the output comment.
+	src := "```bash\nboru do '\"a#b\" upper'   # prints A#B\n```\n"
 	got := Extract("CLI.md", src)
 	if len(got) != 1 {
 		t.Fatalf("got %d: %+v", len(got), got)
@@ -88,7 +88,7 @@ func TestCLIExtract_HashInQuotesNotComment(t *testing.T) {
 }
 
 func TestCLIExtract_PromptStripped(t *testing.T) {
-	src := "```bash\n$ aql do '1 add 2'   # prints 3\n```\n"
+	src := "```bash\n$ boru do '1 add 2'   # prints 3\n```\n"
 	got := Extract("CLI.md", src)
 	if len(got) != 1 || !reflect.DeepEqual(got[0].Args, []string{"do", "1 add 2"}) {
 		t.Fatalf("got %+v", got)
@@ -96,7 +96,7 @@ func TestCLIExtract_PromptStripped(t *testing.T) {
 }
 
 func TestShellSplit_UnterminatedQuote(t *testing.T) {
-	if _, ok := shellSplit(`aql do '1 add 2`); ok {
+	if _, ok := shellSplit(`boru do '1 add 2`); ok {
 		t.Error("unterminated quote should return ok=false")
 	}
 }

@@ -3,7 +3,7 @@ package lang_test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // The "speculative forward commit" advisory: in check mode, flag the

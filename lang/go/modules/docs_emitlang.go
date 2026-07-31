@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:emitlang", map[string]string{
+	registerDocs("boru:emitlang", map[string]string{
 		"emit_json": "Built-in JSON emitter: `emit json <value>` → compact JSON (opts {pretty:true} " +
 			"or {indent:N} indent). The natural target for Maps, Lists, scalars and Errors.",
 		"emit_jsonic": "Built-in jsonic emitter: `emit jsonic <value>` → relaxed JSON with bare " +
@@ -31,7 +31,7 @@ func init() {
 	// calls them directly: `emit` dispatches on the kind atom, and that
 	// spelling is what the signatures cannot show. Results are from
 	// verified lang/spec/module-emitlang.tsv rows.
-	registerExamples("aql:emitlang", map[string][]string{
+	registerExamples("boru:emitlang", map[string][]string{
 		"kinds": {`EmitLang.kinds                                   ;# the kinds emit accepts`},
 		"emit_json": {
 			`emit {a:1 b:[2 3]}                               ;# '{"a":1,"b":[2,3]}' — json is the default`,

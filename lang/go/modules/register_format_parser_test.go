@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // upFormat is a trivial host Format that uppercases its content. It
@@ -23,7 +23,7 @@ func (upFormat) Encode(native.Value) (string, error) { return "", nil }
 // TestFormatParserFnBothSurfaces wires one Format onto both surfaces the
 // post-freeze way: native.RegisterFormat for `read` (name + extension), and
 // a NewFormatParserFn VALUE bound to a name for `parse` — which needs no
-// aql:parselang import at all (the value form is import-free).
+// boru:parselang import at all (the value form is import-free).
 func TestFormatParserFnBothSurfaces(t *testing.T) {
 	r, err := native.DefaultRegistry()
 	if err != nil {
@@ -85,7 +85,7 @@ func TestModuleBodyInheritsHostFormats(t *testing.T) {
 	mem.Files["x.uc"] = []byte("hi")
 	native.SetHostFileOps(r, mem)
 
-	src := `import module [ import "aql:io" export "R" {v: (IO.read (make Pathon "x.uc"))} ] R.v`
+	src := `import module [ import "boru:io" export "R" {v: (IO.read (make Pathon "x.uc"))} ] R.v`
 	tokens, err := parser.Parse(src)
 	if err != nil {
 		t.Fatal(err)

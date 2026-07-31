@@ -1,4 +1,4 @@
-# AQL Behavior Mechanism — Commentary and Comparison
+# BORU Behavior Mechanism — Commentary and Comparison
 
 > **Syntax note (2026-07):** the `refine Object {…}` examples and the
 > "Object types" dispatch discussion below predate the Object/Array
@@ -9,7 +9,7 @@
 
 ## What it is
 
-AQL associates per-type capabilities — `compare`, `canon`, `nodify` —
+BORU associates per-type capabilities — `compare`, `canon`, `nodify` —
 with a type's `Behavior` slot on its `*Type`. The kernel-side free
 functions (`eng.CompareValues`, `eng.Value.String`, `eng.NodifyValue`)
 dispatch by walking the value's `Parent` parent chain looking for a
@@ -25,7 +25,7 @@ Three layers ship today:
    their existing `Format` method.
 3. **User-defined types** — installed via the `behave NAME (fn …)` word:
 
-```aql
+```boru
 def Person (refine Object {name:String age:Integer})
 behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]])
 behave canon/q   (fn [[Person]        [String]  [(a 'name' get)]])
@@ -53,21 +53,21 @@ The closest cousins are **Common Lisp's CLOS generic functions** and
 **Clojure's protocols**. All three share the same shape:
 
 - Capability declared once, kernel-side (CLOS `defgeneric`, Clojure
-  `defprotocol`, AQL `behaviors` table).
+  `defprotocol`, BORU `behaviors` table).
 - Implementations added per-type after the fact (CLOS `defmethod`,
-  Clojure `extend-type`, AQL `behave compare/q (fn …)`).
+  Clojure `extend-type`, BORU `behave compare/q (fn …)`).
 - Dispatch through runtime lookup rather than compile-time resolution.
 
-AQL's behavior-name registry being kernel-closed is more like Clojure's
+BORU's behavior-name registry being kernel-closed is more like Clojure's
 protocols than CLOS — Clojure also requires a protocol be defined
 before extensions can target it.
 
-Where AQL diverges:
+Where BORU diverges:
 
 - **Open registration in any program**, not just at type-declaration
   time. ML-family languages (Haskell type classes, Rust traits, OCaml
   modules) require all instances declared in the module that owns
-  either the type or the class — Rust calls this the orphan rule. AQL
+  either the type or the class — Rust calls this the orphan rule. BORU
   has no orphan rule; any program can `behave` on any non-builtin type
   in scope. Python's `functools.singledispatch` is the closest
   mainstream parallel; Smalltalk / Ruby reach this through reopened
@@ -75,7 +75,7 @@ Where AQL diverges:
   like visitor.
 
 - **Single dispatch on the LCA**, not on individual operand types.
-  CLOS does true multimethods (dispatch on every arg's class); AQL
+  CLOS does true multimethods (dispatch on every arg's class); BORU
   collapses to "find the lowest common ancestor of the operand types
   and ask its `Behavior`" — strictly less powerful but easier to
   reason about. Cross-type compare (Integer + Decimal → Number) falls
@@ -89,8 +89,8 @@ Where AQL diverges:
   JSON encoder. Most languages collapse these — Python's `json.dumps`
   calls `default()` and serialises in one step, Rust's
   `serde::Serialize` produces wire bytes directly, Go's `MarshalJSON`
-  returns `[]byte`. AQL exposing the intermediate Node as a
-  first-class result lets users compose with downstream AQL
+  returns `[]byte`. BORU exposing the intermediate Node as a
+  first-class result lets users compose with downstream BORU
   transforms before any encoder runs — a fit for a query language.
 
 - **Capability methods are Go interfaces** detected via type
@@ -111,13 +111,13 @@ Where AQL diverges:
 | Ruby / Smalltalk | Yes (reopen class) | Runtime | Receiver only |
 | Clojure | Yes (`extend-type` after `defprotocol`) | Runtime | Receiver only |
 | Common Lisp / CLOS | Yes (`defmethod`) | Runtime | All args (multimethods) |
-| **AQL** | **Yes (`behave`)** | **Runtime** | **LCA of operand types** |
+| **BORU** | **Yes (`behave`)** | **Runtime** | **LCA of operand types** |
 
 ## Type considerations
 
 ### Structural typing for validation, nominal typing for dispatch
 
-AQL splits the role types play depending on whether they validate or
+BORU splits the role types play depending on whether they validate or
 dispatch — the subtlest gotcha for users coming from nominal languages.
 
 **Validation is structural.** `def x:Person {name:'A' age:30}` validates
@@ -133,7 +133,7 @@ Comparer, even though that value was just validated as a Person.
 
 The way to *carry* nominal identity is `make`:
 
-```aql
+```boru
 def Person (refine Object {name:String age:Integer})
 behave compare/q (fn [[Person Person] [Integer] [(a 'age' get) (b 'age' get) sub]])
 
@@ -157,7 +157,7 @@ How other languages handle this:
   question mostly doesn't arise because OCaml objects aren't where
   variant-style dispatch happens.
 
-AQL splits the difference deliberately. Structural validation keeps
+BORU splits the difference deliberately. Structural validation keeps
 typed bindings flexible (any old map fits if its shape is right), while
 nominal dispatch keeps behavior lookup predictable (only `make` produces
 a value that behaves as the named type). The cost is the gotcha above:
@@ -334,7 +334,7 @@ One behavior name → one capability slot per type. Can't have
 emulate via distinct nominal types (`def PersonByAge (refine Object {…})`) or
 by writing an ad-hoc comparator at the call site. CLOS has `:before` /
 `:after` / `:around` and qualifier-keyed methods; Clojure has
-multimethods with arbitrary dispatch fns. AQL stays minimal here,
+multimethods with arbitrary dispatch fns. BORU stays minimal here,
 which keeps the dispatch path predictable and the kernel surface
 small.
 
@@ -343,7 +343,7 @@ small.
 The closed kernel table (compare / canon / nodify today) is a design
 decision, not a limitation: new capabilities need kernel awareness
 because the kernel needs to know how to dispatch them. CLOS lets users
-define new generic functions freely; AQL's narrower surface trades
+define new generic functions freely; BORU's narrower surface trades
 that flexibility for guaranteed dispatch. The natural extension point
 is allowing plugins to register new behavior names at engine-init time
 (parallel to `RegisterExternalBuiltin` for types) — a small future
@@ -351,16 +351,16 @@ change.
 
 ## Summary
 
-The overall posture: AQL sits closer to **Clojure protocols + Lisp-style
+The overall posture: BORU sits closer to **Clojure protocols + Lisp-style
 runtime extension** than to ML-family type classes. The kernel keeps a
 small list of dispatchable capabilities; the world extends the impls.
 Two interesting bets:
 
 - **Projection / encoding split** (`nodify` decomposed from `jsonify`).
-- **AQL-body-as-Go-interface bridge** (the `userBehavior` wrapper) —
-  user-supplied AQL fn bodies become first-class implementations of
+- **BORU-body-as-Go-interface bridge** (the `userBehavior` wrapper) —
+  user-supplied BORU fn bodies become first-class implementations of
   Go-side capability interfaces, dispatched alongside the kernel and
   native implementations through the same mechanism.
 
 Both are individually uncontroversial; the combination is what gives
-AQL behavior dispatch its distinctive character.
+BORU behavior dispatch its distinctive character.

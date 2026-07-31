@@ -22,11 +22,11 @@ func TestEnvelopeFileKeyringRoundTrip(t *testing.T) {
 	if _, err := kr.Get("missing"); err != ErrNotFound {
 		t.Errorf("Get(missing) = %v, want ErrNotFound", err)
 	}
-	if err := kr.Set("proj:apikey", "AQLE-sealed-blob"); err != nil {
+	if err := kr.Set("proj:apikey", "BORUE-sealed-blob"); err != nil {
 		t.Fatal(err)
 	}
 	got, err := kr.Get("proj:apikey")
-	if err != nil || got != "AQLE-sealed-blob" {
+	if err != nil || got != "BORUE-sealed-blob" {
 		t.Fatalf("Get = %q,%v want the sealed blob", got, err)
 	}
 	if err := kr.Delete("proj:apikey"); err != nil {

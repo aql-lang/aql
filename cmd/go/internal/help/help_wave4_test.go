@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
 )
 
 type fakeCmd struct {
@@ -50,7 +50,7 @@ func TestW4OverviewGroupsCommandsAndServices(t *testing.T) {
 	s := out.String()
 
 	for _, want := range []string{
-		"aql — command-line tool",
+		"boru — command-line tool",
 		"Usage:",
 		"Commands:",
 		"Services (long-running",
@@ -86,10 +86,10 @@ func TestW4HelpKnownCommand(t *testing.T) {
 		t.Fatalf("Run(runner) = %d, want 0", code)
 	}
 	s := out.String()
-	if !strings.Contains(s, "aql runner — run things") {
+	if !strings.Contains(s, "boru runner — run things") {
 		t.Errorf("missing summary line: %q", s)
 	}
-	if !strings.Contains(s, "Run 'aql runner -h'") {
+	if !strings.Contains(s, "Run 'boru runner -h'") {
 		t.Errorf("missing -h hint: %q", s)
 	}
 }
@@ -104,7 +104,7 @@ func TestW4HelpUnknownCommand(t *testing.T) {
 	if !strings.Contains(s, `unknown command "zz-nope"`) {
 		t.Errorf("missing unknown-command line: %q", s)
 	}
-	if !strings.Contains(s, "aql describe zz-nope") {
+	if !strings.Contains(s, "boru describe zz-nope") {
 		t.Errorf("missing describe hint: %q", s)
 	}
 }

@@ -16,8 +16,8 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // shapeCheckStack runs a plain Check and returns the residual stack

@@ -18,7 +18,7 @@ import (
 // Layer 1: textkit (v3.2.0) → styler
 // Project: wordlab → textkit
 //
-// Each module is nested inside its parent's .aql/ directory, forming
+// Each module is nested inside its parent's .boru/ directory, forming
 // a 7-level deep tree mirroring CommonJS node_modules resolution.
 //
 // Main branch:  textkit → styler → decorator → formatter → caser → wrapper → charops
@@ -89,7 +89,7 @@ func TestDeepFormatterMarkBranch(t *testing.T) {
 	//
 	// Instead, test from decorator's directory context where formatter is a child dep.
 	dir := wordlabDir(t)
-	decDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql", "decorator")
+	decDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru", "decorator")
 	result, err := runRealFileSteps(t, decDir, []string{
 		`(import "formatter")`,
 		`"tag" Formatter.mark`,
@@ -106,7 +106,7 @@ func TestDeepFormatterMarkBranch(t *testing.T) {
 
 func TestDeepFormatterFormatBranch(t *testing.T) {
 	dir := wordlabDir(t)
-	decDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql", "decorator")
+	decDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru", "decorator")
 	result, err := runRealFileSteps(t, decDir, []string{
 		`(import "formatter")`,
 		`"word" Formatter.format`,
@@ -121,8 +121,8 @@ func TestDeepFormatterFormatBranch(t *testing.T) {
 
 func TestDeepCharopsFromWrapper(t *testing.T) {
 	dir := wordlabDir(t)
-	wrapperDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
-		"decorator", ".aql", "formatter", ".aql", "caser", ".aql", "wrapper")
+	wrapperDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru",
+		"decorator", ".boru", "formatter", ".boru", "caser", ".boru", "wrapper")
 	result, err := runRealFileSteps(t, wrapperDir, []string{
 		`(import "charops")`,
 		`"hello" Charops.to-up`,
@@ -135,8 +135,8 @@ func TestDeepCharopsFromWrapper(t *testing.T) {
 
 func TestDeepCharopsToDown(t *testing.T) {
 	dir := wordlabDir(t)
-	wrapperDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
-		"decorator", ".aql", "formatter", ".aql", "caser", ".aql", "wrapper")
+	wrapperDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru",
+		"decorator", ".boru", "formatter", ".boru", "caser", ".boru", "wrapper")
 	result, err := runRealFileSteps(t, wrapperDir, []string{
 		`(import "charops")`,
 		`"WORLD" Charops.to-down`,
@@ -149,8 +149,8 @@ func TestDeepCharopsToDown(t *testing.T) {
 
 func TestDeepJoinerFromTagger(t *testing.T) {
 	dir := wordlabDir(t)
-	taggerDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
-		"decorator", ".aql", "formatter", ".aql", "bracket", ".aql", "tagger")
+	taggerDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru",
+		"decorator", ".boru", "formatter", ".boru", "bracket", ".boru", "tagger")
 	result, err := runRealFileSteps(t, taggerDir, []string{
 		`(import "joiner")`,
 		`"hello" Joiner.add-dot`,
@@ -163,8 +163,8 @@ func TestDeepJoinerFromTagger(t *testing.T) {
 
 func TestDeepWrapperFromCaser(t *testing.T) {
 	dir := wordlabDir(t)
-	caserDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
-		"decorator", ".aql", "formatter", ".aql", "caser")
+	caserDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru",
+		"decorator", ".boru", "formatter", ".boru", "caser")
 	result, err := runRealFileSteps(t, caserDir, []string{
 		`(import "wrapper")`,
 		`"hello" Wrapper.shout`,
@@ -177,8 +177,8 @@ func TestDeepWrapperFromCaser(t *testing.T) {
 
 func TestDeepTaggerFromBracket(t *testing.T) {
 	dir := wordlabDir(t)
-	bracketDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
-		"decorator", ".aql", "formatter", ".aql", "bracket")
+	bracketDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru",
+		"decorator", ".boru", "formatter", ".boru", "bracket")
 	result, err := runRealFileSteps(t, bracketDir, []string{
 		`(import "tagger")`,
 		`"test" Tagger.tag`,
@@ -191,8 +191,8 @@ func TestDeepTaggerFromBracket(t *testing.T) {
 
 func TestDeepCaserFromFormatter(t *testing.T) {
 	dir := wordlabDir(t)
-	fmtDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
-		"decorator", ".aql", "formatter")
+	fmtDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru",
+		"decorator", ".boru", "formatter")
 	result, err := runRealFileSteps(t, fmtDir, []string{
 		`(import "caser")`,
 		`"hello" Caser.emphasize`,
@@ -205,8 +205,8 @@ func TestDeepCaserFromFormatter(t *testing.T) {
 
 func TestDeepBracketFromFormatter(t *testing.T) {
 	dir := wordlabDir(t)
-	fmtDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
-		"decorator", ".aql", "formatter")
+	fmtDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru",
+		"decorator", ".boru", "formatter")
 	result, err := runRealFileSteps(t, fmtDir, []string{
 		`(import "bracket")`,
 		`"test" Bracket.label`,
@@ -219,7 +219,7 @@ func TestDeepBracketFromFormatter(t *testing.T) {
 
 func TestDeepDecoratorFromStyler(t *testing.T) {
 	dir := wordlabDir(t)
-	stylerDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler")
+	stylerDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler")
 	result, err := runRealFileSteps(t, stylerDir, []string{
 		`(import "decorator")`,
 		`"hello" Decorator.decorate`,
@@ -232,7 +232,7 @@ func TestDeepDecoratorFromStyler(t *testing.T) {
 
 func TestDeepDecoratorLabelItFromStyler(t *testing.T) {
 	dir := wordlabDir(t)
-	stylerDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler")
+	stylerDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler")
 	result, err := runRealFileSteps(t, stylerDir, []string{
 		`(import "decorator")`,
 		`"test" Decorator.label-it`,
@@ -245,7 +245,7 @@ func TestDeepDecoratorLabelItFromStyler(t *testing.T) {
 
 func TestDeepStylerFromTextkit(t *testing.T) {
 	dir := wordlabDir(t)
-	tkDir := filepath.Join(dir, ".aql", "textkit")
+	tkDir := filepath.Join(dir, ".boru", "textkit")
 	result, err := runRealFileSteps(t, tkDir, []string{
 		`(import "styler")`,
 		`"hello" Styler.style`,
@@ -262,7 +262,7 @@ func TestDeepWordlabNestedFileTree(t *testing.T) {
 	dir := wordlabDir(t)
 
 	// Project-level files.
-	for _, f := range []string{"aql.jsonic", "index.aql", ".aql/aql.json"} {
+	for _, f := range []string{"boru.jsonic", "index.boru", ".boru/boru.json"} {
 		if _, err := os.Stat(filepath.Join(dir, f)); err != nil {
 			t.Errorf("expected wordlab/%s: %s", f, err)
 		}
@@ -277,25 +277,25 @@ func TestDeepWordlabNestedFileTree(t *testing.T) {
 
 	tree := []modEntry{
 		// Layer 1
-		{".aql/textkit", "textkit.aql"},
+		{".boru/textkit", "textkit.boru"},
 		// Layer 2
-		{".aql/textkit/.aql/styler", "styler.aql"},
+		{".boru/textkit/.boru/styler", "styler.boru"},
 		// Layer 3
-		{".aql/textkit/.aql/styler/.aql/decorator", "decorator.aql"},
+		{".boru/textkit/.boru/styler/.boru/decorator", "decorator.boru"},
 		// Layer 4
-		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter", "formatter.aql"},
+		{".boru/textkit/.boru/styler/.boru/decorator/.boru/formatter", "formatter.boru"},
 		// Layer 5 (main branch)
-		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/caser", "caser.aql"},
+		{".boru/textkit/.boru/styler/.boru/decorator/.boru/formatter/.boru/caser", "caser.boru"},
 		// Layer 5 (second branch)
-		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/bracket", "bracket.aql"},
+		{".boru/textkit/.boru/styler/.boru/decorator/.boru/formatter/.boru/bracket", "bracket.boru"},
 		// Layer 6 (main branch)
-		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/caser/.aql/wrapper", "wrapper.aql"},
+		{".boru/textkit/.boru/styler/.boru/decorator/.boru/formatter/.boru/caser/.boru/wrapper", "wrapper.boru"},
 		// Layer 6 (second branch)
-		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/bracket/.aql/tagger", "tagger.aql"},
+		{".boru/textkit/.boru/styler/.boru/decorator/.boru/formatter/.boru/bracket/.boru/tagger", "tagger.boru"},
 		// Layer 7 (main branch leaf)
-		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/caser/.aql/wrapper/.aql/charops", "charops.aql"},
+		{".boru/textkit/.boru/styler/.boru/decorator/.boru/formatter/.boru/caser/.boru/wrapper/.boru/charops", "charops.boru"},
 		// Layer 7 (second branch leaf)
-		{".aql/textkit/.aql/styler/.aql/decorator/.aql/formatter/.aql/bracket/.aql/tagger/.aql/joiner", "joiner.aql"},
+		{".boru/textkit/.boru/styler/.boru/decorator/.boru/formatter/.boru/bracket/.boru/tagger/.boru/joiner", "joiner.boru"},
 	}
 
 	for _, m := range tree {
@@ -306,19 +306,19 @@ func TestDeepWordlabNestedFileTree(t *testing.T) {
 			continue
 		}
 
-		// Main AQL file exists.
+		// Main BORU file exists.
 		if _, err := os.Stat(filepath.Join(modDir, m.main)); err != nil {
 			t.Errorf("expected %s/%s: %s", m.relPath, m.main, err)
 		}
 
-		// aql.jsonic exists.
-		if _, err := os.Stat(filepath.Join(modDir, "aql.jsonic")); err != nil {
-			t.Errorf("expected %s/aql.jsonic: %s", m.relPath, err)
+		// boru.jsonic exists.
+		if _, err := os.Stat(filepath.Join(modDir, "boru.jsonic")); err != nil {
+			t.Errorf("expected %s/boru.jsonic: %s", m.relPath, err)
 		}
 
-		// .aql/aql.json exists (prep was run).
-		if _, err := os.Stat(filepath.Join(modDir, ".aql", "aql.json")); err != nil {
-			t.Errorf("expected %s/.aql/aql.json: %s", m.relPath, err)
+		// .boru/boru.json exists (prep was run).
+		if _, err := os.Stat(filepath.Join(modDir, ".boru", "boru.json")); err != nil {
+			t.Errorf("expected %s/.boru/boru.json: %s", m.relPath, err)
 		}
 	}
 }
@@ -352,8 +352,8 @@ func TestDeepResourceTextkitConfigKey(t *testing.T) {
 
 func TestDeepResourceCharopsLetters(t *testing.T) {
 	dir := wordlabDir(t)
-	wrapperDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
-		"decorator", ".aql", "formatter", ".aql", "caser", ".aql", "wrapper")
+	wrapperDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru",
+		"decorator", ".boru", "formatter", ".boru", "caser", ".boru", "wrapper")
 	result, err := runRealFileSteps(t, wrapperDir, []string{
 		`(import "charops")`,
 		`resource.letters.alpha`,
@@ -366,8 +366,8 @@ func TestDeepResourceCharopsLetters(t *testing.T) {
 
 func TestDeepResourceCharopsLettersAll(t *testing.T) {
 	dir := wordlabDir(t)
-	wrapperDir := filepath.Join(dir, ".aql", "textkit", ".aql", "styler", ".aql",
-		"decorator", ".aql", "formatter", ".aql", "caser", ".aql", "wrapper")
+	wrapperDir := filepath.Join(dir, ".boru", "textkit", ".boru", "styler", ".boru",
+		"decorator", ".boru", "formatter", ".boru", "caser", ".boru", "wrapper")
 	result, err := runRealFileSteps(t, wrapperDir, []string{
 		`(import "charops")`,
 		`resource.letters`,

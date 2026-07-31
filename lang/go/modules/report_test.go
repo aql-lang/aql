@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// reportRegistry returns a registry with the aql:report module
-// installed as defs (mirrors what `import "aql:report"` would do).
+// reportRegistry returns a registry with the boru:report module
+// installed as defs (mirrors what `import "boru:report"` would do).
 func reportRegistry(t *testing.T) *native.Registry {
 	t.Helper()
 	r, err := native.DefaultRegistry()
@@ -27,7 +27,7 @@ func reportRegistry(t *testing.T) *native.Registry {
 	return r
 }
 
-func runReportAQL(t *testing.T, r *native.Registry, src string) []native.Value {
+func runReportBORU(t *testing.T, r *native.Registry, src string) []native.Value {
 	t.Helper()
 	values, err := parser.Parse(src)
 	if err != nil {
@@ -42,7 +42,7 @@ func runReportAQL(t *testing.T, r *native.Registry, src string) []native.Value {
 
 func TestReportValueScalar(t *testing.T) {
 	r := reportRegistry(t)
-	result := runReportAQL(t, r, `42 Report.value`)
+	result := runReportBORU(t, r, `42 Report.value`)
 	s, _ := native.AsString(result[0])
 	if s != "42" {
 		t.Errorf("Report.value 42 = %q, want %q", s, "42")
@@ -51,7 +51,7 @@ func TestReportValueScalar(t *testing.T) {
 
 func TestReportRecordVerticalLayout(t *testing.T) {
 	r := reportRegistry(t)
-	result := runReportAQL(t, r, `{name:"alice" age:30} Report.record`)
+	result := runReportBORU(t, r, `{name:"alice" age:30} Report.record`)
 	s, _ := native.AsString(result[0])
 	if !strings.Contains(s, "name : alice") {
 		t.Errorf("missing aligned field; got:\n%s", s)
@@ -63,7 +63,7 @@ func TestReportRecordVerticalLayout(t *testing.T) {
 
 func TestReportTableFromListOfMaps(t *testing.T) {
 	r := reportRegistry(t)
-	result := runReportAQL(t, r, `[{a:1 b:2} {a:3 b:4}] Report.table`)
+	result := runReportBORU(t, r, `[{a:1 b:2} {a:3 b:4}] Report.table`)
 	s, _ := native.AsString(result[0])
 	if !strings.Contains(s, "a | b") {
 		t.Errorf("missing header; got:\n%s", s)
@@ -75,7 +75,7 @@ func TestReportTableFromListOfMaps(t *testing.T) {
 
 func TestReportListNumbered(t *testing.T) {
 	r := reportRegistry(t)
-	result := runReportAQL(t, r, `[10 20 30] Report.list`)
+	result := runReportBORU(t, r, `[10 20 30] Report.list`)
 	s, _ := native.AsString(result[0])
 	for _, want := range []string{"[0] 10", "[1] 20", "[2] 30"} {
 		if !strings.Contains(s, want) {

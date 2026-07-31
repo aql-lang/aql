@@ -1,7 +1,7 @@
 # Silent forward-collection traps (DX investigations)
 
 **Status:** investigations only — no code change. Two silent-failure traps
-surfaced by the voxgig trie/bloom DX reports (`design/VOXGIG-AQL-REPORTS.5.md`,
+surfaced by the voxgig trie/bloom DX reports (`design/VOXGIG-BORU-REPORTS.5.md`,
 bloom #3 and trie #6), both reproduced on the current build. Each is a case
 where forward collection does something locally reasonable but globally
 surprising, and fails **quietly** rather than loudly — the dominant cost the
@@ -15,7 +15,7 @@ DX reports call out.
 
 Binding the result of a void-returning call derails the *next* word:
 
-```aql
+```boru
 def Bits (refine Object {})
 def mark fn [ [i:Integer b:Bits] [] [ b 1 (convert String i) set ] ]
 def b (make Bits {})
@@ -62,7 +62,7 @@ mislocated failure: with a following token, the word binds the wrong one and a
 
 "Zero values in an argument slot → error" is too aggressive: `(if c [v] [])`
 with the empty branch taken legitimately yields zero values, so
-`add 1 (if c [t] []) 2` (conditionally contribute a term) is reasonable AQL and
+`add 1 (if c [t] []) 2` (conditionally contribute a term) is reasonable BORU and
 would start erroring.
 
 ### Recommendation (deferred — investigation only)
@@ -95,7 +95,7 @@ words are binding" is a language-design call with test blast radius (e.g. the
 This is **not a bug** and needs no behaviour change. It is the direct analogue
 of JavaScript member access, with `()` playing the role of `[]`:
 
-| JavaScript | AQL | meaning |
+| JavaScript | BORU | meaning |
 |---|---|---|
 | `xs.i` | `xs get i` | literal key/property named `i` |
 | `xs[i]` | `xs get (i)` | computed key — the **value** of `i` |
@@ -106,7 +106,7 @@ not because the behaviour is wrong. The resolution is a docs line, nothing more.
 
 ### Symptom (trie #6)
 
-```aql
+```boru
 def xs [10 20 30]
 def i 1
 xs get i        # => None      literal key "i" — like xs.i

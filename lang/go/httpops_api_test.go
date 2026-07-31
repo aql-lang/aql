@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // stubRoundTripper serves a canned response and counts calls, so a test
@@ -46,7 +46,7 @@ func TestSetHTTPOps(t *testing.T) {
 	rt := &stubRoundTripper{}
 	a.SetHTTPOps(stubHTTPOps{rt: rt})
 
-	if _, err = a.RunInterp(`import "aql:net"`); err != nil {
+	if _, err = a.RunInterp(`import "boru:net"`); err != nil {
 		t.Fatal(err)
 	}
 	res, err := a.RunInterp(
@@ -77,7 +77,7 @@ func TestRegisterClientIdentity(t *testing.T) {
 	a.RegisterClientIdentity("acme", lang.ClientIdentity(
 		identityStub(func(lang.CertRequest) (*tls.Certificate, error) { return nil, nil })))
 
-	if _, err = a.RunInterp(`import "aql:net"`); err != nil {
+	if _, err = a.RunInterp(`import "boru:net"`); err != nil {
 		t.Fatal(err)
 	}
 	// The host is unroutable, so this fails at the dial — the assertion

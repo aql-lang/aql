@@ -145,9 +145,9 @@ func TestListScreenActionsAndReload(t *testing.T) {
 	s := newListScreen("things", items, acts, func() []list.Item {
 		reloaded = true
 		return items[:1]
-	}).withHelp("help text").withCmd("aql vault things")
+	}).withHelp("help text").withCmd("boru vault things")
 
-	if s.Title() != "things" || s.helpInfo() != "help text" || s.cliCommand() != "aql vault things" {
+	if s.Title() != "things" || s.helpInfo() != "help text" || s.cliCommand() != "boru vault things" {
 		t.Errorf("metadata wrong: %q %q %q", s.Title(), s.helpInfo(), s.cliCommand())
 	}
 	if s.Init() != nil {
@@ -287,11 +287,11 @@ func TestPagerScreenBasics(t *testing.T) {
 	}
 	content := "line one\nline two"
 	s := newPagerScreen("pg", content, acts, func() string { return "reloaded" }).
-		withHelp("pager help").withCmd("aql vault audit")
+		withHelp("pager help").withCmd("boru vault audit")
 	if s.Init() != nil || s.Title() != "pg" || s.capturesInput() {
 		t.Error("pager metadata wrong")
 	}
-	if s.helpInfo() != "pager help" || s.cliCommand() != "aql vault audit" {
+	if s.helpInfo() != "pager help" || s.cliCommand() != "boru vault audit" {
 		t.Error("pager help/cmd wrong")
 	}
 	// View before any resize sizes the viewport lazily.
@@ -337,8 +337,8 @@ func TestFormScreenLifecycle(t *testing.T) {
 	if s.cliCommand() != "" {
 		t.Error("cliCommand without cmdFn should be empty")
 	}
-	s.cmdFn = func() string { return "aql vault add " + val }
-	if !strings.HasPrefix(s.cliCommand(), "aql vault add") {
+	s.cmdFn = func() string { return "boru vault add " + val }
+	if !strings.HasPrefix(s.cliCommand(), "boru vault add") {
 		t.Errorf("cliCommand with cmdFn: %q", s.cliCommand())
 	}
 	if len(s.shortHelp()) != 3 || len(s.fullHelp()) != 1 {

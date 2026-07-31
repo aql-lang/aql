@@ -3,7 +3,7 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // docToAny's Map-branch AsMap-nil fallback (minilang_query.go:36-38) is a

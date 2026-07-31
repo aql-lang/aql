@@ -39,8 +39,8 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // crossRec is one engine's result for one corpus row.
@@ -58,7 +58,7 @@ func crossKey(mode, file string, line int) string {
 }
 
 // goValueResult runs one row through the Go kernel exactly as TestSpec does,
-// rendering success via eng.Canon and failure as the AqlError taxonomy code
+// rendering success via eng.Canon and failure as the BoruError taxonomy code
 // (so error-parity is compared by code, not message text — the same shape the
 // TS dumper emits).
 func goValueResult(input string) (bool, string) {
@@ -93,11 +93,11 @@ func goCheckResult(input string) (bool, string) {
 	return true, rendered
 }
 
-// errTag renders an error as its AqlError taxonomy code, or as
-// <fallbackPrefix><message> when it is not an AqlError — matching the TS
+// errTag renders an error as its BoruError taxonomy code, or as
+// <fallbackPrefix><message> when it is not a BoruError — matching the TS
 // dumper's classification so error-parity compares by code.
 func errTag(err error, fallbackPrefix string) string {
-	var ae *eng.AqlError
+	var ae *eng.BoruError
 	if errors.As(err, &ae) {
 		return ae.Code
 	}

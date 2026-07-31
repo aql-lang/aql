@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // TestPolicyRefusalClassification pins the adapter's three answers,
@@ -49,7 +49,7 @@ func TestPolicyRefusalClassification(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got := PolicyRefusal(r, "w", c.err)
-			var ae *AqlError
+			var ae *BoruError
 			coded := errors.As(got, &ae)
 			switch {
 			case c.wantCode == "" && coded:
@@ -57,7 +57,7 @@ func TestPolicyRefusalClassification(t *testing.T) {
 			case c.wantCode == "" && got != c.err:
 				t.Errorf("a non-refusal must pass through as the SAME error value, got %v", got)
 			case c.wantCode != "" && !coded:
-				t.Errorf("a refusal must become an AqlError so `dot code` can read it, got %T", got)
+				t.Errorf("a refusal must become a BoruError so `dot code` can read it, got %T", got)
 			case c.wantCode != "" && ae.Code != c.wantCode:
 				t.Errorf("code = %q, want %q", ae.Code, c.wantCode)
 			}
@@ -90,9 +90,9 @@ func TestPolicyRefusalPassesNonRefusalsThrough(t *testing.T) {
 		Profile: "p", Blame: "network.words default=deny",
 	}
 	coded := PolicyRefusal(r, "fetch", denied)
-	var ae *AqlError
+	var ae *BoruError
 	if !errors.As(coded, &ae) {
-		t.Fatalf("a refusal must become an AqlError so `dot code` can read it, got %T", coded)
+		t.Fatalf("a refusal must become a BoruError so `dot code` can read it, got %T", coded)
 	}
 	if ae.Code != "permission_denied" {
 		t.Errorf("code = %q, want permission_denied", ae.Code)

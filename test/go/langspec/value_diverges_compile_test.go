@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // TestValueDivergesCompilesNative pins the CompileValueDiverges mechanism that

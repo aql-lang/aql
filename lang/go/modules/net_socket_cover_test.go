@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // Unit coverage for the net_socket.go handler arms the end-to-end suite
@@ -75,12 +75,12 @@ func nscTCPPair(t *testing.T) (net.Conn, net.Conn) {
 	return client, srv.c
 }
 
-// nscCode unwraps the AqlError code from a handler error.
+// nscCode unwraps the BoruError code from a handler error.
 func nscCode(t *testing.T, err error) string {
 	t.Helper()
-	var ae *eng.AqlError
+	var ae *eng.BoruError
 	if !errors.As(err, &ae) {
-		t.Fatalf("expected an AqlError, got %v", err)
+		t.Fatalf("expected a BoruError, got %v", err)
 	}
 	return ae.Code
 }
@@ -432,7 +432,7 @@ func TestNSCServeRawHandlerNotFn(t *testing.T) {
 
 func TestNSCServeRawListenErrorPropagates(t *testing.T) {
 	_, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`Net.serve-raw {} ([conn:Any] => [conn])`,
 	})
 	nscErrContains(t, err, "options need tcp:")
@@ -442,7 +442,7 @@ func TestNSCServeRawListenErrorPropagates(t *testing.T) {
 // the connection dropped — the client observes `closed`.
 func TestNSCServeRawHandlerRejectsSocket(t *testing.T) {
 	_, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def ln (Net.serve-raw {tcp: 0} ([a:Integer] => [a]))`,
 		`def lna (Net.addr ln)`,
 		`def port lna.port`,
@@ -457,7 +457,7 @@ func TestNSCServeRawHandlerRejectsSocket(t *testing.T) {
 // observes `closed`.
 func TestNSCServeRawHandlerErrorLogged(t *testing.T) {
 	_, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def nl (convert Bytes "\n")`,
 		`def ln (Net.serve-raw {tcp: 0} ([conn:Any] => [
 		   Net.recv-until conn nl {within: 60}

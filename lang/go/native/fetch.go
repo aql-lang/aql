@@ -11,9 +11,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // checkFetchPolicy consults the registry's host policy (if any)
@@ -90,13 +90,13 @@ func hostPortFromURL(rawURL string) (string, int) {
 }
 
 // The Fetch family — the Fetch root and its Request / Response leaves
-// — is owned by aql:net as per-import module mints (former global
+// — is owned by boru:net as per-import module mints (former global
 // FixedIDs 3000-3002, retired): BuildNetModule mints them via
 // MintFetchTypes and threads them to the fetch handlers, whose
 // Response values escape to the importer. Reachable after import as
 // Net.Fetch / Net.Request / Net.Response.
 
-// FetchModuleTypes are aql:net's minted types.
+// FetchModuleTypes are boru:net's minted types.
 type FetchModuleTypes struct {
 	Fetch    *Type
 	Request  *Type
@@ -104,7 +104,7 @@ type FetchModuleTypes struct {
 }
 
 // MintFetchTypes mints the Fetch family into r's type table (r is
-// aql:net's sub-registry) and returns the nodes.
+// boru:net's sub-registry) and returns the nodes.
 func MintFetchTypes(r *Registry) FetchModuleTypes {
 	fetch := r.Types.MintType("Fetch", eng.TIdeal)
 	return FetchModuleTypes{
@@ -142,7 +142,7 @@ func (ft FetchModuleTypes) fetchStringHandler(args []Value, ctx map[string]Value
 func (ft FetchModuleTypes) fetchStringMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	opts, _ := AsMap(args[1])
 	if opts == nil {
-		return nil, r.AqlError("fetch_error", "fetch: expected map for options, got nil", "fetch")
+		return nil, r.BoruError("fetch_error", "fetch: expected map for options, got nil", "fetch")
 	}
 	reqOM := NewOrderedMap()
 	reqOM.Set("url", args[0])
@@ -162,7 +162,7 @@ func (ft FetchModuleTypes) fetchStringMapHandler(args []Value, ctx map[string]Va
 func (ft FetchModuleTypes) fetchMapHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 	m, _ := AsMap(args[0])
 	if m == nil {
-		return nil, r.AqlError("fetch_error", "fetch: expected map argument, got nil", "fetch")
+		return nil, r.BoruError("fetch_error", "fetch: expected map argument, got nil", "fetch")
 	}
 	return ft.doFetch(m, r)
 }
@@ -185,11 +185,11 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	// Extract url (required).
 	urlVal, ok := reqOM.Get("url")
 	if !ok {
-		return nil, r.AqlError("fetch_error", "fetch: missing required \"url\" field", "fetch")
+		return nil, r.BoruError("fetch_error", "fetch: missing required \"url\" field", "fetch")
 	}
 	urlStr, err := AsString(urlVal)
 	if err != nil {
-		return nil, r.AqlError("fetch_error", "fetch: url: "+err.Error(), "fetch")
+		return nil, r.BoruError("fetch_error", "fetch: url: "+err.Error(), "fetch")
 	}
 
 	// Policy gate: consult host policy before opening any socket.
@@ -202,7 +202,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	if mv, ok := reqOM.Get("method"); ok {
 		mvStr, err := AsString(mv)
 		if err != nil {
-			return nil, r.AqlError("fetch_error", "fetch: method: "+err.Error(), "fetch")
+			return nil, r.BoruError("fetch_error", "fetch: method: "+err.Error(), "fetch")
 		}
 		method = strings.ToUpper(mvStr)
 	}
@@ -212,7 +212,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	if bv, ok := reqOM.Get("body"); ok {
 		bvStr, err := AsString(bv)
 		if err != nil {
-			return nil, r.AqlError("fetch_error", "fetch: body: "+err.Error(), "fetch")
+			return nil, r.BoruError("fetch_error", "fetch: body: "+err.Error(), "fetch")
 		}
 		bodyReader = strings.NewReader(bvStr)
 	}
@@ -220,7 +220,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	// Build http.Request.
 	req, err := http.NewRequest(method, urlStr, bodyReader)
 	if err != nil {
-		return nil, r.AqlError("fetch_error", "fetch: "+err.Error(), "fetch")
+		return nil, r.BoruError("fetch_error", "fetch: "+err.Error(), "fetch")
 	}
 
 	// Set headers.
@@ -230,7 +230,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 			val, _ := hm.Get(key)
 			valStr, err := AsString(val)
 			if err != nil {
-				return nil, r.AqlError("fetch_error",
+				return nil, r.BoruError("fetch_error",
 					fmt.Sprintf("fetch: header %q: %v", key, err), "fetch")
 			}
 			req.Header.Set(key, valStr)
@@ -242,7 +242,7 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 	if tv, ok := reqOM.Get("timeout"); ok {
 		tvInt, err := AsInteger(tv)
 		if err != nil {
-			return nil, r.AqlError("fetch_error", "fetch: timeout: "+err.Error(), "fetch")
+			return nil, r.BoruError("fetch_error", "fetch: timeout: "+err.Error(), "fetch")
 		}
 		timeout = time.Duration(tvInt) * time.Millisecond
 	}
@@ -271,11 +271,11 @@ func (ft FetchModuleTypes) doFetch(reqOM ReadMap, r *Registry) ([]Value, error) 
 		// through with ITS code — re-wrapping would both bury the
 		// specific code under `transport` and print the rendered inner
 		// error inside the outer one.
-		var coded *AqlError
+		var coded *BoruError
 		if errors.As(err, &coded) {
 			return nil, err
 		}
-		return nil, r.AqlError("transport",
+		return nil, r.BoruError("transport",
 			"fetch: tls: "+err.Error(), "fetch")
 	}
 
@@ -392,7 +392,7 @@ func fetchGetrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	key := fetchFieldKey(args[0])
 	v, found := fetchFieldAt(args[1], key)
 	if !found {
-		return nil, r.AqlError("key_error",
+		return nil, r.BoruError("key_error",
 			"getr: no field \""+key+"\" on this Fetch value", "getr")
 	}
 	return []Value{v}, nil
@@ -408,7 +408,7 @@ func fetchHasHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) (
 // a Response answer `.status` directly, instead of requiring the
 // undiscoverable `convert Map` step first.
 //
-// This is the aql:time-util / aql:matrix-util pattern
+// This is the boru:time-util / boru:matrix-util pattern
 // (design/OPEN-WORDS.0.md): a module extends a CORE word with overloads
 // anchored on its own minted type, and `import` transplants them onto
 // the importer's bare word. It is the only mechanism available here —
@@ -448,10 +448,10 @@ func FetchAccessorExtensions(ft FetchModuleTypes) []FnDefInfo {
 	return []FnDefInfo{
 		// dot quotes a bare-word key (the `.field` sugar); get evaluates
 		// it — the split documented in lang/go/CLAUDE.md.
-		NewWordExtension("aql:net", "dot", lenient(true)),
-		NewWordExtension("aql:net", "get", lenient(false)),
-		NewWordExtension("aql:net", "dotr", strict(true)),
-		NewWordExtension("aql:net", "getr", strict(false)),
-		NewWordExtension("aql:net", "has", hasSigs),
+		NewWordExtension("boru:net", "dot", lenient(true)),
+		NewWordExtension("boru:net", "get", lenient(false)),
+		NewWordExtension("boru:net", "dotr", strict(true)),
+		NewWordExtension("boru:net", "getr", strict(false)),
+		NewWordExtension("boru:net", "has", hasSigs),
 	}
 }

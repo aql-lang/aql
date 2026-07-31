@@ -7,7 +7,7 @@
 // disciplined about not mutating shared Value instances. Constructors
 // here always return fresh instances.
 import {
-  AqlType,
+  BoruType,
   TAny,
   TAtom,
   TBoolean,
@@ -56,7 +56,7 @@ export interface WordInfo {
 /** A typed parameter on a function definition. */
 export interface FnParam {
   name: string
-  type: AqlType
+  type: BoruType
   /** Optional (`?`) params default to their type's base value when omitted. */
   optional?: boolean
 }
@@ -73,7 +73,7 @@ export interface FnParam {
  * `collected.length === expectedForward`, the marker fires the
  * original handler and is itself replaced by the handler's result.
  * Mirrors the (insertForward, stepLiteral, ForwardInfo) trio in
- * aqleng/go/engine.go.
+ * borueng/go/engine.go.
  */
 export interface ForwardMarker {
   funcName: string
@@ -95,7 +95,7 @@ export interface ForwardMarker {
 /** One authored signature of a function definition. */
 export interface FnSig {
   params: FnParam[]
-  returns: AqlType[]
+  returns: BoruType[]
   body: Value[]
 }
 
@@ -104,7 +104,7 @@ export interface FnDefInfo {
 }
 
 export class Value {
-  readonly vType: AqlType
+  readonly vType: BoruType
   readonly data: unknown
   /**
    * For TList values: when true, the list contents will auto-evaluate
@@ -132,7 +132,7 @@ export class Value {
   undefined: boolean
 
   constructor(
-    vType: AqlType,
+    vType: BoruType,
     data: unknown,
     opts?: { eval?: boolean; quoted?: boolean; carrier?: boolean; dynamic?: boolean },
   ) {
@@ -419,7 +419,7 @@ export function newAtom(name: string): Value {
   return new Value(TAtom, name)
 }
 
-export function newTypeLiteral(t: AqlType): Value {
+export function newTypeLiteral(t: BoruType): Value {
   return new Value(t, null)
 }
 
@@ -528,7 +528,7 @@ export function newAny(data: unknown): Value {
  * (no concrete payload) that matches signatures as a value of that type
  * and propagates its type through dispatch. Mirrors Go NewCarrier.
  */
-export function newCarrier(t: AqlType): Value {
+export function newCarrier(t: BoruType): Value {
   return new Value(t, null, { carrier: true })
 }
 
@@ -538,7 +538,7 @@ export function newCarrier(t: AqlType): Value {
  * optimistically and its contagion widens results to dynamic. Mirrors
  * Go NewDynamicCarrier.
  */
-export function newDynamicCarrier(t: AqlType): Value {
+export function newDynamicCarrier(t: BoruType): Value {
   return new Value(t, null, { carrier: true, dynamic: true })
 }
 

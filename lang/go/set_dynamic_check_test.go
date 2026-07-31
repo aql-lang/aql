@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // `set` over a DYNAMIC receiver has runtime-dependent return arity: the

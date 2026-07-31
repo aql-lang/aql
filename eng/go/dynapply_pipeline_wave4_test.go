@@ -35,7 +35,7 @@ func registerDynWords(r *Registry) {
 			Signatures: []Signature{{
 				Params:     params,
 				Returns:    []*Type{TInteger},
-				Impl:       AQL(body),
+				Impl:       BORU(body),
 				BarrierPos: BarrierAllForward,
 			}},
 		})
@@ -70,13 +70,13 @@ func registerDynWords(r *Registry) {
 			{
 				Params:     []FnParam{{Name: "n", Type: TInteger}},
 				Returns:    []*Type{TInteger},
-				Impl:       AQL(parenBody(NewWord("cadd"), NewWord("n"), NewInteger(1))),
+				Impl:       BORU(parenBody(NewWord("cadd"), NewWord("n"), NewInteger(1))),
 				BarrierPos: BarrierAllForward,
 			},
 			{
 				Params:     []FnParam{{Name: "s", Type: TString}},
 				Returns:    []*Type{TString},
-				Impl:       AQL(parenBody(NewWord("ccat"), NewWord("s"), NewString("!"))),
+				Impl:       BORU(parenBody(NewWord("ccat"), NewWord("s"), NewString("!"))),
 				BarrierPos: BarrierAllForward,
 			},
 		},

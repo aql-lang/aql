@@ -1,4 +1,4 @@
-# AQL Language Specification: module-system edge cases
+# BORU Language Specification: module-system edge cases
 # Format: input<TAB>expected<TAB>description
 #
 # Edge-case battery over the module system: the inline `module […]`
@@ -57,10 +57,10 @@ import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] B.$module.exp
 import module [export "M" {a:1}] M.$module.name size	0	an inline module has no reference name (empty string)
 import module [export "foo" {a:1}] foo.$module.kind eq "inline"	true	the synthetics work on a lowercase export too
 import module [export "M" {a:1}] M!.b	ERROR:not_found	…and raises not_found under the strict one
-import "aql:test" Test.$module is Assert.$module	true	a module may bind SEVERAL namespaces — one shared descriptor
-import "aql:test" Assert.$module.exports	['Assert' 'Test']	…which lists both exports
-import "aql:string-util" StringUtil.$module.kind eq "native"	true	builtin modules carry kind native
-import "aql:logic-util" LogicUtil.$module.name eq "aql:logic-util"	true	…and their aql: reference as the name
+import "boru:test" Test.$module is Assert.$module	true	a module may bind SEVERAL namespaces — one shared descriptor
+import "boru:test" Assert.$module.exports	['Assert' 'Test']	…which lists both exports
+import "boru:string-util" StringUtil.$module.kind eq "native"	true	builtin modules carry kind native
+import "boru:logic-util" LogicUtil.$module.name eq "boru:logic-util"	true	…and their boru: reference as the name
 #
 # §7  import renaming and aliasing
 import [Foo Bar] module [export "Foo" {a:1}] Foo.a	ERROR:undefined_word	renaming REPLACES the original name — Foo is not bound
@@ -85,36 +85,36 @@ import module [def h fn [[x:Integer] [Integer] [x mul 3]] def g fn [[x:Integer] 
 # §9  coexistence and re-export
 import module [export "A" {x:1}] import module [export "A" {x:2}] A.x	2	a second import of the same export name shadows the first
 import module [def f fn [[x:Integer] [Integer] [x add 1]] export "A" {f: f/r}] import module [def f fn [[x:Integer] [Integer] [x mul 2]] export "B" {f: f/r}] (A.f 4) add (B.f 4)	13	two modules' same-named fns coexist under their namespaces
-import "aql:math-util" import "aql:string-util" (StringUtil.upper "ab" size) add (MathUtil.abs -3)	5	builtin modules coexist the same way
+import "boru:math-util" import "boru:string-util" (StringUtil.upper "ab" size) add (MathUtil.abs -3)	5	builtin modules coexist the same way
 import module [import module [def f fn [[x:Integer] [Integer] [x add 1]] export "I" {inc: f/r}] export "O" {inc: I.inc}] O.inc 4	5	re-export: an outer module re-exposes an inner module's fn
 import module [import module [def f fn [[x:Integer] [Integer] [x add 1]] export "I" {inc: f/r}] export "O" {inc: I.inc}] I.inc 4	ERROR:undefined_word	…but the INNER namespace never crosses the outer boundary
 import module [import module [export "I" {v: 40}] export "O" {v: I.v}] O.v add 2	42	plain values re-export the same way
-import module [import "aql:math-util" def s fn [[x:Float] [Float] [MathUtil.sqrt x]] export "M" {s: s/r}] M.s 81.0	9.0	a module-PRIVATE builtin import serves the exported fn's body
+import module [import "boru:math-util" def s fn [[x:Float] [Float] [MathUtil.sqrt x]] export "M" {s: s/r}] M.s 81.0	9.0	a module-PRIVATE builtin import serves the exported fn's body
 #
 # §10  import misc
-import "aql:math-util" import "aql:math-util" MathUtil.sqrt 4.0	2.0	a duplicate import is idempotent
-import "aql:math-util" end MathUtil.sqrt 25.0	5.0	`end` after an import id is always safe
+import "boru:math-util" import "boru:math-util" MathUtil.sqrt 4.0	2.0	a duplicate import is idempotent
+import "boru:math-util" end MathUtil.sqrt 25.0	5.0	`end` after an import id is always safe
 #
 # §11  builtin wrappers under edge inputs
-import "aql:math-util" 3 7 MathUtil.min	3	swap-free stack dispatch through the min wrapper
-import "aql:math-util" 3 7 MathUtil.max	7	…and max
-import "aql:math-util" MathUtil.min 3 7	3	forward form agrees
-import "aql:math-util" MathUtil.max 2 2.5	2.5	mixed Integer/Float promotes
-import "aql:math-util" MathUtil.hypot 3.0 4.0	5.0	two-arg wrapper, forward
-import "aql:math-util" MathUtil.sqrt -1.0	nan	IEEE domain error: NaN, not a raise
-import "aql:math-util" MathUtil.log 0.0	-inf	IEEE pole: -inf, not a raise
-import "aql:math-util" MathUtil.copysign 3.0 -1.0	1.0	GOTCHA sig order: the SECOND operand carries the magnitude (|-1.0| with 3.0's sign)
-import "aql:string-util" StringUtil.upper ""	''	empty-string subject is fine
-import "aql:string-util" "ab" StringUtil.upper	'AB'	swap form through a string wrapper
-import "aql:string-util" StringUtil.trim "   "	''	an all-space string trims to empty
-import "aql:string-util" StringUtil.split "," ""	[]	splitting the empty string yields no fields
-import "aql:string-util" StringUtil.split "" "ab"	['a' 'b']	an empty separator splits into characters
-import "aql:string-util" StringUtil.repeat 0 "ab"	''	zero repetitions of a string is the empty string
-import "aql:string-util" StringUtil.indexof "zz" "hello"	-1	a missing needle indexes -1, not an error
-import "aql:string-util" StringUtil.contains "" "abc"	true	the empty string is contained in everything
-import "aql:string-util" StringUtil.replace "a" "o" "banana"	'bonana'	replace rewrites the FIRST occurrence only
-import "aql:logic-util" LogicUtil.implies true false	true	GOTCHA arg order: `implies a b` reads b→a (false→true holds)
-import "aql:logic-util" LogicUtil.implies false true	false	…true→false fails — the operands are NOT symmetric
-import "aql:logic-util" LogicUtil.nor true false	false	nor: any true operand kills it
-import "aql:logic-util" LogicUtil.xnor false false	true	xnor: two falses agree
-import "aql:logic-util" true false LogicUtil.nand	true	stack dispatch through a logic wrapper
+import "boru:math-util" 3 7 MathUtil.min	3	swap-free stack dispatch through the min wrapper
+import "boru:math-util" 3 7 MathUtil.max	7	…and max
+import "boru:math-util" MathUtil.min 3 7	3	forward form agrees
+import "boru:math-util" MathUtil.max 2 2.5	2.5	mixed Integer/Float promotes
+import "boru:math-util" MathUtil.hypot 3.0 4.0	5.0	two-arg wrapper, forward
+import "boru:math-util" MathUtil.sqrt -1.0	nan	IEEE domain error: NaN, not a raise
+import "boru:math-util" MathUtil.log 0.0	-inf	IEEE pole: -inf, not a raise
+import "boru:math-util" MathUtil.copysign 3.0 -1.0	1.0	GOTCHA sig order: the SECOND operand carries the magnitude (|-1.0| with 3.0's sign)
+import "boru:string-util" StringUtil.upper ""	''	empty-string subject is fine
+import "boru:string-util" "ab" StringUtil.upper	'AB'	swap form through a string wrapper
+import "boru:string-util" StringUtil.trim "   "	''	an all-space string trims to empty
+import "boru:string-util" StringUtil.split "," ""	[]	splitting the empty string yields no fields
+import "boru:string-util" StringUtil.split "" "ab"	['a' 'b']	an empty separator splits into characters
+import "boru:string-util" StringUtil.repeat 0 "ab"	''	zero repetitions of a string is the empty string
+import "boru:string-util" StringUtil.indexof "zz" "hello"	-1	a missing needle indexes -1, not an error
+import "boru:string-util" StringUtil.contains "" "abc"	true	the empty string is contained in everything
+import "boru:string-util" StringUtil.replace "a" "o" "banana"	'bonana'	replace rewrites the FIRST occurrence only
+import "boru:logic-util" LogicUtil.implies true false	true	GOTCHA arg order: `implies a b` reads b→a (false→true holds)
+import "boru:logic-util" LogicUtil.implies false true	false	…true→false fails — the operands are NOT symmetric
+import "boru:logic-util" LogicUtil.nor true false	false	nor: any true operand kills it
+import "boru:logic-util" LogicUtil.xnor false false	true	xnor: two falses agree
+import "boru:logic-util" true false LogicUtil.nand	true	stack dispatch through a logic wrapper

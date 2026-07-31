@@ -1,0 +1,67 @@
+# main.boru — build the BORU project knowledge graph.
+#
+# Run FROM THE kg/ DIRECTORY (imports and fixture paths resolve against
+# the working directory):
+#
+#   cd kg
+#   ../cmd/go/bin/boru main.boru        # or: go run ../cmd/go/boru main.boru
+#
+# Reads project/boru-project.jsonic (candidate facts about this
+# repository, each with quoted evidence), runs the full pipeline —
+# ingest, identity resolution, conflict marking, validation, competency
+# report — and writes:
+#
+#   out/graph.json   the boru-kg/1 bundle (committed; refresh each PR)
+#   out/graph.sql    the same graph as normalized SQL (see storage.boru)
+#
+# Both stamps below are pinned so a rebuild over unchanged input is
+# byte-identical; bump run-stamp when you regenerate after a change.
+
+import "boru:io"
+import "./util.boru"
+import "./schema.boru"
+import "./identifiers.boru"
+import "./report.boru"
+import "./storage.boru"
+
+def run-stamp "2026-07-22T00:00:00Z"
+
+# The one schema-term gap found while modelling the repository —
+# proposed, not silently added (see kg/README.md §schema proposals).
+def proposals [
+  (KgSchema.mk-proposal
+        {id:(KgId.proposal-id "entity_type" "SoftwareModule")
+          term_kind:"entity_type"
+          term:"SoftwareModule"
+          definition:"A buildable code module or package within a software repository."
+          domain:["SoftwareModule"]
+          range:["Product" "Concept"]
+          examples:["cmd/go" "lang/go" "eng/go"]
+          reason:"Repository modules are currently typed Product, which blurs shipped artifacts and source-tree modules."
+          possible_equivalents:["Product"]
+        }
+    )
+]
+
+def candidates [(IO.read (make Pathon "project/boru-project.jsonic"))]
+
+def bundle
+(KgReport.build-graph candidates
+      {recorded_at:run-stamp generated_at:run-stamp proposals:proposals}
+  )
+
+IO.folder (make Pathon "out") drop
+KgStore.write-bundle bundle "out/graph.json" drop
+KgStore.write-sql bundle "out/graph.sql" drop
+
+def summary (bundle get "summary")
+print `kg: wrote out/graph.json and out/graph.sql`
+print
+`kg: sources=${summary get "source_count"} entities=${summary get "entity_count"} assertions=${summary get "assertion_count"} disputed=${summary get "disputed_assertion_count"} unresolved=${summary get "unresolved_identity_count"} errors=${summary get "error_count"} warnings=${summary get "warning_count"}`
+print
+`kg: review queue: ${(bundle get "human_review_queue") size} item(s)`
+
+if ((summary get "error_count") gt 0)
+[raise kg_build_errors
+      "the project graph has validation errors — fix them before committing out/graph.json"
+  ]

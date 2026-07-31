@@ -1,9 +1,9 @@
-// Package attach implements `aql attach <host:port> [--token T]` — the
-// thin viewer for a served aql:tui app (design/TUI.0.md §6.4, plan P4).
+// Package attach implements `boru attach <host:port> [--token T]` — the
+// thin viewer for a served boru:tui app (design/TUI.0.md §6.4, plan P4).
 // It is deliberately dumb: dial, handshake, then loop — widget trees
 // come down as json-lines and lay out LOCALLY through the shared tuikit
 // renderer onto the real terminal; decoded input events go back up. No
-// AQL engine runs client-side.
+// BORU engine runs client-side.
 package attach
 
 import (
@@ -14,9 +14,9 @@ import (
 	"io"
 	"net"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/termback"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/termback"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // Test seams (design/TEST-SEAMS.10.md).
@@ -34,10 +34,10 @@ func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string { return "attach" }
 func (*cmd) Synopsis() string {
-	return "attach to a served aql:tui app and render it on this terminal"
+	return "attach to a served boru:tui app and render it on this terminal"
 }
 
-// Run handles `aql attach [--token T] <host:port>`.
+// Run handles `boru attach [--token T] <host:port>`.
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("attach", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -46,7 +46,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintln(stderr, "usage: aql attach [--token T] <host:port>")
+		fmt.Fprintln(stderr, "usage: boru attach [--token T] <host:port>")
 		return 1
 	}
 	if err := attach(fs.Arg(0), *token); err != nil {

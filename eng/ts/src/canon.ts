@@ -1,4 +1,4 @@
-// Canon renders values as canonical AQL source — the string a spec row's
+// Canon renders values as canonical BORU source — the string a spec row's
 // `expected` column is compared against. Ported from eng/go/canon.go +
 // eng/go/value.go::FormatFloat so the TS engine's output matches the Go
 // reference row-for-row.
@@ -22,7 +22,7 @@ function canonXml(e: XmlElement): string {
 }
 
 /**
- * canonString renders a string payload as parseable AQL source. Plain
+ * canonString renders a string payload as parseable BORU source. Plain
  * content uses single quotes; content with a single quote switches to
  * double quotes; content with both quote kinds, backslashes, or control
  * characters falls back to single quotes with backslash escapes.
@@ -130,12 +130,12 @@ function expandExponential(s: string): string {
   return (neg ? '-' : '') + out
 }
 
-/** Canon renders a stack of values as canonical AQL source. */
+/** Canon renders a stack of values as canonical BORU source. */
 export function canon(stack: Value[]): string {
   return stack.map(canonValue).join(' ')
 }
 
-/** canonValue renders one value as canonical AQL source. */
+/** canonValue renders one value as canonical BORU source. */
 export function canonValue(v: Value): string {
   // The `none` value renders lowercase; a bare type literal (including
   // the `None` type) renders as its user-facing leaf name.

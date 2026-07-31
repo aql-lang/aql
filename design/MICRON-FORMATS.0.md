@@ -14,7 +14,7 @@
 design record: it distinguishes, throughout, what is **verified in the code
 today** from what is **proposed**. The executable spec, when this lands, will
 be `lang/spec/module-minilang.tsv` / a new `lang/spec/micron-format.tsv`; the
-canonical word docs will come from `aql describe`.
+canonical word docs will come from `boru describe`.
 
 Grounding was done against the tree at the time of writing:
 `eng/go/micron_grammar.go`, `lang/go/modules/minilang.go`,
@@ -65,7 +65,7 @@ The shared `+m` grammar (`eng/go/micron_grammar.go`, `MicronGrammarWith`) merges
 **Emailon, Urlon, Pathon** — in that token order (`#EMAILON`, `#URLON`, extras…,
 `#PATHON`). Each recognizes its literal shape and calls its constructor;
 `MicronFromString` parses with the merge, and the `+m:…` minilang literal
-(aql:minilang, kind `micron` / short form `m`) dispatches on literal *shape*:
+(boru:minilang, kind `micron` / short form `m`) dispatches on literal *shape*:
 
 ```
 +m:alice@example.com    => Emailon
@@ -123,11 +123,11 @@ the **GrammarSpec map** form that `MiniLang.micron` already accepts.
 
 ### 2.3 The parse / emit split; tabnas is decode-only
 
-AQL already separates the two directions into sibling modules:
+BORU already separates the two directions into sibling modules:
 
 ```
-parse : string → value      (aql:parselang, lang/go/modules/parselang.go)
-emit  : value → string      (aql:emitlang,  design/EMIT.md)
+parse : string → value      (boru:parselang, lang/go/modules/parselang.go)
+emit  : value → string      (boru:emitlang,  design/EMIT.md)
 ```
 
 Crucially, **tabnas grammars do not reverse**. `TabnasFormat` is marked
@@ -318,7 +318,7 @@ live registry**, stringifies, and concatenates. So denotationally:
 ```
 
 — a **closure over its free variables** (the hole references), returning a
-string. But it is **eager**: AQL applies it the instant it is reached. Verified:
+string. But it is **eager**: BORU applies it the instant it is reached. Verified:
 
 ```
 def x 5
@@ -365,7 +365,7 @@ Classical names:
 - **Lambda lifting** (Johnsson, 1985): the same operation as a compiler pass —
   eliminate free variables by making them parameters.
 
-One AQL-native framing: the operator is **`quote` + auto-parameterize-the-holes**.
+One BORU-native framing: the operator is **`quote` + auto-parameterize-the-holes**.
 `quote` reifies a term as data without abstracting; this operator reifies *and*
 binds the free holes as λ-params. They are siblings — which is also why
 `quote`/`ref` can't stand in for it (§6.2): they reify or un-invoke, but neither
@@ -385,7 +385,7 @@ this operator, restricted to syntactically-marked holes):
 | Swift | `{ $0 + 1 }` | `{ x in x + 1 }` |
 | Kotlin | `it + 1` | single implicit param |
 
-AQL's `${…}`-holes → fn is this family, specialized to string templates with
+BORU's `${…}`-holes → fn is this family, specialized to string templates with
 *named* holes (the field names) instead of positional `_` / `%` / `$0`.
 
 The **general** operator (abstract *all* free vars, not just marked ones) is the
@@ -413,7 +413,7 @@ Abstraction needs free variables to abstract. A closure has **none left** —
 they have been resolved into captured values; the term is closed. Abstracting a
 closure would mean *un-capturing*, and capture has no inverse the operation can
 run: which captured values were "meant to be" parameters is not recoverable,
-and the captured environment is opaque anyway (in AQL, `inspect` on a fn
+and the captured environment is opaque anyway (in BORU, `inspect` on a fn
 surfaces only its **signatures**, never captures or body — verified).
 
 So the operator is fundamentally **term → function**. There is no sound
@@ -422,13 +422,13 @@ world (code is an inspectable open term), not the closure world.
 
 This is exactly why interp strings qualify and closures don't: an interp string
 is a **reified open term** (its `Parts` still hold unevaluated hole `Expr`s),
-*not* a closure — and AQL's eager evaluation is the precise moment the open term
+*not* a closure — and BORU's eager evaluation is the precise moment the open term
 collapses to a closed value (`def s ` `` `${x} bar` `` ` → `"5 bar"`). The
 operator must act **before** that collapse, on the term.
 
-### 6.6 AQL-specific position
+### 6.6 BORU-specific position
 
-AQL is *closer* to a general version than a compiled language: fn bodies are
+BORU is *closer* to a general version than a compiled language: fn bodies are
 reified token streams internally, and the engine already computes free-variable
 captures (`ComputeCaptures`, `eng/go/callable_words.go`). But none of that is
 first-class at the surface — closures are opaque (`inspect` = signatures only;
@@ -444,7 +444,7 @@ This is why Tier 1 uses a **plain-string** template `'T-${id}'`, not a backtick
 interp `` `T-${id}` ``:
 
 - A plain string is **inert text** — the Micron layer parses the `${…}` itself,
-  so it never touches AQL's eager interp machinery and never demands the fields
+  so it never touches BORU's eager interp machinery and never demands the fields
   be in scope. The `${id}` is a *field name to abstract over*, not a *free
   variable to resolve now*.
 - It is also **direction-neutral**: render by *filling* the holes, parse by
@@ -453,7 +453,7 @@ interp `` `T-${id}` ``:
   abstraction operator of §6.3 even to be usable.
 
 The **function** form (`$emit: ([host version] => […])`) is just §6.3's
-abstraction written explicitly. If AQL later grows the abstraction operator as a
+abstraction written explicitly. If BORU later grows the abstraction operator as a
 first-class thing, `$emit: ` `` `${…}` `` `` becomes a third spelling of the same
 function — but it is not required for this design.
 

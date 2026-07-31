@@ -1,6 +1,6 @@
 # Data-Last Sig Audit
 
-Branch: `claude/extract-aql-engine-ZpBq4`
+Branch: `claude/extract-boru-engine-ZpBq4`
 Base commit: `4f9b6d6`
 
 ## Principle
@@ -146,7 +146,7 @@ The matrix-* FnDef wrappers retain user-facing positional order
 (`mat row col matrix.at`) because FnDef param matching is
 deepest-first while the underlying NativeFunc sig matching is
 top-of-stack-first. The two compose: stack [mat,1,0] →
-FnDef-args [mat,1,0] → CallAQL pushes them as tokens [mat,1,0] →
+FnDef-args [mat,1,0] → CallBORU pushes them as tokens [mat,1,0] →
 NativeFunc sig [Int,Int,Matrix] matches stack [mat,1,0]
 (top=0→sig[0], mid=1→sig[1], deep=mat→sig[2]).
 
@@ -183,7 +183,7 @@ For the time module, FnDef wrapper params keep the user-facing order
 (`date n add-days`, `date "month" start-of`); the NativeFunc sig is
 the corresponding data-last reverse.
 
-### `aqleng/go` (cross-module)
+### `borueng/go` (cross-module)
 
 | Word | Sig | Verdict |
 |---|---|---|
@@ -270,7 +270,7 @@ After all data-last reorders:
 
 ## Commits
 
-1. `0fdc3e2` — aqleng: data-last sig review — native data-ops
-2. `d64354a` — aqleng: data-last sig review — nativemod matrix and time
+1. `0fdc3e2` — borueng: data-last sig review — native data-ops
+2. `d64354a` — borueng: data-last sig review — nativemod matrix and time
 3. `fcf6fbf` — initial audit report
 4. *(this update)* — concat reordered to [Map, List]; ambiguous cases resolved per user decision

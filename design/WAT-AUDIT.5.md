@@ -1,14 +1,14 @@
 # WAT Audit — Surprising Behaviours of the Reference Implementation
 
 Status: **observational + suggested remediations**. This records
-behaviours of the `aql` reference implementation (as built from this
+behaviours of the `boru` reference implementation (as built from this
 tree) that are likely to surprise a user, contradict the prose
 documentation, or both, and proposes a fix for each. No remediation
 here has been applied to engine behaviour; the only committed change is
 the companion documentation pass, which makes the prose match what the
 binary actually does.
 
-Every entry below was reproduced against `cmd/go/bin/aql` built at the
+Every entry below was reproduced against `cmd/go/bin/boru` built at the
 audit commit. Commands are shown exactly as run. `=>` in this document
 means "evaluates to" (a human annotation — see Exhibit U for why that
 matters), not literal syntax.
@@ -45,19 +45,19 @@ The README, EXPLANATION, and TUTORIAL all sell infix reading with
 `"hello" upper`. There is no `upper` word in the base environment.
 
 ```
-$ aql -e '"hello" upper'
-error: [aql/undefined_word]: undefined word: upper
+$ boru -e '"hello" upper'
+error: [boru/undefined_word]: undefined word: upper
 ```
 
-The real word is `StringUtil.upper`, behind `import "aql:string-util"
-end`. More broadly, `aql describe` documents **159** words; **90** of
+The real word is `StringUtil.upper`, behind `import "boru:string-util"
+end`. More broadly, `boru describe` documents **159** words; **90** of
 them report `undefined word` when invoked, because `describe` lists
 module words (`abs`, `changecase`, `split`, `trim`, …) under bare names
 with no import hint. `describe abs` shows docs for a word that
-`aql do -- '-1 abs'` cannot call.
+`boru do -- '-1 abs'` cannot call.
 
 > **Fix.** Done in docs (examples now use `StringUtil.upper` with the
-> import shown). Code follow-up: make `aql describe` annotate module
+> import shown). Code follow-up: make `boru describe` annotate module
 > words with their import path and qualified name (a small change in
 > `genhelp` / the `describe` handler) so the help system stops listing
 > words bare that the base environment can't call.
@@ -65,9 +65,9 @@ with no import hint. `describe abs` shows docs for a word that
 ## B. The CLI cannot evaluate a leading negative number — `bug`
 
 ```
-$ aql do '-7 0 add'
+$ boru do '-7 0 add'
 flag provided but not defined: -7 0 add
-$ aql do -- '-7 0 add'
+$ boru do -- '-7 0 add'
 -7
 ```
 
@@ -86,8 +86,8 @@ but is undocumented.
 ## C. Forward collection breaks composition — `design`
 
 ```
-$ aql do '3 4 add 2 mul'        => 18      # naive reading: 14
-$ aql do -- '1 lt 2 lt 3'       => 1 false 2
+$ boru do '3 4 add 2 mul'        => 18      # naive reading: 14
+$ boru do -- '1 lt 2 lt 3'       => 1 false 2
 ```
 
 `add` collects the `2` that visually belongs to `mul`, computing
@@ -96,7 +96,7 @@ debris. The "reads naturally" claim holds only for a single isolated
 operation.
 
 > **Fix.** This is the language's defining mechanic — do **not** change
-> the semantics. Remediate with tooling: add an `aql check` warning when
+> the semantics. Remediate with tooling: add a `boru check` warning when
 > a value computed by one word is stranded because a following word
 > forward-collected past it (the `a b op c op2` shape). That catches the
 > trap at author time without altering behaviour. Already documented;
@@ -109,14 +109,14 @@ EXPLANATION says you can avoid Exhibit C by keeping each step on its own
 line. Newlines are **not** barriers in a file:
 
 ```
-$ printf '3 4 add\n2 mul\n' > t.aql && aql t.aql   => 18
+$ printf '3 4 add\n2 mul\n' > t.boru && boru t.boru   => 18
 ```
 
 The advice appears to work in the REPL only because the REPL **wipes the
 stack between lines**:
 
 ```
-$ printf '3 4 add\n2 mul\n' | aql repl
+$ printf '3 4 add\n2 mul\n' | boru repl
 7
 error: no matching signature for mul   (stack: 2)
 ```
@@ -130,10 +130,10 @@ So the same two lines give `18` in a file and `7` + a crash in the REPL.
 ## E. String truthiness: only `""` and exactly `"false"` are falsy — `design`
 
 ```
-$ aql do -- 'if "false" ["T"] ["F"]'   => F
-$ aql do -- 'if "FALSE" ["T"] ["F"]'   => T
-$ aql do -- 'if "0"     ["T"] ["F"]'   => T
-$ aql do -- 'if "no"    ["T"] ["F"]'   => T
+$ boru do -- 'if "false" ["T"] ["F"]'   => F
+$ boru do -- 'if "FALSE" ["T"] ["F"]'   => T
+$ boru do -- 'if "0"     ["T"] ["F"]'   => T
+$ boru do -- 'if "no"    ["T"] ["F"]'   => T
 ```
 
 Source: `eng/go/core_helpers.go:494` (`case "false", "":`). A non-empty
@@ -151,9 +151,9 @@ value`) rather than being falsy like `""`.
 ## F. `and` / `or` return operands, not booleans — `design`
 
 ```
-$ aql do -- '1 2 and'      => 2
-$ aql do -- 'true 5 and'   => 5
-$ aql do -- '0 9 or'       => 9
+$ boru do -- '1 2 and'      => 2
+$ boru do -- 'true 5 and'   => 5
+$ boru do -- '0 9 or'       => 9
 ```
 
 `describe and` says "Logical AND of two booleans." The implementation is
@@ -169,8 +169,8 @@ Python-style operand-returning short-circuit over any type.
 ## G. `add` of a boolean and an int is a string; the checker approves — `design`
 
 ```
-$ aql do -- 'true 1 add'     => true1
-$ aql check -e 'true 1 add'  => check: 0 error(s), 0 warning(s)
+$ boru do -- 'true 1 add'     => true1
+$ boru check -e 'true 1 add'  => check: 0 error(s), 0 warning(s)
 ```
 
 Boolean stringifies and concatenates with the number. The static
@@ -186,10 +186,10 @@ checker reports no problem.
 ## H. Equal values that are not substitutable — `design`
 
 ```
-$ aql do '1 1.0 eq'    => true
-$ aql do '1 1.0 cmp'   => 0
-$ aql do '1 2 div'     => 0      # integer division
-$ aql do '1.0 2 div'   => 0.5    # real division
+$ boru do '1 1.0 eq'    => true
+$ boru do '1 1.0 cmp'   => 0
+$ boru do '1 2 div'     => 0      # integer division
+$ boru do '1.0 2 div'   => 0.5    # real division
 ```
 
 `1` and `1.0` are equal by both `eq` and `cmp`, yet not interchangeable.
@@ -206,9 +206,9 @@ $ aql do '1.0 2 div'   => 0.5    # real division
 ## I. "Any word, any position" is selectively false — `doc`
 
 ```
-$ aql do '1 dup'    => 1 1
-$ aql do 'dup 1'    => error: no matching signature for dup
-$ aql do 'reverse [1 2 3]'  => [3 2 1]   # but this forward-collects fine
+$ boru do '1 dup'    => 1 1
+$ boru do 'dup 1'    => error: no matching signature for dup
+$ boru do 'reverse [1 2 3]'  => [3 2 1]   # but this forward-collects fine
 ```
 
 `reverse`/`add` collect forward; `dup`/`swap` don't. The universal
@@ -219,22 +219,22 @@ prefix/infix/suffix claim does not hold for stack-shuffling words.
 > — forward-collecting `dup`/`swap` would be ambiguous; the honest fix
 > is the qualified claim already shipped.
 
-## J. `aql fmt -w` is documented everywhere and always errors — `doc` (+ `bug`-adjacent)
+## J. `boru fmt -w` is documented everywhere and always errors — `doc` (+ `bug`-adjacent)
 
 ```
-$ aql fmt -w script.aql
+$ boru fmt -w script.boru
 error: open -w: no such file or directory
-$ aql fmt -h
+$ boru fmt -h
 error: open -h: no such file or directory
 ```
 
 `cmd/go/internal/fmt/fmt.go` treats every argument as a filename
 (`files = args`). There is no flag parsing: no `-w`, no `-h`, no
-stdout/diff mode. Formatting is always in place. `aql fmt` with **no**
-args reformats every `.aql` file in the working tree — convenient and
+stdout/diff mode. Formatting is always in place. `boru fmt` with **no**
+args reformats every `.boru` file in the working tree — convenient and
 dangerous. CLI.md (×3) and README all show the non-existent `-w` flag.
 
-> **Fix.** Done in docs (`aql fmt -w` → `aql fmt`; the always-in-place /
+> **Fix.** Done in docs (`boru fmt -w` → `boru fmt`; the always-in-place /
 > no-arg-walks-tree reality stated). Optional code follow-up for
 > familiarity: give `cmd/go/internal/fmt/fmt.go` a real `flag.FlagSet`
 > matching the `gofmt` contract — default to stdout, `-w` to rewrite,
@@ -244,9 +244,9 @@ dangerous. CLI.md (×3) and README all show the non-existent `-w` flag.
 ## K. Integer overflow has two contradictory silent behaviours — `bug`
 
 ```
-$ aql do '9223372036854775807 1 add'      => 9223372036854776000.0
-$ aql do '2 63 pow'                        => -9223372036854775808
-$ aql do '4000000000 4000000000 mul'       => -2446744073709551616
+$ boru do '9223372036854775807 1 add'      => 9223372036854776000.0
+$ boru do '2 63 pow'                        => -9223372036854775808
+$ boru do '4000000000 4000000000 mul'       => -2446744073709551616
 ```
 
 Two distinct defects hide here. The first line is a **lexer** problem:
@@ -262,9 +262,9 @@ flags anything.
 > literals were silently *value-corrupted*, not just floated). (1) Lexer:
 > plain decimal integer literals are now parsed from their exact digits
 > with `strconv.ParseInt`; an out-of-int64-range literal raises
-> `[aql/integer_overflow]` instead of silently degrading to `Float`.
+> `[boru/integer_overflow]` instead of silently degrading to `Float`.
 > (2) Runtime: `numericBinaryHandler`'s `intFn` and the `pow` loop use
-> checked arithmetic and raise `[aql/integer_overflow]` **uniformly**
+> checked arithmetic and raise `[boru/integer_overflow]` **uniformly**
 > across `add`/`sub`/`mul`/`pow` instead of wrapping. Phase 1 (adopt
 > `big.Int` for true bignums so overflow *promotes* rather than errors)
 > is proposed in the strategy doc and planned alongside the numeric
@@ -273,8 +273,8 @@ flags anything.
 ## L. The type named `Decimal` is binary float64 — `doc`/`design`
 
 ```
-$ aql do '0.1 0.2 add'            => 0.30000000000000004
-$ aql do -- '0.1 0.2 add 0.3 eq'  => false
+$ boru do '0.1 0.2 add'            => 0.30000000000000004
+$ boru do -- '0.1 0.2 add 0.3 eq'  => false
 ```
 
 `typeof 0.1` is `Decimal`, a name that implies base-10 exactness. It is
@@ -293,8 +293,8 @@ IEEE-754 binary float with the standard `0.1 + 0.2 ≠ 0.3` behaviour.
 ## M. Core literals and builtins are unprotected mutable bindings — `design`
 
 ```
-$ aql do -- 'def true fn [[] [Number] [42]] true'                      => 42
-$ aql do -- 'def add fn [[x:Number y:Number] [Number] [x sub y]] 5 3 add'  => -2
+$ boru do -- 'def true fn [[] [Number] [42]] true'                      => 42
+$ boru do -- 'def add fn [[x:Number y:Number] [Number] [x sub y]] 5 3 add'  => -2
 ```
 
 `def true` shadows the boolean literal; `def add` redefines addition. No
@@ -302,10 +302,10 @@ warning.
 
 > **Fix.** ✅ **Done.** Redefining a core word is now illegal everywhere.
 > The registry records every name registered via `Register` (all native /
-> kernel words, plus host words added through `(*AQL).Register`) in a
+> kernel words, plus host words added through `(*BORU).Register`) in a
 > `builtinWords` set; `r.IsBuiltinWord` also covers the reserved literals
 > `true`/`false`/`none`. The `def` and `undef` handlers reject any such
-> name with `[aql/reserved_word]`. User `def`s install through
+> name with `[boru/reserved_word]`. User `def`s install through
 > `InstallFnDef`/`DefTable.Push` and never reach `Register`, so user words
 > (and re-`def` shadowing of user words) are unaffected. Built-in TYPE
 > names (`Integer`, …) and `none` were already unredefinable — they parse
@@ -318,8 +318,8 @@ EXPLANATION: *"When `1 div 0` fails, it doesn't unwind the stack — it
 produces an Error value that sits on the stack like any other."*
 
 ```
-$ aql do -- '1 div 0 dup'    => error: division by zero    # unwinds; never reaches dup
-$ aql do -- 'do [1 div 0]'   => error(division by zero)    # value — but only here
+$ boru do -- '1 div 0 dup'    => error: division by zero    # unwinds; never reaches dup
+$ boru do -- 'do [1 div 0]'   => error(division by zero)    # value — but only here
 ```
 
 Errors become values only when a `do [...]` (or the `error` handler)
@@ -333,10 +333,10 @@ captures them. Bare operations unwind.
 ## O. Schrödinger's quotation — `[...]` evaluates or defers by receiver — `design`
 
 ```
-$ aql do -- '[1 2 add]'     => [3]      # eager
-$ aql do -- 'do [1 2 add]'  => 3        # deferred
-$ aql do -- '[1 0 div]'     => error: division by zero      # eager → throws
-$ aql do -- 'do [1 0 div]'  => error(division by zero)      # deferred → caught
+$ boru do -- '[1 2 add]'     => [3]      # eager
+$ boru do -- 'do [1 2 add]'  => 3        # deferred
+$ boru do -- '[1 0 div]'     => error: division by zero      # eager → throws
+$ boru do -- 'do [1 0 div]'  => error(division by zero)      # deferred → caught
 ```
 
 The same `[code]` syntax is eagerly-evaluated data in most positions and
@@ -353,10 +353,10 @@ is the overloaded word `do`.)
 ## P. `lt`/`gt` compare across any types and never error — `design`
 
 ```
-$ aql do -- '1 "a" lt'   => true
-$ aql do -- '"a" 1 lt'   => false
-$ aql do -- 'true 1 lt'  => true
-$ aql do '[3 "a" 1 true] sort'   => [true 1 3 'a']
+$ boru do -- '1 "a" lt'   => true
+$ boru do -- '"a" 1 lt'   => false
+$ boru do -- 'true 1 lt'  => true
+$ boru do '[3 "a" 1 true] sort'   => [true 1 3 'a']
 ```
 
 A universal total order `bool < number < string` means cross-type
@@ -369,7 +369,7 @@ comparison silently succeeds; heterogeneous lists sort without error.
 > gained a shallow family guard (`orderedCompare`): they accept a pair
 > only when it is the same type or shares a same-family comparer
 > (Integer↔Float, two Dates, the instant-bearing Time leaves), and
-> otherwise raise `[aql/incomparable]` pointing at `tcmp`. Equality
+> otherwise raise `[boru/incomparable]` pointing at `tcmp`. Equality
 > (`eq`/`neq`/`deq`) was left total (cross-type → not-equal, never an
 > error). The Time leaves Date/DateTime/Instant were additionally
 > unified to compare chronologically (a new comparer on `Scalar/Time`).
@@ -380,9 +380,9 @@ comparison silently succeeds; heterogeneous lists sort without error.
 ## Q/W. `convert Integer` takes a string but refuses a number — `bug`
 
 ```
-$ aql do '"4" convert Integer'   => 4
-$ aql do '3.9 convert Integer'   => error: convert: cannot convert "3.9" to number
-$ aql do '3.0 convert Integer'   => error: convert: cannot convert "3.0" to number
+$ boru do '"4" convert Integer'   => 4
+$ boru do '3.9 convert Integer'   => error: convert: cannot convert "3.9" to number
+$ boru do '3.0 convert Integer'   => error: convert: cannot convert "3.0" to number
 ```
 
 Text-to-int works; number-to-int fails — even for whole-valued floats.
@@ -402,10 +402,10 @@ not a number.
 ## R. Missing data is `None` in some places and a crash in others — `design`
 
 ```
-$ aql do '{a: 1} . b'          => None        # missing key: silent
-$ aql do '[10 20 30] 5 get'    => None        # out of range: silent
-$ aql do -- '[10 20 30] -1 get'  => None        # negative index: silent (no end-indexing)
-$ aql do '{a: 1} . a . b'      => error: no matching signature for get   # field on a scalar
+$ boru do '{a: 1} . b'          => None        # missing key: silent
+$ boru do '[10 20 30] 5 get'    => None        # out of range: silent
+$ boru do -- '[10 20 30] -1 get'  => None        # negative index: silent (no end-indexing)
+$ boru do '{a: 1} . a . b'      => error: no matching signature for get   # field on a scalar
 ```
 
 Silent `None` from bad indices means off-by-one and accidental-negative
@@ -421,8 +421,8 @@ bugs vanish until a downstream stage chokes.
 ## S. `"${...}"` interpolation works only in backtick strings — `doc`/`design`
 
 ```
-$ aql do -- '"sum is ${1 add 2}"'   => sum is ${1 add 2}   # double quotes: literal
-$ aql do -- '`sum is ${1 add 2}`'   => sum is 3            # backticks: interpolated
+$ boru do -- '"sum is ${1 add 2}"'   => sum is ${1 add 2}   # double quotes: literal
+$ boru do -- '`sum is ${1 add 2}`'   => sum is 3            # backticks: interpolated
 ```
 
 A `${}` in a double-quoted string is emitted verbatim with no
@@ -436,7 +436,7 @@ diagnostic.
 ## T. Duplicate map-literal keys collapse silently — `design`
 
 ```
-$ aql do '{a: 1, a: 2}'   => {a:2}
+$ boru do '{a: 1, a: 2}'   => {a:2}
 ```
 
 Last write wins; no duplicate-key warning.
@@ -454,8 +454,8 @@ a real operator: the `afn` (lambda) arrow (`eng` grammar maps `=>` →
 `afn`).
 
 ```
-$ aql do -- 'def square fn [[x:Number][Number][x mul x]] 4 square => 16'    => fn (Integer)
-$ aql do -- 'def square fn [[x:Number][Number][x mul x]] 4 square => 9999'  => fn (Integer)
+$ boru do -- 'def square fn [[x:Number][Number][x mul x]] 4 square => 16'    => fn (Integer)
+$ boru do -- 'def square fn [[x:Number][Number][x mul x]] 4 square => 9999'  => fn (Integer)
 ```
 
 Pasting a whole doc line (annotation included) builds a function and
@@ -478,9 +478,9 @@ stays CI-verified. `=>` now appears in the docs only where the docs
 ## V. `:Number` record fields launder strings into numbers — `design`/`bug`
 
 ```
-$ aql do -- 'def Point refine Record [x:Number y:Number] end make Point ["1" "2"]'  => {x:1 y:2}
-$ aql do -- 'def Point refine Record [x:Number y:Number] end make Point [3 "4"]'    => {x:3 y:4}
-$ aql do -- 'def P refine Record [x:Number] end make P [true]'   => error: cannot convert "true" to number
+$ boru do -- 'def Point refine Record [x:Number y:Number] end make Point ["1" "2"]'  => {x:1 y:2}
+$ boru do -- 'def Point refine Record [x:Number y:Number] end make Point [3 "4"]'    => {x:3 y:4}
+$ boru do -- 'def P refine Record [x:Number] end make P [true]'   => error: cannot convert "true" to number
 ```
 
 A `:Number` field coerces by stringify-then-reparse rather than
@@ -499,9 +499,9 @@ contradicts Exhibit Q/W: `make` coerces freely while `convert` refuses.
 
 ```
 # prefix if — works:
-$ aql do -- 'def cd fn [[n:Integer][Integer][if (n 0 eq) [0] [n 1 sub cd]]] 3 cd'  => 0
+$ boru do -- 'def cd fn [[n:Integer][Integer][if (n 0 eq) [0] [n 1 sub cd]]] 3 cd'  => 0
 # suffix if — same logic, if written last:
-$ aql do -- 'def cd fn [[n:Integer][Integer][n 0 eq [0] [n 1 sub cd] if]] 3 cd'
+$ boru do -- 'def cd fn [[n:Integer][Integer][n 0 eq [0] [n 1 sub cd] if]] 3 cd'
    => runtime: goroutine stack exceeds 1000000000-byte limit
 ```
 
@@ -509,7 +509,7 @@ In suffix position, forward collection mis-binds `if`'s arguments so the
 base case never fires.
 
 > **Fix.** Add a call-depth (or step) counter to the engine step loop
-> with a configurable limit that raises a clean `[aql/recursion_limit]`
+> with a configurable limit that raises a clean `[boru/recursion_limit]`
 > error *before* the Go stack is exhausted. That bounds this case and
 > Y's `runaway`. Separately, the suffix-`if` mis-binding is the
 > forward-collection trap (C) striking a control word — the depth guard
@@ -519,8 +519,8 @@ base case never fires.
 ## Y. Stack overflow is reported with two wrong names — `bug`
 
 ```
-$ aql do -- 'def runaway fn [[n:Integer][Integer][n 1 add runaway]] 0 runaway'
-   => error: [aql/syntax_error]: unmatched opening parenthesis
+$ boru do -- 'def runaway fn [[n:Integer][Integer][n 1 add runaway]] 0 runaway'
+   => error: [boru/syntax_error]: unmatched opening parenthesis
 ```
 
 Genuine infinite recursion is reported as a `syntax_error` about
@@ -529,7 +529,7 @@ reports `runtime: goroutine stack exceeds 1GB`. Neither says "recursion
 too deep."
 
 > **Fix.** Same depth guard as X (front-runs the overflow with a clean
-> `[aql/recursion_limit]`). Additionally, the `recover()` in
+> `[boru/recursion_limit]`). Additionally, the `recover()` in
 > `eng/go/engine.go:361` should map a Go stack-overflow panic to that
 > error instead of falling through to the `unmatched opening parenthesis`
 > message (`engine.go:562`), which is unrelated. Risk: low.
@@ -537,9 +537,9 @@ too deep."
 ## Z. Two distinct "nothing" values that are not equal — `design`
 
 ```
-$ aql do -- '[1,,2] 1 get'   => null
-$ aql do 'none'              => None({})
-$ aql do -- 'null none eq'     => false
+$ boru do -- '[1,,2] 1 get'   => null
+$ boru do 'none'              => None({})
+$ boru do -- 'null none eq'     => false
 ```
 
 `null` (list gap-filler) and `none` (`None({})`) are different bottom
@@ -554,16 +554,16 @@ values and compare unequal.
 ## AA. A double comma fabricates a `null` element — `design`/`bug`
 
 ```
-$ aql do -- '[1, 2, 3]'   => [1 2 3]      # commas optional
-$ aql do -- '1 , 2'       => 1 2          # bare comma is a no-op word
-$ aql do -- '[1,,2]'      => [1 null 2]   # double comma invents an element
+$ boru do -- '[1, 2, 3]'   => [1 2 3]      # commas optional
+$ boru do -- '1 , 2'       => 1 2          # bare comma is a no-op word
+$ boru do -- '[1,,2]'      => [1 null 2]   # double comma invents an element
 ```
 
 Commas are decorative no-ops everywhere except an empty slot between
 two, which materialises a `null` and lengthens the list.
 
 > **Fix.** ✅ **Done.** An empty list element — a leading or repeated
-> comma (`[,1]`, `[1,,2]`, `[1,,,2]`) — is now an `[aql/syntax_error]`
+> comma (`[,1]`, `[1,,2]`, `[1,,,2]`) — is now an `[boru/syntax_error]`
 > rather than a fabricated `null`. An empty slot reaches the parser as
 > an untyped-nil element (an explicit `null` token comes through as the
 > `jsonic.Text` "null", so it is unaffected), so the `case nil:` arm of
@@ -576,7 +576,7 @@ two, which materialises a `null` and lengthens the list.
 ## AB. A typo'd float yields a signature error about `get` — `design`
 
 ```
-$ aql do '1.2.3'   => error: [aql/signature_error]: no matching signature for get
+$ boru do '1.2.3'   => error: [boru/signature_error]: no matching signature for get
 ```
 
 `1.2.3` lexes as `1.2` then `.` (field access) then `3`. The diagnostic
@@ -589,7 +589,7 @@ points at an accessor the user never wrote.
 > numeric-literal receiver before a `.` at parse time
 > (`convertTopLevelItems` in `eng/go/parser/parse.go`,
 > `numberReceiverError`): `1.2.3` (the malformed-number case), `1 . 2`,
-> and `5 . foo` all raise `[aql/syntax_error]: a number has no members
+> and `5 . foo` all raise `[boru/syntax_error]: a number has no members
 > to access with .` with a source position, instead of the runtime "no
 > matching signature for get". `5.0` (a plain Float) and real reaches
 > (`{a:1} . a`, `[1 2 3] . 0`) are unaffected.
@@ -597,9 +597,9 @@ points at an accessor the user never wrote.
 ## AC. Strings are not indexable and have no built-in length; maps are not `each`-able — `design`
 
 ```
-$ aql do '"hello" 0 get'   => error: no matching signature for get
-$ aql do '"hello" len'     => error: undefined word: len
-$ aql do '{a:1 b:2} each [dup mul]'   => error: no matching signature for each
+$ boru do '"hello" 0 get'   => error: no matching signature for get
+$ boru do '"hello" len'     => error: undefined word: len
+$ boru do '{a:1 b:2} each [dup mul]'   => error: no matching signature for each
 ```
 
 String index and length (`len`/`length`) are absent from the base
@@ -614,15 +614,15 @@ but not maps.
 ## AD. Two fields of the same record cannot be added inline — `design`
 
 ```
-$ aql do -- '{first: 1 second: 2} . first add . second'
-   => error: [aql/signature_error]: no matching signature for add
+$ boru do -- '{first: 1 second: 2} . first add . second'
+   => error: [boru/signature_error]: no matching signature for add
 ```
 
 Forward collection has `add` reach past the `. second` accessor word.
 `record.first + record.second` requires parentheses or stack juggling.
 
 > **Fix.** Same root as C — forward collection. No semantic change
-> recommended; the stranded-value `aql check` warning proposed in C would
+> recommended; the stranded-value `boru check` warning proposed in C would
 > flag this pattern, and the docs show the parenthesised form. A dotted
 > `.`-chain already binds tightly; the trap is purely `add` reaching
 > forward past it.
@@ -669,7 +669,7 @@ Only **doc**-tagged items (and accuracy notes for **design** items where
 the docs already discuss the topic) were edited:
 
 - `upper` examples → `StringUtil.upper` with the import shown (A).
-- `aql fmt -w` → `aql fmt` everywhere; the in-place / no-arg / no-stdout
+- `boru fmt -w` → `boru fmt` everywhere; the in-place / no-arg / no-stdout
   reality stated (J).
 - The "keep each step on its own line" advice corrected; the REPL
   stack-reset behaviour documented (D).
@@ -693,7 +693,7 @@ in each exhibit's ✅ markers above.
 
 Sequenced by value-to-risk. The first column is unambiguous correctness
 with near-zero compatibility cost; the second needs an owner to commit
-to what AQL's types *mean*; the third is documentation/lint or additive.
+to what BORU's types *mean*; the third is documentation/lint or additive.
 
 | Do now (cheap, clearly-right) | Decide then do (behavioural) | Docs / lint / additive |
 | --- | --- | --- |

@@ -21,7 +21,7 @@ type ReadList struct {
 }
 
 // NewReadList wraps a slice of Values as a ReadList. External callers
-// (outside the aqleng package) use this constructor because the elems
+// (outside the borueng package) use this constructor because the elems
 // field is unexported.
 func NewReadList(elems []Value) ReadList {
 	return ReadList{elems: elems}
@@ -226,7 +226,7 @@ type FnParam struct {
 	Type     *Type
 	Pattern  *Value // optional: map/list pattern for structural matching
 	Optional bool   // true if this param was marked optional via ?
-	// Quote marks a /q param (`name:Atom/q` in an AQL input sig): the
+	// Quote marks a /q param (`name:Atom/q` in a BORU input sig): the
 	// slot captures an upcoming bare Word as its Atom NAME during
 	// collection — the arg is presented as if quoted — with the same
 	// binding-agnostic rule native QuoteArgs slots follow (`def`,
@@ -265,7 +265,7 @@ type FnSig struct {
 	// declaration as a secondary span. Zero for Go-registered sigs.
 	Decl DeclSite
 	// BarrierPos is the forward/stack boundary expressed by `|` in
-	// an AQL fn parameter list. Three values carry distinct meaning:
+	// a BORU fn parameter list. Three values carry distinct meaning:
 	//
 	//   -1 — unset (no `|` token in the source). Consumers
 	//        (InstallFnDef, fnSigsToSignatures) default this to
@@ -281,7 +281,7 @@ type FnSig struct {
 	// Go-side construction sites that don't go through ParseFnParams
 	// (modules/math.go, modules/matrix.go, etc.) leave the field at
 	// the Go zero value (0); the consumer treats that as "default"
-	// for backwards compatibility — only the AQL-source path emits
+	// for backwards compatibility — only the BORU-source path emits
 	// the -1 sentinel.
 	BarrierPos int
 	// NoEvalArgs lists per-sig-position the list-shaped args that
@@ -291,7 +291,7 @@ type FnSig struct {
 	// `rand.list-of [body] N` — body is code, not data).
 	//
 	// Honored by fnSigsToSignatures (forwards to Signature.NoEvalArgs)
-	// and by execFnDefSig's auto-eval guard before CallAQL. Without
+	// and by execFnDefSig's auto-eval guard before CallBORU. Without
 	// this, an Eval=true list passed in would be silently sub-Run'd,
 	// breaking the quoted-body contract.
 	NoEvalArgs map[int]bool
@@ -314,12 +314,12 @@ type FnSig struct {
 	// --- Run implementation + dispatch metadata. ---
 
 	// Impl is the signature's run implementation as a sealed sum
-	// (GoImpl | AQLImpl) — the SINGLE representation every reader consults
+	// (GoImpl | BORUImpl) — the SINGLE representation every reader consults
 	// through the Signature accessors (dispatchHandler / body / fnFrame /
 	// fullStack / checkFullStackFn / parkResult / runInCheckMode in
 	// sigimpl.go). Native words and internal Go sites author `Go(handler,
-	// opts...)`; module refs / un-installed lambdas author `AQL(body)`;
-	// InstallFnDef / compileFnDefLiteral build the installed-fn `AQLImpl`
+	// opts...)`; module refs / un-installed lambdas author `BORU(body)`;
+	// InstallFnDef / compileFnDefLiteral build the installed-fn `BORUImpl`
 	// (with a derived body-splicer + frame meta) directly. A Signature with
 	// a nil Impl has no implementation (a check-mode shape synth, a raw
 	// match-only test fixture) and dispatchHandler() returns nil.
@@ -351,7 +351,7 @@ type FnSig struct {
 	// Fallback marks the synthesized 0-arg catch-all sig.
 	Fallback bool
 	// ReturnsFn is the check-mode return computer (native-authored or
-	// AQL-derived); orthogonal to the run implementation in Impl.
+	// BORU-derived); orthogonal to the run implementation in Impl.
 	ReturnsFn ReturnsFunc
 	// CompileEffect declares the word's compile-relevant semantics for the
 	// bytecode recorder, so it can classify the word WITHOUT a name-keyed table
@@ -370,10 +370,10 @@ type FnSig struct {
 	// StoredBodies declares the word's PARAM-CARRYING stored code-body
 	// positions (Test.check-prop's gen/property): NoEvalArgs lists the
 	// handler stores and later invokes per call with the declared params
-	// bound (its own CallAQL frames). The recorder compiles each declared
+	// bound (its own CallBORU frames). The recorder compiles each declared
 	// position to a closure unit with those params and replaces the operand
 	// with a synthetic fn-value carrier whose single sig mirrors the
-	// handler's CallAQL sig — same Params, same raw Body — plus the
+	// handler's CallBORU sig — same Params, same raw Body — plus the
 	// CompiledFnRef, so the handler upgrades to InvokeCallback and the VM
 	// hosts the unit nested (same-program ref); every decline leaves the
 	// raw list and the handler's interpreter path unchanged. Copied from
@@ -387,14 +387,14 @@ type FnSig struct {
 	// match order (CompareSignatures), so an unlocked merged addition
 	// can never pre-empt a locked match — no previously-valid call
 	// changes its dispatch. Locking is a property of the Go layer, not
-	// an AQL language ability; InstallFnDef (user `def … fn`) never
+	// a BORU language ability; InstallFnDef (user `def … fn`) never
 	// sets it.
 	Locked bool
 	// Origin records which module contributed this signature via an
-	// export transplant (the module ref, e.g. "./ext.aql" or
-	// "aql:time-util"). Empty for native registrations and direct user
+	// export transplant (the module ref, e.g. "./ext.boru" or
+	// "boru:time-util"). Empty for native registrations and direct user
 	// defs. Read by the transplant collision check: the same tuple
-	// arriving from a DIFFERENT module raises [aql/extend_conflict],
+	// arriving from a DIFFERENT module raises [boru/extend_conflict],
 	// while identical provenance (diamond re-import) is idempotent.
 	Origin string
 	// CoreDefault marks a core-provided UNLOCKED default overload that the
@@ -483,14 +483,14 @@ const (
 	CompileExecutesBody
 	// CompileRunsBodyIsolated marks a word whose NoEvalArgs body(ies) are NEITHER
 	// spliced onto the tape NOR const-baked and re-run in the enclosing sub-engine.
-	// Instead the handler executes each body via a fresh, ISOLATED CallAQL frame
+	// Instead the handler executes each body via a fresh, ISOLATED CallBORU frame
 	// against a registry the word CAPTURED at registration (not the passed-in `r`),
 	// binding only that body's own parameters. Test.check-prop is the canonical
 	// case: runCheckProp runs the generator body (param `r` = a seeded rand
 	// instance) and the property body (one unnamed param) each through
-	// parent.CallAQL, so name resolution inside a body is IDENTICAL under the
+	// parent.CallBORU, so name resolution inside a body is IDENTICAL under the
 	// interpreter and the VM -- it never touches a compiled frame local, because the
-	// CallAQL frame binds only the body's params and resolves everything else
+	// CallBORU frame binds only the body's params and resolves everything else
 	// against the captured parent (module / global scope), exactly as it does when
 	// the interpreter drives the same handler. So a plain CALL_NATIVE bake is sound
 	// even when the body is a DYNAMIC value (a map get, `p get "gen"`) whose tokens
@@ -593,7 +593,7 @@ const BodyOutResidual = -1
 
 // StoredBodySpec is one Signature.StoredBodies entry: the sig position of a
 // NoEvalArgs code-body list the word's handler stores and invokes per call,
-// and the params the handler's own CallAQL frame binds for it (a named param
+// and the params the handler's own CallBORU frame binds for it (a named param
 // binds the body's reads of that name; an unnamed param rides the stack).
 type StoredBodySpec struct {
 	Pos    int
@@ -688,9 +688,9 @@ type CallableSpec struct {
 //
 // Signatures is the SINGLE per-function signature slice — one full-fidelity
 // overload per entry. Each Signature carries the authored shape (Params with
-// names, Returns, and the AQL Body) AND, once compiled, the dispatch fields
+// names, Returns, and the BORU Body) AND, once compiled, the dispatch fields
 // (a Go Handler, resolved BarrierPos, sorted order). Body vs Handler is the
-// only Go-vs-AQL distinction: a Go builtin has a Handler and no Body, an AQL
+// only Go-vs-BORU distinction: a Go builtin has a Handler and no Body, a BORU
 // fn carries Body tokens and (after install/compile) a body-splicing Handler.
 //
 // The slice on a DefStack entry or a constructed Function value holds only
@@ -711,7 +711,7 @@ type FnDefInfo struct {
 	// Module/Export/Doc record a function's origin and one-line summary
 	// when it is a native-module export (e.g. ArrayUtil.indices). They are
 	// the provenance `describe` renders for a qualified name. Module is the
-	// import id ("aql:array-util"), Export the namespace ("ArrayUtil"), Doc
+	// import id ("boru:array-util"), Export the namespace ("ArrayUtil"), Doc
 	// a one-line summary. All three are empty for user/anonymous fns and
 	// core words, which carry no module origin.
 	Module string
@@ -729,7 +729,7 @@ type FnDefInfo struct {
 	Examples []string
 	// MiniKind names the mini-language kind whose expansion produced
 	// this partially-applied Function ("" for everything else). The
-	// per-kind member types the aql:minilang module exports
+	// per-kind member types the boru:minilang module exports
 	// (MiniLang.Re, MiniLang.Gex, …) match on it, so a typed fn param
 	// can require a specific kind's partial (e.g. a regexp matcher).
 	MiniKind string
@@ -763,7 +763,7 @@ type FnDefInfo struct {
 	// defs in the per-call scope BEFORE body execution and torn down
 	// by the same DefCleanup mechanism that pops named params; the
 	// install/cleanup wiring lives in InstallFnDef (core_helpers.go),
-	// execFnDefSig + spliceAnonCheckResult (engine.go), and CallAQL
+	// execFnDefSig + spliceAnonCheckResult (engine.go), and CallBORU
 	// (registry.go). Nil for top-level constructions and any inner
 	// fn whose body references only params, module-global names, or
 	// forward refs. See lang/go/CLAUDE.md "Closures and Capture".
@@ -783,9 +783,9 @@ type FnDefInfo struct {
 	// ExtOwner is the AUTHOR owner id of a HOST-authored word-extension
 	// clone (design/OPEN-WORDS.1.md §4): the provenance the transplant
 	// admission verifies the clone's anchor types against. Set only by
-	// NewWordExtension from Go module builders — aql:time-util passes
+	// NewWordExtension from Go module builders — boru:time-util passes
 	// its own id (matching the Date/duration types it registered),
-	// aql:io passes OwnerKernel (its Pathon list/remove sigs anchor on
+	// boru:io passes OwnerKernel (its Pathon list/remove sigs anchor on
 	// a kernel-owned type — the kernel-shipped host prerogative).
 	// Empty for every source-authored clone, whose author is the
 	// exporting module's TypeTable.MintOwner instead.
@@ -924,7 +924,7 @@ type DisjunctInfo struct {
 // negation is the kernel's set-theoretic complement; together with
 // DisjunctInfo (union) and TandValues (intersection) it closes the type
 // algebra under Boolean operations — see
-// design/elixir-types-in-aql-report.10.md.
+// design/elixir-types-in-boru-report.10.md.
 type NegationInfo struct {
 	Inner Value
 }
@@ -1052,7 +1052,7 @@ func (ri ResourceInstanceInfo) GetField(name string) (Value, bool) {
 // hold arbitrary key-value pairs. Key resolution walks the prototype chain,
 // enabling scope-like lookup when contexts are nested.
 //
-// Copy-on-write: the AQL `set` word creates a new Store layer (prototype =
+// Copy-on-write: the BORU `set` word creates a new Store layer (prototype =
 // old Store) instead of mutating in place. If this Store is nested inside
 // a parent Store, the parent is COW'd too, propagating up to the ctxStack.
 type StoreInstanceInfo struct {
@@ -1075,7 +1075,7 @@ func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
 }
 
 // Set stores a key-value pair directly (for internal/init use only).
-// AQL code should use the set word which does COW via CowSet.
+// BORU code should use the set word which does COW via CowSet.
 func (si *StoreInstanceInfo) Set(key string, val Value) {
 	// Allocate on demand: a layer pushed by ContextStack.Push carries a nil
 	// Data map (writes go through CowSet, which replaces the layer rather
@@ -1168,7 +1168,7 @@ type ModuleDesc struct {
 	Exports map[string]*OrderedMap // export name → export map (name → value)
 	// Descriptor metadata, populated by the loader (Resolve / loadFileModule
 	// / RunModuleBody) and surfaced on the Ideal/Module instance at import.
-	Ref    string // external module reference ("aql:math-util", "./lib.aql"); "" inline
+	Ref    string // external module reference ("boru:math-util", "./lib.boru"); "" inline
 	Kind   string // "native" | "file" | "inline"
 	File   string // source file path ("" for native/inline)
 	Folder string // source folder ("" for native/inline)
@@ -1223,7 +1223,7 @@ type ForwardInfo struct {
 	SpeculativeAt int
 }
 
-// Value is the single node type of the AQL kernel: it is at once a
+// Value is the single node type of the BORU kernel: it is at once a
 // runtime value (an entry on the stack) and a node in the type
 // lattice. Value and Type were historically separate structs; they
 // are now one, with Type an alias for Value (see typetable.go). A
@@ -1388,7 +1388,7 @@ type typeMeta struct {
 	// Owner is the registration/mint provenance of the type node — the
 	// authority the ownership-anchored signature rules check against
 	// (design/OPEN-WORDS.1.md §4): OwnerKernel for kernel builtins and
-	// kernel-shipped global types, a module id (e.g. "aql:matrix-util",
+	// kernel-shipped global types, a module id (e.g. "boru:matrix-util",
 	// "module#N" for source modules) for module registrations and
 	// module-body mints, OwnerProgram for top-level program mints.
 	// Empty means UNOWNED (ad-hoc / test-fixture types) — an unowned
@@ -2180,7 +2180,7 @@ func NewWordModified(name string, argCount int, forceStack, forceForward bool) V
 // reached at the pointer it resolves the name to its bound Function
 // value without entering function dispatch. /r is legal ONLY for
 // function words — a name bound to a non-fn value (plain value, type
-// body) raises [aql/illegal_ref] (see eng.IsFunctionRef). ArgCount
+// body) raises [boru/illegal_ref] (see eng.IsFunctionRef). ArgCount
 // stays unspecified because /r short-circuits argument collection.
 func NewWordRef(name string) Value {
 	return NewValueRaw(TWord, WordInfo{
@@ -2289,7 +2289,7 @@ func AsReach(v Value) (ReachInfo, error) {
 
 // InterpPart represents one segment of an interpolated string.
 // If Expr is nil, Lit is a literal string segment.
-// If Expr is non-nil, it contains parsed AQL values to evaluate.
+// If Expr is non-nil, it contains parsed BORU values to evaluate.
 type InterpPart struct {
 	Lit  string
 	Expr []Value
@@ -2366,7 +2366,7 @@ type DefCleanupInfo struct {
 	// EvalResidual marks a MULTI-TOKEN fn body: the frame's residual
 	// pending containers evaluate IN-frame at this marker — before the
 	// body-local defs pop — so the spliced dispatch path agrees with the
-	// CallAQL sub-run drain (which evaluates the residual at sub-run end,
+	// CallBORU sub-run drain (which evaluates the residual at sub-run end,
 	// while the frame is live). A SINGLE-LITERAL container body leaves
 	// this false and keeps the no-closures transparency: the returned
 	// container resolves names in the CONSUMER's scope
@@ -2503,11 +2503,11 @@ type CalDurationData struct {
 	Days   int
 }
 
-// ErrorInfo holds the details of an AQL error value.
+// ErrorInfo holds the details of a BORU error value.
 type ErrorInfo struct {
-	Message string // the short error description (an AqlError's Detail)
+	Message string // the short error description (a BoruError's Detail)
 	// Code is the stable, dispatchable error code ("user_error",
-	// "type_error", …) when the source was an AqlError (native or
+	// "type_error", …) when the source was a BoruError (native or
 	// `raise`d); empty for plain Go errors. Handlers branch on it via
 	// `e.code` / `convert Map`.
 	Code string
@@ -2517,14 +2517,14 @@ type ErrorInfo struct {
 	Data *OrderedMap
 }
 
-// NewError creates an error value from a Go error. An AqlError (the
+// NewError creates an error value from a Go error. A BoruError (the
 // engine's structured error, including everything `raise` produces)
 // contributes its stable Code, its SHORT Detail as the message (not
 // the formatted multi-line report), and any raise payload; a plain Go
 // error contributes only its text.
 func NewError(err error) Value {
 	info := ErrorInfo{Message: err.Error()}
-	var ae *AqlError
+	var ae *BoruError
 	if errors.As(err, &ae) {
 		info.Code = ae.Code
 		info.Message = ae.Detail
@@ -3278,7 +3278,7 @@ func AsMutableMap(v Value) (*OrderedMap, error) {
 // String returns a human-readable representation.
 func (v Value) String() string {
 	// A dynamic carrier renders as dynamic(<bound>) so the gradual
-	// modality is legible in traces / `aql check` output instead of
+	// modality is legible in traces / `boru check` output instead of
 	// masquerading as its bare bound (design/dynamic-modality-report.10.md).
 	// Render the bound by clearing the flag and recursing.
 	if v.Dynamic {

@@ -1,8 +1,8 @@
 package modules
 
 import (
-	"github.com/aql-lang/aql/eng/go/stackform"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/stackform"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // Test seams for wave-9 coverage (design/TEST-SEAMS.10.md). Each var defaults
@@ -29,17 +29,17 @@ var (
 	// PushLit-shaped form never fails to evaluate.
 	w9StackformEval = stackform.Eval
 
-	// w9ParsePreamble seams the aql:test preamble parse in BuildTestModule
+	// w9ParsePreamble seams the boru:test preamble parse in BuildTestModule
 	// (test.go:57-61 parse-error arm, and the run-error arm at 128 when the
 	// returned tokens run-fail). Defaults to the sync.Once-guarded parse.
 	w9ParsePreamble = w9ParsePreambleReal
 )
 
 // w9ParsePreambleReal is the production preamble parse: the sync.Once-guarded
-// single parse of testAQLPreamble, returning the cached tokens/error.
+// single parse of testBORUPreamble, returning the cached tokens/error.
 func w9ParsePreambleReal(parent *native.Registry) ([]native.Value, error) {
 	testParseOnce.Do(func() {
-		testParsed, testParseErr = parent.ParseFunc(testAQLPreamble)
+		testParsed, testParseErr = parent.ParseFunc(testBORUPreamble)
 	})
 	return testParsed, testParseErr
 }

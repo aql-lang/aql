@@ -23,11 +23,11 @@ func TestEvalParseError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	// Parse failures surface as AQL-voice syntax_errors
+	// Parse failures surface as BORU-voice syntax_errors
 	// (design/DIAGNOSTICS.0.md phase 2).
-	if !strings.Contains(err.Error(), "[aql/syntax_error]") ||
+	if !strings.Contains(err.Error(), "[boru/syntax_error]") ||
 		!strings.Contains(err.Error(), "this string is never closed") {
-		t.Errorf("expected an AQL-voice syntax_error, got %q", err.Error())
+		t.Errorf("expected a BORU-voice syntax_error, got %q", err.Error())
 	}
 }
 
@@ -78,10 +78,10 @@ func TestEvalForceCompile(t *testing.T) {
 }
 
 // ResolveCompileMode applies the bytecode mode contract: best-effort compiled
-// mode is the DEFAULT (the `--compile` flag / AQL_COMPILE spell it
-// explicitly); the `--force-compile` flag OR AQL_FORCE_COMPILE demands the
+// mode is the DEFAULT (the `--compile` flag / BORU_COMPILE spell it
+// explicitly); the `--force-compile` flag OR BORU_FORCE_COMPILE demands the
 // bytecode path (winning over the best-effort form); and --no-compile /
-// AQL_NO_COMPILE is the kill switch that wins over all.
+// BORU_NO_COMPILE is the kill switch that wins over all.
 func TestResolveCompileMode(t *testing.T) {
 	cases := []struct {
 		compileFlag, forceFlag, noCompileFlag bool
@@ -91,34 +91,34 @@ func TestResolveCompileMode(t *testing.T) {
 		{false, false, false, "", "", "", CompileTry},     // default: compiled mode ON (P7 endgame flip)
 		{true, false, false, "", "", "", CompileTry},      // --compile flag (explicit spelling of the default)
 		{false, true, false, "", "", "", CompileForce},    // --force-compile flag
-		{false, false, false, "1", "", "", CompileTry},    // AQL_COMPILE=1
-		{false, false, false, "true", "", "", CompileTry}, // AQL_COMPILE=true
-		{false, false, false, "0", "", "", CompileTry},    // AQL_COMPILE=0 is not an opt-out — the default TRY stands
-		{false, false, false, "no", "", "", CompileTry},   // AQL_COMPILE=no likewise; --no-compile/AQL_NO_COMPILE is the opt-out
-		{false, false, false, "", "1", "", CompileForce},  // AQL_FORCE_COMPILE=1
+		{false, false, false, "1", "", "", CompileTry},    // BORU_COMPILE=1
+		{false, false, false, "true", "", "", CompileTry}, // BORU_COMPILE=true
+		{false, false, false, "0", "", "", CompileTry},    // BORU_COMPILE=0 is not an opt-out — the default TRY stands
+		{false, false, false, "no", "", "", CompileTry},   // BORU_COMPILE=no likewise; --no-compile/BORU_NO_COMPILE is the opt-out
+		{false, false, false, "", "1", "", CompileForce},  // BORU_FORCE_COMPILE=1
 		{true, true, false, "", "", "", CompileForce},     // force wins over try (flags)
 		{true, false, false, "", "1", "", CompileForce},   // force env wins over try flag
-		{true, false, false, "", "", "1", CompileOff},     // AQL_NO_COMPILE wins over the flag
-		{false, true, false, "", "", "1", CompileOff},     // AQL_NO_COMPILE wins over force
-		{false, false, false, "1", "1", "1", CompileOff},  // AQL_NO_COMPILE wins over both envs
-		{true, false, false, "", "", "0", CompileTry},     // AQL_NO_COMPILE=0 does not disable
+		{true, false, false, "", "", "1", CompileOff},     // BORU_NO_COMPILE wins over the flag
+		{false, true, false, "", "", "1", CompileOff},     // BORU_NO_COMPILE wins over force
+		{false, false, false, "1", "1", "1", CompileOff},  // BORU_NO_COMPILE wins over both envs
+		{true, false, false, "", "", "0", CompileTry},     // BORU_NO_COMPILE=0 does not disable
 		{true, false, true, "", "", "", CompileOff},       // --no-compile wins over --compile (checker-style twin)
 		{false, true, true, "", "", "", CompileOff},       // --no-compile wins over --force-compile
 		{false, false, true, "1", "1", "", CompileOff},    // --no-compile wins over both envs
 	}
 	for _, c := range cases {
-		t.Setenv("AQL_COMPILE", c.compile)
-		t.Setenv("AQL_FORCE_COMPILE", c.force)
-		t.Setenv("AQL_NO_COMPILE", c.noCompile)
+		t.Setenv("BORU_COMPILE", c.compile)
+		t.Setenv("BORU_FORCE_COMPILE", c.force)
+		t.Setenv("BORU_NO_COMPILE", c.noCompile)
 		if got := ResolveCompileMode(c.compileFlag, c.forceFlag, c.noCompileFlag); got != c.want {
-			t.Errorf("ResolveCompileMode(compile=%v, force=%v, AQL_COMPILE=%q, AQL_FORCE_COMPILE=%q, AQL_NO_COMPILE=%q) = %v, want %v",
+			t.Errorf("ResolveCompileMode(compile=%v, force=%v, BORU_COMPILE=%q, BORU_FORCE_COMPILE=%q, BORU_NO_COMPILE=%q) = %v, want %v",
 				c.compileFlag, c.forceFlag, c.compile, c.force, c.noCompile, got, c.want)
 		}
 	}
 }
 
 // Completion plan Phase 5.2 — check-by-default: every Run pre-flights
-// unless --no-check / AQL_NO_CHECK; the default gate is quiet for clean
+// unless --no-check / BORU_NO_CHECK; the default gate is quiet for clean
 // programs and verbose only under an explicit --check.
 func TestCheckByDefault(t *testing.T) {
 	run := func(args ...string) (int, string, string) {

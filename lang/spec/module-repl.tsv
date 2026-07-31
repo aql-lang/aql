@@ -1,21 +1,21 @@
-# AQL Language Specification: the aql:repl module
+# BORU Language Specification: the boru:repl module
 # Format: input<TAB>expected<TAB>description
 #
-# A socket REPL server + client, implemented IN AQL (lang/go/modules/
-# repl.go's preamble) over aql:net's lines codec — the first networking
+# A socket REPL server + client, implemented IN BORU (lang/go/modules/
+# repl.go's preamble) over boru:net's lines codec — the first networking
 # verification app. Each received line is evaluated in a sandboxed
 # sub-engine against the session's accumulated history; the reply is
 # the rendered result or an "error: …" line.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  serve / close — start a REPL listener on an ephemeral port, stop it
-import "aql:repl" def l (Repl.serve {port: 0}) Repl.close l; "stopped"	'stopped'	Repl.serve binds a listener; Repl.close stops it
+import "boru:repl" def l (Repl.serve {port: 0}) Repl.close l; "stopped"	'stopped'	Repl.serve binds a listener; Repl.close stops it
 #
 # §2  connect / eval — a full client round-trip (evaluate, then reuse a
 #     definition from the session history; errors come back as text)
-import "aql:repl" import "aql:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) def r (Repl.eval e "1 add 2") Repl.close e; Repl.close l; r	'3'	Repl.connect dials; Repl.eval evaluates one line remotely
-import "aql:repl" import "aql:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) (Repl.eval e "def x 21") drop def r (Repl.eval e "x mul 2") Repl.close e; Repl.close l; r	'42'	definitions persist across lines (session history replay)
-import "aql:repl" import "aql:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) def r (Repl.eval e "no-such-thing") Repl.close e; Repl.close l; def rb (convert Bytes r) def r6 (slice 0 6 rb) def out (convert String r6) out eq "error:"	true	a bad line replies with an error line instead of killing the connection
+import "boru:repl" import "boru:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) def r (Repl.eval e "1 add 2") Repl.close e; Repl.close l; r	'3'	Repl.connect dials; Repl.eval evaluates one line remotely
+import "boru:repl" import "boru:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) (Repl.eval e "def x 21") drop def r (Repl.eval e "x mul 2") Repl.close e; Repl.close l; r	'42'	definitions persist across lines (session history replay)
+import "boru:repl" import "boru:net" def l (Repl.serve {port: 0}) def a (Net.addr l) def e (Repl.connect (join "" ["127.0.0.1:" (convert String a.port)])) def r (Repl.eval e "no-such-thing") Repl.close e; Repl.close l; def rb (convert Bytes r) def r6 (slice 0 6 rb) def out (convert String r6) out eq "error:"	true	a bad line replies with an error line instead of killing the connection
 #
 # §3  negative — the namespace needs the import
-Repl.serve {port: 0}	ERROR:undefined_word	`Repl` is unbound without `import "aql:repl"`
+Repl.serve {port: 0}	ERROR:undefined_word	`Repl` is unbound without `import "boru:repl"`

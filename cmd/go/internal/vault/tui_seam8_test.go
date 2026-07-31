@@ -61,7 +61,7 @@ func TestW8_RunInteractiveOpensExistingVault(t *testing.T) {
 
 // TestW8_RunInteractiveNoVaultDefaultsHome drives runInteractive's else branch:
 // with no vault, resolveLaunchVault reports !ok and the active location falls
-// back to ~/.aql so the picker can open.
+// back to ~/.boru so the picker can open.
 func TestW8_RunInteractiveNoVaultDefaultsHome(t *testing.T) {
 	home := testHome(t) // no vault initialized
 	w8FakeTTY(t)

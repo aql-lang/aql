@@ -16,7 +16,7 @@ gate-clean commits:
 
 - **§4.5 finished** — the last name-keyed table, `callableWords`, was the only
   remaining instance of the eng↔module coupling §4.5 set out to remove (it
-  hard-coded the `aql:test` words `test-test` / `test-describe`). It is now a
+  hard-coded the `boru:test` words `test-test` / `test-describe`). It is now a
   word-level `Signature.Callable` (`*CallableSpec`) declaration; eng names no
   callable word. See the corrected §4.5 note.
 - **Trailing fn-value boundary** (completion-guide #1, the "biggest lever") —
@@ -61,7 +61,7 @@ gate-clean commits:
 **Continuation session (2026-06, branch `claude/bytecode-compiler-review-ai3l9u`).**
 Five more gate-clean landings took the ratchet **16 → 11** (every landing 0
 divergences across the differential + whole-corpus + combination + property-fuzz
-gates, `-race`, and `-tags aqldebug`; islands stayed **0**). Newest first:
+gates, `-race`, and `-tags borudebug`; islands stayed **0**). Newest first:
 
 - **patrun fn-value store** (`function value reaches word`) — `add {cmd:"sum"}
   (=>…) pm` stashes a fn in a Patrun dispatch table and never invokes it on the
@@ -119,12 +119,12 @@ when tried). See the refreshed [Completion guide](#completion-guide-remaining-re
 
 
 This note is a router + analysis for the next person (or session) working on the
-AQL bytecode compiler. It captures (a) how the checker and the bytecode compiler
+BORU bytecode compiler. It captures (a) how the checker and the bytecode compiler
 actually interact today, (b) the current state of the runtime-independence
 ratchet, (c) concrete generalizations / simplifications / data-structure
 improvements, and (d) the state-of-the-art algorithms we are reinventing ad-hoc
 and could adopt instead. It is meant to be read alongside
-`design/aql-bytecode-runtime-independence.0.md` (the P5–P7 work plan, now stale
+`design/boru-bytecode-runtime-independence.0.md` (the P5–P7 work plan, now stale
 on numbers — see "Current state" below) and the two module guides
 (`eng/go/CLAUDE.md`, `lang/go/CLAUDE.md`).
 
@@ -182,12 +182,12 @@ per commit: `fmt/vet/lint/test` × 35 packages + coverage + differential +
   seventh — `callableWords` — is NOT a capability flag (it carries structural
   per-word data: the body operand position, output count, and an `inputs`
   closure), so it could not fold into the bitfield, and it still hard-coded the
-  `aql:test` module words `test-test` / `test-describe` — the exact eng↔module
+  `boru:test` module words `test-test` / `test-describe` — the exact eng↔module
   coupling §4.5 targeted. The follow-on session lifted it to a word-level
   `Signature.Callable` (`*CallableSpec{BodyPos, BodyOut, Inputs}`, copied from
   `NativeFunc.Callable` at registration, read back via the resolved
   `sig.Callable`). eng now names **no** callable word — the core transforms
-  declare in `lang/native`, the `aql:test` bodies in their own module. The
+  declare in `lang/native`, the `boru:test` bodies in their own module. The
   package-global `callableWords` map is deleted.
 - **§4.6** — **NOT DONE.** The `carrierResults` try-chain collapse is *not
   cleanly feasible*: the fallthrough is load-bearing — the same word (`get`)
@@ -315,7 +315,7 @@ the existing suites for the race check.
 
 ## 0. TL;DR (the verdict)
 
-The core design is **sound and modern — do not rewrite it.** AQL's "the compiler
+The core design is **sound and modern — do not rewrite it.** BORU's "the compiler
 *is* the carrier checker with a recording side-effect" is exactly the
 **single-pass abstract-interpretation baseline-compiler** architecture that every
 production WebAssembly engine converged on (Titzer's V8 / Wizard work). The
@@ -357,7 +357,7 @@ tryRecordPoly → tryRecordFallback → RecordCall
 
 and then `EmitState.Finalize(residual)` (`eng/go/emit.go`) linearises the
 recorded event trace into a `Program` (`eng/go/bytecode.go`). The host entry
-point is `(*AQL).CompileCheck` (`lang/go/aql.go`).
+point is `(*BORU).CompileCheck` (`lang/go/boru.go`).
 
 ### What the checker hands the compiler
 
@@ -402,7 +402,7 @@ breakdown prose. The CURRENT live state is 64 refused; see the
 up-to-date histogram and root-cause split.**
 
 The ratchet is **far** ahead of the prose in
-`design/aql-bytecode-runtime-independence.0.md` (which still says 459 / 15). The
+`design/boru-bytecode-runtime-independence.0.md` (which still says 459 / 15). The
 review-session `test/go/langspec/compiled_coverage_test.go` snapshot:
 
 ```
@@ -417,7 +417,7 @@ Refusal histogram at 82 (the buckets are normalised by `normaliseReason`):
 | 12 | dynamic/opaque output | soundness-gated |
 | 10 | quoted-operand word | meta words (usurp / ref family) |
 | 8  | residual lowering (Stage 1 limit) | stack scheduling |
-| 6  | code-body word (NoEvalArgs) | mostly aql:test property words (2-body) |
+| 6  | code-body word (NoEvalArgs) | mostly boru:test property words (2-body) |
 | 6  | if-branch lowering | variadic-statement-if, computed-else, usurp-if |
 | 5  | dynamic input | soundness-gated |
 | 5  | suppressed runtime error | *correct refusals* — must emit error path for P7 |
@@ -468,7 +468,7 @@ full gate — differential 0 mismatches, `-race`, alloc, full `make test`):
    RecordClosureCall` + `lang/go/modules/test.go`) — generalised the closure
    path from exactly-1 to 0-or-1 outputs (`callableWord.bodyOut`); registered
    `test-test` so `Test.test "n" [body]` compiles, run via `InvokeBody`.
-6. **aql:test describe bodies** — reused the 0-output infra for `test-describe`.
+6. **boru:test describe bodies** — reused the 0-output infra for `test-describe`.
 7. **`fnStoreWords`** (`emit.go`) — minilang/parselang `register` *store* a fn
    (never invoke on the VM tape), so the fn bakes as an inert const, exempt from
    the function-valued-operand refusal.
@@ -724,10 +724,10 @@ way to see what a change cleared. The June session used exactly this.
 | Opcodes + Program | `eng/go/bytecode.go`; VM in `eng/go/vm.go` |
 | Word compile-classification tables | `eng/go/emit.go` (`fnIntrospectionWords`, `fnStoreWords`), `eng/go/carrier.go` (`moduleConstFoldWords`, `checkModeLiteralWords`, `fallbackWords`, `islandPureWords`, `dynOutNativeOK`, …) |
 | const-fold / schema-vs-data | `eng/go/engine.go` — `autoEvalList`, `autoEvalMap`, `constFoldContainerVal` |
-| Host entry point | `lang/go/aql.go` — `(*AQL).CompileCheck` |
+| Host entry point | `lang/go/boru.go` — `(*BORU).CompileCheck` |
 | The ratchet | `test/go/langspec/compiled_coverage_test.go` |
 | Differential gate | `test/go/langspec/compiled_differential_test.go` |
-| The (stale-on-numbers) P5–P7 plan | `design/aql-bytecode-runtime-independence.0.md` |
+| The (stale-on-numbers) P5–P7 plan | `design/boru-bytecode-runtime-independence.0.md` |
 
 ---
 
@@ -850,7 +850,7 @@ this session's.)
 - **57 → 53** — dot-access reach in an inert code body: the property-test words
   `Test.prop` / `Test.check-prop` / `Test.skip` take TWO code bodies
   (`[r.int 0 100]` + `[0 gte]`) that are inert at the call (prop stores them in a
-  PropertySpec map, skip discards them, check-prop CallAQLs them in its native
+  PropertySpec map, skip discards them, check-prop CallBORUs them in its native
   handler), so `noEvalBodiesInert` already bakes them as const operands — but a
   dot-access reach (`r.int`, an Eval=true receiver Reach) inside a body was not
   an inert const MEMBER, so the body list failed `isInertConst`. Unlike
@@ -909,8 +909,8 @@ this session's.)
   (frame stack-base, scoped to user-fn frames; closures keep `each_error`).
 - **94 → 82** — fn-storing words (minilang/parselang `register`) bake the fn as
   an inert const (stored, never invoked on the VM tape).
-- **95 → 94** — `aql:test` describe-body closures (`Test.describe "g" [body]`).
-- **107 → 95** — `aql:test` case-body closures (`Test.test "n" [body]`, 0-output
+- **95 → 94** — `boru:test` describe-body closures (`Test.describe "g" [body]`).
+- **107 → 95** — `boru:test` case-body closures (`Test.test "n" [body]`, 0-output
   side-effect bodies; closure path generalized to 0-or-1 outputs).
 - **109 → 107** — `OpMakeList` of make-instance lists (fresh instances per run).
 - **112 → 109** — `OpMakeMap` for computed `make` construction bodies.

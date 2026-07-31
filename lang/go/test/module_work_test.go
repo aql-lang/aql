@@ -4,7 +4,7 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 func moduleWorkDir(t *testing.T) string {
@@ -141,7 +141,7 @@ func TestColorClampNegative(t *testing.T) {
 	assertResult(t, result, "0")
 }
 
-// --- Color-scheme module: uses color.aql's exported functions ---
+// --- Color-scheme module: uses color.boru's exported functions ---
 
 func TestColorSchemeSunsetName(t *testing.T) {
 	dir := moduleWorkDir(t)

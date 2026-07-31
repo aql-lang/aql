@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 
 	udk "github.com/voxgig/udk/go"
 )
@@ -58,13 +58,13 @@ func makeTestSDKForOps(t *testing.T) *udk.UniversalSDK {
 	return testSDK
 }
 
-func newAQLWithSDK(t *testing.T) *lang.AQL {
+func newBORUWithSDK(t *testing.T) *lang.BORU {
 	t.Helper()
 	a, err := lang.New(lang.Options{Registry: "test/registry"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	a.SetSDK("voxgig-solardemo", makeTestSDKForOps(t))
 	return a
 }
@@ -72,7 +72,7 @@ func newAQLWithSDK(t *testing.T) *lang.AQL {
 // --- list with query ---
 
 func TestListAPIWithQuery(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`list {kind:"api", spec:"voxgig-solardemo", entity:"planet", query:{id:"planet01"}}`)
 	if err != nil {
@@ -95,7 +95,7 @@ func TestListAPIWithQuery(t *testing.T) {
 }
 
 func TestListAPIWithQueryNoMatch(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	// Query for a non-existent id should return an empty list (not an error).
 	result, err := a.Run(`list {kind:"api", spec:"voxgig-solardemo", entity:"planet", query:{id:"planet99"}}`)
@@ -109,7 +109,7 @@ func TestListAPIWithQueryNoMatch(t *testing.T) {
 }
 
 func TestListAPIWithoutQuery(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	// Without query should return all planets.
 	result, err := a.Run(`list {kind:"api", spec:"voxgig-solardemo", entity:"planet"}`)
@@ -136,7 +136,7 @@ func TestListAPIWithoutQuery(t *testing.T) {
 // --- load ---
 
 func TestLoadAPIPlanet(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`load {kind:"api", spec:"voxgig-solardemo", entity:"planet", query:{id:"planet01"}}`)
 	if err != nil {
@@ -161,7 +161,7 @@ func TestLoadAPIPlanet(t *testing.T) {
 }
 
 func TestLoadAPIMoon(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`load {kind:"api", spec:"voxgig-solardemo", entity:"moon", query:{id:"moon01"}}`)
 	if err != nil {
@@ -183,7 +183,7 @@ func TestLoadAPIMoon(t *testing.T) {
 }
 
 func TestLoadAPINotFound(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	// Loading a non-existent entity should fail.
 	_, err := a.Run(`load {kind:"api", spec:"voxgig-solardemo", entity:"planet", query:{id:"planet99"}}`)
@@ -193,7 +193,7 @@ func TestLoadAPINotFound(t *testing.T) {
 }
 
 func TestLoadAPIWithJsonExtension(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`load {kind:"api", spec:"voxgig-solardemo.json", entity:"planet", query:{id:"planet02"}}`)
 	if err != nil {
@@ -217,7 +217,7 @@ func TestLoadAPIWithJsonExtension(t *testing.T) {
 // --- create ---
 
 func TestCreateAPIPlanet(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`create {kind:"api", spec:"voxgig-solardemo", entity:"planet", data:{name:"Mars", kind:"terrestrial", diameter:6792}}`)
 	if err != nil {
@@ -245,7 +245,7 @@ func TestCreateAPIPlanet(t *testing.T) {
 }
 
 func TestCreateAPIMoon(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`create {kind:"api", spec:"voxgig-solardemo", entity:"moon", data:{name:"Deimos", kind:"natural", diameter:12, planet_id:"planet04"}}`)
 	if err != nil {
@@ -269,7 +269,7 @@ func TestCreateAPIMoon(t *testing.T) {
 // --- update ---
 
 func TestUpdateAPIPlanet(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`update {kind:"api", spec:"voxgig-solardemo", entity:"planet", data:{id:"planet01", name:"Mercury Updated"}}`)
 	if err != nil {
@@ -294,7 +294,7 @@ func TestUpdateAPIPlanet(t *testing.T) {
 }
 
 func TestUpdateAPINotFound(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	_, err := a.Run(`update {kind:"api", spec:"voxgig-solardemo", entity:"planet", data:{id:"planet99", name:"Ghost"}}`)
 	if err == nil {
@@ -305,7 +305,7 @@ func TestUpdateAPINotFound(t *testing.T) {
 // --- remove ---
 
 func TestRemoveAPIPlanet(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	// Remove planet01.
 	_, err := a.Run(`remove {kind:"api", spec:"voxgig-solardemo", entity:"planet", query:{id:"planet01"}}`)
@@ -321,7 +321,7 @@ func TestRemoveAPIPlanet(t *testing.T) {
 }
 
 func TestRemoveAPINotFound(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	_, err := a.Run(`remove {kind:"api", spec:"voxgig-solardemo", entity:"planet", query:{id:"planet99"}}`)
 	if err == nil {
@@ -332,7 +332,7 @@ func TestRemoveAPINotFound(t *testing.T) {
 // --- non-API map falls through ---
 
 func TestLoadAPINonAPIMapFallsThrough(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	// A map without kind:"api" should not trigger the API handler.
 	// It should match the [map, map] signature (loadRecordHandler) and return empty map.
@@ -347,7 +347,7 @@ func TestLoadAPINonAPIMapFallsThrough(t *testing.T) {
 }
 
 func TestCreateAPINonAPIMapFallsThrough(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`create {name:"test"} {id:"1", name:"Bob"}`)
 	if err != nil {
@@ -360,7 +360,7 @@ func TestCreateAPINonAPIMapFallsThrough(t *testing.T) {
 }
 
 func TestUpdateAPINonAPIMapFallsThrough(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`update {name:"test"} {id:"1", name:"Bob"}`)
 	if err != nil {
@@ -373,7 +373,7 @@ func TestUpdateAPINonAPIMapFallsThrough(t *testing.T) {
 }
 
 func TestRemoveAPINonAPIMapFallsThrough(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`remove {name:"test"} {id:"1"}`)
 	if err != nil {
@@ -388,7 +388,7 @@ func TestRemoveAPINonAPIMapFallsThrough(t *testing.T) {
 // --- Entity object type operations ---
 
 func TestListEntityAll(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`def planets (make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"})
 list planets`)
@@ -413,7 +413,7 @@ list planets`)
 }
 
 func TestListEntityWithQuery(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`def planets (make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"})
 planets list {id:"planet01"}`)
@@ -436,7 +436,7 @@ planets list {id:"planet01"}`)
 }
 
 func TestLoadEntity(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`def planets (make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"})
 planets load {id:"planet01"}`)
@@ -459,7 +459,7 @@ planets load {id:"planet01"}`)
 }
 
 func TestCreateEntity(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`def planets (make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"})
 planets create {name:"Mars", kind:"terrestrial", diameter:6792}`)
@@ -482,7 +482,7 @@ planets create {name:"Mars", kind:"terrestrial", diameter:6792}`)
 }
 
 func TestUpdateEntity(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	result, err := a.Run(`def planets (make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"})
 planets update {id:"planet01", name:"Mercury Updated"}`)
@@ -505,7 +505,7 @@ planets update {id:"planet01", name:"Mercury Updated"}`)
 }
 
 func TestRemoveEntity(t *testing.T) {
-	a := newAQLWithSDK(t)
+	a := newBORUWithSDK(t)
 
 	_, err := a.Run(`def planets (make Entity {kind:"api", spec:"voxgig-solardemo", entity:"planet"})
 planets remove {id:"planet01"}`)

@@ -19,8 +19,8 @@ value was still on the tape when the program ended. That is ERRORS.8.md §5
 option 2, and for the shape it was written against it worked:
 
 ```
-$ aql do 'import "aql:io"  IO.read "/nonexistent"'
-error: [aql/uncalled_function]: call to 'read' matched no signature
+$ boru do 'import "boru:io"  IO.read "/nonexistent"'
+error: [boru/uncalled_function]: call to 'read' matched no signature
 ```
 
 **The gap was the word "consumed".** The drain fired only on residue, and
@@ -29,7 +29,7 @@ error: [aql/uncalled_function]: call to 'read' matched no signature
 succeeded:
 
 ```
-$ aql do 'import "aql:io"  print (IO.read "/nonexistent")'
+$ boru do 'import "boru:io"  print (IO.read "/nonexistent")'
 fn read(Pathon, Map) or (Pathon) or (StreamKind, Map) or …
 /nonexistent
 $ echo $?
@@ -37,7 +37,7 @@ $ echo $?
 ```
 
 The program printed the *function* and its own argument, and exited 0.
-`aql check` on the same source reported `0 error(s), 0 warning(s)` — the
+`boru check` on the same source reported `0 error(s), 0 warning(s)` — the
 check arm inherited the same deferral, so neither surface named it.
 
 This is not a corner case invented for the note: it is why
@@ -73,7 +73,7 @@ The cost is real and is accepted: a composition that relied on a failed
 dispatch leaving a value behind must be re-spelled with `/r`. The
 `(Sort.by-number Sort.reverse)` comparator composition the engine comment
 cites as the reason for the deferral **does not exist in this repository**
-(`Sort` is not a defined word; zero hits across `*.md`, `*.aql`, `*.tsv`),
+(`Sort` is not a defined word; zero hits across `*.md`, `*.boru`, `*.tsv`),
 so the migration cost is the in-repo pins inventoried in §4 — not
 user-facing library code.
 
@@ -155,19 +155,19 @@ to assert.
 
 ## 5. Verification
 
-- Both reproductions in §1 raise, at the call, and `aql check` agrees with
-  `aql run` on both (that agreement is the point of the check arm).
+- Both reproductions in §1 raise, at the call, and `boru check` agrees with
+  `boru run` on both (that agreement is the point of the check arm).
 - The 41 pinned rows still fail with the same code.
-- `make -C kg check test graph` clean, every `kg/*.aql` free of
+- `make -C kg check test graph` clean, every `kg/*.boru` free of
   `uncalled_function`, and `out/graph.json` byte-identical — the largest
-  body of AQL in the tree, run end to end.
+  body of BORU in the tree, run end to end.
 - Full gauntlet including `make cover-gate` at 100%.
 
 ## 6. Known divergence, pre-existing: a failing call inside a `do` body
 
 `do [(M.w "x")] error [dot code]` **runs clean** — the failure is raised at
 the call, inside the trapping region, so the handler takes it and the
-program yields `uncalled_function` as a value. `aql check` on the same
+program yields `uncalled_function` as a value. `boru check` on the same
 source reports an **error**.
 
 That is a check-mode timing gap, not a disagreement about the finding: the

@@ -273,7 +273,7 @@ func TestCapabilityMissingIsNotFatal(t *testing.T) {
 func TestCapabilityMapPattern(t *testing.T) {
 	// The "format registry" pattern: store a map under one capability
 	// key, look up entries by name. This is how the host wires its
-	// format encoders/decoders without aqleng knowing about formats.
+	// format encoders/decoders without borueng knowing about formats.
 	type formatter struct{ tag string }
 	formats := map[string]*formatter{
 		"json": {tag: "JSON"},

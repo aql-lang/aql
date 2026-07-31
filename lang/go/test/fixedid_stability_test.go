@@ -3,12 +3,12 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 	// Side-effect imports: trigger the init() / var initialisers that
 	// register externally-owned types into eng.Builtin so the snapshot
 	// below sees the full set.
-	_ "github.com/aql-lang/aql/lang/go/modules"
-	_ "github.com/aql-lang/aql/lang/go/native"
+	_ "github.com/boru-lang/boru/lang/go/modules"
+	_ "github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestFixedIDStability is the regression gate for type-identity
@@ -75,7 +75,7 @@ func TestFixedIDStability(t *testing.T) {
 		// class instances live under Ideal/Class. Not recycled.
 		"Node/Map/Inspect": 31,
 		// 3000-3002 (Fetch / Request / Response) retired — per-import
-		// aql:net mints now (MintFetchTypes).
+		// boru:net mints now (MintFetchTypes).
 
 		"Ideal/Resource":        36,
 		"Ideal/Resource/Entity": 37,
@@ -101,14 +101,14 @@ func TestFixedIDStability(t *testing.T) {
 		"Scalar/Micron/Qion":     121,
 		"Scalar/Micron/Phonon":   122,
 		// Tensor family (former FixedIDs 2000-2002) moved to
-		// aql:matrix-util as per-import module mints with no FixedID —
+		// boru:matrix-util as per-import module mints with no FixedID —
 		// see MintTensorTypes and design/OPEN-WORDS.0.md.
 		"Ideal/Module":       5000,
 		"Ideal/ModuleExport": 5001,
 		"Node/Map/KeyVal":    5002, // map-iteration entry — lang/go/native/native_keyval.go
 		// 5003 (MiniLangCompiled), 5005 (ParseGrammar), 5006 (Model)
-		// retired — per-import module mints now (aql:minilang /
-		// aql:parse / aql:model own them; see design/OPEN-WORDS.0.md).
+		// retired — per-import module mints now (boru:minilang /
+		// boru:parse / boru:model own them; see design/OPEN-WORDS.0.md).
 		"Ideal/Patrun":        5004, // pattern-dispatch table — lang/go/native/native_patrun.go
 		"Ideal/Pid":           5007, // process handle — lang/go/native/native_process.go
 		"Ideal/Service":       5008, // service/endpoint — lang/go/native/native_service.go
@@ -142,7 +142,7 @@ func TestFixedIDStability(t *testing.T) {
 		// Time family — lang/go/native/native_temporal.go. Only the
 		// family root and the three instant-bearing leaves are global;
 		// TimeOfDay / Duration / CalendarDuration / ClockDuration / Timezone
-		// (former FixedIDs 1004-1008) moved to aql:time-util as
+		// (former FixedIDs 1004-1008) moved to boru:time-util as
 		// per-import module mints with no FixedID — see
 		// MintTemporalModuleTypes and design/OPEN-WORDS.0.md.
 		"Scalar/Time":          1000,
@@ -150,7 +150,7 @@ func TestFixedIDStability(t *testing.T) {
 		"Scalar/Time/DateTime": 1002,
 		"Scalar/Time/Instant":  1003,
 		// 4000 (Timeout) / 4001 (Interval) retired — per-import
-		// aql:time-util mints now (MintTemporalModuleTypes).
+		// boru:time-util mints now (MintTemporalModuleTypes).
 		"Scalar/Bytes": 1009, // byte-string leaf — lang/go/native/native_bytes.go
 	}
 

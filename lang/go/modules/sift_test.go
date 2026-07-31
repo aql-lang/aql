@@ -3,13 +3,13 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// aql:sift is implemented in AQL (sift.aql, embedded + run by BuildSiftModule).
+// boru:sift is implemented in BORU (sift.boru, embedded + run by BuildSiftModule).
 // Its behaviour is pinned by the executable spec suite in
-// lang/spec/module-sift.tsv; these Go tests only assert that the AQL module
+// lang/spec/module-sift.tsv; these Go tests only assert that the BORU module
 // LOADS and exposes the Sift namespace, plus a couple of end-to-end smokes.
 
 func siftRun(t *testing.T, src string) ([]native.Value, error) {
@@ -27,7 +27,7 @@ func siftRun(t *testing.T, src string) ([]native.Value, error) {
 	return native.NewTop(r).Run(values)
 }
 
-// TestSiftModuleLoads asserts the AQL-implemented module builds and exports
+// TestSiftModuleLoads asserts the BORU-implemented module builds and exports
 // the seven Sift words.
 func TestSiftModuleLoads(t *testing.T) {
 	r, err := native.DefaultRegistry()
@@ -54,9 +54,9 @@ func TestSiftModuleLoads(t *testing.T) {
 // TestSiftSmoke exercises the namespace end-to-end through import.
 func TestSiftSmoke(t *testing.T) {
 	cases := []struct{ src, want string }{
-		{`import "aql:sift"  Sift.families`, "[kv blocks columns dsv fixed pattern]"},
-		{`import "aql:sift"  Sift.kinds`, "[kv blocks columns dsv fixed pattern]"},
-		{"import \"aql:sift\"  Sift.parse kv/q {sep:':'} \"a: 1\\nb: 2\"", "{a:'1' b:'2'}"},
+		{`import "boru:sift"  Sift.families`, "[kv blocks columns dsv fixed pattern]"},
+		{`import "boru:sift"  Sift.kinds`, "[kv blocks columns dsv fixed pattern]"},
+		{"import \"boru:sift\"  Sift.parse kv/q {sep:':'} \"a: 1\\nb: 2\"", "{a:'1' b:'2'}"},
 	}
 	for _, tc := range cases {
 		res, err := siftRun(t, tc.src)

@@ -4,21 +4,21 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BuildReportModule creates the "aql:report" native module. It exposes
+// BuildReportModule creates the "boru:report" native module. It exposes
 // pretty-printers for the kernel value types — primarily Records and
 // Tables, but useful for any Value. Each word returns a String so
 // callers can compose with `print`, error messages, or further
 // formatting. No word prints to stdout itself; the caller controls IO.
 //
-//	import "aql:report"
+//	import "boru:report"
 //	some-record Report.record print
 //	some-table  Report.table  print
 //	some-value  Report.value  print
 func BuildReportModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := newModuleRegistry("aql:report", reportNatives())
+	subReg, err := newModuleRegistry("boru:report", reportNatives())
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

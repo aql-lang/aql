@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // Resource/Entity instances carry their own ResourceInstanceInfo struct
@@ -24,7 +24,7 @@ func TestResourceInstanceJsonify(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	res, err := a.Run(`import "aql:struct-util"  StructUtil.jsonify (make Entity {kind:'api' spec:'s' entity:'x'})`)
+	res, err := a.Run(`import "boru:struct-util"  StructUtil.jsonify (make Entity {kind:'api' spec:'s' entity:'x'})`)
 	if err != nil {
 		t.Fatalf("run: %v", err)
 	}

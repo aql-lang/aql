@@ -5,10 +5,10 @@ func init() {
 	// restricted: they compare only same-type values, or values a
 	// shared same-family comparer handles (Integer-vs-Float, two Dates,
 	// …). A cross-family pair (Integer-vs-String, List-vs-Map) raises
-	// [aql/incomparable]; use tcmp for a cross-type total order.
+	// [boru/incomparable]; use tcmp for a cross-type total order.
 	const restrictNote = "Compares only same-family values (e.g. Integer " +
 		"and Float, two strings); a cross-family pair raises " +
-		"[aql/incomparable] — use tcmp for a cross-type total order."
+		"[boru/incomparable] — use tcmp for a cross-type total order."
 
 	register(&Entry{
 		Word:        "lt",

@@ -13,9 +13,9 @@ did-you-mean suggestions, plain language, and actionable fixes.
 Builds on the loud-failures tradition (design/ERRORS.8.md, the DX
 field reports).
 
-## The model (eng/go/aql_error.go)
+## The model (eng/go/boru_error.go)
 
-`AqlError` was EXTENDED in place (it is type-asserted everywhere —
+`BoruError` was EXTENDED in place (it is type-asserted everywhere —
 stampErrPos, traps, gates):
 
 - `Spans []DiagSpan` — secondary labeled locations. The error's own
@@ -35,7 +35,7 @@ stampErrPos, traps, gates):
 
 ## Rendering (eng/go/diag_render.go)
 
-ONE renderer: `(e *AqlError) Render(RenderOpts{Color}) string`.
+ONE renderer: `(e *BoruError) Render(RenderOpts{Color}) string`.
 `Error()` IS `Render(RenderOpts{})` — the plain rendering, byte-
 identical to the historical output when no structured payload is
 present, so the 872 spec ERROR rows, logs, `%w` chains, JSON, and the
@@ -71,7 +71,7 @@ below; that is the phase-7 contract, enforced by the extended gate.
   ``cannot call `w` — no signature matches the arguments``; notes =
   received-tuple line, ≤3 per-candidate verdicts from the explain pass
   (below), `…and N more signatures`; suggestions = swap probe ("did you
-  swap the arguments?"), forward-parens fix, `aql describe` pointer (≥4
+  swap the arguments?"), forward-parens fix, `boru describe` pointer (≥4
   overloads or truncated list). There is deliberately NO tape-snapshot
   ("stack: …") note — it was interpreter-tape-internal and had no
   compiled-mode equivalent (see Compiled-mode parity); the received-tuple
@@ -98,16 +98,16 @@ below; that is the phase-7 contract, enforced by the extended gate.
   declaration (DeclSite; zero site attaches nothing — locations are
   never guessed).
 - **Parse** (`syntax_error`): tabnas/jsonic failures translated into
-  AQL-voice AqlErrors (eng/go/parser/parse_error.go); the library's
+  BORU-voice BoruErrors (eng/go/parser/parse_error.go); the library's
   always-on ANSI palette, `--internal:` block, and docs link are
   disabled at the source.
 - **Arith** (`arith_error`): div/mod-by-zero and apd faults raise
-  coded AqlErrors (was bare fmt.Errorf), matching the check pass's
+  coded BoruErrors (was bare fmt.Errorf), matching the check pass's
   existing taxonomy.
 
 ## Surfaces
 
-- `aql run/do/check --color`, REPL auto-color, `aql build` binaries
+- `boru run/do/check --color`, REPL auto-color, `boru build` binaries
   auto-resolve over stderr.
 - check: rich block under each one-liner (cmd/go/internal/check).
 - LSP: notes/suggestions append to Diagnostic.Message as
@@ -132,7 +132,7 @@ error:
    construction.
 2. **The compile-time OpTrap** (`tryRecordUnmatchedDispatchTrap`,
    strict-read miss) serialises the interpreter's OWN error — the full
-   `AqlError` including spans/notes/suggestions — into the `TrapSpec`
+   `BoruError` including spans/notes/suggestions — into the `TrapSpec`
    via `RecordTrapErr`; the VM rebuilds it at `OpTrap`. Sound only when
    the trap's operands are CONCRETE at compile time (definiteness),
    because then check-time values == runtime values. A trap whose window
@@ -162,16 +162,16 @@ result comparison already tolerates.
 ### Undefined word + did-you-mean
 
 ```
-error: [aql/undefined_word]: undefined word: pritn
+error: [boru/undefined_word]: undefined word: pritn
   --> 1:1
   1 | pritn "hi"
       ^^^^^ undefined word: pritn
   = help: did you mean `print`?
-  = help: see `aql describe print` for its signatures and examples\n```\n\n(before: `[aql/undefined_word]: undefined word: pritn` + position only)\n
+  = help: see `boru describe print` for its signatures and examples\n```\n\n(before: `[boru/undefined_word]: undefined word: pritn` + position only)\n
 ### Dispatch failure — received tuple, candidate verdict, swap probe
 
 ```
-error: [aql/signature_error]: cannot call `wp` — no signature matches the arguments
+error: [boru/signature_error]: cannot call `wp` — no signature matches the arguments
   --> 2:1
   1 | def wp fn [[policy:String n:Integer] [Integer] [n]]
   2 | wp 3 "collect"
@@ -183,7 +183,7 @@ error: [aql/signature_error]: cannot call `wp` — no signature matches the argu
 ### Return-type violation — three labeled locations
 
 ```
-error: [aql/type_error]: f: return value 1: expected String, got Integer
+error: [boru/type_error]: f: return value 1: expected String, got Integer
   --> 2:4
   1 | def f fn [[n:Integer] String [n]]
   2 | 42 f
@@ -195,10 +195,10 @@ error: [aql/type_error]: f: return value 1: expected String, got Integer
   1 | def f fn [[n:Integer] String [n]]
                             ------ the declaration says `f` returns String
   = value: 42\n```\n\n(before: the header + primary caret only — no declaration or value spans)\n
-### Parse error — AQL voice
+### Parse error — BORU voice
 
 ```
-error: [aql/syntax_error]: this string is never closed: 'abc
+error: [boru/syntax_error]: this string is never closed: 'abc
   --> 1:7
   1 | def s 'abc
             ^^^^ this string is never closed: 'abc
@@ -206,7 +206,7 @@ error: [aql/syntax_error]: this string is never closed: 'abc
 ### Arithmetic — coded taxonomy
 
 ```
-error: [aql/arith_error]: division by zero
+error: [boru/arith_error]: division by zero
   --> 1:4
   1 | 20 div 0
          ^^^ division by zero\n```\n\n(before: a bare code-less `division by zero` with no position or excerpt)\n

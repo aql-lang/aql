@@ -4,8 +4,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // EnableDynamicHelp sets up the OnRegisterHook so that functions
@@ -25,7 +25,7 @@ func EnableDynamicHelp(r *Registry) {
 	}
 }
 
-// makeDynamicEval returns a function that parses and evaluates an AQL
+// makeDynamicEval returns a function that parses and evaluates a BORU
 // expression, returning the formatted result. Returns nil if ParseFunc
 // is not set.
 func makeDynamicEval(r *Registry) func(string) (string, error) {
@@ -51,7 +51,7 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 		//      `['a' 'b']` sample list for a list-typed param) leaked into the
 		//      program's pool and a later operand compiled against the stale value
 		//      (a valid `def zs [1 2] end f2 zs` saw f2's arg as `['a' 'b']`).
-		//   2. Check diagnostics — snapshot + truncate (the decision.aql false
+		//   2. Check diagnostics — snapshot + truncate (the decision.boru false
 		//      positives from synthetic stand-in args).
 		//   3. Def-stack bindings — snapshot + restore (an example that `def`s).
 		//   4. Check-mode step budget — snapshot + restore (IsolateBudget). The

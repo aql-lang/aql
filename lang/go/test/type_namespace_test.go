@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // --- Name-confusion guards between `type` and `def` ---
@@ -21,7 +21,7 @@ func expectError(t *testing.T, src string, wantSubstr string) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	_, err = a.Run(src)
 	if err == nil {
 		t.Fatalf("expected error matching %q for source:\n%s", wantSubstr, src)

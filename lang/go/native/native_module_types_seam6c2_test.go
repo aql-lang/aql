@@ -154,8 +154,8 @@ func TestSeam6C2ModuleBehaviorFormatFallback(t *testing.T) {
 		t.Fatalf("expected path fallback, got %q", got)
 	}
 	// Positive pair: a Module value formats with its ref.
-	if got := b.Format(NewModuleInstance(ModuleDesc{Ref: "aql:x"})); got != "Module(aql:x)" {
-		t.Fatalf("expected Module(aql:x), got %q", got)
+	if got := b.Format(NewModuleInstance(ModuleDesc{Ref: "boru:x"})); got != "Module(boru:x)" {
+		t.Fatalf("expected Module(boru:x), got %q", got)
 	}
 }
 

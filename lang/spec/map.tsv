@@ -2,7 +2,7 @@
 # =====================================================================		
 # map — key/value associative collection		
 # =====================================================================		
-# A map is AQL's associative type: insertion-ordered key:value pairs		
+# A map is BORU's associative type: insertion-ordered key:value pairs		
 # produced by `{…}` literal syntax. Maps come in three structurally-		
 # similar but semantically distinct flavours:		
 #		

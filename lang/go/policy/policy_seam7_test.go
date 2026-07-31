@@ -22,16 +22,16 @@ func TestSeam7CheckModuleCallNilScope(t *testing.T) {
 		t.Fatal(err)
 	}
 	// modules scope is absent → checkModuleCall(nil, …) → allow.
-	if err := p.Check("modules", "call", Args{"module": "aql:x", "export": "y"}); err != nil {
+	if err := p.Check("modules", "call", Args{"module": "boru:x", "export": "y"}); err != nil {
 		t.Errorf("absent modules scope should inherit allow: %v", err)
 	}
 	// Boundary twin: a present modules scope with a per-export deny still
 	// refuses, proving the nil arm is the only thing being exercised above.
-	p2, err := LoadInline(`{name:"m" scopes:{modules:{scopes:{"aql:x":{words:{default:"deny"}}}}}}`)
+	p2, err := LoadInline(`{name:"m" scopes:{modules:{scopes:{"boru:x":{words:{default:"deny"}}}}}}`)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := p2.Check("modules", "call", Args{"module": "aql:x", "export": "y"}); err == nil {
+	if err := p2.Check("modules", "call", Args{"module": "boru:x", "export": "y"}); err == nil {
 		t.Error("present modules subscope default-deny must refuse")
 	}
 }
@@ -196,7 +196,7 @@ func TestSeam7ValidateNilScope(t *testing.T) {
 func TestSeam7ValidateModulesSubscopeInvalid(t *testing.T) {
 	bad := &Profile{Scopes: map[string]*Scope{
 		"modules": {Scopes: map[string]*Scope{
-			"aql:x": {Words: WordsBlock{Default: "maybe"}},
+			"boru:x": {Words: WordsBlock{Default: "maybe"}},
 		}},
 	}}
 	if err := bad.Validate(); err == nil ||
@@ -205,7 +205,7 @@ func TestSeam7ValidateModulesSubscopeInvalid(t *testing.T) {
 	}
 	good := &Profile{Scopes: map[string]*Scope{
 		"modules": {Scopes: map[string]*Scope{
-			"aql:x": {Words: WordsBlock{Default: EffectAllow}},
+			"boru:x": {Words: WordsBlock{Default: EffectAllow}},
 		}},
 	}}
 	if err := good.Validate(); err != nil {

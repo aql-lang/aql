@@ -1,3 +1,3 @@
-module github.com/aql-lang/aql/test/solardemo
+module github.com/boru-lang/boru/test/solardemo
 
 go 1.24.7

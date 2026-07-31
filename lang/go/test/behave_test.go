@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestBehave runs the behavior-dispatch spec at behave.tsv. Each row
@@ -19,7 +19,7 @@ import (
 // native variants (Date, Instant, ClockDuration), and user-defined
 // behaviors installed via `reg compare/q | canon/q | jsonify/q`.
 //
-// The native rows use the `aql:time` module, so the runner wires
+// The native rows use the `boru:time` module, so the runner wires
 // `modules.Resolve` and pre-installs the time exports
 // (langspec doesn't, since it can't import lang-internal nativemod
 // across module boundaries — this runner lives inside the lang
@@ -58,13 +58,13 @@ func TestBehave(t *testing.T) {
 			}
 			reg.SetParseFunc(parser.Parse)
 			reg.Modules.Resolver = modules.Resolve
-			// Pre-install the aql:time module so spec rows can use
+			// Pre-install the boru:time module so spec rows can use
 			// `TimeUtil.unix`, `TimeUtil.seconds`, … without the
-			// `import "aql:time-util"` boilerplate on every native row.
+			// `import "boru:time-util"` boilerplate on every native row.
 			if err := modules.InstallTimeExports(reg); err != nil {
 				t.Fatalf("install time exports: %v", err)
 			}
-			// nodify moved to aql:struct; pre-install Struct so spec rows can
+			// nodify moved to boru:struct; pre-install Struct so spec rows can
 			// use `StructUtil.nodify` (the projection word) without import
 			// boilerplate. The `nodify` *behavior* name (`behave nodify/q …`)
 			// is unaffected — it is a quoted atom, not the word.

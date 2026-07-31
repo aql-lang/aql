@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
-	"github.com/aql-lang/aql/cmd/go/internal/registry"
-	"github.com/aql-lang/aql/cmd/go/internal/vault"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/registry"
+	"github.com/boru-lang/boru/cmd/go/internal/vault"
 )
 
 func TestRunLoginCLI(t *testing.T) {
@@ -51,7 +51,7 @@ func TestRunLoginCLI(t *testing.T) {
 	}
 }
 
-// TestRunLoginVault: `aql login --vault` stores the token in the vault
+// TestRunLoginVault: `boru login --vault` stores the token in the vault
 // and leaves user.jsonic with a reference (token_vault), not a plaintext
 // token.
 func TestRunLoginVault(t *testing.T) {
@@ -65,10 +65,10 @@ func TestRunLoginVault(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("AQL_HOME", "")
-	t.Setenv("AQL_VAULT_FOLDER", "")
-	t.Setenv("AQL_VAULT_SUFFIX", "")
-	t.Setenv("AQL_VAULT_PASSPHRASE", "vpw")
+	t.Setenv("BORU_HOME", "")
+	t.Setenv("BORU_VAULT_FOLDER", "")
+	t.Setenv("BORU_VAULT_SUFFIX", "")
+	t.Setenv("BORU_VAULT_PASSPHRASE", "vpw")
 
 	if code := vault.Run([]string{"init", "--backend=file"}, strings.NewReader(""), io.Discard, io.Discard); code != 0 {
 		t.Fatal("vault init failed")

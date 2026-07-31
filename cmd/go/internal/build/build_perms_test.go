@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
+	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
 )
 
-// build_perms_test.go — `aql build -perms …` bakes the resolved policy into
+// build_perms_test.go — `boru build -perms …` bakes the resolved policy into
 // the produced binary (design/CLI-PROGRAMS.1.md). The two arms here are the
 // resolution boundary: an unresolvable spec fails the BUILD rather than
 // producing a binary with no constraints, and a resolved one is flattened
@@ -21,7 +21,7 @@ import (
 // a baked policy worth having in the first place.
 func TestRunRejectsUnresolvablePerms(t *testing.T) {
 	dir := t.TempDir()
-	src := filepath.Join(dir, "p.aql")
+	src := filepath.Join(dir, "p.boru")
 	if err := os.WriteFile(src, []byte("add 1 2"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestRunRejectsUnresolvablePerms(t *testing.T) {
 // interface and Config is JSON-marshalled into the executable's trailer.
 func TestBuildConfigCarriesResolvedProfile(t *testing.T) {
 	dir := t.TempDir()
-	src := filepath.Join(dir, "p.aql")
+	src := filepath.Join(dir, "p.boru")
 	if err := os.WriteFile(src, []byte("add 1 2"), 0o644); err != nil {
 		t.Fatal(err)
 	}

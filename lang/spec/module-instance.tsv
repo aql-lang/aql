@@ -1,4 +1,4 @@
-# AQL Language Specification: Module / ModuleExport (Ideal types)
+# BORU Language Specification: Module / ModuleExport (Ideal types)
 # Format: input<TAB>expected<TAB>description
 #
 # `import` binds each `export "Name" {…}` to a ModuleExport instance
@@ -9,25 +9,25 @@
 #   X.$module  → the owning Module instance (Ideal/Module)
 # A Module (Ideal/Module) is the shared descriptor with normal fields
 # id, kind, file, folder, exports. The import reference stays lowercase
-# (import "aql:math-util"); the bound namespace is CamelCase (MathUtil).
+# (import "boru:math-util"); the bound namespace is CamelCase (MathUtil).
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  the bound namespace is a ModuleExport, transparent for use
-import "aql:math-util"  typeof MathUtil	ModuleExport	import binds a ModuleExport
-import "aql:math-util"  MathUtil is ModuleExport	true	…of the Ideal/ModuleExport type
-import "aql:math-util"  MathUtil.sqrt 16.0	4.0	transparent: exports are used as before
-import "aql:math-util"  MathUtil.$name	'MathUtil'	$name is the export name
+import "boru:math-util"  typeof MathUtil	ModuleExport	import binds a ModuleExport
+import "boru:math-util"  MathUtil is ModuleExport	true	…of the Ideal/ModuleExport type
+import "boru:math-util"  MathUtil.sqrt 16.0	4.0	transparent: exports are used as before
+import "boru:math-util"  MathUtil.$name	'MathUtil'	$name is the export name
 #
 # §2  $module → the Module descriptor (Ideal/Module) and its fields
-import "aql:math-util"  typeof MathUtil.$module	Module	$module is an Ideal/Module
-import "aql:math-util"  MathUtil.$module is Module	true	…of the Module type
-import "aql:math-util"  MathUtil.$module.name	'aql:math-util'	name is the module reference
-import "aql:math-util"  MathUtil.$module.kind	'native'	kind: native / file / inline
-import "aql:math-util"  MathUtil.$module.exports	['MathUtil']	exports lists the export names
+import "boru:math-util"  typeof MathUtil.$module	Module	$module is an Ideal/Module
+import "boru:math-util"  MathUtil.$module is Module	true	…of the Module type
+import "boru:math-util"  MathUtil.$module.name	'boru:math-util'	name is the module reference
+import "boru:math-util"  MathUtil.$module.kind	'native'	kind: native / file / inline
+import "boru:math-util"  MathUtil.$module.exports	['MathUtil']	exports lists the export names
 #
 # §3  the -util colliders carry their -util id
-import "aql:array-util"  ArrayUtil.$module.name	'aql:array-util'	collider module name
-import "aql:type-util"  TypeUtil.$module.kind	'native'	type-util is native too
+import "boru:array-util"  ArrayUtil.$module.name	'boru:array-util'	collider module name
+import "boru:type-util"  TypeUtil.$module.kind	'native'	type-util is native too
 #
 # §4  inline modules — `import module […]` binds all exports; kind="inline"
 import module [export "Foo" {a:1 b:2}]  Foo.a	1	inline export field access
@@ -42,7 +42,7 @@ import [Foo Bar] module [export "Foo" {a:1}]  Bar.a	1	renamed binding still a Mo
 import [Foo Bar] module [export "Foo" {a:1}]  Bar.$name	'Foo'	$name is the declared export name, not the alias
 #
 # §6  negative — a missing export via getr (!.) errors
-import "aql:math-util"  MathUtil!.nope	ERROR:not_found	unknown export raises not_found (the documented strict-lookup code)
+import "boru:math-util"  MathUtil!.nope	ERROR:not_found	unknown export raises not_found (the documented strict-lookup code)
 #
 # §7  minted-type identity is per-mint, across module boundaries.
 # Types minted in sibling registries (two inline module bodies, or a

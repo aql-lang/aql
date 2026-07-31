@@ -7,13 +7,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
-// TestCheckGoldenFixtures runs every *.aql file under
-// test/check_fixtures through lang.AQL.Check and compares the
+// TestCheckGoldenFixtures runs every *.boru file under
+// test/check_fixtures through lang.BORU.Check and compares the
 // marshalled CheckResult against the sibling *.golden.json file.
-// Set AQL_UPDATE_GOLDEN=1 to overwrite the golden files with the
+// Set BORU_UPDATE_GOLDEN=1 to overwrite the golden files with the
 // current output (use when the diagnostic stream has intentionally
 // changed). Otherwise mismatches fail the test.
 func TestCheckGoldenFixtures(t *testing.T) {
@@ -22,28 +22,28 @@ func TestCheckGoldenFixtures(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read %s: %v", dir, err)
 	}
-	update := os.Getenv("AQL_UPDATE_GOLDEN") == "1"
+	update := os.Getenv("BORU_UPDATE_GOLDEN") == "1"
 	for _, e := range entries {
-		if !strings.HasSuffix(e.Name(), ".aql") {
+		if !strings.HasSuffix(e.Name(), ".boru") {
 			continue
 		}
-		name := strings.TrimSuffix(e.Name(), ".aql")
-		aqlPath := filepath.Join(dir, e.Name())
+		name := strings.TrimSuffix(e.Name(), ".boru")
+		boruPath := filepath.Join(dir, e.Name())
 		goldenPath := filepath.Join(dir, name+".golden.json")
 
 		t.Run(name, func(t *testing.T) {
-			src, err := os.ReadFile(aqlPath)
+			src, err := os.ReadFile(boruPath)
 			if err != nil {
-				t.Fatalf("read %s: %v", aqlPath, err)
+				t.Fatalf("read %s: %v", boruPath, err)
 			}
 			a, err := lang.New()
 			if err != nil {
 				t.Fatalf("new: %v", err)
 			}
-			seedAQL(a)
+			seedBORU(a)
 			res, err := a.Check(string(src))
 			if err != nil {
-				t.Fatalf("check %s: %v", aqlPath, err)
+				t.Fatalf("check %s: %v", boruPath, err)
 			}
 			// Avoid nil-vs-empty JSON differences: normalise.
 			if res.Diagnostics == nil {
@@ -68,11 +68,11 @@ func TestCheckGoldenFixtures(t *testing.T) {
 
 			want, err := os.ReadFile(goldenPath)
 			if err != nil {
-				t.Fatalf("read golden %s: %v (run with AQL_UPDATE_GOLDEN=1 to create)", goldenPath, err)
+				t.Fatalf("read golden %s: %v (run with BORU_UPDATE_GOLDEN=1 to create)", goldenPath, err)
 			}
 			if strings.TrimSpace(string(got)) != strings.TrimSpace(string(want)) {
 				t.Errorf("golden mismatch for %s\nGOT:\n%s\nWANT:\n%s",
-					aqlPath, got, want)
+					boruPath, got, want)
 			}
 		})
 	}

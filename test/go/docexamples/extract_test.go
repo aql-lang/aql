@@ -24,7 +24,7 @@ func TestExtract_Inline(t *testing.T) {
 }
 
 func TestExtract_ReplPromptStripped(t *testing.T) {
-	src := "```\naql> 1 2 add   # returns 3\n```\n"
+	src := "```\nboru> 1 2 add   # returns 3\n```\n"
 	got := Extract("X.md", src)
 	if len(got) != 1 || got[0].Expr != "1 2 add" || got[0].Expected != "3" {
 		t.Fatalf("got %+v", got)
@@ -34,7 +34,7 @@ func TestExtract_ReplPromptStripped(t *testing.T) {
 func TestExtract_SharedSetupState(t *testing.T) {
 	// def lines (no result) become setup prepended to the later
 	// `# returns` line.
-	src := "```\naql> def x 1\naql> def y 2\naql> {x y}   # returns {x:1 y:2}\n```\n"
+	src := "```\nboru> def x 1\nboru> def y 2\nboru> {x y}   # returns {x:1 y:2}\n```\n"
 	got := Extract("X.md", src)
 	if len(got) != 1 {
 		t.Fatalf("got %d examples, want 1: %+v", len(got), got)
@@ -51,7 +51,7 @@ func TestExtract_SharedSetupState(t *testing.T) {
 func TestExtract_PriorResultLinesNotInProgram(t *testing.T) {
 	// Two independent result lines in one block: the second must NOT
 	// carry the first as setup (it was an asserted result, not state).
-	src := "```\naql> 5 dup    # returns 5 5\naql> 1 2 swap  # returns 2 1\n```\n"
+	src := "```\nboru> 5 dup    # returns 5 5\nboru> 1 2 swap  # returns 2 1\n```\n"
 	got := Extract("X.md", src)
 	if len(got) != 2 {
 		t.Fatalf("got %d examples, want 2", len(got))
@@ -114,7 +114,7 @@ func TestExtract_ErrorForms(t *testing.T) {
 		{"build error", true, "", ""},
 		{"error: missing key 'y'", true, "missing key 'y'", ""},
 		{"Error", true, "", ""},
-		{"[aql/type_error] return value 1: expected Integer got X", true, "aql/type_error", ""},
+		{"[boru/type_error] return value 1: expected Integer got X", true, "boru/type_error", ""},
 		{"6", false, "", "6"},
 	}
 	for _, c := range cases {
@@ -127,7 +127,7 @@ func TestExtract_ErrorForms(t *testing.T) {
 }
 
 func TestExtract_BashFenceIgnored(t *testing.T) {
-	src := "```bash\naql do '2 mul 3'   # returns 6\n```\n"
+	src := "```bash\nboru do '2 mul 3'   # returns 6\n```\n"
 	if got := Extract("X.md", src); len(got) != 0 {
 		t.Errorf("bash fence should be ignored, got %+v", got)
 	}
@@ -140,16 +140,7 @@ func TestExtract_SkipMarker(t *testing.T) {
 	}
 }
 
-func TestExtract_AqlTaggedFenceRuns(t *testing.T) {
-	src := "```aql\n2 mul 3   # returns 6\n```\n"
-	if got := Extract("X.md", src); len(got) != 1 {
-		t.Errorf("```aql fence should run, got %+v", got)
-	}
-}
-
 func TestExtract_BoruTaggedFenceRuns(t *testing.T) {
-	// The aql→boru rename retags doc fences; both tags are live during
-	// the transition.
 	src := "```boru\n2 mul 3   # returns 6\n```\n"
 	if got := Extract("X.md", src); len(got) != 1 {
 		t.Errorf("```boru fence should run, got %+v", got)
@@ -158,7 +149,7 @@ func TestExtract_BoruTaggedFenceRuns(t *testing.T) {
 
 func TestExtract_ResultOnOwnLine(t *testing.T) {
 	// The expression is one line; its `# returns result` is the next line.
-	src := "```\naql> make Inventory [[1] [2]]\n# returns [{a:1} {a:2}]\n```\n"
+	src := "```\nboru> make Inventory [[1] [2]]\n# returns [{a:1} {a:2}]\n```\n"
 	got := Extract("X.md", src)
 	if len(got) != 1 {
 		t.Fatalf("got %d examples, want 1: %+v", len(got), got)

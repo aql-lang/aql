@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // The calc PARSER is the parse-system sibling of the iop calc mini-language:
@@ -22,18 +22,18 @@ func calcParserSpec() lang.ParseLangSpec {
 		Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 			src, err := args[0].AsConcreteString() // already resolved by the framework
 			if err != nil {
-				return nil, r.AqlError("parse_error", "calc: src: "+err.Error(), "parse_calc")
+				return nil, r.BoruError("parse_error", "calc: src: "+err.Error(), "parse_calc")
 			}
 			parts := strings.Fields(src)
 			if len(parts) != 3 {
-				return nil, r.AqlErrorHint("parse_syntax_error",
+				return nil, r.BoruErrorHint("parse_syntax_error",
 					"calc: expected '<a> <op> <b>', got "+src, "parse_calc",
 					"write a binary expression like 'x + y'")
 			}
 			switch parts[1] {
 			case "+", "-", "*", "/", "%":
 			default:
-				return nil, r.AqlErrorHint("parse_syntax_error",
+				return nil, r.BoruErrorHint("parse_syntax_error",
 					"calc: unknown operator "+parts[1], "parse_calc", "use one of + - * / %")
 			}
 			ast := native.NewOrderedMap()
@@ -45,7 +45,7 @@ func calcParserSpec() lang.ParseLangSpec {
 	}
 }
 
-func newCalcParserInstance(t *testing.T) *lang.AQL {
+func newCalcParserInstance(t *testing.T) *lang.BORU {
 	t.Helper()
 	a, err := lang.New()
 	if err != nil {
@@ -102,7 +102,7 @@ func TestParseLangValueComputed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	got, err := a.Run(`import "aql:parselang"
+	got, err := a.Run(`import "boru:parselang"
 		def mk fn [[] [Function] [fn [[source:String opts:Map] [Any] [source]]]]
 		parse (mk) 'hi'`)
 	if err != nil {
@@ -117,7 +117,7 @@ func TestParseLangValueComputed(t *testing.T) {
 // operator, and the operand fields — via field access on the returned node.
 func TestParseLangHostCalcAST(t *testing.T) {
 	a := newCalcParserInstance(t)
-	imp := `import "aql:parselang"  `
+	imp := `import "boru:parselang"  `
 	for _, op := range []string{"+", "-", "*", "/", "%"} {
 		got := runLast(t, a, imp+`(parse calc 'a `+op+` b').op`)
 		if got != op {
@@ -140,7 +140,7 @@ func TestParseLangHostCalcAST(t *testing.T) {
 // {src:…} agree; {file:…} is deferred; an empty / bad source map errors.
 func TestParseLangHostSourceForms(t *testing.T) {
 	a := newCalcParserInstance(t)
-	imp := `import "aql:parselang"  `
+	imp := `import "boru:parselang"  `
 	inline := runLast(t, a, imp+`(parse calc 'x + y').op`)
 	srcMap := runLast(t, a, imp+`(parse calc {src:'x + y'}).op`)
 	if inline != srcMap || inline != "+" {
@@ -172,7 +172,7 @@ func TestParseLangHostSourceForms(t *testing.T) {
 // value is sugar for the direct call `calc <source> <opts> end`.
 func TestParseLangHostDesugarEquivalence(t *testing.T) {
 	a := newCalcParserInstance(t)
-	imp := `import "aql:parselang"  `
+	imp := `import "boru:parselang"  `
 	sugar := runLast(t, a, imp+`(parse calc 'x * y').op`)
 	desugared := runLast(t, a, imp+`(calc 'x * y' {} end).op`)
 	if sugar != desugared || sugar != "*" {
@@ -187,7 +187,7 @@ func TestParseLangHostRegisterAfterImport(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	if _, err := a.Run(`import "aql:parselang"`); err != nil {
+	if _, err := a.Run(`import "boru:parselang"`); err != nil {
 		t.Fatalf("import: %v", err)
 	}
 	v, err := lang.NewParseLangFn(calcParserSpec())
@@ -210,10 +210,10 @@ func TestParseLangHostIsolation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("lang.New: %v", err)
 	}
-	if got := runLast(t, a, `import "aql:parselang"  (parse calc 'x + y').op`); got != "+" {
+	if got := runLast(t, a, `import "boru:parselang"  (parse calc 'x + y').op`); got != "+" {
 		t.Fatalf("instance a: got %v, want +", got)
 	}
-	if _, err := b.Run(`import "aql:parselang"  parse calc 'x + y'`); err == nil {
+	if _, err := b.Run(`import "boru:parselang"  parse calc 'x + y'`); err == nil {
 		t.Fatal("instance b: expected parse_unknown_lang, got nil error")
 	} else if !strings.Contains(err.Error(), "calc") {
 		t.Fatalf("instance b: error should name the unknown parser, got: %v", err)
@@ -224,7 +224,7 @@ func TestParseLangHostIsolation(t *testing.T) {
 // runs on a FRESH instance — `Run` state persists across calls, so a shared
 // instance would leak the import into the "no import" case.
 func TestParseLangHostRuntimeErrors(t *testing.T) {
-	imp := `import "aql:parselang"  `
+	imp := `import "boru:parselang"  `
 	cases := []struct{ name, src, want string }{
 		{"unknown operator", imp + `parse calc 'x ^ y'`, "unknown operator"},
 		{"malformed source", imp + `parse calc 'x +'`, "expected"},
@@ -245,7 +245,7 @@ func TestParseLangHostRuntimeErrors(t *testing.T) {
 }
 
 // TestParseLangHostNoImportValueForm pins that a BOUND parser value needs no
-// aql:parselang import at all — the value form is import-free (only the
+// boru:parselang import at all — the value form is import-free (only the
 // kind sugar and the ParseLang namespace need the module).
 func TestParseLangHostNoImportValueForm(t *testing.T) {
 	a := newCalcParserInstance(t)
@@ -278,7 +278,7 @@ func TestParseLangHostRegistrationContract(t *testing.T) {
 		if err := a.DefineValue("", v); err == nil {
 			t.Fatal("expected error for an empty value name")
 		}
-		// The full def word-name grammar is enforced — a name source AQL
+		// The full def word-name grammar is enforced — a name source BORU
 		// cannot spell must be refused, not silently installed.
 		if err := a.DefineValue("1parser", v); err == nil {
 			t.Fatal("expected error for a name failing ValidateWordName")

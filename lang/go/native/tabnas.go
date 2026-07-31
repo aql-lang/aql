@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 	tabnascsv "github.com/tabnas/csv/go"
 	tabnasfeed "github.com/tabnas/feed/go"
 	tabnasini "github.com/tabnas/ini/go"
@@ -26,7 +26,7 @@ import (
 // The tabnas decoder core — the single source of truth for the tabnas
 // parser family (github.com/tabnas/*). It is consumed by BOTH the `read`
 // word (via DefaultFormats / TabnasFormat in format.go) and the `parse`
-// word (the aql:parselang module builds its built-in kinds from
+// word (the boru:parselang module builds its built-in kinds from
 // TabnasKinds). It lives in native — below modules — because the import
 // direction is eng < native < modules, so a modules-level definition
 // could never be shared down into native's read pipeline.
@@ -47,13 +47,13 @@ type TabnasKind struct {
 	Returns *Type
 	// Parse runs the decoder over the source string with the given opts.
 	Parse TabnasParser
-	// Convert maps the decoder's generic output to an AQL Value —
+	// Convert maps the decoder's generic output to a BORU Value —
 	// tabnasAnyToValue for most kinds, tabnasXmlToValue for xml.
 	Convert func(any) Value
 }
 
 // TabnasKinds returns the parser kinds backed by the tabnas parser family.
-// The slice order is significant — aql:parselang's ParseLang.kinds is
+// The slice order is significant — boru:parselang's ParseLang.kinds is
 // pinned to it (lang/spec/module-parselang.tsv §3), so new kinds append at
 // the end rather than insert mid-list.
 //
@@ -202,7 +202,7 @@ var ansiEscape = regexp.MustCompile("\x1b\\[[0-9;]*m")
 
 // FirstCleanLine returns the first line of a parser diagnostic with colour
 // escapes stripped — the tabnas/jsonic parsers emit richly-formatted
-// multi-line errors; the AQL error keeps just the headline.
+// multi-line errors; the BORU error keeps just the headline.
 func FirstCleanLine(msg string) string {
 	msg = ansiEscape.ReplaceAllString(msg, "")
 	if i := strings.IndexByte(msg, '\n'); i >= 0 {
@@ -250,7 +250,7 @@ func tabnasXmlToValue(v any) Value {
 	return NewXmlElement(tag, attr, cren)
 }
 
-// tabnasMapToValue converts a decoded map to an AQL Map, ordering keys
+// tabnasMapToValue converts a decoded map to a BORU Map, ordering keys
 // deterministically (the parsers hand back unordered Go maps).
 func tabnasMapToValue(m map[string]any) Value {
 	om := NewOrderedMap()
@@ -266,21 +266,21 @@ func tabnasMapToValue(m map[string]any) Value {
 }
 
 // AnyToValue maps a single piece of generic decoded Go data (strings,
-// booleans, numbers, nested map[string]any / []any) to an AQL Value, with
+// booleans, numbers, nested map[string]any / []any) to a BORU Value, with
 // deterministic key ordering for maps. It is the shared decoder-output
 // converter used by the tabnas formats and reused by other modules (e.g.
-// aql:query's jsonpath/jq results). An unrecognised shape degrades to its
+// boru:query's jsonpath/jq results). An unrecognised shape degrades to its
 // string form rather than erroring.
 func AnyToValue(v any) Value { return tabnasAnyToValue(v) }
 
-// tabnasAnyToValue maps a single decoded value to an AQL Value. The parsers
+// tabnasAnyToValue maps a single decoded value to a BORU Value. The parsers
 // emit strings, booleans, numbers, nested maps and lists; an unrecognised
 // shape degrades to its string form rather than erroring.
 func tabnasAnyToValue(v any) Value {
 	switch val := v.(type) {
 	case Value:
-		// A node a custom-parser semantic action already built as an AQL
-		// Value (see aql:parse): pass it through untouched so user data types
+		// A node a custom-parser semantic action already built as a BORU
+		// Value (see boru:parse): pass it through untouched so user data types
 		// survive to the parse result rather than being flattened.
 		return val
 	case nil:
@@ -317,7 +317,7 @@ func tabnasAnyToValue(v any) Value {
 }
 
 // tabnasOrderedMapToValue converts the parser's insertion-ordered OrderedMap
-// to an AQL Map, preserving the source key order (the whole point of the
+// to a BORU Map, preserving the source key order (the whole point of the
 // ordered parser node) rather than sorting like the legacy plain-map path.
 func tabnasOrderedMapToValue(src *tabnasjsonic.OrderedMap) Value {
 	om := NewOrderedMap()

@@ -1,4 +1,4 @@
-# AQL Language Specification: forward-collection edge cases II —
+# BORU Language Specification: forward-collection edge cases II —
 # per-call-site modifiers, statement-boundary speculation, splice and
 # quote interaction, BarrierPos shapes, deep paren nesting.
 # Format: input<TAB>expected<TAB>description
@@ -125,12 +125,12 @@ def m fn [[a:Integer | b:Integer][Integer][a sub b]] 7 m 3	-4	the mixed shape re
 # §8b  import — the module id is collected, and everything after it
 #      that no overload can use is left alone (structure-first
 #      collection; the classic `end` guard still works).
-import "aql:math-util" MathUtil.sqrt 25	5.0	the dotted call after import is a new statement, not an import argument
-import "aql:math-util" "leftover"	'leftover'	a following bare String is NOT collected (no viable overload puts one there)
-import "aql:math-util" end "leftover"	'leftover'	…the explicit end states the same intent
-import "aql:math-util" [1 2]	[1 2]	a following plain list is not taken as a rename list
-import "aql:math-util" sqrt	ERROR:undefined_word	module exports are namespaced: the bare word after import is not a rename, it is undefined
-import "aql:string-util" (StringUtil.upper "hi") 5	'HI' 5	a paren after import runs as its own expression
+import "boru:math-util" MathUtil.sqrt 25	5.0	the dotted call after import is a new statement, not an import argument
+import "boru:math-util" "leftover"	'leftover'	a following bare String is NOT collected (no viable overload puts one there)
+import "boru:math-util" end "leftover"	'leftover'	…the explicit end states the same intent
+import "boru:math-util" [1 2]	[1 2]	a following plain list is not taken as a rename list
+import "boru:math-util" sqrt	ERROR:undefined_word	module exports are namespaced: the bare word after import is not a rename, it is undefined
+import "boru:string-util" (StringUtil.upper "hi") 5	'HI' 5	a paren after import runs as its own expression
 #
 # ─────────────────────────────────────────────────────────────────────
 # §9  Deep nesting — paren groups as forward arguments, groups inside

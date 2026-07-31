@@ -10,7 +10,7 @@ import "fmt"
 // ReparentValue), the SAME error strings, in the SAME order — so an error
 // raised here is byte-identical to the interpreter's (a plain, position-less
 // error: defTypedHandler raises via fmt.Errorf, and the interpreter surfaces
-// it unstamped — stampErrPos only positions AqlErrors).
+// it unstamped — stampErrPos only positions BoruErrors).
 //
 // Returns the value the binding installs: reparented to the refine newtype /
 // named predicate type where the interpreter reparents (so a downstream

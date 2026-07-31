@@ -6,7 +6,7 @@ import (
 
 	multisource "github.com/tabnas/multisource/go"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 func TestTextFormatDecode(t *testing.T) {

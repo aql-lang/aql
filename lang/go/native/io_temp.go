@@ -36,7 +36,7 @@ func doTempWord(args []Value, r *Registry) ([]Value, error) {
 		path, err = EffectiveFileOps(r).TempFile(dir, pattern)
 	}
 	if err != nil {
-		return nil, r.AqlError("temp_error", fmt.Sprintf("temp: %v", err), "temp")
+		return nil, r.BoruError("temp_error", fmt.Sprintf("temp: %v", err), "temp")
 	}
 	return []Value{NewPathonFromString(path)}, nil
 }
@@ -53,7 +53,7 @@ func spaceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	path := extractPath(args[0])
 	fs, err := EffectiveFileOps(r).Statfs(path)
 	if err != nil {
-		return nil, r.AqlError("space_error", fmt.Sprintf("space: %v", err), "space")
+		return nil, r.BoruError("space_error", fmt.Sprintf("space: %v", err), "space")
 	}
 	om := NewOrderedMap()
 	om.Set("total", NewInteger(int64(fs.TotalBytes)))

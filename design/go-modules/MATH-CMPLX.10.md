@@ -1,4 +1,4 @@
-# `math/cmplx` → `aql:cmplx` *(NICHE)*
+# `math/cmplx` → `boru:cmplx` *(NICHE)*
 
 > **Status: design proposal — not implemented. NICHE.** A curated,
 > hand-written native module wrapping Go's `math/cmplx`. Read
@@ -12,16 +12,16 @@
 Go package: [`math/cmplx`](https://pkg.go.dev/math/cmplx) — elementary
 functions over `complex128`: magnitude, phase, polar/rectangular
 conversion, conjugate, and the transcendentals (`Exp`, `Log`, `Sqrt`,
-`Pow`). This note specifies `aql:cmplx` (namespace `Cmplx`). Design
+`Pow`). This note specifies `boru:cmplx` (namespace `Cmplx`). Design
 proposal; no Go code exists yet, and shipping is genuinely in question
 (§10).
 
 ## 2. Why curated
 
-There is no "raw bridge vs curated" framing here, because **AQL has no
+There is no "raw bridge vs curated" framing here, because **BORU has no
 complex type at all** — `complex128` has no `eng.FromNative` /
 `eng.ToNative` mapping, so a mechanical `go:math/cmplx` bridge could not
-even pass an argument. Any AQL surface must *invent* a representation. The
+even pass an argument. Any BORU surface must *invent* a representation. The
 curated choice is to model a complex number as a **`Map {re, im}`** of two
 Floats, so every word reads and writes ordinary inspectable data and the
 results compose with `get`, `set`, comparison, and serialization.
@@ -29,7 +29,7 @@ results compose with `get`, `set`, comparison, and serialization.
 ## 3. Import & namespace
 
 ```
-import "aql:cmplx"        # binds the Cmplx namespace
+import "boru:cmplx"        # binds the Cmplx namespace
 ```
 
 The bare capitalized package name `Cmplx` is free (not a builtin type,
@@ -49,7 +49,7 @@ Signatures are **top-first, sig order** (position 0 = top of stack), per
 the README "Argument order & dispatch" rule. All inner natives use
 `BarrierPos: -1` so the swap form `a Cmplx.word b` dispatches.
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `complex(re, im)` | `rect` | `[Float im, Float re] -> Map` | Build a complex number from real and imaginary parts. | Constructor: `re Cmplx.rect im` (swap) → `{re, im}` Map. There is no Go `cmplx` function for this (it is the `complex` builtin); curated as the canonical way to mint the Map. |
 | `cmplx.Polar` | `polar` | `[Map] -> Map` | Decompose a complex number into magnitude and phase. | `cmplx.Polar` returns `(r, theta)`; collapsed to a `Map {r, theta}` (`Map → Map`). |
@@ -81,7 +81,7 @@ Float↔float kinds, Map↔`map[string]any`. (This is exactly the friction
 
 No panics (`eng/go/CLAUDE.md` "Panic Prevention"; guard with
 `RequireConcreteMap` and `AsConcreteFloat` before use). Failure is
-signalled via `r.AqlError(code, detail, word)`:
+signalled via `r.BoruError(code, detail, word)`:
 
 | code | raised when |
 |---|---|
@@ -89,7 +89,7 @@ signalled via `r.AqlError(code, detail, word)`:
 
 The `cmplx` functions themselves are total over `complex128` (they return
 `Inf`/`NaN` components rather than erroring), mirroring how
-`aql:math-util` treats IEEE specials — so there is no Go `error` to
+`boru:math-util` treats IEEE specials — so there is no Go `error` to
 unwrap; a `NaN`/`Inf` component simply rides in the result Map's Float.
 
 ## 7. Policy / capabilities
@@ -98,7 +98,7 @@ unwrap; a `NaN`/`Inf` component simply rides in the result Map's Float.
 
 ## 8. Overlap
 
-Touches `aql:math-util` (`MathUtil`) — which owns `math` and `math/big`
+Touches `boru:math-util` (`MathUtil`) — which owns `math` and `math/big`
 and the real-valued transcendentals (`sqrt`, `exp`, `log`, `atan2`, …) —
 but does **not** move or change any of those words. The dividing line:
 `MathUtil` operates on **real** Numbers and returns Numbers; `Cmplx`
@@ -112,7 +112,7 @@ All args-before form (`re Cmplx.rect im` / `z Cmplx.abs`); never pure
 forward.
 
 ```
-import "aql:cmplx"
+import "boru:cmplx"
 
 3.0 Cmplx.rect 4.0                 # → {re:3.0 im:4.0}   (re word im)
 {re:3.0 im:4.0} Cmplx.abs          # → 5.0
@@ -130,20 +130,20 @@ import "aql:cmplx"
 
 - A complex number as `{re:3.0 im:4.0}` is verbose to write, easy to
   malform (a typo'd or missing key is a runtime `bad-arg`, not a type
-  error caught early), and gives up the natural arithmetic AQL has for
+  error caught early), and gives up the natural arithmetic BORU has for
   numbers: `z1 add z2` does **not** add two complex Maps (Map `add` is
   not complex addition), so users would need `Cmplx.add`/`Cmplx.mul`
   words too — which this note has *not* included, widening the surface
   further. Without them the module can transform a complex number but not
   do complex *arithmetic*, which is an odd half-tool.
-- The honest alternative is to **defer the whole module until AQL has a
+- The honest alternative is to **defer the whole module until BORU has a
   native Complex type** (a leaf in the Number lattice with its own
   literal syntax and Comparer, the way Float/Integer/Big are). With a
   real type, `cmplx` words would take and return `Complex` values,
   arithmetic operators would just work, and the Map gymnastics vanish.
   That is a much larger language change, but it is the only thing that
   makes a complex-math module genuinely idiomatic.
-- **Recommendation to weigh:** ship `aql:cmplx` only if a concrete user
+- **Recommendation to weigh:** ship `boru:cmplx` only if a concrete user
   need for complex math appears *before* a native Complex type is on the
   roadmap; otherwise mark it deferred. It is in the roster flagged niche
   precisely so this decision is taken deliberately rather than by
@@ -168,11 +168,11 @@ Wiring checklist — no Go code here. Reference: `lang/go/modules/math.go`
   function, and decomposes the result back into a `{re, im}` Map.
 - Register `"cmplx": BuildCmplxModule` in the `modules` map in
   `lang/go/modules/modules.go`.
-- `lang/go/modules/docs_cmplx.go` — `registerDocs("aql:cmplx",
+- `lang/go/modules/docs_cmplx.go` — `registerDocs("boru:cmplx",
   map[string]string{…})` with a one-liner per export (else
   `TestModuleExportDocs` fails).
 - `lang/spec/module-cmplx.tsv` — `input⇥expected⇥description` rows leading
-  with `import "aql:cmplx"`; pin the round-trip (`rect` → `abs`/`phase`,
+  with `import "boru:cmplx"`; pin the round-trip (`rect` → `abs`/`phase`,
   `polar` → `from-polar`) and pair every positive row with an
   `ERROR:<substring>` sibling (a non-Map / missing-key `bad-arg`) per Test
   discipline (`lang/go/CLAUDE.md`).

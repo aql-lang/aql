@@ -67,7 +67,7 @@ def x (m get "k")
 (g x)`)
 }
 
-// The decision.aql apply-op shape: a GENERIC 2-sig def (a Comparable-bounded
+// The decision.boru apply-op shape: a GENERIC 2-sig def (a Comparable-bounded
 // 3-arg overload plus a 3-arg Any catch-all) merged with a separate 2-arg
 // def, called with record-field Any args. All three runtime directions —
 // the generic arm, the catch-all arm (which raises), and per-op relational
@@ -90,7 +90,7 @@ def c (flex ` + rec + `)
 		userPolySound(t, srcFor(rec))
 	}
 	// The happy relational direction must not just agree — it must
-	// force-compile (this is the decision.aql apply-op leaf).
+	// force-compile (this is the decision.boru apply-op leaf).
 	userPolyCompiles(t, srcFor(`{l:3 o:"lt" v:5}`))
 }
 

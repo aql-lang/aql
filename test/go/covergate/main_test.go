@@ -35,15 +35,15 @@ func fixtureRoot(t *testing.T, files map[string]string) string {
 }
 
 const profA = `mode: set
-github.com/aql-lang/aql/eng/go/a.go:1.1,2.2 3 1
-github.com/aql-lang/aql/eng/go/a.go:3.1,4.2 2 0
-github.com/aql-lang/aql/lang/go/b.go:1.1,2.2 5 0
+github.com/boru-lang/boru/eng/go/a.go:1.1,2.2 3 1
+github.com/boru-lang/boru/eng/go/a.go:3.1,4.2 2 0
+github.com/boru-lang/boru/lang/go/b.go:1.1,2.2 5 0
 `
 
 // profB covers the block profA missed (dedupe must take the max count)
 // and an out-of-repo file (bucketed as "other").
 const profB = `mode: set
-github.com/aql-lang/aql/eng/go/a.go:3.1,4.2 2 7
+github.com/boru-lang/boru/eng/go/a.go:3.1,4.2 2 7
 example.com/x/y.go:1.1,2.2 1 1
 `
 
@@ -81,10 +81,10 @@ func TestMergeAndTally(t *testing.T) {
 
 func TestModuleOf(t *testing.T) {
 	cases := map[string]string{
-		"github.com/aql-lang/aql/eng/go/engine.go": "eng/go",
-		"github.com/aql-lang/aql/wpg/serve/m.go":   "wpg/serve",
-		"github.com/aql-lang/aql/single.go":        "single.go",
-		"example.com/other/pkg/f.go":               "other",
+		"github.com/boru-lang/boru/eng/go/engine.go": "eng/go",
+		"github.com/boru-lang/boru/wpg/serve/m.go":   "wpg/serve",
+		"github.com/boru-lang/boru/single.go":        "single.go",
+		"example.com/other/pkg/f.go":                 "other",
 	}
 	for in, want := range cases {
 		if got := moduleOf(in); got != want {
@@ -100,8 +100,8 @@ func TestPctEmptyIsFull(t *testing.T) {
 }
 
 func TestBlockStart(t *testing.T) {
-	got := blockStart("github.com/aql-lang/aql/eng/go/a.go:42.7,45.3")
-	want := pragmaKey{"github.com/aql-lang/aql/eng/go/a.go", 42}
+	got := blockStart("github.com/boru-lang/boru/eng/go/a.go:42.7,45.3")
+	want := pragmaKey{"github.com/boru-lang/boru/eng/go/a.go", 42}
 	if got != want {
 		t.Errorf("blockStart = %+v, want %+v", got, want)
 	}
@@ -110,8 +110,8 @@ func TestBlockStart(t *testing.T) {
 func TestMergeRejections(t *testing.T) {
 	cases := []struct{ name, content, wantErr string }{
 		{"missing fields", "mode: set\nnot-a-profile-line\n", "malformed profile line"},
-		{"bad stmt count", "github.com/aql-lang/aql/e/g/a.go:1.1,2.2 x 1\n", "malformed statement count"},
-		{"bad hit count", "github.com/aql-lang/aql/e/g/a.go:1.1,2.2 1 y\n", "malformed hit count"},
+		{"bad stmt count", "github.com/boru-lang/boru/e/g/a.go:1.1,2.2 x 1\n", "malformed statement count"},
+		{"bad hit count", "github.com/boru-lang/boru/e/g/a.go:1.1,2.2 1 y\n", "malformed hit count"},
 	}
 	for _, c := range cases {
 		_, err := mergeProfiles([]string{writeProfile(t, "bad.out", c.content)})
@@ -129,14 +129,14 @@ func TestScanPragmas(t *testing.T) {
 		"eng/go/a.go": "package a\nvar _ = 1 //covergate:allow dead arm\nvar _ = 2\n",
 	})
 	blocks := map[string]block{
-		"github.com/aql-lang/aql/eng/go/a.go:2.1,3.2": {stmts: 1},
-		"example.com/out/z.go:1.1,2.2":                {stmts: 1}, // out-of-repo → skipped
+		"github.com/boru-lang/boru/eng/go/a.go:2.1,3.2": {stmts: 1},
+		"example.com/out/z.go:1.1,2.2":                  {stmts: 1}, // out-of-repo → skipped
 	}
 	pr, err := scanPragmas(root, blocks)
 	if err != nil {
 		t.Fatalf("scanPragmas: %v", err)
 	}
-	if len(pr) != 1 || pr[pragmaKey{"github.com/aql-lang/aql/eng/go/a.go", 2}] != "dead arm" {
+	if len(pr) != 1 || pr[pragmaKey{"github.com/boru-lang/boru/eng/go/a.go", 2}] != "dead arm" {
 		t.Fatalf("pragmas = %v, want line 2 -> 'dead arm'", pr)
 	}
 
@@ -145,7 +145,7 @@ func TestScanPragmas(t *testing.T) {
 		"eng/go/a.go": "package a\nvar _ = 1 //covergate:allow\n",
 	})
 	if _, err := scanPragmas(bad, map[string]block{
-		"github.com/aql-lang/aql/eng/go/a.go:2.1,2.2": {stmts: 1},
+		"github.com/boru-lang/boru/eng/go/a.go:2.1,2.2": {stmts: 1},
 	}); err == nil || !strings.Contains(err.Error(), "needs a reason") {
 		t.Errorf("empty-reason err = %v, want 'needs a reason'", err)
 	}
@@ -156,14 +156,14 @@ func TestScanPragmas(t *testing.T) {
 		"eng/go/a.go": "package a\n\n// docs about //covergate:allow markers\nvar _ = \"//covergate:allow x\"\n",
 	})
 	if pr, err := scanPragmas(mention, map[string]block{
-		"github.com/aql-lang/aql/eng/go/a.go:3.1,4.2": {stmts: 1},
+		"github.com/boru-lang/boru/eng/go/a.go:3.1,4.2": {stmts: 1},
 	}); err != nil || len(pr) != 0 {
 		t.Errorf("mention scan = %v, %v; want no pragmas", pr, err)
 	}
 
 	// A referenced source file missing under root is an error.
 	if _, err := scanPragmas(t.TempDir(), map[string]block{
-		"github.com/aql-lang/aql/eng/go/gone.go:1.1,2.2": {stmts: 1},
+		"github.com/boru-lang/boru/eng/go/gone.go:1.1,2.2": {stmts: 1},
 	}); err == nil || !strings.Contains(err.Error(), "pragma scan") {
 		t.Errorf("missing-file err = %v, want 'pragma scan'", err)
 	}
@@ -171,7 +171,7 @@ func TestScanPragmas(t *testing.T) {
 	// A source file that does not parse is an error.
 	broken := fixtureRoot(t, map[string]string{"eng/go/a.go": "package a\nfunc {\n"})
 	if _, err := scanPragmas(broken, map[string]block{
-		"github.com/aql-lang/aql/eng/go/a.go:1.1,2.2": {stmts: 1},
+		"github.com/boru-lang/boru/eng/go/a.go:1.1,2.2": {stmts: 1},
 	}); err == nil || !strings.Contains(err.Error(), "pragma scan") {
 		t.Errorf("parse-error err = %v, want 'pragma scan'", err)
 	}
@@ -179,7 +179,7 @@ func TestScanPragmas(t *testing.T) {
 
 func TestRunPassAndFail(t *testing.T) {
 	root := plainRoot(t)
-	full := writeProfile(t, "full.out", "mode: set\ngithub.com/aql-lang/aql/eng/go/a.go:1.1,2.2 3 1\n")
+	full := writeProfile(t, "full.out", "mode: set\ngithub.com/boru-lang/boru/eng/go/a.go:1.1,2.2 3 1\n")
 	partial := writeProfile(t, "part.out", profA)
 
 	var out, errb bytes.Buffer
@@ -231,7 +231,7 @@ func TestPragmaExcludes(t *testing.T) {
 	// Exclude lang/go's uncovered block via a pragma on its opening line;
 	// the remaining tree is fully covered, so 6/6.
 	pragmas := map[pragmaKey]string{
-		{"github.com/aql-lang/aql/lang/go/b.go", 1}: "dead",
+		{"github.com/boru-lang/boru/lang/go/b.go", 1}: "dead",
 	}
 	perModule, all, ex := tallyModules(blocks, pragmas)
 	if _, ok := perModule["lang/go"]; ok {
@@ -246,14 +246,14 @@ func TestPragmaExcludes(t *testing.T) {
 
 	// A pragma whose line's blocks are all covered is reported for removal.
 	covered := map[pragmaKey]string{
-		{"github.com/aql-lang/aql/eng/go/a.go", 1}: "dead",
+		{"github.com/boru-lang/boru/eng/go/a.go", 1}: "dead",
 	}
 	if _, _, ex := tallyModules(blocks, covered); len(ex.nowCovered) != 1 {
 		t.Errorf("nowCovered = %v, want the covered a.go line", ex.nowCovered)
 	}
 	// A pragma line that opens no profiled block is reported as stale.
 	stale := map[pragmaKey]string{
-		{"github.com/aql-lang/aql/eng/go/gone.go", 9}: "dead",
+		{"github.com/boru-lang/boru/eng/go/gone.go", 9}: "dead",
 	}
 	if _, _, ex := tallyModules(blocks, stale); len(ex.stale) != 1 {
 		t.Errorf("stale = %v, want the gone.go entry", ex.stale)
@@ -264,12 +264,12 @@ func TestPragmaExcludes(t *testing.T) {
 	// sibling is tallied, and there is no false now-covered/stale alarm.
 	collide, err := mergeProfiles([]string{writeProfile(t, "c.out",
 		"mode: set\n"+
-			"github.com/aql-lang/aql/eng/go/c.go:5.2,5.14 1 3\n"+
-			"github.com/aql-lang/aql/eng/go/c.go:5.14,7.3 1 0\n")})
+			"github.com/boru-lang/boru/eng/go/c.go:5.2,5.14 1 3\n"+
+			"github.com/boru-lang/boru/eng/go/c.go:5.14,7.3 1 0\n")})
 	if err != nil {
 		t.Fatal(err)
 	}
-	cp := map[pragmaKey]string{{"github.com/aql-lang/aql/eng/go/c.go", 5}: "guard"}
+	cp := map[pragmaKey]string{{"github.com/boru-lang/boru/eng/go/c.go", 5}: "guard"}
 	_, cAll, cEx := tallyModules(collide, cp)
 	if len(cEx.nowCovered) != 0 || len(cEx.stale) != 0 {
 		t.Errorf("collision: nowCovered=%v stale=%v, want none", cEx.nowCovered, cEx.stale)

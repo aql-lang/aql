@@ -1,0 +1,104 @@
+# roundtrip_test.boru — serialization round-trips, file write/read-back,
+# build determinism, re-ingest idempotence, and SQL emission.
+# Run from kg/:  ../cmd/go/bin/boru tests/roundtrip_test.boru
+
+import "boru:io"
+import "boru:test"
+import "boru:string-util"
+import "boru:struct-util"
+import "./report.boru"
+import "./ingest.boru"
+import "./storage.boru"
+import "./util.boru"
+
+def stamp "2026-01-01T00:00:00Z"
+def candidates [
+  (IO.read (make Pathon "fixtures/valid.jsonic"))
+    (IO.read (make Pathon "fixtures/conflicts.jsonic"))
+]
+def bundle (KgReport.build-graph candidates {recorded_at:stamp})
+
+# -- in-memory JSON round trip -------------------------------------------
+
+[(KgStore.roundtrip-ok bundle) true Assert.equal]
+"jsonify -> parse preserves the bundle" Test.test end
+
+# -- file write / read-back ----------------------------------------------
+
+def tmp-path "out/test-roundtrip.json"
+IO.folder (make Pathon "out") drop
+KgStore.write-bundle bundle tmp-path drop
+def back (KgStore.read-bundle tmp-path)
+[back bundle Assert.equal]
+"write-bundle then read-bundle is lossless" Test.test end
+remove (make Pathon tmp-path) drop
+
+# -- determinism ----------------------------------------------------------
+
+def again (KgReport.build-graph candidates {recorded_at:stamp})
+[again bundle Assert.equal]
+"rebuilding from identical input is identical" Test.test end
+
+# -- re-ingesting a bundle preserves its identifiers ----------------------
+
+def re-cands [(KgIngest.bundle-to-candidates bundle)]
+def rebuilt (KgReport.build-graph re-cands {recorded_at:stamp})
+[(each [dot id] (rebuilt get "entities"))
+      (each [dot id] (bundle get "entities")) Assert.equal
+  ]
+"re-ingesting the bundle keeps every entity id" Test.test end
+[(each [dot id] (rebuilt get "assertions"))
+      (each [dot id] (bundle get "assertions")) Assert.equal
+  ]
+"re-ingesting the bundle keeps every assertion id" Test.test end
+
+# -- overlapping bundles deduplicate, never fail (PR #293 review) ---------
+
+def doubled
+(KgReport.build-graph
+      [(IO.read (make Pathon "fixtures/valid.jsonic"))
+          (IO.read (make Pathon "fixtures/valid.jsonic"))
+      ]
+      {recorded_at:stamp}
+  )
+def single
+(KgReport.build-graph
+      [(IO.read (make Pathon "fixtures/valid.jsonic"))]
+      {recorded_at:stamp}
+  )
+[((doubled get "summary") get "error_count") 0 Assert.equal]
+"ingesting the same bundle twice produces no validation errors"
+Test.test end
+[((doubled get "assertions") size) ((single get "assertions") size)
+      Assert.equal
+  ]
+"repeated identical claims deduplicate to one assertion each" Test.test
+end
+[((doubled get "entities") size) ((single get "entities") size)
+      Assert.equal
+  ]
+"repeated identical entities deduplicate to one entity each" Test.test
+end
+
+# -- SQL emission ---------------------------------------------------------
+
+[(KgStore.emit-sql bundle) (KgStore.emit-sql bundle) Assert.equal]
+"SQL emission is deterministic" Test.test end
+[(KgStore.sql-lit "O'Brien") "'O''Brien'" Assert.equal]
+"SQL string literals escape quotes" Test.test end
+[(KgStore.sql-lit none) "NULL" Assert.equal]
+"SQL renders none as NULL" Test.test end
+[(KgStore.sql-lit true) "1" Assert.equal]
+"SQL renders booleans as 0/1" Test.test end
+def sql (KgStore.emit-sql bundle)
+[(StringUtil.contains "CREATE TABLE assertion_evidence" sql) true
+      Assert.equal
+  ]
+"the SQL script creates the normalized evidence table" Test.test end
+[(StringUtil.contains "BEGIN TRANSACTION;" sql) true Assert.equal]
+"the SQL script is wrapped in a transaction" Test.test end
+
+print (Test.report)
+if ((Test.fail-count) gt 0) [
+  raise test_failed "roundtrip_test failures"
+]

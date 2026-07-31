@@ -3,8 +3,8 @@ package native
 import (
 	"crypto/tls"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // ParseTLSOpts reads a guest `tls: {…}` option map into a resolved
@@ -34,14 +34,14 @@ func ParseTLSOpts(r *Registry, v Value, word string) (capabilities.TLSProfile, e
 		case "verify":
 			b, bErr := val.AsConcreteBoolean()
 			if bErr != nil {
-				return p, r.AqlError("fetch_error",
+				return p, r.BoruError("fetch_error",
 					word+": tls: verify: must be a Boolean", word)
 			}
 			p.Insecure = !b
 		case "ca":
 			pem, ok := tlsPEMArg(val)
 			if !ok {
-				return p, r.AqlError("fetch_error",
+				return p, r.BoruError("fetch_error",
 					word+": tls: ca: must be Bytes or a String of PEM", word)
 			}
 			p.RootsPEM = pem
@@ -50,14 +50,14 @@ func ParseTLSOpts(r *Registry, v Value, word string) (capabilities.TLSProfile, e
 			// String is accepted so a computed name works too.
 			name, ok := tlsIdentityArg(val)
 			if !ok {
-				return p, r.AqlError("fetch_error",
+				return p, r.BoruError("fetch_error",
 					word+": tls: identity: must be an Atom or non-empty String", word)
 			}
 			p.Identity = name
 		case "sni":
 			s, sErr := val.AsConcreteString()
 			if sErr != nil || s == "" {
-				return p, r.AqlError("fetch_error",
+				return p, r.BoruError("fetch_error",
 					word+": tls: sni: must be a non-empty String", word)
 			}
 			p.ServerName = s
@@ -89,11 +89,11 @@ var clientOnlyTLSOpts = map[string]string{
 
 func unknownTLSOpt(r *Registry, key, word string, otherSide map[string]string) error {
 	if why, ok := otherSide[key]; ok {
-		return r.AqlErrorHint("fetch_error",
+		return r.BoruErrorHint("fetch_error",
 			word+": tls: "+key+": is not available here", word,
 			key+": is "+why)
 	}
-	return r.AqlError("fetch_error", word+": tls: unknown option \""+key+"\"", word)
+	return r.BoruError("fetch_error", word+": tls: unknown option \""+key+"\"", word)
 }
 
 // tlsMinVersion reads the `min:` option. Shared by both sides so the
@@ -101,7 +101,7 @@ func unknownTLSOpt(r *Registry, key, word string, otherSide map[string]string) e
 func tlsMinVersion(r *Registry, val Value, word string) (uint16, error) {
 	s, sErr := val.AsConcreteString()
 	if sErr != nil {
-		return 0, r.AqlError("fetch_error",
+		return 0, r.BoruError("fetch_error",
 			word+`: tls: min: must be "1.2" or "1.3"`, word)
 	}
 	switch s {
@@ -110,7 +110,7 @@ func tlsMinVersion(r *Registry, val Value, word string) (uint16, error) {
 	case "1.3":
 		return tls.VersionTLS13, nil
 	}
-	return 0, r.AqlError("fetch_error",
+	return 0, r.BoruError("fetch_error",
 		word+`: tls: min: must be "1.2" or "1.3", got "`+s+`"`, word)
 }
 
@@ -139,14 +139,14 @@ func ParseServerTLSOpts(r *Registry, v Value, word string) (capabilities.ServerT
 		case "identity":
 			name, ok := tlsIdentityArg(val)
 			if !ok {
-				return p, r.AqlError("fetch_error",
+				return p, r.BoruError("fetch_error",
 					word+": tls: identity: must be an Atom or non-empty String", word)
 			}
 			p.Identity = name
 		case "require-client":
 			pem, ok := tlsPEMArg(val)
 			if !ok {
-				return p, r.AqlError("fetch_error",
+				return p, r.BoruError("fetch_error",
 					word+": tls: require-client: must be Bytes or a String of PEM", word)
 			}
 			p.ClientCAsPEM = pem
@@ -161,17 +161,17 @@ func ParseServerTLSOpts(r *Registry, v Value, word string) (capabilities.ServerT
 		}
 	}
 	if p.Identity == "" {
-		return p, r.AqlErrorHint("net_error",
+		return p, r.BoruErrorHint("net_error",
 			word+": tls: needs identity: — a TLS server must present a certificate", word,
-			"the host registers credentials with (*AQL).RegisterClientIdentity")
+			"the host registers credentials with (*BORU).RegisterClientIdentity")
 	}
 	return p, nil
 }
 
 // TLSIdentityHandles lets a module teach ParseTLSOpts an opaque handle
-// shape that names a registered identity — aql:vault registers one so
+// shape that names a registered identity — boru:vault registers one so
 // `tls: {identity: (Vault.identity "acme")}` works without a private key
-// ever becoming an AQL value.
+// ever becoming a BORU value.
 //
 // It is a hook rather than a direct call because the handle types live
 // in lang/go/modules, which imports this package; the dependency cannot
@@ -196,7 +196,7 @@ func tlsIdentityArg(v Value) (string, bool) {
 }
 
 // tlsPEMArg accepts either a Bytes value (the natural output of reading
-// a .pem through aql:io) or a String holding PEM text.
+// a .pem through boru:io) or a String holding PEM text.
 func tlsPEMArg(v Value) (string, bool) {
 	if b, ok := AsBytesValue(v); ok {
 		return string(b), true

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
+	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
 )
 
 // --- New / Name / Synopsis ---
@@ -41,7 +41,7 @@ func TestRunRequiresExactlyOneProgram(t *testing.T) {
 		t.Errorf("stderr = %q, want 'exactly one'", stderr)
 	}
 
-	code, _, stderr = runBuild(t, "a.aql", "b.aql")
+	code, _, stderr = runBuild(t, "a.boru", "b.boru")
 	if code != 1 {
 		t.Fatalf("two positionals: exit = %d, want 1", code)
 	}
@@ -51,7 +51,7 @@ func TestRunRequiresExactlyOneProgram(t *testing.T) {
 }
 
 func TestRunRejectsUnknownFlag(t *testing.T) {
-	code, _, stderr := runBuild(t, "-nope", "p.aql")
+	code, _, stderr := runBuild(t, "-nope", "p.boru")
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
 	}
@@ -62,7 +62,7 @@ func TestRunRejectsUnknownFlag(t *testing.T) {
 
 func TestRunRejectsBadOptions(t *testing.T) {
 	dir := t.TempDir()
-	src := write(t, dir, "p.aql", "add 1 2")
+	src := write(t, dir, "p.boru", "add 1 2")
 
 	// Unknown option key fails ApplyOptions validation at build time.
 	code, _, stderr := runBuild(t, "-options", "nosuch:1", src)
@@ -84,7 +84,7 @@ func TestRunRejectsBadOptions(t *testing.T) {
 }
 
 func TestRunMissingSourceFile(t *testing.T) {
-	missing := filepath.Join(t.TempDir(), "nope.aql")
+	missing := filepath.Join(t.TempDir(), "nope.boru")
 	code, _, stderr := runBuild(t, missing)
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
@@ -98,7 +98,7 @@ func TestRunMissingSourceFile(t *testing.T) {
 
 func TestRunSelfEmbedSuccess(t *testing.T) {
 	dir := t.TempDir()
-	src := write(t, dir, "p.aql", "add 1 2")
+	src := write(t, dir, "p.boru", "add 1 2")
 	out := filepath.Join(dir, "p-built")
 
 	// Flags after the positional exercise the interleaved re-parse loop.
@@ -127,7 +127,7 @@ func TestRunSelfEmbedSuccess(t *testing.T) {
 
 func TestRunSelfEmbedDefaultOutput(t *testing.T) {
 	dir := t.TempDir()
-	src := write(t, dir, "prog.aql", "add 1 2")
+	src := write(t, dir, "prog.boru", "add 1 2")
 
 	// Run from the temp dir so the defaulted output lands there.
 	prevWD, err := os.Getwd()
@@ -153,7 +153,7 @@ func TestRunSelfEmbedDefaultOutput(t *testing.T) {
 
 func TestRunSelfEmbedWriteFailure(t *testing.T) {
 	dir := t.TempDir()
-	src := write(t, dir, "p.aql", "add 1 2")
+	src := write(t, dir, "p.boru", "add 1 2")
 	out := filepath.Join(dir, "no-such-dir", "p")
 
 	code, _, stderr := runBuild(t, src, "-o", out)

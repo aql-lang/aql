@@ -49,7 +49,7 @@ func TestW9WriteHandlersFileOpsError(t *testing.T) {
 func TestW9ImportFileHandlerMissingFile(t *testing.T) {
 	r := seam5Reg(t)
 	// A nonexistent file path fails loadFileModule (599.17,601.4).
-	if _, err := importFileHandler([]Value{NewString("/nonexistent/w9-xyz-999.aql")}, nil, nil, r); err == nil {
+	if _, err := importFileHandler([]Value{NewString("/nonexistent/w9-xyz-999.boru")}, nil, nil, r); err == nil {
 		t.Fatalf("importFileHandler(missing file) must error")
 	}
 }

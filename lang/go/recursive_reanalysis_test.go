@@ -3,7 +3,7 @@ package lang_test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // A recursive fn whose body is clean against its DECLARED param types must not
@@ -74,7 +74,7 @@ def go fn [[n:Integer] [Integer] [n rec]] end`
 // concat overloads' ReturnsFn (ReturnsAddConcat) now returns String only when an
 // operand is PROVABLY String, else a gradual Scalar — so `Integer add
 // (get-result)` types as a gradual Scalar that accepts a later Integer use. This
-// is the root-cause fix for the sort.aql `msd-go` no_signature false positive
+// is the root-cause fix for the sort.boru `msd-go` no_signature false positive
 // (the recursive self-call fed `lo add (Array-get)` back to its own lo:Integer
 // param). The negatives lock that provable string-concat typing is preserved and
 // no false negative was introduced.

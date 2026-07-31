@@ -2,8 +2,8 @@ package lang
 
 import "testing"
 
-// Pins for the historical `uncompilable.aql` trio (authored against
-// 407feda, where `aql --force-compile` aborted on each): three shapes
+// Pins for the historical `uncompilable.boru` trio (authored against
+// 407feda, where `boru --force-compile` aborted on each): three shapes
 // that interpreted green while the strict compiler soundly refused.
 // All three compile natively today; these pins keep them compiling.
 // The refusal MESSAGES each shape used to produce still guard genuinely

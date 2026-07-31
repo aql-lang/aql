@@ -11,7 +11,7 @@ import (
 // ========================
 
 // TestQueryWordsModuleOnly pins the decision that the SQL-flavoured
-// query DSL lives exclusively in the aql:query module sub-registry:
+// query DSL lives exclusively in the boru:query module sub-registry:
 // its words are NOT in the global registry, so unqualified use is an
 // undefined_word error, never a silent partial query. (The module
 // surface itself is covered in lang/go/modules/query_test.go.)
@@ -342,7 +342,7 @@ func TestDotMapAtom(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
-	result := runAQL(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("dot")})
+	result := runBORU(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("dot")})
 	_as0, _ := AsInteger(result[0])
 	if len(result) != 1 || _as0 != 42 {
 		t.Errorf("expected 42, got %v", result)
@@ -357,7 +357,7 @@ func TestDotMapString(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
-	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("get")})
+	result := runBORU(t, r, []Value{NewMap(m), NewString("key"), NewWord("get")})
 	_as1, _ := AsInteger(result[0])
 	if len(result) != 1 || _as1 != 99 {
 		t.Errorf("expected 99, got %v", result)
@@ -371,7 +371,7 @@ func TestDotListIndex(t *testing.T) {
 	}
 	registerIOWords(r)
 	list := NewList([]Value{NewString("a"), NewString("b"), NewString("c")})
-	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("get")})
+	result := runBORU(t, r, []Value{list, NewInteger(1), NewWord("get")})
 	_as2, _ := AsString(result[0])
 	if len(result) != 1 || _as2 != "b" {
 		t.Errorf("expected 'b', got %v", result)
@@ -385,7 +385,7 @@ func TestDotListOutOfBounds(t *testing.T) {
 	}
 	registerIOWords(r)
 	list := NewList([]Value{NewString("a")})
-	result := runAQL(t, r, []Value{list, NewInteger(5), NewWord("get")})
+	result := runBORU(t, r, []Value{list, NewInteger(5), NewWord("get")})
 	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none, got %v", result)
 	}
@@ -399,7 +399,7 @@ func TestDotMapMissing(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	result := runAQL(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("dot")})
+	result := runBORU(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("dot")})
 	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none for missing key, got %v", result)
 	}
@@ -413,7 +413,7 @@ func TestDotMapIntegerKey(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("0", NewString("zero"))
-	result := runAQL(t, r, []Value{NewMap(m), NewInteger(0), NewWord("get")})
+	result := runBORU(t, r, []Value{NewMap(m), NewInteger(0), NewWord("get")})
 	_as3, _ := AsString(result[0])
 	if len(result) != 1 || _as3 != "zero" {
 		t.Errorf("expected 'zero', got %v", result)
@@ -426,7 +426,7 @@ func TestDotNone(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("dot")})
+	result := runBORU(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("dot")})
 	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none, got %v", result)
 	}
@@ -441,7 +441,7 @@ func TestDotListByIndex(t *testing.T) {
 	}
 	registerIOWords(r)
 	list := NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)})
-	result := runAQL(t, r, []Value{list, NewInteger(1), NewWord("get")})
+	result := runBORU(t, r, []Value{list, NewInteger(1), NewWord("get")})
 	_as4, _ := AsInteger(result[0])
 	if len(result) != 1 || _as4 != 20 {
 		t.Errorf("expected 20, got %v", result)
@@ -455,7 +455,7 @@ func TestDotListAtomKeyReturnsNone(t *testing.T) {
 	}
 	registerIOWords(r)
 	list := NewList([]Value{NewInteger(10), NewInteger(20)})
-	result := runAQL(t, r, []Value{list, NewAtom("x"), NewWord("dot")})
+	result := runBORU(t, r, []Value{list, NewAtom("x"), NewWord("dot")})
 	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none for atom key on list, got %v", result)
 	}
@@ -468,7 +468,7 @@ func TestDotListStringKeyReturnsNone(t *testing.T) {
 	}
 	registerIOWords(r)
 	list := NewList([]Value{NewInteger(10)})
-	result := runAQL(t, r, []Value{list, NewString("x"), NewWord("get")})
+	result := runBORU(t, r, []Value{list, NewString("x"), NewWord("get")})
 	if len(result) != 1 || !IsNoneShape(result[0]) {
 		t.Errorf("expected none for string key on list, got %v", result)
 	}
@@ -490,7 +490,7 @@ func TestDotNestedMapChain(t *testing.T) {
 	outer := NewOrderedMap()
 	outer.Set("a", NewMap(mid))
 	// Chained forward gets: map get a get b get c
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewMap(outer),
 		NewWord("dot"), NewWord("a"),
 		NewWord("dot"), NewWord("b"),
@@ -513,7 +513,7 @@ func TestDotMapThenList(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("items", NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewMap(m),
 		NewAtom("items"), NewWord("dot"),
 		NewInteger(1), NewWord("get"),
@@ -538,7 +538,7 @@ func TestDotListThenMap(t *testing.T) {
 	m1 := NewOrderedMap()
 	m1.Set("x", NewInteger(2))
 	list := NewList([]Value{NewMap(m0), NewMap(m1)})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		list,
 		NewInteger(0), NewWord("dot"),
 		NewAtom("x"), NewWord("dot"),
@@ -561,7 +561,7 @@ func TestDotListThenMapSecondElement(t *testing.T) {
 	m1 := NewOrderedMap()
 	m1.Set("x", NewInteger(2))
 	list := NewList([]Value{NewMap(m0), NewMap(m1)})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		list,
 		NewInteger(1), NewWord("dot"),
 		NewAtom("x"), NewWord("dot"),
@@ -582,7 +582,7 @@ func TestDotAliasMapAccess(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
-	result := runAQL(t, r, []Value{NewMap(m), NewAtom("key"), NewWord("dot")})
+	result := runBORU(t, r, []Value{NewMap(m), NewAtom("key"), NewWord("dot")})
 	_as9, _ := AsInteger(result[0])
 	if len(result) != 1 || _as9 != 99 {
 		t.Errorf("expected 99 via . alias, got %v", result)
@@ -596,7 +596,7 @@ func TestDotAliasListAccess(t *testing.T) {
 	}
 	registerIOWords(r)
 	list := NewList([]Value{NewString("a"), NewString("b")})
-	result := runAQL(t, r, []Value{list, NewInteger(0), NewWord("get")})
+	result := runBORU(t, r, []Value{list, NewInteger(0), NewWord("get")})
 	_as10, _ := AsString(result[0])
 	if len(result) != 1 || _as10 != "a" {
 		t.Errorf("expected 'a' via . alias, got %v", result)
@@ -620,7 +620,7 @@ func TestDotDeepListMapCombo(t *testing.T) {
 	m1.Set("b", b1)
 	outer := NewOrderedMap()
 	outer.Set("a", NewList([]Value{NewMap(m0), NewMap(m1)}))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewMap(outer),
 		NewAtom("a"), NewWord("dot"),
 		NewInteger(1), NewWord("dot"),
@@ -641,7 +641,7 @@ func TestDotrMapSuccess(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(42))
-	result := runAQL(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("dotr")})
+	result := runBORU(t, r, []Value{NewMap(m), NewAtom("x"), NewWord("dotr")})
 	_as12, _ := AsInteger(result[0])
 	if len(result) != 1 || _as12 != 42 {
 		t.Errorf("expected 42, got %v", result)
@@ -656,7 +656,7 @@ func TestDotrMapMissingError(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	err = runAQLError(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("dotr")})
+	err = runBORUError(t, r, []Value{NewMap(m), NewAtom("y"), NewWord("dotr")})
 	if err == nil {
 		t.Fatal("expected error for missing key")
 	}
@@ -671,7 +671,7 @@ func TestDotrNoneError(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	err = runAQLError(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("dotr")})
+	err = runBORUError(t, r, []Value{NewTypeLiteral(TNone), NewAtom("x"), NewWord("dotr")})
 	if err == nil {
 		t.Fatal("expected error for none parent")
 	}
@@ -687,7 +687,7 @@ func TestDotrListOutOfBounds(t *testing.T) {
 	}
 	registerIOWords(r)
 	list := NewList([]Value{NewString("a")})
-	err = runAQLError(t, r, []Value{list, NewInteger(5), NewWord("getr")})
+	err = runBORUError(t, r, []Value{list, NewInteger(5), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for out of bounds")
 	}
@@ -704,7 +704,7 @@ func TestDotrMapStringKey(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(99))
-	result := runAQL(t, r, []Value{NewMap(m), NewString("key"), NewWord("getr")})
+	result := runBORU(t, r, []Value{NewMap(m), NewString("key"), NewWord("getr")})
 	_as13, _ := AsInteger(result[0])
 	if len(result) != 1 || _as13 != 99 {
 		t.Errorf("expected 99, got %v", result)
@@ -719,7 +719,7 @@ func TestDotrMapStringMissing(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	err = runAQLError(t, r, []Value{NewMap(m), NewString("nope"), NewWord("getr")})
+	err = runBORUError(t, r, []Value{NewMap(m), NewString("nope"), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for missing string key")
 	}
@@ -733,7 +733,7 @@ func TestDotrMapIntegerKey(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("5", NewString("five"))
-	result := runAQL(t, r, []Value{NewMap(m), NewInteger(5), NewWord("getr")})
+	result := runBORU(t, r, []Value{NewMap(m), NewInteger(5), NewWord("getr")})
 	_as14, _ := AsString(result[0])
 	if len(result) != 1 || _as14 != "five" {
 		t.Errorf("expected 'five', got %v", result)
@@ -748,7 +748,7 @@ func TestDotrMapIntegerKeyMissing(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("0", NewString("zero"))
-	err = runAQLError(t, r, []Value{NewMap(m), NewInteger(9), NewWord("getr")})
+	err = runBORUError(t, r, []Value{NewMap(m), NewInteger(9), NewWord("getr")})
 	if err == nil {
 		t.Fatal("expected error for missing integer key")
 	}
@@ -766,7 +766,7 @@ func TestMakeRecordPositional(t *testing.T) {
 	registerIOWords(r)
 	// def Point type Record [x:number y:number]
 	// make Point [1 2]
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("Point"),
 		NewWord("refine"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
@@ -800,7 +800,7 @@ func TestMakeRecordNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("Pt"),
 		NewWord("refine"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
@@ -834,7 +834,7 @@ func TestMakeRecordMap(t *testing.T) {
 	src := NewOrderedMap()
 	src.Set("x", NewInteger(5))
 	src.Set("y", NewInteger(6))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("Pt2"),
 		NewWord("refine"), NewWord("Record"), NewList([]Value{
 			NewMap(singleMap("x", NewTypeLiteral(TNumber))),
@@ -857,7 +857,7 @@ func TestConvertIntToString(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(42), NewWord("convert"), NewWord("String"),
 	})
 	_as19, _ := AsString(result[0])
@@ -874,7 +874,7 @@ func TestConvertIntToStringHex(t *testing.T) {
 	registerIOWords(r)
 	hexOpts := NewOrderedMap()
 	hexOpts.Set("base", NewString("hex"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewWord("String"), NewMap(hexOpts),
 	})
 	_as20, _ := AsString(result[0])
@@ -891,7 +891,7 @@ func TestConvertIntToStringBin(t *testing.T) {
 	registerIOWords(r)
 	binOpts := NewOrderedMap()
 	binOpts.Set("base", NewString("bin"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(10), NewWord("convert"), NewWord("String"), NewMap(binOpts),
 	})
 	_as21, _ := AsString(result[0])
@@ -908,7 +908,7 @@ func TestConvertIntToStringOct(t *testing.T) {
 	registerIOWords(r)
 	octOpts := NewOrderedMap()
 	octOpts.Set("base", NewString("oct"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(8), NewWord("convert"), NewWord("String"), NewMap(octOpts),
 	})
 	_as22, _ := AsString(result[0])
@@ -923,7 +923,7 @@ func TestConvertStringToNumber(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewString("99"), NewWord("convert"), NewWord("Number"),
 	})
 	_as23, _ := AsInteger(result[0])
@@ -938,7 +938,7 @@ func TestConvertBoolToString(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewBoolean(true), NewWord("convert"), NewWord("String"),
 	})
 	_as24, _ := AsString(result[0])
@@ -953,7 +953,7 @@ func TestConvertIntToBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(1), NewWord("convert"), NewWord("Boolean"),
 	})
 	_as25, _ := AsBoolean(result[0])
@@ -968,7 +968,7 @@ func TestConvertIntToBoolZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(0), NewWord("convert"), NewWord("Boolean"),
 	})
 	_as26, _ := AsBoolean(result[0])
@@ -983,7 +983,7 @@ func TestConvertStringToBool(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewString("true"), NewWord("convert"), NewWord("Boolean"),
 	})
 	_as27, _ := AsBoolean(result[0])
@@ -1000,7 +1000,7 @@ func TestConvertWithSettingsMap(t *testing.T) {
 	registerIOWords(r)
 	settings := NewOrderedMap()
 	settings.Set("base", NewString("hex"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewWord("String"), NewMap(settings),
 	})
 	_as28, _ := AsString(result[0])
@@ -1020,7 +1020,7 @@ func TestVarStringName(t *testing.T) {
 	}
 	registerIOWords(r)
 	// 5 var [["x"] x mul x]
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(5),
 		NewWord("var"), NewList([]Value{
 			NewList([]Value{NewString("x")}),
@@ -1040,7 +1040,7 @@ func TestVarWithDefault(t *testing.T) {
 	}
 	registerIOWords(r)
 	// var [[[x 10]] x add 1]
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("var"), NewList([]Value{
 			NewList([]Value{
 				NewList([]Value{NewWord("x"), NewInteger(10)}),

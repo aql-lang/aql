@@ -1,38 +1,38 @@
-# AQL for BBEdit (macOS)
+# BORU for BBEdit (macOS)
 
-Two complementary layers of AQL support for [BBEdit](https://www.barebones.com/products/bbedit/):
+Two complementary layers of BORU support for [BBEdit](https://www.barebones.com/products/bbedit/):
 
-1. **`AQL.plist`** — a **Codeless Language Module** (CLM) that gives
-   `.aql` files syntax colouring, comment awareness, string/number
+1. **`BORU.plist`** — a **Codeless Language Module** (CLM) that gives
+   `.boru` files syntax colouring, comment awareness, string/number
    recognition, and a function-navigation menu. No compiled plug-in
    required.
 2. **BBEdit's built-in Language Server client** — point it at the bundled
-   `aql lsp` server for diagnostics, hover, completion, and whole-buffer
+   `boru lsp` server for diagnostics, hover, completion, and whole-buffer
    formatting.
 
 Use either layer on its own, or both together (recommended).
 
 ## Install the Codeless Language Module
 
-1. Copy `AQL.plist` into BBEdit's Language Modules folder:
+1. Copy `BORU.plist` into BBEdit's Language Modules folder:
 
    ```sh
    mkdir -p "$HOME/Library/Application Support/BBEdit/Language Modules"
-   cp AQL.plist "$HOME/Library/Application Support/BBEdit/Language Modules/"
+   cp BORU.plist "$HOME/Library/Application Support/BBEdit/Language Modules/"
    ```
 
 2. Restart BBEdit, or choose **BBEdit ▸ (menu) ▸ Reload Language Modules**
    if your version exposes it.
 
-3. Open any `.aql` file. The language pop-up at the bottom of the editing
-   window should read **AQL**. If it does not, pick **AQL** manually from
-   that pop-up, or confirm the `.aql` suffix mapping in
+3. Open any `.boru` file. The language pop-up at the bottom of the editing
+   window should read **BORU**. If it does not, pick **BORU** manually from
+   that pop-up, or confirm the `.boru` suffix mapping in
    **Settings ▸ Languages**.
 
 ## What the CLM colours
 
-The module recognises the AQL lexical grammar as verified against the
-`aql` CLI:
+The module recognises the BORU lexical grammar as verified against the
+`boru` CLI:
 
 | Element | What is coloured |
 | ------- | ---------------- |
@@ -49,37 +49,37 @@ The module recognises the AQL lexical grammar as verified against the
 
 A Codeless Language Module supports exactly **one** line-comment prefix and
 **one** block-comment pair, so the CLM registers `#` for line comments and
-`/* */` for block comments. AQL also accepts `//` line comments; those stay
-valid AQL but the CLM does not colour a bare `//` line. Capitalised type
+`/* */` for block comments. BORU also accepts `//` line comments; those stay
+valid BORU but the CLM does not colour a bare `//` line. Capitalised type
 names (`Integer`, `Emailon`, `MathUtil`, user types) and `/q` `/s` `/2`
 dispatch modifiers are likewise beyond a CLM's keyword-list model — enable
 the LSP below for full-fidelity handling and semantic features.
 
-## Enable the AQL Language Server (`aql lsp`)
+## Enable the BORU Language Server (`boru lsp`)
 
-BBEdit 14.5+ ships a built-in LSP client. The AQL server is the `lsp`
-subcommand of the `aql` binary and speaks stdio by default.
+BBEdit 14.5+ ships a built-in LSP client. The BORU server is the `lsp`
+subcommand of the `boru` binary and speaks stdio by default.
 
 ### Prerequisites
 
-Install `aql` and confirm the server starts:
+Install `boru` and confirm the server starts:
 
 ```sh
-go install github.com/aql-lang/aql/cmd/go/aql@latest
-echo '' | aql lsp        # stdio mode; waits for input, Ctrl-D to exit
+go install github.com/boru-lang/boru/cmd/go/boru@latest
+echo '' | boru lsp        # stdio mode; waits for input, Ctrl-D to exit
 ```
 
 Note the absolute path — BBEdit does not always inherit your shell `PATH`:
 
 ```sh
-command -v aql           # e.g. /Users/you/go/bin/aql
+command -v boru           # e.g. /Users/you/go/bin/boru
 ```
 
 ### Configure BBEdit
 
 1. Open **Settings ▸ Languages**.
-2. In the language list, select **AQL** (added by the CLM above). If AQL is
-   not listed, click **+**, then **Add**, and choose AQL / the `.aql`
+2. In the language list, select **BORU** (added by the CLM above). If BORU is
+   not listed, click **+**, then **Add**, and choose BORU / the `.boru`
    suffix.
 3. In the per-language pane on the right, open the **Language Server** tab
    and set:
@@ -87,14 +87,14 @@ command -v aql           # e.g. /Users/you/go/bin/aql
    | Field | Value |
    | ----- | ----- |
    | **Enabled** | ✓ (checked) |
-   | **Command** | the absolute path to `aql`, e.g. `/Users/you/go/bin/aql` |
+   | **Command** | the absolute path to `boru`, e.g. `/Users/you/go/bin/boru` |
    | **Arguments** | `lsp` |
 
-   Leave **Working directory** empty to use the document's folder. If `aql`
+   Leave **Working directory** empty to use the document's folder. If `boru`
    is reliably on the `PATH` BBEdit sees, you may set **Command** to just
-   `aql`; the absolute path is the safe default.
+   `boru`; the absolute path is the safe default.
 
-4. Apply, then reopen a `.aql` file. Diagnostics appear in the gutter and
+4. Apply, then reopen a `.boru` file. Diagnostics appear in the gutter and
    the status bar; hover, completion, and formatting are available from the
    **Edit** and contextual menus.
 
@@ -113,7 +113,7 @@ For debugging or remote-attach the server can listen on a socket instead of
 stdio:
 
 ```sh
-aql lsp -p 9999          # listens on 127.0.0.1:9999
+boru lsp -p 9999          # listens on 127.0.0.1:9999
 ```
 
 Most BBEdit setups should use the default stdio command above.
@@ -124,13 +124,13 @@ The plist is a standard XML property list and can be linted with the
 system tool:
 
 ```sh
-plutil -lint AQL.plist
-# AQL.plist: OK
+plutil -lint BORU.plist
+# BORU.plist: OK
 ```
 
 ## Files
 
 | File        | Purpose                                            |
 | ----------- | -------------------------------------------------- |
-| `AQL.plist` | BBEdit Codeless Language Module (syntax + nav)     |
+| `BORU.plist` | BBEdit Codeless Language Module (syntax + nav)     |
 | `README.md` | this document                                      |

@@ -5,7 +5,7 @@ package vault
 //
 // To guarantee the interactive TUI and the CLI can never drift, every
 // MUTATING operation is driven through the very same Run() entry point the
-// CLI uses: the collected passphrase is supplied via AQL_VAULT_PASSPHRASE,
+// CLI uses: the collected passphrase is supplied via BORU_VAULT_PASSPHRASE,
 // any typed value via stdin (--from-stdin), and --yes is set because the
 // TUI performs its own typed confirmation before calling in. Pure read
 // views either load the store directly (for the browsable, actionable
@@ -13,7 +13,7 @@ package vault
 // informational panels) — both reuse the canonical implementation.
 //
 // The active vault is selected by promoting its folder/suffix into the
-// AQL_VAULT_FOLDER / AQL_VAULT_SUFFIX environment, which is the single
+// BORU_VAULT_FOLDER / BORU_VAULT_SUFFIX environment, which is the single
 // source of truth every path resolver reads (the same mechanism Run() uses
 // to promote the --folder/--suffix flags). The UI drives one vault at a
 // time on the bubbletea goroutine, so there is no concurrent env race.
@@ -122,10 +122,10 @@ func (c *tuiController) customProviders() []Provider {
 
 // createVault initializes a new vault at (folder, suffix) with the given
 // backend, then makes it active. It drives the same init path as the CLI,
-// which records the vault in the index. folder defaults to the home ~/.aql.
+// which records the vault in the index. folder defaults to the home ~/.boru.
 func (c *tuiController) createVault(folder, suffix, backend, pass string) error {
 	if folder == "" {
-		folder = homeAQLDir(c.homeDir)
+		folder = homeBORUDir(c.homeDir)
 	}
 	if pass != "" {
 		_ = os.Setenv(EnvPassphrase, pass)

@@ -1,7 +1,7 @@
 package modules
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // w9NopParser is a do-nothing host parser handler for constructor seams

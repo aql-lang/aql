@@ -1,4 +1,4 @@
-// Stage-5 compile-or-fallback gate (design/aql-bytecode-plan.0.md
+// Stage-5 compile-or-fallback gate (design/boru-bytecode-plan.0.md
 // §Stage 5: "every program either compiles or falls back, so the whole
 // suite must pass in compiled mode"). Where the span-level differential
 // gate (compiled_differential_test.go) checks ONLY the rows the emitter
@@ -30,25 +30,25 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
-// errCode returns an AQL error's taxonomy code (or "" for nil, "non-aql"
+// errCode returns a BORU error's taxonomy code (or "" for nil, "non-boru"
 // for a foreign error) so the gate compares taxonomy, not message text.
 func errCode(e error) string {
 	if e == nil {
 		return ""
 	}
-	var ae *eng.AqlError
+	var ae *eng.BoruError
 	if errors.As(e, &ae) {
 		return ae.Code
 	}
-	return "non-aql"
+	return "non-boru"
 }
 
-// asAqlError unwraps e to an *AqlError, or nil for a non-AQL / nil error.
-func asAqlError(e error) *eng.AqlError {
-	var ae *eng.AqlError
+// asBoruError unwraps e to an *BoruError, or nil for a non-BORU / nil error.
+func asBoruError(e error) *eng.BoruError {
+	var ae *eng.BoruError
 	if e != nil && errors.As(e, &ae) {
 		return ae
 	}
@@ -63,7 +63,7 @@ func asAqlError(e error) *eng.AqlError {
 // Detail. The PRIMARY caret position is deliberately excluded (the VM points
 // inside the shared fn unit where the interpreter points at the call site — the
 // documented return-error difference, gated separately by position PRESENCE).
-func diagPayloadMismatch(aeC, aeI *eng.AqlError) string {
+func diagPayloadMismatch(aeC, aeI *eng.BoruError) string {
 	if !normSliceEq(aeC.Notes, aeI.Notes) {
 		return "notes:\n  compiled=" + strings.Join(aeC.Notes, " | ") +
 			"\n  interpreted=" + strings.Join(aeI.Notes, " | ")
@@ -127,7 +127,7 @@ func strSliceEq(a, b []string) bool {
 	return true
 }
 
-func suggestionMsgs(ae *eng.AqlError) []string {
+func suggestionMsgs(ae *eng.BoruError) []string {
 	out := make([]string, len(ae.Suggestions))
 	for i, s := range ae.Suggestions {
 		out[i] = s.Message
@@ -138,7 +138,7 @@ func suggestionMsgs(ae *eng.AqlError) []string {
 // spanKeys renders each secondary span as "label@row:col" so both the label
 // and the location are compared (the produced-value and declaration spans must
 // point at the same place in both engines).
-func spanKeys(ae *eng.AqlError) []string {
+func spanKeys(ae *eng.BoruError) []string {
 	out := make([]string, len(ae.Spans))
 	for i, s := range ae.Spans {
 		out[i] = s.Label + "@" + itoa(s.Pos.Row) + ":" + itoa(s.Pos.Col)
@@ -213,7 +213,7 @@ func TestSpecCompiledOrFallback(t *testing.T) {
 				// the call site by the interpreter but inside the shared fn unit by
 				// the VM, so the column legitimately differs — only presence is
 				// gated, which is what catches a "source position unknown" regression.
-				if aeC, aeI := asAqlError(errC), asAqlError(errI); aeC != nil && aeI != nil {
+				if aeC, aeI := asBoruError(errC), asBoruError(errI); aeC != nil && aeI != nil {
 					if aeC.Detail != aeI.Detail {
 						mismatches++
 						t.Errorf("%s:L%d (wasCompiled=%v): %s\n  error detail divergence:\n  compiled=%q\n  interpreted=%q",

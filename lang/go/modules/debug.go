@@ -7,8 +7,8 @@ import (
 	"strings"
 	"unsafe"
 
-	"github.com/aql-lang/aql/eng/go/stackform"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/stackform"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // moduleNamesFn indirects the package-level Names() so the `debug-modules`
@@ -21,8 +21,8 @@ var moduleNamesFn func() []string
 
 func init() { moduleNamesFn = Names }
 
-// BuildDebugModule creates the "aql:debug" native module — the curated
-// front door for debugging an AQL program: printing taps, structural and
+// BuildDebugModule creates the "boru:debug" native module — the curated
+// front door for debugging a BORU program: printing taps, structural and
 // system introspection, value sizing, and performance measurement.
 //
 // It follows the standard native-module shape (an isolated sub-registry of
@@ -32,7 +32,7 @@ func init() { moduleNamesFn = Names }
 // dashboard, attach, serverless channel) are gated on the unbuilt
 // Service/Process layer and are intentionally not implemented here.
 //
-//	import "aql:debug"
+//	import "boru:debug"
 //	(compute) Debug.tap further-process     # print + pass through
 //	[1 add 2 mul 3] Debug.steps             # engine step count (deterministic)
 //	[heavy] 100 Debug.bench                 # {n mean-ms min-ms max-ms ...}
@@ -41,7 +41,7 @@ func init() { moduleNamesFn = Names }
 func BuildDebugModule(parent *native.Registry) (native.ModuleDesc, error) {
 	natives := append(debugNatives(), stepNatives()...)
 	natives = append(natives, dashboardNatives()...)
-	subReg, err := newModuleRegistry("aql:debug", natives)
+	subReg, err := newModuleRegistry("boru:debug", natives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -72,11 +72,11 @@ func debugParseHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 		return nil, err
 	}
 	if r.ParseFunc == nil {
-		return nil, r.AqlError("debug_error", "Debug.parse: parser not configured", "Debug.parse")
+		return nil, r.BoruError("debug_error", "Debug.parse: parser not configured", "Debug.parse")
 	}
 	tokens, perr := r.ParseFunc(src)
 	if perr != nil {
-		return nil, r.AqlError("parse_error", fmt.Sprintf("Debug.parse: %v", perr), "Debug.parse")
+		return nil, r.BoruError("parse_error", fmt.Sprintf("Debug.parse: %v", perr), "Debug.parse")
 	}
 	lst := native.NewList(tokens)
 	lst.Quoted = true
@@ -156,7 +156,7 @@ func debugNatives() []native.NativeFunc {
 						return nil, err
 					}
 					if !cond {
-						return nil, r.AqlError("assertion_failure", msg, "Debug.assert")
+						return nil, r.BoruError("assertion_failure", msg, "Debug.assert")
 					}
 					return nil, nil
 				}),
@@ -174,7 +174,7 @@ func debugNatives() []native.NativeFunc {
 					if err != nil {
 						return nil, err
 					}
-					return nil, r.AqlError("not_implemented", msg, "Debug.todo")
+					return nil, r.BoruError("not_implemented", msg, "Debug.todo")
 				}),
 			}},
 		},
@@ -288,7 +288,7 @@ func debugNatives() []native.NativeFunc {
 					sort.Strings(names)
 					out := make([]string, len(names))
 					for i, n := range names {
-						out[i] = "aql:" + n
+						out[i] = "boru:" + n
 					}
 					return []native.Value{stringsToList(out)}, nil
 				}),
@@ -389,7 +389,7 @@ func debugNatives() []native.NativeFunc {
 						return nil, err
 					}
 					if n <= 0 {
-						return nil, r.AqlError("debug_error",
+						return nil, r.BoruError("debug_error",
 							fmt.Sprintf("Debug.bench: n (%d) must be > 0", n), "Debug.bench")
 					}
 					clk := native.EffectiveClock(r)
@@ -494,7 +494,7 @@ func debugNatives() []native.NativeFunc {
 					}
 					fn := r.Lookup(name)
 					if fn == nil {
-						return nil, r.AqlError("debug_error",
+						return nil, r.BoruError("debug_error",
 							fmt.Sprintf("Debug.sig: no such word %q", name), "Debug.sig")
 					}
 					var sigs []native.Value
@@ -509,7 +509,7 @@ func debugNatives() []native.NativeFunc {
 			}},
 		},
 		{
-			// The quoted body of an AQL-defined word; `native/q` for a host word.
+			// The quoted body of a BORU-defined word; `native/q` for a host word.
 			Name: "debug-body",
 			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
@@ -522,7 +522,7 @@ func debugNatives() []native.NativeFunc {
 					}
 					fn := r.Lookup(name)
 					if fn == nil {
-						return nil, r.AqlError("debug_error",
+						return nil, r.BoruError("debug_error",
 							fmt.Sprintf("Debug.body: no such word %q", name), "Debug.body")
 					}
 					for _, sig := range fn.OwnSigs() {
@@ -576,7 +576,7 @@ func debugNatives() []native.NativeFunc {
 					}
 					_, form, cerr := stackform.Compile(sub, append([]native.Value(nil), body.Slice()...))
 					if cerr != nil {
-						return nil, r.AqlError("debug_error",
+						return nil, r.BoruError("debug_error",
 							fmt.Sprintf("Debug.disasm: %v", cerr), "Debug.disasm")
 					}
 					return []native.Value{native.NewString(strings.TrimRight(stackform.Pretty(form), "\n"))}, nil
@@ -768,7 +768,7 @@ func profileRows(counts map[string]int) native.Value {
 	return native.NewList(out)
 }
 
-// sizeOfValue estimates the retained byte size of an AQL value by a deep
+// sizeOfValue estimates the retained byte size of a BORU value by a deep
 // walk. The estimate is heuristic (per-node overhead + payload bytes) but
 // deterministic, so it is useful for relative comparisons. Type literals
 // and carriers (non-concrete) contribute only their node overhead — the

@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // newRegistry builds the same registry main() uses.
@@ -71,6 +71,6 @@ func TestEvalExprSuppressesPrintOutput(t *testing.T) {
 
 // NOTE: seedMemFS is deliberately not covered. Its embedded program
 // still uses the stale `context get __sys …` idiom and fails with
-// aql/undefined_word on the current language (the working idiom is
+// boru/undefined_word on the current language (the working idiom is
 // `context dot __sys`), so `go run ./genhelp` exits 1 at head. Fixing
 // it requires a non-test change to main.go.

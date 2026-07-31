@@ -1,7 +1,7 @@
 package eng
 
 // The bytecode VM — the execution half of Stages 1–3 of
-// design/aql-bytecode-plan.0.md: straight-line natives, control flow
+// design/boru-bytecode-plan.0.md: straight-line natives, control flow
 // (JMP / JMP_IF_FALSE / FOR_SETUP / FOR_NEXT), and user-fn frames
 // with CALL_USER / TAIL_CALL_USER / RET.
 //
@@ -44,7 +44,7 @@ import (
 // Engine.Run on this same registry, so a registry-level flag cannot tell a
 // legitimate island from a foreign run without goroutine identity. That last
 // shape stays the caller's responsibility under the same rule the interpreter
-// already follows: give each goroutine its own *Registry. AQL's concurrent
+// already follows: give each goroutine its own *Registry. BORU's concurrent
 // words honour this by forking an isolated registry per branch
 // (ForkConcurrent); host callers run each instance on its own registry.
 func RunProgram(p *Program, r *Registry) ([]Value, error) {
@@ -190,12 +190,12 @@ func (vc *vmContext) island() *Engine {
 // islandRun runs an island token window on the given dispatch registry. The
 // program registry keeps the vm's cached island engine; a FOREIGN (module
 // sub-registry) unit runs its window on ITS OWN registry's pooled sub-engine —
-// the interpreter twin: the enclosing body would have run there (CallAQL), so
+// the interpreter twin: the enclosing body would have run there (CallBORU), so
 // a same-registry callee SPLICES into the island tape and a break/continue it
 // raises exits cleanly with the registry FlowCtrl flag set (exitWithFlowCtrl's
 // sub-engine contract) for the VM to translate (escapedFlow). Islanding a
 // foreign unit's window on the program registry instead would push the callee
-// through CallAQL's NewTop sub-engine, where the same signal is a hard
+// through CallBORU's NewTop sub-engine, where the same signal is a hard
 // flow_error the interpreter never raises.
 func (vc *vmContext) islandRun(reg *Registry, tokens []Value) ([]Value, error) {
 	if reg == nil || reg == vc.r {
@@ -296,7 +296,7 @@ func (vc *vmContext) enterBodyUnit(reg *Registry, unit int, locals []Value) ([]V
 // bindUnitLocals builds a compiled unit's frame locals: per-call args fill the
 // leading param slots (0..NParams-NCaptures-1) and captures the trailing ones —
 // the top-first sig-order split every enterBodyUnit caller shares. Args past
-// the param count are ignored, matching the interpreter's CallAQL binding.
+// the param count are ignored, matching the interpreter's CallBORU binding.
 func bindUnitLocals(fn *CompiledFn, args, captures []Value) []Value {
 	locals := make([]Value, fn.NLocals)
 	nInputs := fn.NParams - len(captures)
@@ -325,7 +325,7 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 	// on exit before the next run begins, which is the normal RunCompiled path.
 	if r != nil {
 		if !atomic.CompareAndSwapInt32(&r.vmRunning, 0, 1) {
-			return nil, makeAqlError("concurrency_error",
+			return nil, makeBoruError("concurrency_error",
 				"bytecode: a compiled program is already running on this registry; concurrent runs need their own registry (ForkConcurrent)",
 				"", "", "")
 		}
@@ -337,14 +337,14 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 		// own islands increment the depth only later).
 		if r.interpRunActive() {
 			// The deferred StoreInt32 above releases vmRunning on this return.
-			return nil, makeAqlError("concurrency_error",
+			return nil, makeBoruError("concurrency_error",
 				"bytecode: an interpreter run is already active on this registry; concurrent runs need their own registry (ForkConcurrent)",
 				"", "", "")
 		}
 	}
 	// Last-resort panic guard, mirroring the interpreter's top-level recover
 	// (engine.go Run): a bug in a compiled-reachable handler or in the VM loop
-	// must surface as a clean internal_error AqlError — which RunCompiled then
+	// must surface as a clean internal_error BoruError — which RunCompiled then
 	// resolves by falling back to the interpreter — never as a goroutine stack
 	// trace. Errors returned normally are untouched.
 	defer func() {
@@ -354,7 +354,7 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 				src = r.Source
 			}
 			result = nil
-			runErr = makeAqlError("internal_error",
+			runErr = makeBoruError("internal_error",
 				fmt.Sprintf("internal bytecode VM error: %v", rec), "", src, "")
 		}
 	}()
@@ -486,7 +486,7 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 
 // callPolyIn is callPoly against an explicit dispatch registry — the active
 // unit's (a module fn's natives run in module scope, like the interpreter's
-// CallAQL body run).
+// CallBORU body run).
 func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
 	// The word-policy gate mirrors the interpreter's per-dispatch check
 	// (see gateWord); poly re-match is still one dispatch of pr.Word.
@@ -659,7 +659,7 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 		// STORED mode has no live table to compare against (fd is nil): the
 		// plain defer re-runs the interpreter, which raises the canonical
 		// signature_error over its own live dispatch.
-		var alt *AqlError
+		var alt *BoruError
 		if fd != nil {
 			alt = bestEffortNoMatch(vc.r, fd, pr.Word, window, curDebug, pc)
 			if alt != nil {
@@ -935,7 +935,7 @@ func (vc *vmContext) callDynApplyTop(reg *Registry, n int, stack []Value, curDeb
 // boundary machinery: a compiled closure runs VM-native, a
 // trivial-delegation method dispatches its inner native directly, and any
 // other callable islands [fn, a1..aN] — byte-identical to the
-// interpreter's forward auto-dispatch of the same window. A genuine AQL
+// interpreter's forward auto-dispatch of the same window. A genuine BORU
 // error from the method surfaces as-is (the interpreter raises the same,
 // prior side effects included).
 func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
@@ -957,7 +957,7 @@ func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []V
 	guard := func(results []Value) ([]Value, error) {
 		if len(results) != spec.NOut {
 			// A count differing from the shape claim indicts a HOST-CONTRACT
-			// violation, not compiler model debt: an AQL-source method's
+			// violation, not compiler model debt: a BORU-source method's
 			// count is the checker's own body model (return contracts are
 			// engine-enforced), so the only way here is a host registration
 			// whose handler returned a count its own signature denies — the
@@ -1132,7 +1132,7 @@ func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, b
 	if mr == nil || mr.Sig == nil || mr.Sig.dispatchHandler() == nil {
 		return nil, false, nil
 	}
-	// An AQL-BODIED overload resolved in a FOREIGN sub-registry (a module-
+	// A BORU-BODIED overload resolved in a FOREIGN sub-registry (a module-
 	// preamble fn reached through its /r delegation export, e.g. Repl.serve)
 	// must not run its body-splicing handler against the dispatching
 	// registry: the body's words resolve in the module's own scope
@@ -1141,7 +1141,7 @@ func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, b
 	// Decline so the caller islands — the island applies the value through
 	// that branch, module scope and all. Go-handler natives stay on this
 	// fast path: they read HOST state from vc.r and never resolve body words.
-	if _, isAQL := mr.Sig.Impl.(*AQLImpl); isAQL && reg != vc.r {
+	if _, isBORU := mr.Sig.Impl.(*BORUImpl); isBORU && reg != vc.r {
 		return nil, false, nil
 	}
 	// The handler runs against the DISPATCHING registry (vc.r), not the
@@ -1288,7 +1288,7 @@ func bindGlobal(curReg *Registry, gb *GlobalBindSpec, stack []Value, curDebug []
 // ensureInvoker installs the run's body-closure invoker on a FOREIGN unit's
 // dispatch registry (once per registry per run): the unit's native handlers
 // run their code bodies through InvokeBody on that registry, exactly as the
-// interpreter's CallAQL dispatch does, so the VM seam must be present there
+// interpreter's CallBORU dispatch does, so the VM seam must be present there
 // too. The main registry's invoker is installed by runProgram; the ones added
 // here are removed by its deferred cleanup.
 func (vc *vmContext) ensureInvoker(reg *Registry) {
@@ -1378,7 +1378,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 	var curDebug []SrcPos
 	// curReg is the ACTIVE unit's dispatch registry: a module-preamble fn's
 	// unit (CompiledFn.Reg) runs its natives against the module's own
-	// registry — the interpreter's CallAQL does exactly that — so
+	// registry — the interpreter's CallBORU does exactly that — so
 	// registry-visible handler effects (Net.listen's per-connection forks,
 	// dynamic-scope binds) land in module scope on both engines. Ordinary
 	// units (Reg nil) run on the program's registry.
@@ -1523,7 +1523,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 		case OpTrap:
 			// A check-mode-suppressed runtime error compiled in place: raise the
-			// byte-identical AQL error (the interpreter errors at this same point),
+			// byte-identical BORU error (the interpreter errors at this same point),
 			// including its full structured diagnostic payload (spans, notes,
 			// suggestions) so the compiled report equals the interpreted one.
 			tr := &p.Traps[in.Arg]
@@ -1531,7 +1531,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if r != nil {
 				src = r.Source
 			}
-			ae := makeAqlError(tr.Code, tr.Detail, tr.Word, src, tr.Hint)
+			ae := makeBoruError(tr.Code, tr.Detail, tr.Word, src, tr.Hint)
 			ae.Spans = tr.Spans
 			ae.Notes = tr.Notes
 			ae.Suggestions = tr.Suggestions
@@ -1560,7 +1560,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// The ACTIVE unit's registry first: a module-preamble fn's minted
 			// types (def Pos (refine Integer) in the module body) live in the
 			// module's own table (CompiledFn.Reg / curReg), not the importer's
-			// — exactly where the interpreter's CallAQL resolves them. An
+			// — exactly where the interpreter's CallBORU resolves them. An
 			// ordinary unit has curReg == r, so the second lookup repeats only
 			// for the kernel-builtin path below.
 			var t *Type
@@ -1623,7 +1623,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// natives (the monomorphic math/compare/etc. words the emitter
 			// admits) do not retain the args slice. The 0-divergence gate
 			// + combination matrix catch any handler that does — and a
-			// -tags aqldebug build (vmFreshArgsPerCall) allocates fresh per
+			// -tags borudebug build (vmFreshArgsPerCall) allocates fresh per
 			// call to localize a violator directly. See vm_args_release.go.
 			var args []Value
 			if vmFreshArgsPerCall { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
@@ -1673,7 +1673,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// the interpreter runs, push the value the interpreter would bind. A
 			// failed validation returns the interpreter's byte-identical plain
 			// error unstamped (defTypedHandler raises via fmt.Errorf with no
-			// position; stampAt only touches AqlErrors, so it is a no-op here and
+			// position; stampAt only touches BoruErrors, so it is a no-op here and
 			// kept purely for uniformity with the other dispatch sites).
 			if len(stack) == 0 {
 				return nil, vmErrAt(curDebug, pc, "BIND_TYPED stack underflow")
@@ -1912,7 +1912,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				stack = trimmed
 				// Strip any dispatch ascription (`v as T`) from the frame's
 				// return values — the compiled mirror of the interpreter's
-				// frame-collapse / CallAQL strip: an ascription is scoped to
+				// frame-collapse / CallBORU strip: an ascription is scoped to
 				// a dispatch WITHIN the body and cannot ride out to the
 				// caller (design/OPEN-WORDS.1.md §9). Unconditional
 				// StripAscribed (its own nil-fast-path handles the common no-
@@ -1980,10 +1980,10 @@ func (vc *vmContext) opForSetup(stack []Value, loops []vmLoop, slot int, curCode
 	stepV, err3 := stack[len(stack)-3].AsConcreteInteger()
 	stack = stack[:len(stack)-3]
 	if err1 != nil || err2 != nil || err3 != nil {
-		return nil, nil, stampAt(vc.r.AqlError("for_error", "for: range must be concrete Integers", "for"), debug, pc, vc.r)
+		return nil, nil, stampAt(vc.r.BoruError("for_error", "for: range must be concrete Integers", "for"), debug, pc, vc.r)
 	}
 	if stepV == 0 {
-		return nil, nil, stampAt(vc.r.AqlError("for_error", "for: step cannot be zero", "for"), debug, pc, vc.r)
+		return nil, nil, stampAt(vc.r.BoruError("for_error", "for: step cannot be zero", "for"), debug, pc, vc.r)
 	}
 	// The loop's FOR_NEXT usually follows FOR_SETUP directly, but a loop with
 	// CARRIED defs seats their slot inits between the two (lowerLoop) — scan
@@ -2049,7 +2049,7 @@ func (vc *vmContext) flowSignal(op Opcode, frames []vmFrame, loops []vmLoop, loc
 // stampAt / vmErrAt are the per-unit debug-table variants of the
 // program-level error helpers.
 func stampAt(err error, debug []SrcPos, pc int, r *Registry) error {
-	ae, ok := err.(*AqlError)
+	ae, ok := err.(*BoruError)
 	if !ok || pc < 0 || pc >= len(debug) {
 		return err
 	}
@@ -2257,12 +2257,12 @@ func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase i
 		return stack, nil
 	}
 	// A whole-frame dynamic-apply replay (RetReplay) in a FOREIGN-registry fn:
-	// the interpreter dispatches such a fn via CallAQL, whose return path is
+	// the interpreter dispatches such a fn via CallBORU, whose return path is
 	// TRIM-ONLY (registry.go — up to NUnnamed extra bottom values discarded,
 	// count and type NEVER enforced; the documented frame-path asymmetry). The
 	// replay's residual count is runtime-variable, but every compiled CALLER
 	// was laid out against the static model of len(Returns) results — so after
-	// the CallAQL trim, a count that still differs cannot be represented and
+	// the CallBORU trim, a count that still differs cannot be represented and
 	// DEFERS to the interpreter (internal_error → the sound whole-program
 	// fallback). A same-registry fn falls through to the frame-path contract
 	// below, which the interpreter enforces identically.
@@ -2421,9 +2421,9 @@ func vmInterpXml(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) (
 	return append(stack[:len(stack)-n], out), nil
 }
 
-// vmErrAt builds an internal_error AqlError for a VM-internal soundness
+// vmErrAt builds an internal_error BoruError for a VM-internal soundness
 // violation (a simulated/runtime stack disagreement the lowerer thought
-// impossible). It carries the AQL taxonomy code — so a direct RunProgram
+// impossible). It carries the BORU taxonomy code — so a direct RunProgram
 // caller and error-scraping tooling see a structured error, not a raw Go
 // string — and RunCompiled treats it as a fall-back-to-interpreter signal.
 // Reaching one is a compiler bug; the message keeps the pc/source detail.
@@ -2432,7 +2432,7 @@ func vmErrAt(debug []SrcPos, pc int, msg string) error {
 	if pc >= 0 && pc < len(debug) {
 		pos = debug[pc]
 	}
-	return makeAqlErrorAt("internal_error",
+	return makeBoruErrorAt("internal_error",
 		fmt.Sprintf("bytecode: internal: %s (pc=%d, src %d:%d)", msg, pc, pos.Row, pos.Col),
 		"", "", "", pos)
 }
@@ -2441,7 +2441,7 @@ func vmErrAt(debug []SrcPos, pc int, msg string) error {
 // step-count (CPU) guard, distinct from the stack/frame ceiling
 // (the memory guard).
 func vmEvalLimitAt(debug []SrcPos, pc int, r *Registry, limit int) error {
-	err := r.AqlErrorHint("evaluation_limit",
+	err := r.BoruErrorHint("evaluation_limit",
 		fmt.Sprintf("evaluation exceeded the step limit of %d — the program ran too long (an infinite loop or unbounded recursion?)", limit),
 		"",
 		"if this is a legitimately long computation, raise the limit with `--options steps:N` (or lang.Options.Steps); otherwise check for a loop or recursion that never terminates")
@@ -2449,7 +2449,7 @@ func vmEvalLimitAt(debug []SrcPos, pc int, r *Registry, limit int) error {
 }
 
 func vmExhaustedAt(debug []SrcPos, pc int, r *Registry, ceiling int) error {
-	err := r.AqlErrorHint("tape_exhausted",
+	err := r.BoruErrorHint("tape_exhausted",
 		fmt.Sprintf("evaluation stack exhausted its growth ceiling of %d entries — the program consumed unbounded space (an unbounded loop accumulating results, or unbounded non-tail recursion?)", ceiling),
 		"",
 		"raise the tape size via options (initial size / grow count / growth factor) for a legitimately large program; otherwise check the loop bounds / recursion")

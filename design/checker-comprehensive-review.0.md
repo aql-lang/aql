@@ -9,7 +9,7 @@ gate, pin 104), Tier 2 (single severity table + completeness gate; the
 distribute-over-dispatch invariant test — which found and fixed a THIRD
 non-distributing carrier shape, named-union tags; the CheckState lifecycle
 gate — which caught a live Clone bug on FnNameInflight; the
-recordDispatchOutcome emit seam), Tier 3 (`aql check --strict`; the
+recordDispatchOutcome emit seam), Tier 3 (`boru check --strict`; the
 Any-frontier ratio gate — which exposed its own stale 303 pin; the A8
 macro_not_expandable advisory; TandReturnsFn + DepScalarInfo carrier
 preservation, shrinking the frontier 354→345; typed-code-values and
@@ -21,8 +21,8 @@ runFnBodyOnce / declaredReturnBail / refineRecursiveSummary).
 
 Originally grounded at `5277166`.
 Produced by a three-lane review (architecture / self-admitted-gap inventory /
-feature boundaries) plus a fresh empirical differential probe of `aql check`
-vs `aql run` on targeted programs. Prior art: `checker-accuracy-review.10.md`
+feature boundaries) plus a fresh empirical differential probe of `boru check`
+vs `boru run` on targeted programs. Prior art: `checker-accuracy-review.10.md`
 (the A1–A9 accuracy pass), `CARRIER-STATIC-TYPECHECK-REPORT.10.md`,
 `dynamic-modality-report.10.md`.
 
@@ -98,7 +98,7 @@ code) is deliberately un-gated and invisible to users.
 Probes run against the built CLI at `5277166`. **Confirmed false negatives —
 all statically decidable** (concrete literals in hand at check time):
 
-| # | Program | `aql check` | `aql run` |
+| # | Program | `boru check` | `boru run` |
 |---|---|---|---|
 | FN-1 | `def f fn [[a:Integer] [String] [42]] f 1` | clean | `type_error: return value 1: expected String, got Integer` |
 | FN-2 | `def Big (Integer gt 10) def x:Big 5 x` | clean (plus an `unused_def` red herring in the uncalled variant) | `def x: value 5 does not unify with declared type Big` |
@@ -127,7 +127,7 @@ the predicate on them. The three failing shapes are the *other* boundaries:
 
 **Confirmed false positive (outside the pinned corpus):**
 
-| # | Program | `aql check` | `aql run` |
+| # | Program | `boru check` | `boru run` |
 |---|---|---|---|
 | FP-1 | `[1 2 "s"] each [1 add]` | `no_signature: no matching signature for add` | `[2 3 's1']` |
 
@@ -278,7 +278,7 @@ shippable; each item names its seam.
 
 ### Tier 3 — precision fronts (each shrinks the Any frontier)
 
-11. **Strict mode / dynamic-frontier report** (`aql check --strict`): report
+11. **Strict mode / dynamic-frontier report** (`boru check --strict`): report
     every point a dynamic carrier crosses into a typed slot, and every
     Any-frontier residual — the Typed-Racket-style migration tool already
     sketched in `checker-accuracy-review.10.md:344`. Also gate the frontier:

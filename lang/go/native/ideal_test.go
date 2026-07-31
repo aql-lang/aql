@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // The three kernel type-kinds are registered as Ideals on every
@@ -47,7 +47,7 @@ func TestIdeals_CustomKindDispatchesThroughType(t *testing.T) {
 	})
 	// `refine String {}` — no kernel kind claims a String base, so the
 	// custom Ideal handles it.
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("refine"), NewTypeLiteral(TString), NewMap(NewOrderedMap()),
 	})
 	if !called {
@@ -77,7 +77,7 @@ func TestIdeals_CustomKindInstantiatesThroughMake(t *testing.T) {
 	})
 	// `make List 7` — no kernel kind claims a bare List type literal,
 	// so the custom Ideal's Instantiate handles it.
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TList), NewInteger(7),
 	})
 	if !called {
@@ -165,7 +165,7 @@ func TestIdeals_DisabledKindErrorsFromType(t *testing.T) {
 		t.Fatal("Record Ideal not registered")
 	}
 	rec.Enabled = false
-	err = runAQLError(t, r, []Value{
+	err = runBORUError(t, r, []Value{
 		NewWord("refine"), NewTypeLiteral(TRecord), NewMap(NewOrderedMap()),
 	})
 	if err == nil {

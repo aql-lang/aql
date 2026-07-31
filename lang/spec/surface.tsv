@@ -1,4 +1,4 @@
-# AQL Language Specification: surfaces — pure operation contracts
+# BORU Language Specification: surfaces — pure operation contracts
 # Format: input<TAB>expected<TAB>description
 #
 # `def Shape surface {area: (fnsig [[Self] [Float]])}` declares a

@@ -41,7 +41,7 @@ func TestExitCodeRejectsNonExits(t *testing.T) {
 	for _, err := range []error{
 		nil,
 		errors.New("plain"),
-		&AqlError{Code: "signature_error", Detail: "nope"},
+		&BoruError{Code: "signature_error", Detail: "nope"},
 	} {
 		if _, isExit := ExitCode(err); isExit {
 			t.Errorf("ExitCode(%v) reported an exit", err)
@@ -55,14 +55,14 @@ func TestExitCodeRejectsNonExits(t *testing.T) {
 // from NewExitError — they are what a HOST could hand back after building
 // or mutating the error itself.
 func TestExitCodeMalformedReportsZero(t *testing.T) {
-	noData := &AqlError{Code: ExitErrorCode, Detail: "exit"}
+	noData := &BoruError{Code: ExitErrorCode, Detail: "exit"}
 
-	noKey := &AqlError{Code: ExitErrorCode, Detail: "exit", Data: NewOrderedMap()}
+	noKey := &BoruError{Code: ExitErrorCode, Detail: "exit", Data: NewOrderedMap()}
 
-	wrongType := &AqlError{Code: ExitErrorCode, Detail: "exit", Data: NewOrderedMap()}
+	wrongType := &BoruError{Code: ExitErrorCode, Detail: "exit", Data: NewOrderedMap()}
 	wrongType.Data.Set(ExitCodeKey, NewString("three"))
 
-	for name, err := range map[string]*AqlError{
+	for name, err := range map[string]*BoruError{
 		"no Data":     noData,
 		"no code key": noKey,
 		"non-Integer": wrongType,

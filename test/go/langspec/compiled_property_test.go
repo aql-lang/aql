@@ -1,5 +1,5 @@
 // Property-based differential gate: instead of the finite curated corpus,
-// GENERATE random well-typed AQL programs from the compilable subset and assert
+// GENERATE random well-typed BORU programs from the compilable subset and assert
 // the compiled VM and the interpreter agree on every one (the same invariant
 // TestSpecCompiledDifferential checks per spec row). The corpus exercises hand-
 // written rows; this exercises COMBINATIONS the corpus never enumerates (a
@@ -18,7 +18,7 @@ import (
 )
 
 // fuzzEnv reads a positive integer from an env var, else returns def. Lets CI /
-// a nightly job CRANK the fuzzer (`AQL_FUZZ_SEEDS=20 AQL_FUZZ_ITERS=5000`)
+// a nightly job CRANK the fuzzer (`BORU_FUZZ_SEEDS=20 BORU_FUZZ_ITERS=5000`)
 // without touching the lean, deterministic default the standard suite runs.
 func fuzzEnv(name string, def int) int {
 	if v := os.Getenv(name); v != "" {
@@ -605,7 +605,7 @@ func renderFnDef(form string, params []string, bodySrc string) string {
 	return "(fn [[" + psig + "][Integer][" + bodySrc + "]])"
 }
 
-// genStrProg builds a STRING-OPERATIONS program: the `import "aql:string-util"
+// genStrProg builds a STRING-OPERATIONS program: the `import "boru:string-util"
 // end` preamble (transparent — a program compiles identically with or without
 // it) followed by a string-flavoured expression from genS. Exercises the
 // `StringUtil.*` module ops and, crucially, COMPUTED strings flowing through
@@ -971,7 +971,7 @@ func render(n *gnode, scope []string) string {
 	case "ctxset":
 		return "context set '" + n.keys[0] + "' " + render(n.kids[0], scope) + " end"
 	case "strprog":
-		return `import "aql:string-util" ` + render(n.kids[0], scope)
+		return `import "boru:string-util" ` + render(n.kids[0], scope)
 	case "strop":
 		parts := make([]string, len(n.kids))
 		for i, k := range n.kids {
@@ -1053,11 +1053,11 @@ func TestPropertyDifferential(t *testing.T) {
 	}
 	// Lean DETERMINISTIC default (a regression guard, ~10s) — the same programs
 	// every run, so a failure always reproduces. Override the budget for a deep
-	// exploratory hunt: `AQL_FUZZ_SEEDS=20 AQL_FUZZ_ITERS=5000 go test -run
+	// exploratory hunt: `BORU_FUZZ_SEEDS=20 BORU_FUZZ_ITERS=5000 go test -run
 	// TestPropertyDifferential`.
 	const depth = 4
-	iters := fuzzEnv("AQL_FUZZ_ITERS", 1500)
-	seeds := fuzzEnv("AQL_FUZZ_SEEDS", 2)
+	iters := fuzzEnv("BORU_FUZZ_ITERS", 1500)
+	seeds := fuzzEnv("BORU_FUZZ_SEEDS", 2)
 	var compiled, failures int
 	for seed := 1; seed <= seeds; seed++ {
 		r := rand.New(rand.NewSource(int64(seed)))

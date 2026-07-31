@@ -1,22 +1,22 @@
 package native
 
 import (
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // Host-side capability keys. The host installs implementations under
 // these names on eng.Registry; word handlers retrieve them through
-// the typed accessors in this file. aqleng itself never sees them.
+// the typed accessors in this file. borueng itself never sees them.
 const (
 	CapFileOps        = "engine.fileops"         // active capabilities.FileOps
 	CapMemFileOps     = "engine.fileops.mem"     // lazily created in-memory FileOps
 	CapOverlayFileOps = "engine.fileops.overlay" // lazily created mem-over-host overlay
 	// CapModelledFileOps holds the overlay that MODELS filesystem effects for
 	// a registry running with eng.CheckState.ModelEffects — a module body
-	// executed during `aql check`. Distinct from CapOverlayFileOps so a body
+	// executed during `boru check`. Distinct from CapOverlayFileOps so a body
 	// that also opts into `__sys.fs overlay` gets its own layer rather than
 	// silently sharing the modelling one.
 	CapModelledFileOps = "engine.fileops.modelled"
@@ -25,10 +25,10 @@ const (
 	CapSQLite          = "engine.sqlite"         // *SQLiteStore
 	CapPolicy          = "engine.policy"         // policy.Policy enforcing permissions
 	CapClock           = "engine.clock"          // capabilities.Clock (the time source)
-	CapLogSinks        = "engine.logsinks"       // *LogSinkRegistry (aql:log fan-out sinks)
+	CapLogSinks        = "engine.logsinks"       // *LogSinkRegistry (boru:log fan-out sinks)
 	CapDebugOps        = "engine.debugops"       // capabilities.DebugOps (interactive stepping)
 	CapScriptArgs      = "engine.scriptargs"     // []string script positional arguments (IO.args)
-	CapHTTPOps         = "engine.httpops"        // capabilities.HTTPOps (aql:net fetch transport)
+	CapHTTPOps         = "engine.httpops"        // capabilities.HTTPOps (boru:net fetch transport)
 	CapClientIdents    = "engine.clientidents"   // map[string]capabilities.ClientIdentity (mTLS)
 	CapHTTPTransports  = "engine.httptransports" // map[TLSProfile]http.RoundTripper (per-registry cache)
 	CapEnv             = "engine.env"            // capabilities.EnvOps (IO.env)
@@ -74,7 +74,7 @@ func EffectiveDebugOps(r *Registry) (capabilities.DebugOps, bool) {
 	return nil, false
 }
 
-// SetHostDebugOps installs a DebugOps capability (used by the `aql debug`
+// SetHostDebugOps installs a DebugOps capability (used by the `boru debug`
 // session, the REPL/TTY host, and tests supplying a scripted controller).
 func SetHostDebugOps(r *Registry, ops capabilities.DebugOps) {
 	if r == nil || ops == nil {
@@ -85,7 +85,7 @@ func SetHostDebugOps(r *Registry, ops capabilities.DebugOps) {
 
 // RemoveHostDebugOps uninstalls the DebugOps capability — the uninstall
 // affordance SetHostDebugOps deliberately lacks (nil there is a no-op).
-// A borrowing host (the `aql debug` session) restores the registry with
+// A borrowing host (the `boru debug` session) restores the registry with
 // this on the way out so a reused registry doesn't keep pausing into a
 // dead controller.
 func RemoveHostDebugOps(r *Registry) {
@@ -128,7 +128,7 @@ func HostLogSinks(r *Registry) *LogSinkRegistry {
 // registry. When a policy uninstalls the "log" scope (install:false)
 // the slot is left empty so emission is a silent no-op — logging must
 // never crash a program. Hosts call this to pre-attach an OTel/Datadog
-// sink before the AQL program runs `import "aql:log"`.
+// sink before the BORU program runs `import "boru:log"`.
 func SetHostLogSinks(r *Registry, lsr *LogSinkRegistry) {
 	if r == nil {
 		return
@@ -313,7 +313,7 @@ func SetHostSQLite(r *Registry, store *SQLiteStore) {
 // Returns nil only when r itself is nil (a misconfigured registry).
 //
 // This logic used to live on eng.Registry; it now lives here
-// because aqleng has no fileops concept.
+// because borueng has no fileops concept.
 func EffectiveFileOps(r *Registry) capabilities.FileOps {
 	if r == nil {
 		return nil
@@ -343,7 +343,7 @@ func EffectiveFileOps(r *Registry) capabilities.FileOps {
 
 // hostOrModelled returns the host FileOps — or, when this registry MODELS
 // effects (eng.CheckState.ModelEffects: a module body running under
-// `aql check`), a mem-over-host overlay so the body's filesystem mutations
+// `boru check`), a mem-over-host overlay so the body's filesystem mutations
 // are contained and discarded while its reads still resolve against the real
 // filesystem.
 //
@@ -453,7 +453,7 @@ func SetHostEnvOps(r *Registry, ops capabilities.EnvOps) {
 }
 
 // permissionedEnvOps gates each read through the policy's `env` scope, so a
-// profile can expose an allowlist (read-only.jsonic allows LANG, TZ, AQL_*)
+// profile can expose an allowlist (read-only.jsonic allows LANG, TZ, BORU_*)
 // rather than all-or-nothing. A denied name reads as UNSET rather than
 // raising: a program probing for an optional variable should take its default
 // path, not crash, and the alternative leaks which names exist.

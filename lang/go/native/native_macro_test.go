@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // Phase 1b (design/MACROS-PHASE1.10.md §3): FormArgs raw-form capture, tested in

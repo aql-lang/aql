@@ -35,7 +35,7 @@ predicates*:
   a raw **nominal** lattice-descent test (`t.Matches(p)` ≡
   `t.IsAncestor(p)` ≡ "t <: p") that ignores the type's Behavior.
 
-So AQL ran *value-sensitive/lenient* semantics going in and *strict
+So BORU ran *value-sensitive/lenient* semantics going in and *strict
 nominal* semantics coming out. No language adopts that split on purpose
 (see §3). It was masked until recently because user-type return
 annotations resolved to `Any` (the prior bug fixed in
@@ -77,7 +77,7 @@ boundary**, symmetric-strict:
 | Go | `type Pos int` (explicit `Pos(i)`; untyped constants convert) |
 | Scala 3 | `opaque type Pos = Int` (transparent in scope, opaque outside) |
 
-Under the nominal reading AQL's *param* was the outlier — Haskell/Rust
+Under the nominal reading BORU's *param* was the outlier — Haskell/Rust
 reject a bare `42` at a `Pos` parameter too.
 
 **Refinement / subset types** — **value-sensitive**, symmetric: a base
@@ -93,7 +93,7 @@ predicate holds*, checked statically (solver) or at the boundary:
 
 Ada is the sharpest mirror: it has *both* a `subtype` (constraint,
 implicit + runtime-checked, symmetric) and a derived `type … is new …`
-(distinct, explicit conversion) — exactly the two AQL concepts.
+(distinct, explicit conversion) — exactly the two BORU concepts.
 
 ## 4. Decision
 

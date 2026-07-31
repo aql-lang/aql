@@ -2,33 +2,33 @@ package formatter
 
 import "strings"
 
-// Embedded AQL in host documents (Markdown, HTML, or anything that
+// Embedded BORU in host documents (Markdown, HTML, or anything that
 // tolerates HTML comments) is delimited two ways, both handled here:
 //
-//   - Markdown fenced code blocks whose info string is "aql":
-//     ```aql
+//   - Markdown fenced code blocks whose info string is "boru":
+//     ```boru
 //     def  x  1
 //     ```
 //   - explicit marker comments, for HTML or any non-fenced context:
-//     <!-- aqlfmt -->
+//     <!-- borufmt -->
 //     def  x  1
-//     <!-- /aqlfmt -->
+//     <!-- /borufmt -->
 //
-// Only the AQL between the delimiters is reformatted; the delimiter lines
+// Only the BORU between the delimiters is reformatted; the delimiter lines
 // and every other byte of the document are preserved.
 const (
-	markerOpen  = "<!-- aqlfmt -->"
-	markerClose = "<!-- /aqlfmt -->"
+	markerOpen  = "<!-- borufmt -->"
+	markerClose = "<!-- /borufmt -->"
 )
 
-// FormatMarkdown reformats the AQL inside ```aql fenced code blocks and
-// inside <!-- aqlfmt --> … <!-- /aqlfmt --> marker regions of a Markdown
+// FormatMarkdown reformats the BORU inside ```boru fenced code blocks and
+// inside <!-- borufmt --> … <!-- /borufmt --> marker regions of a Markdown
 // document, leaving the rest of the document unchanged.
 func FormatMarkdown(src string) string {
 	return formatMarkerRegions(formatFencedBlocks(src))
 }
 
-// FormatHTML reformats the AQL inside <!-- aqlfmt --> … <!-- /aqlfmt -->
+// FormatHTML reformats the BORU inside <!-- borufmt --> … <!-- /borufmt -->
 // marker regions of an HTML document, leaving the rest unchanged.
 func FormatHTML(src string) string {
 	return formatMarkerRegions(src)
@@ -67,7 +67,7 @@ func formatDelimited(src string, open func(string) (func(string) bool, bool)) st
 	return strings.Join(out, "\n")
 }
 
-// reformatBody formats a collected block of AQL lines, returning the
+// reformatBody formats a collected block of BORU lines, returning the
 // formatted lines with the trailing newline trimmed; an all-blank block
 // yields no lines.
 func reformatBody(body []string) []string {
@@ -79,10 +79,10 @@ func reformatBody(body []string) []string {
 }
 
 // formatFencedBlocks reformats each fenced code block whose info string's
-// first word is "aql".
+// first word is "boru".
 func formatFencedBlocks(src string) string {
 	return formatDelimited(src, func(line string) (func(string) bool, bool) {
-		fence, ok := aqlFenceOpen(line)
+		fence, ok := boruFenceOpen(line)
 		if !ok {
 			return nil, false
 		}
@@ -90,7 +90,7 @@ func formatFencedBlocks(src string) string {
 	})
 }
 
-// formatMarkerRegions reformats each <!-- aqlfmt --> … <!-- /aqlfmt -->
+// formatMarkerRegions reformats each <!-- borufmt --> … <!-- /borufmt -->
 // region.
 func formatMarkerRegions(src string) string {
 	return formatDelimited(src, func(line string) (func(string) bool, bool) {
@@ -101,17 +101,17 @@ func formatMarkerRegions(src string) string {
 	})
 }
 
-// aqlFenceOpen reports whether line opens a fenced code block whose info
-// string's first word is "aql" (case-insensitive), returning the fence
+// boruFenceOpen reports whether line opens a fenced code block whose info
+// string's first word is "boru" (case-insensitive), returning the fence
 // run (``` or ~~~) a matching close must repeat. The fence must start at
 // column 0 so indented content is never reflowed out of place.
-func aqlFenceOpen(line string) (string, bool) {
+func boruFenceOpen(line string) (string, bool) {
 	fence := leadingFenceRun(line)
 	if fence == "" {
 		return "", false
 	}
 	info := strings.Fields(line[len(fence):])
-	if len(info) == 0 || !strings.EqualFold(info[0], "aql") {
+	if len(info) == 0 || !strings.EqualFold(info[0], "boru") {
 		return "", false
 	}
 	return fence, true

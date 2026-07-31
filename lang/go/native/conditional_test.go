@@ -63,7 +63,7 @@ func TestIfClauseList(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			toks := make([]Value, len(tt.tokens))
 			copy(toks, tt.tokens)
-			got := runAQL(t, r, toks)
+			got := runBORU(t, r, toks)
 			parts := make([]string, len(got))
 			for i, v := range got {
 				parts[i] = v.String()
@@ -133,7 +133,7 @@ func TestIfListConditionMarkMove(t *testing.T) {
 	registerIOWords(r)
 	// if [1 add 2 gt 2] 10 20 — condition evaluates to true (3>2)
 	condList := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2), NewWord("gt"), NewInteger(2)})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("if"), condList, NewInteger(10), NewInteger(20),
 	})
 	_as0, _ := AsInteger(result[0])
@@ -150,7 +150,7 @@ func TestIfListConditionFalseMarkMove(t *testing.T) {
 	registerIOWords(r)
 	// if [1 gt 2] 10 20 — condition is false
 	condList := NewList([]Value{NewInteger(1), NewWord("gt"), NewInteger(2)})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("if"), condList, NewInteger(10), NewInteger(20),
 	})
 	_as1, _ := AsInteger(result[0])
@@ -166,7 +166,7 @@ func TestIfScalar2ArgTrue(t *testing.T) {
 	}
 	registerIOWords(r)
 	// if true 42 — 2-arg, scalar true condition
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("if"), NewBoolean(true), NewInteger(42),
 	})
 	_as2, _ := AsInteger(result[0])
@@ -182,7 +182,7 @@ func TestIfScalar2ArgFalse(t *testing.T) {
 	}
 	registerIOWords(r)
 	// if false 42 — 2-arg, scalar false condition returns nothing
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("if"), NewBoolean(false), NewInteger(42),
 	})
 	if len(result) != 0 {
@@ -199,7 +199,7 @@ func TestIfConditionSharesContext(t *testing.T) {
 	}
 	registerIOWords(r)
 	condList := NewList([]Value{NewWord("context"), NewWord("get"), NewString("flag")})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("flag"), NewBoolean(true),
 		NewWord("if"), condList, NewString("yes"), NewString("no"),
 	})
@@ -222,7 +222,7 @@ func TestIfConditionCanSetContext(t *testing.T) {
 		NewWord("context"), NewWord("set"), NewString("seen"), NewBoolean(true),
 		NewBoolean(true),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("if"), condList, NewInteger(1), NewInteger(2),
 		NewWord("context"), NewWord("get"), NewString("seen"),
 	})

@@ -248,7 +248,7 @@ func TestClientUserFilePermissions(t *testing.T) {
 	}
 	SaveClientUser(homeDir, cu)
 
-	info, err := os.Stat(filepath.Join(homeDir, ".aql", "user.jsonic"))
+	info, err := os.Stat(filepath.Join(homeDir, ".boru", "user.jsonic"))
 	if err != nil {
 		t.Fatal(err)
 	}

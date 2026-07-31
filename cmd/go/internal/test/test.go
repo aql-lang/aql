@@ -1,10 +1,10 @@
-// Package test implements `aql test` — discover *_test.aql suites, run each on
+// Package test implements `boru test` — discover *_test.boru suites, run each on
 // the bytecode compiler by DEFAULT (the normal, fast execution mode; falls back
-// to the interpreter only when a file is uncompilable), print aql:test's
+// to the interpreter only when a file is uncompilable), print boru:test's
 // per-case report, and exit non-zero if any case failed or any file errored.
 //
 // With --coverage the runner arms the engine's line-coverage hook BEFORE each
-// file runs, so a `*_test.aql` that imports a user module (`import "./mod.aql"`)
+// file runs, so a `*_test.boru` that imports a user module (`import "./mod.boru"`)
 // records that module's executed source rows (feature C tags the module because
 // the hook is armed at import time). After the run it reports each imported
 // module's line coverage.
@@ -27,22 +27,22 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
-	"github.com/aql-lang/aql/cmd/go/internal/run"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/permsflags"
+	"github.com/boru-lang/boru/cmd/go/internal/run"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// walkDir and newAQL are test seams (design/TEST-SEAMS.10.md): filepath.WalkDir
+// walkDir and newBORU are test seams (design/TEST-SEAMS.10.md): filepath.WalkDir
 // never surfaces a read error under the test's root uid, and lang.New's only
 // error path (registry init) is unreachable in a healthy build, so both
 // error arms are driven by swapping these in a test.
 var (
 	walkDir = filepath.WalkDir
-	newAQL  = lang.New
+	newBORU = lang.New
 )
 
 type cmd struct{}
@@ -51,7 +51,7 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "test" }
-func (*cmd) Synopsis() string { return "discover and run *_test.aql suites (compiled by default)" }
+func (*cmd) Synopsis() string { return "discover and run *_test.boru suites (compiled by default)" }
 
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
@@ -60,8 +60,8 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	coverage := fs.Bool("coverage", false, "measure imported-user-module line coverage; print a summary and write an HTML report")
 	coverageDir := fs.String("coverage-dir", "coverage", "directory for the HTML coverage report written with --coverage")
 	coverageMin := fs.Float64("coverage-min", 0, "fail the run (exit 1) when aggregate line coverage is below this percentage; implies coverage measurement")
-	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler when possible; silent interpreter fallback (the default; also enabled by AQL_COMPILE)")
-	noCompileFlag := fs.Bool("no-compile", false, "run each suite on the interpreter instead of the default bytecode compiler (also enabled by AQL_NO_COMPILE)")
+	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler when possible; silent interpreter fallback (the default; also enabled by BORU_COMPILE)")
+	noCompileFlag := fs.Bool("no-compile", false, "run each suite on the interpreter instead of the default bytecode compiler (also enabled by BORU_NO_COMPILE)")
 	forceCompileFlag := fs.Bool("force-compile", false, "REQUIRE the bytecode compiler — a suite that is not compilable errors instead of falling back")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
@@ -85,7 +85,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if len(files) == 0 {
-		fmt.Fprintln(stderr, "no *_test.aql files found")
+		fmt.Fprintln(stderr, "no *_test.boru files found")
 		return 1
 	}
 
@@ -135,8 +135,8 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 }
 
 // discover expands each target into test files: a file target is taken
-// verbatim (run even if it lacks the _test.aql suffix — an explicit request),
-// a directory is walked recursively for *_test.aql. Results are de-duplicated
+// verbatim (run even if it lacks the _test.boru suffix — an explicit request),
+// a directory is walked recursively for *_test.boru. Results are de-duplicated
 // and sorted for a stable run order. A target that does not exist is an error.
 func discover(targets []string) ([]string, error) {
 	seen := map[string]bool{}
@@ -161,7 +161,7 @@ func discover(targets []string) ([]string, error) {
 			if err != nil {
 				return err
 			}
-			if !d.IsDir() && strings.HasSuffix(path, "_test.aql") {
+			if !d.IsDir() && strings.HasSuffix(path, "_test.boru") {
 				add(path)
 			}
 			return nil
@@ -184,7 +184,7 @@ func discover(targets []string) ([]string, error) {
 // read back rather than discarded. Reporting 0/0 for a file whose first ten
 // cases passed made the summary actively misleading — worse, a file of purely
 // passing cases followed by one stray error was indistinguishable from an
-// empty file. Only a suite that errored before aql:test loaded counts nothing,
+// empty file. Only a suite that errored before boru:test loaded counts nothing,
 // because there is then no tally to read.
 func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.CompileMode, accum *covAccum) (passed, failed int, errored bool) {
 	data, err := os.ReadFile(path)
@@ -192,13 +192,13 @@ func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.Com
 		fmt.Fprintf(stderr, "error: %s: %s\n", path, err)
 		return 0, 0, true
 	}
-	a, err := newAQL(o)
+	a, err := newBORU(o)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s: init: %s\n", path, err)
 		return 0, 0, true
 	}
 	// Route the framework's streams to the runner's writers: a test body's
-	// `print` and aql:test's loud per-case `FAIL` line go to the runner's
+	// `print` and boru:test's loud per-case `FAIL` line go to the runner's
 	// stdout/stderr rather than leaking to os.Stderr.
 	a.SetOutput(stdout)
 	a.NativeRegistry().ErrOutput = stderr
@@ -221,7 +221,7 @@ func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.Com
 		}
 		// Salvage whatever the framework tallied before the error. A read
 		// failure here is the ordinary case for a suite that died before
-		// `import "aql:test"` — Test.summary is simply not a word yet — so
+		// `import "boru:test"` — Test.summary is simply not a word yet — so
 		// it is not reported as a second error on top of the first.
 		_, passed, failed, report, readErr := readOutcome(a)
 		if readErr != nil {
@@ -246,7 +246,7 @@ func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.Com
 // default (CompileTry) is a.Run — bytecode when compilable, silent interpreter
 // fallback otherwise. A recorded test failure does NOT error the run (the
 // framework records it and continues); only a genuine runtime/parse error does.
-func runSource(a *lang.AQL, src string, mode run.CompileMode) error {
+func runSource(a *lang.BORU, src string, mode run.CompileMode) error {
 	switch mode {
 	case run.CompileForce:
 		_, err := a.RunCompiledStrict(src)
@@ -260,11 +260,11 @@ func runSource(a *lang.AQL, src string, mode run.CompileMode) error {
 	}
 }
 
-// readOutcome reads aql:test's accumulated results off the (already-run)
+// readOutcome reads boru:test's accumulated results off the (already-run)
 // instance: `Test.summary Test.report` leaves a {total,passed,failed} map and
 // the human report string on the stack in that order. The helpers below skip
 // whichever value they don't consume, so one read yields both.
-func readOutcome(a *lang.AQL) (total, passed, failed int, report string, err error) {
+func readOutcome(a *lang.BORU) (total, passed, failed int, report string, err error) {
 	vals, err := a.RunInterpValues("Test.summary Test.report")
 	if err != nil {
 		return 0, 0, 0, "", err

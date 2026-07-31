@@ -1,4 +1,4 @@
-# `aql:fmt` — Go `fmt`
+# `boru:fmt` — Go `fmt`
 
 > **Status: design proposal, not implemented.** A curated, hand-written
 > native module wrapping the *string-returning* part of Go's `fmt`. Read
@@ -11,7 +11,7 @@ Go [`fmt`](https://pkg.go.dev/fmt) implements C-style formatted I/O. This
 note covers only the **string-producing** functions — `Sprintf`,
 `Sprint`, `Sprintln`, and `Errorf` (as a format-then-error helper). The
 `Print` / `Fprint` family that writes to `os.Stdout` / an `io.Writer` is
-**out of scope**: side-effecting output belongs to `aql:io` (`IO.print`
+**out of scope**: side-effecting output belongs to `boru:io` (`IO.print`
 / `IO.printstr`, see `lang/go/native/io_module.go`). Nothing is
 implemented yet.
 
@@ -20,15 +20,15 @@ implemented yet.
 Go's `fmt.Sprintf(format string, a ...any) string` is variadic over the
 empty interface. The raw `go:` bridge would expose that as an
 `Any`-typed varargs blur. The curated surface fixes the shape: a format
-String plus a **List** of AQL values, with values crossing the boundary
+String plus a **List** of BORU values, with values crossing the boundary
 via `eng.ToNative` so `%v`/`%d`/`%s`/… see real Go scalars. printf-style
-formatting is the power-user complement to AQL's idiomatic template
+formatting is the power-user complement to BORU's idiomatic template
 strings (see Overlap).
 
 ## 3. Import & namespace
 
 ```
-import "aql:fmt"            # binds the Fmt namespace
+import "boru:fmt"            # binds the Fmt namespace
 ```
 
 `fmt` does not clash with a builtin type or existing module namespace,
@@ -42,15 +42,15 @@ Signatures are **top-first, sig order** (position 0 = top of stack).
 Inner native sigs use `BarrierPos: -1` so the swap form dispatches. Go's
 variadic `...any` becomes a single **List** argument.
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `Sprintf(format,a...) string` | `format` | `[List args, String format] -> String` | Format args against a printf format string. | Variadic `...any` → a `List`; each element bridged via `eng.ToNative`. format is the top arg so swap reads `format Fmt.format args`. |
 | `Sprint(a...) string` | `sprint` | `[List] -> String` | Concatenate args, spaces only between non-string operands. | Variadic → `List`; no format string. |
 | `Sprintln(a...) string` | `sprintln` | `[List] -> String` | Concatenate args with spaces, append a newline. | Variadic → `List`; always spaces between operands, trailing `\n`. |
-| `Errorf(format,a...) error` | (folded) | — | — | Not a separate word: an `error` value has no AQL counterpart. Use `Fmt.format` to build the message, then raise it via the engine's normal error path (`r.AqlError`) at the call site. |
+| `Errorf(format,a...) error` | (folded) | — | — | Not a separate word: an `error` value has no BORU counterpart. Use `Fmt.format` to build the message, then raise it via the engine's normal error path (`r.BoruError`) at the call site. |
 
 Common verbs (documented in `docs_fmt.go` / the spec header so users
-have a reference without leaving AQL):
+have a reference without leaving BORU):
 
 | verb | meaning |
 |---|---|
@@ -63,7 +63,7 @@ have a reference without leaving AQL):
 | `%t` | boolean |
 | `%x` | hex (lowercase) |
 
-AQL values map to their Go counterparts through `eng.ToNative` before
+BORU values map to their Go counterparts through `eng.ToNative` before
 formatting: String→`string`, Integer→`int64`, Float→`float64`,
 Boolean→`bool`, List→`[]any`, Map→`map[string]any`, None→`nil`. A Map
 formats under `%v`/`%+v` like a Go map.
@@ -83,7 +83,7 @@ failing. The module therefore:
 - returns the formatted String including any `%!` marker (mirrors Go;
   does not invent an error where Go produced none), and
 - guards its own argument types up front: a non-String format or a
-  non-List args raises `format` (via `r.AqlError`). Guard with
+  non-List args raises `format` (via `r.BoruError`). Guard with
   `AsConcreteString` and `RequireConcreteList` before use; never panic
   (`eng/go/CLAUDE.md` "Panic Prevention").
 
@@ -97,17 +97,17 @@ error is an open question — see §10.)
 ## 7. Policy / capabilities
 
 None — pure string production, no I/O. (The output-writing `Print`
-family that *would* gate lives in `aql:io`, not here.)
+family that *would* gate lives in `boru:io`, not here.)
 
 ## 8. Overlap
 
-AQL already has two formatting facilities, and `Fmt` must not disturb
+BORU already has two formatting facilities, and `Fmt` must not disturb
 them — it sits alongside as the printf escape hatch:
 
 - **Template strings** `` `...${x}...` `` (parser-level `InterpString`,
   see `lang/go/CLAUDE.md` "Template string interpolation") are the
   **idiomatic default** for interpolation. Reach for them first.
-- The **core `format` word** (`lang/go/native/format.go`) renders AQL
+- The **core `format` word** (`lang/go/native/format.go`) renders BORU
   values to canonical text.
 
 **Dividing line:** `Fmt.format` exposes *Go printf semantics* — width,
@@ -119,7 +119,7 @@ unqualified way to build strings; `Fmt.format` is opt-in via `import`.
 ## 9. Examples (args-before form)
 
 ```
-import "aql:fmt"
+import "boru:fmt"
 
 [42] "n = %d" Fmt.format                    # "n = 42"
 [3.14159] "%.2f" Fmt.format                 # "3.14"
@@ -133,16 +133,16 @@ import "aql:fmt"
 ## 10. Open questions / out of scope
 
 - **`Print` / `Println` / `Fprintf`** — stdout/writer output is out of
-  scope; that surface is `aql:io`.
-- **`Errorf` / `%w` wrapping** — AQL has no first-class `error` value, so
+  scope; that surface is `boru:io`.
+- **`Errorf` / `%w` wrapping** — BORU has no first-class `error` value, so
   `Errorf` is folded away (build the message with `Fmt.format`, raise via
-  `r.AqlError`). Revisit if an error/diagnostic value type is added.
+  `r.BoruError`). Revisit if an error/diagnostic value type is added.
 - **`%!`-marker promotion** — should a result containing a Go formatting
   marker (`%!d(...)`, `%!(EXTRA ...)`) be returned verbatim (current
-  proposal, matches Go) or promoted to an `AqlError`? Leaning verbatim
+  proposal, matches Go) or promoted to a `BoruError`? Leaning verbatim
   for transparency.
 - **`Scan` / `Sscanf` family** — input parsing is out of scope; scalar
-  parsing is `aql:strconv` (see [STRCONV.10.md](STRCONV.10.md)).
+  parsing is `boru:strconv` (see [STRCONV.10.md](STRCONV.10.md)).
 
 ## 11. Implementation sketch
 
@@ -157,9 +157,9 @@ Wiring checklist — no Go code. Reference: `lang/go/modules/math.go`
   Exports: {"Fmt": …}}`.
 - Register `"fmt": BuildFmtModule` in the `modules` map in
   `lang/go/modules/modules.go`.
-- `lang/go/modules/docs_fmt.go` — `registerDocs("aql:fmt", …)` with a
+- `lang/go/modules/docs_fmt.go` — `registerDocs("boru:fmt", …)` with a
   one-line summary per export (`TestModuleExportDocs` enforces it).
 - `lang/spec/module-fmt.tsv` — `input⇥expected⇥description`, each row
-  leading with `import "aql:fmt"`; each positive row paired with an
+  leading with `import "boru:fmt"`; each positive row paired with an
   `ERROR:<substring>` negative sibling.
 - No FixedID entry, no policy wiring.

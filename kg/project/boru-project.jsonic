@@ -1,0 +1,244 @@
+# boru-project.jsonic — candidate facts about the boru-lang/boru repository
+# itself: the modules, the documentation set, the tools, and the core
+# language concepts. This is the input that kg/main.boru turns into the
+# project knowledge graph (kg/out/graph.json).
+#
+# Every assertion quotes its supporting passage from README.md or
+# AGENTS.md. When the repository structure or documentation changes in a
+# PR, update the affected entries here and rebuild (see kg/README.md).
+{
+  sources: [
+    {
+      id: "src:readme"
+      kind: "text"
+      locator: "README.md"
+      title: "BORU README"
+      retrieved_at: null
+      content_hash: "readme-2026-07"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
+      id: "src:agents"
+      kind: "text"
+      locator: "AGENTS.md"
+      title: "AGENTS.md agent guide"
+      retrieved_at: null
+      content_hash: "agents-2026-07"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+  ]
+  entities: [
+    { key: "boru", type: "Concept", label: "BORU language"
+      attributes: { paradigm: "concatenative, typed, word-based" } }
+    { key: "repo", type: "Product", label: "boru-lang/boru repository"
+      external_ids: { github: "boru-lang/boru" } }
+    { key: "binary", type: "Product", label: "boru binary"
+      attributes: { role: "CLI, REPL, type checker, formatter, LSP, registry client, vault, supervisor" } }
+    { key: "forward", type: "Concept", label: "Forward arguments" }
+    { key: "stack", type: "Concept", label: "Value stack" }
+    { key: "describe", type: "Concept", label: "boru describe discovery" }
+    { key: "spec", type: "Concept", label: "Executable language spec" }
+    { key: "cmd-go", type: "Product", label: "cmd/go module"
+      attributes: { path: "cmd/go" } }
+    { key: "lang-go", type: "Product", label: "lang/go module"
+      attributes: { path: "lang/go" } }
+    { key: "eng-go", type: "Product", label: "eng/go module"
+      attributes: { path: "eng/go" } }
+    { key: "calc-go", type: "Product", label: "calc/go module"
+      attributes: { path: "calc/go" } }
+    { key: "wpg", type: "Product", label: "wpg playground module"
+      attributes: { path: "wpg" } }
+    { key: "kg", type: "Product", label: "kg knowledge-graph pipeline"
+      attributes: { path: "kg" } }
+    { key: "lang-spec", type: "Product", label: "lang/spec directory"
+      attributes: { path: "lang/spec" } }
+    { key: "utils", type: "Product", label: "utils coreutils subset"
+      attributes: { path: "utils" } }
+    { key: "boru-cli", type: "Product", label: "boru:cli module"
+      attributes: { path: "lang/go/modules/cli.boru", language: "BORU" } }
+    { key: "readme", type: "Document", label: "README.md" }
+    { key: "agents-md", type: "Document", label: "AGENTS.md" }
+    { key: "tutorial", type: "Document", label: "TUTORIAL.md" }
+    { key: "howto", type: "Document", label: "HOWTO.md" }
+    { key: "reference", type: "Document", label: "REFERENCE.md" }
+    { key: "explanation", type: "Document", label: "EXPLANATION.md" }
+    { key: "cli-md", type: "Document", label: "CLI.md" }
+    { key: "adr", type: "Document", label: "ADR.md" }
+    { key: "nur", type: "Document", label: "NUR.md" }
+    { key: "eng-guide", type: "Document", label: "eng/go/CLAUDE.md" }
+    { key: "lang-guide", type: "Document", label: "lang/go/CLAUDE.md" }
+    { key: "vault", type: "Concept", label: "secrets vault"
+      attributes: { role: "encrypted API-key / token store, driven by the boru vault subcommand" } }
+    { key: "design-notes", type: "Document", label: "design/ notes" }
+    { key: "org", type: "Organization", label: "boru-lang" }
+  ]
+  assertions: [
+    { subject: "repo", predicate: "created_by"
+      object: { kind: "entity", entity: "org" }
+      evidence: [{ source: "src:readme", locator: "Install",
+        quote: "git clone https://github.com/boru-lang/boru" }]
+      confidence: 0.95 }
+    { subject: "binary", predicate: "part_of"
+      object: { kind: "entity", entity: "cmd-go" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "cmd/go/ | The boru CLI / REPL" }]
+      confidence: 0.97 }
+    { subject: "cmd-go", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "cmd/go/ | The boru CLI / REPL (github.com/boru-lang/boru/cmd/go)." }]
+      confidence: 0.98 }
+    { subject: "lang-go", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "lang/go/ | The language layer: public lang API and the consolidated native word library." }]
+      confidence: 0.98 }
+    { subject: "eng-go", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "eng/go/ | Engine kernel, parser, and kernel spec runner." }]
+      confidence: 0.98 }
+    { subject: "calc-go", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "calc/go/ | A small calculator built directly on eng (learning example)." }]
+      confidence: 0.98 }
+    { subject: "wpg", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "wpg/ | The wasm web playground (wpg/wasm + wpg/serve)." }]
+      confidence: 0.98 }
+    { subject: "kg", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:agents", locator: "Repository layout",
+        quote: "kg/ | The project knowledge graph: an evidence-backed BORU pipeline and its generated bundle." }]
+      confidence: 0.98 }
+    { subject: "utils", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:agents", locator: "Repository layout",
+        quote: "utils/ | A coreutils subset written in BORU — real programs that prove the CLI story (argv, exit codes, streams, baked permissions)." }]
+      confidence: 0.98 }
+    { subject: "utils", predicate: "related_to"
+      object: { kind: "entity", entity: "boru-cli" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "utils/ | A coreutils subset written in BORU (cat, wc, head, grep, ...) — real programs, built with boru build." }]
+      confidence: 0.95 }
+    { subject: "boru-cli", predicate: "part_of"
+      object: { kind: "entity", entity: "lang-go" }
+      evidence: [{ source: "src:agents", locator: "Repository layout",
+        quote: "utils/ | A coreutils subset written in BORU — real programs that prove the CLI story (argv, exit codes, streams, baked permissions)." }]
+      confidence: 0.9 }
+    { subject: "utils", predicate: "related_to"
+      object: { kind: "entity", entity: "binary" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "real programs, built with boru build" }]
+      confidence: 0.9 }
+    { subject: "boru", predicate: "has_attribute"
+      object: { kind: "literal", value: "typed, word-based query language", datatype: "String" }
+      evidence: [{ source: "src:readme", locator: "intro",
+        quote: "BORU is a typed, word-based query language." }]
+      confidence: 0.98 }
+    { subject: "boru", predicate: "has_attribute"
+      object: { kind: "literal", value: "concatenative", datatype: "String" }
+      evidence: [{ source: "src:readme", locator: "intro",
+        quote: "Underneath, BORU is concatenative: words can equally take their arguments from a value stack" }]
+      confidence: 0.98 }
+    { subject: "boru", predicate: "related_to"
+      object: { kind: "entity", entity: "forward" }
+      evidence: [{ source: "src:readme", locator: "Forward arguments",
+        quote: "the defining feature of the surface syntax is forward arguments" }]
+      confidence: 0.95 }
+    { subject: "boru", predicate: "related_to"
+      object: { kind: "entity", entity: "stack" }
+      evidence: [{ source: "src:readme", locator: "intro",
+        quote: "words can equally take their arguments from a value stack, which is what makes point-free pipelines compose" }]
+      confidence: 0.95 }
+    { subject: "binary", predicate: "supports"
+      object: { kind: "entity", entity: "describe" }
+      evidence: [{ source: "src:agents", locator: "First: let the tool document itself",
+        quote: "The boru CLI documents both the language and itself, and that output is generated from the live engine" }]
+      confidence: 0.95 }
+    { subject: "lang-spec", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "lang/spec/ | Engine spec TSV files (the language's executable spec)." }]
+      confidence: 0.98 }
+    { subject: "spec", predicate: "part_of"
+      object: { kind: "entity", entity: "lang-spec" }
+      evidence: [{ source: "src:agents", locator: "Task router",
+        quote: "The executable language spec (the rows tests run against) | lang/spec/*.tsv" }]
+      confidence: 0.95 }
+    { subject: "readme", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:agents", locator: "header",
+        quote: "New to the repo? Skim README.md first." }]
+      confidence: 0.95 }
+    { subject: "agents-md", predicate: "mentions"
+      object: { kind: "entity", entity: "describe" }
+      evidence: [{ source: "src:agents", locator: "First: let the tool document itself",
+        quote: "Before grepping source or guessing a word's signature, ask the binary." }]
+      confidence: 0.95 }
+    { subject: "tutorial", predicate: "supports"
+      object: { kind: "entity", entity: "boru" }
+      evidence: [{ source: "src:readme", locator: "Documentation",
+        quote: "Tutorial | You are new to BORU and want to learn it step by step." }]
+      confidence: 0.95 }
+    { subject: "howto", predicate: "supports"
+      object: { kind: "entity", entity: "boru" }
+      evidence: [{ source: "src:readme", locator: "Documentation",
+        quote: "How-To Guides | You have a specific task and want a recipe." }]
+      confidence: 0.95 }
+    { subject: "reference", predicate: "supports"
+      object: { kind: "entity", entity: "boru" }
+      evidence: [{ source: "src:readme", locator: "Documentation",
+        quote: "Reference | You need the precise behaviour of a syntax form, type, or word." }]
+      confidence: 0.95 }
+    { subject: "explanation", predicate: "supports"
+      object: { kind: "entity", entity: "boru" }
+      evidence: [{ source: "src:readme", locator: "Documentation",
+        quote: "Explanation | You want to understand why BORU is the way it is." }]
+      confidence: 0.95 }
+    { subject: "cli-md", predicate: "supports"
+      object: { kind: "entity", entity: "binary" }
+      evidence: [{ source: "src:readme", locator: "Documentation",
+        quote: "CLI Reference | You want to drive the boru binary from the shell." }]
+      confidence: 0.95 }
+    { subject: "adr", predicate: "mentions"
+      object: { kind: "entity", entity: "boru" }
+      evidence: [{ source: "src:readme", locator: "Documentation",
+        quote: "Architecture Design Record | You want the key architectural decisions and the reasoning behind them." }]
+      confidence: 0.9 }
+    { subject: "nur", predicate: "mentions"
+      object: { kind: "entity", entity: "boru" }
+      evidence: [{ source: "src:readme", locator: "Documentation",
+        quote: "Non-Uniformity Register | You want the recorded deviations from the language's uniform rules, each pending, resolved, or explicitly allowed." }]
+      confidence: 0.9 }
+    { subject: "eng-guide", predicate: "supports"
+      object: { kind: "entity", entity: "eng-go" }
+      evidence: [{ source: "src:agents", locator: "Working in the code",
+        quote: "Engine kernel — types, values, signatures, matching, the step loop, the parser bridge | eng/go/CLAUDE.md" }]
+      confidence: 0.95 }
+    { subject: "lang-guide", predicate: "supports"
+      object: { kind: "entity", entity: "lang-go" }
+      evidence: [{ source: "src:agents", locator: "Working in the code",
+        quote: "Language layer — native words, modules, registry, help/describe, capabilities | lang/go/CLAUDE.md" }]
+      confidence: 0.95 }
+    { subject: "wpg", predicate: "supports"
+      object: { kind: "entity", entity: "boru" }
+      evidence: [{ source: "src:readme", locator: "Install",
+        quote: "A wasm-powered browser playground is bundled in docs/index.html" }]
+      confidence: 0.9 }
+    { subject: "vault", predicate: "part_of"
+      object: { kind: "entity", entity: "binary" }
+      evidence: [{ source: "src:readme", locator: "Overview",
+        quote: "a secrets vault" }]
+      confidence: 0.95 }
+    { subject: "design-notes", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "Internal design notes and proposals." }]
+      confidence: 0.9 }
+  ]
+}

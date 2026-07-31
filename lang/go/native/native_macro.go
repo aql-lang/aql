@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // Macro system words. See design/MACROS.8.md and design/MACROS-PHASE1.10.md.
@@ -326,7 +326,7 @@ func macroHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	}
 	elems := spec.Slice()
 	if len(elems) != 2 {
-		return nil, r.AqlError("macro_error",
+		return nil, r.BoruError("macro_error",
 			fmt.Sprintf("macro: expected [[params] [body]] (2 elements), got %d", len(elems)), "macro")
 	}
 	// Macro params are plain NAMES of type Any (operands arrive as raw code,
@@ -335,21 +335,21 @@ func macroHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// here; typed macro params are a later extension.)
 	paramsSpec := elems[0]
 	if !paramsSpec.Parent.Equal(TList) || !IsConcrete(paramsSpec) {
-		return nil, r.AqlError("macro_error", "macro: params must be a list of names", "macro")
+		return nil, r.BoruError("macro_error", "macro: params must be a list of names", "macro")
 	}
 	pl, _ := AsList(paramsSpec)
 	params := make([]FnParam, 0, pl.Len())
 	for i := 0; i < pl.Len(); i++ {
 		el := pl.Get(i)
 		if !IsWord(el) {
-			return nil, r.AqlError("macro_error",
+			return nil, r.BoruError("macro_error",
 				"macro: each param must be a bare name (typed params are a later extension)", "macro")
 		}
 		w, _ := AsWord(el)
 		params = append(params, FnParam{Name: w.Name, Type: TAny})
 	}
 	if len(params) == 0 {
-		return nil, r.AqlError("macro_error", "macro: needs at least one parameter", "macro")
+		return nil, r.BoruError("macro_error", "macro: needs at least one parameter", "macro")
 	}
 	barrierPos := len(params) // all operands forward-eligible
 
@@ -373,7 +373,7 @@ func macroHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	sig := FnSig{
 		Params:        params,
 		Returns:       []*Type{TAny},
-		Impl:          AQL(bodyElems),
+		Impl:          BORU(bodyElems),
 		BarrierPos:    barrierPos,
 		FormArgs:      form,
 		NoEvalArgs:    form,
@@ -394,11 +394,11 @@ func macroHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 // word is stepped outside a macro template (the expander consumes them by name
 // during expansion and they never reach dispatch there).
 func unquoteOutsideMacroHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return nil, r.AqlError("unquote_error", "unquote: only valid inside a macro template", "unquote")
+	return nil, r.BoruError("unquote_error", "unquote: only valid inside a macro template", "unquote")
 }
 
 func spliceOutsideMacroHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return nil, r.AqlError("splice_error", "splice: only valid inside a macro template", "splice")
+	return nil, r.BoruError("splice_error", "splice: only valid inside a macro template", "splice")
 }
 
 // macroexpandHandler returns the expansion of a macro call as a List, without
@@ -424,7 +424,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	}
 	kind, err := args[0].AsConcreteAtom()
 	if err != nil {
-		return nil, r.AqlErrorHint("mini_error",
+		return nil, r.BoruErrorHint("mini_error",
 			"mini: the kind must be a literal name", "mini",
 			"write the kind as a bare word: mini re '[a-z]+'")
 	}
@@ -476,14 +476,14 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			// the trap and keeps the lenient fallback.
 			r.Check.Recorder().RecordTrap("mini_unknown_lang",
 				fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
-				`import "aql:minilang" first; the kinds are fixed (MiniLang.kinds lists them) — pass a custom mini-language as a fn value: mini <fn> '…'`,
+				`import "boru:minilang" first; the kinds are fixed (MiniLang.kinds lists them) — pass a custom mini-language as a fn value: mini <fn> '…'`,
 				args[0].Pos())
-			macroDegradedAdvisory(r, "mini", "the aql:minilang import is outside the checked fragment", args[0].Pos())
+			macroDegradedAdvisory(r, "mini", "the boru:minilang import is outside the checked fragment", args[0].Pos())
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
-		return nil, r.AqlErrorHint("mini_unknown_lang",
+		return nil, r.BoruErrorHint("mini_unknown_lang",
 			fmt.Sprintf("mini: no mini-language %q is registered", kind), "mini",
-			`import "aql:minilang" first; the kinds are fixed (MiniLang.kinds lists them) — pass a custom mini-language as a fn value: mini <fn> '…'`)
+			`import "boru:minilang" first; the kinds are fixed (MiniLang.kinds lists them) — pass a custom mini-language as a fn value: mini <fn> '…'`)
 	}
 
 	opts := NewMap(NewOrderedMap())
@@ -494,7 +494,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// Compile-hook path (design/MINILANG.5.md §13). When the kind registered
 	// a Go compile hook AND src is concrete, compile at the call site and
 	// splice the hook's tokens instead of the standard call. (Hooks are
-	// BUILT-IN machinery now — the AQL `register-compiled` surface died with
+	// BUILT-IN machinery now — the BORU `register-compiled` surface died with
 	// the frozen kind namespace; `re` is the shipping example.) A PLAIN
 	// check pass stays on the standard `lang_<kind>` call (the semantic
 	// reference for checking; a check-mode src is usually a carrier anyway)
@@ -617,12 +617,12 @@ func miniFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 		}
 		// A fn-family value whose payload is not an FnDefInfo — defensive:
 		// the sig matcher never delivers one from surface syntax.
-		return nil, r.AqlErrorHint("mini_error",
+		return nil, r.BoruErrorHint("mini_error",
 			"mini: the mini-language is not a usable function value", "mini",
 			"pass a transducer fn: mini (fn [[src:String opts:Map] [Any] [...]]) 'text'")
 	}
 	if why := MiniLangFnSigWhy(fnDef); why != "" {
-		return nil, r.AqlErrorHint("mini_bad_signature",
+		return nil, r.BoruErrorHint("mini_bad_signature",
 			"mini: "+why, "mini",
 			"declare the fn as fn [[src:String opts:Map …inputs] [outputs] [body]]")
 	}
@@ -699,7 +699,7 @@ func miniPartialFromSigs(label, kindTag string, sigs []FnSig, tail []Value) Valu
 		outSigs = append(outSigs, FnSig{
 			Params:  []FnParam{{Name: miniSubjParam, Type: ws.Params[2].Type}},
 			Returns: ws.Returns,
-			Impl:    AQL(body),
+			Impl:    BORU(body),
 			// STACK-ONLY: a filter's subject comes from the stack (the
 			// documented semantics), and a stack-only partial never
 			// forward-collects the tokens after it — which is what lets
@@ -727,7 +727,7 @@ func miniPartialFromSigs(label, kindTag string, sigs []FnSig, tail []Value) Valu
 // miniPartialSeq disambiguates partial names process-wide.
 var miniPartialSeq int
 
-// (miniCompileExport / miniInvokeAQLCompile — the AQL compile-hook plumbing —
+// (miniCompileExport / miniInvokeBORUCompile — the BORU compile-hook plumbing —
 // died with the frozen kind namespace: hooks are Go-only builtin machinery
 // now, discovered via miniGoHook.)
 
@@ -774,7 +774,7 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	}
 	kind, err := args[0].AsConcreteAtom()
 	if err != nil {
-		return nil, r.AqlErrorHint("parse_error",
+		return nil, r.BoruErrorHint("parse_error",
 			"parse: the kind must be a literal name", "parse",
 			"write the kind as a bare word: parse calc 'x + y'")
 	}
@@ -832,14 +832,14 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			// declines and keeps the lenient fallback.
 			r.Check.Recorder().RecordTrap("parse_unknown_lang",
 				fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
-				`import "aql:parselang" first; the kinds are fixed (ParseLang.kinds lists them) — pass a custom parser as a fn value: parse <fn> '…'`,
+				`import "boru:parselang" first; the kinds are fixed (ParseLang.kinds lists them) — pass a custom parser as a fn value: parse <fn> '…'`,
 				args[0].Pos())
-			macroDegradedAdvisory(r, "parse", "the aql:parselang import is outside the checked fragment", args[0].Pos())
+			macroDegradedAdvisory(r, "parse", "the boru:parselang import is outside the checked fragment", args[0].Pos())
 			return []Value{NewDynamicCarrier(TAny)}, nil
 		}
-		return nil, r.AqlErrorHint("parse_unknown_lang",
+		return nil, r.BoruErrorHint("parse_unknown_lang",
 			fmt.Sprintf("parse: no parser %q is registered", kind), "parse",
-			`import "aql:parselang" first; the kinds are fixed (ParseLang.kinds lists them) — pass a custom parser as a fn value: parse <fn> '…'`)
+			`import "boru:parselang" first; the kinds are fixed (ParseLang.kinds lists them) — pass a custom parser as a fn value: parse <fn> '…'`)
 	}
 
 	source, opts := parseSurfaceOperands(args)
@@ -889,18 +889,18 @@ func parseFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 		// sig matcher never delivers one from surface syntax (a bare `Function`
 		// type literal is parented at Type and refuses every parse sig), so
 		// only a crafted or corrupted function value lands here.
-		return nil, r.AqlErrorHint("parse_error",
+		return nil, r.BoruErrorHint("parse_error",
 			"parse: the parser is not a usable function value", "parse",
 			"pass a parser fn: parse (fn [[source:String opts:Map] [Any] [...]]) 'x'")
 	}
 	if why := ParseLangFnSigWhy(fnDef); why != "" {
-		return nil, r.AqlErrorHint("parse_bad_signature",
+		return nil, r.BoruErrorHint("parse_bad_signature",
 			"parse: "+why, "parse",
 			"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
 	}
 	source, opts := parseSurfaceOperands(args)
 	// COMPILE pass, NON-CONCRETE source (a fn-body parse over a `src:String`
-	// param carrier — every voxgig-aql/template lexer): the direct expansion
+	// param carrier — every voxgig-boru/template lexer): the direct expansion
 	// `<fn> <source> <opts> end` dispatches the parser WORD, whose result is a
 	// dynamic Any, so the compiler refuses "unannotated or opaque word <fn>".
 	// Route it through the SAME parselang-fn-dispatch CALL_NATIVE the
@@ -912,7 +912,7 @@ func parseFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 	// source (a top-level `parse op 'inc'`) keeps the expansion: the dispatch
 	// yields a concrete result the compile pass folds, observation-free
 	// (TestParseFnDispatchCheckObservationFree). Declines (pure check, no
-	// aql:parselang import) also fall through to the expansion.
+	// boru:parselang import) also fall through to the expansion.
 	if !IsConcrete(source) {
 		if out, ok := recordParseLangFnDispatch(r, fn, args); ok {
 			return []Value{out}, nil
@@ -951,7 +951,7 @@ func ParseLangFnSigWhy(fnDef FnDefInfo) string {
 // transducer — every signature must open with the standard prefix
 // [src:String opts:Map …] — or "" when it conforms. It is the single
 // contract shared by the `mini` macro's fn-operand form (miniFnExpand) and
-// aql:minilang's MiniLang.register validation (modules/minilang.go), so
+// boru:minilang's MiniLang.register validation (modules/minilang.go), so
 // both surfaces enforce byte-identical requirements.
 func MiniLangFnSigWhy(fnDef FnDefInfo) string {
 	for _, sig := range fnDef.Signatures {
@@ -1022,7 +1022,7 @@ func parseNamespaceBound(r *Registry) bool {
 // runtime resolver a compiled `parse <fn>` VALUE-form call dispatches
 // through when the parser operand is not concrete under analysis (a
 // computed parser, a Function-typed binding, a Parse.parser grammar
-// parser). Installed once per registry when aql:parselang is built.
+// parser). Installed once per registry when boru:parselang is built.
 const capParseLangFnDispatch = "engine.parse.fn-dispatch"
 
 // InstallParseLangFnDispatch records the parselang-side fn-dispatch
@@ -1042,7 +1042,7 @@ func InstallParseLangFnDispatch(r *Registry, sig *Signature) {
 // OPERAND's provenance is its own producing event — the recorded call that
 // computed it — so the parse result reaches downstream consumers with
 // provenance instead of refusing "residual value of unknown provenance".
-// Declines (pure check, suspended analysis, no aql:parselang import) leave
+// Declines (pure check, suspended analysis, no boru:parselang import) leave
 // the caller on the unrecorded dynamic degrade.
 func recordParseLangFnDispatch(r *Registry, fn Value, args []Value) (Value, bool) {
 	rec := r.Check.Recorder()
@@ -1153,13 +1153,13 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		if r.Check.IsActive() && !emitNamespaceBound(r) {
 			r.Check.Recorder().RecordTrap("emit_unknown_lang",
 				fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
-				`import "aql:emitlang" first; the kinds are fixed (EmitLang.kinds lists them) — pass a custom emitter as a fn value: emit <fn> <data>`,
+				`import "boru:emitlang" first; the kinds are fixed (EmitLang.kinds lists them) — pass a custom emitter as a fn value: emit <fn> <data>`,
 				args[0].Pos())
 			return []Value{NewDynamicCarrier(TString)}, nil
 		}
-		return nil, r.AqlErrorHint("emit_unknown_lang",
+		return nil, r.BoruErrorHint("emit_unknown_lang",
 			fmt.Sprintf("emit: no emitter %q is registered", kind), "emit",
-			`import "aql:emitlang" first; the kinds are fixed (EmitLang.kinds lists them) — pass a custom emitter as a fn value: emit <fn> <data>`)
+			`import "boru:emitlang" first; the kinds are fixed (EmitLang.kinds lists them) — pass a custom emitter as a fn value: emit <fn> <data>`)
 	}
 
 	// Reconstruct a /q'd leading bare word as a Word so the variable it names
@@ -1216,12 +1216,12 @@ func emitFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 		}
 		// A fn-family value whose payload is not an FnDefInfo — defensive:
 		// the sig matcher never delivers one from surface syntax.
-		return nil, r.AqlErrorHint("emit_error",
+		return nil, r.BoruErrorHint("emit_error",
 			"emit: the emitter is not a usable function value", "emit",
 			"pass an emitter fn: emit (fn [[value:Any opts:Map] [String] [...]]) {a:1}")
 	}
 	if why := EmitLangFnSigWhy(fnDef); why != "" {
-		return nil, r.AqlErrorHint("emit_bad_signature",
+		return nil, r.BoruErrorHint("emit_bad_signature",
 			"emit: "+why, "emit",
 			"declare the fn as fn [[value:Any opts:Map] [String] [body]]")
 	}

@@ -46,8 +46,8 @@ var perfBaselineBenches = []baselineBench{
 	// Map construction + key access.
 	{"map_build_get", "", `def m {a:1 b:2 c:3 d:4 e:5} (m.a add m.e)`},
 
-	// String words. split lives in aql:string-util; join is core.
-	{"string_split_join", `import "aql:string-util" def s 'a,b,c,d,e,f,g,h,i,j'`,
+	// String words. split lives in boru:string-util; join is core.
+	{"string_split_join", `import "boru:string-util" def s 'a,b,c,d,e,f,g,h,i,j'`,
 		`join '-' (StringUtil.split ',' s)`},
 	{"string_interp", `def nm 'world'`, "`hello ${nm} ${1 add 2}`"},
 }

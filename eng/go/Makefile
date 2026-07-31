@@ -1,6 +1,6 @@
 .PHONY: test vet fmt lint vuln clean cover publish tags
 
-# This module (github.com/aql-lang/aql/eng/go) is the AQL engine
+# This module (github.com/boru-lang/boru/eng/go) is the BORU engine
 # kernel + jsonic parser + kernel spec runner. It is standalone — it has
 # no dependency on the lang or cmd/go modules.
 #
@@ -46,7 +46,7 @@ publish: test
 	cd ../.. && git tag eng/go/v$(V)
 	cd ../.. && git push origin eng/go/v$(V)
 	@if command -v gh >/dev/null 2>&1; then \
-		cd ../.. && gh release create eng/go/v$(V) --title "eng/go v$(V)" --notes "AQL engine kernel v$(V)"; \
+		cd ../.. && gh release create eng/go/v$(V) --title "eng/go v$(V)" --notes "BORU engine kernel v$(V)"; \
 	fi
 
 # List recent eng/go tags (newest first).

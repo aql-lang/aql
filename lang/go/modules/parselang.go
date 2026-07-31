@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// The aql:parselang module — the ParseLang namespace of named parsers
-// behind the core `parse` macro word. It is the sibling of aql:minilang
+// The boru:parselang module — the ParseLang namespace of named parsers
+// behind the core `parse` macro word. It is the sibling of boru:minilang
 // (design/MINILANG.5.md): same macro mechanics, same registration story,
 // a separate namespace. Where a mini-language PRODUCES A VALUE, a parser
 // CONSUMES A SOURCE and yields whatever its language defines — typically an
@@ -46,11 +46,11 @@ import (
 // its src; a `{file:…}` map raises `parse_file_unsupported` (deferred in
 // v1). Every framework-built parser (the built-in kinds, NewParseLangFn
 // values, Parse.parser values) gets resolution for free — parseSourceShell
-// resolves the source before the parser body runs. A hand-written AQL
+// resolves the source before the parser body runs. A hand-written BORU
 // parser fn receives the source as given and may call `ParseLang.source`
 // to normalise it.
 
-// BuildParseLangModule creates the "aql:parselang" native module: the FIXED
+// BuildParseLangModule creates the "boru:parselang" native module: the FIXED
 // built-in parser kinds (the tabnas family + aontu) plus the out-of-band
 // framework words (kinds / source / the register tombstone).
 func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
@@ -65,7 +65,7 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// survives one release as an unconditional, hint-carrying raise so an
 	// existing program fails loudly with the migration path instead of a
 	// bare missing-export miss. DryPassWrap mirrors the raise statically, so
-	// `aql check` flags the use too (the unquote/splice tombstone pattern).
+	// `boru check` flags the use too (the unquote/splice tombstone pattern).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parselang-register",
 		Signatures: []native.Signature{{
@@ -129,7 +129,7 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// ---- out-of-band: source ------------------------------------------
 	// ParseLang.source <source> resolves a String or {src:…} Source map to
-	// a String (so AQL parsers can opt into the same normalisation host
+	// a String (so BORU parsers can opt into the same normalisation host
 	// parsers get automatically).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parselang-source",
@@ -147,7 +147,7 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- the FIXED built-in parser kinds ---------------------------------
 	// The tabnas parser family (ini, json, jsonic, json5, jsonc, csv, toml,
 	// yaml, xml, zon, markdown, feed) ships in the box, so `import
-	// "aql:parselang"` then `parse <kind> '<text>'` works out of the box.
+	// "boru:parselang"` then `parse <kind> '<text>'` works out of the box.
 	// Each gets source resolution (String or {src:…}) for free
 	// (parseSourceShell). aontu (github.com/rjrodger/aontu, a CUE-inspired
 	// unification config dialect with no Go port) ships as a hand-written
@@ -222,7 +222,7 @@ func formatParseHandler(name string, f native.Format) ParseLang {
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		src, err := args[0].AsConcreteString() // resolved by the framework
 		if err != nil {
-			return nil, r.AqlError("parse_error", name+": src: "+err.Error(), target)
+			return nil, r.BoruError("parse_error", name+": src: "+err.Error(), target)
 		}
 		var out []native.Value
 		var perr error
@@ -232,7 +232,7 @@ func formatParseHandler(name string, f native.Format) ParseLang {
 			out, perr = f.Decode(src)
 		}
 		if perr != nil {
-			return nil, r.AqlErrorHint("parse_syntax_error",
+			return nil, r.BoruErrorHint("parse_syntax_error",
 				name+": "+native.FirstCleanLine(perr.Error()), target,
 				"check that the source is well-formed "+name)
 		}
@@ -381,21 +381,21 @@ func resolveParseSource(v native.Value, r *native.Registry) (string, error) {
 	if v.Parent.Equal(native.TMap) && native.IsConcrete(v) {
 		m, _ := native.AsMap(v)
 		if m == nil {
-			return "", r.AqlError("parse_bad_source", "parse: source map is empty", "parse")
+			return "", r.BoruError("parse_bad_source", "parse: source map is empty", "parse")
 		}
 		if _, ok := m.Get("file"); ok {
-			return "", r.AqlErrorHint("parse_file_unsupported",
+			return "", r.BoruErrorHint("parse_file_unsupported",
 				"parse: {file:…} source is not yet supported", "parse",
 				"use an inline string or {src:'…'} for now")
 		}
 		if s, ok := native.MapFieldString(m, "src"); ok {
 			return s, nil
 		}
-		return "", r.AqlErrorHint("parse_bad_source",
+		return "", r.BoruErrorHint("parse_bad_source",
 			"parse: source map must have a 'src' String field", "parse",
 			"write {src:'…'} or pass the source string directly")
 	}
-	return "", r.AqlErrorHint("parse_bad_source",
+	return "", r.BoruErrorHint("parse_bad_source",
 		"parse: source must be a String or a {src:…} map", "parse",
 		"e.g. parse calc 'x + y'  or  parse calc {src:'x + y'}")
 }
@@ -415,7 +415,7 @@ func parseSourceHandler(args []native.Value, _ map[string]native.Value, _ []nati
 // registration was removed. An unconditional, hint-carrying raise — the
 // DryPassWrap mirror on its signature surfaces the same finding statically.
 func parseRegisterFrozenHandler(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	return nil, r.AqlErrorHint("parse_registry_frozen",
+	return nil, r.BoruErrorHint("parse_registry_frozen",
 		"register: the parse kind namespace is fixed — registration was removed", "register",
 		"pass the parser as a Function value instead: def myp (fn [[source:String opts:Map] [Any] [...]])  parse myp '...' — Go hosts build one with NewParseLangFn")
 }
@@ -431,12 +431,12 @@ func parseRegisterFrozenHandler(_ []native.Value, _ map[string]native.Value, _ [
 func parseFnDispatchHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	fnDef, ok := args[0].Data.(native.FnDefInfo)
 	if !ok {
-		return nil, r.AqlErrorHint("parse_error",
+		return nil, r.BoruErrorHint("parse_error",
 			"parse: the parser is not a usable function value", "parse",
 			"pass a parser fn: parse (fn [[source:String opts:Map] [Any] [...]]) 'x'")
 	}
 	if why := native.ParseLangFnSigWhy(fnDef); why != "" {
-		return nil, r.AqlErrorHint("parse_bad_signature",
+		return nil, r.BoruErrorHint("parse_bad_signature",
 			"parse: "+why, "parse",
 			"declare the fn as fn [[source:String opts:Map] [outputs] [body]]")
 	}
@@ -446,7 +446,7 @@ func parseFnDispatchHandler(args []native.Value, _ map[string]native.Value, _ []
 		return nil, err
 	}
 	if len(res) != 1 { //covergate:allow ParseLangFnSigWhy (checked above) admits only single-return signatures and the engine's fn return-count check enforces the declared count, so a conforming run cannot yield ≠1 results; kept as drift protection so a future contract change fails loudly instead of corrupting the operand stack (§modules)
-		return nil, r.AqlError("internal_error",
+		return nil, r.BoruError("internal_error",
 			fmt.Sprintf("parse fn: expected one result, got %d", len(res)), "parse")
 	}
 	return res, nil
@@ -475,7 +475,7 @@ func predefinedParsers() (map[string]ParseLangSpec, []string) {
 // tabnasParserSpecs returns the parser kinds backed by the tabnas parser
 // family, built from the shared native.TabnasKinds() core (which read also
 // consumes — see lang/go/native/tabnas.go). Every kind ships built-in —
-// importing aql:parselang is enough to use `parse <kind> '<text>'`, no host
+// importing boru:parselang is enough to use `parse <kind> '<text>'`, no host
 // registration needed.
 //
 // The slice order mirrors native.TabnasKinds() and is pinned by
@@ -499,8 +499,8 @@ func tabnasParserSpecs() []ParseLangSpec {
 
 // aontuParserSpec is the built-in aontu parse kind. Its handler decodes the
 // resolved source via native.AontuParse and converts the generic result
-// (map[string]any / []any / scalars) to an AQL Node of Maps and Lists; a
-// decode or unification failure raises [aql/parse_syntax_error].
+// (map[string]any / []any / scalars) to a BORU Node of Maps and Lists; a
+// decode or unification failure raises [boru/parse_syntax_error].
 func aontuParserSpec() ParseLangSpec {
 	return ParseLangSpec{
 		Name:    "aontu",
@@ -511,11 +511,11 @@ func aontuParserSpec() ParseLangSpec {
 		Handler: func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 			src, err := args[0].AsConcreteString() // resolved by the framework
 			if err != nil {
-				return nil, r.AqlError("parse_error", "aontu: src: "+err.Error(), "parse_aontu")
+				return nil, r.BoruError("parse_error", "aontu: src: "+err.Error(), "parse_aontu")
 			}
 			v, perr := native.AontuParse(src, native.OptsToMap(args[1]))
 			if perr != nil {
-				return nil, r.AqlErrorHint("parse_syntax_error",
+				return nil, r.BoruErrorHint("parse_syntax_error",
 					native.FirstCleanLine(perr.Error()), "parse_aontu",
 					"check that the source is well-formed aontu")
 			}
@@ -526,17 +526,17 @@ func aontuParserSpec() ParseLangSpec {
 
 // tabnasParseHandler builds the ParseLang for one tabnas kind: it runs
 // the decoder over the (already-resolved) source string and converts the
-// result to an AQL Value. A decode failure raises [aql/parse_syntax_error].
+// result to a BORU Value. A decode failure raises [boru/parse_syntax_error].
 func tabnasParseHandler(kind string, parse native.TabnasParser, convert func(any) native.Value) ParseLang {
 	target := "parse_" + kind
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		src, err := args[0].AsConcreteString() // resolved by the framework
 		if err != nil {
-			return nil, r.AqlError("parse_error", kind+": src: "+err.Error(), target)
+			return nil, r.BoruError("parse_error", kind+": src: "+err.Error(), target)
 		}
 		v, perr := parse(src, native.OptsToMap(args[1]))
 		if perr != nil {
-			return nil, r.AqlErrorHint("parse_syntax_error",
+			return nil, r.BoruErrorHint("parse_syntax_error",
 				kind+": "+native.FirstCleanLine(perr.Error()), target,
 				"check that the source is well-formed "+kind)
 		}

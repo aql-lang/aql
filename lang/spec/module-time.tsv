@@ -1,9 +1,9 @@
-# AQL Language Specification: the aql:time-util module
+# BORU Language Specification: the boru:time-util module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of time/date utilities. Its name collides with the
 # builtin `Time` type, so it carries a `-util` id and a `TimeUtil`
-# namespace: `import "aql:time-util"  TimeUtil.word args`. The module
+# namespace: `import "boru:time-util"  TimeUtil.word args`. The module
 # distinguishes Instant (a point in time, e.g. a unix timestamp) from
 # Date (a calendar day) — Date-typed words (to-iso, is-leap-year, …) take
 # a Date, not an Instant. The "current time" words (today-utc, now-local)
@@ -12,126 +12,126 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  unix epoch ↔ Instant
-import "aql:time-util"  TimeUtil.unix 0	1970-01-01T00:00:00Z	unix seconds → Instant
-import "aql:time-util"  TimeUtil.to-unix (TimeUtil.unix 1700000000)	1700000000	Instant → unix seconds (round-trip)
+import "boru:time-util"  TimeUtil.unix 0	1970-01-01T00:00:00Z	unix seconds → Instant
+import "boru:time-util"  TimeUtil.to-unix (TimeUtil.unix 1700000000)	1700000000	Instant → unix seconds (round-trip)
 #
 # §2  current day — frozen at 2021-01-01 in this suite
-import "aql:time-util"  TimeUtil.today-utc	2021-01-01	today (UTC) reads the frozen clock
+import "boru:time-util"  TimeUtil.today-utc	2021-01-01	today (UTC) reads the frozen clock
 #
 # §3  Date formatting (Date-typed input)
-import "aql:time-util"  TimeUtil.to-iso TimeUtil.today-utc	'2021-01-01'	ISO-8601 string of a Date
-import "aql:time-util"  TimeUtil.to-string TimeUtil.today-utc	'2021-01-01'	default string form of a Date
+import "boru:time-util"  TimeUtil.to-iso TimeUtil.today-utc	'2021-01-01'	ISO-8601 string of a Date
+import "boru:time-util"  TimeUtil.to-string TimeUtil.today-utc	'2021-01-01'	default string form of a Date
 #
 # §4  leap-year predicate (Date-typed input)
-import "aql:time-util"  TimeUtil.is-leap-year TimeUtil.today-utc	false	2021 is not a leap year
-import "aql:time-util"  TimeUtil.is-leap-year (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	2020 is a leap year
+import "boru:time-util"  TimeUtil.is-leap-year TimeUtil.today-utc	false	2021 is not a leap year
+import "boru:time-util"  TimeUtil.is-leap-year (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	2020 is a leap year
 #
 # §5  clock / async words (moved here from core)
-import "aql:time-util" TimeUtil.now	2021-01-01T00:00:00Z	now reads the (frozen, in specs) clock
-import "aql:time-util" typeof TimeUtil.now	Instant	now yields an Instant
-import "aql:time-util" TimeUtil.await [[1 add 2] [3 add 4]]	[3 7]	await runs bodies in parallel
+import "boru:time-util" TimeUtil.now	2021-01-01T00:00:00Z	now reads the (frozen, in specs) clock
+import "boru:time-util" typeof TimeUtil.now	Instant	now yields an Instant
+import "boru:time-util" TimeUtil.await [[1 add 2] [3 add 4]]	[3 7]	await runs bodies in parallel
 #
 # §6  negative — the namespace is unbound until imported; words gone from core
 TimeUtil.unix 0	ERROR:undefined_word	`TimeUtil` is undefined without `import`
 now	ERROR:undefined_word	`now` is no longer a core word
 #
 # §7  Instant construction & unix conversions
-import "aql:time-util"  TimeUtil.unix-ms 1700000000000	2023-11-14T22:13:20Z	unix milliseconds → Instant
-import "aql:time-util"  TimeUtil.unix-ns 1700000000000000000	2023-11-14T22:13:20Z	unix nanoseconds → Instant
-import "aql:time-util"  TimeUtil.to-unix-ms (TimeUtil.unix 1700000000)	1700000000000	Instant → unix milliseconds
+import "boru:time-util"  TimeUtil.unix-ms 1700000000000	2023-11-14T22:13:20Z	unix milliseconds → Instant
+import "boru:time-util"  TimeUtil.unix-ns 1700000000000000000	2023-11-14T22:13:20Z	unix nanoseconds → Instant
+import "boru:time-util"  TimeUtil.to-unix-ms (TimeUtil.unix 1700000000)	1700000000000	Instant → unix milliseconds
 #
 # §8  timezones
-import "aql:time-util"  TimeUtil.tz "America/New_York"	America/New_York	IANA zone name → Timezone
-import "aql:time-util"  TimeUtil.tz-utc	UTC	the UTC timezone
-import "aql:time-util"  TimeUtil.tz-local	Local	the host-local timezone
-import "aql:time-util"  TimeUtil.tz-name (TimeUtil.tz-utc)	'UTC'	name of a Timezone
-import "aql:time-util"  TimeUtil.tz-offset (TimeUtil.tz-utc) (TimeUtil.unix 1700000000)	'+00:00'	offset of an Instant in a zone
-import "aql:time-util"  TimeUtil.is-dst (TimeUtil.tz "America/New_York") (TimeUtil.unix 1700000000)	false	DST active? (Nov → false)
+import "boru:time-util"  TimeUtil.tz "America/New_York"	America/New_York	IANA zone name → Timezone
+import "boru:time-util"  TimeUtil.tz-utc	UTC	the UTC timezone
+import "boru:time-util"  TimeUtil.tz-local	Local	the host-local timezone
+import "boru:time-util"  TimeUtil.tz-name (TimeUtil.tz-utc)	'UTC'	name of a Timezone
+import "boru:time-util"  TimeUtil.tz-offset (TimeUtil.tz-utc) (TimeUtil.unix 1700000000)	'+00:00'	offset of an Instant in a zone
+import "boru:time-util"  TimeUtil.is-dst (TimeUtil.tz "America/New_York") (TimeUtil.unix 1700000000)	false	DST active? (Nov → false)
 #
 # §9  current local datetime — frozen at 2021-01-01
-import "aql:time-util"  TimeUtil.now-local	2021-01-01T00:00:00	now-local reads the frozen clock
+import "boru:time-util"  TimeUtil.now-local	2021-01-01T00:00:00	now-local reads the frozen clock
 #
 # §10  Date field extraction (Date → Integer/String)
-import "aql:time-util"  TimeUtil.year (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023	calendar year
-import "aql:time-util"  TimeUtil.month (TimeUtil.to-date (TimeUtil.unix 1700000000))	11	month number (1-12)
-import "aql:time-util"  TimeUtil.day (TimeUtil.to-date (TimeUtil.unix 1700000000))	14	day of month
-import "aql:time-util"  TimeUtil.weekday (TimeUtil.to-date (TimeUtil.unix 1700000000))	2	ISO weekday (Mon=1..Sun=7)
-import "aql:time-util"  TimeUtil.weekday-name (TimeUtil.to-date (TimeUtil.unix 1700000000))	'Tuesday'	weekday name
-import "aql:time-util"  TimeUtil.month-name (TimeUtil.to-date (TimeUtil.unix 1700000000))	'November'	month name
-import "aql:time-util"  TimeUtil.year-day (TimeUtil.to-date (TimeUtil.unix 1700000000))	318	ordinal day of the year
-import "aql:time-util"  TimeUtil.iso-week (TimeUtil.to-date (TimeUtil.unix 1700000000))	46	ISO-8601 week number
-import "aql:time-util"  TimeUtil.quarter (TimeUtil.to-date (TimeUtil.unix 1700000000))	4	calendar quarter (1-4)
-import "aql:time-util"  TimeUtil.days-in-month (TimeUtil.to-date (TimeUtil.unix 1700000000))	30	days in that month
-import "aql:time-util"  TimeUtil.days-in-year (TimeUtil.to-date (TimeUtil.unix 1700000000))	365	days in that year
-import "aql:time-util"  TimeUtil.format "2006-01-02" (TimeUtil.to-date (TimeUtil.unix 1700000000))	'2023-11-14'	Go-layout format of a Date
+import "boru:time-util"  TimeUtil.year (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023	calendar year
+import "boru:time-util"  TimeUtil.month (TimeUtil.to-date (TimeUtil.unix 1700000000))	11	month number (1-12)
+import "boru:time-util"  TimeUtil.day (TimeUtil.to-date (TimeUtil.unix 1700000000))	14	day of month
+import "boru:time-util"  TimeUtil.weekday (TimeUtil.to-date (TimeUtil.unix 1700000000))	2	ISO weekday (Mon=1..Sun=7)
+import "boru:time-util"  TimeUtil.weekday-name (TimeUtil.to-date (TimeUtil.unix 1700000000))	'Tuesday'	weekday name
+import "boru:time-util"  TimeUtil.month-name (TimeUtil.to-date (TimeUtil.unix 1700000000))	'November'	month name
+import "boru:time-util"  TimeUtil.year-day (TimeUtil.to-date (TimeUtil.unix 1700000000))	318	ordinal day of the year
+import "boru:time-util"  TimeUtil.iso-week (TimeUtil.to-date (TimeUtil.unix 1700000000))	46	ISO-8601 week number
+import "boru:time-util"  TimeUtil.quarter (TimeUtil.to-date (TimeUtil.unix 1700000000))	4	calendar quarter (1-4)
+import "boru:time-util"  TimeUtil.days-in-month (TimeUtil.to-date (TimeUtil.unix 1700000000))	30	days in that month
+import "boru:time-util"  TimeUtil.days-in-year (TimeUtil.to-date (TimeUtil.unix 1700000000))	365	days in that year
+import "boru:time-util"  TimeUtil.format "2006-01-02" (TimeUtil.to-date (TimeUtil.unix 1700000000))	'2023-11-14'	Go-layout format of a Date
 #
 # §11  Date arithmetic (shift a Date by n units)
-import "aql:time-util"  TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-24	add days
-import "aql:time-util"  TimeUtil.add-months 2 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2024-01-14	add months
-import "aql:time-util"  TimeUtil.add-years 3 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2026-11-14	add years
+import "boru:time-util"  TimeUtil.add-days 10 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-24	add days
+import "boru:time-util"  TimeUtil.add-months 2 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2024-01-14	add months
+import "boru:time-util"  TimeUtil.add-years 3 (TimeUtil.to-date (TimeUtil.unix 1700000000))	2026-11-14	add years
 #
 # §12  duration constructors — calendar (Integer → CalendarDuration)
-import "aql:time-util"  TimeUtil.years 2	P2Y0M0D	n years as a CalendarDuration
-import "aql:time-util"  TimeUtil.months 6	P0Y6M0D	n months as a CalendarDuration
-import "aql:time-util"  TimeUtil.weeks 2	P0Y0M14D	n weeks (→ days)
-import "aql:time-util"  TimeUtil.days 30	P0Y0M30D	n days
-import "aql:time-util"  TimeUtil.cal-dur 1 6 15	P15Y6M1D	years/months/days → CalendarDuration
+import "boru:time-util"  TimeUtil.years 2	P2Y0M0D	n years as a CalendarDuration
+import "boru:time-util"  TimeUtil.months 6	P0Y6M0D	n months as a CalendarDuration
+import "boru:time-util"  TimeUtil.weeks 2	P0Y0M14D	n weeks (→ days)
+import "boru:time-util"  TimeUtil.days 30	P0Y0M30D	n days
+import "boru:time-util"  TimeUtil.cal-dur 1 6 15	P15Y6M1D	years/months/days → CalendarDuration
 #
 # §13  duration constructors — clock (Number → ClockDuration)
-import "aql:time-util"  TimeUtil.hours 3	3h0m0s	n hours
-import "aql:time-util"  TimeUtil.minutes 90	1h30m0s	n minutes
-import "aql:time-util"  TimeUtil.seconds 30	30s	n seconds
-import "aql:time-util"  TimeUtil.ms 500	500ms	n milliseconds
-import "aql:time-util"  TimeUtil.us 250	250µs	n microseconds
-import "aql:time-util"  TimeUtil.ns 1000	1µs	n nanoseconds
+import "boru:time-util"  TimeUtil.hours 3	3h0m0s	n hours
+import "boru:time-util"  TimeUtil.minutes 90	1h30m0s	n minutes
+import "boru:time-util"  TimeUtil.seconds 30	30s	n seconds
+import "boru:time-util"  TimeUtil.ms 500	500ms	n milliseconds
+import "boru:time-util"  TimeUtil.us 250	250µs	n microseconds
+import "boru:time-util"  TimeUtil.ns 1000	1µs	n nanoseconds
 #
 # §14  duration extraction
-import "aql:time-util"  TimeUtil.total-hours (TimeUtil.minutes 90)	1.5	ClockDuration → total hours (Float)
-import "aql:time-util"  TimeUtil.total-minutes (TimeUtil.hours 2)	120.0	→ total minutes
-import "aql:time-util"  TimeUtil.total-seconds (TimeUtil.minutes 1)	60.0	→ total seconds
-import "aql:time-util"  TimeUtil.total-ms (TimeUtil.seconds 2)	2000.0	→ total milliseconds
-import "aql:time-util"  TimeUtil.dur-years (TimeUtil.cal-dur 1 6 15)	15	CalendarDuration years field
-import "aql:time-util"  TimeUtil.dur-months (TimeUtil.cal-dur 1 6 15)	6	CalendarDuration months field
-import "aql:time-util"  TimeUtil.dur-days (TimeUtil.cal-dur 1 6 15)	1	CalendarDuration days field
-import "aql:time-util"  TimeUtil.dur-sign (TimeUtil.cal-dur 1 0 0)	1	sign of a CalendarDuration
+import "boru:time-util"  TimeUtil.total-hours (TimeUtil.minutes 90)	1.5	ClockDuration → total hours (Float)
+import "boru:time-util"  TimeUtil.total-minutes (TimeUtil.hours 2)	120.0	→ total minutes
+import "boru:time-util"  TimeUtil.total-seconds (TimeUtil.minutes 1)	60.0	→ total seconds
+import "boru:time-util"  TimeUtil.total-ms (TimeUtil.seconds 2)	2000.0	→ total milliseconds
+import "boru:time-util"  TimeUtil.dur-years (TimeUtil.cal-dur 1 6 15)	15	CalendarDuration years field
+import "boru:time-util"  TimeUtil.dur-months (TimeUtil.cal-dur 1 6 15)	6	CalendarDuration months field
+import "boru:time-util"  TimeUtil.dur-days (TimeUtil.cal-dur 1 6 15)	1	CalendarDuration days field
+import "boru:time-util"  TimeUtil.dur-sign (TimeUtil.cal-dur 1 0 0)	1	sign of a CalendarDuration
 #
 # §15  date/instant differences
-import "aql:time-util"  TimeUtil.until (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	P-54Y1M18D	calendar span from→to
-import "aql:time-util"  TimeUtil.since (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.to-date (TimeUtil.unix 0))	P-54Y1M18D	calendar span (later, earlier)
-import "aql:time-util"  TimeUtil.diff (TimeUtil.unix 1700003600) (TimeUtil.unix 1700000000)	1h0m0s	clock duration between Instants
-import "aql:time-util"  TimeUtil.dur-sign (TimeUtil.elapsed (TimeUtil.unix 1700000000))	1	elapsed since a past Instant is positive
+import "boru:time-util"  TimeUtil.until (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	P-54Y1M18D	calendar span from→to
+import "boru:time-util"  TimeUtil.since (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.to-date (TimeUtil.unix 0))	P-54Y1M18D	calendar span (later, earlier)
+import "boru:time-util"  TimeUtil.diff (TimeUtil.unix 1700003600) (TimeUtil.unix 1700000000)	1h0m0s	clock duration between Instants
+import "boru:time-util"  TimeUtil.dur-sign (TimeUtil.elapsed (TimeUtil.unix 1700000000))	1	elapsed since a past Instant is positive
 #
 # §16  comparison & ordering (Date Date)
-import "aql:time-util"  TimeUtil.compare (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	1	-1/0/1 ordering
-import "aql:time-util"  TimeUtil.is-before (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	before? (swap reads later<earlier)
-import "aql:time-util"  TimeUtil.is-after (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	true	after?
-import "aql:time-util"  TimeUtil.is-equal (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 0))	true	equal?
-import "aql:time-util"  TimeUtil.is-between (TimeUtil.to-date (TimeUtil.unix 850000000)) (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	within [start,end]? (date start end)
-import "aql:time-util"  TimeUtil.earliest (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	1970-01-01	min of two Dates
-import "aql:time-util"  TimeUtil.latest (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-14	max of two Dates
+import "boru:time-util"  TimeUtil.compare (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	1	-1/0/1 ordering
+import "boru:time-util"  TimeUtil.is-before (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	before? (swap reads later<earlier)
+import "boru:time-util"  TimeUtil.is-after (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	true	after?
+import "boru:time-util"  TimeUtil.is-equal (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 0))	true	equal?
+import "boru:time-util"  TimeUtil.is-between (TimeUtil.to-date (TimeUtil.unix 850000000)) (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	within [start,end]? (date start end)
+import "boru:time-util"  TimeUtil.earliest (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	1970-01-01	min of two Dates
+import "boru:time-util"  TimeUtil.latest (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-14	max of two Dates
 #
 # §17  rounding
-import "aql:time-util"  TimeUtil.start-of "month" (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-01	first day of the unit
-import "aql:time-util"  TimeUtil.end-of "month" (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-30	last day of the unit
+import "boru:time-util"  TimeUtil.start-of "month" (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-01	first day of the unit
+import "boru:time-util"  TimeUtil.end-of "month" (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-30	last day of the unit
 #
 # §18  conversions between Date / DateTime / Instant
-import "aql:time-util"  TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-14T00:00:00	Date → DateTime (midnight)
-import "aql:time-util"  TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))	00:00:00	DateTime → TimeOfDay
-import "aql:time-util"  TimeUtil.to-instant (TimeUtil.tz-utc) (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))	2023-11-14T00:00:00Z	DateTime + zone → Instant
-import "aql:time-util"  TimeUtil.to-local (TimeUtil.tz-utc) (TimeUtil.unix 1700000000)	2023-11-14T22:13:20	Instant + zone → local DateTime
-import "aql:time-util"  TimeUtil.to-utc (TimeUtil.unix 1700000000)	2023-11-14T22:13:20	Instant → UTC DateTime
+import "boru:time-util"  TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))	2023-11-14T00:00:00	Date → DateTime (midnight)
+import "boru:time-util"  TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))	00:00:00	DateTime → TimeOfDay
+import "boru:time-util"  TimeUtil.to-instant (TimeUtil.tz-utc) (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))	2023-11-14T00:00:00Z	DateTime + zone → Instant
+import "boru:time-util"  TimeUtil.to-local (TimeUtil.tz-utc) (TimeUtil.unix 1700000000)	2023-11-14T22:13:20	Instant + zone → local DateTime
+import "boru:time-util"  TimeUtil.to-utc (TimeUtil.unix 1700000000)	2023-11-14T22:13:20	Instant → UTC DateTime
 #
 # §19  async / timer words — deterministic exercises
-import "aql:time-util"  def h (TimeUtil.timeout 1000 [1 add 2]) def t (typeof h) TimeUtil.cancel h end t	Timeout	timeout schedules a body → Timeout handle (cancelled: a live timer would outlive the row and race later ones)
-import "aql:time-util"  def i (TimeUtil.interval 1000 [1 add 2]) def t (typeof i) TimeUtil.cancel i end t	Interval	interval repeats a body → Interval handle (cancelled: an uncancelled ticker fires for the rest of the suite)
-import "aql:time-util"  100 (TimeUtil.cancel (TimeUtil.timeout 1000 [1 add 2])) add 23	123	cancel stops a timer (no value); 100+23
-import "aql:time-util"  def h (TimeUtil.timeout 100000 [totally-undefined-xyz]) def t (typeof h) TimeUtil.cancel h end t	Timeout	body is stored as code, not eagerly run (undefined word would raise) — cancelled so it never fires mid-suite
-import "aql:time-util"  100 (TimeUtil.sleep 0) add 23	123	sleep 0 pauses then continues; 100+23
-import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) eq (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	same Date value is eq (content equality)
-import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) eq (TimeUtil.unix 1577836800)	false	Date and Instant are distinct leaf types — eq is by type+content, NOT chronological (the same instant is `cmp`-equal but not `eq`)
-import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) deq (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	deq agrees with eq on a Time scalar — content equality, never container identity
-import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) deq (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	unequal Dates are deq-unequal
-import "aql:time-util"  [(TimeUtil.to-date (TimeUtil.unix 1577836800))] deq [(TimeUtil.to-date (TimeUtil.unix 1577836800))]	true	deq recurses into Nodes holding Time scalars
+import "boru:time-util"  def h (TimeUtil.timeout 1000 [1 add 2]) def t (typeof h) TimeUtil.cancel h end t	Timeout	timeout schedules a body → Timeout handle (cancelled: a live timer would outlive the row and race later ones)
+import "boru:time-util"  def i (TimeUtil.interval 1000 [1 add 2]) def t (typeof i) TimeUtil.cancel i end t	Interval	interval repeats a body → Interval handle (cancelled: an uncancelled ticker fires for the rest of the suite)
+import "boru:time-util"  100 (TimeUtil.cancel (TimeUtil.timeout 1000 [1 add 2])) add 23	123	cancel stops a timer (no value); 100+23
+import "boru:time-util"  def h (TimeUtil.timeout 100000 [totally-undefined-xyz]) def t (typeof h) TimeUtil.cancel h end t	Timeout	body is stored as code, not eagerly run (undefined word would raise) — cancelled so it never fires mid-suite
+import "boru:time-util"  100 (TimeUtil.sleep 0) add 23	123	sleep 0 pauses then continues; 100+23
+import "boru:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) eq (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	same Date value is eq (content equality)
+import "boru:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) eq (TimeUtil.unix 1577836800)	false	Date and Instant are distinct leaf types — eq is by type+content, NOT chronological (the same instant is `cmp`-equal but not `eq`)
+import "boru:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) deq (TimeUtil.to-date (TimeUtil.unix 1577836800))	true	deq agrees with eq on a Time scalar — content equality, never container identity
+import "boru:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) deq (TimeUtil.to-date (TimeUtil.unix 1700000000))	false	unequal Dates are deq-unequal
+import "boru:time-util"  [(TimeUtil.to-date (TimeUtil.unix 1577836800))] deq [(TimeUtil.to-date (TimeUtil.unix 1577836800))]	true	deq recurses into Nodes holding Time scalars
 #
 # ─────────────────────────────────────────────────────────────────────
 # §21  temporal arithmetic — word extensions of core add/sub (open words)
@@ -139,47 +139,47 @@ import "aql:time-util"  [(TimeUtil.to-date (TimeUtil.unix 1577836800))] deq [(Ti
 # mints (no global registration), and the temporal overloads ride the
 # module's exported word extensions: import transplants them onto the
 # importer's bare add/sub (design/OPEN-WORDS.0.md §2.4, migration 1).
-import "aql:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	Date + CalendarDuration dispatches on bare add via the transplanted extension
-import "aql:time-util"  sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-04	Date - CalendarDuration via the transplanted extension
-import "aql:time-util"  add (TimeUtil.unix 1700000000) (TimeUtil.hours 1)	2023-11-14T23:13:20Z	Instant + ClockDuration
-import "aql:time-util"  sub (TimeUtil.unix 1700000000) (TimeUtil.hours 1)	2023-11-14T21:13:20Z	Instant - ClockDuration
-import "aql:time-util"  add (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))) (TimeUtil.hours 5)	2023-11-14T05:00:00	DateTime + ClockDuration
-import "aql:time-util"  TimeUtil.add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	the namespaced form works alongside the transplant (§4.9)
-import "aql:time-util"  add 1 2	3	the locked numeric add is untouched by the transplant
-import "aql:time-util"  undef add  add 1 2	3	undef pops the module's extension; core add intact
-import "aql:time-util"  undef add  import "aql:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	re-import restores the extension (idempotent by origin)
+import "boru:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	Date + CalendarDuration dispatches on bare add via the transplanted extension
+import "boru:time-util"  sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-04	Date - CalendarDuration via the transplanted extension
+import "boru:time-util"  add (TimeUtil.unix 1700000000) (TimeUtil.hours 1)	2023-11-14T23:13:20Z	Instant + ClockDuration
+import "boru:time-util"  sub (TimeUtil.unix 1700000000) (TimeUtil.hours 1)	2023-11-14T21:13:20Z	Instant - ClockDuration
+import "boru:time-util"  add (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))) (TimeUtil.hours 5)	2023-11-14T05:00:00	DateTime + ClockDuration
+import "boru:time-util"  TimeUtil.add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	the namespaced form works alongside the transplant (§4.9)
+import "boru:time-util"  add 1 2	3	the locked numeric add is untouched by the transplant
+import "boru:time-util"  undef add  add 1 2	3	undef pops the module's extension; core add intact
+import "boru:time-util"  undef add  import "boru:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-24	re-import restores the extension (idempotent by origin)
 add 1 2	3	an engine that never imports the module has plain numeric add — nothing temporal leaks (negative twin)
 #
 # §22  module-owned temporal types — per-import mints, exported literals
-import "aql:time-util"  typeof (TimeUtil.days 3)	CalendarDuration	duration values carry the module-minted type
-import "aql:time-util"  (TimeUtil.days 3) is TimeUtil.CalendarDuration	true	the minted type is exported and testable with is
-import "aql:time-util"  (TimeUtil.days 3) is TimeUtil.Duration	true	CalendarDuration sits under the module's Duration node
-import "aql:time-util"  (TimeUtil.hours 1) is TimeUtil.CalendarDuration	false	sibling duration leaves stay distinct
-import "aql:time-util"  typeof (TimeUtil.tz-utc)	Timezone	Timezone is module-minted too
-import "aql:time-util"  TimeUtil.sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-04	the namespaced sub extension works alongside the transplant
-import "aql:time-util"  (TimeUtil.hours 2) is TimeUtil.ClockDuration	true	clock durations carry the module-minted ClockDuration type
-import "aql:time-util"  (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))) is TimeUtil.TimeOfDay	true	TimeOfDay is module-minted and exported
-import "aql:time-util"  (TimeUtil.tz-utc) is TimeUtil.Timezone	true	Timezone is module-minted and exported
-import "aql:time-util"  def a (TimeUtil.timeout 1000 [1 add 2]) def b (TimeUtil.timeout 900 [1]) def r (b is TimeUtil.Timeout) TimeUtil.cancel a TimeUtil.cancel b r	true	timer handles carry the module-minted Timeout type (exported literal); both cancelled
-import "aql:time-util"  def a (TimeUtil.interval 1000 [1 add 2]) def b (TimeUtil.interval 900 [1]) def r (b is TimeUtil.Interval) TimeUtil.cancel a TimeUtil.cancel b r	true	interval handles carry the module-minted Interval type (exported literal); both cancelled
+import "boru:time-util"  typeof (TimeUtil.days 3)	CalendarDuration	duration values carry the module-minted type
+import "boru:time-util"  (TimeUtil.days 3) is TimeUtil.CalendarDuration	true	the minted type is exported and testable with is
+import "boru:time-util"  (TimeUtil.days 3) is TimeUtil.Duration	true	CalendarDuration sits under the module's Duration node
+import "boru:time-util"  (TimeUtil.hours 1) is TimeUtil.CalendarDuration	false	sibling duration leaves stay distinct
+import "boru:time-util"  typeof (TimeUtil.tz-utc)	Timezone	Timezone is module-minted too
+import "boru:time-util"  TimeUtil.sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.days 10)	2023-11-04	the namespaced sub extension works alongside the transplant
+import "boru:time-util"  (TimeUtil.hours 2) is TimeUtil.ClockDuration	true	clock durations carry the module-minted ClockDuration type
+import "boru:time-util"  (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))) is TimeUtil.TimeOfDay	true	TimeOfDay is module-minted and exported
+import "boru:time-util"  (TimeUtil.tz-utc) is TimeUtil.Timezone	true	Timezone is module-minted and exported
+import "boru:time-util"  def a (TimeUtil.timeout 1000 [1 add 2]) def b (TimeUtil.timeout 900 [1]) def r (b is TimeUtil.Timeout) TimeUtil.cancel a TimeUtil.cancel b r	true	timer handles carry the module-minted Timeout type (exported literal); both cancelled
+import "boru:time-util"  def a (TimeUtil.interval 1000 [1 add 2]) def b (TimeUtil.interval 900 [1]) def r (b is TimeUtil.Interval) TimeUtil.cancel a TimeUtil.cancel b r	true	interval handles carry the module-minted Interval type (exported literal); both cancelled
 #
 # §23  the affine package — point−point → duration, duration arithmetic,
 # and ClockDuration div/mod (word extensions transplanted onto add/sub/
 # div/mod at import; read in forward form: `sub a b` = a − b).
-import "aql:time-util"  add (TimeUtil.hours 2) (TimeUtil.minutes 30)	2h30m0s	ClockDuration + ClockDuration
-import "aql:time-util"  sub (TimeUtil.hours 2) (TimeUtil.minutes 30)	1h30m0s	ClockDuration − ClockDuration
-import "aql:time-util"  add (TimeUtil.days 5) (TimeUtil.months 2)	P0Y2M5D	CalendarDuration + CalendarDuration, component-wise
-import "aql:time-util"  sub (TimeUtil.days 5) (TimeUtil.days 2)	P0Y0M3D	CalendarDuration − CalendarDuration
-import "aql:time-util"  typeof (add (TimeUtil.hours 2) (TimeUtil.minutes 30))	ClockDuration	duration sum stays a ClockDuration
-import "aql:time-util"  div (TimeUtil.hours 6) (TimeUtil.hours 2)	3.0	ClockDuration ÷ ClockDuration is a Float ratio
-import "aql:time-util"  mod (TimeUtil.minutes 130) (TimeUtil.hours 1)	10m0s	ClockDuration mod ClockDuration
-import "aql:time-util"  sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.to-date (TimeUtil.unix 1699000000))	P0Y0M11D	Date − Date is a CalendarDuration in days
-import "aql:time-util"  sub (TimeUtil.unix 1700000000) (TimeUtil.unix 1699996400)	1h0m0s	Instant − Instant is a ClockDuration
-import "aql:time-util"  typeof (sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.to-date (TimeUtil.unix 1699000000)))	CalendarDuration	Date − Date yields a CalendarDuration
+import "boru:time-util"  add (TimeUtil.hours 2) (TimeUtil.minutes 30)	2h30m0s	ClockDuration + ClockDuration
+import "boru:time-util"  sub (TimeUtil.hours 2) (TimeUtil.minutes 30)	1h30m0s	ClockDuration − ClockDuration
+import "boru:time-util"  add (TimeUtil.days 5) (TimeUtil.months 2)	P0Y2M5D	CalendarDuration + CalendarDuration, component-wise
+import "boru:time-util"  sub (TimeUtil.days 5) (TimeUtil.days 2)	P0Y0M3D	CalendarDuration − CalendarDuration
+import "boru:time-util"  typeof (add (TimeUtil.hours 2) (TimeUtil.minutes 30))	ClockDuration	duration sum stays a ClockDuration
+import "boru:time-util"  div (TimeUtil.hours 6) (TimeUtil.hours 2)	3.0	ClockDuration ÷ ClockDuration is a Float ratio
+import "boru:time-util"  mod (TimeUtil.minutes 130) (TimeUtil.hours 1)	10m0s	ClockDuration mod ClockDuration
+import "boru:time-util"  sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.to-date (TimeUtil.unix 1699000000))	P0Y0M11D	Date − Date is a CalendarDuration in days
+import "boru:time-util"  sub (TimeUtil.unix 1700000000) (TimeUtil.unix 1699996400)	1h0m0s	Instant − Instant is a ClockDuration
+import "boru:time-util"  typeof (sub (TimeUtil.to-date (TimeUtil.unix 1700000000)) (TimeUtil.to-date (TimeUtil.unix 1699000000)))	CalendarDuration	Date − Date yields a CalendarDuration
 # negatives — a zero-duration modulo has no remainder
-import "aql:time-util"  mod (TimeUtil.hours 1) (TimeUtil.seconds 0)	ERROR:modulo by a zero duration	ClockDuration mod a zero duration errors
-import "aql:time-util"  sub (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))) (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1699000000)))	264h0m0s	DateTime − DateTime is a ClockDuration
-import "aql:time-util"  sub (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))) (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))))	0s	TimeOfDay − TimeOfDay is a ClockDuration
-import "aql:time-util"  TimeUtil.div (TimeUtil.hours 6) (TimeUtil.hours 2)	3.0	the namespaced div extension works alongside the transplant
-import "aql:time-util"  TimeUtil.mod (TimeUtil.minutes 130) (TimeUtil.hours 1)	10m0s	the namespaced mod extension works alongside the transplant
-import "aql:time-util"  add (TimeUtil.hours 2562047) (TimeUtil.hours 1)	ERROR:ClockDuration overflow	checked duration arithmetic — no int64 wrap (WAT Exhibit K)
+import "boru:time-util"  mod (TimeUtil.hours 1) (TimeUtil.seconds 0)	ERROR:modulo by a zero duration	ClockDuration mod a zero duration errors
+import "boru:time-util"  sub (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))) (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1699000000)))	264h0m0s	DateTime − DateTime is a ClockDuration
+import "boru:time-util"  sub (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000)))) (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1700000000))))	0s	TimeOfDay − TimeOfDay is a ClockDuration
+import "boru:time-util"  TimeUtil.div (TimeUtil.hours 6) (TimeUtil.hours 2)	3.0	the namespaced div extension works alongside the transplant
+import "boru:time-util"  TimeUtil.mod (TimeUtil.minutes 130) (TimeUtil.hours 1)	10m0s	the namespaced mod extension works alongside the transplant
+import "boru:time-util"  add (TimeUtil.hours 2562047) (TimeUtil.hours 1)	ERROR:ClockDuration overflow	checked duration arithmetic — no int64 wrap (WAT Exhibit K)

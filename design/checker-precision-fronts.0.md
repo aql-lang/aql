@@ -107,14 +107,14 @@ mode:
 4. Flow-sensitivity (set-after-get ordering) falls out for free: the shape
    is threaded through the same sequential analysis every other carrier is.
 
-**Risk**: the ctx words are used heavily by modules (`aql:test` state,
-`aql:log` spans); stage 1 must keep the flat-map behavior for any store the
+**Risk**: the ctx words are used heavily by modules (`boru:test` state,
+`boru:log` spans); stage 1 must keep the flat-map behavior for any store the
 minting misses (unknown store carrier → today's `dynamic(Any)`), so
 precision only increases.
 
 ## 3. What landed alongside this note (context)
 
-The cheap Tier-3 items shipped directly: `aql check --strict` (the
+The cheap Tier-3 items shipped directly: `boru check --strict` (the
 dynamic-dispatch advisory surface), the Any-frontier RATIO gate (12%
 ceiling; count informational), the A8 macro_not_expandable advisory, the
 tand/DepScalar check-mode fixes (TandReturnsFn; toCarrier preserves

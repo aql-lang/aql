@@ -1,4 +1,4 @@
-# AQL File Access API Design
+# BORU File Access API Design
 
 ## Status: Implemented (v2 — CSV/TSV added)
 
@@ -20,7 +20,7 @@ type FileOps interface {
 }
 ```
 
-Set via `aql.SetFileOps(ops)` or `registry.SetFileOps(ops)`.
+Set via `boru.SetFileOps(ops)` or `registry.SetFileOps(ops)`.
 Default implementation uses the real file system with process cwd for relative paths.
 
 ### Format Registry
@@ -39,7 +39,7 @@ Built-in formats are registered at startup via `DefaultFormats()`.
 The host application can add custom formats:
 
 ```go
-a := aql.New()
+a := boru.New()
 a.RegisterFormat("yaml", &MyYAMLFormat{})
 // Now: read "config.yaml" {fmt:"yaml"}
 ```
@@ -101,7 +101,7 @@ Signatures:
 ### Format Details
 
 - `text` — raw string, no parsing
-- `json` — on read: parse JSON to AQL map/list; on write: serialize to JSON
+- `json` — on read: parse JSON to BORU map/list; on write: serialize to JSON
 - `jsonic` — on read: parse with jsonic (relaxed JSON: unquoted keys, etc.)
 - `lines` — on read: split into list of strings; on write: join list with newline
 - `csv` — on read: parse CSV into a table value with schema; on write: serialize table to CSV
@@ -127,7 +127,7 @@ The `FileOps` interface controls resolution — custom implementations can chang
 
 ## Error Handling
 
-File operations follow AQL's existing error conventions:
+File operations follow BORU's existing error conventions:
 
 - File not found: `ERROR:read: open nope.txt: file does not exist`
 - Write failure: `ERROR:write: ...`
@@ -148,8 +148,8 @@ reg := engine.DefaultRegistry()
 reg.SetFileOps(mem)
 
 // Or via public API:
-a := aql.New()
-a.SetFileOps(aql.NewMemFileOps())
+a := boru.New()
+a.SetFileOps(boru.NewMemFileOps())
 ```
 
 

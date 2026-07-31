@@ -30,7 +30,7 @@ modules)**:
 
 The second step keeps the committed project knowledge graph
 ([`kg/out/graph.json`](../kg/out/graph.json)) honest: it type-checks the
-AQL pipeline, runs its test suite, rebuilds the bundle, and fails the
+BORU pipeline, runs its test suite, rebuilds the bundle, and fails the
 build if the committed bundle drifts from the deterministic rebuild —
 mechanically enforcing the "update the graph with each PR" rule in
 [kg/README.md](../kg/README.md).

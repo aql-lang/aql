@@ -224,7 +224,7 @@ func TestPreviewMasksSecret(t *testing.T) {
 }
 
 func TestIsSkippedDir(t *testing.T) {
-	skip := []string{".git", "node_modules", "vendor", ".aql", "dist"}
+	skip := []string{".git", "node_modules", "vendor", ".boru", "dist"}
 	keep := []string{"src", "cmd", "internal", "deep_dir"}
 	for _, d := range skip {
 		if !isSkippedDir(d) {

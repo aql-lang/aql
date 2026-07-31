@@ -1,4 +1,4 @@
-// Command calc is a small CLI / REPL calculator built on the AQL
+// Command calc is a small CLI / REPL calculator built on the BORU
 // engine kernel.
 //
 // Usage:
@@ -19,7 +19,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aql-lang/aql/calc/go"
+	"github.com/boru-lang/boru/calc/go"
 )
 
 // Test seams (design/TEST-SEAMS.10.md): osExit lets tests observe

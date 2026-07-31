@@ -21,12 +21,12 @@ does not repeat that analysis; it builds on it.
 > module-fn check-path change; the in-repo corpus is not sufficient
 > coverage.**
 
-Since `.0` was written, the `aql:decision` module was **removed from this
-repository** (`a7882da` "remove the aql:decision module (moved to a
+Since `.0` was written, the `boru:decision` module was **removed from this
+repository** (`a7882da` "remove the boru:decision module (moved to a
 separate repo)"). `diverge.sh` and the `decision_unit_spec` /
 `decision_prop_test` / `decision_prop_spec` suites live in that external
 repo. **The mandated gate is therefore not runnable from a checkout of
-`aql-lang/aql` alone.**
+`boru-lang/boru` alone.**
 
 This is the first thing to resolve before writing code, because the whole
 reason `.0` is a negative result is that the in-repo gates (`make test`,
@@ -144,7 +144,7 @@ pointer auto-derefs for field access and the `CheckState` methods already
 have pointer receivers (`check.go`).
 
 The threading happens at the **one** boundary that crosses registries:
-`engine.go::execFnDefSig` → `capturedReg.CallAQL(sig, args, captures)`
+`engine.go::execFnDefSig` → `capturedReg.CallBORU(sig, args, captures)`
 (`engine.go:4388`) and its stack-match siblings (`engine.go:4067/4115/4150`).
 
 When the **calling** engine is in check mode (`e.registry.IsCheckMode()`)
@@ -157,10 +157,10 @@ if e.registry.IsCheckMode() && capturedReg != nil && capturedReg != e.registry {
     capturedReg.Check = e.registry.Check   // share mode+emit+memos+counters
     defer func() { capturedReg.Check = saved }()
 }
-result, err := capturedReg.CallAQL(sig, args, captures)
+result, err := capturedReg.CallBORU(sig, args, captures)
 ```
 
-Now the body sub-engine (`CallAQL`'s `NewTop(capturedReg)`) sees
+Now the body sub-engine (`CallBORU`'s `NewTop(capturedReg)`) sees
 `capturedReg.IsCheckMode() == true`, so:
 
 - side effects gate on `SkipsSideEffect()` (§5c makes `test-record` honour
@@ -254,8 +254,8 @@ grep module + native handlers for state mutation (`run.`, store writes,
 file ops, `append` into capability accumulators) and confirm each either
 sets `RunInCheckMode` deliberately (a prerequisite-for-analysis word like
 `def`) **or** early-returns under `SkipsSideEffect()`. Candidates to check
-explicitly: the `aql:test` accumulators (`test-reset`, `test-skip`),
-`aql:io` writes, store mutation (`set`/`ctx-set`), and any module that
+explicitly: the `boru:test` accumulators (`test-reset`, `test-skip`),
+`boru:io` writes, store mutation (`set`/`ctx-set`), and any module that
 keeps a per-run accumulator in a capability slot.
 
 **Negative test (per repo discipline):** assert that compiling a 2-case
@@ -318,12 +318,12 @@ is the §4 breakage resurfacing.
 `.0` is emphatic that the in-repo corpus missed the breakage because it
 "does not exercise the heavy *generic* module-fn patterns
 (`decide gen [...]`, `apply-op gen [...]`) the decision module leans on."
-The fixture must reproduce that surface. Concretely, a small AQL module
+The fixture must reproduce that surface. Concretely, a small BORU module
 (under `lang/go/test/fixtures/` or a new `lang/spec/*.tsv`) that:
 
 - defines a **native sub-registry module** (the `BuildXxxModule` pattern)
-  whose preamble defines AQL fns with **named params + real bodies** (so
-  they take the `CallAQL` path, not the trivial-delegation short-circuit);
+  whose preamble defines BORU fns with **named params + real bodies** (so
+  they take the `CallBORU` path, not the trivial-delegation short-circuit);
 - exercises **generic dispatch** through those fns — `decide gen [...]`,
   `apply-op gen [...]` shaped calls — so the `FnSummaries`/`FnInflight`
   memo paths run across the parent/module boundary;

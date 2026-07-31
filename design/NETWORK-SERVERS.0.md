@@ -1,6 +1,6 @@
 # NETWORK-SERVERS
 
-Design for the **network-server handling API** in AQL — the layer where a
+Design for the **network-server handling API** in BORU — the layer where a
 developer actually writes the code that handles a network connection. It
 completes the "efficient, safe network servers" end-goal that
 `PROCESSES.0.md` (the actor substrate) and `SERVICES.0.md` (the service/server
@@ -18,7 +18,7 @@ actor-per-connection model**:
 Both ride the actors of `PROCESSES.0.md`. The high-level tier is *literally the
 low-level tier plus a codec and a dispatch loop* — §6 shows the reduction.
 Binary protocols are made first-class by a new **`Bytes` type + bit-syntax**
-(§3); streaming data reuses `aql:stream` (`STREAM-WORDS.0.md`) for both
+(§3); streaming data reuses `boru:stream` (`STREAM-WORDS.0.md`) for both
 request bodies and replies (§7).
 
 This is a **design RFC only — no implementation code yet**, matching how the
@@ -69,8 +69,8 @@ The same job — *accept a connection, turn its bytes into something, act, reply
 
 **Low level (you own the bytes and the framing):**
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 # Echo server: one actor per connection, reading and writing raw bytes.
 def echo fn [[conn:Socket] [Never] [
@@ -90,9 +90,9 @@ serve-raw {tcp: 7} [ [conn] => [ echo conn ] ]
 
 **High level (a codec gives you messages; you write handlers):**
 
-```aql
-import "aql:net"
-import "aql:serve"
+```boru
+import "boru:net"
+import "boru:serve"
 
 # The same echo, as a message service over a newline-delimited text codec.
 def echo-svc ( service {} )
@@ -114,7 +114,7 @@ connection** — maps onto `PROCESSES.0.md` actors with one addition (a socket
 handle) and one new runtime owner (a `net` listener). Nothing here needs a new
 scheduler.
 
-| BEAM / `gen_tcp` concept | AQL realization |
+| BEAM / `gen_tcp` concept | BORU realization |
 | --- | --- |
 | `gen_tcp:listen/2` → listen socket | **`listen {tcp: …} -> Listener`**, a new opaque Ideal handle (like `Pid`) |
 | `gen_tcp:accept/1` (acceptor process) | **`accept <Listener> -> Socket`**, blocking; idiomatically called in a loop that `spawn`s a handler |
@@ -134,12 +134,12 @@ and a `context.Context` for shutdown so no FD or goroutine leaks on host exit.
 
 ## 3. `Bytes` and bit-syntax (the binary prerequisite)
 
-Binary wire protocols need two things AQL lacks: a **byte-string value** and a
+Binary wire protocols need two things BORU lacks: a **byte-string value** and a
 terse, safe way to **build and pattern-match frames**. Both `PROCESSES.0.md` §8
 and `SERVICES.0.md` §10 name this gap. The **full design is `BYTES.10.md`**
 (`design/go-modules/`); this section is the working summary the rest of this doc
 relies on. It is its own phase (§10) because the handling API depends on it but
-the type is independently useful (file I/O, hashing, `aql:stream`'s
+the type is independently useful (file I/O, hashing, `boru:stream`'s
 already-referenced `from-bytes`).
 
 ### 3.1 The `Bytes` value type (summary)
@@ -150,7 +150,7 @@ A new core **`Bytes`** type: an **immutable** finite sequence of octets.
   `PROCESSES.0.md` §6 — a received frame is shared into a handler by reference,
   never copied, exactly like a `List` or `Map`. A defensive copy happens only at
   ingest (`recv`, the Go bridge); after that every op is copy-free
-  (`BYTES.10.md` §4). This is AQL getting Erlang's refc-binary optimisation "for
+  (`BYTES.10.md` §4). This is BORU getting Erlang's refc-binary optimisation "for
   free", as `SERVICES.0.md` §7.1 anticipated.
 - **Distinct from `String`.** `String` is text (UTF-8, character-indexed);
   `Bytes` is octets (byte-indexed). `utf8 <String> -> Bytes` encodes (total);
@@ -161,15 +161,15 @@ A new core **`Bytes`** type: an **immutable** finite sequence of octets.
 Core surface (forward form, **no import**): the `convert` text/ints⇄Bytes
 overloads (+ compact), `slice`, `add`; `size`/`eq`/ordering via type behaviors.
 Hex/binary constants are the `+hb/deadbeef/` / `+bb/01001100/` kinds in
-`aql:minilang` (BYTES.10.md §6). Crypto, hashing, and hex/base encodings live in
-`aql:bin-util` (taking/returning `Bytes`). Full table: `BYTES.10.md` §5. (There
+`boru:minilang` (BYTES.10.md §6). Crypto, hashing, and hex/base encodings live in
+`boru:bin-util` (taking/returning `Bytes`). Full table: `BYTES.10.md` §5. (There
 is **no `0x"…"` core literal and no `b"…"` literal** — write
 `convert Bytes "GET "` for text-as-bytes.)
 
 ### 3.2 Bit-syntax — `pack` / `unpack` (summary)
 
 Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is what makes binary code
-short *and* safe. AQL's equivalent reuses the **`name:Type` binding slot** parsed
+short *and* safe. BORU's equivalent reuses the **`name:Type` binding slot** parsed
 by `eng.ParseFnParams` (the same one `PROCESSES.0.md` §3 uses for `receive`
 clauses), extended with a size and modifier suffix. A frame spec is a list of
 *segments* `<value-or-name> : <seg-type> ( (size) )? ( / <modifier> )*` —
@@ -178,7 +178,7 @@ seg-types `u8…u64`/`i8…i64`/`f32 f64`/`bits(n)`/`bytes`/`utf8`, modifiers
 previously-bound name (`body:bytes(len)`, the killer feature). Full grammar and
 semantics: `BYTES.10.md` §7.
 
-```aql
+```boru
 # build + match a [ver=1][u16 len][len bytes body] frame
 def body  ( utf8 "hello" )
 def frame ( pack [ 1:u8  (length body):u16  body:bytes ] )
@@ -194,7 +194,7 @@ matches as much as the spec needs and returns the bound fields plus the leftover
 bytes, or `{need: n}` more bytes required — the one primitive a length-prefixed
 framer needs (§5.3), instead of a hand-rolled state machine.
 
-## 4. Tier 1 — the low-level handling API (`aql:net`)
+## 4. Tier 1 — the low-level handling API (`boru:net`)
 
 For protocol authors, performance-critical paths, and anything a codec doesn't
 yet cover. You get a socket and the bytes; you own framing, parsing, and the
@@ -322,7 +322,7 @@ a Unix-domain socket instead of `tcp:`.
 > authenticated one is the whole failure mode this word exists to avoid.
 > It is what makes `require-client:` useful rather than merely
 > restrictive — TLS proves the peer holds a trusted key, and `peer-cert`
-> hands that identity to AQL so the *authorization* rule can be written
+> hands that identity to BORU so the *authorization* rule can be written
 > in the language.
 >
 > Presenting a server certificate is gated by `network`/`server-cert`,
@@ -349,8 +349,8 @@ comparison.)
 
 ### 5.1 Line/text — a line-reversing server
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def rev-conn fn [[conn:Socket] [Never] [
   do [
@@ -369,13 +369,13 @@ serve-raw {tcp: 8001} [ [conn] => [ rev-conn conn ] ]
 Reuses the existing `Format`/`reify`/`jsonify` JSON path (`PROCESSES.0.md` §8
 notes JSON is already covered), with only framing done by hand.
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def json-conn fn [[conn:Socket] [Never] [
   do [
     def req ( reify (to-text (recv-until conn (utf8 "\n"))) )   # bytes → text → value
-    def reply ( handle-request req )                       # ordinary AQL
+    def reply ( handle-request req )                       # ordinary BORU
     send-bytes (concat [ (utf8 (jsonify reply))  (utf8 "\n") ]) conn
     json-conn conn
   ]
@@ -394,9 +394,9 @@ A `[u8 op][u32 len][len bytes payload]` wire protocol. `recv-frame` pulls
 exactly one frame using the §3.2 spec (it reads the 5-byte header, learns
 `len`, then reads `len` more) — no manual buffering.
 
-```aql
-import "aql:net"
-import "aql:bin-util"
+```boru
+import "boru:net"
+import "boru:bin-util"
 
 def rpc-conn fn [[conn:Socket] [Never] [
   do [
@@ -421,8 +421,8 @@ connections), so both arrive in one mailbox and one `receive` handles them.
 A named `"chatroom"` process (an ordinary `PROCESSES.0.md` actor, elided) keeps
 the member set and re-broadcasts.
 
-```aql
-import "aql:net"
+```boru
+import "boru:net"
 
 def chat-conn fn [[conn:Socket] [Never] [
   set-active conn "once"                          # socket data now arrives as messages
@@ -484,7 +484,7 @@ is one `Codec` value, written with §3–§4 primitives.
 `listen {codec} svc` is then *exactly* this generic Tier-1 handler (this is the
 "high level = low level + codec + dispatch" reduction promised in §1):
 
-```aql
+```boru
 # Conceptual desugaring of `listen {tcp:P codec:C} SVC`:
 serve-raw {tcp: P} [ [conn] => [ conn-session conn C SVC (convert Bytes []) ] ]
 
@@ -507,7 +507,7 @@ mailbox, same `service`. It only factors out "read → decode → dispatch → e
 
 ### 6.2 Built-in codecs
 
-Shipped in `aql:net`, each a `Codec` value usable as `codec:` above:
+Shipped in `boru:net`, each a `Codec` value usable as `codec:` above:
 
 | Codec | Decodes to message | Encodes reply |
 | --- | --- | --- |
@@ -558,9 +558,9 @@ close — making setup/teardown just more patterns, not a side API.
 
 **Echo and JSON, the §5.1–5.2 jobs without the framing:**
 
-```aql
-import "aql:net"
-import "aql:serve"
+```boru
+import "boru:net"
+import "boru:serve"
 
 def upper ( service {} )
 add {} [ [req state] => [ str.upper req.line ] ] upper
@@ -571,9 +571,9 @@ listen {tcp: 8001  codec: lines} upper                 # text in, text out
 `method`+`path` (with path patterns), handlers return values the `http` codec
 renders as JSON responses. A shared service holds a `todos` store.
 
-```aql
-import "aql:net"
-import "aql:serve"
+```boru
+import "boru:net"
+import "boru:serve"
 
 def api ( service {todos: {}} )
 
@@ -618,9 +618,9 @@ The hand-framed §5.3 server, rewritten with a `length-prefixed` codec carrying 
 bit-syntax spec. The byte handling vanishes; only the op→handler dispatch
 remains.
 
-```aql
-import "aql:net"
-import "aql:serve"
+```boru
+import "boru:net"
+import "boru:serve"
 
 def rpc ( service {} )
 add {op: 1} [ [req state] => [ {op: 1  result: (do-ping req.payload)} ] ] rpc
@@ -643,9 +643,9 @@ buffering deleted — the payoff of making bit-syntax a codec parameter.
 When no built-in fits, a codec is just a value. A minimal STOMP-ish
 frame (`COMMAND\n…headers…\n\nbody\0`) shows the surface:
 
-```aql
-import "aql:net"
-import "aql:bin-util"
+```boru
+import "boru:net"
+import "boru:bin-util"
 
 def stomp-codec {
   decode: [ [buf] => [
@@ -671,7 +671,7 @@ change to the actor or service machinery.
 ## 7. Streaming data
 
 Streaming is a first-class reply shape (`SERVICES.0.md` §1, §6) and binds to
-`aql:stream` (`STREAM-WORDS.0.md`). Three directions:
+`boru:stream` (`STREAM-WORDS.0.md`). Three directions:
 
 ### 7.1 Streaming replies (server → client)
 
@@ -680,7 +680,7 @@ per element). The transport writes each element as it is produced — chunked
 HTTP, Server-Sent Events, or repeated WS frames depending on the codec — and
 never buffers the whole body (the vault-proxy requirement, `SERVICES.0.md` §6).
 
-```aql
+```boru
 # Server-Sent Events: stream price ticks to a subscriber.
 add {method: "GET" path: "/prices/stream"} [ [req state] => [
     price-channel req.params.symbol
@@ -698,7 +698,7 @@ A large or unbounded upload is presented to the handler as `req.body` being a
 `Stream<Bytes>` rather than a materialised `Bytes`, so a handler folds it in
 bounded memory:
 
-```aql
+```boru
 add {method: "POST" path: "/upload"} [ [req state] => [
     req.body
       "./incoming.dat" stream.to-bytes        # bounded-memory spool to disk
@@ -718,7 +718,7 @@ not two (`SERVICES.0.md` §7.2, §8.1).
 - **Outbound:** `send-stream` / streamed replies write at the socket's drain
   rate; a slow client stalls `send-stream`, which (being a `Stream` consumer)
   stalls the producing stage — no unbounded buffer grows. A bounded
-  `aql:stream` channel between producer and socket gives an explicit cap.
+  `boru:stream` channel between producer and socket gives an explicit cap.
 - **Inbound:** active-mode `"once"` (§4.3) is the socket analog of a bounded
   mailbox — the socket delivers one chunk, then waits to be re-armed, so a fast
   peer cannot flood the actor's mailbox past the §8.1 bound. Passive `recv`
@@ -735,10 +735,10 @@ protocol, authorises via the capability model, **streams** a large result back,
 and is supervised — exercising Tier 2, bit-syntax, streaming, and
 `SERVICES.0.md` composition at once.
 
-```aql
-import "aql:net"
-import "aql:serve"
-import "aql:stream"
+```boru
+import "boru:net"
+import "boru:serve"
+import "boru:stream"
 
 # A session per connection: holds the authenticated principal in private state.
 def make-session fn [[meta:Map] [Service] [
@@ -792,8 +792,8 @@ enforceable on day one, not new permission work:
   gates `fetch`). A proxy/gateway needs both.
 - **`process`** still gates the per-connection `spawn` (§2) via the substrate.
 
-Denials carry the usual blame chain. A sandboxed sub-engine (`aql:vm`) can
-attenuate networking away entirely, so untrusted AQL can parse and transform
+Denials carry the usual blame chain. A sandboxed sub-engine (`boru:vm`) can
+attenuate networking away entirely, so untrusted BORU can parse and transform
 wire data (codecs are pure!) without ever being able to open a socket.
 
 Two safety properties fall out of the model rather than needing enforcement:
@@ -808,7 +808,7 @@ separable trust tiers.
 What this RFC adds, and what remains:
 
 - **Added (binary):** the `Bytes` value type, `pack`/`unpack`/`unpack-prefix`
-  bit-syntax, and the `aql:bin-util` byte words (§3) — also unblocks
+  bit-syntax, and the `boru:bin-util` byte words (§3) — also unblocks
   `STREAM-WORDS.0.md`'s already-referenced `from-bytes`/`to-bytes`.
 - **Added (Tier 1):** `Listener`/`Socket` handles, `listen`/`accept`/
   `serve-raw`, passive `recv*` and active-mode messages, `send-bytes`/
@@ -822,7 +822,7 @@ What this RFC adds, and what remains:
 - **Added (streaming):** streaming replies and request bodies over sockets, and
   socket↔stream↔mailbox back-pressure composition (§7).
 - **Depends on:** `PROCESSES.0.md` phase 1 (actors), `SERVICES.0.md` phases 1–2
-  (services, `serve`, supervision, bounded mailboxes), `aql:stream`.
+  (services, `serve`, supervision, bounded mailboxes), `boru:stream`.
 - **Still out of scope:** HTTP/2 & QUIC (start with HTTP/1.1 + WS); a full
   TLS-client story for `connect` (mutual TLS); protocol *fuzzing* harnesses;
   cross-node distribution (`SERVICES.0.md` §9 "later"). UDP/datagram sockets are
@@ -835,8 +835,8 @@ Layered so each phase is independently testable and the cheapest useful slice
 lands first.
 
 - **Phase A — `Bytes` + bit-syntax (§3).** The value type, `pack`/`unpack`/
-  `unpack-prefix`, `aql:bin-util` words. **No networking.** Highest-leverage and
-  independently useful (binary files, hashing, `aql:stream` bytes). The
+  `unpack-prefix`, `boru:bin-util` words. **No networking.** Highest-leverage and
+  independently useful (binary files, hashing, `boru:stream` bytes). The
   recommended first slice — it only touches the type table and a new module.
 - **Phase B — Tier 1 low-level (§4–5).** `Listener`/`Socket`, `listen`/
   `accept`/`serve-raw`, passive + active reads, `send-bytes`/`send-stream`, TLS.
@@ -876,8 +876,8 @@ lands first.
 5. **`http` routing power.** How much routing does the `http` codec do itself
    (path params, method, query) vs. leaving it to patrun on a flat message?
    §6.4 assumes `:id` path patterns and `req.params`; is that the codec's job or
-   a thin `aql:net` router layer above the service? (Leaning: a small router in
-   `aql:net` that produces patrun-friendly messages, kept separate from the raw
+   a thin `boru:net` router layer above the service? (Leaning: a small router in
+   `boru:net` that produces patrun-friendly messages, kept separate from the raw
    `http` codec so non-REST HTTP is still possible.)
 6. **WebSocket as codec vs. upgrade.** WS starts as HTTP then switches framing
    mid-connection. Model it as one `websocket` codec that does the handshake, or

@@ -1,4 +1,4 @@
-// dap.go — the Debug Adapter Protocol front end (design/AQL-DEBUGGER.0.md
+// dap.go — the Debug Adapter Protocol front end (design/BORU-DEBUGGER.0.md
 // §8.2): a SECOND front end over the same Session, so editors (VS Code
 // and friends) drive the identical stepping, breakpoint, and inspection
 // semantics the TTY prompt does. The transport is the LSP base protocol
@@ -27,7 +27,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // dapMessage is the DAP wire shape — one struct for requests,
@@ -255,8 +255,8 @@ func (a *dapAdapter) serve(sess *Session, tokens []native.Value, source string) 
 				})
 				a.event("initialized", map[string]any{})
 			case "launch":
-				// The program comes from the command line (`aql debug
-				// --dap file.aql`); launch just gates the start.
+				// The program comes from the command line (`boru debug
+				// --dap file.boru`); launch just gates the start.
 				a.respond(m, nil)
 				launched = true
 				maybeStart()
@@ -371,7 +371,7 @@ func (a *dapAdapter) setBreakpoints(sess *Session, m dapMessage, needLock bool) 
 }
 
 // setFunctionBreakpoints REPLACES the session's word breakpoints with
-// the request's set — DAP's "function" breakpoints are AQL's word
+// the request's set — DAP's "function" breakpoints are BORU's word
 // breakpoints (a concatenative program's functions ARE its words). The
 // same lock discipline as setBreakpoints.
 func (a *dapAdapter) setFunctionBreakpoints(sess *Session, m dapMessage, needLock bool) map[string]any {

@@ -1,14 +1,14 @@
-// Package exec is the aql exec HTTP server subcommand —
-// `aql exec -p <port>`.
+// Package exec is the boru exec HTTP server subcommand —
+// `boru exec -p <port>`.
 //
-// The server exposes a REST API for executing AQL source code. Each
-// request creates a fresh AQL instance so requests are stateless and
-// safe to handle concurrently (the underlying lang.AQL instance is
+// The server exposes a REST API for executing BORU source code. Each
+// request creates a fresh BORU instance so requests are stateless and
+// safe to handle concurrently (the underlying lang.BORU instance is
 // not safe for concurrent use).
 //
 // Routes:
 //
-//	POST /v1/exec     run AQL code; returns last stack value as result
+//	POST /v1/exec     run BORU code; returns last stack value as result
 //	GET  /healthz     liveness probe
 package exec
 
@@ -25,11 +25,11 @@ import (
 	"strings"
 	"syscall"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/permsflags"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // newServer is a test seam (design/TEST-SEAMS.10.md); tests swap it to
@@ -42,7 +42,7 @@ var newServer = NewServer
 // registry construction errors that no request can provoke.
 var langNew = lang.New
 
-// cmd is the Command implementation for `aql exec`.
+// cmd is the Command implementation for `boru exec`.
 type cmd struct{}
 
 // New returns the exec subcommand.
@@ -53,10 +53,10 @@ func (*cmd) Name() string { return "exec" }
 
 // Synopsis returns the one-line help text.
 func (*cmd) Synopsis() string {
-	return "serve AQL code execution over HTTP"
+	return "serve BORU code execution over HTTP"
 }
 
-// Run handles `aql exec -p <port> [-r <registry>]`.
+// Run handles `boru exec -p <port> [-r <registry>]`.
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return run(args, stdout, stderr)
 }
@@ -69,7 +69,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	bind := fs.String("bind", "127.0.0.1:8091", "host:port to bind the exec HTTP server")
 	port := fs.Int("p", 0, "port to listen on (overrides -bind host:port if >0)")
-	registry := fs.String("r", "", "registry path passed to AQL instances")
+	registry := fs.String("r", "", "registry path passed to BORU instances")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
 
@@ -95,9 +95,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "aql exec serving on %s\n", srv.Addr())
+	fmt.Fprintf(stdout, "boru exec serving on %s\n", srv.Addr())
 	if pol != nil {
-		fmt.Fprintf(stdout, "aql exec policy: %s\n", pol.Name())
+		fmt.Fprintf(stdout, "boru exec policy: %s\n", pol.Name())
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -127,9 +127,9 @@ type execResponse struct {
 }
 
 // Handler builds the http.Handler for the exec service. registry is
-// forwarded to each AQL instance so user code can `use` modules from
+// forwarded to each BORU instance so user code can `use` modules from
 // a local directory. pol (may be nil) is the policy applied to every
-// per-request AQL instance — it is bound at server construction and
+// per-request BORU instance — it is bound at server construction and
 // cannot be overridden by request bodies. Exposed so tests can spin
 // up an httptest server.
 func Handler(registry string, pol policy.Policy) http.Handler {
@@ -150,9 +150,9 @@ func Handler(registry string, pol policy.Policy) http.Handler {
 	return mux
 }
 
-// handleExec runs the submitted code in a fresh AQL instance and
+// handleExec runs the submitted code in a fresh BORU instance and
 // writes the JSON response. Errors are reported in the response body
-// with HTTP 200 so clients can distinguish transport errors from AQL
+// with HTTP 200 so clients can distinguish transport errors from BORU
 // errors (parse / type / runtime).
 func handleExec(registry string, pol policy.Policy, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -179,7 +179,7 @@ func handleExec(registry string, pol policy.Policy, w http.ResponseWriter, r *ht
 	var outBuf strings.Builder
 	a.SetOutput(&outBuf)
 
-	// Compiled-by-default (the same CompileTry semantics as `aql run`),
+	// Compiled-by-default (the same CompileTry semantics as `boru run`),
 	// with the interpreter as the sound fallback for refused programs
 	// (plan Phase 2 — entry-point routing). Post-Stage-J a refusal
 	// returns compile_refused instead of the library silently re-running,
@@ -191,7 +191,7 @@ func handleExec(registry string, pol policy.Policy, w http.ResponseWriter, r *ht
 	// policy-free servers (StampDetachedFn itself refuses under a word
 	// policy, so arming never re-opens the gate).
 	stack, _, _, runErr := a.RunCompiledReason(req.Code)
-	var refused *lang.AqlError
+	var refused *lang.BoruError
 	if errors.As(runErr, &refused) && refused.Code == "compile_refused" {
 		disarm := a.ArmRuntimeStamping()
 		stack, runErr = a.RunInterp(req.Code)

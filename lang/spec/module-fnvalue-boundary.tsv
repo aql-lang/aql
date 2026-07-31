@@ -1,4 +1,4 @@
-# AQL Language Specification: module fn-VALUE application boundary
+# BORU Language Specification: module fn-VALUE application boundary
 # Format: input<TAB>expected<TAB>description
 #
 # Boundary rows for a module-captured Function VALUE applied inside its

@@ -3,7 +3,7 @@ package lang_test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // A reference-exported word is a USE of its def. The canonical public-API
@@ -11,7 +11,7 @@ import (
 // `{ name: impl }` of a fn value is equivalent. The use-tracker must count
 // those as uses, or every public word is falsely flagged unused_def precisely
 // because it is public — the dominant `unused_def` false positive on the
-// voxgig-aql trie/decision/bloom client modules (their AQL-CHECK-REPORT
+// voxgig-boru trie/decision/bloom client modules (their BORU-CHECK-REPORT
 // wishlist item #1). The negative half pins that a GENUINELY unreferenced def
 // is still flagged, so the fix removes false positives without introducing
 // false negatives.

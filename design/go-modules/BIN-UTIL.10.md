@@ -1,7 +1,7 @@
-# `aql:bin-util` (expanded) — the binary-adjacent hub
+# `boru:bin-util` (expanded) — the binary-adjacent hub
 
 > **Status: design proposal, not implemented.** This note specifies a
-> large expansion of the existing `aql:bin-util` module
+> large expansion of the existing `boru:bin-util` module
 > (`lang/go/modules/binary.go`, namespace `BinUtil`) to **concentrate all
 > binary-adjacent functionality in one place**: cryptographic hashes,
 > HMAC, secure random, CRC checksums, hex / base32 / base64 / base128 /
@@ -15,16 +15,16 @@
 `popcount`/`clz`/`ctz`, `fnv32`/`fnv64`, `ord`/`chr` — delegating to
 `math/bits` and `hash/fnv`. Crypto, CRC, encodings, and UUIDs are the
 same family of "work with raw bytes" operations. Rather than a dozen
-single-purpose modules (`aql:base64`, `aql:sha256`, …), the user's
+single-purpose modules (`boru:base64`, `boru:sha256`, …), the user's
 decision is **one coherent module** whose words all speak the `Bytes`
 type and read uniformly. This keeps imports simple (`import
-"aql:bin-util"`), the API discoverable (`describe BinUtil`), and the byte
+"boru:bin-util"`), the API discoverable (`describe BinUtil`), and the byte
 model consistent.
 
 ## 2. Import & namespace
 
 ```
-import "aql:bin-util"        # binds the BinUtil namespace (unchanged)
+import "boru:bin-util"        # binds the BinUtil namespace (unchanged)
 ```
 
 The `-util` id + `BinUtil` namespace is unchanged (the existing module).
@@ -40,7 +40,7 @@ flat `BinUtil.*`).
   supporting true binary (`someBytes BinUtil.sha256`).
 - **Digests and raw binary results are `Bytes`.** Pipe through
   `hex-encode` / `base64-encode` for display. This is forced by the type
-  system: a 32-byte SHA-256 digest and a CRC64 value both **exceed AQL's
+  system: a 32-byte SHA-256 digest and a CRC64 value both **exceed BORU's
   `int64` `Integer`**, so they cannot be Integers.
 - **Decoders return `Bytes`**; core `to-text` converts back to String when wanted.
 - Top-first sig order; all inner native sigs `BarrierPos: -1`; invoked
@@ -59,7 +59,7 @@ The `Bytes` type, frame spec types (`BinarySpec` kind: `def P (refine BinarySpec
 serialises; `unpack`/`unpack-prefix` decode), and the value overloads (`convert`
 text/ints⇄Bytes + compact, `slice`, `add`; plus `size`/`eq`/ordering via type
 behaviors) are **core — no import** (see [BYTES.10.md](BYTES.10.md) §5, §7). Hex/binary byte constants are the `+hb/…/` /
-`+bb/…/` kinds in `aql:minilang` (BYTES.10.md §6), not a `bin-util` word.
+`+bb/…/` kinds in `boru:minilang` (BYTES.10.md §6), not a `bin-util` word.
 `bin-util` does **not** re-export any of these. This keeps the network-framing hot
 path importable-free; `bin-util` builds *on top of* the core type, taking and
 returning `Bytes`.
@@ -80,12 +80,12 @@ returning `Bytes`.
 
 ### 4.3 Cryptographic hashes
 
-> **Superseded — see [AQL-CRYPTO.0](../AQL-CRYPTO.0.md).** The
+> **Superseded — see [BORU-CRYPTO.0](../BORU-CRYPTO.0.md).** The
 > cryptographic surface below (§4.3 hashes, §4.5 HMAC, §4.6 secure random)
-> was later reassigned to a dedicated, policy-scoped `aql:crypto` module,
+> was later reassigned to a dedicated, policy-scoped `boru:crypto` module,
 > which also carries the AEAD / KDF / sealed-box primitives the vault
-> migration needs and which `aql:bin-util` does not. Treat these three
-> subsections as withdrawn from this proposal: `aql:bin-util` keeps its
+> migration needs and which `boru:bin-util` does not. Treat these three
+> subsections as withdrawn from this proposal: `boru:bin-util` keeps its
 > **non-cryptographic** binary surface (bitwise ops, rotates, `popcount`,
 > CRC, the `base*`/`hex`/`ascii85` encodings, UUIDs); `sha*`/`hmac`/
 > `random-*` live in `Crypto.*`. (Both docs are unimplemented proposals;
@@ -159,7 +159,7 @@ BYTES.10.md §2 — so values produced here carry the real `Bytes` type and
 
 ## 6. Errors
 
-Kebab codes via `r.AqlError(code, detail, word)`, Go `error` unwrapped,
+Kebab codes via `r.BoruError(code, detail, word)`, Go `error` unwrapped,
 never panic (guard with `AsConcreteString` / `AsConcreteInteger` / the
 `Bytes` unwrap helper):
 
@@ -188,24 +188,24 @@ The split is the whole point of keeping `bin-util` mostly pure:
   `random` entry to `policy.KnownScopes` and a `random` global cap to
   `policy.GlobalOps` (`lang/go/policy/policy.go`) — none exists today.
 
-Contrast with **`aql:rand`** (seedable PRNG, deterministic, good for
+Contrast with **`boru:rand`** (seedable PRNG, deterministic, good for
 reproducible tests): `bin-util` random is the **unseedable CSPRNG** for
 security-grade randomness. Both can coexist.
 
 ## 8. Overlap
 
-- **`aql:rand`** — different randomness class (CSPRNG vs seedable PRNG);
+- **`boru:rand`** — different randomness class (CSPRNG vs seedable PRNG);
   no word collision (`BinUtil.random-*` vs `Rand.*`). Noted in §7.
-- **`aql:string-util`** — core `utf8`/`to-text` are the explicit String↔Bytes
+- **`boru:string-util`** — core `utf8`/`to-text` are the explicit String↔Bytes
   bridge; they do not duplicate string search/transform words.
 - The folded standalone notes (base64/hex/sha*/hmac/crc*/crypto-rand) are
-  fully represented here; their separate `aql:*` modules are **not**
+  fully represented here; their separate `boru:*` modules are **not**
   created.
 
 ## 9. Examples (args-before form)
 
 ```
-import "aql:bin-util"
+import "boru:bin-util"
 
 # hashing → hex
 "hello" BinUtil.sha256 BinUtil.hex-encode
@@ -248,7 +248,7 @@ BinUtil.uuid-v7                                     # "0190a1b2-..." (sortable)
 - **A dedicated `random` policy scope vs reusing a global cap** — proposed
   as a new scope; confirm during implementation against the policy schema.
 - **Streaming hashes** (incremental `hash.Hash` over large inputs) — out
-  of scope; the one-shot `Sum*` form covers the data sizes AQL handles.
+  of scope; the one-shot `Sum*` form covers the data sizes BORU handles.
 - **`google/uuid` dependency** — adds an external module; note the
   `GOPROXY=direct` fallback (`lang/go/CLAUDE.md` "Dependencies").
 
@@ -277,7 +277,7 @@ variant, for the `EntropySource` seam).
 - **`lang/go/modules/docs_bin.go`** — a one-line `registerDocs` entry per
   new export (`TestModuleExportDocs` enforces completeness).
 - **`lang/spec/module-bin.tsv`** — positive rows leading with `import
-  "aql:bin-util"` plus an `ERROR:<substring>` negative sibling per word
+  "boru:bin-util"` plus an `ERROR:<substring>` negative sibling per word
   (Test discipline, `lang/go/CLAUDE.md`); include known-answer vectors
   (e.g. the SHA-256 of `"hello"`, CRC of `"123456789"`).
 - **`lang/go/go.mod`** — add `github.com/google/uuid`.

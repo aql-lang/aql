@@ -6,15 +6,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // End-to-end test for the TUI verification app (design/examples/apps/
-// todo-tui.aql — the TUI.0.md acceptance app, the terminal twin of
+// todo-tui.boru — the TUI.0.md acceptance app, the terminal twin of
 // TestAppTodoAPI): the app file loads as a FILE MODULE and runs a real
 // Tui.run session against a scripted virtual terminal.
 
@@ -58,7 +58,7 @@ func runTuiAppSteps(t *testing.T, vb *tuikit.VirtualBackend, appFiles []string, 
 	return result, nil
 }
 
-// The todo TUI (todo-tui.aql): type a todo, submit it, hop to the list,
+// The todo TUI (todo-tui.boru): type a todo, submit it, hop to the list,
 // toggle it done, quit — the final state carries the session's work and
 // the init frame carries the §5 layout chrome.
 func TestAppTodoTUI(t *testing.T) {
@@ -75,8 +75,8 @@ func TestAppTodoTUI(t *testing.T) {
 	} {
 		vb.Inject(ev)
 	}
-	out, err := runTuiAppSteps(t, vb, []string{"todo-tui.aql"}, []string{
-		`import "/apps/todo-tui.aql"`,
+	out, err := runTuiAppSteps(t, vb, []string{"todo-tui.boru"}, []string{
+		`import "/apps/todo-tui.boru"`,
 		`def final (TodoTui.run {})`,
 		`def first (final.todos get 0)`,
 		`join "|" [(convert String (size final.todos)) (first.text)
@@ -102,8 +102,8 @@ func TestAppTodoTUI(t *testing.T) {
 	// negative: the serve entry demands its transport options (a missing
 	// token reaches Tui.serve as None via dot-leniency and is refused)
 	vb2 := tuikit.NewVirtualBackend(44, 12)
-	_, sErr := runTuiAppSteps(t, vb2, []string{"todo-tui.aql"}, []string{
-		`import "/apps/todo-tui.aql"`,
+	_, sErr := runTuiAppSteps(t, vb2, []string{"todo-tui.boru"}, []string{
+		`import "/apps/todo-tui.boru"`,
 		`TodoTui.serve {tcp: 0}`,
 	})
 	if sErr == nil || !strings.Contains(sErr.Error(), "token: must be a String") {
@@ -125,7 +125,7 @@ func pollScreen(t *testing.T, vb *tuikit.VirtualBackend, want string) {
 	t.Fatalf("screen never showed %q:\n%s", want, strings.Join(vb.Screen(), "\n"))
 }
 
-// The REST-backed client (todo-tui-client.aql) against the real
+// The REST-backed client (todo-tui-client.boru) against the real
 // todo-api server over loopback HTTP: the UI's list is a cache of the
 // server's, every mutation is a spawned worker round trip, and the
 // status line tracks sync state — TUI.0.md §2.3 end to end.
@@ -137,10 +137,10 @@ func TestAppTodoTUIClient(t *testing.T) {
 	}
 	done := make(chan result, 1)
 	go func() {
-		out, err := runTuiAppSteps(t, vb, []string{"todo-api.aql", "todo-tui-client.aql"}, []string{
-			`import "/apps/todo-api.aql"`,
-			`import "/apps/todo-tui-client.aql"`,
-			`import "aql:net"`,
+		out, err := runTuiAppSteps(t, vb, []string{"todo-api.boru", "todo-tui-client.boru"}, []string{
+			`import "/apps/todo-api.boru"`,
+			`import "/apps/todo-tui-client.boru"`,
+			`import "boru:net"`,
 			`def ln (TodoApi.serve {port: 0})`,
 			`def addr (join "" ["127.0.0.1:" (convert String (Net.addr ln).port)])`,
 			`def final (TodoTuiClient.run {tcp: addr})`,

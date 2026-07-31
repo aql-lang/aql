@@ -13,8 +13,8 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/formatter"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/formatter"
 )
 
 // failWriter fails every Write, for driving the transport error paths.
@@ -161,7 +161,7 @@ func TestToLSPDiagnosticTranslations(t *testing.T) {
 			in:   lang.CheckDiagnostic{Code: "c1", Detail: "boom", Word: "add", Row: 2, Col: 3, Severity: lang.SeverityError},
 			want: Diagnostic{
 				Range:    Range{Start: Position{Line: 1, Character: 2}, End: Position{Line: 1, Character: 5}},
-				Severity: severityError, Code: "c1", Source: "aql", Message: "boom",
+				Severity: severityError, Code: "c1", Source: "boru", Message: "boom",
 			},
 		},
 		{
@@ -169,7 +169,7 @@ func TestToLSPDiagnosticTranslations(t *testing.T) {
 			in:   lang.CheckDiagnostic{Code: "c2", Detail: "meh", Word: "x", Row: 1, Col: 1, Severity: lang.SeverityWarning},
 			want: Diagnostic{
 				Range:    Range{Start: Position{Line: 0, Character: 0}, End: Position{Line: 0, Character: 1}},
-				Severity: severityWarning, Code: "c2", Source: "aql", Message: "meh",
+				Severity: severityWarning, Code: "c2", Source: "boru", Message: "meh",
 			},
 		},
 		{
@@ -177,7 +177,7 @@ func TestToLSPDiagnosticTranslations(t *testing.T) {
 			in:   lang.CheckDiagnostic{Code: "c3", Detail: "?", Row: 0, Col: 0},
 			want: Diagnostic{
 				Range:    Range{Start: Position{Line: 0, Character: 0}, End: Position{Line: 0, Character: 1}},
-				Severity: severityInformation, Code: "c3", Source: "aql", Message: "?",
+				Severity: severityInformation, Code: "c3", Source: "boru", Message: "?",
 			},
 		},
 		{
@@ -185,7 +185,7 @@ func TestToLSPDiagnosticTranslations(t *testing.T) {
 			in:   lang.CheckDiagnostic{Code: "c4", Detail: "e", Word: "\U0001F30Dx", Row: 1, Col: 1, Severity: lang.SeverityError},
 			want: Diagnostic{
 				Range:    Range{Start: Position{Line: 0, Character: 0}, End: Position{Line: 0, Character: 3}},
-				Severity: severityError, Code: "c4", Source: "aql", Message: "e",
+				Severity: severityError, Code: "c4", Source: "boru", Message: "e",
 			},
 		},
 	}

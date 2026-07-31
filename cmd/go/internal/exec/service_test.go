@@ -15,8 +15,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // waitExecState polls Status until it reports want or the deadline

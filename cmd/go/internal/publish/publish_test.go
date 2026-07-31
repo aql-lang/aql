@@ -11,12 +11,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
-	"github.com/aql-lang/aql/cmd/go/internal/install"
-	"github.com/aql-lang/aql/cmd/go/internal/pack"
-	"github.com/aql-lang/aql/cmd/go/internal/prep"
-	"github.com/aql-lang/aql/cmd/go/internal/registry"
-	"github.com/aql-lang/aql/cmd/go/internal/vault"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/install"
+	"github.com/boru-lang/boru/cmd/go/internal/pack"
+	"github.com/boru-lang/boru/cmd/go/internal/prep"
+	"github.com/boru-lang/boru/cmd/go/internal/registry"
+	"github.com/boru-lang/boru/cmd/go/internal/vault"
 )
 
 // --- "not logged in" guard ---
@@ -67,9 +67,9 @@ func TestRunPublishCLI(t *testing.T) {
 	})
 
 	moduleDir := t.TempDir()
-	os.WriteFile(filepath.Join(moduleDir, "aql.jsonic"),
-		[]byte("name: clipub\nmajor: 1\nminor: 0\npatch: 0\nfiles: [clipub.aql]\n"), 0644)
-	os.WriteFile(filepath.Join(moduleDir, "clipub.aql"), []byte("1"), 0644)
+	os.WriteFile(filepath.Join(moduleDir, "boru.jsonic"),
+		[]byte("name: clipub\nmajor: 1\nminor: 0\npatch: 0\nfiles: [clipub.boru]\n"), 0644)
+	os.WriteFile(filepath.Join(moduleDir, "clipub.boru"), []byte("1"), 0644)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"-r", srv.URL, moduleDir}, nil, &stdout, &stderr)
@@ -99,10 +99,10 @@ func TestRunPublishFromVault(t *testing.T) {
 
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("AQL_HOME", "") // force the vault to resolve home from HOME
-	t.Setenv("AQL_VAULT_FOLDER", "")
-	t.Setenv("AQL_VAULT_SUFFIX", "")
-	t.Setenv("AQL_VAULT_PASSPHRASE", "vpw")
+	t.Setenv("BORU_HOME", "") // force the vault to resolve home from HOME
+	t.Setenv("BORU_VAULT_FOLDER", "")
+	t.Setenv("BORU_VAULT_SUFFIX", "")
+	t.Setenv("BORU_VAULT_PASSPHRASE", "vpw")
 
 	// Initialize the vault and stash the registry token in it.
 	if code := vault.Run([]string{"init", "--backend=file"}, strings.NewReader(""), io.Discard, io.Discard); code != 0 {
@@ -119,9 +119,9 @@ func TestRunPublishFromVault(t *testing.T) {
 	})
 
 	moduleDir := t.TempDir()
-	os.WriteFile(filepath.Join(moduleDir, "aql.jsonic"),
-		[]byte("name: vaultpub\nmajor: 1\nminor: 0\npatch: 0\nfiles: [vaultpub.aql]\n"), 0644)
-	os.WriteFile(filepath.Join(moduleDir, "vaultpub.aql"), []byte("1"), 0644)
+	os.WriteFile(filepath.Join(moduleDir, "boru.jsonic"),
+		[]byte("name: vaultpub\nmajor: 1\nminor: 0\npatch: 0\nfiles: [vaultpub.boru]\n"), 0644)
+	os.WriteFile(filepath.Join(moduleDir, "vaultpub.boru"), []byte("1"), 0644)
 
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{"-r", srv.URL, moduleDir}, strings.NewReader(""), &stdout, &stderr)
@@ -168,9 +168,9 @@ func TestRegisterLoginPublishFlow(t *testing.T) {
 	}
 
 	moduleDir := t.TempDir()
-	os.WriteFile(filepath.Join(moduleDir, "aql.jsonic"),
-		[]byte("name: flowmod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [flowmod.aql]\n"), 0644)
-	os.WriteFile(filepath.Join(moduleDir, "flowmod.aql"),
+	os.WriteFile(filepath.Join(moduleDir, "boru.jsonic"),
+		[]byte("name: flowmod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [flowmod.boru]\n"), 0644)
+	os.WriteFile(filepath.Join(moduleDir, "flowmod.boru"),
 		[]byte(`export Flowmod {val: 42}`), 0644)
 
 	var packOut, packErr bytes.Buffer
@@ -208,10 +208,10 @@ func TestRegisterLoginPublishFlow(t *testing.T) {
 	}
 
 	installDir := t.TempDir()
-	os.WriteFile(filepath.Join(installDir, "aql.jsonic"),
-		[]byte("name: myapp\nmajor: 0\nminor: 1\npatch: 0\nfiles: [app.aql]\n"), 0644)
-	os.WriteFile(filepath.Join(installDir, "app.aql"), []byte("1"), 0644)
-	os.MkdirAll(filepath.Join(installDir, ".aql"), 0755)
+	os.WriteFile(filepath.Join(installDir, "boru.jsonic"),
+		[]byte("name: myapp\nmajor: 0\nminor: 1\npatch: 0\nfiles: [app.boru]\n"), 0644)
+	os.WriteFile(filepath.Join(installDir, "app.boru"), []byte("1"), 0644)
+	os.MkdirAll(filepath.Join(installDir, ".boru"), 0755)
 
 	orig, _ := os.Getwd()
 	os.Chdir(installDir)
@@ -229,8 +229,8 @@ func TestRegisterLoginPublishFlow(t *testing.T) {
 		t.Errorf("unexpected install output: %q", instOut.String())
 	}
 
-	modAql, _ := os.ReadFile(filepath.Join(".aql", "flowmod", "flowmod.aql"))
-	if !strings.Contains(string(modAql), "val: 42") {
-		t.Errorf("installed module content wrong: %s", modAql)
+	modBoru, _ := os.ReadFile(filepath.Join(".boru", "flowmod", "flowmod.boru"))
+	if !strings.Contains(string(modBoru), "val: 42") {
+		t.Errorf("installed module content wrong: %s", modBoru)
 	}
 }

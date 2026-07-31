@@ -1,4 +1,4 @@
-# Tail-Call Optimisation for the AQL Tape Machine
+# Tail-Call Optimisation for the BORU Tape Machine
 
 **Status:** **IMPLEMENTED** (June 2026) — via the staged plan in
 `TCO-STAGED.10.md`, which re-reviewed this note, corrected three points
@@ -149,7 +149,7 @@ correctness never depends on TCO firing.
 - `args` stays correct: the per-call Args entry is replaced, so `args.N`
   sees the callee's own args, as ever.
 - Quoted/NoEval bodies: body tokens are inert data until spliced.
-- `CallAQL` (module fns running in a captured sub-registry) is a
+- `CallBORU` (module fns running in a captured sub-registry) is a
   separate, Go-recursive path; its TCO analogue is the standard
   trampoline — detect the tail self-call and loop within the same Run
   invocation instead of recursing. Worth doing second; the splice path
@@ -211,5 +211,5 @@ Refer to "Implementation reality" above for why these touch
    unchanged (`n add (s …)` still nests), `args` visibility, capture
    shadowing across a TCO'd call, and a return-type-mismatch case that
    must nest rather than mis-fire.
-7. The `CallAQL` trampoline (module fns in a captured sub-registry) as a
+7. The `CallBORU` trampoline (module fns in a captured sub-registry) as a
    follow-up.

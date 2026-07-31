@@ -1,4 +1,4 @@
-# AQL How-To Guides
+# BORU How-To Guides
 
 Practical recipes for common tasks. Each guide assumes you know the
 basics from the [Tutorial](tutorial.md).
@@ -201,13 +201,13 @@ import mymod [
 Import from a file:
 
 ```
-import "lib/utils.aql"
+import "lib/utils.boru"
 ```
 
 Rename on import:
 
 ```
-import [helper as h] "lib/utils.aql"
+import [helper as h] "lib/utils.boru"
 ```
 
 
@@ -275,6 +275,6 @@ convert Decimal 5           => 5.0
 
 ## Next Steps
 
-- [Tutorial](tutorial.md) — learn AQL from first principles
+- [Tutorial](tutorial.md) — learn BORU from first principles
 - [Reference](reference.md) — complete word and type reference
 - [Explanation](explanation.md) — understand the concatenative model

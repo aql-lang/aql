@@ -18,7 +18,7 @@ func xmlReg(t *testing.T) *Registry {
 			Signatures: []Signature{{
 				Args: []*Type{TInteger},
 				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					return nil, &AqlError{Code: "runtime_error", Detail: "xboom"}
+					return nil, &BoruError{Code: "runtime_error", Detail: "xboom"}
 				}),
 				Returns: []*Type{TInteger}, BarrierPos: -1,
 			}},

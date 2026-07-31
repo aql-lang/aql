@@ -1,4 +1,4 @@
-# `aql:html` — Go `html`
+# `boru:html` — Go `html`
 
 > **Status: design proposal, not implemented.** A curated, hand-written
 > native module wrapping Go's `html`. Read [README.10.md](README.10.md)
@@ -11,7 +11,7 @@ Go [`html`](https://pkg.go.dev/html) provides exactly two functions for
 escaping and unescaping HTML text: `EscapeString` (replaces the five
 special characters `<`, `>`, `&`, `'`, `"` with their entities) and
 `UnescapeString` (reverses it, decoding the full entity set). This note
-specifies an idiomatic AQL surface over that package. Nothing is
+specifies an idiomatic BORU surface over that package. Nothing is
 implemented yet.
 
 ## 2. Why curated
@@ -26,7 +26,7 @@ deserves a documented, tested home.
 ## 3. Import & namespace
 
 ```
-import "aql:html"          # binds the Html namespace
+import "boru:html"          # binds the Html namespace
 ```
 
 The bare package name `html` does not clash with any builtin type
@@ -41,7 +41,7 @@ Signatures are **top-first, sig order** (position 0 is the top of the
 stack). All inner native sigs use `BarrierPos: -1` so the swap form
 dispatches.
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `EscapeString(s)` | `escape` | `[String] -> String` | Escape `<`, `>`, `&`, `'`, `"` to HTML entities. | Total, no error; plain String→String rename. |
 | `UnescapeString(s)` | `unescape` | `[String] -> String` | Decode HTML entities back to their characters. | Total, no error; decodes the full entity set, not just the five `escape` produces. |
@@ -75,7 +75,7 @@ None — pure value transformation, runs under any policy.
 
 ## 8. Overlap
 
-None with an existing module. No AQL-user-facing word does HTML entity
+None with an existing module. No BORU-user-facing word does HTML entity
 escaping today.
 
 **Out of scope — `html/template`.** Go's
@@ -83,7 +83,7 @@ escaping today.
 much larger* surface: it does **contextual, auto-escaping** template
 rendering (escaping is chosen per HTML/JS/CSS/URL context, not a single
 blanket entity pass). That belongs with the templating work, not here —
-cross-reference [TEXT-TEMPLATE.10.md](TEXT-TEMPLATE.10.md) (`aql:template`,
+cross-reference [TEXT-TEMPLATE.10.md](TEXT-TEMPLATE.10.md) (`boru:template`,
 the `text/template` wrapper) for the template surface, and note that
 `html/template`'s auto-escaping is explicitly **not** covered by either
 note. `Html.escape` is the manual, single-shot entity escaper only.
@@ -91,7 +91,7 @@ note. `Html.escape` is the manual, single-shot entity escaper only.
 ## 9. Examples (args-before form)
 
 ```
-import "aql:html"
+import "boru:html"
 
 "<b>hi & bye</b>" Html.escape          # "&lt;b&gt;hi &amp; bye&lt;/b&gt;"
 "&lt;a&gt;" Html.unescape              # "<a>"
@@ -128,11 +128,11 @@ Wiring checklist — no Go code here. Reference: `lang/go/modules/math.go`
   parent.Modules.NextID(), Exports: {"Html": …}}`.
 - Register `"html": BuildHtmlModule` in the `modules` map in
   `lang/go/modules/modules.go`.
-- `lang/go/modules/docs_html.go` — `registerDocs("aql:html",
+- `lang/go/modules/docs_html.go` — `registerDocs("boru:html",
   map[string]string{…})` with a one-line summary for `escape` and
   `unescape` (`TestModuleExportDocs` enforces completeness).
 - `lang/spec/module-html.tsv` — `input⇥expected⇥description` rows, each
-  leading with `import "aql:html"`; pair the positive rows with a
+  leading with `import "boru:html"`; pair the positive rows with a
   type-rejection negative sibling (Test discipline,
   `lang/go/CLAUDE.md`).
 - No FixedID entry (no external type), no policy wiring.

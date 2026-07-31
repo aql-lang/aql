@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // In-process services — the language surface of design/SERVICES.0.md
@@ -53,7 +53,7 @@ func registerServiceType() *eng.Type {
 
 // RemoteDispatch is the transport hook a `connect`ed Endpoint carries: it
 // forwards an encoded request to the remote peer and returns the reply.
-// Installed by aql:net (design/NETWORK-CLIENTS.0.md §6); nil for ordinary
+// Installed by boru:net (design/NETWORK-CLIENTS.0.md §6); nil for ordinary
 // in-process services.
 type RemoteDispatch func(r *Registry, req Value, opts Value) ([]Value, error)
 
@@ -100,7 +100,7 @@ func NewServiceValue(initial *OrderedMap) Value {
 }
 
 // NewRemoteServiceValue builds an Endpoint: a Service whose call/send
-// forward through the given transport dispatch. Used by aql:net connect.
+// forward through the given transport dispatch. Used by boru:net connect.
 func NewRemoteServiceValue(dispatch RemoteDispatch, closer func() error) Value {
 	v := NewServiceValue(nil)
 	s, _ := asService(v)
@@ -110,7 +110,7 @@ func NewRemoteServiceValue(dispatch RemoteDispatch, closer func() error) Value {
 }
 
 // ServiceCloser returns the endpoint's transport closer (nil for plain
-// services). Used by aql:net's `close` overload.
+// services). Used by boru:net's `close` overload.
 func ServiceCloser(v Value) func() error {
 	if s, ok := asService(v); ok {
 		return s.closer
@@ -242,7 +242,7 @@ func serviceNewHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 // requireHandlerFn validates a handler argument is a function value.
 func requireHandlerFn(r *Registry, v Value, word string) error {
 	if _, ok := FnDefFromValue(v); !ok {
-		return r.AqlErrorHint(word+"_error",
+		return r.BoruErrorHint(word+"_error",
 			word+": handler must be a function, got "+v.Parent.String(),
 			word, "write `[ [req state] => [ … ] ]` (or `[req state prior]` for a layering handler)")
 	}
@@ -252,7 +252,7 @@ func requireHandlerFn(r *Registry, v Value, word string) error {
 func serviceAddHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	s, ok := asService(args[2])
 	if !ok {
-		return nil, r.AqlError("service_error", "add: expected a Service, got "+args[2].Parent.String(), "add")
+		return nil, r.BoruError("service_error", "add: expected a Service, got "+args[2].Parent.String(), "add")
 	}
 	if err := requireHandlerFn(r, args[1], "add"); err != nil {
 		return nil, err
@@ -286,7 +286,7 @@ func serviceAddHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 func serviceWrapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	s, ok := asService(args[1])
 	if !ok {
-		return nil, r.AqlError("service_error", "wrap: expected a Service, got "+args[1].Parent.String(), "wrap")
+		return nil, r.BoruError("service_error", "wrap: expected a Service, got "+args[1].Parent.String(), "wrap")
 	}
 	if err := requireHandlerFn(r, args[0], "wrap"); err != nil {
 		return nil, err
@@ -302,7 +302,7 @@ func serviceWrapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 func serviceStateHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	s, ok := asService(args[0])
 	if !ok {
-		return nil, r.AqlError("service_error", "state-of: expected a Service, got "+args[0].Parent.String(), "state-of")
+		return nil, r.BoruError("service_error", "state-of: expected a Service, got "+args[0].Parent.String(), "state-of")
 	}
 	return []Value{s.state}, nil
 }
@@ -310,7 +310,7 @@ func serviceStateHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 func serviceCallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	s, ok := asService(args[1])
 	if !ok {
-		return nil, r.AqlError("service_error", "call: expected a Service, got "+args[1].Parent.String(), "call")
+		return nil, r.BoruError("service_error", "call: expected a Service, got "+args[1].Parent.String(), "call")
 	}
 	var opts Value
 	if len(args) >= 3 {
@@ -329,7 +329,7 @@ func serviceCallHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 func serviceSendHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	s, ok := asService(args[1])
 	if !ok {
-		return nil, r.AqlError("service_error", "send: expected a Service, got "+args[1].Parent.String(), "send")
+		return nil, r.BoruError("service_error", "send: expected a Service, got "+args[1].Parent.String(), "send")
 	}
 	if s.remote != nil {
 		_, err := s.remote(r, args[0], Value{})
@@ -342,7 +342,7 @@ func serviceSendHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 }
 
 // ServiceRoutePatterns returns the raw pattern maps registered on a
-// Service, in registration order. The aql:net HTTP router scans these
+// Service, in registration order. The boru:net HTTP router scans these
 // for `path` templates carrying `:param` / `*rest` segments.
 func ServiceRoutePatterns(svc Value) []Value {
 	s, ok := asService(svc)
@@ -359,11 +359,11 @@ func ServiceRoutePatterns(svc Value) []Value {
 }
 
 // DispatchServiceValue routes one request into a Service from Go — the
-// hook the aql:net transport loop uses to deliver decoded messages.
+// hook the boru:net transport loop uses to deliver decoded messages.
 func DispatchServiceValue(r *Registry, svc Value, req Value) ([]Value, error) {
 	s, ok := asService(svc)
 	if !ok {
-		return nil, r.AqlError("service_error", "dispatch: expected a Service", "call")
+		return nil, r.BoruError("service_error", "dispatch: expected a Service", "call")
 	}
 	return dispatchService(r, s, req)
 }
@@ -394,7 +394,7 @@ func dispatchService(r *Registry, s *serviceState, req Value) ([]Value, error) {
 	s.mu.Unlock()
 
 	if !found || h == nil {
-		return nil, r.AqlErrorHint("no_match",
+		return nil, r.BoruErrorHint("no_match",
 			"call: no handler matches request "+ValToString(req),
 			"call", "register a handler with `add {pattern} [handler] svc` (a catch-all `add {} …` accepts anything)")
 	}
@@ -427,12 +427,12 @@ func runHandlerChain(r *Registry, state Value, req Value, chain []Value) ([]Valu
 	rest := chain[1:]
 	fnInfo, ok := FnDefFromValue(handler)
 	if !ok {
-		return nil, r.AqlError("service_error", "handler is not a function", "call")
+		return nil, r.BoruError("service_error", "handler is not a function", "call")
 	}
 
 	// Try the layering arity first: [req state prior]. InvokeCallback runs the
 	// handler on the VM when its body compiled to a unit (nested in the enclosing
-	// run, or fresh on an idle actor registry) and falls back to CallAQL — the
+	// run, or fresh on an idle actor registry) and falls back to CallBORU — the
 	// interpreter — for a body that didn't compile (e.g. one that calls `prior`).
 	priorFn := makePriorFn(r, state, rest)
 	args3 := []Value{req, state, priorFn}
@@ -443,7 +443,7 @@ func runHandlerChain(r *Registry, state Value, req Value, chain []Value) ([]Valu
 	if sig := MatchFnSig(handler, args2); sig != nil {
 		return eng.InvokeCallback(r, sig, args2, fnInfo.Captured)
 	}
-	return nil, r.AqlErrorHint("service_error",
+	return nil, r.BoruErrorHint("service_error",
 		"handler signature must be [req state] or [req state prior]",
 		"call", "declare handlers as `[ [req state] => [ … ] ]`")
 }

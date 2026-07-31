@@ -16,7 +16,7 @@ func run(t *testing.T, args ...string) (int, string, string) {
 	return code, stdout.String(), stderr.String()
 }
 
-// TestModelBuildWritesJSON pins the core job: `aql model <file>` resolves the
+// TestModelBuildWritesJSON pins the core job: `boru model <file>` resolves the
 // model and writes <base>/<name>.json.
 func TestModelBuildWritesJSON(t *testing.T) {
 	dir := t.TempDir()

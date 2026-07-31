@@ -1,4 +1,4 @@
-# AQL Language Specification: Arithmetic (add sub mul div mod pow)
+# BORU Language Specification: Arithmetic (add sub mul div mod pow)
 # Format: input<TAB>expected<TAB>description
 #
 # The binary math words follow the kernel's ONE convention: the handler

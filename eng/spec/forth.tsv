@@ -11,7 +11,7 @@
 #     : incr    1 + ;		
 #     : anti-rot  rot rot ;		
 #		
-# In aqleng the equivalent is `def NAME [body]` — a list-bound def		
+# In borueng the equivalent is `def NAME [body]` — a list-bound def		
 # whose body is spliced in-place at every use site (NOT an `fn` call		
 # with named parameters; see fn.tsv for that). The body executes		
 # against the current stack, exactly like a Forth colon definition.		
@@ -20,7 +20,7 @@
 # ------------------------------------------------		
 # Production Forth's `+`, `*`, `-`, etc. are purely stack-based —		
 # they only ever consume args from the stack, never look ahead at		
-# future tokens. aqleng's default math ops (addq, subq, mulq) are		
+# future tokens. borueng's default math ops (addq, subq, mulq) are		
 # FORWARD-PRECEDENCE: at a body's splice site, an inner mulq's		
 # fwd-scan can greedily consume the next literal in the outer		
 # stream. So a naive `def square [ dup mulq ]` invoked as		
@@ -50,7 +50,7 @@
 # -----------------------------		
 # Words that require `if`/`then`/`else` or `for`/`while` are		
 # deliberately omitted. abs, max, min, factorial all need		
-# conditionals which aqleng's spec runner doesn't yet register.		
+# conditionals which borueng's spec runner doesn't yet register.		
 # They land once `if`/`for` core words land. See section 9.		
 		
 # === Test fixtures (defined in eng/go/spec_test.go::registerSpecWords) ===		
@@ -109,7 +109,7 @@ def sumsq word [ dup mulq/s swap dup mulq/s addq/s ] 0 0 sumsq	0	zero case
 		
 # ---------- 4. Stack-manipulation words from primitives ----------		
 # Classic Forth defines composite stack ops in terms of lower-level		
-# primitives. These rows verify that aqleng's core stack ops behave		
+# primitives. These rows verify that borueng's core stack ops behave		
 # identically to their Forth-textbook definitions. None of these		
 # bodies use forward-prec ops, so no /s suffix is needed — dup, swap,		
 # drop, over are already stack-only.		

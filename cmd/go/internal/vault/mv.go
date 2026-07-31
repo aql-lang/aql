@@ -7,13 +7,13 @@ import (
 	"strings"
 )
 
-// runMv implements `aql vault mv <src> <dst>` (alias: rename). It
+// runMv implements `boru vault mv <src> <dst>` (alias: rename). It
 // renames one key or moves a whole namespace:
 //
-//	aql vault mv key proj:key        # move a key into a namespace
-//	aql vault mv proj:key other:k2   # move and rename across namespaces
-//	aql vault mv proj: other:        # rename namespace proj to other
-//	aql vault mv proj: :             # move every proj key to root
+//	boru vault mv key proj:key        # move a key into a namespace
+//	boru vault mv proj:key other:k2   # move and rename across namespaces
+//	boru vault mv proj: other:        # rename namespace proj to other
+//	boru vault mv proj: :             # move every proj key to root
 //
 // Alias references follow the usual resolution rule (bare names use
 // the default namespace, :name forces root); a trailing colon (`ns:`,
@@ -37,7 +37,7 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 		return 1
 	}
 	if fs.NArg() != 2 {
-		fmt.Fprintf(stderr, "error: usage: aql vault mv [--revoke-caps] [--dry-run] <src> <dst>  (aliases like [ns:]name | :name, or whole namespaces like ns: | :)\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault mv [--revoke-caps] [--dry-run] <src> <dst>  (aliases like [ns:]name | :name, or whole namespaces like ns: | :)\n")
 		return 1
 	}
 	srcRef, dstRef := fs.Arg(0), fs.Arg(1)
@@ -48,7 +48,7 @@ func runMv(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wri
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 

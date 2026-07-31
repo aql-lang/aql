@@ -1,0 +1,53 @@
+{
+    "identifier": "boru.lang",
+    "name": "BORU",
+    "organization": "boru-lang",
+    "description": "Syntax highlighting and language-server support for BORU, a concatenative, strongly-typed query language.",
+    "version": "0.1.0",
+    "categories": [
+        "languages"
+    ],
+    "license": "MIT",
+    "repository": "https://github.com/boru-lang/boru",
+    "bugs": "https://github.com/boru-lang/boru/issues",
+    "main": "main.js",
+    "entitlements": {
+        "process": true,
+        "filesystem": "readonly"
+    },
+    "activationEvents": [
+        "onLanguage:boru"
+    ],
+    "languages": [
+        "BORU"
+    ],
+    "languageServers": {
+        "boru-lsp": {
+            "name": "BORU Language Server",
+            "type": "stdio",
+            "path": "boru",
+            "args": [
+                "lsp"
+            ],
+            "syntaxes": [
+                "boru"
+            ]
+        }
+    },
+    "config": [
+        {
+            "key": "boru.lsp.path",
+            "title": "BORU binary path",
+            "description": "Path to the `boru` executable used to run the language server (`boru lsp`). Leave as `boru` to use the binary found on your $PATH, or give an absolute path (a leading ~ is expanded).",
+            "type": "path",
+            "default": "boru"
+        },
+        {
+            "key": "boru.lsp.enabled",
+            "title": "Enable language server",
+            "description": "Start the `boru lsp` language server for diagnostics, hover, completion and formatting. Disable to use syntax highlighting only.",
+            "type": "boolean",
+            "default": true
+        }
+    ]
+}

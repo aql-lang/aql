@@ -1,4 +1,4 @@
-# AQL Language Specification: the `case` word — dispatch on a value
+# BORU Language Specification: the `case` word — dispatch on a value
 # Format: input<TAB>expected<TAB>description
 #
 # `case <value> [m1 b1 m2 b2 … default]` evaluates the value (a
@@ -16,10 +16,10 @@
 # stack-value form `<value> case [clauses]` serves contexts where the
 # value is already on the stack (e.g. error handlers).
 #
-# STATIC EXHAUSTIVENESS (design/case-exhaustiveness.0.md): `aql check`
+# STATIC EXHAUSTIVENESS (design/case-exhaustiveness.0.md): `boru check`
 # requires a case's clauses to cover the scrutinee's static type — a
 # default-less case with a provably-uncoverable value is a check ERROR
-# (case_not_exhaustive), and `aql run` refuses such a program at
+# (case_not_exhaustive), and `boru run` refuses such a program at
 # preflight. The default is NOT required when the type disjunctions are
 # met: the clauses cover every union alternative / enum member /
 # Boolean's true+false / the concrete scrutinee value. Coverage rules:

@@ -1,7 +1,7 @@
-# `RegisterHostKeyring` — the OS keyring host seam (`aql:keyring` / `Keyring`)
+# `RegisterHostKeyring` — the OS keyring host seam (`boru:keyring` / `Keyring`)
 
 > **Status: design proposal — not implemented.** This note specifies the
-> host seam that lets AQL vault logic read and write secrets in the
+> host seam that lets BORU vault logic read and write secrets in the
 > platform keychain **without linking a credential daemon into the
 > language layer**. It is the authoritative spec for
 > [VAULT-TUI-PORT.0](VAULT-TUI-PORT.0.md) §7.3. The seam mirrors
@@ -13,12 +13,12 @@
 The vault stores secret bytes in an **OS keyring backend** — macOS
 Keychain, freedesktop Secret Service, Windows Credential Manager,
 1Password, or an encrypted file — reached today only from Go
-(`cmd/go/internal/vault/keyring.go`). To move vault logic into AQL (§7 of
+(`cmd/go/internal/vault/keyring.go`). To move vault logic into BORU (§7 of
 the port) without dragging `os/exec`, `/usr/bin/security`, the `op` CLI,
 or a PowerShell helper into `lang/go`, the keyring must arrive the same
 way the terminal and the vault backend already do: **injected by the host
 through a capability seam**. `lang/go` stays free of OS-keychain
-dependencies; the host supplies the backend; AQL words resolve it at
+dependencies; the host supplies the backend; BORU words resolve it at
 dispatch.
 
 This is the third member of a family — `RegisterHostTui`
@@ -43,20 +43,20 @@ Semantics copied verbatim from `RegisterHostVault`
   registered") — one backend per registry;
 - **register before the import for module-body callers (CRITICAL).** On
   the *same* registry the words resolve the backend live at dispatch, so a
-  top-level program may register before or after `import "aql:keyring"`.
-  But the vault-in-AQL use case runs inside an **imported module body**,
+  top-level program may register before or after `import "boru:keyring"`.
+  But the vault-in-BORU use case runs inside an **imported module body**,
   and `RunModuleBody` snapshots the `ModuleInheritedCaps` slots from the
   parent **at import time**: if nothing has created the slot on the parent
   before the child imports, the child inherits no slot, and a later
   `RegisterHostKeyring` on the parent creates a backend the already-imported
   child never sees. So the host **must register the backend before the
   program imports the module** (which is what the launcher does, ordering
-  `RegisterHost*` ahead of the run — matching `registerAqlTuiBackends`).
+  `RegisterHost*` ahead of the run — matching `registerBoruTuiBackends`).
   This is the same child-registry snapshot semantics as
   [PERMISSIONS.10's Known gap](PERMISSIONS.10.md#known-gap-child-module-registries-do-not-inherit-the-policy);
   the seam's word docs must state the before-import requirement rather than
   the vault seam's looser "before or after" wording.
-- with **no backend registered**, the words raise `[aql/no_backend]` —
+- with **no backend registered**, the words raise `[boru/no_backend]` —
   the natural state of the spec harness, wasm, and CI, where a **fake
   in-memory backend** is registered for tests.
 
@@ -88,7 +88,7 @@ type KeyringSpec struct {
 ```
 
 The one adaptation: `Get` returns an explicit `found bool` rather than a
-sentinel `ErrNotFound`, so the AQL word maps a miss to `None` without the
+sentinel `ErrNotFound`, so the BORU word maps a miss to `None` without the
 host and the module agreeing on an error value across the package
 boundary (§8).
 
@@ -97,18 +97,18 @@ boundary (§8).
 Exactly as `capVaultHost` (`vault.go`): `capKeyringHost` is a
 per-registry slot, and the seam's `init()` appends it to
 `native.ModuleInheritedCaps` so an **imported module body inherits the
-backend by pointer** at import time — the vault-in-AQL logic runs inside a
+backend by pointer** at import time — the vault-in-BORU logic runs inside a
 module and must reach the same backend the host registered on the parent.
 This is the mechanism that carries the terminal and vault backends into
 module bodies today; the keyring rides the same rail.
 
 ## 5. The backend contract
 
-Semantics are the vault's, so an in-AQL vault behaves identically to the
+Semantics are the vault's, so an in-BORU vault behaves identically to the
 Go one:
 
 - **`Set(alias, value)`** replaces any existing value for `alias`; the
-  per-alias OS key is namespaced (`"aql:<alias>"`, `keyringService="aql"`).
+  per-alias OS key is namespaced (`"boru:<alias>"`, `keyringService="boru"`).
   The secret is delivered to the platform tool on **stdin, never argv**
   (the Go backends are careful about this — `security -i
   add-generic-password`, `op item create -`, the PowerShell helper's env
@@ -120,19 +120,19 @@ Go one:
 - **Backend selection stays host-side.** `auto` / `keychain` /
   `secret-service` / `wincred` / `file` / `1password` and the
   `autoBackend` fallback-to-file resolution
-  (`cmd/go/internal/vault/keyring.go`) are the host's concern; AQL never
+  (`cmd/go/internal/vault/keyring.go`) are the host's concern; BORU never
   names a backend constant. The seam is backend-agnostic.
 
-## 6. Word surface — a minimal `aql:keyring` module
+## 6. Word surface — a minimal `boru:keyring` module
 
-The seam alone is enough for an in-AQL vault that the host wires up
+The seam alone is enough for an in-BORU vault that the host wires up
 directly, but §7.3 frames the deliverable as a seam *so keychain access
-stays host-injected* — which still needs AQL words to call. Ship a
-**minimal `aql:keyring` (`Keyring`) module** of exactly three words over
+stays host-injected* — which still needs BORU words to call. Ship a
+**minimal `boru:keyring` (`Keyring`) module** of exactly three words over
 the seam:
 
-```aql
-import "aql:keyring"       # binds the Keyring namespace
+```boru
+import "boru:keyring"       # binds the Keyring namespace
 
 alias Keyring.get             # → String | None   (None on miss)
 Keyring.set alias value       # → (no result)
@@ -178,7 +178,7 @@ module registries do not inherit `CapPolicy`
 ([PERMISSIONS.10 → Known gap](PERMISSIONS.10.md#known-gap-child-module-registries-do-not-inherit-the-policy)),
 a dispatch-time `checkKeyringPolicy` gate silently becomes allow-all when
 `Keyring.*` runs inside an imported module body — which is *exactly* where
-the in-AQL vault will call it. Keyring is effectful and security-critical,
+the in-BORU vault will call it. Keyring is effectful and security-critical,
 so this is not low-severity as it is for crypto (§8 there). This spec is
 therefore **coupled to fixing that gap**: either land the `CapPolicy`
 inheritance fix first, or (matching the more robust `permissionedFileOps`
@@ -200,16 +200,16 @@ latter for defence in depth.
 
 ## 9. Overlap
 
-- **`aql:vault` (`Vault`)** — the layer *above* this. The vault owns
+- **`boru:vault` (`Vault`)** — the layer *above* this. The vault owns
   aliases, capabilities, password slots, and the envelope crypto; the
   keyring is just where the sealed secret bytes are parked. In the
-  migration, the in-AQL vault calls `Keyring.*` for storage and
-  `Crypto.*` ([AQL-CRYPTO.0](AQL-CRYPTO.0.md)) for the envelopes.
-- **`aql:crypto`** — supplies the AES-256-GCM envelope for the **file**
+  migration, the in-BORU vault calls `Keyring.*` for storage and
+  `Crypto.*` ([BORU-CRYPTO.0](BORU-CRYPTO.0.md)) for the envelopes.
+- **`boru:crypto`** — supplies the AES-256-GCM envelope for the **file**
   keyring backend (the encrypted `vault.keyring` container), so even the
-  fallback backend is expressible in AQL.
-- **`aql:io` (`IO`)** — the file keyring backend's persistence (atomic
-  write, `0600` mode); host-side today, AQL-expressible after the
+  fallback backend is expressible in BORU.
+- **`boru:io` (`IO`)** — the file keyring backend's persistence (atomic
+  write, `0600` mode); host-side today, BORU-expressible after the
   migration.
 
 ## 10. Open questions / out of scope
@@ -220,7 +220,7 @@ latter for defence in depth.
 - **Typed methods vs `Do`-style handler** (§3) — recommended typed
   `Get`/`Set`/`Delete` to match the interface being wrapped; the seam
   family may prefer `Do(op, params)` for consistency with `VaultSpec`.
-- **Backend enumeration.** Whether AQL can *list* or *select* backends, or
+- **Backend enumeration.** Whether BORU can *list* or *select* backends, or
   only use the host's choice — recommended host-only; the seam exposes no
   backend identity beyond `Name`.
 - **1Password / helper latency.** Backends that shell out (`op`, PowerShell)
@@ -236,7 +236,7 @@ latter for defence in depth.
 - **Module.** `BuildKeyringModule(parent)` — three trivial-delegation
   wrappers (`get`/`set`/`delete`) with inner-sig **`BarrierPos: -1`**,
   exported into the `Keyring` map; register in the resolver;
-  `moduleDocs["aql:keyring"]`.
+  `moduleDocs["boru:keyring"]`.
 - **Policy.** §7 steps (add `keyring` to `KnownScopes`; the
   `GlobalOps`+`GlobalsFor`+`subset.go` global-widening if the dedicated
   global is chosen; profiles; `checkKeyringPolicy` — or the
@@ -245,18 +245,18 @@ latter for defence in depth.
   `cmd/go/internal/vault`'s `keyring` interface to `KeyringSpec` and
   calling `RegisterHostKeyring` alongside the existing
   `RegisterHostVault` / `RegisterHostTui` in the launcher
-  (`registerAqlTuiBackends`).
+  (`registerBoruTuiBackends`).
 - **Governance gates.** `help.ModuleCatalog` (`catalog_sync`), ADR-003
   export-coverage TSV rows, `check-accuracy` ratchet.
 - **Spec + tests.** A **fake in-memory backend** for CI (get/set/delete
   over a map); `lang/spec/keyring.tsv` rows positive **and** negative
   (no-backend → `no_backend`; miss → `None`; a policy that denies keyring
-  → `[aql/…]`); `TestTypeLiteralNoPanic` entry.
+  → `[boru/…]`); `TestTypeLiteralNoPanic` entry.
 
 ## See also
 
 - [VAULT-TUI-PORT.0](VAULT-TUI-PORT.0.md) §7.3 — the migration this serves.
-- [AQL-CRYPTO.0](AQL-CRYPTO.0.md) — the sibling primitive module.
+- [BORU-CRYPTO.0](BORU-CRYPTO.0.md) — the sibling primitive module.
 - [PERMISSIONS.10](PERMISSIONS.10.md) — the policy model and the
   child-registry gap §7 is coupled to.
 - `cmd/go/internal/vault/keyring.go` — the backend interface and the

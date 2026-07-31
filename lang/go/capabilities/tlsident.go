@@ -5,7 +5,7 @@ import (
 )
 
 // CertRequest is what the peer asked for during the TLS handshake — the
-// AQL-facing projection of crypto/tls's CertificateRequestInfo. A
+// BORU-facing projection of crypto/tls's CertificateRequestInfo. A
 // ClientIdentity may use it to pick among several certificates.
 type CertRequest struct {
 	// Host is the peer being dialled.
@@ -23,7 +23,7 @@ type CertRequest struct {
 // holding bytes, and that is the whole point: a tls.Certificate's
 // PrivateKey is a crypto.Signer, so an implementation may be backed by
 // a file, a vault slot, an HSM, a KMS, or a SPIFFE agent that rotates
-// hourly — the key need never exist in this process as bytes, and AQL
+// hourly — the key need never exist in this process as bytes, and BORU
 // never sees it either way. A credential modelled as cert-bytes +
 // key-bytes could not express those cases.
 //
@@ -59,7 +59,7 @@ func StaticIdentity(certPEM, keyPEM []byte) (ClientIdentity, error) {
 // FileIdentity builds a ClientIdentity from PEM files on disk.
 //
 // The paths are the HOST's, supplied by host Go code at registration —
-// never a path chosen by guest AQL source. That distinction is the
+// never a path chosen by guest BORU source. That distinction is the
 // reason `tls: {identity: …}` names a credential instead of pointing at
 // one: a guest-chosen path dereferenced under host authority would hand
 // a program holding `network` a file read it is not entitled to.

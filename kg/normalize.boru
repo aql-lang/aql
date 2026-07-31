@@ -1,0 +1,45 @@
+# normalize.boru — label normalization for the knowledge graph.
+#
+# The identifier policy (kg/README.md §identifiers) requires every label
+# to be normalized the same way before comparison or fingerprinting:
+#   1. Unicode normalization (NFC, via StringUtil.normalize)
+#   2. Trim leading and trailing whitespace
+#   3. Collapse repeated internal whitespace to single spaces
+#   4. Lowercase — for the *comparison* form only
+# The original display label is preserved separately by the caller
+# (KgEntity keeps both `label` and `normalized_label`).
+
+import "boru:string-util"
+
+# Replace tabs, newlines, and carriage returns with plain spaces so the
+# whitespace collapse below sees a single separator kind.
+def spaces-only fn s:String String [
+  StringUtil.replace "\r" " "
+    (StringUtil.replace "\n" " "
+        (StringUtil.replace "\t" " " s {scope:"all"}) {scope:"all"}
+    )
+    {scope:"all"}
+]
+
+# Collapse runs of spaces to one space; split drops empty fields, so
+# leading/trailing runs vanish too.
+def collapse-ws fn s:String String [
+  StringUtil.concat (StringUtil.split " " (spaces-only s)) {sep:" "}
+]
+
+# Display normalization: NFC + trimmed + single-spaced, case preserved.
+def norm-display fn s:String String [
+  collapse-ws (StringUtil.trim (StringUtil.normalize s))
+]
+
+# Comparison normalization: the display form, lowercased. Idempotent —
+# norm-label (norm-label s) always equals norm-label s (see the property
+# test in tests/identifiers_test.boru).
+def norm-label fn s:String String [StringUtil.lower (norm-display s)]
+
+export "KgNorm" {
+  spaces-only:spaces-only/r
+  collapse-ws:collapse-ws/r
+  norm-display:norm-display/r
+  norm-label:norm-label/r
+}

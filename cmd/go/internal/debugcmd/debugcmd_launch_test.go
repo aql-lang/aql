@@ -8,18 +8,18 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // The interactive-launch end-to-end tests: each writes a program file,
 // drives the debugger with a scripted command transcript on stdin, and
-// asserts the resulting transcript (design/AQL-DEBUGGER.0.md §11 — the
+// asserts the resulting transcript (design/BORU-DEBUGGER.0.md §11 — the
 // scripted front end IS the CI story, so these are the debugger's
 // executable spec).
 
 func writeProgram(t *testing.T, src string) string {
 	t.Helper()
-	path := filepath.Join(t.TempDir(), "prog.aql")
+	path := filepath.Join(t.TempDir(), "prog.boru")
 	if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -134,7 +134,7 @@ func TestLaunchEOFDetaches(t *testing.T) {
 }
 
 func TestLaunchBreakMarkerPausesUnderContinue(t *testing.T) {
-	path := writeProgram(t, `import "aql:debug"
+	path := writeProgram(t, `import "boru:debug"
 def a 1
 Debug.break
 def b 2
@@ -149,7 +149,7 @@ a add b
 
 func TestLaunchBreakWhenFalseNeverPauses(t *testing.T) {
 	// Negative: a false conditional breakpoint must not stop the program.
-	path := writeProgram(t, `import "aql:debug"
+	path := writeProgram(t, `import "boru:debug"
 Debug.break-when false
 1 add 2
 `)
@@ -165,7 +165,7 @@ Debug.break-when false
 func TestLaunchQuitAtBreakDetaches(t *testing.T) {
 	// Quitting AT a break marker detaches; later markers stay silent
 	// (OnStep's detached arm) and the program still finishes.
-	path := writeProgram(t, `import "aql:debug"
+	path := writeProgram(t, `import "boru:debug"
 print "one"
 Debug.break
 print "two"
@@ -232,7 +232,7 @@ func TestLaunchInspectionCommands(t *testing.T) {
 func TestLaunchBacktraceInsideFn(t *testing.T) {
 	// A Debug.break inside a fn body pauses with the inline frame live:
 	// bt names the fn and its bindings, defs shows the bound param (§5.3).
-	path := writeProgram(t, `import "aql:debug"
+	path := writeProgram(t, `import "boru:debug"
 def f fn [[x:Integer] [Integer] [
 Debug.break
 x add 1
@@ -252,7 +252,7 @@ f 41
 func TestLaunchListAtBreakIsUnknown(t *testing.T) {
 	// Negative: a one-shot break pause carries no source position (§7),
 	// so `list` there reports the line unknown rather than guessing.
-	path := writeProgram(t, `import "aql:debug"
+	path := writeProgram(t, `import "boru:debug"
 Debug.break
 1 add 2
 `)
@@ -267,7 +267,7 @@ func TestLaunchInnerDebugStepReachesSession(t *testing.T) {
 	// A Debug.step the PROGRAM runs consults the same session (the
 	// installed DebugOps), with source-located frames via the StepFrame
 	// widening — and `step`/`continue` drive it.
-	path := writeProgram(t, `import "aql:debug"
+	path := writeProgram(t, `import "boru:debug"
 [1 add 2] Debug.step
 `)
 	code, out, _ := launch(t, []string{path}, "continue\nstep\ncontinue\n")
@@ -284,7 +284,7 @@ func TestLaunchStepAtBreakPausesNextLine(t *testing.T) {
 	// `step` at a Debug.break works ONLY via the session-side mode change
 	// — pauseAtBreak discards OnStep's returned action — so pin the
 	// break → step → next-source-line transition end to end.
-	path := writeProgram(t, `import "aql:debug"
+	path := writeProgram(t, `import "boru:debug"
 Debug.break
 def z 5
 z add 1
@@ -328,7 +328,7 @@ func TestLaunchEvalFlowSignalDiscarded(t *testing.T) {
 func TestLaunchEvalBreakDoesNotNest(t *testing.T) {
 	// Negative (§5 re-entrancy): a `print` expression that itself hits
 	// Debug.break must not open a nested prompt.
-	path := writeProgram(t, `import "aql:debug"
+	path := writeProgram(t, `import "boru:debug"
 def n 1
 n add 1
 `)
@@ -366,7 +366,7 @@ func TestLaunchScriptMissing(t *testing.T) {
 }
 
 func TestLaunchScriptArgsReachProgram(t *testing.T) {
-	path := writeProgram(t, `import "aql:io"
+	path := writeProgram(t, `import "boru:io"
 IO.args
 `)
 	code, out, _ := launch(t, []string{"--no-check", path, "alpha", "beta"}, "continue\n")
@@ -379,11 +379,11 @@ IO.args
 func TestLaunchUsageAndFlagErrors(t *testing.T) {
 	// No file positional.
 	if code, _, errOut := launch(t, []string{"--no-check"}, ""); code != 1 ||
-		!strings.Contains(errOut, "usage: aql debug") {
+		!strings.Contains(errOut, "usage: boru debug") {
 		t.Errorf("no-file: exit %d, stderr %q", code, errOut)
 	}
 	// Unknown flag.
-	if code, _, _ := launch(t, []string{"--bogus", "x.aql"}, ""); code != 1 {
+	if code, _, _ := launch(t, []string{"--bogus", "x.boru"}, ""); code != 1 {
 		t.Errorf("bad flag must exit 1, got %d", code)
 	}
 }
@@ -415,16 +415,16 @@ func TestLaunchAliases(t *testing.T) {
 }
 
 func TestLaunchPreflightEnvSkip(t *testing.T) {
-	// Negative pair for the preflight gate: AQL_NO_CHECK skips the check,
+	// Negative pair for the preflight gate: BORU_NO_CHECK skips the check,
 	// so a checker-rejected program reaches runtime (and fails there).
-	t.Setenv("AQL_NO_CHECK", "1")
+	t.Setenv("BORU_NO_CHECK", "1")
 	path := writeProgram(t, "boguswordxyz\n")
 	code, out, errOut := launch(t, []string{path}, "continue\n")
 	if code != 1 {
 		t.Errorf("exit = %d, want the runtime failure", code)
 	}
 	if !strings.Contains(out, "type 'help' for commands") {
-		t.Errorf("with AQL_NO_CHECK the debugger must start:\n%s", out)
+		t.Errorf("with BORU_NO_CHECK the debugger must start:\n%s", out)
 	}
 	if !strings.Contains(errOut, "boguswordxyz") {
 		t.Errorf("stderr = %q, want the runtime error", errOut)
@@ -569,7 +569,7 @@ func TestLaunchOutLeavesFrame(t *testing.T) {
 	// fn-literal CONSTRUCTION surfaces "(in body)" stops under `step`
 	// varies with process-warm caches, so step counts through a def are
 	// not portable — continue-to-marker is, in every world.
-	path := writeProgram(t, `import "aql:debug"
+	path := writeProgram(t, `import "boru:debug"
 def f fn [[x:Integer] [Integer] [
 Debug.break
 x add 1
@@ -748,12 +748,12 @@ func TestLaunchModuleFnDescent(t *testing.T) {
 	// sub-registry — the debugParent chain resolves the session's live
 	// hook there, so breakpoints fire inside module fns too.
 	dir := t.TempDir()
-	lib := filepath.Join(dir, "lib.aql")
+	lib := filepath.Join(dir, "lib.boru")
 	if err := os.WriteFile(lib,
 		[]byte("def twice fn [[x:Integer] [Integer] [\nx add x\n]]\nexport \"Lib\" {twice: twice/r}\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	main := filepath.Join(dir, "main.aql")
+	main := filepath.Join(dir, "main.boru")
 	if err := os.WriteFile(main,
 		[]byte("import \""+lib+"\"\nLib.twice 21\n"), 0o600); err != nil {
 		t.Fatal(err)
@@ -904,7 +904,7 @@ func TestLaunchInitError(t *testing.T) {
 	// The langNew seam (design/TEST-SEAMS.10.md): a registry-construction
 	// failure surfaces as an init error.
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.AQL, error) { return nil, errors.New("boom-init") }
+	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, errors.New("boom-init") }
 	defer func() { langNew = orig }()
 	path := writeProgram(t, "1 add 2\n")
 	code, _, errOut := launch(t, []string{"--no-check", path}, "")

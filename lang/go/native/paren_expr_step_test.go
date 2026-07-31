@@ -16,7 +16,7 @@ func TestParenExprStepSingleResult(t *testing.T) {
 	}
 	// (1 add 2) → 3
 	pe := NewParenExpr([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
-	result := runAQL(t, r, []Value{pe})
+	result := runBORU(t, r, []Value{pe})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %v", result)
 	}
@@ -32,7 +32,7 @@ func TestParenExprStepMultipleResultsFlowOut(t *testing.T) {
 	}
 	// (1 2 3) → 1 2 3 on the stack (results flow out)
 	pe := NewParenExpr([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
-	result := runAQL(t, r, []Value{pe})
+	result := runBORU(t, r, []Value{pe})
 	if len(result) != 3 {
 		t.Fatalf("expected 3 results to flow out, got %v", result)
 	}
@@ -45,7 +45,7 @@ func TestParenExprStepResultsThenMore(t *testing.T) {
 	}
 	// (1 2 3) 99 → 1 2 3 99 (results splice in before following tokens)
 	pe := NewParenExpr([]Value{NewInteger(1), NewInteger(2), NewInteger(3)})
-	result := runAQL(t, r, []Value{pe, NewInteger(99)})
+	result := runBORU(t, r, []Value{pe, NewInteger(99)})
 	if len(result) != 4 {
 		t.Fatalf("expected 4 results, got %v", result)
 	}
@@ -61,7 +61,7 @@ func TestParenExprStepDefLeaks(t *testing.T) {
 	}
 	// (def x 1) x → 1  (defs leak to the enclosing scope)
 	pe := NewParenExpr([]Value{NewWord("def"), NewWord("x"), NewInteger(1)})
-	result := runAQL(t, r, []Value{pe, NewWord("x")})
+	result := runBORU(t, r, []Value{pe, NewWord("x")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %v", result)
 	}
@@ -80,7 +80,7 @@ func TestParenExprForwardArgTrailing(t *testing.T) {
 	}
 	// add 10 (1 add 2) → 13
 	pe := NewParenExpr([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
-	result := runAQL(t, r, []Value{NewWord("add"), NewInteger(10), pe})
+	result := runBORU(t, r, []Value{NewWord("add"), NewInteger(10), pe})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %v", result)
 	}
@@ -96,7 +96,7 @@ func TestParenExprForwardArgLeading(t *testing.T) {
 	}
 	// add (1 add 2) 10 → 13 (paren first in the forward window)
 	pe := NewParenExpr([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
-	result := runAQL(t, r, []Value{NewWord("add"), pe, NewInteger(10)})
+	result := runBORU(t, r, []Value{NewWord("add"), pe, NewInteger(10)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %v", result)
 	}
@@ -112,7 +112,7 @@ func TestParenExprStepErrorPropagates(t *testing.T) {
 	}
 	// (1 div 0) 99 → error propagates (NOT caught and reified like `do`)
 	pe := NewParenExpr([]Value{NewInteger(1), NewWord("div"), NewInteger(0)})
-	if e := runAQLError(t, r, []Value{pe, NewInteger(99)}); e == nil {
+	if e := runBORUError(t, r, []Value{pe, NewInteger(99)}); e == nil {
 		t.Fatal("expected division-by-zero error to propagate from paren")
 	}
 }

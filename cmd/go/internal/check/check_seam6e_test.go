@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 func swapLangNewFail(t *testing.T) {
 	t.Helper()
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.AQL, error) { return nil, errors.New("init boom") }
+	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, errors.New("init boom") }
 	t.Cleanup(func() { langNew = orig })
 }
 

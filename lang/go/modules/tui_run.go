@@ -4,9 +4,9 @@ import (
 	"errors"
 	"fmt"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // The Tier-2 app runtime of design/TUI.0.md §2 — "native loop, real
@@ -36,7 +36,7 @@ var errTuiViewerGone = errors.New("tui: viewer disconnected")
 func acquireTuiBackend(r *native.Registry, word string, opts tuikit.OpenOpts) (tuikit.Backend, tuikit.Info, error) {
 	spec := hostTuiSpec(r)
 	if spec == nil {
-		return nil, tuikit.Info{}, r.AqlError("no_backend", word+": no terminal backend registered", word)
+		return nil, tuikit.Info{}, r.BoruError("no_backend", word+": no terminal backend registered", word)
 	}
 	backend, err := spec.Open()
 	if err != nil {
@@ -58,14 +58,14 @@ func tuiRunOpts(cfg native.ReadMap, word string, r *native.Registry) (tuikit.Ope
 		opts.Title, err = tuiOptString(cfg, "title")
 	}
 	if err != nil {
-		return opts, false, r.AqlError("tui_error", word+": "+err.Error(), word)
+		return opts, false, r.BoruError("tui_error", word+": "+err.Error(), word)
 	}
 	if err := tuiAltScreenReserved(cfg, word, r); err != nil {
 		return opts, false, err
 	}
 	mode, err := tuiOptString(cfg, "ctrl-c")
 	if err != nil {
-		return opts, false, r.AqlError("tui_error", word+": "+err.Error(), word)
+		return opts, false, r.BoruError("tui_error", word+": "+err.Error(), word)
 	}
 	switch mode {
 	case "":
@@ -73,7 +73,7 @@ func tuiRunOpts(cfg native.ReadMap, word string, r *native.Registry) (tuikit.Ope
 	case "deliver":
 		deliverCtrlC = true
 	default:
-		return opts, false, r.AqlError("tui_error", word+`: ctrl-c: must be "quit" or "deliver"`, word)
+		return opts, false, r.BoruError("tui_error", word+`: ctrl-c: must be "quit" or "deliver"`, word)
 	}
 	return opts, deliverCtrlC, nil
 }
@@ -97,19 +97,19 @@ type tuiApp struct {
 func parseTuiApp(cfgV native.Value, word string, r *native.Registry) (*tuiApp, error) {
 	cfg, err := native.RequireConcreteMap(cfgV, word)
 	if err != nil {
-		return nil, r.AqlError("tui_error", word+": expected an app config Map", word)
+		return nil, r.BoruError("tui_error", word+": expected an app config Map", word)
 	}
 	app := &tuiApp{}
 	if sv, hasService := cfg.Get("service"); hasService {
 		if _, hasUpdate := cfg.Get("update"); hasUpdate {
-			return nil, r.AqlError("tui_error", word+": service: and update: are exclusive — the service owns the fold", word)
+			return nil, r.BoruError("tui_error", word+": service: and update: are exclusive — the service owns the fold", word)
 		}
 		if _, hasInit := cfg.Get("init"); hasInit {
-			return nil, r.AqlError("tui_error", word+": service: and init: are exclusive — the service owns the state", word)
+			return nil, r.BoruError("tui_error", word+": service: and init: are exclusive — the service owns the state", word)
 		}
 		state, isSvc := native.ServiceStateOf(sv)
 		if !isSvc {
-			return nil, r.AqlError("tui_error", word+": service: must be a Service", word)
+			return nil, r.BoruError("tui_error", word+": service: must be a Service", word)
 		}
 		app.service = sv
 		app.isService = true
@@ -117,10 +117,10 @@ func parseTuiApp(cfgV native.Value, word string, r *native.Registry) (*tuiApp, e
 	} else {
 		up, ok := cfg.Get("update")
 		if !ok {
-			return nil, r.AqlError("tui_error", word+": missing update", word)
+			return nil, r.BoruError("tui_error", word+": missing update", word)
 		}
 		if app.updateInfo, ok = native.FnDefFromValue(up); !ok {
-			return nil, r.AqlError("tui_error", word+": update must be a function taking (state, event)", word)
+			return nil, r.BoruError("tui_error", word+": update must be a function taking (state, event)", word)
 		}
 		app.update = up
 		if iv, ok := cfg.Get("init"); ok {
@@ -131,10 +131,10 @@ func parseTuiApp(cfgV native.Value, word string, r *native.Registry) (*tuiApp, e
 	}
 	vw, ok := cfg.Get("view")
 	if !ok {
-		return nil, r.AqlError("tui_error", word+": missing view", word)
+		return nil, r.BoruError("tui_error", word+": missing view", word)
 	}
 	if app.viewInfo, ok = native.FnDefFromValue(vw); !ok {
-		return nil, r.AqlError("tui_error", word+": view must be a function taking the state", word)
+		return nil, r.BoruError("tui_error", word+": view must be a function taking the state", word)
 	}
 	app.view = vw
 	if app.opts, app.deliverCtrlC, err = tuiRunOpts(cfg, word, r); err != nil {
@@ -159,7 +159,7 @@ func tuiRunHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	// RegisterName REPLACES an existing binding (BEAM re-register
 	// semantics), so the single-owner rule is a Whereis pre-check.
 	if _, taken := rt.Whereis(tuiRegisteredName); taken {
-		return nil, r.AqlError("already_running", "run: another TUI app already owns the terminal", "run")
+		return nil, r.BoruError("already_running", "run: another TUI app already owns the terminal", "run")
 	}
 	proc := eng.NewProcess(rt, eng.DefaultMailboxBound, eng.OverflowBlock)
 	if err := rt.Insert(proc); err != nil {
@@ -198,7 +198,7 @@ func localPaint(r *native.Registry, word string, backend tuikit.Backend) func(na
 	return func(tree native.Value, cols, rows int) error {
 		res, rErr := tuikit.Render(native.ValueToAny(tree), cols, rows)
 		if rErr != nil {
-			return r.AqlError("bad_widget", word+": "+rErr.Error(), word)
+			return r.BoruError("bad_widget", word+": "+rErr.Error(), word)
 		}
 		if pErr := backend.Present(res.Frame); pErr != nil {
 			return mapTuiErr(r, word, pErr)
@@ -233,9 +233,9 @@ type tuiDriver struct {
 func (d *tuiDriver) run() (final native.Value, err error) {
 	defer func() {
 		d.finish()
-		if rec := recover(); rec != nil { //covergate:allow driver recover body: update/view run under InvokeCallback, whose CallAQL sub-engine converts body panics into internal_error AqlErrors flowing the covered error path; the remaining driver calls are the panic-free tuikit renderer and backend methods (§modules)
+		if rec := recover(); rec != nil { //covergate:allow driver recover body: update/view run under InvokeCallback, whose CallBORU sub-engine converts body panics into internal_error BoruErrors flowing the covered error path; the remaining driver calls are the panic-free tuikit renderer and backend methods (§modules)
 			final = native.Value{}
-			err = d.reg.AqlError("internal", fmt.Sprintf("run: driver crashed: %v", rec), "run")
+			err = d.reg.BoruError("internal", fmt.Sprintf("run: driver crashed: %v", rec), "run")
 		}
 	}()
 
@@ -370,14 +370,14 @@ func (d *tuiDriver) applyUpdate(state, msg native.Value) (native.Value, bool, er
 	}
 	sig := native.MatchFnSig(d.app.update, []native.Value{state, msg})
 	if sig == nil {
-		return native.Value{}, false, d.reg.AqlError("tui_error", "run: update does not accept (state, event)", "run")
+		return native.Value{}, false, d.reg.BoruError("tui_error", "run: update does not accept (state, event)", "run")
 	}
 	out, err := eng.InvokeCallback(d.reg, sig, []native.Value{state, msg}, d.app.updateInfo.Captured)
 	if err != nil {
 		return native.Value{}, false, err
 	}
 	if len(out) == 0 {
-		return native.Value{}, false, d.reg.AqlError("tui_error", "run: update returned no state", "run")
+		return native.Value{}, false, d.reg.BoruError("tui_error", "run: update returned no state", "run")
 	}
 	next := out[len(out)-1]
 	if payload, ok := isQuitMarker(next); ok {
@@ -394,7 +394,7 @@ func (d *tuiDriver) applyUpdate(state, msg native.Value) (native.Value, bool, er
 func (d *tuiDriver) applyServiceUpdate(msg native.Value) (native.Value, bool, error) {
 	out, err := native.DispatchServiceValue(d.reg, d.app.service, msg)
 	if err != nil {
-		var ae *eng.AqlError
+		var ae *eng.BoruError
 		if errors.As(err, &ae) && ae.Code == "no_match" {
 			state, _ := native.ServiceStateOf(d.app.service)
 			return state, false, nil
@@ -413,14 +413,14 @@ func (d *tuiDriver) applyServiceUpdate(msg native.Value) (native.Value, bool, er
 func (d *tuiDriver) render(state native.Value) error {
 	sig := native.MatchFnSig(d.app.view, []native.Value{state})
 	if sig == nil {
-		return d.reg.AqlError("tui_error", "run: view does not accept the state", "run")
+		return d.reg.BoruError("tui_error", "run: view does not accept the state", "run")
 	}
 	out, err := eng.InvokeCallback(d.reg, sig, []native.Value{state}, d.app.viewInfo.Captured)
 	if err != nil {
 		return err
 	}
 	if len(out) == 0 {
-		return d.reg.AqlError("bad_widget", "run: view returned no widget tree", "run")
+		return d.reg.BoruError("bad_widget", "run: view returned no widget tree", "run")
 	}
 	return d.paint(out[len(out)-1], d.cols, d.rows)
 }

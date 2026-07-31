@@ -1,8 +1,8 @@
-# `text/template` → `aql:template`
+# `text/template` → `boru:template`
 
 > **Status: design proposal — not implemented.** A curated, hand-written
 > native module wrapping Go's `text/template` with an idiomatic
-> ("aql-ish") surface. Read [`README.10.md`](README.10.md) first for the
+> ("boru-ish") surface. Read [`README.10.md`](README.10.md) first for the
 > shared conventions this note assumes.
 
 ## 1. Package & status
@@ -11,7 +11,7 @@ Go package: [`text/template`](https://pkg.go.dev/text/template) — Go's
 data-driven text templating engine: a template string with `{{...}}`
 actions (field access, `range` loops, `if`/`else` conditionals, pipelines)
 is parsed, then executed against a data value to produce text. This note
-specifies `aql:template` (namespace `Template`), exposing both a one-shot
+specifies `boru:template` (namespace `Template`), exposing both a one-shot
 `render` and a reusable `compile`/`exec` pair. Design proposal; no Go code
 exists yet.
 
@@ -31,7 +31,7 @@ execution error.
 ## 3. Import & namespace
 
 ```
-import "aql:template"        # binds the Template namespace
+import "boru:template"        # binds the Template namespace
 ```
 
 The bare capitalized package name `Template` is free (not a builtin type —
@@ -47,7 +47,7 @@ the README "Argument order & dispatch" rule. All inner natives use
 `BarrierPos: -1` so the swap form `a Template.word b` dispatches (this is
 the dispatch requirement pinned by `wrapper_dispatch_test.go`).
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `template.New(name).Parse(text)` + `(*Template).Execute` | `render` | `[Map data, String template] -> String` | Parse a template and execute it against data in one call. | **PRIMARY — recommended.** Parses + executes in a single call; **no opaque handle**, fully idiomatic. `data` is the top arg so swap form reads `template Template.render data`. Internally writes to a `bytes.Buffer` and returns its String. A parse failure errors `parse`; an execution failure errors `exec`. |
 | `template.New(name).Parse(text)` | `compile` | `[String] -> Template` | Parse a template string into a reusable compiled handle. | **REUSABLE — for hot loops.** Returns an opaque `Template` external-type handle holding the parsed `*template.Template`. Parse failure errors `parse`. |
@@ -57,7 +57,7 @@ the dispatch requirement pinned by `wrapper_dispatch_test.go`).
 
 `render` is the recommended primary surface: most call sites render a
 template once (or rarely), and a single `template data Template.render`
-call with no handle to manage is the idiomatic AQL shape — the same
+call with no handle to manage is the idiomatic BORU shape — the same
 "value in, value out, no protocol" choice this whole roster makes.
 
 `compile` + `exec` exist only for the **hot-loop** case: rendering the
@@ -68,7 +68,7 @@ reach for it only when the reuse actually matters.
 
 ### `data` as a Map
 
-The template's data context is modeled as an AQL **Map**: `eng.FromNative`
+The template's data context is modeled as a BORU **Map**: `eng.FromNative`
 turns it into a `map[string]any`, which `text/template` addresses with
 `{{.key}}`. Nested Maps and Lists work through the same bridge
 (`{{range .items}}`, `{{.user.name}}`). A non-Map data value (e.g. a bare
@@ -79,14 +79,14 @@ the top-level dot — but Map is the documented common shape.
 ## 5. Types
 
 Mostly scalars / Map. The one exception is `compile`'s return value: a
-parsed `*template.Template` has **no AQL counterpart**, so it is held in
+parsed `*template.Template` has **no BORU counterpart**, so it is held in
 an `ExtensionPayload` and surfaced as a registered external type, the
 `Template` handle.
 
 This follows the in-tree precedent of **`IO.StreamKind`** (`io.go`):
 `MintStreamKind(subReg)` mints a module-owned type into the sub-registry
 per import and exports it as a type literal via `NewTypeLiteral`, so
-`x is IO.StreamKind` works after import. `aql:template` mirrors that:
+`x is IO.StreamKind` works after import. `boru:template` mirrors that:
 
 - Register the type with **`RegisterExternalBuiltin`** using a **`FixedID`
   from the documented `10000+` host/third-party range**
@@ -111,7 +111,7 @@ in/out, `data`) is plain String / Map and needs no external type.
 
 No panics (`eng/go/CLAUDE.md` "Panic Prevention"; guard with
 `AsConcreteString` / `RequireConcreteMap` before use). Go `error` returns
-unwrap to an `AqlError` via `r.AqlError(code, detail, word)` with
+unwrap to a `BoruError` via `r.BoruError(code, detail, word)` with
 kebab-case codes:
 
 | code | raised when |
@@ -135,13 +135,13 @@ String.)
 
 - **`html/template`** (contextual auto-escaping for safe HTML output) is
   **out of scope** here — it is a different package with a security
-  contract of its own; see the cross-referenced `aql:html`
-  ([HTML.10.md](HTML.10.md)). `aql:template` is the *text* engine with no
+  contract of its own; see the cross-referenced `boru:html`
+  ([HTML.10.md](HTML.10.md)). `boru:template` is the *text* engine with no
   escaping.
-- **AQL's own template strings** (the backtick `` `...${expr}...` ``
+- **BORU's own template strings** (the backtick `` `...${expr}...` ``
   interpolation built into the parser — see `lang/go/CLAUDE.md` "Template
   string interpolation") cover *simple value interpolation* and are the
-  right tool for that. `aql:template` is for **Go-template-syntax logic**:
+  right tool for that. `boru:template` is for **Go-template-syntax logic**:
   `{{range}}` loops, `{{if}}`/`{{else}}` conditionals, pipelines, and
   named sub-templates — control flow that backtick interpolation does not
   express. The dividing line: reach for backtick strings to splice a few
@@ -154,7 +154,7 @@ All args-before form (`template data Template.render` /
 `template Template.render data`); never pure forward.
 
 ```
-import "aql:template"
+import "boru:template"
 
 # one-shot render (recommended)
 "Hello {{.name}}!" {name:"Ada"} Template.render
@@ -179,11 +179,11 @@ t Template.exec {n:"b" v:2}                          # → "b: 2"
 
 ## 10. Open questions / out of scope
 
-- **Custom funcs (`Funcs(FuncMap)`)** — letting AQL register helper
+- **Custom funcs (`Funcs(FuncMap)`)** — letting BORU register helper
   functions callable from inside a template is powerful but needs a bridge
-  from AQL `Function` values into a Go `FuncMap`. Deferred; open question
+  from BORU `Function` values into a Go `FuncMap`. Deferred; open question
   whether the common cases (a few string/format helpers) justify it or
-  whether AQL pre-processing of the data Map is enough.
+  whether BORU pre-processing of the data Map is enough.
 - **Named / associated templates and `{{template "x"}}`** — multi-template
   sets (`ParseFiles`, `{{define}}`/`{{template}}`) are out of scope for
   the first cut; `render` / `compile` handle a single template body.
@@ -194,7 +194,7 @@ t Template.exec {n:"b" v:2}                          # → "b: 2"
   expose a strict-missing-key option is open. If added, it would be an
   options Map arg, not a separate word.
 - **`html/template` as a sibling module** — explicitly punted to
-  [HTML.10.md](HTML.10.md) / a future `aql:html-template`; not this note.
+  [HTML.10.md](HTML.10.md) / a future `boru:html-template`; not this note.
 
 ## 11. Implementation sketch
 
@@ -222,11 +222,11 @@ words.
 - **FixedID stability:** add the allocated `10000+` ID to
   `lang/go/test/fixedid_stability_test.go` (`eng/go/CLAUDE.md` "FixedID
   Allocation").
-- `lang/go/modules/docs_template.go` — `registerDocs("aql:template",
+- `lang/go/modules/docs_template.go` — `registerDocs("boru:template",
   map[string]string{…})` with a one-liner per export (else
   `TestModuleExportDocs` fails); document `Kind` too.
 - `lang/spec/module-template.tsv` — `input⇥expected⇥description` rows
-  leading with `import "aql:template"`; cover `render`, the `range`/`if`
+  leading with `import "boru:template"`; cover `render`, the `range`/`if`
   cases, `compile`+`exec`, and pair every positive row with an
   `ERROR:<substring>` sibling (`parse` and `exec` both) per Test
   discipline (`lang/go/CLAUDE.md`).

@@ -3,7 +3,7 @@ package modules
 import (
 	"regexp"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // Test seams (design/TEST-SEAMS.10.md). Each var defaults to the real

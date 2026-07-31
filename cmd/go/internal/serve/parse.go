@@ -1,5 +1,5 @@
 // parse.go implements the `+`-separated argv grammar used by
-// `aql serve`. Each segment is `<svc> [flags...]` and is forwarded
+// `boru serve`. Each segment is `<svc> [flags...]` and is forwarded
 // verbatim to that service's own flag parser, so adding a new
 // service requires no parser changes here.
 

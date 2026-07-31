@@ -65,7 +65,7 @@ func TestFnReturnTypeDivergenceParity(t *testing.T) {
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "x", Type: TInteger}},
 				Returns:    []*Type{TInteger},
-				Impl:       AQL(parenBody(NewOpenParen(), NewWord("clie"), NewCloseParen())),
+				Impl:       BORU(parenBody(NewOpenParen(), NewWord("clie"), NewCloseParen())),
 				BarrierPos: BarrierAllForward,
 			}},
 		})
@@ -84,7 +84,7 @@ func TestFnReturnCountDivergenceParity(t *testing.T) {
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "x", Type: TInteger}},
 				Returns:    []*Type{TInteger},
-				Impl:       AQL(parenBody(NewOpenParen(), NewWord("cvar2"), NewCloseParen())),
+				Impl:       BORU(parenBody(NewOpenParen(), NewWord("cvar2"), NewCloseParen())),
 				BarrierPos: BarrierAllForward,
 			}},
 		})
@@ -192,7 +192,7 @@ func TestAnonFnMapPatternParam(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "m", Type: TMap, Pattern: &pat}},
 			Returns:    []*Type{TInteger},
-			Impl:       AQL(parenBody(NewInteger(1))),
+			Impl:       BORU(parenBody(NewInteger(1))),
 			BarrierPos: 0,
 		}},
 	})

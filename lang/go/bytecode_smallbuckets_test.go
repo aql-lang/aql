@@ -50,8 +50,8 @@ func TestReachComputedSegmentLowers(t *testing.T) {
 // would raise if evaluated; correct behaviour returns a handle with no error.
 func TestTimeUtilBodyNotEager(t *testing.T) {
 	for _, s := range []string{
-		`import "aql:time-util"  typeof (TimeUtil.timeout 100000 [totally-undefined-xyz])`,
-		`import "aql:time-util"  typeof (TimeUtil.interval 100000 [totally-undefined-xyz])`,
+		`import "boru:time-util"  typeof (TimeUtil.timeout 100000 [totally-undefined-xyz])`,
+		`import "boru:time-util"  typeof (TimeUtil.interval 100000 [totally-undefined-xyz])`,
 	} {
 		// Interpreter: the undefined word must NOT raise (body is inert code).
 		b, _ := New()
@@ -81,9 +81,9 @@ func TestTimeUtilQuotedBodyLowers(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`import "aql:time-util"  typeof (TimeUtil.timeout 1000 [1 add 2])`, "Timeout"},
-		{`import "aql:time-util"  typeof (TimeUtil.interval 1000 [1 add 2])`, "Interval"},
-		{`import "aql:time-util"  100 (TimeUtil.cancel (TimeUtil.timeout 1000 [1 add 2])) add 23`, "123"},
+		{`import "boru:time-util"  typeof (TimeUtil.timeout 1000 [1 add 2])`, "Timeout"},
+		{`import "boru:time-util"  typeof (TimeUtil.interval 1000 [1 add 2])`, "Interval"},
+		{`import "boru:time-util"  100 (TimeUtil.cancel (TimeUtil.timeout 1000 [1 add 2])) add 23`, "123"},
 	}
 	for _, c := range cases {
 		a, _ := New()

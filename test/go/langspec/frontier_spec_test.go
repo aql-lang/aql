@@ -8,12 +8,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/test/go/specrunner"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/test/go/specrunner"
 )
 
 // The shared frontier TSV corpus (lang/spec/frontier/*.tsv — the flat corpus

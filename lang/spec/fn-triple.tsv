@@ -1,4 +1,4 @@
-# AQL Language Specification: fn 3-arg single-triple form — `fn input output body`
+# BORU Language Specification: fn 3-arg single-triple form — `fn input output body`
 # Format: input<TAB>expected<TAB>description
 #
 # The `fn` word has two signatures (in match order):

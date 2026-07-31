@@ -1,4 +1,4 @@
-# NET-COMPILE-FRONTIER — what blocks the aql:net apps from compiling
+# NET-COMPILE-FRONTIER — what blocks the boru:net apps from compiling
 
 > **ADDENDUM 6 (2026-07-11 — mini-s3 is FULLY STAMPED: 23/23, zero
 > refusals).** The last wall ("for: body nets multiple values per
@@ -35,7 +35,7 @@
 >
 > - **Multi-token fn body**: a trailing pending container evaluates
 >   IN-frame — before the body-local defs pop — on EVERY dispatch path.
->   The CallAQL path always did this (the sub-run's end-of-run drain);
+>   The CallBORU path always did this (the sub-run's end-of-run drain);
 >   the same-registry SPLICED path deferred it to the consumer's scope
 >   (where the body-locals are gone → `undefined_word: from`), because a
 >   spliced frame has no sub-run and the eager top-engine drain does not
@@ -50,7 +50,7 @@
 >   unwind skips it (the region's values are discarded).
 > - **Single-literal container body**: UNTOUCHED — the pinned
 >   no-closures transparency (def-node-binding.tsv §3): top-level
->   spliced resolves the MODULE binding; the CallAQL module path keeps
+>   spliced resolves the MODULE binding; the CallBORU module path keeps
 >   its in-frame answer (pre-existing split, now documented and pinned in
 >   lang/go/test/stamp_residual_map_test.go). The whole-program compiler
 >   keeps refusing the shape ("body result of unknown provenance").
@@ -166,7 +166,7 @@
 >   of unknown provenance` — BLOCKED on an interpreter semantic fork, not
 >   a missing compiler feature.** s3-parse-range's trailing computed map
 >   `{from: from upto: upto}` is evaluated at DIFFERENT times by the two
->   interpreter dispatch paths: a CallAQL-class call (cross-registry or
+>   interpreter dispatch paths: a CallBORU-class call (cross-registry or
 >   fork context — every serve-raw request, which is why the app works)
 >   evaluates it at the callee sub-run's end, IN-frame; a same-registry
 >   spliced call defers it to the CONSUMER's scope, where the body-locals
@@ -193,14 +193,14 @@
 > claims: "the handler bodies pass their compile probe" and "the handlers
 > execute on the VM at runtime". The ~442→~680 req/s bump cited under
 > mini-redis came from the top-level DRIVER loop compiling — profiling
-> showed ~97% of per-request callback CPU still in `Registry.CallAQL`
+> showed ~97% of per-request callback CPU still in `Registry.CallBORU`
 > (`-force-compile` cannot surface stored-handler refusals: the probe is
 > a throwaway EmitState and declines silently). The runtime-stamping work
 > closed the gap end to end: detached fn-unit compilation at the codec /
 > service / module-load trigger sites, gradual-Any generalisation for
 > nested user-fn compiles, filter-lambda closures with lexical captures,
 > and the module-export apply reroute. mini-redis now runs **~8,100-8,400
-> req/s compiled vs ~700-745 interpreted (~11x)** with ZERO CallAQL
+> req/s compiled vs ~700-745 interpreted (~11x)** with ZERO CallBORU
 > samples on the steady-state path. A follow-on fix closed the last
 > callback — the catch-all, whose whole body is a computed map literal
 > (formerly "body result of unknown provenance"): a callback body's
@@ -210,7 +210,7 @@
 > body — now executes on the VM. mini-s3's blockers (do/error trap
 > lowering, its remaining higher-order shapes) stay open as described below.
 
-Goal: get the realistic `aql:net` example handlers (`design/examples/apps/`) to
+Goal: get the realistic `boru:net` example handlers (`design/examples/apps/`) to
 compile their bodies to bytecode units (like the echo benchmark handler does),
 not just run interpreted. This note maps every remaining blocker precisely so the
 work can proceed one capability at a time.
@@ -220,9 +220,9 @@ vs ~620 interpreted). **todo-api** (~12x) and **mini-redis** now compile their
 handlers (see the per-app sections below); **mini-s3** remains, blocked on two
 deliberate-frontier capabilities (`do`/`error` trap-region lowering + higher-order
 `filter`) for an I/O-bound app. Each blocker was surfaced by
-`aql run -force-compile -install network bench/networking/apps/<app>.aql`.
+`boru run -force-compile -install network bench/networking/apps/<app>.boru`.
 
-None of these block `aql run` (the apps run fine interpreted, default gate green,
+None of these block `boru run` (the apps run fine interpreted, default gate green,
 per design/CHECK-FALSE-POSITIVES.0.md). They block only the compiled speedup.
 
 ## The walls (each app, exact blocker)

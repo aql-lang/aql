@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -67,7 +67,7 @@ func TestS5bETemplateMatcherGuards(t *testing.T) {
 		t.Errorf("nil rule: expected decline, got %v", tok)
 	}
 	// Armed but at end of source: decline.
-	armed := &jsonic.Rule{K: map[string]any{"aql_tpl": true}}
+	armed := &jsonic.Rule{K: map[string]any{"boru_tpl": true}}
 	if tok := m(jsonic.NewLex("", &jsonic.LexConfig{}), armed); tok != nil {
 		t.Errorf("empty source: expected decline, got %v", tok)
 	}
@@ -85,7 +85,7 @@ func TestS5bEXmlMatcherGuards(t *testing.T) {
 	if tok := m(jsonic.NewLex("<a/>", &jsonic.LexConfig{}), nil); tok != nil {
 		t.Errorf("nil rule: expected decline, got %v", tok)
 	}
-	armed := &jsonic.Rule{K: map[string]any{"aql_xml": true}}
+	armed := &jsonic.Rule{K: map[string]any{"boru_xml": true}}
 	// `<` at end of source (nothing after the consumed `<`): no progress,
 	// decline so normal lexing reports the character.
 	if tok := m(jsonic.NewLex("", &jsonic.LexConfig{}), armed); tok != nil {

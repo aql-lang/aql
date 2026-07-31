@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:math-util", map[string]string{
+	registerDocs("boru:math-util", map[string]string{
 		"abs":        "Absolute value (magnitude) of a number.",
 		"acos":       "Arccosine, returning an angle in radians.",
 		"asin":       "Arcsine, returning an angle in radians.",
@@ -45,7 +45,7 @@ func init() {
 	// authored: the two rounding modes, the ones that need Floats, and the
 	// swap-order binaries. Results are from verified
 	// lang/spec/module-math.tsv rows.
-	registerExamples("aql:math-util", map[string][]string{
+	registerExamples("boru:math-util", map[string][]string{
 		"round": {
 			`MathUtil.round 4.6                               ;# 5`,
 			`2.5 MathUtil.round                               ;# 3 — halves go away from zero`,

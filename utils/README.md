@@ -1,10 +1,10 @@
-# utils/ — a coreutils subset, written in AQL
+# utils/ — a coreutils subset, written in BORU
 
-These are real programs, not examples. Each one is an AQL source file that
-`aql build` turns into a standalone executable, parses its own arguments with
-[`aql:cli`](../lang/go/modules/cli.aql), reads stdin or files, writes stdout,
+These are real programs, not examples. Each one is a BORU source file that
+`boru build` turns into a standalone executable, parses its own arguments with
+[`boru:cli`](../lang/go/modules/cli.boru), reads stdin or files, writes stdout,
 and chooses an exit code. They exist to answer a question the language could
-not answer before: *can you actually write a command-line tool in AQL?*
+not answer before: *can you actually write a command-line tool in BORU?*
 
 Every program here is therefore also a test of the runtime's CLI contract —
 argv, environment, exit codes, stream detection, baked permissions — and each
@@ -29,29 +29,29 @@ Every program is driven by a suite under `tests/`: **995 cases**, all passing.
 ## Running them
 
 ```bash
-make -C ../cmd/go build     # the aql binary
+make -C ../cmd/go build     # the boru binary
 make check                  # type-check every program and test
 make test                   # run the suites
 make binaries               # build every program into bin/
 printf 'b\na\n' | ./bin/sort
 ```
 
-`aql build` performs no type check of its own, so `make check` is not
+`boru build` performs no type check of its own, so `make check` is not
 optional — it is the only gate between a typo and a shipped binary.
 
 ## Why a Makefile here and a Go test over there
 
 This directory is not in the repository's Go module list, so nothing in it is
-reached by `make test` at the root. A top-level AQL directory outside the Go
+reached by `make test` at the root. A top-level BORU directory outside the Go
 fan-out rots — `kg/` demonstrated that — so `cmd/go` carries an end-to-end Go
 test — `cmd/go/internal/build/utils_e2e_test.go` — that builds real programs
-from here with `aql build` and runs the produced executables: it pipes into
+from here with `boru build` and runs the produced executables: it pipes into
 them, passes argv, hands them an environment, and checks `$?`. That test is
 what keeps this directory honest in CI; the Makefile is what makes it pleasant
 to work in.
 
 It also owns the claims that are properties of a **built binary** rather than
-of a running program, and so cannot be checked from inside AQL at all:
+of a running program, and so cannot be checked from inside BORU at all:
 
 - argv and the process environment reach a built binary,
 - the exit code a program chooses is the process's exit status,
@@ -76,19 +76,19 @@ Learned by writing them, and each one prevents a silent failure:
 - **Declare callbacks at top level**, never inside another fn: a fn-local
   callback resolves under the interpreter and is undefined under the compiler
   (NUR037).
-- **Take argv as a parameter** in anything you want to test — `aql test`
+- **Take argv as a parameter** in anything you want to test — `boru test`
   cannot inject an argument vector. Take the *environment* and the *terminal*
   as parameters too, for the same reason: a fn that reads them can only ever
   be tested against the one it is running in.
 - **Guard the standalone entry point.** A suite reaches a program with
-  `import "./prog.aql"`, and an import RUNS the file's top level — so the
+  `import "./prog.boru"`, and an import RUNS the file's top level — so the
   `IO.exit` at the bottom would end the suite before a case had run, and a
   program that reads stdin would block on the runner's own. The guard is
   `IO.env-all` being non-empty, which is a host capability rather than a
-  heuristic: `aql run` installs the environment and `aql test` does not.
+  heuristic: `boru run` installs the environment and `boru test` does not.
 - **Do not name a local after a built-in.** `append`, `emit`, `dup`, `word`,
-  `all` and friends pass `aql check`, run correctly under the bytecode
+  `all` and friends pass `boru check`, run correctly under the bytecode
   compiler, and then die at runtime under `-no-compile` when the interpreter
   tears the binding down with `undef`.
-- **`aql fmt` is not idempotent here** (NUR046), which is why `make fmt` is a
+- **`boru fmt` is not idempotent here** (NUR046), which is why `make fmt` is a
   target but not part of `make all`, and why these sources are hand-formatted.

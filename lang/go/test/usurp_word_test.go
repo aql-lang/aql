@@ -3,9 +3,9 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // The `usurp` word and `/u` suffix wrap a function so its signature
@@ -254,7 +254,7 @@ func TestUsurpCheckModeClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	res, err := a.Check(`
 		def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]
 		sub2/u 10 3
@@ -276,7 +276,7 @@ func TestUsurpCheckModeUndefined(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	res, err := a.Check(`nope/u`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -369,7 +369,7 @@ func TestUsurpByNameNonFnRejected(t *testing.T) {
 	if err == nil {
 		t.Fatalf("usurp x (x=5) should error")
 	}
-	if ae, ok := err.(*eng.AqlError); !ok || ae.Code != "illegal_ref" {
+	if ae, ok := err.(*eng.BoruError); !ok || ae.Code != "illegal_ref" {
 		t.Errorf("usurp x error = %v, want illegal_ref", err)
 	}
 }
@@ -381,7 +381,7 @@ func TestUsurpByNameUnboundRejected(t *testing.T) {
 	if err == nil {
 		t.Fatalf("usurp nope should error")
 	}
-	if ae, ok := err.(*eng.AqlError); !ok || ae.Code != "undefined_word" {
+	if ae, ok := err.(*eng.BoruError); !ok || ae.Code != "undefined_word" {
 		t.Errorf("usurp nope error = %v, want undefined_word", err)
 	}
 }
@@ -389,7 +389,7 @@ func TestUsurpByNameUnboundRejected(t *testing.T) {
 // TestUsurpWrapperBoundByName pins that a usurp wrapper bound to a name
 // and called as a word dispatches correctly (the `def ifu (usurp if)`
 // alias idiom). Regression for the InstallFnDef path that used to wrap
-// the body-less wrapper sig in an AQL body-runner, producing zero values
+// the body-less wrapper sig in a BORU body-runner, producing zero values
 // and failing the fn return check.
 func TestUsurpWrapperBoundByName(t *testing.T) {
 	cases := []struct {
@@ -435,7 +435,7 @@ func TestUsurpWrapperBoundByName(t *testing.T) {
 
 // TestRefNativeBoundByName checks the sibling case: a referenced NATIVE
 // fn bound to a name dispatches the native (InstallFnDef preserves the
-// body-less native handler rather than running an empty AQL body).
+// body-less native handler rather than running an empty BORU body).
 func TestRefNativeBoundByName(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{`def myadd (ref add)`, `myadd 2 3`})
 	if err != nil {
@@ -446,10 +446,10 @@ func TestRefNativeBoundByName(t *testing.T) {
 	}
 }
 
-// TestNamedAQLFnUnaffected guards that an ordinary named AQL fn (and an
-// AQL fn re-bound through ref) still runs its body via the body-runner —
+// TestNamedBORUFnUnaffected guards that an ordinary named BORU fn (and an
+// BORU fn re-bound through ref) still runs its body via the body-runner —
 // the preserve-handler branch must NOT swallow Body-bearing sigs.
-func TestNamedAQLFnUnaffected(t *testing.T) {
+func TestNamedBORUFnUnaffected(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
 		`def fu (ref sub2)`,

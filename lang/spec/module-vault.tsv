@@ -1,9 +1,9 @@
-# AQL Language Specification: the aql:vault module (host-vault bridge words)
+# BORU Language Specification: the boru:vault module (host-vault bridge words)
 # Format: input<TAB>expected<TAB>description
 #
-# Loadable module bridging AQL to the host's secret vault
+# Loadable module bridging BORU to the host's secret vault
 # (design/VAULT-TUI-PORT.0.md §3). The words are reached only after
-# `import`, under the `Vault` namespace: `import "aql:vault" Vault.word args`.
+# `import`, under the `Vault` namespace: `import "boru:vault" Vault.word args`.
 #
 #   Vault.status / secrets / secret / reveal      — reads
 #   Vault.add / rotate / remove / rename / …      — mutations
@@ -21,7 +21,7 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  import binds the Vault namespace
-import "aql:vault" convert List Vault.$module	['Vault']	import binds the Vault namespace
+import "boru:vault" convert List Vault.$module	['Vault']	import binds the Vault namespace
 #
 # §2  negative — unbound without import
 Vault.status	ERROR:undefined_word	`Vault` is unbound without `import`
@@ -29,77 +29,77 @@ Vault.status	ERROR:undefined_word	`Vault` is unbound without `import`
 # §3  no backend registered → the first-class no_backend error, across
 #     the word groups (reads, reveal, mutation, settings, multi-vault,
 #     clipboard)
-import "aql:vault"  Vault.status	ERROR:no vault backend registered	status requires a registered backend
-import "aql:vault"  Vault.secrets	ERROR:no vault backend registered	secrets requires a registered backend
-import "aql:vault"  Vault.reveal "stripe"	ERROR:no vault backend registered	reveal requires a registered backend
-import "aql:vault"  Vault.add {alias: "a" value: "k"}	ERROR:no vault backend registered	a VALID add reaches the backend lookup
-import "aql:vault"  Vault.lock	ERROR:no vault backend registered	lock requires a registered backend
-import "aql:vault"  Vault.vaults	ERROR:no vault backend registered	vaults requires a registered backend
-import "aql:vault"  Vault.copy "text"	ERROR:no vault backend registered	copy requires a registered backend
-import "aql:vault"  Vault.scan ["src"]	ERROR:no vault backend registered	a valid scan reaches the backend lookup
-import "aql:vault"  Vault.restore 3	ERROR:no vault backend registered	a valid restore reaches the backend lookup
-import "aql:vault"  Vault.needs-passphrase	ERROR:no vault backend registered	needs-passphrase requires a registered backend
-import "aql:vault"  Vault.authed	ERROR:no vault backend registered	authed requires a registered backend
-import "aql:vault"  Vault.authenticate "p"	ERROR:no vault backend registered	authenticate requires a registered backend
-import "aql:vault"  Vault.status-text	ERROR:no vault backend registered	status-text requires a registered backend
-import "aql:vault"  Vault.providers-text	ERROR:no vault backend registered	providers-text requires a registered backend
-import "aql:vault"  Vault.config-text	ERROR:no vault backend registered	config-text requires a registered backend
-import "aql:vault"  Vault.secret "a"	ERROR:no vault backend registered	secret requires a registered backend
-import "aql:vault"  Vault.rotate {alias: "a" value: "v"}	ERROR:no vault backend registered	a valid rotate reaches the backend lookup
-import "aql:vault"  Vault.remove "a"	ERROR:no vault backend registered	remove requires a registered backend
-import "aql:vault"  Vault.rename {from: "a" to: "b"}	ERROR:no vault backend registered	a valid rename reaches the backend lookup
-import "aql:vault"  Vault.set-expiry "a" "2030-01-01"	ERROR:no vault backend registered	set-expiry requires a registered backend
-import "aql:vault"  Vault.clear-expiry "a"	ERROR:no vault backend registered	clear-expiry requires a registered backend
-import "aql:vault"  Vault.recipes "a"	ERROR:no vault backend registered	recipes requires a registered backend
-import "aql:vault"  Vault.capabilities	ERROR:no vault backend registered	capabilities requires a registered backend
-import "aql:vault"  Vault.grant {alias: "a"}	ERROR:no vault backend registered	a valid grant reaches the backend lookup
-import "aql:vault"  Vault.revoke "id"	ERROR:no vault backend registered	revoke requires a registered backend
-import "aql:vault"  Vault.passwords	ERROR:no vault backend registered	passwords requires a registered backend
-import "aql:vault"  Vault.password-add {name: "n" pass: "p"}	ERROR:no vault backend registered	a valid password-add reaches the backend lookup
-import "aql:vault"  Vault.password-remove "n"	ERROR:no vault backend registered	password-remove requires a registered backend
-import "aql:vault"  Vault.password-revoke-temp	ERROR:no vault backend registered	password-revoke-temp requires a registered backend
-import "aql:vault"  Vault.temp-password-count	ERROR:no vault backend registered	temp-password-count requires a registered backend
-import "aql:vault"  Vault.verify {}	ERROR:no vault backend registered	verify requires a registered backend
-import "aql:vault"  Vault.history	ERROR:no vault backend registered	history requires a registered backend
-import "aql:vault"  Vault.audit {}	ERROR:no vault backend registered	audit requires a registered backend
-import "aql:vault"  Vault.config-set "k" "v"	ERROR:no vault backend registered	config-set requires a registered backend
-import "aql:vault"  Vault.config-unset "k"	ERROR:no vault backend registered	config-unset requires a registered backend
-import "aql:vault"  Vault.unlock	ERROR:no vault backend registered	unlock requires a registered backend
-import "aql:vault"  Vault.locked	ERROR:no vault backend registered	locked requires a registered backend
-import "aql:vault"  Vault.prefs	ERROR:no vault backend registered	prefs requires a registered backend
-import "aql:vault"  Vault.set-prefs {}	ERROR:no vault backend registered	set-prefs requires a registered backend
-import "aql:vault"  Vault.switch {folder: "/v"}	ERROR:no vault backend registered	a valid switch reaches the backend lookup
-import "aql:vault"  Vault.create {folder: "/v" backend: "file"}	ERROR:no vault backend registered	a valid create reaches the backend lookup
-import "aql:vault"  Vault.set-default	ERROR:no vault backend registered	set-default requires a registered backend
-import "aql:vault"  Vault.prune-index {folder: "/v"}	ERROR:no vault backend registered	prune-index requires a registered backend
+import "boru:vault"  Vault.status	ERROR:no vault backend registered	status requires a registered backend
+import "boru:vault"  Vault.secrets	ERROR:no vault backend registered	secrets requires a registered backend
+import "boru:vault"  Vault.reveal "stripe"	ERROR:no vault backend registered	reveal requires a registered backend
+import "boru:vault"  Vault.add {alias: "a" value: "k"}	ERROR:no vault backend registered	a VALID add reaches the backend lookup
+import "boru:vault"  Vault.lock	ERROR:no vault backend registered	lock requires a registered backend
+import "boru:vault"  Vault.vaults	ERROR:no vault backend registered	vaults requires a registered backend
+import "boru:vault"  Vault.copy "text"	ERROR:no vault backend registered	copy requires a registered backend
+import "boru:vault"  Vault.scan ["src"]	ERROR:no vault backend registered	a valid scan reaches the backend lookup
+import "boru:vault"  Vault.restore 3	ERROR:no vault backend registered	a valid restore reaches the backend lookup
+import "boru:vault"  Vault.needs-passphrase	ERROR:no vault backend registered	needs-passphrase requires a registered backend
+import "boru:vault"  Vault.authed	ERROR:no vault backend registered	authed requires a registered backend
+import "boru:vault"  Vault.authenticate "p"	ERROR:no vault backend registered	authenticate requires a registered backend
+import "boru:vault"  Vault.status-text	ERROR:no vault backend registered	status-text requires a registered backend
+import "boru:vault"  Vault.providers-text	ERROR:no vault backend registered	providers-text requires a registered backend
+import "boru:vault"  Vault.config-text	ERROR:no vault backend registered	config-text requires a registered backend
+import "boru:vault"  Vault.secret "a"	ERROR:no vault backend registered	secret requires a registered backend
+import "boru:vault"  Vault.rotate {alias: "a" value: "v"}	ERROR:no vault backend registered	a valid rotate reaches the backend lookup
+import "boru:vault"  Vault.remove "a"	ERROR:no vault backend registered	remove requires a registered backend
+import "boru:vault"  Vault.rename {from: "a" to: "b"}	ERROR:no vault backend registered	a valid rename reaches the backend lookup
+import "boru:vault"  Vault.set-expiry "a" "2030-01-01"	ERROR:no vault backend registered	set-expiry requires a registered backend
+import "boru:vault"  Vault.clear-expiry "a"	ERROR:no vault backend registered	clear-expiry requires a registered backend
+import "boru:vault"  Vault.recipes "a"	ERROR:no vault backend registered	recipes requires a registered backend
+import "boru:vault"  Vault.capabilities	ERROR:no vault backend registered	capabilities requires a registered backend
+import "boru:vault"  Vault.grant {alias: "a"}	ERROR:no vault backend registered	a valid grant reaches the backend lookup
+import "boru:vault"  Vault.revoke "id"	ERROR:no vault backend registered	revoke requires a registered backend
+import "boru:vault"  Vault.passwords	ERROR:no vault backend registered	passwords requires a registered backend
+import "boru:vault"  Vault.password-add {name: "n" pass: "p"}	ERROR:no vault backend registered	a valid password-add reaches the backend lookup
+import "boru:vault"  Vault.password-remove "n"	ERROR:no vault backend registered	password-remove requires a registered backend
+import "boru:vault"  Vault.password-revoke-temp	ERROR:no vault backend registered	password-revoke-temp requires a registered backend
+import "boru:vault"  Vault.temp-password-count	ERROR:no vault backend registered	temp-password-count requires a registered backend
+import "boru:vault"  Vault.verify {}	ERROR:no vault backend registered	verify requires a registered backend
+import "boru:vault"  Vault.history	ERROR:no vault backend registered	history requires a registered backend
+import "boru:vault"  Vault.audit {}	ERROR:no vault backend registered	audit requires a registered backend
+import "boru:vault"  Vault.config-set "k" "v"	ERROR:no vault backend registered	config-set requires a registered backend
+import "boru:vault"  Vault.config-unset "k"	ERROR:no vault backend registered	config-unset requires a registered backend
+import "boru:vault"  Vault.unlock	ERROR:no vault backend registered	unlock requires a registered backend
+import "boru:vault"  Vault.locked	ERROR:no vault backend registered	locked requires a registered backend
+import "boru:vault"  Vault.prefs	ERROR:no vault backend registered	prefs requires a registered backend
+import "boru:vault"  Vault.set-prefs {}	ERROR:no vault backend registered	set-prefs requires a registered backend
+import "boru:vault"  Vault.switch {folder: "/v"}	ERROR:no vault backend registered	a valid switch reaches the backend lookup
+import "boru:vault"  Vault.create {folder: "/v" backend: "file"}	ERROR:no vault backend registered	a valid create reaches the backend lookup
+import "boru:vault"  Vault.set-default	ERROR:no vault backend registered	set-default requires a registered backend
+import "boru:vault"  Vault.prune-index {folder: "/v"}	ERROR:no vault backend registered	prune-index requires a registered backend
 #
 # §4  usage is validated BEFORE the backend lookup — malformed arguments
 #     raise vault_usage with no backend registered (the headless
 #     contract; positives for these shapes live in vault_test.go)
-import "aql:vault"  Vault.add {}	ERROR:alias: required	add requires an alias
-import "aql:vault"  Vault.add {alias: "a"}	ERROR:value: required	add requires a value
-import "aql:vault"  Vault.add {alias: "a" value: ""}	ERROR:value: must be a non-empty String	an empty secret value is refused
-import "aql:vault"  Vault.add {alias: "a" value: 5}	ERROR:value: must be a non-empty String	a non-String secret value is refused
-import "aql:vault"  Vault.rotate {alias: "a"}	ERROR:value: required	rotate requires the new value
-import "aql:vault"  Vault.rename {from: "a"}	ERROR:to: required	rename requires both ends
-import "aql:vault"  Vault.grant {}	ERROR:alias: required	grant requires an alias
-import "aql:vault"  Vault.password-add {name: "ci"}	ERROR:pass: required	password-add requires the pass
-import "aql:vault"  Vault.switch {}	ERROR:folder: required	switch requires a folder
-import "aql:vault"  Vault.create {folder: "/v"}	ERROR:backend: required	create requires a backend
-import "aql:vault"  Vault.scan [5]	ERROR:paths: elements must be Strings	scan paths must be Strings
+import "boru:vault"  Vault.add {}	ERROR:alias: required	add requires an alias
+import "boru:vault"  Vault.add {alias: "a"}	ERROR:value: required	add requires a value
+import "boru:vault"  Vault.add {alias: "a" value: ""}	ERROR:value: must be a non-empty String	an empty secret value is refused
+import "boru:vault"  Vault.add {alias: "a" value: 5}	ERROR:value: must be a non-empty String	a non-String secret value is refused
+import "boru:vault"  Vault.rotate {alias: "a"}	ERROR:value: required	rotate requires the new value
+import "boru:vault"  Vault.rename {from: "a"}	ERROR:to: required	rename requires both ends
+import "boru:vault"  Vault.grant {}	ERROR:alias: required	grant requires an alias
+import "boru:vault"  Vault.password-add {name: "ci"}	ERROR:pass: required	password-add requires the pass
+import "boru:vault"  Vault.switch {}	ERROR:folder: required	switch requires a folder
+import "boru:vault"  Vault.create {folder: "/v"}	ERROR:backend: required	create requires a backend
+import "boru:vault"  Vault.scan [5]	ERROR:paths: elements must be Strings	scan paths must be Strings
 #
 # §5  negative — wrong-typed positional args fail dispatch
-import "aql:vault"  Vault.reveal 5	ERROR:uncalled_function	reveal requires a String alias
-import "aql:vault"  Vault.restore "x"	ERROR:uncalled_function	restore requires an Integer generation
-import "aql:vault"  Vault.set-expiry "a" 5	ERROR:uncalled_function	set-expiry requires String args
+import "boru:vault"  Vault.reveal 5	ERROR:uncalled_function	reveal requires a String alias
+import "boru:vault"  Vault.restore "x"	ERROR:uncalled_function	restore requires an Integer generation
+import "boru:vault"  Vault.set-expiry "a" 5	ERROR:uncalled_function	set-expiry requires String args
 #
 # §6  `identity` — an opaque handle to a vault-held TLS client
 #     credential (design/NETWORK-TLS-PLAN.0.md §5). It is deliberately
-#     NOT a String: `reveal` yields a secret an AQL program can print,
+#     NOT a String: `reveal` yields a secret a BORU program can print,
 #     which is right for an API token and wrong for a private key. The
 #     handle is accepted only as `tls: {identity: …}` and needs no
 #     backend to mint — the vault is read lazily, at the handshake.
-import "aql:vault"  Vault.identity "acme-mtls"	<vault identity>	minting a credential handle needs no vault backend
-import "aql:vault"  typeof (Vault.identity "acme-mtls")	VaultIdentity	the handle carries its own opaque type
-import "aql:vault"  Vault.identity ""	ERROR:alias must be a non-empty String	an empty alias names no credential
-import "aql:vault"  Vault.identity 5	ERROR:uncalled_function	identity requires a String alias
+import "boru:vault"  Vault.identity "acme-mtls"	<vault identity>	minting a credential handle needs no vault backend
+import "boru:vault"  typeof (Vault.identity "acme-mtls")	VaultIdentity	the handle carries its own opaque type
+import "boru:vault"  Vault.identity ""	ERROR:alias must be a non-empty String	an empty alias names no credential
+import "boru:vault"  Vault.identity 5	ERROR:uncalled_function	identity requires a String alias

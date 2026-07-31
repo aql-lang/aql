@@ -3,7 +3,7 @@
 Status: **`.5` — §6 scoped; it is NOT a bytecode-compiler task.** The
 test-framework bodies refuse to compile for the SAME reason the module's
 own `check` carries errors: a single, measurable checker-precision root
-cause. Fixing it removes **18 of decision.aql's 39** baseline check errors
+cause. Fixing it removes **18 of decision.boru's 39** baseline check errors
 in one principled change — the largest lever found across `.2`–`.5`
 (Direction A removed 4). Read `.0`–`.4` first. No code landed; the branch
 keeps §5a (`6665be3`) + the `.0`–`.5` record.
@@ -42,7 +42,7 @@ they invoke.
 Tracing one failing dispatch to ground (`(m get "xs") all`, reproduced
 standalone with no decision module):
 
-```aql
+```boru
 def g fn [[m:Map] [Any] [(m get "xs") all]]   # check → no_signature for all
 ```
 
@@ -64,7 +64,7 @@ with **known, finite keys**, and every access to a key the sample lacks
 collapses to `None`. The decision module's fns read caller-supplied keys
 (`c.field`, `pred get "children"`, `input.(…)`, `c.op`, `c.value`) that are
 never in `{a:1,b:2}` / `{c:3,d:4}` — so each read poisons the rest of the
-body. This is the true source of decision.aql's **39 baseline direct-check
+body. This is the true source of decision.boru's **39 baseline direct-check
 errors** (`.3` §1) and the §5b/§6 cascade.
 
 ### `.3`'s attribution was wrong
@@ -81,7 +81,7 @@ One-line experiment in `getNodeReturns`: return `dynamic(Any)` instead of
 `None` for an absent key (the gradual-unknown reading — an abstract param's
 key *might* be present at runtime):
 
-| decision.aql direct `check` | errors |
+| decision.boru direct `check` | errors |
 |---|---|
 | baseline (§5a) | **39** |
 | absent-key → `dynamic(Any)` | **21** |
@@ -129,7 +129,7 @@ decision direct-check error count and, under the §5b threading probe, the
 1. **§5a memo keys** — *landed* (`6665be3`).
 2. **§6a — abstract-param representation (this note's root cause).** Make
    generic/abstract fn-body analysis use Map/List **carriers**, so absent-key
-   `get` is `dynamic(Any)`, not `None`. Target: decision.aql direct check
+   `get` is `dynamic(Any)`, not `None`. Target: decision.boru direct check
    39 → ~21; verify no regression in the in-repo corpus + dynamic-help.
 3. **§6b — gradual carrier into typed user-fn params + reachable-return
    join** (the remaining 21: `eval-pred` recursion, `eval-table-*`). A scoped
@@ -147,10 +147,10 @@ compiles the framework bodies.
 ## 6. Reproduction
 
 ```bash
-cd /home/user/aql/cmd/go && go build -o bin/aql ./aql
+cd /home/user/boru/cmd/go && go build -o bin/boru ./boru
 # the standalone root-cause repro:
-printf 'def g fn [[m:Map] [Any] [(m get "xs") all]]\ng {xs:[1 2 3]}\n' > /tmp/t.aql
-./bin/aql check /tmp/t.aql          # → no_signature for all
+printf 'def g fn [[m:Map] [Any] [(m get "xs") all]]\ng {xs:[1 2 3]}\n' > /tmp/t.boru
+./bin/boru check /tmp/t.boru          # → no_signature for all
 # the lever (experimental getNodeReturns: absent key → NewDynamicCarrier(TAny)):
-#   decision.aql direct check 39 → 21 errors.
+#   decision.boru direct check 39 → 21 errors.
 ```

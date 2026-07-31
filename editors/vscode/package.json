@@ -1,13 +1,13 @@
 {
-  "name": "aql",
-  "displayName": "AQL Language",
-  "description": "AQL language support backed by the aql lsp server.",
+  "name": "boru",
+  "displayName": "BORU Language",
+  "description": "BORU language support backed by the boru lsp server.",
   "version": "0.1.0",
-  "publisher": "aql-lang",
+  "publisher": "boru-lang",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aql-lang/aql.git"
+    "url": "https://github.com/boru-lang/boru.git"
   },
   "engines": {
     "vscode": "^1.75.0"
@@ -16,33 +16,33 @@
     "Programming Languages"
   ],
   "activationEvents": [
-    "onLanguage:aql"
+    "onLanguage:boru"
   ],
   "main": "./extension.js",
   "contributes": {
     "languages": [
       {
-        "id": "aql",
-        "aliases": ["AQL", "aql"],
-        "extensions": [".aql"],
+        "id": "boru",
+        "aliases": ["BORU", "boru"],
+        "extensions": [".boru"],
         "configuration": "./language-configuration.json"
       }
     ],
     "grammars": [
       {
-        "language": "aql",
-        "scopeName": "source.aql",
-        "path": "./syntaxes/aql.tmLanguage.json"
+        "language": "boru",
+        "scopeName": "source.boru",
+        "path": "./syntaxes/boru.tmLanguage.json"
       }
     ],
     "configuration": {
       "type": "object",
-      "title": "AQL",
+      "title": "BORU",
       "properties": {
-        "aql.serverPath": {
+        "boru.serverPath": {
           "type": "string",
-          "default": "aql",
-          "description": "Path to the aql binary. Leave as 'aql' if it is on PATH."
+          "default": "boru",
+          "description": "Path to the boru binary. Leave as 'boru' if it is on PATH."
         }
       }
     }

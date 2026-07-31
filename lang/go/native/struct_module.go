@@ -4,11 +4,11 @@ import (
 	"errors"
 	"strings"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // StructModuleNatives holds the voxgig-struct data-manipulation words that
-// were moved out of the core registry into the loadable `aql:struct` module
+// were moved out of the core registry into the loadable `boru:struct` module
 // (namespace `Struct`). They are registered ONLY into that module's
 // sub-registry by modules.BuildStructModule — deliberately absent from the
 // global registry (they are no longer in the core Natives slice in
@@ -130,7 +130,7 @@ var StructModuleNatives = []NativeFunc{
 		// jsonify. DATA context (nothing evaluates: unquoted text →
 		// strings, numbers → numbers, true/false → booleans); accepts
 		// the jsonic superset so strict JSON parses too; malformed
-		// input raises [aql/parse_error]. See design/PARSING.10.md §2.
+		// input raises [boru/parse_error]. See design/PARSING.10.md §2.
 		Name: "parse",
 		Signatures: []Signature{
 			{Args: []*Type{TString}, Impl: Go(parseTextHandler), Returns: []*Type{TAny}, ReturnsFn: parseTextReturns, BarrierPos: -1},
@@ -323,7 +323,7 @@ func reifyReturns(args []Value, r *Registry) []Value {
 	if atUncaughtTopLevel(r) && IsConcrete(args[1]) {
 		if _, err := reifyHandler(args, nil, nil, r); err != nil {
 			code, detail := "reify_error", err.Error()
-			var ae *AqlError
+			var ae *BoruError
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
@@ -365,7 +365,7 @@ func parseTextReturns(args []Value, r *Registry) []Value {
 		// the runtime's own code + detail (the dry-pass discipline).
 		if err != nil && atUncaughtTopLevel(r) {
 			code, detail := "parse_error", err.Error()
-			var ae *AqlError
+			var ae *BoruError
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}

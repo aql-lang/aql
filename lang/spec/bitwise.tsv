@@ -1,4 +1,4 @@
-# AQL Language Specification: Bitwise Operators (band bor bxor bnot
+# BORU Language Specification: Bitwise Operators (band bor bxor bnot
 # bsl bsr busr)
 # Format: input<TAB>expected<TAB>description
 #
@@ -9,19 +9,19 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  band / bor / bxor — commutative
-import "aql:bin-util" BinUtil.band 12 10	8	bitwise AND (1100 & 1010 = 1000)
-import "aql:bin-util" BinUtil.bor 12 10	14	bitwise OR (1100 | 1010 = 1110)
-import "aql:bin-util" BinUtil.bxor 12 10	6	bitwise XOR (1100 ^ 1010 = 0110)
+import "boru:bin-util" BinUtil.band 12 10	8	bitwise AND (1100 & 1010 = 1000)
+import "boru:bin-util" BinUtil.bor 12 10	14	bitwise OR (1100 | 1010 = 1110)
+import "boru:bin-util" BinUtil.bxor 12 10	6	bitwise XOR (1100 ^ 1010 = 0110)
 #
 # §2  bnot — ones' complement
-import "aql:bin-util" BinUtil.bnot 0	-1	~0 = -1
-import "aql:bin-util" BinUtil.bnot 5	-6	~5 = -6
+import "boru:bin-util" BinUtil.bnot 0	-1	~0 = -1
+import "boru:bin-util" BinUtil.bnot 5	-6	~5 = -6
 #
 # §3  shifts — non-commutative; swap form reads `value shift count`
-import "aql:bin-util" 1 BinUtil.bsl 4	16	`1 bsl 4` = 1 << 4 = 16
-import "aql:bin-util" BinUtil.bsl 1 4	8	forward `bsl 1 4` = 4 << 1 = 8
-import "aql:bin-util" 8 BinUtil.bsr 1	4	`8 bsr 1` = 8 >> 1 = 4
-import "aql:bin-util" 256 BinUtil.bsr 2	64	`256 bsr 2` = 256 >> 2 = 64
-import "aql:bin-util" BinUtil.busr 1024 2	0	unsigned right shift: 2 >>> 1024 (count mod width) = 0
+import "boru:bin-util" 1 BinUtil.bsl 4	16	`1 bsl 4` = 1 << 4 = 16
+import "boru:bin-util" BinUtil.bsl 1 4	8	forward `bsl 1 4` = 4 << 1 = 8
+import "boru:bin-util" 8 BinUtil.bsr 1	4	`8 bsr 1` = 8 >> 1 = 4
+import "boru:bin-util" 256 BinUtil.bsr 2	64	`256 bsr 2` = 256 >> 2 = 64
+import "boru:bin-util" BinUtil.busr 1024 2	0	unsigned right shift: 2 >>> 1024 (count mod width) = 0
 #
 # §4  errors

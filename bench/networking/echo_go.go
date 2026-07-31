@@ -1,5 +1,5 @@
 // TCP echo round-trip benchmark in plain Go.
-// Same protocol as echo_aql.aql: one persistent connection, newline-framed,
+// Same protocol as echo_boru.boru: one persistent connection, newline-framed,
 // 20000 timed round-trips (+1 warm-up).
 package main
 

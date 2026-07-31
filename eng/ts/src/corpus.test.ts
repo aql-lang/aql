@@ -4,7 +4,7 @@
 // + runProgram) and the interpreter, and the two OUTCOMES must agree:
 //   - a value row the compiler accepts MUST produce a canon-equal residual;
 //   - an ERROR row MUST either compile to a program that raises the SAME
-//     AqlError code (a native OpTrap), or refuse and fall back to the
+//     BoruError code (a native OpTrap), or refuse and fall back to the
 //     interpreter (which errors identically).
 // Any silent divergence — a compiled program that succeeds where the
 // interpreter errors (or vice versa), or two differing error codes — is a
@@ -16,7 +16,7 @@ import { strict as assert } from 'node:assert'
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import { AqlError, Engine, Registry, type Value } from './index.ts'
+import { BoruError, Engine, Registry, type Value } from './index.ts'
 import { compileCheck } from './compile.ts'
 import { runProgram } from './vm.ts'
 import { SPEC_DIR, parseSpec, registerSpecWords, renderStack, tokenize } from './spec-fixture.ts'
@@ -39,7 +39,7 @@ type RowResult =
   | { kind: 'errorFallback' } // ERROR row: refused; interpreter fallback errors identically
   | { kind: 'mismatch'; detail: string } // any silent divergence — a miscompilation
 
-/** An execution outcome: a rendered residual, or an AqlError code. */
+/** An execution outcome: a rendered residual, or a BoruError code. */
 type Outcome = { ok: true; residual: string } | { ok: false; code: string }
 
 function fresh(): Registry {
@@ -52,7 +52,7 @@ function run(fn: () => Value[]): Outcome {
   try {
     return { ok: true, residual: renderStack(fn()) }
   } catch (e) {
-    if (e instanceof AqlError) return { ok: false, code: e.code }
+    if (e instanceof BoruError) return { ok: false, code: e.code }
     throw e
   }
 }

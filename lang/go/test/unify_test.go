@@ -3,12 +3,12 @@ package test
 import (
 	"bufio"
 	"fmt"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 func TestUnify(t *testing.T) {
@@ -101,7 +101,7 @@ func TestUnify(t *testing.T) {
 	t.Logf("ran %d unify test cases", ran)
 }
 
-// evalSingle parses and evaluates an AQL expression, returning the single
+// evalSingle parses and evaluates a BORU expression, returning the single
 // result value. It fails if the expression produces zero or more than one value.
 func evalSingle(expr string) (native.Value, error) {
 	values, err := parser.Parse(expr)

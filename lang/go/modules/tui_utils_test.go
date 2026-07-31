@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // The standalone terminal utilities (tui_utils.go): exact ANSI bytes
@@ -27,7 +27,7 @@ func TestTuiColorizeProfiles(t *testing.T) {
 	reg := tcReg(t)
 	run := func(src string) string {
 		t.Helper()
-		out, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, src})
+		out, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, src})
 		return tuStr(t, out, err)
 	}
 	// truecolor is the default: 24-bit foreground + reset
@@ -63,7 +63,7 @@ func TestTuiUtilRoundTripAndWidth(t *testing.T) {
 	reg := tcReg(t)
 	steps := func(src string) []native.Value {
 		t.Helper()
-		out, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, src})
+		out, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, src})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -104,7 +104,7 @@ func TestTuiUtilGuards(t *testing.T) {
 		{`Tui.strip-ansi 5`, "uncalled_function"},
 		{`Tui.text-width 5`, "uncalled_function"},
 	} {
-		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`, c.src})
+		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "boru:tui"`, c.src})
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Fatalf("%s = %v, want %q", c.src, err, c.want)
 		}

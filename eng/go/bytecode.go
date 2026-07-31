@@ -6,7 +6,7 @@ import (
 	"sync"
 )
 
-// Bytecode Program model — Stage 1 of design/aql-bytecode-plan.0.md.
+// Bytecode Program model — Stage 1 of design/boru-bytecode-plan.0.md.
 //
 // A Program is the flat, linear lowering of the typed region the
 // carrier checker resolved: literal pushes, fixed-arity native calls
@@ -134,7 +134,7 @@ const (
 	// frozen, aliasable const. A fully-literal / const-foldable map stays a
 	// pooled const and never needs this.
 	OpMakeMap
-	// OpTrap raises the AQL error described by Program.Traps[Arg] and aborts the
+	// OpTrap raises the BORU error described by Program.Traps[Arg] and aborts the
 	// run. It is the compiled form of a check-mode-suppressed runtime error: a
 	// word that is deliberately lenient in check mode but raises at run time (an
 	// orphan `gen [...]`, an `unpack` of a missing key). The checker is lenient,
@@ -314,7 +314,7 @@ const (
 	// the window is the body's LAST statement: the replay fires at the RET,
 	// so a recorded event after it would reorder observable effects ahead of
 	// the apply's (the recorder's replayIsBodyTail gate refuses that shape).
-	// The following RET applies the CallAQL-path trim (CompiledFn.RetReplay).
+	// The following RET applies the CallBORU-path trim (CompiledFn.RetReplay).
 	OpCallDynFrame
 
 	// OpPushConstFresh pushes a deep clone of Consts[Arg] with fresh container
@@ -386,7 +386,7 @@ const (
 	// a result count differing from the claim — raises internal_error, which
 	// RunCompiled resolves by re-running the interpreter (slow, not wrong;
 	// runtimeShouldFallback) and --force-compile surfaces loudly. A genuine
-	// AQL error raised by the method surfaces as-is (the interpreter raises
+	// BORU error raised by the method surfaces as-is (the interpreter raises
 	// the same at the same point, prior side effects included).
 	OpCallDynMethod
 
@@ -691,7 +691,7 @@ type CompiledFnRef struct {
 	// compiled; the interpreter resolves the same names at CALL time. So if any
 	// dep is undef'd or redefined LATER in the program — after this ref was
 	// created — NotifyNameRebound sets poisoned, Finalize leaves Prog nil, and
-	// InvokeCallback falls back to CallAQL, which resolves the live definition
+	// InvokeCallback falls back to CallBORU, which resolves the live definition
 	// exactly as the interpreter does. Compile-time only; unused at run time (a
 	// stamped ref always has poisoned=false).
 	depNames map[string]bool
@@ -709,14 +709,14 @@ type CompiledFnRef struct {
 	// PLUS live shadowing (a body-local def of the same name active at
 	// invoke time) that compile-time poisoning structurally cannot see.
 	// InvokeCallback checks depsFresh before the VM path; any mismatch
-	// falls to CallAQL, which resolves the live binding exactly as the
+	// falls to CallBORU, which resolves the live binding exactly as the
 	// interpreter. nil = compile-time ref, no validation (nil is the
 	// unambiguous unset for a map).
 	depSnap map[string]depSnapEntry
 	// restamp is the JIT re-stamp box (REFUSAL-CLOSURE.0 §7c): a DETACHED
 	// ref whose depSnap went stale re-compiles against the LIVE bindings at
 	// invoke time (CompiledFnRef.jitRestamp) instead of degrading
-	// permanently to CallAQL. Allocated by StampDetachedFn only — a
+	// permanently to CallBORU. Allocated by StampDetachedFn only — a
 	// compile-time ref re-poisons via NotifyNameRebound and never re-stamps
 	// (nil box → the interpreter, as before). A POINTER field keeps the
 	// struct copyable while the box's mutex serialises concurrent invokers
@@ -727,7 +727,7 @@ type CompiledFnRef struct {
 // restampBox carries a detached ref's stamp inputs and its current
 // re-stamped twin (see CompiledFnRef.restamp). tries caps the TOTAL
 // re-compiles per ref so a hot rebinding loop cannot pay a compile per
-// invoke — once exhausted, the seam stays on CallAQL (slow, not wrong).
+// invoke — once exhausted, the seam stays on CallBORU (slow, not wrong).
 type restampBox struct {
 	mu     sync.Mutex
 	fd     FnDefInfo
@@ -749,7 +749,7 @@ type depSnapEntry struct {
 // is handled by NotifyNameRebound poisoning before Finalize. Any mismatch —
 // a changed generation (rebind, undef, in-place replace) or a changed depth
 // (live shadow) — reports false and the caller falls back to the
-// interpreter, so validation only ever degrades toward CallAQL, never away
+// interpreter, so validation only ever degrades toward CallBORU, never away
 // from it.
 func (ref *CompiledFnRef) depsFresh(r *Registry) bool {
 	if ref == nil || ref.depSnap == nil {
@@ -921,16 +921,16 @@ type ConstLocalRef struct {
 	Slot     int
 }
 
-// TrapSpec describes the AQL error one OpTrap raises: the taxonomy code, the
+// TrapSpec describes the BORU error one OpTrap raises: the taxonomy code, the
 // detail message, the word it is attributed to, an optional hint, and the full
 // structured diagnostic payload (secondary spans, notes, suggestions) — built
-// from the SAME AqlError the interpreter raises for the matching runtime error,
+// from the SAME BoruError the interpreter raises for the matching runtime error,
 // so the compiled and interpreted diagnostics are byte-identical and
 // error-scraping tooling can never tell which engine ran. It lowers a
 // check-mode-suppressed runtime error (an orphan gen, an unpack of a missing
 // key, a statically-definite unmatched dispatch) into the compiled stream
 // rather than refusing the whole program. The rich fields are populated by
-// RecordTrapErr (serialising a built AqlError); the plain string RecordTrap
+// RecordTrapErr (serialising a built BoruError); the plain string RecordTrap
 // leaves them nil for the simpler callers.
 type TrapSpec struct {
 	Code        string
@@ -1025,7 +1025,7 @@ type Program struct {
 	storedFnRefs []*CompiledFnRef
 }
 
-// CompiledFn is one compiled AQL fn overload at one arg shape: its
+// CompiledFn is one compiled BORU fn overload at one arg shape: its
 // own code unit with frame-relative locals (params in slots 0..N-1,
 // sig order).
 type CompiledFn struct {
@@ -1062,7 +1062,7 @@ type CompiledFn struct {
 	// Reg is the fn's OWNING registry when it differs from the program's —
 	// a module-preamble fn compiled through a foreign dispatch. The VM runs
 	// the unit's native dispatches against it (vmContext curReg), exactly
-	// as the interpreter's CallAQL runs the body in the fn's own registry:
+	// as the interpreter's CallBORU runs the body in the fn's own registry:
 	// module-private names resolve there, and registry-visible handler
 	// effects (Net.listen forking per-connection registries, dynamic-scope
 	// binds) land in module scope on both engines. Nil for ordinary fns —
@@ -1127,9 +1127,9 @@ type CompiledFn struct {
 	// RetReplay marks a body that ends in a whole-frame dynamic-apply replay
 	// (OpCallDynFrame): its residual count is RUNTIME-variable, so the RET
 	// contract switches discipline. A FOREIGN-registry fn (Reg set, a module-
-	// preamble fn) is dispatched via CallAQL in the interpreter, whose return
+	// preamble fn) is dispatched via CallBORU in the interpreter, whose return
 	// path is TRIM-ONLY — it discards up to NUnnamed extra bottom values and
-	// has never enforced return count or type (registry.go::CallAQL, the
+	// has never enforced return count or type (registry.go::CallBORU, the
 	// documented asymmetry) — so the compiled RET mirrors that trim, then
 	// DEFERS to the interpreter (internal_error → sound whole-program
 	// fallback) if the count still differs from the callers' static model. A

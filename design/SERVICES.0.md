@@ -1,11 +1,11 @@
 # SERVICES
 
-Design for a unified **service / server** model in AQL — one model that covers
-both *user code written in AQL* (a value that owns state and answers
+Design for a unified **service / server** model in BORU — one model that covers
+both *user code written in BORU* (a value that owns state and answers
 pattern-matched requests) and *the CLI's own long-running servers* (`repl`,
 `registry`, `lsp`, `exec`, `api`, `tui`, `vault-proxy`). BEAM/OTP is the
 inspiration for the request/reply + supervision shape, but the vocabulary stays
-**AQL-native**.
+**BORU-native**.
 
 ## Terminology (settled)
 
@@ -16,11 +16,11 @@ Two words, in a deliberate hierarchy:
   exactly the existing Go `service.Service` interface (`Name`/`Start`/`Stop`/
   `Status`). One service = one isolated unit of state + messages.
 - **server** — a **collection of services**, supervised together. This is exactly
-  the existing `serve` supervisor (`aql serve registry + lsp + …`). A server
+  the existing `serve` supervisor (`boru serve registry + lsp + …`). A server
   starts, stops, restarts, and exposes its services; it owns no request handlers
   of its own.
 
-> **"Behaviour" is deliberately avoided.** In AQL a `Behavior` is already a
+> **"Behaviour" is deliberately avoided.** In BORU a `Behavior` is already a
 > core type-system concept — the per-type operation dispatch (Match/Format/
 > Equal/Compare) in `eng/go/compare_scalar_behaviors.go` and
 > `lang/spec/user-types.tsv`. Reusing the word for services would collide.
@@ -29,7 +29,7 @@ Two words, in a deliberate hierarchy:
 
 This design went too far in both directions before settling:
 
-| | dropped (too Seneca) | dropped (too Erlang) | **settled (AQL-native)** |
+| | dropped (too Seneca) | dropped (too Erlang) | **settled (BORU-native)** |
 | --- | --- | --- | --- |
 | the unit | `service` ✓ | `server` / behaviour | **`service`** |
 | collection of units | (plugins in one instance) | supervision tree | **`server`** (a collection of services) |
@@ -41,12 +41,12 @@ This design went too far in both directions before settling:
 | compose units (fault) | (plugins in one instance) | supervision tree | **`server`** supervision (§3) |
 | run it | `host` | `start_link` | **`serve`** (reuse the CLI verb) |
 | no-match error code | `no_action` | `no_clause` | **`no_match`** |
-| framework module | `aql:mesh` | `aql:otp` | **`aql:serve`** + **`aql:net`** |
+| framework module | `boru:mesh` | `boru:otp` | **`boru:serve`** + **`boru:net`** |
 
-The two anchors that pull this back to AQL: **`add`** (services register handlers
+The two anchors that pull this back to BORU: **`add`** (services register handlers
 with the same word patrun already uses) and **`send`** (async delivery is the same
 word the actor layer uses for a `Pid`). `call` and `serve` are kept because they
-are plain and already meaningful (`aql serve`). Erlang's `cast`/`handle`/
+are plain and already meaningful (`boru serve`). Erlang's `cast`/`handle`/
 `handle_call`/`start_link`/`one_for_one` jargon is dropped.
 
 ## Context
@@ -58,7 +58,7 @@ layer most
 code is actually written against — services and servers — and, crucially, shows
 how the CLI's **existing** servers fold into the same model (§5).
 
-### Why this is mostly already in AQL
+### Why this is mostly already in BORU
 
 A service is **pattern-matching on requests + owned state**, and the matcher is
 already core: patrun (`lang/go/native/native_patrun.go`). `add {pattern} value
@@ -96,8 +96,8 @@ server whose handlers `call` a `connect`ed client.
    change.
 2. **Hybrid packaging.** The in-process surface — `service`, `add`, `call`,
    `send`, `state` — is **core** (next to the patrun words). Running, supervising,
-   proxying, and transport live in modules **`aql:serve`** and **`aql:net`**.
-3. **Services live in modules.** A reusable service is just an AQL module that
+   proxying, and transport live in modules **`boru:serve`** and **`boru:net`**.
+3. **Services live in modules.** A reusable service is just a BORU module that
    exports a constructor function returning a `Service`. No special plugin
    mechanism — `import` is the loader.
 
@@ -122,7 +122,7 @@ service's private mutable `Store`; the handler **mutates it in place** for state
 changes and **returns the reply** value. This is the deliberate middle ground:
 no functional `{reply, NewState}` tuple ceremony (the over-Erlang trap), and no
 hidden closure capture (the Seneca trap) — state is an explicit, named, mutable
-value, which is exactly what `Store` is for in AQL. It is safe because a service
+value, which is exactly what `Store` is for in BORU. It is safe because a service
 processes **one request at a time** (in-process: the caller's goroutine; served:
 the process's single goroutine — the gen_server guarantee, no locks). Reuses the
 existing `patrunAddHandler` registration shape.
@@ -145,7 +145,7 @@ call {request} <service> -> reply
 Route `request` through the patrun (most-specific wins); on no match raise
 the **`no_match`** error (`raise no_match …`) unless a catch-all `add {} […]`
 exists; invoke the handler with `(request, state)` and return its reply. Reuses
-`execFnDefLiteral`/`CallAQL`. `call` also obeys the uniform failure contract —
+`execFnDefLiteral`/`CallBORU`. `call` also obeys the uniform failure contract —
 it may raise `timeout`/`down`/`overload` — which is rare and advisory in-process
 and enforced once `serve`d (§8).
 
@@ -181,10 +181,10 @@ without burdening the common case:
    upstream): the handler returns the sentinel **`defer`**; the reply target is
    available as the request metadata field **`req.@from`** (a `Pid`-like handle),
    and the service later does `reply req.@from value`. (`reply` lives in
-   `aql:serve`, used only by deferred/proxy handlers.)
+   `boru:serve`, used only by deferred/proxy handlers.)
 2. **Streaming reply** (the handler answers with a byte/value stream — the proxy
    case, §6): the handler returns a **stream** value; `call` yields a stream the
-   caller consumes (ties to `aql:stream` / `STREAM-WORDS.0.md`).
+   caller consumes (ties to `boru:stream` / `STREAM-WORDS.0.md`).
 
 So `[req state] -> reply` is the whole contract for normal services; `@from` and
 `defer` exist for the proxy/transport minority. Settled.
@@ -209,7 +209,7 @@ patrun), newest outermost. A layering handler opts into the third, optional
 argument — the continuation **`prior`** — and chooses whether and how to invoke
 the handler it shadowed:
 
-```aql
+```boru
 # Wrap the order-submit action with auth + audit, without touching it.
 add {role:"order" op:"submit"} [ [req state prior] => [
     require-role req "clerk"                 # cross-cutting: auth (may short-circuit)
@@ -224,7 +224,7 @@ handler (stack bottom) is the plain `[req state]` form with no `prior`. A
 decorator may **short-circuit** (never call `prior` — a cache hit, an auth
 reject), **pre-process** (`prior modified-req`), or **post-process** (transform
 `prior`'s reply). This is `around`-advice / middleware `next()` realised as an
-*explicit captured continuation* — no hidden dynamic-dispatch context, just AQL
+*explicit captured continuation* — no hidden dynamic-dispatch context, just BORU
 function values. (It is exactly Seneca's `this.prior(msg, done)`.)
 
 **Service middleware — `wrap` (ambient cross-cutting).** Per-pattern layering
@@ -232,7 +232,7 @@ decorates *one* action; concerns that apply to *every* request into a service
 (tracing, metrics, panic recovery, a blanket auth gate) use **`wrap`**, which runs
 around the whole dispatch regardless of which pattern matches:
 
-```aql
+```boru
 wrap [ [req state prior] => [
     trace-start req
     def out ( prior req )                   # run the rest of the pipeline
@@ -276,12 +276,12 @@ metadata — local layering + metadata, not a distributed interceptor.
 
 ## 2. Services live in modules
 
-A reusable service is an AQL module that **exports a constructor** returning a
+A reusable service is a BORU module that **exports a constructor** returning a
 `Service`. Module-private `def`s are scaffolding; nothing leaks across modules
 (encapsulation). No `attach`/`Init`/plugin machinery — `import` is the loader.
 
-```aql
-# counter.aql — a module that exports a service constructor
+```boru
+# counter.boru — a module that exports a service constructor
 export "New" fn [[opts:Map] [Service] [
   def svc ( service {count: (opts get start ? 0)} )
 
@@ -294,18 +294,18 @@ export "New" fn [[opts:Map] [Service] [
 ]]
 ```
 
-```aql
-import "./counter.aql"
+```boru
+import "./counter.boru"
 def c ( Counter.New {start: 10} )
 call {op:"inc"} c            # → 11
 call {op:"get"} c            # → 11
 call {op:"nope"} c           # raises no_match
 ```
 
-## 3. A server is a collection of services (module `aql:serve`)
+## 3. A server is a collection of services (module `boru:serve`)
 
 ```
-import "aql:serve"
+import "boru:serve"
 server [services] {restart: "isolated"} -> Server     # a supervised collection
 serve <server-or-service>                            # run it
 ```
@@ -320,7 +320,7 @@ serve <server-or-service>                            # run it
   supervisor). `serve <service>` is sugar for a one-service server.
 
 This **is** today's `serve` supervisor (`cmd/go/internal/serve`), surfaced as a
-value. `aql serve registry + lsp + api` is `serve (server [Registry.New{…}
+value. `boru serve registry + lsp + api` is `serve (server [Registry.New{…}
 Lsp.New{…} Api.New{…}])`. This is the **fault/lifecycle** composition axis —
 independent services with their own state, supervised together. It is *orthogonal*
 to the **behavioural** composition axis (cross-cutting layering with `prior`/`wrap`,
@@ -341,14 +341,14 @@ proxying across them (§6).
   `send` is true async; the deadline, mailbox bound, and `down` detection are now
   *enforced*. Same surface and same contract, different locus — the actor
   `receive` loop and the service's handler patrun are the *same* matcher.
-- **Transport** (`aql:net`): **`listen {transport} <service>`** exposes a served
+- **Transport** (`boru:net`): **`listen {transport} <service>`** exposes a served
   service over a wire protocol; **`connect {transport} -> Service`** returns a
   local proxy whose `call`/`send` forward to a remote service. A transport is an
   adapter translating wire frames ↔ requests: HTTP/JSON, stdio, raw TCP, and
   LSP-style framed JSON-RPC are all transports over the one service model. JSON
   envelope first (reuse `Format`/`jsonify`/`reify`); binary later (`Bytes` +
   bit-syntax, per `PROCESSES.0.md`). Transport needs the **TCP/socket server**
-  AQL still lacks (only HTTP-client `fetch` exists) — later phase.
+  BORU still lacks (only HTTP-client `fetch` exists) — later phase.
 
 Capability gating: in-process `call`/`add` need no new capability; `serve`
 (processes) is gated like `spawn` (the **`process`** scope, `PROCESSES.0.md` §7);
@@ -365,7 +365,7 @@ The CLI already has the bones of this model — a `service.Service` interface
 and a supervisor in `serve`. The consolidation is to (a) make every CLI server a
 **service** over a shared **transport** + **lifecycle** core, (b) make the
 supervisor the **server**, (c) lift the lifecycle controls to standard request
-patterns, and (d) make services *also* writable in AQL. Mapping:
+patterns, and (d) make services *also* writable in BORU. Mapping:
 
 | CLI server (today) | becomes | transport | notes |
 | --- | --- | --- | --- |
@@ -390,7 +390,7 @@ The lifecycle surface unifies onto standard requests/state:
   through, not an interface bolt-on.
 
 Net effect: one lifecycle, one supervisor, one set of words — and a user can
-write a registry-like or exec-like service *in AQL* and `serve` it next to the
+write a registry-like or exec-like service *in BORU* and `serve` it next to the
 built-in ones.
 
 ## 6. Proxies — careful thought
@@ -401,7 +401,7 @@ it **forwards** a request to a *target* (an upstream provider), wrapping that
 forward with authorization, transformation, and accounting. Generalize it as:
 
 ```
-import "aql:serve"
+import "boru:serve"
 proxy <target> {before: [..] after: [..]} -> Service
 ```
 
@@ -409,7 +409,7 @@ A `proxy` is a `Service` whose handler, for a matched request:
 
 1. runs **`before`** interceptors — authorize + transform the request;
 2. **forwards** to `target` via `call`/`send` (local service, or a remote one via
-   `aql:net connect`) — the location-transparent leg;
+   `boru:net connect`) — the location-transparent leg;
 3. runs **`after`** interceptors — transform + account for the response;
 4. returns the (possibly streamed) reply.
 
@@ -428,7 +428,7 @@ must honour, each drawn from the real proxy:
 - **Streaming replies, never buffered.** The proxy streams the upstream body
   straight back (`proxy.go` copies the response; secrets/bodies are never
   materialised in logs). The service model therefore must let `call` return a
-  **stream** (§1 settlement, ties to `aql:stream`) — a reply is not always a
+  **stream** (§1 settlement, ties to `boru:stream`) — a reply is not always a
   single immutable value. This is the main reason streaming is a first-class
   reply shape.
 - **Secret state is private and never travels in messages.** The proxy holds the
@@ -436,7 +436,7 @@ must honour, each drawn from the real proxy:
   a process/transport boundary stay immutable and secret-free. The boundary
   immutability check (`PROCESSES.0.md` `not_sendable`) applies to forwarded
   requests/replies, *not* to the proxy's internal secret state.
-- **Capability enforcement is the AQL permission model, unified.** The proxy's
+- **Capability enforcement is the BORU permission model, unified.** The proxy's
   capability-token check (hashed token → alias binding → revoked/expired/method/
   budget/host policy, per `proxy_security_test.go`) is the *same* capability/
   scope machinery as `PERMISSIONS.10.md`, not a bespoke mechanism. A `before`
@@ -451,7 +451,7 @@ must honour, each drawn from the real proxy:
   open connections drain, new requests are rejected. Same mechanism as every
   pausable service.
 - **Protocol/trust versioning.** The wire envelope carries a protocol version
-  (`X-AQL-Vault-Protocol`); the transport adapter (`aql:net`) enforces fail-loud
+  (`X-BORU-Vault-Protocol`); the transport adapter (`boru:net`) enforces fail-loud
   on mismatch. Versioning belongs to the transport layer, shared by all
   services, not re-implemented per proxy.
 
@@ -463,18 +463,18 @@ so consolidation removes the bespoke wrapper, not the credential logic.
 ## 7. Lessons from BEAM's weaknesses
 
 BEAM is the inspiration, but its model has well-known weaknesses. Below are the
-generally-agreed ones, the ecosystem's responses, and the stance AQL takes — two
+generally-agreed ones, the ecosystem's responses, and the stance BORU takes — two
 of them (zero-copy messaging and backpressure) are load-bearing enough to change
 the design.
 
-### 7.1 Zero-copy messaging — AQL structurally avoids BEAM's biggest tax
+### 7.1 Zero-copy messaging — BORU structurally avoids BEAM's biggest tax
 
 BEAM copies *every* message between processes. That cost is **not intrinsic to
 the actor model**: it exists because each BEAM process has its **own heap and own
 GC**, so a message must be copied to live in the receiver's heap (the same
-per-process-heap design that gives BEAM its low pause times). AQL has no
+per-process-heap design that gives BEAM its low pause times). BORU has no
 per-process heaps — services and processes are **goroutines on one Go heap with
-one GC** — and AQL values are **immutability-first** (`eng/go/clone.go`: scalars,
+one GC** — and BORU values are **immutability-first** (`eng/go/clone.go`: scalars,
 plain `List`, plain `Map`, type/function values are never mutated in place).
 
 **So, inside a server, an immutable message is passed by reference — zero copy,
@@ -482,7 +482,7 @@ zero race** — both for an in-process `call` and for delivery to a `serve`d
 service in another goroutine. The mailbox send supplies the happens-before edge
 (Go memory model) so the receiver observes a fully-published value, and
 immutability guarantees no concurrent writer. This is exactly the property
-`PROCESSES.0.md` already states: AQL gets BEAM's **isolation** (a handler can
+`PROCESSES.0.md` already states: BORU gets BEAM's **isolation** (a handler can
 never observe a caller mutating a message mid-flight) **without** BEAM's **copy
 cost** — sidestepping the per-message-copy weakness entirely. (It also gets
 Erlang's refc-binary optimization for free: a future immutable `Bytes` is shared
@@ -493,7 +493,7 @@ Sharing one across goroutines would reintroduce precisely the data race the acto
 model exists to prevent. The rule (already proposed as `PROCESSES.0.md`'s
 `not_sendable` check) is **refuse, not copy**: a `call`/`send` crossing a
 process/transport boundary must carry only immutable values; a mutable value at
-the boundary is an error. So AQL *never copies messages* — it shares immutable
+the boundary is an error. So BORU *never copies messages* — it shares immutable
 ones and forbids mutable ones. A service's own state `Store` is unaffected because
 it never crosses a boundary: it is owned and mutated by that one service's single
 goroutine. In-process `call` is cheaper still — a direct function call in the
@@ -506,7 +506,7 @@ BEAM's worst production failure mode is the **unbounded mailbox**: async `send`
 with no flow control lets a fast producer grow a slow consumer's mailbox until
 OOM, and a large mailbox also makes selective `receive` O(n). The ecosystem bolts
 backpressure on afterwards (synchronous `call`, GenStage/Flow/Broadway, sbroker,
-jobs). AQL should take a stance up front:
+jobs). BORU should take a stance up front:
 
 - **`call` is the backpressured path** — synchronous request/reply naturally
   rate-limits the caller to the service's throughput. Prefer it.
@@ -514,15 +514,15 @@ jobs). AQL should take a stance up front:
   full, `send` either blocks (applying backpressure) or fails fast with an
   overload error, configurable per service (`server [..] {mailbox: N}`). Never
   silently unbounded.
-- A demand-driven streaming path (GenStage-style) is deferred to the `aql:stream`
+- A demand-driven streaming path (GenStage-style) is deferred to the `boru:stream`
   integration but should reuse the same bounded-mailbox mechanism.
 
-### 7.3 The rest — mapped to AQL stances
+### 7.3 The rest — mapped to BORU stances
 
-| BEAM weakness | ecosystem response | AQL stance |
+| BEAM weakness | ecosystem response | BORU stance |
 | --- | --- | --- |
 | Numeric/CPU throughput | BeamAsm JIT, NIFs/Rustler, Nx | Go-hosted (compiled, real arrays/maps); hot paths are Go natives, not a VM/NIF boundary — the gap mostly doesn't arise |
-| Dynamic typing / untyped protocols | Dialyzer, Gleam, Elixir set-theoretic types, Akka Typed | AQL has a static-leaning type system + `Behavior`; **a service may carry a schema on its accepted patterns**, validated at the `connect` boundary (Open Q #4) — ahead of Erlang |
+| Dynamic typing / untyped protocols | Dialyzer, Gleam, Elixir set-theoretic types, Akka Typed | BORU has a static-leaning type system + `Behavior`; **a service may carry a schema on its accepted patterns**, validated at the `connect` boundary (Open Q #4) — ahead of Erlang |
 | Distribution: full mesh, head-of-line blocking | Partisan, `erpc`, message fragmentation | distribution is "later"; when built, follow Partisan (overlays, parallel connections), not disterl's full mesh |
 | Distribution: all-or-nothing trust | (largely unsolved in core) | **the proxy + capability model is the answer** — every cross-boundary `call` carries capability scopes; no ambient "connected = trusted" |
 | Location transparency leaks | Orleans virtual actors; "make failure explicit" | **one uniform, failure-aware surface — assume remote** (§8): the same `call` contract local and remote, exposing failure everywhere rather than hiding it (the Waldo-consistent direction), with defaults keeping the common case terse |
@@ -585,7 +585,7 @@ telemetry sink wants `"drop"` while a worker wants `"block"`. Rather than force 
 policy into its own `serve ( server [..] {..} )`, a service carries its own opts
 map where it is placed in the server, overriding the server default:
 
-```aql
+```boru
 server [ worker  (metrics {mailbox: 4096  overflow: "drop"}) ]
   {mailbox: 1024  overflow: "block"}        # server default; metrics overrides it
 ```
@@ -614,9 +614,9 @@ the inbound mailbox; the per-process save-queue used for selective `receive` in
 makes selective `receive` O(n). A bound turns overload into one of three *chosen*
 behaviours — pace, shed, or drop — instead of an unbounded-queue death spiral.
 
-```aql
-import "aql:serve"
-import "aql:time-util"
+```boru
+import "boru:serve"
+import "boru:time-util"
 
 # A slow worker behind a bounded, backpressured mailbox.
 def worker ( service {} )
@@ -708,10 +708,10 @@ This honesty about "unknown outcome" is the whole point: the model refuses to
 pretend a timed-out remote mutation definitely did — or definitely did not —
 happen.
 
-```aql
-import "aql:serve"
-import "aql:net"
-import "aql:time-util"
+```boru
+import "boru:serve"
+import "boru:net"
+import "boru:time-util"
 
 # Reach a remote service. Its `call` obeys the same contract as a local one —
 # only the failure modes are now common, so we handle them at this call site.
@@ -759,7 +759,7 @@ dispatch, the bytecode VM) — projections, not measurements.
 | GC tail latency | **sub-ms typical, few-ms p99.9 at large heaps** | one shared Go GC |
 
 Limiters, in order: **(1) `ForkConcurrent` weight per process** — the biggest
-divergence from BEAM (~2.6 KB/process → 10⁶–10⁷ there); AQL forks copy the
+divergence from BEAM (~2.6 KB/process → 10⁶–10⁷ there); BORU forks copy the
 *mutable* eval state (sharing read-only infra), so density is **~10× behind BEAM
 but tunable** via lean/copy-on-write forks. **(2) The single shared GC** — zero-copy
 messaging is a win over BEAM's per-message copy, but BEAM's per-process GC gives
@@ -789,10 +789,10 @@ Two limiters above — per-service serialization (vertical) and node distributio
 instances.** The model meets it with one idea at two scopes — a **balanced
 service** that fronts a pool of workers and routes each request by a policy.
 
-**A pool is a service (`pool`, `aql:serve`).**
+**A pool is a service (`pool`, `boru:serve`).**
 
 ```
-import "aql:serve"
+import "boru:serve"
 pool [worker-spec] {size: N  strategy: "p2c"} -> Service
 ```
 
@@ -835,7 +835,7 @@ for `"hash"` pools on node join/leave (consistent hashing keeps reshuffling
 minimal). Intra-node pools land with phase 2; inter-node balancing with transport
 + distribution.
 
-## 10. Gap analysis — what AQL still lacks
+## 10. Gap analysis — what BORU still lacks
 
 - **`Service` type + `add`/`call`/`send`/`state`** and the `[req state] -> reply`
   handler contract (the patrun router is reused; invocation reuses
@@ -848,9 +848,9 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
   cross-cutting `wrap` layers can propagate context between services.
 - **`server`/`serve`/restart** — depend on `PROCESSES.0.md` (processes, links,
   exit signals).
-- **`proxy` + streaming replies** — needs `call` to return a stream (`aql:stream`)
+- **`proxy` + streaming replies** — needs `call` to return a stream (`boru:stream`)
   and the `before`/`after`/`target` plumbing.
-- **Transport (`listen`/`connect`)** — needs the **TCP/socket server** AQL lacks,
+- **Transport (`listen`/`connect`)** — needs the **TCP/socket server** BORU lacks,
   plus the wire envelope. JSON covered; binary needs `Bytes` + bit-syntax.
 - **Capability integration for proxies** — wiring the proxy's auth to
   `PERMISSIONS.10.md` scopes.
@@ -881,12 +881,12 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
   the `PROCESSES.0.md` substrate (no `spawn`, mailbox, `Pid`, or `context.Context`),
   so it is the cheapest, highest-signal way to validate the `[req state] -> reply`
   handler contract and the `prior`/`wrap` stack before any concurrency lands.
-- **Phase 2: server + supervision.** `aql:serve` `server`/`serve`/restart on the
+- **Phase 2: server + supervision.** `boru:serve` `server`/`serve`/restart on the
   `PROCESSES.0.md` process layer; services-in-modules; `pause`/`status`/`meta`
   control requests; bounded mailboxes + backpressure for `send` (§8.1); the
   served `call` deadline + delivery-error set (§8.2); **intra-node `pool`** load
   balancing (§9.2).
-- **Phase 3: transport + proxy.** `aql:net` `listen`/`connect` (HTTP/stdio/TCP/
+- **Phase 3: transport + proxy.** `boru:net` `listen`/`connect` (HTTP/stdio/TCP/
   JSON-RPC); remote `call` failure modes + retries under the uniform contract (§8.2);
   `proxy` with streaming replies and capability-checked interceptors;
   **inter-node load balancing** via a multi-target proxy (§9.2); begin refactoring
@@ -897,13 +897,13 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
 
 ## 12. Worked example
 
-```aql
-import "aql:serve"
-import "aql:net"
+```boru
+import "boru:serve"
+import "boru:net"
 
 # A server = a collection of services, supervised; restart each in isolation.
 def app ( server [
-    ( Registry.New {dir: "./mods"} )      # an AQL-written service
+    ( Registry.New {dir: "./mods"} )      # a BORU-written service
     ( Counter.New  {start: 0} )
   ] {restart: "isolated"} )
 

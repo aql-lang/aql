@@ -2,13 +2,13 @@ package modules
 
 import (
 	"github.com/antchfx/xpath"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// The `sp` (structure-path) mini-language: query AQL native structure (Maps
+// The `sp` (structure-path) mini-language: query BORU native structure (Maps
 // and Lists) with XPath-style paths (github.com/antchfx/xpath). Where `xp`
 // runs XPath over a Node/Xml
-// document, `sp` runs the SAME XPath engine over ordinary AQL data, so the
+// document, `sp` runs the SAME XPath engine over ordinary BORU data, so the
 // full axis / predicate / function vocabulary (//, [pred], count(), sum(),
 // string(), contains(), position(), …) reaches into maps and lists — the
 // path-shaped query layer the XSLT-style rule engine wants (see
@@ -26,12 +26,12 @@ import (
 // of its key element. The subject's entries hang directly off the document
 // root, so `/key` addresses a top-level entry and `//key` any descendant.
 //
-// A matched element comes back as its SOURCE AQL value (a nested map/list or
-// a scalar), so results compose with the rest of AQL; a text() or scalar
+// A matched element comes back as its SOURCE BORU value (a nested map/list or
+// a scalar), so results compose with the rest of BORU; a text() or scalar
 // XPath result comes back as a String / Number / Boolean, exactly like `xp`.
 // The compiled-expression memo (miniCompiledXPath) is shared with `xp`.
 
-// buildSpTree mirrors an AQL Map/List/scalar subject into the navigable
+// buildSpTree mirrors a BORU Map/List/scalar subject into the navigable
 // xpNode tree the antchfx cursor walks. The subject's own entries become
 // the document root's children (no wrapper element), so an absolute `/key`
 // addresses a top-level entry.
@@ -45,13 +45,13 @@ func buildSpTree(v native.Value) *xpNode {
 	return root
 }
 
-// buildSpElement mirrors one AQL value into an element node named name. A
+// buildSpElement mirrors one BORU value into an element node named name. A
 // Map recurses into key-named element children; a List into repeated `item`
 // element children; any other value becomes a single text child (its scalar
-// rendering). Each element keeps a back-reference to its source AQL value so
+// rendering). Each element keeps a back-reference to its source BORU value so
 // a match converts straight back.
 func buildSpElement(name string, v native.Value) *xpNode {
-	n := &xpNode{typ: xpath.ElementNode, name: name, aql: v}
+	n := &xpNode{typ: xpath.ElementNode, name: name, boru: v}
 	if m, err := native.AsMap(v); err == nil {
 		for _, k := range m.Keys() {
 			cv, _ := m.Get(k)
@@ -86,27 +86,27 @@ func spAppend(parent, child *xpNode) {
 func miniSpHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", "sp: src: "+err.Error(), "lang_sp")
+		return nil, r.BoruError("mini_error", "sp: src: "+err.Error(), "lang_sp")
 	}
 	doc := args[2]
 	_, mapErr := native.AsMap(doc)
 	_, listErr := native.AsList(doc)
 	if mapErr != nil && listErr != nil {
-		return nil, r.AqlErrorHint("mini_error",
+		return nil, r.BoruErrorHint("mini_error",
 			"sp: expected a Map or List, got "+doc.Parent.String(), "lang_sp",
-			"the sp document is an AQL structure — a Map or a List")
+			"the sp document is a BORU structure — a Map or a List")
 	}
 	expr, perr := miniCompiledXPath(src)
 	if perr != nil {
-		return nil, r.AqlErrorHint("mini_parse_error", "sp: "+perr.Error(), "lang_sp",
+		return nil, r.BoruErrorHint("mini_parse_error", "sp: "+perr.Error(), "lang_sp",
 			"write an XPath like /name, //title or count(//item)")
 	}
 	result := expr.Evaluate(newXpNav(buildSpTree(doc)))
 	return []native.Value{native.NewList(spResultToList(result))}, nil
 }
 
-// spResultToList projects an antchfx XPath result into AQL values: a node-set
-// yields one value per matched node (an element as its source AQL value, a
+// spResultToList projects an antchfx XPath result into BORU values: a node-set
+// yields one value per matched node (an element as its source BORU value, a
 // text node as its String), a scalar (boolean/number/string) a single-element
 // list.
 func spResultToList(result any) []native.Value {
@@ -128,11 +128,11 @@ func spResultToList(result any) []native.Value {
 	}
 }
 
-// spNodeToValue converts one matched node back to an AQL value: an element to
+// spNodeToValue converts one matched node back to a BORU value: an element to
 // its source value (map/list/scalar), a text node to its String value.
 func spNodeToValue(nav xpath.NodeNavigator) native.Value {
 	if n, ok := nav.(*xpNav); ok && n.attr == -1 && n.cur.typ == xpath.ElementNode {
-		return n.cur.aql
+		return n.cur.boru
 	}
 	return native.NewString(nav.Value())
 }

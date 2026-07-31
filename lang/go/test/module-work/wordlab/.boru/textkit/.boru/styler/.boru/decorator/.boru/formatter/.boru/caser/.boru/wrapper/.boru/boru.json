@@ -1,0 +1,13 @@
+{
+  "deps": {
+    "charops": "2.3.1"
+  },
+  "files": [
+    "wrapper.boru"
+  ],
+  "main": "wrapper.boru",
+  "major": 1,
+  "minor": 1,
+  "name": "wrapper",
+  "patch": 0
+}

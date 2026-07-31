@@ -73,7 +73,7 @@ func (c *Client) Eval(src string) (result string, evalErr string, err error) {
 }
 
 // StepState is the wire shape of the remote stepping surface
-// (AQL-DEBUGGER.0.md §8.3 Phase 4): the debugged program's current
+// (BORU-DEBUGGER.0.md §8.3 Phase 4): the debugged program's current
 // pause, as served by GET /debug/pause and returned by POST
 // /debug/action. State is "paused", "running", or "exited"; the
 // location fields are meaningful only while paused; Exit carries the

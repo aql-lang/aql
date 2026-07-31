@@ -3,12 +3,12 @@ package test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // runOne runs source and returns the single resulting value.
-func runOneScriptArgs(t *testing.T, a *lang.AQL, src string) any {
+func runOneScriptArgs(t *testing.T, a *lang.BORU, src string) any {
 	t.Helper()
 	res, err := a.Run(src)
 	if err != nil {
@@ -27,13 +27,13 @@ func TestIOArgsSurfacesScriptArgs(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := runOneScriptArgs(t, a, `import "aql:io"  size (IO.args)`); n != int64(2) {
+	if n := runOneScriptArgs(t, a, `import "boru:io"  size (IO.args)`); n != int64(2) {
 		t.Fatalf("size (IO.args) = %#v, want 2", n)
 	}
-	if got := runOneScriptArgs(t, a, `import "aql:io"  (IO.args) get 0`); got != "notes.json" {
+	if got := runOneScriptArgs(t, a, `import "boru:io"  (IO.args) get 0`); got != "notes.json" {
 		t.Errorf("IO.args[0] = %#v, want notes.json", got)
 	}
-	if got := runOneScriptArgs(t, a, `import "aql:io"  (IO.args) get 1`); got != "--fast" {
+	if got := runOneScriptArgs(t, a, `import "boru:io"  (IO.args) get 1`); got != "--fast" {
 		t.Errorf("IO.args[1] = %#v, want --fast", got)
 	}
 }
@@ -45,7 +45,7 @@ func TestIOArgsDefaultsEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := runOneScriptArgs(t, a, `import "aql:io"  size (IO.args)`)
+	got := runOneScriptArgs(t, a, `import "boru:io"  size (IO.args)`)
 	if n, ok := got.(int64); !ok || n != 0 {
 		t.Errorf("default size (IO.args) = %#v, want 0", got)
 	}
@@ -58,7 +58,7 @@ func TestIOArgsEmptyVector(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got := runOneScriptArgs(t, a, `import "aql:io"  size (IO.args)`)
+	got := runOneScriptArgs(t, a, `import "boru:io"  size (IO.args)`)
 	if n, ok := got.(int64); !ok || n != 0 {
 		t.Errorf("empty-vector size (IO.args) = %#v, want 0", got)
 	}
@@ -78,7 +78,7 @@ func TestSetHostScriptArgsNilClears(t *testing.T) {
 	if got := native.HostScriptArgs(reg); got != nil {
 		t.Fatalf("after nil clear, HostScriptArgs = %v, want nil", got)
 	}
-	got := runOneScriptArgs(t, a, `import "aql:io"  size (IO.args)`)
+	got := runOneScriptArgs(t, a, `import "boru:io"  size (IO.args)`)
 	if n, ok := got.(int64); !ok || n != 0 {
 		t.Errorf("after clear, size (IO.args) = %#v, want 0", got)
 	}
@@ -91,7 +91,7 @@ func TestCoreArgsWordUnaffected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := a.Run(`import "aql:io"
+	res, err := a.Run(`import "boru:io"
 def f fn [[x:Integer] [Integer] [ (args) get 0 ]]
 f 7`)
 	if err != nil {

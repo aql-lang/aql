@@ -3,7 +3,7 @@ package native
 import "fmt"
 
 // BitwiseModuleNatives covers the bitwise / binary operators on the 64-bit
-// signed Integer type — moved OUT of core into the aql:bin module (see
+// signed Integer type — moved OUT of core into the boru:bin module (see
 // modules/binary.go), reached as `BinUtil.band`, `BinUtil.bsl`, ….
 // See design/BINARY-OPERATIONS.10.md.
 //
@@ -19,7 +19,7 @@ import "fmt"
 //	-1 busr 60 => 15    # logical right-shift, zero-fill
 //
 // The handler convention `args[1] OP args[0]` (swap form) matches
-// every other binary word in AQL.
+// every other binary word in BORU.
 var BitwiseModuleNatives = []NativeFunc{
 	{
 		Name: "band",
@@ -138,7 +138,7 @@ func bslHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		return nil, err
 	}
 	if n < 0 {
-		return nil, r.AqlError("binary_error",
+		return nil, r.BoruError("binary_error",
 			fmt.Sprintf("bsl: shift count must be non-negative, got %d", n), "bsl")
 	}
 	if n >= 64 {
@@ -156,7 +156,7 @@ func bsrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		return nil, err
 	}
 	if n < 0 {
-		return nil, r.AqlError("binary_error",
+		return nil, r.BoruError("binary_error",
 			fmt.Sprintf("bsr: shift count must be non-negative, got %d", n), "bsr")
 	}
 	if n >= 64 {
@@ -177,7 +177,7 @@ func busrHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		return nil, err
 	}
 	if n < 0 {
-		return nil, r.AqlError("binary_error",
+		return nil, r.BoruError("binary_error",
 			fmt.Sprintf("busr: shift count must be non-negative, got %d", n), "busr")
 	}
 	if n >= 64 {

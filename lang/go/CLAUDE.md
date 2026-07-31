@@ -2,31 +2,31 @@
 
 ## Project
 
-This is **AQL** — a concatenative query language implemented in Go. Each
+This is **BORU** — a concatenative query language implemented in Go. Each
 component sits under a top-level folder; the Go implementation of each
 lives in a `<component>/go/` subfolder so that future TS ports can sit
 alongside as `<component>/ts/`. The Go modules are:
 
 - `eng/go/` — the engine kernel + jsonic parser + kernel spec runner
-  (`github.com/aql-lang/aql/eng/go`).
+  (`github.com/boru-lang/boru/eng/go`).
 - `lang/go/` — the language layer: `lang.New()` API and the consolidated
   `native` package (the eng-shim + every built-in word) plus the
   production spec suite (this module,
-  `github.com/aql-lang/aql/lang/go`). The pre-May-2026 split between
+  `github.com/boru-lang/boru/lang/go`). The pre-May-2026 split between
   `lang/go/engine/` (language-layer primitives + alias shim) and
   `lang/go/native/` (data-manipulation words) was merged into a single
   `lang/go/native/` package — see `Package layout` below.
-- `cmd/go/` — the `aql` CLI / REPL
-  (`github.com/aql-lang/aql/cmd/go`).
+- `cmd/go/` — the `boru` CLI / REPL
+  (`github.com/boru-lang/boru/cmd/go`).
 - `calc/go/` — a small calculator built directly on `eng` (learning example,
-  `github.com/aql-lang/aql/calc/go`; not published).
+  `github.com/boru-lang/boru/calc/go`; not published).
 - `wpg/` — the wasm web playground: `wpg/wasm` (browser wasm build) and
   `wpg/serve` (standalone HTTP server with embedded HTML)
-  (`github.com/aql-lang/aql/wpg`).
+  (`github.com/boru-lang/boru/wpg`).
 - `test/go/` — shared TSV spec-runner scaffolding
-  (`github.com/aql-lang/aql/test/go`).
+  (`github.com/boru-lang/boru/test/go`).
 - `test/solardemo/` — standalone HTTP fixture used by API tests
-  (`github.com/aql-lang/aql/test/solardemo`).
+  (`github.com/boru-lang/boru/test/solardemo`).
 
 Language-agnostic content stays at the top of each component:
 `eng/spec/`, `lang/spec/`, `lang/doc/`, `calc/doc/`.
@@ -35,8 +35,8 @@ Language-agnostic content stays at the top of each component:
 
 `lang/go/` contains:
 
-- `aql.go`, `parse.go` — the public `lang` package (entry points
-  `lang.New()`, `(*AQL).Run`, `(*AQL).Check`, `(*AQL).Register`,
+- `boru.go`, `parse.go` — the public `lang` package (entry points
+  `lang.New()`, `(*BORU).Run`, `(*BORU).Check`, `(*BORU).Register`,
   re-exports of `Type`/`Value`/`Signature` for handler authors).
 - `native/` — every built-in word and the kernel-shim aliases.
   Sub-files:
@@ -60,33 +60,33 @@ Language-agnostic content stays at the top of each component:
 - `capabilities/` — file I/O abstraction (`FileOps` interface
   + OS-backed and in-memory implementations).
 - `modules/` — loadable modules. Import binds a CamelCase namespace
-  (`import "aql:math-util"` → `MathUtil.sqrt`).
+  (`import "boru:math-util"` → `MathUtil.sqrt`).
   **Naming rule:** a `-util` id + `*Util` namespace marks a **utility
   library** (a collection of pure/domain helper functions):
-  `aql:math-util` (`MathUtil`), `aql:array-util` (`ArrayUtil`),
-  `aql:time-util` (`TimeUtil`), `aql:type-util` (`TypeUtil`),
-  `aql:matrix-util` (`MatrixUtil`), `aql:string-util` (`StringUtil`),
-  `aql:bin-util` (`BinUtil`), `aql:struct-util` (`StructUtil`),
-  `aql:logic-util` (`LogicUtil`). Capability / framework / DSL modules
-  stay plain: `aql:io` (`IO`), `aql:net` (`Net`),
-  `aql:vm`, `aql:report`, `aql:test`, `aql:rand`, `aql:query`.
+  `boru:math-util` (`MathUtil`), `boru:array-util` (`ArrayUtil`),
+  `boru:time-util` (`TimeUtil`), `boru:type-util` (`TypeUtil`),
+  `boru:matrix-util` (`MatrixUtil`), `boru:string-util` (`StringUtil`),
+  `boru:bin-util` (`BinUtil`), `boru:struct-util` (`StructUtil`),
+  `boru:logic-util` (`LogicUtil`). Capability / framework / DSL modules
+  stay plain: `boru:io` (`IO`), `boru:net` (`Net`),
+  `boru:vm`, `boru:report`, `boru:test`, `boru:rand`, `boru:query`.
   (The `-util` suffix also conveniently avoids the type-name clashes for
   `Array`/`Time`/`Type`/`Matrix`/`String`, which are builtin types.)
   Exported names must be capitalised (`export "Foo"`; lowercase rejected).
-  `aql:struct-util` (`StructUtil.` namespace) holds the voxgig-struct
+  `boru:struct-util` (`StructUtil.` namespace) holds the voxgig-struct
   data-manipulation words — `clone`, `getpath`, `setpath`, `inject`,
   `merge`, `walk`, `items`, `transform`, `validate`, `selector`,
   `jsonify`, `nodify` — moved OUT of core (see `native/struct_module.go`).
-  `aql:io` (`IO.` namespace) holds the I/O words — `printstr`, `read`,
+  `boru:io` (`IO.` namespace) holds the I/O words — `printstr`, `read`,
   `write`, `stdin`, `stdout`, `stderr`, `trace` — also moved out of core
   (see `native/io_module.go`); only `print` stays in core.
-  `aql:net` (`Net.` namespace) holds the HTTP / API words — `fetch`,
+  `boru:net` (`Net.` namespace) holds the HTTP / API words — `fetch`,
   `prepare`, `direct` (see `native/net_module.go`).
   Further moves out of core: bitwise `band`/`bor`/`bxor`/`bnot`/`bsl`/`bsr`/
-  `busr` → `aql:bin-util` (`BinUtil.`); clock/async `now`/`sleep`/`timeout`/`interval`/
-  `await`/`cancel` → `aql:time-util` (`TimeUtil.`); `tpartial` → `aql:type-util`
-  (`TypeUtil.`); `folder` → `aql:io`; and the derived boolean connectives
-  `nand`/`nor`/`xnor`/`iff`/`implies` → `aql:logic-util` (`LogicUtil.`).
+  `busr` → `boru:bin-util` (`BinUtil.`); clock/async `now`/`sleep`/`timeout`/`interval`/
+  `await`/`cancel` → `boru:time-util` (`TimeUtil.`); `tpartial` → `boru:type-util`
+  (`TypeUtil.`); `folder` → `boru:io`; and the derived boolean connectives
+  `nand`/`nor`/`xnor`/`iff`/`implies` → `boru:logic-util` (`LogicUtil.`).
   All moved words are no longer available unqualified.
 - `test/` — integration tests and TSV spec runners.
 
@@ -101,12 +101,12 @@ they sound. The same rule is stated in the `ADR.md` header.
 ## Known sharp edges (app-authoring)
 
 Language- and compiler-level sharp edges found by writing a large app
-entirely in AQL are collected in **`design/AQL-SHARP-EDGES.0.md`** —
+entirely in BORU are collected in **`design/BORU-SHARP-EDGES.0.md`** —
 minimal repros, root-cause hypotheses, workarounds, and a triage table.
 Two are engine-bug candidates (G8 recovered-`raise` binding teardown;
 G12 an `/r`-parked fn not satisfying a `Function` param); one is a latent
 bug in shipped example code (G10 `def why (dot message)` in an `error`
-handler, in `design/examples/apps/todo-tui-client.aql`); the rest are
+handler, in `design/examples/apps/todo-tui-client.boru`); the rest are
 `case`-default collection (G9), returned-list-literal laziness (G11), and
 two bytecode-compiler refusals (G13a single-token bare-map body, G13b a
 type-literal map value). Read it before re-deriving a workaround.
@@ -117,14 +117,14 @@ type-literal map value). Read it before re-deriving a workaround.
 make test         # from repo root: fans out across every module
 make vet          # vet across every module
 make fmt          # gofmt across every module
-make fmt-docs     # aql fmt over the gated user-facing docs' ```aql blocks
+make fmt-docs     # boru fmt over the gated user-facing docs' ```boru blocks
 make lint         # golangci-lint across every module — RUN BEFORE COMMIT
 
 cd cmd/go
-make build        # builds bin/aql
+make build        # builds bin/boru
 
 cd ../wpg
-make wasm         # builds ../docs/index.html (bundled aql.wasm playground)
+make wasm         # builds ../docs/index.html (bundled boru.wasm playground)
 make serve        # runs the HTTP playground on :8080
 ```
 
@@ -202,12 +202,12 @@ normally using the cached modules.
 
 ## Jsonic Token Usage
 
-AQL uses `github.com/tabnas/jsonic/go` (v0.2.0) for all tokenization and
+BORU uses `github.com/tabnas/jsonic/go` (v0.2.0) for all tokenization and
 structural parsing. (This replaced the legacy `github.com/jsonicjs/jsonic/go`
 v0.1.6 — the tabnas family is an API-compatible superset port; the swap
 removed the jsonicjs dependency entirely.) There is exactly one parser — it
 lives in the standalone **eng** module at `eng/go/parser/parse.go`
-(`github.com/aql-lang/aql/eng/go/parser`); `lang.Parse` re-exports
+(`github.com/boru-lang/boru/eng/go/parser`); `lang.Parse` re-exports
 it. (The old hand-rolled lexer / token / AST / tree-walking evaluator
 were removed — jsonic is the sole parsing path.) Key jsonic integration:
 
@@ -255,13 +255,13 @@ were removed — jsonic is the sole parsing path.) Key jsonic integration:
   Instead, `` ` `` (#BT), `${` (#IS), and template literal text (#TL) are
   handled by custom tokens and grammar rules:
   - A `LexMatcher` (priority 1M, registered via `addMatcher`) checks
-    `rule.K["aql_tpl"]` to produce #TL tokens for literal text segments only
+    `rule.K["boru_tpl"]` to produce #TL tokens for literal text segments only
     inside template strings.
-  - `"interp"` rule: opened by #BT in val, sets `K["aql_tpl"]` in BO,
+  - `"interp"` rule: opened by #BT in val, sets `K["boru_tpl"]` in BO,
     collects parts into an `interpGroup`.
   - `"ielem"` rule: matches #TL (literal text) or #IS (interpolation start).
   - `"iexpr"/"ieval"` rules: collect expression values between `${` and `}`.
-    `iexpr` clears `K["aql_tpl"]` and increments `dlist`/`dmap` so
+    `iexpr` clears `K["boru_tpl"]` and increments `dlist`/`dmap` so
     expressions parse normally without template literal interference.
   - Nesting works to any depth since each `iexpr` pushes to `val` which
     can match another backtick and open a fresh `interp` rule.
@@ -380,13 +380,13 @@ every downstream handoff in **sig order with no reordering**:
 
 - Kernel native handlers (`func(args, …) ([]Value, error)`) —
   `args[i]` is sig position i.
-- AQL `def fn […]` body via `InstallFnDef`'s registered handler —
+- BORU `def fn […]` body via `InstallFnDef`'s registered handler —
   named params bind by name, `args[i]` matches the i-th declared
   param; unnamed params push to body tokens in i-order so body
   position `i` from the bottom holds `args[i]`.
-- `CallAQL` and `execFnDefSig` — same: named params bind by name,
+- `CallBORU` and `execFnDefSig` — same: named params bind by name,
   unnamed params push in i-order.
-- `args.N` AQL accessor — returns `args[N]` directly.
+- `args.N` BORU accessor — returns `args[N]` directly.
 
 No reversals, no swaps, no permutations between matchSignature and
 the handler. The only "reordering" anywhere in the kernel is
@@ -397,7 +397,7 @@ right sig — it's matchSignature internals, not a separate hop.
 Module FnDef wrappers (`makeXxxFnDef` helpers) get a special
 short-circuit in `execFnDefLiteral`: trivial single-word delegation
 bodies (`[Word(inner-name)]`) dispatch the inner native directly via
-`execMatch`, skipping CallAQL entirely. See
+`execMatch`, skipping CallBORU entirely. See
 `design/SIG-ORDER-REFACTOR.10.md`.
 
 ### The unified algorithm
@@ -492,7 +492,7 @@ old flat (ungrouped) behaviour.
 `afn` has signature `[Any Any |]` (both args forward-eligible, both
 typed `Any`, body and sig captured via `NoEvalArgs`). The canonical
 call form is the swap `input afn body` (i.e. `input => body`),
-mirroring the AQL `args[1] op args[0]` reading convention — afn
+mirroring the BORU `args[1] op args[0]` reading convention — afn
 collects the body as the forward arg and the input sig from the
 stack.
 
@@ -549,7 +549,7 @@ a named fn's body does.
 
 ## Closures and Capture
 
-AQL fns and lambdas use **implicit lexical capture**. At fn-construction
+BORU fns and lambdas use **implicit lexical capture**. At fn-construction
 time the engine walks the body's bare-Word references; any name that
 resolves to a binding made by an **enclosing fn** (a param or local
 def of an outer fn currently executing) is snapshotted into the
@@ -630,7 +630,7 @@ lambdas. Don't expect to capture caller args; pass them explicitly.
   currently-active fn entry — lives on `Registry.FnBaselines`. Pushed
   in lockstep with the per-call args-stack push and the existing
   body-local-def cleanup snapshot; popped by `__pa`'s handler at body
-  exit and by `CallAQL`'s inline cleanup.
+  exit and by `CallBORU`'s inline cleanup.
 - Captures and named params are installed via `InstallFrameBinding`
   (not `InstallDef`) — captures BEFORE params so params shadow same-
   named captures. `InstallFrameBinding` SHADOWS (pushes a fresh
@@ -813,8 +813,8 @@ the static analyser and user-facing display; at runtime,
 `execMatch` on the inner native directly via the matched sig.
 No body execution, no token splicing, no push reordering.
 
-AQL fns defined inside a module preamble (named params + real
-body) take a different path: their body runs via `CallAQL` in the
+BORU fns defined inside a module preamble (named params + real
+body) take a different path: their body runs via `CallBORU` in the
 captured sub-registry so module-private words resolve correctly. Named params bind via `InstallDef`, so
 push ordering doesn't apply.
 
@@ -916,10 +916,10 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
   `defer r.BeginCheckMode()()` in the analyser entry point.
 
 **Error construction**:
-- `r.AqlError(code, detail, word)` — handler-side error constructor;
+- `r.BoruError(code, detail, word)` — handler-side error constructor;
   picks up `r.Source` automatically. Replaces the recurring
-  `makeAqlError(code, detail, name, r.Source, "")` pattern.
-- `r.AqlErrorHint(code, detail, word, hint)` — same with an explicit
+  `makeBoruError(code, detail, name, r.Source, "")` pattern.
+- `r.BoruErrorHint(code, detail, word, hint)` — same with an explicit
   hint string. The engine-internal helpers (`signatureError`,
   `insufficientArgsError`, etc. in `engine.go`) layer above these
   with engine-specific source resolution.
@@ -961,7 +961,7 @@ methods on `Value`; only `Is(t)` and `String()` remain as methods.)
 
 An undefined word reaching the pointer is an **error**, not a value.
 A word that is not registered, not in the def stack, and not a known
-literal (`true`/`false`/a type name) raises `[aql/undefined_word]` at
+literal (`true`/`false`/a type name) raises `[boru/undefined_word]` at
 `stepWord`. There is no implicit `Word → Atom` fallback.
 
 Names that are meant as data must be quoted:
@@ -990,7 +990,7 @@ diagnostic + `Any` carrier in the end-of-`Run()` drain in
 When adding a sig that should accept a bare-word name as data, add `/q`
 to the corresponding Atom position. Without `/q`, callers will see an
 `undefined_word` error and must wrap the name in `quote` themselves.
-AQL-defined fns declare the same capability as `name:Atom/q` (or bare
+BORU-defined fns declare the same capability as `name:Atom/q` (or bare
 `Atom/q` for an unnamed param) — ParseFnParams sets `FnParam.Quote`,
 which flows into `Signature.QuoteArgs` at construction/normalizeSig,
 so the dispatch-side behaviour (binding-agnostic word capture) is

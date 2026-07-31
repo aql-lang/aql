@@ -2,7 +2,7 @@
 # =====================================================================		
 # make — universal constructor for typed values		
 # =====================================================================		
-# `make TARGET data` is AQL's general-purpose value constructor. The		
+# `make TARGET data` is BORU's general-purpose value constructor. The		
 # target dictates the construction strategy:		
 #		
 #   make Type v          coerce v to Type (parse / cast)		
@@ -16,7 +16,7 @@
 # detects which side carries the type literal and which carries the		
 # data, so `make Integer '5'` and `'5' make Integer` both work.		
 #		
-# This file covers the parts of `make` that the aqleng-only kernel		
+# This file covers the parts of `make` that the borueng-only kernel		
 # can demonstrate without relying on the production `record` /		
 # `class` constructor words. The named-type instantiation rows		
 # live in spec/prod/object.tsv, record.tsv, and resource.tsv.		

@@ -5,11 +5,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
-// The Timeout / Interval timer types are owned by aql:time-util — the
+// The Timeout / Interval timer types are owned by boru:time-util — the
 // timeout/interval handlers live in this file, and the types are
 // per-import module mints (former global FixedIDs 4000-4001, retired)
 // minted alongside the temporal leaves by MintTemporalModuleTypes
@@ -76,7 +76,7 @@ var miscNatives []NativeFunc
 func init() {
 	miscNatives = []NativeFunc{
 		// file I/O (read/write) and stream words (stdin/stdout/stderr)
-		// moved to the aql:io module — see io_module.go.
+		// moved to the boru:io module — see io_module.go.
 
 		// ---- help (language overview) ----
 		{
@@ -201,7 +201,7 @@ func init() {
 		// `export` does its real work only inside an import context, where
 		// RunModuleBody registers a collecting handler on the module
 		// sub-registry that shadows this one. At the top level — running a
-		// file directly (`aql foo.aql`) or in the REPL — there is nowhere
+		// file directly (`boru foo.boru`) or in the REPL — there is nowhere
 		// to export to, so `export` is a no-op that simply consumes its
 		// (name, map) arguments. This lets a single file both run
 		// standalone and export a namespace when imported. See §8.3 in the
@@ -226,7 +226,7 @@ func init() {
 			},
 		},
 
-		// timeout / await moved to the aql:time-util module — see
+		// timeout / await moved to the boru:time-util module — see
 		// native/time_async_module.go.
 	}
 }
@@ -270,7 +270,7 @@ func readOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// format decoding; anything else falls through to the normal decode path.
 	if res, handled, err := tryBinaryRead(r, path, enc, args[1]); handled {
 		if err != nil {
-			return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", err), "read")
+			return nil, r.BoruError("read_error", fmt.Sprintf("read: %v", err), "read")
 		}
 		return res, nil
 	}
@@ -325,7 +325,7 @@ func checkWritableFormat(r *Registry, format string, fmtExplicit bool) error {
 		return nil // unknown format is doWrite's concern; nothing read-only to reject
 	}
 	if ro, ok := f.(ReadOnlyFormat); ok && ro.ReadOnly() {
-		return r.AqlErrorHint("write_error",
+		return r.BoruErrorHint("write_error",
 			fmt.Sprintf("write: format %q is read-only", format), "write",
 			"write supports text/json/jsonic/lines/csv/tsv")
 	}
@@ -374,7 +374,7 @@ func helpOverviewHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) 
 
 // describeSelfHandler implements the 0-arg `describe` word: a categorised
 // guide to every built-in word and loadable module (the same guide the CLI
-// `aql describe` prints).
+// `boru describe` prints).
 func describeSelfHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	DescribeIndex(r.Output)
 	return nil, nil
@@ -477,12 +477,12 @@ func referentHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	name, err := AsAtom(v)
 	if err != nil {
-		return nil, r.AqlError("referent_error", "referent: expected an atom", "referent")
+		return nil, r.BoruError("referent_error", "referent: expected an atom", "referent")
 	}
 	if bound, ok := r.Defs.Top(name); ok {
 		return []Value{bound}, nil
 	}
-	return nil, r.AqlError("referent_error",
+	return nil, r.BoruError("referent_error",
 		fmt.Sprintf("referent: atom %q has no referent (name is unbound)", name), "referent")
 }
 
@@ -494,7 +494,7 @@ func referentHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 // the "export (top-level no-op)" entry above and §8.3 in the DX report.
 //
 // In CHECK mode it does one thing before discarding: it records every export
-// value as a use of its def. A standalone module file (`aql check trie.aql`)
+// value as a use of its def. A standalone module file (`boru check trie.boru`)
 // reaches this no-op, not the collecting handler — so without this, every
 // reference-exported public word (`export "X" { make: impl/r }`) is falsely
 // flagged unused_def precisely because it is public. The map arrives already
@@ -534,7 +534,7 @@ func exportNoopHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 
 func moduleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("module_error", "module: argument must be a concrete list, got type literal", "module")
+		return nil, r.BoruError("module_error", "module: argument must be a concrete list, got type literal", "module")
 	}
 	_lst, _ := AsList(args[0])
 	desc, err := RunModuleBody(r, _lst.Slice())
@@ -552,7 +552,7 @@ func importAllHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 func importRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	desc, _ := asModuleDesc(args[1])
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("import_error", "import: rename list must be a concrete list, got type literal", "import")
+		return nil, r.BoruError("import_error", "import: rename list must be a concrete list, got type literal", "import")
 	}
 	_lst, _ := AsList(args[0])
 	return nil, installRenamedExports(r, desc, _lst.Slice())
@@ -569,7 +569,7 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// In check mode the path string literal has been stripped to a
 	// carrier (StripToCarriers), so `path` is empty. We can't read,
 	// parse, or analyse the target file without it — but the importing
-	// file itself is valid, so a hard error here would block `aql check`
+	// file itself is valid, so a hard error here would block `boru check`
 	// on every file that imports a sibling. Treat the import as opaque:
 	// return a Module carrier and let analysis continue (imported names
 	// resolve to Any, which is the conservative check-mode default).
@@ -581,7 +581,7 @@ func importFileHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// resolved. Loading the target binds its export namespaces, so
 	// `Pkg.word` no longer flags undefined_word. But the target may be
 	// missing, unparseable, or itself fail to load — none of which should
-	// block `aql check` on the importing file. On any such error, fall
+	// block `boru check` on the importing file. On any such error, fall
 	// back to an opaque Module carrier and let analysis continue.
 	if r.Check.IsActive() {
 		if err := loadImportForCheck(r, path); err != nil {
@@ -644,7 +644,7 @@ func loadImportForCheck(r *Registry, path string) error {
 func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	path, _ := args[1].AsConcreteString()
 	// Check mode: the path literal was stripped to a carrier. Skip the
-	// import gracefully so `aql check` doesn't hard-fail (see
+	// import gracefully so `boru check` doesn't hard-fail (see
 	// importFileHandler for the full rationale).
 	if path == "" && r.Check.IsActive() {
 		return nil, nil
@@ -662,7 +662,7 @@ func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		return nil, installRenamedExports(r, desc, _lst.Slice())
 	}
 	if isDataFile(r, path) {
-		return nil, r.AqlError("import_error", fmt.Sprintf("import: rename not supported for data files (%s)", path), "import")
+		return nil, r.BoruError("import_error", fmt.Sprintf("import: rename not supported for data files (%s)", path), "import")
 	}
 	desc, err := loadFileModule(r, path)
 	if err != nil {
@@ -678,10 +678,10 @@ func importFileRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 func importInlineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	if name != "module" {
-		return nil, r.AqlError("import_error", fmt.Sprintf("import: unknown inline form %q (expected 'module')", name), "import")
+		return nil, r.BoruError("import_error", fmt.Sprintf("import: unknown inline form %q (expected 'module')", name), "import")
 	}
 	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("import_error", "import: module body must be a concrete list, got type literal", "import")
+		return nil, r.BoruError("import_error", "import: module body must be a concrete list, got type literal", "import")
 	}
 	_lst, _ := AsList(args[1])
 	desc, err := RunModuleBody(r, _lst.Slice())
@@ -694,13 +694,13 @@ func importInlineHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 func importInlineRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[1])
 	if name != "module" {
-		return nil, r.AqlError("import_error", fmt.Sprintf("import: unknown inline form %q (expected 'module')", name), "import")
+		return nil, r.BoruError("import_error", fmt.Sprintf("import: unknown inline form %q (expected 'module')", name), "import")
 	}
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("import_error", "import: rename list must be a concrete list, got type literal", "import")
+		return nil, r.BoruError("import_error", "import: rename list must be a concrete list, got type literal", "import")
 	}
 	if !IsConcrete(args[2]) {
-		return nil, r.AqlError("import_error", "import: module body must be a concrete list, got type literal", "import")
+		return nil, r.BoruError("import_error", "import: module body must be a concrete list, got type literal", "import")
 	}
 	_lst2, _ := AsList(args[2])
 	desc, err := RunModuleBody(r, _lst2.Slice())
@@ -714,10 +714,10 @@ func importInlineRenameHandler(args []Value, _ map[string]Value, _ []Value, r *R
 func importInlineSingleRenameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	modName := defName(args[1])
 	if modName != "module" {
-		return nil, r.AqlError("import_error", fmt.Sprintf("import: unknown inline form %q (expected 'module')", modName), "import")
+		return nil, r.BoruError("import_error", fmt.Sprintf("import: unknown inline form %q (expected 'module')", modName), "import")
 	}
 	if !IsConcrete(args[2]) {
-		return nil, r.AqlError("import_error", "import: module body must be a concrete list, got type literal", "import")
+		return nil, r.BoruError("import_error", "import: module body must be a concrete list, got type literal", "import")
 	}
 	_lst, _ := AsList(args[2])
 	desc, err := RunModuleBody(r, _lst.Slice())
@@ -740,7 +740,7 @@ func (tt TemporalModuleTypes) timeoutWordHandler(args []Value, _ map[string]Valu
 func (tt TemporalModuleTypes) doTimeout(r *Registry, args []Value, isList bool) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms < 0 {
-		return nil, r.AqlError("timeout_error", fmt.Sprintf("timeout: milliseconds must be non-negative, got %d", ms), "timeout")
+		return nil, r.BoruError("timeout_error", fmt.Sprintf("timeout: milliseconds must be non-negative, got %d", ms), "timeout")
 	}
 	callback := args[1]
 
@@ -790,7 +790,7 @@ func awaitDefaultHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 
 func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
 	if !IsConcrete(parallels) {
-		return nil, r.AqlError("await_error", "await: parallels must be a concrete list, got type literal", "await")
+		return nil, r.BoruError("await_error", "await: parallels must be a concrete list, got type literal", "await")
 	}
 	_lst, _ := AsList(parallels)
 	elems := _lst.Slice()
@@ -808,7 +808,7 @@ func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
 	case "any":
 		return awaitAny(r, elems)
 	default:
-		return nil, r.AqlError("await_error", fmt.Sprintf("await: unknown mode %q, expected all, full, first, or any", mode), "await")
+		return nil, r.BoruError("await_error", fmt.Sprintf("await: unknown mode %q, expected all, full, first, or any", mode), "await")
 	}
 }
 

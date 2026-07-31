@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestFileInfoWords checks __file and __folder report the source file's
@@ -12,25 +12,25 @@ import (
 func TestFileInfoWords(t *testing.T) {
 	files := map[string]string{
 		// A module in a subdirectory. Its exports capture __file/__folder,
-		// which must reflect THIS file (proj/lib.aql), not the entry.
-		"proj/lib.aql": `export "Lib" { f: (__file) d: (__folder) }`,
-		// A sibling the entry imports; it in turn imports proj/lib.aql with
+		// which must reflect THIS file (proj/lib.boru), not the entry.
+		"proj/lib.boru": `export "Lib" { f: (__file) d: (__folder) }`,
+		// A sibling the entry imports; it in turn imports proj/lib.boru with
 		// a path relative to ITS OWN location (the repo root here).
-		"main.aql": `import "./proj/lib.aql"`,
+		"main.boru": `import "./proj/lib.boru"`,
 	}
 	res, err := runNativeModuleSubImport(t, files, []string{
-		`import "./proj/lib.aql"`,
+		`import "./proj/lib.boru"`,
 		`Lib.f`,
 	})
 	if err != nil {
 		t.Fatalf("Lib.f: %v", err)
 	}
-	if got, _ := native.AsString(res[len(res)-1]); got != "lib.aql" {
-		t.Errorf("__file in proj/lib.aql = %q, want \"lib.aql\"", got)
+	if got, _ := native.AsString(res[len(res)-1]); got != "lib.boru" {
+		t.Errorf("__file in proj/lib.boru = %q, want \"lib.boru\"", got)
 	}
 
 	res, err = runNativeModuleSubImport(t, files, []string{
-		`import "./proj/lib.aql"`,
+		`import "./proj/lib.boru"`,
 		`Lib.d`,
 	})
 	if err != nil {
@@ -39,7 +39,7 @@ func TestFileInfoWords(t *testing.T) {
 	// __folder is the absolute-style Path of the module's directory; its
 	// last segment is "proj".
 	if got := res[len(res)-1].String(); got == "" || lastSeg(got) != "proj" {
-		t.Errorf("__folder in proj/lib.aql = %q, want a path ending in proj", got)
+		t.Errorf("__folder in proj/lib.boru = %q, want a path ending in proj", got)
 	}
 }
 

@@ -17,11 +17,11 @@ func runPrep(t *testing.T, args ...string) (int, string, string) {
 	return code, stdout.String(), stderr.String()
 }
 
-// writeManifest drops an aql.jsonic into a fresh temp dir.
+// writeManifest drops a boru.jsonic into a fresh temp dir.
 func writeManifest(t *testing.T, body string) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(body), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	return dir
@@ -38,7 +38,7 @@ func TestNameAndSynopsis(t *testing.T) {
 }
 
 func TestDoWritesJSON(t *testing.T) {
-	dir := writeManifest(t, "name: my-mod\nversion: \"1.2.3\"\nfiles: [a.aql, b.aql]")
+	dir := writeManifest(t, "name: my-mod\nversion: \"1.2.3\"\nfiles: [a.boru, b.boru]")
 	m, err := Do(dir)
 	if err != nil {
 		t.Fatalf("Do: %v", err)
@@ -47,7 +47,7 @@ func TestDoWritesJSON(t *testing.T) {
 		t.Errorf("name = %v, want my-mod", m["name"])
 	}
 
-	data, err := os.ReadFile(filepath.Join(dir, ".aql", "aql.json"))
+	data, err := os.ReadFile(filepath.Join(dir, ".boru", "boru.json"))
 	if err != nil {
 		t.Fatalf("read output: %v", err)
 	}
@@ -69,7 +69,7 @@ func TestDoWritesJSON(t *testing.T) {
 
 func TestDoMissingManifest(t *testing.T) {
 	if _, err := Do(t.TempDir()); err == nil {
-		t.Error("expected an error when aql.jsonic is absent")
+		t.Error("expected an error when boru.jsonic is absent")
 	}
 }
 
@@ -92,12 +92,12 @@ func TestDoTopLevelMustBeMap(t *testing.T) {
 
 func TestDoMkdirFailure(t *testing.T) {
 	dir := writeManifest(t, "name: x")
-	// Occupy the .aql slot with a regular file so MkdirAll fails.
-	if err := os.WriteFile(filepath.Join(dir, ".aql"), []byte("in the way"), 0o600); err != nil {
+	// Occupy the .boru slot with a regular file so MkdirAll fails.
+	if err := os.WriteFile(filepath.Join(dir, ".boru"), []byte("in the way"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Do(dir); err == nil {
-		t.Error("expected an error when .aql exists as a file")
+		t.Error("expected an error when .boru exists as a file")
 	}
 }
 
@@ -107,7 +107,7 @@ func TestRunWithDirArg(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr = %q", code, errOut)
 	}
-	want := filepath.Join(dir, ".aql", "aql.json")
+	want := filepath.Join(dir, ".boru", "boru.json")
 	if strings.TrimSpace(out) != want {
 		t.Errorf("stdout = %q, want %q", out, want)
 	}
@@ -120,10 +120,10 @@ func TestRunDefaultDir(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr = %q", code, errOut)
 	}
-	if strings.TrimSpace(out) != filepath.Join(".", ".aql", "aql.json") {
+	if strings.TrimSpace(out) != filepath.Join(".", ".boru", "boru.json") {
 		t.Errorf("stdout = %q", out)
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".aql", "aql.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".boru", "boru.json")); err != nil {
 		t.Errorf("output file not written: %v", err)
 	}
 }
@@ -135,14 +135,14 @@ func TestRunExpandsTilde(t *testing.T) {
 	if err := os.MkdirAll(proj, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(proj, "aql.jsonic"), []byte("name: x"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(proj, "boru.jsonic"), []byte("name: x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	code, _, errOut := runPrep(t, "~/proj")
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr = %q", code, errOut)
 	}
-	if _, err := os.Stat(filepath.Join(proj, ".aql", "aql.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(proj, ".boru", "boru.json")); err != nil {
 		t.Errorf("output not written under expanded home: %v", err)
 	}
 }
@@ -164,7 +164,7 @@ func TestCommandRunDelegates(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("exit = %d, stderr = %q", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "aql.json") {
+	if !strings.Contains(stdout.String(), "boru.json") {
 		t.Errorf("stdout = %q", stdout.String())
 	}
 }

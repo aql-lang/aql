@@ -34,7 +34,7 @@ func recovSound(t *testing.T, src string) {
 // An Any value (Options get) into a Float/Integer-typed fn whose body does
 // `convert Float` — compiles to a native lowering (no FALLBACK) and matches.
 func TestRecoveredParam_ConvertOverDeclaredType(t *testing.T) {
-	const src = `import "aql:math-util" end
+	const src = `import "boru:math-util" end
 def derive fn [[p:Float n:Integer] [Float] [ n MathUtil.negate convert Float mul p ]]
 def mk fn [[opts:Options] [Float] [
   def n-val (opts "n" get)

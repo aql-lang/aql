@@ -34,7 +34,7 @@ func TestAnyHandlerParamCompilesLikeSocket(t *testing.T) {
 	]`
 	for _, ty := range []string{"Any", "Socket"} {
 		a, _ := New()
-		src := `import "aql:net"
+		src := `import "boru:net"
 def ln (Net.serve-raw {tcp: 0} (fn [[sock:` + ty + `] [Any] ` + body + `]))`
 		prog, reason, res, err := a.CompileCheck(src)
 		if err != nil {
@@ -64,7 +64,7 @@ def ln (Net.serve-raw {tcp: 0} (fn [[sock:` + ty + `] [Any] ` + body + `]))`
 // error.)
 func TestDefBoundFailedDispatchNotWordExtension(t *testing.T) {
 	a, _ := New()
-	src := `import "aql:net"
+	src := `import "boru:net"
 def nl (convert Bytes "\n")
 for 3 [ def y (Net.recv-until nl nl) y ]`
 	_, _, res, err := a.CompileCheck(src)

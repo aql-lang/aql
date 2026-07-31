@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // End-to-end guard: deeply nested source reaching the public API must surface a

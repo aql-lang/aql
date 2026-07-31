@@ -14,7 +14,7 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 type failWriter struct{ after int }

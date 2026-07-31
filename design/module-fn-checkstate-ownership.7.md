@@ -12,8 +12,8 @@ decouple + corpus re-baseline as one reviewed unit).
 
 - **`shareCheckState` exists** (`eng/go/engine.go:4408`). In `execFnDefSig`'s
   `capturedReg` branch (~4474) it installs the MAIN registry's active `Check`
-  (including `Emit`) onto the module sub-registry for the duration of `CallAQL`,
-  then restores. So a module-preamble AQL fn now *records* into the main frame —
+  (including `Emit`) onto the module sub-registry for the duration of `CallBORU`,
+  then restores. So a module-preamble BORU fn now *records* into the main frame —
   the missing piece `.6`/next-stages §C described ("`capturedReg.Check.Emit.Active()`
   is false") is partly addressed. The remaining gap is **unit isolation**: the
   body records into the MAIN frame, so its internal residual leaks onto the program
@@ -28,7 +28,7 @@ unit:
 
 | effect | result |
 | --- | --- |
-| `decision.aql` false positives (`g fn [[m:Map]…(m get "xs") all]`) | **fixed** — 0 errors (was a synthetic `no_signature` at the example arg) |
+| `decision.boru` false positives (`g fn [[m:Map]…(m get "xs") all]`) | **fixed** — 0 errors (was a synthetic `no_signature` at the example arg) |
 | `TestForwardStrandAdvisory_FiresOnGotcha` (`lang/go/forward_strand_advisory_test.go`) | **breaks** — the in-body `forward_strands_operand` advisory was a help-eval side effect |
 | `TestCheckUncalledFnBodyTypoStillFlagged` (`lang/go/test/forward_ref_rescue_test.go`) | **breaks** — the uncalled-fn body `undefined_word` (zzyzx) was a help-eval side effect |
 | langspec coverage | **shifts** — `reducibleCeiling` trips (2 > 1; a `quote` row reappears) and a NEW `dispatch recovery (best guess)` compute gap of 3 surfaces (rows previously gated as check-errors by synthetic diagnostics now reach the compiler) |
@@ -76,17 +76,17 @@ cross-registry unit compilation compiles the exposed + target rows.
 Steps **1, 2, 4 LANDED** gate-clean (commit on `claude/bytecode-compiler-impl-dpwdyx`):
 the hermetic help eval + the first-class `checkFnBodyAtConstruction` pass +
 the corpus re-baseline (refusalCeiling 6 → 9, reducibleCeiling 1 → 2, documented
-rationale). `decision.aql` 39 → 0 errors. `verify-bytecode` green (differential +
-fuzz + race + aqldebug, 0 divergences); full suite green. The in-body
+rationale). `decision.boru` 39 → 0 errors. `verify-bytecode` green (differential +
+fuzz + race + borudebug, 0 divergences); full suite green. The in-body
 forward-strand advisory was intentionally dropped (it required false-positive-prone
 concrete example args; carrier analysis can't see it) — `TestForwardStrandAdvisory_QuietInBody`
 pins the new sound contract.
 
 **Step 3 (cross-registry unit isolation) — precisely identified, NOT yet landed.**
 Mechanism confirmed on the live tree:
-- A non-trivial module wrapper (e.g. `Test.run-spec`, a real AQL body) dispatches
+- A non-trivial module wrapper (e.g. `Test.run-spec`, a real BORU body) dispatches
   at `eng/go/engine.go:3998` → `execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry)`
-  → the `capturedReg` branch (engine.go:4474) → `CallAQL` → `sub.Run(tokens)`
+  → the `capturedReg` branch (engine.go:4474) → `CallBORU` → `sub.Run(tokens)`
   (registry.go:1169). With `shareCheckState` active, `sub.Run` records the body's
   internal dispatches **inline into the MAIN program's EmitState frame**.
 - So `test-describe` (which DOES declare a `CallableSpec`, test.go:227-270 — it can
@@ -98,7 +98,7 @@ Mechanism confirmed on the live tree:
   module-preamble fn body as its OWN `StartFnCompile` unit (resolving names in
   `capturedReg`'s scope via the shared, now-active EmitState) + `RecordUserCall`,
   mirroring `buildFnBodyReturnsFn` (core_helpers.go:367-407), instead of the bare
-  `CallAQL`. The body's internal residual (test-describe) then records into that
+  `CallBORU`. The body's internal residual (test-describe) then records into that
   unit, not the program residual. Clears `module-test.tsv:38` + the Test/Assert
   reducible (2 → 1). Deferred: delicate hot-path change; land with the differential
   as the gate in a focused follow-up. (`module-parselang:23` / `module-rand:38` are
@@ -106,7 +106,7 @@ Mechanism confirmed on the live tree:
 
   **ATTEMPTED + reverted (empirical finding, this session).** The "route the
   module-fn dispatch through its registered `ReturnsFn` (so it unit-compiles via
-  `buildFnBodyReturnsFn`) instead of `CallAQL`" approach was implemented in
+  `buildFnBodyReturnsFn`) instead of `CallBORU`" approach was implemented in
   `execFnDefSig`'s `capturedReg` branch (a `tryModuleFnUnit` helper, check-mode
   only) and MEASURED:
   - It did **not** clear `module-test.tsv:38` — the refusal reason was unchanged
@@ -121,7 +121,7 @@ Mechanism confirmed on the live tree:
     the roadmap calls the hardest Stage-C shape, not a single dispatch reroute.
   - It also **regressed**: refusals 9 → 10 and the dispatch-recovery bucket 3 → 4
     (routing every check-mode module-preamble-fn dispatch through `ReturnsFn`
-    perturbs other module rows whose `CallAQL`-recorded carriers differed from the
+    perturbs other module rows whose `CallBORU`-recorded carriers differed from the
     `ReturnsFn` residual). Differential stayed clean (value parity held), but the
     coverage gate caught the regression → reverted (gate-clean-or-revert).
 
@@ -130,7 +130,7 @@ Mechanism confirmed on the live tree:
   `run-case`) must each compile as closure units whose internal `Test.test` /
   `test-describe` bodies compile as nested closures, with the per-frame residual
   composed across the chain — and the reroute must be NARROWED so it does not
-  perturb the module rows that already compile via `CallAQL`. This is a dedicated
+  perturb the module rows that already compile via `CallBORU`. This is a dedicated
   effort with the differential AND the coverage ceiling as joint gates.
 
   **DEFINITIVE root cause (traced 2026-06, `Test.run-spec` row):** the binding
@@ -189,7 +189,7 @@ Mechanism confirmed on the live tree:
 
 Land as ONE reviewed unit (never a partial diagnostic filter — `.6` §3 proved
 partial suppression silently reclassifies compilation and changes observable
-behavior). `make verify-bytecode` (differential + fuzz + race + aqldebug, 0
+behavior). `make verify-bytecode` (differential + fuzz + race + borudebug, 0
 divergences) gates soundness; the ceilings are re-baselined with explicit
 rationale. Gate-clean-or-revert.
 
@@ -251,7 +251,7 @@ inlining, `s` is concrete, `getNodeReturns`'s new container fold fires, `(s get
 (Stage 3)"), and `run-spec` recurses into itself — so the inlining has to handle
 nested + recursive user-fn-call compilation with concrete argument propagation.
 That is the very-high-risk corpus re-baseline flagged in
-`design/aql-bytecode-next-stages.0.md` Stage C; the previous session's
+`design/boru-bytecode-next-stages.0.md` Stage C; the previous session's
 cross-registry reroute attempt (Step-3 `tryModuleFnUnit`) regressed coverage and
 was reverted. The landed get-fold is the genuine PREREQUISITE for that inlining,
 not a standalone cure.

@@ -423,7 +423,7 @@ func TestTUITempPasswordRevoke(t *testing.T) {
 	// Cancel path: completing without choosing the affirmative pops and does
 	// not revoke.
 	fs := m.buildPasswordRevokeTempForm().(*formScreen)
-	if fs.cliCommand() != "aql vault password rm --temp" {
+	if fs.cliCommand() != "boru vault password rm --temp" {
 		t.Errorf("revoke-temp preview: %q", fs.cliCommand())
 	}
 	if msgs := completeForm(t, fs); !msgOfType(msgs, popMsg{}) {

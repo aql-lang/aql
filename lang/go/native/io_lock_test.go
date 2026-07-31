@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // io_lock_test.go — P5 word layer for advisory locks: IO.lock / IO.unlock,
@@ -33,32 +33,32 @@ func TestLockWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A lock is an IO.Lock; unlocking releases it.
-	res := runAQL(t, r, []Value{NewWord("lock"), pathV("f")})
+	res := runBORU(t, r, []Value{NewWord("lock"), pathV("f")})
 	if _, ok := asLockInfo(res[0]); !ok {
 		t.Fatalf("lock returned %v, not a Lock", res[0])
 	}
-	runAQL(t, r, []Value{NewWord("unlock"), res[0]})
+	runBORU(t, r, []Value{NewWord("unlock"), res[0]})
 
 	// {shared} and {block} options parse.
-	sh := runAQL(t, r, []Value{NewWord("lock"), pathV("f"),
+	sh := runBORU(t, r, []Value{NewWord("lock"), pathV("f"),
 		wrapMap(func(om *OrderedMap) { om.Set("shared", NewBoolean(true)) })})
 	li, _ := asLockInfo(sh[0])
 	if !li.Shared {
 		t.Error("shared lock flag not set")
 	}
-	runAQL(t, r, []Value{NewWord("close"), sh[0]}) // polymorphic close over a Lock
+	runBORU(t, r, []Value{NewWord("close"), sh[0]}) // polymorphic close over a Lock
 
 	// Non-blocking contention returns none, not an error.
-	held := runAQL(t, r, []Value{NewWord("lock"), pathV("f")})
-	none := runAQL(t, r, []Value{NewWord("lock"), pathV("f"),
+	held := runBORU(t, r, []Value{NewWord("lock"), pathV("f")})
+	none := runBORU(t, r, []Value{NewWord("lock"), pathV("f"),
 		wrapMap(func(om *OrderedMap) { om.Set("block", NewBoolean(false)) })})
 	if !none[0].Is(TNone) {
 		t.Errorf("contended non-block lock = %v, want none", none[0])
 	}
-	runAQL(t, r, []Value{NewWord("unlock"), held[0]})
+	runBORU(t, r, []Value{NewWord("unlock"), held[0]})
 
 	// Locking an absent path errors.
-	if err := runAQLError(t, r, []Value{NewWord("lock"), pathV("ghost")}); err == nil {
+	if err := runBORUError(t, r, []Value{NewWord("lock"), pathV("ghost")}); err == nil {
 		t.Error("lock of an absent path should error")
 	}
 }
@@ -79,12 +79,12 @@ func TestUnlockErrors(t *testing.T) {
 		return rr
 	}
 	r2 := newReg()
-	l := runAQL(t, r2, []Value{NewWord("lock"), pathV("f")})
-	if err := runAQLError(t, r2, []Value{NewWord("unlock"), l[0]}); err == nil {
+	l := runBORU(t, r2, []Value{NewWord("lock"), pathV("f")})
+	if err := runBORUError(t, r2, []Value{NewWord("unlock"), l[0]}); err == nil {
 		t.Error("a release failure should surface from unlock")
 	}
 	r3 := newReg()
-	l3 := runAQL(t, r3, []Value{NewWord("lock"), pathV("f")})
+	l3 := runBORU(t, r3, []Value{NewWord("lock"), pathV("f")})
 	if _, err := doCloseWord([]Value{l3[0]}, r3); err == nil {
 		t.Error("a release failure should surface from close")
 	}

@@ -1,0 +1,13 @@
+{
+  "deps": {
+    "wrapper": "1.1.0"
+  },
+  "files": [
+    "caser.boru"
+  ],
+  "main": "caser.boru",
+  "major": 0,
+  "minor": 2,
+  "name": "caser",
+  "patch": 4
+}

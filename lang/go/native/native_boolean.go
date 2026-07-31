@@ -44,7 +44,7 @@ var booleanNatives = []NativeFunc{
 		},
 	},
 	boolBinaryNative("xor", func(a, b bool) bool { return a != b }),
-	// nand / nor / iff / xnor (and `implies`) moved to the aql:logic-util
+	// nand / nor / iff / xnor (and `implies`) moved to the boru:logic-util
 	// module — see native/logic_module.go.
 	{
 		Name: "any",

@@ -44,7 +44,7 @@ func TestB3GetErrorFieldNotError(t *testing.T) {
 		t.Fatalf("getErrorField(code) on a bare error: want the None literal, got %v / %v", out, err)
 	}
 	// And a CODED error reads its code as an atom.
-	cv := NewError(MakeAqlError("arith_error", "division by zero", "div", "", ""))
+	cv := NewError(MakeBoruError("arith_error", "division by zero", "div", "", ""))
 	out, err = getErrorFieldHandler([]Value{NewString("code"), cv}, nil, nil, r)
 	if err != nil || len(out) != 1 {
 		t.Fatalf("getErrorField(code) on a coded error: unexpected %v / %v", out, err)

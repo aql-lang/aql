@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/run"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/cmd/go/internal/run"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // write creates path with content and returns path.
@@ -30,8 +30,8 @@ func runCmd(args ...string) (int, string, string) {
 	return code, stdout.String(), stderr.String()
 }
 
-const passSuite = "import \"aql:test\"\nTest.test \"ok\" [1 1 Assert.equal]\n"
-const failSuite = "import \"aql:test\"\nTest.test \"bad\" [1 2 Assert.equal]\n"
+const passSuite = "import \"boru:test\"\nTest.test \"ok\" [1 1 Assert.equal]\n"
+const failSuite = "import \"boru:test\"\nTest.test \"bad\" [1 2 Assert.equal]\n"
 
 func TestNameSynopsis(t *testing.T) {
 	c := New()
@@ -79,7 +79,7 @@ func TestRunNoFiles(t *testing.T) {
 	if code != 1 {
 		t.Errorf("code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr, "no *_test.aql files") {
+	if !strings.Contains(stderr, "no *_test.boru files") {
 		t.Errorf("stderr = %q, want no-files message", stderr)
 	}
 }
@@ -91,15 +91,15 @@ func TestRunDefaultTargetCwd(t *testing.T) {
 	if code != 1 {
 		t.Errorf("code = %d, want 1", code)
 	}
-	if !strings.Contains(stderr, "no *_test.aql files") {
+	if !strings.Contains(stderr, "no *_test.boru files") {
 		t.Errorf("stderr = %q, want no-files message", stderr)
 	}
 }
 
 func TestRunAllPass(t *testing.T) {
 	dir := t.TempDir()
-	write(t, filepath.Join(dir, "a_test.aql"), passSuite)
-	write(t, filepath.Join(dir, "b_test.aql"), passSuite)
+	write(t, filepath.Join(dir, "a_test.boru"), passSuite)
+	write(t, filepath.Join(dir, "b_test.boru"), passSuite)
 	code, stdout, _ := runCmd(dir)
 	if code != 0 {
 		t.Errorf("code = %d, want 0", code)
@@ -110,7 +110,7 @@ func TestRunAllPass(t *testing.T) {
 }
 
 func TestRunFailures(t *testing.T) {
-	f := write(t, filepath.Join(t.TempDir(), "x_test.aql"), failSuite)
+	f := write(t, filepath.Join(t.TempDir(), "x_test.boru"), failSuite)
 	code, stdout, stderr := runCmd(f)
 	if code != 1 {
 		t.Errorf("code = %d, want 1", code)
@@ -126,8 +126,8 @@ func TestRunFailures(t *testing.T) {
 
 // A file that raises at top level errors the run (not a recorded failure).
 func TestRunErroredFile(t *testing.T) {
-	f := write(t, filepath.Join(t.TempDir(), "boom_test.aql"),
-		"import \"aql:test\"\nraise boom \"top-level\"\n")
+	f := write(t, filepath.Join(t.TempDir(), "boom_test.boru"),
+		"import \"boru:test\"\nraise boom \"top-level\"\n")
 	code, _, stderr := runCmd(f)
 	if code != 1 {
 		t.Errorf("code = %d, want 1", code)
@@ -137,9 +137,9 @@ func TestRunErroredFile(t *testing.T) {
 	}
 }
 
-// A file that runs fine but never imports aql:test can't be read for results.
+// A file that runs fine but never imports boru:test can't be read for results.
 func TestRunReadResultsError(t *testing.T) {
-	f := write(t, filepath.Join(t.TempDir(), "noframework_test.aql"), "1 add 2\n")
+	f := write(t, filepath.Join(t.TempDir(), "noframework_test.boru"), "1 add 2\n")
 	code, _, stderr := runCmd(f)
 	if code != 1 {
 		t.Errorf("code = %d, want 1", code)
@@ -153,8 +153,8 @@ func TestRunReadResultsError(t *testing.T) {
 // Discarding them made a file of passing cases plus one stray error report
 // "0 passed, 0 failed" — indistinguishable from an empty file.
 func TestRunErroredFileKeepsCompletedCases(t *testing.T) {
-	f := write(t, filepath.Join(t.TempDir(), "partial_test.aql"),
-		"import \"aql:test\"\nTest.test \"ok\" [1 1 Assert.equal]\nraise boom \"after the case\"\n")
+	f := write(t, filepath.Join(t.TempDir(), "partial_test.boru"),
+		"import \"boru:test\"\nTest.test \"ok\" [1 1 Assert.equal]\nraise boom \"after the case\"\n")
 	code, stdout, stderr := runCmd(f)
 	if code != 1 {
 		t.Errorf("code = %d, want 1 — the error still fails the run", code)
@@ -167,10 +167,10 @@ func TestRunErroredFileKeepsCompletedCases(t *testing.T) {
 	}
 }
 
-// A suite that errors BEFORE aql:test loads has no tally to salvage, so it
+// A suite that errors BEFORE boru:test loads has no tally to salvage, so it
 // counts nothing — and the failed read is not piled on as a second error.
 func TestRunErroredBeforeFrameworkCountsNothing(t *testing.T) {
-	f := write(t, filepath.Join(t.TempDir(), "early_test.aql"), "nosuchword 1 2\n")
+	f := write(t, filepath.Join(t.TempDir(), "early_test.boru"), "nosuchword 1 2\n")
 	code, stdout, stderr := runCmd(f)
 	if code != 1 {
 		t.Errorf("code = %d, want 1", code)
@@ -183,17 +183,17 @@ func TestRunErroredBeforeFrameworkCountsNothing(t *testing.T) {
 	}
 }
 
-// coverageFixture writes calc.aql (add2 is exercised, triple is not — its body
+// coverageFixture writes calc.boru (add2 is exercised, triple is not — its body
 // on row 5 stays uncovered → 71.4% coverage) plus a suite importing it, and
 // returns their paths.
 func coverageFixture(t *testing.T, dir string) (mod, suite string) {
 	t.Helper()
-	mod = write(t, filepath.Join(dir, "calc.aql"),
+	mod = write(t, filepath.Join(dir, "calc.boru"),
 		"def add2 fn [[x:Integer] [Integer] [\n  x add 2\n]]\n"+
 			"def triple fn [[x:Integer] [Integer] [\n  x mul 3\n]]\n"+
 			"export \"Calc\" { add2: add2/r  triple: triple/r }\n")
-	suite = write(t, filepath.Join(dir, "calc_test.aql"),
-		"import \"aql:test\"\nimport \""+mod+"\"\nTest.test \"add2\" [(Calc.add2 3) 5 Assert.equal]\n")
+	suite = write(t, filepath.Join(dir, "calc_test.boru"),
+		"import \"boru:test\"\nimport \""+mod+"\"\nTest.test \"add2\" [(Calc.add2 3) 5 Assert.equal]\n")
 	return mod, suite
 }
 
@@ -276,7 +276,7 @@ func TestRunCoverageMinPass(t *testing.T) {
 
 // A --coverage run whose suites import no user module writes no report.
 func TestRunCoverageNoModules(t *testing.T) {
-	f := write(t, filepath.Join(t.TempDir(), "p_test.aql"), passSuite)
+	f := write(t, filepath.Join(t.TempDir(), "p_test.boru"), passSuite)
 	htmlDir := filepath.Join(t.TempDir(), "cov")
 	code, stdout, _ := runCmd("--coverage", "--coverage-dir", htmlDir, f)
 	if code != 0 {
@@ -292,39 +292,39 @@ func TestRunCoverageNoModules(t *testing.T) {
 
 // coverageLine appends uncovered row numbers only when some remain.
 func TestCoverageLine(t *testing.T) {
-	full := coverageLine("m.aql", 4, 4, nil)
+	full := coverageLine("m.boru", 4, 4, nil)
 	if strings.Contains(full, "uncovered") {
 		t.Errorf("fully-covered line = %q, want no uncovered suffix", full)
 	}
-	partial := coverageLine("m.aql", 2, 4, []int{3, 6})
+	partial := coverageLine("m.boru", 2, 4, []int{3, 6})
 	if !strings.Contains(partial, "uncovered: 3, 6") {
 		t.Errorf("partial line = %q, want uncovered: 3, 6", partial)
 	}
 }
 
 func TestRunNoCompile(t *testing.T) {
-	f := write(t, filepath.Join(t.TempDir(), "n_test.aql"), passSuite)
+	f := write(t, filepath.Join(t.TempDir(), "n_test.boru"), passSuite)
 	if code, _, _ := runCmd("--no-compile", f); code != 0 {
 		t.Errorf("--no-compile code = %d, want 0", code)
 	}
 }
 
 func TestRunForceCompile(t *testing.T) {
-	f := write(t, filepath.Join(t.TempDir(), "fc_test.aql"), passSuite)
+	f := write(t, filepath.Join(t.TempDir(), "fc_test.boru"), passSuite)
 	if code, _, _ := runCmd("--force-compile", f); code != 0 {
 		t.Errorf("--force-compile code = %d, want 0", code)
 	}
 }
 
 // discover: explicit files are added verbatim (even without the suffix) and
-// de-duplicated; a directory is walked for *_test.aql.
+// de-duplicated; a directory is walked for *_test.boru.
 func TestDiscover(t *testing.T) {
 	dir := t.TempDir()
-	a := write(t, filepath.Join(dir, "a_test.aql"), passSuite)
-	write(t, filepath.Join(dir, "not-a-suite.aql"), passSuite) // ignored by walk
-	plain := write(t, filepath.Join(dir, "plain.aql"), passSuite)
+	a := write(t, filepath.Join(dir, "a_test.boru"), passSuite)
+	write(t, filepath.Join(dir, "not-a-suite.boru"), passSuite) // ignored by walk
+	plain := write(t, filepath.Join(dir, "plain.boru"), passSuite)
 
-	// Directory walk finds only the _test.aql file.
+	// Directory walk finds only the _test.boru file.
 	got, err := discover([]string{dir})
 	if err != nil {
 		t.Fatal(err)
@@ -357,7 +357,7 @@ func TestDiscoverWalkError(t *testing.T) {
 // runFile surfaces a file-read error as an errored suite.
 func TestRunFileReadError(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	p, f, errored := runFile(&stdout, &stderr, filepath.Join(t.TempDir(), "gone_test.aql"), lang.Options{}, defaultMode(), nil)
+	p, f, errored := runFile(&stdout, &stderr, filepath.Join(t.TempDir(), "gone_test.boru"), lang.Options{}, defaultMode(), nil)
 	if !errored || p != 0 || f != 0 {
 		t.Errorf("runFile(missing) = (%d,%d,%v), want (0,0,true)", p, f, errored)
 	}
@@ -366,12 +366,12 @@ func TestRunFileReadError(t *testing.T) {
 	}
 }
 
-// runFile surfaces an instance-init error (newAQL seam).
+// runFile surfaces an instance-init error (newBORU seam).
 func TestRunFileInitError(t *testing.T) {
-	old := newAQL
-	t.Cleanup(func() { newAQL = old })
-	newAQL = func(...lang.Options) (*lang.AQL, error) { return nil, errors.New("init boom") }
-	f := write(t, filepath.Join(t.TempDir(), "i_test.aql"), passSuite)
+	old := newBORU
+	t.Cleanup(func() { newBORU = old })
+	newBORU = func(...lang.Options) (*lang.BORU, error) { return nil, errors.New("init boom") }
+	f := write(t, filepath.Join(t.TempDir(), "i_test.boru"), passSuite)
 	var stdout, stderr bytes.Buffer
 	if _, _, errored := runFile(&stdout, &stderr, f, lang.Options{}, defaultMode(), nil); !errored {
 		t.Error("runFile should report an init error as errored")
@@ -421,11 +421,11 @@ func TestRunFileExitEndsTheFileNotTheRun(t *testing.T) {
 	// used never dispatched — it left the function on the stack and
 	// recorded no case at all, which the loud dispatch contract now
 	// refuses outright (design/FN-VALUE-DISPATCH.0.md).
-	src := "import \"aql:test\"\nimport \"aql:io\"\n" +
+	src := "import \"boru:test\"\nimport \"boru:io\"\n" +
 		"Test.test \"one\" [Assert.equal 1 1]\n" +
 		"IO.exit 0\n" +
 		"Test.test \"two\" [Assert.equal 1 1]\n"
-	f := write(t, filepath.Join(t.TempDir(), "x_test.aql"), src)
+	f := write(t, filepath.Join(t.TempDir(), "x_test.boru"), src)
 	var stdout, stderr bytes.Buffer
 	passed, failed, errored := runFile(&stdout, &stderr, f, lang.Options{}, defaultMode(), nil)
 	if !errored {

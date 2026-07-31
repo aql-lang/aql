@@ -5,6 +5,6 @@
 
 package permsflags
 
-import "github.com/aql-lang/aql/lang/go/policy"
+import "github.com/boru-lang/boru/lang/go/policy"
 
 var policyLoadFull = func() (policy.Policy, error) { return policy.Load("full") }

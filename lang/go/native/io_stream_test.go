@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// ioRegistry returns a registry with the aql:io words registered against
+// ioRegistry returns a registry with the boru:io words registered against
 // a freshly minted StreamKind — the same shape BuildIOModule produces per
 // import — and returns that StreamKind so tests can assert against it.
 func ioRegistry(t *testing.T) (*Registry, *Type) {
@@ -27,7 +27,7 @@ func TestStreamHandlesAreStreamKindAtoms(t *testing.T) {
 	r, sk := ioRegistry(t)
 
 	for _, name := range []string{"stdin", "stdout", "stderr"} {
-		result := runAQL(t, r, []Value{NewWord(name)})
+		result := runBORU(t, r, []Value{NewWord(name)})
 		if len(result) != 1 {
 			t.Fatalf("%s: expected 1 result, got %d", name, len(result))
 		}
@@ -105,7 +105,7 @@ func TestWriteNonStringNoOptsMap(t *testing.T) {
 
 			// write path value  (no opts map)
 			toks := append([]Value{NewWord("write"), pathV(tc.path)}, tc.write...)
-			wres := runAQL(t, r, toks)
+			wres := runBORU(t, r, toks)
 			if len(wres) != 1 {
 				t.Fatalf("write returned %d values, want 1 (the path)", len(wres))
 			}
@@ -114,7 +114,7 @@ func TestWriteNonStringNoOptsMap(t *testing.T) {
 			}
 
 			// read it back
-			rres := runAQL(t, r, []Value{NewWord("read"), pathV(tc.path)})
+			rres := runBORU(t, r, []Value{NewWord("read"), pathV(tc.path)})
 			if len(rres) != 1 {
 				t.Fatalf("read returned %d values, want 1", len(rres))
 			}
@@ -132,7 +132,7 @@ func TestWriteToStdoutStream(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	result := runAQL(t, r, []Value{NewWord("write"), newStreamAtom("stdout", sk), NewString("hello")})
+	result := runBORU(t, r, []Value{NewWord("write"), newStreamAtom("stdout", sk), NewString("hello")})
 	if buf.String() != "hello" {
 		t.Errorf("stdout = %q, want %q", buf.String(), "hello")
 	}
@@ -142,7 +142,7 @@ func TestWriteToStdoutStream(t *testing.T) {
 
 	// A non-string value to a stream serializes with no opts map.
 	buf.Reset()
-	runAQL(t, r, append([]Value{NewWord("write"), newStreamAtom("stdout", sk)},
+	runBORU(t, r, append([]Value{NewWord("write"), newStreamAtom("stdout", sk)},
 		mapTokens("x", NewInteger(7))...))
 	if got := buf.String(); got != `{"x":7}` {
 		t.Errorf("stdout = %q, want %q", got, `{"x":7}`)
@@ -153,7 +153,7 @@ func TestWriteToStdoutStream(t *testing.T) {
 func TestReadOutputStreamErrors(t *testing.T) {
 	r, sk := ioRegistry(t)
 
-	err := runAQLError(t, r, []Value{NewWord("read"), newStreamAtom("stdout", sk)})
+	err := runBORUError(t, r, []Value{NewWord("read"), newStreamAtom("stdout", sk)})
 	if err == nil {
 		t.Fatal("expected an error reading from stdout")
 	}

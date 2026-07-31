@@ -149,16 +149,16 @@ coverage/
 # calc module build output
 calc/bin/
 
-# Local-run binary from `go run .` / `go build .` inside cmd/go/aql/
-cmd/go/aql/aql
+# Local-run binary from `go run .` / `go build .` inside cmd/go/boru/
+cmd/go/boru/boru
 
 # Build artifact occasionally produced under cmd/go (ar archive)
-cmd/go/aqlbin
+cmd/go/borubin
 
 # Claude Code local worktree / session storage
 .claude/
 
-# Test artifacts written by the aql:io IO.write corpus rows
+# Test artifacts written by the boru:io IO.write corpus rows
 # (lang/spec/corpus-modules.tsv §IO) into the langspec test working
 # directory on every `make test` run. Deterministic, not source.
 /test/go/langspec/a
@@ -171,7 +171,7 @@ cmd/go/aqlbin
 # is rebuilt from the workflow artifact on every push to main, never from
 # the repo copy. Committing it only bloated the repo and went stale.
 /docs/index.html
-/docs/aql.wasm
+/docs/boru.wasm
 /docs/wasm_exec.js
 /docs/sql-wasm.js
 /docs/sql-wasm.wasm

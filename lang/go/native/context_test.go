@@ -12,7 +12,7 @@ func TestContextSetGetString(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(42),
 		NewWord("context"), NewWord("get"), NewString("x"),
 	})
@@ -28,7 +28,7 @@ func TestContextSetGetWordKey(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("foo"), NewInteger(99),
 		NewWord("context"), NewWord("dot"), NewWord("foo"),
 	})
@@ -44,7 +44,7 @@ func TestContextSetOverwrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(1),
 		NewWord("context"), NewWord("set"), NewString("k"), NewInteger(2),
 		NewWord("context"), NewWord("get"), NewString("k"),
@@ -81,7 +81,7 @@ func TestContextSubEngineInherits(t *testing.T) {
 	}
 	registerIOWords(r)
 	// Set in parent, read in sub-engine via do
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(10),
 		NewWord("do"), NewList([]Value{
 			NewWord("context"), NewWord("get"), NewString("x"),
@@ -102,7 +102,7 @@ func TestContextSubEngineIsolation(t *testing.T) {
 	}
 	registerIOWords(r)
 	// Set in parent, override in sub-engine, check parent still has original
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(1),
 		NewWord("do"), NewList([]Value{
 			NewWord("context"), NewWord("set"), NewString("x"), NewInteger(999),
@@ -148,7 +148,7 @@ func TestContextNestedThreeLevels(t *testing.T) {
 	// Level 2 (do do): read level → should see 1, set level=2
 	// Back at level 1: read level → should see 1
 	// Back at level 0: read level → should see 0
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("level"), NewInteger(0),
 		NewWord("do"), NewList([]Value{
 			NewWord("context"), NewWord("set"), NewString("level"), NewInteger(1),
@@ -183,7 +183,7 @@ func TestContextMultipleKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("a"), NewInteger(1),
 		NewWord("context"), NewWord("set"), NewString("b"), NewInteger(2),
 		NewWord("context"), NewWord("set"), NewString("c"), NewInteger(3),
@@ -211,7 +211,7 @@ func TestContextDifferentValueTypes(t *testing.T) {
 	// don't get consumed by the next get (stack-preference rule: when
 	// a String result is on the stack, context-get would take it as
 	// its key instead of forward-collecting the intended key).
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("str"), NewString("hello"),
 		NewEnd(),
 		NewWord("context"), NewWord("set"), NewString("num"), NewInteger(42),
@@ -250,7 +250,7 @@ func TestContextValuesByReference(t *testing.T) {
 	// Store a map in context, retrieve it in sub-engine — should be the same map
 	m := NewOrderedMap()
 	m.Set("key", NewInteger(100))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("mymap"), NewMap(m),
 		NewWord("do"), NewList([]Value{
 			NewWord("context"), NewWord("get"), NewString("mymap"),
@@ -275,7 +275,7 @@ func TestContextModuleInherits(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("parent_val"), NewInteger(77),
 		NewWord("module"), NewList([]Value{
 			NewWord("export"), NewAtom("result"),
@@ -304,7 +304,7 @@ func TestContextModuleIsolation(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("x"), NewInteger(1),
 		NewWord("module"), NewList([]Value{
 			NewWord("context"), NewWord("set"), NewString("x"), NewInteger(999),
@@ -390,7 +390,7 @@ func TestContextIfSubEngineInherits(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewString("val"), NewInteger(5),
 		NewWord("if"), NewList([]Value{NewBoolean(true)}),
 		NewList([]Value{NewWord("context"), NewWord("get"), NewString("val")}),

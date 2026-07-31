@@ -5,7 +5,7 @@
 //
 // Every test here swaps package-level seams, so none of them may use
 // t.Parallel().
-package aql
+package boru
 
 import (
 	"errors"
@@ -15,7 +15,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
+	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
 )
 
 // seam5SetDevVersion pins Version to the dev default for the duration
@@ -254,7 +254,7 @@ func TestSeam5RunNormalCLIPath(t *testing.T) {
 		return buildrt.Config{}, false, nil
 	}
 	// Benign argv so execute() returns quickly with code 0.
-	os.Args = []string{"aql", "help"}
+	os.Args = []string{"boru", "help"}
 	codes := seam5TrapExit(t)
 
 	stdout := seam5CaptureStdout(t)
@@ -262,7 +262,7 @@ func TestSeam5RunNormalCLIPath(t *testing.T) {
 	out := stdout()
 
 	if len(*codes) != 1 || (*codes)[0] != 0 {
-		t.Errorf("exit codes = %v, want [0] from `aql help`", *codes)
+		t.Errorf("exit codes = %v, want [0] from `boru help`", *codes)
 	}
 	if !strings.Contains(out, "Commands:") {
 		t.Errorf("expected the help overview on stdout, got %q", out)

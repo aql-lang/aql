@@ -6,7 +6,7 @@ could take. No behaviour change is proposed here.
 
 ## Symptom
 
-Recursive AQL functions run in **O(depth²)** time, while the equivalent
+Recursive BORU functions run in **O(depth²)** time, while the equivalent
 iterative `for` loop is flat. Measured with the reference binary:
 
 | program | n=500 | n=1000 | n=2000 | n=4000 |
@@ -64,7 +64,7 @@ Deep-but-valid recursion that exceeds the limits does **not** report a
 clean "recursion/step limit exceeded" error. `s 4000` surfaces:
 
 ```
-[aql/syntax_error]: unmatched opening parenthesis
+[boru/syntax_error]: unmatched opening parenthesis
 ```
 
 This comes from the inner `evalParenGroupAt` loop giving up at its
@@ -82,7 +82,7 @@ None of these is small; they are recorded so the trade-offs are visible.
    distinct call stack and run it there, so the main tape does not grow
    with call depth. This is the standard fix and removes the quadratic
    factor, but it is a substantial change to the dispatch model
-   (`execFnDefSig`, `CallAQL`, the `__pa`/cleanup machinery, forward
+   (`execFnDefSig`, `CallBORU`, the `__pa`/cleanup machinery, forward
    collection across the frame boundary).
 
 2. **Tail-call optimisation.** Detect a body whose final action is a

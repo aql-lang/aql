@@ -66,7 +66,7 @@ func tupleAt(window []Value, idx []int) ([]Value, bool) {
 // is the full window, which may be wider than the tape-derived tuple the
 // interpreter would show — the open-fallback arm keeps byte-identity by
 // re-running instead.
-func bestEffortNoMatch(r *Registry, fn *FnDefInfo, word string, window []Value, curDebug []SrcPos, pc int) *AqlError {
+func bestEffortNoMatch(r *Registry, fn *FnDefInfo, word string, window []Value, curDebug []SrcPos, pc int) *BoruError {
 	if fn == nil || len(window) == 0 {
 		return nil
 	}
@@ -77,8 +77,8 @@ func bestEffortNoMatch(r *Registry, fn *FnDefInfo, word string, window []Value, 
 		}
 	}
 	ae := noMatchDiag(r.Source, word, fn, window, SrcPos{}, reorderHintFor(word, fn, window))
-	if stamped, ok := stampAt(ae, curDebug, pc, r).(*AqlError); ok {
+	if stamped, ok := stampAt(ae, curDebug, pc, r).(*BoruError); ok {
 		return stamped
 	}
-	return ae //covergate:allow stampAt returns the same *AqlError it was given (§compiler)
+	return ae //covergate:allow stampAt returns the same *BoruError it was given (§compiler)
 }

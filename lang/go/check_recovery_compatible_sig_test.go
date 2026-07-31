@@ -64,8 +64,8 @@ def _ (need-map "not-a-map")`
 // suppressed just because some OTHER operand is an Any carrier.
 func TestRecoveryConcreteMismatchAlongsideAny(t *testing.T) {
 	// x is a dynamic (Any) carrier that satisfies a:Integer at run time, but the
-	// literal 123 can never satisfy b:String. `aql run` raises signature_error, so
-	// `aql check` must report it (concreteArgsMatch requires every NON-Any arg to
+	// literal 123 can never satisfy b:String. `boru run` raises signature_error, so
+	// `boru check` must report it (concreteArgsMatch requires every NON-Any arg to
 	// match the sole sig before the diagnostic is withheld).
 	const src = `def g fn [ [a:Integer b:String] [Integer] [ a add 1 ] ]
 def m (flex {k:5})

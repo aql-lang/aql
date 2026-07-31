@@ -22,7 +22,7 @@ func w4WriteBundle(t *testing.T, payload []byte, pass string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	path := filepath.Join(t.TempDir(), "bundle.aqlx")
+	path := filepath.Join(t.TempDir(), "bundle.borux")
 	if err := os.WriteFile(path, blob, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -50,14 +50,14 @@ func TestExportErrorArms(t *testing.T) {
 		home := testHome(t)
 		mustInit(t)
 		w4CorruptStore(t, home)
-		if code, _, _ := runVault(t, "", "export", "--out=x.aqlx"); code == 0 {
+		if code, _, _ := runVault(t, "", "export", "--out=x.borux"); code == 0 {
 			t.Error("export on a corrupt store should fail")
 		}
 	})
 	t.Run("wrong passphrase", func(t *testing.T) {
 		w4EnvelopeVault(t)
 		setPass(t, "wrong")
-		out := filepath.Join(t.TempDir(), "b.aqlx")
+		out := filepath.Join(t.TempDir(), "b.borux")
 		if code, _, e := runVault(t, "", "export", "--out="+out); code == 0 ||
 			!strings.Contains(e, "wrong passphrase") {
 			t.Errorf("export wrong pass = %d, %q", code, e)
@@ -74,7 +74,7 @@ func TestExportErrorArms(t *testing.T) {
 		if err := SaveStore(home, s); err != nil {
 			t.Fatal(err)
 		}
-		out := filepath.Join(t.TempDir(), "b.aqlx")
+		out := filepath.Join(t.TempDir(), "b.borux")
 		if code, _, e := runVault(t, "", "export", "--out="+out, "ghost"); code == 0 ||
 			!strings.Contains(e, "reading ghost") {
 			t.Errorf("export of a store-only alias = %d, %q", code, e)
@@ -87,7 +87,7 @@ func TestExportErrorArms(t *testing.T) {
 			t.Fatalf("seed: %s", e)
 		}
 		t.Setenv(EnvExportPassphrase, "")
-		out := filepath.Join(t.TempDir(), "b.aqlx")
+		out := filepath.Join(t.TempDir(), "b.borux")
 		if code, _, e := runVault(t, "", "export", "--out="+out); code == 0 || e == "" {
 			t.Errorf("EOF at the first seal prompt = %d, %q", code, e)
 		}
@@ -102,7 +102,7 @@ func TestExportErrorArms(t *testing.T) {
 			t.Fatalf("seed: %s", e)
 		}
 		t.Setenv(EnvExportPassphrase, "bp")
-		if code, _, e := runVault(t, "", "export", "--out=/w4-no-such-dir/b.aqlx"); code == 0 || e == "" {
+		if code, _, e := runVault(t, "", "export", "--out=/w4-no-such-dir/b.borux"); code == 0 || e == "" {
 			t.Errorf("export into a missing directory = %d, %q", code, e)
 		}
 	})
@@ -216,7 +216,7 @@ func TestImportBundleErrorArms(t *testing.T) {
 			t.Fatal(err)
 		}
 		if code, _, e := runVault(t, "", "import", path); code == 0 ||
-			!strings.Contains(e, "changed outside aql") {
+			!strings.Contains(e, "changed outside boru") {
 			t.Errorf("bundle import over an external change = %d, %q", code, e)
 		}
 	})

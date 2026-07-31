@@ -205,7 +205,7 @@ func TestUnifyDepRejectsCrossType(t *testing.T) {
 	}
 }
 
-// --- AQL-level construction across base types ---
+// --- BORU-level construction across base types ---
 
 func TestRunFloatGTEReturnsDepFloat(t *testing.T) {
 	r, err := DefaultRegistry()
@@ -213,7 +213,7 @@ func TestRunFloatGTEReturnsDepFloat(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewTypeLiteral(TFloat),
 		NewWord("gte"),
 		NewFloat(1.5),
@@ -229,7 +229,7 @@ func TestRunStringLTReturnsDepString(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewTypeLiteral(TString),
 		NewWord("lt"),
 		NewString("z"),
@@ -247,7 +247,7 @@ func TestRunAtomGTEReturnsDepAtom(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewTypeLiteral(TAtom),
 		NewWord("gte"),
 		NewAtom("m"),
@@ -283,7 +283,7 @@ func TestIsCheckWithDepFloat(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewFloat(2.0),
 		NewWord("is"),
 		NewOpenParen(),
@@ -304,7 +304,7 @@ func TestIsCheckWithDepString(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewString("apple"),
 		NewWord("is"),
 		NewOpenParen(),

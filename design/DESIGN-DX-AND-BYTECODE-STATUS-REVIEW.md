@@ -32,7 +32,7 @@ value rows; 3204 compilable; **3185 compile natively**, **0 interpreter
 islands**, **19 refuse** whole-program, 231 statically invalid in both
 engines. 99% of compilable rows produce a Program. (This pass drove
 refusals 23 → 19 and islands 2 → 0 — see
-`aql-bytecode-next-stages.0.md`'s 2026-06-25 update for the per-row
+`boru-bytecode-next-stages.0.md`'s 2026-06-25 update for the per-row
 wins: `has`/`inspect` quoted-operand bakes, `do {map}`, and `outer` via
 `InvokeBody`. The remaining 19 are the fn-value-application + module-body
 frontier, not coverage gaps.)
@@ -41,7 +41,7 @@ frontier, not coverage gaps.)
 output is byte-identical to interpreted output* — is enforced by the
 differential suite (`TestSpecCompiledDifferential`,
 `TestSpecCompiledOrFallback`, `TestPropertyDifferential`, the
-combination matrix, the `-race` and `-tags aqldebug` lanes) and passes:
+combination matrix, the `-race` and `-tags borudebug` lanes) and passes:
 `make verify-bytecode` → **VERIFY PASSED**; `crossdiff` → 1787 rows, 0
 divergences; `test-ts` → 3622 / 0 fail.
 
@@ -55,7 +55,7 @@ compile an `OpTrap`/RET-error path, never silently refuse) — and it is
 reading of an expanding corpus against the P7 finish-line of 0.
 
 **Why "completion" docs say refusals = 0 but the live count is 23.**
-`aql-bytecode-final-two-refusals.0.md` / `…finish-line.0.md` recorded
+`boru-bytecode-final-two-refusals.0.md` / `…finish-line.0.md` recorded
 the P7 *floor* being reached at a point in time on the corpus as it then
 stood. The corpus has since grown (every new spec row is also a compiler
 test), so the informational frontier has drifted back up. The decrement
@@ -72,7 +72,7 @@ bytecode-compilable — and `COMPILED_STATUS.md` was regenerated to
 reflect it.
 
 **The 23-refusal frontier = the P7 backlog (DEFERRED-BY-DESIGN).** It is
-fully inventoried and risk-rated in `aql-bytecode-next-stages.0.md`
+fully inventoried and risk-rated in `boru-bytecode-next-stages.0.md`
 (Stages A–I) and bucketed by root cause in `COMPILED_STATUS.md`:
 
 | bucket | count | root cause |
@@ -96,7 +96,7 @@ correct, bounded "completion" of the *status*.
 
 ---
 
-## 2. AQL-DX-REPORT.5.md — CLOSED
+## 2. BORU-DX-REPORT.5.md — CLOSED
 
 The six decision-library issues are all **DONE** (verified): list
 auto-eval keeps def refs (Issue 1), fn-body local-def cleanup (Issue 2 —
@@ -105,14 +105,14 @@ also fixed, `ACCESSOR-SPLIT-AND-CLEANUP-BUG.md`), forward-by-default
 documented (Issue 3), literal dot-keys (Issue 4), list-building idiom
 moot (Issue 5), module-word forward collection (Issue 6). No open items.
 
-## 3. VOXGIG-DX-REPORT.5.md / VOXGIG-AQL-REPORTS.5.md — actionable items DONE
+## 3. VOXGIG-DX-REPORT.5.md / VOXGIG-BORU-REPORTS.5.md — actionable items DONE
 
 Verified against today's binary:
 
 | item | report status | **today** |
 | --- | --- | --- |
-| `raise` (T9.6) | designed | **DONE** — `raise "boom"` → `[aql/user_error]`; `error.tsv` §1–2 |
-| void-`def` loud error (B3) | designed, not impl. | **DONE** — `def x (void-call)` → `[aql/def_error]: expression produced no value to bind to '<name>'` |
+| `raise` (T9.6) | designed | **DONE** — `raise "boom"` → `[boru/user_error]`; `error.tsv` §1–2 |
+| void-`def` loud error (B3) | designed, not impl. | **DONE** — `def x (void-call)` → `[boru/def_error]: expression produced no value to bind to '<name>'` |
 | runtime `uncalled_function` (T1) | designed | **DONE** (ERRORS.8.md §5 LANDED) |
 | `mixed_form_call` advisory (T9.4) | designed | **DONE** (ERRORS.8.md §6.2 LANDED) |
 | `StructUtil.parse` + `Vm.parse` (T9.7) | designed | **DONE** (PARSING.10.md) |
@@ -128,7 +128,7 @@ Verified against today's binary:
   `mixed_form_call` advisory plus the documented `end`/`;`/`print/s`
   call-site forms. A medium-risk engine evaluation-order change, not a
   point fix.
-- **`aql check` false positives on generic, dynamically-dispatched
+- **`boru check` false positives on generic, dynamically-dispatched
   library code** (5 categories: `/r`-export-as-usage tracing,
   flow-typing `get` over `Any`, `Returns` on core words, the body
   re-parser, the branch-stack cascade). A checker *expressiveness*
@@ -146,11 +146,11 @@ against the live module set:
 
 | feature (report "MISSING") | **today** |
 | --- | --- |
-| Math (trig/log/exp/roots/constants) | **DONE** — `aql:math-util` (abs, sin/cos/tan, log/log2/log10, exp, cbrt/hypot, floor/ceil/round, pi, e, …) |
+| Math (trig/log/exp/roots/constants) | **DONE** — `boru:math-util` (abs, sin/cos/tan, log/log2/log10, exp, cbrt/hypot, floor/ceil/round, pi, e, …) |
 | Regex | **DONE** — `gex` module (regexp-backed; `+gex/…/`, `mini gex`) |
-| Random | **DONE** — `aql:rand` (int/float/bool/string/one-of/list-of/map-from/with-seed) |
-| Date/time formatting + tz | **DONE** — `aql:time-util` (format, to-date/to-datetime/to-iso, tz-*, parsing, ~80 words) |
-| HTTP client | **DONE** — `aql:net` (fetch/prepare/direct) |
+| Random | **DONE** — `boru:rand` (int/float/bool/string/one-of/list-of/map-from/with-seed) |
+| Date/time formatting + tz | **DONE** — `boru:time-util` (format, to-date/to-datetime/to-iso, tz-*, parsing, ~80 words) |
+| HTTP client | **DONE** — `boru:net` (fetch/prepare/direct) |
 | Non-crypto hashing | **DONE** — `BinUtil.fnv32/fnv64` |
 | JSON path query | **DONE (substitute)** — `StructUtil.getpath/setpath` over parsed data |
 | base64 / hex encoding | **DONE (landed this pass)** — `BinUtil.base64-encode/decode`, `BinUtil.hex-encode/decode` (RFC 4648; round-trip + malformed-input errors pinned in `module-bin.tsv` §11) |
@@ -196,10 +196,10 @@ present and correct today; only throughput is the gap.
 
 The remaining items are **deferred-by-design roadmap projects**, each
 with its own tracking doc and risk profile: the P7 23-refusal soundness
-frontier (`aql-bytecode-next-stages.0.md`), the standard-library
+frontier (`boru-bytecode-next-stages.0.md`), the standard-library
 expansion phases (`BATTERIES-INCLUDED-REPORT.5.md`), the native
 persistent map (HAMT Level B), the B2a sibling-forward evaluation-order
-engine rework (`ERRORS.8.md` §6.1), and the `aql check` expressiveness
+engine rework (`ERRORS.8.md` §6.1), and the `boru check` expressiveness
 programme. Landing any of them half-way — particularly the
 soundness-sensitive compiler frontier — would violate the project's
 ratchet/differential discipline. They are recorded here as scoped future

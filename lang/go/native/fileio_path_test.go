@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 func setupMemFSForIO(t *testing.T, r *Registry) *capabilities.MemFileOps {
@@ -32,7 +32,7 @@ func TestWriteWithPath(t *testing.T) {
 	mem := setupMemFSForIO(t, r)
 
 	path := NewPathon([]string{"data", "test.txt"}, false)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("write"), path, NewString("hello world"),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) {
@@ -56,7 +56,7 @@ func TestWriteWithAbsPath(t *testing.T) {
 	mem := setupMemFSForIO(t, r)
 
 	path := NewPathon([]string{"tmp", "out.txt"}, true)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("write"), path, NewString("abs content"),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) {
@@ -76,7 +76,7 @@ func TestReadWithPath(t *testing.T) {
 	mem.Files["greeting.txt"] = []byte("hello")
 
 	path := NewPathon([]string{"greeting.txt"}, false)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), path,
 	})
 	_as2, _ := AsString(result[0])
@@ -92,7 +92,7 @@ func TestReadWithAbsPath(t *testing.T) {
 	mem.Files["/etc/config"] = []byte("key=val")
 
 	path := NewPathon([]string{"etc", "config"}, true)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), path,
 	})
 	_as3, _ := AsString(result[0])
@@ -109,10 +109,10 @@ func TestWriteReadRoundtripPath(t *testing.T) {
 	setupMemFSForIO(t, r)
 
 	path := NewPathon([]string{"roundtrip.txt"}, false)
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("write"), path, NewString("round and round"),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), path,
 	})
 	_as4, _ := AsString(result[0])
@@ -131,7 +131,7 @@ func TestWriteWithPathAndOptions(t *testing.T) {
 	path := NewPathon([]string{"log.txt"}, false)
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("write"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("write"), path, NewString("line1"), NewMap(opts),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) {
@@ -154,7 +154,7 @@ func TestReadWithPathAndOptions(t *testing.T) {
 	path := NewPathon([]string{"data.txt"}, false)
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("read"), path, NewMap(opts),
 	})
 	_as5, _ := AsString(result[0])
@@ -172,7 +172,7 @@ func TestWriteStringPathRejected(t *testing.T) {
 
 	// A String target no longer matches any write signature — the caller
 	// must supply a Pathon (make Pathon "old.txt").
-	if err := runAQLError(t, r, []Value{
+	if err := runBORUError(t, r, []Value{
 		NewWord("write"), NewString("old.txt"), NewString("old style"),
 	}); err == nil {
 		t.Error("expected a String write target to be rejected (Pathon-only)")
@@ -186,7 +186,7 @@ func TestReadStringPathRejected(t *testing.T) {
 	mem.Files["compat.txt"] = []byte("compat")
 
 	// A String target no longer matches any read signature.
-	if err := runAQLError(t, r, []Value{
+	if err := runBORUError(t, r, []Value{
 		NewWord("read"), NewString("compat.txt"),
 	}); err == nil {
 		t.Error("expected a String read target to be rejected (Pathon-only)")

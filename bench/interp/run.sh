@@ -2,8 +2,8 @@
 # Cross-language interpreter-speed harness.
 #
 # Runs three equivalent workloads (fib, loopsum, nestloop) under:
-#   - AQL interpreter   (AQL_NO_COMPILE=1)
-#   - AQL bytecode VM    (default)
+#   - BORU interpreter   (BORU_NO_COMPILE=1)
+#   - BORU bytecode VM    (default)
 #   - CPython, Ruby, Node
 # and reports the best-of-N wall-clock time per cell, plus the
 # interp/compiled and interp/python ratios.
@@ -15,11 +15,11 @@
 # equivalent programs — a divergent result means a broken fixture, not a
 # valid measurement).
 #
-# Usage:  AQL=/path/to/aql bench/interp/run.sh [reps]
+# Usage:  BORU=/path/to/boru bench/interp/run.sh [reps]
 set -u
 here="$(cd "$(dirname "$0")" && pwd)"
 fix="$here/fixtures"
-AQL="${AQL:-aql}"
+BORU="${BORU:-boru}"
 reps="${1:-3}"
 workloads=(fib loopsum nestloop)
 
@@ -56,24 +56,24 @@ best_ms() {
   echo "$best"
 }
 
-printf "%-10s %12s %12s %12s %12s %12s\n" workload aql-interp aql-compiled python ruby node
+printf "%-10s %12s %12s %12s %12s %12s\n" workload boru-interp boru-compiled python ruby node
 printf "%-10s %12s %12s %12s %12s %12s\n" -------- ---------- ------------ ------ ---- ----
 for w in "${workloads[@]}"; do
   # Verify each command succeeds and all five outputs agree before timing.
-  ref=$(run_capture "$w/aql-interp" env AQL_NO_COMPILE=1 "$AQL" run "$fix/$w.aql")
+  ref=$(run_capture "$w/boru-interp" env BORU_NO_COMPILE=1 "$BORU" run "$fix/$w.boru")
   declare -A got=(
-    [aql-compiled]="$(run_capture "$w/aql-compiled" "$AQL" run "$fix/$w.aql")"
+    [boru-compiled]="$(run_capture "$w/boru-compiled" "$BORU" run "$fix/$w.boru")"
     [python]="$(run_capture "$w/python" python3 "$fix/$w.py")"
     [ruby]="$(run_capture "$w/ruby" ruby "$fix/$w.rb")"
     [node]="$(run_capture "$w/node" node "$fix/$w.js")"
   )
-  for lang in aql-compiled python ruby node; do
+  for lang in boru-compiled python ruby node; do
     [[ "${got[$lang]}" == "$ref" ]] || \
-      die "[$w] $lang output ${got[$lang]@Q} != aql-interp ${ref@Q} — fixtures diverge"
+      die "[$w] $lang output ${got[$lang]@Q} != boru-interp ${ref@Q} — fixtures diverge"
   done
 
-  ai=$(best_ms "$w/aql-interp" env AQL_NO_COMPILE=1 "$AQL" run "$fix/$w.aql")
-  ac=$(best_ms "$w/aql-compiled" "$AQL" run "$fix/$w.aql")
+  ai=$(best_ms "$w/boru-interp" env BORU_NO_COMPILE=1 "$BORU" run "$fix/$w.boru")
+  ac=$(best_ms "$w/boru-compiled" "$BORU" run "$fix/$w.boru")
   py=$(best_ms "$w/python" python3 "$fix/$w.py")
   rb=$(best_ms "$w/ruby" ruby "$fix/$w.rb")
   nd=$(best_ms "$w/node" node "$fix/$w.js")

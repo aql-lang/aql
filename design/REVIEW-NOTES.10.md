@@ -1,4 +1,4 @@
-# AQL documentation/implementation review notes
+# BORU documentation/implementation review notes
 
 Date: 2026-06-11
 
@@ -13,7 +13,7 @@ this block recording the outcomes.
   and the doc harness is a zero-xfail gate. One engine bug surfaced
   alongside: `Value.String` rendered the value `none` as the debug
   form `None({})` — fixed to lowercase `none`, matching Canon.
-- **aql:query (finding 2, action 2)** — maintainer decision:
+- **boru:query (finding 2, action 2)** — maintainer decision:
   **supported, module-only**. The 21 native tests skipped as "query
   words disabled" tested the deliberately-removed unqualified words;
   they were deleted, their unique coverage ported to
@@ -39,10 +39,10 @@ this block recording the outcomes.
   the "Absence — `none` and `None`" subsection; TUTORIAL explains
   the rendering at the optional-field example.
 - **Cognitive load 4 (module names)** — TUTORIAL's modules section
-  gained the compact import-id → namespace table; stale `aql:math` /
+  gained the compact import-id → namespace table; stale `boru:math` /
   `math.` spellings fixed.
-- **Cognitive load 5 (`aql check`)** — TUTORIAL now folds
-  `aql check` into the workflow where typed functions appear.
+- **Cognitive load 5 (`boru check`)** — TUTORIAL now folds
+  `boru check` into the workflow where typed functions appear.
 - **Code anomaly 3 (`_DEBUG` tests), action 4** — the three log-only
   probes are now asserting tests named for the invariants they pin
   (nominal newtype membership, canonical lattice-node identity for
@@ -93,13 +93,13 @@ Recommendation: resolve these as ordinary doc bugs or engine bugs, then remove t
 
 ### 2. Query documentation/help is ahead of the enabled test surface
 
-The reference lists `aql:query` as a SQL-flavoured query pipeline module, module docs register query words, and help text describes `Query.select`, `Query.from`, `Query.where`, and related words. However, many query tests in `lang/go/native/coverage_test.go` and `lang/go/native/coverage_engine_edge_test.go` are skipped with `query words disabled`.
+The reference lists `boru:query` as a SQL-flavoured query pipeline module, module docs register query words, and help text describes `Query.select`, `Query.from`, `Query.where`, and related words. However, many query tests in `lang/go/native/coverage_test.go` and `lang/go/native/coverage_engine_edge_test.go` are skipped with `query words disabled`.
 
 Recommendation: either mark query as experimental/disabled in user-facing docs, or re-enable the tests and make the query module part of the supported surface. Advertising a disabled or weakly tested subsystem increases user trust risk.
 
 ### 3. CLI/docs examples rely on subtle shell and parser interactions
 
-The CLI reference already calls out at least one shell/parser gotcha: a leading negative expression to `aql do` is parsed as a command-line flag unless separated with `--`. This is a useful warning, but it also indicates that examples involving negative literals should consistently use non-leading negatives or the `--` form.
+The CLI reference already calls out at least one shell/parser gotcha: a leading negative expression to `boru do` is parsed as a command-line flag unless separated with `--`. This is a useful warning, but it also indicates that examples involving negative literals should consistently use non-leading negatives or the `--` form.
 
 Recommendation: audit command-line examples for leading `-N` and add `--` wherever applicable.
 
@@ -107,7 +107,7 @@ Recommendation: audit command-line examples for leading `-N` and add `--` wherev
 
 ### 1. Flexible call order is powerful but expensive to reason about
 
-AQL intentionally allows stack, mixed, and forward forms for most words. This is expressive, but it asks readers to model both the visible stack and a type-directed forward-collection process. The `end` keyword exists specifically because the collector can otherwise consume more than intended.
+BORU intentionally allows stack, mixed, and forward forms for most words. This is expressive, but it asks readers to model both the visible stack and a type-directed forward-collection process. The `end` keyword exists specifically because the collector can otherwise consume more than intended.
 
 Cognitive load drivers:
 
@@ -132,15 +132,15 @@ Possible mitigation: add a small “absence, `none`, and `None`” reference sub
 
 ### 4. The module naming transition increases memorization cost
 
-The README's upgrade notes say namespaces are now capital-initial and utility modules took a `-util` suffix. That is reasonable, but it means users must remember both package paths such as `aql:math-util` and bound namespace names such as `MathUtil`.
+The README's upgrade notes say namespaces are now capital-initial and utility modules took a `-util` suffix. That is reasonable, but it means users must remember both package paths such as `boru:math-util` and bound namespace names such as `MathUtil`.
 
 Possible mitigation: include a compact module import/name table near the first module tutorial section, not only in upgrade notes.
 
 ### 5. Static checking and runtime behavior are intentionally close, but not identical enough to be simple
 
-The CLI reference explains diagnostics such as `uncalled_function`, including cases where runtime would leave a named function value on the stack instead of erroring. That is an important guardrail, but it also means users need to know when `aql check` is stricter or more informative than a run.
+The CLI reference explains diagnostics such as `uncalled_function`, including cases where runtime would leave a named function value on the stack instead of erroring. That is an important guardrail, but it also means users need to know when `boru check` is stricter or more informative than a run.
 
-Possible mitigation: recommend `aql check` as part of every tutorial workflow before introducing advanced dispatch, not only as a CLI feature.
+Possible mitigation: recommend `boru check` as part of every tutorial workflow before introducing advanced dispatch, not only as a CLI feature.
 
 ## Code anomalies, dead paths, and maintainability risks
 
@@ -164,7 +164,7 @@ Suggested priority: low-to-medium. Rename them to describe the invariant they pr
 
 ### 4. Function dispatch still has transitional dual paths
 
-`REFACTOR_PROGRESS.md` records that named AQL functions already compile into Go handlers, but function values on the stack still go through `execFnDefLiteral` and handler-less signature fallbacks. The same note lists future stages to remove handler-nil fallbacks, merge signature structures, and delete bridge paths.
+`REFACTOR_PROGRESS.md` records that named BORU functions already compile into Go handlers, but function values on the stack still go through `execFnDefLiteral` and handler-less signature fallbacks. The same note lists future stages to remove handler-nil fallbacks, merge signature structures, and delete bridge paths.
 
 Suggested priority: medium-to-high, because dispatch is central to the language and dual representations tend to leak into edge behavior.
 
@@ -176,14 +176,14 @@ Suggested priority: medium. Keep an owner-facing migration checklist current, an
 
 ### 6. Panics are used for builtin registration failures
 
-Several native registration functions panic when builtin registration fails. That is acceptable for impossible startup invariants, but it should remain isolated to initialization. Any user-triggerable parse, import, registry, or module-loading failure should return structured AQL errors instead.
+Several native registration functions panic when builtin registration fails. That is acceptable for impossible startup invariants, but it should remain isolated to initialization. Any user-triggerable parse, import, registry, or module-loading failure should return structured BORU errors instead.
 
 Suggested priority: low, unless audit finds user input can reach these panic paths.
 
 ## Suggested next actions
 
 1. Fix or explicitly redesign the four `knownMismatch` doc examples, then remove their xfail entries.
-2. Decide whether `aql:query` is supported, experimental, or disabled; align docs and tests accordingly.
+2. Decide whether `boru:query` is supported, experimental, or disabled; align docs and tests accordingly.
 3. Add one short reference subsection for `none` vs `None` and canonical rendering.
 4. Rename `_DEBUG` tests or document why they are permanent probes.
 5. Continue the function-model consolidation tracked in `REFACTOR_PROGRESS.md`, keeping the equivalence harnesses as required gates.

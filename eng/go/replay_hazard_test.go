@@ -19,17 +19,17 @@ func TestBodyHasReplayHazard(t *testing.T) {
 		{"capitalised def", lst(w("def"), w("Big"), NewTypeLiteral(TInteger)), true},
 		{"capitalised var", lst(w("var"), w("Big"), NewInteger(1)), true},
 		{"capitalised undef", lst(w("undef"), w("Big")), true},
-		{"import", lst(w("import"), NewString("aql:minilang")), true},
+		{"import", lst(w("import"), NewString("boru:minilang")), true},
 		{"value def is sound", lst(w("def"), w("b"), NewInteger(5)), false},
 		{"value undef is sound", lst(w("undef"), w("b")), false},
 		{"def at tail without a name", lst(NewInteger(1), w("def")), false},
 		{"quoted-atom capitalised name", lst(w("def"), NewAtom("Big"), NewTypeLiteral(TInteger)), true},
 		{"computed name is not static", lst(w("def"), paren(w("mkname")), NewInteger(1)), false},
 		{"nested list hazard", lst(w("if"), w("b"), lst(w("def"), w("Big"), NewTypeLiteral(TInteger)), lst()), true},
-		{"nested paren hazard", lst(paren(w("import"), NewString("aql:io"))), true},
+		{"nested paren hazard", lst(paren(w("import"), NewString("boru:io"))), true},
 		{"plain body", lst(NewInteger(1), w("add"), NewInteger(2)), false},
 		{"non-container value", NewInteger(7), false},
-		{"paren body import", paren(w("import"), NewString("aql:io")), true},
+		{"paren body import", paren(w("import"), NewString("boru:io")), true},
 	}
 	for _, c := range cases {
 		if got := bodyHasReplayHazard(c.v); got != c.want {

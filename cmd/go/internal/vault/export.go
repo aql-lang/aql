@@ -12,8 +12,8 @@ import (
 	"sort"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 )
 
 // Export bundles let a vault be moved between machines and backends:
@@ -25,7 +25,7 @@ import (
 //
 // On-disk envelope (self-describing, per ADR-009):
 //
-//	"AQLX" | format(1 byte) | salt(16) | nonce(12) | ciphertext|tag
+//	"BORUX" | format(1 byte) | salt(16) | nonce(12) | ciphertext|tag
 //
 // The header bytes + salt are bound in as AEAD additional data, so the
 // format byte cannot be downgraded by tampering. The plaintext is the
@@ -33,9 +33,9 @@ import (
 const (
 	// EnvExportPassphrase supplies the bundle passphrase non-interactively
 	// for both export and import.
-	EnvExportPassphrase = "AQL_VAULT_EXPORT_PASSPHRASE"
+	EnvExportPassphrase = "BORU_VAULT_EXPORT_PASSPHRASE"
 
-	exportMagic = "AQLX"
+	exportMagic = "BORUX"
 	// exportEnvelopeFormat versions the crypto envelope (KDF/cipher/layout).
 	exportEnvelopeFormat = 1
 	// exportVersion versions the inner JSON schema.
@@ -44,7 +44,7 @@ const (
 	//	v2 — bundles also carry the custom provider presets the exported
 	//	     aliases reference, so a custom-backed alias still brokers after
 	//	     import instead of falling back to the URL-less generic preset.
-	//	     An older aql refuses a v2 bundle (Version > exportVersion) rather
+	//	     An older boru refuses a v2 bundle (Version > exportVersion) rather
 	//	     than importing aliases whose provider tag it cannot satisfy.
 	exportVersion = 2
 )
@@ -87,7 +87,7 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	// A leading ~ that the shell did not expand (e.g. --out=~/bundle.aqlx)
+	// A leading ~ that the shell did not expand (e.g. --out=~/bundle.borux)
 	// must resolve under the home folder, not a literal "~" directory.
 	outPath := pathutil.ExpandTilde(*out, homeDir)
 	nsFilter, nsFiltered, err := normalizeNSFilter(*namespace)
@@ -101,7 +101,7 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 
@@ -122,7 +122,7 @@ func runExport(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	}
 
 	// Prompts go to stderr, never stdout: in the default mode the bundle
-	// IS stdout (e.g. `aql vault export > vault.aqlx`), so a prompt on
+	// IS stdout (e.g. `boru vault export > vault.borux`), so a prompt on
 	// stdout would corrupt the file — and the user wouldn't see it on
 	// their terminal either.
 	sess, err := authenticate(s, homeDir, stdin, stderr, "Vault passphrase: ")
@@ -288,7 +288,7 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		return 1
 	}
 	if bundle.Version > exportVersion {
-		fmt.Fprintf(stderr, "error: bundle is schema version %d but this aql understands up to %d; upgrade aql\n", bundle.Version, exportVersion)
+		fmt.Fprintf(stderr, "error: bundle is schema version %d but this boru understands up to %d; upgrade boru\n", bundle.Version, exportVersion)
 		return 1
 	}
 
@@ -298,7 +298,7 @@ func importBundle(data []byte, fromStdin bool, homeDir string, stdin io.Reader, 
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 	krStdin := stdin
@@ -460,11 +460,11 @@ func sealExport(plain []byte, passphrase string) ([]byte, error) {
 func openExport(blob []byte, passphrase string) ([]byte, error) {
 	magic := []byte(exportMagic)
 	if len(blob) < len(magic)+1 || !bytes.Equal(blob[:len(magic)], magic) {
-		return nil, errors.New("vault: not an aql vault export bundle")
+		return nil, errors.New("vault: not a boru vault export bundle")
 	}
 	format := int(blob[len(magic)])
 	if format > exportEnvelopeFormat {
-		return nil, fmt.Errorf("vault: export bundle is format %d but this aql understands up to %d; upgrade aql", format, exportEnvelopeFormat)
+		return nil, fmt.Errorf("vault: export bundle is format %d but this boru understands up to %d; upgrade boru", format, exportEnvelopeFormat)
 	}
 	if format != 1 {
 		return nil, fmt.Errorf("vault: unknown export bundle format %d", format)

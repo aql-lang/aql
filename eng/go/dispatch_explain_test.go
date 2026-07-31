@@ -179,7 +179,7 @@ func TestNoMatchDetailAndSuggestionTexts(t *testing.T) {
 	if got := forwardParensSuggestion("f"); !strings.Contains(got, "(f …)") {
 		t.Errorf("parens suggestion = %q", got)
 	}
-	if got := describeSuggestion("pad"); got != "see `aql describe pad` for its signatures and examples" {
+	if got := describeSuggestion("pad"); got != "see `boru describe pad` for its signatures and examples" {
 		t.Errorf("describe suggestion = %q", got)
 	}
 }
@@ -291,7 +291,7 @@ func TestNoMatchErrorDescribeSuggestion(t *testing.T) {
 	}}
 	e := engWithTape(t, []Value{NewBoolean(true)}, 1)
 	ae := e.noMatchError("f", fn, []Value{NewBoolean(true)}, SrcPos{}, "")
-	if len(ae.Suggestions) != 1 || !strings.Contains(ae.Suggestions[0].Message, "aql describe f") {
+	if len(ae.Suggestions) != 1 || !strings.Contains(ae.Suggestions[0].Message, "boru describe f") {
 		t.Errorf("want the describe suggestion, got %v", ae.Suggestions)
 	}
 	joined := strings.Join(ae.Notes, "\n")

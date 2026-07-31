@@ -1,5 +1,5 @@
 
-# AQL Engine
+# BORU Engine
 
 Concatenative language using function composition.
 

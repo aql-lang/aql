@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// Wave-3 aql:type-util coverage: record surgery over CLASS types (the
+// Wave-3 boru:type-util coverage: record surgery over CLASS types (the
 // fieldsOf / constructRecordOrObjectLike object branches), function-shape
 // introspection over fnsig values (the FnUndefInfo branch), declared-return
 // introspection (returnsofResult single / multiple), field-name decoding
@@ -124,7 +124,7 @@ func TestTypeFieldNamesWave3(t *testing.T) {
 
 // TestTypeRequiredDisjunctEdgesWave3 pins stripNoneFromField: a 3-alt
 // field collapses to a 2-alt disjunct (the NewDisjunct arm); an all-None
-// disjunct — not constructible from AQL, where `None tor None` collapses
+// disjunct — not constructible from BORU, where `None tor None` collapses
 // to None — is returned unchanged (kept==0 arm), never emptied.
 func TestTypeRequiredDisjunctEdgesWave3(t *testing.T) {
 	got := runType(t, `(refine Record [y:[String tor Integer tor None]]) TypeUtil.required`)

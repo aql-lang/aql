@@ -165,5 +165,5 @@ def R (refine Record [ { a:Integer } ]) (make R {a:1}) eq (make R {a:1})	false	r
 def s (context) (s eq s)	true	NUR031: a Store IS its handle — eq is reference identity, like class instances
 (context) eq (context)	true	the context word returns the same handle each read, so the two are eq
 def s (context) (s deq s)	true	deq on the same store agrees (a store's deep value is its own entries)
-import "aql:struct-util" def P class {x:1} def p (make P {x:5}) (StructUtil.reify P (StructUtil.jsonify p)) deq p	true	jsonify→reify round-trips the instance structurally ($class tag)
-import "aql:struct-util" def P class {x:1} def p (make P {x:5}) (StructUtil.reify P (StructUtil.jsonify p)) eq p	false	…but reify constructs a NEW instance, not the original
+import "boru:struct-util" def P class {x:1} def p (make P {x:5}) (StructUtil.reify P (StructUtil.jsonify p)) deq p	true	jsonify→reify round-trips the instance structurally ($class tag)
+import "boru:struct-util" def P class {x:1} def p (make P {x:5}) (StructUtil.reify P (StructUtil.jsonify p)) eq p	false	…but reify constructs a NEW instance, not the original

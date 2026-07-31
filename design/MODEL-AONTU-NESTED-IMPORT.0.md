@@ -1,10 +1,10 @@
-# aql:model vs. voxgig/struct test model — aontu nested-import defect (RESOLVED)
+# boru:model vs. voxgig/struct test model — aontu nested-import defect (RESOLVED)
 
 Status: **Resolved, June 2026.** A `github.com/rjrodger/aontu` (Go) defect
-once blocked `aql:model` from reproducing the canonical `voxgig/struct`
+once blocked `boru:model` from reproducing the canonical `voxgig/struct`
 test model. Upstream aontu fixed it (tagged `v0.1.4`, with
 `github.com/tabnas/multisource` v0.3.1); after bumping the dependency,
-`aql:model` builds the model and its content matches the committed
+`boru:model` builds the model and its content matches the committed
 reference exactly (semantically / canonically). The history below is kept
 as a record of the validation. Tracked as a design note (not an ADR).
 
@@ -15,13 +15,13 @@ struct test specs by `@`-importing nine sibling `.jsonic` files under a
 `struct:` tree, plus an inline `primary:` tree. The committed reference
 output is `build/test/test.json` (~390 KB).
 
-The goal was to confirm `aql:model` (which wraps the Go
+The goal was to confirm `boru:model` (which wraps the Go
 `github.com/voxgig/model` → Go aontu) can build that model and match the
 reference exactly.
 
 ## Result (after the upstream fix)
 
-`aql:model` builds the model (`Model.run` → `ok:true`) and the output is
+`boru:model` builds the model (`Model.run` → `ok:true`) and the output is
 **390,826 bytes** whose content is **canonically identical** to the
 390,606-byte reference: parsing both and re-serialising with sorted keys
 and normalised separators yields byte-for-byte equal strings. So the
@@ -69,11 +69,11 @@ model uses exactly that shape (`struct: minor: @"minor.jsonic"`, …) for
 every spec import, so the Go engine drops the whole `struct` branch.
 
 The defect reproduces identically at three layers, so it is **not** in the
-`aql:model` wrapper:
+`boru:model` wrapper:
 
 | Layer | `struct` resolved? |
 | --- | --- |
-| `aql:model` `Model.run` | no (705 B) |
+| `boru:model` `Model.run` | no (705 B) |
 | voxgig `model.New(...).Run()` | no (223 B model) |
 | `aontu.NewWithBase(...).Generate(...)` | no (223 B) |
 
@@ -86,9 +86,9 @@ while the Go build was truncated.
 transitive `github.com/tabnas/multisource/go` to v0.3.1) makes the Go
 build resolve the `struct` tree in full.
 
-## Consequences for aql:model
+## Consequences for boru:model
 
-- The `aql:model` module is sound: it drives a real multi-file model build
+- The `boru:model` module is sound: it drives a real multi-file model build
   end-to-end on disk and on an in-memory FS (see
   `lang/go/test/model_test.go`), and now reproduces the `voxgig/struct`
   test model's content exactly.

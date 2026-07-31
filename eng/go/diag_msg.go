@@ -40,8 +40,8 @@ func noMatchDetail(name string) string {
 // that the compiled VM has no equivalent for, so it could never match
 // across engines; the received-arguments note conveys the same "what
 // values were here" information in plain language instead.
-func noMatchDiag(source, name string, fn *FnDefInfo, written []Value, pos SrcPos, reorder string) *AqlError {
-	ae := makeAqlErrorAt("signature_error", noMatchDetail(name), name, source, "", pos)
+func noMatchDiag(source, name string, fn *FnDefInfo, written []Value, pos SrcPos, reorder string) *BoruError {
+	ae := makeBoruErrorAt("signature_error", noMatchDetail(name), name, source, "", pos)
 
 	if n := callArgsNote(written); n != "" {
 		ae.Notes = append(ae.Notes, n)
@@ -85,7 +85,7 @@ func noMatchDiag(source, name string, fn *FnDefInfo, written []Value, pos SrcPos
 // argument values, sig order) rebuilds the SAME rich diagnostic the
 // interpreter would raise over those values. It runs on the failure
 // path only; the VM stamps the source position afterward (stampAt).
-func runtimeNoMatch(r *Registry, name string, written []Value) *AqlError {
+func runtimeNoMatch(r *Registry, name string, written []Value) *BoruError {
 	var fn *FnDefInfo
 	src := ""
 	if r != nil {
@@ -119,7 +119,7 @@ func forwardParensSuggestion(name string) string {
 // or the word carries many overloads — for a one-signature word the
 // candidate verdict already says everything describe would.
 func describeSuggestion(name string) string {
-	return "see `aql describe " + name + "` for its signatures and examples"
+	return "see `boru describe " + name + "` for its signatures and examples"
 }
 
 // callArgsNote describes the tuple the failed dispatch saw:

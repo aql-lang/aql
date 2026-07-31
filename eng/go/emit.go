@@ -1,6 +1,6 @@
 package eng
 
-// The bytecode recording pass — Stage 1 of design/aql-bytecode-plan.0.md.
+// The bytecode recording pass — Stage 1 of design/boru-bytecode-plan.0.md.
 //
 // For the POSITIVE statement of what compiles and why — the rule each refusal
 // gate below is defending — see design/COMPILABLE-SUBSET.md. Keep it in lockstep
@@ -11,7 +11,7 @@ package eng
 // through carrierResults records a call event with full operand
 // provenance, and Finalize linearises the event trace into a Program.
 //
-// Site taxonomy (aql-bytecode-readiness.0.md gap 1) — every dispatch
+// Site taxonomy (boru-bytecode-readiness.0.md gap 1) — every dispatch
 // is classified from the first commit:
 //
 //   - mono                — single checker-selected signature; compiles.
@@ -40,7 +40,7 @@ const (
 
 // Synthetic word names for the compiler-internal assembly events — a computed
 // list literal (OpMakeList) and a computed map / make body (OpMakeMap). They are
-// not real AQL words; the recorder stamps them on the emitCall it records and
+// not real BORU words; the recorder stamps them on the emitCall it records and
 // producerWord / makeListRange read them back, so the two sides must use the
 // same string. Centralised here rather than repeated as literals.
 const (
@@ -342,7 +342,7 @@ const (
 	evDynBind
 )
 
-// emitUserCall is a recorded call of a compiled AQL fn: the target
+// emitUserCall is a recorded call of a compiled BORU fn: the target
 // unit index, the args in sig order, the number of results the unit
 // returns (0 for a side-effect / 0-return fn, N for a multi-return
 // fn), and whether the lowering marked it a TAIL call (it then
@@ -753,7 +753,7 @@ type emitUnit struct {
 	// module-preamble fn; the main registry otherwise). Finalize stamps it
 	// on the CompiledFn when it differs from the check registry, and the VM
 	// then dispatches the unit's natives against it — the interpreter's
-	// CallAQL runs a foreign fn's body IN its own registry, so handlers
+	// CallBORU runs a foreign fn's body IN its own registry, so handlers
 	// with registry-visible effects (Net.listen forking per-connection
 	// registries) see module scope on both engines.
 	reg *Registry
@@ -860,7 +860,7 @@ type fnUnitRec struct {
 	// (compileStoredFnUnit's "storedfn" / compileStoredBody's "spawnbody"):
 	// it is reachable at run time only through its CompiledFnRef, whose
 	// module-dep rebinds are handled PRECISELY by per-ref poisoning
-	// (NotifyNameRebound → poisoned → InvokeCallback falls to CallAQL).
+	// (NotifyNameRebound → poisoned → InvokeCallback falls to CallBORU).
 	// NoteFrozenRead therefore skips reads attributed to it — the whole-
 	// program frozen-read hammer is for ordinary CALL_USER units, which
 	// have no per-unit fallback.
@@ -897,7 +897,7 @@ type fnUnitRec struct {
 	// included) and emits OpCallDynFrame(dynFrameW) before the RET: the top
 	// dynFrameW entries are the token region the interpreter's pointer stepped,
 	// replayed with the prefix resolved (see the opcode doc). Sets
-	// CompiledFn.RetReplay so the RET applies the CallAQL-path trim discipline.
+	// CompiledFn.RetReplay so the RET applies the CallBORU-path trim discipline.
 	dynFrameW int
 	// retPrefix seats the unnamed-param frame-bottom re-pushes at UNIT START
 	// (before the body events), for a body whose residual holds a variadic
@@ -2056,12 +2056,12 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 // compileStoredFnUnit compiles a CAPTURE-FREE store-fn handler body (the fn a
 // CompileStoresFn word stashes for later invocation — a serve-raw connection
 // handler) to its own fn unit, so the native word can run it on the VM via
-// RunUnit instead of CallAQL. Returns the unit index and true, or (0, false)
+// RunUnit instead of CallBORU. Returns the unit index and true, or (0, false)
 // when the body refuses (a refusal-class word, a flow sentinel, an ineligible
 // sig) — the caller then bakes only the plain const and that overload falls
 // back to the interpreter, per-sig and sound. Mirrors tryReturnedClosure's
 // probe-then-real compile, but bodyOut 0 (count-agnostic): a stored handler is
-// invoked for effect and its residual, like CallAQL's, is the caller's to use
+// invoked for effect and its residual, like CallBORU's, is the caller's to use
 // or discard.
 func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, sigIdx int, pos SrcPos) (int, bool) {
 	if es == nil || es.reg == nil {
@@ -2109,11 +2109,11 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, sigIdx int, pos SrcPos) (
 }
 
 // storedSigEligible reports whether ONE signature of a stored fn value is a
-// stampable unit shape: an own (non-fallback) AQL body, non-empty and free
+// stampable unit shape: an own (non-fallback) BORU body, non-empty and free
 // of flow-control sentinels. Every own sig stamps INDEPENDENTLY
 // (REFUSAL-CLOSURE §7b): the callback seam dispatches through MatchFnSig
 // first, so the matched sig's own Impl ref IS the "sig table" — an
-// unstamped sibling simply interprets via CallAQL, per-sig and fail-safe.
+// unstamped sibling simply interprets via CallBORU, per-sig and fail-safe.
 // Shared by the compile-time store-fn bake and the runtime detached stamp
 // so the two gates cannot drift. Capture-freedom is the CALLER's gate
 // (recordCallOperands / StampFnValue): it is a property of the storing
@@ -2122,13 +2122,13 @@ func storedSigEligible(sig *Signature) bool {
 	if sig.Fallback {
 		return false
 	}
-	if _, isAQL := sig.Impl.(*AQLImpl); !isAQL {
+	if _, isBORU := sig.Impl.(*BORUImpl); !isBORU {
 		return false
 	}
 	return len(sig.body()) > 0 && !bodyToksHaveSentinel(sig.body())
 }
 
-// firstStampableSig returns fd's first stampable own AQL sig — the
+// firstStampableSig returns fd's first stampable own BORU sig — the
 // single-sig entry the predicate-type constructor and the module-load
 // sweep use (their values are single-overload by construction); multi-sig
 // values stamp per sig through the callers' own loops.
@@ -2184,7 +2184,7 @@ func (es *EmitState) compileStoredBody(bodyList Value) (Value, bool) {
 	ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(tokens)}
 	es.storedFnRefs = append(es.storedFnRefs, ref)
 	carrier := Value{Parent: TFunction, Data: FnDefInfo{
-		Signatures: []Signature{{Impl: &AQLImpl{Body: tokens, Compiled: ref}}},
+		Signatures: []Signature{{Impl: &BORUImpl{Body: tokens, Compiled: ref}}},
 	}}
 	return carrier, true
 }
@@ -2204,8 +2204,8 @@ func storedBodySpecFor(sig *Signature, i int) *StoredBodySpec {
 // body (a Signature.StoredBodies position — Test.check-prop's gen/property):
 // the body compiles to a closure unit whose leading param slots bind the
 // declared params (a named param binds the body's reads of that name, the
-// handler's own CallAQL frame shape; an unnamed one rides the stack), and
-// the carrier's single sig mirrors the handler's CallAQL sig — same Params,
+// handler's own CallBORU frame shape; an unnamed one rides the stack), and
+// the carrier's single sig mirrors the handler's CallBORU sig — same Params,
 // same raw Body tokens — plus the CompiledFnRef, so the handler dispatches
 // it through InvokeCallback with byte-identical interpreter fallback. The
 // unit is compiled INLINE into the current program, so a mid-run invoke is
@@ -2278,23 +2278,23 @@ func (es *EmitState) compileStoredParamBody(bodyList Value, params []FnParam) (V
 			Params:     append([]FnParam(nil), params...),
 			Returns:    []*Type{TAny},
 			BarrierPos: -1,
-			Impl:       &AQLImpl{Body: tokens, Compiled: ref},
+			Impl:       &BORUImpl{Body: tokens, Compiled: ref},
 		}},
 	}}
 	return carrier, true
 }
 
-// stampCompiledRef records ref on the fn value's first own (non-fallback) AQL
+// stampCompiledRef records ref on the fn value's first own (non-fallback) BORU
 // body sig, so the runtime FnDefInfo the store-fn word receives carries the VM
-// edge alongside its raw Body. Mutates the shared *AQLImpl pointer, so the
-// interned const reflects it. Returns false when no own AQL body sig exists (a
-// Go-backed or fallback-only fn value — never a stored AQL handler).
+// edge alongside its raw Body. Mutates the shared *BORUImpl pointer, so the
+// interned const reflects it. Returns false when no own BORU body sig exists (a
+// Go-backed or fallback-only fn value — never a stored BORU handler).
 func stampCompiledRef(fd FnDefInfo, ref *CompiledFnRef) bool {
 	for i := range fd.Signatures {
 		if fd.Signatures[i].Fallback {
 			continue
 		}
-		if a, ok := fd.Signatures[i].Impl.(*AQLImpl); ok {
+		if a, ok := fd.Signatures[i].Impl.(*BORUImpl); ok {
 			a.Compiled = ref
 			return true
 		}
@@ -2305,7 +2305,7 @@ func stampCompiledRef(fd FnDefInfo, ref *CompiledFnRef) bool {
 // storedHandlerDeps returns the MODULE-LEVEL names a stored handler / spawn body
 // reads — every body word bound as a user `def` at the store site. These are the
 // names whose later undef/redefinition (NotifyNameRebound) makes the frozen unit
-// stale, so the ref is left unstamped and falls back to CallAQL. Kernel natives
+// stale, so the ref is left unstamped and falls back to CallBORU. Kernel natives
 // and the handler's own params/locals are excluded: the store site sits OUTSIDE
 // the handler frame, so those are not in r.Defs here. nil when the body reads no
 // module-level def.
@@ -2332,7 +2332,7 @@ func (es *EmitState) storedHandlerDeps(body []Value) map[string]bool {
 // body reads `name`: a def or undef of that name AFTER the ref was created
 // changes what the interpreter resolves at CALL time, but the compiled unit is
 // frozen at the store-site definition. Poisoned refs are left unstamped at
-// Finalize, so InvokeCallback falls back to CallAQL. A def/undef processed BEFORE
+// Finalize, so InvokeCallback falls back to CallBORU. A def/undef processed BEFORE
 // a ref exists poisons nothing (the ref is not in storedFnRefs yet), so a handler
 // over stable module helpers (todo-api's live-todos, mini-redis's arg-at/kv-read,
 // never redefined) still compiles.
@@ -3708,7 +3708,7 @@ func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) boo
 		return false
 	}
 	// The lowered apply (OpCallDynTrailTop) nets EXACTLY ONE value (nout: 1
-	// below). AQL fns can return 0 or multiple values, so refuse the lowering
+	// below). BORU fns can return 0 or multiple values, so refuse the lowering
 	// for a CONCRETE callee (a baked `/r` reference) that is not provably
 	// single-valued: a multi-return callee miscompiles (`(1 2 pair/r)` with
 	// pair → [Integer Integer] compiled to [2 1] vs the interpreter's [1 2])
@@ -4121,7 +4121,7 @@ func (es *EmitState) RecordTrap(code, detail, word, hint string, pos SrcPos) boo
 	return true
 }
 
-// RecordTrapErr is RecordTrap for a fully-built interpreter AqlError: it
+// RecordTrapErr is RecordTrap for a fully-built interpreter BoruError: it
 // serialises the whole diagnostic — code, detail, word, hint, and the
 // structured payload (secondary spans, notes, suggestions) — into the trap so
 // the compiled OpTrap raises a report byte-identical to the interpreter's. Used
@@ -4129,7 +4129,7 @@ func (es *EmitState) RecordTrap(code, detail, word, hint string, pos SrcPos) boo
 // statically-definite unmatched dispatch, whose runtime values are provably the
 // same the check pass saw — tryRecordUnmatchedDispatchTrap). Same top-level-only
 // guard as RecordTrap.
-func (es *EmitState) RecordTrapErr(ae *AqlError, pos SrcPos) bool {
+func (es *EmitState) RecordTrapErr(ae *BoruError, pos SrcPos) bool {
 	if ae == nil {
 		return false
 	}
@@ -4473,7 +4473,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 	case len(sig.NoEvalArgs) > 0 && (sig.CompileEffect.Has(CompileExecutesBody) || (sig.Callable != nil && execBodyRefsNames(sig, args)) || (!sig.CompileEffect.Has(CompileRunsBodyIsolated) && !es.noEvalBodiesInertScoped(sig, args))):
 		// A code-body word is refused when:
 		//   - its body is not inert data (UNLESS the word runs the body in an
-		//     ISOLATED CallAQL frame — CompileRunsBodyIsolated — where name
+		//     ISOLATED CallBORU frame — CompileRunsBodyIsolated — where name
 		//     resolution is identical under interpreter and VM: Test.check-prop's
 		//     dynamic gen/property bodies bake as CALL_NATIVE operands and run
 		//     through the same captured-parent handler in both modes); OR
@@ -4687,10 +4687,10 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 	for i, a := range args {
 		// STORE-FN edge: a word that stashes a fn to invoke LATER (serve-raw)
 		// gets its capture-free handler body compiled to its own unit, and a
-		// durable CompiledFnRef stamped on the handler value's shared *AQLImpl —
+		// durable CompiledFnRef stamped on the handler value's shared *BORUImpl —
 		// so the interned const the word receives carries the VM edge alongside
 		// its raw Body, and the word runs it on the VM (RunUnit) instead of the
-		// interpreter (CallAQL). Done here, BEFORE resolveOperand's outcome is
+		// interpreter (CallBORU). Done here, BEFORE resolveOperand's outcome is
 		// consulted, because resolveOperand already interns a concrete fn value
 		// as a const (ok=true) and would skip the inert-fn branch below; the
 		// stamp mutates the pointer that interned copy shares, so it lands either
@@ -4720,7 +4720,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 					if !storedSigEligible(&fd.Signatures[si]) {
 						continue
 					}
-					aImpl := fd.Signatures[si].Impl.(*AQLImpl)
+					aImpl := fd.Signatures[si].Impl.(*BORUImpl)
 					if aImpl.Compiled != nil {
 						continue // first stamp wins
 					}
@@ -4770,7 +4770,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 		// STORED-PARAM-BODY edge: a declared param-carrying stored body
 		// (Signature.StoredBodies — Test.check-prop's gen/property) compiles
 		// to a closure unit with the declared params bound and rides as a
-		// carrier mirroring the handler's own CallAQL sig; a body that
+		// carrier mirroring the handler's own CallBORU sig; a body that
 		// refuses keeps its raw list and the handler interprets, unchanged.
 		// MODULE SCOPE ONLY (the noEvalBodiesInertScoped discipline): inside
 		// a compiled fn frame the body's ${interp} / bare reads of frame
@@ -4804,7 +4804,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 					// resolveOperand cannot materialise it as a const, but it lowers
 					// to an OpPushClosure — the captures resolved in THIS frame and
 					// packed into the closure value the storing native invokes per
-					// call, exactly as the interpreter dispatches the AQL handler
+					// call, exactly as the interpreter dispatches the BORU handler
 					// with its captures. tryReturnedClosure declines (leaving es
 					// untouched) when a capture is unreachable or the body refuses,
 					// so an uncompilable handler still falls back faithfully.
@@ -5120,7 +5120,7 @@ func (es *EmitState) NoteFrozenRead(name string) {
 	}
 	// A read attributed to a STORED-REF unit (a service/minilang handler, a
 	// spawn body) is already rebind-safe: NotifyNameRebound poisons the ref
-	// itself and InvokeCallback falls back to CallAQL for just that handler,
+	// itself and InvokeCallback falls back to CallBORU for just that handler,
 	// keeping the rest of the program compiled (the PR #243 discipline).
 	// Only ordinary CALL_USER units need the whole-program hammer.
 	if rec := es.openUnitRecs[len(es.openUnitRecs)-1]; rec >= 0 && rec < len(es.fnRecs) && es.fnRecs[rec].storedRefUnit {
@@ -6179,7 +6179,7 @@ func (es *EmitState) noEvalBodiesInertScoped(sig *Signature, args []Value) bool 
 
 // dynInputsProven reports whether a dynamic-operand dispatch is nonetheless a
 // PROVEN sig match — safe to bake a plain CALL_NATIVE despite the dynamic
-// carriers — for a word that runs its bodies in ISOLATED CallAQL frames
+// carriers — for a word that runs its bodies in ISOLATED CallBORU frames
 // (CompileRunsBodyIsolated, i.e. Test.check-prop). The dynamic-input refusal
 // defends against a WIDENED sig: a gradual-Any operand (Parent=Any) matched a
 // concrete sig position only by the Any→anything rule, so the runtime value
@@ -6710,9 +6710,9 @@ func isInertConst(v Value) bool {
 		//   - a TRIVIAL-DELEGATION wrapper (`MathUtil.sqrt`, every own sig a
 		//     `[Word(inner)]` pass-through) via callDynamic → tryNativeFnApply, which
 		//     re-resolves the inner native in that registry;
-		//   - a REAL AQL body via the island sub-engine (callDynTrailTop/…'s
+		//   - a REAL BORU body via the island sub-engine (callDynTrailTop/…'s
 		//     `vc.island().Run([fn, args…])`), which INTERPRETS the fn in
-		//     fnDef.Registry — CallAQL, module-private scope and all. So a real body
+		//     fnDef.Registry — CallBORU, module-private scope and all. So a real body
 		//     applies soundly too (compile == interpret, verified). A macro stays
 		//     refused (applied only by name / compile-time expansion, never as data).
 		return !d.Macro
@@ -6963,7 +6963,7 @@ func isInertConstMember(v Value) bool {
 		// A dot-access reach (`r.int`, `m.a.b`) riding inside a NEVER-evaluated
 		// compound — a NoEvalArgs code body the driving word stores or drops
 		// (Test.prop builds a PropertySpec map; Test.skip discards it;
-		// Test.check-prop CallAQLs it via its native handler), or a quoted code
+		// Test.check-prop CallBORUs it via its native handler), or a quoted code
 		// list. Unlike isInertReach (the STANDALONE detached lens, which must be
 		// receiverless + Eval=false so the engine never expands it at the
 		// pointer), a reach as a MEMBER is pure DATA: the VM pushes the baked
@@ -7719,7 +7719,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// Stamp the unit's dispatch registry ONLY for a FOREIGN sub-registry
 			// (a `module [...]` preamble fn — decision.cond, repl-eval-line):
 			// its body resolves module-private words there, exactly where the
-			// interpreter's CallAQL runs it, so the VM must override curReg. An
+			// interpreter's CallBORU runs it, so the VM must override curReg. An
 			// ORDINARY top-level fn (rec.reg == the program registry) must NOT be
 			// stamped: the VM run may be handed a DIFFERENT registry
 			// (ForkConcurrent gives each concurrent execution its own fork), so
@@ -7819,14 +7819,14 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	// Back-stamp every stored-fn handler ref with the now-built *Program so a
 	// callback invoked after this run returns (a serve-raw connection handler on
 	// its own fork) can locate its unit. The refs are already reachable from the
-	// baked consts (their *AQLImpl); the side-list keeps this O(refs) rather than
+	// baked consts (their *BORUImpl); the side-list keeps this O(refs) rather than
 	// re-scanning Consts. Fns is fully assembled above, so every ref.Unit indexes
 	// a valid entry.
 	for _, ref := range es.storedFnRefs {
 		if ref.poisoned {
 			// A dep the body reads was undef'd/redefined after this ref was
 			// created — the frozen unit is stale. Leave Prog nil so
-			// InvokeCallback falls back to CallAQL (live resolution).
+			// InvokeCallback falls back to CallBORU (live resolution).
 			continue
 		}
 		ref.Prog = lw.p

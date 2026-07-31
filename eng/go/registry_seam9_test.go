@@ -123,7 +123,7 @@ func TestW9NewRegistryInitError(t *testing.T) {
 
 func TestW9AggregateDispatchSkipsFallback(t *testing.T) {
 	r := newTestRegistry(t)
-	// A single def entry carrying BOTH a Fallback sig and an AQL-bodied sig:
+	// A single def entry carrying BOTH a Fallback sig and a BORU-bodied sig:
 	// the aggregate walk skips the Fallback sig (continue) and unions the
 	// real one. Pushed directly so the Fallback flag survives verbatim.
 	fd := FnDefInfo{
@@ -132,7 +132,7 @@ func TestW9AggregateDispatchSkipsFallback(t *testing.T) {
 			{Fallback: true, BarrierPos: 0, Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 				return nil, nil
 			})},
-			{Params: []FnParam{{Name: "n", Type: TInteger}}, Impl: AQL([]Value{NewWord("n")})},
+			{Params: []FnParam{{Name: "n", Type: TInteger}}, Impl: BORU([]Value{NewWord("n")})},
 		},
 	}
 	r.Defs.Push("w9agg", NewFunction(fd))
@@ -214,15 +214,15 @@ func TestW9StoreKeyKinds(t *testing.T) {
 	}
 }
 
-func TestW9CallAQLArgsPushError(t *testing.T) {
+func TestW9CallBORUArgsPushError(t *testing.T) {
 	r := newTestRegistry(t)
 	r.Args = nil // nil args stack → Push fails, the baseline must unwind
 	sig := &FnSig{
 		Params: []FnParam{{Name: "n", Type: TInteger}},
-		Impl:   AQL([]Value{NewWord("n")}),
+		Impl:   BORU([]Value{NewWord("n")}),
 	}
-	if _, err := r.CallAQL(sig, []Value{NewInteger(1)}, nil); err == nil {
-		t.Error("a nil args stack should fail CallAQL")
+	if _, err := r.CallBORU(sig, []Value{NewInteger(1)}, nil); err == nil {
+		t.Error("a nil args stack should fail CallBORU")
 	}
 }
 

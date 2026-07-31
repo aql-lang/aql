@@ -175,9 +175,9 @@ func TestFnUnitDynFrameBreakWithoutLoopDefers(t *testing.T) {
 //     inversion this gate closes), falling back with identical output.
 func TestFnUnitDynFrameEffectDiscipline(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	runOut := func(src string, compiled bool) (out []any, printed string, took bool, err error) {
 		a, e := New()
 		if e != nil {
@@ -316,7 +316,7 @@ f2 (flex {k:41})`
 //     and the caller's later dynamic-scope read deferred spuriously;
 //   - a module-preamble fn's minted type (a module-private refine) resolves
 //     through the ACTIVE unit's registry at OpPushType, exactly where the
-//     interpreter's CallAQL resolves it — previously the importer-registry
+//     interpreter's CallBORU resolves it — previously the importer-registry
 //     lookup missed it and the whole program deferred.
 func TestUserPolyFramePreservesCallerDynBinds(t *testing.T) {
 	src := `def p fn [[a:Integer] [Integer] [a add 1] [s:String] [Integer] [0]] def f fn [[m:Map n:Integer] [Integer] [if (n lte 0) [acc2] [def acc2 n p (m get k/q) drop f m (n sub 1)]]] f {k:3} 2`

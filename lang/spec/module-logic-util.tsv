@@ -1,4 +1,4 @@
-# AQL Language Specification: the aql:logic-util module
+# BORU Language Specification: the boru:logic-util module
 # Format: input<TAB>expected<TAB>description
 #
 # Derived boolean connectives moved out of core into the LogicUtil
@@ -9,11 +9,11 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  the connectives
-import "aql:logic-util" LogicUtil.nand true true	false	not (a and b)
-import "aql:logic-util" LogicUtil.nor false false	true	not (a or b)
-import "aql:logic-util" LogicUtil.iff true true	true	biconditional
-import "aql:logic-util" LogicUtil.xnor true false	false	iff alias
-import "aql:logic-util" LogicUtil.implies false true	false	(b implies a): true→false
+import "boru:logic-util" LogicUtil.nand true true	false	not (a and b)
+import "boru:logic-util" LogicUtil.nor false false	true	not (a or b)
+import "boru:logic-util" LogicUtil.iff true true	true	biconditional
+import "boru:logic-util" LogicUtil.xnor true false	false	iff alias
+import "boru:logic-util" LogicUtil.implies false true	false	(b implies a): true→false
 #
 # §2  negative — the words are gone from core (unbound without import)
 nand true true	ERROR:undefined_word	derived connectives are no longer core

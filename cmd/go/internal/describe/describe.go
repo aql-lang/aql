@@ -1,16 +1,16 @@
-// Package describe implements `aql describe` — documentation for the
-// AQL *language*: its built-in words, their categories, and loadable
+// Package describe implements `boru describe` — documentation for the
+// BORU *language*: its built-in words, their categories, and loadable
 // modules. The forms are:
 //
-//	aql describe                     a categorised guide to words and modules
-//	aql describe <word>              full per-word docs (e.g. aql describe add)
-//	aql describe <category>          the words in one category (e.g. math)
-//	aql describe aql:<module>        a module and the words it exports
-//	aql describe aql:<module>:<word> one exported word of a module
+//	boru describe                     a categorised guide to words and modules
+//	boru describe <word>              full per-word docs (e.g. boru describe add)
+//	boru describe <category>          the words in one category (e.g. math)
+//	boru describe boru:<module>        a module and the words it exports
+//	boru describe boru:<module>:<word> one exported word of a module
 //
 // A name it doesn't recognise is given one more chance: describe tries to
 // load it as a module (native, installed, or file) before giving up.
-// CLI/command help lives separately under `aql help`.
+// CLI/command help lives separately under `boru help`.
 package describe
 
 import (
@@ -19,11 +19,11 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	parse "github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
-	helppkg "github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	parse "github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
+	helppkg "github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // The built-in module catalog (names + one-line summaries) lives in the help
@@ -46,12 +46,12 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "describe" }
-func (*cmd) Synopsis() string { return "document an AQL word, category, or module (or list them)" }
+func (*cmd) Synopsis() string { return "document a BORU word, category, or module (or list them)" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, _ io.Writer) int {
 	return Run(args, stdout)
 }
 
-// Run dispatches `aql describe [name]`. Precedence for a bare name (no colon):
+// Run dispatches `boru describe [name]`. Precedence for a bare name (no colon):
 // category first (so generic names like `math`/`type`/`string` show their
 // group), then word, then dotted export, then a built-in module, and finally
 // a best-effort module load. A name containing ':' is always a module path.
@@ -63,8 +63,8 @@ func Run(args []string, w io.Writer) int {
 
 	name := args[0]
 
-	// A colon marks a module reference: "aql:type-util" or, with a word,
-	// "aql:type-util:foo" / "type-util:foo". No built-in word carries a colon,
+	// A colon marks a module reference: "boru:type-util" or, with a word,
+	// "boru:type-util:foo" / "type-util:foo". No built-in word carries a colon,
 	// so this is unambiguous and takes precedence over every bare-name form.
 	if strings.Contains(name, ":") {
 		return describeModulePath(w, name)
@@ -72,7 +72,7 @@ func Run(args []string, w io.Writer) int {
 
 	// A category groups related words. Checked before words so that browsing
 	// names (math, type, string, stack, …) open the group; the only words that
-	// share a category name are `help` (use `aql help`) and the niche `stack`
+	// share a category name are `help` (use `boru help`) and the niche `stack`
 	// dump word, both better served by the group view here.
 	if cat, ok := helppkg.LookupCategory(name); ok {
 		writeCategory(w, cat)
@@ -118,7 +118,7 @@ func describeName(w io.Writer, name string) int {
 			fmt.Fprintf(w, "describe: cannot load module %q: %s\n", name, derr)
 			return 1
 		}
-		return renderModuleDesc(w, "aql:"+name, desc)
+		return renderModuleDesc(w, "boru:"+name, desc)
 	}
 
 	// Unknown: give it one more chance as a loadable module (installed or file).
@@ -127,7 +127,7 @@ func describeName(w io.Writer, name string) int {
 	}
 
 	fmt.Fprintf(w, "describe: no description available for %q\n", name)
-	fmt.Fprintln(w, "Run 'aql describe' to list available words and modules.")
+	fmt.Fprintln(w, "Run 'boru describe' to list available words and modules.")
 	return 1
 }
 
@@ -145,7 +145,7 @@ func describeModulePath(w io.Writer, name string) int {
 	desc, err := resolveModule(reg, modRef)
 	if err != nil {
 		fmt.Fprintf(w, "describe: cannot load module %q: %s\n", modRef, err)
-		fmt.Fprintln(w, "Run 'aql describe' to list available words and modules.")
+		fmt.Fprintln(w, "Run 'boru describe' to list available words and modules.")
 		return 1
 	}
 
@@ -166,19 +166,19 @@ func describeModulePath(w io.Writer, name string) int {
 }
 
 // splitModulePath separates a colon-form argument into a module reference and
-// an optional word. "aql:type-util:foo" → ("aql:type-util", "foo");
-// "aql:type-util" → ("aql:type-util", ""); "type-util:foo" → ("type-util",
-// "foo"). The "aql:" prefix is preserved on the module reference so the
+// an optional word. "boru:type-util:foo" → ("boru:type-util", "foo");
+// "boru:type-util" → ("boru:type-util", ""); "type-util:foo" → ("type-util",
+// "foo"). The "boru:" prefix is preserved on the module reference so the
 // resolver routes it as a native import.
 func splitModulePath(name string) (modRef, word string) {
-	hadAQL := strings.HasPrefix(name, "aql:")
-	rest := strings.TrimPrefix(name, "aql:")
+	hadBORU := strings.HasPrefix(name, "boru:")
+	rest := strings.TrimPrefix(name, "boru:")
 	short := rest
 	if i := strings.IndexByte(rest, ':'); i >= 0 {
 		short, word = rest[:i], rest[i+1:]
 	}
-	if hadAQL {
-		return "aql:" + short, word
+	if hadBORU {
+		return "boru:" + short, word
 	}
 	return short, word
 }
@@ -187,7 +187,7 @@ func splitModulePath(name string) (modRef, word string) {
 // built-in native path when the module is compiled in and a best-effort load
 // otherwise ("attempt to load a module if unknown").
 func resolveModule(reg *native.Registry, modRef string) (native.ModuleDesc, error) {
-	if short := strings.TrimPrefix(modRef, "aql:"); isModule(short) {
+	if short := strings.TrimPrefix(modRef, "boru:"); isModule(short) {
 		return modulesResolve(short, reg)
 	}
 	return native.ResolveAnyModule(reg, modRef)
@@ -196,22 +196,22 @@ func resolveModule(reg *native.Registry, modRef string) (native.ModuleDesc, erro
 // writeIndex prints the categorised guide: every word grouped by category,
 // then the loadable modules, then how to drill into each.
 func writeIndex(w io.Writer) {
-	fmt.Fprintln(w, "AQL language reference — built-in words by category, and loadable modules.")
+	fmt.Fprintln(w, "BORU language reference — built-in words by category, and loadable modules.")
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Words:")
 	helppkg.WriteWordsByCategory(w)
 
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Modules (load with import \"aql:<name>\"):")
+	fmt.Fprintln(w, "Modules (load with import \"boru:<name>\"):")
 	helppkg.WriteModuleCatalog(w)
 
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Drill in:")
-	fmt.Fprintln(w, "  aql describe <word>                e.g. aql describe add")
-	fmt.Fprintln(w, "  aql describe <category>            e.g. aql describe math")
-	fmt.Fprintln(w, "  aql describe aql:<module>          e.g. aql describe aql:type-util")
-	fmt.Fprintln(w, "  aql describe aql:<module>:<word>   e.g. aql describe aql:type-util:tpartial")
+	fmt.Fprintln(w, "  boru describe <word>                e.g. boru describe add")
+	fmt.Fprintln(w, "  boru describe <category>            e.g. boru describe math")
+	fmt.Fprintln(w, "  boru describe boru:<module>          e.g. boru describe boru:type-util")
+	fmt.Fprintln(w, "  boru describe boru:<module>:<word>   e.g. boru describe boru:type-util:tpartial")
 	fmt.Fprintln(w, "Docs: "+helppkg.ReferenceURL)
 }
 
@@ -220,14 +220,14 @@ func writeIndex(w io.Writer) {
 func writeCategory(w io.Writer, cat helppkg.Category) {
 	helppkg.WriteCategory(w, cat)
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Use 'aql describe <word>' for full docs (signatures, examples) on any of these.")
+	fmt.Fprintln(w, "Use 'boru describe <word>' for full docs (signatures, examples) on any of these.")
 	fmt.Fprintln(w, "Docs: "+helppkg.ReferenceURL)
 }
 
 // renderModuleDesc prints a module's summary (when built-in) and the words it
 // exports, plus how to import and drill into them.
 func renderModuleDesc(w io.Writer, ref string, desc native.ModuleDesc) int {
-	if summary := helppkg.ModuleSummary(strings.TrimPrefix(ref, "aql:")); summary != "" {
+	if summary := helppkg.ModuleSummary(strings.TrimPrefix(ref, "boru:")); summary != "" {
 		fmt.Fprintf(w, "%s — %s\n", ref, summary)
 	} else {
 		fmt.Fprintf(w, "%s\n", ref)
@@ -251,7 +251,7 @@ func renderModuleDesc(w io.Writer, ref string, desc native.ModuleDesc) int {
 
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Load with import \"%s\", then call e.g. <export>.<word>.\n", ref)
-	fmt.Fprintf(w, "Describe one word with 'aql describe %s:<word>'.\n", ref)
+	fmt.Fprintf(w, "Describe one word with 'boru describe %s:<word>'.\n", ref)
 	fmt.Fprintln(w, "Docs: "+helppkg.ReferenceURL)
 	return 0
 }
@@ -335,7 +335,7 @@ func qualifiedExportInfo(reg *native.Registry, name string) *helppkg.FuncInfo {
 
 // newRegistry builds a registry wired for module resolution: the parser is
 // installed (file modules need it) and the native-module resolver is enabled
-// so "aql:<name>" references load.
+// so "boru:<name>" references load.
 func newRegistry() (*native.Registry, error) {
 	reg, err := defaultRegistry()
 	if err != nil {

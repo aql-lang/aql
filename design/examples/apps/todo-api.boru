@@ -1,0 +1,89 @@
+# ============================================================
+# todo-api.boru — a REST todo API server, written in BORU.
+#
+# The NETWORK-SERVERS.0.md §6.4 verification app: patrun routes on
+# method + path (with :id templates surfacing req.params), handlers
+# are plain [req state] functions returning values the http codec
+# renders as JSON, and a wrap middleware counts every request.
+#
+#   import "./todo-api.boru"
+#   def ln (TodoApi.serve {port: 8080})
+#
+#   GET    /todos            → list todos
+#   POST   /todos            → create {text: …}      (201)
+#   GET    /todos/:id        → one todo or 404
+#   PUT    /todos/:id        → update text/done or 404
+#   DELETE /todos/:id        → remove (204)
+#   GET    /stats            → {hits: N} (the wrap middleware's count)
+# ============================================================
+
+import "boru:net"
+
+# Deleted todos become None tombstones in the state's flex map; reads
+# and lists filter them out.
+def live-todos fn st:Any List [
+  def entries (vals st.todos)
+    # filter's predicate receives {key value} entry maps
+  filter ([t:Any] => [(t.value eq None) not]) entries
+]
+
+def todo-serve fn opts:Map Any [
+  def api (service {todos:{} next:1 hits:0}) add
+    {method:"GET" path:"/todos"}
+    ([req:Map state:Any] => [live-todos state]) api add
+    {method:"POST" path:"/todos"}
+    ([req:Map state:Any] =>
+        [if (req has "body-json")
+            [def body req.body-json
+              def id (convert String state.next)
+                (state set next (add 1 state.next)) drop
+              def text body.text
+              def todo {id:id text:text done:false}
+              def todos state.todos (todos set (id) todo) drop
+                {status:201 body:todo}
+            ]
+            [{status:400 body:{error:"missing json body"}}]
+        ]
+    )
+    api add {method:"GET" path:"/todos/:id"}
+    ([req:Map state:Any] =>
+        [def todos state.todos
+          def id req.params.id
+          def t (todos get id)
+          if (t eq None) [{status:404 body:{error:"not found"}}] [t]
+        ]
+    )
+    api add {method:"PUT" path:"/todos/:id"}
+    ([req:Map state:Any] =>
+        [def todos state.todos
+          def id req.params.id
+          def t (todos get id)
+          if (t eq None) [{status:404 body:{error:"not found"}}]
+            [# Build a FRESH map (never alias the stored flex node back into
+              # its own parent — that would create a cycle).
+              def body (if (req has "body-json") [req.body-json] [{}])
+              def new-text (if (body has "text") [body.text] [t.text])
+              def new-done (if (body has "done") [body.done] [t.done])
+              def t2 {id:id text:new-text done:new-done}
+                (todos set (id) t2) drop t2
+            ]
+        ]
+    )
+    api add {method:"DELETE" path:"/todos/:id"}
+    ([req:Map state:Any] =>
+        [def todos state.todos
+          def id req.params.id (todos set (id) None) drop
+            {status:204 body:""}
+        ]
+    )
+    api add {method:"GET" path:"/stats"}
+    ([req:Map state:Any] => [{hits:state.hits}]) api
+    # Ambient middleware: count every request into the service.
+  wrap
+    ([req:Map state:Any prior:Any] =>
+        [(state set hits (add 1 state.hits)) drop prior req]
+    )
+    api Net.listen {tcp:opts.port codec:Net.http} api
+]
+
+export "TodoApi" {serve:todo-serve/r}

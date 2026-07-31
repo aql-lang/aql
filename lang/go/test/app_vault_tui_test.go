@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
-// End-to-end test for the AQL vault TUI (lang/go/modules/vault_tui.aql,
-// the design/VAULT-TUI-PORT.0.md application): the aql:vault-tui native
+// End-to-end test for the BORU vault TUI (lang/go/modules/vault_tui.boru,
+// the design/VAULT-TUI-PORT.0.md application): the boru:vault-tui native
 // module runs a real Tui.run session against a scripted virtual
 // terminal and a scripted fake vault backend — no TTY and no vault
 // anywhere, the §6.2 harness.
@@ -92,7 +92,7 @@ func TestAppVaultTUI(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := runVaultTuiSteps(t, vb, do, []string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`def final (VaultTui.run {dark: true})`,
 			`join "|" [(convert String (size final.screens)) (convert String final.vault.ok)
 			           (final.vault.backend) ((final.screens get 0).kind)]`,
@@ -103,7 +103,7 @@ func TestAppVaultTUI(t *testing.T) {
 	// the init frame renders the chrome over the fake vault's status
 	pollScreen(t, vb, "vault: /tmp/v/vault.jsonic")
 	first := strings.Join(vb.Screen(), "\n")
-	for _, want := range []string{"aql vault", "Secrets", "enter open"} {
+	for _, want := range []string{"boru vault", "Secrets", "enter open"} {
 		if !strings.Contains(first, want) {
 			t.Errorf("init frame is missing %q:\n%s", want, first)
 		}
@@ -153,7 +153,7 @@ func TestAppVaultTUIBackendErrorsFold(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := runVaultTuiSteps(t, vb, nil, []string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`def final (VaultTui.run {dark: false})`,
 			`join "|" [(convert String final.vault.ok) (convert String final.status.err)]`,
 		})
@@ -259,8 +259,8 @@ func (f *secretsFake) do(op string, params map[string]any) (any, error) {
 		return row, nil
 	case "recipes":
 		return []any{
-			map[string]any{"cmd": "aql vault exec gh_token -- <cmd>", "desc": "inject as env"},
-			map[string]any{"cmd": "aql vault exec --for=github gh_token -- gh", "desc": "provider recipe"},
+			map[string]any{"cmd": "boru vault exec gh_token -- <cmd>", "desc": "inject as env"},
+			map[string]any{"cmd": "boru vault exec --for=github gh_token -- gh", "desc": "provider recipe"},
 		}, nil
 	case "reveal":
 		return "sekrit-v1", nil
@@ -300,7 +300,7 @@ func (f *secretsFake) do(op string, params map[string]any) (any, error) {
 		return "SCAN: no leaks found", nil
 	case "vaults":
 		return []any{map[string]any{
-			"folder": "/home/u/.aql", "suffix": "", "backend": "file",
+			"folder": "/home/u/.boru", "suffix": "", "backend": "file",
 			"default": true, "active": true,
 		}, map[string]any{
 			"folder": "/work/vault", "suffix": "", "backend": "file",
@@ -337,7 +337,7 @@ func TestAppVaultTUISecretsBrowse(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`def final (VaultTui.run {dark: true})`,
 			`convert String (size final.screens)`,
 		})
@@ -408,7 +408,7 @@ func TestAppVaultTUISecretsMutate(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`def final (VaultTui.run {dark: true})`,
 			`(final.add-defaults).provider`,
 		})
@@ -510,7 +510,7 @@ func TestAppVaultTUIPassphraseGate(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`(VaultTui.run {dark: true}) drop`,
 		})
 		done <- result{out, err}
@@ -573,7 +573,7 @@ func TestAppVaultTUIPaletteHelpTheme(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`def final (VaultTui.run {dark: true})`,
 			`final.theme`,
 		})
@@ -652,7 +652,7 @@ func TestAppVaultTUIAccessPasswords(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`(VaultTui.run {dark: true}) drop`,
 		})
 		done <- result{out, err}
@@ -750,7 +750,7 @@ func TestAppVaultTUIMaintenanceSettings(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`(VaultTui.run {dark: true}) drop`,
 		})
 		done <- result{out, err}
@@ -834,7 +834,7 @@ func TestAppVaultTUIVaultPicker(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := runVaultTuiSteps(t, vb, fake.do, []string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`(VaultTui.run {dark: true}) drop`,
 		})
 		done <- result{out, err}
@@ -922,7 +922,7 @@ func TestAppVaultTUILaunchNoVault(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		out, err := runVaultTuiSteps(t, vb, do, []string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`def final (VaultTui.run {dark: true})`,
 			// the app is on the picker at quit time (depth 2): last screen is it
 			`def top (final.screens get ((size final.screens) sub 1))`,
@@ -956,7 +956,7 @@ func TestAppVaultTUINoTerminal(t *testing.T) {
 	_, err := runVaultTuiSteps(t, nil,
 		func(string, map[string]any) (any, error) { return nil, nil },
 		[]string{
-			`import "aql:vault-tui"`,
+			`import "boru:vault-tui"`,
 			`VaultTui.run {}`,
 		})
 	if err == nil || !strings.Contains(err.Error(), "no terminal backend registered") {

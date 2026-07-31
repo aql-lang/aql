@@ -11,7 +11,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 func swapDefaultRegistryFail(t *testing.T) {
@@ -44,7 +44,7 @@ func TestDescribeNameRegistryError(t *testing.T) {
 func TestDescribeModulePathRegistryError(t *testing.T) {
 	swapDefaultRegistryFail(t)
 	var out bytes.Buffer
-	if code := Run([]string{"aql:math-util"}, &out); code != 1 {
+	if code := Run([]string{"boru:math-util"}, &out); code != 1 {
 		t.Fatalf("exit = %d, want 1", code)
 	}
 	if !strings.Contains(out.String(), "cannot load registry") {

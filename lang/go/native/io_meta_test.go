@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // io_meta_test.go — P2 word-layer and wrapper coverage for ownership and
@@ -34,10 +34,10 @@ func TestStatXattrOption(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Seed one text and one binary attribute THROUGH the host mapping.
-	if err := mem.XattrSet("x.txt", aqlToHostXattr("note"), []byte("hi")); err != nil {
+	if err := mem.XattrSet("x.txt", boruToHostXattr("note"), []byte("hi")); err != nil {
 		t.Fatal(err)
 	}
-	if err := mem.XattrSet("x.txt", aqlToHostXattr("blob"), []byte{0xFF, 0x01}); err != nil {
+	if err := mem.XattrSet("x.txt", boruToHostXattr("blob"), []byte{0xFF, 0x01}); err != nil {
 		t.Fatal(err)
 	}
 	// A foreign-namespace attribute must not surface.
@@ -47,7 +47,7 @@ func TestStatXattrOption(t *testing.T) {
 		}
 	}
 
-	res := runAQL(t, r, []Value{
+	res := runBORU(t, r, []Value{
 		NewWord("stat"), pathV("x.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("xattr", NewBoolean(true)) }),
 	})
@@ -84,7 +84,7 @@ func TestTouchOwnerGroupXattr(t *testing.T) {
 	mem.SetIdentity(func() int { return 0 }, func() int { return 0 }) // root: chown allowed
 
 	// {owner}/{group} re-own; an omitted id stays.
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("touch"), pathV("t.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("owner", NewInteger(42)) }),
 	})
@@ -92,7 +92,7 @@ func TestTouchOwnerGroupXattr(t *testing.T) {
 	if fi.UID != 42 || fi.GID != 0 {
 		t.Errorf("touch {owner:42} = %d/%d", fi.UID, fi.GID)
 	}
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("touch"), pathV("t.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("group", NewInteger(9)) }),
 	})
@@ -101,7 +101,7 @@ func TestTouchOwnerGroupXattr(t *testing.T) {
 	}
 
 	// {xattr:{…}} sets attributes (String and Bytes payloads).
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("touch"), pathV("t.txt"),
 		wrapMap(func(om *OrderedMap) {
 			xs := NewOrderedMap()
@@ -110,15 +110,15 @@ func TestTouchOwnerGroupXattr(t *testing.T) {
 			om.Set("xattr", NewMap(xs))
 		}),
 	})
-	if v, err := mem.XattrGet("t.txt", aqlToHostXattr("note")); err != nil || string(v) != "v" {
+	if v, err := mem.XattrGet("t.txt", boruToHostXattr("note")); err != nil || string(v) != "v" {
 		t.Errorf("touch xattr note = %q (%v)", v, err)
 	}
-	if v, err := mem.XattrGet("t.txt", aqlToHostXattr("raw")); err != nil || len(v) != 2 {
+	if v, err := mem.XattrGet("t.txt", boruToHostXattr("raw")); err != nil || len(v) != 2 {
 		t.Errorf("touch xattr raw = %v (%v)", v, err)
 	}
 
 	// A non-scalar xattr value refuses.
-	if err := runAQLError(t, r, []Value{
+	if err := runBORUError(t, r, []Value{
 		NewWord("touch"), pathV("t.txt"),
 		wrapMap(func(om *OrderedMap) {
 			xs := NewOrderedMap()
@@ -131,7 +131,7 @@ func TestTouchOwnerGroupXattr(t *testing.T) {
 
 	// Chown refusal surfaces through touch (non-root, real id change).
 	mem.SetIdentity(func() int { return 1000 }, func() int { return 1000 })
-	if err := runAQLError(t, r, []Value{
+	if err := runBORUError(t, r, []Value{
 		NewWord("touch"), pathV("t.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("owner", NewInteger(0)) }),
 	}); err == nil {
@@ -148,7 +148,7 @@ func TestStatXattrErrorBranches(t *testing.T) {
 	}
 	registerIOWords(r)
 	SetHostFileOps(r, notInstalledFileOps{})
-	if err := runAQLError(t, r, []Value{
+	if err := runBORUError(t, r, []Value{
 		NewWord("stat"), pathV("x"),
 		wrapMap(func(om *OrderedMap) { om.Set("xattr", NewBoolean(true)) }),
 	}); err == nil {
@@ -165,11 +165,11 @@ func TestStatXattrErrorBranches(t *testing.T) {
 	if err := mem.WriteFile("g.txt", []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := mem.XattrSet("g.txt", aqlToHostXattr("a"), []byte("1")); err != nil {
+	if err := mem.XattrSet("g.txt", boruToHostXattr("a"), []byte("1")); err != nil {
 		t.Fatal(err)
 	}
 	SetHostFileOps(r2, &failAtOps{MemFileOps: mem, failXattrGet: "g.txt"})
-	if err := runAQLError(t, r2, []Value{
+	if err := runBORUError(t, r2, []Value{
 		NewWord("stat"), pathV("g.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("xattr", NewBoolean(true)) }),
 	}); err == nil {
@@ -205,16 +205,16 @@ func TestMapMapOpt(t *testing.T) {
 }
 
 func TestHostXattrNameMapping(t *testing.T) {
-	host := aqlToHostXattr("note")
+	host := boruToHostXattr("note")
 	if capabilities.XattrNamespacePrefix != "" && !strings.HasPrefix(host, capabilities.XattrNamespacePrefix) {
-		t.Errorf("aqlToHostXattr(%q) = %q, want prefixed", "note", host)
+		t.Errorf("boruToHostXattr(%q) = %q, want prefixed", "note", host)
 	}
-	back, ours := hostToAqlXattr(host)
+	back, ours := hostToBoruXattr(host)
 	if !ours || back != "note" {
 		t.Errorf("round trip = %q/%v", back, ours)
 	}
 	if capabilities.XattrNamespacePrefix != "" {
-		if _, ours := hostToAqlXattr("security.selinux"); ours {
+		if _, ours := hostToBoruXattr("security.selinux"); ours {
 			t.Error("foreign namespace claimed as ours")
 		}
 	}
@@ -379,7 +379,7 @@ func TestMetaFailInjection(t *testing.T) {
 	}
 
 	r := newReg(&failAtOps{failXattrList: "f.txt"})
-	if err := runAQLError(t, r, []Value{
+	if err := runBORUError(t, r, []Value{
 		NewWord("stat"), pathV("f.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("xattr", NewBoolean(true)) }),
 	}); err == nil {
@@ -387,7 +387,7 @@ func TestMetaFailInjection(t *testing.T) {
 	}
 
 	r = newReg(&failAtOps{failXattrSet: "f.txt"})
-	if err := runAQLError(t, r, []Value{
+	if err := runBORUError(t, r, []Value{
 		NewWord("touch"), pathV("f.txt"),
 		wrapMap(func(om *OrderedMap) {
 			xs := NewOrderedMap()

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // The 2026-07-15 flip composite's root cause, pinned at the module level: a

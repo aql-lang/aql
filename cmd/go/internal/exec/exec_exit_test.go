@@ -15,7 +15,7 @@ func TestExecServedExitDoesNotKillTheServer(t *testing.T) {
 	defer srv.Close()
 
 	var got execResponse
-	post(t, srv, "/v1/exec", map[string]any{"code": `import "aql:io" IO.exit 3`}, &got)
+	post(t, srv, "/v1/exec", map[string]any{"code": `import "boru:io" IO.exit 3`}, &got)
 	if got.Error == "" {
 		t.Fatal("a served exit request was silently honoured or ignored")
 	}

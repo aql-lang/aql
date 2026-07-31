@@ -48,7 +48,7 @@ func TestSuffixFromMetaName(t *testing.T) {
 
 func TestEnumerateVaultsScanAndIndex(t *testing.T) {
 	home := testHome(t)
-	defaultFolder := filepath.Join(home, ".aql")
+	defaultFolder := filepath.Join(home, ".boru")
 
 	// Two vaults in the default folder (default + suffixed sibling)...
 	writeMeta(t, defaultFolder, "", "file")

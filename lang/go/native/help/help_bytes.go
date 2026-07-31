@@ -12,7 +12,7 @@ package help
 // Bytes back into an instance (ADR-007 — the layout is plain Node data on the
 // type, not a parsed spec). See design/go-modules/BYTES.10.md. Heavier binary
 // ops (hashes, HMAC, hex/base encodings, secure random, UUID) live in
-// aql:bin-util.
+// boru:bin-util.
 func init() {
 	register(&Entry{
 		Word:    "unpack-prefix",
@@ -26,7 +26,7 @@ func init() {
 			"`List` of segment `Map`s — keys `name`|`value`, `type` (u8..u64/i8..i64/" +
 			"f32/f64/bits/bytes/utf8/pad), `endian` (be/le), `signed`, `size` (Integer " +
 			"or a field-name String). Hex/binary byte constants are the `+hb/…/` / " +
-			"`+bb/…/` minilang kinds (import \"aql:minilang\").",
+			"`+bb/…/` minilang kinds (import \"boru:minilang\").",
 		Examples: []string{
 			`def Msg (refine BinarySpec [{name:'op' type:'u8'} {name:'len' type:'u16'} {name:'body' type:'bytes' size:'len'}])  unpack-prefix Msg (convert Bytes [1 0 2 104 105])   # {ok:Class/Msg{op:1 len:2 body:Bytes<68 69>} rest:Bytes<>}`,
 			`def Hdr (refine BinarySpec [{name:'op' type:'u8'} {name:'len' type:'u16'}]) unpack-prefix Hdr (convert Bytes [0]) # {need: 2}`,

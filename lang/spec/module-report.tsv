@@ -1,9 +1,9 @@
-# AQL Language Specification: the aql:report module
+# BORU Language Specification: the boru:report module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of pretty-printers for kernel value types. Import binds
 # the `Report` namespace; each word returns a String the caller can
-# `print` or compose: `import "aql:report"  some-value Report.value`.
+# `print` or compose: `import "boru:report"  some-value Report.value`.
 # No word performs I/O itself. The record / table / list renderers produce
 # multi-line aligned blocks for populated inputs (verified in the Go
 # tests, since embedded newlines aren't TSV-expressible); the rows below
@@ -11,16 +11,16 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  value — generic single-value rendering (FormatForPrint)
-import "aql:report" 42 Report.value	'42'	a scalar renders as its print form
-import "aql:report" {name:"alice"} Report.value	'{"name": "alice"}'	a map renders inline as its print form
+import "boru:report" 42 Report.value	'42'	a scalar renders as its print form
+import "boru:report" {name:"alice"} Report.value	'{"name": "alice"}'	a map renders inline as its print form
 #
 # §2  record — vertical key:value block (single-key stays one line)
-import "aql:report" {age:30} Report.record	'age : 30'	one field renders as a single aligned line
-import "aql:report" {} Report.record	'(empty record)'	empty record fallback
+import "boru:report" {age:30} Report.record	'age : 30'	one field renders as a single aligned line
+import "boru:report" {} Report.record	'(empty record)'	empty record fallback
 #
 # §3  table — list-of-maps grid (empty fallback; populated form is multi-line)
-import "aql:report" [] Report.table	'(empty table)'	empty table fallback
+import "boru:report" [] Report.table	'(empty table)'	empty table fallback
 #
 # §4  list — indexed one-per-line (single element stays one line)
-import "aql:report" [42] Report.list	'[0] 42'	a one-element list renders as a single indexed line
-import "aql:report" [] Report.list	'(empty list)'	empty list fallback
+import "boru:report" [42] Report.list	'[0] 42'	a one-element list renders as a single indexed line
+import "boru:report" [] Report.list	'(empty list)'	empty list fallback

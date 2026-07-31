@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // watchReg builds a registry with the io words, a mem FS, and a `snoop`
@@ -56,12 +56,12 @@ func awaitSnoop(t *testing.T, snapshot func() []Value, n int) []Value {
 
 func TestWatchWordDeliversEvents(t *testing.T) {
 	r, snapshot := watchReg(t)
-	runAQL(t, r, []Value{NewWord("folder"), pathV("d")})
+	runBORU(t, r, []Value{NewWord("folder"), pathV("d")})
 
 	// watch d [snoop] — each event record is passed to the snoop native.
 	body := NewList([]Value{NewWord("snoop")})
 	body.Quoted = true
-	res := runAQL(t, r, []Value{NewWord("watch"), pathV("d"), body})
+	res := runBORU(t, r, []Value{NewWord("watch"), pathV("d"), body})
 	if len(res) != 1 {
 		t.Fatalf("watch returned %d values", len(res))
 	}
@@ -78,7 +78,7 @@ func TestWatchWordDeliversEvents(t *testing.T) {
 
 	// A write inside the watched dir triggers the callback with the
 	// {op, path} record.
-	runAQL(t, r, []Value{NewWord("write"), pathV("d/a.txt"), NewString("x")})
+	runBORU(t, r, []Value{NewWord("write"), pathV("d/a.txt"), NewString("x")})
 	evs := awaitSnoop(t, snapshot, 1)
 	m, err := AsMap(evs[0])
 	if err != nil || m == nil {
@@ -93,9 +93,9 @@ func TestWatchWordDeliversEvents(t *testing.T) {
 	}
 
 	// A remove triggers again; unwatch stops the stream and the pump.
-	runAQL(t, r, []Value{NewWord("remove"), pathV("d/a.txt")})
+	runBORU(t, r, []Value{NewWord("remove"), pathV("d/a.txt")})
 	awaitSnoop(t, snapshot, 2)
-	runAQL(t, r, []Value{NewWord("unwatch"), res[0]})
+	runBORU(t, r, []Value{NewWord("unwatch"), res[0]})
 	select {
 	case <-wi.Done():
 	case <-time.After(5 * time.Second):
@@ -103,13 +103,13 @@ func TestWatchWordDeliversEvents(t *testing.T) {
 	}
 	// Post-unwatch mutations deliver nothing.
 	before := len(snapshot())
-	runAQL(t, r, []Value{NewWord("write"), pathV("d/late.txt"), NewString("z")})
+	runBORU(t, r, []Value{NewWord("write"), pathV("d/late.txt"), NewString("z")})
 	time.Sleep(10 * time.Millisecond)
 	if got := len(snapshot()); got != before {
 		t.Errorf("events after unwatch: %d -> %d", before, got)
 	}
 	// unwatch is idempotent through the word too.
-	runAQL(t, r, []Value{NewWord("unwatch"), res[0]})
+	runBORU(t, r, []Value{NewWord("unwatch"), res[0]})
 }
 
 // TestWatchWordOptsFilter covers the option-bearing watch: {recursive:true}
@@ -117,22 +117,22 @@ func TestWatchWordDeliversEvents(t *testing.T) {
 // a non-matching write is dropped, so only .txt records reach the callback.
 func TestWatchWordOptsFilter(t *testing.T) {
 	r, snapshot := watchReg(t)
-	runAQL(t, r, []Value{NewWord("folder"), pathV("d")})
+	runBORU(t, r, []Value{NewWord("folder"), pathV("d")})
 	body := NewList([]Value{NewWord("snoop")})
 	body.Quoted = true
 	opts := NewOrderedMap()
 	opts.Set("recursive", NewBoolean(true))
 	opts.Set("match", NewString("*.txt"))
-	res := runAQL(t, r, []Value{NewWord("watch"), pathV("d"), body, NewMap(opts)})
+	res := runBORU(t, r, []Value{NewWord("watch"), pathV("d"), body, NewMap(opts)})
 	if len(res) != 1 {
 		t.Fatalf("watch returned %d values", len(res))
 	}
 	// A matching write fires; a non-matching one is filtered; the following
 	// match fires — awaitSnoop(2) proves the .log did not count.
-	runAQL(t, r, []Value{NewWord("write"), pathV("d/keep.txt"), NewString("x")})
+	runBORU(t, r, []Value{NewWord("write"), pathV("d/keep.txt"), NewString("x")})
 	awaitSnoop(t, snapshot, 1)
-	runAQL(t, r, []Value{NewWord("write"), pathV("d/skip.log"), NewString("y")})
-	runAQL(t, r, []Value{NewWord("write"), pathV("d/again.txt"), NewString("z")})
+	runBORU(t, r, []Value{NewWord("write"), pathV("d/skip.log"), NewString("y")})
+	runBORU(t, r, []Value{NewWord("write"), pathV("d/again.txt"), NewString("z")})
 	evs := awaitSnoop(t, snapshot, 2)
 	for _, ev := range evs {
 		m, _ := AsMap(ev)
@@ -141,7 +141,7 @@ func TestWatchWordOptsFilter(t *testing.T) {
 			t.Errorf("a non-.txt event slipped through {match}: %v", p)
 		}
 	}
-	runAQL(t, r, []Value{NewWord("unwatch"), res[0]})
+	runBORU(t, r, []Value{NewWord("unwatch"), res[0]})
 }
 
 // TestWatchRel covers watchRel's relative-path computation and every
@@ -166,7 +166,7 @@ func TestWatchWordErrors(t *testing.T) {
 	body := NewList([]Value{NewWord("snoop")})
 	body.Quoted = true
 	// Watching an absent path errors.
-	if err := runAQLError(t, r, []Value{NewWord("watch"), pathV("ghost"), body}); err == nil {
+	if err := runBORUError(t, r, []Value{NewWord("watch"), pathV("ghost"), body}); err == nil {
 		t.Error("expected watch of an absent path to error")
 	}
 	// A non-concrete body list is refused.

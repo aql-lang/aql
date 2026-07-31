@@ -14,15 +14,15 @@ import (
 	"fmt"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 func TestModuleTypeCompiledLiteral(t *testing.T) {
 	cases := []struct {
 		name, src, want string
 	}{
-		{"matrix make", `import "aql:matrix-util"  make MatrixUtil.Matrix [[1 2] [3 4]]`, "Matrix(2x2)"},
-		{"timezone is", `import "aql:time-util"  (TimeUtil.tz "UTC") is TimeUtil.Timezone`, "true"},
+		{"matrix make", `import "boru:matrix-util"  make MatrixUtil.Matrix [[1 2] [3 4]]`, "Matrix(2x2)"},
+		{"timezone is", `import "boru:time-util"  (TimeUtil.tz "UTC") is TimeUtil.Timezone`, "true"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

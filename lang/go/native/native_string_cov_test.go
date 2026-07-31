@@ -11,7 +11,7 @@ import (
 // modes behind them, and the option-parsing helper. Positive rows are
 // paired with rejection rows per the repo test discipline.
 
-// covOpts builds a concrete AQL options map from Go pairs.
+// covOpts builds a concrete BORU options map from Go pairs.
 func covOpts(pairs map[string]Value) Value {
 	om := NewOrderedMap()
 	for k, v := range pairs {
@@ -859,7 +859,7 @@ func TestStrOptsRejectUnknownKeys(t *testing.T) {
 			t.Errorf("%s: option %q accepted, want rejection", c.word, c.key)
 			continue
 		}
-		ae, ok := err.(*AqlError)
+		ae, ok := err.(*BoruError)
 		if !ok || ae.Code != "string_option_error" {
 			t.Errorf("%s/%s: got %T %v, want string_option_error", c.word, c.key, err, err)
 		}

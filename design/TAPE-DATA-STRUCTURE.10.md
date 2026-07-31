@@ -112,7 +112,7 @@ multi-megabyte documents, concurrent edits, and structural sharing. The
 engine tape is small (10³–10⁵ tokens), single-cursor, and access-heavy:
 O(1)-with-one-branch beats O(log n)-with-tree-nodes, and the
 implementation complexity (rebalancing, node management) is far beyond
-what the workload demands. If AQL ever needed multiple concurrent
+what the workload demands. If BORU ever needed multiple concurrent
 cursors into one tape (it doesn't — forks get their own registry), this
 would be the candidate to revisit.
 
@@ -223,5 +223,5 @@ Notes for the implementer:
   recursion will become fast enough to hit the limits sooner. The limit
   error should be made explicit regardless (see
   `RECURSION-PERFORMANCE.10.md` §remediation 4).
-- Go-stack depth from nested sub-engines (CallAQL recursion) is
+- Go-stack depth from nested sub-engines (CallBORU recursion) is
   unchanged; it was not the observed bottleneck.

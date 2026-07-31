@@ -1,15 +1,15 @@
-# AQL through a LISP/Scheme Lens — Analysis & Improvement Proposals
+# BORU through a LISP/Scheme Lens — Analysis & Improvement Proposals
 
 **Status:** analysis / design note
-**Scope:** evaluates AQL's metaprogramming and functional-programming
+**Scope:** evaluates BORU's metaprogramming and functional-programming
 surface against the classical LISP/Scheme tradition — *code as data*,
 hygienic macros, combinators, higher-order functions, and the broader
 "lisp-ish mentality" — and proposes concrete, prioritized improvements.
 
-> AQL is **not** a LISP. It is a *concatenative* language (Forth/Joy/Factor
+> BORU is **not** a LISP. It is a *concatenative* language (Forth/Joy/Factor
 > lineage) with a **data syntax borrowed from jsonic/JSON** and a
-> value-is-type lattice. The interesting question is not "is AQL a LISP?"
-> but "which of LISP's powers does AQL's design already grant, which does
+> value-is-type lattice. The interesting question is not "is BORU a LISP?"
+> but "which of LISP's powers does BORU's design already grant, which does
 > it forgo, and which could it gain cheaply without betraying its
 > concatenative, data-first identity?" That framing drives every
 > recommendation below.
@@ -18,7 +18,7 @@ hygienic macros, combinators, higher-order functions, and the broader
 
 ## 0. TL;DR scorecard
 
-| LISP capability | AQL today | Grade | One-line verdict |
+| LISP capability | BORU today | Grade | One-line verdict |
 |---|---|---|---|
 | Code as data (homoiconicity) | lists evaluate by default; `quote`, `word` splice, `do`, fn bodies are lists | **B** | Real and idiomatic, but "code" is a *list of tokens*, not a uniform tree; no reader/printer round-trip for all forms |
 | Higher-order functions | `fn`/`afn` lambdas, lexical closures, `ref`/`usurp`/`apply`, `each`/`fold`/`scan`/`outer`/`inner` | **A−** | Strong; first-class functions with capture; only naming/coverage gaps |
@@ -28,7 +28,7 @@ hygienic macros, combinators, higher-order functions, and the broader
 | `eval` / metacircularity | `do`/`module` run lists as sub-programs | **B−** | Eval-by-another-name exists; no first-class `eval`/`read`, no environment reification |
 | REPL / dynamic mentality | REPL, dynamic defs, minimal core + words, type-as-value | **A−** | Very lisp-ish in spirit |
 
-Net: **AQL already lives in the homoiconic, higher-order, REPL-driven
+Net: **BORU already lives in the homoiconic, higher-order, REPL-driven
 world LISP pioneered** — its data syntax doubles as code, lambdas are
 first-class with closures, and the concatenative core is a combinator
 playground. The two weakest dimensions are **macro hygiene** (effectively
@@ -37,7 +37,7 @@ data."** Those are where the leverage is.
 
 ---
 
-## 1. Background: AQL's evaluation model in one screen
+## 1. Background: BORU's evaluation model in one screen
 
 A few facts the rest of this note leans on (all from `lang/go/CLAUDE.md`
 and `eng/go/CLAUDE.md`):
@@ -58,12 +58,12 @@ and `eng/go/CLAUDE.md`):
   `force-arity` words wrap a function to change its dispatch shape, and
   **compose**.
 - **`word` is a splice marker** (`__SP`): `def doub word [dup add]` expands
-  its body Forth-style at the call site — AQL's nearest thing to a macro.
+  its body Forth-style at the call site — BORU's nearest thing to a macro.
 - **Types are values** on a lattice; `def Foo …` binds a type, `make`
   instantiates, `refine` subtypes. Recent work added `Ideal/Module` +
   `Ideal/ModuleExport` and an `IdealConverter` capability.
 
-So AQL's "S-expression" is the **evaluated list** `[...]`, and its
+So BORU's "S-expression" is the **evaluated list** `[...]`, and its
 "special form" toolkit is **quotation** (`quote`, `/q`, `NoEvalArgs`) plus
 **splice** (`word`).
 
@@ -71,10 +71,10 @@ So AQL's "S-expression" is the **evaluated list** `[...]`, and its
 
 ## 2. Code as data (homoiconicity)
 
-### What AQL has
+### What BORU has
 
 LISP's defining trick — programs are the language's own primary data
-structure — has a genuine AQL analogue:
+structure — has a genuine BORU analogue:
 
 - A bracketed **list is literally a program fragment**. `[dup add]` is
   both "a list of three tokens" and "the body that doubles its input."
@@ -97,7 +97,7 @@ quote it, splice it, and run it.
 
 1. **"Code" is a flat token list, not a uniform tree.** In LISP every form
    is a cons cell; `car`/`cdr`/`cons` traverse *all* code uniformly.
-   AQL's quoted body is a `[]Value` of heterogeneous tokens (Words, atoms,
+   BORU's quoted body is a `[]Value` of heterogeneous tokens (Words, atoms,
    `OpenParen`/`CloseParen` markers, `Forward`/`End` markers, `ParenExpr`,
    `InterpString`). Paren grouping and dotted access are **markers in the
    stream**, not nested sub-lists, so a program that wants to *walk and
@@ -107,7 +107,7 @@ quote it, splice it, and run it.
 2. **No general `read`/`eval`/`print` triad at the language level.** `do`
    evaluates a list, but there is no `eval` that takes an arbitrary quoted
    value (atom, word, nested structure) and runs it with an explicit
-   environment; no `read` word (string→code) surfaced to AQL; the
+   environment; no `read` word (string→code) surfaced to BORU; the
    *printer* (`canon`) round-trips most but not all forms (the earlier
    `typeof (module …)` empty-render bug, since fixed, is the family of
    problem).
@@ -125,7 +125,7 @@ access to code** and a **reflective `read`/`eval`/`print`** surface.
 
 ## 3. Higher-order functions
 
-### What AQL has — and it's strong
+### What BORU has — and it's strong
 
 - **First-class functions**: `fn [[params][returns][body]]` and the `=>`
   lambda (`afn`). They are ordinary `Function` values.
@@ -167,7 +167,7 @@ combinators) is genuinely excellent. The gaps are *vocabulary*, not
 
 ## 4. Combinators
 
-AQL is, by construction, a **combinator language**: juxtaposition is
+BORU is, by construction, a **combinator language**: juxtaposition is
 composition, and the stack is the implicit plumbing. This is the Joy/
 Factor inheritance and it's a real strength.
 
@@ -209,7 +209,7 @@ This is the weakest dimension — and the most LISP-defining one.
 
 ### What's missing
 
-1. **No user-level macro definition.** You cannot write, in AQL, "a word
+1. **No user-level macro definition.** You cannot write, in BORU, "a word
    that receives its arguments unevaluated, transforms them as data, and
    returns code to run." `NoEvalArgs` is a Go-side `Signature` field, not
    something `def`/`fn` can request. So *all* metaprogramming that needs
@@ -226,7 +226,7 @@ This is the weakest dimension — and the most LISP-defining one.
    at the pointer during execution; there's no separate, inspectable
    expansion step (so no `macroexpand`, no compile-time error surface).
 
-**Verdict: macros C, hygiene D.** AQL has the *primitive* (`word` splice +
+**Verdict: macros C, hygiene D.** BORU has the *primitive* (`word` splice +
 `NoEvalArgs`) but not the *system*. For a language that already treats
 lists as code, this is the biggest unrealized LISP dividend.
 
@@ -278,7 +278,7 @@ Tension with LISP:
 
 ## 8. Suggested improvements
 
-Ordered by **leverage ÷ cost**. Each is framed to *fit AQL's
+Ordered by **leverage ÷ cost**. Each is framed to *fit BORU's
 concatenative, data-first identity* — not to bolt a parenthesised LISP on
 top.
 
@@ -299,11 +299,11 @@ This is the headline gap. Concretely:
   way to mark a word as receiving operands **unevaluated** (surface the
   existing `NoEvalArgs` to user code) and to return code to splice. Even
   *non-hygienic* user macros + `gensym` would move metaprogramming out of
-  Go and into AQL — the single biggest "become more of a LISP" step.
+  Go and into BORU — the single biggest "become more of a LISP" step.
 
-*Why first:* AQL already lists-are-code and has `word`/`NoEvalArgs`; this
+*Why first:* BORU already lists-are-code and has `word`/`NoEvalArgs`; this
 is assembling existing parts into a usable system, and it is the dimension
-where AQL is furthest from its own potential.
+where BORU is furthest from its own potential.
 
 **2. Combinator vocabulary: `compose`, `dip`, `keep`, `bi`, `flip`,
 `identity`, `const`.** Implement as wrapper words returning `Function`
@@ -328,13 +328,13 @@ code that something *evals*).
 **list-shaped** API: make paren groups and dotted access recursively
 *walkable as nested lists* (or provide `code->list` / `list->code` that
 normalize the marker tape to/from a real tree). This is what lets users
-write code-walking macros and optimizers in AQL itself, the way LISP walks
+write code-walking macros and optimizers in BORU itself, the way LISP walks
 cons cells. It is the deepest change (touches the parser's marker model)
 but it is what would move "code as data" from **B** to **A**.
 
 **6. First-class environments.** Generalize the module sub-registry into a
 reifiable `Environment` value: capture the current bindings, extend, eval
-in. AQL is unusually close (modules already do this internally); exposing
+in. BORU is unusually close (modules already do this internally); exposing
 it would give Scheme-grade reflective power and a clean substrate for
 sandboxed `eval`.
 
@@ -371,13 +371,13 @@ sandboxed `eval`.
 **Smallest high-value slice:** ship **#1 `gensym` + #4 combinators +
 #5 names** first (all small, all pure additions, no engine surgery), then
 tackle **#2 quasiquote + #3 user macros** as the flagship
-"AQL-gets-real-metaprogramming" milestone.
+"BORU-gets-real-metaprogramming" milestone.
 
 ---
 
 ## 10. Closing assessment
 
-AQL is **not** a LISP, and shouldn't try to be one — its concatenative
+BORU is **not** a LISP, and shouldn't try to be one — its concatenative
 core and jsonic data syntax are a coherent, distinctive identity. But it
 sits much closer to the LISP tradition than its surface suggests: **lists
 are code, functions are first-class values with closures, the environment
@@ -386,18 +386,18 @@ late-bound behaviours.** Two LISP superpowers remain largely unrealized —
 **a real (hygienic) macro system** and **uniform, walkable code-as-data** —
 and both are *assembling existing primitives* (`word`, `NoEvalArgs`,
 `quote`, the parser, the marker tape) into a coherent surface rather than
-inventing new machinery. Those are the investments that would let AQL
+inventing new machinery. Those are the investments that would let BORU
 honestly claim LISP's most enduring promise: **a language you extend in
 itself.**
 
 ---
 
-## Appendix A — the `aql:decision` DX report through the LISP lens
+## Appendix A — the `boru:decision` DX report through the LISP lens
 
-`design/AQL-DX-REPORT.5.md` records a concrete failure: a decision library
-that *should* have been ~80 lines of AQL became ~350 lines of Go + 30 of
-AQL, because the author hit six issues. Re-reading those issues through
-this analysis is striking — **every one is a place where AQL was missing a
+`design/BORU-DX-REPORT.5.md` records a concrete failure: a decision library
+that *should* have been ~80 lines of BORU became ~350 lines of Go + 30 of
+BORU, because the author hit six issues. Re-reading those issues through
+this analysis is striking — **every one is a place where BORU was missing a
 LISP idea**, and the fixes that have since landed are exactly the
 LISP-shaped ones. Current status (verified on this branch):
 
@@ -421,7 +421,7 @@ Two higher-order observations:
    or makes the DSL a set of macros/combinators that lower to core words.
    The 80→350-line blow-up is precisely the cost of *not* having the LISP
    metaprogramming layer: the Go evaluators are a metacircular interpreter
-   that couldn't be hosted in AQL.
+   that couldn't be hosted in BORU.
 
 2. **The DX report independently re-derived the Tier-1 roadmap.** Its
    suggested fixes — an explicit `eval`, a `collect`/`list` builder, a
@@ -429,14 +429,14 @@ Two higher-order observations:
    §8 lists from first principles (`eval`/`read`, quasiquote, the
    combinator vocabulary, keyword semantics). That convergence is strong
    evidence the Tier-1 work is the right next investment: it is what turns
-   "fall back to Go" into "the library is AQL."
+   "fall back to Go" into "the library is BORU."
 
 **Bottom line:** the DX pain was LISP-shaped, and so were the fixes. Four
 of six issues are resolved by changes that amount to *adopting a LISP idea*
 (explicit eval of consumed lists, lexical cleanup, keyword keys, uniform
 application). The two that remain — **a `list`/`eval` builder (#5)** and
 the **hygiene/`gensym` half of #2** — are Tier-1 items in §8, and they are
-the ones that would have kept the decision module pure AQL.
+the ones that would have kept the decision module pure BORU.
 
 ---
 
@@ -450,9 +450,9 @@ shipped working code; the report's own framing is the headline finding:
 > every hour lost went to behaviour that failed **quietly** rather than
 > loudly."
 
-That sentence is, almost verbatim, the LISP critique of AQL from §2 and §7 of
+That sentence is, almost verbatim, the LISP critique of BORU from §2 and §7 of
 this document. LISP's parenthesised `(f a b)` makes two things impossible that
-AQL allows: (a) an application whose operator/operand boundary is ambiguous,
+BORU allows: (a) an application whose operator/operand boundary is ambiguous,
 and (b) an application that *fails to apply yet produces no error*. The whole
 of the report's dominant "Theme A — silent dispatch" is the cost of not having
 LISP's loud, explicit application form. Re-read through this analysis:
@@ -461,9 +461,9 @@ LISP's loud, explicit application form. Re-read through this analysis:
 
 | DX issue | LISP concept it's really about | Status (vs main) | What the LISP lens says |
 |---|---|---|---|
-| **T1** namespace dispatch type-miss leaves the fn on the stack **as data**, no error | **uniform, loud application** | ❌ open | This is the single most anti-LISP behaviour in the language. In LISP, a symbol in operator position is *applied*; an arity/type failure is **always** an error (`wrong-type-argument`, `wrong-number-of-arguments`). AQL conflates two distinct things — "a function used as a first-class **value**" and "a function that **failed to apply**" — into one stack state. LISP keeps them apart structurally: a function is a value only when it is *not* in operator position. The fix is the §8/§5 note made concrete: **when a function value is consumed in operator position and no signature matches, raise** — never silently park it as data. |
+| **T1** namespace dispatch type-miss leaves the fn on the stack **as data**, no error | **uniform, loud application** | ❌ open | This is the single most anti-LISP behaviour in the language. In LISP, a symbol in operator position is *applied*; an arity/type failure is **always** an error (`wrong-type-argument`, `wrong-number-of-arguments`). BORU conflates two distinct things — "a function used as a first-class **value**" and "a function that **failed to apply**" — into one stack state. LISP keeps them apart structurally: a function is a value only when it is *not* in operator position. The fix is the §8/§5 note made concrete: **when a function value is consumed in operator position and no signature matches, raise** — never silently park it as data. |
 | **B1** forward `set` on a `refine Object` store silently no-ops | same family (a missed overload that parks instead of erroring) | ❌ open | The report bisects this to "behaves exactly like a missed overload." Same cure: a write whose signature didn't match is a **loud** error, not a value that quietly evaporates. |
-| **T6** `xs get i` returns `none` — forward `get` grabs the bare word `i`, not its value | the **quote/eval boundary** + explicit application | ❌ open | In LISP every operand is evaluated unless explicitly quoted; you can never *accidentally* pass a symbol where you meant its value. AQL's forward collection sometimes captures a `Word` as data. The `/s` / `/f` / `stack-args` / `forward-args` levers (just landed) are AQL's way to *recover the explicit boundary* LISP gets from parens — `xs get (i)` already works; the levers generalise it. |
+| **T6** `xs get i` returns `none` — forward `get` grabs the bare word `i`, not its value | the **quote/eval boundary** + explicit application | ❌ open | In LISP every operand is evaluated unless explicitly quoted; you can never *accidentally* pass a symbol where you meant its value. BORU's forward collection sometimes captures a `Word` as data. The `/s` / `/f` / `stack-args` / `forward-args` levers (just landed) are BORU's way to *recover the explicit boundary* LISP gets from parens — `xs get (i)` already works; the levers generalise it. |
 | **T9.2** `filter` rejects a `[…]` quotation | a lambda is a lambda **everywhere** | ❌ open | In LISP a procedure is accepted in every higher-order position uniformly. `filter` refusing a quotation that `each`/`fold` accept is a per-word special case — the opposite of uniform application. |
 
 ### B.2 The quote/eval boundary, again
@@ -479,7 +479,7 @@ LISP's loud, explicit application form. Re-read through this analysis:
 | DX issue | LISP concept | Status | Lens |
 |---|---|---|---|
 | **T5** `eq` on lists is **identity**, not structure (`["a"] ["a"] eq → false`) | Scheme's `eq?` / `eqv?` / `equal?` trichotomy | ❌ open | This is *precisely* the distinction Scheme names explicitly. Users reached for `eq` expecting `equal?` (deep) and got `eq?` (identity), and a property test passed **vacuously**. The fix is the LISP fix: **name the levels** — keep `eq` for identity, add a structural `equal` (the report's `Assert.equal` already is one), and document the split. |
-| **B2a** chained `(expr) print (expr) print` prints in **reverse** | defined **sequencing** (`begin`/`progn`, left-to-right) | ❌ open | LISP guarantees evaluation order in a body. AQL's forward collection reorders side effects. The report's own suggestion ("make `print` stack-first") is a point fix; the general LISP answer is an explicit sequencing form with specified order. |
+| **B2a** chained `(expr) print (expr) print` prints in **reverse** | defined **sequencing** (`begin`/`progn`, left-to-right) | ❌ open | LISP guarantees evaluation order in a body. BORU's forward collection reorders side effects. The report's own suggestion ("make `print` stack-first") is a point fix; the general LISP answer is an explicit sequencing form with specified order. |
 | **B3** `def _ (void-call)` leaves stack residue → next word mis-dispatches | **everything is an expression with a value** | ❌ open | In LISP every form yields a value (or a defined "unspecified"); there is no "residue on the stack." A stack VM can't fully adopt that, but the `dip`/`keep` combinators (§4) give the disciplined "run this for effect, preserve the rest" contract that prevents residue from leaking into the next application. |
 
 ### B.4 Missing primitives = missing the LISP metaprogramming floor
@@ -491,16 +491,16 @@ The report's Theme G + HAMT study list exactly the primitives §6/§8 call out:
   *why* so much of Theme A degrades to silent wrong values instead of errors.
   `raise` is the user-space half of the P0 "make failures loud" recommendation.
 - **`parse` / `decode`** (T9.7, missing) → LISP's **`read`**. The report wants
-  to turn a string into AQL data; that is `read`, the front half of the
+  to turn a string into BORU data; that is `read`, the front half of the
   `read`→`eval`→`print` loop §6 sketches. Pair it with the still-absent `eval`
-  and AQL gains the metacircular floor that would have let the decision DSL
+  and BORU gains the metacircular floor that would have let the decision DSL
   (Appendix A) and these libraries host their *own* interpreters.
 - **`with` / `assoc`** (missing) → Clojure's `assoc` — functional **shallow
   single-key update**, the immutable-map idiom. Its absence is *why* T3's deep
   `merge` got misused as a one-field update and silently fused subtrees.
 - **`popcount`, `insert-at`/`remove-at`** (HAMT Level A) → not LISP-specific,
   but note the HAMT itself is a *persistent data structure* — the report
-  observes AQL's copy-returning ops already make path-copying tries "the path
+  observes BORU's copy-returning ops already make path-copying tries "the path
   of least resistance," which is the Clojure/persistent-LISP design point §7
   praises. The gap is primitives, not philosophy.
 
@@ -512,7 +512,7 @@ Three higher-order observations, parallel to Appendix A:
    The report's P0 — namespace dispatch must error, not no-op (T1/B1); `get`
    on a bare undefined word must error, not return `none` (T6) — is one
    principle: *application in operator position is loud*. LISP gets this free
-   from parens + the evaluator's apply step. AQL chose implicit forward
+   from parens + the evaluator's apply step. BORU chose implicit forward
    collection for ergonomics and inherited the ambiguity as silent failure.
    The cure is not to abandon concatenative syntax but to make the **apply
    step loud** the way LISP's is.
@@ -535,9 +535,9 @@ Three higher-order observations, parallel to Appendix A:
    floor**, with **loud application** (a tiny, surgical change — raise instead
    of park) as the highest-leverage single fix.
 
-**Bottom line:** Appendix A's libraries fell back to Go because AQL lacked the
+**Bottom line:** Appendix A's libraries fell back to Go because BORU lacked the
 *metaprogramming* layer (eval/quasiquote/gensym). The Voxgig libraries
-*shipped* — but bled hours to *silent* failures because AQL lacked the
+*shipped* — but bled hours to *silent* failures because BORU lacked the
 *loud-application* layer. Both are the same LISP lesson from two sides:
 **application should be explicit at the boundary and loud on failure.** The
 modifier words on this branch deliver the first half; making dispatch

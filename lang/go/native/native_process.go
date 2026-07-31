@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native/internal/patrun"
-	"github.com/aql-lang/aql/lang/go/policy"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native/internal/patrun"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // BEAM-style process words — the language surface of design/PROCESSES.0.md
@@ -21,7 +21,7 @@ import (
 //
 // Message-passing semantics (deliberate divergences noted):
 //   - Messages are DEEP-COPIED at `send` (eng.CloneValue): plain List/Map
-//     payloads ARE mutated in place by `set` in today's AQL, so zero-copy
+//     payloads ARE mutated in place by `set` in today's BORU, so zero-copy
 //     sharing across goroutines (the PROCESSES.0.md §6 aspiration) is not
 //     yet safe for containers. Scalars, Bytes, and handles still share
 //     (CloneValue shares immutable payloads), so the common cases stay
@@ -45,13 +45,13 @@ func registerPidType() *eng.Type {
 	return t
 }
 
-// NewPid wraps a process handle as an AQL Pid value.
+// NewPid wraps a process handle as a BORU Pid value.
 func NewPid(p *eng.Process) Value {
 	return eng.NewExtension(TPid, p)
 }
 
 // PidProcess unwraps a Pid value to its process — the hook a Go
-// driver uses to deliver messages to an AQL-held pid (aql:tui's
+// driver uses to deliver messages to a BORU-held pid (boru:tui's
 // deliver-events). The bool is false for non-Pid values.
 func PidProcess(v Value) (*eng.Process, bool) {
 	return asPid(v)
@@ -198,7 +198,7 @@ func ensureSelfProc(r *Registry) (*eng.Process, error) {
 	rt := procRuntime(r)
 	p := eng.NewProcess(rt, eng.DefaultMailboxBound, eng.OverflowBlock)
 	if err := rt.Insert(p); err != nil {
-		return nil, r.AqlError("process_error", "process runtime is shut down", "self")
+		return nil, r.BoruError("process_error", "process runtime is shut down", "self")
 	}
 	r.Proc = p
 	return p, nil
@@ -237,7 +237,7 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			if v, ok := opts.Get("mailbox"); ok {
 				n, cErr := v.AsConcreteInteger()
 				if cErr != nil || n < 0 {
-					return nil, r.AqlError("spawn_error", "spawn: opts.mailbox must be a non-negative Integer (0 = unbounded)", "spawn")
+					return nil, r.BoruError("spawn_error", "spawn: opts.mailbox must be a non-negative Integer (0 = unbounded)", "spawn")
 				}
 				bound = int(n)
 			}
@@ -247,7 +247,7 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 				case eng.OverflowBlock, eng.OverflowFail, eng.OverflowDrop:
 					overflow = s
 				default:
-					return nil, r.AqlError("spawn_error",
+					return nil, r.BoruError("spawn_error",
 						fmt.Sprintf("spawn: opts.overflow must be %q, %q or %q, got %q",
 							eng.OverflowBlock, eng.OverflowFail, eng.OverflowDrop, s), "spawn")
 				}
@@ -264,7 +264,7 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	p := eng.NewProcess(rt, bound, overflow)
 	fork.Proc = p
 	if err := rt.Insert(p); err != nil {
-		return nil, r.AqlError("spawn_error", "spawn: process runtime is shut down", "spawn")
+		return nil, r.BoruError("spawn_error", "spawn: process runtime is shut down", "spawn")
 	}
 
 	go func() {
@@ -272,7 +272,7 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			// "Let it crash" per process: a panic or error terminates only
 			// this process; the host and sibling processes are untouched.
 			if rec := recover(); rec != nil {
-				fmt.Fprintf(fork.ErrOutput, "[aql/process] %s crashed: %v\n", p.ID, rec)
+				fmt.Fprintf(fork.ErrOutput, "[boru/process] %s crashed: %v\n", p.ID, rec)
 			}
 			rt.Remove(p)
 			p.Close()
@@ -284,7 +284,7 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 			_, runErr = New(fork).Run(tokens)
 		}
 		if runErr != nil {
-			fmt.Fprintf(fork.ErrOutput, "[aql/process] %s exited with error: %v\n", p.ID, runErr)
+			fmt.Fprintf(fork.ErrOutput, "[boru/process] %s exited with error: %v\n", p.ID, runErr)
 		}
 	}()
 
@@ -348,7 +348,7 @@ func sendableViolation(v Value) string {
 func sendHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	msg := args[0]
 	if bad := sendableViolation(msg); bad != "" {
-		return nil, r.AqlErrorHint("not_sendable",
+		return nil, r.BoruErrorHint("not_sendable",
 			fmt.Sprintf("send: message contains a mutable %s, which cannot cross a process boundary", bad),
 			"send", "messages must be immutable values (scalars, Bytes, plain List/Map, Pid); convert stateful containers first")
 	}
@@ -360,9 +360,9 @@ func sendHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// sender mutating a shared container (see the file comment).
 	if err := target.Send(CloneValue(msg)); err != nil {
 		if err == eng.ErrMailboxOverload {
-			return nil, r.AqlError("overload", "send: target mailbox is full", "send")
+			return nil, r.BoruError("overload", "send: target mailbox is full", "send")
 		}
-		return nil, r.AqlError("process_error", "send: "+err.Error(), "send")
+		return nil, r.BoruError("process_error", "send: "+err.Error(), "send")
 	}
 	return nil, nil
 }
@@ -371,13 +371,13 @@ func registerHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	name := ValToString(args[0])
 	p, ok := asPid(args[1])
 	if !ok {
-		return nil, r.AqlError("process_error", "register: expected a Pid, got "+args[1].Parent.String(), "register")
+		return nil, r.BoruError("process_error", "register: expected a Pid, got "+args[1].Parent.String(), "register")
 	}
 	if name == "" {
-		return nil, r.AqlError("process_error", "register: name must be non-empty", "register")
+		return nil, r.BoruError("process_error", "register: name must be non-empty", "register")
 	}
 	if err := procRuntime(r).RegisterName(name, p); err != nil {
-		return nil, r.AqlError("process_error", "register: "+err.Error(), "register")
+		return nil, r.BoruError("process_error", "register: "+err.Error(), "register")
 	}
 	return nil, nil
 }
@@ -435,15 +435,15 @@ func parseReceiveClauses(r *Registry, list Value) ([]recvClause, *recvAfter, err
 		// `after <ms> [body]` — the timeout clause.
 		if w, ok := e.Data.(eng.WordInfo); ok && w.Name == "after" {
 			if i+2 >= len(elems) {
-				return nil, nil, r.AqlError("receive_error", "receive: `after` needs <ms> and [body]", "receive")
+				return nil, nil, r.BoruError("receive_error", "receive: `after` needs <ms> and [body]", "receive")
 			}
 			ms, cErr := elems[i+1].AsConcreteInteger()
 			if cErr != nil || ms < 0 {
-				return nil, nil, r.AqlError("receive_error", "receive: `after` deadline must be a non-negative Integer literal", "receive")
+				return nil, nil, r.BoruError("receive_error", "receive: `after` deadline must be a non-negative Integer literal", "receive")
 			}
 			bodyList, bErr := RequireConcreteList(elems[i+2], "receive")
 			if bErr != nil {
-				return nil, nil, r.AqlError("receive_error", "receive: `after` body must be a list", "receive")
+				return nil, nil, r.BoruError("receive_error", "receive: `after` body must be a list", "receive")
 			}
 			body := make([]Value, bodyList.Len())
 			copy(body, bodyList.Slice())
@@ -453,15 +453,15 @@ func parseReceiveClauses(r *Registry, list Value) ([]recvClause, *recvAfter, err
 		}
 		// `{pattern} [body]` pair.
 		if !IsConcrete(e) || !e.Parent.ConformsTo(TMap) {
-			return nil, nil, r.AqlError("receive_error",
+			return nil, nil, r.BoruError("receive_error",
 				"receive: expected a {pattern} map (or `after`), got "+e.Parent.String(), "receive")
 		}
 		if i+1 >= len(elems) {
-			return nil, nil, r.AqlError("receive_error", "receive: pattern has no [body]", "receive")
+			return nil, nil, r.BoruError("receive_error", "receive: pattern has no [body]", "receive")
 		}
 		bodyList, bErr := RequireConcreteList(elems[i+1], "receive")
 		if bErr != nil {
-			return nil, nil, r.AqlError("receive_error", "receive: clause body must be a list", "receive")
+			return nil, nil, r.BoruError("receive_error", "receive: clause body must be a list", "receive")
 		}
 		body := make([]Value, bodyList.Len())
 		copy(body, bodyList.Slice())
@@ -474,7 +474,7 @@ func parseReceiveClauses(r *Registry, list Value) ([]recvClause, *recvAfter, err
 		i++
 	}
 	if len(clauses) == 0 && after == nil {
-		return nil, nil, r.AqlError("receive_error", "receive: needs at least one clause", "receive")
+		return nil, nil, r.BoruError("receive_error", "receive: needs at least one clause", "receive")
 	}
 	return clauses, after, nil
 }
@@ -502,7 +502,7 @@ func splitClausePattern(r *Registry, pat Value) (recvClause, error) {
 				c.binds = append(c.binds, recvBind{name: k, t: CanonicalType(r, t)})
 				continue
 			}
-			return recvClause{}, r.AqlErrorHint("receive_error",
+			return recvClause{}, r.BoruErrorHint("receive_error",
 				fmt.Sprintf("receive: pattern field %q names unknown type %q", k, w.Name),
 				"receive", "route on top-level scalar tags ({cmd: \"inc\"}); bind typed fields ({reply: Pid})")
 		}
@@ -516,7 +516,7 @@ func splitClausePattern(r *Registry, pat Value) (recvClause, error) {
 			}
 			c.binds = append(c.binds, recvBind{name: k, t: CanonicalType(r, t)})
 		default:
-			return recvClause{}, r.AqlErrorHint("receive_error",
+			return recvClause{}, r.BoruErrorHint("receive_error",
 				fmt.Sprintf("receive: pattern field %q must be a Scalar routing tag or a Type binding slot, got %s", k, v.Parent.String()),
 				"receive", "route on top-level scalar tags ({cmd: \"inc\"}); bind typed fields ({reply: Pid})")
 		}
@@ -641,7 +641,7 @@ func receiveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		msg, got, err = p.PopFront(0, false)
 	}
 	if err != nil {
-		return nil, r.AqlError("process_error", "receive: "+err.Error(), "receive")
+		return nil, r.BoruError("process_error", "receive: "+err.Error(), "receive")
 	}
 	if !got {
 		// Deadline passed with an empty mailbox → the `after` body.
@@ -650,7 +650,7 @@ func receiveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 
 	idx := routeMessage(clauses, msg)
 	if idx < 0 {
-		return nil, r.AqlErrorHint("no_match",
+		return nil, r.BoruErrorHint("no_match",
 			"receive: message matches no clause: "+ValToString(msg),
 			"receive", "add a catch-all {} clause to accept unmatched messages")
 	}
@@ -666,7 +666,7 @@ func receiveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 			}
 		}
 		if !fell {
-			return nil, r.AqlErrorHint("no_match",
+			return nil, r.BoruErrorHint("no_match",
 				"receive: message routed to a clause but failed its typed binding slots: "+ValToString(msg),
 				"receive", "binding slots ({reply: Pid}) require the field present and of the slot type")
 		}

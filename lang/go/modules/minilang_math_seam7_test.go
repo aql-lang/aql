@@ -3,7 +3,7 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 	tabnasexpr "github.com/tabnas/expr/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
@@ -33,16 +33,16 @@ func TestS7B_MathValueListRef(t *testing.T) {
 	}
 }
 
-// TestS7B_MathAqlToMvalBadPayloads drives aqlToMval's AsInteger / AsFloat
+// TestS7B_MathBoruToMvalBadPayloads drives boruToMval's AsInteger / AsFloat
 // error arms: a value whose Parent conforms to Integer/Float but whose
 // payload is not the matching numeric payload is refused (not coerced).
-func TestS7B_MathAqlToMvalBadPayloads(t *testing.T) {
+func TestS7B_MathBoruToMvalBadPayloads(t *testing.T) {
 	badInt := native.NewValueRaw(native.TInteger, native.StrPayload{S: "x"})
-	if _, ok := aqlToMval(badInt); ok {
-		t.Error("aqlToMval: Integer-typed value with non-int payload should be refused")
+	if _, ok := boruToMval(badInt); ok {
+		t.Error("boruToMval: Integer-typed value with non-int payload should be refused")
 	}
 	badFloat := native.NewValueRaw(native.TFloat, native.StrPayload{S: "x"})
-	if _, ok := aqlToMval(badFloat); ok {
-		t.Error("aqlToMval: Float-typed value with non-float payload should be refused")
+	if _, ok := boruToMval(badFloat); ok {
+		t.Error("boruToMval: Float-typed value with non-float payload should be refused")
 	}
 }

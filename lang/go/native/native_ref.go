@@ -3,17 +3,17 @@ package native
 import (
 	"fmt"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
-// refNatives registers the two words that complete AQL's first-class
+// refNatives registers the two words that complete BORU's first-class
 // function-value pipeline:
 //
 //   - `ref name`  — resolves a function word to its bound value
 //     without invoking; companion to the `/r` word suffix
 //     that lives in the parser+stepWord path. Both are legal
 //     only for function words — referencing a non-fn binding
-//     raises [aql/illegal_ref] (a bare value name already
+//     raises [boru/illegal_ref] (a bare value name already
 //     pushes its value, so there is nothing to reference).
 //   - `apply fn`  — invokes a captured function value against the
 //     preceding stack args. The opposite-direction
@@ -51,7 +51,7 @@ var refNatives = []NativeFunc{
 		// Stack-only: `args... fn apply` reads as "take the function
 		// off the stack and apply it to the preceding values." Forward
 		// collection would force callers to put fn-args after the fn,
-		// which fights AQL's left-to-right stack flow.
+		// which fights BORU's left-to-right stack flow.
 
 		Signatures: []Signature{
 			{
@@ -208,7 +208,7 @@ func forceArityHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 		}
 		detail := "force-arity requires a non-negative arity and a function value"
 		if reg != nil {
-			return nil, reg.AqlError("illegal_ref", detail, "force-arity")
+			return nil, reg.BoruError("illegal_ref", detail, "force-arity")
 		}
 		return nil, fmt.Errorf("%s", detail)
 	}
@@ -222,8 +222,8 @@ func forceArityHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 // atom resolves to nothing, with the same did-you-mean the bare-word
 // path offers (diagnostics phase 4).
 func unboundNameError(reg *Registry, detail, name string) error {
-	err := reg.AqlError("undefined_word", detail, name)
-	if ae, ok := err.(*eng.AqlError); ok {
+	err := reg.BoruError("undefined_word", detail, name)
+	if ae, ok := err.(*eng.BoruError); ok {
 		if s := eng.DidYouMean(name, reg.SuggestionCandidates()); s != "" {
 			ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
 		}
@@ -248,7 +248,7 @@ func forceArityAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Reg
 		// non-nil registry, so a resolved-but-non-fn binding cannot occur
 		// with reg == nil (design/TEST-SEAMS.10.md dead-guard removal).
 		detail := "force-arity requires a function word: " + name + " is bound to " + v.Parent.String()
-		return nil, reg.AqlError("illegal_ref", detail, name)
+		return nil, reg.BoruError("illegal_ref", detail, name)
 	}
 	return forceArityHandler([]Value{args[0], v}, nil, nil, reg)
 }
@@ -266,7 +266,7 @@ func rebarrierResult(wrap func(Value) (Value, bool), v Value, word string, reg *
 		}
 		detail := word + " requires a function value, got " + v.Parent.String()
 		if reg != nil {
-			return nil, reg.AqlError("illegal_ref", detail, word)
+			return nil, reg.BoruError("illegal_ref", detail, word)
 		}
 		return nil, fmt.Errorf("%s", detail)
 	}
@@ -292,7 +292,7 @@ func rebarrierAtom(wrap func(Value) (Value, bool), args []Value, word string, re
 		// reg is provably non-nil here (ResolveRef only returns ok for a
 		// non-nil registry); the former reg==nil arm was dead.
 		detail := word + " requires a function word: " + name + " is bound to " + v.Parent.String()
-		return nil, reg.AqlError("illegal_ref", detail, name)
+		return nil, reg.BoruError("illegal_ref", detail, name)
 	}
 	return rebarrierResult(wrap, v, word, reg)
 }
@@ -322,7 +322,7 @@ func usurpAtomHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry
 		// reg is provably non-nil here (ResolveRef only returns ok for a
 		// non-nil registry); the former reg==nil arm was dead.
 		detail := "usurp requires a function word: " + name + " is bound to " + v.Parent.String()
-		return nil, reg.AqlError("illegal_ref", detail, name)
+		return nil, reg.BoruError("illegal_ref", detail, name)
 	}
 	return usurpHandler([]Value{v}, nil, nil, reg)
 }
@@ -353,7 +353,7 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 		// reg is provably non-nil here (ResolveRef only returns ok for a
 		// non-nil registry); the former reg==nil arm was dead.
 		detail := "ref requires a function word: " + name + " is bound to " + v.Parent.String()
-		return nil, reg.AqlError("illegal_ref", detail, name)
+		return nil, reg.BoruError("illegal_ref", detail, name)
 	}
 	return []Value{v}, nil
 }
@@ -362,7 +362,7 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 // The engine's stepLiteral check then fires execFnDefLiteral, which
 // dispatches the function against whatever stack args precede it.
 //
-// For AQL-defined fns the dispatch uses the captured FnDef's own
+// For BORU-defined fns the dispatch uses the captured FnDef's own
 // Sigs table, so the call is stable even when the original binding
 // has been redefined or undef'd.
 //
@@ -371,7 +371,7 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 // reach apply, unquote, but fall back to passing through. Native fn
 // captures still serve as TFunction-slot args to higher-order words
 // (filter, walk, behave) where the consumer's handler calls into the
-// engine directly via CallAQL.
+// engine directly via CallBORU.
 func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	v := args[0]
 	if !v.Parent.Equal(TFunction) && !v.Parent.Equal(TFnDef) {
@@ -429,7 +429,7 @@ func usurpHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		}
 		detail := "usurp requires a function value, got " + args[0].Parent.String()
 		if reg != nil {
-			return nil, reg.AqlError("illegal_ref", detail, "usurp")
+			return nil, reg.BoruError("illegal_ref", detail, "usurp")
 		}
 		return nil, fmt.Errorf("%s", detail)
 	}

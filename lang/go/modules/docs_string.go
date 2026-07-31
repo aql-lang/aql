@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:string-util", map[string]string{
+	registerDocs("boru:string-util", map[string]string{
 		"upper":      "Uppercase a string.",
 		"lower":      "Lowercase a string.",
 		"concat":     "Join a list of values into one string.",
@@ -25,7 +25,7 @@ func init() {
 	// authoring are the ones with an OPTIONS MAP (whose keys no signature
 	// can show) or a non-obvious argument order; upper/lower/trim/repeat
 	// keep the generated permutations, which already read correctly.
-	registerExamples("aql:string-util", map[string][]string{
+	registerExamples("boru:string-util", map[string][]string{
 		"normalize": {
 			`StringUtil.normalize 'hello'                     ;# 'hello' — no options, no change`,
 			`StringUtil.normalize '  a   b  ' {collapseWs: true trim: true}   ;# 'a b'`,

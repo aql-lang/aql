@@ -529,14 +529,14 @@ func makePathon(srcVal Value, abs bool) ([]Value, error) {
 		}
 		return []Value{NewPathon(parts, abs)}, nil
 	default:
-		return nil, &AqlError{Code: "type_error", Detail: fmt.Sprintf("make: Pathon source must be a list or string, got %s", srcVal.String())}
+		return nil, &BoruError{Code: "type_error", Detail: fmt.Sprintf("make: Pathon source must be a list or string, got %s", srcVal.String())}
 	}
 }
 
 // NewPathonFromString parses a path string into a Pathon value with the
 // same rules as `make Pathon "<s>"` (a Windows drive prefix switches on
 // drive parsing; anything else is POSIX). Host code that surfaces OS
-// paths as values uses this — the aql:io watch events in particular,
+// paths as values uses this — the boru:io watch events in particular,
 // whose records must carry Pathon microns, never bare strings.
 func NewPathonFromString(s string) Value {
 	return NewValueRaw(TPathon, PathonPayload{Info: parsePathonString(s)})
@@ -1094,7 +1094,7 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 		text := ValToString(src)
 		f, err := strconv.ParseFloat(text, 64)
 		if err != nil {
-			return Value{}, &AqlError{Code: "type_error", Detail: fmt.Sprintf("make: cannot convert %q to float", text)}
+			return Value{}, &BoruError{Code: "type_error", Detail: fmt.Sprintf("make: cannot convert %q to float", text)}
 		}
 		return NewFloat(f), nil
 
@@ -1104,7 +1104,7 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 		if err != nil {
 			f, ferr := strconv.ParseFloat(text, 64)
 			if ferr != nil {
-				return Value{}, &AqlError{Code: "type_error", Detail: fmt.Sprintf("make: cannot convert %q to number", text)}
+				return Value{}, &BoruError{Code: "type_error", Detail: fmt.Sprintf("make: cannot convert %q to number", text)}
 			}
 			return NewInteger(int64(f)), nil
 		}
@@ -1125,7 +1125,7 @@ func MakeConvert(src Value, targetType *Type) (Value, error) {
 		return NewAtom(ValToString(src)), nil
 
 	default:
-		return Value{}, &AqlError{Code: "unsupported", Detail: fmt.Sprintf("make: unsupported target type %s", targetType)}
+		return Value{}, &BoruError{Code: "unsupported", Detail: fmt.Sprintf("make: unsupported target type %s", targetType)}
 	}
 }
 

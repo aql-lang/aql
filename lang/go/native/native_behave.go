@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // behave BEHAVIOR FN
@@ -62,7 +62,7 @@ var behaveNative = NativeFunc{
 // Project VALUE into a Node or Scalar via its type's Nodifier
 // capability — direct access to the data-shape produced by a
 // `behave nodify/q` body without the JSON-string serialisation step.
-// Useful when the caller wants the structural result for further AQL
+// Useful when the caller wants the structural result for further BORU
 // processing rather than for wire output. With no nodify behavior
 // registered for the type, the value passes through unchanged.
 //
@@ -71,7 +71,7 @@ var behaveNative = NativeFunc{
 // so tests and downstream pipelines can observe the Node/Scalar
 // directly.
 // nodifyHandler exposes voxgig/struct's Node/Scalar projection. `nodify`
-// moved to the aql:struct module (see struct_module.go); the handler stays
+// moved to the boru:struct module (see struct_module.go); the handler stays
 // here next to its sibling `behave`.
 func nodifyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	out, err := eng.NodifyValue(args[0])
@@ -119,7 +119,7 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	name := defName(args[0])
 	be, ok := behaviors[name]
 	if !ok {
-		return nil, r.AqlError("behave_error", fmt.Sprintf("behave %s: unknown behavior name; known: compare, canon, nodify, unify", name), "behave")
+		return nil, r.BoruError("behave_error", fmt.Sprintf("behave %s: unknown behavior name; known: compare, canon, nodify, unify", name), "behave")
 	}
 
 	fnVal := args[1]
@@ -129,7 +129,7 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	}
 	firstSig, ok := info.FirstOwnSig()
 	if !ok {
-		return nil, r.AqlError("behave_error", fmt.Sprintf("behave %s: fn has no signatures", name), "behave")
+		return nil, r.BoruError("behave_error", fmt.Sprintf("behave %s: fn has no signatures", name), "behave")
 	}
 	sig := *firstSig
 
@@ -138,7 +138,7 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 		return nil, fmt.Errorf("behave %s: %w", name, err)
 	}
 	if target == nil {
-		return nil, r.AqlError("behave_error", fmt.Sprintf("behave %s: could not infer target type from fn sig", name), "behave")
+		return nil, r.BoruError("behave_error", fmt.Sprintf("behave %s: could not infer target type from fn sig", name), "behave")
 	}
 	if target.Origin == eng.OriginBuiltin {
 		return nil, fmt.Errorf("behave %s: cannot install on builtin type %s", name, target.Leaf())
@@ -227,7 +227,7 @@ func validateCanonSig(sig eng.FnSig) (*eng.Type, error) {
 
 // validateNodifySig enforces shape `[[T] [Any] [body]]` and returns
 // T. The body produces a Node or Scalar projection of the value —
-// the output stays in the AQL data domain (Integer, String, Map,
+// the output stays in the BORU data domain (Integer, String, Map,
 // List, …) rather than a serialised JSON string, so callers can
 // compose with other data transforms before encoding.
 func validateNodifySig(sig eng.FnSig) (*eng.Type, error) {
@@ -278,7 +278,7 @@ func validateUnifySig(sig eng.FnSig) (*eng.Type, error) {
 }
 
 // userBehavior is the shared wrapper type that carries one or more
-// AQL-bodied capability slots on a target *Type. The TypeBehavior
+// BORU-bodied capability slots on a target *Type. The TypeBehavior
 // surface (Match / Format / Equal) delegates to the previous
 // Behavior; capability methods (Compare for compare, Format-via-canon
 // for canon, Nodify for nodify) run an installed body or hand off

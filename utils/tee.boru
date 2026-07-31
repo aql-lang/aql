@@ -1,0 +1,222 @@
+# ============================================================================
+# tee — copy standard input to standard output AND to each named file.
+#
+#   tee [-a|--append] [FILE…]
+#
+# Input is STREAMED one line at a time with IO.read-line and written straight
+# through, so tee works in a pipeline that is still running — which is the
+# whole point of the program. With no FILE it is a slow `cat`, which is also
+# what coreutils does.
+#
+# Exit codes:
+#   0  every named file was opened and written
+#   1  at least one file could not be opened; the diagnostic goes to stderr,
+#      the remaining files still receive the input, and standard output is
+#      never affected — the coreutils contract
+#   2  usage error — unknown flag (from Cli.dispatch)
+#
+# WHY THIS PROGRAM EXISTS, beyond being a classic: it is the suite's only
+# WRITER. Every other program here reads. That makes tee the acceptance test
+# for baked build-time permissions (design/CLI-PROGRAMS.1.md §1): the same
+# source, built twice —
+#
+#   boru build tee.boru -perms read-only                      → the write is denied
+#   boru build tee.boru -perms read-only \
+#     -allow-global disk.write -allow fileops.write         → the write succeeds
+#
+# — is a PAIR, and only the pair proves the profile is what decided. One build
+# failing proves nothing on its own. cmd/go/internal/build/utils_e2e_test.go
+# runs exactly that pair, which is why this program's write path is a single
+# obvious call rather than something clever.
+#
+# NOTE the two `-perms read-only` caveats, both recorded in NUR.md: that
+# profile denies file READS as well (NUR041), and `boru build` does not run the
+# static check that `boru run` does (NUR044). Neither changes what the pair
+# proves; both change what the failure message looks like.
+#
+# Structure, as everywhere here: the decisions are pure fns taking their input
+# as parameters, and tee-main takes ARGV as a parameter and returns the exit
+# code rather than exiting.
+# ============================================================================
+
+import "boru:cli"
+import "boru:io"
+
+# ----------------------------------------------------------------------------
+# Pure helpers.
+# ----------------------------------------------------------------------------
+
+def tee-bool fn [[fl:Map k:String] [Boolean] [
+  def v (fl get k)
+  if (v is Boolean) [v] [false]
+]]
+
+def tee-count fn [[st:Map] [Integer] [
+  def v (st get "n")
+  if (v is Integer) [v] [0]
+]]
+
+def tee-worse fn [[a:Integer b:Integer] [Integer] [ if (a gt b) [a] [b] ]]
+
+# The open mode for a destination: -a appends, the default truncates. Both
+# create the file if it is missing, which is what tee is for.
+# NOTE the param name. `append` is a BUILT-IN word, and a fn param that
+# shadows a built-in passes `boru check` and runs under the bytecode compiler,
+# then dies at RUNTIME under -no-compile with "undef append: 'append' is a
+# built-in word and cannot be redefined" — the interpreter tears the param
+# binding down with `undef` and the built-in refuses. cut.boru hit the same
+# edge with `emit`. So the param is `app`; the flag is still --append.
+def tee-mode fn [[app:Boolean] [Map] [
+  if app [{mode:"append" create:true}] [{mode:"write" create:true truncate:true}]
+]]
+
+# The chunk ramp for the read loop — see cat.boru for why the loop is chunked
+# and why it has no `break`.
+def tee-next-chunk fn [[m:Integer] [Integer] [ if (m gte 8192) [8192] [(m mul 2)] ]]
+
+# One output record: the line as read, plus the terminator IO.read-line took
+# off. tee is byte-transparent, so nothing else happens to it.
+def tee-record fn [[line:String] [String] [ join "" [line "\n"] ]]
+
+# ----------------------------------------------------------------------------
+# Opening the destinations. A failure is DATA — {handles codes} — so that one
+# unopenable file cannot stop the others, and so the decision is testable
+# without a filesystem.
+# ----------------------------------------------------------------------------
+def tee-fail fn [[name:String msg:String] [Integer] [
+  (IO.write (IO.stderr) (join "" ["tee: " name ": " msg "\n"])) drop
+  1
+]]
+
+def tee-open-at fn [[names:List i:Integer opt:Map hs:List acc:Integer] [Integer] [
+  if (i gte (size names)) [acc] [
+    def name (convert String (names get i))
+    def rc (do [
+      def h (IO.open (make Pathon name) opt)
+      def _p (push h hs)
+      0
+    ] error [
+      def e end
+      def c (tee-fail name (e.message))
+      c
+    ])
+    def r (tee-open-at names (i add 1) opt hs (tee-worse acc rc))
+    r
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# The write fan-out. Standard output goes first and unconditionally: a file
+# that fails mid-write must not cost the pipeline its data.
+# ----------------------------------------------------------------------------
+def tee-fan fn [[hs:List rec:String] [Integer] [
+  (IO.write (IO.stdout) rec) drop
+  for [0 (size hs)] [
+    (IO.write (hs get i) rec) drop
+  ]
+  0
+]]
+
+# IO.close returns NOTHING, so its result cannot be bound: `def _c (IO.close
+# h)` fails with "def is still waiting for 1 argument" — def's value slot is
+# never filled. It is called bare instead, which is also how cat.boru closes.
+def tee-close-at fn [[hs:List i:Integer] [Integer] [
+  if (i gte (size hs)) [0] [
+    IO.close (hs get i)
+    def r (tee-close-at hs (i add 1))
+    r
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# The streaming loop. Identical in shape to cat's, and for the same reasons:
+# a fixed-count chunk, no `break`, a ramp from 64 to 8192.
+# ----------------------------------------------------------------------------
+def tee-chunk fn [[h:Any st:Map hs:List m:Integer] [Integer] [
+  def before (tee-count st)
+  for [0 m] [
+    def line (IO.read-line h)
+    if ((line is None) not) [
+      def _n (st set (quote n) ((tee-count st) add 1))
+      def _w (tee-fan hs (tee-record (convert String line)))
+    ] []
+  ]
+  def got ((tee-count st) sub before)
+  got
+]]
+
+def tee-pump fn [[h:Any st:Map hs:List m:Integer] [Integer] [
+  def got (tee-chunk h st hs m)
+  if (got eq 0) [(tee-count st)] [
+    def r (tee-pump h st hs (tee-next-chunk m))
+    r
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# The spec and the handler.
+# ----------------------------------------------------------------------------
+def spec {
+  name:    "tee"
+  version: "0.1.0"
+  summary: "copy standard input to standard output and to each file"
+  flags: [
+    {name:"append" short:"a" kind:"bool"
+     help:"append to the files rather than overwriting them"}
+  ]
+  args: {name:"file" min:0 help:"files to write; none means standard output only"}
+}
+
+def tee-run fn [[ctx:Map] [Integer] [
+  def app (tee-bool (ctx.flags) "append")
+  def hs (flex [])
+  def opened (tee-open-at (ctx.args) 0 (tee-mode app) hs 0)
+  def st (flex {n:0})
+  def read (do [
+    def _p (tee-pump (IO.stdin) st hs 64)
+    0
+  ] error [
+    def e end
+    def c (tee-fail "-" (e.message))
+    c
+  ])
+  def _c (tee-close-at hs 0)
+  def rc (tee-worse opened read)
+  rc
+]]
+
+def tee-main fn [[argv:List] [Integer] [
+  def d (Cli.dispatch (spec) argv)
+  def _out (if ((d.out) neq "") [(IO.write (IO.stdout) (d.out))] [none])
+  def _err (if ((d.err) neq "") [(IO.write (IO.stderr) (d.err))] [none])
+  def code (if ((d.action) neq "run") [(d.code)] [(tee-run d)])
+  code
+]]
+
+export "Tee" {
+  bool:      tee-bool/r
+  count:     tee-count/r
+  worse:     tee-worse/r
+  mode:      tee-mode/r
+  nextChunk: tee-next-chunk/r
+  record:    tee-record/r
+  fail:      tee-fail/r
+  openAt:    tee-open-at/r
+  fan:       tee-fan/r
+  closeAt:   tee-close-at/r
+  main:      tee-main/r
+  spec:      spec
+}
+
+# ----------------------------------------------------------------------------
+# The standalone guard — see cat.boru. Note that tee READS STANDARD INPUT with
+# no operand at all, so an unguarded import would block the importing suite
+# on the runner's own stdin. That is not hypothetical: it is what happens
+# without the guard, and it was verified.
+# ----------------------------------------------------------------------------
+def tee-standalone ((((IO.env-all) size) gt 0) or (((IO.args) size) gt 0))
+
+if tee-standalone [
+  def tee-rc (tee-main (IO.args))
+  IO.exit tee-rc;
+] []

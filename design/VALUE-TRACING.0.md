@@ -19,11 +19,11 @@ explicit instruction") this stays a `design/` note. No ADR entry is proposed.
 
 ## 1. The idea, and what it buys
 
-boru already has a strong **control-flow** debugger. `aql debug`
-(`design/AQL-DEBUGGER.0.md`, every phase shipped) gives source-line stepping,
+boru already has a strong **control-flow** debugger. `boru debug`
+(`design/BORU-DEBUGGER.0.md`, every phase shipped) gives source-line stepping,
 line/word breakpoints, data watchpoints, break-on-error, post-mortem, a bounded
 time-travel ring, deterministic `replay`, a DAP adapter and remote stepping.
-The `aql:debug` module (`design/DEBUG-MODULE.0.md`) adds 27 words for printing,
+The `boru:debug` module (`design/DEBUG-MODULE.0.md`) adds 27 words for printing,
 introspection, memory and perf.
 
 Not one of them answers a **dataflow** question. Faced with
@@ -195,7 +195,7 @@ implies at the language level too.
    bytes/op; an unarmed trace must not move either.
 3. **Never change execution mode silently.** Tracing instruments the compiled
    VM as well as the interpreter, rather than forcing the interpreter the way
-   `aql debug` does. A program that behaves differently under observation is a
+   `boru debug` does. A program that behaves differently under observation is a
    debugging tool that lies.
 4. **Bound everything, and say what was dropped.** Infectious taint over a long
    run makes everything traced. Every bound is explicit and every truncation is
@@ -352,7 +352,7 @@ The comment above it calls this "the dominant per-CALL_NATIVE allocation on the
 compute path", and notes that compiled-reachable natives must not retain the
 slice. **The provenance hook must obey the same rule**: read the traced IDs out
 synchronously, copy anything it keeps, and never store the slice or a subslice
-of it. The `-tags aqldebug` seam `vmFreshArgsPerCall` exists precisely to
+of it. The `-tags borudebug` seam `vmFreshArgsPerCall` exists precisely to
 localise a violator, and a Phase-1 test should run the compiled corpus under it.
 
 Results must be stamped **before** the `append` onto the operand stack, mirroring
@@ -475,7 +475,7 @@ affect?" walks `Children`.
 ### 6.2 The monotonic sequence is a bonus
 
 `ProvStore.seq` is a process-monotonic counter incremented at every event,
-across every engine, sub-engine and fork. `design/AQL-DEBUGGER.0.md` §6.4 names
+across every engine, sub-engine and fork. `design/BORU-DEBUGGER.0.md` §6.4 names
 "a global monotonic step clock spanning sub-engines" as one of the three things
 missing for full time-travel, alongside sub-engine trace propagation (since
 shipped, via `SetDebugTrace`) and a state-restore seam. This work delivers the
@@ -609,7 +609,7 @@ Two consequences worth stating plainly rather than leaving as loose ends:
   leftover naming.
 - **`Origin` already means something in Go.** `OriginKind` classifies where a
   `*Type` was registered, and is read as `Value.Origin` / `Signature.Origin`
-  (`eng/go/typetable.go:10`). There is no AQL-level clash, and this work's
+  (`eng/go/typetable.go:10`). There is no BORU-level clash, and this work's
   kernel types are `Prov*` (`ProvStore`, `ProvNode`, `ProvEvent`, `ProvKind`),
   so nothing actually collides — but a reader of `eng/go` should not be
   surprised twice by the same word.
@@ -619,8 +619,8 @@ root-finding word in §8.2 is `Origin.root`.
 
 ### 8.2 The words
 
-Module id `aql:origin` in code, documented as `boru:origin` — the resolver still
-matches `strings.HasPrefix(path, "aql:")` (`native_module_module.go:743`) while
+Module id `boru:origin` in code, documented as `boru:origin` — the resolver still
+matches `strings.HasPrefix(path, "boru:")` (`native_module_module.go:743`) while
 the docs run ahead of the engine, exactly as
 `test/go/docexamples/docexamples_test.go:69-70` already allows for other
 modules.
@@ -667,7 +667,7 @@ Origin.region [
 - **`BarrierPos: -1`** on every inner native registered into the module
   sub-registry (`lang/go/CLAUDE.md` § "Module FnDef Wrappers", gated by
   `lang/go/modules/wrapper_dispatch_test.go`).
-- `registerDocs("aql:origin", …)` in `lang/go/modules/docs_origin.go` (gated by
+- `registerDocs("boru:origin", …)` in `lang/go/modules/docs_origin.go` (gated by
   `TestModuleExportDocs`) and a `moduleCatalog` row in
   `lang/go/native/help/help_render.go` (gated by
   `TestModuleCatalogMatchesModules`).
@@ -695,8 +695,8 @@ returns, so **online and offline analysis run the same code**.
 
 ### 9.2 The tooling, in boru
 
-`kg/` is the precedent: 14 `.aql` modules, 6 test suites, driven by a Makefile
-target that is literally `aql main.aql`. The trace tooling follows it —
+`kg/` is the precedent: 14 `.boru` modules, 6 test suites, driven by a Makefile
+target that is literally `boru main.boru`. The trace tooling follows it —
 `tools/origin/*.boru` with a `main.boru` entry point — and renders three views
 from `Origin.load`'s output:
 
@@ -711,7 +711,7 @@ reads a checkpoint file has no CLI surface to maintain.
 
 ### 9.3 Debugger integration
 
-`aql debug` already has the session, the prompt and the pause. A `why <expr>`
+`boru debug` already has the session, the prompt and the pause. A `why <expr>`
 command at the prompt — evaluate the expression in the existing child engine,
 then render `Origin.why` over the result — is a small addition to
 `cmd/go/internal/debugger` and is the single highest-value integration. It
@@ -742,7 +742,7 @@ The stance:
 
 **Module gating is free.** `modules.Resolve` (`lang/go/modules/modules.go:63`)
 already checks `pol.Installed("modules")`, `pol.Check("modules","import",…)` and
-the per-module subscope, so a profile can deny `aql:origin` outright with no new
+the per-module subscope, so a profile can deny `boru:origin` outright with no new
 machinery. `KnownScopes` (`lang/go/policy/policy.go:108`) has no `debug` scope —
 the one `DEBUG-MODULE.0.md` §8 proposed was never added — so a dedicated
 `trace` scope would be new policy surface. Whether that is wanted is Q2.
@@ -771,7 +771,7 @@ sites in §5.3 (interpolated strings first). Binding-read events via
 `DefTable.Top` (§5.4). `Origin.events`, `Origin.graph`, `Origin.explain`,
 `Origin.checkpoint`, `Origin.load`.
 
-**Phase 3 — tooling and integration.** `tools/origin/*.boru`. The `aql debug`
+**Phase 3 — tooling and integration.** `tools/origin/*.boru`. The `boru debug`
 `why <expr>` command (§9.3).
 
 **Beyond.** Store sharding if the mutex measures badly (§7.2); using the
@@ -796,12 +796,12 @@ Per `lang/go/CLAUDE.md` and ADR-008, and pairing every positive with a negative:
 - **The container gap is pinned as a negative**, so Phase 2 changing it is a
   visible, deliberate diff rather than an accident.
 - **VM parity** — the same program traced compiled and interpreted yields the
-  same graph; and the compiled corpus runs green under `-tags aqldebug`
+  same graph; and the compiled corpus runs green under `-tags borudebug`
   (`vmFreshArgsPerCall`) to prove the hook does not retain `argScratch`.
 - **Bounds are honest** — a run that overflows the ring reports a non-zero
   `dropped` from `Origin.stats`, and `Origin.why` marks the truncated chain.
 - **Determinism** — same seed, same program, byte-identical trace transcript.
-- **Policy refusal** — importing `aql:origin` under a denying profile fails with
+- **Policy refusal** — importing `boru:origin` under a denying profile fails with
   the documented error and leaks no state.
 - **Secrets** — `Origin.checkpoint` without an explicit capture level writes
   `shape` records containing no payload bytes.
@@ -831,7 +831,7 @@ Per `lang/go/CLAUDE.md` and ADR-008, and pairing every positive with a negative:
    divergence — but "the same program allocates differently under observation"
    is exactly the shape of thing `NUR.md` exists to record. *Leaning: record it
    once Phase 1 lands and the effect is measured, not before.*
-5. **Scope of the `aql:debug` overlap.** Should this be a new module at all, or
-   should the words join `aql:debug` as a sixth surface? *Leaning: separate —
-   `aql:debug` is already 27 words across five surfaces, and provenance has its
+5. **Scope of the `boru:debug` overlap.** Should this be a new module at all, or
+   should the words join `boru:debug` as a sixth surface? *Leaning: separate —
+   `boru:debug` is already 27 words across five surfaces, and provenance has its
    own lifecycle, policy story and on-disk format.*

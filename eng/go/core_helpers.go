@@ -43,7 +43,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 
 	// Attribute a body-local def to its enclosing fn for the dynamic-scope
 	// undefined-word rescue (check mode only; no-op at the top level or outside
-	// check). A name bound as a local inside fn F is visible — via AQL's
+	// check). A name bound as a local inside fn F is visible — via BORU's
 	// dynamic scoping — to any fn F reaches on the call stack.
 	r.Check.RecordFnBinder(name)
 
@@ -223,7 +223,7 @@ func UninstallDef(r *Registry, name string) {
 	r.Defs.Pop(name)
 }
 
-// buildFnBodyHandler produces the dispatch Handler for one AQL fn
+// buildFnBodyHandler produces the dispatch Handler for one BORU fn
 // signature. Rather than computing a final result, the handler returns
 // a PAREN-WRAPPED TOKEN SEQUENCE — `( unnamed-args… body DefCleanup __pa
 // undef-tail… ReturnCheck )` — that execMatch splices back onto the
@@ -311,7 +311,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		// engine. The inline-re-step token expansion below binds params and resolves
 		// the body in r, but execMatch re-steps the returned tokens in the CALLER's
 		// registry (callReg), where r's params + module-private words are absent
-		// ("undefined word: x"). So run the body via CallAQL and return the result —
+		// ("undefined word: x"). So run the body via CallBORU and return the result —
 		// the SAME execution the old execFnDefSig path did, now behind ONE dispatch
 		// path. A same-registry fn (callReg == r, the common top-level case) keeps the
 		// inline re-step (recursion / forward-ref intact).
@@ -328,7 +328,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			if callReg.AnalysisScopeID() == r.AnalysisScopeID() {
 				target = callReg
 			}
-			return target.CallAQLNamed(&s, args, fnDefCopy.Captured, fnDefCopy.Name)
+			return target.CallBORUNamed(&s, args, fnDefCopy.Captured, fnDefCopy.Name)
 		}
 		// Retag typed-container args up front so EVERY access path in the body —
 		// named binding, the args stack (args.N), and unnamed body-token pushes —
@@ -451,7 +451,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		}
 
 		// Append the body tokens directly: append COPIES them into result's
-		// backing array and s.body() (the shared AQLImpl.Body) is never
+		// backing array and s.body() (the shared BORUImpl.Body) is never
 		// mutated here, so the previous intermediate make+copy was a
 		// redundant per-call allocation (design/INTERPRETER-SPEED-PLAN.10.md #5).
 		result = append(result, s.body()...)
@@ -475,7 +475,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 	}
 }
 
-// buildFnBodyReturnsFn produces the check-mode ReturnsFn for one AQL fn
+// buildFnBodyReturnsFn produces the check-mode ReturnsFn for one BORU fn
 // signature. In static-check mode the engine skips the runtime handler
 // and calls this with carrier-typed args; it analyses the body via
 // AnalyseFnBody (so body diagnostics propagate) and returns the carrier
@@ -578,7 +578,7 @@ func typedContainerCarrier(p FnParam, a Value) (Value, bool) {
 // with no ElemConstraint and bypass enforcement. Unify against the pattern both
 // VALIDATES (the sig already admitted the arg, so it conforms) and recursively
 // tags; a non-container param or a non-concrete arg passes through. Applied at
-// every param-binding site (execFnDefSig / CallAQL / InstallFnDef).
+// every param-binding site (execFnDefSig / CallBORU / InstallFnDef).
 func RetagTypedContainerParam(p FnParam, arg Value) Value {
 	if p.Pattern == nil || !IsConcrete(arg) {
 		return arg
@@ -902,7 +902,7 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 	// Any carrier is the same kind of seam: it is the lenient approximation
 	// left for a 0-net / undeclared call whose body unit declined (a
 	// cross-module fn calling a private 0-return helper before its own
-	// return — sort.aql's counting-sort → ensure-ints), a phantom that
+	// return — sort.boru's counting-sort → ensure-ints), a phantom that
 	// inflates the residual by an unknown count, so skip it too. It is a
 	// RuntimeMirror: the compile pass deliberately COMPILES the
 	// count-mismatched body and lets the VM RET raise the byte-identical
@@ -1395,10 +1395,10 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// dispatching registry, losing module scope for the constructed
 		// lambda). Units now carry their owning registry (CompiledFn.Reg):
 		// the VM dispatches the unit's natives against it — exactly the
-		// registry the interpreter's foreign-wrapper CallAQL runs the body
+		// registry the interpreter's foreign-wrapper CallBORU runs the body
 		// in — so a constructed lambda's downstream capability state (a
 		// listener's per-connection registries) forks module scope on both
-		// engines, and the refusal is retired (aql:repl rows 12/16/18
+		// engines, and the refusal is retired (boru:repl rows 12/16/18
 		// compile; the remaining statement-position recovery strand refuses
 		// through the ordinary provenance paths).
 		if es.Armed() && !polyBarred {
@@ -1551,7 +1551,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// empty fragment. The cache (and the AnalyseFnBody call below) is
 				// keyed on genArgs, NOT args — deleting the args key left the
 				// genArgs-keyed probe summary live, so a fn dispatched under a
-				// recursive closure probe (aql:test run-case) compiled to an EMPTY
+				// recursive closure probe (boru:test run-case) compiled to an EMPTY
 				// stub unit in the real pass (silent 0-cases miscompile).
 				delete(r.Check.FnSummaries, FnAnalysisKey(r.AnalysisScopeID(), nameCopy, genArgs, capturesCopy, bodyCopy))
 				stkGen := AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, genArgs, capturesCopy, declaredReturns, fnDef.Anonymous)
@@ -1747,7 +1747,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// bare strict-Any carrier from the residual count (stackHasApproxAny),
 			// which cleared the false "expected N return value(s), got N+1" on a
 			// fn calling a private 0-return helper before its own return
-			// (sort.aql's counting-sort → ensure-ints, reached cross-module).
+			// (sort.boru's counting-sort → ensure-ints, reached cross-module).
 			return []Value{NewCarrier(TAny)}
 		}
 		// Undeclared fn (anonymous lambda, 0-return fn) with a non-empty body
@@ -1783,7 +1783,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	// Construction-time body check (first-class, post-binding). Replaces the
 	// dynamic-help example eval's accidental side-channel: that eval ran each fn
 	// body against SYNTHETIC example args ({a:1,b:2}), producing false positives
-	// (decision.aql), and is now hermetic. Here we analyse each AQL-bodied
+	// (decision.boru), and is now hermetic. Here we analyse each BORU-bodied
 	// overload ONCE against CARRIER args (NewCarrier(param) — an abstract Map/List
 	// reads dynamic(Any)), post-binding so recursive self-refs resolve, so a fn
 	// that is DEFINED BUT NEVER CALLED still has its body statically checked
@@ -1797,7 +1797,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 }
 
 // compileFnSigs turns a definition's authored overloads into dispatch-
-// ready Signatures: optional params expand into extra sigs, AQL-bodied
+// ready Signatures: optional params expand into extra sigs, BORU-bodied
 // sigs get the body-splicing runner (buildFnBodyHandler) plus the
 // check-mode ReturnsFn, and the BarrierPos sentinel resolves. Shared by
 // InstallFnDef (ordinary `def name fn […]`) and BuildWordExtension
@@ -1823,14 +1823,14 @@ func compileFnSigs(r *Registry, name string, fnDef FnDefInfo, isStackOnly bool) 
 		}
 
 		cs := s // keep Params (names), Returns, NoEval*, Impl
-		// AQL-bodied sigs get the body-splicing runner in a fresh AQLImpl. A sig
-		// that already carries a Go handler with NO AQL Body is a pre-compiled /
+		// BORU-bodied sigs get the body-splicing runner in a fresh BORUImpl. A sig
+		// that already carries a Go handler with NO BORU Body is a pre-compiled /
 		// synthetic overload — a `usurp` wrapper (whose handler re-dispatches
 		// the wrapped fn through a paren) or a captured native fn value bound
 		// to a name. Wrapping the body-runner around its empty Body would
 		// emit zero values and fail the return check, so preserve the existing
 		// Impl/ReturnsFn instead; the fn it forwards to performs its own
-		// arg-binding and return validation. (An already-compiled AQL fn
+		// arg-binding and return validation. (An already-compiled BORU fn
 		// re-bound by name still has Body>0, so it correctly gets a fresh
 		// body-runner — only Body-less handler sigs are preserved.)
 		if s.dispatchHandler() == nil || len(s.body()) > 0 {
@@ -1839,7 +1839,7 @@ func compileFnSigs(r *Registry, name string, fnDef FnDefInfo, isStackOnly bool) 
 				HasGen:       fnDefCopy.Gen != nil,
 				InstallNames: fnInstallNames(s, fnDefCopy.Captured),
 			}
-			cs.Impl = &AQLImpl{
+			cs.Impl = &BORUImpl{
 				Body:     s.body(),
 				FnFrame:  meta,
 				dispatch: buildFnBodyHandler(r, name, s, fnDefCopy, meta),
@@ -1853,13 +1853,13 @@ func compileFnSigs(r *Registry, name string, fnDef FnDefInfo, isStackOnly bool) 
 	return compiled
 }
 
-// checkFnBodyAtConstruction runs a static body pass for each AQL-bodied overload
+// checkFnBodyAtConstruction runs a static body pass for each BORU-bodied overload
 // of a freshly-installed fn, against generalised (carrier) args, so an UNCALLED
 // fn's body is still checked (a called fn is additionally checked per call site
 // via buildFnBodyReturnsFn). Check-mode only; bytecode recording suspended; the
 // fn name must already be bound (recursion). Generic and Body-less (native /
 // handler) overloads are skipped — a generic body needs per-call type bindings,
-// and a native handler has no AQL body to analyse.
+// and a native handler has no BORU body to analyse.
 func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 	if r == nil || !r.Check.IsActive() || fnDef.Gen != nil {
 		return
@@ -2075,7 +2075,7 @@ func IsHostTypeBody(v Value) bool {
 // options type, typed list/map, dependent scalar, fn-shape, or
 // predicate function).
 //
-// AQL also lets every concrete value act as a type — `type Foo 1`
+// BORU also lets every concrete value act as a type — `type Foo 1`
 // defines Foo as the singleton type containing only 1 — but that
 // "literals as types" admission is checked separately via
 // IsLiteralTypeBody at the `type` install site, so paths that need
@@ -2506,7 +2506,7 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 
 			// Propagate the parent sig's BarrierPos so an
 			// optional-param expansion inherits the same forward/
-			// stack convention. -1 (the AQL-source default) stays
+			// stack convention. -1 (the BORU-source default) stays
 			// -1; an explicit barrier carries over but clamps to
 			// the reduced param count.
 			expandedBarrier := sig.BarrierPos
@@ -2517,7 +2517,7 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 				Params:         reducedParams,
 				Returns:        sig.Returns,
 				ReturnPatterns: sig.ReturnPatterns,
-				Impl:           AQL(body),
+				Impl:           BORU(body),
 				BarrierPos:     expandedBarrier,
 			})
 		}

@@ -15,7 +15,7 @@ import (
 	"os"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // pinnedCheckRunDivergent is the measured count of generated programs the
@@ -47,7 +47,7 @@ const pinnedCheckRunDivergent = 144
 // TestCheckRunFalsePositive generates the property fuzzer's program corpus
 // and ratchets the count of check-rejected-but-running programs.
 // Deterministic default budget (the same seeds every run, so a failure
-// always reproduces); deepen with AQL_FUZZ_SEEDS / AQL_FUZZ_ITERS exactly
+// always reproduces); deepen with BORU_FUZZ_SEEDS / BORU_FUZZ_ITERS exactly
 // like TestPropertyDifferential (the pin applies only at the default
 // budget — a cranked run reports without gating).
 func TestCheckRunFalsePositive(t *testing.T) {
@@ -55,8 +55,8 @@ func TestCheckRunFalsePositive(t *testing.T) {
 		t.Skip("check-run fp fuzz: skipped in -short")
 	}
 	const depth = 4
-	iters := fuzzEnv("AQL_FUZZ_ITERS", 1500)
-	seeds := fuzzEnv("AQL_FUZZ_SEEDS", 2)
+	iters := fuzzEnv("BORU_FUZZ_ITERS", 1500)
+	seeds := fuzzEnv("BORU_FUZZ_SEEDS", 2)
 	var rejected, divergent int
 	var samples []string
 	for seed := 1; seed <= seeds; seed++ {
@@ -71,7 +71,7 @@ func TestCheckRunFalsePositive(t *testing.T) {
 			ai := newDifferentialInstance(t)
 			if _, err := ai.RunInterp(src); err == nil {
 				divergent++
-				if os.Getenv("AQL_LOG_DIVERGENT") != "" {
+				if os.Getenv("BORU_LOG_DIVERGENT") != "" {
 					t.Logf("DIVERGENT s%d i%d: %s", seed, i, src)
 				}
 				if len(samples) < 5 {
@@ -83,7 +83,7 @@ func TestCheckRunFalsePositive(t *testing.T) {
 	t.Logf("check-run fp fuzz: %d seeds x %d programs, %d check-rejected, %d run clean (pin %d)",
 		seeds, iters, rejected, divergent, pinnedCheckRunDivergent)
 	if iters != 1500 || seeds != 2 {
-		// A cranked exploratory run (AQL_FUZZ_*) reports without gating —
+		// A cranked exploratory run (BORU_FUZZ_*) reports without gating —
 		// the pin is calibrated to the deterministic default corpus.
 		for _, s := range samples {
 			t.Logf("  divergent sample: %s", s)

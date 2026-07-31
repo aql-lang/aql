@@ -112,7 +112,7 @@ func requireMicronName(name string) error {
 	if len(part) >= 3 && strings.HasSuffix(part, "on") {
 		return nil
 	}
-	return &AqlError{
+	return &BoruError{
 		Code:   "micron_name",
 		Detail: "type " + name + ": names under Scalar/Micron must end in the suffix 'on'",
 		Hint:   "rename it — e.g. " + part + "on",
@@ -535,7 +535,7 @@ func makeEmailon(src Value) ([]Value, error) {
 			v, _ := m.Get(k)
 			sv, serr := v.AsConcreteString()
 			if serr != nil {
-				return nil, &AqlError{Code: "type_error",
+				return nil, &BoruError{Code: "type_error",
 					Detail: fmt.Sprintf("make: Emailon field %s must be a String, got %s", k, v.String())}
 			}
 			switch k {
@@ -544,30 +544,30 @@ func makeEmailon(src Value) ([]Value, error) {
 			case "host":
 				host = sv
 			default:
-				return nil, &AqlError{Code: "type_error",
+				return nil, &BoruError{Code: "type_error",
 					Detail: "make: Emailon has no field " + k + " (fields: user, host)"}
 			}
 		}
 		if user == "" || host == "" {
-			return nil, &AqlError{Code: "type_error",
+			return nil, &BoruError{Code: "type_error",
 				Detail: "make: Emailon requires both user and host fields"}
 		}
 		return emailonFromString(user + "@" + host)
 	}
-	return nil, &AqlError{Code: "type_error",
+	return nil, &BoruError{Code: "type_error",
 		Detail: fmt.Sprintf("make: Emailon source must be a string or map, got %s", src.String())}
 }
 
 func emailonFromString(s string) ([]Value, error) {
 	addr, err := mail.ParseAddress(s)
 	if err != nil {
-		return nil, &AqlError{Code: "type_error",
+		return nil, &BoruError{Code: "type_error",
 			Detail: fmt.Sprintf("make: invalid email address %q: %v", s, err)}
 	}
 	// Reject display-name / angle-bracket forms ("Alice <a@x.com>") —
 	// an Emailon is the plain address only.
 	if addr.Name != "" || addr.Address != s {
-		return nil, &AqlError{Code: "type_error",
+		return nil, &BoruError{Code: "type_error",
 			Detail: fmt.Sprintf("make: Emailon takes a plain user@host address, got %q", s)}
 	}
 	at := strings.LastIndex(s, "@")
@@ -597,28 +597,28 @@ func makeIpon(src Value) ([]Value, error) {
 			v, _ := m.Get(k)
 			sv, serr := v.AsConcreteString()
 			if serr != nil {
-				return nil, &AqlError{Code: "type_error",
+				return nil, &BoruError{Code: "type_error",
 					Detail: fmt.Sprintf("make: Ipon field %s must be a String, got %s", k, v.String())}
 			}
 			if k != "addr" {
-				return nil, &AqlError{Code: "type_error",
+				return nil, &BoruError{Code: "type_error",
 					Detail: "make: Ipon has no field " + k + " (field: addr)"}
 			}
 			addr = sv
 		}
 		if addr == "" {
-			return nil, &AqlError{Code: "type_error", Detail: "make: Ipon requires an addr field"}
+			return nil, &BoruError{Code: "type_error", Detail: "make: Ipon requires an addr field"}
 		}
 		return iponFromString(addr)
 	}
-	return nil, &AqlError{Code: "type_error",
+	return nil, &BoruError{Code: "type_error",
 		Detail: fmt.Sprintf("make: Ipon source must be a string or map, got %s", src.String())}
 }
 
 func iponFromString(s string) ([]Value, error) {
 	ip := net.ParseIP(s)
 	if ip == nil {
-		return nil, &AqlError{Code: "type_error",
+		return nil, &BoruError{Code: "type_error",
 			Detail: fmt.Sprintf("make: invalid IP address %q (want IPv4 or IPv6, e.g. 203.0.113.7 or 2001:db8::1)", s)}
 	}
 	version := int64(6)
@@ -809,7 +809,7 @@ func micronHostonRender(host string, port int64, hasPort bool) string {
 }
 
 func hostonErr(detail string) error {
-	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+	return &BoruError{Code: "type_error", Detail: "make: " + detail}
 }
 
 // ---- Semveron (Semantic Versioning 2.0.0) ----
@@ -1199,7 +1199,7 @@ func semveronIdentField(v Value, field string) (string, error) {
 }
 
 func semveronErr(detail string) error {
-	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+	return &BoruError{Code: "type_error", Detail: "make: " + detail}
 }
 
 // ---- Cidron (CIDR block) ----
@@ -1311,7 +1311,7 @@ func compareCidrons(a, b Value) int {
 }
 
 func cidronErr(detail string) error {
-	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+	return &BoruError{Code: "type_error", Detail: "make: " + detail}
 }
 
 // ---- Macon (IEEE 802 hardware address) ----
@@ -1410,7 +1410,7 @@ func maconAllOnes(hw net.HardwareAddr) bool {
 }
 
 func maconErr(detail string) error {
-	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+	return &BoruError{Code: "type_error", Detail: "make: " + detail}
 }
 
 // ---- Coloron (sRGB colour with alpha) ----
@@ -1677,7 +1677,7 @@ func splitTrim(s, sep string) []string {
 }
 
 func coloronErr(detail string) error {
-	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+	return &BoruError{Code: "type_error", Detail: "make: " + detail}
 }
 
 // ---- Mimon (MIME / media type) ----
@@ -1838,7 +1838,7 @@ func micronMimonRender(fields *OrderedMap) string {
 }
 
 func mimonErr(detail string) error {
-	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+	return &BoruError{Code: "type_error", Detail: "make: " + detail}
 }
 
 // ---- Qion (monetary amount) ----
@@ -2037,7 +2037,7 @@ func isThreeLetters(s string) bool {
 }
 
 func qionErr(detail string) error {
-	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+	return &BoruError{Code: "type_error", Detail: "make: " + detail}
 }
 
 // ---- Phonon (E.164 telephone number) ----
@@ -2101,7 +2101,7 @@ func phononFromString(s string) ([]Value, error) {
 }
 
 func phononErr(detail string) error {
-	return &AqlError{Code: "type_error", Detail: "make: " + detail}
+	return &BoruError{Code: "type_error", Detail: "make: " + detail}
 }
 
 // urlonFieldOrder is the canonical field layout of an Urlon map source
@@ -2133,13 +2133,13 @@ func makeUrlon(src Value) ([]Value, error) {
 				}
 			}
 			if !valid {
-				return nil, &AqlError{Code: "type_error",
+				return nil, &BoruError{Code: "type_error",
 					Detail: "make: Urlon has no field " + k + " (fields: " + strings.Join(urlonFieldOrder, ", ") + ")"}
 			}
 			if k == "port" {
 				n, nerr := v.AsConcreteInteger()
 				if nerr != nil {
-					return nil, &AqlError{Code: "type_error",
+					return nil, &BoruError{Code: "type_error",
 						Detail: fmt.Sprintf("make: Urlon port must be an Integer, got %s", v.String())}
 				}
 				parts[k] = strconv.FormatInt(n, 10)
@@ -2147,13 +2147,13 @@ func makeUrlon(src Value) ([]Value, error) {
 			}
 			sv, serr := v.AsConcreteString()
 			if serr != nil {
-				return nil, &AqlError{Code: "type_error",
+				return nil, &BoruError{Code: "type_error",
 					Detail: fmt.Sprintf("make: Urlon field %s must be a String, got %s", k, v.String())}
 			}
 			parts[k] = sv
 		}
 		if parts["scheme"] == "" || parts["host"] == "" {
-			return nil, &AqlError{Code: "type_error",
+			return nil, &BoruError{Code: "type_error",
 				Detail: "make: Urlon requires both scheme and host fields"}
 		}
 		href := parts["scheme"] + "://" + parts["host"]
@@ -2169,18 +2169,18 @@ func makeUrlon(src Value) ([]Value, error) {
 		}
 		return urlonFromString(href)
 	}
-	return nil, &AqlError{Code: "type_error",
+	return nil, &BoruError{Code: "type_error",
 		Detail: fmt.Sprintf("make: Urlon source must be a string or map, got %s", src.String())}
 }
 
 func urlonFromString(s string) ([]Value, error) {
 	u, err := url.Parse(s)
 	if err != nil {
-		return nil, &AqlError{Code: "type_error",
+		return nil, &BoruError{Code: "type_error",
 			Detail: fmt.Sprintf("make: invalid URL %q: %v", s, err)}
 	}
 	if u.Scheme == "" || u.Host == "" {
-		return nil, &AqlError{Code: "type_error",
+		return nil, &BoruError{Code: "type_error",
 			Detail: fmt.Sprintf("make: Urlon requires an absolute URL (scheme://host…), got %q", s)}
 	}
 	fields := NewOrderedMap()
@@ -2189,7 +2189,7 @@ func urlonFromString(s string) ([]Value, error) {
 	if p := u.Port(); p != "" {
 		n, perr := strconv.ParseInt(p, 10, 64)
 		if perr != nil {
-			return nil, &AqlError{Code: "type_error",
+			return nil, &BoruError{Code: "type_error",
 				Detail: fmt.Sprintf("make: invalid URL port %q", p)}
 		}
 		fields.Set("port", NewInteger(n))
@@ -2217,7 +2217,7 @@ func makeMicronUser(info MicronTypeInfo, data Value, r *Registry) ([]Value, erro
 		kindName = "Micron"
 	}
 	if !data.Parent.ConformsTo(TMap) || !IsConcrete(data) {
-		return nil, &AqlError{Code: "type_error",
+		return nil, &BoruError{Code: "type_error",
 			Detail: fmt.Sprintf("make: %s takes a map of fields, got %s", kindName, data.String())}
 	}
 	provided, err := RequireConcreteMap(data, "make "+kindName)
@@ -2226,7 +2226,7 @@ func makeMicronUser(info MicronTypeInfo, data Value, r *Registry) ([]Value, erro
 	}
 	for _, key := range provided.Keys() {
 		if _, ok := info.Fields.Get(key); !ok {
-			return nil, &AqlError{Code: "type_error",
+			return nil, &BoruError{Code: "type_error",
 				Detail: fmt.Sprintf("make: %s has no field %q", kindName, key)}
 		}
 	}
@@ -2240,12 +2240,12 @@ func makeMicronUser(info MicronTypeInfo, data Value, r *Registry) ([]Value, erro
 				result.Set(key, constraint)
 				continue
 			}
-			return nil, &AqlError{Code: "type_error",
+			return nil, &BoruError{Code: "type_error",
 				Detail: fmt.Sprintf("make: %s is missing field %q", kindName, key)}
 		}
 		checked, cerr := MakeClassFieldValue(val, constraint, r)
 		if cerr != nil {
-			return nil, &AqlError{Code: "type_error",
+			return nil, &BoruError{Code: "type_error",
 				Detail: fmt.Sprintf("make: %s field %q: %v", kindName, key, cerr)}
 		}
 		result.Set(key, checked)
@@ -2293,7 +2293,7 @@ func CheckMicronConstruction(r *Registry, target, src Value, pos SrcPos) {
 	// so running the real one at analysis time is safe.
 	if _, err := micronInstantiate(target, src, r); err != nil {
 		code, detail := "type_error", err.Error()
-		var ae *AqlError
+		var ae *BoruError
 		if errors.As(err, &ae) {
 			code, detail = ae.Code, ae.Detail
 		}
@@ -2363,13 +2363,13 @@ func micronConstruct(base, arg Value, r *Registry) ([]Value, error) {
 		} else if info, err := AsMicronType(base); err == nil && info.Name != "" {
 			name = info.Name
 		}
-		return nil, &AqlError{Code: "type_error",
+		return nil, &BoruError{Code: "type_error",
 			Detail: "refine: " + name + " is a Micron kind — its field set is its validation contract",
 			Hint:   "newtype it (def Newon refine " + name + ") or define a fresh kind: def Nameon refine Micron {field:Type}"}
 	}
 	fieldsIn, err := RequireConcreteMap(arg, "refine Micron")
 	if err != nil {
-		return nil, &AqlError{Code: "type_error",
+		return nil, &BoruError{Code: "type_error",
 			Detail: "refine Micron: takes a map of fields, e.g. refine Micron {foo:String}"}
 	}
 	fields := NewOrderedMap()
@@ -2377,7 +2377,7 @@ func micronConstruct(base, arg Value, r *Registry) ([]Value, error) {
 		v, _ := fieldsIn.Get(k)
 		v = ResolveWordValue(v)
 		if !IsTypeBody(v) && !IsConcrete(v) {
-			return nil, &AqlError{Code: "type_error",
+			return nil, &BoruError{Code: "type_error",
 				Detail: fmt.Sprintf("refine Micron: field %s must be a type or a concrete default, got %s", k, v.String())}
 		}
 		fields.Set(k, v)
@@ -2412,7 +2412,7 @@ func micronInstantiateAt(typ, data Value, r *Registry) ([]Value, error) {
 	kind := CanonicalType(r, &typ)
 	switch {
 	case kind.Equal(TMicron):
-		return nil, &AqlError{Code: "type_error",
+		return nil, &BoruError{Code: "type_error",
 			Detail: "make: Micron is abstract — construct a leaf (Pathon / Emailon / Urlon / Ipon / Hoston / Semveron / Cidron / Macon / Coloron / Mimon / Qion / Phonon) or a user-defined Micron kind",
 			Hint:   "define one with: def Nameon refine Micron {field:Type}"}
 	case kind.Equal(TPathon):
@@ -2483,6 +2483,6 @@ func micronInstantiateAt(typ, data Value, r *Registry) ([]Value, error) {
 		}
 		return []Value{ReparentValue(out[0], kind)}, nil
 	}
-	return nil, &AqlError{Code: "type_error",
+	return nil, &BoruError{Code: "type_error",
 		Detail: "make: " + kind.Name() + " has no field schema — define one with refine Micron {fields}"}
 }

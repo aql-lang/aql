@@ -11,14 +11,14 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
-// io_mount.go — the AQL→FileOps bridge: `IO.mount {read: fn, write: fn,
-// …}` installs a filesystem IMPLEMENTED IN AQL as the host FileOps, so
+// io_mount.go — the BORU→FileOps bridge: `IO.mount {read: fn, write: fn,
+// …}` installs a filesystem IMPLEMENTED IN BORU as the host FileOps, so
 // every io word (and any other consumer of the capability) routes its
-// operations through user-supplied AQL handlers. This is how AQL code
+// operations through user-supplied BORU handlers. This is how BORU code
 // exposes an arbitrary backing — a Store, a database table, a remote
 // service — as a filesystem. `IO.unmount` restores the previous FileOps.
 //
@@ -36,7 +36,7 @@ import (
 // atime:Integer mtime:Integer]), truncate ([p size:Integer]), resolve
 // ([p] → String). An operation with no handler returns a clean
 // mount-unsupported error — the documented-no-op posture for exotic ops.
-// Watch is not bridgeable (no event source in AQL) and always refuses.
+// Watch is not bridgeable (no event source in BORU) and always refuses.
 //
 // Precedence: the __sys.fs {mem}/{overlay} context toggles still win —
 // EffectiveFileOps consults them before the host slot — so tests can
@@ -46,11 +46,11 @@ import (
 // not implement.
 var errMountUnsupported = errors.New("operation not supported by the mounted filesystem")
 
-// aqlFileOps adapts a map of AQL Function handlers to the FileOps
-// interface. Handlers run through CallAQL on the mounting registry, on
+// boruFileOps adapts a map of BORU Function handlers to the FileOps
+// interface. Handlers run through CallBORU on the mounting registry, on
 // the calling goroutine — the same execution shape as any fn value
 // invoked by a native word.
-type aqlFileOps struct {
+type boruFileOps struct {
 	r        *Registry
 	handlers *OrderedMap
 	// tempSeq numbers the temp-emulation tokens (deterministic, like mem).
@@ -59,7 +59,7 @@ type aqlFileOps struct {
 
 // call dispatches one operation to its handler, returning the LAST value
 // of the handler's result (the conventional fn return).
-func (a *aqlFileOps) call(op string, args []Value) (Value, error) {
+func (a *boruFileOps) call(op string, args []Value) (Value, error) {
 	fnVal, ok := a.handlers.Get(op)
 	if !ok {
 		return Value{}, &os.PathError{Op: op, Path: pathOfArgs(args), Err: errMountUnsupported}
@@ -70,7 +70,7 @@ func (a *aqlFileOps) call(op string, args []Value) (Value, error) {
 			Err: fmt.Errorf("mounted %s handler has no signature matching %d argument(s)", op, len(args))}
 	}
 	fnDef, _ := fnVal.Data.(FnDefInfo)
-	res, err := a.r.CallAQL(sig, args, fnDef.Captured)
+	res, err := a.r.CallBORU(sig, args, fnDef.Captured)
 	if err != nil {
 		return Value{}, err
 	}
@@ -89,11 +89,11 @@ func pathOfArgs(args []Value) string {
 }
 
 // isNoneResult reports the handler's "absent" convention: any none value
-// (the AQL none literal is a concrete NonePayload; a handler returning no
+// (the BORU none literal is a concrete NonePayload; a handler returning no
 // value at all yields the None type literal — both mean absent).
 func isNoneResult(v Value) bool { return v.Is(TNone) }
 
-func (a *aqlFileOps) ReadFile(path string) ([]byte, error) {
+func (a *boruFileOps) ReadFile(path string) ([]byte, error) {
 	res, err := a.call("read", []Value{NewPathonFromString(path)})
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func (a *aqlFileOps) ReadFile(path string) ([]byte, error) {
 	return []byte(s), nil
 }
 
-func (a *aqlFileOps) WriteFile(path string, data []byte, _ os.FileMode) error {
+func (a *boruFileOps) WriteFile(path string, data []byte, _ os.FileMode) error {
 	var payload Value
 	if utf8.Valid(data) {
 		payload = NewString(string(data))
@@ -123,7 +123,7 @@ func (a *aqlFileOps) WriteFile(path string, data []byte, _ os.FileMode) error {
 	return err
 }
 
-func (a *aqlFileOps) MkdirAll(path string, _ os.FileMode) error {
+func (a *boruFileOps) MkdirAll(path string, _ os.FileMode) error {
 	_, err := a.call("mkdir", []Value{NewPathonFromString(path)})
 	return err
 }
@@ -181,7 +181,7 @@ func statFromMap(path string, m ReadMap) capabilities.FileInfo {
 	return fi
 }
 
-func (a *aqlFileOps) Stat(path string, _ bool) (capabilities.FileInfo, error) {
+func (a *boruFileOps) Stat(path string, _ bool) (capabilities.FileInfo, error) {
 	res, err := a.call("stat", []Value{NewPathonFromString(path)})
 	if err != nil {
 		return capabilities.FileInfo{}, err
@@ -197,7 +197,7 @@ func (a *aqlFileOps) Stat(path string, _ bool) (capabilities.FileInfo, error) {
 	return statFromMap(path, m), nil
 }
 
-func (a *aqlFileOps) ReadDir(path string) ([]capabilities.FileInfo, error) {
+func (a *boruFileOps) ReadDir(path string) ([]capabilities.FileInfo, error) {
 	res, err := a.call("list", []Value{NewPathonFromString(path)})
 	if err != nil {
 		return nil, err
@@ -224,39 +224,39 @@ func (a *aqlFileOps) ReadDir(path string) ([]capabilities.FileInfo, error) {
 	return out, nil
 }
 
-func (a *aqlFileOps) Remove(path string, recursive bool) error {
+func (a *boruFileOps) Remove(path string, recursive bool) error {
 	opts := NewOrderedMap()
 	opts.Set("recursive", NewBoolean(recursive))
 	_, err := a.call("remove", []Value{NewPathonFromString(path), NewMap(opts)})
 	return err
 }
 
-func (a *aqlFileOps) Rename(oldPath, newPath string) error {
+func (a *boruFileOps) Rename(oldPath, newPath string) error {
 	_, err := a.call("rename", []Value{NewPathonFromString(oldPath), NewPathonFromString(newPath)})
 	return err
 }
 
-func (a *aqlFileOps) Symlink(target, linkPath string) error {
+func (a *boruFileOps) Symlink(target, linkPath string) error {
 	_, err := a.call("symlink", []Value{NewPathonFromString(target), NewPathonFromString(linkPath)})
 	return err
 }
 
-func (a *aqlFileOps) Link(target, linkPath string) error {
+func (a *boruFileOps) Link(target, linkPath string) error {
 	_, err := a.call("link", []Value{NewPathonFromString(target), NewPathonFromString(linkPath)})
 	return err
 }
 
-func (a *aqlFileOps) Chmod(path string, mode os.FileMode) error {
+func (a *boruFileOps) Chmod(path string, mode os.FileMode) error {
 	_, err := a.call("chmod", []Value{NewPathonFromString(path), NewInteger(int64(mode & os.ModePerm))})
 	return err
 }
 
-func (a *aqlFileOps) Chtimes(path string, atime, mtime time.Time) error {
+func (a *boruFileOps) Chtimes(path string, atime, mtime time.Time) error {
 	_, err := a.call("chtimes", []Value{NewPathonFromString(path), NewInteger(atime.Unix()), NewInteger(mtime.Unix())})
 	return err
 }
 
-func (a *aqlFileOps) Truncate(path string, size int64) error {
+func (a *boruFileOps) Truncate(path string, size int64) error {
 	_, err := a.call("truncate", []Value{NewPathonFromString(path), NewInteger(size)})
 	return err
 }
@@ -264,14 +264,14 @@ func (a *aqlFileOps) Truncate(path string, size int64) error {
 // Chown bridges to an optional `chown ([p uid gid])` handler (the follow
 // flag is not forwarded — a mounted filesystem models no symlink-deref
 // distinction unless its own handlers do). Absent handler: clean refusal.
-func (a *aqlFileOps) Chown(path string, uid, gid int, _ bool) error {
+func (a *boruFileOps) Chown(path string, uid, gid int, _ bool) error {
 	_, err := a.call("chown", []Value{NewPathonFromString(path), NewInteger(int64(uid)), NewInteger(int64(gid))})
 	return err
 }
 
 // XattrGet bridges to an optional `xattr-get ([p name])` handler; a none
 // result is the absent-attribute convention.
-func (a *aqlFileOps) XattrGet(path, name string) ([]byte, error) {
+func (a *boruFileOps) XattrGet(path, name string) ([]byte, error) {
 	res, err := a.call("xattr-get", []Value{NewPathonFromString(path), NewString(name)})
 	if err != nil {
 		return nil, err
@@ -293,7 +293,7 @@ func (a *aqlFileOps) XattrGet(path, name string) ([]byte, error) {
 // XattrSet bridges to an optional `xattr-set ([p name value])` handler
 // (the value arrives as a String when valid UTF-8, Bytes otherwise —
 // the same convention as the bridged write payload).
-func (a *aqlFileOps) XattrSet(path, name string, value []byte) error {
+func (a *boruFileOps) XattrSet(path, name string, value []byte) error {
 	var payload Value
 	if utf8.Valid(value) {
 		payload = NewString(string(value))
@@ -306,7 +306,7 @@ func (a *aqlFileOps) XattrSet(path, name string, value []byte) error {
 
 // XattrList bridges to an optional `xattr-list ([p])` handler returning a
 // list of name strings (sorted here so backends need not bother).
-func (a *aqlFileOps) XattrList(path string) ([]string, error) {
+func (a *boruFileOps) XattrList(path string) ([]string, error) {
 	res, err := a.call("xattr-list", []Value{NewPathonFromString(path)})
 	if err != nil {
 		return nil, err
@@ -327,7 +327,7 @@ func (a *aqlFileOps) XattrList(path string) ([]string, error) {
 }
 
 // XattrRemove bridges to an optional `xattr-remove ([p name])` handler.
-func (a *aqlFileOps) XattrRemove(path, name string) error {
+func (a *boruFileOps) XattrRemove(path, name string) error {
 	_, err := a.call("xattr-remove", []Value{NewPathonFromString(path), NewString(name)})
 	return err
 }
@@ -336,7 +336,7 @@ func (a *aqlFileOps) XattrRemove(path, name string) error {
 // handler; absent that, a DEFAULT EMULATION generates a counter name and
 // routes through the bridged write — mount's minimum contract already
 // covers file creation, so temp needs no mandatory handler.
-func (a *aqlFileOps) TempFile(dir, pattern string) (string, error) {
+func (a *boruFileOps) TempFile(dir, pattern string) (string, error) {
 	if _, ok := a.handlers.Get("temp"); ok {
 		res, err := a.call("temp", []Value{NewPathonFromString(dir), NewString(pattern)})
 		if err != nil {
@@ -353,7 +353,7 @@ func (a *aqlFileOps) TempFile(dir, pattern string) (string, error) {
 
 // TempDir is the directory twin: the optional handler, else the counter
 // name routed through the bridged mkdir.
-func (a *aqlFileOps) TempDir(dir, pattern string) (string, error) {
+func (a *boruFileOps) TempDir(dir, pattern string) (string, error) {
 	if _, ok := a.handlers.Get("temp"); ok {
 		res, err := a.call("temp", []Value{NewPathonFromString(dir), NewString(pattern), NewBoolean(true)})
 		if err != nil {
@@ -370,7 +370,7 @@ func (a *aqlFileOps) TempDir(dir, pattern string) (string, error) {
 
 // tempEmulatedName builds the emulation's unique name (counter token per
 // the os.CreateTemp pattern contract; "" dir → "/tmp").
-func (a *aqlFileOps) tempEmulatedName(dir, pattern string) string {
+func (a *boruFileOps) tempEmulatedName(dir, pattern string) string {
 	if dir == "" {
 		dir = "/tmp"
 	}
@@ -385,7 +385,7 @@ func (a *aqlFileOps) tempEmulatedName(dir, pattern string) string {
 
 // Statfs bridges to an optional `statfs ([p] → {total free available
 // bsize type}|none)` handler. none (or an absent handler) refuses.
-func (a *aqlFileOps) Statfs(path string) (capabilities.FsInfo, error) {
+func (a *boruFileOps) Statfs(path string) (capabilities.FsInfo, error) {
 	res, err := a.call("statfs", []Value{NewPathonFromString(path)})
 	if err != nil {
 		return capabilities.FsInfo{}, err
@@ -417,13 +417,13 @@ func (a *aqlFileOps) Statfs(path string) (capabilities.FsInfo, error) {
 	return fs, nil
 }
 
-func (a *aqlFileOps) Watch(path string, _ capabilities.WatchOpts) (<-chan capabilities.WatchEvent, func() error, error) {
-	// AQL has no event source to bridge — a mounted filesystem is not
+func (a *boruFileOps) Watch(path string, _ capabilities.WatchOpts) (<-chan capabilities.WatchEvent, func() error, error) {
+	// BORU has no event source to bridge — a mounted filesystem is not
 	// watchable. (A future mount contract could accept an emit callback.)
 	return nil, nil, &os.PathError{Op: "watch", Path: path, Err: errMountUnsupported}
 }
 
-func (a *aqlFileOps) ResolvePath(path string) (string, error) {
+func (a *boruFileOps) ResolvePath(path string) (string, error) {
 	if _, ok := a.handlers.Get("resolve"); ok {
 		res, err := a.call("resolve", []Value{NewPathonFromString(path)})
 		if err != nil {
@@ -439,15 +439,15 @@ func (a *aqlFileOps) ResolvePath(path string) (string, error) {
 // Lock and Mmap REFUSE cleanly on a mount: an advisory lock that locks
 // nothing (or a mapping over a value-based backend with no fd) is worse
 // than an honest refusal.
-func (a *aqlFileOps) Lock(path string, _, _ bool) (io.Closer, error) {
+func (a *boruFileOps) Lock(path string, _, _ bool) (io.Closer, error) {
 	return nil, &os.PathError{Op: "lock", Path: path, Err: errMountUnsupported}
 }
 
-func (a *aqlFileOps) Mmap(path string, _ int64, _ int, _ bool) (capabilities.MmapRegion, error) {
+func (a *boruFileOps) Mmap(path string, _ int64, _ int, _ bool) (capabilities.MmapRegion, error) {
 	return nil, &os.PathError{Op: "mmap", Path: path, Err: errMountUnsupported}
 }
 
-var _ capabilities.FileOps = (*aqlFileOps)(nil)
+var _ capabilities.FileOps = (*boruFileOps)(nil)
 
 // mountPrevKey is the capability slot holding the STACK of FileOps that
 // were active before each IO.mount, so nested mounts unwind in LIFO order —
@@ -485,23 +485,23 @@ func pushMountPrev(r *Registry) {
 func doMountWord(args []Value, r *Registry) ([]Value, error) {
 	m, err := RequireConcreteMap(args[0], "mount")
 	if err != nil {
-		return nil, r.AqlError("mount_error", "mount: the handler map must be a concrete map", "mount")
+		return nil, r.BoruError("mount_error", "mount: the handler map must be a concrete map", "mount")
 	}
 	handlers := NewOrderedMap()
 	for _, key := range m.Keys() {
 		v, _ := m.Get(key)
 		if _, isFn := v.Data.(FnDefInfo); !isFn {
-			return nil, r.AqlError("mount_error",
+			return nil, r.BoruError("mount_error",
 				fmt.Sprintf("mount: handler %q is %s — every handler must be a Function", key, v.Parent), "mount")
 		}
 		handlers.Set(key, v)
 	}
 	if _, ok := handlers.Get("read"); !ok {
-		return nil, r.AqlErrorHint("mount_error", "mount: a mounted filesystem needs at least a `read` handler", "mount",
+		return nil, r.BoruErrorHint("mount_error", "mount: a mounted filesystem needs at least a `read` handler", "mount",
 			"supply {read: ([p] => [...]), ...}; unhandled operations refuse cleanly")
 	}
 	pushMountPrev(r)
-	SetHostFileOps(r, &aqlFileOps{r: r, handlers: handlers})
+	SetHostFileOps(r, &boruFileOps{r: r, handlers: handlers})
 	return nil, nil
 }
 
@@ -524,17 +524,17 @@ func doMountZipWord(args []Value, r *Registry, opts Value) ([]Value, error) {
 		writable = mapBoolOpt(opts, "writable", false)
 	}
 	if !zipIntent {
-		return nil, r.AqlErrorHint("mount_error",
+		return nil, r.BoruErrorHint("mount_error",
 			fmt.Sprintf("mount: %q is not a .zip archive", target), "mount",
-			"pass a .zip path or {zip:true} to mount an archive, or a handler map to mount an AQL filesystem")
+			"pass a .zip path or {zip:true} to mount an archive, or a handler map to mount a BORU filesystem")
 	}
 	data, err := EffectiveFileOps(r).ReadFile(target)
 	if err != nil {
-		return nil, r.AqlError("mount_error", fmt.Sprintf("mount: %v", err), "mount")
+		return nil, r.BoruError("mount_error", fmt.Sprintf("mount: %v", err), "mount")
 	}
 	zfs, err := capabilities.NewZip(data)
 	if err != nil {
-		return nil, r.AqlError("mount_error", fmt.Sprintf("mount: not a valid zip archive: %v", err), "mount")
+		return nil, r.BoruError("mount_error", fmt.Sprintf("mount: not a valid zip archive: %v", err), "mount")
 	}
 	var ops capabilities.FileOps = zfs
 	if writable {
@@ -554,7 +554,7 @@ func doMountZipWord(args []Value, r *Registry, opts Value) ([]Value, error) {
 func doUnmountWord(_ []Value, r *Registry) ([]Value, error) {
 	stack, ok, _ := eng.Cap[*mountStack](r, mountPrevKey)
 	if !ok || stack == nil || len(stack.entries) == 0 {
-		return nil, r.AqlError("unmount_error", "unmount: no mounted filesystem to unmount", "unmount")
+		return nil, r.BoruError("unmount_error", "unmount: no mounted filesystem to unmount", "unmount")
 	}
 	prev := stack.entries[len(stack.entries)-1]
 	stack.entries = stack.entries[:len(stack.entries)-1]

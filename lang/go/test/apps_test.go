@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// End-to-end tests for the networking verification apps written in AQL
+// End-to-end tests for the networking verification apps written in BORU
 // (design/examples/apps/): the todo REST API, the mini-redis server, and
 // the streaming/resumable mini-S3. Each test loads the example file as a
 // FILE MODULE (exercising the file-module loader too) and drives it over
@@ -65,13 +65,13 @@ func appLastString(t *testing.T, vals []native.Value) string {
 	return s
 }
 
-// The todo REST API (todo-api.aql): CRUD over the http codec with :id
+// The todo REST API (todo-api.boru): CRUD over the http codec with :id
 // route params, JSON bodies, tombstone deletes, and the request-count
 // wrap middleware — the NETWORK-SERVERS.0.md §6.4 shape end to end.
 func TestAppTodoAPI(t *testing.T) {
-	out, err := runAppSteps(t, []string{"todo-api.aql"}, []string{
-		`import "/apps/todo-api.aql"`,
-		`import "aql:net"`,
+	out, err := runAppSteps(t, []string{"todo-api.boru"}, []string{
+		`import "/apps/todo-api.boru"`,
+		`import "boru:net"`,
 		`def ln (TodoApi.serve {port: 0})`,
 		`def lna (Net.addr ln)`,
 		`def port lna.port`,
@@ -127,14 +127,14 @@ func TestAppTodoAPI(t *testing.T) {
 	}
 }
 
-// The mini-redis server (mini-redis.aql): the common Redis commands
-// over a custom AQL codec (inline commands in, RESP-flavoured lines
+// The mini-redis server (mini-redis.boru): the common Redis commands
+// over a custom BORU codec (inline commands in, RESP-flavoured lines
 // out) — the NETWORK-SERVERS.0.md §6.6 custom-protocol story as a
 // real app. The client side is plain Net.lines.
 func TestAppMiniRedis(t *testing.T) {
-	out, err := runAppSteps(t, []string{"mini-redis.aql"}, []string{
-		`import "/apps/mini-redis.aql"`,
-		`import "aql:net"`,
+	out, err := runAppSteps(t, []string{"mini-redis.boru"}, []string{
+		`import "/apps/mini-redis.boru"`,
+		`import "boru:net"`,
 		`def ln (MiniRedis.serve {port: 0})`,
 		`def lna (Net.addr ln)`,
 		`def port lna.port`,
@@ -220,17 +220,17 @@ func TestAppMiniRedis(t *testing.T) {
 	}
 }
 
-// The mini-S3 object store (mini-s3.aql) and its raw-socket client
-// (mini-s3-client.aql) — both on the LOW-LEVEL tier: hand-framed HTTP
+// The mini-S3 object store (mini-s3.boru) and its raw-socket client
+// (mini-s3-client.boru) — both on the LOW-LEVEL tier: hand-framed HTTP
 // over recv-until/recv-bytes, bodies streamed in bounded 64 KiB chunks
 // both ways, and RESUMABLE uploads/downloads (HEAD → x-size resume
 // point, PUT x-offset with 409 on a wrong offset, GET with Range → 206).
 func TestAppMiniS3StreamingAndResumption(t *testing.T) {
-	out, err := runAppSteps(t, []string{"mini-s3.aql", "mini-s3-client.aql"}, []string{
-		`import "/apps/mini-s3.aql"`,
-		`import "/apps/mini-s3-client.aql"`,
-		`import "aql:net"`,
-		`import "aql:string-util"`,
+	out, err := runAppSteps(t, []string{"mini-s3.boru", "mini-s3-client.boru"}, []string{
+		`import "/apps/mini-s3.boru"`,
+		`import "/apps/mini-s3-client.boru"`,
+		`import "boru:net"`,
+		`import "boru:string-util"`,
 		`def ln (MiniS3.serve {port: 0})`,
 		`def lna (Net.addr ln)`,
 		`def port lna.port`,

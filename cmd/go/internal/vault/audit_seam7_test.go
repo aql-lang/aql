@@ -28,7 +28,7 @@ func c7writeAudit(t *testing.T, home, content string) {
 func TestC7AppendAuditMkdirFails(t *testing.T) {
 	testHome(t) // neutralize EnvFolder/EnvSuffix
 	home := t.TempDir()
-	// Make .aql a regular file so MkdirAll(vaultFolder) fails with ENOTDIR.
+	// Make .boru a regular file so MkdirAll(vaultFolder) fails with ENOTDIR.
 	if err := os.WriteFile(vaultFolder(home), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestC7RunAuditNamespaceFilterError(t *testing.T) {
 func TestC7RunAuditOpenNonNotExistError(t *testing.T) {
 	testHome(t)
 	home := t.TempDir()
-	// .aql is a file, so auditPath = <file>/vault.audit.jsonl → ENOTDIR (not IsNotExist).
+	// .boru is a file, so auditPath = <file>/vault.audit.jsonl → ENOTDIR (not IsNotExist).
 	if err := os.WriteFile(vaultFolder(home), []byte("x"), 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -172,7 +172,7 @@ func TestC7ReadAuditArms(t *testing.T) {
 		t.Fatalf("ReadAudit absent = %v, %v", evs, err)
 	}
 
-	// Non-IsNotExist open error: .aql is a file → ENOTDIR.
+	// Non-IsNotExist open error: .boru is a file → ENOTDIR.
 	bad := t.TempDir()
 	if err := os.WriteFile(vaultFolder(bad), []byte("x"), 0600); err != nil {
 		t.Fatal(err)

@@ -59,7 +59,7 @@ def Foo (class {x:Integer})  def k fn [[Any] [String] ['a']  [Foo] [String] ['f'
 def Foo refine List  def Bar refine List  def k fn [[Foo] [String] ['f']  [Bar] [String] ['b']]  inspect k 'signatures' get	[{args:['Foo']} {args:['Bar']} {args:[]}]	siblings tiebreak by name (reversed)
 
 # ---------------------------------------------------------------------
-# 4. Go-defined Ideals (Tensor / Matrix / Vector from aql:matrix)
+# 4. Go-defined Ideals (Tensor / Matrix / Vector from boru:matrix)
 # ---------------------------------------------------------------------
 # Matrix and Vector are registered via RegisterExternalBuiltin as
 # lattice children of Tensor (modules/matrix.go::MintTensorTypes —

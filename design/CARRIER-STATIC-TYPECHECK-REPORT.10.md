@@ -1,8 +1,8 @@
-# Carrier-Based Static Type Checking for AQL
+# Carrier-Based Static Type Checking for BORU
 
 ## Executive summary
 
-This report evaluates the feasibility of static type checking for AQL using a **carrier-value abstract interpretation** approach:
+This report evaluates the feasibility of static type checking for BORU using a **carrier-value abstract interpretation** approach:
 
 - Use non-concrete values ("carriers") that carry only type information.
 - Execute programs symbolically over carriers instead of concrete values.
@@ -11,29 +11,29 @@ This report evaluates the feasibility of static type checking for AQL using a **
 
 ### Bottom line
 
-The approach is **feasible and well-aligned with AQL's current runtime architecture**, but it must be implemented as a bounded abstract interpreter (with joining/widening/memoization) to avoid path and union explosion.
+The approach is **feasible and well-aligned with BORU's current runtime architecture**, but it must be implemented as a bounded abstract interpreter (with joining/widening/memoization) to avoid path and union explosion.
 
 ---
 
 ## Theoretical foundation: abstract interpretation
 
-This approach is **abstract interpretation** — a well-understood formal framework. The mapping between the standard theory and AQL's carrier proposal:
+This approach is **abstract interpretation** — a well-understood formal framework. The mapping between the standard theory and BORU's carrier proposal:
 
-| Abstract Interpretation Concept | AQL Carrier Equivalent |
+| Abstract Interpretation Concept | BORU Carrier Equivalent |
 |---|---|
-| Abstract domain | Type lattice (AQL hierarchy + disjunctions) |
+| Abstract domain | Type lattice (BORU hierarchy + disjunctions) |
 | Abstract transfer functions | Signature -> return type mappings |
 | Join operation | Disjunction (`A` or `B`) |
 | Widening operator | Collapse to common ancestor type |
 | Fixed-point iteration | Loop/recursion analysis |
 
-This is good news — the theory is mature, and soundness/termination properties are well-characterized. The checker is not a novel invention but an instance of a proven technique applied to AQL's specific semantics.
+This is good news — the theory is mature, and soundness/termination properties are well-characterized. The checker is not a novel invention but an instance of a proven technique applied to BORU's specific semantics.
 
 ---
 
 ## Scope and question
 
-We evaluate whether the following strategy can provide static typing for AQL:
+We evaluate whether the following strategy can provide static typing for BORU:
 
 1. Introduce a dynamic type carrier value.
 2. Invoke words/functions by signature only (no concrete execution), pushing return carriers.
@@ -46,11 +46,11 @@ We evaluate whether the following strategy can provide static typing for AQL:
 
 ---
 
-## Current AQL properties relevant to this design
+## Current BORU properties relevant to this design
 
 ### 1) Signature-driven dispatch already exists
 
-AQL currently resolves calls by selecting a matching signature from pre-sorted candidates ("first match wins"). `MatchSignature` applies type matching and structural pattern checks (`Unify` for patterns) at call time.
+BORU currently resolves calls by selecting a matching signature from pre-sorted candidates ("first match wins"). `MatchSignature` applies type matching and structural pattern checks (`Unify` for patterns) at call time.
 
 Signature matching is primarily type-driven. The core function `sigTypeMatches(v Value, t Type)` in `signature.go:161-181` uses `Parent.Matches(t)` as its first check. However, it also examines `Data` in specific cases: metatype detection (`Data == nil` for type literals, `Data.(ObjectTypeInfo)` for custom types), and `IsRecordType()`/`IsTableType()`/`IsOptionsType()` discrimination. A carrier value would need to represent these compound type distinctions, not just primitive Parent.
 
@@ -60,7 +60,7 @@ Implication: a static analyzer can reuse most of the matching logic against abst
 
 ### 2) Unification and disjunction already exist as language concepts
 
-AQL has:
+BORU has:
 
 - `Unify(a,b)` rules for scalar/list/map compatibility and narrowing.
 - Disjunct handling (`unifyDisjunct`) for alternatives.
@@ -101,7 +101,7 @@ For a word `f` with args `a` (sig[0]) and `b` (sig[1]), the equivalence is `f a 
 
 ---
 
-## Mapping proposed algorithm (a–h) to AQL
+## Mapping proposed algorithm (a–h) to BORU
 
 ### a) Carrier value
 
@@ -158,7 +158,7 @@ Perform interprocedural summary analysis:
 
 **Feasible and high-value.**
 
-Where AQL expressions encode type checks, narrow carrier type on true-path and complement on false-path (if representable).
+Where BORU expressions encode type checks, narrow carrier type on true-path and complement on false-path (if representable).
 
 ### g) Prefer most specific types
 
@@ -186,11 +186,11 @@ This supports IDE/lint workflows.
 1. **Branch/path explosion**: each conditional multiplies states.
 2. **Overload ambiguity**: broad carriers can match many signatures.
 3. **Union growth**: repeated joins increase disjunct size.
-4. **Optional signature combinations**: AQL already expands optional params combinatorially (`2^N` subsets).
+4. **Optional signature combinations**: BORU already expands optional params combinatorially (`2^N` subsets).
 
 ### Why disjunction growth is naturally limited
 
-Looking at actual AQL signatures:
+Looking at actual BORU signatures:
 
 - `add` has 6 signatures via `registerBinaryMathWord` + extra sigs (`native_math_add.go`): `[TNumber,TNumber]`, `[TScalar,TScalar]`, `[TCalDuration,TDate]`, `[TClkDuration,TDateTime]`, `[TClkDuration,TInstant]`, `[TClkDuration,TDate]`. These produce 6 distinct return types (Integer, Decimal, String, Date, DateTime, Instant). However, for non-temporal inputs the return types collapse to `{Integer, Decimal, String}` — still bounded.
 - Comparison words (`lt`, `gt`, `eq`, etc.) have 7 signatures each but all return `Boolean` — one return type.
@@ -215,7 +215,7 @@ The type lattice has finite height (bounded hierarchy depth + width-capped disju
 
 ### Complexity bound
 
-Worst case is **polynomial, not exponential**, because widening prevents unbounded disjunction growth. The lattice height is `O(depth_of_type_hierarchy * width_cap)`, which is small and constant for AQL's hierarchy.
+Worst case is **polynomial, not exponential**, because widening prevents unbounded disjunction growth. The lattice height is `O(depth_of_type_hierarchy * width_cap)`, which is small and constant for BORU's hierarchy.
 
 ### Can it scale?
 
@@ -234,16 +234,16 @@ Without these controls, worst-case behavior can be exponential. With them, it is
 
 ## Comparison with other static typing strategies
 
-| Approach | Fit for AQL | Why |
+| Approach | Fit for BORU | Why |
 |---|---|---|
-| Hindley-Milner | Poor | Assumes parametric polymorphism, no subtyping, single principal type. AQL has ad-hoc overloading, subtype hierarchy, first-match dispatch. |
-| Abstract interpretation (this proposal) | Excellent | Follows AQL's own execution model. Same signature matching, same dispatch order. |
+| Hindley-Milner | Poor | Assumes parametric polymorphism, no subtyping, single principal type. BORU has ad-hoc overloading, subtype hierarchy, first-match dispatch. |
+| Abstract interpretation (this proposal) | Excellent | Follows BORU's own execution model. Same signature matching, same dispatch order. |
 | Flow typing | Falls out naturally | Branch analysis with type narrowing is just abstract interpretation with path sensitivity. `if [x is Integer] [...]` narrows the carrier in the then-branch. |
-| Gradual typing | Partial overlap | AQL's approach is stronger — it tracks precise types where known and degrades to `Any` only at escape hatches, rather than using `?` throughout. |
-| Factor's stack checker | AQL goes further | Factor checks stack arity (`( a b -- c )`) but not value types. AQL's carriers track concrete types AND handle dispatch. Factor lacks ad-hoc overloading. |
+| Gradual typing | Partial overlap | BORU's approach is stronger — it tracks precise types where known and degrades to `Any` only at escape hatches, rather than using `?` throughout. |
+| Factor's stack checker | BORU goes further | Factor checks stack arity (`( a b -- c )`) but not value types. BORU's carriers track concrete types AND handle dispatch. Factor lacks ad-hoc overloading. |
 | Annotation-heavy checker only | Moderate | Simpler implementation and predictable performance, but weaker precision on existing dynamic features and higher user annotation burden. |
 
-**Best fit for AQL today:** carrier-based analysis with bounded abstract interpretation.
+**Best fit for BORU today:** carrier-based analysis with bounded abstract interpretation.
 
 ---
 
@@ -296,7 +296,7 @@ Without these controls, worst-case behavior can be exponential. With them, it is
 
 ## The checker as a modified engine
 
-What makes this approach particularly natural for AQL is that **the checker IS an AQL engine with a different value representation**. You're not building a separate formal system — you're running the same dispatch, same matching, same signature priority, just with carrier values instead of concrete values. The engine's existing `matchSignature` (in `match.go`), `sigTypeMatches`, `SortSignatures`, `Type.Matches()`, and `Unify` are largely reusable.
+What makes this approach particularly natural for BORU is that **the checker IS a BORU engine with a different value representation**. You're not building a separate formal system — you're running the same dispatch, same matching, same signature priority, just with carrier values instead of concrete values. The engine's existing `matchSignature` (in `match.go`), `sigTypeMatches`, `SortSignatures`, `Type.Matches()`, and `Unify` are largely reusable.
 
 The abstract interpreter could be structured as a modified `engine.Run()` where:
 
@@ -346,11 +346,11 @@ This means the checker **automatically stays in sync with dispatch logic** as wo
 
 ### Key performance risks
 
-**Memoization key space.** The standard abstract interpretation cache key is `(program counter, abstract stack shape, abstract environment)`. In AQL, the environment includes DefStacks — a shared mutable `map[string][]Value` in `registry.go`. DefStacks can be modified by sub-engines (each/fold/do share the same Registry). This makes the environment component of the cache key large and mutable, reducing cache hit rates. Mitigation: scope the environment to only names referenced in the current function.
+**Memoization key space.** The standard abstract interpretation cache key is `(program counter, abstract stack shape, abstract environment)`. In BORU, the environment includes DefStacks — a shared mutable `map[string][]Value` in `registry.go`. DefStacks can be modified by sub-engines (each/fold/do share the same Registry). This makes the environment component of the cache key large and mutable, reducing cache hit rates. Mitigation: scope the environment to only names referenced in the current function.
 
 **Sub-engine fan-out.** `each` creates a sub-engine per iteration (`New(reg)` in `native_array_higher.go:29`). For abstract interpretation, this is one abstract sub-analysis per higher-order word call. If bodies are complex or nested (each within each), the cost multiplies. Mitigation: summarize body effects once per distinct input type, then apply the summary.
 
-**Forward collection state dimensions.** Pending Forward markers add state to the analysis. With N pending forwards, the state space grows. In practice, AQL rarely has more than 1-2 pending forwards at a time, so this is bounded.
+**Forward collection state dimensions.** Pending Forward markers add state to the analysis. With N pending forwards, the state space grows. In practice, BORU rarely has more than 1-2 pending forwards at a time, so this is bounded.
 
 **Step limits as natural bounds.** The runtime engine limits steps to 22222 (top-level) or 2222 (sub-engine) in `engine.go:268-270`. The abstract interpreter can use similar bounds as a safety net, degrading to `Carry<Any>` if analysis exceeds a step budget.
 
@@ -358,7 +358,7 @@ This means the checker **automatically stays in sync with dispatch logic** as wo
 
 ### Comparison with known abstract interpreter performance
 
-**TAJS** (Type Analysis for JavaScript) analyzes programs of ~1000 LOC in seconds with similar dynamic-language challenges. AQL programs are typically shorter. **Pyright** handles Python files of thousands of lines interactively. Given AQL's shallow type lattice (max depth 4: `Scalar/Time/Duration/CalDuration`) and bounded vocabulary, per-file analysis should complete in milliseconds for typical programs.
+**TAJS** (Type Analysis for JavaScript) analyzes programs of ~1000 LOC in seconds with similar dynamic-language challenges. BORU programs are typically shorter. **Pyright** handles Python files of thousands of lines interactively. Given BORU's shallow type lattice (max depth 4: `Scalar/Time/Duration/CalDuration`) and bounded vocabulary, per-file analysis should complete in milliseconds for typical programs.
 
 ---
 
@@ -366,25 +366,25 @@ This means the checker **automatically stays in sync with dispatch logic** as wo
 
 ### Concatenative language type systems
 
-**Factor's stack checker.** Factor uses stack effect declarations `( a b -- c )` to verify arity at compile time but does not track value types. AQL's carrier approach goes further by tracking types through dispatch. Factor's checker demonstrates that concatenative control flow (quotation passing, higher-order combinators) is tractable for static analysis. Source: `factor-lang.org`, stack checker documentation.
+**Factor's stack checker.** Factor uses stack effect declarations `( a b -- c )` to verify arity at compile time but does not track value types. BORU's carrier approach goes further by tracking types through dispatch. Factor's checker demonstrates that concatenative control flow (quotation passing, higher-order combinators) is tractable for static analysis. Source: `factor-lang.org`, stack checker documentation.
 
-**Cat language (Christopher Diggins, 2006).** Concatenative language with a static type system using stack-polymorphic type variables. Cat demonstrates Hindley-Milner adaptation for concatenative semantics: type schemes like `forall A B. (A int int -- A int)` capture stack effects. Cat lacks ad-hoc overloading and subtyping, so its type system is simpler than what AQL requires. Relevant as proof of concept for concatenative type inference.
+**Cat language (Christopher Diggins, 2006).** Concatenative language with a static type system using stack-polymorphic type variables. Cat demonstrates Hindley-Milner adaptation for concatenative semantics: type schemes like `forall A B. (A int int -- A int)` capture stack effects. Cat lacks ad-hoc overloading and subtyping, so its type system is simpler than what BORU requires. Relevant as proof of concept for concatenative type inference.
 
-**Kitten language (Jon Purdy).** Concatenative language with Hindley-Milner inference extended with row-polymorphic stack types. Handles higher-order functions (quotation types). Again, no ad-hoc overloading — Kitten uses parametric polymorphism exclusively. Demonstrates that HM can handle quotation/composition but would not handle AQL's first-match dispatch.
+**Kitten language (Jon Purdy).** Concatenative language with Hindley-Milner inference extended with row-polymorphic stack types. Handles higher-order functions (quotation types). Again, no ad-hoc overloading — Kitten uses parametric polymorphism exclusively. Demonstrates that HM can handle quotation/composition but would not handle BORU's first-match dispatch.
 
 ### Abstract interpreters for dynamic languages
 
-**TAJS — Type Analysis for JavaScript (Jensen, Møller, Thiemann, ECOOP 2009).** The closest academic analogue to AQL's proposal. TAJS is an abstract interpreter for full JavaScript, handling: prototype-based dispatch (cf. AQL's signature dispatch), dynamic property access (cf. `context get`), `eval` of computed strings (cf. `do` on computed lists), higher-order functions (cf. `each`/`fold` with code bodies). TAJS uses a lattice of abstract values with widening, flow-sensitive analysis, and call-graph construction. It demonstrates that abstract interpretation scales for dynamic languages with careful engineering. Key lesson: TAJS handles `eval` by flagging it as uncheckable — the same approach proposed here for dynamic `do`.
+**TAJS — Type Analysis for JavaScript (Jensen, Møller, Thiemann, ECOOP 2009).** The closest academic analogue to BORU's proposal. TAJS is an abstract interpreter for full JavaScript, handling: prototype-based dispatch (cf. BORU's signature dispatch), dynamic property access (cf. `context get`), `eval` of computed strings (cf. `do` on computed lists), higher-order functions (cf. `each`/`fold` with code bodies). TAJS uses a lattice of abstract values with widening, flow-sensitive analysis, and call-graph construction. It demonstrates that abstract interpretation scales for dynamic languages with careful engineering. Key lesson: TAJS handles `eval` by flagging it as uncheckable — the same approach proposed here for dynamic `do`.
 
-**Pyright (Microsoft).** Static type checker for Python, implemented as flow-sensitive abstract interpreter. Handles: ad-hoc overloading via `@overload` decorators (cf. AQL's multi-signature words), union types (cf. disjunctions), type guards (cf. `is` checks in `if` branches), value-dependent narrowing for literal types. Pyright processes thousands of lines per second interactively. Relevant as a production-quality example of abstract interpretation on a dynamic language with overloading.
+**Pyright (Microsoft).** Static type checker for Python, implemented as flow-sensitive abstract interpreter. Handles: ad-hoc overloading via `@overload` decorators (cf. BORU's multi-signature words), union types (cf. disjunctions), type guards (cf. `is` checks in `if` branches), value-dependent narrowing for literal types. Pyright processes thousands of lines per second interactively. Relevant as a production-quality example of abstract interpretation on a dynamic language with overloading.
 
-**Flow (Meta/Facebook, 2014).** JavaScript type checker using flow-sensitive typing with path sensitivity and union types. Handles similar patterns to AQL: conditional type narrowing, union types that split and rejoin at control flow points. Flow's "refinement types" correspond to AQL's guard-based narrowing proposal.
+**Flow (Meta/Facebook, 2014).** JavaScript type checker using flow-sensitive typing with path sensitivity and union types. Handles similar patterns to BORU: conditional type narrowing, union types that split and rejoin at control flow points. Flow's "refinement types" correspond to BORU's guard-based narrowing proposal.
 
-**RPython type inference (PyPy project).** Abstract interpretation over a restricted Python subset. Demonstrates that abstract interpretation handles dynamic features effectively when the language is sufficiently constrained. AQL's bounded type lattice and finite vocabulary make it more constrained than full Python, suggesting good results.
+**RPython type inference (PyPy project).** Abstract interpretation over a restricted Python subset. Demonstrates that abstract interpretation handles dynamic features effectively when the language is sufficiently constrained. BORU's bounded type lattice and finite vocabulary make it more constrained than full Python, suggesting good results.
 
 ### Industrial abstract interpreters
 
-**Astrée (Cousot et al., ESOP 2005).** Industrial abstract interpreter for C used at Airbus. Demonstrates that abstract interpretation scales to hundreds of thousands of lines of code with careful widening strategies. Key lesson: the widening operator design is critical — too aggressive loses precision, too conservative risks non-termination. AQL's shallow lattice (max depth 4) makes widening straightforward compared to C's complex numeric domains.
+**Astrée (Cousot et al., ESOP 2005).** Industrial abstract interpreter for C used at Airbus. Demonstrates that abstract interpretation scales to hundreds of thousands of lines of code with careful widening strategies. Key lesson: the widening operator design is critical — too aggressive loses precision, too conservative risks non-termination. BORU's shallow lattice (max depth 4) makes widening straightforward compared to C's complex numeric domains.
 
 ---
 
@@ -429,8 +429,8 @@ This means the checker **automatically stays in sync with dispatch logic** as wo
 ## Verdict
 
 - **Is it possible?** Yes, with prerequisites. The largest prerequisite is adding return type annotations to all native signatures (Phase 0).
-- **Can it scale?** Yes, if implemented with abstract interpretation controls (join/widen/cache/budget). AQL's type lattice is bounded (max depth 4, ~60 builtin types) and the vocabulary is finite.
+- **Can it scale?** Yes, if implemented with abstract interpretation controls (join/widen/cache/budget). BORU's type lattice is bounded (max depth 4, ~60 builtin types) and the vocabulary is finite.
 - **Is exponential explosion possible?** Yes in worst-case; manageable in practice with bounded analysis. Worst case is polynomial with widening, not exponential.
-- **Compared to alternatives?** This approach is the most compatible with AQL's current runtime semantics and type machinery. Similar approaches have been proven at scale by TAJS (JavaScript), Pyright (Python), and Astrée (C).
+- **Compared to alternatives?** This approach is the most compatible with BORU's current runtime semantics and type machinery. Similar approaches have been proven at scale by TAJS (JavaScript), Pyright (Python), and Astrée (C).
 - **What are the hard boundaries?** The main escape hatches (`do` on computed lists, `context get`, dynamic `def` with shared sub-engine mutation) are exactly the constructs you'd expect to be hard to type-check in any dynamic language — they don't invalidate the approach, they just define its boundary.
 - **What is the realistic scope?** For straight-line code, function calls, branching, and loops over typed data, the carrier approach gives precise results with no explosion. Intra-signature value-dependent returns (arithmetic) and the mark/move control flow mechanism add implementation complexity beyond what a naive "modified engine" description suggests, but both are tractable with known techniques.

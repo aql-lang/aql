@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // The end-to-end debugger transcripts live with the CLI entry
@@ -28,7 +28,7 @@ func testSession(t *testing.T, in string) (*Session, *bytes.Buffer) {
 	return New(reg, Config{
 		In:     strings.NewReader(in),
 		Out:    &buf,
-		File:   "unit.aql",
+		File:   "unit.boru",
 		Source: "line one\nline two\nline three",
 	}), &buf
 }
@@ -89,7 +89,7 @@ func TestPauseAtFaultUnknownRow(t *testing.T) {
 	s.breakOnError = true
 	s.pauseAtFault(0, nil, "boom-fault", s.reg, s.file, s.lines)
 	out := buf.String()
-	if !strings.Contains(out, "paused before unwind at unit.aql:?") {
+	if !strings.Contains(out, "paused before unwind at unit.boru:?") {
 		t.Errorf("out = %q", out)
 	}
 	if !strings.Contains(out, "boom-fault") {
@@ -142,8 +142,8 @@ func TestParseLineSpec(t *testing.T) {
 		ok   bool
 	}{
 		{"12", 12, true},
-		{"prog.aql:7", 7, true},
-		{"/a/b/prog.aql:3", 3, true},
+		{"prog.boru:7", 7, true},
+		{"/a/b/prog.boru:3", 3, true},
 		{"add", 0, false},  // a word, not a line
 		{"x:-3", 0, false}, // non-positive
 		{"0", 0, false},    // lines are 1-based
@@ -317,7 +317,7 @@ func TestFrameLoc(t *testing.T) {
 	if got := frameLoc(capabilities.StepFrame{Row: 3}); got != " at ?:3" {
 		t.Errorf("empty File renders ?, got %q", got)
 	}
-	if got := frameLoc(capabilities.StepFrame{Row: 3, File: "x.aql"}); got != " at x.aql:3" {
+	if got := frameLoc(capabilities.StepFrame{Row: 3, File: "x.boru"}); got != " at x.boru:3" {
 		t.Errorf("got %q", got)
 	}
 }
@@ -455,7 +455,7 @@ func TestEvalExprHonorsGrants(t *testing.T) {
 	var buf bytes.Buffer
 	reg.Output = &buf
 	s := New(reg, Config{In: strings.NewReader(""), Out: &buf})
-	s.evalExpr(`import "aql:io" IO.read (make Pathon "/zz-no-such-file")`)
+	s.evalExpr(`import "boru:io" IO.read (make Pathon "/zz-no-such-file")`)
 	if !strings.Contains(buf.String(), "error:") ||
 		!strings.Contains(buf.String(), "capability") {
 		t.Errorf("an ungranted read must be refused as a capability error; out = %q", buf.String())
@@ -654,8 +654,8 @@ func TestOnStepForeignFileMarker(t *testing.T) {
 	// text to page: list answers honestly rather than showing the main
 	// file's lines at the module's row.
 	s, buf := testSession(t, "list\nc\n")
-	s.OnStep(capabilities.StepFrame{AtBreak: true, File: "other.aql", Row: 2})
-	if s.curFile != "other.aql" || s.curLines != nil {
+	s.OnStep(capabilities.StepFrame{AtBreak: true, File: "other.boru", Row: 2})
+	if s.curFile != "other.boru" || s.curLines != nil {
 		t.Errorf("identity = (%q, %d lines)", s.curFile, len(s.curLines))
 	}
 	if !strings.Contains(buf.String(), "(source line unknown)") {

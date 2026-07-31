@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-// aql:repl — the socket REPL written in AQL (repl.go's preamble) —
+// boru:repl — the socket REPL written in BORU (repl.go's preamble) —
 // exercised end to end over a real loopback socket: evaluation,
 // session-history persistence across sandboxed one-shot evals, error
 // replies, and /reset.
 func TestReplModuleEndToEnd(t *testing.T) {
 	out, err := runNetSteps(t, []string{
-		`import "aql:repl"`,
-		`import "aql:net"`,
+		`import "boru:repl"`,
+		`import "boru:net"`,
 		`def ln (Repl.serve {port: 0})`,
 		`def lna (Net.addr ln)`,
 		`def port lna.port`,
@@ -52,17 +52,17 @@ func TestReplModuleEndToEnd(t *testing.T) {
 	}
 }
 
-// Repl.serve on an aql:net-visible port also needs `import "aql:repl"`
+// Repl.serve on a boru:net-visible port also needs `import "boru:repl"`
 // alone (Net words are used inside the module, not by the caller):
 // the module preamble's own imports must not leak requirements out.
 func TestReplModuleSelfContainedImports(t *testing.T) {
 	_, err := runNetSteps(t, []string{
-		`import "aql:repl"`,
+		`import "boru:repl"`,
 		`def ln (Repl.serve {port: 0})`,
 		`Repl.close ln;`,
 		`"ok"`,
 	})
 	if err != nil {
-		t.Fatalf("aql:repl must work without the caller importing aql:net/aql:vm: %v", err)
+		t.Fatalf("boru:repl must work without the caller importing boru:net/boru:vm: %v", err)
 	}
 }

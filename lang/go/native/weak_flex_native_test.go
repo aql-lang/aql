@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // weakRunErr runs source and returns the error (nil on success), for
@@ -168,7 +168,7 @@ func TestWeakRefusalDiagnosticRendering(t *testing.T) {
 	}
 	msg := err.Error()
 	for _, want := range []string{
-		"[aql/weak_value_error]",
+		"[boru/weak_value_error]",
 		"cannot store an immutable Map in a WeakFlexMap",
 		"= note:",
 		"no independent identity",

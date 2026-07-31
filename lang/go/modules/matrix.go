@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// TensorModuleTypes are the tensor types owned by aql:matrix-util,
+// TensorModuleTypes are the tensor types owned by boru:matrix-util,
 // minted per import into the module's sub-registry by MintTensorTypes
 // (the StreamKind / TemporalModuleTypes pattern — see
 // design/OPEN-WORDS.0.md). Tensor values escape to the importer, so
@@ -28,7 +28,7 @@ type TensorModuleTypes struct {
 }
 
 // MintTensorTypes mints the tensor family into r's type table (r is
-// aql:matrix-util's sub-registry) and returns the nodes. Tensor hangs
+// boru:matrix-util's sub-registry) and returns the nodes. Tensor hangs
 // under the global Ideal branch — the same lattice position the
 // former global registrations occupied.
 func MintTensorTypes(r *native.Registry) TensorModuleTypes {
@@ -91,7 +91,7 @@ func (tensorFormatBehavior) Match(v native.Value, t *native.Type) bool {
 	if native.DefaultBehavior.Match(v, t) {
 		return true
 	}
-	// Cross-import identity: every `import "aql:matrix-util"` mints its
+	// Cross-import identity: every `import "boru:matrix-util"` mints its
 	// own Tensor/Matrix/Vector nodes (per-import, like StreamKind), so a
 	// tensor VALUE constructed by one import carries a Parent the
 	// NOMINAL rule above cannot conform to another import's sig slots —
@@ -304,7 +304,7 @@ func validDims(rows, cols int) error {
 	return nil
 }
 
-// BuildMatrixModule creates the "aql:matrix-util" native module. It registers
+// BuildMatrixModule creates the "boru:matrix-util" native module. It registers
 // Go-implemented matrix words into an isolated sub-registry and returns a
 // ModuleDesc with a "matrix" export containing FnDef wrappers for each word.
 func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
@@ -318,7 +318,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// counter — see eng TypeTable.mintID and the BuildIOModule /
 	// StreamKind precedent.
 	subReg.Types.AdoptSeqFrom(parent.Types)
-	subReg.Types.MintOwner = "aql:matrix-util"
+	subReg.Types.MintOwner = "boru:matrix-util"
 	tt := MintTensorTypes(subReg)
 
 	for _, n := range matrixNatives(tt) {
@@ -371,7 +371,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Transform. The flat row-major list of entries is exported as
 	// `values`, not `flatten`, so it does not shadow the core `flatten`
-	// word (ADR-001). `transpose` is an aql:array module word, not a
+	// word (ADR-001). `transpose` is a boru:array module word, not a
 	// core word, so MatrixUtil.transpose is fine.
 	exports.Set("transpose", makeTypedFnDef("matrix-transpose", subReg, tt.Matrix, tt.Matrix))
 	exports.Set("values", makeTypedFnDef("matrix-flatten", subReg, native.TList, tt.Matrix))
@@ -885,13 +885,13 @@ func (tt TensorModuleTypes) matMulHandler(args []native.Value, _ map[string]nati
 // The mat-* words remain as aliases backed by the same handlers.
 func TensorArithmeticExtensions(tt TensorModuleTypes) []native.FnDefInfo {
 	return []native.FnDefInfo{
-		native.NewWordExtension("aql:matrix-util", "add", []native.Signature{
+		native.NewWordExtension("boru:matrix-util", "add", []native.Signature{
 			{Args: []*native.Type{tt.Matrix, tt.Matrix}, Impl: native.Go(tt.matAddHandler), Returns: []*native.Type{tt.Matrix}, BarrierPos: -1},
 		}),
-		native.NewWordExtension("aql:matrix-util", "sub", []native.Signature{
+		native.NewWordExtension("boru:matrix-util", "sub", []native.Signature{
 			{Args: []*native.Type{tt.Matrix, tt.Matrix}, Impl: native.Go(tt.matSubHandler), Returns: []*native.Type{tt.Matrix}, BarrierPos: -1},
 		}),
-		native.NewWordExtension("aql:matrix-util", "mul", []native.Signature{
+		native.NewWordExtension("boru:matrix-util", "mul", []native.Signature{
 			{Args: []*native.Type{tt.Matrix, tt.Matrix}, Impl: native.Go(tt.matMulHandler), Returns: []*native.Type{tt.Matrix}, BarrierPos: -1},
 		}),
 	}

@@ -1,6 +1,6 @@
 package modules
 
-import "github.com/aql-lang/aql/lang/go/policy"
+import "github.com/boru-lang/boru/lang/go/policy"
 
 // Test seams for wave-7A coverage (design/TEST-SEAMS.10.md). Each var
 // defaults to the real implementation and is swapped only by tests (with a

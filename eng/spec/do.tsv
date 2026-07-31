@@ -2,7 +2,7 @@
 # =====================================================================		
 # do — explicit 'evaluate this list or map' word		
 # =====================================================================		
-# `do` is the explicit counterpart to AQL's implicit list-auto-eval		
+# `do` is the explicit counterpart to BORU's implicit list-auto-eval		
 # rule. It comes in two shapes:		
 #		
 #   do [body]   — runs the list as a sub-program in a fresh sub-engine		

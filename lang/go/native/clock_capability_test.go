@@ -4,8 +4,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // TestEffectiveClockDefault: with no clock installed, EffectiveClock
@@ -33,7 +33,7 @@ func TestEffectiveClockFixed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
-	registerIOWords(r) // `now` moved to aql:time-util; seed it bare for this clock test
+	registerIOWords(r) // `now` moved to boru:time-util; seed it bare for this clock test
 	fixed := time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)
 	SetHostClock(r, capabilities.FixedClock{T: fixed})
 	if got := EffectiveClock(r).Now(); !got.Equal(fixed) {

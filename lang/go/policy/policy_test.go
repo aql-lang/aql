@@ -329,10 +329,10 @@ func TestModuleSubscopes(t *testing.T) {
 		modules: {
 			words: {
 				default: "deny",
-				rules: [ { allow: ["import"], where: { module: ["aql:math-util"] } } ]
+				rules: [ { allow: ["import"], where: { module: ["boru:math-util"] } } ]
 			},
 			scopes: {
-				"aql:math-util": { words: { default: "allow", rules: [ { deny: ["pow"] } ] } }
+				"boru:math-util": { words: { default: "allow", rules: [ { deny: ["pow"] } ] } }
 			}
 		}
 	} }`
@@ -341,19 +341,19 @@ func TestModuleSubscopes(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Import allowed.
-	if err := p.Check("modules", "import", Args{"module": "aql:math-util"}); err != nil {
-		t.Errorf("import aql:math: %v", err)
+	if err := p.Check("modules", "import", Args{"module": "boru:math-util"}); err != nil {
+		t.Errorf("import boru:math: %v", err)
 	}
 	// Import of a different module denied.
-	if err := p.Check("modules", "import", Args{"module": "aql:time-util"}); err == nil {
-		t.Error("import aql:time should deny")
+	if err := p.Check("modules", "import", Args{"module": "boru:time-util"}); err == nil {
+		t.Error("import boru:time should deny")
 	}
-	// Per-export within aql:math.
-	if err := p.Check("modules", "call", Args{"module": "aql:math-util", "export": "sin"}); err != nil {
-		t.Errorf("aql:math.sin: %v", err)
+	// Per-export within boru:math.
+	if err := p.Check("modules", "call", Args{"module": "boru:math-util", "export": "sin"}); err != nil {
+		t.Errorf("boru:math.sin: %v", err)
 	}
-	if err := p.Check("modules", "call", Args{"module": "aql:math-util", "export": "pow"}); err == nil {
-		t.Error("aql:math.pow should deny")
+	if err := p.Check("modules", "call", Args{"module": "boru:math-util", "export": "pow"}); err == nil {
+		t.Error("boru:math.pow should deny")
 	}
 }
 

@@ -6,19 +6,19 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // This file holds the shared implementation of the `describe` language word so
 // the REPL word (describeWordHandler / describeSelfHandler in native_misc.go)
 // and the REPL `/describe` meta-command render identically — and the same way
-// the CLI `aql describe` does. The forms mirror the CLI:
+// the CLI `boru describe` does. The forms mirror the CLI:
 //
 //	describe                       a categorised guide to words and modules
 //	describe add                   full docs for one word
 //	describe math                  the words in one category
-//	describe "aql:type-util"       a module and the words it exports
-//	describe "aql:type-util:foo"   one exported word of a module
+//	describe "boru:type-util"       a module and the words it exports
+//	describe "boru:type-util:foo"   one exported word of a module
 //
 // Module references carry a ':' so they must be quoted in source; the index
 // hints show the quoted form. Unlike the CLI (which has nothing imported and
@@ -29,16 +29,16 @@ import (
 // category, the loadable modules, then how to drill into each. It is the body
 // of the no-argument `describe`.
 func DescribeIndex(w io.Writer) {
-	fmt.Fprint(w, "AQL language reference — built-in words by category, and loadable modules.\n\n")
+	fmt.Fprint(w, "BORU language reference — built-in words by category, and loadable modules.\n\n")
 	fmt.Fprint(w, "Words:\n")
 	help.WriteWordsByCategory(w)
-	fmt.Fprint(w, "\nModules (load with import \"aql:<name>\"):\n")
+	fmt.Fprint(w, "\nModules (load with import \"boru:<name>\"):\n")
 	help.WriteModuleCatalog(w)
 	fmt.Fprint(w, "\nDrill in:\n")
 	fmt.Fprint(w, "  describe <word>                  e.g. describe add\n")
 	fmt.Fprint(w, "  describe <category>              e.g. describe math\n")
-	fmt.Fprint(w, "  describe \"aql:<module>\"          e.g. describe \"aql:type-util\"\n")
-	fmt.Fprint(w, "  describe \"aql:<module>:<word>\"   e.g. describe \"aql:type-util:tpartial\"\n")
+	fmt.Fprint(w, "  describe \"boru:<module>\"          e.g. describe \"boru:type-util\"\n")
+	fmt.Fprint(w, "  describe \"boru:<module>:<word>\"   e.g. describe \"boru:type-util:tpartial\"\n")
 	fmt.Fprint(w, "Docs: "+help.ReferenceURL+"\n")
 }
 
@@ -47,7 +47,7 @@ func DescribeIndex(w io.Writer) {
 // class/surface types) and, for an unrecognised name, tries to load it as a
 // module. r may be nil — static word lookups still work.
 func DescribeName(r *Registry, w io.Writer, name string) {
-	// A ':' marks a module reference: "aql:type-util", "aql:type-util:foo",
+	// A ':' marks a module reference: "boru:type-util", "boru:type-util:foo",
 	// or "type-util:foo". No word or def name carries a colon.
 	if strings.Contains(name, ":") {
 		describeModulePathTo(r, w, name)
@@ -93,8 +93,8 @@ func DescribeName(r *Registry, w io.Writer, name string) {
 
 	// A bare built-in module name (math-util, struct-util, …).
 	if help.ModuleSummary(name) != "" {
-		if desc, err := ResolveAnyModule(r, "aql:"+name); err == nil {
-			writeModuleDesc(w, "aql:"+name, desc)
+		if desc, err := ResolveAnyModule(r, "boru:"+name); err == nil {
+			writeModuleDesc(w, "boru:"+name, desc)
 			return
 		}
 	}
@@ -118,10 +118,10 @@ func describeModulePathTo(r *Registry, w io.Writer, name string) {
 	modRef, word := splitModulePath(name)
 	resolveRef := modRef
 	displayRef := modRef
-	if short := strings.TrimPrefix(modRef, "aql:"); help.ModuleSummary(short) != "" {
+	if short := strings.TrimPrefix(modRef, "boru:"); help.ModuleSummary(short) != "" {
 		// A built-in: route to the native resolver and show the canonical id.
-		resolveRef = "aql:" + short
-		displayRef = "aql:" + short
+		resolveRef = "boru:" + short
+		displayRef = "boru:" + short
 	}
 
 	desc, err := ResolveAnyModule(r, resolveRef)
@@ -148,18 +148,18 @@ func describeModulePathTo(r *Registry, w io.Writer, name string) {
 }
 
 // splitModulePath separates a colon-form name into a module reference and an
-// optional word. "aql:type-util:foo" → ("aql:type-util", "foo");
-// "aql:type-util" → ("aql:type-util", ""); "type-util:foo" → ("type-util",
-// "foo"). The "aql:" prefix is preserved on the module reference.
+// optional word. "boru:type-util:foo" → ("boru:type-util", "foo");
+// "boru:type-util" → ("boru:type-util", ""); "type-util:foo" → ("type-util",
+// "foo"). The "boru:" prefix is preserved on the module reference.
 func splitModulePath(name string) (modRef, word string) {
-	hadAQL := strings.HasPrefix(name, "aql:")
-	rest := strings.TrimPrefix(name, "aql:")
+	hadBORU := strings.HasPrefix(name, "boru:")
+	rest := strings.TrimPrefix(name, "boru:")
 	short := rest
 	if i := strings.IndexByte(rest, ':'); i >= 0 {
 		short, word = rest[:i], rest[i+1:]
 	}
-	if hadAQL {
-		return "aql:" + short, word
+	if hadBORU {
+		return "boru:" + short, word
 	}
 	return short, word
 }
@@ -167,7 +167,7 @@ func splitModulePath(name string) (modRef, word string) {
 // writeModuleDesc prints a module's summary (when built-in) and the words it
 // exports, plus how to import and drill into them.
 func writeModuleDesc(w io.Writer, ref string, desc ModuleDesc) {
-	if summary := help.ModuleSummary(strings.TrimPrefix(ref, "aql:")); summary != "" {
+	if summary := help.ModuleSummary(strings.TrimPrefix(ref, "boru:")); summary != "" {
 		fmt.Fprintf(w, "%s — %s\n", ref, summary)
 	} else {
 		fmt.Fprintf(w, "%s\n", ref)

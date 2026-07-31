@@ -270,7 +270,7 @@ func migrateStore(s *Store) error {
 		v = 1
 	}
 	if v > storeVersion {
-		return fmt.Errorf("vault: store is version %d but this aql understands up to version %d; upgrade aql", v, storeVersion)
+		return fmt.Errorf("vault: store is version %d but this boru understands up to version %d; upgrade boru", v, storeVersion)
 	}
 	for v < storeVersion {
 		if err := storeMigrations[v-1](s); err != nil {
@@ -283,9 +283,9 @@ func migrateStore(s *Store) error {
 }
 
 // StorePath returns the on-disk metadata path for the vault: the
-// vault folder (homeDir/.aql by default, or AQL_VAULT_FOLDER) joined
+// vault folder (homeDir/.boru by default, or BORU_VAULT_FOLDER) joined
 // with the metadata file name (vault.jsonic, or vault.<suffix>.jsonic
-// when AQL_VAULT_SUFFIX is set).
+// when BORU_VAULT_SUFFIX is set).
 func StorePath(homeDir string) string {
 	return filepath.Join(vaultFolder(homeDir), vaultFileName("jsonic"))
 }
@@ -295,7 +295,7 @@ func StorePath(homeDir string) string {
 // distinguish "not initialized" from "broken file" by inspecting
 // the returned pointer.
 //
-// A store written by a newer aql is rejected rather than parsed
+// A store written by a newer boru is rejected rather than parsed
 // leniently: Go's json drops unknown fields, so loading-then-saving a
 // future-version file with this binary would silently strip data it
 // does not understand. Older stores are migrated forward in memory.

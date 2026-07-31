@@ -1,4 +1,4 @@
-// Package run is both the explicit `aql run` subcommand and the
+// Package run is both the explicit `boru run` subcommand and the
 // fallback path the top-level dispatcher takes when no recognised
 // subcommand matches: parse the legacy flags (-e, -r, -s, --check,
 // -version), and either execute a one-shot script/-e expression or
@@ -12,17 +12,17 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
-	"github.com/aql-lang/aql/cmd/go/internal/check"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
-	"github.com/aql-lang/aql/cmd/go/internal/repl"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
+	"github.com/boru-lang/boru/cmd/go/internal/check"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/permsflags"
+	"github.com/boru-lang/boru/cmd/go/internal/repl"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
-// Version is the aql CLI version string, populated by the top-level
+// Version is the boru CLI version string, populated by the top-level
 // package via SetVersion before any Run call. Holding it here (rather
 // than reading from cmd/go directly) keeps the import direction one-way:
 // cmd/go → internal/run, never the other way.
@@ -54,12 +54,12 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 //
 // The scan stops at the first non-flag token — the script path. Every `-e`
 // after it is the program's own argument, not this CLI's eval flag, so
-// `aql run prog.aql a -e b c` must reach the program whole. Scanning past
+// `boru run prog.boru a -e b c` must reach the program whole. Scanning past
 // the script path split there instead and silently dropped everything after
 // the false match (`c` in that example).
 //
 // Recognising the script path requires knowing which flags consume a
-// following token: in `aql -s 5 -e …` the `5` is -s's value, not a
+// following token: in `boru -s 5 -e …` the `5` is -s's value, not a
 // positional. fs supplies that — a registered bool flag stands alone,
 // anything else in the separated form (no `=`) takes the next token.
 func splitEvalTail(fs *flag.FlagSet, args []string) (flagArgs, tail []string) {
@@ -101,11 +101,11 @@ func isBoolFlag(fs *flag.FlagSet, tok string) bool {
 }
 
 // Execute is the legacy CLI body. It owns the flag set for the
-// no-subcommand invocation form (aql [-e expr] [script.aql]). When
+// no-subcommand invocation form (boru [-e expr] [script.boru]). When
 // no source is provided it starts the REPL, preserving the original
 // CLI's default behaviour.
 func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("aql", flag.ContinueOnError)
+	fs := flag.NewFlagSet("boru", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 
 	evalExpr := fs.String("e", "", "evaluate expression")
@@ -113,10 +113,10 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	seed := fs.Int64("s", 0, "random seed for ID generation (default: current time)")
 	showVersion := fs.Bool("version", false, "print version and exit")
 	checkFirst := fs.Bool("check", false, "verbose pre-flight: print ALL check diagnostics (the pre-flight itself runs by default; this flag adds the advisory tiers to stderr)")
-	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before execution (also enabled by AQL_NO_CHECK)")
-	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise (the default; also enabled by AQL_COMPILE)")
-	noCompileFlag := fs.Bool("no-compile", false, "run the interpreter instead of the default bytecode compiler; wins over --compile/--force-compile and their env vars (also enabled by AQL_NO_COMPILE)")
-	forceCompileFlag := fs.Bool("force-compile", false, "REQUIRE the bytecode compiler — abort with the refusal reason instead of falling back to the interpreter (also enabled by AQL_FORCE_COMPILE; AQL_NO_COMPILE disables)")
+	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before execution (also enabled by BORU_NO_CHECK)")
+	compileFlag := fs.Bool("compile", false, "execute via the bytecode compiler when the program is compilable; silently falls back to the interpreter otherwise (the default; also enabled by BORU_COMPILE)")
+	noCompileFlag := fs.Bool("no-compile", false, "run the interpreter instead of the default bytecode compiler; wins over --compile/--force-compile and their env vars (also enabled by BORU_NO_COMPILE)")
+	forceCompileFlag := fs.Bool("force-compile", false, "REQUIRE the bytecode compiler — abort with the refusal reason instead of falling back to the interpreter (also enabled by BORU_FORCE_COMPILE; BORU_NO_COMPILE disables)")
 	optionsStr := fs.String("options", "", "engine options as jsonic (e.g. tape:initial:65536,tape:grows:9)")
 	colorMode := fs.String("color", "auto", "diagnostic color: auto (terminal-only, honors NO_COLOR), always, never")
 	compileReport := fs.Bool("compile-report", false, "after the run, print each runtime-constructed callback's stamp outcome (compiled to the VM, or the refusal reason) to stderr; requires a compiled mode")
@@ -124,13 +124,13 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	permsflags.Register(fs, &pf)
 
 	fs.Usage = func() {
-		fmt.Fprintf(stderr, "Usage: aql [options] [script.aql]\n       aql do <words...>\n       aql check [script.aql]\n       aql test [--coverage] [file|dir ...]\n       aql help [subcommand]\n       aql describe [word|module]\n       aql fmt [file.aql ...]\n       aql build <prog.aql> [-o name]\n       aql prep [dir]\n       aql pack [dir]\n       aql clean [dir]\n       aql lsp [-p <port>]\n       aql exec [-bind host:port] [-p <port>] [-r <registry>]\n       aql registry -r <folder> -p <port>\n       aql serve <svc> [flags] [+ <svc> [flags]]...\n       aql ctl [--api url] [--token tok] <op> [name]\n       aql tui [--api url] [--token tok]\n       aql install <name>-x.y.z [-r <url>]\n       aql register [-r <url>]\n       aql login [-r <url>]\n       aql publish [-r <url>] [dir]\n\nOptions:\n")
+		fmt.Fprintf(stderr, "Usage: boru [options] [script.boru]\n       boru do <words...>\n       boru check [script.boru]\n       boru test [--coverage] [file|dir ...]\n       boru help [subcommand]\n       boru describe [word|module]\n       boru fmt [file.boru ...]\n       boru build <prog.boru> [-o name]\n       boru prep [dir]\n       boru pack [dir]\n       boru clean [dir]\n       boru lsp [-p <port>]\n       boru exec [-bind host:port] [-p <port>] [-r <registry>]\n       boru registry -r <folder> -p <port>\n       boru serve <svc> [flags] [+ <svc> [flags]]...\n       boru ctl [--api url] [--token tok] <op> [name]\n       boru tui [--api url] [--token tok]\n       boru install <name>-x.y.z [-r <url>]\n       boru register [-r <url>]\n       boru login [-r <url>]\n       boru publish [-r <url>] [dir]\n\nOptions:\n")
 		fs.PrintDefaults()
 	}
 
 	// `-e` ends option processing (the node -e / python -c convention): a
 	// program's own arguments — including a dash-prefixed first one, e.g.
-	// `aql -e '…' --fast` — must reach it via IO.args, not be swallowed by
+	// `boru -e '…' --fast` — must reach it via IO.args, not be swallowed by
 	// this FlagSet. Go's flag package otherwise keeps parsing flags after
 	// -e's expression (there is no non-flag positional to stop it), so the
 	// dash arg errors out. Split the eval tail off before parsing; a
@@ -142,12 +142,12 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if *showVersion {
-		fmt.Fprintf(stdout, "aql %s\n", Version)
+		fmt.Fprintf(stdout, "boru %s\n", Version)
 		return 0
 	}
 
 	// Expand a leading ~ the shell left verbatim (e.g. -r=~/reg or a
-	// quoted "~/script.aql") in the registry path and the script path.
+	// quoted "~/script.boru") in the registry path and the script path.
 	reg := pathutil.Expand(*registry)
 
 	var source string
@@ -160,7 +160,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		// -e mode: everything after the expression is a script argument
 		// (IO.args), dash-prefixed or not. A single leading `--` — the
 		// historical separator callers used to force the dash arg through —
-		// is stripped so `aql -e … -- --fast` and `aql -e … --fast` agree.
+		// is stripped so `boru -e … -- --fast` and `boru -e … --fast` agree.
 		scriptArgs = evalTail
 		if len(scriptArgs) > 0 && scriptArgs[0] == "--" {
 			scriptArgs = scriptArgs[1:]
@@ -180,15 +180,15 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 	if hasSource {
 		// CHECK-BY-DEFAULT (completion plan Phase 5.2): every run
-		// pre-flights unless --no-check / AQL_NO_CHECK. The default gate is
+		// pre-flights unless --no-check / BORU_NO_CHECK. The default gate is
 		// QUIET — diagnostics print only when an Error-severity finding
 		// aborts the run, so a clean program's stderr stays empty and the
 		// advisory tiers don't become per-run noise. An explicit --check
 		// keeps the verbose behavior (all diagnostics, every severity).
 		// Sequenced after the guard-narrowing legalization per the plan's
-		// FP-honesty rule; `aql check --soft` remains the advisory surface.
+		// FP-honesty rule; `boru check --soft` remains the advisory surface.
 		color := lang.ResolveColor(nil, stderr, *colorMode)
-		if !*noCheck && os.Getenv("AQL_NO_CHECK") == "" {
+		if !*noCheck && os.Getenv("BORU_NO_CHECK") == "" {
 			if err := check.PreflightColor(stderr, source, reg, *seed, *checkFirst, color); err != nil {
 				fmt.Fprintf(stderr, "%s\n", err)
 				return 1
@@ -232,7 +232,7 @@ func Execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	// No source provided: drop into the REPL.
-	fmt.Fprintf(stdout, "aql %s\n", Version)
+	fmt.Fprintf(stdout, "boru %s\n", Version)
 	repl.Start(stdin, stdout, reg)
 	return 0
 }
@@ -249,7 +249,7 @@ func Eval(w io.Writer, source string, registry string, seed int64) error {
 // arguments map to. Exposed for sibling subcommands (do) so they
 // don't import lang directly.
 func OptionsFor(registry string, seed int64, pol lang.Policy) lang.Options {
-	// The terminal probe rides along, so `aql do` and `aql test` answer
+	// The terminal probe rides along, so `boru do` and `boru test` answer
 	// IO.is-tty honestly rather than always false. Redirected streams answer
 	// false anyway — OSStreamProbe inspects the endpoint the runtime holds.
 	return lang.Options{Registry: registry, Seed: seed, Policy: pol,
@@ -276,7 +276,7 @@ func EvalOptions(w io.Writer, source string, o lang.Options) error {
 // interpreter (--no-compile), or the bytecode compiler in FORCE mode
 // (error if uncompilable).
 // The type and its constants live in buildrt so the standalone executable
-// produced by `aql build` can reference them without importing run; run
+// produced by `boru build` can reference them without importing run; run
 // aliases them here to keep its public surface unchanged.
 type CompileMode = buildrt.CompileMode
 
@@ -294,28 +294,28 @@ const (
 
 // ResolveCompileMode applies the bytecode-mode control contract, styled
 // exactly like the checker's flag family (--check / --no-check /
-// AQL_NO_CHECK): a positive flag, a force variant, and a --no twin
+// BORU_NO_CHECK): a positive flag, a force variant, and a --no twin
 // that wins over everything. Compiled mode is ON by default (maintainer
 // decision, design/P7-ENDGAME.10.md — the P7 endgame closed the refusal
 // ledger to the documented residue and flipped the default to TRY):
 //
 //	(default)                             → TRY: bytecode when compilable,
 //	                                        silent sound fallback otherwise
-//	--compile        / AQL_COMPILE        → TRY, explicitly
-//	--force-compile  / AQL_FORCE_COMPILE  → FORCE: refusal is a loud error
-//	--no-compile     / AQL_NO_COMPILE     → OFF, wins over all of the above
+//	--compile        / BORU_COMPILE        → TRY, explicitly
+//	--force-compile  / BORU_FORCE_COMPILE  → FORCE: refusal is a loud error
+//	--no-compile     / BORU_NO_COMPILE     → OFF, wins over all of the above
 //
 // FORCE wins over TRY when both are requested. Results are identical to the
 // interpreter either way; the differential gates hold compile == interpret
 // byte-identical across the corpus, combinations, and property fuzz.
 func ResolveCompileMode(compile, force, noCompile bool) CompileMode {
-	if noCompile || envEnabled("AQL_NO_COMPILE") {
+	if noCompile || envEnabled("BORU_NO_COMPILE") {
 		return CompileOff
 	}
-	if force || envEnabled("AQL_FORCE_COMPILE") {
+	if force || envEnabled("BORU_FORCE_COMPILE") {
 		return CompileForce
 	}
-	if compile || envEnabled("AQL_COMPILE") {
+	if compile || envEnabled("BORU_COMPILE") {
 		return CompileTry
 	}
 	return CompileTry
@@ -338,7 +338,7 @@ func envEnabled(name string) bool {
 // REQUIRES the bytecode path and errors (with the refusal reason) when the
 // program is not compilable. CompileTry results are identical to the
 // interpreter — the flag is opt-in performance, never semantics
-// (design/aql-bytecode-plan.0.md, ground rules).
+// (design/boru-bytecode-plan.0.md, ground rules).
 func EvalOptionsMode(w io.Writer, source string, o lang.Options, mode CompileMode) error {
 	return buildrt.Eval(w, source, o, mode)
 }

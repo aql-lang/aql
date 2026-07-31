@@ -121,7 +121,7 @@ func foldLastIndex(s, substr string) int {
 }
 
 // StringModuleNatives covers the string-manipulation words, moved OUT of core
-// into the aql:string-util module (StringUtil namespace). Formerly stringNatives. Each entry uses
+// into the boru:string-util module (StringUtil namespace). Formerly stringNatives. Each entry uses
 // the standard NativeFunc shape: forward-collecting words whose
 // signatures fan out across [TString], [TString, TMap], etc.
 //
@@ -176,7 +176,7 @@ var StringModuleNatives = []NativeFunc{
 		// `haystack needle indexof`. The opts form takes a trailing
 		// options map: `indexof needle haystack {…}`. The list-membership
 		// form (for each needle, its index in the haystack) is a separate
-		// word, ArrayUtil.indices, in the aql:array-util module — see
+		// word, ArrayUtil.indices, in the boru:array-util module — see
 		// native_array.go and ADR-001.
 		Signatures: []Signature{
 			{Args: []*Type{TString, TString, TMap}, Impl: Go(indexOfOptsHandler), Returns: []*Type{TInteger}, BarrierPos: -1},
@@ -1042,7 +1042,7 @@ func padHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Val
 // Usage: "ab" pad 5 {side:"left" fill:"0"} → "000ab"
 func padOptsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("pad_error", "pad: options must be a concrete map, got type literal", "pad")
+		return nil, r.BoruError("pad_error", "pad: options must be a concrete map, got type literal", "pad")
 	}
 	if err := validateStrOpts(r, args[1], "pad"); err != nil {
 		return nil, err

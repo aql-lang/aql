@@ -26,16 +26,16 @@ def p {name:"ada"}  typeof (rebind $.name p)	Reach	rebind returns a (bound) lens
 def people [{name:"ada" age:36} {name:"bob" age:20}]  each $.name people	['ada' 'bob']	each plucks the lens from every element
 def xs [{n:"a" on:true} {n:"b" on:false} {n:"c" on:true}]  each $.n (filter $.on xs)	['a' 'c']	filter keeps elements whose lens is truthy
 filter $.on {a:{on:true} b:{on:false}}	{a:{on:true}}	filter lens form works on a map (by value)
-import "aql:array-util"  def people [{name:"ada" age:36} {name:"bob" age:20}]  each $.name (ArrayUtil.sortby $.age people)	['bob' 'ada']	sortby derives the sort key via the lens
+import "boru:array-util"  def people [{name:"ada" age:36} {name:"bob" age:20}]  each $.name (ArrayUtil.sortby $.age people)	['bob' 'ada']	sortby derives the sort key via the lens
 #
 # §5  getpath / setpath accept a Reach lens (struct-util). getpath reads
 #     natively (getr strict, computed keys); setpath does an immutable nested
 #     set. Both forms (reach + dotted string) share the same native setter.
-import "aql:struct-util"  StructUtil.getpath $.a.b {a:{b:7}}	7	getpath reads through a lens
-import "aql:struct-util"  StructUtil.setpath $.a.b 99 {a:{b:1} c:2}	{a:{b:99} c:2}	setpath nests + preserves siblings
-import "aql:struct-util"  StructUtil.setpath $.x.y 5 {a:1}	{a:1 x:{y:5}}	setpath creates intermediate maps
-import "aql:struct-util"  StructUtil.setpath $.1 99 [10 20 30]	[10 99 30]	setpath into a list index
-import "aql:struct-util"  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 {a:{b:1}})	7	get ∘ set round-trips
+import "boru:struct-util"  StructUtil.getpath $.a.b {a:{b:7}}	7	getpath reads through a lens
+import "boru:struct-util"  StructUtil.setpath $.a.b 99 {a:{b:1} c:2}	{a:{b:99} c:2}	setpath nests + preserves siblings
+import "boru:struct-util"  StructUtil.setpath $.x.y 5 {a:1}	{a:1 x:{y:5}}	setpath creates intermediate maps
+import "boru:struct-util"  StructUtil.setpath $.1 99 [10 20 30]	[10 99 30]	setpath into a list index
+import "boru:struct-util"  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 {a:{b:1}})	7	get ∘ set round-trips
 #
 # §6  reach constructor — build a lens programmatically. The key list is NOT
 #     evaluated; it encodes one segment per key: bare key = get, `!` marks the

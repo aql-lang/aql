@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // accessorServer is a local endpoint returning a known response, so
@@ -22,7 +22,7 @@ func accessorServer(t *testing.T) string {
 	return ts.URL
 }
 
-// netRun evaluates source after a REAL `import "aql:net"`, so the
+// netRun evaluates source after a REAL `import "boru:net"`, so the
 // accessor word extensions arrive by the same transplant a guest
 // program gets — not via a test shim that might diverge.
 func netRun(t *testing.T, src string) ([]any, error) {
@@ -31,7 +31,7 @@ func netRun(t *testing.T, src string) ([]any, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err = a.RunInterp(`import "aql:net"`); err != nil {
+	if _, err = a.RunInterp(`import "boru:net"`); err != nil {
 		t.Fatal(err)
 	}
 	return a.RunInterp(src)
@@ -110,7 +110,7 @@ func TestAccessorExtensionsDoNotRegress(t *testing.T) {
 		t.Errorf("convert Map path regressed: %v %v", conv, cErr)
 	}
 	// An unrelated Ideal must NOT have gained dot access: the overloads
-	// are anchored on aql:net's minted Fetch type, so nothing else in
+	// are anchored on boru:net's minted Fetch type, so nothing else in
 	// the Ideal branch is touched. (A catch-all TIdeal sig — the
 	// approach rejected in favour of this one — would make this pass
 	// silently instead of erroring.)

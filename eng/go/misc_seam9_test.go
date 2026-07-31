@@ -92,7 +92,7 @@ func TestW9CanonFnDefMultiReturn(t *testing.T) {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "a", Type: TInteger}},
 			Returns: []*Type{TInteger, TString},
-			Impl:    AQL([]Value{NewWord("a")}),
+			Impl:    BORU([]Value{NewWord("a")}),
 		}},
 	}
 	if got := canonFnDef(fd); got == "" {

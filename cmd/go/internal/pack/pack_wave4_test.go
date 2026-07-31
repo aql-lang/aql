@@ -17,7 +17,7 @@ import (
 func writeModule(t *testing.T, jsonic string, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(jsonic), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte(jsonic), 0644); err != nil {
 		t.Fatal(err)
 	}
 	for name, content := range files {
@@ -32,7 +32,7 @@ const goodJsonic = `name: w4mod
 major: 1
 minor: 2
 patch: 3
-files: [index.aql]
+files: [index.boru]
 `
 
 func TestW4CommandMethods(t *testing.T) {
@@ -46,7 +46,7 @@ func TestW4CommandMethods(t *testing.T) {
 }
 
 func TestW4PackHappyPath(t *testing.T) {
-	dir := writeModule(t, goodJsonic, map[string]string{"index.aql": "1 add 2"})
+	dir := writeModule(t, goodJsonic, map[string]string{"index.boru": "1 add 2"})
 
 	var stdout, stderr bytes.Buffer
 	code := New().Run([]string{dir}, nil, &stdout, &stderr)
@@ -55,7 +55,7 @@ func TestW4PackHappyPath(t *testing.T) {
 	}
 
 	zipPath := strings.TrimSpace(stdout.String())
-	if !strings.HasSuffix(zipPath, filepath.Join(".aql", "_pack", "w4mod-1.2.3.zip")) {
+	if !strings.HasSuffix(zipPath, filepath.Join(".boru", "_pack", "w4mod-1.2.3.zip")) {
 		t.Fatalf("unexpected zip path %q", zipPath)
 	}
 
@@ -68,13 +68,13 @@ func TestW4PackHappyPath(t *testing.T) {
 	for _, f := range zr.File {
 		names[f.Name] = true
 	}
-	if !names["aql.jsonic"] || !names["index.aql"] {
-		t.Errorf("zip entries = %v, want aql.jsonic and index.aql", names)
+	if !names["boru.jsonic"] || !names["index.boru"] {
+		t.Errorf("zip entries = %v, want boru.jsonic and index.boru", names)
 	}
 }
 
 func TestW4PackCwdDefault(t *testing.T) {
-	dir := writeModule(t, goodJsonic, map[string]string{"index.aql": "1"})
+	dir := writeModule(t, goodJsonic, map[string]string{"index.boru": "1"})
 	orig, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -88,13 +88,13 @@ func TestW4PackCwdDefault(t *testing.T) {
 	if code := Run(nil, &stdout, &stderr); code != 0 {
 		t.Fatalf("Run = %d, want 0; stderr: %s", code, stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".aql", "_pack", "w4mod-1.2.3.zip")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".boru", "_pack", "w4mod-1.2.3.zip")); err != nil {
 		t.Errorf("zip not written: %s", err)
 	}
 }
 
 func TestW4PackPrepFails(t *testing.T) {
-	dir := t.TempDir() // no aql.jsonic at all
+	dir := t.TempDir() // no boru.jsonic at all
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{dir}, &stdout, &stderr)
 	if code != 1 {
@@ -106,7 +106,7 @@ func TestW4PackPrepFails(t *testing.T) {
 }
 
 func TestW4PackMissingName(t *testing.T) {
-	dir := writeModule(t, "major: 1\nfiles: [index.aql]\n", map[string]string{"index.aql": "1"})
+	dir := writeModule(t, "major: 1\nfiles: [index.boru]\n", map[string]string{"index.boru": "1"})
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{dir}, &stdout, &stderr)
 	if code != 1 {
@@ -130,7 +130,7 @@ func TestW4PackMissingFilesList(t *testing.T) {
 }
 
 func TestW4PackListedFileMissing(t *testing.T) {
-	// files names index.aql but the file does not exist on disk.
+	// files names index.boru but the file does not exist on disk.
 	dir := writeModule(t, goodJsonic, nil)
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{dir}, &stdout, &stderr)
@@ -148,9 +148,9 @@ func TestW4PackNonStringFilesSkipped(t *testing.T) {
 major: 0
 minor: 0
 patch: 1
-files: [index.aql, 42]
+files: [index.boru, 42]
 `
-	dir := writeModule(t, jsonic, map[string]string{"index.aql": "1"})
+	dir := writeModule(t, jsonic, map[string]string{"index.boru": "1"})
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{dir}, &stdout, &stderr)
 	if code != 0 {
@@ -163,8 +163,8 @@ files: [index.aql, 42]
 
 func TestW4PackZipPathBlocked(t *testing.T) {
 	// The target zip path exists as a DIRECTORY, so os.Create fails.
-	dir := writeModule(t, goodJsonic, map[string]string{"index.aql": "1"})
-	if err := os.MkdirAll(filepath.Join(dir, ".aql", "_pack", "w4mod-1.2.3.zip"), 0755); err != nil {
+	dir := writeModule(t, goodJsonic, map[string]string{"index.boru": "1"})
+	if err := os.MkdirAll(filepath.Join(dir, ".boru", "_pack", "w4mod-1.2.3.zip"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer
@@ -178,12 +178,12 @@ func TestW4PackZipPathBlocked(t *testing.T) {
 }
 
 func TestW4PackPackDirBlocked(t *testing.T) {
-	// .aql/_pack exists as a FILE, so MkdirAll fails.
-	dir := writeModule(t, goodJsonic, map[string]string{"index.aql": "1"})
-	if err := os.MkdirAll(filepath.Join(dir, ".aql"), 0755); err != nil {
+	// .boru/_pack exists as a FILE, so MkdirAll fails.
+	dir := writeModule(t, goodJsonic, map[string]string{"index.boru": "1"})
+	if err := os.MkdirAll(filepath.Join(dir, ".boru"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".aql", "_pack"), []byte("not a dir"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".boru", "_pack"), []byte("not a dir"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	var stdout, stderr bytes.Buffer

@@ -1,0 +1,370 @@
+# ============================================================================
+# head — print the first lines of each file.
+#
+#   head [-n N|--lines N] [-q|--quiet] [-v|--verbose] [FILE…]
+#
+# With no FILE, or when FILE is "-", the input is standard input. The default
+# is 10 lines.
+#
+# THE POINT OF THIS PROGRAM: it STOPS READING once it has N lines. The input is
+# streamed one line at a time with IO.read-line, and the loop is driven by the
+# LIMIT, not by the input — `head -n 2` over a five-million-line file performs
+# exactly two read-line calls and never touches line 3. That is observable, not
+# a claim: the stream state carries a `reads` counter, tests/head_test.boru
+# asserts it is exactly 2 on a 5000-line fixture and exactly 0 under `-n 0`,
+# and at the command line `head -n 2` returns instantly from a fifo whose
+# writer is still sleeping. Nothing is retained, so memory is O(longest line).
+#
+# When more than one FILE is named, each is preceded by a `==> NAME <==`
+# header, with a blank line between files (the GNU layout). -q suppresses the
+# headers, -v forces them on for a single file too.
+#
+# EXIT CODES
+#   0  every named input was opened and its first N lines were written
+#   1  at least one input could not be opened or read; the diagnostic goes to
+#      stderr and the remaining operands are still processed
+#   2  a usage error — an unknown flag, a missing flag value (from
+#      Cli.dispatch), or an -n value that is not a non-negative decimal integer
+#
+# Structure: every decision is a PURE fn taking its input as parameters
+# (head-bool / head-count / head-done / head-reads / head-shown / head-worse /
+# head-inputs / head-line / head-label / head-header / head-show-headers /
+# head-parse-n / head-nflag / head-chunk-size), and head-main takes ARGV as a
+# parameter and returns the exit code rather than exiting, so
+# tests/head_test.boru can drive the whole program — `boru test` cannot inject an
+# argument vector. Only head-chunk / head-pump / head-emit-header / head-fail /
+# head-one / head-walk / head-run touch the world.
+#
+# Two engine defects shaped the code below; each is documented where it bites
+# (head-chunk's missing `break`, and head-main's hand-written shell).
+# ============================================================================
+
+import "boru:cli"
+import "boru:io"
+import "boru:string-util"
+
+# ----------------------------------------------------------------------------
+# Pure helpers.
+# ----------------------------------------------------------------------------
+
+# Read a boolean flag defensively: an absent flag, or one holding something
+# that is not a Boolean, reads as false.
+def head-bool fn [[fl:Map k:String] [Boolean] [
+  def v (fl get k)
+  if (v is Boolean) [v] [false]
+]]
+
+# An Integer out of the stream state, defensively. The state is a flex map with
+# four keys: `n` lines emitted for the CURRENT input, `done` the stop flag,
+# `reads` the running number of IO.read-line calls (the early-exit witness),
+# and `shown` the number of `==>` headers printed so far.
+def head-slot fn [[st:Map k:String] [Integer] [
+  def v (st get k)
+  if (v is Integer) [v] [0]
+]]
+
+def head-count fn [[st:Map] [Integer] [ def r (head-slot st "n")  r ]]
+def head-reads fn [[st:Map] [Integer] [ def r (head-slot st "reads")  r ]]
+def head-shown fn [[st:Map] [Integer] [ def r (head-slot st "shown")  r ]]
+
+def head-done fn [[st:Map] [Boolean] [
+  def v (st get "done")
+  if (v is Boolean) [v] [false]
+]]
+
+# The worse (higher) of two exit codes — the walk keeps the worst one seen.
+def head-worse fn [[a:Integer b:Integer] [Integer] [ if (a gt b) [a] [b] ]]
+
+# No operand at all means standard input, spelled "-", so there is exactly one
+# code path downstream.
+def head-inputs fn [[ops:List] [List] [
+  if ((size ops) eq 0) [(push "-" [])] [ops]
+]]
+
+# One output line. IO.read-line strips the terminator, so it is written back.
+def head-line fn [[line:String] [String] [ join "" [line "\n"] ]]
+
+# The name a header shows: "-" is standard input, as GNU spells it.
+def head-label fn [[name:String] [String] [
+  if (name eq "-") ["standard input"] [name]
+]]
+
+# `==> NAME <==`, preceded by a blank line for every input after the first.
+def head-header fn [[name:String first:Boolean] [String] [
+  def lead (if first [""] ["\n"])
+  join "" [lead "==> " (head-label name) " <==\n"]
+]]
+
+# Headers are on when more than one operand was named; -q forces them off and
+# -v forces them on. -q wins when both are given (see the gaps in the report:
+# GNU is last-flag-wins, and a Boolean flag map cannot record the order).
+def head-show-headers fn [[operands:Integer quiet:Boolean verbose:Boolean] [Boolean] [
+  if quiet [false] [ if verbose [true] [(operands gt 1)] ]
+]]
+
+# ----------------------------------------------------------------------------
+# The -n value. It arrives as a STRING (kind:"string"), because the conversion
+# is this program's to validate, not boru:cli's: `head -n x` must be a usage
+# error with a message that names the offending text, not a raise.
+# ----------------------------------------------------------------------------
+def head-digit-step fn [[c:String acc:Boolean] [Boolean] [
+  if (acc not) [false] [ (StringUtil.indexof c "0123456789") gte 0 ]
+]]
+
+# {ok:true n:<value>} or {ok:false n:0}. Only a non-empty run of decimal digits
+# is accepted. A value of more than 18 digits would overflow Integer, so it is
+# clamped to 18 nines — "every line", which is what the user asked for.
+def head-parse-n fn [[s:String] [Map] [
+  def ok ((s neq "") and (fold [head-digit-step] (StringUtil.split "" s) true))
+  if (ok not) [ ({ok: false} set (quote n) 0) ] [
+    if ((size s) gt 18) [ ({ok: true} set (quote n) 999999999999999999) ]
+                        [ ({ok: true} set (quote n) (convert Integer s)) ]
+  ]
+]]
+
+# The raw -n text out of the flags map. An absent flag is the spec default; a
+# REPEATED flag collects into a List (boru:cli's contract), and the last one
+# wins, as it does in GNU head.
+def head-nflag fn [[fl:Map] [String] [
+  def v (fl get "lines")
+  if (v is None) ["10"] [
+    if (v is List) [
+      def m (size v)
+      if (m eq 0) ["10"] [(convert String (v get (m sub 1)))]
+    ] [(convert String v)]
+  ]
+]]
+
+# The read loop asks for the lines it still needs, in chunks: `for` has no
+# unbounded form, so the count IS the limit. 8192 caps a single loop so that a
+# gigantic -n does not build one enormous iteration count, and head-pump then
+# recurses limit/8192 times.
+def head-chunk-size fn [[remaining:Integer] [Integer] [
+  if (remaining gt 8192) [8192] [remaining]
+]]
+
+# ----------------------------------------------------------------------------
+# The streaming read loop. Reads one line, writes one line, repeats — and stops
+# dead the moment `n` reaches the limit: the `done` guard is checked BEFORE the
+# read, so the (limit+1)th read-line never happens. `reads` counts every call
+# that did, which is what makes the early exit testable rather than asserted.
+#
+# DEFECT 1 (shared with cat.boru): `for` has no unbounded form and the obvious
+# `for [0 1000000000] [ … if (line is None) [break] … ]` is wrong — under the
+# tree-walking interpreter (-no-compile) a `break` escapes not only its own
+# loop but the rest of the enclosing fn body AND the return value of every fn
+# up the call chain. Wrapping the loop in `do [ … ]` contains the break, but
+# `do` in a hot body also refuses bytecode compilation. So this loop has NO
+# break: it runs a fixed count and the guard makes the surplus turns free.
+# Identical in both run modes, and it compiles.
+# ----------------------------------------------------------------------------
+def head-chunk fn [[h:Any st:Map limit:Integer m:Integer] [Integer] [
+  def before (head-count st)
+  for [0 m] [
+    if (head-done st) [] [
+      def _r (st set (quote reads) ((head-reads st) add 1))
+      def line (IO.read-line h)
+      if (line is None) [
+        def _d (st set (quote done) true)
+      ] [
+        def k ((head-count st) add 1)
+        def _n (st set (quote n) k)
+        (IO.write (IO.stdout) (head-line (convert String line))) drop
+        def _f (if (k gte limit) [(st set (quote done) true)] [none])
+      ]
+    ]
+  ]
+  def got ((head-count st) sub before)
+  got
+]]
+
+# Take lines from one open handle until the limit is reached or the input ends.
+# Returns the number of lines emitted from THIS input.
+def head-pump fn [[h:Any st:Map limit:Integer] [Integer] [
+  def m (head-chunk-size (limit sub (head-count st)))
+  if (m lte 0) [(head-count st)] [
+    def got (head-chunk h st limit m)
+    if ((head-done st) or (got eq 0)) [(head-count st)] [
+      def r (head-pump h st limit)
+      r
+    ]
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# The world: headers, diagnostics, one operand, the walk.
+# ----------------------------------------------------------------------------
+
+# Print this input's header when headers are on, and count it. GNU prints the
+# header only for an input it managed to OPEN, which is why head-one calls this
+# after IO.open rather than before.
+def head-emit-header fn [[name:String headers:Boolean st:Map] [Integer] [
+  if (headers not) [(head-shown st)] [
+    def k (head-shown st)
+    (IO.write (IO.stdout) (head-header name (k eq 0))) drop
+    def _s (st set (quote shown) (k add 1))
+    (k add 1)
+  ]
+]]
+
+# One diagnostic on stderr — never stdout — and the failure exit code.
+def head-fail fn [[name:String msg:String] [Integer] [
+  (IO.write (IO.stderr) (join "" ["head: " name ": " msg "\n"])) drop
+  1
+]]
+
+# The invalid -n diagnostic, and the usage exit code.
+def head-bad-n fn [[s:String] [Integer] [
+  (IO.write (IO.stderr) (join "" ["head: invalid number of lines: '" s "'\n"])) drop
+  2
+]]
+
+# One operand. "-" is standard input; anything else is opened, streamed and
+# closed. An open or read failure (missing file, a directory, a permission
+# error) is reported on stderr and yields 1 — head keeps going with the
+# remaining operands, which is the coreutils contract. `do … error` costs a
+# bytecode refusal for THIS fn only, and it runs once per operand, not per
+# line, so the read loop above stays compiled.
+def head-one fn [[name:String st:Map limit:Integer headers:Boolean] [Integer] [
+  def _z (st set (quote n) 0)
+  def _y (st set (quote done) false)
+  if (name eq "-") [
+    def a (do [
+      def _h (head-emit-header name headers st)
+      def _p (head-pump (IO.stdin) st limit)
+      0
+    ] error [
+      def e end
+      def c (head-fail "-" (e.message))
+      c
+    ])
+    a
+  ] [
+    def b (do [
+      def h (IO.open (make Pathon name))
+      def _h (head-emit-header name headers st)
+      def _p (head-pump h st limit)
+      IO.close h
+      0
+    ] error [
+      def e end
+      def c (head-fail name (e.message))
+      c
+    ])
+    b
+  ]
+]]
+
+# Walk the operands in order, carrying the stream state and the worst exit
+# code seen.
+def head-walk fn [[names:List i:Integer st:Map limit:Integer headers:Boolean acc:Integer] [Integer] [
+  if (i gte (size names)) [acc] [
+    def rc (head-one (convert String (names get i)) st limit headers)
+    def r (head-walk names (i add 1) st limit headers (head-worse acc rc))
+    r
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# The spec and the handler.
+# ----------------------------------------------------------------------------
+def spec {
+  name:    "head"
+  version: "0.1.0"
+  summary: "print the first lines of each file"
+  flags: [
+    {name: "lines" short: "n" kind: "string" value: "N" default: "10"
+     help: "print the first N lines"}
+    {name: "quiet" short: "q" kind: "bool" help: "never print the ==> FILE <== headers"}
+    {name: "verbose" short: "v" kind: "bool" help: "always print the ==> FILE <== headers"}
+  ]
+  args: {name: "file" min: 0 help: "files to read; - or nothing means standard input"}
+}
+
+def head-run fn [[ctx:Map] [Integer] [
+  def fl ctx.flags
+  def raw (head-nflag fl)
+  def lim (head-parse-n raw)
+  if ((lim.ok) not) [ def c (head-bad-n raw)  c ] [
+    def ops (ctx.args)
+    def hdr (head-show-headers (size ops) (head-bool fl "quiet") (head-bool fl "verbose"))
+    def st (flex {n: 0 done: false reads: 0 shown: 0})
+    def rc (head-walk (head-inputs ops) 0 st (lim.n) hdr 0)
+    rc
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# The whole program, minus the exit — `Cli.dispatch` plus the three lines
+# `Cli.main` would have run (design/CLI-PROGRAMS.1.md §2 documents exactly this
+# split): print `out`, print `err`, and take the exit code from dispatch unless
+# the action is "run", in which case the handler's Integer is the status.
+# --help and --version still print and exit 0, a usage error still prints to
+# stderr and exits 2.
+#
+# It takes argv as a PARAMETER, which is what lets tests/head_test.boru drive
+# the whole program — `boru test` cannot inject an argument vector, and this fn
+# never calls IO.exit.
+#
+# DEFECT 2 (shared with cat.boru) is why the handler is called from here rather
+# than handed to `Cli.main`. `Cli.main` invokes its handler from inside the
+# boru:cli module, and under the tree-walking interpreter the handler body
+# cannot see this file's module-level defs at all — `Cli.main (spec)
+# (head-run/r)` dies "undefined word: head-nflag" under -no-compile, though the
+# bytecode compiler resolves it. Calling head-run here, at file scope, sidesteps
+# it; the user-visible contract is unchanged.
+# ----------------------------------------------------------------------------
+def head-main fn [[argv:List] [Integer] [
+  def d (Cli.dispatch (spec) argv)
+  def _out (if ((d.out) neq "") [(IO.write (IO.stdout) (d.out))] [none])
+  def _err (if ((d.err) neq "") [(IO.write (IO.stderr) (d.err))] [none])
+  def code (if ((d.action) neq "run") [(d.code)] [(head-run d)])
+  code
+]]
+
+# The pure fns, plus the spec and the argv-taking entry point, for the suite: a
+# module's private defs are NOT visible to an importer, so anything a test
+# touches has to be exported.
+export "Head" {
+  bool: head-bool/r
+  count: head-count/r
+  done: head-done/r
+  reads: head-reads/r
+  shown: head-shown/r
+  worse: head-worse/r
+  inputs: head-inputs/r
+  line: head-line/r
+  label: head-label/r
+  header: head-header/r
+  headers: head-show-headers/r
+  parseN: head-parse-n/r
+  nflag: head-nflag/r
+  chunkSize: head-chunk-size/r
+  fail: head-fail/r
+  badN: head-bad-n/r
+  one: head-one/r
+  main: head-main/r
+  spec: spec
+}
+
+# ----------------------------------------------------------------------------
+# The standalone guard, and the only IO.exit.
+#
+# tests/head_test.boru reaches the fns above with `import "./head.boru"`, and an
+# import RUNS the imported file's top level. Unguarded, that would make the
+# suite run head itself: with no operands head reads standard input, and under
+# `boru test` standard input is the runner's own — a real, open stream, so the
+# import would consume the runner's stdin; and the IO.exit that follows ends
+# the suite file before a single case has run.
+#
+# The discriminator is a host capability, not a heuristic: `boru run` installs
+# the OS environment view (lang/go/boru.go, Options.Env) and `boru test` does not
+# install one at all, so IO.env-all is structurally {} under `boru test` and the
+# process environment under `boru run` and in a built binary.
+# ----------------------------------------------------------------------------
+def head-standalone ((((IO.env-all) size) gt 0) or (((IO.args) size) gt 0))
+
+if head-standalone [
+  def head-rc (head-main (IO.args))
+  IO.exit head-rc;
+] []

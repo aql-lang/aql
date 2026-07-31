@@ -3,8 +3,8 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 func randRegistry(t *testing.T) *native.Registry {
@@ -20,7 +20,7 @@ func randRegistry(t *testing.T) *native.Registry {
 	return r
 }
 
-func runRandAQL(t *testing.T, r *native.Registry, src string) []native.Value {
+func runRandBORU(t *testing.T, r *native.Registry, src string) []native.Value {
 	t.Helper()
 	values, err := parser.Parse(src)
 	if err != nil {
@@ -78,7 +78,7 @@ func TestRandIntHalfOpenRange(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		src += `  (r.int 0 3)` // values must be 0, 1, or 2 — NEVER 3
 	}
-	res := runRandAQL(t, r, src)
+	res := runRandBORU(t, r, src)
 	if len(res) != 200 {
 		t.Fatalf("expected 200 draws, got %d", len(res))
 	}
@@ -139,7 +139,7 @@ func TestRandWithSeedIsolated(t *testing.T) {
 		(b.int 0 1000000) (b.int 0 1000000) (b.int 0 1000000)
 		(c.int 0 1000000) (c.int 0 1000000) (c.int 0 1000000)
 	`
-	res := runRandAQL(t, r, src)
+	res := runRandBORU(t, r, src)
 	if len(res) != 9 {
 		t.Fatalf("expected 9 draws, got %d", len(res))
 	}
@@ -167,7 +167,7 @@ func TestRandWithSeedIsolated(t *testing.T) {
 func TestRandTopLevelIsClockSeeded(t *testing.T) {
 	draw := func() int64 {
 		r := randRegistry(t)
-		res := runRandAQL(t, r, `Rand.int 0 1000000`)
+		res := runRandBORU(t, r, `Rand.int 0 1000000`)
 		n, _ := res[0].AsConcreteInteger()
 		return n
 	}
@@ -189,7 +189,7 @@ func TestRandBool(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		src += `  (r.bool)`
 	}
-	res := runRandAQL(t, r, src)
+	res := runRandBORU(t, r, src)
 	if len(res) != 20 {
 		t.Fatalf("expected 20 bools, got %d", len(res))
 	}
@@ -212,7 +212,7 @@ func TestRandBool(t *testing.T) {
 
 func TestRandString(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `def r (Rand.with-seed 1)  (r.string "abc" 10)`)
+	res := runRandBORU(t, r, `def r (Rand.with-seed 1)  (r.string "abc" 10)`)
 	if len(res) != 1 {
 		t.Fatalf("expected one value, got %d", len(res))
 	}
@@ -232,7 +232,7 @@ func TestRandString(t *testing.T) {
 
 func TestRandStringEmptyCharsetZeroLen(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `def r (Rand.with-seed 1)  (r.string "" 0)`)
+	res := runRandBORU(t, r, `def r (Rand.with-seed 1)  (r.string "" 0)`)
 	if len(res) != 1 {
 		t.Fatalf("expected one value, got %d", len(res))
 	}
@@ -244,7 +244,7 @@ func TestRandStringEmptyCharsetZeroLen(t *testing.T) {
 
 func TestRandOneOfSingleCall(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `def r (Rand.with-seed 7)  ([10 20 30] r.one-of)`)
+	res := runRandBORU(t, r, `def r (Rand.with-seed 7)  ([10 20 30] r.one-of)`)
 	if len(res) != 1 {
 		t.Fatalf("expected one value, got %d", len(res))
 	}
@@ -262,7 +262,7 @@ func TestRandOneOfSingleCall(t *testing.T) {
 // the body survives the wrapper boundary as code (not as data).
 func TestRandListOf(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `def s (Rand.with-seed 42)  Rand.list-of [s.int 0 100] 5`)
+	res := runRandBORU(t, r, `def s (Rand.with-seed 42)  Rand.list-of [s.int 0 100] 5`)
 	if len(res) != 1 {
 		t.Fatalf("expected one list, got %d", len(res))
 	}
@@ -275,7 +275,7 @@ func TestRandListOf(t *testing.T) {
 	}
 	// Determinism: same seed → identical sequence.
 	r2 := randRegistry(t)
-	res2 := runRandAQL(t, r2, `def s (Rand.with-seed 42)  Rand.list-of [s.int 0 100] 5`)
+	res2 := runRandBORU(t, r2, `def s (Rand.with-seed 42)  Rand.list-of [s.int 0 100] 5`)
 	lst2, _ := native.RequireConcreteList(res2[0], "test")
 	for i := 0; i < lst.Len(); i++ {
 		a, _ := lst.Get(i).AsConcreteInteger()
@@ -293,7 +293,7 @@ func TestRandListOf(t *testing.T) {
 // NoEvalMapArgs[0] keeps the schema map intact across the call boundary.
 func TestRandMapFrom(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `
+	res := runRandBORU(t, r, `
 		def s (Rand.with-seed 42)
 		Rand.map-from {age:[s.int 0 100] flag:[s.bool]}
 	`)
@@ -328,7 +328,7 @@ func TestRandMapFrom(t *testing.T) {
 // identical. The fix yields N distinct draws.
 func TestRandListOfBodyKeepsQuoted(t *testing.T) {
 	r := randRegistry(t)
-	res := runRandAQL(t, r, `def s (Rand.with-seed 1)  Rand.list-of [s.int 0 1000000] 4`)
+	res := runRandBORU(t, r, `def s (Rand.with-seed 1)  Rand.list-of [s.int 0 1000000] 4`)
 	lst, _ := native.RequireConcreteList(res[0], "test")
 	distinct := map[int64]bool{}
 	for i := 0; i < lst.Len(); i++ {
@@ -347,7 +347,7 @@ func TestRandFloatInUnitInterval(t *testing.T) {
 	for i := 0; i < 50; i++ {
 		src += `  (r.float)`
 	}
-	res := runRandAQL(t, r, src)
+	res := runRandBORU(t, r, src)
 	for _, v := range res {
 		f, err := v.AsConcreteFloat()
 		if err != nil {

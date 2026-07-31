@@ -5,12 +5,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // Module / ModuleExport — the Ideal types that describe an imported module.
 //
-// When AQL code runs `import "aql:math-util"`, the bound name `Math` is a
+// When BORU code runs `import "boru:math-util"`, the bound name `Math` is a
 // ModuleExport instance (one per `export "Name" {…}` declaration). A
 // ModuleExport is transparent: `MathUtil.sqrt` reads the raw exported value
 // (so `MathUtil.sqrt 16.0 → 4.0` still works), while the synthetic names
@@ -19,7 +19,7 @@ import (
 //	MathUtil.sqrt          → the exported sqrt function (raw, callable)
 //	MathUtil.$name         → 'Math'                (the export name)
 //	MathUtil.$module       → the Module instance   (Ideal/Module)
-//	MathUtil.$module.id    → 'aql:math'            (the module reference)
+//	MathUtil.$module.id    → 'boru:math'            (the module reference)
 //
 // A Module instance (Ideal/Module) is the descriptor shared by all of a
 // module's ModuleExports via $module. Its normal fields are id, kind,
@@ -214,7 +214,7 @@ func (b moduleTypeBehavior) Format(v Value) string {
 
 func getModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
+		return nil, r.BoruError("get_error", "get: cannot access property on type literal", "get")
 	}
 	if val, ok := moduleExportGet(args[1], getKey(args[0])); ok {
 		return []Value{val}, nil
@@ -224,7 +224,7 @@ func getModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Regi
 
 func getrModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
+		return nil, r.BoruError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	k := getKey(args[0])
 	if val, ok := moduleExportGet(args[1], k); ok {
@@ -303,7 +303,7 @@ func moduleExportGetrReturns(args []Value, r *Registry) []Value {
 
 func getModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
+		return nil, r.BoruError("get_error", "get: cannot access property on type literal", "get")
 	}
 	if val, ok := moduleGet(args[1], getKey(args[0])); ok {
 		return []Value{val}, nil
@@ -313,13 +313,13 @@ func getModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Regist
 
 func getrModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
-		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
+		return nil, r.BoruError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	k := getKey(args[0])
 	if val, ok := moduleGet(args[1], k); ok {
 		return []Value{val}, nil
 	}
-	return nil, r.AqlError("not_found", fmt.Sprintf("getr: field %q not found in Module", k), "getr")
+	return nil, r.BoruError("not_found", fmt.Sprintf("getr: field %q not found in Module", k), "getr")
 }
 
 // AsModuleDesc unwraps the ModuleDesc carried by an Ideal/Module value

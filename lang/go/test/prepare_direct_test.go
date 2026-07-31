@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 
 	udk "github.com/voxgig/udk/go"
 )
@@ -34,16 +34,16 @@ func makeTestSDKForDirect(t *testing.T) *udk.UniversalSDK {
 	return testSDK
 }
 
-func newAQLWithDirectSDK(t *testing.T) *lang.AQL {
+func newBORUWithDirectSDK(t *testing.T) *lang.BORU {
 	t.Helper()
 	a, err := lang.New(lang.Options{Registry: "test/registry"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	a.SetSDK("voxgig-solardemo", makeTestSDKForDirect(t))
-	// prepare/direct moved to aql:net; import once (state persists across Run).
-	if _, err := a.Run(`import "aql:net"`); err != nil {
+	// prepare/direct moved to boru:net; import once (state persists across Run).
+	if _, err := a.Run(`import "boru:net"`); err != nil {
 		t.Fatal(err)
 	}
 	return a
@@ -52,7 +52,7 @@ func newAQLWithDirectSDK(t *testing.T) *lang.AQL {
 // --- prepare ---
 
 func TestPrepareAPIBasic(t *testing.T) {
-	a := newAQLWithDirectSDK(t)
+	a := newBORUWithDirectSDK(t)
 
 	result, err := a.Run(`Net.prepare {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"GET"}`)
 	if err != nil {
@@ -80,7 +80,7 @@ func TestPrepareAPIBasic(t *testing.T) {
 }
 
 func TestPrepareAPIWithHeaders(t *testing.T) {
-	a := newAQLWithDirectSDK(t)
+	a := newBORUWithDirectSDK(t)
 
 	result, err := a.Run(`Net.prepare {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"POST", headers:{Authorization:"Bearer test123"}}`)
 	if err != nil {
@@ -102,7 +102,7 @@ func TestPrepareAPIWithHeaders(t *testing.T) {
 }
 
 func TestPrepareAPIDefaultMethod(t *testing.T) {
-	a := newAQLWithDirectSDK(t)
+	a := newBORUWithDirectSDK(t)
 
 	// Without method, should default to GET.
 	result, err := a.Run(`Net.prepare {kind:"api", spec:"voxgig-solardemo", path:"/planets"}`)
@@ -125,7 +125,7 @@ func TestPrepareAPIDefaultMethod(t *testing.T) {
 }
 
 func TestPrepareAPIWithJsonExtension(t *testing.T) {
-	a := newAQLWithDirectSDK(t)
+	a := newBORUWithDirectSDK(t)
 
 	result, err := a.Run(`Net.prepare {kind:"api", spec:"voxgig-solardemo.json", path:"/test"}`)
 	if err != nil {
@@ -140,7 +140,7 @@ func TestPrepareAPIWithJsonExtension(t *testing.T) {
 // --- direct ---
 
 func TestDirectAPIBasic(t *testing.T) {
-	a := newAQLWithDirectSDK(t)
+	a := newBORUWithDirectSDK(t)
 
 	result, err := a.Run(`Net.direct {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"GET"}`)
 	if err != nil {
@@ -166,7 +166,7 @@ func TestDirectAPIBasic(t *testing.T) {
 }
 
 func TestDirectAPIWithJsonExtension(t *testing.T) {
-	a := newAQLWithDirectSDK(t)
+	a := newBORUWithDirectSDK(t)
 
 	result, err := a.Run(`Net.direct {kind:"api", spec:"voxgig-solardemo.json", path:"/test"}`)
 	if err != nil {
@@ -179,7 +179,7 @@ func TestDirectAPIWithJsonExtension(t *testing.T) {
 }
 
 func TestDirectAPIPost(t *testing.T) {
-	a := newAQLWithDirectSDK(t)
+	a := newBORUWithDirectSDK(t)
 
 	result, err := a.Run(`Net.direct {kind:"api", spec:"voxgig-solardemo", path:"/planets", method:"POST", body:"{\"name\":\"Mars\"}"}`)
 	if err != nil {

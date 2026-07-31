@@ -2,7 +2,7 @@ package eng
 
 // Membership-defined types — the convergence point for the two ways the
 // kernel installs a "type whose inhabitants are the values satisfying a
-// rule": the AQL path (predicateUnifier, rule = an AQL fn body run via
+// rule": the BORU path (predicateUnifier, rule = a BORU fn body run via
 // RunPredicate) and the host-Go path (memberBehavior, rule = a Go func).
 // Both answer the same question — "does v inhabit this type?" — at the
 // same kernel touch-points (Match for dispatch, Unify for `is`/`case`/
@@ -40,7 +40,7 @@ func matchMembership(v Value, t *Type, prev TypeBehavior, member func(Value) boo
 		// concrete-closure residual buildFnBodyReturnsFn / toCarrier
 		// preserve) is payload-decidable: the FnDefInfo IS the value
 		// that runs, so the predicate can answer now. Without this, a
-		// member type over Function (the aql:minilang partial kinds,
+		// member type over Function (the boru:minilang partial kinds,
 		// MiniLang.Re / …) false-flags at check time — the strict
 		// lattice walk rejects Parent=Function even though the payload
 		// proves membership. Other carrier payloads (ChildTypeInfo on
@@ -74,7 +74,7 @@ func matchMembership(v Value, t *Type, prev TypeBehavior, member func(Value) boo
 //
 // admit returns (output, matched, err): output is the value to yield on a
 // match — the candidate itself for a Go predicate, or RunPredicate's
-// result for an AQL one.
+// result for a BORU one.
 func unifyMembership(a, c Value, typeName string, admit func(Value) (Value, bool, error)) (Value, *UnifyError) {
 	aConc, cConc := IsConcrete(a), IsConcrete(c)
 	if aConc == cConc {

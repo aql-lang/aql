@@ -9,13 +9,13 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 func TestSeam5EvalInitError(t *testing.T) {
 	boom := errors.New("init boom")
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.AQL, error) { return nil, boom }
+	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, boom }
 	t.Cleanup(func() { langNew = orig })
 
 	err := Eval(io.Discard, "1 2 +", lang.Options{}, CompileOff)
@@ -27,7 +27,7 @@ func TestSeam5EvalInitError(t *testing.T) {
 func TestSeam5MainInitError(t *testing.T) {
 	boom := errors.New("init boom")
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.AQL, error) { return nil, boom }
+	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, boom }
 	t.Cleanup(func() { langNew = orig })
 
 	var stdout, stderr bytes.Buffer
@@ -148,7 +148,7 @@ func TestSeam5AbsDirError(t *testing.T) {
 		t.Skip("this platform still resolves a removed working directory; AbsDir's getwd-error arm is unreachable here")
 	}
 
-	if _, err := AbsDir("rel/prog.aql"); err == nil {
+	if _, err := AbsDir("rel/prog.boru"); err == nil {
 		t.Fatal("AbsDir must fail when the working directory is gone")
 	}
 }

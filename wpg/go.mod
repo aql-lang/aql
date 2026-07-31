@@ -1,12 +1,12 @@
-module github.com/aql-lang/aql/wpg
+module github.com/boru-lang/boru/wpg
 
 go 1.24.7
 
-require github.com/aql-lang/aql/lang/go v0.0.0
+require github.com/boru-lang/boru/lang/go v0.0.0
 
 require (
 	github.com/antchfx/xpath v1.3.6 // indirect
-	github.com/aql-lang/aql/eng/go v0.0.0 // indirect
+	github.com/boru-lang/boru/eng/go v0.0.0 // indirect
 	github.com/cockroachdb/apd/v3 v3.2.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
@@ -48,6 +48,6 @@ require (
 	modernc.org/sqlite v1.46.1 // indirect
 )
 
-replace github.com/aql-lang/aql/eng/go => ../eng/go
+replace github.com/boru-lang/boru/eng/go => ../eng/go
 
-replace github.com/aql-lang/aql/lang/go => ../lang/go
+replace github.com/boru-lang/boru/lang/go => ../lang/go

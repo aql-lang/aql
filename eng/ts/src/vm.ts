@@ -32,7 +32,7 @@ import {
 } from './bytecode.ts'
 import { coerceBoolean } from './coretype.ts'
 import { Engine } from './engine.ts'
-import { AqlError } from './error.ts'
+import { BoruError } from './error.ts'
 import { matchValues } from './match.ts'
 import type { Registry } from './registry.ts'
 import { newInteger, newList, newMap, OrderedMap, Value } from './value.ts'
@@ -92,7 +92,7 @@ export function runProgram(p: Program, registry: Registry): Value[] {
         const start = stack[--sp]!.asInteger()
         const end = stack[--sp]!.asInteger()
         const step = stack[--sp]!.asInteger()
-        if (step === 0n) throw new AqlError('for_error', 'for: step cannot be zero')
+        if (step === 0n) throw new BoruError('for_error', 'for: step cannot be zero')
         // The matching FOR_NEXT is the next instruction; its arg is the
         // (backpatched) loop-exit pc.
         loops.push({ cur: start, end, step, slot: arg, exitPC: args[pc + 1]! })
@@ -138,7 +138,7 @@ export function runProgram(p: Program, registry: Registry): Value[] {
         sp -= a
         const out = sr.sig.handler(as, null, [], registry)
         if (out instanceof Promise) {
-          throw new AqlError('unsupported', `async handlers are not supported in the VM`, sr.word)
+          throw new BoruError('unsupported', `async handlers are not supported in the VM`, sr.word)
         }
         const results = out as Value[]
         for (let i = 0; i < results.length; i++) {
@@ -146,7 +146,7 @@ export function runProgram(p: Program, registry: Registry): Value[] {
           // Handlers that emit tape-coupled tokens (words/marks/moves)
           // can't be faithfully run off-tape — refuse to the caller.
           if (v.isWord() || v.isForward() || v.isMark() || v.isMove()) {
-            throw new AqlError('internal_error', `${sr.word}: tape-coupled handler result`, sr.word)
+            throw new BoruError('internal_error', `${sr.word}: tape-coupled handler result`, sr.word)
           }
           stack[sp++] = v
         }
@@ -168,18 +168,18 @@ export function runProgram(p: Program, registry: Registry): Value[] {
         const fn = registry.lookup(pr.word)
         const mr = fn ? matchValues(fn, win) : null
         if (mr === null) {
-          throw new AqlError('signature_error', `cannot call \`${pr.word}\` — no signature matches the arguments`, pr.word)
+          throw new BoruError('signature_error', `cannot call \`${pr.word}\` — no signature matches the arguments`, pr.word)
         }
         sp -= a
         const out = mr.sig.handler(mr.args, null, [], registry)
         if (out instanceof Promise) {
-          throw new AqlError('unsupported', `async handlers are not supported in the VM`, pr.word)
+          throw new BoruError('unsupported', `async handlers are not supported in the VM`, pr.word)
         }
         const results = out as Value[]
         for (let i = 0; i < results.length; i++) {
           const v = results[i]!
           if (v.isWord() || v.isForward() || v.isMark() || v.isMove()) {
-            throw new AqlError('internal_error', `${pr.word}: tape-coupled handler result`, pr.word)
+            throw new BoruError('internal_error', `${pr.word}: tape-coupled handler result`, pr.word)
           }
           stack[sp++] = v
         }
@@ -187,9 +187,9 @@ export function runProgram(p: Program, registry: Registry): Value[] {
       }
       case OpTrap: {
         // A check-mode-suppressed runtime error compiled in place: raise the
-        // byte-identical AqlError (the interpreter errors at this same point).
+        // byte-identical BoruError (the interpreter errors at this same point).
         const t = traps[arg]!
-        throw new AqlError(t.code, t.detail, t.word)
+        throw new BoruError(t.code, t.detail, t.word)
       }
       case OpFallback: {
         // Interpreter island: pop nIn threaded values (top of stack = the
@@ -206,14 +206,14 @@ export function runProgram(p: Program, registry: Registry): Value[] {
         for (let i = 0; i < results.length; i++) {
           const v = results[i]!
           if (v.isWord() || v.isForward() || v.isMark() || v.isMove()) {
-            throw new AqlError('internal_error', `${fb.desc}: tape-coupled island result`, fb.desc)
+            throw new BoruError('internal_error', `${fb.desc}: tape-coupled island result`, fb.desc)
           }
           stack[sp++] = v
         }
         break
       }
       default:
-        throw new AqlError('internal_error', `bad opcode ${op} at pc ${pc}`)
+        throw new BoruError('internal_error', `bad opcode ${op} at pc ${pc}`)
     }
   }
   return stack.slice(0, sp)

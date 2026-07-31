@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 	tabnasabnf "github.com/tabnas/abnf/go"
 	tabnas "github.com/tabnas/parser/go"
 )
@@ -49,7 +49,7 @@ func pcovErr(t *testing.T, r *native.Registry, src string) error {
 	return rerr
 }
 
-const pcovImports = `import "aql:parse"  import "aql:parselang"  `
+const pcovImports = `import "boru:parse"  import "boru:parselang"  `
 
 // TestParseCovSpecWholeGrammar drives Parse.spec's happy path: options
 // (fixed token + v), a ref action, and a rule referencing it — the whole

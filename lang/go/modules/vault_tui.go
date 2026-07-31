@@ -5,25 +5,25 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// The aql:vault-tui module — the VaultTui namespace: the interactive
-// vault TUI WRITTEN IN AQL (vaultTuiSource below, embedded from
-// vault_tui.aql), the application layer of design/VAULT-TUI-PORT.0.md.
-// Follows the aql:sift hybrid pattern: the module body is parsed once
+// The boru:vault-tui module — the VaultTui namespace: the interactive
+// vault TUI WRITTEN IN BORU (vaultTuiSource below, embedded from
+// vault_tui.boru), the application layer of design/VAULT-TUI-PORT.0.md.
+// Follows the boru:sift hybrid pattern: the module body is parsed once
 // and run in a fresh sub-registry that collects its `export "VaultTui"
-// {…}`. The app itself is all AQL — this loader is the only Go.
+// {…}`. The app itself is all BORU — this loader is the only Go.
 //
 // The app reaches the terminal and the vault through the host seams
 // (RegisterHostTui / RegisterHostVault). Both capability slots ride
 // into the sub-registry by pointer below — the same
 // ModuleInheritedCaps contract file modules get from RunModuleBody —
 // so hosts MUST register their backends before the program imports
-// "aql:vault-tui". With no backends the module still loads (it only
+// "boru:vault-tui". With no backends the module still loads (it only
 // defines words); the app raises `no_backend` when run.
 
-//go:embed vault_tui.aql
+//go:embed vault_tui.boru
 var vaultTuiSource string
 
 var (
@@ -32,8 +32,8 @@ var (
 	vaultTuiParseErr  error
 )
 
-// BuildVaultTuiModule loads the AQL-implemented aql:vault-tui module:
-// it parses the embedded vault_tui.aql once, runs it in a fresh
+// BuildVaultTuiModule loads the BORU-implemented boru:vault-tui module:
+// it parses the embedded vault_tui.boru once, runs it in a fresh
 // sub-registry that inherits the parser + module resolver + host
 // capability slots, and collects the `export "VaultTui" {…}` map.
 // Mirrors BuildSiftModule.
@@ -59,8 +59,8 @@ func BuildVaultTuiModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modReg.InheritObserveHooks(parent)
 	// Coverage attribution: the app's fn bodies run on this registry
 	// (coverage.go). Inert unless a coverage hook is armed.
-	modReg.SetCoverID("aql:vault-tui")
-	parent.RegisterCoverSource("aql:vault-tui", vaultTuiSource)
+	modReg.SetCoverID("boru:vault-tui")
+	parent.RegisterCoverSource("boru:vault-tui", vaultTuiSource)
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	modReg.Modules.InheritConfig(parent.Modules)
@@ -78,7 +78,7 @@ func BuildVaultTuiModule(parent *native.Registry) (native.ModuleDesc, error) {
 		}
 	}
 
-	// Collect `export "VaultTui" {…}` from the preamble (the aql:sift
+	// Collect `export "VaultTui" {…}` from the preamble (the boru:sift
 	// local exporter; see modules/test.go for why RunModuleBody cannot
 	// be reused).
 	exports := map[string]*native.OrderedMap{}

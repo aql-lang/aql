@@ -52,7 +52,7 @@ func TestB3InstrumentCtorSubRegError(t *testing.T) {
 	if len(got) != 1 || !got[0].Parent.ConformsTo(TMap) {
 		t.Fatalf("instrument shape on init error must be a Map carrier, got %v", got)
 	}
-	// Impl surfaces the init error as an aql error.
+	// Impl surfaces the init error as a boru error.
 	g, ok := n.Signatures[0].Impl.(*GoImpl)
 	if !ok {
 		t.Fatal("expected GoImpl")

@@ -132,7 +132,7 @@ into one state transition.
 2. Port existing `MatchSignature` + `bestSigForForward` scoring into one scorer.
 3. Gate with feature flag (`engine.unifiedPlanner`) and run integration tests in both
    modes for parity.
-4. Remove old forward-specific heuristics after parity on SQL/AQL fixtures.
+4. Remove old forward-specific heuristics after parity on SQL/BORU fixtures.
 
 ## Practical recommendation
 

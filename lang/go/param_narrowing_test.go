@@ -3,7 +3,7 @@ package lang_test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // A fn body is analysed against its DECLARED param types, not the (possibly

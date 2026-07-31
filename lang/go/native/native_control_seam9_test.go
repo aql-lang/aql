@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // Seam-9 coverage (W9_nativeC) for native_control.go: for/do/case/if
 // handler error and check-mode arms, driven directly and through crafted
-// AQL programs.
+// BORU programs.
 
 func TestW9ForRangeTypeLiteral(t *testing.T) {
 	r := seam5Reg(t)

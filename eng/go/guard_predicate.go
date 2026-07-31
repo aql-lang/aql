@@ -41,7 +41,7 @@ func predicateImpliedType(r *Registry, name string) (*Type, bool) {
 	if sig == nil {
 		return nil, false
 	}
-	aql, ok := sig.Impl.(*AQLImpl)
+	boru, ok := sig.Impl.(*BORUImpl)
 	if !ok {
 		return nil, false
 	}
@@ -52,7 +52,7 @@ func predicateImpliedType(r *Registry, name string) (*Type, bool) {
 	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(TBoolean) {
 		return nil, false
 	}
-	return predicateBodyImpliedType(r, sig.Params[0].Name, aql.Body)
+	return predicateBodyImpliedType(r, sig.Params[0].Name, boru.Body)
 }
 
 // predicateBodyImpliedType matches the qualifying body shapes over the

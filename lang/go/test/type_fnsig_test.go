@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // --- Function signatures as types ---
@@ -16,7 +16,7 @@ import (
 
 // A function whose sole sig matches Mapper unifies and is bound.
 // The `(quote double)` form passes the function as a value rather than
-// invoking it — same idiom AQL already uses for higher-order calls.
+// invoking it — same idiom BORU already uses for higher-order calls.
 func TestTypeFnSig_DefBindMatchingFunction(t *testing.T) {
 	got := runOne(t, `def Mapper fnsig [[Integer] [Integer]]
 def double fn [[Integer] [Integer] [1 add]]
@@ -35,7 +35,7 @@ func TestTypeFnSig_DefBindRejectsNonFunction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	_, err = a.Run(`def Mapper fnsig [[Integer] [Integer]]
 def m:Mapper 42`)
 	if err == nil {
@@ -49,7 +49,7 @@ func TestTypeFnSig_DefBindRejectsWrongInputType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	_, err = a.Run(`def Mapper fnsig [[Integer] [Integer]]
 def stringy fn [[String] [Integer] [length]]
 def m:Mapper (quote stringy)`)
@@ -64,7 +64,7 @@ func TestTypeFnSig_DefBindRejectsWrongReturnType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	_, err = a.Run(`def Mapper fnsig [[Integer] [Integer]]
 def stringer fn [[Integer] [String] [convert String]]
 def m:Mapper (quote stringer)`)
@@ -79,7 +79,7 @@ func TestTypeFnSig_DefBindRejectsWrongArity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	_, err = a.Run(`def Mapper fnsig [[Integer] [Integer]]
 def two-arg fn [[Integer Integer] [Integer] [add]]
 def m:Mapper (quote two-arg)`)
@@ -151,7 +151,7 @@ func TestTypeFnPredicate_DefBindWrongType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	// Integer 99 is not a String, so (x is String) is false → predicate
 	// returns None → def errors.
 	_, err = a.Run(bbdSource + `def q:Bbd 99`)
@@ -172,7 +172,7 @@ func TestTypeFnPredicate_NotIndependentlyCallable(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	result, err := a.Run(bbdSource + `Bbd "c"`)
 	if err != nil {
 		t.Fatalf("run: %v", err)
@@ -214,7 +214,7 @@ func TestTypeFnPredicate_IntegerRangeFail(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	_, err = a.Run(`def Mid fn [n:Any Any [if ((n is Integer) and (n gte 10) and (n lte 20)) [n] [None]]]
 def x:Mid 25`)
 	if err == nil {

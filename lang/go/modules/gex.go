@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // gex — glob-expression matching, vendored from github.com/rjrodger/gex
@@ -23,7 +23,7 @@ import (
 // {ok ms fst lst n}), `gex` is a SELECTOR — gex's `.on`: it returns the
 // subject when it matches and filters the subject when it is a collection.
 //
-//	import "aql:minilang"
+//	import "boru:minilang"
 //	"ax" mini gex 'a*'                 # → 'ax'   (subject matches → returned)
 //	"ax" +gex/a*/                      # → 'ax'   (the terse +literal form)
 //	"bx" +gex/a*/                      # → None   (no match)
@@ -98,11 +98,11 @@ func gexSpecToRegexp(spec string) string {
 func miniGexHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", fmt.Sprintf("gex: src: %v", err), "lang_gex")
+		return nil, r.BoruError("mini_error", fmt.Sprintf("gex: src: %v", err), "lang_gex")
 	}
 	re, cerr := gexCompile(src)
 	if cerr != nil {
-		return nil, r.AqlErrorHint("mini_parse_error",
+		return nil, r.BoruErrorHint("mini_parse_error",
 			fmt.Sprintf("gex: %v", cerr), "lang_gex",
 			"use ** for a literal * and *? for a literal ?")
 	}

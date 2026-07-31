@@ -1,7 +1,7 @@
-# Defect investigation — root causes for `verse-in-aql-report.0.md` §6
+# Defect investigation — root causes for `verse-in-boru-report.0.md` §6
 
 The Verse comparison report
-([`verse-in-aql-report.0.md`](verse-in-aql-report.0.md)) verified its AQL
+([`verse-in-boru-report.0.md`](verse-in-boru-report.0.md)) verified its BORU
 claims by running them, and seven defects fell out. This note is the
 follow-up: for each, the cause **in the source**, the blast radius as
 *tested*, and what a fix has to decide. Reproduced against `main` @
@@ -43,7 +43,7 @@ because in every case the mistake is more instructive than the fix.
   runtime and check-mode return boundaries.
 - **D is fixed, split mode included.** The advisory landed first; the real
   repair is now in too. `eng.CheckState.ModelEffects` is the third mode —
-  concrete values, substituted effect BACKENDS — so `aql check` no longer
+  concrete values, substituted effect BACKENDS — so `boru check` no longer
   writes, creates, removes or prints through a module body, while a body's
   reads stay real so nothing that loads today starts failing. §D also
   records the correction that mattered most: gating on "the parent is
@@ -121,7 +121,7 @@ paragraph in B and "Blocker 2 is worse than the table says".
 | **A** | `await`/`spawn` share mutable payloads → data race | soundness | **highest** — undefined behaviour, docs asserted the opposite; **`await` FIXED by refusal**, other fork sites unchanged by design |
 | **B** | Compiled `do`/`each` leak `context set` to the parent | miscompile | high — silent wrong answer, default path |
 | **C** | `do […] error […]` + trailing expr → leaked `internal_error` | miscompile | high — user-visible by default once the block emits output; **FIXED** |
-| **D** | `aql check` runs module bodies; a default run runs them twice | correctness | medium — effects during a "no-run" command; **now REPORTED** |
+| **D** | `boru check` runs module bodies; a default run runs them twice | correctness | medium — effects during a "no-run" command; **now REPORTED** |
 | **E** | Error-code table documents codes the engine can't produce | docs + 1 engine bug | medium |
 | **F** | Shorthand `fn` discards a `def`-bound union/enum param type | engine | **high** — silently made a 1-arg fn callable with 0 args — **FIXED**, param and return sides both |
 | **G** | Un-separated forward calls evaluate right-to-left → stale reads | recorded, deferred | medium — invalidates tests silently |
@@ -149,7 +149,7 @@ to the parent.
 ### Evidence
 
 ```
-import "aql:time-util"
+import "boru:time-util"
 def m (make FlexMap {})
 TimeUtil.await [[m set a 1] [m set b 2]] ;
 m
@@ -198,7 +198,7 @@ containers between processes — and `await`/`spawn` do not apply it.
    program that shares a flex container across branches today.
 3. **Document sharing as intended and synchronise `OrderedMap`.** Fast,
    but makes `await` a concurrency primitive whose users must reason about
-   interleaving — a large change to AQL's story, and it would leave
+   interleaving — a large change to BORU's story, and it would leave
    `deq`/rendering racing too.
 
 Recommend (1), with (2) as the interim if a copy cost is unacceptable.
@@ -241,8 +241,8 @@ Each is worth recording because each looked settled before it was tried.
 
 2. **The check first shipped INERT on the default path.** The first
    version walked the branch element as a token list. Compiled, a branch
-   body is a synthetic fn-value carrier holding its tokens in an
-   `AQLImpl` body (the `CompileStoresBodyList` shape `runParallelBranch`
+   body is a synthetic fn-value carrier holding its tokens in a
+   `BORUImpl` body (the `CompileStoresBodyList` shape `runParallelBranch`
    unwraps), so the walk found nothing — the boundary was unguarded on
    the *only path most programs take*. It looked correct because the case
    that did fire had been tested with `--no-compile`. Both shapes are
@@ -472,12 +472,12 @@ Cancelling the timers needed a spelling that keeps the row's expected
 value, and the natural one diverges between the engines:
 
 ```
-import "aql:time-util"
+import "boru:time-util"
 def h (TimeUtil.timeout 1000 [1 add 2])
 def t (typeof h)
 TimeUtil.cancel h t
                               compiled → Timeout
-                              interpreted → [aql/signature_error]:
+                              interpreted → [boru/signature_error]:
                                 cannot call `cancel` — no signature matches
 ```
 
@@ -1135,7 +1135,7 @@ Not caused by it, reproduced on the unpatched binary, all
 
   **FIXED, and it was one typo causing two user-visible defects.** The
   Store `get` handler raised
-  `r.AqlError("unknown key_error", "unknown key: …", "unknown key")` — the
+  `r.BoruError("unknown key_error", "unknown key: …", "unknown key")` — the
   message's leading word glued onto the code, and passed as the WORD too.
   So the code contained a SPACE, which no `case` arm can match (the failure
   was undispatchable), and the compiled path renders the caret span at
@@ -1152,12 +1152,12 @@ Not caused by it, reproduced on the unpatched binary, all
   four more codes the enumeration was missing (`expected-byte`,
   `bad-encoding`, `cancel-timeout_error`, `cancel-interval_error`), which
   settled the naming rule on the property that actually broke: a code must
-  be SPELLABLE as a `case` arm, so a hyphen is fine (AQL word names use
+  be SPELLABLE as a `case` arm, so a hyphen is fine (BORU word names use
   them) and a space or a capital is not. The enumeration went from 233 to
   241 codes, and `errorcodes.go`'s claim that every existing code was
   snake_case is corrected — that was an artefact of how the gate found
   them.
-- `[1 2 3] each [ do [ 9 drop ] ]` → compiled raises `[aql/each_error]:
+- `[1 2 3] each [ do [ 9 drop ] ]` → compiled raises `[boru/each_error]:
   element 0: body produced no result`; the interpreter returns `[1 2 3]`.
   **Default mode**, no fallback rescue. A nested body that leaves no
   residual is a value the two engines disagree about, unrelated to
@@ -1273,7 +1273,7 @@ Everything downstream is faithful to that wrong model:
    island's real 0 results with no count check, so the stack is one short
    and `callDynamic`'s guard fires (`eng/go/vm.go:673-674`).
 
-The check pass shows the mis-model without compiling at all: `aql check`
+The check pass shows the mis-model without compiling at all: `boru check`
 on the repro reports the residual as `dynamic(Any) Integer` where the
 interpreter's real residual is the single value `5`.
 
@@ -1317,7 +1317,7 @@ returns `5`.
 |---|---|---|
 | `do [1 div 0] error [drop]` ⏎ `2 add 3` | `CALL_DYNAMIC underflow` | `5` |
 | `1` ⏎ `do [1 div 0] error [drop]` | `CALL_DYNAMIC underflow` (pc=4) | `1` |
-| `def x (do [1 div 0] error [drop])` ⏎ `x` | `BIND_GLOBAL underflow` | `[aql/undefined_word]: undefined word: x` |
+| `def x (do [1 div 0] error [drop])` ⏎ `x` | `BIND_GLOBAL underflow` | `[boru/undefined_word]: undefined word: x` |
 
 A handler that leaves a value (`error [drop 9]`) is fine, and so is a
 program that ends at the `error`.
@@ -1424,12 +1424,12 @@ a straightforward companion to (1) should not be read as endorsing it.
 `//covergate:allow bindGlobal's only error path is its own allow-listed
 defensive underflow guard, unreachable without a bytecode-level fault`.
 The premise is satisfied as written — a compiler bug *is* a bytecode-level
-fault — but a two-line AQL program reaches it. These guards are doing real
+fault — but a two-line BORU program reaches it. These guards are doing real
 work in production rather than being dead defensive arms, which is worth
 recording in `design/COVERAGE-ALLOWLIST.10.md` when (1) lands.
 
 
-## D. `aql check` executes imported module bodies; a default run executes them twice
+## D. `boru check` executes imported module bodies; a default run executes them twice
 
 ### Root cause — two deliberate decisions that compose badly
 
@@ -1466,16 +1466,16 @@ in the body:
 
 | Program | `-no-check` | `check` | default |
 |---|---|---|---|
-| one import of `m.aql` | 1 | 1 | **2** |
-| two imports of `m.aql` | 2 | 2 | **4** |
-| diamond (`a.aql` and `b.aql` each import `m.aql`) | 2 | 2 | **4** |
+| one import of `m.boru` | 1 | 1 | **2** |
+| two imports of `m.boru` | 2 | 2 | **4** |
+| diamond (`a.boru` and `b.boru` each import `m.boru`) | 2 | 2 | **4** |
 
 So the effect count is *importers × passes*, not a fixed 2 — a module
 imported from N places in a program run with the default pre-flight check
 executes its body 2N times.
 
 `design/MODULE-CACHE.0.md` confirms the caching asymmetry and its status:
-native `aql:` modules load "at most once per registry" via an `IsLoaded`
+native `boru:` modules load "at most once per registry" via an `IsLoaded`
 short-circuit, file modules are "never cached — `loadFileModule` re-reads,
 re-parses, and re-runs the file body on every `import`", and the note is
 **"analysis only — not implemented."**
@@ -1540,7 +1540,7 @@ Two decisions in it worth stating:
   behaviour is the composition of two deliberate decisions, each correct
   on its own. The defect was that it was invisible.
 
-`CLI.md` now states the exception under `aql check` rather than only
+`CLI.md` now states the exception under `boru check` rather than only
 promising "type-check without running", including the 2N figure and the
 `--no-check` escape. Tests in `lang/go/test/module_check_effects_test.go`
 pin the count, the severity, and — the negative that keeps the advisory
@@ -1596,7 +1596,7 @@ and would break a bare `import "foo"` inside a modelled body. The upper's
 
 Gating on "the parent is in check mode" is WRONG, and not visibly so.
 Measured: `import module [ print 'loading' … ]` under a default
-`lang.AQL.Run` went from one line of output to **none**.
+`lang.BORU.Run` went from one line of output to **none**.
 
 The cause is that §D's own model of the doubling was incomplete. On the
 compiled path the module body runs ONLY in the compile pass — `import` is
@@ -1608,14 +1608,14 @@ modelling it does not deduplicate the effect, it deletes it.
 
 | pass | entry | body runs | effects |
 |---|---|---|---|
-| pure check | `Check.Begin` — `aql check`, the CLI's quiet pre-flight, `lang.AQL.Check` | yes | **modelled** |
+| pure check | `Check.Begin` — `boru check`, the CLI's quiet pre-flight, `lang.BORU.Check` | yes | **modelled** |
 | compile | `Check.BeginCompilePass` — `RunCompiled` / `CompileCheck` | yes | real |
 | interpreter | no check pass | yes | real |
 
 So under the CLI's default check-then-run the body still executes twice,
 but exactly ONE of those executions has real effects — which is what a run
 should have had all along. Measured on the built binary: one importer
-prints `MODBODY` once (was twice), two importers twice (was four), `aql
+prints `MODBODY` once (was twice), two importers twice (was four), `boru
 check` prints nothing.
 
 `TestDefaultRunEmitsModuleBodyEffectExactlyOnce` pins all three outcomes
@@ -1645,7 +1645,7 @@ fail when the `!Compiling` gate is removed.
   interpreter fallback, while under-counting a real network send would
   duplicate it. Discarded OUTPUT does stop counting, which is strictly
   correct — nothing escaped, so nothing should block a fallback.
-- **`aql check --emit`** (the disassembly surface) runs a compile pass, so
+- **`boru check --emit`** (the disassembly surface) runs a compile pass, so
   its module-body effects are real. Consistent with the table above, and
   unchanged from before.
 - **A nested body draws no advisory entry.** The advisory lands on
@@ -1724,7 +1724,7 @@ check-time diagnostic for the same condition is `index_out_of_range`, a
 third spelling.
 
 It is one instance of a systemic gap: `lang/go/native` has 417 non-test
-`fmt.Errorf` sites and `lang/go/modules` 119, none attaching an `[aql/…]`
+`fmt.Errorf` sites and `lang/go/modules` 119, none attaching an `[boru/…]`
 code.
 
 ### FIXED — the coded sites, the corrected table, and a gate
@@ -1751,7 +1751,7 @@ identifies itself by. That is the fileops half of the adapter
 
 The uninstalled case was worse and only surfaced because a test for it
 failed: `notInstalledFileOps` wrote its code **into the message** as an
-`[aql/capability_not_installed]:` prefix, where `errors.As` cannot find
+`[boru/capability_not_installed]:` prefix, where `errors.As` cannot find
 it. A code inside prose is a code no `case` arm can match, and it would
 have been quietly restamped `read_error` by the very fix meant to help.
 It is now a typed error (`notInstalledError`). The two refusals stay
@@ -1765,7 +1765,7 @@ fix all of them at once and also flip compiled-mode fallback semantics;
 choosing the CODE is orthogonal to that and carries none of its risk.
 
 A side effect worth stating: `runtimeShouldFallback` treats a foreign Go
-error as "re-run on the interpreter" and an `AqlError` as "surface". So a
+error as "re-run on the interpreter" and a `BoruError` as "surface". So a
 missing file in compiled mode used to silently re-run the whole program;
 now it fails at once. That is the direction the file's own comment on the
 exclusive-write path already argued for — a fallback re-run past an
@@ -1814,7 +1814,7 @@ Two limits of the gate, stated because they bound what it proves:
 
 It deliberately does **not** count constant DECLARATIONS as minting.
 `policy` declares four fully-qualified code constants and its header says
-"the engine adapter copies these onto the produced AqlError" — counting
+"the engine adapter copies these onto the produced BoruError" — counting
 declarations would have let `cap_denied`'s successor pass the gate while
 still never reaching a user. A code is real when a site attaches it.
 
@@ -1824,14 +1824,14 @@ Before this pass, **every** policy refusal reached the user without a
 code — `fileops`, `network`, `process`, `vault`, `tui` alike:
 
 ```
-aql -deny fileops.read    -e '… do [IO.read …]    error [dot code]'  → None
-aql -deny network.connect -e '… do [Net.fetch …]  error [dot code]'  → None
+boru -deny fileops.read    -e '… do [IO.read …]    error [dot code]'  → None
+boru -deny network.connect -e '… do [Net.fetch …]  error [dot code]'  → None
 ```
 
 `policy.Denied` carries `Code` (`permission_denied`,
 `capability_not_installed`, `modules_disabled`, `policy_attenuation`) and
 `lang/go/policy/error.go:3-6` states an engine adapter copies it onto the
-produced `AqlError`. No such adapter existed.
+produced `BoruError`. No such adapter existed.
 
 `fileops` now has one (`fileOpError`), and it is the capability the
 REFERENCE table is mostly about. The first line above returns
@@ -1839,9 +1839,9 @@ REFERENCE table is mostly about. The first line above returns
 `capability_not_installed`; the second line still returns `None`.
 
 The `Unwrap` route was NOT taken. Giving `Denied` an `Unwrap() error`
-returning an `AqlError` would fix all of them at a stroke — and would also
-flip `runtimeShouldFallback` (`lang/go/aql.go`) from "foreign error, re-run
-on the interpreter" to "AQL error, surface", for every denial, in compiled
+returning a `BoruError` would fix all of them at a stroke — and would also
+flip `runtimeShouldFallback` (`lang/go/boru.go`) from "foreign error, re-run
+on the interpreter" to "BORU error, surface", for every denial, in compiled
 mode, including denials from sites nobody has audited. That is probably the
 right answer eventually — `eng.PolicyDenied` already gets exactly that
 treatment at the VM dispatch gate, with a comment explaining that a re-run
@@ -1886,14 +1886,14 @@ the cause.
 
 **A regression the gate caught, worth recording because it proves the gate
 earns its keep.** The first draft hoisted the two code literals into a
-classifier that merely *returned* them, leaving `r.AqlError(code, …)` with
+classifier that merely *returned* them, leaving `r.BoruError(code, …)` with
 a variable. `test/go/docexamples/errorcodes_test.go` immediately reported
 `permission_denied` as unmintable — correct, from its point of view: it
 extracts codes from construction sites and deliberately ignores anything
 that only *names* a code, because policy's four constants sat
 declared-and-never-attached for as long as they existed. The refactor had
 made a live code invisible to the one check that keeps REFERENCE.md
-honest. The switch now sits directly on top of the `r.AqlError` calls, and
+honest. The switch now sits directly on top of the `r.BoruError` calls, and
 `policy_error.go` says why in a comment so the next reader does not
 re-hoist it.
 
@@ -1903,9 +1903,9 @@ and the capability section now shows the dispatch idiom.
 ### DONE: the enumeration itself
 
 The original plan was to generate the table FROM a registry-side
-enumeration of codes — the doctrine that makes `aql describe` unable to
-drift, and the data source `aql explain <code>` would need (R4 in
-`rust-zig-roc-faber-in-aql-report.0.md`). It exists now:
+enumeration of codes — the doctrine that makes `boru describe` unable to
+drift, and the data source `boru explain <code>` would need (R4 in
+`rust-zig-roc-faber-in-boru-report.0.md`). It exists now:
 `eng/go/errorcodes.go` owns the mechanism and the kernel's 45 codes;
 `lang/go/native/errorcodes.go` registers the language layer's 188.
 `eng.ErrorCodes()` / `eng.LookupErrorCode(code)` are the accessors.
@@ -1952,16 +1952,16 @@ artefacts: minted (extracted from construction sites), registered
 | documented ⊆ minted | the original seven phantoms |
 | minted ⊆ registered | a new code reaching users with no deliberate entry |
 | registered ⊆ minted | an entry for a code no site attaches — a phantom one level down |
-| documented ⊆ registered | a documented code `aql explain` could not resolve |
+| documented ⊆ registered | a documented code `boru explain` could not resolve |
 
 Both new directions were verified to fail when violated. `registered ⊆
 documented` is deliberately NOT checked: the table is "common codes", not
 a census.
 
 **One correction to the extraction, found while making it
-bidirectional.** The `Code:` regex also matched `Code: "aql/init"` and
-`Code: "aql/check"` in the LSP server — fields of an LSP `Diagnostic`, not
-of an `AqlError`. They are protocol strings no AQL program can dispatch
+bidirectional.** The `Code:` regex also matched `Code: "boru/init"` and
+`Code: "boru/check"` in the LSP server — fields of an LSP `Diagnostic`, not
+of a `BoruError`. They are protocol strings no BORU program can dispatch
 on. A one-directional gate tolerated them, because extra entries only made
 it more permissive; a bidirectional one would have forced two LSP strings
 into the language's enumeration to stay green. `cmd/go` is therefore no
@@ -2231,7 +2231,7 @@ enforcement branch in `validateReturnTypes` was never executed by the
 suite, because `TestShorthandFnUnionReturnType` calls `checkDiag` and
 nothing else. Re-measured across all three engines:
 
-| form, `Boolean` body | `aql check` | `RunInterp` | **compiled `Run`** |
+| form, `Boolean` body | `boru check` | `RunInterp` | **compiled `Run`** |
 |---|---|---|---|
 | shorthand union return | rejects | rejects | **accepted, returned `true`** |
 | inline union return | rejects | rejects | **accepted, returned `true`** |

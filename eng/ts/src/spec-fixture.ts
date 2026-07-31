@@ -18,8 +18,8 @@ import {
 } from './coretype.ts'
 import { makeIdealHandler, makeScalarHandler, makeScalarOptsHandler } from './make.ts'
 import {
-  AqlError,
-  type AqlType,
+  BoruError,
+  type BoruType,
   Engine,
   type Handler,
   type NativeFunc,
@@ -160,7 +160,7 @@ function enforceTypeConstraint(
     return false
   }
   // Interpret mode.
-  if (!isValueOfType(value, constraint)) throw new AqlError('type_error', detail, word)
+  if (!isValueOfType(value, constraint)) throw new BoruError('type_error', detail, word)
   return false
 }
 
@@ -880,7 +880,7 @@ function registerSpecWords(r: Registry): void {
         args: [TMap, TAny],
         noEvalArgs: new Set([1]),
         handler: () => {
-          throw new AqlError('unsupported', 'def: map-destructuring binding not ported')
+          throw new BoruError('unsupported', 'def: map-destructuring binding not ported')
         },
       },
       {
@@ -904,7 +904,7 @@ function registerSpecWords(r: Registry): void {
           const value = args[1]!
           // A digit-first name is a malformed number, never a name.
           if (/^-?\d/.test(name)) {
-            throw new AqlError('syntax_error', `invalid numeric literal: ${name}`, name)
+            throw new BoruError('syntax_error', `invalid numeric literal: ${name}`, name)
           }
           // Container-typed binding `def NAME:[…]` / `def NAME:{…}`: the
           // tokenizer attached the constraint shape to the name word. The
@@ -995,7 +995,7 @@ function registerSpecWords(r: Registry): void {
         handler: (args) => {
           const elems = args[0]!.asList()
           if (elems.length === 0 || elems.length % 3 !== 0) {
-            throw new AqlError('fn_invalid_spec', `fn: list length must be a non-zero multiple of 3`)
+            throw new BoruError('fn_invalid_spec', `fn: list length must be a non-zero multiple of 3`)
           }
           const sigs: FnSig[] = []
           for (let i = 0; i < elems.length; i += 3) {
@@ -1019,7 +1019,7 @@ function registerSpecWords(r: Registry): void {
         handler: (args) => {
           const elems = args[0]!.asList()
           if (elems.length === 0 || elems.length % 2 !== 0) {
-            throw new AqlError('fnsig_invalid_spec', `fnsig: list length must be a non-zero multiple of 2`)
+            throw new BoruError('fnsig_invalid_spec', `fnsig: list length must be a non-zero multiple of 2`)
           }
           return [newFnUndef(elems)]
         },
@@ -1154,7 +1154,7 @@ function registerSpecWords(r: Registry): void {
       {
         args: [],
         handler: () => {
-          throw new AqlError('flow_error', 'break outside loop')
+          throw new BoruError('flow_error', 'break outside loop')
         },
       },
     ],
@@ -1165,7 +1165,7 @@ function registerSpecWords(r: Registry): void {
       {
         args: [],
         handler: () => {
-          throw new AqlError('flow_error', 'continue outside loop')
+          throw new BoruError('flow_error', 'continue outside loop')
         },
       },
     ],
@@ -1188,7 +1188,7 @@ function registerSpecWords(r: Registry): void {
           const name = args[0]!.asWord().name
           const has = registry.topOfDefStack(name) !== undefined
           if (/^[A-Z]/.test(name) && !has) {
-            throw new AqlError('type_error', `undef ${name}: no such type binding`, name)
+            throw new BoruError('type_error', `undef ${name}: no such type binding`, name)
           }
           if (has) registry.popDef(name)
           return []
@@ -1241,7 +1241,7 @@ function registerSpecWords(r: Registry): void {
   // "type-literal sorts before a concrete inhabitant" rule, cross-leaf numeric
   // magnitude for concrete numbers, then lattice rank. Returns 0 to defer to a
   // canon tiebreak (magnitude-equal cross-leaf pairs, same-rank literals).
-  const familyRoot = (v: Value): AqlType | null => {
+  const familyRoot = (v: Value): BoruType | null => {
     for (const root of [TNumber, TString, TBoolean, TAtom]) {
       if (v.vType.matches(root)) return root
     }
@@ -1417,7 +1417,7 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
     if (stream.i >= stream.s.length) break
 
     // String literals. The eng/spec corpus uses single quotes (the
-    // canonical AQL form); double quotes are also accepted. The closing
+    // canonical BORU form); double quotes are also accepted. The closing
     // quote must match the opener.
     const quote = stream.s[stream.i]
     if (quote === '"' || quote === "'") {
@@ -1841,7 +1841,7 @@ function atomicValue(tok: string): Value {
     case 'none':
       return newNone()
     case 'null':
-      // `null` is the atom 'null' in AQL source (the parser lexes the
+      // `null` is the atom 'null' in BORU source (the parser lexes the
       // JSON null literal as an Atom), distinct from the `none` value.
       return newAtom('null')
   }
@@ -2011,7 +2011,7 @@ function parseFnReturn(v: Value) {
 // overloads whose construction isn't ported yet; their signatures still
 // drive inspect rendering.
 function unsupportedMake(what: string): Value[] {
-  throw new AqlError('unsupported', `make/${what}: not yet ported`)
+  throw new BoruError('unsupported', `make/${what}: not yet ported`)
 }
 
 // buildWordInspection renders a registered word's metadata as an
@@ -2176,7 +2176,7 @@ function buildDefinedInspection(name: string, top: Value): Value {
   return newInspect(om)
 }
 
-// renderStack renders the residual stack as canonical AQL source via
+// renderStack renders the residual stack as canonical BORU source via
 // the ported Canon, matching the Go engspec runner's eng.Canon output.
 function renderStack(stack: Value[]): string {
   return canon(stack)

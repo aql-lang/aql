@@ -554,7 +554,7 @@ func (e *Engine) tryMemberFnArrivalDispatch(valIdx int) bool {
 	}
 	// Plain value params only (the model and the arity claim assume them).
 	// FnParam.Quote needs no separate probe: the body gate above proves an
-	// AQL impl, whose normalizeSig derives QuoteArgs FROM the params.
+	// BORU impl, whose normalizeSig derives QuoteArgs FROM the params.
 	if len(sig.QuoteArgs) != 0 || len(sig.TypeArgs) != 0 ||
 		len(sig.NoEvalArgs) != 0 || len(sig.NoEvalMapArgs) != 0 ||
 		len(sig.RawParens) != 0 || len(sig.FormArgs) != 0 {
@@ -589,7 +589,7 @@ func (e *Engine) tryMemberFnArrivalDispatch(valIdx int) bool {
 	resume := es.Suspend()
 	outs := carrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
 	resume()
-	if len(outs) != 1 { //covergate:allow the declared-single-return gate above fixes carrierResults' count for an AQL-bodied sig (buildFnBodyReturnsFn returns one carrier per declared return) — unreachable without a model fault (§compiler)
+	if len(outs) != 1 { //covergate:allow the declared-single-return gate above fixes carrierResults' count for a BORU-bodied sig (buildFnBodyReturnsFn returns one carrier per declared return) — unreachable without a model fault (§compiler)
 		return false
 	}
 	if !es.RecordDynMethod(v, args, outs, fnDef.Name, v.Pos()) { //covergate:allow the fn carrier is event-produced (memberFnRead tags recorded reads only) and the window args are inert consts, so operand resolution cannot fail — unreachable without a recorder fault (§compiler)

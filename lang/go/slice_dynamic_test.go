@@ -3,7 +3,7 @@ package lang_test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // A word with MIXED-ARITY overloads (e.g. `slice`: 1/2/3-arg forms) dispatched

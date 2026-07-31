@@ -1,4 +1,4 @@
-# AQL Language Specification: Integer × Float numeric cross product
+# BORU Language Specification: Integer × Float numeric cross product
 # Format: input<TAB>expected<TAB>description
 #
 # Postfix form `a b op` computes `a OP b` in natural reading order

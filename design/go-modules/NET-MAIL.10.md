@@ -1,4 +1,4 @@
-# `net/mail` → `aql:mail`  *(NICHE)*
+# `net/mail` → `boru:mail`  *(NICHE)*
 
 > **Status: design proposal — not implemented. NICHE.** A small, curated
 > native module wrapping the address-parsing slice of Go's `net/mail`.
@@ -8,7 +8,7 @@
 ## 1. Package & status
 
 Go package: `net/mail` — parsing of mail messages and RFC 5322 address
-headers. This note specifies `aql:mail` (namespace `Mail`), covering
+headers. This note specifies `boru:mail` (namespace `Mail`), covering
 **only the address-parsing helpers** — the most reusable, value-shaped
 part of the package. Flagged **niche**: useful when handling email
 addresses, but not a core data-language need. Design proposal; no Go code
@@ -25,7 +25,7 @@ exact inverse. `(value, error)` returns collapse to value-or-error.
 ## 3. Import & namespace
 
 ```
-import "aql:mail"            # binds the Mail namespace
+import "boru:mail"            # binds the Mail namespace
 ```
 
 `Mail` is not a builtin type and not an existing module namespace, so the
@@ -37,7 +37,7 @@ import "aql:mail"            # binds the Mail namespace
 Signatures are **top-first, sig order** (position 0 = top of stack). All
 inner natives use `BarrierPos: -1` so the swap form dispatches.
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `mail.ParseAddress` | `parse-address` | `[String] -> [Map]` | Parse a single RFC 5322 address. | `(*mail.Address, error)` → a flat `Map {name, address}` or error (`parse-address`). `name` is the display name (empty if none); `address` is the `local@domain` part. |
 | `mail.ParseAddressList` | `parse-address-list` | `[String] -> [List]` | Parse a comma-separated address list. | `([]*mail.Address, error)` → a `List[Map {name, address}]` or error (`parse-address`). |
@@ -52,7 +52,7 @@ Map.
 ## 6. Errors
 
 No panics — guard with `AsConcreteString` / `RequireConcreteMap`. Failure
-via `r.AqlError(code, detail, word)`:
+via `r.BoruError(code, detail, word)`:
 
 - `parse-address` / `parse-address-list` — Go parse error (malformed
   address) → `parse-address`.
@@ -66,7 +66,7 @@ disk, env, or clock. Runs under any policy.
 
 ## 8. Overlap
 
-None. No existing module parses email addresses. (`aql:net` performs HTTP;
+None. No existing module parses email addresses. (`boru:net` performs HTTP;
 it does not touch mail headers.)
 
 ## 9. Examples
@@ -74,7 +74,7 @@ it does not touch mail headers.)
 All args-before form; never `Mail.word a b`.
 
 ```
-import "aql:mail"
+import "boru:mail"
 
 "Ada <ada@x.io>" Mail.parse-address
 # → {name:"Ada" address:"ada@x.io"}
@@ -89,9 +89,9 @@ import "aql:mail"
 ## 10. Open questions / out of scope
 
 - Out of scope: `mail.ReadMessage` / `mail.Message` (full message
-  parsing with bodies → streaming, belongs with `aql:io` if ever),
+  parsing with bodies → streaming, belongs with `boru:io` if ever),
   `mail.Header` accessors, `mail.ParseDate` (date strings →
-  `aql:time-util` territory). Keep this module to the three address words.
+  `boru:time-util` territory). Keep this module to the three address words.
 
 ## 11. Implementation sketch
 
@@ -104,9 +104,9 @@ Wiring checklist (no code), mirroring `math.go` (pure module):
   Exports: {"Mail": …}}`.
 - Register `BuildMailModule` in the `modules` map in
   `lang/go/modules/modules.go`.
-- `lang/go/modules/docs_mail.go` — `registerDocs("aql:mail", {…})` with a
+- `lang/go/modules/docs_mail.go` — `registerDocs("boru:mail", {…})` with a
   one-liner per export.
-- `lang/spec/module-mail.tsv` — rows leading with `import "aql:mail"`;
+- `lang/spec/module-mail.tsv` — rows leading with `import "boru:mail"`;
   every positive row paired with an `ERROR:<substring>` negative sibling
   (a malformed address → `ERROR:parse-address`).
 - Boundary conversion via `eng.FromNative` / `eng.ToNative`

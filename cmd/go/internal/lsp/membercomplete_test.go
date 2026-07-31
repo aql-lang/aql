@@ -43,7 +43,7 @@ func TestMemberCompletion(t *testing.T) {
 		},
 		{
 			name: "module namespace",
-			src:  "import \"aql:rand\"\nRand.\n",
+			src:  "import \"boru:rand\"\nRand.\n",
 			line: 1, ch: 5,
 			want: []string{"int", "float", "bool", "one-of", "with-seed"},
 		},
@@ -140,11 +140,11 @@ func TestMemberCompletionAllMicronLeaves(t *testing.T) {
 }
 
 // TestModuleNamespaceIrregular verifies namespaces whose bound name is NOT a
-// plain title-case of the id (aql:io → IO) resolve, since we match against the
+// plain title-case of the id (boru:io → IO) resolve, since we match against the
 // module's real Exports keys rather than guessing.
 func TestModuleNamespaceIrregular(t *testing.T) {
 	s := newServer(strings.NewReader(""), io.Discard, io.Discard)
-	items := s.completionItemsAt("import \"aql:io\"\nIO.\n", Position{Line: 1, Character: 3})
+	items := s.completionItemsAt("import \"boru:io\"\nIO.\n", Position{Line: 1, Character: 3})
 	if len(items) == 0 {
 		t.Fatal("IO. produced no module-export completions")
 	}

@@ -3,8 +3,8 @@ package modules
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestW8EmitAutoEncodeError drives emitAutoHandler's encode-error arms

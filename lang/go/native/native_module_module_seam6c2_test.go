@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // Seam-6 coverage for native_module_module.go (design/TEST-SEAMS.10.md).
@@ -129,15 +129,15 @@ func TestSeam6C2ExportTypeLiteralRejected(t *testing.T) {
 func TestSeam6C2ResolveModuleMainBadJSON(t *testing.T) {
 	r := seam5Reg(t)
 	mem := capabilities.NewMem()
-	mem.Files["mod/.aql/aql.json"] = []byte("{not json")
+	mem.Files["mod/.boru/boru.json"] = []byte("{not json")
 	SetHostFileOps(r, mem)
-	if got := resolveModuleMain(r, "mod"); got != "index.aql" {
-		t.Fatalf("bad aql.json must fall back to index.aql, got %q", got)
+	if got := resolveModuleMain(r, "mod"); got != "index.boru" {
+		t.Fatalf("bad boru.json must fall back to index.boru, got %q", got)
 	}
 	// Positive pair: a valid main property is honoured.
-	mem.Files["mod/.aql/aql.json"] = []byte(`{"main":"start.aql"}`)
-	if got := resolveModuleMain(r, "mod"); got != "start.aql" {
-		t.Fatalf("expected start.aql, got %q", got)
+	mem.Files["mod/.boru/boru.json"] = []byte(`{"main":"start.boru"}`)
+	if got := resolveModuleMain(r, "mod"); got != "start.boru" {
+		t.Fatalf("expected start.boru, got %q", got)
 	}
 }
 
@@ -164,18 +164,18 @@ func TestSeam6C2LoadModuleResourcesArms(t *testing.T) {
 	mem := capabilities.NewMem()
 	SetHostFileOps(r, mem)
 
-	// Malformed aql.json: silently no resources.
-	mem.Files["mod/.aql/aql.json"] = []byte("{broken")
+	// Malformed boru.json: silently no resources.
+	mem.Files["mod/.boru/boru.json"] = []byte("{broken")
 	desc := ModuleDesc{Exports: map[string]*OrderedMap{}}
 	if err := loadModuleResources(r, "mod", &desc); err != nil {
-		t.Fatalf("malformed aql.json must be ignored, got %v", err)
+		t.Fatalf("malformed boru.json must be ignored, got %v", err)
 	}
 	if _, ok := desc.Exports["resource"]; ok {
-		t.Fatal("no resource export expected for malformed aql.json")
+		t.Fatal("no resource export expected for malformed boru.json")
 	}
 
 	// Unsupported resource file format.
-	mem.Files["mod/.aql/aql.json"] = []byte(`{"resource":{"k":"data.zzz"}}`)
+	mem.Files["mod/.boru/boru.json"] = []byte(`{"resource":{"k":"data.zzz"}}`)
 	desc = ModuleDesc{Exports: map[string]*OrderedMap{}}
 	err := loadModuleResources(r, "mod", &desc)
 	if err == nil || !strings.Contains(err.Error(), "unsupported file format") {
@@ -183,7 +183,7 @@ func TestSeam6C2LoadModuleResourcesArms(t *testing.T) {
 	}
 
 	// Read failure for a well-formed resource entry.
-	mem.Files["mod/.aql/aql.json"] = []byte(`{"resource":{"k":"missing.json"}}`)
+	mem.Files["mod/.boru/boru.json"] = []byte(`{"resource":{"k":"missing.json"}}`)
 	desc = ModuleDesc{Exports: map[string]*OrderedMap{}}
 	err = loadModuleResources(r, "mod", &desc)
 	if err == nil || !strings.Contains(err.Error(), `resource "k"`) {
@@ -191,7 +191,7 @@ func TestSeam6C2LoadModuleResourcesArms(t *testing.T) {
 	}
 
 	// Positive pair: a resolvable resource lands in the export map.
-	mem.Files["mod/.aql/aql.json"] = []byte(`{"resource":{"k":"ok.json"}}`)
+	mem.Files["mod/.boru/boru.json"] = []byte(`{"resource":{"k":"ok.json"}}`)
 	mem.Files["mod/ok.json"] = []byte(`{"a": 1}`)
 	desc = ModuleDesc{Exports: map[string]*OrderedMap{}}
 	if err := loadModuleResources(r, "mod", &desc); err != nil {
@@ -237,14 +237,14 @@ func TestSeam6C2ResolveNativeModInstallError(t *testing.T) {
 	r := seam5Reg(t)
 	em := NewOrderedMap()
 	em.Set("def", NewFnDef(NewWordExtension(OwnerProgram, "def", nil)))
-	desc := ModuleDesc{ID: "m3", Ref: "aql:evil", Exports: map[string]*OrderedMap{"pkg": em}}
+	desc := ModuleDesc{ID: "m3", Ref: "boru:evil", Exports: map[string]*OrderedMap{"pkg": em}}
 	r.Modules.Resolver = func(name string, _ *Registry) (ModuleDesc, error) {
 		if name != "evil" {
 			t.Fatalf("unexpected module name %q", name)
 		}
 		return desc, nil
 	}
-	err := resolveNativeMod(r, "aql:evil")
+	err := resolveNativeMod(r, "boru:evil")
 	if err == nil || !strings.Contains(err.Error(), "sealed word") {
 		t.Fatalf("expected sealed-word rejection through resolver, got %v", err)
 	}

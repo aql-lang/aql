@@ -6,7 +6,7 @@ import (
 )
 
 // ModuleInfo is one row of the built-in module catalog: the bare module id
-// (the part after "aql:", e.g. "type-util") and its one-line summary.
+// (the part after "boru:", e.g. "type-util") and its one-line summary.
 type ModuleInfo struct {
 	Name    string
 	Summary string
@@ -38,17 +38,17 @@ var moduleCatalog = []ModuleInfo{
 	{"string-util", "String manipulation: concat, split, trim, upper, lower, …."},
 	{"minilang", "Embedded mini-languages behind the `mini` word: re (Go regexp), bf (brainfuck), gex (globs), register."},
 	{"parselang", "Named parsers behind the `parse` word: register a parser, parse a source into an AST."},
-	{"cli", "Command-line argument parsing, written in AQL: a spec map drives parse / dispatch / usage / main, with argv always an explicit parameter."},
+	{"cli", "Command-line argument parsing, written in BORU: a spec map drives parse / dispatch / usage / main, with argv always an explicit parameter."},
 	{"sift", "Semi-structured text parsing (the awk tier): kv, blocks, columns, dsv, fixed, and pattern families via the Sift namespace (Sift.parse / define / …), plus spec-map extensions."},
 	{"emitlang", "Emit data structures to strings behind the `emit` word: json, jsonic, csv, tsv, yaml, xml, toml, ini."},
 	{"parse", "Define custom parsers: ABNF grammars, declarative rules, lex matchers, and custom-type actions, registered as `parse` kinds."},
 	{"model", "Build a system model from .jsonic source (via aontu unification) and run generator actions over it: new, run, start, stop, model."},
 	{"log", "Structured logging: severity levels, fields, console/memory sinks, a global threshold."},
 	{"debug", "Debugging: print taps, structural/system introspection, value sizing, and performance measurement."},
-	{"repl", "A socket REPL server and client, written in AQL over aql:net."},
-	{"fmt", "Source formatting: pretty-print AQL into canonical layout (shared with the `aql fmt` CLI)."},
+	{"repl", "A socket REPL server and client, written in BORU over boru:net."},
+	{"fmt", "Source formatting: pretty-print BORU into canonical layout (shared with the `boru fmt` CLI)."},
 	{"vault", "Bridge to the host's secret vault: status, secrets, capabilities, passwords, maintenance, multi-vault — behind a host-injected backend."},
-	{"vault-tui", "The interactive vault TUI, written in AQL over aql:tui + aql:vault (the `aql vault -i --aql` app)."},
+	{"vault-tui", "The interactive vault TUI, written in BORU over boru:tui + boru:vault (the `boru vault -i --boru` app)."},
 }
 
 // ModuleCatalog returns the built-in module catalog sorted by name. The
@@ -73,7 +73,7 @@ func ModuleSummary(name string) string {
 
 // WriteWordsByCategory writes the "words grouped by category" block: each
 // category's name and summary, then its words wrapped under an indent. Shared
-// by the CLI `aql describe` index and the REPL `describe` word so the two read
+// by the CLI `boru describe` index and the REPL `describe` word so the two read
 // identically.
 func WriteWordsByCategory(w io.Writer) {
 	for _, cat := range categories {
@@ -83,7 +83,7 @@ func WriteWordsByCategory(w io.Writer) {
 		// them. Without this they read as builtins and every one of them
 		// fails as undefined_word in a bare program.
 		for _, id := range cat.ModuleIDs() {
-			writeLine(w, "    (import \"aql:"+id+"\")")
+			writeLine(w, "    (import \"boru:"+id+"\")")
 			writeWordGrid(w, cat.Module[id])
 		}
 	}
@@ -115,7 +115,7 @@ func WriteCategory(w io.Writer, cat Category) {
 			writeLine(w, "")
 		}
 		wrote = true
-		writeLine(w, "Words from import \"aql:"+id+"\" (call as <Export>.<word>):")
+		writeLine(w, "Words from import \"boru:"+id+"\" (call as <Export>.<word>):")
 		for _, word := range cat.Module[id] {
 			writeLine(w, "  "+pad(word, 12)+" "+wordSummary(word))
 		}

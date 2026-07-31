@@ -117,7 +117,7 @@ func (e *Engine) scanMacroOperands(fnDef *FnDefInfo, arity, valIdx int) ([]Value
 		idx++
 	}
 	if len(operands) < arity {
-		return nil, 0, &AqlError{
+		return nil, 0, &BoruError{
 			Code: "macro_error",
 			Detail: fmt.Sprintf("macro %s expects %d operand(s), got %d",
 				fnDef.Name, arity, len(operands)),
@@ -128,7 +128,7 @@ func (e *Engine) scanMacroOperands(fnDef *FnDefInfo, arity, valIdx int) ([]Value
 
 // ExpandMacroWith is the exported entry to expandMacroWith for host packages
 // that hold a macro FnDef directly (rather than by name) — the minilang
-// AQL compile-hook path expands the `compile_<kind>` macro against the
+// BORU compile-hook path expands the `compile_<kind>` macro against the
 // literal src and opts. Returns the expanded token list.
 func ExpandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, error) {
 	return expandMacroWith(r, fnDef, operands)
@@ -171,7 +171,7 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 	}
 	if len(res) == 0 {
 		r.Defs.Restore(snap)
-		return nil, &AqlError{Code: "macro_error",
+		return nil, &BoruError{Code: "macro_error",
 			Detail: fmt.Sprintf("macro %s: template produced no value", fnDef.Name)}
 	}
 	template := res[len(res)-1]
@@ -258,7 +258,7 @@ func expandTemplate(r *Registry, toks []Value, bindings map[string]Value, rename
 			w, _ := AsWord(t)
 			if w.Name == "unquote" || w.Name == "splice" {
 				if i+1 >= len(toks) {
-					return nil, &AqlError{Code: "macro_error",
+					return nil, &BoruError{Code: "macro_error",
 						Detail: w.Name + ": missing operand in template"}
 				}
 				// The escape's operand is USER-origin: resolved against the
@@ -270,7 +270,7 @@ func expandTemplate(r *Registry, toks []Value, bindings map[string]Value, rename
 				i++ // consume the escape's operand
 				if w.Name == "splice" {
 					if !val.Parent.Equal(TList) || !IsConcrete(val) {
-						return nil, &AqlError{Code: "macro_error",
+						return nil, &BoruError{Code: "macro_error",
 							Detail: "splice: operand did not evaluate to a list"}
 					}
 					l, _ := AsList(val)
@@ -319,7 +319,7 @@ func resolveTemplateEscape(r *Registry, operand Value, bindings map[string]Value
 		return Value{}, err
 	}
 	if len(res) == 0 {
-		return Value{}, &AqlError{Code: "macro_error",
+		return Value{}, &BoruError{Code: "macro_error",
 			Detail: "unquote/splice operand produced no value"}
 	}
 	return asTemplateNode(res[len(res)-1]), nil
@@ -390,22 +390,22 @@ func ExpandMacroForm(r *Registry, form Value) ([]Value, error) {
 		l, _ := AsList(form)
 		toks = l.Slice()
 	default:
-		return nil, &AqlError{Code: "macroexpand_error",
+		return nil, &BoruError{Code: "macroexpand_error",
 			Detail: "macroexpand: expected a (macro operand…) form"}
 	}
 	if len(toks) == 0 || !IsWord(toks[0]) {
-		return nil, &AqlError{Code: "macroexpand_error",
+		return nil, &BoruError{Code: "macroexpand_error",
 			Detail: "macroexpand: form must start with a macro word"}
 	}
 	name, _ := AsWord(toks[0])
 	bound, ok := r.Defs.Top(name.Name)
 	if !ok {
-		return nil, &AqlError{Code: "macroexpand_error",
+		return nil, &BoruError{Code: "macroexpand_error",
 			Detail: "macroexpand: undefined macro " + name.Name}
 	}
 	fnDef, ok := bound.Data.(FnDefInfo)
 	if !ok || !fnDef.Macro {
-		return nil, &AqlError{Code: "macroexpand_error",
+		return nil, &BoruError{Code: "macroexpand_error",
 			Detail: "macroexpand: " + name.Name + " is not a macro"}
 	}
 	first, err := expandMacroWith(r, &fnDef, toks[1:])
@@ -442,7 +442,7 @@ func macroByName(r *Registry, name string) (FnDefInfo, bool) {
 // runaway self-expansion.
 func expandAllMacros(r *Registry, toks []Value, depth int) ([]Value, error) {
 	if depth > maxMacroExpandDepth {
-		return nil, &AqlError{Code: "macroexpand_error",
+		return nil, &BoruError{Code: "macroexpand_error",
 			Detail: "macroexpand: expansion too deep (recursive macro?)"}
 	}
 	out := make([]Value, 0, len(toks))

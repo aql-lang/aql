@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // behave unify/q installs a custom Unifier on a user-defined type.
@@ -15,7 +15,7 @@ import (
 //  1. Mint a refine subtype.
 //  2. Install a Unifier on it via `behave unify/q`.
 //  3. Verify the body fires when two values of that type are unified
-//     via the AQL `unify` word.
+//     via the BORU `unify` word.
 
 func TestBehaveUnify_BodyFires(t *testing.T) {
 	got := runOne(t, `def Item refine Integer

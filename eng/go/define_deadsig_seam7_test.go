@@ -21,8 +21,8 @@ func TestS7DefineMemberTypeMicronNaming(t *testing.T) {
 // --- sigimpl.go -----------------------------------------------------------
 
 func TestS7SigImplMarkersAndNilImpl(t *testing.T) {
-	(&GoImpl{}).sigImpl()  // zero-statement seal marker
-	(&AQLImpl{}).sigImpl() // zero-statement seal marker
+	(&GoImpl{}).sigImpl()   // zero-statement seal marker
+	(&BORUImpl{}).sigImpl() // zero-statement seal marker
 	// A signature with no implementation returns a nil dispatch handler.
 	var s Signature
 	if s.DispatchHandler() != nil {

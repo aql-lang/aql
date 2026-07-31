@@ -1,9 +1,9 @@
-# Formal-methods findings — what mechanization taught us about AQL
+# Formal-methods findings — what mechanization taught us about BORU
 
 **Status:** findings note (`.0`), from the formal-verification work on
-branch `claude/formal-methods-aql-hdubtm`. Written against `7373dcf`.
+branch `claude/formal-methods-boru-hdubtm`. Written against `7373dcf`.
 
-This note records what we *learned about AQL* by (a) mechanizing a
+This note records what we *learned about BORU* by (a) mechanizing a
 fragment of `FORMAL-SPEC.md` in Lean, (b) differential-testing the model
 against the real engine, and (c) probing the engine directly. It is
 deliberately separate from the plan
@@ -16,20 +16,20 @@ an explicit account of how much it licenses us to trust.
 - A deep embedding of a tractable fragment of the abstract machine
   (`FORMAL-SPEC` §4 + §6): integer/boolean literals, the data stack,
   variable-arity words, forward collection, and the `end` barrier
-  ([`formal/lean/AqlCore.lean`](../formal/lean/AqlCore.lean)).
+  ([`formal/lean/BoruCore.lean`](../formal/lean/BoruCore.lean)).
 - Machine-checked theorems for that fragment: source-spelling
   equivalence, arity-driven collection with leftover, the barrier
   negative result, determinism, and reflexivity/transitivity of the type
   lattice.
 - A differential "tracer-bullet" harness
   ([`formal/lean/harness/tracer.py`](../formal/lean/harness/tracer.py))
-  that runs shared programs through *both* the Lean model and `aql do`:
+  that runs shared programs through *both* the Lean model and `boru do`:
   currently **22/22 agree** on the covered fragment.
 - Direct engine probing of type-mixing behavior across the native words.
 
 Scope of the fragment: 7 native words, scalar literals, no functions,
 modules, effects, concurrency, macros, refinements, or parser. Findings
-below are about AQL *as observed through this slice* — see §4 for the
+below are about BORU *as observed through this slice* — see §4 for the
 ceiling.
 
 ## 2. What was confirmed (the design holds, in the fragment)
@@ -41,7 +41,7 @@ ceiling.
   including the leftover behaviour (`add 1 2 7 => 3 7`).
 - **Source-spelling equivalence is true and is now a theorem.** For any
   binary word and operands, `y x op`, `y op x`, `op x y` collect the same
-  argument vector and compute the same result. AQL's signature property
+  argument vector and compute the same result. BORU's signature property
   survives a proof checker.
 - **The `end` barrier is load-bearing, not cosmetic.** `gt 3 end 5`
   errors because the barrier blocks forward collection and under-supplies
@@ -54,7 +54,7 @@ ceiling.
 
 ## 3. The main finding: typing is *per-word*, not a uniform lattice
 
-The README frames AQL as "strongly typed" and `FORMAL-SPEC` §5 presents a
+The README frames BORU as "strongly typed" and `FORMAL-SPEC` §5 presents a
 clean type lattice with signature dispatch. Probing the native words
 shows the runtime reality is a set of **individually-typed multimethods
 with idiosyncratic domains**, not a single discipline:
@@ -76,7 +76,7 @@ The takeaways:
    to the lattice-with-dispatch the prose suggests.
 
 2. **The static checker already tracks this — it is the spec/docs/model
-   that lag.** Importantly, `aql check` is *consistent with the runtime*
+   that lag.** Importantly, `boru check` is *consistent with the runtime*
    on these cases: it accepts `add true 2` and `not 5` (which run to
    values) and rejects `gt 5 true` (which errors at runtime, with
    "assuming best-fit candidate for analysis"). So this is **not** a
@@ -101,10 +101,10 @@ Trust must be split by claim; the scope ceiling is low.
 | Claim | Confidence | Ceiling / why |
 |---|---|---|
 | The Lean theorems are correct | **very high** | kernel-checked, no `sorry` |
-| …and they describe AQL | **narrow** | a 7-word scalar fragment only |
+| …and they describe BORU | **narrow** | a 7-word scalar fragment only |
 | The model reflects the engine | **moderate, bounded** | 22 differential cases agree — *testing, not proof*; silent on unprobed inputs (overflow, deep chains, nesting, large values) |
 | The engine is correct | **unestablished** | nothing binds the proofs to the Go code |
-| AQL "the language" is trustworthy | **largely untouched** | checker, type soundness, effects, concurrency, macros, parser all unexamined |
+| BORU "the language" is trustworthy | **largely untouched** | checker, type soundness, effects, concurrency, macros, parser all unexamined |
 
 In one line: we earned **local** trust — forward collection and
 spelling-equivalence are faithfully modeled and provably hold in the
@@ -114,7 +114,7 @@ the engine's correctness or the type system's soundness.
 ## 5. A methodological result worth keeping
 
 The model-plus-harness loop **already paid for itself**: it caught wrong
-assumptions about AQL's typing (the author of the model expected
+assumptions about BORU's typing (the author of the model expected
 `not 5` and `add true 2` to error; they don't). Even at 22 cases the
 harness functioned as a drift detector against the real semantics. As
 coverage widens, divergences will surface as failing rows rather than
@@ -136,5 +136,5 @@ asset even though any single run is only testing.
    milestone — add the per-word domains above so the harness can cover
    the currently-excluded heterogeneous cases.
 4. **Widen the harness** to the `eng/spec/*.tsv` corpus and the
-   `aql:rand` PBT generators, turning 22 hand cases into thousands
+   `boru:rand` PBT generators, turning 22 hand cases into thousands
    (highest-value, lowest-risk next step).

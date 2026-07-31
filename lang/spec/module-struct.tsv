@@ -1,68 +1,68 @@
-# AQL Language Specification: the aql:struct module
+# BORU Language Specification: the boru:struct module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of voxgig-struct data-manipulation utilities. These
 # words were moved out of the core registry; they are reached only after
-# `import`, under the `Struct` namespace: `import "aql:struct-util"
+# `import`, under the `Struct` namespace: `import "boru:struct-util"
 # StructUtil.word args`.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  merge — deep, index-wise merge (later argument wins)
-import "aql:struct-util" StructUtil.merge {a:1 b:2} {b:3 c:4}	{a:1 b:3 c:4}	overlapping key b is overridden
-import "aql:struct-util" StructUtil.merge {a:{x:1 y:2}} {a:{y:3 z:4}}	{a:{x:1 y:3 z:4}}	merge recurses into nested maps
+import "boru:struct-util" StructUtil.merge {a:1 b:2} {b:3 c:4}	{a:1 b:3 c:4}	overlapping key b is overridden
+import "boru:struct-util" StructUtil.merge {a:{x:1 y:2}} {a:{y:3 z:4}}	{a:{x:1 y:3 z:4}}	merge recurses into nested maps
 #
 # §2  getpath — read a dotted path
-import "aql:struct-util" StructUtil.getpath "a.b" {a:{b:42}}	42	nested path read
-import "aql:struct-util" StructUtil.getpath "name" {name:'Alice'}	'Alice'	top-level key read
+import "boru:struct-util" StructUtil.getpath "a.b" {a:{b:42}}	42	nested path read
+import "boru:struct-util" StructUtil.getpath "name" {name:'Alice'}	'Alice'	top-level key read
 #
 # §3  setpath — write at a path (returns a new structure)
-import "aql:struct-util" StructUtil.setpath {a:1} "b" 99	{a:1 b:99}	add a key by path
-import "aql:struct-util" StructUtil.setpath {a:{b:1} c:2} "a.b" 99	{a:{b:99} c:2}	nested set keeps the outer wrapper + siblings
-import "aql:struct-util" StructUtil.setpath {a:1} "x.y" 5	{a:1 x:{y:5}}	a nested path creates intermediate maps
-import "aql:struct-util" StructUtil.setpath {xs:[10 20 30]} "xs.1" 9	{xs:[10 9 30]}	a numeric segment indexes a list
+import "boru:struct-util" StructUtil.setpath {a:1} "b" 99	{a:1 b:99}	add a key by path
+import "boru:struct-util" StructUtil.setpath {a:{b:1} c:2} "a.b" 99	{a:{b:99} c:2}	nested set keeps the outer wrapper + siblings
+import "boru:struct-util" StructUtil.setpath {a:1} "x.y" 5	{a:1 x:{y:5}}	a nested path creates intermediate maps
+import "boru:struct-util" StructUtil.setpath {xs:[10 20 30]} "xs.1" 9	{xs:[10 9 30]}	a numeric segment indexes a list
 #
 # §4  clone — deep copy (forward or stack form)
-import "aql:struct-util" StructUtil.clone {a:1 b:2}	{a:1 b:2}	forward form
-import "aql:struct-util" {a:1 b:2} StructUtil.clone	{a:1 b:2}	stack form also works
+import "boru:struct-util" StructUtil.clone {a:1 b:2}	{a:1 b:2}	forward form
+import "boru:struct-util" {a:1 b:2} StructUtil.clone	{a:1 b:2}	stack form also works
 #
 # §5  items — map entries as [key value] pairs
-import "aql:struct-util" StructUtil.items {a:1 b:2}	[['a' 1] ['b' 2]]	ordered key/value pairs
+import "boru:struct-util" StructUtil.items {a:1 b:2}	[['a' 1] ['b' 2]]	ordered key/value pairs
 #
 # §6  validate — check data against a shape spec (returns the validated spec)
-import "aql:struct-util" StructUtil.validate {name:"$STRING"} {name:'Alice'}	{name:'$STRING'}	conforming data validates against the spec
+import "boru:struct-util" StructUtil.validate {name:"$STRING"} {name:'Alice'}	{name:'$STRING'}	conforming data validates against the spec
 #
 # §7  transform — shape data via a spec (forward: spec then data)
-import "aql:struct-util" StructUtil.transform {x:99} {a:'1'}	{x:99}	literal spec value passes through
+import "boru:struct-util" StructUtil.transform {x:99} {a:'1'}	{x:99}	literal spec value passes through
 #
 # §8  jsonify — serialise a value (also moved here; output verified in the
 #     Go tests, the pretty-printed multiline form isn't tsv-expressible)
 #
 # §8b  nodify — project a value to its Node/Scalar form (pass-through when no
 #      projection behavior is registered for the type)
-import "aql:struct-util" StructUtil.nodify {a:1 b:2}	{a:1 b:2}	plain Map passes through
+import "boru:struct-util" StructUtil.nodify {a:1 b:2}	{a:1 b:2}	plain Map passes through
 #
 # §9  swap form dispatches through the namespace
-import "aql:struct-util" {a:1} StructUtil.merge {b:2}	{a:1 b:2}	data-on-stack + forward arg
+import "boru:struct-util" {a:1} StructUtil.merge {b:2}	{a:1 b:2}	data-on-stack + forward arg
 #
 # §10  negative — unbound without import
 StructUtil.merge {a:1} {b:2}	ERROR:undefined_word	`Struct` is unbound without `import`
 jsonify {a:1}	ERROR:undefined_word	jsonify also moved out of core
 #
 # §11  inject — resolve backtick `$`-path references against a store
-import "aql:struct-util" StructUtil.inject {greeting:'`name`'} {name:'Alice'}	{greeting:'Alice'}	`name` is replaced from the store
+import "boru:struct-util" StructUtil.inject {greeting:'`name`'} {name:'Alice'}	{greeting:'Alice'}	`name` is replaced from the store
 #
 # §12  selector — query-select children matching a spec
-import "aql:struct-util" StructUtil.selector {color:'red'} {a:{color:'red'} b:{color:'blue'}}	[{$KEY:'a' color:'red'}]	matching child carries its $KEY
+import "boru:struct-util" StructUtil.selector {color:'red'} {a:{color:'red'} b:{color:'blue'}}	[{$KEY:'a' color:'red'}]	matching child carries its $KEY
 #
 # §13  walk — collect leaf path/value pairs
-import "aql:struct-util" StructUtil.walk {a:1 b:{c:2}}	[{path:'a' value:1} {path:'b.c' value:2}]	dotted leaf paths
+import "boru:struct-util" StructUtil.walk {a:1 b:{c:2}}	[{path:'a' value:1} {path:'b.c' value:2}]	dotted leaf paths
 #
 # §14  jsonify — serialise a value. Scalars render on one line (the
 #      pretty-printed multiline form for maps/lists isn't tsv-expressible —
 #      see §8 — so the Map output is verified in the Go tests).
-import "aql:struct-util" StructUtil.jsonify 42	'42'	a number
-import "aql:struct-util" StructUtil.jsonify 'hi'	'"hi"'	a string is JSON-quoted
-import "aql:struct-util" StructUtil.jsonify true	'true'	a boolean
+import "boru:struct-util" StructUtil.jsonify 42	'42'	a number
+import "boru:struct-util" StructUtil.jsonify 'hi'	'"hi"'	a string is JSON-quoted
+import "boru:struct-util" StructUtil.jsonify true	'true'	a boolean
 #
 # §  reify — hydrate a class instance from JSON text or a Node; the
 #    inverse of the instance-aware jsonify. Explicit class target (with
@@ -71,53 +71,53 @@ import "aql:struct-util" StructUtil.jsonify true	'true'	a boolean
 #    defaults fill, required fields enforced, predicates run, unknown
 #    keys error. jsonify carries $class on class instances and escapes
 #    user $-keys to $$ (spoof-proof round-trip).
-import "aql:struct-util"  def Point class {x:1, y:2} def p (StructUtil.reify Point {x:9}) p typeof	Point	reify from a Node constructs a typed instance
-import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.reify Point {x:9}) dot y	2	…with schema defaults filling omitted fields
-import "aql:struct-util"  def Point class {x:1} (StructUtil.reify Point (StructUtil.jsonify (make Point {x:9}))) dot x	9	full jsonify→reify round trip through JSON text
-import "aql:struct-util"  def Circle class {r:1.0} def Square class {side:1.0} def Shape (Circle tor Square) (StructUtil.reify Shape (StructUtil.jsonify (make Square {side:4.0}))) typeof	Square	union-bounded: $class selects the member
-import "aql:struct-util"  def Circle class {r:1.0} def Square class {side:1.0} def Shape (Circle tor Square) StructUtil.reify Shape {r:2.0}	ERROR:needs a $class	a union target without $class is a loud error
-import "aql:struct-util"  def Point class {x:1} StructUtil.reify Point {z:5}	ERROR:unknown field	an undeclared key errors (hydration is sealed construction)
-import "aql:struct-util"  def Radius (Float gte 0.0) def Circle class {r:Radius} StructUtil.reify Circle '{"r": -1.5}'	ERROR:does not satisfy	predicate field types run during hydration
-import "aql:struct-util"  def Radius (Float gte 0.0) def Circle class {r:Radius} (StructUtil.reify Circle '{"r": 5}') dot r	5.0	schema-driven recovery: a JSON integer lands as the Float the field declares
-import "aql:struct-util"  StructUtil.reify Integer {x:1}	ERROR:must be a class	a non-class target is rejected
-import "aql:struct-util"  def P class {name:'x' note:none} (StructUtil.reify P (StructUtil.jsonify (make P {note:none}))) dot note	none	JSON null hydrates as the CONCRETE none value (the exact jsonify→reify inverse), not the None type literal
+import "boru:struct-util"  def Point class {x:1, y:2} def p (StructUtil.reify Point {x:9}) p typeof	Point	reify from a Node constructs a typed instance
+import "boru:struct-util"  def Point class {x:1, y:2} (StructUtil.reify Point {x:9}) dot y	2	…with schema defaults filling omitted fields
+import "boru:struct-util"  def Point class {x:1} (StructUtil.reify Point (StructUtil.jsonify (make Point {x:9}))) dot x	9	full jsonify→reify round trip through JSON text
+import "boru:struct-util"  def Circle class {r:1.0} def Square class {side:1.0} def Shape (Circle tor Square) (StructUtil.reify Shape (StructUtil.jsonify (make Square {side:4.0}))) typeof	Square	union-bounded: $class selects the member
+import "boru:struct-util"  def Circle class {r:1.0} def Square class {side:1.0} def Shape (Circle tor Square) StructUtil.reify Shape {r:2.0}	ERROR:needs a $class	a union target without $class is a loud error
+import "boru:struct-util"  def Point class {x:1} StructUtil.reify Point {z:5}	ERROR:unknown field	an undeclared key errors (hydration is sealed construction)
+import "boru:struct-util"  def Radius (Float gte 0.0) def Circle class {r:Radius} StructUtil.reify Circle '{"r": -1.5}'	ERROR:does not satisfy	predicate field types run during hydration
+import "boru:struct-util"  def Radius (Float gte 0.0) def Circle class {r:Radius} (StructUtil.reify Circle '{"r": 5}') dot r	5.0	schema-driven recovery: a JSON integer lands as the Float the field declares
+import "boru:struct-util"  StructUtil.reify Integer {x:1}	ERROR:must be a class	a non-class target is rejected
+import "boru:struct-util"  def P class {name:'x' note:none} (StructUtil.reify P (StructUtil.jsonify (make P {note:none}))) dot note	none	JSON null hydrates as the CONCRETE none value (the exact jsonify→reify inverse), not the None type literal
 #
 # §  struct words on class and resource instances — type-preserving.
 #    clone gives a fresh instance of the same type (deq-equal,
 #    eq-distinct); setpath round-trips through construction, so a
 #    class edit runs the same strict schema checks as make and the
 #    receiver is untouched; walk sees the field projection.
-import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.clone (make Point {})) typeof	Point	clone preserves the class
-import "aql:struct-util"  def Point class {x:1} def p (make Point {}) (StructUtil.clone p) deq p	true	a clone is structurally equal…
-import "aql:struct-util"  def Point class {x:1} def p (make Point {}) (StructUtil.clone p) eq p	false	…but a distinct instance (fresh field map)
-import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.setpath (make Point {}) "x" 9) typeof	Point	setpath on an instance returns a NEW instance
-import "aql:struct-util"  def Point class {x:1, y:2} (StructUtil.setpath (make Point {}) "x" 9) dot x	9	…with the edit applied
-import "aql:struct-util"  def Point class {x:1} def p (make Point {}) def w (StructUtil.setpath p "x" 9) p dot x	1	…and the receiver untouched
-import "aql:struct-util"  def Point class {x:1} StructUtil.setpath (make Point {}) "nope" 9	ERROR:unknown field	a class edit re-makes: unknown fields stay loud
-import "aql:struct-util"  def Point class {x:1} StructUtil.setpath (make Point {}) "x" 'hi'	ERROR:expected Integer	…and off-schema values stay loud
-import "aql:struct-util"  def Point class {x:1} StructUtil.walk (make Point {})	[{path:'x' value:1}]	walk sees the instance's field projection
+import "boru:struct-util"  def Point class {x:1, y:2} (StructUtil.clone (make Point {})) typeof	Point	clone preserves the class
+import "boru:struct-util"  def Point class {x:1} def p (make Point {}) (StructUtil.clone p) deq p	true	a clone is structurally equal…
+import "boru:struct-util"  def Point class {x:1} def p (make Point {}) (StructUtil.clone p) eq p	false	…but a distinct instance (fresh field map)
+import "boru:struct-util"  def Point class {x:1, y:2} (StructUtil.setpath (make Point {}) "x" 9) typeof	Point	setpath on an instance returns a NEW instance
+import "boru:struct-util"  def Point class {x:1, y:2} (StructUtil.setpath (make Point {}) "x" 9) dot x	9	…with the edit applied
+import "boru:struct-util"  def Point class {x:1} def p (make Point {}) def w (StructUtil.setpath p "x" 9) p dot x	1	…and the receiver untouched
+import "boru:struct-util"  def Point class {x:1} StructUtil.setpath (make Point {}) "nope" 9	ERROR:unknown field	a class edit re-makes: unknown fields stay loud
+import "boru:struct-util"  def Point class {x:1} StructUtil.setpath (make Point {}) "x" 'hi'	ERROR:expected Integer	…and off-schema values stay loud
+import "boru:struct-util"  def Point class {x:1} StructUtil.walk (make Point {})	[{path:'x' value:1}]	walk sees the instance's field projection
 #
 # §  parse — jsonic/JSON text → data (the decode complement of
 #    jsonify). DATA context: nothing evaluates; the jsonic superset is
 #    accepted (unquoted keys, optional commas), so strict JSON parses
-#    too. Malformed input raises [aql/parse_error].
-import "aql:struct-util" StructUtil.parse "{a:1, b:[2,3]}"	{a:1 b:[2 3]}	jsonic text decodes to a Map
-import "aql:struct-util" StructUtil.parse "[1, 2, 3]"	[1 2 3]	a JSON array decodes to a List
-import "aql:struct-util" StructUtil.parse '{"a": 1}'	{a:1}	strict JSON is valid jsonic
-import "aql:struct-util" StructUtil.parse "{val:'if'}"	{val:'if'}	data context — text stays a string, never a word
-import "aql:struct-util" StructUtil.parse (StructUtil.jsonify {a:1 b:[2 3]})	{a:1 b:[2 3]}	jsonify→parse round trip
-import "aql:struct-util" StructUtil.parse "2.0"	2.0	a dot-bearing number keeps Float type (was collapsing to Integer 2)
-import "aql:struct-util" StructUtil.parse "2"	2	a plain integer stays Integer
-import "aql:struct-util" StructUtil.parse "[1.0, 2]"	[1.0 2]	per-element numeric fidelity — Float and Integer preserved through parse
-import "aql:struct-util" StructUtil.parse "{x:2.0, n:3}"	{x:2.0 n:3}	Float map value preserved (matches the {x:2.0} map-literal interior)
-import "aql:struct-util" StructUtil.parse "null"	None	a top-level JSON null hydrates to the concrete none (not an empty-input error)
-import "aql:struct-util" StructUtil.parse "{a:1]"	ERROR:parse_error	malformed input raises loudly
-import "aql:struct-util" StructUtil.parse ""	ERROR:parse_error	empty input raises (never a silent none)
+#    too. Malformed input raises [boru/parse_error].
+import "boru:struct-util" StructUtil.parse "{a:1, b:[2,3]}"	{a:1 b:[2 3]}	jsonic text decodes to a Map
+import "boru:struct-util" StructUtil.parse "[1, 2, 3]"	[1 2 3]	a JSON array decodes to a List
+import "boru:struct-util" StructUtil.parse '{"a": 1}'	{a:1}	strict JSON is valid jsonic
+import "boru:struct-util" StructUtil.parse "{val:'if'}"	{val:'if'}	data context — text stays a string, never a word
+import "boru:struct-util" StructUtil.parse (StructUtil.jsonify {a:1 b:[2 3]})	{a:1 b:[2 3]}	jsonify→parse round trip
+import "boru:struct-util" StructUtil.parse "2.0"	2.0	a dot-bearing number keeps Float type (was collapsing to Integer 2)
+import "boru:struct-util" StructUtil.parse "2"	2	a plain integer stays Integer
+import "boru:struct-util" StructUtil.parse "[1.0, 2]"	[1.0 2]	per-element numeric fidelity — Float and Integer preserved through parse
+import "boru:struct-util" StructUtil.parse "{x:2.0, n:3}"	{x:2.0 n:3}	Float map value preserved (matches the {x:2.0} map-literal interior)
+import "boru:struct-util" StructUtil.parse "null"	None	a top-level JSON null hydrates to the concrete none (not an empty-input error)
+import "boru:struct-util" StructUtil.parse "{a:1]"	ERROR:parse_error	malformed input raises loudly
+import "boru:struct-util" StructUtil.parse ""	ERROR:parse_error	empty input raises (never a silent none)
 #
 # §X  Floats serialize as JSON numbers, not strings (bloom report:
 #     jsonify emitted "x": "1.5"), and reify keeps the fraction —
 #     whole-valued JSON numbers still come back as Integers.
-import "aql:struct-util"  import "aql:string-util"  StringUtil.contains '"x": 1.5' (StructUtil.jsonify {x:1.5})	true	a Float field serializes as a bare JSON number
-import "aql:struct-util"  import "aql:string-util"  StringUtil.contains '"1.5"' (StructUtil.jsonify {x:1.5})	false	and never as a quoted string
-def P class {x:0.0} import "aql:struct-util"  (StructUtil.reify P "{\"x\": 1.5}").x	1.5	reify keeps the fraction (was truncated to Integer 1)
-def P class {n:0} import "aql:struct-util"  (StructUtil.reify P "{\"n\": 2}").n typeof	Integer	whole-valued JSON numbers still reify as Integers
+import "boru:struct-util"  import "boru:string-util"  StringUtil.contains '"x": 1.5' (StructUtil.jsonify {x:1.5})	true	a Float field serializes as a bare JSON number
+import "boru:struct-util"  import "boru:string-util"  StringUtil.contains '"1.5"' (StructUtil.jsonify {x:1.5})	false	and never as a quoted string
+def P class {x:0.0} import "boru:struct-util"  (StructUtil.reify P "{\"x\": 1.5}").x	1.5	reify keeps the fraction (was truncated to Integer 1)
+def P class {n:0} import "boru:struct-util"  (StructUtil.reify P "{\"n\": 2}").n typeof	Integer	whole-valued JSON numbers still reify as Integers

@@ -30,7 +30,7 @@ func countErrors(t *testing.T, src string) (int, []string) {
 // A value-or-None branch inside a fn body must type-check cleanly. Before the
 // joinCarriersInner None-arm guard, joining Integer (or Any) with the None arm
 // produced a Parent-less carrier that HALTED the fn-body analyser
-// ("[aql/halt]: undefined stack entry"), so the whole fn wrongly reported a
+// ("[boru/halt]: undefined stack entry"), so the whole fn wrongly reported a
 // fn_body_error and a spurious "produces no return value". This is the exact
 // shape of mini-redis's `arg-at` (`if (size gt i) [xs get i] [None]`).
 func TestNoneBranchInFnBodyChecksClean(t *testing.T) {
@@ -76,9 +76,9 @@ func TestForZeroNetBodyChecksClean(t *testing.T) {
 // correctly decline and fall back. This pins the compile/interpret parity.
 func TestComputedRangeLoopCompilesAndMatches(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	type wc struct {
 		src         string
 		wantCompile bool

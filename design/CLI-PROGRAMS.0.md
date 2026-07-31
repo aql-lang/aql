@@ -1,17 +1,17 @@
 # CLI PROGRAMS
 
-Design for **full command-line program support in AQL** — the layer where a
-developer writes a real Unix-style tool in AQL (`mytool --fast notes.json`,
-`cat data | mytool -o out.json`, a packaged `aql build` binary on `$PATH`)
+Design for **full command-line program support in BORU** — the layer where a
+developer writes a real Unix-style tool in BORU (`mytool --fast notes.json`,
+`cat data | mytool -o out.json`, a packaged `boru build` binary on `$PATH`)
 and gets the things every CLI runtime owes its programs: arguments, an
 argument-parsing convention, environment access, exit codes, stream
 discipline, signals, and (policy-gated) subprocesses.
 
-The motivating client is the `aless` file viewer (voxgig-aql/aless
-`viewer/`), the first substantial end-user program written in AQL. Its
-2026-07-21 DX round found the runtime strong exactly where AQL has
-invested — packaging (`aql build`/`pack`/`install`), per-invocation
-permission policies, structured output (`emit`, `aql:report`, `aql:log`),
+The motivating client is the `aless` file viewer (voxgig-boru/aless
+`viewer/`), the first substantial end-user program written in BORU. Its
+2026-07-21 DX round found the runtime strong exactly where BORU has
+invested — packaging (`boru build`/`pack`/`install`), per-invocation
+permission policies, structured output (`emit`, `boru:report`, `boru:log`),
 stdio handles, and the TUI stack — and empty on the invocation side: a
 script could not see its own command line, read an environment variable,
 choose an exit code, notice a signal, or run another program. `IO.args`
@@ -23,7 +23,7 @@ capability state, delivered through the same seams every other host
 resource uses** (the `CapX` slots + `SetHostX` installers of
 `lang/go/native/capabilities.go`), and **anything asynchronous arrives as
 actor mailbox messages** — the substrate `PROCESSES.0.md` built and
-`aql:tui` proved out. Nothing here invents a new mechanism; each section
+`boru:tui` proved out. Nothing here invents a new mechanism; each section
 is a new tenant on an existing floor.
 
 This is a **design RFC** in the house style (`TUI.0.md`,
@@ -36,7 +36,7 @@ follow.
 > (1) invocation context (args, env) is **host-injected capability
 > state**, never read by the runtime from the OS directly — hermetic
 > registries and embedded hosts stay in full control (§1);
-> (2) argument *parsing* is a **loadable AQL module (`aql:cli`)**, not a
+> (2) argument *parsing* is a **loadable BORU module (`boru:cli`)**, not a
 > native word — the raw vector is the runtime surface, conventions are
 > library (§8);
 > (3) `IO.exit` unwinds via a **reserved control error** the drivers
@@ -58,25 +58,25 @@ follow.
 
 | Concern | State |
 |---|---|
-| Invocation forms | `aql script.aql`, `aql -e`, REPL, `aql /dev/stdin`, `aql build` standalone binaries |
-| Arguments | ✅ `IO.args` landed for `run`/`-e` (branch); ❌ `aql build` binaries still discard argv (`buildrt.Main(_, _ []string, …)`) |
+| Invocation forms | `boru script.boru`, `boru -e`, REPL, `boru /dev/stdin`, `boru build` standalone binaries |
+| Arguments | ✅ `IO.args` landed for `run`/`-e` (branch); ❌ `boru build` binaries still discard argv (`buildrt.Main(_, _ []string, …)`) |
 | Argument parsing / `--help` | ❌ nothing — userland string-splitting |
 | Environment | ❌ no read access of any kind |
 | Exit codes | half: clean run → 0, uncaught error → 1; ❌ no chosen codes |
 | stdin/stdout/stderr | ✅ `IO.stdin`/`stdout`/`stderr` handles; `IO.read (IO.stdin)` slurps; ❌ no line-at-a-time read, no isatty |
-| Structured output | ✅ `emit` family, `aql:report`, `aql:log` |
-| Packaging | ✅ `aql build`/`prep`/`pack`/`publish`/`install` + registry |
+| Structured output | ✅ `emit` family, `boru:report`, `boru:log` |
+| Packaging | ✅ `boru build`/`prep`/`pack`/`publish`/`install` + registry |
 | Permissions | ✅ `-perms`/`-allow`/`-deny` policy per invocation |
 | Signals | ❌ nothing (Ctrl-C only inside the tui driver) |
 | Subprocess | ❌ nothing (by design so far; §7 changes this deliberately) |
-| Long-running / TUI | ✅ `aql serve` + ctl, `aql:tui`, `Tui.serve`/`aql attach` |
+| Long-running / TUI | ✅ `boru serve` + ctl, `boru:tui`, `Tui.serve`/`boru attach` |
 
 The ❌ rows are this RFC's scope.
 
 
 ## 1. The invocation contract
 
-One host-facing contract, honored identically by every way an AQL program
+One host-facing contract, honored identically by every way a BORU program
 can start:
 
 ```
@@ -93,9 +93,9 @@ signals: messages      delivered on request (§6)
 `os.Args`/`os.Environ` itself. Each host installs what it wants the
 program to see:
 
-- `aql run` / `-e`: CLI positionals (`fs.Args()[1:]`, or all positionals
+- `boru run` / `-e`: CLI positionals (`fs.Args()[1:]`, or all positionals
   in `-e` mode) and the real process environment.
-- `aql build` binaries: `os.Args[1:]` and the real environment —
+- `boru build` binaries: `os.Args[1:]` and the real environment —
   `buildrt.Main` gains the plumbing it currently drops (this is the
   C1 headline: a compiled tool that cannot see its arguments is not a
   tool).
@@ -135,7 +135,7 @@ renames on export — the log/debug rename pattern).
 
 Remaining work (C1): thread argv through `buildrt.Config` so `Main`
 installs `os.Args[1:]` before running the embedded program, with a
-`cmd/go` test that `aql build`s a program and runs it with positionals.
+`cmd/go` test that `boru build`s a program and runs it with positionals.
 The CLI should also stop *silently* dropping positionals in the one form
 that still ignores them (none, after C1 — the warning becomes moot).
 
@@ -175,13 +175,13 @@ IO.exit <code>       terminate with this exit code (0..125)
 ```
 
 Mechanism: `IO.exit` raises a **reserved control error**
-(`aql/exit`, payload `{code}`). The run/build drivers recognize it at
+(`boru/exit`, payload `{code}`). The run/build drivers recognize it at
 the top level: unwind, flush output, exit with the code, print nothing.
 Everything else is unchanged: clean run → 0, any other uncaught error →
 1. No `os.Exit` inside the runtime — embedded hosts see the error value
 and decide for themselves (`lang` exposes `ExitCode(err) (int, bool)`).
 
-`do … error …` handlers *can* observe `aql/exit` (it is an error value;
+`do … error …` handlers *can* observe `boru/exit` (it is an error value;
 inventing an uncatchable error class is a bigger mechanism than the
 problem deserves). The documented contract is: **a handler that catches
 a foreign error it does not recognize must re-raise it**; the spec pins
@@ -189,7 +189,7 @@ that an `IO.exit` crossing a `do` without a matching handler still exits
 with its code, and REFERENCE.md documents the re-raise rule where
 `do`/`error` is specified.
 
-Convention (enforced nowhere, documented everywhere, used by `aql:cli`):
+Convention (enforced nowhere, documented everywhere, used by `boru:cli`):
 `0` success, `1` runtime failure, `2` usage error.
 
 
@@ -246,15 +246,15 @@ proposal (aless `proposals/tui-live-io-and-testability.md`) and shares
 this section's plumbing.
 
 
-## 7. Subprocess — `aql:proc`
+## 7. Subprocess — `boru:proc`
 
-The largest addition, and the one that changes AQL's security posture,
+The largest addition, and the one that changes BORU's security posture,
 so it gets the tightest contract.
 
 ### 7.1 Surface
 
 ```
-import "aql:proc"
+import "boru:proc"
 
 Proc.run <argv:List> {opts}      → {code, out, err}         synchronous, captured
 Proc.spawn <argv:List> {opts} <Pid> → Child                 streaming, async
@@ -305,16 +305,16 @@ Optional refinement, staged later: `proc.exec:<basename>` per-program
 grants.
 
 
-## 8. Argument parsing — the `aql:cli` module
+## 8. Argument parsing — the `boru:cli` module
 
 The runtime surface stays the raw vector; conventions live in a
-loadable module, **written in AQL** (dogfooding; pure; testable by the
+loadable module, **written in BORU** (dogfooding; pure; testable by the
 aless suite conventions; no Go coverage cost). Its shape follows the
-`aql:test` precedent — a declarative spec map driving an imperative
+`boru:test` precedent — a declarative spec map driving an imperative
 surface:
 
-```aql
-import "aql:cli"
+```boru
+import "boru:cli"
 
 def spec {
   name: "av"  version: "0.2.0"
@@ -342,7 +342,7 @@ string flags collect into a List, unknown flag / missing value / arity
 violation → `{ok:false}` with a one-line error and the usage text.
 `--help` and `--version` are recognized by:
 
-```aql
+```boru
 Cli.main (spec) handler/r
 ```
 
@@ -365,7 +365,7 @@ rather than multi-sig dispatch on values from the args vector (dx §7).
 If those engine bugs are fixed first (the soundness proposal), this
 paragraph deletes; until then it is load-bearing.
 
-`aql:cli` depends only on `aql:io` (§2–§5) and `aql:string-util` — it
+`boru:cli` depends only on `boru:io` (§2–§5) and `boru:string-util` — it
 must run under the spec runner with nothing installed (parse is pure:
 vector in, map out).
 
@@ -375,13 +375,13 @@ vector in, map out).
 - **Shell-string execution** in any form (§7; `["sh","-c",…]` is the
   visible spelling).
 - **Environment mutation** (`IO.set-env`) — children get env explicitly.
-- **A prompt/readline library** — interactive input is `aql:tui`'s
+- **A prompt/readline library** — interactive input is `boru:tui`'s
   inline tier (`TUI.0.md` §9), not a parallel stack.
 - **A config-file framework** — `IO.read` already parses every format;
   the HOWTO shows the ten-line XDG recipe (`IO.env "XDG_CONFIG_HOME"` +
   fallback + `IO.read`); framework-ness earns nothing.
 - **Chosen exit codes above 125**, signal-death codes, and other
-  waitpid arcana: `code` reports what the OS said; AQL programs choose
+  waitpid arcana: `code` reports what the OS said; BORU programs choose
   0–125.
 - **Windows signal parity** beyond Ctrl-C→`int` (documented limitation,
   aligned with the platform).
@@ -394,7 +394,7 @@ normative:
 - **Spec TSVs** pin every deterministic surface: the uninstalled
   defaults (`IO.args` → `[]`, `IO.env "X"` → none,
   `Proc.run` → `capability_not_installed`), the pure module
-  (`aql:cli` parse tables get their own `module-cli.tsv`, positive and
+  (`boru:cli` parse tables get their own `module-cli.tsv`, positive and
   negative rows in pairs per the house rule).
 - **Go tests** pin host-dependent behavior through fakes (`EnvOps`,
   `ProcOps`, stream fakes for `read-line`/`tty?`), plus one CLI-level
@@ -407,7 +407,7 @@ normative:
   command-line tool"** walking one tool from `IO.args` through
   `Cli.main`, exit codes, NO_COLOR, and a `Proc.run` step; CLI.md notes
   the positional-forwarding behavior of `run` and built binaries.
-- **kg**: the project graph gains the `aql:cli`/`aql:proc` module nodes
+- **kg**: the project graph gains the `boru:cli`/`boru:proc` module nodes
   and the HOWTO chapter when they land (`make -C kg graph`).
 
 ## 11. Staged plan
@@ -421,16 +421,16 @@ C0 (≈60 lines + tests, one day including the gauntlet).
   everywhere. *Unblocks: every packaged tool.*
 - **C2 — stream ergonomics** (S): `IO.read-line`, `IO.tty?`, HOWTO
   color recipe. *Unblocks: filters and pipelines.*
-- **C3 — `aql:cli`** (M, AQL-side): parse/usage/main, flags tier;
+- **C3 — `boru:cli`** (M, BORU-side): parse/usage/main, flags tier;
   `module-cli.tsv`; HOWTO chapter. *Unblocks: conventional UX;
   `aless` migrates its launcher as the reference client.*
 - **C4 — signals** (M): subscription word + mailbox delivery + driver
   integration (suspend/restore default handling); `Tui.run` apps get
   clean SIGTERM. *Unblocks: services and long-running tools.*
-- **C5 — `aql:proc`** (L): ProcOps seam + fake, run/spawn/write/kill,
+- **C5 — `boru:proc`** (L): ProcOps seam + fake, run/spawn/write/kill,
   `proc.exec` policy inversion, streaming into mailboxes. *Unblocks:
   orchestration tools; also the `aless` clipboard-yank deviation.*
-- **C6 — `aql:cli` subcommands** (S, AQL-side): nested specs,
+- **C6 — `boru:cli` subcommands** (S, BORU-side): nested specs,
   per-command usage. *Unblocks: multi-verb tools.*
 
 Ordering rationale: C1–C2 are pure catch-up with zero design risk and

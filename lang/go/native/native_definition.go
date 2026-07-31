@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // definitionNatives covers the binding / function-definition words:
@@ -308,7 +308,7 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// A def of a name that some ALREADY-COMPILED stored handler / spawn body
 	// reads makes that frozen unit stale (the interpreter resolves the new
 	// binding at CALL time). Poison such refs so Finalize leaves them unstamped
-	// and InvokeCallback falls back to CallAQL. A first-time def of a fresh name
+	// and InvokeCallback falls back to CallBORU. A first-time def of a fresh name
 	// poisons nothing (no existing ref lists it as a dep).
 	r.Check.Recorder().NotifyNameRebound(name)
 	// Record the def site for the dynamic-scope binder pass: if some fn body
@@ -641,7 +641,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		return nil, reservedWordError(r, "def", name)
 	}
 	if r.Defs.IsType(name) {
-		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
+		return nil, r.BoruError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	return installAndRecordDef(r, name, body, args[0].Pos(), stackOnly)
 }
@@ -709,7 +709,7 @@ func defWordExtension(r *Registry, name string, body Value, pos SrcPos) (bool, e
 // true/false/none). Core words are frozen — extend the language by
 // defining a NEW word, not by shadowing a built-in.
 func reservedWordError(r *Registry, op, name string) error {
-	return r.AqlError("reserved_word",
+	return r.BoruError("reserved_word",
 		fmt.Sprintf("%s %s: '%s' is a built-in word and cannot be redefined", op, name, name), op)
 }
 
@@ -908,14 +908,14 @@ func lookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool)
 func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	nameMap, _ := AsMap(args[0])
 	if nameMap == nil || nameMap.Len() == 0 {
-		return nil, r.AqlError("def_error", "def: typed-name map must have exactly one key, got empty/non-concrete map", "def")
+		return nil, r.BoruError("def_error", "def: typed-name map must have exactly one key, got empty/non-concrete map", "def")
 	}
 	if nameMap.Len() != 1 {
 		return nil, fmt.Errorf("def: typed-name map must have exactly one key, got %d", nameMap.Len())
 	}
 	name := nameMap.Keys()[0]
 	if IsCapitalisedName(name) {
-		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def")
+		return nil, r.BoruError("def_error", fmt.Sprintf("def %s: def names must not start with a capital letter (capitalised names are reserved for types)", name), "def")
 	}
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
@@ -924,7 +924,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return nil, reservedWordError(r, "def", name)
 	}
 	if r.Defs.IsType(name) {
-		return nil, r.AqlError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
+		return nil, r.BoruError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	constraint, _ := nameMap.Get(name)
 	// A parenthesised annotation — `def b:(Box of [Integer]) {…}` —
@@ -958,11 +958,11 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	var typeName string
 	constraint, typeName, _ = r.ResolveTypedNameValue(constraint)
 	if !IsTypeBody(constraint) {
-		err := r.AqlError("def_error",
+		err := r.BoruError("def_error",
 			fmt.Sprintf("def %s: type annotation must be a type value, got %s", name, constraint.String()), "def")
 		// An unresolved WORD annotation is almost always a misspelt type
 		// name — suggest the near-miss (diagnostics phase 4).
-		if ae, ok := err.(*eng.AqlError); ok && eng.IsWord(constraint) {
+		if ae, ok := err.(*eng.BoruError); ok && eng.IsWord(constraint) {
 			if w, werr := eng.AsWord(constraint); werr == nil {
 				if s := eng.DidYouMean(w.Name, r.SuggestionCandidates()); s != "" {
 					ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
@@ -1227,7 +1227,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		// binding store and retire the minted lattice type.
 		entry, ok := r.Defs.PopEntry(name)
 		if !ok {
-			return nil, r.AqlError("undef_error",
+			return nil, r.BoruError("undef_error",
 				fmt.Sprintf("undef %s: no such type binding", name), "undef")
 		}
 		if entry.TypeDef != nil {
@@ -1242,7 +1242,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// An undef of a name that some ALREADY-COMPILED stored handler / spawn body
 	// reads makes that frozen unit stale (the interpreter resolves the exposed
 	// or re-established binding at CALL time). Poison such refs so InvokeCallback
-	// falls back to CallAQL. Mirrors the def-site NotifyNameRebound.
+	// falls back to CallBORU. Mirrors the def-site NotifyNameRebound.
 	r.Check.Recorder().NotifyNameRebound(name)
 	UninstallDef(r, name)
 	return nil, nil
@@ -1263,19 +1263,19 @@ func undefFnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
 	if !list.Parent.Equal(TList) {
-		return nil, r.AqlError("var_error", "var: argument must be a list", "var")
+		return nil, r.BoruError("var_error", "var: argument must be a list", "var")
 	}
 	if !IsConcrete(list) {
-		return nil, r.AqlError("var_error", "var: argument must be a concrete list, got type literal", "var")
+		return nil, r.BoruError("var_error", "var: argument must be a concrete list, got type literal", "var")
 	}
 	elems, _ := AsList(list)
 	if elems.Len() == 0 {
-		return nil, r.AqlError("var_error", "var: empty list", "var")
+		return nil, r.BoruError("var_error", "var: empty list", "var")
 	}
 
 	declVal := elems.Get(0)
 	if !declVal.Parent.Equal(TList) || !IsConcrete(declVal) {
-		return nil, r.AqlError("var_error", "var: first element must be a list of variable declarations", "var")
+		return nil, r.BoruError("var_error", "var: first element must be a list of variable declarations", "var")
 	}
 	decls, _ := AsList(declVal)
 	body := elems.Slice()[1:]
@@ -1294,7 +1294,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		case decl.Parent.Equal(TList) && decl.Data != nil:
 			declElems, _ := AsList(decl)
 			if declElems.Len() < 2 {
-				return nil, r.AqlError("var_error", "var: declaration list must have name and value", "var")
+				return nil, r.BoruError("var_error", "var: declaration list must have name and value", "var")
 			}
 			var name string
 			if IsWord(declElems.Get(0)) {
@@ -1303,7 +1303,7 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			} else if declElems.Get(0).Parent.ConformsTo(TString) {
 				name, _ = AsString(declElems.Get(0))
 			} else {
-				return nil, r.AqlError("var_error", "var: declaration name must be a word or string", "var")
+				return nil, r.BoruError("var_error", "var: declaration name must be a word or string", "var")
 			}
 			varNames = append(varNames, name)
 			result = append(result, NewWord("def"), NewWord(name))
@@ -1351,15 +1351,15 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	genSpec := r.TakePendingGen()
 	list := args[0]
 	if !list.Parent.Equal(TList) {
-		return failGenErr(r, genSpec, r.AqlError("fn_error", "fn: argument must be a list", "fn"))
+		return failGenErr(r, genSpec, r.BoruError("fn_error", "fn: argument must be a list", "fn"))
 	}
 	if !IsConcrete(list) {
-		return failGenErr(r, genSpec, r.AqlError("fn_error", "fn: argument must be a concrete list, got type literal", "fn"))
+		return failGenErr(r, genSpec, r.BoruError("fn_error", "fn: argument must be a concrete list, got type literal", "fn"))
 	}
 	_lst, _ := AsList(list)
 	elems := _lst.Slice()
 	if len(elems) == 0 || len(elems)%3 != 0 {
-		return failGenErr(r, genSpec, r.AqlError("fn_error", "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form, or the 3-arg form `fn input output body` for a single triple with a non-list input", "fn"))
+		return failGenErr(r, genSpec, r.BoruError("fn_error", "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form, or the 3-arg form `fn input output body` for a single triple with a non-list input", "fn"))
 	}
 	return fnConstruct(r, elems, genSpec)
 }
@@ -1380,7 +1380,7 @@ func fnTripleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// routes a list input here, but check-mode fallbacks and direct
 	// handler calls can. A list input means the spec-list form.
 	if args[0].Parent.Equal(TList) {
-		return failGenErr(r, genSpec, r.AqlError("fn_error", "fn: the 3-arg triple form takes a non-list input; wrap the whole triple as a list instead: fn [[input] [output] [body]]", "fn"))
+		return failGenErr(r, genSpec, r.BoruError("fn_error", "fn: the 3-arg triple form takes a non-list input; wrap the whole triple as a list instead: fn [[input] [output] [body]]", "fn"))
 	}
 	// Unlike the spec-list form — whose operands are always literals
 	// inside the NoEvalArgs list — a triple-form operand can be COMPUTED
@@ -1547,7 +1547,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	// `afn` is normally encountered as the swap form `input afn body`
 	// (because `input => body` desugars to this), which makes args[1]
 	// the source-left operand (input sig) and args[0] the source-right
-	// operand (body). Mirrors the AQL `args[1] op args[0]` convention.
+	// operand (body). Mirrors the BORU `args[1] op args[0]` convention.
 	inputSig := args[1]
 	body := args[0]
 
@@ -1570,7 +1570,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 
 	params, barrierPos, err := parseFnParams(r, inputSig)
 	if err != nil {
-		return nil, r.AqlError("afn_error", err.Error(), "afn")
+		return nil, r.BoruError("afn_error", err.Error(), "afn")
 	}
 
 	var bodyElems []Value
@@ -1584,7 +1584,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	sig := FnSig{
 		Params:     params,
 		Returns:    []*Type{TAny},
-		Impl:       AQL(bodyElems),
+		Impl:       BORU(bodyElems),
 		BarrierPos: barrierPos,
 		QuoteArgs:  eng.QuoteArgsFromParams(params),
 		// The lambda dispatches from this authored FnSig directly (no
@@ -1614,7 +1614,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // eng/go/fnsig.go::FnUndefMatchesFnDef.
 func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, &AqlError{
+		return nil, &BoruError{
 			Code:   "fnsig_invalid_spec",
 			Detail: "fnsig: argument must be a concrete list",
 		}
@@ -1622,7 +1622,7 @@ func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	_lst, _ := AsList(args[0])
 	spec := _lst.Slice()
 	if len(spec) == 0 || len(spec)%2 != 0 {
-		return nil, &AqlError{
+		return nil, &BoruError{
 			Code:   "fnsig_invalid_spec",
 			Detail: "fnsig: list length must be a non-zero multiple of 2 (input output pairs); use `fn` for the with-body form",
 		}
@@ -1651,7 +1651,7 @@ func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value
 		return nil, err
 	}
 	if !ok {
-		return nil, r.AqlError("args_error", "args: not inside a function", "args")
+		return nil, r.BoruError("args_error", "args: not inside a function", "args")
 	}
 	return []Value{top}, nil
 }

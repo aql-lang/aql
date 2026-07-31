@@ -1,7 +1,7 @@
-# Formal Verification for AQL — a layered plan
+# Formal Verification for BORU — a layered plan
 
 **Status:** draft / proposal (`.0`). A first machine-checked **seed of
-milestone 6 now exists** at [`formal/lean/AqlCore.lean`](formal/lean/AqlCore.lean)
+milestone 6 now exists** at [`formal/lean/BoruCore.lean`](formal/lean/BoruCore.lean)
 (Lean 4.15.0, no Mathlib): a deep embedding of the binary-word + forward-collection
 fragment that *proves* source-spelling equivalence, the `end`-barrier
 negative result, determinism, and the type-lattice order — and
@@ -9,41 +9,41 @@ cross-validates against the engine. The rest of `FORMAL-SPEC.md` §10–§11
 names a mechanized model only as an aspiration. This note turns that aspiration into a concrete, staged
 plan and — crucially — connects it to machinery the repo *already*
 ships: the carrier-based static checker (`eng/go/check.go`,
-`CheckState`), property-based testing (`aql:rand`, `test.check-prop`,
+`CheckState`), property-based testing (`boru:rand`, `test.check-prop`,
 `shrink/`), and the `StackForm` IR with its proven
 `Eval(Compile(src)) ≡ Run(src)` equivalence. Written against
-`claude/formal-methods-aql-hdubtm` @ `6b6e20d`.
+`claude/formal-methods-boru-hdubtm` @ `6b6e20d`.
 
 Companion reading: `FORMAL-SPEC.md` (the operational semantics this plan
 mechanizes), `CARRIER-STATIC-TYPECHECK-REPORT.10.md` (the abstract
 interpreter this plan generalizes), `PBT-PLAN.10.md` (the random layer
-this plan sits above), `aql-bytecode-*.md` (the second backend that
+this plan sits above), `boru-bytecode-*.md` (the second backend that
 makes compiler-correctness worth proving).
 
 ---
 
 ## 1. Two halves of the problem
 
-"Formal methods for AQL" splits cleanly into two questions that need
+"Formal methods for BORU" splits cleanly into two questions that need
 different tools:
 
-- **Half A — analysis *of the language*.** Is the AQL *language*
+- **Half A — analysis *of the language*.** Is the BORU *language*
   well-behaved? Type soundness, determinism, confluence of forward
   collection, correctness of the `StackForm` compiler. The object of
   study is the semantics in `FORMAL-SPEC.md`.
-- **Half B — analysis *of programs*.** Is *this AQL program* correct,
+- **Half B — analysis *of programs*.** Is *this BORU program* correct,
   safe, total, effect-bounded? The object of study is user code.
 
-The two halves meet at one mechanism — the **carrier**. AQL's static
+The two halves meet at one mechanism — the **carrier**. BORU's static
 checker already runs the *real evaluator* over abstract "carrier" values
 that hold type information instead of concrete data; that is textbook
 **abstract interpretation** (`CARRIER-STATIC-TYPECHECK-REPORT.10.md`).
 The central thesis of this document:
 
-> Because AQL *runs one evaluator over abstract values*, both program
+> Because BORU *runs one evaluator over abstract values*, both program
 > analysis and (with care) program verification reduce to **choosing an
 > abstract domain** and a **discharge backend**. The expensive,
-> AQL-specific work is concentrated in two places — modelling forward
+> BORU-specific work is concentrated in two places — modelling forward
 > collection, and making first-match dispatch sound over non-singleton
 > carriers — and is paid once, not per analysis.
 
@@ -59,7 +59,7 @@ cover.
 | Layer | Guarantee | Trusted base (TCB) | Cost | Status |
 |---|---|---|---|---|
 | **PBT** | none — finds bugs on sampled inputs | the test harness | ~free | **shipped** |
-| **Abstract interpretation** (`aql check`) | *sound over-approx*: proves absence of a bug class, with false positives | the analyzer + its (informal) soundness argument | medium | **type domain shipped** |
+| **Abstract interpretation** (`boru check`) | *sound over-approx*: proves absence of a bug class, with false positives | the analyzer + its (informal) soundness argument | medium | **type domain shipped** |
 | **SMT-backed refinements** | proves specific verification conditions | VC-generator **+ all of Z3** | high | proposed |
 | **Lean** | machine-checked deductive proof | the Lean kernel only | very high | proposed |
 
@@ -71,7 +71,7 @@ Two principles govern how the layers relate:
    compiler is correct") by turning those claims into theorems.
 2. **Lean relocates trust, it does not remove it.** Even a complete Lean
    development still trusts (a) the Lean kernel, (b) that the Lean
-   semantics faithfully models AQL's *intended* behaviour — the
+   semantics faithfully models BORU's *intended* behaviour — the
    **spec-adequacy problem** — and (c) that the theorem *statements* say
    what we mean. (b) is discharged not by proof but by cross-validating
    the model against the executable `*.tsv` conformance suite and the
@@ -92,13 +92,13 @@ interpreter.
 
 | Domain | Catches | Notes |
 |---|---|---|
-| **Types** (today) | signature/arity/return mismatches | `aql check` |
+| **Types** (today) | signature/arity/return mismatches | `boru check` |
 | **Nullness / `None`-flow** | `none` reaching a slot that can't accept it | ties to `Absent`/optional-field lowering (`FORMAL-SPEC` §3.4, §5.2) |
 | **Interval / range** | out-of-bounds `get`, overflow reachability | makes `INTEGER-OVERFLOW-STRATEGY` / `IEEE-754-COMPLIANCE` checkable |
 | **Taint** | untrusted input reaching an effectful word | security; feeds `PERMISSIONS.10` |
 | **Effect / capability** | which effect classes a program may dispatch | *reuses the shipped PBT transparency lattice* (Transparent/Generator/Frozen/Opaque) — static counterpart to §7.2 capability checks |
 
-### 3.1 Two AQL-specific soundness obligations
+### 3.1 Two BORU-specific soundness obligations
 
 Any carrier domain must respect both, or it is unsound:
 
@@ -114,18 +114,18 @@ Any carrier domain must respect both, or it is unsound:
 
 ### 3.2 Stack-effect analysis — the concatenative tradition, with a twist
 
-AQL is concatenative, and concatenative languages have a mature static
+BORU is concatenative, and concatenative languages have a mature static
 **stack-effect** lineage (Cat, Kitten — row-polymorphic stack typing).
 Because every word declares typed input/output signatures, a checker can
 *compose* signatures down a tape and flag underflow/overflow/arity
-mismatch statically. The AQL-specific twist is **forward collection**
+mismatch statically. The BORU-specific twist is **forward collection**
 (`FORMAL-SPEC` §6.4): a word's stack effect depends on how many forward
 tokens it consumed and on the barrier rules (`|`, `/f`, `/s`, `/N`,
 `end`). Modelling that is novel work, but it catches exactly the
 "stranded operand" class the `FORWARD-STRAND-ADVISORY.10.md` and
 `FORWARD-COLLECTION-TRAPS.0.md` notes describe.
 
-### 3.3 Refinement types — AQL is already a liquid-types language
+### 3.3 Refinement types — BORU is already a liquid-types language
 
 `FORMAL-SPEC` §5.2 defines **dependent scalar refinements**:
 `Base op constraint`, value-sensitive subset types. `def Pos refine
@@ -134,7 +134,7 @@ Number gt 0` is a predicate subtype — the surface syntax of
 predicates are checked *dynamically* at construction boundaries. To
 check them *statically* you discharge implications (e.g. body output
 `> 0` given `x > 0`) — an SMT obligation. Wiring a Z3 backend to
-discharge refinement predicates gives AQL **lightweight functional
+discharge refinement predicates gives BORU **lightweight functional
 verification in its existing syntax, with no new language surface**: the
 contracts already *are* the types. This is the single highest-value
 differentiator in the middle of the pyramid.
@@ -177,7 +177,7 @@ State and prove what the spec currently only asserts:
   becomes a *theorem*, not three TSV rows.
 - **Compiler correctness** — `Eval(Compile(src)) ≡ Run(src)` for
   `StackForm`, currently an example-test, is the natural first Lean
-  theorem and de-risks the `aql-bytecode-*` effort (a second backend
+  theorem and de-risks the `boru-bytecode-*` effort (a second backend
   raises the value of a proven equivalence sharply).
 
 ### 4.3 The connection problem (the crux)
@@ -219,7 +219,7 @@ pretty-prints to Lean — both the model *and* the proof skeleton.
 
 ### 5.2 Worked example
 
-```aql
+```boru
 def clamp fn [[x:Number lo:Number hi:Number] [Number] [
   if (x lt lo) [lo] [if (x gt hi) [hi] [x]]
 ]]
@@ -244,8 +244,8 @@ preconditions automatically.**
 
 ### 5.3 The catch — and why b2 rides on b1
 
-`clamp_model` is a *re-encoding* of `clamp` in Lean math. Mapping AQL
-`add`→Lean `+` is **not** obviously faithful — AQL has an
+`clamp_model` is a *re-encoding* of `clamp` in Lean math. Mapping BORU
+`add`→Lean `+` is **not** obviously faithful — BORU has an
 integer-overflow strategy and IEEE-754 floats, so float-`add` is *not*
 `Int.+`. If the shallow mapping is wrong, the theorem is about a fiction.
 
@@ -327,7 +327,7 @@ independently valuable and nothing changes default behaviour.
 | 3 | **Effect/capability inference** domain reusing the transparency lattice | AI | low | static sandbox decisions; feeds `PERMISSIONS.10` |
 | 4 | **Stack-effect checker** over composed signatures + forward-collection model | AI | medium | catches "stranded operand" statically |
 | 5 | **SMT discharge of `refine` predicates** (Z3) | SMT | high | turns existing refinement syntax into real verification |
-| 6 | **Lean deep embedding** of the scalar+refinement+record fragment; prove progress+preservation; cross-validate vs `eng/spec/*.tsv` | Lean | high | the soundness result the spec implies; answers §11.5 — *seed landed: [`formal/lean/AqlCore.lean`](formal/lean/AqlCore.lean)* |
+| 6 | **Lean deep embedding** of the scalar+refinement+record fragment; prove progress+preservation; cross-validate vs `eng/spec/*.tsv` | Lean | high | the soundness result the spec implies; answers §11.5 — *seed landed: [`formal/lean/BoruCore.lean`](formal/lean/BoruCore.lean)* |
 | 7 | **Per-word adequacy library** + symbolic-carrier emitter; worked `clamp` end-to-end | Lean | high | sound per-program verification (b2); reused by certificate-checked SMT |
 | 8 | **`StackForm` compiler-correctness theorem** in Lean | Lean | medium | de-risks the bytecode backend |
 

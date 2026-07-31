@@ -1,10 +1,10 @@
-# AQL Language Specification: Type Negation (tnot)
+# BORU Language Specification: Type Negation (tnot)
 # Format: input<TAB>expected<TAB>description
 #
 # `tnot T` is the set-theoretic complement of T: a value satisfies it
 # iff it does NOT satisfy T. Together with `tor` (union) and `tand`
 # (intersection) it closes the type algebra under Boolean operations.
-# See design/elixir-types-in-aql-report.10.md.
+# See design/elixir-types-in-boru-report.10.md.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  membership via `is`

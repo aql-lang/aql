@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:minilang", map[string]string{
+	registerDocs("boru:minilang", map[string]string{
 		"lang_re": "Go regular-expression match: `mini re <pattern>` — subject from the stack, " +
 			"match structure {ok ms fst lst n} out; each match is {m i e g}. opts: {limit:I}.",
 		"lang_bf": "Brainfuck: `mini bf <program>` — output String; `,` reads the stack input " +
@@ -13,7 +13,7 @@ func init() {
 		"lang_math": "Traditional maths formula: `mini math '<formula>' {vars}` — evaluate an " +
 			"arithmetic expression (operators + - * / % ^, unary +/-, parens; ^ is " +
 			"right-associative and binds tighter than * /) whose variables are bound by the " +
-			"named params. Numeric coercion follows AQL: all-integer operands stay Integer " +
+			"named params. Numeric coercion follows BORU: all-integer operands stay Integer " +
 			"(division truncates like `div`), any Float promotes to Float. github.com/tabnas/expr/go.",
 		"lang_jp": "JSONPath query: `<doc> mini jp '<path>'` — run a JSONPath (e.g. " +
 			"$.store.book[*].title) over the stack subject (a Node, Object, Array, Table or " +
@@ -27,9 +27,9 @@ func init() {
 			"nodes for a node-set (an element as its Node/Xml value, an attribute/text node as a " +
 			"String), or a one-element list for a scalar count/string/boolean result. " +
 			"github.com/antchfx/xpath.",
-		"lang_sp": "Structure-path (XPath-style) over AQL structure: `<map-or-list> mini sp '<path>' {}` — run an XPath " +
+		"lang_sp": "Structure-path (XPath-style) over BORU structure: `<map-or-list> mini sp '<path>' {}` — run an XPath " +
 			"(e.g. /name, //title, //item[p>20]/p, count(//item), sum(//v)) over the stack Map/List " +
-			"subject and return a List. Same engine as xp but over native AQL data: a Map is an " +
+			"subject and return a List. Same engine as xp but over native BORU data: a Map is an " +
 			"element per key, a List repeated `item` elements, a scalar the element's text. A matched " +
 			"element comes back as its source value, a text/scalar result as a String/Number/Boolean. " +
 			"A Map subject needs an explicit {} opts (a bare Map is claimed as opts). github.com/antchfx/xpath.",
@@ -73,7 +73,7 @@ func init() {
 		"Sp": "The named type of an `sp` partial (a stored structure-path query) — " +
 			"see MiniLang.Re for the convention.",
 		"kinds": "List the (fixed) mini-language kind atoms.",
-		"register-compiled": "TOMBSTONE — raises mini_registry_frozen. The AQL compile-hook " +
+		"register-compiled": "TOMBSTONE — raises mini_registry_frozen. The BORU compile-hook " +
 			"surface died with the frozen kind namespace; pass a custom mini-language as a " +
 			"Function value (mini <fn> '...') and memoize any expensive compile inside the fn.",
 		"run-re": "Internal: the compiled-`re` consumer — matches a precompiled-pattern carrier " +
@@ -84,7 +84,7 @@ func init() {
 	// the lang_* export the signature names — and the RESULT is a match
 	// map, not the matched text. Results are from verified
 	// lang/spec/module-minilang.tsv rows.
-	registerExamples("aql:minilang", map[string][]string{
+	registerExamples("boru:minilang", map[string][]string{
 		"kinds": {`MiniLang.kinds                                   ;# [re/q bf/q gex/q math/q hb/q bb/q micron/q m/q jp/q jq/q xp/q sp/q]`},
 		"lang_re": {
 			`def r ("AbcD" mini re '[a-z]+')`,

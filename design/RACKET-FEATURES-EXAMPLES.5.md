@@ -1,10 +1,10 @@
-# Racket Features for AQL — Use Cases & Worked Syntax
+# Racket Features for BORU — Use Cases & Worked Syntax
 
 **Status:** analysis / design note — companion to `RACKET-ANALYSIS.5.md`
 **Scope:** for each feature proposed in `RACKET-ANALYSIS.5.md`, this note
-gives **concrete use cases** and **worked examples of the proposed AQL
+gives **concrete use cases** and **worked examples of the proposed BORU
 syntax**, including desugarings and how each reuses existing engine
-machinery. Syntax here is a *proposal*, written to match AQL's real
+machinery. Syntax here is a *proposal*, written to match BORU's real
 surface (`[x:T] => [body]` lambdas, `do […] error […]`, subset
 refinements `def Big (Integer gt 10)`, `export "Mod" {…}`, guards
 `if (c) [t] [e]`). Where a form is speculative it is marked **(proposed)**.
@@ -53,7 +53,7 @@ misused it.
 
 A `:::` rider on an export (a boundary contract), and a `/c` modifier to
 contract a bare `fn`. The contract body is an ordinary signature — the
-shapes AQL already type-checks — reused as a *boundary* obligation.
+shapes BORU already type-checks — reused as a *boundary* obligation.
 
 ```
 # (proposed) contracted export — argument blames caller, result blames Bank
@@ -66,7 +66,7 @@ export "Bank" {
 ### Worked example — flat (first-order) contract
 
 ```
-import "aql:bank" end
+import "boru:bank" end
 
 # caller violates the precondition: amount must be > 0
 acct withdraw -5
@@ -82,7 +82,7 @@ acct withdraw 10
 
 The first error is the *caller's* fault (bad argument); the second is the
 *module's* fault (bad result). That flip is the whole point — and it
-reuses the renderer behind `aql policy explain`, which already prints a
+reuses the renderer behind `boru policy explain`, which already prints a
 blame chain for capability decisions.
 
 ### Worked example — higher-order contract
@@ -124,7 +124,7 @@ retry ([n:Integer] => [ if (n eq 2) [raise "boom"] [n] ]) 3
 ### What it is
 
 Flow-sensitive narrowing: a predicate test tightens a union type inside
-the branch it guards (and to the complement in the `else`). AQL already
+the branch it guards (and to the complement in the `else`). BORU already
 does this for a single `is` guard — the extension is to thread narrowing
 through boolean connectives and user predicates.
 
@@ -157,7 +157,7 @@ def describe fn [[x:(String tor Integer)] [String] [
 ### Worked example — compound guard (proposed extension)
 
 ```
-import "aql:logic-util" end
+import "boru:logic-util" end
 
 def combine fn [[a:(Account tor None) b:(Account tor None)] [Account] [
   if (and (a is Account) (b is Account))
@@ -167,7 +167,7 @@ def combine fn [[a:(Account tor None) b:(Account tor None)] [Account] [
 ```
 
 Today only the leading conjunct narrows; the proposal propagates facts
-through `aql:logic-util`'s `and`/`or`/`not`, using AQL's existing
+through `boru:logic-util`'s `and`/`or`/`not`, using BORU's existing
 `tor`/`tand`/`tnot` algebra (and its De Morgan identities) as the
 proposition calculus — the Typed Racket model.
 
@@ -200,7 +200,7 @@ false positives on union-typed code.
 
 A pair of words — a **prompt** (`reset`) marking a boundary and a
 **capture** (`shift`) that grabs the computation *up to that boundary* as
-a resumable value. Because AQL's tape *is* the continuation ("everything
+a resumable value. Because BORU's tape *is* the continuation ("everything
 beyond the pointer is exactly the work that remains" — EXPLANATION), this
 is reifying a structure the engine already manipulates.
 
@@ -430,22 +430,22 @@ value instead of an ad-hoc string key.
 
 ### What it is
 
-AQL already has `mini` + `aql:minilang` (embedded notations behind one
+BORU already has `mini` + `boru:minilang` (embedded notations behind one
 macro and a standard signature) and `+re/…/` reader sugar. The Racket
 `#lang` *headroom* above that is a **replaceable reader** (a whole region
 in a different surface syntax) and **dialects packaged as modules**.
 
 ### Use cases
 
-- **A query sub-language** with its own infix grammar embedded in an AQL
+- **A query sub-language** with its own infix grammar embedded in a BORU
   program (today: a `mini` kind operating on a string `src`).
-- **A whole-file dialect** — a `.aql` file that opts into a curated word
+- **A whole-file dialect** — a `.boru` file that opts into a curated word
   set + a custom reader (the `#lang` horizon).
 
 ### Today's syntax (landed — for contrast)
 
 ```
-import "aql:minilang" end
+import "boru:minilang" end
 "AbcD" mini re '[a-z]+'                  # → 'bc'   (explicit form)
 "AbcD" +re/[a-z]+/                       # → 'bc'   (reader sugar, desugars to mini)
 mini math 'x^2 + 3*y' {x:10, y:2}        # → 106
@@ -457,7 +457,7 @@ mini math 'x^2 + 3*y' {x:10, y:2}        # → 106
 # (proposed) a dialect = a reader + an exported word set, packaged as a module
 import "myorg:sqlish" as Sql end
 
-# a region parsed by Sql's reader, lowered to AQL words underneath
+# a region parsed by Sql's reader, lowered to BORU words underneath
 Sql.region ``
   select name, age from users where age > 18 order by age
 ``                                       # → a Table value
@@ -552,13 +552,13 @@ down — and `sandbox` packages all four into one bounded evaluation.
 
 ### 8a. Units / signature-linked modules
 
-AQL "surfaces" are already a named set of required operations — half a
+BORU "surfaces" are already a named set of required operations — half a
 Racket *unit signature*. The other half is **linking a module against an
 abstract surface at load time** (dependency injection without a global).
 
 ```
 # (proposed) a module that requires a Store surface, linked to a backend
-import "myorg:cache" linking {Store: aql:store-redis} end
+import "myorg:cache" linking {Store: boru:store-redis} end
 ```
 
 **Use case:** swap a `Store` backend (memory / file / remote) by *linking*
@@ -567,7 +567,7 @@ rather than editing imports — pluggable backends named by signature.
 ### 8b. Submodules (`module+ test`)
 
 Co-locate a battery (or an entry point) inside the source file; the runner
-picks it up, `aql build` strips it.
+picks it up, `boru build` strips it.
 
 ```
 # (proposed) a file carrying its own battery
@@ -580,7 +580,7 @@ submodule test [
 ]
 ```
 
-**Use case:** a single `.aql` library file ships with its tests attached,
+**Use case:** a single `.boru` library file ships with its tests attached,
 honoring "pair every positive test with a negative one," with no separate
 spec file.
 
@@ -600,7 +600,7 @@ one protocol.
 
 ### 8d. Scribble-style tested docs
 
-AQL already runs `# returns …` examples as spec rows and generates
+BORU already runs `# returns …` examples as spec rows and generates
 `describe` from the live engine. The remaining Scribble idea is prose docs
 whose code blocks are *executed at build time* and whose identifiers
 *link* to `describe` output — closing the loop between the four manuals
@@ -636,8 +636,8 @@ def handle fn [[req:Request] [Response] [
 ]] end
 ```
 
-Every piece reuses something AQL already has — refinements, `Store`,
+Every piece reuses something BORU already has — refinements, `Store`,
 `await`/sub-engines, policy, `case`/`unpack`, errors-as-values — recombined
 into surfaces (a blame-aware boundary, a bounded evaluation, a structural
-matcher, a restorable ambient value) that AQL doesn't yet name but is
+matcher, a restorable ambient value) that BORU doesn't yet name but is
 unusually close to being able to.

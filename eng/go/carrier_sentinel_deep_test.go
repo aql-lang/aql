@@ -11,11 +11,11 @@ import "testing"
 func TestBodyHasSentinelDeepArms(t *testing.T) {
 	breakFn := NewFnDef(FnDefInfo{Name: "zzleak", Signatures: []Signature{{
 		Params: []FnParam{{Name: "x", Type: TInteger}}, Returns: []*Type{TInteger},
-		Impl: AQL([]Value{NewWord("break"), NewInteger(7)}), BarrierPos: BarrierAllForward,
+		Impl: BORU([]Value{NewWord("break"), NewInteger(7)}), BarrierPos: BarrierAllForward,
 	}}})
 	cleanFn := NewFnDef(FnDefInfo{Name: "zzclean", Signatures: []Signature{{
 		Params: []FnParam{{Name: "x", Type: TInteger}}, Returns: []*Type{TInteger},
-		Impl: AQL([]Value{NewWord("x")}), BarrierPos: BarrierAllForward,
+		Impl: BORU([]Value{NewWord("x")}), BarrierPos: BarrierAllForward,
 	}}})
 
 	// nil registry: no resolution possible — only the direct scan applies.

@@ -284,7 +284,7 @@ func TestUninstallFnSigs(t *testing.T) {
 		return Signature{
 			Params:     []FnParam{{Name: "n", Type: TInteger}},
 			Returns:    []*Type{ret},
-			Impl:       AQL([]Value{NewWord("n")}),
+			Impl:       BORU([]Value{NewWord("n")}),
 			BarrierPos: BarrierAllForward,
 		}
 	}
@@ -292,7 +292,7 @@ func TestUninstallFnSigs(t *testing.T) {
 	InstallFnDef(r, "w3fn", FnDefInfo{Signatures: []Signature{{
 		Params:     []FnParam{{Name: "s", Type: TString}},
 		Returns:    []*Type{TString},
-		Impl:       AQL([]Value{NewWord("s")}),
+		Impl:       BORU([]Value{NewWord("s")}),
 		BarrierPos: BarrierAllForward,
 	}}})
 	if len(r.Defs.Stack("w3fn")) != 2 {

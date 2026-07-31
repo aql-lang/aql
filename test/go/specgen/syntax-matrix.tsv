@@ -1,4 +1,4 @@
-# AQL Language Specification: Syntax Combination Matrix (GENERATED)
+# BORU Language Specification: Syntax Combination Matrix (GENERATED)
 # Format: input<TAB>expected<TAB>note
 #
 # DO NOT EDIT BY HAND. Regenerate with:
@@ -8,7 +8,7 @@
 # Every sequence of 1..4 atoms drawn from a fixed alphabet, evaluated
 # through the production language layer. `expected` is the canonical
 # eng.Canon rendering of the result stack; `ERROR:<code>` rows pin the
-# error CLASS (the stable [aql/<code>] tag), not its message text.
+# error CLASS (the stable [boru/<code>] tag), not its message text.
 #
 # These rows are exhaustive over the alphabet, so they form a frozen
 # contract checked by syntax_matrix_test.go: the interpreter reproduces

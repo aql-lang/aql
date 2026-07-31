@@ -15,10 +15,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // ---- helpers ----
@@ -35,7 +35,7 @@ func mintServerCert(t *testing.T) (id capabilities.ClientIdentity, caPEM string)
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(7),
-		Subject:               pkix.Name{CommonName: "aql-listen-server"},
+		Subject:               pkix.Name{CommonName: "boru-listen-server"},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
@@ -86,7 +86,7 @@ func listenTLS(t *testing.T, r *native.Registry, tlsOpts native.Value) (native.V
 
 // ---- server TLS ----
 
-// The whole point of the phase, end to end: an AQL-bound listener
+// The whole point of the phase, end to end: a BORU-bound listener
 // terminates TLS, and the Socket that comes out of `accept` is the same
 // Socket every other word already drives.
 func TestListenTLSRoundTrip(t *testing.T) {
@@ -112,7 +112,7 @@ func TestListenTLSRoundTrip(t *testing.T) {
 			"tls", nscMap("ca", native.NewString(caPEM))),
 	}, nil, nil, r)
 	if err != nil {
-		t.Fatalf("dial the AQL-bound TLS listener: %v", err)
+		t.Fatalf("dial the BORU-bound TLS listener: %v", err)
 	}
 	got := <-done
 	if got.err != nil {
@@ -149,7 +149,7 @@ func TestListenTLSRoundTrip(t *testing.T) {
 }
 
 // Mutual TLS: require-client: makes a client certificate mandatory, the
-// verified chain reaches AQL through peer-cert, and a client without one
+// verified chain reaches BORU through peer-cert, and a client without one
 // is refused. The negative half is what proves the requirement is real.
 func TestListenTLSRequireClient(t *testing.T) {
 	r, caPEM := tlsListenReg(t)
@@ -213,7 +213,7 @@ func TestListenTLSRequireClient(t *testing.T) {
 		t.Fatalf("peer-cert must be a Map for a verified client: %v (%v)", pc[0], mErr)
 	}
 	cn, _ := mp.Get("common-name")
-	if s, _ := cn.AsConcreteString(); s != "aql-vault-client" {
+	if s, _ := cn.AsConcreteString(); s != "boru-vault-client" {
 		t.Errorf("peer-cert common-name = %q, want the client's CN", s)
 	}
 	for _, key := range []string{"subject", "issuer", "serial", "not-before", "not-after"} {
@@ -255,7 +255,7 @@ func TestListenTLSRequireClient(t *testing.T) {
 // serve-raw inherits server TLS from listen and completes the handshake
 // on the per-connection goroutine, so the handler never sees an
 // unauthenticated peer and a stalled client cannot pin the acceptor.
-// Driven through real AQL because that is the surface that has to work:
+// Driven through real BORU because that is the surface that has to work:
 // the whole option lives in guest source.
 func TestServeRawTLS(t *testing.T) {
 	r, caPEM := tlsListenReg(t)
@@ -267,7 +267,7 @@ func TestServeRawTLS(t *testing.T) {
 	r.Defs.Push("capem", native.NewString(caPEM))
 
 	out, err := runNetStepsOn(t, r, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def nl (convert Bytes "\n")`,
 		`def l (Net.serve-raw {tcp: 0  host: "127.0.0.1"  tls: {identity: srv/q}} ([c:Any] => [
 		   Net.send-bytes (Net.recv-until c nl {within: 5000}) c
@@ -286,7 +286,7 @@ func TestServeRawTLS(t *testing.T) {
 	}
 }
 
-// runNetStepsOn runs AQL steps on a caller-supplied registry, so a test
+// runNetStepsOn runs BORU steps on a caller-supplied registry, so a test
 // can register a host credential first.
 func runNetStepsOn(t *testing.T, reg *native.Registry, steps []string) ([]native.Value, error) {
 	t.Helper()
@@ -512,7 +512,7 @@ func TestServeRawTLSHandshakeFailure(t *testing.T) {
 	r.Defs.Push("capem", native.NewString(caPEM))
 
 	out, err := runNetStepsOn(t, r, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def nl (convert Bytes "\n")`,
 		`def l (Net.serve-raw {tcp: 0  host: "127.0.0.1"  tls: {identity: srv/q}} ([c:Any] => [
 		   Net.send-bytes (Net.recv-until c nl {within: 5000}) c

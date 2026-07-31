@@ -1,8 +1,8 @@
-// Package fmt implements `aql fmt [file.aql ...]` — format AQL
+// Package fmt implements `boru fmt [file.boru ...]` — format BORU
 // source files in place via lang/go/formatter.Format.
 //
-// With no arguments, formats every .aql file in the current
-// directory tree (skipping anything inside .aql/).
+// With no arguments, formats every .boru file in the current
+// directory tree (skipping anything inside .boru/).
 package fmt
 
 import (
@@ -12,9 +12,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/lang/go/formatter"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/lang/go/formatter"
 )
 
 // osWriteFile is a test seam (design/TEST-SEAMS.10.md); tests swap it to
@@ -28,15 +28,15 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "fmt" }
-func (*cmd) Synopsis() string { return "format .aql source files in place" }
+func (*cmd) Synopsis() string { return "format .boru source files in place" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdout, stderr)
 }
 
 // formatByExt formats a file's contents according to its extension:
 // Markdown (.md/.markdown) and HTML (.html/.htm) files have only their
-// embedded AQL (```aql fences / <!-- aqlfmt --> regions) reformatted;
-// everything else is treated as a whole AQL source file.
+// embedded BORU (```boru fences / <!-- borufmt --> regions) reformatted;
+// everything else is treated as a whole BORU source file.
 func formatByExt(path, src string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".md", ".markdown":
@@ -48,7 +48,7 @@ func formatByExt(path, src string) string {
 	}
 }
 
-// Run handles `aql fmt [file.aql ...]`.
+// Run handles `boru fmt [file.boru ...]`.
 func Run(args []string, stdout, stderr io.Writer) int {
 	var files []string
 	if len(args) == 0 {
@@ -56,10 +56,10 @@ func Run(args []string, stdout, stderr io.Writer) int {
 			if err != nil {
 				return err
 			}
-			if info.IsDir() && info.Name() == ".aql" {
+			if info.IsDir() && info.Name() == ".boru" {
 				return filepath.SkipDir
 			}
-			if !info.IsDir() && strings.HasSuffix(path, ".aql") {
+			if !info.IsDir() && strings.HasSuffix(path, ".boru") {
 				files = append(files, path)
 			}
 			return nil
@@ -70,7 +70,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		}
 	} else {
 		// Expand a leading ~ the shell left verbatim (e.g. a quoted
-		// "~/proj/x.aql") on each positional file path.
+		// "~/proj/x.boru") on each positional file path.
 		files = make([]string, len(args))
 		for i, a := range args {
 			files[i] = pathutil.Expand(a)
@@ -78,7 +78,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if len(files) == 0 {
-		stdfmt.Fprintln(stdout, "no .aql files found")
+		stdfmt.Fprintln(stdout, "no .boru files found")
 		return 0
 	}
 

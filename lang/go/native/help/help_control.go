@@ -5,7 +5,7 @@ func init() {
 		Word:    "unpack",
 		Summary: "Destructure entries of a map into local word bindings.",
 		Description: "Extracts entries from a map (or record) and binds each to a bare word " +
-			"in the current scope — AQL's analogue of JavaScript object destructuring. " +
+			"in the current scope — BORU's analogue of JavaScript object destructuring. " +
 			"Three selector forms over the same source: `unpack [names] map`, " +
 			"`unpack all map`, and `unpack {renames} map`. A fourth form decodes a " +
 			"binary frame: `unpack <BinarySpec> b` reads the Bytes `b` against a frame " +
@@ -41,7 +41,7 @@ func init() {
 	register(&Entry{
 		Word:    "do",
 		Summary: "Evaluate a list or map as code.",
-		Description: "Evaluates the elements of a list as AQL code. For maps, recursively " +
+		Description: "Evaluates the elements of a list as BORU code. For maps, recursively " +
 			"evaluates all values. Used to execute deferred expressions.",
 		Notes: []string{
 			"Typed lists, typed maps, and record types are not evaluated.",
@@ -59,8 +59,8 @@ func init() {
 			"Handlers read `e.code` (atom), `e.message` (string), and any payload " +
 			"keys; `convert Map e` projects the same fields.",
 		Examples: []string{
-			`raise "boom" ; # [aql/user_error]: boom`,
-			`raise bad_input "expected a list" ; # [aql/bad_input]: …`,
+			`raise "boom" ; # [boru/user_error]: boom`,
+			`raise bad_input "expected a list" ; # [boru/bad_input]: …`,
 			`do [raise {code: nope/q, message: "m", got: 42}] error [var [[e] e.got print]]`,
 		},
 	})
@@ -91,7 +91,7 @@ func init() {
 			"same way \u2014 value pushed first, like the error handler \u2014 so a block " +
 			"list can consume it; a plain-value block is the result as-is. A trailing " +
 			"odd element is the default. The stack-value form `v case [clauses]` " +
-			"serves error handlers and pipelines. `aql check` requires the clauses " +
+			"serves error handlers and pipelines. `boru check` requires the clauses " +
 			"to be EXHAUSTIVE over the scrutinee's static type: a default-less case " +
 			"with a provably-uncoverable value is a check error " +
 			"(case_not_exhaustive). The default is not needed when the type " +
@@ -236,7 +236,7 @@ func init() {
 	register(&Entry{
 		Word:        "error",
 		Summary:     "Recover from an error: `value error [handler]`.",
-		Description: "If the value is an Error, the handler list runs (with the error on the stack) to produce a fallback; otherwise the value passes through unchanged. AQL's try/catch combinator.",
+		Description: "If the value is an Error, the handler list runs (with the error on the stack) to produce a fallback; otherwise the value passes through unchanged. BORU's try/catch combinator.",
 	})
 	register(&Entry{
 		Word:        "force-arity",

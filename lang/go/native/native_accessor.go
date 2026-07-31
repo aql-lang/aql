@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // accessorNatives covers strict-access words.
@@ -252,7 +252,7 @@ func hasModuleInstHandler(args []Value, _ map[string]Value, _ []Value, _ *Regist
 // for map/object containers and unknown-length carriers) and returns
 // the container's element-type carrier. `getr` errors at runtime on an
 // out-of-bounds list index, so a provably out-of-range literal —
-// `[10 20] 5 getr` — is flagged at `aql check`.
+// `[10 20] 5 getr` — is flagged at `boru check`.
 func returnsGetrIndexChecked(args []Value, r *Registry) []Value {
 	if len(args) >= 2 {
 		CheckListIndex(r, args[0], args[1], "getr")
@@ -384,8 +384,8 @@ func notFoundKeyError(r *Registry, detail, key string, keyPos eng.SrcPos, keys [
 // buildNotFoundKeyError is the shared not_found builder both the runtime
 // handlers and the compile-time trap use, so the strict-read miss error
 // is byte-identical across engines.
-func buildNotFoundKeyError(r *Registry, detail, key string, keyPos eng.SrcPos, keys []string) *eng.AqlError {
-	ae := eng.MakeAqlErrorAt("not_found", detail, "getr", srcOf(r), "", keyPos)
+func buildNotFoundKeyError(r *Registry, detail, key string, keyPos eng.SrcPos, keys []string) *eng.BoruError {
+	ae := eng.MakeBoruErrorAt("not_found", detail, "getr", srcOf(r), "", keyPos)
 	if s := eng.DidYouMean(key, keys); s != "" {
 		ae.Suggestions = append(ae.Suggestions, eng.DiagSuggestion{Message: s})
 	}
@@ -404,7 +404,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	key := args[0]
 	container := args[1]
 	if !IsConcrete(container) {
-		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
+		return nil, r.BoruError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	// Integer key on list.
 	if key.Parent.ConformsTo(TInteger) {
@@ -417,7 +417,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 			// with NO code — nothing for `do […] error [dot code case …]` to
 			// dispatch on, for the most ordinary indexing mistake there is.
 			if idx < 0 || idx >= list.Len() {
-				return nil, r.AqlError("index_out_of_range",
+				return nil, r.BoruError("index_out_of_range",
 					fmt.Sprintf("getr: index %d out of bounds (length %d)", idx, list.Len()), "getr")
 			}
 			return []Value{list.Get(idx)}, nil
@@ -429,7 +429,7 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		// Same code, same message, as this handler's own check-mode mirror
 		// forty lines up (getrNodeReturns) — which was already coded while
 		// the runtime path was not.
-		return nil, r.AqlError("getr_error",
+		return nil, r.BoruError("getr_error",
 			fmt.Sprintf("getr: expected a map, got %s", container.Parent.String()), "getr")
 	}
 	val, ok := m.Get(k)
@@ -443,7 +443,7 @@ func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	key := args[0]
 	container := args[1]
 	if !IsConcrete(container) {
-		return nil, r.AqlError("getr_error", "getr: cannot access property on type literal", "getr")
+		return nil, r.BoruError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	k := getKey(key)
 	if m, err := AsMutableMap(container); err == nil {
@@ -469,5 +469,5 @@ func getrObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 }
 
 func getrNoneHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return nil, r.AqlError("not_found", "getr: parent is None — nothing to read a key from", "getr")
+	return nil, r.BoruError("not_found", "getr: parent is None — nothing to read a key from", "getr")
 }

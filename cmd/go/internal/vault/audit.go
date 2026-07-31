@@ -13,7 +13,7 @@ import (
 )
 
 // AuditEvent is one structured entry in the vault audit log. The
-// log is append-only JSONL at ~/.aql/vault.audit.jsonl, one event
+// log is append-only JSONL at ~/.boru/vault.audit.jsonl, one event
 // per line. Fields that are zero-valued are omitted so each line
 // stays small and grep-friendly.
 //
@@ -92,7 +92,7 @@ func defaultActor() string {
 	return "local"
 }
 
-// runAudit implements `aql vault audit`. By default it prints
+// runAudit implements `boru vault audit`. By default it prints
 // every event in human-readable form; flags narrow the view or
 // stream new entries.
 func runAudit(args []string, homeDir string, stdout, stderr io.Writer) int {

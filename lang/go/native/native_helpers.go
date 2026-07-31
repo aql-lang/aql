@@ -4,7 +4,7 @@ import (
 	"errors"
 	"math/big"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 	"github.com/cockroachdb/apd/v3"
 )
 
@@ -53,7 +53,7 @@ const (
 )
 
 // decimalRounders maps the rounding names accepted by `with-decimal`
-// (both AQL-hyphenated and apd's own underscore spellings) to apd
+// (both BORU-hyphenated and apd's own underscore spellings) to apd
 // Rounders. Anything unrecognised falls back to round-half-even.
 var decimalRounders = map[string]apd.Rounder{
 	"half-even": apd.RoundHalfEven, "half_even": apd.RoundHalfEven,
@@ -138,7 +138,7 @@ type towerOps struct {
 // numericBinaryHandler builds the [TNumber, TNumber] handler for a binary
 // math word as a leaf-rank tower. Args are in sig order (args[0], args[1]).
 //
-//   - Float opposite a Big leaf → [aql/type_error] (the exact Big types
+//   - Float opposite a Big leaf → [boru/type_error] (the exact Big types
 //     never silently degrade to binary Float; convert explicitly).
 //   - Float opposite Integer/Float → the Float path, exactly as before
 //     (preserves Integer⊕Float→Float and the IEEE NaN behaviour; AsNumber
@@ -231,7 +231,7 @@ func checkBigFloatMix(r *Registry, args []Value) {
 	la, lb := numLeaf(args[0]), numLeaf(args[1])
 	if (la == leafFloat && (lb == leafBigInteger || lb == leafBigDecimal)) ||
 		(lb == leafFloat && (la == leafBigInteger || la == leafBigDecimal)) {
-		var ae *AqlError
+		var ae *BoruError
 		if errors.As(bigFloatMixError(r, args[0], args[1]), &ae) {
 			eng.CheckAddUniqueDiagnostic(r, ae.Code, ae.Detail, "", args[0].Pos())
 		}
@@ -281,7 +281,7 @@ func apdBin(fn func(d, x, y *apd.Decimal) (apd.Condition, error), x, y *apd.Deci
 	if _, err := fn(out, x, y); err != nil {
 		// Normalise the library error into the arith_error taxonomy the
 		// check pass already uses for the same failures (phase 5).
-		return Value{}, eng.MakeAqlError("arith_error", err.Error(), "", "", "")
+		return Value{}, eng.MakeBoruError("arith_error", err.Error(), "", "", "")
 	}
 	return NewBigDecimal(out), nil
 }
@@ -290,7 +290,7 @@ func apdBin(fn func(d, x, y *apd.Decimal) (apd.Condition, error), x, y *apd.Deci
 // type with a binary Float — disallowed so exactness is never silently
 // lost. The user must convert one operand explicitly.
 func bigFloatMixError(r *Registry, a, b Value) error {
-	return r.AqlError("type_error",
+	return r.BoruError("type_error",
 		"cannot mix "+a.Parent.Leaf()+" and "+b.Parent.Leaf()+
 			" in arithmetic — convert one explicitly (a Big type never silently becomes a binary Float)",
 		"")
@@ -322,7 +322,7 @@ func ApdUnaryNative(name string, floatFn func(float64) float64, apdFn func(c *ap
 	bigHandler := func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 		out := new(apd.Decimal)
 		if _, err := apdFn(decimalContext(r), out, asApdOperand(args[0])); err != nil {
-			return nil, r.AqlError("math_error", name+": "+err.Error(), name)
+			return nil, r.BoruError("math_error", name+": "+err.Error(), name)
 		}
 		return []Value{NewBigDecimal(out)}, nil
 	}
@@ -362,8 +362,8 @@ func RoundToIntegralNative(name string, floatFn func(float64) float64, mode apd.
 		ctx := *decimalContext(r) // clone: Rounding is per-word, the context is shared
 		ctx.Rounding = mode
 		out := new(apd.Decimal)
-		if _, err := ctx.RoundToIntegralValue(out, asApdOperand(args[0])); err != nil { //covergate:allow AQL BigDecimals are always finite (non-finite literals reject at parse; producing ops trap first) and round-to-integral of a finite decimal cannot overflow the context — defensive error-propagation only (§native)
-			return nil, r.AqlError("math_error", name+": "+err.Error(), name)
+		if _, err := ctx.RoundToIntegralValue(out, asApdOperand(args[0])); err != nil { //covergate:allow BORU BigDecimals are always finite (non-finite literals reject at parse; producing ops trap first) and round-to-integral of a finite decimal cannot overflow the context — defensive error-propagation only (§native)
+			return nil, r.BoruError("math_error", name+": "+err.Error(), name)
 		}
 		return []Value{NewBigDecimal(out)}, nil
 	}
@@ -399,4 +399,4 @@ func FloatUnaryBigNative(name string, floatFn func(float64) float64) NativeFunc 
 	}
 }
 
-// CoerceBoolean is re-exported by aliases.go (defined in aqleng).
+// CoerceBoolean is re-exported by aliases.go (defined in borueng).

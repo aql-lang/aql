@@ -58,9 +58,9 @@ func TestCompiledReturnCheck(t *testing.T) {
 // (SnapshotForCompile / RestoreForCompile).
 func TestRunCompiledFallbackIsolation(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	// Each row is UNCOMPILABLE (so it takes the fallback path) and
 	// side-effecting (so a double-execution would corrupt the result).
 	// RunCompiled must equal a clean interpreter Run.
@@ -84,14 +84,14 @@ func TestRunCompiledFallbackIsolation(t *testing.T) {
 		// `MathUtil.$module.name`) now const-fold and compile, so these pair the
 		// import with a still-uncompilable operation: the import side effect must
 		// still be rolled back before the whole-program fallback re-runs.
-		`import "aql:math-util" def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
-		// aql:test import isolation: Test.test / Test.describe cases (closure
+		`import "boru:math-util" def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
+		// boru:test import isolation: Test.test / Test.describe cases (closure
 		// path) AND the property words prop/check-prop/skip (their inert bodies
 		// bake as consts — the dot-access reach inside now an inert member) all
 		// compile, so pair the import with the predicate-fn `is` (still
 		// uncompilable — the VM cannot re-step the fn body, exactly as row 2/3)
 		// to keep the row on the fallback path and exercise the import rollback.
-		`import "aql:test" def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
+		`import "boru:test" def Positive fn [n:Integer Integer [if (n gt 0) [n] [None]]] 5 is Positive`,
 	}
 	for _, src := range cases {
 		ac, err := New()
@@ -157,7 +157,7 @@ func TestCompiledTraceRenders(t *testing.T) {
 	// it compiles to a CALL_NATIVE (its `[add 1 2]` arg now assembles via
 	// OpMakeList) and emits BYTE-IDENTICAL output to the interpreter. The trace
 	// side-effect must therefore survive the compiled path unchanged.
-	src := `import "aql:io" IO.trace [add 1 2]`
+	src := `import "boru:io" IO.trace [add 1 2]`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -190,7 +190,7 @@ func TestCompiledTraceRenders(t *testing.T) {
 
 // Mixed-mode error rendering: when a fallback island errors, the message
 // must read byte-identically to the interpreter — the island re-runs the
-// SAME tokens through a sub-engine, so its AqlError carries the island's
+// SAME tokens through a sub-engine, so its BoruError carries the island's
 // own frame attribution ("each: element 0: …"), and the VM stamps it
 // through the shared error path (stampAt) without overwriting that
 // position. A regression that mangled island-error attribution (e.g.
@@ -229,9 +229,9 @@ func TestCompiledIslandErrorRendering(t *testing.T) {
 // would silently break it).
 func TestCompiledArgsWordFallsBack(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	// Bare `args` (the WHOLE per-call list) still falls back: the args
 	// projection has no foldable consumer, so it refuses at its use site and
 	// the interpreter owns it. (Compiling it would need a build-list-from-locals

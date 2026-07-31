@@ -34,7 +34,7 @@ it claimed. Verified on this branch:
 |---|---|---|
 | raw-form capture (parens) | **already shipping** as `FnSig.RawParens` | `value.go:251`; `codequote` sets `RawParens{0:true}` (`natives.go:60`); gated in `preEvalParens` via `rawParenForward` (`engine.go:677,826,841`) |
 | capture a bare word as data | **already shipping** as `FnSig.QuoteArgs` | `matchSignature` accepts the raw word (`engine.go:3781`); in-place Word→Atom at `engine.go:1760` |
-| run a transformer body | **`CallAQL`** runs an `FnSig` body in a sub-engine on the same registry, returns `[]Value` | `registry.go:830` |
+| run a transformer body | **`CallBORU`** runs an `FnSig` body in a sub-engine on the same registry, returns `[]Value` | `registry.go:830` |
 | splice tokens into the call site | **`__SP`** marker re-steps the tape | `engine.go:1713` + `spliceExpand` |
 | a dispatch-time behavioural flag | **`FnDefInfo.Anonymous`** is the precedent | `value.go:315` |
 | walk a template structurally | **`WalkBodyWords`** (recurses List/ParenExpr) | `fn_capture.go:18` |
@@ -93,7 +93,7 @@ to an Atom (`engine.go:1760`). A macro needs the word preserved.
 
 3. **`stepLiteral`**: **no conversion needed** (unlike `QuoteArgs`' Word→Atom).
    The collected value is already the raw form; it flows straight to the
-   handler/`CallAQL` binding.
+   handler/`CallBORU` binding.
 
 **Balanced-span note:** because `FormArgs` reuses the *value-level* `ParenExpr`
 (parser-collapsed) rather than the `OpenParen…CloseParen` marker tape, we do
@@ -198,7 +198,7 @@ ethos); revisit if a use case appears.
 1. **Cache check** (§8): key `(w.Name, pos)`. Hit → re-splice cached tokens.
 2. **Raw-capture** the forward operands using the `FormArgs` collection (§3):
    one raw form per param. Bind them as the macro's args.
-3. **Run the template body** via `CallAQL(&fn.Signatures[0], rawArgs,
+3. **Run the template body** via `CallBORU(&fn.Signatures[0], rawArgs,
    fn.Captured)` (`registry.go:830`). Because the body is `quote [ … ]`, the
    result is the **inert template token list** (words stay words; `unquote`/
    `splice`/their operands are literal tokens inside it).
@@ -226,7 +226,7 @@ ethos); revisit if a use case appears.
    generated code (where `preEvalParens` now *does* evaluate the emitted parens
    — deferral to generated code, exactly as intended).
 
-**Errors are loud:** the expander uses `CallAQL` (propagates errors), never
+**Errors are loud:** the expander uses `CallBORU` (propagates errors), never
 routes through `do` (which catches+reifies) — MACROS.8.md fact 6.
 
 **Model decision (D3):** the template is **data walked by the expander** (Model
@@ -258,7 +258,7 @@ into `register.go`).
 ## 8. Expansion cache
 
 - Key: `struct{ Name string; Pos SrcPos }` (`Pos` = `Value.Pos`,
-  `aql_error.go:141`; stable + unique per static call site).
+  `boru_error.go:141`; stable + unique per static call site).
 - Store on `Registry` (new `MacroCache map[...]...`), nil-init.
 - Invalidate on macro redefinition: `def`/`undef` of a name whose binding is a
   `Macro` FnDef clears matching entries (or bump a per-macro generation counter
@@ -340,7 +340,7 @@ into `register.go`).
 - `eng/go/engine.go:1099–1199` — `stepWord` macro branch; `:2146` —
   `execFnDefLiteral` guard; `:1713` — `__SP` output (unchanged).
 - `eng/go/macro_expand.go` — **new** expander.
-- `eng/go/registry.go:830` — `CallAQL` (template run, unchanged); new
+- `eng/go/registry.go:830` — `CallBORU` (template run, unchanged); new
   `MacroCache` + invalidation.
 - `lang/go/native/native_macro.go` — **new**: `macro`, `unquote`, `splice`,
   `gensym`, `macroexpand`; wired in `register.go`.

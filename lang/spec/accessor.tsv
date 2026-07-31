@@ -101,5 +101,5 @@ def i 0 end [[1 2] [3 4]] get i	[1 2]	get-evaluated index into a nested list
 {a:{b:{c:9}}}.a.b.c	9	three-deep . chain
 
 # ---- Module export: dotted member access ----
-import "aql:math-util" end MathUtil.sqrt 16.0	4.0	. over a module export resolves the member fn
-import "aql:math-util" end MathUtil dot sqrt 16.0	4.0	dot is the explicit form of the . member access
+import "boru:math-util" end MathUtil.sqrt 16.0	4.0	. over a module export resolves the member fn
+import "boru:math-util" end MathUtil dot sqrt 16.0	4.0	dot is the explicit form of the . member access

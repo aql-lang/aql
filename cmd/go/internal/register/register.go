@@ -1,4 +1,4 @@
-// Package register implements `aql register [-r <url>]` — prompt
+// Package register implements `boru register [-r <url>]` — prompt
 // for email/username/password, POST /api/register on the registry
 // server.
 package register
@@ -12,8 +12,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
 )
 
 type cmd struct{}
@@ -22,12 +22,12 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "register" }
-func (*cmd) Synopsis() string { return "create an account on an aql registry" }
+func (*cmd) Synopsis() string { return "create an account on a boru registry" }
 func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdin, stdout, stderr)
 }
 
-// Run handles `aql register [-r <url>]`.
+// Run handles `boru register [-r <url>]`.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("register", flag.ContinueOnError)
 	fs.SetOutput(stderr)

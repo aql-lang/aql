@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // ADR-008 coverage for BuildCliModule's guard arms, which the behavioural
-// suite (lang/spec/module-cli.tsv + cli_test.aql) cannot reach: every one of
+// suite (lang/spec/module-cli.tsv + cli_test.boru) cannot reach: every one of
 // them is a loader failure, and a loader that failed would take the whole
 // module — and therefore every behavioural case — with it.
 //
@@ -94,7 +94,7 @@ func TestBuildCliModuleRegisterFallbackWithoutInitFunc(t *testing.T) {
 
 // A sub-registry that cannot resolve the preamble's own imports surfaces the
 // preamble run failure — the parent here carries no native-module resolver, so
-// cli.aql's `import "aql:string-util"` fails inside the run.
+// cli.boru's `import "boru:string-util"` fails inside the run.
 func TestBuildCliModulePreambleRunError(t *testing.T) {
 	reg, err := native.DefaultRegistry()
 	if err != nil {

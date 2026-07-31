@@ -1,14 +1,14 @@
-# `net/url` → `aql:url`
+# `net/url` → `boru:url`
 
 > **Status: design proposal — not implemented.** A curated, hand-written
-> native module wrapping Go's `net/url` with an idiomatic ("aql-ish")
+> native module wrapping Go's `net/url` with an idiomatic ("boru-ish")
 > surface. Read [`README.10.md`](README.10.md) first for the shared
 > conventions this note assumes.
 
 ## 1. Package & status
 
 Go package: `net/url` — parsing and escaping of URLs and query strings.
-This note specifies `aql:url` (namespace `Url`), a value-oriented wrapper
+This note specifies `boru:url` (namespace `Url`), a value-oriented wrapper
 that turns a URL into a plain inspectable Map rather than an opaque
 handle. Design proposal; no Go code exists yet.
 
@@ -28,12 +28,12 @@ value-or-error, and `parse-query` returns the natural `Map` of
 ## 3. Import & namespace
 
 ```
-import "aql:url"          # binds the Url namespace
+import "boru:url"          # binds the Url namespace
 ```
 
 The bare capitalized package name `Url` is free (not a builtin type, not
 an existing module namespace), so **no `-util` suffix** is needed
-(contrast `aql:path-util`, whose `Path` would collide with the builtin
+(contrast `boru:path-util`, whose `Path` would collide with the builtin
 `Path` type). Words are dot-accessed: `Url.parse`, `Url.query-escape`, …
 
 ## 4. API
@@ -42,7 +42,7 @@ Signatures are **top-first, sig order** (position 0 = top of stack), per
 the README "Argument order & dispatch" rule. All inner natives use
 `BarrierPos: -1` so the swap form `a Url.word b` dispatches.
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `url.Parse` | `parse` | `[String] -> [Map]` | Parse a URL into its components. | **KEY**: no opaque `*url.URL`. Returns a flat `Map {scheme, host, port, path, query, fragment, user}` (`String → Map`); `(*url.URL, error)` collapses to Map-or-error. |
 | `(*url.URL).String` | `build` | `[Map] -> [String]` | Render a component Map back to a URL string. | The inverse of `parse`: takes the same flat Map and emits a URL (`Map → String`). Aliased as `format`. Missing keys default empty. |
@@ -82,7 +82,7 @@ reflection bridge would expose, so there is no `RegisterExternalBuiltin`
 ## 6. Errors
 
 No panics (guard args with `AsConcreteString` / `RequireConcreteMap`
-before use). Failure is signalled via `r.AqlError(code, detail, word)`
+before use). Failure is signalled via `r.BoruError(code, detail, word)`
 with kebab codes:
 
 - `parse` — Go `url.Parse` error → `parse`.
@@ -96,17 +96,17 @@ A non-String arg to an escape word, or a non-Map arg to `build` /
 
 **None — pure.** All operations are in-memory string transforms; nothing
 touches the network, disk, env, or clock. Runs under any policy. (Network
-access lives in `aql:net`, see Overlap.)
+access lives in `boru:net`, see Overlap.)
 
 ## 8. Overlap
 
-`aql:net` (`Net.fetch` / `Net.prepare` / `Net.direct`) uses `net/url`
+`boru:net` (`Net.fetch` / `Net.prepare` / `Net.direct`) uses `net/url`
 **internally** — `native/fetch.go` calls `url.Parse(rawURL)` to validate
-and split the target — but it exposes **no url words to AQL users**
-(`docs_net.go` lists only `direct`, `fetch`, `prepare`). So `aql:url` is a
+and split the target — but it exposes **no url words to BORU users**
+(`docs_net.go` lists only `direct`, `fetch`, `prepare`). So `boru:url` is a
 **genuinely new user-facing surface**, not a re-spec of anything in
-`aql:net`; it does not move or change any existing word. The dividing
-line: `aql:net` *performs* requests; `aql:url` only *manipulates URL
+`boru:net`; it does not move or change any existing word. The dividing
+line: `boru:net` *performs* requests; `boru:url` only *manipulates URL
 strings and query data*.
 
 ## 9. Examples
@@ -115,7 +115,7 @@ All args-before form (`a b Url.word` / `a Url.word b`); never
 `Url.word a b`.
 
 ```
-import "aql:url"
+import "boru:url"
 
 "https://u@host.io:8443/a/b?x=1&x=2#frag" Url.parse
 # → {scheme:"https" host:"host.io" port:"8443" path:"/a/b"
@@ -154,10 +154,10 @@ Wiring checklist (no code), mirroring `math.go` (pure module):
   Exports: {"Url": …}}`.
 - Register `BuildUrlModule` in the `modules` map in
   `lang/go/modules/modules.go`.
-- `lang/go/modules/docs_url.go` — `registerDocs("aql:url", {…})` with a
+- `lang/go/modules/docs_url.go` — `registerDocs("boru:url", {…})` with a
   one-liner per export (else `TestModuleExportDocs` fails).
 - `lang/spec/module-url.tsv` — `input⇥expected⇥description` rows leading
-  with `import "aql:url"`; every positive row paired with an
+  with `import "boru:url"`; every positive row paired with an
   `ERROR:<substring>` negative sibling (Test discipline).
 - Boundary conversion via `eng.FromNative` / `eng.ToNative`
   (String↔`string`, Map↔`map[string]any`, List↔slice).

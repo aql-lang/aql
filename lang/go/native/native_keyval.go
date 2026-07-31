@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // TKeyVal is the Node/Map/KeyVal type — the entry value a map-iteration body

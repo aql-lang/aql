@@ -1,6 +1,6 @@
 package vault
 
-// tui_vaults_more_test.go — the vault index CLI (`aql vault folder` list /
+// tui_vaults_more_test.go — the vault index CLI (`boru vault folder` list /
 // rm), index default handling, discovery ordering, and launch selection.
 
 import (
@@ -176,9 +176,9 @@ func TestLaunchVaultSelection(t *testing.T) {
 		t.Error("a stale-only index should mean nothing to launch")
 	}
 	// A real vault becomes the launch target.
-	writeMeta(t, filepath.Join(home, ".aql"), "", "file")
+	writeMeta(t, filepath.Join(home, ".boru"), "", "file")
 	folder, suffix, ok := launchVault(home)
-	if !ok || suffix != "" || folder != filepath.Join(home, ".aql") {
+	if !ok || suffix != "" || folder != filepath.Join(home, ".boru") {
 		t.Errorf("launchVault = %q %q %v", folder, suffix, ok)
 	}
 	// A default-marked second vault wins over the plain one.
@@ -195,7 +195,7 @@ func TestLaunchVaultSelection(t *testing.T) {
 
 func TestLoadVaultIndexCorrupt(t *testing.T) {
 	home := testHome(t)
-	if err := os.MkdirAll(homeAQLDir(home), 0o700); err != nil {
+	if err := os.MkdirAll(homeBORUDir(home), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(vaultIndexPath(home), []byte("{broken"), 0o600); err != nil {

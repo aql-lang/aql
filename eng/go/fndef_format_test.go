@@ -18,7 +18,7 @@ func fnDefValue(name string, paramTypes []*Type, body []Value) Value {
 	reg.Defs.Push("LEAK_SENTINEL_EXPORT", NewInteger(1))
 	return NewFunction(FnDefInfo{
 		Name:       name,
-		Signatures: []Signature{{Params: params, Returns: []*Type{TInteger}, Impl: AQL(body), BarrierPos: -1}},
+		Signatures: []Signature{{Params: params, Returns: []*Type{TInteger}, Impl: BORU(body), BarrierPos: -1}},
 		Registry:   reg,
 	})
 }

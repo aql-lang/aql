@@ -1,10 +1,10 @@
-module github.com/aql-lang/aql/cmd/go
+module github.com/boru-lang/boru/cmd/go
 
 go 1.24.7
 
 require (
-	github.com/aql-lang/aql/eng/go v0.0.0
-	github.com/aql-lang/aql/lang/go v0.0.0
+	github.com/boru-lang/boru/eng/go v0.0.0
+	github.com/boru-lang/boru/lang/go v0.0.0
 	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/huh v0.7.0
@@ -81,6 +81,6 @@ require (
 	modernc.org/sqlite v1.46.1 // indirect
 )
 
-replace github.com/aql-lang/aql/eng/go => ../../eng/go
+replace github.com/boru-lang/boru/eng/go => ../../eng/go
 
-replace github.com/aql-lang/aql/lang/go => ../../lang/go
+replace github.com/boru-lang/boru/lang/go => ../../lang/go

@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // Deterministic coverage for net_codec.go's connection-session loop
@@ -17,7 +17,7 @@ import (
 // using a scripted in-memory net.Conn — every read, write and deadline
 // outcome is fixed up front, so the error arms fire without real sockets
 // or timing races. dispatchDecoded / matchRouteTemplate are driven against
-// real Services built by AQL steps.
+// real Services built by BORU steps.
 
 // scriptAddr is a net.Addr whose String carries no host:port split —
 // exercising peerMapOf's SplitHostPort fallback.

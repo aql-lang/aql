@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // File-module battery for open words (design/OPEN-WORDS.0.md): the
@@ -31,10 +31,10 @@ export "FlagExt" {add: add/r mk: mk/r Flag: Flag}`
 // importer (module-closure execution), and the locked native signatures
 // are untouched.
 func TestModuleExtendFileTransplant(t *testing.T) {
-	files := map[string]string{"ext.aql": flagExtModule}
+	files := map[string]string{"ext.boru": flagExtModule}
 	// flip(flip a AND flip b) == a OR b.
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./ext.aql"`,
+		`import "./ext.boru"`,
 		`add (FlagExt.mk true) (FlagExt.mk false)`,
 	})
 	if err != nil {
@@ -43,7 +43,7 @@ func TestModuleExtendFileTransplant(t *testing.T) {
 	assertResult(t, result, "true")
 
 	result, err = runMemFSModuleSteps(t, files, []string{
-		`import "./ext.aql"`,
+		`import "./ext.boru"`,
 		`add 40 2`,
 	})
 	if err != nil {
@@ -60,10 +60,10 @@ func TestModuleExtendFileTransplant(t *testing.T) {
 // constructor produces values that dispatch the second instance's
 // signature.
 func TestModuleExtendFileDiamond(t *testing.T) {
-	files := map[string]string{"ext.aql": flagExtModule}
+	files := map[string]string{"ext.boru": flagExtModule}
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./ext.aql"`,
-		`import "./ext.aql"`,
+		`import "./ext.boru"`,
+		`import "./ext.boru"`,
 		`add (FlagExt.mk true) (FlagExt.mk false)`,
 	})
 	if err != nil {
@@ -74,9 +74,9 @@ func TestModuleExtendFileDiamond(t *testing.T) {
 
 // TestModuleExtendTransplantConflictDirect pins the §4.4 collision
 // machinery at the API level: the same unlocked tuple transplanted
-// from two DIFFERENT module refs raises [aql/extend_conflict], while
+// from two DIFFERENT module refs raises [boru/extend_conflict], while
 // the same ref re-arriving is idempotent and quiet. Unreachable from
-// AQL source today — a user-typed tuple is anchored to a per-import
+// BORU source today — a user-typed tuple is anchored to a per-import
 // mint, so two source modules can never build the identical tuple —
 // but the guard must hold for a future module cache (shared mints
 // across importers) and for host-constructed clones.
@@ -108,15 +108,15 @@ func TestModuleExtendTransplantConflictDirect(t *testing.T) {
 	}
 	native.UninstallDef(reg, "add")
 
-	if err := native.TransplantExtension(reg, clone, "./mod-a.aql", native.OwnerProgram); err != nil {
+	if err := native.TransplantExtension(reg, clone, "./mod-a.boru", native.OwnerProgram); err != nil {
 		t.Fatalf("first transplant: %v", err)
 	}
-	if err := native.TransplantExtension(reg, clone, "./mod-a.aql", native.OwnerProgram); err != nil {
+	if err := native.TransplantExtension(reg, clone, "./mod-a.boru", native.OwnerProgram); err != nil {
 		t.Fatalf("diamond re-transplant (same ref) must be idempotent, got %v", err)
 	}
-	err = native.TransplantExtension(reg, clone, "./mod-b.aql", native.OwnerProgram)
+	err = native.TransplantExtension(reg, clone, "./mod-b.boru", native.OwnerProgram)
 	if err == nil {
-		t.Fatal("expected [aql/extend_conflict] for the same tuple from a different module, got no error")
+		t.Fatal("expected [boru/extend_conflict] for the same tuple from a different module, got no error")
 	}
 	if !strings.Contains(err.Error(), "extend_conflict") {
 		t.Fatalf("expected extend_conflict, got %v", err)
@@ -130,14 +130,14 @@ func TestModuleExtendTransplantConflictDirect(t *testing.T) {
 // it (this is the firewall idiom as a file layout).
 func TestModuleExtendFileOneLevel(t *testing.T) {
 	files := map[string]string{
-		"ext.aql": flagExtModule,
-		"mid.aql": `import "./ext.aql"
+		"ext.boru": flagExtModule,
+		"mid.boru": `import "./ext.boru"
 def Flag FlagExt.Flag
 def omk fn [[b:Boolean] [Flag] [def v:Flag b v]]
 export "Mid" {mk: omk/r}`,
 	}
 	_, err := runMemFSModuleSteps(t, files, []string{
-		`import "./mid.aql"`,
+		`import "./mid.boru"`,
 		`add (Mid.mk true) (Mid.mk true)`,
 	})
 	if err == nil {
@@ -159,14 +159,14 @@ export "Mid" {mk: omk/r}`,
 // module's private helper.
 func TestModuleExtendFileReExport(t *testing.T) {
 	files := map[string]string{
-		"ext.aql": flagExtModule,
-		"mid.aql": `import "./ext.aql"
+		"ext.boru": flagExtModule,
+		"mid.boru": `import "./ext.boru"
 def Flag FlagExt.Flag
 def omk fn [[b:Boolean] [Flag] [def v:Flag b v]]
 export "Mid" {mk: omk/r add: add/r}`,
 	}
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./mid.aql"`,
+		`import "./mid.boru"`,
 		`add (Mid.mk true) (Mid.mk false)`,
 	})
 	if err != nil {
@@ -178,18 +178,18 @@ export "Mid" {mk: omk/r add: add/r}`,
 // TestModuleExtendFileUserTypeRule pins the ownership-anchor rule at
 // the file boundary (rev 2, design/OPEN-WORDS.1.md): a module extending
 // a core word with an unanchored (all-kernel) tuple is refused with
-// [aql/extend_owner] — `add 1 {}` can never start working because of
+// [boru/extend_owner] — `add 1 {}` can never start working because of
 // an import.
 func TestModuleExtendFileUserTypeRule(t *testing.T) {
 	files := map[string]string{
-		"bad.aql": `def add fn [[a:Integer b:Map] [Integer] [1]]
+		"bad.boru": `def add fn [[a:Integer b:Map] [Integer] [1]]
 export "Bad" {add: add/r}`,
 	}
 	_, err := runMemFSModuleSteps(t, files, []string{
-		`import "./bad.aql"`,
+		`import "./bad.boru"`,
 	})
 	if err == nil {
-		t.Fatal("expected [aql/extend_owner], got no error")
+		t.Fatal("expected [boru/extend_owner], got no error")
 	}
 	if !strings.Contains(err.Error(), "extend_owner") {
 		t.Fatalf("expected extend_owner, got %v", err)
@@ -197,7 +197,7 @@ export "Bad" {add: add/r}`,
 }
 
 // TestModuleExtendPointClass pins the canonical user-module shape end
-// to end: an AQL file module that mints a CLASS type Point {x,y},
+// to end: a BORU file module that mints a CLASS type Point {x,y},
 // merges a [Point Point] overload into core `add` (its own class is
 // the user type the module-scope rule requires), and exports both.
 // The importer constructs Points through the exported type with
@@ -206,12 +206,12 @@ export "Bad" {add: add/r}`,
 // `Point` binding via `make Point {…}`).
 func TestModuleExtendPointClass(t *testing.T) {
 	files := map[string]string{
-		"pointer.aql": `def Point class {x:Integer y:Integer}
+		"pointer.boru": `def Point class {x:Integer y:Integer}
 def add fn [[a:Point b:Point] [Point] [make Point {x:(a.x add b.x) y:(a.y add b.y)}]]
 export "Pointer" {Point: Point add: add/r}`,
 	}
 	steps := []string{
-		`import "./pointer.aql"`,
+		`import "./pointer.boru"`,
 		`def p0 (make Pointer.Point {x:1 y:2})`,
 		`def p1 (make Pointer.Point {x:4 y:6})`,
 		`def p2 (p0 add p1)`,
@@ -263,12 +263,12 @@ export "Pointer" {Point: Point add: add/r}`,
 // pops the transplant (base word intact), and importing the module
 // again re-installs a working extension.
 func TestModuleExtendFileUndefReimport(t *testing.T) {
-	files := map[string]string{"ext.aql": flagExtModule}
+	files := map[string]string{"ext.boru": flagExtModule}
 	result, err := runMemFSModuleSteps(t, files, []string{
-		`import "./ext.aql"`,
+		`import "./ext.boru"`,
 		`undef add`,
 		`add 40 2`,
-		`import "./ext.aql"`,
+		`import "./ext.boru"`,
 		`add (FlagExt.mk false) (FlagExt.mk true)`,
 	})
 	if err != nil {
@@ -300,7 +300,7 @@ func TestModuleExtendTransplantSealedWord(t *testing.T) {
 				return []native.Value{args[0]}, nil
 			}),
 		}})
-		err := native.TransplantExtension(reg, ext, "./evil.aql", "")
+		err := native.TransplantExtension(reg, ext, "./evil.boru", "")
 		if err == nil {
 			t.Fatalf("transplant onto sealed word %q was not refused", sealed)
 		}

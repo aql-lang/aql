@@ -1,9 +1,9 @@
 /**
- * @file Tree-sitter grammar for AQL — a concatenative, strongly-typed query language.
- * @author AQL contributors
+ * @file Tree-sitter grammar for BORU — a concatenative, strongly-typed query language.
+ * @author BORU contributors
  * @license MIT
  *
- * AQL is CONCATENATIVE. This grammar is deliberately PRAGMATIC: it models the
+ * BORU is CONCATENATIVE. This grammar is deliberately PRAGMATIC: it models the
  * token / lexeme layer faithfully (comments, the three string kinds with `${}`
  * interpolation, every number form, words, capitalised type identifiers,
  * operators / brackets and the `/modifier` suffixes) and then treats a program
@@ -11,8 +11,8 @@
  * parsing — the goal is a robust token tree that never ERRORs on real files.
  *
  * Lexical spec source: the repository's authoritative lexical spec, cross-checked
- * against editors/emacs/aql-mode.el and the example programs under
- * design/examples/, lang/go/test/solardemo.aql and bench/networking/.
+ * against editors/emacs/boru-mode.el and the example programs under
+ * design/examples/, lang/go/test/solardemo.boru and bench/networking/.
  */
 
 /* eslint-disable arrow-parens */
@@ -31,7 +31,7 @@ const WORD = /[A-Za-z](?:[A-Za-z0-9_]|-[A-Za-z0-9_])*/;
 const TYPE_IDENT = /[A-Z][A-Za-z0-9]*/;
 
 module.exports = grammar({
-  name: 'aql',
+  name: 'boru',
 
   // Whitespace and all comment forms float between tokens.
   extras: $ => [
@@ -45,7 +45,7 @@ module.exports = grammar({
 
   word: $ => $._word_token,
 
-  // The interpolation `${ … }` inside a template string embeds a full AQL
+  // The interpolation `${ … }` inside a template string embeds a full BORU
   // expression list; keep it in the same rule set.
   rules: {
     // ---------------------------------------------------------------------

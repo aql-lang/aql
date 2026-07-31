@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// queryRegistry returns a registry with the aql:query module installed
+// queryRegistry returns a registry with the boru:query module installed
 // and a parse func wired, plus an in-memory "people" table registered in
 // the context store.
 func queryRegistry(t *testing.T) *native.Registry {
@@ -315,7 +315,7 @@ func TestQueryNoFromErrors(t *testing.T) {
 // --- destructuring DX: unpack lifts query words to bare names ---
 
 // TestQueryUnpackBareWords is the headline DX use case: after importing
-// aql:query, destructure the words so the whole pipeline reads like SQL with
+// boru:query, destructure the words so the whole pipeline reads like SQL with
 // no `query.` prefix. The bound module wrappers preserve their inner natives'
 // QuoteArgs (from's bare table name) and NoEvalArgs (the where/select clause
 // lists) because InstallDef rebinds a trivial-delegation wrapper to the inner

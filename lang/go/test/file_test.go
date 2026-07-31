@@ -1,14 +1,14 @@
 package test
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
-// runWithOSFiles creates a registry using real OS file ops and runs AQL.
+// runWithOSFiles creates a registry using real OS file ops and runs BORU.
 // Files are resolved relative to the test package directory (lang/go/test/).
 func runWithOSFiles(t *testing.T, expr string) ([]native.Value, error) {
 	t.Helper()

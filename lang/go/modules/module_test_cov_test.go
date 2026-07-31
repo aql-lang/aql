@@ -6,17 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// (Uses the testRegistry / runTestAQL helpers from test_test.go and the
+// (Uses the testRegistry / runTestBORU helpers from test_test.go and the
 // runTestAndGetField helper from test_pbt_test.go — same package.)
 
 // tcovFailCount reads Test.fail-count as an int64.
 func tcovFailCount(t *testing.T, r *native.Registry) int64 {
 	t.Helper()
-	out := runTestAQL(t, r, `Test.fail-count`)
+	out := runTestBORU(t, r, `Test.fail-count`)
 	n, _ := native.AsInteger(out[len(out)-1])
 	return n
 }
@@ -25,7 +25,7 @@ func tcovFailCount(t *testing.T, r *native.Registry) int64 {
 // Assert.not-equal: equal values fail the enclosing case.
 func TestTestCovAssertNotEqualFails(t *testing.T) {
 	r := testRegistry(t)
-	runTestAQL(t, r, `Test.test "same" [1 1 Assert.not-equal]`)
+	runTestBORU(t, r, `Test.test "same" [1 1 Assert.not-equal]`)
 	if n := tcovFailCount(t, r); n != 1 {
 		t.Errorf("fail-count = %d, want 1", n)
 	}
@@ -35,7 +35,7 @@ func TestTestCovAssertNotEqualFails(t *testing.T) {
 // booleans, None, bare type literals, and plain truthy values.
 func TestTestCovAssertOkTruthiness(t *testing.T) {
 	r := testRegistry(t)
-	runTestAQL(t, r, `
+	runTestBORU(t, r, `
 		Test.test "int is truthy" [1 Assert.ok]
 		Test.test "string is truthy" ['x' Assert.ok]
 		Test.test "true is truthy" [true Assert.ok]
@@ -52,7 +52,7 @@ func TestTestCovAssertOkTruthiness(t *testing.T) {
 // body does NOT throw.
 func TestTestCovAssertThrowsNegative(t *testing.T) {
 	r := testRegistry(t)
-	runTestAQL(t, r, `Test.test "no throw" [[1 1 add] Assert.throws]`)
+	runTestBORU(t, r, `Test.test "no throw" [[1 1 add] Assert.throws]`)
 	if n := tcovFailCount(t, r); n != 1 {
 		t.Errorf("fail-count = %d, want 1", n)
 	}
@@ -61,7 +61,7 @@ func TestTestCovAssertThrowsNegative(t *testing.T) {
 // TestTestCovAssertMatch pins both arms of Assert.match.
 func TestTestCovAssertMatch(t *testing.T) {
 	r := testRegistry(t)
-	runTestAQL(t, r, `
+	runTestBORU(t, r, `
 		Test.test "contains" [Assert.match 'ell' 'hello']
 		Test.test "missing" [Assert.match 'zz' 'hello']
 	`)
@@ -73,12 +73,12 @@ func TestTestCovAssertMatch(t *testing.T) {
 // TestTestCovReset pins Test.reset: results, failures and path all clear.
 func TestTestCovReset(t *testing.T) {
 	r := testRegistry(t)
-	runTestAQL(t, r, `Test.test "bad" [1 2 Assert.equal]`)
+	runTestBORU(t, r, `Test.test "bad" [1 2 Assert.equal]`)
 	if n := tcovFailCount(t, r); n != 1 {
 		t.Fatalf("precondition: fail-count = %d, want 1", n)
 	}
-	runTestAQL(t, r, `Test.reset`)
-	out := runTestAQL(t, r, `Test.summary`)
+	runTestBORU(t, r, `Test.reset`)
+	out := runTestBORU(t, r, `Test.summary`)
 	m, _ := native.AsMap(out[0])
 	totalV, _ := m.Get("total")
 	total, _ := native.AsInteger(totalV)
@@ -107,7 +107,7 @@ func TestTestCovFailLineOnStderr(t *testing.T) {
 	for name, exp := range desc.Exports {
 		r.Defs.Push(name, native.NewMap(exp))
 	}
-	runTestAQL(t, r, `Test.describe "outer" [Test.test "boom" [1 2 Assert.equal]]`)
+	runTestBORU(t, r, `Test.describe "outer" [Test.test "boom" [1 2 Assert.equal]]`)
 	if !strings.Contains(buf.String(), "FAIL outer / boom") {
 		t.Errorf("stderr should carry the pathed FAIL line, got %q", buf.String())
 	}
@@ -131,8 +131,8 @@ func TestTestCovDescribeBodyError(t *testing.T) {
 func TestTestCovInvokeDotted(t *testing.T) {
 	r := testRegistry(t)
 	InstallResolver(r)
-	runTestAQL(t, r, `import "aql:math-util"`)
-	out := runTestAQL(t, r, `Test.invoke "MathUtil.sqrt" [4.0]`)
+	runTestBORU(t, r, `import "boru:math-util"`)
+	out := runTestBORU(t, r, `Test.invoke "MathUtil.sqrt" [4.0]`)
 	f, _ := native.AsNumber(out[0])
 	if f != 2.0 {
 		t.Errorf("Test.invoke MathUtil.sqrt [4.0] = %v, want 2.0", out[0])
@@ -144,18 +144,18 @@ func TestTestCovInvokeDotted(t *testing.T) {
 func TestTestCovInvokeAtomAndOutcomes(t *testing.T) {
 	r := testRegistry(t)
 	// Atom subject, plain word.
-	out := runTestAQL(t, r, `Test.invoke add/q [1 2]`)
+	out := runTestBORU(t, r, `Test.invoke add/q [1 2]`)
 	n, _ := native.AsInteger(out[0])
 	if n != 3 {
 		t.Errorf("Test.invoke add/q [1 2] = %v, want 3", out[0])
 	}
 	// A raising subject becomes an Error VALUE, not a run error.
-	out2 := runTestAQL(t, r, `Test.invoke "no-such-word-zz" [1]`)
+	out2 := runTestBORU(t, r, `Test.invoke "no-such-word-zz" [1]`)
 	if !native.IsError(out2[0]) {
 		t.Errorf("invoking an unknown word should return an Error value, got %v", out2[0])
 	}
 	// A subject that leaves nothing returns None.
-	out3 := runTestAQL(t, r, `def noop fn [[] [] []]  Test.invoke noop/q []`)
+	out3 := runTestBORU(t, r, `def noop fn [[] [] []]  Test.invoke noop/q []`)
 	if !native.IsNone(out3[len(out3)-1]) {
 		t.Errorf("empty-stack invoke should return None, got %v", out3[len(out3)-1])
 	}
@@ -187,7 +187,7 @@ func TestTestCovCheckPropErrorArms(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			r := testRegistry(t)
-			res := runTestAQL(t, r, c.src)
+			res := runTestBORU(t, r, c.src)
 			m, _ := native.AsMap(res[0])
 			okV, _ := m.Get("ok")
 			ok, _ := okV.AsConcreteBoolean()
@@ -210,7 +210,7 @@ func TestTestCovCheckPropErrorArms(t *testing.T) {
 // flow) falls back to value-level shrinking, which still minimises.
 func TestTestCovCheckPropUnrecordableGen(t *testing.T) {
 	r := testRegistry(t)
-	res := runTestAQL(t, r, `Test.check-prop "cf" [if true [15] [16]] [10 lt] 2 1 50`)
+	res := runTestBORU(t, r, `Test.check-prop "cf" [if true [15] [16]] [10 lt] 2 1 50`)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
 	if ok, _ := okV.AsConcreteBoolean(); ok {

@@ -38,7 +38,7 @@ func TestS7MaybeAddFnShapeHintNil(t *testing.T) {
 
 func TestS7MaybeAddFnShapeHintNonSigError(t *testing.T) {
 	e := &Engine{}
-	orig := &AqlError{Code: "other_error", Detail: "x"}
+	orig := &BoruError{Code: "other_error", Detail: "x"}
 	if got := e.maybeAddFnShapeHint(orig); got != error(orig) {
 		t.Error("a non-signature error must pass through unchanged")
 	}
@@ -46,8 +46,8 @@ func TestS7MaybeAddFnShapeHintNonSigError(t *testing.T) {
 
 func TestS7MaybeAddFnShapeHintSetsSuggestion(t *testing.T) {
 	e := fnShapeCtxEngine(t)
-	err := &AqlError{Code: "signature_error", Src: "double"}
-	out := e.maybeAddFnShapeHint(err).(*AqlError)
+	err := &BoruError{Code: "signature_error", Src: "double"}
+	out := e.maybeAddFnShapeHint(err).(*BoruError)
 	if len(out.Suggestions) != 1 || !strings.Contains(out.Suggestions[0].Message, "double/q") {
 		t.Errorf("suggestions = %v, want the /q suggestion", out.Suggestions)
 	}
@@ -56,9 +56,9 @@ func TestS7MaybeAddFnShapeHintSetsSuggestion(t *testing.T) {
 func TestS7MaybeAddFnShapeHintAppendsSuggestion(t *testing.T) {
 	e := fnShapeCtxEngine(t)
 	// Existing suggestions are kept; the /q one is appended after them.
-	err := &AqlError{Code: "signature_error", Src: "double",
+	err := &BoruError{Code: "signature_error", Src: "double",
 		Suggestions: []DiagSuggestion{{Message: "prior"}}}
-	out := e.maybeAddFnShapeHint(err).(*AqlError)
+	out := e.maybeAddFnShapeHint(err).(*BoruError)
 	if len(out.Suggestions) != 2 || out.Suggestions[0].Message != "prior" ||
 		!strings.Contains(out.Suggestions[1].Message, "double/q") {
 		t.Errorf("suggestions = %v, want prior + /q suggestion", out.Suggestions)

@@ -1,0 +1,14 @@
+{
+  "files": [
+    "charops.boru",
+    "letters.jsonic"
+  ],
+  "main": "charops.boru",
+  "major": 2,
+  "minor": 3,
+  "name": "charops",
+  "patch": 1,
+  "resource": {
+    "letters": "letters.jsonic"
+  }
+}

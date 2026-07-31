@@ -2,10 +2,10 @@
 // design/CHECKER-BYTECODE-COMPLETION-PLAN.0.md Phase 4.3).
 //
 // Every registered native signature — in the default registry and in
-// every `aql:` module's sub-registry — must tell the checker what it
+// every `boru:` module's sub-registry — must tell the checker what it
 // produces: a declared `Returns` (an empty non-nil slice is a valid
 // "produces nothing"), a check-mode `ReturnsFn`, a full-stack
-// `CheckFullStack` shape function, or an AQL body (whose returns the
+// `CheckFullStack` shape function, or a BORU body (whose returns the
 // analyser derives itself). Signature.DeclaresCheckReturns is the single
 // definition of that condition.
 //
@@ -31,10 +31,10 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // nativeReturnsOptOut is the explicit opt-out list: "word/arity" (or
@@ -89,7 +89,7 @@ func TestNativeReturnsCoverage(t *testing.T) {
 	for _, mod := range modNames {
 		desc, err := modules.Resolve(mod, reg)
 		if err != nil {
-			t.Fatalf("resolve aql:%s: %v", mod, err)
+			t.Fatalf("resolve boru:%s: %v", mod, err)
 		}
 		if desc.Src != nil {
 			scanReg(mod+":", desc.Src)

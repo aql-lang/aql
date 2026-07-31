@@ -1,4 +1,4 @@
-# AQL Language Specification: Recursion (fn frames, teardown, tail shapes)
+# BORU Language Specification: Recursion (fn frames, teardown, tail shapes)
 # Format: input<TAB>expected<TAB>description
 #
 # Pins the observable semantics of fn-call frames that tail-call
@@ -73,7 +73,7 @@ def g fn [[] [Integer] [n]] def f2 fn [[n:Integer] [Integer] [g]] f2 42	42	a cal
 def out2 fn [[] [Integer] [def go2 fn [[n:Integer] [Integer] [if (n lte 0) [99] [go2 (n sub 1)]]] go2 3]] out2	99	a locally-defined fn resolves its own name through the enclosing frame's binding while recursing
 #
 # §11 module fn recursion — a module-preamble fn recurses on the MODULE
-#     registry's sub-engine tape (one CallAQL boundary crossing per
+#     registry's sub-engine tape (one CallBORU boundary crossing per
 #     entry); results must be identical whether or not its frames elide
 import module [def fac fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [fac (n sub 1) (acc mul n)]]] export "MR" {fac: fac/r}] MR.fac 10 1	3628800	intra-module tail recursion through an exported preamble fn
 import module [def aod fn [[n:Integer] [Boolean] [if (n eq 0) [false] [aev (n sub 1)]]] def aev fn [[n:Integer] [Boolean] [if (n eq 0) [true] [aod (n sub 1)]]] export "MR" {aev: aev/r}] MR.aev 9	false	mutual tail recursion between module-preamble fns

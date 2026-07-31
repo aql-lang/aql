@@ -8,14 +8,14 @@ import (
 )
 
 // TestFmtByExtension covers formatByExt: Markdown and HTML files have
-// only their embedded AQL reformatted, while other extensions are treated
-// as whole AQL source files.
+// only their embedded BORU reformatted, while other extensions are treated
+// as whole BORU source files.
 func TestFmtByExtension(t *testing.T) {
 	dir := t.TempDir()
 	cases := []struct{ name, content, want string }{
-		{"doc.md", "```aql\ndef  x  1\n```\n", "```aql\ndef x 1\n```\n"},
-		{"page.html", "<!-- aqlfmt -->\ndef  y  2\n<!-- /aqlfmt -->\n", "<!-- aqlfmt -->\ndef y 2\n<!-- /aqlfmt -->\n"},
-		{"code.aql", "def   z   3\n", "def z 3\n"},
+		{"doc.md", "```boru\ndef  x  1\n```\n", "```boru\ndef x 1\n```\n"},
+		{"page.html", "<!-- borufmt -->\ndef  y  2\n<!-- /borufmt -->\n", "<!-- borufmt -->\ndef y 2\n<!-- /borufmt -->\n"},
+		{"code.boru", "def   z   3\n", "def z 3\n"},
 	}
 	for _, c := range cases {
 		p := filepath.Join(dir, c.name)
@@ -37,19 +37,19 @@ func TestFmtByExtension(t *testing.T) {
 }
 
 // TestFmtPositionalTildeExpanded guards that a leading ~ in a positional
-// file path that the shell left verbatim (e.g. a quoted "~/x.aql")
+// file path that the shell left verbatim (e.g. a quoted "~/x.boru")
 // resolves under the home folder rather than being read as a literal
-// "~/x.aql" relative to the working directory.
+// "~/x.boru" relative to the working directory.
 func TestFmtPositionalTildeExpanded(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home) // os.UserHomeDir honors $HOME on Unix.
-	src := filepath.Join(home, "x.aql")
+	src := filepath.Join(home, "x.boru")
 	if err := os.WriteFile(src, []byte("foo:1\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 
 	var out, errOut bytes.Buffer
-	if code := Run([]string{"~/x.aql"}, &out, &errOut); code != 0 {
+	if code := Run([]string{"~/x.boru"}, &out, &errOut); code != 0 {
 		t.Fatalf("fmt code=%d, stderr=%q", code, errOut.String())
 	}
 	if errOut.Len() != 0 {

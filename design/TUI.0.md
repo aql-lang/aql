@@ -1,7 +1,7 @@
 # TUI
 
-Design for the **`aql:tui` module** — the layer where a developer writes a
-terminal user interface in AQL: full-screen apps (dashboards, browsers,
+Design for the **`boru:tui` module** — the layer where a developer writes a
+terminal user interface in BORU: full-screen apps (dashboards, browsers,
 editors-of-things) that run on a local terminal **or** are served from a
 process and viewed from a thin remote client.
 
@@ -19,7 +19,7 @@ networking stack rides (`PROCESSES.0.md`):
 Because a view's output is ordinary sendable data (maps/lists/scalars — the
 `PROCESSES.0.md` §6 sendable class), the **remote story is a codec, not a
 subsystem**: `Tui.serve` ships widget trees down and events up over the
-`aql:net` json-lines machinery, and `aql attach` renders them with the same
+`boru:net` json-lines machinery, and `boru attach` renders them with the same
 layout engine. Local and remote are the same app, differing only in where
 frames are painted.
 
@@ -30,20 +30,20 @@ adjacent subsystems were designed first (`PROCESSES.0.md`, `SERVICES.0.md`,
 > **Decisions proposed at design time** (the forks this RFC closes; a
 > reviewer ratifies or reopens them):
 > (1) the app loop is a **native driver bound to a real `eng.Process`
-> mailbox** — not a loop written in AQL, and not a synthetic queue (§2.2);
+> mailbox** — not a loop written in BORU, and not a synthetic queue (§2.2);
 > (2) **full-screen apps first** — inline prompt/progress widgets are a later
 > tier on the same runtime (§9);
 > (3) the remote wire carries **widget trees, not cell diffs and not ANSI**
 > (§6.1);
 > (4) layout is **Ratatui-style size constraints as data**, not
 > lipgloss-style content joins (§3.2);
-> (5) the thin client is a **new `aql attach` command** — the existing
-> `aql tui` supervisor dashboard keeps its name untouched (§6.4);
+> (5) the thin client is a **new `boru attach` command** — the existing
+> `boru tui` supervisor dashboard keeps its name untouched (§6.4);
 > (6) v1 remote sessions **quit on disconnect** — reattach/persistence is
 > deferred (§6.3);
 > (7) the TTY backend is built on **`x/term` + `x/ansi` + `x/cellbuf`
 > directly**, not on bubbletea's `Program` (§4.4);
-> (8) update handlers are **ordinary AQL code** (may do I/O); only `view`
+> (8) update handlers are **ordinary BORU code** (may do I/O); only `view`
 > must be pure — the pragmatic-BEAM shape, not strict-Elm commands-as-data
 > (§2.3).
 
@@ -57,10 +57,10 @@ settles most of the model; this file adds the terminal-specific pieces.
 | Lightweight processes, `spawn`/`self`/`send`/`receive`, `Pid`, bounded mailbox, patrun dispatch | `PROCESSES.0.md` §2–4 (shipped as core words) | reused verbatim; **the UI app *is* such a process** — its mailbox is the event queue (§2) |
 | Immutable-only, zero-copy messages (`not_sendable`) | `PROCESSES.0.md` §6 | the reason widget trees and events are **plain data** — sendable to the UI and serializable to the wire for free (§3, §6) |
 | `service`/`add` patrun handlers, `call`/`send` | `SERVICES.0.md` §1 (shipped) | **deferred** — v1 has a single `update` function; a patrun-clause variant is an open question (§11.1) |
-| Listener/codec plumbing, `json-lines`, deadline & error vocabulary (`closed`/`timeout`/`transport`), token auth | `NETWORK-SERVERS.0.md` §4/§6, `NETWORK-CLIENTS.0.md`; shipped in `lang/go/modules/net_socket.go`, `net_codec.go` | reused for `Tui.serve`/`aql attach` (§6); the `Service`/`RemoteDispatch` layer is deliberately **not** used (§6.2) |
+| Listener/codec plumbing, `json-lines`, deadline & error vocabulary (`closed`/`timeout`/`transport`), token auth | `NETWORK-SERVERS.0.md` §4/§6, `NETWORK-CLIENTS.0.md`; shipped in `lang/go/modules/net_socket.go`, `net_codec.go` | reused for `Tui.serve`/`boru attach` (§6); the `Service`/`RemoteDispatch` layer is deliberately **not** used (§6.2) |
 | Host-registration seam for pluggable capability backends (Spec + `RegisterHostX` + registry state) | `EXTENSION-MODULES.10.md` §2; shipped as `RegisterHostParser` (`lang/go/modules/parselang.go`) | instantiated as `RegisterHostTui` — the terminal backend is host-injected; `lang/go` stays terminal-dependency-free (§4.3) |
 | Module build/registration/docs/spec/coverage house rules | `NATIVE-MODULES.10.md`; ADR-001/003/005/008 | followed throughout; word surface pre-audited against core words (§7.2) |
-| Timers (`timeout`/`interval`/`await`) | shipped, `aql:time-util` | reused: a tick is an `interval` whose body `send`s to the UI's pid — **no native tick machinery** (§2.4, §11.2) |
+| Timers (`timeout`/`interval`/`await`) | shipped, `boru:time-util` | reused: a tick is an `interval` whose body `send`s to the UI's pid — **no native tick machinery** (§2.4, §11.2) |
 | Streams / channels | `STREAM-WORDS.0.md` (design only) | out of scope; noted for future media/log-follow widgets (§9) |
 
 In one line: **the actor substrate, the wire machinery, and the host-seam
@@ -75,8 +75,8 @@ at both tiers, so the trade-off is visible before any detail.
 
 **Low level (you own the cells and the loop):**
 
-```aql
-import "aql:tui"
+```boru
+import "boru:tui"
 
 def t ( Tui.open {} )                      # raw mode + alt-screen; Terminal handle
 def loop fn [[n:Integer] [Integer] [
@@ -100,8 +100,8 @@ Tui.close t
 
 **High level (the runtime owns the loop; you write update + view):**
 
-```aql
-import "aql:tui"
+```boru
+import "boru:tui"
 
 Tui.run {
   init: {n: 0}
@@ -128,14 +128,14 @@ surfaces and the remote protocol they share.
 
 ### 2.1 Precedents, and what is taken from each
 
-The high-level tier is The Elm Architecture (TEA) mapped onto AQL's existing
+The high-level tier is The Elm Architecture (TEA) mapped onto BORU's existing
 actor substrate — the combination LiveView proved on the server and Bubble
 Tea proved in the terminal.
 
-| Precedent | What `aql:tui` takes | What it rejects |
+| Precedent | What `boru:tui` takes | What it rejects |
 | --- | --- | --- |
-| **Elm / Bubble Tea** (TEA) | the update/view split; runtime owns terminal + loop; declarative view (the direction bubbletea v2 moved) | strict-Elm commands-as-data — AQL already has actors for effects (§2.3) |
-| **Textual** | a named widget vocabulary; `list-view` naming; watch/computed reactivity noted as future sugar (§9) | class-based widgets — AQL widgets are data, not subclasses |
+| **Elm / Bubble Tea** (TEA) | the update/view split; runtime owns terminal + loop; declarative view (the direction bubbletea v2 moved) | strict-Elm commands-as-data — BORU already has actors for effects (§2.3) |
+| **Textual** | a named widget vocabulary; `list-view` naming; watch/computed reactivity noted as future sugar (§9) | class-based widgets — BORU widgets are data, not subclasses |
 | **Ratatui** | constraint layout as data; frame = pure function of state; cell-buffer diffing | immediate mode's app-owned render loop — the engine must not own a blocking loop it cannot interrupt |
 | **Rebol/Red VID** | UI as a block of plain data in the language's own syntax; a future dialect layer via `mini`/`parse` (§9) | inventing the dialect *now* — the data form comes first, sugar later |
 | **Phoenix LiveView** | server holds state, events up / renders down, thin client; disconnect semantics | HTML/DOM diffing — trees are small enough to ship whole in v1 (§6.1) |
@@ -165,12 +165,12 @@ runtime — not a private queue that merely resembles one:
   diff, present. Coalescing is why an event storm costs one render, not one
   per keystroke; queued `resize` events collapse to the last.
 
-**Why not write the loop in AQL** (the way `aql:repl` is written over
-`aql:net`)? Three concrete losses: (a) coalescing needs
+**Why not write the loop in BORU** (the way `boru:repl` is written over
+`boru:net`)? Three concrete losses: (a) coalescing needs
 inspect-and-drain with zero timeout — `receive` is one-message-one-wakeup,
-so an AQL loop repaints per keystroke; (b) the raw-mode restore guarantee
+so a BORU loop repaints per keystroke; (b) the raw-mode restore guarantee
 must sit in a single Go `defer`/`recover` wrapping *everything* including
-layout — an AQL loop puts engine frames between a panic and the restore;
+layout — a BORU loop puts engine frames between a panic and the restore;
 (c) the engine has **no mid-`Run` interruption seam**
 (`lang/go/modules/debug_step.go`), so the host side must own the loop to
 own teardown. The *model* is fully preserved — real pid, real bounded
@@ -178,7 +178,7 @@ mailbox, `send`/`whereis` unchanged — only the pump is native.
 
 ### 2.3 Effects: pragmatic BEAM (decided)
 
-`update` is **ordinary AQL code**. It may read files, call `Net.fetch`, or
+`update` is **ordinary BORU code**. It may read files, call `Net.fetch`, or
 `send` to other processes directly — no command vocabulary, no effect
 sandbox. The contract is instead about *time*, and it is documented rather
 than enforced:
@@ -237,7 +237,7 @@ its workers, which is the BEAM-correct outcome
 - **Teardown order** (all paths): stop the input pump → `Backend.Close()`
   (idempotent, `atomic.Bool` latch — the `net_socket.go` close-latch
   pattern) → process unregister/close. An error raised by `update`/`view`
-  tears down **first** (screen restored), then propagates as the `AqlError`.
+  tears down **first** (screen restored), then propagates as the `BoruError`.
   A driver-level panic is recovered once, restores the terminal, and
   re-raises as `tui_error internal` — panics never escape (ADR-005).
 - **Ctrl-C** is consumed by raw mode, so the driver gives it back: by
@@ -252,7 +252,7 @@ its workers, which is the BEAM-correct outcome
 The Tier-2/Tier-1 reduction, for the record (conceptual — the shipped driver
 is native for the §2.2 reasons):
 
-```aql
+```boru
 # Conceptual desugaring of `Tui.run app`:
 def t ( Tui.open app.opts )
 def ui-loop fn [[state:Map] [Map] [
@@ -314,7 +314,7 @@ tree** (`size: {pct: 30}` travels over the wire; a join is host code).
 
 `style:` is a plain map, merged down the tree (child unset keys inherit):
 
-```aql
+```boru
 {fg: "red"  bg: "#202030"  bold: true  italic: false  underline: false  reverse: false}
 ```
 
@@ -356,8 +356,8 @@ Tier-1 handles can leak into error values and debug output exactly as
 sockets did. `eng.NewExtension(TTerminal, *termState)`; explicit
 `Tui.close` with an `atomic.Bool` double-close latch; every Tier-1 word
 guards on the latch and raises `tui_error closed` after. There is **no
-`App` and no `Frame` AQL type** — `run`/`serve` block and return plain
-state; frames are internal Go values that never cross into AQL.
+`App` and no `Frame` BORU type** — `run`/`serve` block and return plain
+state; frames are internal Go values that never cross into BORU.
 
 Tier-1 drawing is double-buffered: `print-at`/`clear` mutate an offscreen
 grid; **`show`** diffs it against the screen and flushes — so Tier-1 users
@@ -410,13 +410,13 @@ func RegisterHostTui(reg *native.Registry, spec TuiSpec) error
 ```
 
 State lives on the registry under capability key `engine.tui.host`
-(mutex-guarded; registration works before **or** after `import "aql:tui"`;
+(mutex-guarded; registration works before **or** after `import "boru:tui"`;
 a duplicate registration errors). One backend per registry. With **no
 backend registered**, every Tier-1/Tier-2 entry word raises
 `tui_error "no terminal backend registered"` — a first-class negative that
 the TSV spec pins (§8.2), and the natural state of the wasm playground until
-an xterm.js backend exists (§9). Unlike parselang there is **no AQL-level
-`register` word**: a terminal backend cannot be written in AQL.
+an xterm.js backend exists (§9). Unlike parselang there is **no BORU-level
+`register` word**: a terminal backend cannot be written in BORU.
 
 ### 4.4 Backend implementations
 
@@ -428,8 +428,8 @@ an xterm.js backend exists (§9). Unlike parselang there is **no AQL-level
   already vendored, stable across the bubbletea v1→v2 break. **Not**
   bubbletea's `Program`: wrapping it means two event loops fighting over
   input and render timing, and pins the seam to an API that just made its
-  first breaking major-version jump. The existing `aql tui` dashboard and
-  `aql vault -i` keep using bubbletea, untouched. `Open` on a non-terminal
+  first breaking major-version jump. The existing `boru tui` dashboard and
+  `boru vault -i` keep using bubbletea, untouched. `Open` on a non-terminal
   stdout fails with `tui_error not_a_tty`.
 - **`virtual`** — `tuikit.VirtualBackend`, exported for tests everywhere
   (§8.1): fixed-size in-memory grid, `Inject(ev)` to script input,
@@ -475,8 +475,8 @@ The shape most real tools take: a filterable list where the data arrives
 *after* startup from a spawned worker — exercising focus-as-state, `edit`,
 the spawn-and-send idiom, and layout constraints.
 
-```aql
-import "aql:tui"
+```boru
+import "boru:tui"
 
 def browse {
   init: {q: (Tui.input "" {focus: true})  items: []  sel: 0  status: "loading…"}
@@ -511,7 +511,7 @@ def browse {
 def choice ( Tui.run browse )      # blocks; returns the picked row (or None)
 ```
 
-(`scan-inventory`, `match-rows`, `pick-row` are ordinary AQL helpers,
+(`scan-inventory`, `match-rows`, `pick-row` are ordinary BORU helpers,
 elided.) The DX reads to note: the worker never touches the screen — it
 sends a value; the app never blocks — slow work happens elsewhere; quitting
 returns a *value* to the surrounding program, so a TUI can sit mid-pipeline
@@ -519,15 +519,15 @@ as a picker.
 
 ### 5.3 The same app, served
 
-```aql
+```boru
 # on the server (headless — no TTY, no backend needed for serve):
-import "aql:tui"
+import "boru:tui"
 Tui.serve {tcp: 9700  token: "s3cret"} browse
 ```
 
 ```
-# on any machine with the aql binary:
-$ aql attach 10.0.0.5:9700 --token s3cret
+# on any machine with the boru binary:
+$ boru attach 10.0.0.5:9700 --token s3cret
 ```
 
 The viewer sees pixel-for-cell the §5.2 app; keys travel up, trees travel
@@ -627,25 +627,25 @@ type Renderer interface {
 - **Capability**: `Tui.serve` requires **both** `terminal` (§7.3) and the
   existing `network.listen` scope — it is a TUI *and* it binds a port.
 
-### 6.4 The thin client: `aql attach` (decided)
+### 6.4 The thin client: `boru attach` (decided)
 
 A new top-level command, `cmd/go/internal/attach`. Deliberately dumb: dial,
 handshake, then run the **local `tty` backend fed by remote frames** — the
 same `tuikit` layout engine, with the process mailbox replaced by the
-socket. No AQL engine runs client-side. Named `attach` rather than an
-`aql tui …` subcommand because the **`aql tui` supervisor dashboard already
+socket. No BORU engine runs client-side. Named `attach` rather than a
+`boru tui …` subcommand because the **`boru tui` supervisor dashboard already
 exists** and keeps its name and flags untouched; `attach` is a verb, clash-
 free (verified against the command table), and generic enough to later
-attach to other session kinds. The module/CLI homonym (`aql:tui` the module,
-`aql tui` the dashboard) is acknowledged and tolerated — the dashboard may
-eventually be rebuilt *as* an `aql:tui` app, at which point the name
+attach to other session kinds. The module/CLI homonym (`boru:tui` the module,
+`boru tui` the dashboard) is acknowledged and tolerated — the dashboard may
+eventually be rebuilt *as* a `boru:tui` app, at which point the name
 converges rather than collides.
 
 ## 7. Word surface, types, capability
 
 ### 7.1 Exports (28)
 
-Module id **`aql:tui`**, namespace **`Tui`** — a capability/framework
+Module id **`boru:tui`**, namespace **`Tui`** — a capability/framework
 module, so a plain name, not `-util` (`lang/go/CLAUDE.md` naming rules).
 
 | Group | Words |
@@ -669,7 +669,7 @@ releases when the target dies).
 
 ### 7.2 ADR-001 audit (run against the live binary)
 
-Every proposed export was checked with `aql describe <name>` against the
+Every proposed export was checked with `boru describe <name>` against the
 core word set:
 
 - **Collisions found and avoided**: `size` is core (list category) → the
@@ -677,7 +677,7 @@ core word set:
   exported, it is only a key in the `run` config map; `list` resolves in
   core (list category) → the widget is **`list-view`** (Textual precedent).
 - **Verified free**: all 24 exported names above, including `close`/`serve`
-  (which follow `aql:net`'s exact precedent) and `table` (the mutable
+  (which follow `boru:net`'s exact precedent) and `table` (the mutable
   container is a *type*, not a core word).
 - **Considered and not exported**: `view` (free, but only a config key —
   exporting it invites shadow-adjacent confusion with zero benefit).
@@ -727,7 +727,7 @@ the virtual backend by construction.
 Every export gets at least one row; the pure-data design makes most of them
 exact-equality one-liners:
 
-- namespace binding: `import "aql:tui" convert List Tui.$module` → `['Tui']`.
+- namespace binding: `import "boru:tui" convert List Tui.$module` → `['Tui']`.
 - constructors by equality: `Tui.text "hi"` → its literal map; likewise
   `rows/cols/box/list-view/table/input/viewport/spacer`, `style` merges,
   `edit` folds (each key kind), `focusable` on a nested tree, `quit`'s
@@ -762,15 +762,15 @@ trivial-delegation wrappers, **inner sigs `BarrierPos:-1`**) · row in the
   event vocabulary, nine widget constructors, constraint layout, style
   inheritance, `edit`/`focusable`, quit-as-value.
 - **Added (remote)**: the §6.2 tree protocol over json-lines, `Tui.serve`,
-  the `Renderer` seam, `aql attach`.
+  the `Renderer` seam, `boru attach`.
 - **Depends on**: shipped processes (`spawn`/`send`/`receive`), shipped
-  `aql:net` Tier-1 + json-lines, `EXTENSION-MODULES` host-seam pattern,
-  `aql:time-util` timers.
+  `boru:net` Tier-1 + json-lines, `EXTENSION-MODULES` host-seam pattern,
+  `boru:time-util` timers.
 - **Still out of scope (candidate later tiers, in rough order)**: inline
   non-alt-screen widgets (prompt/confirm/select/progress — the huh tier)
   and a runtime focus manager to power them; watch/computed reactivity
   sugar (Textual-style) over the same render loop; a VID-style layout
-  dialect via `aql:minilang`/`aql:parselang`; theming/stylesheets;
+  dialect via `boru:minilang`/`boru:parselang`; theming/stylesheets;
   tree-diff and cell-mode wire encodings (CLOSED by measurement —
   §11.5); the playground browser `Backend` (LANDED — `wpg/wasm/tuiweb.go`
   renders frames as styled HTML rows in the page and feeds keydown
@@ -779,7 +779,7 @@ trivial-delegation wrappers, **inner sigs `BarrierPos:-1`**) · row in the
   xterm.js, deliberately — the tuikit `Frame` is already a laid-out
   cell grid, so `<pre>`+spans needs no vendored terminal emulator and
   no escape-sequence round trip);
-  `Stream`-fed widgets (log followers) pending `aql:stream`; Windows
+  `Stream`-fed widgets (log followers) pending `boru:stream`; Windows
   mouse/VT-input parity (raw mode works via `x/term`; declared best-effort
   in v1); image/graphics protocols (sixel/kitty).
 
@@ -804,14 +804,14 @@ starts):
   `termback` + registration in the run/REPL wiring. Deliverable: §5.1 and
   §5.2 running locally.
 - **Phase D — remote.** `Renderer` seam refactor, `Tui.serve`, the §6.2
-  protocol + token auth, `aql attach`, loopback tests. Deliverable: §5.3
+  protocol + token auth, `boru attach`, loopback tests. Deliverable: §5.3
   end to end.
 - **Phase E — polish.** Full TSV coverage, docs catalog, cover-gate to
   100%, examples, keystroke-storm benchmark (see risk below), retro notes
   into `TUI-IMPLEMENTATION-PLAN.0.md`.
 
 **Known risks, with mitigations**: grapheme/CJK width drift → one width
-source in `tuikit`, goldens pin it; view-in-AQL cost per event → the
+source in `tuikit`, goldens pin it; view-in-BORU cost per event → the
 bytecode VM runs `view`, coalescing bounds invocations, and an
 identical-state check (cheap on immutable values) skips re-render — Phase E
 benchmarks a keystroke storm before declaring victory; event storms →

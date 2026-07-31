@@ -154,7 +154,7 @@ func noteEffectSig() *Signature {
 // callback seam: a stamped unit that emits an observable effect (the
 // CALL_NATIVE notes the ledger, standing in for a write to the peer) and THEN
 // raises internal_error (CALL_DYNAMIC underflow) must PROPAGATE the
-// internal_error — the CallAQL retry would re-run the body and duplicate the
+// internal_error — the CallBORU retry would re-run the body and duplicate the
 // effect. TestInvokeCallbackInternalErrorFallsBack is the positive twin: the
 // same bail with NO prior effect still retries on the interpreter.
 // TestInvokeCallbackBailAfterWriterEffectPropagates is the WRITER-path twin:
@@ -162,7 +162,7 @@ func noteEffectSig() *Signature {
 // not a direct ledger note) and then bails. A detached callback fires after
 // the enclosing compiled run disarmed its fence, so InvokeCallback must arm
 // the writer fence around its own attempt — without it this write is
-// invisible to the ledger and the CallAQL retry runs the body again,
+// invisible to the ledger and the CallBORU retry runs the body again,
 // duplicating the peer-visible output.
 func TestInvokeCallbackBailAfterWriterEffectPropagates(t *testing.T) {
 	writeSig := &Signature{
@@ -187,7 +187,7 @@ func TestInvokeCallbackBailAfterWriterEffectPropagates(t *testing.T) {
 	r := runUnitReg(t)
 	var out bytes.Buffer
 	r.Output = &out
-	sig := &Signature{Impl: &AQLImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
+	sig := &Signature{Impl: &BORUImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
 	res, err := InvokeCallback(r, sig, nil, nil)
 	if !isInternalErr(err) {
 		t.Fatalf("fenced writer bail: err = %v (res=%v), want the propagated internal_error", err, res)
@@ -215,9 +215,9 @@ func TestInvokeCallbackBailAfterEffectPropagates(t *testing.T) {
 	}
 	ref := &CompiledFnRef{Prog: p, Unit: 0}
 	r := runUnitReg(t)
-	// The sig carries an AQL body the interpreter COULD run to 42 — the test
+	// The sig carries a BORU body the interpreter COULD run to 42 — the test
 	// is that the fence refuses to, because the effect already escaped.
-	sig := &Signature{Impl: &AQLImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
+	sig := &Signature{Impl: &BORUImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
 	out, err := InvokeCallback(r, sig, nil, nil)
 	if !isInternalErr(err) {
 		t.Fatalf("fenced callback bail: err = %v (out=%v), want the propagated internal_error", err, out)

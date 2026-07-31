@@ -1,0 +1,7 @@
+name: charops
+main: charops.boru
+major: 2
+minor: 3
+patch: 1
+files: [charops.boru, letters.jsonic]
+resource: {letters: "letters.jsonic"}

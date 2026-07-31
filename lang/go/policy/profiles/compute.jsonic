@@ -26,11 +26,11 @@
       words: {
         default: "deny"
         rules: [
-          { allow: ["import"], where: { module: ["aql:math-util"] } }
+          { allow: ["import"], where: { module: ["boru:math-util"] } }
         ]
       }
       scopes: {
-        "aql:math-util": { words: { default: "allow" } }
+        "boru:math-util": { words: { default: "allow" } }
       }
     }
 

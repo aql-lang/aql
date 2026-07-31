@@ -1,7 +1,7 @@
 package modules
 
 // moduleDocs maps a native module's import id (its desc.Ref, e.g.
-// "aql:array-util") to a per-export one-line summary keyed by the EXPORT name
+// "boru:array-util") to a per-export one-line summary keyed by the EXPORT name
 // — the dotted suffix a user types, e.g. "indices" for ArrayUtil.indices.
 //
 // stampExportProvenance (modules.go) applies these as FnDefInfo.Doc so
@@ -21,7 +21,7 @@ package modules
 var moduleDocs = map[string]map[string]string{}
 
 // registerDocs records the per-export doc summaries for one module, keyed by
-// its import id (e.g. "aql:array-util"). Called from per-module docs_*.go
+// its import id (e.g. "boru:array-util"). Called from per-module docs_*.go
 // init() functions. Entries merge into any existing map for the id so the
 // docs for one module may be split across files if ever convenient.
 func registerDocs(ref string, docs map[string]string) {
@@ -73,7 +73,7 @@ func registerExamples(ref string, examples map[string][]string) {
 }
 
 func init() {
-	registerDocs("aql:array-util", map[string]string{
+	registerDocs("boru:array-util", map[string]string{
 		"shape":     "Shape: the length along each axis of a nested list.",
 		"rank":      "Rank: the number of axes (nesting depth) of a list.",
 		"reshape":   "Lay flat data into the given shape.",
@@ -101,7 +101,7 @@ func init() {
 	// row. The words worth authoring here are the ones whose meaning is in
 	// the SHAPE of the operands, which a signature of [List List] cannot
 	// show; the arithmetic-flavoured ones keep the generated permutations.
-	registerExamples("aql:array-util", map[string][]string{
+	registerExamples("boru:array-util", map[string][]string{
 		"shape":     {`ArrayUtil.shape [[1 2 3] [4 5 6]]                ;# [2 3] — length along each axis`},
 		"rank":      {`ArrayUtil.rank [[1 2 3] [4 5 6]]                 ;# 2 — number of axes`},
 		"reshape":   {`ArrayUtil.reshape [2 3] [1 2 3 4 5 6]            ;# [[1 2 3] [4 5 6]]`},

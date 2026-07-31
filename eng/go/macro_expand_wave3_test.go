@@ -27,7 +27,7 @@ func installMacro(r *Registry, name string, params []string, template Value, cap
 		Signatures: []Signature{{
 			Params:     ps,
 			Returns:    []*Type{TAny},
-			Impl:       AQL([]Value{template}),
+			Impl:       BORU([]Value{template}),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -208,7 +208,7 @@ func TestMacroTemplateErrors(t *testing.T) {
 			Macro: true,
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "a"}},
-				Impl:       AQL([]Value{}),
+				Impl:       BORU([]Value{}),
 				BarrierPos: BarrierAllForward,
 			}},
 		})
@@ -224,7 +224,7 @@ func TestMacroTemplateErrors(t *testing.T) {
 			Macro: true,
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "a"}},
-				Impl:       AQL([]Value{NewWord("definitely_not_a_word")}),
+				Impl:       BORU([]Value{NewWord("definitely_not_a_word")}),
 				BarrierPos: BarrierAllForward,
 			}},
 		})
@@ -317,7 +317,7 @@ func TestExpandMacroFormAndAll(t *testing.T) {
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "n", Type: TInteger}},
 				Returns:    []*Type{TInteger},
-				Impl:       AQL([]Value{NewWord("n")}),
+				Impl:       BORU([]Value{NewWord("n")}),
 				BarrierPos: BarrierAllForward,
 			}},
 		})

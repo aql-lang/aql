@@ -303,7 +303,7 @@ func TestHumanizeDurNegative(t *testing.T) {
 func TestMutateBlockedLockArms(t *testing.T) {
 	t.Run("init", func(t *testing.T) {
 		home := testHome(t)
-		if err := os.MkdirAll(filepath.Join(home, ".aql"), 0o700); err != nil {
+		if err := os.MkdirAll(filepath.Join(home, ".boru"), 0o700); err != nil {
 			t.Fatal(err)
 		}
 		w4BlockLock(t, home)

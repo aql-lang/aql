@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // Shared helpers for the *_seam5_test.go coverage suites
@@ -34,7 +34,7 @@ func seam5Run(r *Registry, src string) ([]Value, error) {
 }
 
 // seam5Check runs src in plain check mode (static analysis pass, no
-// emission recorder), mirroring lang.(*AQL).Check's setup.
+// emission recorder), mirroring lang.(*BORU).Check's setup.
 func seam5Check(r *Registry, src string) ([]Value, error) {
 	toks, err := parser.Parse(src)
 	if err != nil {
@@ -50,7 +50,7 @@ func seam5Check(r *Registry, src string) ([]Value, error) {
 }
 
 // seam5CompileCheck runs src with the bytecode emission recorder active,
-// mirroring lang.(*AQL).CompileCheck's setup, so recorder-only arms in
+// mirroring lang.(*BORU).CompileCheck's setup, so recorder-only arms in
 // native handlers are drivable from this package.
 func seam5CompileCheck(r *Registry, src string) ([]Value, error) {
 	toks, err := parser.Parse(src)

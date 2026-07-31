@@ -5,12 +5,12 @@ import (
 	"testing"
 )
 
-//go:embed sift_test.aql
-var siftTestAQL string
+//go:embed sift_test.boru
+var siftTestBORU string
 
-// siftCoverAllow lists sift.aql rows that are STRUCTURALLY UNREACHABLE through
+// siftCoverAllow lists sift.boru rows that are STRUCTURALLY UNREACHABLE through
 // the public Sift API — shadowed defense-in-depth guards a caller's earlier
-// validation always intercepts (the AQL analog of //covergate:allow). Each
+// validation always intercepts (the BORU analog of //covergate:allow). Each
 // entry is asserted to actually be uncovered, so it cannot rot.
 //
 // Both are terminal `else` arms of an exhaustive dispatch over a value that is
@@ -26,11 +26,11 @@ var siftCoverAllow = map[int]string{
 	809: "shadowed: sift-known-family validates family in sift-spec-from before sift-run-spec calls sift-run-family",
 }
 
-// TestSiftAQLCoverage runs the aql:test suite for sift under the coverage hook
-// and asserts (1) every case passes and (2) every executable row of sift.aql is
+// TestSiftBORUCoverage runs the boru:test suite for sift under the coverage hook
+// and asserts (1) every case passes and (2) every executable row of sift.boru is
 // covered, save the allowlisted unreachable guards.
-func TestSiftAQLCoverage(t *testing.T) {
-	assertAQLCoverage(t, "aql:sift", siftSource, siftTestAQL, siftCoverAllow)
+func TestSiftBORUCoverage(t *testing.T) {
+	assertBORUCoverage(t, "boru:sift", siftSource, siftTestBORU, siftCoverAllow)
 }
 
 func itoa(n int) string {

@@ -1,9 +1,9 @@
-# aqleng spec coverage — author's report
+# borueng spec coverage — author's report
 
 This report accompanies the new TSV files added under
-`aqleng/test/spec/`. It does NOT propose fixes; per the brief, it
+`borueng/test/spec/`. It does NOT propose fixes; per the brief, it
 records what each new file pins down, then catalogues every
-*observed deviation* between aqleng's Go engine and the language
+*observed deviation* between borueng's Go engine and the language
 design as documented in `design/*.md` (notably
 `LANGREF.10.md`, `ENGINE.10.md`, `ENGINE-UNIFIED-ALGO.8.md`,
 `SIGNATURES.10.md`, and `TYPES.10.md`).
@@ -144,7 +144,7 @@ the matcher sees a concrete value.
 
 **Impact**: Every example in LANGREF that shows nested forward
 without parens (e.g. `def Point record [x:number y:number]`) is
-the docs assuming the documented model; aqleng's engine requires
+the docs assuming the documented model; borueng's engine requires
 parens. The `def Point record [...]` form *does* work, but only
 because `def`'s sig has a `TWord` slot for the name (which captures
 without dispatch) and its second slot is `TAny` (which accepts the
@@ -368,8 +368,8 @@ re-investigating.
 - **No tests for the `/N` modifier or its combinations**: see
   §2.8.
 
-These all live in the larger AQL test corpus
-(`lang/go/test/*.go` and `lang/go/test/*.tsv`); the aqleng spec subset is
+These all live in the larger BORU test corpus
+(`lang/go/test/*.go` and `lang/go/test/*.tsv`); the borueng spec subset is
 deliberately focused on the dispatch / value / type-lattice core.
 
 ---

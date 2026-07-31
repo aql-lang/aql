@@ -8,7 +8,7 @@ import (
 )
 
 // The lang-level forwarders for the eng observability seams
-// (eng interp_entry.go): the frontier suite arms them through (*AQL).
+// (eng interp_entry.go): the frontier suite arms them through (*BORU).
 
 // A plain interpreted Run reports Engine.Run entries through the forwarder;
 // disarm stops recording.
@@ -65,7 +65,7 @@ func TestModuleLoadEntriesAttributed(t *testing.T) {
 		entries = append(entries, e)
 	})
 	defer disarm()
-	if _, _, err := a.RunCompiled(`import "aql:test" 1 add 2`); err != nil {
+	if _, _, err := a.RunCompiled(`import "boru:test" 1 add 2`); err != nil {
 		t.Fatalf("import run: %v", err)
 	}
 	mu.Lock()
@@ -80,7 +80,7 @@ func TestModuleLoadEntriesAttributed(t *testing.T) {
 	}
 	mu.Unlock()
 	if loads == 0 {
-		t.Errorf("expected module-load-attributed entries from the aql:test preamble, got none")
+		t.Errorf("expected module-load-attributed entries from the boru:test preamble, got none")
 	}
 	if unattributed != 0 {
 		t.Errorf("import-driving compiled program: %d unattributed entries", unattributed)

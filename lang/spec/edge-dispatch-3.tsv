@@ -1,4 +1,4 @@
-# AQL Language Specification: Dispatch edge cases 3 — options maps,
+# BORU Language Specification: Dispatch edge cases 3 — options maps,
 # quoted-argument slots (QuoteArgs), arity forcing and 0-arg courtesy
 # dispatch, guard-then-narrow on Any params, and undefined words.
 # Format: input<TAB>expected<TAB>description
@@ -19,22 +19,22 @@
 #   3. The synthetic 0-arg fallback: a fn called with no collectable
 #      args courtesy-dispatches its 0-arg overload when one exists and
 #      raises a grouped-call hint otherwise. /N forces one arity.
-#   4. An unregistered word raises [aql/undefined_word] — the /q, quote
+#   4. An unregistered word raises [boru/undefined_word] — the /q, quote
 #      and (quote …) escapes turn the SAME spelling into an Atom.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  options maps — the optional trailing Map signature
-import "aql:string-util" StringUtil.split ',' 'a,b' {}	['a' 'b']	an explicit empty options map lands on the [String String Map] sig
-import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {}	'baa'	empty options keep the default first-occurrence scope
-import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:all/q}	'bbb'	an Atom option value selects all-occurrences
-import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:"all"}	'bbb'	a String option value is accepted for the same key
-import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:all/q count:2}	'bba'	two options combine: all-scope capped at 2
-import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:nope/q}	ERROR:string_option_error	an unrecognised option VALUE is rejected — it used to fall back to the default, indistinguishable from a correct call
-import "aql:string-util" StringUtil.replace 'a' 'b' 'aaa' {scop:all/q}	ERROR:string_option_error	a typo'd option KEY is rejected — matching emit's schema behaviour below, where it was already loud
-import "aql:string-util" StringUtil.changecase 'hello' {style:"upper"}	'HELLO'	changecase drives its style through the options map
-import "aql:string-util" StringUtil.changecase 'hello' {styl:"upper"}	ERROR:string_option_error	typo'd key is rejected — it used to lowercase silently, so the typo looked like it worked
-import "aql:emitlang" emit json {prety:true} {a:1}	ERROR:uncalled_function	emit: an unknown option key (typo'd 'prety') no longer matches the schema — a loud rejection, not silent compact output
-import "aql:emitlang" emit json {pretty:1} {a:1}	ERROR:uncalled_function	emit: a non-Boolean 'pretty' value fails the schema's typed slot — rejected rather than ignored
+import "boru:string-util" StringUtil.split ',' 'a,b' {}	['a' 'b']	an explicit empty options map lands on the [String String Map] sig
+import "boru:string-util" StringUtil.replace 'a' 'b' 'aaa' {}	'baa'	empty options keep the default first-occurrence scope
+import "boru:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:all/q}	'bbb'	an Atom option value selects all-occurrences
+import "boru:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:"all"}	'bbb'	a String option value is accepted for the same key
+import "boru:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:all/q count:2}	'bba'	two options combine: all-scope capped at 2
+import "boru:string-util" StringUtil.replace 'a' 'b' 'aaa' {scope:nope/q}	ERROR:string_option_error	an unrecognised option VALUE is rejected — it used to fall back to the default, indistinguishable from a correct call
+import "boru:string-util" StringUtil.replace 'a' 'b' 'aaa' {scop:all/q}	ERROR:string_option_error	a typo'd option KEY is rejected — matching emit's schema behaviour below, where it was already loud
+import "boru:string-util" StringUtil.changecase 'hello' {style:"upper"}	'HELLO'	changecase drives its style through the options map
+import "boru:string-util" StringUtil.changecase 'hello' {styl:"upper"}	ERROR:string_option_error	typo'd key is rejected — it used to lowercase silently, so the typo looked like it worked
+import "boru:emitlang" emit json {prety:true} {a:1}	ERROR:uncalled_function	emit: an unknown option key (typo'd 'prety') no longer matches the schema — a loud rejection, not silent compact output
+import "boru:emitlang" emit json {pretty:1} {a:1}	ERROR:uncalled_function	emit: a non-Boolean 'pretty' value fails the schema's typed slot — rejected rather than ignored
 #
 # §2  options as the longer-arity overload on user fns
 def w fn [[a:Integer][String]["plain"] [a:Integer o:Map][String]["opts"]] w 1	'plain'	no trailing map → the 1-arg sig
@@ -88,7 +88,7 @@ def lst [10 20 30] lst.1	20	dot with a literal index reads positionally
 def lst [10 20 30] def i 1 lst.i	None	dot NEVER evaluates: no literal i key on a list → None
 {a:1} get 0	None	maps have no positional read — an Integer key misses
 {a:1} getr a/q	1	getr: the required-read twin returns the value…
-{a:1} getr b/q	ERROR:not_found	…but raises [aql/not_found] where get would yield None
+{a:1} getr b/q	ERROR:not_found	…but raises [boru/not_found] where get would yield None
 def lst [1 2] lst set 0 9	[9 2]	set on a list evaluates its Integer index
 def lst [1 2] lst set 5 9	ERROR:index_out_of_range	…and range-checks it
 #
@@ -98,12 +98,12 @@ if/3 true [1] [2]	1	/3 selects the 3-arg overload
 if/2 true [1] [2]	1 [2]	forcing /2 leaves the would-be else branch on the stack
 if/2 false [1] [2]	[2]	…where the 2-arg false form yields nothing
 # (dropped) `if/1 [true 7]` — checker-vs-runtime type precision gap (would raise the soundness pin); removed to hold pin=7. See design/EDGE-SPEC-FINDINGS.0.md.
-import "aql:emitlang" emit/1 {a:1}	'{"a":1}'	emit/1 forces the bare auto-emit arity
-import "aql:emitlang" emit/2 json {a:1}	'{"a":1}'	emit/2 forces kind + data
-import "aql:emitlang" emit/3 json {} {a:1}	'{"a":1}'	emit/3 forces kind + opts + data
+import "boru:emitlang" emit/1 {a:1}	'{"a":1}'	emit/1 forces the bare auto-emit arity
+import "boru:emitlang" emit/2 json {a:1}	'{"a":1}'	emit/2 forces kind + data
+import "boru:emitlang" emit/3 json {} {a:1}	'{"a":1}'	emit/3 forces kind + opts + data
 {a:1} get/2 a/q	1	get/2 pins the 2-arg container read
-import "aql:string-util" StringUtil.split/2 "," "a,b"	ERROR:force-arity	/N does not reach through a module's dotted wrapper — pinned limitation
-import "aql:string-util" StringUtil.split/3 "," "a,b" {}	ERROR:force-arity	…for any forced arity
+import "boru:string-util" StringUtil.split/2 "," "a,b"	ERROR:force-arity	/N does not reach through a module's dotted wrapper — pinned limitation
+import "boru:string-util" StringUtil.split/3 "," "a,b" {}	ERROR:force-arity	…for any forced arity
 #
 # §8  0-arg courtesy dispatch and the grouped-call hint
 def f fn [[][Integer][42]] f	42	a 0-arg fn dispatches bare

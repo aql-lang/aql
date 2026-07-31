@@ -1,14 +1,14 @@
-// Package ctl implements `aql ctl <op> [name]` — the HTTP client
+// Package ctl implements `boru ctl <op> [name]` — the HTTP client
 // for the `api` service. It reads the api's discovery file (or
 // --api/--token overrides) and translates ops into REST calls.
 //
 // Ops match the api's allowed action set:
 //
-//	aql ctl status              GET  /v1/services
-//	aql ctl info                GET  /v1/server
-//	aql ctl pause  <svc>        POST /v1/services/<svc>/actions {"action":"pause"}
-//	aql ctl resume <svc>        POST /v1/services/<svc>/actions {"action":"resume"}
-//	aql ctl stop   <svc>        POST /v1/services/<svc>/actions {"action":"stop"}
+//	boru ctl status              GET  /v1/services
+//	boru ctl info                GET  /v1/server
+//	boru ctl pause  <svc>        POST /v1/services/<svc>/actions {"action":"pause"}
+//	boru ctl resume <svc>        POST /v1/services/<svc>/actions {"action":"resume"}
+//	boru ctl stop   <svc>        POST /v1/services/<svc>/actions {"action":"stop"}
 package ctl
 
 import (
@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/api"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/api"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
 )
 
 type cmd struct{}
@@ -31,9 +31,9 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "ctl" }
-func (*cmd) Synopsis() string { return "control a running `aql serve` process via its api service" }
+func (*cmd) Synopsis() string { return "control a running `boru serve` process via its api service" }
 
-// Run handles `aql ctl [--api url] [--token tok] <op> [name]`.
+// Run handles `boru ctl [--api url] [--token tok] <op> [name]`.
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("ctl", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -90,7 +90,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aql ctl [--api url] [--token tok] <op> [name]")
+	fmt.Fprintln(w, "Usage: boru ctl [--api url] [--token tok] <op> [name]")
 	fmt.Fprintln(w, "Ops:")
 	fmt.Fprintln(w, "  status              list services and their state")
 	fmt.Fprintln(w, "  info                supervisor info (pid, uptime, version)")

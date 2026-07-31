@@ -18,7 +18,7 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import {
-  type AqlType,
+  type BoruType,
   type CheckDiagnostic,
   Engine,
   type FnParam,
@@ -184,7 +184,7 @@ function registerFn(r: Registry): void {
               const t = typeTable.get(tName) ?? TAny
               return { name, type: t }
             })
-            const returns: AqlType[] = elems[i + 1]!.asList().map((rt) => rt.vType)
+            const returns: BoruType[] = elems[i + 1]!.asList().map((rt) => rt.vType)
             const body: Value[] = elems[i + 2]!.asList()
             sigs.push({ params, returns, body })
           }

@@ -4,10 +4,10 @@ Designs the type-operation vocabulary, drawing on TypeScript utility
 types, Python `typing`, Haskell type classes, and SQL's type/cast
 surface. The surface is split:
 
-- A small set of **core type ops** are AQL built-ins (the language's
+- A small set of **core type ops** are BORU built-ins (the language's
   bedrock type vocabulary).
-- The remainder live in the **`aql:type` module**, loaded via
-  `import "aql:type"` and accessed as `type.<verb>` (e.g. `type.pick`,
+- The remainder live in the **`boru:type` module**, loaded via
+  `import "boru:type"` and accessed as `type.<verb>` (e.g. `type.pick`,
   `type.lca`). The `t`-prefix is dropped for module words because the
   `type.` qualifier already disambiguates.
 
@@ -29,7 +29,7 @@ surface. The surface is split:
 Module words drop the `t` prefix. `type.exclude`, `type.pick`,
 `type.lca`, etc. The module qualifier carries the namespacing.
 
-### `aql:type` vs `aql:bin`
+### `boru:type` vs `boru:bin`
 
 `bin.extract` (bit extraction) and `type.extract` (type-set
 intersection) are independent operators that happen to share a stem
@@ -55,9 +55,9 @@ prefix.
 | `tany` | `List -> Any` | list-reduction `tor` |
 | `tall` | `List -> Any` | list-reduction `tand` |
 
-## `aql:type` module
+## `boru:type` module
 
-Loaded via `import "aql:type"`; words accessed as `type.<verb>`.
+Loaded via `import "boru:type"`; words accessed as `type.<verb>`.
 
 ### Type-set algebra
 
@@ -128,7 +128,7 @@ field order and each value type wrapped as `T | None`.
 For class types, all fields (including inherited) are flattened
 into the result's own field map, and the result is registered as a
 fresh anonymous class type (lattice parent: `Class`). `tpartial
-Person` is NOT a subtype of `Person` — AQL's lattice runs the other
+Person` is NOT a subtype of `Person` — BORU's lattice runs the other
 way (a child requires more, not less).
 
 `type.required` is the inverse: it strips the `None` alternative
@@ -155,7 +155,7 @@ produce two separate types. To get the "same brand across multiple
 uses" pattern, pair with `def`:
 
 ```
-import "aql:type"
+import "boru:type"
 def UserID (type.brand Integer userid/q)
 def OrderID (type.brand Integer orderid/q)
 # UserID and OrderID are distinct types; UserID teq UserID is true.

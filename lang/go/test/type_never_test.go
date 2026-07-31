@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // --- Never: the bottom type ---
@@ -192,7 +192,7 @@ func TestNever_DefRejectsAllValues(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBORU(a)
 	_, err = a.Run(`def x:Never 1`)
 	if err == nil {
 		t.Errorf("def x:Never 1 succeeded; want error (Never is uninhabited)")

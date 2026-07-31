@@ -6,9 +6,9 @@ import (
 	"sync/atomic"
 )
 
-// AQL-source line coverage — the interpreter seam that powers aql:test's
-// coverage feature (design intent: aql:test measures which source lines of an
-// AQL module-under-test its tests exercise, so a pure-AQL module like aql:sift
+// BORU-source line coverage — the interpreter seam that powers boru:test's
+// coverage feature (design intent: boru:test measures which source lines of an
+// BORU module-under-test its tests exercise, so a pure-BORU module like boru:sift
 // can be driven to 100% line coverage).
 //
 // The mechanism mirrors the ObserveHooks pattern (interp_entry.go): a
@@ -19,8 +19,8 @@ import (
 // Attribution is by COVER ID, not by row alone: SrcPos carries no file tag, so
 // the harness source and the module-under-test both start at row 1 and their
 // rows collide. Instead, only a registry that carries a non-empty CoverID emits
-// — and a module-under-test runs its fn bodies on its OWN sub-registry (aql:sift
-// runs on siftModReg), which the loader tags with a stable id ("aql:sift"). The
+// — and a module-under-test runs its fn bodies on its OWN sub-registry (boru:sift
+// runs on siftModReg), which the loader tags with a stable id ("boru:sift"). The
 // harness registry has no CoverID, so its tokens are never recorded; every
 // recorded (id, row) is unambiguously the tagged module's. This also keeps the
 // unarmed hot path to a single atomic load and the ARMED path to the tagged
@@ -68,7 +68,7 @@ func (r *Registry) CoverSource(id string) (string, bool) {
 }
 
 // CoverSourceIDs returns every registered cover source id, sorted. The
-// `aql test --coverage` runner enumerates them after a run to report each
+// `boru test --coverage` runner enumerates them after a run to report each
 // imported module's line coverage. Nil-safe; empty when nothing registered.
 func (r *Registry) CoverSourceIDs() []string {
 	if r == nil || r.coverSources == nil {

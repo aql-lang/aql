@@ -1,11 +1,11 @@
-// Package serve implements `aql serve <svc> [flags] + <svc> [flags] ...`:
-// the umbrella command that supervises multiple AQL services in one
+// Package serve implements `boru serve <svc> [flags] + <svc> [flags] ...`:
+// the umbrella command that supervises multiple BORU services in one
 // process. Each segment between `+` tokens is parsed by the named
 // service's factory, then all services run concurrently under a
 // single SIGINT/SIGTERM-driven graceful shutdown.
 //
 // A Unix-socket control plane can be enabled with --ctl=<path>, which
-// is what `aql ctl` connects to for ad-hoc status/pause/resume/stop.
+// is what `boru ctl` connects to for ad-hoc status/pause/resume/stop.
 //
 // Stdio conflicts (two services that both want stdin/stdout) are
 // rejected up front rather than allowed to interleave.
@@ -23,8 +23,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 type cmd struct{}
@@ -35,9 +35,9 @@ func New() command.Command { return &cmd{} }
 func (*cmd) Name() string     { return "serve" }
 func (*cmd) Synopsis() string { return "run one or more services in one process" }
 
-// Run handles `aql serve [-c file] <svc> [flags] + <svc> [flags] ...`.
+// Run handles `boru serve [-c file] <svc> [flags] + <svc> [flags] ...`.
 // Control is exposed via the `api` service (see internal/api); add
-// `+ api` to your invocation if you want `aql ctl` to work.
+// `+ api` to your invocation if you want `boru ctl` to work.
 func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Pull the serve-level flags off the head of argv before we
 	// hand the rest to splitSegments. We use a manual walk because
@@ -166,8 +166,8 @@ func checkDuplicateNames(svcs []service.Service) error {
 
 // printUsage writes the serve subcommand help.
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aql serve <svc> [flags] [+ <svc> [flags]]...")
-	fmt.Fprintln(w, "       aql serve -c <file>")
+	fmt.Fprintln(w, "Usage: boru serve <svc> [flags] [+ <svc> [flags]]...")
+	fmt.Fprintln(w, "       boru serve -c <file>")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Compose multiple services in one process under a single supervisor.")
 	fmt.Fprintln(w, "Segments are separated by a bare '+' token; each segment uses the")
@@ -182,17 +182,17 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  -c <file>      load service list from a jsonic config file")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintln(w, "  aql serve registry -r ./mods -p 8080 + lsp -p 9000")
-	fmt.Fprintln(w, "  aql serve registry -r ./mods + api")
-	fmt.Fprintln(w, "  aql serve -c services.jsonic")
+	fmt.Fprintln(w, "  boru serve registry -r ./mods -p 8080 + lsp -p 9000")
+	fmt.Fprintln(w, "  boru serve registry -r ./mods + api")
+	fmt.Fprintln(w, "  boru serve -c services.jsonic")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "For supervisor control (status/pause/resume/stop), include the")
-	fmt.Fprintln(w, "`api` service and use `aql ctl` or `aql tui` as the client.")
+	fmt.Fprintln(w, "`api` service and use `boru ctl` or `boru tui` as the client.")
 }
 
 // supervisor owns the running services and implements
 // service.Inspector so api/tui can read state and drive transitions.
-// One supervisor per `aql serve` invocation.
+// One supervisor per `boru serve` invocation.
 type supervisor struct {
 	services []service.Service
 	byName   map[string]service.Service
@@ -302,7 +302,7 @@ func (sup *supervisor) run(ctx context.Context) int {
 	for _, s := range sup.services {
 		names = append(names, s.Name())
 	}
-	fmt.Fprintf(sup.stdout, "aql serve: running %v\n", names)
+	fmt.Fprintf(sup.stdout, "boru serve: running %v\n", names)
 
 	select {
 	case <-ctx.Done():

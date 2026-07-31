@@ -563,7 +563,7 @@ func WeakRefusalError(r *Registry, word, container string, refusal *WeakRefusal)
 	if r != nil {
 		src = r.Source
 	}
-	e := makeAqlError("weak_value_error",
+	e := makeBoruError("weak_value_error",
 		fmt.Sprintf("%s: cannot store %s in a %s", word, refusal.Kind, container),
 		word, src, "")
 	e.Notes = append(e.Notes, refusal.Note)

@@ -8,6 +8,6 @@
 
 package policy
 
-import pol "github.com/aql-lang/aql/lang/go/policy"
+import pol "github.com/boru-lang/boru/lang/go/policy"
 
 var policyLoadAuto = pol.LoadAuto

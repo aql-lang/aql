@@ -12,7 +12,7 @@ import (
 // manufacturing inconsistencies directly.
 func testKeyring(t *testing.T) *fileKeyring {
 	t.Helper()
-	return &fileKeyring{folder: filepath.Join(os.Getenv(EnvHome), ".aql"), pass: "test-pass"}
+	return &fileKeyring{folder: filepath.Join(os.Getenv(EnvHome), ".boru"), pass: "test-pass"}
 }
 
 func TestVerifyHealthyVault(t *testing.T) {
@@ -151,7 +151,7 @@ func TestVerifyTakesVaultLock(t *testing.T) {
 func TestVerifyStaleTempFile(t *testing.T) {
 	home := testHome(t)
 	mustInit(t)
-	stale := filepath.Join(home, ".aql", ".vault.jsonic.987654.tmp")
+	stale := filepath.Join(home, ".boru", ".vault.jsonic.987654.tmp")
 	if err := os.WriteFile(stale, []byte("junk"), 0600); err != nil {
 		t.Fatal(err)
 	}

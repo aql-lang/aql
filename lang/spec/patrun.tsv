@@ -1,4 +1,4 @@
-# AQL Language Specification: Patrun — pattern→value dispatch tables
+# BORU Language Specification: Patrun — pattern→value dispatch tables
 # Format: input<TAB>expected<TAB>description
 #
 # `patrun T` builds a mutable Patrun (vendored github.com/rjrodger/patrun)

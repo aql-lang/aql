@@ -1,7 +1,7 @@
-# AQL Mini-Languages — the `mini` macro and the MiniLang module
+# BORU Mini-Languages — the `mini` macro and the MiniLang module
 
 **Status:** Phase 1 **LANDED** (2026-06-12) with two kinds: the core
-`mini` word (`lang/go/native/native_macro.go`), the `aql:minilang`
+`mini` word (`lang/go/native/native_macro.go`), the `boru:minilang`
 module with `re` (Go regexp) and `bf` (brainfuck) plus
 `MiniLang.register` / `MiniLang.kinds` (`lang/go/modules/minilang.go`),
 static checking through the expansion, and the
@@ -9,7 +9,7 @@ static checking through the expansion, and the
 catalogue (§5), compile hooks, and the optional lexer sugar remain
 design-only. Rev 2 supersedes rev 1's `xy/` lexer-literal design
 (condensed in Appendix A). Core mechanics were first validated with a
-pure-AQL prototype — every claim marked ✓ ran; the empirical findings
+pure-BORU prototype — every claim marked ✓ ran; the empirical findings
 are in §10.
 
 Embedded domain notations — regular expressions, path queries,
@@ -18,7 +18,7 @@ one module, and one standard signature, with **no parser or lexer
 changes**.
 
 ```
-import "aql:minilang"
+import "boru:minilang"
 
 "AbcD" mini re '[a-z]+'                  # → 'bc'
 mini math 'x^2 + 3*y' {x:10, y:2}        # → 106
@@ -41,10 +41,10 @@ mini <kind> <src> <opts>   ⇒   MiniLang.lang_<kind> <src> <opts> end
 
 (token chain `MiniLang get lang_<kind> <src> <opts> end`), where
 `MiniLang.lang_<kind>` is a word with the **standard minilang
-signature** (§3) exported by the `aql:minilang` module. A minilang can
+signature** (§3) exported by the `boru:minilang` module. A minilang can
 take further inputs from the stack and leave any number of results;
 it raises errors through the normal `raise`/`Ideal/Error` machinery.
-New minilangs are registered from native Go (§6) or from pure AQL
+New minilangs are registered from native Go (§6) or from pure BORU
 (§7). Because expansion produces an ordinary typed word call, the
 static checker sees through `mini` per-kind once expansion is visible
 to check mode (§9).
@@ -114,7 +114,7 @@ the `MiniLang` namespace that are part of the module's API but are
 not minilangs and can never be invoked via `mini`:
 
 ```
-MiniLang.register   # §7 — register a kind from AQL
+MiniLang.register   # §7 — register a kind from BORU
 MiniLang.kinds      # list registered kind atoms (discovery)
 MiniLang.lang_re    # a kind — reachable as `mini re …`
 ```
@@ -135,8 +135,8 @@ MACROS-PHASE1.10.md) and adds no new mechanism:
    `opts` (raw map; absent → `{}`).
 2. **Resolve the target name**: `lang_` + kind atom. If the binding
    does not exist at expansion time, raise
-   `[aql/mini_unknown_lang]` with a hint
-   (`import "aql:minilang"` / `MiniLang.register`) at the **call
+   `[boru/mini_unknown_lang]` with a hint
+   (`import "boru:minilang"` / `MiniLang.register`) at the **call
    site** span.
 3. **Emit** the token list
    `MiniLang get lang_<kind>  <src-form>  <opts-form>  end`
@@ -190,7 +190,7 @@ orthogonal to `mini`.
 
 ---
 
-## 5. The `aql:minilang` module
+## 5. The `boru:minilang` module
 
 A plain (non-`-util`) module — it is a DSL/framework module per the
 naming rule — exporting the `MiniLang` namespace. The standard kinds
@@ -213,7 +213,7 @@ becoming ordinary kind atoms (no lexer involvement):
 | `fm` | format template | `args:Any` → `[String]` |
 | `ur` | URL pattern | `url:String` → `[Any]` |
 | `dt` | date/time format | `text:String` → `[Any]` |
-| `m` ✅ | natural infix maths (github.com/tabnas/expr) | *(generator — no stack input)* → `[Number]`; variables from `opts`; AQL int/float coercion — **landed** (the rev-1 `math` kind, shipped as `m`) |
+| `m` ✅ | natural infix maths (github.com/tabnas/expr) | *(generator — no stack input)* → `[Number]`; variables from `opts`; BORU int/float coercion — **landed** (the rev-1 `math` kind, shipped as `m`) |
 | `bf` ✅ | brainfuck | `input:String` → `[String]` (filter), or *(generator)* with `opts.in`; `opts.steps` execution budget — **landed** |
 
 (`re` ✅ is also landed — all matches by default, `{ok ms fst lst n}`
@@ -244,14 +244,14 @@ parse happens once, at expansion time.
 
 ### No auto-import
 
-`aql:minilang` is **not** implicitly imported, even though the core
+`boru:minilang` is **not** implicitly imported, even though the core
 `mini` word is useless without it. Deliberate, for four reasons:
 
 1. **Policy/capability discipline.** Module imports are policy-checked
    (`modules.go::Resolve` consults the host policy; profiles
    allow/deny per module id). An implicit import would acquire a
    capability the program never stated — and every policy profile
-   would have to account for `aql:minilang` whether or not the
+   would have to account for `boru:minilang` whether or not the
    program uses `mini`.
 2. **The unbound-until-imported contract.** Every module's spec
    battery pins a negative row of the form "`X.word` errors before
@@ -342,7 +342,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
             }
             pat, err := compiledPattern(src) // per-src memo: compile once, reuse (F-perf)
             if err != nil {
-                return nil, r.AqlErrorHint("mini_parse_error",
+                return nil, r.BoruErrorHint("mini_parse_error",
                     fmt.Sprintf("re: %v", err), "lang_re",
                     "fix the pattern; remember '\\d' needs '\\\\d' in quoted strings (or use a backtick string)")
             }
@@ -373,22 +373,22 @@ trivial-delegation wrapper (`Body: [Word(inner)]`, `Registry: subReg`,
 (`rand.go:181`).
 
 Error contract: kind handlers return errors via
-`r.AqlError`/`AqlErrorHint` with stable codes (`mini_parse_error`,
+`r.BoruError`/`BoruErrorHint` with stable codes (`mini_parse_error`,
 `mini_eval_error`, …) carrying `{kind, src, offset}` detail where
 applicable, so `do … error […]` handlers can dispatch on `.code` and
 the report points at the calling site (ERRORS.8.md §7 quality bar).
 
 ---
 
-## 7. Registering a minilang — pure AQL
+## 7. Registering a minilang — pure BORU
 
-The out-of-band export `MiniLang.register` installs an AQL function
+The out-of-band export `MiniLang.register` installs a BORU function
 as a kind. The function must carry the standard signature prefix —
 validated loudly at registration:
 
 ```
-import "aql:minilang"
-import "aql:string-util"
+import "boru:minilang"
+import "boru:string-util"
 
 # a counting minilang: src is the substring sought, subject from the stack
 MiniLang.register count (fn [
@@ -420,7 +420,7 @@ MiniLang.register : [name:Atom/q  f:Function]  []
   *same* name is an explicit `undef`-then-register, never silent
   shadowing).
 - `f` — every signature must start `[String, Map, …]`; otherwise
-  `[aql/mini_bad_signature]` with the expected prefix in the hint.
+  `[boru/mini_bad_signature]` with the expected prefix in the hint.
 - Effect: installs the function under `lang_<name>` in the `MiniLang`
   export map. Since the F4 engine fix, a raw fn value in an export
   map dispatches like any word (`lang/spec/fn-value.tsv`), so no
@@ -436,13 +436,13 @@ body are visible wherever that module's import is; `undef`-style
 teardown on scope exit matches existing binding rules. Two modules
 registering the same kind name collide loudly at import time.
 
-### Memoising an AQL-registered kind
+### Memoising a BORU-registered kind
 
 A built-in kind caches its compiled artifact in a private,
 process-global Go map (`re`'s `miniCompiledPattern`, `xp`'s
-`miniXPathExprs`) — a table an AQL kind author cannot reach, and there
+`miniXPathExprs`) — a table a BORU kind author cannot reach, and there
 is **no automatic per-kind cache**: the registered `fn` body runs on
-every `mini` call. So an AQL kind memoises the same way conceptually —
+every `mini` call. So a BORU kind memoises the same way conceptually —
 it holds **its own cross-call cache** and short-circuits on a hit. The
 cache is a **mutable container** keyed by `src`: a `flex` map (or a
 `Store`), either module-level (a dynamic binding the body resolves at
@@ -452,7 +452,7 @@ pointer-backed, so the captured value shares its state across calls,
 the standard factory-retains-state pattern from CLOSURES):
 
 ```
-import "aql:minilang"
+import "boru:minilang"
 
 # A factory whose returned fn captures a per-kind cache. Models a kind
 # whose `src` carries an expensive "compile" step (here just `add src src`).
@@ -488,7 +488,7 @@ hit). A module-level `def cache (flex {})` referenced from the body
 works identically — the factory just keeps the cache out of the
 program namespace.
 
-Note the contrast with the built-ins: an AQL kind's cache is **per
+Note the contrast with the built-ins: a BORU kind's cache is **per
 kind-instance / per engine**, not process-global, so it needs no mutex
 (one engine steps single-threaded) and never leaks across `lang.New()`
 instances — the inverse trade-off to the Go memos, which take a mutex
@@ -519,7 +519,7 @@ turned typos into values — F-rev1).
 ## 9. Static checking and discovery
 
 Post-expansion, a mini call **is** an ordinary wrapper-word call, so
-`aql check` validates per call site against the kind's standard
+`boru check` validates per call site against the kind's standard
 signature — `12345 mini re 'a+'` is a static signature error on
 `lang_re`'s `subject:String`, and outputs type the surrounding
 program per kind.
@@ -533,21 +533,21 @@ Two facts gate / support this (verified):
   flowing through ✓. So implementing `mini` natively (it must be
   native anyway, for the optional-opts arity and call-site error
   spans) delivers static checking without waiting on check-mode macro
-  expansion; landing the latter then also covers AQL-prototyped
+  expansion; landing the latter then also covers BORU-prototyped
   macros generally.
 - discovery: `describe mini` lists the registered kind atoms with
   each kind's effective signature (the standard call including its
   stack inputs and outputs) — `mini`'s own signature deliberately
   says nothing about stack effect, so the per-kind listing is the
-  documentation. `aql describe aql:minilang` lists the exports;
-  `aql describe aql:minilang:lang_re` documents one kind;
+  documentation. `boru describe boru:minilang` lists the exports;
+  `boru describe boru:minilang:lang_re` documents one kind;
   `MiniLang.kinds` answers from code.
 
 ---
 
 ## 10. Validated by prototype (2026-06-12)
 
-A pure-AQL prototype of the full rev 2 pipeline ran against the live
+A pure-BORU prototype of the full rev 2 pipeline ran against the live
 engine (built from this branch; source in Appendix B): a `mini` macro
 that raw-captures `kind`/`src`/`opts`, builds `lang_<kind>` from the
 kind atom at expansion time, and splices
@@ -578,7 +578,7 @@ Empirical findings the design must respect:
   both directions (`"x" mini re 'p' "y"` leaves `"y"`; chained minis
   bind their own subjects).
 - **F2 — argument order in generated code.** Binary non-commutative
-  handlers compute `args[1] op args[0]`; a kind compiler emitting AQL
+  handlers compute `args[1] op args[0]`; a kind compiler emitting BORU
   (the `math` kind) must emit swap-form / fully-parenthesized code —
   `pow 10 2` is 2¹⁰, `10 pow 2` is 10². Every code-generating kind's
   battery needs a non-commutative case.
@@ -612,7 +612,7 @@ Empirical findings the design must respect:
   `MiniLang.register` remains a native word for the *contract*
   (standard-prefix validation, collision checks, help metadata), no
   longer out of dispatch necessity.
-- **F5 — check-mode macro gap.** `aql check` does not expand
+- **F5 — check-mode macro gap.** `boru check` does not expand
   user-level macros (a `def m (macro …)` use reports
   `undefined_word`). Native splice integrates today (see §9); native
   `mini` is the route to static checking now, check-mode macro
@@ -624,7 +624,7 @@ Empirical findings the design must respect:
   not source-expressible at all — bare `re` re-parses as an
   invocation and `re/q` as an Atom — so canon renders it as the
   deliberately non-syntax marker `word(re)` (the same rendering the
-  macro.tsv goldens pin). Consequence: pure-AQL name-constructing
+  macro.tsv goldens pin). Consequence: pure-BORU name-constructing
   macros currently have no clean route from a captured Word to its
   name (the prototype stripped the `word(…)` wrapper — a stopgap;
   `quote`/`inspect`/`convert` don't reach it). The native `mini`
@@ -643,7 +643,7 @@ Empirical findings the design must respect:
    Handler: convertWordHandler, Returns: []*Type{TString}, BarrierPos: -1},
   ```
 
-  after which a pure-AQL `mini` reads cleanly
+  after which a pure-BORU `mini` reads cleanly
   (`def wn (convert Atom ("lang_" add (convert String kind)))`).
   `convert` is the right home (the established cross-type gateway
   with TypeArgs target dispatch); overloading `quote` would conflate
@@ -657,8 +657,8 @@ Empirical findings the design must respect:
 
 | Phase | Deliverable |
 |-------|-------------|
-| 1 | **LANDED 2026-06-12** (scoped to two kinds): native `mini` (two sigs `[Atom/q String]` / `[Atom/q String Map]`; `lang_` resolution with expansion-time `mini_unknown_lang`; auto-`end`; opts normalized to `{}`; `RunInCheckMode` so the checker steps the expansion) + `aql:minilang` with `re` (Go `regexp`, per-src compile memo) and `bf` (brainfuck — filter + generator forms, `opts.steps` budget) + `MiniLang.register` / `MiniLang.kinds` + battery `lang/spec/module-minilang.tsv`. Implementation notes: `mini` returns an `__SP` splice of the standard-call tokens (the `word` mechanism) rather than going through the macro expander — so there is no expansion cache (the `re` compile memo covers the hot cost) and `macroexpand` does not apply to `mini`; src is spliced as collected, so dynamic src works for runtime kinds. Deferred from the original Phase-1 row: `re-sub` / `re-test` / `re-all` |
-| 2 | **`m`** ✅ (Pratt maths via github.com/tabnas/expr — the rev-1 `math` kind, shipped as `m`), **`jp`** ✅ (JSONPath via github.com/ohler55/ojg), **`jq`** ✅ (jq via github.com/itchyny/gojq); remaining: `tr`, `fm`, `gl`. `jp`/`jq` take any AQL document — a Node (Map/List), Object, Array, Table or Record — converting it to generic data (Ideals project through their IdealConverter) and the matches back to AQL values; both return a List of results (a Map/Record subject needs an explicit `{}` opts, the same gotcha as `gex`) |
+| 1 | **LANDED 2026-06-12** (scoped to two kinds): native `mini` (two sigs `[Atom/q String]` / `[Atom/q String Map]`; `lang_` resolution with expansion-time `mini_unknown_lang`; auto-`end`; opts normalized to `{}`; `RunInCheckMode` so the checker steps the expansion) + `boru:minilang` with `re` (Go `regexp`, per-src compile memo) and `bf` (brainfuck — filter + generator forms, `opts.steps` budget) + `MiniLang.register` / `MiniLang.kinds` + battery `lang/spec/module-minilang.tsv`. Implementation notes: `mini` returns an `__SP` splice of the standard-call tokens (the `word` mechanism) rather than going through the macro expander — so there is no expansion cache (the `re` compile memo covers the hot cost) and `macroexpand` does not apply to `mini`; src is spliced as collected, so dynamic src works for runtime kinds. Deferred from the original Phase-1 row: `re-sub` / `re-test` / `re-all` |
+| 2 | **`m`** ✅ (Pratt maths via github.com/tabnas/expr — the rev-1 `math` kind, shipped as `m`), **`jp`** ✅ (JSONPath via github.com/ohler55/ojg), **`jq`** ✅ (jq via github.com/itchyny/gojq); remaining: `tr`, `fm`, `gl`. `jp`/`jq` take any BORU document — a Node (Map/List), Object, Array, Table or Record — converting it to generic data (Ideals project through their IdealConverter) and the matches back to BORU values; both return a List of results (a Map/Record subject needs an explicit `{}` opts, the same gotcha as `gex`) |
 | 3 | **compile hooks**: a kind may register an expansion-time compiler `(src, opts-form) → token list` that `mini` splices *instead of* the standard call — staged compilation of the DSL (parse once ever, splice precompiled carrier values, surface `src` syntax errors at expansion time with call-site spans; requires literal `src`). The standard call remains the semantic reference and the dynamic-src fallback |
 | 4 | **`xp`** ✅ (XPath via github.com/antchfx/xpath — queries a Node/Xml document, the stack subject, now that XML is a node type; a navigable mirror tree feeds the antchfx cursor model); remaining catalogue kinds (`cs`, `ur`, `dt`, `sh`); the `+` literal shortcut — **LANDED** (§12) |
 
@@ -707,7 +707,7 @@ over for free: a stack subject, a trailing `{opts}` map (collected by mini's
 - **Sugar only, opts-less in the literal** — for options, the trailing map
   rides the desugared call (`+re/\d/ {limit:2}`). There is no first-class
   compiled-pattern *value* yet; that remains the Phase-3 compile-hook /
-  `aql:regexp`-style story.
+  `boru:regexp`-style story.
 
 Examples (all equivalent to the explicit `mini` call):
 
@@ -744,7 +744,7 @@ hooks are layered on top.
 - **Go** — a built-in's `native.RegisterMiniCompileGoHook`. The hook is a Go
   func `(src, opts, r) → []Value`. Stored in a per-registry table.
 
-> **Retired (2026-07):** the AQL path — `MiniLang.register-compiled <name>
+> **Retired (2026-07):** the BORU path — `MiniLang.register-compiled <name>
 > (macro …)` stored as `compile_<name>` — died with the frozen kind
 > namespace (`register-compiled` is a tombstone raising
 > `mini_registry_frozen`; an expansion-time macro rewrite is
@@ -808,7 +808,7 @@ deleting the delivery costs:
   generic MiniLang value") turned typos into values; unknown kinds
   now error at expansion time;
 - **Go-only extensibility** (lexer matcher + Go registry) becomes
-  registration from AQL itself (§7);
+  registration from BORU itself (§7);
 - **a new lexer matcher and value hierarchy** versus zero new
   syntax: rev 2 rides the landed macro machinery.
 
@@ -817,13 +817,13 @@ What rev 1 had that rev 2 gives up: terseness (`rm/a+/` vs
 Both are recoverable later — the literal syntax can return as pure
 sugar that desugars to `mini` (Phase 4), and first-class compiled
 values arrive with compile hooks (Phase 3) or per-domain modules
-(e.g. a future full `aql:regexp` with a `compile → instance` API in
+(e.g. a future full `boru:regexp` with a `compile → instance` API in
 the `Rand.with-seed` style). Rev 1's kind catalogue is retained as
 §5's standard library.
 
 ---
 
-## Appendix B — the validated pure-AQL prototype
+## Appendix B — the validated pure-BORU prototype
 
 The §10 prototype, verbatim as last run (green). This is *model*
 code: the real `mini` is native (`lang/go/native/native_macro.go`,
@@ -833,17 +833,17 @@ now `lang/spec/module-minilang.tsv`. The appendix remains as the
 record of the design-validation prototype.
 
 ```
-# Pure-AQL prototype of the rev-2 minilang design (validated 2026-06-12).
+# Pure-BORU prototype of the rev-2 minilang design (validated 2026-06-12).
 # Models the native mini exactly, except the F6 name-construction wart
 # (the canon strip below; native mini reads WordInfo.Name).
 
-import "aql:string-util"
+import "boru:string-util"
 
 # --- the MiniLang module: kinds carry the STANDARD signature
 #     [src:String opts:Map ...inputs] [...outputs], exported as lang_<name>.
 #     NB: kind bodies run in MODULE scope — import dependencies here.
 import module [
-  import "aql:string-util"
+  import "boru:string-util"
   export "MiniLang" {
     lang_re:   (fn [[src:String opts:Map subject:String] [Map]
                    [ StringUtil.match src subject ]]),

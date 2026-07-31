@@ -6,15 +6,15 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// io_watch.go — the aql:io filesystem watcher: `IO.watch path [body]`
+// io_watch.go — the boru:io filesystem watcher: `IO.watch path [body]`
 // subscribes to change events on a Pathon (a file, or a directory's
 // direct children — non-recursive, inotify semantics) and runs the body
-// once per event, PUSH style, exactly like aql:time-util's `interval`
+// once per event, PUSH style, exactly like boru:time-util's `interval`
 // runs its callback per tick. The body executes on a concurrent fork of
 // the registry with the EVENT RECORD on the stack:
 //
@@ -86,7 +86,7 @@ func asWatcherInfo(v Value) (*WatcherInfo, bool) {
 	return wi, ok
 }
 
-// watchEventValue builds the AQL event record for one WatchEvent.
+// watchEventValue builds the BORU event record for one WatchEvent.
 func watchEventValue(op, path string) Value {
 	om := NewOrderedMap()
 	om.Set("op", NewAtom(op))
@@ -117,7 +117,7 @@ func doWatchWord(args []Value, r *Registry, watcherType *Type, opts Value) ([]Va
 	path := extractPath(args[0])
 	body := args[1]
 	if !IsConcrete(body) {
-		return nil, r.AqlError("watch_error", "watch: the callback body must be a concrete list", "watch")
+		return nil, r.BoruError("watch_error", "watch: the callback body must be a concrete list", "watch")
 	}
 	bodyList, _ := AsList(body)
 	tokens := make([]Value, bodyList.Len())
@@ -131,7 +131,7 @@ func doWatchWord(args []Value, r *Registry, watcherType *Type, opts Value) ([]Va
 
 	ch, stop, err := EffectiveFileOps(r).Watch(path, capabilities.WatchOpts{Recursive: recursive})
 	if err != nil {
-		return nil, r.AqlError("watch_error", fmt.Sprintf("watch: %v", err), "watch")
+		return nil, r.BoruError("watch_error", fmt.Sprintf("watch: %v", err), "watch")
 	}
 	info := &WatcherInfo{ID: GenerateID("W_"), Path: path, stop: stop, done: make(chan struct{})}
 	// Fork now, on the subscribing goroutine, so every event runs the
@@ -164,10 +164,10 @@ const watchOverflowOp = "overflow"
 func doUnwatchWord(args []Value, r *Registry) ([]Value, error) {
 	wi, ok := asWatcherInfo(args[0])
 	if !ok {
-		return nil, r.AqlError("unwatch_error", fmt.Sprintf("unwatch: not a Watcher handle (got %s)", args[0].Parent), "unwatch")
+		return nil, r.BoruError("unwatch_error", fmt.Sprintf("unwatch: not a Watcher handle (got %s)", args[0].Parent), "unwatch")
 	}
 	if err := wi.Stop(); err != nil {
-		return nil, r.AqlError("unwatch_error", fmt.Sprintf("unwatch: %v", err), "unwatch")
+		return nil, r.BoruError("unwatch_error", fmt.Sprintf("unwatch: %v", err), "unwatch")
 	}
 	return nil, nil
 }

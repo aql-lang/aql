@@ -1,8 +1,8 @@
-# AQL Language Specification: the aql:query module
+# BORU Language Specification: the boru:query module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable SQL-style query DSL. Import binds the `Query` namespace:
-# `import "aql:query"  Query.select [...] Query.from <table> ...`.
+# `import "boru:query"  Query.select [...] Query.from <table> ...`.
 #
 # The pipeline is LAZY: `select` seeds a query, later words attach
 # clauses, and it only runs when materialized (printed / iterated /
@@ -17,34 +17,34 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  seed: select
-import "aql:query"  Query.select []	[]	SELECT * seeds an all-columns query
-import "aql:query"  Query.select [name age]	[]	projection seeds the named columns
+import "boru:query"  Query.select []	[]	SELECT * seeds an all-columns query
+import "boru:query"  Query.select [name age]	[]	projection seeds the named columns
 #
 # §2  filter / order / limit / offset / distinct
-import "aql:query"  Query.where [age gt 1] (Query.select [name])	[]	WHERE attaches a condition clause
-import "aql:query"  Query.order [age desc] (Query.select [name])	[]	ORDER BY attaches a sort clause
-import "aql:query"  Query.limit 5 (Query.select [name])	[]	LIMIT caps the row count
-import "aql:query"  Query.offset 2 (Query.select [name])	[]	OFFSET skips leading rows
-import "aql:query"  Query.distinct (Query.select [name])	[]	DISTINCT dedupes rows
+import "boru:query"  Query.where [age gt 1] (Query.select [name])	[]	WHERE attaches a condition clause
+import "boru:query"  Query.order [age desc] (Query.select [name])	[]	ORDER BY attaches a sort clause
+import "boru:query"  Query.limit 5 (Query.select [name])	[]	LIMIT caps the row count
+import "boru:query"  Query.offset 2 (Query.select [name])	[]	OFFSET skips leading rows
+import "boru:query"  Query.distinct (Query.select [name])	[]	DISTINCT dedupes rows
 #
 # §3  grouping
-import "aql:query"  Query.group [city] (Query.select [city])	[]	GROUP BY attaches grouping keys
-import "aql:query"  Query.having [cnt gt 1] (Query.group [city] (Query.select [city]))	[]	HAVING filters groups
+import "boru:query"  Query.group [city] (Query.select [city])	[]	GROUP BY attaches grouping keys
+import "boru:query"  Query.having [cnt gt 1] (Query.group [city] (Query.select [city]))	[]	HAVING filters groups
 #
 # §4  joins
-import "aql:query"  Query.join visits (Query.select [name])	[]	JOIN attaches another table
-import "aql:query"  Query.innerjoin visits (Query.select [name])	[]	INNER JOIN
-import "aql:query"  Query.leftjoin visits (Query.select [name])	[]	LEFT JOIN
-import "aql:query"  Query.crossjoin visits (Query.select [name])	[]	CROSS JOIN
-import "aql:query"  Query.on [name eq who] (Query.join visits (Query.select [name]))	[]	ON attaches a join predicate
-import "aql:query"  Query.using [name] (Query.join visits (Query.select [name]))	[]	USING joins on a shared column
+import "boru:query"  Query.join visits (Query.select [name])	[]	JOIN attaches another table
+import "boru:query"  Query.innerjoin visits (Query.select [name])	[]	INNER JOIN
+import "boru:query"  Query.leftjoin visits (Query.select [name])	[]	LEFT JOIN
+import "boru:query"  Query.crossjoin visits (Query.select [name])	[]	CROSS JOIN
+import "boru:query"  Query.on [name eq who] (Query.join visits (Query.select [name]))	[]	ON attaches a join predicate
+import "boru:query"  Query.using [name] (Query.join visits (Query.select [name]))	[]	USING joins on a shared column
 #
 # §5  set operations
-import "aql:query"  Query.union (Query.select [name]) (Query.select [name])	[]	UNION (distinct) of two queries
-import "aql:query"  Query.unionall (Query.select [name]) (Query.select [name])	[]	UNION ALL keeps duplicates
-import "aql:query"  Query.intersect (Query.select [name]) (Query.select [name])	[]	INTERSECT of two queries
-import "aql:query"  Query.except (Query.select [name]) (Query.select [name])	[]	EXCEPT (set difference)
+import "boru:query"  Query.union (Query.select [name]) (Query.select [name])	[]	UNION (distinct) of two queries
+import "boru:query"  Query.unionall (Query.select [name]) (Query.select [name])	[]	UNION ALL keeps duplicates
+import "boru:query"  Query.intersect (Query.select [name]) (Query.select [name])	[]	INTERSECT of two queries
+import "boru:query"  Query.except (Query.select [name]) (Query.select [name])	[]	EXCEPT (set difference)
 #
 # §6  from + negatives
-import "aql:query"  Query.select [] Query.from people	ERROR:unknown table	FROM resolves the source by name; absent table errors
+import "boru:query"  Query.select [] Query.from people	ERROR:unknown table	FROM resolves the source by name; absent table errors
 Query.select []	ERROR:undefined_word	`Query` is unbound without `import`

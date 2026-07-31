@@ -13,7 +13,7 @@ func TestEngineCoreStepEndMultipleEnds(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// Multiple ends with no pending forwards — should be harmlessly removed
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(5), NewEnd(), NewEnd(),
 	})
 	_as0, _ := AsNumber(result[0])
@@ -27,7 +27,7 @@ func TestEngineCoreStepEndTerminatesForwardAdd(t *testing.T) {
 	registerIOWords(r)
 	// "end" should terminate a forward expression: 10 add 20 end 99
 	// The add consumes 10 and 20 via end, leaving 30 and 99
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(10), NewWord("add"), NewInteger(20), NewEnd(), NewInteger(99),
 	})
 	if len(result) != 2 {
@@ -50,7 +50,7 @@ func TestEngineCoreStepEndSemicolonSequence(t *testing.T) {
 	// First add: fwd 2→sig[0], stack 1→sig[1] → add(2,1)=3.
 	// Push 3 → stack=[3, 3]. Second add prefers stack: add(3,3)=6.
 	// Push 4 → [6, 4]. Semicolons don't create stack barriers.
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewEnd(),
 		NewInteger(3), NewWord("add"), NewInteger(4),
 	})
@@ -75,7 +75,7 @@ func TestEngineCoreParenSimple(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// ( 2 add 3 ) => 5
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
 	})
 	_as5, _ := AsNumber(result[0])
@@ -88,7 +88,7 @@ func TestEngineCoreParenNested(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// ( ( 1 add 2 ) add 3 ) => 6
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewOpenParen(), NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
 		NewWord("add"), NewInteger(3), NewCloseParen(),
 	})
@@ -101,7 +101,7 @@ func TestEngineCoreParenNested(t *testing.T) {
 func TestEngineCoreParenUnmatched(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewCloseParen(),
 	})
 	if err == nil {
@@ -112,7 +112,7 @@ func TestEngineCoreParenUnmatched(t *testing.T) {
 func TestEngineCoreParenUnmatchedOpen(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewOpenParen(), NewInteger(1),
 	})
 	if err == nil {
@@ -124,7 +124,7 @@ func TestEngineCoreParenAsBarrier(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// Parens create a scope barrier: 10 ( 2 add 3 ) => 10 5
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(10), NewOpenParen(), NewInteger(2), NewWord("add"), NewInteger(3), NewCloseParen(),
 	})
 	if len(result) != 2 {
@@ -155,12 +155,12 @@ func TestEngineCoreFnDefNamedParam(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TNumber)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("x")}),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("double"),
 		NewWord("fn"), fnBody,
 		NewEnd(),
 	})
-	result := runAQL(t, r, []Value{NewInteger(7), NewWord("double")})
+	result := runBORU(t, r, []Value{NewInteger(7), NewWord("double")})
 	_as9, _ := AsNumber(result[0])
 	if len(result) != 1 || _as9 != 14 {
 		t.Errorf("7 double = %v, want 14", result)
@@ -185,21 +185,21 @@ func TestEngineCoreFnDefMultipleSigs(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TString)}),
 		NewList([]Value{NewWord("x")}),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("my-overload"),
 		NewWord("fn"), fnBody,
 		NewEnd(),
 	})
 
 	// Integer overload
-	result := runAQL(t, r, []Value{NewInteger(5), NewWord("my-overload")})
+	result := runBORU(t, r, []Value{NewInteger(5), NewWord("my-overload")})
 	_as10, _ := AsNumber(result[0])
 	if len(result) != 1 || _as10 != 15 {
 		t.Errorf("5 my-overload = %v, want 15", result)
 	}
 
 	// String overload
-	result = runAQL(t, r, []Value{NewString("hello"), NewWord("my-overload")})
+	result = runBORU(t, r, []Value{NewString("hello"), NewWord("my-overload")})
 	_as11, _ := AsString(result[0])
 	if len(result) != 1 || _as11 != "hello" {
 		t.Errorf("'hello' my-overload = %v, want 'hello'", result)
@@ -217,12 +217,12 @@ func TestEngineCoreFnReturnTypeCheck(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TString)}), // expects String return
 		NewList([]Value{NewWord("x")}),            // but returns Number
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("bad-return"),
 		NewWord("fn"), fnBody,
 		NewEnd(),
 	})
-	err := runAQLError(t, r, []Value{NewInteger(5), NewWord("bad-return")})
+	err := runBORUError(t, r, []Value{NewInteger(5), NewWord("bad-return")})
 	if err == nil {
 		t.Error("expected return type check error")
 	}
@@ -239,12 +239,12 @@ func TestEngineCoreFnNonListBody(t *testing.T) {
 		NewList([]Value{}),
 		NewInteger(42), // non-list body: abbreviation for [42]
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("always42"),
 		NewWord("fn"), fnBody,
 		NewEnd(),
 	})
-	result := runAQL(t, r, []Value{NewInteger(1), NewWord("always42")})
+	result := runBORU(t, r, []Value{NewInteger(1), NewWord("always42")})
 	_as12, _ := AsNumber(result[0])
 	if len(result) != 1 || _as12 != 42 {
 		t.Errorf("1 always42 = %v, want 42", result)
@@ -259,17 +259,17 @@ func TestEngineCoreUndefBasic(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// def my-val 100 end my-val => 100
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("my-val-undef"), NewInteger(100), NewEnd(),
 	})
-	result := runAQL(t, r, []Value{NewWord("my-val-undef")})
+	result := runBORU(t, r, []Value{NewWord("my-val-undef")})
 	_as13, _ := AsNumber(result[0])
 	if len(result) != 1 || _as13 != 100 {
 		t.Fatalf("my-val-undef = %v, want 100", result)
 	}
 
 	// undef my-val
-	runAQL(t, r, []Value{NewWord("undef"), NewWord("my-val-undef")})
+	runBORU(t, r, []Value{NewWord("undef"), NewWord("my-val-undef")})
 
 	// After undef, the word should error (undefined)
 	e := New(r)
@@ -283,21 +283,21 @@ func TestEngineCoreUndefShadowing(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// def "x-shadow" 1 end def "x-shadow" 2 end x-shadow => 2
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewString("x-shadow"), NewInteger(1), NewEnd(),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewString("x-shadow"), NewInteger(2), NewEnd(),
 	})
-	result := runAQL(t, r, []Value{NewWord("x-shadow")})
+	result := runBORU(t, r, []Value{NewWord("x-shadow")})
 	_as14, _ := AsNumber(result[0])
 	if len(result) != 1 || _as14 != 2 {
 		t.Fatalf("x-shadow = %v, want 2", result)
 	}
 
 	// undef x => reveals 1
-	runAQL(t, r, []Value{NewWord("undef"), NewWord("x-shadow")})
-	result = runAQL(t, r, []Value{NewWord("x-shadow")})
+	runBORU(t, r, []Value{NewWord("undef"), NewWord("x-shadow")})
+	result = runBORU(t, r, []Value{NewWord("x-shadow")})
 	_as15, _ := AsNumber(result[0])
 	if len(result) != 1 || _as15 != 1 {
 		t.Errorf("after first undef, x-shadow = %v, want 1", result)
@@ -307,10 +307,10 @@ func TestEngineCoreUndefShadowing(t *testing.T) {
 func TestEngineCoreUndefWithStringName(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("str-undef"), NewInteger(77), NewEnd(),
 	})
-	runAQL(t, r, []Value{NewWord("undef"), NewString("str-undef")})
+	runBORU(t, r, []Value{NewWord("undef"), NewString("str-undef")})
 	e := New(r)
 	_, err := e.Run([]Value{NewWord("str-undef")})
 	if err == nil {
@@ -329,14 +329,14 @@ func TestEngineCoreUndefTargetedFnSig(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TNumber)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("tgt-undef"),
 		NewWord("fn"), fnBody,
 		NewEnd(),
 	})
 
 	// Verify it works
-	result := runAQL(t, r, []Value{NewInteger(10), NewWord("tgt-undef")})
+	result := runBORU(t, r, []Value{NewInteger(10), NewWord("tgt-undef")})
 	_as16, _ := AsNumber(result[0])
 	if len(result) != 1 || _as16 != 11 {
 		t.Fatalf("10 tgt-undef = %v, want 11", result)
@@ -347,7 +347,7 @@ func TestEngineCoreUndefTargetedFnSig(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("Number")}),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("undef"), NewWord("tgt-undef"),
 		NewWord("fnsig"), undefSpec,
 	})
@@ -360,7 +360,7 @@ func TestEngineCoreUndefTargetedFnSig(t *testing.T) {
 func TestEngineCoreMakeStringToInteger(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewString("42"),
 	})
 	_as17, _ := AsInteger(result[0])
@@ -372,7 +372,7 @@ func TestEngineCoreMakeStringToInteger(t *testing.T) {
 func TestEngineCoreMakeStringToFloat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TFloat), NewString("3.14"),
 	})
 	if len(result) != 1 {
@@ -387,7 +387,7 @@ func TestEngineCoreMakeStringToFloat(t *testing.T) {
 func TestEngineCoreMakeToBoolean(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewString("true"),
 	})
 	_as19, _ := AsBoolean(result[0])
@@ -397,7 +397,7 @@ func TestEngineCoreMakeToBoolean(t *testing.T) {
 
 	// make Boolean coerces by presence, not content — a non-empty String
 	// is true, so the text "false" is true.
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewString("false"),
 	})
 	_as20, _ := AsBoolean(result[0])
@@ -405,7 +405,7 @@ func TestEngineCoreMakeToBoolean(t *testing.T) {
 		t.Errorf("make Boolean 'false' = %v, want true", result)
 	}
 
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewString(""),
 	})
 	_as21, _ := AsBoolean(result[0])
@@ -417,7 +417,7 @@ func TestEngineCoreMakeToBoolean(t *testing.T) {
 func TestEngineCoreMakeToAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TAtom), NewString("hello"),
 	})
 	_as22, _ := AsAtom(result[0])
@@ -430,7 +430,7 @@ func TestEngineCoreMakeSameType(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// make Integer on integer should pass through
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewInteger(99),
 	})
 	_as23, _ := AsInteger(result[0])
@@ -442,7 +442,7 @@ func TestEngineCoreMakeSameType(t *testing.T) {
 func TestEngineCoreMakeErrorBadConversion(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewString("notanumber"),
 	})
 	if err == nil {
@@ -454,7 +454,7 @@ func TestEngineCoreMakeFloatTruncToInt(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// make Integer on decimal string should parse as float and truncate
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewString("3.7"),
 	})
 	_as24, _ := AsInteger(result[0])
@@ -466,14 +466,14 @@ func TestEngineCoreMakeFloatTruncToInt(t *testing.T) {
 func TestEngineCoreMakeBooleanFromNumber(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewInteger(0),
 	})
 	_as25, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as25 {
 		t.Errorf("make Boolean 0 = %v, want false", result)
 	}
-	result = runAQL(t, r, []Value{
+	result = runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewInteger(1),
 	})
 	_as26, _ := AsBoolean(result[0])
@@ -485,7 +485,7 @@ func TestEngineCoreMakeBooleanFromNumber(t *testing.T) {
 func TestEngineCoreMakeToString(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TString), NewInteger(42),
 	})
 	_as27, _ := AsString(result[0])
@@ -497,7 +497,7 @@ func TestEngineCoreMakeToString(t *testing.T) {
 func TestEngineCoreMakeErrorBadFloat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TFloat), NewString("xyz"),
 	})
 	if err == nil {
@@ -519,7 +519,7 @@ func TestEngineCoreRecordMakePositional(t *testing.T) {
 	recType := NewRecordType(fields)
 
 	// make RecType [1 "hello"]
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), recType, NewList([]Value{NewInteger(1), NewString("hello")}),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
@@ -547,7 +547,7 @@ func TestEngineCoreRecordMakeMap(t *testing.T) {
 	src := NewOrderedMap()
 	src.Set("x", NewInteger(1))
 	src.Set("y", NewString("hello"))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), recType, NewMap(src),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
@@ -572,7 +572,7 @@ func TestEngineCoreRecordMakeMissingField(t *testing.T) {
 	// Missing field y should error
 	src := NewOrderedMap()
 	src.Set("x", NewInteger(1))
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("make"), recType, NewMap(src),
 	})
 	if err == nil {
@@ -590,7 +590,7 @@ func TestEngineCoreRecordMakeUnknownField(t *testing.T) {
 	src := NewOrderedMap()
 	src.Set("x", NewInteger(1))
 	src.Set("z", NewString("extra"))
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("make"), recType, NewMap(src),
 	})
 	if err == nil {
@@ -607,7 +607,7 @@ func TestEngineCoreRecordMakeWrongFieldCount(t *testing.T) {
 	recType := NewRecordType(fields)
 
 	// Positional with wrong count
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("make"), recType, NewList([]Value{NewInteger(1)}),
 	})
 	if err == nil {
@@ -627,7 +627,7 @@ func TestEngineCoreModuleSimple(t *testing.T) {
 		NewWord("export"), NewAtom("myexp"),
 		NewMap(singleMap("v", NewString("val"))),
 	})
-	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
+	result := runBORU(t, r, []Value{NewWord("module"), moduleBody})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleInst) {
 		t.Fatalf("module should return a Module, got %v", result)
 	}
@@ -645,14 +645,14 @@ func TestEngineCoreModuleImportAll(t *testing.T) {
 		NewWord("export"), NewAtom("coreExp"),
 		NewMap(singleMap("v", NewString("val"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("cmod"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
-	runAQL(t, r, []Value{NewWord("import"), NewWord("cmod")})
+	runBORU(t, r, []Value{NewWord("import"), NewWord("cmod")})
 
-	result := runAQL(t, r, []Value{NewWord("coreExp")})
+	result := runBORU(t, r, []Value{NewWord("coreExp")})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
 		t.Fatalf("coreExp should be a ModuleExport, got %v", result)
 	}
@@ -671,15 +671,15 @@ func TestEngineCoreModuleImportRename(t *testing.T) {
 		NewWord("export"), NewAtom("origName"),
 		NewMap(singleMap("v", NewString("val"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("rmod"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 	renameList := NewList([]Value{NewAtom("origName"), NewAtom("newName")})
-	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("rmod")})
+	runBORU(t, r, []Value{NewWord("import"), renameList, NewWord("rmod")})
 
-	result := runAQL(t, r, []Value{NewWord("newName")})
+	result := runBORU(t, r, []Value{NewWord("newName")})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
 		t.Fatalf("newName should be a ModuleExport, got %v", result)
 	}
@@ -696,7 +696,7 @@ func TestEngineCoreModuleImportMultiRename(t *testing.T) {
 		NewWord("export"), NewAtom("eb"),
 		NewMap(singleMap("v", NewString("b"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("mmod"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
@@ -706,9 +706,9 @@ func TestEngineCoreModuleImportMultiRename(t *testing.T) {
 		NewList([]Value{NewAtom("ea"), NewAtom("ra")}),
 		NewList([]Value{NewAtom("eb"), NewAtom("rb")}),
 	})
-	runAQL(t, r, []Value{NewWord("import"), renameList, NewWord("mmod")})
+	runBORU(t, r, []Value{NewWord("import"), renameList, NewWord("mmod")})
 
-	result := runAQL(t, r, []Value{NewWord("ra")})
+	result := runBORU(t, r, []Value{NewWord("ra")})
 	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
 		t.Fatalf("ra should be a ModuleExport, got %v", result)
 	}
@@ -722,14 +722,14 @@ func TestEngineCoreModuleImportEmptyRenameError(t *testing.T) {
 		NewWord("export"), NewAtom("ex"),
 		NewMap(singleMap("v", NewString("x"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("emod"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
 	})
 
 	// Empty rename list should error
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("import"), NewList([]Value{}), NewWord("emod"),
 	})
 	if err == nil {
@@ -745,7 +745,7 @@ func TestEngineCoreModuleImportMissingExportError(t *testing.T) {
 		NewWord("export"), NewAtom("ex"),
 		NewMap(singleMap("v", NewString("x"))),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("memod"),
 		NewOpenParen(), NewWord("module"), moduleBody, NewCloseParen(),
 		NewEnd(),
@@ -753,7 +753,7 @@ func TestEngineCoreModuleImportMissingExportError(t *testing.T) {
 
 	// Try to rename a non-existent export
 	renameList := NewList([]Value{NewAtom("nonexistent"), NewAtom("target")})
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("import"), renameList, NewWord("memod"),
 	})
 	if err == nil {
@@ -770,7 +770,7 @@ func TestEngineCoreModuleExportWithAtomString(t *testing.T) {
 		NewWord("export"), NewAtom("atexp"),
 		NewMap(singleMap("v", NewString("val"))),
 	})
-	result := runAQL(t, r, []Value{NewWord("module"), moduleBody})
+	result := runBORU(t, r, []Value{NewWord("module"), moduleBody})
 	if len(result) != 1 {
 		t.Fatalf("module should return 1 value, got %d", len(result))
 	}
@@ -787,7 +787,7 @@ func TestEngineCoreModuleExportWithAtomString(t *testing.T) {
 func TestEngineCoreBaseInteger(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewInteger(5), NewWord("base")})
+	result := runBORU(t, r, []Value{NewInteger(5), NewWord("base")})
 	_as32, _ := AsInteger(result[0])
 	if len(result) != 1 || _as32 != 0 {
 		t.Errorf("base Integer = %v, want 0", result)
@@ -797,7 +797,7 @@ func TestEngineCoreBaseInteger(t *testing.T) {
 func TestEngineCoreBaseFloat(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewFloat(3.14), NewWord("base")})
+	result := runBORU(t, r, []Value{NewFloat(3.14), NewWord("base")})
 	_as33, _ := AsFloat(result[0])
 	if len(result) != 1 || _as33 != 0 {
 		t.Errorf("base Float = %v, want 0", result)
@@ -807,7 +807,7 @@ func TestEngineCoreBaseFloat(t *testing.T) {
 func TestEngineCoreBaseString(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewString("hello"), NewWord("base")})
+	result := runBORU(t, r, []Value{NewString("hello"), NewWord("base")})
 	_as34, _ := AsString(result[0])
 	if len(result) != 1 || _as34 != "" {
 		t.Errorf("base String = %v, want ''", result)
@@ -817,7 +817,7 @@ func TestEngineCoreBaseString(t *testing.T) {
 func TestEngineCoreBaseBoolean(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("base")})
+	result := runBORU(t, r, []Value{NewBoolean(true), NewWord("base")})
 	_as35, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as35 {
 		t.Errorf("base Boolean = %v, want false", result)
@@ -827,7 +827,7 @@ func TestEngineCoreBaseBoolean(t *testing.T) {
 func TestEngineCoreBaseList(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewList([]Value{NewInteger(1)}), NewWord("base"),
 	})
 	if len(result) != 1 {
@@ -844,7 +844,7 @@ func TestEngineCoreBaseMap(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("base")})
+	result := runBORU(t, r, []Value{NewMap(m), NewWord("base")})
 	if len(result) != 1 {
 		t.Fatalf("base Map got %d results", len(result))
 	}
@@ -857,7 +857,7 @@ func TestEngineCoreBaseMap(t *testing.T) {
 func TestEngineCoreBaseAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewAtom("foo"), NewWord("base")})
+	result := runBORU(t, r, []Value{NewAtom("foo"), NewWord("base")})
 	_as36, _ := AsAtom(result[0])
 	if len(result) != 1 || _as36 != "" {
 		t.Errorf("base Atom = %v, want empty atom", result)
@@ -918,7 +918,7 @@ func TestEngineCorePeekForwardBoolTrue(t *testing.T) {
 	registerIOWords(r)
 	// "true" as forward should resolve to boolean
 	// Test indirectly: def myval true end myval => true
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("true-val"), NewWord("true"), NewEnd(),
 		NewWord("true-val"),
 	})
@@ -931,7 +931,7 @@ func TestEngineCorePeekForwardBoolTrue(t *testing.T) {
 func TestEngineCorePeekForwardBoolFalse(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("false-val"), NewWord("false"), NewEnd(),
 		NewWord("false-val"),
 	})
@@ -945,7 +945,7 @@ func TestEngineCorePeekForwardAtom(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// An explicit Atom value can be the body of a def (def atom-val 'myatom).
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("atom-val"), NewAtom("myatom"), NewEnd(),
 		NewWord("atom-val"),
 	})
@@ -962,7 +962,7 @@ func TestEngineCoreForwardLeftToRight(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// left-to-right: 2 add 3 mul 4 => (2 + 3) * 4 = 20
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(2), NewWord("add"), NewInteger(3), NewWord("mul"), NewInteger(4),
 	})
 	_as41, _ := AsNumber(result[0])
@@ -975,7 +975,7 @@ func TestEngineCoreForwardLeftToRightReverse(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// left-to-right: 2 mul 3 add 4 => (2 * 3) + 4 = 10
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(2), NewWord("mul"), NewInteger(3), NewWord("add"), NewInteger(4),
 	})
 	_as42, _ := AsNumber(result[0])
@@ -993,7 +993,7 @@ func TestEngineCoreForceForward(t *testing.T) {
 	registerIOWords(r)
 	// Force forward on add: ALL args must come from forward.
 	// add/f 10 5 → forward-collects both → add(10, 5) = 15
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWordModified("add", -1, false, true),
 		NewInteger(10),
 		NewInteger(5),
@@ -1013,7 +1013,7 @@ func TestEngineCoreTypeNameResolution(t *testing.T) {
 	registerIOWords(r)
 	// Type names resolve to type literals
 	for _, name := range []string{"Number", "String", "Boolean", "Integer", "Float", "List", "Map", "Atom"} {
-		result := runAQL(t, r, []Value{NewWord(name)})
+		result := runBORU(t, r, []Value{NewWord(name)})
 		if len(result) != 1 || result[0].Data != nil {
 			t.Errorf("%s should resolve to type literal, got %v", name, result)
 		}
@@ -1274,7 +1274,7 @@ func TestEngineCoreFnImplicitMapNamedParamE2E(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TInteger)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("inc"),
 	})
@@ -1297,14 +1297,14 @@ func TestEngineCoreFnExplicitMapPatternE2E(t *testing.T) {
 		NewList([]Value{}),
 		NewList([]Value{NewString("matched")}),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
 	// {a:1} foo → match
 	argMap := NewOrderedMap()
 	argMap.Set("a", NewInteger(1))
-	result := runAQL(t, r, []Value{NewMap(argMap), NewWord("foo")})
+	result := runBORU(t, r, []Value{NewMap(argMap), NewWord("foo")})
 	found := false
 	for _, v := range result {
 		_as47, _ := AsString(v)
@@ -1319,7 +1319,7 @@ func TestEngineCoreFnExplicitMapPatternE2E(t *testing.T) {
 	// {a:2} foo → no match
 	noMatch := NewOrderedMap()
 	noMatch.Set("a", NewInteger(2))
-	err := runAQLError(t, r, []Value{NewMap(noMatch), NewWord("foo")})
+	err := runBORUError(t, r, []Value{NewMap(noMatch), NewWord("foo")})
 	if err == nil {
 		t.Error("expected signature error for {a:2} foo")
 	}
@@ -1338,12 +1338,12 @@ func TestEngineCoreFnExplicitMapNotNamedParam(t *testing.T) {
 		NewList([]Value{NewTypeLiteral(TInteger)}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
-	runAQL(t, r, []Value{
+	runBORU(t, r, []Value{
 		NewWord("def"), NewWord("bar"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
 	// 5 bar → fails: no map on stack, or x not bound
-	err := runAQLError(t, r, []Value{NewInteger(5), NewWord("bar")})
+	err := runBORUError(t, r, []Value{NewInteger(5), NewWord("bar")})
 	if err == nil {
 		t.Error("expected error: explicit map should not create named param")
 	}
@@ -1387,7 +1387,7 @@ func TestEngineCoreMakeRecordWithBase(t *testing.T) {
 	src.Set("x", NewInteger(5))
 	opts := NewOrderedMap()
 	opts.Set("base", NewBoolean(true))
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), recType, NewMap(src), NewMap(opts),
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
@@ -1546,7 +1546,7 @@ func TestEngineCoreImportFileNoParser(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	r.ParseFunc = nil
-	_, err := loadFileModule(r, "some.aql")
+	_, err := loadFileModule(r, "some.boru")
 	if err == nil {
 		t.Error("expected error when ParseFunc is nil")
 	}
@@ -1563,7 +1563,7 @@ func TestEngineCoreForceStack(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// Force prefix on add: both args must be before the word
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewInteger(3), NewInteger(4),
 		NewWordModified("add", -1, true, false),
 	})
@@ -1577,7 +1577,7 @@ func TestEngineCoreForceStackNoMatchError(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// Force prefix with no matching args
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWordModified("add", -1, true, false),
 	})
 	if err == nil {
@@ -1604,7 +1604,7 @@ func TestEngineCoreMakeRecordNamed(t *testing.T) {
 	a.Set("age", NewInteger(30))
 	src := NewList([]Value{NewMap(n), NewMap(a)})
 
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), recType, src,
 	})
 	if len(result) != 1 || !result[0].Parent.Equal(TMap) {
@@ -1631,7 +1631,7 @@ func TestEngineCoreMakeRecordBadSource(t *testing.T) {
 	fields.Set("x", NewTypeLiteral(TNumber))
 	recType := NewRecordType(fields)
 
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("make"), recType, NewInteger(42),
 	})
 	if err == nil {
@@ -1657,7 +1657,7 @@ func TestEngineCoreMakeTablePositional(t *testing.T) {
 		NewList([]Value{NewInteger(1), NewString("a")}),
 		NewList([]Value{NewInteger(2), NewString("b")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("make"), tableType, rows,
 	})
 	if len(result) != 1 {
@@ -1683,7 +1683,7 @@ func TestEngineCoreMakeTableBadRowCount(t *testing.T) {
 	rows := NewList([]Value{
 		NewList([]Value{NewInteger(1)}), // missing y
 	})
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("make"), tableType, rows,
 	})
 	if err == nil {
@@ -1699,7 +1699,7 @@ func TestEngineCoreMakeTableNonList(t *testing.T) {
 	recType := RecordTypeInfo{Fields: fields}
 	tableType := NewTableType(recType)
 
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("make"), tableType, NewInteger(42),
 	})
 	if err == nil {

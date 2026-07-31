@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/prep"
-	"github.com/aql-lang/aql/cmd/go/internal/registry"
+	"github.com/boru-lang/boru/cmd/go/internal/prep"
+	"github.com/boru-lang/boru/cmd/go/internal/registry"
 )
 
 func setupInstallTest(t *testing.T) (dir string, srvURL string, cleanup func()) {
@@ -20,14 +20,14 @@ func setupInstallTest(t *testing.T) (dir string, srvURL string, cleanup func()) 
 	srv := httptest.NewServer(registry.Handler(regDir))
 
 	dir = t.TempDir()
-	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(`name: testmod
+	os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte(`name: testmod
 major: 0
 minor: 1
 patch: 0
-files: [index.aql]
+files: [index.boru]
 `), 0644)
-	os.WriteFile(filepath.Join(dir, "index.aql"), []byte(`(import "color") "#FF0000" Color.hex2rgb .r`), 0644)
-	os.MkdirAll(filepath.Join(dir, ".aql"), 0755)
+	os.WriteFile(filepath.Join(dir, "index.boru"), []byte(`(import "color") "#FF0000" Color.hex2rgb .r`), 0644)
+	os.MkdirAll(filepath.Join(dir, ".boru"), 0755)
 
 	orig, _ := os.Getwd()
 	os.Chdir(dir)
@@ -61,11 +61,11 @@ func TestInstallDownloadsAndExtracts(t *testing.T) {
 		t.Errorf("unexpected output: %q", stdout.String())
 	}
 
-	if _, err := os.Stat(filepath.Join(".aql", "color", "color.aql")); err != nil {
-		t.Errorf("expected .aql/color/color.aql: %s", err)
+	if _, err := os.Stat(filepath.Join(".boru", "color", "color.boru")); err != nil {
+		t.Errorf("expected .boru/color/color.boru: %s", err)
 	}
-	if _, err := os.Stat(filepath.Join(".aql", "color", "aql.jsonic")); err != nil {
-		t.Errorf("expected .aql/color/aql.jsonic: %s", err)
+	if _, err := os.Stat(filepath.Join(".boru", "color", "boru.jsonic")); err != nil {
+		t.Errorf("expected .boru/color/boru.jsonic: %s", err)
 	}
 }
 
@@ -79,20 +79,20 @@ func TestInstallUpdatesDeps(t *testing.T) {
 		t.Fatalf("exit code = %d; stderr: %s", code, stderr.String())
 	}
 
-	data, err := os.ReadFile("aql.jsonic")
+	data, err := os.ReadFile("boru.jsonic")
 	if err != nil {
 		t.Fatal(err)
 	}
 	content := string(data)
 	if !strings.Contains(content, "deps:") {
-		t.Fatalf("aql.jsonic missing deps: %s", content)
+		t.Fatalf("boru.jsonic missing deps: %s", content)
 	}
 	if !strings.Contains(content, "color: 0.1.0") {
-		t.Fatalf("aql.jsonic missing color dep: %s", content)
+		t.Fatalf("boru.jsonic missing color dep: %s", content)
 	}
 }
 
-func TestInstallRegeneratesAqlJSON(t *testing.T) {
+func TestInstallRegeneratesBoruJSON(t *testing.T) {
 	_, srvURL, cleanup := setupInstallTest(t)
 	defer cleanup()
 
@@ -102,7 +102,7 @@ func TestInstallRegeneratesAqlJSON(t *testing.T) {
 		t.Fatalf("exit code = %d; stderr: %s", code, stderr.String())
 	}
 
-	data, err := os.ReadFile(filepath.Join(".aql", "aql.json"))
+	data, err := os.ReadFile(filepath.Join(".boru", "boru.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,7 +112,7 @@ func TestInstallRegeneratesAqlJSON(t *testing.T) {
 	}
 	deps, ok := m["deps"].(map[string]any)
 	if !ok {
-		t.Fatalf("expected deps map in aql.json, got %v", m["deps"])
+		t.Fatalf("expected deps map in boru.json, got %v", m["deps"])
 	}
 	if deps["color"] != "0.1.0" {
 		t.Errorf("deps.color = %v, want 0.1.0", deps["color"])
@@ -136,7 +136,7 @@ func TestInstallMultipleDeps(t *testing.T) {
 		t.Fatalf("second install failed: %s", stderr.String())
 	}
 
-	data, err := os.ReadFile("aql.jsonic")
+	data, err := os.ReadFile("boru.jsonic")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,15 +148,15 @@ func TestInstallMultipleDeps(t *testing.T) {
 		t.Errorf("missing color-scheme dep in: %s", content)
 	}
 
-	if _, err := os.Stat(filepath.Join(".aql", "color", "color.aql")); err != nil {
-		t.Error("missing .aql/color/color.aql")
+	if _, err := os.Stat(filepath.Join(".boru", "color", "color.boru")); err != nil {
+		t.Error("missing .boru/color/color.boru")
 	}
-	if _, err := os.Stat(filepath.Join(".aql", "color-scheme", "index.aql")); err != nil {
-		t.Error("missing .aql/color-scheme/index.aql")
+	if _, err := os.Stat(filepath.Join(".boru", "color-scheme", "index.boru")); err != nil {
+		t.Error("missing .boru/color-scheme/index.boru")
 	}
 }
 
-func TestInstallNoAqlJSON(t *testing.T) {
+func TestInstallNoBoruJSON(t *testing.T) {
 	dir := t.TempDir()
 	orig, _ := os.Getwd()
 	os.Chdir(dir)
@@ -218,10 +218,10 @@ func TestInstallIdempotent(t *testing.T) {
 		t.Fatalf("first install failed: %s", stderr.String())
 	}
 
-	firstAqlJsonic, _ := os.ReadFile("aql.jsonic")
-	firstAqlJSON, _ := os.ReadFile(filepath.Join(".aql", "aql.json"))
-	firstColorAql, _ := os.ReadFile(filepath.Join(".aql", "color", "color.aql"))
-	firstColorJsonic, _ := os.ReadFile(filepath.Join(".aql", "color", "aql.jsonic"))
+	firstBoruJsonic, _ := os.ReadFile("boru.jsonic")
+	firstBoruJSON, _ := os.ReadFile(filepath.Join(".boru", "boru.json"))
+	firstColorBoru, _ := os.ReadFile(filepath.Join(".boru", "color", "color.boru"))
+	firstColorJsonic, _ := os.ReadFile(filepath.Join(".boru", "color", "boru.jsonic"))
 
 	stdout.Reset()
 	stderr.Reset()
@@ -230,22 +230,22 @@ func TestInstallIdempotent(t *testing.T) {
 		t.Fatalf("second install failed: %s", stderr.String())
 	}
 
-	secondAqlJsonic, _ := os.ReadFile("aql.jsonic")
-	secondAqlJSON, _ := os.ReadFile(filepath.Join(".aql", "aql.json"))
-	secondColorAql, _ := os.ReadFile(filepath.Join(".aql", "color", "color.aql"))
-	secondColorJsonic, _ := os.ReadFile(filepath.Join(".aql", "color", "aql.jsonic"))
+	secondBoruJsonic, _ := os.ReadFile("boru.jsonic")
+	secondBoruJSON, _ := os.ReadFile(filepath.Join(".boru", "boru.json"))
+	secondColorBoru, _ := os.ReadFile(filepath.Join(".boru", "color", "color.boru"))
+	secondColorJsonic, _ := os.ReadFile(filepath.Join(".boru", "color", "boru.jsonic"))
 
-	if string(firstAqlJsonic) != string(secondAqlJsonic) {
-		t.Errorf("aql.jsonic changed:\n  first:  %s\n  second: %s", firstAqlJsonic, secondAqlJsonic)
+	if string(firstBoruJsonic) != string(secondBoruJsonic) {
+		t.Errorf("boru.jsonic changed:\n  first:  %s\n  second: %s", firstBoruJsonic, secondBoruJsonic)
 	}
-	if string(firstAqlJSON) != string(secondAqlJSON) {
-		t.Errorf(".aql/aql.json changed")
+	if string(firstBoruJSON) != string(secondBoruJSON) {
+		t.Errorf(".boru/boru.json changed")
 	}
-	if string(firstColorAql) != string(secondColorAql) {
-		t.Errorf(".aql/color/color.aql changed")
+	if string(firstColorBoru) != string(secondColorBoru) {
+		t.Errorf(".boru/color/color.boru changed")
 	}
 	if string(firstColorJsonic) != string(secondColorJsonic) {
-		t.Errorf(".aql/color/aql.jsonic changed")
+		t.Errorf(".boru/color/boru.jsonic changed")
 	}
 }
 
@@ -255,9 +255,9 @@ func TestInstallDeepChain(t *testing.T) {
 	defer srv.Close()
 
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte("name: deeptest\nmajor: 0\nminor: 1\npatch: 0\nfiles: [index.aql]\n"), 0644)
-	os.WriteFile(filepath.Join(dir, "index.aql"), []byte(`1`), 0644)
-	os.MkdirAll(filepath.Join(dir, ".aql"), 0755)
+	os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte("name: deeptest\nmajor: 0\nminor: 1\npatch: 0\nfiles: [index.boru]\n"), 0644)
+	os.WriteFile(filepath.Join(dir, "index.boru"), []byte(`1`), 0644)
+	os.MkdirAll(filepath.Join(dir, ".boru"), 0755)
 
 	orig, _ := os.Getwd()
 	os.Chdir(dir)
@@ -296,20 +296,20 @@ func TestInstallDeepChain(t *testing.T) {
 
 	for _, mod := range modules {
 		name := mod[:strings.LastIndex(mod, "-")]
-		modDir := filepath.Join(".aql", name)
+		modDir := filepath.Join(".boru", name)
 		if _, err := os.Stat(modDir); err != nil {
 			t.Errorf("expected %s directory: %s", modDir, err)
 		}
 	}
 
-	data, err := os.ReadFile("aql.jsonic")
+	data, err := os.ReadFile("boru.jsonic")
 	if err != nil {
 		t.Fatal(err)
 	}
 	content := string(data)
 	for _, dep := range []string{"textkit: 3.2.0", "charops: 2.3.1", "joiner: 0.4.2"} {
 		if !strings.Contains(content, dep) {
-			t.Errorf("aql.jsonic missing %s", dep)
+			t.Errorf("boru.jsonic missing %s", dep)
 		}
 	}
 }

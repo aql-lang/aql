@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// tensorRegistry returns a registry with the aql:matrix module loaded
+// tensorRegistry returns a registry with the boru:matrix module loaded
 // and a parse func installed, so source-string programs can be run.
 func tensorRegistry(t *testing.T) *native.Registry {
 	t.Helper()
@@ -23,7 +23,7 @@ func tensorRegistry(t *testing.T) *native.Registry {
 	return r
 }
 
-// runTensorSrc parses and runs an AQL source string.
+// runTensorSrc parses and runs a BORU source string.
 func runTensorSrc(t *testing.T, r *native.Registry, src string) ([]native.Value, error) {
 	t.Helper()
 	values, err := parser.Parse(src)
@@ -33,7 +33,7 @@ func runTensorSrc(t *testing.T, r *native.Registry, src string) ([]native.Value,
 	return native.NewTop(r).Run(values)
 }
 
-// Importing aql:matrix registers the three tensor type-kinds, with
+// Importing boru:matrix registers the three tensor type-kinds, with
 // Matrix and Vector refining Tensor. They are absent until imported.
 func TestTensorIdeals_Registered(t *testing.T) {
 	r := tensorRegistry(t)
@@ -54,7 +54,7 @@ func TestTensorIdeals_Registered(t *testing.T) {
 		t.Fatal(err)
 	}
 	if bare.Ideals.Get("Tensor") != nil {
-		t.Error("Tensor kind present without importing aql:matrix")
+		t.Error("Tensor kind present without importing boru:matrix")
 	}
 }
 

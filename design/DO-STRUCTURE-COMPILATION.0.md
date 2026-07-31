@@ -1,6 +1,6 @@
 # Compilation of `do [ … ]` structures
 
-Investigation of how the AQL bytecode compiler lowers the `do` word — the
+Investigation of how the BORU bytecode compiler lowers the `do` word — the
 error-trapping "evaluate this body as code" construct. Covers the two `do`
 signatures (`do [List]` and `do {Map}`), every distinct compile strategy the
 recorder picks, why each is chosen, and a differential-parity check of
@@ -21,9 +21,9 @@ compiled vs. interpreted execution.
 All disassembly below is reproducible with:
 
 ```bash
-cd cmd/go && go build -o bin/aql ./aql
-./bin/aql check --emit -e 'do [1 add 2]'      # show the bytecode + site report
-./bin/aql run  -force-compile -e 'do [1 add 2]'  # require the VM path (no fallback)
+cd cmd/go && go build -o bin/boru ./boru
+./bin/boru check --emit -e 'do [1 add 2]'      # show the bytecode + site report
+./bin/boru run  -force-compile -e 'do [1 add 2]'  # require the VM path (no fallback)
 ```
 
 ## 1. What `do` is
@@ -140,7 +140,7 @@ time (`vmContext.callPolyIn`) — the same first-match the interpreter takes.
 If the body neither compiles to a closure nor bakes as an inert const nor
 islands, the whole program falls back to the interpreter silently under
 `--compile`, or aborts with the refusal reason under `--force-compile`
-(`RunCompiledStrict`, `lang/go/aql.go`).
+(`RunCompiledStrict`, `lang/go/boru.go`).
 
 **`do [ … ]` does NOT always natively compile** — and it doesn't need to, because
 the fallback is the interpreter, which produces the identical result. The body
@@ -166,7 +166,7 @@ engines agree on the result either way.
 `error [handler]` (sig `[List Any]`, `BarrierPos 1`) takes the **preceding stack
 value**: if it is an `Error` the handler runs (with the error on the stack) to
 produce a fallback, otherwise the value passes through. Paired with `do` it is
-AQL's try/catch, and it compiles to **two paired closures**:
+BORU's try/catch, and it compiles to **two paired closures**:
 
 ```
 do [raise boom "kaboom"] error [drop "recovered"]
@@ -207,7 +207,7 @@ are downgraded to info rather than reported as program errors (see
 
 ## 4. Differential parity check
 
-`aql run -no-compile` vs. `aql run -force-compile` agree on every form tried
+`boru run -no-compile` vs. `boru run -force-compile` agree on every form tried
 (20+ cases), including nested `do`, `do` over higher-order bodies, `do` bodies
 that reference module-level defs, `do` inside a fn body capturing an enclosing
 param, and every divergence/trap case:
@@ -250,7 +250,7 @@ found during this investigation.
 ## 7. The always-compile goal — tranche 1 (July 2026)
 
 Maintainer directive: `do` must ALWAYS compile — natively, for performance
-(network servers in AQL need full compilation to be credible; correctness via
+(network servers in BORU need full compilation to be credible; correctness via
 interpreter fallback is not enough). Measured stakes (200k-iteration hot
 loop): a closure-compiled `do` body runs **10.3×** the interpreter; the old
 baked-const path (a runtime `RunResolved` sub-engine per call) recovered only

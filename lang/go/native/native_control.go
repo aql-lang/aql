@@ -220,7 +220,7 @@ var controlNatives = []NativeFunc{
 
 func doListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("do_error", "do: argument must be a concrete list, got type literal", "do")
+		return nil, r.BoruError("do_error", "do: argument must be a concrete list, got type literal", "do")
 	}
 	// `do` runs its body with no per-call inputs and catches a body error,
 	// surfacing it as an Error VALUE rather than propagating (the escape
@@ -917,7 +917,7 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 // the token stream the engine then runs.
 func ifListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("if_error", "if: clause-list argument must be a concrete list, got a type literal", "if")
+		return nil, r.BoruError("if_error", "if: clause-list argument must be a concrete list, got a type literal", "if")
 	}
 	_lst, _ := AsList(args[0])
 	return ifClause(_lst.Slice()), nil
@@ -951,13 +951,13 @@ func caseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			return nil, err
 		}
 		if len(out) == 0 {
-			return nil, r.AqlError("case_error",
+			return nil, r.BoruError("case_error",
 				"case: value expression produced no value to dispatch on", "case")
 		}
 		v = out[len(out)-1]
 	}
 	if !isCodeBody(clauses) {
-		return nil, r.AqlError("case_error",
+		return nil, r.BoruError("case_error",
 			"case: clause list must be a concrete list of match/block pairs (optional trailing default)", "case")
 	}
 	lst, _ := AsList(clauses)
@@ -1014,7 +1014,7 @@ func forCountHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// both engines must agree instead of one looping and the other erroring.
 	n, err := args[0].AsConcreteInteger()
 	if err != nil {
-		return nil, r.AqlError("for_error", "for: count must be a concrete Integer", "for")
+		return nil, r.BoruError("for_error", "for: count must be a concrete Integer", "for")
 	}
 	body := args[1]
 	return runForLoop(r, 0, n, 1, "i", body)
@@ -1022,7 +1022,7 @@ func forCountHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 
 func forRangeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("for_error", "for: range must be a concrete list, got type literal", "for")
+		return nil, r.BoruError("for_error", "for: range must be a concrete list, got type literal", "for")
 	}
 	_lst, _ := AsList(args[0])
 	rangeSpec := _lst.Slice()
@@ -1031,7 +1031,7 @@ func forRangeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if err != nil {
 		// for_error matches the VM's OpForSetup taxonomy (eng/go/vm.go) so a
 		// malformed/non-concrete range errors the same way in both engines.
-		return nil, r.AqlError("for_error", "for: "+err.Error(), "for")
+		return nil, r.BoruError("for_error", "for: "+err.Error(), "for")
 	}
 	return runForLoop(r, start, end, step, "i", body)
 }
@@ -1350,7 +1350,7 @@ func errorReturnsFn(args []Value, r *Registry) []Value {
 
 func errorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("error_error", "error: handler must be a concrete list, got type literal", "error")
+		return nil, r.BoruError("error_error", "error: handler must be a concrete list, got type literal", "error")
 	}
 	// Success pass-through: a non-Error do result skips the handler and passes
 	// through unchanged (`do [risky] error [handler]` composes when risky

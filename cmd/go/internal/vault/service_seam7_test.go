@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 func s7waitRunning(t *testing.T, ps *ProxyService) {
@@ -25,7 +25,7 @@ func s7waitRunning(t *testing.T, ps *ProxyService) {
 }
 
 func TestS7_NewProxyServiceHomeDirError(t *testing.T) {
-	// No AQL_HOME and no HOME → homeDir() fails → NewProxyService wraps it.
+	// No BORU_HOME and no HOME → homeDir() fails → NewProxyService wraps it.
 	t.Setenv(EnvHome, "")
 	t.Setenv("HOME", "")
 	if _, err := NewProxyService("", "", ""); err == nil ||

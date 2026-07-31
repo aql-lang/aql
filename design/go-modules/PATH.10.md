@@ -1,4 +1,4 @@
-# `path` → `aql:path-util`
+# `path` → `boru:path-util`
 
 > **Status: design proposal — not implemented.** A curated, hand-written
 > native module wrapping Go's `path` (slash-separated paths). Read
@@ -10,7 +10,7 @@
 Go package: `path` — manipulation of **slash-separated** paths (URL
 paths, archive entries, virtual hierarchies — *not* OS file paths, which
 are `path/filepath`, see [`PATH-FILEPATH.10.md`](PATH-FILEPATH.10.md)).
-This note specifies `aql:path-util` (namespace `PathUtil`). Design
+This note specifies `boru:path-util` (namespace `PathUtil`). Design
 proposal; no Go code exists yet.
 
 ## 2. Why curated
@@ -25,14 +25,14 @@ a `bad-pattern` error). Pure string algebra, idiomatic shape.
 ## 3. Import & namespace
 
 ```
-import "aql:path-util"        # binds the PathUtil namespace
+import "boru:path-util"        # binds the PathUtil namespace
 ```
 
 The `-util` id + `*Util` namespace is **REQUIRED here**: the bare
 namespace would be `Path`, which **collides with the builtin `Path`
 type** in the kernel. Per the README naming rule ("the `-util` id +
 `*Util` namespace is used **only** when the bare namespace would collide
-with a builtin type … `Path` …"), this package takes `aql:path-util` /
+with a builtin type … `Path` …"), this package takes `boru:path-util` /
 `PathUtil`. Words: `PathUtil.join`, `PathUtil.base`, … The `-util` suffix
 also reads correctly — this *is* a utility library of pure helpers.
 
@@ -42,7 +42,7 @@ Signatures are **top-first, sig order** (position 0 = top of stack). All
 inner natives use `BarrierPos: -1` so the swap form `a PathUtil.word b`
 dispatches.
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `path.Join` | `join` | `[List] -> [String]` | Join path elements with `/` and clean the result. | Variadic `...string` → a single `List[String]` argument (one List value, idiomatic). Empty / empty-string elements skipped, as in Go. |
 | `path.Split` | `split` | `[String] -> [Map]` | Split a path into its directory and final element. | Two returns `(dir, file)` → a `Map {dir, file}` so the caller reads by name rather than destructuring a pair. |
@@ -61,7 +61,7 @@ allocation.
 ## 6. Errors
 
 No panics — guard with `AsConcreteString` / `RequireConcreteList` before
-use. Failure via `r.AqlError(code, detail, word)`:
+use. Failure via `r.BoruError(code, detail, word)`:
 
 - `match` — Go `path.ErrBadPattern` → `bad-pattern`.
 - A non-String element inside the `join` List, or a non-String arg
@@ -79,13 +79,13 @@ because slash paths have no cwd.)
 
 ## 8. Overlap
 
-- `aql:filepath` (`FilePath`) — the **OS-aware** sibling
+- `boru:filepath` (`FilePath`) — the **OS-aware** sibling
   ([`PATH-FILEPATH.10.md`](PATH-FILEPATH.10.md)). Same word names
   (`join`, `split`, `base`, …) but `path/filepath` uses the
   OS separator and adds `rel` / `to-slash` / `from-slash` /
-  `volume-name` / `abs`. Dividing line: `aql:path-util` is *always*
+  `volume-name` / `abs`. Dividing line: `boru:path-util` is *always*
   slash-based and *always* pure (good for URLs and portable virtual
-  paths); `aql:filepath` is platform-dependent. They do not share code or
+  paths); `boru:filepath` is platform-dependent. They do not share code or
   move each other's words.
 - The builtin `Path` **type** is unrelated kernel machinery; this module
   operates on plain `String` values, which is why the `-util` rename is
@@ -96,7 +96,7 @@ because slash paths have no cwd.)
 All args-before form; never `PathUtil.word a b`.
 
 ```
-import "aql:path-util"
+import "boru:path-util"
 
 ["a" "b" "c"] PathUtil.join          # → "a/b/c"
 ["a/" "/b"] PathUtil.join            # → "a/b"  (cleaned)
@@ -130,10 +130,10 @@ Wiring checklist (no code), mirroring `math.go` (pure module):
   Exports: {"PathUtil": …}}`.
 - Register `BuildPathUtilModule` in the `modules` map in
   `lang/go/modules/modules.go`.
-- `lang/go/modules/docs_path_util.go` — `registerDocs("aql:path-util",
+- `lang/go/modules/docs_path_util.go` — `registerDocs("boru:path-util",
   {…})` with a one-liner per export.
 - `lang/spec/module-path-util.tsv` — rows leading with
-  `import "aql:path-util"`; every positive row paired with an
+  `import "boru:path-util"`; every positive row paired with an
   `ERROR:<substring>` negative sibling (notably `match` with a malformed
   pattern → `ERROR:bad-pattern`).
 - Boundary conversion via `eng.FromNative` / `eng.ToNative`

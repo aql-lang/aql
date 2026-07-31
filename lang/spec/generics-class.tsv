@@ -1,4 +1,4 @@
-# AQL Language Specification: generic classes — gen [...] class {...}
+# BORU Language Specification: generic classes — gen [...] class {...}
 # Format: input<TAB>expected<TAB>description
 #
 # `def Box gen [T] class {value:T}` declares a generic CLASS schema.
@@ -42,5 +42,5 @@ def Box gen [T] class {value:T} def P refine (Box of [Integer]) {tag:'x'} end (m
 def Box gen [T] class {value:T} def Sub refine Box {extra:1}	ERROR:type_error	subclassing the SCHEMA itself is rejected (instantiate first)
 #
 # §5  serialization — $class carries the canonical instantiation name
-import "aql:struct-util"  def Box gen [T] class {value:T} def a (make (Box of [Integer]) {value:42}) (StructUtil.reify (Box of [Integer]) (StructUtil.jsonify a)) deq a	true	jsonify→reify round-trips an instantiated class
-import "aql:struct-util"  def Box gen [T] class {value:T} def a (make (Box of [Integer]) {value:1}) StructUtil.reify (Box of [String]) (StructUtil.jsonify a)	ERROR:does not match	a $class/target mismatch is loud
+import "boru:struct-util"  def Box gen [T] class {value:T} def a (make (Box of [Integer]) {value:42}) (StructUtil.reify (Box of [Integer]) (StructUtil.jsonify a)) deq a	true	jsonify→reify round-trips an instantiated class
+import "boru:struct-util"  def Box gen [T] class {value:T} def a (make (Box of [Integer]) {value:1}) StructUtil.reify (Box of [String]) (StructUtil.jsonify a)	ERROR:does not match	a $class/target mismatch is loud

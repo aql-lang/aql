@@ -43,8 +43,8 @@ func listActs(t *testing.T, s screen) map[string]func() tea.Cmd {
 }
 
 func TestVaultKeyRoundTrip(t *testing.T) {
-	f, s := splitVaultKey(vaultKey("/home/u/.aql", "work"))
-	if f != "/home/u/.aql" || s != "work" {
+	f, s := splitVaultKey(vaultKey("/home/u/.boru", "work"))
+	if f != "/home/u/.boru" || s != "work" {
 		t.Errorf("splitVaultKey = %q,%q", f, s)
 	}
 	if f, s := splitVaultKey("plain"); f != "plain" || s != "" {
@@ -179,7 +179,7 @@ func TestSecretDetailScreenActions(t *testing.T) {
 	if s.capturesInput() || s.reload() != nil || s.Init() != nil {
 		t.Error("detail metadata wrong")
 	}
-	if s.cliCommand() != "aql vault get tok" || s.Title() != "tok" {
+	if s.cliCommand() != "boru vault get tok" || s.Title() != "tok" {
 		t.Errorf("detail cmd/title: %q %q", s.cliCommand(), s.Title())
 	}
 	if !strings.Contains(s.helpInfo(), "Rotate") {
@@ -355,7 +355,7 @@ func TestRemoveFormConfirmAndCancel(t *testing.T) {
 
 	// Default (ok=false) is the cancel path: pops with a status, keeps data.
 	fs := m.buildRemoveForm("gone").(*formScreen)
-	if fs.cliCommand() != "aql vault rm --yes gone" {
+	if fs.cliCommand() != "boru vault rm --yes gone" {
 		t.Errorf("remove preview: %q", fs.cliCommand())
 	}
 	msgs := completeForm(t, fs)
@@ -478,7 +478,7 @@ func TestPasswordsScreenAndForms(t *testing.T) {
 	// Remove-form: cancel path, then confirmed removal against a vault
 	// with no slots errors cleanly.
 	fs = m.buildPasswordRemoveForm("reader").(*formScreen)
-	if fs.cliCommand() != "aql vault password rm reader" {
+	if fs.cliCommand() != "boru vault password rm reader" {
 		t.Errorf("password rm preview: %q", fs.cliCommand())
 	}
 	if msgs := completeForm(t, fs); !msgOfType(msgs, popMsg{}) {
@@ -517,7 +517,7 @@ func TestMaintenanceMenuAndPagers(t *testing.T) {
 	}
 	// Prune form: cancel, then confirmed repair (a clean vault repairs to ok).
 	fs := m.buildVerifyPruneForm().(*formScreen)
-	if fs.cliCommand() != "aql vault verify --prune" {
+	if fs.cliCommand() != "boru vault verify --prune" {
 		t.Errorf("prune preview: %q", fs.cliCommand())
 	}
 	if msgs := completeForm(t, fs); !msgOfType(msgs, popMsg{}) {

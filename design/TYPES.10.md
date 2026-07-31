@@ -1,6 +1,6 @@
-# AQL Type Hierarchy
+# BORU Type Hierarchy
 
-Every AQL value carries a hierarchical type path (e.g.
+Every BORU value carries a hierarchical type path (e.g.
 `Scalar/String/ProperString`). A child type matches its parent:
 `Scalar/String/ProperString` matches `Scalar/String` matches
 `Scalar`. A parent does NOT match a child. The lattice is **single-

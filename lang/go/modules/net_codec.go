@@ -13,18 +13,18 @@ import (
 	"sync"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// Tier-2 high-level networking for aql:net — the executable slice of
+// Tier-2 high-level networking for boru:net — the executable slice of
 // design/NETWORK-SERVERS.0.md §6 and design/NETWORK-CLIENTS.0.md §6:
 //
 //	listen {tcp: <port> codec: <codec>} <service> -> Listener
 //	connect {tcp: "host:port" codec: <codec>}     -> Endpoint (a Service)
 //
 // A Codec is a plain Map of functions over Bytes — the RFC's whole
-// extension point, so custom protocols are ordinary AQL values:
+// extension point, so custom protocols are ordinary BORU values:
 //
 //	{ decode:      [buf:Bytes]  -> {msg: Value rest: Bytes} | {need: Integer}
 //	  encode:      [reply:Any]  -> Bytes
@@ -37,7 +37,7 @@ import (
 // service patterns whose `path` carries `:param` / `*rest` segments are
 // matched against the request path when the exact patrun route misses,
 // and the bound segments surface as `req.params`
-// (NETWORK-SERVERS.0.md §12 Q5's "small router in aql:net").
+// (NETWORK-SERVERS.0.md §12 Q5's "small router in boru:net").
 //
 // `connect` returns an Endpoint — a Service whose call/send forward over
 // the socket, one in-flight request at a time (synchronous correlation;
@@ -47,8 +47,8 @@ import (
 
 // ---- Go-backed Function values ----
 
-// goFn builds an AQL Function value whose implementation is a Go
-// handler — the same shape as a lambda, dispatchable via CallAQL /
+// goFn builds a BORU Function value whose implementation is a Go
+// handler — the same shape as a lambda, dispatchable via CallBORU /
 // direct application. Params are authored (not legacy Args) because a
 // constructed Function value compiles through compileFnDef, which
 // derives the forward barrier from len(Params).
@@ -68,9 +68,9 @@ func goFn(name string, arity int, handler eng.Handler) native.Value {
 
 // invokeFn applies a Function value to args and returns its last result
 // (None when the body produced nothing). A Go-backed function (a goFn
-// built-in codec) dispatches its handler directly — CallAQL only splices
-// AQL bodies; an AQL-authored function (a user codec lambda) takes the
-// MatchFnSig + CallAQL path.
+// built-in codec) dispatches its handler directly — CallBORU only splices
+// BORU bodies; a BORU-authored function (a user codec lambda) takes the
+// MatchFnSig + CallBORU path.
 func invokeFn(r *native.Registry, fn native.Value, args ...native.Value) (native.Value, error) {
 	fnInfo, ok := native.FnDefFromValue(fn)
 	if !ok {
@@ -94,7 +94,7 @@ func invokeFn(r *native.Registry, fn native.Value, args ...native.Value) (native
 		return native.Value{}, fmt.Errorf("codec function does not accept %d argument(s)", len(args))
 	}
 	// InvokeCallback runs a compiled codec body on the VM (nested in the live run,
-	// or fresh on an idle connection fork) and falls back to CallAQL otherwise.
+	// or fresh on an idle connection fork) and falls back to CallBORU otherwise.
 	res, err := eng.InvokeCallback(r, sig, args, fnInfo.Captured)
 	if err != nil {
 		return native.Value{}, err
@@ -114,7 +114,7 @@ type codecFuncs struct {
 func resolveCodec(r *native.Registry, v native.Value, word string) (codecFuncs, error) {
 	mp, err := native.RequireConcreteMap(v, word)
 	if err != nil {
-		return codecFuncs{}, r.AqlErrorHint("net_error", word+": codec: must be a {decode encode} map", word,
+		return codecFuncs{}, r.BoruErrorHint("net_error", word+": codec: must be a {decode encode} map", word,
 			"use a built-in codec (Net.lines, Net.json-lines, Net.http) or supply your own functions")
 	}
 	var cf codecFuncs
@@ -122,11 +122,11 @@ func resolveCodec(r *native.Registry, v native.Value, word string) (codecFuncs, 
 	dec, okD := get("decode")
 	enc, okE := get("encode")
 	if !okD || !okE {
-		return codecFuncs{}, r.AqlErrorHint("net_error", word+": codec must carry decode: and encode: functions", word,
+		return codecFuncs{}, r.BoruErrorHint("net_error", word+": codec must carry decode: and encode: functions", word,
 			"decode: [buf:Bytes] -> {msg rest}|{need n};  encode: [reply] -> Bytes")
 	}
-	// Detached-stamp each custom AQL codec fn so the per-request invokeFn →
-	// InvokeCallback dispatch runs it on the VM instead of CallAQL. The codec
+	// Detached-stamp each custom BORU codec fn so the per-request invokeFn →
+	// InvokeCallback dispatch runs it on the VM instead of CallBORU. The codec
 	// fns live INSIDE this map, where the compile-time store-fn bake never
 	// reaches (recordCallOperands stamps only direct fn operands), so the
 	// resolve site is their stamping seam. StampFnValue declines silently —
@@ -187,7 +187,7 @@ func readDecodeStep(res native.Value) decodeStep {
 func listenSvcHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	svc := args[1]
 	if !svc.Parent.ConformsTo(native.TService) {
-		return nil, r.AqlError("net_error", "listen: second argument must be a Service", "listen")
+		return nil, r.BoruError("net_error", "listen: second argument must be a Service", "listen")
 	}
 	optsMap, err := native.RequireConcreteMap(args[0], "listen")
 	if err != nil {
@@ -196,7 +196,7 @@ func listenSvcHandler(args []native.Value, _ map[string]native.Value, _ []native
 	cv, ok := optsMap.Get("codec")
 	if !ok {
 		// A wire protocol is never implicit (NETWORK-SERVERS.0.md §12 Q4).
-		return nil, r.AqlErrorHint("net_error", "listen: a codec: is required to expose a service", "listen",
+		return nil, r.BoruErrorHint("net_error", "listen: a codec: is required to expose a service", "listen",
 			"pass codec: Net.lines / Net.json-lines / Net.http, or a custom {decode encode} map")
 	}
 	cf, cErr := resolveCodec(r, cv, "listen")
@@ -218,7 +218,7 @@ func listenSvcHandler(args []native.Value, _ map[string]native.Value, _ []native
 	go func() {
 		defer func() {
 			if rec := recover(); rec != nil { //covergate:allow acceptor-goroutine recover body: the loop calls only Accept (errors, never panics) and ForkConcurrent on a listener listenHandler mints valid; per-connection panics land in runConnSession's own covered recover (§native)
-				fmt.Fprintf(acceptorFork.ErrOutput, "[aql/net] listen acceptor crashed: %v\n", rec)
+				fmt.Fprintf(acceptorFork.ErrOutput, "[boru/net] listen acceptor crashed: %v\n", rec)
 			}
 		}()
 		for {
@@ -241,7 +241,7 @@ func runConnSession(r *native.Registry, conn net.Conn, cf codecFuncs, svc native
 	sc := &socketConn{id: native.GenerateID("SK_"), conn: conn}
 	defer func() {
 		if rec := recover(); rec != nil {
-			fmt.Fprintf(r.ErrOutput, "[aql/net] connection session crashed: %v\n", rec)
+			fmt.Fprintf(r.ErrOutput, "[boru/net] connection session crashed: %v\n", rec)
 		}
 		_ = sc.close()
 	}()
@@ -254,12 +254,12 @@ func runConnSession(r *native.Registry, conn net.Conn, cf codecFuncs, svc native
 		for len(buf) > 0 {
 			res, dErr := invokeFn(r, cf.decode, native.NewBytesValue(append([]byte(nil), buf...)))
 			if dErr != nil {
-				fmt.Fprintf(r.ErrOutput, "[aql/net] codec decode error: %v\n", dErr)
+				fmt.Fprintf(r.ErrOutput, "[boru/net] codec decode error: %v\n", dErr)
 				return
 			}
 			step := readDecodeStep(res)
 			if step.invalid != "" {
-				fmt.Fprintf(r.ErrOutput, "[aql/net] %s\n", step.invalid)
+				fmt.Fprintf(r.ErrOutput, "[boru/net] %s\n", step.invalid)
 				return
 			}
 			if step.need {
@@ -269,12 +269,12 @@ func runConnSession(r *native.Registry, conn net.Conn, cf codecFuncs, svc native
 			reply := dispatchDecoded(r, svc, step.msg, peerVal)
 			out, eErr := invokeFn(r, cf.encode, reply)
 			if eErr != nil {
-				fmt.Fprintf(r.ErrOutput, "[aql/net] codec encode error: %v\n", eErr)
+				fmt.Fprintf(r.ErrOutput, "[boru/net] codec encode error: %v\n", eErr)
 				return
 			}
 			data, okB := native.AsBytesValue(out)
 			if !okB {
-				fmt.Fprintf(r.ErrOutput, "[aql/net] codec encode must return Bytes\n")
+				fmt.Fprintf(r.ErrOutput, "[boru/net] codec encode must return Bytes\n")
 				return
 			}
 			if _, wErr := conn.Write(data); wErr != nil {
@@ -311,7 +311,7 @@ func dispatchDecoded(r *native.Registry, svc native.Value, msg native.Value, pee
 		}
 	}
 	if err != nil {
-		var ae *eng.AqlError
+		var ae *eng.BoruError
 		code, detail := "error", err.Error()
 		if errors.As(err, &ae) {
 			code, detail = ae.Code, ae.Detail
@@ -328,7 +328,7 @@ func dispatchDecoded(r *native.Registry, svc native.Value, msg native.Value, pee
 }
 
 func isNoMatch(err error) bool {
-	var ae *eng.AqlError
+	var ae *eng.BoruError
 	return errors.As(err, &ae) && ae.Code == "no_match"
 }
 
@@ -476,7 +476,7 @@ func connectHandler(args []native.Value, _ map[string]native.Value, _ []native.V
 	}
 	cv, ok := optsMap.Get("codec")
 	if !ok {
-		return nil, r.AqlErrorHint("net_error", "connect: a codec: is required (use connect-raw for a raw Socket)", "connect",
+		return nil, r.BoruErrorHint("net_error", "connect: a codec: is required (use connect-raw for a raw Socket)", "connect",
 			"pass codec: Net.lines / Net.json-lines / Net.http, or a custom {decode encode} map")
 	}
 	cf, cErr := resolveCodec(r, cv, "connect")
@@ -504,7 +504,7 @@ func (tr *endpointTransport) dispatch(r *native.Registry, req native.Value, opts
 		if tv, ok := mp.Get("timeout"); ok {
 			ms, err := tv.AsConcreteInteger()
 			if err != nil || ms < 0 {
-				return nil, r.AqlError("net_error", "call: timeout: must be a non-negative Integer (milliseconds)", "call")
+				return nil, r.BoruError("net_error", "call: timeout: must be a non-negative Integer (milliseconds)", "call")
 			}
 			deadline = time.Now().Add(time.Duration(ms) * time.Millisecond)
 		}
@@ -512,11 +512,11 @@ func (tr *endpointTransport) dispatch(r *native.Registry, req native.Value, opts
 
 	out, err := invokeFn(r, tr.cf.encodeReq, req)
 	if err != nil {
-		return nil, r.AqlError("net_error", "call: codec encode failed: "+err.Error(), "call")
+		return nil, r.BoruError("net_error", "call: codec encode failed: "+err.Error(), "call")
 	}
 	data, okB := native.AsBytesValue(out)
 	if !okB {
-		return nil, r.AqlError("net_error", "call: codec encode must return Bytes", "call")
+		return nil, r.BoruError("net_error", "call: codec encode must return Bytes", "call")
 	}
 	tr.sc.wmu.Lock()
 	_, wErr := tr.sc.conn.Write(data)
@@ -530,11 +530,11 @@ func (tr *endpointTransport) dispatch(r *native.Registry, req native.Value, opts
 		if len(tr.buf) > 0 {
 			res, dErr := invokeFn(r, tr.cf.decodeResp, native.NewBytesValue(append([]byte(nil), tr.buf...)))
 			if dErr != nil {
-				return nil, r.AqlError("net_error", "call: codec decode failed: "+dErr.Error(), "call")
+				return nil, r.BoruError("net_error", "call: codec decode failed: "+dErr.Error(), "call")
 			}
 			step := readDecodeStep(res)
 			if step.invalid != "" {
-				return nil, r.AqlError("net_error", "call: "+step.invalid, "call")
+				return nil, r.BoruError("net_error", "call: "+step.invalid, "call")
 			}
 			if !step.need {
 				tr.buf = append([]byte(nil), step.rest...)
@@ -606,14 +606,14 @@ func makeJSONLinesCodec() native.Value {
 		line := bytes.TrimSuffix(buf[:idx], []byte("\r"))
 		msg, err := jsonToValue(line)
 		if err != nil {
-			return nil, r.AqlError("codec_error", "json-lines: malformed JSON frame: "+err.Error(), "decode")
+			return nil, r.BoruError("codec_error", "json-lines: malformed JSON frame: "+err.Error(), "decode")
 		}
 		return []native.Value{msgRest(msg, buf[idx+1:])}, nil
 	}
 	encode := func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		data, err := valueToJSON(args[0])
 		if err != nil {
-			return nil, r.AqlError("codec_error", "json-lines: unencodable reply: "+err.Error(), "encode")
+			return nil, r.BoruError("codec_error", "json-lines: unencodable reply: "+err.Error(), "encode")
 		}
 		return []native.Value{native.NewBytesValue(append(data, '\n'))}, nil
 	}
@@ -633,12 +633,12 @@ func makeHTTPCodec() native.Value {
 			return []native.Value{needMap(need)}, nil
 		}
 		if err != nil {
-			return nil, r.AqlError("codec_error", "http: "+err.Error(), "decode")
+			return nil, r.BoruError("codec_error", "http: "+err.Error(), "decode")
 		}
 		lines := strings.Split(head, "\r\n")
 		parts := strings.SplitN(lines[0], " ", 3)
 		if len(parts) < 2 {
-			return nil, r.AqlError("codec_error", "http: malformed request line", "decode")
+			return nil, r.BoruError("codec_error", "http: malformed request line", "decode")
 		}
 		method, rawPath := parts[0], parts[1]
 		path, query := rawPath, ""
@@ -720,7 +720,7 @@ func makeHTTPCodec() native.Value {
 	encodeReq := func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		mp, _ := native.AsMap(args[0])
 		if mp == nil {
-			return nil, r.AqlError("codec_error", "http: a request must be a {method path …} map", "encode-req")
+			return nil, r.BoruError("codec_error", "http: a request must be a {method path …} map", "encode-req")
 		}
 		method := "GET"
 		if mv, ok := mp.Get("method"); ok {
@@ -730,7 +730,7 @@ func makeHTTPCodec() native.Value {
 		if pv, ok := mp.Get("path"); ok {
 			path, _ = pv.AsConcreteString()
 		}
-		headers := map[string]string{"host": "aql"}
+		headers := map[string]string{"host": "boru"}
 		if hv, ok := mp.Get("headers"); ok {
 			if hm, _ := native.AsMap(hv); hm != nil {
 				for _, k := range hm.Keys() {
@@ -763,12 +763,12 @@ func makeHTTPCodec() native.Value {
 			return []native.Value{needMap(need)}, nil
 		}
 		if err != nil {
-			return nil, r.AqlError("codec_error", "http: "+err.Error(), "decode-resp")
+			return nil, r.BoruError("codec_error", "http: "+err.Error(), "decode-resp")
 		}
 		lines := strings.Split(head, "\r\n")
 		parts := strings.SplitN(lines[0], " ", 3)
 		if len(parts) < 2 {
-			return nil, r.AqlError("codec_error", "http: malformed status line", "decode-resp")
+			return nil, r.BoruError("codec_error", "http: malformed status line", "decode-resp")
 		}
 		status, _ := strconv.Atoi(parts[1])
 		m := native.NewOrderedMap()

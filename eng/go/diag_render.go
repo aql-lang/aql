@@ -5,12 +5,12 @@ import (
 	"strings"
 )
 
-// This file owns diagnostic RENDERING — the one place AqlError and
+// This file owns diagnostic RENDERING — the one place BoruError and
 // CheckDiagnostic turn into text (design/DIAGNOSTICS.0.md). The layout
 // is a strict superset of the historical four-part shape
-// ([aql/<code>]: detail / --> pos / excerpt+caret / = hint), extended
+// ([boru/<code>]: detail / --> pos / excerpt+caret / = hint), extended
 // with secondary labeled spans (--- underlines), `= note:` lines, and
-// `= help:` suggestions. AqlError.Error() is Render(RenderOpts{}) —
+// `= help:` suggestions. BoruError.Error() is Render(RenderOpts{}) —
 // the plain rendering — so string-matching consumers never see ANSI;
 // color is caller-resolved and opt-in per call. Resolving it needs the
 // process environment and a stat() on the destination, which is ambient
@@ -37,11 +37,11 @@ func (o RenderOpts) paint(style, s string) string {
 // RenderOpts and no structured payload it reproduces the historical
 // Error() output byte-for-byte (the 872 spec ERROR rows substring-match
 // it); spans, notes, and suggestions extend the report additively.
-func (e *AqlError) Render(o RenderOpts) string {
+func (e *BoruError) Render(o RenderOpts) string {
 	var b strings.Builder
 
-	// Line 1: [aql/<code>]: <detail>
-	b.WriteString(o.paint(cBold+cRed, "[aql/"+e.Code+"]:"))
+	// Line 1: [boru/<code>]: <detail>
+	b.WriteString(o.paint(cBold+cRed, "[boru/"+e.Code+"]:"))
 	b.WriteString(" ")
 	b.WriteString(e.Detail)
 
@@ -136,7 +136,7 @@ func posLabel(file string, row, col int) string {
 }
 
 // posLabel renders e's primary position, or the honest unknown marker.
-func (e *AqlError) posLabel() string {
+func (e *BoruError) posLabel() string {
 	if e.Row <= 0 {
 		return "source position unknown"
 	}
@@ -163,20 +163,20 @@ type siteStyle struct {
 }
 
 // primarySiteStyle is the primary-span excerpt style — the historical
-// aqlErrSite shape.
+// boruErrSite shape.
 var primarySiteStyle = siteStyle{underline: "^", caretStyle: cBold + cRed, context: 2}
 
-// aqlErrSite is the historical name for the primary-span site extract;
+// boruErrSite is the historical name for the primary-span site extract;
 // renderSite with the primary style and plain opts reproduces its
-// output byte-for-byte (pinned by TestS5bEAqlErrSiteClampsRowCol and
+// output byte-for-byte (pinned by TestS5bEBoruErrSiteClampsRowCol and
 // the error-format goldens).
-func aqlErrSite(src, sub, msg string, row, col int) string {
+func boruErrSite(src, sub, msg string, row, col int) string {
 	return renderSite(src, sub, msg, row, col, RenderOpts{}, primarySiteStyle)
 }
 
 // renderSite generates a source code extract showing one location — a
 // gutter-numbered excerpt with an underline captioned by msg. With the
-// primary style and plain opts it reproduces the historical aqlErrSite
+// primary style and plain opts it reproduces the historical boruErrSite
 // output byte-for-byte.
 func renderSite(src, sub, msg string, row, col int, o RenderOpts, st siteStyle) string {
 	if row < 1 {

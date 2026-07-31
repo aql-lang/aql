@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // Wave-3 coverage for native_array.go: the rare overloads (group/1,
@@ -27,7 +27,7 @@ func w3Run(t *testing.T, r *Registry, src string) (string, error) {
 	return Canon(out), runErr
 }
 
-// w3Array runs src against a registry with the aql:array-util words
+// w3Array runs src against a registry with the boru:array-util words
 // registered bare (arrayTestReg, shared with array_test.go).
 func w3Array(t *testing.T, src string) (string, error) {
 	t.Helper()

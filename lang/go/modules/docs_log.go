@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:log", map[string]string{
+	registerDocs("boru:log", map[string]string{
 		"trace":        "Emit a TRACE-level record (optional structured fields).",
 		"debug":        "Emit a DEBUG-level record (optional structured fields).",
 		"info":         "Emit an INFO-level record (optional structured fields).",
@@ -21,7 +21,7 @@ func init() {
 		"clear":        "Empty the memory sink's capture buffer.",
 		"logger":       "Create a named logger instance: logger NAME.",
 		"with":         "Create a named logger with default fields: with NAME FIELDS.",
-		"register":     "Install an AQL function as a sink: register FN NAME MIN-LEVEL.",
+		"register":     "Install a BORU function as a sink: register FN NAME MIN-LEVEL.",
 		"span":         "Start a span and return its handle: span NAME [ATTRS].",
 		"with-span":    "Run a body inside a span, ending it on exit: with-span NAME BODY.",
 		"end-span":     "End a started span given its handle: end-span SPAN.",
@@ -37,7 +37,7 @@ func init() {
 	// signature names but does not enumerate — and the default sink set
 	// matters as much as the API. Results are from verified
 	// lang/spec/module-log.tsv rows.
-	registerExamples("aql:log", map[string][]string{
+	registerExamples("boru:log", map[string][]string{
 		"info":  {`Log.info "started"                               ;# levels: trace debug info warn error fatal`},
 		"warn":  {`Log.warn "retrying" {attempt: 2}                 ;# the second operand is structured context`},
 		"error": {`Log.error "failed" {err: e.message}`},

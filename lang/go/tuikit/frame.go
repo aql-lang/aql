@@ -2,7 +2,7 @@ package tuikit
 
 // Style is the cell-attribute set carried by every painted cell —
 // the Go carrier of the style maps of TUI.0.md §3.3. Colors are kept as
-// the strings AQL programs wrote ("red", "#rrggbb", a 256-palette index
+// the strings BORU programs wrote ("red", "#rrggbb", a 256-palette index
 // in decimal); interpretation/degradation is the painting backend's job.
 type Style struct {
 	FG, BG    string

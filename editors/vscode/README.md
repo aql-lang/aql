@@ -1,25 +1,25 @@
-# VS Code AQL extension
+# VS Code BORU extension
 
-Minimal Language Server client that runs `aql lsp` on stdio for any
-`*.aql` file.
+Minimal Language Server client that runs `boru lsp` on stdio for any
+`*.boru` file.
 
 ## Install (local development)
 
 ```sh
 cd editors/vscode
 npm install
-npx --yes @vscode/vsce package          # writes aql-0.1.0.vsix
-code --install-extension aql-0.1.0.vsix
+npx --yes @vscode/vsce package          # writes boru-0.1.0.vsix
+code --install-extension boru-0.1.0.vsix
 ```
 
 ## Configure
 
-Settings → `AQL: Server Path` to point at a non-default `aql` binary,
+Settings → `BORU: Server Path` to point at a non-default `boru` binary,
 or set in `settings.json`:
 
 ```json
 {
-  "aql.serverPath": "/usr/local/bin/aql"
+  "boru.serverPath": "/usr/local/bin/boru"
 }
 ```
 

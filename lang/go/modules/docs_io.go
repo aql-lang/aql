@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:io", map[string]string{
+	registerDocs("boru:io", map[string]string{
 		"read":      "Read a file; {enc} decodes utf8/bytes/utf16le/utf16be/latin1.",
 		"write":     "Write to a file, returning its path; {enc} encodes, {mode:'append'} appends, {atomic:true} replaces via a temp+rename.",
 		"printstr":  "Write formatted text to output, leaving no value.",
@@ -11,7 +11,7 @@ func init() {
 		"trace":     "Run a list as a traced sub-program, returning its result.",
 		"read-line": "Read the next line of a stream or File handle without its terminator; none at EOF.",
 		"is-tty":    "Report whether a stream is a terminal (false when the host installed no probe).",
-		"exit":      "Ask the driver to terminate with a status (0..125); raises the reserved aql/exit control error rather than calling os.Exit.",
+		"exit":      "Ask the driver to terminate with a status (0..125); raises the reserved boru/exit control error rather than calling os.Exit.",
 		"env":       "Read one environment variable by name; none when it is unset (\"\" is a real value).",
 		"env-all":   "The whole visible environment as a Map, sorted by name; empty when the host installed none.",
 		"args":      "The script's command-line arguments (after the script path), as a List of Strings; empty when the host passed none.",
@@ -42,7 +42,7 @@ func init() {
 	// a caller most needs shown — a signature of [Path Any] does not say
 	// how to build one. Results are from verified lang/spec/module-io.tsv
 	// rows, which use the in-memory filesystem so they touch no disk.
-	registerExamples("aql:io", map[string][]string{
+	registerExamples("boru:io", map[string][]string{
 		"write": {
 			`IO.write (make Pathon "/tmp/a.txt") "hello"      ;# returns the Path, so it chains`,
 			`;# The path is a Pathon, not a String: ` + "`make Pathon \"…\"`" + ` or the`,
@@ -76,7 +76,7 @@ func init() {
 		"args":   {`IO.args                                          ;# the argv this program was started with`},
 		"temp":   {`def p (IO.temp)                                  ;# a fresh temporary Path`},
 		"watch": {
-			`IO.watch (make Pathon "/tmp") {match:"*.aql"}    ;# events until IO.unwatch`,
+			`IO.watch (make Pathon "/tmp") {match:"*.boru"}    ;# events until IO.unwatch`,
 		},
 	})
 }

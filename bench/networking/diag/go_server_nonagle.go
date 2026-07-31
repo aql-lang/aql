@@ -9,7 +9,7 @@ import (
 func main() {
 	ln, _ := net.Listen("tcp", "127.0.0.1:"+os.Args[1])
 	conn, _ := ln.Accept()
-	conn.(*net.TCPConn).SetNoDelay(false) // Nagle ON — the suspected AQL behaviour
+	conn.(*net.TCPConn).SetNoDelay(false) // Nagle ON — the suspected BORU behaviour
 	r := bufio.NewReader(conn)
 	w := bufio.NewWriter(conn)
 	for {

@@ -21,7 +21,7 @@ func runReg(t *testing.T) *Registry {
 			Signatures: []Signature{{
 				Args: []*Type{TInteger},
 				Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-					return nil, &AqlError{Code: "runtime_error", Detail: "boom"}
+					return nil, &BoruError{Code: "runtime_error", Detail: "boom"}
 				}),
 				Returns: []*Type{TInteger}, BarrierPos: -1,
 			}},

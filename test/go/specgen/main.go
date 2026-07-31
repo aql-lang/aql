@@ -1,4 +1,4 @@
-// Command specgen deterministically enumerates every AQL token
+// Command specgen deterministically enumerates every BORU token
 // sequence up to a fixed length over a small, documented alphabet of
 // syntax atoms, evaluates each through the production language layer,
 // and emits a `.tsv` spec row (`input<TAB>expected[<TAB>note]`) capturing
@@ -69,14 +69,14 @@ import (
 	"sync/atomic"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/test/go/specrunner"
-	"github.com/aql-lang/aql/test/go/vary"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/test/go/specrunner"
+	"github.com/boru-lang/boru/test/go/vary"
 )
 
 // Test seams (design/TEST-SEAMS.10.md): tests swap these to observe
@@ -87,14 +87,14 @@ import (
 var (
 	osExit      = os.Exit
 	numCPU      = runtime.NumCPU
-	langNew     = func() (*lang.AQL, error) { return lang.New() }
-	runCompiled = (*lang.AQL).RunCompiled
+	langNew     = func() (*lang.BORU, error) { return lang.New() }
+	runCompiled = (*lang.BORU).RunCompiled
 	// newNativeRegistry / compileCheck: the registry constructor cannot
 	// fail on a healthy build, and CompileCheck can never return a
 	// Program alongside a check error (the checker runs first) — the
 	// seams make those arms drivable.
 	newNativeRegistry = native.DefaultRegistry
-	compileCheck      = (*lang.AQL).CompileCheck
+	compileCheck      = (*lang.BORU).CompileCheck
 	// varySweep: the healthy build has no reachable divergence (the do-unit
 	// registry-replay class is fixed), so the vary mode's diverged-report arm
 	// is drivable only by swapping the sweep.
@@ -161,15 +161,15 @@ func run(input string) ([]eng.Value, error) {
 // errorClass extracts a stable, message-independent substring from an
 // engine error so a generated ERROR row pins the error *kind* rather
 // than its (volatile) human text. Engine errors render as
-// "[aql/<code>]: <detail>"; the code (e.g. signature_error,
+// "[boru/<code>]: <detail>"; the code (e.g. signature_error,
 // undefined_word, div_by_zero) is the stable part. Anything without the
 // bracketed code falls back to the generic "ERROR:" sentinel, which the
 // spec runner treats as "any error".
 func errorClass(err error) string {
 	msg := err.Error()
-	if strings.HasPrefix(msg, "[aql/") {
-		if end := strings.IndexByte(msg, ']'); end > len("[aql/") {
-			return "ERROR:" + msg[len("[aql/"):end]
+	if strings.HasPrefix(msg, "[boru/") {
+		if end := strings.IndexByte(msg, ']'); end > len("[boru/") {
+			return "ERROR:" + msg[len("[boru/"):end]
 		}
 	}
 	return "ERROR:"
@@ -313,7 +313,7 @@ func main() {
 // provenance and the alphabet, so a reader of the .tsv knows it is
 // generated and how to regenerate it.
 func writeHeader(w *bufio.Writer, max int) {
-	fmt.Fprintf(w, "# AQL Language Specification: Syntax Combination Matrix (GENERATED)\n")
+	fmt.Fprintf(w, "# BORU Language Specification: Syntax Combination Matrix (GENERATED)\n")
 	fmt.Fprintf(w, "# Format: input<TAB>expected<TAB>note\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate with:\n")
@@ -323,7 +323,7 @@ func writeHeader(w *bufio.Writer, max int) {
 	fmt.Fprintf(w, "# Every sequence of 1..%d atoms drawn from a fixed alphabet, evaluated\n", max)
 	fmt.Fprintf(w, "# through the production language layer. `expected` is the canonical\n")
 	fmt.Fprintf(w, "# eng.Canon rendering of the result stack; `ERROR:<code>` rows pin the\n")
-	fmt.Fprintf(w, "# error CLASS (the stable [aql/<code>] tag), not its message text.\n")
+	fmt.Fprintf(w, "# error CLASS (the stable [boru/<code>] tag), not its message text.\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# These rows are exhaustive over the alphabet, so they form a frozen\n")
 	fmt.Fprintf(w, "# contract checked by syntax_matrix_test.go: the interpreter reproduces\n")
@@ -589,7 +589,7 @@ func renderAny(vs []any) string {
 // writePassingHeader emits the leading comment block of the passing
 // subset file. maxLen is the length window (0 = the whole matrix).
 func writePassingHeader(w *bufio.Writer, scanned, kept, maxLen int) {
-	fmt.Fprintf(w, "# AQL Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)\n")
+	fmt.Fprintf(w, "# BORU Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)\n")
 	fmt.Fprintf(w, "%s\n", frontCodeMarker)
 	fmt.Fprintf(w, "# Format: FRONT-CODED. Each data row is reuse<TAB>suffix<TAB>expected,\n")
 	fmt.Fprintf(w, "# where reuse = the count of leading bytes the input shares with the\n")
@@ -633,7 +633,7 @@ const (
 // and returns a nil Program on any error-severity diagnostic — so a
 // check-stage failure can never also be `compiled`. The caller asserts
 // that (the "checker runs first" confirmation) on the returned bool.
-func classifyFrontier(a *lang.AQL, src string) (frontierClass, string, bool) {
+func classifyFrontier(a *lang.BORU, src string) (frontierClass, string, bool) {
 	prog, reason, res, err := compileCheck(a, src)
 	compiled := prog != nil
 	if err != nil {
@@ -839,7 +839,7 @@ func writeFrontierFile(path, kind, tag string, cands []string, classes []frontie
 // writeFrontierHeader emits the leading comment block of a frontier file.
 // maxLen is the length window the prefixes were drawn from.
 func writeFrontierHeader(w *bufio.Writer, kind, tag string, n, maxLen int) {
-	fmt.Fprintf(w, "# AQL Language Specification: Minimal Failing Prefixes — %s FAILURES (GENERATED)\n", strings.ToUpper(kind))
+	fmt.Fprintf(w, "# BORU Language Specification: Minimal Failing Prefixes — %s FAILURES (GENERATED)\n", strings.ToUpper(kind))
 	fmt.Fprintf(w, "%s\n", frontCodeMarker)
 	fmt.Fprintf(w, "%s\n", detailLegendMarker)
 	fmt.Fprintf(w, "# Format: FRONT-CODED with a DETAIL LEGEND. Each data row is\n")
@@ -863,9 +863,9 @@ func writeFrontierHeader(w *bufio.Writer, kind, tag string, n, maxLen int) {
 	}
 	switch kind {
 	case "type-check":
-		fmt.Fprintf(w, "# These prefixes FAIL THE TYPE CHECKER: `aql check` reports at least one\n")
+		fmt.Fprintf(w, "# These prefixes FAIL THE TYPE CHECKER: `boru check` reports at least one\n")
 		fmt.Fprintf(w, "# error-severity diagnostic. Because the compiler runs the checker first\n")
-		fmt.Fprintf(w, "# (lang.(*AQL).CompileCheck), every prefix here is also refused by the\n")
+		fmt.Fprintf(w, "# (lang.(*BORU).CompileCheck), every prefix here is also refused by the\n")
 		fmt.Fprintf(w, "# compiler — none is ever lowered to bytecode.\n")
 	case "runtime":
 		fmt.Fprintf(w, "# These prefixes PASS THE TYPE CHECKER and COMPILE to bytecode, yet they\n")
@@ -1232,7 +1232,7 @@ func runVarySweep(seedDir, outDir string, nSeeds int) {
 
 // writeLen5Header emits the leading comment block of a length-5 file.
 func writeLen5Header(w *bufio.Writer, kind string, n int) {
-	fmt.Fprintf(w, "# AQL Language Specification: Length-5 Layer — %s (GENERATED)\n", strings.ToUpper(kind))
+	fmt.Fprintf(w, "# BORU Language Specification: Length-5 Layer — %s (GENERATED)\n", strings.ToUpper(kind))
 	fmt.Fprintf(w, "%s\n", frontCodeMarker)
 	if kind != "passing" {
 		fmt.Fprintf(w, "%s\n", detailLegendMarker)

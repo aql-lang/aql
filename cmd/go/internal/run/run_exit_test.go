@@ -8,15 +8,15 @@ import (
 	"testing"
 )
 
-// run_exit_test.go — `aql run`'s decision about IO.exit: the requested code
+// run_exit_test.go — `boru run`'s decision about IO.exit: the requested code
 // becomes THIS process's status, nothing is printed, and the residual stack
 // is not flushed. The language-level contract is in
 // lang/go/test/io_exit_test.go.
 
 func writeExitScript(t *testing.T, body string) string {
 	t.Helper()
-	file := filepath.Join(t.TempDir(), "exit.aql")
-	if err := os.WriteFile(file, []byte("import \"aql:io\"\n"+body+"\n"), 0o644); err != nil {
+	file := filepath.Join(t.TempDir(), "exit.boru")
+	if err := os.WriteFile(file, []byte("import \"boru:io\"\n"+body+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	return file
@@ -59,8 +59,8 @@ func TestExecuteExitUnwindsWithoutDiscarding(t *testing.T) {
 	dir := t.TempDir()
 	before := filepath.Join(dir, "before.txt")
 	after := filepath.Join(dir, "after.txt")
-	file := filepath.Join(dir, "exit.aql")
-	src := "import \"aql:io\"\n" +
+	file := filepath.Join(dir, "exit.boru")
+	src := "import \"boru:io\"\n" +
 		"IO.write (make Pathon \"" + before + "\") \"1\" drop\n" +
 		"IO.exit 2\n" +
 		"IO.write (make Pathon \"" + after + "\") \"1\" drop\n"

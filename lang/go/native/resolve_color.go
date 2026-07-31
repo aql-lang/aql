@@ -56,7 +56,7 @@ func noColor(r *Registry) bool {
 }
 
 // isCharDevice reports whether w is a terminal, by the same character-device
-// test the aql:io `is-tty` word uses (capabilities.OSStreamProbe), so a word
+// test the boru:io `is-tty` word uses (capabilities.OSStreamProbe), so a word
 // and the renderer can never disagree about a stream. Engine-side writer
 // wrappers are peeled first: every concurrency fork rewraps the output
 // writers, and an *os.File assertion through the wrapper would report a real

@@ -6,8 +6,8 @@ import (
 	"io"
 	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // io_lock.go — advisory file locks. IO.lock acquires a Lock resource (an
@@ -81,7 +81,7 @@ func doLockWord(args []Value, r *Registry, lockType *Type) ([]Value, error) {
 			// Non-blocking contention → none, not an error.
 			return []Value{NewTypeLiteral(TNone)}, nil
 		}
-		return nil, r.AqlError("lock_error", fmt.Sprintf("lock: %v", err), "lock")
+		return nil, r.BoruError("lock_error", fmt.Sprintf("lock: %v", err), "lock")
 	}
 	info := &LockInfo{ID: GenerateID("L_"), Path: path, Shared: shared, closer: closer}
 	return []Value{eng.NewValueRaw(lockType, ExtensionPayload{Body: info})}, nil
@@ -91,10 +91,10 @@ func doLockWord(args []Value, r *Registry, lockType *Type) ([]Value, error) {
 func doUnlockWord(args []Value, r *Registry) ([]Value, error) {
 	li, ok := asLockInfo(args[0])
 	if !ok {
-		return nil, r.AqlError("unlock_error", fmt.Sprintf("unlock: not a Lock handle (got %s)", args[0].Parent), "unlock")
+		return nil, r.BoruError("unlock_error", fmt.Sprintf("unlock: not a Lock handle (got %s)", args[0].Parent), "unlock")
 	}
 	if err := li.Release(); err != nil {
-		return nil, r.AqlError("unlock_error", fmt.Sprintf("unlock: %v", err), "unlock")
+		return nil, r.BoruError("unlock_error", fmt.Sprintf("unlock: %v", err), "unlock")
 	}
 	return nil, nil
 }

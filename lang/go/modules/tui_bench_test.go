@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // BenchmarkTuiKeystrokeStorm floods one driver session with key events
@@ -26,7 +26,7 @@ func BenchmarkTuiKeystrokeStorm(b *testing.B) {
 	engine := native.NewTop(reg)
 	var out []native.Value
 	for _, step := range []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`def u ([s:Any e:Map] => [ if (e.key eq "q") [ Tui.quit s ] [ (s add 1) ] ])`,
 		`def v ([s:Any] => [ Tui.text (convert String s) ])`,
 		`[u/r v/r]`,

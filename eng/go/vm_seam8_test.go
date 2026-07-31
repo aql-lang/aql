@@ -41,7 +41,7 @@ func w8Deleg0(t *testing.T, r *Registry, name string, impl Handler) Value {
 		Name: name, Registry: r,
 		Signatures: []Signature{{
 			Returns: []*Type{TAny}, BarrierPos: -1,
-			Impl: AQL([]Value{NewWord(name)}),
+			Impl: BORU([]Value{NewWord(name)}),
 		}},
 	})
 }
@@ -111,7 +111,7 @@ func TestW8CallDynMethodZeroArgError(t *testing.T) {
 	r := w8Reg(t)
 	// The arity-0 applied inner native errors: callDynMethod surfaces it.
 	deleg := w8Deleg0(t, r, "w8zfail", func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-		return nil, r.AqlError("value_error", "w8zfail: boom", "w8zfail")
+		return nil, r.BoruError("value_error", "w8zfail: boom", "w8zfail")
 	})
 	vc := seam7VC(r)
 	_, err := vc.callDynMethod(vc.r, &DynMethodSpec{Word: "w8zfail", NArgs: 0, NOut: 1},
@@ -150,7 +150,7 @@ func w8Deleg1(t *testing.T, r *Registry, name string, impl Handler) Value {
 		Name: name, Registry: r,
 		Signatures: []Signature{{
 			Args: []*Type{TInteger}, Returns: []*Type{TAny}, BarrierPos: -1,
-			Impl: AQL([]Value{NewWord(name)}),
+			Impl: BORU([]Value{NewWord(name)}),
 		}},
 	})
 }
@@ -182,7 +182,7 @@ func TestW8CallDynMethodIslandSuccess(t *testing.T) {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TInteger}},
 			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
-			Impl: AQL([]Value{NewWord("n")}),
+			Impl: BORU([]Value{NewWord("n")}),
 		}},
 	})
 	if isDelegationFnDef(fn.Data.(FnDefInfo)) {

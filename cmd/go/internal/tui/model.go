@@ -170,7 +170,7 @@ func (m *model) View() string {
 	var b strings.Builder
 
 	// Header.
-	b.WriteString(headerStyle.Render("aql tui"))
+	b.WriteString(headerStyle.Render("boru tui"))
 	if m.server != nil {
 		fmt.Fprintf(&b, "  pid=%d  version=%s  uptime=%.0fs  services=%d",
 			m.server.PID, m.server.Version, m.server.UptimeSeconds, m.server.ServiceCount)

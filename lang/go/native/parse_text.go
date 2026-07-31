@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // parseTextHandler implements `StructUtil.parse` — jsonic/JSON text →
@@ -15,11 +15,11 @@ import (
 // `StructUtil.parse "{val:'if'}"` yields a map holding the STRING
 // 'if'. The jsonic superset is accepted (unquoted keys, optional
 // commas), so strict JSON parses too. Malformed input raises
-// [aql/parse_error] — loud, never a silent none.
+// [boru/parse_error] — loud, never a silent none.
 func parseTextHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	text, err := AsString(args[0])
 	if err != nil {
-		return nil, r.AqlError("parse_error",
+		return nil, r.BoruError("parse_error",
 			fmt.Sprintf("parse: argument must be a string, got %s", args[0].String()), "parse")
 	}
 	// Empty input is "no value to decode" and raises (never a silent none).
@@ -28,19 +28,19 @@ func parseTextHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	// would wrongly reject `null` — which must hydrate to the concrete none
 	// (jsonicToValue maps nil → None, matching how `{a: null}` decodes).
 	if strings.TrimSpace(text) == "" {
-		return nil, r.AqlError("parse_error",
+		return nil, r.BoruError("parse_error",
 			"parse: input is empty (no value to decode)", "parse")
 	}
 	// SafeParseData (not SafeParse) so number tokens preserve their
 	// int/float distinction: "42.0" decodes to Float, "42" to Integer.
 	result, perr := parser.SafeParseData(text)
 	if perr != nil {
-		return nil, r.AqlError("parse_error",
+		return nil, r.BoruError("parse_error",
 			fmt.Sprintf("parse: invalid jsonic/JSON: %v", perr), "parse")
 	}
 	v, cerr := jsonicToValue(result)
 	if cerr != nil {
-		return nil, r.AqlError("parse_error",
+		return nil, r.BoruError("parse_error",
 			fmt.Sprintf("parse: %v", cerr), "parse")
 	}
 	return []Value{v}, nil

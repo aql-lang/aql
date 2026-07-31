@@ -327,14 +327,14 @@ func InferAndInstantiateSchema(r *Registry, schema Value, body Value) (Value, er
 			// mix loudly rather than guessing.
 			for j := i + 1; j < len(info.Params); j++ {
 				if _, later := bindings[info.Params[j].Name]; later {
-					return Value{}, r.AqlError("unbound_param",
+					return Value{}, r.BoruError("unbound_param",
 						fmt.Sprintf("%s: parameter %s could not be inferred but a later parameter could — instantiate explicitly with `%s of [...]`",
 							info.Name, p.Name, info.Name), "make")
 				}
 			}
 			break
 		}
-		return Value{}, r.AqlErrorHint("unbound_param",
+		return Value{}, r.BoruErrorHint("unbound_param",
 			fmt.Sprintf("%s: type parameter %s cannot be inferred from the construction body", info.Name, p.Name),
 			"make",
 			"instantiate explicitly: "+info.Name+" of [...]")

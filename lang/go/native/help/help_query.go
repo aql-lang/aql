@@ -1,91 +1,91 @@
 package help
 
 func init() {
-	// SQL-style query DSL words. These live in the aql:query module and
-	// are accessed via dot notation after `import "aql:query"` — e.g.
+	// SQL-style query DSL words. These live in the boru:query module and
+	// are accessed via dot notation after `import "boru:query"` — e.g.
 	// Query.from, Query.where, Query.select. They form a left-to-right
 	// pipeline in forward form: `Query.from people Query.where [age gt
 	// 18] Query.select [name age]`.
 
 	register(&Entry{
 		Word:    "select",
-		Summary: "Start a query, projecting columns (aql:query).",
+		Summary: "Start a query, projecting columns (boru:query).",
 		Description: "The SQL-order entry word: `select [name age] from people …`. Seeds a new " +
 			"lazy query with the projection columns; an empty list [] selects every column. " +
 			"Supports renaming ([col alias]), casting ([cast col type]), and aggregate functions " +
 			"(sum, avg, min, max, count). The query runs only when its result is printed, " +
-			"iterated, or otherwise needs rows. Imported from aql:query; call as Query.select.",
+			"iterated, or otherwise needs rows. Imported from boru:query; call as Query.select.",
 	})
 
 	register(&Entry{
 		Word:    "from",
-		Summary: "Set the source table of a query (aql:query).",
+		Summary: "Set the source table of a query (boru:query).",
 		Description: "Sets the table the preceding `select` reads from — required in every query. " +
 			"Given a bare name it looks the table up in the context store (set via " +
 			"`context set <name> <table>`); given a table value it uses that. Imported from " +
-			"aql:query; call as Query.from.",
+			"boru:query; call as Query.from.",
 	})
 
 	register(&Entry{
 		Word:    "where",
-		Summary: "Add a filter condition to a query (aql:query).",
+		Summary: "Add a filter condition to a query (boru:query).",
 		Description: "Filters rows matching the condition. Supports operators: eq, neq, lt, gt, " +
 			"lte, gte, like, in, between, is null, is not null, and, or, not. Imported from " +
-			"aql:query; call as Query.where.",
+			"boru:query; call as Query.where.",
 	})
 
 	register(&Entry{
 		Word:    "order",
-		Summary: "Specify sort order for query results (aql:query).",
+		Summary: "Specify sort order for query results (boru:query).",
 		Description: "Orders query results by the specified columns. Use [col desc] for descending. " +
-			"Imported from aql:query; call as Query.order.",
+			"Imported from boru:query; call as Query.order.",
 	})
 
 	register(&Entry{
 		Word:        "limit",
-		Summary:     "Limit the number of query results (aql:query).",
-		Description: "Restricts the query to return at most n rows. Imported from aql:query; call as Query.limit.",
+		Summary:     "Limit the number of query results (boru:query).",
+		Description: "Restricts the query to return at most n rows. Imported from boru:query; call as Query.limit.",
 	})
 
 	register(&Entry{
 		Word:        "offset",
-		Summary:     "Skip rows in query results (aql:query).",
-		Description: "Skips the first n rows before returning results. Imported from aql:query; call as Query.offset.",
+		Summary:     "Skip rows in query results (boru:query).",
+		Description: "Skips the first n rows before returning results. Imported from boru:query; call as Query.offset.",
 	})
 
 	register(&Entry{
 		Word:        "distinct",
-		Summary:     "Remove duplicate rows from query results (aql:query).",
-		Description: "Adds SELECT DISTINCT to the query. Imported from aql:query; call as Query.distinct.",
+		Summary:     "Remove duplicate rows from query results (boru:query).",
+		Description: "Adds SELECT DISTINCT to the query. Imported from boru:query; call as Query.distinct.",
 	})
 
 	register(&Entry{
 		Word:        "group",
-		Summary:     "Group query results by columns (aql:query).",
-		Description: "Groups rows by the specified columns for aggregate queries. Imported from aql:query; call as Query.group.",
+		Summary:     "Group query results by columns (boru:query).",
+		Description: "Groups rows by the specified columns for aggregate queries. Imported from boru:query; call as Query.group.",
 	})
 
 	register(&Entry{
 		Word:    "having",
-		Summary: "Filter grouped query results (aql:query).",
+		Summary: "Filter grouped query results (boru:query).",
 		Description: "Filters groups after GROUP BY, like WHERE but for aggregated values. " +
-			"Imported from aql:query; call as Query.having.",
+			"Imported from boru:query; call as Query.having.",
 	})
 
 	register(&Entry{
 		Word:    "join",
-		Summary: "Join another table into a query (aql:query).",
+		Summary: "Join another table into a query (boru:query).",
 		Description: "Adds a JOIN against the named table; pair with Query.on (ON condition) or " +
 			"Query.using (shared columns). Variants: Query.join / Query.innerjoin (inner), " +
-			"Query.leftjoin (left outer), Query.crossjoin (cross). Imported from aql:query.",
+			"Query.leftjoin (left outer), Query.crossjoin (cross). Imported from boru:query.",
 	})
 
 	register(&Entry{
 		Word:    "union",
-		Summary: "Combine two queries with a set operation (aql:query).",
+		Summary: "Combine two queries with a set operation (boru:query).",
 		Description: "Appends a set operation against a right-hand query: Query.union (distinct), " +
 			"Query.unionall (keep duplicates), Query.intersect, Query.except. The right-hand " +
-			"query is typically a parenthesized sub-pipeline. Imported from aql:query.",
+			"query is typically a parenthesized sub-pipeline. Imported from boru:query.",
 	})
 
 	register(&Entry{
@@ -109,14 +109,14 @@ func init() {
 		Word:    "import",
 		Summary: "Import a module or data file.",
 		Description: "Loads a file as a module or data. File paths must start with /, ./ or ../. " +
-			"For .aql files, executes as an isolated module and installs exports. " +
+			"For .boru files, executes as an isolated module and installs exports. " +
 			"For .json/.jsonic files, pushes parsed data onto the stack. " +
 			"For .csv/.tsv files, loads data as a table. " +
 			"Use a list argument to rename imports (not supported for data files).",
 		Examples: []string{
-			`import "aql:math-util" ; # native module → math.* namespace`,
-			`import "./lib.aql" ; # sibling file's exports`,
-			`import [Orig Alias] "./lib.aql" ; # rename on import`,
+			`import "boru:math-util" ; # native module → math.* namespace`,
+			`import "./lib.boru" ; # sibling file's exports`,
+			`import [Orig Alias] "./lib.boru" ; # rename on import`,
 		},
 	})
 

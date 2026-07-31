@@ -1,15 +1,15 @@
 package test
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
 )
 
-// runSteps executes a sequence of AQL expressions on a shared engine,
+// runSteps executes a sequence of BORU expressions on a shared engine,
 // returning the result of the last step.
 func runSteps(t *testing.T, steps []string) ([]native.Value, error) {
 	t.Helper()

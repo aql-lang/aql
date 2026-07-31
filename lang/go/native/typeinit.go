@@ -36,7 +36,7 @@ func SwapTypeInitErrs(errs []error) []error {
 
 // RecordTypeInitError is the exported spelling of recordTypeInitErr for
 // sibling packages (lang/go/modules) that register global external
-// builtins of their own (the aql:net Socket/Listener handles) and must
+// builtins of their own (the boru:net Socket/Listener handles) and must
 // funnel init-time failures through the same surfaced-at-construction
 // channel.
 func RecordTypeInitError(err error) { recordTypeInitErr(err) }

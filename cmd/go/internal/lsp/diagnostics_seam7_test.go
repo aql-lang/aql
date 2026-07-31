@@ -6,17 +6,17 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // TestS7n_ComputeDiagnosticsLangNewFailure drives computeDiagnostics's
 // init-failure arm (diagnostics.go) by swapping the langNew seam so
-// lang.New fails; the server must synthesise a single aql/init
+// lang.New fails; the server must synthesise a single boru/init
 // diagnostic carrying the underlying error message.
 func TestS7n_ComputeDiagnosticsLangNewFailure(t *testing.T) {
 	orig := langNew
 	t.Cleanup(func() { langNew = orig })
-	langNew = func(opts ...lang.Options) (*lang.AQL, error) {
+	langNew = func(opts ...lang.Options) (*lang.BORU, error) {
 		return nil, errors.New("boom-init")
 	}
 
@@ -26,8 +26,8 @@ func TestS7n_ComputeDiagnosticsLangNewFailure(t *testing.T) {
 		t.Fatalf("diags = %+v, want exactly 1", diags)
 	}
 	d := diags[0]
-	if d.Code != "aql/init" {
-		t.Errorf("Code = %q, want aql/init", d.Code)
+	if d.Code != "boru/init" {
+		t.Errorf("Code = %q, want boru/init", d.Code)
 	}
 	if d.Severity != severityError {
 		t.Errorf("Severity = %v, want severityError", d.Severity)

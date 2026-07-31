@@ -73,7 +73,7 @@ statement-boundary commit was built to cure (bloom-filter report #1;
 `design/FORWARD-COLLECTION-PHASES.10.md`). VERIFIED via the paren
 transform:
 
-```aql
+```boru
 def n 0 if (n eq 0) [raise "zero"] def q (10 div n) q     # today: ERROR:zero (guard fires first)
 def n 0 if (n eq 0) [raise "zero"] (def q (10 div n)) q   # paren form: division by zero — pre-emption returns
 if (1 eq 1) [99] add 1 2                                  # today: 99 3
@@ -106,7 +106,7 @@ greedy `/f` plan (overloads sort arity-descending — `CompareSignatures`,
 signature.go:554-586; no backtracking exists anywhere in the engine).
 Greedy and minimal readings genuinely diverge:
 
-```aql
+```boru
 def k fn [[a:Integer][Integer][mul a 10] [a:Integer b:Integer][Integer][add a b]]
 add 1 k 2 3        # greedy  add 1 (k 2 3) → 6      (VERIFIED both readings)
                    # minimal add 1 (k 2) 3 → 21 3
@@ -128,7 +128,7 @@ word evaluates depends on the chosen overload, which depends on the type
 the inner *would* produce — a genuine cycle, and runtime evaluation has
 side effects, so try-both is unsound:
 
-```aql
+```boru
 def h fn [[f:Function][String]['fn'] [n:Integer][String]['int']]
 def g7 fn [[a:Integer][Integer][a]]
 h g7 3        # today: ERROR:signature          (VERIFIED)
@@ -187,7 +187,7 @@ rule-interaction surface.
 
 ### 2.4 Corpus blast radius (measured)
 
-- Repo `.aql` corpus (71 files, ~2.5k LOC): **0** `speculative_forward_commit`
+- Repo `.boru` corpus (71 files, ~2.5k LOC): **0** `speculative_forward_commit`
   and **0** `forward_strands_operand` hits — zero sites change meaning
   under the proposal with the §2.2 exemptions. Caveat: this corpus was
   *cleaned by* the barrier-commit work; the voxgig DX reports show real
@@ -255,7 +255,7 @@ nested call would route through), `bytecode_baseline_bench_test.go`,
 ### 4.1 Structural position
 
 There is no separate checker model to update: the checker runs the
-runtime machinery verbatim over carriers (lang/go/aql.go:192-197), so it
+runtime machinery verbatim over carriers (lang/go/boru.go:192-197), so it
 *inherits* the mechanism change. Typed-slot auto-eval is strictly more
 checkable than what it replaces: the inner's declared returns flow into
 the outer's slot as ordinary carriers (VERIFIED `2 mul (add 3 4)` checks
@@ -351,9 +351,9 @@ What it *does* buy the compiler:
   (engine.go:6719-6722). Deterministic auto-eval removes the split's root
   cause wherever it applies. This is a soundness-tax cut, not a subset
   expansion.
-- **AOT robustness.** `aql-bytecode-report.0.md` lists forward-collection
+- **AOT robustness.** `boru-bytecode-report.0.md` lists forward-collection
   edge cases in its compiler-must-emulate-exactly hazard inventory
-  (§10.1), separately from the `.aqlc` staleness hazard; a
+  (§10.1), separately from the `.boruc` staleness hazard; a
   syntactically-determined call tree shrinks the former.
 
 Two hard requirements fall out:

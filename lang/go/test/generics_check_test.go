@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // Static check mode for generics (design/GENERICS.10.md Phase 5).
@@ -183,7 +183,7 @@ loose 1
 
 // TestGenCheckConstraintViolationLoud pins pillar 3's
 // constraint_violation: `of` runs for real in check mode, so a bound
-// violation is loud (the same failure `aql run` would raise).
+// violation is loud (the same failure `boru run` would raise).
 func TestGenCheckConstraintViolationLoud(t *testing.T) {
 	_, err := checkSrc(t, `
 def Sorted gen [(T extends Number)] refine Record [items:[:T]]

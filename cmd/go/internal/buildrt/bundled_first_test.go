@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // A built multi-file program must run the sources it was BUILT from.
@@ -16,10 +16,10 @@ import (
 // — so the bundled copy only ever won when the host had nothing at the path.
 // Two consequences, both reproduced before the fix:
 //
-//  1. Editing an imported .aql after `aql build` changed the executable's
+//  1. Editing an imported .boru after `boru build` changed the executable's
 //     behaviour. "Self-contained" was not true for anything but a single file.
 //
-//  2. Worse: a relative `import "./lib.aql"` resolves through the file layer
+//  2. Worse: a relative `import "./lib.boru"` resolves through the file layer
 //     against the RUN-TIME process working directory, so a built tool started
 //     in any directory containing a file of that name loaded and executed THAT
 //     file in place of its bundled module. A baked -perms profile constrains
@@ -44,7 +44,7 @@ func memWith(t *testing.T, cwd string, files map[string]string) capabilities.Fil
 
 func TestBundledFirstPrefersTheBundleOverAHostFileAtTheSamePath(t *testing.T) {
 	dir := t.TempDir()
-	shared := filepath.Join(dir, "lib.aql")
+	shared := filepath.Join(dir, "lib.boru")
 	if err := os.WriteFile(shared, []byte("EDITED AFTER THE BUILD"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -68,7 +68,7 @@ func TestBundledFirstPrefersTheBundleOverAHostFileAtTheSamePath(t *testing.T) {
 // rather than silently executing the stranger.
 func TestBundledFirstDoesNotReadAStrangerFromTheRunTimeCwd(t *testing.T) {
 	runDir := t.TempDir()
-	stranger := filepath.Join(runDir, "lib.aql")
+	stranger := filepath.Join(runDir, "lib.boru")
 	if err := os.WriteFile(stranger, []byte("STRANGER FROM THE CWD"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -76,11 +76,11 @@ func TestBundledFirstDoesNotReadAStrangerFromTheRunTimeCwd(t *testing.T) {
 	fs := bundledFirst{
 		FileOps: capabilities.NewDefault(),
 		mem: memWith(t, "/build/machine/proj", map[string]string{
-			"/build/machine/proj/lib.aql": "BUNDLED AT BUILD TIME",
+			"/build/machine/proj/lib.boru": "BUNDLED AT BUILD TIME",
 		}),
 	}
 	// A read of the BUNDLED key must find the bundle, not the host.
-	got, err := fs.ReadFile("/build/machine/proj/lib.aql")
+	got, err := fs.ReadFile("/build/machine/proj/lib.boru")
 	if err != nil {
 		t.Fatalf("ReadFile(bundled key): %v", err)
 	}
@@ -103,7 +103,7 @@ func TestBundledFirstWritesReachTheHost(t *testing.T) {
 	target := filepath.Join(dir, "out.txt")
 	fs := bundledFirst{
 		FileOps: capabilities.NewDefault(),
-		mem:     memWith(t, dir, map[string]string{filepath.Join(dir, "lib.aql"): "bundled"}),
+		mem:     memWith(t, dir, map[string]string{filepath.Join(dir, "lib.boru"): "bundled"}),
 	}
 	if err := fs.WriteFile(target, []byte("payload"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -127,7 +127,7 @@ func TestBundledFirstFallsThroughForUnbundledPaths(t *testing.T) {
 	}
 	fs := bundledFirst{
 		FileOps: capabilities.NewDefault(),
-		mem:     memWith(t, dir, map[string]string{filepath.Join(dir, "lib.aql"): "bundled"}),
+		mem:     memWith(t, dir, map[string]string{filepath.Join(dir, "lib.boru"): "bundled"}),
 	}
 	got, err := fs.ReadFile(data)
 	if err != nil || string(got) != "a,b\n" {
@@ -142,7 +142,7 @@ func TestBundledFirstFallsThroughForUnbundledPaths(t *testing.T) {
 // module before reading it cannot be told the host's version is the one there.
 func TestBundledFirstStatPrefersTheBundle(t *testing.T) {
 	dir := t.TempDir()
-	shared := filepath.Join(dir, "lib.aql")
+	shared := filepath.Join(dir, "lib.boru")
 	if err := os.WriteFile(shared, []byte("host content is longer"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +165,7 @@ func TestBundledFirstStatPrefersTheBundle(t *testing.T) {
 // there would be discarded at exit.
 func TestBundledFirstOpenSplitsByWriteIntent(t *testing.T) {
 	dir := t.TempDir()
-	shared := filepath.Join(dir, "lib.aql")
+	shared := filepath.Join(dir, "lib.boru")
 	if err := os.WriteFile(shared, []byte("HOST"), 0o644); err != nil {
 		t.Fatal(err)
 	}

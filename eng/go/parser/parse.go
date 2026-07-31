@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 	"github.com/cockroachdb/apd/v3"
 	jsonic "github.com/tabnas/jsonic/go"
 )
@@ -118,7 +118,7 @@ type parseDepth struct {
 func (d *parseDepth) enter() error {
 	d.cur++
 	if d.cur > maxParseNestingDepth {
-		return eng.MakeAqlError("evaluation_limit",
+		return eng.MakeBoruError("evaluation_limit",
 			fmt.Sprintf("source nesting exceeds the depth limit of %d — lists, maps, and parentheses are nested too deeply", maxParseNestingDepth),
 			"", d.src,
 			"flatten the structure or split it across definitions; nesting this deep is almost always generated, not intended")
@@ -129,7 +129,7 @@ func (d *parseDepth) enter() error {
 // leave ascends one container level. Always deferred immediately after enter.
 func (d *parseDepth) leave() { d.cur-- }
 
-// Parse tokenizes the AQL source string into a slice of eng.Value.
+// Parse tokenizes the BORU source string into a slice of eng.Value.
 // The input is treated as a top-level implicit list: jsonic.Parse handles
 // the entire source. The TextInfo option distinguishes quoted strings from
 // unquoted text (words).
@@ -160,7 +160,7 @@ func Parse(src string) ([]eng.Value, error) {
 		Map:   &jsonic.MapOptions{Child: boolPtr(true)},
 		Value: &jsonic.ValueOptions{Lex: boolPtr(false)},
 		// The library's own error rendering is silenced at the source:
-		// parse failures are translated into AQL syntax_errors
+		// parse failures are translated into BORU syntax_errors
 		// (translateParseError), so the always-on ANSI palette, the
 		// `--internal:` suffix, and the library docs link must never
 		// reach a user (they used to leak raw into the REPL and the
@@ -176,7 +176,7 @@ func Parse(src string) ([]eng.Value, error) {
 	setupMiniLitMatcher(j, t)
 	setupXmlMatcher(j, t)
 
-	// Stage 2: Grammar setup — extend rules for AQL syntax.
+	// Stage 2: Grammar setup — extend rules for BORU syntax.
 	setupValRule(j, t)
 	setupPairGrammar(j, t)
 	setupParenGrammar(j, t)
@@ -249,7 +249,7 @@ func Parse(src string) ([]eng.Value, error) {
 		}
 		return []eng.Value{mv}, nil
 	case unclosedParen:
-		return nil, eng.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", src, "")
+		return nil, eng.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", src, "")
 
 	case parenGroup:
 		// Single paren group at top level: expand to paren markers.
@@ -450,7 +450,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 		// Unclosed paren: error at parse time.
 		if up, ok := items[i].(unclosedParen); ok {
 			_ = up
-			return nil, eng.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", "", "")
+			return nil, eng.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 		}
 
 		// Generic-def head sugar (D15): `def Name<params>` desugars to
@@ -722,10 +722,10 @@ func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 
 // emptyElementError is raised when a list literal contains an empty
 // element produced by a leading or repeated comma (`[1,,2]`, `[,1]`).
-// AQL has no implicit "hole" value; commas are optional separators, so a
+// BORU has no implicit "hole" value; commas are optional separators, so a
 // missing element is a typo. Use `none` for an explicit empty value.
 func emptyElementError() error {
-	return &eng.AqlError{
+	return &eng.BoruError{
 		Code:   "syntax_error",
 		Detail: "empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)",
 	}
@@ -750,7 +750,7 @@ func isNumberLiteral(item any) bool {
 // reach. Caught at parse time instead of surfacing the runtime
 // "no matching signature for get".
 func numberReceiverError(pos eng.SrcPos) error {
-	return &eng.AqlError{
+	return &eng.BoruError{
 		Code:   "syntax_error",
 		Detail: "a number has no members to access with `.`",
 		Hint:   "this looks like a malformed numeric literal (e.g. `1.2.3`) or `.`-access on a number — numbers have no fields or keys",
@@ -766,7 +766,7 @@ func numberReceiverError(pos eng.SrcPos) error {
 // not a fraction — write `0.5`. The receiverless reach `$.name` is the
 // supported way to write a detached accessor.
 func danglingDotError(pos eng.SrcPos) error {
-	return &eng.AqlError{
+	return &eng.BoruError{
 		Code:   "syntax_error",
 		Detail: "`.` member access has no receiver",
 		Hint:   "a `.`/`!.` access must follow a value (e.g. `m.key`); a leading `.` is not valid — write `0.5` for a fraction, or `$.key` for a detached accessor",
@@ -833,7 +833,7 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 		}
 		if _, _, _, _, _, _, _, _, hasMod := scanWordModifier(key); hasMod {
 			return eng.Value{}, fmt.Errorf(
-				"[aql/illegal_key]: word modifier not allowed on map key %q (modifiers qualify values, not keys; quote the key as '%s' for a literal slash)",
+				"[boru/illegal_key]: word modifier not allowed on map key %q (modifiers qualify values, not keys; quote the key as '%s' for a literal slash)",
 				key, key)
 		}
 	}
@@ -1003,7 +1003,7 @@ func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 		return convertDataList(val.Val, d)
 
 	case unclosedParen:
-		return eng.Value{}, eng.MakeAqlError("syntax_error", "unmatched opening parenthesis", "(", "", "")
+		return eng.Value{}, eng.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 
 	case parenGroup:
 		// Paren group in data context: convert items in word context
@@ -1164,7 +1164,7 @@ func angleGenList(items []any, pos eng.SrcPos, d *parseDepth) (eng.Value, error)
 		node, epos := deSite(items[i])
 		txt, ok := node.(jsonic.Text)
 		if !ok || txt.Quote != "" || txt.Str == "" || !(txt.Str[0] >= 'A' && txt.Str[0] <= 'Z') {
-			return eng.Value{}, &eng.AqlError{
+			return eng.Value{}, &eng.BoruError{
 				Code:   "syntax_error",
 				Detail: "generic parameter must be a capitalised name",
 				Hint:   "write def Name<T> / def Name<T extends Bound> / def Name<T = Default>",
@@ -1184,7 +1184,7 @@ func angleGenList(items []any, pos eng.SrcPos, d *parseDepth) (eng.Value, error)
 				}
 				if kw != "" {
 					if i+2 >= len(items) {
-						return eng.Value{}, &eng.AqlError{
+						return eng.Value{}, &eng.BoruError{
 							Code:   "syntax_error",
 							Detail: "generic parameter " + name + ": " + opTxt.Str + " needs a value",
 							Row:    epos.Row, Col: epos.Col, Src: epos.Src,
@@ -1212,7 +1212,7 @@ func angleGenList(items []any, pos eng.SrcPos, d *parseDepth) (eng.Value, error)
 
 // unclosedAngleError is raised for an angle group auto-closed at EOF.
 func unclosedAngleError(ua unclosedAngle) error {
-	return &eng.AqlError{
+	return &eng.BoruError{
 		Code:   "syntax_error",
 		Detail: "unclosed angle bracket: " + ua.Name + "<… has no matching `>`",
 	}
@@ -1229,7 +1229,7 @@ func convertDataList(items []any, d *parseDepth) (eng.Value, error) {
 }
 
 // resolveTextValue converts a bare text string into the appropriate
-// AQL value — type literal, boolean, or atom.
+// BORU value — type literal, boolean, or atom.
 // Unquoted text is never a string; only quoted text produces strings.
 func resolveTextValue(text string) eng.Value {
 	if text == "true" {
@@ -1437,7 +1437,7 @@ func wordBaseName(text string) string {
 	return base
 }
 
-// parseWord interprets an unquoted text token as an AQL word, handling
+// parseWord interprets an unquoted text token as a BORU word, handling
 // the modifier syntax decoded by scanWordModifier. q produces an Atom and
 // overrides the other modifiers; u emits a usurp-word and r emits a
 // ref-word, both of which short-circuit the rest.
@@ -1456,7 +1456,7 @@ func parseWord(text string) (eng.Value, error) {
 	// names, builtin type paths).
 	if !valid {
 		if idx := strings.LastIndex(text, "/"); idx >= 0 && idx < len(text)-1 && isModifierAlphabet(text[idx+1:]) {
-			return eng.Value{}, &eng.AqlError{
+			return eng.Value{}, &eng.BoruError{
 				Code:   "syntax_error",
 				Detail: fmt.Sprintf("invalid word modifier /%s on %q", text[idx+1:], text[:idx]),
 				Src:    text,
@@ -1525,7 +1525,7 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.NewNone(), nil
 	}
 
-	// IEEE-754 special-value literals, following the AQL reserved-literal
+	// IEEE-754 special-value literals, following the BORU reserved-literal
 	// convention (lowercase, parser-emitted, like true / false / none):
 	// `inf` / `-inf` / `nan` produce the corresponding Float. They render
 	// back to these same tokens (see FormatFloat), so print∘parse is
@@ -1562,12 +1562,12 @@ func parseWord(text string) (eng.Value, error) {
 	// A base-prefixed integer token whose magnitude jsonic could not lex
 	// as a number (>= 2^63) arrives here as bare text. Parse it exactly:
 	// `-0x8000000000000000` (= int64 min) succeeds, while a truly
-	// out-of-range magnitude becomes a clean [aql/integer_overflow]
+	// out-of-range magnitude becomes a clean [boru/integer_overflow]
 	// instead of an opaque undefined_word. (In-range base-prefixed
 	// literals never reach this path — jsonic lexes them as numbers.)
 	if isBasePrefixedInteger(name) {
 		if strings.IndexByte(name, '_') >= 0 && !validUnderscores(name) {
-			return eng.Value{}, &eng.AqlError{Code: "syntax_error", Src: name,
+			return eng.Value{}, &eng.BoruError{Code: "syntax_error", Src: name,
 				Detail: "misplaced `_` in numeric literal: " + name,
 				Hint:   "`_` is a single digit-separator — use one between digits"}
 		}
@@ -1620,7 +1620,7 @@ func isRangeError(err error) bool {
 // floatLiteralOverflowError reports a floating-point literal whose
 // magnitude overflows binary64 to ±infinity (e.g. 1e309).
 func floatLiteralOverflowError(src string) error {
-	return &eng.AqlError{
+	return &eng.BoruError{
 		Code:   "float_overflow",
 		Detail: "floating-point literal out of range: " + src + " overflows to infinity",
 		Src:    src,
@@ -1633,7 +1633,7 @@ func floatLiteralOverflowError(src string) error {
 // a botched numeric literal (`1e`, `0x1p4`) or a digit-first name (`2dup`
 // — the stack words are now `dup2`/`swap2`/`drop2`/`over2`).
 func malformedNumberError(src string) error {
-	return &eng.AqlError{
+	return &eng.BoruError{
 		Code:   "syntax_error",
 		Detail: "invalid numeric literal: " + src,
 		Src:    src,
@@ -1725,7 +1725,7 @@ type numberVal struct {
 	Row, Col int // 1-based source position of the literal (0 = unknown)
 }
 
-// floatToValue converts a JSON float64 to the appropriate AQL numeric value.
+// floatToValue converts a JSON float64 to the appropriate BORU numeric value.
 // Whole numbers become integers; fractional values become decimals.
 func floatToValue(f float64) eng.Value {
 	if f == float64(int64(f)) && !math.IsInf(f, 0) && !math.IsNaN(f) {
@@ -1735,7 +1735,7 @@ func floatToValue(f float64) eng.Value {
 }
 
 // numberValToValue converts a numberVal (float64 + source) to the
-// appropriate AQL numeric value.
+// appropriate BORU numeric value.
 //
 //   - A source containing "." is always a Float (even whole-valued, e.g.
 //     5.0), using the float64 jsonic produced.
@@ -1745,7 +1745,7 @@ func floatToValue(f float64) eng.Value {
 //     WAT Exhibit K: routing through float64 silently corrupts any
 //     integer above 2^53 (e.g. 9007199254740993 → ...992) and turns
 //     near-int64-max literals into Floats. An out-of-int64-range literal
-//     now raises [aql/integer_overflow] instead of silently degrading.
+//     now raises [boru/integer_overflow] instead of silently degrading.
 //   - Everything else (scientific notation like 1e3, or a base prefix
 //     like 0x10 / 0o17 / 0b101) keeps the existing float64-derived path,
 //     which already matches jsonic's own base interpretation.
@@ -1798,7 +1798,7 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 
 // ConvertParsedNumber converts a jsonic parse-result element that the
 // number-Sub wrapped in a numberVal (see SafeParseData / setupNumberSub)
-// into its AQL numeric Value, preserving the int/float distinction carried
+// into its BORU numeric Value, preserving the int/float distinction carried
 // by the source text. Returns ok=false for any non-numberVal input so the
 // caller falls through to its default conversion. The numberVal type stays
 // unexported; this is the single public seam data-decode paths use.
@@ -1856,7 +1856,7 @@ func parseBigNumber(src string) (eng.Value, error) {
 }
 
 func bigLiteralError(src string) error {
-	return &eng.AqlError{
+	return &eng.BoruError{
 		Code:   "syntax_error",
 		Detail: "invalid 0d numeric literal: " + src,
 		Src:    src,
@@ -1962,7 +1962,7 @@ func stripUnderscores(src string) string {
 // arbitrary-precision (Phase 1 of design/INTEGER-OVERFLOW-STRATEGY.5.md),
 // this is a hard parse error rather than a silent fall-back to Float.
 func integerLiteralOverflowError(src string, row, col int) error {
-	return &eng.AqlError{
+	return &eng.BoruError{
 		Code:   "integer_overflow",
 		Detail: "integer literal out of range: " + src + " exceeds the Integer range (-9223372036854775808..9223372036854775807)",
 		Row:    row,
@@ -1975,7 +1975,7 @@ func integerLiteralOverflowError(src string, row, col int) error {
 // underscoreError reports a misused `_` digit-separator (leading, trailing,
 // or repeated) in a numeric literal.
 func underscoreError(nv numberVal) error {
-	return &eng.AqlError{
+	return &eng.BoruError{
 		Code:   "syntax_error",
 		Detail: "misplaced `_` in numeric literal: " + nv.Src,
 		Row:    nv.Row,
@@ -1988,7 +1988,7 @@ func underscoreError(nv numberVal) error {
 // leadingDotNumberError reports a `.`-leading numeric literal (`-.5`,
 // `+.5`); a number needs a digit before the decimal point.
 func leadingDotNumberError(nv numberVal) error {
-	return &eng.AqlError{
+	return &eng.BoruError{
 		Code:   "syntax_error",
 		Detail: "numeric literal has no digit before `.`: " + nv.Src,
 		Row:    nv.Row,

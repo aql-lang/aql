@@ -1,8 +1,8 @@
-// Package model implements `aql model [flags] <model.jsonic>` — build a
+// Package model implements `boru model [flags] <model.jsonic>` — build a
 // voxgig model: unify .jsonic source into a single JSON model (via aontu),
 // write <base>/<name>.json, and optionally watch and rebuild on change.
 //
-// It is the command-line twin of the aql:model language module and mirrors
+// It is the command-line twin of the boru:model language module and mirrors
 // the @voxgig/model CLI. Actions (Go generator callbacks) are not loadable
 // from the command line, so this command performs the core job — resolving
 // the model and writing the JSON — with optional watch.
@@ -17,8 +17,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 	model "github.com/voxgig/model/go"
 )
 
@@ -34,7 +34,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("model", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	fs.Usage = func() {
-		stdfmt.Fprintln(stderr, "usage: aql model [flags] <model.jsonic>")
+		stdfmt.Fprintln(stderr, "usage: boru model [flags] <model.jsonic>")
 		stdfmt.Fprintln(stderr, "\nUnify a .jsonic model and write <base>/<name>.json.\n\nFlags:")
 		fs.PrintDefaults()
 	}

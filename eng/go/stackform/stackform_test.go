@@ -3,7 +3,7 @@ package stackform
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // Unit tests for stackform — structural operations on StackForm

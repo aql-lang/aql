@@ -1,4 +1,4 @@
-# Basic AQL expression tests
+# Basic BORU expression tests
 # Format: expression<TAB>expected result
 # String values shown as 'text', integers as digits.
 # Multiple stack values are space-separated.
@@ -543,7 +543,7 @@ Number neq Number	false
 None deq None	true
 
 # Comparison - cross-branch scalars order Atom < Boolean < Number < String < Pathon.
-# lt/gt/cmp are family-restricted (cross-family → [aql/incomparable]);
+# lt/gt/cmp are family-restricted (cross-family → [boru/incomparable]);
 # the cross-branch total order is reached via tcmp.
 1 lt "a"	ERROR:incomparable
 1 tcmp "a"	-1

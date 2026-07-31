@@ -1,14 +1,14 @@
-// Package policy implements the `aql policy` subcommand: a thin
+// Package policy implements the `boru policy` subcommand: a thin
 // CLI surface for listing built-in profiles, validating user
 // profiles, and explaining permission decisions.
 //
 // Subcommands:
 //
-//	aql policy list
-//	aql policy show <name|path>
-//	aql policy validate <path>
-//	aql policy test <name|path> <scope>.<op> [arg=value...]
-//	aql policy explain <name|path> <scope>.<op> [arg=value...]
+//	boru policy list
+//	boru policy show <name|path>
+//	boru policy validate <path>
+//	boru policy test <name|path> <scope>.<op> [arg=value...]
+//	boru policy explain <name|path> <scope>.<op> [arg=value...]
 package policy
 
 import (
@@ -17,8 +17,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	pol "github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	pol "github.com/boru-lang/boru/lang/go/policy"
 )
 
 type cmd struct{}
@@ -56,7 +56,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aql policy <subcommand> [args...]")
+	fmt.Fprintln(w, "Usage: boru policy <subcommand> [args...]")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  list                          list built-in profiles")
@@ -66,7 +66,7 @@ func printUsage(w io.Writer) {
 	fmt.Fprintln(w, "  explain <name|path> <scope.op>  print blame chain for the decision")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Args are key=value pairs after the scope.op token, e.g.")
-	fmt.Fprintln(w, "  aql policy explain sandbox fileops.write path=/etc/passwd")
+	fmt.Fprintln(w, "  boru policy explain sandbox fileops.write path=/etc/passwd")
 }
 
 // listProfiles writes the names of every built-in profile, in

@@ -20,8 +20,8 @@ import (
 
 	"golang.org/x/term"
 
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // Test seams — each defaults to the real implementation.

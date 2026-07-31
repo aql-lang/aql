@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// TestS7Lang_NewSeed drives New's Seed arm (aql.go:144-146): a non-zero
+// TestS7Lang_NewSeed drives New's Seed arm (boru.go:144-146): a non-zero
 // Options.Seed calls native.SetIDSeed so ID minting is deterministic.
 func TestS7Lang_NewSeed(t *testing.T) {
 	a, err := New(Options{Seed: 42})
@@ -34,7 +34,7 @@ func TestS7Lang_NewSeed(t *testing.T) {
 }
 
 // TestS7Lang_NewRegistryError drives New's registry-construction error arm
-// (aql.go:149-151) by swapping the newDefaultRegistryWithPolicy seam to
+// (boru.go:149-151) by swapping the newDefaultRegistryWithPolicy seam to
 // fail. The default construction cannot fail once the process is running,
 // so only the seam observes the propagation.
 func TestS7Lang_NewRegistryError(t *testing.T) {
@@ -59,7 +59,7 @@ func TestS7Lang_NewRegistryError(t *testing.T) {
 }
 
 // TestS7Lang_RegisterFormatLazyInit drives RegisterFormat's lazy-init guard
-// (aql.go:380-382): when the instance has no formats map, RegisterFormat
+// (boru.go:380-382): when the instance has no formats map, RegisterFormat
 // allocates one before registering. A fresh instance ships with formats
 // installed, so the guard is exercised by clearing them first — this pins
 // the contract that RegisterFormat works even with no prior formats map.
@@ -91,7 +91,7 @@ type s7BracketFormat struct{}
 func (*s7BracketFormat) Decode(string) ([]native.Value, error) { return nil, nil }
 func (*s7BracketFormat) Encode(native.Value) (string, error)   { return "", nil }
 
-// TestS7Lang_DefineType drives DefineType (aql.go:425-427): the direct
+// TestS7Lang_DefineType drives DefineType (boru.go:425-427): the direct
 // embedding-API type installation, plus a negative (an invalid body errors).
 func TestS7Lang_DefineType(t *testing.T) {
 	a, err := New()
@@ -125,8 +125,8 @@ func TestS7Lang_DefineType(t *testing.T) {
 }
 
 // TestS7Lang_DefineTypeFromSourceInvalidName drives the name-validation
-// reject arm (aql.go:459-462) and validTypeIdent's two false arms
-// (aql.go:478-480 first-char, 486-487 later-char). Names must be a
+// reject arm (boru.go:459-462) and validTypeIdent's two false arms
+// (boru.go:478-480 first-char, 486-487 later-char). Names must be a
 // capitalised identifier of letters/digits/_/-//.
 func TestS7Lang_DefineTypeFromSourceInvalidName(t *testing.T) {
 	a, err := New()
@@ -167,7 +167,7 @@ func TestS7Lang_DefineTypeFromSourceInvalidName(t *testing.T) {
 }
 
 // TestS7Lang_DefineTypeFromSourceNoResolve drives the
-// installed-but-did-not-resolve arm (aql.go:469): a body whose program
+// installed-but-did-not-resolve arm (boru.go:469): a body whose program
 // runs cleanly yet leaves the name unbound (it defines then immediately
 // undefs the type) reaches the final defensive error.
 func TestS7Lang_DefineTypeFromSourceNoResolve(t *testing.T) {
@@ -190,7 +190,7 @@ func TestS7Lang_DefineTypeFromSourceNoResolve(t *testing.T) {
 }
 
 // TestS7Lang_RunCompiledStrictCompileError drives RunCompiledStrict's
-// CompileCheck-error arm (aql.go:723-726): a syntax error surfaces from
+// CompileCheck-error arm (boru.go:723-726): a syntax error surfaces from
 // CompileCheck and RunCompiledStrict rolls back and returns it.
 func TestS7Lang_RunCompiledStrictCompileError(t *testing.T) {
 	a, err := New()
@@ -206,7 +206,7 @@ func TestS7Lang_RunCompiledStrictCompileError(t *testing.T) {
 	}
 
 	// Negative sibling: an uncompilable-but-valid program returns the
-	// force-compile refusal (prog==nil arm, aql.go:727-729) — a distinct
+	// force-compile refusal (prog==nil arm, boru.go:727-729) — a distinct
 	// path that must NOT be the CompileCheck-error arm.
 	_, err = a.RunCompiledStrict("undefinedword123")
 	if err == nil {
@@ -217,7 +217,7 @@ func TestS7Lang_RunCompiledStrictCompileError(t *testing.T) {
 	}
 }
 
-// TestS7Lang_ForceCompileReason drives forceCompileReason (aql.go:746-748
+// TestS7Lang_ForceCompileReason drives forceCompileReason (boru.go:746-748
 // empty-reason default, plus the pass-through else): the empty reason maps
 // to a generic message; a non-empty reason passes through verbatim.
 func TestS7Lang_ForceCompileReason(t *testing.T) {
@@ -230,7 +230,7 @@ func TestS7Lang_ForceCompileReason(t *testing.T) {
 }
 
 // TestS7Lang_AmbiguousGradualSplit drives CompileCheck's ambiguous-gradual-
-// split refusal (aql.go:345-347). An `if` join produces a genuinely MIXED
+// split refusal (boru.go:345-347). An `if` join produces a genuinely MIXED
 // gradual carrier — Disjunct(Integer,Boolean) — and feeding it to `not`
 // (which has a Boolean overload that rejects the mixed carrier at the stack
 // top, plus a forward arm that grabs the trailing 0) makes the static

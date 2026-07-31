@@ -7,16 +7,16 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 	tabnasabnf "github.com/tabnas/abnf/go"
 	tabnas "github.com/tabnas/parser/go"
 )
 
-// The aql:parse module — the Parse namespace, a builder DSL for defining a
+// The boru:parse module — the Parse namespace, a builder DSL for defining a
 // CUSTOM parser and exposing it as a new `parse <name>` kind. Where
-// aql:parselang ships built-in decoders (json, csv, yaml, …) and lets an AQL
-// fn register as a parser, aql:parse lets a user CONSTRUCT a parser from
+// boru:parselang ships built-in decoders (json, csv, yaml, …) and lets a BORU
+// fn register as a parser, boru:parse lets a user CONSTRUCT a parser from
 // grammar: an ABNF grammar, a declarative rule map ("grammar as Map
 // subtypes"), custom lex matchers, and semantic actions that build custom
 // data types. It is built on github.com/tabnas/parser/go (the engine under
@@ -24,12 +24,12 @@ import (
 //
 // The module is BUILD-ONLY: there is no standalone run word. Building a
 // grammar culminates in `Parse.parser <grammar>`, which finalizes it into a
-// ParseLang Function VALUE (the aql:parselang framework shell around the
+// ParseLang Function VALUE (the boru:parselang framework shell around the
 // grammar's parse handler). The user binds or passes the value and runs it
 // with the ordinary `parse` macro's value form:
 //
-//	import "aql:parse"
-//	import "aql:parselang"
+//	import "boru:parse"
+//	import "boru:parselang"
 //	def g Parse.grammar                              # mint a builder, bind it
 //	Parse.action g '@op:o:INC' ([nd:Any] => [1])     # custom data via a mark
 //	Parse.abnf g "op = \"inc\" / \"dec\"" {start:'op'}
@@ -43,12 +43,12 @@ import (
 // (when every mark action is known), and custom matchers are applied last.
 
 // parseGrammar is the host-backed builder a Parse.grammar call mints. It
-// carries the tabnas engine under construction plus the AQL-fn-backed
+// carries the tabnas engine under construction plus the BORU-fn-backed
 // callbacks (mark actions) and the deferred ABNF installs. Pointer-backed so
 // the chainable words mutate one instance.
 type parseGrammar struct {
 	j           *tabnas.Tabnas        // the engine under construction
-	markActions tabnasabnf.ActionsMap // ABNF mark/phase ref -> AQL-fn-backed AltActions
+	markActions tabnasabnf.ActionsMap // ABNF mark/phase ref -> BORU-fn-backed AltActions
 	inlineSeq   int                   // counter for generated declarative action refs
 
 	// steps are the deferred grammar-building operations (tokens, declarative
@@ -66,13 +66,13 @@ type parseGrammar struct {
 	// parser. Build a fresh Parse.grammar for a second parser.
 	registered bool
 
-	// firstErr captures the first error raised by an AQL-fn callback (a
+	// firstErr captures the first error raised by a BORU-fn callback (a
 	// matcher or action) during a parse; the parser handler surfaces it as a
 	// parse error. Callbacks never panic (ADR-005) — they record here instead.
 	firstErr error
 	// r is the active registry for the current parse, set by the parser
 	// handler for the duration of one j.Parse call so callbacks can dispatch
-	// AQL fns re-entrantly. Single-threaded parse → safe; nil-guarded.
+	// BORU fns re-entrantly. Single-threaded parse → safe; nil-guarded.
 	r *native.Registry
 }
 
@@ -92,7 +92,7 @@ func (g *parseGrammar) setErr(err error) {
 // ensureOpen errors when the builder has already been registered (single-use).
 func (g *parseGrammar) ensureOpen(word string, r *native.Registry) error {
 	if g.registered {
-		return r.AqlErrorHint("parse_grammar_done",
+		return r.BoruErrorHint("parse_grammar_done",
 			word+": this grammar was already finalized into a parser", word,
 			"a Parse.grammar builder is single-use — build a fresh one for another parser")
 	}
@@ -147,12 +147,12 @@ func asParseGrammar(v native.Value, word string, r *native.Registry) (*parseGram
 			return g, nil
 		}
 	}
-	return nil, r.AqlErrorHint("parse_bad_grammar",
+	return nil, r.BoruErrorHint("parse_bad_grammar",
 		word+": expected a Parse grammar (from Parse.grammar)", word,
 		"build one with `Parse.grammar` first, then chain Parse.abnf / Parse.rule / …")
 }
 
-// BuildParseModule creates the "aql:parse" native module.
+// BuildParseModule creates the "boru:parse" native module.
 func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg, err := newDefaultRegistry()
 	if err != nil {
@@ -250,7 +250,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 		{{Type: gT}, {Type: native.TString}, {Type: native.TString}},
 	}, []*native.Type{}, nil, subReg))
 
-	// ---- matcher — register an AQL-fn-backed custom lex matcher --------
+	// ---- matcher — register a BORU-fn-backed custom lex matcher --------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-matcher",
 		Signatures: []native.Signature{{
@@ -266,7 +266,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 		{{Type: gT}, {Type: native.TAtom, Quote: true}, {Type: native.TInteger}, {Type: native.TFunction}},
 	}, []*native.Type{}, map[int]bool{1: true}, subReg))
 
-	// ---- action — attach an AQL-fn-backed semantic action (mark) -------
+	// ---- action — attach a BORU-fn-backed semantic action (mark) -------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-action",
 		Signatures: []native.Signature{{
@@ -376,7 +376,7 @@ func parseAbnfHandler(args []native.Value, _ map[string]native.Value, _ []native
 	}
 	src, err := args[1].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("parse_bad_abnf", fmt.Sprintf("Parse.abnf: src: %v", err), "Parse.abnf")
+		return nil, r.BoruError("parse_bad_abnf", fmt.Sprintf("Parse.abnf: src: %v", err), "Parse.abnf")
 	}
 	var opts native.Value
 	if len(args) > 2 {
@@ -404,7 +404,7 @@ func (g *parseGrammar) addAbnfStep(src string, o *tabnasabnf.AbnfConvertOptions)
 
 // parseSpecHandler — args[0]=grammar, args[1]=the WHOLE grammar as one
 // declarative map, mirroring the tabnas GrammarSpec document shape
-// (grammarspec.go: {options, rule, ref, v}) plus the two AQL-side
+// (grammarspec.go: {options, rule, ref, v}) plus the two BORU-side
 // extension sections tabnas has no JSON home for:
 //
 //	Parse.spec g {
@@ -449,7 +449,7 @@ func parseSpecReturns(args []native.Value, r *native.Registry) []native.Value {
 		scratch := &parseGrammar{j: tabnas.Make(), markActions: tabnasabnf.ActionsMap{}}
 		if err := applySpecMap(scratch, args[1], r, true); err != nil {
 			code, detail := "parse_bad_spec", err.Error()
-			var ae *eng.AqlError
+			var ae *eng.BoruError
 			if errors.As(err, &ae) {
 				code, detail = ae.Code, ae.Detail
 			}
@@ -465,13 +465,13 @@ func parseSpecReturns(args []native.Value, r *native.Registry) []native.Value {
 func applySpecMap(g *parseGrammar, specV native.Value, r *native.Registry, lenient bool) error {
 	m, merr := native.RequireConcreteMap(specV, "Parse.spec")
 	if merr != nil {
-		return r.AqlError("parse_bad_spec", fmt.Sprintf("Parse.spec: %v", merr), "Parse.spec")
+		return r.BoruError("parse_bad_spec", fmt.Sprintf("Parse.spec: %v", merr), "Parse.spec")
 	}
 	for _, k := range m.Keys() {
 		switch k {
 		case "options", "ref", "rule", "v", "abnf", "matcher":
 		default:
-			return r.AqlErrorHint("parse_bad_spec",
+			return r.BoruErrorHint("parse_bad_spec",
 				fmt.Sprintf("Parse.spec: unknown section %q", k), "Parse.spec",
 				"sections: options, ref, rule, v (the tabnas GrammarSpec shape), plus abnf and matcher")
 		}
@@ -488,7 +488,7 @@ func applySpecMap(g *parseGrammar, specV native.Value, r *native.Registry, lenie
 		}
 		sm, _ := native.AsMap(v)
 		if sm == nil {
-			return nil, r.AqlError("parse_bad_spec",
+			return nil, r.BoruError("parse_bad_spec",
 				fmt.Sprintf("Parse.spec: the %s section must be a map of %s", key, want), "Parse.spec")
 		}
 		return sm, nil
@@ -508,7 +508,7 @@ func applySpecMap(g *parseGrammar, specV native.Value, r *native.Registry, lenie
 	if vv, ok := m.Get("v"); ok && !(lenient && !native.IsConcrete(vv)) {
 		n, verr := vv.AsConcreteInteger()
 		if verr != nil {
-			return r.AqlError("parse_bad_spec",
+			return r.BoruError("parse_bad_spec",
 				fmt.Sprintf("Parse.spec: v must be an Integer, got %s", vv.String()), "Parse.spec")
 		}
 		schemaV = int(n)
@@ -516,7 +516,7 @@ func applySpecMap(g *parseGrammar, specV native.Value, r *native.Registry, lenie
 		// fast, and the check-mode dry pass flags it) rather than at
 		// the deferred register replay. Mirrors tabnas.Grammar's gate.
 		if schemaV < 0 || schemaV > tabnas.BUILTIN_SCHEMA_VERSION {
-			return r.AqlError("parse_bad_spec",
+			return r.BoruError("parse_bad_spec",
 				fmt.Sprintf("Parse.spec: v requires builtin schema version %d, but this engine supports up to %d", schemaV, tabnas.BUILTIN_SCHEMA_VERSION), "Parse.spec")
 		}
 	}
@@ -543,7 +543,7 @@ func applySpecMap(g *parseGrammar, specV native.Value, r *native.Registry, lenie
 	}
 	for _, ref := range tmKeys(am) {
 		if !strings.HasPrefix(ref, "@") {
-			return r.AqlErrorHint("parse_bad_action",
+			return r.BoruErrorHint("parse_bad_action",
 				fmt.Sprintf("Parse.spec: ref %q must start with '@'", ref), "Parse.spec",
 				"use @name (rule-alt a: reference), @rule:phase (bo/ao/bc/ac) or @rule:o|c:MARK")
 		}
@@ -558,7 +558,7 @@ func applySpecMap(g *parseGrammar, specV native.Value, r *native.Registry, lenie
 				continue
 			}
 			if !isCallableValue(fn) {
-				return r.AqlError("parse_bad_action",
+				return r.BoruError("parse_bad_action",
 					fmt.Sprintf("Parse.spec: ref %s: the value must be a Function (or a list of Functions), got %s", ref, fn.String()), "Parse.spec")
 			}
 			g.markActions[ref] = append(g.markActions[ref], g.wrapAction(fn))
@@ -608,13 +608,13 @@ func applySpecMap(g *parseGrammar, specV native.Value, r *native.Registry, lenie
 				em, _ := native.AsMap(e)
 				s, ok := native.MapFieldString(em, "src")
 				if em == nil || !ok {
-					return r.AqlError("parse_bad_abnf",
+					return r.BoruError("parse_bad_abnf",
 						"Parse.spec: an abnf entry map must carry a src:String field (plus optional start/tag/builtins/marks)", "Parse.spec")
 				}
 				src = s
 				opts = e // start/tag/builtins/marks read off the same map
 			default:
-				return r.AqlError("parse_bad_abnf",
+				return r.BoruError("parse_bad_abnf",
 					fmt.Sprintf("Parse.spec: the abnf section must be a String, a {src:…} map, or a list of those, got %s", e.String()), "Parse.spec")
 			}
 			g.addAbnfStep(src, abnfOptsFrom(opts))
@@ -634,17 +634,17 @@ func applySpecMap(g *parseGrammar, specV native.Value, r *native.Registry, lenie
 		}
 		em, _ := native.AsMap(ev)
 		if em == nil {
-			return r.AqlError("parse_bad_matcher",
+			return r.BoruError("parse_bad_matcher",
 				fmt.Sprintf("Parse.spec: matcher %s: the entry must be a {priority fn} map", name), "Parse.spec")
 		}
 		prio, ok := native.MapFieldInteger(em, "priority")
 		if !ok {
-			return r.AqlError("parse_bad_matcher",
+			return r.BoruError("parse_bad_matcher",
 				fmt.Sprintf("Parse.spec: matcher %s: priority must be an Integer", name), "Parse.spec")
 		}
 		fn, ok := em.Get("fn")
 		if !ok || (!isCallableValue(fn) && !(lenient && !native.IsConcrete(fn))) {
-			return r.AqlError("parse_bad_matcher",
+			return r.BoruError("parse_bad_matcher",
 				fmt.Sprintf("Parse.spec: matcher %s: fn must be a Function", name), "Parse.spec")
 		}
 		g.matchers = append(g.matchers, pendingMatcher{name: name, prio: int(prio), fn: fn})
@@ -671,7 +671,7 @@ func parseRuleHandler(args []native.Value, _ map[string]native.Value, _ []native
 	}
 	name, err := args[1].AsConcreteAtom()
 	if err != nil {
-		return nil, r.AqlError("parse_bad_rule", fmt.Sprintf("Parse.rule: name: %v", err), "Parse.rule")
+		return nil, r.BoruError("parse_bad_rule", fmt.Sprintf("Parse.rule: name: %v", err), "Parse.rule")
 	}
 	gs, err := ruleMapToSpec(g, name, args[2], r)
 	if err != nil {
@@ -697,11 +697,11 @@ func parseTokenHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	}
 	name, err := args[1].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("parse_bad_token", fmt.Sprintf("Parse.token: name: %v", err), "Parse.token")
+		return nil, r.BoruError("parse_bad_token", fmt.Sprintf("Parse.token: name: %v", err), "Parse.token")
 	}
 	lit, err := args[2].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("parse_bad_token", fmt.Sprintf("Parse.token: literal: %v", err), "Parse.token")
+		return nil, r.BoruError("parse_bad_token", fmt.Sprintf("Parse.token: literal: %v", err), "Parse.token")
 	}
 	g.steps = append(g.steps, func() error {
 		g.j.Token(name, lit)
@@ -721,11 +721,11 @@ func parseMatcherHandler(args []native.Value, _ map[string]native.Value, _ []nat
 	}
 	name, err := args[1].AsConcreteAtom()
 	if err != nil {
-		return nil, r.AqlError("parse_bad_matcher", fmt.Sprintf("Parse.matcher: name: %v", err), "Parse.matcher")
+		return nil, r.BoruError("parse_bad_matcher", fmt.Sprintf("Parse.matcher: name: %v", err), "Parse.matcher")
 	}
 	prio, err := args[2].AsConcreteInteger()
 	if err != nil {
-		return nil, r.AqlError("parse_bad_matcher", fmt.Sprintf("Parse.matcher: priority: %v", err), "Parse.matcher")
+		return nil, r.BoruError("parse_bad_matcher", fmt.Sprintf("Parse.matcher: priority: %v", err), "Parse.matcher")
 	}
 	g.matchers = append(g.matchers, pendingMatcher{name: name, prio: int(prio), fn: args[3]})
 	return nil, nil
@@ -742,10 +742,10 @@ func parseActionHandler(args []native.Value, _ map[string]native.Value, _ []nati
 	}
 	ref, err := args[1].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("parse_bad_action", fmt.Sprintf("Parse.action: ref: %v", err), "Parse.action")
+		return nil, r.BoruError("parse_bad_action", fmt.Sprintf("Parse.action: ref: %v", err), "Parse.action")
 	}
 	if !strings.HasPrefix(ref, "@") {
-		return nil, r.AqlErrorHint("parse_bad_action",
+		return nil, r.BoruErrorHint("parse_bad_action",
 			fmt.Sprintf("Parse.action: ref %q must start with '@'", ref), "Parse.action",
 			"use @rule:phase (bo/ao/bc/ac) or @rule:o|c:MARK")
 	}
@@ -759,7 +759,7 @@ func parseActionHandler(args []native.Value, _ map[string]native.Value, _ []nati
 // matchers LAST (priority-sorted) so a grammar install cannot drop or
 // reorder them — and returns the parser as a ParseLang Function VALUE: the
 // source-resolving framework shell (parseSourceShell) over the grammar's
-// parse handler, wrapped as a trivial-delegation FnDef in the aql:parse
+// parse handler, wrapped as a trivial-delegation FnDef in the boru:parse
 // sub-registry so it dispatches exactly like a ParseLang.parse_<kind>
 // export does (and satisfies ParseLangFnSigWhy for the `parse` value form).
 func parseParserHandlerFor(subReg *native.Registry) native.Handler {
@@ -773,7 +773,7 @@ func parseParserHandlerFor(subReg *native.Registry) native.Handler {
 		}
 		for _, step := range g.steps {
 			if serr := step(); serr != nil {
-				return nil, r.AqlErrorHint("parse_bad_grammar",
+				return nil, r.BoruErrorHint("parse_bad_grammar",
 					fmt.Sprintf("Parse.parser: %s", serr.Error()),
 					"Parse.parser", "check the grammar is well-formed")
 			}
@@ -820,26 +820,26 @@ func parseParserReturns(_ []native.Value, _ *native.Registry) []native.Value {
 
 // parseHandler builds the ParseLang (the ParseLangSpec handler) that runs
 // the constructed parser over a source string and converts the result. It
-// binds g.r for the duration of the parse (so callbacks dispatch AQL fns)
+// binds g.r for the duration of the parse (so callbacks dispatch BORU fns)
 // and surfaces the first callback error as a parse error.
 func (g *parseGrammar) parseHandler(kind string) ParseLang {
 	target := "parse_" + kind
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 		src, err := args[0].AsConcreteString() // resolved by the framework
 		if err != nil {
-			return nil, r.AqlError("parse_error", kind+": src: "+err.Error(), target)
+			return nil, r.BoruError("parse_error", kind+": src: "+err.Error(), target)
 		}
 		g.firstErr = nil
 		g.r = r
 		out, perr := g.j.Parse(src)
 		g.r = nil
 		if g.firstErr != nil {
-			return nil, r.AqlErrorHint("parse_syntax_error",
+			return nil, r.BoruErrorHint("parse_syntax_error",
 				kind+": "+native.FirstCleanLine(g.firstErr.Error()), target,
 				"a grammar action/matcher raised this error")
 		}
 		if perr != nil {
-			return nil, r.AqlErrorHint("parse_syntax_error",
+			return nil, r.BoruErrorHint("parse_syntax_error",
 				kind+": "+native.FirstCleanLine(perr.Error()), target,
 				"check that the source is well-formed "+kind)
 		}
@@ -847,9 +847,9 @@ func (g *parseGrammar) parseHandler(kind string) ParseLang {
 	}
 }
 
-// wrapAction wraps an AQL fn as a tabnas semantic action (an AltAction): it
-// hands the fn the rule's current node (as an AQL Value), and stores the fn's
-// returned Value back on the node — which, because nodes may now BE AQL
+// wrapAction wraps a BORU fn as a tabnas semantic action (an AltAction): it
+// hands the fn the rule's current node (as a BORU Value), and stores the fn's
+// returned Value back on the node — which, because nodes may now BE BORU
 // Values (see the native.AnyToValue pass-through), is how an action emits a
 // custom-typed value into the parse result.
 func (g *parseGrammar) wrapAction(fn native.Value) tabnas.AltAction {
@@ -869,7 +869,7 @@ func (g *parseGrammar) wrapAction(fn native.Value) tabnas.AltAction {
 	}
 }
 
-// wrapMatcher wraps an AQL fn as a tabnas custom lex matcher. The fn receives
+// wrapMatcher wraps a BORU fn as a tabnas custom lex matcher. The fn receives
 // the unconsumed source as a String and returns either None (no match) or a
 // Map {src:String tin:String? val:Any?}: src is the matched prefix, tin the
 // emitted token name (default "#TX" — a text token that flows to the value
@@ -929,7 +929,7 @@ func (g *parseGrammar) wrapMatcher(fn native.Value) tabnas.LexMatcher {
 	}
 }
 
-// callParseFn invokes an AQL function value (a matcher or action callback)
+// callParseFn invokes a BORU function value (a matcher or action callback)
 // against args, handling both the compiled-closure and interpreter-FnDef
 // shapes — the same seam filter's callback uses (native/filter.go).
 func callParseFn(r *native.Registry, fn native.Value, args []native.Value) ([]native.Value, error) {
@@ -944,7 +944,7 @@ func callParseFn(r *native.Registry, fn native.Value, args []native.Value) ([]na
 	if fd, ok := fn.Data.(native.FnDefInfo); ok {
 		caps = fd.Captured
 	}
-	return r.CallAQL(sig, args, caps)
+	return r.CallBORU(sig, args, caps)
 }
 
 // abnfOptsFrom reads the {start tag builtins marks} option map into the
@@ -978,7 +978,7 @@ func abnfOptsFrom(opts native.Value) *tabnasabnf.AbnfConvertOptions {
 func ruleMapToSpec(g *parseGrammar, name string, specV native.Value, r *native.Registry) (*tabnas.GrammarSpec, error) {
 	m, _ := native.AsMap(specV)
 	if m == nil {
-		return nil, r.AqlError("parse_bad_rule",
+		return nil, r.BoruError("parse_bad_rule",
 			fmt.Sprintf("Parse.rule %q: spec must be a {open:[…] close:[…]} map", name), "Parse.rule")
 	}
 	gs := &tabnas.GrammarSpec{Ref: map[string]any{}}
@@ -991,7 +991,7 @@ func ruleMapToSpec(g *parseGrammar, name string, specV native.Value, r *native.R
 		}
 		lst, lerr := native.AsList(v)
 		if lerr != nil {
-			return nil, r.AqlError("parse_bad_rule",
+			return nil, r.BoruError("parse_bad_rule",
 				fmt.Sprintf("Parse.rule %q: %s must be a list of alternates", name, key), "Parse.rule")
 		}
 		alts := make([]*tabnas.GrammarAltSpec, 0, lst.Len())
@@ -1024,7 +1024,7 @@ func ruleMapToSpec(g *parseGrammar, name string, specV native.Value, r *native.R
 func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, rule string, r *native.Registry) (*tabnas.GrammarAltSpec, error) {
 	m, _ := native.AsMap(altV)
 	if m == nil {
-		return nil, r.AqlError("parse_bad_rule",
+		return nil, r.BoruError("parse_bad_rule",
 			fmt.Sprintf("Parse.rule %q: each alternate must be a map", rule), "Parse.rule")
 	}
 	alt := &tabnas.GrammarAltSpec{}
@@ -1101,7 +1101,7 @@ func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, ru
 					}
 					refs = append(refs, s)
 				default:
-					return nil, r.AqlError("parse_bad_rule",
+					return nil, r.BoruError("parse_bad_rule",
 						fmt.Sprintf("Parse.rule %q: a: each action must be a Function or a '@ref' String, got %s", rule, el.String()), "Parse.rule")
 				}
 			}
@@ -1111,11 +1111,11 @@ func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, ru
 	// c — a DECLARATIVE condition map ({'counter':n} / {'counter.sub':n}
 	// entries, matched by $eq). The FuncRef condition form takes
 	// parser-internal types (tabnas.AltCond) and is not expressible from
-	// AQL; the declarative map is.
+	// BORU; the declarative map is.
 	if cv, ok := m.Get("c"); ok {
 		cm, ok := specDataMap(cv)
 		if !ok {
-			return nil, r.AqlError("parse_bad_rule",
+			return nil, r.BoruError("parse_bad_rule",
 				fmt.Sprintf("Parse.rule %q: c: the condition must be a declarative map", rule), "Parse.rule")
 		}
 		alt.C = cm
@@ -1124,7 +1124,7 @@ func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, ru
 	if uv, ok := m.Get("u"); ok {
 		um, ok := specDataMap(uv)
 		if !ok {
-			return nil, r.AqlError("parse_bad_rule",
+			return nil, r.BoruError("parse_bad_rule",
 				fmt.Sprintf("Parse.rule %q: u: custom props must be a map", rule), "Parse.rule")
 		}
 		alt.U = um
@@ -1132,7 +1132,7 @@ func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, ru
 	if kv, ok := m.Get("k"); ok {
 		km, ok := specDataMap(kv)
 		if !ok {
-			return nil, r.AqlError("parse_bad_rule",
+			return nil, r.BoruError("parse_bad_rule",
 				fmt.Sprintf("Parse.rule %q: k: propagated props must be a map", rule), "Parse.rule")
 		}
 		alt.K = km
@@ -1140,7 +1140,7 @@ func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, ru
 	return alt, nil
 }
 
-// specDataMap converts a concrete AQL map to a plain map[string]any for
+// specDataMap converts a concrete BORU map to a plain map[string]any for
 // the declarative alt fields (c / u / k). Integers convert to int at
 // every depth — the width tabnas' declarative normalizers (conditions,
 // MapToOptions) match on.

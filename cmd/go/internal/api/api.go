@@ -17,7 +17,7 @@
 // are accepted unauthenticated (default bind is 127.0.0.1 so the
 // trust boundary is the loopback interface).
 //
-// The api service writes a discovery file at $TMPDIR/aql-api.json
+// The api service writes a discovery file at $TMPDIR/boru-api.json
 // (mode 0600) containing {url, token, pid} so ctl/tui can find it
 // without arguments. The file is removed on Stop.
 package api
@@ -34,7 +34,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 //go:embed openapi.yaml

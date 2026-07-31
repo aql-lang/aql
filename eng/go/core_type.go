@@ -101,7 +101,7 @@ func TypeOf(v Value) Value {
 // IsRecordShape reports whether v is a non-empty map all of whose
 // field values are themselves type bodies (type literals or nested
 // record shapes). Independent of how the map was constructed
-// (production aql `{x:Integer}` produces an explicit OrderedMap;
+// (production boru `{x:Integer}` produces an explicit OrderedMap;
 // the implicit-pair syntax inside fn signatures produces an Implicit
 // map; both are treated as record shapes here when their values are
 // type-shape values).
@@ -264,7 +264,7 @@ func IsValueOfType(v, t Value) bool {
 // named type body (`def Foo body`). Validates the body shape,
 // rejects name clashes, and pushes onto the registry's type
 // stack. Used by both the eng-internal core `def` word and the
-// production aql `def` word in lang/go/engine. Changes to
+// production boru `def` word in lang/go/engine. Changes to
 // type-installation policy go here, not in a per-surface duplicate.
 //
 // Body acceptance is broad: a structural type body (IsTypeBody — type
@@ -283,7 +283,7 @@ func IsValueOfType(v, t Value) bool {
 // shadow a builtin/user type or mint under an invalid name.
 func validateTypeName(r *Registry, name string) error {
 	if !IsCapitalisedName(name) {
-		return &AqlError{
+		return &BoruError{
 			Code:   "type_error",
 			Detail: "type " + name + ": type names must start with a capital letter",
 		}
@@ -294,13 +294,13 @@ func validateTypeName(r *Registry, name string) error {
 		}
 	}
 	if r.Lookup(name) != nil {
-		return &AqlError{
+		return &BoruError{
 			Code:   "type_error",
 			Detail: "type " + name + ": name clash — already a registered function",
 		}
 	}
 	if r.Defs.Has(name) && !r.Defs.IsType(name) {
-		return &AqlError{
+		return &BoruError{
 			Code:   "type_error",
 			Detail: "type " + name + ": name clash — already a def'd value",
 		}
@@ -311,7 +311,7 @@ func validateTypeName(r *Registry, name string) error {
 // when it inherits) so `typeof` / `is` report the nominal name.
 func InstallType(r *Registry, name string, body Value) error {
 	if !IsTypeBody(body) && !IsLiteralTypeBody(body) {
-		return &AqlError{
+		return &BoruError{
 			Code:   "type_error",
 			Detail: "type: body must be a type value or literal, got " + body.String(),
 		}
@@ -418,7 +418,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		// base-compatible value without checking the predicate.
 		// Phase 6 (predicate stamps): compile the predicate body to a
 		// detached unit at CONSTRUCTION, so RunPredicate's InvokeCallback
-		// runs it on the VM instead of the CallAQL interpreter fallback —
+		// runs it on the VM instead of the CallBORU interpreter fallback —
 		// the same pre-publication in-place stamp module load applies to
 		// its exports (the binding has not escaped this goroutine).
 		// Declines (captures, compile refusals) keep the interpreter path;
@@ -447,7 +447,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		// band) rather than the original input type literal.
 		def := r.Types.LookupByID(body.ID)
 		if def == nil {
-			return &AqlError{
+			return &BoruError{
 				Code:   "type_error",
 				Detail: "type " + name + ": refine prefab missing from lattice",
 			}
@@ -516,7 +516,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		// `body`.
 		di, err := body.AsDepScalar()
 		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
-			return &AqlError{
+			return &BoruError{
 				Code:   "type_error",
 				Detail: "type " + name + ": DepScalar body unreadable: " + err.Error(),
 			}

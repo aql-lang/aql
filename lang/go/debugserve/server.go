@@ -1,25 +1,25 @@
 // Package debugserve is the host-level realization of the cross-process
-// debug surfaces of aql:debug (design/DEBUG-MODULE.0.md §7.2 attach and
+// debug surfaces of boru:debug (design/DEBUG-MODULE.0.md §7.2 attach and
 // §7.3 the serverless debug channel).
 //
-// The design's eventual unification routes these through the AQL `Service`
+// The design's eventual unification routes these through the BORU `Service`
 // model, which does not yet exist (SERVICES.0.md / PROCESSES.0.md are
-// RFC-only, and AQL has no language-level socket primitive). This package
+// RFC-only, and BORU has no language-level socket primitive). This package
 // is the pragmatic implementation on the substrate that DOES exist: Go's
 // net/http, the same bearer-token + discovery-file pattern the api service
 // already uses (cmd/go/internal/api), and vault capability tokens for auth.
 // It wraps a *native.Registry behind authenticated HTTP introspection so a
-// separate process can attach and interrogate a running AQL runtime:
+// separate process can attach and interrogate a running BORU runtime:
 //
 //	GET  /debug/healthz          liveness
 //	GET  /debug/words            the registry's built-in word names
 //	GET  /debug/defs             current def bindings (name -> rendered value)
 //	GET  /debug/heap             Go-runtime heap stats
-//	POST /debug/eval             run AQL source on the registry, return the result
+//	POST /debug/eval             run BORU source on the registry, return the result
 //	POST /debug/emit?id=<inv>    (serverless channel) append a debug event for an invocation
 //	GET  /debug/events?id=<inv>  (serverless channel) read an invocation's events
 //
-// The remote STEPPING surface (`aql debug serve --step`, AQL-DEBUGGER.0.md
+// The remote STEPPING surface (`boru debug serve --step`, BORU-DEBUGGER.0.md
 // §8.3 Phase 4) mounts three more routes over this same transport — the
 // handlers live with the debugger session (cmd/go/internal/debugger); this
 // package carries the wire shape (StepState) and the client verbs:
@@ -45,8 +45,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // Server exposes a registry's debug introspection over HTTP.
@@ -99,7 +99,7 @@ func (s *Server) ListenAndServe(ctx context.Context, bind string, allowPublic bo
 }
 
 // ListenAndServeHandler is ListenAndServe with a caller-composed handler —
-// the seam `aql debug serve --step` uses to mount the remote stepping
+// the seam `boru debug serve --step` uses to mount the remote stepping
 // routes alongside (and, for /debug/eval, in front of) the introspection
 // set. The bind hygiene is identical.
 func (s *Server) ListenAndServeHandler(ctx context.Context, bind string, allowPublic bool, h http.Handler) error {

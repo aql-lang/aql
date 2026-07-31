@@ -10,9 +10,9 @@ import (
 	"sync"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // The remote tier of design/TUI.0.md §6 (implementation plan P4, v2
@@ -236,7 +236,7 @@ func tuiServeHandler(args []native.Value, _ map[string]native.Value, _ []native.
 		r.Procs = rt
 	}
 	if _, taken := rt.Whereis(tuiRegisteredName); taken {
-		return nil, r.AqlError("already_running", "serve: another TUI app already owns the terminal", "serve")
+		return nil, r.BoruError("already_running", "serve: another TUI app already owns the terminal", "serve")
 	}
 
 	ln, lErr := tuiListen("tcp", fmt.Sprintf(":%d", opts.port))
@@ -253,7 +253,7 @@ func tuiServeHandler(args []native.Value, _ map[string]native.Value, _ []native.
 
 	session, ok := <-firstCh
 	if !ok {
-		return nil, r.AqlError("closed", "serve: listener closed before a viewer attached", "serve")
+		return nil, r.BoruError("closed", "serve: listener closed before a viewer attached", "serve")
 	}
 
 	teardown := func() {
@@ -308,7 +308,7 @@ func tuiServeHandler(args []native.Value, _ map[string]native.Value, _ []native.
 func tuiWirePaint(r *native.Registry, hub *tuiViewerHub) func(native.Value, int, int) error {
 	return func(tree native.Value, cols, rows int) error {
 		if _, rErr := tuikit.Render(native.ValueToAny(tree), cols, rows); rErr != nil {
-			return r.AqlError("bad_widget", "serve: "+rErr.Error(), "serve")
+			return r.BoruError("bad_widget", "serve: "+rErr.Error(), "serve")
 		}
 		data, mErr := json.Marshal(jsonReady(native.ValueToAny(tree)))
 		if mErr != nil { //covergate:allow json.Marshal cannot fail on the jsonReady-projected tree shapes the renderer accepts; kept as the io seam's defensive twin (§modules)
@@ -326,29 +326,29 @@ func tuiServeOptsOf(v native.Value, r *native.Registry) (tuiServeOpts, error) {
 	out := tuiServeOpts{viewers: 1}
 	opts, err := native.RequireConcreteMap(v, "serve")
 	if err != nil {
-		return out, r.AqlError("tui_error", "serve: expected an options Map", "serve")
+		return out, r.BoruError("tui_error", "serve: expected an options Map", "serve")
 	}
 	port, hasPort, pErr := nodePortOf(opts)
 	if pErr != nil || !hasPort {
-		return out, r.AqlError("tui_error", "serve: tcp: must be an Integer port", "serve")
+		return out, r.BoruError("tui_error", "serve: tcp: must be an Integer port", "serve")
 	}
 	out.port = port
 	if out.token, err = tuiOptString(opts, "token"); err != nil {
-		return out, r.AqlError("tui_error", "serve: "+err.Error(), "serve")
+		return out, r.BoruError("tui_error", "serve: "+err.Error(), "serve")
 	}
 	if out.token == "" {
-		return out, r.AqlError("tui_error", `serve: token: is required (use token: "none" to opt out on a trusted network)`, "serve")
+		return out, r.BoruError("tui_error", `serve: token: is required (use token: "none" to opt out on a trusted network)`, "serve")
 	}
 	if vv, ok := opts.Get("viewers"); ok {
 		n, nErr := vv.AsConcreteInteger()
 		if nErr != nil || n < 1 || n > tuiMaxViewers {
-			return out, r.AqlError("tui_error",
+			return out, r.BoruError("tui_error",
 				fmt.Sprintf("serve: viewers: must be an Integer between 1 and %d", tuiMaxViewers), "serve")
 		}
 		out.viewers = int(n)
 	}
 	if out.reattach, err = tuiOptBoolean(opts, "reattach"); err != nil {
-		return out, r.AqlError("tui_error", "serve: "+err.Error(), "serve")
+		return out, r.BoruError("tui_error", "serve: "+err.Error(), "serve")
 	}
 	return out, nil
 }

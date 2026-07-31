@@ -1,6 +1,6 @@
-// Package login implements `aql login [-r <url>]` — prompt for
+// Package login implements `boru login [-r <url>]` — prompt for
 // username/password, POST /api/login on the registry server, save
-// the returned token in ~/.aql/user.jsonic.
+// the returned token in ~/.boru/user.jsonic.
 package login
 
 import (
@@ -13,9 +13,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/vault"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/vault"
 )
 
 type cmd struct{}
@@ -24,17 +24,17 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "login" }
-func (*cmd) Synopsis() string { return "log in to an aql registry" }
+func (*cmd) Synopsis() string { return "log in to a boru registry" }
 func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdin, stdout, stderr)
 }
 
-// Run handles `aql login [-r <url>]`.
+// Run handles `boru login [-r <url>]`.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("login", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	registryURL := fs.String("r", "http://localhost:8080", "registry server URL")
-	useVault := fs.Bool("vault", false, "store the registry token in the aql vault instead of plaintext ~/.aql/user.jsonic")
+	useVault := fs.Bool("vault", false, "store the registry token in the boru vault instead of plaintext ~/.boru/user.jsonic")
 	vaultAlias := fs.String("vault-alias", auth.DefaultRegistryTokenAlias, "vault alias for the token when --vault is set")
 
 	if err := fs.Parse(args); err != nil {
@@ -101,8 +101,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if *useVault {
 		// Store the token in the (encrypted) vault and keep only a
 		// reference in user.jsonic. The vault passphrase comes from
-		// AQL_VAULT_PASSPHRASE or an interactive prompt.
-		if err := vault.WriteSecret(homeDir, *vaultAlias, cu.Token, "aql-login", stdin, stdout); err != nil {
+		// BORU_VAULT_PASSPHRASE or an interactive prompt.
+		if err := vault.WriteSecret(homeDir, *vaultAlias, cu.Token, "boru-login", stdin, stdout); err != nil {
 			fmt.Fprintf(stderr, "error: storing token in vault: %s\n", err)
 			return 1
 		}

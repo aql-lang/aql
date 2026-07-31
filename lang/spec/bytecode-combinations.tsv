@@ -1,5 +1,5 @@
 # Bytecode combination matrix — curated feature crossings for the
-# compiled execution mode (design/aql-bytecode-plan.0.md Stage 6
+# compiled execution mode (design/boru-bytecode-plan.0.md Stage 6
 # follow-on). These rows are run by the production spec runner (pinning
 # the INTERPRETER's canonical output) AND by the compiled differential /
 # whole-corpus gates (pinning compiled == interpreter, value + error

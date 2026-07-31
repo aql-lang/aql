@@ -54,14 +54,14 @@ import "fmt"
 //	                  convention instead (`is-leap-year`,
 //	                  `is-before`, `is-equal`, …).
 //
-// Returns nil for valid names; an *AqlError with code
+// Returns nil for valid names; an *BoruError with code
 // "invalid_word_name" otherwise. Callers are expected to surface the
 // error in whatever way fits their entry point — Registry methods
 // accumulate into r.errs; def/fn handlers return it as a Run-time
 // error.
 func ValidateWordName(name string) error {
 	if name == "" {
-		return &AqlError{
+		return &BoruError{
 			Code:   "invalid_word_name",
 			Detail: "word name cannot be empty",
 		}
@@ -80,7 +80,7 @@ func ValidateWordName(name string) error {
 		}
 	}
 	if allDollars {
-		return &AqlError{
+		return &BoruError{
 			Code: "invalid_word_name",
 			Detail: fmt.Sprintf(
 				"word %q is reserved (an all-$ name is the receiverless-reach sentinel; e.g. $.name)",
@@ -90,7 +90,7 @@ func ValidateWordName(name string) error {
 	}
 	first := name[0]
 	if !(first >= 'a' && first <= 'z') && first != '_' && first != '-' && first != '$' {
-		return &AqlError{
+		return &BoruError{
 			Code: "invalid_word_name",
 			Detail: fmt.Sprintf(
 				"word %q must begin with [a-z_-$]; got %q",
@@ -107,7 +107,7 @@ func ValidateWordName(name string) error {
 		}
 	}
 	if allDashes {
-		return &AqlError{
+		return &BoruError{
 			Code: "invalid_word_name",
 			Detail: fmt.Sprintf(
 				"word %q contains only hyphens; need at least one [a-z0-9_$] character",
@@ -124,7 +124,7 @@ func ValidateWordName(name string) error {
 		case c == '_':
 		case c == '$':
 		default:
-			return &AqlError{
+			return &BoruError{
 				Code: "invalid_word_name",
 				Detail: fmt.Sprintf(
 					"word %q contains illegal character %q at position %d (allowed: [a-z0-9_-$] after the first letter)",

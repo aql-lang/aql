@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestBinary runs every line of binary.tsv as a parse+run+compare
@@ -61,7 +61,7 @@ func TestBinary(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			registerIOWords(reg) // bitwise moved to aql:bin; available bare for the spec
+			registerIOWords(reg) // bitwise moved to boru:bin; available bare for the spec
 			eng := native.NewTop(reg)
 			result, err := eng.Run(values)
 

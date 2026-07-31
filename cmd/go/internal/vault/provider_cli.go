@@ -78,7 +78,7 @@ func runProviderAdd(args []string, homeDir string, stdout, stderr io.Writer) int
 		return 1
 	}
 	if fs.NArg() != 1 || *rawURL == "" {
-		fmt.Fprintf(stderr, "error: usage: aql vault provider add --url=BASE [--auth-style=STYLE] <name>\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault provider add --url=BASE [--auth-style=STYLE] <name>\n")
 		return 1
 	}
 	name := fs.Arg(0)
@@ -127,7 +127,7 @@ func runProviderAdd(args []string, homeDir string, stdout, stderr io.Writer) int
 	if strings.HasPrefix(baseURL, "http://") {
 		fmt.Fprintf(stderr, "warning: %s is plain http; the secret will travel unencrypted to this upstream\n", baseURL)
 	}
-	fmt.Fprintf(stdout, "tag secrets with it: aql vault add --provider=%s <alias>\n", name)
+	fmt.Fprintf(stdout, "tag secrets with it: boru vault add --provider=%s <alias>\n", name)
 	return 0
 }
 
@@ -142,7 +142,7 @@ func runProviderRemove(args []string, homeDir string, stdout, stderr io.Writer) 
 		return 1
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault provider rm <name>\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault provider rm <name>\n")
 		return 1
 	}
 	name := fs.Arg(0)

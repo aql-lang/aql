@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:net", map[string]string{
+	registerDocs("boru:net", map[string]string{
 		"direct":  "Build and send a request against an API descriptor.",
 		"fetch":   "Perform an HTTP request.",
 		"prepare": "Build a request from an API descriptor without sending.",
@@ -37,7 +37,7 @@ func init() {
 	// these words: `Net.fetch 'a' {a:1,b:2}` is well-formed and teaches
 	// nothing, because everything that matters about a capability word
 	// is the shape of its options map. See docs.go.
-	registerExamples("aql:net", map[string][]string{
+	registerExamples("boru:net", map[string][]string{
 		"fetch": {
 			`Net.fetch "https://api.example.com/v1/orders"           ;# GET, returns a Response`,
 			`(Net.fetch "https://api.example.com/health").status     ;# 200`,
@@ -124,7 +124,7 @@ func init() {
 			`def who (Net.peer-cert c)                               ;# none unless require-client: demanded one`,
 			`who.common-name                                         ;# 'billing.internal'`,
 			`who.dns-names                                           ;# ['billing.internal']`,
-			`if (who eq none) [ raise "unauthenticated" ] [ … ]       ;# authorize in AQL, not in the host`,
+			`if (who eq none) [ raise "unauthenticated" ] [ … ]       ;# authorize in BORU, not in the host`,
 		},
 		"addr": {
 			`(Net.addr l).port                                       ;# the REAL port behind an ephemeral {tcp: 0}`,

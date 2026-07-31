@@ -3,15 +3,15 @@ package native
 import (
 	"errors"
 
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // This file is the engine adapter `lang/go/policy/error.go` has promised
 // since it was written: "the engine adapter copies these onto the produced
-// AqlError when a *Denied bubbles up." For a long time no such adapter
+// BoruError when a *Denied bubbles up." For a long time no such adapter
 // existed, so EVERY policy refusal reached the user code-less —
 //
-//	aql -deny network.connect -e '… do [Net.fetch …] error [dot code]'  → None
+//	boru -deny network.connect -e '… do [Net.fetch …] error [dot code]'  → None
 //
 // and the code is the only part of an Error a handler can dispatch on. A
 // refusal that cannot be distinguished from a transport failure cannot be
@@ -28,9 +28,9 @@ import (
 // option's risk.
 //
 // What this deliberately does NOT do is give `*policy.Denied` an
-// `Unwrap() error` returning an AqlError. That would code every refusal
+// `Unwrap() error` returning a BoruError. That would code every refusal
 // everywhere at a stroke — and would also flip `runtimeShouldFallback`
-// (lang/go/aql.go) from "foreign error, re-run on the interpreter" to "AQL
+// (lang/go/boru.go) from "foreign error, re-run on the interpreter" to "BORU
 // error, surface" for every denial in compiled mode, including denials from
 // sites nobody has audited. That is a semantic call about the fallback fence.
 // Coding a refusal at a site whose effect has already been refused carries
@@ -47,9 +47,9 @@ import (
 // merely RETURNED them, and the gate immediately reported `permission_denied`
 // as unmintable: true, from its point of view, and the code had just become
 // invisible to the one check that keeps REFERENCE.md honest. Hence the switch
-// below sits directly on top of `r.AqlError("…", …)`.
+// below sits directly on top of `r.BoruError("…", …)`.
 
-// policyRefusalCoded converts a policy refusal into a dispatchable AqlError
+// policyRefusalCoded converts a policy refusal into a dispatchable BoruError
 // carrying the code the refusal identifies itself by. ok is false when err is
 // not a refusal, or is a refusal whose code no capability GATE can produce —
 // in which case the caller keeps whatever error it already had.
@@ -75,14 +75,14 @@ func policyRefusalCoded(r *Registry, word, detail string, err error) (error, boo
 	}
 	switch denied.Code {
 	case policy.CodePermissionDenied:
-		return r.AqlError("permission_denied", detail, word), true
+		return r.BoruError("permission_denied", detail, word), true
 	case policy.CodeCapabilityNotInstalled:
-		return r.AqlError("capability_not_installed", detail, word), true
+		return r.BoruError("capability_not_installed", detail, word), true
 	}
 	return nil, false
 }
 
-// PolicyRefusal converts a policy refusal into a dispatchable AqlError,
+// PolicyRefusal converts a policy refusal into a dispatchable BoruError,
 // passing nil and every non-refusal error through unchanged. Call it on a
 // capability gate's result so the refusal keeps its own code:
 //

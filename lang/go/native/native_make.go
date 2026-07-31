@@ -1,6 +1,6 @@
 package native
 
-import "github.com/aql-lang/aql/eng/go"
+import "github.com/boru-lang/boru/eng/go"
 
 // makeNatives installs the `make` word — the universal constructor
 // for typed values (scalars, class instances, records, tables).

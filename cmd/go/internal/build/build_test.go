@@ -9,17 +9,17 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
+	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
 )
 
 // --- defaultOutput ---
 
 func TestDefaultOutput(t *testing.T) {
 	cases := map[string]string{
-		"prog.aql":      "prog",
-		"a/b/c.aql":     "c",
-		"/x/y/main.aql": "main",
-		"noext":         "noext",
+		"prog.boru":      "prog",
+		"a/b/c.boru":     "c",
+		"/x/y/main.boru": "main",
+		"noext":          "noext",
 	}
 	for in, want := range cases {
 		if got := defaultOutput(in); got != want {
@@ -55,7 +55,7 @@ func TestResolveCompile(t *testing.T) {
 
 func TestBuildConfigSingleFile(t *testing.T) {
 	dir := t.TempDir()
-	src := filepath.Join(dir, "p.aql")
+	src := filepath.Join(dir, "p.boru")
 	if err := os.WriteFile(src, []byte("add 1 2"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -76,15 +76,15 @@ func TestBuildConfigSingleFile(t *testing.T) {
 
 func TestBuildConfigBundlesTransitiveImports(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "main.aql", `import "./lib.aql"`+"\n"+`Lib.x`)
-	write(t, dir, "lib.aql", `import "./dep.aql"`+"\n"+`export "Lib" {x:1}`)
-	write(t, dir, "dep.aql", `export "Dep" {y:2}`)
+	write(t, dir, "main.boru", `import "./lib.boru"`+"\n"+`Lib.x`)
+	write(t, dir, "lib.boru", `import "./dep.boru"`+"\n"+`export "Lib" {x:1}`)
+	write(t, dir, "dep.boru", `export "Dep" {y:2}`)
 
-	cfg, err := buildConfig(filepath.Join(dir, "main.aql"), "", 0, buildrt.CompileOff, "", nil)
+	cfg, err := buildConfig(filepath.Join(dir, "main.boru"), "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, name := range []string{"main.aql", "lib.aql", "dep.aql"} {
+	for _, name := range []string{"main.boru", "lib.boru", "dep.boru"} {
 		key := filepath.Join(dir, name)
 		if _, ok := cfg.Files[key]; !ok {
 			t.Errorf("expected %s in bundled Files", key)
@@ -97,20 +97,20 @@ func TestBuildConfigBundlesTransitiveImports(t *testing.T) {
 
 func TestBuildConfigSkipsBuiltinImports(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "p.aql", `import "aql:math-util"`+"\n"+`MathUtil.sqrt 16.0`)
-	cfg, err := buildConfig(filepath.Join(dir, "p.aql"), "", 0, buildrt.CompileOff, "", nil)
+	write(t, dir, "p.boru", `import "boru:math-util"`+"\n"+`MathUtil.sqrt 16.0`)
+	cfg, err := buildConfig(filepath.Join(dir, "p.boru"), "", 0, buildrt.CompileOff, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if cfg.Files != nil {
-		t.Fatalf("built-in aql: import must not bundle files, got %v", cfg.Files)
+		t.Fatalf("built-in boru: import must not bundle files, got %v", cfg.Files)
 	}
 }
 
 func TestBuildConfigRejectsBareImport(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "p.aql", `import "somepkg"`+"\n"+`1`)
-	_, err := buildConfig(filepath.Join(dir, "p.aql"), "", 0, buildrt.CompileOff, "", nil)
+	write(t, dir, "p.boru", `import "somepkg"`+"\n"+`1`)
+	_, err := buildConfig(filepath.Join(dir, "p.boru"), "", 0, buildrt.CompileOff, "", nil)
 	if err == nil {
 		t.Fatal("expected an error for an unbundlable bare-module import")
 	}
@@ -118,15 +118,15 @@ func TestBuildConfigRejectsBareImport(t *testing.T) {
 
 func TestBuildConfigMissingImportFails(t *testing.T) {
 	dir := t.TempDir()
-	write(t, dir, "p.aql", `import "./missing.aql"`+"\n"+`1`)
-	_, err := buildConfig(filepath.Join(dir, "p.aql"), "", 0, buildrt.CompileOff, "", nil)
+	write(t, dir, "p.boru", `import "./missing.boru"`+"\n"+`1`)
+	_, err := buildConfig(filepath.Join(dir, "p.boru"), "", 0, buildrt.CompileOff, "", nil)
 	if err == nil {
 		t.Fatal("expected an error when a bundled import does not exist")
 	}
 }
 
 func TestBuildConfigMissingEntryFails(t *testing.T) {
-	_, err := buildConfig(filepath.Join(t.TempDir(), "nope.aql"), "", 0, buildrt.CompileOff, "", nil)
+	_, err := buildConfig(filepath.Join(t.TempDir(), "nope.boru"), "", 0, buildrt.CompileOff, "", nil)
 	if err == nil {
 		t.Fatal("expected an error for a missing entry file")
 	}
@@ -181,7 +181,7 @@ func TestBuildSelfEmbedEndToEnd(t *testing.T) {
 	// executable, and carries a decodable payload. The full run-the-binary
 	// path is exercised by the manual verification in the plan.
 	dir := t.TempDir()
-	src := write(t, dir, "p.aql", "add 1 2")
+	src := write(t, dir, "p.boru", "add 1 2")
 	out := filepath.Join(dir, "p")
 
 	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "", nil)
@@ -219,7 +219,7 @@ func TestBuildNativeEndToEnd(t *testing.T) {
 	_ = moduleDir
 
 	dir := t.TempDir()
-	src := write(t, dir, "p.aql", "add 1 2")
+	src := write(t, dir, "p.boru", "add 1 2")
 	out := filepath.Join(dir, "p")
 
 	cfg, err := buildConfig(src, "", 0, buildrt.CompileOff, "", nil)

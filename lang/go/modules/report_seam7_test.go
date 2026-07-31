@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // s7bTable builds a concrete TableData-backed List value (IsTableType true,
@@ -51,7 +51,7 @@ func TestS7B_ReportTableTypeArm(t *testing.T) {
 // a list whose elements are scalars renders through FormatForPrint.
 func TestS7B_ReportTableNonMapRows(t *testing.T) {
 	r := reportRegistry(t)
-	got := runReportAQL(t, r, `[1 2 3] Report.table`)
+	got := runReportBORU(t, r, `[1 2 3] Report.table`)
 	s, _ := native.AsString(got[0])
 	want := native.FormatForPrint(native.NewList([]native.Value{
 		native.NewInteger(1), native.NewInteger(2), native.NewInteger(3),
@@ -65,7 +65,7 @@ func TestS7B_ReportTableNonMapRows(t *testing.T) {
 // wider than its header widens the column.
 func TestS7B_ReportTableWideCell(t *testing.T) {
 	r := reportRegistry(t)
-	got := runReportAQL(t, r, `[{a:12345}] Report.table`)
+	got := runReportBORU(t, r, `[{a:12345}] Report.table`)
 	s, _ := native.AsString(got[0])
 	if !strings.Contains(s, "12345") {
 		t.Errorf("wide cell not rendered in full:\n%s", s)

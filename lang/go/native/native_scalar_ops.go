@@ -43,7 +43,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // arithOps is the set of binary arithmetic words this file gives
@@ -102,7 +102,7 @@ func applyScalarBinaryOp(r *Registry, op string, left, right Value) (Value, erro
 }
 
 func opCrossTypeError(r *Registry, op string, left, right Value) error {
-	return r.AqlError("type_error",
+	return r.BoruError("type_error",
 		fmt.Sprintf("%s: no operation defined between %s and %s — core operations apply within a type, not across",
 			op, typeLeaf(left), typeLeaf(right)), op)
 }
@@ -181,12 +181,12 @@ func seqPow(r *Registry, op, a, b string, mk func(string) Value) (Value, error) 
 }
 
 func seqEmptyError(r *Registry, op, verb string) error {
-	return r.AqlError("arith_error", op+": "+verb+" by an empty string", op)
+	return r.BoruError("arith_error", op+": "+verb+" by an empty string", op)
 }
 
 func seqSizeGuard(r *Registry, op string, estBytes int64) error {
 	if estBytes > int64(maxStringResultBytes) {
-		return r.AqlError("value_error",
+		return r.BoruError("value_error",
 			fmt.Sprintf("%s: result would exceed %d bytes", op, maxStringResultBytes), op)
 	}
 	return nil
@@ -256,7 +256,7 @@ func booleanArithDetail(op string) string {
 }
 
 func booleanArithError(r *Registry, op string) error {
-	return r.AqlErrorHint("type_error", booleanArithDetail(op), op,
+	return r.BoruErrorHint("type_error", booleanArithDetail(op), op,
 		"Boolean carries the logical words (and / or / xor / not), not arithmetic")
 }
 
@@ -293,7 +293,7 @@ func booleanArithReturns(op string) ReturnsFunc {
 func micronBinaryOp(r *Registry, op string, left, right Value) (Value, error) {
 	lk, rk := left.Parent, right.Parent
 	if lk == nil || rk == nil || !lk.Equal(rk) {
-		return Value{}, r.AqlError("type_error",
+		return Value{}, r.BoruError("type_error",
 			fmt.Sprintf("%s: %s and %s are different Micron kinds — core operations apply within a kind, not across",
 				op, typeLeaf(left), typeLeaf(right)), op)
 	}
@@ -353,14 +353,14 @@ func micronFieldError(r *Registry, op string, kind *Type, field string, inner er
 	if kind != nil {
 		name = kind.Leaf()
 	}
-	return r.AqlError("type_error",
-		fmt.Sprintf("%s: %s field %q: %s", op, name, field, aqlErrorDetail(inner)), op)
+	return r.BoruError("type_error",
+		fmt.Sprintf("%s: %s field %q: %s", op, name, field, boruErrorDetail(inner)), op)
 }
 
-// aqlErrorDetail unwraps an AqlError's detail for nesting into a field
+// boruErrorDetail unwraps a BoruError's detail for nesting into a field
 // message, falling back to the raw error text.
-func aqlErrorDetail(err error) string {
-	if ae, ok := err.(*AqlError); ok {
+func boruErrorDetail(err error) string {
+	if ae, ok := err.(*BoruError); ok {
 		return ae.Detail
 	}
 	return err.Error()
@@ -380,7 +380,7 @@ func qionOp(r *Registry, op string, left, right Value) (Value, error) {
 		lcs, _ := lc.AsConcreteString()
 		rcs, _ := rc.AsConcreteString()
 		if lcs != rcs {
-			return Value{}, r.AqlError("arith_error",
+			return Value{}, r.BoruError("arith_error",
 				fmt.Sprintf("%s: cannot combine Qion amounts in different currencies (%s and %s)", op, lcs, rcs), op)
 		}
 		la, _ := lf.Get("amount")
@@ -394,7 +394,7 @@ func qionOp(r *Registry, op string, left, right Value) (Value, error) {
 		m.Set("amount", sum)
 		return remakeMicron(r, left.Parent, m)
 	default:
-		return Value{}, r.AqlErrorHint("type_error",
+		return Value{}, r.BoruErrorHint("type_error",
 			op+": is not defined between two Qion values — only add and sub (same currency) are", op,
 			"scale money with a plain Number (e.g. `q mul 2`), not with another Qion")
 	}
@@ -413,7 +413,7 @@ func pathonOp(r *Registry, op string, left, right Value) (Value, error) {
 	switch op {
 	case "add":
 		if ri.Abs {
-			return Value{}, r.AqlErrorHint("type_error",
+			return Value{}, r.BoruErrorHint("type_error",
 				"add: cannot join an absolute path onto another — the right operand must be relative", "add",
 				"drop the leading separator from the right operand")
 		}
@@ -421,14 +421,14 @@ func pathonOp(r *Registry, op string, left, right Value) (Value, error) {
 		return eng.NewPathonVol(li.Volume, parts, li.Abs), nil
 	case "sub":
 		if ri.Abs {
-			return Value{}, r.AqlErrorHint("type_error",
+			return Value{}, r.BoruErrorHint("type_error",
 				"sub: the right operand of a Pathon subtraction must be relative", "sub",
 				"drop the leading separator from the right operand")
 		}
 		parts := stripSegSuffix(li.Parts, ri.Parts)
 		return eng.NewPathonVol(li.Volume, parts, li.Abs), nil
 	default:
-		return Value{}, r.AqlErrorHint("type_error",
+		return Value{}, r.BoruErrorHint("type_error",
 			op+": is not defined between two Pathon values — only add (join) and sub (strip trailing segments) are", op,
 			"")
 	}
@@ -577,7 +577,7 @@ func seqReturnType(op string, elem *Type) *Type {
 // CheckAddUniqueDiagnostic discipline).
 func mirrorOpError(r *Registry, op string, err error, pos eng.SrcPos) {
 	code, detail := "type_error", err.Error()
-	var ae *AqlError
+	var ae *BoruError
 	if errors.As(err, &ae) {
 		code, detail = ae.Code, ae.Detail
 	}

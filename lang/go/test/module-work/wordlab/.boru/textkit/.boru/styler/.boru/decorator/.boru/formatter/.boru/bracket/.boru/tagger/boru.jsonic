@@ -1,0 +1,7 @@
+name: tagger
+main: tagger.boru
+major: 3
+minor: 0
+patch: 2
+files: [tagger.boru]
+deps: {joiner: 0.4.2}

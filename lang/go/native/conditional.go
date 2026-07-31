@@ -256,7 +256,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	// Otherwise the island / whole-program fallback owns COMPILATION, but the
 	// result TYPE is still computable: the join of every clause block's
 	// residual type plus the trailing default. Decoupling the type from the
-	// compile-eligibility lets a plain `aql check` (which has no emit state)
+	// compile-eligibility lets a plain `boru check` (which has no emit state)
 	// and a non-re-pushable case narrow instead of poisoning the result with
 	// Any.
 	return caseBranchJoin(r, v, elems)

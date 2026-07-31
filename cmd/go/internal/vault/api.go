@@ -1,11 +1,11 @@
 package vault
 
-// api.go — a small exported surface so other commands (e.g. `aql login`
-// / `aql publish`) can read and write vault secrets without importing
+// api.go — a small exported surface so other commands (e.g. `boru login`
+// / `boru publish`) can read and write vault secrets without importing
 // the vault's internals. Both helpers go through the normal
 // authenticate/Session path, so they work on legacy single-passphrase
 // vaults and on envelope (scoped-password) vaults alike, sourcing the
-// passphrase from AQL_VAULT_PASSPHRASE or an interactive prompt.
+// passphrase from BORU_VAULT_PASSPHRASE or an interactive prompt.
 
 import "io"
 

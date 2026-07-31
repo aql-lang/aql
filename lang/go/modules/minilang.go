@@ -7,11 +7,11 @@ import (
 	"strings"
 	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// The aql:minilang module — the MiniLang namespace of embedded
+// The boru:minilang module — the MiniLang namespace of embedded
 // mini-languages behind the core `mini` macro word. See
 // design/MINILANG.5.md.
 //
@@ -62,7 +62,7 @@ func miniCompiledPattern(src string) (*regexp.Regexp, error) {
 	return re, nil
 }
 
-// BuildMiniLangModule creates the "aql:minilang" native module.
+// BuildMiniLangModule creates the "boru:minilang" native module.
 func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg, err := newDefaultRegistry()
 	if err != nil {
@@ -101,7 +101,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// fn-value code path is untouched, while `is` and typed fn params
 	// ([m:Rex] after `def Rex MiniLang.Re`) dispatch on the specific
 	// kind. Per-import mint, like MiniLangCompiled above (and the
-	// aql:io StreamKind precedent for exported member types). typeof
+	// boru:io StreamKind precedent for exported member types). typeof
 	// still reports Function — the member type is a constraint, the
 	// same convention DepScalar types follow.
 	mintMiniFnType := func(kind string) {
@@ -124,7 +124,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Wrapper params are UNNAMED — the trivial-delegation short-circuit in
 	// execFnDefLiteral requires Body=[Word(inner)] with all-unnamed Params
-	// (named params would route through CallAQL name-binding and starve
+	// (named params would route through CallBORU name-binding and starve
 	// the inner native). See lang/go/CLAUDE.md "Module FnDef Wrappers".
 	stdPrefix := []native.FnParam{
 		{Type: native.TString}, // src
@@ -230,7 +230,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// [src opts] → [Number]. Evaluate a formula like `x*y-z^2` (operators
 	// + - * / % ^, unary +/-, parens) whose variables are bound by the
 	// named params (opts). Backed by the tabnas/expr Pratt parser; numeric
-	// coercion follows AQL's integer/float domain rules. See minilang_math.go.
+	// coercion follows BORU's integer/float domain rules. See minilang_math.go.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-math",
 		Signatures: []native.Signature{{
@@ -310,7 +310,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// frozen kind namespaces (the un-namespaced literal dispatch is the
 	// same collision surface as the kind atoms). The word survives one
 	// release as an unconditional, hint-carrying raise; DryPassWrap
-	// mirrors it statically so `aql check` flags the use too.
+	// mirrors it statically so `boru check` flags the use too.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-micron-lit",
 		Signatures: []native.Signature{{
@@ -379,12 +379,12 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}, []*native.Type{native.TList}, nil, subReg))
 	mintMiniFnType("xp")
 
-	// ---- kind: sp — structure-path over AQL structure (Map/List) -------
+	// ---- kind: sp — structure-path over BORU structure (Map/List) -------
 	// [src opts doc:Any] → [List]. Run an XPath expression over the stack
 	// Map/List subject and return the result as a List. Same engine as `xp`
-	// (github.com/antchfx/xpath), but over AQL native structure rather than
-	// Node/Xml — the XPath-shaped query layer for AQL data. A matched element
-	// comes back as its source AQL value; a text/scalar result as a
+	// (github.com/antchfx/xpath), but over BORU native structure rather than
+	// Node/Xml — the XPath-shaped query layer for BORU data. A matched element
+	// comes back as its source BORU value; a text/scalar result as a
 	// String/Number/Boolean. See minilang_sp.go.
 	// Two overloads — a Map subject and a List subject — rather than one
 	// TAny: the `mini` filter partial (native_macro.go::miniPartialFn) takes
@@ -430,7 +430,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// survives one release as an unconditional, hint-carrying raise so an
 	// existing program fails loudly with the migration path instead of a
 	// bare missing-export miss. DryPassWrap mirrors the raise statically, so
-	// `aql check` flags the use too (the unquote/splice tombstone pattern).
+	// `boru check` flags the use too (the unquote/splice tombstone pattern).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-register",
 		Signatures: []native.Signature{{
@@ -459,7 +459,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		[]*native.Type{native.TList}, nil, subReg))
 
 	// ---- out-of-band: register-compiled (TOMBSTONE) -----------------------
-	// The AQL compile-hook surface died with the frozen namespace (an
+	// The BORU compile-hook surface died with the frozen namespace (an
 	// expansion-time macro rewrite is unrepresentable as a runtime value);
 	// the word survives one release as the same unconditional raise.
 	subReg.RegisterNativeFunc(native.NativeFunc{
@@ -572,7 +572,7 @@ func miniDropGrouping(s string) string {
 // namespaces. An unconditional, hint-carrying raise — the DryPassWrap
 // mirror on its signature surfaces the same finding statically.
 func miniMicronLitFrozenHandler(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	return nil, r.AqlErrorHint("mini_registry_frozen",
+	return nil, r.BoruErrorHint("mini_registry_frozen",
 		"micron: the +m literal grammar is fixed to the builtin Micron leaves — the user-shape hook was removed", "micron",
 		"parse a custom Micron source with a parser fn value and construct the instance with make (def Nameon refine Micron {…} still works; only the literal sugar is builtin-only)")
 }
@@ -585,11 +585,11 @@ func miniMicronLitFrozenHandler(_ []native.Value, _ map[string]native.Value, _ [
 func miniMicronHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_parse_error", fmt.Sprintf("micron: src: %v", err), "lang_micron")
+		return nil, r.BoruError("mini_parse_error", fmt.Sprintf("micron: src: %v", err), "lang_micron")
 	}
 	v, merr := eng.MicronFromString(src)
 	if merr != nil {
-		return nil, r.AqlError("mini_parse_error", fmt.Sprintf("micron: %v", merr), "lang_micron")
+		return nil, r.BoruError("mini_parse_error", fmt.Sprintf("micron: %v", merr), "lang_micron")
 	}
 	return []native.Value{v}, nil
 }
@@ -600,11 +600,11 @@ func miniMicronHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 func miniHexBytesHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_parse_error", fmt.Sprintf("hb: src: %v", err), "lang_hb")
+		return nil, r.BoruError("mini_parse_error", fmt.Sprintf("hb: src: %v", err), "lang_hb")
 	}
 	b, derr := hex.DecodeString(miniDropGrouping(src))
 	if derr != nil {
-		return nil, r.AqlErrorHint("mini_parse_error", fmt.Sprintf("hb: %v", derr), "lang_hb",
+		return nil, r.BoruErrorHint("mini_parse_error", fmt.Sprintf("hb: %v", derr), "lang_hb",
 			"use an even number of hex digits, e.g. +hb/deadbeef/")
 	}
 	return []native.Value{eng.FromNative(b)}, nil
@@ -615,11 +615,11 @@ func miniHexBytesHandler(args []native.Value, _ map[string]native.Value, _ []nat
 func miniBinBytesHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_parse_error", fmt.Sprintf("bb: src: %v", err), "lang_bb")
+		return nil, r.BoruError("mini_parse_error", fmt.Sprintf("bb: src: %v", err), "lang_bb")
 	}
 	bits := miniDropGrouping(src)
 	if len(bits)%8 != 0 {
-		return nil, r.AqlErrorHint("mini_parse_error",
+		return nil, r.BoruErrorHint("mini_parse_error",
 			fmt.Sprintf("bb: bit count %d is not a multiple of 8", len(bits)), "lang_bb",
 			"pad to whole bytes, e.g. +bb/01001100/")
 	}
@@ -633,7 +633,7 @@ func miniBinBytesHandler(args []native.Value, _ map[string]native.Value, _ []nat
 				v |= 1
 			case '0':
 			default:
-				return nil, r.AqlErrorHint("mini_parse_error",
+				return nil, r.BoruErrorHint("mini_parse_error",
 					fmt.Sprintf("bb: %q is not a binary digit", string(bits[i*8+j])), "lang_bb",
 					"use only 0 and 1, e.g. +bb/01001100/")
 			}
@@ -647,19 +647,19 @@ func miniBinBytesHandler(args []native.Value, _ map[string]native.Value, _ []nat
 func miniReHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", fmt.Sprintf("re: src: %v", err), "lang_re")
+		return nil, r.BoruError("mini_error", fmt.Sprintf("re: src: %v", err), "lang_re")
 	}
 	subject, err := args[2].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", fmt.Sprintf("re: subject: %v", err), "lang_re")
+		return nil, r.BoruError("mini_error", fmt.Sprintf("re: subject: %v", err), "lang_re")
 	}
 	limit, err := miniOptInt(args[1], "limit", -1)
 	if err != nil {
-		return nil, r.AqlError("mini_error", fmt.Sprintf("re: %v", err), "lang_re")
+		return nil, r.BoruError("mini_error", fmt.Sprintf("re: %v", err), "lang_re")
 	}
 	re, cerr := miniCompiledPattern(src)
 	if cerr != nil {
-		return nil, r.AqlErrorHint("mini_parse_error",
+		return nil, r.BoruErrorHint("mini_parse_error",
 			fmt.Sprintf("re: %v", cerr), "lang_re",
 			"fix the pattern — note backslashes in '…'/\"…\" strings need doubling ('\\\\d'); backtick strings are backslash-safe")
 	}
@@ -776,19 +776,19 @@ func reMatchResult(re *regexp.Regexp, subject string, limit int64) native.Value 
 func miniRunReHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	ep, ok := args[0].Data.(eng.ExtensionPayload)
 	if !ok {
-		return nil, r.AqlError("mini_error", "run-re: not a compiled pattern", "run-re")
+		return nil, r.BoruError("mini_error", "run-re: not a compiled pattern", "run-re")
 	}
 	re, ok := ep.Body.(*regexp.Regexp)
 	if !ok {
-		return nil, r.AqlError("mini_error", "run-re: not a compiled pattern", "run-re")
+		return nil, r.BoruError("mini_error", "run-re: not a compiled pattern", "run-re")
 	}
 	subject, err := args[2].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", fmt.Sprintf("re: subject: %v", err), "run-re")
+		return nil, r.BoruError("mini_error", fmt.Sprintf("re: subject: %v", err), "run-re")
 	}
 	limit, err := miniOptInt(args[1], "limit", -1)
 	if err != nil {
-		return nil, r.AqlError("mini_error", fmt.Sprintf("re: %v", err), "run-re")
+		return nil, r.BoruError("mini_error", fmt.Sprintf("re: %v", err), "run-re")
 	}
 	return []native.Value{reMatchResult(re, subject, limit)}, nil
 }
@@ -829,23 +829,23 @@ const miniBfDefaultSteps = 1_000_000
 func miniBfHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", fmt.Sprintf("bf: src: %v", err), "lang_bf")
+		return nil, r.BoruError("mini_error", fmt.Sprintf("bf: src: %v", err), "lang_bf")
 	}
 	input := ""
 	if len(args) == 3 {
 		input, err = args[2].AsConcreteString()
 		if err != nil {
-			return nil, r.AqlError("mini_error", fmt.Sprintf("bf: input: %v", err), "lang_bf")
+			return nil, r.BoruError("mini_error", fmt.Sprintf("bf: input: %v", err), "lang_bf")
 		}
 	} else {
 		input, err = miniOptString(args[1], "in")
 		if err != nil {
-			return nil, r.AqlError("mini_error", fmt.Sprintf("bf: %v", err), "lang_bf")
+			return nil, r.BoruError("mini_error", fmt.Sprintf("bf: %v", err), "lang_bf")
 		}
 	}
 	steps, err := miniOptInt(args[1], "steps", miniBfDefaultSteps)
 	if err != nil {
-		return nil, r.AqlError("mini_error", fmt.Sprintf("bf: %v", err), "lang_bf")
+		return nil, r.BoruError("mini_error", fmt.Sprintf("bf: %v", err), "lang_bf")
 	}
 
 	out, bferr := runBrainfuck(src, input, steps)
@@ -856,7 +856,7 @@ func miniBfHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 			code = "mini_parse_error"
 			hint = "balance the [ ] brackets"
 		}
-		return nil, r.AqlErrorHint(code, fmt.Sprintf("bf: %s", bferr.msg), "lang_bf", hint)
+		return nil, r.BoruErrorHint(code, fmt.Sprintf("bf: %s", bferr.msg), "lang_bf", hint)
 	}
 	return []native.Value{native.NewString(out)}, nil
 }
@@ -943,18 +943,18 @@ func runBrainfuck(prog, input string, maxSteps int64) (string, *bfError) {
 // was removed. An unconditional, hint-carrying raise — the DryPassWrap
 // mirror on its signature surfaces the same finding statically.
 func miniRegisterFrozenHandler(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	return nil, r.AqlErrorHint("mini_registry_frozen",
+	return nil, r.BoruErrorHint("mini_registry_frozen",
 		"register: the mini kind namespace is fixed — registration was removed", "register",
 		"pass the mini-language as a Function value instead: def myl (fn [[src:String opts:Map] [Any] [...]])  mini myl '...' — Go hosts build one with NewMiniLangFn")
 }
 
 // miniRegisterCompiledFrozenHandler is MiniLang.register-compiled's
-// TOMBSTONE: the AQL compile-hook surface died with the frozen namespace —
+// TOMBSTONE: the BORU compile-hook surface died with the frozen namespace —
 // an expansion-time macro rewrite is unrepresentable as a runtime value, so
 // there is no value-form successor. The raise carries the closest migration
 // path (a plain fn value; the per-call compile becomes the fn's own work).
 func miniRegisterCompiledFrozenHandler(_ []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
-	return nil, r.AqlErrorHint("mini_registry_frozen",
+	return nil, r.BoruErrorHint("mini_registry_frozen",
 		"register-compiled: the mini kind namespace is fixed — compile hooks were removed with registration", "register-compiled",
 		"pass the mini-language as a Function value instead (mini <fn> '...') and memoize any expensive compile inside the fn")
 }

@@ -33,7 +33,7 @@ import (
 // the generated list, passing a module comparator fn as the argument. It must
 // FULLY compile (no interpreter island) AND agree with the interpreter.
 func TestCheckPropStoredBodyComparatorDispatchCompiles(t *testing.T) {
-	src := `import "aql:test" end
+	src := `import "boru:test" end
 import module [
   def by-number fn [[b:Any a:Any] [Integer] [(a cmp b)]]
   def srt fn [[comp:Function lst:List] [List] [

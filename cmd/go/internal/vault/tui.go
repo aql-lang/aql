@@ -1,6 +1,6 @@
 package vault
 
-// tui.go — `aql vault -i` / `aql vault --interactive`: the entry point that
+// tui.go — `boru vault -i` / `boru vault --interactive`: the entry point that
 // resolves which vault to open, guards against a non-terminal, and runs the
 // bubbletea program.
 
@@ -15,7 +15,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// cliVersion is the aql build version string, injected by the main package
+// cliVersion is the boru build version string, injected by the main package
 // via SetVersion and shown in the interactive TUI header.
 var cliVersion string
 
@@ -23,23 +23,23 @@ var cliVersion string
 // The main package calls it during startup (mirroring run.SetVersion).
 func SetVersion(v string) { cliVersion = v }
 
-// runInteractive launches the interactive vault TUI. --aql runs the
-// AQL implementation (the aql:vault-tui module over the aql:vault
+// runInteractive launches the interactive vault TUI. --boru runs the
+// BORU implementation (the boru:vault-tui module over the boru:vault
 // bridge — design/VAULT-TUI-PORT.0.md §1.3); the bubbletea TUI stays
 // the default.
 func runInteractive(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault -i", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	useAQL := fs.Bool("aql", false, "run the AQL implementation of the interactive TUI (experimental)")
+	useBORU := fs.Bool("boru", false, "run the BORU implementation of the interactive TUI (experimental)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if *useAQL {
-		return runInteractiveAQL(homeDir, stdin, stdout, stderr)
+	if *useBORU {
+		return runInteractiveBORU(homeDir, stdin, stdout, stderr)
 	}
 
 	if !interactiveTTY(stdin, stdout) {
-		fmt.Fprintln(stderr, "error: the interactive vault TUI requires a terminal (run `aql vault -i` in an interactive shell)")
+		fmt.Fprintln(stderr, "error: the interactive vault TUI requires a terminal (run `boru vault -i` in an interactive shell)")
 		return 1
 	}
 
@@ -49,10 +49,10 @@ func runInteractive(args []string, homeDir string, stdin io.Reader, stdout, stde
 		ctl.setActiveVault(folder, suffix)
 		_ = recordVaultOpened(homeDir, folder, suffix)
 	} else {
-		// Default the active location to the home ~/.aql so the header and the
+		// Default the active location to the home ~/.boru so the header and the
 		// "new vault" defaults are sensible; the picker opens because no store
 		// exists there yet.
-		ctl.setActiveVault(homeAQLDir(homeDir), "")
+		ctl.setActiveVault(homeBORUDir(homeDir), "")
 	}
 
 	// Theme: detect the terminal background once, then honor the saved
@@ -72,7 +72,7 @@ func runInteractive(args []string, homeDir string, stdin io.Reader, stdout, stde
 	return 0
 }
 
-// resolveLaunchVault decides which vault `aql vault -i` opens: an explicit
+// resolveLaunchVault decides which vault `boru vault -i` opens: an explicit
 // --folder/--suffix (already promoted to the env by Run) opens that vault
 // directly; otherwise the index default / most-recently-opened / sole vault
 // is used. ok is false when there is no vault to open, so the TUI starts on

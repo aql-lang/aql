@@ -1,4 +1,4 @@
-# Bidirectional Typing for the AQL Checker — Design Proposal
+# Bidirectional Typing for the BORU Checker — Design Proposal
 
 Status: **`.0` proposal — not started.** This is a discovery note, not a
 commitment. It evaluates reframing the carrier checker as a bidirectional type
@@ -23,7 +23,7 @@ rule).
 
 The checker today is a **carrier abstract interpreter**: it runs the program in
 check mode over type-only "carrier" values, reusing the runtime dispatch
-machinery *verbatim* (`aql.go:186` — "the actual runtime dispatch, matching, and
+machinery *verbatim* (`boru.go:186` — "the actual runtime dispatch, matching, and
 forward-collection machinery is reused verbatim so checker and runtime stay in
 absolute parity"). Type information is derived by an informal pile of
 propagation rules concentrated in `carrier.go` (**2,630 LOC**): forward
@@ -44,7 +44,7 @@ propagation with two short rules per form, consolidate every type comparison to
 one `Unify` site, shrink the `AnalyseFnBody` inference path, and — because the
 compiler rides the checker — **widen the compilable subset** (more closures
 compile to `PUSH_CLOSURE` instead of `OpFallback` islands). But it carries one
-**hard constraint** that bounds what may be adopted: AQL's runtime dispatches on
+**hard constraint** that bounds what may be adopted: BORU's runtime dispatches on
 *argument values on the stack*, never on an expected result type, so
 **return-type-directed overload resolution — bidirectional typing's signature
 capability — is forbidden.** Using it would split the checker from the runtime
@@ -105,18 +105,18 @@ at the failing mode switch rather than at a distant constraint solve.
 
 ---
 
-## 4. Mapping onto AQL (a concatenative adaptation)
+## 4. Mapping onto BORU (a concatenative adaptation)
 
-AQL is not a tree of lambda-calculus expressions; it is a sequence of stack
+BORU is not a tree of lambda-calculus expressions; it is a sequence of stack
 effects. The textbook intro/elim split does not transcribe directly, so we adopt
 the *discipline*, not the rules. The carrier stack is the typed state.
 
-| Bidirectional concept | AQL realisation |
+| Bidirectional concept | BORU realisation |
 |---|---|
 | **Synthesis** `e ⇒ T` | The forward carrier flow we already have: each word, given the synthesized carriers on top of the stack, produces result carriers from its matched signature's `Returns`. **Synthesis ≈ today's forward propagation.** |
 | **Checking** `e ⇐ T` | The contexts where an expected type is already known and `carrier.go` currently hand-narrows: signature argument slots, **fn return annotations** (`def f fn [[…][String][…]]` → body checked `⇐ String`), typed-list/map element positions (`[:Integer]`), and `def x:T` bindings. |
-| **Subsumption (mode switch)** | The single `Unify` / `v.Is(t)` boundary. AQL already has `Unify` as the meet operation and a one-predicate boundary rule (`REFINE-NEWTYPE-VS-SUBSET.10.md`); bidirectional gives it **one canonical call site per boundary** instead of many. |
-| **Annotation** | Already first-class: `def x:T`, param `:T`, return slots, `X/t` bounds. AQL is, in effect, already annotation-rich — a favourable starting point. |
+| **Subsumption (mode switch)** | The single `Unify` / `v.Is(t)` boundary. BORU already has `Unify` as the meet operation and a one-predicate boundary rule (`REFINE-NEWTYPE-VS-SUBSET.10.md`); bidirectional gives it **one canonical call site per boundary** instead of many. |
+| **Annotation** | Already first-class: `def x:T`, param `:T`, return slots, `X/t` bounds. BORU is, in effect, already annotation-rich — a favourable starting point. |
 
 The sharpest concrete win is the anonymous lambda. Today it carries
 `Returns=[Any]` and triggers the `AnalyseFnBody` inference pass. As an
@@ -129,8 +129,8 @@ inference pass for the common case**.
 
 ## 5. The hard constraint (what bounds the proposal)
 
-AQL's defining invariant is that **the checker reuses runtime dispatch
-verbatim** (`aql.go:186`). The runtime selects an overload from the *argument
+BORU's defining invariant is that **the checker reuses runtime dispatch
+verbatim** (`boru.go:186`). The runtime selects an overload from the *argument
 values/types on the stack* (`matchSignature`) — it has **no notion of an
 expected result type**. Therefore:
 
@@ -173,7 +173,7 @@ also the compiler's story. Tracing it through:
 - **Differential gate.** Bidirectional changes how types are *derived*, not what
   the interpreter *does*; `Run` is unchanged, so `RunCompiled` byte-identity and
   `compiled_differential_test.go` keep their premise.
-- **Evaluation order.** Direction of type flow ≠ order of evaluation. AQL stays
+- **Evaluation order.** Direction of type flow ≠ order of evaluation. BORU stays
   left-to-right; the recorder stays hooked to the evaluation traversal, so
   `Finalize`'s linearisation still matches the interpreter tape — *provided*
   checking mode only annotates subterms with an expected type and never reorders
@@ -252,7 +252,7 @@ may legitimately stop after any stage: the value is monotonic.
 The proposal succeeds iff, at the chosen stopping stage, all hold:
 
 1. `make fmt/vet/lint/test` green, including `compiled_differential_test.go` and
-   the property fuzzer (`AQL_FUZZ_*`).
+   the property fuzzer (`BORU_FUZZ_*`).
 2. The extended differential gate confirms identical *signature selection*
    between checker and interpreter on every spec row (the §5 invariant, made
    executable).
@@ -270,10 +270,10 @@ If (2) cannot be met, the proposal is rejected regardless of the other metrics.
 
 ## 10. Alternatives considered
 
-- **Do nothing.** Defensible: AQL's hierarchy is shallow and the checker works.
+- **Do nothing.** Defensible: BORU's hierarchy is shallow and the checker works.
   The cost is `carrier.go` continuing to accrete special cases. This proposal is
   only worthwhile if the volume/locality pressure is real.
-- **Constraint-based inference (Algorithm W / union-find).** Rejected: AQL has
+- **Constraint-based inference (Algorithm W / union-find).** Rejected: BORU has
   **no unification variables** — `Unify` is a structural meet/membership, not
   Robinson unification — so the union-find inference machinery has nothing to
   manage. (Established in the checker literature review on this branch.)

@@ -5,26 +5,26 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
-// Parse failures must surface as AQL-voice [aql/syntax_error]s — same
+// Parse failures must surface as BORU-voice [boru/syntax_error]s — same
 // renderer, same position discipline, zero ANSI — never as raw library
 // output (which used to leak an always-on color palette, an
 // `--internal:` block, and the library docs link into the REPL and the
 // wasm DOM).
 
 // parseErrOf runs Parse on bad source and returns the translated error.
-func parseErrOf(t *testing.T, src string) *eng.AqlError {
+func parseErrOf(t *testing.T, src string) *eng.BoruError {
 	t.Helper()
 	_, err := Parse(src)
 	if err == nil {
 		t.Fatalf("Parse(%q) must fail", src)
 	}
-	var ae *eng.AqlError
+	var ae *eng.BoruError
 	if !errors.As(err, &ae) {
-		t.Fatalf("Parse(%q) must yield an *AqlError, got %T: %v", src, err, err)
+		t.Fatalf("Parse(%q) must yield an *BoruError, got %T: %v", src, err, err)
 	}
 	return ae
 }
@@ -32,7 +32,7 @@ func parseErrOf(t *testing.T, src string) *eng.AqlError {
 func TestParseErrorTranslation(t *testing.T) {
 	cases := []struct {
 		src        string
-		wantDetail string // substring of the AQL-voice detail
+		wantDetail string // substring of the BORU-voice detail
 		wantExtra  string // substring of a note/help line ("" = none asserted)
 	}{
 		{"(fn x]", "unexpected `]` — nothing valid can appear here", "check for a missing bracket, quote, or value"},
@@ -84,9 +84,9 @@ func TestParseErrorSyntheticCodes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.te.Code, func(t *testing.T) {
 			err := translateParseError(c.te, "x")
-			var ae *eng.AqlError
+			var ae *eng.BoruError
 			if !errors.As(err, &ae) {
-				t.Fatalf("want *AqlError, got %T", err)
+				t.Fatalf("want *BoruError, got %T", err)
 			}
 			if ae.Code != "syntax_error" {
 				t.Fatalf("code = %q, want syntax_error", ae.Code)
@@ -105,8 +105,8 @@ func TestParseErrorNonJsonicFallback(t *testing.T) {
 	if err == nil || err.Error() != "parse error: boom" {
 		t.Fatalf("non-jsonic errors keep the parse error wrap, got %v", err)
 	}
-	var ae *eng.AqlError
+	var ae *eng.BoruError
 	if errors.As(err, &ae) {
-		t.Fatal("non-jsonic errors must not be reshaped into AqlError")
+		t.Fatal("non-jsonic errors must not be reshaped into BoruError")
 	}
 }

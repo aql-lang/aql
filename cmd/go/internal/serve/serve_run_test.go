@@ -13,7 +13,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 // runServe invokes the subcommand the way main does.
@@ -40,7 +40,7 @@ func TestRunHelp(t *testing.T) {
 		if code != 0 {
 			t.Errorf("%s: exit = %d, want 0", arg, code)
 		}
-		if !strings.Contains(out, "Usage: aql serve") {
+		if !strings.Contains(out, "Usage: boru serve") {
 			t.Errorf("%s: stdout should show usage; got %q", arg, out)
 		}
 		// Usage lists the known services.
@@ -172,7 +172,7 @@ func TestRunSignalShutdown(t *testing.T) {
 	}()
 
 	deadline := time.Now().Add(10 * time.Second)
-	for !strings.Contains(stdout.String(), "aql serve: running") {
+	for !strings.Contains(stdout.String(), "boru serve: running") {
 		if time.Now().After(deadline) {
 			t.Fatalf("startup line never appeared; stderr=%s", stderr.String())
 		}

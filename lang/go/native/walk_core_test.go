@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // walkRun parses and runs source against a fresh DefaultRegistry, returning the

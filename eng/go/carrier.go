@@ -544,7 +544,7 @@ func toCarrier(v Value) Value {
 var checkModeLiteralWords = map[string]bool{
 	"import": true,
 	"module": true,
-	// `unpack 'aql:mod'` / `unpack ExportName 'aql:mod'` resolve a module's
+	// `unpack 'boru:mod'` / `unpack ExportName 'boru:mod'` resolve a module's
 	// (statically-declared) exports and bind them unqualified in check mode;
 	// the module-name string must stay concrete for the handler to resolve it.
 	// The export-name form puts the string two tokens after `unpack`, so the
@@ -576,7 +576,7 @@ func StripToCarriers(in []Value) []Value {
 // immediate neighbour that is a checkModeLiteralWords word.
 func adjacentToLiteralWord(in []Value, i int) bool {
 	// A window of two each way: `import "x"` / `"x" import` are immediate, but
-	// `unpack ExportName 'aql:mod'` places the module-name string two tokens
+	// `unpack ExportName 'boru:mod'` places the module-name string two tokens
 	// after the literal word. Keeping a string concrete is sound regardless
 	// (it only adds precision), so the slightly wider window is harmless for
 	// the rare non-literal-word case it might also catch.
@@ -828,7 +828,7 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 			// expansion error (a malformed form, a non-macro head) is not a
 			// runtime error to reproduce — it falls through to refuse, and the
 			// interpreter surfaces it.
-			var ae *AqlError
+			var ae *BoruError
 			if errors.As(err, &ae) && ae.Code == "macroexpand_error" {
 				r.Check.Recorder().RecordTrap("macroexpand_error", ae.Detail,
 					"macroexpand", ae.Hint, pos)
@@ -926,7 +926,7 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 	// back to strict. ReturnsFn results that are already dynamic (e.g.
 	// ReturnsIdentity of a dynamic input) stay so via toCarrier.
 	if anyDynamicCarrier(args) {
-		// STRICT mode (`aql check --strict`): make the gradual frontier
+		// STRICT mode (`boru check --strict`): make the gradual frontier
 		// loud — every committed dispatch over a dynamic operand is a
 		// point the checker matched optimistically and the runtime will
 		// re-verify. Non-gating info; deduped by word+position (the same
@@ -1182,7 +1182,7 @@ func constFoldAgrees(a, b Value) bool { return CanonValue(a) == CanonValue(b) }
 // constant because it depends only on a module value (immutable, import-bound)
 // plus inert consts / type operands — `MathUtil.$name` -> 'MathUtil',
 // `convert Map Foo` -> the export map, `MathUtil.$module.name` ->
-// 'aql:math-util', `typeof MathUtil.$module` -> Module. The checker's recorded
+// 'boru:math-util', `typeof MathUtil.$module` -> Module. The checker's recorded
 // RESULT is NOT enough: a word like `convert`/`is`/`typeof` returns its declared
 // TYPE (a Map carrier, a Boolean carrier) in check mode, not the concrete value,
 // so baking that would render `Map` where the interpreter rebuilds `{a:1 b:2}`.
@@ -1567,7 +1567,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 		return false
 	}
 	// Persist matchReg (NOT ownerReg): callPoly re-matches over the PolyRef's
-	// registry, and for a module sub-registry native (aql:test `test-record`)
+	// registry, and for a module sub-registry native (boru:test `test-record`)
 	// dispatched inside a module-fn body, ownerReg arrives nil (native dispatch
 	// sets no match.Reg) while matchReg is the sub-registry that actually holds the
 	// word — see the comment above. Passing ownerReg left pr.Reg nil, so callPoly
@@ -2130,7 +2130,7 @@ func calleeValueLeaksFlow(r *Registry, v Value, seen map[string]bool) bool {
 // calleeLeaksFlow resolves name to its aggregated dispatch table (Lookup
 // unions every FnDefInfo binding on the name's def stack — exactly what a
 // call would dispatch over) and scans the overload bodies. Native (Go-impl)
-// sigs have no AQL body and contribute nothing.
+// sigs have no BORU body and contribute nothing.
 func calleeLeaksFlow(r *Registry, name string, seen map[string]bool) bool {
 	if name == "" || seen[name] {
 		return false
@@ -2422,7 +2422,7 @@ func comboTypeNames(combo []Value) string {
 // overloads can't be statically chosen and it has no poly re-match (code body).
 // fnPredicateOverloadHazard reports whether word's same-arity overload set
 // both (a) contains an fn-PREDICATE-typed param slot (*predicateUnifier —
-// the AQL fn-body membership path whose check-mode match is LENIENT:
+// the BORU fn-body membership path whose check-mode match is LENIENT:
 // RunPredicate short-circuits true, registry.go) and (b) leaves more than
 // one arm reachable for these args — the combination where a static arm
 // commit can diverge from the interpreter's runtime predicate fall-through.
@@ -3130,7 +3130,7 @@ func ReturnsNumericBinary() ReturnsFunc {
 // OPTIMISTICALLY: it MIGHT be a String, yet at run time it could be a Number,
 // in which case the interpreter takes the NUMERIC overload instead. A definite
 // [String] return for that case wrongly rejects a downstream numeric use — the
-// sort.aql `msd-go` false positive, where `lo add (Array-get-result)` (Integer
+// sort.boru `msd-go` false positive, where `lo add (Array-get-result)` (Integer
 // + a dynamic get) was typed String and then failed the recursive `lo:Integer`
 // param. So: return String only when an operand is PROVABLY String (a concrete
 // or non-gradual String-typed value); otherwise the result is String-or-Number,
@@ -4128,7 +4128,7 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 			narrowed.Carrier = true
 		}
 		if ValuesEqual(narrowed, cur) {
-			// Complement did not refine cur (T disjoint from cur, or AQL
+			// Complement did not refine cur (T disjoint from cur, or BORU
 			// has no positive representation for the exact difference).
 			continue
 		}
@@ -4358,10 +4358,10 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// (RunCarrierBodyWithDefs, peekCaptureArm).
 	//
 	// Admitted for CALLBACK bodies and MULTI-TOKEN fn bodies. A callback is
-	// only ever invoked via InvokeCallback / CallAQL, which evaluate the
+	// only ever invoked via InvokeCallback / CallBORU, which evaluate the
 	// body residual IN the live frame on both engines. A multi-token body's
 	// trailing computed container now ALSO evaluates in-frame on every
-	// interpreter dispatch path — CallAQL-class and same-registry spliced,
+	// interpreter dispatch path — CallBORU-class and same-registry spliced,
 	// consumed and unconsumed alike (mini-s3's s3-parse-range
 	// `{from: from upto: upto}`; the historical spliced-path deferral that
 	// blocked this admission is gone) — so the recorded OpMakeMap /
@@ -4412,7 +4412,7 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 // isCallbackBodyName reports whether name is a stored-fn / spawn callback
 // body — compileClosureBody builds "storedfn$body" / "spawnbody$body" for the
 // words "storedfn" / "spawnbody" (callable_words.go). Such a body is invoked
-// only via InvokeCallback / CallAQL, which evaluate a residual COMPUTED
+// only via InvokeCallback / CallBORU, which evaluate a residual COMPUTED
 // container (`{message: (join …)}` / `[a b]`) IN the live frame on both
 // engines, so recording its OpMakeMap / OpMakeList assembly is safe (it
 // re-assembles per run, matching the interpreter). A normal user fn applied

@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 // failStopInspector wraps fakeInspector but fails StopService.
@@ -120,7 +120,7 @@ func TestW4StartServeAndStop(t *testing.T) {
 	}
 
 	// Discovery file exists while running.
-	if _, err := os.Stat(filepath.Join(tmp, "aql-api.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(tmp, "boru-api.json")); err != nil {
 		t.Errorf("discovery file missing while running: %s", err)
 	}
 	url, _, pid, err := ReadDiscoveryFile()
@@ -159,7 +159,7 @@ func TestW4StartServeAndStop(t *testing.T) {
 		t.Errorf("Status after Stop = %s, want stopped", s.Status())
 	}
 	// Discovery file removed on shutdown.
-	if _, err := os.Stat(filepath.Join(tmp, "aql-api.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(tmp, "boru-api.json")); !os.IsNotExist(err) {
 		t.Error("discovery file survived shutdown")
 	}
 }
@@ -234,7 +234,7 @@ func TestW4WriteDiscoveryFileRenameError(t *testing.T) {
 	tempDirFunc = func() string { return tmp }
 	defer func() { tempDirFunc = origTmp }()
 
-	blocked := filepath.Join(tmp, "aql-api.json")
+	blocked := filepath.Join(tmp, "boru-api.json")
 	if err := os.MkdirAll(filepath.Join(blocked, "sub"), 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestW4ReadDiscoveryFileMalformed(t *testing.T) {
 	tempDirFunc = func() string { return tmp }
 	defer func() { tempDirFunc = origTmp }()
 
-	if err := os.WriteFile(filepath.Join(tmp, "aql-api.json"), []byte("{not json"), 0600); err != nil {
+	if err := os.WriteFile(filepath.Join(tmp, "boru-api.json"), []byte("{not json"), 0600); err != nil {
 		t.Fatal(err)
 	}
 	if _, _, _, err := ReadDiscoveryFile(); err == nil || !strings.Contains(err.Error(), "malformed") {

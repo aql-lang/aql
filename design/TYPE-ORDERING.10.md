@@ -1,6 +1,6 @@
 # TYPE-ORDERING.10 — The Value Lattice & Comparison Total Order
 
-This document records the design of AQL's value ordering: the lattice
+This document records the design of BORU's value ordering: the lattice
 that places every Value in a total preorder, the cascade
 `CompareValues` uses to settle a pair, and the deliberate anomalies
 we accepted. It is the canonical reference for `tcmp` / `sort` and the
@@ -12,7 +12,7 @@ we accepted. It is the canonical reference for `tcmp` / `sort` and the
 > everyday ordering words `cmp` / `lt` / `lte` / `gt` / `gte` add a
 > shallow guard *on top*: they accept a pair only when it is the same
 > type or resolves via a same-family Comparer (stage 1 below), and
-> raise `[aql/incomparable]` for pairs that would settle only by the
+> raise `[boru/incomparable]` for pairs that would settle only by the
 > Rank fallback (stage 2). So this document describes what `tcmp`
 > computes; the restricted words compute the same number but refuse the
 > cross-family cases. Equality (`eq`/`neq`/`deq`) is independent of this
@@ -137,7 +137,7 @@ RANK             TYPE PATH                  REPRESENTATIVE LITERAL          NOTE
 61_000_000_000   Type/<user>                def Positive (Integer gt 0)      DepScalar values
 ```
 
-## In AQL, literals are types
+## In BORU, literals are types
 
 A concrete value's `Parent` IS its type — there is no separate "value
 inhabits type" indirection. `42`, `'hello'`, `true` each have their
@@ -240,7 +240,7 @@ Functions < FunctionSignatures < Disjuncts < Enums    (Type band)
 Example: `true tcmp 5 = -1` (Boolean Rank `20.2·10⁹` < Integer Rank
 `20.31·10⁹`); `5 tcmp 'a' = -1` (Integer < String); `'a' tcmp [1] =
 -1` (String band < List band). (These are cross-family, so `tcmp` —
-the restricted `cmp`/`lt` raise `[aql/incomparable]` here.)
+the restricted `cmp`/`lt` raise `[boru/incomparable]` here.)
 
 ## Type-literal-first rule (the family-zero anomaly, now fixed)
 
@@ -285,7 +285,7 @@ true tcmp Integer → -1   # Boolean Rank 20.2·10⁹ < Integer Rank 20.31·10�
 5    tcmp String  → -1   # Integer Rank < String Rank
 ```
 (Cross-family → shown with `tcmp`; `cmp`/`lt` would raise
-`[aql/incomparable]`.)
+`[boru/incomparable]`.)
 
 The Path family runs through `comparePaths` (no Comparer on `TPath`
 itself; the LCA walk reaches `Scalar`); `comparePaths` carries its
@@ -342,7 +342,7 @@ Never tcmp Any  →  1     (Never Rank 13·10⁹ > Any Rank 11·10⁹)
 
 `none tcmp none = 0` (same type — `cmp` accepts it too); `none` and any
 other value compare strictly by Rank, so a cross-type pair needs
-`tcmp` (`cmp`/`lt` raise `[aql/incomparable]`).
+`tcmp` (`cmp`/`lt` raise `[boru/incomparable]`).
 
 ### Summary of order properties
 

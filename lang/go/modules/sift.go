@@ -5,30 +5,30 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// The aql:sift module — the Sift namespace, the semi-structured-text tier of
+// The boru:sift module — the Sift namespace, the semi-structured-text tier of
 // the parsing stack (design/SIFT.0.md). Between StringUtil / read {fmt:'lines'}
-// (primitives) and parse json / aql:parse (rigid formats / grammars), sift
+// (primitives) and parse json / boru:parse (rigid formats / grammars), sift
 // parses the loose line- and field-oriented text Unix tools and /proc files
 // emit.
 //
-// sift is WRITTEN IN AQL (siftSource below, embedded from sift.aql), following
-// the aql:repl / aql:test hybrid pattern: the module body is parsed once and
+// sift is WRITTEN IN BORU (siftSource below, embedded from sift.boru), following
+// the boru:repl / boru:test hybrid pattern: the module body is parsed once and
 // run in a fresh sub-registry that collects its `export "Sift" {…}`. The six
 // format families (kv, blocks, columns, dsv, fixed, pattern), the spec engine,
-// the coercion vocabulary, and the seven Sift words are all AQL — the loader
+// the coercion vocabulary, and the seven Sift words are all BORU — the loader
 // below is the only Go.
 //
-// Surface (v1, design decision "Pure AQL, Sift.* surface"): every kind is
+// Surface (v1, design decision "Pure BORU, Sift.* surface"): every kind is
 // reached through the Sift namespace — `Sift.parse <kind> <src>`,
 // `Sift.define`, `Sift.kinds`, etc. A module body runs in a discarded
 // sub-registry, so it cannot register a global `parse <kind>` macro kind the
 // importing program would see (that needs the parent registry, which only the
-// Go loader holds); the namespaced surface is the coherent pure-AQL form.
+// Go loader holds); the namespaced surface is the coherent pure-BORU form.
 
-//go:embed sift.aql
+//go:embed sift.boru
 var siftSource string
 
 var (
@@ -37,8 +37,8 @@ var (
 	siftParseErr  error
 )
 
-// BuildSiftModule loads the AQL-implemented aql:sift module: it parses the
-// embedded sift.aql once, runs it in a fresh sub-registry that inherits the
+// BuildSiftModule loads the BORU-implemented boru:sift module: it parses the
+// embedded sift.boru once, runs it in a fresh sub-registry that inherits the
 // parser + module resolver (so the body's own `import`s resolve), and collects
 // the `export "Sift" {…}` map. Mirrors BuildReplModule.
 func BuildSiftModule(parent *native.Registry) (native.ModuleDesc, error) {
@@ -63,10 +63,10 @@ func BuildSiftModule(parent *native.Registry) (native.ModuleDesc, error) {
 	modReg.InheritObserveHooks(parent)
 	// Tag sift's sub-registry as a coverage target (coverage.go): sift's fn
 	// bodies run on this registry, so a coverage run attributes their executed
-	// rows to "aql:sift". Inert unless a coverage hook is armed. Registering the
-	// source lets aql:test build the coverage denominator (all executable rows).
-	modReg.SetCoverID("aql:sift")
-	parent.RegisterCoverSource("aql:sift", siftSource)
+	// rows to "boru:sift". Inert unless a coverage hook is armed. Registering the
+	// source lets boru:test build the coverage denominator (all executable rows).
+	modReg.SetCoverID("boru:sift")
+	parent.RegisterCoverSource("boru:sift", siftSource)
 	modReg.ParseFunc = parent.ParseFunc
 	modReg.BaseDir = parent.BaseDir
 	modReg.Modules.InheritConfig(parent.Modules)
@@ -76,7 +76,7 @@ func BuildSiftModule(parent *native.Registry) (native.ModuleDesc, error) {
 		native.Register(modReg)
 	}
 
-	// Collect `export "Sift" {…}` from the preamble (the aql:test-style local
+	// Collect `export "Sift" {…}` from the preamble (the boru:test-style local
 	// exporter; see modules/test.go for why RunModuleBody cannot be reused).
 	exports := map[string]*native.OrderedMap{}
 	modReg.Defs.Delete("export")

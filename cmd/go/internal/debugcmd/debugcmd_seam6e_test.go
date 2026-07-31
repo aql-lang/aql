@@ -12,12 +12,12 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 func TestServeInitError(t *testing.T) {
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.AQL, error) { return nil, errors.New("init boom") }
+	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, errors.New("init boom") }
 	t.Cleanup(func() { langNew = orig })
 	var stdout, stderr bytes.Buffer
 	code := runServe(nil, &stdout, &stderr)
@@ -49,7 +49,7 @@ func TestWriteDiscoveryMarshalError(t *testing.T) {
 	orig := jsonMarshal
 	jsonMarshal = func(any) ([]byte, error) { return nil, errors.New("marshal boom") }
 	t.Cleanup(func() { jsonMarshal = orig })
-	path := filepath.Join(t.TempDir(), "aql-debug.json")
+	path := filepath.Join(t.TempDir(), "boru-debug.json")
 	writeDiscovery(path, "127.0.0.1:1", "")
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("discovery file written despite marshal error (stat err=%v)", err)

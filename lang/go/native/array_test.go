@@ -5,10 +5,10 @@ import (
 	"testing"
 )
 
-// arrayTestReg returns a registry with the aql:array module words
+// arrayTestReg returns a registry with the boru:array module words
 // registered as bare words, so these handler unit tests can exercise
 // them directly even though shape/reshape/where/etc. are no longer part
-// of the global default registry (they now live in the aql:array module).
+// of the global default registry (they now live in the boru:array module).
 // The core array words (iota, range, each, …) are present regardless.
 func arrayTestReg() *Registry {
 	r, _ := DefaultRegistry()
@@ -23,7 +23,7 @@ func arrayTestReg() *Registry {
 
 func TestIota(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{NewWord("iota"), NewInteger(5)})
+	result := runBORU(t, r, []Value{NewWord("iota"), NewInteger(5)})
 	list, _ := AsList(result[0])
 	if list.Len() != 5 {
 		t.Fatalf("iota 5: length = %d, want 5", list.Len())
@@ -39,7 +39,7 @@ func TestIota(t *testing.T) {
 
 func TestIotaZero(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{NewWord("iota"), NewInteger(0)})
+	result := runBORU(t, r, []Value{NewWord("iota"), NewInteger(0)})
 	list, _ := AsList(result[0])
 	if list.Len() != 0 {
 		t.Errorf("iota 0: length = %d, want 0", list.Len())
@@ -68,43 +68,43 @@ func assertIntList(t *testing.T, label string, result []Value, want []int64) {
 
 func TestRangeStartStop(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(2), NewInteger(6)})
+	result := runBORU(t, r, []Value{NewWord("range"), NewInteger(2), NewInteger(6)})
 	assertIntList(t, "range 2 6", result, []int64{2, 3, 4, 5})
 }
 
 // range 0 n 1 must equal iota n.
 func TestRangeMatchesIota(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(5), NewInteger(1)})
+	result := runBORU(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(5), NewInteger(1)})
 	assertIntList(t, "range 0 5 1", result, []int64{0, 1, 2, 3, 4})
 }
 
 func TestRangeStep(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(3)})
+	result := runBORU(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(3)})
 	assertIntList(t, "range 0 10 3", result, []int64{0, 3, 6, 9})
 }
 
 func TestRangeNegativeStep(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(5), NewInteger(0), NewInteger(-1)})
+	result := runBORU(t, r, []Value{NewWord("range"), NewInteger(5), NewInteger(0), NewInteger(-1)})
 	assertIntList(t, "range 5 0 -1", result, []int64{5, 4, 3, 2, 1})
 }
 
 // An empty range (start already past stop in the step direction) yields [].
 func TestRangeEmpty(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{NewWord("range"), NewInteger(5), NewInteger(5)})
+	result := runBORU(t, r, []Value{NewWord("range"), NewInteger(5), NewInteger(5)})
 	assertIntList(t, "range 5 5", result, []int64{})
 
-	result = runAQL(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(-1)})
+	result = runBORU(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(-1)})
 	assertIntList(t, "range 0 10 -1", result, []int64{})
 }
 
 // A zero step is rejected rather than looping forever.
 func TestRangeZeroStepErrors(t *testing.T) {
 	r := arrayTestReg()
-	if err := runAQLError(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(0)}); err == nil {
+	if err := runBORUError(t, r, []Value{NewWord("range"), NewInteger(0), NewInteger(10), NewInteger(0)}); err == nil {
 		t.Fatalf("range 0 10 0: expected error, got none")
 	}
 }
@@ -113,7 +113,7 @@ func TestRangeZeroStepErrors(t *testing.T) {
 
 func TestShapeFlat(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 		NewWord("shape"),
 	})
@@ -131,7 +131,7 @@ func TestShapeNested(t *testing.T) {
 		NewList([]Value{NewInteger(3), NewInteger(4)}),
 		NewList([]Value{NewInteger(5), NewInteger(6)}),
 	})
-	result := runAQL(t, r, []Value{input, NewWord("shape")})
+	result := runBORU(t, r, []Value{input, NewWord("shape")})
 	list, _ := AsList(result[0])
 	_as4, _ := AsInteger(list.Get(0))
 	_as3, _ := AsInteger(list.Get(1))
@@ -144,7 +144,7 @@ func TestShapeNested(t *testing.T) {
 
 func TestRank(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2)}),
 		NewWord("rank"),
 	})
@@ -158,7 +158,7 @@ func TestRank(t *testing.T) {
 		NewList([]Value{NewInteger(1), NewInteger(2)}),
 		NewList([]Value{NewInteger(3), NewInteger(4)}),
 	})
-	result = runAQL(t, r, []Value{input, NewWord("rank")})
+	result = runBORU(t, r, []Value{input, NewWord("rank")})
 	_as7, _ := AsInteger(result[0])
 	if _as7 != 2 {
 		_as8, _ := AsInteger(result[0])
@@ -170,7 +170,7 @@ func TestRank(t *testing.T) {
 
 func TestReshape(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("reshape"),
 		NewList([]Value{NewInteger(2), NewInteger(3)}),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4), NewInteger(5), NewInteger(6)}),
@@ -198,7 +198,7 @@ func TestFlattenFull(t *testing.T) {
 		NewList([]Value{NewInteger(1), NewList([]Value{NewInteger(2), NewList([]Value{NewInteger(3)})})}),
 		NewInteger(4),
 	})
-	result := runAQL(t, r, []Value{NewWord("flatten"), NewInteger(-1), input})
+	result := runBORU(t, r, []Value{NewWord("flatten"), NewInteger(-1), input})
 	list, _ := AsList(result[0])
 	if list.Len() != 4 {
 		t.Fatalf("flatten -1 length = %d, want 4", list.Len())
@@ -219,7 +219,7 @@ func TestFlattenDefaultOneLevel(t *testing.T) {
 	input := NewList([]Value{
 		NewList([]Value{NewInteger(1), NewList([]Value{NewInteger(2)})}),
 	})
-	result := runAQL(t, r, []Value{NewWord("flatten"), input})
+	result := runBORU(t, r, []Value{NewWord("flatten"), input})
 	list, _ := AsList(result[0])
 	// [[1,[2]]] flatten -> [1,[2]] : one level removed, inner [2] survives.
 	if list.Len() != 2 {
@@ -238,7 +238,7 @@ func TestTranspose(t *testing.T) {
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 		NewList([]Value{NewInteger(4), NewInteger(5), NewInteger(6)}),
 	})
-	result := runAQL(t, r, []Value{input, NewWord("transpose")})
+	result := runBORU(t, r, []Value{input, NewWord("transpose")})
 	outer, _ := AsList(result[0])
 	if outer.Len() != 3 {
 		t.Fatalf("transpose rows = %d, want 3", outer.Len())
@@ -252,7 +252,7 @@ func TestTranspose(t *testing.T) {
 	}
 }
 
-// --- indices: list-membership lookup (aql:array-util) ---
+// --- indices: list-membership lookup (boru:array-util) ---
 
 // indices is an array word (ArrayUtil.indices), distinct from the
 // string word indexof: for each needle, its index in the haystack, or
@@ -260,7 +260,7 @@ func TestTranspose(t *testing.T) {
 // haystack (the larger reference collection) is the final argument.
 func TestIndicesListLookup(t *testing.T) {
 	r := arrayTestReg() // seeds ArrayModuleNatives as bare words
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("indices"),
 		NewList([]Value{NewInteger(20), NewInteger(99), NewInteger(10)}),
 		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
@@ -274,7 +274,7 @@ func TestIndexofStringStillWorks(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 	// Haystack-last: forward form is `indexof needle haystack`.
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("indexof"), NewString("ll"), NewString("hello"),
 	})
 	got, _ := AsInteger(result[0])
@@ -288,7 +288,7 @@ func TestIndexofStringStillWorks(t *testing.T) {
 func TestIndexofListFormRemoved(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("indexof"),
 		NewList([]Value{NewInteger(20)}),
 		NewList([]Value{NewInteger(10), NewInteger(20)}),
@@ -302,7 +302,7 @@ func TestIndexofListFormRemoved(t *testing.T) {
 
 func TestCompress(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("compress"),
 		NewList([]Value{NewBoolean(true), NewBoolean(false), NewBoolean(true)}),
 		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
@@ -312,7 +312,7 @@ func TestCompress(t *testing.T) {
 
 func TestCompressMismatchErrors(t *testing.T) {
 	r := arrayTestReg()
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("compress"),
 		NewList([]Value{NewBoolean(true), NewBoolean(false)}),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
@@ -327,7 +327,7 @@ func TestCompressMismatchErrors(t *testing.T) {
 // eachrank 0 targets each scalar leaf; the body doubles it.
 func TestEachrankScalar(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("eachrank"), NewInteger(0),
 		NewList([]Value{NewWord("mul"), NewInteger(2)}),
 		NewList([]Value{
@@ -347,7 +347,7 @@ func TestEachrankScalar(t *testing.T) {
 
 func TestEachrankOverRankErrors(t *testing.T) {
 	r := arrayTestReg()
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("eachrank"), NewInteger(5),
 		NewList([]Value{NewWord("reverse")}),
 		NewList([]Value{NewInteger(1), NewInteger(2)}),
@@ -361,7 +361,7 @@ func TestEachrankOverRankErrors(t *testing.T) {
 
 func TestFoldaxisColumns(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("foldaxis"), NewInteger(0),
 		NewList([]Value{NewWord("add")}),
 		NewList([]Value{
@@ -374,7 +374,7 @@ func TestFoldaxisColumns(t *testing.T) {
 
 func TestFoldaxisRows(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("foldaxis"), NewInteger(1),
 		NewList([]Value{NewWord("add")}),
 		NewList([]Value{
@@ -387,7 +387,7 @@ func TestFoldaxisRows(t *testing.T) {
 
 func TestFoldaxisBadAxisErrors(t *testing.T) {
 	r := arrayTestReg()
-	err := runAQLError(t, r, []Value{
+	err := runBORUError(t, r, []Value{
 		NewWord("foldaxis"), NewInteger(2),
 		NewList([]Value{NewWord("add")}),
 		NewList([]Value{NewList([]Value{NewInteger(1)})}),
@@ -401,7 +401,7 @@ func TestFoldaxisBadAxisErrors(t *testing.T) {
 
 func TestReverse(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 		NewWord("reverse"),
 	})
@@ -418,7 +418,7 @@ func TestReverse(t *testing.T) {
 
 func TestTake(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("take"), NewInteger(2),
 		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30), NewInteger(40)}),
 	})
@@ -432,7 +432,7 @@ func TestTake(t *testing.T) {
 
 func TestTakeNegative(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("take"), NewInteger(-2),
 		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30), NewInteger(40)}),
 	})
@@ -448,7 +448,7 @@ func TestTakeNegative(t *testing.T) {
 
 func TestShed(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("shed"), NewInteger(1),
 		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30), NewInteger(40)}),
 	})
@@ -463,7 +463,7 @@ func TestShed(t *testing.T) {
 
 func TestWhere(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewList([]Value{NewBoolean(true), NewBoolean(false), NewBoolean(true), NewBoolean(false), NewBoolean(true)}),
 		NewWord("where"),
 	})
@@ -480,7 +480,7 @@ func TestWhere(t *testing.T) {
 
 func TestUnique(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewList([]Value{NewInteger(3), NewInteger(1), NewInteger(4), NewInteger(1), NewInteger(5)}),
 		NewWord("unique"),
 	})
@@ -502,7 +502,7 @@ func TestUnique(t *testing.T) {
 
 func TestGrade(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewList([]Value{NewInteger(30), NewInteger(10), NewInteger(40), NewInteger(20)}),
 		NewWord("grade"),
 	})
@@ -522,7 +522,7 @@ func TestGrade(t *testing.T) {
 
 func TestAt(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("at"),
 		NewList([]Value{NewInteger(2), NewInteger(0), NewInteger(1)}),
 		NewList([]Value{NewString("a"), NewString("b"), NewString("c")}),
@@ -540,7 +540,7 @@ func TestAt(t *testing.T) {
 
 func TestSortby(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("sortby"),
 		NewList([]Value{NewInteger(3), NewInteger(1), NewInteger(2)}),
 		NewList([]Value{NewString("c"), NewString("a"), NewString("b")}),
@@ -558,7 +558,7 @@ func TestSortby(t *testing.T) {
 
 func TestMember(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("member"),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 		NewList([]Value{NewInteger(2), NewInteger(4), NewInteger(6)}),
@@ -578,7 +578,7 @@ func TestMember(t *testing.T) {
 
 func TestWindow(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("window"), NewInteger(2),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
 	})
@@ -598,7 +598,7 @@ func TestWindow(t *testing.T) {
 
 func TestPairs(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
 		NewWord("pairs"),
 	})
@@ -612,7 +612,7 @@ func TestPairs(t *testing.T) {
 
 func TestReplicate(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("replicate"),
 		NewList([]Value{NewInteger(2), NewInteger(0), NewInteger(3)}),
 		NewList([]Value{NewInteger(10), NewInteger(20), NewInteger(30)}),
@@ -636,7 +636,7 @@ func TestReplicate(t *testing.T) {
 
 func TestGroupTwoArgs(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("group"),
 		NewList([]Value{NewAtom("a"), NewAtom("b"), NewAtom("a")}),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
@@ -658,7 +658,7 @@ func TestGroupTwoArgs(t *testing.T) {
 
 func TestEach(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("each"),
 		NewList([]Value{NewWord("mul"), NewInteger(2)}),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
@@ -680,7 +680,7 @@ func TestEach(t *testing.T) {
 // produces nothing, leaving the stack clean.
 func TestForEachProducesNothing(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
 		NewWord("for-each"),
 		NewList([]Value{NewWord("drop")}),
@@ -696,7 +696,7 @@ func TestForEachProducesNothing(t *testing.T) {
 func TestForEachAllowsEmptyBody(t *testing.T) {
 	r := arrayTestReg()
 	// Body `drop` consumes the element and pushes nothing.
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewList([]Value{NewInteger(10), NewInteger(20)}),
 		NewWord("for-each"),
 		NewList([]Value{NewWord("drop")}),
@@ -737,7 +737,7 @@ func TestForEachPropagatesBodyError(t *testing.T) {
 
 func TestFoldSum(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("fold"),
 		NewList([]Value{NewWord("add")}),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
@@ -750,7 +750,7 @@ func TestFoldSum(t *testing.T) {
 
 func TestFoldProduct(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("fold"),
 		NewList([]Value{NewWord("mul")}),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
@@ -765,7 +765,7 @@ func TestFoldProduct(t *testing.T) {
 
 func TestScan(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("scan"),
 		NewList([]Value{NewWord("add")}),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3), NewInteger(4)}),
@@ -785,7 +785,7 @@ func TestScan(t *testing.T) {
 
 func TestOuterMul(t *testing.T) {
 	r := arrayTestReg()
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("outer"),
 		NewList([]Value{NewWord("mul")}),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewInteger(3)}),
@@ -822,7 +822,7 @@ func TestInnerMatMul(t *testing.T) {
 		NewList([]Value{NewInteger(5), NewInteger(6)}),
 		NewList([]Value{NewInteger(7), NewInteger(8)}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("inner"),
 		NewList([]Value{NewWord("mul")}),
 		NewList([]Value{NewWord("add")}),
@@ -854,7 +854,7 @@ func TestCompositionSumOfSquares(t *testing.T) {
 	r := arrayTestReg()
 	// (each [dup mul] (iota 5)) produces [0,1,4,9,16]
 	// fold [add] over that produces 30
-	result := runAQL(t, r, []Value{
+	result := runBORU(t, r, []Value{
 		NewWord("fold"),
 		NewList([]Value{NewWord("add")}),
 		NewOpenParen(),

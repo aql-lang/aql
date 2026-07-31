@@ -1,21 +1,21 @@
-# AQL through a Racket Lens — Features Worth Borrowing
+# BORU through a Racket Lens — Features Worth Borrowing
 
 **Status:** analysis / design note
-**Scope:** evaluates AQL against the *distinctively Racket* parts of the
+**Scope:** evaluates BORU against the *distinctively Racket* parts of the
 Scheme tradition — runtime contracts with blame, occurrence typing,
 delimited continuations, language-oriented programming, structural
 `match`, parameters, custodians/sandboxing — and proposes concrete,
-prioritized features that fit AQL's concatenative, typed, data-first
+prioritized features that fit BORU's concatenative, typed, data-first
 identity.
 
 > **Why a separate note from `LISP-ANALYSIS.5.md`.** That document
-> already grades AQL against *core* LISP/Scheme: homoiconicity, hygienic
-> macros, `gensym`, quasiquote, `eval`/`read`, combinators. AQL has since
+> already grades BORU against *core* LISP/Scheme: homoiconicity, hygienic
+> macros, `gensym`, quasiquote, `eval`/`read`, combinators. BORU has since
 > landed hygienic `macro`, `gensym`, quasiquote-for-code, and the `mini`
 > mini-language system, closing most of that gap. This note deliberately
 > skips what core Scheme already motivated and looks only at the layers
 > Racket *added on top* of Scheme — the research-grade machinery that is
-> Racket's, not Lisp's-in-general. Several of these map onto AQL design
+> Racket's, not Lisp's-in-general. Several of these map onto BORU design
 > work already in flight (the bidirectional checker, policy blame chains,
 > the services supervisor), which is exactly why they are worth naming.
 
@@ -23,23 +23,23 @@ identity.
 
 ## 0. TL;DR scorecard
 
-| Racket capability (beyond core Scheme) | AQL today | Fit | One-line verdict |
+| Racket capability (beyond core Scheme) | BORU today | Fit | One-line verdict |
 |---|---|---|---|
-| Contracts with **blame** (`racket/contract`) | refinement types (newtype/subset); module `export`; policy blame chains | **A** | The headline opportunity: AQL has the *predicates* and a *blame* idiom; it lacks higher-order contracts and a contracted module boundary |
-| **Occurrence typing** (Typed Racket) | checker already does guard/complement narrowing on `is`; `tor` unions | **A** | AQL is *already walking toward this* — Racket is the map of where it leads |
+| Contracts with **blame** (`racket/contract`) | refinement types (newtype/subset); module `export`; policy blame chains | **A** | The headline opportunity: BORU has the *predicates* and a *blame* idiom; it lacks higher-order contracts and a contracted module boundary |
+| **Occurrence typing** (Typed Racket) | checker already does guard/complement narrowing on `is`; `tor` unions | **A** | BORU is *already walking toward this* — Racket is the map of where it leads |
 | **Delimited continuations** (`shift`/`reset`) | the tape *is* a reified continuation; `await`, `error`, TCE all exploit it | **A−** | The Lisp note filed `call/cc` as "against the grain"; the *tape model* makes **delimited** control more natural than that verdict assumed |
 | **Structural `match`** (`racket/match`) | `case` (value), `unpack` (map keys), type-directed dispatch | **B+** | Real destructuring exists but is shallow; nested/predicate/ellipsis patterns are missing |
 | **Parameters** (`parameterize`) | `Store` prototype chain; copy-on-write child contexts | **B+** | Store gives dynamic scope; a true `parameter` adds dynamic-extent restore + clean `await` semantics |
-| Language-oriented programming (`#lang`, reader tower) | `mini` + `aql:minilang` + `+re/…/` reader sugar | **B** | AQL has the *spirit* and one delivery vector; Racket shows the reader/expander headroom above it |
-| **Custodians + sandbox** (`racket/sandbox`) | capabilities, policy profiles, step/tape budgets, the `serve` supervisor | **B+** | AQL has the *flags* and *budgets*; Racket has the *hierarchical resource owner* that ties them to a lifetime |
+| Language-oriented programming (`#lang`, reader tower) | `mini` + `boru:minilang` + `+re/…/` reader sugar | **B** | BORU has the *spirit* and one delivery vector; Racket shows the reader/expander headroom above it |
+| **Custodians + sandbox** (`racket/sandbox`) | capabilities, policy profiles, step/tape budgets, the `serve` supervisor | **B+** | BORU has the *flags* and *budgets*; Racket has the *hierarchical resource owner* that ties them to a lifetime |
 | Units / signatures (`racket/unit`) | modules + "surfaces" (operation contracts) | **B** | "Surfaces" are already half of a unit signature; linkable/parameterized modules are the other half |
 | Submodules (`module+ test`) | separate `lang/spec/*.tsv`; `_test.go` | **B** | Co-located, strippable test/main submodules are a packaging idea, not a power gap |
 
-Net: AQL's strongest single opportunity from Racket is **contracts with
+Net: BORU's strongest single opportunity from Racket is **contracts with
 blame on module boundaries**, because the constituent parts (predicate
 refinements, typed exports, a blame-chain idiom in policy) already exist
 and only need to be composed. The most *intellectually* interesting is
-**delimited continuations**, because AQL's tape is an unusually literal
+**delimited continuations**, because BORU's tape is an unusually literal
 continuation and the existing "against the grain" verdict deserves
 revisiting. And the most *timely* is **occurrence typing**, which names
 the destination the bidirectional-checker work is already driving toward.
@@ -54,8 +54,8 @@ layered on top of R⁶RS: a contract system with blame, Typed Racket
 continuations, the `#lang` language tower (a replaceable reader *and*
 expander per source file), `racket/match`, parameters, and a
 custodian-based resource model. Those are the features this note mines —
-each evaluated against what AQL *already has*, so the recommendation is
-always "compose existing AQL parts," never "bolt a parenthesised Racket
+each evaluated against what BORU *already has*, so the recommendation is
+always "compose existing BORU parts," never "bolt a parenthesised Racket
 on top."
 
 ---
@@ -87,9 +87,9 @@ Three properties make it more than "an assert":
    *inside* of a module runs unchecked and fast while every value
    crossing out is policed.
 
-### 2.2 What AQL already has
+### 2.2 What BORU already has
 
-AQL is startlingly close on the parts that are usually hardest:
+BORU is startlingly close on the parts that are usually hardest:
 
 - **Predicates as types.** A subset refinement `def Big (Integer gt 10)`
   is exactly a *flat contract* — a value-sensitive membership test
@@ -100,20 +100,20 @@ AQL is startlingly close on the parts that are usually hardest:
 - **Typed module exports.** `export "Mod" {double: double/r}` already
   ships functions across a namespace boundary; the export map is the
   natural place to hang a contract.
-- **A blame idiom already in the codebase.** `aql policy explain`
+- **A blame idiom already in the codebase.** `boru policy explain`
   "prints the blame chain for a decision, so 'why was this denied?' is
-  always answerable" (EXPLANATION → Capabilities). AQL has *already
+  always answerable" (EXPLANATION → Capabilities). BORU has *already
   decided* that blame attribution is a first-class UX. Contracts are the
   same idea applied to *values crossing a module edge* instead of
   *effects crossing a capability gate*.
 
 ### 2.3 The gap, and why it is the highest-leverage one
 
-What AQL lacks is the **higher-order** half and the **boundary
+What BORU lacks is the **higher-order** half and the **boundary
 attribution** half:
 
 - A refinement constrains a value *now*. It cannot say "this `fn`, every
-  time you later call it, must map `Integer → (Integer gt 0)`." AQL
+  time you later call it, must map `Integer → (Integer gt 0)`." BORU
   checks a `Function`'s *signature types* structurally, but it does not
   *wrap* a passed-in function so that a violation at call site N is
   caught and attributed.
@@ -121,7 +121,7 @@ attribution** half:
   type. It does not say *whose fault* the boundary crossing was — the
   module that promised the type, or the caller that supplied the value.
 
-A concrete sketch in AQL's grain — a contracted export:
+A concrete sketch in BORU's grain — a contracted export:
 
 ```
 # proposal — a contract rider on an export, blame-aware
@@ -133,7 +133,7 @@ export "Bank" {
 The `:::` rider is just the `fn` signature lifted to a *boundary*
 obligation: arguments blame the caller, the result blames `Bank`, and a
 function-typed parameter would be *wrapped* so a later misuse is caught
-at the offending call rather than silently. Because AQL signatures are
+at the offending call rather than silently. Because BORU signatures are
 already typed and `policy explain` already renders blame chains, this is
 **composition of existing machinery**, not new semantics:
 
@@ -147,17 +147,17 @@ already typed and `policy explain` already renders blame chains, this is
 (and optionally to `fn` boundaries via a `/c` modifier), reusing
 refinement predicates as flat contracts and the policy blame renderer
 for attribution. This is the single best fit between a Racket signature
-feature and an AQL feature that is 80% built.
+feature and a BORU feature that is 80% built.
 
 ### 2.4 The enabling primitive: chaperones / impersonators
 
 Racket implements higher-order contracts on top of **chaperones** and
 **impersonators** — wrappers that interpose on a value's operations
 (application, field access) while preserving its identity (`equal?` and,
-for chaperones, behaviour up to errors). This is the same shape as AQL's
+for chaperones, behaviour up to errors). This is the same shape as BORU's
 capability gate: a side-effecting word is already "interposed" by a
 capability check before it runs. Generalizing that into a value-level
-*interposition wrapper* would give AQL one primitive that serves both
+*interposition wrapper* would give BORU one primitive that serves both
 contracts (check on apply) and finer capabilities (e.g. a `read`
 chaperoned to a path whitelist — exactly the `capabilities.FileOps`
 layering EXPLANATION describes, but as a value rather than a host hook).
@@ -185,9 +185,9 @@ in the *else* branch. Typed Racket formalizes this with "latent
 predicates" attached to functions and a logic of positive/negative type
 propositions through `and`/`or`/`not`.
 
-### 3.2 What AQL already does
+### 3.2 What BORU already does
 
-This is not a gap — it is a *direction AQL is actively building*:
+This is not a gap — it is a *direction BORU is actively building*:
 
 - `checker-accuracy-review.10.md`: "Guard narrowing with real algebra
   (`ApplyGuardNarrowing` / `ApplyComplementNarrowing`): then-branch
@@ -195,23 +195,23 @@ This is not a gap — it is a *direction AQL is actively building*:
 - `BIDIRECTIONAL-CHECKER.0.md`: "forward propagation + narrowing + join
   rules," narrowing at guards, joining at control-flow merges.
 - REFERENCE.md already documents that "a guard narrows the else branch
-  by the [complement]," and AQL has `tor`/`tand`/`tnot` as a real type
+  by the [complement]," and BORU has `tor`/`tand`/`tnot` as a real type
   algebra with De Morgan identities (`tnot (tnot T)` is `T`).
 
-So AQL has the *propositions* (`is` guards), the *algebra* (`tor`/`tand`/
-`tnot`), and the *then/else narrowing*. What Typed Racket has that AQL's
+So BORU has the *propositions* (`is` guards), the *algebra* (`tor`/`tand`/
+`tnot`), and the *then/else narrowing*. What Typed Racket has that BORU's
 notes flag as not-yet-done:
 
 - **Narrowing through bound `and`/`or`**, not just a single `is` guard —
   TR threads propositions through boolean connectives so
   `if (and (x is A) (y is B)) […]` narrows *both* in the then-branch.
-  AQL's `aql:logic-util` connectives are the natural carriers.
+  BORU's `boru:logic-util` connectives are the natural carriers.
 - **Latent predicates on user functions** — a user predicate
   `def even? fn [[n:Integer] [Boolean] …]` that, when used as a guard,
   narrows its argument to a refinement. TR's "this function *is* a type
-  test" is exactly AQL's predicate-refinement story (`def Big (Integer
+  test" is exactly BORU's predicate-refinement story (`def Big (Integer
   gt 10)`) lifted into flow analysis.
-- **Aliasing / path narrowing** — TR narrows `(car x)` not just `x`. AQL
+- **Aliasing / path narrowing** — TR narrows `(car x)` not just `x`. BORU
   would narrow a `.field` access or a dotted store path.
 
 ### 3.3 Recommendation
@@ -219,7 +219,7 @@ notes flag as not-yet-done:
 **Tier 1 (it's already the roadmap).** Frame the in-flight checker work
 explicitly as *occurrence typing*, and use Typed Racket's proposition
 calculus as the reference design for two extensions: (a) propagate
-narrowing through `aql:logic-util` `and`/`or`/`not`, and (b) let a
+narrowing through `boru:logic-util` `and`/`or`/`not`, and (b) let a
 user `Boolean`-returning fn whose signature is a refinement act as a
 *type-test* that narrows its argument. Both reuse the existing
 `tor`/`tand`/`tnot` algebra and the `ApplyGuardNarrowing` machinery. The
@@ -238,7 +238,7 @@ model." That verdict is right for *undelimited* `call/cc` (capturing the
 *whole* rest of the computation in a stack VM is genuinely awkward). But
 Racket's modern answer is **delimited** continuations (`shift`/`reset`,
 or `call-with-continuation-prompt` + `call-with-composable-continuation`),
-and AQL's execution model is unusually well-suited to them.
+and BORU's execution model is unusually well-suited to them.
 
 ### 4.2 Why the tape changes the calculus
 
@@ -249,7 +249,7 @@ EXPLANATION → "Tail calls and the tape" says it outright:
 
 That is a *reified, concrete, inspectable* continuation — the thing
 `call/cc` has to reconstruct in most languages already exists as a data
-structure in AQL. The engine *already* manipulates it as a delimited
+structure in BORU. The engine *already* manipulates it as a delimited
 object:
 
 - **TCE** runs a *parked tail* (a delimited slice of the continuation)
@@ -272,13 +272,13 @@ reset [
 ]                              # a lazy producer; `yield` = shift to the prompt
 ```
 
-The payoffs map onto things AQL either lacks or special-cases:
+The payoffs map onto things BORU either lacks or special-cases:
 generators/lazy streams (cf. `STREAM-WORDS.0.md`), cooperative
 coroutines, backtracking search (a natural fit for the Prolog-flavoured
 `unify`), and an `await` whose suspension point is a value rather than a
 goroutine. The mutable-vs-immutable discipline (EXPLANATION →
 Immutability) is also what makes captured continuations *safe* to resume
-in AQL: immutable values are free to re-enter, and the model already
+in BORU: immutable values are free to re-enter, and the model already
 forbids sharing mutable Ideals across sub-engines.
 
 ### 4.3 Recommendation
@@ -290,14 +290,14 @@ not undelimited `call/cc`. Start with the narrowest useful target — a
 `STREAM-WORDS` design, which it may subsume. The Lisp note's caution
 holds for `call/cc`; it does not hold for the delimited form on a tape
 that is *already* a first-class continuation. This is the most
-distinctive thing AQL could take from Racket precisely *because* its
+distinctive thing BORU could take from Racket precisely *because* its
 runtime is closer to the theory than a typical stack VM.
 
 ---
 
 ## 5. Structural `match` — beyond `case` and `unpack`
 
-### 5.1 What AQL has
+### 5.1 What BORU has
 
 - **`case`** dispatches on a *value* against literal/block pairs with a
   default (`case 2 [1 "one" 2 "two" "many"]`).
@@ -306,7 +306,7 @@ runtime is closer to the theory than a typical stack VM.
   capitalised targets.
 - **Type-directed dispatch** picks a `fn` signature by argument *types*.
 
-Between them AQL covers value-dispatch, shallow record destructuring, and
+Between them BORU covers value-dispatch, shallow record destructuring, and
 type-overloading.
 
 ### 5.2 What `racket/match` adds
@@ -323,12 +323,12 @@ recursively*:
   [(? string? s)         ...])  ; predicate pattern
 ```
 
-The properties AQL's three constructs lack *jointly*: **nested**
+The properties BORU's three constructs lack *jointly*: **nested**
 patterns (destructure a list-of-records-of-lists in one shape), **arity
 and structure matching** on lists (not just maps), **predicate patterns**
 (`(? Big n)` binds only if `n is Big`), **ellipsis** (`...` capturing a
 variable-length tail), and **or-patterns** with shared bindings. Crucially
-for AQL, predicate patterns would let *refinement types double as match
+for BORU, predicate patterns would let *refinement types double as match
 guards* — `match` on `[(Big n) …]` reuses the membership question the
 whole type system already answers, exactly the way `extends C` reuses
 `is C` for generic bounds (EXPLANATION → Generics).
@@ -350,7 +350,7 @@ turns three partial destructurers into one uniform one — the same
 
 ### 6.1 Store vs parameters
 
-AQL's `Store` (EXPLANATION → Store and context) already gives
+BORU's `Store` (EXPLANATION → Store and context) already gives
 dynamically-scoped, prototype-chained, copy-on-write bindings, and
 sub-engines (`do`, `for`, `each`, `await`) inherit the parent's store.
 That is most of what dynamic binding is for. Racket's **parameters**
@@ -366,9 +366,9 @@ restores the old value), and well-defined **interaction with threads**
   (render x))     ; sees 8; on exit (even via exception) reverts to 2
 ```
 
-### 6.2 Why it matters for AQL specifically
+### 6.2 Why it matters for BORU specifically
 
-Two AQL features make parameters more than sugar:
+Two BORU features make parameters more than sugar:
 
 - **`await` and sub-engines.** Branches run in independent sub-engines
   that inherit the store but whose mutations are local (EXPLANATION →
@@ -395,8 +395,8 @@ semantics and a typed, named handle for the rebindable thing.
 
 ## 7. Language-oriented programming — the headroom above `mini`
 
-AQL already ships the *spirit* of Racket's signature feature: `mini` +
-`aql:minilang` register embedded notations (regex, JSONPath, jq, XPath,
+BORU already ships the *spirit* of Racket's signature feature: `mini` +
+`boru:minilang` register embedded notations (regex, JSONPath, jq, XPath,
 infix math, brainfuck) behind one macro and one standard signature, with
 static checking through the expansion, compile hooks for staging, and
 even a `+re/…/` reader-sugar literal (`MINILANG.5.md`). That is a real,
@@ -408,17 +408,17 @@ near-term ask):
 - **A replaceable reader,** not just a replaceable expander. `mini`
   operates on already-lexed forms (a string `src`); Racket lets a
   `#lang` swap the *reader* so a whole file is a different surface
-  syntax that still compiles to the host. AQL's `+name/…/` literal is a
+  syntax that still compiles to the host. BORU's `+name/…/` literal is a
   tiny step in this direction (a custom `LexMatcher`); the general form
   would be per-file or per-region reader selection.
 - **Languages as modules.** In Racket a `#lang` *is* a module that
-  exports the bindings (and reader) the language consists of. AQL's
+  exports the bindings (and reader) the language consists of. BORU's
   module system + `mini` kinds are close; the missing piece is treating
-  a *whole AQL dialect* (a curated set of words + a reader) as an
+  a *whole BORU dialect* (a curated set of words + a reader) as an
   importable unit.
 
 **Recommendation (Tier 3 / horizon).** No action needed now — `mini` is
-the right-sized version for AQL's audience. Record `#lang` as the
+the right-sized version for BORU's audience. Record `#lang` as the
 upper bound: if embedded-DSL demand grows past one-line notations toward
 whole-file alternative surfaces, the path is *reader* selection layered
 on the existing `LexMatcher`, with a dialect packaged as a module.
@@ -427,9 +427,9 @@ on the existing `LexMatcher`, with a dialect packaged as a module.
 
 ## 8. Custodians and sandboxing — a resource *owner* for the services surface
 
-### 8.1 What AQL has
+### 8.1 What BORU has
 
-AQL already has strong *enforcement*: capabilities (one flag per system),
+BORU already has strong *enforcement*: capabilities (one flag per system),
 policy profiles (allow/deny over `scope.op` with quantitative caps),
 step budgets (`evaluation_limit`), tape-growth ceilings
 (`tape_exhausted`), and a `serve` supervisor that "composes several
@@ -446,11 +446,11 @@ a **memory limit**, a **time limit**, and a restricted namespace — the
 custodian is what makes "kill everything this evaluation spawned,
 including what it leaked" a single, reliable operation.
 
-The mapping to AQL is direct:
+The mapping to BORU is direct:
 
-- AQL's `exec` HTTP endpoint and the Wasm playground run *untrusted user
+- BORU's `exec` HTTP endpoint and the Wasm playground run *untrusted user
   code* — Racket's sandbox is the reference for "time + memory +
-  capability" as one bounded evaluation, where AQL today has time
+  capability" as one bounded evaluation, where BORU today has time
   (step budget) and capability (policy) but no memory-bounded,
   one-call-teardown *owner*.
 - The `serve` supervisor manages services that "each own a scarce
@@ -480,40 +480,40 @@ the one axis the current model leaves implicit.
 
 ## 9. Smaller borrowings (Tier 3)
 
-- **Units / module signatures (`racket/unit`).** AQL "surfaces" are
+- **Units / module signatures (`racket/unit`).** BORU "surfaces" are
   already "a pure operation contract: a named set of required
   [operations]" (REFERENCE §surfaces) — that is half of a Racket *unit
   signature*. The other half is *linkable, parameterized* modules: a
   module that imports an abstract surface and is linked against a
   concrete provider at load time (dependency injection without a global
-  registry). Worth considering if AQL wants pluggable backends (e.g. a
+  registry). Worth considering if BORU wants pluggable backends (e.g. a
   `Store` interface with file/memory/remote implementations) named by
   signature rather than imported by id.
 
 - **Submodules (`module+ test` / `main`).** Racket co-locates tests and
-  the entry point as *submodules* stripped from production builds. AQL
+  the entry point as *submodules* stripped from production builds. BORU
   keeps tests in `lang/spec/*.tsv` and `_test.go`. A `submodule test [
-  … ]` that the runner picks up but `aql build` strips would let a
-  single `.aql` file carry its own battery — a packaging convenience
+  … ]` that the runner picks up but `boru build` strips would let a
+  single `.boru` file carry its own battery — a packaging convenience
   aligned with "pair every positive test with a negative one."
 
 - **Phase separation in the macro system.** Racket strictly separates
   compile-time (`begin-for-syntax`, phase 1) from runtime (phase 0).
-  AQL macros are "define-before-use, expand left-to-right" (MACROS.8.md)
+  BORU macros are "define-before-use, expand left-to-right" (MACROS.8.md)
   — a single-phase model that works because expansion re-enters the same
-  evaluator. As the compiled/bytecode path matures (the `aql-bytecode-*`
+  evaluator. As the compiled/bytecode path matures (the `boru-bytecode-*`
   notes), Racket's phase discipline is the reference for keeping macro
   expansion's effects out of the runtime image.
 
 - **Generators / `for` comprehensions.** Racket's `for/list`,
   `for/fold`, sequences, and `in-range`/`in-list` unify iteration over
-  any sequence. AQL has `each`/`fold`/`scan`/`outer`/`inner` and the
+  any sequence. BORU has `each`/`fold`/`scan`/`outer`/`inner` and the
   `STREAM-WORDS` design; if delimited continuations (§4) land, Racket-
   style lazy generators fall out, and a unified sequence protocol
   (one `Iterable` Ideal that `each`/`fold` dispatch on) would tie the
   array words and streams together.
 
-- **Scribble-style executed documentation.** AQL already generates
+- **Scribble-style executed documentation.** BORU already generates
   `describe` from the live engine and runs `# returns …` examples as
   spec rows — the core of Scribble's "documentation examples are
   tested." The remaining Scribble idea is *cross-referenced* prose docs
@@ -525,7 +525,7 @@ the one axis the current model leaves implicit.
 
 ## 10. Recommended roadmap
 
-| # | Item | Racket source | Tier | Effort | Reuses (already in AQL) |
+| # | Item | Racket source | Tier | Effort | Reuses (already in BORU) |
 |---|---|---|---|---|---|
 | 1 | Contracts with blame on exports / `fn` boundaries | `racket/contract` | 1 | M | subset refinements, typed exports, `policy explain` blame chain |
 | 2 | Frame + extend the checker as **occurrence typing** | Typed Racket | 1 | M | `ApplyGuardNarrowing`, `tor`/`tand`/`tnot`, bidirectional checker |
@@ -535,11 +535,11 @@ the one axis the current model leaves implicit.
 | 6 | Custodian-style resource owner + bounded `exec`/Wasm eval | custodians, `racket/sandbox` | 2 | L | `serve` supervisor, capabilities, policy, step/tape budgets |
 | 7 | Value-interposition chaperone (enables #1; finer capabilities) | chaperones/impersonators | 2 | L | capability gate, `capabilities.FileOps` layering |
 | 8 | Units / signature-linked modules | `racket/unit` | 3 | L | "surfaces", module system |
-| 9 | `submodule test`/`main` | `module+` | 3 | S | spec runner, `aql build` |
+| 9 | `submodule test`/`main` | `module+` | 3 | S | spec runner, `boru build` |
 
 **Smallest high-value slice.** Ship **#1 (contracts/blame)** and **#2
 (occurrence-typing framing + boolean-connective narrowing)** first: both
-*compose parts AQL already has* (predicates, typed exports, blame
+*compose parts BORU already has* (predicates, typed exports, blame
 rendering, guard narrowing) rather than adding engine machinery, and
 both move metrics the project already tracks (boundary safety; checker
 false positives). Then **#3 `match`** and **#4 `parameter`** as
@@ -553,18 +553,18 @@ before committing.
 
 ## 11. Closing assessment
 
-Racket's lesson for AQL is narrower and sharper than core Scheme's was.
-The Lisp tradition told AQL to finish its *metaprogramming floor*
-(macros, hygiene, eval) — and it largely has. Racket tells AQL something
+Racket's lesson for BORU is narrower and sharper than core Scheme's was.
+The Lisp tradition told BORU to finish its *metaprogramming floor*
+(macros, hygiene, eval) — and it largely has. Racket tells BORU something
 about its *next* floor: that the systems Racket built on top of Scheme —
 contracts with blame, occurrence typing, delimited control, custodial
-resource ownership — are each a place where **AQL has already, often
-independently, built the hard half**. AQL has predicates and a blame UX
+resource ownership — are each a place where **BORU has already, often
+independently, built the hard half**. BORU has predicates and a blame UX
 but no contracted boundary; a narrowing checker but no name for it; a
 reified-continuation tape but no `shift`; budgets and a supervisor but no
 reclaimable owner. In every case the recommendation is the same one the
 Lisp note reached: *assemble existing primitives into a coherent
 surface.* The difference is that the primitives are now more advanced, so
-the surfaces AQL can assemble from them — a blame-aware module boundary,
+the surfaces BORU can assemble from them — a blame-aware module boundary,
 an occurrence-typed checker, a continuation-based generator, a custodial
-sandbox — are correspondingly more powerful, and more uniquely AQL's own.
+sandbox — are correspondingly more powerful, and more uniquely BORU's own.

@@ -7,7 +7,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // TBytes is the Scalar/Bytes type — an immutable byte string and the
@@ -59,13 +59,13 @@ func newBytes(b []byte) Value { return eng.NewExtension(TBytes, b) }
 
 // NewBytesValue wraps an OWNED []byte as a Bytes value without copying —
 // same contract as newBytes (the caller must never retain or mutate the
-// slice). Exported for the aql:net socket words, whose recv path hands
+// slice). Exported for the boru:net socket words, whose recv path hands
 // over freshly-read buffers (the copy-on-ingest boundary newBytes's doc
 // anticipates).
 func NewBytesValue(b []byte) Value { return newBytes(b) }
 
 // AsBytesValue unwraps a Bytes value's backing slice (shared, not
-// copied); ok=false when v is not a concrete Bytes. Exported for aql:net.
+// copied); ok=false when v is not a concrete Bytes. Exported for boru:net.
 func AsBytesValue(v Value) ([]byte, bool) { return asBytes(v) }
 
 // asBytes extracts the backing slice of a Bytes value.
@@ -286,7 +286,7 @@ var bytesNatives = []NativeFunc{
 func convertStringToBytes(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	s, err := args[1].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("bytes_error", "convert Bytes: expected a String", "convert")
+		return nil, r.BoruError("bytes_error", "convert Bytes: expected a String", "convert")
 	}
 	return []Value{newBytes([]byte(s))}, nil
 }
@@ -294,10 +294,10 @@ func convertStringToBytes(args []Value, _ map[string]Value, _ []Value, r *Regist
 func convertBytesToString(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	b, ok := asBytes(args[1])
 	if !ok {
-		return nil, r.AqlError("bytes_error", "convert String: expected Bytes", "convert")
+		return nil, r.BoruError("bytes_error", "convert String: expected Bytes", "convert")
 	}
 	if !utf8.Valid(b) {
-		return nil, r.AqlError("bad-encoding", "convert String: bytes are not valid UTF-8", "convert")
+		return nil, r.BoruError("bad-encoding", "convert String: bytes are not valid UTF-8", "convert")
 	}
 	return []Value{NewString(string(b))}, nil
 }
@@ -311,10 +311,10 @@ func convertListToBytes(args []Value, _ map[string]Value, _ []Value, r *Registry
 	for i := 0; i < lst.Len(); i++ {
 		n, ierr := lst.Get(i).AsConcreteInteger()
 		if ierr != nil {
-			return nil, r.AqlError("expected-byte", fmt.Sprintf("convert Bytes: element %d is not an Integer", i), "convert")
+			return nil, r.BoruError("expected-byte", fmt.Sprintf("convert Bytes: element %d is not an Integer", i), "convert")
 		}
 		if n < 0 || n > 255 {
-			return nil, r.AqlError("expected-byte", fmt.Sprintf("convert Bytes: element %d = %d is out of range 0-255", i, n), "convert")
+			return nil, r.BoruError("expected-byte", fmt.Sprintf("convert Bytes: element %d = %d is out of range 0-255", i, n), "convert")
 		}
 		out[i] = byte(n)
 	}
@@ -324,7 +324,7 @@ func convertListToBytes(args []Value, _ map[string]Value, _ []Value, r *Registry
 func convertBytesToList(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	b, ok := asBytes(args[1])
 	if !ok {
-		return nil, r.AqlError("bytes_error", "convert List: expected Bytes", "convert")
+		return nil, r.BoruError("bytes_error", "convert List: expected Bytes", "convert")
 	}
 	out := make([]Value, len(b))
 	for i, c := range b {
@@ -338,7 +338,7 @@ func convertBytesToList(args []Value, _ map[string]Value, _ []Value, r *Registry
 func convertBytesToBytes(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	b, ok := asBytes(args[1])
 	if !ok {
-		return nil, r.AqlError("bytes_error", "convert Bytes: expected Bytes", "convert")
+		return nil, r.BoruError("bytes_error", "convert Bytes: expected Bytes", "convert")
 	}
 	return []Value{newBytes(append([]byte(nil), b...))}, nil
 }
@@ -421,7 +421,7 @@ var intWidths = map[string]struct {
 	"i8": {1, true}, "i16": {2, true}, "i32": {4, true}, "i64": {8, true},
 }
 
-// binaryFieldType maps a segment's wire type to the AQL value type a decoded
+// binaryFieldType maps a segment's wire type to the BORU value type a decoded
 // field carries — used to build the spec class's field schema so a Binary
 // instance validates and type-narrows like any object instance.
 func binaryFieldType(seg bitSeg) *Type {
@@ -454,7 +454,7 @@ func binaryFieldSchema(segs []bitSeg) *OrderedMap {
 // readBitSegments reads the spec, a `List` of segment `Map`s. Each Map is a
 // fully-structured, JSON-representable descriptor that this code only READS —
 // there is NO token-level / sub-language parsing (ADR-007: no secondary
-// parsing; every AQL structure is plain Node data a macro could construct).
+// parsing; every BORU structure is plain Node data a macro could construct).
 // Segment Map keys:
 //   - name (String) | value (Integer) — exactly one. `name` binds (unpack) or
 //     reads from scope (pack); `value` is a pack constant / unpack match-guard.
@@ -480,7 +480,7 @@ func readBitSegments(spec Value, r *Registry, word string) ([]bitSeg, error) {
 	}
 	for i := range segs {
 		if (segs[i].typ == "bits" || segs[i].typ == "pad") && !segs[i].hasSize {
-			return nil, r.AqlError("bytes_error", fmt.Sprintf("%s: %s segment needs a `size` (bit count)", word, segs[i].typ), word)
+			return nil, r.BoruError("bytes_error", fmt.Sprintf("%s: %s segment needs a `size` (bit count)", word, segs[i].typ), word)
 		}
 	}
 	return segs, nil
@@ -489,7 +489,7 @@ func readBitSegments(spec Value, r *Registry, word string) ([]bitSeg, error) {
 func readOneSeg(el Value, i int, r *Registry, word string) (bitSeg, error) {
 	var seg bitSeg
 	segErr := func(detail string) error {
-		return r.AqlError("bytes_error", fmt.Sprintf("%s: segment %d %s", word, i, detail), word)
+		return r.BoruError("bytes_error", fmt.Sprintf("%s: segment %d %s", word, i, detail), word)
 	}
 	m, merr := RequireConcreteMap(el, word)
 	if merr != nil {
@@ -612,11 +612,11 @@ func segSize(seg bitSeg, fields ReadMap, r *Registry, word string) (int, error) 
 	}
 	v, ok := fields.Get(seg.sizeName)
 	if !ok {
-		return 0, r.AqlError("bytes_error", fmt.Sprintf("%s: size field %q is not provided", word, seg.sizeName), word)
+		return 0, r.BoruError("bytes_error", fmt.Sprintf("%s: size field %q is not provided", word, seg.sizeName), word)
 	}
 	n, err := v.AsConcreteInteger()
 	if err != nil {
-		return 0, r.AqlError("bytes_error", fmt.Sprintf("%s: size field %q is not an Integer", word, seg.sizeName), word)
+		return 0, r.BoruError("bytes_error", fmt.Sprintf("%s: size field %q is not an Integer", word, seg.sizeName), word)
 	}
 	return int(n), nil
 }
@@ -634,7 +634,7 @@ func resolveSize(seg bitSeg, seen map[string]int64, r *Registry, word string) (i
 	if n, ok := seen[seg.sizeName]; ok {
 		return int(n), nil
 	}
-	return 0, r.AqlError("bytes_error", fmt.Sprintf("%s: size field %q is not an earlier field", word, seg.sizeName), word)
+	return 0, r.BoruError("bytes_error", fmt.Sprintf("%s: size field %q is not an earlier field", word, seg.sizeName), word)
 }
 
 // ---- bit writer / reader (MSB-first) --------------------------------------
@@ -775,7 +775,7 @@ func checkSegLen(seg bitSeg, fields ReadMap, have int, r *Registry, word string)
 		return err
 	}
 	if n >= 0 && have != n {
-		return r.AqlError("bytes_error", fmt.Sprintf("%s: field %q is %d bytes but its declared size is %d", word, seg.name, have, n), word)
+		return r.BoruError("bytes_error", fmt.Sprintf("%s: field %q is %d bytes but its declared size is %d", word, seg.name, have, n), word)
 	}
 	return nil
 }
@@ -789,7 +789,7 @@ func checkSegLen(seg bitSeg, fields ReadMap, have int, r *Registry, word string)
 func convertBinaryToBytes(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	rawLayout, ok := binaryInstanceLayout(args[1])
 	if !ok {
-		return nil, r.AqlError("type_error", "convert Bytes: value is not a Binary instance", "convert")
+		return nil, r.BoruError("type_error", "convert Bytes: value is not a Binary instance", "convert")
 	}
 	segs, err := readBitSegments(rawLayout, r, "convert")
 	if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
@@ -804,7 +804,7 @@ func convertBinaryToBytes(args []Value, _ map[string]Value, _ []Value, r *Regist
 		}
 	}
 	if !w.aligned() {
-		return nil, r.AqlError("unaligned", "convert Bytes: bit segments do not sum to whole bytes", "convert")
+		return nil, r.BoruError("unaligned", "convert Bytes: bit segments do not sum to whole bytes", "convert")
 	}
 	return []Value{newBytes(w.out)}, nil
 }
@@ -820,7 +820,7 @@ func packValue(seg bitSeg, fields ReadMap) (Value, bool) {
 
 func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string) error {
 	missing := func() error {
-		return r.AqlError("bytes_error", fmt.Sprintf("%s: field %q is not provided", word, seg.name), word)
+		return r.BoruError("bytes_error", fmt.Sprintf("%s: field %q is not provided", word, seg.name), word)
 	}
 	switch {
 	case seg.typ == "pad":
@@ -841,13 +841,13 @@ func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string)
 		}
 		iv, _ := v.AsConcreteInteger()
 		if !fitsBits(iv, n) {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: value %d does not fit a %d-bit field", word, iv, n), word)
+			return r.BoruError("bytes_error", fmt.Sprintf("%s: value %d does not fit a %d-bit field", word, iv, n), word)
 		}
 		w.writeBits(uint64(iv), n)
 		return nil
 	}
 	if !w.aligned() {
-		return r.AqlError("unaligned", fmt.Sprintf("%s: %s segment is not byte-aligned", word, seg.typ), word)
+		return r.BoruError("unaligned", fmt.Sprintf("%s: %s segment is not byte-aligned", word, seg.typ), word)
 	}
 	switch seg.typ {
 	case "bytes":
@@ -857,7 +857,7 @@ func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string)
 		}
 		b, bok := asBytes(v)
 		if !bok {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: field %q is not Bytes", word, seg.name), word)
+			return r.BoruError("bytes_error", fmt.Sprintf("%s: field %q is not Bytes", word, seg.name), word)
 		}
 		if err := checkSegLen(seg, fields, len(b), r, word); err != nil {
 			return err
@@ -870,7 +870,7 @@ func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string)
 		}
 		s, serr := v.AsConcreteString()
 		if serr != nil {
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: field %q is not a String", word, seg.name), word)
+			return r.BoruError("bytes_error", fmt.Sprintf("%s: field %q is not a String", word, seg.name), word)
 		}
 		if err := checkSegLen(seg, fields, len(s), r, word); err != nil {
 			return err
@@ -901,7 +901,7 @@ func packSeg(w *bitWriter, seg bitSeg, fields ReadMap, r *Registry, word string)
 			if seg.signed {
 				kind = "i"
 			}
-			return r.AqlError("bytes_error", fmt.Sprintf("%s: value %d does not fit %s%d", word, n, kind, seg.width*8), word)
+			return r.BoruError("bytes_error", fmt.Sprintf("%s: value %d does not fit %s%d", word, n, kind, seg.width*8), word)
 		}
 		w.writeBytes(putUint(uint64(n), seg.width, seg.little))
 	}
@@ -940,7 +940,7 @@ func unpackFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	inst, _, err := frameInstance(args[0], firstBytes(args[1]), r, "unpack")
 	if err != nil {
 		if _, short := err.(needMore); short {
-			return nil, r.AqlError("no_match", "unpack: buffer too short for the frame", "unpack")
+			return nil, r.BoruError("no_match", "unpack: buffer too short for the frame", "unpack")
 		}
 		return nil, err
 	}
@@ -967,7 +967,7 @@ func unpackPrefixFrameHandler(args []Value, _ map[string]Value, _ []Value, r *Re
 func firstBytes(v Value) []byte { b, _ := asBytes(v); return b }
 
 func frameTypeErr(r *Registry, t Value, word string) error {
-	return r.AqlErrorHint("type_error",
+	return r.BoruErrorHint("type_error",
 		fmt.Sprintf("%s: %s is not a BinarySpec (frame) type", word, t.String()),
 		word,
 		"define one with `def P (refine BinarySpec [ {name:'x' type:'u8'} … ])`")
@@ -1010,7 +1010,7 @@ func decodeSegs(b []byte, segs []bitSeg, r *Registry, word string, bind bool) (*
 			// pad is alignment filler the encoder always writes as zero;
 			// nonzero padding is a malformed frame, not a value to discard.
 			if bits != 0 {
-				return nil, nil, r.AqlError("no_match", fmt.Sprintf("%s: nonzero padding bits", word), word)
+				return nil, nil, r.BoruError("no_match", fmt.Sprintf("%s: nonzero padding bits", word), word)
 			}
 			continue
 		case "bits":
@@ -1024,7 +1024,7 @@ func decodeSegs(b []byte, segs []bitSeg, r *Registry, word string, bind bool) (*
 			}
 			if seg.isLit {
 				if int64(v) != seg.litVal {
-					return nil, nil, r.AqlError("no_match", fmt.Sprintf("%s: guard bits != %d", word, seg.litVal), word)
+					return nil, nil, r.BoruError("no_match", fmt.Sprintf("%s: guard bits != %d", word, seg.litVal), word)
 				}
 				continue
 			}
@@ -1033,7 +1033,7 @@ func decodeSegs(b []byte, segs []bitSeg, r *Registry, word string, bind bool) (*
 			continue
 		}
 		if !rd.aligned() {
-			return nil, nil, r.AqlError("unaligned", fmt.Sprintf("%s: %s segment is not byte-aligned", word, seg.typ), word)
+			return nil, nil, r.BoruError("unaligned", fmt.Sprintf("%s: %s segment is not byte-aligned", word, seg.typ), word)
 		}
 		switch seg.typ {
 		case "bytes", "utf8":
@@ -1051,7 +1051,7 @@ func decodeSegs(b []byte, segs []bitSeg, r *Registry, word string, bind bool) (*
 			rd.pos += n
 			if seg.typ == "utf8" {
 				if !utf8.Valid(chunk) {
-					return nil, nil, r.AqlError("bad-encoding", word+": utf8 segment is not valid UTF-8", word)
+					return nil, nil, r.BoruError("bad-encoding", word+": utf8 segment is not valid UTF-8", word)
 				}
 				emit(seg.name, NewString(string(chunk)))
 			} else {
@@ -1081,17 +1081,17 @@ func decodeSegs(b []byte, segs []bitSeg, r *Registry, word string, bind bool) (*
 			if seg.signed {
 				n = signExtend(u, seg.width)
 			} else {
-				// AQL Integer is int64; a u64 with the high bit set has no
+				// BORU Integer is int64; a u64 with the high bit set has no
 				// faithful Integer (it would wrap negative), so reject it
 				// rather than expose a corrupted value.
 				if u > math.MaxInt64 {
-					return nil, nil, r.AqlError("bytes_error", fmt.Sprintf("%s: u%d value exceeds Integer range", word, seg.width*8), word)
+					return nil, nil, r.BoruError("bytes_error", fmt.Sprintf("%s: u%d value exceeds Integer range", word, seg.width*8), word)
 				}
 				n = int64(u)
 			}
 			if seg.isLit {
 				if n != seg.litVal {
-					return nil, nil, r.AqlError("no_match", fmt.Sprintf("%s: guard %s != %d", word, seg.typ, seg.litVal), word)
+					return nil, nil, r.BoruError("no_match", fmt.Sprintf("%s: guard %s != %d", word, seg.typ, seg.litVal), word)
 				}
 				continue
 			}
@@ -1100,21 +1100,21 @@ func decodeSegs(b []byte, segs []bitSeg, r *Registry, word string, bind bool) (*
 		}
 	}
 	if !rd.aligned() {
-		return nil, nil, r.AqlError("unaligned", word+": trailing sub-byte bits", word)
+		return nil, nil, r.BoruError("unaligned", word+": trailing sub-byte bits", word)
 	}
 	return out, rd.b[rd.pos:], nil
 }
 
 func shortErr(word string, bind bool) error {
 	if bind {
-		return fmt.Errorf("[aql/no_match] %s: buffer too short", word)
+		return fmt.Errorf("[boru/no_match] %s: buffer too short", word)
 	}
 	return needMore{n: 1}
 }
 
 func shortErr2(word string, bind bool, need int) error {
 	if bind {
-		return fmt.Errorf("[aql/no_match] %s: buffer too short", word)
+		return fmt.Errorf("[boru/no_match] %s: buffer too short", word)
 	}
 	if need < 1 {
 		need = 1

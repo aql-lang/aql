@@ -10,7 +10,7 @@ import (
 )
 
 // initVaultAt initializes a fresh file-backed vault under dir with the
-// given vault passphrase, and points AQL_HOME at it.
+// given vault passphrase, and points BORU_HOME at it.
 func initVaultAt(t *testing.T, dir, pass string) {
 	t.Helper()
 	t.Setenv(EnvHome, dir)
@@ -25,7 +25,7 @@ func initVaultAt(t *testing.T, dir, pass string) {
 // (a stand-in for another machine), with metadata preserved.
 func TestExportImportRoundTripAcrossVaults(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bundle-pass")
-	bundle := filepath.Join(t.TempDir(), "vault.aqlx")
+	bundle := filepath.Join(t.TempDir(), "vault.borux")
 
 	// Source vault. --namespace qualifies, so k1 is stored as proj:k1.
 	src := t.TempDir()
@@ -76,7 +76,7 @@ func TestExportImportRoundTripAcrossVaults(t *testing.T) {
 // import, so a backup/migration cannot silently drop a key's IP restriction.
 func TestExportImportPreservesIPWhitelist(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bundle-pass")
-	bundle := filepath.Join(t.TempDir(), "vault.aqlx")
+	bundle := filepath.Join(t.TempDir(), "vault.borux")
 
 	src := t.TempDir()
 	initVaultAt(t, src, "src-pass")
@@ -106,7 +106,7 @@ func TestExportImportPreservesIPWhitelist(t *testing.T) {
 // dangling provider tag that resolves to the URL-less generic preset.
 func TestExportImportCarriesCustomProvider(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bundle-pass")
-	bundle := filepath.Join(t.TempDir(), "vault.aqlx")
+	bundle := filepath.Join(t.TempDir(), "vault.borux")
 
 	src := t.TempDir()
 	initVaultAt(t, src, "src-pass")
@@ -164,7 +164,7 @@ func TestExportImportCarriesCustomProvider(t *testing.T) {
 // mint-time name check).
 func TestImportSkipsInvalidBundleProvider(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bundle-pass")
-	dir := filepath.Join(t.TempDir(), "tampered.aqlx")
+	dir := filepath.Join(t.TempDir(), "tampered.borux")
 
 	bundle := exportBundle{
 		Version: exportVersion,
@@ -208,7 +208,7 @@ func TestImportSkipsInvalidBundleProvider(t *testing.T) {
 // --overwrite, mirroring alias import semantics.
 func TestImportCustomProviderOverwrite(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bundle-pass")
-	bundle := filepath.Join(t.TempDir(), "vault.aqlx")
+	bundle := filepath.Join(t.TempDir(), "vault.borux")
 
 	src := t.TempDir()
 	initVaultAt(t, src, "src-pass")
@@ -254,7 +254,7 @@ func TestImportCustomProviderOverwrite(t *testing.T) {
 }
 
 // TestExportOutTildeExpanded guards that a leading ~ in --out that the
-// shell left verbatim (e.g. --out=~/bundle.aqlx) resolves under the home
+// shell left verbatim (e.g. --out=~/bundle.borux) resolves under the home
 // folder rather than writing to a literal "~" directory in the cwd.
 func TestExportOutTildeExpanded(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bundle-pass")
@@ -263,26 +263,26 @@ func TestExportOutTildeExpanded(t *testing.T) {
 	if code, _, e := runVault(t, "sk\n", "add", "--from-stdin", "k"); code != 0 {
 		t.Fatalf("add: %s", e)
 	}
-	if code, _, e := runVault(t, "", "export", "--out=~/bundle.aqlx", "k"); code != 0 {
+	if code, _, e := runVault(t, "", "export", "--out=~/bundle.borux", "k"); code != 0 {
 		t.Fatalf("export: %s", e)
 	}
-	if _, err := os.Stat(filepath.Join(home, "bundle.aqlx")); err != nil {
+	if _, err := os.Stat(filepath.Join(home, "bundle.borux")); err != nil {
 		t.Errorf("bundle not written under expanded home: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join("~", "bundle.aqlx")); err == nil {
+	if _, err := os.Stat(filepath.Join("~", "bundle.borux")); err == nil {
 		t.Errorf("a literal ~ directory was created")
 	}
 }
 
 // TestExportToStdoutKeepsPromptsOffBundle guards the corruption bug
 // where passphrase prompts were written to the same stdout stream as
-// the bundle, so `aql vault export > vault.aqlx` produced an
+// the bundle, so `boru vault export > vault.borux` produced an
 // unimportable file prefixed with prompt text. With no
-// AQL_VAULT_EXPORT_PASSPHRASE set, the export passphrase is typed at
+// BORU_VAULT_EXPORT_PASSPHRASE set, the export passphrase is typed at
 // the prompt (twice, for confirmation); the captured stdout must be a
 // clean, importable bundle.
 func TestExportToStdoutKeepsPromptsOffBundle(t *testing.T) {
-	testHome(t) // sets AQL_VAULT_PASSPHRASE, so only the export prompt fires
+	testHome(t) // sets BORU_VAULT_PASSPHRASE, so only the export prompt fires
 	mustInit(t)
 	if code, _, e := runVault(t, "secret-val\n", "add", "--from-stdin", "k"); code != 0 {
 		t.Fatalf("add: %s", e)
@@ -319,7 +319,7 @@ func TestExportSubsetByName(t *testing.T) {
 			t.Fatalf("add %s: %s", k, e)
 		}
 	}
-	bundle := filepath.Join(t.TempDir(), "b.aqlx")
+	bundle := filepath.Join(t.TempDir(), "b.borux")
 	if code, _, e := runVault(t, "", "export", "--out="+bundle, "a", "c"); code != 0 {
 		t.Fatalf("export: %s", e)
 	}
@@ -341,7 +341,7 @@ func TestExportSubsetByName(t *testing.T) {
 
 func TestImportBundleSkipsExistingUnlessOverwrite(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bp")
-	bundle := filepath.Join(t.TempDir(), "b.aqlx")
+	bundle := filepath.Join(t.TempDir(), "b.borux")
 
 	src := t.TempDir()
 	initVaultAt(t, src, "p")
@@ -377,7 +377,7 @@ func TestImportBundleSkipsExistingUnlessOverwrite(t *testing.T) {
 }
 
 func TestImportBundleWrongPassphrase(t *testing.T) {
-	bundle := filepath.Join(t.TempDir(), "b.aqlx")
+	bundle := filepath.Join(t.TempDir(), "b.borux")
 	src := t.TempDir()
 	t.Setenv(EnvExportPassphrase, "right-pass")
 	initVaultAt(t, src, "p")
@@ -408,7 +408,7 @@ func TestExportRefusesEmptyPassphrase(t *testing.T) {
 	}
 	// No env passphrase; two empty prompt lines -> empty passphrase.
 	t.Setenv(EnvExportPassphrase, "")
-	bundle := filepath.Join(t.TempDir(), "b.aqlx")
+	bundle := filepath.Join(t.TempDir(), "b.borux")
 	code, _, errOut := runVault(t, "\n\n", "export", "--out="+bundle)
 	if code == 0 {
 		t.Fatal("expected refusal of empty export passphrase")
@@ -426,7 +426,7 @@ func TestImportRejectsFutureBundleVersion(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundle := filepath.Join(t.TempDir(), "b.aqlx")
+	bundle := filepath.Join(t.TempDir(), "b.borux")
 	if err := os.WriteFile(bundle, blob, 0600); err != nil {
 		t.Fatal(err)
 	}
@@ -438,7 +438,7 @@ func TestImportRejectsFutureBundleVersion(t *testing.T) {
 	if code == 0 {
 		t.Fatal("expected refusal of future bundle version")
 	}
-	if !strings.Contains(errOut, "upgrade aql") {
+	if !strings.Contains(errOut, "upgrade boru") {
 		t.Errorf("unexpected error: %q", errOut)
 	}
 }
@@ -455,7 +455,7 @@ func TestExportBundleEnvelopeShape(t *testing.T) {
 		t.Errorf("envelope format byte = %d, want %d", blob[len(exportMagic)], exportEnvelopeFormat)
 	}
 	// A bundle is NOT mistaken for a keyring file, and vice versa.
-	if isExportBundle([]byte("AQLK\x01rest")) {
+	if isExportBundle([]byte("BORUK\x01rest")) {
 		t.Errorf("keyring magic misclassified as export bundle")
 	}
 	got, err := openExport(blob, "pw")

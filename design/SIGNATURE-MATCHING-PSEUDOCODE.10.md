@@ -12,13 +12,13 @@
 > `design/SIG-ORDER-REFACTOR.10.md`, and
 > `design/FORWARD-COLLECTION-PHASES.10.md`.
 
-This document describes the AQL signature matching algorithm used to dispatch
+This document describes the BORU signature matching algorithm used to dispatch
 function calls to the correct overload based on the types of values on the
 stack.
 
 ## Overview
 
-AQL is a concatenative (stack-based) language. When a word (function) is
+BORU is a concatenative (stack-based) language. When a word (function) is
 invoked, the engine must choose which of its registered signatures best
 matches the current stack state. The algorithm has two modes:
 

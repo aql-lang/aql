@@ -51,7 +51,7 @@ function argMatches(
   sig: Signature,
   idx: number,
   v: Value,
-  expected: import('./type.ts').AqlType,
+  expected: import('./type.ts').BoruType,
 ): boolean {
   if (sig.typeArgs?.has(idx)) return isTypeArg(v) && v.vType.matches(expected)
   return sigTypeMatches(v, expected)
@@ -161,7 +161,7 @@ function readWordInfo(stack: readonly Value[], pointer: number): WordInfo | unde
  */
 function resolveForwardToken(
   tok: Value,
-  expected: import('./type.ts').AqlType,
+  expected: import('./type.ts').BoruType,
   registry: Registry | undefined,
 ): Value {
   if (!tok.isWord()) return tok
@@ -244,7 +244,7 @@ function tryMatch(
   return { sig, args, forwardCount: fwd, prefixCount: remaining }
 }
 
-export function sigTypeMatches(v: Value, expected: import('./type.ts').AqlType): boolean {
+export function sigTypeMatches(v: Value, expected: import('./type.ts').BoruType): boolean {
   // Check-mode gradual carrier: a dynamic carrier's type is statically
   // unknown, so it matches any slot optimistically (the contagion then
   // widens the result to dynamic). Mirrors NewDynamicCarrier matching.

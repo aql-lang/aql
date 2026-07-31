@@ -1,8 +1,8 @@
-# AQL Language Specification: the aql:rand module
+# BORU Language Specification: the boru:rand module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of pseudo-random generators. Import binds the `Rand`
-# namespace: `import "aql:rand"  Rand.word args`. A seeded generator
+# namespace: `import "boru:rand"  Rand.word args`. A seeded generator
 # (`Rand.with-seed n`) is a reproducible instance; the top-level words
 # draw from a default generator seeded from the Clock capability — which
 # this spec suite FREEZES (2021-01-01T00:00:00Z), so even the default
@@ -10,13 +10,13 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  seeded generators are reproducible — same seed, same sequence
-import "aql:rand"  def r (Rand.with-seed 42)  r.int 0 100	75	seed 42 → first int in [0,100)
-import "aql:rand"  def r (Rand.with-seed 7)  r.bool	false	seed 7 → first bool
-import "aql:rand"  def r (Rand.with-seed 1)  r.float	0.6046602879796196	seed 1 → first float in [0,1)
-import "aql:rand"  def r (Rand.with-seed 5)  [10 20 30] r.one-of	10	seed 5 → pick from a list
+import "boru:rand"  def r (Rand.with-seed 42)  r.int 0 100	75	seed 42 → first int in [0,100)
+import "boru:rand"  def r (Rand.with-seed 7)  r.bool	false	seed 7 → first bool
+import "boru:rand"  def r (Rand.with-seed 1)  r.float	0.6046602879796196	seed 1 → first float in [0,1)
+import "boru:rand"  def r (Rand.with-seed 5)  [10 20 30] r.one-of	10	seed 5 → pick from a list
 #
 # §2  default generator — seeded from the (frozen, in specs) clock
-import "aql:rand"  Rand.int 0 100	87	default draw is deterministic under the fixed clock
+import "boru:rand"  Rand.int 0 100	87	default draw is deterministic under the fixed clock
 #
 # §3  negative — the namespace is unbound until imported
 Rand.int 0 100	ERROR:undefined_word	`Rand` is undefined without `import`
@@ -24,15 +24,15 @@ Rand.int 0 100	ERROR:undefined_word	`Rand` is undefined without `import`
 # §4  the rest of the vocabulary on the default generator (deterministic
 #     under the frozen clock, like §2). The same methods are also available
 #     on a seeded instance from `Rand.with-seed`.
-import "aql:rand"  Rand.bool	false	default draw → bool
-import "aql:rand"  Rand.float	0.2952921773953623	default draw → float in [0,1)
-import "aql:rand"  Rand.one-of [10 20 30]	10	pick one element of a list
-import "aql:rand"  Rand.string "abc" 4	'abcb'	4 chars drawn from a charset
+import "boru:rand"  Rand.bool	false	default draw → bool
+import "boru:rand"  Rand.float	0.2952921773953623	default draw → float in [0,1)
+import "boru:rand"  Rand.one-of [10 20 30]	10	pick one element of a list
+import "boru:rand"  Rand.string "abc" 4	'abcb'	4 chars drawn from a charset
 # list-of runs a quoted generator body n times into a List
-import "aql:rand"  Rand.list-of [Rand.int 0 100] 3	[87 75 74]	3 generated ints
+import "boru:rand"  Rand.list-of [Rand.int 0 100] 3	[87 75 74]	3 generated ints
 # map-from builds a Map by running each value's quoted generator body
-import "aql:rand"  Rand.map-from {a:[Rand.int 0 10]}	{a:7}	schema of generators
+import "boru:rand"  Rand.map-from {a:[Rand.int 0 10]}	{a:7}	schema of generators
 #
 # §5  the seeded instance carries the same methods, reproducibly
-import "aql:rand"  def r (Rand.with-seed 8)  r.string "abc" 5	'bacbb'	seed 8 → 5-char draw
-import "aql:rand"  def r (Rand.with-seed 2)  r.list-of [Rand.int 0 10] 3	[7 5 4]	seed 2 → 3 generated ints
+import "boru:rand"  def r (Rand.with-seed 8)  r.string "abc" 5	'bacbb'	seed 8 → 5-char draw
+import "boru:rand"  def r (Rand.with-seed 2)  r.list-of [Rand.int 0 10] 3	[7 5 4]	seed 2 → 3 generated ints

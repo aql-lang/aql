@@ -5,18 +5,18 @@
 > `mustache-acc` flex accumulator; any computed module `def`) inside a
 > fn/closure unit now routes to a dynamic-scope lookup (`OpLookupDynScope`)
 > instead of an unreachable in-frame event operand — see
-> `aql-bytecode-next-stages.0.md` §"Stage C — Update (2026-07)". The Template
-> library `template.aql` and 5 of 6 test files now `-force-compile` clean and
+> `boru-bytecode-next-stages.0.md` §"Stage C — Update (2026-07)". The Template
+> library `template.boru` and 5 of 6 test files now `-force-compile` clean and
 > stay byte-identical `compile == interpret` across all four engines
 > (mustache/handlebars/liquid/jinja), including the mutating lexers. The lone
-> remaining refusal — `test/template_prop_test.aql`: "code-body word `each`
+> remaining refusal — `test/template_prop_test.boru`: "code-body word `each`
 > (Stage 2)" — is a SEPARATE frontier (a higher-order `each` in code-body
 > position in the property-test harness), unrelated to the module-scope read,
 > and falls back to the interpreter cleanly.
 
 Diagnosis of every bytecode-compilation refusal the **voxgig `Template`**
-library (`voxgig-aql/template`) and its test suites trigger against `aql`
-`main` (`203ea2f`), and the one fix landed here. Method: build `aql`, run each
+library (`voxgig-boru/template`) and its test suites trigger against `boru`
+`main` (`203ea2f`), and the one fix landed here. Method: build `boru`, run each
 suite under `-force-compile` / `-compile-report`, reduce every refusal to a
 minimal reproducer, and map it to its emit/lower site. This is the Template
 corpus's analogue of `VOXGIG-COMPILE-COMPLETION-PLAN.0.md` (which covers the
@@ -25,7 +25,7 @@ bloom/stats/decision/trie/sort corpus).
 ## The one hard rule held
 
 `compile == interpret` (byte-identical stdout). Confirmed for every Template
-suite: `diff <(aql -compile f) <(aql -no-compile f)` is identical on stdout for
+suite: `diff <(boru -compile f) <(boru -no-compile f)` is identical on stdout for
 all eight files, and `make verify-bytecode` stays green with the fix below.
 
 ## Refusal frontier (whole-program, after the do-map fix)
@@ -171,7 +171,7 @@ corpus re-baseline Stage C is defined around. A fix (either stop the loop-body
 member promotion, or keep the do-map variadic when a member references a
 loop-body-local) must be gated on that sweep, not verify-bytecode alone.
 
-That is exactly Stage C in `aql-bytecode-next-stages.0.md` — "sound module-body
+That is exactly Stage C in `boru-bytecode-next-stages.0.md` — "sound module-body
 compilation (cross-registry EmitState) … the one stage that is a *project*, not a
 commit," gated on a corpus re-baseline. The read-site module-scope mechanism is
 the correct Stage-E/F piece and should land **together with** the Stage-C

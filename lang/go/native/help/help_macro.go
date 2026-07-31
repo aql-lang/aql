@@ -36,9 +36,9 @@ func init() {
 
 	register(&Entry{
 		Word:    "macro",
-		Summary: "Define a hygienic macro: AQL code that rewrites code before it runs.",
+		Summary: "Define a hygienic macro: BORU code that rewrites code before it runs.",
 		Description: "`def name (macro [[params] [template]])` — the template, built with quote / unquote / splice, " +
-			"expands at each call site. Macros add new syntax in AQL itself; hygiene (via gensym) keeps temporaries " +
+			"expands at each call site. Macros add new syntax in BORU itself; hygiene (via gensym) keeps temporaries " +
 			"from colliding with user names.",
 	})
 
@@ -57,7 +57,7 @@ func init() {
 
 	register(&Entry{
 		Word:    "canon",
-		Summary: "Render any value as canonical, round-trippable AQL source.",
+		Summary: "Render any value as canonical, round-trippable BORU source.",
 		Description: "The textual inverse of parsing: `canon v` produces the canonical source form of a value — " +
 			"normalising sugar (dotted access, `/q`, `=>`) to its underlying words. Useful for serialising code or " +
 			"data back to source.",
@@ -73,7 +73,7 @@ func init() {
 			"deliberately. Each built-in filter kind's partial has a NAMED member type (MiniLang.Re, " +
 			"MiniLang.Gex, MiniLang.Jp, MiniLang.Jq, MiniLang.Xp, MiniLang.Sp) for `is` checks and typed fn params " +
 			"(`fn [[m:(MiniLang.Re) s:String] …]`); typeof still reports Function. " +
-			"The built-in kinds live in the aql:minilang module (import it first; MiniLang.kinds lists " +
+			"The built-in kinds live in the boru:minilang module (import it first; MiniLang.kinds lists " +
 			"them) and the kind set is FIXED — new kinds cannot be registered. " +
 			"An unknown kind is an expansion-time error. " +
 			"The first argument may instead BE the transducer — a fn (or a word bound to one) whose every " +
@@ -81,10 +81,10 @@ func init() {
 			"lookup; a filter-shaped fn (every sig [src opts subject]) partial-applies the same way. Note " +
 			"backslashes in quoted strings need doubling ('\\\\d'); backtick strings are backslash-safe.",
 		Examples: []string{
-			`import "aql:minilang" def r ("AbcD" mini re '[a-z]+') end r.fst.m ; # => 'bc'`,
-			`import "aql:minilang" def f (+re/[a-z]+/) ("AbcD" f).fst.m ; # => 'bc' — a stored matcher`,
-			`import "aql:minilang" mini bf '++++++++[>++++++++<-]>+.' ; # => 'A'`,
-			`import "aql:minilang" def dbl fn [[src:String opts:Map] [String] [src add src]] mini dbl 'ab' ; # => 'abab' — a fn as the transducer`,
+			`import "boru:minilang" def r ("AbcD" mini re '[a-z]+') end r.fst.m ; # => 'bc'`,
+			`import "boru:minilang" def f (+re/[a-z]+/) ("AbcD" f).fst.m ; # => 'bc' — a stored matcher`,
+			`import "boru:minilang" mini bf '++++++++[>++++++++<-]>+.' ; # => 'A'`,
+			`import "boru:minilang" def dbl fn [[src:String opts:Map] [String] [src add src]] mini dbl 'ab' ; # => 'abab' — a fn as the transducer`,
 		},
 	})
 
@@ -95,17 +95,17 @@ func init() {
 			"`ParseLang.parse_<kind> <source> <opts> end` at the call site. The `source` is the " +
 			"required LAST argument — a String or a {src:…} Source map — and `opts` is the optional " +
 			"middle one. A parser returns whatever the language yields (an AST, a transduction, …), " +
-			"typed Any. The built-in kinds live in the aql:parselang module (import it first; " +
+			"typed Any. The built-in kinds live in the boru:parselang module (import it first; " +
 			"ParseLang.kinds lists them) and the kind set is FIXED — new kinds cannot be registered. " +
 			"An unknown kind is an expansion-time error. The first argument may instead BE the parser " +
 			"— a ParseLang value: a fn (or a word bound to one) whose every signature starts with the " +
 			"standard [source:String opts:Map] prefix — called directly with no kind lookup, so a " +
 			"parser works without being registered under a kind name.",
 		Examples: []string{
-			`import "aql:parselang" parse calc 'x + y' ; # => the parser's AST`,
-			`import "aql:parselang" parse calc {src:'x + y'} ; # a {src:…} source map`,
-			`import "aql:parselang" parse (ParseLang.parse_json) '{"a":1}' ; # a ParseLang value as the parser`,
-			`import "aql:parselang" def myp fn [[source:String opts:Map] [Any] [...]] parse myp 'x' ; # a bound parser fn`,
+			`import "boru:parselang" parse calc 'x + y' ; # => the parser's AST`,
+			`import "boru:parselang" parse calc {src:'x + y'} ; # a {src:…} source map`,
+			`import "boru:parselang" parse (ParseLang.parse_json) '{"a":1}' ; # a ParseLang value as the parser`,
+			`import "boru:parselang" def myp fn [[source:String opts:Map] [Any] [...]] parse myp 'x' ; # a bound parser fn`,
 		},
 	})
 
@@ -119,7 +119,7 @@ func init() {
 			"Table → csv, Xml → xml). Built-in kinds: json, jsonic, yaml, csv, tsv, toml, ini, xml " +
 			"(opts {pretty:true} / {indent:N} for json/jsonic/yaml/xml; {separation:sep} for csv). " +
 			"Every emitter traverses the value through the canonical walk engine — one code path " +
-			"for all formats. The built-in emitters live in the aql:emitlang module (import it " +
+			"for all formats. The built-in emitters live in the boru:emitlang module (import it " +
 			"first; EmitLang.kinds lists them) and the kind set is FIXED — new kinds cannot be " +
 			"registered. An unknown " +
 			"explicit kind is an expansion-time error; a shape a format cannot represent (e.g. " +
@@ -127,9 +127,9 @@ func init() {
 			"instead BE the emitter — a fn (or a word bound to one) whose every signature is " +
 			"[value:Any opts:Map] → [String] — called directly with no kind lookup.",
 		Examples: []string{
-			`import "aql:emitlang" emit {a:1 b:[2 3]} ; # => compact json (natural)`,
-			`import "aql:emitlang" emit json {pretty:true} {a:1} ; # => indented json`,
-			`import "aql:emitlang" def up fn [[value:Any opts:Map] [String] ['UP']] emit up {a:1} ; # => 'UP' — a fn as the emitter`,
+			`import "boru:emitlang" emit {a:1 b:[2 3]} ; # => compact json (natural)`,
+			`import "boru:emitlang" emit json {pretty:true} {a:1} ; # => indented json`,
+			`import "boru:emitlang" def up fn [[value:Any opts:Map] [String] ['UP']] emit up {a:1} ; # => 'UP' — a fn as the emitter`,
 		},
 	})
 }

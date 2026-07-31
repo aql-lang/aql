@@ -1,0 +1,495 @@
+# ============================================================================
+# cut — unit suite (boru:test), shaped like tests/cat_test.boru.
+#
+#   boru test tests/cut_test.boru          (run from utils/)
+#
+# Three tiers, as everywhere in this directory:
+#
+#   1. the pure fns       — LIST parsing, normalization, selection, the two
+#                           modes, and option validation
+#   2. the argv contract  — Cli.parse / Cli.dispatch against cut's own spec
+#   3. the program        — Cut.main takes argv as a PARAMETER and returns the
+#                           exit code instead of exiting, and Cut.one is driven
+#                           over real files
+#
+# Tier 3 writes cut's normal output to stdout (a stream cannot be redirected
+# in-process), so the fixtures' selected fields appear in the run. That is the
+# program working; the assertions are on the returned values.
+#
+# The LIST parser is where cut earns its keep, so it gets the most cases:
+# every accepted spelling, every rejected one, and the normalization property
+# that makes -f3,1 and -f1,1,3 the same query.
+# ============================================================================
+
+import "boru:test"
+import "boru:cli"
+import "boru:io"
+import "boru:string-util"
+import "./cut.boru"
+
+def fixture "/tmp/boru-utils-cut-test-fixture.txt"
+def missing "/tmp/boru-utils-cut-test-no-such-file.txt"
+
+# ----------------------------------------------------------------------------
+# 1a. The small readers.
+# ----------------------------------------------------------------------------
+Test.describe "cut-bool" [
+  Test.test "a true flag reads true" [
+    Assert.equal true (Cut.bool {only-delimited:true} "only-delimited")
+  ]
+  Test.test "an absent flag reads false — it does not raise" [
+    Assert.equal false (Cut.bool {} "only-delimited")
+  ]
+  Test.test "a non-Boolean flag value reads false" [
+    Assert.equal false (Cut.bool {only-delimited:"yes"} "only-delimited")
+  ]
+]
+
+Test.describe "cut-count" [
+  Test.test "the counter is read back" [ Assert.equal 5 (Cut.count {n:5}) ]
+  Test.test "a missing counter reads 0" [ Assert.equal 0 (Cut.count {}) ]
+  Test.test "a non-Integer counter reads 0" [ Assert.equal 0 (Cut.count {n:"x"}) ]
+]
+
+Test.describe "cut-worse" [
+  Test.test "the higher code wins" [ Assert.equal 2 (Cut.worse 0 2) ]
+  Test.test "in either order" [ Assert.equal 2 (Cut.worse 2 1) ]
+  Test.test "success stays success" [ Assert.equal 0 (Cut.worse 0 0) ]
+]
+
+Test.describe "cut-inputs" [
+  Test.test "no operand means standard input" [
+    Assert.equal ["-"] (Cut.inputs [])
+  ]
+  Test.test "operands pass through unchanged, in order" [
+    Assert.equal ["a" "b"] (Cut.inputs ["a" "b"])
+  ]
+]
+
+Test.describe "cut-next-chunk" [
+  Test.test "the chunk doubles while under the ceiling" [
+    Assert.equal 128 (Cut.nextChunk 64)
+  ]
+  Test.test "the ceiling is a fixed point" [ Assert.equal 8192 (Cut.nextChunk 8192) ]
+]
+
+Test.describe "cut-spec-str" [
+  Test.test "a single string flag is itself" [
+    Assert.equal "1,3" (Cut.specStr "1,3")
+  ]
+  Test.test "a repeated flag arrives as a List and comma-joins to the union" [
+    Assert.equal "1,3" (Cut.specStr ["1" "3"])
+  ]
+  Test.test "a missing flag reads as the empty string, not a raise" [
+    Assert.equal "" (Cut.specStr none)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 1b. String building. `join` DROPS empty strings, which is exactly what a
+# field joiner must not do — these cases are the reason cut-cat exists.
+# ----------------------------------------------------------------------------
+Test.describe "cut-cat" [
+  Test.test "elements are interleaved with the separator" [
+    Assert.equal "a,b,c" (Cut.cat ["a" "b" "c"] ",")
+  ]
+  Test.test "a single element gets no separator" [
+    Assert.equal "a" (Cut.cat ["a"] ",")
+  ]
+  Test.test "no elements is the empty string" [
+    Assert.equal "" (Cut.cat [] ",")
+  ]
+  Test.test "an EMPTY FIELD is preserved — `join` would have dropped it" [
+    Assert.equal "a,,b" (Cut.cat ["a" "" "b"] ",")
+  ]
+  Test.test "every field empty still yields the separators" [
+    Assert.equal ",," (Cut.cat ["" "" ""] ",")
+  ]
+  Test.test "a multi-byte separator is used verbatim" [
+    Assert.equal "a、b" (Cut.cat ["a" "b"] "、")
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 1c. LIST parsing. Errors are DATA, never a raise, so every refusal is a case.
+# ----------------------------------------------------------------------------
+Test.describe "cut-digits" [
+  Test.test "a run of digits is digits" [ Assert.equal true (Cut.digits "123") ]
+  Test.test "the empty string is not" [ Assert.equal false (Cut.digits "") ]
+  Test.test "a letter anywhere disqualifies it" [ Assert.equal false (Cut.digits "1a3") ]
+  Test.test "a sign is not a digit" [ Assert.equal false (Cut.digits "+1") ]
+  Test.test "a space is not a digit" [ Assert.equal false (Cut.digits "1 2") ]
+  Test.test "a non-ASCII digit-looking rune is not a digit" [
+    Assert.equal false (Cut.digits "１")
+  ]
+]
+
+Test.describe "cut-strip0" [
+  Test.test "leading zeros go" [ Assert.equal "7" (Cut.strip0 "007") ]
+  Test.test "an unpadded number is untouched" [ Assert.equal "70" (Cut.strip0 "70") ]
+  Test.test "all zeros keeps one rune, so the value is still readable" [
+    Assert.equal "0" (Cut.strip0 "000")
+  ]
+  Test.test "an interior zero survives" [ Assert.equal "101" (Cut.strip0 "0101") ]
+]
+
+Test.describe "cut-num" [
+  Test.test "a digit string converts" [ Assert.equal 42 (Cut.num "42") ]
+  Test.test "padding does not change the value" [ Assert.equal 7 (Cut.num "007") ]
+  Test.test "a 40-digit index is clamped at the sentinel, never overflowed" [
+    Assert.equal 1000000000 (Cut.num "1234567890123456789012345678901234567890")
+  ]
+]
+
+Test.describe "cut-part" [
+  Test.test "a single index is the one-element range" [
+    Assert.equal [3 3] [((Cut.part "3") dot lo) ((Cut.part "3") dot hi)]
+  ]
+  Test.test "a closed range is itself" [
+    Assert.equal [3 5] [((Cut.part "3-5") dot lo) ((Cut.part "3-5") dot hi)]
+  ]
+  Test.test "an open-left range starts at 1" [
+    Assert.equal [1 5] [((Cut.part "-5") dot lo) ((Cut.part "-5") dot hi)]
+  ]
+  Test.test "an open-right range ends at the sentinel" [
+    Assert.equal [3 1000000000] [((Cut.part "3-") dot lo) ((Cut.part "3-") dot hi)]
+  ]
+  Test.test "an accepted part reports ok" [
+    Assert.equal true ((Cut.part "3-5") dot ok)
+  ]
+  Test.test "index 0 is refused — the list is 1-based" [
+    Assert.equal false ((Cut.part "0") dot ok)
+  ]
+  Test.test "a descending range is refused" [
+    Assert.equal false ((Cut.part "5-3") dot ok)
+  ]
+  Test.test "a bare dash selects everything and is refused" [
+    Assert.equal false ((Cut.part "-") dot ok)
+  ]
+  Test.test "an empty part is refused" [
+    Assert.equal false ((Cut.part "") dot ok)
+  ]
+  Test.test "a non-numeric part is refused" [
+    Assert.equal false ((Cut.part "a") dot ok)
+  ]
+  Test.test "a two-dash part is refused" [
+    Assert.equal false ((Cut.part "1-2-3") dot ok)
+  ]
+  Test.test "a refusal carries a message, not an empty string" [
+    Assert.equal true (((size ((Cut.part "0") dot err)) gt 0))
+  ]
+]
+
+Test.describe "cut-list" [
+  Test.test "one index" [
+    Assert.equal [[1 1]] ((Cut.list "1") dot ranges)
+  ]
+  Test.test "several, comma-separated" [
+    Assert.equal [[1 1] [3 5]] ((Cut.list "1,3-5") dot ranges)
+  ]
+  Test.test "OUT-OF-ORDER input normalizes to input order" [
+    Assert.equal [[1 1] [3 3]] ((Cut.list "3,1") dot ranges)
+  ]
+  Test.test "a REPEATED index appears once" [
+    Assert.equal [[1 1] [3 3]] ((Cut.list "1,1,3") dot ranges)
+  ]
+  Test.test "OVERLAPPING ranges fuse" [
+    Assert.equal [[1 3]] ((Cut.list "1-2,2-3") dot ranges)
+  ]
+  Test.test "ADJACENT ranges fuse too — 1-2,3-4 is one run" [
+    Assert.equal [[1 4]] ((Cut.list "1-2,3-4") dot ranges)
+  ]
+  Test.test "a range that swallows another leaves one" [
+    Assert.equal [[1 9]] ((Cut.list "1-9,3-4") dot ranges)
+  ]
+  Test.test "disjoint ranges stay separate" [
+    Assert.equal [[1 2] [5 6]] ((Cut.list "1-2,5-6") dot ranges)
+  ]
+  Test.test "an open-right range absorbs everything after it" [
+    Assert.equal [[2 1000000000]] ((Cut.list "2-,5,9-11") dot ranges)
+  ]
+  Test.test "the first bad part wins and the list is refused" [
+    Assert.equal false ((Cut.list "1,0,3") dot ok)
+  ]
+  Test.test "a trailing comma is an empty part, so it is refused" [
+    Assert.equal false ((Cut.list "1,") dot ok)
+  ]
+  Test.test "an empty list is refused" [
+    Assert.equal false ((Cut.list "") dot ok)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 1d. Selection over a normalized range list.
+# ----------------------------------------------------------------------------
+Test.describe "cut-in" [
+  Test.test "an index inside a range is in" [
+    Assert.equal true (Cut.inRanges [[1 1] [3 5]] 4)
+  ]
+  Test.test "an index between ranges is out" [
+    Assert.equal false (Cut.inRanges [[1 1] [3 5]] 2)
+  ]
+  Test.test "the low bound is inclusive" [
+    Assert.equal true (Cut.inRanges [[3 5]] 3)
+  ]
+  Test.test "the high bound is inclusive" [
+    Assert.equal true (Cut.inRanges [[3 5]] 5)
+  ]
+  Test.test "past the last range is out" [
+    Assert.equal false (Cut.inRanges [[3 5]] 6)
+  ]
+  Test.test "an empty range list holds nothing" [
+    Assert.equal false (Cut.inRanges [] 1)
+  ]
+]
+
+Test.describe "cut-pick" [
+  Test.test "elements come out in INPUT order, 1-based" [
+    Assert.equal ["a" "c"] (Cut.pick ["a" "b" "c"] [[1 1] [3 3]])
+  ]
+  Test.test "a range picks a contiguous run" [
+    Assert.equal ["b" "c"] (Cut.pick ["a" "b" "c"] [[2 3]])
+  ]
+  Test.test "a range past the end is clamped, not an error" [
+    Assert.equal ["c"] (Cut.pick ["a" "b" "c"] [[3 99]])
+  ]
+  Test.test "a range entirely past the end picks nothing" [
+    Assert.equal [] (Cut.pick ["a" "b" "c"] [[9 99]])
+  ]
+  Test.test "the open-right sentinel takes the tail" [
+    Assert.equal ["b" "c"] (Cut.pick ["a" "b" "c"] [[2 1000000000]])
+  ]
+  Test.test "picking from an empty list yields an empty list" [
+    Assert.equal [] (Cut.pick [] [[1 3]])
+  ]
+  Test.test "an empty field is picked like any other" [
+    Assert.equal ["" "c"] (Cut.pick ["a" "" "c"] [[2 3]])
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 1e. The two modes. Everything is counted in RUNES.
+# ----------------------------------------------------------------------------
+Test.describe "cut-chars" [
+  Test.test "a single character" [ Assert.equal "b" (Cut.chars "abc" [[2 2]]) ]
+  Test.test "a run of characters" [ Assert.equal "bc" (Cut.chars "abc" [[2 3]]) ]
+  Test.test "two disjoint runs concatenate in input order" [
+    Assert.equal "ac" (Cut.chars "abc" [[1 1] [3 3]])
+  ]
+  Test.test "a range past the end is clamped" [
+    Assert.equal "c" (Cut.chars "abc" [[3 99]])
+  ]
+  Test.test "a range entirely past the end selects nothing" [
+    Assert.equal "" (Cut.chars "abc" [[9 99]])
+  ]
+  Test.test "an empty line selects nothing rather than raising" [
+    Assert.equal "" (Cut.chars "" [[1 3]])
+  ]
+  Test.test "characters are RUNES: -c2 of 日本語 is 本, not a broken byte" [
+    Assert.equal "本" (Cut.chars "日本語" [[2 2]])
+  ]
+  Test.test "and a rune range spans runes" [
+    Assert.equal "本語" (Cut.chars "日本語" [[2 3]])
+  ]
+  Test.test "an astral rune counts as one character" [
+    Assert.equal "🎉" (Cut.chars "a🎉b" [[2 2]])
+  ]
+]
+
+Test.describe "cut-fields" [
+  Test.test "a field is selected and the delimiter is restored" [
+    Assert.equal "a" ((Cut.fields "a:b:c" ":" [[1 1]] false) dot text)
+  ]
+  Test.test "two fields keep the delimiter between them" [
+    Assert.equal "a:c" ((Cut.fields "a:b:c" ":" [[1 1] [3 3]] false) dot text)
+  ]
+  Test.test "an EMPTY field is preserved" [
+    Assert.equal "a:" ((Cut.fields "a::c" ":" [[1 2]] false) dot text)
+  ]
+  Test.test "a line with NO delimiter passes through unchanged (the GNU rule)" [
+    Assert.equal "whole line" ((Cut.fields "whole line" ":" [[1 1]] false) dot text)
+  ]
+  Test.test "and it IS emitted" [
+    Assert.equal true ((Cut.fields "whole line" ":" [[1 1]] false) dot emit)
+  ]
+  Test.test "-s suppresses that line instead" [
+    Assert.equal false ((Cut.fields "whole line" ":" [[1 1]] true) dot emit)
+  ]
+  Test.test "-s leaves a DELIMITED line alone" [
+    Assert.equal true ((Cut.fields "a:b" ":" [[1 1]] true) dot emit)
+  ]
+  Test.test "a selection that matches nothing still emits, empty" [
+    Assert.equal [true ""] [((Cut.fields "a:b" ":" [[9 9]] false) dot emit)
+                            ((Cut.fields "a:b" ":" [[9 9]] false) dot text)]
+  ]
+  Test.test "a multi-byte delimiter is one character" [
+    Assert.equal "b" ((Cut.fields "a、b" "、" [[2 2]] false) dot text)
+  ]
+]
+
+Test.describe "cut-line" [
+  Test.test "mode c goes to the character path" [
+    Assert.equal "b" ((Cut.line "abc" "c" [[2 2]] "\t" false) dot text)
+  ]
+  Test.test "mode f goes to the field path" [
+    Assert.equal "b" ((Cut.line "a\tb" "f" [[2 2]] "\t" false) dot text)
+  ]
+  Test.test "mode c ignores -s, since -s is a field-mode idea" [
+    Assert.equal true ((Cut.line "abc" "c" [[2 2]] "\t" true) dot emit)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 1f. Option validation — every refusal in the usage contract.
+# ----------------------------------------------------------------------------
+Test.describe "cut-opts" [
+  Test.test "-f alone is accepted, and the delimiter defaults to TAB" [
+    Assert.equal [true "f" "\t"] [((Cut.opts {fields:"1"}) dot ok)
+                                  ((Cut.opts {fields:"1"}) dot mode)
+                                  ((Cut.opts {fields:"1"}) dot delim)]
+  ]
+  Test.test "-c alone is accepted" [
+    Assert.equal [true "c"] [((Cut.opts {characters:"1"}) dot ok)
+                             ((Cut.opts {characters:"1"}) dot mode)]
+  ]
+  Test.test "-d sets the delimiter" [
+    Assert.equal ":" ((Cut.opts {fields:"1" delimiter:":"}) dot delim)
+  ]
+  Test.test "-s is carried through" [
+    Assert.equal true ((Cut.opts {fields:"1" only-delimited:true}) dot only)
+  ]
+  Test.test "the parsed ranges are carried through, normalized" [
+    Assert.equal [[1 3]] ((Cut.opts {fields:"1-2,2-3"}) dot ranges)
+  ]
+  Test.test "NEITHER -f nor -c is refused" [
+    Assert.equal false ((Cut.opts {}) dot ok)
+  ]
+  Test.test "BOTH -f and -c is refused" [
+    Assert.equal false ((Cut.opts {fields:"1" characters:"1"}) dot ok)
+  ]
+  Test.test "-d without -f is refused" [
+    Assert.equal false ((Cut.opts {characters:"1" delimiter:":"}) dot ok)
+  ]
+  Test.test "-s without -f is refused" [
+    Assert.equal false ((Cut.opts {characters:"1" only-delimited:true}) dot ok)
+  ]
+  Test.test "a two-character delimiter is refused" [
+    Assert.equal false ((Cut.opts {fields:"1" delimiter:"ab"}) dot ok)
+  ]
+  Test.test "an empty delimiter is refused" [
+    Assert.equal false ((Cut.opts {fields:"1" delimiter:""}) dot ok)
+  ]
+  Test.test "a ONE-RUNE multi-byte delimiter is accepted" [
+    Assert.equal true ((Cut.opts {fields:"1" delimiter:"、"}) dot ok)
+  ]
+  Test.test "a malformed LIST is refused, and the parser's message survives" [
+    Assert.equal false ((Cut.opts {fields:"0"}) dot ok)
+  ]
+  Test.test "every refusal carries a message" [
+    Assert.equal true ((size ((Cut.opts {}) dot err)) gt 0)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 2. The argv contract.
+# ----------------------------------------------------------------------------
+Test.describe "argv" [
+  Test.test "-f takes its value" [
+    Assert.equal "1,3" ((Cli.parse (Cut.spec) ["-f" "1,3"]) dot flags dot fields)
+  ]
+  Test.test "the attached form -f1,3 works too" [
+    Assert.equal "1,3" ((Cli.parse (Cut.spec) ["-f1,3"]) dot flags dot fields)
+  ]
+  Test.test "and the long --fields=1,3 form" [
+    Assert.equal "1,3" ((Cli.parse (Cut.spec) ["--fields=1,3"]) dot flags dot fields)
+  ]
+  Test.test "a repeated -f collects into a List" [
+    Assert.equal ["1" "3"] ((Cli.parse (Cut.spec) ["-f1" "-f3"]) dot flags dot fields)
+  ]
+  Test.test "-d takes a value that looks like a flag" [
+    Assert.equal "-" ((Cli.parse (Cut.spec) ["-f1" "-d" "-"]) dot flags dot delimiter)
+  ]
+  Test.test "-s is a bool, so it clusters with a value flag" [
+    Assert.equal true ((Cli.parse (Cut.spec) ["-sf1"]) dot flags dot only-delimited)
+  ]
+  Test.test "operands survive the flags" [
+    Assert.equal ["a" "b"] ((Cli.parse (Cut.spec) ["-f1" "a" "b"]) dot args)
+  ]
+  Test.test "-f with no value is a usage error, not a crash" [
+    Assert.equal false ((Cli.parse (Cut.spec) ["-f"]) dot ok)
+  ]
+  Test.test "an unknown flag is data, and names the offender" [
+    Assert.equal "unknown flag: -z" ((Cli.parse (Cut.spec) ["-z"]) dot err)
+  ]
+  Test.test "--version prints the name and version" [
+    Assert.equal "cut 0.1.0\n" ((Cli.dispatch (Cut.spec) ["--version"]) dot out)
+  ]
+  Test.test "--help renders the LIST value names in the flag column" [
+    Assert.equal true ((StringUtil.indexof "LIST" ((Cli.dispatch (Cut.spec) ["--help"]) dot out)) gte 0)
+  ]
+  Test.test "a usage error dispatches to code 2" [
+    Assert.equal 2 ((Cli.dispatch (Cut.spec) ["-z"]) dot code)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 3. The program itself.
+# ----------------------------------------------------------------------------
+Test.describe "streaming" [
+  Test.test "one operand is drained to EOF: exit 0, every line counted" [
+    (IO.write (make Pathon fixture) "a:b:c\nd:e:f\n") drop
+    def st (flex {n:0})
+    def rc (Cut.one fixture st (Cut.opts {fields:"1" delimiter:":"}))
+    Assert.equal [0 2] [rc (Cut.count st)]
+  ]
+  Test.test "the state is shared, so the count continues across inputs" [
+    def st (flex {n:0})
+    def _1 (Cut.one fixture st (Cut.opts {fields:"1" delimiter:":"}))
+    def _2 (Cut.one fixture st (Cut.opts {fields:"1" delimiter:":"}))
+    Assert.equal 4 (Cut.count st)
+  ]
+  Test.test "a file longer than the first chunk (64) crosses the ramp intact" [
+    def big "/tmp/boru-utils-cut-test-ramp.txt"
+    (IO.write (make Pathon big) (StringUtil.repeat 65 "x:y\n")) drop
+    def st (flex {n:0})
+    def rc (Cut.one big st (Cut.opts {fields:"2" delimiter:":"}))
+    (IO.remove (make Pathon big)) drop
+    Assert.equal [0 65] [rc (Cut.count st)]
+  ]
+  Test.test "a missing operand is reported as 1, not raised" [
+    Assert.equal 1 (Cut.one missing (flex {n:0}) (Cut.opts {fields:"1"}))
+  ]
+]
+
+Test.describe "exit codes" [
+  Test.test "a readable file with a valid list exits 0" [
+    Assert.equal 0 (Cut.main ["-f1" "-d:" fixture])
+  ]
+  Test.test "-c over the same file exits 0" [
+    Assert.equal 0 (Cut.main ["-c1-3" fixture])
+  ]
+  Test.test "a missing file exits 1" [
+    Assert.equal 1 (Cut.main ["-f1" missing])
+  ]
+  Test.test "one bad operand among good ones still exits 1" [
+    Assert.equal 1 (Cut.main ["-f1" fixture missing])
+  ]
+  Test.test "NO list at all exits 2 — a usage error, not a read error" [
+    Assert.equal 2 (Cut.main [fixture])
+  ]
+  Test.test "both -f and -c exits 2" [
+    Assert.equal 2 (Cut.main ["-f1" "-c1" fixture])
+  ]
+  Test.test "a malformed list exits 2 BEFORE any file is opened" [
+    Assert.equal 2 (Cut.main ["-f0" missing])
+  ]
+  Test.test "a two-character delimiter exits 2" [
+    Assert.equal 2 (Cut.main ["-f1" "-dxy" fixture])
+  ]
+  Test.test "--help exits 0" [ Assert.equal 0 (Cut.main ["--help"]) ]
+  Test.test "--version exits 0" [ Assert.equal 0 (Cut.main ["--version"]) ]
+  Test.test "an unknown flag exits 2" [ Assert.equal 2 (Cut.main ["-z"]) ]
+  Test.test "usage errors outrank read errors: 2 wins over the missing file" [
+    Assert.equal 2 (Cut.main ["-z" missing])
+  ]
+]

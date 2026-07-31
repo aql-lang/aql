@@ -13,7 +13,7 @@ import (
 // MISCOMPILE (the cardinal forbidden outcome). The fix: a def/undef of a name an
 // already-created stored ref reads (NotifyNameRebound) POISONS that ref, so
 // Finalize leaves it unstamped (Prog nil) and InvokeCallback falls back to
-// CallAQL — the interpreter, which resolves the live definition. compile ==
+// CallBORU — the interpreter, which resolves the live definition. compile ==
 // interpret MUST hold, and the ref must NOT be stamped (StoredRefStampedCount 0).
 func TestCompiledStoredHandlerFreezeRedefine(t *testing.T) {
 	cases := []struct{ name, src, want string }{
@@ -77,7 +77,7 @@ call {} svc`, "[11]"},
 }
 
 // TestCompiledStoredHandlerStableDepCompiles is the POSITIVE guard: a stored handler over
-// a module dependency that is NEVER redefined (the shape of every real aql:net
+// a module dependency that is NEVER redefined (the shape of every real boru:net
 // app handler — todo-api's live-todos, mini-redis's arg-at/kv-read) MUST still
 // compile its unit and be stamped. Proves the fix is PRECISE — keyed on actual
 // redefinition, not "reads a module ref" — so the apps keep their compiled

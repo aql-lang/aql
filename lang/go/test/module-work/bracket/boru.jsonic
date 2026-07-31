@@ -1,0 +1,7 @@
+name: bracket
+main: bracket.boru
+major: 1
+minor: 3
+patch: 0
+files: [bracket.boru]
+deps: {tagger: 3.0.2}
