@@ -379,7 +379,8 @@ constants) **iff** one of these holds:
    `ReturnCheck`, `DefCleanup`, `ParenExpr`, `InterpString`,
    `Module`.
 3. It is a meta-type used by `is`/`typeof`/`inspect`: `Type`,
-   `Function`, `FnDef`, `FnUndef`, `Disjunct`, `Enum`.
+   `Function`, `FnUndef`, `Disjunct`, `Enum`. (`FnDef` — `Word/__FN`
+   — was collapsed into `Function`; ADR-011.)
 4. It is a structural type used by `make`/`record`/`class`:
    `Record`, `Options`, `Table`, `ChildType`, `Class`,
    `Resource`, `Store`, `Error`, and the `Scalar/Micron`

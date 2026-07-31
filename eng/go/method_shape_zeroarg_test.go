@@ -14,7 +14,7 @@ import (
 // z9Member builds a named trivial-delegation fn VALUE over inner natives
 // registered in r (the shaped-instance-method class).
 func z9Member(name string, r *Registry, sigs ...Signature) Value {
-	return NewFnDef(FnDefInfo{Name: name, Registry: r, Signatures: sigs})
+	return NewFunction(FnDefInfo{Name: name, Registry: r, Signatures: sigs})
 }
 
 func z9Engine(t *testing.T, r *Registry, tape []Value) *Engine {
@@ -59,7 +59,7 @@ func TestFnDefNameFallbacks(t *testing.T) {
 	if got := fnDefName(NewInteger(3)); got != "fn value" {
 		t.Errorf("fnDefName(non-fn) = %q, want the generic label", got)
 	}
-	if got := fnDefName(NewFnDef(FnDefInfo{})); got != "fn value" {
+	if got := fnDefName(NewFunction(FnDefInfo{})); got != "fn value" {
 		t.Errorf("fnDefName(anonymous) = %q, want the generic label", got)
 	}
 }
@@ -144,7 +144,7 @@ func TestShapedMethodApplyWindowZeroArgGates(t *testing.T) {
 func TestNoteMethodShapeDeclinesNonDelegation(t *testing.T) {
 	r := seam7Reg(t)
 	r.Check.Mode = true
-	realBody := NewFnDef(FnDefInfo{Name: "z9real", Registry: r, Signatures: []Signature{{
+	realBody := NewFunction(FnDefInfo{Name: "z9real", Registry: r, Signatures: []Signature{{
 		Params: []FnParam{{Name: "n", Type: TInteger}}, Returns: []*Type{TAny},
 		BarrierPos: -1, Impl: Boru([]Value{NewWord("n"), NewWord("n")}),
 	}}})

@@ -113,7 +113,7 @@ func isPredicateFnValue(v Value) bool {
 	if v.Parent == nil {
 		return false
 	}
-	if !v.Parent.Equal(TFnDef) && !v.Parent.Equal(TFunction) {
+	if !v.Parent.Equal(TFunction) {
 		return false
 	}
 	info, ok := v.Data.(FnDefInfo)

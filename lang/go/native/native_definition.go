@@ -324,7 +324,7 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// "a function is bound here", so record the carrier in the per-pass
 	// fn-carrier side table they consult.
 	if checking && !IsConcrete(value) &&
-		(value.Parent.ConformsTo(TFunction) || value.Parent.ConformsTo(TFnDef)) {
+		value.Parent.ConformsTo(TFunction) {
 		noteCheckFnCarrierBind(r, name, value)
 	}
 	return outs, nil
@@ -657,7 +657,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // keeps the reserved_word refusal. Sealed words (`def`, `make`,
 // `word`) refuse inside InstallWordExtension.
 func defWordExtension(r *Registry, name string, body Value, pos SrcPos) (bool, error) {
-	if !body.Parent.Equal(TFnDef) && !body.Parent.Equal(TFunction) {
+	if !body.Parent.Equal(TFunction) {
 		return false, nil
 	}
 	// A FailedDispatch fn value is here because a CALL matched no signature —
@@ -788,7 +788,7 @@ func defFnPredicateBind(r *Registry, name, typeName string, constraint, body Val
 	// type (e.g. `fn [n:Integer …]`). Predicates with `Any`
 	// input — the historical `fn [x:Any Any […]]` shape — are
 	// pure validation gates: their *Type is parented at
-	// TFnDef and rewrapping would break rendering and
+	// TFunction and rewrapping would break rendering and
 	// downstream type tests (the value would print as
 	// `Type/Function/Bbd({…})` rather than its underlying
 	// scalar). The PredicateInputType check below mirrors the
@@ -993,12 +993,12 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	if constraint.Parent.Equal(TFnUndef) && IsAtom(body) {
 		atomName, _ := AsAtom(body)
 		if top, ok := r.Defs.Top(atomName); ok {
-			if top.Parent.Equal(TFnDef) || top.Parent.Equal(TFunction) {
+			if top.Parent.Equal(TFunction) {
 				body = top
 			}
 		}
 	}
-	if constraint.Parent.Equal(TFnDef) || constraint.Parent.Equal(TFunction) {
+	if constraint.Parent.Equal(TFunction) {
 		return defFnPredicateBind(r, name, typeName, constraint, body, describeType, args[0].Pos())
 	}
 
@@ -1190,7 +1190,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// FnUndef constraint (`def f:Mapper fn […]`): after Unify
 	// confirms the function shape matches Mapper, rewrap the
 	// Parent so dispatch keys off Mapper rather than the generic
-	// TFunction / TFnDef. Behaviors installed via
+	// the generic TFunction. Behaviors installed via
 	// `behave compare/q (fn [[Mapper Mapper] …])` then dispatch on
 	// f. Same rewrap pattern as predicate types — the payload
 	// shape (FnDefInfo) is unchanged, accessors keep working, just

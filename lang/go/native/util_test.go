@@ -596,11 +596,11 @@ func TestRunPredicate_NotAFn(t *testing.T) {
 func TestRunPredicate_BadPayload(t *testing.T) {
 	r, _ := NewRegistry()
 	// Post Step 5g: payload is a sealed interface. A wrong-shape
-	// payload (a StrPayload for a TFnDef-typed Value) is the
+	// payload (a StrPayload for a TFunction-typed Value) is the
 	// closest we can express to "not a FnDefInfo" — the value
 	// satisfies Payload but is the wrong variant. RunPredicate must
 	// detect the mismatch at runtime.
-	v := Value{Parent: TFnDef, Data: StrPayload{S: "not a FnDefInfo"}}
+	v := Value{Parent: TFunction, Data: StrPayload{S: "not a FnDefInfo"}}
 	_, _, err := r.RunPredicate(v, NewInteger(42))
 	if err == nil {
 		t.Fatalf("expected error for invalid FnDef payload")
@@ -609,7 +609,7 @@ func TestRunPredicate_BadPayload(t *testing.T) {
 
 func TestRunPredicate_ZeroArgPredicate(t *testing.T) {
 	r, _ := NewRegistry()
-	v := Value{Parent: TFnDef, Data: FnDefInfo{}}
+	v := Value{Parent: TFunction, Data: FnDefInfo{}}
 	_, _, err := r.RunPredicate(v, NewInteger(42))
 	if err == nil {
 		t.Fatalf("expected error for predicate with no sigs")
@@ -618,7 +618,7 @@ func TestRunPredicate_ZeroArgPredicate(t *testing.T) {
 
 func TestRunPredicate_MultiArgPredicate(t *testing.T) {
 	r, _ := NewRegistry()
-	v := Value{Parent: TFnDef, Data: FnDefInfo{
+	v := Value{Parent: TFunction, Data: FnDefInfo{
 		Signatures: []FnSig{{Params: []FnParam{{Type: TAny}, {Type: TAny}}, BarrierPos: -1}},
 	}}
 	_, _, err := r.RunPredicate(v, NewInteger(42))

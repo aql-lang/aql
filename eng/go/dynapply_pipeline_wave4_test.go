@@ -425,7 +425,7 @@ func TestIsAppliableFnShapes(t *testing.T) {
 	if isFnTypedCarrier(NewCarrier(TInteger)) {
 		t.Error("Integer carrier fn-typed")
 	}
-	if !isFnValueResidual(NewFnDef(FnDefInfo{Name: "g"})) {
+	if !isFnValueResidual(NewFunction(FnDefInfo{Name: "g"})) {
 		t.Error("FnDef value not a fn residual")
 	}
 	if isFnValueResidual(NewString("s")) {

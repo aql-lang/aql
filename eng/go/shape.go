@@ -24,8 +24,7 @@ const (
 	ShapeDisjunct                  // DisjunctInfo
 	ShapeNegation                  // NegationInfo — set-theoretic complement
 	ShapeFnUndef                   // FnUndefInfo — structural fn-shape constraint
-	ShapeFnDef                     // FnDefInfo on TFnDef
-	ShapeFunction                  // FnDefInfo on TFunction
+	ShapeFunction                  // FnDefInfo on TFunction (there is exactly one function type — ADR-011)
 	ShapeDepScalar                 // DepScalarInfo — refined scalar with bounds
 	ShapeScalar                    // concrete scalar leaf (Integer/Float/String/Boolean/Atom/...)
 	ShapeList                      // plain list — Parent=TList, Data=ListPayload
@@ -79,10 +78,7 @@ func Shape(v Value) ValueShape {
 		return ShapeFnUndef
 	}
 	if _, ok := v.Data.(FnDefInfo); ok {
-		if t.Equal(TFunction) {
-			return ShapeFunction
-		}
-		return ShapeFnDef
+		return ShapeFunction
 	}
 	if _, ok := v.Data.(ClassInstanceInfo); ok {
 		return ShapeObjectInstance

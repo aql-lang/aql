@@ -11,7 +11,7 @@ import (
 // Module/Export/Doc provenance and a single 2-arg forward-eligible sig,
 // mirroring what a module maker + stampExportProvenance produce.
 func fnDefWithProvenance() Value {
-	return NewFnDef(FnDefInfo{
+	return NewFunction(FnDefInfo{
 		Name:   "indices",
 		Module: "boru:array-util",
 		Export: "ArrayUtil",

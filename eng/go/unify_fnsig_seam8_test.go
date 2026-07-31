@@ -8,7 +8,7 @@ import "testing"
 
 func TestW8UnifyFnUndefShapeLeftUndef(t *testing.T) {
 	undef := NewFnUndef(FnUndefInfo{}) // empty constraint matches any fn
-	fn := NewValueRaw(TFnDef, FnDefInfo{})
+	fn := NewValueRaw(TFunction, FnDefInfo{})
 	if Shape(undef) != ShapeFnUndef {
 		t.Fatalf("precondition: FnUndef value must have ShapeFnUndef, got %v", Shape(undef))
 	}

@@ -397,7 +397,7 @@ func BuildMatrixModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// minted Matrix type is what satisfies the module-scope user-type
 	// rule; mat-add / mat-sub / mat-mul stay as aliases.
 	for _, ext := range TensorArithmeticExtensions(tt) {
-		exports.Set(ext.Extends, native.NewFnDef(ext))
+		exports.Set(ext.Extends, native.NewFunction(ext))
 	}
 
 	return moduleDesc(parent, "MatrixUtil", subReg, exports), nil

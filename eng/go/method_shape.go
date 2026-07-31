@@ -381,7 +381,7 @@ func (e *Engine) shapedMethodReturnArity(sig *Signature, args []Value, pos SrcPo
 // dynamic(String|None) etc. must strand its trailing values as data (the
 // runtime never calls them), keeping the residual stack depth honest.
 func dynamicBoundConformsToFunction(v Value) bool {
-	if v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef) {
+	if v.Parent.ConformsTo(TFunction) {
 		return true
 	}
 	if disj, err := AsDisjunct(v); err == nil {
@@ -390,7 +390,7 @@ func dynamicBoundConformsToFunction(v Value) bool {
 			// lattice identity (typeNodeOf) is the represented type — its
 			// .Parent is TType, not the type itself.
 			at := typeNodeOf(alt)
-			if at.ConformsTo(TFunction) || at.ConformsTo(TFnDef) {
+			if at.ConformsTo(TFunction) {
 				return true
 			}
 		}

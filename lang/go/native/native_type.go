@@ -798,7 +798,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	if b.Parent.Equal(TFnUndef) && IsAtom(a) {
 		name, _ := AsAtom(a)
 		if top, ok := r.Defs.Top(name); ok {
-			if top.Parent.Equal(TFnDef) || top.Parent.Equal(TFunction) {
+			if top.Parent.Equal(TFunction) {
 				a = top
 			}
 		}
@@ -808,7 +808,7 @@ func isHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	// minted subtype of Function (the boru:minilang partial kinds,
 	// MiniLang.Re / …) and must fall through to the type-literal
 	// branch below, where a.Is(bNode) runs its member predicate.
-	if (b.Parent.Equal(TFnDef) || b.Parent.Equal(TFunction)) && !IsBareTypeNode(b) {
+	if b.Parent.Equal(TFunction) && !IsBareTypeNode(b) {
 		_, matched, err := r.RunPredicate(b, a)
 		if err != nil {
 			return []Value{NewBoolean(false)}, nil

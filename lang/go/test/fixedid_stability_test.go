@@ -64,13 +64,14 @@ func TestFixedIDStability(t *testing.T) {
 		"Word/__IN":                       20,
 		"Word/__FW":                       21,
 		"Word/__OP":                       22,
-		"Word/__FN":                       23,
-		"Type/FunctionSignature":          24,
-		"Word/__RC":                       25,
-		"Type/Disjunct":                   26,
-		"Word/__MK":                       27,
-		"Word/__MV":                       28,
-		"Ideal":                           48,
+		// FixedID 23 retired with Word/__FN (collapsed into Type/Function,
+		// ADR-011); not recycled.
+		"Type/FunctionSignature": 24,
+		"Word/__RC":              25,
+		"Type/Disjunct":          26,
+		"Word/__MK":              27,
+		"Word/__MV":              28,
+		"Ideal":                  48,
 		// FixedID 30 retired with Ideal/Object (the bare open container);
 		// class instances live under Ideal/Class. Not recycled.
 		"Node/Map/Inspect": 31,

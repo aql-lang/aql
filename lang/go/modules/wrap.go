@@ -77,7 +77,7 @@ func makeModuleFnDef(n native.NativeFunc, subReg *native.Registry) native.Value 
 			ReturnsFn: s.ReturnsFn,
 		}
 	}
-	return native.NewFnDef(native.FnDefInfo{
+	return native.NewFunction(native.FnDefInfo{
 		Name:       n.Name,
 		Signatures: fnSigs,
 		Registry:   subReg,
@@ -123,7 +123,7 @@ func makeWrapFnDef(wordName string, subReg *native.Registry, sigs ...wrapSig) na
 			BarrierPos:    barrier,
 		}
 	}
-	return native.NewFnDef(native.FnDefInfo{
+	return native.NewFunction(native.FnDefInfo{
 		Name:       wordName,
 		Signatures: fnSigs,
 		Registry:   subReg,

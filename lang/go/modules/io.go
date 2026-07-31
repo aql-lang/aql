@@ -88,7 +88,7 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// `list` / `remove` (design/OPEN-WORDS.0.md). transplantWordExtensions
 	// picks these out of the export map by IsWordExtension.
 	for _, ext := range native.IOWordExtensions(fileType) {
-		exports.Set(ext.Extends, native.NewFnDef(ext))
+		exports.Set(ext.Extends, native.NewFunction(ext))
 	}
 
 	return moduleDesc(parent, "IO", subReg, exports), nil

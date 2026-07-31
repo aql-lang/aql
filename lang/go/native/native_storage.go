@@ -1036,7 +1036,7 @@ func recordSchemaFieldReturns(rt RecordTypeInfo, key Value) []Value {
 		return []Value{NewDynamicCarrierValue(NewRecordType(nested.Fields))}
 	}
 	ft := ValueType(fv)
-	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+	if ft == nil || ft.ConformsTo(TFunction) {
 		return dyn
 	}
 	return []Value{NewDynamicCarrier(ft)}
@@ -1176,11 +1176,11 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	// and would collide in operand-provenance tracking). A NON-closure wrapper
 	// (`r.int`, RNG-bound) stays dynamic so it does not bake a seed-specific
 	// handler -- it takes the runtime CALL_DYNAMIC path instead.
-	if (val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef)) &&
+	if val.Parent.ConformsTo(TFunction) &&
 		isClosureBearingWrapper(val) {
 		return []Value{CloneValue(val)}
 	}
-	if val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef) ||
+	if val.Parent.ConformsTo(TFunction) ||
 		IsReach(val) || IsSplice(val) {
 		// Shaped-instance-method annotation (Stage M2c, eng/method_shape.go):
 		// a NON-closure delegation wrapper member (`l.info`, `c.add`, `r.int`)
@@ -1191,7 +1191,7 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 		// NoteMethodShape vets the member (delegation wrapper only, never a
 		// genuine 0-arg overload — the miscompile-E auto-dispatch class stays
 		// refused); everything it declines keeps the bare dynamic Any.
-		if r != nil && (val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef)) {
+		if r != nil && val.Parent.ConformsTo(TFunction) {
 			out := NewDynamicCarrier(TAny)
 			r.Check.NoteMethodShape(out, val)
 			return []Value{out}
@@ -1250,7 +1250,7 @@ func getIntKeyReturns(args []Value, r *Registry) []Value {
 		return []Value{NewCarrier(TNone)} // out-of-range index reads as None
 	}
 	el := list.Get(i)
-	if el.Parent.ConformsTo(TFunction) || el.Parent.ConformsTo(TFnDef) ||
+	if el.Parent.ConformsTo(TFunction) ||
 		IsReach(el) || IsSplice(el) {
 		return dyn
 	}
@@ -1324,7 +1324,7 @@ func getObjectReturns(args []Value, r *Registry) []Value {
 		return []Value{NewCarrier(TNone)} // sealed / absent field reads as None
 	}
 	ft := ValueType(fv)
-	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+	if ft == nil || ft.ConformsTo(TFunction) {
 		return dyn
 	}
 	return []Value{NewCarrier(ft)}
@@ -1352,7 +1352,7 @@ func getResourceReturns(args []Value, r *Registry) []Value {
 		return []Value{NewCarrier(TNone)} // absent field reads as None
 	}
 	ft := ValueType(fv)
-	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+	if ft == nil || ft.ConformsTo(TFunction) {
 		return dyn
 	}
 	return []Value{NewCarrier(ft)}

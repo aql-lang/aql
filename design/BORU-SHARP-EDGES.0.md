@@ -129,10 +129,15 @@ snapshots it in-frame.
 
 ### G12 — an `/r`-parked fn does not match a `Function`-typed param  ·  *engine-bug (candidate)*
 
-> **Status: still reproduces (re-verified 2026-07-30). Registered as
-> [NUR050](../NUR.md#nur050)** — verdict (2026-07-31): FIX needed,
-> mechanism deferred — one principled `Function` type with
-> reference-vs-call distinguished at the call site (ADR-level).
+> **Status: FIXED (NUR050, resolved 2026-07-31 — ADR-011).** Two
+> halves: (1) a `/r`-marked word now feeds forward collection as its
+> reference (`wa {x:1} some-fn/r` dispatches; the function-word
+> barrier fired before the marker was visible), and (2) `Word/__FN`
+> was collapsed into `Type/Function` — there is exactly one function
+> type, so the checker's `__FN` misdiagnosis is gone and a bare fn
+> name before a Function-typed slot resolves as a reference (the
+> planner's designed intercept, un-broken by the collapse). The
+> map-continuation workaround below is no longer required.
 
 ```
 def wa fn [[s:Map act:Function] [Map] [ act s ]]
@@ -284,16 +289,16 @@ and `design/NUR-RESOLUTION-PLAN.0.md`).
 | # | Finding | Class | Status → action |
 |---|---|---|---|
 | G8  | recovered-raise binding teardown | engine-bug? | **no longer reproduces** (fixed by unrelated work) |
-| G12 | `/r` fn ≠ `Function` param | engine-bug? | reproduces → **NUR050**: fix needed, mechanism deferred (function type vs reference; ADR-level) |
+| G12 | `/r` fn ≠ `Function` param | engine-bug? | **FIXED** (NUR050 resolved 2026-07-31 — /r collection admission + the ADR-011 one-Function-type collapse) |
 | G10 | `def why (dot message)` in `error` | latent-bug | reproduces → **NUR049**: symmetric paren barrier; fix `todo-tui-client.boru` + failing-sync test |
 | G9  | `case` default slot collection | sharp-edge | **FIXED** (NUR048 resolved 2026-07-31 — open-call default runs isolated like a matched arm) |
 | G11 | returned list literal laziness | sharp-edge | **no longer reproduces** (fixed by unrelated work) |
 | G13a| single-token bare-map body | compiler-limit | **no longer reproduces** (single-token now compiles) |
 | G13b| type-literal map value | compiler-limit | **FIXED** (NUR051 resolved 2026-07-31 — nested bare type nodes intern as `OpPushType` operands; ADR-010) |
 
-The two live items (G10 → NUR049, G12 → NUR050) carry verdict-bearing
-NUR records; a per-item fix retires its record — as G9 (NUR048) and
-G13b (NUR051) now demonstrate. The two dead engine items (G8, G11) and
+The one live item (G10 → NUR049) carries a verdict-bearing NUR
+record; a per-item fix retires its record — as G9 (NUR048), G12
+(NUR050) and G13b (NUR051) now demonstrate. The two dead engine items (G8, G11) and
 the dead compiler item (G13a) were fixed by unrelated work — which the
 register only noticed on re-verification, the cost of the original
 umbrella entry.

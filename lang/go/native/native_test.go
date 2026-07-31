@@ -668,7 +668,7 @@ func TestRemoveRecordHandler(t *testing.T) {
 
 // makeTrueFilterFn creates a boru function that takes one map arg and returns true.
 func makeTrueFilterFn() Value {
-	return NewFnDef(FnDefInfo{
+	return NewFunction(FnDefInfo{
 		Signatures: []FnSig{
 			{
 				Params: []FnParam{
@@ -724,7 +724,7 @@ func TestFilterHandler(t *testing.T) {
 // makeWalkValueFn creates a boru function that extracts the "value" field
 // from the walk node map. Body: [getpath node "value"]
 func makeWalkValueFn() Value {
-	return NewFnDef(FnDefInfo{
+	return NewFunction(FnDefInfo{
 		Signatures: []FnSig{
 			{
 				Params: []FnParam{

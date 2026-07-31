@@ -953,7 +953,7 @@ func stampResultPos(vals []Value, pos *SrcPos) {
 				rc.Pos = *pos
 				vals[i] = NewReturnCheck(rc)
 			}
-		case vals[i].Parent.Equal(TFunction) || vals[i].Parent.Equal(TFnDef):
+		case vals[i].Parent.Equal(TFunction):
 			vals[i].pos = pos
 		}
 	}
@@ -2179,19 +2179,8 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// `undef foo`, a raw/form/type slot, a matching KEYWORD literal like
 		// def's `fn`) — there the function word is the argument, not a
 		// barrier, and the scan must walk past it.
-		if IsWord(tok) && !capturesForwardToken(fn, pos, tok) {
-			if wi, werr := AsWord(tok); werr == nil && e.registry.Lookup(wi.Name) != nil &&
-				// A `/r`-marked word is NO barrier: it denotes its
-				// REFERENCE value (inert data), never a call — the
-				// call-site marker is explicit intent (NUR050/G12).
-				// The scan counts it as an ordinary optimistic
-				// position; stepWordRef resolves and DELIVERS the
-				// Function value to the parked forward at arrival
-				// (the phase-2 half of this rule — keep in sync per
-				// design/FORWARD-COLLECTION-PHASES.10.md).
-				!wi.ForceRef {
-				break
-			}
+		if IsWord(tok) && !capturesForwardToken(fn, pos, tok) && e.fnWordBarrierAt(tok) {
+			break
 		}
 
 		// Non-group token. A concrete literal carries a final type that
@@ -2216,6 +2205,19 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		scanIdx++
 	}
 	return nil
+}
+
+// fnWordBarrierAt reports whether a scan token is a bare function word
+// acting as a forward-collection barrier: registered as a function and
+// NOT `/r`-marked. An `/r`-marked word is NO barrier — it denotes its
+// REFERENCE value (inert data), never a call; the call-site marker is
+// explicit intent (NUR050/G12). The scan then counts it as an ordinary
+// optimistic position, and stepWordRef resolves and DELIVERS the
+// Function value to the parked forward at arrival (the phase-2 half of
+// this rule — keep in sync per design/FORWARD-COLLECTION-PHASES.10.md).
+func (e *Engine) fnWordBarrierAt(tok Value) bool {
+	wi, werr := AsWord(tok)
+	return werr == nil && e.registry.Lookup(wi.Name) != nil && !wi.ForceRef
 }
 
 // sigRawSlot reports whether signature sig captures position pos structurally
@@ -4122,7 +4124,7 @@ func (e *Engine) stepLiteral() error {
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.tape.At(valIdx)
-		if (val.Parent.Equal(TFnDef) || val.Parent.Equal(TFunction)) &&
+		if val.Parent.Equal(TFunction) &&
 			val.Data != nil && !val.Quoted {
 			if _, ok := val.Data.(FnDefInfo); ok {
 				return e.execFnDefLiteral(valIdx)
@@ -7892,7 +7894,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// value (mirror of stepWord's r.Types lookup so the
 					// planner's expected type matches what stepWord
 					// will actually push at runtime). Predicate types
-					// arrive as TFnDef/TFunction values; plan against
+					// arrive as TFunction values; plan against
 					// that Parent for sig matching.
 					if tv, ok := e.registry.TopTypeBody(ww.Name); ok {
 						if sigArgMatches(sig, fwd, tv) || expectedType.Equal(TAny) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)

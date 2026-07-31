@@ -56,7 +56,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 	// The def word's handler records the carrier in the check-scoped
 	// fn-carrier side table instead (native installAndRecordDef), which the
 	// parse/mini/emit value-form macros consult for name resolution.
-	if body.Parent.Equal(TFnDef) || body.Parent.Equal(TFunction) {
+	if body.Parent.Equal(TFunction) {
 		fnDef, ok := body.Data.(FnDefInfo)
 		if !ok {
 			return
@@ -105,7 +105,7 @@ func installDef(r *Registry, name string, body Value, shadow bool, stackOnly ...
 						MaxForwardArgs: inner.MaxForwardArgs,
 						Registry:       reg,
 					}
-					r.Defs.Push(name, NewFnDef(rebound))
+					r.Defs.Push(name, NewFunction(rebound))
 					if r.ready && r.OnRegisterHook != nil {
 						r.OnRegisterHook(name)
 					}
@@ -1032,7 +1032,7 @@ func hasCheckDiagnostic(r *Registry, code, detail string) bool {
 // the interpreter applies at runtime; see emit.go's cluster-E refusal).
 func stackHasFnValue(stk []Value) bool {
 	for _, v := range stk {
-		if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
+		if v.Parent != nil && v.Parent.ConformsTo(TFunction) {
 			return true
 		}
 	}
@@ -1157,7 +1157,7 @@ func residualProvablyDisjoint(got Value, exp *Type) bool {
 	// it (the "fn-value-call boundary" imprecision class), so a Function
 	// residual routinely means "not modeled", not "returns a function".
 	// Both stay with the runtime RET check.
-	if p.ConformsTo(TDisjunct) || p.ConformsTo(TFunction) || p.ConformsTo(TFnDef) {
+	if p.ConformsTo(TDisjunct) || p.ConformsTo(TFunction) {
 		return false
 	}
 	// A declared type that admits values by VALUE-level membership — a
@@ -1651,9 +1651,9 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// check pass; the compile pass keeps the carrier and compiles the
 				// closure as before.
 				if !r.Check.Compiling &&
-					(t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) && len(stk) >= len(declaredReturns) {
+					t.ConformsTo(TFunction) && len(stk) >= len(declaredReturns) {
 					if bv := stk[len(stk)-len(declaredReturns)+i]; IsConcrete(bv) &&
-						(bv.Parent.ConformsTo(TFunction) || bv.Parent.ConformsTo(TFnDef)) {
+						bv.Parent.ConformsTo(TFunction) {
 						out[i] = CloneValue(bv)
 						continue
 					}
@@ -1779,7 +1779,7 @@ func InstallFnDef(r *Registry, name string, fnDef FnDefInfo, stackOnly ...bool) 
 	entry.Signatures = compileFnSigs(r, name, fnDef, isStackOnly)
 	SortSignatures(entry.Signatures)
 	entry.MaxForwardArgs = calcMaxForwardArgs(entry.Signatures)
-	r.Defs.Push(name, NewFnDef(entry))
+	r.Defs.Push(name, NewFunction(entry))
 	// Construction-time body check (first-class, post-binding). Replaces the
 	// dynamic-help example eval's accidental side-channel: that eval ran each fn
 	// body against SYNTHETIC example args ({a:1,b:2}), producing false positives
@@ -2147,7 +2147,7 @@ func IsTypeBody(v Value) bool {
 		return true
 	}
 	// Predicate type: a FnDef / Function whose body returns a Boolean.
-	if v.Parent.Equal(TFnDef) || v.Parent.Equal(TFunction) {
+	if v.Parent.Equal(TFunction) {
 		return true
 	}
 	// Micron type body (`refine Micron {fields}`)
@@ -2165,7 +2165,7 @@ func IsTypeBody(v Value) bool {
 // predicate-shaped fn body (a Function or FnDef whose first sig
 // takes exactly one argument with a declared type other than Any).
 // Returns nil if v isn't a predicate type or the input type is Any
-// or unset — those bodies stay parented at TFnDef / TFunction, the
+// or unset — those bodies stay parented at TFunction, the
 // pre-existing behavior.
 //
 // Used by InstallType to mint user-defined predicate types with the
@@ -2178,7 +2178,7 @@ func PredicateInputType(v Value) *Type {
 	if v.Parent == nil {
 		return nil
 	}
-	if !v.Parent.Equal(TFnDef) && !v.Parent.Equal(TFunction) {
+	if !v.Parent.Equal(TFunction) {
 		return nil
 	}
 	info, ok := v.Data.(FnDefInfo)

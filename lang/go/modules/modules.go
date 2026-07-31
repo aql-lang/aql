@@ -132,7 +132,7 @@ func stampExportProvenance(desc native.ModuleDesc) {
 			if v.Parent == native.TFunction {
 				om.Set(key, native.NewFunction(*fn))
 			} else {
-				om.Set(key, native.NewFnDef(*fn))
+				om.Set(key, native.NewFunction(*fn))
 			}
 		}
 	}

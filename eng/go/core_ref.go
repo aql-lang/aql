@@ -78,7 +78,7 @@ func IsFunctionRef(v Value) bool {
 // return checks, closures, module scope) is preserved; usurp only reverses
 // which caller argument lands in which original slot.
 func UsurpFunction(v Value) (Value, bool) {
-	if !v.Parent.Equal(TFunction) && !v.Parent.Equal(TFnDef) {
+	if !v.Parent.Equal(TFunction) {
 		return Value{}, false
 	}
 	fnDef, ok := v.Data.(FnDefInfo)
@@ -145,7 +145,7 @@ func ForceStackFunction(v Value) (Value, bool)   { return rebarrierFunction(v, t
 func ForceForwardFunction(v Value) (Value, bool) { return rebarrierFunction(v, false) }
 
 func rebarrierFunction(v Value, stack bool) (Value, bool) {
-	if !v.Parent.Equal(TFunction) && !v.Parent.Equal(TFnDef) {
+	if !v.Parent.Equal(TFunction) {
 		return Value{}, false
 	}
 	fnDef, ok := v.Data.(FnDefInfo)
@@ -204,7 +204,7 @@ func rebarrierFunction(v Value, stack bool) (Value, bool) {
 // selecting the original's 2-arg overload. Returns false when v is not a
 // function value or n < 0.
 func ForceArityFunction(v Value, n int) (Value, bool) {
-	if n < 0 || (!v.Parent.Equal(TFunction) && !v.Parent.Equal(TFnDef)) {
+	if n < 0 || !v.Parent.Equal(TFunction) {
 		return Value{}, false
 	}
 	fnDef, ok := v.Data.(FnDefInfo)

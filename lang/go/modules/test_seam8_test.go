@@ -27,7 +27,7 @@ func TestW8ResolveTestExportTypeBody(t *testing.T) {
 
 	// FnDef-typed body → NewFnDef (187/188).
 	defA := modReg.Types.MintType("WTypeFn", native.TIdeal)
-	modReg.Defs.PushType("WTypeFn", defA, native.NewFnDef(native.FnDefInfo{Name: "wtf"}))
+	modReg.Defs.PushType("WTypeFn", defA, native.NewFunction(native.FnDefInfo{Name: "wtf"}))
 	outA := resolveTestExport(modReg, native.NewWord("WTypeFn"))
 	if _, ok := outA.Data.(native.FnDefInfo); !ok {
 		t.Errorf("resolveTestExport(type→FnDef) = %v, want an FnDef value", outA)
@@ -47,7 +47,7 @@ func TestW8ResolveTestExportTypeBody(t *testing.T) {
 // FnDef value.
 func TestW8ResolveTestExportValueFnDef(t *testing.T) {
 	modReg := mcovReg(t)
-	modReg.Defs.Push("wvfd", native.NewFnDef(native.FnDefInfo{Name: "vf"}))
+	modReg.Defs.Push("wvfd", native.NewFunction(native.FnDefInfo{Name: "vf"}))
 	out := resolveTestExport(modReg, native.NewWord("wvfd"))
 	if _, ok := out.Data.(native.FnDefInfo); !ok {
 		t.Errorf("resolveTestExport(value FnDef) = %v, want an FnDef value", out)

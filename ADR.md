@@ -814,4 +814,82 @@ checkable contract so future features cannot silently regress it.
   misreading.
 - Relates to (does not supersede) the pending NUR050 decision: a
   single, principled `Function` value type is consistent with, and
-  reinforced by, this record.
+  reinforced by, this record. (Since decided — ADR-011.)
+
+---
+
+## ADR-011 — One Function type: reference-vs-call is a call-site property {#adr-011}
+
+**Status:** Accepted · **Date:** 2026-07-31 · Implemented with
+NUR050's resolution (maintainer instruction via the NUR resolution
+programme; evidence in the NUR050 record's investigation and the
+83-site collapse audit)
+
+### Decision
+
+1. **There is exactly one function type: `Type/Function`.** The
+   internal `Word/__FN` (`TFnDef`, FixedID 23) is retired — collapsed
+   into `Type/Function`. The def table, module exports, word-extension
+   wrappers, and every constructor produce `Function`-parented values
+   carrying `FnDefInfo`. FixedID 23 is retired, never recycled; the
+   TS twin (`eng/ts/src/type.ts`) moved in lockstep.
+
+2. **A function value is always the inert, referenceable thing;
+   calling is an act of the USE site.** The discriminators are the
+   name/value distinction and the transient `Quoted` flag — never the
+   Parent type:
+   - a bare NAME bound to a function **calls** (`add5 3`; `t` after
+     `def t (z/r)` still calls — parking does not travel with the
+     binding);
+   - a function VALUE stepped at the pointer dispatches (member reads
+     auto-invoke: `m.run {x:1}`), with the established data escapes
+     (freshly `/r`-parked → `Quoted`; anonymous with no matching
+     args; handler-less predicate bodies);
+   - **`/r` at the call site takes the reference**, and an
+     `/r`-marked word is NO forward-collection barrier: it feeds
+     collection as its resolved reference (`wa {x:1} some-fn/r`
+     dispatches — all three coordinated walks honour the marker, and
+     `stepWordRef` delivers the reference through the literal step so
+     a parked forward collects it);
+   - a bare fn name before a **`Function`-typed slot** resolves as a
+     reference — the slot declares the intent (the planner's designed
+     intercept, `hasPendingForwardExpectingFunction`, which the
+     `__FN` Parent had silently defeated in `sigArgMatches`); before
+     any other slot a bare fn word remains a call/barrier.
+
+### Context
+
+The type split was vestigial and leaky. The 83-site audit
+(adversarially verified; recorded in the NUR050 record) found the
+call-vs-data discriminator at the pointer is `Data != nil && !Quoted`
+plus the `FnDefInfo` payload — never the Parent; every dispatch/emit
+site OR-paired the two types; `native_macro.go` carried six duplicate
+signatures existing ONLY because `__FN` did not conform to `Function`.
+What the split DID do was break things: the G12/NUR050 dispatch
+failure and checker misdiagnosis (`got (Map, __FN)`), module-export
+references answering `is Function` → false, `/N` force-arity failing
+through module dotted wrappers, and the `__FN` leak into diagnostics
+and check residuals.
+
+### Consequences
+
+- `act:Function` + `some-fn/r` just works, in every spelling (the
+  six-row matrix in `lang/spec/path-modifier.tsv` §NUR050); the
+  `ref.tsv` §7 grouping gotcha is retired.
+- Module-export references satisfy `is Function`; `/N` reaches
+  through dotted wrappers (`edge-dispatch-3.tsv` rows updated from
+  pinned-limitation to working); check residuals render `Function`.
+- **Ordering:** fn values now order in the Type band (they left the
+  Word band's Rank). No spec row or test pinned the old band. The
+  predicate-type canonical-form rows (`compare.tsv` §predicate-kind)
+  are unchanged and still pass. Two references to the same function
+  still compare unstably (`(f/r) tcmp (f/r)` → -1 — canon keys on the
+  binding name; pre-existing, NOT introduced by the collapse); that
+  is function IDENTITY, the NUR031 equality work, deliberately not
+  solved here.
+- The compiler frontier is unchanged by this record: direct fn-value
+  application compiles; `each`/`fold` as fn-body words remain a
+  Stage-2 refusal (slow, not wrong), and NUR037 (fn-local fn capture)
+  remains the open wrong-answer compile gap, tracked separately.
+- Reinforces ADR-010: a function value is one more first-class value
+  kind every layer treats identically.

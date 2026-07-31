@@ -379,21 +379,21 @@ func TestFnConcreteSingleValuedOrCarrier(t *testing.T) {
 	if !fnConcreteSingleValuedOrCarrier(NewCarrier(TFunction)) {
 		t.Error("carrier refused")
 	}
-	one := NewFnDef(FnDefInfo{Signatures: []Signature{{
+	one := NewFunction(FnDefInfo{Signatures: []Signature{{
 		Params: []FnParam{{Name: "x", Type: TInteger}}, Returns: []*Type{TInteger},
 		Impl: Boru([]Value{NewWord("x")}), BarrierPos: BarrierAllForward,
 	}}})
 	if !fnConcreteSingleValuedOrCarrier(one) {
 		t.Error("single-return fn refused")
 	}
-	zero := NewFnDef(FnDefInfo{Signatures: []Signature{{
+	zero := NewFunction(FnDefInfo{Signatures: []Signature{{
 		Params: []FnParam{{Name: "x", Type: TInteger}},
 		Impl:   Boru([]Value{NewWord("x")}), BarrierPos: BarrierAllForward,
 	}}})
 	if fnConcreteSingleValuedOrCarrier(zero) {
 		t.Error("zero-return fn admitted")
 	}
-	if fnConcreteSingleValuedOrCarrier(NewFnDef(FnDefInfo{})) {
+	if fnConcreteSingleValuedOrCarrier(NewFunction(FnDefInfo{})) {
 		t.Error("sig-less fn admitted")
 	}
 }

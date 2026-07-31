@@ -67,7 +67,6 @@ commit.
 | [NUR037](#nur037) | A fn-local fn used as a higher-order body word breaks in compiled mode only | re-opened 2026-07-31 (was Allowed 2026-07-30) |
 | [NUR038](#nur038) | Two consecutive statements headed by a 1-arg Any module export misfire silently | re-opened 2026-07-31 (was Allowed 2026-07-30) |
 | [NUR049](#nur049) | The paren barrier is one-directional: a group can reach backward for a receiver | 2026-07-31 split of NUR029 (G10) |
-| [NUR050](#nur050) | An `/r`-parked fn (`Word/__FN`) does not satisfy a `Function`-typed param | 2026-07-31 split of NUR029 (G12) |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -879,11 +878,17 @@ acceptance:
   (`m.run eq m.run`): `deq` is parent-insensitive and never-equal
   (`DeqNeverEqual`), while `ExactEqual`'s type-body arm requires
   Parent equality — so today two identical-canon fn values compare
-  `eq`-false when their Parents differ (`Word/__FN` vs
-  `Type/Function`), and the NUR050 collapse would flip that pair to
-  true. The reflexivity gap this record tracks therefore covers
-  functions-as-container-data too, not just Module/ModuleExport.
-  Tolerable while the deeper question below is open.
+  `eq`-false when their Parents differed (`Word/__FN` vs
+  `Type/Function`) — a case RETIRED by the ADR-011 collapse (one
+  Function type; NUR050 resolved). The reflexivity gap this record
+  tracks still covers functions-as-container-data: canon/render of an
+  fn value keys on the BINDING NAME it was reached through (`def a
+  (f/r)` canons `fn a[…]`), so two references to the same function
+  are neither `eq` nor stably ordered (`(f/r) tcmp (f/r)` → -1 via
+  the per-wrap tie-break — pre-existing, not a collapse regression).
+  Function identity — what makes two references "the same function"
+  — is exactly this record's open design work. Tolerable while the
+  deeper question below is open.
 - **Re-classified as an open defect (NOT a benign allowance):**
   `Module`/`ModuleExport` values DO reach `eq`/`deq` and return
   `false` **including against themselves** — a silent violation of
@@ -893,10 +898,11 @@ acceptance:
 
 **Standing requirement (maintainer, 2026-07-31):** every value —
 functions and modules included — must eventually fall under equality,
-at minimum reflexively (a value is `eq`/`deq` to itself). No mechanism
-is chosen here, because function equality depends on first resolving
-the function-type-vs-function-value question (NUR050, proposed
-ADR-010). The likely shape — routing `eq`/`deq` through the type's
+at minimum reflexively (a value is `eq`/`deq` to itself). The
+function-type-vs-value question is now settled (ADR-011: one
+`Function` type; NUR050 resolved), so the remaining mechanism is
+function IDENTITY (stable canon independent of the binding name) plus
+the Behavior routing below. The likely shape — routing `eq`/`deq` through the type's
 `Behavior` for Ideals rather than the kernel's hardcoded arms (the
 future ADR the 2026-07-24 record deferred to) — is plausibly the same
 architectural change NUR050's resolution needs; track them together.
@@ -981,12 +987,14 @@ re-classifies the record:
 - **The mechanism is a closure-capture gap** — the compiled fn unit
   does not capture the enclosing frame's local fn bindings, so `step`
   is simply out of scope in compiled mode. A scope / name-resolution
-  defect: distinct from NUR050's type-identity mismatch.
+  defect: distinct from NUR050's (since-resolved) type-identity
+  mismatch.
 - **But the same family.** It rhymes with the recurring theme — the
   bytecode compiler failing to treat functions/values as first-class
   where the interpreter does: NUR051 (type literals as data refused to
   compile — since RESOLVED: the emitter interns them per ADR-010),
-  NUR050 (function references fail dispatch), and here, function
+  NUR050 (function references failed dispatch — since RESOLVED:
+  stage-1 collection admission + the ADR-011 collapse), and here, function
   *bindings* as captured values failing name resolution when compiled.
 - **"Slow, not wrong" is genuinely violated.** `boru check` reports
   clean while the DEFAULT runtime fails with `undefined_word` on a
@@ -997,7 +1005,7 @@ re-classifies the record:
 frame's local fn bindings (proper closure capture — preferred), OR the
 compiler must refuse the shape at check time (a refusal is merely
 slow; an `undefined_word` on a working program is wrong). Track
-alongside the NUR050/NUR051/ADR-010 first-class-values work even
+alongside the (now-resolved) NUR050/NUR051 first-class-values work even
 though the concrete mechanism here is closure capture, not type
 identity. The house rule remains the mitigation until the fix lands.
 ---
@@ -1026,7 +1034,8 @@ IO.printstr "B\n"
 
 prints `B`, then `A`, then leaves ` fn printstr(Any)` on the stack (the
 residual the driver then prints). `boru check` reports `0 error(s)` and a
-residual of `ProperString __FN` — the `__FN` in the residual is the only
+residual of `ProperString Function` (rendered `__FN` before the
+ ADR-011 collapse) — the fn value in the residual is the only
 trace, and no diagnostic names it. Terminating either statement with `end`
 or wrapping it in parens gives the expected `A`, `B`.
 
@@ -1077,7 +1086,7 @@ mitigation** until the fix lands.
   including the second export word and its argument. So `printstr` #1
   reaches across the boundary, swallows statement #2 (which
   evaluates first → `B` before `A`), and the leftover
-  ` fn printstr(Any)` strands on the stack (the `__FN` residual is
+  ` fn printstr(Any)` strands on the stack (the Function residual is
   the only trace). Nothing type-errors → `check` reports clean →
   silent wrong answer. This is exactly why every workaround works:
   `end`/parens are structural stops `polyReachBound` honours
@@ -1649,135 +1658,3 @@ intentionally open a paren expecting to consume an enclosing stack
 value; if such patterns exist and are sanctioned, they need an
 explicit alternative (e.g. `$`-receiver forms) before the barrier
 closes.
-
----
-
-## NUR050 — An `/r`-parked fn (`Word/__FN`) does not satisfy a `Function`-typed param {#nur050}
-
-**Status:** Pending · **Recorded:** 2026-07-31 · **Surfaced by:** split
-of NUR029 (design/BORU-SHARP-EDGES.0.md G12; engine-bug candidate)
-
-**Rule:** a parked function reference satisfies a `Function`-typed
-parameter — `def wa fn [[s:Map act:Function] [Map] [ act s ]]` then
-`wa {x:1} some-fn/r` is the natural higher-order call.
-**Divergence:** the call fails to dispatch — the checker reports `got
-(Map, __FN); nearest [Map Function]`; the interpreter silently strands
-the args. Yet the **same** parked value stored in a map and dot-invoked
-works: `def m {run: some-fn/r}` … `m.run {x:1}` dispatches fine.
-**Source investigation (2026-07-31, read-only):** two distinct type
-identities exist — `TFunction` = `Type/Function` (what `act:Function`
-resolves to via `ResolveTypeName`, `eng/go/fn_params.go:721`) and
-`TFnDef` = `Word/__FN` (a different subtree; does not conform). The
-`/r` path via `ResolveRef` *does* wrap an FnDef binding as
-`NewFunction` (Parent `TFunction`; `IsFunctionRef` checks it —
-`eng/go/core_ref.go:26-63`), which **contradicts** the reproducing
-`__FN` failure — so the failing repro likely takes a different path.
-
-**Investigation COMPLETED (2026-07-31, run against the binary) — the
-open item is answered, and the answer corrects this record's premise.**
-The runtime **never produces a `__FN` value that fails conformance**;
-the failure decomposes into two separate defects:
-
-1. **The runtime failure is COLLECTION-level, not type-level.** The
-   forward plan walk (`matchSignature` step 1.4; the same rule as
-   `polyReachBound`'s "a function word stops forward collection",
-   `eng/go/engine.go:465`) treats ANY word bound to a function — a
-   def'd fn, or a def-bound Function value — as a hard barrier, and
-   decides this BEFORE the trailing `/r` DispatchMod marker is
-   visible. `wa` therefore under-fills (1 of 2 args) and raises; the
-   reference is never collected at all. The marker consumption
-   (`execFnDefLiteral`, `engine.go:5192`) sets `Quoted=true` on an
-   already-stepped value — too late for a collector that stopped at
-   the word.
-2. **The `__FN` in the diagnostic is the CHECKER's model, not the
-   runtime's.** Check mode resolves the word to the raw def binding
-   (`NewFnDef` → `Word/__FN`) and reports `got (Map, __FN)` — a
-   *misdiagnosis* of the real (collection) failure. Everywhere the
-   reference actually lands as data it is `TFunction` and **already
-   satisfies `act:Function` today**: `wa {x:1} (some-fn/r)` works,
-   `wa {x:1} m.run` works, the stack form `some-fn/r {x:1} wa`
-   works; `typeof` reports `Function` for every parked form.
-3. **Where the two types actually live:** the def table stores
-   `NewFnDef` (`Word/__FN`); every value-facing surface wraps to
-   `NewFunction` (`ResolveRef`; `stepWord`'s
-   expecting-Function arrival path, `engine.go:2657`; `usurp`; the
-   `fn`/`afn` constructors). The call-vs-data discriminator at the
-   pointer is the **`Quoted` flag, not the Parent** — so the Parent
-   split is largely vestigial, leaking only through the checker's
-   model and the module-export fn resolution
-   (`native_module_module.go` returns `NewFnDef` — the `__FN`
-   residual NUR038 observed). 84 non-test `TFnDef` references
-   repo-wide, mostly OR-paired with `TFunction`.
-4. A precedent for slot-aware admission already exists:
-   `hasPendingForwardExpectingFunction` (`engine.go:7571`) resolves a
-   bare word to `NewFunction` when a parked forward's next slot
-   expects exactly `TFunction` — arrival path only; it does not
-   rescue the plan-walk barrier.
-
-**Collapse audit (2026-07-31, full-tree sweep, adversarially
-verified):** 83 non-test `TFnDef`/`__FN` sites classified for option
-2a (retire `Word/__FN`; def table stores `NewFunction`). Verdict:
-**mechanical except one accepted behaviour change.** Every
-emit/engine/dispatch site OR-pairs the two Parents (no compiler path
-branches on `TFnDef`; VM closures are already `TFunction`;
-`isAppliableFn` is payload-first); constructions rename
-(`registry.go:1607`, `resolveModuleExport` + its `modules/test.go`
-twin, `log_logger`, word-extension exports); `native_macro.go`'s 14
-uses are six duplicate `TFnDef` signature twins that exist ONLY
-because `__FN` does not conform to `Function` — deleted outright.
-Must move in lockstep: the typetable decl (retire FixedID 23 — the
-snapshot-row protocol has ~8 precedents), `fixedid_stability_test`,
-the TS twin `eng/ts/src/type.ts`, `fnmodel_equivalence.golden`,
-`ShapeFnDef` (sole consumer OR-pairs). **The one real delta:
-ordering** — fn values leave the Word band (Rank 50_100_006_000,
-`wordCompareBehavior` lexical) for the Type band (~6·10¹⁰, no
-Comparer → structural), changing `tcmp`/`cmp` for programs ordering
-parked references; NO spec row or Go test pins the old order, so the
-ADR should either accept-and-pin the new order or weigh a `TFunction`
-Comparer (which conflicts with the pinned `TFunction` structural
-rows — not preservable both ways). Two latent bugs the collapse fixes
-for free: a module-export fn reference (`resolveModuleExport`, the
-one user-reachable runtime `TFnDef` producer) answers `is Function` →
-**false** today; and the `__FN` leak in diagnostics/residuals
-(`Parent.Leaf()` at `boru.go:325`, `engine.go:8970`, `value.go:3394`)
-disappears. Note: `typeof` does NOT remap — earlier probes showed
-`Function` only because every value-facing surface wraps; the split
-is hidden by wrapping, not by rendering.
-**Framing (maintainer, 2026-07-31):** this is a fundamental confusion
-between **a function itself and a reference to a function**, with a
-confused implementation. boru is stack-based: a zero-arg function on
-the stack executes immediately, and `/r` exists to obtain the function
-as inert data — which is exactly what one passes to a higher-order
-function. The type hierarchy half-admits the distinction (`Word/__FN`
-for the parked form vs `Type/Function` for the callable type) but
-never made it principled or user-facing; it leaked as an internal
-marker that fails dispatch, and is a likely root cause of the
-long-standing higher-order fragility in the type checker and bytecode
-compiler.
-
-**Verdict (maintainer, 2026-07-31 — FIX needed; mechanism
-deliberately deferred, `design/NUR-RESOLUTION-PLAN.0.md`):** the
-direction is a principled definition of "function type" vs "reference
-type" such that the natural code — declare `act:Function`, pass
-`some-fn/r` — just works; the reference-vs-call intent belongs at the
-**call site** (`/r`), never duplicated into parameter annotations.
-Options recorded for the later decision (ADR-level — it changes the
-type hierarchy's treatment of functions):
-
-1. ~~Force the annotation~~ (a `FunctionRef`/`Function/r` param type)
-   — **rejected**: it pays for the implementation's confusion with
-   user ergonomics.
-2. **One `Function` type; reference-vs-call distinguished at the call
-   site.** A function value is always the inert, referenceable thing;
-   calling is a separate act; `/r` (and parking generally) produces a
-   `Function`; a bare name is sugar for "reference then immediately
-   call". Mechanism sub-options: **2a** collapse `Word/__FN` into
-   `Type/Function` (cleanest — "there is exactly one function type" —
-   but invasive), or **2b** keep `__FN` internally but make it conform
-   to `Function` at every dispatch boundary (less invasive if `__FN`
-   carries dispatch-time behaviour the engine relies on).
-
-Open items before implementing: run the repro to pin which path
-yields `__FN` (and why the map/dot path already works); choose 2a vs
-2b; record the choice as an ADR. Relates to proposed ADR-010 (types
-are values) and to the NUR031 remainder (function equality).

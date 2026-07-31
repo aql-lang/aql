@@ -1319,7 +1319,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 		return false
 	}
 	for _, t := range sig.ArgTypes() {
-		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+		if t != nil && t.ConformsTo(TFunction) {
 			return false
 		}
 	}
@@ -1532,7 +1532,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// (apply/usurp, an atom-keyed method get): the value would need dynamic
 	// INVOCATION (the fn-value-call boundary, P4). Keep those out of poly.
 	for _, t := range sig.ArgTypes() {
-		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+		if t != nil && t.ConformsTo(TFunction) {
 			return false
 		}
 	}

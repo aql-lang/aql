@@ -79,7 +79,7 @@ func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		// FnDef / Function defs are functions, not types — report
 		// their sig structure via buildInspection instead of treating
 		// the def as a type body.
-		if IsTypeBody(top) && !top.Parent.Equal(TFnDef) && !top.Parent.Equal(TFunction) {
+		if IsTypeBody(top) && !top.Parent.Equal(TFunction) {
 			return []Value{buildTypeInspection(name, top)}, nil
 		}
 	}

@@ -76,7 +76,6 @@ export {
   TEnum,
   TError,
   TFloat,
-  TFnDef,
   TFnUndef,
   TForward,
   TFunction,

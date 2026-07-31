@@ -127,8 +127,8 @@ var macroNatives = []NativeFunc{
 			// The mini-language VALUE form — `mini <fn> <src> <opts?>`:
 			// the first operand IS the transducer, a fn (or a word bound to
 			// one, handled in miniHandler) whose every signature opens with
-			// the standard [src opts] prefix. An anonymous fn literal is
-			// TFunction; a def'd fn or module export is TFnDef.
+			// the standard [src opts] prefix. Every fn value — anonymous
+			// literal, def'd fn, module export — is TFunction (ADR-011).
 			{
 				Args:    []*Type{TFunction, TString, TMap},
 				Impl:    Go(miniHandler, RunInCheck()),
@@ -136,16 +136,6 @@ var macroNatives = []NativeFunc{
 			},
 			{
 				Args:    []*Type{TFunction, TString},
-				Impl:    Go(miniHandler, RunInCheck()),
-				Returns: []*Type{TAny}, BarrierPos: -1,
-			},
-			{
-				Args:    []*Type{TFnDef, TString, TMap},
-				Impl:    Go(miniHandler, RunInCheck()),
-				Returns: []*Type{TAny}, BarrierPos: -1,
-			},
-			{
-				Args:    []*Type{TFnDef, TString},
 				Impl:    Go(miniHandler, RunInCheck()),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
@@ -211,16 +201,6 @@ var macroNatives = []NativeFunc{
 				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 			{
-				Args:    []*Type{TFnDef, TAny, TAny},
-				Impl:    Go(emitHandler, RunInCheck()),
-				Returns: []*Type{TString}, BarrierPos: -1,
-			},
-			{
-				Args:    []*Type{TFnDef, TAny},
-				Impl:    Go(emitHandler, RunInCheck()),
-				Returns: []*Type{TString}, BarrierPos: -1,
-			},
-			{
 				Args:    []*Type{TAny, TAny},
 				Impl:    Go(emitHandler, RunInCheck()),
 				Returns: []*Type{TString}, BarrierPos: -1,
@@ -275,19 +255,6 @@ var macroNatives = []NativeFunc{
 			},
 			{
 				Args:    []*Type{TFunction, TAny},
-				Impl:    Go(parseHandler, RunInCheck()),
-				Returns: []*Type{TAny}, BarrierPos: -1,
-			},
-			// A def'd fn or a module export (e.g. `(ParseLang.parse_json)`)
-			// is a TFnDef value, a separate family from an anonymous fn's
-			// TFunction — both spell the same ParseLang-value form.
-			{
-				Args:    []*Type{TFnDef, TMap, TAny},
-				Impl:    Go(parseHandler, RunInCheck()),
-				Returns: []*Type{TAny}, BarrierPos: -1,
-			},
-			{
-				Args:    []*Type{TFnDef, TAny},
 				Impl:    Go(parseHandler, RunInCheck()),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
@@ -419,7 +386,7 @@ func macroexpandHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 // (2-arg form normalizes to {}). src/opts are spliced as collected — they may
 // be carriers in check mode; only the kind must be concrete.
 func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if args[0].Parent.ConformsTo(TFunction) || args[0].Parent.ConformsTo(TFnDef) {
+	if args[0].Parent.ConformsTo(TFunction) {
 		return miniFnExpand(args[0], args, r)
 	}
 	kind, err := args[0].AsConcreteAtom()
@@ -443,7 +410,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		// resolves through the per-pass fn-carrier side table
 		// (checkFnCarrierBind) instead, like parse.
 		top, bound := r.Defs.Top(kind)
-		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+		if !bound || !top.Parent.ConformsTo(TFunction) {
 			if v, hit := checkFnCarrierBind(r, kind); hit {
 				top, bound = v, true
 			} else {
@@ -769,7 +736,7 @@ func miniKindRegistered(r *Registry, target string) bool {
 // IS the parser (no kind lookup), and the call expands to the direct fn call
 // — see parseFnExpand.
 func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if args[0].Parent.ConformsTo(TFunction) || args[0].Parent.ConformsTo(TFnDef) {
+	if args[0].Parent.ConformsTo(TFunction) {
 		return parseFnExpand(args[0], args, r)
 	}
 	kind, err := args[0].AsConcreteAtom()
@@ -794,7 +761,7 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		// name — and resolves through the per-pass fn-carrier side table
 		// (checkFnCarrierBind) instead.
 		top, bound := r.Defs.Top(kind)
-		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+		if !bound || !top.Parent.ConformsTo(TFunction) {
 			if v, hit := checkFnCarrierBind(r, kind); hit {
 				top, bound = v, true
 			} else {
@@ -1101,7 +1068,7 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// The emitter VALUE form — `emit <fn> <opts?> <data>` (sigs 4-7): the
 	// first operand IS the emitter, so no kind classification happens.
 	if len(args) >= 2 &&
-		(args[0].Parent.ConformsTo(TFunction) || args[0].Parent.ConformsTo(TFnDef)) {
+		args[0].Parent.ConformsTo(TFunction) {
 		return emitFnExpand(args[0], args, r)
 	}
 	// Try to read the leading operand as a kind name (a /q'd bare word).
@@ -1124,7 +1091,7 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// fn-carrier side table (checkFnCarrierBind), like parse.
 	if leadingKind && !explicit {
 		top, bound := r.Defs.Top(kind)
-		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+		if !bound || !top.Parent.ConformsTo(TFunction) {
 			if v, hit := checkFnCarrierBind(r, kind); hit {
 				top, bound = v, true
 			} else {

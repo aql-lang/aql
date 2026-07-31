@@ -795,9 +795,6 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 		modReg.Check.RecordUse(fnDef.Name)
 		if fnDef.Registry == nil {
 			fnDef.Registry = modReg
-			if v.Parent.Equal(TFnDef) {
-				return NewFnDef(fnDef)
-			}
 			return NewFunction(fnDef)
 		}
 		return v
@@ -828,9 +825,6 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 		if fnDef, ok := tv.Data.(FnDefInfo); ok {
 			if fnDef.Registry == nil {
 				fnDef.Registry = modReg
-				if tv.Parent.Equal(TFnDef) {
-					return NewFnDef(fnDef)
-				}
 				return NewFunction(fnDef)
 			}
 		}
@@ -842,9 +836,6 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 		if fnDef, ok := val.Data.(FnDefInfo); ok {
 			if fnDef.Registry == nil {
 				fnDef.Registry = modReg
-				if val.Parent.Equal(TFnDef) {
-					return NewFnDef(fnDef)
-				}
 				return NewFunction(fnDef)
 			}
 		}

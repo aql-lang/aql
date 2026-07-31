@@ -106,14 +106,16 @@ minimal repros, root-cause hypotheses, workarounds, and a triage table.
 Re-verified 2026-07-30: G8 (recovered-`raise` binding teardown), G11
 (returned-list-literal laziness) and G13a (single-token bare-map body)
 **no longer reproduce** — fixed by unrelated work. G9 (`case`-default
-collection, NUR048) and G13b (type-literal map values refusing to
-compile, NUR051) were **resolved 2026-07-31** — an open-call `case`
-default now runs isolated like a matched arm, and nested bare type
-nodes intern as type operands (ADR-010). The two live items carry
-per-item NUR records with fix verdicts: G10 `(dot message)`
-receiverless in an `error` handler → NUR049, G12 an `/r`-parked fn not
-satisfying a `Function` param → NUR050. Read the note before
-re-deriving a workaround.
+collection, NUR048), G13b (type-literal map values refusing to
+compile, NUR051) and G12 (an `/r`-parked fn not satisfying a
+`Function` param, NUR050) were **resolved 2026-07-31** — an open-call
+`case` default runs isolated like a matched arm, nested bare type
+nodes intern as type operands (ADR-010), and there is exactly one
+function type (`Word/__FN` collapsed into `Type/Function`; `/r`-marked
+words feed forward collection as references — ADR-011). The one live
+item carries a per-item NUR record with a fix verdict: G10
+`(dot message)` receiverless in an `error` handler → NUR049. Read the
+note before re-deriving a workaround.
 
 ## Build & Test
 

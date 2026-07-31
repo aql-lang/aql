@@ -163,12 +163,12 @@ func TestFnCompileRefusesIdentitylessCapture(t *testing.T) {
 
 func TestSameFnConstruction(t *testing.T) {
 	sigs := []Signature{{Params: []FnParam{{Name: "n", Type: TInteger}}}}
-	orig := NewFnDef(FnDefInfo{Signatures: sigs})
+	orig := NewFunction(FnDefInfo{Signatures: sigs})
 	cpy := orig // by-value copy shares the Signatures backing array
 	if !sameFnConstruction(orig, cpy) {
 		t.Error("copies of one construction must match")
 	}
-	other := NewFnDef(FnDefInfo{Signatures: []Signature{{Params: []FnParam{{Name: "n", Type: TInteger}}}}})
+	other := NewFunction(FnDefInfo{Signatures: []Signature{{Params: []FnParam{{Name: "n", Type: TInteger}}}}})
 	if sameFnConstruction(orig, other) {
 		t.Error("distinct constructions must not match")
 	}
@@ -177,7 +177,7 @@ func TestSameFnConstruction(t *testing.T) {
 	}
 	// ID fallback arm: same ID, rebuilt (non-shared) sig backing.
 	end := BeginIDMintScope()
-	x := NewFnDef(FnDefInfo{Signatures: []Signature{{}}})
+	x := NewFunction(FnDefInfo{Signatures: []Signature{{}}})
 	end()
 	y := x
 	y.Data = FnDefInfo{Signatures: append([]Signature(nil), x.Data.(FnDefInfo).Signatures...)}

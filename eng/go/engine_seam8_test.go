@@ -811,7 +811,7 @@ func TestW8ExecFnDefStackMatchCheckFnValueUnnamed(t *testing.T) {
 		Impl: Boru(parenBody(NewInteger(42))), BarrierPos: 0,
 	}}}
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(3), NewFnDef(fnDef)}, stackHeadroom)
+	e.tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
 	e.pointer = 1
 	if err := e.execFnDefSigStackMatch(1, fnDef, []Value{NewInteger(3)}); err != nil {
 		t.Fatalf("execFnDefSigStackMatch: %v", err)
@@ -830,7 +830,7 @@ func TestW8SpliceFnValueCheckResultEmptyDeclaredReturns(t *testing.T) {
 	}}}
 	sig := &fnDef.Signatures[0]
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(3), NewFnDef(fnDef)}, stackHeadroom)
+	e.tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
 	e.pointer = 1
 	e.spliceFnValueCheckResult(1, 1, fnDef, sig, []Value{NewInteger(3)})
 }

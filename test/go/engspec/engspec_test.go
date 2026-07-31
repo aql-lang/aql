@@ -1048,7 +1048,7 @@ func registerEngSpecInspect(r *eng.Registry) {
 			return []eng.Value{buildTypeInspection(name, tv)}, nil
 		}
 		if top, ok := r.Defs.Top(name); ok {
-			if eng.IsTypeBody(top) && !top.Parent.Equal(eng.TFnDef) && !top.Parent.Equal(eng.TFunction) {
+			if eng.IsTypeBody(top) && !top.Parent.Equal(eng.TFunction) && !top.Parent.Equal(eng.TFunction) {
 				return []eng.Value{buildTypeInspection(name, top)}, nil
 			}
 		}

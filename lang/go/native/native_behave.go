@@ -171,13 +171,13 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	return nil, nil
 }
 
-// extractFnDefInfo unwraps a TFunction or TFnDef value into its
+// extractFnDefInfo unwraps a TFunction value into its
 // FnDefInfo payload. Returns an error for anything else.
 func extractFnDefInfo(v Value) (eng.FnDefInfo, error) {
 	if v.Parent == nil {
 		return eng.FnDefInfo{}, errors.New("fn arg is nil")
 	}
-	if !v.Parent.Equal(eng.TFunction) && !v.Parent.Equal(eng.TFnDef) {
+	if !v.Parent.Equal(eng.TFunction) {
 		return eng.FnDefInfo{}, fmt.Errorf("fn arg must be a Function (got %s)", v.Parent.String())
 	}
 	info, ok := v.Data.(eng.FnDefInfo)

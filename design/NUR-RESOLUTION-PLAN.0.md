@@ -247,13 +247,16 @@ split into four per-item records:
   sanctioned point-free patterns that consume enclosing stack values
   need an explicit alternative (e.g. `$`-receiver forms) if they
   exist.
-- **NUR050 (G12)** — `/r`-parked fn vs `Function` param
-  (`Word/__FN` vs `Type/Function`). **FIX needed, mechanism
-  deferred**: one principled `Function` type; reference-vs-call at
-  the call site. Option 1 (force a reference annotation) rejected;
-  option 2a (collapse `__FN` into `Function`) vs 2b (make `__FN`
-  conform at every dispatch boundary) to be decided as an ADR after
-  running the repro to pin which path yields `__FN`.
+- **NUR050 (G12)** — `/r`-parked fn vs `Function` param. **FIX —
+  RESOLVED (this session, ADR-011)**: the repro was pinned (a
+  collection-barrier failure plus a checker misdiagnosis, not a
+  runtime type mismatch), option 2a landed — `Word/__FN` collapsed
+  into `Type/Function` (one function type; FixedID 23 retired; TS
+  twin in lockstep) — and `/r`-marked words now feed forward
+  collection as references. `wa {x:1} some-fn/r` dispatches;
+  module-export refs answer `is Function`; `/N` reaches through
+  dotted wrappers; the `__FN` diagnostic leak is gone. Option 1
+  (force a reference annotation) stayed rejected. Record deleted.
 - **NUR051 (G13b)** — a type-literal map value refuses to
   bytecode-compile ("body result of unknown provenance"). Root
   cause: the emitter had no provenance representation for a bare
@@ -324,8 +327,9 @@ differs. Outcomes:
 4. **Barrier positions and argument handling** (the ADR-004
    refinement, NUR023).
 5. **Semantic vs deterministic ordering** (NUR024).
-6. **Module provenance as a Value facet** (NUR038) and **one Function
-   type** (NUR050) — both ADR-level, recorded in their NUR records.
+6. **Module provenance as a Value facet** (NUR038) — ADR-level,
+   recorded in its NUR record. (The companion "one Function type"
+   candidate became **ADR-011**, Accepted, with NUR050's resolution.)
 
 Per the ADR.md rule, none of these becomes an ADR entry until the
 maintainer explicitly instructs it; ADR-010 was so instructed and is

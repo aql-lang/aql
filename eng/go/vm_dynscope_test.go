@@ -78,7 +78,7 @@ func TestLookupDynScopeDeferralArms(t *testing.T) {
 	// A dispatching binding (FnDefInfo): the interpreter would dispatch, not
 	// substitute — defer.
 	r2 := seam7Reg(t)
-	r2.Defs.Push("dsfn", NewFnDef(FnDefInfo{Name: "dsfn", Registry: r2,
+	r2.Defs.Push("dsfn", NewFunction(FnDefInfo{Name: "dsfn", Registry: r2,
 		Signatures: []Signature{{Returns: []*Type{TAny}, BarrierPos: -1}}}))
 	p2 := dsProgram(nil, []Instr{{Op: OpLookupDynScope, Arg: 0}}, NewString("dsfn"))
 	_, err = RunProgram(p2, r2)
@@ -116,7 +116,7 @@ func TestLookupDynScopeDataArms(t *testing.T) {
 	// FnDefInfo binding: OpLookupDynScope DEFERS (name-position dispatch), but
 	// the DATA twin PUSHES it — the parselang-fn-dispatch parser operand.
 	r := seam7Reg(t)
-	fn := NewFnDef(FnDefInfo{Name: "dspfn", Registry: r,
+	fn := NewFunction(FnDefInfo{Name: "dspfn", Registry: r,
 		Signatures: []Signature{{Returns: []*Type{TAny}, BarrierPos: -1}}})
 	r.Defs.Push("dspfn", fn)
 	p := dsProgram(nil, []Instr{{Op: OpLookupDynScopeData, Arg: 0}}, NewString("dspfn"))

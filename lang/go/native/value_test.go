@@ -104,9 +104,9 @@ func TestValueStringForward(t *testing.T) {
 	}
 }
 
-func TestNewFnDef(t *testing.T) {
-	v := NewFnDef(FnDefInfo{})
-	if !v.Parent.Equal(TFnDef) {
+func TestNewFunction(t *testing.T) {
+	v := NewFunction(FnDefInfo{})
+	if !v.Parent.Equal(TFunction) {
 		t.Errorf("expected fndef type, got %s", v.Parent)
 	}
 }

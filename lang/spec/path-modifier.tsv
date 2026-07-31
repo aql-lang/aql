@@ -64,4 +64,4 @@ def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] wa 
 def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] def mm {run: sf/r} wa {x:1} mm.run	{x:1}	map-stored reference via dot (already worked) is unchanged
 def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] sf/r {x:1} wa	{x:1}	stack form (already worked) is unchanged
 def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] def hr (sf/r) wa {x:1} hr/r	{x:1}	a def-bound reference passes as hr/r (bare hr is a call, per the model)
-def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] wa {x:1} sf	ERROR:	a BARE fn name stays a barrier — reference intent must be spelled /r
+def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] wa {x:1} sf	{x:1}	a bare fn name before a Function-TYPED slot resolves as a reference — the slot declares the intent (the planner's designed TFunction intercept, un-broken by the ADR-011 collapse); before a non-Function slot a bare fn word remains a call/barrier

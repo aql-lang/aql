@@ -115,7 +115,7 @@ func FnSigSatisfiesSpec(sig FnSig, spec FnSigSpec) bool {
 }
 
 // FnUndefMatchesFnDef reports whether the candidate function value
-// (TFnDef or TFunction wrapping FnDefInfo) satisfies every FnSigSpec
+// (TFunction wrapping FnDefInfo) satisfies every FnSigSpec
 // declared by the FnUndef constraint.
 func FnUndefMatchesFnDef(undef Value, fnVal Value) bool {
 	uInfo, ok := undef.Data.(FnUndefInfo)

@@ -362,7 +362,7 @@ func InstallWordExtension(r *Registry, name string, ext FnDefInfo) error {
 	SortSignatures(clone.Signatures)
 	clone.MaxForwardArgs = calcMaxForwardArgs(clone.Signatures)
 	r.Check.RecordFnBinder(name)
-	r.Defs.Push(name, NewFnDef(clone))
+	r.Defs.Push(name, NewFunction(clone))
 	// Construction-time body check on the ADDED overloads only — the
 	// base's signatures were checked at their own construction, and
 	// re-analysing them here would duplicate their diagnostics.
@@ -463,7 +463,7 @@ func TransplantExtension(r *Registry, ext FnDefInfo, origin, owner string) error
 	}
 	SortSignatures(clone.Signatures)
 	clone.MaxForwardArgs = calcMaxForwardArgs(clone.Signatures)
-	r.Defs.Push(name, NewFnDef(clone))
+	r.Defs.Push(name, NewFunction(clone))
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}

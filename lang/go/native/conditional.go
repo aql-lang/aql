@@ -89,7 +89,7 @@ func isCaseOpenCallHead(r *Registry, m Value) bool {
 	if !ok {
 		return false
 	}
-	return bound.Parent.Equal(TFnDef) || bound.Parent.Equal(TFunction)
+	return bound.Parent.Equal(TFunction)
 }
 
 // caseDefaultStart returns the index where the clause list's trailing

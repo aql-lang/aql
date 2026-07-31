@@ -100,7 +100,7 @@ func TestModuleWrapperRebindPreservesArgHandling(t *testing.T) {
 			Returns: []*native.Type{native.TString, native.TInteger}, BarrierPos: -1,
 		}},
 	})
-	wrapper := native.NewFnDef(native.FnDefInfo{
+	wrapper := native.NewFunction(native.FnDefInfo{
 		Name: "qop",
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TAtom}, {Type: native.TList}},
@@ -160,7 +160,7 @@ func buildProbeRegistry(innerBarrier int) *native.Registry {
 		}},
 	})
 
-	wrapper := native.NewFnDef(native.FnDefInfo{
+	wrapper := native.NewFunction(native.FnDefInfo{
 		Name: "op",
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},

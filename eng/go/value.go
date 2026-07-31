@@ -2327,11 +2327,6 @@ func NewMoveIf(to, reason string, ifCont *IfCont) Value {
 	return NewValueRaw(TMove, MoveInfo{To: to, Reason: reason, IfCont: ifCont})
 }
 
-// NewFnDef creates a function definition value for storage on DefStacks.
-func NewFnDef(info FnDefInfo) Value {
-	return NewValueRaw(TFnDef, info)
-}
-
 // NewFunction creates a function reference value. The underlying data is a
 // FnDefInfo, but the type is TFunction so it can be matched by function-typed
 // parameters and passed to other functions without being called.
@@ -3500,7 +3495,7 @@ func kernelFormatDefault(v Value) string {
 			return "tnot (" + ni.Inner.String() + ")"
 		}
 		return "tnot " + ni.Inner.String()
-	// A function value (TFnDef / TFunction, payload FnDefInfo) renders
+	// A function value (TFunction, payload FnDefInfo) renders
 	// as a compact `fn name(sig…)` summary. Crucially it does NOT fall
 	// through to the `%v` default, which would dump the whole FnDefInfo
 	// — including its captured *Registry and the module's entire exports
@@ -3524,7 +3519,7 @@ func kernelFormatDefault(v Value) string {
 }
 
 // isFnDefValue reports whether v carries an FnDefInfo payload (a fn or
-// lambda value, Parent TFnDef or TFunction).
+// lambda value, Parent TFunction).
 func isFnDefValue(v Value) bool {
 	_, ok := v.Data.(FnDefInfo)
 	return ok

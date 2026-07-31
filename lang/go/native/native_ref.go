@@ -374,7 +374,7 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 // engine directly via CallBoru.
 func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	v := args[0]
-	if !v.Parent.Equal(TFunction) && !v.Parent.Equal(TFnDef) {
+	if !v.Parent.Equal(TFunction) {
 		return nil, fmt.Errorf("apply: expected Function, got %s", v.Parent.String())
 	}
 	if _, ok := v.Data.(FnDefInfo); !ok {

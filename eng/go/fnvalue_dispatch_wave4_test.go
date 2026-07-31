@@ -32,7 +32,7 @@ func anonFnVal(params []FnParam, returns []*Type, body []Value) Value {
 // namedFnVal builds a NON-anonymous FnDef value carrying its own authored
 // sigs — the shape a fn literal stored in a map / module export has.
 func namedFnVal(name string, params []FnParam, returns []*Type, body []Value) Value {
-	return NewFnDef(FnDefInfo{
+	return NewFunction(FnDefInfo{
 		Name: name,
 		Signatures: []Signature{{
 			Params:     params,
@@ -255,7 +255,7 @@ func TestNamedFnValueZeroParamBody(t *testing.T) {
 func TestNamedFnValueCapturedBindings(t *testing.T) {
 	// Lexical captures install as frame bindings before params.
 	r := covRegistry(t, nil)
-	fnv := NewFnDef(FnDefInfo{
+	fnv := NewFunction(FnDefInfo{
 		Name: "plusk",
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "x", Type: TInteger}},
@@ -277,7 +277,7 @@ func TestNamedFnValueCapturedBindings(t *testing.T) {
 func TestMacroFnValueIsData(t *testing.T) {
 	// A macro FnDef at the pointer is a VALUE — applied only by name.
 	r := covRegistry(t, nil)
-	fnv := NewFnDef(FnDefInfo{
+	fnv := NewFunction(FnDefInfo{
 		Name:  "mmac",
 		Macro: true,
 		Signatures: []Signature{{
@@ -290,7 +290,7 @@ func TestMacroFnValueIsData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("macro value: %v", err)
 	}
-	if len(out) != 1 || !out[0].Parent.Equal(TFnDef) {
+	if len(out) != 1 || !out[0].Parent.Equal(TFunction) {
 		t.Errorf("macro value dispatched: %s", renderAll(out))
 	}
 }
@@ -299,7 +299,7 @@ func TestNamedFnValueByNameLookup(t *testing.T) {
 	// A named fn value with NO own sigs resolves via registry lookup:
 	// covRegistry installs ctwice, so a bare handle to it dispatches.
 	r := covRegistry(t, nil)
-	fnv := NewFnDef(FnDefInfo{Name: "ctwice"})
+	fnv := NewFunction(FnDefInfo{Name: "ctwice"})
 	out, err := NewTop(r).Run([]Value{fnv, NewInteger(9)})
 	if err != nil {
 		t.Fatalf("name lookup dispatch: %v", err)
@@ -312,12 +312,12 @@ func TestNamedFnValueByNameLookup(t *testing.T) {
 func TestUnresolvableFnValueIsData(t *testing.T) {
 	// Neither own sigs nor a resolvable name: the value stays data.
 	r := covRegistry(t, nil)
-	fnv := NewFnDef(FnDefInfo{Name: "no_such_fn_xyz"})
+	fnv := NewFunction(FnDefInfo{Name: "no_such_fn_xyz"})
 	out, err := NewTop(r).Run([]Value{fnv})
 	if err != nil {
 		t.Fatalf("unresolvable fn value: %v", err)
 	}
-	if len(out) != 1 || !out[0].Parent.Equal(TFnDef) {
+	if len(out) != 1 || !out[0].Parent.Equal(TFunction) {
 		t.Errorf("unresolvable fn value not left as data: %s", renderAll(out))
 	}
 }
@@ -398,7 +398,7 @@ func TestForeignRegistryFnValueCallBoru(t *testing.T) {
 		})
 	})
 	main := covRegistry(t, nil)
-	fnv := NewFnDef(FnDefInfo{
+	fnv := NewFunction(FnDefInfo{
 		Registry: sub,
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "x", Type: TInteger}},
@@ -431,7 +431,7 @@ func TestForeignRegistryWrapperDispatch(t *testing.T) {
 	InstallFnDef(sub, "times7", FnDefInfo{Signatures: []Signature{sig}})
 
 	main := covRegistry(t, nil)
-	fnv := NewFnDef(FnDefInfo{
+	fnv := NewFunction(FnDefInfo{
 		Name:       "times7",
 		Registry:   sub,
 		Module:     "test:mod",
@@ -456,7 +456,7 @@ func TestForeignRegistryNativeRefDispatch(t *testing.T) {
 		t.Fatalf("NewRegistry: %v", err)
 	}
 	main.InitRootContext()
-	fnv := NewFnDef(FnDefInfo{Name: "cadd", Registry: sub})
+	fnv := NewFunction(FnDefInfo{Name: "cadd", Registry: sub})
 	out, rErr := NewTop(main).Run([]Value{fnv, NewInteger(20), NewInteger(22)})
 	if rErr != nil {
 		t.Fatalf("foreign native ref: %v", rErr)

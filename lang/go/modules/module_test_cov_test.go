@@ -264,9 +264,9 @@ func TestTestCovResolveTestExportDirect(t *testing.T) {
 	}
 
 	// An FnDef-parented value keeps its parent.
-	fd := native.NewFnDef(native.FnDefInfo{Name: "g"})
+	fd := native.NewFunction(native.FnDefInfo{Name: "g"})
 	got2 := resolveTestExport(r, fd)
-	if !got2.Parent.Equal(native.TFnDef) {
+	if !got2.Parent.Equal(native.TFunction) {
 		t.Errorf("FnDef parent should be preserved, got %s", got2.Parent.String())
 	}
 
