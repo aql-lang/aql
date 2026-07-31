@@ -462,6 +462,12 @@ func (e *Engine) polyReachBound() (int, bool) {
 			}
 			if top, ok := e.registry.Defs.Top(wi.Name); ok {
 				if _, isFn := top.Data.(FnDefInfo); isFn {
+					if wi.ForceRef {
+						// `/r`: the word denotes its REFERENCE value —
+						// one claimable datum, not a call (NUR050/G12).
+						n++
+						continue
+					}
 					break // a function word stops forward collection
 				}
 				n++ // a plain value binding: the word steps to exactly one value
@@ -2174,7 +2180,16 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// def's `fn`) — there the function word is the argument, not a
 		// barrier, and the scan must walk past it.
 		if IsWord(tok) && !capturesForwardToken(fn, pos, tok) {
-			if wi, werr := AsWord(tok); werr == nil && e.registry.Lookup(wi.Name) != nil {
+			if wi, werr := AsWord(tok); werr == nil && e.registry.Lookup(wi.Name) != nil &&
+				// A `/r`-marked word is NO barrier: it denotes its
+				// REFERENCE value (inert data), never a call — the
+				// call-site marker is explicit intent (NUR050/G12).
+				// The scan counts it as an ordinary optimistic
+				// position; stepWordRef resolves and DELIVERS the
+				// Function value to the parked forward at arrival
+				// (the phase-2 half of this rule — keep in sync per
+				// design/FORWARD-COLLECTION-PHASES.10.md).
+				!wi.ForceRef {
 				break
 			}
 		}
@@ -2601,6 +2616,21 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 		}
 	}
 	v.pos = val.pos
+	// A reference denotes DATA. When a parked forward in this paren
+	// scope is still collecting, deliver the reference through the
+	// normal literal step so it ARRIVES like any value and fills the
+	// waiting slot (`wa {x:1} some-fn/r` — NUR050/G12; the phase-1 scan
+	// counts the /r-marked word as an ordinary position, this is the
+	// phase-2 half). Delivered UNQUOTED, exactly like the
+	// expecting-Function arrival path below — a Quoted delivery binds a
+	// quoted param, which the VM honours as data while the interpreter
+	// dispatches it: an engine divergence the differential gate catches.
+	// The former unconditional set+advance left the value BEHIND the
+	// pointer, so the forward stranded at end of run.
+	if e.hasPendingForwardCollecting() {
+		e.tape.Set(e.pointer, v)
+		return e.stepLiteral()
+	}
 	e.tape.Set(e.pointer, v)
 	// (The use is recorded inside ResolveRef, covering this `/r` path, the
 	// `ref` word, and export-map reference values alike.)
@@ -2614,6 +2644,24 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 	}
 	e.pointer++
 	return nil
+}
+
+// hasPendingForwardCollecting reports whether a parked Forward in the
+// current paren scope is still collecting arguments — the generic twin
+// of hasPendingForwardExpectingFunction, used by stepWordRef to decide
+// whether a `/r` reference should ARRIVE (feed the forward) rather than
+// be pushed behind the pointer.
+func (e *Engine) hasPendingForwardCollecting() bool {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.tape.At(i)) {
+			break
+		}
+		if IsForward(e.tape.At(i)) {
+			fwd, _ := AsForward(e.tape.At(i))
+			return fwd.CollectedArgs < fwd.Sig.TotalArgs()
+		}
+	}
+	return false
 }
 
 func (e *Engine) stepWord(val Value) error {
@@ -7856,8 +7904,18 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						break // named-type value doesn't fit this slot
 					}
 
-					// 1.4: function word — boundary, stop.
+					// 1.4: function word — boundary, stop. A `/r`-marked
+					// word is NO boundary: it denotes its REFERENCE
+					// value (NUR050/G12), so it claims this slot as a
+					// Function datum when the sig admits one.
 					if e.registry.Lookup(ww.Name) != nil {
+						if ww.ForceRef &&
+							(sigArgMatches(sig, fwd, Value{Parent: TFunction}) || expectedType.Equal(TAny)) {
+							positions[fwd] = scanIdx
+							fwd++
+							scanIdx++
+							continue
+						}
 						break
 					}
 
