@@ -1,6 +1,6 @@
-# BORU TextMate grammar
+# boru TextMate grammar
 
-`boru.tmLanguage.json` is the **canonical TextMate grammar** for BORU — a
+`boru.tmLanguage.json` is the **canonical TextMate grammar** for boru — a
 concatenative, strongly-typed query language (`.boru`). It defines the scope
 name `source.boru` and highlights comments, the three string kinds (single,
 double, and backtick template strings with `${…}` interpolation), every
@@ -13,7 +13,7 @@ dispatch suffixes.
 The grammar uses conventional TextMate scope names (`comment.*`,
 `string.*`, `constant.*`, `keyword.control`, `support.function`,
 `entity.name.type`, `keyword.operator.*`) so that standard colour themes
-render BORU without any theme-specific tweaks.
+render boru without any theme-specific tweaks.
 
 ## Source of truth
 
@@ -50,17 +50,17 @@ plutil -convert xml1 -o boru.tmLanguage boru.tmLanguage.json
 ```
 
 Drop the result into a bundle's `Syntaxes/` folder
-(`~/Library/Application Support/TextMate/Bundles/BORU.tmbundle/Syntaxes/`).
+(`~/Library/Application Support/TextMate/Bundles/boru.tmbundle/Syntaxes/`).
 
 ### Sublime Text
 
 Sublime Text loads `.tmLanguage` / `.sublime-syntax` grammars. The simplest
-path is to save this grammar under a `Packages/BORU/` directory:
+path is to save this grammar under a `Packages/boru/` directory:
 
 ```sh
-# ~/Library/Application Support/Sublime Text/Packages/BORU/   (macOS)
-# %APPDATA%\Sublime Text\Packages\BORU\                       (Windows)
-cp boru.tmLanguage.json "…/Packages/BORU/BORU.tmLanguage.json"
+# ~/Library/Application Support/Sublime Text/Packages/boru/   (macOS)
+# %APPDATA%\Sublime Text\Packages\boru\                       (Windows)
+cp boru.tmLanguage.json "…/Packages/boru/boru.tmLanguage.json"
 ```
 
 Sublime maps `fileTypes: ["boru"]` / `scopeName: "source.boru"` automatically,

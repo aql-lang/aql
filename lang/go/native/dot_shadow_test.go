@@ -33,7 +33,7 @@ func TestDotNotationRegisteredWordKey(t *testing.T) {
 		t.Run(tt.key, func(t *testing.T) {
 			// Simulate dot notation: map dot key
 			// The key is a Word that names a registered function.
-			result := runBORU(t, r, []Value{
+			result := runBoru(t, r, []Value{
 				NewMap(m), NewWord("dot"), NewWord(tt.key),
 			})
 			if len(result) != 1 || result[0].String() != tt.want {
@@ -58,12 +58,12 @@ func TestDotNotationModuleExportShadow(t *testing.T) {
 
 	// def matrix {trace:"my-trace-fn"}
 	// MatrixUtil.trace → "my-trace-fn" (not the debug trace word)
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("def"), NewWord("Matrix"), NewMap(moduleMap), NewEnd(),
 	})
 
 	// matrix get trace — should do map lookup, not execute trace word
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("Matrix"), NewWord("dot"), NewWord("trace"),
 	})
 	_as0, _ := AsString(result[0])
@@ -85,7 +85,7 @@ func TestDotNotationNormalKeysStillWork(t *testing.T) {
 	m.Set("name", NewString("alice"))
 	m.Set("age", NewInteger(30))
 
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewMap(m), NewWord("dot"), NewWord("name"),
 	})
 	_as1, _ := AsString(result[0])
@@ -93,7 +93,7 @@ func TestDotNotationNormalKeysStillWork(t *testing.T) {
 		t.Errorf("dot name = %v, want 'alice'", result)
 	}
 
-	result = runBORU(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewMap(m), NewWord("dot"), NewWord("age"),
 	})
 	_as2, _ := AsNumber(result[0])

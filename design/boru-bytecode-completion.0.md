@@ -1,4 +1,4 @@
-# BORU Bytecode — Completion Roadmap (toward P7)
+# boru Bytecode — Completion Roadmap (toward P7)
 
 Status: design. Companion to `boru-bytecode-plan.0.md` (P0–P4) and
 `boru-bytecode-runtime-independence.0.md` (P5–P7 machinery). This doc
@@ -458,7 +458,7 @@ ratchet delta.
 corpus is a finite, hand-written oracle — it exercises rows, never COMBINATIONS,
 and the carrier compiler's per-construct gates fail exactly on combinations the
 author didn't foresee (the make-default fold inside a `for` body; a computed map
-value referencing a def-local carrier). So a generator emits well-typed BORU from
+value referencing a def-local carrier). So a generator emits well-typed boru from
 the compilable subset (arithmetic / division / boolean logic / strings / `if` /
 computed lists / `size` / `def`-locals / `for` / nested maps + `get` / in-place
 mutation (`Array` + map `set`) / object & class field mutation / higher-order

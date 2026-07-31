@@ -160,7 +160,7 @@ to assert.
 - The 41 pinned rows still fail with the same code.
 - `make -C kg check test graph` clean, every `kg/*.boru` free of
   `uncalled_function`, and `out/graph.json` byte-identical — the largest
-  body of BORU in the tree, run end to end.
+  body of boru in the tree, run end to end.
 - Full gauntlet including `make cover-gate` at 100%.
 
 ## 6. Known divergence, pre-existing: a failing call inside a `do` body

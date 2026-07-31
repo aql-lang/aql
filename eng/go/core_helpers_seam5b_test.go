@@ -158,7 +158,7 @@ func TestS5bEBuildFnBodyHandlerQuotesListParam(t *testing.T) {
 	r := newTestRegistry(t)
 	s := FnSig{
 		Params: []FnParam{{Name: "s5bex", Type: TList}},
-		Impl:   BORU([]Value{NewWord("s5bex")}),
+		Impl:   Boru([]Value{NewWord("s5bex")}),
 	}
 	meta := &FnFrameMeta{Name: "s5bef"}
 	h := buildFnBodyHandler(r, "s5bef", s, FnDefInfo{}, meta)
@@ -185,12 +185,12 @@ func TestS5bEBuildFnBodyHandlerForkDispatch(t *testing.T) {
 	s := FnSig{
 		Params:  []FnParam{{Name: "s5bev", Type: TInteger}},
 		Returns: []*Type{TInteger},
-		Impl:    BORU([]Value{NewWord("s5bev")}),
+		Impl:    Boru([]Value{NewWord("s5bev")}),
 	}
 	h := buildFnBodyHandler(r, "s5bevf", s, FnDefInfo{}, &FnFrameMeta{Name: "s5bevf"})
 	// A registry FORK shares the install registry's AnalysisScopeID, so
 	// the handler must run the body in the fork (branch-local bindings
-	// resolve there), via CallBORU.
+	// resolve there), via CallBoru.
 	fork := r.ForkConcurrent()
 	out, err := h([]Value{NewInteger(42)}, nil, nil, fork)
 	if err != nil {
@@ -209,7 +209,7 @@ func TestS5bEBuildFnBodyHandlerArgsPushError(t *testing.T) {
 	r.Args = nil // nil args stack: Push fails, the handler must unwind the baseline
 	s := FnSig{
 		Params: []FnParam{{Name: "s5bey", Type: TInteger}},
-		Impl:   BORU([]Value{NewWord("s5bey")}),
+		Impl:   Boru([]Value{NewWord("s5bey")}),
 	}
 	h := buildFnBodyHandler(r, "s5beg", s, FnDefInfo{}, &FnFrameMeta{Name: "s5beg"})
 	if _, err := h([]Value{NewInteger(1)}, nil, nil, r); err == nil {
@@ -268,7 +268,7 @@ func TestS5bEReturnsFnDeferredParamListPopsGenBindings(t *testing.T) {
 	inner.Eval = true
 	sig := FnSig{
 		Params: []FnParam{{Name: "s5bec1", Type: node}},
-		Impl:   BORU([]Value{inner}),
+		Impl:   Boru([]Value{inner}),
 	}
 	rf := buildFnBodyReturnsFn(r, "s5bemk", sig, FnDefInfo{Gen: spec})
 	out := rf([]Value{NewInteger(9)}, r)
@@ -290,7 +290,7 @@ func TestS5bEReturnsFnArmedRootCarrierArg(t *testing.T) {
 
 	sig := FnSig{
 		Params: []FnParam{{Name: "s5bez", Type: TAny}},
-		Impl:   BORU([]Value{NewInteger(1)}),
+		Impl:   Boru([]Value{NewInteger(1)}),
 	}
 	rf := buildFnBodyReturnsFn(r, "s5beh", sig, FnDefInfo{})
 	// A root-node arg (nil Parent): the armed generalisation must keep it
@@ -318,7 +318,7 @@ func TestS5bEReturnsFnUnboundReturnTypeParamDedupes(t *testing.T) {
 	sig := FnSig{
 		Params:  []FnParam{{Name: "s5bew", Type: TInteger}},
 		Returns: []*Type{node},
-		Impl:    BORU([]Value{NewInteger(1)}),
+		Impl:    Boru([]Value{NewInteger(1)}),
 	}
 	rf := buildFnBodyReturnsFn(r, "s5bei", sig, FnDefInfo{Gen: spec})
 
@@ -352,7 +352,7 @@ func TestS5bEInstallFnDefStackOnly(t *testing.T) {
 	InstallFnDef(r, "s5beso", FnDefInfo{
 		Signatures: []Signature{{
 			Params: []FnParam{{Name: "n", Type: TInteger}},
-			Impl:   BORU([]Value{NewWord("n")}),
+			Impl:   Boru([]Value{NewWord("n")}),
 		}},
 	}, true)
 	fn := r.Lookup("s5beso")
@@ -375,7 +375,7 @@ func TestS5bEUninstallFnSigsSkipsNonFnEntries(t *testing.T) {
 	InstallFnDef(r, "s5bemix", FnDefInfo{
 		Signatures: []Signature{{
 			Params: []FnParam{{Name: "a", Type: TInteger}},
-			Impl:   BORU([]Value{NewWord("a")}),
+			Impl:   Boru([]Value{NewWord("a")}),
 		}},
 	})
 	// A plain value entry ABOVE the fn: the top-down spec scan must skip
@@ -432,7 +432,7 @@ func TestS5bEExpandOptionalSigsUnnamedAndBarrierClamp(t *testing.T) {
 			{Name: "o", Type: TInteger, Optional: true},
 		},
 		BarrierPos: 2,
-		Impl:       BORU([]Value{NewInteger(1)}),
+		Impl:       Boru([]Value{NewInteger(1)}),
 	}})
 	if len(sigs) != 2 {
 		t.Fatalf("expected original + 1 expansion, got %d", len(sigs))

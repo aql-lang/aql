@@ -13,7 +13,7 @@ import "testing"
 //      bodies arrive DYNAMIC on the declarative surface (`p get "gen"` /
 //      `p get "property"` inside run-property). The NoEvalArgs code-body refusal
 //      fires because a dynamic body is not an inert const. BUT runCheckProp runs
-//      BOTH bodies through parent.CallBORU in fresh ISOLATED frames against the
+//      BOTH bodies through parent.CallBoru in fresh ISOLATED frames against the
 //      module-captured registry — the SAME Go handler under interpreter and VM,
 //      binding only each body's own params (gen: `r`; property: one unnamed).
 //      Name resolution inside a body never touches a compiled frame local, so a
@@ -38,7 +38,7 @@ import "testing"
 // The declarative surface end to end: Test.prop builds a spec, `specs each`
 // runs it via Test.run-property (the exact corpus shape). The gen body uses the
 // seeded rand instance (`r.int`) — which is NEVER compiled: it runs inside
-// runCheckProp's CallBORU, so the dot-method dispatch is an interpreter concern,
+// runCheckProp's CallBoru, so the dot-method dispatch is an interpreter concern,
 // not a compile leaf. Must force-compile clean AND match the interpreter.
 func TestPropSpecDeclarativeSurfaceCompiles(t *testing.T) {
 	stage1aCompiles(t, `import "boru:test" end

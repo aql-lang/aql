@@ -25,7 +25,7 @@ func optSig(pattern Value) FnSig {
 			Optional: true,
 		}},
 		Returns: []*Type{TMap},
-		Impl:    BORU([]Value{NewWord("m")}),
+		Impl:    Boru([]Value{NewWord("m")}),
 	}
 }
 

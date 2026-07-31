@@ -1,4 +1,4 @@
-# BORU Language Specification: within-type scalar & Micron operations
+# boru Language Specification: within-type scalar & Micron operations
 # Format: input<TAB>expected<TAB>description
 #
 # Every scalar type and every Micron kind has WELL-DEFINED behaviour under

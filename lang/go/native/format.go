@@ -160,7 +160,7 @@ func (f *JsonicFormat) Decode(content string) ([]Value, error) {
 }
 
 // MakeFileOpsResolver creates a multisource.Resolver backed by a FileOps
-// implementation. This bridges the BORU file abstraction to multisource's
+// implementation. This bridges the boru file abstraction to multisource's
 // path resolution so that @"path" references in .jsonic files work.
 func MakeFileOpsResolver(ops capabilities.FileOps) multisource.Resolver {
 	return func(spec multisource.PathSpec, opts *multisource.MultiSourceOptions, _ *jsonic.Context) multisource.Resolution {
@@ -325,7 +325,7 @@ func convertDelimitedRecords(records []any) Value {
 	}
 	recType := RecordTypeInfo{Fields: fields}
 
-	// Convert each data row into a BORU map value.
+	// Convert each data row into a boru map value.
 	rows := make([]Value, 0, len(records)-1)
 	for _, rec := range records[1:] {
 		arr, ok := rec.([]any)

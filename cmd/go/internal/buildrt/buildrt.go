@@ -1,4 +1,4 @@
-// Package buildrt is the shared runtime for executing a BORU program and
+// Package buildrt is the shared runtime for executing a boru program and
 // printing its residual stack. It is the single implementation of "evaluate
 // source, print the result" used by three callers:
 //
@@ -63,7 +63,7 @@ var langNew = lang.New
 // (design/TUI-IMPLEMENTATION-PLAN.0.md P3). Registration is cheap and
 // pre-import-safe; failure means a backend is already registered on
 // this registry, which is exactly the state we want.
-func registerTerminalBackend(a *lang.BORU) {
+func registerTerminalBackend(a *lang.Boru) {
 	_ = modules.RegisterHostTui(a.NativeRegistry(), termback.Spec())
 }
 
@@ -84,7 +84,7 @@ func EvalColor(w io.Writer, source string, o lang.Options, mode CompileMode, col
 
 // EvalReport is Eval plus the -compile-report surface, a compilation-refusal
 // warning stream, and caller-resolved color. When report is non-nil, the
-// instance's detached-stamp attribution (lang.BORU.StampReport —
+// instance's detached-stamp attribution (lang.Boru.StampReport —
 // design/RUNTIME-STAMPING.0.md) is printed to it after the run, one line per
 // runtime-constructed callback with its outcome or refusal reason. When warn is
 // non-nil and the default compile-try mode falls back because the WHOLE program
@@ -138,7 +138,7 @@ func PrintStampReport(w io.Writer, events []lang.StampEvent) {
 // that need to configure the instance first — e.g. seed an in-memory file
 // system for bundled imports — can do so before running) and prints the
 // residual stack exactly as the run subcommand does.
-func runAndPrint(w, warn io.Writer, a *lang.BORU, source string, mode CompileMode, color bool) error {
+func runAndPrint(w, warn io.Writer, a *lang.Boru, source string, mode CompileMode, color bool) error {
 	var result []any
 	var err error
 	switch mode {
@@ -242,7 +242,7 @@ type Config struct {
 	// JSON behind a magic+length marker with no integrity check, so a baked
 	// profile is a strippable DEFAULT, not a boundary against an attacker
 	// who holds the binary. It constrains the PROGRAM, which is what a tool
-	// author shipping a BORU script wants.
+	// author shipping a boru script wants.
 	Profile *policy.Profile `json:"profile,omitempty"`
 }
 

@@ -8,7 +8,7 @@ import (
 	lang "github.com/boru-lang/boru/lang/go"
 )
 
-// geoModule is a BORU module, defined inline and imported, that exports
+// geoModule is a boru module, defined inline and imported, that exports
 // two USER-DEFINED TYPES and two functions whose signatures accept those
 // types:
 //

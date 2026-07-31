@@ -19,7 +19,7 @@ func fnDefWithProvenance() Value {
 		Signatures: []FnSig{{
 			Params:     []FnParam{{Type: TList}, {Type: TList}},
 			Returns:    []*Type{TList},
-			Impl:       BORU([]Value{NewWord("indices")}),
+			Impl:       Boru([]Value{NewWord("indices")}),
 			BarrierPos: -1,
 		}},
 	})

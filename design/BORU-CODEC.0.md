@@ -5,7 +5,7 @@
 
 ## 1. Purpose
 
-BORU already has ParseLang and built-in facilities for structured formats such as JSON and CSV. A new codec module must not duplicate that work.
+boru already has ParseLang and built-in facilities for structured formats such as JSON and CSV. A new codec module must not duplicate that work.
 
 The proposed boundary is:
 
@@ -61,7 +61,7 @@ UTF conversion needs explicit unit semantics:
 - UTF-8 bytes;
 - UTF-16 code units with stated endianness;
 - UTF-32 code units with stated endianness;
-- Unicode scalar/rune sequences where BORU has such a carrier;
+- Unicode scalar/rune sequences where boru has such a carrier;
 - invalid-sequence policy: reject, replace or preserve, selected explicitly.
 
 Do not use the term "character" without identifying whether it means byte, code unit, scalar value or grapheme.

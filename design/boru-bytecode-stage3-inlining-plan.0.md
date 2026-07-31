@@ -74,7 +74,7 @@ target is the 3 module rows.
 
 ## The single root cause of the 3 module rows
 
-A module-preamble BORU fn (`run-spec`, `run-cases`, `run-case`;
+A module-preamble boru fn (`run-spec`, `run-cases`, `run-case`;
 `Rand.list-of`; `ParseLang.parse_calc`) is an `FnFrame` fn. In
 check+emit mode its `buildFnBodyReturnsFn` (`eng/go/core_helpers.go:271`)
 compiles the body as a **shared, type-memoized unit** against
@@ -247,7 +247,7 @@ dispatch RECORD a closure call** so its `[Rand.int 0 10]` body → a closure
 unit and its result → a tracked operand.
 
 CORRECTION (further tracing): `r.list-of`'s dispatch goes through NEITHER
-the `execFnDefSig`/`CallBORU` path (a `FNDEFSIG` probe never fired) NOR
+the `execFnDefSig`/`CallBoru` path (a `FNDEFSIG` probe never fired) NOR
 `carrierResults` (no `CARRES rand-list-of`/`list-of` line). So the result
 `N_…` (the final `List`) is produced by some OTHER path — most likely the
 Rand-instance `get`/method dispatch for `r.list-of` (where `r =
@@ -435,14 +435,14 @@ VERIFIED at code level this session:
   ARMS the body so `__pa` is captured INSIDE the unit).
 - A fn VALUE with a real body, dispatched at the pointer (a module export like
   `ParseLang.parse_calc`, or `Rand.list-of`'s wrapper), goes through
-  `execFnDefLiteral` → inline `CallBORU` analysis, whose synthesized body tail
+  `execFnDefLiteral` → inline `CallBoru` analysis, whose synthesized body tail
   contains `__pa` (pop Args/FnBaseline). That `__pa` leaks into the TOP-LEVEL
   residual and `emit.go:1920` refuses it (`context-dependent word __pa`).
 - The machinery to fix it EXISTS: `eng/go/callable_words.go` `compileClosureBody`
   / `tryRecordClosure` already compile a code body into its own fn unit via
   `StartFnCompile` (used by each/fold/scan and a "fnval" factory path). The gap
   is routing the body-bearing fn-VALUE dispatch path through that same
-  `StartFnCompile` arming instead of inline `CallBORU`.
+  `StartFnCompile` arming instead of inline `CallBoru`.
 
 This `__pa` crux is SHARED by module-parselang:23 (parse_calc body) and
 module-rand:38 (list-of's wrapper body + its NoEvalArgs gen). Cracking

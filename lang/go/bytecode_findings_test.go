@@ -15,7 +15,7 @@ import (
 
 // Finding A / C — RunCompiled resolves a compiled-mode INTERNAL error (a VM
 // lowering assertion or a recovered handler panic) by re-running on the
-// interpreter, but surfaces genuine BORU runtime errors (type_error, the
+// interpreter, but surfaces genuine boru runtime errors (type_error, the
 // resource ceilings) as-is. runtimeShouldFallback is the decision point.
 func TestRuntimeShouldFallback(t *testing.T) {
 	cases := []struct {
@@ -24,7 +24,7 @@ func TestRuntimeShouldFallback(t *testing.T) {
 		want bool
 	}{
 		{"internal_error falls back", eng.MakeBoruError("internal_error", "boom", "", "", ""), true},
-		{"foreign (non-BORU) error falls back", errors.New("some go error"), true},
+		{"foreign (non-Boru) error falls back", errors.New("some go error"), true},
 		{"type_error surfaces", eng.MakeBoruError("type_error", "bad", "", "", ""), false},
 		{"evaluation_limit surfaces (fast-fail by design)", eng.MakeBoruError("evaluation_limit", "too long", "", "", ""), false},
 		{"tape_exhausted surfaces", eng.MakeBoruError("tape_exhausted", "too big", "", "", ""), false},
@@ -47,7 +47,7 @@ func TestRunCompiledSurfacesGenuineError(t *testing.T) {
 	}
 	// An integer overflow is a genuine RUNTIME error the emitter still compiles
 	// (concrete args) and the VM raises. It must surface FROM THE COMPILED PATH
-	// (not be masked by a fallback) with the BORU taxonomy intact, matching the
+	// (not be masked by a fallback) with the boru taxonomy intact, matching the
 	// interpreter.
 	const src = `1000000 pow 1000000`
 	_, compiled, errC := a.RunCompiled(src)
@@ -1514,7 +1514,7 @@ func TestPRReviewFindings(t *testing.T) {
 	// re-running it concretely (twice), performing/doubling the side effect at
 	// compile time. The fold now declines an impure expression; a PURE container
 	// value still folds and compiles.
-	effOut := func(run func(*BORU, string)) string {
+	effOut := func(run func(*Boru, string)) string {
 		old := os.Stdout
 		r, w, _ := os.Pipe()
 		os.Stdout = w
@@ -1525,8 +1525,8 @@ func TestPRReviewFindings(t *testing.T) {
 		out, _ := io.ReadAll(r)
 		return string(out)
 	}
-	ci := effOut(func(a *BORU, s string) { a.Run(s) })
-	cc := effOut(func(a *BORU, s string) { a.RunCompiled(s) })
+	ci := effOut(func(a *Boru, s string) { a.Run(s) })
+	cc := effOut(func(a *Boru, s string) { a.RunCompiled(s) })
 	if ci != cc || ci != "x\n" {
 		t.Errorf("#2 effect parity: interp print=%q compiled print=%q (want %q once)", ci, cc, "x\n")
 	}
@@ -1548,7 +1548,7 @@ func TestPRReviewFindings(t *testing.T) {
 func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
 	const src = `context set 'n' 5 end ( context get 'n' ) add3 ( context get 'n' ) add3 ( context get 'n' )`
 
-	mk := func() *BORU {
+	mk := func() *Boru {
 		a, err := New()
 		if err != nil {
 			t.Fatal(err)
@@ -1691,7 +1691,7 @@ func TestFactoryApplyCompiles(t *testing.T) {
 	}
 }
 
-func mustNew(t *testing.T) *BORU {
+func mustNew(t *testing.T) *Boru {
 	t.Helper()
 	a, err := New()
 	if err != nil {
@@ -2483,7 +2483,7 @@ func TestRunSpecHarnessCompiles(t *testing.T) {
 	//
 	// SOUNDNESS (always): compile == interpret. FALLBACK ALLOWED: since the
 	// fn-dispatch unification (all fns compile their body as a unit via execMatch,
-	// no separate inline CallBORU path), Test.run-spec no longer compiles NATIVELY —
+	// no separate inline CallBoru path), Test.run-spec no longer compiles NATIVELY —
 	// the recursive code-body word `test-describe` (run-spec → test-describe →
 	// run-spec) hits the recursive-closure-compilation limit the inline path used to
 	// mask via data-driven recursion termination. So run-spec falls back to the
@@ -3176,7 +3176,7 @@ func TestReturnedCapturingClosureApply(t *testing.T) {
 }
 
 // TestParseLangFnValueDispatchCompiles pins body-bearing fn-VALUE dispatch
-// for a def-bound BORU parser (module-parselang:23): the bound parser fn,
+// for a def-bound boru parser (module-parselang:23): the bound parser fn,
 // called with args — directly or through the `parse` sugar — lowers to a
 // CALL_USER unit (its `__pa` tail captured INSIDE the unit) instead of
 // leaking `__pa` into the top-level residual. (The former sub-feature A,
@@ -3237,7 +3237,7 @@ func TestParseLangFnValueDispatchCompiles(t *testing.T) {
 
 func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 	clk := capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)}
-	newClocked := func() *BORU {
+	newClocked := func() *Boru {
 		a := mustNew(t)
 		a.SetClock(clk)
 		return a
@@ -3827,7 +3827,7 @@ func TestUnmatchedDispatchTrapCompiles(t *testing.T) {
 		// whenever the interpreter's is (the full-corpus error lane's contract).
 		var aeC, aeI *eng.BoruError
 		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
-			t.Fatalf("%s: non-BORU error: compiled=%v interp=%v", c.name, errC, errI)
+			t.Fatalf("%s: non-Boru error: compiled=%v interp=%v", c.name, errC, errI)
 		}
 		if aeC.Detail != aeI.Detail {
 			t.Errorf("%s: detail divergence:\n  compiled=%q\n  interp=%q", c.name, aeC.Detail, aeI.Detail)

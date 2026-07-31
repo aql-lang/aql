@@ -10,7 +10,7 @@ package modules
 // paren-wrapped `arg ( math get NAME )` form — the same form the
 // TestMathDot* tests use — which flows through execFnDefLiteral's
 // captured-sub-registry branch (trivial-delegation short-circuit /
-// CallBORU). The golden pins this byte-for-byte across refactor stages.
+// CallBoru). The golden pins this byte-for-byte across refactor stages.
 //
 // Regenerate: go test ./modules -run TestFnModelWrapperEquivalence -update-wrapper
 

@@ -263,7 +263,7 @@ func TestDebugBody(t *testing.T) {
 	} else {
 		t.Errorf("body of a native word should be `native`, got %v", res[len(res)-1])
 	}
-	// A BORU-defined word reports its quoted body list.
+	// A boru-defined word reports its quoted body list.
 	r2, _ := debugRegistry(t)
 	res2 := runDebug(t, r2, `def double fn [[x:Integer] [Integer] [x mul 2]]  "double" Debug.body`)
 	if lst, err := native.AsList(res2[len(res2)-1]); err != nil || lst.IsNil() {

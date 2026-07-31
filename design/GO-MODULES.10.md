@@ -1,7 +1,7 @@
 # Go Modules (reflection bridge)
 
 > **Status: design proposal.** Nothing in this note is implemented yet.
-> It describes how BORU *could* expose arbitrary Go packages to BORU source
+> It describes how boru *could* expose arbitrary Go packages to boru source
 > via a reflection bridge, surfaced through the existing `import` word with
 > a `go:` prefix. It is written to be implementable as a later task; the
 > "Implementation" and "Open questions" sections mark the work and the
@@ -9,7 +9,7 @@
 
 ## Motivation
 
-BORU is **sealed at compile time**. Go reaches the language only through
+boru is **sealed at compile time**. Go reaches the language only through
 host-wired native words (`RegisterNativeFunc`) and native modules
 (`BuildXxxModule` → `ModuleDesc`, imported as `import "boru:math-util"`,
 see [NATIVE-MODULES.10.md](NATIVE-MODULES.10.md)). Every importable name is
@@ -17,13 +17,13 @@ gated through a *static map* (`lang/go/modules/modules.go`'s `modules`).
 There is no FFI, no runtime `reflect`, no dynamic loading.
 
 The goal here is to let a host expose **any** Go package's functions and
-constants to BORU *without hand-writing a `NativeFunc` per function*.
+constants to boru *without hand-writing a `NativeFunc` per function*.
 
 Go itself cannot load arbitrary packages at runtime (only the limited
 `plugin` package can, with severe constraints — see "Alternatives"). So
 "arbitrary" here means **any package the host chooses to wire in** — the
 host enumerates the Go symbols once at construction time, and the bridge
-exposes them to BORU *automatically via reflection* rather than per-function
+exposes them to boru *automatically via reflection* rather than per-function
 boilerplate. The host registration list is the trust boundary.
 
 ## Surface
@@ -58,7 +58,7 @@ import [Strings Str] "go:strings"
 
 Go identifiers are exported in `CamelCase`; the bridge lower-kebab-cases
 the export name (`HasPrefix` → `has-prefix`, `ParseFloat` → `parse-float`)
-to read like the rest of BORU. The mapping is mechanical and documented per
+to read like the rest of boru. The mapping is mechanical and documented per
 package via `boru describe` (below).
 
 ## Calling convention
@@ -76,7 +76,7 @@ import "go:strings"
 "  hi  " Strings.trim-space              # → "hi"
 ```
 
-> **Note on argument form.** BORU's general guidance is to prefer *forward*
+> **Note on argument form.** boru's general guidance is to prefer *forward*
 > form `f a b c` (see `eng/go/CLAUDE.md` "Signature Ordering"). Imported
 > module words are the documented exception: the dot-access desugars to a
 > `get`-chain that resolves the namespace from the stack, so the wrapper can
@@ -97,8 +97,8 @@ dispatches (see the caveat under "Resolution path").
 ## Host registration (the "arbitrary" surface)
 
 The host enumerates the symbols it wants to expose. Proposed public entry
-point on the `lang` package (alongside the existing `lang.New`, `(*BORU).Run`,
-`(*BORU).Check`, `(*BORU).Register` in `lang/go/boru.go`):
+point on the `lang` package (alongside the existing `lang.New`, `(*Boru).Run`,
+`(*Boru).Check`, `(*Boru).Register` in `lang/go/boru.go`):
 
 ```go
 a, _ := lang.New()
@@ -121,7 +121,7 @@ a.Run(`import "go:strings"   "a,b,c" "," Strings.split`)
 This is deliberate: Go has no portable way to discover or load a package by
 name at runtime, and even reflection cannot enumerate a package's exported
 identifiers. The host map *is* the package surface. It doubles as the trust
-boundary — only registered symbols are reachable from BORU.
+boundary — only registered symbols are reachable from boru.
 
 ## Type mapping
 
@@ -129,10 +129,10 @@ Values cross the boundary through an extension of the existing
 `eng.FromNative` / `eng.ToNative` helpers (`eng/go/gobridge.go`), which
 today cover only scalars, lists, and maps with a *fixed* mapping. The bridge
 needs **param-directed** conversion: the target Go type comes from the
-function's `reflect.Type`, so a BORU Integer becomes whatever width the
+function's `reflect.Type`, so a boru Integer becomes whatever width the
 parameter declares.
 
-| BORU                     | Go (in)                         | Go (out) → BORU          |
+| boru                     | Go (in)                         | Go (out) → boru          |
 |-------------------------|---------------------------------|-------------------------|
 | `String`                | `string`                        | `string` → `String`     |
 | `Integer`               | `int`, `int8..64`, `uint8..64`  | integer kinds → `Integer` |
@@ -148,7 +148,7 @@ output; reused unchanged.
 
 ### Opaque values: the `Go/Object` type
 
-Go values that have no BORU counterpart (structs the host doesn't want
+Go values that have no boru counterpart (structs the host doesn't want
 flattened, pointers, handles like `*os.File`, `*url.URL`) are wrapped in an
 `ExtensionPayload{Body: any}` — the kernel's explicit escape hatch
 (`eng/go/payload.go`, `eng.NewExtension`; see `eng/go/CLAUDE.md` "Sealed
@@ -166,9 +166,9 @@ Bodies that want to participate in deep cloning implement the optional
 ### Errors
 
 A trailing `error` return is the universal Go convention. The bridge
-**unwraps it**: on non-nil `error` it raises a BORU error (`ErrorInfo`,
+**unwraps it**: on non-nil `error` it raises a boru error (`ErrorInfo`,
 constructed via `r.BoruError`) instead of pushing the error as a value. So
-`func F(...) (T, error)` exposes a single `T` result to BORU and faults on
+`func F(...) (T, error)` exposes a single `T` result to boru and faults on
 failure, matching how native words signal errors.
 
 ## Resolution path (reuse existing module machinery)
@@ -218,9 +218,9 @@ converted value, matching how `math.pi` / `math.e` work today.
 
 ## Static checking & `describe`
 
-Reflected words cannot be expressed precisely in BORU's type lattice
+Reflected words cannot be expressed precisely in boru's type lattice
 (`int`, `*url.URL`, etc. have no lattice node). They are declared with
-`TAny` arg and return types (mapping the obvious scalar kinds to their BORU
+`TAny` arg and return types (mapping the obvious scalar kinds to their boru
 type where 1:1 is safe). Consequently `boru check` treats them as gradual
 boundaries — values flowing through a `go:` word carry `Any` forward. This
 is the same conservative stance anonymous lambdas take (`Returns=[Any]`,
@@ -242,7 +242,7 @@ describe Strings.split           # synthesized sig + "→ strings.Split"
 Two gates, in order:
 
 1. **Host registration** is primary and absolute: a package is reachable
-   only if the host called `RegisterGoPackage` for it. BORU source cannot
+   only if the host called `RegisterGoPackage` for it. boru source cannot
    name an unregistered package, and reflection cannot reach a symbol the
    host did not hand over.
 2. **Policy** gates the `go:` import op the same way native-module imports
@@ -259,14 +259,14 @@ registered; behaviour is deterministic across runs.
 
 | Approach            | Why not |
 |---------------------|---------|
-| Go `plugin` (.so)   | The only mechanism that loads truly *new* code at runtime, but Linux/macOS-only, requires an identical toolchain and dependency graph, cannot be unloaded, and breaks BORU's sealed/deterministic model. |
+| Go `plugin` (.so)   | The only mechanism that loads truly *new* code at runtime, but Linux/macOS-only, requires an identical toolchain and dependency graph, cannot be unloaded, and breaks boru's sealed/deterministic model. |
 | Subprocess / RPC    | Fully isolated and language-agnostic, but heavyweight, serialization-bound, and an operational burden (process lifecycle, transport). Overkill for in-process Go interop. |
 | Build-time codegen  | Type-safe with no runtime `reflect`, but every package must be chosen and generated *before* the binary is built — no host-time flexibility, more build machinery. |
 | **Reflection bridge** (chosen) | Host wires in any package at construction time; words are generated automatically; stays in-process, deterministic, and sealed. Cost is runtime `reflect` and `Any`-typed boundaries. |
 
 ## Open questions
 
-- **Variadics.** Map a BORU `List` tail to the variadic slot, or accept
+- **Variadics.** Map a boru `List` tail to the variadic slot, or accept
   trailing forward args? (Lean: a single `List` argument.)
 - **Struct methods / pointer receivers.** Expose methods on a `Go/Object`
   (e.g. `urlObj Url.string` → `(*url.URL).String`)? Needs a method-dispatch
@@ -277,11 +277,11 @@ registered; behaviour is deterministic across runs.
 - **`(T, error)` vs `(T, U)` disambiguation.** The "trailing error" rule is
   unambiguous only because `error` is an interface; confirm the bridge keys
   on the concrete `error` type, not arity.
-- **Funcs as arguments / closures.** Marshaling a BORU `Function` into a Go
+- **Funcs as arguments / closures.** Marshaling a boru `Function` into a Go
   `func(...)` param is possible via reflection but needs a defined calling
   convention; likely out of scope for v1 (reject with a clear error).
 - **Generics & channels.** `reflect` cannot instantiate generic functions;
-  channels and `context.Context` have no BORU representation. All rejected at
+  channels and `context.Context` have no boru representation. All rejected at
   registration time with a clear error rather than failing at call time.
 
 ## Implementation checklist (for the later task)
@@ -298,7 +298,7 @@ registered; behaviour is deterministic across runs.
    `BarrierPos: -1`).
 5. `lang/go/native/native_module_module.go` — `isGoModImport` / `resolveGoMod`
    branches in `import` and `ResolveAnyModule`.
-6. `lang/go/boru.go` — `(*BORU).RegisterGoPackage` (or an `Options` field) and
+6. `lang/go/boru.go` — `(*Boru).RegisterGoPackage` (or an `Options` field) and
    wiring of the new resolver, parallel to `modules.InstallResolver`.
 7. `lang/go/policy/` — a `go`/`go-modules` scope gating the import op.
 8. `lang/go/native/describe.go` — synthesize help from `reflect.Type` for
@@ -312,7 +312,7 @@ registered; behaviour is deterministic across runs.
 
 1. Host calls `a.RegisterGoPackage("<import path>", map[string]any{…})` with
    the funcs/constants to expose.
-2. BORU source runs `import "go:<import path>"`, optionally renaming the
+2. boru source runs `import "go:<import path>"`, optionally renaming the
    namespace (`import [Derived New] "go:…"`).
 3. Call the words: `arg1 arg2 Namespace.word-name`.
 4. `describe "go:<import path>"` lists what's available.

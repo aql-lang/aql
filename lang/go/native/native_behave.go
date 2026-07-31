@@ -62,7 +62,7 @@ var behaveNative = NativeFunc{
 // Project VALUE into a Node or Scalar via its type's Nodifier
 // capability — direct access to the data-shape produced by a
 // `behave nodify/q` body without the JSON-string serialisation step.
-// Useful when the caller wants the structural result for further BORU
+// Useful when the caller wants the structural result for further boru
 // processing rather than for wire output. With no nodify behavior
 // registered for the type, the value passes through unchanged.
 //
@@ -227,7 +227,7 @@ func validateCanonSig(sig eng.FnSig) (*eng.Type, error) {
 
 // validateNodifySig enforces shape `[[T] [Any] [body]]` and returns
 // T. The body produces a Node or Scalar projection of the value —
-// the output stays in the BORU data domain (Integer, String, Map,
+// the output stays in the boru data domain (Integer, String, Map,
 // List, …) rather than a serialised JSON string, so callers can
 // compose with other data transforms before encoding.
 func validateNodifySig(sig eng.FnSig) (*eng.Type, error) {
@@ -278,7 +278,7 @@ func validateUnifySig(sig eng.FnSig) (*eng.Type, error) {
 }
 
 // userBehavior is the shared wrapper type that carries one or more
-// BORU-bodied capability slots on a target *Type. The TypeBehavior
+// boru-bodied capability slots on a target *Type. The TypeBehavior
 // surface (Match / Format / Equal) delegates to the previous
 // Behavior; capability methods (Compare for compare, Format-via-canon
 // for canon, Nodify for nodify) run an installed body or hand off

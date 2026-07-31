@@ -1,11 +1,11 @@
-; highlights.scm — syntax highlighting for BORU (tree-sitter-boru).
+; highlights.scm — syntax highlighting for boru (tree-sitter-boru).
 ;
 ; Standard capture names (nvim-treesitter / Helix / Zed compatible):
 ;   @comment @string @string.escape @number @boolean @constant.builtin
 ;   @keyword @function.builtin @function @type @operator
 ;   @punctuation.bracket @punctuation.delimiter @variable
 ;
-; BORU is concatenative, so a bare "word" node can be a keyword, a builtin, or a
+; boru is concatenative, so a bare "word" node can be a keyword, a builtin, or a
 ; user word. We discriminate purely on the token text via #any-of? predicates
 ; whose lists are the authoritative keyword / builtin vocabularies.
 

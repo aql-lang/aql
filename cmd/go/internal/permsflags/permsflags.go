@@ -1,5 +1,5 @@
-// Package permsflags provides a shared flag set for BORU CLI
-// commands that build a lang.BORU instance and want to optionally
+// Package permsflags provides a shared flag set for boru CLI
+// commands that build a lang.Boru instance and want to optionally
 // apply a permissions policy.
 //
 // Usage:

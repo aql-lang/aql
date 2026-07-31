@@ -9,11 +9,11 @@ import (
 )
 
 // The boru:vault-tui module — the VaultTui namespace: the interactive
-// vault TUI WRITTEN IN BORU (vaultTuiSource below, embedded from
+// vault TUI WRITTEN IN boru (vaultTuiSource below, embedded from
 // vault_tui.boru), the application layer of design/VAULT-TUI-PORT.0.md.
 // Follows the boru:sift hybrid pattern: the module body is parsed once
 // and run in a fresh sub-registry that collects its `export "VaultTui"
-// {…}`. The app itself is all BORU — this loader is the only Go.
+// {…}`. The app itself is all boru — this loader is the only Go.
 //
 // The app reaches the terminal and the vault through the host seams
 // (RegisterHostTui / RegisterHostVault). Both capability slots ride
@@ -32,7 +32,7 @@ var (
 	vaultTuiParseErr  error
 )
 
-// BuildVaultTuiModule loads the BORU-implemented boru:vault-tui module:
+// BuildVaultTuiModule loads the boru-implemented boru:vault-tui module:
 // it parses the embedded vault_tui.boru once, runs it in a fresh
 // sub-registry that inherits the parser + module resolver + host
 // capability slots, and collects the `export "VaultTui" {…}` map.

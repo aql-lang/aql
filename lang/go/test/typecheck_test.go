@@ -21,7 +21,7 @@ func TestCheckLoopResidualSpread(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	cases := []struct {
 		src  string
@@ -63,7 +63,7 @@ func TestCheckAddIntegerPrecision(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	res, err := a.Check("1 add 2")
 	if err != nil {
@@ -93,7 +93,7 @@ func TestCheckShapedMethodArity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	// Side-effect-only method: 0 declared returns → 0 residual carriers.
 	res, err := a.Check(`import "boru:log" ; def l (Log.logger "x") ; l.info "msg"`)
@@ -147,7 +147,7 @@ func TestCheckModuleExportTypePropagation(t *testing.T) {
 	}
 
 	// A bare export reference keeps a function type (FnDef wrapper renders
-	// as __FN; a BORU-preamble fn export renders as Function) — the point
+	// as __FN; a boru-preamble fn export renders as Function) — the point
 	// is that it is no longer the bare Any it used to degrade to.
 	res2, err := a.Check(`import "boru:math-util" end  MathUtil.sqrt`)
 	if err != nil {
@@ -261,7 +261,7 @@ func TestCheckAddFloatWiden(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	res, err := a.Check("1 add 2.5")
 	if err != nil {
@@ -283,7 +283,7 @@ func TestCheckStackOpIdentity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	res, err := a.Check("1 dup")
 	if err != nil {
@@ -307,7 +307,7 @@ func TestCheckSwapPreservesTypes(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	res, err := a.Check(`1 "hi" swap`)
 	if err != nil {
@@ -334,7 +334,7 @@ func TestCheckComparisonReturnsBoolean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	for _, expr := range []string{
 		"1 lt 2",
@@ -366,7 +366,7 @@ func TestCheckRunParity(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	// Check first.
 	if _, err := a.Check("1 add 2"); err != nil {
@@ -394,7 +394,7 @@ func TestCheckUpperReturnsString(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	res, err := a.Check(`upper "hello"`)
 	if err != nil {
@@ -418,7 +418,7 @@ func TestCheckIfJoinsBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	res, err := a.Check("if [1 lt 2] [42] [99]")
 	if err != nil {
@@ -444,7 +444,7 @@ func TestCheckIfMixedBranchesWidenToScalar(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	res, err := a.Check(`if [1 lt 2] [42] ["hello"]`)
 	if err != nil {
@@ -468,7 +468,7 @@ func TestCheckNoSignatureDiagnosis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check("upper 42")
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -496,7 +496,7 @@ func TestCheckUndefinedWordDiagnosis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check("nonexistent")
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -532,7 +532,7 @@ func TestCheckDoLiteralBody(t *testing.T) {
 		if err != nil {
 			t.Fatalf("new: %v", err)
 		}
-		seedBORU(a)
+		seedBoru(a)
 		res, err := a.Check(c.src)
 		if err != nil {
 			t.Fatalf("%q: %v", c.src, err)
@@ -560,7 +560,7 @@ func TestCheckHigherOrderBody(t *testing.T) {
 		if err != nil {
 			t.Fatalf("new: %v", err)
 		}
-		seedBORU(a)
+		seedBoru(a)
 		res, err := a.Check(c.src)
 		if err != nil {
 			t.Fatalf("%q: %v", c.src, err)
@@ -584,7 +584,7 @@ func TestCheckHigherOrderBadBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check("each [upper 42] [1 2]")
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -609,7 +609,7 @@ func TestCheckUserFnInference(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	src := `def inc fn [[n:Integer] [Integer] [n add 1]]  inc 10`
 	res, err := a.Check(src)
 	if err != nil {
@@ -628,7 +628,7 @@ func TestCheckUserFnRecursion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	src := `def fact fn [[n:Integer] [Integer] [if [n lte 1] [1] [n mul ( fact n sub 1 )]]]  fact 5`
 	res, err := a.Check(src)
 	if err != nil {
@@ -647,7 +647,7 @@ func TestCheckUserFnBadArgDiagnoses(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	src := `def inc fn [[n:Integer] [Integer] [n add 1]]  inc "hi"`
 	res, err := a.Check(src)
 	if err != nil {
@@ -675,7 +675,7 @@ func TestCheckDisjunctWidthCap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// Nested-if chain returning different scalar types per branch.
 	// After >8 distinct non-comparable alternatives, the join must
 	// widen; the common ancestor of mixed Number/String/Boolean is
@@ -715,7 +715,7 @@ func TestCheckFlowTypingNarrow(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// Bind x as Any (via a fn arg), then guard and narrow.
 	src := `def f fn [[x:Any] [Any] [if [x is Integer] [x add 1] [0]]] f 5`
 	res, err := a.Check(src)
@@ -740,7 +740,7 @@ func TestCheckFlowTypingWithoutGuard(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	src := `def f fn [[x:Any] [Any] [x mul x]] f 5`
 	res, err := a.Check(src)
 	if err != nil {
@@ -763,7 +763,7 @@ func TestCheckTypedListCarrier(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check("each [upper] ( iota 5 )")
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -789,7 +789,7 @@ func TestCheckTypedListPreserved(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// Build TList<Integer>, reverse it, each +1 over it.
 	res, err := a.Check("each [dup add] ( reverse ( iota 5 ) )")
 	if err != nil {
@@ -809,7 +809,7 @@ func TestCheckDiagnosticPosition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// upper expects String, gets Integer → no_signature.
 	res, err := a.Check("upper 42")
 	if err != nil {
@@ -841,7 +841,7 @@ func TestCheckConditionalDefJoin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// Use a dynamic condition (1 lt 2) so the checker must analyse
 	// both branches; a literal true would be flagged as
 	// unreachable-branch and select only the then side.
@@ -865,7 +865,7 @@ func TestCheckConditionalDefSameBranch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`if [1 lt 2] [def x 1] [def x 2]  x`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -883,17 +883,17 @@ func TestCheckStepBudget(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// A modest program that would run fine under the default
 	// budget, run under a tiny budget to force abort.
 	src := `1 add 2 add 3 add 4`
 	// Use engine-level access via a plain Run path: not exposed
-	// through lang.BORU. Instead, short-circuit via a generous
+	// through lang.Boru. Instead, short-circuit via a generous
 	// program that triggers the clamp: pretend default is fine,
 	// and verify budget-tripped diagnostic presence only when
 	// we construct a long program. For simplicity, we reach
 	// inside the registry via reflection-free public fields.
-	// lang.BORU doesn't expose the registry, so this test primarily
+	// lang.Boru doesn't expose the registry, so this test primarily
 	// confirms the path compiles and doesn't fire for ordinary
 	// programs.
 	res, err := a.Check(src)
@@ -915,7 +915,7 @@ func TestCheckForLoopAnalysis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// Body returns one Integer per iteration. A statically-counted loop leaves
 	// the SPREAD of its per-iteration residual (matching the runtime, which
 	// splices each iteration's value onto the stack): `for 5 [i dup add]` →
@@ -945,7 +945,7 @@ func TestCheckForLoopBadBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check("for 5 [i upper]")
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -980,7 +980,7 @@ func runPerfComparison(t *testing.T, program string, iters int) PerfSample {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	// First call to check (so any caches warm up).
 	res, err := a.Check(program)
@@ -999,9 +999,9 @@ func runPerfComparison(t *testing.T, program string, iters int) PerfSample {
 		checkTimes[i] = time.Since(start)
 	}
 
-	// Fresh BORU for runtime so Check-mode state doesn't influence.
+	// Fresh boru for runtime so Check-mode state doesn't influence.
 	a2, _ := lang.New()
-	seedBORU(a2)
+	seedBoru(a2)
 	runRes, err := a2.Run(program)
 	if err != nil {
 		t.Fatalf("run err: %v", err)
@@ -1011,7 +1011,7 @@ func runPerfComparison(t *testing.T, program string, iters int) PerfSample {
 	runTimes := make([]time.Duration, iters)
 	for i := 0; i < iters; i++ {
 		a3, _ := lang.New()
-		seedBORU(a3)
+		seedBoru(a3)
 		start := time.Now()
 		_, err := a3.Run(program)
 		if err != nil {
@@ -1057,7 +1057,7 @@ func TestCheckFullStackDepth(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check("1 2 3 depth")
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1078,7 +1078,7 @@ func TestCheckFullStackPickStack(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`1 "hi" 3 1 pick`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1106,7 +1106,7 @@ func TestCheckNestedTypedList(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// outer yields TList<TList<Integer>>; each [reverse] should
 	// type-check cleanly because reverse accepts TList.
 	res, err := a.Check("each [reverse] ( outer [add] ( iota 3 ) ( iota 3 ) )")
@@ -1136,7 +1136,7 @@ func TestCheckDiagnosticJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check("upper 42")
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1171,7 +1171,7 @@ func TestCheckUnreachableBranchTrue(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`if [true] [1] ["dead"]`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1199,7 +1199,7 @@ func TestCheckUnreachableBranchFalse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`if [false] ["dead"] [42]`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1216,7 +1216,7 @@ func TestCheckUnusedDef(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`def x 5  def y 10  x add x`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1247,7 +1247,7 @@ func TestCheckUnusedDefFn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`def helper fn [[n:Integer] [Integer] [n add 1]]  10`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1271,7 +1271,7 @@ func TestCheckContextTracking(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`context set "x" 42 end context get "x"`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1290,7 +1290,7 @@ func TestCheckContextMissingKey(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`context get "missing"`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1312,7 +1312,7 @@ func TestCheckInlineModule(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// Access the export with bare `get`, not dotted `X.v`. Dotted access
 	// groups to `( X get v )`, and check mode does not statically resolve a
 	// name bound by `import` inside a paren sub-expression (it does for
@@ -1337,7 +1337,7 @@ func TestCheckRecordShapeMismatch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	src := `
 def Point refine Record [x:Integer y:Integer]
 def dist fn [[p:Point] [Integer] [42]]
@@ -1367,7 +1367,7 @@ func TestCheckDoViaDefStacks(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`def body quote [1 add 2]  do body`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1447,7 +1447,7 @@ func TestPerfCorpus(t *testing.T) {
 
 // TestPerfRealistic measures Check vs Run on a realistic program
 // combining arithmetic, higher-order words, and a user-defined fn.
-// This is the headline perf number — closer to typical BORU code.
+// This is the headline perf number — closer to typical boru code.
 func TestPerfRealistic(t *testing.T) {
 	src := `def inc fn [[n:Integer] [Integer] [n add 1]]
 	        each [inc] ( iota 20 )`
@@ -1461,7 +1461,7 @@ func TestCheckSummaryCounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// One error (upper 42), one error (nonexistent), zero others.
 	res, err := a.Check("upper 42 nonexistent")
 	if err != nil {
@@ -1484,7 +1484,7 @@ func TestCheckSeverityClassification(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check("upper 42")
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1521,7 +1521,7 @@ func TestCheckBuiltinsAnnotated(t *testing.T) {
 		if err != nil {
 			t.Fatalf("new: %v", err)
 		}
-		seedBORU(a)
+		seedBoru(a)
 		res, err := a.Check(c.expr)
 		if err != nil {
 			t.Errorf("%q: check error: %v", c.expr, err)
@@ -1578,7 +1578,7 @@ func TestCheckCollectsMultipleUndefinedWords(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`first second third`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1598,7 +1598,7 @@ func TestCheckUndefinedWordInIfThen(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`if [true] [missing-then] [42]`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1616,7 +1616,7 @@ func TestCheckUndefinedWordInIfElse(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`if [false] [42] [missing-else]`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1634,7 +1634,7 @@ func TestCheckUndefinedWordInDoBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`do [missing-in-do]`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1652,7 +1652,7 @@ func TestCheckUndefinedWordInFnBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`def f fn [[Integer] [Integer] [missing-in-fn add 1]]
 f 5`)
 	if err != nil {
@@ -1670,7 +1670,7 @@ func TestCheckUndefinedWordInForBody(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`for 3 [missing-in-for]`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1693,7 +1693,7 @@ func TestCheckUndefinedWordInInlineModuleAborts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	_, err = a.Check(`import module [
 		def x missing-in-mod
 		export "M" {x:x}
@@ -1715,7 +1715,7 @@ func TestCheckUndefinedWordContinuesAnalysis(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`nope
 1 add 2`)
 	if err != nil {
@@ -1746,7 +1746,7 @@ func TestCheckUndefinedWordHasPosition(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check("\n\nhello-typo\n")
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1779,7 +1779,7 @@ func TestCheckModeDoesNotLeakAfterReturn(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	// First, run a check pass — this puts the registry into CheckMode
 	// briefly; the deferred reset in lang.Check() must clear it.
 	if _, err := a.Check(`some-typo`); err != nil {
@@ -1806,7 +1806,7 @@ func TestCheckUndefinedWordTypoNextToValid(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`upper "hi" typo-here`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -1893,7 +1893,7 @@ func TestCheckIndexOutOfRange(t *testing.T) {
 }
 
 // TestDynamicScopeUndefinedRescue pins the SOUND dynamic-scope undefined-word
-// rescue: BORU is dynamically scoped, so a fn body run at CALL time sees names
+// rescue: boru is dynamically scoped, so a fn body run at CALL time sees names
 // bound in the dynamic call chain (a callee reading the caller's param; a
 // body-local def read across a recursive frame). Such a reference must NOT be
 // flagged undefined_word — but ONLY when a fn that binds the name can actually

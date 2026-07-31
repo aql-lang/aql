@@ -666,7 +666,7 @@ func TestRemoveRecordHandler(t *testing.T) {
 
 // --- helpers for callback-based tests ---
 
-// makeTrueFilterFn creates a BORU function that takes one map arg and returns true.
+// makeTrueFilterFn creates a boru function that takes one map arg and returns true.
 func makeTrueFilterFn() Value {
 	return NewFnDef(FnDefInfo{
 		Signatures: []FnSig{
@@ -674,7 +674,7 @@ func makeTrueFilterFn() Value {
 				Params: []FnParam{
 					{Name: "item", Type: TMap},
 				},
-				Impl: BORU([]Value{NewBoolean(true)}), BarrierPos: -1,
+				Impl: Boru([]Value{NewBoolean(true)}), BarrierPos: -1,
 			},
 		},
 	})
@@ -721,7 +721,7 @@ func TestFilterHandler(t *testing.T) {
 
 // --- walk with before callback ---
 
-// makeWalkValueFn creates a BORU function that extracts the "value" field
+// makeWalkValueFn creates a boru function that extracts the "value" field
 // from the walk node map. Body: [getpath node "value"]
 func makeWalkValueFn() Value {
 	return NewFnDef(FnDefInfo{
@@ -730,7 +730,7 @@ func makeWalkValueFn() Value {
 				Params: []FnParam{
 					{Name: "node", Type: TMap},
 				},
-				Impl: BORU([]Value{
+				Impl: Boru([]Value{
 					NewWord("getpath"),
 					NewString("value"),
 					NewWord("node"),

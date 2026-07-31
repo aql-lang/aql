@@ -6,9 +6,9 @@ import (
 )
 
 //go:embed cli_test.boru
-var cliTestBORU string
+var cliTestBoru string
 
-// cliCoverAllow lists cli.boru rows that cli_test.boru cannot reach — the BORU
+// cliCoverAllow lists cli.boru rows that cli_test.boru cannot reach — the boru
 // analogue of //covergate:allow. Each entry is asserted to actually be
 // uncovered, so the list cannot rot.
 //
@@ -27,9 +27,9 @@ var cliTestBORU string
 // technique, not merely assert that something looks unreachable.
 var cliCoverAllow = map[int]string{}
 
-// TestCliBORUCoverage runs the boru:test suite for cli under the coverage hook
+// TestCliBoruCoverage runs the boru:test suite for cli under the coverage hook
 // and asserts every case passes and every executable row of cli.boru is covered
 // — with an EMPTY allowlist.
-func TestCliBORUCoverage(t *testing.T) {
-	assertBORUCoverage(t, "boru:cli", cliSource, cliTestBORU, cliCoverAllow)
+func TestCliBoruCoverage(t *testing.T) {
+	assertBoruCoverage(t, "boru:cli", cliSource, cliTestBoru, cliCoverAllow)
 }

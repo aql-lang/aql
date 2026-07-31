@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// boru:repl — the socket REPL written in BORU (repl.go's preamble) —
+// boru:repl — the socket REPL written in boru (repl.go's preamble) —
 // exercised end to end over a real loopback socket: evaluation,
 // session-history persistence across sandboxed one-shot evals, error
 // replies, and /reset.

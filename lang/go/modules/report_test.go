@@ -27,7 +27,7 @@ func reportRegistry(t *testing.T) *native.Registry {
 	return r
 }
 
-func runReportBORU(t *testing.T, r *native.Registry, src string) []native.Value {
+func runReportBoru(t *testing.T, r *native.Registry, src string) []native.Value {
 	t.Helper()
 	values, err := parser.Parse(src)
 	if err != nil {
@@ -42,7 +42,7 @@ func runReportBORU(t *testing.T, r *native.Registry, src string) []native.Value 
 
 func TestReportValueScalar(t *testing.T) {
 	r := reportRegistry(t)
-	result := runReportBORU(t, r, `42 Report.value`)
+	result := runReportBoru(t, r, `42 Report.value`)
 	s, _ := native.AsString(result[0])
 	if s != "42" {
 		t.Errorf("Report.value 42 = %q, want %q", s, "42")
@@ -51,7 +51,7 @@ func TestReportValueScalar(t *testing.T) {
 
 func TestReportRecordVerticalLayout(t *testing.T) {
 	r := reportRegistry(t)
-	result := runReportBORU(t, r, `{name:"alice" age:30} Report.record`)
+	result := runReportBoru(t, r, `{name:"alice" age:30} Report.record`)
 	s, _ := native.AsString(result[0])
 	if !strings.Contains(s, "name : alice") {
 		t.Errorf("missing aligned field; got:\n%s", s)
@@ -63,7 +63,7 @@ func TestReportRecordVerticalLayout(t *testing.T) {
 
 func TestReportTableFromListOfMaps(t *testing.T) {
 	r := reportRegistry(t)
-	result := runReportBORU(t, r, `[{a:1 b:2} {a:3 b:4}] Report.table`)
+	result := runReportBoru(t, r, `[{a:1 b:2} {a:3 b:4}] Report.table`)
 	s, _ := native.AsString(result[0])
 	if !strings.Contains(s, "a | b") {
 		t.Errorf("missing header; got:\n%s", s)
@@ -75,7 +75,7 @@ func TestReportTableFromListOfMaps(t *testing.T) {
 
 func TestReportListNumbered(t *testing.T) {
 	r := reportRegistry(t)
-	result := runReportBORU(t, r, `[10 20 30] Report.list`)
+	result := runReportBoru(t, r, `[10 20 30] Report.list`)
 	s, _ := native.AsString(result[0])
 	for _, want := range []string{"[0] 10", "[1] 20", "[2] 30"} {
 		if !strings.Contains(s, want) {

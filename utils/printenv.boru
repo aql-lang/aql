@@ -22,7 +22,7 @@
 #
 # DIVERGENCE FROM GNU, deliberate: the no-operand listing is sorted by name.
 # GNU prints in `environ` order, which is the order the OS happened to hand
-# over — not reproducible, and not something a test can assert. BORU's
+# over — not reproducible, and not something a test can assert. boru's
 # IO.env-all returns a Map, whose iteration order is its own business, so
 # there is no "original order" to preserve even in principle. Sorting makes
 # the output a function of the environment alone, which is what makes the

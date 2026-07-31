@@ -1,4 +1,4 @@
-# BORU Language Specification: error-taxonomy edge cases
+# boru Language Specification: error-taxonomy edge cases
 # Format: input<TAB>expected<TAB>description
 #
 # Edge-case battery over the error system (design/ERRORS.8.md): the

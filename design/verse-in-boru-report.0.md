@@ -1,12 +1,12 @@
-# Verse — Language Lessons Considered Against BORU
+# Verse — Language Lessons Considered Against boru
 
 ## Scope
 
-This report answers a question asked of the BORU project in July 2026:
+This report answers a question asked of the boru project in July 2026:
 read the **Book of Verse**
 ([verselang.github.io/book](https://verselang.github.io/book/)), the
 reference book for Epic Games' **Verse** language, and identify which of
-its ideas could enhance BORU.
+its ideas could enhance boru.
 
 All twenty chapters were read in full (fetched 2026-07-25; ~634K
 characters of prose and examples). Verse is described there as "a
@@ -24,7 +24,7 @@ consolidated recommendation and pitfall tables are in **§5**.
 
 Two ground rules were applied while writing it.
 
-**BORU claims were verified, not recalled.** Every statement about BORU
+**boru claims were verified, not recalled.** Every statement about boru
 below was checked against the tree at `ab0e1e0` — by reading the cited
 file, by `boru describe`, or by running the program shown. Where a
 documented behaviour and the observed behaviour disagree, the report says
@@ -40,24 +40,24 @@ good deal of design intent that is not shipped: live variables
 JSON serialization ("not yet released"), and `@deprecated`,
 `@experimental`, custom attributes and getter/setter accessors (all
 "Internal Feature … cannot be used by end-users"). Those are read here as
-*design proposals from a team solving BORU-adjacent problems* — useful,
+*design proposals from a team solving boru-adjacent problems* — useful,
 but not proven prior art. Shipped-versus-planned is marked at each use.
 
 
-## 1. What Verse is, and why it is worth BORU's attention
+## 1. What Verse is, and why it is worth boru's attention
 
 Verse is a statically-typed, expression-oriented language for scripting a
 persistent shared world. Its stated principles are code-based complexity,
 uniform use of language constructs, and metaverse orientation — and that
-third one is load-bearing in a way no other language BORU has surveyed can
+third one is load-bearing in a way no other language boru has surveyed can
 match: Verse is designed on the assumption that **published code must keep
 working for decades**, and it pays for that assumption with real language
 machinery.
 
-On the surface Verse and BORU could hardly be less alike. Verse is
+On the surface Verse and boru could hardly be less alike. Verse is
 indentation-sensitive, infix, class-oriented and aimed at game
-simulation; BORU is concatenative, word-based, query-oriented and aimed at
-data. But four of Verse's central commitments are commitments BORU has also
+simulation; boru is concatenative, word-based, query-oriented and aimed at
+data. But four of Verse's central commitments are commitments boru has also
 made, arrived at independently:
 
 - everything is an expression;
@@ -69,16 +69,16 @@ made, arrived at independently:
 That overlap is what makes the comparison productive. On the first two
 the languages are broadly level. On the third Verse is far ahead: its
 effects are a mandatory, compiler-enforced, subtyped part of every
-signature, where BORU's are a runtime permission system. And the fourth it
-has taken somewhere BORU has no counterpart for at all — failure as
+signature, where boru's are a runtime permission system. And the fourth it
+has taken somewhere boru has no counterpart for at all — failure as
 control flow, borrowed from logic programming and deliberately tamed.
 
 
-## 2. Parallel evolution — where BORU already holds Verse's ground
+## 2. Parallel evolution — where boru already holds Verse's ground
 
 Stating this first keeps the recommendations honest.
 
-| Verse concept | BORU today | Where |
+| Verse concept | boru today | Where |
 |---|---|---|
 | Everything is an expression (nearly) | `if`, `case`, `var`, `do`, `for` all yield values — `if true [1] [2]` → `1`, `[for 4 [(i mul i)]]` → `[0 1 4 9]`. But `def` yields nothing, so the principle holds less literally than in Verse | verified by run |
 | Immutable by default | Scalars / `List` / `Map` immutable; `Store` / `FlexMap` / `FlexList` / class instances mutate | README.md, `eng/go/clone.go` |
@@ -97,23 +97,23 @@ Stating this first keeps the recommendations honest.
 | Insertion-ordered maps | map literals preserve source key order | `58df45d` "D1: map literals preserve source key order" |
 | Executable spec as stability surface | ~11K-row `lang/spec/*.tsv`, whole-corpus differential | AGENTS.md, ADR-003 |
 
-One row deserves a footnote, because BORU and Verse landed the same
+One row deserves a footnote, because boru and Verse landed the same
 feature and then diverged on its consequence. Verse's maps are
 insertion-ordered *and* map equality is order-sensitive: "Two maps are
 equal only if they contain the same key–value pairs in the same order."
-BORU preserves order for iteration and ignores it for equality —
-`{a:1, b:2} deq {b:2, a:1}` returns `true`. BORU's split is the better
+boru preserves order for iteration and ignores it for equality —
+`{a:1, b:2} deq {b:2, a:1}` returns `true`. boru's split is the better
 one, and worth defending explicitly: order is a rendering and iteration
 property, not an identity property, and NUR011/NUR030 already show how
 much scrutiny equality attracts.
 
-On two axes BORU is plainly **ahead**. Its `case` exhaustiveness proves
+On two axes boru is plainly **ahead**. Its `case` exhaustiveness proves
 coverage by interval union over comparison predicates and refuses to let
 a base type cover a newtype; Verse's `case` does not work on floats,
 objects or tuples "due to implementation limitations." And Verse's
 refinement types accept **only literal bounds** — no variables, no calls,
 no qualified names, "to ensure constraints are statically known at
-compile time" — where BORU admits arbitrary predicates, disjunctions and
+compile time" — where boru admits arbitrary predicates, disjunctions and
 surfaces as bounds. That generality is not free (see §5.3), but it is
 wider.
 
@@ -160,7 +160,7 @@ and `0 < 10` evaluates to `0`. This makes a range validator read
 beautifully — `ValidateInRange(V, Lo, Hi)<decides>:int = V >= Lo and V <= Hi`
 — and makes `X := 0 < 10` read as a lie.
 
-**BORU's position.** BORU has the *ingredients* and none of the assembly.
+**boru's position.** boru has the *ingredients* and none of the assembly.
 `None` is a real type and a miss yields it; `guard` converts a condition
 to value-or-`None`; `do […] error […]` reifies a raise into a value;
 `filter` selects by predicate. It even has the lenient/strict choice
@@ -190,7 +190,7 @@ $ boru do '1 lt 2'
 true                            # comparisons yield Boolean, not the operand
 ```
 
-And on rollback, BORU's behaviour is **partial and accidental** rather than
+And on rollback, boru's behaviour is **partial and accidental** rather than
 designed. Under the interpreter, a `context set` inside `do […]` is local
 to the sub-engine and never escapes — whether the block succeeds or fails.
 But a mutation to a heap container is not scoped and not rolled back:
@@ -224,7 +224,7 @@ $ boru -no-check e4.boru        # 1 div 0
 error: [boru/arith_error]: division by zero      ; exit 1
 ```
 
-Verse's contribution here is not the rollback mechanism (BORU would
+Verse's contribution here is not the rollback mechanism (boru would
 implement it quite differently) but the observation that **the boundary
 at which effects become permanent, and the boundary at which a failure
 stops being a failure, should be stated language guarantees** — because
@@ -237,7 +237,7 @@ absorbed).
 
 ### 3.2 Effects — the family/subtyping/joining structure
 
-BORU has already been here once. `effect-oriented-programming-in-boru-report.0.md`
+boru has already been here once. `effect-oriented-programming-in-boru-report.0.md`
 ranks "effect rows on signatures + static effect inference" as its
 highest-leverage idea, and records the gap exactly:
 
@@ -282,7 +282,7 @@ the most directly reusable material in the book:
   therefore *recommends over-declaring* effects to leave room to
   optimise later.
 
-Every one of those six maps onto machinery BORU owns, and closer than the
+Every one of those six maps onto machinery boru owns, and closer than the
 EOP report's framing suggests. The capability scopes are the effect
 alphabet — thirteen of them, enumerated in `KnownScopes`
 (`lang/go/policy/policy.go:108`), with `global` carrying the hard-cap
@@ -309,13 +309,13 @@ Verse also shows where *not* to follow. `<suspends>` and `<decides>`
 while failure is about success/failure. Mixing their syntactic forms
 creates ambiguity", and the consequence is a set of asymmetric rules
 about which call syntax is legal in which context, plus a prohibition on
-`spawn`ing failable work. BORU's `await` is colourless and its errors are
+`spawn`ing failable work. boru's `await` is colourless and its errors are
 values, so it has no such split. Keep it that way (§5.3).
 
 ### 3.3 Concurrency — cancellation is the gap
 
 Verse's structured concurrency is a five-way vocabulary, and the
-distinctions are sharper than BORU's four `await` modes:
+distinctions are sharper than boru's four `await` modes:
 
 | Verse | Completes when | Losers | Outlives scope |
 |---|---|---|---|
@@ -331,21 +331,21 @@ still releases its resources. `rush` and `branch` are **banned directly
 inside `loop`/`for` bodies**, because iteration would accumulate
 unbounded background tasks.
 
-BORU's coverage is wider than the `await` modes alone suggest, and in one
+boru's coverage is wider than the `await` modes alone suggest, and in one
 direction wider than Verse's. `await` covers `sync` (`'all`), `'full`
 (all-settled, which Verse lacks) and two first-wins modes; and alongside
-it BORU ships a whole **actor layer** that Verse has no counterpart for —
+it boru ships a whole **actor layer** that Verse has no counterpart for —
 a `concurrent` word category with `spawn` / `self` / `send` / `receive` /
 `register` / `whereis` / `unregister` over an opaque `Pid`, bounded
 mailboxes with `block`/`fail`/`drop` overflow policies, `receive […]
 after <ms> […]` timeouts, an in-process `service` / `call` / `state-of` /
 `wrap` gen_server analogue, and `process`-scope capability gating. So
-BORU has Verse's `spawn` (unstructured, outlives its scope, returns a
+boru has Verse's `spawn` (unstructured, outlives its scope, returns a
 handle) and then some.
 
 The gap is therefore narrower and sharper than "no fire-and-forget". It
 is **cancellation, and anything you can do with a handle**. Verse's
-`task(t)` can be cancelled or awaited; BORU's `Pid` can be neither — there
+`task(t)` can be cancelled or awaited; boru's `Pid` can be neither — there
 is no kill, no join, no link, no monitor, no supervisor. And the
 first-wins `await` modes do not cancel their losers:
 
@@ -360,16 +360,16 @@ func awaitFirst(r *Registry, elems []Value) ([]Value, error) {
 
 `awaitAny` is the same shape. Confirmed by running it: with
 `{mode: "first"}` over a fast and a slow branch, the slow branch's
-`print` still reaches the terminal. So BORU's `'first` is Verse's **`rush`,
+`print` still reaches the terminal. So boru's `'first` is Verse's **`rush`,
 not its `race`** — which matters, because EXPLANATION.md calls it
 "the first branch to complete wins (race)" and REFERENCE.md offers no
 correction. A losing branch continues to consume its step budget, hold
 its capabilities and perform its side effects.
 
 Transferable: **V6** (a genuinely cancelling mode, honest docs for the
-non-cancelling one, and the `task(t)`-shaped operations BORU's `Pid` is
+non-cancelling one, and the `task(t)`-shaped operations boru's `Pid` is
 missing). Verse's rule that `rush`/`branch` may not appear directly in a
-`loop`/`for` body is also worth adopting for `spawn`, since BORU's `spawn`
+`loop`/`for` body is also worth adopting for `spawn`, since boru's `spawn`
 has exactly the unbounded-accumulation property that restriction exists
 to prevent.
 
@@ -383,22 +383,22 @@ effects, including the scheduling of defer blocks." That interaction
 between rollback and cleanup is a decision `RESOURCE-SAFETY.0.md` has to
 take deliberately if **V1** ever lands.
 
-### 3.4 Types — where BORU is ahead, and the one idea it lacks
+### 3.4 Types — where boru is ahead, and the one idea it lacks
 
-Verse's type chapter is largely territory BORU already occupies, often
-less generally: `where` clauses for type-parameter bounds (BORU:
-`gen`/`extends`), refinement types (BORU: DepScalar surfaces), fallible
-casts (BORU: `is`/`as`), a family of metatypes — `subtype`,
-`concrete_subtype`, `castable_subtype`, `classifiable_subset` — where BORU
+Verse's type chapter is largely territory boru already occupies, often
+less generally: `where` clauses for type-parameter bounds (boru:
+`gen`/`extends`), refinement types (boru: DepScalar surfaces), fallible
+casts (boru: `is`/`as`), a family of metatypes — `subtype`,
+`concrete_subtype`, `castable_subtype`, `classifiable_subset` — where boru
 has one lattice and Ideals.
 
 Two Verse constraints are instructive precisely *because* they are
 restrictions. Refinement bounds must be literals, which keeps
 constraint checking decidable; and **overlapping refinement types cannot
 be used to overload** ("percent ⊂ not_infinity" is rejected as
-ambiguous) while disjoint ones can. BORU's signature dispatch admits
+ambiguous) while disjoint ones can. boru's signature dispatch admits
 predicate bounds whose overlap is not statically decidable in general, so
-Verse's rule is the trade BORU declined — worth naming in
+Verse's rule is the trade boru declined — worth naming in
 `design/GENERICS.10.md` terms rather than adopting.
 
 The general form of that rule is worth more than the refinement-type
@@ -408,7 +408,7 @@ and if one signature's set of legal calls is a superset of the other's,
 the pair is rejected outright. Parameter *order* among named parameters
 is irrelevant, and so is the presence of a default — two overloads that
 are both callable with no arguments are indistinct even when their
-parameter names and types differ. BORU takes the opposite stance:
+parameter names and types differ. boru takes the opposite stance:
 overlapping signatures are legal and resolved by specificity — two `def`s
 of the same word at `x:Any` and `x:Integer` dispatch `f 1` to the
 `Integer` arm regardless of which was declared first (verified by run) —
@@ -419,14 +419,14 @@ Stating an explicit distinctness criterion, even as a never-gating
 `check` advisory, would make that case visible instead of merely
 resolvable.
 
-The idea BORU lacks is smaller and sharper: **open versus closed enums**.
+The idea boru lacks is smaller and sharper: **open versus closed enums**.
 A closed enum (the default) freezes its members forever, which is what
 licenses exhaustive matching without a wildcard. An open enum may gain
 members after publication, and therefore can *never* be matched
 exhaustively — every `case` over one needs a wildcard or a failure
 context. The trade is stated in the type, once.
 
-BORU has no `enum`; the equivalent is a `tor` union of `const` singleton
+boru has no `enum`; the equivalent is a `tor` union of `const` singleton
 types, and `case` proves coverage over union alternatives — though only
 in the bracket `fn` form, which is the defect in §6(c). But nothing
 declares whether an exported union may grow, so a library that adds an
@@ -439,7 +439,7 @@ exactly the hazard the open/closed distinction exists to price
 The third Verse idea here is the neatest: **incomplete `case` coverage is
 legal in a `<decides>` context**, because the unmatched value simply makes
 the function fail. No wildcard, no silent default swallowing a real gap.
-BORU's analogue is direct — a default-less `case` could be legal wherever
+boru's analogue is direct — a default-less `case` could be legal wherever
 the enclosing context can absorb a raise, starting with "inside a
 `do […]`" and becoming precise if raise-set inference lands (**V8**).
 
@@ -460,7 +460,7 @@ function*; and because `Multiply` has `<reads>`, changes to what it reads
 also update `X`. The `var In->Out : Clamp.Evaluate` form keeps the raw
 written value in `In` and the transformed one in `Out`.
 
-BORU already has half of this, and it is the validating half. A predicate
+boru already has half of this, and it is the validating half. A predicate
 field type runs on every write, not just at construction:
 
 ```
@@ -472,14 +472,14 @@ error: [boru/type_error]: set: field "r": expected (Float gte 0.0), got Float (-
        value does not satisfy DepScalar bounds
 ```
 
-So BORU rejects where Verse would transform. That is the better default —
+So boru rejects where Verse would transform. That is the better default —
 Verse's own type chapter argues the case against clamping ("clamping
 silently propagates wrong values … dangerous in … bit manipulation,
 hashing, Unicode code point operations") and then ships the clamping
-feature anyway. A *coercing* field type is a real gap in BORU's expressive
+feature anyway. A *coercing* field type is a real gap in boru's expressive
 range, but a small one, and it should be spelled so that coercion is
 visibly opt-in. Reactive dataflow is a larger question and is left out of
-the recommendations: BORU is a query language, its `select`/`where`
+the recommendations: boru is a query language, its `select`/`where`
 pipelines already express derived values declaratively, and adopting
 dependency-tracked mutable cells would be a much bigger commitment than
 this report can motivate.
@@ -487,7 +487,7 @@ this report can motivate.
 ### 3.6 Access control — named scopes and split read/write
 
 Verse's access specifiers go past `public`/`protected`/`private`/`internal`
-in two ways BORU should notice.
+in two ways boru should notice.
 
 **`scoped{…}` is a named, reusable grant.** A module declares an access
 level naming particular modules, and then uses it as a specifier:
@@ -505,13 +505,13 @@ whole path.
 **Read and write access are separable.** `var<SharedScope> GameState<public>`
 is publicly readable and writable only by the named scope.
 
-BORU's export surface is all-or-nothing: `export "Mod" {double: double/r}`
-publishes a name to everyone who can import the module. Yet BORU already
+boru's export surface is all-or-nothing: `export "Mod" {double: double/r}`
+publishes a name to everyone who can import the module. Yet boru already
 has the harder half of `scoped{}` built — policy profiles are named,
 reusable allow/deny rule sets over `scope.op` pairs, with `boru policy
 explain` printing the blame chain for a decision. Reusing that machinery
 for *export visibility* rather than only for *effect permission* is a
-smaller step for BORU than it was for Verse (**V10**).
+smaller step for boru than it was for Verse (**V10**).
 
 ### 3.7 Modules, persistence, and evolution — the strongest chapter
 
@@ -531,7 +531,7 @@ module-scope data **must** carry an explicit type annotation, which "makes
 module interfaces explicit and helps with separate compilation and module
 evolution."
 
-BORU is at the other end of both. "A module is a fresh evaluation context.
+boru is at the other end of both. "A module is a fresh evaluation context.
 You build one by evaluating a list in a new store" (EXPLANATION.md) — so
 importing a module runs arbitrary code, by construction. That is a
 deliberate consequence of homoiconicity and ADR-007, and
@@ -561,7 +561,7 @@ it wrote to disk. Worse, because the pre-flight check runs by default
 before execution, an ordinary `boru run` of this program executes the
 module body **twice** — once during the check pass, once for real — so
 any import-time effect is doubled. Verse's definition-only module bodies
-are the structural fix for exactly this, and while BORU cannot adopt that
+are the structural fix for exactly this, and while boru cannot adopt that
 restriction wholesale without giving up computed module construction, a
 weaker version is available and worth its own note (**V14**).
 
@@ -576,7 +576,7 @@ fields are filled from defaults — so adding a field with a default is a
 forward-compatible change — and `block:` initialization clauses
 deliberately do **not** run during deserialization.
 
-BORU has the serialization and none of the guarantee. `StructUtil.jsonify`
+boru has the serialization and none of the guarantee. `StructUtil.jsonify`
 emits `$class`-tagged pure JSON and `StructUtil.reify` hydrates it — and
 the round trip is silently lossy for exactly the field types Verse
 prohibits:
@@ -597,7 +597,7 @@ A function went in and a string came out, through a class documented as
 "strictly typed at `make` and `set`", with no error at any step. A
 checked `Persistable` marker — a predicate over a class's transitive
 field types, verified by `boru check` — turns that from a latent data-loss
-bug into a compile-time refusal, and BORU's Ideals framework is the
+bug into a compile-time refusal, and boru's Ideals framework is the
 natural home for the marker (**V5**).
 
 **The compatibility catalog** is the single most transferable artefact in
@@ -621,7 +621,7 @@ warnings become errors only when a project opts into a new language
 version, and explicit "superpowers" reserved to Epic for legal or safety
 rewrites.
 
-Two of the rules go further than any of that, and both are worth BORU's
+Two of the rules go further than any of that, and both are worth boru's
 attention even though neither is a recommendation here.
 
 **Function bodies are part of the contract.** A function that lacks
@@ -641,7 +641,7 @@ shadowing anywhere, including nested scopes; so if an imported module
 later adds a public `X` and your function already declared a local `X`,
 your previously-valid code no longer compiles. The remedy is the
 `(local:)` qualifier, which pins a definition to local scope so a future
-upstream addition cannot collide with it. BORU is structurally immune to
+upstream addition cannot collide with it. boru is structurally immune to
 this particular hazard for the good reason that module words are always
 namespace-qualified (`MathUtil.min` cannot collide with a bare `def
 min` — verified by run) and redefinition is simply allowed (`def x 1`
@@ -650,20 +650,20 @@ then `def x 2` yields `2`). That immunity is worth stating in
 because it is exactly the class of breakage **V3** would otherwise have
 to police.
 
-BORU's need for a compatibility mechanism — the catalogue above, not the
+boru's need for a compatibility mechanism — the catalogue above, not the
 two exotic rules — is not hypothetical. README.md carries a hand-written
 "Upgrade notes (pre-1.0 breaking changes)" section listing renames library
 authors must apply — namespaces became capital-initial, utility modules
 took a `-util` suffix, words moved out of core into modules, `set` changed
 its return convention. That list is maintained by hand, is not
-machine-checkable, and has no mechanism behind it. BORU nonetheless owns
+machine-checkable, and has no mechanism behind it. boru nonetheless owns
 two assets Verse does not: an ~11K-row executable spec, and a registry
 with a real publish step (`boru publish`). A compatibility check over
 exported signatures at publish time is a natural fit for both
 (**V3**, **V4**).
 
 
-### 3.8 Numbers — Verse took a branch BORU deliberately deferred
+### 3.8 Numbers — Verse took a branch boru deliberately deferred
 
 Verse has a primitive **`rational`**: an exact ratio of integers with *no
 literal syntax*, produced only by integer division. `7 / 3` yields the
@@ -673,7 +673,7 @@ raising, and `int` is a subtype of `rational` so `(4 / 2) = 2` succeeds.
 `Floor`/`Ceil` are total on rationals and round toward −∞/+∞ rather than
 toward zero.
 
-BORU truncates instead: `7 div 2` returns `3` with type `Integer`, and
+boru truncates instead: `7 div 2` returns `3` with type `Integer`, and
 `7.0 div 2.0` returns `3.5` (verified). `design/NUMERIC-TOWER.0.md`
 already considered the alternative and made `Rational` an explicit
 **non-goal for that pass** — "exact for *every* fraction including `1/3`,
@@ -681,13 +681,13 @@ but awkward to display and rarely what 'decimal' users want. Reserve the
 name; don't build it now" — while leaving open whether
 `Integer div Integer` should stay truncating.
 
-Verse is therefore a live experiment in the option BORU shelved, and it
+Verse is therefore a live experiment in the option boru shelved, and it
 mostly **validates the deferral**: `rational` has no literal syntax, is
 on the prohibited list for persistable fields, cannot be used to overload
 against `int` (because `int` is strictly more specific, making the
 signatures ambiguous), and integers beyond 64 bits "cannot be used in
 string interpolation or persisted." Those are precisely the display and
-integration costs the BORU note predicted. The transferable part is
+integration costs the boru note predicted. The transferable part is
 narrower and cheaper: Verse's integer division is **failable rather than
 raising**, which is the same instinct as **V7**/**V8** — a partial
 operation whose partiality is in its type instead of in its
@@ -697,10 +697,10 @@ neighbourhood, not in this report's recommendations.
 One contrast is worth recording for `design/IEEE-754-COMPLIANCE.8.md`.
 Verse keeps IEEE 754 for arithmetic but **deliberately breaks it for
 equality**: there is one NaN, NaN equals itself, and there is no negative
-zero. BORU made a finer-grained choice — NUR013 records NaN occupying a
+zero. boru made a finer-grained choice — NUR013 records NaN occupying a
 total-order slot in `cmp`/`sort` while staying IEEE-unordered in
 `lt`/`gt`. Both languages concluded that raw IEEE equality is the wrong
-default for a language with total comparison; BORU's version preserves
+default for a language with total comparison; boru's version preserves
 more information and is documented as a recorded non-uniformity rather
 than a silent deviation.
 
@@ -711,14 +711,14 @@ Honesty about non-transfer is most of the value of a report like this.
 
 - **The metaverse premises.** Persistent global state, `weak_map(player, t)`
   auto-loading, client prediction (`<predicts>`), simulation ticks as the
-  unit of suspension: all specific to a game runtime BORU does not have.
+  unit of suspension: all specific to a game runtime boru does not have.
 - **Bracket-versus-paren call syntax.** Verse can spare `f[x]` for
-  "failable" because `[]` is otherwise only indexing. In BORU `[…]` is a
+  "failable" because `[]` is otherwise only indexing. In boru `[…]` is a
   list literal and the foundation of quotation (ADR-007); the notation is
   not available at any price.
 - **Comparison chaining and comparison-returns-LHS.** Chaining needs
-  special-cased grammar, and BORU's forward collection makes `0 lte 5 lte 100`
-  a stranding error rather than a chain. BORU already has `between` for the
+  special-cased grammar, and boru's forward collection makes `0 lte 5 lte 100`
+  a stranding error rather than a chain. boru already has `between` for the
   range idiom. Comparisons returning their left operand would be a much
   worse fit still: it would make `lt` polymorphic in its *return* on
   context, against the grain of type-directed dispatch.
@@ -729,18 +729,18 @@ Honesty about non-transfer is most of the value of a report like this.
   prevent.
 - **Inheritance-heavy nominal design.** `<castable>`, `<final_super>`,
   `<unique>`, `<concrete>`, `<abstract>` and `GetCastableFinalSuperClass`
-  are the cost of a deep class hierarchy. BORU's class instances are
+  are the cost of a deep class hierarchy. boru's class instances are
   deliberately flat and sealed; importing the specifier vocabulary would
   buy nothing.
 - **Localization as a language feature.** Verse builds localizable message
-  types into the language. For BORU this belongs in a module, if anywhere.
+  types into the language. For boru this belongs in a module, if anywhere.
 
 
 ## 5. Synthesis
 
 ### 5.1 Design axes
 
-| Axis | Verse | BORU |
+| Axis | Verse | boru |
 |---|---|---|
 | Failure | first-class control flow; `<decides>`; failure contexts; speculative rollback | `raise` unwinds, `do […] error […]` reifies; `None` for absence; no failure-driven control flow |
 | Effects | six families in the signature, subtyped, joined, hidden by construct | named capability scopes + policy profiles, enforced at runtime only |
@@ -771,47 +771,47 @@ decision.
 | **V3** | **`boru check --compat <baseline>`, run by `boru publish`.** Compare a module's exported signatures against the last published version under four variance rules: parameters may widen, returns may narrow, effects may narrow, nothing may be removed or renamed or change kind. | Verse's catalogue is directly portable, the registry already has a publish step, and the spec rows give a second oracle. Turns README.md's hand-written upgrade notes into a mechanism. | medium |
 | **V4** | **`@deprecated` / `@experimental` / `@available` metadata on `def`s and exports**, with Verse's transitive rule: deprecated code may call deprecated code silently; non-deprecated code calling it raises an advisory. `experimental` gated by a flag; `available` carrying a minimum version. | `check` already has never-gating advisory tiers and `describe` already renders per-word metadata from the live registry — and the pattern already exists hand-rolled as **tombstone words**: `ParseLang.register` and friends raise `<surface>_registry_frozen` with a migration hint and are mirrored statically by `check` as an `info` diagnostic (`lang/go/modules/docs_parselang.go:27`). V4 is generalising a mechanism the tree already has one-off instances of. | small |
 | **V5** | **A checked `Persistable` marker.** A predicate over a class's transitive field types (no function values, no opaque, no `Store`, no `Any`), verified by `check`, so `jsonify`/`reify` round-tripping is a type-level guarantee. Adopt Verse's missing-fields-take-defaults rule for forward compatibility. | Closes a verified silent data-loss path (`f:Any` holding a function round-trips to a string). Ideals are the home for the marker. | medium |
-| **V6** | **Cancellation, and a `Pid` you can do something with.** Add a genuinely cancelling `'race` mode beside the existing non-cancelling first-wins one; give `Pid` the `task(t)` operations it lacks (kill, join/await); fix the docs — `'first` is Verse's `rush`, not its `race`, and EXPLANATION.md calls it "race". Adopt Verse's ban on fire-and-forget directly inside a loop body for `spawn`. | `awaitFirst`/`awaitAny` verifiably leave losers running (`native_temporal_await.go:167`), and BORU's actor layer ships `spawn`→`Pid` with no kill, join, link, monitor or supervisor. Needs a cancellation channel through forked registries; the docs half is free. | small (docs) / medium (cancellation) |
+| **V6** | **Cancellation, and a `Pid` you can do something with.** Add a genuinely cancelling `'race` mode beside the existing non-cancelling first-wins one; give `Pid` the `task(t)` operations it lacks (kill, join/await); fix the docs — `'first` is Verse's `rush`, not its `race`, and EXPLANATION.md calls it "race". Adopt Verse's ban on fire-and-forget directly inside a loop body for `spawn`. | `awaitFirst`/`awaitAny` verifiably leave losers running (`native_temporal_await.go:167`), and boru's actor layer ships `spawn`→`Pid` with no kill, join, link, monitor or supervisor. Needs a cancellation channel through forked registries; the docs half is free. | small (docs) / medium (cancellation) |
 | **V7** | **A fused comprehension**: one form that iterates, binds intermediates, filters and collects, where an absent (`None`) element is skipped rather than collected. Verse's `for (X : Xs, P[X], Y := f[X]) : g(Y)`. | `each` verifiably keeps `None`s (`[None None 3 4]`); `guard` already produces `None`; `filter` already selects. This is fusion plus a skip rule, not new semantics. A `first`-style single-result sibling falls out. | medium |
 | **V8** | **Let a default-less `case` be legal where failure can be absorbed** — inside `do […]`, or (once V2 lands) in any word whose declared raise-set admits `case_no_match`. | Verse's "incomplete coverage is allowed in a `<decides>` context". The hook already exists: the checker tracks `CaughtBodyDepth` (`eng/go/registry.go:662-670`) precisely to mean "analysis is inside an error-trapping `do […]`", and already uses it to silence other runtime mirrors. Removes the pressure to add a defensive default that then hides a genuine gap — the failure mode V9 also addresses. | small |
 | **V9** | **Declared open vs closed unions.** Let an exported union say whether it may grow: closed → exhaustiveness provable, membership frozen (a V3 compatibility rule); open → every `case` needs a default or an absorbing context. | Today adding an alternative to an exported union silently converts downstream default-less `case`s into gating errors. Verse prices this in the type. | medium |
 | **V10** | **Named export scopes and split read/write access.** `scoped{ModA, ModB}` as a reusable named grant on an export; separate read and write visibility on class fields. | Policy profiles are already named, reusable rule sets with `policy explain` for blame; pointing them at export visibility reuses all of it. | medium |
 | **V11** | **Fold Verse's two `defer` rules into `design/RESOURCE-SAFETY.0.md`**: cleanup may neither fail nor suspend, and take an explicit position on whether cleanup runs when the scope is rolled back (Verse says no; that answer is surprising and should be argued, not inherited). | The RFC exists and is unimplemented; this sharpens it before it ships. | folds into RFC |
-| **V12** | **A transparent `profile` word.** `profile "tag" [expr]` times the body, logs, and passes the result through unchanged. | Verse's `profile` is a pure wrapper, so it can be inserted anywhere without changing behaviour. BORU has `bench/` but no in-language equivalent. | small |
-| **V13** | **A coercing field type** as an explicitly-spelled sibling of the validating predicate field (Verse's function-as-type / `In->Out`). | BORU validates on write and cannot transform. Keep validation the default — Verse's own argument against clamping is the reason. | small |
-| **V14** | **An effect-free import path for `check`.** BORU cannot adopt Verse's definition-only module bodies without losing computed module construction, but `check` can resolve a module for its *exports* without committing its effects — by running the body under a deny-all policy, or by reusing the dry-pass machinery that already substitutes `ReturnsFn` for handlers at the top level. | `boru check` verifiably writes files when the program imports a file module, while CLI.md:63 calls it "type-check without running". This is the concrete cost of the module-body contrast, and the fix is local to `check`. | medium |
+| **V12** | **A transparent `profile` word.** `profile "tag" [expr]` times the body, logs, and passes the result through unchanged. | Verse's `profile` is a pure wrapper, so it can be inserted anywhere without changing behaviour. boru has `bench/` but no in-language equivalent. | small |
+| **V13** | **A coercing field type** as an explicitly-spelled sibling of the validating predicate field (Verse's function-as-type / `In->Out`). | boru validates on write and cannot transform. Keep validation the default — Verse's own argument against clamping is the reason. | small |
+| **V14** | **An effect-free import path for `check`.** boru cannot adopt Verse's definition-only module bodies without losing computed module construction, but `check` can resolve a module for its *exports* without committing its effects — by running the body under a deny-all policy, or by reusing the dry-pass machinery that already substitutes `ReturnsFn` for handlers at the top level. | `boru check` verifiably writes files when the program imports a file module, while CLI.md:63 calls it "type-check without running". This is the concrete cost of the module-body contrast, and the fix is local to `check`. | medium |
 
 The three highest-confidence entries are **V2**, **V3** and **V5**: each
 closes a gap that is verified rather than inferred, and each is
-implementable out of machinery BORU already ships. **V14** is smaller in
+implementable out of machinery boru already ships. **V14** is smaller in
 scope but higher in urgency, because the current behaviour is a
 correctness bug in a command users are told is inert.
 
 ### 5.3 Pitfall watchlist
 
-| Pitfall | Where Verse shows it | BORU exposure |
+| Pitfall | Where Verse shows it | boru exposure |
 |---|---|---|
 | Mixing rollback with failure creates traps | `if (not ProcessData[])` rolls back the *successful* call, because `not` of success fails; the book has to teach `if (X): else:` instead | inherited the moment **V1** takes the uniform option — NUR.md is the right home |
 | Rollback silently cancels cleanup | a failed scope never runs its `defer`s | decide it explicitly in `RESOURCE-SAFETY.0.md` (**V11**) |
 | Colouring async splits the language | `<suspends>` is viral and cannot combine with `<decides>`; `spawn` cannot take failable work | keep `await` colourless and errors as values; do not import the exclusion |
-| Non-cancelling first-wins leaks work | `rush` keeps losers running; banned inside loops for that reason | BORU's `'first` is already `rush` and is documented as `race` (**V6**) |
-| Fire-and-forget inside iteration accumulates tasks | `rush`/`branch` prohibited in `loop`/`for` bodies | BORU already ships `spawn` with no such restriction, and no way to kill what it starts (**V6**) |
+| Non-cancelling first-wins leaks work | `rush` keeps losers running; banned inside loops for that reason | boru's `'first` is already `rush` and is documented as `race` (**V6**) |
+| Fire-and-forget inside iteration accumulates tasks | `rush`/`branch` prohibited in `loop`/`for` bodies | boru already ships `spawn` with no such restriction, and no way to kill what it starts (**V6**) |
 | A specifier vocabulary grows into a contract | six families, exclusive-vs-additive rules, per-family clearing, "duplicate specifier is an error" | keep **V2**'s surface inferred-by-default and printed by `describe`, not hand-written on every word |
 | Invisible separators changing semantics | `(1; 2)` = `2` versus `(1, 2)` = a tuple | do not add separator-sensitive forms; NUR.md already polices this |
 | Comparison operators returning an operand | `X := 0 < 10` binds `0` | do not adopt; it would make `lt`'s return context-dependent |
-| Restricting a feature to keep it decidable is a real trade | refinement bounds must be literals; overlapping refinements cannot overload | BORU chose generality; name the cost in `GENERICS.10.md` rather than pretending there is none |
+| Restricting a feature to keep it decidable is a real trade | refinement bounds must be literals; overlapping refinements cannot overload | boru chose generality; name the cost in `GENERICS.10.md` rather than pretending there is none |
 | Reactive cells poison the effect lattice | because any variable may be made live later, `<writes>` must imply `<diverges>`: every write might start a non-terminating guard cascade | the reason reactive dataflow is left out of §5.2 — it would make **V2**'s termination facet vacuous |
 | The same syntax both updates and destroys a reactive binding | `set X = v` updates a live `X` if liveness came from its type, but silently *removes* the guard if liveness came from `set live` | a cost of retrofitting reactivity onto assignment; another reason to keep it out |
-| Declarative-looking constructs that are order-dependent | `using` resolves sequentially, so importing a nested module before its parent fails | BORU's `import` should stay order-insensitive; worth a spec row |
-| Order-sensitive container equality | two maps with the same pairs in different insertion order are unequal | BORU already chose otherwise (`deq` ignores order); keep it and say why |
-| A permanent global namespace is a governance commitment | paths are owned forever, with vendor "superpowers" as the escape hatch | BORU's registry should keep versioned, revocable naming |
-| Documented-but-unreleased features read as shipped | live variables, `<predicts>`, JSON serialization, `@deprecated` all documented as prose, gated in reality | treat as design intent; BORU's own design notes carry the same risk |
+| Declarative-looking constructs that are order-dependent | `using` resolves sequentially, so importing a nested module before its parent fails | boru's `import` should stay order-insensitive; worth a spec row |
+| Order-sensitive container equality | two maps with the same pairs in different insertion order are unequal | boru already chose otherwise (`deq` ignores order); keep it and say why |
+| A permanent global namespace is a governance commitment | paths are owned forever, with vendor "superpowers" as the escape hatch | boru's registry should keep versioned, revocable naming |
+| Documented-but-unreleased features read as shipped | live variables, `<predicts>`, JSON serialization, `@deprecated` all documented as prose, gated in reality | treat as design intent; boru's own design notes carry the same risk |
 
 ### 5.4 Closing observation
 
 Verse is the first language in this survey series whose *primary*
-concern is the one BORU has least machinery for: keeping published code
-working while it changes. Its nearest neighbour among BORU's earlier
+concern is the one boru has least machinery for: keeping published code
+working while it changes. Its nearest neighbour among boru's earlier
 comparisons is Rust — the editions recommendation in
 `rust-zig-roc-faber-in-boru-report.0.md` (R3) and this report's **V3** and
 **V4** are the same instinct arriving from two directions, and their
@@ -824,22 +824,22 @@ The effect system is the second convergence. Verse independently
 validates `effect-oriented-programming-in-boru-report.0.md`'s highest-ranked
 idea and supplies the algebra that report left open, and its one clear
 mistake in the area — coupling suspension to failure so tightly that they
-cannot coexist — is a mistake BORU has already avoided.
+cannot coexist — is a mistake boru has already avoided.
 
-The failure system, finally, is the idea BORU should study hardest and
+The failure system, finally, is the idea boru should study hardest and
 adopt least. Verse's own summary is that it "tames" logic programming by
 "making failure contexts explicit and limiting backtracking to specific
-constructs". BORU has no reason to want backtracking. But it does want the
+constructs". boru has no reason to want backtracking. But it does want the
 two things Verse gets almost for free from having thought about failure at
 all: a construct where absence skips rather than accumulates (**V7**),
 and a stated boundary at which effects become permanent (**V1**). Those
 are the parts worth taking.
 
 
-## 6. Incidental defects found while verifying BORU claims
+## 6. Incidental defects found while verifying boru claims
 
 None of these are Verse lessons. They surfaced because §2 and §3 required
-running BORU rather than trusting its documentation, and they are recorded
+running boru rather than trusting its documentation, and they are recorded
 here so they are not lost. All seven reproduce on `main` @ `ab0e1e0`.
 
 > **This section is a snapshot of what was found, not of what is still
@@ -870,7 +870,7 @@ fixed: dynamic help *executed* the examples it synthesised, so registering
 (a)–(d) and (f) are behavioural, (e) is documentation, and (g) is an
 already-recorded issue whose worst manifestation is not recorded. **(f)
 is the one to read first** — it is a data race, confirmed with the Go race
-detector, reachable from ordinary BORU, and the prose docs assert the
+detector, reachable from ordinary boru, and the prose docs assert the
 opposite of the truth.
 
 **(a) Compiled `do`/`each` leak `context set` writes out of the
@@ -999,7 +999,7 @@ a handler copied from that example fires only if user code raises the
 atom itself.
 
 Most of this is docs-only and cheap to fix, and it is worth listing
-because it is exactly the drift BORU's `describe`-from-the-live-registry
+because it is exactly the drift boru's `describe`-from-the-live-registry
 doctrine exists to prevent — it argues for generating the code table from
 the registry rather than maintaining it by hand. But the `out_of_range`
 row is not a documentation bug: a runtime error with no code is

@@ -6,8 +6,8 @@
 > sets are fixed built-in lists; the `register` words are tombstones
 > raising `<surface>_registry_frozen`), and custom languages are Function
 > VALUES built with `NewParseLangFn` / `NewMiniLangFn` / `NewEmitLangFn`
-> and bound via `(*BORU).DefineValue` (or a `def`). Three capabilities were
-> retired without replacement: BORU-side mini compile hooks
+> and bound via `(*Boru).DefineValue` (or a `def`). Three capabilities were
+> retired without replacement: boru-side mini compile hooks
 > (`register-compiled`), custom-kind member types (`MiniLang.<Name>`), and
 > `+kind/src/` sugar for custom kinds. The host-registration RECIPE below
 > (validate / store under a capability / gate on policy) is still the
@@ -27,11 +27,11 @@
 
 ## 1. Motivation
 
-BORU already has a proven pattern for *pluggable, named handlers*: the
+boru already has a proven pattern for *pluggable, named handlers*: the
 parse/emit framework. `boru:parselang` / `boru:emitlang` keep a registry of
 format kinds (`json`, `csv`, `yaml`, …), expose `parse <kind>` /
 `emit <kind>`, and let a host add new kinds at runtime via
-`RegisterHostParser` / `RegisterHostEmitter` — or BORU code add them via a
+`RegisterHostParser` / `RegisterHostEmitter` — or boru code add them via a
 `register` word (`lang/go/modules/parselang.go`, `emitlang.go`).
 
 Three upcoming needs are the *same shape* — a registry of named codecs
@@ -76,8 +76,8 @@ all already demonstrated by parselang/emitlang:
    pre-import specs **and** the live module, so registration works both
    **before and after** `import` and is visible to later calls in the
    same session (runtime-pluggable).
-4. **A BORU-level `register` word** so BORU code (not just the host) can
-   add a kind — `ParseLang.register` installs a BORU fn as a parser.
+4. **A boru-level `register` word** so boru code (not just the host) can
+   add a kind — `ParseLang.register` installs a boru fn as a parser.
 5. **A handler of the standard shape**
    `func(args []native.Value, named map[string]native.Value, stack []native.Value, r *native.Registry) ([]native.Value, error)`
    converting at the boundary with `eng.FromNative` / `eng.ToNative`,
@@ -120,7 +120,7 @@ small model so authors write only the codec body:
 - **Templates live in the jostraca project** (the `boru` codec/number-system
   generator), invoked as a dev tool; the repo references them, it does not
   vendor a runtime dependency (generation is build-time, off the hot path
-  — consistent with BORU staying sealed at runtime,
+  — consistent with boru staying sealed at runtime,
   [GO-MODULES.10.md](GO-MODULES.10.md)).
 - **Model** (per extension): `{ module, kind, namespace, returns, doc,
   examples }`. From it the template emits:
@@ -157,7 +157,7 @@ built-in kinds:
 | `encode` | `[Atom kind, String s] → String` | Encode `s` in the named text encoding. |
 | `decode` | `[Atom kind, String s] → String` | Inverse of `encode` (error `decode`). |
 | `kinds` | `→ List[Atom]` | List registered coding kinds (like `ParseLang.kinds`). |
-| `register` | `[fn, Atom kind, Atom op] →` | Install a BORU fn as a coding kind. |
+| `register` | `[fn, Atom kind, Atom op] →` | Install a boru fn as a coding kind. |
 
 Built-in **escape** kinds: `html`, `xml`, `url` (percent), `shell`,
 `json` (string body), `csv` (field), `regex` (metacharacters), `c`
@@ -207,7 +207,7 @@ notes; the dividing lines:
 ## 5. `boru:micro-format` — email, iCal, vCard, …
 
 Structured **micro-formats**: small, well-defined textual formats that
-parse to / emit from BORU Records. Namespace `MicroFormat`.
+parse to / emit from boru Records. Namespace `MicroFormat`.
 
 ### 5.1 Built on the existing parse/emit framework
 
@@ -244,7 +244,7 @@ body:String headers:Map]`. The Record type is exported
 ### 5.3 Extension
 
 New micro-formats register through the **same parse/emit host seam** (§2)
-— `RegisterFormatParser(reg, "vcard", vcardFormat)` — or BORU code via
+— `RegisterFormatParser(reg, "vcard", vcardFormat)` — or boru code via
 `ParseLang.register`. The jostraca template (§3) scaffolds the
 parser/emitter pair, the typed-accessor word, the exported Record type,
 docs, and spec rows. Types: Records/Maps/Lists/scalars +

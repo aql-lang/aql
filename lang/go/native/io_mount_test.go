@@ -86,7 +86,7 @@ func TestUnmountRewiresJsonicResolver(t *testing.T) {
 	}
 }
 
-// mountFixture builds a registry with the io words and runs a BORU
+// mountFixture builds a registry with the io words and runs a boru
 // program that mounts a handler set, returning the registry.
 func mountFixture(t *testing.T, src string) *Registry {
 	t.Helper()
@@ -107,8 +107,8 @@ func mountFixture(t *testing.T, src string) *Registry {
 
 // fullMountSrc is the database-style example: a flex-map "table" of
 // path → {data, mtime} rows, exposing read/write/stat/list/remove —
-// the minimal viable filesystem, implemented entirely in BORU. (A SQL
-// backing would swap the flex map for table queries; BORU currently has
+// the minimal viable filesystem, implemented entirely in Boru. (A SQL
+// backing would swap the flex map for table queries; boru currently has
 // no SQL-execution surface, so the row store stands in for the table.)
 const fullMountSrc = `
 def rows (flex {})
@@ -133,7 +133,7 @@ func TestMountedBoruFilesystemFullSurface(t *testing.T) {
 	r := mountFixture(t, fullMountSrc)
 	ops := HostFileOps(r)
 
-	// write / read round-trip through the BORU row store.
+	// write / read round-trip through the boru row store.
 	if err := ops.WriteFile("a.txt", []byte("alpha"), 0o644); err != nil {
 		t.Fatal(err)
 	}

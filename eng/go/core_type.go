@@ -418,7 +418,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		// base-compatible value without checking the predicate.
 		// Phase 6 (predicate stamps): compile the predicate body to a
 		// detached unit at CONSTRUCTION, so RunPredicate's InvokeCallback
-		// runs it on the VM instead of the CallBORU interpreter fallback —
+		// runs it on the VM instead of the CallBoru interpreter fallback —
 		// the same pre-publication in-place stamp module load applies to
 		// its exports (the binding has not escaped this goroutine).
 		// Declines (captures, compile refusals) keep the interpreter path;

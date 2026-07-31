@@ -20,9 +20,9 @@ implemented yet.
 Go's `fmt.Sprintf(format string, a ...any) string` is variadic over the
 empty interface. The raw `go:` bridge would expose that as an
 `Any`-typed varargs blur. The curated surface fixes the shape: a format
-String plus a **List** of BORU values, with values crossing the boundary
+String plus a **List** of boru values, with values crossing the boundary
 via `eng.ToNative` so `%v`/`%d`/`%s`/… see real Go scalars. printf-style
-formatting is the power-user complement to BORU's idiomatic template
+formatting is the power-user complement to boru's idiomatic template
 strings (see Overlap).
 
 ## 3. Import & namespace
@@ -47,10 +47,10 @@ variadic `...any` becomes a single **List** argument.
 | `Sprintf(format,a...) string` | `format` | `[List args, String format] -> String` | Format args against a printf format string. | Variadic `...any` → a `List`; each element bridged via `eng.ToNative`. format is the top arg so swap reads `format Fmt.format args`. |
 | `Sprint(a...) string` | `sprint` | `[List] -> String` | Concatenate args, spaces only between non-string operands. | Variadic → `List`; no format string. |
 | `Sprintln(a...) string` | `sprintln` | `[List] -> String` | Concatenate args with spaces, append a newline. | Variadic → `List`; always spaces between operands, trailing `\n`. |
-| `Errorf(format,a...) error` | (folded) | — | — | Not a separate word: an `error` value has no BORU counterpart. Use `Fmt.format` to build the message, then raise it via the engine's normal error path (`r.BoruError`) at the call site. |
+| `Errorf(format,a...) error` | (folded) | — | — | Not a separate word: an `error` value has no boru counterpart. Use `Fmt.format` to build the message, then raise it via the engine's normal error path (`r.BoruError`) at the call site. |
 
 Common verbs (documented in `docs_fmt.go` / the spec header so users
-have a reference without leaving BORU):
+have a reference without leaving boru):
 
 | verb | meaning |
 |---|---|
@@ -63,7 +63,7 @@ have a reference without leaving BORU):
 | `%t` | boolean |
 | `%x` | hex (lowercase) |
 
-BORU values map to their Go counterparts through `eng.ToNative` before
+boru values map to their Go counterparts through `eng.ToNative` before
 formatting: String→`string`, Integer→`int64`, Float→`float64`,
 Boolean→`bool`, List→`[]any`, Map→`map[string]any`, None→`nil`. A Map
 formats under `%v`/`%+v` like a Go map.
@@ -101,13 +101,13 @@ family that *would* gate lives in `boru:io`, not here.)
 
 ## 8. Overlap
 
-BORU already has two formatting facilities, and `Fmt` must not disturb
+boru already has two formatting facilities, and `Fmt` must not disturb
 them — it sits alongside as the printf escape hatch:
 
 - **Template strings** `` `...${x}...` `` (parser-level `InterpString`,
   see `lang/go/CLAUDE.md` "Template string interpolation") are the
   **idiomatic default** for interpolation. Reach for them first.
-- The **core `format` word** (`lang/go/native/format.go`) renders BORU
+- The **core `format` word** (`lang/go/native/format.go`) renders boru
   values to canonical text.
 
 **Dividing line:** `Fmt.format` exposes *Go printf semantics* — width,
@@ -134,7 +134,7 @@ import "boru:fmt"
 
 - **`Print` / `Println` / `Fprintf`** — stdout/writer output is out of
   scope; that surface is `boru:io`.
-- **`Errorf` / `%w` wrapping** — BORU has no first-class `error` value, so
+- **`Errorf` / `%w` wrapping** — boru has no first-class `error` value, so
   `Errorf` is folded away (build the message with `Fmt.format`, raise via
   `r.BoruError`). Revisit if an error/diagnostic value type is added.
 - **`%!`-marker promotion** — should a result containing a Go formatting

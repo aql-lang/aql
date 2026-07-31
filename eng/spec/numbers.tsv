@@ -26,7 +26,7 @@
 #		
 # Type lattice		
 # ------------		
-# BORU has two concrete numeric types under the same Number root:		
+# boru has two concrete numeric types under the same Number root:		
 #		
 #   Scalar/Number/Integer  — written as digits with optional leading minus		
 #   Scalar/Number/Float  — written with a decimal point		

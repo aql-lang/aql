@@ -80,7 +80,7 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 > bodies whose apply is the LAST statement — replayIsBodyTail — since
 > the replay fires at the RET and a later effectful statement would
 > otherwise reorder ahead of the callee's effects); the RET
-> then takes the **RetReplay** discipline (the CallBORU trim-only
+> then takes the **RetReplay** discipline (the CallBoru trim-only
 > return path for foreign-registry fns, count-exact-or-defer so a
 > runtime-variable residual falls back soundly). And the per-iteration
 > loop apply extends to Function params (`applyFn` re-push, apply-first

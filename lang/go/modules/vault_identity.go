@@ -98,7 +98,7 @@ func vaultIdentityHandler(args []native.Value, _ map[string]native.Value, _ []na
 
 // vaultCertificate reveals the alias through the host vault backend and
 // parses it as a PEM bundle. The reveal happens in HOST Go under the
-// vault's own `reveal` gate — the bytes never become a BORU value, which
+// vault's own `reveal` gate — the bytes never become a boru value, which
 // is the whole point of the handle.
 func vaultCertificate(r *native.Registry, alias string) (*tls.Certificate, error) {
 	spec := hostVaultSpec(r)

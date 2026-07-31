@@ -25,7 +25,7 @@ func EnableDynamicHelp(r *Registry) {
 	}
 }
 
-// makeDynamicEval returns a function that parses and evaluates a BORU
+// makeDynamicEval returns a function that parses and evaluates a boru
 // expression, returning the formatted result. Returns nil if ParseFunc
 // is not set.
 func makeDynamicEval(r *Registry) func(string) (string, error) {

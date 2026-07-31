@@ -9,7 +9,7 @@ import (
 )
 
 // BEAM-style lightweight processes — the concurrency substrate specified
-// in design/PROCESSES.0.md. A process is a goroutine running a BORU body
+// in design/PROCESSES.0.md. A process is a goroutine running a boru body
 // on its own ForkConcurrent() registry, plus a bounded, mutex-guarded
 // mailbox. The kernel owns the runtime (this file); the language layer
 // (lang/go/native/native_process.go) owns the words (`spawn`, `self`,

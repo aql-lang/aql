@@ -1,4 +1,4 @@
-# BORU Language Specification: type-system edge cases 3 — generic
+# boru Language Specification: type-system edge cases 3 — generic
 # instantiation identity, invariance, bounds; class sealing + the
 # nominal Class root
 # Format: input<TAB>expected<TAB>description

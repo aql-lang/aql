@@ -115,7 +115,7 @@ func (terminalBehavior) Format(v native.Value) string {
 
 // TuiSpec describes a host-provided terminal backend. Open is called
 // once per Tui.open and must return a fresh (or freshly reusable)
-// Backend; failures surface to the BORU caller as `terminal` errors.
+// Backend; failures surface to the boru caller as `terminal` errors.
 type TuiSpec struct {
 	// Name identifies the backend in diagnostics ("tty", "virtual", …).
 	Name string

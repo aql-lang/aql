@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:math module
+# boru Language Specification: the boru:math module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module. Import binds the `math` namespace, then words are

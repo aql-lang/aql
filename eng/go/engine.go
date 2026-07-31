@@ -33,7 +33,7 @@ const stackHeadroom = 8
 // describing what happened on the previous step.
 type TraceCallback func(step int, pointer int, stack []Value, note string)
 
-// Engine is the BORU stack machine.
+// Engine is the boru stack machine.
 //
 // Execution model: `tape` is a rewriting tape, not a LIFO stack. The
 // input program is loaded onto it whole; `pointer` then walks forward
@@ -58,7 +58,7 @@ type Engine struct {
 	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 	// debugLabel names the CALL this engine's run realises, when the
-	// dispatch knows it (CallBORUNamed: a module fn body run in its own
+	// dispatch knows it (CallBoruNamed: a module fn body run in its own
 	// sub-engine, whose Defs-based frame leaves no tape marks). A debug
 	// host reads it back through EngineState.Label so a backtrace can
 	// name the module fn. Empty for every other engine.
@@ -249,7 +249,7 @@ func (e *Engine) SetTrace(t TraceCallback) { e.trace = t }
 // the CLI via `--options steps:N`. Unset (zero) keeps the defaults below.
 const (
 	DefaultStepLimit    = 10_000_000 // top-level engine cap
-	DefaultSubStepLimit = 10_000_000 // sub-engine cap (autoEvalMap, CallBORU, etc.)
+	DefaultSubStepLimit = 10_000_000 // sub-engine cap (autoEvalMap, CallBoru, etc.)
 )
 
 // stepLimitFor resolves the effective step budget: the registry's
@@ -1191,7 +1191,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 	// Last-resort panic guard at the top-level engine boundary. A bug in
 	// any handler or in the step loop should surface to the user as a
-	// clean BORU error, never as a goroutine stack trace. Only the
+	// clean boru error, never as a goroutine stack trace. Only the
 	// outermost (NewTop) engine recovers; sub-engines let the panic
 	// propagate so it unwinds to here with the original stack intact for
 	// the debug detail. Errors returned normally are untouched.
@@ -1202,7 +1202,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 				runErr = makeBoruErrorAt("internal_error",
 					fmt.Sprintf("internal engine error: %v", rec),
 					"", e.effectiveSource(),
-					"this is a bug in BORU; please report it", e.currentPos())
+					"this is a bug in boru; please report it", e.currentPos())
 			}
 		}()
 	}
@@ -2889,7 +2889,7 @@ func (e *Engine) stepWord(val Value) error {
 
 	// Retry fallback for words with forward-collecting sigs: when
 	// nearest-first matching fails, retry with deepest-first
-	// (ForceStack). Handles CallBORU sub-engines where FnDef args are
+	// (ForceStack). Handles CallBoru sub-engines where FnDef args are
 	// placed in deepest-first order on the input stack.
 	if sig == nil && fn.HasForwardSigs() && !w.ForceStack {
 		wDeep := w
@@ -3614,7 +3614,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return nil
 	}
 
-	// Tail calls (design/TCO-STAGED.10.md): a BORU fn-body dispatch
+	// Tail calls (design/TCO-STAGED.10.md): a boru fn-body dispatch
 	// (Sig.FnFrame non-nil — natives skip on the nil check) sitting in
 	// tail position of an enclosing fn frame is counted; when the
 	// eligibility gate passes (no binding mutations during arg
@@ -4699,7 +4699,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		v, _ := m.Get(key)
 		resolvedKey := key
 
-		// Computed key: evaluate the key text as BORU code to get
+		// Computed key: evaluate the key text as boru code to get
 		// the actual string key. E.g., {[a]:1} with def a 'x' → {x:1}
 		if ckSet[key] {
 			keyResult, err := runPooledSub(e.registry, []Value{NewWord(key)}, false)
@@ -5146,7 +5146,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// resolves the authored sigs (it is idempotent on already-compiled
 	// ones) and attaches the body-runner for anonymous fns.
 	//
-	// A value carrying a FOREIGN sub-registry (a module wrapper, or a BORU
+	// A value carrying a FOREIGN sub-registry (a module wrapper, or a boru
 	// fn defined inside a module preamble) is NOT a stable own-sig handle:
 	// it must resolve the real (inner) definition in that sub-registry, so
 	// it falls through to the name-lookup branch below. Anonymous closures
@@ -5214,7 +5214,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 	// Retry fallback for words with forward-collecting sigs: when
 	// nearest-first matching fails, retry with deepest-first
-	// (ForceStack). Mirrors stepWord's CallBORU-input recovery.
+	// (ForceStack). Mirrors stepWord's CallBoru-input recovery.
 	if sig == nil && fn.HasForwardSigs() && !w.ForceStack {
 		wDeep := w
 		wDeep.ForceStack = true
@@ -5243,7 +5243,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 	// Fall through to FnSig-based pure-stack matching when
 	// matchSignature finds nothing — this preserves the legacy
-	// anonymous-fn-on-stack dispatch for BORU fns whose Sigs carry
+	// anonymous-fn-on-stack dispatch for boru fns whose Sigs carry
 	// named params. The same path runs when matched but the sig
 	// has no Go Handler AND this isn't an `afn`-produced lambda:
 	// predicate-type FnDefs landing bare are intentionally inert.
@@ -5281,7 +5281,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// the engine re-processes the Function value with all args on
 	// the stack — which routes through this same execFnDefLiteral
 	// entry. This branch runs whether the sig has a Go Handler
-	// (registered native) or only a BORU body (anonymous FnDef from
+	// (registered native) or only a boru body (anonymous FnDef from
 	// `afn` / `=>`); in both cases matchSignature found valid
 	// positions and we need the forward args on the stack before
 	// the body / handler runs.
@@ -5308,12 +5308,12 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	//     so args flow straight through in sig order — no body
 	//     execution, no token splicing, no push reordering.
 	//
-	//  2. **BORU fn defined inside a module preamble** (e.g.
+	//  2. **Boru fn defined inside a module preamble** (e.g.
 	//     decision.cond, defined via `def cond fn […]` in the
-	//     module's BORU source). The body references module-private
+	//     module's boru source). The body references module-private
 	//     types/words that only resolve in fnDef.Registry, so we must
-	//     run it in that registry via CallBORU. These fns use NAMED
-	//     params, so CallBORU's named-param binding (InstallDef by
+	//     run it in that registry via CallBoru. These fns use NAMED
+	//     params, so CallBoru's named-param binding (InstallDef by
 	//     name) sidesteps any unnamed-param push ordering issues.
 	//
 	// See design/SIG-ORDER-REFACTOR.10.md for the architecture history.
@@ -5367,10 +5367,10 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				e.traceNote = "call " + fnDef.Name
 			}
 			// ONE dispatch path, no exceptions: a module wrapper — trivial-delegation
-			// OR a real BORU body — dispatches through execMatch, exactly like a named
+			// OR a real boru body — dispatches through execMatch, exactly like a named
 			// fn and a bare-word call. So a fn body is ANALYSED/COMPILED the SAME way
 			// regardless of how the fn was reached: a param-slot unit via the matched
-			// sig's ReturnsFn, NOT a separate def-stack CallBORU run that left Function
+			// sig's ReturnsFn, NOT a separate def-stack CallBoru run that left Function
 			// params slot-less and unreachable to a closure capture (the sort
 			// comp-capture leaf — a fundamental dispatch-path divergence). match.Reg
 			// carries the sub-registry so the body's module-private words resolve there
@@ -5519,7 +5519,7 @@ func (e *Engine) upcomingArgs(valIdx int) []Value {
 }
 
 // execFnDefSigStackMatch is the legacy pure-stack dispatch path for
-// BORU-defined functions whose signatures carry named params. Used as a
+// boru-defined functions whose signatures carry named params. Used as a
 // fallback when matchSignature's aggregate match returns nothing.
 func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []Value) error {
 	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
@@ -5536,7 +5536,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	// can emit body diagnostics under generalised carrier args that the legacy
 	// inline-splice path (execFnDefSig) did not — the check-accuracy ratchet
 	// pins that pure-check behaviour. Excludes foreign-sub-registry fns (their
-	// body must run via CallBORU in that registry — the execFnDefLiteral
+	// body must run via CallBoru in that registry — the execFnDefLiteral
 	// sub-registry branch handles them) and macros.
 	checkFnValue := e.registry != nil && e.registry.Check.Mode && !fnDef.Anonymous && !fnDef.Macro &&
 		(fnDef.Registry == nil || fnDef.Registry == e.registry) &&
@@ -5818,7 +5818,7 @@ func (e *Engine) spliceFnCheckTail(valIdx, nArgs int, result []Value) {
 // on: every site that needs a dispatchable FnDefInfo from authored sigs
 // routes through here rather than constructing the struct inline.
 //
-// Each compiled Signature is given a Go Handler (the shared BORU body-
+// Each compiled Signature is given a Go Handler (the shared boru body-
 // runner, buildFnBodyHandler) and a check-mode ReturnsFn
 // (buildFnBodyReturnsFn), so a Function value dispatches through the
 // uniform execMatch path exactly like a registered native — no
@@ -5858,7 +5858,7 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 				HasGen:       fnDef.Gen != nil,
 				InstallNames: fnInstallNames(sig, fnDef.Captured),
 			}
-			compiled.Impl = &BORUImpl{
+			compiled.Impl = &BoruImpl{
 				Body:     sig.body(),
 				FnFrame:  meta,
 				dispatch: buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta),
@@ -5916,7 +5916,7 @@ func shareCheckStateFrom(owner, caller *Registry) func() {
 }
 
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
-// (module closure), execution uses CallBORU on that registry. Otherwise, body
+// (module closure), execution uses CallBoru on that registry. Otherwise, body
 // tokens are spliced into the current engine's stack.
 func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry, anonymous bool) error {
 	nArgs := len(sig.Params)
@@ -5975,7 +5975,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	}
 
 	if capturedReg != nil && (capturedReg != e.registry || e.registry.Lookup("__pa") == nil) {
-		// Execute in the captured module's registry via CallBORU.
+		// Execute in the captured module's registry via CallBoru.
 		// Pass the FnDef's lexical captures so the body sees them as
 		// defs (alongside the module-registry's own bindings).
 		//
@@ -5988,7 +5988,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		// lang/spec/module-fnvalue-boundary.tsv). Gated on the frame
 		// protocol being EXECUTABLE: the splice tail's `__pa` word is
 		// registered by the language layer, so a bare kernel registry (an
-		// eng-only embedder, the kernel test harnesses) keeps the CallBORU
+		// eng-only embedder, the kernel test harnesses) keeps the CallBoru
 		// path, whose per-call cleanup is Go-side and needs no words.
 		var captures []CapturedBinding
 		var fnLabel string
@@ -6005,13 +6005,13 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			// Check mode ANALYSES the body — always the interpreter path
 			// (running a stamped unit here would execute real side effects
 			// during static analysis).
-			result, err = capturedReg.CallBORUNamed(sig, args, captures, fnLabel)
+			result, err = capturedReg.CallBoruNamed(sig, args, captures, fnLabel)
 		} else {
 			// Runtime: a module fn stamped at load (StampFnValueInPlace,
 			// RunModuleBody) runs its unit on the VM — the module
 			// sub-registry is idle from the caller's perspective, so
 			// InvokeCallback starts a fresh RunUnit there; an unstamped or
-			// stale-dep sig falls to CallBORU inside the seam, byte-identical
+			// stale-dep sig falls to CallBoru inside the seam, byte-identical
 			// to the old direct call. This retires the per-call interpreter
 			// hop for module-export application (the mini-redis client loop:
 			// `MiniRedis.cmd` per iteration).
@@ -6031,7 +6031,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			skipSet[valIdx] = true
 			dst := firstArgIdx
 			for i := firstArgIdx; i <= valIdx; i++ {
-				if !skipSet[i] { //covergate:allow execFnDefSig cross-registry CallBORU result-splice interior (structural cell copy-down): post arguments-are-inert flip, foreign fn values dispatch via the compiled-value path first, so no corpus shape reaches these splice arms; kept as defensive splice-correctness arms (design/ARG-SEMANTICS-UNIFICATION.0.md §7) (§kernel)
+				if !skipSet[i] { //covergate:allow execFnDefSig cross-registry CallBoru result-splice interior (structural cell copy-down): post arguments-are-inert flip, foreign fn values dispatch via the compiled-value path first, so no corpus shape reaches these splice arms; kept as defensive splice-correctness arms (design/ARG-SEMANTICS-UNIFICATION.0.md §7) (§kernel)
 					e.tape.Set(dst, e.tape.At(i))
 					dst++
 				}
@@ -6091,7 +6091,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// args in top-first sig order (matchSignature convention).
 	// Named params bind by name; unnamed params push to body tokens in
 	// i-order. No reordering — same convention as InstallFnDef and
-	// CallBORU. See design/SIG-ORDER-REFACTOR.10.md.
+	// CallBoru. See design/SIG-ORDER-REFACTOR.10.md.
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
@@ -6116,7 +6116,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	defSnapshot := e.registry.Defs.Snapshot()
 
 	// Append the sig's body tokens directly: append COPIES them into
-	// tokens' backing array, and sig.body() (the shared BORUImpl.Body) is
+	// tokens' backing array, and sig.body() (the shared BoruImpl.Body) is
 	// never mutated here, so the previous intermediate make+copy was a
 	// redundant per-call allocation (design/INTERPRETER-SPEED-PLAN.10.md #5).
 	tokens = append(tokens, sig.body()...)
@@ -6282,7 +6282,7 @@ func (e *Engine) commitBarrierForward() bool {
 		return false
 	}
 	// The commit must consume EXACTLY the claimed args through a real
-	// overload. BORU-bodied fns carry a synthetic 0-arg Fallback in the
+	// overload. boru-bodied fns carry a synthetic 0-arg Fallback in the
 	// aggregate dispatch table (it exists to raise a clean
 	// "no matching signature" error); matching it here would commit a
 	// waiting word to its own failure — `g 1 def x 5 x` must keep
@@ -6471,7 +6471,7 @@ func (e *Engine) stepDefCleanup(val Value, markerIdx int) error {
 	if info.EvalResidual {
 		// A COMPUTING body's residual pending containers evaluate
 		// IN-frame — before the body-local defs pop — so the spliced
-		// dispatch path agrees with the CallBORU sub-run drain (mini-s3's
+		// dispatch path agrees with the CallBoru sub-run drain (mini-s3's
 		// s3-parse-range trailing `{from: from upto: upto}`; previously
 		// the spliced path deferred the container to the CONSUMER scope,
 		// where the body-locals are gone — the residual-timing fork,
@@ -6508,7 +6508,7 @@ func (e *Engine) stepDefCleanup(val Value, markerIdx int) error {
 				// The error unwinds the run, so the frame's remaining
 				// parked tail (__pa, the undef pairs) never steps —
 				// replay its registry effects before propagating,
-				// exactly as CallBORU's inline cleanup runs on a body
+				// exactly as CallBoru's inline cleanup runs on a body
 				// error. Otherwise a do-error trap upstream would
 				// resume with the callee's params/args/locals still
 				// bound in the caller's scope.
@@ -7684,7 +7684,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	// re-zeroed per candidate — the previous per-candidate make was ~17%
 	// of all interpreter allocations) and the resolved-index map (tail
 	// cells). Per-invocation (NOT engine-level) is load-bearing: a
-	// predicate-typed param runs BORU during sigTypeMatches (RunPredicate),
+	// predicate-typed param runs boru during sigTypeMatches (RunPredicate),
 	// so matchSignature can nest — each nested call owns its own buffer.
 	// A success return hands the positions slice to the caller (ownership
 	// transfers; this call never touches the buffer again and the
@@ -8297,9 +8297,9 @@ func singleOverloadRecoverable(sig *Signature, fn *FnDefInfo) bool {
 	// with a ReturnsFn, e.g. `enum`) and a trivial-delegation module wrapper
 	// (body = [Word(inner)] short-circuiting to an inner native) do NOT get the
 	// guarded CALL_USER param contract, so their unmatched dispatch is not
-	// deferrable. The discriminator is a real BORU body (len(Body) > 0), NOT a nil
-	// Handler: a BORU fn defined in a module preamble carries a synthesized CallBORU
-	// Handler yet is genuinely BORU-bodied (the `engine-known` case) — gating on
+	// deferrable. The discriminator is a real boru body (len(Body) > 0), NOT a nil
+	// Handler: a boru fn defined in a module preamble carries a synthesized CallBoru
+	// Handler yet is genuinely boru-bodied (the `engine-known` case) — gating on
 	// Handler==nil wrongly excludes it. Core natives have an empty Body; delegation
 	// wrappers are caught by trivialDelegationTarget.
 	if _, isDelegation := trivialDelegationTarget(sole); isDelegation {
@@ -8541,7 +8541,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 		resume()
 		// Re-match over the dispatching registry: a module sub-registry word
-		// (the test framework's `test-record`, run via CallBORU in the module's
+		// (the test framework's `test-record`, run via CallBoru in the module's
 		// sub-registry) must re-match over THAT registry at run time, not the
 		// main one, or callPoly's Lookup misses it. e.registry is the same
 		// sub-registry pointer the compiled run reaches (it lives on the module

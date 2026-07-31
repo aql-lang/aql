@@ -47,7 +47,7 @@ func TestStatXattrOption(t *testing.T) {
 		}
 	}
 
-	res := runBORU(t, r, []Value{
+	res := runBoru(t, r, []Value{
 		NewWord("stat"), pathV("x.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("xattr", NewBoolean(true)) }),
 	})
@@ -84,7 +84,7 @@ func TestTouchOwnerGroupXattr(t *testing.T) {
 	mem.SetIdentity(func() int { return 0 }, func() int { return 0 }) // root: chown allowed
 
 	// {owner}/{group} re-own; an omitted id stays.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("touch"), pathV("t.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("owner", NewInteger(42)) }),
 	})
@@ -92,7 +92,7 @@ func TestTouchOwnerGroupXattr(t *testing.T) {
 	if fi.UID != 42 || fi.GID != 0 {
 		t.Errorf("touch {owner:42} = %d/%d", fi.UID, fi.GID)
 	}
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("touch"), pathV("t.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("group", NewInteger(9)) }),
 	})
@@ -101,7 +101,7 @@ func TestTouchOwnerGroupXattr(t *testing.T) {
 	}
 
 	// {xattr:{…}} sets attributes (String and Bytes payloads).
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("touch"), pathV("t.txt"),
 		wrapMap(func(om *OrderedMap) {
 			xs := NewOrderedMap()
@@ -118,7 +118,7 @@ func TestTouchOwnerGroupXattr(t *testing.T) {
 	}
 
 	// A non-scalar xattr value refuses.
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("touch"), pathV("t.txt"),
 		wrapMap(func(om *OrderedMap) {
 			xs := NewOrderedMap()
@@ -131,7 +131,7 @@ func TestTouchOwnerGroupXattr(t *testing.T) {
 
 	// Chown refusal surfaces through touch (non-root, real id change).
 	mem.SetIdentity(func() int { return 1000 }, func() int { return 1000 })
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("touch"), pathV("t.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("owner", NewInteger(0)) }),
 	}); err == nil {
@@ -148,7 +148,7 @@ func TestStatXattrErrorBranches(t *testing.T) {
 	}
 	registerIOWords(r)
 	SetHostFileOps(r, notInstalledFileOps{})
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("stat"), pathV("x"),
 		wrapMap(func(om *OrderedMap) { om.Set("xattr", NewBoolean(true)) }),
 	}); err == nil {
@@ -169,7 +169,7 @@ func TestStatXattrErrorBranches(t *testing.T) {
 		t.Fatal(err)
 	}
 	SetHostFileOps(r2, &failAtOps{MemFileOps: mem, failXattrGet: "g.txt"})
-	if err := runBORUError(t, r2, []Value{
+	if err := runBoruError(t, r2, []Value{
 		NewWord("stat"), pathV("g.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("xattr", NewBoolean(true)) }),
 	}); err == nil {
@@ -379,7 +379,7 @@ func TestMetaFailInjection(t *testing.T) {
 	}
 
 	r := newReg(&failAtOps{failXattrList: "f.txt"})
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("stat"), pathV("f.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("xattr", NewBoolean(true)) }),
 	}); err == nil {
@@ -387,7 +387,7 @@ func TestMetaFailInjection(t *testing.T) {
 	}
 
 	r = newReg(&failAtOps{failXattrSet: "f.txt"})
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("touch"), pathV("f.txt"),
 		wrapMap(func(om *OrderedMap) {
 			xs := NewOrderedMap()

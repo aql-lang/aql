@@ -1,4 +1,4 @@
-# BORU Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)
+# boru Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)
 # format: front-coded
 # Format: FRONT-CODED. Each data row is reuse<TAB>suffix<TAB>expected,
 # where reuse = the count of leading bytes the input shares with the

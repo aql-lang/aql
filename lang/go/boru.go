@@ -29,11 +29,11 @@ type FileOps = capabilities.FileOps
 // Format handles encoding and decoding file content for a specific format.
 type Format = native.Format
 
-// Type represents a BORU type such as "string", "number/integer", or "any".
+// Type represents a boru type such as "string", "number/integer", or "any".
 // Use NewType to create types from slash-separated paths.
 type Type = native.Type
 
-// Value is a typed entry on the BORU stack.
+// Value is a typed entry on the boru stack.
 type Value = native.Value
 
 // Signature describes one way a function can be called.
@@ -45,7 +45,7 @@ type Value = native.Value
 // only use the first parameter and ignore the rest with _.
 type Signature = native.Signature
 
-// Well-known BORU types for use in Signature definitions.
+// Well-known boru types for use in Signature definitions.
 var (
 	TAny            = native.TAny
 	TScalar         = native.TScalar
@@ -98,11 +98,11 @@ func NewMemFileOps() *capabilities.MemFileOps {
 // HostFileOps returns the file system currently installed on the instance —
 // the real OS-backed one unless a host or policy replaced it. Callers layering
 // an overlay need it as the lower layer.
-func (a *BORU) HostFileOps() FileOps {
+func (a *Boru) HostFileOps() FileOps {
 	return native.HostFileOps(a.registry)
 }
 
-// Options configures a BORU instance.
+// Options configures a boru instance.
 type Options struct {
 	// Registry is a string identifier for the registry to use.
 	Registry string
@@ -153,23 +153,23 @@ type Options struct {
 // GrowthFactor 0 use the defaults (7 and 2.7).
 type TapeOptions = native.TapeConfig
 
-// BORU is an independent BORU execution instance.
+// boru is an independent boru execution instance.
 // Each instance has its own state (set/get storage is isolated).
 // Create multiple instances with New() for independent execution contexts.
 //
-// BORU is not safe for concurrent use. (*BORU).Run and (*BORU).Check both
+// boru is not safe for concurrent use. (*Boru).Run and (*Boru).Check both
 // mutate the underlying Registry (source pointer, def/type stacks, check
 // state) and must not be called from multiple goroutines simultaneously
 // on the same instance. Use one instance per goroutine for parallel work.
-type BORU struct {
+type Boru struct {
 	registry *native.Registry
 	options  Options
 	manager  *udk.UniversalManager
 }
 
-// New creates a new BORU instance with built-in functions.
+// New creates a new boru instance with built-in functions.
 // An optional Options value may be provided to configure the instance.
-func New(opts ...Options) (*BORU, error) {
+func New(opts ...Options) (*Boru, error) {
 	var o Options
 	if len(opts) > 0 {
 		o = opts[0]
@@ -207,7 +207,7 @@ func New(opts ...Options) (*BORU, error) {
 	native.EnableDynamicHelp(reg)
 	reg.MarkReady()
 
-	return &BORU{registry: reg, options: o, manager: um}, nil
+	return &Boru{registry: reg, options: o, manager: um}, nil
 }
 
 func init() {
@@ -216,7 +216,7 @@ func init() {
 	// injected here — the same contract as the public Run (explicit armed
 	// interpreter fallback on compile_refused).
 	modules.CompiledSubRun = func(reg *native.Registry, src string) ([]native.Value, error) {
-		a := &BORU{registry: reg}
+		a := &Boru{registry: reg}
 		vals, _, _, err := a.RunAutoValues(src)
 		var refused *BoruError
 		if errors.As(err, &refused) && refused.Code == "compile_refused" {
@@ -228,21 +228,21 @@ func init() {
 	}
 }
 
-// NewFromRegistry wraps an ALREADY-WIRED registry in an *BORU instance so a
+// NewFromRegistry wraps an ALREADY-WIRED registry in a *Boru instance so a
 // host with a long-lived registry of its own — the REPL, a service — can use
 // the compiled-by-default entry points (RunAutoValues / RunCompiledReason)
 // over it. The caller owns the wiring (parse func, module resolver, Manager,
 // Output, policy): nothing is installed or re-installed here, and the zero
 // Options apply. Plan Phase 2 prerequisite (entry-point routing).
-func NewFromRegistry(reg *native.Registry) (*BORU, error) {
+func NewFromRegistry(reg *native.Registry) (*Boru, error) {
 	if reg == nil {
 		return nil, fmt.Errorf("NewFromRegistry: nil registry")
 	}
-	return &BORU{registry: reg}, nil
+	return &Boru{registry: reg}, nil
 }
 
 // Options returns the Options the instance was created with.
-func (a *BORU) Options() Options {
+func (a *Boru) Options() Options {
 	return a.options
 }
 
@@ -252,7 +252,7 @@ func (a *BORU) Options() Options {
 // which wraps a registry behind authenticated HTTP introspection. Most
 // callers should use the higher-level Run/Check API instead; this is the
 // escape hatch for host-level inspection tools.
-func (a *BORU) NativeRegistry() *native.Registry {
+func (a *Boru) NativeRegistry() *native.Registry {
 	return a.registry
 }
 
@@ -260,7 +260,7 @@ func (a *BORU) NativeRegistry() *native.Registry {
 // none was configured. Equivalent to a.Options().Policy but reads
 // the live capability slot, so it reflects any subsequent
 // SetHostPolicy calls (rare; intended for tooling).
-func (a *BORU) Policy() Policy {
+func (a *Boru) Policy() Policy {
 	return native.HostPolicy(a.registry)
 }
 
@@ -279,7 +279,7 @@ func (a *BORU) Policy() Policy {
 // the Typed-Racket-style migration surface
 // (design/checker-accuracy-review.10.md). Persistent on the instance
 // until toggled off.
-func (a *BORU) SetStrictCheck(on bool) {
+func (a *Boru) SetStrictCheck(on bool) {
 	if a.registry.Check.Strict != on {
 		// Fn-body summaries memoised under the OTHER strictness suppress
 		// re-analysis on a reused instance (a bare Begin keeps them), so a
@@ -292,7 +292,7 @@ func (a *BORU) SetStrictCheck(on bool) {
 	a.registry.Check.Strict = on
 }
 
-func (a *BORU) Check(src string) (CheckResult, error) {
+func (a *Boru) Check(src string) (CheckResult, error) {
 	values, err := parser.Parse(src)
 	if err != nil {
 		return CheckResult{}, err
@@ -360,7 +360,7 @@ type StampEvent = eng.StampEvent
 // stamp ATTEMPT — runtime-constructed codec fns, service handlers, and
 // module fns — with the refusal reason when the compile declined. Nil when
 // runtime stamping was never armed (a plain Run / -no-compile execution).
-func (a *BORU) StampReport() []eng.StampEvent {
+func (a *Boru) StampReport() []eng.StampEvent {
 	return a.registry.StampEvents()
 }
 
@@ -375,14 +375,14 @@ type BailEvent = eng.BailEvent
 // observability seam (eng interp_entry.go — a TEST seam, not API): fn fires
 // on every entry into tree-walking machinery until the returned disarm func
 // runs.
-func (a *BORU) ArmInterpEntryHook(fn func(InterpEntry)) func() {
+func (a *Boru) ArmInterpEntryHook(fn func(InterpEntry)) func() {
 	return a.registry.ArmInterpEntryHook(fn)
 }
 
 // ArmRuntimeBailHook forwards to the registry's runtime-bail observability
 // seam (eng interp_entry.go — a TEST seam, not API): fn fires on every
 // designed VM defer-to-interpreter until the returned disarm func runs.
-func (a *BORU) ArmRuntimeBailHook(fn func(BailEvent)) func() {
+func (a *Boru) ArmRuntimeBailHook(fn func(BailEvent)) func() {
 	return a.registry.ArmRuntimeBailHook(fn)
 }
 
@@ -397,7 +397,7 @@ func (a *BORU) ArmRuntimeBailHook(fn func(BailEvent)) func() {
 // prior state (a no-op when the registry was already armed), so nesting is
 // safe. A policy-gated registry stays sound under arming: StampDetachedFn
 // itself refuses when a word policy is installed, exactly like CompileCheck.
-func (a *BORU) ArmRuntimeStamping() func() {
+func (a *Boru) ArmRuntimeStamping() func() {
 	if a.registry.RuntimeStampingEnabled() {
 		return func() {}
 	}
@@ -412,7 +412,7 @@ func (a *BORU) ArmRuntimeStamping() func() {
 // user fns, polymorphic or dynamic dispatch, compile-time words —
 // the Program is nil and reason names the first offender; the
 // CheckResult is valid either way.
-func (a *BORU) CompileCheck(src string) (*Program, string, CheckResult, error) {
+func (a *Boru) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	// Policy-gated registries COMPILE (the 2026-07-15 lift, user-authorized):
 	// every named VM dispatch consults the SAME WordChecker the
 	// interpreter's policyGateWord runs (vmContext.gateWord — CALL_NATIVE,
@@ -492,7 +492,7 @@ func (a *BORU) CompileCheck(src string) (*Program, string, CheckResult, error) {
 }
 
 // SetFileOps replaces the file operations implementation used by read/write.
-func (a *BORU) SetFileOps(ops FileOps) {
+func (a *Boru) SetFileOps(ops FileOps) {
 	native.SetHostFileOps(a.registry, ops)
 }
 
@@ -502,7 +502,7 @@ func (a *BORU) SetFileOps(ops FileOps) {
 type Clock = capabilities.Clock
 
 // SetClock replaces the instance's clock.
-func (a *BORU) SetClock(clk Clock) {
+func (a *Boru) SetClock(clk Clock) {
 	native.SetHostClock(a.registry, clk)
 }
 
@@ -517,7 +517,7 @@ type TLSProfile = capabilities.TLSProfile
 
 // SetHTTPOps replaces the HTTP transport used by fetch. With none
 // installed, fetch uses http.DefaultTransport.
-func (a *BORU) SetHTTPOps(ops HTTPOps) {
+func (a *Boru) SetHTTPOps(ops HTTPOps) {
 	native.SetHostHTTPOps(a.registry, ops)
 }
 
@@ -525,7 +525,7 @@ func (a *BORU) SetHTTPOps(ops HTTPOps) {
 // CertRequest is what the peer asked for during the handshake.
 type ClientIdentity = capabilities.ClientIdentity
 
-// CertRequest is the BORU-facing projection of crypto/tls's
+// CertRequest is the boru-facing projection of crypto/tls's
 // CertificateRequestInfo, handed to a ClientIdentity per handshake.
 type CertRequest = capabilities.CertRequest
 
@@ -536,23 +536,23 @@ var (
 	FileIdentity   = capabilities.FileIdentity
 )
 
-// RegisterClientIdentity makes a client certificate available to BORU
+// RegisterClientIdentity makes a client certificate available to boru
 // source under a name, for mutual TLS:
 //
 //	a.RegisterClientIdentity("acme", id)
-//	// BORU: Net.fetch {url: "https://…"  tls: {identity: acme/q}}
+//	// boru: Net.fetch {url: "https://…"  tls: {identity: acme/q}}
 //
 // The guest can SELECT an identity but can never read or construct one
 // — the private key stays behind the ClientIdentity interface, which is
 // why an HSM- or vault-backed credential works here unchanged. Which
 // identity a program may actually present is a policy decision
 // (network/client-cert), not the program's.
-func (a *BORU) RegisterClientIdentity(name string, id ClientIdentity) {
+func (a *Boru) RegisterClientIdentity(name string, id ClientIdentity) {
 	native.RegisterClientIdentity(a.registry, name, id)
 }
 
 // SetOutput replaces the writer used by print, help, and other output words.
-func (a *BORU) SetOutput(w io.Writer) {
+func (a *Boru) SetOutput(w io.Writer) {
 	a.registry.Output = w
 }
 
@@ -560,7 +560,7 @@ func (a *BORU) SetOutput(w io.Writer) {
 // any given file extensions (leading dot optional) to it. Formats are used
 // by the read/write words via the {fmt:"name"} option and, for any mapped
 // extensions, by `read` on a matching path.
-func (a *BORU) RegisterFormat(name string, f Format, exts ...string) {
+func (a *Boru) RegisterFormat(name string, f Format, exts ...string) {
 	if native.HostFormats(a.registry) == nil {
 		native.SetHostFormats(a.registry, make(map[string]native.Format))
 	}
@@ -582,7 +582,7 @@ func (a *BORU) RegisterFormat(name string, f Format, exts ...string) {
 //	        return []lang.Value{lang.NewInteger(n * 2)}, nil
 //	    },
 //	})
-func (a *BORU) Register(name string, sigs ...Signature) {
+func (a *Boru) Register(name string, sigs ...Signature) {
 	a.registry.Register(name, sigs...)
 }
 
@@ -590,7 +590,7 @@ func (a *BORU) Register(name string, sigs ...Signature) {
 // instance's registry. Convenience for callers that already hold a
 // native.NativeFunc value (e.g. seeding the words that moved into loadable
 // modules into a test instance without an explicit import).
-func (a *BORU) RegisterNativeFunc(n native.NativeFunc) {
+func (a *Boru) RegisterNativeFunc(n native.NativeFunc) {
 	a.registry.RegisterNativeFunc(n)
 }
 
@@ -603,10 +603,10 @@ func (a *BORU) RegisterNativeFunc(n native.NativeFunc) {
 //
 // `body` is an ordinary type body: a bare type literal (alias), a refine
 // prefab (newtype), a disjunct (DefineEnum / NewDisjunct — union/enum), a
-// negation, a record/object/schema body, etc. For a body expressed in BORU
+// negation, a record/object/schema body, etc. For a body expressed in boru
 // syntax, use DefineTypeFromSource; for a membership rule expressed as a
 // Go func, use DefineMemberType.
-func (a *BORU) DefineType(name string, body Value) (*Type, error) {
+func (a *Boru) DefineType(name string, body Value) (*Type, error) {
 	return a.registry.DefineType(name, body)
 }
 
@@ -614,7 +614,7 @@ func (a *BORU) DefineType(name string, body Value) (*Type, error) {
 // alternatives — the embedding equivalent of `def Name (v0 tor v1 …)`.
 // Alternatives may be concrete values (a closed enum) or type literals
 // (a union). Returns the minted type handle.
-func (a *BORU) DefineEnum(name string, alternatives ...Value) (*Type, error) {
+func (a *Boru) DefineEnum(name string, alternatives ...Value) (*Type, error) {
 	return a.registry.DefineEnum(name, alternatives...)
 }
 
@@ -623,17 +623,17 @@ func (a *BORU) DefineEnum(name string, alternatives ...Value) (*Type, error) {
 // func (the one case DefineType's body path cannot express). The name is
 // bound (resolves in source and exports like a `def`-installed type) and
 // the minted handle returned.
-func (a *BORU) DefineMemberType(name string, parent *Type, member func(v Value) bool) (*Type, error) {
+func (a *Boru) DefineMemberType(name string, parent *Type, member func(v Value) bool) (*Type, error) {
 	return a.registry.DefineMemberType(name, parent, member)
 }
 
-// DefineTypeFromSource installs `name` with a body written in BORU syntax
+// DefineTypeFromSource installs `name` with a body written in boru syntax
 // — it runs `def Name <bodySource>` on the instance and returns the
 // minted type handle. The most direct embedding form: the host writes the
 // body exactly as it would in a script (e.g.
 // DefineTypeFromSource("Point", "refine Record [x:Integer y:Integer]"))
 // and gets the *Type back to thread into Register'd signatures.
-func (a *BORU) DefineTypeFromSource(name, bodySource string) (*Type, error) {
+func (a *Boru) DefineTypeFromSource(name, bodySource string) (*Type, error) {
 	// `name` is composed into a `def` program, so it must be a plain type
 	// identifier — never source. Reject anything else BEFORE running, so a
 	// name like `X end <code>` cannot terminate the def and execute
@@ -656,7 +656,7 @@ func (a *BORU) DefineTypeFromSource(name, bodySource string) (*Type, error) {
 // validTypeIdent reports whether name is a safe type identifier to splice
 // into a `def` program: capitalised, and otherwise only letters, digits,
 // and the path/word separators '_', '-', '/'. This excludes whitespace
-// and every BORU-significant character (quotes, parens, brackets, ';',
+// and every boru-significant character (quotes, parens, brackets, ';',
 // 'end', …), so a name can never break out of the def-name position.
 func validTypeIdent(name string) bool {
 	if name == "" || name[0] < 'A' || name[0] > 'Z' {
@@ -777,7 +777,7 @@ func NewEmitLangFn(spec EmitLangSpec) (Value, error) {
 // twin of `def name <value>` (lowercase names; capitalised names are types —
 // use DefineType). The canonical way to install a NewParseLangFn value so
 // programs reach it by bare name (`parse myp '…'`).
-func (a *BORU) DefineValue(name string, v Value) error {
+func (a *Boru) DefineValue(name string, v Value) error {
 	if name == "" {
 		return fmt.Errorf("define value: name must not be empty")
 	}
@@ -785,7 +785,7 @@ func (a *BORU) DefineValue(name string, v Value) error {
 		return fmt.Errorf("define value %q: lowercase names bind values (capitalised names are types — use DefineType)", name)
 	}
 	// The host twin of `def` enforces def's word-name grammar too — a name
-	// source BORU cannot spell would install an unreachable binding.
+	// source boru cannot spell would install an unreachable binding.
 	if err := native.ValidateWordName(name); err != nil {
 		return fmt.Errorf("define value %q: %w", name, err)
 	}
@@ -800,11 +800,11 @@ func (a *BORU) DefineValue(name string, v Value) error {
 
 // SetSDK injects an SDK instance for the given spec name.
 // Used in tests to provide a pre-configured SDK (e.g. test mode with mock data).
-func (a *BORU) SetSDK(spec string, sdk any) {
+func (a *Boru) SetSDK(spec string, sdk any) {
 	a.registry.SDKCache[spec] = sdk
 }
 
-// Run parses and executes a BORU source string.
+// Run parses and executes a boru source string.
 // The source may span multiple lines; newlines and tabs are treated as
 // whitespace (equivalent to spaces).
 //
@@ -827,7 +827,7 @@ func (a *BORU) SetSDK(spec string, sdk any) {
 // interpreter SPECIFICALLY — parity oracles, canonical-error rendering
 // — must call RunInterp, which survives the flip as the explicitly-
 // named tree-walker entry point.
-func (a *BORU) Run(src string) ([]any, error) {
+func (a *Boru) Run(src string) ([]any, error) {
 	out, _, _, err := a.RunCompiledReason(src)
 	var refused *BoruError
 	if errors.As(err, &refused) && refused.Code == "compile_refused" {
@@ -843,7 +843,7 @@ func (a *BORU) Run(src string) ([]any, error) {
 // the compiled path is measured against (byte-identical values, errors,
 // and output), and it survives Stage J's Run flip as the explicitly-named
 // interpreter entry point.
-func (a *BORU) RunInterp(src string) ([]any, error) {
+func (a *Boru) RunInterp(src string) ([]any, error) {
 	result, err := a.runValues(src)
 	if err != nil {
 		return nil, err
@@ -856,7 +856,7 @@ func (a *BORU) RunInterp(src string) ([]any, error) {
 // Value.String() (the REPL's per-line echo and its compile_refused
 // fallback). Same contract as RunInterp: unconditionally the tree-walking
 // interpreter, never the VM.
-func (a *BORU) RunInterpValues(src string) ([]native.Value, error) {
+func (a *Boru) RunInterpValues(src string) ([]native.Value, error) {
 	return a.runValues(src)
 }
 
@@ -864,7 +864,7 @@ func (a *BORU) RunInterpValues(src string) ([]native.Value, error) {
 // The Value-returning entry points (RunAutoValues' fallback arms) need the
 // unprojected Values so a host renderer (the REPL's v.String()) stays
 // byte-identical with what the engine produced.
-func (a *BORU) runValues(src string) ([]native.Value, error) {
+func (a *Boru) runValues(src string) ([]native.Value, error) {
 	values, err := parser.Parse(src)
 	if err != nil {
 		return nil, err
@@ -932,7 +932,7 @@ func convertResults(result []eng.Value) []any {
 // Two boundaries qualify "identical results":
 //
 //   - Internal errors. A compiled-mode VM/lowering soundness assertion or a
-//     recovered handler panic (taxonomy internal_error), and any non-BORU Go
+//     recovered handler panic (taxonomy internal_error), and any non-Boru Go
 //     error, are NOT surfaced: the run rolls back and re-executes on the
 //     interpreter, so a latent compiler bug degrades to the correct result
 //     rather than a raw failure (the differential gate's row-count floor still
@@ -952,7 +952,7 @@ func convertResults(result []eng.Value) []any {
 //     interpreter reports as evaluation_limit may COMPLETE under compilation.
 //     A genuine runaway trips evaluation_limit fast in both (the VM does not
 //     fall back on it — that would only re-burn the same budget).
-func (a *BORU) RunCompiled(src string) ([]any, bool, error) {
+func (a *Boru) RunCompiled(src string) ([]any, bool, error) {
 	out, ran, _, err := a.RunCompiledReason(src)
 	return out, ran, err
 }
@@ -973,7 +973,7 @@ func (a *BORU) RunCompiled(src string) ([]any, bool, error) {
 //     fell back to the slower interpreter (design/COMPILABLE-SUBSET.md §1 — the
 //     refusal is "slow, not wrong"). A refusal is surprising performance debt,
 //     so the CLI surfaces this reason as a warning.
-func (a *BORU) RunCompiledReason(src string) ([]any, bool, string, error) {
+func (a *Boru) RunCompiledReason(src string) ([]any, bool, string, error) {
 	vals, ran, reason, err := a.RunAutoValues(src)
 	if err != nil {
 		return nil, ran, reason, err
@@ -988,7 +988,7 @@ func (a *BORU) RunCompiledReason(src string) ([]any, bool, string, error) {
 // per-line echo and /stack). Identical semantics: same compiled/fallback
 // arms, same fence, same reason contract (plan Phase 2's prerequisite for
 // entry-point routing).
-func (a *BORU) RunAutoValues(src string) ([]native.Value, bool, string, error) {
+func (a *Boru) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 	// CompileCheck executes the program in check mode, so its
 	// RunInCheckMode words (def/import/type/macro, the Test harness)
 	// leave real side effects on the registry. The COMPILED path needs
@@ -1121,10 +1121,10 @@ func (a *BORU) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 	if err != nil {
 		// An INTERNAL compiled-mode error — a VM/lowering soundness assertion
 		// or a recovered handler panic (both carry code internal_error), or any
-		// non-BORU Go error — must never reach the caller as a raw compiler bug.
+		// non-Boru Go error — must never reach the caller as a raw compiler bug.
 		// Roll the registry back to the pre-check state (exactly as the
 		// uncompilable path does) and let the interpreter render the canonical
-		// result. Genuine BORU runtime errors (type_error, div-by-zero, and the
+		// result. Genuine boru runtime errors (type_error, div-by-zero, and the
 		// resource ceilings evaluation_limit / tape_exhausted) match the
 		// interpreter by the differential gate and are returned as-is — the
 		// resource limits in particular fail FAST in both engines by design
@@ -1165,13 +1165,13 @@ func (a *BORU) RunAutoValues(src string) ([]native.Value, bool, string, error) {
 // refusal reason, or the VM's internal_error. Use it to GUARANTEE a program ran
 // through the compiler (verifying the compilable subset, benchmarking the VM in
 // isolation, or catching a compiler regression that would otherwise hide behind
-// the fallback). Genuine BORU runtime errors (type_error, div-by-zero, the
+// the fallback). Genuine boru runtime errors (type_error, div-by-zero, the
 // resource ceilings) are returned as-is, exactly as RunCompiled returns them.
 //
 // Side-effect parity matches RunCompiled: on the compiled path the check pass's
 // RunInCheckMode words (def/import/type/macro) persist; on every error path the
 // registry is rolled back to its pre-check state.
-func (a *BORU) RunCompiledStrict(src string) ([]any, error) {
+func (a *Boru) RunCompiledStrict(src string) ([]any, error) {
 	snap := a.registry.SnapshotForCompile()
 	// Same arming as RunCompiled: force mode is compiled execution, so
 	// runtime-constructed callbacks stamp at their store sites too. Restored to
@@ -1241,7 +1241,7 @@ func fenceBlockedFallback(r *native.Registry, err error) error {
 // resolved by re-running on the interpreter rather than surfaced. True for an
 // internal_error (a VM/lowering soundness assertion or a recovered handler
 // panic — never surface a raw compiler bug; the interpreter is the correctness
-// backstop) and any non-BORU (foreign) error. False for every genuine BORU
+// backstop) and any non-Boru (foreign) error. False for every genuine boru
 // runtime error — type_error, div-by-zero, and the resource ceilings
 // (evaluation_limit / tape_exhausted) — which the differential gate proves
 // match the interpreter, and which the VM deliberately surfaces fast rather

@@ -9,11 +9,11 @@ import (
 	"github.com/boru-lang/boru/eng/go/parser"
 )
 
-// The canonical rule table is EXPRESSED IN BORU — fmt-rules.boru is the
+// The canonical rule table is EXPRESSED IN boru — fmt-rules.boru is the
 // stylesheet, exactly as an XSLT stylesheet is expressed in XML. This file
 // is the processor's loader: it parses the embedded stylesheet into the
 // compiled Rules form the renderer interprets. The Go struct is not the
-// definition; the BORU source is.
+// definition; the boru source is.
 //
 //go:embed fmt-rules.boru
 var rulesSource string
@@ -28,10 +28,10 @@ func loadDefaultRules() {
 	defaultRules, defaultRulesErr = parseRulesSource(rulesSource)
 }
 
-// DefaultRules is the canonical BORU layout: the compiled form of the
+// DefaultRules is the canonical boru layout: the compiled form of the
 // fmt-rules.boru stylesheet (parsed once, at first use). If the embedded
 // stylesheet failed to parse — a build defect, pinned against by
-// TestDefaultRulesFromBORU — this returns the zero Rules and
+// TestDefaultRulesFromBoru — this returns the zero Rules and
 // DefaultRulesInitError reports the failure; BuildFmtModule surfaces it at
 // module construction (the ADR-005 no-panic pattern).
 func DefaultRules() Rules {
@@ -58,7 +58,7 @@ func SwapDefaultRulesErr(err error) error {
 	return prev
 }
 
-// parseRulesSource parses a BORU stylesheet — comments, then one map
+// parseRulesSource parses a boru stylesheet — comments, then one map
 // literal carrying ALL rule keys — into a complete Rules table. Used for
 // the embedded canonical stylesheet; strictness (every key required)
 // guarantees the file fully defines the style, with no silent Go-side
@@ -84,7 +84,7 @@ func parseRulesSource(src string) (Rules, error) {
 	return mergeRulesValue(Rules{}, *table, true)
 }
 
-// MergeRulesValue reads a (partial) BORU rule table over base: keys the
+// MergeRulesValue reads a (partial) boru rule table over base: keys the
 // table names are overridden, everything else keeps base's value. This is
 // the read side of `Fmt.format-with` (modules/fmtrules.go wraps it with
 // DefaultRules as the base). Every key and enum value is validated — an
@@ -94,7 +94,7 @@ func MergeRulesValue(base Rules, v eng.Value) (Rules, error) {
 	return mergeRulesValue(base, v, false)
 }
 
-// maxRuleMagnitude bounds width/indent values from a BORU rule table.
+// maxRuleMagnitude bounds width/indent values from a boru rule table.
 // Layout dimensions beyond ±4096 columns are nonsensical and a huge indent
 // would otherwise force absurd padding allocations (the processor also
 // clamps defensively — this boundary rejects loudly instead of clamping

@@ -1,4 +1,4 @@
-# BORU Language Specification: Control flow (if do for guard)
+# boru Language Specification: Control flow (if do for guard)
 # Format: input<TAB>expected<TAB>description
 #
 # Branch/body arguments are unevaluated code lists (NoEvalArgs): `if`

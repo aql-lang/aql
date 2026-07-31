@@ -2,8 +2,8 @@
 # Cross-language interpreter-speed harness.
 #
 # Runs three equivalent workloads (fib, loopsum, nestloop) under:
-#   - BORU interpreter   (BORU_NO_COMPILE=1)
-#   - BORU bytecode VM    (default)
+#   - boru interpreter   (BORU_NO_COMPILE=1)
+#   - boru bytecode VM    (default)
 #   - CPython, Ruby, Node
 # and reports the best-of-N wall-clock time per cell, plus the
 # interp/compiled and interp/python ratios.

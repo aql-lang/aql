@@ -1,9 +1,9 @@
 # Interpreter-speed measurement fixtures
 
-Cross-language fixtures that quantify how slow the **BORU interpreter**
+Cross-language fixtures that quantify how slow the **boru interpreter**
 (`BORU_NO_COMPILE=1`) is relative to the **bytecode VM** (default) and to
 other dynamic-language interpreters (CPython, Ruby, Node). They exist to
-turn the "interpreted BORU is orders of magnitude too slow" claim into a
+turn the "interpreted boru is orders of magnitude too slow" claim into a
 reproducible number and to anchor before/after comparisons for any
 interpreter optimization.
 
@@ -29,7 +29,7 @@ BORU=/path/to/boru bench/interp/run.sh [reps]     # default reps=3, best-of-N
 `run.sh` reports best-of-N wall-clock (ms) per language. Wall-clock
 includes process start + parse; startup is ~20 ms for `boru`, ~17 ms for
 Python, so subtract it before quoting execution-only ratios (fixtures
-are sized so execution dominates on the BORU-interp column).
+are sized so execution dominates on the boru-interp column).
 
 ### Watch out for Ruby: its wall-clock is almost all startup
 
@@ -39,10 +39,10 @@ and ~63 ms for `ruby` (RubyGems loading; `ruby --disable-gems` drops it
 back to ~14 ms). These fixtures run in only ~4 ms of actual Ruby (timed
 with an internal `Process.clock_gettime` best-of-5: fib 4.5 ms, loopsum
 3.9 ms, nestloop 3.8 ms), so a "62 ms" Ruby wall-clock cell is ~95 %
-overhead. Taken at face value the wall-clock table makes the BORU
+overhead. Taken at face value the wall-clock table makes the boru
 compiled VM look as fast as Ruby (55 ms vs 62 ms) — but that is a
 startup artifact. On **execution only** (startup subtracted, this
-container): the BORU interpreter is ~320–980× slower than Ruby (worst on
+container): the boru interpreter is ~320–980× slower than Ruby (worst on
 recursive `fib`) and the compiled VM is ~11–46× slower. Do not read the
 raw Ruby column as an execution ratio.
 

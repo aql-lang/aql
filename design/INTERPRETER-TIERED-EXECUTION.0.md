@@ -15,7 +15,7 @@ gap (fib ~215×, loops ~60× Python) is the execution model itself:
 per-token dispatch over 72-byte values with per-call overload matching.
 
 CPython is not a tree-walker. Its "interpreter" parses to bytecode and
-runs a tight dispatch loop — exactly BORU's compiled mode, which already
+runs a tight dispatch loop — exactly boru's compiled mode, which already
 runs fib at ~235ms wall (≈10× Python wall, most of it fixed startup) on
 the same fixtures. **"Interpreter performance like Python" means doing
 what Python does: compile transparently, fall back rarely.** The tier
@@ -53,7 +53,7 @@ top-level statement stream stays tree-walked (cheap, once-per-statement).
    island-engine pattern in reverse — `vm.go` already runs Programs with
    an interpreter fallback island INSIDE it, so a VM-refused shape
    degrades composably). Args in, results out — the same contract
-   CallBORU has. Flow-control (`break`/`continue` escaping a compiled
+   CallBoru has. Flow-control (`break`/`continue` escaping a compiled
    body) already has a defined VM translation (`flowUnwind`,
    engine.go).
 4. **Invalidation.** Promotion pins the per-name `Defs.Gen` of every

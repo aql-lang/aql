@@ -1,4 +1,4 @@
-# BORU Language Specification: scalar edge cases 3 — strings, atoms, booleans
+# boru Language Specification: scalar edge cases 3 — strings, atoms, booleans
 # Format: input<TAB>expected<TAB>description
 #
 # String-edge coverage via boru:string-util (the empty string through

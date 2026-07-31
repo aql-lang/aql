@@ -1,6 +1,6 @@
-# BORU — Lean formalization + differential harness (prototype)
+# boru — Lean formalization + differential harness (prototype)
 
-A machine-checked prototype of BORU's core semantics in Lean 4, plus a
+A machine-checked prototype of boru's core semantics in Lean 4, plus a
 "tracer-bullet" harness that differential-tests the model against the
 real `boru` engine. This is the first concrete step of the milestone-6
 plan in
@@ -54,7 +54,7 @@ and engine agree.
 `harness/tracer.py` drives one thin slice through the whole pipeline:
 
 ```
-BORU source ──tokenize──▶ Lean Tape ──lean──▶ model output
+boru source ──tokenize──▶ Lean Tape ──lean──▶ model output
      │                                            │
      └─────────── boru do ─────▶ engine output ───┴──▶ compare
 ```

@@ -97,8 +97,8 @@ An earlier revision exempted `def` — first by name, then via a
 function word could keep feeding def's body slot. Both were rejected:
 `def foo add 1 2` silently binding `3` is exactly the wait-through
 class the strict rule exists to kill, and a Go-only signature
-attribute violates the language's expressibility principle — BORU has
-macros, so whatever def can declare, a BORU-authored binder must be
+attribute violates the language's expressibility principle — boru has
+macros, so whatever def can declare, a boru-authored binder must be
 able to declare too.
 
 What survives instead is the **KEYWORD slot** — the language-native
@@ -122,7 +122,7 @@ wait-through — so `def f fn [...]` is pure structural dispatch and
 works identically under the strict rule, while `def x add 1 2`,
 `def s size [1 2 3]`, and `def x:T add 1 2` are stranded (write
 `def x (add 1 2)`). This is Scheme's syntax-rules literals arriving
-in BORU signatures: the same mechanism is what user macros/binders
+in boru signatures: the same mechanism is what user macros/binders
 need for DSL keywords (`for x in xs […]`).
 
 Three kernel seams make keyword slots sound (all in this change):
@@ -256,7 +256,7 @@ Against:
   nullary-fn arguments (`typeof gensym`) — the places where the
   wait-through is genuinely pleasant. Note the tension: the same
   mechanism that makes `print add 1 2` fragile is the one that gives
-  BORU its partial Polish-notation feel on `Any` slots. A stricter
+  boru its partial Polish-notation feel on `Any` slots. A stricter
   language is a more parenthesised language.
 - The checker must mirror the rule for words whose binding kind is
   unknown at check time (forward references) — stays gradual there.
@@ -274,7 +274,7 @@ Against:
   (`native_help.go::sigKeywordSlots`, `help.go::writeSigs`). A
   capture-any `/q` slot (no pattern, e.g. `quote`'s `[Atom]`) stays
   bare.
-- ~~The BORU-authored surface~~ — a `/q` param whose atom names no type
+- ~~The boru-authored surface~~ — a `/q` param whose atom names no type
   is a KEYWORD slot: `def between fn [[a:Integer in/q b:Integer] …]`
   matches only the literal word `in` (`fn_params.go::keywordParam`,
   spec `lang/spec/keyword-slot.tsv`). This is the source spelling of

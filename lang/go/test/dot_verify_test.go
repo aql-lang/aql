@@ -7,7 +7,7 @@ import (
 	"github.com/boru-lang/boru/eng/go/parser"
 )
 
-func runBORUText(t *testing.T, r *native.Registry, src string) ([]native.Value, error) {
+func runBoruText(t *testing.T, r *native.Registry, src string) ([]native.Value, error) {
 	t.Helper()
 	values, err := parser.Parse(src)
 	if err != nil {
@@ -51,7 +51,7 @@ def m 'y'`
 
 	for _, tt := range tests {
 		t.Run(tt.expr, func(t *testing.T) {
-			result, err := runBORUText(t, r, tt.expr)
+			result, err := runBoruText(t, r, tt.expr)
 			if tt.wantErr {
 				if err == nil {
 					t.Errorf("%s: expected error, got %v", tt.expr, result)

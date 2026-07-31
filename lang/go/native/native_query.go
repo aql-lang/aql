@@ -342,7 +342,7 @@ func queryDistinctHandler(args []Value, _ map[string]Value, _ []Value, r *Regist
 }
 
 // queryJoinNative builds a join word (join/innerjoin/leftjoin/crossjoin).
-// The handler captures the BORU word name (for errors) and the SQL join
+// The handler captures the boru word name (for errors) and the SQL join
 // type. args[0] is the joined table name (forward, quoted), args[1] is
 // the upstream builder (stack).
 func queryJoinNative(name, joinType string) NativeFunc {

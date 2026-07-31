@@ -6,7 +6,7 @@ import (
 )
 
 // maxLineWidth mirrors the width the canonical stylesheet (fmt-rules.boru)
-// declares, for tests that assert line lengths. TestDefaultRulesFromBORU
+// declares, for tests that assert line lengths. TestDefaultRulesFromBoru
 // pins the two equal — the stylesheet is the definition, this is the echo.
 const maxLineWidth = 72
 
@@ -30,7 +30,7 @@ var knownTypes = map[string]bool{
 	"table": true, "record": true, "object": true, "function": true,
 }
 
-// TokenKind classifies a token in the BORU source.
+// TokenKind classifies a token in the boru source.
 type TokenKind int
 
 const (
@@ -54,7 +54,7 @@ const (
 	TokNewline
 )
 
-// Token is a lexical token from BORU source.
+// Token is a lexical token from boru source.
 type Token struct {
 	Kind TokenKind
 	Text string
@@ -89,7 +89,7 @@ type Node struct {
 	Children []*Node
 }
 
-// Parse turns BORU source into the format tree the emitter walks (an
+// Parse turns boru source into the format tree the emitter walks (an
 // NdRoot node). It is a PARAMETER of the formatter (see FormatWith) so the
 // front end is pluggable: the default is the built-in lossless lexer, but
 // a tabnas grammar that preserves comments, backticks, and layout can be
@@ -118,7 +118,7 @@ func HandParse(src string) *Node {
 	return buildTree(tokenize(src))
 }
 
-// Format formats BORU source code using the default (tabnas) parser.
+// Format formats boru source code using the default (tabnas) parser.
 func Format(src string) string {
 	return FormatWith(src, DefaultParse)
 }
@@ -126,9 +126,9 @@ func Format(src string) string {
 // ParseTree returns the layout tree the emitter walks for src: the default
 // (tabnas) front end's parse with the semantics-preserving transforms already
 // applied (type-name capitalisation, fn-bracket elision). It is the seam a
-// DECLARATIVE formatter consumes — bridge this tree to BORU values (boru:fmt's
+// DECLARATIVE formatter consumes — bridge this tree to boru values (boru:fmt's
 // Fmt.tree) and a rule set keyed by node kind can lay it out, the Phase-3
-// "layout rules as BORU" direction. Emitting ParseTree(src) with the built-in
+// "layout rules as boru" direction. Emitting ParseTree(src) with the built-in
 // emitRoot reproduces Format(src) exactly.
 func ParseTree(src string) *Node {
 	tree := DefaultParse(src)
@@ -140,7 +140,7 @@ func ParseTree(src string) *Node {
 // NodeKindName is the stable dispatch key for a node kind — the atom a
 // declarative rule table matches on (`word`, `list`, `map`, `paren`,
 // `comment`, `newline`, …). It is the source-CST analogue of Fmt.kind's
-// tag: a formatter written as BORU rules dispatches on these names.
+// tag: a formatter written as boru rules dispatches on these names.
 func NodeKindName(k NodeKind) string {
 	switch k {
 	case NdRoot:
@@ -183,7 +183,7 @@ func NodeKindName(k NodeKind) string {
 	return "unknown"
 }
 
-// FormatWith formats BORU source using the supplied parser and the default
+// FormatWith formats boru source using the supplied parser and the default
 // rule table. A nil parse falls back to DefaultParse. This is the seam
 // through which a tabnas-based, trivia-preserving parser is injected — the
 // layout rules and the emitter operate on the tree regardless of which
@@ -192,8 +192,8 @@ func FormatWith(src string, parse Parse) string {
 	return FormatRulesWith(src, DefaultRules(), parse)
 }
 
-// FormatRules formats BORU source under the supplied declarative rule table
-// (see Rules) with the default parser. `Fmt.format-with` is its BORU twin.
+// FormatRules formats boru source under the supplied declarative rule table
+// (see Rules) with the default parser. `Fmt.format-with` is its boru twin.
 func FormatRules(src string, ru Rules) string {
 	return FormatRulesWith(src, ru, nil)
 }
@@ -240,7 +240,7 @@ func tokenize(src string) []Token {
 			continue
 		}
 
-		// Comment. Both `#` and `##` run to end of line — BORU has NO bounded
+		// Comment. Both `#` and `##` run to end of line — boru has NO bounded
 		// block comment (`## a ## b` is one comment; the real parser lexes
 		// `#` to EOL). Modelling `## … ##` as bounded made fmt treat what
 		// follows on the line as CODE and reformat it — corrupting comment
@@ -368,7 +368,7 @@ func singleCharToken(ch byte) (TokenKind, bool) {
 	return 0, false
 }
 
-// scanNumber consumes a complete BORU numeric literal starting at start,
+// scanNumber consumes a complete boru numeric literal starting at start,
 // so `boru fmt` never splits one apart. It covers plain decimals, the `0d`
 // BigInteger/BigDecimal form, `0x`/`0o`/`0b` base literals, `_` digit
 // separators, and `e` exponents. A trailing `.` is taken only when a digit
@@ -546,7 +546,7 @@ func scanInterpHole(s string, i int) int {
 	return len(s)
 }
 
-// scanMinilang detects and scans a BORU minilang literal starting at
+// scanMinilang detects and scans a boru minilang literal starting at
 // s[0] == '+' (e.g. +re/[a-z]+/, +gex|a*b|, +hb/de_ad/, +m:a@b.com),
 // returning the full raw literal text and the byte count, or ("", 0) when s
 // does not start one. The body is scanned VERBATIM and emitted as a single
@@ -609,7 +609,7 @@ func scanMinilang(s string) (string, int) {
 	return s[:i], i
 }
 
-// isSpaceByte reports whether b is one of the BORU source whitespace bytes.
+// isSpaceByte reports whether b is one of the boru source whitespace bytes.
 func isSpaceByte(b byte) bool {
 	return b == ' ' || b == '\t' || b == '\n' || b == '\r'
 }
@@ -738,7 +738,7 @@ func capitalizeTypesInTree(n *Node) {
 }
 
 // isKeyword returns true for type names that are also used as
-// BORU keywords and should not be auto-capitalized.
+// boru keywords and should not be auto-capitalized.
 func isKeyword(lower string) bool {
 	switch lower {
 	case "record", "object", "function":

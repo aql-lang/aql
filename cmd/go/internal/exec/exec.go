@@ -1,14 +1,14 @@
 // Package exec is the boru exec HTTP server subcommand —
 // `boru exec -p <port>`.
 //
-// The server exposes a REST API for executing BORU source code. Each
-// request creates a fresh BORU instance so requests are stateless and
-// safe to handle concurrently (the underlying lang.BORU instance is
+// The server exposes a REST API for executing boru source code. Each
+// request creates a fresh boru instance so requests are stateless and
+// safe to handle concurrently (the underlying lang.Boru instance is
 // not safe for concurrent use).
 //
 // Routes:
 //
-//	POST /v1/exec     run BORU code; returns last stack value as result
+//	POST /v1/exec     run boru code; returns last stack value as result
 //	GET  /healthz     liveness probe
 package exec
 
@@ -53,7 +53,7 @@ func (*cmd) Name() string { return "exec" }
 
 // Synopsis returns the one-line help text.
 func (*cmd) Synopsis() string {
-	return "serve BORU code execution over HTTP"
+	return "serve boru code execution over HTTP"
 }
 
 // Run handles `boru exec -p <port> [-r <registry>]`.
@@ -69,7 +69,7 @@ func run(args []string, stdout, stderr io.Writer) int {
 
 	bind := fs.String("bind", "127.0.0.1:8091", "host:port to bind the exec HTTP server")
 	port := fs.Int("p", 0, "port to listen on (overrides -bind host:port if >0)")
-	registry := fs.String("r", "", "registry path passed to BORU instances")
+	registry := fs.String("r", "", "registry path passed to boru instances")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
 
@@ -127,9 +127,9 @@ type execResponse struct {
 }
 
 // Handler builds the http.Handler for the exec service. registry is
-// forwarded to each BORU instance so user code can `use` modules from
+// forwarded to each boru instance so user code can `use` modules from
 // a local directory. pol (may be nil) is the policy applied to every
-// per-request BORU instance — it is bound at server construction and
+// per-request boru instance — it is bound at server construction and
 // cannot be overridden by request bodies. Exposed so tests can spin
 // up an httptest server.
 func Handler(registry string, pol policy.Policy) http.Handler {
@@ -150,9 +150,9 @@ func Handler(registry string, pol policy.Policy) http.Handler {
 	return mux
 }
 
-// handleExec runs the submitted code in a fresh BORU instance and
+// handleExec runs the submitted code in a fresh boru instance and
 // writes the JSON response. Errors are reported in the response body
-// with HTTP 200 so clients can distinguish transport errors from BORU
+// with HTTP 200 so clients can distinguish transport errors from boru
 // errors (parse / type / runtime).
 func handleExec(registry string, pol policy.Policy, w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {

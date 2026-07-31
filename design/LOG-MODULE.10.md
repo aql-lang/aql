@@ -17,12 +17,12 @@
 > `Log.end-span` with the Span method `finish`; and statements that share
 > mutable logging state must be sequenced with `;` (newline is not a
 > separator), as the spec rows show. This note specifies the
-> capability module `boru:log` (namespace `Log`) that gives BORU programs
+> capability module `boru:log` (namespace `Log`) that gives boru programs
 > three layers on one surface: (1) **traditional logging** backed by Go's
 > standard `log` package, (2) a vendor-neutral **OpenTelemetry abstraction**
 > (logs, spans, and metrics) that never pulls the OTel SDK into
 > the sealed runtime, and (3) **provider hooks** — a registry of named
-> *sinks* that hosts (in Go) or BORU code (via a `register` word) attach at
+> *sinks* that hosts (in Go) or boru code (via a `register` word) attach at
 > runtime, modelled on the existing parse/emit host-registration pattern.
 > Read [NATIVE-MODULES.10.md](NATIVE-MODULES.10.md),
 > [EXTENSION-MODULES.10.md](EXTENSION-MODULES.10.md) §2, and
@@ -43,8 +43,8 @@ Where the shipped surface differs from the design sketch below:
   plain Records via `Log.dump` / `Log.traces` / `Log.measurements`.
 - **Trace context propagates via a per-registry active-span stack**, not
   the `ctx-set`/`ctx-get` context stack — simpler and equivalent for
-  single-threaded BORU (§3.5).
-- **`Log.register` registers *and* attaches** the BORU function sink (the
+  single-threaded boru (§3.5).
+- **`Log.register` registers *and* attaches** the boru function sink (the
   common intent); `remove-sink`/`add-sink` toggle thereafter.
 - **Host-owned trace ids** ship via `OnSpanStart func(Span) SpanContext`
   (the §4 sketch's `SpanToken`/error shape simplified to a returned
@@ -67,12 +67,12 @@ Where the shipped surface differs from the design sketch below:
 
 ## 1. Motivation
 
-BORU today has exactly one output path: `print` / `IO.printstr` write a
+boru today has exactly one output path: `print` / `IO.printstr` write a
 value's formatted form to `Registry.Output`, and `IO.stderr` to
 `Registry.ErrOutput` (`native/native_print.go`, `native/io_module.go`).
 That is fine for REPL results; it is not logging. There is no severity, no
 structured fields, no logger names, no way to fan a record out to more than
-one destination, and no way for an embedding host to route BORU diagnostics
+one destination, and no way for an embedding host to route boru diagnostics
 into the observability stack it already runs (OpenTelemetry, Datadog,
 stdout-JSON shipped to Loki, …).
 
@@ -83,14 +83,14 @@ Three needs, one module:
    package. Works with zero host wiring, like `print` does.
 2. **An OpenTelemetry abstraction** — a vendor-neutral in-memory shape for
    the OTel **logs**, **traces**, and **metrics** signals, so
-   BORU code emits *records* and *spans* without naming OTel, and a host
+   boru code emits *records* and *spans* without naming OTel, and a host
    translates them to the OTel SDK at the boundary. The OTel SDK must stay
-   a **host dependency**, never a runtime one — the BORU runtime is sealed
+   a **host dependency**, never a runtime one — the boru runtime is sealed
    ([GO-MODULES.10.md](GO-MODULES.10.md)) and must not grow a transitive
    `go.opentelemetry.io/*` graph.
-3. **Provider hooks** — the same *pluggable named-handler* shape BORU already
+3. **Provider hooks** — the same *pluggable named-handler* shape boru already
    uses for parse/emit: a registry of **sinks**, extensible at runtime from
-   the host (`RegisterHostLogSink`) **and** from BORU (`Log.register`),
+   the host (`RegisterHostLogSink`) **and** from boru (`Log.register`),
    gated by policy.
 
 The design reuses every existing seam — the native-module sub-registry
@@ -103,7 +103,7 @@ pattern (§7), the host-capability key pattern (`CapFileOps`/`CapClock`/…,
 ## 2. Design principles
 
 - **Neutral core, OTel at the edge.** The module produces a `LogRecord`
-  Record and a `Span` object in plain BORU value space. Translation to the
+  Record and a `Span` object in plain boru value space. Translation to the
   OTel data model happens *inside a host-installed sink*, so the module
   imports nothing from `go.opentelemetry.io`. The OTel data model (severity
   number + text, body, attributes, timestamp, trace/span id) is the *shape*
@@ -288,7 +288,7 @@ Log.measurements                          # [{instrument,kind,value,attributes,t
 ### 4.1 Why neutral-core / edge-translation
 
 OTel's value is its *data model*, not its Go SDK. By targeting the data
-model in plain BORU values and translating only inside a host sink, we get
+model in plain boru values and translating only inside a host sink, we get
 OTel interop **without** a runtime dependency:
 
 - The sealed runtime's `go.mod` stays free of `go.opentelemetry.io/*`
@@ -329,11 +329,11 @@ modules.RegisterHostLogSink(reg, modules.LogSinkSpec{
 ```
 
 The bridge is the *only* place OTel is named. Swapping OTel for Datadog or
-slog is swapping this adapter — the BORU programs are untouched.
+slog is swapping this adapter — the boru programs are untouched.
 
 ### 4.3 Signal coverage
 
-| OTel signal | Neutral BORU shape | v1? |
+| OTel signal | Neutral boru shape | v1? |
 |---|---|---|
 | **Logs** | `Log.LogRecord` Record (severity #, body, attrs, timestamp, trace context) | ✅ |
 | **Traces** | `Span` object + context-stack propagation; events, status, attributes | ✅ |
@@ -380,16 +380,16 @@ State lives under a new capability key `CapLogSinks = "engine.logsinks"`
 holding a `*LogSinkRegistry` (the attached sinks, the global level, and the
 console format) — the same "pending pre-import + live" storage parselang
 uses (`engine.parselang.host`), so a host can register a sink before the
-BORU program runs `import "boru:log"`.
+boru program runs `import "boru:log"`.
 
-### 5.2 BORU-level registration (`Log.register`)
+### 5.2 boru-level registration (`Log.register`)
 
-So BORU code — not just the host — can add a sink, exactly as
-`ParseLang.register` installs a BORU fn as a parser:
+So boru code — not just the host — can add a sink, exactly as
+`ParseLang.register` installs a boru fn as a parser:
 
 | word | signature | meaning |
 |---|---|---|
-| `Log.register` | `[fn handler, Atom name, Log.Level min] →` | Install a BORU fn `record →` as a sink. |
+| `Log.register` | `[fn handler, Atom name, Log.Level min] →` | Install a boru fn `record →` as a sink. |
 | `Log.add-sink` | `[Atom name] →` | Attach a *registered* sink to the active pipeline. |
 | `Log.remove-sink` | `[Atom name] →` | Detach it. |
 | `Log.sinks` | `→ List[Atom]` | Names of attached sinks. |
@@ -397,7 +397,7 @@ So BORU code — not just the host — can add a sink, exactly as
 ```
 import "boru:log"
 def capture (fn [[rec:Log.LogRecord] [] [ rec.body my-collector.push ]])
-capture errors/q Log.error/q Log.register     # BORU sink, ERROR+ only
+capture errors/q Log.error/q Log.register     # boru sink, ERROR+ only
 errors/q Log.add-sink
 ```
 
@@ -414,7 +414,7 @@ Built-in sinks (always registered, attachable by name):
 
 To satisfy "traditional logging via the go `log` package" literally: the
 `console` sink holds a `*log.Logger` constructed with
-`log.New(r.ErrOutput, "", 0)` (BORU owns timestamp/level formatting, so the
+`log.New(r.ErrOutput, "", 0)` (boru owns timestamp/level formatting, so the
 std flags are off) and calls `logger.Output(...)` per record. `text`
 format renders `2026-06-23T12:00:00Z INFO  [http] request method=GET …`;
 `json` renders the `LogRecord` as a one-line JSON object (reusing the
@@ -526,7 +526,7 @@ Per the test discipline (always pair positive with negative):
 - **Metrics in v1 or later?** RESOLVED — shipped as phase 5 (§3.6).
 - **`fatal` semantics.** Emit-and-`os.Exit` (classic), or emit at FATAL
   severity and *return* (let the program decide)? Lean: **emit + raise a
-  BORU error** (`log_fatal`), so control flow stays in BORU and the sealed
+  boru error** (`log_fatal`), so control flow stays in boru and the sealed
   runtime never calls `os.Exit`. Confirm.
 - **One `log` scope, or split `log.emit` / `log.sinks`?** Proposed: one
   scope, two ops (§6.2). Sufficient for the sandbox-can't-redirect case.

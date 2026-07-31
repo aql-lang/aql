@@ -216,7 +216,7 @@ func TestVaultLocationFlags(t *testing.T) {
 	ctl, _ := newTestController(t)
 	m := newRootModel(ctl)
 	// The default vault (~/.boru, no suffix) adds no flags.
-	ctl.folder = homeBORUDir(ctl.homeDir)
+	ctl.folder = homeBoruDir(ctl.homeDir)
 	ctl.suffix = ""
 	if got := m.vaultLocationFlags(); got != "" {
 		t.Errorf("default vault should add no flags, got %q", got)

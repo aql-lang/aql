@@ -31,7 +31,7 @@ func TestTypeRecordRejectsMap(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	if _, err := a.Run("refine Record {x:Integer}"); err == nil {
 		t.Fatal("expected error for `refine Record {x:Integer}` (map), got nil")
 	}
@@ -76,7 +76,7 @@ func TestTypeObjectInheritance(t *testing.T) {
 
 // A child instance satisfies the parent type via `is`.
 func TestTypeObjectInheritanceIsCheck(t *testing.T) {
-	// `is` yields a boolean; (*BORU).Run stringifies non-int/string
+	// `is` yields a boolean; (*Boru).Run stringifies non-int/string
 	// results, so the boolean surfaces as the string "true".
 	got := runOne(t, "def Animal (class {legs:Integer})\n"+
 		"def Dog (refine Animal {breed:String})\n"+
@@ -92,7 +92,7 @@ func TestTypeBadBase(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	if _, err := a.Run("refine Integer {x:1}"); err == nil {
 		t.Fatal("expected error for `refine Integer {x:1}`, got nil")
 	}

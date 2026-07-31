@@ -24,7 +24,7 @@ func TestW4CommandMethods(t *testing.T) {
 	if code := c.Run(nil, nil, &out, nil); code != 0 {
 		t.Errorf("Run(nil) = %d, want 0", code)
 	}
-	if !strings.Contains(out.String(), "BORU language reference") {
+	if !strings.Contains(out.String(), "boru language reference") {
 		t.Errorf("index output missing header: %.120q", out.String())
 	}
 }

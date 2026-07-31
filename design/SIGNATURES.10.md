@@ -1,4 +1,4 @@
-# BORU Word Signatures
+# boru Word Signatures
 
 All words listed alphabetically with their registered signatures (in match
 order — first match wins), return values, and notes on special argument

@@ -6,9 +6,9 @@ import (
 	"sync/atomic"
 )
 
-// BORU-source line coverage — the interpreter seam that powers boru:test's
-// coverage feature (design intent: boru:test measures which source lines of an
-// BORU module-under-test its tests exercise, so a pure-BORU module like boru:sift
+// boru-source line coverage — the interpreter seam that powers boru:test's
+// coverage feature (design intent: boru:test measures which source lines of a
+// boru module-under-test its tests exercise, so a pure-Boru module like boru:sift
 // can be driven to 100% line coverage).
 //
 // The mechanism mirrors the ObserveHooks pattern (interp_entry.go): a

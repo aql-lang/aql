@@ -1,14 +1,14 @@
-# BORU Vendor — `boru vendor` (Design)
+# boru Vendor — `boru vendor` (Design)
 
 **Status: design proposal — not implemented.** A new top-level CLI
 command that fetches source from a *separate, language-agnostic
 repository space* and **vendors it in** — copies it into the consuming
 project's tree, committed alongside the project — so it can distribute
-SDKs and libraries for *any* language platform, not just BORU modules.
+SDKs and libraries for *any* language platform, not just boru modules.
 
 ## 1. Motivation
 
-BORU is increasingly used to **generate SDKs**: from one API description,
+boru is increasingly used to **generate SDKs**: from one API description,
 emit a typed client for every target ecosystem (TypeScript, Python, Go,
 Rust, …). That produces *many* small packages — potentially one per API,
 per version, per language.
@@ -26,7 +26,7 @@ Publishing that fan-out into each language's own registry is a poor fit:
   copy — not a `curl | unzip` off a wiki.
 
 `boru vendor` offers a third path: host the generated SDKs in a **separate
-vendor space** (a BORU-served vendor registry, or plain git repos), and
+vendor space** (a boru-served vendor registry, or plain git repos), and
 let each consumer **vendor** the exact SDK they need directly into their
 project. No language-registry gatekeeping, but still pinned, hashed, and
 reproducible.
@@ -37,7 +37,7 @@ reproducible.
 it, and copies its files into the project's `vendor/` tree, recording the
 result in the manifest + lockfile. The vendored tree is **committed** to
 the consumer's repo and consumed by the **target language's** toolchain
-(tsc, Python, cargo, go, …) — BORU never interprets its contents; it only
+(tsc, Python, cargo, go, …) — boru never interprets its contents; it only
 places them.
 
 This deliberately mirrors two well-worn patterns:
@@ -51,26 +51,26 @@ This deliberately mirrors two well-worn patterns:
 ## 3. `vendor` vs `import` / `install`
 
 The existing `import` (runtime) and `install` (CLI,
-`cmd/go/internal/install/install.go`) fetch **BORU modules** from the
-**BORU module registry** into `.boru/<name>/` — a build cache that is
-gitignored and loaded by the BORU runtime via `import "boru:foo"`. They are
-registry-only and BORU-only.
+`cmd/go/internal/install/install.go`) fetch **boru modules** from the
+**boru module registry** into `.boru/<name>/` — a build cache that is
+gitignored and loaded by the boru runtime via `import "boru:foo"`. They are
+registry-only and boru-only.
 
 `vendor` is a different axis:
 
 | | `install` / `import` | `vendor` |
 |---|---|---|
-| Payload | BORU module (`.boru` + `boru.jsonic`) | Any-language source (TS, Py, Go, …) |
-| Source | BORU module registry (`GET /module/<name>-x.y.z`) | Separate vendor space: vendor registry **or** GitHub/GitLab/git |
+| Payload | boru module (`.boru` + `boru.jsonic`) | Any-language source (TS, Py, Go, …) |
+| Source | boru module registry (`GET /module/<name>-x.y.z`) | Separate vendor space: vendor registry **or** GitHub/GitLab/git |
 | Lands in | `.boru/<name>/` (build cache, gitignored) | `vendor/<…>/` (committed to the project) |
-| Consumed by | the BORU runtime (`import`) | the target language's toolchain |
+| Consumed by | the boru runtime (`import`) | the target language's toolchain |
 | Recorded in | `boru.jsonic` `deps` | `boru.jsonic` `vendor` + `vendor.lock` |
 
-The two can coexist in one project: a BORU app `install`s BORU modules
+The two can coexist in one project: a boru app `install`s boru modules
 *and* `vendor`s, say, a generated TypeScript SDK it ships to a browser
 front-end.
 
-(A BORU SDK could also be vendored — as *source* to embed and modify —
+(A boru SDK could also be vendored — as *source* to embed and modify —
 rather than installed as an opaque module; both remain available.)
 
 ## 4. Sources and resolution
@@ -153,12 +153,12 @@ Two guards on `into` (enforced at write time, §8):
   check guards paths *inside* the archive; it does not guard where the
   tree lands, so the destination is validated separately.
 - **Ownership.** The tool only swaps into a directory it *owns* — an
-  empty dir, or one carrying an `.boru-vendor` marker from a prior vendor
+  empty dir, or one carrying a `.boru-vendor` marker from a prior vendor
   of the same entry. It refuses to overwrite a non-empty, unmanaged
   directory (so `into: "src/acme"` can never delete hand-written code),
   and `into` paths must be unique across lock entries.
 
-BORU writes files and nothing else; wiring the tree into a build is the
+boru writes files and nothing else; wiring the tree into a build is the
 target ecosystem's concern (§9) — note the Go caveat there: a module
 root's `vendor/` is special to the Go toolchain, so Go SDKs default
 *outside* `vendor/`.
@@ -213,7 +213,7 @@ half-written tree, and a hash mismatch aborts *before* the swap.
 
 ## 9. Language integration
 
-BORU stays language-agnostic: it delivers files and records provenance.
+boru stays language-agnostic: it delivers files and records provenance.
 Consuming a vendored tree is per-ecosystem:
 
 - **TypeScript / Node** — map the vendored dir via `tsconfig.json`
@@ -233,7 +233,7 @@ Consuming a vendored tree is per-ecosystem:
 A **post-vendor hook** (a declared command run in the vendored dir after
 placement — `npm install`, `pip install -e`, …) is an optional seam, off
 by default. Its trust boundary must be stated honestly: the CLI
-permission model (`--perms`) gates *BORU words* (the fileops / network /
+permission model (`--perms`) gates *boru words* (the fileops / network /
 process capability wrappers), it does **not** sandbox the syscalls of a
 spawned `npm` / `pip` / shell process once launched. A hook therefore
 runs with the user's full privileges and is **explicitly unsandboxed** —
@@ -245,7 +245,7 @@ placed, you wire them."
 ## 10. The vendor repository space
 
 The default source is a **vendor registry** — deliberately *separate*
-from the BORU module registry so SDK fan-out never pollutes the module
+from the boru module registry so SDK fan-out never pollutes the module
 namespace (the whole point of §1). It is another service composable under
 `boru serve` (alongside `registry`), exposing:
 
@@ -280,7 +280,7 @@ it as a supply-chain dependency:
 - **Provenance.** The lock records the exact resolved source URL + commit
   + tree hash, so an audit can answer "where did this come from."
 - **Hooks are unsandboxed.** A §9 post-vendor hook is off by default and,
-  when enabled, runs with full user privileges — `--perms` gates BORU
+  when enabled, runs with full user privileges — `--perms` gates boru
   words, not a spawned process's syscalls. It is a trusted-code seam, not
   a security boundary; enable only for code you trust.
 - **Future.** An OS-level sandbox for hooks, and optional signature
@@ -306,7 +306,7 @@ CLI + a new optional service.
 - **Workspaces / monorepos.** A shared vendor root across sub-projects.
 - **Update ergonomics.** `boru vendor update` policy — latest tag, latest
   within range, or interactive.
-- **Non-goal:** BORU does **not** build, type-check, or run the vendored
+- **Non-goal:** boru does **not** build, type-check, or run the vendored
   code. It fetches, verifies, places, and records. The target
   ecosystem's toolchain owns the rest.
 - **Non-goal (v1):** signature verification and mirror federation —

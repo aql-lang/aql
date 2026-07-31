@@ -213,7 +213,7 @@ func builtinEmitSpecs() []EmitLangSpec {
 }
 
 // emitKindHandler builds the emitter native for one kind: it runs the kind's
-// Encode over the value and opts, mapping an emit error to its BORU code.
+// Encode over the value and opts, mapping an emit error to its boru code.
 func emitKindHandler(kind string, encode func(native.Value, map[string]any) (string, error)) native.Handler {
 	target := "emit_" + kind
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {

@@ -3,7 +3,7 @@
 // It is deliberately dumb: dial, handshake, then loop — widget trees
 // come down as json-lines and lay out LOCALLY through the shared tuikit
 // renderer onto the real terminal; decoded input events go back up. No
-// BORU engine runs client-side.
+// boru engine runs client-side.
 package attach
 
 import (

@@ -23,7 +23,7 @@ func tensorRegistry(t *testing.T) *native.Registry {
 	return r
 }
 
-// runTensorSrc parses and runs a BORU source string.
+// runTensorSrc parses and runs a boru source string.
 func runTensorSrc(t *testing.T, r *native.Registry, src string) ([]native.Value, error) {
 	t.Helper()
 	values, err := parser.Parse(src)

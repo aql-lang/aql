@@ -1,7 +1,7 @@
 # TUI
 
 Design for the **`boru:tui` module** — the layer where a developer writes a
-terminal user interface in BORU: full-screen apps (dashboards, browsers,
+terminal user interface in boru: full-screen apps (dashboards, browsers,
 editors-of-things) that run on a local terminal **or** are served from a
 process and viewed from a thin remote client.
 
@@ -30,7 +30,7 @@ adjacent subsystems were designed first (`PROCESSES.0.md`, `SERVICES.0.md`,
 > **Decisions proposed at design time** (the forks this RFC closes; a
 > reviewer ratifies or reopens them):
 > (1) the app loop is a **native driver bound to a real `eng.Process`
-> mailbox** — not a loop written in BORU, and not a synthetic queue (§2.2);
+> mailbox** — not a loop written in boru, and not a synthetic queue (§2.2);
 > (2) **full-screen apps first** — inline prompt/progress widgets are a later
 > tier on the same runtime (§9);
 > (3) the remote wire carries **widget trees, not cell diffs and not ANSI**
@@ -43,7 +43,7 @@ adjacent subsystems were designed first (`PROCESSES.0.md`, `SERVICES.0.md`,
 > deferred (§6.3);
 > (7) the TTY backend is built on **`x/term` + `x/ansi` + `x/cellbuf`
 > directly**, not on bubbletea's `Program` (§4.4);
-> (8) update handlers are **ordinary BORU code** (may do I/O); only `view`
+> (8) update handlers are **ordinary boru code** (may do I/O); only `view`
 > must be pure — the pragmatic-BEAM shape, not strict-Elm commands-as-data
 > (§2.3).
 
@@ -128,14 +128,14 @@ surfaces and the remote protocol they share.
 
 ### 2.1 Precedents, and what is taken from each
 
-The high-level tier is The Elm Architecture (TEA) mapped onto BORU's existing
+The high-level tier is The Elm Architecture (TEA) mapped onto boru's existing
 actor substrate — the combination LiveView proved on the server and Bubble
 Tea proved in the terminal.
 
 | Precedent | What `boru:tui` takes | What it rejects |
 | --- | --- | --- |
-| **Elm / Bubble Tea** (TEA) | the update/view split; runtime owns terminal + loop; declarative view (the direction bubbletea v2 moved) | strict-Elm commands-as-data — BORU already has actors for effects (§2.3) |
-| **Textual** | a named widget vocabulary; `list-view` naming; watch/computed reactivity noted as future sugar (§9) | class-based widgets — BORU widgets are data, not subclasses |
+| **Elm / Bubble Tea** (TEA) | the update/view split; runtime owns terminal + loop; declarative view (the direction bubbletea v2 moved) | strict-Elm commands-as-data — boru already has actors for effects (§2.3) |
+| **Textual** | a named widget vocabulary; `list-view` naming; watch/computed reactivity noted as future sugar (§9) | class-based widgets — boru widgets are data, not subclasses |
 | **Ratatui** | constraint layout as data; frame = pure function of state; cell-buffer diffing | immediate mode's app-owned render loop — the engine must not own a blocking loop it cannot interrupt |
 | **Rebol/Red VID** | UI as a block of plain data in the language's own syntax; a future dialect layer via `mini`/`parse` (§9) | inventing the dialect *now* — the data form comes first, sugar later |
 | **Phoenix LiveView** | server holds state, events up / renders down, thin client; disconnect semantics | HTML/DOM diffing — trees are small enough to ship whole in v1 (§6.1) |
@@ -165,12 +165,12 @@ runtime — not a private queue that merely resembles one:
   diff, present. Coalescing is why an event storm costs one render, not one
   per keystroke; queued `resize` events collapse to the last.
 
-**Why not write the loop in BORU** (the way `boru:repl` is written over
+**Why not write the loop in boru** (the way `boru:repl` is written over
 `boru:net`)? Three concrete losses: (a) coalescing needs
 inspect-and-drain with zero timeout — `receive` is one-message-one-wakeup,
-so a BORU loop repaints per keystroke; (b) the raw-mode restore guarantee
+so a boru loop repaints per keystroke; (b) the raw-mode restore guarantee
 must sit in a single Go `defer`/`recover` wrapping *everything* including
-layout — a BORU loop puts engine frames between a panic and the restore;
+layout — a boru loop puts engine frames between a panic and the restore;
 (c) the engine has **no mid-`Run` interruption seam**
 (`lang/go/modules/debug_step.go`), so the host side must own the loop to
 own teardown. The *model* is fully preserved — real pid, real bounded
@@ -178,7 +178,7 @@ mailbox, `send`/`whereis` unchanged — only the pump is native.
 
 ### 2.3 Effects: pragmatic BEAM (decided)
 
-`update` is **ordinary BORU code**. It may read files, call `Net.fetch`, or
+`update` is **ordinary boru code**. It may read files, call `Net.fetch`, or
 `send` to other processes directly — no command vocabulary, no effect
 sandbox. The contract is instead about *time*, and it is documented rather
 than enforced:
@@ -356,8 +356,8 @@ Tier-1 handles can leak into error values and debug output exactly as
 sockets did. `eng.NewExtension(TTerminal, *termState)`; explicit
 `Tui.close` with an `atomic.Bool` double-close latch; every Tier-1 word
 guards on the latch and raises `tui_error closed` after. There is **no
-`App` and no `Frame` BORU type** — `run`/`serve` block and return plain
-state; frames are internal Go values that never cross into BORU.
+`App` and no `Frame` boru type** — `run`/`serve` block and return plain
+state; frames are internal Go values that never cross into boru.
 
 Tier-1 drawing is double-buffered: `print-at`/`clear` mutate an offscreen
 grid; **`show`** diffs it against the screen and flushes — so Tier-1 users
@@ -415,8 +415,8 @@ a duplicate registration errors). One backend per registry. With **no
 backend registered**, every Tier-1/Tier-2 entry word raises
 `tui_error "no terminal backend registered"` — a first-class negative that
 the TSV spec pins (§8.2), and the natural state of the wasm playground until
-an xterm.js backend exists (§9). Unlike parselang there is **no BORU-level
-`register` word**: a terminal backend cannot be written in BORU.
+an xterm.js backend exists (§9). Unlike parselang there is **no boru-level
+`register` word**: a terminal backend cannot be written in boru.
 
 ### 4.4 Backend implementations
 
@@ -511,7 +511,7 @@ def browse {
 def choice ( Tui.run browse )      # blocks; returns the picked row (or None)
 ```
 
-(`scan-inventory`, `match-rows`, `pick-row` are ordinary BORU helpers,
+(`scan-inventory`, `match-rows`, `pick-row` are ordinary boru helpers,
 elided.) The DX reads to note: the worker never touches the screen — it
 sends a value; the app never blocks — slow work happens elsewhere; quitting
 returns a *value* to the surrounding program, so a TUI can sit mid-pipeline
@@ -632,7 +632,7 @@ type Renderer interface {
 A new top-level command, `cmd/go/internal/attach`. Deliberately dumb: dial,
 handshake, then run the **local `tty` backend fed by remote frames** — the
 same `tuikit` layout engine, with the process mailbox replaced by the
-socket. No BORU engine runs client-side. Named `attach` rather than a
+socket. No boru engine runs client-side. Named `attach` rather than a
 `boru tui …` subcommand because the **`boru tui` supervisor dashboard already
 exists** and keeps its name and flags untouched; `attach` is a verb, clash-
 free (verified against the command table), and generic enough to later
@@ -811,7 +811,7 @@ starts):
   into `TUI-IMPLEMENTATION-PLAN.0.md`.
 
 **Known risks, with mitigations**: grapheme/CJK width drift → one width
-source in `tuikit`, goldens pin it; view-in-BORU cost per event → the
+source in `tuikit`, goldens pin it; view-in-boru cost per event → the
 bytecode VM runs `view`, coalescing bounds invocations, and an
 identical-state check (cheap on immutable values) skips re-render — Phase E
 benchmarks a keystroke storm before declaring victory; event storms →

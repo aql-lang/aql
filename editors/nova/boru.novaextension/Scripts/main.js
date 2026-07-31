@@ -1,5 +1,5 @@
 //
-// BORU extension for Nova — starts the bundled `boru lsp` stdio language
+// boru extension for Nova — starts the bundled `boru lsp` stdio language
 // server and wires it up as a LanguageClient for *.boru files.
 //
 // The server binary is discovered from the "boru.lsp.path" configuration
@@ -42,7 +42,7 @@ function startClient() {
         type: "stdio",
     };
 
-    // Client options: attach to the BORU syntax and watch *.boru files.
+    // Client options: attach to the boru syntax and watch *.boru files.
     const clientOptions = {
         syntaxes: ["boru"],
         debug: nova.inDevMode(),
@@ -50,7 +50,7 @@ function startClient() {
 
     client = new LanguageClient(
         "boru-lsp",
-        "BORU Language Server",
+        "boru Language Server",
         serverOptions,
         clientOptions
     );
@@ -59,7 +59,7 @@ function startClient() {
         // Surface server crashes as a notice rather than failing silently.
         client.onDidStop((err) => {
             if (err) {
-                console.error("BORU language server stopped:", err.message);
+                console.error("boru language server stopped:", err.message);
             }
         });
 
@@ -69,7 +69,7 @@ function startClient() {
         nova.subscriptions.add(client);
     } catch (err) {
         if (nova.inDevMode()) {
-            console.error("Failed to start BORU language server:", err);
+            console.error("Failed to start boru language server:", err);
         }
         client = null;
     }

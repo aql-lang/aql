@@ -192,7 +192,7 @@ func dateDiffCalendarDuration(from, to time.Time) native.CalDurationData {
 
 // ISO 8601 duration parsing (parseISO8601Duration) and auto-date
 // layout tables (autoDateLayouts) removed at the parser-hand-off
-// step. BORU no longer parses dates / times / durations from
+// step. boru no longer parses dates / times / durations from
 // strings; construct via numeric helpers (cal-dur, years, months,
 // days, hours, …) or via current-time sources (today, now-local,
 // unix, unix-ms, unix-ns).

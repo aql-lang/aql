@@ -1,18 +1,18 @@
 {
-  "name": "BORU",
+  "name": "boru",
   "programArgs": {
     "default": "boru lsp"
   },
   "languageMappings": [
     {
-      "language": "BORU",
+      "language": "boru",
       "languageId": "boru"
     }
   ],
   "fileTypeMappings": [
     {
       "fileType": {
-        "name": "BORU",
+        "name": "boru",
         "patterns": [
           "*.boru"
         ]

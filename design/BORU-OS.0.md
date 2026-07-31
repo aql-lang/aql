@@ -6,11 +6,11 @@
 
 ## 1. Positioning
 
-Go's `os` package spans files, processes, environment and host interaction. Node's `os` module is narrower and primarily exposes host facts. BORU should follow the narrower model.
+Go's `os` package spans files, processes, environment and host interaction. Node's `os` module is narrower and primarily exposes host facts. boru should follow the narrower model.
 
 `boru:os` is not a dumping ground for every host API. It exposes portable operating-system facts, conventional directories, process metadata, feature probing and safe process-lifecycle integration.
 
-File operations remain in BORU's I/O facilities. Path manipulation remains in the path module. Networking remains in networking modules. Process execution belongs in a separate, capability-gated execution facility.
+File operations remain in boru's I/O facilities. Path manipulation remains in the path module. Networking remains in networking modules. Process execution belongs in a separate, capability-gated execution facility.
 
 ## 2. Design principles
 
@@ -19,7 +19,7 @@ File operations remain in BORU's I/O facilities. Path manipulation remains in th
 - Read-only facts are easy to access.
 - Mutating or sensitive operations are capability-gated.
 - Host-specific values are not constant-folded into portable bytecode.
-- Signal delivery never executes arbitrary BORU code inside a native signal handler.
+- Signal delivery never executes arbitrary boru code inside a native signal handler.
 - API names must be checked against core words before finalization.
 
 ## 3. Proposed surface areas
@@ -99,11 +99,11 @@ Signals require both a safe portable layer and an advanced host layer.
 
 ### 4.1 Portable lifecycle layer
 
-The default API maps process termination events to structured BORU lifecycle behaviour:
+The default API maps process termination events to structured boru lifecycle behaviour:
 
 - interrupt and terminate cancel the root or selected execution scope;
 - cancellation includes a structured signal reason;
-- service code performs orderly shutdown through ordinary BORU control flow;
+- service code performs orderly shutdown through ordinary boru control flow;
 - hangup may be exposed as a reload event on systems where it exists.
 
 This is sufficient for most CLI tools and daemons.
@@ -114,11 +114,11 @@ Where applications need explicit signal handling, the runtime may expose a queue
 
 - native handlers perform only async-signal-safe bookkeeping;
 - the runtime queues a signal event;
-- BORU code observes the event later on the normal scheduler;
+- boru code observes the event later on the normal scheduler;
 - subscriptions have explicit lifetime and cleanup;
 - duplicate/coalesced delivery semantics are documented.
 
-BORU callbacks are never invoked directly from a POSIX signal handler.
+boru callbacks are never invoked directly from a POSIX signal handler.
 
 ### 4.3 Raw and unsafe operations
 

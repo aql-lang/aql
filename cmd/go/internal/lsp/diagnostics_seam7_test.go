@@ -16,7 +16,7 @@ import (
 func TestS7n_ComputeDiagnosticsLangNewFailure(t *testing.T) {
 	orig := langNew
 	t.Cleanup(func() { langNew = orig })
-	langNew = func(opts ...lang.Options) (*lang.BORU, error) {
+	langNew = func(opts ...lang.Options) (*lang.Boru, error) {
 		return nil, errors.New("boom-init")
 	}
 

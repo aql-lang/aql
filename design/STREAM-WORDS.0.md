@@ -4,7 +4,7 @@ Design for `boru:stream` — the streaming & concurrency module.
 
 ## Context
 
-BORU today has eager `list` and one-shot async primitives (`await`,
+boru today has eager `list` and one-shot async primitives (`await`,
 `await-any`, `await-first`, `await-full` in
 `lang/go/native/native_temporal_await.go`), but no first-class story for:
 
@@ -23,7 +23,7 @@ importable native module `boru:stream`. All new words, types, and
 runtime support are scoped under that module so the global namespace
 stays clean and users opt in with `import "boru:stream"`.
 
-The intended outcome: a BORU programmer can write
+The intended outcome: a boru programmer can write
 
 ```boru
 import "boru:stream"
@@ -48,7 +48,7 @@ parallel enrichment.
    stages see a cancellation signal and must release resources.
 3. **External processes:** out-of-scope for implementation; a short
    "future extension" section appears below.
-4. **Framing:** typed pipes carrying BORU `Value`s end-to-end (no string
+4. **Framing:** typed pipes carrying boru `Value`s end-to-end (no string
    serialisation between stages). Bash pipelines are the familiar
    mental model; PowerShell / Nushell are the actual reference for
    typed elements and pluggable framing.
@@ -169,10 +169,10 @@ place.
 ## Common patterns
 
 Side-by-side with the bash equivalent. Bash is shown as the reference
-mental model; the BORU versions are typed end-to-end and back-pressured.
+mental model; the boru versions are typed end-to-end and back-pressured.
 
-Every BORU snippet assumes `import "boru:stream"` at the top. Words
-that appear inside filter / map blocks come from elsewhere in BORU and
+Every boru snippet assumes `import "boru:stream"` at the top. Words
+that appear inside filter / map blocks come from elsewhere in boru and
 are shown here for context: `contains` (string search,
 `lang/go/native/native_string.go`), `eq` (equality,
 `lang/go/native/native_compare.go`), and `.` (record / list field
@@ -335,7 +335,7 @@ cat events.log \
 - The first error wins; later errors are recorded in a debug trace
   but do not overwrite the primary cause.
 - The terminator (`to-list`, `for-each`, `fold`, …) re-raises the
-  primary error to the BORU caller.
+  primary error to the boru caller.
 - A future `stream.try` combinator (not in v1) will let users opt into
   per-element error capture.
 
@@ -349,7 +349,7 @@ New files mirror the `boru:time` pattern in `lang/go/modules/`:
   `Job` implementations: goroutines, bounded channels, cancellation
   tokens. Internal to the module.
 - `lang/go/modules/stream_words.go` — native-word adapters that move
-  BORU `Value`s in and out of the runtime.
+  boru `Value`s in and out of the runtime.
 - `lang/go/modules/stream_test.go` — unit tests (see Verification).
 
 Registration in `lang/go/modules/modules.go`:
@@ -382,7 +382,7 @@ A future `stream.exec` would return a record:
 }
 ```
 
-letting BORU pipelines splice in shell commands the same way Nushell
+letting boru pipelines splice in shell commands the same way Nushell
 does. Cancellation kills the child; `wait` joins it. The v1 types
 above are deliberately shaped to accommodate this, but no code lands
 in v1.
@@ -400,7 +400,7 @@ End-to-end checks before declaring v1 done:
    - `select` cancels the losing jobs;
    - `with-timeout` fires under a stalled source.
 
-2. **BORU-level integration test** under `lang/go/test/` (mirroring the
+2. **boru-level integration test** under `lang/go/test/` (mirroring the
    existing `pipe_barrier_test.go` style) that runs the worked
    example from the Context section against a fixture file and
    checks the output.

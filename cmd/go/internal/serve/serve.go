@@ -1,5 +1,5 @@
 // Package serve implements `boru serve <svc> [flags] + <svc> [flags] ...`:
-// the umbrella command that supervises multiple BORU services in one
+// the umbrella command that supervises multiple boru services in one
 // process. Each segment between `+` tokens is parsed by the named
 // service's factory, then all services run concurrently under a
 // single SIGINT/SIGTERM-driven graceful shutdown.

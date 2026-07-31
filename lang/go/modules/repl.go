@@ -8,8 +8,8 @@ import (
 )
 
 // BuildReplModule creates the "boru:repl" native module — a socket REPL
-// server and client whose implementation is WRITTEN IN BORU (the
-// replBORUPreamble below), following the boru:test hybrid pattern. It is
+// server and client whose implementation is WRITTEN IN boru (the
+// replBoruPreamble below), following the boru:test hybrid pattern. It is
 // the first verification app of the networking stack
 // (design/NETWORK-IMPLEMENTATION-PLAN.0.md §1.5): a service over the
 // `lines` codec whose handler evaluates each received line and replies
@@ -31,7 +31,7 @@ func BuildReplModule(parent *native.Registry) (native.ModuleDesc, error) {
 		return native.ModuleDesc{}, fmt.Errorf("repl: parser not configured")
 	}
 	replParseOnce.Do(func() {
-		replParsed, replParseErr = parent.ParseFunc(replBORUPreamble)
+		replParsed, replParseErr = parent.ParseFunc(replBoruPreamble)
 	})
 	if replParseErr != nil {
 		return native.ModuleDesc{}, fmt.Errorf("repl: parse preamble: %w", replParseErr)
@@ -101,18 +101,18 @@ var (
 	replParseErr  error
 )
 
-// replBORUPreamble is the module's implementation — plain BORU over the
+// replBoruPreamble is the module's implementation — plain boru over the
 // boru:net codec tier and the core service words.
-const replBORUPreamble = `
+const replBoruPreamble = `
 
 import "boru:net"
 import "boru:vm"
 
 # ============================================================
-# boru:repl — a socket REPL, written in BORU.
+# boru:repl — a socket REPL, written in Boru.
 #
 # The server is a service over the lines codec: each received line is
-# BORU source, evaluated in a sandboxed sub-engine (Vm.run) against the
+# boru source, evaluated in a sandboxed sub-engine (Vm.run) against the
 # session's accumulated history, and the rendered result (canon) is
 # the reply line. Errors reply as "error: <message>" instead of
 # killing the connection.

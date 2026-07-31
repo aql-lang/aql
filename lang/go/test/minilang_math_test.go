@@ -15,7 +15,7 @@ import (
 const mImp = `import "boru:minilang"  `
 
 // TestMiniMathEval pins the arithmetic, operator precedence/associativity, and
-// the BORU numeric coercion (integer domain vs float domain).
+// the boru numeric coercion (integer domain vs float domain).
 func TestMiniMathEval(t *testing.T) {
 	cases := []struct {
 		expr string

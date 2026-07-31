@@ -1,15 +1,15 @@
 # CLI PROGRAMS
 
-Design for **full command-line program support in BORU** — the layer where a
-developer writes a real Unix-style tool in BORU (`mytool --fast notes.json`,
+Design for **full command-line program support in boru** — the layer where a
+developer writes a real Unix-style tool in boru (`mytool --fast notes.json`,
 `cat data | mytool -o out.json`, a packaged `boru build` binary on `$PATH`)
 and gets the things every CLI runtime owes its programs: arguments, an
 argument-parsing convention, environment access, exit codes, stream
 discipline, signals, and (policy-gated) subprocesses.
 
 The motivating client is the `aless` file viewer (voxgig-boru/aless
-`viewer/`), the first substantial end-user program written in BORU. Its
-2026-07-21 DX round found the runtime strong exactly where BORU has
+`viewer/`), the first substantial end-user program written in boru. Its
+2026-07-21 DX round found the runtime strong exactly where boru has
 invested — packaging (`boru build`/`pack`/`install`), per-invocation
 permission policies, structured output (`emit`, `boru:report`, `boru:log`),
 stdio handles, and the TUI stack — and empty on the invocation side: a
@@ -36,7 +36,7 @@ follow.
 > (1) invocation context (args, env) is **host-injected capability
 > state**, never read by the runtime from the OS directly — hermetic
 > registries and embedded hosts stay in full control (§1);
-> (2) argument *parsing* is a **loadable BORU module (`boru:cli`)**, not a
+> (2) argument *parsing* is a **loadable boru module (`boru:cli`)**, not a
 > native word — the raw vector is the runtime surface, conventions are
 > library (§8);
 > (3) `IO.exit` unwinds via a **reserved control error** the drivers
@@ -76,7 +76,7 @@ The ❌ rows are this RFC's scope.
 
 ## 1. The invocation contract
 
-One host-facing contract, honored identically by every way a BORU program
+One host-facing contract, honored identically by every way a boru program
 can start:
 
 ```
@@ -248,7 +248,7 @@ this section's plumbing.
 
 ## 7. Subprocess — `boru:proc`
 
-The largest addition, and the one that changes BORU's security posture,
+The largest addition, and the one that changes boru's security posture,
 so it gets the tightest contract.
 
 ### 7.1 Surface
@@ -308,7 +308,7 @@ grants.
 ## 8. Argument parsing — the `boru:cli` module
 
 The runtime surface stays the raw vector; conventions live in a
-loadable module, **written in BORU** (dogfooding; pure; testable by the
+loadable module, **written in boru** (dogfooding; pure; testable by the
 aless suite conventions; no Go coverage cost). Its shape follows the
 `boru:test` precedent — a declarative spec map driving an imperative
 surface:
@@ -381,7 +381,7 @@ vector in, map out).
   the HOWTO shows the ten-line XDG recipe (`IO.env "XDG_CONFIG_HOME"` +
   fallback + `IO.read`); framework-ness earns nothing.
 - **Chosen exit codes above 125**, signal-death codes, and other
-  waitpid arcana: `code` reports what the OS said; BORU programs choose
+  waitpid arcana: `code` reports what the OS said; boru programs choose
   0–125.
 - **Windows signal parity** beyond Ctrl-C→`int` (documented limitation,
   aligned with the platform).
@@ -421,7 +421,7 @@ C0 (≈60 lines + tests, one day including the gauntlet).
   everywhere. *Unblocks: every packaged tool.*
 - **C2 — stream ergonomics** (S): `IO.read-line`, `IO.tty?`, HOWTO
   color recipe. *Unblocks: filters and pipelines.*
-- **C3 — `boru:cli`** (M, BORU-side): parse/usage/main, flags tier;
+- **C3 — `boru:cli`** (M, boru-side): parse/usage/main, flags tier;
   `module-cli.tsv`; HOWTO chapter. *Unblocks: conventional UX;
   `aless` migrates its launcher as the reference client.*
 - **C4 — signals** (M): subscription word + mailbox delivery + driver
@@ -430,7 +430,7 @@ C0 (≈60 lines + tests, one day including the gauntlet).
 - **C5 — `boru:proc`** (L): ProcOps seam + fake, run/spawn/write/kill,
   `proc.exec` policy inversion, streaming into mailboxes. *Unblocks:
   orchestration tools; also the `aless` clipboard-yank deviation.*
-- **C6 — `boru:cli` subcommands** (S, BORU-side): nested specs,
+- **C6 — `boru:cli` subcommands** (S, boru-side): nested specs,
   per-command usage. *Unblocks: multi-verb tools.*
 
 Ordering rationale: C1–C2 are pure catch-up with zero design risk and

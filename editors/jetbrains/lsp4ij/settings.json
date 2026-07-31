@@ -1,9 +1,9 @@
 {
-  "//": "LSP4IJ per-server settings for the BORU language server. This mirrors the",
-  "//2": "toggles under Settings > Languages & Frameworks > Language Servers > BORU",
+  "//": "LSP4IJ per-server settings for the boru language server. This mirrors the",
+  "//2": "toggles under Settings > Languages & Frameworks > Language Servers > boru",
   "//3": "for a user-defined server started with `boru lsp` (stdio). LSP4IJ enables all",
   "//4": "of these features by default; the block below documents the wiring explicitly.",
-  "//5": "The BORU server advertises: diagnostics (publishDiagnostics), hover, completion,",
+  "//5": "The boru server advertises: diagnostics (publishDiagnostics), hover, completion,",
   "//6": "and whole-document formatting. It does NOT advertise signatureHelp, document",
   "//7": "symbols, rename, code actions, or go-to-definition, so leave those off.",
 

@@ -128,7 +128,7 @@ func HostLogSinks(r *Registry) *LogSinkRegistry {
 // registry. When a policy uninstalls the "log" scope (install:false)
 // the slot is left empty so emission is a silent no-op — logging must
 // never crash a program. Hosts call this to pre-attach an OTel/Datadog
-// sink before the BORU program runs `import "boru:log"`.
+// sink before the boru program runs `import "boru:log"`.
 func SetHostLogSinks(r *Registry, lsr *LogSinkRegistry) {
 	if r == nil {
 		return

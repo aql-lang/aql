@@ -6,18 +6,18 @@ import (
 )
 
 // The declarative rule-table surface of boru:fmt — the completion of the
-// Phase-3 "formatting rules expressed as BORU" direction
+// Phase-3 "formatting rules expressed as boru" direction
 // (design/fmt-module-and-xslt.0.md). The formatter's layout decisions live
 // in a RULE TABLE (formatter.Rules); the Go emitter is the generic
 // processor that interprets it, exactly as an XSLT processor interprets a
-// stylesheet. Two words expose the split to BORU:
+// stylesheet. Two words expose the split to boru:
 //
-//	Fmt.rules                     the canonical rule table, as BORU data
+//	Fmt.rules                     the canonical rule table, as boru data
 //	Fmt.format-with <rules> <src> format src under a (partial) rule table
 //
 // A partial table overrides only the TOP-LEVEL keys it names; everything
 // else keeps the canonical value. `Fmt.format-with {} src` therefore equals
-// `Fmt.format src`, and `Fmt.format-with (Fmt.rules) src` proves the BORU
+// `Fmt.format src`, and `Fmt.format-with (Fmt.rules) src` proves the boru
 // representation is authoritative (pinned by spec rows + Go tests). Two
 // keys differ in their inner granularity: `attach` REPLACES the whole
 // attachment policy (kinds absent from the map attach nothing — pinned by
@@ -37,7 +37,7 @@ import (
 //	 strategies: ['comment-only' 'inline' …]}  statement templates, in order
 
 // fmtRulesNative implements Fmt.rules: the canonical layout rule table as
-// a BORU Map — the stylesheet the default formatter interprets.
+// a boru Map — the stylesheet the default formatter interprets.
 func fmtRulesNative() native.NativeFunc {
 	return native.NativeFunc{
 		Name: "rules",
@@ -54,7 +54,7 @@ func fmtRulesHandler(_ []native.Value, _ map[string]native.Value, _ []native.Val
 	return []native.Value{rulesToValue(formatter.DefaultRules())}, nil
 }
 
-// fmtFormatWithNative implements Fmt.format-with: format BORU source under
+// fmtFormatWithNative implements Fmt.format-with: format boru source under
 // a caller-supplied (partial) rule table.
 func fmtFormatWithNative() native.NativeFunc {
 	return native.NativeFunc{
@@ -80,7 +80,7 @@ func fmtFormatWithHandler(args []native.Value, _ map[string]native.Value, _ []na
 	return []native.Value{native.NewString(formatter.FormatRules(src, ru))}, nil
 }
 
-// rulesToValue renders a formatter.Rules table as the BORU Map shape
+// rulesToValue renders a formatter.Rules table as the boru Map shape
 // documented above. It is the write side of the authority round-trip:
 // valueToRules(rulesToValue(r)) must reproduce r's behaviour exactly for
 // any r whose attach lists are duplicate-free (duplicate kinds in a
@@ -186,7 +186,7 @@ func templatesToValue(ru formatter.Rules) native.Value {
 	return native.NewMap(t)
 }
 
-// valueToRules reads a (partial) BORU rule table into a formatter.Rules,
+// valueToRules reads a (partial) boru rule table into a formatter.Rules,
 // starting from the canonical (stylesheet-defined) table so omitted keys
 // keep their standard values. The reading and validation live beside the
 // stylesheet loader in the formatter package (formatter.MergeRulesValue) —

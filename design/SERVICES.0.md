@@ -1,11 +1,11 @@
 # SERVICES
 
-Design for a unified **service / server** model in BORU — one model that covers
-both *user code written in BORU* (a value that owns state and answers
+Design for a unified **service / server** model in boru — one model that covers
+both *user code written in boru* (a value that owns state and answers
 pattern-matched requests) and *the CLI's own long-running servers* (`repl`,
 `registry`, `lsp`, `exec`, `api`, `tui`, `vault-proxy`). BEAM/OTP is the
 inspiration for the request/reply + supervision shape, but the vocabulary stays
-**BORU-native**.
+**boru-native**.
 
 ## Terminology (settled)
 
@@ -20,7 +20,7 @@ Two words, in a deliberate hierarchy:
   starts, stops, restarts, and exposes its services; it owns no request handlers
   of its own.
 
-> **"Behaviour" is deliberately avoided.** In BORU a `Behavior` is already a
+> **"Behaviour" is deliberately avoided.** In boru a `Behavior` is already a
 > core type-system concept — the per-type operation dispatch (Match/Format/
 > Equal/Compare) in `eng/go/compare_scalar_behaviors.go` and
 > `lang/spec/user-types.tsv`. Reusing the word for services would collide.
@@ -29,7 +29,7 @@ Two words, in a deliberate hierarchy:
 
 This design went too far in both directions before settling:
 
-| | dropped (too Seneca) | dropped (too Erlang) | **settled (BORU-native)** |
+| | dropped (too Seneca) | dropped (too Erlang) | **settled (boru-native)** |
 | --- | --- | --- | --- |
 | the unit | `service` ✓ | `server` / behaviour | **`service`** |
 | collection of units | (plugins in one instance) | supervision tree | **`server`** (a collection of services) |
@@ -43,7 +43,7 @@ This design went too far in both directions before settling:
 | no-match error code | `no_action` | `no_clause` | **`no_match`** |
 | framework module | `boru:mesh` | `boru:otp` | **`boru:serve`** + **`boru:net`** |
 
-The two anchors that pull this back to BORU: **`add`** (services register handlers
+The two anchors that pull this back to boru: **`add`** (services register handlers
 with the same word patrun already uses) and **`send`** (async delivery is the same
 word the actor layer uses for a `Pid`). `call` and `serve` are kept because they
 are plain and already meaningful (`boru serve`). Erlang's `cast`/`handle`/
@@ -58,7 +58,7 @@ layer most
 code is actually written against — services and servers — and, crucially, shows
 how the CLI's **existing** servers fold into the same model (§5).
 
-### Why this is mostly already in BORU
+### Why this is mostly already in boru
 
 A service is **pattern-matching on requests + owned state**, and the matcher is
 already core: patrun (`lang/go/native/native_patrun.go`). `add {pattern} value
@@ -97,7 +97,7 @@ server whose handlers `call` a `connect`ed client.
 2. **Hybrid packaging.** The in-process surface — `service`, `add`, `call`,
    `send`, `state` — is **core** (next to the patrun words). Running, supervising,
    proxying, and transport live in modules **`boru:serve`** and **`boru:net`**.
-3. **Services live in modules.** A reusable service is just a BORU module that
+3. **Services live in modules.** A reusable service is just a boru module that
    exports a constructor function returning a `Service`. No special plugin
    mechanism — `import` is the loader.
 
@@ -122,7 +122,7 @@ service's private mutable `Store`; the handler **mutates it in place** for state
 changes and **returns the reply** value. This is the deliberate middle ground:
 no functional `{reply, NewState}` tuple ceremony (the over-Erlang trap), and no
 hidden closure capture (the Seneca trap) — state is an explicit, named, mutable
-value, which is exactly what `Store` is for in BORU. It is safe because a service
+value, which is exactly what `Store` is for in boru. It is safe because a service
 processes **one request at a time** (in-process: the caller's goroutine; served:
 the process's single goroutine — the gen_server guarantee, no locks). Reuses the
 existing `patrunAddHandler` registration shape.
@@ -145,7 +145,7 @@ call {request} <service> -> reply
 Route `request` through the patrun (most-specific wins); on no match raise
 the **`no_match`** error (`raise no_match …`) unless a catch-all `add {} […]`
 exists; invoke the handler with `(request, state)` and return its reply. Reuses
-`execFnDefLiteral`/`CallBORU`. `call` also obeys the uniform failure contract —
+`execFnDefLiteral`/`CallBoru`. `call` also obeys the uniform failure contract —
 it may raise `timeout`/`down`/`overload` — which is rare and advisory in-process
 and enforced once `serve`d (§8).
 
@@ -224,7 +224,7 @@ handler (stack bottom) is the plain `[req state]` form with no `prior`. A
 decorator may **short-circuit** (never call `prior` — a cache hit, an auth
 reject), **pre-process** (`prior modified-req`), or **post-process** (transform
 `prior`'s reply). This is `around`-advice / middleware `next()` realised as an
-*explicit captured continuation* — no hidden dynamic-dispatch context, just BORU
+*explicit captured continuation* — no hidden dynamic-dispatch context, just boru
 function values. (It is exactly Seneca's `this.prior(msg, done)`.)
 
 **Service middleware — `wrap` (ambient cross-cutting).** Per-pattern layering
@@ -276,7 +276,7 @@ metadata — local layering + metadata, not a distributed interceptor.
 
 ## 2. Services live in modules
 
-A reusable service is a BORU module that **exports a constructor** returning a
+A reusable service is a boru module that **exports a constructor** returning a
 `Service`. Module-private `def`s are scaffolding; nothing leaks across modules
 (encapsulation). No `attach`/`Init`/plugin machinery — `import` is the loader.
 
@@ -348,7 +348,7 @@ proxying across them (§6).
   LSP-style framed JSON-RPC are all transports over the one service model. JSON
   envelope first (reuse `Format`/`jsonify`/`reify`); binary later (`Bytes` +
   bit-syntax, per `PROCESSES.0.md`). Transport needs the **TCP/socket server**
-  BORU still lacks (only HTTP-client `fetch` exists) — later phase.
+  boru still lacks (only HTTP-client `fetch` exists) — later phase.
 
 Capability gating: in-process `call`/`add` need no new capability; `serve`
 (processes) is gated like `spawn` (the **`process`** scope, `PROCESSES.0.md` §7);
@@ -365,7 +365,7 @@ The CLI already has the bones of this model — a `service.Service` interface
 and a supervisor in `serve`. The consolidation is to (a) make every CLI server a
 **service** over a shared **transport** + **lifecycle** core, (b) make the
 supervisor the **server**, (c) lift the lifecycle controls to standard request
-patterns, and (d) make services *also* writable in BORU. Mapping:
+patterns, and (d) make services *also* writable in boru. Mapping:
 
 | CLI server (today) | becomes | transport | notes |
 | --- | --- | --- | --- |
@@ -390,7 +390,7 @@ The lifecycle surface unifies onto standard requests/state:
   through, not an interface bolt-on.
 
 Net effect: one lifecycle, one supervisor, one set of words — and a user can
-write a registry-like or exec-like service *in BORU* and `serve` it next to the
+write a registry-like or exec-like service *in boru* and `serve` it next to the
 built-in ones.
 
 ## 6. Proxies — careful thought
@@ -436,7 +436,7 @@ must honour, each drawn from the real proxy:
   a process/transport boundary stay immutable and secret-free. The boundary
   immutability check (`PROCESSES.0.md` `not_sendable`) applies to forwarded
   requests/replies, *not* to the proxy's internal secret state.
-- **Capability enforcement is the BORU permission model, unified.** The proxy's
+- **Capability enforcement is the boru permission model, unified.** The proxy's
   capability-token check (hashed token → alias binding → revoked/expired/method/
   budget/host policy, per `proxy_security_test.go`) is the *same* capability/
   scope machinery as `PERMISSIONS.10.md`, not a bespoke mechanism. A `before`
@@ -451,7 +451,7 @@ must honour, each drawn from the real proxy:
   open connections drain, new requests are rejected. Same mechanism as every
   pausable service.
 - **Protocol/trust versioning.** The wire envelope carries a protocol version
-  (`X-BORU-Vault-Protocol`); the transport adapter (`boru:net`) enforces fail-loud
+  (`X-Boru-Vault-Protocol`); the transport adapter (`boru:net`) enforces fail-loud
   on mismatch. Versioning belongs to the transport layer, shared by all
   services, not re-implemented per proxy.
 
@@ -463,18 +463,18 @@ so consolidation removes the bespoke wrapper, not the credential logic.
 ## 7. Lessons from BEAM's weaknesses
 
 BEAM is the inspiration, but its model has well-known weaknesses. Below are the
-generally-agreed ones, the ecosystem's responses, and the stance BORU takes — two
+generally-agreed ones, the ecosystem's responses, and the stance boru takes — two
 of them (zero-copy messaging and backpressure) are load-bearing enough to change
 the design.
 
-### 7.1 Zero-copy messaging — BORU structurally avoids BEAM's biggest tax
+### 7.1 Zero-copy messaging — boru structurally avoids BEAM's biggest tax
 
 BEAM copies *every* message between processes. That cost is **not intrinsic to
 the actor model**: it exists because each BEAM process has its **own heap and own
 GC**, so a message must be copied to live in the receiver's heap (the same
-per-process-heap design that gives BEAM its low pause times). BORU has no
+per-process-heap design that gives BEAM its low pause times). boru has no
 per-process heaps — services and processes are **goroutines on one Go heap with
-one GC** — and BORU values are **immutability-first** (`eng/go/clone.go`: scalars,
+one GC** — and boru values are **immutability-first** (`eng/go/clone.go`: scalars,
 plain `List`, plain `Map`, type/function values are never mutated in place).
 
 **So, inside a server, an immutable message is passed by reference — zero copy,
@@ -482,7 +482,7 @@ zero race** — both for an in-process `call` and for delivery to a `serve`d
 service in another goroutine. The mailbox send supplies the happens-before edge
 (Go memory model) so the receiver observes a fully-published value, and
 immutability guarantees no concurrent writer. This is exactly the property
-`PROCESSES.0.md` already states: BORU gets BEAM's **isolation** (a handler can
+`PROCESSES.0.md` already states: boru gets BEAM's **isolation** (a handler can
 never observe a caller mutating a message mid-flight) **without** BEAM's **copy
 cost** — sidestepping the per-message-copy weakness entirely. (It also gets
 Erlang's refc-binary optimization for free: a future immutable `Bytes` is shared
@@ -493,7 +493,7 @@ Sharing one across goroutines would reintroduce precisely the data race the acto
 model exists to prevent. The rule (already proposed as `PROCESSES.0.md`'s
 `not_sendable` check) is **refuse, not copy**: a `call`/`send` crossing a
 process/transport boundary must carry only immutable values; a mutable value at
-the boundary is an error. So BORU *never copies messages* — it shares immutable
+the boundary is an error. So boru *never copies messages* — it shares immutable
 ones and forbids mutable ones. A service's own state `Store` is unaffected because
 it never crosses a boundary: it is owned and mutated by that one service's single
 goroutine. In-process `call` is cheaper still — a direct function call in the
@@ -506,7 +506,7 @@ BEAM's worst production failure mode is the **unbounded mailbox**: async `send`
 with no flow control lets a fast producer grow a slow consumer's mailbox until
 OOM, and a large mailbox also makes selective `receive` O(n). The ecosystem bolts
 backpressure on afterwards (synchronous `call`, GenStage/Flow/Broadway, sbroker,
-jobs). BORU should take a stance up front:
+jobs). boru should take a stance up front:
 
 - **`call` is the backpressured path** — synchronous request/reply naturally
   rate-limits the caller to the service's throughput. Prefer it.
@@ -517,12 +517,12 @@ jobs). BORU should take a stance up front:
 - A demand-driven streaming path (GenStage-style) is deferred to the `boru:stream`
   integration but should reuse the same bounded-mailbox mechanism.
 
-### 7.3 The rest — mapped to BORU stances
+### 7.3 The rest — mapped to boru stances
 
-| BEAM weakness | ecosystem response | BORU stance |
+| BEAM weakness | ecosystem response | boru stance |
 | --- | --- | --- |
 | Numeric/CPU throughput | BeamAsm JIT, NIFs/Rustler, Nx | Go-hosted (compiled, real arrays/maps); hot paths are Go natives, not a VM/NIF boundary — the gap mostly doesn't arise |
-| Dynamic typing / untyped protocols | Dialyzer, Gleam, Elixir set-theoretic types, Akka Typed | BORU has a static-leaning type system + `Behavior`; **a service may carry a schema on its accepted patterns**, validated at the `connect` boundary (Open Q #4) — ahead of Erlang |
+| Dynamic typing / untyped protocols | Dialyzer, Gleam, Elixir set-theoretic types, Akka Typed | boru has a static-leaning type system + `Behavior`; **a service may carry a schema on its accepted patterns**, validated at the `connect` boundary (Open Q #4) — ahead of Erlang |
 | Distribution: full mesh, head-of-line blocking | Partisan, `erpc`, message fragmentation | distribution is "later"; when built, follow Partisan (overlays, parallel connections), not disterl's full mesh |
 | Distribution: all-or-nothing trust | (largely unsolved in core) | **the proxy + capability model is the answer** — every cross-boundary `call` carries capability scopes; no ambient "connected = trusted" |
 | Location transparency leaks | Orleans virtual actors; "make failure explicit" | **one uniform, failure-aware surface — assume remote** (§8): the same `call` contract local and remote, exposing failure everywhere rather than hiding it (the Waldo-consistent direction), with defaults keeping the common case terse |
@@ -759,7 +759,7 @@ dispatch, the bytecode VM) — projections, not measurements.
 | GC tail latency | **sub-ms typical, few-ms p99.9 at large heaps** | one shared Go GC |
 
 Limiters, in order: **(1) `ForkConcurrent` weight per process** — the biggest
-divergence from BEAM (~2.6 KB/process → 10⁶–10⁷ there); BORU forks copy the
+divergence from BEAM (~2.6 KB/process → 10⁶–10⁷ there); boru forks copy the
 *mutable* eval state (sharing read-only infra), so density is **~10× behind BEAM
 but tunable** via lean/copy-on-write forks. **(2) The single shared GC** — zero-copy
 messaging is a win over BEAM's per-message copy, but BEAM's per-process GC gives
@@ -835,7 +835,7 @@ for `"hash"` pools on node join/leave (consistent hashing keeps reshuffling
 minimal). Intra-node pools land with phase 2; inter-node balancing with transport
 + distribution.
 
-## 10. Gap analysis — what BORU still lacks
+## 10. Gap analysis — what boru still lacks
 
 - **`Service` type + `add`/`call`/`send`/`state`** and the `[req state] -> reply`
   handler contract (the patrun router is reused; invocation reuses
@@ -850,7 +850,7 @@ minimal). Intra-node pools land with phase 2; inter-node balancing with transpor
   exit signals).
 - **`proxy` + streaming replies** — needs `call` to return a stream (`boru:stream`)
   and the `before`/`after`/`target` plumbing.
-- **Transport (`listen`/`connect`)** — needs the **TCP/socket server** BORU lacks,
+- **Transport (`listen`/`connect`)** — needs the **TCP/socket server** boru lacks,
   plus the wire envelope. JSON covered; binary needs `Bytes` + bit-syntax.
 - **Capability integration for proxies** — wiring the proxy's auth to
   `PERMISSIONS.10.md` scopes.
@@ -903,7 +903,7 @@ import "boru:net"
 
 # A server = a collection of services, supervised; restart each in isolation.
 def app ( server [
-    ( Registry.New {dir: "./mods"} )      # a BORU-written service
+    ( Registry.New {dir: "./mods"} )      # a boru-written service
     ( Counter.New  {start: 0} )
   ] {restart: "isolated"} )
 

@@ -4,7 +4,7 @@
 # classes by the matching algorithm.		
 # =====================================================================		
 #		
-# BORU has SIX surface arrangements for any 2-arg word `f` applied to		
+# boru has SIX surface arrangements for any 2-arg word `f` applied to		
 # values X and Y:		
 #		
 #   f X Y      f Y X      X f Y      Y f X      X Y f      Y X f		

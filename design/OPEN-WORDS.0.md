@@ -36,14 +36,14 @@ import machinery recognises and transplants one level up.
 
 (unchanged from rev 0)
 
-BORU's dispatch is type-directed and openly polymorphic — `add`
+boru's dispatch is type-directed and openly polymorphic — `add`
 already covers numeric addition, string concatenation, Bytes
 concatenation, and Date/Duration arithmetic through one signature
 list. But the *right to contribute to that list* is closed: only Go
 code in `lang/go/native`, at registry build time, can append
 signatures (`RegisterNativeFunc` — how `native_bytes.go` adds the
 Bytes `add` overload and `native_math.go:130-158` carries the
-temporal ones). Nothing at the BORU level can:
+temporal ones). Nothing at the boru level can:
 
 - `def add …` raises `[boru/reserved_word]` — built-in words cannot
   be redefined, and there is no separate append path.
@@ -106,7 +106,7 @@ proposal asks for falls out of machinery that already exists:
 Every natively registered signature carries `Locked`. Locked
 signatures can never be replaced or removed, and they keep **first
 position in match order** (see §4.2 for what that buys). Locking is
-not a BORU language ability — it is a property of the Go
+not a boru language ability — it is a property of the Go
 registration layer, like capability flags.
 
 A second, stronger tier: a small set of **sealed words** cannot be
@@ -172,7 +172,7 @@ machinery that already exists and is already tested:
    sub-engine inheritance — all existing `DefTable` behaviour. rev 0
    had to invent a lifecycle; rev 1 inherits one.
 2. **Module-closure execution is free.** A transplanted signature's
-   handler is a BORU fn closed over the module sub-registry — the
+   handler is a boru fn closed over the module sub-registry — the
    exact shape of today's exported FnDef wrappers, so module-private
    helpers work with no new dispatch path.
 3. **The locked-first ordering theorem.** With locked signatures
@@ -500,7 +500,7 @@ re-mints its user types — a diamond import appends a fresh-minted
 tuple quietly, and two modules' same-shaped user-typed extensions
 COEXIST (each anchored to its own mint, per-tree mintID §5.2) rather
 than conflict. `[boru/extend_conflict]` is therefore unreachable from
-BORU source today; the guard is pinned at the API level
+boru source today; the guard is pinned at the API level
 (TestModuleExtendTransplantConflictDirect) because it must hold for a
 future module cache (shared mints across importers) and for
 host-constructed clones.
@@ -516,7 +516,7 @@ structs, so `BarrierPos`/`QuoteArgs`/`NoEvalArgs`/`RawParens`/
 
 §4.7 as observed: the checker follows scope through the ordinary
 registry lookup (a merged call type-checks in scope, flags out of
-scope); the bytecode recorder treats an added sig like any BORU fn —
+scope); the bytecode recorder treats an added sig like any boru fn —
 local merges compile with interpreter parity, and a transplanted
 (foreign-registry) sig REFUSES under `-force-compile` ("user fn call")
 and falls back to the interpreter under `-compile`, which is exactly

@@ -132,14 +132,14 @@ byte-identical taxonomy), and the island count is pinned ≤ 1 throughout.
 
 `module-fn-checkstate-ownership.7.md` Step 3 (`tryModuleFnUnit`): route the
 check-mode module-preamble-fn dispatch through its registered `ReturnsFn` (unit
-compile) **while the inline `CallBORU` path still existed for everything else**.
+compile) **while the inline `CallBoru` path still existed for everything else**.
 Measured results:
 
 - did **not** clear module-test:38 (the binding constraint was one level
   deeper — the closure/capture analysis, then deeper again: check-time
   termination of the recursion), and
 - **regressed** coverage (refusals 9 → 10, dispatch-recovery 3 → 4): other
-  module rows' `CallBORU`-recorded carriers differed from the `ReturnsFn`
+  module rows' `CallBoru`-recorded carriers differed from the `ReturnsFn`
   residuals, so a partial reroute perturbed rows it never targeted.
 
 The `.7` closing corrections then mispinned the root cause twice

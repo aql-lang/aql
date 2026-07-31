@@ -1,21 +1,21 @@
-# languages.yml.patch — the BORU entry for github-linguist.
+# languages.yml.patch — the boru entry for github-linguist.
 #
 # HOW TO APPLY
 # ------------
 # github-linguist keeps every language in ONE big YAML map in
 # `lib/linguist/languages.yml`, sorted ALPHABETICALLY by language name.
 # There is no automated patch tool: you paste the block below into that
-# file in the right alphabetical slot. "BORU" sorts after "Boogie" and
+# file in the right alphabetical slot. "boru" sorts after "Boogie" and
 # before "BQN" (linguist compares names case-insensitively and treats the
 # whole name as the sort key). Find the `Boogie:` block, and add the block
 # below immediately after Boogie's closing line.
 #
-# Everything below (from `BORU:` to the final `ace_mode`) is the literal
+# Everything below (from `boru:` to the final `ace_mode`) is the literal
 # YAML to insert. Keep the two-space indentation — languages.yml uses two
 # spaces per level and the key is indented two spaces under the document
 # root.
 
-BORU:
+boru:
   type: programming
   color: "#4a7dbf"
   extensions:
@@ -38,7 +38,7 @@ BORU:
 # NOTES ON EACH FIELD
 # -------------------
 # type: programming
-#   BORU is a general-purpose concatenative programming/query language, so
+#   boru is a general-purpose concatenative programming/query language, so
 #   it is `programming` (not `data`, `markup`, or `prose`).
 #
 # color: "#4a7dbf"
@@ -58,11 +58,11 @@ BORU:
 #   colourise blobs. This MUST match the top-level `scopeName` of whatever
 #   grammar you register as the linguist grammar submodule (see README.md,
 #   "Grammar submodule"). If no grammar is submitted, set this to `none`
-#   and blobs classify as BORU but render un-highlighted — but a grammar is
+#   and blobs classify as boru but render un-highlighted — but a grammar is
 #   strongly preferred and required for highlighting.
 #
 # ace_mode: text
-#   The Ace editor mode used by the in-browser code editor. BORU has no
+#   The Ace editor mode used by the in-browser code editor. boru has no
 #   dedicated Ace mode upstream, so `text` is the correct honest value
 #   (linguist requires a real Ace mode name; `text` is the fallback).
 #   If/when an Ace mode named `boru` is contributed to ace, bump this.

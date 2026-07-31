@@ -2,20 +2,20 @@
 // debug surfaces of boru:debug (design/DEBUG-MODULE.0.md §7.2 attach and
 // §7.3 the serverless debug channel).
 //
-// The design's eventual unification routes these through the BORU `Service`
+// The design's eventual unification routes these through the boru `Service`
 // model, which does not yet exist (SERVICES.0.md / PROCESSES.0.md are
-// RFC-only, and BORU has no language-level socket primitive). This package
+// RFC-only, and boru has no language-level socket primitive). This package
 // is the pragmatic implementation on the substrate that DOES exist: Go's
 // net/http, the same bearer-token + discovery-file pattern the api service
 // already uses (cmd/go/internal/api), and vault capability tokens for auth.
 // It wraps a *native.Registry behind authenticated HTTP introspection so a
-// separate process can attach and interrogate a running BORU runtime:
+// separate process can attach and interrogate a running boru runtime:
 //
 //	GET  /debug/healthz          liveness
 //	GET  /debug/words            the registry's built-in word names
 //	GET  /debug/defs             current def bindings (name -> rendered value)
 //	GET  /debug/heap             Go-runtime heap stats
-//	POST /debug/eval             run BORU source on the registry, return the result
+//	POST /debug/eval             run boru source on the registry, return the result
 //	POST /debug/emit?id=<inv>    (serverless channel) append a debug event for an invocation
 //	GET  /debug/events?id=<inv>  (serverless channel) read an invocation's events
 //

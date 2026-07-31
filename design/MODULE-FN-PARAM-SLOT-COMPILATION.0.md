@@ -30,7 +30,7 @@ an inert const. For `[comp:Function]`:
 
 **The divergence (confirmed by the comp-install stack trace):** a MODULE fn
 (`Sort.insertion`, a FnDef WRAPPER value reached by dot-access) dispatches through
-`execFnDefLiteral` (engine.go:3920) → `execFnDefSig` (engine.go:4660) → `CallBORU`
+`execFnDefLiteral` (engine.go:3920) → `execFnDefSig` (engine.go:4660) → `CallBoru`
 (registry.go:1238), which binds params via `InstallFrameBinding` on the **def-stack
 only — NO unit, NO param slots**. A NAMED top-level fn instead dispatches through its
 registered sig's `ReturnsFn` = `buildFnBodyReturnsFn`, which `StartFnCompile`s the
@@ -46,14 +46,14 @@ Two candidate approaches; (A) is preferred (reuses the proven path), (B) is the
 fallback if (A)'s dispatch surgery proves too broad.
 
 ### (A) Compile the module-wrapper's body as a unit (reuse buildFnBodyReturnsFn)
-When a module-wrapper FnDef with a real BORU body (not a trivial-delegation wrapper —
+When a module-wrapper FnDef with a real boru body (not a trivial-delegation wrapper —
 `isTrivialDelegationBody` is false; `comp` lives in a real body) is dispatched in
 COMPILE mode (`Check.Compiling`), drive its `buildFnBodyReturnsFn` (which already
 exists on its sub-registry sig) so the body is `StartFnCompile`'d as a unit with
-param slots + `SetUnitParamTypes`, instead of the `execFnDefSig`/`CallBORU`
+param slots + `SetUnitParamTypes`, instead of the `execFnDefSig`/`CallBoru`
 def-stack run. The each closure then captures `comp` via its param slot.
 
-- Investigate first: WHY does `execFnDefLiteral`/`execFnDefSig` take the CallBORU
+- Investigate first: WHY does `execFnDefLiteral`/`execFnDefSig` take the CallBoru
   body-run instead of the registered ReturnsFn unit-compile for a module wrapper?
   (The named path uses `execMatch`'s `match.Sig.RunInCheckMode` intercept at
   engine.go:2514 to call the ReturnsFn; the FnDef-value path at 2995 →
@@ -62,8 +62,8 @@ def-stack run. The each closure then captures `comp` via its param slot.
 - The sub-registry threading must be preserved (the body runs in `fnDef.Registry`
   so module-private words resolve — see lang/go/CLAUDE.md "Module FnDef Wrappers").
 
-### (B) Give the CallBORU body-run param SLOTS (a local param-slot unit)
-If routing through the ReturnsFn is too invasive, have the compile-mode CallBORU /
+### (B) Give the CallBoru body-run param SLOTS (a local param-slot unit)
+If routing through the ReturnsFn is too invasive, have the compile-mode CallBoru /
 execFnDefSig path open a lightweight `StartFnCompile` unit for the body so named
 params get `localByID`/`localByName` slots (and `InstallFnDef` of a Function param
 ALSO registers the param's slot id), so `resolveOperand` / the name-fallback
@@ -106,7 +106,7 @@ right shape; it only needs the enclosing unit to actually HAVE the param slots.
    import + call it. (Top-level repros compile; this must reproduce the refuse, so
    the fix can be validated without the whole sort lib.)
 1. Confirm the dispatch divergence (A's investigation): instrument which path
-   (ReturnsFn unit-compile vs execFnDefSig/CallBORU) a module-wrapper dispatch takes
+   (ReturnsFn unit-compile vs execFnDefSig/CallBoru) a module-wrapper dispatch takes
    in compile mode, and identify the exact branch (engine.go:2995 / execFnDefLiteral)
    that bypasses the ReturnsFn intercept.
 2. Land approach (A) or (B), gated on `Check.Compiling`, sub-registry-faithful.
@@ -136,8 +136,8 @@ ATTEMPT is reverted; the insights stand):
 
 - **The unify point is engine.go:4179** (execFnDefLiteral's sub-registry branch). A
   TRIVIAL-delegation wrapper already routes through `execMatch` (→ carrierResults →
-  the matched sig's ReturnsFn = unit-compile); the NON-trivial BORU body routed to
-  `execFnDefSig`/`CallBORU` (def-stack, no unit). Routing the non-trivial body through
+  the matched sig's ReturnsFn = unit-compile); the NON-trivial boru body routed to
+  `execFnDefSig`/`CallBoru` (def-stack, no unit). Routing the non-trivial body through
   `execMatch` IN CHECK MODE — wrapped in `e.shareCheckState(fnDef.Registry)` so the
   body's `buildFnBodyReturnsFn` compiles its unit into the MAIN program and
   `RecordUserCall` references it — is the change.
@@ -149,7 +149,7 @@ ATTEMPT is reverted; the insights stand):
 - **BUT it REGRESSES `TestRunSpecHarnessCompiles`** (a positive test: `Test.run-spec`
   must compile native). Under the unit path, `test-describe` refuses "unmatched
   dispatch recovered at test-describe" — the RECURSIVE-code-body wall. The inline
-  `CallBORU` path AVOIDED this because the recursion terminates DATA-DRIVEN during
+  `CallBoru` path AVOIDED this because the recursion terminates DATA-DRIVEN during
   inline analysis (empty `subs`), so test-describe never compiles as a self-
   referential unit. **So the two paths exist partly BECAUSE inline handles recursion
   that unit-compile does not.**
@@ -159,7 +159,7 @@ A naive unify regresses the recursive test framework. Two sound ways to land it:
 1. **Probe-and-fallback** (lower risk, preferred): at engine.go:4179 in check mode,
    PROBE the unit-compile (execMatch in a throwaway emit state, like the closure
    probe at callable_words.go:262). If it records cleanly, COMMIT it (sort gets param
-   slots). If it refuses (run-spec's recursion), fall back to the inline `CallBORU`
+   slots). If it refuses (run-spec's recursion), fall back to the inline `CallBoru`
    path (run-spec keeps compiling). Both sound; no regression. The intricacy is the
    throwaway-state + replay at the dispatch level — model it on the existing closure
    probe.
@@ -179,7 +179,7 @@ compiled the SAME way regardless of how the fn was reached (a param-slot unit vi
 matched sig's ReturnsFn). The trivial/non-trivial split in execFnDefLiteral is gone
 (isTrivialDelegationBody removed). Sub-registry fidelity via match.Reg + shareCheckState;
 INTERPRET byte-identical (buildFnBodyHandler runs a FOREIGN-registry body in its home
-registry via CallBORU — same execution, one dispatch path). GATE: verify-bytecode GREEN +
+registry via CallBoru — same execution, one dispatch path). GATE: verify-bytecode GREEN +
 crossdiff GREEN (0 interpret divergences) + fmt/vet/lint. The module comp-capture leaf
 CLEARS. FOLLOW-UP (handled, soundly falling back): recursive `test-describe` hits the
 recursive-closure limit the inline path masked — TestRunSpecHarnessCompiles re-scoped to

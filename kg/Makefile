@@ -1,6 +1,6 @@
 # Makefile for the kg/ knowledge-graph pipeline.
 #
-# Everything runs FROM THIS DIRECTORY — BORU imports and fixture paths
+# Everything runs FROM THIS DIRECTORY — boru imports and fixture paths
 # resolve against the working directory. The `boru` binary comes from
 # cmd/go (make -C ../cmd/go build).
 

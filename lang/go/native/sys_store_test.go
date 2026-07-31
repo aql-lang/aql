@@ -81,7 +81,7 @@ func TestEffectiveFileOpsMemTrue(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
 
-	// Set __sys.fs.mem = true via BORU
+	// Set __sys.fs.mem = true via boru
 	e := New(r)
 	_, err := e.Run([]Value{
 		// Get the fs Store from __sys

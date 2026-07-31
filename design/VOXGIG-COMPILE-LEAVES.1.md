@@ -234,7 +234,7 @@ describe") and compile the recursive spec body, OR accept fallback per the repos
 ### ROOT-CAUSED: the test-framework leaf IS the single-overload user-fn recovery leaf
 test-describe's closure body fails with Reason `unmatched dispatch recovered at
 run-cases` (instrumented compileClosureBody). `run-cases` (test.go:1403) is a
-SINGLE-overload BORU user fn `fn [[| subject:Scalar cases:List][]…]`. Called with
+SINGLE-overload boru user fn `fn [[| subject:Scalar cases:List][]…]`. Called with
 Any-typed spec data, matchSignature can't statically commit → the engine.go:6664
 recovery branch runs. tryRecordPoly DECLINES because its gate (carrier.go ~line 26)
 is `if !matchReg.IsBuiltinWord(word) return false` — run-cases is a user `def fn`,
@@ -451,7 +451,7 @@ does not unify with declared type Map` (net 7→3), i.e. the checker genuinely b
 liquid-if returns non-Map. NOT located: which dispatch path produces liquid-if's Atom
 result — it does NOT reach stepWord's sig==nil recovery (2227), and wrapping
 carrierResults' ReturnsFn output (490) with an assume-guarantee reconciliation did NOT
-change it, so liquid-if's result is spliced via a third path (execFnDefSig/CallBORU residual
+change it, so liquid-if's result is spliced via a third path (execFnDefSig/CallBoru residual
 or spliceFnCheckTail). NEXT: instrument spliceFnCheckTail callers to find where the
 named-fn body residual becomes the dispatch result, then reconcile a divergent residual
 with the declared concrete return there (assume-guarantee). Gate: verify-bytecode +

@@ -10,7 +10,7 @@ import (
 // BuildTypeModule creates the "boru:type-util" native module — the second-
 // tier type-operation vocabulary. The core type ops (refine, pathof,
 // typeof, enum, is, teq, tpartial, guard, base, convert, tor, tand,
-// tany, tall) are BORU built-ins. This module covers the rest.
+// tany, tall) are boru built-ins. This module covers the rest.
 //
 // After import, words are accessed via dot notation: TypeUtil.pick,
 // TypeUtil.exclude, TypeUtil.lca, etc. The `t` prefix is dropped because the

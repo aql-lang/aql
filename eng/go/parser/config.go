@@ -8,7 +8,7 @@ import (
 
 // ParseConfig parses a jsonic configuration string into a nested map —
 // the backing parser for the CLI's `--options` flag and any other
-// host-supplied option blob. It uses PLAIN jsonic (no BORU grammar
+// host-supplied option blob. It uses PLAIN jsonic (no boru grammar
 // extensions), so it accepts ordinary relaxed-JSON / jsonic syntax:
 //
 //	a:1,b:2            => {a:1, b:2}

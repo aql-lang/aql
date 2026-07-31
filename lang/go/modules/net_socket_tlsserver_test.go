@@ -86,7 +86,7 @@ func listenTLS(t *testing.T, r *native.Registry, tlsOpts native.Value) (native.V
 
 // ---- server TLS ----
 
-// The whole point of the phase, end to end: a BORU-bound listener
+// The whole point of the phase, end to end: a boru-bound listener
 // terminates TLS, and the Socket that comes out of `accept` is the same
 // Socket every other word already drives.
 func TestListenTLSRoundTrip(t *testing.T) {
@@ -112,7 +112,7 @@ func TestListenTLSRoundTrip(t *testing.T) {
 			"tls", nscMap("ca", native.NewString(caPEM))),
 	}, nil, nil, r)
 	if err != nil {
-		t.Fatalf("dial the BORU-bound TLS listener: %v", err)
+		t.Fatalf("dial the boru-bound TLS listener: %v", err)
 	}
 	got := <-done
 	if got.err != nil {
@@ -149,7 +149,7 @@ func TestListenTLSRoundTrip(t *testing.T) {
 }
 
 // Mutual TLS: require-client: makes a client certificate mandatory, the
-// verified chain reaches BORU through peer-cert, and a client without one
+// verified chain reaches boru through peer-cert, and a client without one
 // is refused. The negative half is what proves the requirement is real.
 func TestListenTLSRequireClient(t *testing.T) {
 	r, caPEM := tlsListenReg(t)
@@ -255,7 +255,7 @@ func TestListenTLSRequireClient(t *testing.T) {
 // serve-raw inherits server TLS from listen and completes the handshake
 // on the per-connection goroutine, so the handler never sees an
 // unauthenticated peer and a stalled client cannot pin the acceptor.
-// Driven through real BORU because that is the surface that has to work:
+// Driven through real boru because that is the surface that has to work:
 // the whole option lives in guest source.
 func TestServeRawTLS(t *testing.T) {
 	r, caPEM := tlsListenReg(t)
@@ -286,7 +286,7 @@ func TestServeRawTLS(t *testing.T) {
 	}
 }
 
-// runNetStepsOn runs BORU steps on a caller-supplied registry, so a test
+// runNetStepsOn runs boru steps on a caller-supplied registry, so a test
 // can register a host credential first.
 func runNetStepsOn(t *testing.T, reg *native.Registry, steps []string) ([]native.Value, error) {
 	t.Helper()

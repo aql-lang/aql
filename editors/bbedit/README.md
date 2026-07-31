@@ -1,8 +1,8 @@
-# BORU for BBEdit (macOS)
+# boru for BBEdit (macOS)
 
-Two complementary layers of BORU support for [BBEdit](https://www.barebones.com/products/bbedit/):
+Two complementary layers of boru support for [BBEdit](https://www.barebones.com/products/bbedit/):
 
-1. **`BORU.plist`** — a **Codeless Language Module** (CLM) that gives
+1. **`boru.plist`** — a **Codeless Language Module** (CLM) that gives
    `.boru` files syntax colouring, comment awareness, string/number
    recognition, and a function-navigation menu. No compiled plug-in
    required.
@@ -14,24 +14,24 @@ Use either layer on its own, or both together (recommended).
 
 ## Install the Codeless Language Module
 
-1. Copy `BORU.plist` into BBEdit's Language Modules folder:
+1. Copy `boru.plist` into BBEdit's Language Modules folder:
 
    ```sh
    mkdir -p "$HOME/Library/Application Support/BBEdit/Language Modules"
-   cp BORU.plist "$HOME/Library/Application Support/BBEdit/Language Modules/"
+   cp boru.plist "$HOME/Library/Application Support/BBEdit/Language Modules/"
    ```
 
 2. Restart BBEdit, or choose **BBEdit ▸ (menu) ▸ Reload Language Modules**
    if your version exposes it.
 
 3. Open any `.boru` file. The language pop-up at the bottom of the editing
-   window should read **BORU**. If it does not, pick **BORU** manually from
+   window should read **boru**. If it does not, pick **boru** manually from
    that pop-up, or confirm the `.boru` suffix mapping in
    **Settings ▸ Languages**.
 
 ## What the CLM colours
 
-The module recognises the BORU lexical grammar as verified against the
+The module recognises the boru lexical grammar as verified against the
 `boru` CLI:
 
 | Element | What is coloured |
@@ -49,15 +49,15 @@ The module recognises the BORU lexical grammar as verified against the
 
 A Codeless Language Module supports exactly **one** line-comment prefix and
 **one** block-comment pair, so the CLM registers `#` for line comments and
-`/* */` for block comments. BORU also accepts `//` line comments; those stay
-valid BORU but the CLM does not colour a bare `//` line. Capitalised type
+`/* */` for block comments. boru also accepts `//` line comments; those stay
+valid boru but the CLM does not colour a bare `//` line. Capitalised type
 names (`Integer`, `Emailon`, `MathUtil`, user types) and `/q` `/s` `/2`
 dispatch modifiers are likewise beyond a CLM's keyword-list model — enable
 the LSP below for full-fidelity handling and semantic features.
 
-## Enable the BORU Language Server (`boru lsp`)
+## Enable the boru Language Server (`boru lsp`)
 
-BBEdit 14.5+ ships a built-in LSP client. The BORU server is the `lsp`
+BBEdit 14.5+ ships a built-in LSP client. The boru server is the `lsp`
 subcommand of the `boru` binary and speaks stdio by default.
 
 ### Prerequisites
@@ -78,8 +78,8 @@ command -v boru           # e.g. /Users/you/go/bin/boru
 ### Configure BBEdit
 
 1. Open **Settings ▸ Languages**.
-2. In the language list, select **BORU** (added by the CLM above). If BORU is
-   not listed, click **+**, then **Add**, and choose BORU / the `.boru`
+2. In the language list, select **boru** (added by the CLM above). If boru is
+   not listed, click **+**, then **Add**, and choose boru / the `.boru`
    suffix.
 3. In the per-language pane on the right, open the **Language Server** tab
    and set:
@@ -124,13 +124,13 @@ The plist is a standard XML property list and can be linted with the
 system tool:
 
 ```sh
-plutil -lint BORU.plist
-# BORU.plist: OK
+plutil -lint boru.plist
+# boru.plist: OK
 ```
 
 ## Files
 
 | File        | Purpose                                            |
 | ----------- | -------------------------------------------------- |
-| `BORU.plist` | BBEdit Codeless Language Module (syntax + nav)     |
+| `boru.plist` | BBEdit Codeless Language Module (syntax + nav)     |
 | `README.md` | this document                                      |

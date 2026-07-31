@@ -29,7 +29,7 @@ import (
 // category, the loadable modules, then how to drill into each. It is the body
 // of the no-argument `describe`.
 func DescribeIndex(w io.Writer) {
-	fmt.Fprint(w, "BORU language reference — built-in words by category, and loadable modules.\n\n")
+	fmt.Fprint(w, "boru language reference — built-in words by category, and loadable modules.\n\n")
 	fmt.Fprint(w, "Words:\n")
 	help.WriteWordsByCategory(w)
 	fmt.Fprint(w, "\nModules (load with import \"boru:<name>\"):\n")
@@ -152,13 +152,13 @@ func describeModulePathTo(r *Registry, w io.Writer, name string) {
 // "boru:type-util" → ("boru:type-util", ""); "type-util:foo" → ("type-util",
 // "foo"). The "boru:" prefix is preserved on the module reference.
 func splitModulePath(name string) (modRef, word string) {
-	hadBORU := strings.HasPrefix(name, "boru:")
+	hadBoru := strings.HasPrefix(name, "boru:")
 	rest := strings.TrimPrefix(name, "boru:")
 	short := rest
 	if i := strings.IndexByte(rest, ':'); i >= 0 {
 		short, word = rest[:i], rest[i+1:]
 	}
-	if hadBORU {
+	if hadBoru {
 		return "boru:" + short, word
 	}
 	return short, word

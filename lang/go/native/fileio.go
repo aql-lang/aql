@@ -144,7 +144,7 @@ func applyNL(content string, nl string) string {
 	}
 }
 
-// parseFileOpts extracts options from a BORU map value. fmtExplicit is
+// parseFileOpts extracts options from a boru map value. fmtExplicit is
 // true if the user explicitly set the fmt option. parserOpts holds every
 // remaining (non-reserved) key, forwarded to an opts-aware decoder — e.g.
 // `read foo.csv {fmt:'csv' field:{separation:';'}}` yields
@@ -189,7 +189,7 @@ func parseFileOpts(opts Value) (enc, format, mode, nl string, fmtExplicit bool, 
 	return
 }
 
-// jsonicToValue converts a jsonic parse result to a BORU Value.
+// jsonicToValue converts a jsonic parse result to a boru Value.
 // This uses data context: all text becomes strings, not words.
 func jsonicToValue(v any) (Value, error) {
 	// A number-Sub-wrapped token (from parser.SafeParseData) carries its
@@ -263,7 +263,7 @@ func sortedMapKeys(m map[string]any) []string {
 	return sortedAnyMapKeys(m)
 }
 
-// valueToJsonic converts a BORU Value to a compact json/jsonic-compatible
+// valueToJsonic converts a boru Value to a compact json/jsonic-compatible
 // string. It is a thin wrapper over the canonical walk-based json encoder
 // (emit.go) — the single emit code path — keeping its name and signature for
 // the existing callers/tests. Compact, double-quoted keys (the json profile),

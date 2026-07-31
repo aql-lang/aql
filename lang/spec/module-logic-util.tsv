@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:logic-util module
+# boru Language Specification: the boru:logic-util module
 # Format: input<TAB>expected<TAB>description
 #
 # Derived boolean connectives moved out of core into the LogicUtil

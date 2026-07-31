@@ -77,7 +77,7 @@ Four pieces, each following an existing in-tree pattern.
 |---|---|---|
 | `ClientIdentity` interface + `CertRequest` | `capabilities.FileOps` / `Clock` | `lang/go/capabilities/tlsident.go` (new) |
 | `CapClientIdents` registry slot + `SetHostClientIdents` | `CapFormats` / `SetHostFormats`, `lang/go/native/capabilities.go:168-183` | `lang/go/native/capabilities.go` |
-| `(*BORU).RegisterClientIdentity` | `(*BORU).RegisterFormat`, `lang/go/boru.go:484-491` (lazy map init + register) | `lang/go/boru.go` |
+| `(*Boru).RegisterClientIdentity` | `(*Boru).RegisterFormat`, `lang/go/boru.go:484-491` (lazy map init + register) | `lang/go/boru.go` |
 | HTTP transport seam | `SetHostFileOps` slot + `design/TEST-SEAMS.10.md` | `lang/go/native/fetch.go` + `capabilities.go` |
 
 ### 4.1 The identity seam
@@ -210,7 +210,7 @@ Ordered so each lands green on its own. Phase 1 is the smallest useful PR.
 Replaced the inline client with `HTTPOps`, default implementation
 reproducing today's behaviour exactly (`http.DefaultTransport`, which is
 what a nil `Transport` field resolved to anyway). Host entry point is
-`(*BORU).SetHTTPOps`.
+`(*Boru).SetHTTPOps`.
 
 `CapHTTPOps` deliberately has **no policy-uninstall branch**, unlike
 `CapFormats`: the transport is not itself an authority, `fetch` is gated
@@ -229,7 +229,7 @@ policy op. Client certificates are meaningless before this exists.
 
 ### Phase 3 — client identities (the actual mTLS) ✅ **DONE**
 `capabilities.ClientIdentity`, `CapClientIdents`,
-`(*BORU).RegisterClientIdentity`, `tls: {identity: …}`, `client-cert`
+`(*Boru).RegisterClientIdentity`, `tls: {identity: …}`, `client-cert`
 policy op, identity name in `policy.Args`.
 **Done when:** an mTLS `httptest` server with `ClientAuth:
 RequireAndVerifyClientCert` accepts a request carrying a registered
@@ -256,7 +256,7 @@ string is precisely the failure mode this design avoids.
 ### Phase 6 — server side ✅ **DONE**
 `listen {tls: {identity: … require-client: <Bytes>}}` (`ClientCAs` +
 `ClientAuth`), and the verified peer chain surfaced as a Map
-(`Net.peer-cert`) so authorization can be written in BORU. `serve-raw`
+(`Net.peer-cert`) so authorization can be written in boru. `serve-raw`
 inherits it, since it binds through `listen`. See §8b for the four
 places the build sharpened this.
 

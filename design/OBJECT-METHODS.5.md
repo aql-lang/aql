@@ -13,12 +13,12 @@
 
 ## Question
 
-When a Function value is stored as a field on a BORU Object, and the
+When a Function value is stored as a field on a boru Object, and the
 user invokes it via `obj.method args`, does the method body have any
 implicit access to the owning object — the equivalent of `this` or
 `self` in object-oriented languages?
 
-**Answer: no.** BORU has no implicit receiver binding. This document
+**Answer: no.** boru has no implicit receiver binding. This document
 records why, what idioms cover the gap, and what changes would be
 needed to add `this`/`self` if that became a design goal.
 
@@ -74,7 +74,7 @@ There is no separate "method call" pathway in the engine. There is no
 by the time the Function dispatches, the engine has no reference to
 the owning object at all.
 
-This matches BORU's concatenative model: values flow through a
+This matches boru's concatenative model: values flow through a
 unified stack, and dispatch is by sig, not by receiver type. The
 "object" abstraction is a typed-record-with-inheritance, not a
 collection of methods bound to a receiver.
@@ -83,7 +83,7 @@ collection of methods bound to a receiver.
 
 ### Idiom 1 — Free functions taking the receiver explicitly
 
-The most idiomatic BORU pattern. A "method" is just a normal `fn`
+The most idiomatic boru pattern. A "method" is just a normal `fn`
 that takes the object as one of its arguments:
 
 ```boru
@@ -149,23 +149,23 @@ r.int 0 100        # dispatches r.int against the captured rng state
 Under the hood (`lang/go/modules/rand.go:buildRandExportsForState`),
 each method's handler closes over a private `*randState`. The "this"
 equivalent is the captured state in the Go closure — invisible from
-BORU but providing the same behavioural effect (per-instance state,
+boru but providing the same behavioural effect (per-instance state,
 shared across methods on the same instance).
 
 **Pros**: each call dispatches with live state access; methods are
 real callable values; no global state.
 **Cons**: requires the methods to be **built in Go**, not authored
-in BORU source. There is no BORU-source-level way to write this
+in boru source. There is no boru-source-level way to write this
 pattern today because:
 
-- BORU closures capture by snapshot, not by reference.
-- BORU has no mutable cell or "ref" abstraction that the user can
+- boru closures capture by snapshot, not by reference.
+- boru has no mutable cell or "ref" abstraction that the user can
   thread through closure construction.
 - The OrderedMap holding the methods doesn't exist yet at the time
-  each method body is constructed, so a "this" reference at BORU
+  each method body is constructed, so a "this" reference at boru
   source level can't cyclically refer to the enclosing map.
 
-This is the closest BORU gets to "methods with implicit this" — but
+This is the closest boru gets to "methods with implicit this" — but
 it lives in the Go layer.
 
 ## Design space for adding implicit `self`/`this`
@@ -268,7 +268,7 @@ just sugar.
 **Do not implement implicit `self`/`this` at the kernel layer
 unless a concrete use case demands it.** The current free-function-
 plus-receiver pattern (Idiom 1) covers nearly every real OO use
-case, integrates cleanly with BORU's sig-driven dispatch, and keeps
+case, integrates cleanly with boru's sig-driven dispatch, and keeps
 the language model simple. The Map-as-object pattern (Idiom 3)
 covers the per-instance-state case for modules.
 

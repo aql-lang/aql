@@ -41,7 +41,7 @@ func predicateImpliedType(r *Registry, name string) (*Type, bool) {
 	if sig == nil {
 		return nil, false
 	}
-	boru, ok := sig.Impl.(*BORUImpl)
+	boru, ok := sig.Impl.(*BoruImpl)
 	if !ok {
 		return nil, false
 	}

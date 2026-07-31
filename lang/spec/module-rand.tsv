@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:rand module
+# boru Language Specification: the boru:rand module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of pseudo-random generators. Import binds the `Rand`

@@ -9,7 +9,7 @@ package native
 // …) — proved by the module-*.tsv specs.
 //
 // Idempotent: a no-op if the words are already present, so it is safe to call
-// from the shared runners (runBORU, …) on a registry that some test seeded.
+// from the shared runners (runBoru, …) on a registry that some test seeded.
 func registerIOWords(r *Registry) {
 	if r == nil || r.Lookup("read") != nil {
 		return

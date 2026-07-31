@@ -1,4 +1,4 @@
-# BORU Bytecode Compilation — Full Report
+# boru Bytecode Compilation — Full Report
 
 **Status:** re-reviewed against main June 2026 — see
 `boru-bytecode-revisions.0.md` (what changed underneath this report:
@@ -8,7 +8,7 @@ stricter soundness condition; macros/minilang/generics/closures/
 concurrency post-date this text) and `boru-bytecode-plan.0.md` (the
 staged implementation plan). This report is kept as written.
 
-This report evaluates compiling BORU to a bytecode for a simple
+This report evaluates compiling boru to a bytecode for a simple
 stack VM in Go, driven by the existing carrier-based static type
 checker. The shape of the argument: the checker already resolves
 every dispatch decision statically in typed regions, so the same
@@ -331,7 +331,7 @@ split sig_ids automatically from signatures that declare a
 
 ### 2.5 Arity larger than 0/1/2
 
-A handful of BORU words take 3+ args (list/map builders, `fn`
+A handful of boru words take 3+ args (list/map builders, `fn`
 definitions, temporal words). These use the generic
 `OpCallNative` opcode with an arity operand. They are rare enough
 on hot paths (arithmetic, comparison, list folds) that a single
@@ -364,7 +364,7 @@ Three costs remain even with fully compiled fixed-arity calls:
    `MAKE_LIST n` with a pre-sized slice, `LIST_APPEND` for
    in-place builders) but most allocations are inherent to the
    semantics.
-3. **Boxing.** BORU `Value` is a tagged union (`Parent` + `Data
+3. **Boxing.** boru `Value` is a tagged union (`Parent` + `Data
    interface{}`). Every int still pays the `interface{}` boxing
    cost inside `Data`. True un-boxing requires typed opcodes
    (`IADD`, `FADD`, `SADD`) with a parallel un-boxed value
@@ -553,7 +553,7 @@ path is 3 ops total.
 
 ## 4. Replacing mark/move with static branches
 
-Mark/move is the runtime mechanism BORU uses for `if`, `for`, and
+Mark/move is the runtime mechanism boru uses for `if`, `for`, and
 similar words that splice new tokens onto the stack for later
 evaluation. `if`'s 3-arg handler (`conditional.go:61-85`) returns
 a token sequence `[Mark, condTokens..., MoveIf{Then, Else}]`;
@@ -751,7 +751,7 @@ to the interpreter's.
 
 The instruction set is small (~35 opcodes) and dominated by
 stack manipulation, fixed-arity calls, and conditional branches.
-Mark/move — BORU's most interpreter-flavoured mechanism — lowers
+Mark/move — boru's most interpreter-flavoured mechanism — lowers
 cleanly to static branches and loops because the carrier
 checker has already resolved every branch and every iteration
 shape. `break`/`continue` become `JMP`. Higher-order words with
@@ -767,7 +767,7 @@ carrier pass.
 
 ## 5. User-defined functions
 
-User-defined functions in BORU come from two constructs: `def` —
+User-defined functions in boru come from two constructs: `def` —
 installing a literal-substitution body or a fn value under a name
 — and `fn` — building a multi-signature function value. Both are
 `RunInCheckMode` (see `native_definition_def.go:64,72` and
@@ -816,7 +816,7 @@ For `def doubled [dup add]`:
 A reasonable heuristic: inline if the body is ≤8 instructions
 and non-recursive; otherwise promote to a `CompiledFn`. This
 mirrors how modern JITs decide inlining, but the threshold is
-small because BORU's literal defs are usually terse.
+small because boru's literal defs are usually terse.
 
 ### 5.3 Compiling a `fn` value
 
@@ -1035,7 +1035,7 @@ original source to know what `Point` is.
 
 ### 6.4 Runtime `def`
 
-BORU allows a `def` inside a loop body or conditional branch:
+boru allows a `def` inside a loop body or conditional branch:
 
 ```
 for 10 [i dup def current_i ...]
@@ -1182,7 +1182,7 @@ chains, typed-list folds) gets the big wins. Orchestration-heavy
 code (I/O, dynamic dispatch, context manipulation) gets
 modest-to-negligible wins.
 
-Factorial — a canonical BORU benchmark in `lang/go/test/factorial_type_scaling_test.go`
+Factorial — a canonical boru benchmark in `lang/go/test/factorial_type_scaling_test.go`
 — is the ideal candidate: recursion plus a tight arithmetic body.
 Estimate: 10–15× faster compiled. Record-transform pipelines
 (e.g. map over a list of maps, fold into a summary record) would
@@ -1230,7 +1230,7 @@ from dispatch alone.
    string whether called from a bytecode VM or an interpreter.
    Any word whose handler is the bottleneck sees a ~1× "speed-up".
 2. **Go interface boxing.** `Value.Data interface{}` boxes every
-   scalar. An `int64 + int64` in BORU still involves two `AsInteger()`
+   scalar. An `int64 + int64` in boru still involves two `AsInteger()`
    unboxings and one `NewInteger()` box, whether dispatched or
    direct. Unboxed arithmetic requires typed opcodes (`IADD`,
    `IMUL`) and a parallel un-boxed value representation — see
@@ -1250,7 +1250,7 @@ from dispatch alone.
 
 To validate the estimates above, a benchmarking plan:
 
-**Corpus.** The existing BORU tests and the step-by-step programs
+**Corpus.** The existing boru tests and the step-by-step programs
 in `lang/go/test/` (factorial scaling, arg order, array ops, fold
 patterns) are the natural starting corpus. Supplement with:
 
@@ -1332,7 +1332,7 @@ is already known to be polynomial with widening
   once, cached by `fn_id`.
 
 Net: compilation is ~2× the checker's cost, i.e. still
-polynomial and small. For typical BORU programs this is
+polynomial and small. For typical boru programs this is
 milliseconds — well under the latency a user notices.
 
 A more interesting question is **when to compile**. Three
@@ -1347,7 +1347,7 @@ strategies:
    called (and cache the bytecode). Minimises cold-start cost
    for scripts that don't exercise the whole program.
 
-Given BORU programs are generally small, **eager at load** is
+Given boru programs are generally small, **eager at load** is
 the right default. Lazy compilation introduces concurrent-
 compile hazards for multi-threaded use that aren't worth the
 complexity.
@@ -1548,7 +1548,7 @@ invisible; errors point at source lines that no longer exist.
    memory per run. Cheap (milliseconds) and eliminates the
    staleness class.
 3. **Partial recompilation is out of scope for v1.** Any source
-   change recompiles the whole program. Fine for typical BORU
+   change recompiles the whole program. Fine for typical boru
    sizes; revisit only if compile latency becomes a complaint.
 
 Corollary: the compiler emits a monotonic format-version byte
@@ -1693,7 +1693,7 @@ with the specific shape of the problem and the intended fix.
 
 ### 10.1 Forward-collection edge cases (inventory #6)
 
-BORU's forward collection handles three wrinkles that the
+boru's forward collection handles three wrinkles that the
 compiler must emulate: **optional args** (signatures with
 trailing `Option` types that may or may not be collected),
 **barrier positions** (`|` in fn signatures — `BarrierPos` in
@@ -1790,7 +1790,7 @@ Two risks. First, spans are per-instruction, but a single source
 token can emit multiple instructions (e.g. forward-arg
 rearrangement). The compiler must attach the *token's* pos to
 every emitted instruction, not the rearrangement bookkeeping.
-Second, tools that scrape BORU error messages (IDEs, CI) must
+Second, tools that scrape boru error messages (IDEs, CI) must
 keep working — if the wording changes, tooling breaks. Fix: use
 the same error-format code path for both modes, feed it
 (span, message) tuples, and keep the format stable.
@@ -1834,7 +1834,7 @@ signature. Mechanical, but easy to miss.
 ### 10.8 Constant-pool identity (inventory #13)
 
 Interning shares storage for equal values: two `PUSH_CONST 3`
-instructions both reference `Constants[k]`. Most BORU words
+instructions both reference `Constants[k]`. Most boru words
 compare by value (`eq`, `lt`, etc.), so this is invisible. But
 any word that compares by identity — the `is` type-membership
 word, or a future `same?` identity predicate — would see
@@ -1863,7 +1863,7 @@ careful work.
 
 The original question asked how this approach compares to other
 languages that compile through similar stages. This section
-surveys the landscape, grouped by structural similarity to BORU,
+surveys the landscape, grouped by structural similarity to boru,
 and highlights what each case teaches about the design choices
 above.
 
@@ -1877,7 +1877,7 @@ naïve interpreter with some form of threaded code, typically:
 
 - **Direct-threaded code (DTC)**: each word's body is a list of
   pointers to other words' code. The inner interpreter is a
-  tight `*ip++ ; goto *ip;` loop (in C) — in BORU terms, a
+  tight `*ip++ ; goto *ip;` loop (in C) — in boru terms, a
   program is a `[]uintptr` and the "VM" is two lines.
 - **Indirect-threaded code (ITC)**: one more level of indirection
   to handle colon definitions vs. primitives uniformly.
@@ -1889,14 +1889,14 @@ Forth routinely gets 3–10× over text-stream interpretation from
 threaded code alone (Rodriguez, "Moving Forth", 1993; Ertl &
 Gregg, "Retargeting JIT Compilers by Using C-Compiler Generated
 Executable Code", 2004 — the same Ertl who wrote Gforth). The
-lesson for BORU: the baseline win from bytecode is historically
+lesson for boru: the baseline win from bytecode is historically
 well-documented at exactly the order of magnitude we're
 projecting in §7.
 
 What Forth does *not* have: signatures, overloading, or static
-type dispatch. So Forth-style threading handles BORU's straight-
+type dispatch. So Forth-style threading handles boru's straight-
 line cases but doesn't help with polymorphic dispatch — that's
-where BORU's carrier-driven pre-resolution is the value add.
+where boru's carrier-driven pre-resolution is the value add.
 
 ### 11.2 Factor — concatenative with stack checker and optimising compiler
 
@@ -1912,11 +1912,11 @@ code. The pipeline is:
 5. Machine code (x86-64, ARM64).
 
 Factor's stack checker verifies arity and stack balance but does
-not track value types. BORU's carrier checker goes one step
+not track value types. boru's carrier checker goes one step
 further — it tracks types through dispatch. Structurally, the
-BORU-to-bytecode path corresponds to Factor's steps 1–2 plus a
+boru-to-bytecode path corresponds to Factor's steps 1–2 plus a
 trivial "lowering to bytecode" step; the full Factor pipeline
-is what v2 and v3 of BORU (typed opcodes, JIT) would look like.
+is what v2 and v3 of boru (typed opcodes, JIT) would look like.
 
 Lesson: the approach proposed here is a proven execution model,
 not a novel research effort. Factor has been in production use
@@ -1933,16 +1933,16 @@ passes, every call site has a known static callee and the
 compiler emits direct calls with no dispatch table at all.
 
 Neither language has ad-hoc overloading (multiple signatures
-per name), which is exactly the feature BORU couldn't drop
+per name), which is exactly the feature boru couldn't drop
 without a rewrite. So Cat/Kitten represent the ceiling: if
-BORU ever required full annotation and gave up first-match
+boru ever required full annotation and gave up first-match
 dispatch, it could compile even more aggressively. The
 carrier-based approach sacrifices some precision (disjuncts,
-widening) in exchange for keeping BORU's existing semantics.
+widening) in exchange for keeping boru's existing semantics.
 
 Lesson: static-type-driven concatenative compilation is not
 only feasible but can be pushed considerably further than what
-BORU's approach needs. The ceiling is well above the floor set
+boru's approach needs. The ceiling is well above the floor set
 by §7's estimates.
 
 ### 11.4 Lua 5 — register VM from a dynamic stack language
@@ -1959,13 +1959,13 @@ portable C, and the design choices map directly:
 - **Single-pass compile**: source → bytecode in one parser
   pass. Very fast compilation — usually invisible to users.
 - **Precomputed constants and upvalues**: resolved at compile
-  time, exactly as proposed for BORU's constant pool and fn
+  time, exactly as proposed for boru's constant pool and fn
   tables.
 
-BORU stays stack-based because the language is stack-based;
+boru stays stack-based because the language is stack-based;
 moving to registers would fight the source semantics. But Lua
 5's compact opcode encoding (bit-packed 32-bit words) is a
-cheap optimisation BORU should consider for v1 rather than v2.
+cheap optimisation boru should consider for v1 rather than v2.
 
 Lesson: stack vs. register is a valid design question, but for
 a *concatenative* source language, stack bytecode is the natural
@@ -1980,13 +1980,13 @@ recording; recorded traces become native code via Mike Pall's
 extremely efficient SSA IR and backend. Typical speed-ups over
 Lua 5 are 10–100×.
 
-This is what BORU v3+ could look like if the bytecode VM
+This is what boru v3+ could look like if the bytecode VM
 demonstrates real-world usage. The bytecode layer is a
 prerequisite — you can't trace-compile a text-stream
 interpreter cleanly. The §7 v1 win is a stepping stone toward
 this kind of future optimisation, not an end-state.
 
-Lesson: bytecode is infrastructure, not a destination. If BORU
+Lesson: bytecode is infrastructure, not a destination. If boru
 ever needs JavaScript-class performance, the bytecode VM is
 step zero.
 
@@ -2004,7 +2004,7 @@ opcode mutates itself on first execution to a specialised
 variant that remembers the object shape. Repeated executions
 on the same shape skip the full lookup.
 
-BORU doesn't have CPython's runtime flexibility (attributes
+boru doesn't have CPython's runtime flexibility (attributes
 added at runtime, classes redefined) so inline caching is
 less important — the carrier checker already narrows most of
 what IC catches at run time. But for the residual polymorphic
@@ -2012,7 +2012,7 @@ sites (`CALL_NATIVE_POLY`), inline caching is the right v2
 optimisation.
 
 Lesson: fixed arity alone isn't sufficient if handlers still
-dispatch internally. The §7 estimates assume BORU's handlers
+dispatch internally. The §7 estimates assume boru's handlers
 are already reasonably specialised; if they aren't, the win
 shrinks. The `ReturnsFn`-driven signature splitting in §9.4 is
 what keeps handler dispatch flat.
@@ -2025,7 +2025,7 @@ specialised per observed type. Polymorphic sites maintain a
 small (typically ≤4) table of observed shapes. Sites that blow
 past the table fall back to the generic dispatch.
 
-For BORU this is directly applicable at `CALL_NATIVE_POLY`: the
+For boru this is directly applicable at `CALL_NATIVE_POLY`: the
 first observed input type tag becomes the fast path; a small
 table grows on further types; beyond the table size, fall back
 to the generic. The lattice in §2.4 described this shape; the
@@ -2041,12 +2041,12 @@ index.
 **Structural fit: interesting for `do` and `context`.** Scheme
 systems (Racket, Chez) have handled compilation in the presence
 of first-class continuations, dynamic-wind, and parameterise
-for decades. The lesson most relevant to BORU: **dynamic
+for decades. The lesson most relevant to boru: **dynamic
 features don't block AOT compilation; they require an explicit
 boundary**. Chez compiles nearly everything and falls back only
 at continuation captures.
 
-BORU's `do` on computed code and `context get` play the role
+boru's `do` on computed code and `context get` play the role
 of Scheme's `eval` and parameterise. The fallback-to-interpreter
 approach is the right strategy; Chez proves it scales.
 
@@ -2056,21 +2056,21 @@ them but don't let them block the common case.
 
 ### 11.9 Comparison table
 
-| System            | Dispatch resolution | Compile target | What BORU borrows                          |
+| System            | Dispatch resolution | Compile target | What boru borrows                          |
 |-------------------|---------------------|----------------|-------------------------------------------|
 | Forth (DTC/STC)   | Dictionary lookup   | Threaded code  | Stack-machine baseline, threading idea    |
 | Factor            | Stack-effect infer  | Machine code   | Closest structural analogue end-to-end    |
 | Cat / Kitten      | HM inference        | Machine code   | Ceiling for typed concatenative compile   |
 | Lua 5             | None (typed ops)    | Register bytecode | Compact encoding, compile-time constants |
-| LuaJIT            | Trace + specialise  | SSA → native   | Roadmap for BORU v3                        |
+| LuaJIT            | Trace + specialise  | SSA → native   | Roadmap for boru v3                        |
 | CPython (pre-3.11) | Runtime            | Stack bytecode | What to avoid — handler still dispatches  |
 | CPython ≥3.11      | Inline caching     | Adaptive bytecode | Specialisation design for v2             |
 | V8 / SpiderMonkey | Inline caching      | Native + ICs   | Polymorphic-site design                   |
 | Chez Scheme       | Whole-program       | Native         | Dynamic-escape-hatch discipline           |
 
-### 11.10 Where BORU sits
+### 11.10 Where boru sits
 
-BORU's position is **Factor-like in shape, Lua-like in scope**:
+boru's position is **Factor-like in shape, Lua-like in scope**:
 the source language is concatenative and dispatch-heavy
 (Factor), but the target is a small embedded VM that needs to
 stay simple and Go-native (Lua). The carrier checker is the
@@ -2082,9 +2082,9 @@ No existing system combines precisely these ingredients:
 concatenative source, first-match ad-hoc overloading, carrier-
 value pre-resolution, and a bytecode VM. That's not because the
 combination is novel research — it's because each ingredient is
-a specific BORU design choice. The overall recipe is standard
+a specific boru design choice. The overall recipe is standard
 and well-understood; the carrier checker is the one piece that
-makes it work for BORU's specific dispatch model.
+makes it work for boru's specific dispatch model.
 
 ### 11.11 Summary of §11
 
@@ -2098,9 +2098,9 @@ specialisation. V8/SpiderMonkey inform the polymorphic-site
 design. Chez Scheme validates the fallback-to-interpreter
 approach for dynamic features.
 
-BORU's plan sits well within this landscape; the approach is
+boru's plan sits well within this landscape; the approach is
 neither novel nor risky, it's just applied differently to match
-BORU's specific design choices.
+boru's specific design choices.
 
 ---
 
@@ -2114,7 +2114,7 @@ makes every dispatch decision in typed regions; compilation is
 that same pass with an instruction-emission side effect and a
 label-resolution pass at the end. No new theory is required.
 Nothing proposed here is novel research — the combination is
-BORU-specific, but each ingredient is standard.
+boru-specific, but each ingredient is standard.
 
 The main condition is **Phase 0**: the carrier checker's
 return-type annotations must be complete. The bytecode
@@ -2136,10 +2136,10 @@ heavy workloads.** §7 estimates:
   **marginal — dispatch is not the bottleneck there.**
 
 Whether this investment is worth making depends on what kinds
-of BORU programs dominate usage. If BORU is mostly used to
+of boru programs dominate usage. If boru is mostly used to
 orchestrate external systems (database queries, HTTP calls,
 file I/O), the speed-up is small and the risk/benefit is
-poor. If BORU is used to compute things directly (aggregations,
+poor. If boru is used to compute things directly (aggregations,
 transformations, decision logic), the speed-up is meaningful
 and the investment is justified.
 
@@ -2236,7 +2236,7 @@ checker bug into a runtime bug.
 - Compilation via the carrier checker is **feasible** and
   **structurally sound**: the same pass that types the program
   records its dispatch decisions as bytecode.
-- **Fixed-arity calls** eliminate BORU's single largest
+- **Fixed-arity calls** eliminate boru's single largest
   interpreter overhead — the combination of `matchSignature`,
   forward collection, and stack splicing.
 - The **~35-opcode instruction set** is small, with ~5 hot
@@ -2256,7 +2256,7 @@ checker bug into a runtime bug.
   implementable.
 - **Moderate gotchas** are standard implementation hazards
   with clear fixes.
-- **Prior art** places BORU between Forth (baseline threading)
+- **Prior art** places boru between Forth (baseline threading)
   and Factor (optimising concatenative compile), with Lua and
   LuaJIT mapping the later-phase roadmap.
 - **Recommendation**: proceed after Phase 0, ship as opt-in
@@ -2265,7 +2265,7 @@ checker bug into a runtime bug.
 
 The path from text-stream interpretation to compiled bytecode
 is well-trodden, and the carrier checker makes it straightforward
-for BORU specifically. The open question is not "can it be done"
+for boru specifically. The open question is not "can it be done"
 but "is it worth the ongoing maintenance cost versus the
-real-world workloads BORU needs to serve?" — and that's a
+real-world workloads boru needs to serve?" — and that's a
 question only usage data can answer.

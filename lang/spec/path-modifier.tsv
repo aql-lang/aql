@@ -1,4 +1,4 @@
-# BORU Language Specification: / modifiers on parens and dotted paths
+# boru Language Specification: / modifiers on parens and dotted paths
 # Format: input<TAB>expected<TAB>description
 #
 # A `/` modifier on a parenthesised expression or a dotted path applies to

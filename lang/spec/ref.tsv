@@ -1,4 +1,4 @@
-# BORU Language Specification: Function References (ref / /r)
+# boru Language Specification: Function References (ref / /r)
 # Format: input<TAB>expected<TAB>description
 #
 # ref name   → resolve a function word to its bound Function value WITHOUT

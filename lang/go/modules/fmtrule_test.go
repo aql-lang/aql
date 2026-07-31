@@ -110,7 +110,7 @@ func TestFmtChildrenHandler(t *testing.T) {
 }
 
 // TestFmtDeclarativeFormatter proves the whole point of the rule vocabulary:
-// a complete formatter written as a declarative BORU rule table + a one-line
+// a complete formatter written as a declarative boru rule table + a one-line
 // apply driver, dispatching by Fmt.kind, recursing through Fmt.children, and
 // laying the result out with the Fmt.render document algebra. The program
 // formats a nested value {a:1 b:{c:2}}; the `b` entry's Map value recurses,

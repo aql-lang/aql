@@ -6,11 +6,11 @@ import (
 )
 
 //go:embed sift_test.boru
-var siftTestBORU string
+var siftTestBoru string
 
 // siftCoverAllow lists sift.boru rows that are STRUCTURALLY UNREACHABLE through
 // the public Sift API — shadowed defense-in-depth guards a caller's earlier
-// validation always intercepts (the BORU analog of //covergate:allow). Each
+// validation always intercepts (the boru analog of //covergate:allow). Each
 // entry is asserted to actually be uncovered, so it cannot rot.
 //
 // Both are terminal `else` arms of an exhaustive dispatch over a value that is
@@ -26,11 +26,11 @@ var siftCoverAllow = map[int]string{
 	809: "shadowed: sift-known-family validates family in sift-spec-from before sift-run-spec calls sift-run-family",
 }
 
-// TestSiftBORUCoverage runs the boru:test suite for sift under the coverage hook
+// TestSiftBoruCoverage runs the boru:test suite for sift under the coverage hook
 // and asserts (1) every case passes and (2) every executable row of sift.boru is
 // covered, save the allowlisted unreachable guards.
-func TestSiftBORUCoverage(t *testing.T) {
-	assertBORUCoverage(t, "boru:sift", siftSource, siftTestBORU, siftCoverAllow)
+func TestSiftBoruCoverage(t *testing.T) {
+	assertBoruCoverage(t, "boru:sift", siftSource, siftTestBoru, siftCoverAllow)
 }
 
 func itoa(n int) string {

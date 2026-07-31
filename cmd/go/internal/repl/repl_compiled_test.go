@@ -98,7 +98,7 @@ func TestStartRefusedLineFallbackIsSilent(t *testing.T) {
 func TestStartInstanceInitErrorReported(t *testing.T) {
 	prev := langNewFromRegistry
 	t.Cleanup(func() { langNewFromRegistry = prev })
-	langNewFromRegistry = func(*native.Registry) (*lang.BORU, error) {
+	langNewFromRegistry = func(*native.Registry) (*lang.Boru, error) {
 		return nil, errors.New("boom")
 	}
 	in := strings.NewReader("1 add 2\n")

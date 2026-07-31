@@ -8,7 +8,7 @@ import (
 )
 
 // DefaultRegistry returns a registry populated with every built-in
-// BORU word, plus any additional provider functions passed in. Each
+// boru word, plus any additional provider functions passed in. Each
 // provider is a function that registers extra words.
 //
 // Post engine→native consolidation (May 2026) there is a single

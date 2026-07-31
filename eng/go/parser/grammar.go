@@ -12,7 +12,7 @@ import (
 // The tabnas jsonic engine exposes RuleSpec alternates and actions through
 // accessor methods (AddOpen/ClearOpen/OpenAlts, AddBO/ClearActions, …) rather
 // than the exported Open/Close/BO/BC slice fields the legacy jsonicjs parser
-// used. These helpers re-create the field-assignment idioms the BORU grammar is
+// used. These helpers re-create the field-assignment idioms the boru grammar is
 // written against, so the rule definitions read the same:
 //
 //	setOpen(rs, alts)      — replace the open alternates       (was rs.Open = alts)
@@ -63,7 +63,7 @@ func setAC(rs *jsonic.RuleSpec, actions []jsonic.StateAction) {
 // addMatcher re-creates jsonicjs's AddMatcher(name, priority, fn): it appends a
 // priority-ordered custom lex matcher. The tabnas lexer interleaves
 // Config.CustomMatchers by priority against the built-in matchers using the
-// SAME bands (match=1e6, fixed=2e6, space=3e6, …), so the BORU matchers keep
+// SAME bands (match=1e6, fixed=2e6, space=3e6, …), so the boru matchers keep
 // their exact relative ordering.
 func addMatcher(j *jsonic.Jsonic, name string, priority int, fn jsonic.LexMatcher) {
 	cfg := j.Config()
@@ -74,7 +74,7 @@ func addMatcher(j *jsonic.Jsonic, name string, priority int, fn jsonic.LexMatche
 	})
 }
 
-// parserTokens holds the custom jsonic token IDs registered for BORU grammar.
+// parserTokens holds the custom jsonic token IDs registered for boru grammar.
 // Passed between grammar setup stages so token IDs are defined once.
 type parserTokens struct {
 	OP  jsonic.Tin // (
@@ -94,7 +94,7 @@ type parserTokens struct {
 	XML jsonic.Tin // embedded XML literal <tag>…</tag> (matcher-produced)
 }
 
-// setupBaseTokens registers the fixed BORU tokens and removes backtick from
+// setupBaseTokens registers the fixed boru tokens and removes backtick from
 // jsonic's string/multi chars so template strings are handled by custom rules.
 func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
 	// Remove backtick from string chars so jsonic doesn't consume backtick
@@ -380,7 +380,7 @@ func setupTemplateLiteralMatcher(j *jsonic.Jsonic, t parserTokens) {
 	})
 }
 
-// setupValRule extends the jsonic "val" rule with BORU-specific alternates:
+// setupValRule extends the jsonic "val" rule with boru-specific alternates:
 // parens, template strings, close-paren markers, semicolons, ?, !, |, and dots.
 func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 	j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {

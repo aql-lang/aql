@@ -46,7 +46,7 @@ func w8macroReg(t *testing.T) *Registry {
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "a"}},
 				Returns:    []*Type{TAny},
-				Impl:       BORU([]Value{NewInteger(42)}),
+				Impl:       Boru([]Value{NewInteger(42)}),
 				BarrierPos: BarrierAllForward,
 			}},
 		})

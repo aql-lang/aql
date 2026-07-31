@@ -2,7 +2,7 @@ package formatter
 
 import "strings"
 
-// Embedded BORU in host documents (Markdown, HTML, or anything that
+// Embedded boru in host documents (Markdown, HTML, or anything that
 // tolerates HTML comments) is delimited two ways, both handled here:
 //
 //   - Markdown fenced code blocks whose info string is "boru":
@@ -14,21 +14,21 @@ import "strings"
 //     def  x  1
 //     <!-- /borufmt -->
 //
-// Only the BORU between the delimiters is reformatted; the delimiter lines
+// Only the boru between the delimiters is reformatted; the delimiter lines
 // and every other byte of the document are preserved.
 const (
 	markerOpen  = "<!-- borufmt -->"
 	markerClose = "<!-- /borufmt -->"
 )
 
-// FormatMarkdown reformats the BORU inside ```boru fenced code blocks and
+// FormatMarkdown reformats the boru inside ```boru fenced code blocks and
 // inside <!-- borufmt --> … <!-- /borufmt --> marker regions of a Markdown
 // document, leaving the rest of the document unchanged.
 func FormatMarkdown(src string) string {
 	return formatMarkerRegions(formatFencedBlocks(src))
 }
 
-// FormatHTML reformats the BORU inside <!-- borufmt --> … <!-- /borufmt -->
+// FormatHTML reformats the boru inside <!-- borufmt --> … <!-- /borufmt -->
 // marker regions of an HTML document, leaving the rest unchanged.
 func FormatHTML(src string) string {
 	return formatMarkerRegions(src)
@@ -67,7 +67,7 @@ func formatDelimited(src string, open func(string) (func(string) bool, bool)) st
 	return strings.Join(out, "\n")
 }
 
-// reformatBody formats a collected block of BORU lines, returning the
+// reformatBody formats a collected block of boru lines, returning the
 // formatted lines with the trailing newline trimmed; an all-blank block
 // yields no lines.
 func reformatBody(body []string) []string {

@@ -1,6 +1,6 @@
 # RESOURCE-SAFETY
 
-Design for **guaranteed-cleanup resource safety** in BORU — the `ensure` and
+Design for **guaranteed-cleanup resource safety** in boru — the `ensure` and
 `bracket` core words.
 
 ## Context
@@ -8,11 +8,11 @@ Design for **guaranteed-cleanup resource safety** in BORU — the `ensure` and
 This is the implementation-ready expansion of idea #2 from
 `design/effect-oriented-programming-in-boru-report.0.md` ("Resource safety:
 `ensure` / `bracket` / `scoped`"), which ranked it the clearest concrete gap an
-effect-oriented lens exposes in BORU — and the one place where both EOP lineages
+effect-oriented lens exposes in boru — and the one place where both EOP lineages
 converge on the same primitive (ZIO's `acquireRelease`/`scoped`/`ensuring`, and the
 algebraic-effects `finally` clause).
 
-BORU today reifies a failure as a value (`do […] error […]`, `raise`,
+boru today reifies a failure as a value (`do […] error […]`, `raise`,
 `design/ERRORS.8.md`) but has **no construct that guarantees a finalizer runs**. A
 cleanup step written after a body simply does not execute when the body raises:
 
@@ -34,10 +34,10 @@ subsystems were designed first (`PROCESSES.0.md`, `SERVICES.0.md`,
 
 ### Honest framing: what actually needs cleanup today
 
-A resource-inventory pass found that BORU currently exposes **very few leakable
+A resource-inventory pass found that boru currently exposes **very few leakable
 native handles**:
 
-| Resource | BORU-visible handle? | Released today by |
+| Resource | boru-visible handle? | Released today by |
 | --- | --- | --- |
 | `timeout` / `interval` timers | **Yes** — `Ideal/Timeout`, `Ideal/Interval` | explicit `cancel` (`boru:time-util`) |
 | File I/O (`read`/`write`) | No | implicit — opened-read-closed inside the handler |
@@ -53,7 +53,7 @@ file/socket handles, the actor-per-connection sockets and process lifecycles of
 `PROCESSES.0.md` phase 3, and any future `open`/`close` or transaction API. Building
 the control structure now, before those handles exist, means they can ship *with*
 their safety story rather than retrofitting one. This RFC states that scope honestly
-rather than implying BORU is leaking handles today.
+rather than implying boru is leaking handles today.
 
 ### Relationship to `ERRORS.8.md`
 
@@ -113,10 +113,10 @@ bracket
   [ release-it ]               # runs with the resource on its stack, ALWAYS
 ```
 
-Without this, every effectful BORU program that holds transient state has to
+Without this, every effectful boru program that holds transient state has to
 hand-duplicate its cleanup into a success path and one or more failure handlers — and
 the `break`/`continue` escape path (which is *not* an error and so is invisible to
-`error`) cannot be covered at all from BORU today.
+`error`) cannot be covered at all from boru today.
 
 ## 3. The enabling machinery (already present)
 
@@ -127,7 +127,7 @@ Three existing facts make this a small, low-risk addition:
   runs a quoted body either VM-native (`r.Invoker`) or on a fresh sub-engine sharing
   the registry, pushing `inputs` first. `ensure`/`bracket` route through it unchanged,
   so they inherit compiled-closure execution for free.
-- **BORU failures are Go `error` values returned up the stack** (`eng/go/engine.go`
+- **boru failures are Go `error` values returned up the stack** (`eng/go/engine.go`
   `Run` returns `(nil, err)` and short-circuits on the first failing step). Because
   the failure unwinds as an ordinary Go return, a Go **`defer` in the handler is a
   reliable cleanup hook** — it fires on the error return and on a recovered panic.
@@ -241,7 +241,7 @@ Two failures can coincide (body fails *and* cleanup fails). The rule, leaning on
   propagates; the cleanup error is attached under a `suppressed` key on the primary
   Error's `Data` (`{code:…, message:…}`), so a programmatic `error [handler]` can read
   `e.suppressed` but the formatted report still shows the original cause. This mirrors
-  ZIO's suppressed-cause handling using machinery BORU already has, and never silently
+  ZIO's suppressed-cause handling using machinery boru already has, and never silently
   discards a failure.
 
 `mergeCleanupError(primary, cerr)` in the sketch implements exactly this table.
@@ -365,7 +365,7 @@ Per the repo's positive-with-negative discipline (`lang/go/CLAUDE.md`), a new
 3. **`ensure` arg order** — `ensure [body] [cleanup]` (body first, reads
    chronologically) vs `ensure [cleanup] [body]`. *Leaning body-first* (matches the
    `do [body] error [handler]` reading order: the thing that runs is written first).
-4. **`scoped` shape** — BORU has no block scope below the fn body, so a `scoped`
+4. **`scoped` shape** — boru has no block scope below the fn body, so a `scoped`
    resource that auto-releases "at end of scope" has no obvious scope boundary to bind
    to. Options: (a) make `scoped` pure sugar for a `bracket` whose `use` is the rest
    of the enclosing body (hard without a block construct), or (b) drop `scoped` and

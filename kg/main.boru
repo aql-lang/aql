@@ -1,4 +1,4 @@
-# main.boru — build the BORU project knowledge graph.
+# main.boru — build the boru project knowledge graph.
 #
 # Run FROM THE kg/ DIRECTORY (imports and fixture paths resolve against
 # the working directory):

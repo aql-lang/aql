@@ -11,10 +11,10 @@ import (
 // The boru:cli module — the Cli namespace, command-line argument parsing
 // (design/CLI-PROGRAMS.0.md §8, design/CLI-PROGRAMS.1.md §2–3).
 //
-// cli is WRITTEN IN BORU (cliSource below, embedded from cli.boru), following the
+// cli is WRITTEN IN boru (cliSource below, embedded from cli.boru), following the
 // boru:sift precedent: the module body is parsed once and run in a fresh
 // sub-registry that collects its `export "Cli" {…}`. The flag grammar, the
-// usage renderer, and the dispatch decision are all BORU; the loader below is
+// usage renderer, and the dispatch decision are all boru; the loader below is
 // the only Go.
 //
 // The surface splits along one line — what touches the world:
@@ -41,7 +41,7 @@ var (
 	cliParseErr  error
 )
 
-// BuildCliModule loads the BORU-implemented boru:cli module: it parses the
+// BuildCliModule loads the boru-implemented boru:cli module: it parses the
 // embedded cli.boru once, runs it in a fresh sub-registry that inherits the
 // parser + module resolver (so the body's own `import`s resolve), and collects
 // the `export "Cli" {…}` map. Mirrors BuildSiftModule.
@@ -68,9 +68,9 @@ func BuildCliModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Coverage tagging (coverage.go): cli's fn bodies run on this registry, so
 	// a coverage run attributes their executed rows to "boru:cli", and
 	// registering the source gives boru:test the denominator. Inert unless a
-	// coverage hook is armed — but load-bearing when one is: the BORU-line
+	// coverage hook is armed — but load-bearing when one is: the boru-line
 	// coverage gate (cli_coverage_test.go) is the only thing standing between
-	// cli.boru and untested code, since nothing meta-tests that a BORU module
+	// cli.boru and untested code, since nothing meta-tests that a boru module
 	// has such a gate at all.
 	modReg.SetCoverID("boru:cli")
 	parent.RegisterCoverSource("boru:cli", cliSource)

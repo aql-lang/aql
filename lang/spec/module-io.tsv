@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:io module
+# boru Language Specification: the boru:io module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of input/output words that were moved out of the core
@@ -229,16 +229,16 @@ import "boru:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "
 import "boru:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://m") "x" drop  IO.write (IO.mmap (make Pathon "mem://m")) (convert Bytes "z")	ERROR:write	a read-only region refuses a write
 import "boru:io"  context dot __sys dot fs set mem true  IO.mmap (make Pathon "mem://ghost")	ERROR:mmap	mapping an absent path errors
 #
-# §18  mount — the BORU→FileOps bridge: `IO.mount {read: fn …}` installs a
-#      filesystem IMPLEMENTED IN BORU as the host FileOps, so every io word
+# §18  mount — the boru→FileOps bridge: `IO.mount {read: fn …}` installs a
+#      filesystem IMPLEMENTED IN boru as the host FileOps, so every io word
 #      routes through the supplied handler fns (read/write/stat/list/remove,
 #      plus optional mkdir/rename/…; an op with no handler refuses cleanly).
 #      `IO.unmount` restores the previous filesystem. A mounted row is
-#      hermetic by construction — every operation lands in BORU state. The
+#      hermetic by construction — every operation lands in boru state. The
 #      full handler contract and a database-backed example live in
 #      lang/go/native/io_mount.go and io_mount_test.go.
 import "boru:io"  IO.mount {read: (p:Pathon => ["from-boru"])}  IO.read (make Pathon "anything.txt")	'from-boru'	a mounted read handler serves IO.read
-import "boru:io"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon "n/a.txt") "hello mounted" drop  IO.read (make Pathon "n/a.txt")	'hello mounted'	a flex-map-backed BORU filesystem round-trips through the io words
+import "boru:io"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon "n/a.txt") "hello mounted" drop  IO.read (make Pathon "n/a.txt")	'hello mounted'	a flex-map-backed boru filesystem round-trips through the io words
 import "boru:io"  IO.mount {read: (p:Pathon => [none])}  IO.stat (make Pathon "x")	ERROR:stat	an operation with no mounted handler refuses cleanly
 import "boru:io"  IO.mount {write: ([p:Pathon d:Any] => [none])}	ERROR:mount	a mount needs at least a `read` handler
 import "boru:io"  IO.mount {read: 42}	ERROR:mount	every mounted handler must be a Function

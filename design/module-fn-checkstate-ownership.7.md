@@ -12,8 +12,8 @@ decouple + corpus re-baseline as one reviewed unit).
 
 - **`shareCheckState` exists** (`eng/go/engine.go:4408`). In `execFnDefSig`'s
   `capturedReg` branch (~4474) it installs the MAIN registry's active `Check`
-  (including `Emit`) onto the module sub-registry for the duration of `CallBORU`,
-  then restores. So a module-preamble BORU fn now *records* into the main frame —
+  (including `Emit`) onto the module sub-registry for the duration of `CallBoru`,
+  then restores. So a module-preamble boru fn now *records* into the main frame —
   the missing piece `.6`/next-stages §C described ("`capturedReg.Check.Emit.Active()`
   is false") is partly addressed. The remaining gap is **unit isolation**: the
   body records into the MAIN frame, so its internal residual leaks onto the program
@@ -84,9 +84,9 @@ pins the new sound contract.
 
 **Step 3 (cross-registry unit isolation) — precisely identified, NOT yet landed.**
 Mechanism confirmed on the live tree:
-- A non-trivial module wrapper (e.g. `Test.run-spec`, a real BORU body) dispatches
+- A non-trivial module wrapper (e.g. `Test.run-spec`, a real boru body) dispatches
   at `eng/go/engine.go:3998` → `execFnDefSig(valIdx, wrapperSig, args, fnDef.Registry)`
-  → the `capturedReg` branch (engine.go:4474) → `CallBORU` → `sub.Run(tokens)`
+  → the `capturedReg` branch (engine.go:4474) → `CallBoru` → `sub.Run(tokens)`
   (registry.go:1169). With `shareCheckState` active, `sub.Run` records the body's
   internal dispatches **inline into the MAIN program's EmitState frame**.
 - So `test-describe` (which DOES declare a `CallableSpec`, test.go:227-270 — it can
@@ -98,7 +98,7 @@ Mechanism confirmed on the live tree:
   module-preamble fn body as its OWN `StartFnCompile` unit (resolving names in
   `capturedReg`'s scope via the shared, now-active EmitState) + `RecordUserCall`,
   mirroring `buildFnBodyReturnsFn` (core_helpers.go:367-407), instead of the bare
-  `CallBORU`. The body's internal residual (test-describe) then records into that
+  `CallBoru`. The body's internal residual (test-describe) then records into that
   unit, not the program residual. Clears `module-test.tsv:38` + the Test/Assert
   reducible (2 → 1). Deferred: delicate hot-path change; land with the differential
   as the gate in a focused follow-up. (`module-parselang:23` / `module-rand:38` are
@@ -106,7 +106,7 @@ Mechanism confirmed on the live tree:
 
   **ATTEMPTED + reverted (empirical finding, this session).** The "route the
   module-fn dispatch through its registered `ReturnsFn` (so it unit-compiles via
-  `buildFnBodyReturnsFn`) instead of `CallBORU`" approach was implemented in
+  `buildFnBodyReturnsFn`) instead of `CallBoru`" approach was implemented in
   `execFnDefSig`'s `capturedReg` branch (a `tryModuleFnUnit` helper, check-mode
   only) and MEASURED:
   - It did **not** clear `module-test.tsv:38` — the refusal reason was unchanged
@@ -121,7 +121,7 @@ Mechanism confirmed on the live tree:
     the roadmap calls the hardest Stage-C shape, not a single dispatch reroute.
   - It also **regressed**: refusals 9 → 10 and the dispatch-recovery bucket 3 → 4
     (routing every check-mode module-preamble-fn dispatch through `ReturnsFn`
-    perturbs other module rows whose `CallBORU`-recorded carriers differed from the
+    perturbs other module rows whose `CallBoru`-recorded carriers differed from the
     `ReturnsFn` residual). Differential stayed clean (value parity held), but the
     coverage gate caught the regression → reverted (gate-clean-or-revert).
 
@@ -130,7 +130,7 @@ Mechanism confirmed on the live tree:
   `run-case`) must each compile as closure units whose internal `Test.test` /
   `test-describe` bodies compile as nested closures, with the per-frame residual
   composed across the chain — and the reroute must be NARROWED so it does not
-  perturb the module rows that already compile via `CallBORU`. This is a dedicated
+  perturb the module rows that already compile via `CallBoru`. This is a dedicated
   effort with the differential AND the coverage ceiling as joint gates.
 
   **DEFINITIVE root cause (traced 2026-06, `Test.run-spec` row):** the binding

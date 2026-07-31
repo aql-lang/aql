@@ -1,5 +1,5 @@
 # ============================================================================
-# boru:sift — BORU unit-test suite (boru:test framework).
+# boru:sift — boru unit-test suite (boru:test framework).
 #
 # Goal: exercise every code path of lang/go/modules/sift.boru for 100% line
 # coverage. Run under Test.cover so the interpreter coverage hook records the

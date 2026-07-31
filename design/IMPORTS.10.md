@@ -1,6 +1,6 @@
 # The `import` Word
 
-The `import` word brings external definitions into the current BORU engine.
+The `import` word brings external definitions into the current boru engine.
 It is registered in `internal/engine/native_module_module.go` alongside the
 related `module` and `export` words.
 
@@ -43,7 +43,7 @@ import "./utils.boru"
 File paths must start with `/`, `./`, or `../`. Bare filenames like
 `"utils.boru"` are rejected.
 
-For `.boru` files, reads the file, parses it as BORU, and runs it in an
+For `.boru` files, reads the file, parses it as boru, and runs it in an
 **isolated module engine**. All `export`ed names become available as `def`s.
 
 For data files, the content is parsed and pushed directly onto the stack:
@@ -137,6 +137,6 @@ The implementation lives in `native_module_module.go`:
 | `isDataFile()` | Checks extension for data files (json, jsonic, csv, tsv) |
 | `installExports()` | Installs exports as defs (with optional name filter) |
 | `installRenamedExports()` | Handles rename lists (single pair or list of pairs) |
-| `loadFileModule()` | Reads file, parses as BORU, runs as module |
+| `loadFileModule()` | Reads file, parses as boru, runs as module |
 | `loadDataFile()` | Reads data file via `doRead` (same path as `read` word) |
 | `resolveModuleExport()` | Resolves export values through module def stacks |

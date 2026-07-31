@@ -11,7 +11,7 @@ import (
 // Wave-4 coverage for the boru:log machinery: log_module.go (levels,
 // records, sinks, render), log_logger.go (contextual loggers),
 // log_span.go (traces), log_metrics.go (instruments), and log_sinks.go
-// (host / BORU sink registration). The natives are registered BARE
+// (host / boru sink registration). The natives are registered BARE
 // (log-info, log-set-level, …) on a DefaultRegistry — the same
 // NativeFuncs the boru:log module wraps — so the handlers run in-package
 // and count toward native coverage.
@@ -337,7 +337,7 @@ func TestW4Metrics(t *testing.T) {
 		`1`)
 }
 
-// --- BORU fn sinks ----------------------------------------------------------------
+// --- boru fn sinks ----------------------------------------------------------------
 
 func TestW4RegisterFnSink(t *testing.T) {
 	r, _, _ := w4LogEnv(t)

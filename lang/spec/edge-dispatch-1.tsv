@@ -1,4 +1,4 @@
-# BORU Language Specification: Dispatch edge cases 1 — overload order,
+# boru Language Specification: Dispatch edge cases 1 — overload order,
 # first-match over sorted signatures, the add numeric-vs-concat lattice,
 # and numeric promotion families.
 # Format: input<TAB>expected<TAB>description

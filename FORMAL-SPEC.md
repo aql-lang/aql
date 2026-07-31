@@ -1,6 +1,6 @@
-# BORU Formal Language Specification
+# boru Formal Language Specification
 
-Status: draft formal specification for the current BORU language as implemented by
+Status: draft formal specification for the current boru language as implemented by
 this repository.
 
 This document is normative for the core language model. Existing reference
@@ -12,7 +12,7 @@ language rather than redesign it.
 
 ### 1.1 Scope
 
-BORU is a concatenative, typed, stack-transforming language. A program is a finite
+boru is a concatenative, typed, stack-transforming language. A program is a finite
 sequence of tokens evaluated against a registry of words, types, modules, and
 capabilities. The core language includes:
 
@@ -52,11 +52,11 @@ This specification uses the following notation.
   the type predicate.
 - `⟨E, S, R, Σ⟩ → ⟨E', S', R', Σ'⟩` is a one-step dynamic transition where
   `E` is the remaining expression/tape.
-- `error(c, m)` is a BORU error with code `c` and diagnostic message `m`.
+- `error(c, m)` is a boru error with code `c` and diagnostic message `m`.
 
 ## 2. Lexical Grammar
 
-BORU source is a Unicode character stream. Implementations may preserve exact
+boru source is a Unicode character stream. Implementations may preserve exact
 source positions for diagnostics. Unless stated otherwise, lexical comparison of
 keywords and word names is case-sensitive.
 
@@ -108,7 +108,7 @@ A word token is any unquoted text token accepted by the implementation lexer tha
 is not parsed as a number, string, boolean, `none`, punctuation, or container
 syntax.
 
-For portable BORU programs, identifiers SHOULD be restricted to:
+For portable boru programs, identifiers SHOULD be restricted to:
 
 ```ebnf
 IdentStart  ::= UnicodeLetter | "_"
@@ -284,7 +284,7 @@ are syntax errors or runtime syntax errors, depending on when they are detected.
 
 ## 4. Abstract Syntax
 
-BORU implementations parse source into a sequence of abstract values and control
+boru implementations parse source into a sequence of abstract values and control
 markers. The following abstract syntax is normative; concrete parser details are
 not.
 
@@ -325,7 +325,7 @@ Important abstract distinctions:
 
 ### 5.1 Type universe
 
-BORU values carry hierarchical types. The root is `Any`; `Never` is empty;
+boru values carry hierarchical types. The root is `Any`; `Never` is empty;
 `None` is the singleton type inhabited only by `none`; scalar, node, ideal, word,
 and type families are children of `Any`.
 
@@ -386,7 +386,7 @@ T1 ⊑ T2 ∧ T2 ⊑ T3 ⇒ T1 ⊑ T3           (T-Trans)
 
 ### 5.2 Refinement and structural types
 
-BORU supports nominal refinements, predicate refinements, disjunctions, typed
+boru supports nominal refinements, predicate refinements, disjunctions, typed
 lists, typed maps, records, options, objects, and tables.
 
 - `refine Base` creates a nominal newtype. Plain `Base` values do not match the
@@ -682,7 +682,7 @@ The group boundary also stops forward collection from words outside the group.
 
 ### 6.8 Lists and quotation
 
-A source list in word context denotes a `List` value whose elements are BORU tape
+A source list in word context denotes a `List` value whose elements are boru tape
 items. Lists are evaluated by default only at specified auto-evaluation points:
 when run by `do`, spliced by `call`, consumed by a word that evaluates code, or
 when the engine's list auto-evaluation contract for parser-created lists applies.
@@ -706,7 +706,7 @@ call [G] ⇒ splice G into the current tape
 An explicit source map denotes a `Map` value. Its values auto-evaluate unless the
 map is quoted or consumed by a no-evaluation slot. A computed key `[K]: V` first
 evaluates `K`; the resulting scalar key is converted to a string key by the
-standard key conversion rule. Values are evaluated according to ordinary BORU
+standard key conversion rule. Values are evaluated according to ordinary boru
 rules in map value context.
 
 ```text
@@ -782,7 +782,7 @@ Error codes are namespaced strings such as `syntax_error`, `signature`,
 
 ### 7.1 Store model
 
-Pure BORU expressions transform only the stack and registry. Effectful native
+Pure boru expressions transform only the stack and registry. Effectful native
 words may also transform `Σ`, which includes external resources, filesystem
 state, network state, SQLite handles, module caches, vault state, and host
 capabilities.
@@ -811,7 +811,7 @@ MUST NOT perform the denied effect.
 
 Mutable bindings and resource/object values are references into `Σ` or
 implementation-managed cells. Implementations MUST NOT expose data races through
-safe BORU constructs. If host resources are shared, their native word definitions
+safe boru constructs. If host resources are shared, their native word definitions
 must specify serialization, atomicity, or error behavior.
 
 ### 7.4 Concurrency
@@ -830,7 +830,7 @@ otherwise:
 
 ## 8. Module Semantics
 
-A module is a BORU source unit with a module registry, lexical scope, and export
+A module is a boru source unit with a module registry, lexical scope, and export
 set. Module import performs:
 
 1. resolve a module name/path according to the module search and registry rules;
@@ -862,7 +862,7 @@ The standard/native library defines concrete words for:
 - concurrency words;
 - help, formatting, LSP, registry, and CLI-facing services.
 
-A conforming BORU implementation may implement only the kernel, but it MUST state
+A conforming boru implementation may implement only the kernel, but it MUST state
 which standard/native library profiles it supports. A conforming full
 implementation of this repository's language MUST pass the conformance suite in
 Section 10 for the profiles it claims.
@@ -871,7 +871,7 @@ Section 10 for the profiles it claims.
 
 The executable conformance suite consists of repository spec files and ordinary
 unit tests. These files are normative examples: an implementation that claims
-compatibility with the current BORU language must produce the same successful
+compatibility with the current boru language must produce the same successful
 results and the same error classes for the same profile.
 
 Core engine conformance:

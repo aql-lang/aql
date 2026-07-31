@@ -73,9 +73,9 @@ type testRun struct {
 
 const capTestRun = "Test.run.active"
 
-// testParseOnce caches the parsed BORU preamble that defines the
+// testParseOnce caches the parsed boru preamble that defines the
 // TestCase / TestSet / TestSpec / TestResult record types plus the
-// pure-BORU spec runner. The preamble is parsed once per process and
+// pure-Boru spec runner. The preamble is parsed once per process and
 // reused for every BuildTestModule call.
 var (
 	testParseOnce sync.Once
@@ -90,7 +90,7 @@ var (
 //     implemented in Go because it needs to manage the active
 //     testRun, catch errors, and time execution.
 //   - The declarative pieces (TestCase, TestSet, TestSpec, TestResult
-//     record types, plus run-spec) live in BORU because they are pure
+//     record types, plus run-spec) live in boru because they are pure
 //     data construction and benefit from reading like a schema.
 //
 // Both are folded into the `test` and `assert` exports so callers
@@ -108,7 +108,7 @@ func BuildTestModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}
 
 	// Build the module sub-registry, register the Go-implemented test
-	// natives into it, then run the BORU preamble so record types and
+	// natives into it, then run the boru preamble so record types and
 	// spec-runner fns are defined alongside them. The preamble's
 	// `export` call assembles the final export map.
 	modReg, err := newDefaultRegistry()
@@ -443,7 +443,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		},
 
 		// --- assertions ---
-		// All assertion words raise a BORU error with code
+		// All assertion words raise a boru error with code
 		// "assertion_failure" when they fail. The enclosing test
 		// handler catches the error and records the case as failed.
 		// The PURE comparisons (equal / not-equal / ok / match) carry a
@@ -509,7 +509,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		// the parent registry by pushing inputs as tokens and
 		// dispatching the word in a sub-engine. Returns the top-of-
 		// stack result (or Error value). Runs against `parent` (the
-		// caller's registry) — the BORU spec runner lives in the test
+		// caller's registry) — the boru spec runner lives in the test
 		// module's sub-registry, but the subject under test is defined
 		// in the caller's scope.
 		{
@@ -535,7 +535,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		},
 		// Test.record name path ok expected actual error duration-ms
 		//   — append a TestResult to the active TestRun. Used by the
-		//   BORU spec runner to assemble results uniformly with the
+		//   boru spec runner to assemble results uniformly with the
 		//   imperative API.
 		{
 			Name: "test-record",
@@ -578,7 +578,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 		},
 		// Test.prop name gen property → PropertySpec map.
 		//   — constructs a PropertySpec with default runs=100, seed=1,
-		//   max-shrinks=200. Implemented in Go (not as a BORU fn)
+		//   max-shrinks=200. Implemented in Go (not as a boru fn)
 		//   because gen/property are List bodies that would otherwise
 		//   be auto-evaluated during fn-param binding; this native
 		//   uses NoEvalArgs + explicit Quoted=true to preserve the
@@ -635,7 +635,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 			Name: "test-check-prop",
 			// The gen/property bodies are param-carrying stored bodies: the
 			// recorder compiles each to a closure unit with the SAME params
-			// runCheckProp's own CallBORU frames bind (gen: named `r`; property:
+			// runCheckProp's own CallBoru frames bind (gen: named `r`; property:
 			// one unnamed Any), and runCheckProp dispatches the carriers via
 			// InvokeCallback — per-iteration VM runs instead of interpreter
 			// frames. A body that refuses (a frame-local ${interp} — the
@@ -658,7 +658,7 @@ func testNatives(parent *native.Registry) []native.NativeFunc {
 				ReturnsFn:  testPropResultShapeReturns,
 				BarrierPos: -1,
 				// runCheckProp runs BOTH bodies (the generator, param `r`; the
-				// property, one unnamed param) through parent.CallBORU in fresh
+				// property, one unnamed param) through parent.CallBoru in fresh
 				// isolated frames against the module-captured parent registry — the
 				// SAME Go handler in interpreter and compiled mode. So the bodies
 				// never couple to the VM tape or a compiled frame local: a plain
@@ -767,14 +767,14 @@ func runSkipProp(parent *native.Registry, args []native.Value) ([]native.Value, 
 
 // storedBodyArg splits a check-prop body arg into its dispatch sig and raw
 // tokens. A COMPILED body arrives as a stored-param-body carrier
-// (Signature.StoredBodies): its single sig — the handler's own CallBORU param
+// (Signature.StoredBodies): its single sig — the handler's own CallBoru param
 // shape plus the CompiledFnRef — dispatches through InvokeCallback, so the
 // unit runs nested on the VM with the interpreter as its per-invoke
 // fallback. A raw list (interpreter mode, or a body the compile declined)
-// yields tokens only, and the caller builds today's throwaway CallBORU sig.
+// yields tokens only, and the caller builds today's throwaway CallBoru sig.
 func storedBodyArg(arg native.Value, what string) (*native.FnSig, []native.Value, error) {
 	if fd, ok := arg.Data.(native.FnDefInfo); ok && len(fd.Signatures) == 1 {
-		if impl, isBORU := fd.Signatures[0].Impl.(*eng.BORUImpl); isBORU && fd.Signatures[0].CompiledRef() != nil {
+		if impl, isBoru := fd.Signatures[0].Impl.(*eng.BoruImpl); isBoru && fd.Signatures[0].CompiledRef() != nil {
 			return &fd.Signatures[0], impl.Body, nil
 		}
 	}
@@ -828,7 +828,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		// generated input. A stored-param-body carrier (compiled path)
 		// dispatches through InvokeCallback — the unit runs nested on the
 		// VM, and stale deps / internal errors degrade to the identical
-		// CallBORU frame; a raw body builds today's throwaway sig.
+		// CallBoru frame; a raw body builds today's throwaway sig.
 		var genResults []native.Value
 		if genSigC != nil {
 			genResults, err = eng.InvokeCallback(parent, genSigC, []native.Value{native.NewMap(randMap)}, nil)
@@ -836,10 +836,10 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 			genSig := native.FnSig{
 				Params:     []native.FnParam{{Name: "r", Type: native.TMap}},
 				Returns:    []*native.Type{native.TAny},
-				Impl:       native.BORU(append([]native.Value(nil), genBody...)),
+				Impl:       native.Boru(append([]native.Value(nil), genBody...)),
 				BarrierPos: -1,
 			}
-			genResults, err = parent.CallBORU(&genSig, []native.Value{native.NewMap(randMap)}, nil)
+			genResults, err = parent.CallBoru(&genSig, []native.Value{native.NewMap(randMap)}, nil)
 		}
 		if err != nil {
 			failed = true
@@ -856,7 +856,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 		}
 		input := genResults[len(genResults)-1]
 
-		// Run the property body via CallBORU with one unnamed param
+		// Run the property body via CallBoru with one unnamed param
 		// bound to the generated input. The body sees the value on
 		// the stack (so stack-form bodies like `[0 gte]` work) AND
 		// can reference it via `args.0` (so map-destructuring bodies
@@ -868,10 +868,10 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 			propSig := native.FnSig{
 				Params:     []native.FnParam{{Type: native.TAny}},
 				Returns:    []*native.Type{native.TAny},
-				Impl:       native.BORU(append([]native.Value(nil), propBody...)),
+				Impl:       native.Boru(append([]native.Value(nil), propBody...)),
 				BarrierPos: -1,
 			}
-			propResults, err = parent.CallBORU(&propSig, []native.Value{input}, nil)
+			propResults, err = parent.CallBoru(&propSig, []native.Value{input}, nil)
 		}
 		if err != nil {
 			failed = true
@@ -962,7 +962,7 @@ func runCheckProp(parent *native.Registry, args []native.Value) ([]native.Value,
 // shrink reducer mutate the form (drop ops, shrink literals, prune
 // quote bodies). Each candidate evaluates against a fresh seeded
 // rand-equipped registry; the produced value runs through the
-// property body via CallBORU. Failure-preserving lower-cost
+// property body via CallBoru. Failure-preserving lower-cost
 // candidates win.
 //
 // Returns the reduced form's eval result, the pretty-printed source,
@@ -1023,10 +1023,10 @@ func shrinkFailingProgram(
 		propSig := native.FnSig{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{native.TAny},
-			Impl:       native.BORU(append([]native.Value(nil), propBody...)),
+			Impl:       native.Boru(append([]native.Value(nil), propBody...)),
 			BarrierPos: -1,
 		}
-		res, err := parent.CallBORU(&propSig, []native.Value{candidateValue}, nil)
+		res, err := parent.CallBoru(&propSig, []native.Value{candidateValue}, nil)
 		if err != nil || len(res) == 0 {
 			return shrink.Invalid
 		}
@@ -1114,15 +1114,15 @@ func shrinkFailingInput(
 			return shrink.Invalid
 		}
 		candidateValue := vals[len(vals)-1]
-		// Same CallBORU plumbing as the main loop: an unnamed Any
+		// Same CallBoru plumbing as the main loop: an unnamed Any
 		// param makes `args.0` available inside the property body.
 		propSig := native.FnSig{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{native.TAny},
-			Impl:       native.BORU(append([]native.Value(nil), propBody...)),
+			Impl:       native.Boru(append([]native.Value(nil), propBody...)),
 			BarrierPos: -1,
 		}
-		res, err := parent.CallBORU(&propSig, []native.Value{candidateValue}, nil)
+		res, err := parent.CallBoru(&propSig, []native.Value{candidateValue}, nil)
 		if err != nil || len(res) == 0 {
 			return shrink.Invalid
 		}
@@ -1223,7 +1223,7 @@ func (run *testRun) skipCase(name string) {
 	run.mu.Unlock()
 }
 
-// firstErrLine returns the first line of an error's message. BORU errors
+// firstErrLine returns the first line of an error's message. boru errors
 // carry a multi-line source extract; the loud per-case FAIL line wants a
 // single scannable reason.
 func firstErrLine(err error) string {
@@ -1235,7 +1235,7 @@ func firstErrLine(err error) string {
 }
 
 // makeResult builds a TestResult Map value matching the schema declared
-// in the BORU preamble (testBORUPreamble).
+// in the boru preamble (testBoruPreamble).
 func makeResult(name string, path []string, ok bool, expected, actual, errVal native.Value, elapsed time.Duration) native.Value {
 	pathVals := make([]native.Value, len(path))
 	for i, p := range path {
@@ -1396,7 +1396,7 @@ func dottedWordTokens(name string) []native.Value {
 	return out
 }
 
-// isTruthy mirrors the BORU convention used by `if` / `and` / `or`:
+// isTruthy mirrors the boru convention used by `if` / `and` / `or`:
 // false, none and the None type literal are falsy; everything else is
 // truthy. This keeps `Assert.ok` aligned with the language's other
 // boolean coercion sites without introducing a new rule.
@@ -1414,16 +1414,16 @@ func isTruthy(v native.Value) bool {
 	return true
 }
 
-// testBORUPreamble defines canonical record types and the pure-BORU
+// testBoruPreamble defines canonical record types and the pure-Boru
 // spec runner. It runs inside the test module's sub-registry after
 // the Go natives are registered, so the `export` map references both
-// Go words (test-test, test-describe, ...) and BORU types (TestCase,
+// Go words (test-test, test-describe, ...) and boru types (TestCase,
 // TestSet, TestSpec, TestResult).
 //
 // Naming convention: Go words use kebab prefixes (test-X) to avoid
 // colliding with user-facing names; the export map renames them to
 // the dotted form (Test.test, Test.describe, Assert.equal, ...).
-const testBORUPreamble = `
+const testBoruPreamble = `
 
 # ============================================================
 # boru:test — Record / Table types
@@ -1546,7 +1546,7 @@ def run-property fn [[| p:PropertySpec] [Map] [
 ]]
 
 # ============================================================
-# Pure-BORU spec runner
+# Pure-Boru spec runner
 # ============================================================
 # run-spec invokes each case's subject with the case inputs, compares
 # the result to the case's "out" via deep equality, and records the

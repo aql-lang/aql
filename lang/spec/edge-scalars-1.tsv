@@ -1,4 +1,4 @@
-# BORU Language Specification: scalar edge cases 1 — the numeric tower
+# boru Language Specification: scalar edge cases 1 — the numeric tower
 # Format: input<TAB>expected<TAB>description
 #
 # Edge coverage for the four numeric leaves (Integer, Float, BigInteger,

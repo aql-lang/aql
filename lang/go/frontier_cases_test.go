@@ -17,7 +17,7 @@ import (
 // --- error-returning assertion helpers --------------------------------------
 
 // fcNew builds a fresh instance or reports why it could not.
-func fcNew() (*BORU, error) {
+func fcNew() (*Boru, error) {
 	a, err := New()
 	if err != nil {
 		return nil, fmt.Errorf("New: %w", err)
@@ -109,7 +109,7 @@ func fcStampedRun(src, name string) error {
 // fcNoUnattributedInterp arms the interp-entry hook, runs drive, and fails
 // when any interpreter entry lacks a C4 attribution — the end-state invariant
 // ("no interpreter execution of an accepted program on a default path").
-func fcNoUnattributedInterp(drive func(a *BORU) error) error {
+func fcNoUnattributedInterp(drive func(a *Boru) error) error {
 	a, err := fcNew()
 	if err != nil {
 		return err
@@ -225,13 +225,13 @@ var frontierCases = []frontierCase{
 		// body's member-fn-arrival dispatch declines (sound), so the
 		// per-iteration gen run adds unattributed interpreter entries.
 		src := "import \"boru:test\" end\ndef res (Test.check-prop \"x\" [r.int 1 9] [ var [[k] (`v${k}`) eq `v${k}` ] ] 5 1 0)\nres get \"ok\""
-		return fcNoUnattributedInterp(func(a *BORU) error {
+		return fcNoUnattributedInterp(func(a *Boru) error {
 			_, err := a.RunCompiledStrict(src)
 			return err
 		})
 	}},
 	{"p6/concurrent-fork-bodies-on-vm", func() error {
-		return fcNoUnattributedInterp(func(a *BORU) error {
+		return fcNoUnattributedInterp(func(a *Boru) error {
 			_, _, err := a.RunCompiled(`import "boru:time-util" TimeUtil.await [[1 add 2] [3 add 4]]`)
 			return err
 		})
@@ -242,7 +242,7 @@ var frontierCases = []frontierCase{
 	// composed sandbox policy is enforced per VM dispatch by gateWord).
 	// The case stays as a permanent pin.
 	{"p6/vm-run-on-vm", func() error {
-		return fcNoUnattributedInterp(func(a *BORU) error {
+		return fcNoUnattributedInterp(func(a *Boru) error {
 			_, _, err := a.RunCompiled(`import "boru:vm" Vm.run "1 add 2"`)
 			return err
 		})
@@ -253,7 +253,7 @@ var frontierCases = []frontierCase{
 		// A genuine whole-program refusal (the each variadic-if knownRefusals
 		// row): today the silent fallback re-runs the source unattributed.
 		// Target: every residual interpreter entry belongs to a named C4 seam.
-		return fcNoUnattributedInterp(func(a *BORU) error {
+		return fcNoUnattributedInterp(func(a *Boru) error {
 			_, _, _ = a.RunCompiled(zzRefusingRow) // the row raises; the entries are the assertion
 			return nil
 		})
@@ -286,7 +286,7 @@ var frontierCases = []frontierCase{
 	// pollution (no longer reproducible after it: 20 plain + 5 -race
 	// in-sequence ledger runs clean).
 	{"p11/public-run-is-compiled", func() error {
-		return fcNoUnattributedInterp(func(a *BORU) error {
+		return fcNoUnattributedInterp(func(a *Boru) error {
 			_, err := a.Run(`1 add 2`)
 			return err
 		})
@@ -317,7 +317,7 @@ var frontierCases = []frontierCase{
 
 // zzShapedInstanceE is zzShapedInstance without the *testing.T (cases are
 // data): it returns nil if the fixture cannot be built.
-func zzShapedInstanceE() *BORU {
+func zzShapedInstanceE() *Boru {
 	a, err := New()
 	if err != nil {
 		return nil

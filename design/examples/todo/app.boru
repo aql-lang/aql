@@ -3,7 +3,7 @@
 # DX probe: composition is the test of an architecture. Here every piece snaps
 # together with plain values — services are values, layers are functions over
 # services, a server is a list of services, transport is one more wrapper. No
-# framework registration, no config DSL: just BORU.
+# framework registration, no config DSL: just boru.
 #
 # Capability note: `serve` is gated by the `process` scope and `listen` by the
 # `network` scope (§4, PERMISSIONS.10) — both already exist, so a restrictive

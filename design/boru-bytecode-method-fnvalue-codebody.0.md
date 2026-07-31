@@ -1,4 +1,4 @@
-# BORU Bytecode — deep-dive: method-fn-value apply with a code body (`module-rand.tsv:38`)
+# boru Bytecode — deep-dive: method-fn-value apply with a code body (`module-rand.tsv:38`)
 
 Status: design / diagnostic, validated against the live tree (June 2026, after
 Stage A landed at refusalCeiling 10). This is the next-step investigation for the

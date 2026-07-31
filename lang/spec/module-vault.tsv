@@ -1,7 +1,7 @@
-# BORU Language Specification: the boru:vault module (host-vault bridge words)
+# boru Language Specification: the boru:vault module (host-vault bridge words)
 # Format: input<TAB>expected<TAB>description
 #
-# Loadable module bridging BORU to the host's secret vault
+# Loadable module bridging boru to the host's secret vault
 # (design/VAULT-TUI-PORT.0.md §3). The words are reached only after
 # `import`, under the `Vault` namespace: `import "boru:vault" Vault.word args`.
 #
@@ -95,7 +95,7 @@ import "boru:vault"  Vault.set-expiry "a" 5	ERROR:uncalled_function	set-expiry r
 #
 # §6  `identity` — an opaque handle to a vault-held TLS client
 #     credential (design/NETWORK-TLS-PLAN.0.md §5). It is deliberately
-#     NOT a String: `reveal` yields a secret a BORU program can print,
+#     NOT a String: `reveal` yields a secret a boru program can print,
 #     which is right for an API token and wrong for a private key. The
 #     handle is accepted only as `tls: {identity: …}` and needs no
 #     backend to mint — the vault is read lazily, at the handshake.

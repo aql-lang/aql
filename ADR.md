@@ -1,6 +1,6 @@
 # Architecture Design Record (ADR)
 
-A running list of the key architectural decisions behind BORU — the ones
+A running list of the key architectural decisions behind boru — the ones
 that shape the language and its implementation, with the reasoning that
 led to them. Each record is short, numbered, and dated. Newer decisions
 may supersede older ones; superseded records are kept (struck through in
@@ -49,7 +49,7 @@ following instead:
 
 ### Context
 
-BORU resolves words by signature and has no implicit `Word → Atom`
+boru resolves words by signature and has no implicit `Word → Atom`
 fallback. When a module exports a name that also exists as a core word,
 two different operations end up wearing the "same" name, distinguished
 only by a `boru:array-util`-style prefix. That is confusing in exactly the
@@ -116,7 +116,7 @@ After this, no module export shadows a core word.
 
 ### Decision
 
-BORU will **not** implement broadcasting — the implicit lifting of a
+boru will **not** implement broadcasting — the implicit lifting of a
 scalar word over an array. Applying an operation across an array is
 always **explicit**, via a combinator (`each`, `eachrank`, `fold`, …).
 A scalar word applied to a list where it expects a scalar is a **type
@@ -132,7 +132,7 @@ each [add 10] [1,2,3]     #  # returns [11,12,13]   (the supported form)
 An earlier draft of `design/ARRAYIFICATION.6.md` proposed broadcasting:
 `add 10 [1,2,3]` returns `[11,12,13]`, with rules for scalar+list, equal-length
 list+list zip, and nested alignment. It is attractive (it reads like
-NumPy/APL) but a poor fit for BORU:
+NumPy/APL) but a poor fit for boru:
 
 1. **It cannot be a word.** It would have to be a fallback wedged into
    the signature matcher (`eng/go/match.go`) — the most load-bearing
@@ -187,7 +187,7 @@ disambiguates the legitimate cross-module name reuse the language allows
 ### Context
 
 Of the seventeen native modules, four (`array-util`, `matrix-util`,
-`string-util` in part, and the BORU-implemented `decision`/`report`/`test`
+`string-util` in part, and the boru-implemented `decision`/`report`/`test`
 /`vm`/`query` modules) had grown export sets with **zero** rows in the
 formal spec suite, and even the modules *with* a spec file
 (`math-util`, `type-util`, `time-util`, …) covered only a fraction of
@@ -240,7 +240,7 @@ exhaustive over the public export set, not a sample of it.
 
 ### Decision
 
-Every BORU word is **forward-collecting by default**: a word looks ahead
+Every boru word is **forward-collecting by default**: a word looks ahead
 for its arguments first, so the canonical call form is
 `word arg1 arg2 …` — written argument order matches declared parameter
 order, and code reads like a function call. The only standing exception
@@ -260,7 +260,7 @@ collection behaviour.
 
 ### Context
 
-BORU is a concatenative language with a stack, but it deliberately does
+boru is a concatenative language with a stack, but it deliberately does
 not *read* like Forth. The §1.4 sig-order unification (see lang/go/
 CLAUDE.md "Argument Ordering") made one rule govern every word, with
 the forward phase first and the stack as fallback; the mirror
@@ -339,7 +339,7 @@ are stack-only").
 
 ### Decision
 
-The BORU implementation **never panics deliberately**. Every error
+The boru implementation **never panics deliberately**. Every error
 condition — including build-time programmer errors such as a malformed
 type path or a duplicate `FixedID` — is reported as a returned `error`,
 surfaced at a checkable boundary, not raised as a `panic`. This is
@@ -503,11 +503,11 @@ versioning and restore worth having.
   last-known-good recovery for `vault.jsonic`, not a secret-value rewind.
 - The scoped-password feature requires the file backend's envelope; a
   keychain-backed vault that gains slots double-wraps (OS store of
-  envelope ciphertext) and now requires a BORU passphrase to decrypt.
+  envelope ciphertext) and now requires a boru passphrase to decrypt.
 
 ---
 
-## ADR-007 — No secondary parsing; every BORU structure is macro-constructable Node data {#adr-007}
+## ADR-007 — No secondary parsing; every boru structure is macro-constructable Node data {#adr-007}
 
 **Status:** Accepted · **Date:** 2026-06-29
 
@@ -515,12 +515,12 @@ versioning and restore worth having.
 
 A word **must not** define a custom sub-language that it parses out of a
 captured token stream or out of the text of a value. Any structure a word
-consumes must be an ordinary BORU **Node** (a `List`/`Map` of plain scalars)
+consumes must be an ordinary boru **Node** (a `List`/`Map` of plain scalars)
 that the word only **reads** — never re-lexes, re-parses, or string-splits.
 
 Concretely, the contract is: every structure accepted by a word must be
 
-1. **constructable by a macro** — a macro emits BORU data (`quote`/`unquote`),
+1. **constructable by a macro** — a macro emits boru data (`quote`/`unquote`),
    so any structure a macro can produce is, by definition, plain Node data;
    and
 2. **JSON-representable** — expressible with maps, lists, strings, integers,
@@ -545,7 +545,7 @@ Secondary parsing is corrosive: the structure it accepts can't be built or
 inspected as data (so no macro can emit it, and it can't be serialised),
 its grammar drifts from the host language's, and its rules (here, "a numeric
 `/N` is the arity modifier so sizes must use parens") are accidents of the
-token stream rather than deliberate design. BORU already has exactly one
+token stream rather than deliberate design. boru already has exactly one
 parser and a uniform type/`make`/`refine` model; a per-word DSL undercuts
 both.
 
@@ -703,7 +703,7 @@ the rules for reading one are fixed:
    drift.
 
 The live wire protocols are versioned too: the credential broker
-advertises `X-BORU-Vault-Protocol` on every response and refuses a client
+advertises `X-Boru-Vault-Protocol` on every response and refuses a client
 that declares a newer one; the MCP server reports its protocol and
 server version from `initialize`.
 

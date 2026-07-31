@@ -125,7 +125,7 @@ func (c *tuiController) customProviders() []Provider {
 // which records the vault in the index. folder defaults to the home ~/.boru.
 func (c *tuiController) createVault(folder, suffix, backend, pass string) error {
 	if folder == "" {
-		folder = homeBORUDir(c.homeDir)
+		folder = homeBoruDir(c.homeDir)
 	}
 	if pass != "" {
 		_ = os.Setenv(EnvPassphrase, pass)

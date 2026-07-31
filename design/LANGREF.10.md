@@ -1,7 +1,7 @@
 
-# BORU Language Reference
+# boru Language Reference
 
-BORU is a concatenative language using function composition. The core
+boru is a concatenative language using function composition. The core
 engine is a pure stack machine: each token is interpreted as a function
 that modifies the stack. Literals push themselves; words consume
 arguments and push results.
@@ -153,7 +153,7 @@ contents are the result.
 
 ## Execution Model
 
-BORU is a stack machine. The program is a sequence of tokens read left
+boru is a stack machine. The program is a sequence of tokens read left
 to right. Each token either pushes a value onto the stack or names a
 word that consumes values and pushes results.
 
@@ -2677,7 +2677,7 @@ trace [1 2 3 rot add mul]       # traces stack operations, returns 8
 
 #### `help`
 
-Show help for a BORU word. With no argument, prints a summary of the
+Show help for a boru word. With no argument, prints a summary of the
 `help` word itself. Given a word name, prints detailed help including
 description, signatures, examples, and notes.
 
@@ -2738,7 +2738,7 @@ read "raw.bin" {nl:"raw"}              # no line ending normalization
 **Format details:**
 
 - `text` — raw string, no parsing
-- `json` — parse JSON to BORU map/list
+- `json` — parse JSON to boru map/list
 - `jsonic` — parse with jsonic (unquoted keys, trailing commas, etc.)
 - `lines` — split on `\n` into a list of strings
 - `csv` — parse CSV into a table value with typed schema

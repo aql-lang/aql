@@ -3,7 +3,7 @@ package eng
 // Micron literal grammars — each builtin Micron leaf owns a tabnas
 // grammar (github.com/tabnas/parser/go) that recognizes its literal
 // string form and, via the alternate's action, constructs the
-// appropriate BORU value. The three grammars MERGE (the tabnas
+// appropriate boru value. The three grammars MERGE (the tabnas
 // (*Tabnas).Merge operation — commutative, alternates interleaved
 // deterministically) into the ONE grammar MicronFromString parses
 // with, so the micron minilang (`+m:…`, boru:minilang) dispatches on

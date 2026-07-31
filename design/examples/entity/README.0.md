@@ -1,18 +1,18 @@
-# Seneca-style entities & store plugins on BORU — a DX probe
+# Seneca-style entities & store plugins on boru — a DX probe
 
-Illustrative, **non-executable** BORU (the SERVICES words and the `Entity` Ideal
+Illustrative, **non-executable** boru (the SERVICES words and the `Entity` Ideal
 type don't exist yet), answering the question: *how would Seneca's `seneca-entity`
-data layer and its store plugins (e.g. `seneca-dynamo-store`) be built on BORU using
+data layer and its store plugins (e.g. `seneca-dynamo-store`) be built on boru using
 patrun — and do we need to port Seneca's basic engine?* The formal design is
 `../../ENTITY-STORES.0.md`; this folder makes it concrete.
 
 ## The answer up front: no, we don't need Seneca's engine
 
-BORU's `SERVICES.0` model **is** Seneca's core, re-derived on the same vendored
-patrun. The entity layer and store plugins are ordinary BORU services and modules
+boru's `SERVICES.0` model **is** Seneca's core, re-derived on the same vendored
+patrun. The entity layer and store plugins are ordinary boru services and modules
 on top:
 
-| Seneca | BORU | Where |
+| Seneca | boru | Where |
 | --- | --- | --- |
 | `seneca.add` / `seneca.act` | `add` / `call`+`send` | SERVICES §1 |
 | patrun most-specific dispatch | patrun (same library) | `patrun.tsv` (impl.) |
@@ -75,7 +75,7 @@ patrun": **Seneca's canon routing is patrun most-specific-match.**
   pattern specificity, with wildcards = omitted tags. No separate routing table.
 
 - **The `Entity` Ideal type earns the `make$/.save$` feel** — but note this probe
-  models the handle as a Map `{canon data bus}` because BORU can't mint a Go-level
+  models the handle as a Map `{canon data bus}` because boru can't mint a Go-level
   Ideal type from `.boru`. The real type's `Field` hook would make `u.name` read a
   data field directly; here we write `(Entity.data u) get name`. The Ideal type is
   the difference between "looks like ActiveRecord" and "looks like map-poking".
@@ -95,17 +95,17 @@ patrun": **Seneca's canon routing is patrun most-specific-match.**
 
 - **The real store gaps are honest and concrete.** `dynamo-store.boru` shows the
   store *shape* is trivial, but flags the true blockers: **AWS SigV4 signing**
-  (BORU has no HMAC/crypto/signer), the **`network`** capability scope, and the
+  (boru has no HMAC/crypto/signer), the **`network`** capability scope, and the
   upsert race the real plugin documents. mem-store needs none of this — hence
   "mem-store first" (ENTITY-STORES §8).
 
-- **One naming clash to resolve:** the op `list` collides with BORU's core `list`;
+- **One naming clash to resolve:** the op `list` collides with boru's core `list`;
   here the ops are `boru:entity`-namespaced (`Entity.list`). The RFC's Open Q #1
   tracks whether to keep them namespaced or add object-method sugar (`e.save`).
 
 ## Cross-references
 
-- Full design + the Seneca→BORU mapping: `../../ENTITY-STORES.0.md`
+- Full design + the Seneca→boru mapping: `../../ENTITY-STORES.0.md`
 - Service model, `add`/`call`/`prior`/`wrap`, modules, transport: `../../SERVICES.0.md`
 - patrun routing semantics (specificity, scalar-only, subset match): `../../../lang/spec/patrun.tsv`
 - How the `Entity` Ideal type is registered: `../../IDEAL.10.md`

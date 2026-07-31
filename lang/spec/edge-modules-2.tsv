@@ -1,4 +1,4 @@
-# BORU Language Specification: module-system edge cases II
+# boru Language Specification: module-system edge cases II
 # Format: input<TAB>expected<TAB>description
 #
 # Continuation of edge-modules-1.tsv: export bookkeeping (duplicates,

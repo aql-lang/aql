@@ -432,7 +432,7 @@ func runHandlerChain(r *Registry, state Value, req Value, chain []Value) ([]Valu
 
 	// Try the layering arity first: [req state prior]. InvokeCallback runs the
 	// handler on the VM when its body compiled to a unit (nested in the enclosing
-	// run, or fresh on an idle actor registry) and falls back to CallBORU — the
+	// run, or fresh on an idle actor registry) and falls back to CallBoru — the
 	// interpreter — for a body that didn't compile (e.g. one that calls `prior`).
 	priorFn := makePriorFn(r, state, rest)
 	args3 := []Value{req, state, priorFn}

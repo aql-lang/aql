@@ -237,7 +237,7 @@ value means "none" — No-Zero-Overload rule). Consumers:
   no speculative word at all.
 
 **The commit needs a real overload consuming EXACTLY the claimed
-args.** BORU-bodied fns carry a synthetic 0-arg Fallback in their
+args.** boru-bodied fns carry a synthetic 0-arg Fallback in their
 aggregate dispatch table (it exists to raise a clean "no matching
 signature" error); the first probe implementation matched it, which
 committed a waiting call to its own failure — `g 1 def x 5 x` errored

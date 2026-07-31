@@ -1,8 +1,8 @@
-# Matrix Operations Word Design for BORU
+# Matrix Operations Word Design for boru
 
 ## Context
 
-BORU has comprehensive scalar math builtins (add, sub, mul, div, pow, sqrt, trig, etc.) and planned dataframe words for tabular data. This design introduces matrix operations — a distinct domain covering linear algebra, signal processing, ML feature engineering, and scientific computing. While BORU is a scripting/query language, a pragmatic subset of matrix operations enables useful workflows: computing correlations, transforming coordinates, solving linear systems, and preparing data for ML pipelines.
+boru has comprehensive scalar math builtins (add, sub, mul, div, pow, sqrt, trig, etc.) and planned dataframe words for tabular data. This design introduces matrix operations — a distinct domain covering linear algebra, signal processing, ML feature engineering, and scientific computing. While boru is a scripting/query language, a pragmatic subset of matrix operations enables useful workflows: computing correlations, transforming coordinates, solving linear systems, and preparing data for ML pipelines.
 
 ---
 

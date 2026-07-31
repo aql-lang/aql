@@ -30,7 +30,7 @@ func init() {
 		"throws":    "Assert that evaluating a body raises an error.",
 	})
 
-	// The assertion words take their operands in the BORU swap order
+	// The assertion words take their operands in the boru swap order
 	// (actual, then expected), and the runner words take a BODY — neither
 	// of which the generated permutations can show. Results are from
 	// verified lang/spec/module-test.tsv rows.

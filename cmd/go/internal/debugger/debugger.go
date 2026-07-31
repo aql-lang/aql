@@ -1183,7 +1183,7 @@ func (s *Session) frameEntries() []frameInfo {
 		var frames []frameInfo
 		for _, st := range states {
 			if st.Label != "" {
-				// A labelled engine IS a fn call (CallBORUNamed): its
+				// A labelled engine IS a fn call (CallBoruNamed): its
 				// Defs-based frame leaves no tape marks, so the label
 				// stands in as the frame — outer to any inside its tape.
 				frames = append(frames, frameInfo{name: st.Label})

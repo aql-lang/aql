@@ -24,7 +24,7 @@
 
 ## Problem
 
-BORU's unified dispatch rule maps a value sitting on the **stack**
+boru's unified dispatch rule maps a value sitting on the **stack**
 (a prefix operand) into the function's **last** signature slot,
 while forward tokens fill the leading slots. This is the right
 default for most words, but it makes the natural cond-first reading
@@ -94,8 +94,8 @@ dispatch path).
 
 The wrapper **re-dispatches the original function value** through a
 small Go handler (`usurpDispatchHandler`, `eng/go/core_ref.go`)
-rather than delegating through a synthesized BORU body. (The v0
-design used a BORU body, `if p2 p1 p0`; the handler form replaced
+rather than delegating through a synthesized boru body. (The v0
+design used a boru body, `if p2 p1 p0`; the handler form replaced
 it when stack-only and mixed-barrier originals were brought into
 scope — see "Scope and limitations".) The handler receives the
 wrapper's reversed args and lays them out *around* the original
@@ -135,10 +135,10 @@ function.
 
 `if`'s branches are unevaluated code bodies. Because the wrapper
 re-dispatches the original — rather than binding args to wrapper
-params and re-forwarding them through a BORU body — the branch
+params and re-forwarding them through a boru body — the branch
 lists reach `if`'s own collection raw, and its `NoEvalArgs` keep
 them unevaluated through to the handler's mark/move. The hazard
-this section originally tracked (a naive BORU-body wrapper
+this section originally tracked (a naive boru-body wrapper
 auto-evaluating `[then]`/`[else]` at param-binding time) is
 structurally avoided by the handler design. The spec rows in
 `lang/spec/usurp.tsv` — including a list-valued condition — pin

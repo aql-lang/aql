@@ -20,7 +20,7 @@ func runOne(t *testing.T, src string) []any {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	result, err := a.Run(src)
 	if err != nil {
 		t.Fatalf("run %q: %v", src, err)
@@ -42,7 +42,7 @@ func TestTypedDefIntegerLiteralSurfaceFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	_, err = a.Run(`def x:Integer "nope"`)
 	if err == nil {
 		t.Fatal("expected unify error for `def x:Integer \"nope\"`, got nil")
@@ -74,7 +74,7 @@ func TestTypedDefNamedDepTypeSurfaceFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	_, err = a.Run(`def G10 (Integer gt 10)
 def n:G10 5`)
 	if err == nil {

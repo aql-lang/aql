@@ -124,9 +124,9 @@ func newRandState(seed int64) *randState {
 // `one-of`), each closing over a private PRNG seeded with `seed`.
 //
 // Exposed so other modules (notably boru:test's PBT framework) can
-// build deterministic rand instances without going through BORU-level
+// build deterministic rand instances without going through boru-level
 // `Rand.with-seed N` invocation. The returned Map is functionally
-// identical to what `Rand.with-seed N` produces from BORU.
+// identical to what `Rand.with-seed N` produces from Boru.
 func BuildSeededRandInstance(seed int64) (*native.OrderedMap, error) {
 	state := newRandState(seed)
 	return buildRandExportsForState(state)

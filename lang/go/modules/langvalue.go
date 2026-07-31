@@ -10,7 +10,7 @@ import (
 // registration APIs (RegisterHostParser / RegisterFormatParser's parse
 // side). The kind namespaces are FIXED, so a Go-implemented custom language
 // is handed to programs as a Function VALUE: bind it to a name
-// ((*BORU).DefineValue or a def), export it from a module, or pass it to the
+// ((*Boru).DefineValue or a def), export it from a module, or pass it to the
 // macro word directly. The values carry the same framework shell the
 // built-in kinds get (source resolution, pure folding), wrapped as a
 // trivial-delegation FnDef over a private sub-registry — the modules/wrap.go

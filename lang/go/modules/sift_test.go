@@ -7,9 +7,9 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// boru:sift is implemented in BORU (sift.boru, embedded + run by BuildSiftModule).
+// boru:sift is implemented in boru (sift.boru, embedded + run by BuildSiftModule).
 // Its behaviour is pinned by the executable spec suite in
-// lang/spec/module-sift.tsv; these Go tests only assert that the BORU module
+// lang/spec/module-sift.tsv; these Go tests only assert that the boru module
 // LOADS and exposes the Sift namespace, plus a couple of end-to-end smokes.
 
 func siftRun(t *testing.T, src string) ([]native.Value, error) {
@@ -27,7 +27,7 @@ func siftRun(t *testing.T, src string) ([]native.Value, error) {
 	return native.NewTop(r).Run(values)
 }
 
-// TestSiftModuleLoads asserts the BORU-implemented module builds and exports
+// TestSiftModuleLoads asserts the boru-implemented module builds and exports
 // the seven Sift words.
 func TestSiftModuleLoads(t *testing.T) {
 	r, err := native.DefaultRegistry()

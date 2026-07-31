@@ -47,7 +47,7 @@ func TestIdeals_CustomKindDispatchesThroughType(t *testing.T) {
 	})
 	// `refine String {}` — no kernel kind claims a String base, so the
 	// custom Ideal handles it.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("refine"), NewTypeLiteral(TString), NewMap(NewOrderedMap()),
 	})
 	if !called {
@@ -77,7 +77,7 @@ func TestIdeals_CustomKindInstantiatesThroughMake(t *testing.T) {
 	})
 	// `make List 7` — no kernel kind claims a bare List type literal,
 	// so the custom Ideal's Instantiate handles it.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TList), NewInteger(7),
 	})
 	if !called {
@@ -165,7 +165,7 @@ func TestIdeals_DisabledKindErrorsFromType(t *testing.T) {
 		t.Fatal("Record Ideal not registered")
 	}
 	rec.Enabled = false
-	err = runBORUError(t, r, []Value{
+	err = runBoruError(t, r, []Value{
 		NewWord("refine"), NewTypeLiteral(TRecord), NewMap(NewOrderedMap()),
 	})
 	if err == nil {

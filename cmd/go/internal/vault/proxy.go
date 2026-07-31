@@ -24,7 +24,7 @@ const (
 	// supports is refused, so a stale agent fails loudly instead of
 	// silently misbehaving.
 	proxyProtocol  = 1
-	headerProtocol = "X-BORU-Vault-Protocol"
+	headerProtocol = "X-Boru-Vault-Protocol"
 )
 
 // Proxy is the local credential broker. It listens on a loopback
@@ -336,7 +336,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Persist the call against the capability *before* streaming
 	// the body so a crash mid-stream cannot cause the quota to be
 	// silently bypassed.
-	costCents := parseCostHeader(resp.Header.Get("X-BORU-Vault-Cost-Cents"))
+	costCents := parseCostHeader(resp.Header.Get("X-Boru-Vault-Cost-Cents"))
 	p.recordUse(tok.ID, costCents)
 
 	copyHeadersExceptHop(w.Header(), resp.Header)

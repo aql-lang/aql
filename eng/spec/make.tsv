@@ -2,7 +2,7 @@
 # =====================================================================		
 # make — universal constructor for typed values		
 # =====================================================================		
-# `make TARGET data` is BORU's general-purpose value constructor. The		
+# `make TARGET data` is boru's general-purpose value constructor. The		
 # target dictates the construction strategy:		
 #		
 #   make Type v          coerce v to Type (parse / cast)		

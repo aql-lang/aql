@@ -8,8 +8,8 @@ import (
 )
 
 // TestFmtByExtension covers formatByExt: Markdown and HTML files have
-// only their embedded BORU reformatted, while other extensions are treated
-// as whole BORU source files.
+// only their embedded boru reformatted, while other extensions are treated
+// as whole boru source files.
 func TestFmtByExtension(t *testing.T) {
 	dir := t.TempDir()
 	cases := []struct{ name, content, want string }{

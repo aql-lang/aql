@@ -2,7 +2,7 @@ package eng
 
 // Membership-defined types — the convergence point for the two ways the
 // kernel installs a "type whose inhabitants are the values satisfying a
-// rule": the BORU path (predicateUnifier, rule = a BORU fn body run via
+// rule": the boru path (predicateUnifier, rule = a boru fn body run via
 // RunPredicate) and the host-Go path (memberBehavior, rule = a Go func).
 // Both answer the same question — "does v inhabit this type?" — at the
 // same kernel touch-points (Match for dispatch, Unify for `is`/`case`/
@@ -74,7 +74,7 @@ func matchMembership(v Value, t *Type, prev TypeBehavior, member func(Value) boo
 //
 // admit returns (output, matched, err): output is the value to yield on a
 // match — the candidate itself for a Go predicate, or RunPredicate's
-// result for a BORU one.
+// result for a boru one.
 func unifyMembership(a, c Value, typeName string, admit func(Value) (Value, bool, error)) (Value, *UnifyError) {
 	aConc, cConc := IsConcrete(a), IsConcrete(c)
 	if aConc == cConc {

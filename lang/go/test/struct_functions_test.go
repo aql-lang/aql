@@ -485,7 +485,7 @@ func TestWalkBeforeIdentity(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Impl:    native.BORU([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}), BarrierPos: -1,
+			Impl:    native.Boru([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}), BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -540,7 +540,7 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Impl:    native.BORU([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}), BarrierPos: -1,
+			Impl:    native.Boru([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}), BarrierPos: -1,
 		}},
 	}
 	inner := native.NewOrderedMap()
@@ -593,7 +593,7 @@ func TestWalkBeforeIdentityNested(t *testing.T) {
 }
 
 func TestWalkBeforeReplace(t *testing.T) {
-	// BORU: {a:1 b:2} (fn [[m:Map] [Any] [99]]) walk
+	// boru: {a:1 b:2} (fn [[m:Map] [Any] [99]]) walk
 	// Before callback replaces the root node with 99 (a non-node value).
 	// Since 99 is not a map/list, walk does NOT descend into children.
 	// This demonstrates that the before callback controls traversal:
@@ -602,7 +602,7 @@ func TestWalkBeforeReplace(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Impl:    native.BORU([]native.Value{native.NewInteger(99)}), BarrierPos: -1,
+			Impl:    native.Boru([]native.Value{native.NewInteger(99)}), BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -641,7 +641,7 @@ func TestWalkBeforeReplace(t *testing.T) {
 }
 
 func TestWalkBeforeReturnPath(t *testing.T) {
-	// BORU: {a:1 b:2} (fn [[m:Map] [Any] [m.path]]) walk
+	// boru: {a:1 b:2} (fn [[m:Map] [Any] [m.path]]) walk
 	// Before callback returns the path string for every node.
 	// The root path is "" (empty string), which replaces the root map.
 	// Since a string is not a node, descent stops — result is "".
@@ -649,7 +649,7 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Impl:    native.BORU([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("path")}), BarrierPos: -1,
+			Impl:    native.Boru([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("path")}), BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -690,21 +690,21 @@ func TestWalkBeforeReturnPath(t *testing.T) {
 // --- walk with before AND after callbacks ---
 
 func TestWalkBeforeAfterIdentity(t *testing.T) {
-	// BORU: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [m.value]]) walk
+	// boru: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [m.value]]) walk
 	// Both before and after return m.value (identity) — tree is preserved.
 	identityBody := []native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}
 	fnDef1 := native.FnDefInfo{
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Impl:    native.BORU(identityBody), BarrierPos: -1,
+			Impl:    native.Boru(identityBody), BarrierPos: -1,
 		}},
 	}
 	fnDef2 := native.FnDefInfo{
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Impl:    native.BORU(identityBody), BarrierPos: -1,
+			Impl:    native.Boru(identityBody), BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -752,7 +752,7 @@ func TestWalkBeforeAfterIdentity(t *testing.T) {
 }
 
 func TestWalkBeforeAfterPostOrder(t *testing.T) {
-	// BORU: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [99]]) walk
+	// boru: {a:1 b:2} (fn [[m:Map] [Any] [m.value]]) (fn [[m:Map] [Any] [99]]) walk
 	// Before callback is identity (allows descent), after callback replaces
 	// every node with 99 (post-order). Processing order:
 	//   1. before(root) → {a:1 b:2} (identity, descent proceeds)
@@ -766,14 +766,14 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Impl:    native.BORU([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}), BarrierPos: -1,
+			Impl:    native.Boru([]native.Value{native.NewWord("m"), native.NewWord("dot"), native.NewWord("value")}), BarrierPos: -1,
 		}},
 	}
 	fnDef2 := native.FnDefInfo{
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Impl:    native.BORU([]native.Value{native.NewInteger(99)}), BarrierPos: -1,
+			Impl:    native.Boru([]native.Value{native.NewInteger(99)}), BarrierPos: -1,
 		}},
 	}
 	om := native.NewOrderedMap()
@@ -814,7 +814,7 @@ func TestWalkBeforeAfterPostOrder(t *testing.T) {
 }
 
 func TestWalkBeforeAfterNested(t *testing.T) {
-	// BORU: {a:{x:1 y:2} b:3}
+	// boru: {a:{x:1 y:2} b:3}
 	//        (fn [[m:Map] [Any] [m.value]])
 	//        (fn [[m:Map] [Any] [m.value]]) walk
 	// Both callbacks are identity — nested tree preserved through full traversal.
@@ -823,14 +823,14 @@ func TestWalkBeforeAfterNested(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Impl:    native.BORU(identityBody), BarrierPos: -1,
+			Impl:    native.Boru(identityBody), BarrierPos: -1,
 		}},
 	}
 	fnDef2 := native.FnDefInfo{
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Name: "m", Type: native.TMap}},
 			Returns: []*native.Type{native.TAny},
-			Impl:    native.BORU(identityBody), BarrierPos: -1,
+			Impl:    native.Boru(identityBody), BarrierPos: -1,
 		}},
 	}
 	innerMap := native.NewOrderedMap()

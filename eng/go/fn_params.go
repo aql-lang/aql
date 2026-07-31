@@ -71,7 +71,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 	elems, _ := AsList(inputSig)
 	var params []FnParam
 	// -1 is the "no barrier seen" sentinel — consumers default
-	// it to len(params) so BORU fns without a `|` are all-forward,
+	// it to len(params) so boru fns without a `|` are all-forward,
 	// matching the convention native registrations follow. A
 	// leading `|` overwrites with 0 (explicit all-stack).
 	barrierPos := -1
@@ -402,7 +402,7 @@ func PatternsFromParams(params []FnParam) map[int]Value {
 
 // keywordParam builds a KEYWORD-slot param: a /q slot whose concrete
 // Atom pattern (`kw`) admits exactly the literal word `kw` at dispatch
-// (patternsOk's keyword branch, eng/go/match.go). It is the BORU-source
+// (patternsOk's keyword branch, eng/go/match.go). It is the boru-source
 // spelling of the def constructor forms' keyword slots — an atom `kw/q`
 // (or `name:kw/q`) whose name is NOT a type. Binding-agnostic like every
 // /q slot: the captured value is the Atom `kw`, bound to `name` when

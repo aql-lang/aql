@@ -1,6 +1,6 @@
 # codemirror-lang-boru
 
-A [CodeMirror 6](https://codemirror.net/) language mode for **BORU** — the
+A [CodeMirror 6](https://codemirror.net/) language mode for **boru** — the
 concatenative, strongly-typed query language (`.boru`).
 
 It is implemented as a
@@ -10,7 +10,7 @@ and stays dependency-light: the only runtime dependency is a peer dependency on
 `@codemirror/language` (plus `@codemirror/state`, and `@codemirror/view` for a
 running editor).
 
-This mode also drives the **BORU web playground**.
+This mode also drives the **boru web playground**.
 
 ## What it highlights
 
@@ -18,7 +18,7 @@ This mode also drives the **BORU web playground**.
   lines).
 - All three string kinds — `'single'`, `"double"`, and `` `template ${expr}` ``
   backtick strings, where the `${ … }` interpolation is tokenised as embedded
-  BORU code.
+  boru code.
 - Every number form: decimal ints/floats (with `_` digit separators and
   exponents), `0x` hex, `0b` binary, `0d` big integers, and an optional leading
   `-`.
@@ -90,7 +90,7 @@ The mode advertises `languageData` for the host editor:
 ## Demo
 
 Open [`index.html`](index.html) in a browser — it loads CodeMirror from
-[esm.sh](https://esm.sh) and mounts an editor over a sample BORU program, so you
+[esm.sh](https://esm.sh) and mounts an editor over a sample boru program, so you
 can eyeball the highlighting without a build step.
 
 ## Self-check

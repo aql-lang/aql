@@ -7,7 +7,7 @@ This is the verbatim downstream proposal. An assessment grounded in the
 current engine (eng/go/engine.go) was provided separately to the team.
 -->
 
-# BORU Proposal: Structure-First, Lazy Argument Resolution for Dispatch
+# boru Proposal: Structure-First, Lazy Argument Resolution for Dispatch
 
 > **⚠️ LEGACY / HISTORICAL — proposal accepted and implemented.**
 > The structure-first, lazy model proposed here is now the *shipped*
@@ -29,7 +29,7 @@ Every "current behaviour" transcript below was run against that build;
 
 ## 1. Summary
 
-BORU resolves an overloaded word by **evaluating following tokens to
+boru resolves an overloaded word by **evaluating following tokens to
 discover the argument list, then matching that list against the word's
 signatures**. Because the arguments are computed *before* a signature is
 chosen, resolution can execute code that the chosen signature never
@@ -57,7 +57,7 @@ alternative (§7) — keeps every genuine error loud and precisely located.
 
 ## 2. Background: forward dispatch and overloaded words
 
-BORU is concatenative. A word takes its arguments from the tokens that
+boru is concatenative. A word takes its arguments from the tokens that
 follow it (forward) and/or from the stack. These three forms are
 equivalent (verified):
 
@@ -204,7 +204,7 @@ claims, left to right, **once each**. Anything not claimed is left as the
 next expression. Errors in a *claimed* argument propagate normally, with
 their precise source span.
 
-### Precedent: this generalises machinery BORU already has
+### Precedent: this generalises machinery boru already has
 
 `import`'s rename overloads are registered with `NoEvalArgs` / `QuoteArgs`:
 

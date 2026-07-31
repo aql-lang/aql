@@ -10,7 +10,7 @@ import (
 	"syscall/js"
 )
 
-// boruTypeToSQLType maps a BORU field type to a SQLite column type.
+// boruTypeToSQLType maps a boru field type to a SQLite column type.
 func boruTypeToSQLType(t *Type) string {
 	switch {
 	case t.ConformsTo(TInteger):
@@ -190,7 +190,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 		om := NewOrderedMap()
 		for i, col := range cols {
 			jsVal := jsRow.Index(i)
-			om.Set(col, jsValueToBORU(jsVal, colTypes[i]))
+			om.Set(col, jsValueToBoru(jsVal, colTypes[i]))
 		}
 		resultRows = append(resultRows, NewMap(om))
 	}
@@ -214,7 +214,7 @@ func (s *SQLiteStore) DropTable(name string) {
 	delete(s.tables, name)
 }
 
-// boruValueToJSParam converts a BORU Value to a JS value for sql.js binding.
+// boruValueToJSParam converts a boru Value to a JS value for sql.js binding.
 func boruValueToJSParam(v Value, colType *Type) any {
 	if v.Parent.Equal(TNone) {
 		return js.Null()
@@ -280,8 +280,8 @@ func boruValueToJSParam(v Value, colType *Type) any {
 	}
 }
 
-// jsValueToBORU converts a sql.js result value to a BORU Value.
-func jsValueToBORU(v js.Value, colType *Type) Value {
+// jsValueToBoru converts a sql.js result value to a boru Value.
+func jsValueToBoru(v js.Value, colType *Type) Value {
 	if v.IsNull() || v.IsUndefined() {
 		return NewValueRaw(TNone, nil)
 	}

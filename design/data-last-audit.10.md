@@ -146,7 +146,7 @@ The matrix-* FnDef wrappers retain user-facing positional order
 (`mat row col matrix.at`) because FnDef param matching is
 deepest-first while the underlying NativeFunc sig matching is
 top-of-stack-first. The two compose: stack [mat,1,0] →
-FnDef-args [mat,1,0] → CallBORU pushes them as tokens [mat,1,0] →
+FnDef-args [mat,1,0] → CallBoru pushes them as tokens [mat,1,0] →
 NativeFunc sig [Int,Int,Matrix] matches stack [mat,1,0]
 (top=0→sig[0], mid=1→sig[1], deep=mat→sig[2]).
 

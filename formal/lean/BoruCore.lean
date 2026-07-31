@@ -1,10 +1,10 @@
 /-
-  BoruCore.lean — a mechanized prototype of BORU's core semantics (deepened).
+  BoruCore.lean — a mechanized prototype of boru's core semantics (deepened).
 
   Milestone-6 seed from `design/FORMAL-VERIFICATION.0.md`: a *deep
-  embedding* of a tractable fragment of the BORU abstract machine
+  embedding* of a tractable fragment of the boru abstract machine
   (`FORMAL-SPEC.md` §4 + §6). This iteration deepens the model to put
-  BORU's distinctive **forward collection** under a proof checker in a
+  boru's distinctive **forward collection** under a proof checker in a
   more faithful form:
 
     * two value types — `Int` and `Bool` (so types are non-trivial);
@@ -260,7 +260,7 @@ def check (label got expected : String) : IO Unit :=
   IO.println s!"  [{mark}] {label}: {got}  (want {expected})"
 
 def main : IO Unit := do
-  IO.println "BORU core model — executable cross-checks (cf. `boru do`):"
+  IO.println "boru core model — executable cross-checks (cf. `boru do`):"
   check "sub 3 10    (prefix) " (render (run [Item.word Word.sub, ilit 3, ilit 10])) "7"
   check "10 sub 3    (infix)  " (render (run [ilit 10, Item.word Word.sub, ilit 3])) "7"
   check "10 3 sub    (postfix)" (render (run [ilit 10, ilit 3, Item.word Word.sub])) "7"

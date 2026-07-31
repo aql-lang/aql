@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:time-util module
+# boru Language Specification: the boru:time-util module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of time/date utilities. Its name collides with the

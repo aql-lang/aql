@@ -2,7 +2,7 @@ package help
 
 import "strings"
 
-// RepoURL is the canonical BORU source repository.
+// RepoURL is the canonical boru source repository.
 const RepoURL = "https://github.com/boru-lang/boru"
 
 // ReferenceURL points at the word/syntax reference in the repo.
@@ -11,14 +11,14 @@ const ReferenceURL = RepoURL + "/blob/main/REFERENCE.md"
 // TutorialURL points at the step-by-step tutorial in the repo.
 const TutorialURL = RepoURL + "/blob/main/TUTORIAL.md"
 
-// Overview returns a short orientation to the BORU language: the
+// Overview returns a short orientation to the boru language: the
 // basics of how words and values compose, and how to reach the
 // per-word/per-module documentation via `describe`. It is the single
 // source of truth shared by the `help` word and the REPL `/help`
 // meta-command.
 func Overview() string {
 	var b strings.Builder
-	b.WriteString("BORU — a concatenative query language.\n")
+	b.WriteString("boru — a concatenative query language.\n")
 	b.WriteString("\n")
 	b.WriteString("Basics:\n")
 	b.WriteString("  - A program is a sequence of words and values, read left to right:\n")

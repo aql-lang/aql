@@ -23,8 +23,8 @@ func TestModuleExportDocs(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultRegistry: %v", err)
 	}
-	reg.SetParseFunc(parser.Parse) // BORU modules parse their source on import
-	InstallResolver(reg)           // boru:repl's BORU preamble imports boru:net / boru:vm
+	reg.SetParseFunc(parser.Parse) // boru modules parse their source on import
+	InstallResolver(reg)           // boru:repl's boru preamble imports boru:net / boru:vm
 
 	var missing []string
 	names := Names()
@@ -197,7 +197,7 @@ func TestDescribeUsesAuthoredExamples(t *testing.T) {
 	}
 }
 
-// exampleSource reassembles a word's example lines into parseable BORU:
+// exampleSource reassembles a word's example lines into parseable boru:
 // the `;#` commentary comes off (it is prose, and a multi-line example
 // puts it mid-literal), and lines that were only a comment drop out.
 func exampleSource(lines []string) string {

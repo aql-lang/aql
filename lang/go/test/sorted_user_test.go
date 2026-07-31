@@ -8,13 +8,13 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// TestPureBORUSortedFlexMap is the acceptance pin for pure-BORU sorted
+// TestPureBoruSortedFlexMap is the acceptance pin for pure-Boru sorted
 // nodes (FLEX-ATTRS.1 D4) over the three enablers: nominal refine of
 // FlexMap, an anchored `set` override, and `as` dispatch ascription
 // (design/OPEN-WORDS.1.md §9) — the override delegates to the base
 // overloads in CORE vocabulary (`set k v (m as FlexMap)`), with no
 // renamed shadow words, and maintains sorted key order across
-// out-of-order in-place writes, entirely in BORU source.
+// out-of-order in-place writes, entirely in boru source.
 //
 // Runs on the interpreter: the resort loop's dynamic list-element key
 // feeding the now-multi-overload `set` is outside today's compiled
@@ -24,7 +24,7 @@ import (
 // is deferred with that boundary — the residual documented in
 // OPEN-WORDS.1 §9. The compilable delegation shapes (strict-key
 // override, helper delegation) are pinned by lang/spec/as.tsv §5.
-func TestPureBORUSortedFlexMap(t *testing.T) {
+func TestPureBoruSortedFlexMap(t *testing.T) {
 	const src = `
 def SortedFlexMap (refine FlexMap)
 def resort fn [[ks:List m2:SortedFlexMap] [SortedFlexMap] [

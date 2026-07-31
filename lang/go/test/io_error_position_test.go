@@ -22,7 +22,7 @@ func runIO(t *testing.T, src string) error {
 	return err
 }
 
-// boruErrorWithCode asserts err is an *BoruError carrying code.
+// boruErrorWithCode asserts err is a *BoruError carrying code.
 func boruErrorWithCode(t *testing.T, err error, code string) *native.BoruError {
 	t.Helper()
 	if err == nil {

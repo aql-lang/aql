@@ -1,4 +1,4 @@
-# BORU Language Specification: Dispatch edge cases 2 — family-restricted
+# boru Language Specification: Dispatch edge cases 2 — family-restricted
 # ordering vs tcmp totality, type-literal operand ordering, the left-side
 # predicate-construction gotcha, and the equality lattice.
 # Format: input<TAB>expected<TAB>description

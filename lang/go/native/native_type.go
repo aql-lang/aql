@@ -332,7 +332,7 @@ var typeNatives = []NativeFunc{
 //     spec:String, entity:String
 //
 // These are registered via InstallDef so they get proper handler
-// resolution and can be referenced by name in BORU code (e.g. make
+// resolution and can be referenced by name in boru code (e.g. make
 // Entity {...}).
 func installResourceTypes(r *Registry) {
 	resourceFields := NewOrderedMap()
@@ -974,7 +974,7 @@ var TPartialModuleNatives = []NativeFunc{
 // is left unchanged. For Object types, inherited fields are flattened
 // into the result's own field map and the result is registered as a
 // fresh anonymous Object type (lattice parent: Object root) — the
-// partial is NOT a subtype of the input because BORU's lattice runs
+// partial is NOT a subtype of the input because boru's lattice runs
 // the other way (a child requires more, not less).
 func tpartialHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	t := args[0]
@@ -1560,7 +1560,7 @@ const maxFloatFractionDigits = 1074
 // applyFloatSign restores a negative sign bit that big.Rat drops for a
 // zero: big.Rat has no signed zero, so the exact/round expansions of
 // -0.0 (and of a negative value that rounds to zero) come back as a
-// positive 0d0. apd's BigDecimal can represent signed zero, and BORU
+// positive 0d0. apd's BigDecimal can represent signed zero, and boru
 // treats -0.0 as a first-class Float, so we preserve math.Signbit here
 // to stay consistent with the shortest mode (which keeps it natively).
 func applyFloatSign(f float64, d *apd.Decimal) *apd.Decimal {

@@ -1,6 +1,6 @@
-# AGENTS.md — agent guide to the BORU repository
+# AGENTS.md — agent guide to the boru repository
 
-**BORU** is a concatenative, strongly-typed query language implemented in
+**boru** is a concatenative, strongly-typed query language implemented in
 Go: programs are sequences of *words* that transform a *stack*. The
 reference implementation ships as a single `boru` binary (REPL, type
 checker, formatter, LSP, registry client, vault, supervisor). New to the
@@ -14,7 +14,7 @@ linked source — it is authoritative, this page is just the index.
 > ships a machine-readable map of itself: modules, documents, tools,
 > and core concepts, with every relation backed by a quoted passage
 > from the docs — [`kg/out/graph.json`](kg/out/graph.json), built by
-> the BORU pipeline in [`kg/`](kg/README.md). Read it to orient fast;
+> the boru pipeline in [`kg/`](kg/README.md). Read it to orient fast;
 > query it with `kg/queries.boru`. **If your PR changes the repository's
 > structure, tooling, or documentation set, update
 > [`kg/project/boru-project.jsonic`](kg/project/boru-project.jsonic) and
@@ -76,7 +76,7 @@ Rule of thumb: **`help` = the tool, `describe` = the language.**
 `boru repl` (or just `boru` with no args). The same two systems are at the
 prompt, plus REPL meta-commands:
 
-- Words: `describe` and `help` are ordinary BORU words. An argument that
+- Words: `describe` and `help` are ordinary boru words. An argument that
   contains `:` or `.` (a module ref or a dotted export) is source syntax,
   so quote it: `describe "boru:type-util"`, `describe "boru:type-util:tpartial"`.
 - Meta-commands (lines starting with `/`): `/describe [name]` (takes its
@@ -90,10 +90,10 @@ Full REPL reference: [CLI.md → REPL meta-commands](CLI.md#repl-meta-commands).
 
 | If you want to … | Read |
 |------------------|------|
-| Learn BORU step by step | [TUTORIAL.md](TUTORIAL.md) |
+| Learn boru step by step | [TUTORIAL.md](TUTORIAL.md) |
 | A recipe for a specific task | [HOWTO.md](HOWTO.md) |
 | The precise behaviour of a syntax form, type, or word | [REFERENCE.md](REFERENCE.md) — or `boru describe <word>` for one word |
-| Understand *why* BORU is designed the way it is | [EXPLANATION.md](EXPLANATION.md) |
+| Understand *why* boru is designed the way it is | [EXPLANATION.md](EXPLANATION.md) |
 | Drive the `boru` binary (every subcommand, REPL) | [CLI.md](CLI.md) |
 | The key architectural decisions and their rationale | [ADR.md](ADR.md) |
 | The recorded non-uniformities of the language and their verdicts | [NUR.md](NUR.md) |
@@ -157,6 +157,6 @@ A few rules from those guides that bite hardest when missed:
 | `calc/go/` | A small calculator built on `eng` (learning example). |
 | `wpg/` | The wasm web playground. |
 | `test/` | Shared TSV spec-runner scaffolding and HTTP fixtures. |
-| `kg/` | The project knowledge graph: an evidence-backed BORU pipeline and its generated bundle. |
-| `utils/` | A coreutils subset written in BORU — real programs that prove the CLI story (argv, exit codes, streams, baked permissions). |
+| `kg/` | The project knowledge graph: an evidence-backed boru pipeline and its generated bundle. |
+| `utils/` | A coreutils subset written in boru — real programs that prove the CLI story (argv, exit codes, streams, baked permissions). |
 | `design/` | Internal design notes and proposals (historical record). |

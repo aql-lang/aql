@@ -1,6 +1,6 @@
 # TYPE-ORDERING.10 — The Value Lattice & Comparison Total Order
 
-This document records the design of BORU's value ordering: the lattice
+This document records the design of boru's value ordering: the lattice
 that places every Value in a total preorder, the cascade
 `CompareValues` uses to settle a pair, and the deliberate anomalies
 we accepted. It is the canonical reference for `tcmp` / `sort` and the
@@ -137,7 +137,7 @@ RANK             TYPE PATH                  REPRESENTATIVE LITERAL          NOTE
 61_000_000_000   Type/<user>                def Positive (Integer gt 0)      DepScalar values
 ```
 
-## In BORU, literals are types
+## In boru, literals are types
 
 A concrete value's `Parent` IS its type — there is no separate "value
 inhabits type" indirection. `42`, `'hello'`, `true` each have their

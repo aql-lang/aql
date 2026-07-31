@@ -1,5 +1,5 @@
 # ============================================================
-# todo-tui.boru — the todo list as a full-screen TUI, written in BORU.
+# todo-tui.boru — the todo list as a full-screen TUI, written in boru.
 #
 # The TUI.0.md verification app, graduated from the speculative probe
 # in ../tui/ onto the LANDED boru:tui surface: same domain state as

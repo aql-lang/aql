@@ -1,8 +1,8 @@
-# Boolean Operations in BORU
+# Boolean Operations in boru
 
 ## Scope
 
-This report surveys how BORU implements its boolean operators
+This report surveys how boru implements its boolean operators
 (`and`, `or`, `not`, `xor`, `nand`, `implies`), where each operator is
 overloaded, how argument collection interacts with concatenative
 evaluation, and what short-circuiting behaviour (if any) the language
@@ -106,7 +106,7 @@ runtime analogue on `and` (which would ideally build an intersection).
 
 ### 3.1 There is none for `and`/`or`/`implies`
 
-BORU's boolean operators **never short-circuit**. The concatenative
+boru's boolean operators **never short-circuit**. The concatenative
 dispatch pipeline collects both forward and stack arguments
 (`match.go`, `engine.go` execution loop) before invoking a handler.
 By the time `and`, `or`, `nand`, `xor`, or `implies` receive their
@@ -136,7 +136,7 @@ if true 1 [10 div 0]    => 1    # no division error
 if false [10 div 0] 2   => 2    # no division error
 ```
 
-So in today's BORU, if you want short-circuiting you write
+So in today's boru, if you want short-circuiting you write
 `if cond [then] [else]`, not `cond and then` or `cond or else`.
 
 ### 3.3 Apparent precedence is really argument collection
@@ -384,7 +384,7 @@ This cleanly splits the two worlds: `or` is always a boolean OR,
   `without [from:Any remove:T]` but worth a name (mirrors boolean
   `not`, and appears often enough — e.g. `complement None` for
   not-null — to justify the shortcut).
-- `literal Value` — pin a concrete value as a type. BORU already
+- `literal Value` — pin a concrete value as a type. boru already
   treats `42 is 42` as true; this builder just lifts that
   capability into the type algebra. Foundation for enums and
   discriminated unions.
@@ -397,7 +397,7 @@ sugar, for naming consistency with `any`/`all`/`without`)**
   typed map.
 - `setof Type` — if sets become first-class; mainly a distinction
   from `listof` with respect to ordering and duplicates.
-- `tuple [T0 T1 ...]` — fixed-arity heterogeneous list. BORU already
+- `tuple [T0 T1 ...]` — fixed-arity heterogeneous list. boru already
   accepts `[1 "a" true] is [Integer String Boolean]`; this gives
   the construct a canonical name.
 - `optionof Type` — sugar for `any [T None]`; could coexist with
@@ -521,7 +521,7 @@ them.
 
 ## 10. Summary
 
-BORU's boolean layer is small, regular, and conceptually clean:
+boru's boolean layer is small, regular, and conceptually clean:
 forward-collecting words with strict `[boolean, boolean]`
 signatures, plus `not`. The one overload is `or`, which doubles as a
 type-union constructor via a `[any, any]` signature guarded by

@@ -27,7 +27,7 @@ func testRegistry(t *testing.T) *native.Registry {
 	return r
 }
 
-func runTestBORU(t *testing.T, r *native.Registry, src string) []native.Value {
+func runTestBoru(t *testing.T, r *native.Registry, src string) []native.Value {
 	t.Helper()
 	values, err := parser.Parse(src)
 	if err != nil {
@@ -47,9 +47,9 @@ func runTestBORU(t *testing.T, r *native.Registry, src string) []native.Value {
 // also exercises skipCase's path-copy into the recorded result.
 func TestSkipCase(t *testing.T) {
 	r := testRegistry(t)
-	// The body would raise if run; runTestBORU asserts no error, so a clean run
+	// The body would raise if run; runTestBoru asserts no error, so a clean run
 	// proves skip did not execute the body.
-	runTestBORU(t, r, `Test.describe "grp" [ [ raise kaboom "x" ] "parked" Test.skip ]`)
+	runTestBoru(t, r, `Test.describe "grp" [ [ raise kaboom "x" ] "parked" Test.skip ]`)
 	run := activeRun(r)
 	if len(run.results) != 1 {
 		t.Fatalf("expected 1 recorded result, got %d", len(run.results))
@@ -121,10 +121,10 @@ func TestTestModuleExports(t *testing.T) {
 
 func TestImperativePass(t *testing.T) {
 	r := testRegistry(t)
-	runTestBORU(t, r, `
+	runTestBoru(t, r, `
 		Test.test "math works" [(3 4 add) 7 Assert.equal]
 	`)
-	result := runTestBORU(t, r, `Test.summary`)
+	result := runTestBoru(t, r, `Test.summary`)
 	m, _ := native.AsMap(result[0])
 	total, _ := m.Get("total")
 	passed, _ := m.Get("passed")
@@ -139,10 +139,10 @@ func TestImperativePass(t *testing.T) {
 
 func TestImperativeFail(t *testing.T) {
 	r := testRegistry(t)
-	runTestBORU(t, r, `
+	runTestBoru(t, r, `
 		Test.test "math is wrong" [(3 4 add) 8 Assert.equal]
 	`)
-	result := runTestBORU(t, r, `Test.fail-count`)
+	result := runTestBoru(t, r, `Test.fail-count`)
 	n, _ := native.AsInteger(result[0])
 	if n != 1 {
 		t.Errorf("fail-count = %d, want 1", n)
@@ -151,7 +151,7 @@ func TestImperativeFail(t *testing.T) {
 
 func TestImperativeDescribeNesting(t *testing.T) {
 	r := testRegistry(t)
-	runTestBORU(t, r, `
+	runTestBoru(t, r, `
 		Test.describe "outer" [
 			Test.test "a" [true Assert.ok]
 			Test.describe "inner" [
@@ -159,7 +159,7 @@ func TestImperativeDescribeNesting(t *testing.T) {
 			]
 		]
 	`)
-	result := runTestBORU(t, r, `Test.results`)
+	result := runTestBoru(t, r, `Test.results`)
 	td, ok := result[0].Data.(native.TableData)
 	if !ok {
 		t.Fatalf("results not a TableData: %T", result[0].Data)
@@ -178,10 +178,10 @@ func TestImperativeDescribeNesting(t *testing.T) {
 
 func TestAssertThrows(t *testing.T) {
 	r := testRegistry(t)
-	runTestBORU(t, r, `
+	runTestBoru(t, r, `
 		Test.test "div by zero" [[1 0 div] Assert.throws]
 	`)
-	result := runTestBORU(t, r, `Test.fail-count`)
+	result := runTestBoru(t, r, `Test.fail-count`)
 	n, _ := native.AsInteger(result[0])
 	if n != 0 {
 		t.Errorf("Assert.throws should pass; fail-count = %d", n)
@@ -197,11 +197,11 @@ func TestResultsThroughReport(t *testing.T) {
 	for name, exp := range desc.Exports {
 		r.Defs.Push(name, native.NewMap(exp))
 	}
-	runTestBORU(t, r, `
+	runTestBoru(t, r, `
 		Test.test "ok" [1 1 Assert.equal]
 		Test.test "bad" [1 2 Assert.equal]
 	`)
-	result := runTestBORU(t, r, `Test.results Report.value`)
+	result := runTestBoru(t, r, `Test.results Report.value`)
 	s, _ := native.AsString(result[0])
 	if !strings.Contains(s, "name") || !strings.Contains(s, "ok") {
 		t.Errorf("results table missing expected columns:\n%s", s)
@@ -210,7 +210,7 @@ func TestResultsThroughReport(t *testing.T) {
 
 func TestSpecRunnerHappyPath(t *testing.T) {
 	r := testRegistry(t)
-	runTestBORU(t, r, `
+	runTestBoru(t, r, `
 		def double fn [[n:Integer] [Integer] [n 2 mul]]
 		def my-spec {
 		  name: "doubling"
@@ -224,7 +224,7 @@ func TestSpecRunnerHappyPath(t *testing.T) {
 		}
 		my-spec Test.run-spec
 	`)
-	result := runTestBORU(t, r, `Test.summary`)
+	result := runTestBoru(t, r, `Test.summary`)
 	m, _ := native.AsMap(result[0])
 	total, _ := m.Get("total")
 	failed, _ := m.Get("failed")
@@ -237,7 +237,7 @@ func TestSpecRunnerHappyPath(t *testing.T) {
 
 func TestSpecRunnerDetectsFailures(t *testing.T) {
 	r := testRegistry(t)
-	runTestBORU(t, r, `
+	runTestBoru(t, r, `
 		def double fn [[n:Integer] [Integer] [n 2 mul]]
 		def bad-spec {
 		  name: "bad doubles"
@@ -250,7 +250,7 @@ func TestSpecRunnerDetectsFailures(t *testing.T) {
 		}
 		bad-spec Test.run-spec
 	`)
-	result := runTestBORU(t, r, `Test.summary`)
+	result := runTestBoru(t, r, `Test.summary`)
 	m, _ := native.AsMap(result[0])
 	failed, _ := m.Get("failed")
 	fn, _ := native.AsInteger(failed)

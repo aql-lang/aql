@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:report module
+# boru Language Specification: the boru:report module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of pretty-printers for kernel value types. Import binds

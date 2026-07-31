@@ -7,7 +7,7 @@ import (
 	"github.com/boru-lang/boru/lang/go"
 )
 
-// checkSrc runs src through lang.BORU.Check and returns the result +
+// checkSrc runs src through lang.Boru.Check and returns the result +
 // error. Shared by the S2 surface-checker tests below.
 func checkSrc(t *testing.T, src string) (lang.CheckResult, error) {
 	t.Helper()
@@ -15,7 +15,7 @@ func checkSrc(t *testing.T, src string) (lang.CheckResult, error) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	return a.Check(src)
 }
 

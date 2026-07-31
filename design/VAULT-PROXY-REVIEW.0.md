@@ -38,7 +38,7 @@ agent → <method> http://127.0.0.1:8787/<alias>/<upstream-path>
         Authorization: Bearer <capability-token>
 
 broker (proxy.go ServeHTTP):
-  1. protocol-version check         (X-BORU-Vault-Protocol; fail-loud on newer client)
+  1. protocol-version check         (X-Boru-Vault-Protocol; fail-loud on newer client)
   2. split /<alias>/<path>          (splitAliasPath)
   3. authenticate bearer token      (FindCapabilityByToken → hashed, constant-time)
   4. token bound to this alias?     (tok.Alias == alias)
@@ -139,7 +139,7 @@ no incremental flush.
 
 ### 3.3 Cost budgets are inert against real providers (design gap, medium)
 
-`MaxCostCents` is debited only from an `X-BORU-Vault-Cost-Cents` **response
+`MaxCostCents` is debited only from an `X-Boru-Vault-Cost-Cents` **response
 header** (`parseCostHeader`, `proxy.go:300`) that no real provider sends.
 Genuine cost metering would require parsing provider-specific usage from
 the response body — which the broker deliberately does not read (§3.2's
@@ -213,7 +213,7 @@ HTTPS** (installed CA cert), matches the request by host/path pattern,
 swaps `FAKE_KEY` → real key (AES-256-GCM at rest under
 `SECRET_ENCRYPTION_KEY`), and forwards. Team mode adds Google OAuth. Its
 public docs mention no quotas, cost tracking, audit log, expiry, or
-revocation. It is the closest analogue to the BORU broker — same job (raw
+revocation. It is the closest analogue to the boru broker — same job (raw
 static-key injection), opposite proxy mechanics.
 
 ### 4.2 open-connector — action-catalog platform
@@ -241,10 +241,10 @@ connections, is **multi-tenant** (named connections per user account), and
 governs with connection identity, scopes, action allow/block policy, and
 redacted run logs. Quotas, cost tracking, and expiry are not documented.
 
-This is a **platform**, where the BORU broker is a **library-grade
+This is a **platform**, where the boru broker is a **library-grade
 component**: open-connector's value is the Action catalog + OAuth
-plumbing + multi-user account management, none of which the BORU vault
-proxy attempts. Conversely open-connector does not expose the BORU broker's
+plumbing + multi-user account management, none of which the boru vault
+proxy attempts. Conversely open-connector does not expose the boru broker's
 per-token quantitative governance or its envelope cryptography.
 
 ### 4.3 Feature matrix
@@ -277,19 +277,19 @@ per-token quantitative governance or its envelope cryptography.
   SDK-native — at the cost of being a multi-component Node platform you
   host and operate, with governance expressed as scopes + allow/block
   rather than quantitative quotas.
-- **BORU optimizes for an explicit, auditable trust boundary in one
+- **boru optimizes for an explicit, auditable trust boundary in one
   binary.** No MITM, no CA cert, no DB; a hard alias→host binding (§2 SSRF
   boundary), envelope crypto, and a rich per-token capability model — at
   the cost of a narrow provider set, static-key-only injection, and a
   rewritten agent endpoint.
 
-Read against both competitors, BORU is **the most secure and most
+Read against both competitors, boru is **the most secure and most
 governable per credential, and by far the lightest to run**, but **the
 narrowest in reach**: onecli beats it on universality (any host, zero
 code change), and open-connector beats it on abstraction and scope (typed
 Actions, OAuth, 1,000+ providers, multi-tenant). The gaps that matter are
 now sharper than in the onecli-only view: arbitrary upstreams and OAuth2
-are the two capabilities whose absence most limits what the BORU broker can
+are the two capabilities whose absence most limits what the boru broker can
 front — see §5.
 
 ## 5. Recommendations
@@ -306,7 +306,7 @@ In priority order. Items 1–2 are the reach gaps the three-way comparison
 2. **Decide the OAuth2 question — the strategic fork.** Static-secret
    injection cannot broker the durable-account use case (Gmail, Slack,
    Notion, GitHub-App), which is OAuth2 and is exactly where
-   open-connector lives (§4.2). BORU can either (a) **stay a hardened
+   open-connector lives (§4.2). boru can either (a) **stay a hardened
    raw-HTTP broker** and explicitly cede the OAuth/connector-platform tier,
    or (b) **grow an OAuth2 connection type** — store refresh tokens as a
    new secret kind, refresh on expiry, inject the live access token — which
@@ -359,7 +359,7 @@ review, after the report above was written:
 - **Recs 5 and 6 — closed by documentation** (the option each
   recommendation offered): CLI.md now states that `--max-calls` is a
   soft cap under concurrency and that `--max-cost-cents` meters only the
-  `X-BORU-Vault-Cost-Cents` response header, which real providers do not
+  `X-Boru-Vault-Cost-Cents` response header, which real providers do not
   send.
 - **Recs 2, 3, 7, 8 — open.** The OAuth2 fork (2) and the MITM
   forward-proxy mode (3) are maintainer/positioning decisions; the

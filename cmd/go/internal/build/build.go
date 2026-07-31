@@ -1,4 +1,4 @@
-// Package build implements `boru build <prog.boru>` — compile a BORU program
+// Package build implements `boru build <prog.boru>` — compile a boru program
 // into a standalone native executable.
 //
 // Two mechanisms produce the binary:

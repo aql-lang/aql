@@ -6,7 +6,7 @@
         viz-callvis viz-callgraph viz-goda viz-godepgraph \
         viz-gomod viz-golds viz-plantuml viz-list viz-modgraph
 
-# Top-level Makefile for the whole BORU codebase.
+# Top-level Makefile for the whole boru codebase.
 #
 # The repo is a collection of Go modules:
 #
@@ -45,7 +45,7 @@ install:
 # ---- generated syntax-combination spec ---------------------------------
 #
 # Regenerate the two committed spec files under test/go/specgen/:
-#   syntax-matrix.tsv          — the exhaustive matrix of every BORU token
+#   syntax-matrix.tsv          — the exhaustive matrix of every boru token
 #                                sequence up to length 4 over a fixed
 #                                alphabet, with the canonical interpreter
 #                                result (or stable error class) for each.
@@ -391,11 +391,11 @@ cover-html: cover
 	  ( cd $$m && go tool cover -html=$$f -o $$out ) || true; \
 	done
 	@{ \
-	  printf '<!doctype html>\n<html><head><meta charset="utf-8"><title>BORU coverage</title>'; \
+	  printf '<!doctype html>\n<html><head><meta charset="utf-8"><title>boru coverage</title>'; \
 	  printf '<style>body{font:14px system-ui;margin:2em;max-width:1000px}h1{margin-bottom:.4em}'; \
 	  printf 'table{border-collapse:collapse;margin-top:1em}td,th{border:1px solid #ddd;padding:6px 12px;text-align:left}'; \
 	  printf 'a{color:#06c;text-decoration:none}a:hover{text-decoration:underline}</style></head><body>'; \
-	  printf '<h1>BORU coverage</h1>'; \
+	  printf '<h1>boru coverage</h1>'; \
 	  printf '<p>Generated %s</p>' "$$(date '+%Y-%m-%d %H:%M:%S')"; \
 	  printf '<table><tr><th>Module</th><th>Coverage</th><th>Report</th></tr>'; \
 	  for f in $(COVER_DIR)/*.out; do \
@@ -659,7 +659,7 @@ viz-index:
 	@mkdir -p $(VIZ_DIR)
 	@{ \
 	  printf '<!doctype html>\n<html><head><meta charset="utf-8">'; \
-	  printf '<title>BORU — code structure</title>'; \
+	  printf '<title>boru — code structure</title>'; \
 	  printf '<style>'; \
 	  printf 'body{font:14px system-ui;margin:2em;max-width:1400px;color:#222}'; \
 	  printf 'h1{margin-bottom:.2em}'; \
@@ -674,7 +674,7 @@ viz-index:
 	  printf '</style>'; \
 	  printf '<script src="https://cdn.jsdelivr.net/npm/svg-pan-zoom@3.6.1/dist/svg-pan-zoom.min.js"></script>'; \
 	  printf '</head><body>'; \
-	  printf '<h1>BORU — code structure</h1>'; \
+	  printf '<h1>boru — code structure</h1>'; \
 	  printf '<p class="meta">Generated %s · drag to pan, scroll/pinch to zoom, double-click to reset</p>' "$$(date '+%Y-%m-%d %H:%M:%S')"; \
 	  printf '<nav>'; \
 	  for d in $(VIZ_DIR)/*/; do \

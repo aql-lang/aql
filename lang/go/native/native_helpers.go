@@ -53,7 +53,7 @@ const (
 )
 
 // decimalRounders maps the rounding names accepted by `with-decimal`
-// (both BORU-hyphenated and apd's own underscore spellings) to apd
+// (both boru-hyphenated and apd's own underscore spellings) to apd
 // Rounders. Anything unrecognised falls back to round-half-even.
 var decimalRounders = map[string]apd.Rounder{
 	"half-even": apd.RoundHalfEven, "half_even": apd.RoundHalfEven,
@@ -362,7 +362,7 @@ func RoundToIntegralNative(name string, floatFn func(float64) float64, mode apd.
 		ctx := *decimalContext(r) // clone: Rounding is per-word, the context is shared
 		ctx.Rounding = mode
 		out := new(apd.Decimal)
-		if _, err := ctx.RoundToIntegralValue(out, asApdOperand(args[0])); err != nil { //covergate:allow BORU BigDecimals are always finite (non-finite literals reject at parse; producing ops trap first) and round-to-integral of a finite decimal cannot overflow the context — defensive error-propagation only (§native)
+		if _, err := ctx.RoundToIntegralValue(out, asApdOperand(args[0])); err != nil { //covergate:allow boru BigDecimals are always finite (non-finite literals reject at parse; producing ops trap first) and round-to-integral of a finite decimal cannot overflow the context — defensive error-propagation only (§native)
 			return nil, r.BoruError("math_error", name+": "+err.Error(), name)
 		}
 		return []Value{NewBigDecimal(out)}, nil

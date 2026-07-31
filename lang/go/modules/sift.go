@@ -14,19 +14,19 @@ import (
 // parses the loose line- and field-oriented text Unix tools and /proc files
 // emit.
 //
-// sift is WRITTEN IN BORU (siftSource below, embedded from sift.boru), following
+// sift is WRITTEN IN boru (siftSource below, embedded from sift.boru), following
 // the boru:repl / boru:test hybrid pattern: the module body is parsed once and
 // run in a fresh sub-registry that collects its `export "Sift" {…}`. The six
 // format families (kv, blocks, columns, dsv, fixed, pattern), the spec engine,
-// the coercion vocabulary, and the seven Sift words are all BORU — the loader
+// the coercion vocabulary, and the seven Sift words are all boru — the loader
 // below is the only Go.
 //
-// Surface (v1, design decision "Pure BORU, Sift.* surface"): every kind is
+// Surface (v1, design decision "Pure boru, Sift.* surface"): every kind is
 // reached through the Sift namespace — `Sift.parse <kind> <src>`,
 // `Sift.define`, `Sift.kinds`, etc. A module body runs in a discarded
 // sub-registry, so it cannot register a global `parse <kind>` macro kind the
 // importing program would see (that needs the parent registry, which only the
-// Go loader holds); the namespaced surface is the coherent pure-BORU form.
+// Go loader holds); the namespaced surface is the coherent pure-Boru form.
 
 //go:embed sift.boru
 var siftSource string
@@ -37,7 +37,7 @@ var (
 	siftParseErr  error
 )
 
-// BuildSiftModule loads the BORU-implemented boru:sift module: it parses the
+// BuildSiftModule loads the boru-implemented boru:sift module: it parses the
 // embedded sift.boru once, runs it in a fresh sub-registry that inherits the
 // parser + module resolver (so the body's own `import`s resolve), and collects
 // the `export "Sift" {…}` map. Mirrors BuildReplModule.

@@ -16,7 +16,7 @@ import (
 // [src:String opts:Map] -> [Integer].
 
 // calcSpec builds the iop mini-language. Implemented entirely in Go — the
-// point of the host API is that a mini-language needs no BORU source and no
+// point of the host API is that a mini-language needs no boru source and no
 // fork of the core minilang module.
 func calcSpec() lang.MiniLangSpec {
 	return lang.MiniLangSpec{
@@ -84,8 +84,8 @@ func calcOperand(r *native.Registry, m native.ReadMap, name string) (int64, erro
 	return n, nil
 }
 
-// newCalcInstance builds a BORU instance with the iop value bound.
-func newCalcInstance(t *testing.T) *lang.BORU {
+// newCalcInstance builds a boru instance with the iop value bound.
+func newCalcInstance(t *testing.T) *lang.Boru {
 	t.Helper()
 	a, err := lang.New()
 	if err != nil {
@@ -103,7 +103,7 @@ func newCalcInstance(t *testing.T) *lang.BORU {
 
 // runLast runs src and returns the single residual value, failing on error
 // or on an unexpected stack shape.
-func runLast(t *testing.T, a *lang.BORU, src string) any {
+func runLast(t *testing.T, a *lang.Boru, src string) any {
 	t.Helper()
 	res, err := a.Run(src)
 	if err != nil {

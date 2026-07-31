@@ -1,4 +1,4 @@
-# BORU Implementation Status
+# boru Implementation Status
 
 Cross-reference of design documents in `design/` against the current
 codebase. Last updated: **2026-06-17** (rebuilt from a full audit of every
@@ -184,7 +184,7 @@ feature; the suffix reflects how much of what they recommend has landed.
 | VOXGIG-BORU-REPORTS.5 / VOXGIG-DX-REPORT.5 | First-hand library/DX reports; many findings since fixed. |
 | WAT-AUDIT.5 | Surprising-behaviour catalogue + remediations. |
 | PORT_OBSERVATIONS.5 | Go→TS engine-port parity notes. |
-| LISP-ANALYSIS.5 | BORU through a Lisp/Scheme lens. |
+| LISP-ANALYSIS.5 | boru through a Lisp/Scheme lens. |
 | elixir-types-in-boru-report.10 | Elixir set-theoretic types applicability. |
 | jsonic-matcher-rule-access-report.10 | jsonic matcher rule access (Go-port gap). |
 | REVIEW-NOTES.10 / data-last-audit.10 / TYPE-DECOUPLING-INVENTORY.10 | Implementation/audit records. |

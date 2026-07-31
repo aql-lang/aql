@@ -12,7 +12,7 @@
       id: "src:readme"
       kind: "text"
       locator: "README.md"
-      title: "BORU README"
+      title: "boru README"
       retrieved_at: null
       content_hash: "readme-2026-07"
       authority: "primary"
@@ -30,7 +30,7 @@
     }
   ]
   entities: [
-    { key: "boru", type: "Concept", label: "BORU language"
+    { key: "boru", type: "Concept", label: "boru language"
       attributes: { paradigm: "concatenative, typed, word-based" } }
     { key: "repo", type: "Product", label: "boru-lang/boru repository"
       external_ids: { github: "boru-lang/boru" } }
@@ -57,7 +57,7 @@
     { key: "utils", type: "Product", label: "utils coreutils subset"
       attributes: { path: "utils" } }
     { key: "boru-cli", type: "Product", label: "boru:cli module"
-      attributes: { path: "lang/go/modules/cli.boru", language: "BORU" } }
+      attributes: { path: "lang/go/modules/cli.boru", language: "boru" } }
     { key: "readme", type: "Document", label: "README.md" }
     { key: "agents-md", type: "Document", label: "AGENTS.md" }
     { key: "tutorial", type: "Document", label: "TUTORIAL.md" }
@@ -113,22 +113,22 @@
     { subject: "kg", predicate: "part_of"
       object: { kind: "entity", entity: "repo" }
       evidence: [{ source: "src:agents", locator: "Repository layout",
-        quote: "kg/ | The project knowledge graph: an evidence-backed BORU pipeline and its generated bundle." }]
+        quote: "kg/ | The project knowledge graph: an evidence-backed boru pipeline and its generated bundle." }]
       confidence: 0.98 }
     { subject: "utils", predicate: "part_of"
       object: { kind: "entity", entity: "repo" }
       evidence: [{ source: "src:agents", locator: "Repository layout",
-        quote: "utils/ | A coreutils subset written in BORU — real programs that prove the CLI story (argv, exit codes, streams, baked permissions)." }]
+        quote: "utils/ | A coreutils subset written in boru — real programs that prove the CLI story (argv, exit codes, streams, baked permissions)." }]
       confidence: 0.98 }
     { subject: "utils", predicate: "related_to"
       object: { kind: "entity", entity: "boru-cli" }
       evidence: [{ source: "src:readme", locator: "Repository layout",
-        quote: "utils/ | A coreutils subset written in BORU (cat, wc, head, grep, ...) — real programs, built with boru build." }]
+        quote: "utils/ | A coreutils subset written in boru (cat, wc, head, grep, ...) — real programs, built with boru build." }]
       confidence: 0.95 }
     { subject: "boru-cli", predicate: "part_of"
       object: { kind: "entity", entity: "lang-go" }
       evidence: [{ source: "src:agents", locator: "Repository layout",
-        quote: "utils/ | A coreutils subset written in BORU — real programs that prove the CLI story (argv, exit codes, streams, baked permissions)." }]
+        quote: "utils/ | A coreutils subset written in boru — real programs that prove the CLI story (argv, exit codes, streams, baked permissions)." }]
       confidence: 0.9 }
     { subject: "utils", predicate: "related_to"
       object: { kind: "entity", entity: "binary" }
@@ -138,12 +138,12 @@
     { subject: "boru", predicate: "has_attribute"
       object: { kind: "literal", value: "typed, word-based query language", datatype: "String" }
       evidence: [{ source: "src:readme", locator: "intro",
-        quote: "BORU is a typed, word-based query language." }]
+        quote: "boru is a typed, word-based query language." }]
       confidence: 0.98 }
     { subject: "boru", predicate: "has_attribute"
       object: { kind: "literal", value: "concatenative", datatype: "String" }
       evidence: [{ source: "src:readme", locator: "intro",
-        quote: "Underneath, BORU is concatenative: words can equally take their arguments from a value stack" }]
+        quote: "Underneath, boru is concatenative: words can equally take their arguments from a value stack" }]
       confidence: 0.98 }
     { subject: "boru", predicate: "related_to"
       object: { kind: "entity", entity: "forward" }
@@ -183,7 +183,7 @@
     { subject: "tutorial", predicate: "supports"
       object: { kind: "entity", entity: "boru" }
       evidence: [{ source: "src:readme", locator: "Documentation",
-        quote: "Tutorial | You are new to BORU and want to learn it step by step." }]
+        quote: "Tutorial | You are new to boru and want to learn it step by step." }]
       confidence: 0.95 }
     { subject: "howto", predicate: "supports"
       object: { kind: "entity", entity: "boru" }
@@ -198,7 +198,7 @@
     { subject: "explanation", predicate: "supports"
       object: { kind: "entity", entity: "boru" }
       evidence: [{ source: "src:readme", locator: "Documentation",
-        quote: "Explanation | You want to understand why BORU is the way it is." }]
+        quote: "Explanation | You want to understand why boru is the way it is." }]
       confidence: 0.95 }
     { subject: "cli-md", predicate: "supports"
       object: { kind: "entity", entity: "binary" }

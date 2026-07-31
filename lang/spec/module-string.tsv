@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:string-util module — normalize
+# boru Language Specification: the boru:string-util module — normalize
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable utility library. Import binds the `StringUtil` namespace:

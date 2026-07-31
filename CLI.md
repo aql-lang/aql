@@ -1,4 +1,4 @@
-# BORU CLI Reference
+# boru CLI Reference
 
 The `boru` binary bundles the language runtime, the REPL, a static
 type-checker, a code formatter, a module-packaging toolchain, a
@@ -103,7 +103,7 @@ boru --options 'tape:initial:65536,tape:grows:9'      # two tape knobs
 boru --options 'tape:{initial:65536,grows:9,factor:3}' # explicit nested map
 ```
 
-The blob is a **nested map**; the same jsonic that parses BORU data parses
+The blob is a **nested map**; the same jsonic that parses boru data parses
 it (`a:1,b:c:2` → `{a:1, b:{c:2}}`). Option handling is **strict** — an
 unknown key or a wrong-typed value is an error, not a silent no-op, so a
 typo fails loudly:
@@ -132,7 +132,7 @@ runaway sooner. See `design/TAPE-DATA-STRUCTURE.10.md`.
 
 ### Bytecode compilation
 
-> **Experimental.** BORU ships an optional bytecode compiler that lowers the
+> **Experimental.** boru ships an optional bytecode compiler that lowers the
 > statically-typed subset of a program to a compact instruction stream and runs
 > it on a small VM. **Execution defaults to the interpreter** — the compiler is
 > opt-in and produces results identical to the interpreter, so the choice is
@@ -228,7 +228,7 @@ an optional variable takes its default path, and an error would leak which
 names exist.
 
 **Exit codes (`IO.exit`).** `IO.exit <code>` ends the program with a
-status of the caller's choosing (`0..125`). It is what makes a BORU program
+status of the caller's choosing (`0..125`). It is what makes a boru program
 usable in a shell pipeline: `if mytool …; then` reads the status, and
 without it every program could only ever say 0 (clean) or 1 (any failure).
 Exiting is not failing — nothing is printed, for any code, and the residual
@@ -302,7 +302,7 @@ than the loss.)
 
 ### `boru do`
 
-Evaluate the remaining args as a BORU expression. Slightly more
+Evaluate the remaining args as a boru expression. Slightly more
 shell-friendly than `boru -e` because positional words don't need
 extra quoting.
 
@@ -514,7 +514,7 @@ full flag set. An unknown name exits non-zero and suggests
 
 ### `boru describe`
 
-`describe` documents the **BORU language**: its built-in words, the
+`describe` documents the **boru language**: its built-in words, the
 categories they fall into, and the loadable modules.
 
 ```bash
@@ -592,7 +592,7 @@ error on stderr.
 
 ### `boru build`
 
-Compile a BORU program into a **standalone native executable** — a single
+Compile a boru program into a **standalone native executable** — a single
 file that runs the program without needing the source or a separate `boru`
 install. The produced binary runs through the full interpreter, so it
 executes *any* program, and prints the residual stack exactly as `boru run`
@@ -787,7 +787,7 @@ with `--token`.
 
 ## Project lifecycle
 
-A BORU "project" is a directory with a `boru.jsonic` manifest plus
+A boru "project" is a directory with a `boru.jsonic` manifest plus
 one or more `.boru` source files. The lifecycle commands operate on
 that directory layout.
 
@@ -1067,10 +1067,10 @@ secrets). `boru vault folder` prints the same list from the command line, and
 `boru vault [--suffix=NAME] folder add <dir>` registers a pre-existing vault
 (the suffix is auto-detected when the folder holds exactly one).
 
-`boru vault -i --boru` (experimental) runs the TUI's **BORU implementation** —
-the same vault driven by a BORU program (the `boru:vault-tui` module) over
+`boru vault -i --boru` (experimental) runs the TUI's **boru implementation** —
+the same vault driven by a boru program (the `boru:vault-tui` module) over
 the `boru:vault` bridge words, per `design/VAULT-TUI-PORT.0.md`. The
-bubbletea TUI stays the default until the BORU port reaches full parity.
+bubbletea TUI stays the default until the boru port reaches full parity.
 
 The secret value is never taken as a command-line argument — that
 would leak it into your shell history and the process listing.
@@ -1182,7 +1182,7 @@ limits. **`--max-calls` is a soft cap under concurrency**: the check
 runs at request start and the counter persists after the response, so
 N simultaneous in-flight requests can overshoot the cap by up to N−1
 — use it for budget hygiene, not as a hard rate limiter.
-**`--max-cost-cents` is debited only from an `X-BORU-Vault-Cost-Cents`
+**`--max-cost-cents` is debited only from an `X-Boru-Vault-Cost-Cents`
 response header**, which the built-in providers' real APIs do not
 send; unless your upstream (or a middlebox you control) sets that
 header, the cost meter stays at zero and the budget never trips.
@@ -1371,11 +1371,11 @@ process and is gone when it exits — never written to `~/.npmrc`,
 and env-var spellings verified against each tool's official docs,
 2026-06.)
 
-For BORU's **own** registry, `boru login --vault` stores the registry token
+For boru's **own** registry, `boru login --vault` stores the registry token
 in the vault instead of plaintext `~/.boru/user.jsonic`, and `boru publish`
 reads it back automatically — see **[publish](#boru-publish)**.
 
-Inside BORU programs the vault is accessed through the `vault`
+Inside boru programs the vault is accessed through the `vault`
 capability — see **[Reference §Capabilities](REFERENCE.md#capabilities)**.
 
 
@@ -1402,7 +1402,7 @@ boru policy explain sandbox fileops.write path=/etc/passwd
 
 ### Per-command policy flags
 
-Every command that builds a `lang.BORU` accepts these flags:
+Every command that builds a `lang.Boru` accepts these flags:
 
 | Flag | Effect |
 |---|---|
@@ -1501,9 +1501,9 @@ boru lsp -p 9001             # TCP mode
 
 ### `boru exec`
 
-Serve BORU code execution over HTTP. POST source to `/v1/exec` and
+Serve boru code execution over HTTP. POST source to `/v1/exec` and
 get back the residual stack; the last value on the stack is exposed
-as the top-level `result`. Each request runs in a fresh BORU
+as the top-level `result`. Each request runs in a fresh boru
 instance, so requests are stateless and safe for concurrent use.
 
 ```bash
@@ -1514,13 +1514,13 @@ boru exec -bind 0.0.0.0:8091 -r ./modules    # custom bind + registry
 
 * `-bind HOST:PORT` — interface and port (default `127.0.0.1:8091`).
 * `-p PORT` — short form; if non-zero, overrides `-bind`.
-* `-r PATH` — registry folder passed to every BORU instance.
+* `-r PATH` — registry folder passed to every boru instance.
 
 Routes:
 
 * `POST /v1/exec` — body `{"code": "..."}`; returns
   `{"result": ..., "stack": [...], "output": "...", "error": "..."}`.
-  BORU errors (parse / type / runtime) come back at HTTP 200 with
+  boru errors (parse / type / runtime) come back at HTTP 200 with
   `error` set, so clients can distinguish them from transport errors.
 * `GET /healthz` — liveness probe.
 
@@ -1584,7 +1584,7 @@ both as the `describe` *word* and as `/describe`:
 >> /describe boru:type-util:tpartial   # a module word (no quoting needed via /describe)
 ```
 
-The `describe` and `help` *words* are ordinary BORU, so an argument that
+The `describe` and `help` *words* are ordinary boru, so an argument that
 contains punctuation must be quoted: a module reference carries `:`
 (`describe "boru:type-util"`), and a dotted namespace export carries `.`
 — which is otherwise the `get` operator — so it too is quoted
@@ -1592,7 +1592,7 @@ contains punctuation must be quoted: a module reference carries `:`
 `/describe` meta-command takes its argument raw, so no quoting is needed
 there.
 
-Plain BORU expressions work as usual; exit with Ctrl-D (EOF):
+Plain boru expressions work as usual; exit with Ctrl-D (EOF):
 
 ```
 >> add 1 2

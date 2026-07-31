@@ -96,7 +96,7 @@ func TestParseFnDispatchMissParity(t *testing.T) {
 	}
 	var aeC, aeI *eng.BoruError
 	if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
-		t.Fatalf("non-BORU error: compiled=%v interp=%v", errC, errI)
+		t.Fatalf("non-Boru error: compiled=%v interp=%v", errC, errI)
 	}
 	if aeC.Detail != aeI.Detail {
 		t.Errorf("miss detail divergence:\n  compiled=%q\n  interp=%q", aeC.Detail, aeI.Detail)
@@ -226,7 +226,7 @@ func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 		}
 		var aeC, aeI *eng.BoruError
 		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
-			t.Fatalf("%s: non-BORU error: compiled=%v interp=%v", c.name, errC, errI)
+			t.Fatalf("%s: non-Boru error: compiled=%v interp=%v", c.name, errC, errI)
 		}
 		if aeC.Detail != aeI.Detail {
 			t.Errorf("%s: detail divergence:\n  compiled=%q\n  interp=%q", c.name, aeC.Detail, aeI.Detail)

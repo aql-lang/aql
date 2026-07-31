@@ -5,7 +5,7 @@
 // every `boru:` module's sub-registry — must tell the checker what it
 // produces: a declared `Returns` (an empty non-nil slice is a valid
 // "produces nothing"), a check-mode `ReturnsFn`, a full-stack
-// `CheckFullStack` shape function, or a BORU body (whose returns the
+// `CheckFullStack` shape function, or a boru body (whose returns the
 // analyser derives itself). Signature.DeclaresCheckReturns is the single
 // definition of that condition.
 //

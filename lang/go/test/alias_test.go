@@ -17,7 +17,7 @@ func stripErrPos(s string) string {
 	return s
 }
 
-// aliasCase defines a single alias test: an original BORU expression
+// aliasCase defines a single alias test: an original boru expression
 // and the same expression using a def alias.
 type aliasCase struct {
 	name      string            // test name

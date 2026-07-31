@@ -61,7 +61,7 @@ func tuiLastString(t *testing.T, vals []native.Value) string {
 }
 
 // The full Tier-1 session: open with options, draw, present, read a
-// scripted event, retitle, ring, clear, close — asserting both the BORU
+// scripted event, retitle, ring, clear, close — asserting both the boru
 // results and the backend's recorded state.
 func TestTuiTier1EndToEnd(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(10, 3)

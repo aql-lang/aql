@@ -366,11 +366,11 @@ func TestRunFileReadError(t *testing.T) {
 	}
 }
 
-// runFile surfaces an instance-init error (newBORU seam).
+// runFile surfaces an instance-init error (newBoru seam).
 func TestRunFileInitError(t *testing.T) {
-	old := newBORU
-	t.Cleanup(func() { newBORU = old })
-	newBORU = func(...lang.Options) (*lang.BORU, error) { return nil, errors.New("init boom") }
+	old := newBoru
+	t.Cleanup(func() { newBoru = old })
+	newBoru = func(...lang.Options) (*lang.Boru, error) { return nil, errors.New("init boom") }
 	f := write(t, filepath.Join(t.TempDir(), "i_test.boru"), passSuite)
 	var stdout, stderr bytes.Buffer
 	if _, _, errored := runFile(&stdout, &stderr, f, lang.Options{}, defaultMode(), nil); !errored {

@@ -1,4 +1,4 @@
-# BORU Language Specification: Boolean & Logic (and or not all any
+# boru Language Specification: Boolean & Logic (and or not all any
 # eq neq gt lt gte lte implies otherwise guard xor xnor nand nor iff)
 # Format: input<TAB>expected<TAB>description
 #

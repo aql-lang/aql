@@ -1,6 +1,6 @@
 .PHONY: build run install vet fmt test lint vuln clean publish tags
 
-# This module (github.com/boru-lang/boru/cmd/go) is the BORU command-line
+# This module (github.com/boru-lang/boru/cmd/go) is the boru command-line
 # tool. The CLI implementation lives in this directory as a library
 # (package `boru`); the thin `main` package that produces the `boru`
 # binary lives at ./boru so `go install` picks the right binary name.
@@ -67,7 +67,7 @@ publish: test
 	  git tag cmd/go/v$(V) && \
 	  git push origin main cmd/go/v$(V)
 	@if command -v gh >/dev/null 2>&1; then \
-		cd ../.. && gh release create cmd/go/v$(V) --title "cmd/go (boru CLI) v$(V)" --notes "BORU CLI v$(V)"; \
+		cd ../.. && gh release create cmd/go/v$(V) --title "cmd/go (boru CLI) v$(V)" --notes "boru CLI v$(V)"; \
 	fi
 
 # List recent cmd/go tags (newest first).

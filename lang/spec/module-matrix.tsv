@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:matrix-util module
+# boru Language Specification: the boru:matrix-util module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of dense Matrix utilities. Import binds the

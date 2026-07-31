@@ -1,7 +1,7 @@
-# BORU Language Specification: the boru:vault-tui module (the vault TUI app)
+# boru Language Specification: the boru:vault-tui module (the vault TUI app)
 # Format: input<TAB>expected<TAB>description
 #
-# The interactive vault TUI written in BORU (lang/go/modules/vault_tui.boru,
+# The interactive vault TUI written in boru (lang/go/modules/vault_tui.boru,
 # design/VAULT-TUI-PORT.0.md). The module exports the app map and its
 # runner under the `VaultTui` namespace:
 #

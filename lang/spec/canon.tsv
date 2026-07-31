@@ -1,6 +1,6 @@
-# BORU Language Specification: the `canon` word
+# boru Language Specification: the `canon` word
 #
-# `canon v` renders any value as canonical BORU source — the same
+# `canon v` renders any value as canonical boru source — the same
 # renderer (eng.CanonValue) the spec suites and the doc-example
 # harness compare against. For DATA values (scalars, atoms, paths,
 # none, type literals, plain and flex Node trees) the result is

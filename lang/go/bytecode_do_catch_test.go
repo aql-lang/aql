@@ -49,9 +49,9 @@ func TestDoCatchMultiValueArity(t *testing.T) {
 		// divisor so the body stays multi-value (div does not statically diverge):
 		// refuses on the fallible-native path, correct via fallback (y=5, no raise).
 		`def y 5  do [(10 div y) 2]`,
-		// A user (BORU-body) fn that raises, caught.
+		// A user (boru-body) fn that raises, caught.
 		`def f fn [[x:Any] [Any] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]`,
-		// A NATIVE module fn bound to a NAME (Module set, no BORU body) — the
+		// A NATIVE module fn bound to a NAME (Module set, no boru body) — the
 		// fnDefMayRaise Module!="" path. StructUtil.parse can raise on bad input.
 		`import "boru:struct-util"  def g StructUtil.parse/r  do [(g "x") 2] error [dot code]`,
 		// A bare module-export VALUE in the body — the wordMayRaise TModuleExport path.

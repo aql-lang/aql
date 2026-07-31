@@ -67,7 +67,7 @@ proposal before any design work starts.
    `Meta["sh"]` shorthand list, `grammar.go:992-1006`) and could in
    principle be extended to record full key order. `OrderedMap.Meta`
    (`value.go:77`) is the existing parser→engine side-channel
-   (`"ck"`, `"qm"`, `"qk"`, `"sh"`), never surfaced to BORU.
+   (`"ck"`, `"qm"`, `"qk"`, `"sh"`), never surfaced to boru.
 
 3. **FlexMaps built by `set` already expose insertion order.**
    Verified: `def f (flex {}) set zz/q 1 f set aa/q 2 f` renders
@@ -317,11 +317,11 @@ attrs read back as defaults or absent) need spec rows.
 
 | Language | Mechanism | Lesson for this proposal |
 |---|---|---|
-| R | `attr()` — instance attributes that change behaviour (`class`, `dim`, `names`) | The cautionary tale. Propagation was never specified ("attributes are generally discarded" — R Language Definition); every pipeline stage silently drops some; `class`-as-attribute (factors!) is a permanent bug generator. BORU would replay the propagation debt on day one (§3.4) — except ADR-008 forces BORU to pay it explicitly, per boundary, forever. |
+| R | `attr()` — instance attributes that change behaviour (`class`, `dim`, `names`) | The cautionary tale. Propagation was never specified ("attributes are generally discarded" — R Language Definition); every pipeline stage silently drops some; `class`-as-attribute (factors!) is a permanent bug generator. boru would replay the propagation debt on day one (§3.4) — except ADR-008 forces boru to pay it explicitly, per boundary, forever. |
 | Lua | metatables; `__mode` IS `weak:true` | Strongest precedent FOR the mechanism (per-instance config on the reference-cell type, invisible to types) — and AGAINST importing weak: even Lua's uniform GC'd heap had to carve scalars out ("values, such as numbers, are not subject to garbage collection"), plus documented resurrection subtleties that took ephemerons (5.2) to patch. |
 | Clojure | `with-meta` | The disciplined version of instance attachment — and the line this proposal crosses: metadata explicitly does NOT affect equality or behaviour, which is WHY loose propagation is affordable. `sort:false` is behavioural. Where Clojure wanted ordering it used distinct concrete types (`sorted-map` vs `hash-map`), chosen at construction. |
 | JavaScript | Map / WeakMap | The load-bearing convergence: ordering is not a mode — `Map` is insertion-ordered ALWAYS (ES2015); weakness is a SEPARATE TYPE with a deliberately amputated API (no iteration, no `.size`) precisely so GC is never observable. |
-| Python | dict / weakref | Same convergence independently: 3.7 made insertion order universal (no mode; and order stays OUT of dict equality — matching BORU's `deq` today); weakness lives in separate types whose docs warn entries "may be discarded at any time". |
+| Python | dict / weakref | Same convergence independently: 3.7 made insertion order universal (no mode; and order stays OUT of dict equality — matching boru's `deq` today); weakness lives in separate types whose docs warn entries "may be discarded at any time". |
 | Java / C# | LinkedHashMap, WeakHashMap / ConditionalWeakTable | Constructor-time flavours as nominal types; WeakHashMap's javadoc is a standing nondeterminism warning label, quarantined in a type whose name announces it. |
 | Racket / Guile | weak hash tables as constructor flags | The one genuine precedent for the proposal's shape — with three qualifiers: constructor-time-FIXED (not a mutable post-hoc word), a uniform heap where every value has GC identity, and no exact-render spec regime. Supports at most "constructor option". |
 
@@ -345,7 +345,7 @@ function preserve attributes?" documentation question).
 Attributes only cohere on reference cells: all handles must agree,
 and "this instance's attributes" is not a well-formed question for a
 value-semantic plain node (which copy?). So the flex-only scope falls
-out of BORU's existing reference/value split — attrs are properties of
+out of boru's existing reference/value split — attrs are properties of
 the CELL, like a Lua table's metatable. But the slippery slope is
 real: Store, class instances, and resources are also pointer-backed
 cells, and the language would then host three behaviour-modification

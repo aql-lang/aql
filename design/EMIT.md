@@ -7,7 +7,7 @@ It is a design record, not a normative spec; the executable spec is
 
 ## Why
 
-BORU could turn strings into data (`parse <kind> <src>`, the `boru:parselang`
+boru could turn strings into data (`parse <kind> <src>`, the `boru:parselang`
 module + the tabnas decoder family) but had no symmetric word for the inverse —
 turning data structures into strings. `write` encodes to a *file* via
 `Format.Encode`, and a few ad-hoc encoders existed (`valueToJsonic`,
@@ -83,7 +83,7 @@ Emission is controlled by the optional middle map argument:
 - **csv** — `{separation:sep}` overrides the field separator. (tsv is tab-fixed.)
 - **xml** — `{pretty:true}` indents element children.
 
-Map keys follow BORU's own map semantics (sorted), so emitted output matches the
+Map keys follow boru's own map semantics (sorted), so emitted output matches the
 language's canonical rendering and round-trips through `parse`.
 
 ## Errors

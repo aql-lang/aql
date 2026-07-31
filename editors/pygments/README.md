@@ -1,14 +1,14 @@
-# BORU for Pygments
+# boru for Pygments
 
-`boru_lexer.py` is a [Pygments](https://pygments.org/) lexer for BORU
+`boru_lexer.py` is a [Pygments](https://pygments.org/) lexer for boru
 (`.boru`) — a concatenative, strongly-typed query language. Use it to
-syntax-highlight BORU code blocks in documentation (MkDocs, Sphinx),
+syntax-highlight boru code blocks in documentation (MkDocs, Sphinx),
 with `pygmentize`, or anywhere the Chroma-compatible token names are
 consumed.
 
 It highlights: line comments (`#` and `//`) and `/* … */` block
 comments; single-, double- and backtick **template** strings (with
-`\`-escapes and `${ … }` interpolation of embedded BORU); decimal /
+`\`-escapes and `${ … }` interpolation of embedded boru); decimal /
 hex (`0x`) / binary (`0b`) / big-integer (`0d`) numbers and floats;
 the constants `true false none inf nan`; the structural/query
 **keywords** and the **builtin** library words; capitalised **type
@@ -34,7 +34,7 @@ pip install "git+https://github.com/boru-lang/boru#subdirectory=editors/pygments
 Verify the entry point is registered:
 
 ```bash
-pygmentize -L lexers | grep -i boru       # -> * boru:  BORU ...
+pygmentize -L lexers | grep -i boru       # -> * boru:  boru ...
 ```
 
 ## Use it
@@ -109,7 +109,7 @@ lexers["boru"] = BoruLexer()
 
 ## Token mapping
 
-| BORU construct                                   | Pygments token          |
+| boru construct                                   | Pygments token          |
 | ----------------------------------------------- | ----------------------- |
 | `# …`, `// …`                                    | `Comment.Single`        |
 | `/* … */`                                        | `Comment.Multiline`     |

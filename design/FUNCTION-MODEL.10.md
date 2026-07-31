@@ -14,14 +14,14 @@ uniform.
 
 ## 1. One dispatch path
 
-Named BORU fns already compiled to a Go handler: `InstallFnDef`
+Named boru fns already compiled to a Go handler: `InstallFnDef`
 (core_helpers.go) lowers a `def f fn […]` into `RegisterNativeFunc` with a
 body-splicing handler closure plus a check-mode `ReturnsFn`. The remaining
 fork was Function-VALUE-on-stack dispatch — `afn` / `=>` lambdas and the
 closures they return — which used a handler-less compiled table and fell
 back to `execFnDefSigStackMatch`.
 
-`compileFnDef` (engine.go) now attaches the shared BORU body-runner
+`compileFnDef` (engine.go) now attaches the shared boru body-runner
 (`buildFnBodyHandler` + the check-mode `buildFnBodyReturnsFn`, both
 extracted verbatim from `InstallFnDef`) to the compiled signatures of
 **anonymous** fns. So an afn/closure Function value dispatches through the
@@ -56,10 +56,10 @@ for a not-yet-normalized positional signature (e.g. a test calling
 Signature-only fields (`Handler`, `Args`, `Patterns`, `FullStack`,
 `QuoteArgs`, `TypeArgs`, `Fallback`, `ReturnsFn`, `RunInCheckMode`,
 `CheckFullStackFn`) were folded into `FnSig`, which already carried the
-shared `Params`/`Returns`/`BarrierPos`/`NoEval*` and the BORU `Body`.
+shared `Params`/`Returns`/`BarrierPos`/`NoEval*` and the boru `Body`.
 
-Within the one type, **Body vs Handler is the sole Go-vs-BORU distinction**:
-a BORU sig carries `Body` tokens; a native sig carries a Go `Handler`.
+Within the one type, **Body vs Handler is the sole Go-vs-boru distinction**:
+a boru sig carries `Body` tokens; a native sig carries a Go `Handler`.
 
 `NativeSig` remains the ergonomic Go authoring shim — it lowers into the
 unified `FnSig`/`Signature` at `RegisterNativeFunc`; the ~348 `NativeSig`
@@ -69,9 +69,9 @@ literals are unchanged.
 
 `FnDefInfo` now has ONE signature slice, `Signatures []Signature`. The old
 `Sigs` field is gone. Each `Signature` is full-fidelity: it carries the
-authored shape (`Params` with names, `Returns`, BORU `Body`) AND, once
+authored shape (`Params` with names, `Returns`, boru `Body`) AND, once
 compiled, the dispatch fields (`Handler`, resolved `BarrierPos`). Body vs
-Handler remains the sole Go-vs-BORU distinction within the one type.
+Handler remains the sole Go-vs-boru distinction within the one type.
 
 How the three reconciliation points were resolved:
 
@@ -83,7 +83,7 @@ How the three reconciliation points were resolved:
   The accumulated, sorted, fallback-bearing dispatch table is built on demand
   at the registry boundary — `Registry.Lookup` → `aggregateDispatch` unions
   every stacked entry's own sigs, sorts with `CompareSignatures`, and appends
-  the synthetic 0-arg `Fallback` when the name has any BORU-bodied overload.
+  the synthetic 0-arg `Fallback` when the name has any boru-bodied overload.
   This removed the carry-forward accumulation and the install-time fallback
   injection, and let `undef` / overlap-removal simplify to plain entry
   removal (the table just rebuilds from what remains).
@@ -102,7 +102,7 @@ How the three reconciliation points were resolved:
   through its Go handler.
 
 Verified by the two equivalence goldens below plus the full eng + lang
-suites; the one intended behavior change is eng-level `inspect` of a BORU fn
+suites; the one intended behavior change is eng-level `inspect` of a boru fn
 (`eng/spec/inspect.tsv`), which now reports `kind:defined` and the synthetic
 `{args:[]}` fallback, matching the lang surface.
 

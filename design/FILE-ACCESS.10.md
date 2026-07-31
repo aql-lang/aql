@@ -1,4 +1,4 @@
-# BORU File Access API Design
+# boru File Access API Design
 
 ## Status: Implemented (v2 — CSV/TSV added)
 
@@ -101,7 +101,7 @@ Signatures:
 ### Format Details
 
 - `text` — raw string, no parsing
-- `json` — on read: parse JSON to BORU map/list; on write: serialize to JSON
+- `json` — on read: parse JSON to boru map/list; on write: serialize to JSON
 - `jsonic` — on read: parse with jsonic (relaxed JSON: unquoted keys, etc.)
 - `lines` — on read: split into list of strings; on write: join list with newline
 - `csv` — on read: parse CSV into a table value with schema; on write: serialize table to CSV
@@ -127,7 +127,7 @@ The `FileOps` interface controls resolution — custom implementations can chang
 
 ## Error Handling
 
-File operations follow BORU's existing error conventions:
+File operations follow boru's existing error conventions:
 
 - File not found: `ERROR:read: open nope.txt: file does not exist`
 - Write failure: `ERROR:write: ...`

@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:test module
+# boru Language Specification: the boru:test module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable testing framework. Import binds TWO namespaces: `Test` (the

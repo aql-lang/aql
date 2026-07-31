@@ -26,7 +26,7 @@ type Span struct {
 }
 
 // SpanEvent is a host-facing view of a timestamped span event, so a
-// host OTel/Datadog sink can export events added by BORU code via
+// host OTel/Datadog sink can export events added by boru code via
 // Span.add-event.
 type SpanEvent struct {
 	Name       string
@@ -38,7 +38,7 @@ type SpanEvent struct {
 // ownership of trace identity: when the host owns tracing (e.g. an OTel
 // SDK with its own sampler), it returns the real trace/span ids it
 // minted, and the module restamps the span — and every record emitted
-// inside it — with those ids so BORU logs correlate with the host's
+// inside it — with those ids so boru logs correlate with the host's
 // exported trace. A zero value (both empty) keeps the module's local,
 // deterministic ids.
 type SpanContext struct {
@@ -96,7 +96,7 @@ func valToNativeMap(v Value) map[string]any {
 //     a LogSinkSpec — e.g. an OpenTelemetry / Datadog bridge that
 //     translates the neutral LogRecord to its SDK. This is the seam
 //     that keeps the OTel SDK a HOST dependency, never a runtime one.
-//   - from BORU, `Log.register FN NAME MIN` installs a BORU function as a
+//   - from boru, `Log.register FN NAME MIN` installs a boru function as a
 //     sink: FN is invoked with the record Map for every admitted record.
 //
 // Registering a sink also attaches it (the common intent — you
@@ -189,7 +189,7 @@ func (lsr *LogSinkRegistry) RegisterSink(spec LogSinkSpec) error {
 	return lsr.installSink(s)
 }
 
-// registerFnSink installs a BORU function as a sink. The function is
+// registerFnSink installs a boru function as a sink. The function is
 // invoked (in a sub-engine over the live registry, so it resolves
 // module / global defs) with the record Map for every admitted record.
 func (lsr *LogSinkRegistry) registerFnSink(name string, min LogLevel, fn Value) error {
@@ -208,7 +208,7 @@ func (lsr *LogSinkRegistry) registerFnSink(name string, min LogLevel, fn Value) 
 	return lsr.installSink(s)
 }
 
-// logRegisterNative is `Log.register FN NAME MIN` — install a BORU
+// logRegisterNative is `Log.register FN NAME MIN` — install a boru
 // function as a sink at the given minimum level.
 func logRegisterNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{

@@ -89,7 +89,7 @@ func Extract(file, src string) []CLIExample {
 		cmd = strings.TrimSpace(cmd)
 		// Strip an optional leading shell prompt.
 		cmd = strings.TrimPrefix(cmd, "$ ")
-		args, ok := parseBORUInvocation(cmd)
+		args, ok := parseBoruInvocation(cmd)
 		if !ok {
 			continue
 		}
@@ -145,10 +145,10 @@ func indexUnquotedHash(s string) int {
 	return -1
 }
 
-// parseBORUInvocation shell-splits a command line and, if it invokes
+// parseBoruInvocation shell-splits a command line and, if it invokes
 // `boru`, returns the argv after the program name. Returns ok=false for
 // non-boru commands or ones that don't parse cleanly.
-func parseBORUInvocation(cmd string) ([]string, bool) {
+func parseBoruInvocation(cmd string) ([]string, bool) {
 	toks, ok := shellSplit(cmd)
 	if !ok || len(toks) == 0 || toks[0] != "boru" {
 		return nil, false

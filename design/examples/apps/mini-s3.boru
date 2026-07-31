@@ -1,5 +1,5 @@
 # ============================================================
-# mini-s3.boru — a very basic S3-style object store, written in BORU
+# mini-s3.boru — a very basic S3-style object store, written in boru
 # on the LOW-LEVEL socket tier (NETWORK-SERVERS.0.md §4/§5): the
 # HTTP framing is hand-rolled with recv-until / recv-bytes, request
 # bodies STREAM into the store in bounded 64 KiB chunks, responses

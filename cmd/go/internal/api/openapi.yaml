@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: BORU Supervisor API
+  title: boru Supervisor API
   version: 1.0.0
   description: |
-    REST API for inspecting and controlling BORU services managed by
+    REST API for inspecting and controlling boru services managed by
     a running `boru serve` supervisor. The api service is itself a
     service (composed under `boru serve`), so its presence in the
     process is what makes ctl/tui control possible.
@@ -149,7 +149,7 @@ components:
           description: OS process ID of the supervisor.
         version:
           type: string
-          description: BORU CLI version string.
+          description: boru CLI version string.
         startTime:
           type: string
           format: date-time

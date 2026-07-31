@@ -87,7 +87,7 @@ single item above ~6 % flat — `Value.Equal` residual, `IsAncestor`,
   per-name generation — see the guard-surface analysis earlier in this
   note). Expected win single-digit % wall for the largest remaining risk
   surface. If revisited: attach `*inlineCache` slots to the durable body
-  slices (`BORUImpl.Body`, `ForCont.Body`, `MarkInfo.Body`) via a
+  slices (`BoruImpl.Body`, `ForCont.Body`, `MarkInfo.Body`) via a
   WordInfo pointer field, scope to per-word "plain sigs" precomputed at
   `aggregateDispatch`, all-stack matches only.
 - **F6 (tagged values): assessed, declined** within the tree-walker-only
@@ -99,7 +99,7 @@ single item above ~6 % flat — `Value.Equal` residual, `IsAncestor`,
   ~60–65× Python, the interpreter now spends its time in genuine
   tree-walking work: per-token dispatch over 72-byte values, per-call
   overload matching, paren re-expansion. CPython is a bytecode VM — the
-  equivalent BORU execution model is the existing compiled mode, already
+  equivalent boru execution model is the existing compiled mode, already
   at ~3× Python wall-clock (~10× execution-only, startup-dominated).
   Per the maintainers' scope decision the tree-walker stays a
   tree-walker; the VM is the performance story, and the interpreter is
@@ -152,7 +152,7 @@ everything below:
    argument types* and *where the arguments are* on every dispatch of
    `add`, `sub`, `lte`, `if`, `fib` — even inside a hot loop where the
    answer is identical every iteration. This is exactly the work the
-   bytecode VM bakes once at compile time, and exactly why compiled BORU is
+   bytecode VM bakes once at compile time, and exactly why compiled boru is
    already within ~3.4× of CPython on loops (79 ms vs 23 ms, most of it
    startup) while the interpreter is ~80×.
 
@@ -338,7 +338,7 @@ VM.
 
 CPython never copies a function's body to call it — it pushes a
 lightweight frame that *references* the shared, immutable code object and
-interprets it in place. The BORU interpreter copies the body and mints a
+interprets it in place. The boru interpreter copies the body and mints a
 fresh token skeleton per call.
 
 **Fix (the `#5` follow-up that was scoped but not done).** Build the
@@ -406,7 +406,7 @@ So the two-track recommendation is:
   well-scoped, each individually gated, and each removes a named,
   measured cost. F1+F2+F4 alone are low-risk and should recover a
   meaningful multiple.
-- **For "BORU is fast" as a product goal:** the answer is the compiler.
+- **For "boru is fast" as a product goal:** the answer is the compiler.
   Widen what compiles and keep compile the default for scripts; the
   interpreter's job is fidelity and REPL immediacy, and F1–F5 make it
   respectable, not a VM replacement.

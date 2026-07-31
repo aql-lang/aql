@@ -20,7 +20,7 @@ const aontuImp = `import "boru:parselang"  `
 // aStr runs src and renders the single result to a string, so an Integer
 // result (returned as an int64 by lang.Run) compares cleanly against the
 // expected text.
-func aStr(t *testing.T, a *lang.BORU, src string) string {
+func aStr(t *testing.T, a *lang.Boru, src string) string {
 	t.Helper()
 	return fmt.Sprintf("%v", runLast(t, a, src))
 }

@@ -1,8 +1,8 @@
 # ============================================================
-# vault_tui.boru — the interactive vault TUI, written in BORU on the
+# vault_tui.boru — the interactive vault TUI, written in boru on the
 # boru:tui + boru:vault surfaces (design/VAULT-TUI-PORT.0.md §4).
 #
-# The BORU port of `boru vault -i`: one Elm-style app — a single
+# The boru port of `boru vault -i`: one Elm-style app — a single
 # immutable state map folded by vt-update, rendered by the pure
 # vt-view — over the host vault reached through the boru:vault bridge
 # words. Screens are DATA on a stack in the state (§4.2): every stack

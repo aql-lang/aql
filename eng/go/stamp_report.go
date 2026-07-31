@@ -8,7 +8,7 @@ import "sync"
 // Go test (the gap that let a stale "the handlers compile" claim survive in
 // the design notes). When stamping is armed, every detached-stamp ATTEMPT
 // records a StampEvent on a per-arming log; the lang layer exposes the log
-// (BORU.StampReport) and the CLI prints it under -compile-report.
+// (Boru.StampReport) and the CLI prints it under -compile-report.
 //
 // Only genuine attempts record: values the primitive was never going to
 // compile (non-fns, Go-backed wrappers, already-stamped values — the bulk of

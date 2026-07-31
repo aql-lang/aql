@@ -233,7 +233,7 @@ type tuiDriver struct {
 func (d *tuiDriver) run() (final native.Value, err error) {
 	defer func() {
 		d.finish()
-		if rec := recover(); rec != nil { //covergate:allow driver recover body: update/view run under InvokeCallback, whose CallBORU sub-engine converts body panics into internal_error BoruErrors flowing the covered error path; the remaining driver calls are the panic-free tuikit renderer and backend methods (§modules)
+		if rec := recover(); rec != nil { //covergate:allow driver recover body: update/view run under InvokeCallback, whose CallBoru sub-engine converts body panics into internal_error BoruErrors flowing the covered error path; the remaining driver calls are the panic-free tuikit renderer and backend methods (§modules)
 			final = native.Value{}
 			err = d.reg.BoruError("internal", fmt.Sprintf("run: driver crashed: %v", rec), "run")
 		}

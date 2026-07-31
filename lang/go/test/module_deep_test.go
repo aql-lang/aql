@@ -306,7 +306,7 @@ func TestDeepWordlabNestedFileTree(t *testing.T) {
 			continue
 		}
 
-		// Main BORU file exists.
+		// Main boru file exists.
 		if _, err := os.Stat(filepath.Join(modDir, m.main)); err != nil {
 			t.Errorf("expected %s/%s: %s", m.relPath, m.main, err)
 		}

@@ -193,7 +193,7 @@ binary operations are symmetric without ceremony:
 something receiver-based interfaces handle awkwardly.
 
 Precedent: CLOS, Dylan, and Julia all attach methods to **generic
-functions**, not classes — classes are data plus a tag. BORU's
+functions**, not classes — classes are data plus a tag. boru's
 concatenative call syntax adds the trick that `c area` *reads* like a
 receiver method call while having no receiver semantics at all.
 
@@ -279,7 +279,7 @@ Candidate replacements (all verified unclaimed):
 | `concept` | C++20's name for *exactly this* — a named, checkable predicate over types whose primary job is constraining generics, which is also this design's primary consumer (`T extends Shape`); no duck-typing or wire baggage; verb pairs available: `models` (the C++ literature's own verb), `satisfies`, `implements` | abstract-sounding; C++ mindshare smaller than Java/Rust |
 | `contract` | says precisely what it does — a checked obligation; design-by-contract heritage matches the loud-completeness-check culture | legal flavour; Solidity gave it smart-contract baggage; 8 chars |
 | `role` | short; reads naturally with classes ("Circle plays the Shape role"); DCI heritage | Raku/Moose roles *carry code* (mixin-flavoured), inviting the same confusion trait has |
-| `ability` | plain-English capability reading ("types with the Shape ability") | adjacent to BORU's existing *capabilities* (runtime I/O feature flags, REFERENCE.md) — real confusion risk |
+| `ability` | plain-English capability reading ("types with the Shape ability") | adjacent to boru's existing *capabilities* (runtime I/O feature flags, REFERENCE.md) — real confusion risk |
 
 ~~Leaning: `concept`~~ — superseded by review (2026-06-09):
 **`surface`** is the proposed term, and it is the strongest candidate
@@ -294,7 +294,7 @@ yet:
   no mixin history (trait), no single-language mindshare (concept).
 - The conformance verb pairs naturally: `Circle exposes Shape`
   (verified unclaimed, as are `surface` and `Self`).
-- One honest caveat: BORU's contributor docs use "surface" as prose
+- One honest caveat: boru's contributor docs use "surface" as prose
   jargon ("surface form", "surface syntax"). Measured: zero uses in
   the user-facing docs (REFERENCE/TUTORIAL), 8 total in
   CLAUDE/EXPLANATION — a small mechanical sweep to "syntax form"

@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:log module
+# boru Language Specification: the boru:log module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of structured logging. Import binds the `Log`
@@ -56,10 +56,10 @@ import "boru:log" ; def l (Log.with "a" {x:1}) ; def c (l.child {y:2}) ; Log.add
 import "boru:log" ; def l (Log.with "a" {x:1}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.error "boom" {x:2} ; Log.dump 0 get "attributes" get	{x:2}	a call field overrides a same-named logger default
 
 # --- provider hooks (phase 3) ---------------------------------------------
-# (BORU function sinks firing per record + min-level filtering are verified in
+# (boru function sinks firing per record + min-level filtering are verified in
 # modules/log_test.go::TestLogBoruFnSink, which observes the side effect without
 # a mutable-container word the compiler-coverage ratchet tracks.)
-import "boru:log" ; Log.register (fn [[rec:Any] [] []]) tap/q info/q ; Log.sinks	[console/q tap/q]	register installs and attaches a BORU function sink
+import "boru:log" ; Log.register (fn [[rec:Any] [] []]) tap/q info/q ; Log.sinks	[console/q tap/q]	register installs and attaches a boru function sink
 
 # --- spans / traces (phase 4) ---------------------------------------------
 import "boru:log" ; def s (Log.span "op") ; typeof s	Map	a span handle is a Map of fields and method closures

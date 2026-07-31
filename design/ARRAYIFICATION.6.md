@@ -1,24 +1,24 @@
 
-# BORU Arrayification Design
+# boru Arrayification Design
 
 How array-language ideas from APL, J, R, Julia, and similar languages
-can be applied to BORU — a concatenative, stack-based query language.
+can be applied to boru — a concatenative, stack-based query language.
 
 
 ## Motivation
 
-BORU already operates on lists and maps as first-class values. It has
+boru already operates on lists and maps as first-class values. It has
 `for` loops, `map`, `reduce`, and `filter` as listed operators, typed
 lists `[:type]`, and typed maps `{:type}`. The stack machine naturally
 composes operations.
 
-What BORU does not yet have is a systematic treatment of arrays as the
+What boru does not yet have is a systematic treatment of arrays as the
 default unit of computation. Array languages differ from traditional
 languages not by having more library functions, but by making
 whole-array operations primitive, uniform across dimensions, and
 composable without explicit loops.
 
-This document explores how to bring those ideas into BORU while
+This document explores how to bring those ideas into boru while
 respecting its concatenative nature.
 
 
@@ -27,7 +27,7 @@ respecting its concatenative nature.
 1. **Words, not methods.** Every array operation is a word with suffix
    precedence, composable on the stack. No dot-method syntax.
 
-2. **Lists are arrays.** BORU lists `[1,2,3]` are the array primitive.
+2. **Lists are arrays.** boru lists `[1,2,3]` are the array primitive.
    Nested lists `[[1,2],[3,4]]` represent higher-rank arrays. Shape
    is inferred from structure.
 
@@ -41,7 +41,7 @@ respecting its concatenative nature.
    rather than requiring manual indexing.
 
 5. **Concatenative composition.** Pipelines of array transforms should
-   read left to right on the stack, as with all BORU code.
+   read left to right on the stack, as with all boru code.
 
 
 ## Packaging — core vs the `boru:array` module
@@ -303,7 +303,7 @@ eachrank 0 [mul 2] [[1,2],[3,4]]
 
 Signature: `[integer, list, list] -> [list]`
 
-This is the BORU equivalent of J's rank operator or APL's rank
+This is the boru equivalent of J's rank operator or APL's rank
 conjunction. It generalizes "map over rows" and "map over columns"
 to arbitrary nesting depths.
 
@@ -572,7 +572,7 @@ each [add 10] [1,2,3]                 => [11,12,13]
 ```
 
 
-## Integration with Existing BORU
+## Integration with Existing boru
 
 ### Relationship to `for`
 
@@ -672,7 +672,7 @@ replicate: [list, list] -> [list]
 expand:    [list, list] -> [list]
 ```
 
-All use suffix precedence, consistent with BORU convention.
+All use suffix precedence, consistent with boru convention.
 
 
 ## Implementation Priority
@@ -791,7 +791,7 @@ reshape [3,3] outer [eq] iota 3 iota 3
 ```
 
 
-## Contrast: Traditional vs Array Style in BORU
+## Contrast: Traditional vs Array Style in boru
 
 ### Sum of squares (traditional)
 
@@ -830,7 +830,7 @@ a sequence of transforms: generate, select, apply, aggregate.
 
 The core insight from array languages is not any single operation but
 the discipline of expressing computation as shape-aware transforms
-composed without explicit loops. BORU's concatenative model is
+composed without explicit loops. boru's concatenative model is
 naturally suited to this: the stack is already a pipeline, words
 already compose, and the type system already dispatches by structure.
 
@@ -848,6 +848,6 @@ Implicit broadcasting was considered and **rejected** (see
 [ADR-002](../ADR.md#adr-002)); scalar-over-array application is always
 explicit via `each`/`eachrank`.
 
-Together these give BORU a systematic, compositional approach to array
+Together these give boru a systematic, compositional approach to array
 programming while staying true to its concatenative stack-machine
 identity.

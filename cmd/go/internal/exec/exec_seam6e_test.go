@@ -35,7 +35,7 @@ func TestRunNewServerError(t *testing.T) {
 
 func TestHandlerInitError(t *testing.T) {
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, errors.New("init boom") }
+	langNew = func(...lang.Options) (*lang.Boru, error) { return nil, errors.New("init boom") }
 	t.Cleanup(func() { langNew = orig })
 	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()

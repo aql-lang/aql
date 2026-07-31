@@ -1,4 +1,4 @@
-# TCP echo round-trip benchmark in BORU.
+# TCP echo round-trip benchmark in boru.
 # One persistent connection; measures request/response round-trips over
 # a newline-framed TCP echo protocol.
 import "boru:net"
@@ -36,5 +36,5 @@ for 20000 [
 ]
 def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
 
-print (join "" ["BORU  20000 round-trips  " (convert String dur) " ms  " (convert String (div dur 20000000.0)) " req/s"])
+print (join "" ["boru  20000 round-trips  " (convert String dur) " ms  " (convert String (div dur 20000000.0)) " req/s"])
 Net.close sock

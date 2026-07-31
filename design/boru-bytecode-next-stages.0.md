@@ -1,4 +1,4 @@
-# BORU Bytecode — Next Stages (detailed work to refusalCeiling 0 + P7)
+# boru Bytecode — Next Stages (detailed work to refusalCeiling 0 + P7)
 
 Status: design / work-breakdown. Written after the session that drove
 `refusalCeiling` 20 → 16 and landed the variadic-stack VM mechanism. This is the
@@ -316,9 +316,9 @@ dynamic-help eval + corpus re-baseline of the original plan, steps 2–4).
 **reducible** rows (Test/Assert, quote-macro) and several `computeRefusalCeiling`
 rows. This stage has the widest payoff and the widest blast radius.
 
-**Root cause (verified this session).** A module-preamble BORU fn (`run-spec`,
+**Root cause (verified this session).** A module-preamble boru fn (`run-spec`,
 `run-cases`, `parse_calc`, generator bodies) dispatched as a value runs its body
-via `CallBORU` (`registry.go:1103`) → `sub.Run`, which records into whatever frame
+via `CallBoru` (`registry.go:1103`) → `sub.Run`, which records into whatever frame
 is active. Attempting to unit-compile it via `buildFnBodyReturnsFn` returned a
 bare `[Any]` because **the module sub-registry has a separate, inactive
 EmitState**: `e.registry.Check.Emit != capturedReg.Check.Emit` and
@@ -334,7 +334,7 @@ construction-time checking AND the compilation corpus, so the change requires a
 
 **Design (the project, in order).**
 1. **Cross-registry EmitState sharing.** When the compiling program dispatches a
-   module-preamble BORU fn, the fn body must unit-compile **against the main
+   module-preamble boru fn, the fn body must unit-compile **against the main
    program's EmitState** while resolving names in its **own sub-registry scope**.
    Concretely: at the `execFnDefSig` capturedReg branch (engine.go ~4411), when
    `e.registry.Check.IsActive()`, temporarily install the main EmitState +
@@ -363,7 +363,7 @@ construction-time checking AND the compilation corpus, so the change requires a
 reviewed change, never a partial diagnostic filter.
 
 **Files.** `eng/go/engine.go` (`execFnDefSig`), `eng/go/registry.go`
-(`CallBORU`, `CheckState` sharing helper — add a `BorrowCheck(parent)`/restore that
+(`CallBoru`, `CheckState` sharing helper — add a `BorrowCheck(parent)`/restore that
 shares `Emit`+`Mode` and snapshots `Diagnostics`), `lang/go/native/native_help.go`
 (hermetic eval), `eng/go/carrier.go` (construction-time body check), and
 `test/go/langspec/*` (re-baseline).

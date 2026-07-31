@@ -1,6 +1,6 @@
 # Unify test cases
 # Format: left_val<TAB>right_val<TAB>boolean_result<TAB>out_val
-# Each left_val and right_val is a BORU expression evaluated to produce a value.
+# Each left_val and right_val is a boru expression evaluated to produce a value.
 # boolean_result is true or false.
 # out_val is the expected unified value (ignored when boolean_result is false).
 

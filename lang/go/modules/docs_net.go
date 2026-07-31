@@ -124,7 +124,7 @@ func init() {
 			`def who (Net.peer-cert c)                               ;# none unless require-client: demanded one`,
 			`who.common-name                                         ;# 'billing.internal'`,
 			`who.dns-names                                           ;# ['billing.internal']`,
-			`if (who eq none) [ raise "unauthenticated" ] [ … ]       ;# authorize in BORU, not in the host`,
+			`if (who eq none) [ raise "unauthenticated" ] [ … ]       ;# authorize in boru, not in the host`,
 		},
 		"addr": {
 			`(Net.addr l).port                                       ;# the REAL port behind an ephemeral {tcp: 0}`,

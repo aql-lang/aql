@@ -72,7 +72,7 @@ func TestShapedMethodEffectOrdering(t *testing.T) {
 	// registry Output and the console sink writes the record line through the
 	// registry ErrOutput — pointing both at one pipe makes the full effect
 	// order observable as a single byte stream.
-	capture := func(run func(a *BORU)) string {
+	capture := func(run func(a *Boru)) string {
 		rd, w, _ := os.Pipe()
 		a := mustNew(t)
 		a.SetOutput(w)
@@ -84,7 +84,7 @@ func TestShapedMethodEffectOrdering(t *testing.T) {
 		return string(out)
 	}
 	var gotC, gotI []any
-	outC := capture(func(a *BORU) {
+	outC := capture(func(a *Boru) {
 		var compiled bool
 		var err error
 		gotC, compiled, err = a.RunCompiled(src)
@@ -92,7 +92,7 @@ func TestShapedMethodEffectOrdering(t *testing.T) {
 			t.Errorf("effect ordering: compiled=%v err=%v", compiled, err)
 		}
 	})
-	outI := capture(func(a *BORU) {
+	outI := capture(func(a *Boru) {
 		var err error
 		gotI, err = a.RunInterp(src)
 		if err != nil {
@@ -180,7 +180,7 @@ func TestShapedMethodComputedArgStaysRefused(t *testing.T) {
 // The compiled OpCallDynMethod must detect the count mismatch and defer via
 // internal_error: RunCompiled silently re-runs the interpreter (correct
 // result, fallback), RunCompiledStrict surfaces the internal_error loudly.
-func zzShapedInstance(t *testing.T) *BORU {
+func zzShapedInstance(t *testing.T) *Boru {
 	t.Helper()
 	a := mustNew(t)
 	if err := zzInstallShapedInstance(a); err != nil {
@@ -192,7 +192,7 @@ func zzShapedInstance(t *testing.T) *BORU {
 // zzInstallShapedInstance registers the zz-inst fixture on an existing
 // instance without a *testing.T, so data-driven suites (the frontier cases)
 // can build it too.
-func zzInstallShapedInstance(a *BORU) error {
+func zzInstallShapedInstance(a *Boru) error {
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
 		return err
@@ -213,7 +213,7 @@ func zzInstallShapedInstance(a *BORU) error {
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{},
-			Impl:       native.BORU([]native.Value{native.NewWord("zz-m")}),
+			Impl:       native.Boru([]native.Value{native.NewWord("zz-m")}),
 			BarrierPos: -1,
 		}},
 		Registry: subReg,
@@ -316,7 +316,7 @@ func TestShapedMethodRegisteredShapeCompiles(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TInteger}},
 			Returns:    []*native.Type{native.TInteger},
-			Impl:       native.BORU([]native.Value{native.NewWord("zz-h")}),
+			Impl:       native.Boru([]native.Value{native.NewWord("zz-h")}),
 			BarrierPos: -1,
 		}},
 		Registry: subReg,

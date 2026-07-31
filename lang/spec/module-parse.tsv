@@ -1,17 +1,17 @@
-# BORU Language Specification: the boru:parse module (custom parsers)
+# boru Language Specification: the boru:parse module (custom parsers)
 # Format: input<TAB>expected<TAB>description
 #
-# boru:parse lets a BORU author DEFINE a parser and register it as a `parse`
+# boru:parse lets a boru author DEFINE a parser and register it as a `parse`
 # kind (boru:parselang). A grammar is built from an ABNF source (Parse.abnf),
 # declarative rules (Parse.rule, shaped by the Parse.RuleSpec / Parse.AltSpec
 # Map subtypes), fixed tokens (Parse.token) and custom lex matchers
-# (Parse.matcher); semantic actions (Parse.action) attach BORU fns to grammar
+# (Parse.matcher); semantic actions (Parse.action) attach boru fns to grammar
 # marks so the parser can emit custom data. Parse.grammar mints the builder;
 # Parse.parser finalizes it into a ParseLang Function VALUE. The carrier is a
 # shared pointer threaded through each word and bound to a def; the finalized
 # parser is def-bound and run via the `parse` value form (`parse <name> …`).
 #
-# §1  ABNF grammar + a mark action — the action's BORU value is the result
+# §1  ABNF grammar + a mark action — the action's boru value is the result
 import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [7])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def op (Parse.parser g)  end  parse op 'inc'	7	Parse.grammar + Parse.action + Parse.abnf + Parse.parser: action value is the AST
 import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [{k:'inc'}])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def opm (Parse.parser g)  end  (parse opm 'inc').k	'inc'	an action can build a custom Map node that survives to the parse result
 #
@@ -28,7 +28,7 @@ import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.action 
 import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.abnf g 'x = "a"' {start:'x'}  def p (Parse.parser g)  def p2 (Parse.parser g)	ERROR:parse_grammar_done	a finalized grammar is single-use — a second Parse.parser is refused
 #
 # §5  Parse.spec — the WHOLE grammar as one declarative map, mirroring the
-#     tabnas GrammarSpec document: {options rule ref v} plus the BORU
+#     tabnas GrammarSpec document: {options rule ref v} plus the boru
 #     extension sections abnf and matcher. options is the tabnas OptionsMap
 #     (fixed:{token:…} declares fixed tokens, rule:{start:…} the start rule)
 #     and applies FIRST, as tabnas does; ref is the named-action table

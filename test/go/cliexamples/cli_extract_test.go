@@ -50,7 +50,7 @@ func TestCLIExtract_NoAssertionIgnored(t *testing.T) {
 	}
 }
 
-func TestCLIExtract_NonBORUIgnored(t *testing.T) {
+func TestCLIExtract_NonBoruIgnored(t *testing.T) {
 	src := "```bash\nls -la   # prints files\n```\n"
 	if got := Extract("CLI.md", src); len(got) != 0 {
 		t.Errorf("non-boru command should be ignored, got %+v", got)
@@ -58,7 +58,7 @@ func TestCLIExtract_NonBORUIgnored(t *testing.T) {
 }
 
 func TestCLIExtract_BoruFenceIgnored(t *testing.T) {
-	// A ```boru block is BORU source, not shell — not a CLI example.
+	// A ```boru block is boru source, not shell — not a CLI example.
 	src := "```boru\nboru do '1 add 2'   # prints 3\n```\n"
 	if got := Extract("CLI.md", src); len(got) != 0 {
 		t.Errorf("boru fence should be ignored, got %+v", got)
@@ -73,7 +73,7 @@ func TestCLIExtract_SkipMarker(t *testing.T) {
 }
 
 func TestCLIExtract_HashInQuotesNotComment(t *testing.T) {
-	// A '#' inside the BORU string is not the output comment.
+	// A '#' inside the boru string is not the output comment.
 	src := "```bash\nboru do '\"a#b\" upper'   # prints A#B\n```\n"
 	got := Extract("CLI.md", src)
 	if len(got) != 1 {

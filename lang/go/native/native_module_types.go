@@ -10,7 +10,7 @@ import (
 
 // Module / ModuleExport — the Ideal types that describe an imported module.
 //
-// When BORU code runs `import "boru:math-util"`, the bound name `Math` is a
+// When boru code runs `import "boru:math-util"`, the bound name `Math` is a
 // ModuleExport instance (one per `export "Name" {…}` declaration). A
 // ModuleExport is transparent: `MathUtil.sqrt` reads the raw exported value
 // (so `MathUtil.sqrt 16.0 → 4.0` still works), while the synthetic names

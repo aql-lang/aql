@@ -1,6 +1,6 @@
 # Compilation of `do [ … ]` structures
 
-Investigation of how the BORU bytecode compiler lowers the `do` word — the
+Investigation of how the boru bytecode compiler lowers the `do` word — the
 error-trapping "evaluate this body as code" construct. Covers the two `do`
 signatures (`do [List]` and `do {Map}`), every distinct compile strategy the
 recorder picks, why each is chosen, and a differential-parity check of
@@ -166,7 +166,7 @@ engines agree on the result either way.
 `error [handler]` (sig `[List Any]`, `BarrierPos 1`) takes the **preceding stack
 value**: if it is an `Error` the handler runs (with the error on the stack) to
 produce a fallback, otherwise the value passes through. Paired with `do` it is
-BORU's try/catch, and it compiles to **two paired closures**:
+boru's try/catch, and it compiles to **two paired closures**:
 
 ```
 do [raise boom "kaboom"] error [drop "recovered"]
@@ -250,7 +250,7 @@ found during this investigation.
 ## 7. The always-compile goal — tranche 1 (July 2026)
 
 Maintainer directive: `do` must ALWAYS compile — natively, for performance
-(network servers in BORU need full compilation to be credible; correctness via
+(network servers in boru need full compilation to be credible; correctness via
 interpreter fallback is not enough). Measured stakes (200k-iteration hot
 loop): a closure-compiled `do` body runs **10.3×** the interpreter; the old
 baked-const path (a runtime `RunResolved` sub-engine per call) recovered only

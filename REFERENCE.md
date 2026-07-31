@@ -1,15 +1,15 @@
-# BORU Reference
+# boru Reference
 
-Information-oriented reference for BORU syntax, types, and the
-built-in word library. For learning BORU, start with the
+Information-oriented reference for boru syntax, types, and the
+built-in word library. For learning boru, start with the
 **[Tutorial](TUTORIAL.md)**. For task-oriented recipes, see the
-**[How-To Guides](HOWTO.md)**. For *why* BORU is shaped the way it
+**[How-To Guides](HOWTO.md)**. For *why* boru is shaped the way it
 is, see the **[Explanation](EXPLANATION.md)**.
 
 > **Notation.** Throughout, a trailing `# returns …` comment shows what
 > an expression evaluates to (`mul 2 3  # returns 6`); in prose we say
 > "`mul 2 3` returns `6`". The comment is ordinary documentation (`#`
-> begins a line comment), not special syntax. BORU has no result arrow:
+> begins a line comment), not special syntax. boru has no result arrow:
 > `=>` is itself a word — the anonymous-function arrow, sugar for `afn`
 > — so results are written as comments rather than with `=>`.
 
@@ -235,7 +235,7 @@ Commas are optional inside list and map literals — `[1 2 3]` and
 
 * An **empty element** — a leading or repeated comma (`[,1]`, `[1,,2]`)
   — is a **syntax error** (`[boru/syntax_error]`), not a fabricated
-  `null`. BORU has no implicit hole value; write `none` for an explicit
+  `null`. boru has no implicit hole value; write `none` for an explicit
   empty value. (A trailing comma, `[1,]`, is fine.)
 * A **duplicate key** in a map literal is accepted silently and the
   last value wins: `{a: 1, a: 2}` returns `{a:2}`.
@@ -403,7 +403,7 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   execution are captured by `quote`.)
 * **Macros.** A `macro` runs at expansion time on its operands *as
   code* and splices the result into the call site — new syntax in
-  BORU itself. See **[Macros](#macros)**.
+  boru itself. See **[Macros](#macros)**.
 * **`end`.** Forces the nearest waiting word to stop forward
   collection — needed only when the next token would otherwise be a
   valid argument (e.g. `import "boru:math-util" "foo" print`). `;`
@@ -671,7 +671,7 @@ is absolute when a separator follows the colon (`C:\x`) and
 drive-relative otherwise (`C:x`). Anything without a drive prefix stays
 POSIX — only `/` splits, `\` is an ordinary character, and the `volume`
 is empty (so `'//a//b'` is `/a/b`, never a volume). (Write drive paths
-with `/` in BORU source — single-quoted strings treat `\` as an escape.)
+with `/` in boru source — single-quoted strings treat `\` as an escape.)
 
 Both construction forms run the *same* validator — the map form
 re-renders through the string parser — and the derived properties
@@ -1269,7 +1269,7 @@ restricted words refuse. See
 `word v` wraps its (unevaluated) argument in a splice marker. When the
 marker reaches the evaluation pointer it is replaced by its payload: a
 plain list contributes its **top-level elements**, any other value
-contributes itself. This is BORU's spread operator, and it works inline,
+contributes itself. This is boru's spread operator, and it works inline,
 bound, and in argument positions:
 
 ```
@@ -1567,7 +1567,7 @@ module boundary once, and recursion inside it is eliminated as above.
 A **macro** is `fn`'s expand-time sibling: a transformer the engine runs on
 its operands **as unevaluated code**, whose returned token list is **spliced
 into the call site** in place of the call. Macros add new syntax / control
-forms in BORU itself, rather than in Go.
+forms in boru itself, rather than in Go.
 
 | Word | Description | Example |
 |------|-------------|---------|
@@ -1600,7 +1600,7 @@ written, so the body runs only when `x gt 10` is false.
 #### The template — `quote`, `unquote`, `splice`
 
 The template is an ordinary `quote [ … ]` region (default-data, the opposite of
-BORU's default-eval). Inside it:
+boru's default-eval). Inside it:
 
 * bare tokens are literal code of the expansion;
 * **`unquote x`** inserts `x` as **one grouped node** — a bare parameter name
@@ -2125,9 +2125,9 @@ word — `size` subsumes it.
 
 > **A bare word key is a *literal* name — like JavaScript `.key`. Wrap a
 > variable (or any expression) in parens to use its *value* as the key —
-> like `[expr]`.** `()` is to BORU what `[]` is to JS member access:
+> like `[expr]`.** `()` is to boru what `[]` is to JS member access:
 >
-> | JavaScript | BORU | meaning |
+> | JavaScript | boru | meaning |
 > |------------|-----|---------|
 > | `xs.i`     | `xs dot i` or `xs.i` | literal key/index named `i` |
 > | `xs[i]`    | `xs get i`           | computed — the **value** of `i` |
@@ -2293,7 +2293,7 @@ Row`. See **[HOWTO: Define a record/table/object type](HOWTO.md#define-a-record-
 | Word | Description |
 |------|-------------|
 | `inspect` | Structured view of a value, word, or type |
-| `canon` | Render a value as canonical BORU source (a String) |
+| `canon` | Render a value as canonical boru source (a String) |
 | `trace` | Evaluate a list with step-by-step tracing |
 
 **`canon` is round-trippable for data.** The result is the same
@@ -2456,13 +2456,13 @@ modules keep plain names.
 | `boru:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
 | `boru:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
 | `boru:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `boru:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (BORU-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), `args` (the script's argument vector), `env` / `env-all` (read-only environment: one variable by name, or the whole visible map), `exit` (end the program with a status, 0..125), `read-line` (the next line of a stream or File handle, none at EOF), `is-tty` (is this stream a terminal?), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
+| `boru:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (boru-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), `args` (the script's argument vector), `env` / `env-all` (read-only environment: one variable by name, or the whole visible map), `exit` (end the program with a status, 0..125), `read-line` (the next line of a stream or File handle, none at EOF), `is-tty` (is this stream a terminal?), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
 | `boru:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
 | `boru:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
 | `boru:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
 | `boru:query` | `Query` | SQL-flavoured query pipeline. |
 | `boru:report` | `Report` | Tabular result reporting. |
-| `boru:vm` | `Vm` | Run BORU source in-memory — `run`, `run-with`, `run-sandbox`, `run-compute`. |
+| `boru:vm` | `Vm` | Run boru source in-memory — `run`, `run-with`, `run-sandbox`, `run-compute`. |
 
 > **`StructUtil.merge` is a deep, index-wise merge** — lists merge
 > element-by-element (`{kids:[99]} {kids:[10,20]} StructUtil.merge`
@@ -2563,9 +2563,9 @@ modules keep plain names.
 > so watch behaviour is part of the same real/mem parity surface as every
 > other io word.
 >
-> **Mounting a BORU-implemented filesystem.** `IO.mount {read: fn, …}`
-> installs a map of BORU handler functions as the host filesystem — every
-> io word then routes through them, so BORU code can expose any backing
+> **Mounting a boru-implemented filesystem.** `IO.mount {read: fn, …}`
+> installs a map of boru handler functions as the host filesystem — every
+> io word then routes through them, so boru code can expose any backing
 > (a flex map, a table, a service) as a filesystem:
 >
 > ```
@@ -2810,7 +2810,7 @@ One-shot commands (run and exit):
 | Subcommand | Purpose | Key flags |
 |------------|---------|-----------|
 | `run` / `boru [script]` | Execute a script, `-e` expression, or (no args) the REPL | `-e`, `-check`, `-compile`, `-options`, `--perms`, `--allow`/`--deny` |
-| `do <words…>` | Evaluate the arguments as one BORU expression and print the result | `--perms`, `--allow`/`--deny`, `--compile` |
+| `do <words…>` | Evaluate the arguments as one boru expression and print the result | `--perms`, `--allow`/`--deny`, `--compile` |
 | `check [script]` | Static type-check; print diagnostics | `--json`, `--soft`, `--emit`, `-e` |
 | `fmt [file…]` | Format `.boru` files in place (whole tree if no args) | — |
 | `describe [name]` | Document a word, category, or module (the *language*) | — |

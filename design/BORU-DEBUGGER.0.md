@@ -66,29 +66,29 @@ The inspiration is Tim Misiak's *Writing a Debugger From Scratch*
 > state, then continue. Everything else — symbols, stacks, disassembly —
 > hangs off that loop.
 
-BORU already *has* that loop. The engine fires a callback before every
+boru already *has* that loop. The engine fires a callback before every
 step. What's missing is a host that stops on it and talks to a human.
 
 
-## 1. The mental model — the article, mapped to BORU
+## 1. The mental model — the article, mapped to boru
 
-The article builds a native x64 debugger on the Win32 debug API. BORU is
+The article builds a native x64 debugger on the Win32 debug API. boru is
 an interpreted concatenative stack language on a Go engine, so the
 *substrate* differs entirely — but the *primitives* map one-to-one, and
 several are cheaper here than on bare metal.
 
-| Article (native x64) | BORU equivalent | Status in-tree |
+| Article (native x64) | boru equivalent | Status in-tree |
 |----------------------|----------------|----------------|
 | Part 1 — attach to / launch a process | `boru debug <file>` (launch); `boru debug attach` (already exists via `debugserve`) | launch: **shipped** (Phase 1) |
 | Part 2 — register state & stepping (`GetThreadContext`, trap flag) | the **data stack** + `pointer` are the "registers"; step = one engine step | seam **present** (`SetTrace`) |
-| Part 3 — reading memory (`ReadProcessMemory`) | read BORU values on the stack, in scope, in stores | present (`CurrentStack`, `Defs`) |
+| Part 3 — reading memory (`ReadProcessMemory`) | read boru values on the stack, in scope, in stores | present (`CurrentStack`, `Defs`) |
 | Part 4 — exports & private symbols | the registry's live word + def tables | present (`Debug.words`/`defs`) |
 | Part 5 — breakpoints (INT3 `0xCC`) | `Debug.break` markers; source `file:line`; word/pattern | markers **present**; line/word **missing** |
 | Part 6 — stacks (unwind) | the spliced fn-frame chain on the tape | raw material **present** (`fn_frame.go`) |
 | Part 7 — disassembly | `Debug.disasm` — the StackForm "bytecode" view | present |
 | Part 8 — source & symbols | `SrcPos{Row,Col}` on every value → `file:line` | present (per §7) |
 
-Two things the article's native target *cannot* cheaply do, but BORU can,
+Two things the article's native target *cannot* cheaply do, but boru can,
 because execution is a **deterministic step machine** with a whole-stack
 snapshot available at every step:
 
@@ -233,7 +233,7 @@ is neither `serve` nor `attach`, treat it as a file to launch (§4).
    TTY prompt is one thin front end over it; a DAP adapter (§8) is a
    second. The two can never diverge on semantics because they share the
    session.
-3. **Honest about the granularity floor.** You pause *between BORU
+3. **Honest about the granularity floor.** You pause *between boru
    tokens*, never inside a native handler. v1 is *blind inside
    sub-engines* (module fns, `each`/`fold`/`do`, forks); the UI labels
    those steps as stepped-over rather than pretending to descend.
@@ -378,7 +378,7 @@ stepping-while-compiled (§7 option D, §10).
 
 ## 6. Signature features
 
-These four are what make the BORU debugger more than a port of the
+These four are what make the boru debugger more than a port of the
 article. **Break-on-error is prioritised for an early phase** (it is
 nearly free and the highest-value); the others are designed here and
 sequenced in §10.
@@ -400,7 +400,7 @@ sequenced in §10.
 > **pause-before-unwind** (stopping at a raise that a `do` handler will
 > catch, or resuming past it) — that remains the Phase-2 form.
 
-Stop **at the token that raised**, before the error unwinds — BORU's
+Stop **at the token that raised**, before the error unwinds — boru's
 answer to `pdb.post_mortem` / `gdb`'s stop-on-signal. Two entry points:
 
 - **`--break-on-error`** on launch: when a step is about to dispatch a
@@ -548,7 +548,7 @@ prompt:
 | `bt` | the call chain (§5.3) |
 | `frame <n>` | select a frame; `defs`/`eval` then act in its scope |
 | `defs` / `locals` | bindings in scope (`Defs`, frame `InstallNames`) |
-| `print <expr>` / `p` | evaluate BORU against the paused state (reuse the `debugserve` sub-engine eval pattern) |
+| `print <expr>` / `p` | evaluate boru against the paused state (reuse the `debugserve` sub-engine eval pattern) |
 | `watch <name>` | data watchpoint (§6.2) |
 | `list` | source around the current line |
 | `back` / `replay` | time-travel (§6.4, later phase) |
@@ -593,7 +593,7 @@ evaluated expression can never grant itself more than the program had.
 
 Editor users expect the **Debug Adapter Protocol** (`setBreakpoints`,
 `stackTrace`, `scopes`, `variables`, `next`/`stepOut`, `pause`,
-`terminate`). BORU already ships an **LSP** whose JSON-RPC transport
+`terminate`). boru already ships an **LSP** whose JSON-RPC transport
 (`cmd/go/internal/lsp/jsonrpc.go`, `Content-Length` framing) is ~90%
 reusable for a DAP server, and it would slot in under `boru serve` as an
 LSP sibling.
@@ -707,7 +707,7 @@ ends and kernel work begins.
   sub-engines as they are re-taken in `takeSubEngine`) starts with as
   its trace. That one seam reaches everything routed through
   `runPooledSub`/`InvokeBody` — each/fold/do/filter bodies, paren
-  groups, interp holes — and `CallBORU`'s same-registry fn bodies. The
+  groups, interp holes — and `CallBoru`'s same-registry fn bodies. The
   session installs TWO callbacks (main tape vs. the registry hook), so
   the modes get their semantics: `step` descends into bodies (labelled
   `(in body)`), `next`/`out` treat them as part of their line,
@@ -747,7 +747,7 @@ ends and kernel work begins.
   still stops. *Module-fn FRAMES in `bt`* — two seams:
   `RunningEngineChain` walks the debugParent registry chain from
   the pause's registry up to the session's, collecting engines
-  outermost-first; and `CallBORUNamed` labels the body sub-engine
+  outermost-first; and `CallBoruNamed` labels the body sub-engine
   with the fn's name (`Engine.debugLabel` → `EngineState.Label` — a
   Defs-based frame leaves no tape marks to reconstruct a name
   from), which the session renders as the call's frame.

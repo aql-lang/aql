@@ -59,7 +59,7 @@ import (
 //	touch     create/update a Pathon and apply {mode,mtime,atime,size}
 //	watch     run a body per change event on a Pathon (returns a Watcher)
 //	unwatch   stop a Watcher, closing its event stream
-//	mount     install a map of BORU handler fns as the filesystem
+//	mount     install a map of boru handler fns as the filesystem
 //	unmount   restore the filesystem that was active before mount
 //
 // IOModuleTypes bundles the per-import module-minted types the io words
@@ -478,7 +478,7 @@ func IOModuleNativeFuncs(t IOModuleTypes) []NativeFunc {
 		},
 		{
 			// mount installs a filesystem as the host FileOps; unmount
-			// restores the previous one. A handler MAP is the BORU→FileOps
+			// restores the previous one. A handler MAP is the boru→FileOps
 			// bridge; a Pathon (a ".zip" path or {zip:true}) mounts a
 			// read-only ZIP archive, or a copy-on-write overlay over it with
 			// {writable:true}. See io_mount.go for both contracts.

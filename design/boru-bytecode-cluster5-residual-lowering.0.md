@@ -1,4 +1,4 @@
-# BORU Bytecode — Cluster 5: variadic branch / multi-shape residual lowering
+# boru Bytecode — Cluster 5: variadic branch / multi-shape residual lowering
 
 Status: design. The linchpin for the remaining ~21 not-fully-native spec rows.
 Companion to `boru-bytecode-finish-line.0.md` (the cluster roadmap) and
@@ -182,11 +182,11 @@ before landing.
   `evCallUser name="double"` results**. Root cause (traced with an event dump):
   the two leftovers are the test's *subject* (`double`) invoked on each case's
   inputs (`[3]`, `[0]`). `Test.run-spec` analyses its concrete cases at compile
-  time, but because it is a **module-preamble BORU fn not compiled as an isolated
+  time, but because it is a **module-preamble boru fn not compiled as an isolated
   unit**, those internal subject-invocations are recorded into the MAIN frame and
   their results leak onto the program residual. At runtime they are consumed
   inside run-spec (which nets 0 via the `BodyOut:0` `test-describe`). The fix is
-  fn-unit isolation for module-preamble BORU fns (plan cluster 2) so a module-fn's
+  fn-unit isolation for module-preamble boru fns (plan cluster 2) so a module-fn's
   internal residual is contained — NOT a residual-seat tweak. `test-describe`
   already declares `Returns: []` correctly, so leaf output-count modeling is not
   the problem; containment is.
@@ -194,11 +194,11 @@ before landing.
   **Attempted fix + architectural blocker found (reverted, gate-clean).** Tried
   routing the module-fn value dispatch (`execFnDefSig` capturedReg branch) through
   the unit-compiling `buildFnBodyReturnsFn` (`StartFnCompile` + `AnalyseFnBody` +
-  `RecordUserCall`) instead of `CallBORU`. It fired but returned a bare `[Any]`:
+  `RecordUserCall`) instead of `CallBoru`. It fired but returned a bare `[Any]`:
   debug showed the module sub-registry has a **separate, inactive EmitState**
   (`mainES == capturedReg.Check.Emit` is FALSE, `capturedReg.Check.Emit.Active()`
   is FALSE), so `StartFnCompile` declines and no unit records. The real prerequisite
-  is therefore **cross-registry EmitState sharing**: a module-preamble BORU fn must
+  is therefore **cross-registry EmitState sharing**: a module-preamble boru fn must
   unit-compile against the MAIN program's EmitState while resolving names in its own
   sub-registry scope. That is a foundational module-compilation change (how
   `BuildXxxModule` sub-registries relate to the compiling program's Check/Emit), not

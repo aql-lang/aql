@@ -24,18 +24,18 @@ var cliVersion string
 func SetVersion(v string) { cliVersion = v }
 
 // runInteractive launches the interactive vault TUI. --boru runs the
-// BORU implementation (the boru:vault-tui module over the boru:vault
+// boru implementation (the boru:vault-tui module over the boru:vault
 // bridge — design/VAULT-TUI-PORT.0.md §1.3); the bubbletea TUI stays
 // the default.
 func runInteractive(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault -i", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	useBORU := fs.Bool("boru", false, "run the BORU implementation of the interactive TUI (experimental)")
+	useBoru := fs.Bool("boru", false, "run the boru implementation of the interactive TUI (experimental)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
-	if *useBORU {
-		return runInteractiveBORU(homeDir, stdin, stdout, stderr)
+	if *useBoru {
+		return runInteractiveBoru(homeDir, stdin, stdout, stderr)
 	}
 
 	if !interactiveTTY(stdin, stdout) {
@@ -52,7 +52,7 @@ func runInteractive(args []string, homeDir string, stdin io.Reader, stdout, stde
 		// Default the active location to the home ~/.boru so the header and the
 		// "new vault" defaults are sensible; the picker opens because no store
 		// exists there yet.
-		ctl.setActiveVault(homeBORUDir(homeDir), "")
+		ctl.setActiveVault(homeBoruDir(homeDir), "")
 	}
 
 	// Theme: detect the terminal background once, then honor the saved

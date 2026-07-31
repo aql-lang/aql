@@ -1,4 +1,4 @@
-# BORU Language Specification: Open words — ownership-anchored `def` extension
+# boru Language Specification: Open words — ownership-anchored `def` extension
 # Format: input<TAB>expected<TAB>description
 #
 # design/OPEN-WORDS.1.md: `def <word> fn […]` on a word that carries

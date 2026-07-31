@@ -23,7 +23,7 @@ func testdataDir(t *testing.T) string {
 }
 
 // runRealFileSteps creates a registry backed by real OS file operations,
-// with the working directory set to dir, then executes BORU steps.
+// with the working directory set to dir, then executes boru steps.
 func runRealFileSteps(t *testing.T, dir string, steps []string) ([]native.Value, error) {
 	t.Helper()
 
@@ -196,7 +196,7 @@ func TestRealFileBareModuleJsonMarsField(t *testing.T) {
 	assertResult(t, result, "6792")
 }
 
-// --- Bare module with relative BORU import ---
+// --- Bare module with relative boru import ---
 
 func TestRealFileBareModuleImportsBoruRelative(t *testing.T) {
 	// testdata/.boru/utils/index.boru does: import "./helpers.boru"

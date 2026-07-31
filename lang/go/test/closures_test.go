@@ -9,7 +9,7 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BORU fns and lambdas use implicit lexical capture: at construction
+// boru fns and lambdas use implicit lexical capture: at construction
 // time the engine walks the body's bare-Word references, identifies
 // which ones resolve to bindings made by an enclosing fn (params or
 // local defs), and snapshots their current values into the FnDefInfo.

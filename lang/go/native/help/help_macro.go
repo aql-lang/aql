@@ -36,9 +36,9 @@ func init() {
 
 	register(&Entry{
 		Word:    "macro",
-		Summary: "Define a hygienic macro: BORU code that rewrites code before it runs.",
+		Summary: "Define a hygienic macro: boru code that rewrites code before it runs.",
 		Description: "`def name (macro [[params] [template]])` — the template, built with quote / unquote / splice, " +
-			"expands at each call site. Macros add new syntax in BORU itself; hygiene (via gensym) keeps temporaries " +
+			"expands at each call site. Macros add new syntax in boru itself; hygiene (via gensym) keeps temporaries " +
 			"from colliding with user names.",
 	})
 
@@ -57,7 +57,7 @@ func init() {
 
 	register(&Entry{
 		Word:    "canon",
-		Summary: "Render any value as canonical, round-trippable BORU source.",
+		Summary: "Render any value as canonical, round-trippable boru source.",
 		Description: "The textual inverse of parsing: `canon v` produces the canonical source form of a value — " +
 			"normalising sugar (dotted access, `/q`, `=>`) to its underlying words. Useful for serialising code or " +
 			"data back to source.",

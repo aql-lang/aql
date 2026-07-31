@@ -21,7 +21,7 @@ func stampReg(t *testing.T) *Registry {
 }
 
 func boruBodyFd(body ...Value) FnDefInfo {
-	return FnDefInfo{Signatures: []Signature{{Impl: BORU(body)}}}
+	return FnDefInfo{Signatures: []Signature{{Impl: Boru(body)}}}
 }
 
 // Policy: a registry never armed (a plain interpreter run) must not stamp;
@@ -124,8 +124,8 @@ func TestStampDetachedFnShapeGates(t *testing.T) {
 	// reaches each remaining overload — MatchFnSig at the invoke seam picks
 	// the sig, whose own Impl ref then runs.
 	multi := FnDefInfo{Signatures: []Signature{
-		{Impl: BORU([]Value{NewInteger(1)})},
-		{Impl: BORU([]Value{NewInteger(2)})},
+		{Impl: Boru([]Value{NewInteger(1)})},
+		{Impl: Boru([]Value{NewInteger(2)})},
 	}}
 	if ref0, ok := StampDetachedFn(r, multi, SrcPos{}); !ok || ref0 == nil {
 		t.Fatalf("multi-own-sig first overload must stamp (§7b)")
@@ -147,14 +147,14 @@ func TestStampDetachedFnShapeGates(t *testing.T) {
 	}
 
 	fallbackOnly := FnDefInfo{Signatures: []Signature{
-		{Fallback: true, Impl: BORU([]Value{NewInteger(1)})},
+		{Fallback: true, Impl: Boru([]Value{NewInteger(1)})},
 	}}
 	if _, ok := StampDetachedFn(r, fallbackOnly, SrcPos{}); ok {
 		t.Fatalf("fallback-only fn (no own sig) must decline")
 	}
 }
 
-// StampFnValue value-level gates: non-fn input, Go-backed fns (no BORU own
+// StampFnValue value-level gates: non-fn input, Go-backed fns (no boru own
 // sig), and already-stamped values decline and return the INPUT unchanged.
 func TestStampFnValueGates(t *testing.T) {
 	r := stampReg(t)
@@ -176,7 +176,7 @@ func TestStampFnValueGates(t *testing.T) {
 
 	pre := &CompiledFnRef{Unit: 0, Prog: &Program{Fns: []CompiledFn{{}}}}
 	stampedAlready := Value{Parent: TFunction, Data: FnDefInfo{Signatures: []Signature{
-		{Impl: &BORUImpl{Body: []Value{NewInteger(1)}, Compiled: pre}},
+		{Impl: &BoruImpl{Body: []Value{NewInteger(1)}, Compiled: pre}},
 	}}}
 	if _, ok := StampFnValue(r, stampedAlready); ok {
 		t.Fatalf("already-stamped fn must decline (first stamp wins)")
@@ -261,7 +261,7 @@ func TestDepsFresh(t *testing.T) {
 }
 
 // InvokeCallback consults depsFresh: a stale runtime-stamped ref must take
-// the interpreter (CallBORU over the BORU body), not the frozen unit.
+// the interpreter (CallBoru over the boru body), not the frozen unit.
 func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 	r := stampReg(t)
 	r.Defs.Push("dep", NewInteger(1))
@@ -275,8 +275,8 @@ func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 			Debug: []SrcPos{{Row: 1, Col: 1}, {Row: 1, Col: 1}},
 		}},
 	}
-	// The BORU body the interpreter runs instead: a single literal 7.
-	sig := &Signature{Impl: &BORUImpl{
+	// The boru body the interpreter runs instead: a single literal 7.
+	sig := &Signature{Impl: &BoruImpl{
 		Body: []Value{NewInteger(7)},
 		Compiled: &CompiledFnRef{Prog: p, Unit: 0, depSnap: map[string]depSnapEntry{
 			"dep": {Depth: 99, Gen: -1}, // never matches → stale
@@ -294,7 +294,7 @@ func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 	}
 
 	// The positive twin: a FRESH snapshot takes the VM unit (42).
-	sig.Impl.(*BORUImpl).Compiled.depSnap = map[string]depSnapEntry{
+	sig.Impl.(*BoruImpl).Compiled.depSnap = map[string]depSnapEntry{
 		"dep": {Depth: r.Defs.Depth("dep"), Gen: r.Defs.Gen("dep")},
 	}
 	out, err = InvokeCallback(r, sig, nil, nil)
@@ -366,7 +366,7 @@ func TestStampReportCollector(t *testing.T) {
 		t.Fatalf("args-reading fn must decline")
 	}
 	// Shape noise (a fallback-only fn) records NOTHING.
-	noise := FnDefInfo{Signatures: []Signature{{Fallback: true, Impl: BORU([]Value{NewInteger(1)})}}}
+	noise := FnDefInfo{Signatures: []Signature{{Fallback: true, Impl: Boru([]Value{NewInteger(1)})}}}
 	if _, ok := StampDetachedFn(r, noise, SrcPos{}); ok {
 		t.Fatalf("a fallback-only fn must decline")
 	}
@@ -542,7 +542,7 @@ func TestInterpMemberInertMapArms(t *testing.T) {
 // REBOUND after the stamp re-compiles against the live binding at invoke
 // time — the fresh twin runs on the VM with the NEW value (parity with the
 // interpreter's live resolution) — instead of degrading permanently to
-// CallBORU. A second invoke under the same binding REUSES the twin (no
+// CallBoru. A second invoke under the same binding REUSES the twin (no
 // second compile); the try budget bounds a hot rebinding loop; and a
 // declined re-stamp (stamping disarmed) takes the interpreter.
 func TestInvokeCallbackJITRestamp(t *testing.T) {
@@ -556,7 +556,7 @@ func TestInvokeCallbackJITRestamp(t *testing.T) {
 	if !ok {
 		t.Fatalf("initial stamp declined: %+v", r.StampEvents())
 	}
-	sig := &Signature{Impl: &BORUImpl{Body: []Value{NewWord("dep")}, Compiled: ref}}
+	sig := &Signature{Impl: &BoruImpl{Body: []Value{NewWord("dep")}, Compiled: ref}}
 
 	// Fresh: the frozen unit returns the stamp-time binding.
 	out, err := InvokeCallback(r, sig, nil, nil)
@@ -597,7 +597,7 @@ func TestInvokeCallbackJITRestamp(t *testing.T) {
 
 	// The try budget: each further rebind pays one re-stamp until the budget
 	// (restampMaxTries, one already spent) exhausts; after that the seam
-	// stays on CallBORU — which STILL resolves the live binding, so values
+	// stays on CallBoru — which STILL resolves the live binding, so values
 	// keep matching the interpreter (slow, not wrong).
 	for i := 3; i <= 6; i++ {
 		r.Defs.Pop("dep")
@@ -606,7 +606,7 @@ func TestInvokeCallbackJITRestamp(t *testing.T) {
 			t.Fatalf("rebind %d invoke: %v", i, err)
 		}
 		if n, _ := AsInteger(out[0]); n != int64(i) {
-			t.Fatalf("rebind %d: got %v, want the live value (VM twin or CallBORU alike)", i, out[0])
+			t.Fatalf("rebind %d: got %v, want the live value (VM twin or CallBoru alike)", i, out[0])
 		}
 	}
 	if tries := ref.restamp.tries; tries != restampMaxTries {
@@ -624,6 +624,6 @@ func TestInvokeCallbackJITRestamp(t *testing.T) {
 		t.Fatalf("disarmed invoke: %v", err)
 	}
 	if n, _ := AsInteger(out[0]); n != 9 {
-		t.Fatalf("disarmed re-stamp must fall to CallBORU's live resolution (9), got %v", out[0])
+		t.Fatalf("disarmed re-stamp must fall to CallBoru's live resolution (9), got %v", out[0])
 	}
 }

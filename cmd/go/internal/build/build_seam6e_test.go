@@ -287,7 +287,7 @@ func TestNativeGoBuildFails(t *testing.T) {
 
 // --- findCmdGoModuleDir / isCmdGoModule arms ---
 
-func TestFindCmdGoModuleDirViaBORUSrc(t *testing.T) {
+func TestFindCmdGoModuleDirViaBoruSrc(t *testing.T) {
 	root := fakeModuleTree(t)
 	t.Setenv("BORU_SRC", root)
 	dir, err := findCmdGoModuleDir()

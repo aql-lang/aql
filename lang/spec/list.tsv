@@ -2,7 +2,7 @@
 # =====================================================================		
 # list — sequence of values		
 # =====================================================================		
-# A list is BORU's primary sequence type: ordered, heterogeneous,		
+# A list is boru's primary sequence type: ordered, heterogeneous,		
 # value-equal. Lists are produced by `[…]` literal syntax and		
 # auto-evaluated when they appear as data on the stack at end of		
 # Run() (only if Eval=true && !Quoted), so `[1 add 2]` collapses to		

@@ -6,15 +6,15 @@ import (
 
 // The XSLT-style rule-dispatch vocabulary for boru:fmt. Together with the
 // document algebra (Fmt.render, see fmtdoc.go) these two PURE words let a
-// formatter be written as a declarative BORU rule table keyed by node kind —
+// formatter be written as a declarative boru rule table keyed by node kind —
 // the "template rules dispatched by node kind, apply recursion, document
-// output" model the design concludes is the natural BORU expression of
+// output" model the design concludes is the natural boru expression of
 // formatting (design/fmt-module-and-xslt.0.md, "The XSLT investigation").
 //
 // The two words are deliberately pure value→value transforms: they classify
 // a node and expose its children, leaving DISPATCH and RECURSION to ordinary
-// BORU (fetch the rule fn from the table by kind, apply it, recurse on
-// children). So the rule engine itself is BORU — no fn-invocation or
+// boru (fetch the rule fn from the table by kind, apply it, recurse on
+// children). So the rule engine itself is boru — no fn-invocation or
 // registry-threading in Go — and the whole loop reads like an XSLT stylesheet:
 //
 //	import "boru:fmt"

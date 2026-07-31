@@ -13,7 +13,7 @@ import (
 	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
-// End-to-end test for the BORU vault TUI (lang/go/modules/vault_tui.boru,
+// End-to-end test for the boru vault TUI (lang/go/modules/vault_tui.boru,
 // the design/VAULT-TUI-PORT.0.md application): the boru:vault-tui native
 // module runs a real Tui.run session against a scripted virtual
 // terminal and a scripted fake vault backend — no TTY and no vault

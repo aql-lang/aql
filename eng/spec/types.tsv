@@ -246,7 +246,7 @@ def Nested { kind:String n:Number } typeof Nested	Map
 # =====================================================================
 # `def` is the universal binder: a capitalised NAME is a type binding,
 # a lowercase NAME a value binding — both valid. Bodies are accepted
-# broadly: every value is a valid type body, since BORU treats scalars
+# broadly: every value is a valid type body, since boru treats scalars
 # and collections as types in their own right (the singleton type
 # whose only inhabitant equals that value). Only a NAME that violates
 # the word-name rule (a leading digit, say) is rejected.
@@ -787,7 +787,7 @@ def p:{ x:Integer y:Integer } { x:1 y:'two' }	ERROR:type_error	y is wrong type
 		
 # Typed-list typing — `def xs:[ :T]` accepts homogeneous lists. The		
 # list is stored as a code-body, so referencing xs splices its		
-# elements (canonical BORU list-def semantics, see code-splice in		
+# elements (canonical boru list-def semantics, see code-splice in		
 # function.tsv §2). `quote` would store as data instead.		
 def xs:[ :Integer ] [ 1 2 3 ] xs	[1 2 3]	typed-name list binds the list value (matches [:Integer]); use `word` to splice
 def xs:[ :Integer ] [ 1 'x' ]	ERROR:type_error	'x' doesn't satisfy Integer at def-time validation
@@ -869,7 +869,7 @@ fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with bo
 # `def x:Color body` validates the body against Color: only members		
 # of the disjunct succeed, anything else triggers a type_error.		
 #		
-# This is BORU's analogue of 'instantiating an enum value' in other		
+# This is boru's analogue of 'instantiating an enum value' in other		
 # languages. Survey of the surrounding design space:		
 #		
 #   Rust          Color::Red          variant path on the enum type		
@@ -878,12 +878,12 @@ fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with bo
 #   Python        Color.RED           Enum subclass attribute		
 #   TypeScript    Color.Red           value of an enum type		
 #   Haskell       Red                 data constructor of the sum type		
-#   BORU           def x:Color (quote red)		
+#   boru           def x:Color (quote red)		
 #                                     typed-def asserts `red ∈ Color` at		
 #                                     bind time; x then resolves to		
 #                                     Atom(red) and `x is Color` is true		
 #		
-# BORU's twist is that the 'instantiated value' is just the underlying		
+# boru's twist is that the 'instantiated value' is just the underlying		
 # Atom — no nominal wrapper distinguishes `Atom(red)` from		
 # `Color::Red`. The Color membership check happens at def-time; once		
 # bound, x is an Atom that *happens* to satisfy Color.		

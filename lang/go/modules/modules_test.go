@@ -7,8 +7,8 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// runBORU is a test helper that creates an engine and runs the given values.
-func runBORU(t *testing.T, r *native.Registry, input []native.Value) []native.Value {
+// runBoru is a test helper that creates an engine and runs the given values.
+func runBoru(t *testing.T, r *native.Registry, input []native.Value) []native.Value {
 	t.Helper()
 	e := native.New(r)
 	result, err := e.Run(input)
@@ -116,7 +116,7 @@ func TestMathExportContainsAllWords(t *testing.T) {
 
 func TestMathDotAbs(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewInteger(-5),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("abs"),
@@ -130,7 +130,7 @@ func TestMathDotAbs(t *testing.T) {
 
 func TestMathDotSin(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewFloat(0),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("sin"),
@@ -144,7 +144,7 @@ func TestMathDotSin(t *testing.T) {
 
 func TestMathDotCos(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewFloat(0),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("cos"),
@@ -158,7 +158,7 @@ func TestMathDotCos(t *testing.T) {
 
 func TestMathDotSqrt(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewFloat(4),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("sqrt"),
@@ -174,7 +174,7 @@ func TestMathDotMin(t *testing.T) {
 	r := mathRegistry(t)
 	// 3 MathUtil.min 7 — but since FnDef takes both args from stack:
 	// We need: 3 7 (math get min)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewInteger(3), native.NewInteger(7),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("min"),
@@ -188,7 +188,7 @@ func TestMathDotMin(t *testing.T) {
 
 func TestMathDotMax(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewInteger(3), native.NewInteger(7),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("max"),
@@ -202,7 +202,7 @@ func TestMathDotMax(t *testing.T) {
 
 func TestMathDotPi(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("pi"),
 		native.NewCloseParen(),
@@ -215,7 +215,7 @@ func TestMathDotPi(t *testing.T) {
 
 func TestMathDotE(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("e"),
 		native.NewCloseParen(),
@@ -228,7 +228,7 @@ func TestMathDotE(t *testing.T) {
 
 func TestMathDotNegate(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewInteger(5),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("negate"),
@@ -242,7 +242,7 @@ func TestMathDotNegate(t *testing.T) {
 
 func TestMathDotCeil(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewFloat(1.2),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("ceil"),
@@ -256,7 +256,7 @@ func TestMathDotCeil(t *testing.T) {
 
 func TestMathDotFloor(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewFloat(1.8),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("floor"),
@@ -270,7 +270,7 @@ func TestMathDotFloor(t *testing.T) {
 
 func TestMathDotRound(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewFloat(1.5),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("round"),
@@ -284,7 +284,7 @@ func TestMathDotRound(t *testing.T) {
 
 func TestMathDotSign(t *testing.T) {
 	r := mathRegistry(t)
-	result := runBORU(t, r, []native.Value{
+	result := runBoru(t, r, []native.Value{
 		native.NewInteger(-7),
 		native.NewOpenParen(),
 		native.NewWord("MathUtil"), native.NewWord("dot"), native.NewWord("sign"),

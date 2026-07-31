@@ -20,7 +20,7 @@ func sigArgsStr(s eng.Signature) string {
 }
 
 // TestNoDeadNativeOverloads is the kernel regression gate for
-// unreachable signatures. BORU dispatch is first-match-wins over
+// unreachable signatures. boru dispatch is first-match-wins over
 // SortSignatures' order, so a registered word must not declare an
 // overload that an earlier, higher-priority signature already subsumes
 // — it could never win. This catches sig-ordering and duplicate-signature

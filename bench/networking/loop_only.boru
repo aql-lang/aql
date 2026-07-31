@@ -6,4 +6,4 @@ def start (TimeUtil.now)
 for 20000 [def line (convert Bytes (join "" [(convert String msg) ""]))]
 def dur (TimeUtil.total-ms (TimeUtil.elapsed start))
 print
-(join "" ["BORU loop-only 20000 iters  " (convert String dur) " ms"])
+(join "" ["boru loop-only 20000 iters  " (convert String dur) " ms"])

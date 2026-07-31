@@ -1,9 +1,9 @@
 # Go stdlib coverage map & non-goals
 
-> **Status: living reference.** Maps the Go standard library against BORU's
-> module surface — what is covered (shipped or designed), what BORU
+> **Status: living reference.** Maps the Go standard library against boru's
+> module surface — what is covered (shipped or designed), what boru
 > **deliberately will not cover** (non-goals), and what remains a
-> **coverable gap** (fits BORU's model, not yet designed). Read
+> **coverable gap** (fits boru's model, not yet designed). Read
 > [NATIVE-MODULES.10.md](NATIVE-MODULES.10.md),
 > [GO-MODULES.10.md](GO-MODULES.10.md),
 > [go-modules/README.10.md](go-modules/README.10.md), and
@@ -15,7 +15,7 @@
 
 ## Framing
 
-BORU is a **sealed, deterministic, single-threaded data/query language**
+boru is a **sealed, deterministic, single-threaded data/query language**
 (no runtime `reflect`/`plugin`, one engine per registry, host effects
 behind capability seams). That model — not feature parity with Go — is
 what decides whether a stdlib package belongs. This note records the
@@ -24,7 +24,7 @@ boundary so it stays auditable as modules land.
 Four buckets:
 
 - **A. Covered** — shipped or specified by a design note.
-- **B. Non-goals** — against BORU's nature; intentionally never wrapped.
+- **B. Non-goals** — against boru's nature; intentionally never wrapped.
 - **C. Coverable gaps** — fit the model, simply not designed yet.
 - **D. Not yet considered** — absent from A, B **and** C: no design note,
   no non-goal ruling, no gap entry. §D is the audit residue, not a
@@ -37,7 +37,7 @@ are listed in §D.
 
 ## A. Covered (shipped or designed)
 
-| Go package(s) | BORU home | Status |
+| Go package(s) | boru home | Status |
 |---|---|---|
 | `math`, `math/big`, `math/bits` | `boru:math-util`, `boru:bin-util` | shipped |
 | `math/cmplx`, `math/big` (rationals) | number systems (`Arith` seam) | designed — [EXTENSION-MODULES](EXTENSION-MODULES.10.md) §6 |
@@ -69,7 +69,7 @@ are listed in §D.
 | `testing` | `boru:test` | shipped |
 | `context` (cancellation/deadlines) | `boru:time-util` async (timeout/await/cancel) | shipped (capability, not the package) |
 
-## B. Non-goals — BORU deliberately will **not** cover
+## B. Non-goals — boru deliberately will **not** cover
 
 These serve Go-the-systems-language; they have no meaning in a sealed
 query language. The reflection bridge ([GO-MODULES.10.md](GO-MODULES.10.md))
@@ -79,11 +79,11 @@ remains the escape hatch if a host ever truly needs one ad hoc.
 |---|---|---|
 | Go toolchain / introspection | `go/*`, `debug/*`, `reflect`, `unsafe`, `embed` | Compiler/AST/unsafe-memory/build features. `reflect` is used *inside* the bridge, never exposed. |
 | Dynamic loading | `plugin` | Breaks the sealed, deterministic model (rejected in GO-MODULES). |
-| Concurrency primitives | `sync`, `sync/atomic`, `syscall`, `golang.org/x/sys` | BORU concurrency is the `time-util` async model; raw goroutines/mutexes/syscalls are not a query-language concern (one engine per registry). |
-| Go-specific serialization / errors | `encoding/gob`, `errors` | `gob` is a Go-only wire format; BORU has its own `Error` type and value model. |
-| Native collections (already built in) | `container/{heap,list,ring}` | BORU has `List`/`Map`/`Table`/`Record` + `array-util`/`struct-util`. |
+| Concurrency primitives | `sync`, `sync/atomic`, `syscall`, `golang.org/x/sys` | boru concurrency is the `time-util` async model; raw goroutines/mutexes/syscalls are not a query-language concern (one engine per registry). |
+| Go-specific serialization / errors | `encoding/gob`, `errors` | `gob` is a Go-only wire format; boru has its own `Error` type and value model. |
+| Native collections (already built in) | `container/{heap,list,ring}` | boru has `List`/`Map`/`Table`/`Record` + `array-util`/`struct-util`. |
 | Host / runtime internals | `runtime/{pprof,trace,debug}`, `expvar`, `os/signal`, `flag` | Profiling, signals, metrics export, CLI-flag parsing belong to the *host* (`cmd/go`), not the language. |
-| Graphics | `image/*` | BORU is a data/query language, not a rendering toolkit. |
+| Graphics | `image/*` | boru is a data/query language, not a rendering toolkit. |
 | Low-level interface plumbing | exposed `io.Reader`/`Writer`, `bufio` | Streaming stays behind the `io`/capability seam; not a user-facing surface. |
 
 ## C. Coverable gaps — fit the model, not yet designed
@@ -100,7 +100,7 @@ effectful, a capability seam + policy scope).
 | **DNS / mail transport** | `net.Lookup*` (DNS), `net/smtp`, `net/textproto` | Sockets ship (bucket A); name resolution and SMTP do not — no `lookup`-family word exists (security-sensitive, capability-gated). |
 | **`boru:mime`** | `mime`, `mime/multipart` | Content-type detection + multipart form uploads (HTTP-adjacent). |
 | html auto-escaping | `html/template` | `text/template` is covered; the *contextual auto-escaping* variant would build on `boru:coding`. |
-| DB drivers | `database/sql` + non-sqlite drivers | BORU has native sqlite (`lang/go/native/sqlite.go`); other backends uncovered. |
+| DB drivers | `database/sql` + non-sqlite drivers | boru has native sqlite (`lang/go/native/sqlite.go`); other backends uncovered. |
 | misc text/encoding | `encoding/binary` (struct pack/unpack), `unicode/utf16`, `text/tabwriter`, `os/user`, `hash/adler32` | Small/niche; `encoding/binary` extends `Bytes`; `tabwriter` overlaps `boru:report`. |
 
 ## D. Not yet considered — never ruled on
@@ -119,8 +119,8 @@ The map's families predate these; nothing points at them.
 
 | Package | Since | Note | Suggest |
 |---|---|---|---|
-| `cmp` | 1.21 | Go's `Ordered`/`Compare` helpers. BORU has its own `cmp` word and type ordering ([TYPE-ORDERING](TYPE-ORDERING.10.md)). | B |
-| `iter` | 1.23 | Range-over-func iterators — a Go *language* mechanism; BORU iterates with `each`/`fold` and [STREAM-WORDS](STREAM-WORDS.0.md). | B |
+| `cmp` | 1.21 | Go's `Ordered`/`Compare` helpers. boru has its own `cmp` word and type ordering ([TYPE-ORDERING](TYPE-ORDERING.10.md)). | B |
+| `iter` | 1.23 | Range-over-func iterators — a Go *language* mechanism; boru iterates with `each`/`fold` and [STREAM-WORDS](STREAM-WORDS.0.md). | B |
 | `unique` | 1.23 | Value interning. Runtime mechanic, no guest surface (already used internally by `lang/go/modules/docs.go`). | B |
 | `weak` | 1.24 | Weak pointers. Runtime mechanic (already used internally by `eng/go/weak_flex.go`). | B |
 | `structs` | 1.24 | `HostLayout` marker — pure Go memory layout. | B |
@@ -143,7 +143,7 @@ The map's families predate these; nothing points at them.
 | `text/scanner` | Tokenizer for Go-like syntax; overlaps `boru:parse` / [MINILANG](MINILANG.5.md). | C (low) |
 | `compress/lzw` | The one codec missing from the bucket-C `compress/{gzip,flate,zlib,bzip2}` group. | C — `boru:compress` |
 | `log/syslog` | Unix syslog client — a plausible `boru:log` provider hook ([LOG-MODULE](LOG-MODULE.10.md) §5 sink registry). | C (low) |
-| `net/rpc`, `net/rpc/jsonrpc` | Go-specific RPC wire format; BORU has its own codec/service model ([SERVICES](SERVICES.0.md)). | B |
+| `net/rpc`, `net/rpc/jsonrpc` | Go-specific RPC wire format; boru has its own codec/service model ([SERVICES](SERVICES.0.md)). | B |
 | `io/ioutil` | Deprecated alias shim for `io`/`os`. | B |
 | `crypto`, `encoding`, `hash` (roots) | Interface/registry packages with no callable surface of their own. | B |
 
@@ -155,11 +155,11 @@ The parent is bucketed; these were never individually ruled on.
 |---|---|---|---|
 | `net/http/cookiejar` | `net/http` (A) | Session-cookie persistence for the `boru:net` client — a real gap in the HTTP surface. | C — `boru:net` |
 | `net/http/httputil` | `net/http` (A) | Reverse proxy + request/response dump; pairs with [SERVICES](SERVICES.0.md). | C — `boru:net` |
-| `net/netip` | `net` (A) | Typed IP/prefix values. BORU already **has** a `Cidron` type ordered by `net/netip`, but no address-manipulation words. | C — `boru:net` |
+| `net/netip` | `net` (A) | Typed IP/prefix values. boru already **has** a `Cidron` type ordered by `net/netip`, but no address-manipulation words. | C — `boru:net` |
 | `net/http/{cgi,fcgi,pprof}` | `net/http` (A) | Host deployment / profiling endpoints — same rationale as `runtime/pprof`. | B |
 | `net/http/{httptest,httptrace}` | `net/http` (A) | Go-side test harness and connection tracing. | B |
-| `testing/quick` | `testing` (A) | Property-based testing — BORU already has its own PBT ([PBT-PLAN](PBT-PLAN.10.md)); worth an explicit "superseded" ruling. | B (superseded) |
-| `testing/fstest` | `testing` (A) | In-memory FS. BORU's equivalent is the `FileOps` capability seam (`overlay.go`, `zipfs.go`) — likewise worth an explicit ruling. | B (superseded) |
+| `testing/quick` | `testing` (A) | Property-based testing — boru already has its own PBT ([PBT-PLAN](PBT-PLAN.10.md)); worth an explicit "superseded" ruling. | B (superseded) |
+| `testing/fstest` | `testing` (A) | In-memory FS. boru's equivalent is the `FileOps` capability seam (`overlay.go`, `zipfs.go`) — likewise worth an explicit ruling. | B (superseded) |
 | `testing/iotest` | `testing` (A) | Go `io` error-injection readers. | B |
 | `runtime/{cgo,coverage,metrics,race}` | `runtime` (A) / `runtime/{pprof,trace,debug}` (B) | Host/runtime internals; same rationale as the bucket-B runtime row. | B |
 | `crypto/{des,rc4}` | crypto (A/C) | Broken/legacy ciphers — exclude **deliberately**, not by omission. | B |
@@ -175,7 +175,7 @@ The parent is bucketed; these were never individually ruled on.
 
 The **"won't cover"** boundary is bucket B — Go's systems/runtime/
 toolchain machinery, intentionally invisible to a sealed query language.
-Everything in bucket C fits BORU's grain; the only sizeable, broadly-useful
+Everything in bucket C fits boru's grain; the only sizeable, broadly-useful
 omission from current designs is **signing / PKI / TLS**, since
 [BORU-CRYPTO](BORU-CRYPTO.0.md) stopped at symmetric AEAD and KDFs. After
 that, **archive / compress** and **DNS / SMTP** are the next most

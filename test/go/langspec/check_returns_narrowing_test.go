@@ -135,8 +135,8 @@ func TestDeclaresCheckReturnsPredicate(t *testing.T) {
 	if !fullStack.DeclaresCheckReturns() {
 		t.Fatalf("CheckFullStack shape fn must count")
 	}
-	boruBody := eng.Signature{Impl: eng.BORU([]eng.Value{eng.NewWord("dup")})}
+	boruBody := eng.Signature{Impl: eng.Boru([]eng.Value{eng.NewWord("dup")})}
 	if !boruBody.DeclaresCheckReturns() {
-		t.Fatalf("a BORU body (analyser-derived returns) must count")
+		t.Fatalf("a boru body (analyser-derived returns) must count")
 	}
 }

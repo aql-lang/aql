@@ -1,6 +1,6 @@
 # Tutorial — Build calc from scratch
 
-> **Audience.** You know Go and have never used the BORU engine. By
+> **Audience.** You know Go and have never used the boru engine. By
 > the end you will have rebuilt every line of the calc module
 > yourself and understood what it does.
 >
@@ -278,7 +278,7 @@ only on success.
 ## Step 7 — A REPL with meta-commands
 
 Read lines from stdin, run them through `Eval`, print the result.
-Reserve a prefix (calc uses `:`) for non-BORU commands:
+Reserve a prefix (calc uses `:`) for non-boru commands:
 
 ```go
 func REPL(c *Calc, in io.Reader, out io.Writer) {
@@ -328,7 +328,7 @@ go run ./cmd/mycalc
 # calc> :quit
 ```
 
-You wrote a working concatenative interpreter on top of the BORU
+You wrote a working concatenative interpreter on top of the boru
 kernel without touching the kernel itself. Every word in your
 language is yours — including the names, the signatures, the
 return types, and the dispatch behaviour. The kernel handed you

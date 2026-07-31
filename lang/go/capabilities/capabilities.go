@@ -1,5 +1,5 @@
 // Package capabilities provides the abstraction for host-side capabilities
-// the BORU engine needs to talk to the outside world. At present it covers
+// the boru engine needs to talk to the outside world. At present it covers
 // file-system access (the FileOps interface and its OS-backed and
 // in-memory implementations); future host capabilities (network,
 // process spawn, …) go here too. All dangerous I/O routes through these
@@ -20,7 +20,7 @@ import (
 	"time"
 )
 
-// Clock is the host capability that supplies "the current time" to BORU's
+// Clock is the host capability that supplies "the current time" to boru's
 // temporal words (`now`, the boru:time `time-now*` family) and to the
 // default seed of boru:rand. The default implementation reads the wall
 // clock; a FixedClock can be installed for deterministic tests/specs so
@@ -92,7 +92,7 @@ type DebugOps interface {
 
 // FileInfo is the host-agnostic result of Stat / a ReadDir entry. It
 // carries only stdlib types so the capabilities package stays engine-
-// agnostic; the `boru:io` handlers turn it into a BORU FileInfo record.
+// agnostic; the `boru:io` handlers turn it into a boru FileInfo record.
 type FileInfo struct {
 	Name    string      // base name (final path segment)
 	Size    int64       // length in bytes (0 for directories/symlinks)
@@ -102,7 +102,7 @@ type FileInfo struct {
 	Symlink bool        // true when the entry itself is a symlink (lstat view)
 	Target  string      // symlink target, when Symlink
 	// UID / GID are the owning user and group ids, or -1 where the
-	// backend cannot know them (Windows, a mounted BORU filesystem whose
+	// backend cannot know them (Windows, a mounted boru filesystem whose
 	// stat handler omits them). Construct FileInfo values through a path
 	// that sets them explicitly — the Go zero value 0 is root's uid, so
 	// an accidental zero is a real (wrong) owner, not "unset".
@@ -170,7 +170,7 @@ type MmapRegion interface {
 	Close() error
 }
 
-// FileOps defines the file operations that BORU's io words use. The
+// FileOps defines the file operations that boru's io words use. The
 // default implementation delegates to the os package. Replace with a
 // custom implementation for testing or sandboxing.
 //

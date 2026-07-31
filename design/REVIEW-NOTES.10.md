@@ -1,4 +1,4 @@
-# BORU documentation/implementation review notes
+# boru documentation/implementation review notes
 
 Date: 2026-06-11
 
@@ -107,7 +107,7 @@ Recommendation: audit command-line examples for leading `-N` and add `--` wherev
 
 ### 1. Flexible call order is powerful but expensive to reason about
 
-BORU intentionally allows stack, mixed, and forward forms for most words. This is expressive, but it asks readers to model both the visible stack and a type-directed forward-collection process. The `end` keyword exists specifically because the collector can otherwise consume more than intended.
+boru intentionally allows stack, mixed, and forward forms for most words. This is expressive, but it asks readers to model both the visible stack and a type-directed forward-collection process. The `end` keyword exists specifically because the collector can otherwise consume more than intended.
 
 Cognitive load drivers:
 
@@ -164,7 +164,7 @@ Suggested priority: low-to-medium. Rename them to describe the invariant they pr
 
 ### 4. Function dispatch still has transitional dual paths
 
-`REFACTOR_PROGRESS.md` records that named BORU functions already compile into Go handlers, but function values on the stack still go through `execFnDefLiteral` and handler-less signature fallbacks. The same note lists future stages to remove handler-nil fallbacks, merge signature structures, and delete bridge paths.
+`REFACTOR_PROGRESS.md` records that named boru functions already compile into Go handlers, but function values on the stack still go through `execFnDefLiteral` and handler-less signature fallbacks. The same note lists future stages to remove handler-nil fallbacks, merge signature structures, and delete bridge paths.
 
 Suggested priority: medium-to-high, because dispatch is central to the language and dual representations tend to leak into edge behavior.
 
@@ -176,7 +176,7 @@ Suggested priority: medium. Keep an owner-facing migration checklist current, an
 
 ### 6. Panics are used for builtin registration failures
 
-Several native registration functions panic when builtin registration fails. That is acceptable for impossible startup invariants, but it should remain isolated to initialization. Any user-triggerable parse, import, registry, or module-loading failure should return structured BORU errors instead.
+Several native registration functions panic when builtin registration fails. That is acceptable for impossible startup invariants, but it should remain isolated to initialization. Any user-triggerable parse, import, registry, or module-loading failure should return structured boru errors instead.
 
 Suggested priority: low, unless audit finds user input can reach these panic paths.
 

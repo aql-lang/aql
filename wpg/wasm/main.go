@@ -1,6 +1,6 @@
 //go:build js && wasm
 
-// Command wpg/wasm compiles the BORU engine to WebAssembly.
+// Command wpg/wasm compiles the boru engine to WebAssembly.
 // Build (from the wpg directory): GOOS=js GOARCH=wasm go build -o boru.wasm ./wasm
 package main
 

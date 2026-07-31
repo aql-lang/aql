@@ -1,6 +1,6 @@
 # NETWORK-SERVERS
 
-Design for the **network-server handling API** in BORU — the layer where a
+Design for the **network-server handling API** in boru — the layer where a
 developer actually writes the code that handles a network connection. It
 completes the "efficient, safe network servers" end-goal that
 `PROCESSES.0.md` (the actor substrate) and `SERVICES.0.md` (the service/server
@@ -114,7 +114,7 @@ connection** — maps onto `PROCESSES.0.md` actors with one addition (a socket
 handle) and one new runtime owner (a `net` listener). Nothing here needs a new
 scheduler.
 
-| BEAM / `gen_tcp` concept | BORU realization |
+| BEAM / `gen_tcp` concept | boru realization |
 | --- | --- |
 | `gen_tcp:listen/2` → listen socket | **`listen {tcp: …} -> Listener`**, a new opaque Ideal handle (like `Pid`) |
 | `gen_tcp:accept/1` (acceptor process) | **`accept <Listener> -> Socket`**, blocking; idiomatically called in a loop that `spawn`s a handler |
@@ -134,7 +134,7 @@ and a `context.Context` for shutdown so no FD or goroutine leaks on host exit.
 
 ## 3. `Bytes` and bit-syntax (the binary prerequisite)
 
-Binary wire protocols need two things BORU lacks: a **byte-string value** and a
+Binary wire protocols need two things boru lacks: a **byte-string value** and a
 terse, safe way to **build and pattern-match frames**. Both `PROCESSES.0.md` §8
 and `SERVICES.0.md` §10 name this gap. The **full design is `BYTES.10.md`**
 (`design/go-modules/`); this section is the working summary the rest of this doc
@@ -150,7 +150,7 @@ A new core **`Bytes`** type: an **immutable** finite sequence of octets.
   `PROCESSES.0.md` §6 — a received frame is shared into a handler by reference,
   never copied, exactly like a `List` or `Map`. A defensive copy happens only at
   ingest (`recv`, the Go bridge); after that every op is copy-free
-  (`BYTES.10.md` §4). This is BORU getting Erlang's refc-binary optimisation "for
+  (`BYTES.10.md` §4). This is boru getting Erlang's refc-binary optimisation "for
   free", as `SERVICES.0.md` §7.1 anticipated.
 - **Distinct from `String`.** `String` is text (UTF-8, character-indexed);
   `Bytes` is octets (byte-indexed). `utf8 <String> -> Bytes` encodes (total);
@@ -169,7 +169,7 @@ is **no `0x"…"` core literal and no `b"…"` literal** — write
 ### 3.2 Bit-syntax — `pack` / `unpack` (summary)
 
 Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is what makes binary code
-short *and* safe. BORU's equivalent reuses the **`name:Type` binding slot** parsed
+short *and* safe. boru's equivalent reuses the **`name:Type` binding slot** parsed
 by `eng.ParseFnParams` (the same one `PROCESSES.0.md` §3 uses for `receive`
 clauses), extended with a size and modifier suffix. A frame spec is a list of
 *segments* `<value-or-name> : <seg-type> ( (size) )? ( / <modifier> )*` —
@@ -322,7 +322,7 @@ a Unix-domain socket instead of `tcp:`.
 > authenticated one is the whole failure mode this word exists to avoid.
 > It is what makes `require-client:` useful rather than merely
 > restrictive — TLS proves the peer holds a trusted key, and `peer-cert`
-> hands that identity to BORU so the *authorization* rule can be written
+> hands that identity to boru so the *authorization* rule can be written
 > in the language.
 >
 > Presenting a server certificate is gated by `network`/`server-cert`,
@@ -375,7 +375,7 @@ import "boru:net"
 def json-conn fn [[conn:Socket] [Never] [
   do [
     def req ( reify (to-text (recv-until conn (utf8 "\n"))) )   # bytes → text → value
-    def reply ( handle-request req )                       # ordinary BORU
+    def reply ( handle-request req )                       # ordinary boru
     send-bytes (concat [ (utf8 (jsonify reply))  (utf8 "\n") ]) conn
     json-conn conn
   ]
@@ -793,7 +793,7 @@ enforceable on day one, not new permission work:
 - **`process`** still gates the per-connection `spawn` (§2) via the substrate.
 
 Denials carry the usual blame chain. A sandboxed sub-engine (`boru:vm`) can
-attenuate networking away entirely, so untrusted BORU can parse and transform
+attenuate networking away entirely, so untrusted boru can parse and transform
 wire data (codecs are pure!) without ever being able to open a socket.
 
 Two safety properties fall out of the model rather than needing enforcement:

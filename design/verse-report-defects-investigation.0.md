@@ -1,7 +1,7 @@
 # Defect investigation — root causes for `verse-in-boru-report.0.md` §6
 
 The Verse comparison report
-([`verse-in-boru-report.0.md`](verse-in-boru-report.0.md)) verified its BORU
+([`verse-in-boru-report.0.md`](verse-in-boru-report.0.md)) verified its boru
 claims by running them, and seven defects fell out. This note is the
 follow-up: for each, the cause **in the source**, the blast radius as
 *tested*, and what a fix has to decide. Reproduced against `main` @
@@ -198,7 +198,7 @@ containers between processes — and `await`/`spawn` do not apply it.
    program that shares a flex container across branches today.
 3. **Document sharing as intended and synchronise `OrderedMap`.** Fast,
    but makes `await` a concurrency primitive whose users must reason about
-   interleaving — a large change to BORU's story, and it would leave
+   interleaving — a large change to boru's story, and it would leave
    `deq`/rendering racing too.
 
 Recommend (1), with (2) as the interim if a copy cost is unacceptable.
@@ -242,7 +242,7 @@ Each is worth recording because each looked settled before it was tried.
 2. **The check first shipped INERT on the default path.** The first
    version walked the branch element as a token list. Compiled, a branch
    body is a synthetic fn-value carrier holding its tokens in a
-   `BORUImpl` body (the `CompileStoresBodyList` shape `runParallelBranch`
+   `BoruImpl` body (the `CompileStoresBodyList` shape `runParallelBranch`
    unwraps), so the walk found nothing — the boundary was unguarded on
    the *only path most programs take*. It looked correct because the case
    that did fire had been tested with `--no-compile`. Both shapes are
@@ -1152,7 +1152,7 @@ Not caused by it, reproduced on the unpatched binary, all
   four more codes the enumeration was missing (`expected-byte`,
   `bad-encoding`, `cancel-timeout_error`, `cancel-interval_error`), which
   settled the naming rule on the property that actually broke: a code must
-  be SPELLABLE as a `case` arm, so a hyphen is fine (BORU word names use
+  be SPELLABLE as a `case` arm, so a hyphen is fine (boru word names use
   them) and a space or a capital is not. The enumeration went from 233 to
   241 codes, and `errorcodes.go`'s claim that every existing code was
   snake_case is corrected — that was an artefact of how the gate found
@@ -1424,7 +1424,7 @@ a straightforward companion to (1) should not be read as endorsing it.
 `//covergate:allow bindGlobal's only error path is its own allow-listed
 defensive underflow guard, unreachable without a bytecode-level fault`.
 The premise is satisfied as written — a compiler bug *is* a bytecode-level
-fault — but a two-line BORU program reaches it. These guards are doing real
+fault — but a two-line boru program reaches it. These guards are doing real
 work in production rather than being dead defensive arms, which is worth
 recording in `design/COVERAGE-ALLOWLIST.10.md` when (1) lands.
 
@@ -1596,7 +1596,7 @@ and would break a bare `import "foo"` inside a modelled body. The upper's
 
 Gating on "the parent is in check mode" is WRONG, and not visibly so.
 Measured: `import module [ print 'loading' … ]` under a default
-`lang.BORU.Run` went from one line of output to **none**.
+`lang.Boru.Run` went from one line of output to **none**.
 
 The cause is that §D's own model of the doubling was incomplete. On the
 compiled path the module body runs ONLY in the compile pass — `import` is
@@ -1608,7 +1608,7 @@ modelling it does not deduplicate the effect, it deletes it.
 
 | pass | entry | body runs | effects |
 |---|---|---|---|
-| pure check | `Check.Begin` — `boru check`, the CLI's quiet pre-flight, `lang.BORU.Check` | yes | **modelled** |
+| pure check | `Check.Begin` — `boru check`, the CLI's quiet pre-flight, `lang.Boru.Check` | yes | **modelled** |
 | compile | `Check.BeginCompilePass` — `RunCompiled` / `CompileCheck` | yes | real |
 | interpreter | no check pass | yes | real |
 
@@ -1841,7 +1841,7 @@ REFERENCE table is mostly about. The first line above returns
 The `Unwrap` route was NOT taken. Giving `Denied` an `Unwrap() error`
 returning a `BoruError` would fix all of them at a stroke — and would also
 flip `runtimeShouldFallback` (`lang/go/boru.go`) from "foreign error, re-run
-on the interpreter" to "BORU error, surface", for every denial, in compiled
+on the interpreter" to "boru error, surface", for every denial, in compiled
 mode, including denials from sites nobody has audited. That is probably the
 right answer eventually — `eng.PolicyDenied` already gets exactly that
 treatment at the VM dispatch gate, with a comment explaining that a re-run
@@ -1961,7 +1961,7 @@ a census.
 **One correction to the extraction, found while making it
 bidirectional.** The `Code:` regex also matched `Code: "boru/init"` and
 `Code: "boru/check"` in the LSP server — fields of an LSP `Diagnostic`, not
-of a `BoruError`. They are protocol strings no BORU program can dispatch
+of a `BoruError`. They are protocol strings no boru program can dispatch
 on. A one-directional gate tolerated them, because extra entries only made
 it more permissive; a bidirectional one would have forced two LSP strings
 into the language's enumeration to stay green. `cmd/go` is therefore no

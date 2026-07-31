@@ -44,7 +44,7 @@ func mtimeUnix(t time.Time) int64 {
 	return t.Unix()
 }
 
-// buildStatRecord turns a host FileInfo into the BORU stat record: a Map with
+// buildStatRecord turns a host FileInfo into the boru stat record: a Map with
 // name/path/type/size/mode/mtime (and target for a symlink). `type` is a
 // FileType atom so `(stat p).type is IO.FileType` holds.
 func buildStatRecord(fi capabilities.FileInfo, path string, fileType *Type) Value {
@@ -74,10 +74,10 @@ func xattrValue(v []byte) Value {
 	return NewBytesValue(v)
 }
 
-// boruToHostXattr / hostToBoruXattr map plain BORU attribute names onto the
+// boruToHostXattr / hostToBoruXattr map plain boru attribute names onto the
 // host's namespace: Linux user xattrs live in the mandatory `user.`
 // namespace, Darwin uses flat names (capabilities.XattrNamespacePrefix).
-// The word layer owns this mapping, so BORU programs spell `note` on every
+// The word layer owns this mapping, so boru programs spell `note` on every
 // platform. hostToBoruXattr additionally reports whether the host name IS
 // ours — attributes outside the namespace (security.selinux and friends)
 // are not displayable or settable through the io words and are skipped.

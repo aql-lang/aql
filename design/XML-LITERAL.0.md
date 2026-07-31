@@ -1,4 +1,4 @@
-# BORU Literal XML Embedding Design
+# boru Literal XML Embedding Design
 
 Status: Increments 1–5 **LANDED**. Increment 1: static (non-interpolated)
 `Node/Xml` literals parse end-to-end, build an immutable element value,
@@ -97,14 +97,14 @@ Implementation landed in Increment 5 (accessor / query words):
 - not done: the `cs/` CSS-selector words (`xml-is`, selector engine) —
   deferred with the `cs` mini-language kind.
 
-Literal XML embedded directly in BORU source — `<tag …>…</tag>` written
+Literal XML embedded directly in boru source — `<tag …>…</tag>` written
 in-line where a value is expected — producing a first-class `Node/Xml`
-value. This is the JSX/TSX analogue for BORU: structural XML data
+value. This is the JSX/TSX analogue for boru: structural XML data
 written in source the same way jsonic `{…}` / `[…]` literals already
 embed structural data today.
 
 > **Not to be confused with `design/XML.0.md`.** That document
-> describes the inverse direction — encoding an entire BORU *program* as
+> describes the inverse direction — encoding an entire boru *program* as
 > an XML tree (`<boru><def>…</def></boru>`) for tooling and code
 > generation. This document is about embedding XML *data values* into
 > ordinary concatenative source. The two share the `${}` interpolation
@@ -116,7 +116,7 @@ embed structural data today.
 
 ## 1. Motivation — the JSON analogy, and why it is not quite JSON
 
-BORU has **no** `json "…"` literal form. Its relaxed-JSON jsonic
+boru has **no** `json "…"` literal form. Its relaxed-JSON jsonic
 literals — `{a:1, b:[2 3]}`, `[x y z]` — *are* the embedded
 structured-data mechanism: you write the data tree directly in source
 and the parser turns it into `Node/Map` / `Node/List` values
@@ -130,18 +130,18 @@ XML has only the runtime-parse half today: `parse xml '<r><a>1</a></r>'`
 (`lang/go/modules/parselang.go:414`, the tabnas `Xml` plugin) takes a
 **string** and returns a plain `Node/Map`. There is no way to write the
 tree *literally*. This document closes that gap, making literal XML the
-first **tagged-tree** literal in BORU — beyond the untagged map/list
+first **tagged-tree** literal in boru — beyond the untagged map/list
 trees jsonic already gives us.
 
 The model is JSX/TSX: in React you write `<div className="x">{kids}</div>`
-inline in JavaScript and it compiles to `createElement` calls. BORU's
+inline in JavaScript and it compiles to `createElement` calls. boru's
 concatenative surface is even more amenable — a literal is just another
 value on the tape — so the literal can evaluate to a `Node/Xml` directly
 with no framework runtime.
 
 **Scope.** This is about XML used as *data* (documents, config,
 markup, feeds, SVG, HTML fragments). It is deliberately *not* a second
-concrete syntax for BORU programs — that is `XML.0.md`'s job.
+concrete syntax for boru programs — that is `XML.0.md`'s job.
 
 
 ## 2. Surface syntax
@@ -179,7 +179,7 @@ question (§7).
 
 ## 3. Disambiguation versus generic type sugar (the crux)
 
-`<` and `>` are already meaningful in BORU: they are the **generic type
+`<` and `>` are already meaningful in boru: they are the **generic type
 sugar** delimiters, `Box<Integer>` ≡ `(Box of [Integer])`
 (`design/GENERICS.10.md` D14/D15). Adding XML must not disturb that.
 It does not — and the reason is structural, not a heuristic.
@@ -253,7 +253,7 @@ one-liner: **`<` is generics after a capitalised name, XML everywhere
 else.** No lookahead beyond the single token already needed to reject a
 stray `<`.
 
-### 3.4 How TSX disambiguates — and why BORU needs less
+### 3.4 How TSX disambiguates — and why boru needs less
 
 TypeScript's JSX dialect faces a *harder* version of this problem
 because JS generics can suffix *any* expression and casts use the same
@@ -268,11 +268,11 @@ because JS generics can suffix *any* expression and casts use the same
 - A JSX element is then recognised by `<` in expression position
   followed by an identifier (or `>` for a fragment).
 
-BORU needs none of these hacks. Its generics attach **only to a
+boru needs none of these hacks. Its generics attach **only to a
 capitalised name**, never to an arbitrary expression, so "XML in open
 position" and "generics in close position after a Name" are lexically
 disjoint. There is no cast form to ban and no arrow-vs-element
-ambiguity to annotate. TSX pays for JS's looser grammar; BORU's
+ambiguity to annotate. TSX pays for JS's looser grammar; boru's
 name-gated generics make the split fall out for free.
 
 A note on tag case: HTML/XML tags are conventionally lowercase
@@ -286,7 +286,7 @@ component-like dispatch is deferred (§7).
 
 ## 4. Interpolation — reuse the template-string machinery
 
-XML literals interpolate BORU expressions with `${…}`, identical in
+XML literals interpolate boru expressions with `${…}`, identical in
 spelling and mechanism to backtick template strings. `XML.0.md §3`
 already argued the `${}` choice over bare `{}` (which collides with
 map literals and is extremely common in real markup/CSS/code text); we
@@ -338,7 +338,7 @@ This mirrors how `word [a b c]` splices a list's elements.
 Like `InterpString`, the parsed literal is a **static skeleton plus
 embedded expression token-lists**, not an eagerly-built value. At
 runtime it evaluates in the current scope — each `${…}` runs as an
-ordinary BORU expression against the live def stack — and yields a
+ordinary boru expression against the live def stack — and yields a
 `Node/Xml`. A literal with no interpolations is a constant `Node/Xml`
 (it can be built once at parse/first-eval time). This matches the
 `InterpString` "constant-fold when no parts interpolate" behaviour in
@@ -402,7 +402,7 @@ decision (§7).
 
 ### 5.3 Well-known keys (stored)
 
-The element exposes exactly three stored keys, terse per BORU house style
+The element exposes exactly three stored keys, terse per boru house style
 (cf. the `re` minilang's `{ok ms fst lst n}` and `match`'s `{m i e}` —
 short keys are the idiom, not `attributes`/`children`):
 

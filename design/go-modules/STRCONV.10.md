@@ -10,7 +10,7 @@
 Go [`strconv`](https://pkg.go.dev/strconv) converts between primitive
 values and their textual representations: parse a string to an int /
 uint / float / bool, format a number / bool back to a string, and
-add/strip Go-syntax quoting. This note specifies an idiomatic BORU
+add/strip Go-syntax quoting. This note specifies an idiomatic boru
 surface over that package. Nothing is implemented yet.
 
 ## 2. Why curated
@@ -18,7 +18,7 @@ surface over that package. Nothing is implemented yet.
 The raw `go:` reflection bridge would surface `strconv.ParseInt(s
 string, base int, bitSize int) (int64, error)` verbatim — three
 arguments, a `(value, error)` pair, and a `bitSize` knob that is
-meaningless in BORU (a BORU Integer **is** an `int64`, so `bitSize` is
+meaningless in boru (a boru Integer **is** an `int64`, so `bitSize` is
 always 64). The curated surface drops `bitSize`, splits the
 base-10-vs-explicit-base cases into two readable words, and collapses
 every `(value, error)` into value-or-error via `r.BoruError`. Numeric
@@ -46,9 +46,9 @@ dispatches.
 | Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `Atoi(s) (int,err)` | `parse-int` | `[String] -> Integer` | Parse a base-10 integer string. | `Atoi` ≡ `ParseInt(s,10,64)`; `(int,err)` → value-or-error `parse-int`. |
-| `ParseInt(s,base,bitSize) (int64,err)` | `parse-int-base` | `[Integer base, String s] -> Integer` | Parse a signed integer in the given base. | Dropped `bitSize` (BORU Integer is int64). base is the top arg so swap reads `s parse-int-base base`; `0` base means infer from prefix. `(int64,err)` → value-or-error. |
+| `ParseInt(s,base,bitSize) (int64,err)` | `parse-int-base` | `[Integer base, String s] -> Integer` | Parse a signed integer in the given base. | Dropped `bitSize` (boru Integer is int64). base is the top arg so swap reads `s parse-int-base base`; `0` base means infer from prefix. `(int64,err)` → value-or-error. |
 | `ParseUint(s,base,bitSize) (uint64,err)` | `parse-uint` | `[Integer base, String s] -> Integer` | Parse an unsigned integer in the given base. | Dropped `bitSize`. Result returned as Integer; overflow past int64 max errors `parse-uint`. |
-| `ParseFloat(s,bitSize) (float64,err)` | `parse-float` | `[String] -> Float` | Parse a floating-point string. | Dropped `bitSize` (BORU Float is float64). `(float64,err)` → value-or-error `parse-float`. |
+| `ParseFloat(s,bitSize) (float64,err)` | `parse-float` | `[String] -> Float` | Parse a floating-point string. | Dropped `bitSize` (boru Float is float64). `(float64,err)` → value-or-error `parse-float`. |
 | `ParseBool(s) (bool,err)` | `parse-bool` | `[String] -> Boolean` | Parse a boolean ("1","t","true","0","f","false",…). | `(bool,err)` → value-or-error `parse-bool`. |
 | `FormatInt(i,base) string` | `format-int` | `[Integer] -> String` | Format an integer in base 10. | Specialised to base 10 (the common case); total, no error. |
 | `FormatInt(i,base) string` | `format-int-base` | `[Integer base, Integer i] -> String` | Format an integer in the given base (2–36). | base is the top arg; out-of-range base errors `format-int-base`. |
@@ -98,7 +98,7 @@ None — pure value conversion, runs under any policy.
 ## 8. Overlap
 
 None with an existing module. The core engine has literal parsing in
-the parser, but no BORU-user-facing word converts a runtime String to an
+the parser, but no boru-user-facing word converts a runtime String to an
 Integer/Float; `boru:strconv` fills that gap. `Fmt.format` (see
 [FMT.10.md](FMT.10.md)) does printf-style formatting of arbitrary
 values — `Strconv.format-*` is the scalar-specific, base-aware path.
@@ -123,7 +123,7 @@ import "boru:strconv"
 ## 10. Open questions / out of scope
 
 - **AppendInt / AppendQuote family** — append-to-byte-slice variants are
-  out of scope; BORU has no Bytes type (see [BYTES.10.md](BYTES.10.md))
+  out of scope; boru has no Bytes type (see [BYTES.10.md](BYTES.10.md))
   and string building is already idiomatic via templates / `concat`.
 - **QuoteRune / QuoteToASCII / AppendQuoteRuneToGraphic** — niche quoting
   variants deferred until a real need appears; `quote` covers the common

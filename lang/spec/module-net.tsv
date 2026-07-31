@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:net module
+# boru Language Specification: the boru:net module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of HTTP / API access words that were moved out of the
@@ -96,7 +96,7 @@ import "boru:net" {a:1} Net.dot a/q	ERROR:uncalled_function	the overloads are an
 # verifies one and may present one. Each side rejects the other's keys
 # by name — a `verify: false` quietly accepted on a listener would read
 # as configured while configuring nothing. The positive round trip needs
-# a host-registered credential, which BORU source cannot create by
+# a host-registered credential, which boru source cannot create by
 # design, so it lives in net_socket_tlsserver_test.go.
 import "boru:net" Net.listen {tcp: 0  tls: {}}	ERROR:needs identity:	a TLS server with no certificate has nothing to present
 import "boru:net" Net.listen {tcp: 0  tls: {identity: nobody/q}}	ERROR:no client identity named "nobody"	guest source names a credential; only the host registers one

@@ -7,7 +7,7 @@ import (
 )
 
 // The canonical walk-based emitter — the single source of truth for turning
-// a BORU Value into a string. It is the symmetric inverse of the tabnas
+// a boru Value into a string. It is the symmetric inverse of the tabnas
 // decoder core (tabnas.go): where TabnasKinds drives string→value for the
 // `parse` word and `read`, EmitKinds drives value→string for the `emit` word
 // and `write`.
@@ -119,7 +119,7 @@ func EmitKinds() []EmitKind {
 // check AND run time instead of a silently ignored option, while a dynamic
 // opts map still matches (Options vs a non-concrete Map preserves the
 // schema). ok is false for a kind that is not built in (host- and
-// BORU-registered emitters own their key sets, so their opts stay a plain
+// boru-registered emitters own their key sets, so their opts stay a plain
 // Map). The schema for emit_auto is EmitAutoOptsSchema.
 func EmitOptsSchema(kind string) (Value, bool) {
 	switch kind {
@@ -993,7 +993,7 @@ func emitUnsupported(kind, detail string) error {
 	return &emitError{Code: "emit_unsupported", Msg: kind + ": " + detail}
 }
 
-// emitError is a typed error carrying the BORU error code so the module layer
+// emitError is a typed error carrying the boru error code so the module layer
 // can surface it via r.BoruError without string-matching.
 type emitError struct {
 	Code string
@@ -1002,7 +1002,7 @@ type emitError struct {
 
 func (e *emitError) Error() string { return e.Msg }
 
-// EmitErrorCode returns the BORU error code for an emit error, or "" if err is
+// EmitErrorCode returns the boru error code for an emit error, or "" if err is
 // not an emitError.
 func EmitErrorCode(err error) string {
 	if e, ok := err.(*emitError); ok {

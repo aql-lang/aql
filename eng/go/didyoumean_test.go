@@ -202,7 +202,7 @@ func TestUndefinedWordCheckDiagSuggestions(t *testing.T) {
 // fork's failure path iterates ITS OWN builtinWords snapshot, so a
 // host Register call on the parent can never fault the iteration (the
 // fatal "concurrent map iteration and map write" a timer callback hit
-// when its undefined-word error raced (*BORU).Register).
+// when its undefined-word error raced (*Boru).Register).
 func TestForkSuggestionsSafeAgainstParentRegister(t *testing.T) {
 	r := covRegistry(t, nil)
 	fork := r.ForkConcurrent()

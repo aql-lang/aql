@@ -77,9 +77,9 @@ type (
 	ModuleDesc           = eng.ModuleDesc
 	MoveInfo             = eng.MoveInfo
 	NativeFunc           = eng.NativeFunc
-	SigImpl              = eng.SigImpl  // sealed run-impl sum (GoImpl | BORUImpl)
+	SigImpl              = eng.SigImpl  // sealed run-impl sum (GoImpl | BoruImpl)
 	GoImpl               = eng.GoImpl   // native / internal Go-handler implementation
-	BORUImpl             = eng.BORUImpl // BORU body implementation (module ref / lambda / installed fn)
+	BoruImpl             = eng.BoruImpl // boru body implementation (module ref / lambda / installed fn)
 	GoOpt                = eng.GoOpt    // optional dispatch knob for Go(...)
 	CompileEffect        = eng.CompileEffect
 	CallableSpec         = eng.CallableSpec
@@ -572,7 +572,7 @@ var (
 	NewWord                = eng.NewWord
 	NewWordModified        = eng.NewWordModified
 	Go                     = eng.Go
-	BORU                   = eng.BORU
+	Boru                   = eng.Boru
 	RunInCheck             = eng.RunInCheck
 	Park                   = eng.Park
 	FullStack              = eng.FullStack

@@ -9,7 +9,7 @@ import (
 
 // unpackNatives covers the destructuring word `unpack`, which extracts
 // selected entries from a Map (or Record) value and binds each to a
-// bare word in the current scope — BORU's analogue of JavaScript object
+// bare word in the current scope — boru's analogue of JavaScript object
 // destructuring (`const {from, where, select} = query`).
 //
 // Surface (forward form): `unpack [names] map`.

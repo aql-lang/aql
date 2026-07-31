@@ -48,7 +48,7 @@ func patternsOk(sig *Signature, positions []int, tape *Tape, fwd int, r *Registr
 		// is an FnDefInfo, not an Atom). Word and Atom tokens compare
 		// by name; anything else fails the slot. This is what lets a
 		// signature admit one specific literal word — `def`'s
-		// `[name/q fn/q sigs]` form, and the BORU-authorable equivalent
+		// `[name/q fn/q sigs]` form, and the boru-authorable equivalent
 		// for macros/binders (syntax-rules-style keyword literals).
 		if sig.QuoteArgs != nil && sig.QuoteArgs[idx] && IsAtom(pattern) {
 			name := ""

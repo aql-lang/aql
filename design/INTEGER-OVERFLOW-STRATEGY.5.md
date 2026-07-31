@@ -2,7 +2,7 @@
 
 Status: **Phase 0 implemented; Phase 1 proposed**. This document expands
 [WAT-AUDIT](WAT-AUDIT.5.md) Exhibit K ("Integer overflow has two
-contradictory silent behaviours"), establishes what BORU did before the
+contradictory silent behaviours"), establishes what boru did before the
 fix (which was worse than the audit recorded), surveys what other
 languages do, and recommends a phased strategy. **Phase 0 (the real
 integer lexer + checked, uniformly-erroring arithmetic) has been
@@ -52,7 +52,7 @@ the individual wrong answers are symptoms.
 ### 1.2 The lexer defect is worse than recorded
 
 The audit frames the lexer issue as "large literals fall back to
-`Decimal`/`Float`". The real mechanism is more corrosive. BORU has no
+`Decimal`/`Float`". The real mechanism is more corrosive. boru has no
 integer lexer: jsonic parses every numeric token to `float64`, and
 `numberValToValue` (`eng/go/parser/parse.go:1215`) decides Integer vs
 Float *after the fact* from that float:
@@ -78,7 +78,7 @@ typeof 9007199254740993          # returns Integer      — 2⁵³+1, looks fine
 ```
 
 `9007199254740993` is a perfectly valid `int64`, well below `maxint`,
-yet BORU hands back `…992` typed as `Integer` with no error and no Float
+yet boru hands back `…992` typed as `Integer` with no error and no Float
 to hint that anything happened. For a data/query language this is the
 most dangerous case in the whole audit: a row count or an ID silently
 changes value and stays an `Integer`.
@@ -127,24 +127,24 @@ accident.
 ## 2. What other languages do
 
 Five strategies exist in the wild. Only three are defensible defaults;
-two (the two BORU currently uses) are widely regarded as anti-patterns.
+two (the two boru currently uses) are widely regarded as anti-patterns.
 
 | Strategy | On overflow | Languages |
 | --- | --- | --- |
 | **Promote to bignum** | result is exact, integer widens | Python 3, Ruby, JavaScript `BigInt`, Lisp/Scheme, Haskell `Integer`, Erlang/Elixir, Smalltalk |
 | **Error / trap** | clean failure | SQL (PostgreSQL `integer out of range`), Swift (traps by default), Rust (panics in debug), Ada (`Constraint_Error`), C# `checked` |
 | **Wrap, documented** | two's-complement, *by contract* | Go, Java, C# `unchecked`, Rust `--release`, C unsigned |
-| **Silent float promotion** | precision lost above 2⁵³ | JavaScript pre-`BigInt` numbers, Lua ≤ 5.2 — *BORU's literal path* |
-| **Silent signed wrap** | UB or quiet garbage | C signed overflow (UB), *BORU's runtime path* |
+| **Silent float promotion** | precision lost above 2⁵³ | JavaScript pre-`BigInt` numbers, Lua ≤ 5.2 — *boru's literal path* |
+| **Silent signed wrap** | UB or quiet garbage | C signed overflow (UB), *boru's runtime path* |
 
-Three observations matter for BORU:
+Three observations matter for boru:
 
 1. **The "naturally expected" answer is bignum.** Python/Ruby/Lisp users
    never see overflow; `2 ** 63` is just `9223372036854775808`. For a
    language whose audience writes data transforms and aggregates, "the
    number is simply correct" is the least-surprising behaviour by a wide
    margin. This is the dominant choice among dynamic, data-oriented
-   languages — exactly BORU's category.
+   languages — exactly boru's category.
 
 2. **Query languages specifically error.** PostgreSQL does **not** wrap
    and does **not** promote to float — it raises
@@ -160,7 +160,7 @@ Three observations matter for BORU:
    Rust-debug trap by default and make wrapping an *explicit* operator
    (`&+`, `wrapping_add`). C's silent **signed** wrap (undefined
    behaviour) is the cautionary tale the whole industry cites — and it
-   is precisely BORU's runtime behaviour today.
+   is precisely boru's runtime behaviour today.
 
 **Best-practice synthesis.** For a high-level, dynamically-typed
 data/query language the recommended defaults, in order, are:
@@ -187,7 +187,7 @@ exactly that. When a correct, unsurprising answer is *cheaply
 available*, producing it silently is strictly better than either an
 error (annoying) or documentation (unread). This is the lever for the
 literal path unconditionally — `9007199254740993` must mean
-`9007199254740993` — and for the arithmetic path **if** BORU adopts
+`9007199254740993` — and for the arithmetic path **if** boru adopts
 bignum Integers.
 
 ### 3.2 Errors (fail loudly where you cannot be both correct and silent)
@@ -197,7 +197,7 @@ under its chosen representation. If `Integer` stays fixed-width `int64`,
 then `maxint add 1` has no correct `int64` result — and the only honest
 options are "promote the type" (changes `typeof`, surprising) or
 "error". A typed `[boru/integer_overflow]` error is the SQL-correct
-choice: it never lies. BORU already uses this lever for the sibling case
+choice: it never lies. boru already uses this lever for the sibling case
 — `1 div 0` raises `division by zero` rather than returning a bogus
 number — so an overflow error is *consistent with existing design*, not
 a new concept. The rule: **a silent wrong answer is never acceptable; if
@@ -228,7 +228,7 @@ Is there a correct, unsurprising answer cheaply available?
 ```
 
 Silent wrap and silent float promotion appear nowhere in this tree.
-That is the point: both of BORU's current behaviours are off the tree
+That is the point: both of boru's current behaviours are off the tree
 entirely.
 
 ---
@@ -269,7 +269,7 @@ post-condition overflow test — and apply **one** policy across
 `add`/`sub`/`mul`/`pow`. **Interim policy: error**
 (`[boru/integer_overflow]`), mirroring the existing `division by zero`.
 
-After Phase 0, BORU is *consistent and honest*: every overflow, in the
+After Phase 0, boru is *consistent and honest*: every overflow, in the
 lexer or the runtime, in any word, produces the same clean error. No
 silent wrong answer survives. This is shippable on its own and is the
 correctness floor under either Phase-1 outcome.

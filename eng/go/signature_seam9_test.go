@@ -2,7 +2,7 @@ package eng
 
 import "testing"
 
-// W9 signature.go coverage: normalizeSig's BORU /q merge, MatchSignature's
+// W9 signature.go coverage: normalizeSig's boru /q merge, MatchSignature's
 // pattern-unify decline, sigTypeMatchesAsType's bare-None reject,
 // positionalMatch's /q-non-atom and bare-type-for-container declines, and
 // CompareSignatures' locked-first and barrier tie-breaks.

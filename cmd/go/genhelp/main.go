@@ -1,5 +1,5 @@
 // Command genhelp pre-computes help example results by running each
-// expression through the BORU native. Output is written to
+// expression through the boru native. Output is written to
 // lang/go/engine/help/examples_gen.go as a static map.
 //
 //go:generate go run .

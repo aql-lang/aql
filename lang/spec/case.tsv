@@ -1,4 +1,4 @@
-# BORU Language Specification: the `case` word — dispatch on a value
+# boru Language Specification: the `case` word — dispatch on a value
 # Format: input<TAB>expected<TAB>description
 #
 # `case <value> [m1 b1 m2 b2 … default]` evaluates the value (a

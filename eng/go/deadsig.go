@@ -1,6 +1,6 @@
 package eng
 
-// Dead-overload (unreachable-signature) detection. BORU dispatch is
+// Dead-overload (unreachable-signature) detection. boru dispatch is
 // first-match-wins over SortSignatures' most-specific-first order, so a
 // signature S is unreachable when an earlier, higher-priority signature
 // S' accepts every call S accepts — S' always wins and S never fires.

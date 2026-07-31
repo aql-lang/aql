@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:emitlang module + the core `emit` word
+# boru Language Specification: the boru:emitlang module + the core `emit` word
 # Format: input<TAB>expected<TAB>description
 #
 # `emit <kind> <opts?> <data>` is the symmetric inverse of `parse`: it expands

@@ -1,4 +1,4 @@
-# BORU Language Specification: edge-quote-4 — code-as-data in data context
+# boru Language Specification: edge-quote-4 — code-as-data in data context
 # Format: input<TAB>expected<TAB>description
 # =====================================================================
 # Edge cases for the remaining code-as-data surfaces: ParenExpr in

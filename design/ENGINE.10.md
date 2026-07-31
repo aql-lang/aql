@@ -1,5 +1,5 @@
 
-# BORU Engine
+# boru Engine
 
 Concatenative language using function composition.
 

@@ -24,10 +24,10 @@ import (
 //	find {a:1 z:9}    routes      # → 'A'   (unknown key z ignored)
 //	find {x:9}        routes      # → None
 //
-// patrun matches on map[string]string. BORU match-values are SCALARS compared
+// patrun matches on map[string]string. boru match-values are SCALARS compared
 // by string coercion (ValToString): 1 and "1" share a rule; 1.0 ("1.0") and
 // true ("true") key on their own text. A non-scalar pattern value is a loud
-// error. The stored value is any BORU value — typically a function, making a
+// error. The stored value is any boru value — typically a function, making a
 // Patrun a dispatch/router table — so it rides a side table keyed by the
 // pattern's canonical signature (patrun's *string data is that signature).
 
@@ -45,7 +45,7 @@ func registerPatrunType() *eng.Type {
 	return t
 }
 
-// patrunRule is the BORU side of one registered rule: the original pattern Map
+// patrunRule is the boru side of one registered rule: the original pattern Map
 // (for `patterns`), the stored value, and a pre-rendered "k=v,…" for Format.
 type patrunRule struct {
 	raw  Value
@@ -56,7 +56,7 @@ type patrunRule struct {
 // patrunMatcher wraps the vendored patrun trie plus a side table. The trie
 // owns matching (it stores map[string]string patterns and a *string handle —
 // the pattern's canonical signature); the side table maps that signature to
-// the BORU value and raw pattern, and `order` preserves insertion order for
+// the boru value and raw pattern, and `order` preserves insertion order for
 // `patterns`. add/remove mutate in place; a Patrun Value wraps the pointer
 // (ExtensionPayload), so mutation is visible through every copy.
 type patrunMatcher struct {

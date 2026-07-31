@@ -1,4 +1,4 @@
-# BORU Bytecode — Stage A deep-dive: branch-result modeling (the multi-value / variadic arm)
+# boru Bytecode — Stage A deep-dive: branch-result modeling (the multi-value / variadic arm)
 
 Status: design / deep-dive, validated against the live tree (June 2026).
 This is the "go deep on one next step" companion to the

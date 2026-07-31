@@ -1,8 +1,8 @@
-# Effect-Oriented Programming in BORU: Applicability Report
+# Effect-Oriented Programming in boru: Applicability Report
 
 ## Scope
 
-Evaluate what **effect-oriented programming (EOP)** has to teach BORU. EOP is two
+Evaluate what **effect-oriented programming (EOP)** has to teach boru. EOP is two
 related-but-distinct traditions:
 
 - **Effects-as-values** — the ZIO/Cats-Effect lineage popularised by the
@@ -18,11 +18,11 @@ related-but-distinct traditions:
   with the set of effects a function may perform tracked in its type.
 
 The honest framing up front, the same one `elixir-types-in-boru-report.10.md` opens
-with: **BORU has independently arrived at much of what EOP teaches.** Errors are
+with: **boru has independently arrived at much of what EOP teaches.** Errors are
 already values, side effects are already gated by an object-capability model that
 *already enumerates the effect set*, values are immutable by default, code is
 homoiconic, and `boru check` already does carrier-based abstract interpretation. The
-value of EOP for BORU is therefore not a new paradigm but a handful of specific
+value of EOP for boru is therefore not a new paradigm but a handful of specific
 places where the EOP lens sharpens or extends what is already here. This report
 ranks those by leverage, ties each to concrete machinery, and states plainly what
 does **not** transfer.
@@ -64,12 +64,12 @@ cooperative threads, and backtracking. Languages in this lineage (Eff, Koka, Fra
 Multicore OCaml) also carry an **effect row** in each function's type — the static
 record of which effects it may perform.
 
-## BORU baseline — the parallel-evolution table
+## boru baseline — the parallel-evolution table
 
-Most of EOP's *motivation* is already satisfied in BORU; stating this first keeps the
+Most of EOP's *motivation* is already satisfied in boru; stating this first keeps the
 applications section honest.
 
-| EOP concept | BORU today | Where |
+| EOP concept | boru today | Where |
 |---|---|---|
 | Errors as values (not exceptions) | `do […] error […]`, `raise`; caught Error exposes `.code`/`.message`/payload | `design/ERRORS.8.md`, `lang/go/native/native_error_raise.go`, `eng/go/boru_error.go` |
 | The effect *set*, enumerated | Object-capability scopes: `disk.read`, `disk.write`, `network`, `process`, `env`, `clock` | `design/PERMISSIONS.10.md`, `lang/go/policy/` |
@@ -82,7 +82,7 @@ applications section honest.
 | **Effect set in the type/signature** | **Absent** — capabilities checked at runtime, not carried by signatures | — |
 | **Resource-safety primitive** | **Absent** — no guaranteed finalizer | — |
 | **Retry / schedule as a value** | **Absent** — has `timeout`/`interval`, no policy value | — |
-| **Language-level effect handler** | **Absent** — interpreter swap is host-only, unreachable from BORU code | — |
+| **Language-level effect handler** | **Absent** — interpreter swap is host-only, unreachable from boru code | — |
 
 The last four rows are this report.
 
@@ -90,14 +90,14 @@ The last four rows are this report.
 
 ### 1. Effect rows on signatures + static effect inference (highest leverage)
 
-**The idea.** BORU already names its effects — the capability scopes are exactly an
+**The idea.** boru already names its effects — the capability scopes are exactly an
 effect alphabet (`disk.read`, `network`, `clock`, `process`, `env`, `disk.write`).
 Today a signature records argument and return *types*; it does not record the
 *effects* a word performs. Adding that third facet turns EOP's two type-level ideas
 — ZIO's `R`/`E` channels and algebraic **effect rows** — into a single feature
-realised entirely from machinery BORU already owns.
+realised entirely from machinery boru already owns.
 
-**Why it fits BORU specifically.**
+**Why it fits boru specifically.**
 - Native words already declare metadata-rich signatures (`Args`, `Returns`,
   `ReturnsFn`, `BarrierPos`, `NoEvalArgs`); a per-signature `Effects []string`
   (drawn from the capability vocabulary) is the same shape of declaration. The
@@ -109,7 +109,7 @@ realised entirely from machinery BORU already owns.
   the same call graph is the same fixpoint it already computes for types: a `def`'s
   inferred effects are the union of the effects of the words it calls. Recursion is
   handled by the existing in-flight gate.
-- The result surfaces through tools BORU already ships: `describe` can print a word's
+- The result surfaces through tools boru already ships: `describe` can print a word's
   effect set, and `boru check` can flag a `def` annotated (or assumed) *pure* that in
   fact reaches a `network` word — a capability violation caught **statically**, at
   the call site, before any policy denial at runtime.
@@ -134,7 +134,7 @@ bracket [open "f.txt"] [afn [h] [h read-all]] [afn [h] [h close]]
 ensure [body that may fail] [cleanup that always runs]
 ```
 
-**Why it fits BORU specifically.** BORU has file I/O, SQLite handles, and planned
+**Why it fits boru specifically.** boru has file I/O, SQLite handles, and planned
 network sockets and processes — all resources that need deterministic release — but
 no construct that guarantees it. `do […] error […]` *reifies* a failure as a value
 but guarantees no cleanup, and a finalizer written after the body simply does not run
@@ -166,7 +166,7 @@ A **schedule is itself a value** (a map/record), exactly as ZIO's `Schedule` is 
 policies are inspectable, reusable, and testable, not control flow hand-woven into
 each call site.
 
-**Why it fits BORU specifically.** It is pure leverage of two things BORU already has:
+**Why it fits boru specifically.** It is pure leverage of two things boru already has:
 errors-as-values (a failed attempt is a catchable Error, so "retry on error" is a
 loop over `do…error`) and the temporal layer (`timeout`/`interval`/`sleep`,
 `lang/go/native/native_temporal_await.go`) for the delay component. It needs nothing
@@ -180,7 +180,7 @@ folded into the temporal module) once `ensure` from #2 exists to anchor the
 ### 4. Scoped effect handlers for DI and testing: `with-handler`
 
 **The idea.** The deepest algebraic-effects idea — interpret an operation by the
-nearest enclosing handler — in the pragmatic, **single-shot** form BORU can actually
+nearest enclosing handler — in the pragmatic, **single-shot** form boru can actually
 support: a dynamically-scoped region that *reroutes* effectful words.
 
 ```boru
@@ -193,8 +193,8 @@ with-handler {
 ]
 ```
 
-**Why it fits BORU specifically.** The substrate already exists — it is simply not
-reachable from BORU code today. `FileOps` is already a swappable interface with an
+**Why it fits boru specifically.** The substrate already exists — it is simply not
+reachable from boru code today. `FileOps` is already a swappable interface with an
 in-memory implementation, `EffectiveClock` already indirects every clock read
 (`lang/go/native/capabilities.go`), `Rand.with-seed` already yields a deterministic
 instance (`lang/go/modules/rand.go`), and network access already goes through a
@@ -211,34 +211,34 @@ user operations. This is **not** general algebraic effects — see below.
 
 ## What does NOT transfer
 
-- **Multi-shot delimited continuations / fully general algebraic effects.** BORU's
+- **Multi-shot delimited continuations / fully general algebraic effects.** boru's
   engine runs a single **tape**: a call *splices its body into the tape*, which is
   what makes tail-call elimination true by structural inspection
   (`design/TAPE-DATA-STRUCTURE.10.md`, `design/TCO.10.md`). Capturing the remaining
   tape as a first-class continuation and resuming it *more than once* would break both
-  the execution model and the TCO guarantee. BORU can offer the *restricted* handler of
+  the execution model and the TCO guarantee. boru can offer the *restricted* handler of
   idea #4 (run-to-completion, single resume) but not Koka/OCaml-style resumable,
   multi-shot handlers. This is a real expressiveness ceiling and should be stated as
   such, not papered over.
 
 - **A monadic `IO` / `Either` wrapper.** Threading every effect through an `IO[_]`
-  and every failure through an `Either[E, _]` is antithetical to two settled BORU
+  and every failure through an `Either[E, _]` is antithetical to two settled boru
   decisions: failures are values returned directly (`design/ERRORS.8.md`), *not*
   wrapped in a Result the caller must unwrap, and — as the EOP book itself insists —
   the discipline, not the monad, is the point. Effects belong as **signature
   metadata** (idea #1), inferred and checked, never as a value constructor every
-  program must thread by hand. Mechanically, BORU's forward-collection calling
+  program must thread by hand. Mechanically, boru's forward-collection calling
   convention has no `flatMap` to hang the plumbing on, so a monadic encoding would
   also fight the surface syntax.
 
-- **New effect syntax.** BORU is concatenative; every idea above is a *word* (`ensure`,
+- **New effect syntax.** boru is concatenative; every idea above is a *word* (`ensure`,
   `retry`, `with-handler`) or a *signature field* (effect rows). No new literal forms,
   no `<…>`-style annotations — consistent with `fsharp-units-in-boru-report.0.md`'s
   "new behaviour is a word or a literal, nothing else."
 
 - **Interruption / fibers as an early target.** ZIO-style interruptible fibers
   presuppose a long-lived, individually-addressable process with a cancellation
-  signal. BORU's only such substrate is the *planned* actor runtime
+  signal. boru's only such substrate is the *planned* actor runtime
   (`design/PROCESSES.0.md`, which already reserves a `context.Context` for
   cancellation). Interruption-aware `ensure` is therefore a downstream extension of
   idea #2 once actors land — noted, not scheduled now.
@@ -257,7 +257,7 @@ the reasons above.
 
 ## Verdict
 
-**EOP is largely a refinement lens for BORU, not a new paradigm to adopt.** BORU
+**EOP is largely a refinement lens for boru, not a new paradigm to adopt.** boru
 already has the hard parts — errors as values, an enumerated capability/effect set,
 immutability, homoiconic deferred computation, and a static abstract interpreter. The
 genuine wins are two small, high-value, low-cost primitives (**resource safety** and

@@ -316,7 +316,7 @@ f2 (flex {k:41})`
 //     and the caller's later dynamic-scope read deferred spuriously;
 //   - a module-preamble fn's minted type (a module-private refine) resolves
 //     through the ACTIVE unit's registry at OpPushType, exactly where the
-//     interpreter's CallBORU resolves it — previously the importer-registry
+//     interpreter's CallBoru resolves it — previously the importer-registry
 //     lookup missed it and the whole program deferred.
 func TestUserPolyFramePreservesCallerDynBinds(t *testing.T) {
 	src := `def p fn [[a:Integer] [Integer] [a add 1] [s:String] [Integer] [0]] def f fn [[m:Map n:Integer] [Integer] [if (n lte 0) [acc2] [def acc2 n p (m get k/q) drop f m (n sub 1)]]] f {k:3} 2`

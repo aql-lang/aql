@@ -1,13 +1,13 @@
 {
   "name": "tree-sitter-boru",
   "version": "0.1.0",
-  "description": "BORU grammar for tree-sitter (a concatenative, strongly-typed query language)",
+  "description": "boru grammar for tree-sitter (a concatenative, strongly-typed query language)",
   "repository": {
     "type": "git",
     "url": "https://github.com/boru-lang/boru.git",
     "directory": "editors/tree-sitter"
   },
-  "author": "BORU contributors",
+  "author": "boru contributors",
   "license": "MIT",
   "main": "bindings/node",
   "types": "bindings/node",

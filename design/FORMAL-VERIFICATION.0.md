@@ -1,4 +1,4 @@
-# Formal Verification for BORU — a layered plan
+# Formal Verification for boru — a layered plan
 
 **Status:** draft / proposal (`.0`). A first machine-checked **seed of
 milestone 6 now exists** at [`formal/lean/BoruCore.lean`](formal/lean/BoruCore.lean)
@@ -24,26 +24,26 @@ makes compiler-correctness worth proving).
 
 ## 1. Two halves of the problem
 
-"Formal methods for BORU" splits cleanly into two questions that need
+"Formal methods for boru" splits cleanly into two questions that need
 different tools:
 
-- **Half A — analysis *of the language*.** Is the BORU *language*
+- **Half A — analysis *of the language*.** Is the boru *language*
   well-behaved? Type soundness, determinism, confluence of forward
   collection, correctness of the `StackForm` compiler. The object of
   study is the semantics in `FORMAL-SPEC.md`.
-- **Half B — analysis *of programs*.** Is *this BORU program* correct,
+- **Half B — analysis *of programs*.** Is *this boru program* correct,
   safe, total, effect-bounded? The object of study is user code.
 
-The two halves meet at one mechanism — the **carrier**. BORU's static
+The two halves meet at one mechanism — the **carrier**. boru's static
 checker already runs the *real evaluator* over abstract "carrier" values
 that hold type information instead of concrete data; that is textbook
 **abstract interpretation** (`CARRIER-STATIC-TYPECHECK-REPORT.10.md`).
 The central thesis of this document:
 
-> Because BORU *runs one evaluator over abstract values*, both program
+> Because boru *runs one evaluator over abstract values*, both program
 > analysis and (with care) program verification reduce to **choosing an
 > abstract domain** and a **discharge backend**. The expensive,
-> BORU-specific work is concentrated in two places — modelling forward
+> boru-specific work is concentrated in two places — modelling forward
 > collection, and making first-match dispatch sound over non-singleton
 > carriers — and is paid once, not per analysis.
 
@@ -71,7 +71,7 @@ Two principles govern how the layers relate:
    compiler is correct") by turning those claims into theorems.
 2. **Lean relocates trust, it does not remove it.** Even a complete Lean
    development still trusts (a) the Lean kernel, (b) that the Lean
-   semantics faithfully models BORU's *intended* behaviour — the
+   semantics faithfully models boru's *intended* behaviour — the
    **spec-adequacy problem** — and (c) that the theorem *statements* say
    what we mean. (b) is discharged not by proof but by cross-validating
    the model against the executable `*.tsv` conformance suite and the
@@ -98,7 +98,7 @@ interpreter.
 | **Taint** | untrusted input reaching an effectful word | security; feeds `PERMISSIONS.10` |
 | **Effect / capability** | which effect classes a program may dispatch | *reuses the shipped PBT transparency lattice* (Transparent/Generator/Frozen/Opaque) — static counterpart to §7.2 capability checks |
 
-### 3.1 Two BORU-specific soundness obligations
+### 3.1 Two boru-specific soundness obligations
 
 Any carrier domain must respect both, or it is unsound:
 
@@ -114,18 +114,18 @@ Any carrier domain must respect both, or it is unsound:
 
 ### 3.2 Stack-effect analysis — the concatenative tradition, with a twist
 
-BORU is concatenative, and concatenative languages have a mature static
+boru is concatenative, and concatenative languages have a mature static
 **stack-effect** lineage (Cat, Kitten — row-polymorphic stack typing).
 Because every word declares typed input/output signatures, a checker can
 *compose* signatures down a tape and flag underflow/overflow/arity
-mismatch statically. The BORU-specific twist is **forward collection**
+mismatch statically. The boru-specific twist is **forward collection**
 (`FORMAL-SPEC` §6.4): a word's stack effect depends on how many forward
 tokens it consumed and on the barrier rules (`|`, `/f`, `/s`, `/N`,
 `end`). Modelling that is novel work, but it catches exactly the
 "stranded operand" class the `FORWARD-STRAND-ADVISORY.10.md` and
 `FORWARD-COLLECTION-TRAPS.0.md` notes describe.
 
-### 3.3 Refinement types — BORU is already a liquid-types language
+### 3.3 Refinement types — boru is already a liquid-types language
 
 `FORMAL-SPEC` §5.2 defines **dependent scalar refinements**:
 `Base op constraint`, value-sensitive subset types. `def Pos refine
@@ -134,7 +134,7 @@ Number gt 0` is a predicate subtype — the surface syntax of
 predicates are checked *dynamically* at construction boundaries. To
 check them *statically* you discharge implications (e.g. body output
 `> 0` given `x > 0`) — an SMT obligation. Wiring a Z3 backend to
-discharge refinement predicates gives BORU **lightweight functional
+discharge refinement predicates gives boru **lightweight functional
 verification in its existing syntax, with no new language surface**: the
 contracts already *are* the types. This is the single highest-value
 differentiator in the middle of the pyramid.
@@ -244,8 +244,8 @@ preconditions automatically.**
 
 ### 5.3 The catch — and why b2 rides on b1
 
-`clamp_model` is a *re-encoding* of `clamp` in Lean math. Mapping BORU
-`add`→Lean `+` is **not** obviously faithful — BORU has an
+`clamp_model` is a *re-encoding* of `clamp` in Lean math. Mapping boru
+`add`→Lean `+` is **not** obviously faithful — boru has an
 integer-overflow strategy and IEEE-754 floats, so float-`add` is *not*
 `Int.+`. If the shallow mapping is wrong, the theorem is about a fiction.
 

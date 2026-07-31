@@ -11,7 +11,7 @@ import (
 )
 
 // runModuleSteps creates a registry with in-memory files and ParseFunc set,
-// then executes a sequence of BORU steps on a shared native.
+// then executes a sequence of boru steps on a shared native.
 func runModuleSteps(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
 	mem := capabilities.NewMem()
@@ -586,7 +586,7 @@ export "B" {y:2}`,
 }
 
 // runModuleStepsWithCwd creates a registry with a simulated working directory,
-// in-memory files, and ParseFunc set, then executes BORU steps.
+// in-memory files, and ParseFunc set, then executes boru steps.
 func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
 	mem := capabilities.NewMem()

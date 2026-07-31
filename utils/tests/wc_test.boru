@@ -1,5 +1,5 @@
 # ============================================================================
-# wc — BORU unit-test suite (boru:test), over the PURE core of ../wc.boru.
+# wc — boru unit-test suite (boru:test), over the PURE core of ../wc.boru.
 #
 # HOW THIS SUITE REACHES THE PROGRAM. `boru test` cannot inject an argument
 # vector, and a program is not a module: it has no `export`, so

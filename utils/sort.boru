@@ -16,7 +16,7 @@
 #
 # WHY THIS PROGRAM SLURPS, and why that is not a cop-out. sort cannot stream:
 # the first line of the output is not known until the last line of the input
-# has been read. That is a property of the problem, not of BORU, and it is
+# has been read. That is a property of the problem, not of boru, and it is
 # precisely what makes sort worth having next to head — the two programs are
 # the opposite ends of the same axis, and having both means the suite covers
 # "reads everything" as deliberately as it covers "reads as little as
@@ -26,7 +26,7 @@
 # named file and standard input, because both arrive as a handle. Nothing
 # downstream of sort-slurp knows which it got.
 #
-# COMPARISON. The default is BORU's own total order over strings, via `sort`.
+# COMPARISON. The default is boru's own total order over strings, via `sort`.
 # -n switches to a numeric key computed per line (sort-key), so the sort stays
 # one call rather than a hand-rolled comparator — which matters, because a
 # comparator passed as a Function value is the sharpest edge in the language

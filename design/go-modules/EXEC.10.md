@@ -1,7 +1,7 @@
 # `os/exec` → `boru:exec` (`Exec`)
 
 > **Status: design proposal — not implemented (2026-07-16).** This note
-> specifies the curated BORU surface for Go's `os/exec` package. No Go
+> specifies the curated boru surface for Go's `os/exec` package. No Go
 > code exists yet; the note exists so the proposed surface — and
 > especially its **policy gating** — is auditable before any handler is
 > written. Read [`README.10.md`](README.10.md) first for the shared
@@ -135,7 +135,7 @@ messages); `ms` is wall-clock duration.
 | never started (not found / not executable) | **raise** `exec-start` | the command never ran; there is no meaningful record |
 | timeout | **raise** `exec-timeout` (child killed) | a deadline breach is exceptional; folding it into exit codes invites silent misparses |
 
-All raises are ordinary BORU errors, catchable with `do […] error […]` —
+All raises are ordinary boru errors, catchable with `do […] error […]` —
 errors-as-values is preserved.
 
 **Non-UTF8 output:** v1 decodes lossily (invalid bytes → U+FFFD),
@@ -262,7 +262,7 @@ spawn**, …) go here too").
   are chosen so a future `stream.exec` can reuse them.
 - **CLI `boru vault exec`** (`cmd/go/internal/vault/exec.go`). A host
   feature that injects vault secrets into a child's env from the CLI —
-  not a BORU word, not this gate. Named here to preempt confusion.
+  not a boru word, not this gate. Named here to preempt confusion.
 - **Go `os/exec` semantics.** Like Go, no shell interpretation by
   default — the argv vector leaves no injection surface. When `sh` is
   unavoidable and interpolation is involved, quote with

@@ -15,7 +15,7 @@ import (
 
 // The boru:parse module — the Parse namespace, a builder DSL for defining a
 // CUSTOM parser and exposing it as a new `parse <name>` kind. Where
-// boru:parselang ships built-in decoders (json, csv, yaml, …) and lets a BORU
+// boru:parselang ships built-in decoders (json, csv, yaml, …) and lets a boru
 // fn register as a parser, boru:parse lets a user CONSTRUCT a parser from
 // grammar: an ABNF grammar, a declarative rule map ("grammar as Map
 // subtypes"), custom lex matchers, and semantic actions that build custom
@@ -43,12 +43,12 @@ import (
 // (when every mark action is known), and custom matchers are applied last.
 
 // parseGrammar is the host-backed builder a Parse.grammar call mints. It
-// carries the tabnas engine under construction plus the BORU-fn-backed
+// carries the tabnas engine under construction plus the boru-fn-backed
 // callbacks (mark actions) and the deferred ABNF installs. Pointer-backed so
 // the chainable words mutate one instance.
 type parseGrammar struct {
 	j           *tabnas.Tabnas        // the engine under construction
-	markActions tabnasabnf.ActionsMap // ABNF mark/phase ref -> BORU-fn-backed AltActions
+	markActions tabnasabnf.ActionsMap // ABNF mark/phase ref -> boru-fn-backed AltActions
 	inlineSeq   int                   // counter for generated declarative action refs
 
 	// steps are the deferred grammar-building operations (tokens, declarative
@@ -66,13 +66,13 @@ type parseGrammar struct {
 	// parser. Build a fresh Parse.grammar for a second parser.
 	registered bool
 
-	// firstErr captures the first error raised by a BORU-fn callback (a
+	// firstErr captures the first error raised by a boru-fn callback (a
 	// matcher or action) during a parse; the parser handler surfaces it as a
 	// parse error. Callbacks never panic (ADR-005) — they record here instead.
 	firstErr error
 	// r is the active registry for the current parse, set by the parser
 	// handler for the duration of one j.Parse call so callbacks can dispatch
-	// BORU fns re-entrantly. Single-threaded parse → safe; nil-guarded.
+	// boru fns re-entrantly. Single-threaded parse → safe; nil-guarded.
 	r *native.Registry
 }
 
@@ -250,7 +250,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 		{{Type: gT}, {Type: native.TString}, {Type: native.TString}},
 	}, []*native.Type{}, nil, subReg))
 
-	// ---- matcher — register a BORU-fn-backed custom lex matcher --------
+	// ---- matcher — register a boru-fn-backed custom lex matcher --------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-matcher",
 		Signatures: []native.Signature{{
@@ -266,7 +266,7 @@ func BuildParseModule(parent *native.Registry) (native.ModuleDesc, error) {
 		{{Type: gT}, {Type: native.TAtom, Quote: true}, {Type: native.TInteger}, {Type: native.TFunction}},
 	}, []*native.Type{}, map[int]bool{1: true}, subReg))
 
-	// ---- action — attach a BORU-fn-backed semantic action (mark) -------
+	// ---- action — attach a boru-fn-backed semantic action (mark) -------
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parse-action",
 		Signatures: []native.Signature{{
@@ -404,7 +404,7 @@ func (g *parseGrammar) addAbnfStep(src string, o *tabnasabnf.AbnfConvertOptions)
 
 // parseSpecHandler — args[0]=grammar, args[1]=the WHOLE grammar as one
 // declarative map, mirroring the tabnas GrammarSpec document shape
-// (grammarspec.go: {options, rule, ref, v}) plus the two BORU-side
+// (grammarspec.go: {options, rule, ref, v}) plus the two boru-side
 // extension sections tabnas has no JSON home for:
 //
 //	Parse.spec g {
@@ -820,7 +820,7 @@ func parseParserReturns(_ []native.Value, _ *native.Registry) []native.Value {
 
 // parseHandler builds the ParseLang (the ParseLangSpec handler) that runs
 // the constructed parser over a source string and converts the result. It
-// binds g.r for the duration of the parse (so callbacks dispatch BORU fns)
+// binds g.r for the duration of the parse (so callbacks dispatch boru fns)
 // and surfaces the first callback error as a parse error.
 func (g *parseGrammar) parseHandler(kind string) ParseLang {
 	target := "parse_" + kind
@@ -847,9 +847,9 @@ func (g *parseGrammar) parseHandler(kind string) ParseLang {
 	}
 }
 
-// wrapAction wraps a BORU fn as a tabnas semantic action (an AltAction): it
-// hands the fn the rule's current node (as a BORU Value), and stores the fn's
-// returned Value back on the node — which, because nodes may now BE BORU
+// wrapAction wraps a boru fn as a tabnas semantic action (an AltAction): it
+// hands the fn the rule's current node (as a boru Value), and stores the fn's
+// returned Value back on the node — which, because nodes may now BE boru
 // Values (see the native.AnyToValue pass-through), is how an action emits a
 // custom-typed value into the parse result.
 func (g *parseGrammar) wrapAction(fn native.Value) tabnas.AltAction {
@@ -869,7 +869,7 @@ func (g *parseGrammar) wrapAction(fn native.Value) tabnas.AltAction {
 	}
 }
 
-// wrapMatcher wraps a BORU fn as a tabnas custom lex matcher. The fn receives
+// wrapMatcher wraps a boru fn as a tabnas custom lex matcher. The fn receives
 // the unconsumed source as a String and returns either None (no match) or a
 // Map {src:String tin:String? val:Any?}: src is the matched prefix, tin the
 // emitted token name (default "#TX" — a text token that flows to the value
@@ -929,7 +929,7 @@ func (g *parseGrammar) wrapMatcher(fn native.Value) tabnas.LexMatcher {
 	}
 }
 
-// callParseFn invokes a BORU function value (a matcher or action callback)
+// callParseFn invokes a boru function value (a matcher or action callback)
 // against args, handling both the compiled-closure and interpreter-FnDef
 // shapes — the same seam filter's callback uses (native/filter.go).
 func callParseFn(r *native.Registry, fn native.Value, args []native.Value) ([]native.Value, error) {
@@ -944,7 +944,7 @@ func callParseFn(r *native.Registry, fn native.Value, args []native.Value) ([]na
 	if fd, ok := fn.Data.(native.FnDefInfo); ok {
 		caps = fd.Captured
 	}
-	return r.CallBORU(sig, args, caps)
+	return r.CallBoru(sig, args, caps)
 }
 
 // abnfOptsFrom reads the {start tag builtins marks} option map into the
@@ -1111,7 +1111,7 @@ func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, ru
 	// c — a DECLARATIVE condition map ({'counter':n} / {'counter.sub':n}
 	// entries, matched by $eq). The FuncRef condition form takes
 	// parser-internal types (tabnas.AltCond) and is not expressible from
-	// BORU; the declarative map is.
+	// boru; the declarative map is.
 	if cv, ok := m.Get("c"); ok {
 		cm, ok := specDataMap(cv)
 		if !ok {
@@ -1140,7 +1140,7 @@ func altMapToSpec(g *parseGrammar, gs *tabnas.GrammarSpec, altV native.Value, ru
 	return alt, nil
 }
 
-// specDataMap converts a concrete BORU map to a plain map[string]any for
+// specDataMap converts a concrete boru map to a plain map[string]any for
 // the declarative alt fields (c / u / k). Integers convert to int at
 // every depth — the width tabnas' declarative normalizers (conditions,
 // MapToOptions) match on.

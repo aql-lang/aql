@@ -609,7 +609,7 @@ Two consequences worth stating plainly rather than leaving as loose ends:
   leftover naming.
 - **`Origin` already means something in Go.** `OriginKind` classifies where a
   `*Type` was registered, and is read as `Value.Origin` / `Signature.Origin`
-  (`eng/go/typetable.go:10`). There is no BORU-level clash, and this work's
+  (`eng/go/typetable.go:10`). There is no boru-level clash, and this work's
   kernel types are `Prov*` (`ProvStore`, `ProvNode`, `ProvEvent`, `ProvKind`),
   so nothing actually collides — but a reader of `eng/go` should not be
   surprised twice by the same word.

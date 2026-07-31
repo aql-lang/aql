@@ -92,7 +92,7 @@ func execFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Servi
 	fs.SetOutput(stderr)
 	bind := fs.String("bind", "127.0.0.1:8091", "host:port to bind the exec HTTP server")
 	port := fs.Int("p", 0, "port to listen on (overrides -bind host:port if >0)")
-	registryPath := fs.String("r", "", "registry path passed to BORU instances")
+	registryPath := fs.String("r", "", "registry path passed to boru instances")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
 	if err := fs.Parse(args); err != nil {

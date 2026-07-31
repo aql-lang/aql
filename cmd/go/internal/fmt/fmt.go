@@ -1,4 +1,4 @@
-// Package fmt implements `boru fmt [file.boru ...]` — format BORU
+// Package fmt implements `boru fmt [file.boru ...]` — format boru
 // source files in place via lang/go/formatter.Format.
 //
 // With no arguments, formats every .boru file in the current
@@ -35,8 +35,8 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 
 // formatByExt formats a file's contents according to its extension:
 // Markdown (.md/.markdown) and HTML (.html/.htm) files have only their
-// embedded BORU (```boru fences / <!-- borufmt --> regions) reformatted;
-// everything else is treated as a whole BORU source file.
+// embedded boru (```boru fences / <!-- borufmt --> regions) reformatted;
+// everything else is treated as a whole boru source file.
 func formatByExt(path, src string) string {
 	switch strings.ToLower(filepath.Ext(path)) {
 	case ".md", ".markdown":

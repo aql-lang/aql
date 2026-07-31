@@ -14,7 +14,7 @@ import (
 	model "github.com/voxgig/model/go"
 )
 
-// The boru:model module — the Model namespace, a thin BORU surface over the
+// The boru:model module — the Model namespace, a thin boru surface over the
 // upstream Go implementation of @voxgig/model (github.com/voxgig/model, the
 // repo's go/ module). voxgig/model unifies .jsonic source into a single
 // system model (via aontu — see native/aontu.go) and runs generator
@@ -24,9 +24,9 @@ import (
 // Build/Watch from the library's own exported building blocks (NewBuild,
 // NewWatch, ModelProducer, LocalProducer) — exactly what model.New does
 // internally — and drives Run / Start / Stop. The one thing it changes is
-// the filesystem seam: every file read and write goes through BORU's boru:io
+// the filesystem seam: every file read and write goes through boru's boru:io
 // FileOps capability (native.EffectiveFileOps), so a test that installs an
-// in-memory FileOps (capabilities.NewMem, via BORU.SetFileOps) runs the whole
+// in-memory FileOps (capabilities.NewMem, via Boru.SetFileOps) runs the whole
 // model — source reads, the <base>/<name>.json write, inline source — entirely
 // in memory, touching no disk. model.New itself cannot do this: its ModelSpec
 // exposes no FS seam (only BuildSpec does), which is why the module assembles
@@ -63,15 +63,15 @@ var inlineSeq atomic.Int64
 
 // modelHandle is the Go state behind a Model value: the assembled Build and
 // Watch, the registry actions call back into (actionReg), action errors
-// collected during a build (CallBORU errors cannot flow through the
+// collected during a build (CallBoru errors cannot flow through the
 // model.Action signature, so they are stashed here and merged into the
 // result), and a mutex serialising action callbacks.
 //
-// actionReg is the registry an action's CallBORU runs on. For Model.run it is
+// actionReg is the registry an action's CallBoru runs on. For Model.run it is
 // the live foreground registry (the build runs synchronously on the calling
 // goroutine, so that is race-free). For Model.start it is a ForkConcurrent of
 // the registry, taken on the foreground goroutine before the watch begins, so
-// the watch goroutine's rebuilds run their BORU actions on an isolated registry
+// the watch goroutine's rebuilds run their boru actions on an isolated registry
 // that can never race the main interpreter — the same pattern timeout /
 // interval / await use (see eng/go/fork.go).
 type modelHandle struct {
@@ -237,7 +237,7 @@ func modelNewHandlerFor(tModel *native.Type) native.Handler {
 	}
 }
 
-// parseSpec decodes the spec Map, wiring BORU-function actions through
+// parseSpec decodes the spec Map, wiring boru-function actions through
 // makeAction.
 func parseSpec(specMap native.ReadMap, h *modelHandle, r *native.Registry) (parsedSpec, error) {
 	var ps parsedSpec
@@ -288,7 +288,7 @@ func parseSpec(specMap native.ReadMap, h *modelHandle, r *native.Registry) (pars
 }
 
 // buildActions reads the `actions` spec field into a map of model.ActionDef,
-// each wrapping a BORU Function.
+// each wrapping a boru Function.
 func buildActions(specMap native.ReadMap, h *modelHandle, r *native.Registry) (map[string]model.ActionDef, error) {
 	av, ok := specMap.Get("actions")
 	if !ok {
@@ -371,15 +371,15 @@ func parseStep(s string) model.Step {
 	}
 }
 
-// makeAction wraps a BORU Function as a model.Action. The callback hands the
-// unified model (as a BORU Map) to the function via eng.InvokeCallback on
+// makeAction wraps a boru Function as a model.Action. The callback hands the
+// unified model (as a boru Map) to the function via eng.InvokeCallback on
 // h.actionReg — the foreground registry for Model.run, an isolated fork for
 // Model.start — and reads its result: a Boolean is the OK flag; a Map supplies
 // {ok, reload}; anything else (including no result) is treated as OK. An error
 // is stashed on the handle (the model.Action signature has no error return) and
 // surfaces in the build result. InvokeCallback is the uniform seam: the action
 // runs on the VM when its sig carries a compiled unit (stampActionFn stamps at
-// model build), else falls back to the interpreter (CallBORU) — captures and
+// model build), else falls back to the interpreter (CallBoru) — captures and
 // ineligible shapes decline the stamp and interpret unchanged.
 func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.ActionDef {
 	var caps []native.CapturedBinding
@@ -408,7 +408,7 @@ func makeAction(h *modelHandle, fnVal native.Value, step model.Step) model.Actio
 	}
 }
 
-// interpretActionResult maps a BORU action's result stack to an ActionResult.
+// interpretActionResult maps a boru action's result stack to an ActionResult.
 func interpretActionResult(res []native.Value) model.ActionResult {
 	if len(res) == 0 {
 		return model.ActionResult{OK: true}
@@ -458,7 +458,7 @@ func modelStartHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	if !ok {
 		return nil, r.BoruError("model_bad_handle", "start: not a Model", "start")
 	}
-	// Watch rebuilds run on a background goroutine, so their BORU actions must
+	// Watch rebuilds run on a background goroutine, so their boru actions must
 	// NOT touch the foreground registry. Fork an isolated registry HERE, on the
 	// foreground goroutine (ForkConcurrent's contract: fork while the parent is
 	// not concurrently mutating), and route action callbacks to it. Outputs are
@@ -497,7 +497,7 @@ func modelModelHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	return []native.Value{native.AnyToValue(h.build.Model)}, nil
 }
 
-// buildResultValue marshals a *model.BuildResult to a BORU Map, merging any
+// buildResultValue marshals a *model.BuildResult to a boru Map, merging any
 // action errors stashed on the handle during the build.
 func buildResultValue(br *model.BuildResult, h *modelHandle) native.Value {
 	om := native.NewOrderedMap()
@@ -531,7 +531,7 @@ func buildResultValue(br *model.BuildResult, h *modelHandle) native.Value {
 
 // ---- FileOps-backed model.FS ---------------------------------------------
 
-// fileOpsFS adapts BORU's boru:io FileOps to the model.FS seam, so the whole
+// fileOpsFS adapts boru's boru:io FileOps to the model.FS seam, so the whole
 // model pipeline (source reads, the JSON-model write, inline source) runs on
 // whatever FileOps the registry has — disk for the OS backend, memory for a
 // test backend. In dryrun mode writes are kept in an in-memory overlay (and

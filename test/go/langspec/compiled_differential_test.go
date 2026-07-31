@@ -24,7 +24,7 @@ import (
 // SAME frozen clock the spec runner uses (langspec_test.go), so
 // clock-seeded rows (rand, now) are deterministic and comparable
 // across the two runs.
-func newDifferentialInstance(t *testing.T) *lang.BORU {
+func newDifferentialInstance(t *testing.T) *lang.Boru {
 	t.Helper()
 	a, err := lang.New()
 	if err != nil {

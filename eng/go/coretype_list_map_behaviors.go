@@ -108,7 +108,7 @@ func formatTableDataAsList(td TableData) string {
 // joinEntries renders m's entries as "k:render(v)" joined by spaces —
 // the ONE k:v body every field-bag and map render shares (Value.String
 // for display, CanonValue for canon, class/resource instance field
-// bags). Keys iterate in insertion order; commas are optional in BORU
+// bags). Keys iterate in insertion order; commas are optional in boru
 // source and the default render omits them.
 func joinEntries(m ReadMap, render func(Value) string) string {
 	parts := make([]string, 0, m.Len())

@@ -74,7 +74,7 @@ func TestCallLambdaNoMatchAndBodyError(t *testing.T) {
 		t.Fatalf("2-param lambda over 1 entry: expected no-sig error, got %v", err)
 	}
 
-	// A matching lambda whose body raises propagates the CallBORU error.
+	// A matching lambda whose body raises propagates the CallBoru error.
 	mb2, err := newMapBody(r, b2Lambda(t, r, "([kv:Any] => [zzz_undef_word_xyz])"), "each")
 	if err != nil {
 		t.Fatal(err)

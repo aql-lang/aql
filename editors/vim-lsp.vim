@@ -1,4 +1,4 @@
-" BORU Language Server for classic Vim via prabirshrestha/vim-lsp.
+" boru Language Server for classic Vim via prabirshrestha/vim-lsp.
 "
 " Prerequisites:
 "   Plug 'prabirshrestha/async.vim'

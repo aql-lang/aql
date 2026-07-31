@@ -2656,7 +2656,7 @@ func TestParseBacktickOnlyLiteral(t *testing.T) {
 // --- Words starting with '-' (CLI flag style) ---
 //
 // `-h`, `--help`, `--limit` need to parse as Words so a CLI built
-// on the engine (e.g. sdkgen go-cli) can register them as native BORU
+// on the engine (e.g. sdkgen go-cli) can register them as native boru
 // words and dispatch the same way as any other word. The grammar
 // preserves the existing number-literal precedence — `-3.14`,
 // `-42`, `+5` still tokenise as numbers because matchNumber only

@@ -174,7 +174,7 @@ are confirmed deep.
 - `eng/go/emit.go:1169` — (the MarkUncompilable function definition; the internal trapAt early-return, not a shape refusal)
   This is the MarkUncompilable latch itself, not a raise site; its trapAt guard silently drops any mark at-or-after a terminal top-level trap (the interpreter raises at the trap and never reaches the later construct), so it never records a real refusal shape.
 - `eng/go/emit.go:2403` — if: <name>-branch not captured
-  frag==nil means the recorder never captured the arm fragment for a const-cond branch; every real captured `if` arm supplies a fragment, so this fires only on an internal recording gap (exercised white-box via BranchRecord{Then:nil} in TestRecordBranchRefusals), not on a compilable BORU shape.
+  frag==nil means the recorder never captured the arm fragment for a const-cond branch; every real captured `if` arm supplies a fragment, so this fires only on an internal recording gap (exercised white-box via BranchRecord{Then:nil} in TestRecordBranchRefusals), not on a compilable boru shape.
 - `eng/go/emit.go:2429` — if: condition body produces no value
   A condFrag whose body diverges or leaves an empty stack has no truth value to branch on — an `if` with a genuinely void condition body; pinned white-box (TestRecordBranchRefusals empty-condition case) but represents a degenerate no-value condition rather than a compilable computation, effectively an internal guard on a non-shape.
 - `eng/go/emit.go:2468` — if: then-branch not captured
@@ -190,7 +190,7 @@ are confirmed deep.
 - `eng/go/emit.go:3529` — for: range of unknown provenance
   The caller decomposes bounds to NewInteger consts (start/step) with the end an already-validated operand before setting lowerable; resolveOperand of these always succeeds, so the guard fires only via emit_seam7's synthetic unresolvable-carrier RecordLoop call — a bytecode-fault belt.
 - `eng/go/emit.go:3533` — for: computed range start/step (Stage 2 follow-on)
-  native_control's lowerable gate only sets lowerable=true when start/step are already concrete integers (parseRange/computedRangeBounds require const start/step), so a computed start/step never reaches RecordLoop from source — the guard fires only white-box; the computed-start SHAPE is a future widening but this emit.go site cannot fire from real BORU.
+  native_control's lowerable gate only sets lowerable=true when start/step are already concrete integers (parseRange/computedRangeBounds require const start/step), so a computed start/step never reaches RecordLoop from source — the guard fires only white-box; the computed-start SHAPE is a future widening but this emit.go site cannot fire from real boru.
 - `eng/go/emit.go:3604` — for: iterator slot not registered
   AnalyseLoopBody registers the iterator local before RecordLoop runs, so the localByID lookup always succeeds from real source; the guard fires only via emit_seam7's synthetic all-const-range/empty-body RecordLoop with an unregistered iter — an internal-consistency belt.
 - `eng/go/emit.go:4109` — dispatch without a signature at <word>
@@ -200,4 +200,4 @@ are confirmed deep.
 - `eng/go/engine.go:6980` — fn-value application bounded by a paren (dynamic value precedes args)
   Carries //covergate:allow: reached only if RecordDynMethod declines after fnVal was gated to a member-read EVENT and every argVal is an isRecordableLiteral resolveOperand can seat — an invariant that cannot break without a future window-shape fault, so the belt is unreachable and keeps the sound refusal defensively.
 - `method_shape.go:482` — shaped method apply: operand of unknown provenance at <w>
-  RecordDynMethod's resolveOperand-fail arm: a real shaped-method Origin is always an event-backed member-read carrier and its args are isRecordableLiterals (the engine.go:6979 covergate states this seam `cannot decline`), so this only fires under a white-box fabricated PendingMethodApply on a bare non-event carrier — covered by fault-injection in method_shape_seam9_test.go (TestW9TryRecordMethodApplyRecordFails), not by any BORU source shape.
+  RecordDynMethod's resolveOperand-fail arm: a real shaped-method Origin is always an event-backed member-read carrier and its args are isRecordableLiterals (the engine.go:6979 covergate states this seam `cannot decline`), so this only fires under a white-box fabricated PendingMethodApply on a bare non-event carrier — covered by fault-injection in method_shape_seam9_test.go (TestW9TryRecordMethodApplyRecordFails), not by any boru source shape.

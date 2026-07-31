@@ -1,7 +1,7 @@
 # `RegisterHostKeyring` — the OS keyring host seam (`boru:keyring` / `Keyring`)
 
 > **Status: design proposal — not implemented.** This note specifies the
-> host seam that lets BORU vault logic read and write secrets in the
+> host seam that lets boru vault logic read and write secrets in the
 > platform keychain **without linking a credential daemon into the
 > language layer**. It is the authoritative spec for
 > [VAULT-TUI-PORT.0](VAULT-TUI-PORT.0.md) §7.3. The seam mirrors
@@ -13,12 +13,12 @@
 The vault stores secret bytes in an **OS keyring backend** — macOS
 Keychain, freedesktop Secret Service, Windows Credential Manager,
 1Password, or an encrypted file — reached today only from Go
-(`cmd/go/internal/vault/keyring.go`). To move vault logic into BORU (§7 of
+(`cmd/go/internal/vault/keyring.go`). To move vault logic into boru (§7 of
 the port) without dragging `os/exec`, `/usr/bin/security`, the `op` CLI,
 or a PowerShell helper into `lang/go`, the keyring must arrive the same
 way the terminal and the vault backend already do: **injected by the host
 through a capability seam**. `lang/go` stays free of OS-keychain
-dependencies; the host supplies the backend; BORU words resolve it at
+dependencies; the host supplies the backend; boru words resolve it at
 dispatch.
 
 This is the third member of a family — `RegisterHostTui`
@@ -44,7 +44,7 @@ Semantics copied verbatim from `RegisterHostVault`
 - **register before the import for module-body callers (CRITICAL).** On
   the *same* registry the words resolve the backend live at dispatch, so a
   top-level program may register before or after `import "boru:keyring"`.
-  But the vault-in-BORU use case runs inside an **imported module body**,
+  But the vault-in-boru use case runs inside an **imported module body**,
   and `RunModuleBody` snapshots the `ModuleInheritedCaps` slots from the
   parent **at import time**: if nothing has created the slot on the parent
   before the child imports, the child inherits no slot, and a later
@@ -88,7 +88,7 @@ type KeyringSpec struct {
 ```
 
 The one adaptation: `Get` returns an explicit `found bool` rather than a
-sentinel `ErrNotFound`, so the BORU word maps a miss to `None` without the
+sentinel `ErrNotFound`, so the boru word maps a miss to `None` without the
 host and the module agreeing on an error value across the package
 boundary (§8).
 
@@ -97,14 +97,14 @@ boundary (§8).
 Exactly as `capVaultHost` (`vault.go`): `capKeyringHost` is a
 per-registry slot, and the seam's `init()` appends it to
 `native.ModuleInheritedCaps` so an **imported module body inherits the
-backend by pointer** at import time — the vault-in-BORU logic runs inside a
+backend by pointer** at import time — the vault-in-boru logic runs inside a
 module and must reach the same backend the host registered on the parent.
 This is the mechanism that carries the terminal and vault backends into
 module bodies today; the keyring rides the same rail.
 
 ## 5. The backend contract
 
-Semantics are the vault's, so an in-BORU vault behaves identically to the
+Semantics are the vault's, so an in-boru vault behaves identically to the
 Go one:
 
 - **`Set(alias, value)`** replaces any existing value for `alias`; the
@@ -120,14 +120,14 @@ Go one:
 - **Backend selection stays host-side.** `auto` / `keychain` /
   `secret-service` / `wincred` / `file` / `1password` and the
   `autoBackend` fallback-to-file resolution
-  (`cmd/go/internal/vault/keyring.go`) are the host's concern; BORU never
+  (`cmd/go/internal/vault/keyring.go`) are the host's concern; boru never
   names a backend constant. The seam is backend-agnostic.
 
 ## 6. Word surface — a minimal `boru:keyring` module
 
-The seam alone is enough for an in-BORU vault that the host wires up
+The seam alone is enough for an in-boru vault that the host wires up
 directly, but §7.3 frames the deliverable as a seam *so keychain access
-stays host-injected* — which still needs BORU words to call. Ship a
+stays host-injected* — which still needs boru words to call. Ship a
 **minimal `boru:keyring` (`Keyring`) module** of exactly three words over
 the seam:
 
@@ -178,7 +178,7 @@ module registries do not inherit `CapPolicy`
 ([PERMISSIONS.10 → Known gap](PERMISSIONS.10.md#known-gap-child-module-registries-do-not-inherit-the-policy)),
 a dispatch-time `checkKeyringPolicy` gate silently becomes allow-all when
 `Keyring.*` runs inside an imported module body — which is *exactly* where
-the in-BORU vault will call it. Keyring is effectful and security-critical,
+the in-boru vault will call it. Keyring is effectful and security-critical,
 so this is not low-severity as it is for crypto (§8 there). This spec is
 therefore **coupled to fixing that gap**: either land the `CapPolicy`
 inheritance fix first, or (matching the more robust `permissionedFileOps`
@@ -203,13 +203,13 @@ latter for defence in depth.
 - **`boru:vault` (`Vault`)** — the layer *above* this. The vault owns
   aliases, capabilities, password slots, and the envelope crypto; the
   keyring is just where the sealed secret bytes are parked. In the
-  migration, the in-BORU vault calls `Keyring.*` for storage and
+  migration, the in-boru vault calls `Keyring.*` for storage and
   `Crypto.*` ([BORU-CRYPTO.0](BORU-CRYPTO.0.md)) for the envelopes.
 - **`boru:crypto`** — supplies the AES-256-GCM envelope for the **file**
   keyring backend (the encrypted `vault.keyring` container), so even the
-  fallback backend is expressible in BORU.
+  fallback backend is expressible in boru.
 - **`boru:io` (`IO`)** — the file keyring backend's persistence (atomic
-  write, `0600` mode); host-side today, BORU-expressible after the
+  write, `0600` mode); host-side today, boru-expressible after the
   migration.
 
 ## 10. Open questions / out of scope
@@ -220,7 +220,7 @@ latter for defence in depth.
 - **Typed methods vs `Do`-style handler** (§3) — recommended typed
   `Get`/`Set`/`Delete` to match the interface being wrapped; the seam
   family may prefer `Do(op, params)` for consistency with `VaultSpec`.
-- **Backend enumeration.** Whether BORU can *list* or *select* backends, or
+- **Backend enumeration.** Whether boru can *list* or *select* backends, or
   only use the host's choice — recommended host-only; the seam exposes no
   backend identity beyond `Name`.
 - **1Password / helper latency.** Backends that shell out (`op`, PowerShell)

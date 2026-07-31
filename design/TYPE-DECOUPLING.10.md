@@ -778,7 +778,7 @@ free-form text input. The path now is:
   `dt to-iso`, `dt format "2006-01-02"`, `dt to-string`
 
 Eliminates the parser/temporal coupling without a spec rebaseline:
-any BORU source that needed ISO input was using the explicit `time-date
+any boru source that needed ISO input was using the explicit `time-date
 "2024-01-15"` form, which becomes a deprecation/removal in the
 domain-module surface (eng kernel unaffected).
 
@@ -911,7 +911,7 @@ color.Register(r)
 `TColor.Behavior` (and the optional `Comparer`). The kernel never
 mentions `colorPayload`, `Color`, or `RGB`.
 
-### 5.2 Adding a new type from a BORU source module
+### 5.2 Adding a new type from a boru source module
 
 All three flavours that work today continue to work — but now they
 flow through the same Behavior pipeline as plugin types.

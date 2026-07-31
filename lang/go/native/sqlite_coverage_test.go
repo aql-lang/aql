@@ -282,15 +282,15 @@ func TestSQLiteCloseNilDB(t *testing.T) {
 	}
 }
 
-func TestSqlResultToBORUValue(t *testing.T) {
+func TestSqlResultToBoruValue(t *testing.T) {
 	// nil
-	v := sqlResultToBORUValue(nil, TString)
+	v := sqlResultToBoruValue(nil, TString)
 	if !v.Parent.Equal(TNone) {
 		t.Errorf("expected none, got %s", v.Parent)
 	}
 
 	// Integer
-	v = sqlResultToBORUValue(int64(42), TInteger)
+	v = sqlResultToBoruValue(int64(42), TInteger)
 	_as0, _ := AsInteger(v)
 	if _as0 != 42 {
 		_as1, _ := AsInteger(v)
@@ -298,7 +298,7 @@ func TestSqlResultToBORUValue(t *testing.T) {
 	}
 
 	// Number
-	v = sqlResultToBORUValue(float64(3.14), TNumber)
+	v = sqlResultToBoruValue(float64(3.14), TNumber)
 	_as2, _ := AsNumber(v)
 	if _as2 != 3.14 {
 		_as3, _ := AsNumber(v)
@@ -306,14 +306,14 @@ func TestSqlResultToBORUValue(t *testing.T) {
 	}
 
 	// Boolean
-	v = sqlResultToBORUValue(int64(1), TBoolean)
+	v = sqlResultToBoruValue(int64(1), TBoolean)
 	_as4, _ := AsBoolean(v)
 	if !_as4 {
 		t.Error("expected true")
 	}
 
 	// String
-	v = sqlResultToBORUValue("hello", TString)
+	v = sqlResultToBoruValue("hello", TString)
 	_as5, _ := AsString(v)
 	if _as5 != "hello" {
 		_as6, _ := AsString(v)

@@ -195,7 +195,7 @@ func TestLaunchVaultSelection(t *testing.T) {
 
 func TestLoadVaultIndexCorrupt(t *testing.T) {
 	home := testHome(t)
-	if err := os.MkdirAll(homeBORUDir(home), 0o700); err != nil {
+	if err := os.MkdirAll(homeBoruDir(home), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(vaultIndexPath(home), []byte("{broken"), 0o600); err != nil {

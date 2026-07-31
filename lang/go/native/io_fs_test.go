@@ -25,7 +25,7 @@ func ioFSReg(t *testing.T) (*Registry, *capabilities.MemFileOps) {
 
 func statField(t *testing.T, r *Registry, path string) ReadMap {
 	t.Helper()
-	res := runBORU(t, r, []Value{NewWord("stat"), pathV(path)})
+	res := runBoru(t, r, []Value{NewWord("stat"), pathV(path)})
 	if len(res) != 1 {
 		t.Fatalf("stat %q: expected 1 result, got %d", path, len(res))
 	}
@@ -66,7 +66,7 @@ func TestStatFileAndDir(t *testing.T) {
 
 func TestStatAbsentReturnsNone(t *testing.T) {
 	r, _ := ioFSReg(t)
-	res := runBORU(t, r, []Value{NewWord("stat"), pathV("ghost")})
+	res := runBoru(t, r, []Value{NewWord("stat"), pathV("ghost")})
 	if len(res) != 1 || !res[0].Is(TNone) {
 		t.Fatalf("stat of absent path: expected none, got %v", res)
 	}
@@ -89,7 +89,7 @@ func TestStatSymlinkAndFollow(t *testing.T) {
 	}
 
 	// {follow:false} describes the link itself and exposes .target.
-	res := runBORU(t, r, []Value{
+	res := runBoru(t, r, []Value{
 		NewWord("stat"), pathV("link"),
 		wrapMap(func(om *OrderedMap) { om.Set("follow", NewBoolean(false)) }),
 	})
@@ -111,7 +111,7 @@ func TestStatResolveOption(t *testing.T) {
 	if err := mem.WriteFile("a.txt", []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	res := runBORU(t, r, []Value{
+	res := runBoru(t, r, []Value{
 		NewWord("stat"), pathV("a.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("resolve", NewBoolean(true)) }),
 	})
@@ -130,7 +130,7 @@ func TestStatCycleErrors(t *testing.T) {
 	if err := mem.Symlink("cyc", "cyc"); err != nil { // self-referential
 		t.Fatal(err)
 	}
-	if err := runBORUError(t, r, []Value{NewWord("stat"), pathV("cyc")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("stat"), pathV("cyc")}); err == nil {
 		t.Error("expected stat error on a symlink cycle")
 	}
 }
@@ -140,7 +140,7 @@ func TestStatPathonTarget(t *testing.T) {
 	if err := mem.WriteFile("p.txt", []byte("z"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	res := runBORU(t, r, []Value{NewWord("stat"), NewPathon([]string{"p.txt"}, false)})
+	res := runBoru(t, r, []Value{NewWord("stat"), NewPathon([]string{"p.txt"}, false)})
 	if _, err := AsMap(res[0]); err != nil {
 		t.Fatalf("stat of Pathon target: %v", err)
 	}
@@ -155,7 +155,7 @@ func TestListNamesDetailRecursive(t *testing.T) {
 	}
 
 	// Shallow names.
-	res := runBORU(t, r, []Value{NewWord("list"), pathV("root")})
+	res := runBoru(t, r, []Value{NewWord("list"), pathV("root")})
 	lst, err := AsList(res[0])
 	if err != nil {
 		t.Fatal(err)
@@ -165,7 +165,7 @@ func TestListNamesDetailRecursive(t *testing.T) {
 	}
 
 	// Detail records.
-	res = runBORU(t, r, []Value{
+	res = runBoru(t, r, []Value{
 		NewWord("list"), pathV("root"),
 		wrapMap(func(om *OrderedMap) { om.Set("detail", NewBoolean(true)) }),
 	})
@@ -175,7 +175,7 @@ func TestListNamesDetailRecursive(t *testing.T) {
 	}
 
 	// Recursive walk.
-	res = runBORU(t, r, []Value{
+	res = runBoru(t, r, []Value{
 		NewWord("list"), pathV("root"),
 		wrapMap(func(om *OrderedMap) { om.Set("recursive", NewBoolean(true)) }),
 	})
@@ -203,7 +203,7 @@ func TestListMatchFilter(t *testing.T) {
 	}
 
 	// Shallow `*` filter: only direct .txt children ( `*` stops at `/` ).
-	res := runBORU(t, r, []Value{
+	res := runBoru(t, r, []Value{
 		NewWord("list"), pathV("m"),
 		wrapMap(func(om *OrderedMap) { om.Set("match", NewString("*.txt")) }),
 	})
@@ -213,7 +213,7 @@ func TestListMatchFilter(t *testing.T) {
 	}
 
 	// Recursive `**` spans components.
-	res = runBORU(t, r, []Value{
+	res = runBoru(t, r, []Value{
 		NewWord("list"), pathV("m"),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("recursive", NewBoolean(true))
@@ -226,7 +226,7 @@ func TestListMatchFilter(t *testing.T) {
 
 	// Character classes are NOT special: `[ab].txt` matches only the
 	// literal name, never a.txt / b.txt.
-	res = runBORU(t, r, []Value{
+	res = runBoru(t, r, []Value{
 		NewWord("list"), pathV("m"),
 		wrapMap(func(om *OrderedMap) { om.Set("match", NewString("[ab].txt")) }),
 	})
@@ -235,7 +235,7 @@ func TestListMatchFilter(t *testing.T) {
 	}
 
 	// A match that filters everything yields an empty list, not an error.
-	res = runBORU(t, r, []Value{
+	res = runBoru(t, r, []Value{
 		NewWord("list"), pathV("m"),
 		wrapMap(func(om *OrderedMap) { om.Set("match", NewString("*.nope")) }),
 	})
@@ -256,13 +256,13 @@ func TestCopyMoveOverwriteOption(t *testing.T) {
 	seed("dst.txt", "old")
 
 	// {overwrite:false} refuses an existing destination for copy and move.
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("copy"), pathV("src.txt"), pathV("dst.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("overwrite", NewBoolean(false)) }),
 	}); err == nil {
 		t.Error("copy {overwrite:false} onto existing dst should error")
 	}
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("move"), pathV("src.txt"), pathV("dst.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("overwrite", NewBoolean(false)) }),
 	}); err == nil {
@@ -273,14 +273,14 @@ func TestCopyMoveOverwriteOption(t *testing.T) {
 	}
 
 	// An absent destination is fine under {overwrite:false}.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("copy"), pathV("src.txt"), pathV("fresh.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("overwrite", NewBoolean(false)) }),
 	})
 	if body, _ := mem.ReadFile("fresh.txt"); string(body) != "new" {
 		t.Errorf("copy to absent dst = %q", body)
 	}
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("move"), pathV("fresh.txt"), pathV("moved.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("overwrite", NewBoolean(false)) }),
 	})
@@ -289,7 +289,7 @@ func TestCopyMoveOverwriteOption(t *testing.T) {
 	}
 
 	// Explicit {overwrite:true} (and the default) still replaces.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("copy"), pathV("src.txt"), pathV("dst.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("overwrite", NewBoolean(true)) }),
 	})
@@ -298,7 +298,7 @@ func TestCopyMoveOverwriteOption(t *testing.T) {
 	}
 	// Move opts form with default overwrite replaces too.
 	seed("again.txt", "v2")
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("move"), pathV("again.txt"), pathV("dst.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("recursive", NewBoolean(false)) }),
 	})
@@ -312,10 +312,10 @@ func TestListErrors(t *testing.T) {
 	if err := mem.WriteFile("f.txt", []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := runBORUError(t, r, []Value{NewWord("list"), pathV("ghost")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("list"), pathV("ghost")}); err == nil {
 		t.Error("expected list error on nonexistent dir")
 	}
-	if err := runBORUError(t, r, []Value{NewWord("list"), pathV("f.txt")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("list"), pathV("f.txt")}); err == nil {
 		t.Error("expected list error on a file")
 	}
 }
@@ -438,7 +438,7 @@ func TestRemoveWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	// remove a file → returns the path, file gone.
-	res := runBORU(t, r, []Value{NewWord("remove"), pathV("f.txt")})
+	res := runBoru(t, r, []Value{NewWord("remove"), pathV("f.txt")})
 	if !IsPathon(res[0]) || res[0].String() != "f.txt" {
 		t.Errorf("remove returned %v", res[0])
 	}
@@ -446,11 +446,11 @@ func TestRemoveWord(t *testing.T) {
 		t.Error("file not removed")
 	}
 	// removing an absent path errors without {force}.
-	if err := runBORUError(t, r, []Value{NewWord("remove"), pathV("f.txt")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("remove"), pathV("f.txt")}); err == nil {
 		t.Error("expected error removing an absent path")
 	}
 	// {force:true} makes an absent removal a no-op.
-	res = runBORU(t, r, []Value{
+	res = runBoru(t, r, []Value{
 		NewWord("remove"), pathV("ghost"),
 		wrapMap(func(om *OrderedMap) { om.Set("force", NewBoolean(true)) }),
 	})
@@ -461,10 +461,10 @@ func TestRemoveWord(t *testing.T) {
 	if err := mem.WriteFile("d/c.txt", []byte("y"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := runBORUError(t, r, []Value{NewWord("remove"), pathV("d")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("remove"), pathV("d")}); err == nil {
 		t.Error("expected error removing a non-empty dir non-recursively")
 	}
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("remove"), pathV("d"),
 		wrapMap(func(om *OrderedMap) { om.Set("recursive", NewBoolean(true)) }),
 	})
@@ -478,7 +478,7 @@ func TestMoveWord(t *testing.T) {
 	if err := mem.WriteFile("a.txt", []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	res := runBORU(t, r, []Value{NewWord("move"), pathV("a.txt"), pathV("b.txt")})
+	res := runBoru(t, r, []Value{NewWord("move"), pathV("a.txt"), pathV("b.txt")})
 	if !IsPathon(res[0]) || res[0].String() != "b.txt" {
 		t.Errorf("move returned %v", res[0])
 	}
@@ -488,14 +488,14 @@ func TestMoveWord(t *testing.T) {
 	if _, err := mem.Stat("a.txt", false); err == nil {
 		t.Error("move source remains")
 	}
-	if err := runBORUError(t, r, []Value{NewWord("move"), pathV("ghost"), pathV("z")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("move"), pathV("ghost"), pathV("z")}); err == nil {
 		t.Error("expected error moving an absent path")
 	}
 	// A Pathon destination is returned as a Pathon.
 	if err := mem.WriteFile("c.txt", []byte("y"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	res = runBORU(t, r, []Value{NewWord("move"), pathV("c.txt"), NewPathon([]string{"e.txt"}, false)})
+	res = runBoru(t, r, []Value{NewWord("move"), pathV("c.txt"), NewPathon([]string{"e.txt"}, false)})
 	if !IsPathon(res[0]) {
 		t.Errorf("move to Pathon returned %v (want Pathon)", res[0])
 	}
@@ -507,7 +507,7 @@ func TestCopyWord(t *testing.T) {
 		t.Fatal(err)
 	}
 	// copy a file.
-	res := runBORU(t, r, []Value{NewWord("copy"), pathV("src.txt"), pathV("dst.txt")})
+	res := runBoru(t, r, []Value{NewWord("copy"), pathV("src.txt"), pathV("dst.txt")})
 	if !IsPathon(res[0]) || res[0].String() != "dst.txt" {
 		t.Errorf("copy returned %v", res[0])
 	}
@@ -518,7 +518,7 @@ func TestCopyWord(t *testing.T) {
 	if err := mem.Symlink("src.txt", "link"); err != nil {
 		t.Fatal(err)
 	}
-	runBORU(t, r, []Value{NewWord("copy"), pathV("link"), pathV("link2")})
+	runBoru(t, r, []Value{NewWord("copy"), pathV("link"), pathV("link2")})
 	if li, err := mem.Stat("link2", false); err != nil || !li.Symlink || li.Target != "src.txt" {
 		t.Errorf("copied symlink = %+v (%v)", li, err)
 	}
@@ -527,7 +527,7 @@ func TestCopyWord(t *testing.T) {
 	if err := mem.WriteFile("occupied.txt", []byte("old"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	runBORU(t, r, []Value{NewWord("copy"), pathV("link"), pathV("occupied.txt")})
+	runBoru(t, r, []Value{NewWord("copy"), pathV("link"), pathV("occupied.txt")})
 	if li, err := mem.Stat("occupied.txt", false); err != nil || !li.Symlink || li.Target != "src.txt" {
 		t.Errorf("symlink copy did not overwrite = %+v (%v)", li, err)
 	}
@@ -536,7 +536,7 @@ func TestCopyWord(t *testing.T) {
 	if err := mem.WriteFile("busydir/keep.txt", []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := runBORUError(t, r, []Value{NewWord("copy"), pathV("link"), pathV("busydir")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("copy"), pathV("link"), pathV("busydir")}); err == nil {
 		t.Error("symlink copy over a non-empty dir should refuse")
 	}
 	// copying a directory needs {recursive}.
@@ -546,10 +546,10 @@ func TestCopyWord(t *testing.T) {
 	if err := mem.WriteFile("tree/sub/b.txt", []byte("2"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := runBORUError(t, r, []Value{NewWord("copy"), pathV("tree"), pathV("treecopy")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("copy"), pathV("tree"), pathV("treecopy")}); err == nil {
 		t.Error("expected error copying a dir without {recursive}")
 	}
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("copy"), pathV("tree"), pathV("treecopy"),
 		wrapMap(func(om *OrderedMap) { om.Set("recursive", NewBoolean(true)) }),
 	})
@@ -557,7 +557,7 @@ func TestCopyWord(t *testing.T) {
 		t.Errorf("recursive copy child = %q (%v)", b, err)
 	}
 	// copying an absent source errors.
-	if err := runBORUError(t, r, []Value{NewWord("copy"), pathV("ghost"), pathV("z")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("copy"), pathV("ghost"), pathV("z")}); err == nil {
 		t.Error("expected error copying an absent path")
 	}
 }
@@ -725,7 +725,7 @@ func TestCopyErrorBranches(t *testing.T) {
 func TestLinkWord(t *testing.T) {
 	r, mem := ioFSReg(t)
 	// symbolic link (default).
-	res := runBORU(t, r, []Value{NewWord("link"), pathV("t.txt"), pathV("sl")})
+	res := runBoru(t, r, []Value{NewWord("link"), pathV("t.txt"), pathV("sl")})
 	if !IsPathon(res[0]) || res[0].String() != "sl" {
 		t.Errorf("link returned %v", res[0])
 	}
@@ -733,14 +733,14 @@ func TestLinkWord(t *testing.T) {
 		t.Errorf("symlink = %+v (%v)", li, err)
 	}
 	// linking over an existing path errors.
-	if err := runBORUError(t, r, []Value{NewWord("link"), pathV("t.txt"), pathV("sl")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("link"), pathV("t.txt"), pathV("sl")}); err == nil {
 		t.Error("expected error creating a link over an existing path")
 	}
 	// hard link.
 	if err := mem.WriteFile("f.txt", []byte("body"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("link"), pathV("f.txt"), pathV("hl"),
 		wrapMap(func(om *OrderedMap) { om.Set("hard", NewBoolean(true)) }),
 	})
@@ -748,14 +748,14 @@ func TestLinkWord(t *testing.T) {
 		t.Errorf("hard link content = %q (%v)", b, err)
 	}
 	// hard-linking an absent target errors.
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("link"), pathV("ghost"), pathV("hl2"),
 		wrapMap(func(om *OrderedMap) { om.Set("hard", NewBoolean(true)) }),
 	}); err == nil {
 		t.Error("expected error hard-linking an absent target")
 	}
 	// A Pathon destination is returned as a Pathon.
-	res = runBORU(t, r, []Value{NewWord("link"), pathV("t.txt"), NewPathon([]string{"pl"}, false)})
+	res = runBoru(t, r, []Value{NewWord("link"), pathV("t.txt"), NewPathon([]string{"pl"}, false)})
 	if !IsPathon(res[0]) {
 		t.Errorf("link to Pathon returned %v (want Pathon)", res[0])
 	}
@@ -764,7 +764,7 @@ func TestLinkWord(t *testing.T) {
 func TestTouchWord(t *testing.T) {
 	r, mem := ioFSReg(t)
 	// touch creates an empty file when absent.
-	res := runBORU(t, r, []Value{NewWord("touch"), pathV("new.txt")})
+	res := runBoru(t, r, []Value{NewWord("touch"), pathV("new.txt")})
 	if !IsPathon(res[0]) || res[0].String() != "new.txt" {
 		t.Errorf("touch returned %v", res[0])
 	}
@@ -775,12 +775,12 @@ func TestTouchWord(t *testing.T) {
 	if err := mem.WriteFile("keep.txt", []byte("data"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	runBORU(t, r, []Value{NewWord("touch"), pathV("keep.txt")})
+	runBoru(t, r, []Value{NewWord("touch"), pathV("keep.txt")})
 	if b, _ := mem.ReadFile("keep.txt"); string(b) != "data" {
 		t.Errorf("touch clobbered content: %q", b)
 	}
 	// {mode} chmods, {mtime} sets the time, {size} truncates/grows.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("touch"), pathV("new.txt"),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("mode", NewInteger(0o600))
@@ -793,14 +793,14 @@ func TestTouchWord(t *testing.T) {
 		t.Errorf("touch metadata = %+v", fi)
 	}
 	// a negative size is rejected.
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("touch"), pathV("new.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("size", NewInteger(-1)) }),
 	}); err == nil {
 		t.Error("expected error on a negative touch size")
 	}
 	// {atime} alone still drives Chtimes.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("touch"), pathV("new.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("atime", NewInteger(2000)) }),
 	})
@@ -862,26 +862,26 @@ func TestMapIntOpt(t *testing.T) {
 // (the divergence the strict-fidelity mem rework closed).
 func TestHardLinkSharesStorage(t *testing.T) {
 	r, mem := ioFSReg(t)
-	runBORU(t, r, []Value{NewWord("write"), pathV("t.txt"), NewString("v1")})
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{NewWord("write"), pathV("t.txt"), NewString("v1")})
+	runBoru(t, r, []Value{
 		NewWord("link"), pathV("t.txt"), pathV("hl"),
 		wrapMap(func(om *OrderedMap) { om.Set("hard", NewBoolean(true)) }),
 	})
 	// Mutate via the ORIGINAL; the link sees it.
-	runBORU(t, r, []Value{NewWord("write"), pathV("t.txt"), NewString("v2")})
-	res := runBORU(t, r, []Value{NewWord("read"), pathV("hl")})
+	runBoru(t, r, []Value{NewWord("write"), pathV("t.txt"), NewString("v2")})
+	res := runBoru(t, r, []Value{NewWord("read"), pathV("hl")})
 	if res[0].String() != "'v2'" {
 		t.Errorf("hard link stale after original write: %v", res[0])
 	}
 	// Mutate via the LINK; the original sees it.
-	runBORU(t, r, []Value{NewWord("write"), pathV("hl"), NewString("v3")})
-	res = runBORU(t, r, []Value{NewWord("read"), pathV("t.txt")})
+	runBoru(t, r, []Value{NewWord("write"), pathV("hl"), NewString("v3")})
+	res = runBoru(t, r, []Value{NewWord("read"), pathV("t.txt")})
 	if res[0].String() != "'v3'" {
 		t.Errorf("original stale after link write: %v", res[0])
 	}
 	// Remove the original; the content survives under the link.
-	runBORU(t, r, []Value{NewWord("remove"), pathV("t.txt")})
-	res = runBORU(t, r, []Value{NewWord("read"), pathV("hl")})
+	runBoru(t, r, []Value{NewWord("remove"), pathV("t.txt")})
+	res = runBoru(t, r, []Value{NewWord("read"), pathV("hl")})
 	if res[0].String() != "'v3'" {
 		t.Errorf("content died with the original name: %v", res[0])
 	}

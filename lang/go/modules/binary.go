@@ -11,7 +11,7 @@ import (
 )
 
 // sign63Mask clears the sign bit of a 64-bit hash so the result is a
-// non-negative BORU Integer (0 … 2^63-1). Probabilistic structures index
+// non-negative boru Integer (0 … 2^63-1). Probabilistic structures index
 // with `hash mod m`, and a negative dividend would produce a negative
 // index — so the hash words deliberately return non-negative values.
 const sign63Mask = 0x7FFFFFFFFFFFFFFF
@@ -19,7 +19,7 @@ const sign63Mask = 0x7FFFFFFFFFFFFFFF
 // BuildBinaryModule creates the "boru:bin-util" native module — rotates,
 // bit-counting, single-bit operators, and slice/construct routines.
 // The core bitwise operators (band, bor, bxor, bnot, bsl, bsr, busr)
-// are BORU built-ins; this module covers the second tier.
+// are boru built-ins; this module covers the second tier.
 //
 // After import, words are accessed via dot notation: BinUtil.popcount,
 // BinUtil.rotl, BinUtil.test, etc. The `b` prefix is dropped on module words
@@ -63,7 +63,7 @@ func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Character codes: String -> Integer (`ord`) and Integer -> String
 	// (`chr`). These replace the O(95) printable-ASCII alphabet trick that
-	// every char-code-needing BORU library otherwise has to roll by hand.
+	// every char-code-needing boru library otherwise has to roll by hand.
 	// See §9.8 in the DX report.
 	exports.Set("ord", makeTypedFnDef("ord", subReg, native.TInteger, native.TString))
 	exports.Set("chr", makeTypedFnDef("chr", subReg, native.TString, native.TInteger))

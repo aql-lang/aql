@@ -1,4 +1,4 @@
-# BORU Language Specification: Dispatch edge cases 3 — options maps,
+# boru Language Specification: Dispatch edge cases 3 — options maps,
 # quoted-argument slots (QuoteArgs), arity forcing and 0-arg courtesy
 # dispatch, guard-then-narrow on Any params, and undefined words.
 # Format: input<TAB>expected<TAB>description

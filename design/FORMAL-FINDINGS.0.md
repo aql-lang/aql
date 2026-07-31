@@ -1,9 +1,9 @@
-# Formal-methods findings — what mechanization taught us about BORU
+# Formal-methods findings — what mechanization taught us about boru
 
 **Status:** findings note (`.0`), from the formal-verification work on
 branch `claude/formal-methods-boru-hdubtm`. Written against `7373dcf`.
 
-This note records what we *learned about BORU* by (a) mechanizing a
+This note records what we *learned about boru* by (a) mechanizing a
 fragment of `FORMAL-SPEC.md` in Lean, (b) differential-testing the model
 against the real engine, and (c) probing the engine directly. It is
 deliberately separate from the plan
@@ -29,7 +29,7 @@ an explicit account of how much it licenses us to trust.
 
 Scope of the fragment: 7 native words, scalar literals, no functions,
 modules, effects, concurrency, macros, refinements, or parser. Findings
-below are about BORU *as observed through this slice* — see §4 for the
+below are about boru *as observed through this slice* — see §4 for the
 ceiling.
 
 ## 2. What was confirmed (the design holds, in the fragment)
@@ -41,7 +41,7 @@ ceiling.
   including the leftover behaviour (`add 1 2 7 => 3 7`).
 - **Source-spelling equivalence is true and is now a theorem.** For any
   binary word and operands, `y x op`, `y op x`, `op x y` collect the same
-  argument vector and compute the same result. BORU's signature property
+  argument vector and compute the same result. boru's signature property
   survives a proof checker.
 - **The `end` barrier is load-bearing, not cosmetic.** `gt 3 end 5`
   errors because the barrier blocks forward collection and under-supplies
@@ -54,7 +54,7 @@ ceiling.
 
 ## 3. The main finding: typing is *per-word*, not a uniform lattice
 
-The README frames BORU as "strongly typed" and `FORMAL-SPEC` §5 presents a
+The README frames boru as "strongly typed" and `FORMAL-SPEC` §5 presents a
 clean type lattice with signature dispatch. Probing the native words
 shows the runtime reality is a set of **individually-typed multimethods
 with idiosyncratic domains**, not a single discipline:
@@ -101,10 +101,10 @@ Trust must be split by claim; the scope ceiling is low.
 | Claim | Confidence | Ceiling / why |
 |---|---|---|
 | The Lean theorems are correct | **very high** | kernel-checked, no `sorry` |
-| …and they describe BORU | **narrow** | a 7-word scalar fragment only |
+| …and they describe boru | **narrow** | a 7-word scalar fragment only |
 | The model reflects the engine | **moderate, bounded** | 22 differential cases agree — *testing, not proof*; silent on unprobed inputs (overflow, deep chains, nesting, large values) |
 | The engine is correct | **unestablished** | nothing binds the proofs to the Go code |
-| BORU "the language" is trustworthy | **largely untouched** | checker, type soundness, effects, concurrency, macros, parser all unexamined |
+| boru "the language" is trustworthy | **largely untouched** | checker, type soundness, effects, concurrency, macros, parser all unexamined |
 
 In one line: we earned **local** trust — forward collection and
 spelling-equivalence are faithfully modeled and provably hold in the
@@ -114,7 +114,7 @@ the engine's correctness or the type system's soundness.
 ## 5. A methodological result worth keeping
 
 The model-plus-harness loop **already paid for itself**: it caught wrong
-assumptions about BORU's typing (the author of the model expected
+assumptions about boru's typing (the author of the model expected
 `not 5` and `add true 2` to error; they don't). Even at 22 cases the
 harness functioned as a drift detector against the real semantics. As
 coverage widens, divergences will surface as failing rows rather than

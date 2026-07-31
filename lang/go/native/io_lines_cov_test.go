@@ -227,10 +227,10 @@ func TestSetHostStreamProbeArms(t *testing.T) {
 	}
 }
 
-// --- the handler arms BORU cannot reach ---
+// --- the handler arms boru cannot reach ---
 
 // The signatures admit only StreamKind and File, so these guards are
-// unreachable from BORU source — but they are the difference between a clear
+// unreachable from boru source — but they are the difference between a clear
 // error and a wrong answer if a future signature admits something looser.
 func TestLineReaderForRejectsNonStreams(t *testing.T) {
 	r, err := DefaultRegistry()

@@ -3,7 +3,7 @@ package eng
 import "testing"
 
 // A host type defined by one predicate must participate in every kernel
-// membership path the BORU `def`/`refine` path wires automatically:
+// membership path the boru `def`/`refine` path wires automatically:
 // signature dispatch (Match, via v.Is), the Unify-driven tests (`is`,
 // `case`, return checks), and canon rendering — without a hand-written
 // Behavior. EvenInt admits even integers; that single rule drives all of

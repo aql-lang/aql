@@ -12,9 +12,9 @@ import (
 // REAL fn bodies — the compile path eng's own tests cannot drive (eng has no
 // def/fn words). Positive paths pair with negatives per lang/go/CLAUDE.md.
 
-// stampHarness runs src on a fresh BORU, arms runtime stamping when armed is
-// true, and returns the BORU plus the fn value bound to name.
-func stampHarness(t *testing.T, src, name string, armed bool) (*BORU, Value) {
+// stampHarness runs src on a fresh boru, arms runtime stamping when armed is
+// true, and returns the boru plus the fn value bound to name.
+func stampHarness(t *testing.T, src, name string, armed bool) (*Boru, Value) {
 	t.Helper()
 	a, err := New()
 	if err != nil {
@@ -35,7 +35,7 @@ func stampHarness(t *testing.T, src, name string, armed bool) (*BORU, Value) {
 
 // invokeFnValue dispatches a fn VALUE through the callback seam exactly as
 // the codec / service words do: MatchFnSig then InvokeCallback.
-func invokeFnValue(t *testing.T, a *BORU, fn Value, args ...Value) []Value {
+func invokeFnValue(t *testing.T, a *Boru, fn Value, args ...Value) []Value {
 	t.Helper()
 	fd, ok := fn.Data.(eng.FnDefInfo)
 	if !ok {
@@ -112,7 +112,7 @@ func TestStampFnValueRealBodyVMMatchesInterpreter(t *testing.T) {
 // "body result of unknown provenance". The VM re-assembles it per invoke,
 // value-identical to the interpreter. Recording is enabled ONLY for callback
 // bodies (isCallbackBodyName) — every callback is invoked in a live frame via
-// InvokeCallback / CallBORU, so the in-frame assembly matches both engines.
+// InvokeCallback / CallBoru, so the in-frame assembly matches both engines.
 func TestStampFnValueComputedMapBodyVMMatchesInterpreter(t *testing.T) {
 	const src = `def h (fn [[req:Map] [Map] [ {message: (join "" ["hi " req.who])} ]])`
 
@@ -486,7 +486,7 @@ func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
   export "M" {helper: helper/r fact: fact/r refuser: refuser/r}
 ]`
 
-	fetch := func(a *BORU, name string) Value {
+	fetch := func(a *Boru, name string) Value {
 		t.Helper()
 		if _, err := a.RunInterp(`def got M.` + name + `/r`); err != nil {
 			t.Fatalf("fetch %s: %v", name, err)
@@ -513,7 +513,7 @@ func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
 	// The export map holds a module-fn WRAPPER; dispatch matches the INNER
 	// def binding's signatures (execFnDefLiteral looks the name up in the
 	// wrapper's Registry), so the stamp must be asserted on the inner value.
-	inner := func(a *BORU, name string) Value {
+	inner := func(a *Boru, name string) Value {
 		t.Helper()
 		w := fetch(a, name)
 		fd, isFn := w.Data.(eng.FnDefInfo)

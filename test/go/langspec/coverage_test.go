@@ -56,7 +56,7 @@ var hermeticExempt = map[string]string{
 	// (design/CLI-PROGRAMS.1.md §2): every one of its arms ends in IO.exit,
 	// and a SPEC ROW cannot survive that — the runner would end mid-file and
 	// the rows after it would never run. (The module's own boru:test suite CAN
-	// exercise it, via Assert.throws, and does — cli.boru is at 100% BORU-line
+	// exercise it, via Assert.throws, and does — cli.boru is at 100% boru-line
 	// coverage with an empty allowlist. What is missing here is a hermetic
 	// spec surface, not a test.) The decision each arm acts on is pinned by
 	// the Cli.dispatch rows in lang/spec/module-cli.tsv §4, and the shell is
@@ -112,10 +112,10 @@ func TestModuleExportCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultRegistry: %v", err)
 	}
-	// BORU-implemented modules (report/test) parse their source via the
+	// boru-implemented modules (report/test) parse their source via the
 	// registry's ParseFunc — mirror lang.New's wiring so Resolve works.
 	reg.SetParseFunc(parser.Parse)
-	// boru:repl's BORU preamble imports boru:net / boru:vm — wire the
+	// boru:repl's boru preamble imports boru:net / boru:vm — wire the
 	// native-module resolver as production does.
 	modules.InstallResolver(reg)
 

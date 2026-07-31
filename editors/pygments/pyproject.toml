@@ -5,11 +5,11 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "boru-pygments-lexer"
 version = "0.1.0"
-description = "Pygments lexer for BORU, a concatenative, strongly-typed query language."
+description = "Pygments lexer for boru, a concatenative, strongly-typed query language."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
-authors = [{ name = "BORU contributors" }]
+authors = [{ name = "boru contributors" }]
 keywords = ["pygments", "lexer", "boru", "syntax highlighting"]
 dependencies = ["Pygments>=2.0"]
 

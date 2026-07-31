@@ -4,7 +4,7 @@ import (
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
-// LexToken is one lexical token from the BORU-configured tabnas lexer: its
+// LexToken is one lexical token from the boru-configured tabnas lexer: its
 // kind name (e.g. "#TX", "#OP", "#CM"), its raw source text, and SI — the
 // byte offset in src where the token starts. It is the trivia-preserving
 // token stream a formatter front end consumes. SI lets a front end fall
@@ -16,7 +16,7 @@ type LexToken struct {
 	SI   int
 }
 
-// LexTokens tokenises src with the BORU-configured tabnas lexer, PRESERVING
+// LexTokens tokenises src with the boru-configured tabnas lexer, PRESERVING
 // trivia (spaces, newlines, comments). The parser's semantic Parse discards
 // those; a formatter needs them, so this drives the same configured lexer
 // (base tokens + the template / big-number / minilang / xml matchers) with an

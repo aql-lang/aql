@@ -1,4 +1,4 @@
-# BORU Language Specification: type-system edge cases 2 — the type
+# boru Language Specification: type-system edge cases 2 — the type
 # algebra (tand / tor / tnot / teq) over user types, predicate-fn
 # types, and Micron membership
 # Format: input<TAB>expected<TAB>description

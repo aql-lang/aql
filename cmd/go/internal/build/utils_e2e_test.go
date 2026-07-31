@@ -11,9 +11,9 @@ import (
 	"testing"
 )
 
-// End-to-end acceptance for utils/ — the coreutils subset written in BORU.
+// End-to-end acceptance for utils/ — the coreutils subset written in Boru.
 //
-// WHY THIS FILE EXISTS. utils/ is a top-level BORU directory with its own
+// WHY THIS FILE EXISTS. utils/ is a top-level boru directory with its own
 // Makefile, outside the repo's Go MODULES fan-out and outside ci.yml, so
 // nothing in `make test` reaches it. kg/ is the standing proof that such a
 // directory rots: its `fmt` target sat disabled for months because nothing

@@ -9,7 +9,7 @@ import (
 // The "filter" word is registered via the consolidated Natives slice in
 // natives.go.
 //
-// filterHandler calls voxgigstruct.Filter with a BORU callback as predicate.
+// filterHandler calls voxgigstruct.Filter with a boru callback as predicate.
 // The callback receives a map with "key" and "value" fields and should return
 // a boolean indicating whether to keep the item.
 // filterHandler keeps the elements for which the callback returns true. The
@@ -136,7 +136,7 @@ func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 // filter natively, the body operand lowered to OpPushClosure) runs through the
 // InvokeBody seam — its named param binds to the cbArgs shape the closure was
 // compiled against ({key,value} pair for a list, KeyVal for a map). An
-// interpreter FnDefINFO lambda matches a signature and runs through CallBORU. The
+// interpreter FnDefINFO lambda matches a signature and runs through CallBoru. The
 // two shapes are byte-identical to the handler: both consume cbArgs and yield a
 // Boolean predicate result.
 func runFilterCallback(r *Registry, cb Value, cbArgs []Value) ([]Value, error) {
@@ -151,7 +151,7 @@ func runFilterCallback(r *Registry, cb Value, cbArgs []Value) ([]Value, error) {
 	if fd, ok := cb.Data.(FnDefInfo); ok {
 		caps = fd.Captured
 	}
-	return r.CallBORU(sig, cbArgs, caps)
+	return r.CallBoru(sig, cbArgs, caps)
 }
 
 // filterBodyHandler is the quotation form of filter: `filter [body] xs`

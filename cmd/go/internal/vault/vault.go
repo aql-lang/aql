@@ -984,7 +984,7 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 	methods := fs.String("methods", "", "comma-separated HTTP methods (default any)")
 	ttl := fs.Duration("ttl", 2*time.Hour, "lifetime before the capability expires")
 	maxCalls := fs.Int("max-calls", 0, "max total proxy calls (0 = unlimited)")
-	maxCostCents := fs.Int("max-cost-cents", 0, "max total cost in cents from X-BORU-Vault-Cost-Cents (0 = unlimited)")
+	maxCostCents := fs.Int("max-cost-cents", 0, "max total cost in cents from X-Boru-Vault-Cost-Cents (0 = unlimited)")
 	approval := fs.Bool("require-approval", false, "advisory: proxy will deny until a human flips this off")
 	if err := fs.Parse(args); err != nil {
 		return 1

@@ -9,12 +9,12 @@ the eng kernel.
 
 ## The eng/lang split
 
-The BORU repository contains three Go modules that matter for
+The boru repository contains three Go modules that matter for
 this story:
 
 ```
 eng/go/     algorithms — registry, dispatch, parser, type lattice
-lang/       words — every word BORU programs use lives here
+lang/       words — every word boru programs use lives here
 cmd/go/     the boru CLI and friends, built on lang
 ```
 
@@ -143,7 +143,7 @@ word and args[1] is the value seen second. Reading `10 sub 3` as
 
 The convention costs the prefix form (`sub 10 3` becomes `3-10 =
 -7`) but is the most common surface form a user types is infix,
-so calc — like every other BORU host — picks the swap form as
+so calc — like every other boru host — picks the swap form as
 canonical. Test cases in `calc_test.go` document this with both
 the infix `10 sub 3 = 7` and the RPN `10 3 sub = 7` rows.
 
@@ -219,7 +219,7 @@ words.
 
 ## Why the REPL uses `:` for meta-commands
 
-BORU word names match `[a-z][a-z0-9-]*` — a leading colon can
+boru word names match `[a-z][a-z0-9-]*` — a leading colon can
 never appear in a valid program. That gives calc a reserved
 prefix it can grab without ambiguity. `:stack` is unambiguously
 a meta-command, not a parse-failure with a confusing error

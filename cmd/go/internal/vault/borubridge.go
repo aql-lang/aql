@@ -1,13 +1,13 @@
 package vault
 
-// borubridge.go — the modules.VaultSpec adapter that lets the BORU vault
+// borubridge.go — the modules.VaultSpec adapter that lets the boru vault
 // TUI (the boru:vault-tui module) drive this package's command layer
 // through the boru:vault bridge words (design/VAULT-TUI-PORT.0.md §3.4),
 // plus the `boru vault -i --boru` launcher.
 //
 // Every op runs under one mutex: the controller promotes the active
 // vault and the cached passphrase into the PROCESS environment per op —
-// safe on the bubbletea goroutine, and made safe here because the BORU
+// safe on the bubbletea goroutine, and made safe here because the boru
 // app may call from spawned worker processes.
 
 import (
@@ -82,7 +82,7 @@ func aliasMap(a Alias) map[string]any {
 }
 
 func capabilityMap(c Capability) map[string]any {
-	// TokenHash stays host-side: the BORU app has no use for it and the
+	// TokenHash stays host-side: the boru app has no use for it and the
 	// hygiene rule is to ship nothing secret-adjacent that isn't shown.
 	return map[string]any{
 		"id": c.ID, "alias": c.Alias, "agent": c.Agent,
@@ -106,7 +106,7 @@ func passwordSlotMap(p PasswordSlot) map[string]any {
 // vault" plus the active vault's location flags.
 func (b *boruBridge) execPrefix() string {
 	var fl []string
-	if b.ctl.folder != homeBORUDir(b.ctl.homeDir) {
+	if b.ctl.folder != homeBoruDir(b.ctl.homeDir) {
 		fl = append(fl, "--folder="+shortenHome(b.ctl.folder, b.ctl.homeDir))
 	}
 	if b.ctl.suffix != "" {
@@ -357,15 +357,15 @@ const boruTuiSource = `import "boru:vault-tui"  (VaultTui.run {dark: %v}) drop`
 // (design/TEST-SEAMS.10.md — a test cannot open a real terminal).
 var (
 	b8langNew      = lang.New
-	b8runSource    = func(a *lang.BORU, src string) error { _, err := a.RunInterp(src); return err }
+	b8runSource    = func(a *lang.Boru, src string) error { _, err := a.RunInterp(src); return err }
 	b8termbackSpec = termback.SpecFor
 )
 
-// runInteractiveBORU launches the BORU implementation of the vault TUI
+// runInteractiveBoru launches the boru implementation of the vault TUI
 // (design/VAULT-TUI-PORT.0.md §1.3): the real-TTY terminal backend and
 // this package's vault bridge are registered as host seams, then the
 // embedded boru:vault-tui app runs under Tui.run until quit.
-func runInteractiveBORU(homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
+func runInteractiveBoru(homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if !interactiveTTY(stdin, stdout) {
 		fmt.Fprintln(stderr, "error: the interactive vault TUI requires a terminal (run `boru vault -i` in an interactive shell)")
 		return 1
@@ -376,7 +376,7 @@ func runInteractiveBORU(homeDir string, stdin io.Reader, stdout, stderr io.Write
 		ctl.setActiveVault(folder, suffix)
 		_ = recordVaultOpened(homeDir, folder, suffix)
 	} else {
-		ctl.setActiveVault(homeBORUDir(homeDir), "")
+		ctl.setActiveVault(homeBoruDir(homeDir), "")
 	}
 
 	a, err := b8langNew(lang.Options{})

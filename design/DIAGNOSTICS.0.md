@@ -98,7 +98,7 @@ below; that is the phase-7 contract, enforced by the extended gate.
   declaration (DeclSite; zero site attaches nothing — locations are
   never guessed).
 - **Parse** (`syntax_error`): tabnas/jsonic failures translated into
-  BORU-voice BoruErrors (eng/go/parser/parse_error.go); the library's
+  boru-voice BoruErrors (eng/go/parser/parse_error.go); the library's
   always-on ANSI palette, `--internal:` block, and docs link are
   disabled at the source.
 - **Arith** (`arith_error`): div/mod-by-zero and apd faults raise
@@ -195,7 +195,7 @@ error: [boru/type_error]: f: return value 1: expected String, got Integer
   1 | def f fn [[n:Integer] String [n]]
                             ------ the declaration says `f` returns String
   = value: 42\n```\n\n(before: the header + primary caret only — no declaration or value spans)\n
-### Parse error — BORU voice
+### Parse error — boru voice
 
 ```
 error: [boru/syntax_error]: this string is never closed: 'abc

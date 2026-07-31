@@ -1,4 +1,4 @@
-// The compiled-program data model for the BORU bytecode VM, ported from
+// The compiled-program data model for the boru bytecode VM, ported from
 // eng/go/bytecode.go and shaped for V8 JIT optimisation.
 //
 // V8 NOTES: the instruction stream is a pair of PARALLEL TYPED ARRAYS —
@@ -57,7 +57,7 @@ export interface PolyRef {
 }
 
 /**
- * One trap: the BORU error an OpTrap raises — the taxonomy code, the detail
+ * One trap: the boru error an OpTrap raises — the taxonomy code, the detail
  * message, and the word it is attributed to, taken verbatim from the
  * matching runtime error so the compiled stream errors byte-identically to
  * the interpreter. Mirrors eng/go bytecode.go::TrapSpec (Go's `hint` is

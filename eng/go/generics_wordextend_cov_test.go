@@ -247,12 +247,12 @@ func TestInstallWordExtensionMergeAndDispatch(t *testing.T) {
 	}
 
 	// The def-merge path (compileFnSigs) reads Params, so the extension
-	// authors named params like a BORU `fn [[a:CovStr b:String] …]` def.
+	// authors named params like a boru `fn [[a:CovStr b:String] …]` def.
 	ext := FnDefInfo{
 		Name: "cadd",
 		Signatures: []Signature{{
 			Params: []FnParam{{Name: "a", Type: covStrT}, {Name: "b", Type: TString}},
-			Impl: BORU([]Value{
+			Impl: Boru([]Value{
 				NewOpenParen(), NewWord("ccat"), NewWord("a"), NewWord("b"), NewCloseParen(),
 			}),
 			Returns: []*Type{TString}, BarrierPos: BarrierAllForward,
@@ -503,7 +503,7 @@ func TestComputeCaptures(t *testing.T) {
 	// No baseline (top level): nothing captures.
 	sig := &FnSig{
 		Params: []FnParam{{Name: "p", Type: TInteger}},
-		Impl:   BORU([]Value{NewWord("outer"), NewWord("p")}),
+		Impl:   Boru([]Value{NewWord("outer"), NewWord("p")}),
 	}
 	if caps := ComputeCaptures(r, sig); caps != nil {
 		t.Errorf("top-level captures = %v, want nil", caps)

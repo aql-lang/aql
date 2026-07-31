@@ -1,4 +1,4 @@
-# BORU Language Specification: generic types — schemas + instantiation
+# boru Language Specification: generic types — schemas + instantiation
 # Format: input<TAB>expected<TAB>description
 #
 # `def Box gen [T] refine Record [value:T]` declares a generic SCHEMA:

@@ -1,4 +1,4 @@
-# BORU Code Review Report
+# boru Code Review Report
 
 **Date:** 2026-04-05  
 **Scope:** `boru/` (architecture, performance, maintainability, gotchas, non-standard patterns, and duplication)  
@@ -142,7 +142,7 @@ This makes behavioral changes risky (e.g., SQL generation tweaks can unintention
 
 **Recommendation**
 - Separate into:
-  - `query_words.go` (BORU word handlers)
+  - `query_words.go` (boru word handlers)
   - `query_ast.go` / `query_clause.go` (parsed clause model)
   - `query_sql.go` (SQL emitter)
   - `query_exec.go` (materialization/cleanup)
@@ -205,4 +205,4 @@ The repository has broad tests across parser, engine, native modules, query path
 
 ## Closing
 
-The project already has strong domain depth and extensive tests. Addressing the structural concentration and panic-safety inconsistencies would materially improve long-term velocity and runtime robustness without changing BORU semantics.
+The project already has strong domain depth and extensive tests. Addressing the structural concentration and panic-safety inconsistencies would materially improve long-term velocity and runtime robustness without changing boru semantics.

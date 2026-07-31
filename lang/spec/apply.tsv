@@ -1,4 +1,4 @@
-# BORU Language Specification: Function Application (apply)
+# boru Language Specification: Function Application (apply)
 # Format: input<TAB>expected<TAB>description
 #
 # apply is the opposite-direction complement of `ref`: where `ref`/`/r`

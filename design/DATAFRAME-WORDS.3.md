@@ -1,10 +1,10 @@
-# Dataframe Operations Word Design for BORU
+# Dataframe Operations Word Design for boru
 
 ## Context
 
-BORU has a full SQL-like query system (`select/from/where/order/group/join/etc.`) that builds `QueryBuilder` objects and executes via SQLite. This design provides a **complementary** set of dataframe-style words that operate directly on table values on the stack in BORU's concatenative style. These are separate from the select-style words and intended for interactive data exploration and transformation pipelines.
+boru has a full SQL-like query system (`select/from/where/order/group/join/etc.`) that builds `QueryBuilder` objects and executes via SQLite. This design provides a **complementary** set of dataframe-style words that operate directly on table values on the stack in boru's concatenative style. These are separate from the select-style words and intended for interactive data exploration and transformation pipelines.
 
-Tables in BORU are `TList` values with `TableData` payload (schema + rows). Records are schema definitions (`RecordTypeInfo` with ordered field map). The new words operate on these types directly.
+Tables in boru are `TList` values with `TableData` payload (schema + rows). Records are schema definitions (`RecordTypeInfo` with ordered field map). The new words operate on these types directly.
 
 ---
 

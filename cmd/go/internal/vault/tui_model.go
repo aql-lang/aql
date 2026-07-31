@@ -483,7 +483,7 @@ func shortenHome(path, home string) string {
 // commands need these so copy-paste runs against the right vault.
 func (m *rootModel) vaultLocationFlags() string {
 	var fl []string
-	if m.ctl.folder != homeBORUDir(m.ctl.homeDir) {
+	if m.ctl.folder != homeBoruDir(m.ctl.homeDir) {
 		fl = append(fl, "--folder="+shortenHome(m.ctl.folder, m.ctl.homeDir))
 	}
 	if m.ctl.suffix != "" {
@@ -500,7 +500,7 @@ func (m *rootModel) execPrefix() string {
 	return "boru vault"
 }
 
-// withVaultLocation injects the active vault's location flags into an
+// withVaultLocation injects the active vault's location flags into a
 // "boru vault …" command so it targets the right vault.
 func (m *rootModel) withVaultLocation(cmd string) string {
 	const base = "boru vault"

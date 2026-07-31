@@ -938,7 +938,7 @@ from everything; 7 is gated on 6's exit criteria.
   a typo'd or wrong-typed key is now a HARD dispatch rejection at
   check AND run time, while a dynamic opts map still matches
   (Options vs non-concrete Map keeps the schema). Host-
-  (RegisterHostEmitter) and BORU-registered (EmitLang.register)
+  (RegisterHostEmitter) and boru-registered (EmitLang.register)
   emitters keep a plain-Map opts slot — their key sets are their
   own. The data slot is untouched (`emit json {prety:true}` still
   emits `{"prety":true}`). The reserved `options_key_unchecked`

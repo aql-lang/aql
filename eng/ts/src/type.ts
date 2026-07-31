@@ -1,4 +1,4 @@
-// BORU types form a slash-separated path lattice.
+// boru types form a slash-separated path lattice.
 //
 // A child type matches a parent pattern: Scalar/String/ProperString
 // matches Scalar/String matches Scalar. The reverse is not true. The

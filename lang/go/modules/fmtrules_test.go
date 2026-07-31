@@ -8,7 +8,7 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// ruleMap builds a BORU map value from alternating key/value pairs.
+// ruleMap builds a boru map value from alternating key/value pairs.
 func ruleMap(pairs ...any) native.Value {
 	m := native.NewOrderedMap()
 	for i := 0; i < len(pairs); i += 2 {
@@ -25,7 +25,7 @@ func strList(ss ...string) native.Value {
 	return native.NewList(out)
 }
 
-// TestFmtRulesAuthorityRoundTrip is the authority pin: the BORU rendering of
+// TestFmtRulesAuthorityRoundTrip is the authority pin: the boru rendering of
 // the canonical rule table, read back through valueToRules, reproduces
 // Fmt.format byte-for-byte across representative shapes. The table IS the
 // formatter's configuration, not documentation of it.
@@ -111,7 +111,7 @@ func TestFmtRulesValueShape(t *testing.T) {
 
 // TestFormatWithOverrides drives Fmt.format-with through the handler for
 // each table dimension and checks it matches the equivalent Go-built Rules
-// — the BORU surface controls the same processor.
+// — the boru surface controls the same processor.
 func TestFormatWithOverrides(t *testing.T) {
 	run := func(rules native.Value, src string) string {
 		t.Helper()

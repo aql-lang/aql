@@ -124,18 +124,18 @@ func TestInvokeFnDirectArms(t *testing.T) {
 	}
 }
 
-func TestInvokeFnBORUArms(t *testing.T) {
-	// A BORU-authored codec function whose body fails at run time.
+func TestInvokeFnBoruArms(t *testing.T) {
+	// A boru-authored codec function whose body fails at run time.
 	reg, vals, err := runNetStepsReg(t, []string{`([b:Any] => [zzz-undefined-codec-word])`})
 	if err != nil {
 		t.Fatalf("build failing lambda: %v", err)
 	}
 	fn := vals[len(vals)-1]
 	if _, iErr := invokeFn(reg, fn, native.NewInteger(1)); iErr == nil {
-		t.Error("failing BORU codec body must surface its error")
+		t.Error("failing boru codec body must surface its error")
 	}
 
-	// A BORU-authored codec function producing no values yields None.
+	// A boru-authored codec function producing no values yields None.
 	reg2, vals2, err := runNetStepsReg(t, []string{`([b:Any] => [b drop])`})
 	if err != nil {
 		t.Fatalf("build empty lambda: %v", err)
@@ -143,10 +143,10 @@ func TestInvokeFnBORUArms(t *testing.T) {
 	fn2 := vals2[len(vals2)-1]
 	res, iErr := invokeFn(reg2, fn2, native.NewInteger(1))
 	if iErr != nil {
-		t.Fatalf("empty BORU codec body: %v", iErr)
+		t.Fatalf("empty boru codec body: %v", iErr)
 	}
 	if native.IsConcrete(res) || res.String() != "None" {
-		t.Errorf("empty BORU codec body must yield None, got %v", res)
+		t.Errorf("empty boru codec body must yield None, got %v", res)
 	}
 }
 

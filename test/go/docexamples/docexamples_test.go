@@ -3,10 +3,10 @@
 // rendered stack to the documented result.
 //
 // Render path: the comparison string is eng.Canon of the residual stack
-// — canonical BORU source, which is the value form the docs are written
+// — canonical boru source, which is the value form the docs are written
 // in (quoted strings, lowercase `none`, comma-free lists/maps, `name/q`
 // atoms). This is the same renderer the .tsv spec suites use
-// (test/go/specrunner), so a passing example round-trips as written BORU.
+// (test/go/specrunner), so a passing example round-trips as written Boru.
 package docexamples
 
 import (
@@ -174,7 +174,7 @@ func runProgram(t *testing.T, src string) string {
 }
 
 // runProgramErr evaluates src against a fresh production registry and
-// renders the residual stack as canonical BORU source (eng.Canon).
+// renders the residual stack as canonical boru source (eng.Canon).
 func runProgramErr(src string) (string, error) {
 	values, err := parser.Parse(src)
 	if err != nil {

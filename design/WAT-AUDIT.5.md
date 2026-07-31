@@ -302,7 +302,7 @@ warning.
 
 > **Fix.** ✅ **Done.** Redefining a core word is now illegal everywhere.
 > The registry records every name registered via `Register` (all native /
-> kernel words, plus host words added through `(*BORU).Register`) in a
+> kernel words, plus host words added through `(*Boru).Register`) in a
 > `builtinWords` set; `r.IsBuiltinWord` also covers the reserved literals
 > `true`/`false`/`none`. The `def` and `undef` handlers reject any such
 > name with `[boru/reserved_word]`. User `def`s install through
@@ -693,7 +693,7 @@ in each exhibit's ✅ markers above.
 
 Sequenced by value-to-risk. The first column is unambiguous correctness
 with near-zero compatibility cost; the second needs an owner to commit
-to what BORU's types *mean*; the third is documentation/lint or additive.
+to what boru's types *mean*; the third is documentation/lint or additive.
 
 | Do now (cheap, clearly-right) | Decide then do (behavioural) | Docs / lint / additive |
 | --- | --- | --- |

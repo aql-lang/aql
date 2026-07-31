@@ -1,5 +1,5 @@
 // Package check implements `boru check [--json] [--soft] [--strict] [script.boru]`
-// — run the static type-checker over a BORU source file or -e
+// — run the static type-checker over a boru source file or -e
 // expression and report diagnostics.
 //
 // Without --soft, the presence of any Error-severity diagnostic

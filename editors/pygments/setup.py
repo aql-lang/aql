@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Packaging shim for the BORU Pygments lexer.
+"""Packaging shim for the boru Pygments lexer.
 
 The canonical, declarative metadata lives in ``pyproject.toml``; this
 ``setup.py`` exists only so that legacy tooling (``python setup.py …`` and
@@ -14,10 +14,10 @@ setup(
     name="boru-pygments-lexer",
     version="0.1.0",
     description=(
-        "Pygments lexer for BORU, a concatenative, strongly-typed query "
+        "Pygments lexer for boru, a concatenative, strongly-typed query "
         "language."
     ),
-    author="BORU contributors",
+    author="boru contributors",
     url="https://github.com/boru-lang/boru",
     license="MIT",
     py_modules=["boru_lexer"],

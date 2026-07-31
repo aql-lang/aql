@@ -3,7 +3,7 @@
 Implementation plan for the client/server networking + app-building stack —
 the executable slice of `PROCESSES.0.md`, `SERVICES.0.md`,
 `NETWORK-SERVERS.0.md`, and `NETWORK-CLIENTS.0.md`, verified by four apps
-written in BORU (a socket REPL, a todo REST API, a mini-redis, a basic
+written in boru (a socket REPL, a todo REST API, a mini-redis, a basic
 streaming/resumable S3).
 
 ## 0. Design review — what is settled, what this slice takes
@@ -25,7 +25,7 @@ landed:
 - **Policy scopes pre-exist** — `network` (`connect`, and now `listen`) and
   `process`; `fetch.go::checkFetchPolicy` is the gating pattern to copy.
 - Text⇄bytes spellings in the RFC examples (`utf8`, `to-text`) are today's
-  `convert Bytes <String>` / `convert String <Bytes>`; BORU app code uses the
+  `convert Bytes <String>` / `convert String <Bytes>`; boru app code uses the
   landed spellings.
 
 ## 1. Scope decisions for this slice
@@ -55,7 +55,7 @@ the load-bearing core end to end and scopes the rest out explicitly:
    `close`, `shutdown`; a `NetRuntime` owner (installed via the capability
    registry, shared by forks) tracking sockets for shutdown;
    `network.listen`/`network.connect` gating.
-4. **`boru:net` Tier 2** — a `Codec` is a plain Map `{decode encode}` of BORU
+4. **`boru:net` Tier 2** — a `Codec` is a plain Map `{decode encode}` of boru
    fns (the RFC's extension point, verbatim); built-in codec values `lines`,
    `json-lines`, `http` (Go-backed for robustness, same value shape);
    `listen {tcp codec} <service>` (Go conn-session loop: buffer → decode →
@@ -65,14 +65,14 @@ the load-bearing core end to end and scopes the rest out explicitly:
    correlation — one in-flight call per endpoint, serialized on the socket);
    HTTP `:param` route matching done in the transport (the RFC's "small
    router in boru:net" leaning), surfacing `req.params`; `req.@peer`.
-5. **Verification apps, written in BORU:**
-   - **`boru:repl`** — a native module whose implementation is a BORU
+5. **Verification apps, written in boru:**
+   - **`boru:repl`** — a native module whose implementation is a boru
      preamble (the `boru:test` pattern): a line-protocol REPL server
      (evaluates via `boru:vm`) + client words.
    - **todo REST API** — the RFC §6.4 shape: patrun routes on
      `method`+`path`, wrap middleware, CRUD over the `http` codec.
    - **mini-redis** — GET/SET/DEL/EXISTS/INCR/KEYS/EXPIRE/TTL/LPUSH/RPUSH/
-     LRANGE/HSET/HGET over a custom BORU codec (inline RESP-ish framing) —
+     LRANGE/HSET/HGET over a custom boru codec (inline RESP-ish framing) —
      the "custom codec written by the user" story (§6.6) exercised for real.
    - **mini-S3** — bucket/object PUT/GET/DELETE/LIST on the **low-level
      tier** (hand-framed HTTP over `recv-until`/`recv-bytes`), streaming
@@ -128,8 +128,8 @@ UDP, reconnection policy, HTTP/2, distribution.
   `docs_net.go`, policy gating tests, loopback socket Go tests).
 - **P4 — codecs + listen/connect**: `lang/go/modules/net_codec.go`,
   `net_listen.go` (+ end-to-end loopback tests per codec).
-- **P5 — apps**: `lang/go/modules/repl.go` (BORU preamble) + catalog entry;
-  `lang/go/test/apps/` BORU sources for todo/redis/s3 + Go end-to-end tests
+- **P5 — apps**: `lang/go/modules/repl.go` (boru preamble) + catalog entry;
+  `lang/go/test/apps/` boru sources for todo/redis/s3 + Go end-to-end tests
   driving real sockets.
 - **P6 — docs + final sweep**: describe/help coverage, design-doc status
   notes, full pre-commit checklist, push.
@@ -159,9 +159,9 @@ Every phase landed and is verified by tests:
   listen-over-service session loops; the `:param` router; Endpoint =
   Service + synchronous remote transport with per-call timeouts;
   `req.body-json`).
-- **P5 apps** — `boru:repl` (native module implemented as a BORU
+- **P5 apps** — `boru:repl` (native module implemented as a boru
   preamble, `modules/repl.go`); `design/examples/apps/`:
-  `todo-api.boru`, `mini-redis.boru` (custom BORU codec),
+  `todo-api.boru`, `mini-redis.boru` (custom boru codec),
   `mini-s3.boru` + `mini-s3-client.boru` (Tier-1 streaming + resumable
   upload/download). All driven over real loopback sockets by
   `lang/go/test/apps_test.go`, `modules/net_test.go`,
@@ -190,7 +190,7 @@ Post-landing hardening (same branch):
   module scope, so the emitter now refuses them and the row falls back
   to full interpretation — the documented boru:repl endpoint tier in
   `test/go/langspec/compiled_coverage_test.go`. `tryNativeFnApply`
-  (vm.go) equally declines foreign BORU-bodied sigs so the fn-value
+  (vm.go) equally declines foreign boru-bodied sigs so the fn-value
   fast path can never run a module body against the wrong registry.
 
 Engine/tooling limitations discovered while building the apps (see

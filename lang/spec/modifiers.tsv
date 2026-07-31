@@ -1,4 +1,4 @@
-# BORU Language Specification: Word Modifiers (the /… suffix)
+# boru Language Specification: Word Modifiers (the /… suffix)
 # Format: input<TAB>expected<TAB>description
 #
 # An unquoted word may carry a `/…` modifier suffix. The recognised

@@ -5,8 +5,8 @@ import (
 	engparser "github.com/boru-lang/boru/eng/go/parser"
 )
 
-// Parse tokenizes and parses BORU source into a slice of engine
-// Values, the same way (*BORU).Run does internally before execution.
+// Parse tokenizes and parses boru source into a slice of engine
+// Values, the same way (*Boru).Run does internally before execution.
 //
 // The parser itself lives in the standalone eng module
 // (github.com/boru-lang/boru/eng/go/parser). This is just the

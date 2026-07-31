@@ -19,7 +19,7 @@ import (
 // runCompiledRequest runs src as one compiled-by-default request and fails
 // the test on refusal or error — the pins below need the COMPILED path (a
 // fallback would bind via the interpreter and prove nothing).
-func runCompiledRequest(t *testing.T, a *BORU, src string) {
+func runCompiledRequest(t *testing.T, a *Boru, src string) {
 	t.Helper()
 	_, ran, reason, err := a.RunAutoValues(src)
 	if err != nil || !ran {
@@ -29,7 +29,7 @@ func runCompiledRequest(t *testing.T, a *BORU, src string) {
 
 // readBack reads src in a follow-up interpreter request and returns the
 // rendering of the result stack.
-func readBack(t *testing.T, a *BORU, src string) string {
+func readBack(t *testing.T, a *Boru, src string) string {
 	t.Helper()
 	out, err := a.RunInterp(src)
 	if err != nil {

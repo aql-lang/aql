@@ -5,7 +5,7 @@ is **the carrier type-checker run with a recording side effect**: every
 dispatch the checker resolves in a typed region is recorded as a classified
 event, and `Finalize` linearises the trace into a `Program`. Anything the
 recorder cannot prove it can lower **faithfully** is refused, and the caller
-(`lang.(*BORU).RunCompiled`) silently falls back to the interpreter. The worst
+(`lang.(*Boru).RunCompiled`) silently falls back to the interpreter. The worst
 failure mode is therefore *slow, not wrong*.
 
 This document is the **positive** statement of what compiles and why. The code

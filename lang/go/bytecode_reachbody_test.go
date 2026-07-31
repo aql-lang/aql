@@ -10,7 +10,7 @@ import (
 // Test.check-prop / Test.skip take TWO code bodies (a generator and a property,
 // e.g. `[r.int 0 100]` and `[0 gte]`). These bodies are inert at the call —
 // `prop` stores them in a PropertySpec map, `skip` discards them, `check-prop`
-// CallBORUs them inside its native handler — so the dispatch should bake them as
+// CallBorus them inside its native handler — so the dispatch should bake them as
 // const operands (a plain CALL_NATIVE). It refused only because a dot-access
 // reach (`r.int`) inside a body was not admitted as an inert const MEMBER; with
 // inertReachMember it now is, so all three compile natively (no FALLBACK island)

@@ -1,4 +1,4 @@
-# BORU Language Specification: error-taxonomy edge cases II
+# boru Language Specification: error-taxonomy edge cases II
 # Format: input<TAB>expected<TAB>description
 #
 # Continuation of edge-errors-1.tsv: the catch-and-substitute idiom

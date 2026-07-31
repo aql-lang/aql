@@ -7,7 +7,7 @@ import (
 	"github.com/boru-lang/boru/eng/go"
 )
 
-// Pretty renders a StackForm back to readable BORU source. The output
+// Pretty renders a StackForm back to readable boru source. The output
 // uses pure post-fix form (args appear on the stack before the word
 // that consumes them) — no forward-collection sugar. This is the
 // canonical surface representation for inspecting what the reducer

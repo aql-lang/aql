@@ -7,7 +7,7 @@ import (
 	lang "github.com/boru-lang/boru/lang/go"
 )
 
-// This suite stresses the BORU signature matcher with USER functions
+// This suite stresses the boru signature matcher with USER functions
 // (`def f fn [...]`) carrying pathological argument signatures, focusing on
 // the structure-first, lazy forward-argument resolution
 // (design/LAZY-ARG-RESOLUTION.10.md). It complements lazy_arg_test.go (which

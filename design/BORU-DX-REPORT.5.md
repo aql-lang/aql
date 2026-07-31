@@ -1,15 +1,15 @@
-# BORU Developer Experience Report: Implementing `boru:decision`
+# boru Developer Experience Report: Implementing `boru:decision`
 
 ## Context
 
 This report documents the experience of implementing a decision modeling
-library (`boru:decision`) as a native BORU module. The goal was a pure-BORU
+library (`boru:decision`) as a native boru module. The goal was a pure-boru
 implementation covering decision tables, decision trees, condition
 evaluation, and hit-policy resolution. The module was informed by a
 comprehensive TypeScript API specification covering builders, evaluators,
 predicates, and tracing.
 
-The implementation ultimately became a hybrid: BORU builders + Go
+The implementation ultimately became a hybrid: boru builders + Go
 evaluators. This report explains why, documents the issues encountered,
 and suggests language improvements.
 
@@ -34,7 +34,7 @@ and bare atoms in value position must be quoted (`quote age` / `'age'`)
 — a bare `age` is an undefined word.
 
 With Issues 1, 2, 5, and 6 resolved, the constraints that forced the
-hybrid architecture are gone: a pure-BORU decision engine is now
+hybrid architecture are gone: a pure-boru decision engine is now
 feasible. The body of the report below is preserved as written for the
 historical record.
 
@@ -116,7 +116,7 @@ passed as fn arguments. This forces verbose, non-compositional code:
 [{field:age,op:"gte",value:18} {field:score,op:"gt",value:50}] decision.all-of
 ```
 
-This is the single biggest barrier to writing real BORU libraries. It
+This is the single biggest barrier to writing real boru libraries. It
 means you cannot name intermediate values and then collect them into
 a list for further processing.
 
@@ -126,7 +126,7 @@ handler. Alternatively, provide an explicit `eval` word that forces
 list evaluation: `eval [c1 c2]` → `[map1, map2]`.
 
 
-### Issue 2: Def leakage from `fn` bodies via CallBORU (critical)
+### Issue 2: Def leakage from `fn` bodies via CallBoru (critical)
 
 > **Status 2026-06-09: ✅ fixed.** A body-local def is undefined after
 > the fn returns (`undefined word` on reference), verified by repro.
@@ -134,7 +134,7 @@ list evaluation: `eval [c1 c2]` → `[map1, map2]`.
 **Severity:** Critical — causes silent, hard-to-diagnose failures.
 
 Local `def` bindings inside an fn body persist in the registry's
-DefStacks after the fn returns via CallBORU. This causes silent name
+DefStacks after the fn returns via CallBoru. This causes silent name
 collisions in subsequent calls.
 
 ```boru
@@ -157,7 +157,7 @@ different function, because a dot-accessor like `c0.op` resolved
 **Workaround:** Use ugly prefixed names (`__ec-op`, `__ao-lhs`) for
 all local defs in fn bodies, or avoid local defs entirely.
 
-**Suggested fix:** CallBORU should snapshot DefStacks entries before
+**Suggested fix:** CallBoru should snapshot DefStacks entries before
 running the body and restore them after, or track which defs were
 created during body execution and clean them up (analogous to how
 it already cleans up named parameters via `uninstallDef`).
@@ -198,7 +198,7 @@ not documented as a general pattern.
 
 **Suggested fix:** Document the arg ordering rules explicitly for
 module/FnDef authors, with examples covering each context (direct
-prefix, direct forward, FnDef auto-invoke, CallBORU nested). Consider
+prefix, direct forward, FnDef auto-invoke, CallBoru nested). Consider
 adding a convention comment pattern. Long-term, consider a mechanism
 where named fn params always bind in declaration order regardless of
 stack position.
@@ -309,11 +309,11 @@ convention.
 
 ## Impact on the decision module
 
-These issues forced the decision module from a pure-BORU implementation
+These issues forced the decision module from a pure-boru implementation
 to a hybrid architecture:
 
-- **BORU builders** (cond, make-rule, make-table, make-tree, etc.) —
-  these are pure BORU. They work because they are simple data-in,
+- **boru builders** (cond, make-rule, make-table, make-tree, etc.) —
+  these are pure boru. They work because they are simple data-in,
   data-out functions with no cross-fn calls, no iteration, and no
   recursion.
 
@@ -326,9 +326,9 @@ to a hybrid architecture:
   - Tree traversal needs reliable state management across fn calls
     (blocked by Issue 2)
 
-A pure-BORU decision engine would have been approximately 80 lines of
-BORU code. The hybrid is approximately 350 lines of Go code plus 30
-lines of BORU. The Go code is more verbose but works reliably.
+A pure-boru decision engine would have been approximately 80 lines of
+boru code. The hybrid is approximately 350 lines of Go code plus 30
+lines of boru. The Go code is more verbose but works reliably.
 
 ---
 
@@ -336,7 +336,7 @@ lines of BORU. The Go code is more verbose but works reliably.
 
 | Priority | Issue | Fix | Status (2026-06-09) |
 |----------|-------|-----|---------------------|
-| **P0** | Def leakage from fn bodies | CallBORU should clean up body-local defs on return | ✅ fixed |
+| **P0** | Def leakage from fn bodies | CallBoru should clean up body-local defs on return | ✅ fixed |
 | **P0** | List auto-eval strips def refs | Resolve word elements when list consumed as fn arg | ✅ fixed |
 | **P1** | Dot notation shadowed by registered words | Emit string keys at the dot-to-get conversion site: `x.y` → `x get "y"` | ✅ fixed (literal-key semantics) |
 | **P1** | No list-building word | Add `N collect` to gather stack values into a list | ✅ moot (list literals evaluate) |
@@ -344,8 +344,8 @@ lines of BORU. The Go code is more verbose but works reliably.
 | **P2** | Arg ordering confusing | Document prefix/forward/FnDef arg ordering for module authors | 📖 documented |
 
 The P0 issues (def leakage and list evaluation) were the primary
-blockers for writing non-trivial BORU libraries. Both are now fixed,
+blockers for writing non-trivial boru libraries. Both are now fixed,
 which makes the decision module — and similar data-processing
-libraries — implementable entirely in BORU. Rewriting the Go
+libraries — implementable entirely in boru. Rewriting the Go
 evaluators (`eval-cond`, `eval-pred`, `eval-table`, `eval-tree`,
-`decide`) in pure BORU is now follow-up work rather than blocked work.
+`decide`) in pure boru is now follow-up work rather than blocked work.

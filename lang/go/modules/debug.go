@@ -22,7 +22,7 @@ var moduleNamesFn func() []string
 func init() { moduleNamesFn = Names }
 
 // BuildDebugModule creates the "boru:debug" native module — the curated
-// front door for debugging a BORU program: printing taps, structural and
+// front door for debugging a boru program: printing taps, structural and
 // system introspection, value sizing, and performance measurement.
 //
 // It follows the standard native-module shape (an isolated sub-registry of
@@ -509,7 +509,7 @@ func debugNatives() []native.NativeFunc {
 			}},
 		},
 		{
-			// The quoted body of a BORU-defined word; `native/q` for a host word.
+			// The quoted body of a boru-defined word; `native/q` for a host word.
 			Name: "debug-body",
 			Signatures: []native.Signature{{
 				Args:       []*native.Type{native.TString},
@@ -768,7 +768,7 @@ func profileRows(counts map[string]int) native.Value {
 	return native.NewList(out)
 }
 
-// sizeOfValue estimates the retained byte size of a BORU value by a deep
+// sizeOfValue estimates the retained byte size of a boru value by a deep
 // walk. The estimate is heuristic (per-node overhead + payload bytes) but
 // deterministic, so it is useful for relative comparisons. Type literals
 // and carriers (non-concrete) contribute only their node overhead — the

@@ -1,4 +1,4 @@
-# BORU Language Specification: error raising and loud failures
+# boru Language Specification: error raising and loud failures
 # Format: input<TAB>expected<TAB>description
 #
 # `raise` constructs the same Ideal/Error the runtime produces and

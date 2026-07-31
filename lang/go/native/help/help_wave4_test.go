@@ -587,7 +587,7 @@ func TestW4Pad(t *testing.T) {
 func TestW4Overview(t *testing.T) {
 	out := Overview()
 	for _, want := range []string{
-		"BORU — a concatenative query language.",
+		"boru — a concatenative query language.",
 		"describe add",
 		TutorialURL,
 		ReferenceURL,

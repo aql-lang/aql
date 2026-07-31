@@ -33,7 +33,7 @@ import (
 	eng "github.com/boru-lang/boru/eng/go"
 )
 
-// errCode returns a BORU error's taxonomy code (or "" for nil, "non-boru"
+// errCode returns a boru error's taxonomy code (or "" for nil, "non-boru"
 // for a foreign error) so the gate compares taxonomy, not message text.
 func errCode(e error) string {
 	if e == nil {
@@ -46,7 +46,7 @@ func errCode(e error) string {
 	return "non-boru"
 }
 
-// asBoruError unwraps e to an *BoruError, or nil for a non-BORU / nil error.
+// asBoruError unwraps e to a *BoruError, or nil for a non-Boru / nil error.
 func asBoruError(e error) *eng.BoruError {
 	var ae *eng.BoruError
 	if e != nil && errors.As(e, &ae) {

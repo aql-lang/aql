@@ -1,9 +1,9 @@
 /**
- * @file Tree-sitter grammar for BORU — a concatenative, strongly-typed query language.
- * @author BORU contributors
+ * @file Tree-sitter grammar for boru — a concatenative, strongly-typed query language.
+ * @author boru contributors
  * @license MIT
  *
- * BORU is CONCATENATIVE. This grammar is deliberately PRAGMATIC: it models the
+ * boru is CONCATENATIVE. This grammar is deliberately PRAGMATIC: it models the
  * token / lexeme layer faithfully (comments, the three string kinds with `${}`
  * interpolation, every number form, words, capitalised type identifiers,
  * operators / brackets and the `/modifier` suffixes) and then treats a program
@@ -45,7 +45,7 @@ module.exports = grammar({
 
   word: $ => $._word_token,
 
-  // The interpolation `${ … }` inside a template string embeds a full BORU
+  // The interpolation `${ … }` inside a template string embeds a full boru
   // expression list; keep it in the same rule set.
   rules: {
     // ---------------------------------------------------------------------

@@ -11,7 +11,7 @@ Go [`html`](https://pkg.go.dev/html) provides exactly two functions for
 escaping and unescaping HTML text: `EscapeString` (replaces the five
 special characters `<`, `>`, `&`, `'`, `"` with their entities) and
 `UnescapeString` (reverses it, decoding the full entity set). This note
-specifies an idiomatic BORU surface over that package. Nothing is
+specifies an idiomatic boru surface over that package. Nothing is
 implemented yet.
 
 ## 2. Why curated
@@ -75,7 +75,7 @@ None — pure value transformation, runs under any policy.
 
 ## 8. Overlap
 
-None with an existing module. No BORU-user-facing word does HTML entity
+None with an existing module. No boru-user-facing word does HTML entity
 escaping today.
 
 **Out of scope — `html/template`.** Go's

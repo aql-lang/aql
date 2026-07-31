@@ -9,7 +9,7 @@ func init() {
 		"xnor":    "Logical XNOR (iff alias): true when operands are equal.",
 	})
 
-	// The connective words read in the BORU swap convention (args[1] op
+	// The connective words read in the boru swap convention (args[1] op
 	// args[0]), which is the one thing about them a reader can get wrong
 	// and a signature of [Boolean Boolean] cannot show.
 	registerExamples("boru:logic-util", map[string][]string{
@@ -20,7 +20,7 @@ func init() {
 		"implies": {
 			`LogicUtil.implies true false                     ;# true`,
 			`LogicUtil.implies false true                     ;# false`,
-			`;# Reads RIGHT to left, like every binary BORU word: "implies a b"`,
+			`;# Reads RIGHT to left, like every binary boru word: "implies a b"`,
 			`;# is b ⇒ a. The swap form "b LogicUtil.implies a" reads forwards.`,
 		},
 	})

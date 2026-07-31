@@ -38,17 +38,17 @@ var moduleCatalog = []ModuleInfo{
 	{"string-util", "String manipulation: concat, split, trim, upper, lower, …."},
 	{"minilang", "Embedded mini-languages behind the `mini` word: re (Go regexp), bf (brainfuck), gex (globs), register."},
 	{"parselang", "Named parsers behind the `parse` word: register a parser, parse a source into an AST."},
-	{"cli", "Command-line argument parsing, written in BORU: a spec map drives parse / dispatch / usage / main, with argv always an explicit parameter."},
+	{"cli", "Command-line argument parsing, written in boru: a spec map drives parse / dispatch / usage / main, with argv always an explicit parameter."},
 	{"sift", "Semi-structured text parsing (the awk tier): kv, blocks, columns, dsv, fixed, and pattern families via the Sift namespace (Sift.parse / define / …), plus spec-map extensions."},
 	{"emitlang", "Emit data structures to strings behind the `emit` word: json, jsonic, csv, tsv, yaml, xml, toml, ini."},
 	{"parse", "Define custom parsers: ABNF grammars, declarative rules, lex matchers, and custom-type actions, registered as `parse` kinds."},
 	{"model", "Build a system model from .jsonic source (via aontu unification) and run generator actions over it: new, run, start, stop, model."},
 	{"log", "Structured logging: severity levels, fields, console/memory sinks, a global threshold."},
 	{"debug", "Debugging: print taps, structural/system introspection, value sizing, and performance measurement."},
-	{"repl", "A socket REPL server and client, written in BORU over boru:net."},
-	{"fmt", "Source formatting: pretty-print BORU into canonical layout (shared with the `boru fmt` CLI)."},
+	{"repl", "A socket REPL server and client, written in boru over boru:net."},
+	{"fmt", "Source formatting: pretty-print boru into canonical layout (shared with the `boru fmt` CLI)."},
 	{"vault", "Bridge to the host's secret vault: status, secrets, capabilities, passwords, maintenance, multi-vault — behind a host-injected backend."},
-	{"vault-tui", "The interactive vault TUI, written in BORU over boru:tui + boru:vault (the `boru vault -i --boru` app)."},
+	{"vault-tui", "The interactive vault TUI, written in boru over boru:tui + boru:vault (the `boru vault -i --boru` app)."},
 }
 
 // ModuleCatalog returns the built-in module catalog sorted by name. The

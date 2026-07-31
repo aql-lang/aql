@@ -119,7 +119,7 @@ when tried). See the refreshed [Completion guide](#completion-guide-remaining-re
 
 
 This note is a router + analysis for the next person (or session) working on the
-BORU bytecode compiler. It captures (a) how the checker and the bytecode compiler
+boru bytecode compiler. It captures (a) how the checker and the bytecode compiler
 actually interact today, (b) the current state of the runtime-independence
 ratchet, (c) concrete generalizations / simplifications / data-structure
 improvements, and (d) the state-of-the-art algorithms we are reinventing ad-hoc
@@ -315,7 +315,7 @@ the existing suites for the race check.
 
 ## 0. TL;DR (the verdict)
 
-The core design is **sound and modern — do not rewrite it.** BORU's "the compiler
+The core design is **sound and modern — do not rewrite it.** boru's "the compiler
 *is* the carrier checker with a recording side-effect" is exactly the
 **single-pass abstract-interpretation baseline-compiler** architecture that every
 production WebAssembly engine converged on (Titzer's V8 / Wizard work). The
@@ -357,7 +357,7 @@ tryRecordPoly → tryRecordFallback → RecordCall
 
 and then `EmitState.Finalize(residual)` (`eng/go/emit.go`) linearises the
 recorded event trace into a `Program` (`eng/go/bytecode.go`). The host entry
-point is `(*BORU).CompileCheck` (`lang/go/boru.go`).
+point is `(*Boru).CompileCheck` (`lang/go/boru.go`).
 
 ### What the checker hands the compiler
 
@@ -724,7 +724,7 @@ way to see what a change cleared. The June session used exactly this.
 | Opcodes + Program | `eng/go/bytecode.go`; VM in `eng/go/vm.go` |
 | Word compile-classification tables | `eng/go/emit.go` (`fnIntrospectionWords`, `fnStoreWords`), `eng/go/carrier.go` (`moduleConstFoldWords`, `checkModeLiteralWords`, `fallbackWords`, `islandPureWords`, `dynOutNativeOK`, …) |
 | const-fold / schema-vs-data | `eng/go/engine.go` — `autoEvalList`, `autoEvalMap`, `constFoldContainerVal` |
-| Host entry point | `lang/go/boru.go` — `(*BORU).CompileCheck` |
+| Host entry point | `lang/go/boru.go` — `(*Boru).CompileCheck` |
 | The ratchet | `test/go/langspec/compiled_coverage_test.go` |
 | Differential gate | `test/go/langspec/compiled_differential_test.go` |
 | The (stale-on-numbers) P5–P7 plan | `design/boru-bytecode-runtime-independence.0.md` |
@@ -850,7 +850,7 @@ this session's.)
 - **57 → 53** — dot-access reach in an inert code body: the property-test words
   `Test.prop` / `Test.check-prop` / `Test.skip` take TWO code bodies
   (`[r.int 0 100]` + `[0 gte]`) that are inert at the call (prop stores them in a
-  PropertySpec map, skip discards them, check-prop CallBORUs them in its native
+  PropertySpec map, skip discards them, check-prop CallBorus them in its native
   handler), so `noEvalBodiesInert` already bakes them as const operands — but a
   dot-access reach (`r.int`, an Eval=true receiver Reach) inside a body was not
   an inert const MEMBER, so the body list failed `isInertConst`. Unlike

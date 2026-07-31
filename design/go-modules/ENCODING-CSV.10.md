@@ -13,7 +13,7 @@ RFC-4180 comma-separated values with configurable knobs:
 `Reader.ReadAll` decodes all rows, `Writer.WriteAll` encodes them, and
 `Comma` (delimiter), `Comment`, `FieldsPerRecord` (row-width policy),
 `LazyQuotes`, and `TrimLeadingSpace` tune non-standard dialects. This
-note specifies an idiomatic BORU surface over that package. Nothing is
+note specifies an idiomatic boru surface over that package. Nothing is
 implemented yet.
 
 ## 2. Why curated
@@ -21,7 +21,7 @@ implemented yet.
 The raw `go:` reflection bridge would surface the stateful
 `*csv.Reader` / `*csv.Writer` objects, `io.Reader`/`io.Writer`
 constructors, the mutable knob fields, and a `([][]string, error)`
-boundary — none of which read well in BORU. The curated surface hides
+boundary — none of which read well in boru. The curated surface hides
 the Reader/Writer objects entirely (whole-String in, whole-value out),
 turns the knobs into an options Map, and collapses `(value, error)`
 into value-or-error via `r.BoruError`. The value it adds over

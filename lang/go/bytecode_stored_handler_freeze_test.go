@@ -13,7 +13,7 @@ import (
 // MISCOMPILE (the cardinal forbidden outcome). The fix: a def/undef of a name an
 // already-created stored ref reads (NotifyNameRebound) POISONS that ref, so
 // Finalize leaves it unstamped (Prog nil) and InvokeCallback falls back to
-// CallBORU — the interpreter, which resolves the live definition. compile ==
+// CallBoru — the interpreter, which resolves the live definition. compile ==
 // interpret MUST hold, and the ref must NOT be stamped (StoredRefStampedCount 0).
 func TestCompiledStoredHandlerFreezeRedefine(t *testing.T) {
 	cases := []struct{ name, src, want string }{

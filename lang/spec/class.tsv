@@ -1,4 +1,4 @@
-# BORU Language Specification: the `class` word — sealed nominal records
+# boru Language Specification: the `class` word — sealed nominal records
 # Format: input<TAB>expected<TAB>description
 #
 # `def Foo class {schema}` defines a class: a sealed nominal record

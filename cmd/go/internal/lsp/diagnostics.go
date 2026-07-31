@@ -64,8 +64,8 @@ func (s *server) computeDiagnostics(src string) []Diagnostic {
 	return out
 }
 
-// toLSPDiagnostic translates a BORU CheckDiagnostic to LSP shape.
-// BORU Row/Col are 1-based; LSP is 0-based. The diagnostic range
+// toLSPDiagnostic translates a boru CheckDiagnostic to LSP shape.
+// boru Row/Col are 1-based; LSP is 0-based. The diagnostic range
 // covers the offending word; when Word is empty, fall back to a
 // single-character range at (Row, Col) so the editor still has
 // somewhere to draw a marker.

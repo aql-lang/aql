@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-// MapTransportErr classifies a Go network error into BORU's transport
+// MapTransportErr classifies a Go network error into boru's transport
 // failure vocabulary, per design/NETWORK-CLIENTS.0.md §8.2:
 //
 //	closed     — the peer hung up (EOF, reset, use-of-closed)
@@ -30,7 +30,7 @@ func MapTransportErr(r *Registry, word string, err error) error {
 
 // MapTransportErrAs is MapTransportErr with an explicit message prefix,
 // for callers that want to say WHICH wire operation failed while still
-// raising the shared code. `word` names the BORU word for the error;
+// raising the shared code. `word` names the boru word for the error;
 // `what` prefixes the detail (e.g. "fetch: reading body").
 func MapTransportErrAs(r *Registry, word, what string, err error) error {
 	var nerr net.Error

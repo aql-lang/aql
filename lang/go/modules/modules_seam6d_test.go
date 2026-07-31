@@ -326,7 +326,7 @@ func TestSeam6DMapStrListAtomElements(t *testing.T) {
 // weekday 0 → ISO 7). 2024-03-17 is a Sunday.
 func TestSeam6DWeekdaySunday(t *testing.T) {
 	r := timeRegistry(t)
-	res := runBORU(t, r, callTimeDot("weekday", native.NewDate(time.Date(2024, 3, 17, 0, 0, 0, 0, time.UTC))))
+	res := runBoru(t, r, callTimeDot("weekday", native.NewDate(time.Date(2024, 3, 17, 0, 0, 0, 0, time.UTC))))
 	got, err := res[len(res)-1].AsConcreteInteger()
 	if err != nil || got != 7 {
 		t.Errorf("weekday(2024-03-17) = %v (err %v), want 7", res[len(res)-1], err)

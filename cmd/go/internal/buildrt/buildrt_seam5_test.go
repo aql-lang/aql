@@ -15,7 +15,7 @@ import (
 func TestSeam5EvalInitError(t *testing.T) {
 	boom := errors.New("init boom")
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, boom }
+	langNew = func(...lang.Options) (*lang.Boru, error) { return nil, boom }
 	t.Cleanup(func() { langNew = orig })
 
 	err := Eval(io.Discard, "1 2 +", lang.Options{}, CompileOff)
@@ -27,7 +27,7 @@ func TestSeam5EvalInitError(t *testing.T) {
 func TestSeam5MainInitError(t *testing.T) {
 	boom := errors.New("init boom")
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, boom }
+	langNew = func(...lang.Options) (*lang.Boru, error) { return nil, boom }
 	t.Cleanup(func() { langNew = orig })
 
 	var stdout, stderr bytes.Buffer

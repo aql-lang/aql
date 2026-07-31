@@ -711,11 +711,11 @@ func parseCastSpec(elems []Value) (columnSpec, error) {
 	return columnSpec{
 		Raw:        raw,
 		Alias:      alias,
-		ResultType: sqlTypeToBORUType(sqlType),
+		ResultType: sqlTypeToBoruType(sqlType),
 	}, nil
 }
 
-// boruTypenameToSQLType maps a BORU type name string to a SQL type.
+// boruTypenameToSQLType maps a boru type name string to a SQL type.
 func boruTypenameToSQLType(name string) string {
 	switch strings.ToLower(name) {
 	case "integer", "int":
@@ -731,8 +731,8 @@ func boruTypenameToSQLType(name string) string {
 	}
 }
 
-// sqlTypeToBORUType maps a SQL type string back to a BORU *Type.
-func sqlTypeToBORUType(sqlType string) *Type {
+// sqlTypeToBoruType maps a SQL type string back to a boru *Type.
+func sqlTypeToBoruType(sqlType string) *Type {
 	switch sqlType {
 	case "INTEGER":
 		return TInteger
@@ -782,7 +782,7 @@ func unwrapQB(v Value) (QueryBuilder, bool) {
 	return QueryBuilder{}, false
 }
 
-// comparisonOps maps BORU comparison word names to SQL operators.
+// comparisonOps maps boru comparison word names to SQL operators.
 var comparisonOps = map[string]string{
 	"eq":     "=",
 	"neq":    "!=",
@@ -795,7 +795,7 @@ var comparisonOps = map[string]string{
 	"regexp": "REGEXP",
 }
 
-// logicalOps maps BORU logical word names to SQL connectors.
+// logicalOps maps boru logical word names to SQL connectors.
 var logicalOps = map[string]string{
 	"and": "AND",
 	"or":  "OR",

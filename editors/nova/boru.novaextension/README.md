@@ -1,6 +1,6 @@
-# BORU for Nova
+# boru for Nova
 
-Language support for [BORU](https://github.com/boru-lang/boru) — a
+Language support for [boru](https://github.com/boru-lang/boru) — a
 concatenative, strongly-typed query language — inside
 [Nova](https://nova.app) (Panic's macOS editor).
 
@@ -45,15 +45,15 @@ bundle.
   directory without packaging.
 
 Once installed, open any `.boru` file (for example
-`design/examples/todo/todo.boru`) — Nova selects the BORU syntax
+`design/examples/todo/todo.boru`) — Nova selects the boru syntax
 automatically and, if `boru` is available, starts the language server.
 
 ## Configuration
 
-Open **Extensions ▸ BORU ▸ Preferences** (or the project-scoped settings)
+Open **Extensions ▸ boru ▸ Preferences** (or the project-scoped settings)
 to configure:
 
-- **BORU binary path** (`boru.lsp.path`, default `boru`) — the `boru`
+- **boru binary path** (`boru.lsp.path`, default `boru`) — the `boru`
   executable used to run `boru lsp`. Leave as `boru` to use the binary on
   your `$PATH`, or give an absolute path. A leading `~` is expanded to
   your home directory.
@@ -64,7 +64,7 @@ to configure:
 ## Notes
 
 Nova compiles its own tree-sitter-style XML grammars; this extension
-maps BORU tokens onto Nova's standard scope names (`comment`, `string`,
+maps boru tokens onto Nova's standard scope names (`comment`, `string`,
 `string.escape`, `value.number.*`, `keyword`, `identifier.type`,
 `identifier.function`, `operator`, …) so highlighting follows whichever
 Nova theme you use.

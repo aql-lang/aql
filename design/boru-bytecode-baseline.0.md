@@ -1,4 +1,4 @@
-# BORU Bytecode — Stage 0 baseline measurement
+# boru Bytecode — Stage 0 baseline measurement
 
 **Status:** measured June 2026 against main @ `6fe4b96` (post
 gap-buffer tape, post TCO Stages 0–6). Deliverable of Stage 0 of
@@ -64,10 +64,10 @@ Headline per-unit costs (execution, this box):
 
 ### Straight-line arithmetic (`arith_chain64` alone, 3s)
 
-Benchmark-goroutine path = `BORU.Run` 3.60s of 4.65s samples.
+Benchmark-goroutine path = `Boru.Run` 3.60s of 4.65s samples.
 Within it:
 
-| where | cum | share of BORU.Run |
+| where | cum | share of Boru.Run |
 |---|---:|---:|
 | `parser.Parse` | 1.33s | 37% |
 | `Engine.Run` (execution) | 2.27s | 63% |

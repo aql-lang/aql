@@ -59,7 +59,7 @@ Three dead ends were verified before landing on this design:
   the `is`/dispatch/return boundaries.
 - **Builtin words are frozen.** `def make …` is refused
   (`native_definition.go`'s `reservedWordError` on `IsBuiltinWord`), so
-  "wrap `make` in BORU" is not available; interception must be a hook the
+  "wrap `make` in boru" is not available; interception must be a hook the
   builtin handlers themselves consult.
 - **The `usurp`/`ref` family is value-level.** `usurp`, `force-arity`,
   `stack-args` wrap a *function value* (argument permutation / barrier
@@ -68,7 +68,7 @@ Three dead ends were verified before landing on this design:
 
 What the tree *does* have is `behave`
 (`lang/go/native/native_behave.go`): a closed table of capability slots
-(`compare`, `canon`, `nodify`, `unify`) that attaches a BORU fn body to a
+(`compare`, `canon`, `nodify`, `unify`) that attaches a boru fn body to a
 **user** type by additively wrapping its `TypeBehavior` (`userBehavior`),
 running the body through a sub-engine with re-entrancy guards, and inferring
 the target type from the fn's first parameter. That is precisely the AOP
@@ -246,7 +246,7 @@ terminates instead of looping.
 exactly: push the param as a def (the declared name, so `fn [[v:Uniq] …]`
 bodies read naturally; `"a"` fallback preserves the compare/canon
 convention), run via `eng.NewTop(r).Run(tokens)` (the behave sub-engine
-precedent — NOT `InvokeBody`/`CallBORU`, keeping all five capability runners on
+precedent — NOT `InvokeBody`/`CallBoru`, keeping all five capability runners on
 one seam), wrap an error as `behave <word> <Type>: …` so the calling word
 surfaces it. Output validation, in this order:
 

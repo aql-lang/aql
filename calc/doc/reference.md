@@ -89,9 +89,9 @@ vocabulary doesn't need them.
 
 | Symbol | What it does |
 | --- | --- |
-| `parser.Parse(src string) ([]eng.Value, error)` | Parse BORU source into a token slice. Used both at `calc.New` setup (via `r.SetParseFunc`) and per-line by `Calc.Eval`. |
+| `parser.Parse(src string) ([]eng.Value, error)` | Parse boru source into a token slice. Used both at `calc.New` setup (via `r.SetParseFunc`) and per-line by `Calc.Eval`. |
 
-The parser is configured for the canonical BORU syntax —
+The parser is configured for the canonical boru syntax —
 parenthesised forms, dotted access, template strings, typed
 lists `[:T]`, typed maps `{:T}`, etc. Calc doesn't use most of
 this, but registering the parser keeps the door open for words

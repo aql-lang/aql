@@ -368,7 +368,7 @@ re-investigating.
 - **No tests for the `/N` modifier or its combinations**: see
   §2.8.
 
-These all live in the larger BORU test corpus
+These all live in the larger boru test corpus
 (`lang/go/test/*.go` and `lang/go/test/*.tsv`); the borueng spec subset is
 deliberately focused on the dispatch / value / type-lattice core.
 

@@ -2,7 +2,7 @@
 # =====================================================================		
 # Resource — built-in object type for external data sources		
 # =====================================================================		
-# `Resource` and `Entity` are BORU's built-in ObjectTypes for naming		
+# `Resource` and `Entity` are boru's built-in ObjectTypes for naming		
 # external data sources. They are not registered as words; instead		
 # `installResourceTypes` (called from `engine.Register`) pushes them		
 # onto the type stack at startup. So they're available out of the		

@@ -1,8 +1,8 @@
-# BORU Language Specification: the boru:cli module
+# boru Language Specification: the boru:cli module
 # Format: input<TAB>expected<TAB>description
 #
 # boru:cli — conventional command-line argument parsing (design/CLI-PROGRAMS.0.md
-# §8, design/CLI-PROGRAMS.1.md §2-3), implemented in BORU
+# §8, design/CLI-PROGRAMS.1.md §2-3), implemented in boru
 # (lang/go/modules/cli.boru). A spec map drives four words:
 #
 #   Cli.parse    (spec) (argv)  -> {ok flags args command} | {ok:false err usage}

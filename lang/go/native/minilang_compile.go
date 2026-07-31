@@ -21,7 +21,7 @@ import (
 //
 // Hooks are BUILT-IN (Go-only) machinery: they live in a per-registry table
 // (RegisterMiniCompileGoHook) keyed by kind, discovered by miniHandler via
-// miniGoHook. The BORU hook surface (MiniLang.register-compiled) died with
+// miniGoHook. The boru hook surface (MiniLang.register-compiled) died with
 // the frozen kind namespace, and the kind set is fixed — so a hook can only
 // belong to a built-in kind (`re` is the shipping example).
 

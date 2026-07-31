@@ -124,7 +124,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Wrapper params are UNNAMED — the trivial-delegation short-circuit in
 	// execFnDefLiteral requires Body=[Word(inner)] with all-unnamed Params
-	// (named params would route through CallBORU name-binding and starve
+	// (named params would route through CallBoru name-binding and starve
 	// the inner native). See lang/go/CLAUDE.md "Module FnDef Wrappers".
 	stdPrefix := []native.FnParam{
 		{Type: native.TString}, // src
@@ -230,7 +230,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// [src opts] → [Number]. Evaluate a formula like `x*y-z^2` (operators
 	// + - * / % ^, unary +/-, parens) whose variables are bound by the
 	// named params (opts). Backed by the tabnas/expr Pratt parser; numeric
-	// coercion follows BORU's integer/float domain rules. See minilang_math.go.
+	// coercion follows boru's integer/float domain rules. See minilang_math.go.
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "minilang-math",
 		Signatures: []native.Signature{{
@@ -379,12 +379,12 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	}, []*native.Type{native.TList}, nil, subReg))
 	mintMiniFnType("xp")
 
-	// ---- kind: sp — structure-path over BORU structure (Map/List) -------
+	// ---- kind: sp — structure-path over boru structure (Map/List) -------
 	// [src opts doc:Any] → [List]. Run an XPath expression over the stack
 	// Map/List subject and return the result as a List. Same engine as `xp`
-	// (github.com/antchfx/xpath), but over BORU native structure rather than
-	// Node/Xml — the XPath-shaped query layer for BORU data. A matched element
-	// comes back as its source BORU value; a text/scalar result as a
+	// (github.com/antchfx/xpath), but over boru native structure rather than
+	// Node/Xml — the XPath-shaped query layer for boru data. A matched element
+	// comes back as its source boru value; a text/scalar result as a
 	// String/Number/Boolean. See minilang_sp.go.
 	// Two overloads — a Map subject and a List subject — rather than one
 	// TAny: the `mini` filter partial (native_macro.go::miniPartialFn) takes
@@ -459,7 +459,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		[]*native.Type{native.TList}, nil, subReg))
 
 	// ---- out-of-band: register-compiled (TOMBSTONE) -----------------------
-	// The BORU compile-hook surface died with the frozen namespace (an
+	// The boru compile-hook surface died with the frozen namespace (an
 	// expansion-time macro rewrite is unrepresentable as a runtime value);
 	// the word survives one release as the same unconditional raise.
 	subReg.RegisterNativeFunc(native.NativeFunc{
@@ -949,7 +949,7 @@ func miniRegisterFrozenHandler(_ []native.Value, _ map[string]native.Value, _ []
 }
 
 // miniRegisterCompiledFrozenHandler is MiniLang.register-compiled's
-// TOMBSTONE: the BORU compile-hook surface died with the frozen namespace —
+// TOMBSTONE: the boru compile-hook surface died with the frozen namespace —
 // an expansion-time macro rewrite is unrepresentable as a runtime value, so
 // there is no value-form successor. The raise carries the closest migration
 // path (a plain fn value; the per-call compile becomes the fn's own work).

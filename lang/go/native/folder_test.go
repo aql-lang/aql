@@ -32,7 +32,7 @@ func TestFolderCreatesDir(t *testing.T) {
 	registerIOWords(r)
 	mem := setupMemFS(t, r)
 
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("folder"), NewPathon([]string{"a", "b", "c"}, false),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) {
@@ -55,7 +55,7 @@ func TestFolderAbsolutePath(t *testing.T) {
 	registerIOWords(r)
 	mem := setupMemFS(t, r)
 
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("folder"), NewPathon([]string{"tmp", "data"}, true),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) {
@@ -78,8 +78,8 @@ func TestFolderIdempotent(t *testing.T) {
 
 	path := NewPathon([]string{"x", "y"}, false)
 	// Create twice — should not error
-	runBORU(t, r, []Value{NewWord("folder"), path})
-	result := runBORU(t, r, []Value{NewWord("folder"), path})
+	runBoru(t, r, []Value{NewWord("folder"), path})
+	result := runBoru(t, r, []Value{NewWord("folder"), path})
 	if len(result) != 1 || !IsPathon(result[0]) {
 		t.Fatalf("idempotent call failed: got %v", result)
 	}
@@ -94,7 +94,7 @@ func TestFolderWithParentsTrue(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("parents", NewBoolean(true))
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("folder"), NewOptionsType(opts), NewPathon([]string{"deep", "nested", "dir"}, false),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) {
@@ -114,7 +114,7 @@ func TestFolderWithParentsFalse(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("parents", NewBoolean(false))
 	// Even with parents=false, MkdirAll is used (idempotent single dir)
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("folder"), NewOptionsType(opts), NewPathon([]string{"single"}, false),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) {
@@ -129,7 +129,7 @@ func TestFolderWithMakePath(t *testing.T) {
 	registerIOWords(r)
 	mem := setupMemFS(t, r)
 
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("folder"),
 		NewOpenParen(),
 		NewWord("make"), NewWord("Pathon"),
@@ -152,7 +152,7 @@ func TestFolderCreatesParentDirs(t *testing.T) {
 	registerIOWords(r)
 	mem := setupMemFS(t, r)
 
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("folder"), NewPathon([]string{"a", "b", "c"}, false),
 	})
 	// Parent dirs should also be recorded

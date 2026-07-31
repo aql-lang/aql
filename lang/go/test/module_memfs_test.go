@@ -10,7 +10,7 @@ import (
 )
 
 // runMemFSModuleSteps sets up an in-memory filesystem with pre-populated files,
-// enables __sys.fs.mem=true, and runs BORU steps against it.
+// enables __sys.fs.mem=true, and runs boru steps against it.
 // This validates the full pipeline: folder + write + import on in-memory FS.
 func runMemFSModuleSteps(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
@@ -208,7 +208,7 @@ export "Strings" {greet:greet/r}`,
 // --- Module with folder + write (full pipeline) ---
 
 func TestMemFSModuleFolderWriteImport(t *testing.T) {
-	// Start with empty FS — use folder and write to create everything from BORU.
+	// Start with empty FS — use folder and write to create everything from Boru.
 	result, err := runMemFSModuleSteps(t, nil, []string{
 		// Create module directory structure using Pathon
 		`folder (make Pathon ["mymod"])`,

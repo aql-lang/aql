@@ -1,4 +1,4 @@
-# BORU Bytecode Compilation — Revisions against main (June 2026)
+# boru Bytecode Compilation — Revisions against main (June 2026)
 
 **Status:** review note — re-reads `boru-bytecode-report.0.md` against
 main @ `6fe4b96` (2026-06-12) and records what changed underneath it.
@@ -99,7 +99,7 @@ for the design:
    mode differential gate must hold both modes to.
 4. **Stage-5 residuals carry over.** Module-boundary pins,
    kill-switch propagation, the foreign-frame guard, and the
-   same-registry `CallBORU` value branch (recorded as non-guarantee
+   same-registry `CallBoru` value branch (recorded as non-guarantee
    residuals in `TCO-STAGED.10.md`) need a bytecode answer or an
    explicit fallback at those boundaries.
 
@@ -109,7 +109,7 @@ The single most important *new* correctness fact comes out of TCO
 Stage 4b (`TCO-STAGED.10.md`): **eager frame teardown was observable
 through dynamic resolution** — outer frames' params and body-locals
 stay visible to the callee chain until the frame unwinds, innermost
-binding wins. In other words, BORU's def table is dynamically scoped
+binding wins. In other words, boru's def table is dynamically scoped
 across call frames: a callee may resolve a name that the *caller's*
 frame installed.
 
@@ -277,7 +277,7 @@ Continuing the report's §8 numbering:
     before lowering in checker order, so the lowered stream never
     contains an unexpanded macro site; assert this invariant.
 30. **Stage-5 residual boundaries** (low). Module-boundary pins,
-    foreign-frame guard, same-registry `CallBORU`: each is a place
+    foreign-frame guard, same-registry `CallBoru`: each is a place
     where the interpreter deliberately declines TCO. The VM declines
     identically (plain `CALL_USER`) — cheap, but easy to forget.
 

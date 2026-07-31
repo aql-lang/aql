@@ -21,7 +21,7 @@ type ModuleRegistry struct {
 	// per registry); the cached desc lets a re-import re-bind the module's
 	// namespace defs without re-resolving — needed because a fn-body /
 	// property-body import installs the namespace via InstallDef, which
-	// CallBORU's def-cleanup then strips, leaving the module marked loaded
+	// CallBoru's def-cleanup then strips, leaving the module marked loaded
 	// but its `pkg` name unbound. See resolveNativeMod (§11b.1).
 	loaded map[string]ModuleDesc
 	seq    int

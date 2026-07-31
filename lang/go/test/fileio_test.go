@@ -10,7 +10,7 @@ import (
 	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
-// runWithFiles creates a registry with in-memory files and runs BORU.
+// runWithFiles creates a registry with in-memory files and runs Boru.
 func runWithFiles(t *testing.T, files map[string]string, expr string) (string, error) {
 	t.Helper()
 	mem := capabilities.NewMem()
@@ -40,7 +40,7 @@ func runWithFiles(t *testing.T, files map[string]string, expr string) (string, e
 	return formatStack(result), nil
 }
 
-// runWithMem creates a registry with an in-memory FS, runs BORU, and returns
+// runWithMem creates a registry with an in-memory FS, runs boru, and returns
 // the MemFileOps so tests can inspect written files.
 func runWithMem(t *testing.T, files map[string]string, expr string) (*capabilities.MemFileOps, string, error) {
 	t.Helper()
@@ -321,7 +321,7 @@ func TestWriteCRLF(t *testing.T) {
 
 // --- stdio word tests ---
 
-// runWithStdio creates a registry with custom stdin/stdout/stderr and runs BORU.
+// runWithStdio creates a registry with custom stdin/stdout/stderr and runs Boru.
 func runWithStdio(t *testing.T, stdin string, expr string) (stdout, stderr, stack string, err error) {
 	t.Helper()
 	reg, err := native.DefaultRegistry()

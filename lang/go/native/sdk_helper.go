@@ -80,7 +80,7 @@ func entityToAPIMapWithOpts(v Value, opts ReadMap, field string) *OrderedMap {
 	return mergeAPIOptions(m, opts, field)
 }
 
-// convertResultList converts a []any result from the SDK into a BORU list of maps.
+// convertResultList converts a []any result from the SDK into a boru list of maps.
 func convertResultList(items []any, opName string) ([]Value, error) {
 	rows := make([]Value, 0, len(items))
 	for _, item := range items {
@@ -96,7 +96,7 @@ func convertResultList(items []any, opName string) ([]Value, error) {
 	return rows, nil
 }
 
-// convertResultItem converts a single any result from the SDK into a BORU value.
+// convertResultItem converts a single any result from the SDK into a boru value.
 func convertResultItem(item any, opName string) (Value, error) {
 	if ent, ok := item.(udk.Entity); ok {
 		item = ent.Data()

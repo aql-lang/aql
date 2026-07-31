@@ -1,4 +1,4 @@
-# BORU edge cases — functions, closures, lambdas, recursion, TCO
+# boru edge cases — functions, closures, lambdas, recursion, TCO
 #
 # Capture is IMPLICIT LEXICAL: enclosing-fn params and body-locals are
 # snapshotted; module-level names stay dynamic; forward refs resolve at

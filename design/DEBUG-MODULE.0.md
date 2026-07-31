@@ -15,15 +15,15 @@ via a current-engine stack for `Debug.stack`, §6.2; the `DebugOps` /
 step controller), and an executable spec (`lang/spec/module-debug.tsv`).
 
 The **§7 cross-process features** now have a **working host-level
-implementation** that does not wait for the BORU `Service` model: attaching
+implementation** that does not wait for the boru `Service` model: attaching
 to a running runtime and the serverless debug channel are realized on Go's
 `net/http` (`lang/go/debugserve`) with the `boru debug serve` / `boru debug
 attach` CLI — a debug server wraps a live `*native.Registry` behind
 authenticated HTTP introspection (`words`/`defs`/`heap`/`eval`) and an
 invocation-keyed event relay, with a Bearer token (static or a vault
 capability id) and a loopback-default bind. What remains is the *elegant
-unification* the design targets — routing these through a first-class BORU
-`Service`/`DebugTarget`, a BORU-level `Debug.attach` word over a `connect`
+unification* the design targets — routing these through a first-class boru
+`Service`/`DebugTarget`, a boru-level `Debug.attach` word over a `connect`
 transport, remote stepping, and a **live** (refreshing) TUI dashboard
 host. Those still want the `Service`/`Process` actor layer
 (`SERVICES.0.md`/`PROCESSES.0.md`, RFC-only) and a language-level socket
@@ -31,7 +31,7 @@ primitive; the host-level core proves the capability and the auth model in
 the meantime (§7.2/§7.3/§7.6).
 
 This captures the design of the native module `boru:debug` (namespace
-`Debug`) that collects BORU's debugging affordances behind one import:
+`Debug`) that collects boru's debugging affordances behind one import:
 simple printing, interactive stepping, and structural / memory /
 performance analysis of both a program and the running system.
 
@@ -107,7 +107,7 @@ granted nothing.
 ## 3. The five surfaces
 
 Below, each surface lists its proposed words with signatures in
-forward form. `~>` denotes "returns". Types in `Capitalised` are BORU
+forward form. `~>` denotes "returns". Types in `Capitalised` are boru
 lattice types; new module-owned types are defined in §5.
 
 ### (A) Printing & tracing — "what is flowing through here?"
@@ -153,7 +153,7 @@ supply a richer one.
 | `Debug.parse` | `String ~> List` | Parse source to the quoted token/value list without running it. Shares the path behind `Vm.parse`; re-exported as the natural home for "show me the AST". |
 | `Debug.disasm` | `List ~> List` | Compile a quoted body to its StackForm op list (the `Recorder` output) and return it as inspectable data — the "bytecode view". |
 | `Debug.sig` | `Atom/q ~> List` | The signatures of a word, as structured data (params, returns, barrier position) — the machine-readable form of what `describe` renders. |
-| `Debug.body` | `Atom/q ~> Any` | For a BORU-defined fn, the quoted body tokens; for a native, a descriptor noting it is host-implemented. |
+| `Debug.body` | `Atom/q ~> Any` | For a boru-defined fn, the quoted body tokens; for a native, a descriptor noting it is host-implemented. |
 | `Debug.deps` | `List ~> List` | The set of word names a quoted body references (via the body-walker `WalkBodyWords` already used for closure capture). Useful for "what does this touch?". |
 | `Debug.explain` | `Atom/q ~> String` | The full `describe` text for a word, returned as a String (so it can be embedded, not just printed). |
 
@@ -184,7 +184,7 @@ seam.
 
 | Word | Signature | Behaviour |
 |------|-----------|-----------|
-| `Debug.sizeof` | `Any ~> Integer` | Estimated retained byte size of a BORU value (deep walk of lists/maps/strings/payloads). Pure — walks the value graph in-process. |
+| `Debug.sizeof` | `Any ~> Integer` | Estimated retained byte size of a boru value (deep walk of lists/maps/strings/payloads). Pure — walks the value graph in-process. |
 | `Debug.shape` | `Any ~> Map` | Structural census of a value: counts by kind (ints, strings, lists, maps), max depth, total node count. Pure. |
 | `Debug.heap` | `None ~> Map` | Go-runtime heap stats (`runtime.MemStats`: alloc, total-alloc, heap-objects, num-GC) as a Map. **Host capability** — only meaningful with a real runtime; gated under `debug`. |
 | `Debug.gc` | `None ~> Map` | Force a GC and return before/after heap deltas. Capability-gated; useful for "is this leaking?". |
@@ -474,7 +474,7 @@ Surfaces (A)–(F) debug a program you are *running yourself*. This section
 adds the three surfaces for debugging a system that is **already running**
 — a live TUI dashboard of runtime state, attaching to a long-lived
 process, and interrogating ephemeral serverless invocations — and the
-authentication that makes them safe. All three reuse infrastructure BORU
+authentication that makes them safe. All three reuse infrastructure boru
 already has rather than inventing transports: the `api` service + its
 discovery file, the bubbletea `tui` client, the `Service`/`call` model
 (`SERVICES.0.md`), and the vault capability-token broker.
@@ -505,7 +505,7 @@ So the data model is wire-uniform and render-agnostic:
 | `WidgetMeta` | `refine Record [id:String title:String kind:String refresh-ms:Integer span:Integer]` | layout + cadence hints; `span` is grid columns. |
 | `DebugWidget` | a `Service` (or a constructor returning one) answering `{op:"meta"}` / `{op:"sample"}` | the contributable unit (§7.1). |
 
-The Go TUI host renders a `DebugCell` by `kind`; the BORU side only ever
+The Go TUI host renders a `DebugCell` by `kind`; the boru side only ever
 produces **data**, never terminal escapes — which is precisely why the
 same cell renders locally and streams back from a remote/serverless
 target.
@@ -513,7 +513,7 @@ target.
 ### 7.1 Live runtime dashboard (`Debug.dashboard`) — extensible via module widgets
 
 ```
-Debug.dashboard [widgets] {refresh-ms:500 …} -> None     # BORU entry: run a TUI
+Debug.dashboard [widgets] {refresh-ms:500 …} -> None     # boru entry: run a TUI
 boru debug top [--attach <target>]                        # CLI entry (Phase 3)
 ```
 
@@ -521,7 +521,7 @@ boru debug top [--attach <target>]                        # CLI entry (Phase 3)
 bubbletea host (the existing `cmd/go/internal/tui` model, generalised
 from "a table of services" to "a grid of widget cells"), and polls each
 widget's `{op:"sample"}` on its `refresh-ms`. The host owns layout,
-input, and rendering; BORU owns the widget set and the sampled data.
+input, and rendering; boru owns the widget set and the sampled data.
 
 **Extensibility — widgets are contributed by other modules.** A widget is
 just a `Service`-shaped value a module **exports**, so any module adds
@@ -683,8 +683,8 @@ target**. Authentication is therefore not a static `--token` but the
   in the error. Emergency revocation is the unified `call {op:"pause"}`
   control — a leaked debug token is killed centrally at the broker.
 - **Protocol versioning + transport hygiene, reused.** The debug wire
-  envelope carries `X-BORU-Debug-Protocol` (mirroring
-  `X-BORU-Vault-Protocol`); a stale agent fails loud. Local endpoints bind
+  envelope carries `X-Boru-Debug-Protocol` (mirroring
+  `X-Boru-Vault-Protocol`); a stale agent fails loud. Local endpoints bind
   loopback by default and require an explicit `--allow-public` to expose,
   exactly like the proxy. For the serverless relay, **both** legs
   authenticate: the function presents a *producer* capability (emit-only,
@@ -719,7 +719,7 @@ and the served-process layer (both RFC-only today —
 `SERVICES.0.md`/`PROCESSES.0.md`); a debug-introspection service on
 `boru serve`; the bubbletea host generalised from the services table to a
 widget grid; a `connect`/transport for remote `call` (the **TCP server
-BORU still lacks** — `SERVICES.0.md` §10); and a relay service for the
+boru still lacks** — `SERVICES.0.md` §10); and a relay service for the
 serverless channel. What it does **not** need to invent: the auth model
 (vault capabilities exist), the discovery/transport bones (the `api`
 service + discovery file exist), the renderer (the `tui` model exists),
@@ -824,7 +824,7 @@ sequenced after them, not after Phase 4 alone:
   `WidgetMeta` typing and the service-shaped widget form arrive with the
   `Service` layer.
 - **Phase 6 — attach.** **Host-level core shipped** (`lang/go/debugserve` +
-  `boru debug` CLI): rather than wait for the BORU `Service` model and a
+  `boru debug` CLI): rather than wait for the boru `Service` model and a
   language-level socket, the attach surface is realized directly on Go's
   `net/http` — the substrate that already underpins the `api` service.
   `debugserve.Server` wraps a `*native.Registry` behind authenticated HTTP
@@ -834,9 +834,9 @@ sequenced after them, not after Phase 4 alone:
   `$TMPDIR/boru-debug.json` discovery file, mirroring `api`). Auth is an
   optional Bearer token — a static token *or* a vault capability id,
   validated as the vault proxy does (§7.4); loopback-by-default with an
-  explicit `--allow-public`. `lang.BORU.NativeRegistry()` is the one new
+  explicit `--allow-public`. `lang.Boru.NativeRegistry()` is the one new
   accessor it needed. **Remaining (the Service-model unification):**
-  routing through a first-class `Service`/`DebugTarget`, a BORU-level
+  routing through a first-class `Service`/`DebugTarget`, a boru-level
   `Debug.attach` word over a `connect` transport, and remote
   widgets/stepping — these still want `SERVICES.0.md`/`PROCESSES.0.md`.
 - **Phase 7 — serverless channel.** **Host-level core shipped:** the
@@ -844,9 +844,9 @@ sequenced after them, not after Phase 4 alone:
   events keyed by invocation id (`POST /debug/emit?id=`), an interrogator
   reads them back (`GET /debug/events?id=`, `boru debug attach events
   <id>`), per-invocation isolated and ring-bounded. **Remaining:** the
-  drop-policy BORU-side emit wiring into `Debug.tap`/`label`, the
+  drop-policy boru-side emit wiring into `Debug.tap`/`label`, the
   poll-for-commands live-control leg, and the producer/consumer capability
-  split — these layer on once the BORU-level transport/`Service` form lands.
+  split — these layer on once the boru-level transport/`Service` form lands.
 
 The auth model (vault capabilities) is reused, not built — wired in at
 Phases 6–7 as the Bearer token the `debugserve` server validates.

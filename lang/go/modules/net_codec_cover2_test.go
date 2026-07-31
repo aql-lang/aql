@@ -17,7 +17,7 @@ import (
 // using a scripted in-memory net.Conn — every read, write and deadline
 // outcome is fixed up front, so the error arms fire without real sockets
 // or timing races. dispatchDecoded / matchRouteTemplate are driven against
-// real Services built by BORU steps.
+// real Services built by boru steps.
 
 // scriptAddr is a net.Addr whose String carries no host:port split —
 // exercising peerMapOf's SplitHostPort fallback.

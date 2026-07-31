@@ -1,8 +1,8 @@
-# Local Reasoning for Global Properties in BORU: Applicability Report
+# Local Reasoning for Global Properties in boru: Applicability Report
 
 ## Scope
 
-Evaluate BORU against the thesis of Laurence Tratt's *Local Reasoning for
+Evaluate boru against the thesis of Laurence Tratt's *Local Reasoning for
 Global Properties* (2026-06-30,
 [tratt.net](https://tratt.net/laurie/blog/2026/local_reasoning_for_global_properties.html)):
 that the most valuable thing a programming language can do — especially
@@ -13,7 +13,7 @@ freedom readable off an ordinary function signature.
 
 Two questions:
 
-1. To what extent does BORU's existing design already deliver "local
+1. To what extent does boru's existing design already deliver "local
    representation of global properties"?
 2. What should be added or modified to genuinely achieve it?
 
@@ -77,11 +77,11 @@ data-race freedom by different means.
 | **Declared error channel** | — | **absent** | — |
 | **Guaranteed finalizers** | — | **absent** (RFC exists) | — |
 
-## What BORU already delivers
+## What boru already delivers
 
 ### 1. Signature-carried value contracts — the genuine Rust analogue
 
-This is BORU's strongest instance of the article's pattern, and it is
+This is boru's strongest instance of the article's pattern, and it is
 better than a casual reading suggests.
 
 **Newtypes are exact.** `def UserId (refine Integer)` makes a raw `42`
@@ -140,7 +140,7 @@ languages this symmetry is rare and load-bearing.
 ### 2. Statically checked generic bounds — the closest syntactic analogue
 
 `def first gen [T] fn [[xs:[:T]] [T] …]` with `extends` bounds is the
-nearest thing BORU has to Rust's `T: Send` *shape*: a constraint on a
+nearest thing boru has to Rust's `T: Send` *shape*: a constraint on a
 type parameter, written in the signature, enforced loudly. Bound
 violations (`constraint_violation`, `unbound_param`, `arity_mismatch`)
 are Error-severity **in check mode** (`eng/go/registry.go`), landed per
@@ -152,7 +152,7 @@ writing yet (see proposals 1–2).
 
 ### 3. Boundary-object locality: `Vm.run-with`, policies, vault tokens
 
-BORU's strongest genuinely *local* effect reasoning today is not in
+boru's strongest genuinely *local* effect reasoning today is not in
 signatures but at engine boundaries. One call site —
 `code Vm.run-with {policy: p}` — is locally sufficient evidence that an
 arbitrary untrusted subprogram runs under **at most** parent∩child
@@ -195,7 +195,7 @@ seam the proposals below should extend.
 ### The inverse decomposition
 
 The effect story deserves its own frame. Rust distributes effect
-knowledge into every signature; BORU concentrates it into **one ambient
+knowledge into every signature; boru concentrates it into **one ambient
 policy artifact**. Both give a global bound; the decompositions are
 inverses. With a policy, you reason locally *about the policy* and
 conclude a bound over all code, known and unknown — which is exactly
@@ -207,12 +207,12 @@ gating is explicitly skipped in check mode). A program can check clean
 and die with `permission_denied` under its deployment profile. The two
 systems — checker and sandbox — are disjoint by design today.
 
-## Where BORU is the anti-article (verified)
+## Where boru is the anti-article (verified)
 
 ### 1. Concurrency: the showcase property is the biggest hole
 
 The article's motivating property — data-race freedom — is precisely
-where BORU currently has **no mechanism at any enforcement level**, and
+where boru currently has **no mechanism at any enforcement level**, and
 the docs overclaim. Probe results against the built binary:
 
 - Name *bindings* are genuinely isolated (`ForkConcurrent` gives each
@@ -236,7 +236,7 @@ the docs overclaim. Probe results against the built binary:
   running and mutating shared state *after* the parent has resumed
   (probe: counter kept climbing for hundreds of ms post-await).
 
-So today BORU sits *below* the pre-Rust baseline the article describes:
+So today boru sits *below* the pre-Rust baseline the article describes:
 the docs assert an isolation that the sanctioned mutable types silently
 violate, and the static layer certifies the crashing program clean.
 This is the single most important gap. (See proposal 2; note also that
@@ -244,7 +244,7 @@ the fix is *not* Rust ownership — see "What not to do".)
 
 ### 2. Defensive-check economics are inverted
 
-The article's core symptom is unnecessary defensive checks. BORU
+The article's core symptom is unnecessary defensive checks. boru
 currently pushes a code generator toward ceremony and silence in
 exactly the wrong places, in both directions at once:
 
@@ -270,7 +270,7 @@ exactly the wrong places, in both directions at once:
 
 ### 3. Local text under-determines local meaning
 
-Some of BORU's foundations cut against the article's premise that local
+Some of boru's foundations cut against the article's premise that local
 code *can* carry the reasoning:
 
 - **Forward collection**: the meaning of `1 2 add 3 mul` depends on
@@ -293,7 +293,7 @@ code *can* carry the reasoning:
   behaviour without per-word lore.
 
 These bound how far *any* static local-reasoning guarantee can go:
-BORU's versions must be **gradual with a runtime backstop**, never
+boru's versions must be **gradual with a runtime backstop**, never
 Rust-sound. That is an acceptable position — it is Tratt's point that
 the property need only be *readable locally and enforced somewhere* —
 but it must be stated honestly.
@@ -347,7 +347,7 @@ settled.)
 
 ### 2. A `Sendable` boundary at every fork, with loser cancellation
 
-The Pony comparison matters here: BORU's existing taxonomy — immutable
+The Pony comparison matters here: boru's existing taxonomy — immutable
 scalars/nodes vs mutable Ideals — is structurally much closer to Pony's
 `val`/`ref` reference capabilities than to Rust ownership. The
 design-consistent fix is a **value-class rule at the fork boundary**,
@@ -369,7 +369,7 @@ not an ownership system:
   the pointer channel, context Store), since dynamic resolution makes
   the analysis incomplete in principle. Runtime remains authoritative.
 
-This is the article's own showcase property, purchasable in BORU's
+This is the article's own showcase property, purchasable in boru's
 idiom: after it, "no branch observes another's mutation, and `await`
 means what the docs say" is a global property a reader gets from the
 `await` call site alone. Until it lands, `EXPLANATION.md`'s isolation
@@ -405,7 +405,7 @@ no SMT needed).
 predicate type, evaluate the predicate at check time (the machinery
 exists — parameters already do it); for abstract carriers, keep the
 runtime RET check and, under `--strict`, surface an `unverified_return`
-info. Symmetry is BORU's stated principle; today the static layer is
+info. Symmetry is boru's stated principle; today the static layer is
 asymmetric exactly at the smart-constructor boundary that the whole
 "validate once, trust the tag" story leans on.
 
@@ -420,7 +420,7 @@ predicates are too costly per-crossing, pair the nominal newtype with a
 the named constructor raises. Note the fence must be specified as a
 *dynamic-extent* check (is the constructor's frame live?) — dynamic
 resolution means "lexically inside the constructor" is not a parse-time
-fact in BORU; only the top-level-literal case (`def ne:NEL []`, the
+fact in boru; only the top-level-literal case (`def ne:NEL []`, the
 probe's empty-"NonEmpty" hole) is def-time detectable.
 
 ### 6. Declared raise rows — an advisory error channel
@@ -432,7 +432,7 @@ seeded on native words, union-propagated by the checker like effects
 (they are the same fixpoint), surfaced in `describe`, with two
 advisories: unhandled-code (info) and **impossible handler arm** — the
 error-channel version of the redundant defensive check. Keep it
-advisory: an open error world is settled BORU design; the point is
+advisory: an open error world is settled boru design; the point is
 locality, not checked exceptions.
 
 ### 7. `ensure` / `bracket` resource safety
@@ -463,7 +463,7 @@ Enforce the policy `limits` block in the run path (step budget, wall
 clock, output bytes — the engine already has the step/tape machinery);
 make `where`-clause quantitative caps **fail closed**; keep
 `policy explain` truthful against actual enforcement. Quantitative
-bounds are on the article's candidate list, and BORU has already done
+bounds are on the article's candidate list, and boru has already done
 the hard part (budgets exist; the taxonomy is honest). A displayed
 limit that doesn't bind is anti-local-reasoning.
 
@@ -498,7 +498,7 @@ and honest about the two audiences.
 
 ## What NOT to do
 
-- **No ownership/borrow system.** BORU's value taxonomy + fork
+- **No ownership/borrow system.** boru's value taxonomy + fork
   boundaries fit Pony-style value classes (proposal 2), not Rust moves;
   retrofitting ownership would fight the Store, dynamic resolution, and
   the tape.
@@ -509,14 +509,14 @@ and honest about the two audiences.
   a checker pass, or a CLI flag — consistent with "new behaviour is a
   word or a literal, nothing else."
 - **No soundness theater.** Dynamic resolution, `do` over data, and
-  catch-all overloads mean BORU's guarantees are gradual with runtime
+  catch-all overloads mean boru's guarantees are gradual with runtime
   backstops. Say so in `describe`/`check` output (as `--strict` already
   does with `dynamic_dispatch` infos) rather than implying Rust-class
   proofs.
 
 ## Verdict
 
-**BORU already practises the article's discipline at the value layer,
+**boru already practises the article's discipline at the value layer,
 inverts it at the effect layer, and is missing it entirely at the
 concurrency layer.** Signature-carried contracts — newtypes, predicate
 subset types, one membership question everywhere, declared returns,
@@ -529,7 +529,7 @@ leverage additions — **effect rows with a static envelope**, a
 **Sendable fork boundary with cancellation**, and **refinement-aware
 narrowing with redundant-guard advisories** — are each an extension of
 existing machinery, not a new paradigm, and together they would give
-BORU local answers to "what can this call touch?", "can these branches
+boru local answers to "what can this call touch?", "can these branches
 interfere?", and "is this check dead?" — the three questions the
 article says the next language generation must answer locally. The
 concurrency hole is urgent independently of any of this: today the

@@ -1,4 +1,4 @@
-# BORU Language Specification: BigInteger & BigDecimal (0d literals)
+# boru Language Specification: BigInteger & BigDecimal (0d literals)
 # Format: input<TAB>expected<TAB>description
 #
 # Two arbitrary-precision exact numeric leaves under Scalar/Number, opted

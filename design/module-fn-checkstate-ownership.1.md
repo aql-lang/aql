@@ -144,7 +144,7 @@ pointer auto-derefs for field access and the `CheckState` methods already
 have pointer receivers (`check.go`).
 
 The threading happens at the **one** boundary that crosses registries:
-`engine.go::execFnDefSig` → `capturedReg.CallBORU(sig, args, captures)`
+`engine.go::execFnDefSig` → `capturedReg.CallBoru(sig, args, captures)`
 (`engine.go:4388`) and its stack-match siblings (`engine.go:4067/4115/4150`).
 
 When the **calling** engine is in check mode (`e.registry.IsCheckMode()`)
@@ -157,10 +157,10 @@ if e.registry.IsCheckMode() && capturedReg != nil && capturedReg != e.registry {
     capturedReg.Check = e.registry.Check   // share mode+emit+memos+counters
     defer func() { capturedReg.Check = saved }()
 }
-result, err := capturedReg.CallBORU(sig, args, captures)
+result, err := capturedReg.CallBoru(sig, args, captures)
 ```
 
-Now the body sub-engine (`CallBORU`'s `NewTop(capturedReg)`) sees
+Now the body sub-engine (`CallBoru`'s `NewTop(capturedReg)`) sees
 `capturedReg.IsCheckMode() == true`, so:
 
 - side effects gate on `SkipsSideEffect()` (§5c makes `test-record` honour
@@ -318,12 +318,12 @@ is the §4 breakage resurfacing.
 `.0` is emphatic that the in-repo corpus missed the breakage because it
 "does not exercise the heavy *generic* module-fn patterns
 (`decide gen [...]`, `apply-op gen [...]`) the decision module leans on."
-The fixture must reproduce that surface. Concretely, a small BORU module
+The fixture must reproduce that surface. Concretely, a small boru module
 (under `lang/go/test/fixtures/` or a new `lang/spec/*.tsv`) that:
 
 - defines a **native sub-registry module** (the `BuildXxxModule` pattern)
-  whose preamble defines BORU fns with **named params + real bodies** (so
-  they take the `CallBORU` path, not the trivial-delegation short-circuit);
+  whose preamble defines boru fns with **named params + real bodies** (so
+  they take the `CallBoru` path, not the trivial-delegation short-circuit);
 - exercises **generic dispatch** through those fns — `decide gen [...]`,
   `apply-op gen [...]` shaped calls — so the `FnSummaries`/`FnInflight`
   memo paths run across the parent/module boundary;

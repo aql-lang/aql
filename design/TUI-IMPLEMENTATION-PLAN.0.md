@@ -23,7 +23,7 @@ shipped code; this plan invents no new architecture.
   loop is `serve-raw`'s connection-actor choreography
   (`lang/go/modules/net_socket.go`) retargeted at a terminal.
 - **The callback seam is DONE.** `eng.InvokeCallback`
-  (`eng/go/invoke.go`) is the single VM-first/CallBORU-fallback seam every
+  (`eng/go/invoke.go`) is the single VM-first/CallBoru-fallback seam every
   native callback word dispatches through; `update`/`view` ride it
   unchanged.
 - **The host-registration pattern is DONE.** The (since-removed)

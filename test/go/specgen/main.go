@@ -1,4 +1,4 @@
-// Command specgen deterministically enumerates every BORU token
+// Command specgen deterministically enumerates every boru token
 // sequence up to a fixed length over a small, documented alphabet of
 // syntax atoms, evaluates each through the production language layer,
 // and emits a `.tsv` spec row (`input<TAB>expected[<TAB>note]`) capturing
@@ -87,14 +87,14 @@ import (
 var (
 	osExit      = os.Exit
 	numCPU      = runtime.NumCPU
-	langNew     = func() (*lang.BORU, error) { return lang.New() }
-	runCompiled = (*lang.BORU).RunCompiled
+	langNew     = func() (*lang.Boru, error) { return lang.New() }
+	runCompiled = (*lang.Boru).RunCompiled
 	// newNativeRegistry / compileCheck: the registry constructor cannot
 	// fail on a healthy build, and CompileCheck can never return a
 	// Program alongside a check error (the checker runs first) — the
 	// seams make those arms drivable.
 	newNativeRegistry = native.DefaultRegistry
-	compileCheck      = (*lang.BORU).CompileCheck
+	compileCheck      = (*lang.Boru).CompileCheck
 	// varySweep: the healthy build has no reachable divergence (the do-unit
 	// registry-replay class is fixed), so the vary mode's diverged-report arm
 	// is drivable only by swapping the sweep.
@@ -313,7 +313,7 @@ func main() {
 // provenance and the alphabet, so a reader of the .tsv knows it is
 // generated and how to regenerate it.
 func writeHeader(w *bufio.Writer, max int) {
-	fmt.Fprintf(w, "# BORU Language Specification: Syntax Combination Matrix (GENERATED)\n")
+	fmt.Fprintf(w, "# boru Language Specification: Syntax Combination Matrix (GENERATED)\n")
 	fmt.Fprintf(w, "# Format: input<TAB>expected<TAB>note\n")
 	fmt.Fprintf(w, "#\n")
 	fmt.Fprintf(w, "# DO NOT EDIT BY HAND. Regenerate with:\n")
@@ -589,7 +589,7 @@ func renderAny(vs []any) string {
 // writePassingHeader emits the leading comment block of the passing
 // subset file. maxLen is the length window (0 = the whole matrix).
 func writePassingHeader(w *bufio.Writer, scanned, kept, maxLen int) {
-	fmt.Fprintf(w, "# BORU Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)\n")
+	fmt.Fprintf(w, "# boru Language Specification: Syntax Combination Matrix — PASSING SUBSET (GENERATED)\n")
 	fmt.Fprintf(w, "%s\n", frontCodeMarker)
 	fmt.Fprintf(w, "# Format: FRONT-CODED. Each data row is reuse<TAB>suffix<TAB>expected,\n")
 	fmt.Fprintf(w, "# where reuse = the count of leading bytes the input shares with the\n")
@@ -633,7 +633,7 @@ const (
 // and returns a nil Program on any error-severity diagnostic — so a
 // check-stage failure can never also be `compiled`. The caller asserts
 // that (the "checker runs first" confirmation) on the returned bool.
-func classifyFrontier(a *lang.BORU, src string) (frontierClass, string, bool) {
+func classifyFrontier(a *lang.Boru, src string) (frontierClass, string, bool) {
 	prog, reason, res, err := compileCheck(a, src)
 	compiled := prog != nil
 	if err != nil {
@@ -839,7 +839,7 @@ func writeFrontierFile(path, kind, tag string, cands []string, classes []frontie
 // writeFrontierHeader emits the leading comment block of a frontier file.
 // maxLen is the length window the prefixes were drawn from.
 func writeFrontierHeader(w *bufio.Writer, kind, tag string, n, maxLen int) {
-	fmt.Fprintf(w, "# BORU Language Specification: Minimal Failing Prefixes — %s FAILURES (GENERATED)\n", strings.ToUpper(kind))
+	fmt.Fprintf(w, "# boru Language Specification: Minimal Failing Prefixes — %s FAILURES (GENERATED)\n", strings.ToUpper(kind))
 	fmt.Fprintf(w, "%s\n", frontCodeMarker)
 	fmt.Fprintf(w, "%s\n", detailLegendMarker)
 	fmt.Fprintf(w, "# Format: FRONT-CODED with a DETAIL LEGEND. Each data row is\n")
@@ -865,7 +865,7 @@ func writeFrontierHeader(w *bufio.Writer, kind, tag string, n, maxLen int) {
 	case "type-check":
 		fmt.Fprintf(w, "# These prefixes FAIL THE TYPE CHECKER: `boru check` reports at least one\n")
 		fmt.Fprintf(w, "# error-severity diagnostic. Because the compiler runs the checker first\n")
-		fmt.Fprintf(w, "# (lang.(*BORU).CompileCheck), every prefix here is also refused by the\n")
+		fmt.Fprintf(w, "# (lang.(*Boru).CompileCheck), every prefix here is also refused by the\n")
 		fmt.Fprintf(w, "# compiler — none is ever lowered to bytecode.\n")
 	case "runtime":
 		fmt.Fprintf(w, "# These prefixes PASS THE TYPE CHECKER and COMPILE to bytecode, yet they\n")
@@ -1232,7 +1232,7 @@ func runVarySweep(seedDir, outDir string, nSeeds int) {
 
 // writeLen5Header emits the leading comment block of a length-5 file.
 func writeLen5Header(w *bufio.Writer, kind string, n int) {
-	fmt.Fprintf(w, "# BORU Language Specification: Length-5 Layer — %s (GENERATED)\n", strings.ToUpper(kind))
+	fmt.Fprintf(w, "# boru Language Specification: Length-5 Layer — %s (GENERATED)\n", strings.ToUpper(kind))
 	fmt.Fprintf(w, "%s\n", frontCodeMarker)
 	if kind != "passing" {
 		fmt.Fprintf(w, "%s\n", detailLegendMarker)

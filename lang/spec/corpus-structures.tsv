@@ -1,4 +1,4 @@
-# BORU corpus: code structures, verified interpret+check+compile
+# boru corpus: code structures, verified interpret+check+compile
 # Format: input<TAB>expected<TAB>kind
 "x" is Integer	false	structure
 'a' add 'b'	'ab'	structure

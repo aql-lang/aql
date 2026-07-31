@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:parselang module + the core `parse` word
+# boru Language Specification: the boru:parselang module + the core `parse` word
 # Format: input<TAB>expected<TAB>description
 #
 # `parse <kind> <opts?> <source>` is the sibling of `mini`: it expands at the
@@ -14,7 +14,7 @@
 # source). A {file:…} source is deferred in v1.
 #
 # ─────────────────────────────────────────────────────────────────────
-# §1  parse — a def-bound BORU parser fn returning a tokenization
+# §1  parse — a def-bound boru parser fn returning a tokenization
 import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc 'x + y') get 1	'+'	the parsed operator token
 import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc 'x + y') get 0	'x'	the left operand token
 import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc '3 * 4') get 2	'4'	operands are arbitrary tokens, not fixed identifiers

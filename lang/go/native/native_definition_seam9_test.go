@@ -5,7 +5,7 @@ import (
 )
 
 // w9CompileMode puts r into the bytecode-emission recorder mode
-// (mirroring lang.(*BORU).CompileCheck) and returns the check-state
+// (mirroring lang.(*Boru).CompileCheck) and returns the check-state
 // cleanup, so recorder-decline arms can be driven by direct handler calls.
 func w9CompileMode(t *testing.T, r *Registry) func() {
 	t.Helper()
@@ -17,7 +17,7 @@ func w9CompileMode(t *testing.T, r *Registry) func() {
 
 // W9_nativeB — coverage for native_definition.go def / undef / var / fn /
 // typed-def arms. Direct handler calls drive the pure arg guards; crafted
-// BORU programs (run + check) drive the paths that need real dispatch.
+// boru programs (run + check) drive the paths that need real dispatch.
 // See design/TEST-SEAMS.10.md.
 
 // --- defHandler guards ---

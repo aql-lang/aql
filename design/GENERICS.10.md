@@ -50,7 +50,7 @@ reads `of`.
 
 ## 1. Motivation
 
-The BORU type system already has records, typed lists/maps, fn-shape
+The boru type system already has records, typed lists/maps, fn-shape
 types, predicate types, dependent scalars, and a `tand`/`tor`/`Never`/
 `Any` algebra (soon closed under negation via `tnot`). What is missing
 is **parametric polymorphism** — the ability to write a single type or
@@ -77,7 +77,7 @@ Concrete pain points users hit today:
 
 A type-parameter list is — structurally — an ordered list with one
 entry per parameter, where each entry carries a name plus optional
-constraint and default. BORU already has lists; BORU already has words
+constraint and default. boru already has lists; boru already has words
 that take quoted lists and do interesting things with them (`def`,
 `fn`, `refine`, `for`, …). Generics fit the same mould.
 
@@ -321,7 +321,7 @@ def map gen [T U] fn [[fn:Mapper of [T U]  [:T]] [:U] [/* body */]]
 The sugar layer commits to the rule **`<` is only ever the start of a
 generic argument list**. Any `<` not followed by a valid type-param
 or type-arg list is a `[boru/syntax_error]`. This is a hard, long-term
-commitment: BORU will not later add `<` as a comparison operator
+commitment: boru will not later add `<` as a comparison operator
 (comparisons stay on `lt`/`gt`/`lte`/`gte`).
 
 Whitespace is irrelevant: `Box<T>`, `Box< T >`, and `Box <T>` all
@@ -419,7 +419,7 @@ is in scope while the constraint is evaluated.
 ## 8. Case study: the `boru:decision` module
 
 `modules/decision.go` is a DMN-style decision module
-(decision tables and decision trees) implemented in pure BORU. It is
+(decision tables and decision trees) implemented in pure boru. It is
 a good case study because it has three independent shapes of
 `Any`-punt that generics resolve in distinct ways.
 
@@ -532,7 +532,7 @@ benefits from the disjunct refactor more than from generics per se.
 - **`Cond.value:Any`** is genuinely heterogeneous per condition: each
   `Cond` compares a different input field, so the value type varies
   row-by-row. This is a path-dependent / dependent-record problem,
-  not a parametric one. Best left as `Any` until BORU grows a
+  not a parametric one. Best left as `Any` until boru grows a
   dependent-record story.
 - **The `collect` hit policy returns `[:R]`, not `R`.** Different
   hit policies have different return-type variants, which
@@ -781,7 +781,7 @@ earlier, higher-priority one. Two points of contact:
 
 ## 10. Static compilation
 
-The proposed BORU bytecode compiler (`design/boru-bytecode-report.0.md`)
+The proposed boru bytecode compiler (`design/boru-bytecode-report.0.md`)
 is "the carrier checker with a recording side effect" — every dispatch
 decision the checker makes statically becomes a `CALL_NATIVE sig_id`
 in the bytecode, and dynamic corners fall back to the interpreter over

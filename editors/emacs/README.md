@@ -1,6 +1,6 @@
-# BORU for Emacs
+# boru for Emacs
 
-`boru-mode.el` is a self-contained major mode for editing BORU source
+`boru-mode.el` is a self-contained major mode for editing boru source
 (`.boru`). It provides syntax highlighting, bracket-aware indentation,
 comment/`imenu` support, and one-line integration with the bundled
 `boru lsp` language server for **both** `lsp-mode` and `eglot`

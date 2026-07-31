@@ -1,4 +1,4 @@
-# VS Code BORU extension
+# VS Code boru extension
 
 Minimal Language Server client that runs `boru lsp` on stdio for any
 `*.boru` file.
@@ -14,7 +14,7 @@ code --install-extension boru-0.1.0.vsix
 
 ## Configure
 
-Settings → `BORU: Server Path` to point at a non-default `boru` binary,
+Settings → `boru: Server Path` to point at a non-default `boru` binary,
 or set in `settings.json`:
 
 ```json

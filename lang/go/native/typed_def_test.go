@@ -25,13 +25,13 @@ func TestTypedDefIntegerSuccess(t *testing.T) {
 	// a single-key map at the top level.
 	m := NewOrderedMap()
 	m.Set("x", NewTypeLiteral(TInteger))
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("def"),
 		NewMap(m),
 		NewInteger(1),
 	})
 	// x should resolve to 1.
-	result := runBORU(t, r, []Value{NewWord("x")})
+	result := runBoru(t, r, []Value{NewWord("x")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result for x, got %v", result)
 	}
@@ -77,13 +77,13 @@ func TestTypedDefAnonymousDepIntegerSuccess(t *testing.T) {
 	dep := NewDepScalar(DepGT, NewInteger(10))
 	m := NewOrderedMap()
 	m.Set("n", dep)
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("def"),
 		NewMap(m),
 		NewInteger(11),
 	})
 	// n should resolve to 11.
-	result := runBORU(t, r, []Value{NewWord("n")})
+	result := runBoru(t, r, []Value{NewWord("n")})
 	got, _ := AsInteger(result[0])
 	if got != 11 {
 		t.Errorf("n = %d, want 11", got)
@@ -126,13 +126,13 @@ func TestTypedDefNamedTypeSuccess(t *testing.T) {
 	g10 := NewDepScalar(DepGT, NewInteger(10))
 	m := NewOrderedMap()
 	m.Set("n", g10)
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("def"),
 		NewMap(m),
 		NewInteger(11),
 	})
 
-	result := runBORU(t, r, []Value{NewWord("n")})
+	result := runBoru(t, r, []Value{NewWord("n")})
 	got, _ := AsInteger(result[0])
 	if got != 11 {
 		t.Errorf("n = %d, want 11", got)

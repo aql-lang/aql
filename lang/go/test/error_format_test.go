@@ -9,7 +9,7 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// runWithSource parses and runs BORU source, returning the error.
+// runWithSource parses and runs boru source, returning the error.
 // Sets source on the engine for error reporting.
 func runWithSource(t *testing.T, src string) error {
 	t.Helper()
@@ -43,7 +43,7 @@ func assertErrorContains(t *testing.T, err error, substrings ...string) {
 	}
 }
 
-// assertBoruError checks that the error is an *BoruError with the given code.
+// assertBoruError checks that the error is a *BoruError with the given code.
 func assertBoruError(t *testing.T, err error, code string) *native.BoruError {
 	t.Helper()
 	if err == nil {

@@ -76,8 +76,8 @@ func TestRunUnitBindsCapture(t *testing.T) {
 // a spawned process), so there is no outer RunCompiled to catch a VM bailout and
 // re-run on the interpreter. InvokeCallback therefore applies that discipline
 // itself — when the stamped unit raises an internal_error (here a CALL_DYNAMIC
-// underflow, the vmErrAt soundness-bailout class), it falls back to CallBORU over
-// the sig's BORU body instead of leaking the raw internal_error to the peer. The
+// underflow, the vmErrAt soundness-bailout class), it falls back to CallBoru over
+// the sig's boru body instead of leaking the raw internal_error to the peer. The
 // body `[42]` returns 42, proving the fallback ran rather than the failing unit.
 func TestInvokeCallbackInternalErrorFallsBack(t *testing.T) {
 	// A unit that raises internal_error when run: CALL_DYNAMIC over an empty
@@ -92,14 +92,14 @@ func TestInvokeCallbackInternalErrorFallsBack(t *testing.T) {
 	if _, err := RunUnit(ref, runUnitReg(t), nil); !isInternalErr(err) {
 		t.Fatalf("RunUnit err = %v, want an internal_error to drive the fallback", err)
 	}
-	// The sig carries the stamped ref AND a BORU body CallBORU can run to 42.
-	sig := &Signature{Impl: &BORUImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
+	// The sig carries the stamped ref AND a boru body CallBoru can run to 42.
+	sig := &Signature{Impl: &BoruImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
 	out, err := InvokeCallback(runUnitReg(t), sig, nil, nil)
 	if err != nil {
-		t.Fatalf("InvokeCallback should have fallen back to CallBORU, got err: %v", err)
+		t.Fatalf("InvokeCallback should have fallen back to CallBoru, got err: %v", err)
 	}
 	if len(out) != 1 {
-		t.Fatalf("got %d results, want 1 (the CallBORU body residual)", len(out))
+		t.Fatalf("got %d results, want 1 (the CallBoru body residual)", len(out))
 	}
 	if n, _ := out[0].AsConcreteInteger(); n != 42 {
 		t.Fatalf("result = %v, want 42 from the interpreter fallback", out[0])
@@ -110,7 +110,7 @@ func TestInvokeCallbackInternalErrorFallsBack(t *testing.T) {
 // invokeCompiledUnit: a stamped ref whose registry is mid-run (canHostVM false)
 // with no nestedRunner installed cannot run on the VM, so invokeCompiledUnit
 // reports ran=false and InvokeCallback owns the call on the interpreter. The
-// CallBORU body `[7]` proves the interpreter ran.
+// CallBoru body `[7]` proves the interpreter ran.
 func TestInvokeCallbackBusyRegistryFallsBack(t *testing.T) {
 	r := runUnitReg(t)
 	r.vmRunning = 1 // canHostVM() false; nestedRunner stays nil
@@ -123,11 +123,11 @@ func TestInvokeCallbackBusyRegistryFallsBack(t *testing.T) {
 	if _, _, ran := invokeCompiledUnit(r, ref, nil); ran {
 		t.Fatal("a busy registry with no nestedRunner must report ran=false")
 	}
-	// Via InvokeCallback: it falls through to CallBORU over the body.
-	sig := &Signature{Impl: &BORUImpl{Body: []Value{NewInteger(7)}, Compiled: ref}}
+	// Via InvokeCallback: it falls through to CallBoru over the body.
+	sig := &Signature{Impl: &BoruImpl{Body: []Value{NewInteger(7)}, Compiled: ref}}
 	out, err := InvokeCallback(r, sig, nil, nil)
 	if err != nil {
-		t.Fatalf("InvokeCallback should have fallen back to CallBORU, got err: %v", err)
+		t.Fatalf("InvokeCallback should have fallen back to CallBoru, got err: %v", err)
 	}
 	if n, _ := out[0].AsConcreteInteger(); n != 7 {
 		t.Fatalf("result = %v, want 7 from the interpreter fallback", out[0])
@@ -135,7 +135,7 @@ func TestInvokeCallbackBusyRegistryFallsBack(t *testing.T) {
 }
 
 // isInternalErr classifies exactly the internal_error BoruError (and nothing
-// else): a foreign error and a genuine BORU runtime error both report false, so
+// else): a foreign error and a genuine boru runtime error both report false, so
 // InvokeCallback returns them straight through rather than masking with a
 // fallback.
 func TestIsInternalErr(t *testing.T) {
@@ -143,7 +143,7 @@ func TestIsInternalErr(t *testing.T) {
 		t.Error("internal_error BoruError must classify true")
 	}
 	if isInternalErr(makeBoruError("signature_error", "no match", "", "", "")) {
-		t.Error("a genuine BORU runtime error must classify false")
+		t.Error("a genuine boru runtime error must classify false")
 	}
 	if isInternalErr(errors.New("foreign")) {
 		t.Error("a non-BoruError must classify false")
@@ -221,41 +221,41 @@ func TestCompileStoredFnUnitGuards(t *testing.T) {
 	}
 }
 
-// stampCompiledRef writes onto the first own BORU body sig and reports true; a fn
-// value with no own BORU body sig (all Go / all fallback) reports false.
+// stampCompiledRef writes onto the first own boru body sig and reports true; a fn
+// value with no own boru body sig (all Go / all fallback) reports false.
 func TestStampCompiledRef(t *testing.T) {
 	ref := &CompiledFnRef{Prog: &Program{}, Unit: 0}
-	boruFd := FnDefInfo{Signatures: []Signature{{Impl: &BORUImpl{Body: []Value{NewInteger(1)}}}}}
+	boruFd := FnDefInfo{Signatures: []Signature{{Impl: &BoruImpl{Body: []Value{NewInteger(1)}}}}}
 	if !stampCompiledRef(boruFd, ref) {
-		t.Fatal("a BORU body sig must accept the stamp")
+		t.Fatal("a boru body sig must accept the stamp")
 	}
 	if boruFd.Signatures[0].CompiledRef() != ref {
 		t.Fatal("stamp did not land on the sig")
 	}
-	// A fallback-only sig is skipped; a Go sig has no *BORUImpl → no stamp.
+	// A fallback-only sig is skipped; a Go sig has no *BoruImpl → no stamp.
 	goFd := FnDefInfo{Signatures: []Signature{
-		{Fallback: true, Impl: &BORUImpl{}},
+		{Fallback: true, Impl: &BoruImpl{}},
 		{Impl: Go(func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) { return nil, nil })},
 	}}
 	if stampCompiledRef(goFd, ref) {
-		t.Fatal("a fn value with no own BORU body sig must not be stamped")
+		t.Fatal("a fn value with no own boru body sig must not be stamped")
 	}
 }
 
-// CompiledRef reads the durable unit reference off a BORU body sig, and returns
+// CompiledRef reads the durable unit reference off a boru body sig, and returns
 // nil for a Go sig (the callback-invocation seam's "no compiled unit" signal).
 func TestSignatureCompiledRef(t *testing.T) {
 	ref := &CompiledFnRef{Prog: &Program{}, Unit: 3}
-	boruSig := &Signature{Impl: &BORUImpl{Body: []Value{NewInteger(1)}, Compiled: ref}}
+	boruSig := &Signature{Impl: &BoruImpl{Body: []Value{NewInteger(1)}, Compiled: ref}}
 	if got := boruSig.CompiledRef(); got != ref {
-		t.Fatalf("BORU-body CompiledRef = %v, want the stamped ref", got)
+		t.Fatalf("boru-body CompiledRef = %v, want the stamped ref", got)
 	}
-	// An un-armed BORU body reports no unit.
-	bareSig := &Signature{Impl: &BORUImpl{Body: []Value{NewInteger(1)}}}
+	// An un-armed boru body reports no unit.
+	bareSig := &Signature{Impl: &BoruImpl{Body: []Value{NewInteger(1)}}}
 	if got := bareSig.CompiledRef(); got != nil {
 		t.Fatalf("un-armed CompiledRef = %v, want nil", got)
 	}
-	// A Go sig has no BORU body at all.
+	// A Go sig has no boru body at all.
 	goSig := &Signature{Impl: Go(func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
 		return nil, nil
 	})}

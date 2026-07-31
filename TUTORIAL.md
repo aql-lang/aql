@@ -1,6 +1,6 @@
-# BORU Tutorial
+# boru Tutorial
 
-This tutorial teaches BORU from the ground up. It is meant to be read
+This tutorial teaches boru from the ground up. It is meant to be read
 in order, with the REPL open at your side — type every example and
 poke at it. By the end you'll be comfortable with forward calls and
 the underlying stack model, the type system, defining typed
@@ -16,7 +16,7 @@ a word, see the **[Reference](REFERENCE.md)**.
 > transcript the same appears after the prompt: `boru> square 4  #
 > returns 16`. The comment is ordinary documentation (`#` begins a line
 > comment), not special syntax; in prose we just say "`square 4`
-> returns `16`". (BORU has no result arrow — `=>` is real syntax, the
+> returns `16`". (boru has no result arrow — `=>` is real syntax, the
 > anonymous-function word `afn` — which is why results are written as
 > comments here.) Note also that the REPL clears the stack after each
 > line, so a multi-step computation that relies on leftover stack
@@ -42,7 +42,7 @@ boru 0.1.0-dev
 boru>
 ```
 
-The prompt accepts BORU expressions. Press `Enter` to evaluate.
+The prompt accepts boru expressions. Press `Enter` to evaluate.
 `Ctrl-D` (or `exit`) leaves the REPL.
 
 You can also evaluate a one-liner from the shell:
@@ -108,7 +108,7 @@ separating setup from the expression that uses it.
 
 You've been writing the **forward** form — arguments after the word —
 which is the recommended style for new code. The same `add` also
-works **infix** and, because BORU is concatenative under the hood,
+works **infix** and, because boru is concatenative under the hood,
 **all-stack**:
 
 ```
@@ -134,7 +134,7 @@ Until then, forward form does everything you need.
 
 ### The argument-order rule
 
-When a word runs, BORU fills its parameter slots `args[0]`, `args[1]`,
+When a word runs, boru fills its parameter slots `args[0]`, `args[1]`,
 … in this order:
 
 1. **Take tokens after the word, in source order**, into `args[0]`,
@@ -441,7 +441,7 @@ boru> for 10 [dup gt 5 if [break]]
 
 ## 11. Higher-order list words
 
-These are the bread-and-butter of array programming in BORU. Note
+These are the bread-and-butter of array programming in boru. Note
 how the multi-list combinators use the all-forward call shape so
 each list argument lands in a predictable slot — see
 [§3: the argument-order rule](#the-argument-order-rule).
@@ -610,7 +610,7 @@ boru> quote foo                       # returns foo/q
 `quote` lets you *hold* code as data. A **macro** lets you *transform*
 it: a macro runs at expansion time on its arguments **as code** and
 splices the result into the call site. Where `fn` receives values, a
-macro receives unevaluated forms — so you can build new syntax in BORU
+macro receives unevaluated forms — so you can build new syntax in boru
 itself.
 
 You write a macro with `macro [[params] [body]]`. The body produces a
@@ -1058,7 +1058,7 @@ everything above.
 
 ## 22. Build and publish a module
 
-A reusable BORU module is a directory with a `boru.jsonic` manifest. The
+A reusable boru module is a directory with a `boru.jsonic` manifest. The
 build-and-publish path is a short pipeline:
 
 ```bash
@@ -1085,7 +1085,7 @@ another, and run your own with `boru registry -r ~/registry -p 8080`.
 
 - **[How-To Guides](HOWTO.md)** — practical recipes by task.
 - **[Reference](REFERENCE.md)** — every word, every type.
-- **[Explanation](EXPLANATION.md)** — the design choices behind BORU.
+- **[Explanation](EXPLANATION.md)** — the design choices behind boru.
 - **[CLI Reference](CLI.md)** — `boru do`, `boru check`, `boru fmt`,
   `boru serve`, and the rest of the binary.
 
@@ -1097,8 +1097,8 @@ Common next steps:
 * Run `boru fmt script.boru` to canonicalise indentation.
 * Build a small module, package it with `boru pack`, and publish it
   with `boru publish`.
-* Serve BORU over HTTP or to an editor: `boru registry`, `boru exec`,
+* Serve boru over HTTP or to an editor: `boru registry`, `boru exec`,
   `boru lsp`, or several at once under `boru serve` — see
-  [How-To → Run BORU as a service](HOWTO.md#run-boru-as-a-service).
+  [How-To → Run boru as a service](HOWTO.md#run-boru-as-a-service).
 
-Welcome to BORU.
+Welcome to boru.

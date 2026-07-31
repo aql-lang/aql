@@ -123,7 +123,7 @@ type LogRecord struct {
 }
 
 // toMap renders a LogRecord as a Record-shaped Map, the form Log.dump
-// returns so BORU code (and spec rows) can inspect captured records.
+// returns so boru code (and spec rows) can inspect captured records.
 // Field order matches design/LOG-MODULE.10.md §3.2.
 func (rec LogRecord) toMap() Value {
 	m := NewOrderedMap()
@@ -219,7 +219,7 @@ type LogSinkRegistry struct {
 // NewLogSinkRegistry returns a default sink registry (level INFO, text
 // format, console attached, memory/null available). Exposed so a host
 // can construct one, pre-attach an OTel/Datadog sink, and install it
-// with SetHostLogSinks before the BORU program runs `import "boru:log"`.
+// with SetHostLogSinks before the boru program runs `import "boru:log"`.
 func NewLogSinkRegistry() *LogSinkRegistry { return newLogSinkRegistry() }
 
 // newLogSinkRegistry builds the default registry: level INFO, text

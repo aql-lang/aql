@@ -15,10 +15,10 @@ import (
 	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
-// io_mount.go — the BORU→FileOps bridge: `IO.mount {read: fn, write: fn,
-// …}` installs a filesystem IMPLEMENTED IN BORU as the host FileOps, so
+// io_mount.go — the boru→FileOps bridge: `IO.mount {read: fn, write: fn,
+// …}` installs a filesystem IMPLEMENTED IN boru as the host FileOps, so
 // every io word (and any other consumer of the capability) routes its
-// operations through user-supplied BORU handlers. This is how BORU code
+// operations through user-supplied boru handlers. This is how boru code
 // exposes an arbitrary backing — a Store, a database table, a remote
 // service — as a filesystem. `IO.unmount` restores the previous FileOps.
 //
@@ -36,7 +36,7 @@ import (
 // atime:Integer mtime:Integer]), truncate ([p size:Integer]), resolve
 // ([p] → String). An operation with no handler returns a clean
 // mount-unsupported error — the documented-no-op posture for exotic ops.
-// Watch is not bridgeable (no event source in BORU) and always refuses.
+// Watch is not bridgeable (no event source in Boru) and always refuses.
 //
 // Precedence: the __sys.fs {mem}/{overlay} context toggles still win —
 // EffectiveFileOps consults them before the host slot — so tests can
@@ -46,8 +46,8 @@ import (
 // not implement.
 var errMountUnsupported = errors.New("operation not supported by the mounted filesystem")
 
-// boruFileOps adapts a map of BORU Function handlers to the FileOps
-// interface. Handlers run through CallBORU on the mounting registry, on
+// boruFileOps adapts a map of boru Function handlers to the FileOps
+// interface. Handlers run through CallBoru on the mounting registry, on
 // the calling goroutine — the same execution shape as any fn value
 // invoked by a native word.
 type boruFileOps struct {
@@ -70,7 +70,7 @@ func (a *boruFileOps) call(op string, args []Value) (Value, error) {
 			Err: fmt.Errorf("mounted %s handler has no signature matching %d argument(s)", op, len(args))}
 	}
 	fnDef, _ := fnVal.Data.(FnDefInfo)
-	res, err := a.r.CallBORU(sig, args, fnDef.Captured)
+	res, err := a.r.CallBoru(sig, args, fnDef.Captured)
 	if err != nil {
 		return Value{}, err
 	}
@@ -89,7 +89,7 @@ func pathOfArgs(args []Value) string {
 }
 
 // isNoneResult reports the handler's "absent" convention: any none value
-// (the BORU none literal is a concrete NonePayload; a handler returning no
+// (the boru none literal is a concrete NonePayload; a handler returning no
 // value at all yields the None type literal — both mean absent).
 func isNoneResult(v Value) bool { return v.Is(TNone) }
 
@@ -418,7 +418,7 @@ func (a *boruFileOps) Statfs(path string) (capabilities.FsInfo, error) {
 }
 
 func (a *boruFileOps) Watch(path string, _ capabilities.WatchOpts) (<-chan capabilities.WatchEvent, func() error, error) {
-	// BORU has no event source to bridge — a mounted filesystem is not
+	// boru has no event source to bridge — a mounted filesystem is not
 	// watchable. (A future mount contract could accept an emit callback.)
 	return nil, nil, &os.PathError{Op: "watch", Path: path, Err: errMountUnsupported}
 }
@@ -526,7 +526,7 @@ func doMountZipWord(args []Value, r *Registry, opts Value) ([]Value, error) {
 	if !zipIntent {
 		return nil, r.BoruErrorHint("mount_error",
 			fmt.Sprintf("mount: %q is not a .zip archive", target), "mount",
-			"pass a .zip path or {zip:true} to mount an archive, or a handler map to mount a BORU filesystem")
+			"pass a .zip path or {zip:true} to mount an archive, or a handler map to mount a boru filesystem")
 	}
 	data, err := EffectiveFileOps(r).ReadFile(target)
 	if err != nil {

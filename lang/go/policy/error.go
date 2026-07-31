@@ -2,7 +2,7 @@ package policy
 
 import "fmt"
 
-// Error codes attached to *Denied. These mirror the BORU error codes
+// Error codes attached to *Denied. These mirror the boru error codes
 // surfaced through the engine's r.BoruError machinery; the engine
 // adapter copies these onto the produced BoruError when a *Denied
 // bubbles up.

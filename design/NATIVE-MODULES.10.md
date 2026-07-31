@@ -1,6 +1,6 @@
 # Native Modules
 
-Native modules are internal BORU modules with Go implementations that are
+Native modules are internal boru modules with Go implementations that are
 imported using names of the form `"boru:<name>"`. They produce a module
 descriptor with exports, just like file-based modules, and their words
 are accessed via dot notation.

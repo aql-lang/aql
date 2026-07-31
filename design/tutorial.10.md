@@ -1,13 +1,13 @@
-# BORU Tutorial
+# boru Tutorial
 
-This tutorial walks you through BORU from first principles. By the
+This tutorial walks you through boru from first principles. By the
 end, you will be comfortable writing expressions, defining functions,
 and working with the type system.
 
 
 ## Getting Started
 
-Build and run the BORU REPL:
+Build and run the boru REPL:
 
 ```bash
 cd boru
@@ -21,7 +21,7 @@ to evaluate it.
 
 ## Your First Expression
 
-BORU is a stack machine. Values push onto the stack; words consume
+boru is a stack machine. Values push onto the stack; words consume
 values and push results.
 
 ```
@@ -228,7 +228,7 @@ value.
 
 ## Types
 
-BORU has a hierarchical type system. Check types with `typeof`:
+boru has a hierarchical type system. Check types with `typeof`:
 
 ```
 boru> typeof 42

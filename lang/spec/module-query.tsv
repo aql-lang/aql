@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:query module
+# boru Language Specification: the boru:query module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable SQL-style query DSL. Import binds the `Query` namespace:

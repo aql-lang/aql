@@ -5,7 +5,7 @@ import "sort"
 // MaxArgs is the maximum number of arguments a signature may declare.
 const MaxArgs = 32
 
-// Handler is the unified function handler type for all BORU words.
+// Handler is the unified function handler type for all boru words.
 // It receives the matched arguments, the current context map, the
 // resolved stack (only populated for FullStack signatures), and the
 // registry.
@@ -99,7 +99,7 @@ func normalizeSig(s *Signature) {
 			}
 			patterns[i] = *p.Pattern
 		}
-		// BORU-declared /q params (FnParam.Quote, from `name:Atom/q`)
+		// boru-declared /q params (FnParam.Quote, from `name:Atom/q`)
 		// merge INTO QuoteArgs — the field every dispatch-side reader
 		// consults — without disturbing native-set entries (two
 		// declaration surfaces, one per-position property).
@@ -109,7 +109,7 @@ func normalizeSig(s *Signature) {
 		// in the legacy-Args branch above), so re-writing it would mutate the
 		// package-level author map that every Registry shares — a data race
 		// under concurrent registration. Skipping the redundant write keeps
-		// the shared native map read-only; the BORU path (QuoteArgs nil/absent)
+		// the shared native map read-only; the boru path (QuoteArgs nil/absent)
 		// still populates its own per-parse map.
 		if p.Quote && !s.QuoteArgs[i] {
 			if s.QuoteArgs == nil {

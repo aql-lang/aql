@@ -143,7 +143,7 @@ func FnUndefMatchesFnDef(undef Value, fnVal Value) bool {
 // FnDefHasSig reports whether the candidate has at least one
 // signature that satisfies `want` under structural subtyping. It reads
 // the function's own overloads (OwnSigs — full-fidelity Params/Returns,
-// fallback excluded) so both BORU fns and Go-implemented words are
+// fallback excluded) so both boru fns and Go-implemented words are
 // considered. The variance rule is delegated to FnSigSatisfiesSpec.
 func FnDefHasSig(fnDef FnDefInfo, want FnSigSpec) bool {
 	for _, s := range fnDef.OwnSigs() {

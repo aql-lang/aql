@@ -1,17 +1,17 @@
-# Elixir v1.20 Set-Theoretic Types in BORU: Applicability Report
+# Elixir v1.20 Set-Theoretic Types in boru: Applicability Report
 
 ## Scope
 
 Evaluate whether the type-system work shipped in Elixir v1.20
 ([release notes](https://elixir-lang.org/blog/2026/06/03/elixir-v1-20-0-released/))
-has anything to teach BORU's type system. The honest framing up front:
-**BORU has independently arrived at most of what the article describes.**
-The value is not a new paradigm — it is four specific places where BORU's
+has anything to teach boru's type system. The honest framing up front:
+**boru has independently arrived at most of what the article describes.**
+The value is not a new paradigm — it is four specific places where boru's
 version is currently *weaker* than Elixir's, plus a real-world data point
 on the exact frontier `GENERICS.10.md` is parked at.
 
 This report ranks the four genuine applications by leverage, ties each to
-concrete BORU machinery, and states plainly what does **not** transfer.
+concrete boru machinery, and states plainly what does **not** transfer.
 
 ## Elixir v1.20 recap
 
@@ -19,7 +19,7 @@ Elixir's type system is a gradual, set-theoretic system (Castagna-style
 semantic subtyping). v1.20's relevant pieces:
 
 - **Set-theoretic types** — closed under union, intersection, **and
-  negation**. The negation closure is the part BORU lacks.
+  negation**. The negation closure is the part boru lacks.
 - **The `dynamic()` type as a gradual modality** — *not* a top type.
   Two load-bearing properties:
   - *Compatibility*: a `dynamic()` value only triggers a violation when
@@ -45,12 +45,12 @@ semantic subtyping). v1.20's relevant pieces:
 The non-type items (parallel compile-time improvements,
 `:module_definition`) are out of scope here.
 
-## BORU baseline — the parallel-evolution table
+## boru baseline — the parallel-evolution table
 
-Most of the article is already true of BORU. Stating this first keeps the
+Most of the article is already true of boru. Stating this first keeps the
 "applications" section honest — it is *refinement*, not adoption.
 
-| Elixir v1.20 feature | BORU today | Where |
+| Elixir v1.20 feature | boru today | Where |
 |---|---|---|
 | Union, intersection | `tor` (disjunct) + `tand` (intersection, distributes `(A tor B) tand C`) | `eng/go/core_boolean.go` |
 | Bottom / top | `Never` (annihilator for `tand`, identity for `tor`) + `Any` | `eng/go/core_boolean.go`, `eng/go/types.go` |
@@ -69,7 +69,7 @@ The last four rows are this report.
 
 ### 1. First-class type negation (`tnot`) — the cleanest win
 
-**Gap.** BORU's algebra is closed under `tor` and `tand` but not
+**Gap.** boru's algebra is closed under `tor` and `tand` but not
 negation. The cost is visible right now in else-branch narrowing.
 `ApplyComplementNarrowing` (`eng/go/carrier.go:648`) can only subtract a
 matched alternative *from an existing disjunction*. The regression test
@@ -98,7 +98,7 @@ shape, completing the set-theoretic algebra:
   Routes through the existing `Type.Behavior.Match` capability (same
   hook DepScalar and refine types already use), so no new dispatch path.
 
-**Closure under negation — the precise status.** BORU today is *not*
+**Closure under negation — the precise status.** boru today is *not*
 closed under negation. `tor`/`tand`/`Never`/`Any` form a bounded
 **distributive lattice**, but it is **not complemented** (not a Boolean
 algebra): `tnot Integer` has no positive representation, because the type
@@ -134,7 +134,7 @@ Reuses `SimplifyDisjunctAlts` (`eng/go/core_helpers.go:755`) for cleanup.
 1. **Scope — first-class.** `tnot` is a real type-algebra word beside
    `tor`/`tand`, valid in annotations and `is`. Completes the Boolean
    closure; not an internal-only narrowing hack.
-2. **Decision procedure — tailored to the BORU lattice.** `T tand U =?
+2. **Decision procedure — tailored to the boru lattice.** `T tand U =?
    Never` is decided by tree-disjointness (incomparable nodes are
    disjoint), DepScalar interval logic, and per-atom negation — *not* a
    general DNF/BDD engine. Complete enough for a tree + DepScalar
@@ -218,23 +218,23 @@ tests; all `make fmt`/`vet`/`lint`/`test` gates green.
 
 ### 2. The `dynamic(T)` bounded modality — the deepest idea
 
-**Gap, and a correction to BORU's own notes.** The carrier report states
-BORU's approach is "stronger — it tracks precise types where known and
+**Gap, and a correction to boru's own notes.** The carrier report states
+boru's approach is "stronger — it tracks precise types where known and
 degrades to `Any` only at escape hatches, rather than using `?`
 throughout." That conflates *coverage* (where the dynamic type appears)
 with the *semantics of the dynamic type itself*, which is Elixir's actual
 contribution. Concretely, `sigTypeMatches` (`eng/go/signature.go:236`)
 resolves to `v.Parent.Matches(t)`, so a bare `Carry<Any>` against an
 `Integer` slot is `TAny.Matches(TInteger)` = **false** — a parent does
-not match a child. **BORU's `Any` is a strict top type.** Elixir's
+not match a child. **boru's `Any` is a strict top type.** Elixir's
 `dynamic()` is deliberately the opposite: compatible unless *provably
 disjoint*, and narrowing through use.
 
-The practical consequence is that BORU's escape hatches (`do` on a
+The practical consequence is that boru's escape hatches (`do` on a
 computed list, `context get`, dynamic `def` rebinding) all collapse to
 bare `Carry<Any>` and lose everything; downstream a `Carry<Any>` either
 falls through to a `TAny` catch-all overload or fails the match and
-emits a diagnostic. BORU cannot say "dynamically an Integer."
+emits a diagnostic. boru cannot say "dynamically an Integer."
 
 **Proposal.** Introduce a *bounded dynamic* carrier — a modality over the
 existing lattice, not a new lattice node:
@@ -363,12 +363,12 @@ legible in traces.
 
 ### 3. Dead-overload detection — Elixir's dead-clause check, generalised
 
-**Gap.** BORU flags dead `if` branches (`unreachable_branch`) but not dead
+**Gap.** boru flags dead `if` branches (`unreachable_branch`) but not dead
 *signatures*. With first-match-wins overload dispatch (`SortSignatures`,
 longest/most-specific first), a later signature whose argument types are
 all subsumed by an earlier, more-general signature can **never win
 dispatch** — exactly Elixir's "earlier clauses shadow later ones" dead
-code, lifted from function clauses to BORU's overload tables.
+code, lifted from function clauses to boru's overload tables.
 
 **Proposal.** At registration time (or as a `boru check` pass), for each
 signature compare it against every earlier signature in sorted order: if
@@ -391,11 +391,11 @@ existing subsumption.
 ### 4. Static size/index checking
 
 **Gap.** Elixir tracks structure sizes to catch index violations
-statically. BORU catches `at`/`getr` out-of-bounds **only at runtime**
+statically. boru catches `at`/`getr` out-of-bounds **only at runtime**
 (`lang/go/native/native_array.go:780`,
 `lang/go/native/native_accessor.go:54`).
 
-**Proposal.** BORU already has both ingredients — DepScalar integer
+**Proposal.** boru already has both ingredients — DepScalar integer
 refinements (`eng/go/depscalar.go`) and typed-list carriers
 (`NewCarrierTypedList`, `eng/go/carrier.go`). Carry an optional length
 refinement on a list carrier, and type index arguments as DepScalars;
@@ -464,20 +464,20 @@ aimed correctly.
 
 - **Dispatch + subtyping model.** Elixir is BEAM pattern-match clauses
   over *semantic* subtyping (subtyping = subset of value denotations).
-  BORU is concatenative first-match overload resolution over a
+  boru is concatenative first-match overload resolution over a
   *nominal/lattice* hierarchy with an explicit `Parent` chain. The
-  carrier report already notes Hindley-Milner is a poor fit for BORU for
-  this reason. Items 1 and 2 move BORU *toward* semantic subtyping (it is
+  carrier report already notes Hindley-Milner is a poor fit for boru for
+  this reason. Items 1 and 2 move boru *toward* semantic subtyping (it is
   already partway: `tand`/`tor` with `Never`-on-disjoint), but they must
   not be lifted wholesale without respecting the lattice's nominal core
   (`refine` newtypes are nominal by design — see
   `design/REFINE-NEWTYPE-VS-SUBSET.10.md`).
 - **Parallel compile-time / `:module_definition`.** Not type-system; no
-  BORU analogue beyond the loose echo that BORU's planned bytecode compiler
+  boru analogue beyond the loose echo that boru's planned bytecode compiler
   is "the carrier checker with a recording side effect"
   (`design/boru-bytecode-report.0.md`).
 - **Efficient map enumeration.** A BEAM runtime-representation concern;
-  BORU's `OrderedMap` does not share it.
+  boru's `OrderedMap` does not share it.
 
 ## Feasibility verdict
 
@@ -509,10 +509,10 @@ with an in-range index that must pass.
 
 ## Verdict
 
-**Applicable, as four targeted refinements rather than a rewrite.** BORU
+**Applicable, as four targeted refinements rather than a rewrite.** boru
 reached the set-theoretic, gradual, flow-typed design independently;
-Elixir v1.20 sharpens the four corners BORU left rounded — negation
+Elixir v1.20 sharpens the four corners boru left rounded — negation
 closure, a real bounded-dynamic modality instead of a strict top `Any`,
 dead-overload detection, and static index safety — and confirms that
-BORU's generics roadmap is pointed at the same frontier the wider
+boru's generics roadmap is pointed at the same frontier the wider
 set-theoretic-types community is still clearing.

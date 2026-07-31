@@ -16,11 +16,11 @@ import (
 // to a number. Operators: `+ - * / %`, `^` (power, right-associative, binding
 // tighter than `* /`), unary `+`/`-`, and `( )`.
 //
-// Numeric coercion follows BORU's rules (dual integer/float domain): when every
+// Numeric coercion follows boru's rules (dual integer/float domain): when every
 // operand is integer-domain the result stays an Integer — and division
 // truncates, exactly like the `div` word (`x/y` with x=5,y=2 → 2) — while any
 // Float operand promotes the whole expression to Float. A formula variable
-// carries the BORU type of its bound param; an integer-valued numeric literal
+// carries the boru type of its bound param; an integer-valued numeric literal
 // (e.g. the `2` in `z^2`) is integer-domain, a fractional literal is Float.
 //
 // IMPORTANT: we evaluate the AST OURSELVES rather than via expr's `evaluate`
@@ -36,7 +36,7 @@ import (
 const maxFormulaDepth = 256
 
 // mval is a number in one of two domains: integer (i holds the value) or float
-// (f holds it). The domain drives the BORU coercion above.
+// (f holds it). The domain drives the boru coercion above.
 type mval struct {
 	i     int64
 	f     float64
@@ -226,7 +226,7 @@ func evalApply(val []any, vars map[string]mval, depth int) (mval, error) {
 	return mval{}, fmt.Errorf("unsupported operator %q", op.Name)
 }
 
-// boruToMval coerces a bound param value to an mval, preserving its BORU numeric
+// boruToMval coerces a bound param value to an mval, preserving its boru numeric
 // domain (Integer → integer-domain, Float → float-domain).
 func boruToMval(v native.Value) (mval, bool) {
 	if !native.IsConcrete(v) {

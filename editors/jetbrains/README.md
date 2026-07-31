@@ -1,6 +1,6 @@
-# BORU in JetBrains IDEs (IntelliJ IDEA, GoLand, PyCharm, WebStorm, …)
+# boru in JetBrains IDEs (IntelliJ IDEA, GoLand, PyCharm, WebStorm, …)
 
-The lightest way to get BORU language support in any JetBrains IDE is the
+The lightest way to get boru language support in any JetBrains IDE is the
 **LSP4IJ** plugin, which lets you register `boru lsp` as a *user-defined
 language server* without writing a custom plugin. You get live
 diagnostics, hover docs, word completion, and whole-buffer formatting —
@@ -24,7 +24,7 @@ This directory contains:
 The `boru lsp` server advertises exactly four capabilities. LSP4IJ maps
 each to a native IDE feature:
 
-| BORU server capability | Backed by                     | In the IDE                          |
+| boru server capability | Backed by                     | In the IDE                          |
 | --------------------- | ----------------------------- | ----------------------------------- |
 | Diagnostics           | `lang.Check` (errors + warns) | Red/yellow squiggles, Problems view |
 | Hover                 | `help` word docs              | Hover popups (Ctrl/⌘ + hover)       |
@@ -65,7 +65,7 @@ use it later to watch server status and traces.
 
 ---
 
-## 2. (Recommended) Register a "BORU" file type
+## 2. (Recommended) Register a "boru" file type
 
 LSP4IJ can bind a server to a raw glob, but giving `.boru` a real IDE file
 type also buys you bracket matching, comment toggling (`Ctrl/⌘+/`), and a
@@ -73,13 +73,13 @@ stable *language id* to map the server to.
 
 1. **Settings ▸ Editor ▸ File Types**.
 2. Under **Recognized File Types**, click **+** to add a new type:
-   - **Name:** `BORU`
-   - **Description:** `BORU query language`
-   - **Line comment:** `#`   *(BORU also accepts `//`; the IDE allows one
+   - **Name:** `boru`
+   - **Description:** `boru query language`
+   - **Line comment:** `#`   *(boru also accepts `//`; the IDE allows one
      line-comment token here — pick `#`)*
    - **Block comment start:** `/*`   **Block comment end:** `*/`
    - Tick **Support paired braces**, **Support paired brackets**, and
-     **Support paired parens** (BORU uses `()`, `[]`, and `{}`).
+     **Support paired parens** (boru uses `()`, `[]`, and `{}`).
 3. In the **File name patterns** panel for the new type, click **+** and
    add `*.boru`.
 4. Click **OK**.
@@ -101,7 +101,7 @@ You can do this by hand (3a) or by importing the template in
 1. **Settings ▸ Languages & Frameworks ▸ Language Servers**.
 2. Click **+** (Add) ▸ this opens **New Language Server**.
 3. On the **Server** tab:
-   - **Name:** `BORU`
+   - **Name:** `boru`
    - **Command:** `boru lsp`
      *(On Windows, or to pin a specific build, use the full path — see
      [Using a non-PATH binary](#using-a-non-path-boru-binary).)*
@@ -109,11 +109,11 @@ You can do this by hand (3a) or by importing the template in
    `.boru` files. Use whichever row matches how you set things up:
    - **File name patterns** ▸ **+** ▸ pattern `*.boru`,
      **Language id** `boru`; **or**
-   - **Language** ▸ **+** ▸ select the `BORU` file type from step 2,
+   - **Language** ▸ **+** ▸ select the `boru` file type from step 2,
      **Language id** `boru`.
 
    The **language id** should be `boru` (lower-case). This is the value the
-   server receives in `textDocument/languageId`; the BORU server ignores
+   server receives in `textDocument/languageId`; the boru server ignores
    it, but keeping it `boru` matches every other editor config in the
    repo.
 5. *(Optional)* On the **Configuration** tab you can paste the contents
@@ -144,7 +144,7 @@ maps to the dialog, and the caveat about LSP4IJ's own schema.
 1. Open (or create) any `*.boru` file — e.g. copy one from
    `design/examples/todo/` in this repo.
 2. Within a second or two the **LSP4IJ** tool window should show the
-   **BORU** server as **Started / Running**. If not, click the server and
+   **boru** server as **Started / Running**. If not, click the server and
    read its console pane (see [Troubleshooting](#troubleshooting)).
 3. Check each feature:
    - **Diagnostics** — introduce a deliberate error (e.g. an unterminated
@@ -153,7 +153,7 @@ maps to the dialog, and the caveat about LSP4IJ's own schema.
    - **Hover** — hover a builtin such as `add` or `filter`; a doc popup
      should appear.
    - **Completion** — start typing a word and press `Ctrl+Space`; the
-     list should include registered BORU words.
+     list should include registered boru words.
    - **Formatting** — run **Code ▸ Reformat Code** (`Ctrl+Alt+L` /
      `⌘⌥L`); the buffer is reformatted by `boru fmt`'s engine.
 
@@ -188,16 +188,16 @@ a separate trailing argument. In the importable template this is the
 ## Colours via a TextMate bundle
 
 LSP4IJ gives you diagnostics/hover/completion/formatting but **not**
-syntax colouring — the BORU server has no semantic-tokens capability. To
+syntax colouring — the boru server has no semantic-tokens capability. To
 add colours without writing a custom plugin, JetBrains IDEs can import a
 **TextMate bundle** (they bundle the *TextMate Bundles* support):
 
 1. **Settings ▸ Editor ▸ TextMate Bundles**.
-2. Click **+** and select a directory containing a BORU TextMate grammar.
+2. Click **+** and select a directory containing a boru TextMate grammar.
    This repo ships one at [`../textmate/`](../textmate/): the folder holds
    `boru.tmLanguage.json` (scope `source.boru`, file type `boru`). Point the
    importer at that directory.
-3. **OK**, then reopen an `.boru` file.
+3. **OK**, then reopen a `.boru` file.
 
 > **JetBrains TextMate quirk.** The IDE's TextMate importer expects a
 > *bundle folder*, ideally with an `info.plist`/`package.json` manifest
@@ -237,13 +237,13 @@ covers the common cases without any compiled plugin.
   Use an absolute path in the **Command**
   (see [above](#using-a-non-path-boru-binary)).
 - **No diagnostics/hover/completion.** Open the **LSP4IJ** tool window,
-  select the **BORU** server, and check that it is *Running*. Set the
+  select the **boru** server, and check that it is *Running*. Set the
   server's **Trace** level (Configuration tab, or
   [`lsp4ij/settings.json`](lsp4ij/settings.json) → `debug.traceLevel`) to
   `verbose` to see the JSON-RPC exchange in the console.
 - **Server started but nothing binds to my file.** The mapping isn't
   matching. Confirm the **Mappings** tab has a `*.boru` file-name pattern
-  (or the `BORU` file type) with language id `boru`, and that your file
+  (or the `boru` file type) with language id `boru`, and that your file
   really ends in `.boru`.
 - **Formatting does nothing / reverts.** Make sure you're invoking
   **Reformat Code**, and that **Formatting** is enabled for the server

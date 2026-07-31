@@ -183,12 +183,12 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 	modReg.BaseFile = parent.BaseFile
 	// The TCO kill switch must follow module code: intra-module tail
 	// recursion runs on THIS registry (module fns are InstallFnDef'd
-	// here and dispatch via execMatch inside CallBORU's sub-engine), so
+	// here and dispatch via execMatch inside CallBoru's sub-engine), so
 	// a host that disables elision on the parent expects module frames
 	// to nest too. Counters stay per-registry.
 	modReg.TCO.Disable = parent.TCO.Disable
 	// The module's own source text, for error excerpts from fns that
-	// run later via CallBORU on this sub-registry (file imports set it
+	// run later via CallBoru on this sub-registry (file imports set it
 	// to the module file; inline modules inherit the entry source).
 	modReg.Source = parent.Source
 	// CheckMode is deliberately NOT propagated to the module sub-
@@ -250,7 +250,7 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 	//
 	// Compiling splits the two passes exactly. A pure check pass
 	// (Check.Begin — the `check` subcommand, the CLI's quiet pre-flight,
-	// lang.BORU.Check) is nobody's execution and is modelled; a compile pass
+	// lang.Boru.Check) is nobody's execution and is modelled; a compile pass
 	// (Check.BeginCompilePass — RunCompiled/CompileCheck) is the execution
 	// and stays real. Under the CLI's default `check-then-run` that turns
 	// the §D doubling into exactly ONE real execution per importer, which is
@@ -473,7 +473,7 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 }
 
 // loadDataFile reads a data file (.json, .jsonic, .csv, .tsv) and returns
-// the result as a BORU value on the stack. Uses doRead so CSV/TSV files
+// the result as a boru value on the stack. Uses doRead so CSV/TSV files
 // get the same table + SQLite handling as the read word.
 func loadDataFile(parent *Registry, path string) ([]Value, error) {
 	format := formatFromExt(parent, path)
@@ -488,7 +488,7 @@ func loadDataFile(parent *Registry, path string) ([]Value, error) {
 	return result, nil
 }
 
-// loadFileModule reads a file, parses it as BORU, and runs it as a module.
+// loadFileModule reads a file, parses it as boru, and runs it as a module.
 // The child module's BaseDir is set to the directory of the loaded file so
 // that relative imports inside it resolve correctly.
 func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
@@ -872,7 +872,7 @@ func resolveNativeMod(r *Registry, path string) error {
 	if desc, ok := r.Modules.LoadedDesc(name); ok {
 		// Already resolved once in this registry. Re-bind any namespace
 		// defs that are no longer present — a fn-body / property-body
-		// import installs the namespace via InstallDef, which CallBORU's
+		// import installs the namespace via InstallDef, which CallBoru's
 		// def-cleanup then strips, leaving the module marked loaded but
 		// `pkg` unbound for the next call. Rebinding only the absent names
 		// keeps repeated top-level imports from stacking shadow bindings.
@@ -931,7 +931,7 @@ func ResolveAnyModule(r *Registry, ref string) (ModuleDesc, error) {
 
 // ensureExportsBound re-installs any module-namespace defs that are not
 // currently bound. Used when re-importing an already-resolved native
-// module whose namespace binding was torn down (e.g. by CallBORU's
+// module whose namespace binding was torn down (e.g. by CallBoru's
 // fn-body def-cleanup). Only absent names are installed, so a plain
 // repeated top-level import stays a no-op rather than stacking bindings.
 // The re-bind MUST be a real ModuleExport, exactly like the first-load

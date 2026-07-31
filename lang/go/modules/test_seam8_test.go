@@ -93,7 +93,7 @@ func TestW8TestBadBodies(t *testing.T) {
 // error=None and no failing-input, so its report line carries no detail.
 func TestW8ReportFailNoDetail(t *testing.T) {
 	r := testRegistry(t)
-	runTestBORU(t, r, `
+	runTestBoru(t, r, `
 		def double fn [[n:Integer] [Integer] [n 2 mul]]
 		def bad-spec {
 		  name: "bad"
@@ -103,7 +103,7 @@ func TestW8ReportFailNoDetail(t *testing.T) {
 		}
 		bad-spec Test.run-spec
 	`)
-	out := runTestBORU(t, r, `Test.report`)
+	out := runTestBoru(t, r, `Test.report`)
 	s, _ := native.AsString(out[0])
 	if !strings.Contains(s, "FAIL: wrong") {
 		t.Errorf("report should carry a detail-less FAIL line for the failing case:\n%s", s)
@@ -117,14 +117,14 @@ func TestW8ReportFailNoDetail(t *testing.T) {
 func TestW8CheckPropShrinks(t *testing.T) {
 	r := testRegistry(t)
 	// property: value < 50; gen draws [0,100); shrinking searches smaller.
-	runTestBORU(t, r, `Test.check-prop "thresh" [r.int 0 100] [50 lt] 40 7 200`)
+	runTestBoru(t, r, `Test.check-prop "thresh" [r.int 0 100] [50 lt] 40 7 200`)
 	// A constant-false property forces the value-level fallback path too.
-	runTestBORU(t, r, `Test.check-prop "always" [r.int 0 100] [false] 5 3 200`)
+	runTestBoru(t, r, `Test.check-prop "always" [r.int 0 100] [false] 5 3 200`)
 	// A CONSTANT gen body (no rand dependence) has a self-contained
 	// StackForm, so the gen-program reducer can re-evaluate its shrink
 	// candidates: candidates below the threshold pass the property (the
 	// evalFn Pass arm), those at/above it stay failing.
-	runTestBORU(t, r, `Test.check-prop "const" [73] [50 lt] 3 1 200`)
+	runTestBoru(t, r, `Test.check-prop "const" [73] [50 lt] 3 1 200`)
 }
 
 // TestW8BuildTestModuleNoInitFunc drives BuildTestModule's native.Register

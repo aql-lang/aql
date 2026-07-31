@@ -1,6 +1,6 @@
-# BORU Explanation
+# boru Explanation
 
-This document explains the ideas behind BORU — the *why* behind the
+This document explains the ideas behind boru — the *why* behind the
 syntax, the type system, and the runtime. It complements the
 **[Tutorial](TUTORIAL.md)** (learning), **[How-To Guides](HOWTO.md)**
 (tasks), and **[Reference](REFERENCE.md)** (precise behaviour).
@@ -8,7 +8,7 @@ syntax, the type system, and the runtime. It complements the
 > **Notation.** In code, a `# returns …` comment shows what an
 > expression evaluates to (`square 4  # returns 16`); in prose we say
 > "`square 4` returns `16`". The comment is ordinary documentation, not
-> special syntax. (BORU has no result arrow — `=>` is the
+> special syntax. (boru has no result arrow — `=>` is the
 > anonymous-function word `afn` — so results are written as comments.)
 
 ## Contents
@@ -58,7 +58,7 @@ combining operations — no parentheses, no `compose(...)`, no `.then`.
 
 ## The stack model
 
-BORU has a single data stack. Every literal pushes; every word pops
+boru has a single data stack. Every literal pushes; every word pops
 its arguments and pushes its results. The stack is the implicit
 data flow.
 
@@ -94,7 +94,7 @@ naming actually helps readability, `def`, `var`, and named-parameter
 ## Forward collection: beyond reverse Polish
 
 Traditional concatenative languages (Forth, Factor) use strict
-reverse Polish notation: arguments always *precede* the word. BORU
+reverse Polish notation: arguments always *precede* the word. boru
 extends this with **forward collection**: a word can gather
 arguments that appear *after* it.
 
@@ -108,7 +108,7 @@ All three are equivalent. The word `add` needs two arguments. If
 fewer are on the stack when it runs, it enters a forward-collecting
 mode and consumes following tokens until its signature is filled.
 
-This lets BORU read naturally in infix position. `10 sub 3` reads
+This lets boru read naturally in infix position. `10 sub 3` reads
 "ten minus three"; `not true` reads "not true"; and with the string
 module imported, `StringUtil.upper "hello"` reads "uppercase hello".
 You never have to mentally reverse-engineer `10 3 -`. (String words
@@ -141,7 +141,7 @@ Two practical consequences:
 
 ### How collection works
 
-When a word executes, BORU fills its argument slots in this order:
+When a word executes, boru fills its argument slots in this order:
 
 1. **Forward first.** Walk the tokens after the word in source
    order, left to right. Each token is evaluated and its type
@@ -303,7 +303,7 @@ all parse.
 
 ## Type-directed dispatch
 
-Every value in BORU carries a hierarchical type. The type
+Every value in boru carries a hierarchical type. The type
 `Scalar/Number/Integer` is a child of `Scalar/Number`, which is a
 child of `Scalar`, which is a child of `Any`. A child matches its
 parent; the reverse is false.
@@ -352,7 +352,7 @@ surprise.
 
 What "member of that type" *means* depends on the kind of type, and
 user types built with `refine` come in two kinds that answer it
-differently. BORU keeps both, because they correspond to two genuinely
+differently. boru keeps both, because they correspond to two genuinely
 different intentions — and the rest of the world splits the same way.
 
 **A bare refinement is a newtype.** `def UserId (refine Integer)`
@@ -382,17 +382,17 @@ def Big (Integer gt 10)                   # subset — validation
 5  is Big                     # returns false — 5 does not
 ```
 
-The trap BORU avoids is treating these asymmetrically — lenient on the
+The trap boru avoids is treating these asymmetrically — lenient on the
 way in, strict on the way out (or vice-versa). No mainstream language
 does that on purpose; each picks one discipline per kind and applies
-it at every boundary. BORU does the same: newtypes are nominal and
+it at every boundary. boru does the same: newtypes are nominal and
 symmetric, subset types are value-sensitive and symmetric. The full
 rationale is in `design/REFINE-NEWTYPE-VS-SUBSET.10.md`.
 
 
 ## Tail calls and the tape
 
-BORU guarantees tail-call elimination — the precise conditions are in
+boru guarantees tail-call elimination — the precise conditions are in
 **[Reference: Recursion and tail calls](REFERENCE.md#recursion-and-tail-calls)**.
 The mechanism falls out of the execution model rather than being
 bolted on.
@@ -417,7 +417,7 @@ caller's region. Frames replace instead of stacking, so depth never
 accumulates — elimination is a reordering of work the tape had
 already scheduled, not a new semantics.
 
-One BORU-specific boundary shapes the conditions. Name resolution is
+One boru-specific boundary shapes the conditions. Name resolution is
 dynamic — an enclosing frame's bindings stay visible to everything it
 calls, until the frame exits. The locally-defined-recursive-fn idiom
 depends on that:
@@ -445,7 +445,7 @@ guard names the resource the program actually consumed.
 
 ## Type ordering
 
-BORU has a single total order over every value, computed in two stages:
+boru has a single total order over every value, computed in two stages:
 
 1. **LCA-Comparer.** Find the least common ancestor of the two
    types. If the ancestor declares a comparer, use it (so
@@ -515,7 +515,7 @@ silently answered.
 
 ## Immutability and mutability
 
-BORU draws a deliberate line between immutable values and mutable
+boru draws a deliberate line between immutable values and mutable
 objects:
 
 * **Scalars** (numbers, strings, booleans, atoms, times) are
@@ -532,7 +532,7 @@ parallel branches in separate sub-engines, immutable values are
 safe to share, mutable Ideals are not — changes inside a branch
 don't propagate to the parent.
 
-Mutable instances are deliberately rare in idiomatic BORU: prefer
+Mutable instances are deliberately rare in idiomatic boru: prefer
 returning a new value to mutating, until a benchmark says otherwise.
 
 
@@ -572,7 +572,7 @@ To evaluate a held list at the point of use, use `do`:
   stack.
 
 The duality — lists as both data and code — is the homoiconic core
-that lets BORU do metaprogramming with no separate AST type.
+that lets boru do metaprogramming with no separate AST type.
 
 
 ## Macros
@@ -582,7 +582,7 @@ it. A macro is a function the engine runs at **expansion time**, on its
 operands **as unevaluated code**, whose returned tokens are spliced into
 the call site in place of the call. Where a normal word receives
 *values*, a macro receives *forms* — so it can build new control
-structures and syntax in BORU itself, not in Go.
+structures and syntax in boru itself, not in Go.
 
 ```
 def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
@@ -591,11 +591,11 @@ twice 5                           # returns 10
 
 `twice 5` does not pass `5` to a function; it rewrites the call to the
 code `5 add 5`, which then runs. The template is an ordinary `quote
-[ … ]` region — default-data, the polarity flip from BORU's default-eval
+[ … ]` region — default-data, the polarity flip from boru's default-eval
 — and `unquote` / `splice` are the holes where operands flow back in:
 `unquote x` inserts one node, `splice xs` spreads a list's elements.
 
-This is the classic LISP dividend, and BORU builds it from parts it
+This is the classic LISP dividend, and boru builds it from parts it
 already had — `quote`, the splice marker behind `word`, raw-form
 argument capture, and closure capture — rather than a new engine. Two
 LISP problems come along for free:
@@ -659,7 +659,7 @@ default.
 
 ## Parallel execution model
 
-The `await` word bridges BORU's sequential stack model with Go's
+The `await` word bridges boru's sequential stack model with Go's
 goroutines. Each element of the parallel list runs in its own
 goroutine with an independent sub-engine:
 
@@ -719,7 +719,7 @@ not detected. Building the container inside each branch is always safe.
 
 ## Errors as values
 
-BORU lets you treat errors as values rather than as exceptions — but
+boru lets you treat errors as values rather than as exceptions — but
 this happens at a `do [...]` boundary, not automatically. When a word
 fails *in the open*, it unwinds: `1 div 0` on its own aborts the
 program (and `1 div 0 dup` never reaches `dup`). Wrap the failing code
@@ -824,7 +824,7 @@ lives under the module's prefix until you alias it explicitly.
 
 ## Ideals and type-kinds
 
-BORU has a system for *type-kinds* called **Ideals**. An Ideal is
+boru has a system for *type-kinds* called **Ideals**. An Ideal is
 the type-constructor turned into data — `Class`, `Record`, `Table`,
 `Store` are all instances. Each Ideal carries:
 
@@ -995,7 +995,7 @@ a worked walkthrough is [Tutorial → the vault](TUTORIAL.md#21-manage-secrets-w
 
 ## Design influences
 
-BORU draws from several traditions:
+boru draws from several traditions:
 
 * **Forth, Factor** — stack-based execution, word definitions,
   quotations, the basic "code is a sequence of words" feel.

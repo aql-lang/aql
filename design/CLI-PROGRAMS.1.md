@@ -19,7 +19,7 @@ compiled back with `policy.CompileProfile` in `buildrt.Main`.
 **It is a default, not a boundary.** The trailer is plain JSON behind a
 magic+length marker with no integrity check, so anyone holding the binary
 can strip or rewrite the profile. What a baked profile does is constrain
-the PROGRAM — which is what a tool author shipping a BORU script wants:
+the PROGRAM — which is what a tool author shipping a boru script wants:
 "this tool never writes files" is a property of the tool, enforced against
 the tool's own code. It is not a sandbox against an adversary who has the
 executable. `CLI.md` says so, and must keep saying so.
@@ -45,7 +45,7 @@ which parses `IO.args`, prints usage or version and exits 0 for
 exits 2 on a usage error, and otherwise calls the handler.
 
 **The decision logic must be reachable without running the program.** A
-module written in BORU is gated by the `sift_coverage_test.go` pattern —
+module written in boru is gated by the `sift_coverage_test.go` pattern —
 every executable row of `cli.boru` covered by `cli_test.boru`, with a small
 allowlist whose entries are each *asserted to be genuinely uncovered* — and
 `Cli.main` ends in `IO.exit`, which ends whatever is running it. More
@@ -79,7 +79,7 @@ Cli.main (spec) handler/r    →  the three-line shell
   exercised by a runner that treats an exit as a file failure. That is wrong.
   `IO.exit` RAISES the reserved `boru/exit`, and `Assert.throws` observes a
   raise — so the arms are reachable from the module's own suite after all,
-  and `cli.boru` ships at **100% BORU-line coverage with an empty allowlist**.
+  and `cli.boru` ships at **100% boru-line coverage with an empty allowlist**.
   (A plain `do […] error […]` genuinely does not catch an exit — deliberately,
   so a program cannot swallow its own termination — which is what made the
   wrong conclusion plausible.) The split still stands on its own merits: the
@@ -87,7 +87,7 @@ Cli.main (spec) handler/r    →  the three-line shell
   to act on it itself. It just is not forced by the coverage gate.
 
 This is the same shape the RFC itself recommends elsewhere — a pure core
-with an imperative rind — and it is what makes "written in BORU, gated like
+with an imperative rind — and it is what makes "written in boru, gated like
 Go" possible rather than aspirational.
 
 ### Consequence for callers

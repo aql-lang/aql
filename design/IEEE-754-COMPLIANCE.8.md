@@ -1,6 +1,6 @@
 # IEEE-754 Compliance — what `Float` would require
 
-Status: **Tier 0 done; Tier 1 done; Tier 2 proposed (impractical on wasm)**. This audits BORU's
+Status: **Tier 0 done; Tier 1 done; Tier 2 proposed (impractical on wasm)**. This audits boru's
 `Float` (binary64) against IEEE 754-2019 and states what full and
 partial conformance would require. **Tier 0 (the NaN-comparison fix) is
 done**, and the `inf`/`-inf`/`nan` literals + matching rendering from
@@ -22,7 +22,7 @@ The **arithmetic core is already mostly conformant** — it rides on Go's
 correctly rounded (round-ties-to-even), and `±0`, `±∞`, subnormals, and
 NaN all propagate. What is *not* conformant splits into three buckets:
 
-1. **Deviations BORU deliberately/accidentally introduced** — div/mod by
+1. **Deviations boru deliberately/accidentally introduced** — div/mod by
    zero raise an error instead of producing `±∞`/NaN, and the comparison
    words are mutually inconsistent on NaN (this one is a genuine bug that
    also breaks `sort`).
@@ -34,7 +34,7 @@ NaN all propagate. What is *not* conformant splits into three buckets:
    `roundToIntegral`/signaling-NaN. Some of this is blocked by Go/wasm
    not exposing FPU state (see [Hard blockers](#hard-blockers)).
 
-So "IEEE-754 compliance" for BORU is really two different targets:
+So "IEEE-754 compliance" for boru is really two different targets:
 **(A) IEEE arithmetic *semantics*** (the values and basic-op rounding) —
 largely present, a few fixable deviations away; and **(B) full
 clause-by-clause *conformance*** (flags + rounding modes + the operation
@@ -42,7 +42,7 @@ catalogue) — a much larger effort, partly impractical on the wasm target.
 
 ## Conformance audit
 
-| IEEE 754-2019 requirement | BORU today | Status |
+| IEEE 754-2019 requirement | boru today | Status |
 | --- | --- | --- |
 | **binary64 format** (§3.4) | Go `float64` | ✅ conformant |
 | **Correctly-rounded `+ − × ÷`** (§5.4) | hardware, via the Float handler path | ✅ |
@@ -64,7 +64,7 @@ catalogue) — a much larger effort, partly impractical on the wasm target.
 | **`Inf`/`NaN` literals & canonical strings** (§5.12) | `inf`/`-inf`/`nan` literals; render to same tokens (round-trip) | ✅ Tier 0 |
 | **Signaling NaN** (§6.2) | not exposed (Go doesn't) | ❌ |
 
-## The three deviations BORU introduced
+## The three deviations boru introduced
 
 ### 1. Division / modulo by zero errors instead of ±∞ / NaN — ✅ RESOLVED
 
@@ -152,7 +152,7 @@ decimal re-parses), just unreadably.
 
 ## Missing machinery
 
-These are the IEEE operations/attributes with no BORU surface at all.
+These are the IEEE operations/attributes with no boru surface at all.
 Most of the *operations* are thin wrappers over Go's `math` package and
 are cheap; the *attributes* (flags, rounding modes) are the hard part.
 
@@ -182,7 +182,7 @@ are cheap; the *attributes* (flags, rounding modes) are the hard part.
 
 ## Hard blockers
 
-Full clause-by-clause conformance is **impractical on BORU's targets**,
+Full clause-by-clause conformance is **impractical on boru's targets**,
 not just laborious:
 
 - **Go does not expose the FPU status/control word.** There is no
@@ -191,17 +191,17 @@ not just laborious:
   would require either (a) a software binary64 implementation (a
   soft-float library — large, slow), or (b) per-architecture assembly to
   drive `MXCSR`/`FPCR`, which is non-portable and **not available under
-  WebAssembly** — and BORU ships a wasm playground (`wpg/`). So directed
+  WebAssembly** — and boru ships a wasm playground (`wpg/`). So directed
   rounding and exception flags cannot be delivered on wasm without
   soft-float.
 - This is why most "IEEE-754" languages (Python, JS, Java, Go itself)
   implement IEEE *arithmetic and values* but do **not** expose the full
-  flags/rounding-mode machinery either. BORU would be in good company
+  flags/rounding-mode machinery either. boru would be in good company
   targeting semantic conformance rather than the full standard.
 
 ## The philosophical tension
 
-BORU's design treats `1 div 0` as a loud error (and Phase 0 made integer
+boru's design treats `1 div 0` as a loud error (and Phase 0 made integer
 overflow an error too). IEEE-754 treats `1.0 / 0.0` as a *normal*
 operation returning `+∞` with a flag. These are fundamentally opposed for
 the float path. Three coherent resolutions:
@@ -211,7 +211,7 @@ the float path. Three coherent resolutions:
    ∞ exists, so this is forced anyway). This is the cleanest split and
    matches how most languages behave — and it is consistent with the
    leaves being genuinely different types.
-2. **Keep errors, drop the IEEE claim for those ops.** Document that BORU
+2. **Keep errors, drop the IEEE claim for those ops.** Document that boru
    Float arithmetic is IEEE binary64 *except* that division/modulo by
    zero are errors rather than ∞/NaN. Honest, zero behavioural change.
 3. **Mode switch.** A `with-float 'ieee [ … ]` context that opts into
@@ -264,7 +264,7 @@ unparseable `+Inf.0`/`NaN.0`), so print∘parse is identity. Verified by
   whose `exp < -4` rule would have rewritten `0.00001` → `1e-05`) keeps
   the common range stable, so no existing spec changed.
 
-Tier 1 is complete; BORU's Float now behaves like every other mainstream
+Tier 1 is complete; boru's Float now behaves like every other mainstream
 language's double — which is what "IEEE-754" colloquially means.
 
 **Tier 2 — full clause conformance (largely impractical on wasm).**
@@ -279,4 +279,4 @@ a non-wasm scope.
 
 - Decimal (base-10) IEEE formats — that is the `Decimal` leaf in
   NUMERIC-TOWER, a separate axis from binary64 conformance.
-- binary16/binary32/binary128 — BORU has one float width (binary64).
+- binary16/binary32/binary128 — boru has one float width (binary64).

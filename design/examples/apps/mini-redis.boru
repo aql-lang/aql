@@ -1,5 +1,5 @@
 # ============================================================
-# mini-redis.boru — a small Redis-flavoured key-value server in BORU.
+# mini-redis.boru — a small Redis-flavoured key-value server in boru.
 #
 # A "simple copy of the more common parts of redis": strings
 # (GET/SET/DEL/EXISTS/INCR), expiry (EXPIRE/TTL), key listing (KEYS),
@@ -8,7 +8,7 @@
 # one "CMD arg arg" line per request) with RESP-flavoured replies
 # ("+OK", ":N", "$-1" for nil, "-ERR …", values as plain text).
 #
-# The SERVER side runs a custom BORU codec (the NETWORK-SERVERS.0.md
+# The SERVER side runs a custom boru codec (the NETWORK-SERVERS.0.md
 # §6.6 extension point): decode splits an inline command line into a
 # patrun-routable {cmd args} message; encode renders the RESP-ish
 # reply line. A CLIENT just uses Net.lines: send {line: "SET k v"},

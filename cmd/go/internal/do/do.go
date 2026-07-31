@@ -1,5 +1,5 @@
 // Package do implements `boru do <words...>` — join the remaining
-// args with spaces, run as a BORU expression, print the result.
+// args with spaces, run as a boru expression, print the result.
 package do
 
 import (
@@ -20,7 +20,7 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "do" }
-func (*cmd) Synopsis() string { return "evaluate args as a BORU expression" }
+func (*cmd) Synopsis() string { return "evaluate args as a boru expression" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	// Separate permission flags from positional words. We accept
 	// every --perms* / --allow / --deny / --no-install / --install

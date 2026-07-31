@@ -1,8 +1,8 @@
-# BORU Language Specification: the boru:sift module
+# boru Language Specification: the boru:sift module
 # Format: input<TAB>expected<TAB>description
 #
 # boru:sift — the semi-structured-text tier (design/SIFT.0.md), implemented in
-# BORU (lang/go/modules/sift.boru). Six format families (kv, blocks, columns,
+# boru (lang/go/modules/sift.boru). Six format families (kv, blocks, columns,
 # dsv, fixed, pattern) drive the Sift namespace (Sift.parse / define / kinds /
 # families / spec / detect / check); a spec-map is a parser expressed as data.
 # v1 surface is the Sift namespace only — a module body runs in a discarded

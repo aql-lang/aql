@@ -105,7 +105,7 @@ func TestModuleWrapperRebindPreservesArgHandling(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TAtom}, {Type: native.TList}},
 			Returns:    []*native.Type{native.TString, native.TInteger},
-			Impl:       native.BORU([]native.Value{native.NewWord("qop")}),
+			Impl:       native.Boru([]native.Value{native.NewWord("qop")}),
 			NoEvalArgs: map[int]bool{1: true},
 			BarrierPos: -1,
 		}},
@@ -165,7 +165,7 @@ func buildProbeRegistry(innerBarrier int) *native.Registry {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
 			Returns: []*native.Type{native.TInteger},
-			Impl:    native.BORU([]native.Value{native.NewWord("op")}), BarrierPos: -1,
+			Impl:    native.Boru([]native.Value{native.NewWord("op")}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})

@@ -6,7 +6,7 @@
 
 ## 1. Positioning
 
-BORU is batteries-included. The crypto module should not merely reproduce Go's package structure or Node's low-level object APIs. It should expose a coherent BORU façade over host cryptography, combining precise primitives with common modern recipes.
+boru is batteries-included. The crypto module should not merely reproduce Go's package structure or Node's low-level object APIs. It should expose a coherent boru façade over host cryptography, combining precise primitives with common modern recipes.
 
 The module must retain legacy algorithms such as MD5 because interoperability and data identification sometimes require them. Legacy algorithms are available but never selected by safe defaults and are marked clearly in metadata and documentation.
 
@@ -122,7 +122,7 @@ A token profile defines:
 
 The prefix conveys type, not security. The random body supplies unpredictability. Verification helpers compare stored token hashes rather than requiring plaintext token storage.
 
-Profiles may produce API keys, session tokens, reset tokens and other opaque identifiers. BORU ID may consume crypto randomness but semantic secret tokens remain crypto recipes.
+Profiles may produce API keys, session tokens, reset tokens and other opaque identifiers. boru ID may consume crypto randomness but semantic secret tokens remain crypto recipes.
 
 ## 10. OTP
 
@@ -192,7 +192,7 @@ This area is broader than cryptography and may later become `boru:privacy` or an
 
 ## 14. Constant-time behaviour
 
-Do not offer a callback wrapper that claims to make arbitrary BORU code constant-time. The runtime, compiler, garbage collector, data-dependent allocations and called code make such a guarantee unsound.
+Do not offer a callback wrapper that claims to make arbitrary boru code constant-time. The runtime, compiler, garbage collector, data-dependent allocations and called code make such a guarantee unsound.
 
 Instead:
 
@@ -215,7 +215,7 @@ Large ciphertexts, arbitrary binary payloads and substantial key material remain
 The target architecture is:
 
 - `boru:crypto` supplies all algorithms and recipes;
-- Vault is primarily BORU business logic using `boru:crypto`;
+- Vault is primarily boru business logic using `boru:crypto`;
 - host-specific Go crypto remains hidden behind the module;
 - Vault adds storage, policy, rotation, audit and provider integration;
 - managed key references can be passed directly to crypto operations.
@@ -242,7 +242,7 @@ Crypto operations execute at runtime. Do not constant-fold secret generation, si
 
 Pure public transforms such as hex encoding may be folded in codec, but crypto results should generally remain runtime operations to preserve randomness, policy and provider selection.
 
-Opaque key handles and secret values require VM-safe lifetime and cleanup semantics. Native errors become BORU errors, never panics.
+Opaque key handles and secret values require VM-safe lifetime and cleanup semantics. Native errors become boru errors, never panics.
 
 ## 20. Testing
 

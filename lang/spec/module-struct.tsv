@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:struct module
+# boru Language Specification: the boru:struct module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of voxgig-struct data-manipulation utilities. These

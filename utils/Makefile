@@ -1,13 +1,13 @@
-# Makefile for utils/ — a coreutils subset written in BORU.
+# Makefile for utils/ — a coreutils subset written in boru.
 #
-# Everything runs FROM THIS DIRECTORY: BORU resolves relative imports against
+# Everything runs FROM THIS DIRECTORY: boru resolves relative imports against
 # the process working directory, so `cd utils && make` is the contract. The
 # `boru` binary comes from cmd/go (make -C ../cmd/go build).
 #
 # This directory is NOT in the repo's Go MODULES list, so nothing here is
 # reached by `make test` at the root. That is why cmd/go carries a Go test
 # (cmd/go/internal/build/utils_e2e_test.go) that builds and runs two of these
-# programs end to end: a top-level BORU directory outside the Go fan-out rots
+# programs end to end: a top-level boru directory outside the Go fan-out rots
 # otherwise, which is the lesson kg/ taught.
 
 BORU ?= ../cmd/go/bin/boru

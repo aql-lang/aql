@@ -308,7 +308,7 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// A def of a name that some ALREADY-COMPILED stored handler / spawn body
 	// reads makes that frozen unit stale (the interpreter resolves the new
 	// binding at CALL time). Poison such refs so Finalize leaves them unstamped
-	// and InvokeCallback falls back to CallBORU. A first-time def of a fresh name
+	// and InvokeCallback falls back to CallBoru. A first-time def of a fresh name
 	// poisons nothing (no existing ref lists it as a dep).
 	r.Check.Recorder().NotifyNameRebound(name)
 	// Record the def site for the dynamic-scope binder pass: if some fn body
@@ -1242,7 +1242,7 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// An undef of a name that some ALREADY-COMPILED stored handler / spawn body
 	// reads makes that frozen unit stale (the interpreter resolves the exposed
 	// or re-established binding at CALL time). Poison such refs so InvokeCallback
-	// falls back to CallBORU. Mirrors the def-site NotifyNameRebound.
+	// falls back to CallBoru. Mirrors the def-site NotifyNameRebound.
 	r.Check.Recorder().NotifyNameRebound(name)
 	UninstallDef(r, name)
 	return nil, nil
@@ -1547,7 +1547,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	// `afn` is normally encountered as the swap form `input afn body`
 	// (because `input => body` desugars to this), which makes args[1]
 	// the source-left operand (input sig) and args[0] the source-right
-	// operand (body). Mirrors the BORU `args[1] op args[0]` convention.
+	// operand (body). Mirrors the boru `args[1] op args[0]` convention.
 	inputSig := args[1]
 	body := args[0]
 
@@ -1584,7 +1584,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	sig := FnSig{
 		Params:     params,
 		Returns:    []*Type{TAny},
-		Impl:       BORU(bodyElems),
+		Impl:       Boru(bodyElems),
 		BarrierPos: barrierPos,
 		QuoteArgs:  eng.QuoteArgsFromParams(params),
 		// The lambda dispatches from this authored FnSig directly (no

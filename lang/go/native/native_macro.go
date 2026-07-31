@@ -373,7 +373,7 @@ func macroHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	sig := FnSig{
 		Params:        params,
 		Returns:       []*Type{TAny},
-		Impl:          BORU(bodyElems),
+		Impl:          Boru(bodyElems),
 		BarrierPos:    barrierPos,
 		FormArgs:      form,
 		NoEvalArgs:    form,
@@ -494,7 +494,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// Compile-hook path (design/MINILANG.5.md §13). When the kind registered
 	// a Go compile hook AND src is concrete, compile at the call site and
 	// splice the hook's tokens instead of the standard call. (Hooks are
-	// BUILT-IN machinery now — the BORU `register-compiled` surface died with
+	// BUILT-IN machinery now — the boru `register-compiled` surface died with
 	// the frozen kind namespace; `re` is the shipping example.) A PLAIN
 	// check pass stays on the standard `lang_<kind>` call (the semantic
 	// reference for checking; a check-mode src is usually a carrier anyway)
@@ -699,7 +699,7 @@ func miniPartialFromSigs(label, kindTag string, sigs []FnSig, tail []Value) Valu
 		outSigs = append(outSigs, FnSig{
 			Params:  []FnParam{{Name: miniSubjParam, Type: ws.Params[2].Type}},
 			Returns: ws.Returns,
-			Impl:    BORU(body),
+			Impl:    Boru(body),
 			// STACK-ONLY: a filter's subject comes from the stack (the
 			// documented semantics), and a stack-only partial never
 			// forward-collects the tokens after it — which is what lets
@@ -727,7 +727,7 @@ func miniPartialFromSigs(label, kindTag string, sigs []FnSig, tail []Value) Valu
 // miniPartialSeq disambiguates partial names process-wide.
 var miniPartialSeq int
 
-// (miniCompileExport / miniInvokeBORUCompile — the BORU compile-hook plumbing —
+// (miniCompileExport / miniInvokeBoruCompile — the boru compile-hook plumbing —
 // died with the frozen kind namespace: hooks are Go-only builtin machinery
 // now, discovered via miniGoHook.)
 

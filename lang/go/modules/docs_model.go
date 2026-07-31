@@ -15,7 +15,7 @@ func init() {
 			"the unified model Map; a Boolean result sets ok, a {ok,reload} Map supplies both.",
 		"start": "Build once, then watch the source and rebuild on change: `Model.start <Model>` " +
 			"returns the initial result Map (same shape as Model.run) and begins watching in the " +
-			"background until Model.stop. Watch rebuilds run their BORU actions on an isolated fork " +
+			"background until Model.stop. Watch rebuilds run their boru actions on an isolated fork " +
 			"of the registry (taken at start time), so they never race the foreground interpreter.",
 		"stop": "Stop watching a model started with Model.start: `Model.stop <Model>`.",
 		"model": "The unified model Map after a build: `Model.model <Model>`. Errors if the model " +

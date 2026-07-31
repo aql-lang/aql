@@ -76,7 +76,7 @@ func TestModuleExtendFileDiamond(t *testing.T) {
 // machinery at the API level: the same unlocked tuple transplanted
 // from two DIFFERENT module refs raises [boru/extend_conflict], while
 // the same ref re-arriving is idempotent and quiet. Unreachable from
-// BORU source today — a user-typed tuple is anchored to a per-import
+// boru source today — a user-typed tuple is anchored to a per-import
 // mint, so two source modules can never build the identical tuple —
 // but the guard must hold for a future module cache (shared mints
 // across importers) and for host-constructed clones.
@@ -197,7 +197,7 @@ export "Bad" {add: add/r}`,
 }
 
 // TestModuleExtendPointClass pins the canonical user-module shape end
-// to end: a BORU file module that mints a CLASS type Point {x,y},
+// to end: a boru file module that mints a CLASS type Point {x,y},
 // merges a [Point Point] overload into core `add` (its own class is
 // the user type the module-scope rule requires), and exports both.
 // The importer constructs Points through the exported type with

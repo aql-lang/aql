@@ -101,7 +101,7 @@ func TestW8ParseHandlerSrcError(t *testing.T) {
 }
 
 // TestW8ApplySpecMapArms drives applySpecMap's error / string arms that the
-// BORU-run cov tests don't reach.
+// boru-run cov tests don't reach.
 func TestW8ApplySpecMapArms(t *testing.T) {
 	r := mcovReg(t)
 

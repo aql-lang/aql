@@ -7,31 +7,31 @@ import (
 	"github.com/boru-lang/boru/eng/go/parser"
 )
 
-// installBORUType runs `def Name <bodySrc>` and returns the minted *Type,
-// so a Go-defined type can be compared against its BORU twin.
-func installBORUType(t *testing.T, r *Registry, name, bodySrc string) *eng.Type {
+// installBoruType runs `def Name <bodySrc>` and returns the minted *Type,
+// so a Go-defined type can be compared against its boru twin.
+func installBoruType(t *testing.T, r *Registry, name, bodySrc string) *eng.Type {
 	t.Helper()
 	toks, err := parser.Parse("def " + name + " " + bodySrc)
 	if err != nil {
 		t.Fatalf("parse def %s: %v", name, err)
 	}
 	if _, err := NewTop(r).Run(toks); err != nil {
-		t.Fatalf("install BORU type %s: %v", name, err)
+		t.Fatalf("install boru type %s: %v", name, err)
 	}
 	got := r.LookupTypeName(name)
 	if got == nil {
-		t.Fatalf("BORU type %s did not install", name)
+		t.Fatalf("boru type %s did not install", name)
 	}
 	return got
 }
 
-// assertParity checks that a BORU-defined type and a Go-defined type
+// assertParity checks that a boru-defined type and a Go-defined type
 // answer `is` identically for every probe value.
 func assertParity(t *testing.T, label string, boruT, goT *eng.Type, probes []Value) {
 	t.Helper()
 	for _, v := range probes {
 		if a, g := v.Is(boruT), v.Is(goT); a != g {
-			t.Errorf("%s: membership disagrees for %s: BORU=%v Go=%v", label, v.String(), a, g)
+			t.Errorf("%s: membership disagrees for %s: boru=%v Go=%v", label, v.String(), a, g)
 		}
 	}
 }
@@ -39,7 +39,7 @@ func assertParity(t *testing.T, label string, boruT, goT *eng.Type, probes []Val
 // TestDefineTypeGoBoruParity is the construction-axis convergence proof:
 // types built from Go via (*Registry).DefineType / DefineEnum — which
 // route through the SAME InstallType the `def` word uses — behave
-// identically to their BORU `def` twins under `is`. Covers a value enum,
+// identically to their boru `def` twins under `is`. Covers a value enum,
 // a type union, and a negation.
 func TestDefineTypeGoBoruParity(t *testing.T) {
 	probes := []Value{
@@ -49,7 +49,7 @@ func TestDefineTypeGoBoruParity(t *testing.T) {
 
 	t.Run("value enum (tor of atoms)", func(t *testing.T) {
 		r, _ := DefaultRegistry()
-		boru := installBORUType(t, r, "ColorA", "(red/q tor green/q)")
+		boru := installBoruType(t, r, "ColorA", "(red/q tor green/q)")
 		// Go twin: the same closed set of atom values.
 		go_, err := r.DefineEnum("ColorG", eng.NewAtom("red"), eng.NewAtom("green"))
 		if err != nil {
@@ -64,7 +64,7 @@ func TestDefineTypeGoBoruParity(t *testing.T) {
 
 	t.Run("type union (tor of types)", func(t *testing.T) {
 		r, _ := DefaultRegistry()
-		boru := installBORUType(t, r, "NumOrStrA", "(Integer tor String)")
+		boru := installBoruType(t, r, "NumOrStrA", "(Integer tor String)")
 		go_, err := r.DefineEnum("NumOrStrG",
 			eng.NewTypeLiteral(eng.TInteger), eng.NewTypeLiteral(eng.TString))
 		if err != nil {
@@ -78,7 +78,7 @@ func TestDefineTypeGoBoruParity(t *testing.T) {
 
 	t.Run("negation (tnot)", func(t *testing.T) {
 		r, _ := DefaultRegistry()
-		boru := installBORUType(t, r, "NotStrA", "(tnot String)")
+		boru := installBoruType(t, r, "NotStrA", "(tnot String)")
 		go_, err := r.DefineType("NotStrG", eng.NewNegation(eng.NewTypeLiteral(eng.TString)))
 		if err != nil {
 			t.Fatalf("DefineType: %v", err)

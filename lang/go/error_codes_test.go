@@ -34,7 +34,7 @@ import (
 // string means the program either succeeded or failed with a code-less
 // (foreign) error — the exact defect these tests exist to catch, so the
 // two are reported apart.
-func codeOf(t *testing.T, a *lang.BORU, src string) string {
+func codeOf(t *testing.T, a *lang.Boru, src string) string {
 	t.Helper()
 	_, err := a.Run(src)
 	if err == nil {

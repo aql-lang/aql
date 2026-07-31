@@ -1,4 +1,4 @@
-# BORU Language Specification: scalar edge cases 2 — Float special values
+# boru Language Specification: scalar edge cases 2 — Float special values
 # Format: input<TAB>expected<TAB>description
 #
 # The corners of IEEE-754 binary64 that float-special.tsv leaves open:

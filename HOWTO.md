@@ -1,4 +1,4 @@
-# BORU How-To Guides
+# boru How-To Guides
 
 Short, task-oriented recipes. Each entry assumes you've worked
 through the **[Tutorial](TUTORIAL.md)** and just need an answer to
@@ -7,7 +7,7 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 > **Notation.** In code, a `# returns …` comment shows what an
 > expression evaluates to (`5 double  # returns 10`); in prose we say
 > "`5 double` returns `10`". The comment is ordinary documentation, not
-> special syntax. (BORU has no result arrow — `=>` is the
+> special syntax. (boru has no result arrow — `=>` is the
 > anonymous-function word `afn`.)
 
 ## Index
@@ -45,7 +45,7 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 * [Trace and debug](#trace-and-debug)
 * [Use `end` to stop forward collection](#use-end-to-stop-forward-collection)
 * [Sandbox untrusted code](#sandbox-untrusted-code)
-* [Run BORU as a service](#run-boru-as-a-service)
+* [Run boru as a service](#run-boru-as-a-service)
 * [Inspect permission profiles](#inspect-permission-profiles)
 * [Write a command-line tool](#write-a-command-line-tool)
 
@@ -107,7 +107,7 @@ show 1 2                      # returns '1 and 2'
 2 1 show                      # returns '1 and 2'
 ```
 
-All three calls compute the same thing: BORU fills argument slots by
+All three calls compute the same thing: boru fills argument slots by
 walking forward tokens first (left to right) and then taking from
 the stack top-first. For details see
 **[Tutorial §3](TUTORIAL.md#3-three-ways-to-call-a-word)**.
@@ -548,7 +548,7 @@ instance.
 
 ### Methods are free functions over the instance
 
-BORU class instances hold **fields, not methods**: the field map has no
+boru class instances hold **fields, not methods**: the field map has no
 method slot and there is no inline dispatch. Putting a body in the map
 (`class {count: 0, inc: [count 1 add]}`) does **not** create a
 callable — that just stores a list under the field `inc`, and `c inc`
@@ -1093,10 +1093,10 @@ recipe, but plain `vault exec` still keeps the secret in the vault; e.g.
 `boru vault exec tok -- sh -c 'dotnet nuget push pkg.nupkg --api-key "$tok" -s URL'`.
 See [CLI.md → Publishers without a recipe](CLI.md#publishers-without-a-recipe).
 
-For BORU's own registry, `boru login --vault` keeps the registry token in
+For boru's own registry, `boru login --vault` keeps the registry token in
 the vault and `boru publish` reads it back automatically.
 
-Inside BORU, secrets are surfaced via the `vault` capability:
+Inside boru, secrets are surfaced via the `vault` capability:
 
 ```
 vault get "github_token"
@@ -1203,7 +1203,7 @@ Read more in
 
 ## Sandbox untrusted code
 
-BORU has an opt-in permissions model that can restrict what a program
+boru has an opt-in permissions model that can restrict what a program
 is allowed to do — useful for running submitted code (`boru exec`),
 embedded scripts, or untrusted plugins. By default there are no
 restrictions; permissions activate only when you pass a `--perms`
@@ -1298,12 +1298,12 @@ the request body — the policy is bound at server startup. Run
 multiple `boru exec` instances on different ports for different
 policies.
 
-For running BORU-from-BORU with stricter permissions (test harnesses,
+For running boru-from-boru with stricter permissions (test harnesses,
 plugin sandboxes), the `boru:vm` native module exposes
 `Vm.run`/`Vm.run-with` with capability attenuation.
 
 
-## Run BORU as a service
+## Run boru as a service
 
 Beyond the one-shot commands, `boru` ships long-running services. Each
 owns a port or stdio and shuts down gracefully on SIGINT/SIGTERM.
@@ -1358,7 +1358,7 @@ boru policy explain sandbox fileops.write path=/etc/passwd  # the blame chain
 
 ## Write a command-line tool
 
-A BORU program becomes a Unix tool through four pieces: it reads its
+A boru program becomes a Unix tool through four pieces: it reads its
 arguments, it reads its input, it writes its output, and it chooses an exit
 code. `boru:cli` supplies the first, `boru:io` the rest, and `boru build` turns
 the result into an executable that needs no `boru` on the target machine.

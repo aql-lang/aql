@@ -5,11 +5,11 @@ import (
 	"testing"
 )
 
-// TestDefaultRulesFromBORU pins the compiled form of the fmt-rules.boru
+// TestDefaultRulesFromBoru pins the compiled form of the fmt-rules.boru
 // stylesheet: every field carries the canonical value the file declares,
 // and the stylesheet parsed without error. This is the guard that makes
 // the embedded file's validity a build fact.
-func TestDefaultRulesFromBORU(t *testing.T) {
+func TestDefaultRulesFromBoru(t *testing.T) {
 	if err := DefaultRulesInitError(); err != nil {
 		t.Fatalf("stylesheet failed to parse: %v", err)
 	}

@@ -42,8 +42,8 @@ import (
 // (map-shaped args are flattened into params by key). The result may be
 // nil (no-result ops), or any composition of string / bool / int /
 // int64 / float64 / []any / map[string]any — vaultAnyToValue projects
-// it onto BORU values. Session state (active vault, cached passphrase)
-// belongs to the host adapter, never to BORU (VAULT-TUI-PORT.0.md §5.1).
+// it onto boru values. Session state (active vault, cached passphrase)
+// belongs to the host adapter, never to boru (VAULT-TUI-PORT.0.md §5.1).
 type VaultSpec struct {
 	// Name identifies the backend in diagnostics ("cli", "fake", …).
 	Name string
@@ -294,7 +294,7 @@ func vaultCollectParams(op vaultOp, args []native.Value, r *native.Registry) (ma
 	return params, nil
 }
 
-// vaultAnyToValue projects a backend result onto a BORU value. Map keys
+// vaultAnyToValue projects a backend result onto a boru value. Map keys
 // are emitted in sorted order so results canon deterministically; an
 // unrecognised shape degrades to its string form rather than erroring.
 func vaultAnyToValue(v any) native.Value {
@@ -401,8 +401,8 @@ func vaultNatives() []native.NativeFunc {
 		})
 	}
 	// `identity` is not a generic Do-dispatch word: it mints an opaque
-	// credential handle rather than projecting a vault result onto an
-	// BORU value, so it carries its own handler (vault_identity.go).
+	// credential handle rather than projecting a vault result onto a
+	// boru value, so it carries its own handler (vault_identity.go).
 	out = append(out, native.NativeFunc{
 		Name: vaultInnerName("identity"),
 		Signatures: []native.Signature{{

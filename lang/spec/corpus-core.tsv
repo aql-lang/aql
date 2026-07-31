@@ -1,4 +1,4 @@
-# BORU corpus: core words (auto-generated from `boru describe` examples, verified interpret+check+compile)
+# boru corpus: core words (auto-generated from `boru describe` examples, verified interpret+check+compile)
 # Format: input<TAB>expected<TAB>word
 'b' gt 'a'	true	gt
 'b' gte 'a'	true	gte

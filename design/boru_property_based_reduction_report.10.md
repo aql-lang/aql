@@ -1,19 +1,19 @@
-# BORU as a Substrate for Property-Based Test Input Reduction
+# boru as a Substrate for Property-Based Test Input Reduction
 
 ## Executive Summary
 
-This report summarizes a discussion about whether property-based testing (PBT) can be modeled as generation plus reduction over a structured, measurable program representation, and whether BORU is a suitable embedded language for that purpose.
+This report summarizes a discussion about whether property-based testing (PBT) can be modeled as generation plus reduction over a structured, measurable program representation, and whether boru is a suitable embedded language for that purpose.
 
 The central recommendation is:
 
-> Use BORU as a **counterexample description calculus**, not merely as a JSON generator. Define a restricted pure profile of BORU, lower surface syntax into a canonical strict-stack intermediate representation (IR), assign an MDL-style cost model to that IR, and implement failure-preserving rewrites over the IR.
+> Use boru as a **counterexample description calculus**, not merely as a JSON generator. Define a restricted pure profile of boru, lower surface syntax into a canonical strict-stack intermediate representation (IR), assign an MDL-style cost model to that IR, and implement failure-preserving rewrites over the IR.
 
 This gives a practical route toward what might be called **Kolmogorov-style shrinking**, without relying on uncomputable Kolmogorov complexity. The generated input is the denotation of a program; the shrinker reduces the program, not the value directly.
 
 The proposed framing is:
 
 ```text
-Find a lower-cost BORU generator program p'
+Find a lower-cost boru generator program p'
 such that:
 
   eval(p') produces a valid test input
@@ -188,15 +188,15 @@ The opportunity is strongest for highly structured domains:
 
 ---
 
-## 5. Why BORU Looks Promising
+## 5. Why boru Looks Promising
 
-BORU appears well-suited as a prototype substrate for this research direction, especially because it is designed as an embedded language whose features and words can be enabled or disabled.
+boru appears well-suited as a prototype substrate for this research direction, especially because it is designed as an embedded language whose features and words can be enabled or disabled.
 
 Relevant properties include:
 
 ### 5.1 JSON-Like Data Representation
 
-BORU can represent structured data such as scalars, lists, maps, and records. This makes it a natural candidate for representing JSON-like test inputs.
+boru can represent structured data such as scalars, lists, maps, and records. This makes it a natural candidate for representing JSON-like test inputs.
 
 Instead of reducing only expanded JSON like:
 
@@ -224,7 +224,7 @@ The second representation preserves the structure of the input.
 
 ### 5.2 Strict Stack Mode
 
-BORU can be rewritten into a strict stack form. This is essential.
+boru can be rewritten into a strict stack form. This is essential.
 
 Human-friendly surface syntax is useful for authoring, but reduction should happen over a canonical strict-stack IR. This avoids ambiguity caused by flexible argument ordering or forward collection.
 
@@ -248,7 +248,7 @@ The cost model and rewrite rules should operate on this canonical IR, not on raw
 
 ### 5.3 Embedded Profile
 
-Because BORU is embedded and can disable most features and words, it can expose a restricted profile specifically for test generation and reduction.
+Because boru is embedded and can disable most features and words, it can expose a restricted profile specifically for test generation and reduction.
 
 A pure profile can disable:
 
@@ -284,11 +284,11 @@ However, the reducer must know whether user-defined words are transparent, opaqu
 
 ### 5.5 Homoiconicity and Quotations
 
-If BORU can represent programs as values through quotations, then generator programs can be manipulated as structured data. This is very useful for reduction, rewriting, and compression.
+If boru can represent programs as values through quotations, then generator programs can be manipulated as structured data. This is very useful for reduction, rewriting, and compression.
 
 ### 5.6 Type and Schema Support
 
-BORU's type, record, and unification mechanisms can help enforce validity-preserving reductions.
+boru's type, record, and unification mechanisms can help enforce validity-preserving reductions.
 
 A candidate can be accepted only if:
 
@@ -303,10 +303,10 @@ This keeps the reducer from minimizing to meaningless generation errors.
 
 ## 6. Main Recommendation
 
-Use BORU in four layers:
+Use boru in four layers:
 
 ```text
-Layer 1: Surface BORU authoring
+Layer 1: Surface boru authoring
 Layer 2: Pure embedded BORU-G profile
 Layer 3: Canonical typed strict-stack IR
 Layer 4: Failure-preserving reducer over IR
@@ -824,12 +824,12 @@ This gives true optimality only under the chosen DSL, cost model, and bound.
 
 ## 17. Important Gotchas
 
-### Gotcha 1: Do Not Reduce Surface BORU Directly
+### Gotcha 1: Do Not Reduce Surface boru Directly
 
-Surface BORU is for humans. Reduction should happen after:
+Surface boru is for humans. Reduction should happen after:
 
 ```text
-surface BORU -> canonical strict stack IR
+surface boru -> canonical strict stack IR
 ```
 
 Otherwise, flexible syntax can make local rewrites non-local or ambiguous.
@@ -969,8 +969,8 @@ failure-preserving greedy loop
 Goal:
 
 ```text
-Given a failing pure BORU generator,
-produce a smaller pure BORU generator that still fails.
+Given a failing pure boru generator,
+produce a smaller pure boru generator that still fails.
 ```
 
 ### Phase 2: Domain-Specific Generator Words
@@ -1028,7 +1028,7 @@ plain JSON shrinking
 delta debugging
 Hypothesis-style choice-trace shrinking
 grammar-aware reduction
-BORU program reduction
+boru program reduction
 ```
 
 Measure:
@@ -1047,7 +1047,7 @@ failure stability
 
 ## 20. Final Recommendation
 
-BORU is a credible and promising substrate for this idea, especially because:
+boru is a credible and promising substrate for this idea, especially because:
 
 ```text
 it is embedded
@@ -1061,24 +1061,24 @@ rewrite rules can operate on stack IR
 
 The key recommendation is:
 
-> Do not attempt to shrink arbitrary full BORU source directly. Define a pure, deterministic, typed, strict-stack BORU-G profile and reduce its canonical IR.
+> Do not attempt to shrink arbitrary full boru source directly. Define a pure, deterministic, typed, strict-stack BORU-G profile and reduce its canonical IR.
 
 The architecture should be:
 
 ```text
-BORU surface syntax
+boru surface syntax
   -> embedded pure profile check
   -> strict-stack canonical IR
   -> type/effect validation
   -> MDL-style cost model
   -> failure-preserving rewrite engine
-  -> readable BORU pretty-printer
+  -> readable boru pretty-printer
 ```
 
 The first milestone should be modest:
 
 ```text
-Produce a deterministic, replayable, lower-cost failing BORU generator.
+Produce a deterministic, replayable, lower-cost failing boru generator.
 ```
 
 Only after that should the system attempt more ambitious MDL-style compression and small-program synthesis.

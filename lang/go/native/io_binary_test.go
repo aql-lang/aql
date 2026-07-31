@@ -10,14 +10,14 @@ import (
 func TestBinaryWriteRead(t *testing.T) {
 	r, mem := ioFSReg(t)
 	// write raw bytes, then read them back as Bytes.
-	res := runBORU(t, r, []Value{NewWord("write"), pathV("b.bin"), NewBytesValue([]byte{0, 1, 2, 255})})
+	res := runBoru(t, r, []Value{NewWord("write"), pathV("b.bin"), NewBytesValue([]byte{0, 1, 2, 255})})
 	if !IsPathon(res[0]) || res[0].String() != "b.bin" {
 		t.Errorf("binary write returned %v", res[0])
 	}
 	if got, _ := mem.ReadFile("b.bin"); !bytes.Equal(got, []byte{0, 1, 2, 255}) {
 		t.Errorf("stored bytes = %v", got)
 	}
-	res = runBORU(t, r, []Value{
+	res = runBoru(t, r, []Value{
 		NewWord("read"), pathV("b.bin"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")) }),
 	})
@@ -25,7 +25,7 @@ func TestBinaryWriteRead(t *testing.T) {
 		t.Errorf("read bytes = %v (ok=%v)", b, ok)
 	}
 	// {enc:'binary'} is an alias for bytes.
-	res = runBORU(t, r, []Value{
+	res = runBoru(t, r, []Value{
 		NewWord("read"), pathV("b.bin"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("binary")) }),
 	})
@@ -40,7 +40,7 @@ func TestPositionedRead(t *testing.T) {
 		t.Fatal(err)
 	}
 	// positioned text slice.
-	res := runBORU(t, r, []Value{
+	res := runBoru(t, r, []Value{
 		NewWord("read"), pathV("h.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(1)); om.Set("length", NewInteger(3)) }),
 	})
@@ -48,7 +48,7 @@ func TestPositionedRead(t *testing.T) {
 		t.Errorf("positioned read = %v, want 'ell'", res[0])
 	}
 	// positioned byte slice.
-	res = runBORU(t, r, []Value{
+	res = runBoru(t, r, []Value{
 		NewWord("read"), pathV("h.txt"),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("enc", NewString("bytes"))
@@ -60,7 +60,7 @@ func TestPositionedRead(t *testing.T) {
 		t.Errorf("positioned byte read = %v (ok=%v)", b, ok)
 	}
 	// binary read of an absent file errors.
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("read"), pathV("ghost"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")) }),
 	}); err == nil {
@@ -71,8 +71,8 @@ func TestPositionedRead(t *testing.T) {
 func TestBinaryWriteAppendAndOffset(t *testing.T) {
 	r, mem := ioFSReg(t)
 	// append.
-	runBORU(t, r, []Value{NewWord("write"), pathV("a.bin"), NewBytesValue([]byte("ab"))})
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{NewWord("write"), pathV("a.bin"), NewBytesValue([]byte("ab"))})
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("a.bin"), NewBytesValue([]byte("cd")),
 		wrapMap(func(om *OrderedMap) { om.Set("mode", NewString("append")) }),
 	})
@@ -83,7 +83,7 @@ func TestBinaryWriteAppendAndOffset(t *testing.T) {
 	if err := mem.WriteFile("p.bin", []byte("hello"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("p.bin"), NewBytesValue([]byte("XY")),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(1)) }),
 	})
@@ -91,7 +91,7 @@ func TestBinaryWriteAppendAndOffset(t *testing.T) {
 		t.Errorf("offset write = %q, want hXYlo", got)
 	}
 	// positioned write past the end grows the file with zero bytes.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("grow.bin"), NewBytesValue([]byte("Z")),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(3)) }),
 	})
@@ -99,7 +99,7 @@ func TestBinaryWriteAppendAndOffset(t *testing.T) {
 		t.Errorf("grow write = %v", got)
 	}
 	// negative offset and stream offset are rejected.
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("write"), pathV("p.bin"), NewBytesValue([]byte("x")),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(-1)) }),
 	}); err == nil {
@@ -108,7 +108,7 @@ func TestBinaryWriteAppendAndOffset(t *testing.T) {
 	// A huge non-negative offset is rejected before the growth arithmetic —
 	// otherwise it would overflow `end` and panic on existing[offset:]
 	// (PR-review fix). 1<<62 is far past the positioned-write cap.
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("write"), pathV("p.bin"), NewBytesValue([]byte("x")),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(int64(1)<<62)) }),
 	}); err == nil {

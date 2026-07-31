@@ -1,18 +1,18 @@
-# GitHub Linguist support for BORU
+# GitHub Linguist support for boru
 
 This directory contains everything needed to get **`.boru` files
-syntax-highlighted on GitHub** and to have repositories that contain BORU
-**classified as BORU** in the repository language bar.
+syntax-highlighted on GitHub** and to have repositories that contain boru
+**classified as boru** in the repository language bar.
 
 GitHub uses [github/linguist](https://github.com/github-linguist/linguist)
 for both jobs:
 
-- **classification** — deciding a blob is BORU (by extension + optional
+- **classification** — deciding a blob is boru (by extension + optional
   heuristics), which drives the per-repo language bar and stats;
 - **highlighting** — colourising the blob using a TextMate/tree-sitter
   grammar whose scope name matches the language's `tm_scope`.
 
-Getting BORU fully supported means a pull request to `github/linguist`.
+Getting boru fully supported means a pull request to `github/linguist`.
 This directory holds the pieces that PR needs, plus a **local fallback**
 (`.gitattributes`) you can use *today*, before the upstream PR lands.
 
@@ -24,7 +24,7 @@ This directory holds the pieces that PR needs, plus a **local fallback**
 | ----------------------- | ----------------------------------------------------------------------- |
 | `languages.yml.patch`   | The exact YAML block to add to linguist's `lib/linguist/languages.yml`. |
 | `samples/`              | 6 real, representative `.boru` programs (byte-identical repo copies).    |
-| `gitattributes-example` | A `.gitattributes` snippet to force-classify `.boru` as BORU locally.     |
+| `gitattributes-example` | A `.gitattributes` snippet to force-classify `.boru` as boru locally.     |
 | `README.md`             | This file — the full submission checklist.                              |
 
 The `samples/` programs were copied unchanged from the repository and
@@ -52,7 +52,7 @@ Work through this in order. Everything happens in a clone of
 
 ### 1. Add the language entry
 
-Open `lib/linguist/languages.yml`, find the alphabetical slot for `BORU`
+Open `lib/linguist/languages.yml`, find the alphabetical slot for `boru`
 (after `Boogie`, before `BQN`), and paste the block from
 [`languages.yml.patch`](./languages.yml.patch). Key fields:
 
@@ -60,7 +60,7 @@ Open `lib/linguist/languages.yml`, find the alphabetical slot for `BORU`
 - `color: "#4a7dbf"` — a valid, reasonably distinct hex colour (tweak to taste)
 - `extensions: [".boru"]`
 - `tm_scope: source.boru` — **must** equal the grammar's top-level `scopeName`
-- `ace_mode: text` — honest fallback; BORU has no dedicated Ace mode upstream
+- `ace_mode: text` — honest fallback; boru has no dedicated Ace mode upstream
 - `language_id:` — **do not invent one.** Generate it with the tool (step 5).
 
 ### 2. Add the grammar submodule
@@ -89,14 +89,14 @@ Notes:
   (linguist requires this for vendored grammars).
 - `scopeName` in the grammar (`source.boru`) must match `tm_scope` in
   `languages.yml` exactly, or highlighting silently no-ops.
-- If BORU does not yet have a standalone grammar repo, extract one from an
+- If boru does not yet have a standalone grammar repo, extract one from an
   existing editor integration (this repo already ships editor support —
   e.g. the reference Emacs mode at `editors/emacs/boru-mode.el` and the
   VS Code / Zed / Sublime / Kate / Helix configs under `editors/` — whose
   vocabulary and faces a TextMate grammar should mirror). A tree-sitter
   grammar is also accepted by linguist and is the modern preference.
 - If you submit **without** a grammar, set `tm_scope: none` in the YAML.
-  Blobs then classify as BORU but render un-highlighted. A grammar is
+  Blobs then classify as boru but render un-highlighted. A grammar is
   strongly preferred; prefer landing it in the same PR.
 
 ### 3. Add the samples
@@ -105,13 +105,13 @@ Copy the programs from [`samples/`](./samples) into linguist's sample
 tree:
 
 ```bash
-mkdir -p samples/BORU
-cp /path/to/this/repo/editors/linguist/samples/*.boru samples/BORU/
+mkdir -p samples/boru
+cp /path/to/this/repo/editors/linguist/samples/*.boru samples/boru/
 ```
 
 Linguist's test suite tokenizes everything under `samples/<Language>/`
 and uses it to train the Bayesian classifier that disambiguates shared
-extensions. `.boru` is currently unique to BORU, so no disambiguation
+extensions. `.boru` is currently unique to boru, so no disambiguation
 heuristic is needed — but the samples are still required and must parse
 under the grammar you registered.
 
@@ -121,14 +121,14 @@ under the grammar you registered.
 **no heuristic is required**. If a future collision appears (another
 language also using `.boru`), add a disambiguating rule to
 `lib/linguist/heuristics.yml` keyed on `.boru`, matching a
-BORU-distinctive pattern — e.g. the concatenative `def … fn [[ … ]]`
+boru-distinctive pattern — e.g. the concatenative `def … fn [[ … ]]`
 shape, `import "boru:…"`, or `export "Name" { … }`. Example skeleton:
 
 ```yaml
 disambiguations:
   - extensions: ['.boru']
     rules:
-      - language: BORU
+      - language: boru
         pattern: '(?m)^\s*(import\s+"boru:|export\s+"[A-Z]|def\s+\w+\s+fn\s+\[\[)'
       - language: <OtherLanguage>
         pattern: '<other-distinctive-pattern>'
@@ -167,10 +167,10 @@ Push a branch to your linguist fork and open a PR against
 [`CONTRIBUTING.md`](https://github.com/github-linguist/linguist/blob/master/CONTRIBUTING.md).
 Linguist's policy is that a language should be **in reasonable use** (a
 few hundred repos / a meaningful public footprint) before it is added —
-be ready to link to public BORU repositories and the language's home
+be ready to link to public boru repositories and the language's home
 (https://github.com/boru-lang/boru). Include in the PR:
 
-- a one-line description of BORU (concatenative, strongly-typed query language),
+- a one-line description of boru (concatenative, strongly-typed query language),
 - links to the spec / homepage and to real repositories using `.boru`,
 - confirmation the grammar repo is public + OSI-licensed,
 - confirmation `language_id` was generated by the tool.
@@ -189,14 +189,14 @@ classification in your own repositories. Add the snippet from
 file at your repository root:
 
 ```gitattributes
-*.boru linguist-language=BORU
+*.boru linguist-language=boru
 ```
 
 Commit and push. GitHub's Linguist honours per-repo `.gitattributes`, so
-`.boru` files are immediately reported as BORU in the language bar.
+`.boru` files are immediately reported as boru in the language bar.
 
 Caveat: `linguist-language` overrides **classification**, but syntax
 **highlighting** still needs a grammar linguist knows about. Until the
 grammar from step 2 ships upstream, force-classified blobs render as
-plain text. Classification (the language bar, the "BORU" label) works
+plain text. Classification (the language bar, the "boru" label) works
 regardless — highlighting follows once the grammar lands.

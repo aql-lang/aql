@@ -128,7 +128,7 @@ func (e *Engine) scanMacroOperands(fnDef *FnDefInfo, arity, valIdx int) ([]Value
 
 // ExpandMacroWith is the exported entry to expandMacroWith for host packages
 // that hold a macro FnDef directly (rather than by name) — the minilang
-// BORU compile-hook path expands the `compile_<kind>` macro against the
+// boru compile-hook path expands the `compile_<kind>` macro against the
 // literal src and opts. Returns the expanded token list.
 func ExpandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, error) {
 	return expandMacroWith(r, fnDef, operands)

@@ -8,10 +8,10 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// Helper: run BORU source and extract a top-of-stack Map field by key.
+// Helper: run boru source and extract a top-of-stack Map field by key.
 func runTestAndGetField(t *testing.T, r *native.Registry, src, key string) native.Value {
 	t.Helper()
-	res := runTestBORU(t, r, src)
+	res := runTestBoru(t, r, src)
 	if len(res) == 0 {
 		t.Fatalf("no result for %q", src)
 	}
@@ -47,7 +47,7 @@ func TestCheckProp_AlwaysPasses(t *testing.T) {
 // TestCheckProp_PropertyBodyCanImportNativeModule pins §11b.1: a
 // property body may `import "boru:<name>"` and use the namespace across
 // MULTIPLE runs. The module is resolved once and cached; because each
-// property iteration runs via CallBORU — whose def-cleanup strips the
+// property iteration runs via CallBoru — whose def-cleanup strips the
 // namespace binding installed during the body — a naive load-once guard
 // left the module "loaded" but `pkg` unbound from iteration 2 on. The
 // fix re-binds the cached desc's namespace when absent.
@@ -83,7 +83,7 @@ func TestSkip_RecordsSkippedWithoutRunning(t *testing.T) {
 	}
 	// The skipped [false] property would fail if run; it must not raise
 	// the run's failure count.
-	out := runTestBORU(t, r, `Test.fail-count`)
+	out := runTestBoru(t, r, `Test.fail-count`)
 	if n, _ := native.AsInteger(out[len(out)-1]); n != 0 {
 		t.Errorf("skipped properties must not count as failures; fail-count = %d, want 0", n)
 	}
@@ -93,11 +93,11 @@ func TestSkip_RecordsSkippedWithoutRunning(t *testing.T) {
 // line per recorded property (pass/FAIL/skip) plus a tally.
 func TestReport_OneLinePerProperty(t *testing.T) {
 	r := testRegistry(t)
-	runTestBORU(t, r, `Test.check-prop "good" [r.int 0 9] [0 gte] 5 1 0`)
-	runTestBORU(t, r, `Test.check-prop "bad" [r.int 0 9] [false] 5 1 0`)
-	runTestBORU(t, r, `Test.skip "parked" [r.int 0 9] [false] 5 1 0`)
+	runTestBoru(t, r, `Test.check-prop "good" [r.int 0 9] [0 gte] 5 1 0`)
+	runTestBoru(t, r, `Test.check-prop "bad" [r.int 0 9] [false] 5 1 0`)
+	runTestBoru(t, r, `Test.skip "parked" [r.int 0 9] [false] 5 1 0`)
 
-	out := runTestBORU(t, r, `Test.report`)
+	out := runTestBoru(t, r, `Test.report`)
 	s, err := out[len(out)-1].AsConcreteString()
 	if err != nil {
 		t.Fatalf("Test.report should return a String, got %v", out[len(out)-1])
@@ -116,7 +116,7 @@ func TestReport_OneLinePerProperty(t *testing.T) {
 func TestCheckProp_FailsOnSpecificInput(t *testing.T) {
 	r := testRegistry(t)
 	src := `Test.check-prop "positive" [r.int 0 100] [0 gt] 200 1 0`
-	res := runTestBORU(t, r, src)
+	res := runTestBoru(t, r, src)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
 	ok, _ := okV.AsConcreteBoolean()
@@ -143,7 +143,7 @@ func TestCheckProp_DeterministicAcrossRuns(t *testing.T) {
 	draw := func() int64 {
 		r := testRegistry(t)
 		src := `Test.check-prop "not-seven" [r.int 0 100] [7 neq] 200 42 0`
-		res := runTestBORU(t, r, src)
+		res := runTestBoru(t, r, src)
 		m, _ := native.AsMap(res[0])
 		v, _ := m.Get("failing-input")
 		n, _ := v.AsConcreteInteger()
@@ -162,7 +162,7 @@ func TestCheckProp_DeterministicAcrossRuns(t *testing.T) {
 func TestCheckProp_RunsCount(t *testing.T) {
 	r := testRegistry(t)
 	src := `Test.check-prop "always-true" [42] [true] 7 1 0`
-	res := runTestBORU(t, r, src)
+	res := runTestBoru(t, r, src)
 	m, _ := native.AsMap(res[0])
 	v, _ := m.Get("runs")
 	n, _ := v.AsConcreteInteger()
@@ -177,7 +177,7 @@ func TestCheckProp_RunsCount(t *testing.T) {
 func TestCheckProp_RejectsNonBooleanProperty(t *testing.T) {
 	r := testRegistry(t)
 	src := `Test.check-prop "bad-prop" [r.int 0 100] [42] 1 1 0`
-	res := runTestBORU(t, r, src)
+	res := runTestBoru(t, r, src)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
 	ok, _ := okV.AsConcreteBoolean()
@@ -190,7 +190,7 @@ func TestCheckProp_RejectsNonBooleanProperty(t *testing.T) {
 	}
 }
 
-// TestRunProperty_ViaSpecMap confirms the BORU `run-property` fn
+// TestRunProperty_ViaSpecMap confirms the boru `run-property` fn
 // destructures a PropertySpec map and dispatches the same way as
 // the imperative `Test.check-prop` call.
 func TestRunProperty_ViaSpecMap(t *testing.T) {
@@ -223,15 +223,15 @@ func TestRunProperty_ViaSpecMap(t *testing.T) {
 func TestCheckProp_ResultsAccumulated(t *testing.T) {
 	r := testRegistry(t)
 	// One passing, one failing.
-	runTestBORU(t, r, `Test.check-prop "ok-prop" [r.int 0 10] [0 gte] 5 1 0`)
-	runTestBORU(t, r, `Test.check-prop "bad-prop" [r.int 0 10] [false] 5 1 0`)
+	runTestBoru(t, r, `Test.check-prop "ok-prop" [r.int 0 10] [0 gte] 5 1 0`)
+	runTestBoru(t, r, `Test.check-prop "bad-prop" [r.int 0 10] [false] 5 1 0`)
 
-	resV := runTestBORU(t, r, `Test.results`)
+	resV := runTestBoru(t, r, `Test.results`)
 	if len(resV) == 0 {
 		t.Fatal("Test.results returned nothing")
 	}
 	// Just confirm we have entries and at least one failure recorded.
-	failV := runTestBORU(t, r, `Test.fail-count`)
+	failV := runTestBoru(t, r, `Test.fail-count`)
 	if len(failV) == 0 {
 		t.Fatal("Test.fail-count returned nothing")
 	}
@@ -252,7 +252,7 @@ func TestCheckProp_ShrinksFailingInput(t *testing.T) {
 	// every value ≥ 10. Reducer should shrink any failing input
 	// down to 10 (smallest violator).
 	src := `Test.check-prop "n-lt-10" [r.int 0 1000] [10 lt] 50 1 200`
-	res := runTestBORU(t, r, src)
+	res := runTestBoru(t, r, src)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
 	if ok, _ := okV.AsConcreteBoolean(); ok {
@@ -282,7 +282,7 @@ func TestCheckProp_ShrinksFailingInput(t *testing.T) {
 func TestCheckProp_ShrinkDisabledByMaxShrinks(t *testing.T) {
 	r := testRegistry(t)
 	src := `Test.check-prop "skip-shrink" [r.int 0 1000] [10 lt] 50 1 0`
-	res := runTestBORU(t, r, src)
+	res := runTestBoru(t, r, src)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
 	if ok, _ := okV.AsConcreteBoolean(); ok {
@@ -309,7 +309,7 @@ func TestCheckProp_ShrinkDisabledByMaxShrinks(t *testing.T) {
 func TestCheckProp_GenProgramShrinkingReachesSmallerSource(t *testing.T) {
 	r := testRegistry(t)
 	src := `Test.check-prop "always-fail" [r.int 0 1000] [false] 5 7 200`
-	res := runTestBORU(t, r, src)
+	res := runTestBoru(t, r, src)
 	m, _ := native.AsMap(res[0])
 	okV, _ := m.Get("ok")
 	if ok, _ := okV.AsConcreteBoolean(); ok {

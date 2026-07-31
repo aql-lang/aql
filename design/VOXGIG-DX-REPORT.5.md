@@ -128,7 +128,7 @@ isolation but surprising in combination (`merge` depth, ~~`do` evaluation~~
 | T9.1 | 🟡 | ✅ fixed (semantics) / 🟠 open (perf) | Maps with **computed keys** now work end-to-end: `{[k]: v}` literals evaluate the key, `m get (k)` reads, and `set` gained a **copy-returning Map form** — `{a:1} set (k) 2` returns a new map with the receiver untouched, and calls chain (`{} set a 1 set b 2`). Together with `StructUtil.items` for enumeration, the association-list workaround is retired. Residual: each set copies the map (O(n) per insert, like setpath), so bulk incremental construction still wants the P4 native persistent map (HAMT Level B). The former side gap (`refine Object` dynamic fields non-enumerable) is gone structurally: `refine Object` was removed under the class/object split (2026-06-09) — class instances are sealed and enumerate their flat field map, and plain Objects are fully enumerable (`design/CLASS-OBJECT.10.md`). |
 | T9.2 | 🟡 | ✅ fixed | `filter` now accepts a `[…]` quotation like `each`/`fold`: `filter [2 gt] [1 2 3 4]` → `[3 4]` (element pushed first, no `{key,value}` wrapper; maps filter by value to a map; a non-Boolean body result is a **loud error**, not a silent drop). The Reach lens (`filter $.active xs`) and Function-callback forms remain. Spec rows in `lang/spec/higher-order.tsv` §5b. |
 | T9.6 | 🟡 | ✅ fixed | `raise` landed (2026-06-10) per `design/ERRORS.8.md` §2: message / code+message / spec-map forms, raising the same `Ideal/Error` natives produce, caught by the existing `do … error […]`; handlers read `e.code` / `e.message` / payload keys, `convert Map` projects them. Spec rows in `lang/spec/error.tsv`. |
-| T9.7 | 🟡 | ✅ fixed | In-memory parsing landed (2026-06-10) per `design/PARSING.10.md`: `StructUtil.parse` decodes jsonic/JSON text to data (the `jsonify` complement — data context, jsonic superset, loud `parse_error` on malformed/empty input) and `Vm.parse` parses BORU source to a quoted token list without evaluating it (element shapes are the engine's parse values, implementation-defined for now). Spec rows in `module-struct.tsv` / `module-vm.tsv`. |
+| T9.7 | 🟡 | ✅ fixed | In-memory parsing landed (2026-06-10) per `design/PARSING.10.md`: `StructUtil.parse` decodes jsonic/JSON text to data (the `jsonify` complement — data context, jsonic superset, loud `parse_error` on malformed/empty input) and `Vm.parse` parses boru source to a quoted token list without evaluating it (element shapes are the engine's parse values, implementation-defined for now). Spec rows in `module-struct.tsv` / `module-vm.tsv`. |
 | — | 🟡 | ✅ closed (docs) | `with` / `assoc` are not words, by choice: `StructUtil.setpath` *is* the copy-returning single-key (and deep-path) update — `{a:1,b:2} StructUtil.setpath "b" 3` → `{a:1, b:3}` — and is now documented as such in REFERENCE.md (both the `set` callout and the merge gotcha point to it). Adding an alias was rejected as API duplication. |
 
 ### Theme H — HAMT case study (capability ceiling)
@@ -156,14 +156,14 @@ parentheses):
 **Level B — to make a HAMT actually *pay off*.** This is a runtime decision,
 not surface syntax:
 1. **Mutable, fixed-width, unboxed arrays** with an O(1) in-place
-   `set`/`insert` contract (transient fast path for bulk construction). BORU
+   `set`/`insert` contract (transient fast path for bulk construction). boru
    has indexed `set` on `Array` but not on `List`, and the mutation contract
    isn't exposed.
 2. **Layout guarantees** — contiguous packed storage, unboxed small ints — for
    the cache locality that *is* the HAMT's edge.
 3. Realistically, **a native persistent-map type in the runtime** (HAMT/CHAMP)
    the way Clojure/Scala/Erlang ship one. As a bonus, this would also retire
-   BORU's dynamic-key-map limitation (T9.1).
+   boru's dynamic-key-map limitation (T9.1).
 
 ### Theme I — Minor papercuts
 
@@ -354,7 +354,7 @@ export-only-import surprise.
 
 If/when a HAMT-class persistent map is on the roadmap: mutable unboxed
 fixed-width arrays with transients, or ship a native HAMT/CHAMP map type. As
-a bonus, the native map would retire BORU's dynamic-key-map limitation (T9.1)
+a bonus, the native map would retire boru's dynamic-key-map limitation (T9.1)
 and turn association-list workarounds back into idiomatic maps.
 
 ---

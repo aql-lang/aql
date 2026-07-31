@@ -4,18 +4,18 @@
 *host-imposed* permission model of [PERMISSIONS.10](PERMISSIONS.10.md)
 (implemented) into a *per-dependency, module-declared, transitively-attenuated*
 capability model. Where PERMISSIONS.10 answers "how does a host sandbox one
-BORU program?", this note answers "how does a program safely depend on code it
-did not write, and code *that* code did not write, all the way down?" — BORU's
+boru program?", this note answers "how does a program safely depend on code it
+did not write, and code *that* code did not write, all the way down?" — boru's
 response to the software-supply-chain trust crisis.
 
 It is written in direct conversation with Laurence Tratt's essay [*Can We
 Retain the Benefits of Transitive Dependencies Without Undermining
 Security?*](https://tratt.net/laurie/blog/2024/can_we_retain_the_benefits_of_transitive_dependencies_without_undermining_security.html)
-(2025-01-28). The short version of the argument below is that BORU, by virtue of
+(2025-01-28). The short version of the argument below is that boru, by virtue of
 being a *concatenative interpreter with object-capability enforcement and no
 ambient authority*, is already most of the way to the system Tratt says our
 industry needs — but only for the portion of the dependency graph written *in
-BORU*, and only once four already-scaffolded mechanisms are finished and wired
+boru*, and only once four already-scaffolded mechanisms are finished and wired
 together.
 
 ---
@@ -30,17 +30,17 @@ together.
   is our only real security boundary, and *within* a process there is
   effectively none.
 
-- **Why BORU is different.** BORU code is not machine code in a shared address
-  space. A BORU word cannot read arbitrary memory or make a syscall; the *only*
+- **Why boru is different.** boru code is not machine code in a shared address
+  space. A boru word cannot read arbitrary memory or make a syscall; the *only*
   path to any effect is dispatching a word that reaches a **wrapped capability
   slot** on the registry (`lang/go/native/capabilities.go`). There is no
   ambient authority to strip away — it was never granted. Tratt's core premise
   ("every machine code instruction can read from, and write to, anywhere") is
-  *false for the BORU-written part of the graph*.
+  *false for the boru-written part of the graph*.
 
 - **Why the cost objection evaporates.** Tratt notes that his "mutually
   distrusting cells that communicate cheaply" model founders on performance:
-  IPC is 5–7 orders of magnitude slower than an in-process call. BORU's
+  IPC is 5–7 orders of magnitude slower than an in-process call. boru's
   cell boundary is **a hashtable lookup** (`policyGateWord`,
   `permissionedFileOps`), not a process boundary, and cells communicate by
   passing values on the stack. The expensive part of his design is free here,
@@ -62,24 +62,24 @@ together.
      software lost (§6).
   4. *Well-known subsets / "a sorting library needs no capabilities"?* → **Yes**
      — a **`pure`** subset (`{}`), plus `deterministic`, `read-only`, `client`,
-     … Because all host access funnels through ~9 accessors and BORU has a static
+     … Because all host access funnels through ~9 accessors and boru has a static
      checker, a module's *declared* footprint can be *statically verified*
      against its *actual* reachable footprint (§7; feasibility worked through in
      detail in §7.3–7.8, where the dynamic-dispatch surface reduces to a closed,
      gate-able list) — the reliable, re-runnable
      whitelisting Tratt calls "incredibly difficult to do."
 
-- **BORU-specific axis.** Resource bounds (step budget, wall-clock, **tape
+- **boru-specific axis.** Resource bounds (step budget, wall-clock, **tape
   growth ceiling**, sub-engine depth, output bytes) are a *second, orthogonal*
   capability axis — quantitative, not allow/deny — that also attenuates
   transitively via the same min-fold. A pure sorting lib gets `{}` *and* a
   bounded tape/step budget: it can neither exfiltrate nor hang nor OOM the host
   (§8).
 
-- **The honest boundary.** All of the above holds for BORU-**source** modules.
+- **The honest boundary.** All of the above holds for boru-**source** modules.
   A **native/Go** module (`boru:*`, host plugins) is arbitrary machine code and
   is part of the trusted computing base; policy can gate whether it is
-  *imported* but cannot sandbox its Go once loaded (§9). BORU is "sealed at
+  *imported* but cannot sandbox its Go once loaded (§9). boru is "sealed at
   compile time" — no runtime `.so` loading — which makes that native tier
   small, fixed, and auditable, concentrating supply-chain risk exactly where
   Tratt says trust should be scarce.
@@ -149,17 +149,17 @@ This note takes up his last sentence — the language rethink — for one langua
 
 ---
 
-## 2. Why BORU is structurally different (the thesis)
+## 2. Why boru is structurally different (the thesis)
 
-BORU is a **concatenative, interpreted, object-capability** language. Three
+boru is a **concatenative, interpreted, object-capability** language. Three
 properties, each of which directly negates one of Tratt's objections:
 
-### 2.1 No ambient authority → the memory-scan attack is impossible for BORU code
+### 2.1 No ambient authority → the memory-scan attack is impossible for boru code
 
 A dependency in Rust/Python/JS is native (or compiled-to-native) code sharing
 one address space; nothing structurally prevents it from reading the bytes
-where your password sits. A BORU module is a sequence of **words** interpreted
-against a **tape** and a **registry**. BORU has no pointer arithmetic, no `unsafe`,
+where your password sits. A boru module is a sequence of **words** interpreted
+against a **tape** and a **registry**. boru has no pointer arithmetic, no `unsafe`,
 no FFI reachable from source, and — critically — **no way to name a host
 capability except by dispatching a word that the interpreter routes to a
 wrapped slot**. The capability substrate is explicit about this
@@ -174,13 +174,13 @@ ambient authority to confine; it was never granted.
 
 Tratt's premise "every instruction can read/write anywhere" is a statement
 about the von Neumann machine under a native language. It is simply not true of
-BORU source. That is the whole game.
+boru source. That is the whole game.
 
 ### 2.2 The cell boundary is a hashtable lookup, not a process
 
 Tratt's model dies on cost: IPC is 5–7 orders of magnitude slower than an
 intra-process call, and "Unix-esque shared memory … is far too difficult to use
-reliably for untrusted components." BORU pays neither price. The "component
+reliably for untrusted components." boru pays neither price. The "component
 boundary" is:
 
 - **for a kernel word:** `e.policyGateWord(name)` → `CheckWord(name)` — one
@@ -194,7 +194,7 @@ boundary" is:
 
 Components communicate by leaving **values on the stack** and calling words —
 the same mechanism as any other call. There is no serialization, no RPC, no
-marshalling tax on the hot path. Tratt's expensive prerequisite is BORU's
+marshalling tax on the hot path. Tratt's expensive prerequisite is boru's
 default execution model. His expressivity worry ("the horrors that RPC tends to
 descend to") likewise dissolves: a dependency's exports are ordinary words with
 ordinary signatures.
@@ -203,11 +203,11 @@ ordinary signatures.
 
 Tratt's deepest worry about capability *machines* is temporal: privileges
 change as a program moves through states, and "a single mistake … can
-accidentally gift a capability with unexpectedly high privileges." BORU's policy
+accidentally gift a capability with unexpectedly high privileges." boru's policy
 is **data, resolved once, immutable for the lifetime of the engine**
 (PERMISSIONS.10 deliberately omits any runtime grant/revoke API — the same
 lesson Deno reached when it deprecated `Deno.permissions.request`). Capabilities
-are **not first-class values** a BORU program can hold, pass, or forge (unlike a
+are **not first-class values** a boru program can hold, pass, or forge (unlike a
 CHERI capability pointer): the only "capability" a word can touch is the wrapped
 slot the host installed, and it cannot be widened from inside. There is no
 `doPrivileged`, no stack inspection, no ambient reference to leak. The confused-
@@ -215,7 +215,7 @@ deputy surface that sank Java's SecurityManager is absent by construction.
 
 ### 2.4 The mapping onto Tratt's aspiration
 
-| Tratt wants | BORU mechanism |
+| Tratt wants | boru mechanism |
 |---|---|
 | Components isolated "as much as possible" | Isolated sub-registries per module / per sub-engine; lexical def-namespace isolation (`RunModuleBody`) + capability-slot isolation (this note) |
 | "Minimum permissions it needs" | Capability scopes + global hard-caps + `install:false` structural denial |
@@ -225,9 +225,9 @@ deputy surface that sank Java's SecurityManager is absent by construction.
 | Least privilege enforced, not hoped | Object-capability wrapping; no ambient authority |
 
 **The catch, stated up front (expanded in §9):** every row above holds for
-BORU-*source* modules. The interpreter itself, and every *native* (`boru:*`,
+boru-*source* modules. The interpreter itself, and every *native* (`boru:*`,
 Go-implemented) module, is arbitrary machine code to which Tratt's original
-argument applies in full. BORU does not abolish the trusted computing base; it
+argument applies in full. boru does not abolish the trusted computing base; it
 makes it **small, fixed at build time, and legible**, and confines everything
 above it.
 
@@ -299,7 +299,7 @@ the rest of this note builds on.
 
 ### 3.4 Isolation and marshalling (two more corrections)
 
-- **Imported BORU modules do NOT start blank.** `RunModuleBody`
+- **Imported boru modules do NOT start blank.** `RunModuleBody`
   (`native_module_module.go`) runs a file module in a fresh sub-registry but
   **inherits the parent's host capabilities into it**:
   `SetHostFileOps(modReg, HostFileOps(parent))` (already the policy-wrapped
@@ -308,7 +308,7 @@ the rest of this note builds on.
   today is **lexical** (the def namespace; only `export`ed names cross), **not
   capability**. Worse, `CapPolicy` is *not* propagated, so any capability that
   re-checks at call time via `HostPolicy(childReg)` sees `nil` = allow-all
-  inside the child. **Per-dependency capability attenuation for BORU modules is
+  inside the child. **Per-dependency capability attenuation for boru modules is
   therefore genuinely unbuilt** — capabilities flow *down* the import graph
   unattenuated. This is the central gap §5–§6 close.
 - **The import boundary is by-reference, not by-copy.** Exports cross as shared
@@ -405,7 +405,7 @@ undeclared capabilities to deny.**
 
 ### 4.1 Where it attaches
 
-A published BORU module is a `.boru` payload plus an **`boru.jsonic`** manifest
+A published boru module is a `.boru` payload plus an **`boru.jsonic`** manifest
 (fields today: `name`, `major`/`minor`/`patch`, `files`, `deps`, per-module
 `main` + `resource`), resolved by `boru prep` into **`.boru/boru.json`**, which is
 already read *at module-load time* by `resolveModuleMain` and
@@ -458,7 +458,7 @@ Design decisions:
 
 Tratt's strongest practical objection to whitelisting is authorship:
 "incredibly difficult to do reliably, and what happens when a new version …
-do I have to examine it again from scratch?" BORU has an answer the native
+do I have to examine it again from scratch?" boru has an answer the native
 ecosystems don't: **`boru check` can *infer* the manifest** and offer to write
 it. Because the capability scopes are an *effect alphabet* and the carrier
 checker already walks the call graph
@@ -563,7 +563,7 @@ program that the developer actually controls. **Trust decays along the chain
 instead of extending unchanged** — precisely the property Tratt says software
 lost and physical-world trust retains.
 
-Worked example (Tratt's own image-decoder scenario, in BORU terms):
+Worked example (Tratt's own image-decoder scenario, in boru terms):
 
 ```
 root program            grant: { fileops:{read,write}, network:{connect: allowlist} }
@@ -628,12 +628,12 @@ capability-least-privilege default Tratt asks for, expressed once.
 
 ### 7.2 "A sorting library needs basically no capabilities" — and can be *proven* so
 
-This is where BORU answers Tratt's whitelisting objection head-on. It is not
+This is where boru answers Tratt's whitelisting objection head-on. It is not
 enough for `acme-sort` to *declare* `pure`; a backdoored release could declare
 `pure` and still reach `Net.fetch`. What makes the declaration *load-bearing* is
-that BORU can **statically verify declared ⊇ actual**:
+that boru can **statically verify declared ⊇ actual**:
 
-- **The mechanism.** All host access funnels through ~9 accessors (§3.5), BORU
+- **The mechanism.** All host access funnels through ~9 accessors (§3.5), boru
   has no ambient authority, and the carrier checker already computes a call-graph
   fixpoint. Adding an `Effects []string` facet to signatures (drawn from the
   capability vocabulary) and unioning it up the graph — the
@@ -657,7 +657,7 @@ that BORU can **statically verify declared ⊇ actual**:
   from calling `HostFileOps`. Machine-check it.
 
 Verification is the difference between a manifest that is a *promise* (Tratt's
-distrusted case) and a manifest that is a *proof for the BORU-source portion of
+distrusted case) and a manifest that is a *proof for the boru-source portion of
 the graph*. Native modules can only be *attested*, not verified (§9) — which is
 why the trust boundary matters.
 
@@ -676,8 +676,8 @@ different difficulty:
   `where`-constraints?" **Feasible, with a soundness/precision trade-off**: some
   modules over-approximate unless annotated.
 
-**Why BORU is unusually favorable.** Doing this in Rust/JS is hard because the
-escape hatch is *every pointer and every dynamic call*. In BORU the surface is
+**Why boru is unusually favorable.** Doing this in Rust/JS is hard because the
+escape hatch is *every pointer and every dynamic call*. In boru the surface is
 small, named, and finite, and the analyzer substrate already exists:
 
 - **Closed effect alphabet + no ambient authority.** Effects enter *only*
@@ -735,9 +735,9 @@ for the `do` case in full.
 **Transitivity** is enumerable iff imports resolve statically — literal import
 string ⇒ walk it; computed import ⇒ over-approximate or forbid; data-file
 imports (`.json`/`.csv`) contribute no code and are trivially pure. **Native
-modules are inference leaves:** their Go cannot be inferred from BORU, so each
+modules are inference leaves:** their Go cannot be inferred from boru, so each
 carries a *trusted, attested capability summary* (once — the native set is
-small, fixed, and compile-time-sealed, §9.1). The BORU-source interior is
+small, fixed, and compile-time-sealed, §9.1). The boru-source interior is
 inferred; the native leaves are labelled; the fixpoint closes. This
 presupposes a *pinned* dependency graph, which today's registry does not yet
 provide (§9.3).
@@ -749,7 +749,7 @@ executed paths). The productive pattern is: dynamic trace to *propose* a
 manifest, static analysis to *prove it is an over-approximation*.
 
 **Verdict.** The purity/reachability verdict is highly feasible, sound, and
-buildable on shipped machinery — a real guarantee for the BORU-source graph.
+buildable on shipped machinery — a real guarantee for the boru-source graph.
 Precise effect sets are best-effort: dynamic-eval-heavy code either annotates
 or over-approximates to its grant, which the design tolerates because the
 importer gates the actual grant regardless. The design should therefore lead
@@ -759,7 +759,7 @@ require.
 
 ### 7.4 Worked case: when is `do [body]` analysable?
 
-`do` is the clearest lens on §7.3 because it is BORU's general "run this code"
+`do` is the clearest lens on §7.3 because it is boru's general "run this code"
 word, and the intuition "`do [add 1 1]` is obviously fine" is exactly right —
 the question is *where the line falls*. `do`'s code-body signature is
 `{Args:[TList], NoEvalArgs:{0:true}, ReturnsFn: doListReturnsFn,
@@ -932,7 +932,7 @@ edge.
 
 ### 7.7 The milder hatches
 
-The three worked cases above are BORU's general dispatch primitives; the
+The three worked cases above are boru's general dispatch primitives; the
 remaining ways source can run code the analyzer cannot see are milder — each
 either reduces to a case above or is narrower.
 
@@ -961,7 +961,7 @@ source literal?) that removes the hatch for any module wanting a verified
 transitive manifest. This is the transitivity analogue of
 "analyzability is a capability."
 
-**(c) Macros** — analysed post-expansion, so no runtime blind spot. BORU macros
+**(c) Macros** — analysed post-expansion, so no runtime blind spot. boru macros
 are a *quote-template* surface (`defmacro` = `fn` + auto-`NoEvalArgs` +
 expand-time splice; the template is a `quote […]` region with `unquote` /
 `splice`), expanded by a deterministic, hygiene-renaming walker whose output
@@ -970,7 +970,7 @@ runs at parse/compile time *before* the effect walk, **the checker analyses the
 expanded code** — a macro expanding to `IO.read` contributes `{fileops.read}`
 to the site. The one wrinkle is *expand-time* effects: an `unquote
 (effectful-expr)` runs during expansion — a compile-time surface distinct from
-runtime, and the BORU analogue of the build-script attacks Tratt cites (the
+runtime, and the boru analogue of the build-script attacks Tratt cites (the
 "install every Python library" experiment). It is rare, discouraged, gated the
 same way if expansion runs under a policy, and a strict profile can additionally
 require macro unquotes to be pure. Macros do not defeat *runtime* capability
@@ -983,7 +983,7 @@ export selected by computed key (`IO get name`). Both are bounded: you can only
 `get` exports of a module you have already (gated) imported, and applying the
 result is the §7.5 case under the applier's grant. No new surface.
 
-**Why the taxonomy being *closed* is the whole point.** Every way BORU source can
+**Why the taxonomy being *closed* is the whole point.** Every way boru source can
 dispatch code the analyzer cannot statically see reduces to a **finite, named,
 individually gate-able list**: `do`-body, `apply`-value, `Vm.run`-string,
 computed-`import`, macro-expand, computed-`get`. Each has a conservative
@@ -991,13 +991,13 @@ handling (§7.3) and each is reachable only through a capability a strict profil
 can withhold. This closedness is precisely what makes *sound over-approximation
 achievable* — and it is the structural difference from a native language, where
 Tratt's escape hatch is *every pointer and every instruction*, an open set no
-analysis can enumerate. In BORU the dynamic surface is small enough to list on
+analysis can enumerate. In boru the dynamic surface is small enough to list on
 one line, which is why "prove this module reaches no capability" is a decidable
 question rather than a hopeful one.
 
 ### 7.8 Operationalizing it: the `analyzable` constraint
 
-§7.3–7.7 establish that BORU's dynamic surface is a closed, gate-able list. This
+§7.3–7.7 establish that boru's dynamic surface is a closed, gate-able list. This
 subsection turns that into a concrete constraint an importer can *require* of a
 dependency — **`analyzable`**: a static / publish-time mode under which a
 module's capability footprint is *provably* inferable because every escape hatch
@@ -1036,12 +1036,12 @@ Three clarities keep it honest:
 
 ---
 
-## 8. BORU-specific resource limits — the quantitative capability axis
+## 8. boru-specific resource limits — the quantitative capability axis
 
 Tratt's model is about *what* a dependency may do. It is silent on *how much* —
 yet a purely-computational dependency with zero capabilities can still wedge or
 exhaust the host (a `sort` that never terminates, a transform that splices the
-tape without bound). BORU already has the governors to prevent this; this note
+tape without bound). boru already has the governors to prevent this; this note
 makes them **per-dependency and transitively attenuating**, a second capability
 axis orthogonal to allow/deny.
 
@@ -1110,9 +1110,9 @@ the model does *not* cover.
 
 ### 9.1 Native modules are the trusted computing base
 
-Everything in §2–§8 confines **BORU-source** modules. A **native/Go** module —
+Everything in §2–§8 confines **boru-source** modules. A **native/Go** module —
 anything reached via `import "boru:<name>"` through the static compile-time
-`modules` map, or registered by a host via `(*BORU).Register` /
+`modules` map, or registered by a host via `(*Boru).Register` /
 `RegisterNativeFunc` / `RegisterExternalBuiltin` / `ExtensionPayload` — is
 arbitrary Go. It runs with the process's full authority (files, network, exec,
 memory) and Tratt's original argument applies to it *in full*. Policy gates
@@ -1120,7 +1120,7 @@ whether a native module is **imported** (`modules.Resolve`), but once loaded its
 Go executes unsandboxed; the fine-grained wrappers only gate the *host
 capabilities* it chooses to route through, not what its Go can do directly.
 
-The one structural mitigation is real and worth stating: **BORU is "sealed at
+The one structural mitigation is real and worth stating: **boru is "sealed at
 compile time"** ([GO-MODULES.10](GO-MODULES.10.md)) — no FFI, no dynamic
 loading, no plugin `.so`. "The host registration list is the trust boundary."
 A third party cannot inject a native module at runtime; the native tier is
@@ -1130,7 +1130,7 @@ model is a **two-tier graph**:
 - a **small, fixed, build-time-audited native TCB** (the interpreter + the
   compiled-in native modules), where trust must be scarce and manual — and *is*,
   because it is small and changes rarely; and
-- an **open-ended, structurally-confined BORU-source dependency graph** above it,
+- an **open-ended, structurally-confined boru-source dependency graph** above it,
   where trust is cheap because it is enforced, not extended.
 
 This is a defensible answer to Tratt: don't try to secure an unbounded native
@@ -1142,7 +1142,7 @@ the graph interpreted and confined.
 
 Per PERMISSIONS.10: in-process capability confinement is **defence in depth for
 moderately untrusted code, not a substitute for OS isolation against truly
-hostile input.** A deployment taking genuinely adversarial BORU should *also* run
+hostile input.** A deployment taking genuinely adversarial boru should *also* run
 the host under a container with seccomp, a read-only rootfs, and net-namespace
 isolation. Side channels (timing, cache) are out of scope — an OS/hardware
 concern.
@@ -1175,7 +1175,7 @@ single verifiable, attributable unit.
   bypass `EffectiveClock`; a "no clock" grant is not airtight until these route
   through the injectable clock.
 - **`env`/`process`/`system-info` are taxonomy-ahead-of-surface.** The scopes
-  and globals exist but no BORU word reads an env var, spawns a process, or reads
+  and globals exist but no boru word reads an env var, spawns a process, or reads
   system info yet; the gates are scaffolding. When those words land, they must
   route through the scopes on day one.
 - **The per-export gate and the `Limits` enforcement are stubs** (§3.2, §3.6) —
@@ -1227,17 +1227,17 @@ single highest-value item for the supply-chain story.
 
 | System | Relation to this design |
 |---|---|
-| WebAssembly component model / WASI | Tratt's own cited "partial solution to performance"; capabilities as explicit imports. BORU lands the same idea at the interpreter layer, with cheaper cell boundaries and a static checker over its *own* source. |
-| Deno permissions | Declarative, syscall-family scoping; process-wide. BORU is finer (per-module, per-word) and in-process. The "no runtime grant/revoke" lesson is shared. |
-| E / object-capability languages | The no-ambient-authority, capabilities-are-not-forgeable model BORU implements via wrapped slots. |
-| CHERI compartments (Tratt) | Hardware capability pointers; powerful but temporally fragile. BORU trades hardware generality for interpreter-enforced simplicity and no first-class capability values to leak. |
-| Newspeak / Wyvern / Austral capability-safe modules | Language-level capability-safe imports; closest kin. BORU adds a static effect-inference *verifier* over an existing checker. |
+| WebAssembly component model / WASI | Tratt's own cited "partial solution to performance"; capabilities as explicit imports. boru lands the same idea at the interpreter layer, with cheaper cell boundaries and a static checker over its *own* source. |
+| Deno permissions | Declarative, syscall-family scoping; process-wide. boru is finer (per-module, per-word) and in-process. The "no runtime grant/revoke" lesson is shared. |
+| E / object-capability languages | The no-ambient-authority, capabilities-are-not-forgeable model boru implements via wrapped slots. |
+| CHERI compartments (Tratt) | Hardware capability pointers; powerful but temporally fragile. boru trades hardware generality for interpreter-enforced simplicity and no first-class capability values to leak. |
+| Newspeak / Wyvern / Austral capability-safe modules | Language-level capability-safe imports; closest kin. boru adds a static effect-inference *verifier* over an existing checker. |
 | Go build-time sealing | The native-TCB-fixed-at-build-time property (§9.1). |
-| AppArmor / AWS IAM / `pledge` | The glob rules, last-match-wins, and bounding-set (global hard-cap) shapes BORU's policy already borrows. |
+| AppArmor / AWS IAM / `pledge` | The glob rules, last-match-wins, and bounding-set (global hard-cap) shapes boru's policy already borrows. |
 
-BORU's distinctive claim is not any single mechanism but their *composition*: no
+boru's distinctive claim is not any single mechanism but their *composition*: no
 ambient authority + cheap in-process cells + declarative attenuating policy +
-a static effect checker, applied to the BORU-source dependency graph, with a
+a static effect checker, applied to the boru-source dependency graph, with a
 small sealed native TCB underneath.
 
 ---
@@ -1255,7 +1255,7 @@ small sealed native TCB underneath.
    footprint but cannot be *verified* (§9.1). Attest it (signature + a
    host-registration allowlist) rather than trust the declaration; surface it in
    `describe` so importers see which deps are native (unverifiable) vs.
-   BORU-source (verifiable).
+   boru-source (verifiable).
 4. **Effect-inference precision** (analysed in depth in §7.3–7.8). The dynamic
    surface is a closed, gate-able list — `do`-body, `apply`-value,
    `Vm.run`-string, computed-`import`, macro-expand, computed-`get` — each with

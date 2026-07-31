@@ -12,12 +12,12 @@ CREATE TABLE schema_proposals (id TEXT PRIMARY KEY, term_kind TEXT NOT NULL, ter
 INSERT INTO sources VALUES ('src:agents', 'text', 'AGENTS.md', 'AGENTS.md agent guide', NULL, 'agents-2026-07', 'primary', '{
   "repository": "boru-lang/boru"
 }');
-INSERT INTO sources VALUES ('src:readme', 'text', 'README.md', 'BORU README', NULL, 'readme-2026-07', 'primary', '{
+INSERT INTO sources VALUES ('src:readme', 'text', 'README.md', 'boru README', NULL, 'readme-2026-07', 'primary', '{
   "repository": "boru-lang/boru"
 }');
 INSERT INTO entities VALUES ('ent:Concept:2039420555596601682', 'Concept', 'secrets vault', 'secrets vault', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Concept:2039420555596601682', 'role', 'encrypted API-key / token store, driven by the boru vault subcommand');
-INSERT INTO entities VALUES ('ent:Concept:3854395902791518463', 'Concept', 'BORU language', 'boru language', 'accepted');
+INSERT INTO entities VALUES ('ent:Concept:3854395902791518463', 'Concept', 'boru language', 'boru language', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Concept:3854395902791518463', 'paradigm', 'concatenative, typed, word-based');
 INSERT INTO entities VALUES ('ent:Concept:4587555710592773395', 'Concept', 'Forward arguments', 'forward arguments', 'accepted');
 INSERT INTO entities VALUES ('ent:Concept:4841193570246608846', 'Concept', 'Value stack', 'value stack', 'accepted');
@@ -45,7 +45,7 @@ INSERT INTO entity_attributes VALUES ('ent:Product:2046405728378673079', 'path',
 INSERT INTO entities VALUES ('ent:Product:4032424380612892464', 'Product', 'boru-lang/boru repository', 'boru-lang/boru repository', 'accepted');
 INSERT INTO entity_external_ids VALUES ('ent:Product:4032424380612892464', 'github', 'boru-lang/boru');
 INSERT INTO entities VALUES ('ent:Product:4976123614970806523', 'Product', 'boru:cli module', 'boru:cli module', 'accepted');
-INSERT INTO entity_attributes VALUES ('ent:Product:4976123614970806523', 'language', 'BORU');
+INSERT INTO entity_attributes VALUES ('ent:Product:4976123614970806523', 'language', 'boru');
 INSERT INTO entity_attributes VALUES ('ent:Product:4976123614970806523', 'path', 'lang/go/modules/cli.boru');
 INSERT INTO entities VALUES ('ent:Product:5397757900009317848', 'Product', 'lang/go module', 'lang/go module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:5397757900009317848', 'path', 'lang/go');
@@ -62,7 +62,7 @@ INSERT INTO entity_attributes VALUES ('ent:Product:9152211458201666591', 'path',
 INSERT INTO assertions VALUES ('ast:1270339351209541981', 'ent:Product:1578575807542004434', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1270339351209541981', 'src:readme', 'Repository layout', 'eng/go/ | Engine kernel, parser, and kernel spec runner.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:1374144917814367558', 'ent:Concept:3854395902791518463', 'has_attribute', 'literal', NULL, '"concatenative"', 'String', NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:1374144917814367558', 'src:readme', 'intro', 'Underneath, BORU is concatenative: words can equally take their arguments from a value stack', 'direct_record', 'kg-ingest');
+INSERT INTO assertion_evidence VALUES ('ast:1374144917814367558', 'src:readme', 'intro', 'Underneath, boru is concatenative: words can equally take their arguments from a value stack', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:1970337823730676342', 'ent:Document:7770110494347118706', 'supports', 'entity', 'ent:Product:5397757900009317848', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1970337823730676342', 'src:agents', 'Working in the code', 'Language layer — native words, modules, registry, help/describe, capabilities | lang/go/CLAUDE.md', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2190303907985753377', 'ent:Document:3955423872539901697', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
@@ -70,7 +70,7 @@ INSERT INTO assertion_evidence VALUES ('ast:2190303907985753377', 'src:readme', 
 INSERT INTO assertions VALUES ('ast:2308356135508106004', 'ent:Document:5292060467150439417', 'mentions', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2308356135508106004', 'src:readme', 'Documentation', 'Non-Uniformity Register | You want the recorded deviations from the language''s uniform rules, each pending, resolved, or explicitly allowed.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2313048313946518913', 'ent:Product:8635404738244704660', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:2313048313946518913', 'src:agents', 'Repository layout', 'utils/ | A coreutils subset written in BORU — real programs that prove the CLI story (argv, exit codes, streams, baked permissions).', 'direct_record', 'kg-ingest');
+INSERT INTO assertion_evidence VALUES ('ast:2313048313946518913', 'src:agents', 'Repository layout', 'utils/ | A coreutils subset written in boru — real programs that prove the CLI story (argv, exit codes, streams, baked permissions).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2457753349338579625', 'ent:Document:4990200910103175455', 'supports', 'entity', 'ent:Product:9122085017676103232', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2457753349338579625', 'src:readme', 'Documentation', 'CLI Reference | You want to drive the boru binary from the shell.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:2510153559955756366', 'ent:Concept:7376417356888575267', 'part_of', 'entity', 'ent:Product:5770789618934008141', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
@@ -78,15 +78,15 @@ INSERT INTO assertion_evidence VALUES ('ast:2510153559955756366', 'src:agents', 
 INSERT INTO assertions VALUES ('ast:2650141132074711437', 'ent:Product:9122085017676103232', 'supports', 'entity', 'ent:Concept:5837115061456563631', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:2650141132074711437', 'src:agents', 'First: let the tool document itself', 'The boru CLI documents both the language and itself, and that output is generated from the live engine', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:303023300656590935', 'ent:Document:1344160336771235777', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:303023300656590935', 'src:readme', 'Documentation', 'Explanation | You want to understand why BORU is the way it is.', 'direct_record', 'kg-ingest');
+INSERT INTO assertion_evidence VALUES ('ast:303023300656590935', 'src:readme', 'Documentation', 'Explanation | You want to understand why boru is the way it is.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:311483063513570585', 'ent:Product:4976123614970806523', 'part_of', 'entity', 'ent:Product:5397757900009317848', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:311483063513570585', 'src:agents', 'Repository layout', 'utils/ | A coreutils subset written in BORU — real programs that prove the CLI story (argv, exit codes, streams, baked permissions).', 'direct_record', 'kg-ingest');
+INSERT INTO assertion_evidence VALUES ('ast:311483063513570585', 'src:agents', 'Repository layout', 'utils/ | A coreutils subset written in boru — real programs that prove the CLI story (argv, exit codes, streams, baked permissions).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:314582934812456120', 'ent:Document:3904106568037504161', 'mentions', 'entity', 'ent:Concept:5837115061456563631', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:314582934812456120', 'src:agents', 'First: let the tool document itself', 'Before grepping source or guessing a word''s signature, ask the binary.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:3211344478610580799', 'ent:Concept:3854395902791518463', 'related_to', 'entity', 'ent:Concept:4587555710592773395', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:3211344478610580799', 'src:readme', 'Forward arguments', 'the defining feature of the surface syntax is forward arguments', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:4109835522011898628', 'ent:Concept:3854395902791518463', 'has_attribute', 'literal', NULL, '"typed, word-based query language"', 'String', NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:4109835522011898628', 'src:readme', 'intro', 'BORU is a typed, word-based query language.', 'direct_record', 'kg-ingest');
+INSERT INTO assertion_evidence VALUES ('ast:4109835522011898628', 'src:readme', 'intro', 'boru is a typed, word-based query language.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:4129485658791420324', 'ent:Concept:2039420555596601682', 'part_of', 'entity', 'ent:Product:9122085017676103232', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:4129485658791420324', 'src:readme', 'Overview', 'a secrets vault', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:4539802379148808939', 'ent:Document:3080274854606714513', 'mentions', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
@@ -102,7 +102,7 @@ INSERT INTO assertion_evidence VALUES ('ast:5406505729946615323', 'src:agents', 
 INSERT INTO assertions VALUES ('ast:5434947745222255640', 'ent:Product:9152211458201666591', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5434947745222255640', 'src:readme', 'Install', 'A wasm-powered browser playground is bundled in docs/index.html', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5569270398049625658', 'ent:Product:8635404738244704660', 'related_to', 'entity', 'ent:Product:4976123614970806523', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:5569270398049625658', 'src:readme', 'Repository layout', 'utils/ | A coreutils subset written in BORU (cat, wc, head, grep, ...) — real programs, built with boru build.', 'direct_record', 'kg-ingest');
+INSERT INTO assertion_evidence VALUES ('ast:5569270398049625658', 'src:readme', 'Repository layout', 'utils/ | A coreutils subset written in boru (cat, wc, head, grep, ...) — real programs, built with boru build.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5780911143793158294', 'ent:Product:9152211458201666591', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5780911143793158294', 'src:readme', 'Repository layout', 'wpg/ | The wasm web playground (wpg/wasm + wpg/serve).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:6024405707462587556', 'ent:Document:481508614007064969', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
@@ -112,7 +112,7 @@ INSERT INTO assertion_evidence VALUES ('ast:7294700582288177136', 'src:readme', 
 INSERT INTO assertions VALUES ('ast:7310321027254467049', 'ent:Product:6926990046092332766', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:7310321027254467049', 'src:readme', 'Repository layout', 'cmd/go/ | The boru CLI / REPL (github.com/boru-lang/boru/cmd/go).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:7447279695537175736', 'ent:Product:2046405728378673079', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:7447279695537175736', 'src:agents', 'Repository layout', 'kg/ | The project knowledge graph: an evidence-backed BORU pipeline and its generated bundle.', 'direct_record', 'kg-ingest');
+INSERT INTO assertion_evidence VALUES ('ast:7447279695537175736', 'src:agents', 'Repository layout', 'kg/ | The project knowledge graph: an evidence-backed boru pipeline and its generated bundle.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:758093515468550172', 'ent:Product:8635404738244704660', 'related_to', 'entity', 'ent:Product:9122085017676103232', NULL, NULL, NULL, NULL, 0.9, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:758093515468550172', 'src:readme', 'Repository layout', 'real programs, built with boru build', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:7661116843982840438', 'ent:Product:5770789618934008141', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
@@ -124,7 +124,7 @@ INSERT INTO assertion_evidence VALUES ('ast:7875690729105221344', 'src:readme', 
 INSERT INTO assertions VALUES ('ast:8053419169907804914', 'ent:Product:9122085017676103232', 'part_of', 'entity', 'ent:Product:6926990046092332766', NULL, NULL, NULL, NULL, 0.97, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:8053419169907804914', 'src:readme', 'Repository layout', 'cmd/go/ | The boru CLI / REPL', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:914658451831503592', 'ent:Document:6176355086953937469', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
-INSERT INTO assertion_evidence VALUES ('ast:914658451831503592', 'src:readme', 'Documentation', 'Tutorial | You are new to BORU and want to learn it step by step.', 'direct_record', 'kg-ingest');
+INSERT INTO assertion_evidence VALUES ('ast:914658451831503592', 'src:readme', 'Documentation', 'Tutorial | You are new to boru and want to learn it step by step.', 'direct_record', 'kg-ingest');
 INSERT INTO schema_proposals VALUES ('schema-proposal:7752279147991378124', 'entity_type', 'SoftwareModule', 'A buildable code module or package within a software repository.', 'Repository modules are currently typed Product, which blurs shipped artifacts and source-tree modules.', 'requires_approval', '[
   "SoftwareModule"
 ]', '[

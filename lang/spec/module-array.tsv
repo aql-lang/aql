@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:array-util module
+# boru Language Specification: the boru:array-util module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of APL-style array utilities. Import binds the

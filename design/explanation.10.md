@@ -1,6 +1,6 @@
-# BORU Explanation
+# boru Explanation
 
-This document explains the ideas and design decisions behind BORU. It
+This document explains the ideas and design decisions behind boru. It
 complements the [Tutorial](tutorial.md) (learning-oriented),
 [How-To Guides](how-to.md) (task-oriented), and
 [Reference](reference.md) (information-oriented).
@@ -31,7 +31,7 @@ through both transformations.
 
 ## The Stack Model
 
-BORU uses a single data stack. Every literal pushes a value. Every
+boru uses a single data stack. Every literal pushes a value. Every
 word pops its arguments and pushes its results. The stack is the
 implicit data flow — you rarely need to name intermediate values.
 
@@ -50,7 +50,7 @@ default is point-free composition.
 ## Forward Collection: Beyond Reverse Polish
 
 Traditional concatenative languages (Forth, Factor) use strict
-reverse Polish notation: arguments always precede the word. BORU
+reverse Polish notation: arguments always precede the word. boru
 extends this with **forward collection**: a word can gather
 arguments that appear *after* it.
 
@@ -64,7 +64,7 @@ All three are equivalent. The word `add` needs two arguments. If
 fewer are on the stack when it executes, it waits and collects
 subsequent values as forward arguments.
 
-This makes BORU readable in ways that pure stack languages are not.
+This makes boru readable in ways that pure stack languages are not.
 `10 sub 3` reads as "10 subtract 3", not the Forth-style `10 3 -`.
 
 ### How Collection Works
@@ -99,7 +99,7 @@ of letting it be the value bound to `y`.
 
 ## Type-Directed Dispatch
 
-Every value in BORU carries a hierarchical type. The type
+Every value in boru carries a hierarchical type. The type
 `Scalar/Number/Integer` is a child of `Scalar/Number`, which is a
 child of `Scalar`. A child matches its parent, but not vice versa.
 
@@ -120,7 +120,7 @@ its arguments, without explicit conditionals.
 
 ## Immutability and Mutability
 
-BORU draws a clear line between immutable values and mutable objects:
+boru draws a clear line between immutable values and mutable objects:
 
 - **Scalars** (strings, numbers, booleans, atoms) are immutable.
 - **Nodes** (lists, maps) are immutable values. Operations return
@@ -137,7 +137,7 @@ the parent.
 
 ## Quotation and Evaluation
 
-Lists serve double duty in BORU: they are both data structures and
+Lists serve double duty in boru: they are both data structures and
 code bodies. By default, lists created in word context are
 **evaluated** — their contents are executed as a sub-program when
 consumed:
@@ -165,7 +165,7 @@ do [1 add 2]        => 3
 ```
 
 This duality — lists as both data and code — is characteristic of
-homoiconic languages and gives BORU its metaprogramming capabilities.
+homoiconic languages and gives boru its metaprogramming capabilities.
 
 
 ## The Options Pattern
@@ -187,7 +187,7 @@ optional.
 
 ## Parallel Execution Model
 
-The `await` word bridges BORU's sequential stack model with Go's
+The `await` word bridges boru's sequential stack model with Go's
 concurrent primitives. Each element in the parallel list runs in its
 own goroutine with an independent sub-engine:
 
@@ -214,7 +214,7 @@ sub-program, and the final stack value becomes the result.
 
 ## Error Handling as Values
 
-BORU treats errors as values, not exceptions. When an operation fails
+boru treats errors as values, not exceptions. When an operation fails
 (e.g., division by zero), it produces an error value that sits on
 the stack like any other value:
 
@@ -235,7 +235,7 @@ operations and handle errors at the boundary.
 
 ## Store and Context
 
-BORU's execution context is a `Store` — a mutable key-value store
+boru's execution context is a `Store` — a mutable key-value store
 with prototype chain lookup. When you `set` a key, it is stored in
 the current context. When you `get` a key, the lookup walks the
 prototype chain, similar to JavaScript's prototype inheritance.
@@ -267,7 +267,7 @@ import utils [
 After import, `utils.helper` and `utils.greet` are available. The
 dot notation is syntactic sugar for module member access.
 
-File imports load external BORU source:
+File imports load external boru source:
 
 ```
 import "lib/utils.boru"
@@ -282,7 +282,7 @@ import [helper as h] "lib/utils.boru"
 
 ## Design Influences
 
-BORU draws from several traditions:
+boru draws from several traditions:
 
 - **Forth / Factor**: Stack-based execution, word definitions, quotations
 - **APL / J / K**: Array operations (`iota`, `reshape`, `grade`,
@@ -296,7 +296,7 @@ BORU draws from several traditions:
 
 ## Further Reading
 
-- [Tutorial](tutorial.md) — learn BORU step by step
+- [Tutorial](tutorial.md) — learn boru step by step
 - [How-To Guides](how-to.md) — practical recipes
 - [Reference](reference.md) — complete word and type listing
 - [Design Documents](design/) — internal design notes and plans

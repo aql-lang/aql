@@ -33,7 +33,7 @@ function activate(context) {
 
   client = new LanguageClient(
     "boruLsp",
-    "BORU Language Server",
+    "boru Language Server",
     serverOptions,
     clientOptions,
   );

@@ -1,7 +1,7 @@
-# BORU Macros — Implementation Plan
+# boru Macros — Implementation Plan
 
 **Status:** design / implementation plan
-**Scope:** a user-level macro system for BORU — `macro` definition, a
+**Scope:** a user-level macro system for boru — `macro` definition, a
 quote-template surface with `unquote`/`splice`, expansion in both
 interpreter and (future) compiled modes, and a staged path to hygiene.
 **Predecessor:** `LISP-ANALYSIS.5.md` §5 + §8 (Tier-1 items #1–3) names
@@ -21,9 +21,9 @@ that recommendation into a concrete build order.
 
 A macro is **an `fn` the expander runs on unevaluated token forms, whose
 returned token list is spliced into the call site.** Everything else is
-existing BORU:
+existing boru:
 
-| Lisp | BORU surface | Backed by (existing) |
+| Lisp | boru surface | Backed by (existing) |
 |---|---|---|
 | `defmacro` | `macro [[params] [template]]` | `fn` + auto-`NoEvalArgs` + expand-time splice |
 | `` ` `` quasiquote | `quote [ … ]` (template region, default-data) | `quote` / `Eval=false` |
@@ -78,7 +78,7 @@ empirically on this branch:
    referential transparency (problem #2).
 8. **`DefCleanup` / `__pa` already scope-and-undef body locals** at fn
    exit. This is the exact tool for containing introduced bindings under
-   BORU's leaky block scope.
+   boru's leaky block scope.
 9. **Single-pass, left-to-right.** The parser does one walk (no rewrite
    passes); compilation to IR (when it lands) is a separate later stage.
    Left-to-right gives **define-before-use staging for free**.
@@ -110,7 +110,7 @@ a macro flag on the resolved `FnDefInfo` (§3) before normal dispatch.
 ### 2.2 The template
 
 The template is an ordinary `quote [ … ]` region — **default-data**, the
-polarity flip from normal BORU (default-eval). Inside it:
+polarity flip from normal boru (default-eval). Inside it:
 
 - bare tokens → literal code of the expansion;
 - `unquote x` → evaluate `x` in macro scope, insert the value as **one
@@ -121,7 +121,7 @@ polarity flip from normal BORU (default-eval). Inside it:
 
 `splice` is an alias for the existing `word`/`__SP`. `unquote` is the
 `(expr)`-collapse given a readable name (we prefer explicit words over
-overloading "paren inside quote means evaluate", consistent with BORU's
+overloading "paren inside quote means evaluate", consistent with boru's
 explicit-words ethos — `usurp`/`stack-args` precedent).
 
 **Optional sugar (Phase 2+):** a `` `[ … ] `` quasiquote form reusing the
@@ -205,7 +205,7 @@ move to compile time**; the design is unchanged, only the *timing* and the
   hand-written code.
 - **Run pass** executes IR containing **no macros and no `__SP`** — they
   were expanded away.
-- **Staging.** The compiler must be able to *execute* BORU to run
+- **Staging.** The compiler must be able to *execute* boru to run
   transformers (the evaluator is present at compile time). Macros are
   **define-before-use**: a macro must be compiled and runnable before the
   compiler reaches its first use. Single-pass left-to-right makes this
@@ -220,7 +220,7 @@ when-it-runs (step time vs compile time) and re-step-vs-lower differ.
 
 ## 5. Hygiene
 
-The naive design is **fully unhygienic**, and BORU's leaky block scope (fact
+The naive design is **fully unhygienic**, and boru's leaky block scope (fact
 5) makes capture sharper than in Lisp — a bare `def` in an expansion
 pollutes the caller. Staged plan:
 
@@ -249,7 +249,7 @@ moves hygiene D→C).
 
 ### 5.2 Phase B — automatic hygiene (Scheme-style)
 
-Two classic problems, two existing BORU tools, with provenance free from
+Two classic problems, two existing boru tools, with provenance free from
 the syntax:
 
 - **Provenance for free.** Tokens *outside* `unquote`/`splice` are
@@ -287,7 +287,7 @@ other names.
 
 **Smallest shippable slice:** Phase 0 + Phase 1 — `gensym` plus an
 unhygienic-but-real `macro`. That alone moves all metaprogramming that
-needs unevaluated operands **out of Go and into BORU**, the single biggest
+needs unevaluated operands **out of Go and into boru**, the single biggest
 "become more of a LISP" step.
 
 ---
@@ -370,6 +370,6 @@ This plan implements that note's headline Tier-1 recommendation (§8 #1–3)
 and its roadmap rows 1–3 + 9. The key refinement from subsequent design
 work: the **`unquote`/`splice` boundary is reused as the hygiene
 provenance marker**, which (combined with `ComputeCaptures` and
-`DefCleanup`) lets BORU reach automatic hygiene with less new machinery than
+`DefCleanup`) lets boru reach automatic hygiene with less new machinery than
 Scheme — directly advancing the analysis's closing claim that the macro
 system is "assembling existing primitives rather than inventing new ones."

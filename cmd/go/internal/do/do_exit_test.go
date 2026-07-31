@@ -9,7 +9,7 @@ import (
 // `boru do` drives a program just as `boru run` does, so an expression that
 // asks to exit sets this process's status rather than being reported as a
 // failure. Without this the shell-friendly form would be the one spelling
-// of a BORU program that cannot choose its own exit code.
+// of a boru program that cannot choose its own exit code.
 func TestDoExitCodeIsProcessStatus(t *testing.T) {
 	for _, tc := range []struct {
 		src  string

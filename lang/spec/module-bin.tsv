@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:bin module
+# boru Language Specification: the boru:bin module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of bit/byte utilities. Import binds the `bin`

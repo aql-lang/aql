@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
-    BORU.plist — a BBEdit Codeless Language Module (CLM) for BORU.
+    boru.plist — a BBEdit Codeless Language Module (CLM) for boru.
 
-    BORU (https://github.com/boru-lang/boru) is a concatenative, strongly-typed
+    boru (https://github.com/boru-lang/boru) is a concatenative, strongly-typed
     query language. Source files use the .boru extension.
 
     This CLM gives BBEdit syntax colouring, comment awareness, string/number
@@ -13,34 +13,34 @@
     and point it at `boru lsp` — see README.md in this directory.
 
     A CLM supports exactly ONE line-comment prefix and ONE block-comment
-    pair. BORU accepts both `#` and `//` for line comments; we register `#`
+    pair. boru accepts both `#` and `//` for line comments; we register `#`
     here (the canonical prefix, per the lexical spec and the reference Emacs
     mode) and `/* ... */` for block comments. `//` line comments are still
     coloured as comments because they begin with the `/*`-family lead-in only
     when followed by `*`; a bare `//` line is left uncoloured by the CLM but
-    remains valid BORU — use the LSP for exhaustive comment handling.
+    remains valid boru — use the LSP for exhaustive comment handling.
 
     Install: drop this file into
       ~/Library/Application Support/BBEdit/Language Modules/
     then restart BBEdit (or use "Reload Language Modules" from the menu).
 
-    Validate: plutil -lint BORU.plist
+    Validate: plutil -lint boru.plist
 -->
 <plist version="1.0">
 <dict>
 	<!-- Display name shown in BBEdit's language pop-up. -->
 	<key>BBLMLanguageDisplayName</key>
-	<string>BORU</string>
+	<string>boru</string>
 
 	<!-- Unique 4-character language code (OSType-style). -->
 	<key>BBLMLanguageCode</key>
-	<string>BoruL</string>
+	<string>Boru</string>
 
 	<!-- Colour .boru source using this module. -->
 	<key>BBLMColorsSyntax</key>
 	<true/>
 
-	<!-- BORU keywords are case-sensitive. -->
+	<!-- boru keywords are case-sensitive. -->
 	<key>BBLMIsCaseSensitive</key>
 	<true/>
 
@@ -78,7 +78,7 @@
 	<!-- ============================================================= -->
 	<!-- Strings                                                        -->
 	<!-- ============================================================= -->
-	<!-- BORU has three string kinds: '...', "...", and `...` template   -->
+	<!-- boru has three string kinds: '...', "...", and `...` template   -->
 	<!-- strings. All support backslash escapes, so declare the escape  -->
 	<!-- character for each delimiter.                                  -->
 
@@ -100,7 +100,7 @@
 		<key>Comment Block End</key>
 		<string>*/</string>
 
-		<!-- Nested-comment support off (BORU block comments do not nest). -->
+		<!-- Nested-comment support off (boru block comments do not nest). -->
 		<key>Comments Can Be Nested</key>
 		<false/>
 
@@ -127,7 +127,7 @@
 		<key>Escape Char in Strings</key>
 		<true/>
 
-		<!-- Identifier character set: BORU words are
+		<!-- Identifier character set: boru words are
 		     [A-Za-z][A-Za-z0-9_-]* — hyphens are internal. -->
 		<key>Identifier and Keyword Characters</key>
 		<string>abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-</string>

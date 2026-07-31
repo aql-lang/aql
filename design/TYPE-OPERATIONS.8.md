@@ -4,7 +4,7 @@ Designs the type-operation vocabulary, drawing on TypeScript utility
 types, Python `typing`, Haskell type classes, and SQL's type/cast
 surface. The surface is split:
 
-- A small set of **core type ops** are BORU built-ins (the language's
+- A small set of **core type ops** are boru built-ins (the language's
   bedrock type vocabulary).
 - The remainder live in the **`boru:type` module**, loaded via
   `import "boru:type"` and accessed as `type.<verb>` (e.g. `type.pick`,
@@ -128,7 +128,7 @@ field order and each value type wrapped as `T | None`.
 For class types, all fields (including inherited) are flattened
 into the result's own field map, and the result is registered as a
 fresh anonymous class type (lattice parent: `Class`). `tpartial
-Person` is NOT a subtype of `Person` — BORU's lattice runs the other
+Person` is NOT a subtype of `Person` — boru's lattice runs the other
 way (a child requires more, not less).
 
 `type.required` is the inverse: it strips the `None` alternative

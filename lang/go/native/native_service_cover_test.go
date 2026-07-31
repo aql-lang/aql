@@ -18,7 +18,7 @@ func svcCoverMap(k string, v Value) Value {
 	return NewMap(om)
 }
 
-// svcCoverFn builds a Function value by evaluating a BORU lambda.
+// svcCoverFn builds a Function value by evaluating a boru lambda.
 func svcCoverFn(t *testing.T, r *Registry, src string) Value {
 	t.Helper()
 	out, err := seam5Run(r, src)

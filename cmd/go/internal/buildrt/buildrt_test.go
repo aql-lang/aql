@@ -187,7 +187,7 @@ func TestEvalColorErrorRendering(t *testing.T) {
 }
 
 // A built binary must see its own command line. Both call sites already
-// passed os.Args[1:] into Main and it was dropped on the floor, so an
+// passed os.Args[1:] into Main and it was dropped on the floor, so a
 // `boru build` tool on $PATH could not be given an argument — which is not a
 // tool. This is the whole point of the packaging story.
 func TestMainSurfacesArgsAsIOArgs(t *testing.T) {
@@ -283,7 +283,7 @@ func TestMainRejectsUnresolvableProfile(t *testing.T) {
 
 // --- IO.exit in a built binary ---
 
-// A built tool chooses its own exit status. This is what makes a BORU
+// A built tool chooses its own exit status. This is what makes a boru
 // program usable in a shell pipeline at all: `if mytool …; then` reads the
 // status, and before C1 every built binary could only ever say 0 or 1.
 func TestMainExitCodeIsProcessStatus(t *testing.T) {

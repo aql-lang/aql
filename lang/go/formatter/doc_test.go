@@ -63,7 +63,7 @@ func TestFitsFlat(t *testing.T) {
 
 // TestRenderDocHostileIndent pins the pad-clamp guard (PR #298 review P1): a
 // caller-supplied document node with a NEGATIVE or ABSURD `by` (reachable from
-// BORU via `Fmt.render {fmt:'indent' by:-1 …}`) must not panic strings.Repeat
+// boru via `Fmt.render {fmt:'indent' by:-1 …}`) must not panic strings.Repeat
 // or force an unbounded allocation — the indent clamps to [0, maxPad].
 func TestRenderDocHostileIndent(t *testing.T) {
 	// Negative indent over a hard line: clamps to 0, so the break carries no

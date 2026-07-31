@@ -180,3 +180,7 @@ cmd/go/borubin
 # (kg/README.md — refresh it with each PR); un-ignore it from the
 # Next.js `out` rule above.
 !kg/out/
+
+# Python bytecode caches (editors/pygments)
+__pycache__/
+*.pyc

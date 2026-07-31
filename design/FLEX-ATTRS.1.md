@@ -58,7 +58,7 @@
 > pinned container predicates (lang/spec/refine-flex.tsv), and the
 > third seam — base-dispatch delegation for override bodies — is
 > closed by the `as` dispatch-ascription word (OPEN-WORDS.1 §9;
-> lang/spec/as.tsv; the full pure-BORU SortedFlexMap acceptance runs
+> lang/spec/as.tsv; the full pure-boru SortedFlexMap acceptance runs
 > in lang/go/test/sorted_user_test.go). A super-style word was built
 > first and rejected on DX grounds (§7b.1-3 keep that history).
 
@@ -255,7 +255,7 @@ serializers later. (`IO.write` emit = representation-faithful;
 `jsonify` = canonicalizing; document jsonify as such.)
 
 One asymmetry becomes visible and must be documented: the same text
-parses ordered as a BORU literal but sorted through `StructUtil.parse`
+parses ordered as a boru literal but sorted through `StructUtil.parse`
 (until the jsonic hook reaches it — the upstream route in §3.2 closes
 this too; decoded json/yaml/toml stays sorted regardless, upstream
 maps are unordered).
@@ -480,7 +480,7 @@ on `ConformsTo(TWeakFlexMap)` and record per-key `T ∪ None` joins
 bound holds" survives collection, since collection removes entries
 rather than corrupting them). FLEX-ATTRS.0 proved the attr design
 could never surface weakness statically; the type does it for free.
-And the LSP objection is smaller than it looks in BORU specifically:
+And the LSP objection is smaller than it looks in boru specifically:
 map `get` is already None-partial (absent keys read as None), so the
 static contract of `get` is unchanged — what weakens is the checker's
 frame property, which is exactly the subsystem that can now see the
@@ -511,7 +511,7 @@ with near-zero kernel churn, no snapshot machinery, no silent-failure
 modes, and the identical spec limitation (collection is equally
 untestable in both designs — this axis does not discriminate). JS
 refused weak iteration deliberately; Java/Python allow it and their
-docs are standing warning labels; BORU's values (exact-canon specs,
+docs are standing warning labels; boru's values (exact-canon specs,
 compile==interpret parity, loud failures) point toward refusing.
 **If** live-cache introspection via the Map vocabulary is a hard
 requirement, WeakFlexMap is shippable under this contract: the §4.2
@@ -680,7 +680,7 @@ D1 — insertion order:
 1. **Mechanism** — bump tabnas/jsonic so `pairval` writes
    `Meta["keyorder"]` at its one site (also fixing SafeParse, the
    json5/jsonc kinds, and the `parse`-word boundary), or build the
-   BORU-side grammar-BC channel against pinned v0.2.0 as a swappable
+   boru-side grammar-BC channel against pinned v0.2.0 as a swappable
    shim? Leaning: upstream. Is the `boru_ck` K-flag leak fixed in the
    same change?
 2. **Scope pin** — confirm the doctrine: Node

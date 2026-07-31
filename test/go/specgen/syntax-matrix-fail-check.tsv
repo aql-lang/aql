@@ -1,4 +1,4 @@
-# BORU Language Specification: Minimal Failing Prefixes — TYPE-CHECK FAILURES (GENERATED)
+# boru Language Specification: Minimal Failing Prefixes — TYPE-CHECK FAILURES (GENERATED)
 # format: front-coded
 # format: detail-legend
 # Format: FRONT-CODED with a DETAIL LEGEND. Each data row is
@@ -20,7 +20,7 @@
 #
 # These prefixes FAIL THE TYPE CHECKER: `boru check` reports at least one
 # error-severity diagnostic. Because the compiler runs the checker first
-# (lang.(*BORU).CompileCheck), every prefix here is also refused by the
+# (lang.(*Boru).CompileCheck), every prefix here is also refused by the
 # compiler — none is ever lowered to bytecode.
 #
 # 10015 prefixes.

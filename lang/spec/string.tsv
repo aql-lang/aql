@@ -1,4 +1,4 @@
-# BORU Language Specification: String operations (concat split trim
+# boru Language Specification: String operations (concat split trim
 # contains indexof replace changecase upper lower repeat pad escape match)
 # Format: input<TAB>expected<TAB>description
 #

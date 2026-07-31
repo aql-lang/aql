@@ -1,7 +1,7 @@
-# BORU Reference
+# boru Reference
 
-Complete reference for BORU syntax, types, and words. For learning
-BORU, see the [Tutorial](tutorial.md). For task-oriented recipes, see
+Complete reference for boru syntax, types, and words. For learning
+boru, see the [Tutorial](tutorial.md). For task-oriented recipes, see
 the [How-To Guides](how-to.md).
 
 
@@ -137,7 +137,7 @@ These names expand automatically:
 
 ## Execution Model
 
-BORU is a stack machine. Tokens are read left to right. Literals push
+boru is a stack machine. Tokens are read left to right. Literals push
 onto the stack; words consume arguments and push results.
 
 ### Argument Collection
@@ -443,6 +443,6 @@ This reversed internal ordering applies to: `sub`, `div`, `mod`,
 
 ## Next Steps
 
-- [Tutorial](tutorial.md) — learn BORU from first principles
+- [Tutorial](tutorial.md) — learn boru from first principles
 - [How-To Guides](how-to.md) — task-oriented recipes
 - [Explanation](explanation.md) — deeper understanding of the model

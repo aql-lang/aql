@@ -25,7 +25,7 @@ type Info struct {
 }
 
 // Event is one decoded input event. Tag selects which of the remaining
-// fields are meaningful; the value shapes delivered to BORU programs are
+// fields are meaningful; the value shapes delivered to boru programs are
 // fixed by TUI.0.md §2.4 (this struct is their Go carrier).
 type Event struct {
 	// Tag is "key", "resize", "mouse", "paste" or "focus".

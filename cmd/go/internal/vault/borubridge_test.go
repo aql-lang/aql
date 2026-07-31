@@ -21,7 +21,7 @@ import (
 // probeBackendsRegistered proves registerBoruTuiBackends ran before the
 // program: a second registration of either backend must be refused as
 // already registered.
-func probeBackendsRegistered(a *lang.BORU) error {
+func probeBackendsRegistered(a *lang.Boru) error {
 	vErr := modules.RegisterHostVault(a.NativeRegistry(), modules.VaultSpec{
 		Name: "probe", Do: func(string, map[string]any) (any, error) { return nil, nil },
 	})
@@ -380,10 +380,10 @@ func TestBridgeConcurrentOps(t *testing.T) {
 	}
 }
 
-// The launcher: --boru routes into runInteractiveBORU; a non-terminal is
+// The launcher: --boru routes into runInteractiveBoru; a non-terminal is
 // refused; the init-error and run-error arms surface through the seams;
 // the success arm registers both backends and runs the program source.
-func TestRunInteractiveBORUArms(t *testing.T) {
+func TestRunInteractiveBoruArms(t *testing.T) {
 	_, home := newTestBridge(t)
 
 	// --boru flag routes here; non-TTY stdin (not an *os.File) refuses
@@ -412,9 +412,9 @@ func TestRunInteractiveBORUArms(t *testing.T) {
 
 	// lang.New failure arm
 	origNew := b8langNew
-	b8langNew = func(...lang.Options) (*lang.BORU, error) { return nil, fmt.Errorf("b8-boom-init") }
+	b8langNew = func(...lang.Options) (*lang.Boru, error) { return nil, fmt.Errorf("b8-boom-init") }
 	var errInit strings.Builder
-	if code := runInteractiveBORU(home, devnull, devnullW, &errInit); code != 1 ||
+	if code := runInteractiveBoru(home, devnull, devnullW, &errInit); code != 1 ||
 		!strings.Contains(errInit.String(), "b8-boom-init") {
 		t.Fatalf("init-error arm = %d, %q", code, errInit.String())
 	}
@@ -427,12 +427,12 @@ func TestRunInteractiveBORUArms(t *testing.T) {
 	origRun := b8runSource
 	t.Cleanup(func() { b8runSource = origRun })
 	var gotSrc string
-	b8runSource = func(a *lang.BORU, src string) error {
+	b8runSource = func(a *lang.Boru, src string) error {
 		gotSrc = src
 		return probeBackendsRegistered(a)
 	}
 	var out strings.Builder
-	if code := runInteractiveBORU(home, devnull, devnullW, &out); code != 0 {
+	if code := runInteractiveBoru(home, devnull, devnullW, &out); code != 0 {
 		t.Fatalf("success arm = %d, %q", code, out.String())
 	}
 	if !strings.Contains(gotSrc, `import "boru:vault-tui"`) ||
@@ -440,21 +440,21 @@ func TestRunInteractiveBORUArms(t *testing.T) {
 		!strings.Contains(gotSrc, ") drop") {
 		t.Fatalf("program source = %q", gotSrc)
 	}
-	b8runSource = func(*lang.BORU, string) error { return fmt.Errorf("b8-boom-run") }
+	b8runSource = func(*lang.Boru, string) error { return fmt.Errorf("b8-boom-run") }
 	var errRun strings.Builder
-	if code := runInteractiveBORU(home, devnull, devnullW, &errRun); code != 1 ||
+	if code := runInteractiveBoru(home, devnull, devnullW, &errRun); code != 1 ||
 		!strings.Contains(errRun.String(), "b8-boom-run") {
 		t.Fatalf("run-error arm = %d, %q", code, errRun.String())
 	}
 
 	// no launch vault at all: the picker-pending arm defaults the active
 	// location to the home ~/.boru
-	b8runSource = func(a *lang.BORU, src string) error { return nil }
+	b8runSource = func(a *lang.Boru, src string) error { return nil }
 	emptyHome := t.TempDir()
 	t.Setenv(EnvFolder, "")
 	t.Setenv(EnvSuffix, "")
 	var out2 strings.Builder
-	if code := runInteractiveBORU(emptyHome, devnull, devnullW, &out2); code != 0 {
+	if code := runInteractiveBoru(emptyHome, devnull, devnullW, &out2); code != 0 {
 		t.Fatalf("empty-home arm = %d, %q", code, out2.String())
 	}
 

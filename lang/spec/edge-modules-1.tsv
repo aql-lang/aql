@@ -1,4 +1,4 @@
-# BORU Language Specification: module-system edge cases
+# boru Language Specification: module-system edge cases
 # Format: input<TAB>expected<TAB>description
 #
 # Edge-case battery over the module system: the inline `module […]`

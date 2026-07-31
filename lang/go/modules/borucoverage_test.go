@@ -10,10 +10,10 @@ import (
 )
 
 // borucoverage_test.go — the shared BORU-LINE coverage gate for modules written
-// in BORU (boru:sift, boru:cli).
+// in boru (boru:sift, boru:cli).
 //
-// Nothing meta-tests that a BORU-authored module HAS such a gate — boru:vault-tui
-// is BORU and has none — so the gate is opt-in per module, and this is the one
+// Nothing meta-tests that a boru-authored module HAS such a gate — boru:vault-tui
+// is boru and has none — so the gate is opt-in per module, and this is the one
 // implementation each opts into. Keeping it in one place is not only tidiness:
 // two copies drifted the moment the second module needed a different message,
 // and the linter's duplicate detector caught them.
@@ -22,7 +22,7 @@ import (
 // row of the module source is covered by it, save rows the module's allowlist
 // names. Every allowlist entry must be genuinely uncovered, so the list cannot
 // rot into a claim nobody re-checks.
-func assertBORUCoverage(t *testing.T, coverID, moduleSource, testSource string, allow map[int]string) {
+func assertBoruCoverage(t *testing.T, coverID, moduleSource, testSource string, allow map[int]string) {
 	t.Helper()
 	r, err := native.DefaultRegistry()
 	if err != nil {

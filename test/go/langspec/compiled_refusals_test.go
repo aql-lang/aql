@@ -1,4 +1,4 @@
-// Compilation refusals are test FAILURES. Full native compilation of every BORU
+// Compilation refusals are test FAILURES. Full native compilation of every boru
 // program is the goal (design/COMPILABLE-SUBSET.md, design/P7-ENDGAME.10.md): a
 // whole-program refusal silently runs on the interpreter, which is slower and
 // keeps the compiler tied to the tree-walker. So this gate treats every spec-row

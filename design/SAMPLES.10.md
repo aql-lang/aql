@@ -1,5 +1,5 @@
 
-# BORU Samples
+# boru Samples
 
 
 ## Format

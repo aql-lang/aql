@@ -103,7 +103,7 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 
 	registry.Output = out
 
-	// One *BORU per session over the persistent registry: each line runs
+	// One *Boru per session over the persistent registry: each line runs
 	// COMPILED-BY-DEFAULT (RunAutoValues — the same CompileTry semantics as
 	// `boru run`), with the interpreter as the sound fallback for refused
 	// lines. Check-pass def/import effects persist across lines on the

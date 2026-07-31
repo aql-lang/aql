@@ -426,7 +426,7 @@ func TestSyntaxMatrixCheckerDeterministic(t *testing.T) {
 // to compare two runs for determinism. A panic is recovered into a
 // sentinel so the no-panic property is asserted as a normal test
 // failure, never a crash.
-func checkWith(sink *failSink, a *lang.BORU, input string) (fp string) {
+func checkWith(sink *failSink, a *lang.Boru, input string) (fp string) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			sink.fail("checker PANICKED on %q: %v", input, rec)

@@ -102,7 +102,7 @@ def P (refine BinarySpec [{name:'a' type:'bits' size:4} {value:0 type:'bits' siz
 # ── Scalarness: Bytes is a Scalar leaf. These rows pin the placement
 # itself and everything that follows from it — the scalar equality
 # contract (eq and deq agree: content, never container identity), the
-# family-restricted ordering rules, immutability at the BORU level, and
+# family-restricted ordering rules, immutability at the boru level, and
 # the ABSENCE of Node affordances (no flex twin, no element iteration).
 
 # lattice placement

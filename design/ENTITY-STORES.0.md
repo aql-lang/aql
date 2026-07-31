@@ -1,7 +1,7 @@
-# ENTITY-STORES — Seneca-style data entities & store plugins on BORU
+# ENTITY-STORES — Seneca-style data entities & store plugins on boru
 
 Design for a data-entity layer (the `seneca-entity` analog) and pluggable
-**store** backends (the `seneca-*-store` analog, e.g. DynamoDB) on top of BORU's
+**store** backends (the `seneca-*-store` analog, e.g. DynamoDB) on top of boru's
 `SERVICES.0.md` model, using **patrun** for routing. This is a **design RFC only —
 no implementation code yet.**
 
@@ -10,16 +10,16 @@ no implementation code yet.**
 Seneca ships an ActiveRecord-ish data layer: `seneca.make$('zone/base/name')`
 gives an *entity* with `save$`/`load$`/`list$`/`remove$`, and store plugins
 (`seneca-mem-store`, `seneca-dynamo-store`, …) implement persistence by handling
-`role:'entity'` messages. **How does this map onto BORU using patrun — and do we
+`role:'entity'` messages. **How does this map onto boru using patrun — and do we
 need to port Seneca's basic engine?**
 
 ## TL;DR — no engine port is needed
 
-BORU's `SERVICES.0.md` is **already a re-derivation of Seneca's core**, built on the
+boru's `SERVICES.0.md` is **already a re-derivation of Seneca's core**, built on the
 *same* vendored patrun (`rjrodger/patrun`, `lang/go/native/internal/patrun/`). The
-engine Seneca's entity layer depends on already exists in the BORU design:
+engine Seneca's entity layer depends on already exists in the boru design:
 
-| Seneca core (the "basic engine") | BORU equivalent | Status |
+| Seneca core (the "basic engine") | boru equivalent | Status |
 | --- | --- | --- |
 | `seneca.add(pattern, action)` | `add {pattern} [handler] svc` (SERVICES §1) | designed |
 | `seneca.act(msg, cb)` | `call {msg} svc` (sync) / `send` (async) | designed |
@@ -29,15 +29,15 @@ engine Seneca's entity layer depends on already exists in the BORU design:
 | `seneca.listen` / `seneca.client` | `listen` / `connect` (SERVICES §4) | designed |
 | inward/outward interceptors | `wrap` middleware (SERVICES §1) | designed |
 
-So the entity layer and store plugins are **ordinary BORU services and modules** —
+So the entity layer and store plugins are **ordinary boru services and modules** —
 nothing about Seneca's JS runtime needs porting. What Seneca's *entity layer* adds
-*on top of* the engine is the only genuinely new surface BORU must design:
+*on top of* the engine is the only genuinely new surface boru must design:
 
 1. the **canon** — the `zone/base/name` naming of an entity kind;
 2. the **entity handle** — `make$` + `save$`/`load$`/`list$`/`remove$`/`data$`;
 3. the **store contract** + its conformance suite (`seneca-store-test`).
 
-This is **greenfield** in BORU — there is no existing persistence/ORM/store design
+This is **greenfield** in boru — there is no existing persistence/ORM/store design
 in `design/` today. The rest of this document specifies those three pieces.
 
 > Cross-references: `SERVICES.0.md` (§1 `add`/`call`/`prior`/`wrap`, §2 modules,
@@ -47,7 +47,7 @@ in `design/` today. The rest of this document specifies those three pieces.
 
 ## 1. The entity message contract
 
-Seneca entities are sugar over messages; so are BORU entities. Every entity
+Seneca entities are sugar over messages; so are boru entities. Every entity
 operation is a `call` to an **entity service** with a fixed tagged-map vocabulary.
 The **routing keys are scalar strings** (patrun requires scalar pattern values —
 `patrun.tsv:50`); the row and the query travel as **payload Maps that are never
@@ -74,7 +74,7 @@ most-specific-match over the scalar `role/cmd/zone/base/name` tags.**
 ## 2. Canon → store routing via patrun specificity
 
 Seneca routes an entity to a store via a config `map` (`'-/sys/-': 'dynamo'`).
-In BORU the **patrun specificity ladder is the map** — no separate mechanism:
+In boru the **patrun specificity ladder is the map** — no separate mechanism:
 
 ```boru
 # A default store catches every entity op (least specific):
@@ -89,7 +89,7 @@ patrun picks the **most-specific** matching rule (`patrun.tsv:15–17`), ignores
 extra subject keys (subset match, `patrun.tsv:18`), and breaks ties on equal key
 counts alphabetically (`patrun.tsv:30`). Seneca's wildcard dimensions
 (`-/sys/-` = "any zone, base sys, any name") map to **omitting that tag** from the
-BORU pattern. So the entire Seneca routing map collapses to "register each store's
+boru pattern. So the entire Seneca routing map collapses to "register each store's
 handlers at the canon specificity it owns."
 
 ## 3. The `Entity` Ideal type (the handle)
@@ -130,7 +130,7 @@ never a hidden connection — identical to Seneca's "entities are just data."
 
 ## 4. The store-plugin contract
 
-A store plugin is an **BORU module** that exports a constructor returning a
+A store plugin is a **boru module** that exports a constructor returning a
 `Service` (or a set of handlers added onto the bus). It must implement the five
 operations against the §1 contract:
 
@@ -142,7 +142,7 @@ operations against the §1 contract:
 | `remove` | `q` (+ canon) | removed `ent` or `None` | by id or query |
 | `native` | `native` | store-specific | escape hatch to the raw backend |
 
-This is the BORU form of the Seneca store API. **Conformance** is the
+This is the boru form of the Seneca store API. **Conformance** is the
 `seneca-store-test` analog: every store module must satisfy a shared checklist —
 CRUD round-trip, id generation, insert-vs-update detection, AND-query semantics,
 sort/limit/skip/field-projection, and the upsert race (concurrent inserts on a
@@ -152,7 +152,7 @@ positive **and** negative rows under `lang/spec/` (per the repo's test disciplin
 ## 5. Entity middleware via `prior` / `wrap`
 
 Seneca layers behaviour over entity ops by `add`-ing another handler for the same
-pattern and calling `this.prior()`. BORU's `prior`/`wrap` (SERVICES §1) is the same
+pattern and calling `this.prior()`. boru's `prior`/`wrap` (SERVICES §1) is the same
 mechanism — validation, auth, caching, audit, soft-delete, timestamps all layer
 **without touching the store**:
 
@@ -191,7 +191,7 @@ This is precisely Seneca's entity-action chaining, with no new concept.
 ## 6. Query model — dropping Seneca's `$`-suffix
 
 Seneca overloads the query object with `sort$`/`limit$`/`skip$`/`fields$` and uses
-the `$` suffix to keep meta-keys from clashing with data fields. BORU has no `$`
+the `$` suffix to keep meta-keys from clashing with data fields. boru has no `$`
 identifier convention; it can instead pass **query data and query meta as two
 maps**, which is cleaner and removes the clash entirely:
 
@@ -228,17 +228,17 @@ different canon specificities (mem for `-/-/tmp`, dynamo for `-/app/-`, …).
   the contract and the conformance suite.
 - **Phase 2 — entity bus + `Entity` Ideal type + `prior`/`wrap` middleware**, and
   store-as-service wiring on the SERVICES/PROCESSES substrate.
-- **Phase 3 — real stores (dynamo/postgres).** These need network I/O. BORU has
+- **Phase 3 — real stores (dynamo/postgres).** These need network I/O. boru has
   `Net.fetch` (HTTP client, `lang/go/native/net_module.go`), and DynamoDB exposes a
   JSON/HTTP API, so a store *can* be written against `Net.fetch`. **Real gaps to
   flag:**
   - **Request signing.** DynamoDB requires AWS SigV4 (HMAC-SHA256 canonical
-    request signing). BORU has no crypto/HMAC or signer today — a concrete
+    request signing). boru has no crypto/HMAC or signer today — a concrete
     prerequisite, not hand-wavable.
   - **Capability.** Store network access is gated by the **`network`** scope
     (`PERMISSIONS.10.md`); `sandbox`/`read-only` profiles hard-deny it.
   - **Transport.** A store that *serves* (vs. calls out) needs the TCP/socket
-    server BORU still lacks (SERVICES §4, later phase).
+    server boru still lacks (SERVICES §4, later phase).
 
 ## 9. Open questions
 

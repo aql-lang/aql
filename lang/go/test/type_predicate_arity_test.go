@@ -20,7 +20,7 @@ func TestRunPredicate_TwoReturns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	_, err = a.Run(`def Two fn [x:Any Any [x x]]
 def n:Two 1`)
 	if err == nil {

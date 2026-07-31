@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:debug module
+# boru Language Specification: the boru:debug module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable debugging module. Import binds the `Debug` namespace:

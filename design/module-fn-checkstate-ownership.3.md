@@ -140,7 +140,7 @@ cd /home/user/boru/cmd/go && go build -o bin/boru ./boru
 # trigger 1 (direct): error count
 ./bin/boru check /tmp/decision/decision.boru 2>&1 | grep -oE '[0-9]+ error\(s\)'
 # trigger 2 (gate): needs the §5b threading (value-thread capturedReg.Check =
-# e.registry.Check around the CallBORU in execFnDefSig when the parent is
+# e.registry.Check around the CallBoru in execFnDefSig when the parent is
 # check-active) to run module bodies in check mode, then:
 ./bin/boru check /tmp/decision/test/decision_smoke_test.boru
 ```

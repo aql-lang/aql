@@ -1,4 +1,4 @@
-// Command calc is a small CLI / REPL calculator built on the BORU
+// Command calc is a small CLI / REPL calculator built on the boru
 // engine kernel.
 //
 // Usage:

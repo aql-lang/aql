@@ -1,4 +1,4 @@
-# BORU Behavior Mechanism — Commentary and Comparison
+# boru Behavior Mechanism — Commentary and Comparison
 
 > **Syntax note (2026-07):** the `refine Object {…}` examples and the
 > "Object types" dispatch discussion below predate the Object/Array
@@ -9,7 +9,7 @@
 
 ## What it is
 
-BORU associates per-type capabilities — `compare`, `canon`, `nodify` —
+boru associates per-type capabilities — `compare`, `canon`, `nodify` —
 with a type's `Behavior` slot on its `*Type`. The kernel-side free
 functions (`eng.CompareValues`, `eng.Value.String`, `eng.NodifyValue`)
 dispatch by walking the value's `Parent` parent chain looking for a
@@ -53,21 +53,21 @@ The closest cousins are **Common Lisp's CLOS generic functions** and
 **Clojure's protocols**. All three share the same shape:
 
 - Capability declared once, kernel-side (CLOS `defgeneric`, Clojure
-  `defprotocol`, BORU `behaviors` table).
+  `defprotocol`, boru `behaviors` table).
 - Implementations added per-type after the fact (CLOS `defmethod`,
-  Clojure `extend-type`, BORU `behave compare/q (fn …)`).
+  Clojure `extend-type`, boru `behave compare/q (fn …)`).
 - Dispatch through runtime lookup rather than compile-time resolution.
 
-BORU's behavior-name registry being kernel-closed is more like Clojure's
+boru's behavior-name registry being kernel-closed is more like Clojure's
 protocols than CLOS — Clojure also requires a protocol be defined
 before extensions can target it.
 
-Where BORU diverges:
+Where boru diverges:
 
 - **Open registration in any program**, not just at type-declaration
   time. ML-family languages (Haskell type classes, Rust traits, OCaml
   modules) require all instances declared in the module that owns
-  either the type or the class — Rust calls this the orphan rule. BORU
+  either the type or the class — Rust calls this the orphan rule. boru
   has no orphan rule; any program can `behave` on any non-builtin type
   in scope. Python's `functools.singledispatch` is the closest
   mainstream parallel; Smalltalk / Ruby reach this through reopened
@@ -75,7 +75,7 @@ Where BORU diverges:
   like visitor.
 
 - **Single dispatch on the LCA**, not on individual operand types.
-  CLOS does true multimethods (dispatch on every arg's class); BORU
+  CLOS does true multimethods (dispatch on every arg's class); boru
   collapses to "find the lowest common ancestor of the operand types
   and ask its `Behavior`" — strictly less powerful but easier to
   reason about. Cross-type compare (Integer + Decimal → Number) falls
@@ -89,8 +89,8 @@ Where BORU diverges:
   JSON encoder. Most languages collapse these — Python's `json.dumps`
   calls `default()` and serialises in one step, Rust's
   `serde::Serialize` produces wire bytes directly, Go's `MarshalJSON`
-  returns `[]byte`. BORU exposing the intermediate Node as a
-  first-class result lets users compose with downstream BORU
+  returns `[]byte`. boru exposing the intermediate Node as a
+  first-class result lets users compose with downstream boru
   transforms before any encoder runs — a fit for a query language.
 
 - **Capability methods are Go interfaces** detected via type
@@ -111,13 +111,13 @@ Where BORU diverges:
 | Ruby / Smalltalk | Yes (reopen class) | Runtime | Receiver only |
 | Clojure | Yes (`extend-type` after `defprotocol`) | Runtime | Receiver only |
 | Common Lisp / CLOS | Yes (`defmethod`) | Runtime | All args (multimethods) |
-| **BORU** | **Yes (`behave`)** | **Runtime** | **LCA of operand types** |
+| **boru** | **Yes (`behave`)** | **Runtime** | **LCA of operand types** |
 
 ## Type considerations
 
 ### Structural typing for validation, nominal typing for dispatch
 
-BORU splits the role types play depending on whether they validate or
+boru splits the role types play depending on whether they validate or
 dispatch — the subtlest gotcha for users coming from nominal languages.
 
 **Validation is structural.** `def x:Person {name:'A' age:30}` validates
@@ -157,7 +157,7 @@ How other languages handle this:
   question mostly doesn't arise because OCaml objects aren't where
   variant-style dispatch happens.
 
-BORU splits the difference deliberately. Structural validation keeps
+boru splits the difference deliberately. Structural validation keeps
 typed bindings flexible (any old map fits if its shape is right), while
 nominal dispatch keeps behavior lookup predictable (only `make` produces
 a value that behaves as the named type). The cost is the gotcha above:
@@ -334,7 +334,7 @@ One behavior name → one capability slot per type. Can't have
 emulate via distinct nominal types (`def PersonByAge (refine Object {…})`) or
 by writing an ad-hoc comparator at the call site. CLOS has `:before` /
 `:after` / `:around` and qualifier-keyed methods; Clojure has
-multimethods with arbitrary dispatch fns. BORU stays minimal here,
+multimethods with arbitrary dispatch fns. boru stays minimal here,
 which keeps the dispatch path predictable and the kernel surface
 small.
 
@@ -343,7 +343,7 @@ small.
 The closed kernel table (compare / canon / nodify today) is a design
 decision, not a limitation: new capabilities need kernel awareness
 because the kernel needs to know how to dispatch them. CLOS lets users
-define new generic functions freely; BORU's narrower surface trades
+define new generic functions freely; boru's narrower surface trades
 that flexibility for guaranteed dispatch. The natural extension point
 is allowing plugins to register new behavior names at engine-init time
 (parallel to `RegisterExternalBuiltin` for types) — a small future
@@ -351,16 +351,16 @@ change.
 
 ## Summary
 
-The overall posture: BORU sits closer to **Clojure protocols + Lisp-style
+The overall posture: boru sits closer to **Clojure protocols + Lisp-style
 runtime extension** than to ML-family type classes. The kernel keeps a
 small list of dispatchable capabilities; the world extends the impls.
 Two interesting bets:
 
 - **Projection / encoding split** (`nodify` decomposed from `jsonify`).
-- **BORU-body-as-Go-interface bridge** (the `userBehavior` wrapper) —
-  user-supplied BORU fn bodies become first-class implementations of
+- **boru-body-as-Go-interface bridge** (the `userBehavior` wrapper) —
+  user-supplied boru fn bodies become first-class implementations of
   Go-side capability interfaces, dispatched alongside the kernel and
   native implementations through the same mechanism.
 
 Both are individually uncontroversial; the combination is what gives
-BORU behavior dispatch its distinctive character.
+boru behavior dispatch its distinctive character.

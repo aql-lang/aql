@@ -7,7 +7,7 @@
 # I/O instead of touching a local Store.
 
 import "boru:serve"
-import "boru:net" # Net.fetch (HTTP client; the only transport BORU has)
+import "boru:net" # Net.fetch (HTTP client; the only transport boru has)
 import "boru:rand"
 
 export "DynamoStore" {New:New/r}
@@ -60,7 +60,7 @@ def New fn opts:Map Service [
 # Build and POST a DynamoDB request. `Net.fetch` reaches the host network policy.
 #
 # GAP: real DynamoDB requires AWS SigV4 signing (HMAC-SHA256 over a canonical
-#      request) on every call. BORU has no HMAC/crypto or signer today — a hard
+#      request) on every call. boru has no HMAC/crypto or signer today — a hard
 #      prerequisite, NOT hand-wavable. The Authorization/X-Amz-Date headers below
 #      are therefore MISSING; this call would be rejected by AWS as-is.
 # GAP: network access is gated by the `network` capability scope (PERMISSIONS.10);

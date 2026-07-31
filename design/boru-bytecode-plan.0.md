@@ -1,4 +1,4 @@
-# BORU Bytecode — staged implementation plan
+# boru Bytecode — staged implementation plan
 
 **Status:** in progress — Stage 0 DONE with a GO result
 (`boru-bytecode-baseline.0.md`); Stage 1 recording pass LANDED;
@@ -70,7 +70,7 @@ user-facing contract):
 `boru run` already performs; no build step, no persisted `.boruc`
 (which eliminates the staleness gotcha class). Rollout:
 
-1. *Now (Stage 1):* tooling-only — `lang.(*BORU).CompileCheck` and
+1. *Now (Stage 1):* tooling-only — `lang.(*Boru).CompileCheck` and
    the planned `boru check --emit` disassembly. Execution unchanged.
 2. *Opt-in (Stages 2–6):* `boru run --compile` / `BORU_COMPILE=1`.
    Uncompilable programs run on the interpreter SILENTLY — same
@@ -147,7 +147,7 @@ profile, and the decision. *~1 week.*
 (Program/Instr/opcodes/disassembler) and `eng/go/emit.go` (EmitState:
 ID-based operand provenance, the four-class site taxonomy, Stage-1
 linearizer with simulated-stack discipline checks) ship with
-`lang.(*BORU).CompileCheck` as the entry point and golden tests
+`lang.(*Boru).CompileCheck` as the entry point and golden tests
 (`lang/go/bytecode_emit_test.go`): the mirror forms `add 1 2` /
 `2 1 add` lower identically, paren results chain through the
 simulated stack, literal-substitution defs inline via provenance,
@@ -220,7 +220,7 @@ silent-drop interpreter divergence found during this stage is fixed
 instruction set (handler errors stamped with `Debug[pc]` + source; a
 belt-and-braces guard refuses tape-coupled handler results). CLI
 opt-in shipped: `boru run --compile` / `boru do --compile`
-(`lang.(*BORU).RunCompiled`, silent interpreter fallback) and `boru
+(`lang.(*Boru).RunCompiled`, silent interpreter fallback) and `boru
 check --emit` (disassembly or the refusal reason). **The compiled
 path is NEVER the default** — flag-only, per the ground rules.
 
@@ -337,7 +337,7 @@ same stage, because tail-call elimination is a language guarantee
   interpreter's innermost-binding-wins visibility exactly. Benchmark
   both paths; expect registry ops to be common at first.
 - Stage-5 residual boundaries (module pins, foreign frames,
-  same-registry `CallBORU`) decline tail treatment, same as the
+  same-registry `CallBoru`) decline tail treatment, same as the
   interpreter (R6 #30).
 - **Gate:** dual-mode `lang/spec/recursion.tsv` (the TCO Stage 0
   pins) including the taxonomy rows: tail runaway →
@@ -699,7 +699,7 @@ Net: differential 1511 → 1636, whole-corpus 1571 → 1708.
 **Remaining frontier items — investigated, resolved or deferred:**
 
 - **Record-type `make` naming — MOOT (no compilable shape).** There is
-  no current BORU syntax where `make R {…}` over a record/map-shape binding
+  no current boru syntax where `make R {…}` over a record/map-shape binding
   yields a valid instance: a plain implicit-map binding
   (`def R {x:Integer} make R {…}`) errors *identically in both engines*
   ("make: first argument must be a type literal or record type"), and the

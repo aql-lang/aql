@@ -302,7 +302,7 @@ func checkFlagsError(t *testing.T, input string) bool {
 
 	done := reg.Check.Begin()
 	_, runErr := native.NewTop(reg).Run(values)
-	// Mirror lang.(*BORU).Check: a fn-body forward reference to a name defined
+	// Mirror lang.(*Boru).Check: a fn-body forward reference to a name defined
 	// LATER in the same program (mutual recursion isod/isev, a body referencing
 	// a sibling def below it) is flagged undefined_word at eager body-analysis
 	// time, then rescued once the def exists. The real checker drops these

@@ -1,6 +1,6 @@
 # SIFT — `boru:sift`, semi-structured text parsing (the awk tier)
 
-**Status:** LANDED (2026-07-18) — implemented in BORU; see **§0 Landed state**
+**Status:** LANDED (2026-07-18) — implemented in boru; see **§0 Landed state**
 for what shipped and the deltas from this record. Originally written as a
 PROPOSAL (2026-07-16) in the house style of `MICRON-FORMATS.0.md`,
 distinguishing throughout what was **verified in the code** from what was
@@ -23,9 +23,9 @@ depends on the other.
 
 ---
 
-## 0. Landed state (2026-07-18) — implemented in BORU
+## 0. Landed state (2026-07-18) — implemented in boru
 
-`boru:sift` has landed as a **core module written in BORU**
+`boru:sift` has landed as a **core module written in boru**
 (`lang/go/modules/sift.boru`), embedded via `go:embed` and run as a module
 body by a ~90-line Go loader (`sift.go`) — the same pattern `boru:repl` and
 `boru:test` already use. The executable spec is
@@ -33,28 +33,28 @@ body by a ~90-line Go loader (`sift.go`) — the same pattern `boru:repl` and
 in both TCO modes). The six families (§5), the coercion vocabulary (§5.4),
 name normalization (§5.3), the spec-map engine (§6), and the seven `Sift`
 words (§7) are all implemented. Deltas from this design record, all forced
-by the pure-BORU implementation choice:
+by the pure-boru implementation choice:
 
 - **Surface is the `Sift.*` namespace only — not the global `parse <kind>`
   macro (§7/§8).** An imported module's body runs in a *discarded
   sub-registry*, so it cannot register a `parse <kind>` (or a
   `read {fmt:…}`) the importing program would see — that state is
   per-registry and only the Go loader holds the parent. The design assumed
-  parselang-kind registration throughout; the coherent pure-BORU form is
+  parselang-kind registration throughout; the coherent pure-boru form is
   `Sift.parse kv "…"`, `Sift.define`, etc. This also settles the "parse-kind
   only for v1" scope decision: the `read {fmt:'…'}` / `{fmt:'auto'}` bridge
   (§8) and the eager preset catalog (§9) are **deferred**.
 - **Tables are a `List` of row `Map`s, not a schema-carrying `Table`.** Pure
-  BORU has no reachable `TableData` constructor; a list-of-maps is
+  boru has no reachable `TableData` constructor; a list-of-maps is
   behaviourally identical for every sift consumer (`size` / `dot` / `get`),
   and cells are coerced to real typed values.
-- **`family:'fn'` (the §16 escape hatch) is deferred.** Passing a BORU fn
+- **`family:'fn'` (the §16 escape hatch) is deferred.** Passing a boru fn
   *value* as data across the module boundary collides with the
   strict-forward-barrier and fn-value auto-invoke rules; the spec engine
   rejects `family:'fn'` with `sift_spec_error` for now.
 - **`pattern` builds named groups on top of positional `mini re`** (the
   group names are scanned out of the regex source and zipped onto the
-  positional submatches), since BORU's regex surface is positional-only.
+  positional submatches), since boru's regex surface is positional-only.
 
 The rest of this note is the original PROPOSAL, preserved as the design
 rationale; read it in light of the deltas above.
@@ -72,7 +72,7 @@ command output (`ps aux` / `df -P` are whitespace-aligned column tables,
 home turf: line- and field-oriented data whose schema lives in your head,
 not in the bytes.
 
-BORU's parsing stack today covers the tiers **around** that turf, but not
+boru's parsing stack today covers the tiers **around** that turf, but not
 the turf itself (all verified):
 
 - **Rigid, self-describing formats** — `parse <kind>` with the tabnas
@@ -167,7 +167,7 @@ it exactly (§9).
 2. **Parsers as data.** The extension mechanism is a declarative spec-map
    (§6). Builtin presets are the *same kind of thing* as user extensions —
    specs — so there is one mental model, and preset packs are ordinary
-   publishable BORU modules. A registered fn is the escape hatch, not the
+   publishable boru modules. A registered fn is the escape hatch, not the
    primary path.
 3. **Ride the existing registries.** Every sift parser is a parselang
    kind (and, where the `formats` capability is installed, a read format)
@@ -354,7 +354,7 @@ Two rules pinned by the §16 validation exercise:
 
 `'normalize'`: split on lower→upper case boundaries and on runs of
 non-alphanumerics; lowercase; join with `-`; a leading digit gets an `f-`
-prefix (bare words cannot start with digits in BORU source, so
+prefix (bare words cannot start with digits in boru source, so
 `m.f-1k-blocks` stays dot-accessible). Post-normalization collisions
 append `-2`, `-3`, … deterministically. Pinned examples (these become
 spec rows):
@@ -658,7 +658,7 @@ command output**; each command preset pins its canonical argv in
 `detect.cmd.argv` (that is the argv `Exec.parse` runs — `EXEC.10.md`
 §4.1) and states its contract in `doc:`. BSD/macOS variants (ps column
 drift: TT/STARTED; indent-delimited ifconfig blocks) are the province of
-**preset packs**: ordinary publishable BORU modules whose body calls
+**preset packs**: ordinary publishable boru modules whose body calls
 `Sift.define`, distributed with the existing toolchain (`boru prep` /
 `pack` / `publish` / `install`, `CLI.md`). The §16 exercise closed the
 two gaps that made this story hollow: `blocks {sep:'indent'}` (§5.2)

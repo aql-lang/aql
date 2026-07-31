@@ -21,7 +21,7 @@ import (
 //
 // Message-passing semantics (deliberate divergences noted):
 //   - Messages are DEEP-COPIED at `send` (eng.CloneValue): plain List/Map
-//     payloads ARE mutated in place by `set` in today's BORU, so zero-copy
+//     payloads ARE mutated in place by `set` in today's boru, so zero-copy
 //     sharing across goroutines (the PROCESSES.0.md §6 aspiration) is not
 //     yet safe for containers. Scalars, Bytes, and handles still share
 //     (CloneValue shares immutable payloads), so the common cases stay
@@ -45,13 +45,13 @@ func registerPidType() *eng.Type {
 	return t
 }
 
-// NewPid wraps a process handle as a BORU Pid value.
+// NewPid wraps a process handle as a boru Pid value.
 func NewPid(p *eng.Process) Value {
 	return eng.NewExtension(TPid, p)
 }
 
 // PidProcess unwraps a Pid value to its process — the hook a Go
-// driver uses to deliver messages to a BORU-held pid (boru:tui's
+// driver uses to deliver messages to a boru-held pid (boru:tui's
 // deliver-events). The bool is false for non-Pid values.
 func PidProcess(v Value) (*eng.Process, bool) {
 	return asPid(v)

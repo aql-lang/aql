@@ -23,11 +23,11 @@ func TestEvalParseError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	// Parse failures surface as BORU-voice syntax_errors
+	// Parse failures surface as boru-voice syntax_errors
 	// (design/DIAGNOSTICS.0.md phase 2).
 	if !strings.Contains(err.Error(), "[boru/syntax_error]") ||
 		!strings.Contains(err.Error(), "this string is never closed") {
-		t.Errorf("expected a BORU-voice syntax_error, got %q", err.Error())
+		t.Errorf("expected a boru-voice syntax_error, got %q", err.Error())
 	}
 }
 

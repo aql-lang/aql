@@ -63,14 +63,14 @@ type discoveredVault struct {
 	InIdx  bool // present in the index
 }
 
-// homeBORUDir is the home ~/.boru folder, where the global index lives. It
+// homeBoruDir is the home ~/.boru folder, where the global index lives. It
 // is independent of BORU_VAULT_FOLDER so the registry stays single even
 // when individual vaults live elsewhere.
-func homeBORUDir(homeDir string) string { return filepath.Join(homeDir, ".boru") }
+func homeBoruDir(homeDir string) string { return filepath.Join(homeDir, ".boru") }
 
 // vaultIndexPath is the path to the index file.
 func vaultIndexPath(homeDir string) string {
-	return filepath.Join(homeBORUDir(homeDir), vaultIndexFile)
+	return filepath.Join(homeBoruDir(homeDir), vaultIndexFile)
 }
 
 // metaFileName builds the metadata file name for a suffix, independent of
@@ -131,7 +131,7 @@ func saveVaultIndex(homeDir string, idx *vaultIndex) error {
 		return nil
 	}
 	idx.Version = vaultIndexVersion
-	if err := os.MkdirAll(homeBORUDir(homeDir), 0700); err != nil {
+	if err := os.MkdirAll(homeBoruDir(homeDir), 0700); err != nil {
 		return err
 	}
 	data, err := t7jsonMarshalIndent(idx, "", "  ")
@@ -311,7 +311,7 @@ func enumerateVaults(homeDir string) ([]discoveredVault, error) {
 		idx = &vaultIndex{Version: vaultIndexVersion}
 	}
 
-	// Folders to scan: home ~/.boru, the resolved vault folder (honors an
+	// Folders to scan: home ~/.boru, the resolved vault folder (honors a
 	// BORU_VAULT_FOLDER override active for this process), and every index
 	// folder.
 	folderSet := map[string]bool{}
@@ -320,7 +320,7 @@ func enumerateVaults(homeDir string) ([]discoveredVault, error) {
 			folderSet[filepath.Clean(f)] = true
 		}
 	}
-	addFolder(homeBORUDir(homeDir))
+	addFolder(homeBoruDir(homeDir))
 	addFolder(vaultFolder(homeDir))
 	for _, ref := range idx.Vaults {
 		addFolder(ref.Folder)

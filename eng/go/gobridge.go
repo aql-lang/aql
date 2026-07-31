@@ -3,9 +3,9 @@ package eng
 // Value <-> Go-type conversion helpers.
 //
 // Host programs (CLIs, REPLs, integrations) frequently need to round-
-// trip data between BORU Values and plain Go values: a CLI passes a Go
-// `map[string]any` returned by some library down into a BORU handler,
-// and renders a BORU Value back as Go data for serialisation. These
+// trip data between boru Values and plain Go values: a CLI passes a Go
+// `map[string]any` returned by some library down into a boru handler,
+// and renders a boru Value back as Go data for serialisation. These
 // helpers centralise that conversion so callers don't reinvent the
 // payload-unwrapping logic per project.
 //
@@ -20,7 +20,7 @@ package eng
 //   None     → nil
 //   anything else → v.String() (best-effort textual fallback)
 //
-// FromNative lifts a plain Go value up to a BORU Value:
+// FromNative lifts a plain Go value up to a boru Value:
 //   nil           → None
 //   string        → String
 //   bool          → Boolean
@@ -32,11 +32,11 @@ package eng
 //
 // FromNative is intentionally lenient — it never errors. Callers passing
 // data of an unknown shape get a stringified fallback so the value at
-// least surfaces in the BORU stream.
+// least surfaces in the boru stream.
 
 import "fmt"
 
-// ToNative converts a BORU Value into a plain Go value. See the package
+// ToNative converts a boru Value into a plain Go value. See the package
 // header comment for the mapping.
 func ToNative(v Value) any {
 	switch {
@@ -106,7 +106,7 @@ func RegisterBytesBridge(from func([]byte) Value, to func(Value) ([]byte, bool))
 	bytesToNativeHook = to
 }
 
-// FromNative lifts a plain Go value to a BORU Value. See the package
+// FromNative lifts a plain Go value to a boru Value. See the package
 // header comment for the mapping. Never returns an error — unknown
 // shapes fall back to a stringified Value.
 func FromNative(x any) Value {

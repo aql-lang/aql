@@ -21,7 +21,7 @@ func (failMmapRegion) Close() error  { return errors.New("close boom") }
 // mmapVal maps a path through IO.mmap and returns the Mmap value.
 func mmapVal(t *testing.T, r *Registry, path string, opts func(*OrderedMap)) Value {
 	t.Helper()
-	res := runBORU(t, r, []Value{NewWord("mmap"), pathV(path), wrapMap(opts)})
+	res := runBoru(t, r, []Value{NewWord("mmap"), pathV(path), wrapMap(opts)})
 	if _, ok := asMmapInfo(res[0]); !ok {
 		t.Fatalf("mmap returned %v, not a Mmap", res[0])
 	}
@@ -35,40 +35,40 @@ func TestMmapWord(t *testing.T) {
 	}
 	// Read a region as text and as bytes; a window slices it.
 	m := mmapVal(t, r, "m.bin", func(*OrderedMap) {})
-	txt := runBORU(t, r, []Value{NewWord("read"), m})
+	txt := runBoru(t, r, []Value{NewWord("read"), m})
 	if s, _ := AsString(txt[0]); s != "hello" {
 		t.Errorf("mmap read text = %q", s)
 	}
-	b := runBORU(t, r, []Value{NewWord("read"), m, wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")) })})
+	b := runBoru(t, r, []Value{NewWord("read"), m, wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")) })})
 	if bs, ok := AsBytesValue(b[0]); !ok || string(bs) != "hello" {
 		t.Errorf("mmap read bytes = %v", b[0])
 	}
-	win := runBORU(t, r, []Value{NewWord("read"), m,
+	win := runBoru(t, r, []Value{NewWord("read"), m,
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(1)); om.Set("length", NewInteger(3)) })})
 	if s, _ := AsString(win[0]); s != "ell" {
 		t.Errorf("mmap window = %q", s)
 	}
-	runBORU(t, r, []Value{NewWord("close"), m})
+	runBoru(t, r, []Value{NewWord("close"), m})
 
 	// Writable: splice in place, flush, and the file changes.
 	w := mmapVal(t, r, "m.bin", func(om *OrderedMap) { om.Set("writable", NewBoolean(true)) })
-	runBORU(t, r, []Value{NewWord("write"), w, NewBytesValue([]byte("HE"))})
-	runBORU(t, r, []Value{NewWord("flush"), w})
-	runBORU(t, r, []Value{NewWord("close"), w})
+	runBoru(t, r, []Value{NewWord("write"), w, NewBytesValue([]byte("HE"))})
+	runBoru(t, r, []Value{NewWord("flush"), w})
+	runBoru(t, r, []Value{NewWord("close"), w})
 	if got, _ := mem.ReadFile("m.bin"); string(got) != "HEllo" {
 		t.Errorf("writable mmap = %q", got)
 	}
 
 	// A windowed mmap ({offset,length}) maps only the requested bytes.
 	ww := mmapVal(t, r, "m.bin", func(om *OrderedMap) { om.Set("offset", NewInteger(1)); om.Set("length", NewInteger(3)) })
-	wb := runBORU(t, r, []Value{NewWord("read"), ww})
+	wb := runBoru(t, r, []Value{NewWord("read"), ww})
 	if s, _ := AsString(wb[0]); s != "Ell" {
 		t.Errorf("windowed mmap region = %q", s)
 	}
-	runBORU(t, r, []Value{NewWord("close"), ww})
+	runBoru(t, r, []Value{NewWord("close"), ww})
 
 	// mmap of an absent path errors.
-	if err := runBORUError(t, r, []Value{NewWord("mmap"), pathV("ghost")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("mmap"), pathV("ghost")}); err == nil {
 		t.Error("mmap of an absent path should error")
 	}
 }
@@ -80,22 +80,22 @@ func TestMmapWriteRefusals(t *testing.T) {
 	}
 	// A read-only region refuses a write.
 	ro := mmapVal(t, r, "m.bin", func(*OrderedMap) {})
-	if err := runBORUError(t, r, []Value{NewWord("write"), ro, NewBytesValue([]byte("x"))}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("write"), ro, NewBytesValue([]byte("x"))}); err == nil {
 		t.Error("write to a read-only region should refuse")
 	}
 	// A write past the region cannot grow the mapping.
 	w := mmapVal(t, r, "m.bin", func(om *OrderedMap) { om.Set("writable", NewBoolean(true)) })
-	if err := runBORUError(t, r, []Value{NewWord("write"), w, NewBytesValue([]byte("toolong!!")),
+	if err := runBoruError(t, r, []Value{NewWord("write"), w, NewBytesValue([]byte("toolong!!")),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(0)) })}); err == nil {
 		t.Error("an over-long region write should refuse")
 	}
 	// A positioned write within bounds succeeds and threads the region.
-	res := runBORU(t, r, []Value{NewWord("write"), w, NewBytesValue([]byte("Z")),
+	res := runBoru(t, r, []Value{NewWord("write"), w, NewBytesValue([]byte("Z")),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(4)) })})
 	if _, ok := asMmapInfo(res[0]); !ok {
 		t.Error("write should return the Mmap region")
 	}
-	runBORU(t, r, []Value{NewWord("close"), w})
+	runBoru(t, r, []Value{NewWord("close"), w})
 }
 
 // TestMmapUseAfterClose pins the PR-review fix: reading, writing, or
@@ -107,18 +107,18 @@ func TestMmapUseAfterClose(t *testing.T) {
 		t.Fatal(err)
 	}
 	w := mmapVal(t, r, "m.bin", func(om *OrderedMap) { om.Set("writable", NewBoolean(true)) })
-	runBORU(t, r, []Value{NewWord("close"), w})
-	if err := runBORUError(t, r, []Value{NewWord("read"), w}); err == nil {
+	runBoru(t, r, []Value{NewWord("close"), w})
+	if err := runBoruError(t, r, []Value{NewWord("read"), w}); err == nil {
 		t.Error("read after close must refuse (no use-after-free)")
 	}
-	if err := runBORUError(t, r, []Value{NewWord("write"), w, NewBytesValue([]byte("x"))}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("write"), w, NewBytesValue([]byte("x"))}); err == nil {
 		t.Error("write after close must refuse")
 	}
-	if err := runBORUError(t, r, []Value{NewWord("flush"), w}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("flush"), w}); err == nil {
 		t.Error("flush after close must refuse")
 	}
 	// close is idempotent (the memoised close-error path).
-	runBORU(t, r, []Value{NewWord("close"), w})
+	runBoru(t, r, []Value{NewWord("close"), w})
 }
 
 func TestMmapHandlerGuards(t *testing.T) {
@@ -154,10 +154,10 @@ func TestMmapHandlerGuards(t *testing.T) {
 	}
 	// flush of a File handle still works (polymorphic flush).
 	f := openFileVal(t, r, "m.bin", func(om *OrderedMap) { om.Set("mode", NewString("rw")) })
-	runBORU(t, r, []Value{NewWord("flush"), f})
-	runBORU(t, r, []Value{NewWord("close"), f})
-	runBORU(t, r, []Value{NewWord("close"), m})
-	runBORU(t, r, []Value{NewWord("close"), w})
+	runBoru(t, r, []Value{NewWord("flush"), f})
+	runBoru(t, r, []Value{NewWord("close"), f})
+	runBoru(t, r, []Value{NewWord("close"), m})
+	runBoru(t, r, []Value{NewWord("close"), w})
 
 	// A region whose Flush/Close fail surfaces the error from IO.flush and
 	// IO.close (built directly).

@@ -18,7 +18,7 @@ func TestTempWordForms(t *testing.T) {
 	r, mem := ioFSReg(t)
 
 	// {} default: a file in the (implicit) temp root, mode 0600.
-	res := runBORU(t, r, []Value{NewWord("temp"), wrapMap(func(*OrderedMap) {})})
+	res := runBoru(t, r, []Value{NewWord("temp"), wrapMap(func(*OrderedMap) {})})
 	if !IsPathon(res[0]) {
 		t.Fatalf("temp returned %v", res[0])
 	}
@@ -28,7 +28,7 @@ func TestTempWordForms(t *testing.T) {
 	}
 
 	// {dir:true} yields a 0700 directory.
-	res = runBORU(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) { om.Set("dir", NewBoolean(true)) })})
+	res = runBoru(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) { om.Set("dir", NewBoolean(true)) })})
 	if fi, _ := mem.Stat(extractPath(res[0]), false); !fi.IsDir || fi.Mode.Perm() != 0o700 {
 		t.Errorf("temp dir stat = %+v", fi)
 	}
@@ -37,7 +37,7 @@ func TestTempWordForms(t *testing.T) {
 	if err := mem.MkdirAll("work", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	res = runBORU(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) {
+	res = runBoru(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) {
 		om.Set("in", pathV("work"))
 		om.Set("prefix", NewString("log-"))
 		om.Set("suffix", NewString(".txt"))
@@ -48,7 +48,7 @@ func TestTempWordForms(t *testing.T) {
 	}
 
 	// An absent {in} directory refuses (os.CreateTemp fidelity).
-	if err := runBORUError(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) {
+	if err := runBoruError(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) {
 		om.Set("in", pathV("ghost"))
 	})}); err == nil {
 		t.Error("temp in an absent dir should error")
@@ -60,7 +60,7 @@ func TestSpaceWord(t *testing.T) {
 	if err := mem.WriteFile("f", []byte("12345"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res := runBORU(t, r, []Value{NewWord("space"), pathV("f")})
+	res := runBoru(t, r, []Value{NewWord("space"), pathV("f")})
 	m, err := AsMap(res[0])
 	if err != nil {
 		t.Fatal(err)
@@ -77,7 +77,7 @@ func TestSpaceWord(t *testing.T) {
 		t.Error("space record missing bsize")
 	}
 	// Absent path refuses.
-	if err := runBORUError(t, r, []Value{NewWord("space"), pathV("ghost")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("space"), pathV("ghost")}); err == nil {
 		t.Error("space on absent path should error")
 	}
 }
@@ -88,7 +88,7 @@ func TestAtomicWrite(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Happy path: content replaced, and no .boru-atomic temp remains.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("d/t.txt"), NewString("new"),
 		wrapMap(func(om *OrderedMap) { om.Set("atomic", NewBoolean(true)) }),
 	})
@@ -102,7 +102,7 @@ func TestAtomicWrite(t *testing.T) {
 		}
 	}
 	// Atomic works for a Bytes payload (non-offset binary write).
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("d/b.bin"), NewBytesValue([]byte{1, 2}),
 		wrapMap(func(om *OrderedMap) { om.Set("atomic", NewBoolean(true)) }),
 	})
@@ -110,7 +110,7 @@ func TestAtomicWrite(t *testing.T) {
 		t.Errorf("atomic bytes = %v", b)
 	}
 	// {atomic} + {offset} is a contradiction and refuses.
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("write"), pathV("d/b.bin"), NewBytesValue([]byte{9}),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("atomic", NewBoolean(true))
@@ -120,7 +120,7 @@ func TestAtomicWrite(t *testing.T) {
 		t.Error("atomic+offset should refuse")
 	}
 	// Append + atomic merges then replaces in one rename.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("d/t.txt"), NewString("+more"),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("atomic", NewBoolean(true))
@@ -148,7 +148,7 @@ func TestAtomicWriteFailureArms(t *testing.T) {
 		return r, mem
 	}
 	atomicWrite := func(r *Registry) error {
-		return runBORUError(t, r, []Value{
+		return runBoruError(t, r, []Value{
 			NewWord("write"), pathV("d/t.txt"), NewString("x"),
 			wrapMap(func(om *OrderedMap) { om.Set("atomic", NewBoolean(true)) }),
 		})

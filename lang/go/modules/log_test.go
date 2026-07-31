@@ -281,7 +281,7 @@ func mustField(t *testing.T, rec native.Value, key string) native.Value {
 	return v
 }
 
-// TestLogBoruFnSink verifies a BORU function registered via Log.register
+// TestLogBoruFnSink verifies a boru function registered via Log.register
 // is invoked once per admitted record, and that the sink's minimum
 // level filters records below it. The sink prints the record body to
 // the registry Output, which the test observes.
@@ -295,7 +295,7 @@ func TestLogBoruFnSink(t *testing.T) {
 		t.Errorf("INFO is below the sink's warn minimum and must not reach it, got %q", got)
 	}
 	if !strings.Contains(got, "hi") {
-		t.Errorf("WARN must reach the BORU function sink, got %q", got)
+		t.Errorf("WARN must reach the boru function sink, got %q", got)
 	}
 }
 

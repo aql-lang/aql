@@ -1,7 +1,7 @@
 # MODULE-CACHE.0 — File-Module Caching & the Singleton Question
 
 This document captures the feasibility findings for adding a
-`require.cache`-style per-registry **file-module cache** to BORU, and the
+`require.cache`-style per-registry **file-module cache** to boru, and the
 one semantic decision that gates it.
 
 It is a sibling to:
@@ -91,7 +91,7 @@ bug fix and this feature reuse one mechanism.
 
 This is not an internal optimization that can be added invisibly. You
 cannot have both "the same instance is returned to every importer" and
-"the body re-runs with fresh state." A cache necessarily switches BORU to
+"the body re-runs with fresh state." A cache necessarily switches boru to
 **Node-style singleton modules**, with two observable changes:
 
 ### 3.1 Module-private state becomes shared
@@ -110,7 +110,7 @@ pointers, and exported `FnDef` values carry `Registry: modReg`
 (`resolveModuleExport`, `native_module_module.go:397`) — on a cache hit
 every importer reuses the one `modReg` and its export maps. This is
 *exactly* Node's `require.cache` behaviour and is usually what people
-want, but it is a behaviour change that existing BORU programs can
+want, but it is a behaviour change that existing boru programs can
 observe.
 
 ### 3.2 Load-time parent context freezes

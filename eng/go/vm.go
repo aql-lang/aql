@@ -44,7 +44,7 @@ import (
 // Engine.Run on this same registry, so a registry-level flag cannot tell a
 // legitimate island from a foreign run without goroutine identity. That last
 // shape stays the caller's responsibility under the same rule the interpreter
-// already follows: give each goroutine its own *Registry. BORU's concurrent
+// already follows: give each goroutine its own *Registry. boru's concurrent
 // words honour this by forking an isolated registry per branch
 // (ForkConcurrent); host callers run each instance on its own registry.
 func RunProgram(p *Program, r *Registry) ([]Value, error) {
@@ -190,12 +190,12 @@ func (vc *vmContext) island() *Engine {
 // islandRun runs an island token window on the given dispatch registry. The
 // program registry keeps the vm's cached island engine; a FOREIGN (module
 // sub-registry) unit runs its window on ITS OWN registry's pooled sub-engine —
-// the interpreter twin: the enclosing body would have run there (CallBORU), so
+// the interpreter twin: the enclosing body would have run there (CallBoru), so
 // a same-registry callee SPLICES into the island tape and a break/continue it
 // raises exits cleanly with the registry FlowCtrl flag set (exitWithFlowCtrl's
 // sub-engine contract) for the VM to translate (escapedFlow). Islanding a
 // foreign unit's window on the program registry instead would push the callee
-// through CallBORU's NewTop sub-engine, where the same signal is a hard
+// through CallBoru's NewTop sub-engine, where the same signal is a hard
 // flow_error the interpreter never raises.
 func (vc *vmContext) islandRun(reg *Registry, tokens []Value) ([]Value, error) {
 	if reg == nil || reg == vc.r {
@@ -296,7 +296,7 @@ func (vc *vmContext) enterBodyUnit(reg *Registry, unit int, locals []Value) ([]V
 // bindUnitLocals builds a compiled unit's frame locals: per-call args fill the
 // leading param slots (0..NParams-NCaptures-1) and captures the trailing ones —
 // the top-first sig-order split every enterBodyUnit caller shares. Args past
-// the param count are ignored, matching the interpreter's CallBORU binding.
+// the param count are ignored, matching the interpreter's CallBoru binding.
 func bindUnitLocals(fn *CompiledFn, args, captures []Value) []Value {
 	locals := make([]Value, fn.NLocals)
 	nInputs := fn.NParams - len(captures)
@@ -486,7 +486,7 @@ func (vc *vmContext) callPoly(pr *PolyRef, stack []Value, curDebug []SrcPos, pc 
 
 // callPolyIn is callPoly against an explicit dispatch registry — the active
 // unit's (a module fn's natives run in module scope, like the interpreter's
-// CallBORU body run).
+// CallBoru body run).
 func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
 	// The word-policy gate mirrors the interpreter's per-dispatch check
 	// (see gateWord); poly re-match is still one dispatch of pr.Word.
@@ -935,7 +935,7 @@ func (vc *vmContext) callDynApplyTop(reg *Registry, n int, stack []Value, curDeb
 // boundary machinery: a compiled closure runs VM-native, a
 // trivial-delegation method dispatches its inner native directly, and any
 // other callable islands [fn, a1..aN] — byte-identical to the
-// interpreter's forward auto-dispatch of the same window. A genuine BORU
+// interpreter's forward auto-dispatch of the same window. A genuine boru
 // error from the method surfaces as-is (the interpreter raises the same,
 // prior side effects included).
 func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []Value, curDebug []SrcPos, pc int) ([]Value, error) {
@@ -957,7 +957,7 @@ func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []V
 	guard := func(results []Value) ([]Value, error) {
 		if len(results) != spec.NOut {
 			// A count differing from the shape claim indicts a HOST-CONTRACT
-			// violation, not compiler model debt: a BORU-source method's
+			// violation, not compiler model debt: a boru-source method's
 			// count is the checker's own body model (return contracts are
 			// engine-enforced), so the only way here is a host registration
 			// whose handler returned a count its own signature denies — the
@@ -1141,7 +1141,7 @@ func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, b
 	// Decline so the caller islands — the island applies the value through
 	// that branch, module scope and all. Go-handler natives stay on this
 	// fast path: they read HOST state from vc.r and never resolve body words.
-	if _, isBORU := mr.Sig.Impl.(*BORUImpl); isBORU && reg != vc.r {
+	if _, isBoru := mr.Sig.Impl.(*BoruImpl); isBoru && reg != vc.r {
 		return nil, false, nil
 	}
 	// The handler runs against the DISPATCHING registry (vc.r), not the
@@ -1288,7 +1288,7 @@ func bindGlobal(curReg *Registry, gb *GlobalBindSpec, stack []Value, curDebug []
 // ensureInvoker installs the run's body-closure invoker on a FOREIGN unit's
 // dispatch registry (once per registry per run): the unit's native handlers
 // run their code bodies through InvokeBody on that registry, exactly as the
-// interpreter's CallBORU dispatch does, so the VM seam must be present there
+// interpreter's CallBoru dispatch does, so the VM seam must be present there
 // too. The main registry's invoker is installed by runProgram; the ones added
 // here are removed by its deferred cleanup.
 func (vc *vmContext) ensureInvoker(reg *Registry) {
@@ -1378,7 +1378,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 	var curDebug []SrcPos
 	// curReg is the ACTIVE unit's dispatch registry: a module-preamble fn's
 	// unit (CompiledFn.Reg) runs its natives against the module's own
-	// registry — the interpreter's CallBORU does exactly that — so
+	// registry — the interpreter's CallBoru does exactly that — so
 	// registry-visible handler effects (Net.listen's per-connection forks,
 	// dynamic-scope binds) land in module scope on both engines. Ordinary
 	// units (Reg nil) run on the program's registry.
@@ -1523,7 +1523,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 		case OpTrap:
 			// A check-mode-suppressed runtime error compiled in place: raise the
-			// byte-identical BORU error (the interpreter errors at this same point),
+			// byte-identical boru error (the interpreter errors at this same point),
 			// including its full structured diagnostic payload (spans, notes,
 			// suggestions) so the compiled report equals the interpreted one.
 			tr := &p.Traps[in.Arg]
@@ -1560,7 +1560,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// The ACTIVE unit's registry first: a module-preamble fn's minted
 			// types (def Pos (refine Integer) in the module body) live in the
 			// module's own table (CompiledFn.Reg / curReg), not the importer's
-			// — exactly where the interpreter's CallBORU resolves them. An
+			// — exactly where the interpreter's CallBoru resolves them. An
 			// ordinary unit has curReg == r, so the second lookup repeats only
 			// for the kernel-builtin path below.
 			var t *Type
@@ -1912,7 +1912,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				stack = trimmed
 				// Strip any dispatch ascription (`v as T`) from the frame's
 				// return values — the compiled mirror of the interpreter's
-				// frame-collapse / CallBORU strip: an ascription is scoped to
+				// frame-collapse / CallBoru strip: an ascription is scoped to
 				// a dispatch WITHIN the body and cannot ride out to the
 				// caller (design/OPEN-WORDS.1.md §9). Unconditional
 				// StripAscribed (its own nil-fast-path handles the common no-
@@ -2257,12 +2257,12 @@ func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase i
 		return stack, nil
 	}
 	// A whole-frame dynamic-apply replay (RetReplay) in a FOREIGN-registry fn:
-	// the interpreter dispatches such a fn via CallBORU, whose return path is
+	// the interpreter dispatches such a fn via CallBoru, whose return path is
 	// TRIM-ONLY (registry.go — up to NUnnamed extra bottom values discarded,
 	// count and type NEVER enforced; the documented frame-path asymmetry). The
 	// replay's residual count is runtime-variable, but every compiled CALLER
 	// was laid out against the static model of len(Returns) results — so after
-	// the CallBORU trim, a count that still differs cannot be represented and
+	// the CallBoru trim, a count that still differs cannot be represented and
 	// DEFERS to the interpreter (internal_error → the sound whole-program
 	// fallback). A same-registry fn falls through to the frame-path contract
 	// below, which the interpreter enforces identically.
@@ -2423,7 +2423,7 @@ func vmInterpXml(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) (
 
 // vmErrAt builds an internal_error BoruError for a VM-internal soundness
 // violation (a simulated/runtime stack disagreement the lowerer thought
-// impossible). It carries the BORU taxonomy code — so a direct RunProgram
+// impossible). It carries the boru taxonomy code — so a direct RunProgram
 // caller and error-scraping tooling see a structured error, not a raw Go
 // string — and RunCompiled treats it as a fall-back-to-interpreter signal.
 // Reaching one is a compiler bug; the message keeps the pc/source detail.

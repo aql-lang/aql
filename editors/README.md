@@ -1,12 +1,12 @@
-# BORU editor support
+# boru editor support
 
-Everything for editing BORU (`.boru`) in your editor lives here. There are
+Everything for editing boru (`.boru`) in your editor lives here. There are
 two, complementary layers — most editors can use both:
 
-1. **Syntax grammars** — colourise BORU with no server or network. One of
+1. **Syntax grammars** — colourise boru with no server or network. One of
    these drives almost every editor and code-renderer in existence.
 2. **Language-server clients** — richer help via `boru lsp` (the
-   BORU Language Server): live diagnostics, hover docs, completion, and
+   boru Language Server): live diagnostics, hover docs, completion, and
    whole-buffer formatting.
 
 ## Syntax grammars (highlighting)

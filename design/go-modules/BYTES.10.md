@@ -1,7 +1,7 @@
 # The `Bytes` type — a first-class binary leaf + bit-syntax
 
 > **Status: design proposal, not implemented.** This note specifies a new
-> BORU value type, `Bytes`, the foundation for all binary-adjacent
+> boru value type, `Bytes`, the foundation for all binary-adjacent
 > functionality, together with its **storage & memory model** (§4) and the
 > **`make`/`unpack` bit-syntax** (§7) that binary wire protocols are written
 > against. The heavier binary words (cryptographic hashes, HMAC,
@@ -36,7 +36,7 @@
 
 ## 1. Why a type (not List[Integer] or String)
 
-BORU has no binary representation today: file reads degrade to `String`
+boru has no binary representation today: file reads degrade to `String`
 (UTF-8), and `eng.FromNative`/`ToNative` (`eng/go/gobridge.go`) have **no
 `[]byte` case** — a Go byte slice falls through to a best-effort
 `fmt.Sprintf` string. Every binary operation (hashing, base64/hex, HMAC, CRC,
@@ -133,7 +133,7 @@ a `Bytes` is **shared by reference on clone** and pays nothing:
 
 ### 4.2 Copy-on-ingest at trust boundaries
 
-The one place a defensive copy is mandatory is where a `[]byte` enters BORU from
+The one place a defensive copy is mandatory is where a `[]byte` enters boru from
 code that may still mutate it:
 
 - **`eng.FromNative([]byte)`** copies the incoming slice before wrapping it. A
@@ -264,7 +264,7 @@ import "boru:minilang"
 ## 7. Frame types — `BinarySpec : Binary :: Class : Object`
 
 Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is what makes binary code
-short *and* safe. BORU's equivalent reuses the **class/object** machinery
+short *and* safe. boru's equivalent reuses the **class/object** machinery
 wholesale, by the analogy **`BinarySpec : Binary :: Class : Object`**:
 
 - **`BinarySpec`** is the spec **kind** — the type-of-a-frame-type, exactly as

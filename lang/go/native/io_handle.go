@@ -32,7 +32,7 @@ type FileHandleInfo struct {
 
 	// lines is the handle's line-read buffer, created on first IO.read-line.
 	// It lives HERE rather than registry-side because a handle already has a
-	// stable per-resource home: the payload is a pointer, so every BORU copy of
+	// stable per-resource home: the payload is a pointer, so every boru copy of
 	// the File value shares this struct, and two handles on the same path each
 	// get their own cursor — which is what a caller reading two files line by
 	// line expects.

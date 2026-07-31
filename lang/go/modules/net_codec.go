@@ -24,7 +24,7 @@ import (
 //	connect {tcp: "host:port" codec: <codec>}     -> Endpoint (a Service)
 //
 // A Codec is a plain Map of functions over Bytes — the RFC's whole
-// extension point, so custom protocols are ordinary BORU values:
+// extension point, so custom protocols are ordinary boru values:
 //
 //	{ decode:      [buf:Bytes]  -> {msg: Value rest: Bytes} | {need: Integer}
 //	  encode:      [reply:Any]  -> Bytes
@@ -47,8 +47,8 @@ import (
 
 // ---- Go-backed Function values ----
 
-// goFn builds a BORU Function value whose implementation is a Go
-// handler — the same shape as a lambda, dispatchable via CallBORU /
+// goFn builds a boru Function value whose implementation is a Go
+// handler — the same shape as a lambda, dispatchable via CallBoru /
 // direct application. Params are authored (not legacy Args) because a
 // constructed Function value compiles through compileFnDef, which
 // derives the forward barrier from len(Params).
@@ -68,9 +68,9 @@ func goFn(name string, arity int, handler eng.Handler) native.Value {
 
 // invokeFn applies a Function value to args and returns its last result
 // (None when the body produced nothing). A Go-backed function (a goFn
-// built-in codec) dispatches its handler directly — CallBORU only splices
-// BORU bodies; a BORU-authored function (a user codec lambda) takes the
-// MatchFnSig + CallBORU path.
+// built-in codec) dispatches its handler directly — CallBoru only splices
+// boru bodies; a boru-authored function (a user codec lambda) takes the
+// MatchFnSig + CallBoru path.
 func invokeFn(r *native.Registry, fn native.Value, args ...native.Value) (native.Value, error) {
 	fnInfo, ok := native.FnDefFromValue(fn)
 	if !ok {
@@ -94,7 +94,7 @@ func invokeFn(r *native.Registry, fn native.Value, args ...native.Value) (native
 		return native.Value{}, fmt.Errorf("codec function does not accept %d argument(s)", len(args))
 	}
 	// InvokeCallback runs a compiled codec body on the VM (nested in the live run,
-	// or fresh on an idle connection fork) and falls back to CallBORU otherwise.
+	// or fresh on an idle connection fork) and falls back to CallBoru otherwise.
 	res, err := eng.InvokeCallback(r, sig, args, fnInfo.Captured)
 	if err != nil {
 		return native.Value{}, err
@@ -125,8 +125,8 @@ func resolveCodec(r *native.Registry, v native.Value, word string) (codecFuncs, 
 		return codecFuncs{}, r.BoruErrorHint("net_error", word+": codec must carry decode: and encode: functions", word,
 			"decode: [buf:Bytes] -> {msg rest}|{need n};  encode: [reply] -> Bytes")
 	}
-	// Detached-stamp each custom BORU codec fn so the per-request invokeFn →
-	// InvokeCallback dispatch runs it on the VM instead of CallBORU. The codec
+	// Detached-stamp each custom boru codec fn so the per-request invokeFn →
+	// InvokeCallback dispatch runs it on the VM instead of CallBoru. The codec
 	// fns live INSIDE this map, where the compile-time store-fn bake never
 	// reaches (recordCallOperands stamps only direct fn operands), so the
 	// resolve site is their stamping seam. StampFnValue declines silently —

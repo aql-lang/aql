@@ -5,13 +5,13 @@
 
 ## 1. Motivation
 
-BORU would benefit from a language-wide visual convention that tells a developer, immediately and consistently, that a name belongs to the language or runtime rather than to ordinary application code. Dollar-prefixed names are a plausible convention.
+boru would benefit from a language-wide visual convention that tells a developer, immediately and consistently, that a name belongs to the language or runtime rather than to ordinary application code. Dollar-prefixed names are a plausible convention.
 
 Potential uses include protected execution-context slots, compiler metadata, runtime tags and future system annotations. A single convention reduces surprise: wherever a developer sees a bare `$name`, it denotes a system concern.
 
 ## 2. The conflict
 
-External data is allowed to contain keys beginning with `$`. JSON documents, database records and third-party protocols commonly use such names. BORU must preserve those keys exactly and permit ergonomic access to them.
+External data is allowed to contain keys beginning with `$`. JSON documents, database records and third-party protocols commonly use such names. boru must preserve those keys exactly and permit ergonomic access to them.
 
 A global prohibition on every string beginning with `$` would break lossless data interchange. A rule that applies only in selected containers, however, risks becoming a visible non-uniformity.
 

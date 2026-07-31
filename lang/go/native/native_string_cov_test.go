@@ -11,7 +11,7 @@ import (
 // modes behind them, and the option-parsing helper. Positive rows are
 // paired with rejection rows per the repo test discipline.
 
-// covOpts builds a concrete BORU options map from Go pairs.
+// covOpts builds a concrete boru options map from Go pairs.
 func covOpts(pairs map[string]Value) Value {
 	om := NewOrderedMap()
 	for k, v := range pairs {

@@ -65,7 +65,7 @@ type Registry struct {
 	// InheritObserveHooks. Inert (one atomic load) unless a test arms them.
 	interpHook *interpEntryHook
 	bailHook   *bailHook
-	// coverHook is the arm-able BORU-source line-coverage seam (coverage.go),
+	// coverHook is the arm-able boru-source line-coverage seam (coverage.go),
 	// powering boru:test's coverage feature. Pointer-shared into forks and
 	// inherited by module sub-registries via InheritObserveHooks; inert (one
 	// atomic load) unless a coverage run arms it. coverID tags a registry as a
@@ -218,7 +218,7 @@ type Registry struct {
 	// FRESH run and so cannot be used mid-run, where vmRunning is already 1). It
 	// is installed alongside Invoker for the duration of a RunProgram and lets a
 	// stamped callback invoked synchronously during the run (a service handler)
-	// execute on the VM instead of falling to CallBORU. Returns handled=false when
+	// execute on the VM instead of falling to CallBoru. Returns handled=false when
 	// the ref belongs to a different program than the running one (a defensive,
 	// normally-unreachable case), so InvokeCallback falls back to the interpreter.
 	// Nil outside a run; a fork inherits it but never reaches it (a fresh fork is
@@ -502,7 +502,7 @@ func (r *Registry) effectiveDebugTrace() TraceCallback {
 }
 
 // EngineState is one running engine's snapshot — see RunningEngineStates.
-// Label carries the engine's debugLabel (the fn call a CallBORUNamed
+// Label carries the engine's debugLabel (the fn call a CallBoruNamed
 // sub-engine realises), empty otherwise.
 type EngineState struct {
 	Stack   []Value
@@ -652,7 +652,7 @@ func (r *Registry) interpRunActive() bool {
 // compiled run and no interpreter run is already in flight on it. A per-
 // connection / per-process fork (ForkConcurrent) is idle, so a callback fires a
 // VM run cleanly; the main registry mid-run is busy, so InvokeCallback routes
-// the callback to the interpreter (CallBORU) instead — never racing the shared
+// the callback to the interpreter (CallBoru) instead — never racing the shared
 // invoker/scopes a live run owns.
 func (r *Registry) canHostVM() bool {
 	return r != nil && atomic.LoadInt32(&r.vmRunning) == 0 && !r.interpRunActive()
@@ -1476,7 +1476,7 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 	}
 	// Record the name as a built-in word. Register is the native /
 	// host-API word-registration path (RegisterNativeFunc and the public
-	// (*BORU).Register both route here); user `def`s install through
+	// (*Boru).Register both route here); user `def`s install through
 	// InstallFnDef / DefTable.Push and never reach here. So this set is
 	// exactly the core vocabulary whose bindings `def` / `undef` must
 	// protect — see IsBuiltinWord. A `def <builtin> fn […]` is not a
@@ -1528,7 +1528,7 @@ var reservedLiterals = map[string]bool{"true": true, "false": true, "none": true
 
 // IsBuiltinWord reports whether name is a core word that user code must
 // not redefine or undefine: a word registered via Register (every
-// native / kernel word, plus host words added through (*BORU).Register)
+// native / kernel word, plus host words added through (*Boru).Register)
 // or a reserved literal (true / false / none). User `def`s never reach
 // Register, so they are never flagged here.
 func (r *Registry) IsBuiltinWord(name string) bool {
@@ -1691,7 +1691,7 @@ func (r *Registry) lookupUncached(name string) *FnDefInfo {
 // per-entry own-signature slices (newest-first). It unions every entry's
 // non-fallback overloads, sorts them with SortSignatures (most specific
 // first, fallbacks last), and appends a single synthetic 0-arg Fallback when
-// the name has any BORU-bodied overload — reproducing what the old carry-
+// the name has any boru-bodied overload — reproducing what the old carry-
 // forward + in-place fallback injection produced on the top DefStack entry,
 // but derived on demand so each stored entry stays its own authored unit
 // (needed by targeted undef and overlap detection). Metadata (Registry,
@@ -1699,7 +1699,7 @@ func (r *Registry) lookupUncached(name string) *FnDefInfo {
 func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInfo {
 	top := entries[0]
 
-	// Fast path: a single entry with no BORU body (a pure native word)
+	// Fast path: a single entry with no boru body (a pure native word)
 	// needs neither a union nor a synthetic fallback — its own sorted
 	// Signatures already ARE the dispatch table.
 	if len(entries) == 1 {
@@ -1716,7 +1716,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 	}
 
 	sigs := make([]Signature, 0, len(top.Signatures)+1)
-	hasBORU := false
+	hasBoru := false
 	for _, e := range entries {
 		for _, s := range e.Signatures {
 			if s.Fallback {
@@ -1724,11 +1724,11 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 			}
 			sigs = append(sigs, s)
 			if len(s.body()) > 0 {
-				hasBORU = true
+				hasBoru = true
 			}
 		}
 	}
-	if hasBORU {
+	if hasBoru {
 		sigs = append(sigs, r.fnFallbackSig(name))
 	}
 	SortSignatures(sigs)
@@ -1749,8 +1749,8 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 	}
 }
 
-// fnFallbackSig builds the synthetic 0-arg catch-all signature for an
-// BORU-defined word. It courtesy-dispatches a 0-arg overload when one
+// fnFallbackSig builds the synthetic 0-arg catch-all signature for a
+// boru-defined word. It courtesy-dispatches a 0-arg overload when one
 // exists, otherwise raises a clean "no matching signature" error (with a
 // forward-collection hint when the word takes args). Injected into the
 // dispatch aggregate by aggregateDispatch; never stored on an authored entry.
@@ -2085,7 +2085,7 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 	}
 }
 
-// CallBORU invokes a BORU function value (FnDefInfo) with a pre-matched
+// CallBoru invokes a boru function value (FnDefInfo) with a pre-matched
 // signature and arguments in a sub-engine. The caller is responsible for
 // signature matching — use MatchFnSig to find the matching sig.
 // `captures` is the FnDefInfo's lexical-closure binding list (may be
@@ -2093,18 +2093,18 @@ func (r *Registry) RegisterNativeFunc(fn NativeFunc) {
 // at exit.
 //
 //	sig := MatchFnSig(fn, args)
-//	result, err := r.CallBORU(sig, args, fnDef.Captured)
-func (r *Registry) CallBORU(sig *FnSig, args []Value, captures []CapturedBinding) ([]Value, error) {
-	return r.CallBORUNamed(sig, args, captures, "")
+//	result, err := r.CallBoru(sig, args, fnDef.Captured)
+func (r *Registry) CallBoru(sig *FnSig, args []Value, captures []CapturedBinding) ([]Value, error) {
+	return r.CallBoruNamed(sig, args, captures, "")
 }
 
-// CallBORUNamed is CallBORU carrying the fn's NAME, when the dispatch
+// CallBoruNamed is CallBoru carrying the fn's NAME, when the dispatch
 // knows it: the body sub-engine is labelled with it (Engine.debugLabel)
 // so a debug host's backtrace can name the call — a module fn's frame
 // is Defs-based and leaves no tape marks to reconstruct a name from.
-func (r *Registry) CallBORUNamed(sig *FnSig, args []Value, captures []CapturedBinding, label string) ([]Value, error) {
+func (r *Registry) CallBoruNamed(sig *FnSig, args []Value, captures []CapturedBinding, label string) ([]Value, error) {
 	// Observability seam (interp_entry.go): the interpreter fn-call path.
-	r.noteInterp("CallBORU")
+	r.noteInterp("CallBoru")
 	// Build token sequence (same as InstallFnDef handler).
 	var tokens []Value
 	var names []string
@@ -2212,7 +2212,7 @@ func (r *Registry) CallBORUNamed(sig *FnSig, args []Value, captures []CapturedBi
 	}
 
 	if err != nil {
-		// Return the body's error UNWRAPPED: the historical `CallBORU:`
+		// Return the body's error UNWRAPPED: the historical `CallBoru:`
 		// prefix leaked an internal name into every error that crossed
 		// a fn-call / import boundary and broke *BoruError type
 		// assertions downstream (decision DX report finding 4).
@@ -2391,9 +2391,9 @@ func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, 
 // Sandboxing: predicate bodies are user-controlled fn bodies that
 // could otherwise mutate registry state during a unify check.
 // runPredicateSandboxed snapshots r.types and r.ctxStack before the
-// CallBORU invocation and restores them on return — additions to
+// CallBoru invocation and restores them on return — additions to
 // r.types via `type Foo …` and pushes onto the context stack are
-// rolled back. r.defStacks is already protected by CallBORU's own
+// rolled back. r.defStacks is already protected by CallBoru's own
 // snapshot.
 func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched bool, err error) {
 	if !constraint.Parent.Equal(TFnDef) && !constraint.Parent.Equal(TFunction) {
@@ -2436,7 +2436,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 
 	// InvokeCallback runs the predicate body on the VM when it compiled to a unit
 	// (nested in a live run, or fresh on an idle registry) and falls back to
-	// CallBORU — the interpreter — otherwise. The predicate sandbox (above) wraps
+	// CallBoru — the interpreter — otherwise. The predicate sandbox (above) wraps
 	// either engine identically.
 	result, err := InvokeCallback(r, predSig, []Value{candidate}, fnDef.Captured)
 	if err != nil {

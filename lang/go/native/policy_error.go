@@ -30,7 +30,7 @@ import (
 // What this deliberately does NOT do is give `*policy.Denied` an
 // `Unwrap() error` returning a BoruError. That would code every refusal
 // everywhere at a stroke — and would also flip `runtimeShouldFallback`
-// (lang/go/boru.go) from "foreign error, re-run on the interpreter" to "BORU
+// (lang/go/boru.go) from "foreign error, re-run on the interpreter" to "boru
 // error, surface" for every denial in compiled mode, including denials from
 // sites nobody has audited. That is a semantic call about the fallback fence.
 // Coding a refusal at a site whose effect has already been refused carries

@@ -1,7 +1,7 @@
 {
   "name": "boru",
-  "displayName": "BORU Language",
-  "description": "BORU language support backed by the boru lsp server.",
+  "displayName": "boru Language",
+  "description": "boru language support backed by the boru lsp server.",
   "version": "0.1.0",
   "publisher": "boru-lang",
   "license": "MIT",
@@ -23,7 +23,7 @@
     "languages": [
       {
         "id": "boru",
-        "aliases": ["BORU", "boru"],
+        "aliases": ["boru", "Boru"],
         "extensions": [".boru"],
         "configuration": "./language-configuration.json"
       }
@@ -37,7 +37,7 @@
     ],
     "configuration": {
       "type": "object",
-      "title": "BORU",
+      "title": "boru",
       "properties": {
         "boru.serverPath": {
           "type": "string",

@@ -254,7 +254,7 @@ func TestUsurpCheckModeClean(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`
 		def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]
 		sub2/u 10 3
@@ -276,7 +276,7 @@ func TestUsurpCheckModeUndefined(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(`nope/u`)
 	if err != nil {
 		t.Fatalf("check: %v", err)
@@ -389,7 +389,7 @@ func TestUsurpByNameUnboundRejected(t *testing.T) {
 // TestUsurpWrapperBoundByName pins that a usurp wrapper bound to a name
 // and called as a word dispatches correctly (the `def ifu (usurp if)`
 // alias idiom). Regression for the InstallFnDef path that used to wrap
-// the body-less wrapper sig in a BORU body-runner, producing zero values
+// the body-less wrapper sig in a boru body-runner, producing zero values
 // and failing the fn return check.
 func TestUsurpWrapperBoundByName(t *testing.T) {
 	cases := []struct {
@@ -435,7 +435,7 @@ func TestUsurpWrapperBoundByName(t *testing.T) {
 
 // TestRefNativeBoundByName checks the sibling case: a referenced NATIVE
 // fn bound to a name dispatches the native (InstallFnDef preserves the
-// body-less native handler rather than running an empty BORU body).
+// body-less native handler rather than running an empty boru body).
 func TestRefNativeBoundByName(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{`def myadd (ref add)`, `myadd 2 3`})
 	if err != nil {
@@ -446,10 +446,10 @@ func TestRefNativeBoundByName(t *testing.T) {
 	}
 }
 
-// TestNamedBORUFnUnaffected guards that an ordinary named BORU fn (and an
-// BORU fn re-bound through ref) still runs its body via the body-runner —
+// TestNamedBoruFnUnaffected guards that an ordinary named boru fn (and a
+// boru fn re-bound through ref) still runs its body via the body-runner —
 // the preserve-handler branch must NOT swallow Body-bearing sigs.
-func TestNamedBORUFnUnaffected(t *testing.T) {
+func TestNamedBoruFnUnaffected(t *testing.T) {
 	res, err := runNativeSteps(t, nil, []string{
 		`def sub2 fn [[a:Integer b:Integer] [Integer] [a sub b]]`,
 		`def fu (ref sub2)`,

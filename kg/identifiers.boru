@@ -31,7 +31,7 @@ import "boru:struct-util"
 # 64-bit FNV-1a of a string, rendered as a decimal string.
 def fingerprint fn s:String String [convert String (BinUtil.fnv64 s)]
 
-# Canonical text of an arbitrary value: JSON with sorted keys (BORU maps
+# Canonical text of an arbitrary value: JSON with sorted keys (boru maps
 # render key-sorted), so structurally equal values canonicalize equally.
 def canon-of fn v:Any String [StructUtil.jsonify v]
 

@@ -16,7 +16,7 @@ func TestExecRunsCompiled(t *testing.T) {
 	var entries []string
 	prev := langNew
 	t.Cleanup(func() { langNew = prev })
-	langNew = func(opts ...lang.Options) (*lang.BORU, error) {
+	langNew = func(opts ...lang.Options) (*lang.Boru, error) {
 		a, err := prev(opts...)
 		if err != nil {
 			return nil, err

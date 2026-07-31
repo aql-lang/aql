@@ -57,7 +57,7 @@ func MatchFnSig(fn Value, args []Value) *FnSig {
 
 // ExpandOptionalSigs: re-exported from borueng via aliases.go
 // InstallFnDef: re-exported from borueng via aliases.go
-// CallBORU: re-exported from borueng via aliases.go
+// CallBoru: re-exported from borueng via aliases.go
 // InstallDef: re-exported from borueng via aliases.go
 // FnDefsOverlap: re-exported from borueng via aliases.go
 // UninstallDef: re-exported from borueng via aliases.go

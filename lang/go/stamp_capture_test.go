@@ -137,7 +137,7 @@ func TestMultiOverloadHandlerStampsPerSig(t *testing.T) {
 
 // Per-sig fail-safe: an overload whose body DECLINES the unit compile (the
 // context-dependent `args`) stays plain while its sibling stamps; the seam's
-// matched sig runs its own ref — or CallBORU when it has none — so a partial
+// matched sig runs its own ref — or CallBoru when it has none — so a partial
 // stamp can never change behaviour.
 func TestMultiOverloadHandlerPartialStamp(t *testing.T) {
 	const src = `def svc (service {}) add {cmd:"P"} (fn [[req:Map st:Map p:Function] [Any] [req get "v"] [req:Map st:Map] [Any] [args]]) svc [(call {v:7 cmd:"P"} svc)]`

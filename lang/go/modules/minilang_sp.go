@@ -5,10 +5,10 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// The `sp` (structure-path) mini-language: query BORU native structure (Maps
+// The `sp` (structure-path) mini-language: query boru native structure (Maps
 // and Lists) with XPath-style paths (github.com/antchfx/xpath). Where `xp`
 // runs XPath over a Node/Xml
-// document, `sp` runs the SAME XPath engine over ordinary BORU data, so the
+// document, `sp` runs the SAME XPath engine over ordinary boru data, so the
 // full axis / predicate / function vocabulary (//, [pred], count(), sum(),
 // string(), contains(), position(), …) reaches into maps and lists — the
 // path-shaped query layer the XSLT-style rule engine wants (see
@@ -26,12 +26,12 @@ import (
 // of its key element. The subject's entries hang directly off the document
 // root, so `/key` addresses a top-level entry and `//key` any descendant.
 //
-// A matched element comes back as its SOURCE BORU value (a nested map/list or
-// a scalar), so results compose with the rest of BORU; a text() or scalar
+// A matched element comes back as its SOURCE boru value (a nested map/list or
+// a scalar), so results compose with the rest of boru; a text() or scalar
 // XPath result comes back as a String / Number / Boolean, exactly like `xp`.
 // The compiled-expression memo (miniCompiledXPath) is shared with `xp`.
 
-// buildSpTree mirrors a BORU Map/List/scalar subject into the navigable
+// buildSpTree mirrors a boru Map/List/scalar subject into the navigable
 // xpNode tree the antchfx cursor walks. The subject's own entries become
 // the document root's children (no wrapper element), so an absolute `/key`
 // addresses a top-level entry.
@@ -45,10 +45,10 @@ func buildSpTree(v native.Value) *xpNode {
 	return root
 }
 
-// buildSpElement mirrors one BORU value into an element node named name. A
+// buildSpElement mirrors one boru value into an element node named name. A
 // Map recurses into key-named element children; a List into repeated `item`
 // element children; any other value becomes a single text child (its scalar
-// rendering). Each element keeps a back-reference to its source BORU value so
+// rendering). Each element keeps a back-reference to its source boru value so
 // a match converts straight back.
 func buildSpElement(name string, v native.Value) *xpNode {
 	n := &xpNode{typ: xpath.ElementNode, name: name, boru: v}
@@ -94,7 +94,7 @@ func miniSpHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	if mapErr != nil && listErr != nil {
 		return nil, r.BoruErrorHint("mini_error",
 			"sp: expected a Map or List, got "+doc.Parent.String(), "lang_sp",
-			"the sp document is a BORU structure — a Map or a List")
+			"the sp document is a boru structure — a Map or a List")
 	}
 	expr, perr := miniCompiledXPath(src)
 	if perr != nil {
@@ -105,8 +105,8 @@ func miniSpHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	return []native.Value{native.NewList(spResultToList(result))}, nil
 }
 
-// spResultToList projects an antchfx XPath result into BORU values: a node-set
-// yields one value per matched node (an element as its source BORU value, a
+// spResultToList projects an antchfx XPath result into boru values: a node-set
+// yields one value per matched node (an element as its source boru value, a
 // text node as its String), a scalar (boolean/number/string) a single-element
 // list.
 func spResultToList(result any) []native.Value {
@@ -128,7 +128,7 @@ func spResultToList(result any) []native.Value {
 	}
 }
 
-// spNodeToValue converts one matched node back to a BORU value: an element to
+// spNodeToValue converts one matched node back to a boru value: an element to
 // its source value (map/list/scalar), a text node to its String value.
 func spNodeToValue(nav xpath.NodeNavigator) native.Value {
 	if n, ok := nav.(*xpNav); ok && n.attr == -1 && n.cur.typ == xpath.ElementNode {

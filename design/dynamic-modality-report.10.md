@@ -1,9 +1,9 @@
-# The Bounded `dynamic(T)` Modality for BORU
+# The Bounded `dynamic(T)` Modality for boru
 
 ## Scope
 
 This is a focused design note for one idea: a **bounded dynamic
-modality** over BORU's existing type lattice. It expands item 2 of
+modality** over boru's existing type lattice. It expands item 2 of
 `design/elixir-types-in-boru-report.10.md` (the analysis of Elixir
 v1.20's set-theoretic types) into an implementable design, and pins
 the two decisions that item flagged as load-bearing but left open:
@@ -22,7 +22,7 @@ enters check mode never sees it.
 
 ## The one distinction this note rests on
 
-BORU already has a top type, `Any`. The temptation is to say "dynamic is
+boru already has a top type, `Any`. The temptation is to say "dynamic is
 just `Any`, we already have it." That is exactly backwards, and the
 rename that landed alongside this note (`Type.Matches → Type.ConformsTo`)
 makes the reason precise.
@@ -47,7 +47,7 @@ Elixir's `dynamic()` is the deliberate **dual**: *compatible unless
 provably disjoint*, and *narrowing through use*. It is not "we know
 nothing"; it is "we have given up *proving* the exact type statically, so
 treat it optimistically and let the runtime check carry the obligation."
-Those are two different epistemic states and BORU can currently only
+Those are two different epistemic states and boru can currently only
 express the pessimistic one.
 
 | | strict `Any` (have today) | `dynamic(T)` (proposed) |
@@ -268,7 +268,7 @@ This is gradual typing; it has the gradual guarantee's known cost. A
 `dynamic(T)` value that lies at runtime (its real type is outside `T`, or
 inside `T` but outside the slice a guard claimed) is *not* caught
 statically — same as Elixir `dynamic()`, TypeScript `any`, Dart dynamic.
-What BORU gets in exchange, and what the strict-`Any` status quo lacks:
+What boru gets in exchange, and what the strict-`Any` status quo lacks:
 
 1. The `Dynamic` flag is an **explicit, localised marker** of exactly
    where static guarantees weaken — it is introduced only at named

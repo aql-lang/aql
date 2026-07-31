@@ -1,11 +1,11 @@
 # Non-Uniformity Register (NUR)
 
-A running register of every place where BORU — the language or its
+A running register of every place where boru — the language or its
 implementation — deviates from one of its own uniform rules. A
 non-uniformity is any special case: a type treated differently from its
 siblings, one member of a word family with an exception, a path that
 bypasses a single-source-of-truth mechanism. Uniformity is a core design
-value of BORU (one parser, one argument-positioning convention, one
+value of boru (one parser, one argument-positioning convention, one
 binding store, one total order, one truthiness rule); this register is
 where every deviation from that value is made visible, argued, and
 either eliminated or explicitly accepted.
@@ -317,7 +317,7 @@ unstated deliberate scoping or an omission; needs a verdict.
 
 **Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
 
-**Rule:** every arithmetic fault carries a coded BORU error —
+**Rule:** every arithmetic fault carries a coded boru error —
 div/mod-by-zero raise `[boru/arith_error]`, range faults
 `[boru/integer_overflow]`.
 **Divergence:** `2 pow -1` fails with the bare `error: pow: negative
@@ -834,7 +834,7 @@ neither covers a same-statement-boundary inversion that drops a call.
 class: the program printed the wrong thing in the wrong order and exited 0.
 If the collection rule genuinely requires `end` here, `boru check` must say
 so — a `forward_strands_operand`-style advisory at minimum. Until then the
-house rule for BORU-authored modules and programs is to terminate every
+house rule for boru-authored modules and programs is to terminate every
 statement whose head is a module export with `end`.
 
 
@@ -1219,7 +1219,7 @@ output is unchanged in every case, and every one still passes `boru check`.
    `kg/Makefile` held while NUR028 was open.
 2. Pass 1 joins two statements onto one line (`… [line]) join "" [body …`)
    and pass 2 re-indents a statement as though it continued the previous
-   one. Both are legal — BORU is whitespace-insensitive — but a reader
+   one. Both are legal — boru is whitespace-insensitive — but a reader
    cannot tell statement boundaries by eye any more, which is most of what
    a formatter is for.
 3. It is a fixed-point bug in the same component as the resolved
@@ -1261,7 +1261,7 @@ cannot silently start churning on every build.
 **Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** the C3 utils
 suite (`grep --color`)
 
-**Rule:** BORU counts strings in RUNES, uniformly. `size "日本語"` is 3,
+**Rule:** boru counts strings in RUNES, uniformly. `size "日本語"` is 3,
 `slice 1 2 "日本語"` is `本`, `StringUtil.split ""` yields runes, and
 `REFERENCE.md` states the rune convention for the string family as a whole.
 It is one of the language's cleaner uniformities — a user never has to ask

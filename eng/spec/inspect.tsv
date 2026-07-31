@@ -202,7 +202,7 @@ def n -7 inspect n	{name:'n' kind:defined value:-7 signatures:[]}
 def s 'hi' inspect s	{name:'s' kind:defined value:'hi' signatures:[]}	
 def lst [ 1 2 3 ] inspect lst	{name:'lst' kind:defined value:[1 2 3] signatures:[]}	a list value — note the comma-separated render
 def m { a:1 b:2 } inspect m	{name:'m' kind:defined value:{a:1 b:2} signatures:[]}	
-def g (fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ]) inspect g	{name:'g' kind:defined signatures:[{args:['Integer']} {args:[]}]}	an fn-defined word — no `value`; the unified signature carries the BORU body so kind:defined, and the dispatch aggregate appends the synthetic 0-arg fallback ({args:[]})
+def g (fn [ [ a:Integer ] [ Integer ] [ a addq 1 ] ]) inspect g	{name:'g' kind:defined signatures:[{args:['Integer']} {args:[]}]}	an fn-defined word — no `value`; the unified signature carries the boru body so kind:defined, and the dispatch aggregate appends the synthetic 0-arg fallback ({args:[]})
 inspect nonexistentword	{name:'nonexistentword' kind:unknown signatures:[]}	not a type, def, or word — no `value`
 		
 typeof ( inspect dup )	Inspect	an inspect result is an `Inspect` value

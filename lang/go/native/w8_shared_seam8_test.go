@@ -18,7 +18,7 @@ func w8Reg(t *testing.T) *Registry {
 	return r
 }
 
-// w8Run parses and runs BORU source on a fresh registry, returning the
+// w8Run parses and runs boru source on a fresh registry, returning the
 // final stack and any run error. Parse errors fail the test.
 func w8Run(t *testing.T, src string) ([]Value, error) {
 	t.Helper()
@@ -31,7 +31,7 @@ func w8Run(t *testing.T, src string) ([]Value, error) {
 	return out, runErr
 }
 
-// w8RunOn parses and runs BORU source on the supplied registry.
+// w8RunOn parses and runs boru source on the supplied registry.
 func w8RunOn(t *testing.T, r *Registry, src string) ([]Value, error) {
 	t.Helper()
 	toks, err := parser.Parse(src)

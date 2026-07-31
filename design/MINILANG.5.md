@@ -1,4 +1,4 @@
-# BORU Mini-Languages — the `mini` macro and the MiniLang module
+# boru Mini-Languages — the `mini` macro and the MiniLang module
 
 **Status:** Phase 1 **LANDED** (2026-06-12) with two kinds: the core
 `mini` word (`lang/go/native/native_macro.go`), the `boru:minilang`
@@ -9,7 +9,7 @@ static checking through the expansion, and the
 catalogue (§5), compile hooks, and the optional lexer sugar remain
 design-only. Rev 2 supersedes rev 1's `xy/` lexer-literal design
 (condensed in Appendix A). Core mechanics were first validated with a
-pure-BORU prototype — every claim marked ✓ ran; the empirical findings
+pure-boru prototype — every claim marked ✓ ran; the empirical findings
 are in §10.
 
 Embedded domain notations — regular expressions, path queries,
@@ -44,7 +44,7 @@ mini <kind> <src> <opts>   ⇒   MiniLang.lang_<kind> <src> <opts> end
 signature** (§3) exported by the `boru:minilang` module. A minilang can
 take further inputs from the stack and leave any number of results;
 it raises errors through the normal `raise`/`Ideal/Error` machinery.
-New minilangs are registered from native Go (§6) or from pure BORU
+New minilangs are registered from native Go (§6) or from pure boru
 (§7). Because expansion produces an ordinary typed word call, the
 static checker sees through `mini` per-kind once expansion is visible
 to check mode (§9).
@@ -114,7 +114,7 @@ the `MiniLang` namespace that are part of the module's API but are
 not minilangs and can never be invoked via `mini`:
 
 ```
-MiniLang.register   # §7 — register a kind from BORU
+MiniLang.register   # §7 — register a kind from boru
 MiniLang.kinds      # list registered kind atoms (discovery)
 MiniLang.lang_re    # a kind — reachable as `mini re …`
 ```
@@ -213,7 +213,7 @@ becoming ordinary kind atoms (no lexer involvement):
 | `fm` | format template | `args:Any` → `[String]` |
 | `ur` | URL pattern | `url:String` → `[Any]` |
 | `dt` | date/time format | `text:String` → `[Any]` |
-| `m` ✅ | natural infix maths (github.com/tabnas/expr) | *(generator — no stack input)* → `[Number]`; variables from `opts`; BORU int/float coercion — **landed** (the rev-1 `math` kind, shipped as `m`) |
+| `m` ✅ | natural infix maths (github.com/tabnas/expr) | *(generator — no stack input)* → `[Number]`; variables from `opts`; boru int/float coercion — **landed** (the rev-1 `math` kind, shipped as `m`) |
 | `bf` ✅ | brainfuck | `input:String` → `[String]` (filter), or *(generator)* with `opts.in`; `opts.steps` execution budget — **landed** |
 
 (`re` ✅ is also landed — all matches by default, `{ok ms fst lst n}`
@@ -380,9 +380,9 @@ the report points at the calling site (ERRORS.8.md §7 quality bar).
 
 ---
 
-## 7. Registering a minilang — pure BORU
+## 7. Registering a minilang — pure boru
 
-The out-of-band export `MiniLang.register` installs a BORU function
+The out-of-band export `MiniLang.register` installs a boru function
 as a kind. The function must carry the standard signature prefix —
 validated loudly at registration:
 
@@ -436,13 +436,13 @@ body are visible wherever that module's import is; `undef`-style
 teardown on scope exit matches existing binding rules. Two modules
 registering the same kind name collide loudly at import time.
 
-### Memoising a BORU-registered kind
+### Memoising a boru-registered kind
 
 A built-in kind caches its compiled artifact in a private,
 process-global Go map (`re`'s `miniCompiledPattern`, `xp`'s
-`miniXPathExprs`) — a table a BORU kind author cannot reach, and there
+`miniXPathExprs`) — a table a boru kind author cannot reach, and there
 is **no automatic per-kind cache**: the registered `fn` body runs on
-every `mini` call. So a BORU kind memoises the same way conceptually —
+every `mini` call. So a boru kind memoises the same way conceptually —
 it holds **its own cross-call cache** and short-circuits on a hit. The
 cache is a **mutable container** keyed by `src`: a `flex` map (or a
 `Store`), either module-level (a dynamic binding the body resolves at
@@ -488,7 +488,7 @@ hit). A module-level `def cache (flex {})` referenced from the body
 works identically — the factory just keeps the cache out of the
 program namespace.
 
-Note the contrast with the built-ins: a BORU kind's cache is **per
+Note the contrast with the built-ins: a boru kind's cache is **per
 kind-instance / per engine**, not process-global, so it needs no mutex
 (one engine steps single-threaded) and never leaks across `lang.New()`
 instances — the inverse trade-off to the Go memos, which take a mutex
@@ -533,7 +533,7 @@ Two facts gate / support this (verified):
   flowing through ✓. So implementing `mini` natively (it must be
   native anyway, for the optional-opts arity and call-site error
   spans) delivers static checking without waiting on check-mode macro
-  expansion; landing the latter then also covers BORU-prototyped
+  expansion; landing the latter then also covers boru-prototyped
   macros generally.
 - discovery: `describe mini` lists the registered kind atoms with
   each kind's effective signature (the standard call including its
@@ -547,7 +547,7 @@ Two facts gate / support this (verified):
 
 ## 10. Validated by prototype (2026-06-12)
 
-A pure-BORU prototype of the full rev 2 pipeline ran against the live
+A pure-boru prototype of the full rev 2 pipeline ran against the live
 engine (built from this branch; source in Appendix B): a `mini` macro
 that raw-captures `kind`/`src`/`opts`, builds `lang_<kind>` from the
 kind atom at expansion time, and splices
@@ -578,7 +578,7 @@ Empirical findings the design must respect:
   both directions (`"x" mini re 'p' "y"` leaves `"y"`; chained minis
   bind their own subjects).
 - **F2 — argument order in generated code.** Binary non-commutative
-  handlers compute `args[1] op args[0]`; a kind compiler emitting BORU
+  handlers compute `args[1] op args[0]`; a kind compiler emitting boru
   (the `math` kind) must emit swap-form / fully-parenthesized code —
   `pow 10 2` is 2¹⁰, `10 pow 2` is 10². Every code-generating kind's
   battery needs a non-commutative case.
@@ -624,7 +624,7 @@ Empirical findings the design must respect:
   not source-expressible at all — bare `re` re-parses as an
   invocation and `re/q` as an Atom — so canon renders it as the
   deliberately non-syntax marker `word(re)` (the same rendering the
-  macro.tsv goldens pin). Consequence: pure-BORU name-constructing
+  macro.tsv goldens pin). Consequence: pure-boru name-constructing
   macros currently have no clean route from a captured Word to its
   name (the prototype stripped the `word(…)` wrapper — a stopgap;
   `quote`/`inspect`/`convert` don't reach it). The native `mini`
@@ -643,7 +643,7 @@ Empirical findings the design must respect:
    Handler: convertWordHandler, Returns: []*Type{TString}, BarrierPos: -1},
   ```
 
-  after which a pure-BORU `mini` reads cleanly
+  after which a pure-boru `mini` reads cleanly
   (`def wn (convert Atom ("lang_" add (convert String kind)))`).
   `convert` is the right home (the established cross-type gateway
   with TypeArgs target dispatch); overloading `quote` would conflate
@@ -658,7 +658,7 @@ Empirical findings the design must respect:
 | Phase | Deliverable |
 |-------|-------------|
 | 1 | **LANDED 2026-06-12** (scoped to two kinds): native `mini` (two sigs `[Atom/q String]` / `[Atom/q String Map]`; `lang_` resolution with expansion-time `mini_unknown_lang`; auto-`end`; opts normalized to `{}`; `RunInCheckMode` so the checker steps the expansion) + `boru:minilang` with `re` (Go `regexp`, per-src compile memo) and `bf` (brainfuck — filter + generator forms, `opts.steps` budget) + `MiniLang.register` / `MiniLang.kinds` + battery `lang/spec/module-minilang.tsv`. Implementation notes: `mini` returns an `__SP` splice of the standard-call tokens (the `word` mechanism) rather than going through the macro expander — so there is no expansion cache (the `re` compile memo covers the hot cost) and `macroexpand` does not apply to `mini`; src is spliced as collected, so dynamic src works for runtime kinds. Deferred from the original Phase-1 row: `re-sub` / `re-test` / `re-all` |
-| 2 | **`m`** ✅ (Pratt maths via github.com/tabnas/expr — the rev-1 `math` kind, shipped as `m`), **`jp`** ✅ (JSONPath via github.com/ohler55/ojg), **`jq`** ✅ (jq via github.com/itchyny/gojq); remaining: `tr`, `fm`, `gl`. `jp`/`jq` take any BORU document — a Node (Map/List), Object, Array, Table or Record — converting it to generic data (Ideals project through their IdealConverter) and the matches back to BORU values; both return a List of results (a Map/Record subject needs an explicit `{}` opts, the same gotcha as `gex`) |
+| 2 | **`m`** ✅ (Pratt maths via github.com/tabnas/expr — the rev-1 `math` kind, shipped as `m`), **`jp`** ✅ (JSONPath via github.com/ohler55/ojg), **`jq`** ✅ (jq via github.com/itchyny/gojq); remaining: `tr`, `fm`, `gl`. `jp`/`jq` take any boru document — a Node (Map/List), Object, Array, Table or Record — converting it to generic data (Ideals project through their IdealConverter) and the matches back to boru values; both return a List of results (a Map/Record subject needs an explicit `{}` opts, the same gotcha as `gex`) |
 | 3 | **compile hooks**: a kind may register an expansion-time compiler `(src, opts-form) → token list` that `mini` splices *instead of* the standard call — staged compilation of the DSL (parse once ever, splice precompiled carrier values, surface `src` syntax errors at expansion time with call-site spans; requires literal `src`). The standard call remains the semantic reference and the dynamic-src fallback |
 | 4 | **`xp`** ✅ (XPath via github.com/antchfx/xpath — queries a Node/Xml document, the stack subject, now that XML is a node type; a navigable mirror tree feeds the antchfx cursor model); remaining catalogue kinds (`cs`, `ur`, `dt`, `sh`); the `+` literal shortcut — **LANDED** (§12) |
 
@@ -744,7 +744,7 @@ hooks are layered on top.
 - **Go** — a built-in's `native.RegisterMiniCompileGoHook`. The hook is a Go
   func `(src, opts, r) → []Value`. Stored in a per-registry table.
 
-> **Retired (2026-07):** the BORU path — `MiniLang.register-compiled <name>
+> **Retired (2026-07):** the boru path — `MiniLang.register-compiled <name>
 > (macro …)` stored as `compile_<name>` — died with the frozen kind
 > namespace (`register-compiled` is a tombstone raising
 > `mini_registry_frozen`; an expansion-time macro rewrite is
@@ -808,7 +808,7 @@ deleting the delivery costs:
   generic MiniLang value") turned typos into values; unknown kinds
   now error at expansion time;
 - **Go-only extensibility** (lexer matcher + Go registry) becomes
-  registration from BORU itself (§7);
+  registration from boru itself (§7);
 - **a new lexer matcher and value hierarchy** versus zero new
   syntax: rev 2 rides the landed macro machinery.
 
@@ -823,7 +823,7 @@ the `Rand.with-seed` style). Rev 1's kind catalogue is retained as
 
 ---
 
-## Appendix B — the validated pure-BORU prototype
+## Appendix B — the validated pure-boru prototype
 
 The §10 prototype, verbatim as last run (green). This is *model*
 code: the real `mini` is native (`lang/go/native/native_macro.go`,
@@ -833,7 +833,7 @@ now `lang/spec/module-minilang.tsv`. The appendix remains as the
 record of the design-validation prototype.
 
 ```
-# Pure-BORU prototype of the rev-2 minilang design (validated 2026-06-12).
+# Pure-boru prototype of the rev-2 minilang design (validated 2026-06-12).
 # Models the native mini exactly, except the F6 name-construction wart
 # (the canon strip below; native mini reads WordInfo.Name).
 

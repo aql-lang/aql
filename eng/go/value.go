@@ -226,7 +226,7 @@ type FnParam struct {
 	Type     *Type
 	Pattern  *Value // optional: map/list pattern for structural matching
 	Optional bool   // true if this param was marked optional via ?
-	// Quote marks a /q param (`name:Atom/q` in a BORU input sig): the
+	// Quote marks a /q param (`name:Atom/q` in a boru input sig): the
 	// slot captures an upcoming bare Word as its Atom NAME during
 	// collection — the arg is presented as if quoted — with the same
 	// binding-agnostic rule native QuoteArgs slots follow (`def`,
@@ -265,7 +265,7 @@ type FnSig struct {
 	// declaration as a secondary span. Zero for Go-registered sigs.
 	Decl DeclSite
 	// BarrierPos is the forward/stack boundary expressed by `|` in
-	// a BORU fn parameter list. Three values carry distinct meaning:
+	// a boru fn parameter list. Three values carry distinct meaning:
 	//
 	//   -1 — unset (no `|` token in the source). Consumers
 	//        (InstallFnDef, fnSigsToSignatures) default this to
@@ -281,7 +281,7 @@ type FnSig struct {
 	// Go-side construction sites that don't go through ParseFnParams
 	// (modules/math.go, modules/matrix.go, etc.) leave the field at
 	// the Go zero value (0); the consumer treats that as "default"
-	// for backwards compatibility — only the BORU-source path emits
+	// for backwards compatibility — only the boru-source path emits
 	// the -1 sentinel.
 	BarrierPos int
 	// NoEvalArgs lists per-sig-position the list-shaped args that
@@ -291,7 +291,7 @@ type FnSig struct {
 	// `rand.list-of [body] N` — body is code, not data).
 	//
 	// Honored by fnSigsToSignatures (forwards to Signature.NoEvalArgs)
-	// and by execFnDefSig's auto-eval guard before CallBORU. Without
+	// and by execFnDefSig's auto-eval guard before CallBoru. Without
 	// this, an Eval=true list passed in would be silently sub-Run'd,
 	// breaking the quoted-body contract.
 	NoEvalArgs map[int]bool
@@ -314,12 +314,12 @@ type FnSig struct {
 	// --- Run implementation + dispatch metadata. ---
 
 	// Impl is the signature's run implementation as a sealed sum
-	// (GoImpl | BORUImpl) — the SINGLE representation every reader consults
+	// (GoImpl | BoruImpl) — the SINGLE representation every reader consults
 	// through the Signature accessors (dispatchHandler / body / fnFrame /
 	// fullStack / checkFullStackFn / parkResult / runInCheckMode in
 	// sigimpl.go). Native words and internal Go sites author `Go(handler,
-	// opts...)`; module refs / un-installed lambdas author `BORU(body)`;
-	// InstallFnDef / compileFnDefLiteral build the installed-fn `BORUImpl`
+	// opts...)`; module refs / un-installed lambdas author `boru(body)`;
+	// InstallFnDef / compileFnDefLiteral build the installed-fn `BoruImpl`
 	// (with a derived body-splicer + frame meta) directly. A Signature with
 	// a nil Impl has no implementation (a check-mode shape synth, a raw
 	// match-only test fixture) and dispatchHandler() returns nil.
@@ -351,7 +351,7 @@ type FnSig struct {
 	// Fallback marks the synthesized 0-arg catch-all sig.
 	Fallback bool
 	// ReturnsFn is the check-mode return computer (native-authored or
-	// BORU-derived); orthogonal to the run implementation in Impl.
+	// boru-derived); orthogonal to the run implementation in Impl.
 	ReturnsFn ReturnsFunc
 	// CompileEffect declares the word's compile-relevant semantics for the
 	// bytecode recorder, so it can classify the word WITHOUT a name-keyed table
@@ -370,10 +370,10 @@ type FnSig struct {
 	// StoredBodies declares the word's PARAM-CARRYING stored code-body
 	// positions (Test.check-prop's gen/property): NoEvalArgs lists the
 	// handler stores and later invokes per call with the declared params
-	// bound (its own CallBORU frames). The recorder compiles each declared
+	// bound (its own CallBoru frames). The recorder compiles each declared
 	// position to a closure unit with those params and replaces the operand
 	// with a synthetic fn-value carrier whose single sig mirrors the
-	// handler's CallBORU sig — same Params, same raw Body — plus the
+	// handler's CallBoru sig — same Params, same raw Body — plus the
 	// CompiledFnRef, so the handler upgrades to InvokeCallback and the VM
 	// hosts the unit nested (same-program ref); every decline leaves the
 	// raw list and the handler's interpreter path unchanged. Copied from
@@ -387,7 +387,7 @@ type FnSig struct {
 	// match order (CompareSignatures), so an unlocked merged addition
 	// can never pre-empt a locked match — no previously-valid call
 	// changes its dispatch. Locking is a property of the Go layer, not
-	// a BORU language ability; InstallFnDef (user `def … fn`) never
+	// a boru language ability; InstallFnDef (user `def … fn`) never
 	// sets it.
 	Locked bool
 	// Origin records which module contributed this signature via an
@@ -483,14 +483,14 @@ const (
 	CompileExecutesBody
 	// CompileRunsBodyIsolated marks a word whose NoEvalArgs body(ies) are NEITHER
 	// spliced onto the tape NOR const-baked and re-run in the enclosing sub-engine.
-	// Instead the handler executes each body via a fresh, ISOLATED CallBORU frame
+	// Instead the handler executes each body via a fresh, ISOLATED CallBoru frame
 	// against a registry the word CAPTURED at registration (not the passed-in `r`),
 	// binding only that body's own parameters. Test.check-prop is the canonical
 	// case: runCheckProp runs the generator body (param `r` = a seeded rand
 	// instance) and the property body (one unnamed param) each through
-	// parent.CallBORU, so name resolution inside a body is IDENTICAL under the
+	// parent.CallBoru, so name resolution inside a body is IDENTICAL under the
 	// interpreter and the VM -- it never touches a compiled frame local, because the
-	// CallBORU frame binds only the body's params and resolves everything else
+	// CallBoru frame binds only the body's params and resolves everything else
 	// against the captured parent (module / global scope), exactly as it does when
 	// the interpreter drives the same handler. So a plain CALL_NATIVE bake is sound
 	// even when the body is a DYNAMIC value (a map get, `p get "gen"`) whose tokens
@@ -593,7 +593,7 @@ const BodyOutResidual = -1
 
 // StoredBodySpec is one Signature.StoredBodies entry: the sig position of a
 // NoEvalArgs code-body list the word's handler stores and invokes per call,
-// and the params the handler's own CallBORU frame binds for it (a named param
+// and the params the handler's own CallBoru frame binds for it (a named param
 // binds the body's reads of that name; an unnamed param rides the stack).
 type StoredBodySpec struct {
 	Pos    int
@@ -688,9 +688,9 @@ type CallableSpec struct {
 //
 // Signatures is the SINGLE per-function signature slice — one full-fidelity
 // overload per entry. Each Signature carries the authored shape (Params with
-// names, Returns, and the BORU Body) AND, once compiled, the dispatch fields
+// names, Returns, and the boru Body) AND, once compiled, the dispatch fields
 // (a Go Handler, resolved BarrierPos, sorted order). Body vs Handler is the
-// only Go-vs-BORU distinction: a Go builtin has a Handler and no Body, a BORU
+// only Go-vs-Boru distinction: a Go builtin has a Handler and no Body, a boru
 // fn carries Body tokens and (after install/compile) a body-splicing Handler.
 //
 // The slice on a DefStack entry or a constructed Function value holds only
@@ -763,7 +763,7 @@ type FnDefInfo struct {
 	// defs in the per-call scope BEFORE body execution and torn down
 	// by the same DefCleanup mechanism that pops named params; the
 	// install/cleanup wiring lives in InstallFnDef (core_helpers.go),
-	// execFnDefSig + spliceAnonCheckResult (engine.go), and CallBORU
+	// execFnDefSig + spliceAnonCheckResult (engine.go), and CallBoru
 	// (registry.go). Nil for top-level constructions and any inner
 	// fn whose body references only params, module-global names, or
 	// forward refs. See lang/go/CLAUDE.md "Closures and Capture".
@@ -1052,7 +1052,7 @@ func (ri ResourceInstanceInfo) GetField(name string) (Value, bool) {
 // hold arbitrary key-value pairs. Key resolution walks the prototype chain,
 // enabling scope-like lookup when contexts are nested.
 //
-// Copy-on-write: the BORU `set` word creates a new Store layer (prototype =
+// Copy-on-write: the boru `set` word creates a new Store layer (prototype =
 // old Store) instead of mutating in place. If this Store is nested inside
 // a parent Store, the parent is COW'd too, propagating up to the ctxStack.
 type StoreInstanceInfo struct {
@@ -1075,7 +1075,7 @@ func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
 }
 
 // Set stores a key-value pair directly (for internal/init use only).
-// BORU code should use the set word which does COW via CowSet.
+// boru code should use the set word which does COW via CowSet.
 func (si *StoreInstanceInfo) Set(key string, val Value) {
 	// Allocate on demand: a layer pushed by ContextStack.Push carries a nil
 	// Data map (writes go through CowSet, which replaces the layer rather
@@ -1223,7 +1223,7 @@ type ForwardInfo struct {
 	SpeculativeAt int
 }
 
-// Value is the single node type of the BORU kernel: it is at once a
+// Value is the single node type of the boru kernel: it is at once a
 // runtime value (an entry on the stack) and a node in the type
 // lattice. Value and Type were historically separate structs; they
 // are now one, with Type an alias for Value (see typetable.go). A
@@ -2289,7 +2289,7 @@ func AsReach(v Value) (ReachInfo, error) {
 
 // InterpPart represents one segment of an interpolated string.
 // If Expr is nil, Lit is a literal string segment.
-// If Expr is non-nil, it contains parsed BORU values to evaluate.
+// If Expr is non-nil, it contains parsed boru values to evaluate.
 type InterpPart struct {
 	Lit  string
 	Expr []Value
@@ -2366,7 +2366,7 @@ type DefCleanupInfo struct {
 	// EvalResidual marks a MULTI-TOKEN fn body: the frame's residual
 	// pending containers evaluate IN-frame at this marker — before the
 	// body-local defs pop — so the spliced dispatch path agrees with the
-	// CallBORU sub-run drain (which evaluates the residual at sub-run end,
+	// CallBoru sub-run drain (which evaluates the residual at sub-run end,
 	// while the frame is live). A SINGLE-LITERAL container body leaves
 	// this false and keeps the no-closures transparency: the returned
 	// container resolves names in the CONSUMER's scope
@@ -2503,7 +2503,7 @@ type CalDurationData struct {
 	Days   int
 }
 
-// ErrorInfo holds the details of a BORU error value.
+// ErrorInfo holds the details of a boru error value.
 type ErrorInfo struct {
 	Message string // the short error description (a BoruError's Detail)
 	// Code is the stable, dispatchable error code ("user_error",

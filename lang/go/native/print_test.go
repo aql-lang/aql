@@ -15,7 +15,7 @@ func TestPrintString(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	runBORU(t, r, []Value{NewWord("print"), NewString("hello")})
+	runBoru(t, r, []Value{NewWord("print"), NewString("hello")})
 
 	got := strings.TrimSpace(buf.String())
 	if got != "hello" {
@@ -32,7 +32,7 @@ func TestPrintInteger(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	runBORU(t, r, []Value{NewWord("print"), NewInteger(42)})
+	runBoru(t, r, []Value{NewWord("print"), NewInteger(42)})
 
 	got := strings.TrimSpace(buf.String())
 	if got != "42" {
@@ -49,7 +49,7 @@ func TestPrintBoolean(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	runBORU(t, r, []Value{NewWord("print"), NewBoolean(true)})
+	runBoru(t, r, []Value{NewWord("print"), NewBoolean(true)})
 
 	got := strings.TrimSpace(buf.String())
 	if got != "true" {
@@ -68,7 +68,7 @@ func TestPrintMap(t *testing.T) {
 
 	om := NewOrderedMap()
 	om.Set("a", NewBoolean(true))
-	runBORU(t, r, []Value{NewWord("print"), NewMap(om)})
+	runBoru(t, r, []Value{NewWord("print"), NewMap(om)})
 
 	got := strings.TrimSpace(buf.String())
 	want := `{"a": true}`
@@ -89,7 +89,7 @@ func TestPrintMapMultiKey(t *testing.T) {
 	om := NewOrderedMap()
 	om.Set("x", NewInteger(1))
 	om.Set("y", NewString("hello"))
-	runBORU(t, r, []Value{NewWord("print"), NewMap(om)})
+	runBoru(t, r, []Value{NewWord("print"), NewMap(om)})
 
 	got := strings.TrimSpace(buf.String())
 	want := `{"x": 1, "y": "hello"}`
@@ -108,7 +108,7 @@ func TestPrintList(t *testing.T) {
 	r.Output = &buf
 
 	list := NewList([]Value{NewInteger(1), NewString("two"), NewBoolean(false)})
-	runBORU(t, r, []Value{NewWord("print"), list})
+	runBoru(t, r, []Value{NewWord("print"), list})
 
 	got := strings.TrimSpace(buf.String())
 	want := `[1, "two", false]`
@@ -143,7 +143,7 @@ func TestPrintTable(t *testing.T) {
 		Rows:   []Value{NewMap(row1), NewMap(row2)},
 	}}
 
-	runBORU(t, r, []Value{NewWord("print"), table})
+	runBoru(t, r, []Value{NewWord("print"), table})
 
 	got := strings.TrimSpace(buf.String())
 	// Expected aligned table output:
@@ -179,7 +179,7 @@ func TestPrintConsumesValue(t *testing.T) {
 	r.Output = &buf
 
 	// print should consume the value, leaving empty stack
-	result := runBORU(t, r, []Value{NewWord("print"), NewString("gone")})
+	result := runBoru(t, r, []Value{NewWord("print"), NewString("gone")})
 	if len(result) != 0 {
 		t.Errorf("print should consume value, stack has %d items", len(result))
 	}
@@ -201,7 +201,7 @@ func TestPrintEmptyTable(t *testing.T) {
 		Rows:   nil,
 	}}
 
-	runBORU(t, r, []Value{NewWord("print"), table})
+	runBoru(t, r, []Value{NewWord("print"), table})
 
 	got := strings.TrimSpace(buf.String())
 	if got != "(empty table)" {
@@ -218,7 +218,7 @@ func TestPrintstrString(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	runBORU(t, r, []Value{NewWord("printstr"), NewString("hello")})
+	runBoru(t, r, []Value{NewWord("printstr"), NewString("hello")})
 
 	got := buf.String()
 	if got != "hello" {
@@ -235,7 +235,7 @@ func TestPrintstrNoNewline(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	runBORU(t, r, []Value{NewWord("printstr"), NewString("abc")})
+	runBoru(t, r, []Value{NewWord("printstr"), NewString("abc")})
 
 	got := buf.String()
 	if strings.Contains(got, "\n") {
@@ -252,7 +252,7 @@ func TestPrintstrInteger(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	runBORU(t, r, []Value{NewWord("printstr"), NewInteger(42)})
+	runBoru(t, r, []Value{NewWord("printstr"), NewInteger(42)})
 
 	got := buf.String()
 	if got != "42" {
@@ -269,7 +269,7 @@ func TestPrintstrConsumesValue(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	result := runBORU(t, r, []Value{NewWord("printstr"), NewString("gone")})
+	result := runBoru(t, r, []Value{NewWord("printstr"), NewString("gone")})
 	if len(result) != 0 {
 		t.Errorf("printstr should consume value, stack has %d items", len(result))
 	}

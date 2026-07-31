@@ -1,4 +1,4 @@
-# Why interpreted BORU is slow — investigation & data (2026-07)
+# Why interpreted boru is slow — investigation & data (2026-07)
 
 ## Results after the fixes (all six root causes landed)
 
@@ -35,15 +35,15 @@ per-cause implementation notes and the commit log.
 
 ## Question
 
-Interpreted BORU (`BORU_NO_COMPILE=1`, the tree-walking engine) runs
-"at least two orders of magnitude" slower than compiled BORU (the
+Interpreted boru (`BORU_NO_COMPILE=1`, the tree-walking engine) runs
+"at least two orders of magnitude" slower than compiled boru (the
 bytecode VM), where we expected roughly one. We want the *interpreter*
 to land in the same ballpark as CPython / Ruby. This note measures the
 gap across languages, profiles the interpreter on the measured shapes,
 attributes the cost, and lists prioritized fixes.
 
 Fixtures + harness: `bench/interp/` (three equivalent programs — `fib`,
-`loopsum`, `nestloop` — in BORU, Python, Ruby, Node; `run.sh` reports
+`loopsum`, `nestloop` — in boru, Python, Ruby, Node; `run.sh` reports
 best-of-N wall-clock and checks the outputs match).
 
 ## The gap, in numbers
@@ -196,7 +196,7 @@ Structural, larger, pays back across interp *and* VM:
 Strategic:
 
 - The compiled VM is already ~15× of CPython and most of that is
-  startup/compile. If the goal is "BORU fast", **widen what compiles**
+  startup/compile. If the goal is "boru fast", **widen what compiles**
   and make compile the default for scripts (it already is) rather than
   chasing the interpreter all the way to CPython — the tree-walker's
   ceiling is bounded by the 184-byte value and re-planned dispatch.

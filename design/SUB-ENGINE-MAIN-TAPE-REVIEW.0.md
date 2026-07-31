@@ -40,7 +40,7 @@ recommendations in §6.
    mark/move rewrite, is the recommended optimization for the hot
    sites (§6 R1).
 5. One genuine sub-engine→main-tape flip is already on record as a
-   residual: `execFnDefSig`'s CallBORU branch when
+   residual: `execFnDefSig`'s CallBoru branch when
    `capturedReg == e.registry` (TCO-STAGED Stage 5 residuals). It stays
    the top conversion candidate, gated on boundary spec rows (§6 R2).
 
@@ -89,7 +89,7 @@ Three cell families run nested work on the main tape today:
   [__RC] )` — the TCO-STAGED protocol. The FrameOpen paren is the
   stack barrier; the cleanup tail (`DefCleanup` cell, `__pa` word,
   `undef` pairs, `ReturnCheck` cell) reproduces on the tape what
-  `CallBORU` does in Go around its sub-engine.
+  `CallBoru` does in Go around its sub-engine.
 
 **The critical asymmetry:** `resolvedIndicesBefore` (stack-argument
 collection) **stops at `OpenParen` but only *skips* `Mark`/`Move`
@@ -134,11 +134,11 @@ measured hot cost (§3) turns out not to require it.
 
 | Feature | Old shape | Current shape |
 |---|---|---|
-| Named `def f fn […]` call | `CallBORU` sub-engine per call | body spliced as a main-tape frame; TCO elides tail frames (TCO-STAGED Stages 1–4b) |
-| Module-fn self/mutual recursion | (believed Go-recursive) | one `CallBORU` boundary per entry, then main-tape frames inside (TCO-STAGED Stage 5 finding) |
+| Named `def f fn […]` call | `CallBoru` sub-engine per call | body spliced as a main-tape frame; TCO elides tail frames (TCO-STAGED Stages 1–4b) |
+| Module-fn self/mutual recursion | (believed Go-recursive) | one `CallBoru` boundary per entry, then main-tape frames inside (TCO-STAGED Stage 5 finding) |
 | `for` | — | mark + body + `MoveCont(ForCont)` replay on the main tape |
 | `if` / chained `elif` | — | mark + condition + `MoveIf(IfCont)`; branches splice as `( … )` groups |
-| Module wrapper delegation | CallBORU per call | `isTrivialDelegationBody` short-circuit → direct `execMatch`, "no body splicing, no sub-engine" |
+| Module wrapper delegation | CallBoru per call | `isTrivialDelegationBody` short-circuit → direct `execMatch`, "no body splicing, no sub-engine" |
 
 The pattern of the successful conversions: **control flow whose body is
 inline source** (loops, conditionals, fn bodies) moved to the tape;
@@ -202,7 +202,7 @@ Each site in §5 is tagged with the blockers that apply:
   ("exactly one value or def-time error", "last residual", "residual
   list is the result"). Convertible only via frame cells + new
   continuation machinery (§1.3).
-- **B-SEAM** — sits behind `InvokeBody`/`CallBORU` for VM parity;
+- **B-SEAM** — sits behind `InvokeBody`/`CallBoru` for VM parity;
   a tape-driven interpreter path forks the two execution shapes.
 - **COLD** — not a hot path (def-time, type-construction, module load,
   debug word): conversion value ≈ 0 regardless of feasibility.
@@ -215,14 +215,14 @@ Each site in §5 is tagged with the blockers that apply:
 
 | Site | What it runs | Blockers | Verdict |
 |---|---|---|---|
-| `registry.go:1467` `CallBORU` | module fns, host calls, fn values via captured registry | B-REG (module case), B-ISO, B-SEAM | **Keep.** Named same-registry fns already bypass it via frame splice; what remains is mostly cross-registry by construction. |
-| `engine.go:4986` `execFnDefSig` CallBORU branch, `capturedReg == e.registry` | a module-fn value applied inside its own module (callbacks passed back in) | none hard — same registry, results already spliced back | **Convert (R2).** Already recorded as a TCO-STAGED Stage-5 residual: "routing it onto the splice branch is a small flip"; needs drain/flow boundary spec rows first. |
+| `registry.go:1467` `CallBoru` | module fns, host calls, fn values via captured registry | B-REG (module case), B-ISO, B-SEAM | **Keep.** Named same-registry fns already bypass it via frame splice; what remains is mostly cross-registry by construction. |
+| `engine.go:4986` `execFnDefSig` CallBoru branch, `capturedReg == e.registry` | a module-fn value applied inside its own module (callbacks passed back in) | none hard — same registry, results already spliced back | **Convert (R2).** Already recorded as a TCO-STAGED Stage-5 residual: "routing it onto the splice branch is a small flip"; needs drain/flow boundary spec rows first. |
 | `invoke.go:27` `InvokeBody` interpreter branch | every higher-order code body: `each`/`fold`/`scan`/`do`/`filter`/`case`/`where`/`group`/`having`/`order`/`outer`/`select` | B-ISO, B-SEAM, B-ERR (`do`) | **Keep the seam; fix the allocation (R1).** Per-element fresh spawn is the hot cost; reuse removes it without touching semantics. |
 | `engine.go:3388` `autoEvalList`, `:3909` `autoEvalMap`, `:3482/3746` interp-string parts, `:3728` `evalParenExprResults` | container-element / template-hole evaluation | B-ISO (element isolation + collect-into-container), B-HOOK (`elemEvalRecordable`, recorder interplay) | **Keep; candidates for reuse (R1).** A collect-into-list/map cell would be new machinery duplicating what a `Run` return already gives. |
 | `trace.go:141` `RunTrace` | `trace [...]` word | B-HOOK (per-run trace callback) | **Keep.** A separate observed execution is the feature. |
 | `vm.go` island engine | interpreter fallback islands inside compiled runs | already reused (`reuseTape`) | **Keep — it is the model to copy.** |
 | `macro_expand.go:134/:284` | macro template body / unquote escapes | B-ISO (last-residual contract, scoped via Defs snapshot/restore), COLD-ish (per macro application) | **Keep.** |
-| `core_helpers.go:247` etc. | remaining CallBORU delegations | as CallBORU | **Keep.** |
+| `core_helpers.go:247` etc. | remaining CallBoru delegations | as CallBoru | **Keep.** |
 
 ### 5.2 Kernel check/compile/def-time paths (eng/go) — all COLD
 
@@ -275,7 +275,7 @@ fallback already exists. A complementary/cheaper variant: give
 element-eval sub-engines a small `TapeConfig.InitialSize` instead of
 the 1024-entry floor.
 
-**R2 — Flip `execFnDefSig`'s same-registry CallBORU branch to the
+**R2 — Flip `execFnDefSig`'s same-registry CallBoru branch to the
 splice branch.** The one true sub-engine→main-tape conversion left on
 the table, already identified in TCO-STAGED Stage 5 residuals. It
 gives fn *values* applied in their own module the same frame-splice
@@ -339,7 +339,7 @@ residual non-clobber).
 
 **R2 — same-registry `execFnDefSig` flip (`engine.go`).**
 `capturedReg == e.registry` now falls through to the main-tape frame
-splice; only genuinely cross-registry values take `CallBORU`. Empirical
+splice; only genuinely cross-registry values take `CallBoru`. Empirical
 boundary work (instrumented sweeps): the branch is reached from source
 ONLY by an **anonymous** fn in a module export map value-dispatched
 back inside its own module — named module fns resolve through their
@@ -362,7 +362,7 @@ design/P7-ENDGAME.10.md). **Follow-up landed:** the auto-dispatch
 itself was subsequently judged a language-design defect and removed —
 arguments are now inert on placement across every dispatch path
 (design/ARG-SEMANTICS-UNIFICATION.0.md §7, which also records the
-CallBORU residual-trim and the flow-control frame-unwind fixes that
+CallBoru residual-trim and the flow-control frame-unwind fixes that
 completed it). The guard stays with an updated justification (unnamed
 args flowing to residuals are still unmodelled by unit lowering;
 refusal gate at 17).

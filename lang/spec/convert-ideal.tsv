@@ -1,4 +1,4 @@
-# BORU Language Specification: convert <Ideal> to Map / List
+# boru Language Specification: convert <Ideal> to Map / List
 # Format: input<TAB>expected<TAB>description
 #
 # Every Ideal value can be converted to a Map or List via

@@ -3,7 +3,7 @@
 //
 //	stackform.Eval(reg, stackform.Compile(reg, src)) == native.Engine.Run(src)
 //
-// for representative BORU programs. Lives here in lang/go/test rather
+// for representative boru programs. Lives here in lang/go/test rather
 // than eng/go/stackform_test because the stackform package can't
 // import the language layer (upward dependency) but the test needs
 // real native words (math, comparison, etc.) to exercise.

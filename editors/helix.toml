@@ -1,4 +1,4 @@
-# BORU Language Server for Helix.
+# boru Language Server for Helix.
 #
 # Merge the blocks below into ~/.config/helix/languages.toml.
 # Helix talks to language servers over stdio by default; the

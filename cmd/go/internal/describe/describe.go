@@ -1,5 +1,5 @@
 // Package describe implements `boru describe` — documentation for the
-// BORU *language*: its built-in words, their categories, and loadable
+// boru *language*: its built-in words, their categories, and loadable
 // modules. The forms are:
 //
 //	boru describe                     a categorised guide to words and modules
@@ -46,7 +46,7 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "describe" }
-func (*cmd) Synopsis() string { return "document a BORU word, category, or module (or list them)" }
+func (*cmd) Synopsis() string { return "document a boru word, category, or module (or list them)" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, _ io.Writer) int {
 	return Run(args, stdout)
 }
@@ -171,13 +171,13 @@ func describeModulePath(w io.Writer, name string) int {
 // "foo"). The "boru:" prefix is preserved on the module reference so the
 // resolver routes it as a native import.
 func splitModulePath(name string) (modRef, word string) {
-	hadBORU := strings.HasPrefix(name, "boru:")
+	hadBoru := strings.HasPrefix(name, "boru:")
 	rest := strings.TrimPrefix(name, "boru:")
 	short := rest
 	if i := strings.IndexByte(rest, ':'); i >= 0 {
 		short, word = rest[:i], rest[i+1:]
 	}
-	if hadBORU {
+	if hadBoru {
 		return "boru:" + short, word
 	}
 	return short, word
@@ -196,7 +196,7 @@ func resolveModule(reg *native.Registry, modRef string) (native.ModuleDesc, erro
 // writeIndex prints the categorised guide: every word grouped by category,
 // then the loadable modules, then how to drill into each.
 func writeIndex(w io.Writer) {
-	fmt.Fprintln(w, "BORU language reference — built-in words by category, and loadable modules.")
+	fmt.Fprintln(w, "boru language reference — built-in words by category, and loadable modules.")
 	fmt.Fprintln(w)
 
 	fmt.Fprintln(w, "Words:")

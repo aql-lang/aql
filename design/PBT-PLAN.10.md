@@ -1,4 +1,4 @@
-# Property-Based Testing for BORU
+# Property-Based Testing for boru
 
 > **STATUS: ALL STAGES + ALL FOLLOW-UPS COMPLETE (2026-05-28)**
 >
@@ -57,7 +57,7 @@
 >   Records, `test.check-prop` Go native (6-arg: name, gen,
 >   property, runs, seed, max-shrinks), `test.prop` Go constructor
 >   (preserves gen/property bodies via NoEvalArgs + Quoted=true),
->   BORU `run-property` fn that destructures a PropertySpec map.
+>   boru `run-property` fn that destructures a PropertySpec map.
 >   Generator bodies bind `r` to a fresh seeded rand instance per
 >   iteration (seed+i). Property bodies receive the generated value
 >   on the stack and must return Boolean. Failure recorded with
@@ -108,16 +108,16 @@
 |---------|------------|--------------|
 | **PBT** | Property-Based Testing | Run a predicate against N randomly-generated inputs; on failure, shrink. |
 | **PRNG** | Pseudo-Random Number Generator | Seeded deterministic source of randomness (Go's `math/rand`). |
-| **Stack form** | (no abbreviation) | A canonical, surface-syntax-free representation of a BORU program — every word call is in strict-stack order, no forward collection, no dotted access, no paren regrouping. The form the shrinker operates on. This plan uses **"stack form"** (not "IR") for two reasons: (a) it matches the terminology in `design/boru-bytecode-report.0.md` (the parent design doc this aligns with — see below) and `design/boru_property_based_reduction_report.10.md:229`; (b) "IR" is overloaded compiler jargon implying SSA-like passes that don't apply here. |
+| **Stack form** | (no abbreviation) | A canonical, surface-syntax-free representation of a boru program — every word call is in strict-stack order, no forward collection, no dotted access, no paren regrouping. The form the shrinker operates on. This plan uses **"stack form"** (not "IR") for two reasons: (a) it matches the terminology in `design/boru-bytecode-report.0.md` (the parent design doc this aligns with — see below) and `design/boru_property_based_reduction_report.10.md:229`; (b) "IR" is overloaded compiler jargon implying SSA-like passes that don't apply here. |
 | **MDL** | Minimum Description Length | Cost-model principle: prefer the program with the smallest description (under a fixed cost table) that still triggers the failure. |
-| **BORU-G** | BORU **G**enerator profile | A restricted policy profile (the report's name) that permits math + `boru:rand` + `boru:decision` and denies side-effecting words. The reducer re-evaluates candidates under this profile. |
+| **BORU-G** | boru **G**enerator profile | A restricted policy profile (the report's name) that permits math + `boru:rand` + `boru:decision` and denies side-effecting words. The reducer re-evaluates candidates under this profile. |
 
 ### Why the 4-layer design
 
-The design in `design/boru_property_based_reduction_report.10.md` argues that the most interesting PBT formulation for BORU is **counterexample shrinking as failure-preserving program compression**: don't shrink the JSON value, shrink the *generator program* that produced it, using an MDL cost model over the program's stack form. The four layers are:
+The design in `design/boru_property_based_reduction_report.10.md` argues that the most interesting PBT formulation for boru is **counterexample shrinking as failure-preserving program compression**: don't shrink the JSON value, shrink the *generator program* that produced it, using an MDL cost model over the program's stack form. The four layers are:
 
 ```
-1  Surface BORU authoring                              (existing)
+1  Surface boru authoring                              (existing)
 2  Pure embedded BORU-G profile                        (build)
 3  Canonical typed strict-stack form                  (build — see Stack form alignment below)
 4  Failure-preserving reducer over stack form         (build)
@@ -167,7 +167,7 @@ This stage is independently valuable beyond PBT — it delivers half of what `de
 
 **New file**: `eng/go/stackform/stackform.go`
 ```go
-// StackForm is a canonical strict-stack representation of a BORU program.
+// StackForm is a canonical strict-stack representation of a boru program.
 // Word calls are in stack order, forward collection has been resolved,
 // dotted access has been normalised to get-calls, paren grouping is gone.
 // Produced by the check pass when RecordForm is enabled (see eng/check.go).
@@ -221,7 +221,7 @@ func Compile(reg *eng.Registry, tokens []eng.Value) (*StackForm, []eng.CheckDiag
 
 **Files** (under `eng/go/stackform/`):
 - `serialise.go` — `Flatten(*StackForm) []eng.Value` re-serialises stack form to a flat token sequence that runs in pure strict-stack order. Because the form is already strict-stack, this is a direct walk: `PushLit` → emit the value; `Call` → emit the word name (which the engine will then run in stack-only mode); `Quote` → emit a list-literal containing the recursively flattened body.
-- `print.go` — `Pretty(*StackForm) string` produces readable BORU. The printer is purely cosmetic; the stack form itself stays strict-stack.
+- `print.go` — `Pretty(*StackForm) string` produces readable boru. The printer is purely cosmetic; the stack form itself stays strict-stack.
 - `eval.go` — `Eval(form *StackForm, reg *eng.Registry) ([]eng.Value, error)` is a thin convenience wrapper: `Flatten` → `native.New(reg).Run`. Useful for callers like the shrinker that want "run this form and tell me the result" without manual token splicing.
 
 **Output-equivalence tests** — the hard correctness gate (`stackform/equivalence_test.go`):
@@ -296,7 +296,7 @@ Documented in `design/NATIVE-MODULES.10.md` under a new "Profiles" subsection.
 Property API in `boru:test`, value-loop only. Confirms generators and properties wire up correctly before we build the reducer.
 
 **Files modified**
-- `lang/go/modules/test.go` — extend the BORU preamble + add Go natives.
+- `lang/go/modules/test.go` — extend the boru preamble + add Go natives.
 
 **Preamble additions** (Record types alongside existing TestCase/TestSet):
 ```
@@ -323,7 +323,7 @@ def PropertyResult refine Record [
 **New Go natives** (in `testNatives()` at `modules/test.go:195`):
 - `test-check-prop` — sig `[String List List Integer Integer Integer]` (name, gen-body, prop-body, runs, seed, max-shrinks). Loops `runs` times: seed RNG (via the rand module's capability), run gen-body in a sub-engine under `boru:gen` policy (reuse the `runInSubEngine` pattern from `modules/vm.go:167-202`), take top of stack as the generated value, push it and run prop-body, expect a Boolean on top. On failure, record `failing-input` and (in this stage) leave shrunk fields as None. Record into the active `testRun` via the existing `runCase` path (lines 462-490).
 
-**BORU spec runner extension** (in the preamble): add a `run-property` fn that takes a `PropertySpec` Map and calls `test-check-prop` with its fields. Extend `run-spec` so a TestSpec whose `subs` contain PropertySpec values dispatches to `run-property` (discriminate by checking for the `gen` key — or add a tag field). For schema cleanliness, prefer renaming TestSpec's `subs:List` semantically to "child specs of any shape (TestSpec or PropertySpec)".
+**boru spec runner extension** (in the preamble): add a `run-property` fn that takes a `PropertySpec` Map and calls `test-check-prop` with its fields. Extend `run-spec` so a TestSpec whose `subs` contain PropertySpec values dispatches to `run-property` (discriminate by checking for the `gen` key — or add a tag field). For schema cleanliness, prefer renaming TestSpec's `subs:List` semantically to "child specs of any shape (TestSpec or PropertySpec)".
 
 **Exports** (extending lines 706-738):
 - `PropertySpec`, `PropertyResult`, `check-prop`, `prop` (constructor), `run-property`.
@@ -472,7 +472,7 @@ cd cmd/go/boru && go run . repl
 - `lang/go/modules/vm.go:167-202` `runInSubEngine` pattern for evaluating generator programs under the BORU-G profile.
 - `lang/go/modules/test.go:183-190` `activeRun` capability pattern.
 - `lang/go/modules/test.go:544-560` `invokeSubject` for property predicate dispatch.
-- `eng/go/registry.go::CallBORU` (already used by the test runner) for invoking fn-shaped generators.
+- `eng/go/registry.go::CallBoru` (already used by the test runner) for invoking fn-shaped generators.
 - `eng/go/compare.go::DeepEqual` / `ExactEqual` for fingerprinting candidates.
 
 ---

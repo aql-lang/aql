@@ -19,7 +19,7 @@ func TestFnReturnTypeMismatchErrors(t *testing.T) {
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "n", Type: TInteger}},
 				Returns:    []*Type{TInteger},
-				Impl:       BORU([]Value{NewString("oops")}),
+				Impl:       Boru([]Value{NewString("oops")}),
 				BarrierPos: BarrierAllForward,
 			}},
 		})
@@ -40,7 +40,7 @@ func TestFnReturnCountMismatchErrors(t *testing.T) {
 			Signatures: []Signature{{
 				Params:     []FnParam{{Name: "n", Type: TInteger}},
 				Returns:    []*Type{TInteger},
-				Impl:       BORU([]Value{}),
+				Impl:       Boru([]Value{}),
 				BarrierPos: BarrierAllForward,
 			}},
 		})
@@ -59,7 +59,7 @@ func TestEvalLimitTripsCleanly(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "n", Type: TInteger}},
 			Returns:    []*Type{TInteger},
-			Impl:       BORU([]Value{NewOpenParen(), NewWord("spin2"), NewWord("n"), NewCloseParen()}),
+			Impl:       Boru([]Value{NewOpenParen(), NewWord("spin2"), NewWord("n"), NewCloseParen()}),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -186,35 +186,35 @@ func TestUndefinedWordErrorMentionsName(t *testing.T) {
 	}
 }
 
-// --- CallBORU -------------------------------------------------------------------
+// --- CallBoru -------------------------------------------------------------------
 
-func TestCallBORUDirect(t *testing.T) {
+func TestCallBoruDirect(t *testing.T) {
 	r := covRegistry(t, nil)
 	sig := &FnSig{
 		Params:  []FnParam{{Name: "n", Type: TInteger}},
 		Returns: []*Type{TInteger},
-		Impl:    BORU([]Value{NewOpenParen(), NewWord("cadd"), NewWord("n"), NewWord("n"), NewCloseParen()}),
+		Impl:    Boru([]Value{NewOpenParen(), NewWord("cadd"), NewWord("n"), NewWord("n"), NewCloseParen()}),
 	}
-	out, err := r.CallBORU(sig, []Value{NewInteger(6)}, nil)
+	out, err := r.CallBoru(sig, []Value{NewInteger(6)}, nil)
 	if err != nil {
-		t.Fatalf("CallBORU: %v", err)
+		t.Fatalf("CallBoru: %v", err)
 	}
 	if len(out) != 1 {
-		t.Fatalf("CallBORU results = %v", out)
+		t.Fatalf("CallBoru results = %v", out)
 	}
 	if got, _ := AsInteger(out[0]); got != 12 {
-		t.Errorf("CallBORU = %v, want 12", out[0])
+		t.Errorf("CallBoru = %v, want 12", out[0])
 	}
 
 	// Captures are visible to the body and shadowed by params.
 	capSig := &FnSig{
 		Params:  []FnParam{{Name: "n", Type: TInteger}},
 		Returns: []*Type{TInteger},
-		Impl:    BORU([]Value{NewOpenParen(), NewWord("cadd"), NewWord("n"), NewWord("base"), NewCloseParen()}),
+		Impl:    Boru([]Value{NewOpenParen(), NewWord("cadd"), NewWord("n"), NewWord("base"), NewCloseParen()}),
 	}
-	out, err = r.CallBORU(capSig, []Value{NewInteger(1)}, []CapturedBinding{{Name: "base", Value: NewInteger(100)}})
+	out, err = r.CallBoru(capSig, []Value{NewInteger(1)}, []CapturedBinding{{Name: "base", Value: NewInteger(100)}})
 	if err != nil {
-		t.Fatalf("CallBORU with capture: %v", err)
+		t.Fatalf("CallBoru with capture: %v", err)
 	}
 	if got, _ := AsInteger(out[0]); got != 101 {
 		t.Errorf("captured call = %v, want 101", out[0])
@@ -223,10 +223,10 @@ func TestCallBORUDirect(t *testing.T) {
 	// Negative: a body that errors propagates.
 	badSig := &FnSig{
 		Params: []FnParam{{Name: "n", Type: TInteger}},
-		Impl:   BORU([]Value{NewWord("no_such_word")}),
+		Impl:   Boru([]Value{NewWord("no_such_word")}),
 	}
-	if _, err := r.CallBORU(badSig, []Value{NewInteger(1)}, nil); err == nil {
-		t.Error("erroring body succeeded via CallBORU")
+	if _, err := r.CallBoru(badSig, []Value{NewInteger(1)}, nil); err == nil {
+		t.Error("erroring body succeeded via CallBoru")
 	}
 }
 

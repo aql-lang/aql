@@ -1,5 +1,5 @@
 # ============================================================
-# todo-api.boru — a REST todo API server, written in BORU.
+# todo-api.boru — a REST todo API server, written in boru.
 #
 # The NETWORK-SERVERS.0.md §6.4 verification app: patrun routes on
 # method + path (with :id templates surfacing req.params), handlers

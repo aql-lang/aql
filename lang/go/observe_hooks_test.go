@@ -8,7 +8,7 @@ import (
 )
 
 // The lang-level forwarders for the eng observability seams
-// (eng interp_entry.go): the frontier suite arms them through (*BORU).
+// (eng interp_entry.go): the frontier suite arms them through (*Boru).
 
 // A plain interpreted Run reports Engine.Run entries through the forwarder;
 // disarm stops recording.

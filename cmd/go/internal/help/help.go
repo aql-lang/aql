@@ -1,7 +1,7 @@
 // Package help implements `boru help` — an overview of the boru
 // command-line tool itself: its usage forms and the subcommands it
 // dispatches. `boru help <subcommand>` prints a one-line summary and
-// points at that subcommand's own -h flags. Documentation for the BORU
+// points at that subcommand's own -h flags. Documentation for the boru
 // *language* (words and modules) lives under `boru describe`.
 package help
 
@@ -39,7 +39,7 @@ func (c *cmd) Run(args []string, _ io.Reader, stdout, _ io.Writer) int {
 // to get help (`help` for the CLI, `describe` for the language), the one-shot
 // commands, the long-running services, and pointers at the deeper help.
 func writeOverview(w io.Writer, reg *command.Registry, services map[string]bool) {
-	fmt.Fprintln(w, "boru — command-line tool for the BORU query language.")
+	fmt.Fprintln(w, "boru — command-line tool for the boru query language.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  boru [options] [script.boru]   Run a script, an -e expression, or the REPL.")

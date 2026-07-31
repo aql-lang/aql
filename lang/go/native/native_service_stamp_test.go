@@ -157,7 +157,7 @@ wrap ([req:Map state:Any prior:Any] => [ add 1 (prior req) ]) svc
 // stored-fn unit must record its OpMakeMap assembly instead of refusing "body
 // result of unknown provenance". runFnBodyOnce enables that recording only
 // for CALLBACK bodies (isCallbackBodyName), where both engines evaluate the
-// residual in the live frame via InvokeCallback / CallBORU — so the recorded
+// residual in the live frame via InvokeCallback / CallBoru — so the recorded
 // assembly matches the interpreter exactly. Armed stamps; unarmed stays plain
 // and answers identically (the -no-compile contract).
 func TestServiceAddStampsComputedMapHandler(t *testing.T) {

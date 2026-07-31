@@ -2,7 +2,7 @@
 
 ## Project
 
-This is **BORU** — a concatenative query language implemented in Go. Each
+This is **boru** — a concatenative query language implemented in Go. Each
 component sits under a top-level folder; the Go implementation of each
 lives in a `<component>/go/` subfolder so that future TS ports can sit
 alongside as `<component>/ts/`. The Go modules are:
@@ -36,7 +36,7 @@ Language-agnostic content stays at the top of each component:
 `lang/go/` contains:
 
 - `boru.go`, `parse.go` — the public `lang` package (entry points
-  `lang.New()`, `(*BORU).Run`, `(*BORU).Check`, `(*BORU).Register`,
+  `lang.New()`, `(*Boru).Run`, `(*Boru).Check`, `(*Boru).Register`,
   re-exports of `Type`/`Value`/`Signature` for handler authors).
 - `native/` — every built-in word and the kernel-shim aliases.
   Sub-files:
@@ -101,7 +101,7 @@ they sound. The same rule is stated in the `ADR.md` header.
 ## Known sharp edges (app-authoring)
 
 Language- and compiler-level sharp edges found by writing a large app
-entirely in BORU are collected in **`design/BORU-SHARP-EDGES.0.md`** —
+entirely in boru are collected in **`design/BORU-SHARP-EDGES.0.md`** —
 minimal repros, root-cause hypotheses, workarounds, and a triage table.
 Two are engine-bug candidates (G8 recovered-`raise` binding teardown;
 G12 an `/r`-parked fn not satisfying a `Function` param); one is a latent
@@ -202,7 +202,7 @@ normally using the cached modules.
 
 ## Jsonic Token Usage
 
-BORU uses `github.com/tabnas/jsonic/go` (v0.2.0) for all tokenization and
+boru uses `github.com/tabnas/jsonic/go` (v0.2.0) for all tokenization and
 structural parsing. (This replaced the legacy `github.com/jsonicjs/jsonic/go`
 v0.1.6 — the tabnas family is an API-compatible superset port; the swap
 removed the jsonicjs dependency entirely.) There is exactly one parser — it
@@ -380,13 +380,13 @@ every downstream handoff in **sig order with no reordering**:
 
 - Kernel native handlers (`func(args, …) ([]Value, error)`) —
   `args[i]` is sig position i.
-- BORU `def fn […]` body via `InstallFnDef`'s registered handler —
+- boru `def fn […]` body via `InstallFnDef`'s registered handler —
   named params bind by name, `args[i]` matches the i-th declared
   param; unnamed params push to body tokens in i-order so body
   position `i` from the bottom holds `args[i]`.
-- `CallBORU` and `execFnDefSig` — same: named params bind by name,
+- `CallBoru` and `execFnDefSig` — same: named params bind by name,
   unnamed params push in i-order.
-- `args.N` BORU accessor — returns `args[N]` directly.
+- `args.N` boru accessor — returns `args[N]` directly.
 
 No reversals, no swaps, no permutations between matchSignature and
 the handler. The only "reordering" anywhere in the kernel is
@@ -397,7 +397,7 @@ right sig — it's matchSignature internals, not a separate hop.
 Module FnDef wrappers (`makeXxxFnDef` helpers) get a special
 short-circuit in `execFnDefLiteral`: trivial single-word delegation
 bodies (`[Word(inner-name)]`) dispatch the inner native directly via
-`execMatch`, skipping CallBORU entirely. See
+`execMatch`, skipping CallBoru entirely. See
 `design/SIG-ORDER-REFACTOR.10.md`.
 
 ### The unified algorithm
@@ -492,7 +492,7 @@ old flat (ungrouped) behaviour.
 `afn` has signature `[Any Any |]` (both args forward-eligible, both
 typed `Any`, body and sig captured via `NoEvalArgs`). The canonical
 call form is the swap `input afn body` (i.e. `input => body`),
-mirroring the BORU `args[1] op args[0]` reading convention — afn
+mirroring the boru `args[1] op args[0]` reading convention — afn
 collects the body as the forward arg and the input sig from the
 stack.
 
@@ -549,7 +549,7 @@ a named fn's body does.
 
 ## Closures and Capture
 
-BORU fns and lambdas use **implicit lexical capture**. At fn-construction
+boru fns and lambdas use **implicit lexical capture**. At fn-construction
 time the engine walks the body's bare-Word references; any name that
 resolves to a binding made by an **enclosing fn** (a param or local
 def of an outer fn currently executing) is snapshotted into the
@@ -630,7 +630,7 @@ lambdas. Don't expect to capture caller args; pass them explicitly.
   currently-active fn entry — lives on `Registry.FnBaselines`. Pushed
   in lockstep with the per-call args-stack push and the existing
   body-local-def cleanup snapshot; popped by `__pa`'s handler at body
-  exit and by `CallBORU`'s inline cleanup.
+  exit and by `CallBoru`'s inline cleanup.
 - Captures and named params are installed via `InstallFrameBinding`
   (not `InstallDef`) — captures BEFORE params so params shadow same-
   named captures. `InstallFrameBinding` SHADOWS (pushes a fresh
@@ -813,8 +813,8 @@ the static analyser and user-facing display; at runtime,
 `execMatch` on the inner native directly via the matched sig.
 No body execution, no token splicing, no push reordering.
 
-BORU fns defined inside a module preamble (named params + real
-body) take a different path: their body runs via `CallBORU` in the
+boru fns defined inside a module preamble (named params + real
+body) take a different path: their body runs via `CallBoru` in the
 captured sub-registry so module-private words resolve correctly. Named params bind via `InstallDef`, so
 push ordering doesn't apply.
 
@@ -990,7 +990,7 @@ diagnostic + `Any` carrier in the end-of-`Run()` drain in
 When adding a sig that should accept a bare-word name as data, add `/q`
 to the corresponding Atom position. Without `/q`, callers will see an
 `undefined_word` error and must wrap the name in `quote` themselves.
-BORU-defined fns declare the same capability as `name:Atom/q` (or bare
+boru-defined fns declare the same capability as `name:Atom/q` (or bare
 `Atom/q` for an unnamed param) — ParseFnParams sets `FnParam.Quote`,
 which flows into `Signature.QuoteArgs` at construction/normalizeSig,
 so the dispatch-side behaviour (binding-agnostic word capture) is

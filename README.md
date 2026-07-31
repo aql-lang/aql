@@ -169,7 +169,7 @@ Suggested reading orders:
 | `wpg/` | The wasm web playground (`wpg/wasm` + `wpg/serve`). |
 | `test/` | Shared TSV spec-runner scaffolding and HTTP test fixtures. |
 | `kg/` | The project knowledge graph: a boru-built, evidence-backed map of the repo (pipeline + committed bundle). |
-| `utils/` | A coreutils subset written in BORU (`cat`, `wc`, `head`, `grep`, …) — real programs, built with `boru build`. |
+| `utils/` | A coreutils subset written in boru (`cat`, `wc`, `head`, `grep`, …) — real programs, built with `boru build`. |
 | `docs/` | The bundled wasm playground (`index.html`). |
 | `lang/spec/` | Engine spec TSV files (the language's executable spec). |
 | `design/` | Internal design notes and proposals. |

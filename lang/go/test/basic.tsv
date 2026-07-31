@@ -1,4 +1,4 @@
-# Basic BORU expression tests
+# Basic boru expression tests
 # Format: expression<TAB>expected result
 # String values shown as 'text', integers as digits.
 # Multiple stack values are space-separated.

@@ -1417,7 +1417,7 @@ function readTokens(stream: TokenStream, until: ']' | null): Value[] {
     if (stream.i >= stream.s.length) break
 
     // String literals. The eng/spec corpus uses single quotes (the
-    // canonical BORU form); double quotes are also accepted. The closing
+    // canonical boru form); double quotes are also accepted. The closing
     // quote must match the opener.
     const quote = stream.s[stream.i]
     if (quote === '"' || quote === "'") {
@@ -1841,7 +1841,7 @@ function atomicValue(tok: string): Value {
     case 'none':
       return newNone()
     case 'null':
-      // `null` is the atom 'null' in BORU source (the parser lexes the
+      // `null` is the atom 'null' in boru source (the parser lexes the
       // JSON null literal as an Atom), distinct from the `none` value.
       return newAtom('null')
   }
@@ -2176,7 +2176,7 @@ function buildDefinedInspection(name: string, top: Value): Value {
   return newInspect(om)
 }
 
-// renderStack renders the residual stack as canonical BORU source via
+// renderStack renders the residual stack as canonical boru source via
 // the ported Canon, matching the Go engspec runner's eng.Canon output.
 function renderStack(stack: Value[]): string {
   return canon(stack)

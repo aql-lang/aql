@@ -5,9 +5,9 @@
 >
 > ## What landed (diff from this design doc)
 >
-> Empirical investigation while executing the plan revealed that BORU
+> Empirical investigation while executing the plan revealed that boru
 > source `def fn` was **already** top-first via `matchSignature` — the
-> audit's claim of "bottom-first BORU semantics" was incorrect. The
+> audit's claim of "bottom-first boru semantics" was incorrect. The
 > only path actually using bottom-first was `execFnDefSigStackMatch`'s
 > `!hasNamed` branch, which fired from `execFnDefLiteral`'s
 > module-closure branch after `matchSignature` had already succeeded.
@@ -15,7 +15,7 @@
 > Implementation — final form (two iterations):
 >
 > **Iteration 1** introduced an unnamed-param push reversal in
-> CallBORU/execFnDefSig to make module-wrapper bodies (`[Word(inner)]`)
+> CallBoru/execFnDefSig to make module-wrapper bodies (`[Word(inner)]`)
 > dispatch correctly. This worked but added a SECOND arg-flow
 > convention to the kernel — args still in sig order at handler
 > handoff, but body-token push order reversed for unnamed params.
@@ -27,9 +27,9 @@
 > `execFnDefLiteral`. Module wrappers built by `makeXxxFnDef` have
 > bodies of the form `[Word(inner-name)]` with all-unnamed Params —
 > detect that shape via `isTrivialDelegationBody` and dispatch the
-> inner native directly via `execMatch`, bypassing CallBORU and body
-> execution entirely. BORU fns defined in module preambles
-> (decision.cond etc.) take the longer CallBORU path, but they all
+> inner native directly via `execMatch`, bypassing CallBoru and body
+> execution entirely. boru fns defined in module preambles
+> (decision.cond etc.) take the longer CallBoru path, but they all
 > use named params so push order doesn't matter for them either.
 >
 > Final state — **one convention everywhere, no reversals**:
@@ -41,9 +41,9 @@
 > - **engine.go `isTrivialDelegationBody`**: predicate that
 >   identifies `[Word(name)]` + all-unnamed shape — the exact
 >   pattern `makeXxxFnDef` / `wrapXxxFnDef` produces.
-> - **engine.go `execFnDefSig` + registry.go `CallBORU`**: push
+> - **engine.go `execFnDefSig` + registry.go `CallBoru`**: push
 >   args in sig order (no reversal). Named params bind via
->   InstallDef; unnamed params (rare here — only BORU fns with
+>   InstallDef; unnamed params (rare here — only boru fns with
 >   unnamed params inside module preambles, none currently exist)
 >   append to body tokens in i-order.
 > - **core_helpers.go `InstallFnDef` handler closure**: unchanged.
@@ -61,13 +61,13 @@
 > - **CLAUDE.md** (eng + lang): "Signature Ordering" sections record
 >   the one rule with no exceptions in production paths, plus a
 >   **strong recommendation to always use forward form** (`f a b c`)
->   as the canonical surface for BORU calls.
+>   as the canonical surface for boru calls.
 > - **Guard test**: `lang/go/test/sig_order_guard_test.go` pins the
 >   four scenarios.
 
 ## Context
 
-The BORU kernel has two argument-positioning conventions that disagree
+The boru kernel has two argument-positioning conventions that disagree
 for heterogeneous-type signatures:
 
 | Path | Source of truth | Convention |
@@ -106,14 +106,14 @@ sig position index counts from the top of the stack down. `sig[0]`
 These are the load-bearing observations. Any plan that breaks them is
 wrong.
 
-1. **BORU source `def fn` already uses top-first**, via
+1. **boru source `def fn` already uses top-first**, via
    `matchSignature`. Empirically:
    ```
    def f fn [[a:Integer b:String] [Integer String] [a b]]
    "hello" 42 f      → a=42, b="hello"   (top-first; matches)
    42 "hello" f      → no matching signature (correctly rejected)
    ```
-   So we do NOT need to touch BORU source semantics or reverse user
+   So we do NOT need to touch boru source semantics or reverse user
    `def fn` param lists. The audit document's contrary claim was
    incorrect.
 
@@ -203,12 +203,12 @@ The same flip applies to the `hasNamed` branch above it
 
 ### `fnSigsToSignatures` already produces the right shape
 
-Since BORU `def fn` source uses top-first today (empirically verified),
+Since boru `def fn` source uses top-first today (empirically verified),
 and `fnSigsToSignatures` copies `Params` → `Args` verbatim,
 `matchSignature` interprets the result top-first — which is correct.
 No change needed.
 
-### `CallBORU` / `InstallFnDef` handler closures
+### `CallBoru` / `InstallFnDef` handler closures
 
 These iterate `for i, p := range sig.Params` and use `args[i]` as the
 i-th param. After the flip, the caller is responsible for passing
@@ -217,9 +217,9 @@ binding now means "args[i] = whatever filled sig position i =
 whatever was at stack top-down position i." Consistent with
 `matchSignature`.
 
-Net effect on BORU `def fn` users: **none**. They already write source
+Net effect on boru `def fn` users: **none**. They already write source
 expecting top-first; matchSignature already delivers that; the
-`CallBORU` binding already matches.
+`CallBoru` binding already matches.
 
 Net effect on module wrappers: **they must declare `FnSig.Params` in
 the same order as the inner native's `Args`** (top-first). Today some
@@ -256,7 +256,7 @@ the WORKING current cases (so we don't regress) and the BROKEN
 current cases (so we know the fix took effect):
 
 ```go
-// Currently works: BORU def fn top-first via matchSignature.
+// Currently works: boru def fn top-first via matchSignature.
 TestBoruDefFnIsTopFirst:
   `def f fn [[a:Integer b:String] [Integer String] [a b]] "hello" 42 f` → [42, "hello"]
 
@@ -354,9 +354,9 @@ visible surface does not change.
 
 ## What this refactor explicitly does NOT do
 
-- Does not change BORU source semantics. `def fn [[a b c]] ...`
+- Does not change boru source semantics. `def fn [[a b c]] ...`
   continues to bind `a` to the top of the stack, as it does today.
-- Does not require user-facing migration. No BORU files change.
+- Does not require user-facing migration. No boru files change.
 - Does not touch the unified-dispatch / Phase-4 rule. That rule is
   already correct; this refactor just makes a stragglar path (the
   module-closure fallback) honor it.

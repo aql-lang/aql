@@ -44,7 +44,7 @@ func TestIndexServed(t *testing.T) {
 	if ct := rec.Header().Get("Content-Type"); !strings.HasPrefix(ct, "text/html") {
 		t.Errorf("GET /: Content-Type %q, want text/html", ct)
 	}
-	if !strings.Contains(rec.Body.String(), "BORU REPL") {
+	if !strings.Contains(rec.Body.String(), "boru REPL") {
 		t.Error("GET /: index page missing the REPL shell")
 	}
 }
@@ -98,7 +98,7 @@ func TestEvalRejections(t *testing.T) {
 		t.Errorf("bad body error = %q, want invalid request body", resp.Error)
 	}
 
-	// BORU-level error surfaces in the error field, not as HTTP failure.
+	// boru-level error surfaces in the error field, not as HTTP failure.
 	code, resp := postEval(t, mux, `{"code":"definitely-not-a-word"}`)
 	if code != 200 {
 		t.Fatalf("boru error eval: status %d, want 200", code)

@@ -6,7 +6,7 @@ import (
 	"github.com/boru-lang/boru/eng/go/parser"
 )
 
-// runSplice parses and runs BORU source, returning the canonical render of the
+// runSplice parses and runs boru source, returning the canonical render of the
 // final stack. Splice (`word` / `def name word value`) is a source-level
 // feature (forward collection, def-deref, container auto-eval), so the tests
 // exercise it through the real parser rather than hand-built token slices.

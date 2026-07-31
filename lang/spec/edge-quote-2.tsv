@@ -1,4 +1,4 @@
-# BORU Language Specification: edge-quote-2 — word splice + /q atoms
+# boru Language Specification: edge-quote-2 — word splice + /q atoms
 # Format: input<TAB>expected<TAB>description
 # =====================================================================
 # Edge cases for the explicit splice (`word` wraps a value in an __SP

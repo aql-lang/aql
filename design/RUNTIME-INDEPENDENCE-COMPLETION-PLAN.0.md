@@ -49,7 +49,7 @@ recursive framework, `template_prop_test` higher-order `each`, net top-level
 drivers, and the Project-B construction-check diagnostic parity gap.
 
 **Never-compiled paths (Ring 3):** the REPL, wasm playground, `boru exec`
-server, `debug serve`, and the public `(*lang.BORU).Run` all call the
+server, `debug serve`, and the public `(*lang.Boru).Run` all call the
 tree-walker unconditionally. Predicates (`Registry.RunPredicate`) and model
 actions route through `InvokeCallback` but are never stamped; capturing
 runtime fns decline detached stamping; `check-prop` bodies interpret;
@@ -130,7 +130,7 @@ entry belongs to an enumerated, named, per-seam-counted carve-out, and the
 counts ratchet down only.** The permanent enumeration: (1) check mode;
 (2) explicit user opt-out (`--no-compile`, debug-serve interactive stepping);
 (3) C2 error-oracle runs; (4) fail-safe decline seams — stale `depSnap` →
-`CallBORU`, JIT-declined bodies → pooled sub-engine,
+`CallBoru`, JIT-declined bodies → pooled sub-engine,
 capture-of-dispatching-binding stamp declines, busy-registry non-nested
 callbacks; (5) R4 unrecorded-rematch-arm JIT-decline residue.
 
@@ -204,7 +204,7 @@ wiring); **(b)** `RunAutoValues(src) ([]native.Value, error)` — a
 Value-returning twin of `RunCompiledReason` (`convertResults` collapses
 Integer→int64/String→string, so a `[]any` API cannot back the REPL's
 `v.String()` rendering or `/stack` byte-identically). Then: REPL builds one
-`*BORU` per session and runs statement-at-a-time `RunAutoValues(line)` (fresh
+`*Boru` per session and runs statement-at-a-time `RunAutoValues(line)` (fresh
 engine per line over a persistent registry is already the model — check-pass
 `def`/`import` effects persist on the compiled path by `SnapshotForCompile`'s
 contract); `exec`/wasm route to `RunAuto`; debug-serve interactive stepping
@@ -368,7 +368,7 @@ defers (poly NOut drift, user-poly unresolved/drift, shaped-method,
 dyn-scope dispatching/active-token, dyn-frame replay, and any 3c sites that
 failed their raise-proof) — each becomes compile-time refusal, sound in-VM
 handling, or an argued defensive arm. `TestNoInterpreterExecution`: assertion
-hooks at `Engine.Run` / `RunResolved` / `CallBORU` / `runPooledSub` recording
+hooks at `Engine.Run` / `RunResolved` / `CallBoru` / `runPooledSub` recording
 any armed-mode entry with seam attribution; zero unattributed entries;
 per-seam counters ratchet down only.
 
@@ -522,7 +522,7 @@ the WS1b follow-on.
 
 Entry-point routing landed: `lang.NewFromRegistry` + `RunAutoValues` (the
 Value-returning twin of RunCompiledReason — one shared core, the []any
-variant is now a converting wrapper); the REPL runs one `*BORU` per session
+variant is now a converting wrapper); the REPL runs one `*Boru` per session
 with per-line `RunAutoValues` (parse-probe preserved for the historical
 "parse error:" prefix; state persistence unchanged via the
 keep-on-compile contract); `boru exec` routes through `RunCompiledReason`.
@@ -804,7 +804,7 @@ detached-unit primitives (no new machinery):
   takes the ACTION name when the spec lambda is anonymous (event label +
   action-error attribution, applied on compiled and interpreted paths
   alike so parity holds). `makeAction`'s `InvokeCallback` runs the unit;
-  captures decline to CallBORU unchanged.
+  captures decline to CallBoru unchanged.
 
 Discovery while pinning the negatives: a lambda written directly as a
 map VALUE (`actions:{gen:([mod:Any] => [flag])}` inside a fn body) runs
@@ -889,8 +889,8 @@ Two re-interpretation seams feed the cache, plus the auto-eval seam:
 sub-engine — fed by `do`'s baked CALL_NATIVE (doListHandler
 native_control.go:224; noEvalBodiesInert emit.go:5024 / tryRecordDynBody
 carrier.go:1520); (b) check-prop: runCheckProp (modules/test.go:734) runs
-gen/property bodies PER ITERATION via parent.CallBORU (test.go:782/:809,
-throwaway FnSig per call) — the "CallBORU" unattributed entries;
+gen/property bodies PER ITERATION via parent.CallBoru (test.go:782/:809,
+throwaway FnSig per call) — the "CallBoru" unattributed entries;
 (c) runPooledSub auto-eval sites (engine.go:3866/3956/4119/4213/4229/
 4266/4391/4623) are the Phase-10 census seam, not this cache's target.
 
@@ -908,7 +908,7 @@ Decisions from the read:
    MODULE-SCOPE gen/property bodies like any code-body word
    (compileStoredBody-style carriers or closure units at the record
    site), and runCheckProp runs a carrier via RunUnit/InvokeCallback per
-   iteration instead of the throwaway-FnSig CallBORU. The fn-scope
+   iteration instead of the throwaway-FnSig CallBoru. The fn-scope
    ${frame-local} interpolation case MUST keep refusing
    (TestCheckPropInterpStringFnScopeRefuses stays green forever).
 2. **do-registry-replay rows are NOT graduated by the cache alone**: the
@@ -940,18 +940,18 @@ param-carrying stored code-body positions (registration folds it like
 Callable), and the recorder's new STORED-PARAM-BODY edge —
 `compileStoredParamBody`, MODULE SCOPE ONLY — compiles each declared
 position to a closure unit whose param slots bind the declared params,
-riding as a carrier whose single sig mirrors the handler's own CallBORU
+riding as a carrier whose single sig mirrors the handler's own CallBoru
 sig (same Params, same raw Body) plus the CompiledFnRef. `runCheckProp`
 (storedBodyArg) dispatches a carrier through InvokeCallback: the unit
-runs NESTED on the VM (same-program ref) with the identical CallBORU
+runs NESTED on the VM (same-program ref) with the identical CallBoru
 frame as its per-invoke fallback. Declines everywhere leave the raw list
 and the interpreter path byte-identical.
 
 Ledger motion: p6/check-prop-body-on-vm DRIFTED, not graduated — the
-per-iteration CallBORU entries are GONE and iteration count adds ZERO
+per-iteration CallBoru entries are GONE and iteration count adds ZERO
 entries (TestCheckPropIterationsAddNoInterpEntries pins invariance
 2 vs 60 runs), but the case still sees Engine.Run×68 + runPooledSub×65:
-`import "boru:test"` MODULE-LOAD BORU (BuildTestModule preambles),
+`import "boru:test"` MODULE-LOAD boru (BuildTestModule preambles),
 identical for an import-only program. Re-pinned as a Phase 10 item —
 the module-load C4 attribution seam, not body compilation. The fn-scope
 guard held only after gating the new edge to module scope (the first
@@ -1541,7 +1541,7 @@ landed; all five closed in one hardening pass:
 1. **Callback writers were unfenced.** InvokeCallback's retry fence read
    the ledger, but a DETACHED callback fires after RunAutoValues disarmed
    the writer wrappers — a callback that printed and then bailed was
-   invisible to the ledger and the CallBORU retry duplicated the output.
+   invisible to the ledger and the CallBoru retry duplicated the output.
    The seam now arms ArmEffectFence around its own VM attempt (nested
    invocations double-wrap harmlessly; the fence reads deltas).
 2. **NoteEffect had no production callers.** Wired the non-writer effect
@@ -1742,7 +1742,7 @@ is the runtime-bail census (Phase 10) before the public Run flip.
 
 ### Phase 10: the executed bail census canary GRADUATED (2026-07-15)
 
-The shaped-method COUNT-VIOLATION defer was reclassified: a BORU-source
+The shaped-method COUNT-VIOLATION defer was reclassified: a boru-source
 method's result count is the checker's own body model (return contracts
 are engine-enforced), so a count differing from the shape claim indicts
 a HOST registration whose handler returned a count its own signature
@@ -1784,7 +1784,7 @@ p6 check-prop/vm-run module seams, and the two p11 Stage-J flips.
 Both Stage-J gates HOLD (refusals=0, executed census=0, C4 attribution
 complete). The flip's exact mechanics, from the code as it stands:
 
-1. **RunInterp lands first** (its own commit): the current (*BORU).Run
+1. **RunInterp lands first** (its own commit): the current (*Boru).Run
    body (boru.go:646, the tree-walker via runValues) moves verbatim to
    RunInterp; Run delegates to it unchanged. Zero behavior change; the
    oracle name exists.
@@ -1897,12 +1897,12 @@ pattern Extension, diverts to the standard transducer call instead,
 sound per the §13 contract: the transducer is the semantic reference).
 Shapes a compile pass cannot mirror REFUSE rather than bake: a
 non-concrete src or opts (the runtime expansion would run the hook over
-values the record cannot see), and a BORU compile hook (a macro whose
+values the record cannot see), and a boru compile hook (a macro whose
 check-mode expansion is not the runtime expansion — and which cannot
 even be registered during its own compile pass, register-compiled not
 being a RunInCheckMode word; the refusal covers the pre-registered
 case). Pinned: hook-parity compiled [HI], the non-concrete-opts and
-BORU-hook refusals with fallback parity, and the materialisable-screen
+boru-hook refusals with fallback parity, and the materialisable-screen
 arms. A PLAIN check pass keeps the standard-call validation unchanged.
 
 Remaining flip blockers: the model watch fork (-race), and the

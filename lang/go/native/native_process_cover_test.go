@@ -2,7 +2,7 @@ package native
 
 // Coverage for lang/go/native/native_process.go (design/TEST-SEAMS.10.md
 // discipline): direct handler calls with crafted args drive the error arms
-// the BORU surface cannot reach deterministically (runtime shutdown, full
+// the boru surface cannot reach deterministically (runtime shutdown, full
 // mailboxes, crafted payloads), and seam5Run drives the clause-parsing and
 // routing arms from source. Per lang/go/CLAUDE.md every negative case is
 // paired with the positive behaviour it protects.

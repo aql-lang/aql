@@ -1,4 +1,4 @@
-# BORU Language Specification: forward-collection edge cases I —
+# boru Language Specification: forward-collection edge cases I —
 # greediness, the ONE split rule, barriers, type-directed stopping.
 # Format: input<TAB>expected<TAB>description
 #

@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:minilang module + the core `mini` word
+# boru Language Specification: the boru:minilang module + the core `mini` word
 # Format: input<TAB>expected<TAB>description
 #
 # `mini <kind> <src> <opts?>` expands at the call site to the STANDARD
@@ -128,9 +128,9 @@ import "boru:minilang"  mini micron 5	ERROR:signature_error	the source must be a
 #     may add a Go compiler that runs at the `mini` site when src is concrete,
 #     splicing tokens instead of the standard call. `re` ships one (precompiled-
 #     pattern carrier + run-re consumer). `mini` has no expansion cache, so hooks
-#     memoize (re does). The BORU hook surface (register-compiled) died with the
+#     memoize (re does). The boru hook surface (register-compiled) died with the
 #     frozen kind namespace — the word survives as a tombstone.
-import "boru:minilang"  MiniLang.register-compiled	ERROR:mini_registry_frozen	the BORU compile-hook surface was removed with registration (tombstone)
+import "boru:minilang"  MiniLang.register-compiled	ERROR:mini_registry_frozen	the boru compile-hook surface was removed with registration (tombstone)
 #
 # §8  the `gex` kind — glob-expression SELECT (not a match-extractor like re).
 #     Anchored whole-subject match: `*` any run, `?` one char, `**`/`*?` a literal
@@ -157,10 +157,10 @@ import "boru:minilang"  if ("bx" +gex/a*/) ['Y'] ['N']	'N'	None is falsy, so a n
 #
 # §m  m — traditional maths formula evaluator (tabnas/expr). Variables are
 #     bound by the named params; operators + - * / % ^ (power, right-assoc),
-#     unary +/-, and parens. Numeric coercion follows BORU: all-integer operands
+#     unary +/-, and parens. Numeric coercion follows boru: all-integer operands
 #     stay Integer (division truncates like `div`), any Float promotes to Float.
 import "boru:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2}	8	formula with variables from the named params
-import "boru:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2.0}	8.0	a Float param promotes the whole result to Float (BORU coercion)
+import "boru:minilang"  mini math 'x*y-z^2' {x:3 y:4 z:2.0}	8.0	a Float param promotes the whole result to Float (boru coercion)
 import "boru:minilang"  mini math '2^3^2' {}	512	`^` is right-associative: 2^(3^2) = 2^9
 import "boru:minilang"  mini math '-z^2' {z:3}	-9	`^` binds tighter than unary minus: -(3^2)
 import "boru:minilang"  mini math '(x+y)*z' {x:1 y:2 z:3}	9	parentheses group
@@ -176,7 +176,7 @@ import "boru:minilang"  mini math 'x +' {x:1}	ERROR:mini_syntax_error	a malforme
 #
 # §jpq  jp — JSONPath (github.com/ohler55/ojg) — and jq — jq filter
 #       (github.com/itchyny/gojq). The document is the stack subject and may be
-#       any BORU shape: a Node (Map/List), class instance, Table or Record. Both
+#       any boru shape: a Node (Map/List), class instance, Table or Record. Both
 #       return a LIST of results (jp: matched nodes; jq: the output stream). A
 #       MAP/Record subject needs an explicit {} opts (a bare map is otherwise
 #       claimed as mini's opts — the same gotcha as gex).
@@ -216,15 +216,15 @@ import "boru:minilang"  <r/> mini xp '//['	ERROR:mini_parse_error	a malformed XP
 # parked shapes are Go tests, not spec rows, because the compiled pipeline does not
 # lower an UNCONSUMED spliced partial yet)
 #
-# §sp  XPath over BORU structure (Map/List) — the same antchfx engine as
-#      xp, but over native BORU data. A Map subject needs an explicit {} opts
+# §sp  XPath over boru structure (Map/List) — the same antchfx engine as
+#      xp, but over native boru data. A Map subject needs an explicit {} opts
 #      (a bare Map is otherwise claimed as opts); a List subject does not.
-import "boru:minilang"  {a:1 b:2} mini sp '/a' {}	[1]	sp runs XPath over a BORU Map; a Map subject needs the explicit {} opts
+import "boru:minilang"  {a:1 b:2} mini sp '/a' {}	[1]	sp runs XPath over a boru Map; a Map subject needs the explicit {} opts
 import "boru:minilang"  [{n:'x'} {n:'y'}] mini sp '//n'	['x' 'y']	a List subject needs no {} — descendant text values come back as Strings
 import "boru:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[p>20]/p' {}	[30]	a predicate filters list items by a child value
 import "boru:minilang"  {xs:[{v:1} {v:2} {v:3}]} mini sp 'sum(//v)' {}	[6]	an XPath function (sum) reduces over matched values
 import "boru:minilang"  {a:1 b:2 c:3} mini sp 'count(/*)' {}	[3]	count() of the top-level entries
-import "boru:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[2]' {}	[{p:30}]	a matched element comes back as its source BORU value
+import "boru:minilang"  {items:[{p:10} {p:30}]} mini sp '//item[2]' {}	[{p:30}]	a matched element comes back as its source boru value
 import "boru:minilang"  {a:1} MiniLang.lang_sp '/a' {} end	[1]	mini is sugar — the desugared standard call is equivalent
 import "boru:minilang"  +sp|//n| is (MiniLang.Sp)	true	a stored sp query has its named type
 #

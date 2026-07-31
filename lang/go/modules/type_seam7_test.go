@@ -72,7 +72,7 @@ func TestS7B_TypeLCANoCommon(t *testing.T) {
 }
 
 // TestS7B_TypeFnIntrospectionEdges drives the introspection words' empty /
-// untyped-shape arms directly (no BORU surface can build a zero-sig or
+// untyped-shape arms directly (no boru surface can build a zero-sig or
 // nil-param-type Function).
 func TestS7B_TypeFnIntrospectionEdges(t *testing.T) {
 	r := typeRegistry(t)

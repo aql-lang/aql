@@ -570,7 +570,7 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 			sock := newSocketValue(conn)
 			go func() {
 				defer func() {
-					if rec := recover(); rec != nil { //covergate:allow per-connection recover body: MatchFnSig is nil-safe and CallBORU runs the handler in a NewTop sub-engine whose own recover converts body panics to internal_error BoruErrors, which flow through the covered error-logging arm (§native)
+					if rec := recover(); rec != nil { //covergate:allow per-connection recover body: MatchFnSig is nil-safe and CallBoru runs the handler in a NewTop sub-engine whose own recover converts body panics to internal_error BoruErrors, which flow through the covered error-logging arm (§native)
 						fmt.Fprintf(connFork.ErrOutput, "[boru/net] connection handler crashed: %v\n", rec)
 					}
 					if sc, ok := asSocket(sock); ok {
@@ -595,7 +595,7 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 				// unit (the common capture-free case) and this per-connection fork
 				// is idle, the body runs on the VM (RunUnit) — closing the ~19x
 				// interpreter penalty the networking benchmark measured — else it
-				// falls back to CallBORU, byte-identical.
+				// falls back to CallBoru, byte-identical.
 				if _, hErr := eng.InvokeCallback(connFork, sig, []native.Value{sock}, fnInfo.Captured); hErr != nil {
 					// `closed` is the normal end of a connection; anything
 					// else is a real handler failure worth logging.
@@ -824,7 +824,7 @@ func peerHandler(args []native.Value, _ map[string]native.Value, _ []native.Valu
 //
 // This is what makes `require-client:` useful rather than merely
 // restrictive: the TLS layer proves the peer holds a key chaining to a
-// trusted CA, and this word hands the resulting identity to BORU so the
+// trusted CA, and this word hands the resulting identity to boru so the
 // AUTHORIZATION decision — which client may do what — can be written in
 // the language rather than baked into the host.
 //
@@ -850,7 +850,7 @@ func peerCertHandler(args []native.Value, _ map[string]native.Value, _ []native.
 
 // certValue projects an X.509 leaf onto the fields an authorization
 // rule actually reads. Names stay Strings (a DN is text, and the
-// distinguished-name grammar is not something BORU should have to
+// distinguished-name grammar is not something boru should have to
 // parse); validity is Instants so `TimeUtil.now` comparisons work; the
 // serial is a String because it is a 20-octet integer that does not fit
 // an Integer.

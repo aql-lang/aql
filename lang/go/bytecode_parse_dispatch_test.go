@@ -23,7 +23,7 @@ import (
 //     dispatch). Byte-identical to the interpreter, which passes the
 //     /q-captured name as data to parseFnDispatchHandler.
 func TestCompileParseOverEnclosingParserDef(t *testing.T) {
-	// A custom grammar with a BORU-closure matcher that pushes tokens onto an
+	// A custom grammar with a boru-closure matcher that pushes tokens onto an
 	// enclosing mutable flex accumulator, finalized into a parser VALUE bound at
 	// top level, then read + dispatched from inside a fn body (`parse myp src`)
 	// with the accumulator sliced around the parse — the lexer shape verbatim.

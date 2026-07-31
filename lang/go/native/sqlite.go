@@ -42,7 +42,7 @@ func init() {
 	})
 }
 
-// boruTypeToSQLType maps a BORU field type to a SQLite column type.
+// boruTypeToSQLType maps a boru field type to a SQLite column type.
 func boruTypeToSQLType(t *Type) string {
 	switch {
 	case t.ConformsTo(TInteger):
@@ -175,7 +175,7 @@ func (s *SQLiteStore) StoreTempTable(td TableData) (string, error) {
 
 // Query executes a SELECT query and returns results as TableData.
 // The optional schema provides type hints for reading values back with
-// proper BORU types. If nil, the result schema is inferred from SQLite
+// proper boru types. If nil, the result schema is inferred from SQLite
 // column types reported by the driver.
 func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData, error) {
 	s.mu.Lock()
@@ -224,7 +224,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 		om := NewOrderedMap()
 		for i, col := range cols {
 			raw := *(scanDest[i].(*interface{}))
-			om.Set(col, sqlResultToBORUValue(raw, colTypes[i]))
+			om.Set(col, sqlResultToBoruValue(raw, colTypes[i]))
 		}
 		resultRows = append(resultRows, NewMap(om))
 	}
@@ -235,7 +235,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 	return TableData{Record: record, Rows: resultRows}, nil
 }
 
-// boruValueToSQLParam converts a BORU Value to a Go value suitable for
+// boruValueToSQLParam converts a boru Value to a Go value suitable for
 // a SQL parameter placeholder, respecting the target column type.
 func boruValueToSQLParam(v Value, colType *Type) interface{} {
 	if v.Parent.Equal(TNone) {
@@ -312,9 +312,9 @@ func boruValueToSQLParam(v Value, colType *Type) interface{} {
 	}
 }
 
-// sqlResultToBORUValue converts a raw SQLite result value to the appropriate
-// BORU Value based on the expected column type.
-func sqlResultToBORUValue(raw interface{}, colType *Type) Value {
+// sqlResultToBoruValue converts a raw SQLite result value to the appropriate
+// boru Value based on the expected column type.
+func sqlResultToBoruValue(raw interface{}, colType *Type) Value {
 	if raw == nil {
 		return NewValueRaw(TNone, nil)
 	}

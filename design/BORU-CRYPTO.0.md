@@ -2,19 +2,19 @@
 
 > **Status: design proposal — not implemented.** This note specifies the
 > cryptographic-primitive module and its secure-randomness word. It is the
-> authoritative spec for the deferred **"vault logic in BORU"** phase of
+> authoritative spec for the deferred **"vault logic in boru"** phase of
 > [VAULT-TUI-PORT.0](VAULT-TUI-PORT.0.md) §7.1–§7.2. No Go code exists yet;
 > the note exists so the surface — and especially its **parameter fidelity
 > to the existing Go vault** and its **policy gating** — is auditable
 > before a handler is written. The governing constraint is **parity, not
 > reinvention**: every constant below must match `cmd/go/internal/vault`
-> byte-for-byte, or an in-BORU vault cannot open a vault the Go path wrote.
+> byte-for-byte, or an in-boru vault cannot open a vault the Go path wrote.
 
 ## 1. Package & status
 
 `boru:crypto` is the curated home for the cryptographic primitives the
 vault needs to move its key-management and envelope logic out of Go and
-into BORU: authenticated encryption, a password KDF, a sub-key KDF,
+into boru: authenticated encryption, a password KDF, a sub-key KDF,
 hashes, a MAC, constant-time comparison, public-key sealing, and a
 cryptographically secure random source. It is the first module in the
 family whose **inputs and outputs are secret key material**, so it is
@@ -25,7 +25,7 @@ It is a **follow-on**, not a rewrite: the port in
 [VAULT-TUI-PORT.0](VAULT-TUI-PORT.0.md) kept the vault crypto in Go
 behind the `boru:vault` bridge. This module is step one of shrinking that
 bridge — once `Crypto.*` exists, `store.jsonic` read/write, keyslot
-envelopes, and capability bookkeeping become expressible in BORU (`boru:io`
+envelopes, and capability bookkeeping become expressible in boru (`boru:io`
 already covers atomic writes, locks, and permissions), and the bridge
 retires op by op.
 
@@ -133,7 +133,7 @@ Crypto.box-open <recipient-public> <recipient-secret> <sealed> → Bytes
 An **anonymous sealed box** (NaCl `box.SealAnonymous`): the sender is
 ephemeral and unauthenticated; only the holder of `recipient-secret` can
 open. This is exactly how the vault wraps per-namespace data keys to a
-password slot's public key (§5), so an in-BORU keyslot can unwrap existing
+password slot's public key (§5), so an in-boru keyslot can unwrap existing
 `WrappedKeys`.
 
 ### Secure randomness
@@ -189,8 +189,8 @@ parity test (§12) must assert equality against the Go source.
 | Public-key seal | `box-*` | X25519 NaCl **anonymous** sealed box (`box.SealAnonymous`/`OpenAnonymous`) | `keyslot.go` `sealNDK`/`openNDK` |
 | CSPRNG | `rand-bytes` | `crypto/rand` | `keyslot.go` `newRandom`, `p7_seam7.go` (`rand.Reader`) |
 
-**The envelope byte layouts stay in BORU, not in these words** — and each
-envelope's AAD is **distinct**, so the BORU layer must build the exact
+**The envelope byte layouts stay in boru, not in these words** — and each
+envelope's AAD is **distinct**, so the boru layer must build the exact
 bytes below and pass them as the `aead-seal`/`aead-open` `aad` argument
 (`boru:crypto` seals nothing implicitly). There is **no** single universal
 AAD rule; getting any one wrong produces envelopes the Go vault cannot
@@ -208,13 +208,13 @@ The `macInput` helper — `label ‖ 0x00 ‖ fields joined by 0x00`
 (`keyslot.go`) — is the **MAC / verifier** domain-separation convention
 (used by `privAAD`, `deriveVerifier`, `derivePubMAC`); it is *not* the
 value/keyring/export AEAD AAD, which are the concatenations above. A
-legacy headerless file-keyring blob authenticates `salt` alone. The BORU
+legacy headerless file-keyring blob authenticates `salt` alone. The boru
 layer reproduces these byte-for-byte; the parity test (§12) must pin at
 least the value and keyring AADs against a Go-sealed fixture.
 
 ## 6. Types — `Bytes` is the carrier
 
-BORU already has a **first-class `Bytes` type** — `Scalar/Bytes`, FixedID
+boru already has a **first-class `Bytes` type** — `Scalar/Bytes`, FixedID
 1009, its own design doc [BYTES.10](go-modules/BYTES.10.md) — and the
 repo deliberately chose a dedicated binary leaf over `String` or
 `List[Integer]` (BYTES.10 §1). `boru:crypto` uses it directly: every key,
@@ -237,7 +237,7 @@ What `Bytes` gives the crypto surface for free (`native_bytes.go`):
   "secret" refinement).
 - **`convert` / `slice` / `add` / `size`** for framing envelopes, and a
   full **bit-syntax** (`make`/`unpack`/`convert Bytes` over a
-  `BinarySpec`) that the BORU layer can use to build the on-disk envelope
+  `BinarySpec`) that the boru layer can use to build the on-disk envelope
   headers (§5) declaratively.
 
 **But `Bytes` comparison is not constant-time.** The type's `Equal` uses
@@ -350,12 +350,12 @@ deterministic reader and assert exact bytes, while production reads
   the PR.)
 - **`Bytes` ([BYTES.10](go-modules/BYTES.10.md))** — the carrier type
   (§6): immutable binary leaf with `convert`/`slice`/`add`/`size` and the
-  bit-syntax the BORU layer uses to frame envelopes.
+  bit-syntax the boru layer uses to frame envelopes.
 - **`boru:vault` (`Vault`)** — the consumer. Today the bridge does the
-  crypto in Go; the migration reverses that so the in-BORU vault calls
+  crypto in Go; the migration reverses that so the in-boru vault calls
   `Crypto.*`.
 - **`boru:io` (`IO`)** — atomic writes, file locks, and permissions the
-  in-BORU vault uses to persist the sealed envelopes `Crypto.*` produces.
+  in-boru vault uses to persist the sealed envelopes `Crypto.*` produces.
 
 ## 11. Open questions / out of scope
 

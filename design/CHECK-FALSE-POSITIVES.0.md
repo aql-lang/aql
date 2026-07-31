@@ -51,7 +51,7 @@ earlier hypotheses, since disproven). The chain is:
    Map)` where it wants `[Map Service Map]` → the spurious `no_signature`.
 
 A plain user fn + `drop`, a native word + `drop`, and a Go-body module fn +
-`drop` are ALL clean — the leak is specific to an **BORU-body module wrapper whose
+`drop` are ALL clean — the leak is specific to a **boru-body module wrapper whose
 first parameter is `Any`**, called unparenthesised and followed by a token.
 `(MiniRedis.cmd ep "X") drop` (parenthesised) and `… ; …` (explicit boundary)
 were both clean because each isolates the dispatch — hence the earlier `;`

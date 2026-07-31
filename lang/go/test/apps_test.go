@@ -12,7 +12,7 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// End-to-end tests for the networking verification apps written in BORU
+// End-to-end tests for the networking verification apps written in boru
 // (design/examples/apps/): the todo REST API, the mini-redis server, and
 // the streaming/resumable mini-S3. Each test loads the example file as a
 // FILE MODULE (exercising the file-module loader too) and drives it over
@@ -128,7 +128,7 @@ func TestAppTodoAPI(t *testing.T) {
 }
 
 // The mini-redis server (mini-redis.boru): the common Redis commands
-// over a custom BORU codec (inline commands in, RESP-flavoured lines
+// over a custom boru codec (inline commands in, RESP-flavoured lines
 // out) — the NETWORK-SERVERS.0.md §6.6 custom-protocol story as a
 // real app. The client side is plain Net.lines.
 func TestAppMiniRedis(t *testing.T) {

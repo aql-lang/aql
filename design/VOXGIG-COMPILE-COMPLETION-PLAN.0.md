@@ -1,4 +1,4 @@
-# BORU Bytecode Compiler — Completion Plan (adversarially-verified)
+# boru Bytecode Compiler — Completion Plan (adversarially-verified)
 
 Supersedes the leaf framing in `VOXGIG-COMPILE-LEAVES.0.md`. Produced by a
 15-agent review (3 architecture/roadmap maps → 6 per-leaf root-cause passes →

@@ -6,7 +6,7 @@ import (
 )
 
 // BuildFmtModule creates the "boru:fmt" native module: the source
-// pretty-printer, exposed as a runtime BORU API under the "Fmt" namespace.
+// pretty-printer, exposed as a runtime boru API under the "Fmt" namespace.
 //
 // After import, the words are accessed via dot notation:
 //
@@ -24,7 +24,7 @@ import (
 // boru:io -> IO and boru:net -> Net (lang/go/CLAUDE.md, "Naming rule").
 func BuildFmtModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Surface a stylesheet-parse failure (the embedded fmt-rules.boru — the
-	// rules are EXPRESSED IN BORU, see formatter/rules_boru.go) at module
+	// rules are EXPRESSED IN boru, see formatter/rules_boru.go) at module
 	// construction rather than formatting with a zero table — the ADR-005
 	// recorded-error pattern (native.TypeInitError precedent).
 	if err := formatter.DefaultRulesInitError(); err != nil {
@@ -37,13 +37,13 @@ func BuildFmtModule(parent *native.Registry) (native.ModuleDesc, error) {
 // Go-implemented words. Each wraps a function in lang/go/formatter so the
 // language-level word and the CLI share one driver:
 //
-//   - format          — format a BORU source string (canonical rule table).
-//   - format-markdown — reformat BORU inside ```boru fences and
+//   - format          — format a boru source string (canonical rule table).
+//   - format-markdown — reformat boru inside ```boru fences and
 //     <!-- borufmt --> … <!-- /borufmt --> regions of a
 //     Markdown document, leaving the rest untouched.
-//   - format-html     — reformat BORU inside <!-- borufmt --> regions of an
+//   - format-html     — reformat boru inside <!-- borufmt --> regions of an
 //     HTML document, leaving the rest untouched.
-//   - rules           — the canonical layout rule table as BORU data.
+//   - rules           — the canonical layout rule table as boru data.
 //   - format-with     — format under a (partial) rule-table override.
 //   - tree            — the layout CST as a $kind-tagged value tree.
 //   - render          — the document algebra (see fmtdoc.go).

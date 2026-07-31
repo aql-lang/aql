@@ -1,4 +1,4 @@
-# LSP4IJ template files for BORU
+# LSP4IJ template files for boru
 
 These files describe the **user-defined language server** that talks to
 `boru lsp`. LSP4IJ (the Red Hat "LSP4IJ" plugin for IntelliJ-based IDEs)
@@ -15,7 +15,7 @@ two purposes:
    A template folder is exactly this shape:
 
    ```
-   BORU/
+   boru/
      template.json               # name + command + file/language mappings
      settings.json               # per-feature toggles (optional)
      initializationOptions.json  # LSP `initialize.initializationOptions` (optional)
@@ -24,8 +24,8 @@ two purposes:
    Point the importer at the folder that contains these files.
 
 > **Accuracy note.** LSP4IJ's template-folder layout is stable across
-> recent releases, but the plugin is developed independently of BORU and
-> its JSON schema is not part of BORU's compatibility surface. If your
+> recent releases, but the plugin is developed independently of boru and
+> its JSON schema is not part of boru's compatibility surface. If your
 > LSP4IJ version rejects an import, fall back to the UI steps in the
 > parent README — those always work. The only field that truly matters is
 > the **command**, `boru lsp`, and the **`*.boru`** mapping.

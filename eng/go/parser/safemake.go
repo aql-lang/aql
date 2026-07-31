@@ -11,7 +11,7 @@ import (
 // tabnas/parser's Make bumps a package-global instance-id counter
 // (options.go: idCounter++) with no synchronization, so two goroutines
 // constructing parsers at once are a data race — caught by `go test -race`
-// in TestSpecCompiledConcurrentRowsRaceFree once BORU migrated from
+// in TestSpecCompiledConcurrentRowsRaceFree once boru migrated from
 // jsonicjs to tabnas/jsonic. Construction is cheap and a constructed
 // instance parses independently, so serializing only the Make call removes
 // the race while leaving the (expensive) Parse step fully concurrent.
@@ -42,7 +42,7 @@ func SafeParse(src string) (any, error) {
 // callback (setupNumberSub), so numeric tokens come back wrapped in a
 // numberVal carrying their exact source text. This preserves the
 // integer/float distinction (and exact large-integer precision) the way the
-// BORU-source parser does — "42.0" stays a Float, "42" an Integer, an
+// boru-source parser does — "42.0" stays a Float, "42" an Integer, an
 // out-of-range integer raises [boru/integer_overflow] — instead of the bare
 // float64 collapse a default parser produces (where "42.0" silently becomes
 // Integer 42). Use this for data-decode paths that must round-trip numeric

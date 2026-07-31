@@ -1,4 +1,4 @@
-// BORU Language Server for Sublime Text via the LSP package.
+// boru Language Server for Sublime Text via the LSP package.
 //
 // Prerequisites: install the "LSP" package via Package Control.
 //
@@ -7,7 +7,7 @@
 // right-hand pane. Sublime will then spawn `boru lsp` for any file
 // whose syntax / scope matches source.boru or extension matches *.boru.
 //
-// For syntax highlighting you can install a BORU syntax package
+// For syntax highlighting you can install a boru syntax package
 // separately or fall back to "Packages/Text/Plain text.tmLanguage"
 // — diagnostics work either way.
 

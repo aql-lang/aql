@@ -69,7 +69,7 @@ remote viewer. Small, but it touches every layer of the design:
 ### Event lifecycle (a `space` toggle, standalone)
 
 ```
-key press           driver (native Go)                      app (BORU, pure-ish)
+key press           driver (native Go)                      app (boru, pure-ish)
 ---------           ------------------                      -------------------
 space ──decode──▶ Backend.Events() ─▶ input pump ─▶ mailbox (real Process)
                                                     └▶ PopFront ─▶ update state {tag:"key" key:"space"}
@@ -131,7 +131,7 @@ sugar); `todo-tui-served.boru` is then a one-word change.
 `todo-api.boru` counts every request in a three-line `wrap` with zero
 handler edits; mirroring a `hits` counter in the TUI means editing
 `update` (or hand-wrapping the update word). Livable in v1 — a manual
-wrapper is three lines of BORU — but it is the same itch §11.1 scratches:
+wrapper is three lines of boru — but it is the same itch §11.1 scratches:
 a service-shaped app would inherit `wrap`/`prior` for free. Folded into
 F1's §11.1 amendment; no separate change.
 

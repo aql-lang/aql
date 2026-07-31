@@ -1,6 +1,6 @@
-;;; boru-mode.el --- Major mode for the BORU query language  -*- lexical-binding: t; -*-
+;;; boru-mode.el --- Major mode for the boru query language  -*- lexical-binding: t; -*-
 
-;; Author: BORU contributors
+;; Author: boru contributors
 ;; Version: 0.1.0
 ;; Package-Requires: ((emacs "26.1"))
 ;; Keywords: languages, boru
@@ -10,8 +10,8 @@
 
 ;;; Commentary:
 
-;; A major mode for editing BORU (https://github.com/boru-lang/boru) source
-;; files.  BORU is a concatenative, strongly-typed query language.  This
+;; A major mode for editing boru (https://github.com/boru-lang/boru) source
+;; files.  boru is a concatenative, strongly-typed query language.  This
 ;; mode provides:
 ;;
 ;;   * syntax highlighting for words, types, literals and comments,
@@ -38,7 +38,7 @@
 (require 'imenu)
 
 (defgroup boru nil
-  "Major mode for editing BORU source."
+  "Major mode for editing boru source."
   :group 'languages
   :prefix "boru-")
 
@@ -49,7 +49,7 @@
   :group 'boru)
 
 (defcustom boru-lsp-command '("boru" "lsp")
-  "Command (program and arguments) that starts the BORU language server.
+  "Command (program and arguments) that starts the boru language server.
 The default runs the `boru lsp' stdio server found on `exec-path'.
 Point the first element at an absolute path if `boru' is not on PATH."
   :type '(repeat string)
@@ -70,7 +70,7 @@ Point the first element at an absolute path if `boru' is not on PATH."
     "offset" "distinct" "union" "between" "in" "with" "with-decimal"
     "convert" "typeof" "inspect" "is" "istype" "of" "extends" "default"
     "const" "base" "behave" "pathof" "exposes")
-  "BORU structural and control keywords.")
+  "boru structural and control keywords.")
 
 ;; Library / built-in words.  Highlighted as builtins.
 (defconst boru-builtins
@@ -114,11 +114,11 @@ Point the first element at an absolute path if `boru' is not on PATH."
     "service" "state-of" "wrap"
     ;; help
     "help" "describe")
-  "BORU built-in library words.")
+  "boru built-in library words.")
 
 (defconst boru-constants
   '("true" "false" "none" "inf" "nan")
-  "BORU literal constants.")
+  "boru literal constants.")
 
 ;;;; Syntax table -----------------------------------------------------------
 
@@ -127,7 +127,7 @@ Point the first element at an absolute path if `boru' is not on PATH."
     ;; Comments: `#' starts a line comment (the dominant style); `/* … */'
     ;; is a block comment (`/' is comment-start-1 / comment-end-2, `*' is
     ;; comment-start-2 / comment-end-1).  Newline ends the line comment.
-    ;; (`//' line comments are also valid BORU but are left un-fontified —
+    ;; (`//' line comments are also valid boru but are left un-fontified —
     ;; a second line-comment style collides with the block-comment `/'.)
     (modify-syntax-entry ?# "<" table)
     (modify-syntax-entry ?\n ">" table)
@@ -235,8 +235,8 @@ Point the first element at an absolute path if `boru' is not on PATH."
 ;;;; Mode definition ---------------------------------------------------------
 
 ;;;###autoload
-(define-derived-mode boru-mode prog-mode "BORU"
-  "Major mode for editing BORU source files.
+(define-derived-mode boru-mode prog-mode "boru"
+  "Major mode for editing boru source files.
 
 \\{boru-mode-map}"
   :syntax-table boru-mode-syntax-table
@@ -247,7 +247,7 @@ Point the first element at an absolute path if `boru' is not on PATH."
   (setq-local indent-line-function #'boru-indent-line)
   (setq-local electric-indent-chars (append "()[]{}" electric-indent-chars))
   (setq-local imenu-generic-expression boru-imenu-generic-expression)
-  (imenu-add-to-menubar "BORU"))
+  (imenu-add-to-menubar "boru"))
 
 ;;;###autoload
 (add-to-list 'auto-mode-alist '("\\.boru\\'" . boru-mode))

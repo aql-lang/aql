@@ -25,9 +25,9 @@ var docFiles = []string{"CLI.md", "HOWTO.md"}
 
 func docRoot() string { return filepath.Join("..", "..", "..") }
 
-// buildBORU compiles cmd/go/boru into a temp binary once for the test
+// buildBoru compiles cmd/go/boru into a temp binary once for the test
 // binary's lifetime and returns its path.
-func buildBORU(t *testing.T) string {
+func buildBoru(t *testing.T) string {
 	t.Helper()
 	bin := filepath.Join(t.TempDir(), "boru")
 	cmd := exec.Command("go", "build", "-o", bin, "./boru")
@@ -39,11 +39,11 @@ func buildBORU(t *testing.T) string {
 }
 
 func TestCLIExamples(t *testing.T) {
-	bin := buildBORU(t)
+	bin := buildBoru(t)
 
 	// Render-parity sanity check: the binary must print the comma-free
 	// canonical form Part A established, matching the doc convention.
-	if got := runBORU(t, bin, t.TempDir(), []string{"do", "[1 2 3]"}); got != "[1 2 3]" {
+	if got := runBoru(t, bin, t.TempDir(), []string{"do", "[1 2 3]"}); got != "[1 2 3]" {
 		t.Fatalf("CLI render sanity: got %q, want %q", got, "[1 2 3]")
 	}
 
@@ -64,7 +64,7 @@ func TestCLIExamples(t *testing.T) {
 				ran++
 				t.Run(sanitise(ex.Raw, ex.Line), func(t *testing.T) {
 					dir := t.TempDir()
-					got := runBORU(t, bin, dir, ex.Args)
+					got := runBoru(t, bin, dir, ex.Args)
 					if got != ex.Expected {
 						t.Errorf("%s\n  got:  %q\n  want: %q", ex.Raw, got, ex.Expected)
 					}
@@ -105,10 +105,10 @@ func needsSandboxSkip(ex CLIExample) string {
 	return ""
 }
 
-// runBORU executes the binary in dir with HOME/TMP/cwd redirected there,
+// runBoru executes the binary in dir with HOME/TMP/cwd redirected there,
 // and returns trimmed stdout. A non-zero exit (or stderr-only output) is
 // surfaced via the returned string so a mismatch shows the diagnostic.
-func runBORU(t *testing.T, bin, dir string, args []string) string {
+func runBoru(t *testing.T, bin, dir string, args []string) string {
 	t.Helper()
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir

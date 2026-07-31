@@ -1,4 +1,4 @@
-# BORU Bytecode Compilation — Outline
+# boru Bytecode Compilation — Outline
 
 Short outline of the full report (see `boru-bytecode-report.0.md`;
 revisions against main June 2026 in `boru-bytecode-revisions.0.md`,
@@ -97,23 +97,23 @@ implementation plan in `boru-bytecode-plan.0.md`).
   stack checker and a bytecode/JIT backend — closest structural
   analogue to what's proposed here.
 - **Lua 5 register VM → LuaJIT.** Shows the ceiling for small
-  dynamic-language VMs; trace-compiling BORU hot loops is a credible
+  dynamic-language VMs; trace-compiling boru hot loops is a credible
   later stage.
 - **CPython bytecode.** Dynamic dispatch still dominates; the lesson
   is that static arity alone is not enough — specialisation
   (PEP 659) is where the real wins come from.
-- **V8 / SpiderMonkey inline caches.** Relevant if BORU later adds
+- **V8 / SpiderMonkey inline caches.** Relevant if boru later adds
   polymorphic dispatch at hot sites.
 - **Cat / Kitten (HM-typed concatenative).** Show that fully typed
   concatenative code can be compiled directly with no runtime
-  dispatch at all — the ceiling if BORU ever required full annotation.
+  dispatch at all — the ceiling if boru ever required full annotation.
 
 ## 8. Verdict (preview)
 
 - **Feasible**: yes, as a second execution mode driven by the
   existing checker. Not as a replacement for the interpreter —
   dynamic features need a fallback.
-- **Worth it**: probably, for compute-heavy BORU (numerical loops,
+- **Worth it**: probably, for compute-heavy boru (numerical loops,
   record/list transforms). Gains on orchestration-style code
   (I/O, context, module wiring) will be small.
 - **Scope**: Phase 0 is completing return-type annotations (already

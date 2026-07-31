@@ -21,7 +21,7 @@ default) — none of these proposals changes a word's collection mode.
   applicable) a hint line.
 - **There is no user-facing constructor or raiser.** `make Error {…}`
   is rejected ("unsupported target type Error"), and no `raise` /
-  `throw` word exists. BORU code that wants to fail must contrive a
+  `throw` word exists. boru code that wants to fail must contrive a
   native error (e.g. divide by zero) — the gap both voxgig libraries
   hit (T9.6).
 - **Static diagnosis** (`boru check`) already catches several silent

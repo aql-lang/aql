@@ -1,8 +1,8 @@
-# Making the BORU Type Checker Catch Silent-Dispatch Failures: Implementation Plan
+# Making the boru Type Checker Catch Silent-Dispatch Failures: Implementation Plan
 
 ## Scope
 
-BORU's `boru check` is a capable flow-sensitive abstract interpreter
+boru's `boru check` is a capable flow-sensitive abstract interpreter
 (`design/CARRIER-STATIC-TYPECHECK-REPORT.10.md`), yet the pain that
 dominates every DX report — dispatch that fails **quietly** instead of
 loudly — slips straight through it. This note plans the additive "loud

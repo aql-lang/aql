@@ -1,4 +1,4 @@
-# BORU How-To Guides
+# boru How-To Guides
 
 Practical recipes for common tasks. Each guide assumes you know the
 basics from the [Tutorial](tutorial.md).
@@ -275,6 +275,6 @@ convert Decimal 5           => 5.0
 
 ## Next Steps
 
-- [Tutorial](tutorial.md) — learn BORU from first principles
+- [Tutorial](tutorial.md) — learn boru from first principles
 - [Reference](reference.md) — complete word and type reference
 - [Explanation](explanation.md) — understand the concatenative model

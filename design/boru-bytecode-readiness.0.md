@@ -1,4 +1,4 @@
-# BORU Bytecode & compilation — readiness assessment
+# boru Bytecode & compilation — readiness assessment
 
 **Status:** assessment — June 2026, after the checker-accuracy work
 landed on this branch (`checker-accuracy-review.10.md` findings A1–A9

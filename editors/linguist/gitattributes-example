@@ -1,18 +1,18 @@
-# gitattributes-example — force GitHub to classify .boru files as BORU.
+# gitattributes-example — force GitHub to classify .boru files as boru.
 #
 # Drop these lines into a file named `.gitattributes` at the ROOT of your
 # repository (create it if it does not exist), commit, and push. GitHub's
 # Linguist reads `.gitattributes` per-repo, so this takes effect even
-# before BORU is merged into github/linguist upstream — it is the local
+# before boru is merged into github/linguist upstream — it is the local
 # fallback while the upstream PR is in flight, and a permanent override if
 # you want to be explicit.
 #
-# `linguist-language=BORU` overrides detection and forces every matching
-# path to be reported as BORU in the repository language bar and rendered
-# with the BORU grammar (once linguist ships one). The name on the right
-# MUST match the language key added to linguist's languages.yml ("BORU").
+# `linguist-language=boru` overrides detection and forces every matching
+# path to be reported as boru in the repository language bar and rendered
+# with the boru grammar (once linguist ships one). The name on the right
+# MUST match the language key added to linguist's languages.yml ("boru").
 
-*.boru linguist-language=BORU
+*.boru linguist-language=boru
 
 # --- optional extras -------------------------------------------------------
 #

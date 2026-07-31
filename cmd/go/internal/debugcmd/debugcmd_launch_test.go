@@ -904,7 +904,7 @@ func TestLaunchInitError(t *testing.T) {
 	// The langNew seam (design/TEST-SEAMS.10.md): a registry-construction
 	// failure surfaces as an init error.
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, errors.New("boom-init") }
+	langNew = func(...lang.Options) (*lang.Boru, error) { return nil, errors.New("boom-init") }
 	defer func() { langNew = orig }()
 	path := writeProgram(t, "1 add 2\n")
 	code, _, errOut := launch(t, []string{"--no-check", path}, "")

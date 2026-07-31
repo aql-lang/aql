@@ -1,4 +1,4 @@
-// BORU Language Server for coc.nvim (Vim 8+ / Neovim).
+// boru Language Server for coc.nvim (Vim 8+ / Neovim).
 //
 // Open with :CocConfig and merge the "languageserver.boru" block into
 // your existing coc-settings.json. coc.nvim will spawn `boru lsp`

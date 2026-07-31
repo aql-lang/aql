@@ -341,7 +341,7 @@ Set out to add "module-fn dispatch in a compiled closure body" (the assumed
 next blocker). **It already works** — verified compiling, byte-identical to the
 interpreter, for every shape probed:
 - a Go-native module fn in an each/var body (`MathUtil.sqrt`);
-- a cross-registry **BORU-bodied** module fn (`import module [def f … export …]`),
+- a cross-registry **boru-bodied** module fn (`import module [def f … export …]`),
   including a **recursive, void-returning, `|`-barriered** export in a var body;
 - a top-level user fn, and a 2-overload (polymorphic) user fn, in a var body;
 - the bloom `bit-test` shape (capture `bits` + user-fn call + var loop var).

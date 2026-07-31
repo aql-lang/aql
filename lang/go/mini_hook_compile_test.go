@@ -15,7 +15,7 @@ import (
 // registration APIs were removed with the frozen namespace. The hook is
 // authoritative at the call site, so a compile pass must either mirror it
 // or refuse.
-func zzBfHookInstance(t *testing.T) *BORU {
+func zzBfHookInstance(t *testing.T) *Boru {
 	t.Helper()
 	a := mustNew(t)
 	native.RegisterMiniCompileGoHook(a.registry, "bf",
@@ -93,6 +93,6 @@ func TestMiniGoHookNonConcreteOptsRefuses(t *testing.T) {
 	}
 }
 
-// (TestMiniBORUHookRefuses died with the BORU compile-hook surface —
+// (TestMiniBoruHookRefuses died with the boru compile-hook surface —
 // MiniLang.register-compiled is a tombstone now; the frozen-registry raise
 // is pinned in module-minilang.tsv and TestMiniCovRegisterTombstones.)

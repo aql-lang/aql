@@ -1,5 +1,5 @@
 // Spec-runner test for the production-language spec suite at
-// boru/lang/spec/. Each TSV row is parsed with the BORU parser
+// boru/lang/spec/. Each TSV row is parsed with the boru parser
 // (eng/go/parser) and run against a fresh production registry
 // (native.DefaultRegistry + native.Register) — the full language
 // layer, so these specs can exercise any registered word (record /
@@ -67,7 +67,7 @@ func runSpecProd(t *testing.T, tcoDisabled bool) {
 		// originally written for engspec (object, record, inspect, …)
 		// can run under the production setup too.
 		specrunner.RegisterQFixtures(reg)
-		// Wire the parser so the BORU-implemented modules (report, test)
+		// Wire the parser so the boru-implemented modules (report, test)
 		// can parse their source on import — exactly what lang.New() does
 		// in production. Without this `import "boru:report"` fails with
 		// "parser not configured".

@@ -105,7 +105,7 @@ func TestVaultIdentityRegisterTypeDuplicate(t *testing.T) {
 }
 
 // A vault-held credential authenticates a real mutual-TLS handshake,
-// and the private key never becomes a BORU value at any point.
+// and the private key never becomes a boru value at any point.
 func TestVaultIdentityMutualTLS(t *testing.T) {
 	certPEM, keyPEM, clientCAs := mintTLSClientCert(t)
 	addr, serverCA := mtlsEchoServer(t, clientCAs)

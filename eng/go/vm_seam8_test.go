@@ -41,7 +41,7 @@ func w8Deleg0(t *testing.T, r *Registry, name string, impl Handler) Value {
 		Name: name, Registry: r,
 		Signatures: []Signature{{
 			Returns: []*Type{TAny}, BarrierPos: -1,
-			Impl: BORU([]Value{NewWord(name)}),
+			Impl: Boru([]Value{NewWord(name)}),
 		}},
 	})
 }
@@ -150,7 +150,7 @@ func w8Deleg1(t *testing.T, r *Registry, name string, impl Handler) Value {
 		Name: name, Registry: r,
 		Signatures: []Signature{{
 			Args: []*Type{TInteger}, Returns: []*Type{TAny}, BarrierPos: -1,
-			Impl: BORU([]Value{NewWord(name)}),
+			Impl: Boru([]Value{NewWord(name)}),
 		}},
 	})
 }
@@ -182,7 +182,7 @@ func TestW8CallDynMethodIslandSuccess(t *testing.T) {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TInteger}},
 			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
-			Impl: BORU([]Value{NewWord("n")}),
+			Impl: Boru([]Value{NewWord("n")}),
 		}},
 	})
 	if isDelegationFnDef(fn.Data.(FnDefInfo)) {

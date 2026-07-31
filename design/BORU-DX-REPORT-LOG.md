@@ -1,4 +1,4 @@
-# BORU Developer Experience Report: Implementing `boru:log`
+# boru Developer Experience Report: Implementing `boru:log`
 
 ## Context
 
@@ -6,11 +6,11 @@ This report documents the experience of implementing `boru:log` — a
 logging / OpenTelemetry-abstraction / provider-hook module — across five
 phases (logging, contextual loggers, provider hooks, traces, metrics).
 Unlike the `boru:decision` DX report (`BORU-DX-REPORT.5.md`), which was a
-*pure-BORU* attempt, `boru:log` is a **Go-backed capability module** in the
+*pure-boru* attempt, `boru:log` is a **Go-backed capability module** in the
 mould of `boru:io` / `boru:net` / `boru:rand`. So the friction profile here
 is complementary: it is the experience of a **Go module author** wiring
-native words into the engine, plus an **BORU author** writing the `.tsv`
-spec rows and driving the CLI — not someone composing fns in pure BORU.
+native words into the engine, plus a **boru author** writing the `.tsv`
+spec rows and driving the CLI — not someone composing fns in pure boru.
 
 The module shipped at ~1,500 lines of Go across five files plus a 40-row
 spec and a 12-test Go suite. Everything that was attempted was
@@ -308,7 +308,7 @@ themselves are the best documentation; a one-line pointer to them from the
 
 ## Overall assessment
 
-For a **Go-backed capability module**, BORU's authoring experience is
+For a **Go-backed capability module**, boru's authoring experience is
 strong: the module pattern, capability seams, instance/closure idiom,
 policy model, self-documenting `describe`, and the spec/ratchet discipline
 turned an ambitious five-signal observability module into a steady
@@ -316,7 +316,7 @@ copy-adapt-verify loop with no architectural blockers. The
 decision-report era's hard blockers (def leakage, list auto-eval) are
 gone, and it shows.
 
-The remaining friction is concentrated in **the BORU surface syntax's
+The remaining friction is concentrated in **the boru surface syntax's
 silent failure modes** — newline-is-not-a-separator (Finding 1) and
 stack-vs-forward re-binding (Finding 3) both produce *wrong answers
 instead of errors*, which is the costliest kind of DX paper-cut. Both are

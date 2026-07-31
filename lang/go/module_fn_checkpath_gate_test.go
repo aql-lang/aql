@@ -23,8 +23,8 @@ import (
 // what catches the collision breakage.
 //
 // WHY boru:test. boru:test IS a native sub-registry module (BuildTestModule) whose
-// preamble defines BORU fns with named params + real bodies (`run-spec`,
-// `run-cases`, `run-case`) — the exact CallBORU-across-the-module-boundary path
+// preamble defines boru fns with named params + real bodies (`run-spec`,
+// `run-cases`, `run-case`) — the exact CallBoru-across-the-module-boundary path
 // the refactor touches, and the literal locus of module-test.tsv:38. The cases
 // below cover the §7 surface reachable with an in-repo module: a SUBJECT-style
 // dynamic dispatch (run-case invokes the spec's subject), CROSS-BOUNDARY

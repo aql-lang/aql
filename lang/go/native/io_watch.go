@@ -86,7 +86,7 @@ func asWatcherInfo(v Value) (*WatcherInfo, bool) {
 	return wi, ok
 }
 
-// watchEventValue builds the BORU event record for one WatchEvent.
+// watchEventValue builds the boru event record for one WatchEvent.
 func watchEventValue(op, path string) Value {
 	om := NewOrderedMap()
 	om.Set("op", NewAtom(op))

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-tracer.py — a "tracer bullet" differential harness for the BORU Lean model.
+tracer.py — a "tracer bullet" differential harness for the boru Lean model.
 
 It drives one thin end-to-end slice through the *whole* pipeline:
 
-    BORU source  ──tokenize──▶  Lean `Tape`  ──lean──▶  model output
+    boru source  ──tokenize──▶  Lean `Tape`  ──lean──▶  model output
         │                                                   │
         └───────────────── boru do ──────▶ engine output ───┴──▶ compare
 
@@ -31,7 +31,7 @@ LEAN_DIR = HERE.parent                            # formal/lean
 REPO = LEAN_DIR.parent.parent                     # repo root
 
 # --- the shared program set (model-covered, homogeneous-type fragment) -------
-# Each entry is BORU source. Coercion cases (`add true 2`, `not 5`) are
+# Each entry is boru source. Coercion cases (`add true 2`, `not 5`) are
 # intentionally excluded: the model is strict there while the engine
 # coerces, so they are a known, documented modeling gap — not a fragment
 # the tracer bullet claims to cover.

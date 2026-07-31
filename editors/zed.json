@@ -1,7 +1,7 @@
-// BORU Language Server for Zed.
+// boru Language Server for Zed.
 //
 // Zed binds language servers per-language. Merge the snippet below
-// into ~/.config/zed/settings.json. Until a dedicated BORU extension
+// into ~/.config/zed/settings.json. Until a dedicated boru extension
 // ships on the Zed extension marketplace, you also need to register
 // the "boru" file association under languages.
 //
@@ -18,7 +18,7 @@
     }
   },
   "languages": {
-    "BORU": {
+    "boru": {
       "language_servers": ["boru-lsp"],
       "tab_size": 2,
       "hard_tabs": false,
@@ -26,6 +26,6 @@
     }
   },
   "file_types": {
-    "BORU": ["boru"]
+    "boru": ["boru"]
   }
 }

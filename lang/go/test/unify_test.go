@@ -101,7 +101,7 @@ func TestUnify(t *testing.T) {
 	t.Logf("ran %d unify test cases", ran)
 }
 
-// evalSingle parses and evaluates a BORU expression, returning the single
+// evalSingle parses and evaluates a boru expression, returning the single
 // result value. It fails if the expression produces zero or more than one value.
 func evalSingle(expr string) (native.Value, error) {
 	values, err := parser.Parse(expr)

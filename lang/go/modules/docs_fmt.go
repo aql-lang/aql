@@ -2,19 +2,19 @@ package modules
 
 func init() {
 	registerDocs("boru:fmt", map[string]string{
-		"format":          "Pretty-print BORU source text into canonical layout.",
-		"format-markdown": "Reformat BORU in ```boru fences and <!-- borufmt --> regions of Markdown.",
-		"format-html":     "Reformat BORU in <!-- borufmt --> regions of an HTML document.",
+		"format":          "Pretty-print boru source text into canonical layout.",
+		"format-markdown": "Reformat boru in ```boru fences and <!-- borufmt --> regions of Markdown.",
+		"format-html":     "Reformat boru in <!-- borufmt --> regions of an HTML document.",
 		"render":          "Lay out a declarative document tree (text/line/group/indent) to a width.",
 		"kind":            "Classify a node for rule dispatch: a $kind-tagged Map's tag, else 'map' / 'list' / 'scalar'.",
 		"children":        "The child sequence a rule recurses over: a Map's {$kind:'entry' key value} entries, a List's elements, else [].",
-		"tree":            "Parse BORU source into its layout CST as a $kind-tagged value tree, so a formatter can be written as declarative BORU rules.",
-		"rules":           "The canonical layout rule table (width/indent/attach/templates/strategies) — defined in BORU (formatter/fmt-rules.boru), the stylesheet Fmt.format interprets.",
-		"format-with":     "Format BORU source under a (partial) rule table: override width, indent, attach classes, per-kind templates, statement strategies.",
+		"tree":            "Parse boru source into its layout CST as a $kind-tagged value tree, so a formatter can be written as declarative boru rules.",
+		"rules":           "The canonical layout rule table (width/indent/attach/templates/strategies) — defined in boru (formatter/fmt-rules.boru), the stylesheet Fmt.format interprets.",
+		"format-with":     "Format boru source under a (partial) rule table: override width, indent, attach classes, per-kind templates, statement strategies.",
 	})
 
 	// Fmt is the pretty-printer behind `boru fmt`. Its two halves look
-	// alike in the signatures and are not: format* REFORMATS BORU source,
+	// alike in the signatures and are not: format* REFORMATS boru source,
 	// while render/tree/children work on a document tree of layout nodes.
 	// Results are from verified lang/spec/module-fmt.tsv rows.
 	registerExamples("boru:fmt", map[string][]string{

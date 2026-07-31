@@ -1,4 +1,4 @@
-// BORU Language Server for Kate / KWrite via the built-in LSP Client.
+// boru Language Server for Kate / KWrite via the built-in LSP Client.
 //
 // Settings > Configure Kate > LSP Client > User Server Settings
 // Paste / merge the snippet below into the text area. Kate will
@@ -13,7 +13,7 @@
       "command": ["boru", "lsp"],
       "rootIndicationFileNames": ["boru.jsonic", ".git"],
       "url": "https://github.com/boru-lang/boru",
-      "highlightingModeRegex": "^BORU$"
+      "highlightingModeRegex": "^boru$"
     }
   }
 }

@@ -1,8 +1,8 @@
 {
     "identifier": "boru.lang",
-    "name": "BORU",
+    "name": "boru",
     "organization": "boru-lang",
-    "description": "Syntax highlighting and language-server support for BORU, a concatenative, strongly-typed query language.",
+    "description": "Syntax highlighting and language-server support for boru, a concatenative, strongly-typed query language.",
     "version": "0.1.0",
     "categories": [
         "languages"
@@ -19,11 +19,11 @@
         "onLanguage:boru"
     ],
     "languages": [
-        "BORU"
+        "boru"
     ],
     "languageServers": {
         "boru-lsp": {
-            "name": "BORU Language Server",
+            "name": "boru Language Server",
             "type": "stdio",
             "path": "boru",
             "args": [
@@ -37,7 +37,7 @@
     "config": [
         {
             "key": "boru.lsp.path",
-            "title": "BORU binary path",
+            "title": "boru binary path",
             "description": "Path to the `boru` executable used to run the language server (`boru lsp`). Leave as `boru` to use the binary found on your $PATH, or give an absolute path (a leading ~ is expanded).",
             "type": "path",
             "default": "boru"

@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:tui module (Tier-1 words)
+# boru Language Specification: the boru:tui module (Tier-1 words)
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of raw-terminal words (design/TUI.0.md §4). They are

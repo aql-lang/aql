@@ -8,7 +8,7 @@ import (
 	"github.com/boru-lang/boru/eng/go/parser"
 )
 
-// runWithOSFiles creates a registry using real OS file ops and runs BORU.
+// runWithOSFiles creates a registry using real OS file ops and runs Boru.
 // Files are resolved relative to the test package directory (lang/go/test/).
 func runWithOSFiles(t *testing.T, expr string) ([]native.Value, error) {
 	t.Helper()

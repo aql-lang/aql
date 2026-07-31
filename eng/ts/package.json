@@ -1,7 +1,7 @@
 {
   "name": "@voxgig/borueng",
   "version": "0.1.0",
-  "description": "TypeScript port of the BORU execution engine. Pure engine — no parser, no built-in word library.",
+  "description": "TypeScript port of the boru execution engine. Pure engine — no parser, no built-in word library.",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",

@@ -1,10 +1,10 @@
 {
   "name": "codemirror-lang-boru",
   "version": "0.1.0",
-  "description": "CodeMirror 6 language mode for BORU — the concatenative, strongly-typed query language.",
+  "description": "CodeMirror 6 language mode for boru — the concatenative, strongly-typed query language.",
   "type": "module",
   "license": "MIT",
-  "author": "BORU contributors",
+  "author": "boru contributors",
   "homepage": "https://github.com/boru-lang/boru/tree/main/editors/codemirror",
   "repository": {
     "type": "git",

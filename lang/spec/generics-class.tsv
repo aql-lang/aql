@@ -1,4 +1,4 @@
-# BORU Language Specification: generic classes — gen [...] class {...}
+# boru Language Specification: generic classes — gen [...] class {...}
 # Format: input<TAB>expected<TAB>description
 #
 # `def Box gen [T] class {value:T}` declares a generic CLASS schema.

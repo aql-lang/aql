@@ -39,7 +39,7 @@ func TestRunSeams(t *testing.T) {
 	}
 
 	// Constructor failure surfaces as exit 1.
-	newInstance = func(...lang.Options) (*lang.BORU, error) { return nil, errors.New("boom") }
+	newInstance = func(...lang.Options) (*lang.Boru, error) { return nil, errors.New("boom") }
 	if code := run(nil); code != 1 {
 		t.Errorf("run with failing constructor = %d, want 1", code)
 	}

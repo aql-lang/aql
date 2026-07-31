@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// bt wraps s in backticks (a BORU interpolated-string literal) — Go raw strings
+// bt wraps s in backticks (a boru interpolated-string literal) — Go raw strings
 // cannot contain a backtick, so build the source by concatenation.
 func bt(s string) string { return "`" + s + "`" }
 

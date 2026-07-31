@@ -69,7 +69,7 @@ func TestListAPIPlanet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	a.SetSDK("voxgig-solardemo", makeTestSDK(t))
 
@@ -101,7 +101,7 @@ func TestListAPIMoon(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	a.SetSDK("voxgig-solardemo", makeTestSDK(t))
 
@@ -132,7 +132,7 @@ func TestListAPIWithJsonExtension(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	a.SetSDK("voxgig-solardemo", makeTestSDK(t))
 
@@ -152,7 +152,7 @@ func TestListAPINonAPIMapFallsThrough(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 
 	// A map without kind:"api" should not trigger the API handler.
 	// It should be treated as a record type and return an empty list.

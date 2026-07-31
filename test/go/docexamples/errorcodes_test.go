@@ -67,7 +67,7 @@ import (
 // `cmd/go` is deliberately NOT scanned. Its only two matches are
 // `Code: "boru/init"` and `Code: "boru/check"` in the LSP server
 // (cmd/go/internal/lsp/diagnostics.go) — fields of an LSP `Diagnostic`, not
-// of a BoruError. No BORU program can dispatch on them, and they are not BORU
+// of a BoruError. No boru program can dispatch on them, and they are not boru
 // error codes; including them would force two protocol strings into the
 // language's enumeration to keep the bidirectional check green. The one-way
 // gate tolerated them because extra entries only made it more permissive.
@@ -132,7 +132,7 @@ var codeLiteralPatterns = []*regexp.Regexp{
 // binds codes that already conform, which is the set that never needed it.
 func TestEveryAttachedCodeLiteralIsWellFormed(t *testing.T) {
 	// The rule is DISPATCHABILITY, not house style. A code has to be
-	// spellable as a `case` arm, so a hyphen is fine — BORU word names use
+	// spellable as a `case` arm, so a hyphen is fine — boru word names use
 	// them freely (`for-each`, `with-decimal`) and four codes follow suit
 	// (`expected-byte`, `bad-encoding`, `cancel-timeout_error`,
 	// `cancel-interval_error`). A SPACE or a capital is not spellable, and

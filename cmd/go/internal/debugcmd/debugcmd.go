@@ -21,7 +21,7 @@
 // Serve/attach transport is plain HTTP with an optional Bearer token (a
 // static token or a vault capability id), the same posture as the api
 // service — the host-level realization of the attach/serverless surfaces
-// while the BORU Service model (SERVICES.0.md) and a language-level socket
+// while the boru Service model (SERVICES.0.md) and a language-level socket
 // primitive are still RFC-only.
 package debugcmd
 

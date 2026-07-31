@@ -124,7 +124,7 @@ func TestTypeFieldNamesWave3(t *testing.T) {
 
 // TestTypeRequiredDisjunctEdgesWave3 pins stripNoneFromField: a 3-alt
 // field collapses to a 2-alt disjunct (the NewDisjunct arm); an all-None
-// disjunct — not constructible from BORU, where `None tor None` collapses
+// disjunct — not constructible from boru, where `None tor None` collapses
 // to None — is returned unchanged (kept==0 arm), never emptied.
 func TestTypeRequiredDisjunctEdgesWave3(t *testing.T) {
 	got := runType(t, `(refine Record [y:[String tor Integer tor None]]) TypeUtil.required`)

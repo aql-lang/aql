@@ -1,4 +1,4 @@
-# BORU Language Specification: Temporal core (now)
+# boru Language Specification: Temporal core (now)
 # Format: input<TAB>expected<TAB>description
 #
 # `now` reads the current instant from the registry's Clock capability.

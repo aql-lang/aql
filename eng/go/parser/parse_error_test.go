@@ -9,7 +9,7 @@ import (
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
-// Parse failures must surface as BORU-voice [boru/syntax_error]s — same
+// Parse failures must surface as boru-voice [boru/syntax_error]s — same
 // renderer, same position discipline, zero ANSI — never as raw library
 // output (which used to leak an always-on color palette, an
 // `--internal:` block, and the library docs link into the REPL and the
@@ -24,7 +24,7 @@ func parseErrOf(t *testing.T, src string) *eng.BoruError {
 	}
 	var ae *eng.BoruError
 	if !errors.As(err, &ae) {
-		t.Fatalf("Parse(%q) must yield an *BoruError, got %T: %v", src, err, err)
+		t.Fatalf("Parse(%q) must yield a *BoruError, got %T: %v", src, err, err)
 	}
 	return ae
 }
@@ -32,7 +32,7 @@ func parseErrOf(t *testing.T, src string) *eng.BoruError {
 func TestParseErrorTranslation(t *testing.T) {
 	cases := []struct {
 		src        string
-		wantDetail string // substring of the BORU-voice detail
+		wantDetail string // substring of the boru-voice detail
 		wantExtra  string // substring of a note/help line ("" = none asserted)
 	}{
 		{"(fn x]", "unexpected `]` — nothing valid can appear here", "check for a missing bracket, quote, or value"},

@@ -1,4 +1,4 @@
-// boru.js — a CodeMirror 6 language mode for BORU (the concatenative,
+// boru.js — a CodeMirror 6 language mode for boru (the concatenative,
 // strongly-typed query language). Implemented as a StreamLanguage so it needs
 // no Lezer grammar build step and stays dependency-light.
 //
@@ -7,7 +7,7 @@
 //   * boru()       — a convenience extension array [boruLanguage, ...]
 //
 // This mode mirrors the vocabulary and faces of the reference Emacs mode
-// (editors/emacs/boru-mode.el) and also drives the BORU web playground.
+// (editors/emacs/boru-mode.el) and also drives the boru web playground.
 //
 // The token classifier recognises:
 //   - line comments  (`# ...`  and  `// ...`)
@@ -32,7 +32,7 @@
 import { StreamLanguage } from "@codemirror/language";
 
 // --- Vocabulary -----------------------------------------------------------
-// Kept in sync with editors/emacs/boru-mode.el and the BORU lexical spec.
+// Kept in sync with editors/emacs/boru-mode.el and the boru lexical spec.
 
 const KEYWORDS = new Set([
   "def", "undef", "var", "fn", "afn", "class", "surface", "refine", "gen",
@@ -154,7 +154,7 @@ const parser = {
       inBlockComment: false, // inside a /* ... */ run
       inString: null,        // active quote char for a multi-line string, or null
       // Template-string interpolation nesting. When > 0 we are inside a
-      // `${ ... }` embedded expression and tokenise BORU normally, tracking
+      // `${ ... }` embedded expression and tokenise boru normally, tracking
       // `{`/`}` depth so the closing `}` returns us to template text.
       templateStack: [],     // stack of interpolation `{` depths, per open backtick
       interpDepth: 0,        // brace depth inside the current `${ ... }`
@@ -335,7 +335,7 @@ const parser = {
 // Scan template-string text starting at (or continuing into) a backtick run.
 // Emits "string" for literal text and, on encountering `${`, opens an
 // interpolation by setting interpDepth and returning the `${` as an operator so
-// the embedded expression is tokenised as ordinary BORU code.
+// the embedded expression is tokenised as ordinary boru code.
 function scanTemplate(stream, state) {
   let escaped = false;
   while (!stream.eol()) {
@@ -372,13 +372,13 @@ function scanTemplate(stream, state) {
 // --- Public API ------------------------------------------------------------
 
 /**
- * The BORU language, as a CodeMirror StreamLanguage.
+ * The boru language, as a CodeMirror StreamLanguage.
  * @type {import("@codemirror/language").StreamLanguage<unknown>}
  */
 export const boruLanguage = StreamLanguage.define(parser);
 
 /**
- * Convenience extension: the BORU language plus room for companion extensions
+ * Convenience extension: the boru language plus room for companion extensions
  * (e.g. a highlight style) added by callers.
  * @returns {import("@codemirror/state").Extension[]}
  */

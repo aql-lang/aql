@@ -23,7 +23,7 @@ func TestRegistryDebugTraceHook(t *testing.T) {
 		t.Fatal("the hook must fire on a pooled sub-run")
 	}
 
-	// NewTop (the CallBORU / top-level constructor) inherits it too.
+	// NewTop (the CallBoru / top-level constructor) inherits it too.
 	fires = 0
 	if _, err := NewTop(r).Run([]Value{NewInteger(2)}); err != nil {
 		t.Fatal(err)
@@ -261,10 +261,10 @@ func TestRunningEngineChain(t *testing.T) {
 	}
 }
 
-// TestCallBORUNamedLabelsEngine pins the backtrace label: the body
+// TestCallBoruNamedLabelsEngine pins the backtrace label: the body
 // sub-engine of a named call carries the name in EngineState.Label
-// while it runs; CallBORU (the unnamed form) leaves it empty.
-func TestCallBORUNamedLabelsEngine(t *testing.T) {
+// while it runs; CallBoru (the unnamed form) leaves it empty.
+func TestCallBoruNamedLabelsEngine(t *testing.T) {
 	r := poolTestRegistry(t)
 	var labels []string
 	r.SetDebugTraceFrom(func(_ *Registry, _, _ int, _ []Value, _ string) {
@@ -274,8 +274,8 @@ func TestCallBORUNamedLabelsEngine(t *testing.T) {
 			}
 		}
 	})
-	sig := &FnSig{Impl: BORU([]Value{NewInteger(7)})}
-	if _, err := r.CallBORUNamed(sig, nil, nil, "zz-label"); err != nil {
+	sig := &FnSig{Impl: Boru([]Value{NewInteger(7)})}
+	if _, err := r.CallBoruNamed(sig, nil, nil, "zz-label"); err != nil {
 		t.Fatal(err)
 	}
 	found := false
@@ -289,10 +289,10 @@ func TestCallBORUNamedLabelsEngine(t *testing.T) {
 	}
 	// The unnamed form stays label-free.
 	labels = nil
-	if _, err := r.CallBORU(sig, nil, nil); err != nil {
+	if _, err := r.CallBoru(sig, nil, nil); err != nil {
 		t.Fatal(err)
 	}
 	if len(labels) != 0 {
-		t.Errorf("CallBORU must not label; got %v", labels)
+		t.Errorf("CallBoru must not label; got %v", labels)
 	}
 }

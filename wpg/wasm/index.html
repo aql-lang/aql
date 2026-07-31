@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
-<title>BORU REPL</title>
+<title>boru REPL</title>
 <style>
   :root {
     --bg: #1e1e2e;
@@ -241,7 +241,7 @@
 </head>
 <body>
 <header>
-  <h1>BORU REPL</h1>
+  <h1>boru REPL</h1>
   <span class="subtitle">concatenative query language</span>
   <span id="buildinfo" title="latest commit / tag / date">__BUILD_INFO__</span>
   <span id="status" class="status-loading">loading wasm...</span>
@@ -249,7 +249,7 @@
 
 <div id="repl-view">
   <div id="output">
-    <div class="line line-info">Loading BORU engine...</div>
+    <div class="line line-info">Loading boru engine...</div>
   </div>
   <div class="hint" id="hint"></div>
   <div id="input-area">
@@ -519,14 +519,14 @@
   window.__boruReady = function() {
     ready = true;
     clearOutput();
-    addLine('line-info', 'BORU Web REPL ready. Type expressions and press Enter.');
+    addLine('line-info', 'boru Web REPL ready. Type expressions and press Enter.');
     addLine('line-info', 'Examples: 1 add 2  |  "hello" upper  |  def double [dup add]  |  5 double');
     status.textContent = 'ready';
     status.className = 'status-ready';
     input.disabled = false;
     runBtn.disabled = false;
     historyBtn.disabled = false;
-    input.placeholder = 'Enter BORU expression...';
+    input.placeholder = 'Enter boru expression...';
     input.focus();
   };
 
@@ -557,7 +557,7 @@
     }).catch(function(err) {
       status.textContent = 'error';
       status.className = 'status-error';
-      addLine('line-error', 'Failed to load BORU WASM: ' + err.message);
+      addLine('line-error', 'Failed to load boru WASM: ' + err.message);
     });
   }
 

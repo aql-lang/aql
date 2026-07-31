@@ -154,7 +154,7 @@ func TestGuardDefUnusedDiagnosticHasPosition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check("def unused-thing 1\n42")
 	if err != nil {
 		t.Fatalf("check: %v", err)

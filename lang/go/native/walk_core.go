@@ -3,7 +3,7 @@ package native
 import "strconv"
 
 // The core `walk` word — a generic, iterative, visit-only traversal of ANY
-// BORU data structure.
+// boru data structure.
 //
 //	walk <options> <data> <descend> [<ascend>]
 //
@@ -122,7 +122,7 @@ func walkModeValue(v Value) (string, bool) {
 
 // walkClassifyHook classifies a hook arg once, before the traversal loop —
 // mirroring newMapBody (native_map_iter.go): a compiled closure runs via
-// InvokeBody, a lambda Function is called via CallBORU, and anything else must
+// InvokeBody, a lambda Function is called via CallBoru, and anything else must
 // be a concrete quotation list run as a sub-program.
 func walkClassifyHook(r *Registry, body Value) (walkHook, error) {
 	h := walkHook{present: true}
@@ -162,7 +162,7 @@ func callWalkHook(r *Registry, h walkHook, arg Value) error {
 		if sig == nil {
 			return r.BoruError("walk_error", "walk: no matching hook signature", "walk")
 		}
-		_, err := r.CallBORU(sig, []Value{arg}, h.caps)
+		_, err := r.CallBoru(sig, []Value{arg}, h.caps)
 		return err
 	}
 	if h.closure {

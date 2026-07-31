@@ -12,7 +12,7 @@ import (
 // t7writeCorruptIndex drops an unparseable vaults.jsonic at the home index path.
 func t7writeCorruptIndex(t *testing.T, home string) {
 	t.Helper()
-	if err := os.MkdirAll(homeBORUDir(home), 0o700); err != nil {
+	if err := os.MkdirAll(homeBoruDir(home), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(vaultIndexPath(home), []byte("{ this is not json"), 0o600); err != nil {
@@ -35,7 +35,7 @@ func TestT7_LoadVaultIndexReadError(t *testing.T) {
 // TestT7_LoadVaultIndexVersionDefault drives the "version 0 -> default" arm.
 func TestT7_LoadVaultIndexVersionDefault(t *testing.T) {
 	home := t.TempDir()
-	if err := os.MkdirAll(homeBORUDir(home), 0o700); err != nil {
+	if err := os.MkdirAll(homeBoruDir(home), 0o700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(vaultIndexPath(home), []byte(`{"vaults":[]}`), 0o600); err != nil {
@@ -117,7 +117,7 @@ func TestT7_EnumerateBackendFill(t *testing.T) {
 	home := testHome(t)
 
 	// Scanned-and-indexed: metadata without a backend, index with one.
-	def := homeBORUDir(home)
+	def := homeBoruDir(home)
 	if err := os.MkdirAll(def, 0o700); err != nil {
 		t.Fatal(err)
 	}

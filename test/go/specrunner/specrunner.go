@@ -8,7 +8,7 @@
 // form for expected-error rows).
 //
 // The caller supplies a Run function that does the parse-and-evaluate
-// step. Rendering lives in `eng.Canon`, which emits canonical BORU source
+// step. Rendering lives in `eng.Canon`, which emits canonical boru source
 // — a form that re-parses to the same stack.
 package specrunner
 

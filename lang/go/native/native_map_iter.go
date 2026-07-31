@@ -107,7 +107,7 @@ func (mb mapBody) callLambda(reg *Registry, args []Value) (Value, bool, error) {
 	if sig == nil {
 		return Value{}, false, fmt.Errorf("no matching lambda signature for %d argument(s)", len(args))
 	}
-	res, err := reg.CallBORU(sig, args, mb.caps)
+	res, err := reg.CallBoru(sig, args, mb.caps)
 	if err != nil {
 		return Value{}, false, err
 	}

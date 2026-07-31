@@ -1,11 +1,11 @@
 # AOT-COMPILE
 
 Design for **ahead-of-time (AOT) bytecode compilation baked into the binary**:
-at Go build time, compile the BORU-implemented core modules (`boru:sift`,
-`boru:repl`, `boru:vault-tui`, and future BORU modules) to bytecode, store the
+at Go build time, compile the boru-implemented core modules (`boru:sift`,
+`boru:repl`, `boru:vault-tui`, and future boru modules) to bytecode, store the
 compiled form inside the `boru` binary, and load it instead of parse+interpret
 at startup — so those modules run on the VM, not the tree-walking interpreter.
-The **same mechanism generalizes to user BORU code built into a binary** via
+The **same mechanism generalizes to user boru code built into a binary** via
 `boru build`.
 
 This is a **design RFC** — no implementation here. It builds on the landed
@@ -25,7 +25,7 @@ verified against the code; the sharp edges that survived are called out inline.
 > version-mismatch fallback to ~never; the tag is what *guarantees* safety, so
 > this is a difference of *degree* from a persisted `.boruc`, not of kind (§1);
 > (3) the enabling change is **teaching fn-dispatch to prefer a compiled unit**
-> — today *nothing* dispatches a BORU-bodied fn to its compiled ref under an
+> — today *nothing* dispatches a boru-bodied fn to its compiled ref under an
 > interpreted top-level, not even callbacks; stamping and AOT merely *feed*
 > that dispatch (§4, the load-bearing section);
 > (4) the compiled form is the **existing detached stamper's output**, moved to
@@ -83,7 +83,7 @@ DX cost that a `go generate` bake (§5) does not impose on users.
 
 ## 2. The performance model — and the reason nothing is fast today
 
-**What runs today.** The BORU-implemented modules parse their embedded `.boru`
+**What runs today.** The boru-implemented modules parse their embedded `.boru`
 source once per process (`sync.Once` around `ParseFunc`, `sift.go:48`) and
 install their `def … fn` bindings by interpreting the body
 (`native.New(modReg).Run(tokens)`, `sift.go:95-99`). They then run on the
@@ -91,7 +91,7 @@ install their `def … fn` bindings by interpreting the body
 path that would use a compiled unit even if one existed*:
 
 - The interpreter's ordinary fn-dispatch (`execFnDefLiteral` `engine.go:4927+`,
-  the sub-registry module-fn path `engine.go:5128-5227`, `CallBORU`
+  the sub-registry module-fn path `engine.go:5128-5227`, `CallBoru`
   `registry.go:1880`) contains **no** `CompiledRef`/`.Compiled` read
   (grep-confirmed). A normally-dispatched module word (`Sift.parse …`) runs its
   token body regardless of any attached unit.
@@ -103,7 +103,7 @@ path that would use a compiled unit even if one existed*:
   increments `interpRunDepth` for the whole activation (`registry.go:440-450`),
   and the `boru:tui` driver fires `update`/`view` via `InvokeCallback` *mid-run*
   on that same registry (`tui_run.go:375,418`). So `canHostVM()==false`,
-  `nestedRunner==nil` → `invokeCompiledUnit` returns `ran=false` → `CallBORU`,
+  `nestedRunner==nil` → `invokeCompiledUnit` returns `ran=false` → `CallBoru`,
   the interpreter (`invoke.go:88,102-117`).
 
 **The consequence sets up the whole design:** `boru vault -i --boru` runs via
@@ -141,7 +141,7 @@ codec.
 ### 3.1 The unit: a co-compiled multi-unit `*Program`, attached fail-safe
 
 `StampDetachedSig` compiles one fn body and attaches the result as a
-`CompiledFnRef` on the signature's `BORUImpl.Compiled` (`stamp_runtime.go:35-171`,
+`CompiledFnRef` on the signature's `BoruImpl.Compiled` (`stamp_runtime.go:35-171`,
 `sigimpl.go:51-62`); `StampFnValue` loops every signature independently, and a
 body that refuses **silently stays interpreted** — per-signature, fail-safe
 (`stamp_runtime.go:231-266`).
@@ -171,7 +171,7 @@ The `CompiledRef` consumers today are `InvokeCallback` (`invoke.go:66`), `spawn`
 (which reads the ref and calls `RunUnit` directly, `native_process.go:218`),
 `await` (`native_temporal_await.go:47`), and the stampers; `RunUnit`
 (`vm.go:244`) is the *entry* that starts a run from `ref.Prog`, not a per-call
-opcode. AOT reuses this attach point: set `BORUImpl.Compiled = CompiledFnRef{Prog,
+opcode. AOT reuses this attach point: set `BoruImpl.Compiled = CompiledFnRef{Prog,
 Unit, Captures}` on each baked root sig.
 
 **Freshness — the one place AOT is strictly weaker than JIT stamping.** A
@@ -246,7 +246,7 @@ foreign sub-registries** (`bytecode.go:519-524,1052-1062`). The loader must
 re-resolve **each reference against its owning module's live sub-registry across
 the entry's full import closure**, which imposes a **load-ordering constraint**:
 a dependent module's baked references can only be re-resolved after its imports
-are themselves loaded (and, if an import is BORU-implemented like `boru:minilang`,
+are themselves loaded (and, if an import is boru-implemented like `boru:minilang`,
 itself loaded — baked or interpreted). The loader walks imports first, exactly
 as `import` resolution does today.
 
@@ -258,7 +258,7 @@ Per §2, *no* dispatch path uses a fn's compiled ref under an interpreted
 top-level — not ordinary dispatch, and not callbacks fired mid-`RunInterp`. So
 the single change that unlocks every tier is: **make the fn-dispatch path prefer
 `sig.CompiledRef()` when it can host the VM**, routing through
-`invokeCompiledUnit`/`RunUnit` with the same `internal_error → CallBORU`
+`invokeCompiledUnit`/`RunUnit` with the same `internal_error → CallBoru`
 fail-safe and effect fence `InvokeCallback` already uses (`invoke.go:88-117`).
 Two sub-parts:
 

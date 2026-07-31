@@ -1,7 +1,7 @@
 # Binary (Bitwise) Operations
 
-Proposal and implementation for BORU's bitwise-operator surface. The
-core seven operators are BORU built-ins; the more specialized routines
+Proposal and implementation for boru's bitwise-operator surface. The
+core seven operators are boru built-ins; the more specialized routines
 live in the `boru:bin` module.
 
 ## Naming convention
@@ -17,7 +17,7 @@ live in the `boru:bin` module.
 
 ## Argument convention
 
-Two-operand binary ops follow BORU's standard swap-form convention
+Two-operand binary ops follow boru's standard swap-form convention
 (`args[1] OP args[0]`). For shifts, the canonical surface reads as
 "value shifted by count":
 
@@ -37,7 +37,7 @@ bnot -1       => 0
 
 ## Integer width
 
-BORU `Integer` is signed `int64`. All bitwise ops operate on 64-bit
+boru `Integer` is signed `int64`. All bitwise ops operate on 64-bit
 twos-complement representation:
 
 - `bsr` is **arithmetic** (sign-extending): the high bit is
@@ -151,9 +151,9 @@ The chosen surface covers the C operator set + the Go `math/bits`
 package + the Java `Integer` static methods. Extras typically
 considered but **deliberately excluded** for now:
 
-- Arbitrary-width / arbitrary-precision: BORU Integer is fixed
+- Arbitrary-width / arbitrary-precision: boru Integer is fixed
   `int64`; bigint is a separate proposal.
-- `wrapping_*` / `checked_*`: BORU's Integer arithmetic already
+- `wrapping_*` / `checked_*`: boru's Integer arithmetic already
   wraps on overflow (no panic); explicit variants add API surface
   without new capability.
 - Saturating shifts: niche; add when needed.

@@ -43,10 +43,10 @@ func (s *server) buildHover(src string, pos Position) *Hover {
 	}
 }
 
-// wordAt locates the BORU "word" (run of identifier chars) covering
+// wordAt locates the boru "word" (run of identifier chars) covering
 // the given LSP Position in src. Returns the word, its range, and
-// true on a hit. BORU identifiers can contain letters, digits, and
-// the characters typical of BORU words (e.g. `.`, `_`, `-`); we
+// true on a hit. boru identifiers can contain letters, digits, and
+// the characters typical of boru words (e.g. `.`, `_`, `-`); we
 // adopt a permissive isWordChar so dotted names like "Color.hex2rgb"
 // hover as one unit.
 func wordAt(src string, pos Position) (string, Range, bool) {
@@ -98,7 +98,7 @@ func wordAt(src string, pos Position) (string, Range, bool) {
 	}, true
 }
 
-// isWordChar reports whether c is part of a BORU word. We accept
+// isWordChar reports whether c is part of a boru word. We accept
 // the union of identifier chars across the languages: ASCII
 // alphanumerics, '_', '-', and '.' (for namespaced words like
 // "Color.hex2rgb"). The set is deliberately a superset — the

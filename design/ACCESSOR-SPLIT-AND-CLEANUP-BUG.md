@@ -58,7 +58,7 @@ frame's `undef comp` tail then popped the only remaining entry, leaving
 The fix is at the **install** site, not the teardown: a new
 `InstallFrameBinding` performs a lexical **shadow** (a plain push that
 keeps the outer entry) and is used by all per-call binding sites
-(`buildFnBodyHandler`, `execFnDefSig`, `CallBORU`, and the macro
+(`buildFnBodyHandler`, `execFnDefSig`, `CallBoru`, and the macro
 expander). The existing `undef`/`DefCleanup` teardown is then already
 depth-correct (`comp` reaches depth 2, `undef` pops exactly one). No
 teardown rewrite, no TCO-twin change — the eager

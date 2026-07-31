@@ -1,4 +1,4 @@
-# BORU Language Specification: generics angle-bracket sugar — Box<T>
+# boru Language Specification: generics angle-bracket sugar — Box<T>
 # Format: input<TAB>expected<TAB>description
 #
 # `<` and `>` are GENERAL-PURPOSE parser tokens (D14): the generics

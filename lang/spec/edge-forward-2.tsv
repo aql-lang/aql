@@ -1,4 +1,4 @@
-# BORU Language Specification: forward-collection edge cases II —
+# boru Language Specification: forward-collection edge cases II —
 # per-call-site modifiers, statement-boundary speculation, splice and
 # quote interaction, BarrierPos shapes, deep paren nesting.
 # Format: input<TAB>expected<TAB>description

@@ -1,5 +1,5 @@
 # ============================================================================
-# boru:cli — conventional command-line argument parsing, in BORU.
+# boru:cli — conventional command-line argument parsing, in boru.
 #
 # design/CLI-PROGRAMS.0.md §8 (the surface) and design/CLI-PROGRAMS.1.md §2
 # (the Cli.dispatch / Cli.main split). The runtime surface for invocation is

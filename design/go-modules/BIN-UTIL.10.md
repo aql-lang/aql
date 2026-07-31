@@ -40,7 +40,7 @@ flat `BinUtil.*`).
   supporting true binary (`someBytes BinUtil.sha256`).
 - **Digests and raw binary results are `Bytes`.** Pipe through
   `hex-encode` / `base64-encode` for display. This is forced by the type
-  system: a 32-byte SHA-256 digest and a CRC64 value both **exceed BORU's
+  system: a 32-byte SHA-256 digest and a CRC64 value both **exceed boru's
   `int64` `Integer`**, so they cannot be Integers.
 - **Decoders return `Bytes`**; core `to-text` converts back to String when wanted.
 - Top-first sig order; all inner native sigs `BarrierPos: -1`; invoked
@@ -248,7 +248,7 @@ BinUtil.uuid-v7                                     # "0190a1b2-..." (sortable)
 - **A dedicated `random` policy scope vs reusing a global cap** — proposed
   as a new scope; confirm during implementation against the policy schema.
 - **Streaming hashes** (incremental `hash.Hash` over large inputs) — out
-  of scope; the one-shot `Sum*` form covers the data sizes BORU handles.
+  of scope; the one-shot `Sum*` form covers the data sizes boru handles.
 - **`google/uuid` dependency** — adds an external module; note the
   `GOPROXY=direct` fallback (`lang/go/CLAUDE.md` "Dependencies").
 

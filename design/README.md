@@ -87,7 +87,7 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   reports.
 - `STDLIB-COVERAGE.10.md`, `IMPLEMENTATION-STATUS.10.md` — coverage/status
   snapshots (inherently point-in-time).
-- Comparative "X-in-BORU" applicability studies (idea evaluations, not
+- Comparative "X-in-boru" applicability studies (idea evaluations, not
   specs): `amop-in-boru-report.0.md`,
   `effect-oriented-programming-in-boru-report.0.md`,
   `elixir-types-in-boru-report.10.md`, `fsharp-units-in-boru-report.0.md`,

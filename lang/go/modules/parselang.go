@@ -46,7 +46,7 @@ import (
 // its src; a `{file:…}` map raises `parse_file_unsupported` (deferred in
 // v1). Every framework-built parser (the built-in kinds, NewParseLangFn
 // values, Parse.parser values) gets resolution for free — parseSourceShell
-// resolves the source before the parser body runs. A hand-written BORU
+// resolves the source before the parser body runs. A hand-written boru
 // parser fn receives the source as given and may call `ParseLang.source`
 // to normalise it.
 
@@ -129,7 +129,7 @@ func BuildParseLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// ---- out-of-band: source ------------------------------------------
 	// ParseLang.source <source> resolves a String or {src:…} Source map to
-	// a String (so BORU parsers can opt into the same normalisation host
+	// a String (so boru parsers can opt into the same normalisation host
 	// parsers get automatically).
 	subReg.RegisterNativeFunc(native.NativeFunc{
 		Name: "parselang-source",
@@ -499,7 +499,7 @@ func tabnasParserSpecs() []ParseLangSpec {
 
 // aontuParserSpec is the built-in aontu parse kind. Its handler decodes the
 // resolved source via native.AontuParse and converts the generic result
-// (map[string]any / []any / scalars) to a BORU Node of Maps and Lists; a
+// (map[string]any / []any / scalars) to a boru Node of Maps and Lists; a
 // decode or unification failure raises [boru/parse_syntax_error].
 func aontuParserSpec() ParseLangSpec {
 	return ParseLangSpec{
@@ -526,7 +526,7 @@ func aontuParserSpec() ParseLangSpec {
 
 // tabnasParseHandler builds the ParseLang for one tabnas kind: it runs
 // the decoder over the (already-resolved) source string and converts the
-// result to a BORU Value. A decode failure raises [boru/parse_syntax_error].
+// result to a boru Value. A decode failure raises [boru/parse_syntax_error].
 func tabnasParseHandler(kind string, parse native.TabnasParser, convert func(any) native.Value) ParseLang {
 	target := "parse_" + kind
 	return func(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {

@@ -7,12 +7,12 @@ package eng
 //   - GoImpl — a Go `Handler` plus its dispatch knobs: a native word, a
 //     usurp/force wrapper, the synthetic fallback, or a captured-native-fn
 //     bound to a name.
-//   - BORUImpl — a BORU `Body` of tokens: an installed `def fn` body, an
+//   - BoruImpl — a boru `Body` of tokens: an installed `def fn` body, an
 //     anonymous lambda, or a module-ref trivial-delegation (`Body=[Word(inner)]`).
 //
 // The discriminator is `dispatchHandler() == nil` — nil selects the
-// body-splice path (a module-ref / un-installed lambda). An INSTALLED BORU fn
-// is still a `BORUImpl`, but carries a derived body-splicing handler
+// body-splice path (a module-ref / un-installed lambda). An INSTALLED boru fn
+// is still a `BoruImpl`, but carries a derived body-splicing handler
 // (buildFnBodyHandler) in `dispatch`, so its `dispatchHandler()` is non-nil.
 //
 // `normalizeSig` synthesizes `Impl` from the flat authoring fields at the
@@ -43,12 +43,12 @@ type GoImpl struct {
 func (g *GoImpl) dispatchHandler() Handler { return g.Handler }
 func (g *GoImpl) sigImpl()                 {}
 
-// BORUImpl is the implementation of an installed BORU fn body, an anonymous
+// BoruImpl is the implementation of an installed boru fn body, an anonymous
 // lambda, or a module-ref delegation. `dispatch` is the derived body-splicer
 // (buildFnBodyHandler) for an installed fn, or nil for a module-ref /
 // un-installed lambda — in which case execFnDefLiteral splices `Body` directly.
 // A nil `dispatch` reproduces today's `Handler==nil` splice discriminator.
-type BORUImpl struct {
+type BoruImpl struct {
 	Body     []Value
 	FnFrame  *FnFrameMeta
 	dispatch Handler
@@ -61,12 +61,12 @@ type BORUImpl struct {
 	Compiled *CompiledFnRef
 }
 
-func (a *BORUImpl) dispatchHandler() Handler { return a.dispatch }
-func (a *BORUImpl) sigImpl()                 {}
+func (a *BoruImpl) dispatchHandler() Handler { return a.dispatch }
+func (a *BoruImpl) sigImpl()                 {}
 
 // --- Authoring constructors. Native words and internal Go-handler sites write
 // `Impl: Go(handler, opts...)`; module-refs / un-installed bodies write
-// `Impl: BORU(body)`. These are the ONLY way an implementation is spelled once
+// `Impl: boru(body)`. These are the ONLY way an implementation is spelled once
 // the flat authoring fields are retired. ---
 
 // GoOpt sets an optional dispatch knob on a GoImpl built by Go.
@@ -98,11 +98,11 @@ func CheckFullStack(fn CheckFullStackFunc) GoOpt {
 	return func(g *GoImpl) { g.CheckFullStackFn = fn }
 }
 
-// BORU builds the implementation of a module-ref trivial delegation or an
+// boru builds the implementation of a module-ref trivial delegation or an
 // un-installed lambda body — a token Body spliced by execFnDefLiteral (dispatch
-// nil, no frame). InstallFnDef / compileFnDefLiteral build `&BORUImpl{…}`
+// nil, no frame). InstallFnDef / compileFnDefLiteral build `&BoruImpl{…}`
 // directly instead, so they can attach the derived body-splicer and frame meta.
-func BORU(body []Value) *BORUImpl { return &BORUImpl{Body: body} }
+func Boru(body []Value) *BoruImpl { return &BoruImpl{Body: body} }
 
 // --- Signature accessors: the SINGLE way every reader reaches the run
 // implementation, all reading the authoritative Impl. A nil Impl means the
@@ -110,13 +110,13 @@ func BORU(body []Value) *BORUImpl { return &BORUImpl{Body: body} }
 // fixture) — dispatchHandler() is nil and the rest return their zero. ---
 
 // DispatchHandler returns the Go function execMatch invokes for this sig, or
-// nil when the sig is dispatched by splicing its BORU Body (module ref /
-// un-installed lambda) or has no implementation. It is also the native-vs-BORU
+// nil when the sig is dispatched by splicing its boru Body (module ref /
+// un-installed lambda) or has no implementation. It is also the native-vs-Boru
 // discriminator, and the exported read surface for external inspectors that
 // previously read the Handler field. dispatchHandler is the internal spelling.
 func (s *Signature) DispatchHandler() Handler { return s.dispatchHandler() }
 
-// Body is the exported read surface for a signature's BORU token body (the
+// Body is the exported read surface for a signature's boru token body (the
 // lang-layer introspection/behaviour words that previously read the Body
 // field). nil for a Go sig / no impl. body is the internal spelling.
 func (s *Signature) Body() []Value { return s.body() }
@@ -124,7 +124,7 @@ func (s *Signature) Body() []Value { return s.body() }
 // DeclaresCheckReturns reports whether this signature tells the checker
 // what it produces: a declared Returns slice (an empty non-nil slice is a
 // valid "produces nothing"), a check-mode ReturnsFn, a full-stack
-// CheckFullStack shape function, or a BORU body (whose returns the
+// CheckFullStack shape function, or a boru body (whose returns the
 // analyser derives itself via AnalyseFnBody / the installed ReturnsFn). A
 // signature declaring NONE of these hits the missing_returns fallback at
 // every call site — the coverage gate
@@ -159,29 +159,29 @@ func DispatchSig(sig *Signature, args []Value, r *Registry) ([]Value, error) {
 	return h(args, nil, nil, r)
 }
 
-// body returns the sig's BORU token body (nil for a Go sig / no impl).
+// body returns the sig's boru token body (nil for a Go sig / no impl).
 func (s *Signature) body() []Value {
-	if a, ok := s.Impl.(*BORUImpl); ok {
+	if a, ok := s.Impl.(*BoruImpl); ok {
 		return a.Body
 	}
 	return nil
 }
 
 // CompiledRef returns the sig's durable compiled-unit reference, or nil when
-// the body was never compiled (a Go sig, an un-armed BORU body, a refused body).
+// the body was never compiled (a Go sig, an un-armed boru body, a refused body).
 // It is the read surface the callback-invocation seam consults to choose the VM
-// path over CallBORU.
+// path over CallBoru.
 func (s *Signature) CompiledRef() *CompiledFnRef {
-	if a, ok := s.Impl.(*BORUImpl); ok {
+	if a, ok := s.Impl.(*BoruImpl); ok {
 		return a.Compiled
 	}
 	return nil
 }
 
-// fnFrame returns the BORU fn-frame metadata stamped on an installed body /
+// fnFrame returns the boru fn-frame metadata stamped on an installed body /
 // anonymous lambda (nil for Go sigs and module refs).
 func (s *Signature) fnFrame() *FnFrameMeta {
-	if a, ok := s.Impl.(*BORUImpl); ok {
+	if a, ok := s.Impl.(*BoruImpl); ok {
 		return a.FnFrame
 	}
 	return nil

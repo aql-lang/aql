@@ -1,4 +1,4 @@
-// Command boru is the thin binary entrypoint for the BORU CLI.
+// Command boru is the thin binary entrypoint for the boru CLI.
 //
 // The CLI implementation lives in the parent package
 // (github.com/boru-lang/boru/cmd/go) as a library so it can be imported

@@ -403,7 +403,7 @@ func (s *mcpServer) callTool(req *mcpRequest) *mcpResponse {
 
 	// Debit the capability the same way the proxy does, so call and
 	// cost quotas are enforced across MCP invocations too.
-	cost := parseCostHeader(resp.Header.Get("X-BORU-Vault-Cost-Cents"))
+	cost := parseCostHeader(resp.Header.Get("X-Boru-Vault-Cost-Cents"))
 	if err := recordCapabilityUse(s.homeDir, capab.ID, cost); err != nil {
 		fmt.Fprintf(s.stderr, "vault mcp: persisting capability counters: %s\n", err)
 	}

@@ -11,7 +11,7 @@ import (
 // stored-param-body unit (Signature.StoredBodies → compileStoredParamBody)
 // and runs nested on the VM via InvokeCallback. The sharp pin: ITERATION
 // COUNT ADDS NO INTERPRETER ENTRIES — every unattributed entry left is
-// module-load BORU (invariant in the run count).
+// module-load boru (invariant in the run count).
 //
 // The gen body here is `[ 3 4 add ]` (a compilable constant expression), NOT
 // a direct rand call `[r.int 1 9]`: a member-fn read from the opaque Map
@@ -59,10 +59,10 @@ func TestCheckPropIterationsAddNoInterpEntries(t *testing.T) {
 		t.Errorf("interpreter entries scale with the iteration count — the bodies are NOT running as units:\n  2 runs:  %v\n  60 runs: %v", few, many)
 	}
 	// The per-iteration seams specifically must contribute nothing: before
-	// the stored-param-body units the census grew by one CallBORU per body
+	// the stored-param-body units the census grew by one CallBoru per body
 	// per iteration.
-	if few["CallBORU"] != 0 || many["CallBORU"] != 0 {
-		t.Errorf("per-iteration CallBORU entries present (2 runs: %d, 60 runs: %d) — the throwaway-sig path is back", few["CallBORU"], many["CallBORU"])
+	if few["CallBoru"] != 0 || many["CallBoru"] != 0 {
+		t.Errorf("per-iteration CallBoru entries present (2 runs: %d, 60 runs: %d) — the throwaway-sig path is back", few["CallBoru"], many["CallBoru"])
 	}
 }
 
@@ -105,7 +105,7 @@ res get "ok"`
 
 // TestCheckPropCompiledParity — the compiled and interpreted pipelines agree
 // on check-prop results across the pass / fail / generator-error shapes (the
-// units must preserve CallBORU frame semantics exactly).
+// units must preserve CallBoru frame semantics exactly).
 func TestCheckPropCompiledParity(t *testing.T) {
 	cases := []string{
 		`import "boru:test" end

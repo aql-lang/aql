@@ -40,7 +40,7 @@ type Server struct {
 }
 
 // NewServer builds an exec Server bound to addr ("host:port"). The
-// registry path (may be empty) is forwarded to every BORU instance
+// registry path (may be empty) is forwarded to every boru instance
 // the server creates per request. The policy (may be nil) is fixed
 // at construction; clients cannot override it via the request body.
 func NewServer(addr, registry string, pol policy.Policy) (*Server, error) {
@@ -77,7 +77,7 @@ func (s *Server) UsesStdio() bool { return false }
 // Addr returns the configured (or bound, post-Start) listen address.
 func (s *Server) Addr() string { return s.addr }
 
-// Registry returns the registry path forwarded to BORU instances.
+// Registry returns the registry path forwarded to boru instances.
 func (s *Server) Registry() string { return s.registry }
 
 // Start binds the listener and serves requests until ctx is canceled

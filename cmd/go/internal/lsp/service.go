@@ -56,7 +56,7 @@ func NewStdioServer(stdin io.Reader, stdout, stderr io.Writer) *Server {
 // current one closes.
 //
 // host should default to a loopback address: the server evaluates
-// arbitrary BORU buffers, so exposing it on all interfaces would let any
+// arbitrary boru buffers, so exposing it on all interfaces would let any
 // reachable client drive the parser/evaluator unauthenticated. An empty
 // host falls back to 127.0.0.1 rather than the all-interfaces ":port".
 func NewTCPServer(host string, port int, stderr io.Writer) *Server {

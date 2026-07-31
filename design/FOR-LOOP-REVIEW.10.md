@@ -1,4 +1,4 @@
-# BORU `for` Word — Design Review
+# boru `for` Word — Design Review
 
 ## Current Specification (SAMPLES.md)
 

@@ -27,7 +27,7 @@ func envFake() capabilities.EnvOps {
 	}}
 }
 
-func runEnv(t *testing.T, a *lang.BORU, src string) any {
+func runEnv(t *testing.T, a *lang.Boru, src string) any {
 	t.Helper()
 	res, err := a.Run(`import "boru:io"  ` + src)
 	if err != nil {
@@ -39,7 +39,7 @@ func runEnv(t *testing.T, a *lang.BORU, src string) any {
 	return res[0]
 }
 
-func newEnvBORU(t *testing.T, opts lang.Options) *lang.BORU {
+func newEnvBoru(t *testing.T, opts lang.Options) *lang.Boru {
 	t.Helper()
 	a, err := lang.New(opts)
 	if err != nil {
@@ -50,7 +50,7 @@ func newEnvBORU(t *testing.T, opts lang.Options) *lang.BORU {
 
 // The lookup form returns the installed value.
 func TestIOEnvLookup(t *testing.T) {
-	a := newEnvBORU(t, lang.Options{Env: envFake()})
+	a := newEnvBoru(t, lang.Options{Env: envFake()})
 	if got := runEnv(t, a, `IO.env "HOME"`); got != "/home/ada" {
 		t.Errorf(`IO.env "HOME" = %#v, want /home/ada`, got)
 	}
@@ -59,7 +59,7 @@ func TestIOEnvLookup(t *testing.T) {
 // "" is a value, not absence: it must come back as the empty String and
 // NOT as none, or a caller can never tell `X=` from an unset X.
 func TestIOEnvEmptyValueIsNotUnset(t *testing.T) {
-	a := newEnvBORU(t, lang.Options{Env: envFake()})
+	a := newEnvBoru(t, lang.Options{Env: envFake()})
 	if got := runEnv(t, a, `IO.env "EMPTY"`); got != "" {
 		t.Errorf(`IO.env "EMPTY" = %#v, want ""`, got)
 	}
@@ -73,7 +73,7 @@ func TestIOEnvEmptyValueIsNotUnset(t *testing.T) {
 
 // The bare form snapshots everything visible, sorted by name.
 func TestIOEnvAll(t *testing.T) {
-	a := newEnvBORU(t, lang.Options{Env: envFake()})
+	a := newEnvBoru(t, lang.Options{Env: envFake()})
 	if got := runEnv(t, a, `size (IO.env-all)`); got != int64(4) {
 		t.Errorf("size (IO.env-all) = %#v, want 4", got)
 	}
@@ -94,7 +94,7 @@ func TestIOEnvAll(t *testing.T) {
 // that choice (a paren expression resolving to a function word does not
 // induce a call), but every call form still has to work, so this stays.
 func TestIOEnvCallForms(t *testing.T) {
-	a := newEnvBORU(t, lang.Options{Env: envFake()})
+	a := newEnvBoru(t, lang.Options{Env: envFake()})
 	for _, src := range []string{
 		`IO.env "HOME"`,          // forward form (canonical)
 		`"HOME" IO.env`,          // stack form
@@ -113,7 +113,7 @@ func TestIOEnvCallForms(t *testing.T) {
 // No installation is not "read the real process environment": the runtime
 // never reaches for ambient state the host did not hand it.
 func TestIOEnvUninstalledSeesNothing(t *testing.T) {
-	a := newEnvBORU(t, lang.Options{})
+	a := newEnvBoru(t, lang.Options{})
 	if got := runEnv(t, a, `typeof (IO.env "HOME")`); got != "None" {
 		t.Errorf(`uninstalled IO.env "HOME" = %#v, want None`, got)
 	}
@@ -124,7 +124,7 @@ func TestIOEnvUninstalledSeesNothing(t *testing.T) {
 
 // SetHostEnvOps(nil) clears a previously-installed view.
 func TestSetHostEnvOpsNilClears(t *testing.T) {
-	a := newEnvBORU(t, lang.Options{Env: envFake()})
+	a := newEnvBoru(t, lang.Options{Env: envFake()})
 	reg := a.NativeRegistry()
 	if native.HostEnvOps(reg) == nil {
 		t.Fatal("expected an installed EnvOps")
@@ -141,7 +141,7 @@ func TestSetHostEnvOpsNilClears(t *testing.T) {
 // SetHostEnvOps with no policy installed leaves the ops unwrapped — the
 // nil-policy arm of the policy-aware installer.
 func TestSetHostEnvOpsNoPolicyUnwrapped(t *testing.T) {
-	a := newEnvBORU(t, lang.Options{})
+	a := newEnvBoru(t, lang.Options{})
 	reg := a.NativeRegistry()
 	native.SetHostEnvOps(reg, envFake())
 	// MapEnvOps is uncomparable (it holds a map), so identity is asserted
@@ -170,7 +170,7 @@ func envPolicy(t *testing.T, name string) policy.Policy {
 // optional variable must take its default path, and an error would leak
 // which names exist.
 func TestIOEnvPolicyAllowlist(t *testing.T) {
-	a := newEnvBORU(t, lang.Options{Env: envFake(), Policy: envPolicy(t, "read-only")})
+	a := newEnvBoru(t, lang.Options{Env: envFake(), Policy: envPolicy(t, "read-only")})
 	if got := runEnv(t, a, `IO.env "LANG"`); got != "en_GB.UTF-8" {
 		t.Errorf(`allowed IO.env "LANG" = %#v, want en_GB.UTF-8`, got)
 	}
@@ -190,7 +190,7 @@ func TestIOEnvPolicyAllowlist(t *testing.T) {
 // sandbox denies the whole env scope: every name reads as unset and the
 // snapshot is empty.
 func TestIOEnvPolicyDeniesAll(t *testing.T) {
-	a := newEnvBORU(t, lang.Options{Env: envFake(), Policy: envPolicy(t, "sandbox")})
+	a := newEnvBoru(t, lang.Options{Env: envFake(), Policy: envPolicy(t, "sandbox")})
 	if got := runEnv(t, a, `typeof (IO.env "HOME")`); got != "None" {
 		t.Errorf(`sandboxed IO.env "HOME" = %#v, want None`, got)
 	}
@@ -213,7 +213,7 @@ func TestIOEnvPolicyUninstalls(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := newEnvBORU(t, lang.Options{Env: envFake(), Policy: pol})
+	a := newEnvBoru(t, lang.Options{Env: envFake(), Policy: pol})
 	if ops := native.HostEnvOps(a.NativeRegistry()); ops != nil {
 		t.Errorf("compute uninstalls env: HostEnvOps = %T, want nil", ops)
 	}
@@ -243,7 +243,7 @@ func TestOSEnvOpsMatchesProcess(t *testing.T) {
 	if !found {
 		t.Error("OSEnvOps.All omitted a name that Get reports as set")
 	}
-	a := newEnvBORU(t, lang.Options{Env: ops})
+	a := newEnvBoru(t, lang.Options{Env: ops})
 	if got := runEnv(t, a, `IO.env "BORU_ENV_PROBE"`); got != "probe-value" {
 		t.Errorf(`IO.env through OSEnvOps = %#v, want probe-value`, got)
 	}
@@ -260,7 +260,7 @@ func TestOSEnvOpsMatchesProcess(t *testing.T) {
 // disappear one import deep — that is a wrong answer, not a refusal, and it
 // is exactly the shape boru:cli depends on.
 func TestEnvAndArgsReachModuleBodies(t *testing.T) {
-	a := newEnvBORU(t, lang.Options{Env: envFake(), ScriptArgs: []string{"alpha", "beta"}})
+	a := newEnvBoru(t, lang.Options{Env: envFake(), ScriptArgs: []string{"alpha", "beta"}})
 	res, err := a.Run(`import "boru:io"
 import module [
   import "boru:io"
@@ -278,7 +278,7 @@ IO.env "HOME"`)
 		t.Errorf("top-level IO.env = %#v, want /home/ada", got)
 	}
 	var out strings.Builder
-	a2 := newEnvBORU(t, lang.Options{Env: envFake(), ScriptArgs: []string{"alpha", "beta"}})
+	a2 := newEnvBoru(t, lang.Options{Env: envFake(), ScriptArgs: []string{"alpha", "beta"}})
 	a2.SetOutput(&out)
 	if _, err := a2.Run(`import module [
   import "boru:io"
@@ -306,7 +306,7 @@ func TestModuleBodyEnvStaysPolicyWrapped(t *testing.T) {
 		t.Fatal(err)
 	}
 	var out strings.Builder
-	a := newEnvBORU(t, lang.Options{Env: envFake(), Policy: pol})
+	a := newEnvBoru(t, lang.Options{Env: envFake(), Policy: pol})
 	a.SetOutput(&out)
 	if _, err := a.Run(`import module [
   import "boru:io"

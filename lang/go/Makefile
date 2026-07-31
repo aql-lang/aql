@@ -1,6 +1,6 @@
 .PHONY: test vet fmt lint vuln lint-assertions clean publish tags
 
-# This module (github.com/boru-lang/boru/lang/go) is the BORU language
+# This module (github.com/boru-lang/boru/lang/go) is the boru language
 # library. The boru CLI lives in the sibling cmd/go module — build it
 # with `make -C ../../cmd/go build`. The web playground (wasm + serve)
 # lives in ../../wpg.
@@ -64,7 +64,7 @@ publish: test
 	  git tag lang/go/v$(V) && \
 	  git push origin main lang/go/v$(V)
 	@if command -v gh >/dev/null 2>&1; then \
-		cd ../.. && gh release create lang/go/v$(V) --title "lang/go v$(V)" --notes "BORU language layer v$(V)"; \
+		cd ../.. && gh release create lang/go/v$(V) --title "lang/go v$(V)" --notes "boru language layer v$(V)"; \
 	fi
 
 # List recent lang/go tags (newest first).

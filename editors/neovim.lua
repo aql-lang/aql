@@ -1,4 +1,4 @@
--- BORU Language Server for Neovim.
+-- boru Language Server for Neovim.
 --
 -- This file covers both the modern (Neovim 0.11+) vim.lsp.config API
 -- and the historical nvim-lspconfig package. Pick whichever matches

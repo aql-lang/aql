@@ -1,14 +1,14 @@
 # BORU-SHARP-EDGES
 
 Language- and compiler-level sharp edges found by **dogfooding** — writing a
-large, real application entirely in BORU. These are findings *about the
+large, real application entirely in boru. These are findings *about the
 language*, deliberately kept out of the app-specific RFC that surfaced them so
 a language/engine maintainer can find them without reading about vaults.
 
 This is a **discovery doc**, not a design proposal: each entry is a minimal
 reproduction, the observed-vs-expected behavior, a root-cause hypothesis with
 `file:line` where known, the workaround the app used, and a **classification**.
-It is the place to record "BORU made me do an unobvious thing" so the next
+It is the place to record "boru made me do an unobvious thing" so the next
 author does not re-derive it — and so the genuine bugs get fixed.
 
 ## Provenance
@@ -205,10 +205,10 @@ The evidence:
 - **`Tui.run` dispatches every `update`/`view` callback through the
   interpreter.** `lang/go/modules/tui_run.go:371,414` call
   `eng.InvokeCallback`, which (`eng/go/invoke.go:66,106`) runs the VM only if
-  the callback has a stamped `CompiledRef`; with none, it falls to `CallBORU` —
+  the callback has a stamped `CompiledRef`; with none, it falls to `CallBoru` —
   the interpreter — on every keystroke and every frame.
 
-So the app is interpreted exactly like every other BORU app in the repo. The
+So the app is interpreted exactly like every other boru app in the repo. The
 **only** part known to bytecode-compile is the **init-construction graph**
 (`vault-app` → `vt-pal`, `vt-palette-closed`, `vt-home`, and the nested init
 map), because three rows in `lang/spec/module-vault-tui.tsv` force-compile it
@@ -232,7 +232,7 @@ already def-binds (zero G11-shape list tails). The runtime impact of the
 compiler items was **zero** either way (nothing here is ever force-compiled).
 
 **Defensible one-liner:** *"The vault TUI does not fully bytecode-compile, and
-that is irrelevant — it runs entirely on the interpreter like every BORU app in
+that is irrelevant — it runs entirely on the interpreter like every boru app in
 the repo; only the spec-forced init graph is known to compile (and does), and a
 single internal function (`vt-detail`) still carries a latent refusal that is
 never exercised."*

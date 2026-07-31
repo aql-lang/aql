@@ -1,4 +1,4 @@
-# BORU Vault — MFA / TOTP Codes (Design)
+# boru Vault — MFA / TOTP Codes (Design)
 
 **Status: design only — not implemented.** This note captures the
 shape of the feature, the security tradeoff that gates it, and a

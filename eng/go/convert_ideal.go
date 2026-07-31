@@ -17,7 +17,7 @@ var ErrNoConverter = errors.New("eng: no converter in this Behavior")
 // The base Ideal type (idealRootBehavior, installed below) provides the
 // fallback: any Ideal that does not override converts to an empty Map ({})
 // or empty List ([]). Concrete Ideals — built-in or user-defined, in Go or
-// BORU — may attach a Behavior implementing this to give a meaningful
+// boru — may attach a Behavior implementing this to give a meaningful
 // projection. Dispatch walks the value's Parent chain (ConvertIdealToMap /
 // ConvertIdealToList) exactly like the Comparer walk, so the nearest
 // override wins and the Ideal root guarantees a terminal result.

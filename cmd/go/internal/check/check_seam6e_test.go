@@ -15,7 +15,7 @@ import (
 func swapLangNewFail(t *testing.T) {
 	t.Helper()
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, errors.New("init boom") }
+	langNew = func(...lang.Options) (*lang.Boru, error) { return nil, errors.New("init boom") }
 	t.Cleanup(func() { langNew = orig })
 }
 

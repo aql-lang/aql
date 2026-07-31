@@ -1,5 +1,5 @@
 // Property-based differential gate: instead of the finite curated corpus,
-// GENERATE random well-typed BORU programs from the compilable subset and assert
+// GENERATE random well-typed boru programs from the compilable subset and assert
 // the compiled VM and the interpreter agree on every one (the same invariant
 // TestSpecCompiledDifferential checks per spec row). The corpus exercises hand-
 // written rows; this exercises COMBINATIONS the corpus never enumerates (a

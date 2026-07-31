@@ -231,7 +231,7 @@ Reopened during review: classes are now flat — should plain mutable
 - A delegating Object reintroduces the bug class this design just
   killed structurally — reads that see fields enumeration doesn't
   show. JS lives with `own` vs `in` vs `for…in` precisely because of
-  this split; BORU doesn't have to.
+  this split; boru doesn't have to.
 - Array doesn't delegate; its keyed sibling shouldn't either.
 - The delegation use cases are already owned elsewhere: **defaults**
   → class schemas (resolved flat at `make`); **data layering** →
@@ -256,7 +256,7 @@ live update (one prototype backs many instances; layered data like
 config cascades is delegation natively); near-zero implementation
 cost (the engine chain exists); minimal-kernel elegance (Self proved
 delegation can express classes/mixins as patterns); REPL dynamism;
-and BORU already teaches `get` via the JS analogy.
+and boru already teaches `get` via the JS analogy.
 
 **Against** (decisive): (1) delegation structurally reintroduces the
 reads-vs-enumeration split — the silent-lie bug class the voxgig
@@ -280,7 +280,7 @@ substrate and lost as a programming model. ES6 classes won the
 surface; `__proto__` is Annex-B legacy and `setPrototypeOf` carries
 engine-deopt warnings; the JS community moved the *dictionary* use
 case to proto-free containers (`Object.create(null)`, then `Map`) —
-i.e. JS itself corrected toward what BORU's flat Object is from the
+i.e. JS itself corrected toward what boru's flat Object is from the
 start; no mainstream newer language (Swift/Rust/Go/Kotlin/Julia)
 adopted prototypes, with Lua metatables the closest survivor —
 promptly wrapped in class libraries; JS's own trajectory (class
@@ -453,7 +453,7 @@ destination — adopt eq-refinement as the internal encoding); **`final`
 (write-once per instance) is the orthogonal feature** — TS
 readonly-vs-literal-types, Python Final-vs-Literal — deliberately not
 conflated, separate pass if wanted; real ADTs (Rust/Haskell enums)
-are the road not taken — BORU's `tor` + literal discriminants is the
+are the road not taken — boru's `tor` + literal discriminants is the
 TypeScript path, which makes `const` *more* load-bearing here.
 
 **Prior art:** TypeScript literal types + `as const` + discriminated
@@ -461,7 +461,7 @@ unions (the proven model and payoff — flow narrowing later via the
 existing `dynamic(T)` narrowing machinery); Python `Literal`/`Final`;
 Scala 3 first-class literal types; Haskell DataKinds; Java/Go none;
 Rust skipped them in favour of declared enums. Verdict: literal types
-earn their keep exactly where unions are structural — BORU's
+earn their keep exactly where unions are structural — boru's
 situation.
 
 **Payoff:** `def Circle class {kind:(const 'circle'), r:0.0}` +

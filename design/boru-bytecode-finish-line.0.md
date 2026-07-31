@@ -1,4 +1,4 @@
-# BORU Bytecode — Finish-Line Plan (to re-scoped P7)
+# boru Bytecode — Finish-Line Plan (to re-scoped P7)
 
 Status: design + live tracker. Companion to `boru-bytecode-completion.0.md`
 (the cluster-by-cluster roadmap) and `boru-bytecode-runtime-independence.0.md`

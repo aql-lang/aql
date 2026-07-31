@@ -112,7 +112,7 @@ func TestTimeWave4TzErrors(t *testing.T) {
 		!strings.Contains(err.Error(), "unknown timezone") {
 		t.Errorf("bad zone: %v, want unknown timezone", err)
 	}
-	result := runBORU(t, r, callTimeDot("tz", native.NewString("America/New_York")))
+	result := runBoru(t, r, callTimeDot("tz", native.NewString("America/New_York")))
 	if loc := native.AsTimezone(result[0]); loc == nil || loc.String() != "America/New_York" {
 		t.Errorf("tz = %v, want America/New_York", result[0])
 	}
@@ -121,8 +121,8 @@ func TestTimeWave4TzErrors(t *testing.T) {
 // TestTimeWave4UnixNs pins the unix-ns constructor round trip.
 func TestTimeWave4UnixNs(t *testing.T) {
 	r := timeRegistry(t)
-	ins := runBORU(t, r, callTimeDot("unix-ns", native.NewInteger(1_500_000_000_000_000_000)))
-	back := runBORU(t, r, callTimeDot("to-unix", ins[0]))
+	ins := runBoru(t, r, callTimeDot("unix-ns", native.NewInteger(1_500_000_000_000_000_000)))
+	back := runBoru(t, r, callTimeDot("to-unix", ins[0]))
 	if n, err := back[0].AsConcreteInteger(); err != nil || n != 1_500_000_000 {
 		t.Errorf("unix-ns round trip = %v (%v), want 1500000000", back[0], err)
 	}
@@ -134,7 +134,7 @@ func TestTimeWave4UntilBorrow(t *testing.T) {
 	r := timeRegistry(t)
 	d1 := native.NewDate(time.Date(2024, 1, 20, 0, 0, 0, 0, time.UTC))
 	d2 := native.NewDate(time.Date(2024, 3, 1, 0, 0, 0, 0, time.UTC))
-	result := runBORU(t, r, callTimeDot("until", d1, d2))
+	result := runBoru(t, r, callTimeDot("until", d1, d2))
 	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Years != 0 || cd.Months != 1 || cd.Days != 10 {
 		t.Errorf("until day-borrow = %+v (%v), want {0 1 10}", cd, ok)
@@ -142,7 +142,7 @@ func TestTimeWave4UntilBorrow(t *testing.T) {
 
 	d3 := native.NewDate(time.Date(2023, 10, 20, 0, 0, 0, 0, time.UTC))
 	d4 := native.NewDate(time.Date(2024, 2, 10, 0, 0, 0, 0, time.UTC))
-	result = runBORU(t, r, callTimeDot("until", d3, d4))
+	result = runBoru(t, r, callTimeDot("until", d3, d4))
 	cd, ok = native.AsCalendarDuration(result[0])
 	if !ok || cd.Years != 0 || cd.Months != 3 || cd.Days != 21 {
 		t.Errorf("until month-borrow = %+v (%v), want {0 3 21}", cd, ok)
@@ -157,8 +157,8 @@ func TestTimeWave4DurSignClock(t *testing.T) {
 		n    int64
 		want int64
 	}{{-2, -1}, {0, 0}, {3, 1}} {
-		d := runBORU(t, r, callTimeDot("hours", native.NewInteger(c.n)))
-		s := runBORU(t, r, callTimeDot("dur-sign", d[0]))
+		d := runBoru(t, r, callTimeDot("hours", native.NewInteger(c.n)))
+		s := runBoru(t, r, callTimeDot("dur-sign", d[0]))
 		if n, err := s[0].AsConcreteInteger(); err != nil || n != c.want {
 			t.Errorf("clock dur-sign(%dh) = %v (%v), want %d", c.n, s[0], err, c.want)
 		}
@@ -167,8 +167,8 @@ func TestTimeWave4DurSignClock(t *testing.T) {
 		n    int64
 		want int64
 	}{{-1, -1}, {0, 0}, {2, 1}} {
-		d := runBORU(t, r, callTimeDot("years", native.NewInteger(c.n)))
-		s := runBORU(t, r, callTimeDot("dur-sign", d[0]))
+		d := runBoru(t, r, callTimeDot("years", native.NewInteger(c.n)))
+		s := runBoru(t, r, callTimeDot("dur-sign", d[0]))
 		if n, err := s[0].AsConcreteInteger(); err != nil || n != c.want {
 			t.Errorf("calendar dur-sign(%dy) = %v (%v), want %d", c.n, s[0], err, c.want)
 		}
@@ -179,8 +179,8 @@ func TestTimeWave4DurSignClock(t *testing.T) {
 // decidedly positive.
 func TestTimeWave4Elapsed(t *testing.T) {
 	r := timeRegistry(t)
-	d := runBORU(t, r, callTimeDot("elapsed", native.NewInstant(time.Unix(0, 0))))
-	total := runBORU(t, r, callTimeDot("total-hours", d[0]))
+	d := runBoru(t, r, callTimeDot("elapsed", native.NewInstant(time.Unix(0, 0))))
+	total := runBoru(t, r, callTimeDot("total-hours", d[0]))
 	if f, err := total[0].AsConcreteFloat(); err != nil || f <= 0 {
 		t.Errorf("elapsed since epoch = %v (%v), want positive", total[0], err)
 	}
@@ -197,7 +197,7 @@ func TestTimeWave4CompareEarliestLatest(t *testing.T) {
 		d1, d2 native.Value
 		want   int64
 	}{{a, b, -1}, {b, a, 1}, {a, a, 0}} {
-		result := runBORU(t, r, callTimeDot("compare", c.d1, c.d2))
+		result := runBoru(t, r, callTimeDot("compare", c.d1, c.d2))
 		if n, err := result[0].AsConcreteInteger(); err != nil || n != c.want {
 			t.Errorf("time-compare = %v (%v), want %d", result[0], err, c.want)
 		}
@@ -210,7 +210,7 @@ func TestTimeWave4CompareEarliestLatest(t *testing.T) {
 		{"earliest", a, b, 1}, {"earliest", b, a, 1},
 		{"latest", a, b, 6}, {"latest", b, a, 6},
 	} {
-		result := runBORU(t, r, callTimeDot(c.word, c.d1, c.d2))
+		result := runBoru(t, r, callTimeDot(c.word, c.d1, c.d2))
 		if got := native.AsDate(result[0]); int(got.Month()) != c.want {
 			t.Errorf("%s month = %v, want %d", c.word, got.Month(), c.want)
 		}
@@ -224,12 +224,12 @@ func TestTimeWave4InstantConversions(t *testing.T) {
 	tt := timeTT(t, r)
 	ins := native.NewInstant(time.Date(2024, 3, 15, 13, 45, 0, 0, time.UTC))
 
-	result := runBORU(t, r, callTimeDot("to-date", ins))
+	result := runBoru(t, r, callTimeDot("to-date", ins))
 	if got := native.AsDate(result[0]); got.Year() != 2024 || got.Month() != 3 || got.Day() != 15 {
 		t.Errorf("to-date(Instant) = %v, want 2024-03-15", got)
 	}
 
-	result = runBORU(t, r, callTimeDot("to-time-of-day", ins))
+	result = runBoru(t, r, callTimeDot("to-time-of-day", ins))
 	if !result[0].Parent.ConformsTo(tt.TimeOfDay) {
 		t.Errorf("to-time-of-day(Instant) type = %s, want TimeOfDay", result[0].Parent)
 	}
@@ -247,12 +247,12 @@ func TestTimeWave4StartEndOfUnits(t *testing.T) {
 		d       native.Value
 		wantDay int
 	}{{sunday, 11}, {wednesday, 11}} {
-		result := runBORU(t, r, callTimeDot("start-of", c.d, native.NewString("week")))
+		result := runBoru(t, r, callTimeDot("start-of", c.d, native.NewString("week")))
 		if got := native.AsDate(result[0]); got.Day() != c.wantDay || got.Weekday() != time.Monday {
 			t.Errorf("start-of week = %v, want Monday the %d", got, c.wantDay)
 		}
 	}
-	result := runBORU(t, r, callTimeDot("start-of", wednesday, native.NewString("day")))
+	result := runBoru(t, r, callTimeDot("start-of", wednesday, native.NewString("day")))
 	if got := native.AsDate(result[0]); got.Day() != 13 {
 		t.Errorf("start-of day = %v, want the 13th", got)
 	}
@@ -261,16 +261,16 @@ func TestTimeWave4StartEndOfUnits(t *testing.T) {
 		d       native.Value
 		wantDay int
 	}{{sunday, 17}, {wednesday, 17}} {
-		result = runBORU(t, r, callTimeDot("end-of", c.d, native.NewString("week")))
+		result = runBoru(t, r, callTimeDot("end-of", c.d, native.NewString("week")))
 		if got := native.AsDate(result[0]); got.Day() != c.wantDay || got.Weekday() != time.Sunday {
 			t.Errorf("end-of week = %v, want Sunday the %d", got, c.wantDay)
 		}
 	}
-	result = runBORU(t, r, callTimeDot("end-of", wednesday, native.NewString("day")))
+	result = runBoru(t, r, callTimeDot("end-of", wednesday, native.NewString("day")))
 	if got := native.AsDate(result[0]); got.Day() != 13 {
 		t.Errorf("end-of day = %v, want the 13th", got)
 	}
-	result = runBORU(t, r, callTimeDot("end-of", wednesday, native.NewString("quarter")))
+	result = runBoru(t, r, callTimeDot("end-of", wednesday, native.NewString("quarter")))
 	if got := native.AsDate(result[0]); got.Month() != 3 || got.Day() != 31 {
 		t.Errorf("end-of quarter = %v, want 2024-03-31", got)
 	}
@@ -292,7 +292,7 @@ func TestTimeWave4TzLocalNameOffset(t *testing.T) {
 	r := timeRegistry(t)
 	tt := timeTT(t, r)
 
-	result := runBORU(t, r, callTimeDot("tz-local"))
+	result := runBoru(t, r, callTimeDot("tz-local"))
 	if loc := native.AsTimezone(result[0]); loc == nil {
 		t.Error("tz-local should carry the local zone")
 	}
@@ -301,13 +301,13 @@ func TestTimeWave4TzLocalNameOffset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tzdata: %v", err)
 	}
-	result = runBORU(t, r, callTimeDot("tz-name", tt.NewTimezone(ny)))
+	result = runBoru(t, r, callTimeDot("tz-name", tt.NewTimezone(ny)))
 	if s, _ := native.AsString(result[0]); s != "America/New_York" {
 		t.Errorf("tz-name = %q", s)
 	}
 
 	winter := native.NewInstant(time.Date(2024, 1, 15, 12, 0, 0, 0, time.UTC))
-	result = runBORU(t, r, callTimeDot("tz-offset", winter, tt.NewTimezone(ny)))
+	result = runBoru(t, r, callTimeDot("tz-offset", winter, tt.NewTimezone(ny)))
 	if s, _ := native.AsString(result[0]); s != "-05:00" {
 		t.Errorf("tz-offset NY winter = %q, want -05:00", s)
 	}
@@ -316,7 +316,7 @@ func TestTimeWave4TzLocalNameOffset(t *testing.T) {
 	if err != nil {
 		t.Fatalf("tzdata: %v", err)
 	}
-	result = runBORU(t, r, callTimeDot("tz-offset", winter, tt.NewTimezone(stj)))
+	result = runBoru(t, r, callTimeDot("tz-offset", winter, tt.NewTimezone(stj)))
 	if s, _ := native.AsString(result[0]); s != "-03:30" {
 		t.Errorf("tz-offset St_Johns winter = %q, want -03:30", s)
 	}
@@ -351,7 +351,7 @@ func TestTimeWave4IsDst(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			result := runBORU(t, r, callTimeDot("is-dst", c.ins, c.tz))
+			result := runBoru(t, r, callTimeDot("is-dst", c.ins, c.tz))
 			if b, err := result[0].AsConcreteBoolean(); err != nil || b != c.want {
 				t.Errorf("is-dst = %v (%v), want %v", result[0], err, c.want)
 			}

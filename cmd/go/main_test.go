@@ -75,11 +75,11 @@ func TestExecuteParseError(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1", code)
 	}
-	// Parse failures surface as BORU-voice syntax_errors with the
+	// Parse failures surface as boru-voice syntax_errors with the
 	// closing-quote help (design/DIAGNOSTICS.0.md phase 2).
 	if !strings.Contains(stderr.String(), "[boru/syntax_error]") ||
 		!strings.Contains(stderr.String(), "this string is never closed") {
-		t.Errorf("expected a BORU-voice syntax_error in stderr, got %q", stderr.String())
+		t.Errorf("expected a boru-voice syntax_error in stderr, got %q", stderr.String())
 	}
 }
 

@@ -1,7 +1,7 @@
-# BORU Language Specification: refine-of-flex retag + container predicates
+# boru Language Specification: refine-of-flex retag + container predicates
 # Format: input<TAB>expected<TAB>description
 #
-# Two of the pure-BORU container-subtype enablers (FLEX-ATTRS.1 D4,
+# Two of the pure-boru container-subtype enablers (FLEX-ATTRS.1 D4,
 # design/OPEN-WORDS.1.md §7b):
 #   1. A bare refine of a FLEX type retags flex handles through typed
 #      def (`def w:S (flex m)`) — check and runtime agree; the tag

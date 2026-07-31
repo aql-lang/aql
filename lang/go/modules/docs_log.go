@@ -21,7 +21,7 @@ func init() {
 		"clear":        "Empty the memory sink's capture buffer.",
 		"logger":       "Create a named logger instance: logger NAME.",
 		"with":         "Create a named logger with default fields: with NAME FIELDS.",
-		"register":     "Install a BORU function as a sink: register FN NAME MIN-LEVEL.",
+		"register":     "Install a boru function as a sink: register FN NAME MIN-LEVEL.",
 		"span":         "Start a span and return its handle: span NAME [ATTRS].",
 		"with-span":    "Run a body inside a span, ending it on exit: with-span NAME BODY.",
 		"end-span":     "End a started span given its handle: end-span SPAN.",

@@ -45,7 +45,7 @@ func calcParserSpec() lang.ParseLangSpec {
 	}
 }
 
-func newCalcParserInstance(t *testing.T) *lang.BORU {
+func newCalcParserInstance(t *testing.T) *lang.Boru {
 	t.Helper()
 	a, err := lang.New()
 	if err != nil {
@@ -278,7 +278,7 @@ func TestParseLangHostRegistrationContract(t *testing.T) {
 		if err := a.DefineValue("", v); err == nil {
 			t.Fatal("expected error for an empty value name")
 		}
-		// The full def word-name grammar is enforced — a name source BORU
+		// The full def word-name grammar is enforced — a name source boru
 		// cannot spell must be refused, not silently installed.
 		if err := a.DefineValue("1parser", v); err == nil {
 			t.Fatal("expected error for a name failing ValidateWordName")

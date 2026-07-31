@@ -4,8 +4,8 @@
 // fix for the module-closure branch in execFnDefLiteral.
 //
 // Pre-refactor state:
-//   - BORU named-param fns dispatch top-first via matchSignature (PASS).
-//   - BORU unnamed-param fns dispatch top-first via matchSignature (PASS).
+//   - boru named-param fns dispatch top-first via matchSignature (PASS).
+//   - boru unnamed-param fns dispatch top-first via matchSignature (PASS).
 //   - Module wrappers with heterogeneous-type Params that mirror the
 //     inner native's Args (top-first) FAIL to dispatch because the
 //     module-closure branch in execFnDefLiteral re-matches via
@@ -48,7 +48,7 @@ func runSrc(t *testing.T, r *native.Registry, src string) ([]native.Value, error
 	return e.Run(vals)
 }
 
-// TestSigOrder_NamedBoruFn_TopFirst pins the current behavior: a BORU
+// TestSigOrder_NamedBoruFn_TopFirst pins the current behavior: a boru
 // fn with named heterogeneous params binds the FIRST source param to
 // the TOP of the outer stack. Must pass before AND after the refactor.
 func TestSigOrder_NamedBoruFn_TopFirst(t *testing.T) {
@@ -93,7 +93,7 @@ func TestSigOrder_NamedBoruFn_RejectsBottomFirst(t *testing.T) {
 	}
 }
 
-// TestSigOrder_UnnamedBoruFn_TopFirst pins unnamed-param BORU fns are
+// TestSigOrder_UnnamedBoruFn_TopFirst pins unnamed-param boru fns are
 // also top-first via matchSignature on the compiled Signatures. args.0
 // references the i-th sig position counted from the stack top.
 func TestSigOrder_UnnamedBoruFn_TopFirst(t *testing.T) {

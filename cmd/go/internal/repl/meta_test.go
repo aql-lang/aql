@@ -212,7 +212,7 @@ func TestMetaHelpNoArgs(t *testing.T) {
 	if !strings.Contains(output, "REPL meta-commands") {
 		t.Error("expected 'REPL meta-commands' header")
 	}
-	if !strings.Contains(output, "BORU") {
+	if !strings.Contains(output, "boru") {
 		t.Error("expected language overview in output")
 	}
 }

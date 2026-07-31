@@ -1,5 +1,5 @@
 // Package stackform defines a canonical strict-stack representation
-// of a BORU program. It is the form the property-based-testing
+// of a boru program. It is the form the property-based-testing
 // reducer operates on (design/PBT-PLAN.10.md) and the first half of
 // the work the bytecode-emission proposal in
 // design/boru-bytecode-report.0.md needs.
@@ -13,7 +13,7 @@
 // call is in strict-stack order with the arity it was matched at.
 //
 // Build a StackForm with Compile(); evaluate it with Eval();
-// render it back to readable BORU with Pretty(). Equivalent
+// render it back to readable boru with Pretty(). Equivalent
 // programs produce equal StackForms (Equal); cost-driven shrinking
 // uses Cost.
 //

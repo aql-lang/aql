@@ -44,9 +44,9 @@ var SpecClock = capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, tim
 // classifier arms that a healthy build cannot reach (a genuine divergence, a
 // FALLBACK island, instance-construction failure).
 var (
-	langNew      = func() (*lang.BORU, error) { return lang.New() }
-	compileCheck = (*lang.BORU).CompileCheck
-	runCompiled  = (*lang.BORU).RunCompiled
+	langNew      = func() (*lang.Boru, error) { return lang.New() }
+	compileCheck = (*lang.Boru).CompileCheck
+	runCompiled  = (*lang.Boru).RunCompiled
 	disasm       = func(p *lang.Program) string { return p.Disassemble() }
 )
 

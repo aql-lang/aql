@@ -450,7 +450,7 @@ var allArrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		// compress: mask-based selection. No code body, so it is an
+		// compress: mask-based selection. No code body, so it is a
 		// boru:array module word like where/replicate.
 		Name: "compress",
 

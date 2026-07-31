@@ -111,7 +111,7 @@ values that could not exist before the module loaded.
 ### 3.1 Nominality is load-bearing (the counterexample)
 
 R1 says *nominal*, not merely *user-defined*, and this is not
-pedantry. BORU user types split by membership mode (the refine
+pedantry. boru user types split by membership mode (the refine
 doctrine):
 
 - **bare refine / class** — tag-carried; a value is a member only if
@@ -228,7 +228,7 @@ kernel table and modules alike.
 | `micron.tsv` §extensions | row 504 (builtin Micron leaf refused) unchanged in outcome, error code updated; 505 (minted Baron anchors) unchanged |
 | ratchets | check-accuracy pins for touched files; COMPILED_STATUS refresh; fnmodel golden if sig lists shift |
 
-## 7b. The pure-BORU enablers (follow-up; two landed, one OPEN)
+## 7b. The pure-boru enablers (follow-up; two landed, one OPEN)
 
 Three seams initially kept the FLEX-ATTRS.1 D4 sorted nodes a
 Go-module capability. Two are fixed (pinned by
@@ -257,7 +257,7 @@ specializes. For `SortedFlexMap`, the `set` override must (a) write
 the entry, then (b) restore key order — and both (a) and the
 per-key moves in (b) ARE the operation `set` (plus `del`). But
 inside the override's scope, the word `set` resolves — like every
-BORU word, dynamically, at call time, through the def stack — to the
+boru word, dynamically, at call time, through the def stack — to the
 MERGED clone, whose most specific matching signature for a
 SortedFlexMap receiver is the override itself. The body's `set`
 re-enters the body: unbounded recursion. The name being extended is
@@ -265,7 +265,7 @@ the only name the body has for the thing it needs underneath.
 
 This is the classic override-shadow problem every OO language meets
 (`super` in Smalltalk/Java/Python, `call-next-method` in CLOS,
-`invoke` in Julia). BORU's value-binding `def` avoids it for VALUES
+`invoke` in Julia). boru's value-binding `def` avoids it for VALUES
 by evaluating the body before binding (`def x (x add 1)` reads the
 old x) — but fn bodies are DEFERRED code, resolved at dispatch time,
 so the same trick does not apply.
@@ -286,11 +286,11 @@ facts do the work:
    the surface while delegating at the implementation layer is
    trivial because the layers cannot collide.
 2. **Static resolution.** A Go handler's callees are fixed at link
-   time. A BORU body's words are resolved at call time through a
+   time. A boru body's words are resolved at call time through a
    stack the merge itself just rewrote — the override shadows the
    very name it needs.
 
-BORU source currently has ONLY the surface layer: the word `set` is
+boru source currently has ONLY the surface layer: the word `set` is
 both the dispatch surface and the sole vocabulary for the
 operation. That is the whole gap.
 
@@ -312,7 +312,7 @@ operation. That is the whole gap.
   and self-recursion stays available through the plain word. Cost: a
   special word with dispatch-stack context, and a compile story for
   it.
-- **(c) A primitive layer.** Give BORU the implementation vocabulary
+- **(c) A primitive layer.** Give boru the implementation vocabulary
   Go enjoys — a small set of payload-level words (`map-put!`,
   `map-del!`, an ordered-insert) that the surface words are defined
   over. Overrides then build on primitives, never delegating to the
@@ -338,7 +338,7 @@ operation. That is the whole gap.
   dispatch machinery — it is per-call static-resolution, i.e. a
   devirtualization hint the compiled path can pin statically
   (the strongest compile story of the four options). Costs: a
-  pure-BORU base body's own internal calls remain virtual (they
+  pure-boru base body's own internal calls remain virtual (they
   dispatch on the real tag — same property as Julia's `invoke`;
   the kernel natives are the recursion floor today), and the
   operator is publicly available, so outside code can route around
@@ -400,7 +400,7 @@ match reads as the value's tag. Three rules make it sound:
   back is its real self, so an ascription written in the body cannot
   leak into the caller's dispatch. Every fn-return strips it — the
   interpreter frame-collapse (the ReturnCheck arm, via
-  `stripTapeAscriptions`), `Registry.CallBORU`, and the VM `OpRet` over
+  `stripTapeAscriptions`), `Registry.CallBoru`, and the VM `OpRet` over
   the frame's produced values. Without this a helper `[(w as
   FlexMap)]` would hand its caller an ascribed value and the caller's
   next dispatch would wrongly select the base overload (the
@@ -438,7 +438,7 @@ runtime match will; a dynamic input the tree lattice cannot refute
 passes gradually as a carrier at the target (the runtime handler
 re-validates). Acceptance: lang/spec/as.tsv (transparency, subtype
 tags, overload selection, one-call consumption, delegation,
-refusals) and lang/go/test/sorted_user_test.go (the full pure-BORU
+refusals) and lang/go/test/sorted_user_test.go (the full pure-boru
 SortedFlexMap: anchored override + as-delegation + recursive
 resort keeps keys sorted with the tag intact).
 

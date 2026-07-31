@@ -57,7 +57,7 @@ the dispatch requirement pinned by `wrapper_dispatch_test.go`).
 
 `render` is the recommended primary surface: most call sites render a
 template once (or rarely), and a single `template data Template.render`
-call with no handle to manage is the idiomatic BORU shape — the same
+call with no handle to manage is the idiomatic boru shape — the same
 "value in, value out, no protocol" choice this whole roster makes.
 
 `compile` + `exec` exist only for the **hot-loop** case: rendering the
@@ -68,7 +68,7 @@ reach for it only when the reuse actually matters.
 
 ### `data` as a Map
 
-The template's data context is modeled as a BORU **Map**: `eng.FromNative`
+The template's data context is modeled as a boru **Map**: `eng.FromNative`
 turns it into a `map[string]any`, which `text/template` addresses with
 `{{.key}}`. Nested Maps and Lists work through the same bridge
 (`{{range .items}}`, `{{.user.name}}`). A non-Map data value (e.g. a bare
@@ -79,7 +79,7 @@ the top-level dot — but Map is the documented common shape.
 ## 5. Types
 
 Mostly scalars / Map. The one exception is `compile`'s return value: a
-parsed `*template.Template` has **no BORU counterpart**, so it is held in
+parsed `*template.Template` has **no boru counterpart**, so it is held in
 an `ExtensionPayload` and surfaced as a registered external type, the
 `Template` handle.
 
@@ -138,7 +138,7 @@ String.)
   contract of its own; see the cross-referenced `boru:html`
   ([HTML.10.md](HTML.10.md)). `boru:template` is the *text* engine with no
   escaping.
-- **BORU's own template strings** (the backtick `` `...${expr}...` ``
+- **boru's own template strings** (the backtick `` `...${expr}...` ``
   interpolation built into the parser — see `lang/go/CLAUDE.md` "Template
   string interpolation") cover *simple value interpolation* and are the
   right tool for that. `boru:template` is for **Go-template-syntax logic**:
@@ -179,11 +179,11 @@ t Template.exec {n:"b" v:2}                          # → "b: 2"
 
 ## 10. Open questions / out of scope
 
-- **Custom funcs (`Funcs(FuncMap)`)** — letting BORU register helper
+- **Custom funcs (`Funcs(FuncMap)`)** — letting boru register helper
   functions callable from inside a template is powerful but needs a bridge
-  from BORU `Function` values into a Go `FuncMap`. Deferred; open question
+  from boru `Function` values into a Go `FuncMap`. Deferred; open question
   whether the common cases (a few string/format helpers) justify it or
-  whether BORU pre-processing of the data Map is enough.
+  whether boru pre-processing of the data Map is enough.
 - **Named / associated templates and `{{template "x"}}`** — multi-template
   sets (`ParseFiles`, `{{define}}`/`{{template}}`) are out of scope for
   the first cut; `render` / `compile` handle a single template body.

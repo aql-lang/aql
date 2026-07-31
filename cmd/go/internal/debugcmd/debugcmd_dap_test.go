@@ -84,7 +84,7 @@ func TestDAPFullSession(t *testing.T) {
 }
 
 func TestDAPFunctionBreakpoints(t *testing.T) {
-	// DAP "function" breakpoints are BORU word breakpoints: the stop
+	// DAP "function" breakpoints are boru word breakpoints: the stop
 	// fires when the named word is about to dispatch. The second
 	// setFunctionBreakpoints (while paused: the direct-mutate arm)
 	// REPLACES the set with nothing, so the program runs out.

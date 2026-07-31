@@ -11,7 +11,7 @@ import (
 
 // io_mmap.go — memory-mapped files. IO.mmap maps a file's bytes into a
 // Mmap resource; `read region {offset length enc}` COPIES bytes out (a
-// read must never hand BORU a slice that a later close unmaps — a
+// read must never hand boru a slice that a later close unmaps — a
 // use-after-free), `write region bytes {offset}` splices INTO the mapping
 // in place, IO.flush syncs, and the polymorphic IO.close unmaps.
 
@@ -154,7 +154,7 @@ func doMmapWord(args []Value, r *Registry, mmapType *Type) ([]Value, error) {
 // readMmapWord reads from a mapped region: {offset}/{length} window it,
 // {enc} decodes ('bytes' returns Bytes, else text). The bytes are COPIED
 // out of the mapping so a later close (munmap) can never invalidate the
-// BORU value.
+// boru value.
 func readMmapWord(args []Value, r *Registry) ([]Value, error) {
 	mi, ok := asMmapInfo(args[0])
 	if !ok {

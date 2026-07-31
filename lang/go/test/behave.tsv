@@ -7,7 +7,7 @@
 #   behave canon/q    (fn [[T]   [String]  [body]])
 #   behave nodify/q  (fn [[T]   [Any]     [body]])
 #
-# `nodify` projects a value into a Node or Scalar (the BORU data
+# `nodify` projects a value into a Node or Scalar (the boru data
 # subset) rather than into a JSON string — callers compose with a
 # separate encoder when they need wire-format JSON. The default
 # (when no nodify is registered) returns the value unchanged.
@@ -23,7 +23,7 @@
 #      their existing FormatBehavior in lang/engine/native_temporal.go.
 #
 #   3. USER-DEFINED — `behave compare/q`, `behave canon/q`, and
-#      `behave nodify/q` install BORU bodies via
+#      `behave nodify/q` install boru bodies via
 #      lang/engine/native_behave.go's userBehavior wrapper. All three
 #      capability slots coexist on one wrapper.
 # =====================================================================
@@ -76,7 +76,7 @@ red/q red/q lt	false	same atom
 # ---------------------------------------------------------------------
 # 1b. CORE canon: kernel default rendering through CanonValue
 # ---------------------------------------------------------------------
-# Each scalar value renders to its canonical BORU source form (the
+# Each scalar value renders to its canonical boru source form (the
 # round-trippable representation produced by eng.CanonValue).
 
 42	42	Integer renders as itself

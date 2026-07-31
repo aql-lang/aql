@@ -19,7 +19,7 @@ import "fmt"
 //	-1 busr 60 => 15    # logical right-shift, zero-fill
 //
 // The handler convention `args[1] OP args[0]` (swap form) matches
-// every other binary word in BORU.
+// every other binary word in Boru.
 var BitwiseModuleNatives = []NativeFunc{
 	{
 		Name: "band",

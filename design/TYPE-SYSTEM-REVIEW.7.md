@@ -1,7 +1,7 @@
-# BORU Type System Review — Algebraic and Dependent Aspects
+# boru Type System Review — Algebraic and Dependent Aspects
 
 This report catalogues weaknesses, semantic gaps, implementation gaps,
-and developer-experience issues in the BORU type system. It started on
+and developer-experience issues in the boru type system. It started on
 the `claude/document-q-modifier-rules-AGp0I` branch at commit `d154b3e`
 and tracks the type-system work that has landed since.
 
@@ -231,10 +231,10 @@ predicate accept and the runtime-still-rejects paths.
 ### 3.3 Predicate has full registry access (sandboxing gap) — RESOLVED
 
 `RunPredicate` snapshots `r.Types`, `r.ctxStack`, and `r.Check`
-before the `CallBORU` invocation and restores them on return — so a
+before the `CallBoru` invocation and restores them on return — so a
 predicate body that does `type Foo …` or `context set k v` cannot
 leak into the surrounding program. `r.DefStacks` is already
-protected by `CallBORU`'s own snapshot.
+protected by `CallBoru`'s own snapshot.
 
 Tests verify that a predicate body that defines `type Leaked …`
 during a `def x:Sneaky v` or `v is Sneaky` invocation does NOT
@@ -451,7 +451,7 @@ pass. Runtime semantics unchanged.
 ### 7.1 No inline disjunct syntax — DECLINED
 
 A `Integer | String` shorthand for `Integer tor String` would save
-a few keystrokes, but BORU's design philosophy prefers words over
+a few keystrokes, but boru's design philosophy prefers words over
 symbols: every operator in the language is a named word that
 participates in the same forward-collecting dispatch. Adding a
 punctuation operator for one type-algebra case introduces a

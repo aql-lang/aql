@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestFormatMarkdown reformats BORU inside ```boru fences and marker
+// TestFormatMarkdown reformats boru inside ```boru fences and marker
 // regions, exercises a longer closing fence and a tilde fence, and leaves
 // non-boru fences, prose, and an empty region untouched.
 func TestFormatMarkdown(t *testing.T) {

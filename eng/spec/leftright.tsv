@@ -36,7 +36,7 @@
 #		
 # Why this matters		
 # ----------------		
-# BORU has no operator precedence table — the language picks the		
+# boru has no operator precedence table — the language picks the		
 # uniform rule 'left to right, with parens for override'. This avoids		
 # the entire precedence-table category of design questions that other		
 # languages spend tooling on (associativity / parentheses-suggester /		

@@ -54,7 +54,7 @@ import "fmt"
 //	                  convention instead (`is-leap-year`,
 //	                  `is-before`, `is-equal`, …).
 //
-// Returns nil for valid names; an *BoruError with code
+// Returns nil for valid names; a *BoruError with code
 // "invalid_word_name" otherwise. Callers are expected to surface the
 // error in whatever way fits their entry point — Registry methods
 // accumulate into r.errs; def/fn handlers return it as a Run-time

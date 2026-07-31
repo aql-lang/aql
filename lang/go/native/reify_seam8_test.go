@@ -4,7 +4,7 @@ import (
 	"testing"
 )
 
-// w8ClassReg defines a class via BORU and returns its resolved type Value
+// w8ClassReg defines a class via boru and returns its resolved type Value
 // plus the registry, ready to drive reifyHandler directly (the reify word
 // lives behind the boru:struct-util module, whose resolver the bare
 // DefaultRegistry does not configure).

@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// BoruError is the structured error type for BORU engine errors.
+// BoruError is the structured error type for boru engine errors.
 // It mirrors the jsonic JsonicError format, providing error codes,
 // source location, source extracts, and detailed descriptions.
 //
@@ -72,7 +72,7 @@ type BoruError struct {
 	fullSource string
 }
 
-// DiagSpan is one secondary labeled source location attached to an
+// DiagSpan is one secondary labeled source location attached to a
 // BoruError. The error's own Row/Col/Src is the primary span (rendered
 // with a ^^^ underline); secondaries render with a --- underline and
 // their Label. A span whose Pos.Row is 0 has no usable location and

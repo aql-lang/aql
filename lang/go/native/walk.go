@@ -9,7 +9,7 @@ import (
 
 // The "walk" word is registered via the consolidated Natives slice in
 // natives.go. This file keeps the leaf-only/before/before-after handlers
-// plus the makeWalkApply helper that bridges BORU callbacks into
+// plus the makeWalkApply helper that bridges boru callbacks into
 // voxgigstruct.Walk.
 //
 // walkHandler uses voxgigstruct.Walk to traverse the value depth-first,
@@ -44,7 +44,7 @@ func walkHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry)
 	return []Value{NewList(leaves)}, nil
 }
 
-// makeWalkApply creates a voxgigstruct.WalkApply from a BORU function callback.
+// makeWalkApply creates a voxgigstruct.WalkApply from a boru function callback.
 // The callback receives a {key, value, path} map and its return value replaces
 // the node in the tree.
 func makeWalkApply(cb Value, r *Registry, callErr *error) func(*string, any, any, []string) any {
@@ -80,7 +80,7 @@ func makeWalkApply(cb Value, r *Registry, callErr *error) func(*string, any, any
 		if fd, ok := cb.Data.(FnDefInfo); ok {
 			cbCaps = fd.Captured
 		}
-		cbResult, err := r.CallBORU(cbSig, cbArgs, cbCaps)
+		cbResult, err := r.CallBoru(cbSig, cbArgs, cbCaps)
 		if err != nil {
 			*callErr = err
 			return val

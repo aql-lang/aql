@@ -1,11 +1,11 @@
 # tree-sitter-boru
 
 A [tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammar for
-**BORU** — a concatenative, strongly-typed query language (source extension
+**boru** — a concatenative, strongly-typed query language (source extension
 `.boru`). It powers syntax highlighting and structural editing in Neovim
 (nvim-treesitter), Helix, Zed, Emacs (`treesit`), and GitHub Linguist.
 
-Because BORU is *concatenative*, this grammar is deliberately **pragmatic**:
+Because boru is *concatenative*, this grammar is deliberately **pragmatic**:
 it models the token / lexeme layer faithfully (comments, the three string
 kinds with `${…}` interpolation, every number form, words, capitalised type
 identifiers, operators / brackets, and the `/modifier` suffixes) and then
@@ -127,7 +127,7 @@ path = "editors/tree-sitter"
 commit = "<pinned-sha>"
 ```
 
-Add a `languages/boru/config.toml` (`name = "BORU"`, `grammar = "boru"`,
+Add a `languages/boru/config.toml` (`name = "boru"`, `grammar = "boru"`,
 `path_suffixes = ["boru"]`, `line_comments = ["# ", "// "]`) and copy
 `highlights.scm` / `injections.scm` into `languages/boru/`.
 
@@ -151,7 +151,7 @@ editors/tree-sitter/
 ├── grammar.js              # the grammar (name: 'boru')
 ├── queries/
 │   ├── highlights.scm      # standard-capture highlighting
-│   └── injections.scm      # (minimal — BORU embeds no foreign DSLs by default)
+│   └── injections.scm      # (minimal — boru embeds no foreign DSLs by default)
 ├── test/corpus/basics.txt  # tree-sitter test cases
 ├── src/                    # GENERATED and committed (parser.c, *.json)
 ├── bindings/               # node / rust / python / go / swift / c bindings
@@ -162,4 +162,4 @@ editors/tree-sitter/
 
 ## License
 
-MIT (same as the parent BORU repository).
+MIT (same as the parent boru repository).

@@ -1,4 +1,4 @@
-# BORU Language Specification: Collection operations (sort reverse
+# boru Language Specification: Collection operations (sort reverse
 # flatten size take)
 # Format: input<TAB>expected<TAB>description
 #

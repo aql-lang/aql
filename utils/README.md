@@ -1,10 +1,10 @@
-# utils/ — a coreutils subset, written in BORU
+# utils/ — a coreutils subset, written in boru
 
-These are real programs, not examples. Each one is a BORU source file that
+These are real programs, not examples. Each one is a boru source file that
 `boru build` turns into a standalone executable, parses its own arguments with
 [`boru:cli`](../lang/go/modules/cli.boru), reads stdin or files, writes stdout,
 and chooses an exit code. They exist to answer a question the language could
-not answer before: *can you actually write a command-line tool in BORU?*
+not answer before: *can you actually write a command-line tool in boru?*
 
 Every program here is therefore also a test of the runtime's CLI contract —
 argv, environment, exit codes, stream detection, baked permissions — and each
@@ -42,7 +42,7 @@ optional — it is the only gate between a typo and a shipped binary.
 ## Why a Makefile here and a Go test over there
 
 This directory is not in the repository's Go module list, so nothing in it is
-reached by `make test` at the root. A top-level BORU directory outside the Go
+reached by `make test` at the root. A top-level boru directory outside the Go
 fan-out rots — `kg/` demonstrated that — so `cmd/go` carries an end-to-end Go
 test — `cmd/go/internal/build/utils_e2e_test.go` — that builds real programs
 from here with `boru build` and runs the produced executables: it pipes into
@@ -51,7 +51,7 @@ what keeps this directory honest in CI; the Makefile is what makes it pleasant
 to work in.
 
 It also owns the claims that are properties of a **built binary** rather than
-of a running program, and so cannot be checked from inside BORU at all:
+of a running program, and so cannot be checked from inside boru at all:
 
 - argv and the process environment reach a built binary,
 - the exit code a program chooses is the process's exit status,

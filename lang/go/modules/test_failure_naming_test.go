@@ -18,7 +18,7 @@ func TestTestCaseFailureIsNamedLoudly(t *testing.T) {
 		r.ErrOutput = &buf
 		// Test.test catches the assertion error, so the Run itself
 		// succeeds — the name must come from the loud FAIL line.
-		runTestBORU(t, r, `[ 1 2 Assert.equal ] "should-fail-named-foo" Test.test`)
+		runTestBoru(t, r, `[ 1 2 Assert.equal ] "should-fail-named-foo" Test.test`)
 		got := buf.String()
 		if !strings.Contains(got, "FAIL") || !strings.Contains(got, "should-fail-named-foo") {
 			t.Errorf("expected a named FAIL line for the failing case, got: %q", got)
@@ -29,7 +29,7 @@ func TestTestCaseFailureIsNamedLoudly(t *testing.T) {
 		r := testRegistry(t)
 		var buf bytes.Buffer
 		r.ErrOutput = &buf
-		runTestBORU(t, r, `Test.describe "math" [ [ 2 3 Assert.equal ] "adds" Test.test ]`)
+		runTestBoru(t, r, `Test.describe "math" [ [ 2 3 Assert.equal ] "adds" Test.test ]`)
 		got := buf.String()
 		if !strings.Contains(got, "math") || !strings.Contains(got, "adds") {
 			t.Errorf("expected FAIL line to include describe path + case name, got: %q", got)
@@ -40,7 +40,7 @@ func TestTestCaseFailureIsNamedLoudly(t *testing.T) {
 		r := testRegistry(t)
 		var buf bytes.Buffer
 		r.ErrOutput = &buf
-		runTestBORU(t, r, `[ 1 1 Assert.equal ] "should-pass" Test.test`)
+		runTestBoru(t, r, `[ 1 1 Assert.equal ] "should-pass" Test.test`)
 		if strings.Contains(buf.String(), "FAIL") {
 			t.Errorf("passing case must not print a FAIL line, got: %q", buf.String())
 		}

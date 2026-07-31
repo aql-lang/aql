@@ -1,4 +1,4 @@
-# BORU Language Specification: Bitwise Operators (band bor bxor bnot
+# boru Language Specification: Bitwise Operators (band bor bxor bnot
 # bsl bsr busr)
 # Format: input<TAB>expected<TAB>description
 #

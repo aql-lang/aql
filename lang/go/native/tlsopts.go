@@ -163,7 +163,7 @@ func ParseServerTLSOpts(r *Registry, v Value, word string) (capabilities.ServerT
 	if p.Identity == "" {
 		return p, r.BoruErrorHint("net_error",
 			word+": tls: needs identity: — a TLS server must present a certificate", word,
-			"the host registers credentials with (*BORU).RegisterClientIdentity")
+			"the host registers credentials with (*Boru).RegisterClientIdentity")
 	}
 	return p, nil
 }
@@ -171,7 +171,7 @@ func ParseServerTLSOpts(r *Registry, v Value, word string) (capabilities.ServerT
 // TLSIdentityHandles lets a module teach ParseTLSOpts an opaque handle
 // shape that names a registered identity — boru:vault registers one so
 // `tls: {identity: (Vault.identity "acme")}` works without a private key
-// ever becoming a BORU value.
+// ever becoming a boru value.
 //
 // It is a hook rather than a direct call because the handle types live
 // in lang/go/modules, which imports this package; the dependency cannot

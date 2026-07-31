@@ -1,8 +1,8 @@
 .PHONY: serve wasm test vet fmt clean e2e
 
-# wpg (github.com/boru-lang/boru/wpg) — the BORU web playground.
+# wpg (github.com/boru-lang/boru/wpg) — the boru web playground.
 #
-#   wasm/   BORU engine compiled to WebAssembly (browser-side eval)
+#   wasm/   boru engine compiled to WebAssembly (browser-side eval)
 #   serve/  Standalone HTTP server (server-side eval; self-contained HTML)
 #
 # The language library lives at ../lang/go (wired in via go.mod replace).

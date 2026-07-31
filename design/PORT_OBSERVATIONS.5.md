@@ -218,7 +218,7 @@ Go engine should follow.
 ### 1.4 Stack-only vs forward-collecting — RESOLVED via boundary-aware unified dispatch
 
 The asker correctly noted: is the difference in the *implementation
-functions*, or in the *BORU language itself*? **Both — but the language
+functions*, or in the *boru language itself*? **Both — but the language
 choice is the cause and the implementation is the effect.**
 
 The language semantics. To compare apples to apples, use the SAME
@@ -451,7 +451,7 @@ ported (each is its own follow-up):
 | Unify | Whole `unify.go` — type unification, dependent-leaf checks, structural map/list unify. |
 | Dependent scalars | `DepInteger`, `DepBound`, `DepKind`, etc. |
 | Module subsystem | Module/import/export, `RunModuleBody`, `loadFileModule`, `installExports`. |
-| FnDef / CallBORU | User-defined functions; `def`/`fn`/`undef`/`var`/`call`/`args` words. |
+| FnDef / CallBoru | User-defined functions; `def`/`fn`/`undef`/`var`/`call`/`args` words. |
 | Control flow | `if`/`for`/`do`/`error`, break/continue, `IfCont`/`ForCont`. |
 | Trace / step budget | `Trace`, `traceWrap`, step-budget enforcement. |
 | Mark/Move primitives | `__MK`/`__MV` continuation tokens. |

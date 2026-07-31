@@ -1,4 +1,4 @@
-# BORU Language Specification: Function VALUES at the pointer dispatch like words
+# boru Language Specification: Function VALUES at the pointer dispatch like words
 # Format: input<TAB>expected<TAB>description
 #
 # A Function value that reaches the pointer (typically a `get` result — a

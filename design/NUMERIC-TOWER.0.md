@@ -1,4 +1,4 @@
-# Numeric Tower — adding a true `Decimal` to BORU
+# Numeric Tower — adding a true `Decimal` to boru
 
 Status: **superseded by [BIGNUM-0D.10.md](BIGNUM-0D.10.md)** (the exact
 leaves shipped as `BigInteger`/`BigDecimal` opted into via the `0d`
@@ -6,7 +6,7 @@ literal prefix, rather than the single `Decimal`/`d`-suffix sketched
 here). Retained for the motivation and the units-of-measure interaction.
 
 Original status: **proposal / design-only**. No code. This document
-specifies how BORU would grow from two numeric leaves (`Integer`, `Float`)
+specifies how boru would grow from two numeric leaves (`Integer`, `Float`)
 to a small *numeric tower* that includes an exact base-10 `Decimal`, and
 how that interacts with the proposed
 [F# units of measure](fsharp-units-in-boru-report.0.md).
@@ -145,7 +145,7 @@ escape hatch.
 1d div 3d                      # returns 0.3333333333333333333333333333  (28 digits, half-even)
 ```
 
-BORU already has an ambient **context Store** (the `context` word /
+boru already has an ambient **context Store** (the `context` word /
 copy-on-write layers). The decimal context lives there, with a block
 word to scope overrides and a sensible default (IEEE decimal128: 34
 significant digits, round-half-even):
@@ -236,7 +236,7 @@ magnitude slot strictly more useful without touching the unit layer.
 ### Money is the meeting point
 
 F#'s own canonical money example is `decimal<USD>` — an **exact decimal**
-magnitude with a **currency unit**. BORU gets the same thing for free once
+magnitude with a **currency unit**. boru gets the same thing for free once
 both features exist:
 
 ```
@@ -269,7 +269,7 @@ tokens that stack as `<magnitude-with-numeric-suffix><unit-marker><unit>`:
 ```
 
 One caveat for the units team: the units report's Tier-2 marker is `#`,
-which is BORU's line-comment character. A money literal `19.99d#usd`
+which is boru's line-comment character. A money literal `19.99d#usd`
 relies on "`#` glued to a number with no space = unit marker", which is
 fragile next to `# comment`. The *numeric* suffix (`d`) is unaffected
 either way — it binds to the number before any unit marker — so the

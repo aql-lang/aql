@@ -1,5 +1,5 @@
 # ============================================================================
-# boru:cli — BORU unit-test suite (boru:test framework), mirroring the shape of
+# boru:cli — boru unit-test suite (boru:test framework), mirroring the shape of
 # lang/go/modules/sift_test.boru.
 #
 # Goal: exercise EVERY executable row of cli.boru for 100% line coverage, with

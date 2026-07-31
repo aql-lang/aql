@@ -1,7 +1,7 @@
-# F# Units of Measure in BORU: Short Feasibility Report
+# F# Units of Measure in boru: Short Feasibility Report
 
 ## Scope
-Evaluate whether F#-style units of measure (dimensional tagging of numeric values, checked at signature match time) can be applied to BORU.
+Evaluate whether F#-style units of measure (dimensional tagging of numeric values, checked at signature match time) can be applied to boru.
 
 ## F# Units Recap
 - Numeric types are annotated with units: `1.5<m>`, `float<m/s^2>`.
@@ -10,7 +10,7 @@ Evaluate whether F#-style units of measure (dimensional tagging of numeric value
 - Catches dimensional mismatch bugs (`m + s` is a type error).
 - Does not do unit conversion or affine offsets — those stay explicit.
 
-## BORU Baseline
+## boru Baseline
 - `Scalar/Number` with `Integer` and `Decimal` subtypes.
 - Hierarchical type paths with subtype matching (`Matches()`).
 - Signature-based dispatch on argument types.
@@ -30,7 +30,7 @@ Evaluate whether F#-style units of measure (dimensional tagging of numeric value
 | Subtype-based units via hierarchical type path | **Feasible**, needs dynamic type-path generation |
 | Signature dispatch on unit tags | **Feasible** via `Matches()` extension for tagged number types |
 | Generic unit variables in signatures | **Moderate** — signature matcher has no unit-variables today |
-| Fully static checking (F#-equivalent) | **Hard** — BORU dispatch is runtime; best BORU can do is fail fast at call site |
+| Fully static checking (F#-equivalent) | **Hard** — boru dispatch is runtime; best boru can do is fail fast at call site |
 | Unit algebra for `mul`/`div`/`pow` | **Feasible**, mechanical |
 | Conversion between compatible units (m ↔ cm) | **Feasible** as explicit `convert` word |
 | Affine units (°C/K, timestamps) | **Out of scope**, same as F# |
@@ -38,7 +38,7 @@ Evaluate whether F#-style units of measure (dimensional tagging of numeric value
 ## Syntax Recommendations
 
 ### Design constraints
-- BORU is concatenative: every token is a word or a literal. New syntax must either be a literal form or a word.
+- boru is concatenative: every token is a word or a literal. New syntax must either be a literal form or a word.
 - `<` and `>` are used as comparison words, so F#'s `1.5<m>` form would clash.
 - Atoms are bare unquoted words, so `9.81 m` parses today as *number then atom* — giving us a ready composition point.
 - Existing map syntax `{m:1, s:-2}` already expresses an exponent-keyed unit tag cleanly.
@@ -97,7 +97,7 @@ Examples:
 This grammar produces the same `{base:exponent}` map everywhere, so `qty 9.81 m/s^2` and `9.81#m/s^2` are interchangeable.
 
 ### Type-annotation syntax
-For record fields and function signatures, annotate a numeric type with a unit tag using the typed-map convention already in BORU:
+For record fields and function signatures, annotate a numeric type with a unit tag using the typed-map convention already in boru:
 
 ```boru
 def Velocity (refine Record [speed:Number#m/s])
@@ -251,7 +251,7 @@ Mirror the existing pattern (`native_temporal_*_test.go`, `math_bool_coverage_te
 1. `units_test.go` — pure unit-algebra coverage (`UnitMul`/`UnitDiv`/`UnitPow`/canonicalisation).
 2. `native_math_qty_test.go` — dispatch cases: `add` same-unit, `add` mismatch, `mul` tag propagation, `div` collapse to dimensionless, `pow` integer check, raw-number interop rules.
 3. Panic-prevention: extend `TestTypeLiteralNoPanic` in `internal/engine/type_scaling_test.go` so the new `qty`, `unit`, `value`, `convert`, and per-base unit words receive a `Quantity` type literal (`Data==nil`) and return an error cleanly.
-4. End-to-end: add a BORU-level script under `lang/go/test/` mirroring `lang/go/test/*.boru` layout — a small physics example and a finance (currency tags) example.
+4. End-to-end: add a boru-level script under `lang/go/test/` mirroring `lang/go/test/*.boru` layout — a small physics example and a finance (currency tags) example.
 
 ### Effort estimate
 - Engine type + accessors: ~0.5 day.
@@ -270,4 +270,4 @@ Mirror the existing pattern (`native_temporal_*_test.go`, `math_bool_coverage_te
 - Serialization: JSON/record round-trips need a canonical encoding of unit tags.
 
 ## Verdict
-**Feasible as a library-first subsystem.** BORU cannot replicate F#'s zero-cost static guarantee, but a runtime-checked equivalent at signature-match time captures the same class of dimensional bugs with minimal engine change.
+**Feasible as a library-first subsystem.** boru cannot replicate F#'s zero-cost static guarantee, but a runtime-checked equivalent at signature-match time captures the same class of dimensional bugs with minimal engine change.

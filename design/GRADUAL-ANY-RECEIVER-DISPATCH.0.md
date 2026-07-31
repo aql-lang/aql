@@ -9,7 +9,7 @@ Companion reading: `FORWARD-COLLECTION-PHASES.10.md`, `FORWARD-COLLECTION-TRAPS.
 
 ## Context
 
-The BORU compiler lowers bytecode from a check-mode analysis pass. Under `--compile`
+The boru compiler lowers bytecode from a check-mode analysis pass. Under `--compile`
 (the default, silent-fallback mode) the compiled program is contractually
 **byte-identical** to the interpreter — it either matches or falls back, never
 diverges. A dispatch over a strict `Any`-carrier **receiver** violates that contract:

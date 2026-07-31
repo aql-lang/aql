@@ -3,7 +3,7 @@
 This directory holds two things:
 
 1. **A reusable, evidence-backed knowledge-graph pipeline written in
-   BORU** — ingest candidate facts, normalize entities, resolve identity,
+   boru** — ingest candidate facts, normalize entities, resolve identity,
    validate every claim, preserve provenance, and query the result with
    bounded traversals.
 2. **The knowledge graph of this repository itself** — built by that
@@ -21,7 +21,7 @@ an unchanged input produces a byte-identical bundle and a clean diff.
 
 ## Quick start
 
-Everything runs **from this directory** (BORU imports resolve against the
+Everything runs **from this directory** (boru imports resolve against the
 working directory):
 
 ```bash
@@ -32,7 +32,7 @@ make test                   # run the whole test suite
 make graph                  # rebuild out/graph.json + out/graph.sql
 ```
 
-Query the committed graph from BORU:
+Query the committed graph from boru:
 
 ```boru
 import "boru:io"
@@ -251,8 +251,8 @@ bundles subject to the full evidence checks.
   repo's scale; add blocking (e.g. by normalized-label prefix) before
   pointing it at very large entity sets.
 - `text`-kind sources are ingested as *candidate assertion bundles*
-  (extraction happens outside BORU — by an agent, a rule, or a model);
-  BORU validates evidence and quotes but does not itself do NLP.
+  (extraction happens outside boru — by an agent, a rule, or a model);
+  boru validates evidence and quotes but does not itself do NLP.
 - `generated_at`/`recorded_at` are pinned in `main.boru` (`run-stamp`)
   so rebuilds are byte-identical; bump the stamp when regenerating
   after a content change.

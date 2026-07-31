@@ -94,7 +94,7 @@ func TestMiniQueryInKinds(t *testing.T) {
 	}
 }
 
-func mustRun(t *testing.T, a *lang.BORU, src string) any {
+func mustRun(t *testing.T, a *lang.Boru, src string) any {
 	t.Helper()
 	res, err := a.Run(src)
 	if err != nil {

@@ -9,14 +9,14 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// Runtime stamping of CUSTOM BORU codec fns at resolveCodec (Phase 1 of
+// Runtime stamping of CUSTOM boru codec fns at resolveCodec (Phase 1 of
 // design/RUNTIME-STAMPING.0.md): an armed registry compiles the map's
 // decode/encode bodies to detached units so per-request invokeFn dispatch
 // runs on the VM; an unarmed registry (the -no-compile contract) and the
 // Go-backed built-in codecs are untouched. Positive + negative per
 // lang/go/CLAUDE.md.
 
-// customCodecSteps defines a newline-framed BORU codec equivalent in shape to
+// customCodecSteps defines a newline-framed boru codec equivalent in shape to
 // mini-redis's (convert / index / slice body — the compilable subset).
 var customCodecSteps = []string{
 	`import "boru:string-util"`,
@@ -71,11 +71,11 @@ func codecRef(t *testing.T, v native.Value) *eng.CompiledFnRef {
 	return nil
 }
 
-// Armed: resolveCodec stamps both custom BORU fns (finalized Prog present) and
+// Armed: resolveCodec stamps both custom boru fns (finalized Prog present) and
 // the symmetric client-side defaults alias the SAME stamped clones (one
 // compile per direction, not two). Unarmed: nothing is stamped. Built-in
 // Go codecs are never touched either way.
-func TestResolveCodecStampsCustomBORUFns(t *testing.T) {
+func TestResolveCodecStampsCustomBoruFns(t *testing.T) {
 	armed := stampNetReg(t, true, customCodecSteps)
 	cdcVal, ok := armed.Defs.Top("cdc")
 	if !ok {

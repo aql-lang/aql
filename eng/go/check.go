@@ -380,7 +380,7 @@ func (r *Registry) RescueForwardRefDiagnostics() {
 			}
 			// Dynamic-scope reference: the name lives only in a per-call frame
 			// (a fn parameter or a body-local def), popped before end of pass,
-			// but BORU's dynamic scoping makes it visible to a fn REACHED from
+			// but boru's dynamic scoping makes it visible to a fn REACHED from
 			// the binder's frame. Rescue iff some fn that binds the name can
 			// actually reach the reading fn through the call graph — the SOUND
 			// condition. A name merely bound by an unrelated fn that never

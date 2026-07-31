@@ -23,7 +23,7 @@ only the §5a memo-key commit (`6665be3`) and the `.0`–`.4` design record.
   diagnostics at end of pass, wired in beside `RescueForwardRefDiagnostics`
   in both `Check` and `CompileCheck` (`lang/go/boru.go`).
 - `execFnDefSig`: a value-threading probe (env-gated) that points the module
-  sub-registry's `Check` at the parent pass's for the `CallBORU`, bumps
+  sub-registry's `Check` at the parent pass's for the `CallBoru`, bumps
   `ModuleBodyDepth`, and copies the mutated state back.
 
 ## 2. Result A — suppression works for in-body diagnostics (29 → 14)

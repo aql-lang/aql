@@ -371,7 +371,7 @@ func (a *dapAdapter) setBreakpoints(sess *Session, m dapMessage, needLock bool) 
 }
 
 // setFunctionBreakpoints REPLACES the session's word breakpoints with
-// the request's set — DAP's "function" breakpoints are BORU's word
+// the request's set — DAP's "function" breakpoints are boru's word
 // breakpoints (a concatenative program's functions ARE its words). The
 // same lock discipline as setBreakpoints.
 func (a *dapAdapter) setFunctionBreakpoints(sess *Session, m dapMessage, needLock bool) map[string]any {

@@ -3,7 +3,7 @@
 Status: **both proposals LANDED (2026-06-10).** Source material:
 VOXGIG-DX-REPORT.5.md T9.7 ("no in-memory parser"), moved here so the
 report tracks status and this document owns the design. The trie
-author wanted to turn text into data (and BORU source into inspectable
+author wanted to turn text into data (and boru source into inspectable
 structure) without touching the filesystem.
 
 > **Landed state (2026-06-10):** §2 `StructUtil.parse` decodes
@@ -64,10 +64,10 @@ Design points:
 - Per ADR-003 it ships with `lang/spec/module-struct.tsv` rows
   (positive + malformed-input negative) in the same change.
 
-## 3. Proposal: `Vm.parse` — BORU source → inspectable structure
+## 3. Proposal: `Vm.parse` — boru source → inspectable structure
 
 For tooling (formatters, linters, macro experiments) a step below
-`Vm.run`: parse BORU source and return the token/value sequence as
+`Vm.run`: parse boru source and return the token/value sequence as
 data, without evaluating it.
 
 ```
@@ -89,7 +89,7 @@ Design points:
 - Open question: rendering of structural markers (paren groups,
   `end`) — recommend exposing exactly the engine's marker values,
   documented as implementation-defined for now, and stabilising the
-  shape when a first real consumer (e.g. a BORU-written linter)
+  shape when a first real consumer (e.g. a boru-written linter)
   exists.
 
 ## 4. Non-goals

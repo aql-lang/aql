@@ -100,7 +100,7 @@ func ParseFnDef(r *Registry, list []Value) (FnDefInfo, error) {
 			Returns:        returns,
 			ReturnPatterns: returnPatterns,
 			Decl:           decl,
-			Impl:           BORU(bodyElems),
+			Impl:           Boru(bodyElems),
 			BarrierPos:     barrierPos,
 			QuoteArgs:      QuoteArgsFromParams(params),
 		})

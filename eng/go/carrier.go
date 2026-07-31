@@ -2130,7 +2130,7 @@ func calleeValueLeaksFlow(r *Registry, v Value, seen map[string]bool) bool {
 // calleeLeaksFlow resolves name to its aggregated dispatch table (Lookup
 // unions every FnDefInfo binding on the name's def stack — exactly what a
 // call would dispatch over) and scans the overload bodies. Native (Go-impl)
-// sigs have no BORU body and contribute nothing.
+// sigs have no boru body and contribute nothing.
 func calleeLeaksFlow(r *Registry, name string, seen map[string]bool) bool {
 	if name == "" || seen[name] {
 		return false
@@ -2422,7 +2422,7 @@ func comboTypeNames(combo []Value) string {
 // overloads can't be statically chosen and it has no poly re-match (code body).
 // fnPredicateOverloadHazard reports whether word's same-arity overload set
 // both (a) contains an fn-PREDICATE-typed param slot (*predicateUnifier —
-// the BORU fn-body membership path whose check-mode match is LENIENT:
+// the boru fn-body membership path whose check-mode match is LENIENT:
 // RunPredicate short-circuits true, registry.go) and (b) leaves more than
 // one arm reachable for these args — the combination where a static arm
 // commit can diverge from the interpreter's runtime predicate fall-through.
@@ -4128,7 +4128,7 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 			narrowed.Carrier = true
 		}
 		if ValuesEqual(narrowed, cur) {
-			// Complement did not refine cur (T disjoint from cur, or BORU
+			// Complement did not refine cur (T disjoint from cur, or boru
 			// has no positive representation for the exact difference).
 			continue
 		}
@@ -4358,10 +4358,10 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// (RunCarrierBodyWithDefs, peekCaptureArm).
 	//
 	// Admitted for CALLBACK bodies and MULTI-TOKEN fn bodies. A callback is
-	// only ever invoked via InvokeCallback / CallBORU, which evaluate the
+	// only ever invoked via InvokeCallback / CallBoru, which evaluate the
 	// body residual IN the live frame on both engines. A multi-token body's
 	// trailing computed container now ALSO evaluates in-frame on every
-	// interpreter dispatch path — CallBORU-class and same-registry spliced,
+	// interpreter dispatch path — CallBoru-class and same-registry spliced,
 	// consumed and unconsumed alike (mini-s3's s3-parse-range
 	// `{from: from upto: upto}`; the historical spliced-path deferral that
 	// blocked this admission is gone) — so the recorded OpMakeMap /
@@ -4412,7 +4412,7 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 // isCallbackBodyName reports whether name is a stored-fn / spawn callback
 // body — compileClosureBody builds "storedfn$body" / "spawnbody$body" for the
 // words "storedfn" / "spawnbody" (callable_words.go). Such a body is invoked
-// only via InvokeCallback / CallBORU, which evaluate a residual COMPUTED
+// only via InvokeCallback / CallBoru, which evaluate a residual COMPUTED
 // container (`{message: (join …)}` / `[a b]`) IN the live frame on both
 // engines, so recording its OpMakeMap / OpMakeList assembly is safe (it
 // re-assembles per run, matching the interpreter). A normal user fn applied

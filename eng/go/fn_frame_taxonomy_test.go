@@ -33,7 +33,7 @@ func TestInfiniteTailLoopTripsEvaluationLimitNotTape(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "n", Type: TInteger}},
 			Returns:    []*Type{TInteger},
-			Impl:       BORU([]Value{NewOpenParen(), NewWord("spin"), NewWord("n"), NewCloseParen()}),
+			Impl:       Boru([]Value{NewOpenParen(), NewWord("spin"), NewWord("n"), NewCloseParen()}),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -68,7 +68,7 @@ func TestInfiniteTailLoopTripsEvaluationLimitNotTape(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "n", Type: TInteger}},
 			Returns:    []*Type{TInteger},
-			Impl:       BORU([]Value{NewOpenParen(), NewWord("spin"), NewWord("n"), NewCloseParen()}),
+			Impl:       Boru([]Value{NewOpenParen(), NewWord("spin"), NewWord("n"), NewCloseParen()}),
 			BarrierPos: BarrierAllForward,
 		}},
 	})

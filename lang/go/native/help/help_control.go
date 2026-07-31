@@ -5,7 +5,7 @@ func init() {
 		Word:    "unpack",
 		Summary: "Destructure entries of a map into local word bindings.",
 		Description: "Extracts entries from a map (or record) and binds each to a bare word " +
-			"in the current scope — BORU's analogue of JavaScript object destructuring. " +
+			"in the current scope — boru's analogue of JavaScript object destructuring. " +
 			"Three selector forms over the same source: `unpack [names] map`, " +
 			"`unpack all map`, and `unpack {renames} map`. A fourth form decodes a " +
 			"binary frame: `unpack <BinarySpec> b` reads the Bytes `b` against a frame " +
@@ -41,7 +41,7 @@ func init() {
 	register(&Entry{
 		Word:    "do",
 		Summary: "Evaluate a list or map as code.",
-		Description: "Evaluates the elements of a list as BORU code. For maps, recursively " +
+		Description: "Evaluates the elements of a list as boru code. For maps, recursively " +
 			"evaluates all values. Used to execute deferred expressions.",
 		Notes: []string{
 			"Typed lists, typed maps, and record types are not evaluated.",
@@ -236,7 +236,7 @@ func init() {
 	register(&Entry{
 		Word:        "error",
 		Summary:     "Recover from an error: `value error [handler]`.",
-		Description: "If the value is an Error, the handler list runs (with the error on the stack) to produce a fallback; otherwise the value passes through unchanged. BORU's try/catch combinator.",
+		Description: "If the value is an Error, the handler list runs (with the error on the stack) to produce a fallback; otherwise the value passes through unchanged. boru's try/catch combinator.",
 	})
 	register(&Entry{
 		Word:        "force-arity",

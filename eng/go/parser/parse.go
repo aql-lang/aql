@@ -129,7 +129,7 @@ func (d *parseDepth) enter() error {
 // leave ascends one container level. Always deferred immediately after enter.
 func (d *parseDepth) leave() { d.cur-- }
 
-// Parse tokenizes the BORU source string into a slice of eng.Value.
+// Parse tokenizes the boru source string into a slice of eng.Value.
 // The input is treated as a top-level implicit list: jsonic.Parse handles
 // the entire source. The TextInfo option distinguishes quoted strings from
 // unquoted text (words).
@@ -160,7 +160,7 @@ func Parse(src string) ([]eng.Value, error) {
 		Map:   &jsonic.MapOptions{Child: boolPtr(true)},
 		Value: &jsonic.ValueOptions{Lex: boolPtr(false)},
 		// The library's own error rendering is silenced at the source:
-		// parse failures are translated into BORU syntax_errors
+		// parse failures are translated into boru syntax_errors
 		// (translateParseError), so the always-on ANSI palette, the
 		// `--internal:` suffix, and the library docs link must never
 		// reach a user (they used to leak raw into the REPL and the
@@ -176,7 +176,7 @@ func Parse(src string) ([]eng.Value, error) {
 	setupMiniLitMatcher(j, t)
 	setupXmlMatcher(j, t)
 
-	// Stage 2: Grammar setup — extend rules for BORU syntax.
+	// Stage 2: Grammar setup — extend rules for boru syntax.
 	setupValRule(j, t)
 	setupPairGrammar(j, t)
 	setupParenGrammar(j, t)
@@ -722,7 +722,7 @@ func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 
 // emptyElementError is raised when a list literal contains an empty
 // element produced by a leading or repeated comma (`[1,,2]`, `[,1]`).
-// BORU has no implicit "hole" value; commas are optional separators, so a
+// boru has no implicit "hole" value; commas are optional separators, so a
 // missing element is a typo. Use `none` for an explicit empty value.
 func emptyElementError() error {
 	return &eng.BoruError{
@@ -1229,7 +1229,7 @@ func convertDataList(items []any, d *parseDepth) (eng.Value, error) {
 }
 
 // resolveTextValue converts a bare text string into the appropriate
-// BORU value — type literal, boolean, or atom.
+// boru value — type literal, boolean, or atom.
 // Unquoted text is never a string; only quoted text produces strings.
 func resolveTextValue(text string) eng.Value {
 	if text == "true" {
@@ -1437,7 +1437,7 @@ func wordBaseName(text string) string {
 	return base
 }
 
-// parseWord interprets an unquoted text token as a BORU word, handling
+// parseWord interprets an unquoted text token as a boru word, handling
 // the modifier syntax decoded by scanWordModifier. q produces an Atom and
 // overrides the other modifiers; u emits a usurp-word and r emits a
 // ref-word, both of which short-circuit the rest.
@@ -1525,7 +1525,7 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.NewNone(), nil
 	}
 
-	// IEEE-754 special-value literals, following the BORU reserved-literal
+	// IEEE-754 special-value literals, following the boru reserved-literal
 	// convention (lowercase, parser-emitted, like true / false / none):
 	// `inf` / `-inf` / `nan` produce the corresponding Float. They render
 	// back to these same tokens (see FormatFloat), so print∘parse is
@@ -1725,7 +1725,7 @@ type numberVal struct {
 	Row, Col int // 1-based source position of the literal (0 = unknown)
 }
 
-// floatToValue converts a JSON float64 to the appropriate BORU numeric value.
+// floatToValue converts a JSON float64 to the appropriate boru numeric value.
 // Whole numbers become integers; fractional values become decimals.
 func floatToValue(f float64) eng.Value {
 	if f == float64(int64(f)) && !math.IsInf(f, 0) && !math.IsNaN(f) {
@@ -1735,7 +1735,7 @@ func floatToValue(f float64) eng.Value {
 }
 
 // numberValToValue converts a numberVal (float64 + source) to the
-// appropriate BORU numeric value.
+// appropriate boru numeric value.
 //
 //   - A source containing "." is always a Float (even whole-valued, e.g.
 //     5.0), using the float64 jsonic produced.
@@ -1798,7 +1798,7 @@ func numberValToValue(nv numberVal) (eng.Value, error) {
 
 // ConvertParsedNumber converts a jsonic parse-result element that the
 // number-Sub wrapped in a numberVal (see SafeParseData / setupNumberSub)
-// into its BORU numeric Value, preserving the int/float distinction carried
+// into its boru numeric Value, preserving the int/float distinction carried
 // by the source text. Returns ok=false for any non-numberVal input so the
 // caller falls through to its default conversion. The numberVal type stays
 // unexported; this is the single public seam data-decode paths use.

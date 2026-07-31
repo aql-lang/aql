@@ -1,7 +1,7 @@
-# BORU Language Specification: the boru:repl module
+# boru Language Specification: the boru:repl module
 # Format: input<TAB>expected<TAB>description
 #
-# A socket REPL server + client, implemented IN BORU (lang/go/modules/
+# A socket REPL server + client, implemented IN boru (lang/go/modules/
 # repl.go's preamble) over boru:net's lines codec — the first networking
 # verification app. Each received line is evaluated in a sandboxed
 # sub-engine against the session's accumulated history; the reply is

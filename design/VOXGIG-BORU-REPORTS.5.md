@@ -1,9 +1,9 @@
-# Voxgig-BORU Library Reports — Amalgamated
+# Voxgig-boru Library Reports — Amalgamated
 
-Downloaded and amalgamated from the downstream BORU library projects in the
+Downloaded and amalgamated from the downstream boru library projects in the
 [`voxgig-boru`](https://github.com/voxgig-boru) GitHub organisation. These are
 first-hand reports written while building real data-structure libraries in
-BORU, and they are the primary signal for language/DX prioritisation.
+boru, and they are the primary signal for language/DX prioritisation.
 
 **Source reports (current versions, 2026-06-06):**
 
@@ -13,7 +13,7 @@ BORU, and they are the primary signal for language/DX prioritisation.
 | 2 | `DX-REPORT.md` | `voxgig-boru/trie` @ `d80f4cc` | Developer-experience report for the trie utilities (four variants, eight namespaces, ~2000 lines), with a `db828ec` upgrade postscript. |
 | 3 | `BORU-CHECK-REPORT.md` | `voxgig-boru/trie` @ `d80f4cc` | Diagnostics report: what `boru check` flags on this library, why they are false positives, and the case for advisory (non-gating) CI. |
 
-All three were reproduced against BORU build `db828ec` (`boru-lang/boru`).
+All three were reproduced against boru build `db828ec` (`boru-lang/boru`).
 
 > **Relationship to `VOXGIG-DX-REPORT.5.md`:** that file is a hand-curated
 > consolidation of the **earlier** (2026-06-01, boru `5b983b6`/`b6617dd`)
@@ -35,10 +35,10 @@ All three were reproduced against BORU build `db828ec` (`boru-lang/boru`).
 
 *Source: `voxgig-boru/bloom-filter/dx-report.md` @ `4b208cb`*
 
-# Developer-experience report: bloom-filter on BORU
+# Developer-experience report: bloom-filter on boru
 
 **Date:** 2026-06-06
-**BORU build under test:** `boru-lang/boru` @ `db828ec` (built locally from a
+**boru build under test:** `boru-lang/boru` @ `db828ec` (built locally from a
 source tarball with `GOFLAGS=-mod=mod`; version string reported as
 `boru db828ecb6ee1d161ff177134478f42c56484f051`).
 **Context:** building, testing, refactoring, and then upgrading this
@@ -237,13 +237,13 @@ arithmetic/comparison/boolean words (`add`, `sub`, `mul`, `div`, `mod`,
 
 *Source: `voxgig-boru/trie/DX-REPORT.md` @ `d80f4cc`*
 
-# Developer-experience report: building the trie utilities in BORU
+# Developer-experience report: building the trie utilities in boru
 
 This is a first-hand account of writing this library — four trie variants,
-eight namespaces, ~2000 lines of BORU plus tests — against `boru` at commit
+eight namespaces, ~2000 lines of boru plus tests — against `boru` at commit
 `b6617dd` (2026-06-01). It records what worked, what cost me time, and the
 workarounds I settled on, in the hope it is useful both to the next person
-writing BORU data structures and to the language authors.
+writing boru data structures and to the language authors.
 
 > **Postscript (upgraded to `db828ec`, 2026-06-06).** Some sharp edges below
 > were since fixed upstream, and the library was updated accordingly:
@@ -254,7 +254,7 @@ writing BORU data structures and to the language authors.
 > `boru:string-util`, the test module is now `Test.*`/`Assert.*`, and `base`
 > joined the reserved words — none a language *fault*, just churn to track.
 
-The headline: BORU is genuinely capable of expressing persistent, recursive
+The headline: boru is genuinely capable of expressing persistent, recursive
 data structures cleanly, and once the idioms are in hand the code reads
 well. Getting the idioms in hand, though, took a lot of empirical probing,
 because several behaviours are surprising and fail *silently* or with an
@@ -265,7 +265,7 @@ error pointing somewhere other than the cause.
 ## What worked well
 
 - **Recursion with pattern-matched overloads.** Trie traversal is naturally
-  recursive, and BORU handles direct self-recursion and mutual recursion
+  recursive, and boru handles direct self-recursion and mutual recursion
   without ceremony. This is the backbone of every variant.
 - **Multiple namespaces per module.** `export "A" {…}` twice in one file
   gives a clean `A.x` / `B.x` split, which let each variant ship a `…Set`
@@ -435,7 +435,7 @@ it.
 
 When the brief asked for four variants, I implemented a **burst trie** for
 the fourth and explicitly declined a **HAMT** (hash array-mapped trie). It
-is worth recording *why*, because the answer is more nuanced than "BORU
+is worth recording *why*, because the answer is more nuanced than "boru
 can't do it" and it points at a few concrete language gaps. (The facts
 below were confirmed against the source and quick probes at `b6617dd`; I
 did not build a HAMT end to end, so the "only blocker" claim in Level A is
@@ -451,9 +451,9 @@ memory layout*: a contiguous, O(1)-indexed array that is cheap to copy
 
 Crucially, a HAMT indexes children by an integer **slot**, not by a
 dynamic string key. So it sidesteps the limitation that shaped every other
-variant here (BORU can't build maps with computed keys, and `refine Object`
+variant here (boru can't build maps with computed keys, and `refine Object`
 fields aren't enumerable) — integer-indexed `List`s cover it. That makes
-the HAMT *more* expressible in BORU than I first assumed. The question
+the HAMT *more* expressible in boru than I first assumed. The question
 splits cleanly into two levels.
 
 ### Level A — to express a *correct, persistent* HAMT
@@ -489,7 +489,7 @@ GC'd, value-semantics language cannot deliver a HAMT's performance
 advantage without:
 
 1. **Mutable, fixed-width, unboxed arrays** with an in-place O(1)
-   `set`/`insert` contract. BORU has indexed `set` *only* on the separate
+   `set`/`insert` contract. boru has indexed `set` *only* on the separate
    `Array` type, not on plain `List`s (`[10 20 30]` is a `List` and `set`
    rejects it), and the mutation-vs-copy contract isn't exposed. This is
    what enables the *transient* fast path (à la Clojure) that makes bulk
@@ -501,17 +501,17 @@ advantage without:
    (HAMT/CHAMP-backed), the way Clojure, Scala, and Erlang ship one. Then
    `make`/`get`/`set`/`merge` over a large map become O(log₃₂ n) with
    structural sharing and user code never touches a bitmap — and, as a
-   bonus, this would also retire BORU's dynamic-key-map limitation.
+   bonus, this would also retire boru's dynamic-key-map limitation.
 
 ### Takeaway
 
 For *expressiveness*, add `popcount` (ideally also `insert-at`/`remove-at`
-and unsigned-int clarity) and a HAMT becomes a reasonable pure-BORU
+and unsigned-int clarity) and a HAMT becomes a reasonable pure-boru
 exercise. For *HAMT-class performance*, that is a runtime decision: ship a
 native persistent map, and/or add mutable unboxed fixed-width arrays with
 transients. The burst trie was the pragmatic stand-in precisely because it
 trades the bitmap-packing trick for flat buckets — and buckets are just
-`List`s, which BORU represents naturally.
+`List`s, which boru represents naturally.
 
 
 ## Suggestions, in priority order
@@ -535,7 +535,7 @@ trades the bitmap-packing trick for flat buckets — and buckets are just
 ## Bottom line
 
 I shipped four working, cross-checked, persistent trie variants with fuzzy
-and wildcard search in BORU, so the language is clearly up to the task. The
+and wildcard search in boru, so the language is clearly up to the task. The
 friction was almost entirely in *discovering* the idioms, not in expressing
 the algorithms — and nearly every hour lost went to a behaviour that failed
 quietly instead of loudly. Louder failures and a handful of docs notes would
@@ -550,7 +550,7 @@ turn a sometimes-bewildering experience into a smooth one.
 
 # `boru check` on the trie library: a diagnostics report
 
-A record of what the BORU static checker (`boru check`) reports when run over this
+A record of what the boru static checker (`boru check`) reports when run over this
 library, why those reports are **false positives** on this style of code, and
 what (if anything) would make the checker useful here. It backs the decision to
 wire `boru check` into CI as an **advisory, non-gating** step (`--soft` +

@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <syntax name="boru">
     <meta>
-        <name>BORU</name>
+        <name>boru</name>
         <type>compiled</type>
         <preferred-file-extension>boru</preferred-file-extension>
     </meta>
@@ -81,7 +81,7 @@
                 <scope name="boru.string.escape">
                     <expression>\\(?:[nt\\'"`]|u[0-9A-Fa-f]{4})</expression>
                 </scope>
-                <!-- Interpolation: ${ embedded BORU expression } -->
+                <!-- Interpolation: ${ embedded boru expression } -->
                 <scope name="boru.string.interpolation">
                     <starts-with>
                         <expression>\$\{</expression>

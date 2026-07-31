@@ -349,9 +349,9 @@ func TestUserPolyNoMatchAltCoverageScreen(t *testing.T) {
 	InstallFnDef(r, "upnm", FnDefInfo{
 		Signatures: []Signature{
 			{Params: []FnParam{{Name: "a", Type: TInteger}}, Returns: []*Type{TAny},
-				BarrierPos: BarrierAllForward, Impl: BORU([]Value{NewWord("a")})},
+				BarrierPos: BarrierAllForward, Impl: Boru([]Value{NewWord("a")})},
 			{Params: []FnParam{{Name: "a", Type: TString}}, Returns: []*Type{TAny},
-				BarrierPos: BarrierAllForward, Impl: BORU([]Value{NewWord("a")})},
+				BarrierPos: BarrierAllForward, Impl: Boru([]Value{NewWord("a")})},
 		},
 	})
 	fd := r.Lookup("upnm")

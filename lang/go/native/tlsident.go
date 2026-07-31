@@ -57,8 +57,8 @@ func resolveIdentity(r *Registry, p capabilities.TLSProfile, word string) (capab
 	if !ok || id == nil {
 		return nil, r.BoruErrorHint("net_error",
 			word+`: tls: no client identity named "`+p.Identity+`" is registered`, word,
-			"the host registers identities with (*BORU).RegisterClientIdentity; "+
-				"BORU source can name one but cannot create one")
+			"the host registers identities with (*Boru).RegisterClientIdentity; "+
+				"boru source can name one but cannot create one")
 	}
 	return id, nil
 }

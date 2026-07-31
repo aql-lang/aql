@@ -1,8 +1,8 @@
-# PERMISSIONS.10 — Capability-Scoped Permissions for BORU
+# PERMISSIONS.10 — Capability-Scoped Permissions for boru
 
 ## Status: Implemented (Phases 1–8 landed; PR-by-PR on `claude/sleepy-hamilton-7OYSz`)
 
-This document records the design of BORU's permissions model: the JSON
+This document records the design of boru's permissions model: the JSON
 profile shape, the uniform scope structure with hard caps and
 subscopes, the wrapped-capability enforcement layer, the CLI surface,
 and the planned `boru:vm` native module that uses the same mechanism
@@ -46,7 +46,7 @@ capability wrappers, and the `--perms*` / `--allow` / `--deny` /
 
 ## Motivation
 
-BORU is increasingly used in contexts where untrusted or
+boru is increasingly used in contexts where untrusted or
 semi-trusted code runs inside a trusted host:
 
 1. The new `boru exec` HTTP service evaluates code submitted by
@@ -165,7 +165,7 @@ earlier — IAM/AppArmor-style).
 
 ### Defaults
 
-The defaults are **allow-everything**. A `*lang.BORU` with no policy
+The defaults are **allow-everything**. A `*lang.Boru` with no policy
 runs without any check. A profile with no `scopes` block is allow
 everything. A scope with no fields acts as
 `{install: true, words: {default: "allow", rules: []}, scopes: {}}`.
@@ -759,7 +759,7 @@ in-script frontmatter (`#boru:policy=sandbox`) > default `full`.
 ## The `boru:vm` native module — sandboxed sub-engine execution
 
 The same policy mechanism that protects the host registry can be
-used by BORU code itself to spawn restricted sub-engines. The
+used by boru code itself to spawn restricted sub-engines. The
 `boru:vm` module exposes this surface.
 
 ### Words
@@ -869,7 +869,7 @@ limit field; default 8) to prevent runaway recursion.
 2. **REPL extensions and macros**. User-written REPL meta-commands
    run in a sandboxed sub-engine — a misbehaving macro can't
    exfiltrate environment variables or write files.
-3. **Untrusted formula evaluation**. BORU embedded in spreadsheet or
+3. **Untrusted formula evaluation**. boru embedded in spreadsheet or
    reporting tools: formulae from untrusted sources run in
    sub-engines.
 4. **Module loading with policy**. `import` could grow a
@@ -899,7 +899,7 @@ Three invariants make `boru:vm` sound:
 
 The structural guarantee that made the host-side enforcement sound
 (wrapped capabilities, no ambient authority) carries directly into
-the BORU-level surface. `vm.run` is not "a privileged escape hatch";
+the boru-level surface. `vm.run` is not "a privileged escape hatch";
 it's "the same enforcement, exposed as a word."
 
 ---
@@ -920,7 +920,7 @@ it's "the same enforcement, exposed as a word."
 | OpenBSD pledge/unveil | Voluntary syscall + path narrowing | Per-process | Underrated |
 | Capsicum | Capability mode, fd-based | Process-level | Minimal & sound |
 
-BORU's design borrows: the **per-command allowlist** (safe-tcl), the
+boru's design borrows: the **per-command allowlist** (safe-tcl), the
 **uniform JSON shape** (IAM), the **profile-files-with-glob-rules**
 shape (AppArmor), the **wrap-the-capability** structural guarantee
 (WASI / OCAP), the **last-match-wins** ordering (IAM/AppArmor), and
@@ -1006,9 +1006,9 @@ Inside a module body (`e.registry` is the policy-free child):
   (`newSubEngineRegistry` → `newDefaultRegistryWithPolicy(pol)`), so the
   [Why this works](#why-this-works-capability-hygiene) reasoning holds
   there — the gap is specific to the `import` path, not sub-engines.
-- **The hybrid BORU-app loaders are strictly worse.** `boru:sift`,
+- **The hybrid boru-app loaders are strictly worse.** `boru:sift`,
   `boru:repl`, and `boru:vault-tui` build their child with a bare
-  `newDefaultRegistry()` and run an embedded BORU program on it. With no
+  `newDefaultRegistry()` and run an embedded boru program on it. With no
   policy present, that child's `fileops` **and** `sqlite` slots are
   installed *fresh and unwrapped* (the `SetHostX` hooks wrap only when a
   policy is present) — so on these loaders even file and database effects
@@ -1040,11 +1040,11 @@ should pin a policy that denies `vault` (and one that denies a nested
   host process under cgroups.
 - **Side-channel attacks.** Timing oracles, cache-based attacks etc.
   are out of scope — handle at the OS/container layer.
-- **Network capability is unimplemented.** BORU doesn't currently
+- **Network capability is unimplemented.** boru doesn't currently
   have a first-class network word set. When one is added (planned
   for `fetch`-family generalisation), it slots into `scopes.network`
   with the same shape.
-- **Process capability is unimplemented.** Likewise — BORU has no
+- **Process capability is unimplemented.** Likewise — boru has no
   shell word today. If one is ever added, it requires the `process`
   scope plus the `process` global cap.
 - **Cryptographic operation policy.** A future `boru:crypto` module
@@ -1053,7 +1053,7 @@ should pin a policy that denies `vault` (and one that denies a nested
 - **User identity and multi-tenancy at the policy layer.** The
   policy doesn't know about users. Bind a user to a policy at the
   application layer (e.g. token → policy lookup in the exec
-  service's auth middleware) before the BORU instance is constructed.
+  service's auth middleware) before the boru instance is constructed.
 
 ---
 

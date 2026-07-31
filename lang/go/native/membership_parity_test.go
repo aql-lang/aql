@@ -8,7 +8,7 @@ import (
 )
 
 // TestMembershipGoBoruParity is the convergence proof: a type defined in
-// BORU by a predicate body (`def Pos (Integer gt 10)`) and the SAME type
+// boru by a predicate body (`def Pos (Integer gt 10)`) and the SAME type
 // defined in Go by a predicate func (MintMemberType) must answer `is`
 // identically for every value — because, after the convergence, both
 // route through the one shared membership contract (matchMembership /
@@ -19,17 +19,17 @@ func TestMembershipGoBoruParity(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// BORU path: install `Pos = Integer gt 10` by running the def.
+	// boru path: install `Pos = Integer gt 10` by running the def.
 	toks, perr := parser.Parse(`def Pos (Integer gt 10)`)
 	if perr != nil {
 		t.Fatalf("parse: %v", perr)
 	}
 	if _, rerr := NewTop(r).Run(toks); rerr != nil {
-		t.Fatalf("install BORU predicate type: %v", rerr)
+		t.Fatalf("install boru predicate type: %v", rerr)
 	}
-	posBORU := r.LookupTypeName("Pos")
-	if posBORU == nil {
-		t.Fatal("BORU type Pos did not install")
+	posBoru := r.LookupTypeName("Pos")
+	if posBoru == nil {
+		t.Fatal("boru type Pos did not install")
 	}
 
 	// Go path: the same rule as a Go predicate, minted into the same
@@ -46,11 +46,11 @@ func TestMembershipGoBoruParity(t *testing.T) {
 		NewInteger(100), NewString("x"), NewBoolean(true),
 	}
 	for _, v := range values {
-		gotBORU := v.Is(posBORU)
+		gotBoru := v.Is(posBoru)
 		gotGo := v.Is(posGo)
-		if gotBORU != gotGo {
-			t.Errorf("membership disagrees for %s: BORU Pos=%v, Go PosGo=%v",
-				v.String(), gotBORU, gotGo)
+		if gotBoru != gotGo {
+			t.Errorf("membership disagrees for %s: boru Pos=%v, Go PosGo=%v",
+				v.String(), gotBoru, gotGo)
 		}
 	}
 
@@ -59,7 +59,7 @@ func TestMembershipGoBoruParity(t *testing.T) {
 	if !NewInteger(11).Is(posGo) || NewInteger(10).Is(posGo) || NewString("x").Is(posGo) {
 		t.Error("Go member type gave an unexpected verdict")
 	}
-	if !NewInteger(11).Is(posBORU) || NewInteger(10).Is(posBORU) || NewString("x").Is(posBORU) {
-		t.Error("BORU predicate type gave an unexpected verdict")
+	if !NewInteger(11).Is(posBoru) || NewInteger(10).Is(posBoru) || NewString("x").Is(posBoru) {
+		t.Error("boru predicate type gave an unexpected verdict")
 	}
 }

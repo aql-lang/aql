@@ -17,7 +17,7 @@ import (
 
 func TestServeInitError(t *testing.T) {
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.BORU, error) { return nil, errors.New("init boom") }
+	langNew = func(...lang.Options) (*lang.Boru, error) { return nil, errors.New("init boom") }
 	t.Cleanup(func() { langNew = orig })
 	var stdout, stderr bytes.Buffer
 	code := runServe(nil, &stdout, &stderr)

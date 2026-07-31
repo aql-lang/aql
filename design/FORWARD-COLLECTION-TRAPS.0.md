@@ -62,7 +62,7 @@ mislocated failure: with a following token, the word binds the wrong one and a
 
 "Zero values in an argument slot → error" is too aggressive: `(if c [v] [])`
 with the empty branch taken legitimately yields zero values, so
-`add 1 (if c [t] []) 2` (conditionally contribute a term) is reasonable BORU and
+`add 1 (if c [t] []) 2` (conditionally contribute a term) is reasonable boru and
 would start erroring.
 
 ### Recommendation (deferred — investigation only)
@@ -95,7 +95,7 @@ words are binding" is a language-design call with test blast radius (e.g. the
 This is **not a bug** and needs no behaviour change. It is the direct analogue
 of JavaScript member access, with `()` playing the role of `[]`:
 
-| JavaScript | BORU | meaning |
+| JavaScript | boru | meaning |
 |---|---|---|
 | `xs.i` | `xs get i` | literal key/property named `i` |
 | `xs[i]` | `xs get (i)` | computed key — the **value** of `i` |

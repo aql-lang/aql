@@ -1,7 +1,7 @@
 # `runtime` → `boru:runtime` (`Runtime`)
 
 > **Status: design proposal — not implemented.** This note specifies the
-> curated BORU surface for Go's `runtime` package. No Go code exists yet;
+> curated boru surface for Go's `runtime` package. No Go code exists yet;
 > the note exists so the proposed surface — and its **policy gating** — is
 > auditable before any handler is written. Read
 > [`README.10.md`](README.10.md) first for the shared conventions this
@@ -30,7 +30,7 @@ curated module:
   (`NumCPU`, `Version`, …) uniformly as words, hiding the const-vs-func
   distinction;
 - reads `GOMAXPROCS` **without mutating** it (Go's `GOMAXPROCS(-1)`
-  query convention is wrapped so the BORU word can never change the
+  query convention is wrapped so the boru word can never change the
   setting — there is no setter); and
 - gates the whole module on `system-info` (§7), which the bridge cannot.
 
@@ -66,7 +66,7 @@ boundary is correct.
 
 - **No setter for `max-procs`.** Go's `runtime.GOMAXPROCS(n)` both reads
   *and* sets (returning the previous value); passing `-1` is the
-  documented "query without changing" idiom. The BORU word wraps the
+  documented "query without changing" idiom. The boru word wraps the
   `-1` query form only, so `boru:runtime` cannot retune the host
   scheduler. (Mutating the scheduler would be a `process`-class effect,
   not `system-info`; it is deliberately omitted — see §10.)
@@ -174,7 +174,7 @@ Runtime.num-goroutine                 # → <policy denied> when system-info den
   `LockOSThread`, the `MemStats` / `ReadMemStats` block, `Stack`,
   `Callers`, `runtime/debug`, `runtime/pprof`. These are either
   effectful (a `process`-class gate, not `system-info`) or deep
-  introspection with no clean BORU value shape.
+  introspection with no clean boru value shape.
 - **Out of scope here:** `runtime.NumCgoCall`, `runtime.Compiler`,
   `runtime.GOROOT` (deprecated) — niche; can be added later if a
   use-case appears (each would also gate on `system-info`).

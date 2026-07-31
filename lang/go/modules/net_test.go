@@ -322,10 +322,10 @@ func TestNetHTTPCodecWithRouteParams(t *testing.T) {
 	}
 }
 
-// A custom codec written in BORU — the §6.6 extension point: a trivial
+// A custom codec written in boru — the §6.6 extension point: a trivial
 // "shout" protocol (frames end in "!") defined as a plain {decode
 // encode} map of lambdas.
-func TestNetCustomBORUCodec(t *testing.T) {
+func TestNetCustomBoruCodec(t *testing.T) {
 	out, err := runNetSteps(t, []string{
 		`import "boru:net"`,
 		`import "boru:string-util"`,

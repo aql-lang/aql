@@ -1,6 +1,6 @@
 # NETWORK-CLIENTS
 
-Design for the **network-client handling API** in BORU — the dial side of
+Design for the **network-client handling API** in boru — the dial side of
 `NETWORK-SERVERS.0.md`, made deliberately **symmetric** with it so that a
 developer who has learned to write a server already knows how to write a client.
 
@@ -176,10 +176,10 @@ set from the bottom up.
 > fetch {url: "https://api.internal/v1"     tls: {identity: acme/q}}
 > ```
 >
-> The host registers with `(*BORU).RegisterClientIdentity(name, id)`, where
+> The host registers with `(*Boru).RegisterClientIdentity(name, id)`, where
 > `id` is a `ClientIdentity` — an interface returning a `*tls.Certificate`
 > **per handshake**, so the private key may live in a file, a vault slot, an
-> HSM or a SPIFFE agent that rotates hourly, and never becomes a BORU value.
+> HSM or a SPIFFE agent that rotates hourly, and never becomes a boru value.
 > Guest source can SELECT an identity; it can never read or construct one.
 > Which identity a program may present, and against which host, is a policy
 > decision (`network`/`client-cert`), not the program's.
@@ -547,7 +547,7 @@ import "boru:stream"
 def feed ( connect {tcp: "market.example.com:443"  tls: {} codec: http} )
 
 # the reply is a Stream<Map> of SSE events; consume it like any stream
-call {method: "GET"  path: "/prices/stream?sym=BORU"} feed
+call {method: "GET"  path: "/prices/stream?sym=boru"} feed
   [ [ev] => [ ev.data ] ] stream.map
   [ [px] => [ println px ] ] stream.for-each      # back-pressured; ends when server closes
 ```
@@ -698,7 +698,7 @@ integration test for its server example).
    should the transport *synthesise* one (wrap every frame in an envelope with an
    id) so `call` works universally, or refuse `call` and force `send`+handler?
    (Leaning: refuse by default — a synthesised envelope changes the wire format
-   the peer sees — with an opt-in `{envelope: true}` for BORU-to-BORU links where
+   the peer sees — with an opt-in `{envelope: true}` for boru-to-boru links where
    both ends cooperate.)
 3. **`fetch` migration.** Make `fetch` literally call the new HTTP `connect`
    path (one implementation), or keep the existing `fetch` and merely *document*

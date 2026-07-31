@@ -165,7 +165,7 @@ func TestNameFromValueOther(t *testing.T) {
 }
 
 // ========================
-// boruTypenameToSQLType / sqlTypeToBORUType tests
+// boruTypenameToSQLType / sqlTypeToBoruType tests
 // ========================
 
 func TestBoruTypenameToSQLType(t *testing.T) {
@@ -182,17 +182,17 @@ func TestBoruTypenameToSQLType(t *testing.T) {
 	}
 }
 
-func TestSqlTypeToBORUType(t *testing.T) {
-	if got := sqlTypeToBORUType("INTEGER"); !got.Equal(TInteger) {
+func TestSqlTypeToBoruType(t *testing.T) {
+	if got := sqlTypeToBoruType("INTEGER"); !got.Equal(TInteger) {
 		t.Errorf("expected TInteger, got %v", got)
 	}
-	if got := sqlTypeToBORUType("REAL"); !got.Equal(TFloat) {
+	if got := sqlTypeToBoruType("REAL"); !got.Equal(TFloat) {
 		t.Errorf("expected TFloat, got %v", got)
 	}
-	if got := sqlTypeToBORUType("TEXT"); !got.Equal(TString) {
+	if got := sqlTypeToBoruType("TEXT"); !got.Equal(TString) {
 		t.Errorf("expected TString, got %v", got)
 	}
-	if got := sqlTypeToBORUType("UNKNOWN"); !got.Equal(TString) {
+	if got := sqlTypeToBoruType("UNKNOWN"); !got.Equal(TString) {
 		t.Errorf("expected TString (default), got %v", got)
 	}
 }
@@ -503,7 +503,7 @@ func TestPeekForwardValueInContext(t *testing.T) {
 	registerIOWords(r)
 	// Exercise curryOrPrefix and peekForwardValue through a word that uses forward arg collection
 	// e.g., "add" with forward: 1 add 2
-	result := runBORU(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
+	result := runBoru(t, r, []Value{NewInteger(1), NewWord("add"), NewInteger(2)})
 	_as54, _ := AsInteger(result[0])
 	if len(result) != 1 || _as54 != 3 {
 		t.Errorf("expected [3], got %v", result)
@@ -521,7 +521,7 @@ func TestStepEndWithMoveAndMark(t *testing.T) {
 	}
 	registerIOWords(r)
 	// def creates a mark; calling a def word triggers move
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("dbl"), NewWord("word"), NewList([]Value{NewWord("dup"), NewWord("add")}),
 		NewInteger(5), NewWord("dbl"),
 	})
@@ -543,7 +543,7 @@ func TestBaseValueForConstraintCoverage(t *testing.T) {
 	}
 	registerIOWords(r)
 	// Create a typed list via the type system
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(1), NewWord("typeof"),
 	})
 	if len(result) != 1 {
@@ -663,10 +663,10 @@ func TestOrderedMapDeleteAll(t *testing.T) {
 }
 
 // ========================
-// CallBORU tests
+// CallBoru tests
 // ========================
 
-func TestCallBORUBasic(t *testing.T) {
+func TestCallBoruBasic(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -681,7 +681,7 @@ func TestCallBORUBasic(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewWord("x")}),
 	})
-	_ = runBORU(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
@@ -696,24 +696,24 @@ func TestCallBORUBasic(t *testing.T) {
 	if sig == nil {
 		t.Fatal("no matching signature")
 	}
-	result, err := r.CallBORU(sig, args, nil)
+	result, err := r.CallBoru(sig, args, nil)
 	if err != nil {
-		t.Fatalf("CallBORU error: %v", err)
+		t.Fatalf("CallBoru error: %v", err)
 	}
 	_as56, _ := AsInteger(result[0])
 	if len(result) != 1 || _as56 != 10 {
-		t.Errorf("CallBORU(double, 5) = %v, want [10]", result)
+		t.Errorf("CallBoru(double, 5) = %v, want [10]", result)
 	}
 }
 
-func TestCallBORUNotAFunction(t *testing.T) {
+func TestCallBoruNotAFunction(t *testing.T) {
 	sig := MatchFnSig(NewInteger(42), []Value{})
 	if sig != nil {
 		t.Error("expected nil sig for non-function value")
 	}
 }
 
-func TestCallBORUNoMatchingSig(t *testing.T) {
+func TestCallBoruNoMatchingSig(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -728,7 +728,7 @@ func TestCallBORUNoMatchingSig(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("add"), NewInteger(1)}),
 	})
-	_ = runBORU(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("def"), NewWord("inc"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
@@ -762,10 +762,10 @@ func TestArgsInsideFn(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("a"), NewWord("add"), NewWord("b")}),
 	})
-	_ = runBORU(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("def"), NewWord("sum2"), NewWord("fn"), fnBody, NewEnd(),
 	})
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("sum2"), NewInteger(3), NewInteger(7),
 	})
 	_as62, _ := AsInteger(result[0])
@@ -806,7 +806,7 @@ func TestArgsOutsideFnErrors(t *testing.T) {
 	}
 	registerIOWords(r)
 	// args outside of a function should error
-	err = runBORUError(t, r, []Value{NewWord("args")})
+	err = runBoruError(t, r, []Value{NewWord("args")})
 	if err == nil {
 		t.Error("expected error for args outside function")
 	}
@@ -872,7 +872,7 @@ func TestResolveFieldTypeString(t *testing.T) {
 	registerIOWords(r)
 
 	// Define a custom type: def MyNum Number
-	_ = runBORU(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("def"), NewWord("MyNum"), NewWord("Number"),
 	})
 
@@ -1086,10 +1086,10 @@ func TestMatchSignaturePatternFallthrough(t *testing.T) {
 }
 
 // ========================
-// CallBORU pattern coverage
+// CallBoru pattern coverage
 // ========================
 
-func TestCallBORUMapPattern(t *testing.T) {
+func TestCallBoruMapPattern(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -1106,7 +1106,7 @@ func TestCallBORUMapPattern(t *testing.T) {
 			{
 				Params:  []FnParam{{Name: "x", Type: TMap, Pattern: &patternVal}},
 				Returns: []*Type{TString},
-				Impl:    BORU([]Value{NewString("yes")}), BarrierPos: -1,
+				Impl:    Boru([]Value{NewString("yes")}), BarrierPos: -1,
 			},
 		},
 	}
@@ -1120,7 +1120,7 @@ func TestCallBORUMapPattern(t *testing.T) {
 	if matchSig == nil {
 		t.Fatal("expected matching signature")
 	}
-	result, callErr := r.CallBORU(matchSig, matchArgs, nil)
+	result, callErr := r.CallBoru(matchSig, matchArgs, nil)
 	if callErr != nil {
 		t.Fatalf("expected match, got error: %v", callErr)
 	}
@@ -1149,7 +1149,7 @@ func TestRegisterFnNonList(t *testing.T) {
 	}
 	registerIOWords(r)
 	// fn with a non-list argument should error.
-	err = runBORUError(t, r, []Value{NewInteger(42), NewWord("fn")})
+	err = runBoruError(t, r, []Value{NewInteger(42), NewWord("fn")})
 	if err == nil {
 		t.Error("expected error for fn with non-list argument")
 	}
@@ -1161,7 +1161,7 @@ func TestRegisterFnEmptyList(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	err = runBORUError(t, r, []Value{NewList([]Value{}), NewWord("fn")})
+	err = runBoruError(t, r, []Value{NewList([]Value{}), NewWord("fn")})
 	if err == nil {
 		t.Error("expected error for fn with empty list")
 	}
@@ -1174,7 +1174,7 @@ func TestRegisterFnBadTriple(t *testing.T) {
 	}
 	registerIOWords(r)
 	// Triple with invalid input sig (non-list, non-map param element).
-	err = runBORUError(t, r, []Value{
+	err = runBoruError(t, r, []Value{
 		NewList([]Value{
 			NewList([]Value{NewFloat(1.5)}), // invalid param type
 			NewTypeLiteral(TString),
@@ -1198,7 +1198,7 @@ func TestParseFnUndefSpecParamError(t *testing.T) {
 	}
 	registerIOWords(r)
 	// 4 elements = 2 pairs, first pair has bad input sig (invalid param type).
-	err = runBORUError(t, r, []Value{
+	err = runBoruError(t, r, []Value{
 		NewList([]Value{
 			NewList([]Value{NewFloat(1.5)}), // invalid param
 			NewTypeLiteral(TString),
@@ -1219,7 +1219,7 @@ func TestParseFnUndefSpecReturnError(t *testing.T) {
 	}
 	registerIOWords(r)
 	// 4 elements = 2 pairs, valid input sig but invalid return type.
-	err = runBORUError(t, r, []Value{
+	err = runBoruError(t, r, []Value{
 		NewList([]Value{
 			NewList([]Value{NewTypeLiteral(TString)}), // valid param
 			NewString("nonexistent_type"),             // invalid return type
@@ -1282,7 +1282,7 @@ func TestFnMapPatternViaEngine(t *testing.T) {
 	patternMap := NewOrderedMap()
 	patternMap.Set("x", NewInteger(99))
 
-	result := runBORU(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewWord("fn"),
 		NewList([]Value{
 			// Overload 1: x matches {x:99}
@@ -1305,7 +1305,7 @@ func TestFnMapPatternViaEngine(t *testing.T) {
 	// Call with {x:100} — should match overload 2 (fallback)
 	noMatchMap := NewOrderedMap()
 	noMatchMap.Set("x", NewInteger(100))
-	result2 := runBORU(t, r, []Value{
+	result2 := runBoru(t, r, []Value{
 		NewMap(noMatchMap), NewWord("foo"),
 	})
 	_as69, _ := AsString(result2[0])

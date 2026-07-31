@@ -1,7 +1,7 @@
 # TCP echo round-trip benchmark in plain Ruby (socket + Thread).
 # Same protocol as echo_boru.boru: one persistent connection, newline-framed,
 # 20000 timed round-trips (+1 warm-up). TCP_NODELAY enabled on both ends to
-# match Go/BORU defaults.
+# match Go/boru defaults.
 require "socket"
 
 N = 20_000

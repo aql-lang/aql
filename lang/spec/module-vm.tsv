@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:vm module
+# boru Language Specification: the boru:vm module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable capability module. Import binds the `Vm` namespace, then code
@@ -19,7 +19,7 @@ import "boru:vm" Vm.run-compute "1 add 2"	3	the 'compute' profile permits arithm
 # §3  run-with — explicit policy supplied as a data map
 import "boru:vm" { scopes: { engine: { words: { default: "allow" } } } } "10 sub 3" Vm.run-with	7	policy map + code; an allow-all engine scope runs the arithmetic
 #
-# §4  parse — BORU source → inspectable structure (no evaluation).
+# §4  parse — boru source → inspectable structure (no evaluation).
 #     Returns a QUOTED list of the engine's parse values; element
 #     shapes are implementation-defined for now (design/PARSING.10.md
 #     §3). Parse errors raise [boru/parse_error].

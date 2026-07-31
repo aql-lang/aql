@@ -6,7 +6,7 @@ import (
 )
 
 // The constraint solver of TUI.0.md §3.2, over the ValueToAny-shaped
-// tree (maps/lists/strings/numbers — the single projection BORU values
+// tree (maps/lists/strings/numbers — the single projection boru values
 // and wire JSON both arrive as). size: is data on each widget map:
 //
 //	<int>        fixed cells

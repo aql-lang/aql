@@ -36,10 +36,10 @@ var (
 )
 
 // w9ParsePreambleReal is the production preamble parse: the sync.Once-guarded
-// single parse of testBORUPreamble, returning the cached tokens/error.
+// single parse of testBoruPreamble, returning the cached tokens/error.
 func w9ParsePreambleReal(parent *native.Registry) ([]native.Value, error) {
 	testParseOnce.Do(func() {
-		testParsed, testParseErr = parent.ParseFunc(testBORUPreamble)
+		testParsed, testParseErr = parent.ParseFunc(testBoruPreamble)
 	})
 	return testParsed, testParseErr
 }

@@ -11,7 +11,7 @@ import (
 )
 
 // TestCheckGoldenFixtures runs every *.boru file under
-// test/check_fixtures through lang.BORU.Check and compares the
+// test/check_fixtures through lang.Boru.Check and compares the
 // marshalled CheckResult against the sibling *.golden.json file.
 // Set BORU_UPDATE_GOLDEN=1 to overwrite the golden files with the
 // current output (use when the diagnostic stream has intentionally
@@ -40,7 +40,7 @@ func TestCheckGoldenFixtures(t *testing.T) {
 			if err != nil {
 				t.Fatalf("new: %v", err)
 			}
-			seedBORU(a)
+			seedBoru(a)
 			res, err := a.Check(string(src))
 			if err != nil {
 				t.Fatalf("check %s: %v", boruPath, err)

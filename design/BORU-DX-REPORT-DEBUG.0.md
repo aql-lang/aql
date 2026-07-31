@@ -1,4 +1,4 @@
-# BORU Developer Experience Report: Implementing `boru:debug`
+# boru Developer Experience Report: Implementing `boru:debug`
 
 ## Context
 
@@ -271,7 +271,7 @@ flaws.
 | 8 | Consider a core `tap`/`peek` (print-and-passthrough) | language | XS |
 | 9 | A registry API to enumerate the *live* word/type set and loaded modules | API | S |
 
-The headline: BORU's module system, capability seams, and (especially)
+The headline: boru's module system, capability seams, and (especially)
 its agent-facing documentation make additive feature work fast. The two
 things a newcomer most needs and least has are a crisp mental model for
 **multi-arg dispatch order** and an explicit **new-module checklist** —

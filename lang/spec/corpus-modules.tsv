@@ -1,4 +1,4 @@
-# BORU corpus: native module words (auto-generated from `boru describe` examples, verified interpret+check+compile)
+# boru corpus: native module words (auto-generated from `boru describe` examples, verified interpret+check+compile)
 # Format: input<TAB>expected<TAB>word
 import "boru:array-util" end ArrayUtil.at ['a','b'] ['c','d']	['c' 'c']	array-util:at
 import "boru:array-util" end ArrayUtil.compress ['a','b'] ['c','d']	['c' 'd']	array-util:compress

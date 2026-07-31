@@ -8,7 +8,7 @@ import (
 	"github.com/boru-lang/boru/eng/go/parser"
 )
 
-// runExpr parses and runs a multi-line BORU expression with a fresh registry.
+// runExpr parses and runs a multi-line boru expression with a fresh registry.
 func runExpr(t *testing.T, expr string) ([]native.Value, error) {
 	t.Helper()
 	values, err := parser.Parse(expr)

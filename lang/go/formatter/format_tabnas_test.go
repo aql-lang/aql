@@ -8,8 +8,8 @@ import (
 )
 
 // TestTabnasParseMatchesHandLexer pins the Phase-4 tabnas front end: for every
-// construct BORU has, FormatWith(src, TabnasParse) must produce byte-identical
-// output to FormatWith(src, HandParse). TabnasParse drives the BORU-configured
+// construct boru has, FormatWith(src, TabnasParse) must produce byte-identical
+// output to FormatWith(src, HandParse). TabnasParse drives the boru-configured
 // tabnas lexer (parser.LexTokens) and coalesces its FINE tokens back into the
 // COARSE words the node model wants; this table is the differential contract
 // that the two front ends agree. Cases are chosen to exercise every branch of

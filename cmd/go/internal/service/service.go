@@ -1,5 +1,5 @@
 // Package service defines the lifecycle contract for long-running
-// BORU services (repl, registry, lsp) and the State enum they report.
+// boru services (repl, registry, lsp) and the State enum they report.
 //
 // The split between Command (one-shot CLI verb) and Service (named,
 // supervisable long-runner) was introduced to support `boru serve
@@ -58,7 +58,7 @@ func (s State) String() string {
 	return "unknown"
 }
 
-// Service is the contract every long-running BORU service implements.
+// Service is the contract every long-running boru service implements.
 // Start blocks until the service exits cleanly or ctx is canceled.
 // Stop requests a graceful shutdown and returns when shutdown is
 // complete (or stopCtx is canceled, whichever first).

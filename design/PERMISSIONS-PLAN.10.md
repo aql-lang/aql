@@ -386,7 +386,7 @@ check themselves.
 
 **Goal**: `--perms*`, `--allow`, `--deny`, `--no-install`,
 `--install`, `--allow-global`, `--deny-global` wired into every
-command that builds a `lang.BORU`. `boru policy` subcommand for
+command that builds a `lang.Boru`. `boru policy` subcommand for
 authoring.
 
 ### Touched files
@@ -429,9 +429,9 @@ func Register(fs *flag.FlagSet, f *Flags) { ... }
 func (f *Flags) Resolve() (policy.Policy, error) { ... }
 ```
 
-Each subcommand that runs BORU code calls `permsflags.Register(fs,
+Each subcommand that runs boru code calls `permsflags.Register(fs,
 &pf)` once during setup and `pf.Resolve()` once before constructing
-the BORU instance.
+the boru instance.
 
 ### `boru policy` subcommand
 
@@ -531,7 +531,7 @@ format decode-from-string only.
 
 ### HOWTO entry
 
-A new "How do I sandbox BORU code?" section walking through:
+A new "How do I sandbox boru code?" section walking through:
 
 1. Pick a built-in profile.
 2. Run with `--perms=<name>`.
@@ -549,7 +549,7 @@ A new "How do I sandbox BORU code?" section walking through:
 
 ## Phase 7 — `boru:vm` native module
 
-**Goal**: BORU code can spawn sandboxed sub-engines via `boru:vm`.
+**Goal**: boru code can spawn sandboxed sub-engines via `boru:vm`.
 
 ### Touched files
 
@@ -580,7 +580,7 @@ For each word, the handler:
 3. Calls `policy.RequireSubset(inner, native.HostPolicy(parent))`.
    Returns attenuation error if violated.
 4. Calls `lang.New(lang.Options{Policy: inner})`.
-5. Runs the code via `(*lang.BORU).Run(code)`.
+5. Runs the code via `(*lang.Boru).Run(code)`.
 6. Marshals the result stack to parent-engine values (by-copy).
 7. Returns the last value (matching the HTTP exec service's "last
    value as result" semantic) or the full stack if asked.
@@ -606,7 +606,7 @@ For each word, the handler:
 
 - `boru:vm` listed in `lang/go/modules/modules.go::modules`.
 - Smoke tests pass.
-- Documentation: HOWTO entry on "Run untrusted BORU from BORU"; one
+- Documentation: HOWTO entry on "Run untrusted boru from boru"; one
   REFERENCE entry per word.
 
 ---
@@ -713,7 +713,7 @@ Total: ~5000 LOC + tests + docs, in 8 reviewable PRs.
 
 Phases 1–4 unlock everything: a developer using `lang.New` directly
 can specify a policy. Phases 5–6 add CLI ergonomics. Phase 7 unlocks
-in-BORU sandboxing. Phase 8 ties it into the new exec service.
+in-boru sandboxing. Phase 8 ties it into the new exec service.
 
 After Phase 4 ships, the design document moves from "Proposed" to
 "Implemented (core)". After Phase 7 to "Implemented (full)".
@@ -756,7 +756,7 @@ After Phase 4 ships, the design document moves from "Proposed" to
 ## Out of scope (deliberately)
 
 - Runtime grant/revoke API. Profiles are immutable for the lifetime
-  of a `*lang.BORU`. To change, build a new instance. (This is the
+  of a `*lang.Boru`. To change, build a new instance. (This is the
   same lesson Deno's recent deprecation of `Deno.permissions.request`
   reaches.)
 - Per-user / multi-tenant identity. Bind users to profiles at the

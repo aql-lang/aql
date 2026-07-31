@@ -1,4 +1,4 @@
-# BORU Language Specification: scalar edge cases 4 — temporal values
+# boru Language Specification: scalar edge cases 4 — temporal values
 # Format: input<TAB>expected<TAB>description
 #
 # Deterministic temporal edges via boru:time-util: every input is a FIXED

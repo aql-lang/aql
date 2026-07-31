@@ -71,7 +71,7 @@ carried by a `typedMapBehavior{elem}` via `MintTypeWithBehavior`,
 `v.Parent`'s behavior.
 
 - **Pros:** values stay concrete (`AsMap` works); reuses the reparent + custom-
-  Behavior machinery; typed containers become *real types* — fits BORU's "def binds,
+  Behavior machinery; typed containers become *real types* — fits boru's "def binds,
   make instantiates" model and makes `typeof` honest.
 - **Cons:** **broad census ripple.** Every `{:T}` value's `Parent` changes from
   `Map` to a minted subtype → touches dispatch admission, `typeof`, comparison
@@ -305,7 +305,7 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
   1. **Param binds the arg UNTAGGED** → a write inside the fn body escaped
      enforcement (BOTH a plain and a flex argument). `RetagTypedContainerParam`
      re-tags a concrete `{:T}`/`[:T]` arg with the param's element constraint at
-     every binding site (`execFnDefSig`/`CallBORU`/`InstallFnDef` in the
+     every binding site (`execFnDefSig`/`CallBoru`/`InstallFnDef` in the
      interpreter, `checkParamContract` on the compiled path) — so the body write
      is enforced identically in both. Dispatch already element-checks the arg and
      rejects a non-conformer before binding, so the re-tag `Unify` cannot fail.
@@ -334,7 +334,7 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
      compiled-vs-interpreted divergence (compiled retags its locals in
      `checkParamContract`; the interpreter did not retag the args stack).
      `RetagTypedContainerArgs` retags the whole arg slice at each interpreter
-     fn-entry (`InstallFnDef` closure, `execFnDefSig`, `CallBORU`) up front, so the
+     fn-entry (`InstallFnDef` closure, `execFnDefSig`, `CallBoru`) up front, so the
      named binding, the args stack, AND unnamed body-token pushes all see the
      tagged value. Copy-on-write — no allocation when no param is a typed
      container (the leaf fast path stays allocation-free).

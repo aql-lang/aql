@@ -125,7 +125,7 @@ func readMem(t *testing.T, path string, content string, opts ...Value) []Value {
 	SetHostFileOps(r, mem)
 	tokens := []Value{NewWord("read"), pathV(path)}
 	tokens = append(tokens, opts...)
-	return runBORU(t, r, tokens)
+	return runBoru(t, r, tokens)
 }
 
 func TestEngineReadINIByExtension(t *testing.T) {
@@ -203,7 +203,7 @@ func TestEngineReadUnknownFmt(t *testing.T) {
 	SetHostFileOps(r, mem)
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("nonesuch"))
-	err = runBORUError(t, r, []Value{NewWord("read"), pathV("x.dat"), NewMap(opts)})
+	err = runBoruError(t, r, []Value{NewWord("read"), pathV("x.dat"), NewMap(opts)})
 	if err == nil || !strings.Contains(err.Error(), "unknown format") {
 		t.Errorf("err = %v, want 'unknown format'", err)
 	}
@@ -219,7 +219,7 @@ func TestEngineWriteReadOnlyFormat(t *testing.T) {
 	SetHostFileOps(r, mem)
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("xml"))
-	err = runBORUError(t, r, []Value{NewWord("write"), pathV("out.xml"), NewString("<r/>"), NewMap(opts)})
+	err = runBoruError(t, r, []Value{NewWord("write"), pathV("out.xml"), NewString("<r/>"), NewMap(opts)})
 	if err == nil || !strings.Contains(err.Error(), "read-only") {
 		t.Errorf("write {fmt:xml} err = %v, want read-only", err)
 	}
@@ -259,7 +259,7 @@ func TestWriteReadOnlyDoesNotInvokeEncode(t *testing.T) {
 	HostFormats(r)["spy"] = panicEncodeFormat{}
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("spy"))
-	err = runBORUError(t, r, []Value{NewWord("write"), pathV("out.spy"), NewString("x"), NewMap(opts)})
+	err = runBoruError(t, r, []Value{NewWord("write"), pathV("out.spy"), NewString("x"), NewMap(opts)})
 	if err == nil || !strings.Contains(err.Error(), "read-only") {
 		t.Errorf("write {fmt:spy} err = %v, want read-only", err)
 	}

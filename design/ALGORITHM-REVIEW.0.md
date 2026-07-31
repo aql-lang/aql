@@ -7,7 +7,7 @@ query paths were reviewed.
 
 ## Summary
 
-BORU's core algorithms are generally straightforward and correct-first. The
+boru's core algorithms are generally straightforward and correct-first. The
 highest-value improvements are not broad rewrites; they are targeted changes
 where current implementations do repeated search work in hot or policy-sensitive
 paths:

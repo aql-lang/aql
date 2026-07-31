@@ -421,7 +421,7 @@ var intWidths = map[string]struct {
 	"i8": {1, true}, "i16": {2, true}, "i32": {4, true}, "i64": {8, true},
 }
 
-// binaryFieldType maps a segment's wire type to the BORU value type a decoded
+// binaryFieldType maps a segment's wire type to the boru value type a decoded
 // field carries — used to build the spec class's field schema so a Binary
 // instance validates and type-narrows like any object instance.
 func binaryFieldType(seg bitSeg) *Type {
@@ -454,7 +454,7 @@ func binaryFieldSchema(segs []bitSeg) *OrderedMap {
 // readBitSegments reads the spec, a `List` of segment `Map`s. Each Map is a
 // fully-structured, JSON-representable descriptor that this code only READS —
 // there is NO token-level / sub-language parsing (ADR-007: no secondary
-// parsing; every BORU structure is plain Node data a macro could construct).
+// parsing; every boru structure is plain Node data a macro could construct).
 // Segment Map keys:
 //   - name (String) | value (Integer) — exactly one. `name` binds (unpack) or
 //     reads from scope (pack); `value` is a pack constant / unpack match-guard.
@@ -1081,7 +1081,7 @@ func decodeSegs(b []byte, segs []bitSeg, r *Registry, word string, bind bool) (*
 			if seg.signed {
 				n = signExtend(u, seg.width)
 			} else {
-				// BORU Integer is int64; a u64 with the high bit set has no
+				// boru Integer is int64; a u64 with the high bit set has no
 				// faithful Integer (it would wrap negative), so reject it
 				// rather than expose a corrupted value.
 				if u > math.MaxInt64 {

@@ -1,4 +1,4 @@
-# BORU Language Specification: Module / ModuleExport (Ideal types)
+# boru Language Specification: Module / ModuleExport (Ideal types)
 # Format: input<TAB>expected<TAB>description
 #
 # `import` binds each `export "Name" {…}` to a ModuleExport instance

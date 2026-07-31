@@ -1,4 +1,4 @@
-# BORU Language Specification: the boru:type module
+# boru Language Specification: the boru:type module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module for type-lattice reflection. Import binds the `type`

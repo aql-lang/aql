@@ -519,7 +519,7 @@ func seam7DelegReg(t *testing.T) (r *Registry, inc, fail Value) {
 			Name: name, Registry: r,
 			Signatures: []Signature{{
 				Args: []*Type{TInteger}, Returns: []*Type{TInteger}, BarrierPos: -1,
-				Impl: BORU([]Value{NewWord(name)}),
+				Impl: Boru([]Value{NewWord(name)}),
 			}},
 		})
 	}
@@ -640,7 +640,7 @@ func seam7UserFail(r *Registry) Value {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TInteger}},
 			Returns: []*Type{TInteger}, BarrierPos: BarrierAllForward,
-			Impl: BORU([]Value{NewWord("cfail"), NewWord("n")}),
+			Impl: Boru([]Value{NewWord("cfail"), NewWord("n")}),
 		}},
 	})
 }
@@ -673,7 +673,7 @@ func TestSeam7MatchUserPolyUnitShapeMismatch(t *testing.T) {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TAny}},
 			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
-			Impl: BORU([]Value{NewWord("n")}),
+			Impl: Boru([]Value{NewWord("n")}),
 		}},
 	})
 	fd := r.Lookup("cpoly")
@@ -704,7 +704,7 @@ func TestSeam7CallUserPolyParamContract(t *testing.T) {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TAny}},
 			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
-			Impl: BORU([]Value{NewWord("n")}),
+			Impl: Boru([]Value{NewWord("n")}),
 		}},
 	})
 	fd := r.Lookup("cpoly2")

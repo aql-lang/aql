@@ -18,7 +18,7 @@ package eng
 //   - Immutable, shared: Integer/Float/Big*/String/Boolean/Atom/Pathon/
 //     None, the Time family, every type body / descriptor, functions
 //     (FnDef/FnUndef), and control markers. Sharing them is correct
-//     because BORU never mutates them in place.
+//     because boru never mutates them in place.
 //   - ExtensionPayload (host types): cloned via the optional DeepCloner
 //     capability if the body implements it; otherwise shared.
 //

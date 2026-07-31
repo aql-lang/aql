@@ -36,13 +36,13 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// walkDir and newBORU are test seams (design/TEST-SEAMS.10.md): filepath.WalkDir
+// walkDir and newBoru are test seams (design/TEST-SEAMS.10.md): filepath.WalkDir
 // never surfaces a read error under the test's root uid, and lang.New's only
 // error path (registry init) is unreachable in a healthy build, so both
 // error arms are driven by swapping these in a test.
 var (
 	walkDir = filepath.WalkDir
-	newBORU = lang.New
+	newBoru = lang.New
 )
 
 type cmd struct{}
@@ -192,7 +192,7 @@ func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.Com
 		fmt.Fprintf(stderr, "error: %s: %s\n", path, err)
 		return 0, 0, true
 	}
-	a, err := newBORU(o)
+	a, err := newBoru(o)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s: init: %s\n", path, err)
 		return 0, 0, true
@@ -246,7 +246,7 @@ func runFile(stdout, stderr io.Writer, path string, o lang.Options, mode run.Com
 // default (CompileTry) is a.Run — bytecode when compilable, silent interpreter
 // fallback otherwise. A recorded test failure does NOT error the run (the
 // framework records it and continues); only a genuine runtime/parse error does.
-func runSource(a *lang.BORU, src string, mode run.CompileMode) error {
+func runSource(a *lang.Boru, src string, mode run.CompileMode) error {
 	switch mode {
 	case run.CompileForce:
 		_, err := a.RunCompiledStrict(src)
@@ -264,7 +264,7 @@ func runSource(a *lang.BORU, src string, mode run.CompileMode) error {
 // instance: `Test.summary Test.report` leaves a {total,passed,failed} map and
 // the human report string on the stack in that order. The helpers below skip
 // whichever value they don't consume, so one read yields both.
-func readOutcome(a *lang.BORU) (total, passed, failed int, report string, err error) {
+func readOutcome(a *lang.Boru) (total, passed, failed int, report string, err error) {
 	vals, err := a.RunInterpValues("Test.summary Test.report")
 	if err != nil {
 		return 0, 0, 0, "", err

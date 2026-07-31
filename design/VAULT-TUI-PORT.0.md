@@ -2,13 +2,13 @@
 
 Design for porting the **interactive vault TUI** (`boru vault -i`) from its
 bubbletea implementation (`cmd/go/internal/vault/tui_*.go`, ~3,900 lines of
-Go) onto the **landed `boru:tui` surface** — the vault UI rewritten *in BORU*,
+Go) onto the **landed `boru:tui` surface** — the vault UI rewritten *in boru*,
 running under `Tui.run` on the same actor substrate as
 `design/examples/apps/todo-tui.boru`.
 
 The port is deliberately the first *real* application on `boru:tui`, and its
 planning phase doubles as a **gap audit**: every capability the vault TUI
-needs that BORU or its core modules cannot supply today is enumerated in §2
+needs that boru or its core modules cannot supply today is enumerated in §2
 with a disposition — closed by this design, pushed to the app layer, or
 explicitly deferred with a spec sketch (§7).
 
@@ -20,18 +20,18 @@ updated to as-built at the end.
 > reviewer ratifies or reopens them):
 > (1) the backend is a **bridge**: a native `boru:vault` module wraps the
 > existing Go vault command layer; crypto, keyring, and storage stay in Go
-> (§1.2). Migrating vault *logic* into BORU is a specced future phase (§7);
-> (2) the BORU app ships **side-by-side opt-in** — `boru vault -i --boru`; the
+> (§1.2). Migrating vault *logic* into boru is a specced future phase (§7);
+> (2) the boru app ships **side-by-side opt-in** — `boru vault -i --boru`; the
 > bubbletea TUI stays the default until parity is proven (§1.3);
 > (3) the bridge host seam is **one generic `Do(op, params)` closure**
 > injected from `cmd/go`, mirroring `RegisterHostTui` (§3.1);
-> (4) the adapter — not BORU — owns the **session secrets**: active vault,
-> cached passphrase, authed flag. BORU sees `authed: Bool` (§5.1);
+> (4) the adapter — not boru — owns the **session secrets**: active vault,
+> cached passphrase, authed flag. boru sees `authed: Bool` (§5.1);
 > (5) screens are **data on a stack in app state**, folded by per-kind pure
 > functions — not objects, not processes (§4.2);
 > (6) vault operations run **inline in `update`** by default; only
 > potentially blocking ops use the spawn-and-send idiom (§4.4);
-> (7) forms are built **in BORU from `Tui.input` + `Tui.edit`** — no new
+> (7) forms are built **in boru from `Tui.input` + `Tui.edit`** — no new
 > widget kinds; the only tuikit change is a `mask` option on `input` (§2.2);
 > (8) no env-var or exit-code words are added — the Go launcher and adapter
 > own both ends (§2.3).
@@ -51,39 +51,39 @@ The full behavioural inventory is the parity matrix in §6.1.
 
 The vault's security core — scrypt/AES-GCM file keyring, HKDF keyslots,
 nacl/box namespace keys, OS keychain backends, atomic store writes,
-journal/audit — is battle-tested Go with **no BORU surface**. Rewriting it in
-BORU is neither possible today (no crypto words, §2.4) nor desirable in one
+journal/audit — is battle-tested Go with **no boru surface**. Rewriting it in
+boru is neither possible today (no crypto words, §2.4) nor desirable in one
 step (security-sensitive logic should not churn as a side effect of a UI
 port).
 
 So the port splits exactly where the Go TUI already splits:
 
-| Layer | Go TUI today | BORU port |
+| Layer | Go TUI today | boru port |
 | --- | --- | --- |
-| Screens, navigation, keys, forms, chrome | bubbletea (`tui_model.go`, `tui_screens.go`, `tui_build.go`) | **BORU** (`lang/go/modules/vault_tui.boru`) on `boru:tui` |
+| Screens, navigation, keys, forms, chrome | bubbletea (`tui_model.go`, `tui_screens.go`, `tui_build.go`) | **boru** (`lang/go/modules/vault_tui.boru`) on `boru:tui` |
 | Command layer (all reads + mutations) | `tuiController` → `vault.Run()` | **unchanged Go**, exposed as the `boru:vault` bridge (§3) |
 | Crypto / keyring / storage | Go (`keyring.go`, `keyslot.go`, `store.go`) | unchanged Go, behind the bridge |
 
-The bridge preserves the TUI↔CLI parity property: the BORU app drives the
+The bridge preserves the TUI↔CLI parity property: the boru app drives the
 same command layer the CLI does.
 
 ### 1.3 Side-by-side launch (decision 2)
 
-`boru vault -i --boru` runs the BORU app; plain `boru vault -i` remains the
-bubbletea TUI, byte-identical. The flag flip (making BORU the default,
+`boru vault -i --boru` runs the boru app; plain `boru vault -i` remains the
+bubbletea TUI, byte-identical. The flag flip (making boru the default,
 retiring the bubbletea screens) is out of scope for this RFC and gated on
 the §6.1 parity matrix being demonstrably green.
 
 ## 2. Gap inventory
 
-The audit question: *what does a full-screen vault app need that BORU and its
+The audit question: *what does a full-screen vault app need that boru and its
 core modules cannot do today?* Each gap carries a disposition.
 
 ### 2.1 Gaps closed by new native surface (this design)
 
 | # | Gap | Evidence | Disposition |
 | --- | --- | --- | --- |
-| G1 | **No vault surface in BORU.** The entire command layer is Go-only under `cmd/go/internal/vault/`. | no `vault` module in `lang/go/modules/modules.go` | New **`boru:vault` bridge module** (§3), host-injected — `lang/go` cannot import `cmd/go`, so the backend arrives via a `RegisterHostVault` seam exactly like `RegisterHostTui`. |
+| G1 | **No vault surface in boru.** The entire command layer is Go-only under `cmd/go/internal/vault/`. | no `vault` module in `lang/go/modules/modules.go` | New **`boru:vault` bridge module** (§3), host-injected — `lang/go` cannot import `cmd/go`, so the backend arrives via a `RegisterHostVault` seam exactly like `RegisterHostTui`. |
 | G2 | **No clipboard word.** The Go TUI's `c` (copy exec recipe) and token copy use `clipboard.go` (pbcopy/xclip/…), Go-only. | no clipboard word in any module | `Vault.copy` rides the vault host spec; the adapter reuses `detectClipboard`. A general-purpose clipboard module is deferred (§7.4). |
 | G3 | **No masked text input.** `tuikit`'s input widget paints `value` verbatim (`render.go` `paintInput`); a passphrase form would echo the passphrase. | `lang/go/tuikit/render.go` | Add a **`mask: true` option** honored by the renderer (§2.2). `Tui.input` already passes unknown option keys into the widget map, so only the renderer (and its measure path) changes. |
 
@@ -91,8 +91,8 @@ core modules cannot do today?* Each gap carries a disposition.
 
 | # | Gap | Disposition |
 | --- | --- | --- |
-| G4 | **No list/table filtering.** bubbles' `list` has built-in `/` filtering; `Tui.list-view`/`Tui.table` take items+cursor only. | App-level: `/` toggles a filter input in the screen's state; visible rows are recomputed by the screen builder. Keeps match semantics in BORU, no widget change. |
-| G5 | **No form primitives.** The Go TUI leans on `huh` (fields, validation, password inputs, confirms). | A small **form model in BORU** (§4.5): fields as data, `Tui.edit` for editing, per-field validate fns, focus-as-state. This is the port's largest new BORU component and a deliberate dogfooding target. |
+| G4 | **No list/table filtering.** bubbles' `list` has built-in `/` filtering; `Tui.list-view`/`Tui.table` take items+cursor only. | App-level: `/` toggles a filter input in the screen's state; visible rows are recomputed by the screen builder. Keeps match semantics in boru, no widget change. |
+| G5 | **No form primitives.** The Go TUI leans on `huh` (fields, validation, password inputs, confirms). | A small **form model in boru** (§4.5): fields as data, `Tui.edit` for editing, per-field validate fns, focus-as-state. This is the port's largest new boru component and a deliberate dogfooding target. |
 | G6 | **No focus manager; single `update` fn.** | Accepted framework property (TUI.0.md §3.4 "focus is app state"). Screens-as-data + `case` routing (§4.2). |
 | G7 | **No terminal background detection.** The Go TUI calls `lipgloss.HasDarkBackground()` once at launch; tuikit has no equivalent. | The launcher passes `{dark: Bool}` (still computed Go-side) into `VaultTui.run`; the theme palette (§4.6) derives from `theme` + `dark`. Prefs persist via `Vault.prefs`/`Vault.set-prefs` (`~/.boru/tui.jsonic`), keeping Tier-1 untouched. |
 
@@ -100,9 +100,9 @@ core modules cannot do today?* Each gap carries a disposition.
 
 | # | Candidate gap | Why it is not one |
 | --- | --- | --- |
-| N1 | No env-var words (`BORU_VAULT_FOLDER/SUFFIX/PASSPHRASE`). | Launch-vault resolution and env promotion stay in the Go adapter (as `tuiController` does today). BORU never needs to read the environment. A general `Os.env` word set (gated by the existing-but-unused `env` policy scope) is deferred (§7.4). |
+| N1 | No env-var words (`BORU_VAULT_FOLDER/SUFFIX/PASSPHRASE`). | Launch-vault resolution and env promotion stay in the Go adapter (as `tuiController` does today). boru never needs to read the environment. A general `Os.env` word set (gated by the existing-but-unused `env` policy scope) is deferred (§7.4). |
 | N2 | No `exit` / exit-code word. | `Tui.run` blocks and returns the final state; the Go launcher maps an error to exit code 1. Nothing in the app needs to set a code. |
-| N3 | No tick/timer primitive in `boru:tui`. | The Go TUI uses **no timers** (no `tea.Tick`, no subscriptions); the status line persists until replaced. Where the BORU app wants polish (status auto-expiry), `TimeUtil.timeout N [send {…} pid]` composes it — documented in §4.4, not required for parity. |
+| N3 | No tick/timer primitive in `boru:tui`. | The Go TUI uses **no timers** (no `tea.Tick`, no subscriptions); the status line persists until replaced. Where the boru app wants polish (status auto-expiry), `TimeUtil.timeout N [send {…} pid]` composes it — documented in §4.4, not required for parity. |
 | N4 | No `while` loop. | The TEA fold needs none; iteration is `for`/`each`/`fold`/recursion throughout. |
 
 Everything else the app needs is **already well-covered**: file I/O with
@@ -115,7 +115,7 @@ harness).
 ### 2.4 Gaps found while building (the dogfooding yield)
 
 Writing `vault_tui.boru` surfaced six language- and compiler-level sharp
-edges (G8–G13). Because those are findings *about BORU* rather than about
+edges (G8–G13). Because those are findings *about boru* rather than about
 the vault port, they are written up in their own language-scoped doc —
 **[BORU-SHARP-EDGES.0.md](BORU-SHARP-EDGES.0.md)** — with minimal repros,
 root-cause hypotheses, classifications (engine-bug / sharp-edge /
@@ -137,10 +137,10 @@ latent-bug / compiler-limit), and a triage table. In brief:
 
 The app carries a workaround for each; the follow-ups are triaged in that
 doc. See also §3 there: `vault_tui.boru` runs **100% on the interpreter**
-(like every BORU app in the repo), so the compiler items have zero runtime
+(like every boru app in the repo), so the compiler items have zero runtime
 impact.
 
-### 2.5 Deferred gaps — the vault-logic-in-BORU phase (§7)
+### 2.5 Deferred gaps — the vault-logic-in-boru phase (§7)
 
 Blocking a *full* rewrite (not this port), confirmed absent from the
 language layer:
@@ -206,7 +206,7 @@ Namespace **`Vault`**, import id **`boru:vault`**. All inner signatures use
 
 `recipes` returns the provider-aware exec inject commands (the adapter
 reuses `injectCommands`/`recipeExampleCmd`) so the detail screen is
-parity-exact without duplicating provider knowledge in BORU.
+parity-exact without duplicating provider knowledge in boru.
 
 **Error mapping**: bad/missing args → `vault_usage` (checked before backend
 lookup); no host → `no_backend`; adapter op failure → code `vault` with the
@@ -232,7 +232,7 @@ reads), plus clipboard, recipes, prefs, and launch-vault resolution.
 active vault and cached passphrase into the *process environment*
 (`BORU_VAULT_FOLDER/SUFFIX/PASSPHRASE`) per op — safe in bubbletea because
 Cmds run on one goroutine, and made safe here by serializing the adapter,
-since the BORU app may call from spawned worker processes (§4.4).
+since the boru app may call from spawned worker processes (§4.4).
 
 ## 4. Data flow and reactivity model
 
@@ -271,7 +271,7 @@ Screens carry identity (`table: "secrets"`, `pager: "audit"`, …) so
 `state.screens` (`push-screen` / `pop-screen` / `pop-to-root`, each followed
 by a reload of the new top). The Go code routes navigation through
 messages (`pushMsg`/`popMsg`) only because bubbletea commands are async; in
-BORU the update fn simply returns the new state — no round-trip.
+boru the update fn simply returns the new state — no round-trip.
 
 ### 4.3 Event routing
 
@@ -295,7 +295,7 @@ One `update`, layered exactly like `rootModel.handleKey`:
 ### 4.4 Effects: inline by default, spawn-and-send when blocking (decision 6)
 
 Bridge ops are local file operations the Go TUI itself runs synchronously
-on its UI goroutine — so the BORU app calls them **inline in `update`**,
+on its UI goroutine — so the boru app calls them **inline in `update`**,
 wrapped `do [ … ] error [ …status… ]`. The screen cannot repaint during an
 update (documented `boru:tui` contract), which for these ops is parity.
 
@@ -312,7 +312,7 @@ spawn [ do [ def out (Vault.verify {})
 Tagged results fold like the Go TUI's messages: `op-result`/`op-error`
 (= `opResultMsg`: set status, refresh `state.vault`, reload top),
 `granted` (push the one-time-token pager), `revealed` (lands on the detail
-screen). Any BORU process can drive the UI the same way —
+screen). Any boru process can drive the UI the same way —
 `send msg (whereis "tui")`.
 
 The status line persists until replaced (parity with the Go TUI). Optional
@@ -370,15 +370,15 @@ persists via `Vault.set-prefs`.
 ### 5.1 The adapter owns session secrets (decision 4)
 
 The cached passphrase and the active-vault env promotion live in the Go
-adapter, exactly as in `tuiController`. BORU observes `authed: Bool` and
+adapter, exactly as in `tuiController`. boru observes `authed: Bool` and
 `needs-passphrase: Bool`; it never holds a long-lived passphrase.
 
-### 5.2 Hygiene mandates in the BORU app
+### 5.2 Hygiene mandates in the boru app
 
 Enforced by review and pinned by e2e frame assertions:
 
 - Passphrase and secret-value fields set `mask: true`.
-- A passphrase string exists in BORU only as the in-flight form-field value
+- A passphrase string exists in boru only as the in-flight form-field value
   and is cleared **in the same update** that calls `Vault.authenticate`
   (success and failure paths both).
 - A revealed secret lives only in the detail screen's map and is deleted on
@@ -390,7 +390,7 @@ Enforced by review and pinned by e2e frame assertions:
 
 ## 6. Parity, testing, rollout
 
-### 6.1 Parity matrix (Go TUI → BORU app)
+### 6.1 Parity matrix (Go TUI → boru app)
 
 Global keys: `enter` open · `esc` back · `/` filter · `:` palette · `?`
 help · `o`/`ctrl+o` switch vault · `T` theme · `q` quit · `ctrl+c` quit.
@@ -400,7 +400,7 @@ Palette words (from `runPalette`): `secrets|secret|s`,
 `history`, `providers`, `config`, `add`, `grant`, `lock`, `unlock`, `home`,
 `quit|exit|q`.
 
-| Go screen (constructor) | Keys / features | BORU phase |
+| Go screen (constructor) | Keys / features | boru phase |
 | --- | --- | --- |
 | Home (`buildHome`) | 5-area menu | 2A |
 | Secrets (`buildSecrets`) | table, `/` filter, `enter` detail, `a` add (defaults memory) | 2A |
@@ -429,7 +429,7 @@ Palette words (from `runPalette`): `secrets|secret|s`,
 4. **E2E**: `lang/go/test/app_vault_tui_test.go` — VirtualBackend + fake
    spec, scripted keys: unlock → browse → filter → detail → reveal (frame
    shows value) → hide (later frames don't) → add → rotate → grant → quit.
-5. **BORU tests**: `vault_tui_test.boru` for the pure helpers (stack ops,
+5. **boru tests**: `vault_tui_test.boru` for the pure helpers (stack ops,
    filter, form validation, palette resolver, theme palette).
 6. **Manual**: scratch vault (`BORU_VAULT_FOLDER=$(mktemp -d)`, file
    backend) → `boru vault -i --boru`; walk this matrix; confirm plain
@@ -448,7 +448,7 @@ gate:
 1c. cmd adapter (`borubridge.go`, mutex-serialized over `tuiController`) +
 the `boru vault -i --boru` launcher.
 2A. secrets core — table + `/` filter, detail (reveal/hide/rotate/rename/
-expiry/delete/grant + recipe copy), the BORU form framework, passphrase gate.
+expiry/delete/grant + recipe copy), the boru form framework, passphrase gate.
 2B. `:` palette (the full `runPalette` word table), `?` help overlay,
 `T` theme cycle with pref persistence.
 2C. Access + Passwords record tables with per-row action keys.
@@ -460,17 +460,17 @@ launch-into-picker when no vault exists.
 Each phase carries a live-driven VirtualBackend e2e flow in
 `lang/go/test/app_vault_tui_test.go`. The one deliberate parity deviation:
 `boru vault -i` (bubbletea) opened section landing screens as status pagers
-in the skeleton, whereas the BORU app opens the real Access/Passwords tables
-and Maintenance/Settings sub-menus — i.e. the BORU port reaches *past* the
+in the skeleton, whereas the boru app opens the real Access/Passwords tables
+and Maintenance/Settings sub-menus — i.e. the boru port reaches *past* the
 skeleton to the same destinations the bubbletea TUI has.
 
-## 7. Deferred: vault logic in BORU (spec authored, not implemented)
+## 7. Deferred: vault logic in boru (spec authored, not implemented)
 
 The bridge is the *first* step of a migration, not its end state. The
-follow-on phase — moving vault logic itself into BORU — is now specified in
+follow-on phase — moving vault logic itself into boru — is now specified in
 three companion design docs; each subsection below is a one-line
 orientation pointing at the authoritative spec. The specs are pinned to
-the **real Go vault internals** (`cmd/go/internal/vault`) so an in-BORU
+the **real Go vault internals** (`cmd/go/internal/vault`) so an in-boru
 vault can open a vault the Go path wrote — parity, not reinvention.
 
 ### 7.1 `boru:crypto` — cryptographic primitives
@@ -506,5 +506,5 @@ gated on `process`. Both are specified in the canonical OS module doc
 additions).
 
 With those landed, `store.jsonic` read/write, keyslot envelopes, and
-capability bookkeeping become expressible in BORU (`boru:io` already covers
+capability bookkeeping become expressible in boru (`boru:io` already covers
 atomic writes, locks, and permissions), and the bridge shrinks op by op.

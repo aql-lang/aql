@@ -3,7 +3,7 @@
     boru_lexer
     ~~~~~~~~~
 
-    A Pygments lexer for BORU (https://github.com/boru-lang/boru), a
+    A Pygments lexer for boru (https://github.com/boru-lang/boru), a
     concatenative, strongly-typed query language.  Source files use the
     ``.boru`` extension.
 
@@ -17,7 +17,7 @@
 
         pygmentize -x -l boru_lexer.py:BoruLexer file.boru
 
-    :license: same as the BORU project.
+    :license: same as the boru project.
 """
 
 from pygments.lexer import RegexLexer, bygroups, include, words
@@ -111,9 +111,9 @@ _WORD_BOUND = r"(?![\w-])"
 
 
 class BoruLexer(RegexLexer):
-    """Lexer for the BORU concatenative query language."""
+    """Lexer for the boru concatenative query language."""
 
-    name = "BORU"
+    name = "boru"
     aliases = ["boru"]
     filenames = ["*.boru"]
     mimetypes = ["text/x-boru"]
@@ -227,7 +227,7 @@ class BoruLexer(RegexLexer):
         ],
 
         # `backtick template ${expr} string` — the ${ … } holds an embedded
-        # BORU expression (nestable).
+        # boru expression (nestable).
         "template": [
             (r"\\[nt\\'\"`]", String.Escape),
             (r"\\u[0-9a-fA-F]{4}", String.Escape),

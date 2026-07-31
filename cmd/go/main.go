@@ -1,4 +1,4 @@
-// Package boru is the top-level dispatcher for the BORU command-line
+// Package boru is the top-level dispatcher for the boru command-line
 // tool. It owns the Version constant (rewritten by `make publish`)
 // and one short execute() function that routes args[0] to the
 // matching subcommand package under internal/. Everything else

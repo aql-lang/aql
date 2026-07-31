@@ -21,7 +21,7 @@ Status: implemented.
 
 ## Problem
 
-BORU's Node types (`Map`, `List`) are immutable: the mutation words
+boru's Node types (`Map`, `List`) are immutable: the mutation words
 (`push`, `pop`, …) return new copies, and `set` deliberately has no
 Map/List signatures. Mutable state therefore lives only in the Ideal
 types — `Array` (indexed store), `Object` (fields), `Store`

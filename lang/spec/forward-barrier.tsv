@@ -1,4 +1,4 @@
-# BORU Language Specification: Statement-boundary commit of parked forwards
+# boru Language Specification: Statement-boundary commit of parked forwards
 #
 # The barrier-commit matrix (design/FORWARD-COLLECTION-PHASES.10.md).
 # Forward args are gathered in two phases — a plan-time token walk and
@@ -63,7 +63,7 @@ def n 0 if (n eq 0) [99] end add 1 2	99 3	explicit end
 def n 0 if (n eq 0) [99] ; add 1 2	99 3	; is end
 #
 # §6  the commit needs a REAL overload consuming EXACTLY the claimed
-#     args. A BORU fn with only a bigger arity keeps waiting for the
+#     args. A boru fn with only a bigger arity keeps waiting for the
 #     next statement's result (its synthetic 0-arg fallback must never
 #     be committed — that would turn a waiting call into an error), and
 #     a smaller real overload fires at the boundary, mirroring the

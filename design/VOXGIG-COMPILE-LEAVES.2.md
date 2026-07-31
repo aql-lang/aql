@@ -160,7 +160,7 @@ shapes), the trie `--compile`==interpret sweep (green output, not merely
 
 ## L-DUP — a chained whole-program duplication miscompile (found while probing)
 
-Attempting the SAFEST possible way to close L-JOIN — a behaviour-preserving BORU
+Attempting the SAFEST possible way to close L-JOIN — a behaviour-preserving boru
 restructure of `longest-t` (push the `end`-node choice into the arms, so no
 branch-join is fed to the recursion) — makes `tst.boru`'s `longest-t` compile
 natively (verified in isolation). But in the FULL `trie_smoke_test.boru` (four

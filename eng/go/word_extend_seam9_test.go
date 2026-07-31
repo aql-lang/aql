@@ -42,7 +42,7 @@ func TestW9TransplantExtensionEmptyIncoming(t *testing.T) {
 	InstallFnDef(r, "w9base", FnDefInfo{
 		Signatures: []Signature{{
 			Params: []FnParam{{Name: "a", Type: TInteger}},
-			Impl:   BORU([]Value{NewWord("a")}),
+			Impl:   Boru([]Value{NewWord("a")}),
 		}},
 	})
 	// An extension whose only sig is a fallback: nothing to transplant.
@@ -60,7 +60,7 @@ func TestW9TransplantExtensionAllForwardBarrier(t *testing.T) {
 	InstallFnDef(r, "w9base2", FnDefInfo{
 		Signatures: []Signature{{
 			Params: []FnParam{{Name: "a", Type: TInteger}},
-			Impl:   BORU([]Value{NewWord("a")}),
+			Impl:   Boru([]Value{NewWord("a")}),
 		}},
 	})
 	// A host-authored clone with an all-forward barrier: TransplantExtension
@@ -71,7 +71,7 @@ func TestW9TransplantExtensionAllForwardBarrier(t *testing.T) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "b", Type: TString}},
 			BarrierPos: BarrierAllForward,
-			Impl:       BORU([]Value{NewWord("b")}),
+			Impl:       Boru([]Value{NewWord("b")}),
 		}},
 	}, "w9origin2", "")
 }

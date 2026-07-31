@@ -10,7 +10,7 @@ import (
 	"golang.org/x/text/unicode/norm"
 )
 
-// strOpts holds common option fields parsed from a BORU options map.
+// strOpts holds common option fields parsed from a boru options map.
 type strOpts struct {
 	normForm string // "", "NFC", "NFD", "NFKC", "NFKD"
 	cs       string // "sensitive" or "insensitive"
@@ -151,7 +151,7 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// parseStrOpts extracts common string options from a BORU map value.
+// parseStrOpts extracts common string options from a boru map value.
 func parseStrOpts(v Value) strOpts {
 	var o strOpts
 	o.cs = "sensitive"

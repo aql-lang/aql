@@ -1,4 +1,4 @@
-# BORU Language Specification: Type Negation (tnot)
+# boru Language Specification: Type Negation (tnot)
 # Format: input<TAB>expected<TAB>description
 #
 # `tnot T` is the set-theoretic complement of T: a value satisfies it

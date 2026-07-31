@@ -1,7 +1,7 @@
 # `os` → `boru:os` (`Os`)
 
 > **Status: design proposal — not implemented.** This note specifies the
-> curated BORU surface for Go's `os` package. No Go code exists yet; the
+> curated boru surface for Go's `os` package. No Go code exists yet; the
 > note exists so the proposed surface — and especially its **policy
 > gating** — is auditable before any handler is written. Read
 > [`README.10.md`](README.10.md) first for the shared conventions this
@@ -91,13 +91,13 @@ form `Os.getenv "K"`-style dispatch resolve.
 
 - **`getenv` value-or-None.** Go forces a choice between `Getenv`
   (empty string for both "unset" and "set-to-empty") and `LookupEnv`
-  (the `ok` disambiguates). BORU exposes **one** word that returns the
+  (the `ok` disambiguates). boru exposes **one** word that returns the
   string when set and `None` when unset, so `"X" Os.getenv is None`
   is the unset test and a present-but-empty var returns `""`.
 - **`environ` as a Map.** Go's `[]string{"K=V", …}` is split on the
   first `=` into an `*OrderedMap`. A line with no `=` (rare, malformed)
   maps the whole string to `""`.
-- **`exit` is a tail effect.** It returns no BORU value because the
+- **`exit` is a tail effect.** It returns no boru value because the
   process is gone; document it as "never returns". In a sandbox it MUST
   be denied or stubbed (§7) — a guest must never be able to kill the
   host.
@@ -186,7 +186,7 @@ Notes for the gate:
   determinism-seeking sandbox denies/stubs them via the fake
   `HostEnv`/`HostProc`.
 - **`exit` is the dangerous one.** It terminates the **host** process,
-  not the BORU engine, so it MUST gate on `process` and be **off by
+  not the boru engine, so it MUST gate on `process` and be **off by
   default** in every sandbox profile. The recommended default is
   `deny`; a host that genuinely wants guest-driven exit installs an
   explicit allow rule. The fake implementation never calls
@@ -299,7 +299,7 @@ Follow `io.go` (the **capability-backed** reference), not `math.go`
 
 ## 12. Vault-migration additions (VAULT-TUI-PORT §7.4)
 
-> The "vault logic in BORU" phase ([VAULT-TUI-PORT.0](../VAULT-TUI-PORT.0.md)
+> The "vault logic in boru" phase ([VAULT-TUI-PORT.0](../VAULT-TUI-PORT.0.md)
 > §7.4) names two `Os.*` needs — a single-variable env read (**N1**) and a
 > clipboard copy (**G2**). This section is the spec for those two, added
 > here rather than in a fourth module so the OS surface stays in one place.
@@ -369,7 +369,7 @@ of empty text is a valid clear, not an error.
 **Robustness note (child-registry leak).** A dispatch-time `os-denied`
 gate would become allow-all inside an imported module body (see
 [PERMISSIONS.10 → Known gap](../PERMISSIONS.10.md#known-gap-child-module-registries-do-not-inherit-the-policy)),
-which is where the vault-in-BORU clipboard call runs. The
+which is where the vault-in-boru clipboard call runs. The
 `permissioned*`-wrapper form recommended in §7 (policy baked into the
 capability object, inherited by value) is leak-resistant and is the
 required mechanism for `clipboard-copy`.

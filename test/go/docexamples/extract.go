@@ -1,5 +1,5 @@
 // Package docexamples extracts and runs the `expr  # returns result`
-// examples embedded in BORU's prose documentation (README, REFERENCE,
+// examples embedded in boru's prose documentation (README, REFERENCE,
 // TUTORIAL, HOWTO, EXPLANATION) so the docs can't silently drift from
 // real engine behavior. The extractor (this file) is pure
 // text→[]Example with no engine dependency, so it is unit-testable in
@@ -32,7 +32,7 @@ type Example struct {
 	File string // source file basename, e.g. "REFERENCE.md"
 	Line int    // 1-based line number of the `# returns` line in File
 
-	// Program is the full BORU source to evaluate: the block's preceding
+	// Program is the full boru source to evaluate: the block's preceding
 	// setup lines (everything before this line that was not itself a
 	// `# returns` line) joined by newlines, then the expression on this
 	// line. Setup-only result lines are deliberately excluded so a block
@@ -68,7 +68,7 @@ const returnsKeyword = "returns"
 
 // descSep separates the asserted value from an optional human-readable
 // description in a `# returns` comment (`# returns 5 5 — duplicate top`).
-// Em-dash never appears in rendered BORU values, so splitting on it is
+// Em-dash never appears in rendered boru values, so splitting on it is
 // unambiguous.
 const descSep = "—"
 
@@ -102,7 +102,7 @@ func Extract(file, src string) []Example {
 		if strings.HasPrefix(trimmed, "```") {
 			if !inFence {
 				// Opening fence. Only plain (untagged) or ```boru blocks
-				// carry BORU examples; ```bash / ```text etc. are skipped.
+				// carry boru examples; ```bash / ```text etc. are skipped.
 				info := strings.TrimSpace(strings.TrimPrefix(trimmed, "```"))
 				skipBlock = (info != "" && info != "boru") ||
 					strings.Contains(prevNonBlank, skipMarker)

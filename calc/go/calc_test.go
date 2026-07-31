@@ -52,7 +52,7 @@ func asDec(t *testing.T, stk []eng.Value, label string) float64 {
 // --- arithmetic ----------------------------------------------------
 
 func TestArithBasic(t *testing.T) {
-	// BORU convention (see lang/CLAUDE.md "Non-commutative two-arg sanity
+	// boru convention (see lang/CLAUDE.md "Non-commutative two-arg sanity
 	// check"): binary handlers compute args[1] op args[0]. So `10 sub 3`
 	// reads naturally as "10 minus 3 = 7"; the prefix form `sub 10 3`
 	// inverts to args=[10,3] → 3-10 = -7. Commutative ops behave the

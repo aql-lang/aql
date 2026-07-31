@@ -9,10 +9,10 @@ import (
 )
 
 // TestPublicDefineTypeAPI exercises the embedding-API convergence: a host
-// defines types three ways — from BORU source (DefineTypeFromSource), from
+// defines types three ways — from boru source (DefineTypeFromSource), from
 // a Go membership func (DefineMemberType), and as a union (DefineEnum) —
-// then both BORU source AND a host-registered signature use those types,
-// all on one lang.BORU instance. This is the external counterpart of `def`:
+// then both boru source AND a host-registered signature use those types,
+// all on one lang.Boru instance. This is the external counterpart of `def`:
 // types defined from Go are first-class and interchangeable with
 // source-defined ones.
 func TestPublicDefineTypeAPI(t *testing.T) {
@@ -21,7 +21,7 @@ func TestPublicDefineTypeAPI(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// (1) From BORU source — the host writes the body exactly as a script
+	// (1) From boru source — the host writes the body exactly as a script
 	// would, and gets the *Type back.
 	point, err := a.DefineTypeFromSource("Point", "refine Record [x:Integer y:Integer]")
 	if err != nil {
@@ -46,7 +46,7 @@ func TestPublicDefineTypeAPI(t *testing.T) {
 		t.Fatalf("DefineEnum: %v", err)
 	}
 
-	// All three are bound and referenceable from BORU source on this
+	// All three are bound and referenceable from boru source on this
 	// instance — just like `def`-installed types.
 	out, err := a.RunInterp(`[(4 is Even) (5 is Even) (3 is NumOrStr) ('x' is NumOrStr) (true is NumOrStr)]`)
 	if err != nil {

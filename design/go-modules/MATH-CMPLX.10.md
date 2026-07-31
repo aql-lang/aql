@@ -18,10 +18,10 @@ proposal; no Go code exists yet, and shipping is genuinely in question
 
 ## 2. Why curated
 
-There is no "raw bridge vs curated" framing here, because **BORU has no
+There is no "raw bridge vs curated" framing here, because **boru has no
 complex type at all** — `complex128` has no `eng.FromNative` /
 `eng.ToNative` mapping, so a mechanical `go:math/cmplx` bridge could not
-even pass an argument. Any BORU surface must *invent* a representation. The
+even pass an argument. Any boru surface must *invent* a representation. The
 curated choice is to model a complex number as a **`Map {re, im}`** of two
 Floats, so every word reads and writes ordinary inspectable data and the
 results compose with `get`, `set`, comparison, and serialization.
@@ -130,13 +130,13 @@ import "boru:cmplx"
 
 - A complex number as `{re:3.0 im:4.0}` is verbose to write, easy to
   malform (a typo'd or missing key is a runtime `bad-arg`, not a type
-  error caught early), and gives up the natural arithmetic BORU has for
+  error caught early), and gives up the natural arithmetic boru has for
   numbers: `z1 add z2` does **not** add two complex Maps (Map `add` is
   not complex addition), so users would need `Cmplx.add`/`Cmplx.mul`
   words too — which this note has *not* included, widening the surface
   further. Without them the module can transform a complex number but not
   do complex *arithmetic*, which is an odd half-tool.
-- The honest alternative is to **defer the whole module until BORU has a
+- The honest alternative is to **defer the whole module until boru has a
   native Complex type** (a leaf in the Number lattice with its own
   literal syntax and Comparer, the way Float/Integer/Big are). With a
   real type, `cmplx` words would take and return `Complex` values,

@@ -102,7 +102,7 @@ access lives in `boru:net`, see Overlap.)
 
 `boru:net` (`Net.fetch` / `Net.prepare` / `Net.direct`) uses `net/url`
 **internally** — `native/fetch.go` calls `url.Parse(rawURL)` to validate
-and split the target — but it exposes **no url words to BORU users**
+and split the target — but it exposes **no url words to boru users**
 (`docs_net.go` lists only `direct`, `fetch`, `prepare`). So `boru:url` is a
 **genuinely new user-facing surface**, not a re-spec of anything in
 `boru:net`; it does not move or change any existing word. The dividing

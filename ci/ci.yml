@@ -58,7 +58,7 @@ jobs:
         run: make cover-gate
 
       # The project knowledge graph (kg/) must stay in sync with the
-      # sources that generate it: type-check the BORU pipeline, run its
+      # sources that generate it: type-check the boru pipeline, run its
       # test suite, rebuild the bundle, and fail if the committed
       # kg/out/graph.json or kg/out/graph.sql drifts from the rebuild —
       # the "keep the graph updated with each PR" rule, enforced. The

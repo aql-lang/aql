@@ -8,7 +8,7 @@ import (
 
 // Error-code enumeration.
 //
-// A BORU error code is a DISPATCH CONTRACT, not a log string. Programs
+// A boru error code is a DISPATCH CONTRACT, not a log string. Programs
 // branch on it:
 //
 //	do [risky] error [dot code case [not_found/q "…" read_error/q "…"]]
@@ -69,7 +69,7 @@ type ErrorCode struct {
 // enforces is DISPATCHABILITY, not house style: a code has to be spellable as
 // a `case` arm, so lower-case, starting with a letter, and no whitespace.
 //
-// A hyphen is allowed because BORU word names use them freely (`for-each`,
+// A hyphen is allowed because boru word names use them freely (`for-each`,
 // `with-decimal`) and four codes follow suit — `expected-byte`,
 // `bad-encoding`, `cancel-timeout_error`, `cancel-interval_error`. Snake_case
 // is the overwhelming convention (233 of 237) and the right choice for a new

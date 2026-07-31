@@ -1,4 +1,4 @@
-# BORU Bytecode — Completing Runtime Independence (P5–P7)
+# boru Bytecode — Completing Runtime Independence (P5–P7)
 
 Status: design. Companion to `design/boru-bytecode-plan.0.md` (which records
 the landed P0–P4). This doc specifies the **remaining** work to reach the

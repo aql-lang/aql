@@ -1,4 +1,4 @@
-# Batteries Included: Standard Library Feature Analysis and BORU Recommendations
+# Batteries Included: Standard Library Feature Analysis and boru Recommendations
 
 > **Status note (2026-06-25):** much of this report's Phase-1/2 list has
 > since LANDED — math (`boru:math-util`), regex (`gex`), random
@@ -12,11 +12,11 @@
 
 ## Executive summary
 
-This report analyzes the standard library coverage of the top 20 TIOBE-ranked languages, identifies the features that appear most consistently across languages, and recommends a feature set for BORU. The primary goal is to **minimize third-party module dependencies** to reduce supply chain attack surface.
+This report analyzes the standard library coverage of the top 20 TIOBE-ranked languages, identifies the features that appear most consistently across languages, and recommends a feature set for boru. The primary goal is to **minimize third-party module dependencies** to reduce supply chain attack surface.
 
 ### Bottom line
 
-BORU already covers ~40% of the "universal standard library" feature set. The highest-priority additions are: **regex, hashing/crypto, JSON path operations, base64/hex encoding, math functions, sorting with custom comparators, and UUID generation**. These features appear in 15+ of the top 20 languages' standard libraries and are the most common sources of third-party dependencies when absent.
+boru already covers ~40% of the "universal standard library" feature set. The highest-priority additions are: **regex, hashing/crypto, JSON path operations, base64/hex encoding, math functions, sorting with custom comparators, and UUID generation**. These features appear in 15+ of the top 20 languages' standard libraries and are the most common sources of third-party dependencies when absent.
 
 ---
 
@@ -142,11 +142,11 @@ Counting how many of the 20 languages include each feature in their standard lib
 
 ---
 
-## Current BORU feature inventory
+## Current boru feature inventory
 
 Based on codebase analysis of `lang/go/internal/engine/native_*.go` (83 files, 126 `NativeSig` definitions):
 
-### What BORU has
+### What boru has
 
 | Category | Words | Status |
 |---|---|---|
@@ -166,7 +166,7 @@ Based on codebase analysis of `lang/go/internal/engine/native_*.go` (83 files, 1
 | **Modules** | module, import, export | Core complete |
 | **Query** | SQL-like operations (from, select, where, etc.) | Exists but disabled |
 
-### What BORU lacks
+### What boru lacks
 
 | Category | Gap | Priority |
 |---|---|---|
@@ -190,13 +190,13 @@ Based on codebase analysis of `lang/go/internal/engine/native_*.go` (83 files, 1
 
 ---
 
-## Recommended feature set for BORU
+## Recommended feature set for boru
 
 ### Guiding principles
 
 1. **Include features that appear in 13+ of the top 20 languages** — these are the "universal" expectations.
 2. **Prioritize features that are the most common third-party dependencies** — eliminating these has the highest security ROI.
-3. **BORU is a query/data language, not a systems language** — networking and OS features matter less than data transformation features.
+3. **boru is a query/data language, not a systems language** — networking and OS features matter less than data transformation features.
 4. **Go is the implementation language** — Go's standard library provides the implementation substrate. Features that are one function call into Go's stdlib are cheap to add.
 
 ### Phase 1: Critical (eliminates top dependency sources)
@@ -205,10 +205,10 @@ These features appear in 13+ languages and are the most common reasons for addin
 
 | Feature | Justification | Go implementation substrate |
 |---|---|---|
-| **Regex** | 17/20 languages include it. BORU's `match`/`contains` use shell-glob; real pattern matching requires regex. | `regexp` package — direct wrapper |
+| **Regex** | 17/20 languages include it. boru's `match`/`contains` use shell-glob; real pattern matching requires regex. | `regexp` package — direct wrapper |
 | **Hashing** | 13/20. Every data pipeline needs checksums, deduplication, content addressing. | `crypto/sha256`, `crypto/md5`, etc. — direct wrapper |
 | **Base64/hex encoding** | 16/20. Required for binary data handling, API integration, token encoding. | `encoding/base64`, `encoding/hex` — trivial |
-| **Math functions** | 19/20 include trig/log/exp. BORU has arithmetic but no `sin`, `cos`, `sqrt`, `abs`, `min`, `max`, `floor`, `ceil`, `round`, `log`, `exp`, `pi`, `e`. | `math` package — direct wrapper |
+| **Math functions** | 19/20 include trig/log/exp. boru has arithmetic but no `sin`, `cos`, `sqrt`, `abs`, `min`, `max`, `floor`, `ceil`, `round`, `log`, `exp`, `pi`, `e`. | `math` package — direct wrapper |
 | **Random** | 14/20. Needed for sampling, shuffling, simulation, test data generation. | `math/rand/v2`, `crypto/rand` — direct wrapper |
 | **UUID** | 11/20. Needed for record identification, idempotency keys, correlation IDs. | Small implementation (~30 lines for v4) or use Go's `crypto/rand` |
 
@@ -216,13 +216,13 @@ These features appear in 13+ languages and are the most common reasons for addin
 
 | Feature | Justification | Go implementation substrate |
 |---|---|---|
-| **JSON path/query** | BORU's `read`/`write` handle JSON serialization, but no way to query `$.store.book[*].author` style paths within JSON data. 13/20 languages include JSON. | `encoding/json` + custom path logic |
+| **JSON path/query** | boru's `read`/`write` handle JSON serialization, but no way to query `$.store.book[*].author` style paths within JSON data. 13/20 languages include JSON. | `encoding/json` + custom path logic |
 | **Compression (gzip)** | 16/20. Required for working with compressed data files, HTTP content encoding. | `compress/gzip`, `compress/zlib` — direct wrapper |
 | **Zip archives** | 13/20. Required for bundling, distribution, processing archived datasets. | `archive/zip` — direct wrapper |
-| **Date/time formatting** | 18/20. BORU has `now` and temporal types but limited parsing/formatting and timezone handling. | `time` package — extend existing temporal words |
+| **Date/time formatting** | 18/20. boru has `now` and temporal types but limited parsing/formatting and timezone handling. | `time` package — extend existing temporal words |
 | **URL encoding** | Part of base64/hex group. Required for web integration, query strings. | `net/url` — direct wrapper |
 | **HMAC** | Extension of hashing. Required for API authentication, webhook verification. | `crypto/hmac` — direct wrapper |
-| **Sorting with comparator** | BORU has `grade`/`sortby` but no user-defined comparison. Most languages support this. | Extend existing sort infrastructure |
+| **Sorting with comparator** | boru has `grade`/`sortby` but no user-defined comparison. Most languages support this. | Extend existing sort infrastructure |
 
 ### Phase 3: Medium value (ecosystem completeness)
 
@@ -230,7 +230,7 @@ These features appear in 13+ languages and are the most common reasons for addin
 |---|---|---|
 | **HTTP client** | 14/20. Required for API integration, webhooks, data fetching. | `net/http` — Go's strongest stdlib feature |
 | **XML parsing** | 11/20. Required for legacy data integration, configuration files, SOAP. | `encoding/xml` — direct wrapper |
-| **CSV streaming** | 7/20 but BORU already has basic CSV. Enhance with streaming, quoting options. | `encoding/csv` — enhance existing |
+| **CSV streaming** | 7/20 but boru already has basic CSV. Enhance with streaming, quoting options. | `encoding/csv` — enhance existing |
 | **Encryption (AES-GCM)** | 8/20. Required for data protection at rest. | `crypto/aes`, `crypto/cipher` — direct wrapper |
 | **TLS** | 11/20. Required for secure HTTP, certificate verification. | `crypto/tls` — bundled with HTTP client |
 | **Logging** | 7/20 but important for production use. Structured logging with levels. | `log/slog` (Go 1.21+) — direct wrapper |
@@ -241,9 +241,9 @@ These features appear in 13+ languages and are the most common reasons for addin
 |---|---|---|
 | **Image decode** | 8/20. Only needed for image pipeline use cases. | `image/png`, `image/jpeg` available in Go |
 | **HTML parsing** | 3/20. Only needed for web scraping. | `golang.org/x/net/html` (quasi-stdlib) |
-| **Templating** | 4/20. BORU's template strings may suffice. | `text/template` available in Go |
-| **Embedded DB** | 5/20. BORU's query system exists but is disabled. | Re-enable and complete query.go |
-| **CLI arg parsing** | 9/20. Only relevant when BORU is used as a script runner. | `flag` package in Go |
+| **Templating** | 4/20. boru's template strings may suffice. | `text/template` available in Go |
+| **Embedded DB** | 5/20. boru's query system exists but is disabled. | Re-enable and complete query.go |
+| **CLI arg parsing** | 9/20. Only relevant when boru is used as a script runner. | `flag` package in Go |
 
 ---
 
@@ -274,11 +274,11 @@ Using Go's standard library as the substrate, most features are thin wrappers:
 
 ---
 
-## Comparison: BORU vs the "universal standard library"
+## Comparison: boru vs the "universal standard library"
 
-Features that appear in 13+ of the top 20 languages, mapped to BORU status:
+Features that appear in 13+ of the top 20 languages, mapped to boru status:
 
-| Universal feature (13+ languages) | BORU status | Action |
+| Universal feature (13+ languages) | boru status | Action |
 |---|---|---|
 | String formatting | **Has** (concat, template strings) | None |
 | File I/O | **Has** (read, write, folder) | None |

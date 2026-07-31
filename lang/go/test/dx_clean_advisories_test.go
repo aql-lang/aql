@@ -19,7 +19,7 @@ func checkCounts(t *testing.T, src string) (errs, warns, mixedForm, unused int) 
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedBORU(a)
+	seedBoru(a)
 	res, err := a.Check(src)
 	if err != nil {
 		t.Fatalf("check: %v", err)

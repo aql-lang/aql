@@ -11,8 +11,8 @@ import "sync/atomic"
 // each emit point, and tests restore via the returned disarm func.
 //
 //   - The INTERPRETER-ENTRY hook observes every entry into tree-walking
-//     machinery (Engine.Run, RunResolved, CallBORU, runPooledSub, and
-//     InvokeCallback's CallBORU fallback). The frontier suite uses it to
+//     machinery (Engine.Run, RunResolved, CallBoru, runPooledSub, and
+//     InvokeCallback's CallBoru fallback). The frontier suite uses it to
 //     assert "this program ran with no unattributed interpreter execution" —
 //     the C4 end-state invariant — at entry points (REPL, exec), callback
 //     seams, and post-Stage-J the public Run itself.
@@ -29,7 +29,7 @@ import "sync/atomic"
 
 // InterpEntry is one observed entry into interpreter machinery.
 type InterpEntry struct {
-	// Seam names the entry point: "Engine.Run", "RunResolved", "CallBORU",
+	// Seam names the entry point: "Engine.Run", "RunResolved", "CallBoru",
 	// "runPooledSub", or "InvokeCallback:callboru" (the callback seam's
 	// interpreter fallback — distinguished so its C4 decline tag can attach
 	// when attribution lands).
@@ -168,7 +168,7 @@ func vmDeferAlt(r *Registry, curDebug []SrcPos, pc int, site, msg string, alt *B
 		return err
 	}
 	ae, ok := err.(*BoruError)
-	if !ok { //covergate:allow vmErrAt always builds an *BoruError (§compiler)
+	if !ok { //covergate:allow vmErrAt always builds a *BoruError (§compiler)
 		return err
 	}
 	ae.DeferAlt = alt

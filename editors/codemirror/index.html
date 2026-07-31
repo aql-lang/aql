@@ -67,7 +67,7 @@
   <body>
     <h1>codemirror-lang-boru</h1>
     <p class="sub">
-      A CodeMirror 6 <code>StreamLanguage</code> mode for BORU. Edit below — the
+      A CodeMirror 6 <code>StreamLanguage</code> mode for boru. Edit below — the
       highlighting is produced by the local <code>boru.js</code>.
     </p>
 
@@ -92,7 +92,7 @@
 
       const status = document.getElementById("status");
 
-      // A small explicit highlight style so every BORU token class is visibly
+      // A small explicit highlight style so every boru token class is visibly
       // distinct (the built-in default style also works — this just makes the
       // demo pop and shows how token classes map to colours).
       const boruHighlight = HighlightStyle.define([
@@ -111,7 +111,7 @@
       ]);
 
       const sample = [
-        "# todo.boru — a taste of BORU (mirrors design/examples/todo).",
+        "# todo.boru — a taste of boru (mirrors design/examples/todo).",
         "// both '#' and '//' start line comments.",
         "/* block comments",
         "   span multiple lines */",
@@ -165,7 +165,7 @@
           }),
         });
         status.textContent =
-          "ready — this is the same mode that drives the BORU web playground.";
+          "ready — this is the same mode that drives the boru web playground.";
         window.__view = view; // handy for poking at from the console
       } catch (err) {
         status.textContent = "failed to load: " + (err && err.message);

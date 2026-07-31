@@ -31,9 +31,9 @@ import (
 // stays on the declared-return path and nets its single return. This mirrors
 // the echo benchmark's `sock:Any` → `sock:Socket` resolution.
 
-// loadApps returns a lang.BORU whose import resolver is backed by an in-memory FS
+// loadApps returns a lang.Boru whose import resolver is backed by an in-memory FS
 // holding the named example apps at /apps/<name>.
-func loadApps(t *testing.T, names ...string) *BORU {
+func loadApps(t *testing.T, names ...string) *Boru {
 	t.Helper()
 	mem := capabilities.NewMem()
 	for _, n := range names {
@@ -56,7 +56,7 @@ func loadApps(t *testing.T, names ...string) *BORU {
 // `Check` (cmd/go/internal/check.Preflight → a.Check), NOT the stricter compile
 // pass. A false positive here is what actually refuses an otherwise-correct
 // program by default.
-func errorDiags(t *testing.T, a *BORU, src string) []CheckDiagnostic {
+func errorDiags(t *testing.T, a *Boru, src string) []CheckDiagnostic {
 	t.Helper()
 	res, err := a.Check(src)
 	if err != nil {
@@ -137,9 +137,9 @@ for 3 [ MiniRedis.cmd ep "SET k v" drop  no-such-word-xyz ep drop ]`
 	}
 }
 
-// loadImportedLib returns a lang.BORU whose import resolver holds `lib` at
+// loadImportedLib returns a lang.Boru whose import resolver holds `lib` at
 // /lib.boru, so a `src` that does `import "/lib.boru"` type-checks against it.
-func loadImportedLib(t *testing.T, lib string) *BORU {
+func loadImportedLib(t *testing.T, lib string) *Boru {
 	t.Helper()
 	mem := capabilities.NewMem()
 	mem.Files["/lib.boru"] = []byte(lib)

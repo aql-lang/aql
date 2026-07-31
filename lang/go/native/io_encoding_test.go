@@ -84,7 +84,7 @@ func TestEncRoundTripThroughWords(t *testing.T) {
 	if err := mem.WriteFile("crlf16.txt", crlf, 0644); err != nil {
 		t.Fatal(err)
 	}
-	res := runBORU(t, r, []Value{
+	res := runBoru(t, r, []Value{
 		NewWord("read"), pathV("crlf16.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("utf16le")) }),
 	})
@@ -93,7 +93,7 @@ func TestEncRoundTripThroughWords(t *testing.T) {
 	}
 
 	// utf16be write emits the BE BOM.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("be.txt"), NewString("hi"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("utf16be")) }),
 	})
@@ -102,11 +102,11 @@ func TestEncRoundTripThroughWords(t *testing.T) {
 	}
 
 	// Append merges at the text level: exactly one leading BOM.
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("ap.txt"), NewString("ab"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("utf16le")) }),
 	})
-	runBORU(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("ap.txt"), NewString("cd"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("utf16le")); om.Set("mode", NewString("append")) }),
 	})
@@ -117,13 +117,13 @@ func TestEncRoundTripThroughWords(t *testing.T) {
 
 	// Unknown enc on write errors; on an append over an EXISTING file the
 	// append-decode guard fires first (same taxonomy, distinct branch).
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("write"), pathV("new.txt"), NewString("x"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bogus")) }),
 	}); err == nil || !strings.Contains(err.Error(), "unknown encoding") {
 		t.Errorf("bogus enc write: err = %v", err)
 	}
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("write"), pathV("ap.txt"), NewString("x"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bogus")); om.Set("mode", NewString("append")) }),
 	}); err == nil || !strings.Contains(err.Error(), "append") {
@@ -131,7 +131,7 @@ func TestEncRoundTripThroughWords(t *testing.T) {
 	}
 
 	// Unknown enc on read errors.
-	if err := runBORUError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("read"), pathV("ap.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bogus")) }),
 	}); err == nil || !strings.Contains(err.Error(), "unknown encoding") {

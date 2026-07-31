@@ -9,7 +9,7 @@ import (
 	"github.com/boru-lang/boru/lang/go/modules"
 )
 
-// runSteps executes a sequence of BORU expressions on a shared engine,
+// runSteps executes a sequence of boru expressions on a shared engine,
 // returning the result of the last step.
 func runSteps(t *testing.T, steps []string) ([]native.Value, error) {
 	t.Helper()

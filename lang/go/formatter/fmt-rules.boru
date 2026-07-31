@@ -1,5 +1,5 @@
-# The BORU formatting STYLESHEET: the canonical layout rules `boru fmt` and
-# `Fmt.format` apply, expressed in BORU — as XSLT stylesheets are expressed
+# The boru formatting STYLESHEET: the canonical layout rules `boru fmt` and
+# `Fmt.format` apply, expressed in boru — as XSLT stylesheets are expressed
 # in XML. This file IS the definition of the canonical style: it is
 # embedded and parsed at build time, the Go emitter is only the processor
 # that interprets it, `Fmt.rules` returns it as data, and

@@ -127,7 +127,7 @@ func TestTuiPolicyArms(t *testing.T) {
 	_, oErr := tuiOpenHandler(nil, nil, nil, reg)
 	tcErrContains(t, oErr, "terminal")
 	// Coded by the gate (native/policy_error.go), so the refusal is
-	// dispatchable from BORU rather than an opaque foreign error.
+	// dispatchable from boru rather than an opaque foreign error.
 	var oAe *native.BoruError
 	if !errors.As(oErr, &oAe) || oAe.Code != "capability_not_installed" {
 		t.Fatalf("sandbox open = %v", oErr)

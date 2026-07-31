@@ -1,6 +1,6 @@
-// Package modules provides built-in native BORU modules that are imported
+// Package modules provides built-in native boru modules that are imported
 // using names of the form "boru:<name>". Each native module contains both
-// Go-implemented words and BORU code definitions.
+// Go-implemented words and boru code definitions.
 //
 // Native modules produce a ModuleDesc with exports, just like file-based
 // modules. The exported words are accessed via dot notation:
@@ -152,7 +152,7 @@ func InstallResolver(reg *native.Registry) {
 
 // InstallMathExports builds the math module and installs its exports as defs
 // in the given registry. This is a convenience for test setup — equivalent to
-// what happens when BORU code runs import "boru:math-util".
+// what happens when boru code runs import "boru:math-util".
 func InstallMathExports(r *native.Registry) error {
 	desc, err := BuildMathModule(r)
 	if err != nil {
@@ -166,7 +166,7 @@ func InstallMathExports(r *native.Registry) error {
 
 // InstallArrayExports builds the array module and installs its exports as defs
 // in the given registry. This is a convenience for test setup — equivalent to
-// what happens when BORU code runs import "boru:array-util".
+// what happens when boru code runs import "boru:array-util".
 func InstallArrayExports(r *native.Registry) error {
 	desc, err := BuildArrayModule(r)
 	if err != nil {

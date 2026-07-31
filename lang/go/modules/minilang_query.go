@@ -11,9 +11,9 @@ import (
 
 // The `jp` and `jq` mini-languages: query a document with JSONPath
 // (github.com/ohler55/ojg) or a jq filter (github.com/itchyny/gojq). The
-// document is the stack subject and may be any BORU data shape — a Node (Map /
+// document is the stack subject and may be any boru data shape — a Node (Map /
 // List tree), an Object, an Array, a Table, or a Record — converted to generic
-// data for the query engine and the matches converted back to BORU values.
+// data for the query engine and the matches converted back to boru values.
 //
 //	{store:{book:[{title:'A'} {title:'B'}]}} mini jp '$.store.book[*].title'  # → ['A' 'B']
 //	{a:1 b:2} mini jq '.a + .b'                                              # → [3]
@@ -22,7 +22,7 @@ import (
 // its output stream (a single-output filter therefore returns a one-element
 // list). Grab the first with `.0` / `get 0` when a scalar is wanted.
 
-// docToAny converts a BORU subject to the generic Go data (map[string]any /
+// docToAny converts a boru subject to the generic Go data (map[string]any /
 // []any / scalars) the query engines operate on. Nodes (Map/List), Objects and
 // Records go through the standard value→any path; Arrays, Tables and other
 // Ideals are projected through their IdealConverter.
@@ -90,7 +90,7 @@ func sliceToAny(elems []native.Value) []any {
 	return out
 }
 
-// queryResultToValue converts a jsonpath / jq output value back to a BORU
+// queryResultToValue converts a jsonpath / jq output value back to a boru
 // Value, reusing the shared any→Value conversion and handling gojq's big.Int.
 func queryResultToValue(v any) native.Value {
 	if bi, ok := v.(*big.Int); ok {

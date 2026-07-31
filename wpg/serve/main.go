@@ -23,10 +23,10 @@ type evalResponse struct {
 	Error  string   `json:"error,omitempty"`
 }
 
-// newMux builds the REPL server's handler over one BORU instance.
+// newMux builds the REPL server's handler over one boru instance.
 // Extracted from main so tests can drive the production routes through
 // httptest.
-func newMux(instance *lang.BORU) *http.ServeMux {
+func newMux(instance *lang.Boru) *http.ServeMux {
 	var mu sync.Mutex
 	var outBuf bytes.Buffer
 	instance.SetOutput(&outBuf)
@@ -94,13 +94,13 @@ func run(args []string) int {
 
 	instance, err := newInstance()
 	if err != nil {
-		log.Printf("failed to create BORU instance: %v", err)
+		log.Printf("failed to create boru instance: %v", err)
 		return 1
 	}
 	mux := newMux(instance)
 
 	addr := fmt.Sprintf(":%d", *port)
-	log.Printf("BORU Web REPL listening on http://localhost%s", addr)
+	log.Printf("boru Web REPL listening on http://localhost%s", addr)
 	if err := listenServe(addr, mux); err != nil {
 		log.Print(err)
 		return 1
@@ -118,7 +118,7 @@ const indexHTML = `<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BORU REPL</title>
+<title>boru REPL</title>
 <style>
   :root {
     --bg: #1e1e2e;
@@ -205,16 +205,16 @@ const indexHTML = `<!DOCTYPE html>
 </head>
 <body>
 <header>
-  <h1>BORU REPL</h1>
+  <h1>boru REPL</h1>
   <span>concatenative query language</span>
 </header>
 <div id="output">
-<div class="line line-info">Welcome to the BORU Web REPL. *Type expressions and press Enter to evaluate.</div>
+<div class="line line-info">Welcome to the boru Web REPL. *Type expressions and press Enter to evaluate.</div>
 <div class="line line-info">Examples: 1 add 2 &nbsp;|&nbsp; "hello" upper &nbsp;|&nbsp; [1 2 3] len &nbsp;|&nbsp; def double [dup add]</div>
 </div>
 <div id="input-row">
   <span class="prompt">&gt;&gt;</span>
-  <input id="input" type="text" autofocus autocomplete="off" spellcheck="false" placeholder="Enter BORU expression...">
+  <input id="input" type="text" autofocus autocomplete="off" spellcheck="false" placeholder="Enter boru expression...">
 </div>
 <script>
 (function() {

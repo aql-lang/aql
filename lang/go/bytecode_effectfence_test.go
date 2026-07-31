@@ -71,7 +71,7 @@ func TestRuntimeBailBeforeEffectStillFallsBack(t *testing.T) {
 // zzCheckEmit registers `zz-emit`, a RunInCheckMode word that WRITES to the
 // registry output when it executes — so the CHECK pass itself emits an
 // observable effect, the way a module body printing at import time does.
-func zzCheckEmit(a *BORU) {
+func zzCheckEmit(a *Boru) {
 	a.Register("zz-emit", native.Signature{
 		Args:       []*native.Type{},
 		Returns:    []*native.Type{},
@@ -302,7 +302,7 @@ func TestCheckErrorAfterCheckEffectSurfacesItself(t *testing.T) {
 // zzForeignBoom registers `zz-boom`, a plain native whose handler returns a
 // foreign Go error — the non-BoruError class runtimeShouldFallback also
 // resolves by re-running the interpreter.
-func zzForeignBoom(t *testing.T) *BORU {
+func zzForeignBoom(t *testing.T) *Boru {
 	t.Helper()
 	a := mustNew(t)
 	a.Register("zz-boom", native.Signature{

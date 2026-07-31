@@ -1,4 +1,4 @@
-# Allocating the remaining Go stdlib to BORU modules
+# Allocating the remaining Go stdlib to boru modules
 
 > **Status: recommendation.** One row has since SHIPPED — `crypto/tls`
 > as `tls: {…}` options on `boru:net`, with mutual TLS through a
@@ -39,7 +39,7 @@ Derived from what the repo already does, not invented here.
 | **P2** | **A module needs a *domain*, not a package.** A package with a two-or-three-function surface folds; it does not earn a namespace. | `net/smtp`, `hash/adler32` below |
 | **P3** | **Types before words.** If a builtin type already models the value, the package's parsing/validation belongs to that type, not to a new module. | the twelve Micron leaves — `Ipon`, `Cidron`, `Mimon`, `Hoston`, `Coloron` already wrap `net`, `net/netip`, `mime` |
 | **P4** | **Effects reuse the existing seams.** New *ops* inside a known `policy.KnownScopes` scope; a new scope only for a genuinely new kind of authority. | `fileops`/`network`/`process` in `lang/go/policy/policy.go` |
-| **P5** | **Provider/driver packages become host seams, not modules.** Where the Go package *is* an interface for plugging things in, the BORU answer is host registration. | `LogSinkSpec` ([LOG-MODULE](LOG-MODULE.10.md) §5), `RegisterHostKeyring` ([OS-KEYRING](OS-KEYRING.0.md)), `RegisterGoPackage` ([GO-MODULES](GO-MODULES.10.md)) |
+| **P5** | **Provider/driver packages become host seams, not modules.** Where the Go package *is* an interface for plugging things in, the boru answer is host registration. | `LogSinkSpec` ([LOG-MODULE](LOG-MODULE.10.md) §5), `RegisterHostKeyring` ([OS-KEYRING](OS-KEYRING.0.md)), `RegisterGoPackage` ([GO-MODULES](GO-MODULES.10.md)) |
 | **P6** | **Naming.** Bare capitalised package name as the namespace; the `-util` id + `*Util` namespace **only** on a clash with a builtin type or an existing namespace. | `go-modules/README.10.md` "The roster" |
 | **P7** | **Not everything becomes a word.** Some packages are build wiring or internal plumbing and correctly have no user surface at all. | `time/tzdata`, `net/textproto` below |
 
@@ -213,9 +213,9 @@ make it non-niche:
 ### 5.8 `boru:tui` and `boru:debug`
 
 - **`boru:tui` ← `image/color`.** A deliberate carve-out from the bucket-B
-  "Graphics" row, which excludes `image/*` on the grounds that BORU is not
+  "Graphics" row, which excludes `image/*` on the grounds that boru is not
   a rendering toolkit. `image/color` is not rendering — it is colour-space
-  arithmetic, and BORU already has a `Coloron` Micron leaf plus a
+  arithmetic, and boru already has a `Coloron` Micron leaf plus a
   `colorize`/`truecolor` path in `tui_utils.go` that needs sRGB→256-colour
   mapping. Recommend narrowing the bucket-B row to `image/*` **except**
   `image/color`. (If `Coloron` maths later wants a home outside a terminal
@@ -248,13 +248,13 @@ Go implementation detail of protocols we already expose. → bucket B.
 
 ### 6.3 `database/sql` → additional **Store backends**, not a SQL module
 
-The coverage map's "DB drivers" row assumes BORU wants a SQL surface. It
+The coverage map's "DB drivers" row assumes boru wants a SQL surface. It
 does not, and the code says so: `lang/go/native/sqlite.go` is a
-`SQLiteStore` — a *backend* behind BORU's own `Store`/`Table` query words —
+`SQLiteStore` — a *backend* behind boru's own `Store`/`Table` query words —
 not a `Db.query` module. So the correct allocation for other backends
 (Postgres, MySQL, …) is **another implementation of that same seam**,
 host-registered per P5, reusing the `sqlite` policy scope generalised to
-`store`. Guests keep writing BORU queries; only the host chooses where they
+`store`. Guests keep writing boru queries; only the host chooses where they
 execute. This is strictly better than exposing `database/sql`: it keeps
 the sealed model, avoids putting driver-specific SQL dialects into guest
 source, and needs no new module.
@@ -266,14 +266,14 @@ the residue so it stops being re-derived. Recommend bucket B for:
 
 | Group | Packages | Why |
 |---|---|---|
-| Go language mechanics | `cmp`, `iter`, `unique`, `weak`, `structs` | Go-side ordering, iteration, interning and memory layout. BORU has its own `cmp`, its own iteration model, and its own value identity. |
+| Go language mechanics | `cmp`, `iter`, `unique`, `weak`, `structs` | Go-side ordering, iteration, interning and memory layout. boru has its own `cmp`, its own iteration model, and its own value identity. |
 | Deprecated / superseded Go APIs | `io/ioutil`, `crypto/elliptic`, `crypto/dsa` | Superseded within Go itself. |
 | Broken primitives | `crypto/des`, `crypto/rc4` | Exclude **deliberately** — a security-sensitive module should refuse these by design, not omit them by accident. |
 | Build modes / interface roots | `crypto/fips140`, `crypto`, `encoding`, `hash` | A build toggle and three interface-only registries — nothing callable. |
 | Implementation-detail sub-packages | `regexp/syntax`, `text/template/parse`, `database/sql/driver` | ASTs and driver interfaces behind a surface that is already bucketed. (`go/build/constraint`, `go/doc/comment` and `image/color/palette` belong here too but are already swept by the `go/*` and `image/*` rows, so they are not counted again.) |
 | Host / runtime internals | `runtime/{cgo,coverage,metrics,race}`, `net/http/{cgi,fcgi,pprof}` | Same rationale as the existing bucket-B `runtime/{pprof,trace,debug}` row: host concerns, not language ones. |
-| Go-side test harnesses | `testing/{fstest,iotest,quick,slogtest}`, `net/http/{httptest,httptrace}` | BORU has `boru:test`, its own PBT ([PBT-PLAN](PBT-PLAN.10.md)) and its own FS seam (`overlay.go`, `zipfs.go`). Worth an explicit *superseded* ruling rather than silence. |
-| Superseded by BORU's own stack | `text/scanner`, `net/rpc`, `net/rpc/jsonrpc`, `net/textproto` | Tokenizing is `boru:parse`/`boru:minilang`; RPC is [SERVICES](SERVICES.0.md) with its own codecs. |
+| Go-side test harnesses | `testing/{fstest,iotest,quick,slogtest}`, `net/http/{httptest,httptrace}` | boru has `boru:test`, its own PBT ([PBT-PLAN](PBT-PLAN.10.md)) and its own FS seam (`overlay.go`, `zipfs.go`). Worth an explicit *superseded* ruling rather than silence. |
+| Superseded by boru's own stack | `text/scanner`, `net/rpc`, `net/rpc/jsonrpc`, `net/textproto` | Tokenizing is `boru:parse`/`boru:minilang`; RPC is [SERVICES](SERVICES.0.md) with its own codecs. |
 
 Deferred rather than closed: `crypto/mlkem` (real, no driver yet) stays in
 bucket C at low priority.

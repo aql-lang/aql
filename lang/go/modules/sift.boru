@@ -1,5 +1,5 @@
 # ============================================================================
-# boru:sift — the semi-structured-text tier of the parsing stack, in BORU.
+# boru:sift — the semi-structured-text tier of the parsing stack, in boru.
 #
 # design/SIFT.0.md. Between StringUtil / read {fmt:'lines'} (primitives) and
 # parse json / boru:parse (rigid formats / grammars), sift parses the loose
@@ -12,7 +12,7 @@
 # sub-registry and so cannot register a global `parse <kind>` the importing
 # program would see.
 #
-# Tables are represented as a List of row Maps (pure BORU has no schema-carrying
+# Tables are represented as a List of row Maps (pure boru has no schema-carrying
 # Table value); every sift consumer uses size / dot / get, for which a
 # list-of-maps is behaviourally identical.
 # ============================================================================
@@ -814,7 +814,7 @@ def sift-run-family fn [[family:String src:String opts:Map] [Any] [
 # ----------------------------------------------------------------------------
 # validate a spec value into a normalized spec Map {family opts detect? doc?}
 # or raise sift_spec_error. (family:'fn' — the fn escape hatch of §16 — is
-# deferred to a follow-up: passing a BORU fn value as data across the module
+# deferred to a follow-up: passing a boru fn value as data across the module
 # boundary hits the strict-forward-barrier + fn-value auto-invoke rules.)
 def sift-spec-from fn [[v:Any] [Map] [
   if (v is Map) [ def r (sift-spec-from-map v)  r ] [ raise sift_spec_error "spec must be a map" ]

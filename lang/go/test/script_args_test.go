@@ -8,7 +8,7 @@ import (
 )
 
 // runOne runs source and returns the single resulting value.
-func runOneScriptArgs(t *testing.T, a *lang.BORU, src string) any {
+func runOneScriptArgs(t *testing.T, a *lang.Boru, src string) any {
 	t.Helper()
 	res, err := a.Run(src)
 	if err != nil {

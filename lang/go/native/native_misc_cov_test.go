@@ -45,8 +45,8 @@ func TestMiscCovHelpOverview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help: %v", err)
 	}
-	if !strings.Contains(printed, "BORU") {
-		t.Errorf("help output should mention BORU, got %q", printed)
+	if !strings.Contains(printed, "boru") {
+		t.Errorf("help output should mention boru, got %q", printed)
 	}
 }
 
@@ -55,7 +55,7 @@ func TestMiscCovDescribeIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("describe: %v", err)
 	}
-	if !strings.Contains(printed, "BORU language reference") {
+	if !strings.Contains(printed, "boru language reference") {
 		t.Errorf("describe index missing header, got %q", printed[:min(len(printed), 120)])
 	}
 }

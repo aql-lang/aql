@@ -9,7 +9,7 @@ import (
 
 // The tree→Frame renderer of TUI.0.md §3: consumes the widget tree as
 // ValueToAny-shaped data (the SAME shape the boru:tui module projects
-// from BORU values and the remote protocol carries as JSON — one
+// from boru values and the remote protocol carries as JSON — one
 // rendering code path for local and attached clients), lays out with
 // the §3.2 constraint solver, and paints the nine §3.1 widget kinds
 // into a Frame. Pure: no engine, no terminal.

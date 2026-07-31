@@ -327,7 +327,7 @@ bytecode_edge_findings_test.go.
   the invoke seam already dispatches through MatchFnSig BEFORE
   InvokeCallback, so the matched sig's own `Impl.Compiled` ref IS the
   sig table. As landed: `storedSigEligible` replaces the
-  single-own-sig gate (per-sig: own, BORU body, non-empty,
+  single-own-sig gate (per-sig: own, boru body, non-empty,
   sentinel-free); the compile-time store-fn bake loops every stampable
   sig (per-sig unit + ref, `compileStoredFnUnit(fd, sigIdx, pos)`);
   the runtime path gains `StampDetachedSig(r, fd, sigIdx, pos)` with
@@ -340,7 +340,7 @@ bytecode_edge_findings_test.go.
   ...PartialStamp (end-to-end service dispatch: the two-arity handler
   shape that never stamped, both units on the VM, parity), and the eng
   stamp-gate/report pins flipped to per-sig.
-- **Stale-dep refs degrade permanently to CallBORU**: **LANDED
+- **Stale-dep refs degrade permanently to CallBoru**: **LANDED
   2026-07-16.** InvokeCallback, on depsFresh failure, re-runs
   StampDetachedFn against the live bindings via a per-ref restampBox
   (CompiledFnRef.restamp — allocated by StampDetachedFn only, so
@@ -349,15 +349,15 @@ bytecode_edge_findings_test.go.
   under a mutex serialising concurrent invokers of one shared sig; each
   re-stamp snapshots the new generations, a stable rebind pays ONE
   compile then runs the VM again, and restampMaxTries (3) bounds a hot
-  rebinding loop — after the budget the seam stays on CallBORU (slow,
+  rebinding loop — after the budget the seam stays on CallBoru (slow,
   not wrong). Pinned in TestInvokeCallbackJITRestamp (freshen-to-live-
   value parity, twin reuse without recompile, budget exhaustion,
   disarmed decline). This is also the mechanism for the plan's Phase-6
   "JIT detached-unit cache" item.
 
-## 8. BORU-written mini compile hooks — keep the opt-out
+## 8. boru-written mini compile hooks — keep the opt-out
 
-A BORU compile hook is a macro whose check-time expansion is
+A boru compile hook is a macro whose check-time expansion is
 CONTRACTUALLY not the runtime expansion (MINILANG.5.md §13): the hook
 may read state that exists only at runtime. Both compile strategies are
 unsound or self-defeating: baking the check-time expansion violates the

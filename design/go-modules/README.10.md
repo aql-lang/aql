@@ -1,7 +1,7 @@
-# Curated Go-stdlib BORU modules
+# Curated Go-stdlib boru modules
 
 > **Status: design proposal.** Nothing in this folder is implemented yet.
-> Each `<PKG>.10.md` note specifies a *curated, hand-written* native BORU
+> Each `<PKG>.10.md` note specifies a *curated, hand-written* native boru
 > module that wraps one Go standard-library package with an **idiomatic
 > ("boru-ish") API** — not a mechanical 1:1 mirror of the Go signatures.
 > The docs exist so the proposed surface is auditable before any Go code
@@ -33,7 +33,7 @@ mechanism (below).
 
 ## Scope of this family — *new packages only*
 
-These notes cover Go packages that have **no BORU-user-facing surface
+These notes cover Go packages that have **no boru-user-facing surface
 today**. The packages already exposed by an existing module are out of
 scope and are NOT to be re-specified or disturbed:
 
@@ -69,7 +69,7 @@ move or change the existing words.
 
 ## The roster
 
-One BORU module per Go package. Namespaces are the plain capitalized
+One boru module per Go package. Namespaces are the plain capitalized
 package name; the `-util` id + `*Util` namespace is used **only** when the
 bare namespace would collide with a builtin type (`Path`, `String`,
 `Time`, `Type`, `Array`, `Matrix`, …) or an existing module namespace
@@ -169,7 +169,7 @@ references. Register the builder in the `modules` map in
   (`eng/go/gobridge.go`): String↔`string`, Integer↔int kinds,
   Float↔float kinds, Boolean↔`bool`, List↔slice, Map↔`map[string]any`,
   None↔`nil`.
-- A Go value with no BORU counterpart (`*url.URL`, a parsed
+- A Go value with no boru counterpart (`*url.URL`, a parsed
   `*template.Template`, a `*csv.Reader`) is held in an
   `ExtensionPayload` and surfaced as a **registered external type**
   via `RegisterExternalBuiltin` with a `FixedID` from the documented

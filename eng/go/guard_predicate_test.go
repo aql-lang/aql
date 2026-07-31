@@ -2,9 +2,9 @@ package eng
 
 import "testing"
 
-// boruPredSig builds a single BORU-bodied signature for a predicate fn.
+// boruPredSig builds a single boru-bodied signature for a predicate fn.
 func boruPredSig(params []FnParam, returns []*Type, body []Value) Signature {
-	return Signature{Params: params, Returns: returns, Impl: &BORUImpl{Body: body}}
+	return Signature{Params: params, Returns: returns, Impl: &BoruImpl{Body: body}}
 }
 
 func installPred(r *Registry, name string, sigs []Signature) {
@@ -12,7 +12,7 @@ func installPred(r *Registry, name string, sigs []Signature) {
 }
 
 // predicateImpliedType's signature-shape gates: only a single-overload,
-// single-named-param, Boolean-returning BORU fn with a recognisable is-T body
+// single-named-param, Boolean-returning boru fn with a recognisable is-T body
 // qualifies. Every rejection path is pinned.
 func TestPredicateImpliedTypeGates(t *testing.T) {
 	if _, ok := predicateImpliedType(nil, "p"); ok {
@@ -48,10 +48,10 @@ func TestPredicateImpliedTypeGates(t *testing.T) {
 		t.Error("multi-overload must decline")
 	}
 
-	// Non-BORU implementation (a native GoImpl) → decline.
+	// Non-Boru implementation (a native GoImpl) → decline.
 	installPred(r, "native", []Signature{{Params: xParam, Returns: []*Type{TBoolean}, Impl: &GoImpl{}}})
 	if _, ok := predicateImpliedType(r, "native"); ok {
-		t.Error("non-BORU impl must decline")
+		t.Error("non-Boru impl must decline")
 	}
 
 	// Only a fallback signature (no real overload) → decline.

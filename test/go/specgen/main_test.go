@@ -580,7 +580,7 @@ func checkFullMatrix(t *testing.T, full string) map[string]string {
 
 	header := readAll(t, full)
 	for _, want := range []string{
-		"# BORU Language Specification: Syntax Combination Matrix (GENERATED)",
+		"# boru Language Specification: Syntax Combination Matrix (GENERATED)",
 		fmt.Sprintf("# Alphabet (%d atoms): %s", len(alphabet), strings.Join(alphabet, " ")),
 		"# §1  1-element sequences",
 		"# §2  2-element sequences",

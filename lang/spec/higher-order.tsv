@@ -1,4 +1,4 @@
-# BORU Language Specification: Higher-order list words (each fold scan join)
+# boru Language Specification: Higher-order list words (each fold scan join)
 # Format: input<TAB>expected<TAB>description
 #
 # each / fold / scan take an unevaluated CODE BODY (NoEvalArgs) as their

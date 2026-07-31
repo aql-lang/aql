@@ -6,7 +6,7 @@ import (
 	eng "github.com/boru-lang/boru/eng/go"
 )
 
-// refNatives registers the two words that complete BORU's first-class
+// refNatives registers the two words that complete boru's first-class
 // function-value pipeline:
 //
 //   - `ref name`  — resolves a function word to its bound value
@@ -51,7 +51,7 @@ var refNatives = []NativeFunc{
 		// Stack-only: `args... fn apply` reads as "take the function
 		// off the stack and apply it to the preceding values." Forward
 		// collection would force callers to put fn-args after the fn,
-		// which fights BORU's left-to-right stack flow.
+		// which fights boru's left-to-right stack flow.
 
 		Signatures: []Signature{
 			{
@@ -362,7 +362,7 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 // The engine's stepLiteral check then fires execFnDefLiteral, which
 // dispatches the function against whatever stack args precede it.
 //
-// For BORU-defined fns the dispatch uses the captured FnDef's own
+// For boru-defined fns the dispatch uses the captured FnDef's own
 // Sigs table, so the call is stable even when the original binding
 // has been redefined or undef'd.
 //
@@ -371,7 +371,7 @@ func refHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]V
 // reach apply, unquote, but fall back to passing through. Native fn
 // captures still serve as TFunction-slot args to higher-order words
 // (filter, walk, behave) where the consumer's handler calls into the
-// engine directly via CallBORU.
+// engine directly via CallBoru.
 func applyHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	v := args[0]
 	if !v.Parent.Equal(TFunction) && !v.Parent.Equal(TFnDef) {
