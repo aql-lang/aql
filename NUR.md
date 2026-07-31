@@ -872,11 +872,18 @@ The **code / opaque values** — `Function`/`FnDef`, `Module`/
 the 2026-07-24 record accepted wholesale. The review splits that
 acceptance:
 
-- **Accepted as current behaviour:** `Function`/`FnDef` and `Word`
-  values are **rejected at dispatch** — `eq`/`deq` have no signature
-  admitting them, so a comparison is a loud `signature_error`, not a
-  silent wrong answer. Tolerable while the deeper question below is
-  open.
+- **Accepted as current behaviour** (correction, 2026-07-31 audit):
+  the "rejected at dispatch" claim holds only for BARE operands
+  (which auto-invoke before comparison). `eq`/`deq`'s signatures are
+  `[Any Any]` and DO admit fn values arriving as **container data**
+  (`m.run eq m.run`): `deq` is parent-insensitive and never-equal
+  (`DeqNeverEqual`), while `ExactEqual`'s type-body arm requires
+  Parent equality — so today two identical-canon fn values compare
+  `eq`-false when their Parents differ (`Word/__FN` vs
+  `Type/Function`), and the NUR050 collapse would flip that pair to
+  true. The reflexivity gap this record tracks therefore covers
+  functions-as-container-data too, not just Module/ModuleExport.
+  Tolerable while the deeper question below is open.
 - **Re-classified as an open defect (NOT a benign allowance):**
   `Module`/`ModuleExport` values DO reach `eq`/`deq` and return
   `false` **including against themselves** — a silent violation of
@@ -1706,6 +1713,36 @@ the failure decomposes into two separate defects:
    bare word to `NewFunction` when a parked forward's next slot
    expects exactly `TFunction` — arrival path only; it does not
    rescue the plan-walk barrier.
+
+**Collapse audit (2026-07-31, full-tree sweep, adversarially
+verified):** 83 non-test `TFnDef`/`__FN` sites classified for option
+2a (retire `Word/__FN`; def table stores `NewFunction`). Verdict:
+**mechanical except one accepted behaviour change.** Every
+emit/engine/dispatch site OR-pairs the two Parents (no compiler path
+branches on `TFnDef`; VM closures are already `TFunction`;
+`isAppliableFn` is payload-first); constructions rename
+(`registry.go:1607`, `resolveModuleExport` + its `modules/test.go`
+twin, `log_logger`, word-extension exports); `native_macro.go`'s 14
+uses are six duplicate `TFnDef` signature twins that exist ONLY
+because `__FN` does not conform to `Function` — deleted outright.
+Must move in lockstep: the typetable decl (retire FixedID 23 — the
+snapshot-row protocol has ~8 precedents), `fixedid_stability_test`,
+the TS twin `eng/ts/src/type.ts`, `fnmodel_equivalence.golden`,
+`ShapeFnDef` (sole consumer OR-pairs). **The one real delta:
+ordering** — fn values leave the Word band (Rank 50_100_006_000,
+`wordCompareBehavior` lexical) for the Type band (~6·10¹⁰, no
+Comparer → structural), changing `tcmp`/`cmp` for programs ordering
+parked references; NO spec row or Go test pins the old order, so the
+ADR should either accept-and-pin the new order or weigh a `TFunction`
+Comparer (which conflicts with the pinned `TFunction` structural
+rows — not preservable both ways). Two latent bugs the collapse fixes
+for free: a module-export fn reference (`resolveModuleExport`, the
+one user-reachable runtime `TFnDef` producer) answers `is Function` →
+**false** today; and the `__FN` leak in diagnostics/residuals
+(`Parent.Leaf()` at `boru.go:325`, `engine.go:8970`, `value.go:3394`)
+disappears. Note: `typeof` does NOT remap — earlier probes showed
+`Function` only because every value-facing surface wraps; the split
+is hidden by wrapping, not by rendering.
 **Framing (maintainer, 2026-07-31):** this is a fundamental confusion
 between **a function itself and a reference to a function**, with a
 confused implementation. boru is stack-based: a zero-arg function on
