@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // io_temp_test.go — P3 word-layer coverage: IO.temp / IO.space handlers,
@@ -18,7 +18,7 @@ func TestTempWordForms(t *testing.T) {
 	r, mem := ioFSReg(t)
 
 	// {} default: a file in the (implicit) temp root, mode 0600.
-	res := runAQL(t, r, []Value{NewWord("temp"), wrapMap(func(*OrderedMap) {})})
+	res := runBoru(t, r, []Value{NewWord("temp"), wrapMap(func(*OrderedMap) {})})
 	if !IsPathon(res[0]) {
 		t.Fatalf("temp returned %v", res[0])
 	}
@@ -28,7 +28,7 @@ func TestTempWordForms(t *testing.T) {
 	}
 
 	// {dir:true} yields a 0700 directory.
-	res = runAQL(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) { om.Set("dir", NewBoolean(true)) })})
+	res = runBoru(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) { om.Set("dir", NewBoolean(true)) })})
 	if fi, _ := mem.Stat(extractPath(res[0]), false); !fi.IsDir || fi.Mode.Perm() != 0o700 {
 		t.Errorf("temp dir stat = %+v", fi)
 	}
@@ -37,7 +37,7 @@ func TestTempWordForms(t *testing.T) {
 	if err := mem.MkdirAll("work", 0o755); err != nil {
 		t.Fatal(err)
 	}
-	res = runAQL(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) {
+	res = runBoru(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) {
 		om.Set("in", pathV("work"))
 		om.Set("prefix", NewString("log-"))
 		om.Set("suffix", NewString(".txt"))
@@ -48,7 +48,7 @@ func TestTempWordForms(t *testing.T) {
 	}
 
 	// An absent {in} directory refuses (os.CreateTemp fidelity).
-	if err := runAQLError(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) {
+	if err := runBoruError(t, r, []Value{NewWord("temp"), wrapMap(func(om *OrderedMap) {
 		om.Set("in", pathV("ghost"))
 	})}); err == nil {
 		t.Error("temp in an absent dir should error")
@@ -60,7 +60,7 @@ func TestSpaceWord(t *testing.T) {
 	if err := mem.WriteFile("f", []byte("12345"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	res := runAQL(t, r, []Value{NewWord("space"), pathV("f")})
+	res := runBoru(t, r, []Value{NewWord("space"), pathV("f")})
 	m, err := AsMap(res[0])
 	if err != nil {
 		t.Fatal(err)
@@ -77,7 +77,7 @@ func TestSpaceWord(t *testing.T) {
 		t.Error("space record missing bsize")
 	}
 	// Absent path refuses.
-	if err := runAQLError(t, r, []Value{NewWord("space"), pathV("ghost")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("space"), pathV("ghost")}); err == nil {
 		t.Error("space on absent path should error")
 	}
 }
@@ -87,8 +87,8 @@ func TestAtomicWrite(t *testing.T) {
 	if err := mem.WriteFile("d/t.txt", []byte("old"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	// Happy path: content replaced, and no .aql-atomic temp remains.
-	runAQL(t, r, []Value{
+	// Happy path: content replaced, and no .boru-atomic temp remains.
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("d/t.txt"), NewString("new"),
 		wrapMap(func(om *OrderedMap) { om.Set("atomic", NewBoolean(true)) }),
 	})
@@ -97,12 +97,12 @@ func TestAtomicWrite(t *testing.T) {
 	}
 	infos, _ := mem.ReadDir("d")
 	for _, fi := range infos {
-		if strings.Contains(fi.Name, ".aql-atomic") {
+		if strings.Contains(fi.Name, ".boru-atomic") {
 			t.Errorf("stranded atomic temp: %s", fi.Name)
 		}
 	}
 	// Atomic works for a Bytes payload (non-offset binary write).
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("d/b.bin"), NewBytesValue([]byte{1, 2}),
 		wrapMap(func(om *OrderedMap) { om.Set("atomic", NewBoolean(true)) }),
 	})
@@ -110,7 +110,7 @@ func TestAtomicWrite(t *testing.T) {
 		t.Errorf("atomic bytes = %v", b)
 	}
 	// {atomic} + {offset} is a contradiction and refuses.
-	if err := runAQLError(t, r, []Value{
+	if err := runBoruError(t, r, []Value{
 		NewWord("write"), pathV("d/b.bin"), NewBytesValue([]byte{9}),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("atomic", NewBoolean(true))
@@ -120,7 +120,7 @@ func TestAtomicWrite(t *testing.T) {
 		t.Error("atomic+offset should refuse")
 	}
 	// Append + atomic merges then replaces in one rename.
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("write"), pathV("d/t.txt"), NewString("+more"),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("atomic", NewBoolean(true))
@@ -148,7 +148,7 @@ func TestAtomicWriteFailureArms(t *testing.T) {
 		return r, mem
 	}
 	atomicWrite := func(r *Registry) error {
-		return runAQLError(t, r, []Value{
+		return runBoruError(t, r, []Value{
 			NewWord("write"), pathV("d/t.txt"), NewString("x"),
 			wrapMap(func(om *OrderedMap) { om.Set("atomic", NewBoolean(true)) }),
 		})
@@ -160,12 +160,12 @@ func TestAtomicWriteFailureArms(t *testing.T) {
 		t.Errorf("temp-fail arm: %v", err)
 	}
 	// A write failure into the temp removes it (no stranding).
-	r, mem := newReg(&failAtOps{failWriteFile: ".aql-atomic"})
+	r, mem := newReg(&failAtOps{failWriteFile: ".boru-atomic"})
 	if err := atomicWrite(r); err == nil {
 		t.Error("temp-write-fail arm should error")
 	}
 	for p := range mem.Files {
-		if strings.Contains(p, ".aql-atomic") {
+		if strings.Contains(p, ".boru-atomic") {
 			t.Errorf("stranded temp after write failure: %s", p)
 		}
 	}
@@ -175,7 +175,7 @@ func TestAtomicWriteFailureArms(t *testing.T) {
 		t.Error("rename-fail arm should error")
 	}
 	for p := range mem.Files {
-		if strings.Contains(p, ".aql-atomic") {
+		if strings.Contains(p, ".boru-atomic") {
 			t.Errorf("stranded temp after rename failure: %s", p)
 		}
 	}
@@ -228,12 +228,12 @@ func TestMountTempStatfsBridge(t *testing.T) {
 	// statfs handler: map, none, and mis-shape; temp handler present.
 	rich := HostFileOps(mountFixture(t, `mount {
 	  read: (p:Pathon => [none])
-	  statfs: (p:Pathon => [{total:1000 free:600 available:500 bsize:512 type:"aqlfs"}])
+	  statfs: (p:Pathon => [{total:1000 free:600 available:500 bsize:512 type:"borufs"}])
 	  temp: (fn [[d:Pathon pat:String] [Pathon] [(make Pathon "mounted-temp")]
 	             [d:Pathon pat:String isdir:Boolean] [Pathon] [(make Pathon "mounted-temp")]])
 	}`))
 	fs, err := rich.Statfs("x")
-	if err != nil || fs.Type != "aqlfs" || fs.TotalBytes != 1000 || fs.AvailBytes != 500 || fs.BlockSize != 512 {
+	if err != nil || fs.Type != "borufs" || fs.TotalBytes != 1000 || fs.AvailBytes != 500 || fs.BlockSize != 512 {
 		t.Errorf("bridged statfs = %+v (%v)", fs, err)
 	}
 	if p, err := rich.TempFile("", "x-*"); err != nil || p != "mounted-temp" {

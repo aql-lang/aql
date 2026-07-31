@@ -7,7 +7,7 @@
 # null at the value level.		
 # =====================================================================		
 #		
-# This spec consolidates everything about types in aqleng:		
+# This spec consolidates everything about types in borueng:		
 #		
 #   1. Type-name words push type-literal values (Integer, String, …).		
 #      Type names are globally unique so the renderer prints just the		
@@ -46,10 +46,10 @@
 #		
 # What's NOT covered		
 # ------------------		
-# This is the aqleng (engine-kernel) subset. The richer type words		
+# This is the borueng (engine-kernel) subset. The richer type words		
 # (record, table, class, make, guard, inspect, base, convert, …) are		
-# layered on top in production aql; their semantics depend on parser /		
-# native-mod features that are intentionally out of aqleng scope.		
+# layered on top in production boru; their semantics depend on parser /		
+# native-mod features that are intentionally out of borueng scope.		
 		
 # === Test fixtures (q-suffixed spec-runner words) ===		
 #   addq     — [Number Number] forward-prec — args[1] + args[0] (decimal contagion)		
@@ -246,7 +246,7 @@ def Nested { kind:String n:Number } typeof Nested	Map
 # =====================================================================
 # `def` is the universal binder: a capitalised NAME is a type binding,
 # a lowercase NAME a value binding — both valid. Bodies are accepted
-# broadly: every value is a valid type body, since AQL treats scalars
+# broadly: every value is a valid type body, since boru treats scalars
 # and collections as types in their own right (the singleton type
 # whose only inhabitant equals that value). Only a NAME that violates
 # the word-name rule (a leading digit, say) is rejected.
@@ -758,7 +758,7 @@ typeof { :Integer }	Map
 # `def x:Integer 1` validates the body against the declared type		
 # before installing. The typed-name `x:Integer` parses as the		
 # implicit map `{x:Integer}`; def's [TMap, TAny] sig dispatches to		
-# the typed-def handler. Mirrors the production aql defTypedHandler		
+# the typed-def handler. Mirrors the production boru defTypedHandler		
 # in lang/internal/engine/native_definition.go.		
 		
 # Type matches → installation succeeds, name resolves to the value.		
@@ -787,7 +787,7 @@ def p:{ x:Integer y:Integer } { x:1 y:'two' }	ERROR:type_error	y is wrong type
 		
 # Typed-list typing — `def xs:[ :T]` accepts homogeneous lists. The		
 # list is stored as a code-body, so referencing xs splices its		
-# elements (canonical AQL list-def semantics, see code-splice in		
+# elements (canonical boru list-def semantics, see code-splice in		
 # function.tsv §2). `quote` would store as data instead.		
 def xs:[ :Integer ] [ 1 2 3 ] xs	[1 2 3]	typed-name list binds the list value (matches [:Integer]); use `word` to splice
 def xs:[ :Integer ] [ 1 'x' ]	ERROR:type_error	'x' doesn't satisfy Integer at def-time validation
@@ -869,7 +869,7 @@ fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with bo
 # `def x:Color body` validates the body against Color: only members		
 # of the disjunct succeed, anything else triggers a type_error.		
 #		
-# This is AQL's analogue of 'instantiating an enum value' in other		
+# This is boru's analogue of 'instantiating an enum value' in other		
 # languages. Survey of the surrounding design space:		
 #		
 #   Rust          Color::Red          variant path on the enum type		
@@ -878,12 +878,12 @@ fnsig [ [ Integer ] [ Integer ] [ Integer ] ]	ERROR:multiple of 2	mod-3 (with bo
 #   Python        Color.RED           Enum subclass attribute		
 #   TypeScript    Color.Red           value of an enum type		
 #   Haskell       Red                 data constructor of the sum type		
-#   AQL           def x:Color (quote red)		
+#   boru           def x:Color (quote red)		
 #                                     typed-def asserts `red ∈ Color` at		
 #                                     bind time; x then resolves to		
 #                                     Atom(red) and `x is Color` is true		
 #		
-# AQL's twist is that the 'instantiated value' is just the underlying		
+# boru's twist is that the 'instantiated value' is just the underlying		
 # Atom — no nominal wrapper distinguishes `Atom(red)` from		
 # `Color::Red`. The Color membership check happens at def-time; once		
 # bound, x is an Atom that *happens* to satisfy Color.		

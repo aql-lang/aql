@@ -20,7 +20,7 @@ import (
 // TestIsInertConstTableTypeBody; here the no-regression guard is that a LOCALLY
 // defined Table type bakes with the same parity, not just the module one.
 func TestModuleTableTypeFold(t *testing.T) {
-	const imp = `import "aql:test"  `
+	const imp = `import "boru:test"  `
 	cases := []struct{ src, want string }{
 		{imp + `Test.TestSet istype`, "[true]"},
 		{imp + `Test.TestCase istype`, "[true]"}, // bare type node — still folds

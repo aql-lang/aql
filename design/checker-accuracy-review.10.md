@@ -5,10 +5,10 @@ implementation landed on this branch** — see "Status of findings"
 below for the per-finding outcome, including two corrections to the
 original analysis. Code review of `eng/go/check.go` / `carrier.go` /
 the check-mode engine paths, plus **empirical probes against the
-built `aql check`** (each finding below quotes a reproducible
+built `boru check`** (each finding below quotes a reproducible
 probe). Companion to `CARRIER-STATIC-TYPECHECK-REPORT.10.md` (the
 design), `dynamic-modality-report.10.md` (the gradual-typing layer),
-and `aql-bytecode-plan.0.md` (which consumes checker accuracy — see
+and `boru-bytecode-plan.0.md` (which consumes checker accuracy — see
 §4).
 
 ## Status of findings (June 2026 follow-up)
@@ -109,8 +109,8 @@ def x if (1 gt 0) [g 1] ['s']        ; x : Integer|String
 x add 1
 ```
 
-`aql check` reports the result type **String** with no diagnostics;
-`aql do` returns **Integer 3**. The checked type *excludes* the value
+`boru check` reports the result type **String** with no diagnostics;
+`boru do` returns **Integer 3**. The checked type *excludes* the value
 the program actually produces.
 
 **Cause:** `matchSignature` tests the disjunct carrier as a single
@@ -222,7 +222,7 @@ for 3 [def acc (acc add 0.5)]
 acc                               ; check: Integer — runtime: 1.5 (Float)
 ```
 
-`aql check` types post-loop `acc` as **Integer** (and the loop's
+`boru check` types post-loop `acc` as **Integer** (and the loop's
 result list as `List Integer`); the runtime value is **Float 1.5**.
 Two compounding causes: `forCarrierAnalyse` runs the body **once**
 with the pre-loop bindings and the net `def` additions from the body
@@ -351,7 +351,7 @@ start loose, burn down the dynamic frontier.
 ## 4. Interaction with the bytecode plan
 
 A1 is not just a checker bug — it is a **compiler soundness
-blocker**. Stage 1 of `aql-bytecode-plan.0.md` bakes the
+blocker**. Stage 1 of `boru-bytecode-plan.0.md` bakes the
 checker-selected `sig_id` into `CALL_NATIVE`. For the A1 probe, the
 checker selects `[Scalar Scalar] → String` where the runtime executes
 `[Number Number]`: compiled code would call the *wrong handler*, not
@@ -369,7 +369,7 @@ them at runtime.
 The probes above are anecdotes; accuracy needs a number. Proposal —
 a **spec-corpus differential harness** (cheap: the corpus exists):
 
-- Run `aql check` over every row of `lang/spec/*.tsv`.
+- Run `boru check` over every row of `lang/spec/*.tsv`.
 - Rows whose expectation is a value: a check *error* is a **false
   positive** (count, target 0).
 - Rows whose expectation is `ERROR:*` of a type-shaped kind: a clean

@@ -88,9 +88,9 @@ func TestDoOutOfOrderResidualPromotes(t *testing.T) {
 // residual whose bottom is the unconsumed error.
 func TestErrorStripInputClosure(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	dis := compileDisasm(t, `do [raise x "e"] error ["fallback"]`)
 	if strings.Contains(dis, "FALLBACK") {
 		t.Errorf("error ignore-handler: must compile as a closure, not island:\n%s", dis)
@@ -142,9 +142,9 @@ func TestEmptyBodyClosureParity(t *testing.T) {
 // holds.
 func TestDoSentinelBodyStaysUncompiled(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	src := `for 3 [ do [break] drop ]`
 	gotC, _, errC, gotI, errI := runBothEngines(t, src)
 	if fmt.Sprint(gotC) != fmt.Sprint(gotI) || fmt.Sprint(errC) != fmt.Sprint(errI) {
@@ -165,9 +165,9 @@ func TestDoSentinelBodyStaysUncompiled(t *testing.T) {
 //     with fallback parity.
 func TestDynBodyVariadicAndSpliceShapes(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	compiles := []string{
 		`def b true  do [do [1 2 (if b [] [9 9])]]`,
 		`def mk fn [[] [List] [[7 8]]]  def xs (mk)  do [word xs]`,

@@ -6,7 +6,7 @@ import (
 )
 
 // Off-corpus regressions for record-typed-param schema recovery — the foundation
-// for force-compiling record-data-driven code (design plan: plan-the-aql-test-
+// for force-compiling record-data-driven code (design plan: plan-the-boru-test-
 // work). A record-typed param (`c:SomeRecord`) is reparented at the call boundary
 // to a carrier that carries the record's RecordTypeInfo schema, so a body
 // `c get "field"` recovers the field's declared type (gradually) instead of
@@ -37,7 +37,7 @@ func TestRecordParam_FieldRecoverySound(t *testing.T) {
 	recSound(t, src)
 }
 
-// The record param is CAPTURED into a closure body (the aql:test `test-describe`
+// The record param is CAPTURED into a closure body (the boru:test `test-describe`
 // shape): the schema carrier must survive capture so the captured field read
 // still recovers its type. compile == interpret either way.
 func TestRecordParam_CapturedFieldRecoverySound(t *testing.T) {

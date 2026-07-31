@@ -1,4 +1,4 @@
-# AQL Language Specification: Word Modifiers (the /… suffix)
+# boru Language Specification: Word Modifiers (the /… suffix)
 # Format: input<TAB>expected<TAB>description
 #
 # An unquoted word may carry a `/…` modifier suffix. The recognised
@@ -29,12 +29,12 @@
 # obscure undefined_word):
 #   - spelled ENTIRELY from the modifier alphabet (digits + f s q r u t):
 #     a botched modifier, never a legitimate name — a LOUD parse error
-#     ([aql/syntax_error]: invalid word modifier).
+#     ([boru/syntax_error]: invalid word modifier).
 #   - containing any NON-modifier character (uppercase included): the
 #     whole token (slash and all) stays a single plain word — that is
 #     what keeps slash-bearing names (`add/x`) and the builtin type
 #     paths (`Scalar/Number/Integer`) parsing; unbound ones raise
-#     [aql/undefined_word] at run time.
+#     [boru/undefined_word] at run time.
 #
 # Full coverage of /r and /u lives in ref.tsv and usurp.tsv; this file is
 # the modifier matrix — every variation and combination, including errors.

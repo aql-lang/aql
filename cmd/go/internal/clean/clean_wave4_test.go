@@ -1,4 +1,4 @@
-// Wave-4 coverage for the clean subcommand: deleting .aql contents
+// Wave-4 coverage for the clean subcommand: deleting .boru contents
 // while preserving dotfiles, the explicit-dir and cwd forms, the
 // missing-directory error, and the Command wrapper methods.
 package clean
@@ -11,17 +11,17 @@ import (
 	"testing"
 )
 
-// setupAqlDir creates dir/.aql populated with a plain file, a
+// setupBoruDir creates dir/.boru populated with a plain file, a
 // subdirectory, and a dotfile.
-func setupAqlDir(t *testing.T) string {
+func setupBoruDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	aql := filepath.Join(dir, ".aql")
-	if err := os.MkdirAll(filepath.Join(aql, "sub"), 0755); err != nil {
+	boru := filepath.Join(dir, ".boru")
+	if err := os.MkdirAll(filepath.Join(boru, "sub"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	for _, f := range []string{"plain.json", filepath.Join("sub", "nested.txt"), ".keepme"} {
-		if err := os.WriteFile(filepath.Join(aql, f), []byte("x"), 0644); err != nil {
+		if err := os.WriteFile(filepath.Join(boru, f), []byte("x"), 0644); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -39,7 +39,7 @@ func TestW4CommandMethods(t *testing.T) {
 }
 
 func TestW4CleanExplicitDir(t *testing.T) {
-	dir := setupAqlDir(t)
+	dir := setupBoruDir(t)
 	var stdout, stderr bytes.Buffer
 	code := New().Run([]string{dir}, nil, &stdout, &stderr)
 	if code != 0 {
@@ -49,20 +49,20 @@ func TestW4CleanExplicitDir(t *testing.T) {
 		t.Errorf("missing cleaned message: %q", stdout.String())
 	}
 
-	aql := filepath.Join(dir, ".aql")
-	if _, err := os.Stat(filepath.Join(aql, "plain.json")); !os.IsNotExist(err) {
+	boru := filepath.Join(dir, ".boru")
+	if _, err := os.Stat(filepath.Join(boru, "plain.json")); !os.IsNotExist(err) {
 		t.Error("plain.json survived clean")
 	}
-	if _, err := os.Stat(filepath.Join(aql, "sub")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(boru, "sub")); !os.IsNotExist(err) {
 		t.Error("sub/ survived clean")
 	}
-	if _, err := os.Stat(filepath.Join(aql, ".keepme")); err != nil {
+	if _, err := os.Stat(filepath.Join(boru, ".keepme")); err != nil {
 		t.Errorf("dotfile was deleted: %s", err)
 	}
 }
 
 func TestW4CleanCwdDefault(t *testing.T) {
-	dir := setupAqlDir(t)
+	dir := setupBoruDir(t)
 	orig, err := os.Getwd()
 	if err != nil {
 		t.Fatal(err)
@@ -77,13 +77,13 @@ func TestW4CleanCwdDefault(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("Run = %d, want 0; stderr: %s", code, stderr.String())
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".aql", "plain.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, ".boru", "plain.json")); !os.IsNotExist(err) {
 		t.Error("plain.json survived clean")
 	}
 }
 
-func TestW4CleanMissingAqlDir(t *testing.T) {
-	dir := t.TempDir() // no .aql inside
+func TestW4CleanMissingBoruDir(t *testing.T) {
+	dir := t.TempDir() // no .boru inside
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{dir}, &stdout, &stderr)
 	if code != 1 {

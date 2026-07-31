@@ -9,7 +9,7 @@ package publish
 import (
 	"io"
 
-	"github.com/aql-lang/aql/cmd/go/internal/pack"
+	"github.com/boru-lang/boru/cmd/go/internal/pack"
 )
 
 var packRun = func(args []string, stdout, stderr io.Writer) int {

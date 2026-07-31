@@ -1,4 +1,4 @@
-# AQL Language Specification: Function References (ref / /r)
+# boru Language Specification: Function References (ref / /r)
 # Format: input<TAB>expected<TAB>description
 #
 # ref name   → resolve a function word to its bound Function value WITHOUT
@@ -11,8 +11,8 @@
 # not even a 0-arg fn. The SAME value dispatches normally when it is
 # re-stepped elsewhere: unwrapped from a paren, retrieved from a map slot,
 # or handed to `apply`. References are legal only for function words; a
-# non-fn binding raises [aql/illegal_ref] and an unbound name raises
-# [aql/undefined_word].
+# non-fn binding raises [boru/illegal_ref] and an unbound name raises
+# [boru/undefined_word].
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  Bare reference is inert (held) — `ref` ≡ `/r`, no auto-fire

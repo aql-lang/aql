@@ -1,7 +1,7 @@
 
-# AQL Language Reference
+# boru Language Reference
 
-AQL is a concatenative language using function composition. The core
+boru is a concatenative language using function composition. The core
 engine is a pure stack machine: each token is interpreted as a function
 that modifies the stack. Literals push themselves; words consume
 arguments and push results.
@@ -153,7 +153,7 @@ contents are the result.
 
 ## Execution Model
 
-AQL is a stack machine. The program is a sequence of tokens read left
+boru is a stack machine. The program is a sequence of tokens read left
 to right. Each token either pushes a value onto the stack or names a
 word that consumes values and pushes results.
 
@@ -2677,7 +2677,7 @@ trace [1 2 3 rot add mul]       # traces stack operations, returns 8
 
 #### `help`
 
-Show help for an AQL word. With no argument, prints a summary of the
+Show help for a boru word. With no argument, prints a summary of the
 `help` word itself. Given a word name, prints detailed help including
 description, signatures, examples, and notes.
 
@@ -2738,7 +2738,7 @@ read "raw.bin" {nl:"raw"}              # no line ending normalization
 **Format details:**
 
 - `text` — raw string, no parsing
-- `json` — parse JSON to AQL map/list
+- `json` — parse JSON to boru map/list
 - `jsonic` — parse with jsonic (unquoted keys, trailing commas, etc.)
 - `lines` — split on `\n` into a list of strings
 - `csv` — parse CSV into a table value with typed schema
@@ -3093,15 +3093,15 @@ def utils [def inc [1 add] def dec [1 sub]] module
 
 #### `import`
 
-Import a module from a `.aql` file, making its exported words
+Import a module from a `.boru` file, making its exported words
 available. Use a list argument to rename imports.
 
 *Signatures:* `[string] -> []`, `[list, string] -> []`
 *Precedence:* forward
 
 ```
-import "utils.aql"
-import [Orig Renamed] "utils.aql"
+import "utils.boru"
+import [Orig Renamed] "utils.boru"
 ```
 
 #### Chaining
@@ -3529,7 +3529,7 @@ Helpers on `Registry` for working with the type stack:
 
 ## Static Type Checking
 
-`aql check` runs a program through the same engine as normal
+`boru check` runs a program through the same engine as normal
 execution but uses **carrier** values — type-only abstractions
 without concrete payloads — in place of literals. The dispatch,
 signature matching, and forward-collection machinery are shared
@@ -3538,9 +3538,9 @@ with runtime, so the checker stays in lockstep with real semantics.
 ### Usage
 
 ```
-aql check [--json] [--soft] script.aql
-aql check -e "1 add 2 mul 3"
-aql --check script.aql        # run the checker before real execution
+boru check [--json] [--soft] script.boru
+boru check -e "1 add 2 mul 3"
+boru --check script.boru        # run the checker before real execution
 ```
 
 Strict mode (default): non-zero exit when any Error-severity

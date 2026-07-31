@@ -10,7 +10,7 @@ package modules
 // paren-wrapped `arg ( math get NAME )` form — the same form the
 // TestMathDot* tests use — which flows through execFnDefLiteral's
 // captured-sub-registry branch (trivial-delegation short-circuit /
-// CallAQL). The golden pins this byte-for-byte across refactor stages.
+// CallBoru). The golden pins this byte-for-byte across refactor stages.
 //
 // Regenerate: go test ./modules -run TestFnModelWrapperEquivalence -update-wrapper
 
@@ -22,7 +22,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 var updateWrapperGolden = flag.Bool("update-wrapper", false, "update the wrapper-equivalence golden file")

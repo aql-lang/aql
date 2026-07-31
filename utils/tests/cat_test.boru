@@ -1,0 +1,276 @@
+# ============================================================================
+# cat — unit suite (boru:test), shaped like lang/go/modules/cli_test.boru.
+#
+#   boru test tests/cat_test.boru          (run from utils/)
+#
+# `boru test` cannot inject an argument vector and an IO.exit ends the suite
+# file, so cat.boru keeps every decision in pure fns and exports them, and its
+# one IO.exit sits behind the standalone guard at the bottom of that file.
+# This suite therefore covers three tiers:
+#
+#   1. the pure fns       — formatting, padding, flag reading, the chunk ramp
+#   2. the argv contract  — Cli.parse / Cli.dispatch against cat's own spec
+#   3. the program        — Cat.main takes argv as a PARAMETER and returns the
+#                           exit code instead of exiting, and Cat.one is driven
+#                           over real files, so the streaming loop and the
+#                           exit-code contract are both pinned end to end
+#
+# Tier 3 writes cat's normal output to stdout (a stream cannot be redirected
+# in-process), so the fixtures' lines appear in the run. That is the program
+# working; the assertions are on the returned values.
+# ============================================================================
+
+import "boru:test"
+import "boru:cli"
+import "boru:io"
+import "boru:string-util"
+import "./cat.boru"
+
+# A scratch file under the OS temp dir — never inside the repository.
+def fixture "/tmp/boru-utils-cat-test-fixture.txt"
+def missing "/tmp/boru-utils-cat-test-no-such-file.txt"
+
+# ----------------------------------------------------------------------------
+# 1. Pure fns.
+# ----------------------------------------------------------------------------
+Test.describe "cat-format" [
+  Test.test "a plain line is copied and terminated" [
+    Assert.equal "hello\n" (Cat.format "hello" 1 false false)
+  ]
+  Test.test "-n prefixes a 6-wide right-aligned number and a tab" [
+    Assert.equal "     1\thello\n" (Cat.format "hello" 1 true false)
+  ]
+  Test.test "the number column widens past 999999 rather than truncating" [
+    Assert.equal "1234567\thello\n" (Cat.format "hello" 1234567 true false)
+  ]
+  Test.test "-E marks the end of the line before the newline" [
+    Assert.equal "hello$\n" (Cat.format "hello" 1 false true)
+  ]
+  Test.test "-n and -E compose: number outside, marker inside" [
+    Assert.equal "    42\thello$\n" (Cat.format "hello" 42 true true)
+  ]
+  Test.test "an empty line stays empty" [
+    Assert.equal "\n" (Cat.format "" 7 false false)
+  ]
+  Test.test "an empty line under -E is just the marker" [
+    Assert.equal "$\n" (Cat.format "" 7 false true)
+  ]
+  Test.test "an empty line under -n still gets its number" [
+    Assert.equal "     7\t\n" (Cat.format "" 7 true false)
+  ]
+  Test.test "the line is copied verbatim, multi-byte runes included" [
+    Assert.equal "日本語 🎉\n" (Cat.format "日本語 🎉" 1 false false)
+  ]
+]
+
+Test.describe "cat-pad-left" [
+  Test.test "a short string is padded on the left" [
+    Assert.equal "     1" (Cat.padLeft "1" 6)
+  ]
+  Test.test "an exact-width string is untouched" [
+    Assert.equal "123456" (Cat.padLeft "123456" 6)
+  ]
+  Test.test "an over-wide string is never truncated" [
+    Assert.equal "1234567" (Cat.padLeft "1234567" 6)
+  ]
+  Test.test "width is counted in runes, not bytes" [
+    Assert.equal "  日本語" (Cat.padLeft "日本語" 5)
+  ]
+]
+
+Test.describe "cat-bool" [
+  Test.test "a true flag reads true" [
+    Assert.equal true (Cat.bool {number:true} "number")
+  ]
+  Test.test "a false flag reads false" [
+    Assert.equal false (Cat.bool {number:false} "number")
+  ]
+  Test.test "an absent flag reads false — it does not raise" [
+    Assert.equal false (Cat.bool {} "number")
+  ]
+  Test.test "a non-Boolean flag value reads false" [
+    Assert.equal false (Cat.bool {number:"yes"} "number")
+  ]
+]
+
+Test.describe "cat-count" [
+  Test.test "the counter is read back" [
+    Assert.equal 3 (Cat.count {n:3})
+  ]
+  Test.test "a missing counter reads 0" [
+    Assert.equal 0 (Cat.count {})
+  ]
+  Test.test "a non-Integer counter reads 0" [
+    Assert.equal 0 (Cat.count {n:"x"})
+  ]
+  Test.test "a flex state map satisfies the same reader" [
+    Assert.equal 0 (Cat.count (flex {n:0}))
+  ]
+]
+
+Test.describe "cat-worse" [
+  Test.test "the higher code wins" [ Assert.equal 1 (Cat.worse 0 1) ]
+  Test.test "in either order" [ Assert.equal 1 (Cat.worse 1 0) ]
+  Test.test "success stays success" [ Assert.equal 0 (Cat.worse 0 0) ]
+  Test.test "failure is sticky" [ Assert.equal 1 (Cat.worse 1 1) ]
+]
+
+Test.describe "cat-inputs" [
+  Test.test "no operand means standard input" [
+    Assert.equal ["-"] (Cat.inputs [])
+  ]
+  Test.test "operands pass through unchanged, in order" [
+    Assert.equal ["a" "b"] (Cat.inputs ["a" "b"])
+  ]
+  Test.test "an explicit - is left alone" [
+    Assert.equal ["a" "-" "b"] (Cat.inputs ["a" "-" "b"])
+  ]
+]
+
+Test.describe "cat-next-chunk" [
+  Test.test "the chunk doubles while it is under the ceiling" [
+    Assert.equal 128 (Cat.nextChunk 64)
+  ]
+  Test.test "the last doubling lands exactly on the ceiling" [
+    Assert.equal 8192 (Cat.nextChunk 4096)
+  ]
+  Test.test "the ceiling is a fixed point, so the recursion stays shallow" [
+    Assert.equal 8192 (Cat.nextChunk 8192)
+  ]
+  Test.test "an over-ceiling chunk is clamped, never grown" [
+    Assert.equal 8192 (Cat.nextChunk 100000)
+  ]
+]
+
+Test.describe "cat-fail" [
+  Test.test "a diagnostic always yields the failure code" [
+    Assert.equal 1 (Cat.fail "f" "boom")      # the text itself goes to stderr
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 2. The argv contract — cat's own spec, read by the pure half of boru:cli.
+# ----------------------------------------------------------------------------
+Test.describe "argv" [
+  Test.test "an empty argv leaves both flags off and takes no operand" [
+    Assert.equal {ok:true flags:{number:false show-ends:false} args:[] command:none}
+                 (Cli.parse (Cat.spec) [])
+  ]
+  Test.test "-n sets number and keeps the operand" [
+    Assert.equal {ok:true flags:{number:true show-ends:false} args:["f"] command:none}
+                 (Cli.parse (Cat.spec) ["-n" "f"])
+  ]
+  Test.test "the long spellings work too" [
+    Assert.equal {number:true show-ends:true}
+                 ((Cli.parse (Cat.spec) ["--number" "--show-ends"]) dot flags)
+  ]
+  Test.test "-nE clusters, and - stays a POSITIONAL (the stdin convention)" [
+    Assert.equal {ok:true flags:{number:true show-ends:true} args:["-"] command:none}
+                 (Cli.parse (Cat.spec) ["-nE" "-"])
+  ]
+  Test.test "--no-number clears the bool flag" [
+    Assert.equal {number:false show-ends:false}
+                 ((Cli.parse (Cat.spec) ["-n" "--no-number"]) dot flags)
+  ]
+  Test.test "-- ends flag processing, so a later -n is a file name" [
+    Assert.equal ["-n"] ((Cli.parse (Cat.spec) ["--" "-n"]) dot args)
+  ]
+  Test.test "an unknown flag is data, not a raise" [
+    Assert.equal false ((Cli.parse (Cat.spec) ["-x"]) dot ok)
+  ]
+  Test.test "and it names the offender" [
+    Assert.equal "unknown flag: -x" ((Cli.parse (Cat.spec) ["-x"]) dot err)
+  ]
+  Test.test "min is 0, so no operand is not an arity error" [
+    Assert.equal true ((Cli.parse (Cat.spec) []) dot ok)
+  ]
+  Test.test "--help dispatches to the help action" [
+    Assert.equal "help" ((Cli.dispatch (Cat.spec) ["--help"]) dot action)
+  ]
+  Test.test "--version prints the name and version" [
+    Assert.equal "cat 0.1.0\n" ((Cli.dispatch (Cat.spec) ["--version"]) dot out)
+  ]
+  Test.test "a usage error dispatches to code 2" [
+    Assert.equal 2 ((Cli.dispatch (Cat.spec) ["-x"]) dot code)
+  ]
+  Test.test "a usage error writes nothing to stdout" [
+    Assert.equal "" ((Cli.dispatch (Cat.spec) ["-x"]) dot out)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 3. The program itself.
+# ----------------------------------------------------------------------------
+# A File handle cannot cross the module boundary: a handle opened HERE and
+# handed to one of cat's fns fails "call to 'read-line' matched no signature",
+# because the module's sub-registry mints its own File type (see the report).
+# So the streaming loop is driven through Cat.one, which opens the file on the
+# module's own side, and observed through the shared state map — `n` is the
+# running line count, which is exactly what -n numbers with.
+Test.describe "streaming" [
+  Test.test "one operand is drained to EOF: exit 0, every line counted" [
+    (IO.write (make Pathon fixture) "a\nb\nc\n") drop
+    def st (flex {n:0})
+    def rc (Cat.one fixture st false false)
+    Assert.equal [0 3] [rc (Cat.count st)]
+  ]
+  Test.test "the state is shared, so -n numbering continues across inputs" [
+    def st (flex {n:0})
+    def _1 (Cat.one fixture st false false)
+    def _2 (Cat.one fixture st false false)
+    Assert.equal 6 (Cat.count st)
+  ]
+  Test.test "an empty input yields 0 lines and still exits 0" [
+    (IO.write (make Pathon fixture) "") drop
+    def st (flex {n:0})
+    def rc (Cat.one fixture st false false)
+    (IO.write (make Pathon fixture) "a\nb\nc\n") drop
+    Assert.equal [0 0] [rc (Cat.count st)]
+  ]
+  Test.test "a file longer than the first chunk (64) crosses the ramp intact" [
+    def big "/tmp/boru-utils-cat-test-ramp.txt"
+    (IO.write (make Pathon big) (StringUtil.repeat 65 "x\n")) drop
+    def st (flex {n:0})
+    def rc (Cat.one big st false false)
+    (IO.remove (make Pathon big)) drop
+    Assert.equal [0 65] [rc (Cat.count st)]
+  ]
+  Test.test "a line with no trailing newline is still counted" [
+    def nonl "/tmp/boru-utils-cat-test-nonl.txt"
+    (IO.write (make Pathon nonl) "one\ntwo") drop
+    def st (flex {n:0})
+    def rc (Cat.one nonl st false false)
+    (IO.remove (make Pathon nonl)) drop
+    Assert.equal [0 2] [rc (Cat.count st)]
+  ]
+]
+
+Test.describe "exit codes" [
+  Test.test "a readable file exits 0" [
+    Assert.equal 0 (Cat.main [fixture])
+  ]
+  Test.test "-n over a real file still exits 0" [
+    Assert.equal 0 (Cat.main ["-n" fixture])
+  ]
+  Test.test "a missing file exits 1" [
+    Assert.equal 1 (Cat.main [missing])
+  ]
+  Test.test "a directory exits 1 rather than raising" [
+    Assert.equal 1 (Cat.main ["/tmp"])
+  ]
+  Test.test "one bad operand among good ones still exits 1" [
+    Assert.equal 1 (Cat.main [fixture missing])
+  ]
+  Test.test "the bad operand first: the good one is still copied, code is 1" [
+    Assert.equal 1 (Cat.main [missing fixture])
+  ]
+  Test.test "--help exits 0" [ Assert.equal 0 (Cat.main ["--help"]) ]
+  Test.test "--version exits 0" [ Assert.equal 0 (Cat.main ["--version"]) ]
+  Test.test "an unknown flag exits 2" [ Assert.equal 2 (Cat.main ["-x"]) ]
+  Test.test "-- makes a flag-looking operand a (missing) file, so 1 not 2" [
+    Assert.equal 1 (Cat.main ["--" "-x"])
+  ]
+  Test.test "cat-one reports a missing operand as 1" [
+    Assert.equal 1 (Cat.one missing (flex {n:0}) false false)
+  ]
+]

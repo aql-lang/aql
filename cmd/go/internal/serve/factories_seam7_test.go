@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/vault"
+	"github.com/boru-lang/boru/cmd/go/internal/vault"
 )
 
 func TestS7n_VaultProxyFactorySucceeds(t *testing.T) {

@@ -5,7 +5,7 @@ import "testing"
 // Pins the execFnDefSig same-registry flip (design/SUB-ENGINE-MAIN-TAPE-
 // REVIEW.0.md R2, the TCO-STAGED Stage-5 residual): a Function VALUE whose
 // FnDefInfo carries a captured Registry equal to the executing engine's
-// registry dispatches through the main-tape SPLICE branch, not a CallAQL
+// registry dispatches through the main-tape SPLICE branch, not a CallBoru
 // sub-engine.
 //
 // Reaching that branch requires VALUE dispatch — an anonymous FnDef
@@ -21,15 +21,15 @@ import "testing"
 // The flip is observable-invariant — every probe (result, def cleanup,
 // raise, capture, args, break/continue) behaves identically pre/post —
 // so these tests pin the INVARIANTS the splice branch must keep, plus the
-// cross-registry negative that must stay on CallAQL. The AQL-source twin
+// cross-registry negative that must stay on CallBoru. The boru-source twin
 // rows live in lang/spec/module-fnvalue-boundary.tsv.
 
-// sameRegistryAnonFnValue defines `name` via AQL source, captures its
+// sameRegistryAnonFnValue defines `name` via boru source, captures its
 // FnDefInfo, strips the name (anonymous value dispatch) and stamps
 // Registry = r — the module-export shape — then removes the def binding.
 func sameRegistryAnonFnValue(t *testing.T, r *Registry, name string, fnBody Value) Value {
 	t.Helper()
-	_ = runAQL(t, r, []Value{NewWord("def"), NewWord(name), NewWord("fn"), fnBody, NewEnd()})
+	_ = runBoru(t, r, []Value{NewWord("def"), NewWord(name), NewWord("fn"), fnBody, NewEnd()})
 	fnVal, ok := r.Defs.Top(name)
 	if !ok {
 		t.Fatalf("%s not defined", name)
@@ -41,7 +41,7 @@ func sameRegistryAnonFnValue(t *testing.T, r *Registry, name string, fnBody Valu
 	fd.Name = ""
 	fd.Anonymous = true
 	fd.Registry = r
-	_ = runAQL(t, r, []Value{NewWord("undef"), NewWord(name), NewEnd()})
+	_ = runBoru(t, r, []Value{NewWord("undef"), NewWord(name), NewEnd()})
 	return NewFunction(fd)
 }
 
@@ -63,7 +63,7 @@ func TestFnValueSameRegistrySplices(t *testing.T) {
 	dbl := sameRegistryAnonFnValue(t, r, "dblsr", typedFnBody("x", "Integer", "Integer",
 		NewWord("x"), NewWord("mul"), NewInteger(2)))
 
-	res := runAQL(t, r, []Value{dbl, NewInteger(21)})
+	res := runBoru(t, r, []Value{dbl, NewInteger(21)})
 	if len(res) != 1 {
 		t.Fatalf("residual = %v, want one value", res)
 	}
@@ -85,12 +85,12 @@ func TestFnValueSameRegistryDefCleanup(t *testing.T) {
 		NewWord("def"), NewWord("tmpsr"), NewInteger(7),
 		NewWord("x"), NewWord("add"), NewWord("tmpsr")))
 
-	res := runAQL(t, r, []Value{leaky, NewInteger(1)})
+	res := runBoru(t, r, []Value{leaky, NewInteger(1)})
 	if n, _ := AsInteger(res[len(res)-1]); n != 8 {
 		t.Fatalf("body result = %d, want 8", n)
 	}
 	// Negative: the body-local def must be torn down by the frame tail,
-	// exactly as the CallAQL path tore it down.
+	// exactly as the CallBoru path tore it down.
 	if r.Defs.Has("tmpsr") {
 		t.Error("body-local def leaked through same-registry value dispatch")
 	}
@@ -99,7 +99,7 @@ func TestFnValueSameRegistryDefCleanup(t *testing.T) {
 func TestFnValueSameRegistryBreakInLoopBody(t *testing.T) {
 	// A raw fn VALUE in a for-loop body whose body breaks: the loop on
 	// the same tape terminates (acc stops at 1). This held on BOTH sides
-	// of the flip (the CallAQL sub-engine shared the registry's FlowCtrl,
+	// of the flip (the CallBoru sub-engine shared the registry's FlowCtrl,
 	// and the loop resolver ran in the enclosing engine); it is the
 	// drain/flow invariant the TCO-STAGED residual asked to be pinned
 	// before routing this class onto the splice branch.
@@ -110,7 +110,7 @@ func TestFnValueSameRegistryBreakInLoopBody(t *testing.T) {
 	brk := sameRegistryAnonFnValue(t, r, "brksr", typedFnBody("x", "Integer", "Any",
 		NewWord("break")))
 
-	res := runAQL(t, r, []Value{
+	res := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("accsr"), NewInteger(0), NewEnd(),
 		NewWord("for"), NewInteger(5), NewList([]Value{
 			NewWord("def"), NewWord("accsr"), NewOpenParen(), NewWord("accsr"), NewWord("add"), NewInteger(1), NewCloseParen(),
@@ -126,9 +126,9 @@ func TestFnValueSameRegistryBreakInLoopBody(t *testing.T) {
 	}
 }
 
-func TestFnValueCrossRegistryStillCallAQL(t *testing.T) {
+func TestFnValueCrossRegistryStillCallBoru(t *testing.T) {
 	// Negative guard for the flip's condition: a fn value captured over a
-	// DIFFERENT registry must keep the CallAQL path — its body names
+	// DIFFERENT registry must keep the CallBoru path — its body names
 	// resolve in the captured registry, not the executing one.
 	r, err := DefaultRegistry()
 	if err != nil {
@@ -139,11 +139,11 @@ func TestFnValueCrossRegistryStillCallAQL(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A module-private helper exists only in `other`.
-	_ = runAQL(t, other, []Value{NewWord("def"), NewWord("privsr"), NewInteger(30), NewEnd()})
+	_ = runBoru(t, other, []Value{NewWord("def"), NewWord("privsr"), NewInteger(30), NewEnd()})
 	helper := sameRegistryAnonFnValue(t, other, "helpersr", typedFnBody("x", "Integer", "Integer",
 		NewWord("x"), NewWord("add"), NewWord("privsr")))
 
-	res := runAQL(t, r, []Value{helper, NewInteger(12)})
+	res := runBoru(t, r, []Value{helper, NewInteger(12)})
 	if n, _ := AsInteger(res[len(res)-1]); n != 42 {
 		t.Fatalf("cross-registry fn value = %d, want 42 (private name must resolve in captured registry)", n)
 	}
@@ -156,7 +156,7 @@ func TestFnValueCrossRegistryStillCallAQL(t *testing.T) {
 // Cross-registry fn-value dispatch shapes: stack form with a structural
 // cell interleaved among the operands, a 0-arg named value, and forward
 // form. (These route through the compiled-value dispatch path, not
-// execFnDefSig's CallAQL splice arms — those arms are allowlisted as
+// execFnDefSig's CallBoru splice arms — those arms are allowlisted as
 // defensive residue; see test/go/covergate/allowlist.tsv.) The pins are
 // behavioural: each shape must produce the callee's result with the
 // callee's names resolved in the CAPTURED registry.
@@ -180,7 +180,7 @@ func TestFnValueCrossRegistrySpliceArms(t *testing.T) {
 			NewWord("x"), NewWord("mul"), NewInteger(2)))
 		// [12, mark, helper]: arg collection skips the mark; the splice's
 		// copy-down walk must carry it over the consumed positions.
-		res := runAQL(t, r, []Value{NewInteger(12), NewMark("xrm1"), helper, NewEnd()})
+		res := runBoru(t, r, []Value{NewInteger(12), NewMark("xrm1"), helper, NewEnd()})
 		if n, _ := AsInteger(res[len(res)-1]); n != 24 {
 			t.Fatalf("stack-form cross-registry dispatch = %d, want 24", n)
 		}
@@ -194,7 +194,7 @@ func TestFnValueCrossRegistrySpliceArms(t *testing.T) {
 		fd := zero.Data.(FnDefInfo)
 		fd.Name = "xr0named" // 0-arg dispatch requires a NAMED value (anonymous stays data)
 		fd.Anonymous = false
-		res := runAQL(t, r, []Value{NewFunction(fd), NewEnd()})
+		res := runBoru(t, r, []Value{NewFunction(fd), NewEnd()})
 		if len(res) == 0 {
 			t.Fatal("no residual from 0-arg cross-registry dispatch")
 		}
@@ -207,7 +207,7 @@ func TestFnValueCrossRegistrySpliceArms(t *testing.T) {
 		r, other := mk(t)
 		helper := sameRegistryAnonFnValue(t, other, "xrf", typedFnBody("x", "Integer", "Integer",
 			NewWord("x"), NewWord("add"), NewInteger(1)))
-		res := runAQL(t, r, []Value{NewOpenParen(), helper, NewCloseParen(), NewInteger(41), NewEnd()})
+		res := runBoru(t, r, []Value{NewOpenParen(), helper, NewCloseParen(), NewInteger(41), NewEnd()})
 		if n, _ := AsInteger(res[len(res)-1]); n != 42 {
 			t.Fatalf("forward-form cross-registry dispatch = %d, want 42", n)
 		}

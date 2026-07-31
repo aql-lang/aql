@@ -30,9 +30,9 @@ func TestSpawnPolicyDeniedBySandbox(t *testing.T) {
 	}
 	// Coded by the gate, so `do [spawn ...] error [dot code]` can dispatch —
 	// see policy_error.go. The raw *policy.Denied no longer escapes.
-	var ae *AqlError
+	var ae *BoruError
 	if !errors.As(err, &ae) {
-		t.Fatalf("expected a coded AqlError, got %T (%v)", err, err)
+		t.Fatalf("expected a coded BoruError, got %T (%v)", err, err)
 	}
 	if ae.Code != "capability_not_installed" {
 		t.Errorf("Code = %q, want capability_not_installed", ae.Code)

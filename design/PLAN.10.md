@@ -1,4 +1,4 @@
-# AQL Core Execution Loop — Implementation Plan
+# boru Core Execution Loop — Implementation Plan
 
 > **Note:** This plan has been completed. The engine, registry, type
 > system, and built-in primitives described below are all implemented.
@@ -9,7 +9,7 @@
 
 ## Analysis
 
-AQL is a **concatenative stack machine**. The core engine takes the next item,
+boru is a **concatenative stack machine**. The core engine takes the next item,
 interprets it as a function, which modifies the stack. Literals self-insert.
 
 This plan focuses **only on the engine**. The input is not source text or
@@ -43,7 +43,7 @@ A new `internal/engine/` package containing:
 
 ### Step 1: Hierarchical Type System (`types.go`)
 
-AQL types are **path-like hierarchies**: `string`, `string/proper`,
+boru types are **path-like hierarchies**: `string`, `string/proper`,
 `number/integer`, `data/map`.
 
 ```go

@@ -3,8 +3,8 @@ package modules
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // s7bTypeNative returns the named inner native from typeModuleNatives.
@@ -72,7 +72,7 @@ func TestS7B_TypeLCANoCommon(t *testing.T) {
 }
 
 // TestS7B_TypeFnIntrospectionEdges drives the introspection words' empty /
-// untyped-shape arms directly (no AQL surface can build a zero-sig or
+// untyped-shape arms directly (no boru surface can build a zero-sig or
 // nil-param-type Function).
 func TestS7B_TypeFnIntrospectionEdges(t *testing.T) {
 	r := typeRegistry(t)

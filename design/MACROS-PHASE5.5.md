@@ -39,7 +39,7 @@ move. None of this can be built until the IR backend exists:
   code.
 - **Run pass.** Executes IR containing **no macros and no `__SP`** — they were
   expanded away at compile time.
-- **Staging / `eval-when`.** The compiler must be able to *execute* AQL to run
+- **Staging / `eval-when`.** The compiler must be able to *execute* boru to run
   transformers (the evaluator is present at compile time). Macros are
   **define-before-use**: a macro must be compiled and runnable before the
   compiler reaches its first use — so a forward reference to a macro (e.g. a

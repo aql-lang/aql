@@ -110,7 +110,7 @@ not false	true
 0.0 not	true
 1.5 not	false
 
-# Double negation via parens (chained `not not` is not how AQL parses).
+# Double negation via parens (chained `not not` is not how boru parses).
 not (1 not)	true
 not (0 not)	false
 not ("x" not)	true

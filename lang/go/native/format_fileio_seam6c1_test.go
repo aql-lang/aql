@@ -7,7 +7,7 @@ import (
 
 	jsonic "github.com/tabnas/jsonic/go"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // Wave-6 coverage for format.go (decoder error arms via the csvConfigure /

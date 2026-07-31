@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // --- type shadowing + undef ---
@@ -59,7 +59,7 @@ func TestTypeShadow_PopToEmpty(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	_, err = a.Run(`def Foo Integer
 undef Foo
 42 is Foo`)
@@ -77,7 +77,7 @@ func TestTypeShadow_UntypeUnbound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	_, err = a.Run(`undef Nonexistent`)
 	if err == nil {
 		t.Fatalf("expected error untyping a nonexistent name")
@@ -95,7 +95,7 @@ func TestTypeShadow_UndefLowercaseIsValueUnbind(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	got, err := a.Run(`def Foo Integer
 undef foo
 5 is Foo`)

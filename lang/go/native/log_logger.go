@@ -1,6 +1,6 @@
 package native
 
-// log_logger.go — phase 2 of aql:log: contextual / named loggers.
+// log_logger.go — phase 2 of boru:log: contextual / named loggers.
 //
 // `Log.logger NAME` and `Log.with NAME FIELDS` return a logger instance
 // (an OrderedMap of method closures, the same shape as a Rand.with-seed
@@ -58,7 +58,7 @@ func wrapLoggerFnDef(n NativeFunc, subReg *Registry) Value {
 		sigs[i] = FnSig{
 			Params:     params,
 			Returns:    s.Returns,
-			Impl:       AQL([]Value{NewWord(n.Name)}),
+			Impl:       Boru([]Value{NewWord(n.Name)}),
 			BarrierPos: -1,
 		}
 	}
@@ -130,7 +130,7 @@ func loggerChildNative(st *loggerState) NativeFunc {
 				merged := asConcreteOrderedMap(mergeAttrs(st.attrs, args[0]))
 				inst, err := buildLoggerInstance(&loggerState{name: st.name, attrs: merged, lsr: st.lsr})
 				if err != nil {
-					return nil, r.AqlError("log_error", "child logger: "+err.Error(), "Logger.child")
+					return nil, r.BoruError("log_error", "child logger: "+err.Error(), "Logger.child")
 				}
 				return []Value{NewMap(inst)}, nil
 			}),
@@ -151,11 +151,11 @@ func logLoggerNative(lsr *LogSinkRegistry) NativeFunc {
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteString()
 				if err != nil {
-					return nil, r.AqlError("log_error", "logger name must be a string", "Log.logger")
+					return nil, r.BoruError("log_error", "logger name must be a string", "Log.logger")
 				}
 				inst, err := buildLoggerInstance(&loggerState{name: name, attrs: NewOrderedMap(), lsr: lsr})
 				if err != nil {
-					return nil, r.AqlError("log_error", err.Error(), "Log.logger")
+					return nil, r.BoruError("log_error", err.Error(), "Log.logger")
 				}
 				return []Value{NewMap(inst)}, nil
 			}),
@@ -176,7 +176,7 @@ func logWithNative(lsr *LogSinkRegistry) NativeFunc {
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteString()
 				if err != nil {
-					return nil, r.AqlError("log_error", "logger name must be a string", "Log.with")
+					return nil, r.BoruError("log_error", "logger name must be a string", "Log.with")
 				}
 				inst, err := buildLoggerInstance(&loggerState{
 					name:  name,
@@ -184,7 +184,7 @@ func logWithNative(lsr *LogSinkRegistry) NativeFunc {
 					lsr:   lsr,
 				})
 				if err != nil {
-					return nil, r.AqlError("log_error", err.Error(), "Log.with")
+					return nil, r.BoruError("log_error", err.Error(), "Log.with")
 				}
 				return []Value{NewMap(inst)}, nil
 			}),

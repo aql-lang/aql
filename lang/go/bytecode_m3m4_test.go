@@ -28,13 +28,13 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // parseRegRow is the module-parse.tsv:14 shape — grammar built by builder
 // words, finalized into a fn value, dispatched through the `parse` macro's
 // value form.
-const parseRegRow = `import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [7])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def op (Parse.parser g)  end  parse op 'inc'`
+const parseRegRow = `import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [7])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def op (Parse.parser g)  end  parse op 'inc'`
 
 // TestParseFnDispatchCompiles pins the parse-side positives: the
 // Parse.parser rows compile NATIVELY (no island, no trap) and produce the
@@ -43,10 +43,10 @@ func TestParseFnDispatchCompiles(t *testing.T) {
 	cases := []struct{ name, src, want string }{
 		{"builder grammar (module-parse:14 shape)", parseRegRow, "7"},
 		{"whole-spec map (module-parse:37 shape)",
-			`import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.spec g {ref:{'@op:o:INC': ([nd:Any] => [7])} abnf:{src:'op = "inc" / "dec"' start:'op'}}  def sp1 (Parse.parser g)  end  parse sp1 'inc'`,
+			`import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.spec g {ref:{'@op:o:INC': ([nd:Any] => [7])} abnf:{src:'op = "inc" / "dec"' start:'op'}}  def sp1 (Parse.parser g)  end  parse sp1 'inc'`,
 			"7"},
 		{"dispatched result consumed downstream (dot over the dynamic value)",
-			`import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [{k:'inc'}])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def opm (Parse.parser g)  end  (parse opm 'inc').k`,
+			`import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [{k:'inc'}])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def opm (Parse.parser g)  end  (parse opm 'inc').k`,
 			"inc"},
 	}
 	for _, c := range cases {
@@ -85,7 +85,7 @@ func TestParseFnDispatchCompiles(t *testing.T) {
 // has no "missing kind" — only an unusable value, and the two engines must
 // agree on it.
 func TestParseFnDispatchMissParity(t *testing.T) {
-	const src = `import "aql:parse"  import "aql:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [7])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def c false  if c [def op (Parse.parser g)] [0]  end  parse op 'inc'`
+	const src = `import "boru:parse"  import "boru:parselang"  def g Parse.grammar  Parse.action g '@op:o:INC' ([nd:Any] => [7])  Parse.abnf g 'op = "inc" / "dec"' {start:'op'}  def c false  if c [def op (Parse.parser g)] [0]  end  parse op 'inc'`
 	gotC, compiled, errC := mustNew(t).RunCompiled(src)
 	_, errI := mustNew(t).Run(src)
 	if !compiled {
@@ -94,9 +94,9 @@ func TestParseFnDispatchMissParity(t *testing.T) {
 	if codeOf(errC) != "parse_error" || codeOf(errI) != "parse_error" {
 		t.Fatalf("miss parity: compiled=[%s] interp=[%s], want both parse_error", codeOf(errC), codeOf(errI))
 	}
-	var aeC, aeI *eng.AqlError
+	var aeC, aeI *eng.BoruError
 	if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
-		t.Fatalf("non-AQL error: compiled=%v interp=%v", errC, errI)
+		t.Fatalf("non-Boru error: compiled=%v interp=%v", errC, errI)
 	}
 	if aeC.Detail != aeI.Detail {
 		t.Errorf("miss detail divergence:\n  compiled=%q\n  interp=%q", aeC.Detail, aeI.Detail)
@@ -134,10 +134,10 @@ func TestMiniLangAbsenceFoldCompiles(t *testing.T) {
 		// A def-bound value never touches the export map (module-minilang.tsv
 		// pins the same read as a spec row): MiniLang.Gen is None on every run.
 		{"missing key with a value-form binding",
-			`import "aql:minilang"  def genv (fn [[src:String opts:Map] [Integer] [1]])  MiniLang.Gen`},
+			`import "boru:minilang"  def genv (fn [[src:String opts:Map] [Integer] [1]])  MiniLang.Gen`},
 		// No binding at all: the ledger is empty, absence is stable.
 		{"missing key with no binding",
-			`import "aql:minilang"  MiniLang.Nope`},
+			`import "boru:minilang"  MiniLang.Nope`},
 	}
 	for _, c := range positives {
 		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
@@ -162,7 +162,7 @@ func TestMiniLangAbsenceFoldCompiles(t *testing.T) {
 
 	// NEGATIVE — a PRESENT key must never fold to a stale None: MiniLang.Re
 	// is the built-in member-type export, identical in both engines.
-	const present = `import "aql:minilang"  MiniLang.Re`
+	const present = `import "boru:minilang"  MiniLang.Re`
 	gotC, _, errC := mustNew(t).RunCompiled(present)
 	gotI, errI := mustNew(t).Run(present)
 	if errC != nil || errI != nil || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
@@ -180,9 +180,9 @@ func TestMiniLangAbsenceFoldCompiles(t *testing.T) {
 // code, detail, and a position wherever the interpreter carries one.
 func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	cases := []struct{ name, src string }{
 		// apply.tsv:37 — the former "carrier operand declines" negative:
 		// inc's Integer result is disjoint from apply's Function slot, and
@@ -224,9 +224,9 @@ func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 		if codeOf(errC) != "signature_error" || codeOf(errI) != "signature_error" {
 			t.Fatalf("%s: compiled=[%s] interp=[%s], want both signature_error", c.name, codeOf(errC), codeOf(errI))
 		}
-		var aeC, aeI *eng.AqlError
+		var aeC, aeI *eng.BoruError
 		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
-			t.Fatalf("%s: non-AQL error: compiled=%v interp=%v", c.name, errC, errI)
+			t.Fatalf("%s: non-Boru error: compiled=%v interp=%v", c.name, errC, errI)
 		}
 		if aeC.Detail != aeI.Detail {
 			t.Errorf("%s: detail divergence:\n  compiled=%q\n  interp=%q", c.name, aeC.Detail, aeI.Detail)
@@ -241,7 +241,7 @@ func TestUnmatchedDispatchTrapCarrierDisjoint(t *testing.T) {
 // normalising the incidental value-rendering non-determinism the two
 // engines legitimately have (counter-based IDs) — the diagnostic
 // STRUCTURE is what parity requires.
-func diagNotesEqual(a, b *eng.AqlError) bool {
+func diagNotesEqual(a, b *eng.BoruError) bool {
 	if len(a.Notes) != len(b.Notes) {
 		return false
 	}

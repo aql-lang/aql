@@ -17,11 +17,11 @@ import (
 // end state is the p6/concurrent-fork-bodies-on-vm frontier pin.
 func TestAwaitCompiledBranchParity(t *testing.T) {
 	cases := []string{
-		`import "aql:time-util" TimeUtil.await [[1 add 2] [3 mul 4]]`,
-		`import "aql:time-util" TimeUtil.await [[def x 5 x add 1] [3 mul 4]]`,
-		`import "aql:time-util" TimeUtil.await [[raise bad_input "boom"] [3 mul 4]]`,
-		`import "aql:time-util" TimeUtil.await {mode:"full"} [[raise bad_input "boom"] [3 mul 4]]`,
-		`import "aql:time-util" TimeUtil.await {mode:"any"} [[raise bad_input "boom"] [3 mul 4]]`,
+		`import "boru:time-util" TimeUtil.await [[1 add 2] [3 mul 4]]`,
+		`import "boru:time-util" TimeUtil.await [[def x 5 x add 1] [3 mul 4]]`,
+		`import "boru:time-util" TimeUtil.await [[raise bad_input "boom"] [3 mul 4]]`,
+		`import "boru:time-util" TimeUtil.await {mode:"full"} [[raise bad_input "boom"] [3 mul 4]]`,
+		`import "boru:time-util" TimeUtil.await {mode:"any"} [[raise bad_input "boom"] [3 mul 4]]`,
 	}
 	for _, src := range cases {
 		t.Run(src, func(t *testing.T) {
@@ -57,7 +57,7 @@ func TestAwaitCompiledBranchParity(t *testing.T) {
 // appears) while the program still runs compiled with interpreter-identical
 // results. The sibling compiled branch is unaffected — per-element, sound.
 func TestAwaitRefusedBranchInterpretsPerElement(t *testing.T) {
-	const src = `import "aql:time-util" TimeUtil.await [[9 (module [export "X" {a:1}]) drop] [3 mul 4]]`
+	const src = `import "boru:time-util" TimeUtil.await [[9 (module [export "X" {a:1}]) drop] [3 mul 4]]`
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -107,7 +107,7 @@ func TestAwaitRefusedBranchInterpretsPerElement(t *testing.T) {
 // is emitted exactly once and the branch surfaces the internal error as its
 // error value (the L-DUP doctrine: no-duplicate-effects beats parity).
 func TestAwaitBranchBailBeforeEffectFallsBack(t *testing.T) {
-	const src = `import "aql:time-util" TimeUtil.await [[def i (zz-inst) i.m 5 42] [3 mul 4]]`
+	const src = `import "boru:time-util" TimeUtil.await [[def i (zz-inst) i.m 5 42] [3 mul 4]]`
 	a := zzShapedInstance(t)
 	a.SetOutput(&bytes.Buffer{})
 	gotC, compiled, err := a.RunCompiled(src)
@@ -126,7 +126,7 @@ func TestAwaitBranchBailBeforeEffectFallsBack(t *testing.T) {
 }
 
 func TestAwaitBranchBailAfterEffectSurfaces(t *testing.T) {
-	const src = `import "aql:time-util" TimeUtil.await [[print "once" def i (zz-inst) i.m 5 42] [3 mul 4]]`
+	const src = `import "boru:time-util" TimeUtil.await [[print "once" def i (zz-inst) i.m 5 42] [3 mul 4]]`
 	a := zzShapedInstance(t)
 	var out bytes.Buffer
 	a.SetOutput(&out)

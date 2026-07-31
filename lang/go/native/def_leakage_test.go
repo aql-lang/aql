@@ -4,10 +4,10 @@ import (
 	"testing"
 )
 
-// TestDefLeakageFromCallAQL verifies that local defs inside fn bodies
-// executed via CallAQL do not persist after the fn returns.
-// This is the fix for AQL-DX-REPORT Issue 2.
-func TestDefLeakageFromCallAQL(t *testing.T) {
+// TestDefLeakageFromCallBoru verifies that local defs inside fn bodies
+// executed via CallBoru do not persist after the fn returns.
+// This is the fix for BORU-DX-REPORT Issue 2.
+func TestDefLeakageFromCallBoru(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -26,13 +26,13 @@ func TestDefLeakageFromCallAQL(t *testing.T) {
 			NewWord("x"), NewWord("add"), NewWord("localvar"),
 		}),
 	})
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("def"), NewWord("myfn"),
 		NewWord("fn"), fnBody, NewEnd(),
 	})
 
 	// Call the fn: 1 myfn → 100
-	result := runAQL(t, r, []Value{NewInteger(1), NewWord("myfn")})
+	result := runBoru(t, r, []Value{NewInteger(1), NewWord("myfn")})
 	_as0, _ := AsNumber(result[0])
 	if len(result) != 1 || _as0 != 100 {
 		t.Errorf("1 myfn = %v, want 100", result)
@@ -70,7 +70,7 @@ func TestDefLeakageDotNotation(t *testing.T) {
 			NewWord("op"),
 		}),
 	})
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("def"), NewWord("process"),
 		NewWord("fn"), fnBody, NewEnd(),
 	})
@@ -78,7 +78,7 @@ func TestDefLeakageDotNotation(t *testing.T) {
 	// Build a map {op:"add"} and call process.
 	m := NewOrderedMap()
 	m.Set("op", NewString("add"))
-	result := runAQL(t, r, []Value{NewMap(m), NewWord("process")})
+	result := runBoru(t, r, []Value{NewMap(m), NewWord("process")})
 	_as1, _ := AsString(result[0])
 	if len(result) != 1 || _as1 != "add" {
 		t.Errorf("{op:'add'} process = %v, want 'add'", result)
@@ -93,7 +93,7 @@ func TestDefLeakageDotNotation(t *testing.T) {
 	// {op:"mul"}.op → "mul" (not the leaked "add")
 	m2 := NewOrderedMap()
 	m2.Set("op", NewString("mul"))
-	result2 := runAQL(t, r, []Value{
+	result2 := runBoru(t, r, []Value{
 		NewMap(m2), NewWord("dot"), NewWord("op"),
 	})
 	_as2, _ := AsString(result2[0])
@@ -124,14 +124,14 @@ func TestDefLeakageMultipleCalls(t *testing.T) {
 			NewWord("tmp"),
 		}),
 	})
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("def"), NewWord("counter"),
 		NewWord("fn"), fnBody, NewEnd(),
 	})
 
 	// Call multiple times — tmp should never accumulate.
 	for i := 0; i < 5; i++ {
-		result := runAQL(t, r, []Value{NewInteger(int64(i)), NewWord("counter")})
+		result := runBoru(t, r, []Value{NewInteger(int64(i)), NewWord("counter")})
 		expected := int64(i + 1)
 		_as3, _ := AsNumber(result[0])
 		if len(result) != 1 || _as3 != float64(expected) {

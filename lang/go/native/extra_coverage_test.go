@@ -116,7 +116,7 @@ func TestExtraStringFnDef(t *testing.T) {
 	// Function definition: the default branch should handle it
 	v := NewFnDef(FnDefInfo{Signatures: []FnSig{{
 		Params: []FnParam{{Name: "x", Type: TInteger}},
-		Impl:   AQL([]Value{NewInteger(1)}), BarrierPos: -1,
+		Impl:   Boru([]Value{NewInteger(1)}), BarrierPos: -1,
 	}}})
 	s := v.String()
 	if s == "" {
@@ -735,7 +735,7 @@ func TestExtraStepEndNoForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewInteger(1), NewEnd()})
+	result := runBoru(t, r, []Value{NewInteger(1), NewEnd()})
 	_as1, _ := AsNumber(result[0])
 	if len(result) != 1 || _as1 != 1.0 {
 		t.Errorf("end with no forward: got %v, want [1]", result)
@@ -749,7 +749,7 @@ func TestExtraStepEndAfterForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(1), NewWord("add"), NewInteger(2), NewEnd(),
 	})
 	_as2, _ := AsNumber(result[0])
@@ -884,7 +884,7 @@ func TestExtraNewTypeSinglePart(t *testing.T) {
 	}
 }
 
-// TestExtraMustTypePanics moved to aqleng (mustType is engine-internal).
+// TestExtraMustTypePanics moved to borueng (mustType is engine-internal).
 
 func TestExtraTypeSpecificity(t *testing.T) {
 	tp, _ := NewType("Number/Integer")
@@ -943,7 +943,7 @@ func TestExtraValuesEqualTypeLiteralVsConcrete(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{a, b, NewWord("unify")})
+	result := runBoru(t, r, []Value{a, b, NewWord("unify")})
 	if len(result) < 2 {
 		t.Fatalf("unify: got %d results", len(result))
 	}
@@ -961,7 +961,7 @@ func TestExtraValuesEqualFloatsDirect(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewFloat(1.5), NewFloat(2.5), NewWord("unify"),
 	})
 	if len(result) < 2 {
@@ -1040,7 +1040,7 @@ func TestExtraStringFunction(t *testing.T) {
 	// Function values (TFunction type)
 	v := NewFunction(FnDefInfo{Signatures: []FnSig{{
 		Params: []FnParam{{Name: "x", Type: TAny}},
-		Impl:   AQL([]Value{NewInteger(1)}), BarrierPos: -1,
+		Impl:   Boru([]Value{NewInteger(1)}), BarrierPos: -1,
 	}}})
 	s := v.String()
 	if s == "" {

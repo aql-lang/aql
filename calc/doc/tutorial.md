@@ -1,6 +1,6 @@
 # Tutorial — Build calc from scratch
 
-> **Audience.** You know Go and have never used the AQL engine. By
+> **Audience.** You know Go and have never used the boru engine. By
 > the end you will have rebuilt every line of the calc module
 > yourself and understood what it does.
 >
@@ -13,12 +13,12 @@ want is to dispatch one word; finish step 7 to get a full REPL.
 
 ## Prerequisites
 
-A clone of the [aql repo](https://github.com/aql-lang/aql).
+A clone of the [boru repo](https://github.com/boru-lang/boru).
 `go 1.24+`. No network access during the build — `eng/go/` is a
 local module imported via a replace directive.
 
 ```
-cd aql
+cd boru
 ls eng/go        # parser, types, registry, dispatch live here
 ```
 
@@ -38,14 +38,14 @@ module example.com/mycalc
 
 go 1.24
 
-require github.com/aql-lang/aql/eng/go v0.0.0
+require github.com/boru-lang/boru/eng/go v0.0.0
 
 require (
 	github.com/tabnas/jsonic/go v0.2.0 // indirect
 	github.com/tabnas/parser/go v0.2.1 // indirect
 )
 
-replace github.com/aql-lang/aql/eng/go => ../eng/go
+replace github.com/boru-lang/boru/eng/go => ../eng/go
 ```
 
 The `replace` line points at the local copy of `eng/go`. In a
@@ -64,7 +64,7 @@ no lang, no native_*, no transitive sqlite or csv. Read this as
 ```go
 package mycalc
 
-import "github.com/aql-lang/aql/eng/go"
+import "github.com/boru-lang/boru/eng/go"
 
 func New() (*eng.Engine, error) {
     r, err := eng.NewRegistry()
@@ -100,7 +100,7 @@ out, err := New().Run(v)        // returns [7, 42], nil
 
 Literals just pass through. There are no words registered yet,
 so any `eng.NewWord("…")` you slip into the input would raise
-`[aql/undefined_word]`.
+`[boru/undefined_word]`.
 
 ## Step 3 — Define your first word
 
@@ -168,10 +168,10 @@ native word. Calc adds a parser, more words, a stack, and a REPL.
 ## Step 4 — Take source instead of token slices
 
 Hand-constructing token slices gets old. The parser lives next to
-the kernel at `github.com/aql-lang/aql/eng/go/parser`:
+the kernel at `github.com/boru-lang/boru/eng/go/parser`:
 
 ```go
-import "github.com/aql-lang/aql/eng/go/parser"
+import "github.com/boru-lang/boru/eng/go/parser"
 
 values, err := parser.Parse("add 2 3")     // returns []eng.Value
 e, _ := New()
@@ -185,7 +185,7 @@ already understood by the kernel and parser without any words
 registered.
 
 Optional: tell the registry about the parser so any word that
-needs to parse strings later on (think `import "x.aql"`) has a
+needs to parse strings later on (think `import "x.boru"`) has a
 reference:
 
 ```go
@@ -278,7 +278,7 @@ only on success.
 ## Step 7 — A REPL with meta-commands
 
 Read lines from stdin, run them through `Eval`, print the result.
-Reserve a prefix (calc uses `:`) for non-AQL commands:
+Reserve a prefix (calc uses `:`) for non-boru commands:
 
 ```go
 func REPL(c *Calc, in io.Reader, out io.Writer) {
@@ -328,7 +328,7 @@ go run ./cmd/mycalc
 # calc> :quit
 ```
 
-You wrote a working concatenative interpreter on top of the AQL
+You wrote a working concatenative interpreter on top of the boru
 kernel without touching the kernel itself. Every word in your
 language is yours — including the names, the signatures, the
 return types, and the dispatch behaviour. The kernel handed you

@@ -77,7 +77,7 @@ func TestWinCredCmdKeepsSecretOffArgvAndEnv(t *testing.T) {
 	}
 	// The operation and target travel in the environment, not argv.
 	env := strings.Join(cmd.Env, "\n")
-	for _, want := range []string{"AQL_KR_OP=set", "AQL_KR_TARGET=" + keyringService + ":my.alias", "AQL_KR_USER=my.alias"} {
+	for _, want := range []string{"BORU_KR_OP=set", "BORU_KR_TARGET=" + keyringService + ":my.alias", "BORU_KR_USER=my.alias"} {
 		if !strings.Contains(env, want) {
 			t.Errorf("env missing %q", want)
 		}
@@ -95,7 +95,7 @@ func TestWinCredScriptShape(t *testing.T) {
 	// the environment variables winCredCmd sets.
 	for _, want := range []string{
 		"CredWriteW", "CredReadW", "CredDeleteW",
-		"[Console]::In.ReadToEnd", "$env:AQL_KR_OP", "$env:AQL_KR_TARGET", "exit 2",
+		"[Console]::In.ReadToEnd", "$env:BORU_KR_OP", "$env:BORU_KR_TARGET", "exit 2",
 	} {
 		if !strings.Contains(winCredScript, want) {
 			t.Errorf("winCredScript missing %q", want)

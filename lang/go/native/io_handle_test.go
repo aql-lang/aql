@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // io_handle_test.go — P4 word layer: IO.open / seek / flush / close, the
@@ -17,7 +17,7 @@ import (
 // openFileVal opens a handle through the IO.open word and returns the File.
 func openFileVal(t *testing.T, r *Registry, path string, opts func(*OrderedMap)) Value {
 	t.Helper()
-	res := runAQL(t, r, []Value{NewWord("open"), pathV(path), wrapMap(opts)})
+	res := runBoru(t, r, []Value{NewWord("open"), pathV(path), wrapMap(opts)})
 	if _, ok := asFileHandle(res[0]); !ok {
 		t.Fatalf("open did not return a File handle: %v", res[0])
 	}
@@ -35,26 +35,26 @@ func TestOpenWordForms(t *testing.T) {
 	if fh.Path != "f.txt" {
 		t.Errorf("handle path = %q", fh.Path)
 	}
-	runAQL(t, r, []Value{NewWord("close"), f})
+	runBoru(t, r, []Value{NewWord("close"), f})
 
 	// {mode:'write'} creates + truncates.
-	runAQL(t, r, []Value{NewWord("open"), pathV("new.txt"),
+	runBoru(t, r, []Value{NewWord("open"), pathV("new.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("mode", NewString("write")) })})
 	if _, err := mem.Stat("new.txt", false); err != nil {
 		t.Errorf("write-open did not create the file: %v", err)
 	}
 
 	// An absent read target errors; an unknown mode errors.
-	if err := runAQLError(t, r, []Value{NewWord("open"), pathV("ghost")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("open"), pathV("ghost")}); err == nil {
 		t.Error("opening an absent file read-only should error")
 	}
-	if err := runAQLError(t, r, []Value{NewWord("open"), pathV("f.txt"),
+	if err := runBoruError(t, r, []Value{NewWord("open"), pathV("f.txt"),
 		wrapMap(func(om *OrderedMap) { om.Set("mode", NewString("bogus")) })}); err == nil {
 		t.Error("an unknown mode should error")
 	}
 	// {perm} + {exclusive} shape the open (exclusive on an absent path
 	// succeeds and creates it).
-	runAQL(t, r, []Value{NewWord("open"), pathV("x.txt"),
+	runBoru(t, r, []Value{NewWord("open"), pathV("x.txt"),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("mode", NewString("write"))
 			om.Set("exclusive", NewBoolean(true))
@@ -70,48 +70,48 @@ func TestHandleReadWriteThread(t *testing.T) {
 	// Open write, write via handle, close; the write is visible to a
 	// stateless read before close (mem page-cache), then persists.
 	f := openFileVal(t, r, "h.txt", func(om *OrderedMap) { om.Set("mode", NewString("write")) })
-	runAQL(t, r, []Value{NewWord("write"), f, NewString("hello world")})
+	runBoru(t, r, []Value{NewWord("write"), f, NewString("hello world")})
 	if b, _ := mem.ReadFile("h.txt"); string(b) != "hello world" {
 		t.Errorf("pre-close visible = %q", b)
 	}
-	runAQL(t, r, []Value{NewWord("close"), f})
+	runBoru(t, r, []Value{NewWord("close"), f})
 
 	// Open read; seek + sequential read; positioned read; bytes read.
 	rf := openFileVal(t, r, "h.txt", func(*OrderedMap) {})
-	runAQL(t, r, []Value{NewWord("seek"), rf, NewInteger(6)})
-	seq := runAQL(t, r, []Value{NewWord("read"), rf,
+	runBoru(t, r, []Value{NewWord("seek"), rf, NewInteger(6)})
+	seq := runBoru(t, r, []Value{NewWord("read"), rf,
 		wrapMap(func(om *OrderedMap) { om.Set("length", NewInteger(5)) })})
 	if s, _ := AsString(seq[0]); s != "world" {
 		t.Errorf("seek+read = %q", s)
 	}
-	pos := runAQL(t, r, []Value{NewWord("read"), rf,
+	pos := runBoru(t, r, []Value{NewWord("read"), rf,
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(0)); om.Set("length", NewInteger(5)) })})
 	if s, _ := AsString(pos[0]); s != "hello" {
 		t.Errorf("positioned read = %q", s)
 	}
-	bin := runAQL(t, r, []Value{NewWord("read"), rf,
+	bin := runBoru(t, r, []Value{NewWord("read"), rf,
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bytes")); om.Set("offset", NewInteger(0)) })})
 	if b, ok := AsBytesValue(bin[0]); !ok || len(b) != 11 {
 		t.Errorf("bytes read = %v", bin[0])
 	}
-	runAQL(t, r, []Value{NewWord("close"), rf})
+	runBoru(t, r, []Value{NewWord("close"), rf})
 }
 
 func TestHandleWriteForms(t *testing.T) {
 	r, mem := ioFSReg(t)
 	f := openFileVal(t, r, "w.bin", func(om *OrderedMap) { om.Set("mode", NewString("write")) })
 	// A Bytes payload writes verbatim; a positioned {offset} splices.
-	runAQL(t, r, []Value{NewWord("write"), f, NewBytesValue([]byte{1, 2, 3, 4})})
-	runAQL(t, r, []Value{NewWord("write"), f, NewBytesValue([]byte{9}),
+	runBoru(t, r, []Value{NewWord("write"), f, NewBytesValue([]byte{1, 2, 3, 4})})
+	runBoru(t, r, []Value{NewWord("write"), f, NewBytesValue([]byte{9}),
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(1)) })})
-	runAQL(t, r, []Value{NewWord("flush"), f})
-	runAQL(t, r, []Value{NewWord("close"), f})
+	runBoru(t, r, []Value{NewWord("flush"), f})
+	runBoru(t, r, []Value{NewWord("close"), f})
 	if b, _ := mem.ReadFile("w.bin"); len(b) != 4 || b[1] != 9 {
 		t.Errorf("handle write forms = %v", b)
 	}
 	// A write of a non-string/bytes payload errors.
 	g := openFileVal(t, r, "w2.txt", func(om *OrderedMap) { om.Set("mode", NewString("write")) })
-	if err := runAQLError(t, r, []Value{NewWord("write"), g, wrapMap(func(om *OrderedMap) { om.Set("a", NewInteger(1)) })}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("write"), g, wrapMap(func(om *OrderedMap) { om.Set("a", NewInteger(1)) })}); err == nil {
 		t.Error("writing a map to a handle should error")
 	}
 }
@@ -122,30 +122,30 @@ func TestSeekForms(t *testing.T) {
 		t.Fatal(err)
 	}
 	f := openFileVal(t, r, "s.txt", func(*OrderedMap) {})
-	end := runAQL(t, r, []Value{NewWord("seek"), f, NewInteger(0),
+	end := runBoru(t, r, []Value{NewWord("seek"), f, NewInteger(0),
 		wrapMap(func(om *OrderedMap) { om.Set("from", NewString("end")) })})
 	if n, _ := AsInteger(end[0]); n != 10 {
 		t.Errorf("seek end = %v", n)
 	}
-	cur := runAQL(t, r, []Value{NewWord("seek"), f, NewInteger(-3),
+	cur := runBoru(t, r, []Value{NewWord("seek"), f, NewInteger(-3),
 		wrapMap(func(om *OrderedMap) { om.Set("from", NewString("current")) })})
 	if n, _ := AsInteger(cur[0]); n != 7 {
 		t.Errorf("seek current = %v", n)
 	}
-	st := runAQL(t, r, []Value{NewWord("seek"), f, NewInteger(2),
+	st := runBoru(t, r, []Value{NewWord("seek"), f, NewInteger(2),
 		wrapMap(func(om *OrderedMap) { om.Set("from", NewString("start")) })})
 	if n, _ := AsInteger(st[0]); n != 2 {
 		t.Errorf("seek start = %v", n)
 	}
 	// A bad {from}, and a seek to a negative offset, error.
-	if err := runAQLError(t, r, []Value{NewWord("seek"), f, NewInteger(0),
+	if err := runBoruError(t, r, []Value{NewWord("seek"), f, NewInteger(0),
 		wrapMap(func(om *OrderedMap) { om.Set("from", NewString("nope")) })}); err == nil {
 		t.Error("bad {from} should error")
 	}
-	if err := runAQLError(t, r, []Value{NewWord("seek"), f, NewInteger(-100)}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("seek"), f, NewInteger(-100)}); err == nil {
 		t.Error("seek to a negative offset should error")
 	}
-	runAQL(t, r, []Value{NewWord("close"), f})
+	runBoru(t, r, []Value{NewWord("close"), f})
 }
 
 func TestCloseAndFlushErrors(t *testing.T) {
@@ -181,28 +181,28 @@ func TestCloseWatcher(t *testing.T) {
 	// IO.close is polymorphic: it also stops a Watcher.
 	body := NewList([]Value{NewWord("drop")})
 	body.Quoted = true
-	w := runAQL(t, r, []Value{NewWord("watch"), pathV("w.txt"), body})
+	w := runBoru(t, r, []Value{NewWord("watch"), pathV("w.txt"), body})
 	if _, ok := asWatcherInfo(w[0]); !ok {
 		t.Fatalf("watch did not return a Watcher: %v", w[0])
 	}
-	runAQL(t, r, []Value{NewWord("close"), w[0]})
+	runBoru(t, r, []Value{NewWord("close"), w[0]})
 }
 
 func TestExclusiveWriteWord(t *testing.T) {
 	r, mem := ioFSReg(t)
 	// Exclusive create on an absent path succeeds.
-	runAQL(t, r, []Value{NewWord("write"), pathV("e.txt"), NewString("fresh"),
+	runBoru(t, r, []Value{NewWord("write"), pathV("e.txt"), NewString("fresh"),
 		wrapMap(func(om *OrderedMap) { om.Set("exclusive", NewBoolean(true)) })})
 	if b, _ := mem.ReadFile("e.txt"); string(b) != "fresh" {
 		t.Errorf("exclusive create = %q", b)
 	}
 	// Exclusive on an existing path refuses.
-	if err := runAQLError(t, r, []Value{NewWord("write"), pathV("e.txt"), NewString("x"),
+	if err := runBoruError(t, r, []Value{NewWord("write"), pathV("e.txt"), NewString("x"),
 		wrapMap(func(om *OrderedMap) { om.Set("exclusive", NewBoolean(true)) })}); err == nil {
 		t.Error("exclusive over an existing file should refuse")
 	}
 	// Exclusive cannot combine with append.
-	if err := runAQLError(t, r, []Value{NewWord("write"), pathV("e2.txt"), NewString("x"),
+	if err := runBoruError(t, r, []Value{NewWord("write"), pathV("e2.txt"), NewString("x"),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("exclusive", NewBoolean(true))
 			om.Set("mode", NewString("append"))
@@ -210,7 +210,7 @@ func TestExclusiveWriteWord(t *testing.T) {
 		t.Error("exclusive+append should refuse")
 	}
 	// Exclusive cannot combine with a positioned {offset} (binary path).
-	if err := runAQLError(t, r, []Value{NewWord("write"), pathV("e3.bin"), NewBytesValue([]byte{1}),
+	if err := runBoruError(t, r, []Value{NewWord("write"), pathV("e3.bin"), NewBytesValue([]byte{1}),
 		wrapMap(func(om *OrderedMap) {
 			om.Set("exclusive", NewBoolean(true))
 			om.Set("offset", NewInteger(0))
@@ -445,17 +445,17 @@ func TestOpenOptsModeArms(t *testing.T) {
 	}
 	// append mode: writes land at end.
 	af := openFileVal(t, r, "f", func(om *OrderedMap) { om.Set("mode", NewString("append")) })
-	runAQL(t, r, []Value{NewWord("write"), af, NewString("B")})
-	runAQL(t, r, []Value{NewWord("close"), af})
+	runBoru(t, r, []Value{NewWord("write"), af, NewString("B")})
+	runBoru(t, r, []Value{NewWord("close"), af})
 	if b, _ := mem.ReadFile("f"); string(b) != "AB" {
 		t.Errorf("append mode = %q", b)
 	}
 	// explicit read mode.
 	rd := openFileVal(t, r, "f", func(om *OrderedMap) { om.Set("mode", NewString("read")) })
-	runAQL(t, r, []Value{NewWord("close"), rd})
+	runBoru(t, r, []Value{NewWord("close"), rd})
 	// rw mode: read and write.
 	rw := openFileVal(t, r, "f", func(om *OrderedMap) { om.Set("mode", NewString("rw")) })
-	runAQL(t, r, []Value{NewWord("close"), rw})
+	runBoru(t, r, []Value{NewWord("close"), rw})
 	// create + truncate refinements on a read base.
 	openFileVal(t, r, "nc.txt", func(om *OrderedMap) { om.Set("create", NewBoolean(true)); om.Set("mode", NewString("rw")) })
 	if _, err := mem.Stat("nc.txt", false); err != nil {
@@ -465,7 +465,7 @@ func TestOpenOptsModeArms(t *testing.T) {
 		t.Fatal(err)
 	}
 	tf := openFileVal(t, r, "tr.txt", func(om *OrderedMap) { om.Set("mode", NewString("rw")); om.Set("truncate", NewBoolean(true)) })
-	runAQL(t, r, []Value{NewWord("close"), tf})
+	runBoru(t, r, []Value{NewWord("close"), tf})
 	if b, _ := mem.ReadFile("tr.txt"); len(b) != 0 {
 		t.Errorf("{truncate} left %q", b)
 	}
@@ -478,18 +478,18 @@ func TestReadHandleVariants(t *testing.T) {
 	}
 	f := openFileVal(t, r, "r.txt", func(*OrderedMap) {})
 	// Sequential, no length → io.ReadAll to EOF.
-	all := runAQL(t, r, []Value{NewWord("read"), f})
+	all := runBoru(t, r, []Value{NewWord("read"), f})
 	if s, _ := AsString(all[0]); s != "hello world" {
 		t.Errorf("read-all = %q", s)
 	}
 	// Positioned, no length → readAtToEnd.
-	pos := runAQL(t, r, []Value{NewWord("read"), f,
+	pos := runBoru(t, r, []Value{NewWord("read"), f,
 		wrapMap(func(om *OrderedMap) { om.Set("offset", NewInteger(6)) })})
 	if s, _ := AsString(pos[0]); s != "world" {
 		t.Errorf("positioned to EOF = %q", s)
 	}
 	// An unknown enc fails to decode.
-	if err := runAQLError(t, r, []Value{NewWord("read"), f,
+	if err := runBoruError(t, r, []Value{NewWord("read"), f,
 		wrapMap(func(om *OrderedMap) { om.Set("enc", NewString("bogus")); om.Set("offset", NewInteger(0)) })}); err == nil {
 		t.Error("read with a bogus enc should error")
 	}
@@ -499,7 +499,7 @@ func TestReadHandleVariants(t *testing.T) {
 		t.Error("seek with a non-integer should error")
 	}
 	// flush of a CLOSED handle errors (Sync refuses).
-	runAQL(t, r, []Value{NewWord("close"), f})
+	runBoru(t, r, []Value{NewWord("close"), f})
 	if _, err := doFlushWord([]Value{f}, r); err == nil {
 		t.Error("flush of a closed handle should error")
 	}
@@ -532,24 +532,24 @@ func TestHandleErrorForwards(t *testing.T) {
 		func(om *OrderedMap) { om.Set("offset", NewInteger(0)); om.Set("length", NewInteger(2)) },
 		func(om *OrderedMap) { om.Set("offset", NewInteger(0)) },
 	} {
-		if err := runAQLError(t, r, []Value{NewWord("read"), f, wrapMap(opt)}); err == nil {
+		if err := runBoruError(t, r, []Value{NewWord("read"), f, wrapMap(opt)}); err == nil {
 			t.Error("a handle read failure should forward")
 		}
 	}
 	// A write failure forwards from IO.write f and from a {exclusive} write.
 	r = newReg(failCapHandle{FileHandle: base(nil), failWrite: true})
 	f = openFileVal(t, r, "f", func(om *OrderedMap) { om.Set("mode", NewString("write")) })
-	if err := runAQLError(t, r, []Value{NewWord("write"), f, NewString("x")}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("write"), f, NewString("x")}); err == nil {
 		t.Error("a handle write failure should forward")
 	}
-	if err := runAQLError(t, r, []Value{NewWord("write"), pathV("new"), NewString("x"),
+	if err := runBoruError(t, r, []Value{NewWord("write"), pathV("new"), NewString("x"),
 		wrapMap(func(om *OrderedMap) { om.Set("exclusive", NewBoolean(true)) })}); err == nil {
 		t.Error("an exclusive write's write failure should forward")
 	}
 	// A sync failure forwards from IO.flush f.
 	r = newReg(failCapHandle{FileHandle: base(nil), failSync: true})
 	f = openFileVal(t, r, "f", func(*OrderedMap) {})
-	if err := runAQLError(t, r, []Value{NewWord("flush"), f}); err == nil {
+	if err := runBoruError(t, r, []Value{NewWord("flush"), f}); err == nil {
 		t.Error("a handle sync failure should forward")
 	}
 	// close of a File whose underlying Close fails, and of a Watcher whose

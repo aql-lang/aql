@@ -9,7 +9,7 @@
 // and module sub-engines. The TS port here is the interpreter slice
 // that the current TSV specs reach.
 import { carrierResults, stripToCarriers } from './check.ts'
-import { AqlError } from './error.ts'
+import { BoruError } from './error.ts'
 import { valToString } from './make.ts'
 import { matchEntry } from './match.ts'
 import type { Registry } from './registry.ts'
@@ -48,10 +48,10 @@ import {
   Value,
   type WordInfo,
 } from './value.ts'
-import type { AqlType } from './type.ts'
+import type { BoruType } from './type.ts'
 
 /** Base value for an omitted optional fn param, by its declared type. */
-function baseValue(t: AqlType): Value {
+function baseValue(t: BoruType): Value {
   // Float is checked before the Integer/Number branch: a Float param
   // matches TNumber too, so the order matters for its base value.
   if (t.matches(TFloat)) return newFloat(0)
@@ -73,14 +73,14 @@ export class Engine {
    * Set of currently-active mark IDs. A Move only fires its replay
    * if its target ID is here — orphaned Moves (whose Mark was
    * removed by some controller) are silently dropped. Mirrors the
-   * `marks map[string]bool` field on aqleng/go/engine.go's Engine.
+   * `marks map[string]bool` field on borueng/go/engine.go's Engine.
    */
   private markIds: Set<string> = new Set()
   /**
    * Set by preEvalParens when a paren in the just-scanned forward
    * window resolved to zero values — a void argument expression. A
    * following signature-match failure blames the void instead of
-   * reporting a generic mismatch. Mirrors aqleng/go/engine.go's
+   * reporting a generic mismatch. Mirrors borueng/go/engine.go's
    * voidGroups tracking.
    */
   private lastPreEvalHadVoid = false
@@ -91,7 +91,7 @@ export class Engine {
 
   /**
    * Run the input value sequence. Returns the residual stack.
-   * Throws AqlError on undefined word, signature mismatch, etc.
+   * Throws BoruError on undefined word, signature mismatch, etc.
    */
   run(input: Value[]): Value[] {
     // Check mode: strip concrete literals to type-only carriers before
@@ -125,7 +125,7 @@ export class Engine {
           continue
         }
         if (w.name === ')') {
-          throw new AqlError('syntax_error', `unmatched ')'`, ')')
+          throw new BoruError('syntax_error', `unmatched ')'`, ')')
         }
         if (w.name === 'end') {
           this.stepEnd()
@@ -133,7 +133,7 @@ export class Engine {
         }
         // If a pending forward marker is waiting for a Word-typed
         // arg, capture this word as data instead of executing it.
-        // Mirrors aqleng/go/engine.go's hasPendingForwardExpectingWord
+        // Mirrors borueng/go/engine.go's hasPendingForwardExpectingWord
         // check at the top of stepWord — without this the engine would
         // dispatch the word and prematurely consume its forward args.
         if (this.pendingExpectsWord()) {
@@ -223,7 +223,7 @@ export class Engine {
         // the pointer so they execute inline. A quoted list (set via
         // `quote`) or an inert list bound via a typed-name constraint
         // (`def xs:[:T] […]`) is data and falls through to the literal-
-        // substitute branch below. Mirrors aqleng/go/engine.go's def-sub
+        // substitute branch below. Mirrors borueng/go/engine.go's def-sub
         // `!top.Quoted` check.
         const elems = top.asList()
         this.stack.splice(this.pointer, 1, ...elems)
@@ -253,7 +253,7 @@ export class Engine {
         this.pointer++
         return
       }
-      throw new AqlError('undefined_word', `undefined word: ${name}`, name)
+      throw new BoruError('undefined_word', `undefined word: ${name}`, name)
     }
 
     // Pre-evaluate any paren groups in the forward window so the
@@ -271,13 +271,13 @@ export class Engine {
         return
       }
       if (this.lastPreEvalHadVoid) {
-        throw new AqlError(
+        throw new BoruError(
           'no_value_error',
           `argument expression produced no value for ${name}`,
           name,
         )
       }
-      throw new AqlError(
+      throw new BoruError(
         'signature_error',
         `cannot call \`${name}\` — no signature matches the arguments\n  = expected: ${name} (${describeExpected(fn)})\n  = stack: ${this.describeStack()}`,
         name,
@@ -347,7 +347,7 @@ export class Engine {
     this.autoEvalArgs(result.args, result.sig)
     const handlerResult = result.sig.handler(result.args, null, [], this.registry)
     if (handlerResult instanceof Promise) {
-      throw new AqlError(
+      throw new BoruError(
         'unsupported',
         `async handlers are not supported in the TS port`,
         name,
@@ -480,7 +480,7 @@ export class Engine {
   private evalParenAt(idx: number): void {
     const closeIdx = this.findMatchingClose(idx)
     if (closeIdx < 0) {
-      throw new AqlError('syntax_error', `unmatched '('`, '(')
+      throw new BoruError('syntax_error', `unmatched '('`, '(')
     }
     const inner = this.stack.slice(idx + 1, closeIdx)
     const sub = new Engine(this.registry)
@@ -607,7 +607,7 @@ export class Engine {
    * + forward args. The bound params are popped after the sub-engine
    * returns so they don't leak into the surrounding scope.
    *
-   * Mirrors aqleng/go/engine.go's FnDef dispatch path (the "stepWord
+   * Mirrors borueng/go/engine.go's FnDef dispatch path (the "stepWord
    * → execFnDefSig" arc) compressed into a single function.
    */
   private dispatchFnDef(name: string, info: FnDefInfo): void {
@@ -648,7 +648,7 @@ export class Engine {
       }
     }
     if (!result || !chosen) {
-      throw new AqlError(
+      throw new BoruError(
         'signature_error',
         `cannot call \`${name}\` — no signature matches the arguments\n  = stack: ${this.describeStack()}`,
         name,
@@ -861,7 +861,7 @@ export class Engine {
   /**
    * Return true iff the nearest preceding ForwardMarker (within the
    * current paren scope) is waiting for a Word-typed arg at its
-   * next collection slot. Mirrors aqleng/go/engine.go's
+   * next collection slot. Mirrors borueng/go/engine.go's
    * hasPendingForwardExpectingWord — the gate that lets `def NAME`
    * capture NAME as data even when it would otherwise dispatch.
    */
@@ -875,7 +875,7 @@ export class Engine {
     // Only an EXPLICIT TWord/TAtom slot suppresses dispatch. TAny
     // also accepts Word values, but at TAny slots we still want the
     // engine to dispatch the word and feed its result back. Mirrors
-    // aqleng/go/engine.go's hasPendingForwardExpectingWord which
+    // borueng/go/engine.go's hasPendingForwardExpectingWord which
     // checks `Equal(TWord)` and the /q flag, never TAny.matches(TWord).
     return expected.equal(TWord) || expected.equal(TAtom)
   }
@@ -928,7 +928,7 @@ export class Engine {
     }
     if (!matches) {
       // Implicit end of forward collection — fail the dispatch.
-      throw new AqlError(
+      throw new BoruError(
         'signature_error',
         `forward arg ${nextIdx} type mismatch for ${m.funcName}: expected ${expected.toString()}, got ${val.toString()}`,
         m.funcName,
@@ -951,7 +951,7 @@ export class Engine {
    * so far (forward args + stack args from the original match) — the
    * collection short-circuits before all expected slots arrive.
    * Otherwise just remove the `end` token. Mirrors stepEnd in
-   * aqleng/go/engine.go.
+   * borueng/go/engine.go.
    */
   private stepEnd(): void {
     const fwdIdx = this.findPendingMarker()
@@ -978,7 +978,7 @@ export class Engine {
     const m = this.stack[fwdIdx]!.asForward()
     const args = [...m.collected, ...m.stackArgs]
     if (args.length < m.sig.args.length) {
-      throw new AqlError(
+      throw new BoruError(
         'signature_error',
         `${m.funcName}: 'end' before all forward args collected (have ${args.length}, need ${m.sig.args.length})`,
         m.funcName,
@@ -1022,7 +1022,7 @@ export class Engine {
     }
     const handlerResult = m.sig.handler(args, null, [], this.registry)
     if (handlerResult instanceof Promise) {
-      throw new AqlError(
+      throw new BoruError(
         'unsupported',
         `async handlers are not supported in the TS port`,
         m.funcName,
@@ -1037,7 +1037,7 @@ export class Engine {
    * Handle a Move at the pointer. Walk back to find the matching
    * Mark; replace [Mark .. body .. Move] with the saved body so the
    * body re-runs from the start. If no matching Mark is on the
-   * stack, drop the orphaned Move silently. Mirrors aqleng/go/engine.go's
+   * stack, drop the orphaned Move silently. Mirrors borueng/go/engine.go's
    * stepMove (one-shot replay variant — Cont/IfCont continuations
    * aren't ported here).
    */
@@ -1076,7 +1076,7 @@ export class Engine {
   /**
    * Auto-evaluate any TList args carrying `eval=true && !quoted`,
    * unless the sig declares NoEvalArgs for that position. Mirrors
-   * aqleng/go/engine.go's pre-handler autoEvalList step in execMatch.
+   * borueng/go/engine.go's pre-handler autoEvalList step in execMatch.
    * Mutates `args` in place.
    */
   private autoEvalArgs(args: Value[], sig: Signature): void {

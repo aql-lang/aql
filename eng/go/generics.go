@@ -171,7 +171,7 @@ func AsGenInstRef(v Value) (GenInstRef, error) {
 // them — certainly a bug).
 func (r *Registry) SetPendingGen(spec *GenSpecInfo) error {
 	if r.pendingGen != nil {
-		return &AqlError{
+		return &BoruError{
 			Code:   "gen_without_constructor",
 			Detail: "gen: the previous gen [...] was not consumed by a type constructor",
 			Hint:   "follow gen [...] with refine Record [...], class {...}, fnsig [...], or fn [...]",

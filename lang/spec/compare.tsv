@@ -4,7 +4,7 @@
 # the UNIFIED total order across every value (the order `sort` and the
 # collection words use; see eng/go/compare.go). The family-restricted
 # words cmp / lt / lte / gt / gte share this order but reject cross-
-# family pairs ([aql/incomparable]) — see compare-restrict.tsv — so this
+# family pairs ([boru/incomparable]) — see compare-restrict.tsv — so this
 # exhaustive cross-product is exercised through tcmp. The rows are the
 # full cross product of a representative value of each scalar kind, a
 # path value, and every scalar type literal.

@@ -1,7 +1,7 @@
-// remote.go — the remote stepping adapter (design/AQL-DEBUGGER.0.md
+// remote.go — the remote stepping adapter (design/BORU-DEBUGGER.0.md
 // §8.3, Phase 4): a THIRD front end over the same Session, publishing
 // pauses over the debugserve HTTP transport so a separate process can
-// drive stepping with `aql debug attach`.
+// drive stepping with `boru debug attach`.
 //
 // Concurrency model, inherited from the DAP adapter: the engine parks
 // inside the session's pauseHook (holding the session lock) until an
@@ -21,7 +21,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/aql-lang/aql/lang/go/debugserve"
+	"github.com/boru-lang/boru/lang/go/debugserve"
 )
 
 // Remote publishes one Session's pauses over HTTP and accepts actions.

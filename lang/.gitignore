@@ -1,6 +1,6 @@
 # Binaries
 /bin/
-/aql
+/boru
 *.exe
 *.exe~
 *.dll

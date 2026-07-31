@@ -14,8 +14,8 @@ import "errors"
 // is unchanged either way (the declared result carriers), so the dry pass
 // gates without altering typing or the compile pass.
 //
-// Precedents: miniMicronLitReturns' lenient dry pass (aql:minilang),
-// parseSpecReturns (aql:parse), CheckMicronConstruction (make).
+// Precedents: miniMicronLitReturns' lenient dry pass (boru:minilang),
+// parseSpecReturns (boru:parse), CheckMicronConstruction (make).
 
 // CheckAtUncaughtTopLevel reports whether the current analysis position is
 // the check pass's top-level straight line: outside every fn body and
@@ -53,7 +53,7 @@ func DryPassWrap(h func(args []Value, named map[string]Value, body []Value, r *R
 			}
 			if _, err := h(dryPassOperands(args), nil, nil, r); err != nil {
 				code, detail := "type_error", err.Error()
-				var ae *AqlError
+				var ae *BoruError
 				if errors.As(err, &ae) {
 					code, detail = ae.Code, ae.Detail
 				}

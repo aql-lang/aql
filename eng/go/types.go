@@ -178,7 +178,7 @@ func NewType(path string) (*Type, error) {
 	for _, p := range parts {
 		r, _ := utf8.DecodeRuneInString(p)
 		if unicode.IsLetter(r) && !unicode.IsUpper(r) {
-			return nil, fmt.Errorf("aql: type part %q in %q must start with an uppercase letter", p, path)
+			return nil, fmt.Errorf("boru: type part %q in %q must start with an uppercase letter", p, path)
 		}
 	}
 
@@ -198,7 +198,7 @@ func NewType(path string) (*Type, error) {
 	if def := Builtin.bypath[fullPath]; def != nil {
 		return def, nil
 	}
-	return nil, fmt.Errorf("aql: unknown type %q", fullPath)
+	return nil, fmt.Errorf("boru: unknown type %q", fullPath)
 }
 
 // ResolveTypePath attempts to resolve a slash-separated path to a

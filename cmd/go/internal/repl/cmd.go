@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 )
 
 type cmd struct{}
@@ -20,7 +20,7 @@ func New() command.Command { return &cmd{} }
 func (*cmd) Name() string     { return "repl" }
 func (*cmd) Synopsis() string { return "start the interactive read-eval-print loop" }
 
-// Run handles `aql repl [-r <registry>]`. With no flags it starts a
+// Run handles `boru repl [-r <registry>]`. With no flags it starts a
 // REPL on stdio; -r passes a registry path to native.DefaultRegistry.
 func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("repl", flag.ContinueOnError)
@@ -30,9 +30,9 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	// Print a small banner so explicit `aql repl` matches the
+	// Print a small banner so explicit `boru repl` matches the
 	// no-arg invocation, which prints the version line.
-	fmt.Fprintf(stdout, "aql repl\n")
+	fmt.Fprintf(stdout, "boru repl\n")
 	Start(stdin, stdout, pathutil.Expand(*registryPath))
 	return 0
 }

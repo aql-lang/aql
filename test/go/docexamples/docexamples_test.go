@@ -3,10 +3,10 @@
 // rendered stack to the documented result.
 //
 // Render path: the comparison string is eng.Canon of the residual stack
-// — canonical AQL source, which is the value form the docs are written
+// — canonical boru source, which is the value form the docs are written
 // in (quoted strings, lowercase `none`, comma-free lists/maps, `name/q`
 // atoms). This is the same renderer the .tsv spec suites use
-// (test/go/specrunner), so a passing example round-trips as written AQL.
+// (test/go/specrunner), so a passing example round-trips as written Boru.
 package docexamples
 
 import (
@@ -16,10 +16,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // docFiles are the prose docs scanned for `# returns` examples, relative to
@@ -57,18 +57,11 @@ type mismatchKey struct {
 // `Integer lt 0` refinement-vs-ordering confusion, MathUtil.log float
 // precision, the absent-optional `none`/`None` render convention, and
 // the bare `set`/`get` `end` demo — were resolved in the June 2026 doc
-// review; see design/REVIEW-NOTES.*.md.)
-//
-// The two current entries are the aql→boru rename transition:
-// README.md already documents the renamed `boru:*` module names (its
-// §"module renames" table), which the engine's module table does not
-// serve yet. The stale-xfail guard makes these self-retiring — the
-// moment the module renames land, both entries fail loudly and must be
-// removed.
-var knownMismatch = map[mismatchKey]string{
-	{"README.md", `import "boru:time-util" TimeUtil.await [[add 1 2] [add 3 4]]`}: "aql→boru rename in flight: the boru:* module names are documented ahead of the engine",
-	{"README.md", "3 7 MathUtil.min"}:                                             "aql→boru rename in flight: the setup line imports boru:math-util, documented ahead of the engine",
-}
+// review; see design/REVIEW-NOTES.*.md.) The two entries that carried the
+// project rename — README.md documenting the `boru:*` module names ahead
+// of the engine — retired when the rename landed and the engine started
+// serving those names.
+var knownMismatch = map[mismatchKey]string{}
 
 func docRoot() string { return filepath.Join("..", "..", "..") }
 
@@ -181,7 +174,7 @@ func runProgram(t *testing.T, src string) string {
 }
 
 // runProgramErr evaluates src against a fresh production registry and
-// renders the residual stack as canonical AQL source (eng.Canon).
+// renders the residual stack as canonical boru source (eng.Canon).
 func runProgramErr(src string) (string, error) {
 	values, err := parser.Parse(src)
 	if err != nil {
@@ -192,7 +185,7 @@ func runProgramErr(src string) (string, error) {
 		return "", err
 	}
 	// Mirror lang.New's registry wiring so module imports
-	// (`import "aql:math-util"`) resolve as they do for a CLI user.
+	// (`import "boru:math-util"`) resolve as they do for a CLI user.
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
 	result, err := native.NewTop(reg).Run(values)

@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // End-to-end coverage for the Tier-2 app runtime (tui_run.go) and the
@@ -41,7 +41,7 @@ func TestTuiRunCounter(t *testing.T) {
 		vb.Inject(ev)
 	}
 	out, err := runTuiSteps(t, vb, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		counterApp,
 		`def final (Tui.run app)`,
 		`convert String final.n`,
@@ -74,7 +74,7 @@ func TestTuiRunCtrlChords(t *testing.T) {
 	vb.Inject(key("up", ""))
 	vb.Inject(key("c", "c", "ctrl"))
 	out, err := runTuiSteps(t, vb, []string{
-		`import "aql:tui"`, counterApp,
+		`import "boru:tui"`, counterApp,
 		`def final (Tui.run app)`,
 		`convert String final.n`,
 	})
@@ -90,7 +90,7 @@ func TestTuiRunCtrlChords(t *testing.T) {
 	vb2.Inject(key("up", ""))
 	vb2.Inject(key(`\`, "", "ctrl")) // the hard chord still quits
 	out, err = runTuiSteps(t, vb2, []string{
-		`import "aql:tui"`, counterApp,
+		`import "boru:tui"`, counterApp,
 		`def cfg (app set ctrl-c "deliver")`,
 		`def final (Tui.run cfg)`,
 		`convert String final.n`,
@@ -111,7 +111,7 @@ func TestTuiRunResizeWorkerAndCursor(t *testing.T) {
 	vb.Inject(tuikit.Event{Tag: "resize", Cols: 12, Rows: 3})
 	vb.Inject(key("q", "q"))
 	out, err := runTuiSteps(t, vb, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`def app {
 		   init: {last: ""  entry: (Tui.input "hi" {focus: true})}
 		   update: ([state:Map ev:Map] => [ case ev.tag [
@@ -136,7 +136,7 @@ func TestTuiRunResizeWorkerAndCursor(t *testing.T) {
 	// worker: a spawned process addresses the UI by registered name
 	vb2 := tuikit.NewVirtualBackend(8, 2)
 	out, err = runTuiSteps(t, vb2, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`def app {
 		   init: {got: ""}
 		   update: ([state:Map ev:Map] => [ case ev.tag [
@@ -159,7 +159,7 @@ func TestTuiRunResizeWorkerAndCursor(t *testing.T) {
 // The negative contracts of the run word.
 func TestTuiRunRejections(t *testing.T) {
 	steps := func(vb *tuikit.VirtualBackend, body string) error {
-		_, err := runTuiSteps(t, vb, []string{`import "aql:tui"`, body})
+		_, err := runTuiSteps(t, vb, []string{`import "boru:tui"`, body})
 		return err
 	}
 	vb := tuikit.NewVirtualBackend(4, 2)
@@ -230,7 +230,7 @@ func TestTuiRunAlreadyRunning(t *testing.T) {
 	}
 	// with a well-formed app, the name squat rejects the run
 	_, err2 := runTuiStepsOn(t, reg, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`Tui.run {update: ([s:Map e:Map] => [s])  view: ([s:Map] => [Tui.spacer])}`,
 	})
 	if err2 == nil || !strings.Contains(err2.Error(), "already owns the terminal") {
@@ -265,7 +265,7 @@ func runTuiStepsOn(t *testing.T, reg *native.Registry, steps []string) ([]native
 func TestTuiWidgetWordsEndToEnd(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(4, 2)
 	out, err := runTuiSteps(t, vb, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`def tw (Tui.text "hi" {size: 1})`,
 		`def ed (Tui.edit (Tui.input "ab" {focus: true}) {tag: "key"  key: "backspace"  char: ""  mods: []})`,
 		`def ids (Tui.focusable (Tui.rows [ (Tui.input "x" {id: "a"}) (Tui.box (Tui.input "y" {id: "b"})) ]))`,

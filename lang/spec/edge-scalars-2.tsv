@@ -1,4 +1,4 @@
-# AQL Language Specification: scalar edge cases 2 — Float special values
+# boru Language Specification: scalar edge cases 2 — Float special values
 # Format: input<TAB>expected<TAB>description
 #
 # The corners of IEEE-754 binary64 that float-special.tsv leaves open:
@@ -26,11 +26,11 @@
 -1.0 div -0.0	inf	both signs flip back
 convert String -0.0	'-0.0'	the sign survives string conversion
 convert Integer -0.0	0	…but Integer conversion collapses to plain 0
-import "aql:math-util"  MathUtil.signbit -0.0	true	signbit sees the negative zero
-import "aql:math-util"  MathUtil.signbit 0.0	false	…and the positive one
-import "aql:math-util"  MathUtil.abs -0.0	0.0	abs normalises the sign away
-import "aql:math-util"  MathUtil.sign -0.0	0	sign treats -0.0 as zero
-import "aql:math-util"  3.0 MathUtil.copysign -0.0	-3.0	copysign reads -0.0's sign bit (a magnitude-0 sign donor works)
+import "boru:math-util"  MathUtil.signbit -0.0	true	signbit sees the negative zero
+import "boru:math-util"  MathUtil.signbit 0.0	false	…and the positive one
+import "boru:math-util"  MathUtil.abs -0.0	0.0	abs normalises the sign away
+import "boru:math-util"  MathUtil.sign -0.0	0	sign treats -0.0 as zero
+import "boru:math-util"  3.0 MathUtil.copysign -0.0	-3.0	copysign reads -0.0's sign bit (a magnitude-0 sign donor works)
 [-0.0 0.0] sort	[-0.0 0.0]	the zeros tie, so sort is a stable no-op…
 [0.0 -0.0] sort	[0.0 -0.0]	…in either input order (no IEEE totalOrder -0 < +0 here)
 #
@@ -59,7 +59,7 @@ inf gt 9223372036854775807	true	inf is above int64 max
 5e-324	5e-324	the smallest subnormal round-trips
 5e-324 typeof	Float	…as an ordinary Float
 5e-324 div 2.0	0.0	halving the smallest subnormal underflows to +0
-import "aql:math-util"  0.0 MathUtil.nextafter 1.0	5e-324	nextafter(0 → 1) is the smallest subnormal
+import "boru:math-util"  0.0 MathUtil.nextafter 1.0	5e-324	nextafter(0 → 1) is the smallest subnormal
 9007199254740992.0 add 1.0	9007199254740992.0	at 2^53 the float grid spacing is 2: +1 is absorbed
 #
 # §5  binary-representation artifacts (why BigDecimal exists)

@@ -630,8 +630,8 @@ func TestRunPredicate_MultiArgPredicate(t *testing.T) {
 // Happy-path tests for RunPredicate live in lang/go/test/type_*_test.go
 // (they need the full parse pipeline to construct predicates).
 // Coverage at the unit level is satisfied by the four error-path
-// tests above — every branch of RunPredicate's pre-CallAQL logic is
-// exercised. The CallAQL → result-shape branches are reachable only
+// tests above — every branch of RunPredicate's pre-CallBoru logic is
+// exercised. The CallBoru → result-shape branches are reachable only
 // via real predicate bodies, hence the integration-level coverage.
 
 // --- FlattenDisjunctAlts ---

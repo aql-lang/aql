@@ -8,15 +8,15 @@ import (
 )
 
 // TestT7_SaveTUIPrefsMkdirError drives saveTUIPrefs' MkdirAll error arm by
-// making ~/.aql a regular file, so creating it as a directory fails with
+// making ~/.boru a regular file, so creating it as a directory fails with
 // ENOTDIR (root-proof: a type conflict, not a permission check).
 func TestT7_SaveTUIPrefsMkdirError(t *testing.T) {
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, ".aql"), []byte("x"), 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".boru"), []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := saveTUIPrefs(dir, tuiPrefs{Theme: "dark"}); err == nil {
-		t.Error("saveTUIPrefs should fail when ~/.aql is a file, not a directory")
+		t.Error("saveTUIPrefs should fail when ~/.boru is a file, not a directory")
 	}
 }
 

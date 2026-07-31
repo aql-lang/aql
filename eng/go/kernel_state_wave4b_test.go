@@ -131,7 +131,7 @@ func TestContextStackUpdateChain(t *testing.T) {
 // missing-key walk terminates), because the pointer assertion alone would
 // still pass if some future relink produced a longer cycle.
 //
-// This is a unit test rather than an AQL program because the compiled path
+// This is a unit test rather than a boru program because the compiled path
 // currently pushes only one such entry, so the cycle is latent — see
 // design/verse-report-defects-investigation.0.md §B, where a patch that added
 // the second entry turned it into a default-path crash from a documented

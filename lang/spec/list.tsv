@@ -2,7 +2,7 @@
 # =====================================================================		
 # list — sequence of values		
 # =====================================================================		
-# A list is AQL's primary sequence type: ordered, heterogeneous,		
+# A list is boru's primary sequence type: ordered, heterogeneous,		
 # value-equal. Lists are produced by `[…]` literal syntax and		
 # auto-evaluated when they appear as data on the stack at end of		
 # Run() (only if Eval=true && !Quoted), so `[1 add 2]` collapses to		
@@ -19,7 +19,7 @@
 #   7. Typed lists `[ :T …]`.		
 #   8. Composition with def / fn bodies.		
 #		
-# Runs against the production aql registry (engine.DefaultRegistry +		
+# Runs against the production boru registry (engine.DefaultRegistry +		
 # native.Register), so all production list words are available.		
 		
 		

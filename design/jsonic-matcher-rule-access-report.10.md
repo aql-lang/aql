@@ -1,7 +1,7 @@
 # Jsonic Matcher Rule Access: TypeScript vs Go
 
 **Date:** 2026-04-04
-**Context:** Exploring jsonic-native string interpolation for AQL backtick strings
+**Context:** Exploring jsonic-native string interpolation for boru backtick strings
 
 ---
 
@@ -82,7 +82,7 @@ for _, matcher := range lex.Config.Lex.Match {
 
 ---
 
-## Impact on AQL String Interpolation
+## Impact on boru String Interpolation
 
 ### Current Approach (Phase 1 — Implemented)
 
@@ -131,8 +131,8 @@ rule to matchers, aligning with the TypeScript version:
 type LexMatcher func(lex *Lex, rule *Rule) *Token
 ```
 
-AQL's string interpolation now uses this API. A custom `LexMatcher`
-(priority 1M) checks `rule.K["aql_tpl"]` to produce template literal
+boru's string interpolation now uses this API. A custom `LexMatcher`
+(priority 1M) checks `rule.K["boru_tpl"]` to produce template literal
 tokens (#TL) only inside backtick strings. The interp/ielem/iexpr/ieval
 grammar rules use K map propagation for state tracking, and nesting
 works to any depth since each `iexpr` pushes to `val` which can open

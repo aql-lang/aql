@@ -3,11 +3,11 @@ package formatter
 import (
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // TabnasParse is the tabnas-lexer front end for the formatter: it tokenises
-// with the AQL-configured tabnas lexer (parser.LexTokens) and builds the same
+// with the boru-configured tabnas lexer (parser.LexTokens) and builds the same
 // Node tree the built-in hand-lexer produces. It is the concrete realisation
 // of the Q2 requirement "Fmt should parse, using a tabnas parser (which is a
 // parameter to the formatting)" — inject it via FormatWith(src, TabnasParse).
@@ -19,7 +19,7 @@ import (
 // run of adjacent word-part tokens into one word, so the resulting []Token —
 // and hence the layout — matches the hand-lexer. It is wired as DefaultParse;
 // TestTabnasParseCorpus pins its byte-for-byte equivalence to HandParse across
-// the whole .aql corpus and TestTabnasParseMatchesHandLexer over an edge
+// the whole .boru corpus and TestTabnasParseMatchesHandLexer over an edge
 // battery. On MALFORMED source (where the tabnas lexer errors and truncates)
 // it falls back to HandParse so a formatter never destroys broken code.
 func TabnasParse(src string) *Node {
@@ -98,7 +98,7 @@ func tabnasTokenize(src string, lts []parser.LexToken) []Token {
 		// literal makes the flat lexer swallow the rest of the physical line
 		// into a comment, so real trailing tokens (a closing `)`, a following
 		// string) never reach the stream. Recover that gap by re-scanning the
-		// swallowed source `[btEnd, lt.SI)` with the correct AQL tokenizer.
+		// swallowed source `[btEnd, lt.SI)` with the correct boru tokenizer.
 		if btEnd > 0 {
 			if gap := src[btEnd:lt.SI]; gap != "" {
 				flush()

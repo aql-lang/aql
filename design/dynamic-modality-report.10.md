@@ -1,10 +1,10 @@
-# The Bounded `dynamic(T)` Modality for AQL
+# The Bounded `dynamic(T)` Modality for boru
 
 ## Scope
 
 This is a focused design note for one idea: a **bounded dynamic
-modality** over AQL's existing type lattice. It expands item 2 of
-`design/elixir-types-in-aql-report.10.md` (the analysis of Elixir
+modality** over boru's existing type lattice. It expands item 2 of
+`design/elixir-types-in-boru-report.10.md` (the analysis of Elixir
 v1.20's set-theoretic types) into an implementable design, and pins
 the two decisions that item flagged as load-bearing but left open:
 the **dispatch-determinism rule** and the **escape-hatch bound
@@ -22,7 +22,7 @@ enters check mode never sees it.
 
 ## The one distinction this note rests on
 
-AQL already has a top type, `Any`. The temptation is to say "dynamic is
+boru already has a top type, `Any`. The temptation is to say "dynamic is
 just `Any`, we already have it." That is exactly backwards, and the
 rename that landed alongside this note (`Type.Matches → Type.ConformsTo`)
 makes the reason precise.
@@ -47,7 +47,7 @@ Elixir's `dynamic()` is the deliberate **dual**: *compatible unless
 provably disjoint*, and *narrowing through use*. It is not "we know
 nothing"; it is "we have given up *proving* the exact type statically, so
 treat it optimistically and let the runtime check carry the obligation."
-Those are two different epistemic states and AQL can currently only
+Those are two different epistemic states and boru can currently only
 express the pessimistic one.
 
 | | strict `Any` (have today) | `dynamic(T)` (proposed) |
@@ -268,12 +268,12 @@ This is gradual typing; it has the gradual guarantee's known cost. A
 `dynamic(T)` value that lies at runtime (its real type is outside `T`, or
 inside `T` but outside the slice a guard claimed) is *not* caught
 statically — same as Elixir `dynamic()`, TypeScript `any`, Dart dynamic.
-What AQL gets in exchange, and what the strict-`Any` status quo lacks:
+What boru gets in exchange, and what the strict-`Any` status quo lacks:
 
 1. The `Dynamic` flag is an **explicit, localised marker** of exactly
    where static guarantees weaken — it is introduced only at named
    escape hatches and propagates by intersection, so "where could a type
-   lie?" has a precise answer (`aql check` can list the dynamic carriers).
+   lie?" has a precise answer (`boru check` can list the dynamic carriers).
 2. **Disjointness is still a proof.** `dynamic(Integer)` into an `Atom`
    slot is a hard error, not a shrug. Gradual loosens the *match* side,
    not the *mismatch* side.
@@ -343,7 +343,7 @@ largest single item in the Elixir report and the deepest payoff:
   to opt a plugin boundary into gradual matching)? The carrier mechanism
   is identical; the only delta is a parser rule. Recommend internal-only
   first, surface the annotation once the modality has proven out.
-- **Trace presentation.** How should `aql check`/LSP render a dynamic
+- **Trace presentation.** How should `boru check`/LSP render a dynamic
   carrier — `dynamic(Integer)`, `Integer?`, `~Integer`? It must be
   visually distinct from both `Integer` and `Any` so the weakening is
   legible at a glance.

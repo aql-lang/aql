@@ -122,7 +122,7 @@ func TestSecretServiceViaStub(t *testing.T) {
 	stubBin(t, dir, "secret-tool", `case "$1" in
 store) cat > /dev/null; exit 0;;
 lookup)
-  case "$AQL_STUB_LOOKUP" in
+  case "$BORU_STUB_LOOKUP" in
     value) printf 'sv\n'; exit 0;;
     empty) exit 0;;
     *) exit 1;;
@@ -136,15 +136,15 @@ exit 3
 	if err := k.Set("a", "v"); err != nil {
 		t.Errorf("stub Set: %v", err)
 	}
-	t.Setenv("AQL_STUB_LOOKUP", "value")
+	t.Setenv("BORU_STUB_LOOKUP", "value")
 	if got, err := k.Get("a"); err != nil || got != "sv" {
 		t.Errorf("stub Get = %q, %v", got, err)
 	}
-	t.Setenv("AQL_STUB_LOOKUP", "empty")
+	t.Setenv("BORU_STUB_LOOKUP", "empty")
 	if _, err := k.Get("a"); err != ErrNotFound {
 		t.Errorf("empty lookup = %v, want ErrNotFound", err)
 	}
-	t.Setenv("AQL_STUB_LOOKUP", "missing")
+	t.Setenv("BORU_STUB_LOOKUP", "missing")
 	if _, err := k.Get("a"); err != ErrNotFound {
 		t.Errorf("exit-1 lookup = %v, want ErrNotFound", err)
 	}
@@ -168,16 +168,16 @@ exit 3
 
 func TestMacKeychainViaStub(t *testing.T) {
 	dir := t.TempDir()
-	t.Setenv("AQL_STUB_DIR", dir)
+	t.Setenv("BORU_STUB_DIR", dir)
 	// The stub honors macSetCmd's stdin protocol: it de-escapes the -w
 	// argument and stores it, so Set's round-trip check passes.
 	stubBin(t, dir, "security", `case "$1" in
 -i)
   line=$(cat)
-  printf '%s' "$line" | sed -e 's/^.* -w //' -e 's/\\\(.\)/\1/g' > "$AQL_STUB_DIR/secval"
+  printf '%s' "$line" | sed -e 's/^.* -w //' -e 's/\\\(.\)/\1/g' > "$BORU_STUB_DIR/secval"
   exit 0;;
 find-generic-password)
-  if [ -f "$AQL_STUB_DIR/secval" ]; then cat "$AQL_STUB_DIR/secval"; echo; exit 0
+  if [ -f "$BORU_STUB_DIR/secval" ]; then cat "$BORU_STUB_DIR/secval"; echo; exit 0
   else echo "could not be found" >&2; exit 44; fi;;
 delete-generic-password)
   echo "security: the item could not be found"; exit 1;;
@@ -203,10 +203,10 @@ exit 3
 
 func TestWinCredViaStub(t *testing.T) {
 	dir := t.TempDir()
-	stubBin(t, dir, "powershell", `case "$AQL_KR_OP" in
+	stubBin(t, dir, "powershell", `case "$BORU_KR_OP" in
 set) cat > /dev/null; exit 0;;
 get)
-  case "$AQL_STUB_WINCRED_GET" in
+  case "$BORU_STUB_WINCRED_GET" in
     value) printf 'wv'; exit 0;;
     *) exit 2;;
   esac;;
@@ -217,7 +217,7 @@ exit 3
 	prependPath(t, dir)
 	var k winCred
 	// Round-trip success: the stub always reads back "wv".
-	t.Setenv("AQL_STUB_WINCRED_GET", "value")
+	t.Setenv("BORU_STUB_WINCRED_GET", "value")
 	if err := k.Set("a", "wv"); err != nil {
 		t.Errorf("stub Set: %v", err)
 	}
@@ -230,7 +230,7 @@ exit 3
 		t.Errorf("round-trip mismatch: %v", err)
 	}
 	// Read-back failure is also refused.
-	t.Setenv("AQL_STUB_WINCRED_GET", "notfound")
+	t.Setenv("BORU_STUB_WINCRED_GET", "notfound")
 	if _, err := k.Get("a"); err != ErrNotFound {
 		t.Errorf("exit-2 get = %v, want ErrNotFound", err)
 	}
@@ -249,11 +249,11 @@ func TestOnePasswordViaStub(t *testing.T) {
 case "$verb" in
 create) cat > /dev/null; exit 0;;
 get)
-  case "$AQL_STUB_OP_GET" in
+  case "$BORU_STUB_OP_GET" in
     value) printf 'opv\n'; exit 0;;
-    *) echo "\"aql:a\" isn't an item" >&2; exit 1;;
+    *) echo "\"boru:a\" isn't an item" >&2; exit 1;;
   esac;;
-delete) echo "\"aql:a\" isn't an item" >&2; exit 1;;
+delete) echo "\"boru:a\" isn't an item" >&2; exit 1;;
 esac
 exit 3
 `)
@@ -262,11 +262,11 @@ exit 3
 	if err := k.Set("a", "opv"); err != nil {
 		t.Errorf("stub Set: %v", err)
 	}
-	t.Setenv("AQL_STUB_OP_GET", "value")
+	t.Setenv("BORU_STUB_OP_GET", "value")
 	if got, err := k.Get("a"); err != nil || got != "opv" {
 		t.Errorf("stub Get = %q, %v", got, err)
 	}
-	t.Setenv("AQL_STUB_OP_GET", "notfound")
+	t.Setenv("BORU_STUB_OP_GET", "notfound")
 	if _, err := k.Get("a"); err != ErrNotFound {
 		t.Errorf("isn't-an-item get = %v, want ErrNotFound", err)
 	}

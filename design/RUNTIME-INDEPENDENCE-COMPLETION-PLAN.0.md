@@ -44,12 +44,12 @@ runtime bail: `OpLookupDynScope` read miss, masked today by L-JOIN), and
 source after output was already emitted, duplicating every side effect: a hard
 `compile==interpret` violation, latent because the differential corpus is
 pure-value. Plus: Stage-D 3/4 & 4/4, sort-comparator module-fn `Function`
-param slots, radix-msd parameterised-mutable-Array carrier, the aql:test
+param slots, radix-msd parameterised-mutable-Array carrier, the boru:test
 recursive framework, `template_prop_test` higher-order `each`, net top-level
 drivers, and the Project-B construction-check diagnostic parity gap.
 
-**Never-compiled paths (Ring 3):** the REPL, wasm playground, `aql exec`
-server, `debug serve`, and the public `(*lang.AQL).Run` all call the
+**Never-compiled paths (Ring 3):** the REPL, wasm playground, `boru exec`
+server, `debug serve`, and the public `(*lang.Boru).Run` all call the
 tree-walker unconditionally. Predicates (`Registry.RunPredicate`) and model
 actions route through `InvokeCallback` but are never stamped; capturing
 runtime fns decline detached stamping; `check-prop` bodies interpret;
@@ -130,7 +130,7 @@ entry belongs to an enumerated, named, per-seam-counted carve-out, and the
 counts ratchet down only.** The permanent enumeration: (1) check mode;
 (2) explicit user opt-out (`--no-compile`, debug-serve interactive stepping);
 (3) C2 error-oracle runs; (4) fail-safe decline seams — stale `depSnap` →
-`CallAQL`, JIT-declined bodies → pooled sub-engine,
+`CallBoru`, JIT-declined bodies → pooled sub-engine,
 capture-of-dispatching-binding stamp declines, busy-registry non-nested
 callbacks; (5) R4 unrecorded-rematch-arm JIT-decline residue.
 
@@ -158,7 +158,7 @@ re-runs the front-end per line).
 | 5 | Off-corpus leaf cluster: L-DO, L-EACH, Stage-D 3/4 & 4/4, template `each`, net drivers, Project-B | L | med-high | 4 |
 | 6 | Stamping extensions: predicates, model actions, captures, JIT cache, concurrent bodies, `Vm.run` runtime compile | L | med | 1 (3 for parity) |
 | 7 | Module-fn param-slot compilation (module-fn-checkstate-ownership.{0-7}, re-baselined) | XL | high | 5 |
-| 8 | aql:test recursive framework (spec-data inference + recursive code-body closures) | XL | high | 4, 7 |
+| 8 | boru:test recursive framework (spec-data inference + recursive code-body closures) | XL | high | 4, 7 |
 | 9 | radix-msd parameterised-mutable-Array carrier | XL | high | 7 |
 | 10 | Runtime-bail census to zero (`TestRuntimeBailCensus`, `TestNoInterpreterExecution`) | M-L | med | 3, 4, 6 |
 | 11 | Stage J: delete the unbounded fallback; flip the public API (`Run`→compiled, `RunInterp` retained) | M | med | refusals=0, bail census=0 |
@@ -204,7 +204,7 @@ wiring); **(b)** `RunAutoValues(src) ([]native.Value, error)` — a
 Value-returning twin of `RunCompiledReason` (`convertResults` collapses
 Integer→int64/String→string, so a `[]any` API cannot back the REPL's
 `v.String()` rendering or `/stack` byte-identically). Then: REPL builds one
-`*AQL` per session and runs statement-at-a-time `RunAutoValues(line)` (fresh
+`*Boru` per session and runs statement-at-a-time `RunAutoValues(line)` (fresh
 engine per line over a persistent registry is already the model — check-pass
 `def`/`import` effects persist on the compiled path by `SnapshotForCompile`'s
 contract); `exec`/wasm route to `RunAuto`; debug-serve interactive stepping
@@ -339,7 +339,7 @@ the unit's RunInCheckMode-word semantics become idempotent by construction
 → cross-registry `StartFnCompile` for module-fn bodies with real param slots
 → comparator capture (`comp:Function` feeding `OpCallDynTrailTop`) → sort
 residuals. Highest-blast-radius seam in the tree; whole-suite sweep per step.
-**8** aql:test recursive framework: spec-data type inference + recursive
+**8** boru:test recursive framework: spec-data type inference + recursive
 code-body closure compilation; `OpDispatchRematch` is the relief valve where
 dispatch still cannot statically resolve — subject to C3, never static
 baking. **9** radix-msd: the parameterised-mutable-Array carrier (gradual
@@ -348,7 +348,7 @@ last; nothing depends on it.
 
 **Re-scoping (2026-07-13, frontier bootstrap):** several Phase 7–9 target
 shapes ALREADY COMPILE and are pinned green in lang/spec/frontier/: the
-aql:test recursion rows ×2 (frontier-aql-test.tsv), the module-fn-param
+boru:test recursion rows ×2 (frontier-boru-test.tsv), the module-fn-param
 inline-lambda comparator (frontier-module-fn-param.tsv), template-each
 (frontier-template-each.tsv), and stage-d ×2. Re-baseline each phase
 against the live census before executing — the remaining work is narrower
@@ -368,7 +368,7 @@ defers (poly NOut drift, user-poly unresolved/drift, shaped-method,
 dyn-scope dispatching/active-token, dyn-frame replay, and any 3c sites that
 failed their raise-proof) — each becomes compile-time refusal, sound in-VM
 handling, or an argued defensive arm. `TestNoInterpreterExecution`: assertion
-hooks at `Engine.Run` / `RunResolved` / `CallAQL` / `runPooledSub` recording
+hooks at `Engine.Run` / `RunResolved` / `CallBoru` / `runPooledSub` recording
 any armed-mode entry with seam attribution; zero unattributed entries;
 per-seam counters ratchet down only.
 
@@ -378,7 +378,7 @@ Gated on refusals=0, bail census=0, all off-corpus regressions green. Split
 the nil-Program branch per C2 (refusal → returned error after rollback;
 static error → the bounded oracle run). Delete the `runtimeShouldFallback`
 re-run entirely — with the census at 0, any surviving `internal_error` is a
-compiler bug and propagates; one-release escape hatch `AQL_COMPILE_FALLBACK=1`,
+compiler bug and propagates; one-release escape hatch `BORU_COMPILE_FALLBACK=1`,
 then deleted. Flip the public `Run` to the compiled path; the tree-walker
 remains public as `RunInterp` (check-mode front-end, error oracle,
 differential/specgen oracle — the retention that keeps `verify-bytecode`
@@ -396,7 +396,7 @@ Every phase, non-negotiable: `make verify-bytecode` (byte-identical
 differential incl. error taxonomy); the whole-suite
 `--compile`==`--no-compile` sweep (never just the changed construct — the
 chained-leaf hazard); `compiled_fullcorpus` / `compiled_property` (crank
-`AQL_FUZZ_SEEDS`/`AQL_FUZZ_ITERS` on dispatch-touching phases) /
+`BORU_FUZZ_SEEDS`/`BORU_FUZZ_ITERS` on dispatch-touching phases) /
 `compiled_combinations` (PATH rows per new opcode) / `compiled_concurrent`
 (`-race`); hand-pinned off-corpus `RunCompiledStrict==Run` regressions per
 leaf; `make fmt && make vet && make lint && make test && make cover-gate`;
@@ -420,7 +420,7 @@ generalized). Three layers:
   bail censuses (p10), end-state Run (p11), built on the WS1 observability
   seams (`eng/go/interp_entry.go`: InterpEntry + BailEvent hooks).
 - **Shared frontier TSV corpus** — `lang/spec/frontier/*.tsv` (join, do-catch,
-  forward-drift, stage-d, for-multi, module-fn-param, aql-test,
+  forward-drift, stage-d, for-multi, module-fn-param, boru-test,
   template-each): standard `input⇥expected` rows, interpreter-verified
   (`TestFrontierSpecInterp` — what a TS port runs), compile status pinned by
   `frontierCompileLedger` (`TestFrontierSpecCompiled`,
@@ -440,7 +440,7 @@ provenance"). Plus the 9 knownRefusals rows ("unmatched dispatch recovered").
 
 ### Discoveries (unexpected passes — green pins, noted per plan §Verification)
 
-- **Constant dry-pass beats fnDefMayRaise**: `import "aql:struct-util" def g
+- **Constant dry-pass beats fnDefMayRaise**: `import "boru:struct-util" def g
   StructUtil.parse/r do [(g "x") 2] error [dot code]` COMPILES natively —
   parse's pure ReturnsFn dry-pass proves the constant call cannot raise, so
   the exact arity is sound. The raising twin (`(g "")`) refuses on a
@@ -448,7 +448,7 @@ provenance"). Plus the 9 knownRefusals rows ("unmatched dispatch recovered").
   boundary)") — pinned as a chained-leaf ledger entry. The
   `bytecode_do_catch_test.go` fallback-list comment predates this
   (requireEngineParity's wantCompiled=false never asserted non-compilation).
-- **aql-test recursion rows ×2, template-each, module-fn-param
+- **boru-test recursion rows ×2, template-each, module-fn-param
   (inline-lambda comparator), stage-d ×2** already compile natively — kept
   as green must-COMPILE pins in the frontier TSVs.
 - **radix-msd Array-carrier repro unconstructible** in-repo (no Array
@@ -464,7 +464,7 @@ the dual pipeline — the interpreter recomputes every expectation, so no
 generated corpus is checked in. Consumers: `specgen -vary` (full-breadth
 triage; outputs are artifacts, not committed) and langspec's standing
 `TestVariationDifferential` gate (deterministic nested sampling —
-`vary.Sample` orders by input hash so `AQL_VARY_SEEDS` cranking strictly
+`vary.Sample` orders by input hash so `BORU_VARY_SEEDS` cranking strictly
 ADDS variants; default 32 seeds).
 
 ### First triage run (default breadth: 32 seeds × 14 transforms)
@@ -522,17 +522,17 @@ the WS1b follow-on.
 
 Entry-point routing landed: `lang.NewFromRegistry` + `RunAutoValues` (the
 Value-returning twin of RunCompiledReason — one shared core, the []any
-variant is now a converting wrapper); the REPL runs one `*AQL` per session
+variant is now a converting wrapper); the REPL runs one `*Boru` per session
 with per-line `RunAutoValues` (parse-probe preserved for the historical
 "parse error:" prefix; state persistence unchanged via the
-keep-on-compile contract); `aql exec` routes through `RunCompiledReason`.
+keep-on-compile contract); `boru exec` routes through `RunCompiledReason`.
 p2 pins live in cmd/go/internal/{repl,exec} (compiled line + zero
 unattributed interp entries + refused-line fallback).
 
 **SECURITY DISCOVERY (new Phase 10 item): compiled dispatch bypassed the
 engine word policy.** `policyGateWord` runs per interpreter stepWord
 dispatch (skipped in check mode by design) and the VM never consulted it —
-so `aql run` (default CompileTry) with a "deny add" policy RAN `1 add 2`
+so `boru run` (default CompileTry) with a "deny add" policy RAN `1 add 2`
 compiled to 3 where the interpreter raises permission-denied; exec
 inherited the hole the moment it moved to the compiled entry (caught by
 its policy test). Closed conservatively in CompileCheck: a registry with
@@ -696,7 +696,7 @@ caught path natively; the variadic latch + strip-input propagation are
 in); net drivers part 1 (computed multi-value loop bodies accumulate
 per-iteration via residualN reconciliation, parked-fn screened). Already
 green from the WS2 discoveries: Stage-D rows ×2, template-each,
-module-fn-param (lambda form), aql-test recursion ×2 — i.e. the Phase 5
+module-fn-param (lambda form), boru-test recursion ×2 — i.e. the Phase 5
 "Stage-D 3/4 & 4/4, template each" items and the Phase 7/8 lambda-form
 and recursion shapes were narrower than planned or already done.
 
@@ -755,7 +755,7 @@ unit must fully unwind, not no-op).
 The naive wiring (units-aware Rollback + suspend-refine-reseed-rerecord in
 AnalyseFnBody) did NOT clear the L-JOIN row (still refuses with the pinned
 provenance reason — the final recording pass still misses the operand
-home) and REGRESSED the aql-test recursion green pins ("fn
+home) and REGRESSED the boru-test recursion green pins ("fn
 test-describe$body: body leaves extra values (Stage 3 lowers in-order
 results)") — the re-record pass leaves different residuals for
 already-working recursive shapes whose first-pass recording was correct.
@@ -764,7 +764,7 @@ immediately). Learnings for the next attempt: (1) the flow must apply
 ONLY when the first pass's recording is actually provenance-broken (gate
 on the resolveOperand failure signal, not on every recursive bail); (2)
 the Rollback units-extension changes the loop-analysis caller's semantics
-too — land it separately with its own unit test; (3) the aql-test pins
+too — land it separately with its own unit test; (3) the boru-test pins
 double as the regression canary for ANY recording-pass restructure.
 
 ### L-EACH mechanics (2026-07-14 close-out read)
@@ -804,7 +804,7 @@ detached-unit primitives (no new machinery):
   takes the ACTION name when the spec lambda is anonymous (event label +
   action-error attribution, applied on compiled and interpreted paths
   alike so parity holds). `makeAction`'s `InvokeCallback` runs the unit;
-  captures decline to CallAQL unchanged.
+  captures decline to CallBoru unchanged.
 
 Discovery while pinning the negatives: a lambda written directly as a
 map VALUE (`actions:{gen:([mod:Any] => [flag])}` inside a fn body) runs
@@ -889,8 +889,8 @@ Two re-interpretation seams feed the cache, plus the auto-eval seam:
 sub-engine — fed by `do`'s baked CALL_NATIVE (doListHandler
 native_control.go:224; noEvalBodiesInert emit.go:5024 / tryRecordDynBody
 carrier.go:1520); (b) check-prop: runCheckProp (modules/test.go:734) runs
-gen/property bodies PER ITERATION via parent.CallAQL (test.go:782/:809,
-throwaway FnSig per call) — the "CallAQL" unattributed entries;
+gen/property bodies PER ITERATION via parent.CallBoru (test.go:782/:809,
+throwaway FnSig per call) — the "CallBoru" unattributed entries;
 (c) runPooledSub auto-eval sites (engine.go:3866/3956/4119/4213/4229/
 4266/4391/4623) are the Phase-10 census seam, not this cache's target.
 
@@ -908,7 +908,7 @@ Decisions from the read:
    MODULE-SCOPE gen/property bodies like any code-body word
    (compileStoredBody-style carriers or closure units at the record
    site), and runCheckProp runs a carrier via RunUnit/InvokeCallback per
-   iteration instead of the throwaway-FnSig CallAQL. The fn-scope
+   iteration instead of the throwaway-FnSig CallBoru. The fn-scope
    ${frame-local} interpolation case MUST keep refusing
    (TestCheckPropInterpStringFnScopeRefuses stays green forever).
 2. **do-registry-replay rows are NOT graduated by the cache alone**: the
@@ -940,18 +940,18 @@ param-carrying stored code-body positions (registration folds it like
 Callable), and the recorder's new STORED-PARAM-BODY edge —
 `compileStoredParamBody`, MODULE SCOPE ONLY — compiles each declared
 position to a closure unit whose param slots bind the declared params,
-riding as a carrier whose single sig mirrors the handler's own CallAQL
+riding as a carrier whose single sig mirrors the handler's own CallBoru
 sig (same Params, same raw Body) plus the CompiledFnRef. `runCheckProp`
 (storedBodyArg) dispatches a carrier through InvokeCallback: the unit
-runs NESTED on the VM (same-program ref) with the identical CallAQL
+runs NESTED on the VM (same-program ref) with the identical CallBoru
 frame as its per-invoke fallback. Declines everywhere leave the raw list
 and the interpreter path byte-identical.
 
 Ledger motion: p6/check-prop-body-on-vm DRIFTED, not graduated — the
-per-iteration CallAQL entries are GONE and iteration count adds ZERO
+per-iteration CallBoru entries are GONE and iteration count adds ZERO
 entries (TestCheckPropIterationsAddNoInterpEntries pins invariance
 2 vs 60 runs), but the case still sees Engine.Run×68 + runPooledSub×65:
-`import "aql:test"` MODULE-LOAD AQL (BuildTestModule preambles),
+`import "boru:test"` MODULE-LOAD boru (BuildTestModule preambles),
 identical for an import-only program. Re-pinned as a Phase 10 item —
 the module-load C4 attribution seam, not body compilation. The fn-scope
 guard held only after gating the new edge to module scope (the first
@@ -1195,7 +1195,7 @@ same-name dispatches; mapped, not built.
 What landed instead — the bounded sound half, fixing the SAME live bug for
 user-polys (probe-confirmed: an effect before a user-poly no-match produced
 internal_error + "report this as a compiler bug"): the two no-match defer
-sites attach a best-effort rich raise (AqlError.DeferAlt via vmDeferAlt)
+sites attach a best-effort rich raise (BoruError.DeferAlt via vmDeferAlt)
 that lang's fenceBlockedFallback surfaces INSTEAD of the internal error when
 the effect fence blocks the re-run. Soundness screen (bestEffortNoMatch):
 every non-fallback live overload takes exactly the window's arity (no
@@ -1541,7 +1541,7 @@ landed; all five closed in one hardening pass:
 1. **Callback writers were unfenced.** InvokeCallback's retry fence read
    the ledger, but a DETACHED callback fires after RunAutoValues disarmed
    the writer wrappers — a callback that printed and then bailed was
-   invisible to the ledger and the CallAQL retry duplicated the output.
+   invisible to the ledger and the CallBoru retry duplicated the output.
    The seam now arms ArmEffectFence around its own VM attempt (nested
    invocations double-wrap harmlessly; the fence reads deltas).
 2. **NoteEffect had no production callers.** Wired the non-writer effect
@@ -1742,7 +1742,7 @@ is the runtime-bail census (Phase 10) before the public Run flip.
 
 ### Phase 10: the executed bail census canary GRADUATED (2026-07-15)
 
-The shaped-method COUNT-VIOLATION defer was reclassified: an AQL-source
+The shaped-method COUNT-VIOLATION defer was reclassified: a boru-source
 method's result count is the checker's own body model (return contracts
 are engine-enforced), so a count differing from the shape claim indicts
 a HOST registration whose handler returned a count its own signature
@@ -1784,8 +1784,8 @@ p6 check-prop/vm-run module seams, and the two p11 Stage-J flips.
 Both Stage-J gates HOLD (refusals=0, executed census=0, C4 attribution
 complete). The flip's exact mechanics, from the code as it stands:
 
-1. **RunInterp lands first** (its own commit): the current (*AQL).Run
-   body (aql.go:646, the tree-walker via runValues) moves verbatim to
+1. **RunInterp lands first** (its own commit): the current (*Boru).Run
+   body (boru.go:646, the tree-walker via runValues) moves verbatim to
    RunInterp; Run delegates to it unchanged. Zero behavior change; the
    oracle name exists.
 2. **The oracle migration** (mechanical, its own commit): every test
@@ -1800,7 +1800,7 @@ complete). The flip's exact mechanics, from the code as it stands:
    RunAutoValues' refusal arm, a GENUINE performance refusal (prog==nil,
    err==nil, reason != "" and != "check diagnostics") returns the
    refusal as an error instead of re-running — unless
-   AQL_COMPILE_FALLBACK=1 (the one-release hatch) restores the re-run.
+   BORU_COMPILE_FALLBACK=1 (the one-release hatch) restores the re-run.
    Statically-invalid programs KEEP the bounded static-error oracle
    re-run (they fail identically in both engines; the re-run only
    renders the canonical error). The RUNTIME-BAIL arm is RETAINED
@@ -1819,14 +1819,14 @@ complete). The flip's exact mechanics, from the code as it stands:
    run_compiled_reason rows, and the two p11 ledger rows graduate.
 
 Remaining after Stage J: the p6 trio (capturing-closure stamps, the
-aql:test module-load seam, Vm.run's fork-isolated runtime compile) —
+boru:test module-load seam, Vm.run's fork-isolated runtime compile) —
 stamping-coverage work, not Stage-J gates — and the external voxgig
-sweep (Phase 9), which needs a NEW session sourced from the voxgig-aql
+sweep (Phase 9), which needs a NEW session sourced from the voxgig-boru
 org (cross-tier add_repo is unsupported in this one).
 
 ### Stage J step 3 MECHANISM LANDED — the refusal→error flip, opt-in (2026-07-15)
 
-Under AQL_COMPILE_FALLBACK=0, RunAutoValues returns a GENUINE refusal as
+Under BORU_COMPILE_FALLBACK=0, RunAutoValues returns a GENUINE refusal as
 a compile_refused error carrying the reason — BEFORE the fence check (no
 re-run happens, so there is nothing to fence) — while the STATIC classes
 (check error / "check diagnostics" sentinel) keep the bounded oracle
@@ -1897,12 +1897,12 @@ pattern Extension, diverts to the standard transducer call instead,
 sound per the §13 contract: the transducer is the semantic reference).
 Shapes a compile pass cannot mirror REFUSE rather than bake: a
 non-concrete src or opts (the runtime expansion would run the hook over
-values the record cannot see), and an AQL compile hook (a macro whose
+values the record cannot see), and a boru compile hook (a macro whose
 check-mode expansion is not the runtime expansion — and which cannot
 even be registered during its own compile pass, register-compiled not
 being a RunInCheckMode word; the refusal covers the pre-registered
 case). Pinned: hook-parity compiled [HI], the non-concrete-opts and
-AQL-hook refusals with fallback parity, and the materialisable-screen
+boru-hook refusals with fallback parity, and the materialisable-screen
 arms. A PLAIN check pass keeps the standard-call validation unchanged.
 
 Remaining flip blockers: the model watch fork (-race), and the
@@ -1948,13 +1948,13 @@ case's print).
 
 The opt-in flag is gone: RunAutoValues now returns `compile_refused`
 for a GENUINE whole-program refusal by DEFAULT, and
-`AQL_COMPILE_FALLBACK=1` is the one-release hatch RESTORING the silent
+`BORU_COMPILE_FALLBACK=1` is the one-release hatch RESTORING the silent
 in-library re-run (the exact inverse of the opt-in landing). The static
 classes (a check error, the "check diagnostics" sentinel) keep the
 bounded oracle re-run unconditionally — those programs fail identically
 in both engines and the re-run only renders the canonical verdict. The
 51 tests pinning refusal+fallback-parity contracts are individually
-hatched with `t.Setenv("AQL_COMPILE_FALLBACK", "1")` and a
+hatched with `t.Setenv("BORU_COMPILE_FALLBACK", "1")` and a
 legacy-contract comment (migrate or retire with the hatch); the new
 default is pinned by TestRefusalReturnsCompileRefused,
 mustRefuseWithParity (bytecode_edge_findings), and the
@@ -1970,7 +1970,7 @@ ledger row is deleted; the case stays as the permanent pin.
 contract: fallback moved from the library, hidden, to the caller,
 attributed):
 
-- `buildrt` CompileTry (aql run / build outputs): warn once naming the
+- `buildrt` CompileTry (boru run / build outputs): warn once naming the
   refusal, then interpret — keyed on the `compile_refused` CODE, not
   the reason (under the hatch the library already ran the source; a
   reason-keyed re-run would double its effects).
@@ -2212,7 +2212,7 @@ p6/vm-run-on-vm: Vm.run's sandbox-composed sub-registry runs its
 runtime compile on the VM), updating the exec-server and
 policy_compiled_gate pins, and a compiled-vs-interpreted policy parity
 sweep — is the next landing. Remaining after that: steps 7-9
-re-baselining and the voxgig sweep (a voxgig-aql-sourced session).
+re-baselining and the voxgig sweep (a voxgig-boru-sourced session).
 
 ### The policy-gate lift (USER-AUTHORIZED) — p6/vm-run-on-vm graduates; THE FRONTIER REACHES 0 EXPECTED-RED (2026-07-15)
 
@@ -2250,5 +2250,5 @@ Every runtime-independence ratchet now sits at its finish line: census
 6000/6000 native, refusals 0, islands 0, runtime bails 0, fullcorpus
 0 divergences, frontier 0 expected-red, and the public Run compiled by
 default. What remains outside this repo: the steps 7–9 external
-re-baseline sweep against the voxgig-aql libraries, which needs a
+re-baseline sweep against the voxgig-boru libraries, which needs a
 session sourced from that org.

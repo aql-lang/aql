@@ -1,4 +1,4 @@
-// Package command defines the Command interface that every aql
+// Package command defines the Command interface that every boru
 // subcommand satisfies and the Registry used by the top-level
 // dispatcher to look one up by name.
 //
@@ -6,13 +6,13 @@
 // are still Commands at this level: the difference now lives in the
 // internal/service package (a Service interface with Start/Stop
 // /Pause/Resume) and only matters when a command is composed under
-// `aql serve`. Help/usage output groups Commands by checking whether
+// `boru serve`. Help/usage output groups Commands by checking whether
 // they are listed as services.
 package command
 
 import "io"
 
-// Command is the contract every aql subcommand implements. The
+// Command is the contract every boru subcommand implements. The
 // top-level dispatcher resolves args[0] to a Command and calls Run
 // with the remaining args.
 //

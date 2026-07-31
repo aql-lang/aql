@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
-// End-to-end coverage for the aql:tui Tier-1 words (tui.go) over the
+// End-to-end coverage for the boru:tui Tier-1 words (tui.go) over the
 // VirtualBackend — no TTY anywhere, per design/TUI.0.md §8.1. Positive
 // paths are paired with the negative contracts (closed, no backend,
 // deadline None, policy denial — the latter in tui_cover_test.go) per
@@ -61,13 +61,13 @@ func tuiLastString(t *testing.T, vals []native.Value) string {
 }
 
 // The full Tier-1 session: open with options, draw, present, read a
-// scripted event, retitle, ring, clear, close — asserting both the AQL
+// scripted event, retitle, ring, clear, close — asserting both the boru
 // results and the backend's recorded state.
 func TestTuiTier1EndToEnd(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(10, 3)
 	vb.Inject(tuikit.Event{Tag: "key", Key: "a", Char: "a", Mods: []string{"ctrl"}})
 	out, err := runTuiSteps(t, vb, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`def t (Tui.open {mouse: false title: "boot"})`,
 		`def d (Tui.dims t)`,
 		`Tui.print-at t 1 0 "hi" {bold: true fg: "red"}`,
@@ -114,7 +114,7 @@ func TestTuiTier1EndToEnd(t *testing.T) {
 func TestTuiPrintAtStyleOnCells(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(4, 1)
 	_, err := runTuiSteps(t, vb, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`def t (Tui.open {})`,
 		`Tui.print-at t 0 0 "x" {fg: "red" bg: "#202030" bold: true italic: true underline: true reverse: true}`,
 		`Tui.show t`,
@@ -140,7 +140,7 @@ func TestTuiPrintAtStyleOnCells(t *testing.T) {
 func TestTuiPrintAtWideRunes(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(6, 3)
 	_, err := runTuiSteps(t, vb, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`def t (Tui.open {})`,
 		"Tui.print-at t 0 0 \"日éx\"",
 		`Tui.print-at t 5 1 "日"`,
@@ -185,7 +185,7 @@ func TestTuiPrintAtWideRunes(t *testing.T) {
 // the words raise the first-class no_backend error.
 func TestTuiNoBackendRegistered(t *testing.T) {
 	_, err := runTuiSteps(t, nil, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`Tui.open {}`,
 	})
 	if err == nil || !strings.Contains(err.Error(), "no terminal backend registered") {
@@ -198,7 +198,7 @@ func TestTuiNoBackendRegistered(t *testing.T) {
 func TestTuiClosedAndRegistrationContracts(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(2, 2)
 	_, err := runTuiSteps(t, vb, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`def t (Tui.open {})`,
 		`Tui.close t`,
 		`Tui.dims t`,
@@ -226,7 +226,7 @@ func TestTuiClosedAndRegistrationContracts(t *testing.T) {
 func TestTuiTerminalTypeExportAndGuard(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(2, 2)
 	out, err := runTuiSteps(t, vb, []string{
-		`import "aql:tui"`,
+		`import "boru:tui"`,
 		`def t (Tui.open {})`,
 		`def ok (t is Tui.Terminal)`,
 		`Tui.close t`,

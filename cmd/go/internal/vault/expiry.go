@@ -78,7 +78,7 @@ func parseDurationDays(s string) (time.Duration, error) {
 	return days + d, nil
 }
 
-// runExpiry implements `aql vault expiry`. With no subcommand (or with
+// runExpiry implements `boru vault expiry`. With no subcommand (or with
 // list/ls) it reports pending expiries; set and clear manage the expiry
 // on an existing alias.
 func runExpiry(args []string, homeDir string, stdout, stderr io.Writer) int {
@@ -180,7 +180,7 @@ func runExpirySet(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if fs.NArg() != 2 {
-		fmt.Fprintf(stderr, "error: usage: aql vault expiry set <alias> <when>\n  when: YYYY-MM-DD, an RFC3339 timestamp, or a duration like 90d / 720h\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault expiry set <alias> <when>\n  when: YYYY-MM-DD, an RFC3339 timestamp, or a duration like 90d / 720h\n")
 		return 1
 	}
 	expiresAt, err := parseExpiry(fs.Arg(1), time.Now())
@@ -224,7 +224,7 @@ func runExpiryClear(args []string, homeDir string, stdout, stderr io.Writer) int
 		return 1
 	}
 	if fs.NArg() != 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault expiry clear <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault expiry clear <alias>\n")
 		return 1
 	}
 	s, err := requireStore(homeDir)

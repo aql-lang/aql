@@ -1,9 +1,9 @@
-# AQL for Emacs
+# boru for Emacs
 
-`aql-mode.el` is a self-contained major mode for editing AQL source
-(`.aql`). It provides syntax highlighting, bracket-aware indentation,
+`boru-mode.el` is a self-contained major mode for editing boru source
+(`.boru`). It provides syntax highlighting, bracket-aware indentation,
 comment/`imenu` support, and one-line integration with the bundled
-`aql lsp` language server for **both** `lsp-mode` and `eglot`
+`boru lsp` language server for **both** `lsp-mode` and `eglot`
 (diagnostics, hover, completion, whole-buffer formatting).
 
 ## Install
@@ -14,52 +14,52 @@ The file is a normal Emacs package — put it on your `load-path` and
 **Manual**
 
 ```elisp
-(add-to-list 'load-path "/path/to/aql/editors/emacs")
-(require 'aql-mode)
+(add-to-list 'load-path "/path/to/boru/editors/emacs")
+(require 'boru-mode)
 ```
 
 **`use-package` + `straight.el` / vc**
 
 ```elisp
 ;; straight.el
-(use-package aql-mode
-  :straight (aql-mode :type git :host github :repo "aql-lang/aql"
-                      :files ("editors/emacs/aql-mode.el")))
+(use-package boru-mode
+  :straight (boru-mode :type git :host github :repo "boru-lang/boru"
+                      :files ("editors/emacs/boru-mode.el")))
 
 ;; built-in package-vc (Emacs 29+)
-(use-package aql-mode
-  :vc (:url "https://github.com/aql-lang/aql" :lisp-dir "editors/emacs"))
+(use-package boru-mode
+  :vc (:url "https://github.com/boru-lang/boru" :lisp-dir "editors/emacs"))
 ```
 
-Opening any `.aql` file then selects `aql-mode` automatically.
+Opening any `.boru` file then selects `boru-mode` automatically.
 
 ## Enable the language server (recommended)
 
-`aql-mode` already registers the `aql lsp` server with whichever client
+`boru-mode` already registers the `boru lsp` server with whichever client
 you use; you just choose one and tell it to start. The server is found
 on your `PATH` (build it with `cd cmd/go && make build`, or
-`go install github.com/aql-lang/aql/cmd/go/aql@latest`).
+`go install github.com/boru-lang/boru/cmd/go/boru@latest`).
 
 **Emacs 29+ built-in eglot**
 
 ```elisp
-(add-hook 'aql-mode-hook #'eglot-ensure)
+(add-hook 'boru-mode-hook #'eglot-ensure)
 ```
 
 **lsp-mode (from MELPA)**
 
 ```elisp
-(add-hook 'aql-mode-hook #'lsp-deferred)
+(add-hook 'boru-mode-hook #'lsp-deferred)
 ```
 
 That's it — you get inline error/warning diagnostics as you type, hover
-docs (`aql describe`-backed), completion of every registered word, and
+docs (`boru describe`-backed), completion of every registered word, and
 `M-x eglot-format-buffer` / `lsp-format-buffer` (which run
 `formatter.Format` over the whole buffer). To format on save:
 
 ```elisp
 ;; eglot
-(add-hook 'aql-mode-hook
+(add-hook 'boru-mode-hook
           (lambda () (add-hook 'before-save-hook #'eglot-format-buffer nil t)))
 ```
 
@@ -67,13 +67,13 @@ docs (`aql describe`-backed), completion of every registered word, and
 
 | Variable            | Default          | Meaning                                        |
 | ------------------- | ---------------- | ---------------------------------------------- |
-| `aql-indent-offset` | `2`              | Columns of indent per bracket nesting level.   |
-| `aql-lsp-command`   | `("aql" "lsp")`  | Program + args that start the language server. |
+| `boru-indent-offset` | `2`              | Columns of indent per bracket nesting level.   |
+| `boru-lsp-command`   | `("boru" "lsp")`  | Program + args that start the language server. |
 
-If `aql` is not on your `PATH`, point the command at the binary:
+If `boru` is not on your `PATH`, point the command at the binary:
 
 ```elisp
-(setq aql-lsp-command '("/Users/me/go/bin/aql" "lsp"))
+(setq boru-lsp-command '("/Users/me/go/bin/boru" "lsp"))
 ```
 
 ## Notes
@@ -84,5 +84,5 @@ If `aql` is not on your `PATH`, point the command at the binary:
   the LSP convention) and evaluates the buffer's static checker — no code
   is executed.
 - For the raw client snippets used by other editors, or a TCP transport
-  (`aql lsp -p <port>`), see the parent [`editors/`](../README.md)
+  (`boru lsp -p <port>`), see the parent [`editors/`](../README.md)
   directory.

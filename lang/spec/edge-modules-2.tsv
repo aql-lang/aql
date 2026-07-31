@@ -1,4 +1,4 @@
-# AQL Language Specification: module-system edge cases II
+# boru Language Specification: module-system edge cases II
 # Format: input<TAB>expected<TAB>description
 #
 # Continuation of edge-modules-1.tsv: export bookkeeping (duplicates,
@@ -27,39 +27,39 @@ import module [def Age (refine Integer) export "M" {Age: Age}] M.Age teq Integer
 import module [def P class {x:Integer} export "M" {P: P}] make M.P {x:3} dot x eq 3	true	an exported class constructs importer-side via make
 #
 # §4  unpack — module words without the namespace
-unpack "aql:logic-util" nand true true	false	unpack binds a module's words bare
-unpack "aql:logic-util" nor false false	true	…all of them
-unpack "aql:logic-util" LogicUtil.nand true true	ERROR:undefined_word	unpack does NOT bind the namespace — only the bare words
-unpack StringUtil "aql:string-util" upper "ab"	'AB'	the export-named unpack form works for any builtin
+unpack "boru:logic-util" nand true true	false	unpack binds a module's words bare
+unpack "boru:logic-util" nor false false	true	…all of them
+unpack "boru:logic-util" LogicUtil.nand true true	ERROR:undefined_word	unpack does NOT bind the namespace — only the bare words
+unpack StringUtil "boru:string-util" upper "ab"	'AB'	the export-named unpack form works for any builtin
 #
 # §5  builtin wrappers — rounding family at the halves and negatives
-import "aql:math-util" MathUtil.floor -2.5	-3	floor moves toward -inf
-import "aql:math-util" MathUtil.ceil -2.5	-2	ceil moves toward +inf
-import "aql:math-util" MathUtil.round 2.5	3	round halves go AWAY from zero…
-import "aql:math-util" MathUtil.round -2.5	-3	…in both directions
-import "aql:math-util" MathUtil.trunc -4.9	-4	trunc moves toward zero
-import "aql:math-util" MathUtil.sign 0	0	sign of zero is zero
-import "aql:math-util" MathUtil.min -3 -7	-7	min of negatives
-import "aql:math-util" MathUtil.exp 0.0	1.0	e^0
-import "aql:math-util" MathUtil.log2 1.0	0.0	log2 of one
-import "aql:math-util" MathUtil.pi	3.141592653589793	the constant words are 0-arg exports
-import "aql:math-util" MathUtil.e	2.718281828459045	…fired transparently on access
-import "aql:math-util" MathUtil.atan2 1.0 0.0	0.0	sig order: atan2 x y — the SECOND operand is the ordinate
-import "aql:math-util" MathUtil.fma 2.0 3.0 4.0	10.0	three-arg wrapper: a mul b add c, in source order
-import "aql:math-util" MathUtil.sqrt (MathUtil.abs -16.0)	4.0	wrappers compose like any words
+import "boru:math-util" MathUtil.floor -2.5	-3	floor moves toward -inf
+import "boru:math-util" MathUtil.ceil -2.5	-2	ceil moves toward +inf
+import "boru:math-util" MathUtil.round 2.5	3	round halves go AWAY from zero…
+import "boru:math-util" MathUtil.round -2.5	-3	…in both directions
+import "boru:math-util" MathUtil.trunc -4.9	-4	trunc moves toward zero
+import "boru:math-util" MathUtil.sign 0	0	sign of zero is zero
+import "boru:math-util" MathUtil.min -3 -7	-7	min of negatives
+import "boru:math-util" MathUtil.exp 0.0	1.0	e^0
+import "boru:math-util" MathUtil.log2 1.0	0.0	log2 of one
+import "boru:math-util" MathUtil.pi	3.141592653589793	the constant words are 0-arg exports
+import "boru:math-util" MathUtil.e	2.718281828459045	…fired transparently on access
+import "boru:math-util" MathUtil.atan2 1.0 0.0	0.0	sig order: atan2 x y — the SECOND operand is the ordinate
+import "boru:math-util" MathUtil.fma 2.0 3.0 4.0	10.0	three-arg wrapper: a mul b add c, in source order
+import "boru:math-util" MathUtil.sqrt (MathUtil.abs -16.0)	4.0	wrappers compose like any words
 #
 # §6  builtin wrappers — string vocabulary under edge operands
-import "aql:string-util" StringUtil.concat ["a" "b"]	'ab'	concat takes the LIST form, not two bare strings
-import "aql:string-util" StringUtil.indexof "ell" "hello"	1	indexof is needle-first, haystack-last
-import "aql:string-util" StringUtil.contains "ell" "hello"	true	contains is needle-first too…
-import "aql:string-util" StringUtil.contains "hello" "ell"	false	…GOTCHA: swapped operands quietly answer the wrong question
-import "aql:string-util" StringUtil.lower "ÅB"	'åb'	case mapping is Unicode-aware
+import "boru:string-util" StringUtil.concat ["a" "b"]	'ab'	concat takes the LIST form, not two bare strings
+import "boru:string-util" StringUtil.indexof "ell" "hello"	1	indexof is needle-first, haystack-last
+import "boru:string-util" StringUtil.contains "ell" "hello"	true	contains is needle-first too…
+import "boru:string-util" StringUtil.contains "hello" "ell"	false	…GOTCHA: swapped operands quietly answer the wrong question
+import "boru:string-util" StringUtil.lower "ÅB"	'åb'	case mapping is Unicode-aware
 #
 # §7  builtin wrappers — connectives are truthiness-driven
-import "aql:logic-util" LogicUtil.nand 1 2	false	non-Boolean operands go through truthiness (1 and 2 are truthy)
-import "aql:logic-util" LogicUtil.nor false true	false	nor is order-free
-import "aql:logic-util" LogicUtil.xnor true true	true	two trues agree
-import "aql:logic-util" LogicUtil.iff false false	true	iff of two falses holds
+import "boru:logic-util" LogicUtil.nand 1 2	false	non-Boolean operands go through truthiness (1 and 2 are truthy)
+import "boru:logic-util" LogicUtil.nor false true	false	nor is order-free
+import "boru:logic-util" LogicUtil.xnor true true	true	two trues agree
+import "boru:logic-util" LogicUtil.iff false false	true	iff of two falses holds
 #
 # §8  module fns — arity, templates, and higher-order use
 import module [def f3 fn [[a:Integer b:Integer c:Integer] [Integer] [((a mul 100) add (b mul 10)) add c]] export "M" {f3: f3/r}] M.f3 1 2 3	123	three forward args bind in source order
@@ -73,22 +73,22 @@ import module [export "M" {v: (2 add 3)}] M.v	5	an export value may be COMPUTED 
 import module [export "M" {a:1} export "M" {a:2}] M.$module.exports size	1	duplicate export names collapse to one descriptor entry
 import module [def T (refine Integer) export "M" {a: 1}] T	ERROR:undefined_word	an unexported module TYPE stays private
 import [foo bar] module [export "foo" {a:1}] bar.a	1	renaming works on lowercase exports too
-import "aql:test" Test.$name	'Test'	a multi-namespace builtin: each binding knows its own name
+import "boru:test" Test.$name	'Test'	a multi-namespace builtin: each binding knows its own name
 #
 # §10  builtin wrappers — numeric edges II
-import "aql:math-util" 3.0 4.0 MathUtil.hypot	5.0	stack dispatch through a two-arg Float wrapper
-import "aql:math-util" MathUtil.logb 8.0	3.0	binary exponent
-import "aql:math-util" MathUtil.remainder 7.0 4.0	-3.0	GOTCHA sig order: IEEE remainder(4, 7) — the top-first convention again
-import "aql:math-util" MathUtil.max nan 1.0	1.0	max ignores a NaN operand
-import "aql:math-util" MathUtil.min 2 1.5	1.5	mixed-type min promotes and compares
-import "aql:string-util" StringUtil.pad 5 "ab"	'ab   '	pad right-fills with spaces to the width
+import "boru:math-util" 3.0 4.0 MathUtil.hypot	5.0	stack dispatch through a two-arg Float wrapper
+import "boru:math-util" MathUtil.logb 8.0	3.0	binary exponent
+import "boru:math-util" MathUtil.remainder 7.0 4.0	-3.0	GOTCHA sig order: IEEE remainder(4, 7) — the top-first convention again
+import "boru:math-util" MathUtil.max nan 1.0	1.0	max ignores a NaN operand
+import "boru:math-util" MathUtil.min 2 1.5	1.5	mixed-type min promotes and compares
+import "boru:string-util" StringUtil.pad 5 "ab"	'ab   '	pad right-fills with spaces to the width
 #
 # §11  wrapper composition and collisions
 import module [def sq fn [[x:Integer] [Integer] [x mul x]] export "M" {sq: sq/r}] M.sq (M.sq 3)	81	a module fn nests inside its own argument position
-import module [export "MathUtil" {sqrt: 1}] import "aql:math-util" MathUtil.sqrt 16.0	4.0	a later builtin import shadows an inline export of the same namespace
+import module [export "MathUtil" {sqrt: 1}] import "boru:math-util" MathUtil.sqrt 16.0	4.0	a later builtin import shadows an inline export of the same namespace
 import module [def v 1 export "M" {v: v} def v 2] M.v	1	an export captures the value AT EXPORT TIME — a later body rebind is invisible
 import [[foo bar]] module [export "foo" {a:1}] bar.$name	'foo'	pair-renamed lowercase exports keep their declared $name
-import "aql:bin-util" 255 BinUtil.popcount	8	stack dispatch through a bin wrapper
-import "aql:math-util" MathUtil.nextafter 1.0 2.0	1.9999999999999998	GOTCHA sig order: nextafter steps 2.0 TOWARD 1.0 (top-first again)
-import "aql:math-util" MathUtil.abs -5 add 2	7	a wrapper result feeds forward collection like any value
-unpack all "aql:logic-util" nand true true	ERROR:unpack_error	the `all` selector is for maps — module unpack has no such form
+import "boru:bin-util" 255 BinUtil.popcount	8	stack dispatch through a bin wrapper
+import "boru:math-util" MathUtil.nextafter 1.0 2.0	1.9999999999999998	GOTCHA sig order: nextafter steps 2.0 TOWARD 1.0 (top-first again)
+import "boru:math-util" MathUtil.abs -5 add 2	7	a wrapper result feeds forward collection like any value
+unpack all "boru:logic-util" nand true true	ERROR:unpack_error	the `all` selector is for maps — module unpack has no such form

@@ -344,7 +344,7 @@ func w8AnonDef(params []FnParam, returns []*Type, body []Value) FnDefInfo {
 		Signatures: []Signature{{
 			Params:     params,
 			Returns:    returns,
-			Impl:       AQL(body),
+			Impl:       Boru(body),
 			BarrierPos: BarrierAllForward,
 		}},
 	}
@@ -477,7 +477,7 @@ func w8UnnamedSig(n int) *Signature {
 	for i := range params {
 		params[i] = FnParam{Type: TInteger}
 	}
-	return &Signature{Params: params, Returns: []*Type{TInteger}, Impl: AQL([]Value{NewInteger(42)}), BarrierPos: 0}
+	return &Signature{Params: params, Returns: []*Type{TInteger}, Impl: Boru([]Value{NewInteger(42)}), BarrierPos: 0}
 }
 
 func TestW8ExecFnDefSigRuntimeCompaction(t *testing.T) {
@@ -510,7 +510,7 @@ func TestW8ExecFnDefSigRuntimeElseBranch(t *testing.T) {
 }
 
 func TestW8ExecFnDefSigCapturedRegCompaction(t *testing.T) {
-	// The captured-registry (CallAQL) splice path with a skipped marker.
+	// The captured-registry (CallBoru) splice path with a skipped marker.
 	r := covRegistry(t, nil)
 	sig := w8UnnamedSig(2)
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
@@ -525,7 +525,7 @@ func TestW8ExecFnDefSigCapturedRegCompaction(t *testing.T) {
 func TestW8ExecFnDefSigCapturedRegZeroArg(t *testing.T) {
 	// The captured-registry path with a 0-arg sig.
 	r := covRegistry(t, nil)
-	sig := &Signature{Returns: []*Type{TInteger}, Impl: AQL([]Value{NewInteger(42)}), BarrierPos: 0}
+	sig := &Signature{Returns: []*Type{TInteger}, Impl: Boru([]Value{NewInteger(42)}), BarrierPos: 0}
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	e := NewTop(r)
 	e.tape = NewTape([]Value{fnv}, stackHeadroom)
@@ -551,7 +551,7 @@ func TestW8ExecFnDefSigCapturedRegElseBranch(t *testing.T) {
 func TestW8ExecFnDefSigListAutoEval(t *testing.T) {
 	// A list arg with Eval=true is auto-evaluated in place.
 	r := covRegistry(t, nil)
-	sig := &Signature{Params: []FnParam{{Type: TList}}, Returns: []*Type{TInteger}, Impl: AQL([]Value{NewInteger(42)}), BarrierPos: 0}
+	sig := &Signature{Params: []FnParam{{Type: TList}}, Returns: []*Type{TInteger}, Impl: Boru([]Value{NewInteger(42)}), BarrierPos: 0}
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	listArg := NewList([]Value{NewInteger(1), NewInteger(2)})
 	listArg.Eval = true
@@ -566,7 +566,7 @@ func TestW8ExecFnDefSigListAutoEval(t *testing.T) {
 func TestW8ExecFnDefSigListAutoEvalError(t *testing.T) {
 	// A list arg whose evaluation fails (undefined word) propagates the error.
 	r := covRegistry(t, nil)
-	sig := &Signature{Params: []FnParam{{Type: TList}}, Returns: []*Type{TInteger}, Impl: AQL([]Value{NewInteger(42)}), BarrierPos: 0}
+	sig := &Signature{Params: []FnParam{{Type: TList}}, Returns: []*Type{TInteger}, Impl: Boru([]Value{NewInteger(42)}), BarrierPos: 0}
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	listArg := NewList([]Value{NewWord("w8_undefined_word")})
 	listArg.Eval = true
@@ -582,7 +582,7 @@ func TestW8ExecFnDefSigMapAutoEval(t *testing.T) {
 	// A map arg with Eval=true is auto-evaluated in place (the success twin
 	// of the error arm below).
 	r := covRegistry(t, nil)
-	sig := &Signature{Params: []FnParam{{Type: TMap}}, Returns: []*Type{TInteger}, Impl: AQL([]Value{NewInteger(42)}), BarrierPos: 0}
+	sig := &Signature{Params: []FnParam{{Type: TMap}}, Returns: []*Type{TInteger}, Impl: Boru([]Value{NewInteger(42)}), BarrierPos: 0}
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	m := NewOrderedMap()
 	m.Set("k", NewInteger(1))
@@ -599,7 +599,7 @@ func TestW8ExecFnDefSigMapAutoEval(t *testing.T) {
 func TestW8ExecFnDefSigMapAutoEvalError(t *testing.T) {
 	// A map arg whose value evaluation fails propagates the error.
 	r := covRegistry(t, nil)
-	sig := &Signature{Params: []FnParam{{Type: TMap}}, Returns: []*Type{TInteger}, Impl: AQL([]Value{NewInteger(42)}), BarrierPos: 0}
+	sig := &Signature{Params: []FnParam{{Type: TMap}}, Returns: []*Type{TInteger}, Impl: Boru([]Value{NewInteger(42)}), BarrierPos: 0}
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	m := NewOrderedMap()
 	m.Set("k", NewWord("w8_undefined_word"))
@@ -808,7 +808,7 @@ func TestW8ExecFnDefStackMatchCheckFnValueUnnamed(t *testing.T) {
 	defer done()
 	fnDef := FnDefInfo{Name: "w8fv", Signatures: []Signature{{
 		Params: []FnParam{{Type: TInteger}}, Returns: []*Type{TInteger},
-		Impl: AQL(parenBody(NewInteger(42))), BarrierPos: 0,
+		Impl: Boru(parenBody(NewInteger(42))), BarrierPos: 0,
 	}}}
 	e := NewTop(r)
 	e.tape = NewTape([]Value{NewInteger(3), NewFnDef(fnDef)}, stackHeadroom)
@@ -826,7 +826,7 @@ func TestW8SpliceFnValueCheckResultEmptyDeclaredReturns(t *testing.T) {
 	defer done()
 	fnDef := FnDefInfo{Name: "w8e", Signatures: []Signature{{
 		Params: []FnParam{{Type: TInteger}}, Returns: []*Type{TInteger, TString},
-		Impl: AQL(parenBody()), BarrierPos: 0,
+		Impl: Boru(parenBody()), BarrierPos: 0,
 	}}}
 	sig := &fnDef.Signatures[0]
 	e := NewTop(r)
@@ -966,7 +966,7 @@ func TestW8StepCloseParenReEvalWordError(t *testing.T) {
 		r.RegisterNativeFunc(NativeFunc{Name: "cfail8", Signatures: []Signature{{
 			Args: []*Type{TInteger},
 			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-				return nil, &AqlError{Code: "runtime_error", Detail: "boom8"}
+				return nil, &BoruError{Code: "runtime_error", Detail: "boom8"}
 			}),
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 		}}})

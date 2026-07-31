@@ -33,14 +33,14 @@ type), and it does reduce errors — but nowhere near enough.
 
 ## 2. The measurements (this is the result)
 
-Two probes: `check decision.aql` **directly** (trigger 1 — construction-time
-analysis), and `check decision_smoke_test.aql` with a value-threading probe
+Two probes: `check decision.boru` **directly** (trigger 1 — construction-time
+analysis), and `check decision_smoke_test.boru` with a value-threading probe
 that runs module-fn bodies in check mode (trigger 2 — the actual §5b gate
 failure).
 
 | Scenario | Baseline (§5a) | + Direction A |
 |---|---|---|
-| `check decision.aql` directly (trigger 1) | 39 errors | **35 errors** |
+| `check decision.boru` directly (trigger 1) | 39 errors | **35 errors** |
 | `check decision_smoke_test` + threading probe (trigger 2 = the gate) | 29 errors | **29 errors** |
 
 **Direction A removes 4 of 39 errors on the direct check and ZERO of the
@@ -135,12 +135,12 @@ suppression and run `--force-compile` on the two compilable suites; a green
 ## 6. How to reproduce these measurements
 
 ```bash
-git clone https://github.com/voxgig-aql/decision /tmp/decision
-cd /home/user/aql/cmd/go && go build -o bin/aql ./aql
+git clone https://github.com/voxgig-boru/decision /tmp/decision
+cd /home/user/boru/cmd/go && go build -o bin/boru ./boru
 # trigger 1 (direct): error count
-./bin/aql check /tmp/decision/decision.aql 2>&1 | grep -oE '[0-9]+ error\(s\)'
+./bin/boru check /tmp/decision/decision.boru 2>&1 | grep -oE '[0-9]+ error\(s\)'
 # trigger 2 (gate): needs the §5b threading (value-thread capturedReg.Check =
-# e.registry.Check around the CallAQL in execFnDefSig when the parent is
+# e.registry.Check around the CallBoru in execFnDefSig when the parent is
 # check-active) to run module bodies in check mode, then:
-./bin/aql check /tmp/decision/test/decision_smoke_test.aql
+./bin/boru check /tmp/decision/test/decision_smoke_test.boru
 ```

@@ -8,7 +8,7 @@ import (
 // runWith creates a fresh registry, applies the supplied setup fn (which
 // typically registers a few test words), then parses the input slice and
 // runs it. Tests in this file exercise the engine via the public native
-// registration API only — no aql parser, no built-in word library.
+// registration API only — no boru parser, no built-in word library.
 func runWith(t *testing.T, setup func(*Registry), input []Value) []Value {
 	t.Helper()
 	r, err := NewRegistry()

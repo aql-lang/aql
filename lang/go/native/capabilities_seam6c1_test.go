@@ -3,8 +3,8 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // Wave-6 coverage for capabilities.go: the nil-registry / nil-arg guard

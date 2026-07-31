@@ -3,8 +3,8 @@ package formatter
 import "strings"
 
 // A Doc is a node in a Wadler/Prettier-style layout document — the output
-// side of a declarative formatter. Rules (expressed as AQL, see the
-// aql:fmt module's `render` word and design/fmt-module-and-xslt.0.md)
+// side of a declarative formatter. Rules (expressed as boru, see the
+// boru:fmt module's `render` word and design/fmt-module-and-xslt.0.md)
 // build a Doc and RenderDoc lays it out to width. This is the substrate an
 // XSLT-style template set emits into: `text` is <xsl:value-of>, `group`
 // and `line` are the width-driven line-breaking, `indent` is nesting.

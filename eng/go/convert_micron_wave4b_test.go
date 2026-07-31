@@ -78,10 +78,10 @@ func TestConvertErrorValue(t *testing.T) {
 		t.Error("plain Go error grew a code field")
 	}
 
-	// An AqlError contributes code and raise-payload data.
+	// A BoruError contributes code and raise-payload data.
 	data := NewOrderedMap()
 	data.Set("extra", NewInteger(7))
-	av := NewError(&AqlError{Code: "user_error", Detail: "bad", Data: data})
+	av := NewError(&BoruError{Code: "user_error", Detail: "bad", Data: data})
 	m, _ = ConvertIdealToMap(av)
 	mm, _ = AsMap(m)
 	code, ok := mm.Get("code")

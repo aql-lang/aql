@@ -9,7 +9,7 @@ import (
 func TestMakePathFromList(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewWord("Pathon"),
 		NewList([]Value{NewString("usr"), NewString("local"), NewString("bin")}),
 	})
@@ -28,7 +28,7 @@ func TestMakePathFromList(t *testing.T) {
 func TestMakePathFromListAtoms(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewWord("Pathon"),
 		NewList([]Value{NewAtom("a"), NewAtom("b"), NewAtom("c")}),
 	})
@@ -47,7 +47,7 @@ func TestMakePathFromListAtoms(t *testing.T) {
 func TestMakePathFromString(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewWord("Pathon"), NewString("usr/local/bin"),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) {
@@ -65,7 +65,7 @@ func TestMakePathFromString(t *testing.T) {
 func TestMakePathFromAbsString(t *testing.T) {
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewWord("Pathon"), NewString("/usr/local/bin"),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) {
@@ -87,7 +87,7 @@ func TestMakePathAbsOption(t *testing.T) {
 	registerIOWords(r)
 	opts := NewOrderedMap()
 	opts.Set("abs", NewBoolean(true))
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewWord("Pathon"), NewMap(opts),
 		NewList([]Value{NewString("x"), NewString("y")}),
 	})
@@ -108,7 +108,7 @@ func TestMakePathAbsOptionString(t *testing.T) {
 	registerIOWords(r)
 	opts := NewOrderedMap()
 	opts.Set("abs", NewBoolean(true))
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewWord("Pathon"), NewMap(opts), NewString("x/y"),
 	})
 	if len(result) != 1 || !IsPathon(result[0]) {

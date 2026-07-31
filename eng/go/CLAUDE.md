@@ -1,6 +1,6 @@
 # eng/go — Kernel CLAUDE.md
 
-The `eng` module is the AQL kernel: types, values, signatures,
+The `eng` module is the boru kernel: types, values, signatures,
 matching, the step loop, and the parser bridge. This file
 documents conventions specific to this module — anything that's
 language-wide rather than lang-specific lives here.
@@ -11,7 +11,7 @@ stacks, helper API discipline, panic prevention) see
 
 ## Single-Pass Parsing (CRITICAL)
 
-AQL source is converted from jsonic items to engine values in
+boru source is converted from jsonic items to engine values in
 one left-to-right walk. Do not introduce post-conversion rewrite
 passes that re-walk the value stream — they accumulate complexity
 (paren-expansion ordering, data-context vs word-context divergence,
@@ -66,9 +66,9 @@ together when you touch one of these sites.
 
 | Stack | Field | Push site | Pop site | Read site |
 | --- | --- | --- | --- | --- |
-| Args list | `Registry.Args` | `InstallFnDef` handler / `execFnDefSig` body splice / `CallAQL` | `__pa` token in the synthesized body tail / `CallAQL` inline cleanup | `args` native word |
-| Body-local def cleanup | (per-call `defSnapshot` local) | same | `DefCleanupInfo` marker (`stepDefCleanup`) / `CallAQL` inline cleanup | closure capture analysis (via `FnBaselines`) |
-| Enclosing-fn baseline | `Registry.FnBaselines` | same (alongside `defSnapshot`) | piggybacks on `__pa` and on `CallAQL`'s inline cleanup | `ComputeCaptures` (`fn_capture.go`) |
+| Args list | `Registry.Args` | `InstallFnDef` handler / `execFnDefSig` body splice / `CallBoru` | `__pa` token in the synthesized body tail / `CallBoru` inline cleanup | `args` native word |
+| Body-local def cleanup | (per-call `defSnapshot` local) | same | `DefCleanupInfo` marker (`stepDefCleanup`) / `CallBoru` inline cleanup | closure capture analysis (via `FnBaselines`) |
+| Enclosing-fn baseline | `Registry.FnBaselines` | same (alongside `defSnapshot`) | piggybacks on `__pa` and on `CallBoru`'s inline cleanup | `ComputeCaptures` (`fn_capture.go`) |
 
 A `break`/`continue` escaping a live spliced frame discards the
 frame's tail before it executes; the flow resolvers therefore run
@@ -99,17 +99,17 @@ handler.
 Concretely:
 
 - `Signature.Args[0]` (native kernel words): top of stack.
-- `FnSig.Params[0]` (AQL `def fn […]` definitions, module FnDef
-  wrappers): also top of stack. Empirical: AQL source `def f fn
+- `FnSig.Params[0]` (boru `def fn […]` definitions, module FnDef
+  wrappers): also top of stack. Empirical: boru source `def f fn
   [[a:Integer b:String]…]` called as `f 1 "x"` (forward form)
   binds `a=1` (sig[0], first forward arg) and `b="x"` (sig[1]).
   Stack form `"x" 1 f` is mirror-equivalent: top `1` → a, deeper
   `"x"` → b.
 - `args[i]` in every handler — registered native, InstallFnDef
-  closure, CallAQL, execFnDefSig — is the i-th sig position from
+  closure, CallBoru, execFnDefSig — is the i-th sig position from
   the top.
-- `args.N` AQL accessor: returns `args[N]` directly.
-- Body-token push (unnamed params via CallAQL / InstallFnDef /
+- `args.N` boru accessor: returns `args[N]` directly.
+- Body-token push (unnamed params via CallBoru / InstallFnDef /
   execFnDefSig): appends `args[0]…args[N-1]` in order, no
   reversal. Body frame contains `args[0]` at the bottom and
   `args[N-1]` on top. **Arguments enter the frame RESOLVED** — the
@@ -173,10 +173,10 @@ helpers have a body of `[Word(inner-native-name)]` — pure
 delegation to an inner native of the same name. `execFnDefLiteral`
 detects this shape via `isTrivialDelegationBody` and short-circuits
 to direct `execMatch` dispatch on the inner native's matched sig,
-bypassing CallAQL and body-token execution entirely. Args flow
+bypassing CallBoru and body-token execution entirely. Args flow
 straight through; no reordering, no body splicing, no sub-engine.
-AQL fns defined in module preambles (named params, real bodies —
-e.g. `decision.cond`) take the longer CallAQL path, where their
+boru fns defined in module preambles (named params, real bodies —
+e.g. `decision.cond`) take the longer CallBoru path, where their
 named params bind to args[i] in i-order without any push reordering.
 
 When adding a new dispatch path (a new way to invoke an
@@ -192,7 +192,7 @@ explicit value. The two meanings are indistinguishable at the
 call site and inevitably drift apart when one path needs the
 "omitted = default" rule and another path needs the "explicit
 zero" interpretation. We hit this exactly with `BarrierPos`,
-where `[| a b]` from AQL source could not be expressed because
+where `[| a b]` from boru source could not be expressed because
 `0` was being silently promoted to `len(Args)` for omitted-field
 callers.
 
@@ -356,7 +356,7 @@ conversion to a Map or List via the `convert Map <v>` / `convert
 List <v>` words. Dispatch walks the value's Parent chain for the
 nearest implementation (like the `Comparer` walk); the base `Ideal`
 behavior is the terminal fallback returning `{}` / `[]`, so every
-Ideal — built-in or user-defined, in Go or AQL — is convertible.
+Ideal — built-in or user-defined, in Go or boru — is convertible.
 Return `ErrNoConverter` to decline and keep walking. Concrete
 projections are installed for Class instances (→ fields), Store
 (→ entries), Error (→ {message}), Table (→ rows /
@@ -426,7 +426,7 @@ duplicated in lang.
 wire-stable**: one identity for the whole process, a FixedID baked
 into serialised `Value.ID`s (matrix, time, fetch, the timers,
 third-party plugins). It is NOT the path for a type that is
-**module-scoped or behaves like an AQL `def`** — those are
+**module-scoped or behaves like a boru `def`** — those are
 per-registry, have no FixedID, and must not bloat the builtin name
 index or the FixedID snapshot.
 
@@ -436,18 +436,18 @@ and a source-defined one are indistinguishable — same unifier, canon,
 dispatch wiring. Do NOT hand-roll `MintType` + a bespoke `TypeBehavior`
 for these; reach for:
 
-| Host need | Use | AQL twin |
+| Host need | Use | boru twin |
 | --- | --- | --- |
 | Any `def`-expressible body (alias, refine, union, negation, record, object, schema, …) | `(*Registry).DefineType(name, body)` → `*Type` | `def Name body` |
 | A value/type union | `(*Registry).DefineEnum(name, alts…)` | `def Name (v0 tor v1 …)` |
-| Membership as a **Go func** (the one shape `InstallType` can't express) | `(*Registry).DefineMemberType(name, parent, fn)` (mints + binds) or `r.Types.MintMemberType(...)` (mint only — module-scoped, reached via an export, like aql:io's `StreamKind`) | `def Name (refine Base …)` |
+| Membership as a **Go func** (the one shape `InstallType` can't express) | `(*Registry).DefineMemberType(name, parent, fn)` (mints + binds) or `r.Types.MintMemberType(...)` (mint only — module-scoped, reached via an export, like boru:io's `StreamKind`) | `def Name (refine Base …)` |
 
 `MemberBehavior(func(Value) bool)` is the shared kernel wiring under
 `MintMemberType`: one predicate yields Match, Unify, canon delegation
 and `is`/dispatch agreement — the same `matchMembership` /
-`unifyMembership` contract the AQL predicate path (`predicateUnifier`)
+`unifyMembership` contract the boru predicate path (`predicateUnifier`)
 routes through (`eng/go/membership.go`). Embedders get all of this on
-the public surface: `lang.AQL.DefineType` / `DefineTypeFromSource` /
+the public surface: `lang.Boru.DefineType` / `DefineTypeFromSource` /
 `DefineEnum` / `DefineMemberType`.
 
 ## FixedID Allocation

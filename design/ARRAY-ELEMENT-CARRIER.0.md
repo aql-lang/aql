@@ -18,7 +18,7 @@ a lowering refusal — a refusal falls back soundly; a wrong carrier does not.
 
 ## 1. The motivating cascade (radix-msd, fully root-caused)
 
-`radix-msd-sort` / `msd-go` (`voxgig-aql/sort/sort.aql:980`) recurse over
+`radix-msd-sort` / `msd-go` (`voxgig-boru/sort/sort.boru:980`) recurse over
 Integer-only arrays. The compile refusal "code-body word each" is the TAIL of a
 multi-layer cascade, all rooted in one fact — **Array `get` returns gradual
 `Any`**:
@@ -27,7 +27,7 @@ multi-layer cascade, all rooted in one fact — **Array `get` returns gradual
    [drop 0]))` is a non-concrete carrier in check mode; the Array-get sig
    hardcodes `Returns: [TAny]` (`native_storage.go:191`), and Array carriers
    carry NO element type. The critical site is `def b-lo (lo add (counts get v))`
-   (`sort.aql:1015`).
+   (`sort.boru:1015`).
 2. **`lo add (gradual Any)` → gradual `Scalar`.** **(Partly historical — read
    the update below.)** The gradual Any fills the String slot of `add`'s concat
    overload `[Scalar String]` optimistically. The cascade USED to be worse here:
@@ -35,7 +35,7 @@ multi-layer cascade, all rooted in one fact — **Array `get` returns gradual
    `lo:Integer` param. **That half is already fixed** at the `add` layer:
    `ReturnsAddConcat` (`eng/go/carrier.go:1988`) now returns `String` only when
    an operand is PROVABLY (non-gradual) String, else `NewDynamicCarrier(TScalar)`
-   — and its own comment names THIS program ("the sort.aql `msd-go` false
+   — and its own comment names THIS program ("the sort.boru `msd-go` false
    positive, where `lo add (Array-get-result)` … was typed String and then
    failed the recursive `lo:Integer` param"). So today `lo add (counts get)`
    yields a gradual `Scalar`, not a definite String; `blo`/`bhi` widen to
@@ -213,19 +213,19 @@ into "admit only the provably-invariant arrays", which is a refusal (sound) when
 the proof fails.
 
 **C is NOT a flat, fixed-point-free scan — the motivating program proves it.**
-Two structural complications, both verified against `msd-go` (`sort.aql:980`):
+Two structural complications, both verified against `msd-go` (`sort.boru:980`):
 - **Self-referential conformance.** The histogram increment
-  `counts set (dig add 1) ((counts get (dig add 1)) add 1)` (`sort.aql:988`)
+  `counts set (dig add 1) ((counts get (dig add 1)) add 1)` (`sort.boru:988`)
   writes a value that READS the very array whose admission is being decided. So
   condition (3) cannot be checked by scanning set-values literally; it must
   **assume `counts:Array<Integer>`, type the body under that assumption, then
   verify every set's value-type ≤ Integer** — a single-shot optimistic fixpoint
   (sound: an inconsistent assumption fails the verify and declines), not a scan.
 - **Inter-array dependency.** `def cur (make Array (iota 11 each [var [[v]
-  counts get v]]))` (`sort.aql:1000`) takes its element type FROM `counts get`,
+  counts get v]]))` (`sort.boru:1000`) takes its element type FROM `counts get`,
   so `cur` can only be admitted AFTER `counts`. The pre-pass is a small
   dependency graph (counts → cur), not independent per-array admission.
-- (For contrast, `tmp` (`sort.aql:1001`) is fed by `arr get` where `arr` is the
+- (For contrast, `tmp` (`sort.boru:1001`) is fed by `arr get` where `arr` is the
   untyped PARAM → its set value is `Any` → fails conformance → `tmp` stays
   `Any`. Harmless: no `tmp get` feeds an ambiguous numeric op. This is the gate
   working correctly, and confirms param-sourced writes decline as they must.)
@@ -310,7 +310,7 @@ So this ONE feature flips radix-msd → 30/30, retiring the sort chain.
   `NewCarrier(TInteger)`; (b) gradual `NewDynamicCarrier(TInteger)`. No commit —
   throwaway.
 
-  **RESULT** (hard-coded line 191 Array-get sig; `aql -force-compile` of a
+  **RESULT** (hard-coded line 191 Array-get sig; `boru -force-compile` of a
   `Sort.radix-msd` driver; controlled A/B/baseline, clean rebuild each):
 
   | Array-get returns | force-compile radix-msd |
@@ -356,7 +356,7 @@ So this ONE feature flips radix-msd → 30/30, retiring the sort chain.
   gradual Any (today's path). Gradual, not strict: an OOB get is `None` at run
   time, so strict `T` over-claims — `TestCheckTypeSoundness` caught it (§6).
   Gate GREEN: crossdiff + whole-corpus compiled differential (zero miscompiles) +
-  combination matrix + bytecode emitter/VM + -race + aqldebug + full lang/go
+  combination matrix + bytecode emitter/VM + -race + borudebug + full lang/go
   package + RunCompiledStrict. radix-msd force-compiles and sorts correctly.
   Off-corpus regressions (`lang/go/bytecode_array_element_test.go`): monomorphic
   admit compiles; set-before-get / forward-pass-loop / alias / return-escape /
@@ -423,7 +423,7 @@ sibling (per `lang/go/CLAUDE.md` test discipline).
 
 ## 10. Validation checklist (every result-changing stage)
 
-1. `make verify-bytecode` GREEN — 0 miscompiles, incl. -race + aqldebug.
+1. `make verify-bytecode` GREEN — 0 miscompiles, incl. -race + borudebug.
 2. `make crossdiff` GREEN — 0 Go-vs-TS interpret divergences.
 3. `make test` — only the pre-existing `TestCheckAccuracyRatchet` may fail.
 4. Hand-pinned off-corpus `RunCompiledStrict == Run`: (a) a monomorphic-Integer
@@ -431,4 +431,4 @@ sibling (per `lang/go/CLAUDE.md` test discipline).
    declines to `Any` and still compiles==interprets; (c) an ESCAPING array
    declines; (d) radix-msd / radix-msd-sort compile natively and sort correctly.
 5. The voxgig `sort` repo's `test/divergence/run.sh` (interpreter vs
-   `aql --compile`) is clean for all 30 algorithms.
+   `boru --compile`) is clean for all 30 algorithms.

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// errTestW9 is a plain Go error (no AqlError Code / Data).
+// errTestW9 is a plain Go error (no BoruError Code / Data).
 var errTestW9 = errors.New("plain boom")
 
 // W9 clone.go coverage: the mutable-payload clone arms not reached by the
@@ -41,7 +41,7 @@ func TestW9CloneTableData(t *testing.T) {
 func TestW9CloneErrorWithData(t *testing.T) {
 	data := NewOrderedMap()
 	data.Set("k", NewInteger(7))
-	ae := &AqlError{Code: "user_error", Detail: "boom", Data: data}
+	ae := &BoruError{Code: "user_error", Detail: "boom", Data: data}
 	ev := NewError(ae)
 	cl := CloneValue(ev)
 	ci, ok := cl.Data.(ErrorInfo)

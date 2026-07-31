@@ -7,7 +7,7 @@ import (
 	"math/big"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 	"github.com/cockroachdb/apd/v3"
 )
 
@@ -35,7 +35,7 @@ import (
 // error. The float64 handlers are unaffected (they saturate to ±Inf per
 // IEEE-754).
 func integerOverflowError(op string, a, b int64) error {
-	return &AqlError{
+	return &BoruError{
 		Code: "integer_overflow",
 		Detail: fmt.Sprintf(
 			"integer overflow in %s: %d %s %d does not fit in the Integer range (-9223372036854775808..9223372036854775807)",
@@ -131,7 +131,7 @@ func returnsIntFaultOn(base ReturnsFunc, op string, faultFn func(a, b int64) err
 			if aerr == nil && berr == nil {
 				if err := faultFn(a, b); err != nil {
 					code, detail := "arith_error", err.Error()
-					var ae *AqlError
+					var ae *BoruError
 					if errors.As(err, &ae) {
 						code, detail = ae.Code, ae.Detail
 					}
@@ -232,7 +232,7 @@ var (
 	divTowerOps = towerOps{
 		intFn: func(a, b int64) (Value, error) {
 			if a == 0 {
-				return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
+				return Value{}, eng.MakeBoruError("arith_error", "division by zero", "div", "", "")
 			}
 			// MinInt64 / -1 is the single int64 division overflow — Go
 			// wraps it back to MinInt64 (the same pair checkedMulInt
@@ -244,7 +244,7 @@ var (
 		},
 		bigFn: func(a, b *big.Int) (Value, error) {
 			if a.Sign() == 0 {
-				return Value{}, eng.MakeAqlError("arith_error", "division by zero", "div", "", "")
+				return Value{}, eng.MakeBoruError("arith_error", "division by zero", "div", "", "")
 			}
 			return NewBigInteger(new(big.Int).Quo(b, a)), nil
 		},
@@ -258,13 +258,13 @@ var (
 	modTowerOps = towerOps{
 		intFn: func(a, b int64) (Value, error) {
 			if a == 0 {
-				return Value{}, eng.MakeAqlError("arith_error", "modulo by zero", "mod", "", "")
+				return Value{}, eng.MakeBoruError("arith_error", "modulo by zero", "mod", "", "")
 			}
 			return NewInteger(b % a), nil
 		},
 		bigFn: func(a, b *big.Int) (Value, error) {
 			if a.Sign() == 0 {
-				return Value{}, eng.MakeAqlError("arith_error", "modulo by zero", "mod", "", "")
+				return Value{}, eng.MakeBoruError("arith_error", "modulo by zero", "mod", "", "")
 			}
 			return NewBigInteger(new(big.Int).Rem(b, a)), nil // truncated remainder, sign of dividend
 		},
@@ -336,7 +336,7 @@ var mathNatives = []NativeFunc{
 			{Args: []*Type{TString, TScalar}, Impl: Go(addConcatHandler), ReturnsFn: ReturnsAddConcat(), BarrierPos: -1},
 			{Args: []*Type{TScalar, TString}, Impl: Go(addConcatHandler), ReturnsFn: ReturnsAddConcat(), BarrierPos: -1},
 			// The temporal overloads (Date+CalendarDuration, Instant+ClockDuration, …)
-			// moved to aql:time-util — the module owns the duration types and
+			// moved to boru:time-util — the module owns the duration types and
 			// exports add/sub word extensions built by
 			// TemporalArithmeticExtensions (below); import transplants them.
 		},
@@ -350,7 +350,7 @@ var mathNatives = []NativeFunc{
 				Impl:      Go(numericBinaryHandler(subTowerOps)),
 				ReturnsFn: returnsIntArithChecked("sub", subIntFault), BarrierPos: -1,
 			},
-			// Temporal sub overloads: moved to aql:time-util — see the
+			// Temporal sub overloads: moved to boru:time-util — see the
 			// add note above and TemporalArithmeticExtensions.
 		},
 	},
@@ -429,7 +429,7 @@ func withDecimalHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	// OpPushClosure). Both run within the scoped context below.
 	closure := IsCompiledClosure(body)
 	if !closure && (!IsConcrete(body) || !body.Parent.ConformsTo(TList)) {
-		return nil, r.AqlError("type_error", "with-decimal: body must be a concrete list", "with-decimal")
+		return nil, r.BoruError("type_error", "with-decimal: body must be a concrete list", "with-decimal")
 	}
 
 	r.Contexts.Push(r.Contexts.Top())
@@ -509,7 +509,7 @@ func addDateClkHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry)
 	return []Value{NewDateTime(t.Add(d))}, nil
 }
 
-// --- affine temporal arithmetic (aql:time-util) ---
+// --- affine temporal arithmetic (boru:time-util) ---
 //
 // The affine package: subtracting two points of the same leaf yields a
 // duration, durations of the same leaf add / subtract, and a ClockDuration
@@ -587,7 +587,7 @@ func clockDurArith(tt TemporalModuleTypes, neg bool) Handler {
 			c, ok = checkedAddInt(int64(a), int64(b))
 		}
 		if !ok {
-			return nil, r.AqlError("integer_overflow",
+			return nil, r.BoruError("integer_overflow",
 				op+": ClockDuration overflow — the result does not fit the int64 nanosecond range", op)
 		}
 		return []Value{tt.NewClockDuration(time.Duration(c))}, nil
@@ -626,14 +626,14 @@ func clockDurModHandler(tt TemporalModuleTypes) Handler {
 		a, _ := AsClockDuration(args[0])
 		b, _ := AsClockDuration(args[1])
 		if b == 0 {
-			return nil, r.AqlError("arith_error", "mod: modulo by a zero duration", "mod")
+			return nil, r.BoruError("arith_error", "mod: modulo by a zero duration", "mod")
 		}
 		return []Value{tt.NewClockDuration(a % b)}, nil
 	}
 }
 
 // TemporalArithmeticExtensions builds the add / sub WORD-EXTENSION
-// clones aql:time-util exports (design/OPEN-WORDS.0.md §2.4 / §6
+// clones boru:time-util exports (design/OPEN-WORDS.0.md §2.4 / §6
 // migration 1): the temporal overloads that historically sat on the
 // core words, now anchored to the module's per-import duration mints —
 // which is exactly what satisfies the module-scope user-type rule at
@@ -646,10 +646,10 @@ func TemporalArithmeticExtensions(tt TemporalModuleTypes) []FnDefInfo {
 	// Anchored (first-party waiver): the affine POINT − POINT overloads
 	// (Date − Date, DateTime − DateTime, Instant − Instant) are all-builtin
 	// tuples the module-scope user-type rule would otherwise refuse.
-	// aql:time-util ships with the kernel, so the waiver applies — the same
-	// escape hatch aql:io uses for its Pathon-anchored list/remove.
+	// boru:time-util ships with the kernel, so the waiver applies — the same
+	// escape hatch boru:io uses for its Pathon-anchored list/remove.
 	return []FnDefInfo{
-		NewWordExtension("aql:time-util", "add", []Signature{
+		NewWordExtension("boru:time-util", "add", []Signature{
 			{Args: []*Type{TDate, tt.CalendarDuration}, Impl: Go(dateCalArith(false)), Returns: []*Type{TDate}, BarrierPos: -1},
 			{Args: []*Type{TDateTime, tt.ClockDuration}, Impl: Go(dateTimeClkArith(false)), Returns: []*Type{TDateTime}, BarrierPos: -1},
 			{Args: []*Type{TInstant, tt.ClockDuration}, Impl: Go(instantClkArith(false)), Returns: []*Type{TInstant}, BarrierPos: -1},
@@ -658,7 +658,7 @@ func TemporalArithmeticExtensions(tt TemporalModuleTypes) []FnDefInfo {
 			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurArith(tt, false)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
 			{Args: []*Type{tt.CalendarDuration, tt.CalendarDuration}, Impl: Go(calDurArith(tt, false)), Returns: []*Type{tt.CalendarDuration}, BarrierPos: -1},
 		}),
-		NewWordExtension("aql:time-util", "sub", []Signature{
+		NewWordExtension("boru:time-util", "sub", []Signature{
 			{Args: []*Type{TDate, tt.CalendarDuration}, Impl: Go(dateCalArith(true)), Returns: []*Type{TDate}, BarrierPos: -1},
 			{Args: []*Type{TDateTime, tt.ClockDuration}, Impl: Go(dateTimeClkArith(true)), Returns: []*Type{TDateTime}, BarrierPos: -1},
 			{Args: []*Type{TInstant, tt.ClockDuration}, Impl: Go(instantClkArith(true)), Returns: []*Type{TInstant}, BarrierPos: -1},
@@ -671,10 +671,10 @@ func TemporalArithmeticExtensions(tt TemporalModuleTypes) []FnDefInfo {
 			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurArith(tt, true)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
 			{Args: []*Type{tt.CalendarDuration, tt.CalendarDuration}, Impl: Go(calDurArith(tt, true)), Returns: []*Type{tt.CalendarDuration}, BarrierPos: -1},
 		}),
-		NewWordExtension("aql:time-util", "div", []Signature{
+		NewWordExtension("boru:time-util", "div", []Signature{
 			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurDivHandler), Returns: []*Type{TFloat}, BarrierPos: -1},
 		}),
-		NewWordExtension("aql:time-util", "mod", []Signature{
+		NewWordExtension("boru:time-util", "mod", []Signature{
 			{Args: []*Type{tt.ClockDuration, tt.ClockDuration}, Impl: Go(clockDurModHandler(tt)), Returns: []*Type{tt.ClockDuration}, BarrierPos: -1},
 		}),
 	}

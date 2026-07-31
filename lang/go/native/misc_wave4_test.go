@@ -6,11 +6,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
-// Wave-4 coverage for native_query.go (the aql:query DSL handlers),
+// Wave-4 coverage for native_query.go (the boru:query DSL handlers),
 // native_module_module.go (file / native / data-file module loading,
 // export installation, renames), describe.go (module describe paths),
 // and native_unpack.go (module unpack).
@@ -19,7 +19,7 @@ import (
 // Query DSL (native_query.go)
 // ---------------------------------------------------------------------------
 
-// w4QueryReg builds a registry with the aql:query natives registered
+// w4QueryReg builds a registry with the boru:query natives registered
 // bare (the same set modules.BuildQueryModule wraps) plus the fixture
 // tables from query_cov_test.go in the context store.
 func w4QueryReg(t *testing.T) *Registry {
@@ -340,21 +340,21 @@ func w4ModEnv(t *testing.T) (*Registry, *capabilities.MemFileOps) {
 		}
 	}
 	// A plain file module with a fn export, a type export, and a value.
-	write("/mods/util/index.aql", `
+	write("/mods/util/index.boru", `
 def twice fn [[x:Integer] [Integer] [x mul 2]]
 def Color refine Integer
 export "Util" {twice: twice/r Color: Color msg: "hello"}
 `)
-	// A module whose entry point is declared in .aql/aql.json, with a
+	// A module whose entry point is declared in .boru/boru.json, with a
 	// data resource.
-	write("/mods/alt/.aql/aql.json", `{"main": "main.aql", "resource": {"cfg": "cfg.json"}}`)
-	write("/mods/alt/main.aql", `export "Alt" {v: 41}`)
+	write("/mods/alt/.boru/boru.json", `{"main": "main.boru", "resource": {"cfg": "cfg.json"}}`)
+	write("/mods/alt/main.boru", `export "Alt" {v: 41}`)
 	write("/mods/alt/cfg.json", `{"a": 1}`)
 	// A module with a malformed resource declaration.
-	write("/mods/badres/.aql/aql.json", `{"main": "main.aql", "resource": {"cfg": 7}}`)
-	write("/mods/badres/main.aql", `export "BadRes" {v: 1}`)
-	// A bare module resolvable by the .aql search walk.
-	write("/proj/.aql/mymod/index.aql", `export "My" {v: 5}`)
+	write("/mods/badres/.boru/boru.json", `{"main": "main.boru", "resource": {"cfg": 7}}`)
+	write("/mods/badres/main.boru", `export "BadRes" {v: 1}`)
+	// A bare module resolvable by the .boru search walk.
+	write("/proj/.boru/mymod/index.boru", `export "My" {v: 5}`)
 	// A data file.
 	write("/data/d.json", `{"a": 1}`)
 
@@ -386,7 +386,7 @@ export "TypeUtil" {tpartial: tp/r}`
 		if err != nil {
 			return ModuleDesc{}, err
 		}
-		desc.Ref = "aql:" + name
+		desc.Ref = "boru:" + name
 		desc.Kind = "native"
 		return desc, nil
 	}
@@ -395,19 +395,19 @@ export "TypeUtil" {tpartial: tp/r}`
 func TestW4FileModuleImport(t *testing.T) {
 	r, _ := w4ModEnv(t)
 	// Explicit path.
-	w4LogWant(t, r, `import "/mods/util/index.aql" ; Util.twice 5`, `10`)
+	w4LogWant(t, r, `import "/mods/util/index.boru" ; Util.twice 5`, `10`)
 	w4LogWant(t, r, `Util.msg`, `'hello'`)
-	// Extension-less path resolves index.aql (no aql.json).
+	// Extension-less path resolves index.boru (no boru.json).
 	w4LogWant(t, r, `import "/mods/util" ; Util.twice 3`, `6`)
-	// aql.json main resolution + data resource export.
+	// boru.json main resolution + data resource export.
 	w4LogWant(t, r, `import "/mods/alt" ; Alt.v`, `41`)
 	w4LogWant(t, r, `resource.cfg`, `{a:1}`)
-	// Bare module name via the .aql search walk.
+	// Bare module name via the .boru search walk.
 	w4LogWant(t, r, `import "mymod" ; My.v`, `5`)
 	// Data file import lands the value on the stack.
 	w4LogWant(t, r, `import "/data/d.json"`, `{a:1}`)
 	// Missing file / missing bare module.
-	w4LogErr(t, r, `import "/mods/nothere.aql"`, "import")
+	w4LogErr(t, r, `import "/mods/nothere.boru"`, "import")
 	w4LogErr(t, r, `import "nomod"`, "not found")
 	// Malformed resource declaration.
 	w4LogErr(t, r, `import "/mods/badres"`, "must be a string filename")
@@ -416,48 +416,48 @@ func TestW4FileModuleImport(t *testing.T) {
 func TestW4FileModuleRenameImports(t *testing.T) {
 	r, _ := w4ModEnv(t)
 	// Single rename pair [From To].
-	w4LogWant(t, r, `import [Util MyU] "/mods/util/index.aql" ; MyU.twice 4`, `8`)
+	w4LogWant(t, r, `import [Util MyU] "/mods/util/index.boru" ; MyU.twice 4`, `8`)
 	// Multiple rename pairs [[From To] …].
-	w4LogWant(t, r, `import [[Util U2]] "/mods/util/index.aql" ; U2.msg`, `'hello'`)
+	w4LogWant(t, r, `import [[Util U2]] "/mods/util/index.boru" ; U2.msg`, `'hello'`)
 	// Errors: unknown export name, malformed pair shapes.
-	w4LogErr(t, r, `import [Nope New] "/mods/util/index.aql"`, "not found")
-	w4LogErr(t, r, `import [[Nope New]] "/mods/util/index.aql"`, "not found")
-	w4LogErr(t, r, `import [OnlyOne] "/mods/util/index.aql"`, "2 elements")
-	w4LogErr(t, r, `import [[Util U3 Extra]] "/mods/util/index.aql"`, "2 elements")
+	w4LogErr(t, r, `import [Nope New] "/mods/util/index.boru"`, "not found")
+	w4LogErr(t, r, `import [[Nope New]] "/mods/util/index.boru"`, "not found")
+	w4LogErr(t, r, `import [OnlyOne] "/mods/util/index.boru"`, "2 elements")
+	w4LogErr(t, r, `import [[Util U3 Extra]] "/mods/util/index.boru"`, "2 elements")
 }
 
 func TestW4NativeModuleImport(t *testing.T) {
 	r, _ := w4ModEnv(t)
-	w4LogWant(t, r, `import "aql:fake" ; Fk.v`, `7`)
+	w4LogWant(t, r, `import "boru:fake" ; Fk.v`, `7`)
 	w4LogWant(t, r, `Fk.fnx 2`, `3`)
 	// Re-import of a loaded module is a quiet no-op…
-	w4LogWant(t, r, `import "aql:fake" ; Fk.v`, `7`)
+	w4LogWant(t, r, `import "boru:fake" ; Fk.v`, `7`)
 	// …and re-binds a namespace that was undef'd (ensureExportsBound).
-	w4LogWant(t, r, `undef Fk ; import "aql:fake" ; Fk.v`, `7`)
+	w4LogWant(t, r, `undef Fk ; import "boru:fake" ; Fk.v`, `7`)
 	// Unknown module and empty name.
-	w4LogErr(t, r, `import "aql:zzz"`, "no such native module")
-	w4LogErr(t, r, `import "aql:"`, "empty native module name")
+	w4LogErr(t, r, `import "boru:zzz"`, "no such native module")
+	w4LogErr(t, r, `import "boru:"`, "empty native module name")
 	// A registry with no resolver at all.
 	r2, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	w4LogErr(t, r2, `import "aql:math-util"`, "resolver not configured")
+	w4LogErr(t, r2, `import "boru:math-util"`, "resolver not configured")
 }
 
 func TestW4ResolveAnyModule(t *testing.T) {
 	r, _ := w4ModEnv(t)
-	if _, err := ResolveAnyModule(r, "aql:fake"); err != nil {
-		t.Errorf("ResolveAnyModule(aql:fake): %v", err)
+	if _, err := ResolveAnyModule(r, "boru:fake"); err != nil {
+		t.Errorf("ResolveAnyModule(boru:fake): %v", err)
 	}
-	if _, err := ResolveAnyModule(r, "aql:"); err == nil {
+	if _, err := ResolveAnyModule(r, "boru:"); err == nil {
 		t.Error("empty native name should error")
 	}
 	if _, err := ResolveAnyModule(r, "/data/d.json"); err == nil ||
 		!strings.Contains(err.Error(), "data file") {
 		t.Errorf("data file ref: %v", err)
 	}
-	if _, err := ResolveAnyModule(r, "/mods/util/index.aql"); err != nil {
+	if _, err := ResolveAnyModule(r, "/mods/util/index.boru"); err != nil {
 		t.Errorf("file ref: %v", err)
 	}
 	if _, err := ResolveAnyModule(r, "mymod"); err != nil {
@@ -470,7 +470,7 @@ func TestW4ResolveAnyModule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := ResolveAnyModule(r2, "aql:x"); err == nil ||
+	if _, err := ResolveAnyModule(r2, "boru:x"); err == nil ||
 		!strings.Contains(err.Error(), "not configured") {
 		t.Errorf("no-resolver ref: %v", err)
 	}
@@ -500,33 +500,33 @@ func TestW4DescribeModules(t *testing.T) {
 	}
 
 	// A file module: bare path (fallthrough) and colon-form word lookup.
-	if out := run("/mods/util/index.aql"); !strings.Contains(out, "Util.twice") ||
+	if out := run("/mods/util/index.boru"); !strings.Contains(out, "Util.twice") ||
 		!strings.Contains(out, "Words (call as <export>.<word>):") {
 		t.Errorf("describe file module:\n%s", out)
 	}
-	if out := run("/mods/util/index.aql:twice"); !strings.Contains(out, "Util.twice — ") &&
+	if out := run("/mods/util/index.boru:twice"); !strings.Contains(out, "Util.twice — ") &&
 		!strings.Contains(out, "Util.twice") {
 		t.Errorf("describe module word:\n%s", out)
 	}
-	if out := run("/mods/util/index.aql:nope"); !strings.Contains(out, `no exported word "nope"`) ||
+	if out := run("/mods/util/index.boru:nope"); !strings.Contains(out, `no exported word "nope"`) ||
 		!strings.Contains(out, "Exported words:") {
 		t.Errorf("describe missing module word:\n%s", out)
 	}
 
-	// Native module through the resolver, with and without the aql: prefix.
-	if out := run("aql:fake"); !strings.Contains(out, "Fk.v") {
-		t.Errorf("describe aql:fake:\n%s", out)
+	// Native module through the resolver, with and without the boru: prefix.
+	if out := run("boru:fake"); !strings.Contains(out, "Fk.v") {
+		t.Errorf("describe boru:fake:\n%s", out)
 	}
-	// A *built-in-catalog* name routes through the canonical aql: id even
+	// A *built-in-catalog* name routes through the canonical boru: id even
 	// when spelled bare, and shows the catalog summary line.
 	if out := run("type-util:tpartial"); !strings.Contains(out, "TypeUtil.tpartial") {
 		t.Errorf("describe type-util:tpartial:\n%s", out)
 	}
-	if out := run("type-util"); !strings.Contains(out, "aql:type-util — ") {
+	if out := run("type-util"); !strings.Contains(out, "boru:type-util — ") {
 		t.Errorf("describe bare builtin module name:\n%s", out)
 	}
 	// Unresolvable module reference.
-	if out := run("aql:zzz"); !strings.Contains(out, "cannot load module") {
+	if out := run("boru:zzz"); !strings.Contains(out, "cannot load module") {
 		t.Errorf("describe unknown module:\n%s", out)
 	}
 	// Unknown plain name falls to the terminal hint.
@@ -534,7 +534,7 @@ func TestW4DescribeModules(t *testing.T) {
 		t.Errorf("describe unknown name:\n%s", out)
 	}
 	// An imported namespace's dotted export renders dynamic help.
-	if _, err := w3Run(t, r, `import "aql:fake"`); err != nil {
+	if _, err := w3Run(t, r, `import "boru:fake"`); err != nil {
 		t.Fatal(err)
 	}
 	if out := run("Fk.fnx"); !strings.Contains(out, "Fk.fnx") {
@@ -549,9 +549,9 @@ func TestW4WriteModuleDescBuiltinSummary(t *testing.T) {
 	em.Set("info", NewInteger(1))
 	desc.Exports["Log"] = em
 	var buf bytes.Buffer
-	writeModuleDesc(&buf, "aql:log", desc)
+	writeModuleDesc(&buf, "boru:log", desc)
 	out := buf.String()
-	if !strings.Contains(out, "aql:log — ") || !strings.Contains(out, "Log.info") {
+	if !strings.Contains(out, "boru:log — ") || !strings.Contains(out, "Log.info") {
 		t.Errorf("writeModuleDesc builtin:\n%s", out)
 	}
 	// exportInfoFromDesc skips non-function exports and nil maps.
@@ -568,17 +568,17 @@ func TestW4WriteModuleDescBuiltinSummary(t *testing.T) {
 func TestW4UnpackModule(t *testing.T) {
 	r, _ := w4ModEnv(t)
 	// Whole-module unpack binds every lowercase export word bare.
-	w4LogWant(t, r, `unpack "aql:fake" ; fnx 9`, `10`)
-	w4LogWant(t, r, `unpack "aql:fake" ; v`, `7`)
+	w4LogWant(t, r, `unpack "boru:fake" ; fnx 9`, `10`)
+	w4LogWant(t, r, `unpack "boru:fake" ; v`, `7`)
 	// Named-export unpack.
-	w4LogWant(t, r, `unpack Fk "aql:fake" ; fnx 1`, `2`)
+	w4LogWant(t, r, `unpack Fk "boru:fake" ; fnx 1`, `2`)
 	// Negatives: unknown export, unknown module, empty name, no resolver.
-	w4LogErr(t, r, `unpack Nope "aql:fake"`, "not found")
-	w4LogErr(t, r, `unpack "aql:zzz"`, "no such native module")
-	w4LogErr(t, r, `unpack "aql:"`, "empty module name")
+	w4LogErr(t, r, `unpack Nope "boru:fake"`, "not found")
+	w4LogErr(t, r, `unpack "boru:zzz"`, "no such native module")
+	w4LogErr(t, r, `unpack "boru:"`, "empty module name")
 	r2, err := DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
 	}
-	w4LogErr(t, r2, `unpack "aql:anything"`, "resolver not configured")
+	w4LogErr(t, r2, `unpack "boru:anything"`, "resolver not configured")
 }

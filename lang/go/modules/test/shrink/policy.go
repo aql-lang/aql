@@ -7,7 +7,7 @@
 // Two pieces:
 //
 //   - Transparency annotations (per-word) — Transparent | Generator |
-//     Frozen | Opaque, per design/aql_property_based_reduction_report.10.md §8.
+//     Frozen | Opaque, per design/boru_property_based_reduction_report.10.md §8.
 //   - ShrinkCost — wraps stackform.Cost with policy weights, per
 //     report §9. Frozen words price high to discourage rewriting;
 //     Transparent words price low so the reducer eagerly drops them.
@@ -108,7 +108,7 @@ func (p *Policy) Weight(t Transparency) int {
 }
 
 // DefaultPolicy returns the canonical PBT classification + weights
-// (per design/aql_property_based_reduction_report.10.md §8-9 and the
+// (per design/boru_property_based_reduction_report.10.md §8-9 and the
 // PBT plan's Stage-4 reference table).
 //
 // Calibration:

@@ -1,8 +1,8 @@
 .PHONY: serve wasm test vet fmt clean e2e
 
-# wpg (github.com/aql-lang/aql/wpg) — the AQL web playground.
+# wpg (github.com/boru-lang/boru/wpg) — the boru web playground.
 #
-#   wasm/   AQL engine compiled to WebAssembly (browser-side eval)
+#   wasm/   boru engine compiled to WebAssembly (browser-side eval)
 #   serve/  Standalone HTTP server (server-side eval; self-contained HTML)
 #
 # The language library lives at ../lang/go (wired in via go.mod replace).
@@ -18,14 +18,14 @@ GIT_COMMIT       := $(shell git -C .. rev-parse --short HEAD 2>/dev/null || echo
 GIT_COMMIT_FULL  := $(shell git -C .. rev-parse HEAD 2>/dev/null)
 GIT_TAG          := $(shell git -C .. describe --tags --abbrev=0 2>/dev/null)
 GIT_DATE         := $(shell git -C .. log -1 --format=%cd --date=iso-local 2>/dev/null || echo unknown)
-GIT_REPO_URL     := https://github.com/aql-lang/aql
+GIT_REPO_URL     := https://github.com/boru-lang/boru
 
 serve:
 	go run ./serve
 
 wasm:
 	@mkdir -p $(WASM_DIR)
-	GOOS=js GOARCH=wasm go build -o $(WASM_DIR)/aql.wasm ./wasm
+	GOOS=js GOARCH=wasm go build -o $(WASM_DIR)/boru.wasm ./wasm
 	@GOROOT=$$(go env GOROOT); \
 	if [ -f "$$GOROOT/misc/wasm/wasm_exec.js" ]; then \
 		cp "$$GOROOT/misc/wasm/wasm_exec.js" $(WASM_DIR)/wasm_exec.js; \
@@ -38,7 +38,7 @@ wasm:
 	cp $(SQLJS_VENDOR)/sql-wasm.wasm $(WASM_DIR)/sql-wasm.wasm
 	@echo "Bundling into single HTML file (commit $(GIT_COMMIT), tag $(if $(GIT_TAG),$(GIT_TAG),<none>), date $(GIT_DATE))..."
 	@SQL_WASM_B64=$$(base64 -w0 $(WASM_DIR)/sql-wasm.wasm); \
-	AQL_WASM_B64=$$(base64 -w0 $(WASM_DIR)/aql.wasm); \
+	BORU_WASM_B64=$$(base64 -w0 $(WASM_DIR)/boru.wasm); \
 	SEP='<span class="sep">·</span>'; \
 	if [ -n "$(GIT_COMMIT_FULL)" ]; then \
 		COMMIT_HTML='<a href="$(GIT_REPO_URL)/commit/$(GIT_COMMIT_FULL)" target="_blank" rel="noopener">$(GIT_COMMIT)</a>'; \
@@ -61,17 +61,17 @@ wasm:
 		echo '</script>'; \
 		echo '<script>'; \
 		echo "window.__sqlWasmB64 = '$$SQL_WASM_B64';"; \
-		echo "window.__aqlWasmB64 = '$$AQL_WASM_B64';"; \
+		echo "window.__boruWasmB64 = '$$BORU_WASM_B64';"; \
 		echo '</script>'; \
 		sed -n '/<script src="wasm_exec.js"><\/script>/,$${ /<script src="wasm_exec.js"><\/script>/!p }' wasm/index.html; \
 	) | sed "s|__BUILD_INFO__|$$BUILD_INFO|" > $(WASM_DIR)/index.html
-	@rm -f $(WASM_DIR)/aql.wasm $(WASM_DIR)/wasm_exec.js $(WASM_DIR)/sql-wasm.js $(WASM_DIR)/sql-wasm.wasm
+	@rm -f $(WASM_DIR)/boru.wasm $(WASM_DIR)/wasm_exec.js $(WASM_DIR)/sql-wasm.js $(WASM_DIR)/sql-wasm.wasm
 	@echo "Built: $(WASM_DIR)/index.html ($$(du -h $(WASM_DIR)/index.html | cut -f1))"
 
 test:
 	go test ./...
 
-# Browser e2e for the aql:tui playground backend. Opt-in: needs the
+# Browser e2e for the boru:tui playground backend. Opt-in: needs the
 # bundle (make wasm), node, playwright, and a chromium. See
 # e2e/tui-e2e.js for the env overrides.
 e2e:

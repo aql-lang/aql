@@ -1,5 +1,5 @@
 // Package debugger implements the interactive session behind
-// `aql debug <file.aql>` (design/AQL-DEBUGGER.0.md §5): a host-side
+// `boru debug <file.boru>` (design/BORU-DEBUGGER.0.md §5): a host-side
 // realisation of the StepController contract that pauses the engine's
 // per-step trace between SOURCE LINES, renders the paused state, and
 // drives a gdb/pdb-style command prompt.
@@ -21,8 +21,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // stepMode is the session's stepping state.
@@ -1183,7 +1183,7 @@ func (s *Session) frameEntries() []frameInfo {
 		var frames []frameInfo
 		for _, st := range states {
 			if st.Label != "" {
-				// A labelled engine IS a fn call (CallAQLNamed): its
+				// A labelled engine IS a fn call (CallBoruNamed): its
 				// Defs-based frame leaves no tape marks, so the label
 				// stands in as the frame — outer to any inside its tape.
 				frames = append(frames, frameInfo{name: st.Label})
@@ -1308,7 +1308,7 @@ func (s *Session) evalText(src string) string {
 		return fmt.Sprintf("parse error: %s", err)
 	}
 	// Error positions must render against the EXPRESSION, not the paused
-	// program: the registry's Source/BaseFile are the program's (AqlError
+	// program: the registry's Source/BaseFile are the program's (BoruError
 	// bakes r.Source in at construction), so swap them to the expression
 	// for the duration of the child run — the module loader's established
 	// swap/restore shape. FlowCtrl is snapshotted too: a bare `break` /

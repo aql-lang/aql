@@ -29,12 +29,12 @@ instruction).
 The bytecode compiler lowered only the **top-level program** to the VM tape.
 Function bodies invoked as runtime callbacks — server handlers, service and
 codec endpoints, predicates, spawned processes, higher-order lambdas — ran
-through `Registry.CallAQL` on the tree-walking interpreter
+through `Registry.CallBoru` on the tree-walking interpreter
 (`sub := NewTop(r); sub.Run(tokens)`). A networking benchmark localized a ~19×
 per-word penalty to exactly this: identical `convert`/`join`/`def` work cost
 76 ms compiled at top level but ~1457 ms inside a `serve-raw` handler fork
 (`bench/networking/`). The gap: a runtime fn value carried only raw tokens
-(`AQLImpl.Body`), with **no edge** to its compiled form (`Program.Fns`).
+(`BoruImpl.Body`), with **no edge** to its compiled form (`Program.Fns`).
 
 ## Mechanism (what landed)
 
@@ -42,7 +42,7 @@ A purely additive extension of the existing "compiler = carrier type-checker
 with a recording side-effect" architecture (no rewrite):
 
 - **`CompiledFnRef` (`eng/go/bytecode.go`)** — a durable `{Prog, Unit, Captures}`
-  reference. `AQLImpl.Compiled` carries it *alongside* `Body`, so a fn value
+  reference. `BoruImpl.Compiled` carries it *alongside* `Body`, so a fn value
   holds both the VM edge and the interpreter fallback. `Signature.CompiledRef()`
   reads it.
 - **Store-fn bake (`eng/go/emit.go`, `compileStoredFnUnit` + `stampCompiledRef`)**
@@ -70,8 +70,8 @@ with a recording side-effect" architecture (no rewrite):
   calls it), so the corpus differential is untouched.
 - **`InvokeCallback` (`eng/go/invoke.go`)** — the single routing seam every
   native callback word dispatches through: idle registry → `RunUnit`; mid-run →
-  `nestedRunner`; else → `CallAQL`. Fail-safe: values and error taxonomy are
-  identical to `CallAQL` when the VM path isn't taken, and the differential gates
+  `nestedRunner`; else → `CallBoru`. Fail-safe: values and error taxonomy are
+  identical to `CallBoru` when the VM path isn't taken, and the differential gates
   prove unit execution ≡ interpreter when it is.
 
 Wired callers: `serveRawHandler` (`net_socket.go`), service `call`
@@ -97,7 +97,7 @@ and `Model` action `makeAction` (`modules/model.go`).
   macro/parselang bodies) has no ahead-of-time form; the confined `OpFallback`
   island and `Engine.Run` remain. `Test.check-prop` likewise stays interpreted:
   its generator/property run through fresh per-iteration `FnSig`s synthesized from
-  the map-literal `gen`/`prop` bodies (`native.AQL(genBody)`) — there is no fn
+  the map-literal `gen`/`prop` bodies (`native.Boru(genBody)`) — there is no fn
   value to stamp, and compiling the two bodies would make `check-prop` a
   dual-body storing word (a separate effort). The whole-program fallback and the
   three sound non-definite-error corpus refusals are unchanged — this work did not

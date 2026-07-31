@@ -119,22 +119,22 @@ func TestWave4ModuleCallSubscopes(t *testing.T) {
 	p := w4Inline(t, `{name:"p" scopes:{modules:{
 		words:{default:"allow"}
 		scopes:{
-			"aql:off":{install:false}
-			"aql:part":{words:{default:"allow" rules:[{deny:["secret*"]}]}}
+			"boru:off":{install:false}
+			"boru:part":{words:{default:"allow" rules:[{deny:["secret*"]}]}}
 		}}}}`)
 
-	if err := p.Check("modules", "call", Args{"module": "aql:other", "export": "x"}); err != nil {
+	if err := p.Check("modules", "call", Args{"module": "boru:other", "export": "x"}); err != nil {
 		t.Errorf("absent subscope should inherit allow: %v", err)
 	}
-	err := p.Check("modules", "call", Args{"module": "aql:off", "export": "x"})
+	err := p.Check("modules", "call", Args{"module": "boru:off", "export": "x"})
 	if err == nil || !strings.Contains(err.Error(), "not installed") {
 		t.Errorf("install=false subscope: %v, want not-installed", err)
 	}
-	err = p.Check("modules", "call", Args{"module": "aql:part", "export": "secret-word"})
+	err = p.Check("modules", "call", Args{"module": "boru:part", "export": "secret-word"})
 	if err == nil || !strings.Contains(err.Error(), "rule #0") {
 		t.Errorf("per-export deny: %v, want rule #0 blame", err)
 	}
-	if err := p.Check("modules", "call", Args{"module": "aql:part", "export": "open"}); err != nil {
+	if err := p.Check("modules", "call", Args{"module": "boru:part", "export": "open"}); err != nil {
 		t.Errorf("non-matching export should pass: %v", err)
 	}
 }
@@ -280,7 +280,7 @@ func TestWave4LoadEntryPoints(t *testing.T) {
 // (.jsonic first, .json fallback) via XDG_CONFIG_HOME.
 func TestWave4UserProfileDirs(t *testing.T) {
 	dir := t.TempDir()
-	polDir := filepath.Join(dir, "aql", "policies")
+	polDir := filepath.Join(dir, "boru", "policies")
 	if err := os.MkdirAll(polDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -385,7 +385,7 @@ func TestWave4ValidateRejections(t *testing.T) {
 		!strings.Contains(err.Error(), "default") {
 		t.Errorf("bad default: %v, want rejection", err)
 	}
-	if _, err := LoadInline(`{name:"ok" scopes:{modules:{scopes:{"aql:x":{words:{default:"allow"}}}}}}`); err != nil {
+	if _, err := LoadInline(`{name:"ok" scopes:{modules:{scopes:{"boru:x":{words:{default:"allow"}}}}}}`); err != nil {
 		t.Errorf("valid modules subscope refused: %v", err)
 	}
 }
@@ -411,14 +411,14 @@ func TestWave4ResolveMerge(t *testing.T) {
 		Limits:  Limits{TimeoutMs: 1, MaxStepBudget: 2, MaxStackDepth: 3, MaxMemoryBytes: 4, MaxOutputBytes: 5, MaxSubEngineDepth: 6},
 		Scopes: map[string]*Scope{
 			"fileops": {Words: WordsBlock{Default: EffectDeny}},
-			"modules": {Scopes: map[string]*Scope{"aql:a": {Install: &on}}},
+			"modules": {Scopes: map[string]*Scope{"boru:a": {Install: &on}}},
 		},
 	}
 	child := &Profile{
 		Limits: Limits{TimeoutMs: 10, MaxStepBudget: 20, MaxStackDepth: 30, MaxMemoryBytes: 40, MaxOutputBytes: 50, MaxSubEngineDepth: 60},
 		Scopes: map[string]*Scope{
 			"fileops": {Words: WordsBlock{Default: EffectAllow, Rules: []Rule{{Deny: []string{"x"}}}}},
-			"modules": {Scopes: map[string]*Scope{"aql:a": {Words: WordsBlock{Default: EffectDeny}}, "aql:b": {}}},
+			"modules": {Scopes: map[string]*Scope{"boru:a": {Words: WordsBlock{Default: EffectDeny}}, "boru:b": {}}},
 			"network": {Words: WordsBlock{Default: EffectDeny}},
 		},
 	}
@@ -436,8 +436,8 @@ func TestWave4ResolveMerge(t *testing.T) {
 		t.Errorf("fileops merge = %+v", fo)
 	}
 	mo := merged.Scopes["modules"]
-	if mo.Scopes["aql:a"] == nil || mo.Scopes["aql:a"].Words.Default != EffectDeny ||
-		mo.Scopes["aql:a"].Install == nil || mo.Scopes["aql:b"] == nil {
+	if mo.Scopes["boru:a"] == nil || mo.Scopes["boru:a"].Words.Default != EffectDeny ||
+		mo.Scopes["boru:a"].Install == nil || mo.Scopes["boru:b"] == nil {
 		t.Errorf("modules subscope merge = %+v", mo.Scopes)
 	}
 	if merged.Scopes["network"] == nil {

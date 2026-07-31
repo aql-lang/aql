@@ -10,7 +10,7 @@ import (
 // Test.check-prop / Test.skip take TWO code bodies (a generator and a property,
 // e.g. `[r.int 0 100]` and `[0 gte]`). These bodies are inert at the call —
 // `prop` stores them in a PropertySpec map, `skip` discards them, `check-prop`
-// CallAQLs them inside its native handler — so the dispatch should bake them as
+// CallBorus them inside its native handler — so the dispatch should bake them as
 // const operands (a plain CALL_NATIVE). It refused only because a dot-access
 // reach (`r.int`) inside a body was not admitted as an inert const MEMBER; with
 // inertReachMember it now is, so all three compile natively (no FALLBACK island)
@@ -23,9 +23,9 @@ import (
 // wrongly baked as frozen data).
 func TestReachBodyInertCompiles(t *testing.T) {
 	cases := []struct{ src, want string }{
-		{`import "aql:test"  (Test.check-prop "nonneg" [r.int 0 100] [0 gte] 20 1 0) get "ok"`, "[true]"},
-		{`import "aql:test"  (Test.skip "wip" [r.int 0 9] [false] 10 1 0) get "skipped"`, "[true]"},
-		{`import "aql:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end p get "runs"`, "[100]"},
+		{`import "boru:test"  (Test.check-prop "nonneg" [r.int 0 100] [0 gte] 20 1 0) get "ok"`, "[true]"},
+		{`import "boru:test"  (Test.skip "wip" [r.int 0 9] [false] 10 1 0) get "skipped"`, "[true]"},
+		{`import "boru:test"  def p (Test.prop "nonneg" [r.int 0 100] [0 gte]) end p get "runs"`, "[100]"},
 		// (Rand.map-from {a:[Rand.int 0 10]} also clears via this fix — its schema
 		// map holds a Rand.int reach — but its result is a raw RNG draw that only
 		// agrees compiled-vs-interpreter under the differential gate's fixed seed,

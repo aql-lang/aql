@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // The Xml well-known field set is fixed (tag / attr / cren), so a

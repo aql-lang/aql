@@ -3,11 +3,11 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// arrayRegistry returns a registry with the aql:array module loaded and a
+// arrayRegistry returns a registry with the boru:array module loaded and a
 // parse func installed, so source-string programs can be run.
 func arrayRegistry(t *testing.T) *native.Registry {
 	t.Helper()
@@ -74,7 +74,7 @@ func TestArrayModuleExports(t *testing.T) {
 	}
 	// ADR-001: no export may shadow a core word. `flatten` is a core word,
 	// so it must NOT be an array export (deep flatten is `flatten -1`).
-	// `indexof` is the string word (aql:string-util); the array module's
+	// `indexof` is the string word (boru:string-util); the array module's
 	// list lookup is the distinctly-named `indices`, not `indexof`.
 	for _, name := range []string{"flatten", "indexof"} {
 		if _, ok := arrExport.Get(name); ok {
@@ -166,7 +166,7 @@ func TestArrayModuleGroupBothSigs(t *testing.T) {
 }
 
 // Deep flatten is the core `flatten -1` (no ArrayUtil.flatten); `indexof`
-// is the string-only word in aql:string-util. The list-membership lookup
+// is the string-only word in boru:string-util. The list-membership lookup
 // is the distinctly-named ArrayUtil.indices (see TestArrayModuleWords).
 func TestFlattenIsCoreIndexofIsString(t *testing.T) {
 	r, err := native.DefaultRegistry()
@@ -174,7 +174,7 @@ func TestFlattenIsCoreIndexofIsString(t *testing.T) {
 		t.Fatal(err)
 	}
 	r.SetParseFunc(parser.Parse)
-	// indexof moved to aql:string-util (string-only now); seed it bare.
+	// indexof moved to boru:string-util (string-only now); seed it bare.
 	for _, n := range native.StringModuleNatives {
 		r.RegisterNativeFunc(n)
 	}
@@ -185,7 +185,7 @@ func TestFlattenIsCoreIndexofIsString(t *testing.T) {
 
 // --- Negative: the moved words are NOT globally available ---
 
-// Without importing aql:array, the specialised words must error as
+// Without importing boru:array, the specialised words must error as
 // undefined rather than silently resolving — that is the whole point of
 // gating them behind the module.
 func TestArrayWordsNotGlobal(t *testing.T) {
@@ -199,7 +199,7 @@ func TestArrayWordsNotGlobal(t *testing.T) {
 			// No InstallArrayExports here.
 			_, runErr := runArraySrc(t, r, "[[1,2],[3,4]] "+word)
 			if runErr == nil {
-				t.Fatalf("expected %q to be undefined without aql:array, but it resolved", word)
+				t.Fatalf("expected %q to be undefined without boru:array, but it resolved", word)
 			}
 		})
 	}
@@ -220,7 +220,7 @@ func TestArrayCoreWordsStillGlobal(t *testing.T) {
 		`[1,2,3] reverse`,
 	} {
 		if _, err := runArraySrc(t, r, src); err != nil {
-			t.Errorf("core word program %q should run without aql:array: %v", src, err)
+			t.Errorf("core word program %q should run without boru:array: %v", src, err)
 		}
 	}
 }

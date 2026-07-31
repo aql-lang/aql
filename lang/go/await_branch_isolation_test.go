@@ -31,7 +31,7 @@ import (
 // pays a per-branch copy for every container in scope. Refusing states the
 // rule once, at the point where it is violated.
 
-const awaitPrelude = "import \"aql:time-util\"\n"
+const awaitPrelude = "import \"boru:time-util\"\n"
 
 // TestAwaitRefusesSharedMutableContainer covers every way a branch reaches
 // a stateful container, in BOTH engine modes. The compiled shape matters

@@ -1,6 +1,6 @@
 // service.go provides the Service-shaped wrapper around the registry
 // HTTP server: a long-running unit that can be started, stopped, and
-// paused under the supervisor in `aql serve`. The pre-existing
+// paused under the supervisor in `boru serve`. The pre-existing
 // Handler() function and request handlers in registry.go are reused
 // unchanged.
 
@@ -17,7 +17,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 // Server is the lifecycle-managed registry HTTP server. Construct

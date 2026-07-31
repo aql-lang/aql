@@ -1,10 +1,10 @@
-// Package vault implements `aql vault <mode>` — operation and
+// Package vault implements `boru vault <mode>` — operation and
 // configuration of a local key vault that stores third-party API
 // keys and registry tokens via the host OS keychain (macOS Keychain,
 // Linux Secret Service, Windows Credential Manager) or an
 // AES-256-GCM encrypted file fallback.
 //
-// Real secret values never appear in ~/.aql/vault.jsonic, in
+// Real secret values never appear in ~/.boru/vault.jsonic, in
 // process environment variables (unless explicitly requested with
 // `vault get --reveal`), in command echoes, or in stored logs.
 // The metadata file holds only aliases, policies, and short-lived
@@ -37,8 +37,8 @@ import (
 
 const (
 	// keyringService is the namespace used for entries in the host
-	// OS keychain. Per-alias keys are stored as "aql:<alias>".
-	keyringService = "aql"
+	// OS keychain. Per-alias keys are stored as "boru:<alias>".
+	keyringService = "boru"
 
 	// BackendAuto picks the best available host keychain and falls
 	// back to the file backend.
@@ -52,7 +52,7 @@ const (
 	// CredWrite/CredRead helper.
 	BackendWinCred = "wincred"
 	// BackendFile uses an AES-256-GCM encrypted file at
-	// ~/.aql/vault.keyring. Used when no host keychain is available
+	// ~/.boru/vault.keyring. Used when no host keychain is available
 	// or when explicitly requested for offline portability.
 	BackendFile = "file"
 	// BackendOnePassword stores secrets in 1Password via the `op`
@@ -122,7 +122,7 @@ func selectKeyring(backend string, folder, passphrase string) (keyring, error) {
 		if _, err := exec.LookPath("op"); err != nil {
 			return nil, fmt.Errorf("vault: 1password CLI `op` not found")
 		}
-		return &onePasswordKeyring{vault: os.Getenv("AQL_VAULT_1PASSWORD_VAULT")}, nil
+		return &onePasswordKeyring{vault: os.Getenv("BORU_VAULT_1PASSWORD_VAULT")}, nil
 	default:
 		return nil, fmt.Errorf("vault: unknown backend %q", backend)
 	}
@@ -247,7 +247,7 @@ type secretService struct{}
 func (*secretService) Name() string { return BackendSecretService }
 
 func (*secretService) Set(alias, value string) error {
-	cmd := exec.Command("secret-tool", "store", "--label", "aql:"+alias,
+	cmd := exec.Command("secret-tool", "store", "--label", "boru:"+alias,
 		"service", keyringService, "account", alias)
 	cmd.Stdin = strings.NewReader(value)
 	out, err := cmd.CombinedOutput()
@@ -345,16 +345,16 @@ func (*winCred) Delete(alias string) error {
 func winCredCmd(op, alias string) *exec.Cmd {
 	cmd := exec.Command("powershell", "-NoProfile", "-NonInteractive", "-Command", winCredScript)
 	cmd.Env = append(os.Environ(),
-		"AQL_KR_OP="+op,
-		"AQL_KR_TARGET="+keyringService+":"+alias,
-		"AQL_KR_USER="+alias,
+		"BORU_KR_OP="+op,
+		"BORU_KR_TARGET="+keyringService+":"+alias,
+		"BORU_KR_USER="+alias,
 	)
 	return cmd
 }
 
 // winCredScript is the PowerShell helper. It defines a C# type that
 // P/Invokes the Win32 Credential Manager API and dispatches on
-// $env:AQL_KR_OP. For "set" the secret is read from stdin; for "get" the
+// $env:BORU_KR_OP. For "set" the secret is read from stdin; for "get" the
 // value is written to stdout (exit code 2 means "not found"); "delete"
 // removes the entry (a missing entry is success).
 const winCredScript = `
@@ -365,7 +365,7 @@ Add-Type -TypeDefinition @'
 using System;
 using System.Runtime.InteropServices;
 using System.Text;
-public static class AqlCred {
+public static class BoruCred {
     [StructLayout(LayoutKind.Sequential)]
     struct CREDENTIAL {
         public uint Flags;
@@ -437,22 +437,22 @@ public static class AqlCred {
     }
 }
 '@
-$op = $env:AQL_KR_OP
-$target = $env:AQL_KR_TARGET
-$user = $env:AQL_KR_USER
+$op = $env:BORU_KR_OP
+$target = $env:BORU_KR_TARGET
+$user = $env:BORU_KR_USER
 switch ($op) {
     'set' {
         $secret = [Console]::In.ReadToEnd()
-        [AqlCred]::Write($target, $user, $secret)
+        [BoruCred]::Write($target, $user, $secret)
     }
     'get' {
         $value = $null
-        $rc = [AqlCred]::Read($target, [ref]$value)
+        $rc = [BoruCred]::Read($target, [ref]$value)
         if ($rc -eq 2) { exit 2 }
         [Console]::Out.Write($value)
     }
     'delete' {
-        [AqlCred]::Delete($target)
+        [BoruCred]::Delete($target)
     }
     default {
         [Console]::Error.Write("unknown op")
@@ -607,7 +607,7 @@ func isReservedKeyringKey(k string) bool { return strings.HasPrefix(k, reservedK
 
 // envelopeKeyringFormat is the on-disk format byte for the plaintext
 // envelope container, distinct from the legacy encrypted blob's
-// keyringFormat=1. Values inside are already AQLE-sealed under namespace
+// keyringFormat=1. Values inside are already BORUE-sealed under namespace
 // data keys, so the container itself needs no encryption — there is no
 // single passphrase to encrypt it under once a vault has scoped slots.
 const envelopeKeyringFormat = 2
@@ -622,7 +622,7 @@ type envelopeKeyringFile struct {
 }
 
 // envelopeFileKeyring is the file backend for a vault with password
-// slots: a plaintext (mode 0600) container of opaque AQLE ciphertext.
+// slots: a plaintext (mode 0600) container of opaque BORUE ciphertext.
 // It needs no passphrase of its own — confidentiality comes from the
 // per-namespace envelope applied above it (keyslot.go).
 type envelopeFileKeyring struct {
@@ -657,9 +657,9 @@ func (f *envelopeFileKeyring) loadFile() (*envelopeKeyringFile, error) {
 		}
 		return &ekf, nil
 	case keyringFormat:
-		return nil, errors.New("vault: keyring is in legacy single-passphrase format but the vault has password slots; run `aql vault verify`")
+		return nil, errors.New("vault: keyring is in legacy single-passphrase format but the vault has password slots; run `boru vault verify`")
 	default:
-		return nil, fmt.Errorf("vault: keyring is format %d but this aql understands up to %d; upgrade aql", format, envelopeKeyringFormat)
+		return nil, fmt.Errorf("vault: keyring is format %d but this boru understands up to %d; upgrade boru", format, envelopeKeyringFormat)
 	}
 }
 
@@ -785,7 +785,7 @@ const (
 	// were written without it (a raw salt|nonce|ciphertext blob) and are
 	// still readable; they are re-written in the current format on the
 	// next save.
-	keyringMagic = "AQLK"
+	keyringMagic = "BORUK"
 	// keyringFormat is the keyring layout version this binary writes.
 	// Bump it (and add a branch in decryptHeadered) when the KDF,
 	// cipher, or byte layout changes.
@@ -796,7 +796,7 @@ const (
 	keyringNonceLen = 12
 )
 
-// Headered layout: "AQLK" | format(1 byte) | salt(16) | nonce(12) | ciphertext|tag.
+// Headered layout: "BORUK" | format(1 byte) | salt(16) | nonce(12) | ciphertext|tag.
 // The GCM additional data is the header bytes + salt, so the format
 // byte is authenticated and cannot be downgraded by tampering.
 func encryptBlob(plain []byte, passphrase string) ([]byte, error) {
@@ -852,7 +852,7 @@ func decryptHeadered(blob []byte, passphrase string) ([]byte, error) {
 	const off = len(keyringMagic) + 1 // magic + format byte
 	format := int(blob[len(keyringMagic)])
 	if format > keyringFormat {
-		return nil, fmt.Errorf("vault: keyring is format %d but this aql understands up to %d; upgrade aql", format, keyringFormat)
+		return nil, fmt.Errorf("vault: keyring is format %d but this boru understands up to %d; upgrade boru", format, keyringFormat)
 	}
 	if format != 1 {
 		return nil, fmt.Errorf("vault: unknown keyring format %d", format)
@@ -908,8 +908,8 @@ func aesGCMOpen(passphrase string, salt, nonce, ct, aad []byte) ([]byte, error) 
 // --- 1Password via `op` CLI -------------------------------------------------
 
 // onePasswordKeyring stores secrets in the 1Password vault named
-// by AQL_VAULT_1PASSWORD_VAULT (default "Private"). Each alias
-// becomes an "API Credential" item titled "aql:<alias>". The user
+// by BORU_VAULT_1PASSWORD_VAULT (default "Private"). Each alias
+// becomes an "API Credential" item titled "boru:<alias>". The user
 // must have an active `op signin` session for the `op` CLI calls
 // to succeed; this is the responsibility of the host.
 type onePasswordKeyring struct {
@@ -919,7 +919,7 @@ type onePasswordKeyring struct {
 func (k *onePasswordKeyring) Name() string { return BackendOnePassword }
 
 func (k *onePasswordKeyring) itemTitle(alias string) string {
-	return "aql:" + alias
+	return "boru:" + alias
 }
 
 func (k *onePasswordKeyring) opVault() string {

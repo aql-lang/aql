@@ -12,7 +12,7 @@ package policy
 // 2026-05-27) for the original report.
 //
 // The correct replacement is policy.Compose(parent, child), used by
-// the aql:vm module: a composed policy routes every check through
+// the boru:vm module: a composed policy routes every check through
 // BOTH layers, so the parent's denies always apply regardless of
 // the child's rule structure. There is no way for a child rule to
 // lift a parent deny because the parent gets to vote independently.

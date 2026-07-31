@@ -383,7 +383,7 @@ func InstantiateSchema(r *Registry, info *TypeSchemaInfo, args []Value) (Value, 
 	// Arity: defaults fill missing trailing params (substituted
 	// against the bindings collected so far — D8 lazy defaults).
 	if len(args) > len(info.Params) {
-		return Value{}, &AqlError{
+		return Value{}, &BoruError{
 			Code: "arity_mismatch",
 			Detail: fmt.Sprintf("of: %s takes %d type parameter(s), got %d",
 				schemaShortName(info), len(info.Params), len(args)),
@@ -403,7 +403,7 @@ func InstantiateSchema(r *Registry, info *TypeSchemaInfo, args []Value) (Value, 
 			}
 			arg = d
 		default:
-			return Value{}, &AqlError{
+			return Value{}, &BoruError{
 				Code: "arity_mismatch",
 				Detail: fmt.Sprintf("of: %s takes %d type parameter(s), got %d (no default for %s)",
 					schemaShortName(info), len(info.Params), len(args), p.Name),
@@ -418,7 +418,7 @@ func InstantiateSchema(r *Registry, info *TypeSchemaInfo, args []Value) (Value, 
 		// case).
 		if p.HasBound {
 			if _, uerr := UnifyExplainR(p.Bound, arg, r); uerr != nil {
-				return Value{}, &AqlError{
+				return Value{}, &BoruError{
 					Code: "constraint_violation",
 					Detail: fmt.Sprintf("of: type argument %s for parameter %s does not satisfy its bound %s",
 						canonTypeArg(arg), p.Name, CanonValue(p.Bound)),

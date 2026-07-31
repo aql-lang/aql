@@ -5,7 +5,7 @@ import (
 	"io"
 	"os"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // io_mount_handle.go — Open over a mount is EMULATED, not native: a mount
@@ -18,7 +18,7 @@ import (
 // Open acquires a buffered mount handle. Create/Truncate materialise the
 // (empty) file immediately so a stateless reader sees it; subsequent
 // writes accumulate in the buffer until Sync/Close.
-func (a *aqlFileOps) Open(path string, opts capabilities.OpenOpts) (capabilities.FileHandle, error) {
+func (a *boruFileOps) Open(path string, opts capabilities.OpenOpts) (capabilities.FileHandle, error) {
 	existing, rerr := a.ReadFile(path)
 	exists := rerr == nil
 	switch {
@@ -52,7 +52,7 @@ func (a *aqlFileOps) Open(path string, opts capabilities.OpenOpts) (capabilities
 // mountFileHandle is a whole-file buffer over a mount. Reads/writes hit
 // the buffer; Sync and Close flush it through the mount's write handler.
 type mountFileHandle struct {
-	a      *aqlFileOps
+	a      *boruFileOps
 	path   string
 	buf    []byte
 	off    int64

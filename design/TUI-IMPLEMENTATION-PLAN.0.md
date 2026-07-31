@@ -1,6 +1,6 @@
 # TUI-IMPLEMENTATION-PLAN
 
-The executable slice of `TUI.0.md` — the `aql:tui` module rollout,
+The executable slice of `TUI.0.md` — the `boru:tui` module rollout,
 verified by the `design/examples/tui/` todo probes graduating to real,
 test-driven apps (the `NETWORK-IMPLEMENTATION-PLAN.0.md` discipline:
 phase by phase, each landing green, acceptance = driven apps rather than
@@ -23,7 +23,7 @@ shipped code; this plan invents no new architecture.
   loop is `serve-raw`'s connection-actor choreography
   (`lang/go/modules/net_socket.go`) retargeted at a terminal.
 - **The callback seam is DONE.** `eng.InvokeCallback`
-  (`eng/go/invoke.go`) is the single VM-first/CallAQL-fallback seam every
+  (`eng/go/invoke.go`) is the single VM-first/CallBoru-fallback seam every
   native callback word dispatches through; `update`/`view` ride it
   unchanged.
 - **The host-registration pattern is DONE.** The (since-removed)
@@ -86,7 +86,7 @@ In scope (implemented, tested — P1 lands with this document):
 
 Out of scope, deferred to P2–P5: layout/widgets, the app runtime
 (`run`/`serve`/`quit`/`edit`/`style`/`focusable` and widget
-constructors), the real TTY backend, remote protocol + `aql attach`,
+constructors), the real TTY backend, remote protocol + `boru attach`,
 grapheme widths, mouse decoding beyond the event shape, Windows.
 
 ## 2. Concrete design points
@@ -131,15 +131,15 @@ grapheme widths, mouse decoding beyond the event shape, Windows.
   here, not before); `cmd/go/internal/termback` on x/term + x/ansi +
   x/cellbuf (promoted to direct) with TEST-SEAMS-style seams, registered
   in the run/REPL wiring. Deliverable: the §1/§5 RFC examples run
-  locally; `design/examples/tui/todo-tui.aql` graduates to
+  locally; `design/examples/tui/todo-tui.boru` graduates to
   `design/examples/apps/` + `TestAppTodoTUI` in `lang/go/test/`.
 - **P4 — remote.** The `Renderer` seam refactor, `Tui.serve` (tree
   protocol over json-lines, token auth, one viewer, disconnect-quits),
-  `aql attach` (`cmd/go/internal/attach`), loopback tests;
-  `todo-tui-served.aql` graduates.
+  `boru attach` (`cmd/go/internal/attach`), loopback tests;
+  `todo-tui-served.boru` graduates.
 - **P5 — polish.** Full TSV for the Tier-2 surface, docs, examples,
   keystroke-storm benchmark (the render-on-change check), retro notes
-  into §3b, `todo-tui-client.aql` graduates once P3+P4 both hold.
+  into §3b, `todo-tui-client.boru` graduates once P3+P4 both hold.
 
 ## 3b. Outcome (P1–P7 landed — plan, follow-ups, and closures complete)
 
@@ -177,7 +177,7 @@ grapheme widths, mouse decoding beyond the event shape, Windows.
   HTML rows (`<pre>`+spans — a DOM renderer, not xterm.js: the Frame
   is already a laid-out cell grid, so a vendored terminal emulator
   would only re-parse escapes we never emit), keydown events feed
-  back through page-exposed hooks, and `aqlEvalAsync` runs blocking
+  back through page-exposed hooks, and `boruEvalAsync` runs blocking
   programs on a goroutine so the browser loop keeps delivering keys.
   Verified end to end by `wpg/e2e/tui-e2e.js` (make e2e): a live
   counter app opens the panel, counts real ArrowUp presses, and
@@ -230,11 +230,11 @@ examples in `design/examples/apps/`, the Tier-2 TSV grew its edit-fold
 and constructor-negative rows, and the keystroke-storm benchmark pinned
 the §2.2 render-on-change claim with a number. Specifics:
 
-- **Graduation**: `todo-tui.aql` + `todo-tui-served.aql` merged into
-  ONE module (`../apps/todo-tui.aql` exporting `TodoTui.app/run/serve`
+- **Graduation**: `todo-tui.boru` + `todo-tui-served.boru` merged into
+  ONE module (`../apps/todo-tui.boru` exporting `TodoTui.app/run/serve`
   — the §5 reuse idiom is literally one export map), and
-  `todo-tui-client.aql` became `../apps/todo-tui-client.aql` (spawned
-  HTTP workers against the real `todo-api.aql`). Driven by
+  `todo-tui-client.boru` became `../apps/todo-tui-client.boru` (spawned
+  HTTP workers against the real `todo-api.boru`). Driven by
   `TestAppTodoTUI` (scripted virtual terminal, file-module import),
   `TestTuiServeGraduatedTodoApp` (real wire viewer), and
   `TestAppTodoTUIClient` (full loopback REST round trips, the test
@@ -272,7 +272,7 @@ the §2.2 render-on-change claim with a number. Specifics:
 
 **P4 landed in full**: `Tui.serve` (`modules/tui_serve.go` — json-lines
 tree protocol, constant-time token auth with the `token: "none"`
-opt-out, one viewer, busy denials, disconnect-quits) and `aql attach`
+opt-out, one viewer, busy denials, disconnect-quits) and `boru attach`
 (`cmd/go/internal/attach` — dial, handshake, local layout via the
 shared tuikit renderer, upstream event projection), with loopback tests
 over real ephemeral listeners plus seam-driven session tests over
@@ -310,7 +310,7 @@ implementation:
 - **TSV**: +6 runtime-only `serve` option/config rows
   (`lang/spec/module-tui.tsv`), check-accuracy ratchet pin 141 → 147
   with the changelog entry.
-- **`todo-tui-served.aql` does not graduate here** — the probe apps
+- **`todo-tui-served.boru` does not graduate here** — the probe apps
   still use the aspirational guard-list `case` prose; all three
   graduate together in P5 on the landed `case` spelling (per the P3
   note).
@@ -367,7 +367,7 @@ implementation:
   bespoke Go widget-struct set. The layout engine's input is exactly
   `native.ValueToAny`'s projection (maps/lists/strings/numbers, with a
   numeric coercion helper spanning int/int64/float64/json.Number), which
-  is also exactly what P4's `aql attach` decodes off the wire — local
+  is also exactly what P4's `boru attach` decodes off the wire — local
   and remote rendering are literally one code path, and P3's module
   glue is a single projection call.
 - **Hand-rolled wcwidth tables, no new dependency.** `RuneWidth`/
@@ -447,6 +447,6 @@ latent open-options dispatch defect).
 RFC §9's later tiers — inline non-alt-screen widgets + a focus manager
 (gated on the reserved `alt-screen: false` landing a real design),
 reactivity sugar, the layout dialect, theming, `Stream`-fed widgets
-(gated on `aql:stream` existing), Windows VT parity (needs Windows CI)
+(gated on `boru:stream` existing), Windows VT parity (needs Windows CI)
 — each is a deliberate product decision to sequence on demand, not an
 unresolved question of this effort.

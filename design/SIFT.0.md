@@ -1,11 +1,11 @@
-# SIFT — `aql:sift`, semi-structured text parsing (the awk tier)
+# SIFT — `boru:sift`, semi-structured text parsing (the awk tier)
 
-**Status:** LANDED (2026-07-18) — implemented in AQL; see **§0 Landed state**
+**Status:** LANDED (2026-07-18) — implemented in boru; see **§0 Landed state**
 for what shipped and the deltas from this record. Originally written as a
 PROPOSAL (2026-07-16) in the house style of `MICRON-FORMATS.0.md`,
 distinguishing throughout what was **verified in the code** from what was
 **proposed**. The executable spec is `lang/spec/module-sift.tsv`; the
-canonical word docs come from `aql describe`.
+canonical word docs come from `boru describe`.
 
 Grounding was done against the tree at the time of writing:
 `lang/go/modules/parselang.go`, `lang/go/modules/register_common.go`,
@@ -17,44 +17,44 @@ and `design/EXTENSION-MODULES.10.md` / `design/STREAM-WORDS.0.md` /
 `design/DATAFRAME-WORDS.3.md` / `design/go-modules/README.10.md`.
 
 **Companion:** [`go-modules/EXEC.10.md`](go-modules/EXEC.10.md) designs
-`aql:exec`, the capability-gated module that *produces* command output;
+`boru:exec`, the capability-gated module that *produces* command output;
 this module *parses* it. The two compose (§13 example 7) but neither
 depends on the other.
 
 ---
 
-## 0. Landed state (2026-07-18) — implemented in AQL
+## 0. Landed state (2026-07-18) — implemented in boru
 
-`aql:sift` has landed as a **core module written in AQL**
-(`lang/go/modules/sift.aql`), embedded via `go:embed` and run as a module
-body by a ~90-line Go loader (`sift.go`) — the same pattern `aql:repl` and
-`aql:test` already use. The executable spec is
+`boru:sift` has landed as a **core module written in boru**
+(`lang/go/modules/sift.boru`), embedded via `go:embed` and run as a module
+body by a ~90-line Go loader (`sift.go`) — the same pattern `boru:repl` and
+`boru:test` already use. The executable spec is
 [`lang/spec/module-sift.tsv`](../lang/spec/module-sift.tsv) (~85 rows, green
 in both TCO modes). The six families (§5), the coercion vocabulary (§5.4),
 name normalization (§5.3), the spec-map engine (§6), and the seven `Sift`
 words (§7) are all implemented. Deltas from this design record, all forced
-by the pure-AQL implementation choice:
+by the pure-boru implementation choice:
 
 - **Surface is the `Sift.*` namespace only — not the global `parse <kind>`
   macro (§7/§8).** An imported module's body runs in a *discarded
   sub-registry*, so it cannot register a `parse <kind>` (or a
   `read {fmt:…}`) the importing program would see — that state is
   per-registry and only the Go loader holds the parent. The design assumed
-  parselang-kind registration throughout; the coherent pure-AQL form is
+  parselang-kind registration throughout; the coherent pure-boru form is
   `Sift.parse kv "…"`, `Sift.define`, etc. This also settles the "parse-kind
   only for v1" scope decision: the `read {fmt:'…'}` / `{fmt:'auto'}` bridge
   (§8) and the eager preset catalog (§9) are **deferred**.
 - **Tables are a `List` of row `Map`s, not a schema-carrying `Table`.** Pure
-  AQL has no reachable `TableData` constructor; a list-of-maps is
+  boru has no reachable `TableData` constructor; a list-of-maps is
   behaviourally identical for every sift consumer (`size` / `dot` / `get`),
   and cells are coerced to real typed values.
-- **`family:'fn'` (the §16 escape hatch) is deferred.** Passing an AQL fn
+- **`family:'fn'` (the §16 escape hatch) is deferred.** Passing a boru fn
   *value* as data across the module boundary collides with the
   strict-forward-barrier and fn-value auto-invoke rules; the spec engine
   rejects `family:'fn'` with `sift_spec_error` for now.
 - **`pattern` builds named groups on top of positional `mini re`** (the
   group names are scanned out of the regex source and zipped onto the
-  positional submatches), since AQL's regex surface is positional-only.
+  positional submatches), since boru's regex surface is positional-only.
 
 The rest of this note is the original PROPOSAL, preserved as the design
 rationale; read it in light of the deltas above.
@@ -72,7 +72,7 @@ command output (`ps aux` / `df -P` are whitespace-aligned column tables,
 home turf: line- and field-oriented data whose schema lives in your head,
 not in the bytes.
 
-AQL's parsing stack today covers the tiers **around** that turf, but not
+boru's parsing stack today covers the tiers **around** that turf, but not
 the turf itself (all verified):
 
 - **Rigid, self-describing formats** — `parse <kind>` with the tabnas
@@ -80,7 +80,7 @@ the turf itself (all verified):
   (`lang/go/native/tabnas.go:71`) plus `aontu`
   (`lang/go/modules/parselang.go:641`); the same set (plus `text`,
   `lines`, `tsv`) as `read` formats (`lang/go/native/format.go:397`).
-- **Real grammars** — `aql:parse` (`Parse.grammar`/`Parse.abnf`/
+- **Real grammars** — `boru:parse` (`Parse.grammar`/`Parse.abnf`/
   `Parse.rule`/`Parse.register`) for recursive, token-level syntax.
 - **Primitives** — `read <path> {fmt:'lines'}` (a `List` of line strings,
   `format.go:210`), `StringUtil.split`/`trim`/`match`, and regex via
@@ -98,7 +98,7 @@ JSON is available, `parse json` is the right answer and sift is not
 needed. Sift targets the large remainder that has no JSON mode, plus the
 `/proc` / `/etc` virtual files that never will.
 
-**`aql:sift`** (namespace `Sift`) is the missing tier: a **pure** core
+**`boru:sift`** (namespace `Sift`) is the missing tier: a **pure** core
 module — string in, value out, no capabilities — providing
 
 1. six generic **format families** covering the recurring line-oriented
@@ -125,7 +125,7 @@ names must be lowercase, non-empty, without the `parse_` prefix
 `parse_kind_exists` whether the duplicate is a builtin
 (`RegisterHostParser`, `parselang.go:244`) or a prior registration
 (`parselang.go:250`). Registration works before **or** after
-`import "aql:parselang"` (`parselang.go:230`), and a
+`import "boru:parselang"` (`parselang.go:230`), and a
 `ParseLangSpec.Pure: true` parser constant-folds literal-source parses at
 check time (`pureParseFoldReturns`, `parselang.go:358`).
 
@@ -149,7 +149,7 @@ csv/tsv formats produce a `TableData` — first row headers, each row a Map
 keyed by headers, an **all-String** record schema, short rows padded with
 `""` (`decodeDelimited`, `format.go:267`) — and tables auto-load into
 SQLite when a store is installed (`fileio.go:253`), which is what feeds
-`aql:query`. `TableData{Record, Rows}` is `eng/go/table.go:11`.
+`boru:query`. `TableData{Record, Rows}` is `eng/go/table.go:11`.
 
 ### 2.4 Shipping declarative data inside the binary
 
@@ -161,13 +161,13 @@ it exactly (§9).
 ## 3. Scope decisions (agreed)
 
 1. **Pure module.** Sift performs no I/O and needs no capability. `read`
-   (FileOps-gated) and the future `aql:exec` (process-gated) *acquire*
+   (FileOps-gated) and the future `boru:exec` (process-gated) *acquire*
    text; sift only transforms strings. Consequence: sift runs unchanged
    under `sandbox` / `compute` policies and in the wasm playground.
 2. **Parsers as data.** The extension mechanism is a declarative spec-map
    (§6). Builtin presets are the *same kind of thing* as user extensions —
    specs — so there is one mental model, and preset packs are ordinary
-   publishable AQL modules. A registered fn is the escape hatch, not the
+   publishable boru modules. A registered fn is the escape hatch, not the
    primary path.
 3. **Ride the existing registries.** Every sift parser is a parselang
    kind (and, where the `formats` capability is installed, a read format)
@@ -178,7 +178,7 @@ it exactly (§9).
    through the one registered-parser framework.)
 4. **Bare kind names, eager registration.** `parse meminfo …`, not
    `parse sift:meminfo …` (§7 rationale); all builtin families and
-   presets register at `import "aql:sift"` (lazy registration would make
+   presets register at `import "boru:sift"` (lazy registration would make
    `ParseLang.kinds` output time-dependent, which breaks TSV spec
    pinning — `module-parselang.tsv` §3 pins the kind list).
 5. **Design RFC only.** No implementation code lands with this note,
@@ -187,9 +187,9 @@ it exactly (§9).
 
 ## 4. Naming
 
-`aql:sift`, namespace `Sift`. The id follows the module naming rule
+`boru:sift`, namespace `Sift`. The id follows the module naming rule
 (`lang/go/CLAUDE.md` "Package layout"): capability / framework / DSL
-modules stay plain (`aql:io`, `aql:net`, `aql:query`, `aql:parselang`);
+modules stay plain (`boru:io`, `boru:net`, `boru:query`, `boru:parselang`);
 `-util` marks pure helper libraries or a builtin-type clash, neither of
 which applies. `Sift` collides with no builtin type, no module namespace,
 and no core word.
@@ -354,7 +354,7 @@ Two rules pinned by the §16 validation exercise:
 
 `'normalize'`: split on lower→upper case boundaries and on runs of
 non-alphanumerics; lowercase; join with `-`; a leading digit gets an `f-`
-prefix (bare words cannot start with digits in AQL source, so
+prefix (bare words cannot start with digits in boru source, so
 `m.f-1k-blocks` stays dot-accessible). Post-normalization collisions
 append `-2`, `-3`, … deterministically. Pinned examples (these become
 spec rows):
@@ -429,7 +429,7 @@ are these same maps, embedded.
   (`EXPLANATION.md`, "The Options pattern").
 - **`detect`.** `path:` is a list of path globs matched against the
   cleaned absolute path (the same trailing-`*` glob dialect policy
-  `where` values use — see `profiles/read-only.jsonic`'s `"AQL_*"`).
+  `where` values use — see `profiles/read-only.jsonic`'s `"BORU_*"`).
   `cmd:` carries `match:` (the argv0 **basenames** this preset claims)
   and `argv:` (the ONE canonical, portability-pinned invocation, e.g.
   `["df" "-P"]` — see §8.2 and `EXEC.10.md` §4.1). At most one registered
@@ -536,7 +536,7 @@ Notes:
 - **`Sift.parse` vs core `parse`.** A registered sift kind is an ordinary
   parse kind, so `parse meminfo <text>` is the normal call. `Sift.parse`
   earns its place with the **inline-spec** form — try a spec without
-  registering — and works without `aql:parselang` imported. (Namespaced
+  registering — and works without `boru:parselang` imported. (Namespaced
   reuse of the name `parse` is established: `StructUtil.parse`,
   `TimeUtil.parse`, per `design/PARSING.10.md`.)
 - **Bare kind names.** Presets register as `meminfo`, `ps`, … not
@@ -569,15 +569,15 @@ Notes:
 
 `BuildSiftModule` installs every family and preset through
 `RegisterFormatParser` (§2.2): reachable as `parse <kind> …` (once
-`aql:parselang` is imported) AND as `IO.read <path> {fmt:'<kind>'}` (once
-`aql:io` is imported; `read` remains FileOps-gated — sift adds no I/O of
+`boru:parselang` is imported) AND as `IO.read <path> {fmt:'<kind>'}` (once
+`boru:io` is imported; `read` remains FileOps-gated — sift adds no I/O of
 its own). Because the bridge pre-checks the `formats` capability
 (`parselang.go:277`), a policy that sets `formats install:false` degrades
 sift **to parse-only**: registration falls back to `RegisterHostParser`,
 and the read-format side is skipped. This is documented behaviour, not an
 import error. Re-import is idempotent via a per-registry state slot (the
 `capParseLangHost` pattern, `parselang.go:203`), so a second
-`import "aql:sift"` is a no-op rather than a duplicate-kind error.
+`import "boru:sift"` is a no-op rather than a duplicate-kind error.
 
 ### 8.2 `{fmt:'auto'}` — path detection (the one new native hook)
 
@@ -596,7 +596,7 @@ fn-backed kinds detect like any preset; the table is pure data.
 - `'auto'` becomes a reserved format name (`RegisterFormat`,
   `format.go:421`, refuses it — a one-line guard).
 - **Rejected: implicit detection** on bare `IO.read "/proc/meminfo"`.
-  An `import "aql:sift"` anywhere in the program would silently change
+  An `import "boru:sift"` anywhere in the program would silently change
   the type of an existing read from String to Map — action-at-a-distance
   for both the checker and the human reader. Detection stays opt-in via
   `{fmt:'auto'}`.
@@ -646,7 +646,7 @@ cleanly, carries a `doc:`, and makes no conflicting `detect` claims.
 "3 days, 2:04" segment is locale- and duration-format-variable; the
 `loadavg` + `proc-uptime` files carry the same data stably); `lsblk` /
 `ip addr` (tree glyphs and nested indentation are grammar territory —
-`aql:parse` — and both tools have `--json`); `lscpu` (needs no preset:
+`boru:parse` — and both tools have `--json`); `lscpu` (needs no preset:
 `parse kv <text>` works as-is — it is the worked "a family covers it"
 example, §13); `/etc/shadow` (**deliberate**: a builtin preset should not
 be an attractive nuisance; `dsv` handles it for whoever has legitimate
@@ -658,8 +658,8 @@ command output**; each command preset pins its canonical argv in
 `detect.cmd.argv` (that is the argv `Exec.parse` runs — `EXEC.10.md`
 §4.1) and states its contract in `doc:`. BSD/macOS variants (ps column
 drift: TT/STARTED; indent-delimited ifconfig blocks) are the province of
-**preset packs**: ordinary publishable AQL modules whose body calls
-`Sift.define`, distributed with the existing toolchain (`aql prep` /
+**preset packs**: ordinary publishable boru modules whose body calls
+`Sift.define`, distributed with the existing toolchain (`boru prep` /
 `pack` / `publish` / `install`, `CLI.md`). The §16 exercise closed the
 two gaps that made this story hollow: `blocks {sep:'indent'}` (§5.2)
 expresses indent-delimited blocks declaratively, and `family:'fn'` specs
@@ -698,40 +698,40 @@ convention, not enforcement)*.
 
 ## 11. Overlap — dividing lines
 
-- **`aql:parselang`** — rigid, self-describing formats (json/yaml/toml/…)
+- **`boru:parselang`** — rigid, self-describing formats (json/yaml/toml/…)
   where the schema is in the bytes; sift is line-oriented text whose
   schema lives in the *spec*. Sift implements *against* parselang's
   registry (`RegisterHostParser` / `RegisterFormatParser`) rather than
   beside it.
-- **`aql:parse`** — real grammars: recursive, nested, token-level syntax
+- **`boru:parse`** — real grammars: recursive, nested, token-level syntax
   (`ip addr`'s indented sections). Sift families are flat and
   line-oriented by design; when a format outgrows them, graduate to
   `Parse.grammar` — the user-facing surface (`parse <kind>`) is identical
   either way.
-- **`aql:minilang`** — one-shot value-producing minilangs (`mini re`,
+- **`boru:minilang`** — one-shot value-producing minilangs (`mini re`,
   `+re/…/`, gex/jp/jq/xp). Sift's `pattern` family shares the RE2 engine
   and semantics with `mini re` but returns shaped Maps/Tables and
   participates in the spec/preset ecosystem.
-- **`aql:string-util`** — the primitives (`split`/`trim`/`match`) sift is
+- **`boru:string-util`** — the primitives (`split`/`trim`/`match`) sift is
   built from. A one-off split does not need sift.
-- **`aql:report` / `aql:emitlang`** — the encode direction. Sift is
+- **`boru:report` / `boru:emitlang`** — the encode direction. Sift is
   decode-only **permanently**: a sift spec is not invertible (whitespace
   alignment, comments, and blank-line structure are lost), so emit stays
   with `Report.table` / `emit csv`. (Same stance as tabnas formats, which
   are read-only on the read side — `format.go:40`.)
-- **`aql:query`** — the consumer: sift Tables are ordinary `TableData`
+- **`boru:query`** — the consumer: sift Tables are ordinary `TableData`
   (`table.go:11`), so `from`/`where`/`group` and the SQLite auto-load
   (`fileio.go:253`) apply unchanged. `DATAFRAME-WORDS.3.md`'s proposed
   table words would apply equally.
-- **`aql:struct-util`** — downstream reshaping (`getpath`, `transform`,
+- **`boru:struct-util`** — downstream reshaping (`getpath`, `transform`,
   `selector`) of sift output; also the fn escape hatch's toolkit.
-- **`aql:micro-format` (designed, `EXTENSION-MODULES.10.md` §5)** —
+- **`boru:micro-format` (designed, `EXTENSION-MODULES.10.md` §5)** —
   Internet *message* micro-formats (RFC-822 email, vCard, iCal): domain
   records with their own RFCs, registered through the same parselang
   seam. No name overlap; sift owns OS-flavored line formats. (One
   citation correction in passing: that note's "RegisterFormatEmitter" is
   actually `RegisterHostEmitter`, `lang/go/modules/emitlang.go:185`.)
-- **`aql:exec` (companion, [`go-modules/EXEC.10.md`](go-modules/EXEC.10.md))**
+- **`boru:exec` (companion, [`go-modules/EXEC.10.md`](go-modules/EXEC.10.md))**
   — produces the command output sift parses. The bridge word
   (`Exec.parse`) lives in exec so sift stays pure; the shared detection
   table (§8.2) is the only coupling, and it is data.
@@ -741,7 +741,7 @@ convention, not enforcement)*.
 - **Streaming.** v1 is whole-string, like every existing Format and parse
   kind (`read` slurps via the FileOps seam before decoding). For
   huge inputs the future options are a streaming decode seam riding the
-  lazy-table `Materializer` interface (`table.go:22`) or `aql:stream`'s
+  lazy-table `Materializer` interface (`table.go:22`) or `boru:stream`'s
   `from-lines` (`STREAM-WORDS.0.md`) — named here, not designed.
 - **Typed refinement (v2).** Micron coercions (`'path'` → Pathon), and
   per-preset exported Record types (`Sift.Meminfo` for `is` checks),
@@ -751,7 +751,7 @@ convention, not enforcement)*.
   producing side (`EXEC.10.md` §4.1).
 - **The `columns` family cannot express** multi-line records, ragged
   multi-header tables (`/proc/net/dev`), or position-critical alignment —
-  `fixed` and `aql:parse` are the escape routes; presets for those files
+  `fixed` and `boru:parse` are the escape routes; presets for those files
   wait for v2.
 
 ## 13. Worked examples
@@ -760,7 +760,7 @@ All examples are **proposed surface** (nothing below runs today) except
 where marked verified. Forward form; `# returns` shows results.
 
 ```
-import "aql:io"  import "aql:sift"  import "aql:parselang"
+import "boru:io"  import "boru:sift"  import "boru:parselang"
 
 # 1. meminfo → Map. Two steps: read is FileOps-gated; sift is pure.
 def mem (parse meminfo ("/proc/meminfo" IO.read))
@@ -777,13 +777,13 @@ cpus size                             # returns 8 — one Map per processor bloc
 # 4. mounts → Table → SQL. Sift tables are ordinary TableData, so the
 #    query pipeline applies unchanged (Query.from resolves its table by
 #    name from the context store — lang/spec/module-query.tsv).
-import "aql:query"
+import "boru:query"
 context set mounts ("/proc/mounts" IO.read {fmt:'mounts'})
 Query.select [device mount] Query.from mounts Query.where [fstype eq "ext4"]
                                       # returns the ext4 rows (Table)
 
 # 5. Command output piped in on stdin — works TODAY up to the parse:
-#    $ ps aux | aql script.aql
+#    $ ps aux | boru script.boru
 context set procs (parse ps (IO.stdin IO.read))
 Query.select [pid command] Query.from procs Query.where [cpu gt 50.0]
 
@@ -797,10 +797,10 @@ Sift.define mytool myspec
 parse mytool "4096 ./a"               # returns a Table — a first-class kind
 Sift.spec mytool                      # returns the merged spec map back
 # To share it: put the Sift.define in a module body and
-# `aql prep && aql pack && aql publish` (CLI.md).
+# `boru prep && boru pack && boru publish` (CLI.md).
 
 # 7. With the companion module (EXEC.10.md), acquisition folds in:
-import "aql:exec"
+import "boru:exec"
 Exec.parse df                         # runs ["df" "-P"], parses with the df preset
 # returns a Table; the equivalent long form:
 def r (["df" "-P"] Exec.run)
@@ -863,7 +863,7 @@ conventions (`go-modules/README.10.md`):
 To pressure-test the extension mechanism before implementation, the user
 code for an `ifconfig` parser (Linux net-tools 2.x) was written
 speculatively against this RFC:
-[`examples/sift/ifconfig.aql`](examples/sift/ifconfig.aql). ifconfig was
+[`examples/sift/ifconfig.boru`](examples/sift/ifconfig.boru). ifconfig was
 chosen *because* it defeats the declarative families: a block is a
 structured header line plus keyword-dispatched detail lines, repeated
 `inet`/`inet6` lines accumulate into Lists, and the RX/TX counter-line

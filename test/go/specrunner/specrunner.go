@@ -8,7 +8,7 @@
 // form for expected-error rows).
 //
 // The caller supplies a Run function that does the parse-and-evaluate
-// step. Rendering lives in `eng.Canon`, which emits canonical AQL source
+// step. Rendering lives in `eng.Canon`, which emits canonical boru source
 // — a form that re-parses to the same stack.
 package specrunner
 
@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // Run executes one spec row's input and returns the resulting stack.

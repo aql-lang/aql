@@ -6,13 +6,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
-// Tier-1 raw-terminal words for aql:tui — the executable slice of
+// Tier-1 raw-terminal words for boru:tui — the executable slice of
 // design/TUI.0.md §4 (Stage P1 of design/TUI-IMPLEMENTATION-PLAN.0.md):
 //
 //	open {mouse: Bool title: "…"}        -> Terminal      (terminal.open gated)
@@ -41,7 +41,7 @@ import (
 var TTerminal = registerTuiType("Ideal/Terminal", 5011, terminalBehavior{})
 
 func registerTuiType(path string, id int, b eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterType(path, id, "aql:tui", b)
+	t, err := eng.Builtin.RegisterType(path, id, "boru:tui", b)
 	if err != nil {
 		native.RecordTypeInitError(fmt.Errorf("tui: register %s: %w", path, err))
 	}
@@ -115,7 +115,7 @@ func (terminalBehavior) Format(v native.Value) string {
 
 // TuiSpec describes a host-provided terminal backend. Open is called
 // once per Tui.open and must return a fresh (or freshly reusable)
-// Backend; failures surface to the AQL caller as `terminal` errors.
+// Backend; failures surface to the boru caller as `terminal` errors.
 type TuiSpec struct {
 	// Name identifies the backend in diagnostics ("tty", "virtual", …).
 	Name string
@@ -154,7 +154,7 @@ func init() {
 
 // RegisterHostTui installs a terminal backend on reg — the embedder
 // seam of design/TUI.0.md §4.3. Registration may happen before or after
-// the program imports "aql:tui": the words resolve the backend at
+// the program imports "boru:tui": the words resolve the backend at
 // dispatch time, not at module build, so there is no replay step
 // (register before the program runs if it loads TUI apps as file
 // modules — the module sub-registry snapshots the slot at import).
@@ -220,10 +220,10 @@ func tuiAltScreenReserved(mp native.ReadMap, word string, r *native.Registry) er
 	}
 	b, err := v.AsConcreteBoolean()
 	if err != nil {
-		return r.AqlError("tui_error", word+": alt-screen: must be a Boolean", word)
+		return r.BoruError("tui_error", word+": alt-screen: must be a Boolean", word)
 	}
 	if !b {
-		return r.AqlError("unsupported", word+": alt-screen: false (the inline tier) is reserved but not yet implemented — see TUI.0.md §9", word)
+		return r.BoruError("unsupported", word+": alt-screen: false (the inline tier) is reserved but not yet implemented — see TUI.0.md §9", word)
 	}
 	return nil
 }
@@ -231,7 +231,7 @@ func tuiAltScreenReserved(mp native.ReadMap, word string, r *native.Registry) er
 // mapTuiErr converts a backend failure into the `terminal` error code —
 // the transport analog of mapNetErr's vocabulary.
 func mapTuiErr(r *native.Registry, word string, err error) error {
-	return r.AqlError("terminal", word+": "+err.Error(), word)
+	return r.BoruError("terminal", word+": "+err.Error(), word)
 }
 
 // ---- guards and option parsing ----
@@ -239,7 +239,7 @@ func mapTuiErr(r *native.Registry, word string, err error) error {
 func tuiTerm(args []native.Value, word string, r *native.Registry) (*termState, error) {
 	ts, ok := asTerminal(args[0])
 	if !ok {
-		return nil, r.AqlError("tui_error", word+": expected a Terminal, got "+args[0].Parent.String(), word)
+		return nil, r.BoruError("tui_error", word+": expected a Terminal, got "+args[0].Parent.String(), word)
 	}
 	return ts, nil
 }
@@ -250,7 +250,7 @@ func tuiOpenTerm(args []native.Value, word string, r *native.Registry) (*termSta
 		return nil, err
 	}
 	if ts.closed.Load() {
-		return nil, r.AqlError("closed", word+": terminal is closed", word)
+		return nil, r.BoruError("closed", word+": terminal is closed", word)
 	}
 	return ts, nil
 }
@@ -289,7 +289,7 @@ func styleFromMap(v native.Value, word string, r *native.Registry) (tuikit.Style
 	st := tuikit.Style{}
 	mp, _ := native.AsMap(v)
 	if mp == nil {
-		return st, r.AqlError("tui_error", word+": style must be a Map", word)
+		return st, r.BoruError("tui_error", word+": style must be a Map", word)
 	}
 	var err error
 	if st.FG, err = tuiOptString(mp, "fg"); err == nil {
@@ -308,7 +308,7 @@ func styleFromMap(v native.Value, word string, r *native.Registry) (tuikit.Style
 		st.Reverse, err = tuiOptBoolean(mp, "reverse")
 	}
 	if err != nil {
-		return tuikit.Style{}, r.AqlError("tui_error", word+": "+err.Error(), word)
+		return tuikit.Style{}, r.BoruError("tui_error", word+": "+err.Error(), word)
 	}
 	return st, nil
 }
@@ -352,14 +352,14 @@ func tuiOpenHandler(args []native.Value, _ map[string]native.Value, _ []native.V
 	if len(args) > 0 {
 		mp, _ := native.AsMap(args[0])
 		if mp == nil {
-			return nil, r.AqlError("tui_error", "open: options must be a Map", "open")
+			return nil, r.BoruError("tui_error", "open: options must be a Map", "open")
 		}
 		var err error
 		if opts.Mouse, err = tuiOptBoolean(mp, "mouse"); err == nil {
 			opts.Title, err = tuiOptString(mp, "title")
 		}
 		if err != nil {
-			return nil, r.AqlError("tui_error", "open: "+err.Error(), "open")
+			return nil, r.BoruError("tui_error", "open: "+err.Error(), "open")
 		}
 		if err := tuiAltScreenReserved(mp, "open", r); err != nil {
 			return nil, err
@@ -404,17 +404,17 @@ func tuiReadEventHandler(args []native.Value, _ map[string]native.Value, _ []nat
 		return nil, err
 	}
 	if ts.delivering.Load() {
-		return nil, r.AqlError("tui_error", "read-event: events are being delivered to a process (deliver-events owns the stream)", "read-event")
+		return nil, r.BoruError("tui_error", "read-event: events are being delivered to a process (deliver-events owns the stream)", "read-event")
 	}
 	dur, has, dErr := recvDeadline(args, 1)
 	if dErr != nil {
-		return nil, r.AqlError("tui_error", "read-event: "+dErr.Error(), "read-event")
+		return nil, r.BoruError("tui_error", "read-event: "+dErr.Error(), "read-event")
 	}
 	events := ts.backend.Events()
 	if !has {
 		ev, ok := <-events
 		if !ok {
-			return nil, r.AqlError("closed", "read-event: terminal input has ended", "read-event")
+			return nil, r.BoruError("closed", "read-event: terminal input has ended", "read-event")
 		}
 		return []native.Value{eventToMap(ev)}, nil
 	}
@@ -423,7 +423,7 @@ func tuiReadEventHandler(args []native.Value, _ map[string]native.Value, _ []nat
 	select {
 	case ev, ok := <-events:
 		if !ok {
-			return nil, r.AqlError("closed", "read-event: terminal input has ended", "read-event")
+			return nil, r.BoruError("closed", "read-event: terminal input has ended", "read-event")
 		}
 		return []native.Value{eventToMap(ev)}, nil
 	case <-timer.C:
@@ -447,10 +447,10 @@ func tuiDeliverEventsHandler(args []native.Value, _ map[string]native.Value, _ [
 	}
 	proc, ok := native.PidProcess(args[1])
 	if !ok {
-		return nil, r.AqlError("tui_error", "deliver-events: expected a Pid target, got "+args[1].Parent.String(), "deliver-events")
+		return nil, r.BoruError("tui_error", "deliver-events: expected a Pid target, got "+args[1].Parent.String(), "deliver-events")
 	}
 	if !ts.delivering.CompareAndSwap(false, true) {
-		return nil, r.AqlError("tui_error", "deliver-events: events are already being delivered", "deliver-events")
+		return nil, r.BoruError("tui_error", "deliver-events: events are already being delivered", "deliver-events")
 	}
 	go func() {
 		defer ts.delivering.Store(false)
@@ -485,15 +485,15 @@ func tuiPrintAtHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	}
 	x64, xErr := args[1].AsConcreteInteger()
 	if xErr != nil {
-		return nil, r.AqlError("tui_error", "print-at: x must be an Integer", "print-at")
+		return nil, r.BoruError("tui_error", "print-at: x must be an Integer", "print-at")
 	}
 	y64, yErr := args[2].AsConcreteInteger()
 	if yErr != nil {
-		return nil, r.AqlError("tui_error", "print-at: y must be an Integer", "print-at")
+		return nil, r.BoruError("tui_error", "print-at: y must be an Integer", "print-at")
 	}
 	text, tErr := args[3].AsConcreteString()
 	if tErr != nil {
-		return nil, r.AqlError("tui_error", "print-at: text must be a String", "print-at")
+		return nil, r.BoruError("tui_error", "print-at: text must be a String", "print-at")
 	}
 	st := tuikit.Style{}
 	if len(args) > 4 {
@@ -563,7 +563,7 @@ func tuiTitleHandler(args []native.Value, _ map[string]native.Value, _ []native.
 	}
 	s, sErr := args[1].AsConcreteString()
 	if sErr != nil {
-		return nil, r.AqlError("tui_error", "title: expected a String", "title")
+		return nil, r.BoruError("tui_error", "title: expected a String", "title")
 	}
 	if tErr := ts.backend.SetTitle(s); tErr != nil {
 		return nil, mapTuiErr(r, "title", tErr)
@@ -643,7 +643,7 @@ func tuiTier1Natives() []native.NativeFunc {
 	}
 }
 
-// BuildTuiModule creates the "aql:tui" native module: the Tier-1 words
+// BuildTuiModule creates the "boru:tui" native module: the Tier-1 words
 // in an isolated sub-registry behind trivial-delegation wrappers, plus
 // the Terminal type literal (so `x is Tui.Terminal` works after import).
 func BuildTuiModule(parent *native.Registry) (native.ModuleDesc, error) {

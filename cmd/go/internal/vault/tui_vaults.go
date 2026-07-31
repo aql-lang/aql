@@ -1,8 +1,8 @@
 package vault
 
-// tui_vaults.go — the vault index (~/.aql/vaults.jsonic) and discovery.
+// tui_vaults.go — the vault index (~/.boru/vaults.jsonic) and discovery.
 //
-// A machine can hold several vaults: the default ~/.aql/vault.jsonic,
+// A machine can hold several vaults: the default ~/.boru/vault.jsonic,
 // suffixed siblings vault.<suffix>.jsonic sharing a folder, and vaults in
 // arbitrary --folder locations. Vaults in a known folder are found by
 // globbing vault*.jsonic; vaults in an arbitrary --folder are NOT findable
@@ -12,7 +12,7 @@ package vault
 //
 // The index records LOCATIONS ONLY — folder, suffix, a label, and
 // timestamps — never any secret, key, or value. It lives in the home
-// ~/.aql folder (not the --folder override) so it is a single global
+// ~/.boru folder (not the --folder override) so it is a single global
 // registry across all vault locations.
 
 import (
@@ -26,13 +26,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 )
 
 // vaultIndexVersion is the on-disk schema version of vaults.jsonic.
 const vaultIndexVersion = 1
 
-// vaultIndexFile is the index file name within the home ~/.aql folder.
+// vaultIndexFile is the index file name within the home ~/.boru folder.
 const vaultIndexFile = "vaults.jsonic"
 
 // vaultRef is one known vault location. It carries no secret material:
@@ -63,18 +63,18 @@ type discoveredVault struct {
 	InIdx  bool // present in the index
 }
 
-// homeAQLDir is the home ~/.aql folder, where the global index lives. It
-// is independent of AQL_VAULT_FOLDER so the registry stays single even
+// homeBoruDir is the home ~/.boru folder, where the global index lives. It
+// is independent of BORU_VAULT_FOLDER so the registry stays single even
 // when individual vaults live elsewhere.
-func homeAQLDir(homeDir string) string { return filepath.Join(homeDir, ".aql") }
+func homeBoruDir(homeDir string) string { return filepath.Join(homeDir, ".boru") }
 
 // vaultIndexPath is the path to the index file.
 func vaultIndexPath(homeDir string) string {
-	return filepath.Join(homeAQLDir(homeDir), vaultIndexFile)
+	return filepath.Join(homeBoruDir(homeDir), vaultIndexFile)
 }
 
 // metaFileName builds the metadata file name for a suffix, independent of
-// the AQL_VAULT_SUFFIX env (unlike vaultFileName): "" -> vault.jsonic,
+// the BORU_VAULT_SUFFIX env (unlike vaultFileName): "" -> vault.jsonic,
 // "work" -> vault.work.jsonic.
 func metaFileName(suffix string) string {
 	if suffix == "" {
@@ -123,7 +123,7 @@ func loadVaultIndex(homeDir string) (*vaultIndex, error) {
 }
 
 // saveVaultIndex writes vaults.jsonic atomically with mode 0600 (the home
-// ~/.aql folder is created 0700 if absent).
+// ~/.boru folder is created 0700 if absent).
 func saveVaultIndex(homeDir string, idx *vaultIndex) error {
 	if homeDir == "" {
 		// No home means no global registry; silently skip rather than
@@ -131,7 +131,7 @@ func saveVaultIndex(homeDir string, idx *vaultIndex) error {
 		return nil
 	}
 	idx.Version = vaultIndexVersion
-	if err := os.MkdirAll(homeAQLDir(homeDir), 0700); err != nil {
+	if err := os.MkdirAll(homeBoruDir(homeDir), 0700); err != nil {
 		return err
 	}
 	data, err := t7jsonMarshalIndent(idx, "", "  ")
@@ -298,7 +298,7 @@ func scanFolderVaults(folder string) []string {
 }
 
 // enumerateVaults lists every known vault: the union of (a) vault*.jsonic
-// files globbed from the home ~/.aql folder, the currently-resolved vault
+// files globbed from the home ~/.boru folder, the currently-resolved vault
 // folder, and every folder named in the index, with (b) the index entries
 // themselves. Results are deduped by (cleaned folder, suffix), annotated
 // with existence/lock state, and sorted default-first then
@@ -311,8 +311,8 @@ func enumerateVaults(homeDir string) ([]discoveredVault, error) {
 		idx = &vaultIndex{Version: vaultIndexVersion}
 	}
 
-	// Folders to scan: home ~/.aql, the resolved vault folder (honors an
-	// AQL_VAULT_FOLDER override active for this process), and every index
+	// Folders to scan: home ~/.boru, the resolved vault folder (honors a
+	// BORU_VAULT_FOLDER override active for this process), and every index
 	// folder.
 	folderSet := map[string]bool{}
 	addFolder := func(f string) {
@@ -320,7 +320,7 @@ func enumerateVaults(homeDir string) ([]discoveredVault, error) {
 			folderSet[filepath.Clean(f)] = true
 		}
 	}
-	addFolder(homeAQLDir(homeDir))
+	addFolder(homeBoruDir(homeDir))
 	addFolder(vaultFolder(homeDir))
 	for _, ref := range idx.Vaults {
 		addFolder(ref.Folder)
@@ -406,7 +406,7 @@ func (dv discoveredVault) displayName() string {
 	}
 }
 
-// runVaults implements `aql vault folder` (aliases: folders, vaults) and its
+// runVaults implements `boru vault folder` (aliases: folders, vaults) and its
 // subcommands:
 //
 //	vault folder                      list discovered + recorded vaults
@@ -437,7 +437,7 @@ func runVaultsList(args []string, homeDir string, stdout, stderr io.Writer) int 
 	// nothing to guard here (unreachable guard removed, ADR-005 / TEST-SEAMS.10).
 	vs, _ := enumerateVaults(homeDir)
 	if len(vs) == 0 {
-		fmt.Fprintln(stdout, "vault: no vaults found (run `aql vault init`)")
+		fmt.Fprintln(stdout, "vault: no vaults found (run `boru vault init`)")
 		return 0
 	}
 	fmt.Fprintf(stdout, "%-2s %-16s %-10s %-10s %-8s %s\n", "", "NAME", "SUFFIX", "BACKEND", "STATUS", "FOLDER")
@@ -461,7 +461,7 @@ func runVaultsList(args []string, homeDir string, stdout, stderr io.Writer) int 
 
 // runVaultsAdd registers an already-existing vault into the index so it is
 // discoverable by the TUI and `vault vaults`. The suffix comes from the
-// global --suffix location flag (e.g. `aql vault --suffix=work vaults add
+// global --suffix location flag (e.g. `boru vault --suffix=work vaults add
 // /path`); when omitted it is auto-detected if the folder holds exactly one
 // vault.
 func runVaultsAdd(args []string, homeDir string, stdout, stderr io.Writer) int {
@@ -471,7 +471,7 @@ func runVaultsAdd(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault [--suffix=NAME] folder add <dir>")
+		fmt.Fprintln(stderr, "error: usage: boru vault [--suffix=NAME] folder add <dir>")
 		return 1
 	}
 	folder := filepath.Clean(pathutil.ExpandTilde(fs.Arg(0), homeDir))
@@ -516,7 +516,7 @@ func runVaultsRemove(args []string, homeDir string, stdout, stderr io.Writer) in
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault [--suffix=NAME] folder rm <dir>")
+		fmt.Fprintln(stderr, "error: usage: boru vault [--suffix=NAME] folder rm <dir>")
 		return 1
 	}
 	folder := filepath.Clean(pathutil.ExpandTilde(fs.Arg(0), homeDir))
@@ -559,7 +559,7 @@ func quoteSuffixes(suffixes []string) []string {
 	return out
 }
 
-// launchVault picks the vault to open when `aql vault -i` is invoked with no
+// launchVault picks the vault to open when `boru vault -i` is invoked with no
 // explicit --folder/--suffix: the index default, else the only vault, else
 // the most-recently-opened. ok is false when there is nothing to open (zero
 // discovered vaults) so the caller drops into the picker/create flow.

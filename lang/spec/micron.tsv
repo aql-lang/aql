@@ -1,4 +1,4 @@
-# AQL Language Specification: Scalar/Micron — structured scalars
+# boru Language Specification: Scalar/Micron — structured scalars
 # Format: input<TAB>expected<TAB>description
 #
 # Scalar/Micron is the structured-scalar family: values that behave as
@@ -318,7 +318,7 @@ make Pathon [ 'x' 'y' ]	x/y
 make Pathon 99	ERROR:Pathon source must be a list or string
 # Windows drive paths: a `C:` drive prefix is recognised, either slash splits
 # segments, and the path renders in canonical backslash form. Inputs use
-# forward slashes since AQL strings treat backslash as an escape. A driveless
+# forward slashes since boru strings treat backslash as an escape. A driveless
 # path stays POSIX (only `/` splits; `//a//b` is `/a/b`, never a volume).
 make Pathon 'C:/Users/foo'	C:\Users\foo	drive path renders canonical backslash
 (make Pathon 'C:/Users/foo').volume	'C:'	the drive is exposed as the volume

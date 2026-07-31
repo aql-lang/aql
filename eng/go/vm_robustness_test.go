@@ -7,9 +7,9 @@ import (
 )
 
 // Finding C — a VM-internal soundness violation surfaces as a structured
-// internal_error AqlError (taxonomy for tooling + the RunCompiled
+// internal_error BoruError (taxonomy for tooling + the RunCompiled
 // fall-back-to-interpreter signal), not a raw Go error string.
-func TestVMInternalErrorIsAqlError(t *testing.T) {
+func TestVMInternalErrorIsBoruError(t *testing.T) {
 	r, err := NewRegistry()
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
@@ -22,7 +22,7 @@ func TestVMInternalErrorIsAqlError(t *testing.T) {
 	if runErr == nil {
 		t.Fatal("SWAP underflow returned nil error")
 	}
-	var ae *AqlError
+	var ae *BoruError
 	if !errors.As(runErr, &ae) || ae.Code != "internal_error" {
 		t.Fatalf("internal error = %v (%T), want code internal_error", runErr, runErr)
 	}
@@ -60,7 +60,7 @@ func TestVMRecoversHandlerPanic(t *testing.T) {
 	if runErr == nil {
 		t.Fatal("panicking handler returned nil error (not recovered)")
 	}
-	var ae *AqlError
+	var ae *BoruError
 	if !errors.As(runErr, &ae) || ae.Code != "internal_error" {
 		t.Fatalf("recovered panic = %v (%T), want code internal_error", runErr, runErr)
 	}
@@ -102,7 +102,7 @@ func TestVMConcurrencyGuard(t *testing.T) {
 	if runErr == nil {
 		t.Fatal("overlapping run on one registry returned nil error")
 	}
-	var ae *AqlError
+	var ae *BoruError
 	if !errors.As(runErr, &ae) || ae.Code != "concurrency_error" {
 		t.Fatalf("overlap = %v (%T), want code concurrency_error", runErr, runErr)
 	}

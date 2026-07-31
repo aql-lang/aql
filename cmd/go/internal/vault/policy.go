@@ -9,7 +9,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 )
 
 // Policy is the declarative shape of a vault policy file. A team
@@ -64,14 +64,14 @@ type PolicyCapability struct {
 	RequireApproval bool     `json:"require_approval,omitempty"`
 }
 
-// runPolicy implements `aql vault policy <apply|show> [args...]`.
+// runPolicy implements `boru vault policy <apply|show> [args...]`.
 // It is the only mode with a nested verb because the policy
 // surface needs both a writer (apply) and a reader (show) and
 // keeping them under one parent keeps the top-level mode list
 // short.
 func runPolicy(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "error: usage: aql vault policy <apply|show> [args...]")
+		fmt.Fprintln(stderr, "error: usage: boru vault policy <apply|show> [args...]")
 		return 1
 	}
 	sub, rest := args[0], args[1:]
@@ -94,7 +94,7 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintln(stderr, "error: usage: aql vault policy apply [--dry-run] <policy.json>")
+		fmt.Fprintln(stderr, "error: usage: boru vault policy apply [--dry-run] <policy.json>")
 		return 1
 	}
 	// Expand a leading ~ the shell left verbatim (e.g. a quoted path).
@@ -110,7 +110,7 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 		return 1
 	}
 	if pol.Version > policyVersion {
-		fmt.Fprintf(stderr, "error: policy %s is version %d but this aql understands up to version %d; upgrade aql\n", path, pol.Version, policyVersion)
+		fmt.Fprintf(stderr, "error: policy %s is version %d but this boru understands up to version %d; upgrade boru\n", path, pol.Version, policyVersion)
 		return 1
 	}
 
@@ -120,7 +120,7 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 
@@ -148,7 +148,7 @@ func runPolicyApply(args []string, homeDir string, stdin io.Reader, stdout, stde
 			return err
 		}
 		if s == nil {
-			return fmt.Errorf("vault not initialized; run \"aql vault init\"")
+			return fmt.Errorf("vault not initialized; run \"boru vault init\"")
 		}
 		if s.Locked {
 			return errLocked

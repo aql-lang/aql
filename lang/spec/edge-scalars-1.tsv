@@ -1,4 +1,4 @@
-# AQL Language Specification: scalar edge cases 1 — the numeric tower
+# boru Language Specification: scalar edge cases 1 — the numeric tower
 # Format: input<TAB>expected<TAB>description
 #
 # Edge coverage for the four numeric leaves (Integer, Float, BigInteger,
@@ -48,7 +48,7 @@ do [0d2 sub 1.0] error [dot code]	type_error/q	Big ⊕ Float never degrades: sub
 (do [0d7 div 2.0] error [dot code]) eq type_error/q	true	…and div raises the same type_error
 #
 # §4  int64 overflow — the literal boundary (statically flagged) and the
-#     runtime boundary (uniform [aql/integer_overflow], captured here as
+#     runtime boundary (uniform [boru/integer_overflow], captured here as
 #     values via do/error so the CODE is pinned, not just the raise).
 9223372036854775807	9223372036854775807	int64 max literal is exact
 -9223372036854775808	-9223372036854775808	int64 min literal is exact
@@ -91,17 +91,17 @@ nan pow 0.0	1.0	…and even for NaN
 # §8  the two rounding regimes — round ties AWAY from zero, round-even
 #     ties to even (IEEE roundTiesToEven); floor/ceil are directional.
 #     All four are Float-typed: an Integer input is a dispatch error.
-import "aql:math-util"  MathUtil.round 0.5	1	round: 0.5 goes AWAY from zero
-import "aql:math-util"  MathUtil.round -0.5	-1	round: -0.5 goes away from zero too (not toward -inf)
-import "aql:math-util"  MathUtil.round -2.5	-3	round: -2.5 → -3 (away)
-import "aql:math-util"  MathUtil.round-even 0.5	0	round-even: 0.5 ties to the even neighbour 0
-import "aql:math-util"  MathUtil.round-even -2.5	-2	round-even: -2.5 ties to even -2 (round gives -3)
-import "aql:math-util"  MathUtil.round-even 1.5	2	round-even: 1.5 → 2 (2 is even)
-import "aql:math-util"  MathUtil.round-even 3.5	4	round-even: 3.5 → 4 — adjacent halves land on DIFFERENT sides
-import "aql:math-util"  MathUtil.floor -2.5	-3	floor is toward -inf
-import "aql:math-util"  MathUtil.ceil -2.5	-2	ceil is toward +inf
-import "aql:math-util"  MathUtil.ceil -0.5	0	ceil of a small negative is zero
-import "aql:math-util"  MathUtil.trunc -2.9	-2	trunc is toward zero (compare floor: -3)
-import "aql:math-util"  MathUtil.trunc 2.9	2	trunc positive
-import "aql:math-util"  MathUtil.round 2.5 typeof	Integer	the rounding family returns an Integer, not a Float
-import "aql:math-util"  MathUtil.floor 5	5	the rounding family is total over Number — an Integer is already integral (identity; NUR008 fix — this row previously pinned the Float-only gap as an uncalled_function)
+import "boru:math-util"  MathUtil.round 0.5	1	round: 0.5 goes AWAY from zero
+import "boru:math-util"  MathUtil.round -0.5	-1	round: -0.5 goes away from zero too (not toward -inf)
+import "boru:math-util"  MathUtil.round -2.5	-3	round: -2.5 → -3 (away)
+import "boru:math-util"  MathUtil.round-even 0.5	0	round-even: 0.5 ties to the even neighbour 0
+import "boru:math-util"  MathUtil.round-even -2.5	-2	round-even: -2.5 ties to even -2 (round gives -3)
+import "boru:math-util"  MathUtil.round-even 1.5	2	round-even: 1.5 → 2 (2 is even)
+import "boru:math-util"  MathUtil.round-even 3.5	4	round-even: 3.5 → 4 — adjacent halves land on DIFFERENT sides
+import "boru:math-util"  MathUtil.floor -2.5	-3	floor is toward -inf
+import "boru:math-util"  MathUtil.ceil -2.5	-2	ceil is toward +inf
+import "boru:math-util"  MathUtil.ceil -0.5	0	ceil of a small negative is zero
+import "boru:math-util"  MathUtil.trunc -2.9	-2	trunc is toward zero (compare floor: -3)
+import "boru:math-util"  MathUtil.trunc 2.9	2	trunc positive
+import "boru:math-util"  MathUtil.round 2.5 typeof	Integer	the rounding family returns an Integer, not a Float
+import "boru:math-util"  MathUtil.floor 5	5	the rounding family is total over Number — an Integer is already integral (identity; NUR008 fix — this row previously pinned the Float-only gap as an uncalled_function)

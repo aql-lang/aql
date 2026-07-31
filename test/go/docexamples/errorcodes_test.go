@@ -35,7 +35,7 @@
 //     entry for a code no site mints is a phantom in the enumeration, the
 //     same defect as a phantom in the table.
 //   - documented ⊆ registered — so tooling that reads the enumeration
-//     (`aql explain <code>`) can resolve every code a reader can look up.
+//     (`boru explain <code>`) can resolve every code a reader can look up.
 //
 // Two limits remain, stated because they bound what this proves:
 //
@@ -57,17 +57,17 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	_ "github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	_ "github.com/boru-lang/boru/lang/go/native"
 )
 
 // codeSourceRoots are the trees searched for code-minting sites, relative to
 // this package (repo root is three dirs up from test/go/docexamples).
 //
 // `cmd/go` is deliberately NOT scanned. Its only two matches are
-// `Code: "aql/init"` and `Code: "aql/check"` in the LSP server
+// `Code: "boru/init"` and `Code: "boru/check"` in the LSP server
 // (cmd/go/internal/lsp/diagnostics.go) — fields of an LSP `Diagnostic`, not
-// of an AqlError. No AQL program can dispatch on them, and they are not AQL
+// of a BoruError. No boru program can dispatch on them, and they are not boru
 // error codes; including them would force two protocol strings into the
 // language's enumeration to keep the bidirectional check green. The one-way
 // gate tolerated them because extra entries only made it more permissive.
@@ -80,29 +80,29 @@ var codeSourceRoots = []string{"eng/go", "lang/go"}
 // error or a diagnostic. Capture group 1 is the code.
 //
 // Deliberately NOT matched: a package-level constant that merely spells a
-// code (`CodePermissionDenied = "aql/permission_denied"`). Counting
+// code (`CodePermissionDenied = "boru/permission_denied"`). Counting
 // declarations would have made this gate vacuous exactly where it is most
 // needed — `policy` declares four such constants, its header says "the
-// engine adapter copies these onto the produced AqlError", and until that
+// engine adapter copies these onto the produced BoruError", and until that
 // adapter was written not one of them ever reached a user. A code is real
 // when a site attaches it, not when a site names it.
 //
-// The `aql/` prefix stays optional in the struct-literal pattern because a
-// code can be assigned from such a constant; AqlError stores the bare name
+// The `boru/` prefix stays optional in the struct-literal pattern because a
+// code can be assigned from such a constant; BoruError stores the bare name
 // and renders the prefix.
 var codeMintPatterns = []*regexp.Regexp{
-	// r.AqlError("x", …) / r.AqlErrorHint("x", …) / MakeAqlError("x", …)
-	// / MakeAqlErrorAt / makeAqlError / makeAqlErrorAt.
-	regexp.MustCompile(`\b(?:M|m)akeAqlError(?:At)?\(\s*"([a-z][a-z0-9_-]*)"`),
-	// …and the POSITIONED constructors r.AqlErrorAt / r.AqlErrorHintAt. They
-	// arrived with the aql:io positionless-error pilot, after this gate was
+	// r.BoruError("x", …) / r.BoruErrorHint("x", …) / MakeBoruError("x", …)
+	// / MakeBoruErrorAt / makeBoruError / makeBoruErrorAt.
+	regexp.MustCompile(`\b(?:M|m)akeBoruError(?:At)?\(\s*"([a-z][a-z0-9_-]*)"`),
+	// …and the POSITIONED constructors r.BoruErrorAt / r.BoruErrorHintAt. They
+	// arrived with the boru:io positionless-error pilot, after this gate was
 	// written, and without them every code minted only through a positioned
 	// site was invisible here — neither counted as mintable nor required to
 	// be in the enumeration, which is precisely the drift the gate exists to
 	// catch. `exit_error` was the first such code.
-	regexp.MustCompile(`\.AqlError(?:Hint)?(?:At)?\(\s*"([a-z][a-z0-9_-]*)"`),
-	// AqlError / Diagnostic struct literals: Code: "x".
-	regexp.MustCompile(`\bCode:\s*"(?:aql/)?([a-z][a-z0-9_-]*)"`),
+	regexp.MustCompile(`\.BoruError(?:Hint)?(?:At)?\(\s*"([a-z][a-z0-9_-]*)"`),
+	// BoruError / Diagnostic struct literals: Code: "x".
+	regexp.MustCompile(`\bCode:\s*"(?:boru/)?([a-z][a-z0-9_-]*)"`),
 	// Check-mode diagnostics: CheckAddUniqueDiagnostic(r, "x", …).
 	regexp.MustCompile(`\bCheckAdd\w*Diagnostic\([^,)]*,\s*"([a-z][a-z0-9_-]*)"`),
 }
@@ -114,15 +114,15 @@ var codeMintPatterns = []*regexp.Regexp{
 // so it is INVISIBLE to every check here — not reported as malformed, not
 // counted as mintable, and not required to be in the enumeration.
 //
-// A live example was `r.AqlError("unknown key_error", …)` in the Store `get`
+// A live example was `r.BoruError("unknown key_error", …)` in the Store `get`
 // handler: the message's leading word glued onto the code. A code containing a
 // SPACE cannot be matched by any `case` arm, so the failure was undispatchable,
 // and the same call passed "unknown key" as the WORD, which the compiled path
 // renders as an 11-caret span against the interpreter's 3. One typo, two
 // user-visible defects, and every gate silent.
 var codeLiteralPatterns = []*regexp.Regexp{
-	regexp.MustCompile(`\b(?:M|m)akeAqlError(?:At)?\(\s*"([^"]*)"`),
-	regexp.MustCompile(`\.AqlError(?:Hint)?(?:At)?\(\s*"([^"]*)"`),
+	regexp.MustCompile(`\b(?:M|m)akeBoruError(?:At)?\(\s*"([^"]*)"`),
+	regexp.MustCompile(`\.BoruError(?:Hint)?(?:At)?\(\s*"([^"]*)"`),
 }
 
 // TestEveryAttachedCodeLiteralIsWellFormed is the blind-spot check: every
@@ -132,7 +132,7 @@ var codeLiteralPatterns = []*regexp.Regexp{
 // binds codes that already conform, which is the set that never needed it.
 func TestEveryAttachedCodeLiteralIsWellFormed(t *testing.T) {
 	// The rule is DISPATCHABILITY, not house style. A code has to be
-	// spellable as a `case` arm, so a hyphen is fine — AQL word names use
+	// spellable as a `case` arm, so a hyphen is fine — boru word names use
 	// them freely (`for-each`, `with-decimal`) and four codes follow suit
 	// (`expected-byte`, `bad-encoding`, `cancel-timeout_error`,
 	// `cancel-interval_error`). A SPACE or a capital is not spellable, and
@@ -155,7 +155,7 @@ func TestEveryAttachedCodeLiteralIsWellFormed(t *testing.T) {
 			}
 			for _, line := range strings.Split(string(src), "\n") {
 				// Skip comment lines: this file's own prose quotes example
-				// calls (`r.AqlError("…", …)`), and a doc comment is not a
+				// calls (`r.BoruError("…", …)`), and a doc comment is not a
 				// construction site.
 				if strings.HasPrefix(strings.TrimSpace(line), "//") {
 					continue
@@ -369,7 +369,7 @@ func TestEveryMintedCodeIsRegistered(t *testing.T) {
 
 // TestEveryRegisteredCodeIsMinted is the other direction: an entry for a code
 // no site attaches. It is the same defect as a phantom row in REFERENCE.md,
-// one level down — tooling built on the enumeration (`aql explain <code>`, an
+// one level down — tooling built on the enumeration (`boru explain <code>`, an
 // editor completion list) would offer a code that can never appear.
 //
 // It also catches the likelier bookkeeping error: a code deleted from the
@@ -399,7 +399,7 @@ func TestEveryRegisteredCodeIsMinted(t *testing.T) {
 
 // TestDocumentedCodesAreRegistered closes the triangle. A code a reader can
 // look up in REFERENCE.md must be resolvable through the enumeration, because
-// that is what an `aql explain <code>` would consult — a documented code the
+// that is what a `boru explain <code>` would consult — a documented code the
 // enumeration cannot resolve would report "no such code" for something the
 // manual describes.
 func TestDocumentedCodesAreRegistered(t *testing.T) {

@@ -67,18 +67,18 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
 
 ## Legacy / historical — point-in-time reports, reviews & analyses
 
-- `AQL-CODE-REVIEW-REPORT.6.md`, `REVIEW-NOTES.10.md`,
+- `BORU-CODE-REVIEW-REPORT.6.md`, `REVIEW-NOTES.10.md`,
   `FOR-LOOP-REVIEW.10.md`, `TYPE-SYSTEM-REVIEW.7.md`,
   `checker-accuracy-review.10.md`,
   `checker-compiler-architecture-review.0.md` — dated review snapshots.
-- `AQL-DX-REPORT.5.md`, `AQL-DX-REPORT-LOG.md`, `AQL-DX-REPORT-DEBUG.0.md`,
-  `VOXGIG-AQL-REPORTS.5.md`, `VOXGIG-DX-REPORT.5.md`,
+- `BORU-DX-REPORT.5.md`, `BORU-DX-REPORT-LOG.md`, `BORU-DX-REPORT-DEBUG.0.md`,
+  `VOXGIG-BORU-REPORTS.5.md`, `VOXGIG-DX-REPORT.5.md`,
   `DESIGN-DX-AND-BYTECODE-STATUS-REVIEW.md` — DX experience reports /
   status snapshots (the last consolidates and closes out the DX reports).
 - `BATTERIES-INCLUDED-REPORT.5.md`, `CARRIER-STATIC-TYPECHECK-REPORT.10.md`,
   `STATIC_ANALYSIS_REPORT.10.md`, `checker-loud-diagnostics-report.10.md`,
-  `aql-boolean-operations-report.10.md`,
-  `aql_property_based_reduction_report.10.md`,
+  `boru-boolean-operations-report.10.md`,
+  `boru_property_based_reduction_report.10.md`,
   `jsonic-matcher-rule-access-report.10.md`, `data-last-audit.10.md`,
   `WAT-AUDIT.5.md`, `FORMAL-FINDINGS.0.md` — feature/feasibility/audit
   reports pinned to a point in time.
@@ -87,13 +87,13 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   reports.
 - `STDLIB-COVERAGE.10.md`, `IMPLEMENTATION-STATUS.10.md` — coverage/status
   snapshots (inherently point-in-time).
-- Comparative "X-in-AQL" applicability studies (idea evaluations, not
-  specs): `amop-in-aql-report.0.md`,
-  `effect-oriented-programming-in-aql-report.0.md`,
-  `elixir-types-in-aql-report.10.md`, `fsharp-units-in-aql-report.0.md`,
+- Comparative "X-in-boru" applicability studies (idea evaluations, not
+  specs): `amop-in-boru-report.0.md`,
+  `effect-oriented-programming-in-boru-report.0.md`,
+  `elixir-types-in-boru-report.10.md`, `fsharp-units-in-boru-report.0.md`,
   `dynamic-modality-report.10.md`, `LISP-ANALYSIS.5.md`,
   `RACKET-ANALYSIS.5.md`, `RACKET-FEATURES-EXAMPLES.5.md`,
-  `PORT_OBSERVATIONS.5.md`, `verse-in-aql-report.0.md` (with
+  `PORT_OBSERVATIONS.5.md`, `verse-in-boru-report.0.md` (with
   `verse-report-defects-investigation.0.md`, the root-cause follow-up on
   the defects that report's verification pass turned up).
 
@@ -112,21 +112,21 @@ longer exists (the engine unified onto one `BarrierPos`-driven rule):
   `MACROS-PHASE5.5.md`, `TCO-STAGED.10.md` (TCO now a language guarantee;
   see `TCO.10.md`).
 
-## Legacy / historical — aql-bytecode project series
+## Legacy / historical — boru-bytecode project series
 
 Point-in-time plan/status/deep-dive notes for the bytecode-compiler effort
 (each pinned to a refusal-count/commit snapshot):
 
-- `aql-bytecode-outline.0.md`, `aql-bytecode-plan.0.md`,
-  `aql-bytecode-report.0.md`, `aql-bytecode-revisions.0.md`,
-  `aql-bytecode-baseline.0.md`, `aql-bytecode-readiness.0.md`,
-  `aql-bytecode-runtime-independence.0.md`, `aql-bytecode-completion.0.md`,
-  `aql-bytecode-finish-line.0.md`, `aql-bytecode-next-stages.0.md`,
-  `aql-bytecode-cluster5-residual-lowering.0.md`,
-  `aql-bytecode-stage3-inlining-plan.0.md`,
-  `aql-bytecode-stageA-branch-result-modeling.0.md`,
-  `aql-bytecode-method-fnvalue-codebody.0.md`,
-  `aql-bytecode-final-two-refusals.0.md`.
+- `boru-bytecode-outline.0.md`, `boru-bytecode-plan.0.md`,
+  `boru-bytecode-report.0.md`, `boru-bytecode-revisions.0.md`,
+  `boru-bytecode-baseline.0.md`, `boru-bytecode-readiness.0.md`,
+  `boru-bytecode-runtime-independence.0.md`, `boru-bytecode-completion.0.md`,
+  `boru-bytecode-finish-line.0.md`, `boru-bytecode-next-stages.0.md`,
+  `boru-bytecode-cluster5-residual-lowering.0.md`,
+  `boru-bytecode-stage3-inlining-plan.0.md`,
+  `boru-bytecode-stageA-branch-result-modeling.0.md`,
+  `boru-bytecode-method-fnvalue-codebody.0.md`,
+  `boru-bytecode-final-two-refusals.0.md`.
 
 ## Legacy / historical — superseded version series & handoff notes
 

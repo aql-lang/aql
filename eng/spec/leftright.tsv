@@ -11,7 +11,7 @@
 #		
 # This is distinct from 'nested forward' (which would let an inner		
 # function fire inside an outer's arg slot — see nested-forward.tsv:		
-# that case ERRORS in aqleng without explicit parens). Left-to-right		
+# that case ERRORS in borueng without explicit parens). Left-to-right		
 # is what powers the 'infix-looking' reader: `2 addq 3 mulq 4` reads		
 # as `(2 + 3) * 4 = 20` because `addq` fires first, leaving 5 on the		
 # stack, then `mulq` collects 4 forward and finds 5 on the stack.		
@@ -23,7 +23,7 @@
 #    stack and becomes the second OP's stack-side arg.		
 # 2. The chain is unbounded: `1 addq 2 addq 3 addq 4` etc.		
 # 3. Mixing operators with different precedence is irrelevant — there		
-#    are no precedence levels in aqleng. Strictly left-to-right.		
+#    are no precedence levels in borueng. Strictly left-to-right.		
 # 4. Parens DO override the default left-to-right reading. `2 addq (3		
 #    mulq 4)` runs the mulq first, producing 12, then addq(2, 12) = 14.		
 # 5. Forward-eligible-with-stack-fallback words (e.g. `negq`)		
@@ -36,7 +36,7 @@
 #		
 # Why this matters		
 # ----------------		
-# AQL has no operator precedence table — the language picks the		
+# boru has no operator precedence table — the language picks the		
 # uniform rule 'left to right, with parens for override'. This avoids		
 # the entire precedence-table category of design questions that other		
 # languages spend tooling on (associativity / parentheses-suggester /		

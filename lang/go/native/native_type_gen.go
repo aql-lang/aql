@@ -108,11 +108,11 @@ var genNatives = []NativeFunc{
 // references to earlier ones work without special casing.
 func genHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("gen_error", "gen: needs a concrete list of type parameters", "gen")
+		return nil, r.BoruError("gen_error", "gen: needs a concrete list of type parameters", "gen")
 	}
 	lst, _ := AsList(args[0])
 	if lst.Len() == 0 {
-		return nil, r.AqlError("gen_error", "gen: parameter list must declare at least one parameter", "gen")
+		return nil, r.BoruError("gen_error", "gen: parameter list must declare at least one parameter", "gen")
 	}
 
 	spec := &GenSpecInfo{}
@@ -138,7 +138,7 @@ func genHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 		case IsParenExpr(entry):
 			toks, _ := AsParenExpr(entry)
 			if len(toks) == 0 || !IsWord(toks[0]) {
-				return fail(r.AqlError("gen_error",
+				return fail(r.BoruError("gen_error",
 					"gen: a parenthesised parameter entry must start with the parameter name, e.g. (T extends Comparable)", "gen"))
 			}
 			w, _ := AsWord(toks[0])
@@ -160,7 +160,7 @@ func genHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 				return fail(fmt.Errorf("gen: parameter %s: %w", w.Name, err))
 			}
 			if len(out) != 1 {
-				return fail(r.AqlError("gen_error",
+				return fail(r.BoruError("gen_error",
 					fmt.Sprintf("gen: parameter entry (%s …) must produce one parameter spec, got %d values", w.Name, len(out)), "gen"))
 			}
 			var p GenParam
@@ -171,7 +171,7 @@ func genHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 				// `(T)` — parens around a bare parameter.
 				p = GenParam{Name: w.Name}
 			default:
-				return fail(r.AqlError("gen_error",
+				return fail(r.BoruError("gen_error",
 					fmt.Sprintf("gen: parameter entry (%s …) must use `extends` / `default`, got %s", w.Name, out[0].String()), "gen"))
 			}
 			p.Pos = entry.Pos()
@@ -180,7 +180,7 @@ func genHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 			spec.Params = append(spec.Params, p)
 
 		default:
-			return fail(r.AqlError("gen_error",
+			return fail(r.BoruError("gen_error",
 				fmt.Sprintf("gen: parameter entries are bare names or parenthesised specs, got %s", entry.String()), "gen"))
 		}
 	}
@@ -200,11 +200,11 @@ func genHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 func validateGenParamName(r *Registry, name string, seen map[string]bool) error {
 	ch, _ := utf8.DecodeRuneInString(name)
 	if !unicode.IsUpper(ch) {
-		return r.AqlError("gen_error",
+		return r.BoruError("gen_error",
 			fmt.Sprintf("gen: type parameter %q must start with a capital letter", name), "gen")
 	}
 	if seen[name] {
-		return r.AqlError("gen_error",
+		return r.BoruError("gen_error",
 			fmt.Sprintf("gen: duplicate type parameter %q", name), "gen")
 	}
 	seen[name] = true
@@ -219,12 +219,12 @@ func extendsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	ph := args[1]
 	name := TypeParamName(&ph)
 	if name == "" {
-		return nil, r.AqlErrorHint("extends_outside_gen",
+		return nil, r.BoruErrorHint("extends_outside_gen",
 			fmt.Sprintf("extends: left side must be a gen type parameter, got %s", ph.String()), "extends",
 			"hint: `extends` declares a parameter bound inside gen [...] — e.g. gen [(T extends Comparable)]")
 	}
 	if !IsTypeLiteral(bound) && !IsTypeBody(bound) {
-		return nil, r.AqlError("extends_error",
+		return nil, r.BoruError("extends_error",
 			fmt.Sprintf("extends: bound must be a type, got %s", bound.String()), "extends")
 	}
 	return []Value{NewGenParamValue(GenParam{Name: name, Bound: bound, HasBound: true})}, nil
@@ -247,7 +247,7 @@ func defaultBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	ph := args[1]
 	name := TypeParamName(&ph)
 	if name == "" {
-		return nil, r.AqlErrorHint("default_outside_gen",
+		return nil, r.BoruErrorHint("default_outside_gen",
 			fmt.Sprintf("default: left side must be a gen type parameter, got %s", ph.String()), "default",
 			"hint: `default` declares a parameter default inside gen [...] — e.g. gen [(E default Error)]")
 	}
@@ -259,7 +259,7 @@ func defaultBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 // A Self head (inside a schema body, D5) defers via GenInstRef.
 func ofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("type_error", "of: needs a concrete list of type arguments", "of")
+		return nil, r.BoruError("type_error", "of: needs a concrete list of type arguments", "of")
 	}
 	head := ResolveWordValue(args[1])
 	lst, _ := AsList(args[0])
@@ -282,7 +282,7 @@ func ofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	// structural bodies have no single node to conform to.
 	if IsBareTypeNode(head) && head.ID == TType.ID {
 		if len(argv) != 1 {
-			return nil, r.AqlError("type_error",
+			return nil, r.BoruError("type_error",
 				fmt.Sprintf("of: Type takes exactly one bound, got %d", len(argv)), "of")
 		}
 		// A NAMED type as the bound (incl. a named disjunct) must bind
@@ -315,7 +315,7 @@ func ofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		}
 		bound := argv[0]
 		if !IsBareTypeNode(bound) {
-			return nil, r.AqlErrorHint("type_error",
+			return nil, r.BoruErrorHint("type_error",
 				fmt.Sprintf("of: Type bound must be a named type, got %s", bound.String()), "of",
 				"hint: name a structural bound first — def MapOrList (Map tor List), then MapOrList/t")
 		}
@@ -333,7 +333,7 @@ func ofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		}
 	}
 	if info == nil {
-		return nil, r.AqlErrorHint("type_error",
+		return nil, r.BoruErrorHint("type_error",
 			fmt.Sprintf("of: %s is not a generic schema", head.String()), "of",
 			"hint: declare one with `def Name gen [T] refine Record [...]` (or `... fnsig [...]`)")
 	}
@@ -398,7 +398,7 @@ func genWrapSchema(r *Registry, spec *GenSpecInfo, body Value, kind SchemaKind) 
 // v1, popping the bindings so nothing leaks.
 func genUnsupported(r *Registry, spec *GenSpecInfo, word string, got string) error {
 	PopGenBindings(r, spec)
-	return r.AqlErrorHint("gen_unsupported_constructor",
+	return r.BoruErrorHint("gen_unsupported_constructor",
 		fmt.Sprintf("gen: %s cannot build a generic schema from %s in v1", word, got), word,
 		"hint: generic schemas are `gen [...] refine Record [...]`, `gen [...] class {...}`, or `gen [...] fnsig [...]`")
 }

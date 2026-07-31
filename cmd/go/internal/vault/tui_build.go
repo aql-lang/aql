@@ -125,13 +125,13 @@ func (m *rootModel) buildVaultPicker() screen {
 		}},
 	}
 	return newListScreen("vaults", build(), acts, build).
-		withHelp(`The vaults aql knows about — found on disk and recorded when created.
+		withHelp(`The vaults boru knows about — found on disk and recorded when created.
 
   enter   Switch to the selected vault.
   n       Create a new vault.
-  d       Make the selected vault the default that aql vault -i opens.
+  d       Make the selected vault the default that boru vault -i opens.
   D       Forget a stale entry from the list (its files are left untouched).`).
-		withCmd("aql vault folder")
+		withCmd("boru vault folder")
 }
 
 func (m *rootModel) vaultItems() []list.Item {
@@ -187,7 +187,7 @@ func (m *rootModel) buildCreateVaultForm() screen {
 	backend = BackendAuto
 	form := huh.NewForm(huh.NewGroup(
 		huh.NewInput().Title("Suffix").Description("blank = the default vault; else vault.<suffix>.jsonic").Value(&suffix),
-		huh.NewInput().Title("Folder").Description("blank = ~/.aql").Value(&folder),
+		huh.NewInput().Title("Folder").Description("blank = ~/.boru").Value(&folder),
 		huh.NewSelect[string]().Title("Backend").
 			Options(
 				huh.NewOption("auto", BackendAuto),
@@ -270,7 +270,7 @@ func (m *rootModel) buildSecrets() screen {
   enter   Open the secret's page — reveal it, rotate / rename / delete it, set an
           expiry, grant a token, and copy the command to inject it into a process.
   a       Add a new secret — you type the value (entry is hidden).`).
-		withCmd("aql vault list")
+		withCmd("boru vault list")
 }
 
 // secretRevealedMsg carries a freshly-revealed value back to the detail
@@ -305,7 +305,7 @@ func (m *rootModel) buildSecretDetail(alias string) screen {
 }
 
 // injectCommands are the exec recipes shown (and copyable) on the detail page,
-// each with a note on its purpose. execPrefix is "aql vault" plus any location
+// each with a note on its purpose. execPrefix is "boru vault" plus any location
 // flags for the active vault, so the samples target the right vault. The --for
 // recipe is chosen to match the secret's provider when it is a known tool.
 func injectCommands(execPrefix, alias, provider string) []injectCmd {
@@ -366,7 +366,7 @@ func (s *secretDetailScreen) Init() tea.Cmd       { return nil }
 func (s *secretDetailScreen) Title() string       { return s.alias }
 func (s *secretDetailScreen) capturesInput() bool { return false }
 func (s *secretDetailScreen) reload() tea.Cmd     { return nil } // View reads live state
-func (s *secretDetailScreen) cliCommand() string  { return "aql vault get " + s.alias }
+func (s *secretDetailScreen) cliCommand() string  { return "boru vault get " + s.alias }
 
 func (s *secretDetailScreen) helpInfo() string {
 	return `Everything about one secret. The value is shown only here, only when you
@@ -383,7 +383,7 @@ reveal it, and it is cleared again when you leave this page.
 
 The "Inject into a process" commands run the secret into a child process's
 environment without it ever touching disk or your shell history:
-"aql vault exec <alias> -- cmd" injects it as $<alias>; add
+"boru vault exec <alias> -- cmd" injects it as $<alias>; add
 "--for=npm|cargo|gem|pypi|uv" for publishing recipes.`
 }
 
@@ -518,7 +518,7 @@ func expiryCountdown(rfc3339 string) string {
 }
 
 // providerOptions builds the Provider select: "(none)" plus every service
-// aql knows about — the HTTP provider presets (openai, anthropic, …), the
+// boru knows about — the HTTP provider presets (openai, anthropic, …), the
 // vault's own operator-defined presets (custom), AND the publish-recipe
 // tools (npm, cargo, pypi, …) — deduped and sorted, so a secret can be
 // tagged with the tool/service it belongs to without free text.
@@ -581,10 +581,10 @@ func (m *rootModel) buildAddForm() screen {
 	return fs
 }
 
-// addCommandPreview renders the equivalent `aql vault add` command for the
+// addCommandPreview renders the equivalent `boru vault add` command for the
 // values entered so far (the secret value is never shown).
 func addCommandPreview(alias, provider, namespace, expiry string) string {
-	parts := []string{"aql", "vault", "add"}
+	parts := []string{"boru", "vault", "add"}
 	if provider != "" {
 		parts = append(parts, "--provider="+provider)
 	}
@@ -613,7 +613,7 @@ func orPlaceholder(s, ph string) string {
 }
 
 func rotateCommandPreview(alias, expiry string, revoke bool) string {
-	parts := []string{"aql", "vault", "rotate"}
+	parts := []string{"boru", "vault", "rotate"}
 	if revoke {
 		parts = append(parts, "--revoke-caps")
 	}
@@ -624,7 +624,7 @@ func rotateCommandPreview(alias, expiry string, revoke bool) string {
 }
 
 func renameCommandPreview(from, to string, revoke bool) string {
-	parts := []string{"aql", "vault", "mv"}
+	parts := []string{"boru", "vault", "mv"}
 	if revoke {
 		parts = append(parts, "--revoke-caps")
 	}
@@ -633,13 +633,13 @@ func renameCommandPreview(from, to string, revoke bool) string {
 
 func expiryCommandPreview(alias, when string) string {
 	if strings.TrimSpace(when) == "" {
-		return "aql vault expiry clear " + alias
+		return "boru vault expiry clear " + alias
 	}
-	return "aql vault expiry set " + alias + " " + when
+	return "boru vault expiry set " + alias + " " + when
 }
 
 func grantCommandPreview(alias, agent, hosts, methods, ttl, maxCalls, maxCost string, approval bool) string {
-	parts := []string{"aql", "vault", "grant"}
+	parts := []string{"boru", "vault", "grant"}
 	if agent != "" {
 		parts = append(parts, "--agent="+agent)
 	}
@@ -665,7 +665,7 @@ func grantCommandPreview(alias, agent, hosts, methods, ttl, maxCalls, maxCost st
 }
 
 func passwordAddCommandPreview(name, scope, namespaces, ttl string) string {
-	parts := []string{"aql", "vault", "password", "add"}
+	parts := []string{"boru", "vault", "password", "add"}
 	if scope != "" {
 		parts = append(parts, "--scope="+scope)
 	}
@@ -679,7 +679,7 @@ func passwordAddCommandPreview(name, scope, namespaces, ttl string) string {
 }
 
 func createVaultCommandPreview(folder, suffix, backend string) string {
-	parts := []string{"aql", "vault"}
+	parts := []string{"boru", "vault"}
 	if folder != "" {
 		parts = append(parts, "--folder="+folder)
 	}
@@ -755,7 +755,7 @@ func (m *rootModel) buildRemoveForm(alias string) screen {
 		}
 		return submitOp("deleted "+alias, func() error { return m.ctl.removeSecret(alias) })
 	})
-	fs.cmdFn = func() string { return "aql vault rm --yes " + alias }
+	fs.cmdFn = func() string { return "boru vault rm --yes " + alias }
 	return fs
 }
 
@@ -894,7 +894,7 @@ func (m *rootModel) buildRevokeForm(id string) screen {
 		}
 		return submitOp("revoked "+short, func() error { return m.ctl.revoke(id) })
 	})
-	fs.cmdFn = func() string { return "aql vault revoke " + id }
+	fs.cmdFn = func() string { return "boru vault revoke " + id }
 	return fs
 }
 
@@ -949,7 +949,7 @@ namespaces, so different holders can be given different access.
       Set a TTL to make it a temporary, time-boxed password.
   D   Remove: delete a password slot; the other slots keep working.
   T   Revoke all temp: pull EVERY temporary (expiring) password at once.`).
-		withCmd("aql vault password list")
+		withCmd("boru vault password list")
 }
 
 func (m *rootModel) buildPasswordAddForm() screen {
@@ -992,7 +992,7 @@ func (m *rootModel) buildPasswordRemoveForm(name string) screen {
 			return submitOp("removed password "+name, func() error { return m.ctl.passwordRemove(name) })
 		})
 	})
-	fs.cmdFn = func() string { return "aql vault password rm " + name }
+	fs.cmdFn = func() string { return "boru vault password rm " + name }
 	return fs
 }
 
@@ -1013,7 +1013,7 @@ func (m *rootModel) buildPasswordRevokeTempForm() screen {
 			return submitOp("revoked all temporary passwords", func() error { return m.ctl.passwordRevokeTemp() })
 		})
 	})
-	fs.cmdFn = func() string { return "aql vault password rm --temp" }
+	fs.cmdFn = func() string { return "boru vault password rm --temp" }
 	return fs
 }
 
@@ -1033,7 +1033,7 @@ func (m *rootModel) buildMaintenance() screen {
 		listItem{name: "Audit", desc: "structured audit log", act: func() tea.Cmd {
 			return pushScreen(newPagerScreen("audit", m.ctl.auditText(), nil, func() string { return m.ctl.auditText() }).
 				withHelp("The structured log of vault operations (newest last). Scroll with ↑/↓; secrets are never recorded here.").
-				withCmd("aql vault audit"))
+				withCmd("boru vault audit"))
 		}},
 	}
 	return newListScreen("maintenance", items, nil, nil).
@@ -1079,7 +1079,7 @@ func (m *rootModel) buildVerifyPruneForm() screen {
 			})
 		})
 	})
-	fs.cmdFn = func() string { return "aql vault verify --prune" }
+	fs.cmdFn = func() string { return "boru vault verify --prune" }
 	return fs
 }
 
@@ -1095,7 +1095,7 @@ func (m *rootModel) buildScanForm() screen {
 			return pushMsg{m.textPager("scan", out)}
 		})
 	})
-	fs.cmdFn = func() string { return "aql vault scan " + orPlaceholder(path, ".") }
+	fs.cmdFn = func() string { return "boru vault scan " + orPlaceholder(path, ".") }
 	return fs
 }
 
@@ -1108,7 +1108,7 @@ func (m *rootModel) buildHistoryPager() screen {
 
   R   Restore the vault metadata to a generation. You confirm by typing its
       number. Password slots, namespace keys, and config are preserved.`).
-		withCmd("aql vault history")
+		withCmd("boru vault history")
 }
 
 func (m *rootModel) buildRestoreForm() screen {
@@ -1137,7 +1137,7 @@ func (m *rootModel) buildRestoreForm() screen {
 		})
 	})
 	fs.cmdFn = func() string {
-		return "aql vault restore --generation=" + orPlaceholder(genStr, "<generation>") + " --yes"
+		return "boru vault restore --generation=" + orPlaceholder(genStr, "<generation>") + " --yes"
 	}
 	return fs
 }
@@ -1186,7 +1186,7 @@ func (m *rootModel) buildConfigPager() screen {
 
   s   Set a key to a value (e.g. namespace.default).
   x   Unset (remove) a key.`).
-		withCmd("aql vault config")
+		withCmd("boru vault config")
 }
 
 func (m *rootModel) buildConfigSetForm() screen {
@@ -1198,7 +1198,7 @@ func (m *rootModel) buildConfigSetForm() screen {
 	fs := newFormScreen("config set", form, func() tea.Cmd {
 		return submitOp("set "+k, func() error { return m.ctl.configSet(k, v) })
 	})
-	fs.cmdFn = func() string { return "aql vault config --set " + orPlaceholder(k, "<key>") + "=" + v }
+	fs.cmdFn = func() string { return "boru vault config --set " + orPlaceholder(k, "<key>") + "=" + v }
 	return fs
 }
 
@@ -1210,7 +1210,7 @@ func (m *rootModel) buildConfigUnsetForm() screen {
 	fs := newFormScreen("config unset", form, func() tea.Cmd {
 		return submitOp("unset "+k, func() error { return m.ctl.configUnset(k) })
 	})
-	fs.cmdFn = func() string { return "aql vault config --unset " + orPlaceholder(k, "<key>") }
+	fs.cmdFn = func() string { return "boru vault config --unset " + orPlaceholder(k, "<key>") }
 	return fs
 }
 
@@ -1226,9 +1226,9 @@ const cliOnlyHelp = `These commands run as long-lived processes or hand the term
 child process, so they are not managed from this TUI. Run them from your
 shell:
 
-  aql vault proxy   — local credential broker (HTTP server)
-  aql vault mcp     — stdio MCP server exposing aliases as tools
-  aql vault exec    — run a command with secrets injected as env vars
+  boru vault proxy   — local credential broker (HTTP server)
+  boru vault mcp     — stdio MCP server exposing aliases as tools
+  boru vault exec    — run a command with secrets injected as env vars
 
 Capabilities for the proxy are granted/revoked under Access in this TUI.`
 

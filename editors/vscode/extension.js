@@ -1,11 +1,11 @@
-// Minimal VS Code extension that spawns `aql lsp` on stdio and wires
-// it up as a Language Server Protocol client for *.aql files.
+// Minimal VS Code extension that spawns `boru lsp` on stdio and wires
+// it up as a Language Server Protocol client for *.boru files.
 //
 // Build/install:
 //   cd editors/vscode
 //   npm install
 //   npx vsce package
-//   code --install-extension aql-0.1.0.vsix
+//   code --install-extension boru-0.1.0.vsix
 
 const { workspace } = require("vscode");
 const { LanguageClient, TransportKind } = require("vscode-languageclient/node");
@@ -13,8 +13,8 @@ const { LanguageClient, TransportKind } = require("vscode-languageclient/node");
 let client;
 
 function activate(context) {
-  const cfg = workspace.getConfiguration("aql");
-  const serverPath = cfg.get("serverPath", "aql");
+  const cfg = workspace.getConfiguration("boru");
+  const serverPath = cfg.get("serverPath", "boru");
 
   const serverOptions = {
     command: serverPath,
@@ -24,16 +24,16 @@ function activate(context) {
 
   const clientOptions = {
     documentSelector: [
-      { scheme: "file", language: "aql" },
+      { scheme: "file", language: "boru" },
     ],
     synchronize: {
-      fileEvents: workspace.createFileSystemWatcher("**/*.aql"),
+      fileEvents: workspace.createFileSystemWatcher("**/*.boru"),
     },
   };
 
   client = new LanguageClient(
-    "aqlLsp",
-    "AQL Language Server",
+    "boruLsp",
+    "boru Language Server",
     serverOptions,
     clientOptions,
   );

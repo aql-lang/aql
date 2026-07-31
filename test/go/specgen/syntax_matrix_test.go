@@ -50,8 +50,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	lang "github.com/aql-lang/aql/lang/go"
+	eng "github.com/boru-lang/boru/eng/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 const matrixPath = "syntax-matrix.tsv"
@@ -426,7 +426,7 @@ func TestSyntaxMatrixCheckerDeterministic(t *testing.T) {
 // to compare two runs for determinism. A panic is recovered into a
 // sentinel so the no-panic property is asserted as a normal test
 // failure, never a crash.
-func checkWith(sink *failSink, a *lang.AQL, input string) (fp string) {
+func checkWith(sink *failSink, a *lang.Boru, input string) (fp string) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			sink.fail("checker PANICKED on %q: %v", input, rec)

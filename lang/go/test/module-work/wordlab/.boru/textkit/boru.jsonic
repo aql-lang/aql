@@ -1,0 +1,8 @@
+name: textkit
+main: textkit.boru
+major: 3
+minor: 2
+patch: 0
+files: [textkit.boru, config.json]
+deps: {styler: 1.0.7}
+resource: {config: "config.json"}

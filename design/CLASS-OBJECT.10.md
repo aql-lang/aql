@@ -43,7 +43,7 @@ owns the design and plan.
    field map: no `Prototype` link, no delegation at `get`. (The
    context/Store scope chain is separate machinery and unaffected.)
 5. **Sealed instances.** Writing an undeclared field on a class
-   instance raises `[aql/sealed_field]` loudly. Open dynamic data
+   instance raises `[boru/sealed_field]` loudly. Open dynamic data
    belongs on plain Object.
 6. **No prototype surface, no prototype dispatch.** Polymorphism
    stays with signature dispatch through the type lattice — one
@@ -64,7 +64,7 @@ m get (k)                     # returns 2      — parens = computed key (JS [k]
 def m2 (m set c 3)            # returns {a:1 b:2 c:3} — NEW map (landed 2026-06-09)
 m                             # returns {a:1 b:2}     — receiver untouched
 {} set a 1 set b 2            # returns {a:1 b:2}     — copy-returning chains
-import "aql:struct-util"
+import "boru:struct-util"
 StructUtil.items m            # returns [['a' 1] ['b' 2]]
 m size                        # returns 2
 m {a:1, b:2} deq              # returns true   — structural; eq is identity
@@ -76,7 +76,7 @@ m {a:1, b:2} deq              # returns true   — structural; eq is identity
 def xs [1 2 3]
 xs get 0                      # returns 1
 xs push 4                     # returns [1 2 3 4]   — copy-returning (current)
-import "aql:array-util"
+import "boru:array-util"
 ArrayUtil.insert-at 1 99 xs   # returns [1 99 2 3]  — copy-returning (current)
 ArrayUtil.remove-at 0 xs      # returns [2 3]       — copy-returning (current)
 
@@ -142,7 +142,7 @@ typeof p                              # returns Point3
 p is Point                            # returns true  — nominal subtyping (lattice)
 p get x                               # returns 1
 p set y 5                             # in place (mutable column); returns nothing
-p set w 9                             # ERROR [aql/sealed_field]: 'w' is not a
+p set w 9                             # ERROR [boru/sealed_field]: 'w' is not a
                                       #   field of Point3 (fields: x y z)
                                       #   hint: declare it in the class, or use
                                       #   a plain Object for open data
@@ -155,7 +155,7 @@ def norm fn [[p:Point3] [Float] [ … ]]   # overload: subclass-specific dispatc
 
 # The removed form fails loudly (no alias):
 def Box refine Object {v:0}
-# ERROR [aql/refine_error]: refine Object is no longer the class form
+# ERROR [boru/refine_error]: refine Object is no longer the class form
 #   hint: def Box class {v:0}
 ```
 
@@ -208,7 +208,7 @@ match the rest of the copy semantics.
   reads become a single map lookup. (`contextstack.go` keeps its own
   chain; it never depended on instance prototypes.)
 - **`set` on a class instance** checks the field against the schema:
-  declared → in-place write; undeclared → `[aql/sealed_field]` with
+  declared → in-place write; undeclared → `[boru/sealed_field]` with
   the field list in the message.
 - **Plain Object** instances are the same flat structure with no
   schema and no seal: any key writes, everything enumerates.
@@ -231,7 +231,7 @@ Reopened during review: classes are now flat — should plain mutable
 - A delegating Object reintroduces the bug class this design just
   killed structurally — reads that see fields enumeration doesn't
   show. JS lives with `own` vs `in` vs `for…in` precisely because of
-  this split; AQL doesn't have to.
+  this split; boru doesn't have to.
 - Array doesn't delegate; its keyed sibling shouldn't either.
 - The delegation use cases are already owned elsewhere: **defaults**
   → class schemas (resolved flat at `make`); **data layering** →
@@ -256,7 +256,7 @@ live update (one prototype backs many instances; layered data like
 config cascades is delegation natively); near-zero implementation
 cost (the engine chain exists); minimal-kernel elegance (Self proved
 delegation can express classes/mixins as patterns); REPL dynamism;
-and AQL already teaches `get` via the JS analogy.
+and boru already teaches `get` via the JS analogy.
 
 **Against** (decisive): (1) delegation structurally reintroduces the
 reads-vs-enumeration split — the silent-lie bug class the voxgig
@@ -280,7 +280,7 @@ substrate and lost as a programming model. ES6 classes won the
 surface; `__proto__` is Annex-B legacy and `setPrototypeOf` carries
 engine-deopt warnings; the JS community moved the *dictionary* use
 case to proto-free containers (`Object.create(null)`, then `Map`) —
-i.e. JS itself corrected toward what AQL's flat Object is from the
+i.e. JS itself corrected toward what boru's flat Object is from the
 start; no mainstream newer language (Swift/Rust/Go/Kotlin/Julia)
 adopted prototypes, with Lua metatables the closest survivor —
 promptly wrapped in class libraries; JS's own trajectory (class
@@ -453,7 +453,7 @@ destination — adopt eq-refinement as the internal encoding); **`final`
 (write-once per instance) is the orthogonal feature** — TS
 readonly-vs-literal-types, Python Final-vs-Literal — deliberately not
 conflated, separate pass if wanted; real ADTs (Rust/Haskell enums)
-are the road not taken — AQL's `tor` + literal discriminants is the
+are the road not taken — boru's `tor` + literal discriminants is the
 TypeScript path, which makes `const` *more* load-bearing here.
 
 **Prior art:** TypeScript literal types + `as const` + discriminated
@@ -461,7 +461,7 @@ unions (the proven model and payoff — flow narrowing later via the
 existing `dynamic(T)` narrowing machinery); Python `Literal`/`Final`;
 Scala 3 first-class literal types; Haskell DataKinds; Java/Go none;
 Rust skipped them in favour of declared enums. Verdict: literal types
-earn their keep exactly where unions are structural — AQL's
+earn their keep exactly where unions are structural — boru's
 situation.
 
 **Payoff:** `def Circle class {kind:(const 'circle'), r:0.0}` +
@@ -597,7 +597,7 @@ Sub-questions resolved (2026-06-09, second pass):
 > tags. Spec rows class.tsv §9.
 >
 > **Phase A increment 5 LANDED (2026-06-09) — the clean break:**
-> `refine Object {…}` is removed; it raises `[aql/refine_error]`
+> `refine Object {…}` is removed; it raises `[boru/refine_error]`
 > with the class hint. All call sites swept to `class` (~213 across
 > specs, Go tests, live docs); tests pinning the removed semantics
 > (silent conversion, prototype seeding/chains, Object-conformance)

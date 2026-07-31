@@ -1,0 +1,71 @@
+# sessions.boru — identity & presence: the multi-user heart of the app.
+#
+# DX probe: this is where the SERVICE layer (request/reply state machine) meets
+# the raw PROCESS layer (PROCESSES.0 §4). Two responsibilities:
+#
+#   1. Identity — `login`/`whoami` over a private token table. A plain service
+#      (`SERVICES.0` §1): owned state, pattern-matched handlers.
+#   2. Presence — one lightweight PROCESS per connected user (presence.boru),
+#      `spawn`ed and `register`ed by name so the notify sink can `whereis` it
+#      and push events. This is the "actor-per-connection" shape PROCESSES.0 is
+#      built for, and it shows the deliberate DX *contrast*: a process is a bare
+#      `spawn` + name, with no handler/reply ceremony, where a service is the
+#      higher-level request/reply value. The README discusses when to reach for
+#      which.
+
+import "boru:serve"
+import "presence.boru"          # the raw-process presence actor
+
+export "Sessions" {
+  New:           New/r
+  presence-name: presence-name/r    # shared so notify.boru can `whereis` a user
+}
+
+# `New {}` -> Service
+def New fn [[opts:Map] [Service] [
+  # token -> uid, and uid -> presence Pid (so we can find a user's pushes).
+  def svc ( service {tokens: {}  present: {}} )
+
+  # --- login: mint a session token -------------------------------------
+  add {op: "login"} [ [req state] => [
+      def token ( new-token )
+      state set tokens (set (token) req.user (state dot tokens))
+      {token: token  user: req.user}                 # reply
+  ] ] svc
+
+  # --- whoami: resolve a token (used by Auth.gate on every request) ----
+  add {op: "whoami"} [ [req state] => [
+      (state dot tokens) get (req.token)             # uid or None
+  ] ] svc
+
+  # --- connect: bring a user "online" — spawn + register a presence proc
+  add {op: "connect"} [ [req state] => [
+      def existing ( whereis (presence-name req.user) )
+      if (not (none? existing))
+        [ existing ]                                 # already online — reuse pid
+        [ # `spawn` a process running the presence loop; it is capability-gated
+          # by the `process` scope (§7). The body is a quoted block, NOT eval'd
+          # by us — the new process runs it. We pass the user it serves.
+          def pid ( spawn [ req.user Presence.loop ] )
+          register (presence-name req.user) pid       # name it for `whereis`
+          state set present (set (req.user) pid (state dot present))
+          pid ]
+  ] ] svc
+
+  # --- disconnect: tell the presence process to stop --------------------
+  add {op: "disconnect"} [ [req state] => [
+      def pid ( whereis (presence-name req.user) )
+      if (none? pid) [ None ]
+        [ send {cmd: "stop"} pid                      # process exits its loop
+          state set present (del (req.user) (state dot present))
+          None ]
+  ] ] svc
+
+  svc
+]]
+
+# Stable, shared naming so notify.boru can independently compute the name and
+# `whereis` a user's presence process without holding a reference.
+def presence-name fn [[user:String] [String] [ `presence:${user}` ]]
+
+def new-token fn [[] [String] [ Rand.uuid ]]

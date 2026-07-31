@@ -1,9 +1,9 @@
 // Signature describes one calling convention of a registered word.
-// Mirrors aqleng/go/signature.go but trimmed to the spec subset:
+// Mirrors borueng/go/signature.go but trimmed to the spec subset:
 // no checker mode, no Patterns, no FullStack, no Returns lists for
 // type-check propagation.
 
-import type { AqlType } from './type.ts'
+import type { BoruType } from './type.ts'
 import type { Value } from './value.ts'
 
 /** A handler receives matched args and the registry, returns the values to push. */
@@ -16,7 +16,7 @@ export type Handler = (
 
 export interface Signature {
   /** Argument types in sig order (sig[0] is the first arg the handler sees). */
-  args: AqlType[]
+  args: BoruType[]
   handler: Handler
   /**
    * Position of the boundary marker `|` in the sig (post-§1.4).
@@ -59,7 +59,7 @@ export interface Signature {
    * carrier return values when the handler is short-circuited in check
    * mode. Mirrors NativeSig.Returns.
    */
-  returns?: AqlType[]
+  returns?: BoruType[]
   /**
    * Computes the carrier return values for this signature in check
    * mode, given the (carrier-typed) args. Takes precedence over
@@ -94,7 +94,7 @@ export interface Signature {
 export type ReturnsFunc = (args: Value[], registry: Registry) => Value[]
 
 export interface NativeSig {
-  args: AqlType[]
+  args: BoruType[]
   handler: Handler
   barrierPos?: number
   patterns?: Map<number, Value>
@@ -102,7 +102,7 @@ export interface NativeSig {
   fallback?: boolean
   typeArgs?: Set<number>
   quoteArgs?: Set<number>
-  returns?: AqlType[]
+  returns?: BoruType[]
   returnsFn?: ReturnsFunc
   runInCheckMode?: boolean
   recordsOwnEvent?: boolean

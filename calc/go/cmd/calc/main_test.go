@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	calc "github.com/aql-lang/aql/calc/go"
+	calc "github.com/boru-lang/boru/calc/go"
 )
 
 func TestRunEFlag(t *testing.T) {

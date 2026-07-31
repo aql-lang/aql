@@ -360,7 +360,7 @@ func (qb *QueryBuilder) ensureSetOpSources() ([]string, error) {
 }
 
 // The query DSL words live in QueryNatives (native_query.go) and are
-// surfaced through the aql:query module (modules/query.go); the
+// surfaced through the boru:query module (modules/query.go); the
 // supporting parser/exec helpers stay in this file. Aggregate
 // functions (count, sum, avg, min, max) and CAST are handled
 // directly in parseColumnSpec when they appear as the first element
@@ -700,7 +700,7 @@ func parseCastSpec(elems []Value) (columnSpec, error) {
 		return columnSpec{}, fmt.Errorf("cast: column and type must be atoms or strings")
 	}
 
-	sqlType := aqlTypenameToSQLType(typeName)
+	sqlType := boruTypenameToSQLType(typeName)
 	raw := "CAST(" + quoteIdent(col) + " AS " + sqlType + ")"
 
 	alias := col
@@ -711,12 +711,12 @@ func parseCastSpec(elems []Value) (columnSpec, error) {
 	return columnSpec{
 		Raw:        raw,
 		Alias:      alias,
-		ResultType: sqlTypeToAQLType(sqlType),
+		ResultType: sqlTypeToBoruType(sqlType),
 	}, nil
 }
 
-// aqlTypenameToSQLType maps an AQL type name string to a SQL type.
-func aqlTypenameToSQLType(name string) string {
+// boruTypenameToSQLType maps a boru type name string to a SQL type.
+func boruTypenameToSQLType(name string) string {
 	switch strings.ToLower(name) {
 	case "integer", "int":
 		return "INTEGER"
@@ -731,8 +731,8 @@ func aqlTypenameToSQLType(name string) string {
 	}
 }
 
-// sqlTypeToAQLType maps a SQL type string back to an AQL *Type.
-func sqlTypeToAQLType(sqlType string) *Type {
+// sqlTypeToBoruType maps a SQL type string back to a boru *Type.
+func sqlTypeToBoruType(sqlType string) *Type {
 	switch sqlType {
 	case "INTEGER":
 		return TInteger
@@ -782,7 +782,7 @@ func unwrapQB(v Value) (QueryBuilder, bool) {
 	return QueryBuilder{}, false
 }
 
-// comparisonOps maps AQL comparison word names to SQL operators.
+// comparisonOps maps boru comparison word names to SQL operators.
 var comparisonOps = map[string]string{
 	"eq":     "=",
 	"neq":    "!=",
@@ -795,7 +795,7 @@ var comparisonOps = map[string]string{
 	"regexp": "REGEXP",
 }
 
-// logicalOps maps AQL logical word names to SQL connectors.
+// logicalOps maps boru logical word names to SQL connectors.
 var logicalOps = map[string]string{
 	"and": "AND",
 	"or":  "OR",

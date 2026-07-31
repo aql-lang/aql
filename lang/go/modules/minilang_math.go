@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 	tabnasexpr "github.com/tabnas/expr/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
@@ -16,11 +16,11 @@ import (
 // to a number. Operators: `+ - * / %`, `^` (power, right-associative, binding
 // tighter than `* /`), unary `+`/`-`, and `( )`.
 //
-// Numeric coercion follows AQL's rules (dual integer/float domain): when every
+// Numeric coercion follows boru's rules (dual integer/float domain): when every
 // operand is integer-domain the result stays an Integer — and division
 // truncates, exactly like the `div` word (`x/y` with x=5,y=2 → 2) — while any
 // Float operand promotes the whole expression to Float. A formula variable
-// carries the AQL type of its bound param; an integer-valued numeric literal
+// carries the boru type of its bound param; an integer-valued numeric literal
 // (e.g. the `2` in `z^2`) is integer-domain, a fractional literal is Float.
 //
 // IMPORTANT: we evaluate the AST OURSELVES rather than via expr's `evaluate`
@@ -36,7 +36,7 @@ import (
 const maxFormulaDepth = 256
 
 // mval is a number in one of two domains: integer (i holds the value) or float
-// (f holds it). The domain drives the AQL coercion above.
+// (f holds it). The domain drives the boru coercion above.
 type mval struct {
 	i     int64
 	f     float64
@@ -55,7 +55,7 @@ func (m mval) asFloat() float64 {
 func miniMathHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", "math: src: "+err.Error(), "lang_math")
+		return nil, r.BoruError("mini_error", "math: src: "+err.Error(), "lang_math")
 	}
 
 	// Variable bindings come from the named params (opts). Each must be numeric.
@@ -64,9 +64,9 @@ func miniMathHandler(args []native.Value, _ map[string]native.Value, _ []native.
 		if m, merr := native.AsMap(args[1]); merr == nil && m != nil {
 			for _, k := range m.Keys() {
 				v, _ := m.Get(k)
-				mv, ok := aqlToMval(v)
+				mv, ok := boruToMval(v)
 				if !ok {
-					return nil, r.AqlErrorHint("mini_error",
+					return nil, r.BoruErrorHint("mini_error",
 						fmt.Sprintf("math: variable %q must be a number, got %s", k, v.String()),
 						"lang_math", "bind every formula variable to an Integer or Float param")
 				}
@@ -85,17 +85,17 @@ func miniMathHandler(args []native.Value, _ map[string]native.Value, _ []native.
 		},
 	})
 	if perr != nil {
-		return nil, r.AqlErrorHint("mini_syntax_error", "math: "+native.FirstCleanLine(perr.Error()),
+		return nil, r.BoruErrorHint("mini_syntax_error", "math: "+native.FirstCleanLine(perr.Error()),
 			"lang_math", "write a maths formula like x*y-z^2 with variables bound via opts")
 	}
 
 	out, eerr := evalFormula(ast, vars, 0)
 	if eerr != nil {
 		if errors.Is(eerr, errMalformedFormula) {
-			return nil, r.AqlErrorHint("mini_syntax_error", "math: malformed formula", "lang_math",
+			return nil, r.BoruErrorHint("mini_syntax_error", "math: malformed formula", "lang_math",
 				"write a maths formula like x*y-z^2 with variables bound via opts")
 		}
-		return nil, r.AqlErrorHint("mini_eval_error", "math: "+eerr.Error(), "lang_math",
+		return nil, r.BoruErrorHint("mini_eval_error", "math: "+eerr.Error(), "lang_math",
 			"check the operators and that every variable is bound in opts")
 	}
 	if out.isInt {
@@ -226,9 +226,9 @@ func evalApply(val []any, vars map[string]mval, depth int) (mval, error) {
 	return mval{}, fmt.Errorf("unsupported operator %q", op.Name)
 }
 
-// aqlToMval coerces a bound param value to an mval, preserving its AQL numeric
+// boruToMval coerces a bound param value to an mval, preserving its boru numeric
 // domain (Integer → integer-domain, Float → float-domain).
-func aqlToMval(v native.Value) (mval, bool) {
+func boruToMval(v native.Value) (mval, bool) {
 	if !native.IsConcrete(v) {
 		return mval{}, false
 	}

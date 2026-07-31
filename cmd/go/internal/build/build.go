@@ -1,21 +1,21 @@
-// Package build implements `aql build <prog.aql>` — compile an AQL program
+// Package build implements `boru build <prog.boru>` — compile a boru program
 // into a standalone native executable.
 //
 // Two mechanisms produce the binary:
 //
-//   - Self-embedding launcher (default). Copy the running `aql` binary and
+//   - Self-embedding launcher (default). Copy the running `boru` binary and
 //     append the program (plus any bundled file imports and the baked engine
 //     settings) as a payload. At startup the copy detects the payload and runs
 //     it through the full interpreter (see cmd/go/main.go). No Go toolchain or
 //     module resolution is needed, and it runs any program — at the cost of a
-//     binary the size of `aql`, for the host OS/arch only.
+//     binary the size of `boru`, for the host OS/arch only.
 //
 //   - Native (`--native`). Generate a tiny main.go that embeds the program and
 //     calls buildrt.Main, then invoke `go build`. Smaller, cross-compilable,
-//     but needs the Go toolchain and the aql module graph (see native.go).
+//     but needs the Go toolchain and the boru module graph (see native.go).
 //
-// Both paths bundle file imports (`import "./lib.aql"`) so the produced binary
-// is self-contained; built-in `aql:` modules are already in the runtime and
+// Both paths bundle file imports (`import "./lib.boru"`) so the produced binary
+// is self-contained; built-in `boru:` modules are already in the runtime and
 // need no bundling.
 package build
 
@@ -27,12 +27,12 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/permsflags"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 type cmd struct{}
@@ -46,7 +46,7 @@ func (*cmd) Synopsis() string { return "compile a program into a standalone exec
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("build", flag.ContinueOnError)
 	fs.SetOutput(stderr)
-	out := fs.String("o", "", "output binary path (default: source basename without .aql)")
+	out := fs.String("o", "", "output binary path (default: source basename without .boru)")
 	native := fs.Bool("native", false, "use the Go toolchain (go build) instead of the self-embedding launcher")
 	keep := fs.Bool("keep", false, "(native) retain the generated temp dir and print its path")
 	registry := fs.String("r", "", "registry path baked into the binary")
@@ -62,7 +62,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	permsflags.Register(fs, &pf)
 
 	// flag.Parse stops at the first non-flag token, so flags placed after the
-	// script (the natural `aql build prog.aql -o prog` form) would be missed.
+	// script (the natural `boru build prog.boru -o prog` form) would be missed.
 	// Interleave: re-parse after each positional so flags work in any position.
 	var positionals []string
 	rest := args
@@ -78,7 +78,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	}
 
 	if len(positionals) != 1 {
-		fmt.Fprintf(stderr, "error: aql build requires exactly one <prog.aql>\n")
+		fmt.Fprintf(stderr, "error: boru build requires exactly one <prog.boru>\n")
 		return 1
 	}
 	srcPath := pathutil.Expand(positionals[0])
@@ -154,7 +154,7 @@ func resolveCompile(compile, force, noCompile bool) buildrt.CompileMode {
 }
 
 // defaultOutput is the source basename without its extension, in the cwd:
-// prog.aql -> prog, a/b/c.aql -> c.
+// prog.boru -> prog, a/b/c.boru -> c.
 func defaultOutput(srcPath string) string {
 	name := filepath.Base(srcPath)
 	if ext := filepath.Ext(name); ext != "" {
@@ -164,8 +164,8 @@ func defaultOutput(srcPath string) string {
 }
 
 // buildConfig reads the entry program, walks its file-import graph, and
-// assembles the buildrt.Config baked into the binary. Built-in aql: imports
-// are skipped (they are in the runtime); every reachable .aql file is embedded
+// assembles the buildrt.Config baked into the binary. Built-in boru: imports
+// are skipped (they are in the runtime); every reachable .boru file is embedded
 // under its absolute path so the in-memory file system resolves it at run time.
 func buildConfig(srcPath, registry string, seed int64, mode buildrt.CompileMode, optionsBlob string, prof *policy.Profile) (buildrt.Config, error) {
 	entryAbs, err := filepath.Abs(srcPath)
@@ -213,7 +213,7 @@ var osExecutable = os.Executable
 // the plain buildrt.Config shape.
 var encodePayload = buildrt.EncodePayload
 
-// buildSelfEmbed produces the standalone binary by copying the running aql
+// buildSelfEmbed produces the standalone binary by copying the running boru
 // executable and appending the encoded payload.
 func buildSelfEmbed(cfg buildrt.Config, outPath string) error {
 	self, err := osExecutable()
@@ -227,7 +227,7 @@ func buildSelfEmbed(cfg buildrt.Config, outPath string) error {
 	// Guard against building from an already-built binary, which would nest
 	// payloads and run the wrong program.
 	if _, ok, _ := buildrt.DecodePayload(image); ok {
-		return fmt.Errorf("the running aql binary is itself a built executable; run `aql build` with a stock aql binary")
+		return fmt.Errorf("the running boru binary is itself a built executable; run `boru build` with a stock boru binary")
 	}
 	payload, err := encodePayload(cfg)
 	if err != nil {

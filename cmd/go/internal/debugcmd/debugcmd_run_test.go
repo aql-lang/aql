@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/debugserve"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/debugserve"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // runDebug invokes the subcommand the way main does.
@@ -53,14 +53,14 @@ func TestRunNoArgs(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit = %d, want 1", code)
 	}
-	if !strings.Contains(errOut, "usage: aql debug") {
+	if !strings.Contains(errOut, "usage: boru debug") {
 		t.Errorf("stderr = %q", errOut)
 	}
 }
 
 func TestRunBarePositionalIsLaunch(t *testing.T) {
 	// A bare positional that is not serve|attach is an interactive-debugger
-	// launch (design/AQL-DEBUGGER.0.md §4); a nonexistent file fails its read.
+	// launch (design/BORU-DEBUGGER.0.md §4); a nonexistent file fails its read.
 	code, _, errOut := runDebug(t, "frobnicate")
 	if code != 1 {
 		t.Errorf("exit = %d, want 1", code)
@@ -74,7 +74,7 @@ func TestDiscoveryRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TMPDIR", dir)
 	dp := discoveryPath()
-	if dp != filepath.Join(dir, "aql-debug.json") {
+	if dp != filepath.Join(dir, "boru-debug.json") {
 		t.Errorf("discoveryPath = %q", dp)
 	}
 	writeDiscovery(dp, "127.0.0.1:7777", "tok")
@@ -94,7 +94,7 @@ func TestReadDiscoveryMissing(t *testing.T) {
 }
 
 func TestReadDiscoveryMalformed(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "aql-debug.json")
+	path := filepath.Join(t.TempDir(), "boru-debug.json")
 	if err := os.WriteFile(path, []byte("{not json"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +122,7 @@ func TestRunAttachViaDiscoveryFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "aql-debug.json"), body, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "boru-debug.json"), body, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	code, out, errOut := runDebug(t, "attach", "heap")
@@ -146,7 +146,7 @@ func TestRunAttachNoVerb(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit = %d, want 1", code)
 	}
-	if !strings.Contains(errOut, "usage: aql debug attach") {
+	if !strings.Contains(errOut, "usage: boru debug attach") {
 		t.Errorf("stderr = %q", errOut)
 	}
 }
@@ -183,7 +183,7 @@ func TestAttachVerbEventsUsage(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit = %d, want 1", code)
 	}
-	if !strings.Contains(errOut.String(), "usage: aql debug attach events") {
+	if !strings.Contains(errOut.String(), "usage: boru debug attach events") {
 		t.Errorf("stderr = %q", errOut.String())
 	}
 }
@@ -209,7 +209,7 @@ func TestRunServeBadFlag(t *testing.T) {
 }
 
 func TestRunServeMissingFile(t *testing.T) {
-	code, _, errOut := runDebug(t, "serve", filepath.Join(t.TempDir(), "nope.aql"))
+	code, _, errOut := runDebug(t, "serve", filepath.Join(t.TempDir(), "nope.boru"))
 	if code != 1 {
 		t.Errorf("exit = %d, want 1", code)
 	}
@@ -219,7 +219,7 @@ func TestRunServeMissingFile(t *testing.T) {
 }
 
 func TestRunServeBadProgram(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "bad.aql")
+	path := filepath.Join(t.TempDir(), "bad.boru")
 	if err := os.WriteFile(path, []byte("no-such-word-xyz-12345"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +240,7 @@ func TestServeShutdownOnSignal(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("TMPDIR", dir)
 
-	prog := filepath.Join(dir, "p.aql")
+	prog := filepath.Join(dir, "p.boru")
 	if err := os.WriteFile(prog, []byte("def served-marker 41"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +251,7 @@ func TestServeShutdownOnSignal(t *testing.T) {
 		done <- runServe([]string{"--bind", "127.0.0.1:0", prog}, &out, &errOut)
 	}()
 
-	dp := filepath.Join(dir, "aql-debug.json")
+	dp := filepath.Join(dir, "boru-debug.json")
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		if _, err := os.Stat(dp); err == nil {

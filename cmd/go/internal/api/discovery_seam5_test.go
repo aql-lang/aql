@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 // seam5Inspector is a minimal service.Inspector for exercising Start.
@@ -24,7 +24,7 @@ func (seam5Inspector) ByName(string) (service.Service, bool) {
 func (seam5Inspector) StopService(context.Context, string) error { return nil }
 
 // seam5TempDir points the discovery file at a per-test directory so the
-// suite never touches the real $TMPDIR/aql-api.json.
+// suite never touches the real $TMPDIR/boru-api.json.
 func seam5TempDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -45,7 +45,7 @@ func TestSeam5WriteDiscoveryFileMarshalError(t *testing.T) {
 	if err := s.writeDiscoveryFile(); !errors.Is(err, boom) {
 		t.Fatalf("writeDiscoveryFile = %v, want %v", err, boom)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "aql-api.json")); !os.IsNotExist(err) {
+	if _, err := os.Stat(filepath.Join(dir, "boru-api.json")); !os.IsNotExist(err) {
 		t.Fatalf("discovery file must not exist after marshal error, stat err = %v", err)
 	}
 }
@@ -103,7 +103,7 @@ func seam5AssertNoTempLeft(t *testing.T, dir string) {
 		t.Fatal(err)
 	}
 	for _, e := range entries {
-		if strings.Contains(e.Name(), "aql-api") {
+		if strings.Contains(e.Name(), "boru-api") {
 			t.Fatalf("leftover file %s in %s", e.Name(), dir)
 		}
 	}

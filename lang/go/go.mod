@@ -1,10 +1,10 @@
-module github.com/aql-lang/aql/lang/go
+module github.com/boru-lang/boru/lang/go
 
 go 1.24.7
 
 require (
 	github.com/antchfx/xpath v1.3.6
-	github.com/aql-lang/aql/eng/go v0.0.0
+	github.com/boru-lang/boru/eng/go v0.0.0
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/itchyny/gojq v0.12.19
@@ -54,4 +54,4 @@ require (
 	modernc.org/memory v1.11.0 // indirect
 )
 
-replace github.com/aql-lang/aql/eng/go => ../../eng/go
+replace github.com/boru-lang/boru/eng/go => ../../eng/go

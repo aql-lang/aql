@@ -4,7 +4,7 @@ Status: **§2, §3, §5, §6.2 LANDED (2026-06-10)**; §4 superseded by
 design; §6.1 deferred to the structure-first lazy-resolution rework
 (see the landed-state note below). Source material: the error-related items from the
 two DX field reports (`design/VOXGIG-DX-REPORT.5.md` tags T9.6, B3,
-B5, T1, B2a, T9.4 and `design/AQL-DX-REPORT.5.md`), consolidated here
+B5, T1, B2a, T9.4 and `design/BORU-DX-REPORT.5.md`), consolidated here
 so the reports can track *status* while this document owns the
 *designs*. Decisions here must respect ADR-004 (all words forward by
 default) — none of these proposals changes a word's collection mode.
@@ -13,18 +13,18 @@ default) — none of these proposals changes a word's collection mode.
 
 - **Errors are values** of type `Ideal/Error` carrying a `code` atom
   and a `message` string (REFERENCE.md "Error codes"). Native handlers
-  construct them via `r.AqlError(code, detail, word)` /
-  `r.AqlErrorHint(...)`.
+  construct them via `r.BoruError(code, detail, word)` /
+  `r.BoruErrorHint(...)`.
 - **Catching:** `do [body] error [handler]` — the handler list runs
   with the Error value pushed first. An uncaught error aborts the run
-  with the formatted `[aql/<code>]` report, source span, and (where
+  with the formatted `[boru/<code>]` report, source span, and (where
   applicable) a hint line.
 - **There is no user-facing constructor or raiser.** `make Error {…}`
   is rejected ("unsupported target type Error"), and no `raise` /
-  `throw` word exists. AQL code that wants to fail must contrive a
+  `throw` word exists. boru code that wants to fail must contrive a
   native error (e.g. divide by zero) — the gap both voxgig libraries
   hit (T9.6).
-- **Static diagnosis** (`aql check`) already catches several silent
+- **Static diagnosis** (`boru check`) already catches several silent
   shapes: `uncalled_function` (a call that matched no signature and
   was left on the stack as data — errors), `forward_strands_operand`
   (forward collection stranding an operand — advisory),
@@ -37,7 +37,7 @@ bug than any loud error.
 
 > **Landed state (2026-06-10):**
 > **§2 `raise`** — all three forms as designed; the raised value is a
-> real `*AqlError`, so abort/catch is unchanged. `ErrorInfo` gained
+> real `*BoruError`, so abort/catch is unchanged. `ErrorInfo` gained
 > `Code` and `Data`: a caught Error now exposes `e.code` (atom),
 > `e.message` (the SHORT detail, not the formatted report), and any
 > raise-payload keys via `get`/dot access, and `convert Map` projects
@@ -46,8 +46,8 @@ bug than any loud error.
 > **§3 void-def / blame shift** — a paren group resolving to ZERO
 > values is recorded with its candidate consumers (the pending word
 > names below it); a same-statement signature failure on one of them
-> reports `[aql/def_error] def: expression produced no value to bind
-> to 'name'` (def) or `[aql/no_value_error] argument expression
+> reports `[boru/def_error] def: expression produced no value to bind
+> to 'name'` (def) or `[boru/no_value_error] argument expression
 > produced no value for <word>` at the causing site, and an undefined
 > reference to the never-bound name gets the explanatory hint.
 > Legitimate void groups (`1 2 add ()`, `add () 5 6`, `5 () add 3` —
@@ -56,7 +56,7 @@ bug than any loud error.
 > **§5 runtime uncalled-function** — option 2 as recommended: a named
 > Function value left by a failed dispatch is marked
 > (`Value.FailedDispatch`); the TOP-LEVEL end-of-Run drain raises
-> `[aql/uncalled_function]` with the original call-site span if
+> `[boru/uncalled_function]` with the original call-site span if
 > nothing consumed it. Higher-order/function-as-value uses are
 > unaffected (consumption clears the residue); check and runtime now
 > name the same bug the same way. The wrapper-dispatch regression
@@ -117,7 +117,7 @@ Proposal: when `def name <expr>` collects its value position and the
 expression produces **no value**, raise immediately at the `def`:
 
 ```
-[aql/def_error]: def: expression produced no value to bind to 'name'
+[boru/def_error]: def: expression produced no value to bind to 'name'
   = hint: the called word returns nothing — call it without def,
     or give it a return value
 ```
@@ -146,11 +146,11 @@ so `def r (b set k v)` is exactly the shape the new error catches.
 > the class/object split). B5 is resolved by design rather than by a
 > better message; do **not** implement the hint below ahead of that.
 
-Original proposal (kept for the record): route through `AqlErrorHint`
+Original proposal (kept for the record): route through `BoruErrorHint`
 with:
 
 ```
-[aql/make_error]: make: expected a constructed object type, got Object
+[boru/make_error]: make: expected a constructed object type, got Object
   = hint: Object itself cannot be made — define a subtype first
     (def Box (refine Object {v:0})  make Box {v:1}), or use a plain
     map literal {…} if you don't need a nominal type
@@ -162,7 +162,7 @@ The remaining 🔴 silent failure. When a namespace word's args don't
 match any signature, `execFnDefLiteral` leaves the Function value on
 the stack as data — by design, because a Function value must be able
 to sit on the stack for higher-order use (`filter f xs`, `def g f`).
-`aql check` now reports this shape as an `uncalled_function` error,
+`boru check` now reports this shape as an `uncalled_function` error,
 but at runtime it is still silent.
 
 Options considered:

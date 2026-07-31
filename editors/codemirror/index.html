@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>codemirror-lang-aql — demo</title>
+    <title>codemirror-lang-boru — demo</title>
     <style>
       :root {
         color-scheme: light dark;
@@ -48,7 +48,7 @@
       }
     </style>
 
-    <!-- Resolve the bare `@codemirror/*` specifiers used by ./aql.js (and by
+    <!-- Resolve the bare `@codemirror/*` specifiers used by ./boru.js (and by
          this page) against esm.sh. Versions are pinned to the CodeMirror 6
          line. No build step required. -->
     <script type="importmap">
@@ -65,10 +65,10 @@
   </head>
 
   <body>
-    <h1>codemirror-lang-aql</h1>
+    <h1>codemirror-lang-boru</h1>
     <p class="sub">
-      A CodeMirror 6 <code>StreamLanguage</code> mode for AQL. Edit below — the
-      highlighting is produced by the local <code>aql.js</code>.
+      A CodeMirror 6 <code>StreamLanguage</code> mode for boru. Edit below — the
+      highlighting is produced by the local <code>boru.js</code>.
     </p>
 
     <div id="editor"></div>
@@ -88,14 +88,14 @@
       import { defaultKeymap, history, historyKeymap }
         from "https://esm.sh/@codemirror/commands@6.6.0";
       // The language mode under test — imported from this directory.
-      import { aql } from "./aql.js";
+      import { boru } from "./boru.js";
 
       const status = document.getElementById("status");
 
-      // A small explicit highlight style so every AQL token class is visibly
+      // A small explicit highlight style so every boru token class is visibly
       // distinct (the built-in default style also works — this just makes the
       // demo pop and shows how token classes map to colours).
-      const aqlHighlight = HighlightStyle.define([
+      const boruHighlight = HighlightStyle.define([
         { tag: t.comment, color: "#6a7381", fontStyle: "italic" },
         { tag: t.string, color: "#2a9d3a" },
         { tag: t.number, color: "#b5651d" },
@@ -111,12 +111,12 @@
       ]);
 
       const sample = [
-        "# todo.aql — a taste of AQL (mirrors design/examples/todo).",
+        "# todo.boru — a taste of boru (mirrors design/examples/todo).",
         "// both '#' and '//' start line comments.",
         "/* block comments",
         "   span multiple lines */",
         "",
-        'import "aql:serve"',
+        'import "boru:serve"',
         "",
         'export "TodoStore" {',
         "  New: New/r          # /r parks a function reference",
@@ -156,8 +156,8 @@
               highlightActiveLine(),
               history(),
               bracketMatching(),
-              aql(),
-              syntaxHighlighting(aqlHighlight),
+              boru(),
+              syntaxHighlighting(boruHighlight),
               // Fall back to the default style for any tag not themed above.
               syntaxHighlighting(defaultHighlightStyle),
               keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -165,7 +165,7 @@
           }),
         });
         status.textContent =
-          "ready — this is the same mode that drives the AQL web playground.";
+          "ready — this is the same mode that drives the boru web playground.";
         window.__view = view; // handy for poking at from the console
       } catch (err) {
         status.textContent = "failed to load: " + (err && err.message);

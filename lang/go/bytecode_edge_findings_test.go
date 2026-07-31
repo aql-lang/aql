@@ -582,7 +582,7 @@ func TestEdgeFindingLoopCollectDefCompiles(t *testing.T) {
 
 // §6 (Stage-3 fn-value dispatch, landed 2026-07-21) — a fn body whose tail
 // applies a DYNAMIC value (a Function fetched from a map at runtime) to the
-// waiting frame values: the aql:fmt stylesheet driver
+// waiting frame values: the boru:fmt stylesheet driver
 // `def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]`. Before the
 // noteDynFrameReplay widening the count-mismatched residual [inert-local,
 // dyn-event] refused ("fn apply: result above a literal"); now the recorder

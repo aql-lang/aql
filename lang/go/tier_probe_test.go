@@ -3,7 +3,7 @@ package lang
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // TestTierFeasibilityProbe validates the two load-bearing claims of

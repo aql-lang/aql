@@ -1,4 +1,4 @@
-# AQL Language Specification: the aql:parselang module + the core `parse` word
+# boru Language Specification: the boru:parselang module + the core `parse` word
 # Format: input<TAB>expected<TAB>description
 #
 # `parse <kind> <opts?> <source>` is the sibling of `mini`: it expands at the
@@ -14,66 +14,66 @@
 # source). A {file:…} source is deferred in v1.
 #
 # ─────────────────────────────────────────────────────────────────────
-# §1  parse — a def-bound AQL parser fn returning a tokenization
-import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc 'x + y') get 1	'+'	the parsed operator token
-import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc 'x + y') get 0	'x'	the left operand token
-import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc '3 * 4') get 2	'4'	operands are arbitrary tokens, not fixed identifiers
+# §1  parse — a def-bound boru parser fn returning a tokenization
+import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc 'x + y') get 1	'+'	the parsed operator token
+import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc 'x + y') get 0	'x'	the left operand token
+import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc '3 * 4') get 2	'4'	operands are arbitrary tokens, not fixed identifiers
 #
 # §2  source forms and opts
-import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc {src:'a - b'}) get 1	'-'	a {src:…} Source map resolves to its string
-import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc {trace:true} 'x + y') get 1	'+'	3-arg form: opts in the middle, source last
-import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (calc 'x + y' {} end) get 1	'+'	parse is pure sugar — invoking the bound fn directly is equivalent
+import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc {src:'a - b'}) get 1	'-'	a {src:…} Source map resolves to its string
+import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc {trace:true} 'x + y') get 1	'+'	3-arg form: opts in the middle, source last
+import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (calc 'x + y' {} end) get 1	'+'	parse is pure sugar — invoking the bound fn directly is equivalent
 #
 # §3  register / kinds / source — out-of-band exports
-import "aql:parselang"  ParseLang.kinds	[ini/q json/q jsonic/q json5/q jsonc/q csv/q toml/q yaml/q xml/q zon/q markdown/q feed/q aontu/q]	the FIXED parser-kind atoms (the tabnas family + aontu — the whole namespace)
-import "aql:parselang"  ParseLang.source 'x + y'	'x + y'	the source resolver passes a String through
-import "aql:parselang"  ParseLang.source {src:'a b'}	'a b'	the source resolver unwraps {src:…}
+import "boru:parselang"  ParseLang.kinds	[ini/q json/q jsonic/q json5/q jsonc/q csv/q toml/q yaml/q xml/q zon/q markdown/q feed/q aontu/q]	the FIXED parser-kind atoms (the tabnas family + aontu — the whole namespace)
+import "boru:parselang"  ParseLang.source 'x + y'	'x + y'	the source resolver passes a String through
+import "boru:parselang"  ParseLang.source {src:'a b'}	'a b'	the source resolver unwraps {src:…}
 #
 # §4  negatives
-import "aql:parselang"  parse nope 'x'	ERROR:parse_unknown_lang	unknown kind: expansion-time error at the call site
+import "boru:parselang"  parse nope 'x'	ERROR:parse_unknown_lang	unknown kind: expansion-time error at the call site
 parse calc 'x'	ERROR:parse_unknown_lang	parse is core but parsers need the import (no auto-import)
 ParseLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
-import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  parse calc {file:'x.calc'}	ERROR:parse_file_unsupported	{file:…} source is deferred in v1
-import "aql:parselang"  import "aql:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  parse calc {nope:1}	ERROR:parse_bad_source	a source map must carry a 'src' field
-import "aql:parselang"  ParseLang.register	ERROR:parse_registry_frozen	the kind namespace is fixed — the register tombstone raises with the value-form migration hint
+import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  parse calc {file:'x.calc'}	ERROR:parse_file_unsupported	{file:…} source is deferred in v1
+import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  parse calc {nope:1}	ERROR:parse_bad_source	a source map must carry a 'src' field
+import "boru:parselang"  ParseLang.register	ERROR:parse_registry_frozen	the kind namespace is fixed — the register tombstone raises with the value-form migration hint
 #
 # §5  ini — the built-in INI parser (github.com/tabnas/ini/go). No host
 #     registration needed: importing the module is enough. Top-level
 #     `key = value` lines become Map fields, `[section]` headers nest a Map,
 #     and a recognised boolean decodes to a Boolean.
-import "aql:parselang"  (parse ini 'b = hello') get 'b'	'hello'	a top-level key/value decodes to a String field
-import "aql:parselang"  (parse ini {src:'b = hello'}) get 'b'	'hello'	a {src:…} Source map resolves like every other parser
-import "aql:parselang"  ((parse ini 'a = 1\n[sec]\nx = true') get 'sec') get 'x'	true	a [section] header nests a Map; a recognised boolean decodes to a Boolean
-import "aql:parselang"  (ParseLang.parse_ini 'b = hello' {} end) get 'b'	'hello'	parse is pure sugar — the desugared standard call is equivalent
+import "boru:parselang"  (parse ini 'b = hello') get 'b'	'hello'	a top-level key/value decodes to a String field
+import "boru:parselang"  (parse ini {src:'b = hello'}) get 'b'	'hello'	a {src:…} Source map resolves like every other parser
+import "boru:parselang"  ((parse ini 'a = 1\n[sec]\nx = true') get 'sec') get 'x'	true	a [section] header nests a Map; a recognised boolean decodes to a Boolean
+import "boru:parselang"  (ParseLang.parse_ini 'b = hello' {} end) get 'b'	'hello'	parse is pure sugar — the desugared standard call is equivalent
 #
 # §5  ini negatives
-import "aql:parselang"  parse ini {file:'cfg.ini'}	ERROR:parse_file_unsupported	{file:…} source is deferred in v1, ini included
-import "aql:parselang"  parse ini {nope:1}	ERROR:parse_bad_source	a source map must carry a 'src' field
+import "boru:parselang"  parse ini {file:'cfg.ini'}	ERROR:parse_file_unsupported	{file:…} source is deferred in v1, ini included
+import "boru:parselang"  parse ini {nope:1}	ERROR:parse_bad_source	a source map must carry a 'src' field
 #
 # §6  the rest of the tabnas parser family (github.com/tabnas/*) — all built
 #     in, all reached the same way. These pin the desugared standard call so
 #     every parser export is covered; the JSON family + yaml/zon return the
 #     decoded top level, csv/markdown a List of rows/blocks, toml/xml/feed a Map.
-import "aql:parselang"  (ParseLang.parse_json '{"a":1,"b":"hi"}' {} end) get 'b'	'hi'	JSON object → Map
-import "aql:parselang"  (ParseLang.parse_jsonic '{a:1, b:"hi"}' {} end) get 'b'	'hi'	jsonic (relaxed JSON): unquoted keys
-import "aql:parselang"  (ParseLang.parse_json5 '{a:1, b:0x10}' {} end) get 'b'	16	JSON5: hex literal decodes to an Integer
-import "aql:parselang"  (ParseLang.parse_jsonc '{"a":1, "b":2}' {} end) get 'b'	2	JSONC (JSON with comments)
-import "aql:parselang"  ((ParseLang.parse_csv 'a,b\n1,2' {} end) get 0) get 1	'b'	CSV → List of rows; row 0 is the header
-import "aql:parselang"  (ParseLang.parse_toml 'b = "hi"' {} end) get 'b'	'hi'	TOML table → Map
-import "aql:parselang"  (ParseLang.parse_yaml 'b: hi' {} end) get 'b'	'hi'	YAML mapping → Map
-import "aql:parselang"  ParseLang.parse_xml '<r><a>1</a></r>' {} end	<r><a>1</a></r>	XML → a Node/Xml element that renders back to well-formed XML
-import "aql:parselang"  (ParseLang.parse_zon '.{ .a = 1, .b = "hi" }' {} end) get 'b'	'hi'	ZON (Zig object notation) → Map
-import "aql:parselang"  ((ParseLang.parse_markdown '# T\n\nhello world' {} end) get 0) get 0	'hello world'	Markdown → List of blocks
-import "aql:parselang"  (ParseLang.parse_feed '<rss version="2.0"><channel><title>My Feed</title></channel></rss>' {} end) get 'format'	'atom'	RSS/Atom feed → normalised atom-shaped Map
+import "boru:parselang"  (ParseLang.parse_json '{"a":1,"b":"hi"}' {} end) get 'b'	'hi'	JSON object → Map
+import "boru:parselang"  (ParseLang.parse_jsonic '{a:1, b:"hi"}' {} end) get 'b'	'hi'	jsonic (relaxed JSON): unquoted keys
+import "boru:parselang"  (ParseLang.parse_json5 '{a:1, b:0x10}' {} end) get 'b'	16	JSON5: hex literal decodes to an Integer
+import "boru:parselang"  (ParseLang.parse_jsonc '{"a":1, "b":2}' {} end) get 'b'	2	JSONC (JSON with comments)
+import "boru:parselang"  ((ParseLang.parse_csv 'a,b\n1,2' {} end) get 0) get 1	'b'	CSV → List of rows; row 0 is the header
+import "boru:parselang"  (ParseLang.parse_toml 'b = "hi"' {} end) get 'b'	'hi'	TOML table → Map
+import "boru:parselang"  (ParseLang.parse_yaml 'b: hi' {} end) get 'b'	'hi'	YAML mapping → Map
+import "boru:parselang"  ParseLang.parse_xml '<r><a>1</a></r>' {} end	<r><a>1</a></r>	XML → a Node/Xml element that renders back to well-formed XML
+import "boru:parselang"  (ParseLang.parse_zon '.{ .a = 1, .b = "hi" }' {} end) get 'b'	'hi'	ZON (Zig object notation) → Map
+import "boru:parselang"  ((ParseLang.parse_markdown '# T\n\nhello world' {} end) get 0) get 0	'hello world'	Markdown → List of blocks
+import "boru:parselang"  (ParseLang.parse_feed '<rss version="2.0"><channel><title>My Feed</title></channel></rss>' {} end) get 'format'	'atom'	RSS/Atom feed → normalised atom-shaped Map
 #
 # §7  the `parse <kind>` sugar across shapes — object, list and scalar field
-import "aql:parselang"  (parse json '{"a":1,"b":"hi"}') get 'b'	'hi'	sugar over an object source
-import "aql:parselang"  ((parse csv 'x,y\n3,4') get 1) get 0	3	sugar over a list (CSV row) source; numeric fields decode to Integers
-import "aql:parselang"  (parse yaml 'greeting: hello') get 'greeting'	'hello'	sugar over a YAML mapping
+import "boru:parselang"  (parse json '{"a":1,"b":"hi"}') get 'b'	'hi'	sugar over an object source
+import "boru:parselang"  ((parse csv 'x,y\n3,4') get 1) get 0	3	sugar over a list (CSV row) source; numeric fields decode to Integers
+import "boru:parselang"  (parse yaml 'greeting: hello') get 'greeting'	'hello'	sugar over a YAML mapping
 #
 # §8  syntax-error negatives — a malformed source raises parse_syntax_error
-import "aql:parselang"  parse json '{not valid'	ERROR:parse_syntax_error	malformed JSON is a loud parse error
-import "aql:parselang"  parse toml '= = ='	ERROR:parse_syntax_error	malformed TOML is a loud parse error
+import "boru:parselang"  parse json '{not valid'	ERROR:parse_syntax_error	malformed JSON is a loud parse error
+import "boru:parselang"  parse toml '= = ='	ERROR:parse_syntax_error	malformed TOML is a loud parse error
 #
 # §9  aontu — the built-in aontu parser, the upstream Go port of
 #     github.com/rjrodger/aontu (the repo's go/ module), a CUE-inspired
@@ -83,21 +83,21 @@ import "aql:parselang"  parse toml '= = ='	ERROR:parse_syntax_error	malformed TO
 #     deep-merge, bare kind words (string/number/integer/boolean/top) constrain
 #     scalars, an absolute `$.a` reference resolves from the root and a relative
 #     `.k` reference resolves a sibling key at the current map level.
-import "aql:parselang"  (parse aontu 'a:1 b:2') get 'b'	2	top-level key/value entries build a Map
-import "aql:parselang"  (((parse aontu 'a:b:c:1') get 'a') get 'b') get 'c'	1	the colon-chain a:b:c:1 nests Maps
-import "aql:parselang"  ((parse aontu 'a:[10,20,30]') get 'a') get 1	20	a [list] builds a List; elements may be comma- or space-separated
-import "aql:parselang"  ((parse aontu 'a:{b:1} a:{c:2}') get 'a') get 'c'	2	duplicate keys deep-merge their Maps (unification)
-import "aql:parselang"  (parse aontu 'a:number a:5') get 'a'	5	a kind word unifies with a matching scalar to yield the scalar
-import "aql:parselang"  (parse aontu 'a:1 b:$.a') get 'b'	1	an absolute $ reference resolves from the document root
-import "aql:parselang"  (parse aontu 'a:[10,20,30] b:$.a.1') get 'b'	20	a reference indexes into a list
-import "aql:parselang"  (ParseLang.parse_aontu 'a:1' {} end) get 'a'	1	parse is pure sugar — the desugared standard call is equivalent
+import "boru:parselang"  (parse aontu 'a:1 b:2') get 'b'	2	top-level key/value entries build a Map
+import "boru:parselang"  (((parse aontu 'a:b:c:1') get 'a') get 'b') get 'c'	1	the colon-chain a:b:c:1 nests Maps
+import "boru:parselang"  ((parse aontu 'a:[10,20,30]') get 'a') get 1	20	a [list] builds a List; elements may be comma- or space-separated
+import "boru:parselang"  ((parse aontu 'a:{b:1} a:{c:2}') get 'a') get 'c'	2	duplicate keys deep-merge their Maps (unification)
+import "boru:parselang"  (parse aontu 'a:number a:5') get 'a'	5	a kind word unifies with a matching scalar to yield the scalar
+import "boru:parselang"  (parse aontu 'a:1 b:$.a') get 'b'	1	an absolute $ reference resolves from the document root
+import "boru:parselang"  (parse aontu 'a:[10,20,30] b:$.a.1') get 'b'	20	a reference indexes into a list
+import "boru:parselang"  (ParseLang.parse_aontu 'a:1' {} end) get 'a'	1	parse is pure sugar — the desugared standard call is equivalent
 #
 # §9  aontu negatives — conflicts, unresolved refs and incomplete kinds are loud
-import "aql:parselang"  parse aontu 'a:1 a:2'	ERROR:parse_syntax_error	unifying two different scalars under one key is a conflict
-import "aql:parselang"  parse aontu 'a:number a:"x"'	ERROR:parse_syntax_error	a kind mismatch is a conflict
-import "aql:parselang"  parse aontu 'b:$.nope'	ERROR:parse_syntax_error	an unresolvable reference is a loud error
-import "aql:parselang"  parse aontu 'a:number'	ERROR:parse_syntax_error	a kind with no concrete value cannot be generated
-import "aql:parselang"  parse aontu 'a:{x:1 y:.z}'	ERROR:parse_syntax_error	a relative reference to a missing sibling is a loud error
+import "boru:parselang"  parse aontu 'a:1 a:2'	ERROR:parse_syntax_error	unifying two different scalars under one key is a conflict
+import "boru:parselang"  parse aontu 'a:number a:"x"'	ERROR:parse_syntax_error	a kind mismatch is a conflict
+import "boru:parselang"  parse aontu 'b:$.nope'	ERROR:parse_syntax_error	an unresolvable reference is a loud error
+import "boru:parselang"  parse aontu 'a:number'	ERROR:parse_syntax_error	a kind with no concrete value cannot be generated
+import "boru:parselang"  parse aontu 'a:{x:1 y:.z}'	ERROR:parse_syntax_error	a relative reference to a missing sibling is a loud error
 #
 # §10  a ParseLang VALUE as the parser — `parse <fn> <opts?> <source>`. The
 #      first operand may BE the parser: a Function (or a word bound to one)
@@ -108,20 +108,20 @@ import "aql:parselang"  parse aontu 'a:{x:1 y:.z}'	ERROR:parse_syntax_error	a re
 #      kind wins a name collision. A parser COMPUTED by a runtime call —
 #      `parse (mk) 'x'` — compiles through the recorded parselang-fn-dispatch:
 #      the fn operand's producing event is its provenance.
-import "aql:parselang"  (parse (ParseLang.parse_json) '{"b":7}') get 'b'	7	a module-exported parser used as a ParseLang value
-import "aql:parselang"  def myp fn [[source:String opts:Map] [Map] [parse json source]]  (parse myp '{"a":42}') get 'a'	42	a word bound to a parser fn is the value form spelled by name
-import "aql:parselang"  parse (fn [[source:String opts:Map] [Any] [opts get 'k']]) {k:9} 'ignored'	9	3-arg form: the opts map reaches an anonymous parser fn
-import "aql:parselang"  def json fn [[source:String opts:Map] [Any] ['shadowed']]  (parse json '{"a":1}') get 'a'	1	a registered kind wins over a same-named binding
-import "aql:parselang"  def mk fn [[] [Function] [fn [[source:String opts:Map] [Any] [source]]]]  parse (mk) 'hi'	'hi'	a computed ParseLang value parses (compiled via the recorded fn dispatch)
-import "aql:parselang"  def mk fn [[] [Function] [([source:Any opts:Map] => [source])]]  parse (mk) 'hi'	'hi'	an ANONYMOUS computed ParseLang value parses (a captureless returned fn const-bakes to its FnDefInfo — PR #295 merge)
-import "aql:parselang"  def wrapp fn [[p:Function] [Any] [parse p 'x']]  wrapp (fn [[source:String opts:Map] [Any] [source]])	'x'	a Function param used as the parser by NAME — a carrier under analysis, dispatched at run time
-import "aql:parselang"  def mk2 fn [[b:Boolean] [Function] [if b [fn [[source:String opts:Map] [Any] [source]]] [fn [[source:String opts:Map] [Any] ['n']]]]]  parse (mk2 true) {k:1} 'z'	'z'	a branch-computed parser is a Function CARRIER under analysis — dispatched at run time, 3-arg surface
+import "boru:parselang"  (parse (ParseLang.parse_json) '{"b":7}') get 'b'	7	a module-exported parser used as a ParseLang value
+import "boru:parselang"  def myp fn [[source:String opts:Map] [Map] [parse json source]]  (parse myp '{"a":42}') get 'a'	42	a word bound to a parser fn is the value form spelled by name
+import "boru:parselang"  parse (fn [[source:String opts:Map] [Any] [opts get 'k']]) {k:9} 'ignored'	9	3-arg form: the opts map reaches an anonymous parser fn
+import "boru:parselang"  def json fn [[source:String opts:Map] [Any] ['shadowed']]  (parse json '{"a":1}') get 'a'	1	a registered kind wins over a same-named binding
+import "boru:parselang"  def mk fn [[] [Function] [fn [[source:String opts:Map] [Any] [source]]]]  parse (mk) 'hi'	'hi'	a computed ParseLang value parses (compiled via the recorded fn dispatch)
+import "boru:parselang"  def mk fn [[] [Function] [([source:Any opts:Map] => [source])]]  parse (mk) 'hi'	'hi'	an ANONYMOUS computed ParseLang value parses (a captureless returned fn const-bakes to its FnDefInfo — PR #295 merge)
+import "boru:parselang"  def wrapp fn [[p:Function] [Any] [parse p 'x']]  wrapp (fn [[source:String opts:Map] [Any] [source]])	'x'	a Function param used as the parser by NAME — a carrier under analysis, dispatched at run time
+import "boru:parselang"  def mk2 fn [[b:Boolean] [Function] [if b [fn [[source:String opts:Map] [Any] [source]]] [fn [[source:String opts:Map] [Any] ['n']]]]]  parse (mk2 true) {k:1} 'z'	'z'	a branch-computed parser is a Function CARRIER under analysis — dispatched at run time, 3-arg surface
 #
 # §10  value-form negatives — the [source opts] prefix contract is enforced
-import "aql:parselang"  parse (fn [[a:Integer] [Integer] [a]]) 'x'	ERROR:parse_bad_signature	a non-parser fn is rejected (too few params)
-import "aql:parselang"  parse (fn [[a:Integer b:Map] [Any] [1]]) 'x'	ERROR:parse_bad_signature	the source param must be String or Any
-import "aql:parselang"  parse (fn [[source:String b:Integer] [Any] [1]]) 'x'	ERROR:parse_bad_signature	the opts param must be a Map
-import "aql:parselang"  parse (fn [[source:Any opts:Map] [Any Any] [source source]]) 'x'	ERROR:parse_bad_signature	a parser yields exactly ONE result — a multi-return fn is rejected (the dispatch contract, enforced at expansion too)
-import "aql:parselang"  def myp 42  parse myp 'x'	ERROR:parse_unknown_lang	a non-fn binding is not a parser — unknown kind unchanged
-import "aql:parselang"  parse (Function) 'x'	ERROR:signature_error	the Function TYPE literal is not a parser value
-import "aql:parselang"  def mkb fn [[] [Function] [fn [[a:Integer] [Integer] [a]]]]  parse (mkb) 'x'	ERROR:parse_bad_signature	a computed non-parser fn is rejected — expansion-time and dispatch-time contracts agree
+import "boru:parselang"  parse (fn [[a:Integer] [Integer] [a]]) 'x'	ERROR:parse_bad_signature	a non-parser fn is rejected (too few params)
+import "boru:parselang"  parse (fn [[a:Integer b:Map] [Any] [1]]) 'x'	ERROR:parse_bad_signature	the source param must be String or Any
+import "boru:parselang"  parse (fn [[source:String b:Integer] [Any] [1]]) 'x'	ERROR:parse_bad_signature	the opts param must be a Map
+import "boru:parselang"  parse (fn [[source:Any opts:Map] [Any Any] [source source]]) 'x'	ERROR:parse_bad_signature	a parser yields exactly ONE result — a multi-return fn is rejected (the dispatch contract, enforced at expansion too)
+import "boru:parselang"  def myp 42  parse myp 'x'	ERROR:parse_unknown_lang	a non-fn binding is not a parser — unknown kind unchanged
+import "boru:parselang"  parse (Function) 'x'	ERROR:signature_error	the Function TYPE literal is not a parser value
+import "boru:parselang"  def mkb fn [[] [Function] [fn [[a:Integer] [Integer] [a]]]]  parse (mkb) 'x'	ERROR:parse_bad_signature	a computed non-parser fn is rejected — expansion-time and dispatch-time contracts agree

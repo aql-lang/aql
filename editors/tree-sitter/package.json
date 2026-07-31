@@ -1,13 +1,13 @@
 {
-  "name": "tree-sitter-aql",
+  "name": "tree-sitter-boru",
   "version": "0.1.0",
-  "description": "AQL grammar for tree-sitter (a concatenative, strongly-typed query language)",
+  "description": "boru grammar for tree-sitter (a concatenative, strongly-typed query language)",
   "repository": {
     "type": "git",
-    "url": "https://github.com/aql-lang/aql.git",
+    "url": "https://github.com/boru-lang/boru.git",
     "directory": "editors/tree-sitter"
   },
-  "author": "AQL contributors",
+  "author": "boru contributors",
   "license": "MIT",
   "main": "bindings/node",
   "types": "bindings/node",
@@ -15,7 +15,7 @@
     "incremental",
     "parsing",
     "tree-sitter",
-    "aql"
+    "boru"
   ],
   "files": [
     "grammar.js",
@@ -54,11 +54,11 @@
   },
   "tree-sitter": [
     {
-      "scope": "source.aql",
+      "scope": "source.boru",
       "file-types": [
-        "aql"
+        "boru"
       ],
-      "injection-regex": "^aql$",
+      "injection-regex": "^boru$",
       "highlights": [
         "queries/highlights.scm"
       ],

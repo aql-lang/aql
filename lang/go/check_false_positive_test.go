@@ -4,12 +4,12 @@ import (
 	"os"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // design/CHECK-FALSE-POSITIVES.0.md — corpus of programs that RUN CORRECTLY yet
 // the static pre-flight check emitted ERROR-severity diagnostics, which blocks
-// `aql run` by default. Each case asserts the plain `Check` pass — the one the
+// `boru run` by default. Each case asserts the plain `Check` pass — the one the
 // run pre-flight gates on — produces no error-level diagnostic (info/warning
 // are fine).
 //
@@ -31,9 +31,9 @@ import (
 // stays on the declared-return path and nets its single return. This mirrors
 // the echo benchmark's `sock:Any` → `sock:Socket` resolution.
 
-// loadApps returns a lang.AQL whose import resolver is backed by an in-memory FS
+// loadApps returns a lang.Boru whose import resolver is backed by an in-memory FS
 // holding the named example apps at /apps/<name>.
-func loadApps(t *testing.T, names ...string) *AQL {
+func loadApps(t *testing.T, names ...string) *Boru {
 	t.Helper()
 	mem := capabilities.NewMem()
 	for _, n := range names {
@@ -52,11 +52,11 @@ func loadApps(t *testing.T, names ...string) *AQL {
 }
 
 // errorDiags returns the error-severity diagnostics for src — the ones that
-// abort `aql run`. It runs the SAME pass the run pre-flight gates on: plain
+// abort `boru run`. It runs the SAME pass the run pre-flight gates on: plain
 // `Check` (cmd/go/internal/check.Preflight → a.Check), NOT the stricter compile
 // pass. A false positive here is what actually refuses an otherwise-correct
 // program by default.
-func errorDiags(t *testing.T, a *AQL, src string) []CheckDiagnostic {
+func errorDiags(t *testing.T, a *Boru, src string) []CheckDiagnostic {
 	t.Helper()
 	res, err := a.Check(src)
 	if err != nil {
@@ -78,9 +78,9 @@ func errorDiags(t *testing.T, a *AQL, src string) []CheckDiagnostic {
 // `call` reported `got (Map, Function, Map); nearest [Map Service Map]`. The
 // program runs correctly (`-no-check`); it now also passes the default gate.
 func TestCheckNoFalsePositiveMiniRedisLoop(t *testing.T) {
-	a := loadApps(t, "mini-redis.aql")
-	src := `import "/apps/mini-redis.aql"
-import "aql:net"
+	a := loadApps(t, "mini-redis.boru")
+	src := `import "/apps/mini-redis.boru"
+import "boru:net"
 def ln (MiniRedis.serve {port: 0})
 def ep (MiniRedis.connect (join "" ["127.0.0.1:" (convert String (Net.addr ln).port)]))
 for 3 [ MiniRedis.cmd ep "SET k v" drop  MiniRedis.cmd ep "GET k" drop ]`
@@ -96,10 +96,10 @@ for 3 [ MiniRedis.cmd ep "SET k v" drop  MiniRedis.cmd ep "GET k" drop ]`
 // `undefined_word: dur` plus a dependent `no_signature`. None are real; with a
 // concrete `ep` the whole driver checks clean.
 func TestCheckNoFalsePositiveMiniRedisDriver(t *testing.T) {
-	a := loadApps(t, "mini-redis.aql")
-	src := `import "/apps/mini-redis.aql"
-import "aql:net"
-import "aql:time-util"
+	a := loadApps(t, "mini-redis.boru")
+	src := `import "/apps/mini-redis.boru"
+import "boru:net"
+import "boru:time-util"
 def ln (MiniRedis.serve {port: 0})
 def ep (MiniRedis.connect (join "" ["127.0.0.1:" (convert String (Net.addr ln).port)]))
 MiniRedis.cmd ep "SET k hello" drop
@@ -119,9 +119,9 @@ print (join "" ["ops " (convert String dur) " " (convert String (div dur 1000000
 // reported — proving the resolution restored precision (a concrete parameter
 // type) rather than blanket-suppressing loop-body diagnostics.
 func TestCheckLoopBodyGenuineErrorStillReports(t *testing.T) {
-	a := loadApps(t, "mini-redis.aql")
-	src := `import "/apps/mini-redis.aql"
-import "aql:net"
+	a := loadApps(t, "mini-redis.boru")
+	src := `import "/apps/mini-redis.boru"
+import "boru:net"
 def ln (MiniRedis.serve {port: 0})
 def ep (MiniRedis.connect (join "" ["127.0.0.1:" (convert String (Net.addr ln).port)]))
 for 3 [ MiniRedis.cmd ep "SET k v" drop  no-such-word-xyz ep drop ]`
@@ -137,12 +137,12 @@ for 3 [ MiniRedis.cmd ep "SET k v" drop  no-such-word-xyz ep drop ]`
 	}
 }
 
-// loadImportedLib returns a lang.AQL whose import resolver holds `lib` at
-// /lib.aql, so a `src` that does `import "/lib.aql"` type-checks against it.
-func loadImportedLib(t *testing.T, lib string) *AQL {
+// loadImportedLib returns a lang.Boru whose import resolver holds `lib` at
+// /lib.boru, so a `src` that does `import "/lib.boru"` type-checks against it.
+func loadImportedLib(t *testing.T, lib string) *Boru {
 	t.Helper()
 	mem := capabilities.NewMem()
-	mem.Files["/lib.aql"] = []byte(lib)
+	mem.Files["/lib.boru"] = []byte(lib)
 	a, err := New()
 	if err != nil {
 		t.Fatal(err)
@@ -159,7 +159,7 @@ func loadImportedLib(t *testing.T, lib string) *AQL {
 // the 0-net call with a bare strict Any carrier, inflating the caller's
 // residual by one phantom. checkBodyReturnConformance's count mirror then
 // flagged a false "expected 1 return value(s), got 2". This is the shape of
-// sort.aql's distribution sorts (`counting-sort` → `ensure-ints`), reached
+// sort.boru's distribution sorts (`counting-sort` → `ensure-ints`), reached
 // through the exported namespace with a concrete literal argument. The count
 // mirror now excludes the bare strict-Any phantom (stackHasApproxAny), like
 // the variadic / fn-value / dynamic seams it already skips.
@@ -174,7 +174,7 @@ def mysort fn [[lst:List] [List] [
 ]]
 export "Ns" { sort: mysort/r }`
 	a := loadImportedLib(t, lib)
-	src := `import "/lib.aql"
+	src := `import "/lib.boru"
 print ((([5 3 1] Ns.sort end))) end`
 	if errs := errorDiags(t, a, src); len(errs) > 0 {
 		for _, d := range errs {
@@ -195,7 +195,7 @@ func TestCheckCrossModuleGenuineOverReturnStillReports(t *testing.T) {
 ]]
 export "Ns" { sort: mysort/r }`
 	a := loadImportedLib(t, lib)
-	src := `import "/lib.aql"
+	src := `import "/lib.boru"
 print ((([5 3 1] Ns.sort end))) end`
 	errs := errorDiags(t, a, src)
 	found := false

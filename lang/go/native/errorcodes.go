@@ -1,6 +1,6 @@
 package native
 
-import eng "github.com/aql-lang/aql/eng/go"
+import eng "github.com/boru-lang/boru/eng/go"
 
 // Error-code registration for the language layer — the codes every built-in
 // word, module and capability attaches. The mechanism, the naming rule and
@@ -22,7 +22,7 @@ import eng "github.com/aql-lang/aql/eng/go"
 // exists to catch.
 //
 // Ownership id: the language layer registers under OwnerLang so tooling can
-// tell a kernel code from a built-in-word code — `aql explain` wants to say
+// tell a kernel code from a built-in-word code — `boru explain` wants to say
 // which layer a failure came from, and that is not derivable from the name.
 var langErrorCodes = []string{
 	"afn_error", "already_running", "append_error", "args_error",

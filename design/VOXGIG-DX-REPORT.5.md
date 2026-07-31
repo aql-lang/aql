@@ -1,9 +1,9 @@
 # Voxgig DX Report — Consolidated
 
 Source reports:
-- `voxgig-aql/bloom-filter/dx-report.md` (2026-06-01, aql `5b983b6`) — building
+- `voxgig-boru/bloom-filter/dx-report.md` (2026-06-01, boru `5b983b6`) — building
   a bloom filter library, five test suites, docs.
-- `voxgig-aql/trie/DX-REPORT.md` (2026-06-01, aql `b6617dd`) — building four
+- `voxgig-boru/trie/DX-REPORT.md` (2026-06-01, boru `b6617dd`) — building four
   trie variants, eight namespaces, ~2000 lines + tests, plus a HAMT
   feasibility study.
 
@@ -22,20 +22,20 @@ Severity legend (carried over from the source reports):
 
 ## Status against current `main` (commit `8fdd4e1`, 2026-06-09)
 
-Each row was re-verified with a minimal repro (in `/tmp/aql-dx-check`) against
-the freshly-built `cmd/go/bin/aql` from this checkout. The first
+Each row was re-verified with a minimal repro (in `/tmp/boru-dx-check`) against
+the freshly-built `cmd/go/bin/boru` from this checkout. The first
 verification pass ran against commit `4a8eb2d0`; this revision is a
 **second pass against `8fdd4e1`** (134 commits later), which landed
 fixes for B1, B6, B7, T4, T8, and `popcount`, plus the `deq` word,
 `StructUtil.setpath`, the lazy forward-argument resolution engine, and
-three new `aql check` diagnostics (`uncalled_function`,
+three new `boru check` diagnostics (`uncalled_function`,
 `forward_strands_operand`, dead-overload detection).
 
 Status legend in the per-theme tables below:
 - ✅ **fixed** — the documented symptom no longer reproduces.
 - ❌ **open** — symptom reproduces unchanged on current `main`.
 - 🟠 **changed/mitigated** — still wrong but with a different symptom, or a
-  real improvement landed (e.g. caught by `aql check`) with a residual gap.
+  real improvement landed (e.g. caught by `boru check`) with a residual gap.
 - 📖 **by design** — behaviour is intentional; reclassified as a docs item.
 
 **Verification deltas worth flagging up front:**
@@ -44,17 +44,17 @@ Status legend in the per-theme tables below:
   `Assert.equal`, `MathUtil.sqrt`) — the source reports used the lowercase
   `test.`/`assert.`/`math.` forms, so most of the voxgig test files now need
   a global rename before they will load.
-- **`aql:array` was renamed to `aql:array-util`** (and binds the `ArrayUtil`
+- **`boru:array` was renamed to `boru:array-util`** (and binds the `ArrayUtil`
   namespace), per the lang/go CLAUDE.md. Three other modules took similar
   `-util` suffixes (`time-util`, `type-util`, `matrix-util`) to avoid
   colliding with builtin type names. The voxgig bloom-filter still imports
-  `"aql:array"` and will not load against current `main` for that reason —
+  `"boru:array"` and will not load against current `main` for that reason —
   unrelated to any of the issues raised in the reports, but blocks
   end-to-end re-running of the voxgig suites until they are updated.
 
 These two breaking changes are **not** themselves DX issues in the sense the
 reports describe (both are deliberate), but they are the reason a naive
-`aql test/…` against current `main` will look catastrophic. Worth a short
+`boru test/…` against current `main` will look catastrophic. Worth a short
 upgrade note in the changelog if there isn't one already.
 
 ---
@@ -69,8 +69,8 @@ cost; both lost time to bugs that produced wrong values with no error.
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
 | B1 | 🔴 | ✅ fixed | Forward `set` (`b set k v`) on a `refine Object` store silently did **not** mutate. **Now:** `set` is an in-place mutator in *both* forms — forward `b set flag 1` writes (read-back returns `1`), and so does the stack form. Note the semantics also changed: `set` returns **nothing**, so `def r (b set k v)` no longer binds anything; read the store back instead. |
-| T1 | 🔴 | ✅ fixed | Landed (2026-06-10) per `design/ERRORS.8.md` §5 (option 2): a named Function value left by a failed dispatch is marked, and if nothing consumes it by the top-level end-of-Run drain, the runtime raises `[aql/uncalled_function]` with the original call-site span — the same name `aql check` uses. Higher-order and function-as-value uses are unaffected (consumption clears the residue). |
-| T3 | 🟠 | ✅ closed (docs) | `merge` is still a **deep, index-wise** merge by design, but it is **no longer a core word** (it moved to `aql:struct-util`) and `StructUtil.setpath` is the copy-returning one-field update. The steering docs landed: REFERENCE.md "Built-in modules" carries the merge-is-deep gotcha pointing one-field edits at `setpath`, and the `set` callout cross-references it. |
+| T1 | 🔴 | ✅ fixed | Landed (2026-06-10) per `design/ERRORS.8.md` §5 (option 2): a named Function value left by a failed dispatch is marked, and if nothing consumes it by the top-level end-of-Run drain, the runtime raises `[boru/uncalled_function]` with the original call-site span — the same name `boru check` uses. Higher-order and function-as-value uses are unaffected (consumption clears the residue). |
+| T3 | 🟠 | ✅ closed (docs) | `merge` is still a **deep, index-wise** merge by design, but it is **no longer a core word** (it moved to `boru:struct-util`) and `StructUtil.setpath` is the copy-returning one-field update. The steering docs landed: REFERENCE.md "Built-in modules" carries the merge-is-deep gotcha pointing one-field edits at `setpath`, and the `set` callout cross-references it. |
 | T4 | 🔴 | ✅ fixed | `do {k:[v]}` no longer dispatches a string that names a word: `do {val:["if"]}` → `{"val": "if"}` (commits `99de896`, `3eb461f` — the last string→word promotion was removed and pinned). The box-every-value workaround is obsolete. |
 | T5 | 🟡 | 📖 by design | `eq` on lists is **identity** — now documented as intended (commit `0fedfc0`), and the structural form **`deq` exists**: `["a" "b"] ["a" "b"] eq` → `false`, `… deq` → `true`. REFERENCE.md carries the property-body-with-eq-passes-vacuously caveat. |
 | T6 | 🟡 | 📖 by design | `xs get i` returning `none` is now *defined* semantics, not a forward-collection accident: a bare word key is a **literal** name (JS `.key`), a parenthesised key is **computed** (JS `[expr]`) — `xs get i` → `None`, `xs get (i)` → `20`. Documented in REFERENCE.md "Maps and access" (commits `ef78e93`, `cb272fc`). |
@@ -89,37 +89,37 @@ isolation but surprising in combination (`merge` depth, ~~`do` evaluation~~
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| B2a | 🟡 | ❌ open → `design/ERRORS.8.md` §6 | Chained forward prints reverse: `(1 add 1) print (2 add 2) print` prints **4 then 2**; not flagged by `aql check` either. Beware: this reordering silently scrambles the apparent results of *any* multi-statement repro that omits `end` separators. **Per ADR-004 (all words forward by default) the report's original fix — make `print` stack-first — is rejected**; the adopted direction is to evaluate sibling forward groups in source order (engine), with `end`/`;`/`print/s` as the documented call-site forms meanwhile. |
-| B2b | 🟡 | ✅ fixed | Trailing `(expr) print` at EOF no longer raises. (Repro: `b2_print_trailing.aql` runs cleanly and prints `value 1`.) |
-| T8 | 🟡 | ✅ fixed | `` `${…}` `` inside a recursive fn body now expands correctly — a genuinely recursive interpolation (`` `step-${n} then ${(n 1 sub) walk}` ``) prints `step-3 then step-2 then step-1 then done`. The raw-template-AST leak from the first verification pass is gone. (Repro: `t8_rec.aql`.) |
+| B2a | 🟡 | ❌ open → `design/ERRORS.8.md` §6 | Chained forward prints reverse: `(1 add 1) print (2 add 2) print` prints **4 then 2**; not flagged by `boru check` either. Beware: this reordering silently scrambles the apparent results of *any* multi-statement repro that omits `end` separators. **Per ADR-004 (all words forward by default) the report's original fix — make `print` stack-first — is rejected**; the adopted direction is to evaluate sibling forward groups in source order (engine), with `end`/`;`/`print/s` as the documented call-site forms meanwhile. |
+| B2b | 🟡 | ✅ fixed | Trailing `(expr) print` at EOF no longer raises. (Repro: `b2_print_trailing.boru` runs cleanly and prints `value 1`.) |
+| T8 | 🟡 | ✅ fixed | `` `${…}` `` inside a recursive fn body now expands correctly — a genuinely recursive interpolation (`` `step-${n} then ${(n 1 sub) walk}` ``) prints `step-3 then step-2 then step-1 then done`. The raw-template-AST leak from the first verification pass is gone. (Repro: `t8_rec.boru`.) |
 | T9.3 | 🟢 | ✅ fixed | The basic shape "user-defined word followed by another word" works (`xs [add-one] each print` → `[11, 21, 31]`, re-confirmed on `8fdd4e1` after the lazy forward-resolution rework). No tighter repro from the trie source has surfaced a remaining failure mode. |
-| T9.4 | 🟢 | ✅ diagnosed | The `mixed_form_call` check advisory landed (2026-06-10, `design/ERRORS.8.md` §6.2): `aql check` now flags ≥3-arg calls that mix stack and forward collection (`(x 3 gt) if […] […]`) with an info-severity advisory recommending the all-forward form. Runtime semantics unchanged per ADR-004 (no per-word flips); the deeper B2a sibling-order fix rides the structure-first rework. |
+| T9.4 | 🟢 | ✅ diagnosed | The `mixed_form_call` check advisory landed (2026-06-10, `design/ERRORS.8.md` §6.2): `boru check` now flags ≥3-arg calls that mix stack and forward collection (`(x 3 gt) if […] […]`) with an info-severity advisory recommending the all-forward form. Runtime semantics unchanged per ADR-004 (no per-word flips); the deeper B2a sibling-order fix rides the structure-first rework. |
 
 ### Theme C — Dispatch residue & overloads
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| B3 | 🟡 | ✅ fixed | Landed (2026-06-10) per `design/ERRORS.8.md` §3: `def r (void-call)` now raises `[aql/def_error] def: expression produced no value to bind to 'r'` at the def (with the returns-nothing hint); a void group starving any other word raises `[aql/no_value_error]` at the causing call; and an undefined reference to a never-bound name explains the real cause. Legitimate void groups (`1 2 add ()`, `add () 5 6`) are untouched. Spec rows in `lang/spec/error.tsv` §3. |
+| B3 | 🟡 | ✅ fixed | Landed (2026-06-10) per `design/ERRORS.8.md` §3: `def r (void-call)` now raises `[boru/def_error] def: expression produced no value to bind to 'r'` at the def (with the returns-nothing hint); a void group starving any other word raises `[boru/no_value_error]` at the causing call; and an undefined reference to a never-bound name explains the real cause. Legitimate void groups (`1 2 add ()`, `add () 5 6`) are untouched. Spec rows in `lang/spec/error.tsv` §3. |
 | B5 | 🟢 | ✅ fixed | Resolved by design under the container symmetry (class/object split, `design/CLASS-OBJECT.10.md`): `make Object {}` is now *valid* — it constructs an empty, open, mutable Object (Phase B landed 2026-06-10, with the `object {…}` sugar). The hint proposal that briefly lived in `design/ERRORS.8.md` §4 stays superseded. |
-| B6 | 🟢 | ✅ fixed | `indexof` is now **haystack-last**, on the data-last grain: it moved to `aql:string-util` as `StringUtil.indexof needle haystack` (`StringUtil.indexof "ll" "hello"` → `2`), with the list form split out as `ArrayUtil.indices` (commits `3b3316c`, `0fedfc0`, `ec5aa25` — the whole string module is now subject-last). The bare core word is gone, so old haystack-first call sites fail loudly rather than answering `-1`. |
+| B6 | 🟢 | ✅ fixed | `indexof` is now **haystack-last**, on the data-last grain: it moved to `boru:string-util` as `StringUtil.indexof needle haystack` (`StringUtil.indexof "ll" "hello"` → `2`), with the list form split out as `ArrayUtil.indices` (commits `3b3316c`, `0fedfc0`, `ec5aa25` — the whole string module is now subject-last). The bare core word is gone, so old haystack-first call sites fail loudly rather than answering `-1`. |
 
 ### Theme D — Reserved identifiers
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| T7 | 🟡 | ✅ fixed (mostly) | `def node 1`, `def eq 42`, and `def L 5` all now work and print their values correctly — none of the three reported reserved-name failures reproduce. `end` is still a parser terminator (not a binding name) by design. Worth a docs note that all word names except the call-terminator `end` are usable bindings. (Repros: `t7_reserved*.aql`.) |
+| T7 | 🟡 | ✅ fixed (mostly) | `def node 1`, `def eq 42`, and `def L 5` all now work and print their values correctly — none of the three reported reserved-name failures reproduce. `end` is still a parser terminator (not a binding name) by design. Worth a docs note that all word names except the call-terminator `end` are usable bindings. (Repros: `t7_reserved*.boru`.) |
 
 ### Theme E — Modules / entry points
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| B4 | 🟡 | ✅ fixed | A library that uses `export` now runs directly with exit 0. (Repro: `b4_run_export.aql` — a minimal `def …; export "Mod" { … }` file runs cleanly.) The "library is import-only" surprise the bloom report describes is gone; an entry-point file using `export` is now a no-op rather than an error. |
+| B4 | 🟡 | ✅ fixed | A library that uses `export` now runs directly with exit 0. (Repro: `b4_run_export.boru` — a minimal `def …; export "Mod" { … }` file runs cleanly.) The "library is import-only" surprise the bloom report describes is gone; an entry-point file using `export` is now a no-op rather than an error. |
 
 ### Theme F — Test framework UX
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| B7 | 🟢 | ✅ fixed | A failing `[…] "name" Test.test` case now prints a loud, *named* FAIL line: `FAIL should-fail-named-foo — [aql/assertion_failure]: Assert.equal: expected 2, got 1`, and `Test.describe` paths are included (commit `26ede5c`, pinned by `lang/go/modules/test_failure_naming_test.go`). Passing cases stay quiet. (Repro: `b7_test_name.aql`.) |
+| B7 | 🟢 | ✅ fixed | A failing `[…] "name" Test.test` case now prints a loud, *named* FAIL line: `FAIL should-fail-named-foo — [boru/assertion_failure]: Assert.equal: expected 2, got 1`, and `Test.describe` paths are included (commit `26ede5c`, pinned by `lang/go/modules/test_failure_naming_test.go`). Passing cases stay quiet. (Repro: `b7_test_name.boru`.) |
 
 ### Theme G — Missing primitives / capabilities
 
@@ -128,7 +128,7 @@ isolation but surprising in combination (`merge` depth, ~~`do` evaluation~~
 | T9.1 | 🟡 | ✅ fixed (semantics) / 🟠 open (perf) | Maps with **computed keys** now work end-to-end: `{[k]: v}` literals evaluate the key, `m get (k)` reads, and `set` gained a **copy-returning Map form** — `{a:1} set (k) 2` returns a new map with the receiver untouched, and calls chain (`{} set a 1 set b 2`). Together with `StructUtil.items` for enumeration, the association-list workaround is retired. Residual: each set copies the map (O(n) per insert, like setpath), so bulk incremental construction still wants the P4 native persistent map (HAMT Level B). The former side gap (`refine Object` dynamic fields non-enumerable) is gone structurally: `refine Object` was removed under the class/object split (2026-06-09) — class instances are sealed and enumerate their flat field map, and plain Objects are fully enumerable (`design/CLASS-OBJECT.10.md`). |
 | T9.2 | 🟡 | ✅ fixed | `filter` now accepts a `[…]` quotation like `each`/`fold`: `filter [2 gt] [1 2 3 4]` → `[3 4]` (element pushed first, no `{key,value}` wrapper; maps filter by value to a map; a non-Boolean body result is a **loud error**, not a silent drop). The Reach lens (`filter $.active xs`) and Function-callback forms remain. Spec rows in `lang/spec/higher-order.tsv` §5b. |
 | T9.6 | 🟡 | ✅ fixed | `raise` landed (2026-06-10) per `design/ERRORS.8.md` §2: message / code+message / spec-map forms, raising the same `Ideal/Error` natives produce, caught by the existing `do … error […]`; handlers read `e.code` / `e.message` / payload keys, `convert Map` projects them. Spec rows in `lang/spec/error.tsv`. |
-| T9.7 | 🟡 | ✅ fixed | In-memory parsing landed (2026-06-10) per `design/PARSING.10.md`: `StructUtil.parse` decodes jsonic/JSON text to data (the `jsonify` complement — data context, jsonic superset, loud `parse_error` on malformed/empty input) and `Vm.parse` parses AQL source to a quoted token list without evaluating it (element shapes are the engine's parse values, implementation-defined for now). Spec rows in `module-struct.tsv` / `module-vm.tsv`. |
+| T9.7 | 🟡 | ✅ fixed | In-memory parsing landed (2026-06-10) per `design/PARSING.10.md`: `StructUtil.parse` decodes jsonic/JSON text to data (the `jsonify` complement — data context, jsonic superset, loud `parse_error` on malformed/empty input) and `Vm.parse` parses boru source to a quoted token list without evaluating it (element shapes are the engine's parse values, implementation-defined for now). Spec rows in `module-struct.tsv` / `module-vm.tsv`. |
 | — | 🟡 | ✅ closed (docs) | `with` / `assoc` are not words, by choice: `StructUtil.setpath` *is* the copy-returning single-key (and deep-path) update — `{a:1,b:2} StructUtil.setpath "b" 3` → `{a:1, b:3}` — and is now documented as such in REFERENCE.md (both the `set` callout and the merge gotcha point to it). Adding an alias was rejected as API duplication. |
 
 ### Theme H — HAMT case study (capability ceiling)
@@ -140,11 +140,11 @@ present (full bitwise suite, `bin.fnv32/64`, O(1) list indexing, structural
 sharing via copy-returning ops). Gaps (status against current main in
 parentheses):
 1. **`popcount`** — the one genuinely absent primitive, central to HAMT slot
-   indexing. (✅ **landed** — `aql:bin-util` now exports it, alongside
+   indexing. (✅ **landed** — `boru:bin-util` now exports it, alongside
    `clz`, `ctz`, `bitlen`, `mask`, `reverse`, `swap`:
    `255 BinUtil.popcount` → `8`.)
 2. **`insert-at` / `remove-at` for lists** — (✅ **landed** in
-   `aql:array-util`: `ArrayUtil.insert-at 1 99 [1 2 3]` → `[1 99 2 3]`
+   `boru:array-util`: `ArrayUtil.insert-at 1 99 [1 2 3]` → `[1 99 2 3]`
    (index = length appends), `ArrayUtil.remove-at 1 [1 2 3]` → `[1 3]`.
    Both are copy-returning; an out-of-range index is a loud
    `index_out_of_range` error. Spec rows in
@@ -156,20 +156,20 @@ parentheses):
 **Level B — to make a HAMT actually *pay off*.** This is a runtime decision,
 not surface syntax:
 1. **Mutable, fixed-width, unboxed arrays** with an O(1) in-place
-   `set`/`insert` contract (transient fast path for bulk construction). AQL
+   `set`/`insert` contract (transient fast path for bulk construction). boru
    has indexed `set` on `Array` but not on `List`, and the mutation contract
    isn't exposed.
 2. **Layout guarantees** — contiguous packed storage, unboxed small ints — for
    the cache locality that *is* the HAMT's edge.
 3. Realistically, **a native persistent-map type in the runtime** (HAMT/CHAMP)
    the way Clojure/Scala/Erlang ship one. As a bonus, this would also retire
-   AQL's dynamic-key-map limitation (T9.1).
+   boru's dynamic-key-map limitation (T9.1).
 
 ### Theme I — Minor papercuts
 
 | Tag | Sev | Status | Issue |
 |-----|-----|--------|-------|
-| T9.5 | 🟢 | ✅ fixed | Print order now matches source order. (Repro: `t9_5_print_order.aql` prints `first`/`second`/`third` in source order.) The demo-script "leading blank line" workaround is no longer needed. |
+| T9.5 | 🟢 | ✅ fixed | Print order now matches source order. (Repro: `t9_5_print_order.boru` prints `first`/`second`/`third` in source order.) The demo-script "leading blank line" workaround is no longer needed. |
 | T9.8 | 🟢 | ❓ not retested | Property-generator order/charset sensitivity wasn't reproduced here — needs the full `test.prop`/`rand` driver to probe and the source repro from the trie report. Leave as documented but unverified. |
 
 ---
@@ -186,7 +186,7 @@ Both reports flagged genuine strengths:
   structures; immutable, path-copying tries were the path of least resistance.
 - **Multiple namespaces per module** (`export "A" {…}` twice) cleanly split
   a `…Set` from a `…Map` over one engine.
-- **Property testing** (`test.prop` / `test.check-prop` with `aql:rand`) was
+- **Property testing** (`test.prop` / `test.check-prop` with `boru:rand`) was
   good enough to cross-check four variants against each other and find real
   bugs. The declarative spec form (`test.spec` / `test.run-spec`) works well
   but isn't promoted in the user docs — bloom-filter author found it in
@@ -234,7 +234,7 @@ work" below for the full accounting):
 Mitigated (real change landed; residual gap remains):
 
 - **T1** — runtime dispatch still silently leaves the fn value as data,
-  but `aql check` reports it as an `uncalled_function` **error**; the
+  but `boru check` reports it as an `uncalled_function` **error**; the
   runtime fix is designed in `design/ERRORS.8.md` §5.
 
 Confirmed still open (each now carries a written design):
@@ -262,7 +262,7 @@ Unverified (need a tighter repro):
 
 Collateral breaking changes (not DX bugs, but explain why a naive
 re-run of the voxgig suites looks broken): namespaces CamelCase
-(`Test.test`, `MathUtil.sqrt`); `aql:array` → `aql:array-util`.
+(`Test.test`, `MathUtil.sqrt`); `boru:array` → `boru:array-util`.
 
 ---
 
@@ -277,7 +277,7 @@ Most of the lost hours in both reports trace to **two** mechanisms.
 Status after the second pass:
 
 1. **Namespace dispatch type-mismatch must error, not no-op.** (T1 —
-   ✅ **done** (2026-06-10). `aql check` errors with `uncalled_function`,
+   ✅ **done** (2026-06-10). `boru check` errors with `uncalled_function`,
    and the *runtime* is now loud too: a named Function value left by a
    failed dispatch raises `uncalled_function` at the top-level
    end-of-run drain if nothing consumed it, with the original call-site
@@ -289,7 +289,7 @@ Status after the second pass:
    (JS `.key`), parenthesised keys are computed (JS `[expr]`), and the
    `None`-for-missing behaviour is documented as intentional.)
 3. **A "loud diagnostics" pass for the common silent shapes** —
-   ✅ **largely landed** (2026-06-10): `aql check` has
+   ✅ **largely landed** (2026-06-10): `boru check` has
    `uncalled_function`, `forward_strands_operand`, `mixed_form_call`
    (the T9.4 shape), and dead-overload detection; T4 was fixed
    outright; B3 void-`def` residue and the runtime uncalled-function
@@ -320,7 +320,7 @@ Status after the second pass:
 - Forward-vs-stack: ADR-004 pins *forward by default* as the language
   cultural rule; EXPLANATION.md "Forward by default — a cultural rule"
   is the user-facing distillation (modifiers `/s` / `/f` / `/N` as the
-  per-call levers); `aql describe <word>` prints per-word precedence
+  per-call levers); `boru describe <word>` prints per-word precedence
   with equivalence forms.
 - `fold` body binding order (T2) — in `describe fold` and a
   REFERENCE.md callout, re-derived from current behaviour
@@ -329,7 +329,7 @@ Status after the second pass:
   (T3) — REFERENCE.md "Built-in modules" gotcha.
 - `set` mutates in place and returns nothing (post-B1 contract) —
   REFERENCE.md "Maps and access" callout.
-- Run `aql check` routinely; it catches the silent
+- Run `boru check` routinely; it catches the silent
   `uncalled_function` shape (T1 residual) — HOWTO.md "Type-check
   before running".
 - Declarative spec API (`Test.test` named failures, `Test.spec` /
@@ -354,7 +354,7 @@ export-only-import surprise.
 
 If/when a HAMT-class persistent map is on the roadmap: mutable unboxed
 fixed-width arrays with transients, or ship a native HAMT/CHAMP map type. As
-a bonus, the native map would retire AQL's dynamic-key-map limitation (T9.1)
+a bonus, the native map would retire boru's dynamic-key-map limitation (T9.1)
 and turn association-list workarounds back into idiomatic maps.
 
 ---
@@ -378,7 +378,7 @@ worth doing:
    now be a one-line default change: `print` ≈ `print/s`.)
 2. A short user-facing **forward-vs-stack arity reference**. Partially
    done: REFERENCE.md documents the `/s` / `/f` / `/N` modifiers and
-   `aql describe` prints per-word precedence with equivalence forms.
+   `boru describe` prints per-word precedence with equivalence forms.
    The lang/go CLAUDE.md "Argument Ordering (CRITICAL)" section remains
    the authoritative source; a one-page distillation in the user docs
    would close the remaining discoverability gap.

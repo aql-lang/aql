@@ -10,9 +10,9 @@ func ljImplSig(impl SigImpl, args ...*Type) Signature {
 
 func TestDisjunctCombosTakeSig(t *testing.T) {
 	r := covRegistry(t, nil)
-	implAny := &AQLImpl{Body: []Value{NewInteger(1)}}
-	implInt := &AQLImpl{Body: []Value{NewInteger(2)}}
-	implStr := &AQLImpl{Body: []Value{NewInteger(3)}}
+	implAny := &BoruImpl{Body: []Value{NewInteger(1)}}
+	implInt := &BoruImpl{Body: []Value{NewInteger(2)}}
+	implStr := &BoruImpl{Body: []Value{NewInteger(3)}}
 	r.RegisterNativeFunc(NativeFunc{Name: "ljone", Signatures: []Signature{ljImplSig(implAny, TAny)}})
 	r.RegisterNativeFunc(NativeFunc{Name: "ljtwo", Signatures: []Signature{
 		ljImplSig(implInt, TInteger), ljImplSig(implStr, TString),
@@ -54,7 +54,7 @@ func TestDisjunctCombosTakeSig(t *testing.T) {
 // per concrete alternative combo.
 func TestCarrierResultsPartitionCountMismatchKeepsRecorded(t *testing.T) {
 	r := covRegistry(t, nil)
-	impl := &AQLImpl{Body: []Value{NewInteger(1)}, FnFrame: &FnFrameMeta{}}
+	impl := &BoruImpl{Body: []Value{NewInteger(1)}, FnFrame: &FnFrameMeta{}}
 	r.RegisterNativeFunc(NativeFunc{Name: "ljmis", Signatures: []Signature{{
 		Args: []*Type{TAny}, BarrierPos: -1, Impl: impl,
 		ReturnsFn: func(args []Value, _ *Registry) []Value {

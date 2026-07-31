@@ -6,22 +6,22 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// The graduated acceptance app (design/examples/apps/todo-tui.aql)
+// The graduated acceptance app (design/examples/apps/todo-tui.boru)
 // served over a real wire: the SAME app map that TestAppTodoTUI runs
 // locally (lang/go/test) is loaded as a FILE MODULE here and driven
 // through TodoTui.serve by a raw json-lines viewer — the §5 run/serve
 // reuse idiom end to end.
 func TestTuiServeGraduatedTodoApp(t *testing.T) {
-	src, err := os.ReadFile("../../../design/examples/apps/todo-tui.aql")
+	src, err := os.ReadFile("../../../design/examples/apps/todo-tui.boru")
 	if err != nil {
 		t.Fatalf("read the graduated app: %v", err)
 	}
 	mem := capabilities.NewMem()
-	mem.Files["/apps/todo-tui.aql"] = src
+	mem.Files["/apps/todo-tui.boru"] = src
 
 	oldBound := tuiServeBound
 	t.Cleanup(func() { tuiServeBound = oldBound })
@@ -34,7 +34,7 @@ func TestTuiServeGraduatedTodoApp(t *testing.T) {
 	errs := make(chan error, 1)
 	go func() {
 		out, sErr := runTuiStepsOn(t, reg, []string{
-			`import "/apps/todo-tui.aql"`,
+			`import "/apps/todo-tui.boru"`,
 			`def final (TodoTui.serve {tcp: 0  token: "s3cret"})`,
 			`(final.todos get 0).text`,
 		})

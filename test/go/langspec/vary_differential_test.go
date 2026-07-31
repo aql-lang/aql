@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/test/go/vary"
+	"github.com/boru-lang/boru/test/go/vary"
 )
 
 // TestVariationDifferential — the standing variation gate (plan WS3): a
@@ -29,7 +29,7 @@ import (
 //     (a bucket observed at the default stays observed at any larger one,
 //     while a smaller sample legitimately misses some).
 //
-// Breadth is env-crankable for triage sweeps: AQL_VARY_SEEDS=<n> (0 = the
+// Breadth is env-crankable for triage sweeps: BORU_VARY_SEEDS=<n> (0 = the
 // whole corpus). The default is modest for CI wall-clock; the full sweep
 // lives in `specgen -vary`.
 func TestVariationDifferential(t *testing.T) {
@@ -38,10 +38,10 @@ func TestVariationDifferential(t *testing.T) {
 		t.Fatalf("seeds: %v", err)
 	}
 	n := defaultVarySeeds
-	if s := os.Getenv("AQL_VARY_SEEDS"); s != "" {
+	if s := os.Getenv("BORU_VARY_SEEDS"); s != "" {
 		v, err := strconv.Atoi(s)
 		if err != nil {
-			t.Fatalf("AQL_VARY_SEEDS=%q: %v", s, err)
+			t.Fatalf("BORU_VARY_SEEDS=%q: %v", s, err)
 		}
 		n = v
 	}
@@ -131,13 +131,15 @@ const defaultVarySeeds = 32
 // which seeds are sampled and legitimately graduate a bucket. Bootstrap
 // census (2026-07-13, 32 seeds): pass=384 refused=42 islanded=0.
 var varyRefusalLedger = map[string]string{
-	"check diagnostics (wrapped-context false positive)": "checker emits model-undermining diagnostics for a program the interpreter runs clean once re-embedded (for/fn wrapping of typed defs) — sound-but-lossy refusal",
-	"conditional fn shadow (branch/loop)":                "a user fn REDEFINED inside a conditionally-reached body (if/case arm, for/each loop) overlap-removes the enclosing overload in place, so the branch/loop def rollback cannot restore it and compiled resolution bakes the shadow while the interpreter keeps the outer fn when the branch is not taken (or the loop runs zero times) — sound refusal (design/frontier: frontier-conditional-fn-shadow.tsv)",
-	"for: body nets multiple values per iteration":       "NARROWED (net drivers landed): only Function-bearing multi-value loop regions keep this refusal — the parked-fn cross-iteration auto-apply hazard; const/computed regions compile",
-	"operand provenance":                                 "residual operand loses provenance across a wrapped context (plan Phase 4/5 accounting classes)",
-	"residual lowering (Stage 1 limit)":                  "scheduling — the wrapped residual shape exceeds Stage 1's lowering (prefix-stack transform)",
-	"stack discipline (lowering)":                        "scheduling — dirty-stack prefixes the lowerer cannot arrange (prefix-stack transform)",
-	"variadic result promoted (exact-arity frame seat)":  "a MULTI-OUT variadic call result (a fallible or branch-variant do region) promoted to frame slots has no fixed arity to store — the raise/short path delivers fewer values than the static seat popped (PR #280 review; lowerCall's store-prologue gate, representative row in frontier-do-catch.tsv)",
+	"check diagnostics (wrapped-context false positive)":                   "checker emits model-undermining diagnostics for a program the interpreter runs clean once re-embedded (for/fn wrapping of typed defs) — sound-but-lossy refusal",
+	"code-body word (NoEvalArgs)":                                          "RE-ENTERED 2026-07-30 (project rename resampled the corpus): a NoEvalArgs code-body word (do/each) wrapping a mount-handler seed still refuses at Stage 2 — the 2026-07-14 graduation held only for the do-def replay shapes then in the default sample, not for this one",
+	"other: closure captures a runtime-minted value (no compile identity)": "a fn/lambda/module body closing over a value minted at run time (a parselang `parse` handle) has no compile-time identity to bake — sound refusal",
+	"conditional fn shadow (branch/loop)":                                  "a user fn REDEFINED inside a conditionally-reached body (if/case arm, for/each loop) overlap-removes the enclosing overload in place, so the branch/loop def rollback cannot restore it and compiled resolution bakes the shadow while the interpreter keeps the outer fn when the branch is not taken (or the loop runs zero times) — sound refusal (design/frontier: frontier-conditional-fn-shadow.tsv)",
+	"for: body nets multiple values per iteration":                         "NARROWED (net drivers landed): only Function-bearing multi-value loop regions keep this refusal — the parked-fn cross-iteration auto-apply hazard; const/computed regions compile",
+	"operand provenance":                                                   "residual operand loses provenance across a wrapped context (plan Phase 4/5 accounting classes)",
+	"residual lowering (Stage 1 limit)":                                    "scheduling — the wrapped residual shape exceeds Stage 1's lowering (prefix-stack transform)",
+	"stack discipline (lowering)":                                          "scheduling — dirty-stack prefixes the lowerer cannot arrange (prefix-stack transform)",
+	"variadic result promoted (exact-arity frame seat)":                    "a MULTI-OUT variadic call result (a fallible or branch-variant do region) promoted to frame slots has no fixed arity to store — the raise/short path delivers fewer values than the static seat popped (PR #280 review; lowerCall's store-prologue gate, representative row in frontier-do-catch.tsv)",
 }
 
 // Graduated 2026-07-14 (do-def leak fidelity): "code-body word
@@ -159,10 +161,18 @@ var varyRefusalLedger = map[string]string{
 // divergence NOT in this map always fails — new miscompiles are never
 // silently ledgerable.
 //
-// EMPTY since 2026-07-13: the do-unit registry-replay class (10 pins, 5
-// seeds × do-body/do-catch — minimal repro preserved in
-// lang/spec/frontier/frontier-do-registry-replay.tsv) graduated when the
-// replay-hazard bake refusal (eng bodyHasReplayHazard) + the
-// ensureExportsBound ModuleExport re-bind fix landed: the typed-def half
-// refuses soundly, the import half compiles natively as a closure unit.
-var varyKnownMiscompiles = map[string]string{}
+// The do-unit registry-replay class (10 pins, 5 seeds × do-body/do-catch —
+// minimal repro preserved in lang/spec/frontier/frontier-do-registry-replay.tsv)
+// graduated 2026-07-13 when the replay-hazard bake refusal (eng
+// bodyHasReplayHazard) + the ensureExportsBound ModuleExport re-bind fix
+// landed: the typed-def half refuses soundly, the import half compiles
+// natively as a closure unit.
+var varyKnownMiscompiles = map[string]string{
+	// Pinned 2026-07-30. NOT a regression: the project rename rewrote every
+	// corpus row, which reshuffles Sample()'s FNV priority and pulled
+	// module-io.tsv:241 into the default 32-seed breadth for the first time.
+	// Verified identical on the pre-rename tree (same seed, same transform,
+	// same divergence), so this is a long-standing gap the sampler had never
+	// reached, not something the rename introduced.
+	"for 2 [import \"boru:io\"  def files (flex {})  IO.mount {read: (p:Pathon => [files get `${p}`]) write: ([p:Pathon data:Any] => [files set `${p}` data drop])}  IO.write (make Pathon \"n/a.txt\") \"hello mounted\" drop  IO.read (make Pathon \"n/a.txt\")]": "a flex-map captured by a mount handler loses its identity across loop iterations under compilation: the compiled run raises [boru/set_error] \"expected a FlexMap, got FlexMap\" (same type name, different instance) where the interpreter round-trips cleanly",
+}

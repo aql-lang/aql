@@ -118,7 +118,7 @@ func TestFormatCommentNeverSwallowsDelimiter(t *testing.T) {
 }
 
 // TestFormatDoubleHashIsLineComment pins that `##` is a LINE comment to end
-// of line, exactly like `#` — AQL has no bounded block comment. So the whole
+// of line, exactly like `#` — boru has no bounded block comment. So the whole
 // `## … ## …` tail is one comment emitted verbatim; the formatter must never
 // treat what follows the second `##` as code and reformat it (which corrupted
 // comment text: `## t ## x is integer` → `## t ## x is Integer`).

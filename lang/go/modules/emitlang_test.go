@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// runEmit runs a full AQL program against a production-shaped registry (the
+// runEmit runs a full boru program against a production-shaped registry (the
 // module resolver wired, the parser installed) and returns the canonical
 // render of the result, or the error.
 func runEmit(t *testing.T, src string) (string, error) {
@@ -30,7 +30,7 @@ func runEmit(t *testing.T, src string) (string, error) {
 	return native.Canon(out), nil
 }
 
-const emitImp = `import "aql:emitlang"  `
+const emitImp = `import "boru:emitlang"  `
 
 // runEmitTop is runEmit through a TOP-LEVEL engine (native.NewTop — the CLI /
 // spec-runner shape), the surface the dispatch-rejection pins below are
@@ -143,7 +143,7 @@ func TestEmitNegatives(t *testing.T) {
 // value type — is a hard dispatch rejection instead of a silently ignored
 // option. The negative half pins what must stay ACCEPTED: every real key, a
 // map with "options-looking" keys in the DATA slot, and custom emitters
-// (host- or AQL-registered), whose key sets are their own.
+// (host- or boru-registered), whose key sets are their own.
 func TestEmitOptsSchemaTypoRejected(t *testing.T) {
 	rejected := []string{
 		// the motivating shape: a typo'd key silently emitted compact JSON

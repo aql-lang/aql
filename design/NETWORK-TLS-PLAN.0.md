@@ -1,4 +1,4 @@
-# TLS and client certificates for `aql:net` — implementation plan
+# TLS and client certificates for `boru:net` — implementation plan
 
 > **Status: phases 1-4 and 7 BUILT; 5-6 outstanding.** It planned the
 > work behind the TLS options that [NETWORK-CLIENTS.0.md](NETWORK-CLIENTS.0.md)
@@ -62,7 +62,7 @@ connect-raw {tcp: "billing.internal:443"  tls: {identity: acme/q}}
 ```
 
 Keep an explicit-bytes fallback (`tls: {cert: <Bytes> key: <Bytes>}`)
-where the bytes arrive through `aql:io`/`aql:pki` under *their own* gates
+where the bytes arrive through `boru:io`/`boru:pki` under *their own* gates
 — never a path the network layer dereferences. It requires the new
 `client-cert` op and is off in the default profile.
 
@@ -77,7 +77,7 @@ Four pieces, each following an existing in-tree pattern.
 |---|---|---|
 | `ClientIdentity` interface + `CertRequest` | `capabilities.FileOps` / `Clock` | `lang/go/capabilities/tlsident.go` (new) |
 | `CapClientIdents` registry slot + `SetHostClientIdents` | `CapFormats` / `SetHostFormats`, `lang/go/native/capabilities.go:168-183` | `lang/go/native/capabilities.go` |
-| `(*AQL).RegisterClientIdentity` | `(*AQL).RegisterFormat`, `lang/go/aql.go:484-491` (lazy map init + register) | `lang/go/aql.go` |
+| `(*Boru).RegisterClientIdentity` | `(*Boru).RegisterFormat`, `lang/go/boru.go:484-491` (lazy map init + register) | `lang/go/boru.go` |
 | HTTP transport seam | `SetHostFileOps` slot + `design/TEST-SEAMS.10.md` | `lang/go/native/fetch.go` + `capabilities.go` |
 
 ### 4.1 The identity seam
@@ -204,13 +204,13 @@ Ordered so each lands green on its own. Phase 1 is the smallest useful PR.
 
 ### Phase 1 — transport seam, no user-visible change ✅ **DONE**
 `lang/go/native/fetch.go`, `lang/go/native/capabilities.go`,
-`lang/go/capabilities/httpops.go` (new), `lang/go/aql.go`,
+`lang/go/capabilities/httpops.go` (new), `lang/go/boru.go`,
 `lang/go/native/httpops_test.go` (new).
 
 Replaced the inline client with `HTTPOps`, default implementation
 reproducing today's behaviour exactly (`http.DefaultTransport`, which is
 what a nil `Transport` field resolved to anyway). Host entry point is
-`(*AQL).SetHTTPOps`.
+`(*Boru).SetHTTPOps`.
 
 `CapHTTPOps` deliberately has **no policy-uninstall branch**, unlike
 `CapFormats`: the transport is not itself an authority, `fetch` is gated
@@ -229,7 +229,7 @@ policy op. Client certificates are meaningless before this exists.
 
 ### Phase 3 — client identities (the actual mTLS) ✅ **DONE**
 `capabilities.ClientIdentity`, `CapClientIdents`,
-`(*AQL).RegisterClientIdentity`, `tls: {identity: …}`, `client-cert`
+`(*Boru).RegisterClientIdentity`, `tls: {identity: …}`, `client-cert`
 policy op, identity name in `policy.Args`.
 **Done when:** an mTLS `httptest` server with `ClientAuth:
 RequireAndVerifyClientCert` accepts a request carrying a registered
@@ -256,7 +256,7 @@ string is precisely the failure mode this design avoids.
 ### Phase 6 — server side ✅ **DONE**
 `listen {tls: {identity: … require-client: <Bytes>}}` (`ClientCAs` +
 `ClientAuth`), and the verified peer chain surfaced as a Map
-(`Net.peer-cert`) so authorization can be written in AQL. `serve-raw`
+(`Net.peer-cert`) so authorization can be written in boru. `serve-raw`
 inherits it, since it binds through `listen`. See §8b for the four
 places the build sharpened this.
 
@@ -268,7 +268,7 @@ places the build sharpened this.
   The server side itself is phase 6; the doc now says so instead of
   implying a shipped path form.
 - **STDLIB-ALLOCATION.0.md §5.4** — the `crypto/tls` row says certificates
-  arrive as `Bytes` from `aql:pki`; correct for the cert, incomplete for
+  arrive as `Bytes` from `boru:pki`; correct for the cert, incomplete for
   the key, which needs this seam.
 - **STDLIB-COVERAGE.10.md** — move `crypto/tls` from bucket C to A.
 
@@ -284,14 +284,14 @@ and ADR-008:
 - **Every export needs a `registerDocs` line** (`docs_net.go`) or
   `TestModuleExportDocs` fails.
 - **Spec rows** in `lang/spec/module-net.tsv`
-  (`input⇥expected⇥description`, rows lead with `import "aql:net"`), and
+  (`input⇥expected⇥description`, rows lead with `import "boru:net"`), and
   every positive row needs a negative sibling (`ERROR:<substring>`).
 - **100% statement coverage** (`make cover-gate`). TLS code is
   error-branch-dense — plan a test per branch. A genuinely unreachable
   guard needs a proof-carrying `//covergate:allow <reason>` on the guard's
   opening line (`design/COVERAGE-ALLOWLIST.10.md`).
 - **No panics**; guard args with `AsConcreteString` / `RequireConcreteMap`
-  and fail with `r.AqlError(code, detail, word)`.
+  and fail with `r.BoruError(code, detail, word)`.
 - **Effect fence.** `r.NoteEffect()` at `fetch.go:~250` stays where it is:
   with a custom transport the handshake happens inside `client.Do`, so the
   existing placement remains correct — everything before it provably sent
@@ -363,7 +363,7 @@ guessed:
   and the narrower reading is the recoverable mistake.
 - **Unknown `tls:` keys are rejected.** A silently-ignored `verifiy:`
   would leave the caller believing they had configured something.
-- **`aql:net` had to start owning its minted types**
+- **`boru:net` had to start owning its minted types**
   (`subReg.Types.MintOwner`), which every other module already did — a
   word extension may only anchor on a nominal type the extending scope
   owns.
@@ -372,7 +372,7 @@ guessed:
   minted Ideal types sit in the 5000 band next to their siblings
   (Module 5000, ModuleExport 5001, Socket 5009, Listener 5010,
   Terminal 5011). It is minted with the same `eng.Builtin.RegisterType`
-  helper `aql:net` uses, not `RegisterExternalBuiltin`.
+  helper `boru:net` uses, not `RegisterExternalBuiltin`.
 - **The handle formats as `<vault identity>`, not `<identity acme-mtls>`.**
   Printing the alias would leak *which* credential a program uses into
   every log that formats the value — a smaller leak than the key, but a

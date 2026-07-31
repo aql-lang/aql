@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestS7n_EnsureRegistryFailureLogged drives ensureRegistry's

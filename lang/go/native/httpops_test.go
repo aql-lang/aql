@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // stubTransport serves a canned response without touching the network,
@@ -153,9 +153,9 @@ func TestFetchTransportErrorIsUnsent(t *testing.T) {
 		!strings.Contains(fErr.Error(), "no transport for you") {
 		t.Errorf("error = %v, want it to name the transport failure", fErr)
 	}
-	var ae *AqlError
+	var ae *BoruError
 	if !errors.As(fErr, &ae) {
-		t.Fatalf("error is %T, want a coded *AqlError", fErr)
+		t.Fatalf("error is %T, want a coded *BoruError", fErr)
 	}
 	if ae.Code != "transport" {
 		t.Errorf("error code = %q, want \"transport\"", ae.Code)

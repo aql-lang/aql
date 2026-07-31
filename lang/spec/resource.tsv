@@ -2,7 +2,7 @@
 # =====================================================================		
 # Resource — built-in object type for external data sources		
 # =====================================================================		
-# `Resource` and `Entity` are AQL's built-in ObjectTypes for naming		
+# `Resource` and `Entity` are boru's built-in ObjectTypes for naming		
 # external data sources. They are not registered as words; instead		
 # `installResourceTypes` (called from `engine.Register`) pushes them		
 # onto the type stack at startup. So they're available out of the		
@@ -28,7 +28,7 @@
 #   5. is checks for parent / sibling types.		
 #   6. Field validation at make-time.		
 #		
-# Runs against the production aql registry.		
+# Runs against the production boru registry.		
 		
 		
 # ====================================================================		
@@ -146,8 +146,8 @@ convert Map ( make Entity { kind:'api' spec:'s' entity:'x' } )	{kind:'api' spec:
 convert List ( make Entity { kind:'api' spec:'s' entity:'x' } )	['api' 's' 'x']	Entity projects to its field values
 
 # struct-util projection sees the resolved fields (not a debug string).
-import "aql:struct-util" StructUtil.items ( make Entity { kind:'api' spec:'s' entity:'x' } )	[['entity' 'x'] ['kind' 'api'] ['spec' 's']]	items enumerates Entity fields
-import "aql:struct-util" StructUtil.setpath ( make Entity { kind:'api' spec:'s' entity:'x' } ) "entity" "y"	Entity{kind:'api' spec:'s' entity:'y'}	setpath preserves the Entity type and other fields
+import "boru:struct-util" StructUtil.items ( make Entity { kind:'api' spec:'s' entity:'x' } )	[['entity' 'x'] ['kind' 'api'] ['spec' 's']]	items enumerates Entity fields
+import "boru:struct-util" StructUtil.setpath ( make Entity { kind:'api' spec:'s' entity:'x' } ) "entity" "y"	Entity{kind:'api' spec:'s' entity:'y'}	setpath preserves the Entity type and other fields
 
 # Typed-def parity: `def e:Entity {map}` constructs like `make Entity {map}`.
 def e:Entity { kind:'api' spec:'s' entity:'x' } e .spec	's'	def e:Entity {…} constructs a real Entity instance

@@ -1,8 +1,8 @@
 package native
 
 import (
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // fileTypeNames is the closed set of FileType atom names — the kind field of
@@ -28,9 +28,9 @@ func isFileTypeAtom(v Value) bool {
 }
 
 // MintFileType mints the FileType type into r's type table and returns the
-// node. Like StreamKind it is owned by the aql:io module (minted per import
+// node. Like StreamKind it is owned by the boru:io module (minted per import
 // into the sub-registry by BuildIOModule), has no FixedID, and is reachable
-// from AQL only through the module export `IO.FileType`. It is an Atom
+// from boru only through the module export `IO.FileType`. It is an Atom
 // subtype whose inhabitants are exactly file/dir/symlink/other.
 func MintFileType(r *Registry) *Type {
 	return r.Types.MintMemberType("FileType", eng.TAtom, isFileTypeAtom)

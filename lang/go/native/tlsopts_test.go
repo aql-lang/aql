@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // tlsTestServer starts a local HTTPS server and returns it plus its
@@ -75,7 +75,7 @@ func TestFetchTLSPrivateCA(t *testing.T) {
 	}
 }
 
-// Bytes is the natural shape for a PEM read through aql:io, so it must
+// Bytes is the natural shape for a PEM read through boru:io, so it must
 // be accepted alongside String.
 func TestFetchTLSCAAsBytes(t *testing.T) {
 	ts, caPEM := tlsTestServer(t)

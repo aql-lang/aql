@@ -1,8 +1,8 @@
-# AQL Language Specification: the aql:log module
+# boru Language Specification: the boru:log module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of structured logging. Import binds the `Log`
-# namespace: `import "aql:log"  Log.info "message"`. Six severity levels
+# namespace: `import "boru:log"  Log.info "message"`. Six severity levels
 # (trace/debug/info/warn/error/fatal) fan a record out to attached sinks;
 # a console sink (Go's standard `log` package → ErrOutput) is attached by
 # default, with `memory` (capture-for-inspection) and `null` sinks also
@@ -18,72 +18,72 @@
 # design/LOG-MODULE.10.md.
 
 # --- defaults -------------------------------------------------------------
-import "aql:log"  Log.get-level	info/q	default global level is info
-import "aql:log"  Log.get-format	text/q	default console format is text
-import "aql:log"  Log.sinks	[console/q]	the console sink is attached by default
+import "boru:log"  Log.get-level	info/q	default global level is info
+import "boru:log"  Log.get-format	text/q	default console format is text
+import "boru:log"  Log.sinks	[console/q]	the console sink is attached by default
 
 # --- level threshold ------------------------------------------------------
-import "aql:log" ; Log.set-level warn/q ; Log.get-level	warn/q	set-level updates the threshold
-import "aql:log"  Log.enabled info/q	true	info is enabled at the default info threshold
-import "aql:log"  Log.enabled debug/q	false	debug is below the default info threshold
-import "aql:log" ; Log.set-level error/q ; Log.enabled warn/q	false	warn is below an error threshold
-import "aql:log" ; Log.set-level trace/q ; Log.enabled trace/q	true	trace is enabled at a trace threshold
+import "boru:log" ; Log.set-level warn/q ; Log.get-level	warn/q	set-level updates the threshold
+import "boru:log"  Log.enabled info/q	true	info is enabled at the default info threshold
+import "boru:log"  Log.enabled debug/q	false	debug is below the default info threshold
+import "boru:log" ; Log.set-level error/q ; Log.enabled warn/q	false	warn is below an error threshold
+import "boru:log" ; Log.set-level trace/q ; Log.enabled trace/q	true	trace is enabled at a trace threshold
 
 # --- format roundtrip -----------------------------------------------------
-import "aql:log" ; Log.set-format json/q ; Log.get-format	json/q	set-format switches the console renderer
+import "boru:log" ; Log.set-format json/q ; Log.get-format	json/q	set-format switches the console renderer
 
 # --- sink management ------------------------------------------------------
-import "aql:log" ; Log.add-sink memory/q ; Log.sinks	[console/q memory/q]	add-sink attaches a registered sink
-import "aql:log" ; Log.remove-sink console/q ; Log.sinks	[]	remove-sink detaches a sink
-import "aql:log" ; Log.add-sink memory/q ; Log.add-sink memory/q ; Log.sinks	[console/q memory/q]	attaching a sink twice is idempotent
+import "boru:log" ; Log.add-sink memory/q ; Log.sinks	[console/q memory/q]	add-sink attaches a registered sink
+import "boru:log" ; Log.remove-sink console/q ; Log.sinks	[]	remove-sink detaches a sink
+import "boru:log" ; Log.add-sink memory/q ; Log.add-sink memory/q ; Log.sinks	[console/q memory/q]	attaching a sink twice is idempotent
 
 # --- emission + capture (route to memory, drop console) -------------------
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "a"		a level word leaves no value on the stack
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "a" ; Log.dump size	1	an emitted record is captured by the memory sink
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "a" ; Log.warn "b" ; Log.dump size	2	each emission appends a record
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "a" {x:1} ; Log.dump size	1	a record with structured fields is captured
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.set-level warn/q ; Log.info "a" ; Log.dump size	0	a record below the threshold is dropped before fan-out
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.log error/q "boom" ; Log.dump size	1	Log.log emits at a computed level
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "a" ; Log.clear ; Log.dump size	0	clear empties the capture buffer
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.set-level trace/q ; Log.trace "t" ; Log.debug "d" ; Log.dump size	2	trace and debug emit once the threshold is lowered
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.error "e" ; Log.fatal "f" ; Log.dump size	2	error and fatal emit at the default threshold
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "a"		a level word leaves no value on the stack
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "a" ; Log.dump size	1	an emitted record is captured by the memory sink
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "a" ; Log.warn "b" ; Log.dump size	2	each emission appends a record
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "a" {x:1} ; Log.dump size	1	a record with structured fields is captured
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.set-level warn/q ; Log.info "a" ; Log.dump size	0	a record below the threshold is dropped before fan-out
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.log error/q "boom" ; Log.dump size	1	Log.log emits at a computed level
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "a" ; Log.clear ; Log.dump size	0	clear empties the capture buffer
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.set-level trace/q ; Log.trace "t" ; Log.debug "d" ; Log.dump size	2	trace and debug emit once the threshold is lowered
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.error "e" ; Log.fatal "f" ; Log.dump size	2	error and fatal emit at the default threshold
 
 # --- contextual loggers (phase 2) -----------------------------------------
-import "aql:log" ; def l (Log.logger "http") ; typeof l	Map	a logger instance is a Map of method closures
-import "aql:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" ; Log.dump 0 get "logger" get	'http'	a logger stamps its name onto each record
-import "aql:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" {path:"/x"} ; Log.dump 0 get "attributes" get	{svc:'api' path:'/x'}	a logger merges its defaults under the call's fields
-import "aql:log" ; def l (Log.with "a" {x:1}) ; def c (l.child {y:2}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; c.info "m" ; Log.dump 0 get "attributes" get	{x:1 y:2}	a child logger layers more defaults over its parent's
-import "aql:log" ; def l (Log.with "a" {x:1}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.error "boom" {x:2} ; Log.dump 0 get "attributes" get	{x:2}	a call field overrides a same-named logger default
+import "boru:log" ; def l (Log.logger "http") ; typeof l	Map	a logger instance is a Map of method closures
+import "boru:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" ; Log.dump 0 get "logger" get	'http'	a logger stamps its name onto each record
+import "boru:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" {path:"/x"} ; Log.dump 0 get "attributes" get	{svc:'api' path:'/x'}	a logger merges its defaults under the call's fields
+import "boru:log" ; def l (Log.with "a" {x:1}) ; def c (l.child {y:2}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; c.info "m" ; Log.dump 0 get "attributes" get	{x:1 y:2}	a child logger layers more defaults over its parent's
+import "boru:log" ; def l (Log.with "a" {x:1}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.error "boom" {x:2} ; Log.dump 0 get "attributes" get	{x:2}	a call field overrides a same-named logger default
 
 # --- provider hooks (phase 3) ---------------------------------------------
-# (AQL function sinks firing per record + min-level filtering are verified in
-# modules/log_test.go::TestLogAqlFnSink, which observes the side effect without
+# (boru function sinks firing per record + min-level filtering are verified in
+# modules/log_test.go::TestLogBoruFnSink, which observes the side effect without
 # a mutable-container word the compiler-coverage ratchet tracks.)
-import "aql:log" ; Log.register (fn [[rec:Any] [] []]) tap/q info/q ; Log.sinks	[console/q tap/q]	register installs and attaches an AQL function sink
+import "boru:log" ; Log.register (fn [[rec:Any] [] []]) tap/q info/q ; Log.sinks	[console/q tap/q]	register installs and attaches a boru function sink
 
 # --- spans / traces (phase 4) ---------------------------------------------
-import "aql:log" ; def s (Log.span "op") ; typeof s	Map	a span handle is a Map of fields and method closures
-import "aql:log" ; Log.current-span	None	there is no active span outside of one
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "op" [Log.info "x"] ; Log.traces size	1	with-span captures one ended span
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "outer" [Log.with-span "inner" [Log.info "x"]] ; Log.traces size	2	nested spans each capture
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "checkout" [Log.info "x"] ; Log.traces 0 get "name" get	'checkout'	a span carries its name
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "op" [Log.info "x"] ; Log.dump 0 get "trace-id" get "" eq	false	a record emitted inside a span is stamped with the trace id
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; Log.end-span s ; Log.traces size	1	a manually started span ends and is captured
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.set-attr region/q "eu" ; s.finish ; Log.traces 0 get "attributes" get	{region:'eu'}	Span.set-attr records an attribute; finish ends the span
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.record-error "boom" ; s.finish ; Log.traces 0 get "status" get	'error'	Span.record-error marks the span failed
+import "boru:log" ; def s (Log.span "op") ; typeof s	Map	a span handle is a Map of fields and method closures
+import "boru:log" ; Log.current-span	None	there is no active span outside of one
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "op" [Log.info "x"] ; Log.traces size	1	with-span captures one ended span
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "outer" [Log.with-span "inner" [Log.info "x"]] ; Log.traces size	2	nested spans each capture
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "checkout" [Log.info "x"] ; Log.traces 0 get "name" get	'checkout'	a span carries its name
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "op" [Log.info "x"] ; Log.dump 0 get "trace-id" get "" eq	false	a record emitted inside a span is stamped with the trace id
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; Log.end-span s ; Log.traces size	1	a manually started span ends and is captured
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.set-attr region/q "eu" ; s.finish ; Log.traces 0 get "attributes" get	{region:'eu'}	Span.set-attr records an attribute; finish ends the span
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.record-error "boom" ; s.finish ; Log.traces 0 get "status" get	'error'	Span.record-error marks the span failed
 
 # --- metrics (phase 5) ----------------------------------------------------
-import "aql:log" ; def c (Log.counter "x") ; typeof c	Map	an instrument is a handle Map
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "requests") ; c.add 1 ; c.add 2 ; Log.measurements size	2	each add records a measurement
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "requests") ; c.add 3 ; Log.measurements 0 get "value" get	3	a counter records its added value
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def g (Log.gauge "temp") ; g.record 21 ; Log.measurements 0 get "kind" get	'gauge'	a gauge records gauge-kind measurements
-import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def h (Log.histogram "lat") ; h.record 12 {ep:"/x"} ; Log.measurements 0 get "attributes" get	{ep:'/x'}	a histogram records measurement attributes
+import "boru:log" ; def c (Log.counter "x") ; typeof c	Map	an instrument is a handle Map
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "requests") ; c.add 1 ; c.add 2 ; Log.measurements size	2	each add records a measurement
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "requests") ; c.add 3 ; Log.measurements 0 get "value" get	3	a counter records its added value
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def g (Log.gauge "temp") ; g.record 21 ; Log.measurements 0 get "kind" get	'gauge'	a gauge records gauge-kind measurements
+import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def h (Log.histogram "lat") ; h.record 12 {ep:"/x"} ; Log.measurements 0 get "attributes" get	{ep:'/x'}	a histogram records measurement attributes
 
 # --- negatives ------------------------------------------------------------
-import "aql:log" ; Log.register (fn [[rec:Any] [] []]) console/q info/q	ERROR:sink-exists	registering an already-taken sink name is rejected
-import "aql:log" ; def a (Log.span "a") ; def b (Log.span "b") ; Log.end-span a	ERROR:span-mismatch	ending a span that is not the active one is rejected
-import "aql:log" ; Log.with-span "op" [raise "boom"]	ERROR:boom	with-span re-raises a body error (after ending the span)
+import "boru:log" ; Log.register (fn [[rec:Any] [] []]) console/q info/q	ERROR:sink-exists	registering an already-taken sink name is rejected
+import "boru:log" ; def a (Log.span "a") ; def b (Log.span "b") ; Log.end-span a	ERROR:span-mismatch	ending a span that is not the active one is rejected
+import "boru:log" ; Log.with-span "op" [raise "boom"]	ERROR:boom	with-span re-raises a body error (after ending the span)
 Log.info "x"	ERROR:undefined_word	`Log` is unbound without import
-import "aql:log" ; Log.set-level loud/q	ERROR:unknown level	an unknown level atom is rejected
-import "aql:log" ; Log.set-format pretty/q	ERROR:unknown format	an unknown console format is rejected
-import "aql:log" ; Log.add-sink nope/q	ERROR:unknown-sink	attaching an unregistered sink is rejected
+import "boru:log" ; Log.set-level loud/q	ERROR:unknown level	an unknown level atom is rejected
+import "boru:log" ; Log.set-format pretty/q	ERROR:unknown format	an unknown console format is rejected
+import "boru:log" ; Log.add-sink nope/q	ERROR:unknown-sink	attaching an unregistered sink is rejected

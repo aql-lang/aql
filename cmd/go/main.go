@@ -1,9 +1,9 @@
-// Package aql is the top-level dispatcher for the AQL command-line
+// Package boru is the top-level dispatcher for the boru command-line
 // tool. It owns the Version constant (rewritten by `make publish`)
 // and one short execute() function that routes args[0] to the
 // matching subcommand package under internal/. Everything else
 // lives in its own package.
-package aql
+package boru
 
 import (
 	"fmt"
@@ -11,41 +11,41 @@ import (
 	"os"
 	"runtime/debug"
 
-	"github.com/aql-lang/aql/cmd/go/internal/api"
-	"github.com/aql-lang/aql/cmd/go/internal/attach"
-	"github.com/aql-lang/aql/cmd/go/internal/build"
-	"github.com/aql-lang/aql/cmd/go/internal/buildrt"
-	"github.com/aql-lang/aql/cmd/go/internal/check"
-	"github.com/aql-lang/aql/cmd/go/internal/clean"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/ctl"
-	"github.com/aql-lang/aql/cmd/go/internal/debugcmd"
-	"github.com/aql-lang/aql/cmd/go/internal/describe"
-	"github.com/aql-lang/aql/cmd/go/internal/do"
-	"github.com/aql-lang/aql/cmd/go/internal/exec"
-	aqlfmt "github.com/aql-lang/aql/cmd/go/internal/fmt"
-	"github.com/aql-lang/aql/cmd/go/internal/help"
-	"github.com/aql-lang/aql/cmd/go/internal/install"
-	"github.com/aql-lang/aql/cmd/go/internal/login"
-	"github.com/aql-lang/aql/cmd/go/internal/lsp"
-	"github.com/aql-lang/aql/cmd/go/internal/model"
-	"github.com/aql-lang/aql/cmd/go/internal/pack"
-	"github.com/aql-lang/aql/cmd/go/internal/policy"
-	"github.com/aql-lang/aql/cmd/go/internal/prep"
-	"github.com/aql-lang/aql/cmd/go/internal/publish"
-	"github.com/aql-lang/aql/cmd/go/internal/register"
-	"github.com/aql-lang/aql/cmd/go/internal/registry"
-	"github.com/aql-lang/aql/cmd/go/internal/repl"
-	"github.com/aql-lang/aql/cmd/go/internal/run"
-	"github.com/aql-lang/aql/cmd/go/internal/serve"
-	testcmd "github.com/aql-lang/aql/cmd/go/internal/test"
-	"github.com/aql-lang/aql/cmd/go/internal/tui"
-	"github.com/aql-lang/aql/cmd/go/internal/vault"
+	"github.com/boru-lang/boru/cmd/go/internal/api"
+	"github.com/boru-lang/boru/cmd/go/internal/attach"
+	"github.com/boru-lang/boru/cmd/go/internal/build"
+	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
+	"github.com/boru-lang/boru/cmd/go/internal/check"
+	"github.com/boru-lang/boru/cmd/go/internal/clean"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/ctl"
+	"github.com/boru-lang/boru/cmd/go/internal/debugcmd"
+	"github.com/boru-lang/boru/cmd/go/internal/describe"
+	"github.com/boru-lang/boru/cmd/go/internal/do"
+	"github.com/boru-lang/boru/cmd/go/internal/exec"
+	borufmt "github.com/boru-lang/boru/cmd/go/internal/fmt"
+	"github.com/boru-lang/boru/cmd/go/internal/help"
+	"github.com/boru-lang/boru/cmd/go/internal/install"
+	"github.com/boru-lang/boru/cmd/go/internal/login"
+	"github.com/boru-lang/boru/cmd/go/internal/lsp"
+	"github.com/boru-lang/boru/cmd/go/internal/model"
+	"github.com/boru-lang/boru/cmd/go/internal/pack"
+	"github.com/boru-lang/boru/cmd/go/internal/policy"
+	"github.com/boru-lang/boru/cmd/go/internal/prep"
+	"github.com/boru-lang/boru/cmd/go/internal/publish"
+	"github.com/boru-lang/boru/cmd/go/internal/register"
+	"github.com/boru-lang/boru/cmd/go/internal/registry"
+	"github.com/boru-lang/boru/cmd/go/internal/repl"
+	"github.com/boru-lang/boru/cmd/go/internal/run"
+	"github.com/boru-lang/boru/cmd/go/internal/serve"
+	testcmd "github.com/boru-lang/boru/cmd/go/internal/test"
+	"github.com/boru-lang/boru/cmd/go/internal/tui"
+	"github.com/boru-lang/boru/cmd/go/internal/vault"
 )
 
-// Version is the aql CLI version. It is rewritten by the publish
+// Version is the boru CLI version. It is rewritten by the publish
 // target before tagging, and may also be overridden at build time
-// with `-ldflags "-X github.com/aql-lang/aql/cmd/go.Version=x.y.z"`.
+// with `-ldflags "-X github.com/boru-lang/boru/cmd/go.Version=x.y.z"`.
 var Version = "0.1.0-dev"
 
 // osExit is a test seam (design/TEST-SEAMS.10.md); tests swap it to
@@ -107,13 +107,13 @@ func versionString() string {
 }
 
 // Run is the binary entrypoint. The thin main package at
-// cmd/go/aql calls this so the installed binary is named `aql`
+// cmd/go/boru calls this so the installed binary is named `boru`
 // rather than `go`.
 func Run() {
-	// A binary produced by `aql build` (self-embedding launcher) carries an
+	// A binary produced by `boru build` (self-embedding launcher) carries an
 	// appended payload describing the program to run. When present, run it and
 	// exit before any CLI dispatch — this executable IS the program, not the
-	// aql CLI.
+	// boru CLI.
 	if code, embedded := runEmbedded(); embedded {
 		osExit(code)
 	}
@@ -126,7 +126,7 @@ func Run() {
 }
 
 // runEmbedded checks whether this executable has a program payload appended by
-// `aql build`. If so it runs that program and returns its exit code with
+// `boru build`. If so it runs that program and returns its exit code with
 // embedded=true; otherwise it returns embedded=false and the normal CLI runs.
 // A self-read or decode failure is reported to stderr and treated as embedded
 // (exit non-zero) so a corrupt built binary fails loudly rather than silently
@@ -150,7 +150,7 @@ func runEmbedded() (code int, embedded bool) {
 // execute resolves args[0] to a Command and runs it. If args[0]
 // is not a registered subcommand (or args is empty), the call
 // falls through to the run subcommand, which owns the legacy
-// `aql [-e expr] [script.aql]` shape and the no-args REPL drop-in.
+// `boru [-e expr] [script.boru]` shape and the no-args REPL drop-in.
 func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	run.SetVersion(versionString())
 	vault.SetVersion(versionString())
@@ -162,7 +162,7 @@ func execute(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 	}
 
-	// Legacy fallthrough: aql, aql -e EXPR, aql script.aql, aql -version.
+	// Legacy fallthrough: boru, boru -e EXPR, boru script.boru, boru -version.
 	fallback, _ := reg.Lookup("run")
 	return fallback.Run(args, stdin, stdout, stderr)
 }
@@ -184,7 +184,7 @@ func buildRegistry() *command.Registry {
 	r.Register(testcmd.New())
 	r.Register(help.New(provide))
 	r.Register(describe.New())
-	r.Register(aqlfmt.New())
+	r.Register(borufmt.New())
 	r.Register(build.New())
 	// Commands: model generation.
 	r.Register(model.New())
@@ -217,7 +217,7 @@ func buildRegistry() *command.Registry {
 }
 
 // serviceNames is the set of Commands that are also long-running
-// services (composable under `aql serve`). Used by the help command to
+// services (composable under `boru serve`). Used by the help command to
 // group them separately from one-shot commands.
 var serviceNames = map[string]bool{
 	"repl":     true,

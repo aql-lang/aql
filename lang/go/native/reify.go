@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // The "reify" word — StructUtil.reify — hydrates a class instance from
@@ -42,12 +42,12 @@ func reifyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		text, _ := AsString(input)
 		var raw any
 		if err := json.Unmarshal([]byte(text), &raw); err != nil {
-			return nil, r.AqlError("reify_error",
+			return nil, r.BoruError("reify_error",
 				fmt.Sprintf("reify: invalid JSON: %s", err.Error()), "reify")
 		}
 		m, ok := raw.(map[string]any)
 		if !ok {
-			return nil, r.AqlError("reify_error",
+			return nil, r.BoruError("reify_error",
 				fmt.Sprintf("reify: expected a JSON object, got %T", raw), "reify")
 		}
 		return reifyFromAnyMap(target, m, r)
@@ -56,7 +56,7 @@ func reifyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// Node form: a concrete Map of already-parsed Values.
 	m, err := RequireConcreteMap(input, "reify")
 	if err != nil {
-		return nil, r.AqlError("reify_error", err.Error(), "reify")
+		return nil, r.BoruError("reify_error", err.Error(), "reify")
 	}
 	anyMap := make(map[string]any, m.Len())
 	keys := make([]string, 0, m.Len())
@@ -92,14 +92,14 @@ func reifyFromAnyMapOrdered(target Value, m map[string]any, keys []string, r *Re
 			} else if val, isVal := v.(Value); isVal && val.Parent.ConformsTo(TString) {
 				className, _ = AsString(val)
 			} else {
-				return nil, r.AqlError("reify_error", "reify: $class must be a string", "reify")
+				return nil, r.BoruError("reify_error", "reify: $class must be a string", "reify")
 			}
 		case strings.HasPrefix(k, "$$"):
 			key := k[1:] // "$$x" unescapes to "$x"
 			fields[key] = v
 			order = append(order, key)
 		case strings.HasPrefix(k, "$"):
-			return nil, r.AqlError("reify_error",
+			return nil, r.BoruError("reify_error",
 				fmt.Sprintf("reify: unknown metadata key %q (user $-keys serialize escaped as $$)", k), "reify")
 		default:
 			fields[k] = v
@@ -119,12 +119,12 @@ func reifyFromAnyMapOrdered(target Value, m map[string]any, keys []string, r *Re
 	for _, k := range order {
 		constraint, declared := allFields.Get(k)
 		if !declared {
-			return nil, r.AqlError("reify_error",
+			return nil, r.BoruError("reify_error",
 				fmt.Sprintf("reify: unknown field %q for class %s", k, info.Name), "reify")
 		}
 		val, err := reifyFieldValue(fields[k], constraint, r)
 		if err != nil {
-			return nil, r.AqlError("reify_error",
+			return nil, r.BoruError("reify_error",
 				fmt.Sprintf("reify: field %q: %s", k, err.Error()), "reify")
 		}
 		provided.Set(k, val)
@@ -134,7 +134,7 @@ func reifyFromAnyMapOrdered(target Value, m map[string]any, keys []string, r *Re
 	// required fields enforced, predicates run, sealing applies).
 	results, err := eng.MakeObject(*info, NewMap(provided), r)
 	if err != nil {
-		return nil, r.AqlError("reify_error", err.Error(), "reify")
+		return nil, r.BoruError("reify_error", err.Error(), "reify")
 	}
 	return results, nil
 }
@@ -146,14 +146,14 @@ func resolveReifyTarget(target Value, className string, r *Registry) (*eng.Class
 	if IsClassType(target) {
 		info, _ := AsClassType(target)
 		if className != "" && className != classShortName(&info) {
-			return nil, r.AqlError("reify_error",
+			return nil, r.BoruError("reify_error",
 				fmt.Sprintf("reify: $class %q does not match target class %s", className, classShortName(&info)), "reify")
 		}
 		return &info, nil
 	}
 	if di, ok := target.Data.(DisjunctInfo); ok {
 		if className == "" {
-			return nil, r.AqlError("reify_error",
+			return nil, r.BoruError("reify_error",
 				"reify: a union target needs a $class key to select the member", "reify")
 		}
 		var names []string
@@ -167,10 +167,10 @@ func resolveReifyTarget(target Value, className string, r *Registry) (*eng.Class
 				return &info, nil
 			}
 		}
-		return nil, r.AqlError("reify_error",
+		return nil, r.BoruError("reify_error",
 			fmt.Sprintf("reify: $class %q is not a member of the union (members: %s)", className, strings.Join(names, " ")), "reify")
 	}
-	return nil, r.AqlError("reify_error",
+	return nil, r.BoruError("reify_error",
 		"reify: target must be a class (or a tor union of classes)", "reify")
 }
 

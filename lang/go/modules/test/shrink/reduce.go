@@ -1,7 +1,7 @@
 package shrink
 
 import (
-	"github.com/aql-lang/aql/eng/go/stackform"
+	"github.com/boru-lang/boru/eng/go/stackform"
 )
 
 // Outcome reports how an evaluation of a candidate StackForm
@@ -23,7 +23,7 @@ const (
 
 // EvalFn is the caller-supplied function that evaluates a candidate
 // StackForm and reports whether it preserves the original failure.
-// For the PBT integration in aql:test, this closes over the property
+// For the PBT integration in boru:test, this closes over the property
 // body and the seeded rand instance so each candidate reproduces the
 // same generator/property pipeline.
 type EvalFn func(*stackform.StackForm) Outcome
@@ -92,7 +92,7 @@ func DefaultProfile() *Profile {
 // NOT fail under `eval`, returns it unchanged — Reduce only shrinks
 // known counterexamples.
 //
-// Algorithms mirror design/aql_property_based_reduction_report.10.md:
+// Algorithms mirror design/boru_property_based_reduction_report.10.md:
 // §11 (greedy failure-preserving reduction) and §15 (best-first
 // search). Exact small-program enumeration (§16) remains future
 // work.

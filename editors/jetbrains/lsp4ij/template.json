@@ -1,23 +1,23 @@
 {
-  "name": "AQL",
+  "name": "boru",
   "programArgs": {
-    "default": "aql lsp"
+    "default": "boru lsp"
   },
   "languageMappings": [
     {
-      "language": "AQL",
-      "languageId": "aql"
+      "language": "boru",
+      "languageId": "boru"
     }
   ],
   "fileTypeMappings": [
     {
       "fileType": {
-        "name": "AQL",
+        "name": "boru",
         "patterns": [
-          "*.aql"
+          "*.boru"
         ]
       },
-      "languageId": "aql"
+      "languageId": "boru"
     }
   ]
 }

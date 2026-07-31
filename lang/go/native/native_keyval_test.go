@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // A KeyVal is a Map subtype: it IS a KeyVal, it IS a Map, and its type leaf is
@@ -77,7 +77,7 @@ func TestKeyValNominal(t *testing.T) {
 
 // The type name is registered in the builtin leaf index, so source can resolve
 // it — the name can be used in annotations and `is` checks (e.g.
-// `[e:KeyVal] => …`, `e is KeyVal`). Verified end-to-end with `aql do 'KeyVal'`.
+// `[e:KeyVal] => …`, `e is KeyVal`). Verified end-to-end with `boru do 'KeyVal'`.
 func TestKeyValNameResolves(t *testing.T) {
 	got := eng.Builtin.LookupBuiltinByName("KeyVal")
 	if got == nil {

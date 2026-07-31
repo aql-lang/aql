@@ -9,7 +9,7 @@ import "testing"
 // exercises a "keep the refusal" path.
 
 func TestW9UserPolyArmShapeOK(t *testing.T) {
-	body := AQL([]Value{NewWord("p")})
+	body := Boru([]Value{NewWord("p")})
 
 	// Empty body → false.
 	if userPolyArmShapeOK(&Signature{}, nil) {
@@ -61,7 +61,7 @@ func TestW9FindOwningFnDef(t *testing.T) {
 	// A non-FnDefInfo binding above the word: the scan skips it (continue)
 	// and, with no fn entry present, returns not-found.
 	r.Defs.Push("w9poly", NewInteger(7))
-	impl := AQL([]Value{NewWord("x")})
+	impl := Boru([]Value{NewWord("x")})
 	if _, ok := findOwningFnDef(r, "w9poly", impl); ok {
 		t.Error("a non-fn binding must be skipped and yield not-found")
 	}
@@ -93,7 +93,7 @@ func TestW9TryCompileUserPolyEarlyReturns(t *testing.T) {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TInteger}},
 			Returns: []*Type{TInteger},
-			Impl:    AQL([]Value{NewWord("n")}),
+			Impl:    Boru([]Value{NewWord("n")}),
 		}},
 	})
 	if tryCompileUserPolyArms(r, NewEmitState(), "w9one", args, []*Type{TInteger}) != nil {
@@ -108,8 +108,8 @@ func TestW9TryCompileUserPolyOwnerRefusal(t *testing.T) {
 	InstallFnDef(r, "w9macro", FnDefInfo{
 		Macro: true,
 		Signatures: []Signature{
-			{Params: []FnParam{{Name: "a", Type: TInteger}}, Returns: []*Type{TInteger}, Impl: AQL([]Value{NewWord("a")})},
-			{Params: []FnParam{{Name: "b", Type: TInteger}}, Returns: []*Type{TInteger}, Impl: AQL([]Value{NewWord("b")})},
+			{Params: []FnParam{{Name: "a", Type: TInteger}}, Returns: []*Type{TInteger}, Impl: Boru([]Value{NewWord("a")})},
+			{Params: []FnParam{{Name: "b", Type: TInteger}}, Returns: []*Type{TInteger}, Impl: Boru([]Value{NewWord("b")})},
 		},
 	})
 	if tryCompileUserPolyArms(r, NewEmitState(), "w9macro", []Value{NewInteger(1)}, []*Type{TInteger}) != nil {
@@ -128,7 +128,7 @@ func TestW9TryCompileUserPolyArmCompileFails(t *testing.T) {
 		return Signature{
 			Params:  []FnParam{{Name: p, Type: TInteger}},
 			Returns: []*Type{TInteger},
-			Impl:    AQL([]Value{inner}),
+			Impl:    Boru([]Value{inner}),
 		}
 	}
 	InstallFnDef(r, "w9defer", FnDefInfo{
@@ -183,7 +183,7 @@ func TestW9CompileUserPolyArmRefusals(t *testing.T) {
 	inner.Eval = true
 	deferredSig := &Signature{
 		Params: []FnParam{{Name: "p", Type: TInteger}},
-		Impl:   AQL([]Value{inner}),
+		Impl:   Boru([]Value{inner}),
 	}
 	if _, ok := compileUserPolyArm(r, NewEmitState(), "w", deferredSig, FnDefInfo{}); ok {
 		t.Error("a deferred-param-list body should refuse")
@@ -193,7 +193,7 @@ func TestW9CompileUserPolyArmRefusals(t *testing.T) {
 	plainSig := &Signature{
 		Params:  []FnParam{{Name: "p", Type: TInteger}},
 		Returns: []*Type{TInteger},
-		Impl:    AQL([]Value{NewWord("p")}),
+		Impl:    Boru([]Value{NewWord("p")}),
 	}
 	if _, ok := compileUserPolyArm(r, inactiveEmitState(), "w", plainSig, FnDefInfo{}); ok {
 		t.Error("an inactive recorder should fail StartFnCompile")

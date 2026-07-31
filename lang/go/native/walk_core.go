@@ -3,7 +3,7 @@ package native
 import "strconv"
 
 // The core `walk` word — a generic, iterative, visit-only traversal of ANY
-// AQL data structure.
+// boru data structure.
 //
 //	walk <options> <data> <descend> [<ascend>]
 //
@@ -73,7 +73,7 @@ func walkCoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			if mv, ok := om.Get("mode"); ok {
 				ms, ok2 := walkModeValue(mv)
 				if !ok2 {
-					return nil, r.AqlError("walk_error", `walk: options 'mode' must be "depth" or "breadth"`, "walk")
+					return nil, r.BoruError("walk_error", `walk: options 'mode' must be "depth" or "breadth"`, "walk")
 				}
 				mode = ms
 			}
@@ -98,7 +98,7 @@ func walkCoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	case "breadth":
 		err = walkBFS(r, args[1], descend, ascend)
 	default:
-		return nil, r.AqlError("walk_error", `walk: mode must be "depth" or "breadth", got "`+mode+`"`, "walk")
+		return nil, r.BoruError("walk_error", `walk: mode must be "depth" or "breadth", got "`+mode+`"`, "walk")
 	}
 	if err != nil {
 		return nil, err
@@ -122,7 +122,7 @@ func walkModeValue(v Value) (string, bool) {
 
 // walkClassifyHook classifies a hook arg once, before the traversal loop —
 // mirroring newMapBody (native_map_iter.go): a compiled closure runs via
-// InvokeBody, a lambda Function is called via CallAQL, and anything else must
+// InvokeBody, a lambda Function is called via CallBoru, and anything else must
 // be a concrete quotation list run as a sub-program.
 func walkClassifyHook(r *Registry, body Value) (walkHook, error) {
 	h := walkHook{present: true}
@@ -140,11 +140,11 @@ func walkClassifyHook(r *Registry, body Value) (walkHook, error) {
 		return h, nil
 	}
 	if !IsConcrete(body) {
-		return walkHook{}, r.AqlError("walk_error", "walk: hook must be a quotation list or a lambda", "walk")
+		return walkHook{}, r.BoruError("walk_error", "walk: hook must be a quotation list or a lambda", "walk")
 	}
 	bl, err := AsList(body)
 	if err != nil {
-		return walkHook{}, r.AqlError("walk_error", "walk: hook must be a quotation list or a lambda", "walk")
+		return walkHook{}, r.BoruError("walk_error", "walk: hook must be a quotation list or a lambda", "walk")
 	}
 	h.tokens = bl.Slice()
 	return h, nil
@@ -160,9 +160,9 @@ func callWalkHook(r *Registry, h walkHook, arg Value) error {
 	if h.lambda {
 		sig := MatchFnSig(h.fn, []Value{arg})
 		if sig == nil {
-			return r.AqlError("walk_error", "walk: no matching hook signature", "walk")
+			return r.BoruError("walk_error", "walk: no matching hook signature", "walk")
 		}
-		_, err := r.CallAQL(sig, []Value{arg}, h.caps)
+		_, err := r.CallBoru(sig, []Value{arg}, h.caps)
 		return err
 	}
 	if h.closure {

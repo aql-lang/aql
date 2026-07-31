@@ -1,4 +1,4 @@
-# AQL corpus: code structures, verified interpret+check+compile
+# boru corpus: code structures, verified interpret+check+compile
 # Format: input<TAB>expected<TAB>kind
 "x" is Integer	false	structure
 'a' add 'b'	'ab'	structure
@@ -61,11 +61,11 @@ do [raise bad_input "bad"] error [dot code]	bad_input/q	structure
 false guard 42	None	structure
 if (3 gt 2) ["yes"] ["no"]	'yes'	structure
 if (3 lt 2) ["yes"] ["no"]	'no'	structure
-import "aql:math-util" end MathUtil.max 3 5	5	structure
-import "aql:math-util" end MathUtil.sqrt 16.0	4.0	structure
-import "aql:string-util" end StringUtil.split "," "a,b,c"	['a' 'b' 'c']	structure
-import "aql:string-util" end StringUtil.upper "abc"	'ABC'	structure
-import "aql:test" end Test.test "ok" [[5] [5] Assert.equal] end Test.fail-count	0	structure
+import "boru:math-util" end MathUtil.max 3 5	5	structure
+import "boru:math-util" end MathUtil.sqrt 16.0	4.0	structure
+import "boru:string-util" end StringUtil.split "," "a,b,c"	['a' 'b' 'c']	structure
+import "boru:string-util" end StringUtil.upper "abc"	'ABC'	structure
+import "boru:test" end Test.test "ok" [[5] [5] Assert.equal] end Test.fail-count	0	structure
 iota 5	[0 1 2 3 4]	structure
 quote [1 add 2]	(quote [1 word(add) 2])	structure
 quote add	add/q	structure

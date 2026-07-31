@@ -4,9 +4,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // runMatrixSrc parses and runs src on a fresh resolver-equipped registry,
@@ -39,7 +39,7 @@ func wantOne(t *testing.T, src, want string) {
 
 // TestMatrixCrossImportDispatch pins the iota…each import-boundary fix
 // (the stats-library blocker): a tensor VALUE built by one
-// `import "aql:matrix-util"` dispatches against ANOTHER import's words.
+// `import "boru:matrix-util"` dispatches against ANOTHER import's words.
 // Each import mints its own Tensor/Matrix/Vector nodes, so the nominal
 // rule alone cannot match across the boundary; tensorFormatBehavior now
 // matches STRUCTURALLY by payload rank (and by family kind for
@@ -53,7 +53,7 @@ func TestMatrixCrossImportDispatch(t *testing.T) {
 	// from ITS import through the Any param.
 	wantOne(t, `
 import module [
-  import "aql:matrix-util"
+  import "boru:matrix-util"
   def f fn [
     [mat:Any] [List] [
       def k (MatrixUtil.cols mat)
@@ -62,14 +62,14 @@ import module [
   ]
   export "M" { f: f/r }
 ]
-import "aql:matrix-util"
+import "boru:matrix-util"
 (M.f (MatrixUtil.create [[1 2] [3 4]]) end)`, "[0 1]")
 
 	// The wider surface the stats library needs: element reads inside
 	// the each body, row access, scaling — all cross-import.
 	wantOne(t, `
 import module [
-  import "aql:matrix-util"
+  import "boru:matrix-util"
   def diag fn [
     [mat:Any] [List] [
       (iota (MatrixUtil.rows mat)) each [var [[j] MatrixUtil.elem mat j j]]
@@ -77,28 +77,28 @@ import module [
   ]
   export "M" { diag: diag/r }
 ]
-import "aql:matrix-util"
+import "boru:matrix-util"
 (M.diag (MatrixUtil.create [[1 2] [3 4]]) end)`, "[1.0 4.0]")
 
 	wantOne(t, `
 import module [
-  import "aql:matrix-util"
+  import "boru:matrix-util"
   def r0 fn [ [mat:Any] [List] [ MatrixUtil.row mat 0 ] ]
   export "M" { r0: r0/r }
 ]
-import "aql:matrix-util"
+import "boru:matrix-util"
 (M.r0 (MatrixUtil.create [[1 2] [3 4]]) end)`, "[1.0 2.0]")
 
 	// `is` agrees with dispatch across the boundary (the one-predicate
 	// doctrine shortcut in isHandler) — and rank keeps Vector distinct.
 	wantOne(t, `
 import module [
-  import "aql:matrix-util"
+  import "boru:matrix-util"
   def t1 fn [ [mat:Any] [Boolean] [ mat is MatrixUtil.Matrix ] ]
   def t2 fn [ [mat:Any] [Boolean] [ mat is MatrixUtil.Vector ] ]
   export "M" { t1: t1/r t2: t2/r }
 ]
-import "aql:matrix-util"
+import "boru:matrix-util"
 def m (MatrixUtil.create [[1 2] [3 4]])
 [(M.t1 m end) (M.t2 m end)]`, "[true false]")
 }
@@ -110,7 +110,7 @@ def m (MatrixUtil.create [[1 2] [3 4]])
 // both orders — Matrix and Integer/Number are disjoint so the matched
 // sig disambiguates).
 func TestMatrixForwardFormAccessors(t *testing.T) {
-	const pre = `import "aql:matrix-util" def m (MatrixUtil.create [[1 2] [3 4]]) `
+	const pre = `import "boru:matrix-util" def m (MatrixUtil.create [[1 2] [3 4]]) `
 	wantOne(t, pre+`(MatrixUtil.row m 1)`, "[3.0 4.0]")
 	wantOne(t, pre+`(MatrixUtil.col m 0)`, "[1.0 3.0]")
 	wantOne(t, pre+`(MatrixUtil.elem m 0 1)`, "2.0")
@@ -127,7 +127,7 @@ func TestMatrixForwardFormAccessors(t *testing.T) {
 // no longer have to be typed Any — and matches values from any import.
 func TestDottedParamAnnotation(t *testing.T) {
 	wantOne(t, `
-import "aql:matrix-util"
+import "boru:matrix-util"
 def f fn [ [mat:MatrixUtil.Matrix] [Integer] [ MatrixUtil.cols mat ] ]
 (f (MatrixUtil.create [[1 2] [3 4]]) end)`, "2")
 
@@ -135,23 +135,23 @@ def f fn [ [mat:MatrixUtil.Matrix] [Integer] [ MatrixUtil.cols mat ] ]
 	// caller's.
 	wantOne(t, `
 import module [
-  import "aql:matrix-util"
+  import "boru:matrix-util"
   def f fn [ [mat:MatrixUtil.Matrix] [Integer] [ MatrixUtil.cols mat ] ]
   export "MA" { f: f/r }
 ]
-import "aql:matrix-util"
+import "boru:matrix-util"
 (MA.f (MatrixUtil.create [[1 2] [3 4]]) end)`, "2")
 
 	// Unnamed positional form.
 	wantOne(t, `
-import "aql:matrix-util"
+import "boru:matrix-util"
 def g fn [ [MatrixUtil.Matrix] [Integer] [ def mat args.0 MatrixUtil.rows mat ] ]
 (g (MatrixUtil.create [[1 2] [3 4]]) end)`, "2")
 
 	// NEGATIVE: a dotted path that reaches a non-type (a word export) is
 	// an invalid parameter, not a silent Any.
 	_, err := runMatrixSrc(t, `
-import "aql:matrix-util"
+import "boru:matrix-util"
 def f fn [ [mat:MatrixUtil.cols] [Integer] [ 0 ] ]
 0`)
 	if err == nil || !strings.Contains(err.Error(), "invalid parameter") {
@@ -161,7 +161,7 @@ def f fn [ [mat:MatrixUtil.cols] [Integer] [ 0 ] ]
 	// NEGATIVE: the annotation enforces — a non-matrix arg raises, it is
 	// not admitted.
 	_, err = runMatrixSrc(t, `
-import "aql:matrix-util"
+import "boru:matrix-util"
 def f fn [ [mat:MatrixUtil.Matrix] [Integer] [ MatrixUtil.cols mat ] ]
 (f 5 end)`)
 	if err == nil || !strings.Contains(err.Error(), "no signature") {
@@ -182,13 +182,13 @@ func TestMatrixDottedReturnTypeNoPhantom(t *testing.T) {
 	// param unchanged — no wrapper involved, so this isolates the return-type
 	// splice (the stats cov-matrix false positive's root).
 	wantOne(t, `
-import "aql:matrix-util"
+import "boru:matrix-util"
 def id fn [ [m:MatrixUtil.Matrix] [MatrixUtil.Matrix] [ m ] ]
 (id (make MatrixUtil.Matrix [[1.0 2.0][3.0 4.0]]))`, "Matrix(2x2)")
 
 	// A wrapper-produced Matrix carrier through the dotted return type.
 	wantOne(t, `
-import "aql:matrix-util"
+import "boru:matrix-util"
 def tr fn [ [m:MatrixUtil.Matrix] [MatrixUtil.Matrix] [ MatrixUtil.transpose m ] ]
 (tr (make MatrixUtil.Matrix [[1.0 2.0][3.0 4.0]]))`, "Matrix(2x2)")
 }

@@ -16,12 +16,12 @@ Status: implemented.
 > historical: there is no `Array` to graduate into or convert from. The
 > headline justification for keeping a distinct opaque `Array` — freeing
 > unboxed numeric backing for `Tensor`/`Matrix` — was never realized
-> (`aql:matrix-util` uses its own `TensorData`), which is what made the
+> (`boru:matrix-util` uses its own `TensorData`), which is what made the
 > removal clean. `class` covers typed, sealed records.
 
 ## Problem
 
-AQL's Node types (`Map`, `List`) are immutable: the mutation words
+boru's Node types (`Map`, `List`) are immutable: the mutation words
 (`push`, `pop`, …) return new copies, and `set` deliberately has no
 Map/List signatures. Mutable state therefore lives only in the Ideal
 types — `Array` (indexed store), `Object` (fields), `Store`

@@ -1,5 +1,5 @@
 // Wave-4 coverage for the specgen generator helpers: the runtime
-// failure whose engine error carries no [aql/<code>] tag (the bare
+// failure whose engine error carries no [boru/<code>] tag (the bare
 // "ERROR:" class, which classifyFrontier maps to the generic "error"
 // detail), and the front-coded reader's remaining edge rows.
 package main
@@ -9,11 +9,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // bareErrorProgram is a program that checks clean, compiles, and then
-// fails at run with an error carrying NO [aql/<code>] tag. Both tests
+// fails at run with an error carrying NO [boru/<code>] tag. Both tests
 // below exist to pin that arm, so they need a specimen that genuinely
 // has no code — and the specimen keeps moving, because each round of
 // error-code work removes one:
@@ -33,7 +33,7 @@ import (
 const bareErrorProgram = `"x" convert Integer`
 
 // TestW4ClassifyFrontierBareErrorDetail pins the classifyFrontier arm
-// for a runtime error whose message has no [aql/<code>] prefix: the
+// for a runtime error whose message has no [boru/<code>] prefix: the
 // program checks clean and compiles, yet fails at run — errorClass
 // yields the generic "ERROR:", and the classifier substitutes the
 // "error" detail.

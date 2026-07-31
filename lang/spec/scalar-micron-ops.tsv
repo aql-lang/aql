@@ -1,4 +1,4 @@
-# AQL Language Specification: within-type scalar & Micron operations
+# boru Language Specification: within-type scalar & Micron operations
 # Format: input<TAB>expected<TAB>description
 #
 # Every scalar type and every Micron kind has WELL-DEFINED behaviour under
@@ -95,7 +95,7 @@ def Pointon refine Micron {x:Integer y:Integer} def add fn [[a:Pointon b:Pointon
 #
 # ─────────────────────────────────────────────────────────────────────
 # §8  Pathon — add joins, sub strips a trailing run of segments
-(make Pathon "usr/local") add (make Pathon "bin/aql")	usr/local/bin/aql	Pathon add joins relative segments
+(make Pathon "usr/local") add (make Pathon "bin/boru")	usr/local/bin/boru	Pathon add joins relative segments
 (make Pathon "usr/local/bin") sub (make Pathon "local/bin")	usr	Pathon sub strips a matching trailing run
 (make Pathon "usr/local/bin") sub (make Pathon "zzz")	usr/local/bin	Pathon sub with no matching suffix is unchanged
 (make Pathon "usr") add (make Pathon "/bin")	ERROR:absolute path	Pathon join of an absolute right operand errors

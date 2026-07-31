@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // syncBuf is a goroutine-safe writer for capturing a spawned process's async
@@ -81,7 +81,7 @@ func TestSpawnCompiledRunsBodyOnVM(t *testing.T) {
 
 // registerStash adds a CompileStoresFn word `stash {opts} handler` that returns
 // its opts map and treats the handler as inert data (the store-fn contract).
-func registerStash(t *testing.T) *AQL {
+func registerStash(t *testing.T) *Boru {
 	t.Helper()
 	a, err := New()
 	if err != nil {
@@ -147,7 +147,7 @@ func TestStoredFnCompilesAndRunsOnVM(t *testing.T) {
 }
 
 // InvokeCallback runs a stamped handler on the VM when the registry is idle, and
-// its result matches CallAQL (the interpreter) on the same body — the fail-safe
+// its result matches CallBoru (the interpreter) on the same body — the fail-safe
 // equivalence. A busy registry (or a nil ref) falls back to the interpreter.
 func TestInvokeCallbackVMAndFallbackAgree(t *testing.T) {
 	a := registerStash(t)
@@ -170,10 +170,10 @@ func TestInvokeCallbackVMAndFallbackAgree(t *testing.T) {
 		t.Fatalf("VM path result = %v, want 6", vmOut[0])
 	}
 
-	// Same sig, interpreter fallback (CallAQL directly): byte-identical.
-	interpOut, err := reg.CallAQL(sig, []Value{NewInteger(5)}, nil)
+	// Same sig, interpreter fallback (CallBoru directly): byte-identical.
+	interpOut, err := reg.CallBoru(sig, []Value{NewInteger(5)}, nil)
 	if err != nil {
-		t.Fatalf("CallAQL: %v", err)
+		t.Fatalf("CallBoru: %v", err)
 	}
 	if n, _ := interpOut[0].AsConcreteInteger(); n != 6 {
 		t.Fatalf("interpreter result = %v, want 6", interpOut[0])

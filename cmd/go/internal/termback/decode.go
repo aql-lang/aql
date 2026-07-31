@@ -6,7 +6,7 @@ import (
 	"strings"
 	"sync/atomic"
 
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // decodeInput turns the raw-mode byte stream into tuikit events. It

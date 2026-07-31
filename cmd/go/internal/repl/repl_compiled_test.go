@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // The Phase 2 entry-point pins (plan p2 cases): a REPL line runs
@@ -98,7 +98,7 @@ func TestStartRefusedLineFallbackIsSilent(t *testing.T) {
 func TestStartInstanceInitErrorReported(t *testing.T) {
 	prev := langNewFromRegistry
 	t.Cleanup(func() { langNewFromRegistry = prev })
-	langNewFromRegistry = func(*native.Registry) (*lang.AQL, error) {
+	langNewFromRegistry = func(*native.Registry) (*lang.Boru, error) {
 		return nil, errors.New("boom")
 	}
 	in := strings.NewReader("1 add 2\n")

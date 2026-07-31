@@ -1,6 +1,6 @@
 // Check-accuracy ratchet (design/checker-accuracy-review.10.md §5).
 //
-// Runs `aql check` semantics (Registry.Check.Begin + a normal engine
+// Runs `boru check` semantics (Registry.Check.Begin + a normal engine
 // run) over every row of the production language spec at lang/spec/
 // and counts two things:
 //
@@ -30,11 +30,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/test/go/specrunner"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/test/go/specrunner"
 )
 
 // pinnedFalsePositives is the whole-corpus count of VALUE rows the checker
@@ -123,7 +123,7 @@ var unflaggedPins = map[string]int{
 	// direction are not.
 	//
 	// 29 → 34: C1 added five ERROR: rows the STATIC checker cannot see.
-	// aql/exit is raised by the exit handler at RUNTIME (IO.exit 3 / 0, and
+	// boru/exit is raised by the exit handler at RUNTIME (IO.exit 3 / 0, and
 	// the one crossing a handler-less `do`), and the 0..125 range check is
 	// a runtime guard on a value the checker treats as an ordinary Integer
 	// (IO.exit 126 / 200). The two rows the checker DOES flag — the String
@@ -209,7 +209,7 @@ func TestCheckAccuracyRatchet(t *testing.T) {
 				if !flagged {
 					unflagged++
 					unflaggedByFile[e.Name()]++
-					if os.Getenv("AQL_LOG_UNFLAGGED") != "" {
+					if os.Getenv("BORU_LOG_UNFLAGGED") != "" {
 						t.Logf("UNFLAGGED %s:L%d: %s", e.Name(), lineNum, input)
 					}
 				}
@@ -302,7 +302,7 @@ func checkFlagsError(t *testing.T, input string) bool {
 
 	done := reg.Check.Begin()
 	_, runErr := native.NewTop(reg).Run(values)
-	// Mirror lang.(*AQL).Check: a fn-body forward reference to a name defined
+	// Mirror lang.(*Boru).Check: a fn-body forward reference to a name defined
 	// LATER in the same program (mutual recursion isod/isev, a body referencing
 	// a sibling def below it) is flagged undefined_word at eager body-analysis
 	// time, then rescued once the def exists. The real checker drops these

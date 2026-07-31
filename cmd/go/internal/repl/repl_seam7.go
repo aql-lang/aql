@@ -9,6 +9,6 @@
 
 package repl
 
-import "github.com/aql-lang/aql/lang/go/native"
+import "github.com/boru-lang/boru/lang/go/native"
 
 var nativeDefaultRegistry = native.DefaultRegistry

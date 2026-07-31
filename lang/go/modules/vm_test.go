@@ -4,12 +4,12 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/policy"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-func newAQL(t *testing.T, pol policy.Policy) *lang.AQL {
+func newBoru(t *testing.T, pol policy.Policy) *lang.Boru {
 	t.Helper()
 	a, err := lang.New(lang.Options{Policy: pol})
 	if err != nil {
@@ -19,8 +19,8 @@ func newAQL(t *testing.T, pol policy.Policy) *lang.AQL {
 }
 
 func TestVMRunReturnsLastValue(t *testing.T) {
-	a := newAQL(t, nil)
-	out, err := a.Run(`(import "aql:vm") "1 add 2" Vm.run`)
+	a := newBoru(t, nil)
+	out, err := a.Run(`(import "boru:vm") "1 add 2" Vm.run`)
 	if err != nil {
 		t.Fatalf("Vm.run: %s", err)
 	}
@@ -30,10 +30,10 @@ func TestVMRunReturnsLastValue(t *testing.T) {
 }
 
 func TestVMRunDefaultSandboxBlocksWrite(t *testing.T) {
-	a := newAQL(t, nil)
-	// Default Vm.run uses sandbox. Sandbox allows importing aql:io but
+	a := newBoru(t, nil)
+	// Default Vm.run uses sandbox. Sandbox allows importing boru:io but
 	// still denies the disk.write capability, so IO.write is blocked.
-	out, err := a.Run(`(import "aql:vm") "import \"aql:io\" IO.write (make Pathon 'data') '/tmp/aql-test'" Vm.run`)
+	out, err := a.Run(`(import "boru:vm") "import \"boru:io\" IO.write (make Pathon 'data') '/tmp/boru-test'" Vm.run`)
 	if err == nil {
 		t.Errorf("expected sandbox denial, got %v", out)
 	}
@@ -45,8 +45,8 @@ func TestVMRunDefaultSandboxBlocksWrite(t *testing.T) {
 }
 
 func TestVMRunSandboxAllowsCompute(t *testing.T) {
-	a := newAQL(t, nil)
-	out, err := a.Run(`(import "aql:vm") "5 mul 7" Vm.run-sandbox`)
+	a := newBoru(t, nil)
+	out, err := a.Run(`(import "boru:vm") "5 mul 7" Vm.run-sandbox`)
 	if err != nil {
 		t.Fatalf("Vm.run-sandbox: %s", err)
 	}
@@ -56,8 +56,8 @@ func TestVMRunSandboxAllowsCompute(t *testing.T) {
 }
 
 func TestVMRunComputeWorksForArith(t *testing.T) {
-	a := newAQL(t, nil)
-	out, err := a.Run(`(import "aql:vm") "3 add 4" Vm.run-compute`)
+	a := newBoru(t, nil)
+	out, err := a.Run(`(import "boru:vm") "3 add 4" Vm.run-compute`)
 	if err != nil {
 		t.Fatalf("Vm.run-compute: %s", err)
 	}
@@ -67,14 +67,14 @@ func TestVMRunComputeWorksForArith(t *testing.T) {
 }
 
 func TestVMRunWithExplicitPolicy(t *testing.T) {
-	a := newAQL(t, nil)
+	a := newBoru(t, nil)
 	// Inline jsonic policy via a map literal: deny `add`, allow
 	// everything else. Sub-engine should refuse 1 add 2.
 	// Stack order for binary dispatch (top=args[0], deeper=args[1]):
 	// push policy-map first, then code string. Then Vm.run-with
 	// resolves to a FnDef and auto-invokes.
 	out, err := a.Run(`
-		(import "aql:vm")
+		(import "boru:vm")
 		{ scopes: { engine: { words: { default: "allow", rules: [ { deny: ["add"] } ] } } } }
 		"1 add 2"
 		Vm.run-with
@@ -103,7 +103,7 @@ func TestVMAttenuationParentDenyWinsOnGlobal(t *testing.T) {
 			modules: {
 				words: {
 					default: "deny"
-					rules: [{ allow: ["import"], where: { module: ["aql:vm", "aql:io"] } }]
+					rules: [{ allow: ["import"], where: { module: ["boru:vm", "boru:io"] } }]
 				}
 			}
 		}
@@ -111,14 +111,14 @@ func TestVMAttenuationParentDenyWinsOnGlobal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := newAQL(t, parentPol)
+	a := newBoru(t, parentPol)
 	// Sub-engine: tries to write a file. Child policy is fully
 	// permissive (default-allow everything) but the parent's
 	// global.disk.write deny still applies via the composed wrapper.
 	_, err = a.Run(`
-		(import "aql:vm")
+		(import "boru:vm")
 		{ scopes: { global: { words: { default: "allow" } }, fileops: { words: { default: "allow" } } } }
-		"import \"aql:io\" 'data' IO.write (make Pathon '/tmp/aql-attenuation-test')"
+		"import \"boru:io\" 'data' IO.write (make Pathon '/tmp/boru-attenuation-test')"
 		Vm.run-with
 	`)
 	if err == nil {
@@ -142,7 +142,7 @@ func TestVMAttenuationParentDenyRuleSurvives(t *testing.T) {
 			modules: {
 				words: {
 					default: "deny"
-					rules: [{ allow: ["import"], where: { module: ["aql:vm", "aql:io"] } }]
+					rules: [{ allow: ["import"], where: { module: ["boru:vm", "boru:io"] } }]
 				}
 			}
 			fileops: {
@@ -156,14 +156,14 @@ func TestVMAttenuationParentDenyRuleSurvives(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := newAQL(t, parentPol)
+	a := newBoru(t, parentPol)
 	// Child opens fileops with no rules — under the old subset
 	// check this slipped through. With Compose, parent's deny rule
 	// is consulted on every check and the read is refused.
 	_, err = a.Run(`
-		(import "aql:vm")
+		(import "boru:vm")
 		{ scopes: { fileops: { words: { default: "allow" } } } }
-		"import \"aql:io\" IO.read (make Pathon '/secret/credentials.txt')"
+		"import \"boru:io\" IO.read (make Pathon '/secret/credentials.txt')"
 		Vm.run-with
 	`)
 	if err == nil {
@@ -175,9 +175,9 @@ func TestVMAttenuationParentDenyRuleSurvives(t *testing.T) {
 }
 
 func TestVMRunIsolatedFromParent(t *testing.T) {
-	a := newAQL(t, nil)
+	a := newBoru(t, nil)
 	// def x in vm sub-engine should not leak into parent.
-	_, err := a.Run(`(import "aql:vm") "def vm-only 42" Vm.run-sandbox`)
+	_, err := a.Run(`(import "boru:vm") "def vm-only 42" Vm.run-sandbox`)
 	if err != nil {
 		t.Fatalf("Vm.run-sandbox def: %s", err)
 	}
@@ -191,90 +191,90 @@ func TestVMRunIsolatedFromParent(t *testing.T) {
 // ---- Vm.check ---------------------------------------------------------
 
 func TestVMCheckCleanSource(t *testing.T) {
-	a := newAQL(t, nil)
-	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add 2").ok`, "true")
-	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add 2").errors`, int64(0))
-	mustScalar(t, a, `(import "aql:vm") size (Vm.check "1 add 2").diagnostics`, int64(0))
+	a := newBoru(t, nil)
+	mustScalar(t, a, `(import "boru:vm") (Vm.check "1 add 2").ok`, "true")
+	mustScalar(t, a, `(import "boru:vm") (Vm.check "1 add 2").errors`, int64(0))
+	mustScalar(t, a, `(import "boru:vm") size (Vm.check "1 add 2").diagnostics`, int64(0))
 }
 
 func TestVMCheckReportsUndefinedWord(t *testing.T) {
-	a := newAQL(t, nil)
+	a := newBoru(t, nil)
 	// Positive: the report flags the error and counts it.
-	mustScalar(t, a, `(import "aql:vm") (Vm.check "totally-undefined-word").ok`, "false")
-	mustScalar(t, a, `(import "aql:vm") (Vm.check "totally-undefined-word").errors`, int64(1))
+	mustScalar(t, a, `(import "boru:vm") (Vm.check "totally-undefined-word").ok`, "false")
+	mustScalar(t, a, `(import "boru:vm") (Vm.check "totally-undefined-word").errors`, int64(1))
 	// The diagnostic carries a stable code and severity.
-	mustScalar(t, a, `(import "aql:vm") ((Vm.check "totally-undefined-word").diagnostics.0).code`, "undefined_word")
-	mustScalar(t, a, `(import "aql:vm") ((Vm.check "totally-undefined-word").diagnostics.0).severity`, "error")
+	mustScalar(t, a, `(import "boru:vm") ((Vm.check "totally-undefined-word").diagnostics.0).code`, "undefined_word")
+	mustScalar(t, a, `(import "boru:vm") ((Vm.check "totally-undefined-word").diagnostics.0).severity`, "error")
 }
 
 func TestVMCheckSeparatesWarningsFromErrors(t *testing.T) {
-	a := newAQL(t, nil)
+	a := newBoru(t, nil)
 	// A non-fatal finding is a warning, not an error: ok stays true.
-	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add 2  def unused 99").ok`, "true")
-	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add 2  def unused 99").warnings`, int64(1))
-	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add 2  def unused 99").errors`, int64(0))
+	mustScalar(t, a, `(import "boru:vm") (Vm.check "1 add 2  def unused 99").ok`, "true")
+	mustScalar(t, a, `(import "boru:vm") (Vm.check "1 add 2  def unused 99").warnings`, int64(1))
+	mustScalar(t, a, `(import "boru:vm") (Vm.check "1 add 2  def unused 99").errors`, int64(0))
 }
 
 // Negative contract: a SYNTAX error is reported as data, never raised — the
 // whole point of a check word is that the caller inspects findings uniformly.
 func TestVMCheckSyntaxErrorIsDataNotRaised(t *testing.T) {
-	a := newAQL(t, nil)
-	out, err := a.Run(`(import "aql:vm") Vm.check "1 add ((("`)
+	a := newBoru(t, nil)
+	out, err := a.Run(`(import "boru:vm") Vm.check "1 add ((("`)
 	if err != nil {
 		t.Fatalf("Vm.check must not raise on malformed source, got: %v", err)
 	}
 	if len(out) == 0 {
 		t.Fatal("expected a result map")
 	}
-	mustScalar(t, a, `(import "aql:vm") (Vm.check "1 add (((").ok`, "false")
-	mustScalar(t, a, `(import "aql:vm") ((Vm.check "1 add (((").diagnostics.0).code`, "parse_error")
+	mustScalar(t, a, `(import "boru:vm") (Vm.check "1 add (((").ok`, "false")
+	mustScalar(t, a, `(import "boru:vm") ((Vm.check "1 add (((").diagnostics.0).code`, "parse_error")
 }
 
 // ---- Vm.compile -------------------------------------------------------
 
 func TestVMCompileCompilable(t *testing.T) {
-	a := newAQL(t, nil)
-	mustScalar(t, a, `(import "aql:vm") (Vm.compile "1 add 2").ok`, "true")
-	mustScalar(t, a, `(import "aql:vm") (Vm.compile "1 add 2").reason`, "")
+	a := newBoru(t, nil)
+	mustScalar(t, a, `(import "boru:vm") (Vm.compile "1 add 2").ok`, "true")
+	mustScalar(t, a, `(import "boru:vm") (Vm.compile "1 add 2").reason`, "")
 	// The dispatch-site census is reported for a compiled program.
-	mustScalar(t, a, `(import "aql:vm") ((Vm.compile "1 add 2").sites).mono`, int64(1))
+	mustScalar(t, a, `(import "boru:vm") ((Vm.compile "1 add 2").sites).mono`, int64(1))
 }
 
 // Negative contract: an UNCOMPILABLE program is refusal-as-data — ok:false
 // with the first offender named, and no Go error raised.
 func TestVMCompileRefusesAsData(t *testing.T) {
-	a := newAQL(t, nil)
-	out, err := a.Run(`(import "aql:vm") Vm.compile "(size (for 5 [i]))"`)
+	a := newBoru(t, nil)
+	out, err := a.Run(`(import "boru:vm") Vm.compile "(size (for 5 [i]))"`)
 	if err != nil {
 		t.Fatalf("Vm.compile must not raise on an uncompilable program, got: %v", err)
 	}
 	if len(out) == 0 {
 		t.Fatal("expected a result map")
 	}
-	mustScalar(t, a, `(import "aql:vm") (Vm.compile "(size (for 5 [i]))").ok`, "false")
+	mustScalar(t, a, `(import "boru:vm") (Vm.compile "(size (for 5 [i]))").ok`, "false")
 	// reason is non-empty: it names why the program could not be lowered.
-	reasonLen := runScalar(t, a, `(import "aql:vm") size (Vm.compile "(size (for 5 [i]))").reason`)
+	reasonLen := runScalar(t, a, `(import "boru:vm") size (Vm.compile "(size (for 5 [i]))").reason`)
 	if n, _ := reasonLen.(int64); n == 0 {
 		t.Error("expected a non-empty refusal reason")
 	}
 }
 
 func TestVMCompileSyntaxErrorIsDataNotRaised(t *testing.T) {
-	a := newAQL(t, nil)
-	out, err := a.Run(`(import "aql:vm") Vm.compile "1 add ((("`)
+	a := newBoru(t, nil)
+	out, err := a.Run(`(import "boru:vm") Vm.compile "1 add ((("`)
 	if err != nil {
 		t.Fatalf("Vm.compile must not raise on malformed source, got: %v", err)
 	}
 	if len(out) == 0 {
 		t.Fatal("expected a result map")
 	}
-	mustScalar(t, a, `(import "aql:vm") (Vm.compile "1 add (((").ok`, "false")
-	mustScalar(t, a, `(import "aql:vm") (Vm.compile "1 add (((").reason`, "parse error")
+	mustScalar(t, a, `(import "boru:vm") (Vm.compile "1 add (((").ok`, "false")
+	mustScalar(t, a, `(import "boru:vm") (Vm.compile "1 add (((").reason`, "parse error")
 }
 
 // ---- helpers ----------------------------------------------------------
 
-func runScalar(t *testing.T, a *lang.AQL, src string) any {
+func runScalar(t *testing.T, a *lang.Boru, src string) any {
 	t.Helper()
 	out, err := a.Run(src)
 	if err != nil {
@@ -286,7 +286,7 @@ func runScalar(t *testing.T, a *lang.AQL, src string) any {
 	return out[0]
 }
 
-func mustScalar(t *testing.T, a *lang.AQL, src string, want any) {
+func mustScalar(t *testing.T, a *lang.Boru, src string, want any) {
 	t.Helper()
 	if got := runScalar(t, a, src); got != want {
 		t.Errorf("run %q: got %v (%T), want %v (%T)", src, got, got, want, want)
@@ -301,8 +301,8 @@ func TestVMRunWithoutCompiledSeamKeepsTreeWalker(t *testing.T) {
 	modules.CompiledSubRun = nil
 	defer func() { modules.CompiledSubRun = saved }()
 
-	a := newAQL(t, nil)
-	out, err := a.Run(`(import "aql:vm") "1 add 2" Vm.run`)
+	a := newBoru(t, nil)
+	out, err := a.Run(`(import "boru:vm") "1 add 2" Vm.run`)
 	if err != nil {
 		t.Fatalf("Vm.run without the seam: %s", err)
 	}

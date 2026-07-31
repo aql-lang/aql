@@ -1,6 +1,6 @@
-// Package install implements `aql install <name>-x.y.z [-r <url>]`
+// Package install implements `boru install <name>-x.y.z [-r <url>]`
 // — download a published module zip from the registry, extract it
-// into .aql/<name>/, update aql.jsonic deps, and re-prep.
+// into .boru/<name>/, update boru.jsonic deps, and re-prep.
 package install
 
 import (
@@ -16,8 +16,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/prep"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/prep"
 )
 
 // moduleIDPattern matches <name>-<major>.<minor>.<patch>.
@@ -42,7 +42,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdout, stderr)
 }
 
-// Run handles `aql install <name>-x.y.z [-r <url>]`.
+// Run handles `boru install <name>-x.y.z [-r <url>]`.
 func Run(args []string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("install", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -54,7 +54,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql install <name>-x.y.z [-r <url>]\n")
+		fmt.Fprintf(stderr, "error: usage: boru install <name>-x.y.z [-r <url>]\n")
 		return 1
 	}
 
@@ -67,9 +67,9 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	name := matches[1]
 	version := matches[2]
 
-	aqlJSON := filepath.Join(".aql", "aql.json")
-	if _, err := os.Stat(aqlJSON); err != nil {
-		fmt.Fprintf(stderr, "error: not a valid module folder (missing .aql/aql.json)\n")
+	boruJSON := filepath.Join(".boru", "boru.json")
+	if _, err := os.Stat(boruJSON); err != nil {
+		fmt.Fprintf(stderr, "error: not a valid module folder (missing .boru/boru.json)\n")
 		return 1
 	}
 
@@ -100,7 +100,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	destDir := filepath.Join(".aql", name)
+	destDir := filepath.Join(".boru", name)
 	if err := os.MkdirAll(destDir, 0755); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -156,7 +156,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	if err := updateDeps(name, version); err != nil {
-		fmt.Fprintf(stderr, "error: updating aql.jsonic: %s\n", err)
+		fmt.Fprintf(stderr, "error: updating boru.jsonic: %s\n", err)
 		return 1
 	}
 
@@ -165,13 +165,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 
-	fmt.Fprintf(stdout, "installed %s@%s -> .aql/%s/\n", name, version, name)
+	fmt.Fprintf(stdout, "installed %s@%s -> .boru/%s/\n", name, version, name)
 	return 0
 }
 
-// updateDeps reads aql.jsonic, adds/updates deps.<name>=<version>, writes back.
+// updateDeps reads boru.jsonic, adds/updates deps.<name>=<version>, writes back.
 func updateDeps(name, version string) error {
-	src := "aql.jsonic"
+	src := "boru.jsonic"
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return err

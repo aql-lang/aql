@@ -65,7 +65,7 @@ func TestReturnCountErrorDeclSpan(t *testing.T) {
 	rc := ReturnCheckInfo{
 		FuncName: "f",
 		Pos:      SrcPos{Row: 2, Col: 4},
-		Decl:     DeclSite{Pos: SrcPos{Row: 1, Col: 23}, Source: "src", File: "mod.aql"},
+		Decl:     DeclSite{Pos: SrcPos{Row: 1, Col: 23}, Source: "src", File: "mod.boru"},
 	}
 	ae := e.returnCountError(rc, 2, 1)
 	if len(ae.Spans) != 1 {
@@ -73,7 +73,7 @@ func TestReturnCountErrorDeclSpan(t *testing.T) {
 	}
 	sp := ae.Spans[0]
 	if !strings.Contains(sp.Label, "expects 2 return value(s)") ||
-		sp.Source != "src" || sp.File != "mod.aql" {
+		sp.Source != "src" || sp.File != "mod.boru" {
 		t.Errorf("decl span = %+v", sp)
 	}
 	// Zero declaration → no span.

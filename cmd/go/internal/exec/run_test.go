@@ -1,4 +1,4 @@
-// Tests for the `aql exec` subcommand plumbing (exec.go run/Run):
+// Tests for the `boru exec` subcommand plumbing (exec.go run/Run):
 // flag validation, policy resolution failures, listen failures, and
 // the SIGINT-driven graceful shutdown of a live server.
 

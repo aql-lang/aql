@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // Within-type scalar & Micron operations (native_scalar_ops.go). The
@@ -457,9 +457,9 @@ func TestQionOp(t *testing.T) {
 func TestPathonOp(t *testing.T) {
 	r := opsReg(t)
 	p := evalOneVal(t, r, `make Pathon "usr/local"`)
-	q := evalOneVal(t, r, `make Pathon "bin/aql"`)
+	q := evalOneVal(t, r, `make Pathon "bin/boru"`)
 	j, err := micronBinaryOp(r, "add", p, q)
-	if err != nil || j.String() != "usr/local/bin/aql" {
+	if err != nil || j.String() != "usr/local/bin/boru" {
 		t.Fatalf("pathon join = %q (err %v)", j.String(), err)
 	}
 	abs := evalOneVal(t, r, `make Pathon "/bin"`)
@@ -626,11 +626,11 @@ func TestHelperEdges(t *testing.T) {
 	if typeLeaf(Value{}) != "?" {
 		t.Errorf("typeLeaf nil parent")
 	}
-	if aqlErrorDetail(errors.New("plain")) != "plain" {
-		t.Errorf("aqlErrorDetail non-aql")
+	if boruErrorDetail(errors.New("plain")) != "plain" {
+		t.Errorf("boruErrorDetail non-boru")
 	}
-	if aqlErrorDetail(&AqlError{Detail: "d"}) != "d" {
-		t.Errorf("aqlErrorDetail aql")
+	if boruErrorDetail(&BoruError{Detail: "d"}) != "d" {
+		t.Errorf("boruErrorDetail boru")
 	}
 	if _, ok := towerOpsFor("add"); !ok {
 		t.Errorf("towerOpsFor add missing")

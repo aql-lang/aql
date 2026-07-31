@@ -4,11 +4,11 @@ import (
 	"math"
 	"math/big"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 	"github.com/cockroachdb/apd/v3"
 )
 
-// BuildMathModule creates the "aql:math-util" native module. It registers the
+// BuildMathModule creates the "boru:math-util" native module. It registers the
 // Go-implemented math words into an isolated sub-registry and returns a
 // ModuleDesc with a "math" export containing FnDef wrappers for each word.
 //
@@ -18,7 +18,7 @@ import (
 // built-in and do not require this module.
 func BuildMathModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Create an isolated sub-registry with the module's Go words.
-	subReg, err := newModuleRegistry("aql:math-util", MathNatives)
+	subReg, err := newModuleRegistry("boru:math-util", MathNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

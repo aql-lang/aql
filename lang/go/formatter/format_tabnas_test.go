@@ -8,8 +8,8 @@ import (
 )
 
 // TestTabnasParseMatchesHandLexer pins the Phase-4 tabnas front end: for every
-// construct AQL has, FormatWith(src, TabnasParse) must produce byte-identical
-// output to FormatWith(src, HandParse). TabnasParse drives the AQL-configured
+// construct boru has, FormatWith(src, TabnasParse) must produce byte-identical
+// output to FormatWith(src, HandParse). TabnasParse drives the boru-configured
 // tabnas lexer (parser.LexTokens) and coalesces its FINE tokens back into the
 // COARSE words the node model wants; this table is the differential contract
 // that the two front ends agree. Cases are chosen to exercise every branch of
@@ -70,7 +70,7 @@ func TestTabnasParseMatchesHandLexer(t *testing.T) {
 		// the flat lexer starts a string at the inner quote that runs to a quote
 		// inside a LATER literal, swallowing that literal's opening backtick. The
 		// gap recovery must re-scan the split literal whole, not leave it
-		// unterminated (sift.aql's char-quote check; regression for PR #298).
+		// unterminated (sift.boru's char-quote check; regression for PR #298).
 		"a eq `\"`",
 		"(a eq `\"`) or (b eq `\"`)",
 		"if (((a eq `\"`) and (b eq `\"`)) or ((a eq `'`) and (b eq `'`))) [x] [y]",
@@ -108,7 +108,7 @@ func TestTabnasParseMatchesHandLexer(t *testing.T) {
 func TestTabnasParseAbsolute(t *testing.T) {
 	cases := []struct{ src, want string }{
 		// blank line between the header comment and the imports survives.
-		{"# hdr\n\nimport \"aql:net\"\n", "# hdr\n\nimport \"aql:net\"\n"},
+		{"# hdr\n\nimport \"boru:net\"\n", "# hdr\n\nimport \"boru:net\"\n"},
 		// a URL with `://` inside a backtick is emitted verbatim, and the
 		// closing paren is not lost.
 		{"def u ( `http://h/x` )\n", "def u (`http://h/x`)\n"},
@@ -128,7 +128,7 @@ func TestTabnasParseAbsolute(t *testing.T) {
 	}
 }
 
-// TestTabnasParseCorpus is the whole-repo differential: every checked-in .aql
+// TestTabnasParseCorpus is the whole-repo differential: every checked-in .boru
 // file must format identically through both front ends. It is skipped when the
 // corpus is not reachable from the test's working directory (e.g. an isolated
 // package checkout) so it never fails spuriously.
@@ -141,13 +141,13 @@ func TestTabnasParseCorpus(t *testing.T) {
 	}
 	var files []string
 	_ = filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() && strings.HasSuffix(p, ".aql") {
+		if err == nil && !info.IsDir() && strings.HasSuffix(p, ".boru") {
 			files = append(files, p)
 		}
 		return nil
 	})
 	if len(files) == 0 {
-		t.Skip("no .aql corpus found")
+		t.Skip("no .boru corpus found")
 	}
 	checked := 0
 	for _, f := range files {
@@ -161,5 +161,5 @@ func TestTabnasParseCorpus(t *testing.T) {
 		}
 		checked++
 	}
-	t.Logf("tabnas/hand differential clean across %d .aql files", checked)
+	t.Logf("tabnas/hand differential clean across %d .boru files", checked)
 }

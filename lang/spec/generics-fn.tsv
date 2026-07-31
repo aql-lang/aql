@@ -1,4 +1,4 @@
-# AQL Language Specification: generic functions — gen [...] fn [...]
+# boru Language Specification: generic functions — gen [...] fn [...]
 # Format: input<TAB>expected<TAB>description
 #
 # `def idg gen [T] fn [[x:T] [T] [x]]` declares a generic FUNCTION:

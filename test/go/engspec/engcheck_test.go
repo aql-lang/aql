@@ -18,9 +18,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/test/go/specrunner"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/test/go/specrunner"
 )
 
 // renderCheck renders a check result — the residual carrier stack plus
@@ -64,7 +64,7 @@ func renderCheck(stack []eng.Value, diags []eng.CheckDiagnostic) string {
 
 // runCheckRow parses input, runs it through the engine in check mode
 // against the kernel fixtures, and returns the rendered check result.
-// Mirrors lang/go/aql.go::Check end-to-end (Begin → Run → rescue forward
+// Mirrors lang/go/boru.go::Check end-to-end (Begin → Run → rescue forward
 // refs → emit unused-def warnings) at the engine-kernel level.
 func runCheckRow(input string) (string, error) {
 	values, err := parser.Parse(input)
@@ -119,13 +119,13 @@ func TestCheckSpec(t *testing.T) {
 }
 
 // TestCheckDump prints `input<TAB>rendered` for each candidate input read
-// from AQL_CHECK_DUMP (newline-separated). Used to author the corpus —
+// from BORU_CHECK_DUMP (newline-separated). Used to author the corpus —
 // the rendered output becomes the expected column. Skipped unless the
 // env var is set.
 func TestCheckDump(t *testing.T) {
-	raw := os.Getenv("AQL_CHECK_DUMP")
+	raw := os.Getenv("BORU_CHECK_DUMP")
 	if raw == "" {
-		t.Skip("set AQL_CHECK_DUMP to a newline-separated input list to dump rendered check results")
+		t.Skip("set BORU_CHECK_DUMP to a newline-separated input list to dump rendered check results")
 	}
 	for _, line := range strings.Split(raw, "\n") {
 		input := strings.TrimSpace(line)

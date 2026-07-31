@@ -1,0 +1,345 @@
+# resolve.boru — identity resolution.
+#
+# Policy (kg/README.md §resolution): names alone NEVER merge entities.
+#   - matching stable external identifier (same scheme, same value, no
+#     conflicting scheme)              -> same_entity 0.98, auto-merge
+#   - same type + normalized label + >=2 corroborating attributes and
+#     no attribute conflict            -> same_entity 0.95, auto-merge
+#   - explicit same_as assertion       -> same_entity at the assertion's
+#     confidence, but auto-merge ONLY when one of the two evidence bars
+#     above is also met; otherwise review_required
+#   - same type + normalized label only -> possible_match 0.60, review
+#   - shared scheme with conflicting values -> different_entity (or
+#     insufficient_evidence when other schemes simultaneously match)
+# possible_match / insufficient_evidence never merge. Merges are applied
+# with entities.boru merge-pair (non-destructive, reversible); the winner
+# is the lexicographically smaller entity id, so re-runs are stable.
+# Assertions keep their original subject/object ids — queries follow
+# attributes.merged_into to the canonical entity.
+#
+# Pair generation is the bounded O(n^2) sweep over non-merged entities;
+# candidate pairs with different types and no shared identifier are
+# skipped silently to keep the decision table meaningful.
+
+import "boru:struct-util"
+import "./util.boru"
+import "./schema.boru"
+import "./identifiers.boru"
+import "./entities.boru"
+
+# {matching conflicting} scheme-name lists for two entities.
+def shared-schemes fn [[a:Map b:Map] [Map] [
+  def common
+    (filter [var [[k] not ((b.external_ids get k) is None)]]
+        (keys a.external_ids)
+    )
+    KgUtil.as-map
+    {matching:(filter
+          [var [[k] (a.external_ids get k) eq (b.external_ids get k)]]
+          common
+      )
+      conflicting:(filter
+          [var
+              [[k] not
+                  ((a.external_ids get k) eq (b.external_ids get k))
+              ]
+          ]
+          common
+      )
+    }
+]]
+
+# {matching conflicting} attribute-key lists (deep-equal on values, so
+# list/map attribute values corroborate too).
+def shared-attributes fn [[a:Map b:Map] [Map] [
+  def common
+    (filter [var [[k] not ((b.attributes get k) is None)]]
+        (keys a.attributes)
+    )
+    KgUtil.as-map
+    {matching:(filter
+          [var [[k] (a.attributes get k) deq (b.attributes get k)]]
+          common
+      )
+      conflicting:(filter
+          [var
+              [[k] not ((a.attributes get k) deq (b.attributes get k))]
+          ]
+          common
+      )
+    }
+]]
+
+def id-evidence fn [[a:Map schemes:List] [List] [
+  each
+    [var
+        [[k] KgUtil.as-map
+            {kind:"external_id" scheme:k value:(a.external_ids get k)}
+        ]
+    ]
+    schemes
+]]
+
+def attr-evidence fn [[a:Map ks:List] [List] [
+  each
+    [var
+        [[k] KgUtil.as-map
+            {kind:"attribute" key:k value:(a.attributes get k)}
+        ]
+    ]
+    ks
+]]
+
+# Decide one pair. same-as-conf is the confidence of an explicit
+# same_as assertion linking the pair, or none. Returns a decision map
+# {decision confidence review_required merge supporting conflicting}
+# or none when the pair warrants no decision row at all.
+def decide-pair fn [[a:Map b:Map same-as-conf:Any] [Any] [
+  def ids (shared-schemes a b)
+  def id-match (KgUtil.list-at ids "matching")
+  def id-conflict (KgUtil.list-at ids "conflicting")
+  def attrs (shared-attributes a b)
+  def attr-match (KgUtil.list-at attrs "matching")
+  def attr-conflict (KgUtil.list-at attrs "conflicting")
+  def same-name
+    ((a.normalized_label eq b.normalized_label) and (a.type eq b.type))
+  def has-same-as (not (same-as-conf is None))
+  if ((id-conflict size) gt 0)
+    [if ((id-match size) gt 0)
+        [KgUtil.as-map
+            {decision:"insufficient_evidence"
+              confidence:0.5
+              review_required:true
+              merge:false
+              supporting:(id-evidence a id-match)
+              conflicting:(flatten
+                  [(id-evidence a id-conflict)
+                      (id-evidence b id-conflict)
+                  ]
+              )
+            }
+        ]
+        [KgUtil.as-map
+            {decision:"different_entity"
+              confidence:0.9
+              review_required:same-name
+              merge:false
+              supporting:[]
+              conflicting:(flatten
+                  [(id-evidence a id-conflict)
+                      (id-evidence b id-conflict)
+                  ]
+              )
+            }
+        ]
+    ]
+    [if ((id-match size) gt 0)
+        [KgUtil.as-map
+            {decision:"same_entity"
+              confidence:0.98
+              review_required:false
+              merge:true
+              supporting:(id-evidence a id-match)
+              conflicting:[]
+            }
+        ]
+        [if
+            ((same-name and ((attr-match size) gte 2)) and
+                ((attr-conflict size) eq 0)
+            )
+            [KgUtil.as-map
+                {decision:"same_entity"
+                  confidence:0.95
+                  review_required:false
+                  merge:true
+                  supporting:(attr-evidence a attr-match)
+                  conflicting:[]
+                }
+            ]
+            [if has-same-as
+                [KgUtil.as-map
+                    {decision:"same_entity"
+                      confidence:same-as-conf
+                      review_required:true
+                      merge:false
+                      supporting:[(KgUtil.as-map
+                              {kind:"same_as"
+                                note:"explicit same_as assertion; corroborating identifier or attributes missing"
+                              }
+                          )
+                      ]
+                      conflicting:(attr-evidence a attr-conflict)
+                    }
+                ]
+                [if same-name
+                    [KgUtil.as-map
+                        {decision:"possible_match"
+                          confidence:0.6
+                          review_required:true
+                          merge:false
+                          supporting:[(KgUtil.as-map
+                                  {kind:"label"
+                                    value:a.normalized_label
+                                  }
+                              )
+                          ]
+                          conflicting:(attr-evidence a attr-conflict)
+                        }
+                    ]
+                    [none]
+                ]
+            ]
+        ]
+    ]
+]]
+
+# Explicit same_as links: "<lo>|<hi>" -> confidence.
+def same-as-links fn assertions:List Map [
+  fold
+    [var
+        [[a acc]
+          if
+            ((a.predicate eq "same_as") and
+                (KgSchema.is-entity-ref a.object)
+            )
+            [def lo
+                (if (a.subject_id lt a.object.entity_id)
+                    [a.subject_id] [a.object.entity_id]
+                )
+              def hi
+                (if (a.subject_id lt a.object.entity_id)
+                    [a.object.entity_id] [a.subject_id]
+                )
+                acc set (`${lo}|${hi}`) a.confidence
+            ]
+            [acc]
+        ]
+    ]
+    assertions {}
+]
+
+# Resolve identities over the whole entity list.
+# Returns {entities decisions}: decisions are KgIdentity records, and
+# entities has every automatic merge applied non-destructively.
+def resolve-entities fn [[entities:List assertions:List] [Map] [
+  def links (same-as-links assertions)
+  def active
+    (filter
+        [var
+            [[e] (e.status eq "accepted") or (e.status eq "candidate")]
+        ]
+        entities
+    )
+  def n (active size)
+  def raw-decisions
+    (flatten
+        (each
+            [var
+                [[i]
+                  def a (active get i) fold
+                    [var
+                        [[j acc]
+                          def b (active get j)
+                          def lo (if (a.id lt b.id) [a.id] [b.id])
+                          def hi (if (a.id lt b.id) [b.id] [a.id])
+                          def verdict
+                            (if (a.id eq b.id) [none]
+                                [decide-pair a b
+                                    (links get `${lo}|${hi}`)
+                                ]
+                            )
+                          if (verdict is None) [acc]
+                            [push
+                                (KgSchema.mk-identity
+                                    {id:(KgId.identity-id lo hi)
+                                      left_entity_id:lo
+                                      right_entity_id:hi
+                                      decision:(KgUtil.get-or verdict
+                                          "decision"
+                                          "insufficient_evidence"
+                                      )
+                                      supporting_evidence:(KgUtil.list-at verdict
+                                          "supporting"
+                                      )
+                                      conflicting_evidence:(KgUtil.list-at verdict
+                                          "conflicting"
+                                      )
+                                      confidence:(KgUtil.get-or verdict
+                                          "confidence" 0.0
+                                      )
+                                      review_required:(KgUtil.get-or verdict
+                                          "review_required" true
+                                      )
+                                    }
+                                )
+                                (push
+                                    {merge:(KgUtil.get-or verdict "merge"
+                                          false
+                                      )
+                                      lo:lo
+                                      hi:hi
+                                    }
+                                    acc
+                                )
+                            ]
+                        ]
+                    ]
+                    (range (i add 1) n) []
+                ]
+            ]
+            (iota n)
+        )
+    )
+  def decisions (filter [var [[d] not (d has merge)]] raw-decisions)
+  def merge-plans (filter [var [[d] d has merge]] raw-decisions)
+  def to-merge (filter [var [[p] p get "merge"]] merge-plans)
+    # Each plan's endpoints are resolved through the CURRENT canonical
+  # representative first, so a chain (A=B by one identifier, B=C by
+  # another) merges transitively: after B folds into A, the B-C plan
+  # becomes an A-C merge instead of being skipped.
+  def merged-map
+    (fold
+        [var
+            [[p emap]
+              def ca (KgEnt.canonical-id emap (p get "lo"))
+              def cb (KgEnt.canonical-id emap (p get "hi"))
+              def wid (if (ca lt cb) [ca] [cb])
+              def lid (if (ca lt cb) [cb] [ca])
+              def w (emap get wid)
+              def l (emap get lid)
+              def mergeable
+                (if (((wid eq lid) or (w is None)) or (l is None))
+                    [false]
+                    [(((w.status eq "accepted") or
+                                (w.status eq "candidate")
+                            )
+                            and
+                            ((l.status eq "accepted") or
+                                (l.status eq "candidate")
+                            )
+                        )
+                    ]
+                )
+              if mergeable
+                [def pair (KgEnt.merge-pair w l)
+                    (emap set (pair.winner.id) pair.winner) set
+                    (pair.loser.id) pair.loser
+                ]
+                [emap]
+            ]
+        ]
+        to-merge (KgEnt.index-by-id entities)
+    )
+    KgUtil.as-map
+    {entities:(each [var [[id] merged-map get id]] (sort (keys merged-map)))
+      decisions:decisions
+    }
+]]
+
+export "KgResolve" {
+  shared-schemes:shared-schemes/r
+  shared-attributes:shared-attributes/r
+  decide-pair:decide-pair/r
+  same-as-links:same-as-links/r
+  resolve-entities:resolve-entities/r
+}

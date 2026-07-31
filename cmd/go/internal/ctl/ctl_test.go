@@ -101,7 +101,7 @@ func TestRunNoArgsPrintsUsage(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit = %d, want 1", code)
 	}
-	if !strings.Contains(errOut, "Usage: aql ctl") {
+	if !strings.Contains(errOut, "Usage: boru ctl") {
 		t.Errorf("stderr should show usage; got %q", errOut)
 	}
 }
@@ -350,7 +350,7 @@ func writeDiscoveryFile(t *testing.T, url, token string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "aql-api.json"), body, 0o600); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "boru-api.json"), body, 0o600); err != nil {
 		t.Fatal(err)
 	}
 }

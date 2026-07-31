@@ -42,8 +42,8 @@ func init() {
 	})
 }
 
-// aqlTypeToSQLType maps an AQL field type to a SQLite column type.
-func aqlTypeToSQLType(t *Type) string {
+// boruTypeToSQLType maps a boru field type to a SQLite column type.
+func boruTypeToSQLType(t *Type) string {
 	switch {
 	case t.ConformsTo(TInteger):
 		return "INTEGER"
@@ -106,7 +106,7 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 	for i, col := range columns {
 		fieldVal, _ := td.Record.Fields.Get(col)
 		colTypes[i] = fieldVal.Parent
-		colDefs[i] = quoteIdent(col) + " " + aqlTypeToSQLType(fieldVal.Parent)
+		colDefs[i] = quoteIdent(col) + " " + boruTypeToSQLType(fieldVal.Parent)
 	}
 	createSQL := fmt.Sprintf("CREATE TABLE %s (%s)", quoteIdent(name), strings.Join(colDefs, ", "))
 	if _, err := s.db.Exec(createSQL); err != nil {
@@ -146,7 +146,7 @@ func (s *SQLiteStore) StoreTable(name string, td TableData) error {
 				if !exists {
 					vals[i] = nil
 				} else {
-					vals[i] = aqlValueToSQLParam(v, colTypes[i])
+					vals[i] = boruValueToSQLParam(v, colTypes[i])
 				}
 			}
 			if _, err := stmt.Exec(vals...); err != nil {
@@ -175,7 +175,7 @@ func (s *SQLiteStore) StoreTempTable(td TableData) (string, error) {
 
 // Query executes a SELECT query and returns results as TableData.
 // The optional schema provides type hints for reading values back with
-// proper AQL types. If nil, the result schema is inferred from SQLite
+// proper boru types. If nil, the result schema is inferred from SQLite
 // column types reported by the driver.
 func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData, error) {
 	s.mu.Lock()
@@ -224,7 +224,7 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 		om := NewOrderedMap()
 		for i, col := range cols {
 			raw := *(scanDest[i].(*interface{}))
-			om.Set(col, sqlResultToAQLValue(raw, colTypes[i]))
+			om.Set(col, sqlResultToBoruValue(raw, colTypes[i]))
 		}
 		resultRows = append(resultRows, NewMap(om))
 	}
@@ -235,9 +235,9 @@ func (s *SQLiteStore) Query(querySQL string, schema *RecordTypeInfo) (TableData,
 	return TableData{Record: record, Rows: resultRows}, nil
 }
 
-// aqlValueToSQLParam converts an AQL Value to a Go value suitable for
+// boruValueToSQLParam converts a boru Value to a Go value suitable for
 // a SQL parameter placeholder, respecting the target column type.
-func aqlValueToSQLParam(v Value, colType *Type) interface{} {
+func boruValueToSQLParam(v Value, colType *Type) interface{} {
 	if v.Parent.Equal(TNone) {
 		return nil
 	}
@@ -312,9 +312,9 @@ func aqlValueToSQLParam(v Value, colType *Type) interface{} {
 	}
 }
 
-// sqlResultToAQLValue converts a raw SQLite result value to the appropriate
-// AQL Value based on the expected column type.
-func sqlResultToAQLValue(raw interface{}, colType *Type) Value {
+// sqlResultToBoruValue converts a raw SQLite result value to the appropriate
+// boru Value based on the expected column type.
+func sqlResultToBoruValue(raw interface{}, colType *Type) Value {
 	if raw == nil {
 		return NewValueRaw(TNone, nil)
 	}

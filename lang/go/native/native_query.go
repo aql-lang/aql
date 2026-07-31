@@ -6,7 +6,7 @@ import (
 )
 
 // QueryNatives is the set of SQL-style query DSL words surfaced through
-// the aql:query module (see lang/go/modules/query.go). The words form a
+// the boru:query module (see lang/go/modules/query.go). The words form a
 // left-to-right pipeline in natural SQL order: the entry word `select`
 // seeds a lazy QueryBuilder with the projection columns, `from` sets the
 // source table, and each subsequent clause word takes the builder off
@@ -342,7 +342,7 @@ func queryDistinctHandler(args []Value, _ map[string]Value, _ []Value, r *Regist
 }
 
 // queryJoinNative builds a join word (join/innerjoin/leftjoin/crossjoin).
-// The handler captures the AQL word name (for errors) and the SQL join
+// The handler captures the boru word name (for errors) and the SQL join
 // type. args[0] is the joined table name (forward, quoted), args[1] is
 // the upstream builder (stack).
 func queryJoinNative(name, joinType string) NativeFunc {

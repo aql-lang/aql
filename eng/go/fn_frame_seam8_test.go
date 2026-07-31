@@ -64,7 +64,7 @@ func TestW8TcoEligibleNonDefCleanupTail(t *testing.T) {
 	r := w8reg(t)
 	e := New(r)
 	e.tape = NewTape([]Value{NewInteger(1)}, 4)
-	sig := &Signature{Impl: &AQLImpl{FnFrame: &FnFrameMeta{}}}
+	sig := &Signature{Impl: &BoruImpl{FnFrame: &FnFrameMeta{}}}
 	scan := frameTailScan{Meta: &FnFrameMeta{}, TailStart: 0, RCIdx: -1}
 	if e.tcoEligible(scan, sig, r.Defs.Mutations()) {
 		t.Fatal("a tail whose start is not a DefCleanup must decline")

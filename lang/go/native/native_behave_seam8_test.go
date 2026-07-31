@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // --- fake Behaviors used as the `prev` slot on a userBehavior ---

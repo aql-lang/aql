@@ -30,7 +30,7 @@ func TestReservedCoreWordsCannotBeRedefined(t *testing.T) {
 	for _, src := range reserved {
 		_, err := runNativeSteps(t, nil, []string{src})
 		if err == nil {
-			t.Errorf("%q: expected [aql/reserved_word], got no error", src)
+			t.Errorf("%q: expected [boru/reserved_word], got no error", src)
 			continue
 		}
 		if !strings.Contains(err.Error(), "reserved_word") {
@@ -45,7 +45,7 @@ func TestReservedCoreWordsCannotBeRedefined(t *testing.T) {
 	// for non-core locked-bearing words; eng pins it directly in
 	// TestMergeExtensionSigsLockedCollision).
 	if _, err := runNativeSteps(t, nil, []string{`def add fn [[x:Number y:Number] [Number] [x sub y]] 5 3 add`}); err == nil {
-		t.Errorf("locked-tuple merge: expected [aql/extend_owner], got no error")
+		t.Errorf("locked-tuple merge: expected [boru/extend_owner], got no error")
 	} else if !strings.Contains(err.Error(), "extend_owner") {
 		t.Errorf("locked-tuple merge: expected extend_owner error, got %v", err)
 	}

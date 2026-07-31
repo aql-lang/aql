@@ -8,7 +8,7 @@ import (
 
 // Coverage for native_service.go (ADR-008): the in-process service
 // words' guard branches, the serviceBehavior Format/Equal arms, the
-// remote-endpoint (aql:net) hooks, and the handler-chain error paths.
+// remote-endpoint (boru:net) hooks, and the handler-chain error paths.
 // Handlers are driven directly (crafted args, unexported access) with
 // positive twins alongside every negative, per lang/go/CLAUDE.md.
 
@@ -18,7 +18,7 @@ func svcCoverMap(k string, v Value) Value {
 	return NewMap(om)
 }
 
-// svcCoverFn builds a Function value by evaluating an AQL lambda.
+// svcCoverFn builds a Function value by evaluating a boru lambda.
 func svcCoverFn(t *testing.T, r *Registry, src string) Value {
 	t.Helper()
 	out, err := seam5Run(r, src)

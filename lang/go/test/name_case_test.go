@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // --- Naming rule: capitalisation selects type vs value binding ---
@@ -84,7 +84,7 @@ func TestNameCase_UndefUpperEmptiesType(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	if _, err := a.Run("def Foo Integer\nundef Foo\nFoo"); err == nil {
 		t.Fatal("expected error — Foo undefined after undef, got nil")
 	}

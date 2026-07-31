@@ -1,0 +1,67 @@
+# ============================================================================
+# false — do nothing, unsuccessfully.
+#
+#   false [ignored command line arguments]
+#   false OPTION
+#
+# Exit code: 1, always. Including for --help and --version, which print their
+# text and then exit 1 anyway — that is the coreutils contract (`false.c`
+# passes EXIT_FAILURE to its own usage()), and it is the single most
+# counter-intuitive exit code in the whole suite:
+#
+#   $ false --help; echo $?
+#   Usage: false [ignored command line arguments]
+#   …
+#   1
+#
+# It is the twin of true.boru, and deliberately NOT a copy: the shared fns take
+# the status as a parameter, so the only difference between the two programs
+# is the literal handed to Tf.main. If that number is the only difference, the
+# pair actually proves what it claims — that IO.exit carries the value it is
+# given, rather than the process's own idea of success.
+#
+# See true.boru for the full rationale, including why neither program goes
+# through Cli.dispatch.
+# ============================================================================
+
+import "boru:cli"
+import "boru:io"
+
+def spec {
+  name:    "false"
+  version: "0.1.0"
+  summary: "do nothing, unsuccessfully"
+  flags: []
+  args: {name:"ignored" min:0 help:"every argument is ignored"}
+}
+
+def fa-sole fn [[argv:List want:String] [Boolean] [
+  if ((size argv) neq 1) [false] [ ((convert String (argv get 0)) eq want) ]
+]]
+
+def fa-out fn [[argv:List] [String] [
+  if (fa-sole argv "--help") [(Cli.usage (spec))] [
+    if (fa-sole argv "--version") [(join "" [(spec.name) " " (spec.version) "\n"])] [""]
+  ]
+]]
+
+def fa-main fn [[argv:List status:Integer] [Integer] [
+  def text (fa-out argv)
+  def _p (if (text neq "") [(IO.write (IO.stdout) text)] [none])
+  status
+]]
+
+export "False" {
+  sole: fa-sole/r
+  out:  fa-out/r
+  main: fa-main/r
+  spec: spec
+}
+
+# The standalone guard — see cat.boru.
+def fa-standalone ((((IO.env-all) size) gt 0) or (((IO.args) size) gt 0))
+
+if fa-standalone [
+  def fa-rc (fa-main (IO.args) 1)
+  IO.exit fa-rc;
+] []

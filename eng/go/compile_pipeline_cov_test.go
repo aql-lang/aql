@@ -6,7 +6,7 @@ import (
 )
 
 // This file drives the full check→emit→lower→VM pipeline from inside the
-// kernel, mirroring lang's CompileCheck/RunCompiled flow (lang/go/aql.go)
+// kernel, mirroring lang's CompileCheck/RunCompiled flow (lang/go/boru.go)
 // but using only eng-registered native words and hand-built token streams.
 // Each program is executed twice — interpreted and compiled — and the
 // rendered results must agree (the bytecode plan's opt-in contract).
@@ -144,7 +144,7 @@ func covWords(r *Registry) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "n", Type: TInteger}},
 			Returns:    []*Type{TInteger},
-			Impl:       AQL([]Value{NewOpenParen(), NewWord("cadd"), NewWord("n"), NewWord("n"), NewCloseParen()}),
+			Impl:       Boru([]Value{NewOpenParen(), NewWord("cadd"), NewWord("n"), NewWord("n"), NewCloseParen()}),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -152,7 +152,7 @@ func covWords(r *Registry) {
 		Signatures: []Signature{{
 			Params:     []FnParam{{Name: "n", Type: TInteger}},
 			Returns:    []*Type{TInteger},
-			Impl:       AQL([]Value{NewOpenParen(), NewWord("ctwice"), NewOpenParen(), NewWord("ctwice"), NewWord("n"), NewCloseParen(), NewCloseParen()}),
+			Impl:       Boru([]Value{NewOpenParen(), NewWord("ctwice"), NewOpenParen(), NewWord("ctwice"), NewWord("n"), NewCloseParen(), NewCloseParen()}),
 			BarrierPos: BarrierAllForward,
 		}},
 	})
@@ -456,7 +456,7 @@ func TestCompiledTypeMismatchErrorParity(t *testing.T) {
 }
 
 // A handler whose Go error surfaces at runtime must fail identically in
-// both engines (genuine runtime AqlErrors are returned as-is, not
+// both engines (genuine runtime BoruErrors are returned as-is, not
 // silently fixed by the fallback path).
 func TestCompiledRuntimeErrorParity(t *testing.T) {
 	// cfail's returns depend on the value, so check mode cannot fold it:
@@ -469,7 +469,7 @@ func TestCompiledRuntimeErrorParity(t *testing.T) {
 				Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 					n, _ := AsInteger(args[0])
 					if n%2 != 0 {
-						return nil, MakeAqlError("type_error", "chalf of odd value", "chalf", "", "")
+						return nil, MakeBoruError("type_error", "chalf of odd value", "chalf", "", "")
 					}
 					return []Value{NewInteger(n / 2)}, nil
 				}),

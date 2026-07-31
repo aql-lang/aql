@@ -1,0 +1,80 @@
+# ============================================================================
+# true — do nothing, successfully.
+#
+#   true [ignored command line arguments]
+#   true OPTION
+#
+# Exit code: 0, always.
+#
+# WHY THIS PROGRAM EXISTS. It is the smallest possible witness for IO.exit:
+# nothing else happens, so a wrong exit code cannot be blamed on anything but
+# the exit itself. Its twin, false.boru, is the same program with the status
+# flipped — and the two together are the only place in the suite where the
+# exit code is the ENTIRE observable behaviour of the program.
+#
+# THE CONTRACT IS NOT "PARSE THE ARGUMENTS". `true` and `false` deliberately
+# do NOT go through Cli.dispatch, because their contract is the opposite of
+# what dispatch provides: every argument is ignored, including an unknown
+# flag, so there is no such thing as a usage error and the exit code is a
+# constant. `true -x` is 0, not 2.
+#
+# --help and --version are recognised ONLY as the sole argument, which is the
+# coreutils rule (`if (argc == 2)` in true.c) and the reason `true --help x`
+# ignores both arguments rather than printing anything. The help text still
+# comes from boru:cli's renderer, so these two programs stay consistent with
+# their siblings' --help without adopting dispatch's exit codes.
+#
+# The status is a PARAMETER of the shared helpers, so false.boru is a genuine
+# twin rather than a copy: the same three fns, called with 1 instead of 0.
+# ============================================================================
+
+import "boru:cli"
+import "boru:io"
+
+def spec {
+  name:    "true"
+  version: "0.1.0"
+  summary: "do nothing, successfully"
+  flags: []
+  args: {name:"ignored" min:0 help:"every argument is ignored"}
+}
+
+# --help / --version are the sole argument, or they are ordinary ignored text.
+def tr-sole fn [[argv:List want:String] [Boolean] [
+  if ((size argv) neq 1) [false] [ ((convert String (argv get 0)) eq want) ]
+]]
+
+# What to print, if anything. Never a raise, never an exit — the caller owns
+# both, which is what lets the suite assert on this fn directly.
+def tr-out fn [[argv:List] [String] [
+  if (tr-sole argv "--help") [(Cli.usage (spec))] [
+    if (tr-sole argv "--version") [(join "" [(spec.name) " " (spec.version) "\n"])] [""]
+  ]
+]]
+
+# The whole program, minus the exit. `status` is the constant this program is
+# named after: 0 here, 1 in false.boru. Note it is returned even for --help —
+# `false --help` prints the help and STILL exits 1, which is what coreutils
+# does and is easy to get wrong.
+def tr-main fn [[argv:List status:Integer] [Integer] [
+  def text (tr-out argv)
+  def _p (if (text neq "") [(IO.write (IO.stdout) text)] [none])
+  status
+]]
+
+export "True" {
+  sole: tr-sole/r
+  out:  tr-out/r
+  main: tr-main/r
+  spec: spec
+}
+
+# The standalone guard — see cat.boru. `true` with no arguments in an empty
+# environment is the one invocation the guard cannot see, and for this program
+# that corner is harmless: the module simply installs and exits 0 either way.
+def tr-standalone ((((IO.env-all) size) gt 0) or (((IO.args) size) gt 0))
+
+if tr-standalone [
+  def tr-rc (tr-main (IO.args) 0)
+  IO.exit tr-rc;
+] []

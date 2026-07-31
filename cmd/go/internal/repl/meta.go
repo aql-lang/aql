@@ -8,9 +8,9 @@ import (
 
 	jsonic "github.com/tabnas/jsonic/go"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // MetaContext provides context to meta command handlers.
@@ -92,7 +92,7 @@ func (mr *MetaRegistry) ParseAndRun(line string, ctx *MetaContext) (bool, error)
 
 	// Expose the raw argument text too, for handlers (like /describe) whose
 	// argument is a single token that must NOT go through jsonic — a module
-	// reference such as "aql:type-util:foo" would otherwise be misread as a map.
+	// reference such as "boru:type-util:foo" would otherwise be misread as a map.
 	ctx.RawArgs = argStr
 
 	return true, cmd.Handler(args, ctx)
@@ -171,14 +171,14 @@ func metaHelp(mr *MetaRegistry) MetaHandler {
 
 // metaDescribe implements /describe by delegating to the shared describe
 // implementation, so it renders identically to the `describe` word (and the
-// CLI `aql describe`): no argument prints the categorised guide; a name
+// CLI `boru describe`): no argument prints the categorised guide; a name
 // resolves to a word, category, module, or module word. It accepts the colon
-// module forms directly (e.g. /describe aql:type-util:tpartial), since the
+// module forms directly (e.g. /describe boru:type-util:tpartial), since the
 // meta-command parser hands them through without the source-level quoting the
 // `describe` word needs.
 func metaDescribe(_ []any, ctx *MetaContext) error {
 	// Take the first raw token, not the jsonic-parsed args: a module reference
-	// like "aql:type-util:tpartial" must reach describe verbatim.
+	// like "boru:type-util:tpartial" must reach describe verbatim.
 	fields := strings.Fields(ctx.RawArgs)
 	if len(fields) == 0 {
 		native.DescribeIndex(ctx.Out)

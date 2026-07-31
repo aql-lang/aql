@@ -3,7 +3,7 @@
 package lsp
 
 import (
-	helppkg "github.com/aql-lang/aql/lang/go/native/help"
+	helppkg "github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // buildCompletionItems returns one CompletionItem per registered

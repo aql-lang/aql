@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:time-util", map[string]string{
+	registerDocs("boru:time-util", map[string]string{
 		// unix epoch <-> Instant
 		"unix":       "Unix seconds to an Instant.",
 		"unix-ms":    "Unix milliseconds to an Instant.",
@@ -116,9 +116,9 @@ func init() {
 	// Two things trip callers here and neither shows in a signature: the
 	// INSTANT vs DATE split (a point on the timeline vs a calendar day —
 	// most calendar words take a Date, so an Instant needs `to-date`
-	// first), and the AQL swap convention on the comparison words. Every
+	// first), and the boru swap convention on the comparison words. Every
 	// line below was run to get its result.
-	registerExamples("aql:time-util", map[string][]string{
+	registerExamples("boru:time-util", map[string][]string{
 		"now":       {`TimeUtil.now                                    ;# an Instant — a point on the timeline, always UTC`},
 		"today-utc": {`TimeUtil.today-utc                              ;# a Date — a calendar day, no time of day`},
 		"unix":      {`TimeUtil.unix 1700000000                        ;# 2023-11-14T22:13:20Z — seconds to an Instant`},

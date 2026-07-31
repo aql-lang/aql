@@ -69,7 +69,7 @@ The design uses three distinct channels, each matched to what it must carry:
 The pre-pass is NOT a new syntactic walker. A syntactic scan would have to
 re-implement descent into `each`/`var`/`if`/`fold` code-bodies (radix-msd's sets
 and gets ALL live inside `iota … each [var [[t] … counts set …]]`,
-`sort.aql:985-1011`), and `WalkBodyWords`/`collectBodyLocalDefs` (`fn_capture.go`)
+`sort.boru:985-1011`), and `WalkBodyWords`/`collectBodyLocalDefs` (`fn_capture.go`)
 deliberately do NOT descend into quoted code-bodies. Instead, reuse the normal
 analysis walk, which already enters those bodies to type them:
 
@@ -98,11 +98,11 @@ analysis walk, which already enters those bodies to type them:
   passed as a call arg, returned as the body residual, stored into a map/store,
   captured by a nested `fn` definition, or aliased (`def b a` — observable when
   `def`'s value is a tracked-array carrier). Conservative: any doubt ⇒ escaped.
-  (`convert List arr` at `sort.aql:1039` counts as an escape of a LOCAL — safe;
+  (`convert List arr` at `sort.boru:1039` counts as an escape of a LOCAL — safe;
   radix-msd's `arr` there is the untyped param, so moot.)
 - The **self-referential conformance** of the increment idiom (§5) resolves
   naturally here: the increment's set value `(counts get i) add 1`
-  (`sort.aql:988`) types `counts get i` against the join-SO-FAR, but the A2
+  (`sort.boru:988`) types `counts get i` against the join-SO-FAR, but the A2
   convergence re-runs until the join is stable, so the final fact is consistent
   with the assumption. The single-shot optimistic assumption of §5 is realised as
   the refinement fixpoint, bounded to ≤2 extra rounds by the existing quota.
@@ -189,7 +189,7 @@ throwaway probe (à la Stage 0) before committing representation:
 - **Spike A — identity round-trips through capture. DONE (2026-06-28): GREEN.**
   Instrumented `make Array` to mint a typed-array carrier
   (`Value{Parent:TArray, Carrier:true, Data:ChildTypeInfo{Child:NewCarrier(elem)}}`)
-  and `get` to log its receiver, then ran `aql check` on the radix-msd driver.
+  and `get` to log its receiver, then ran `boru check` on the radix-msd driver.
   RESULT: across **35 gets — including every `counts`/`cur`/`tmp` access inside
   the nested `each [var […]]` closures — the receiver arrived `carrier=true,
   dyn=false` with `ChildTypeInfo` INTACT every time** (0 stripped, 0 nil-data).

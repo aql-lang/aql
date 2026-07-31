@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // Coverage tests for native_misc.go: help/describe, referent, the inline
@@ -45,8 +45,8 @@ func TestMiscCovHelpOverview(t *testing.T) {
 	if err != nil {
 		t.Fatalf("help: %v", err)
 	}
-	if !strings.Contains(printed, "AQL") {
-		t.Errorf("help output should mention AQL, got %q", printed)
+	if !strings.Contains(printed, "boru") {
+		t.Errorf("help output should mention boru, got %q", printed)
 	}
 }
 
@@ -55,7 +55,7 @@ func TestMiscCovDescribeIndex(t *testing.T) {
 	if err != nil {
 		t.Fatalf("describe: %v", err)
 	}
-	if !strings.Contains(printed, "AQL language reference") {
+	if !strings.Contains(printed, "boru language reference") {
 		t.Errorf("describe index missing header, got %q", printed[:min(len(printed), 120)])
 	}
 }
@@ -307,9 +307,9 @@ func miscCovImportReg(t *testing.T) (*Registry, *capabilities.MemFileOps) {
 		t.Fatal(err)
 	}
 	mem := capabilities.NewMem()
-	mem.Files["mod.aql"] = []byte(`export "FM" {x: 7}`)
+	mem.Files["mod.boru"] = []byte(`export "FM" {x: 7}`)
 	mem.Files["d.json"] = []byte(`{"a": 1}`)
-	mem.Files["/proj/.aql/barem/index.aql"] = []byte(`export "BM" {y: 2}`)
+	mem.Files["/proj/.boru/barem/index.boru"] = []byte(`export "BM" {y: 2}`)
 	SetHostFileOps(r, mem)
 	r.SetParseFunc(parser.Parse)
 	return r, mem
@@ -317,21 +317,21 @@ func miscCovImportReg(t *testing.T) (*Registry, *capabilities.MemFileOps) {
 
 func TestMiscCovImportFile(t *testing.T) {
 	r, _ := miscCovImportReg(t)
-	got, _, err := runMiscCovWith(t, r, `import "./mod.aql" FM.x`)
+	got, _, err := runMiscCovWith(t, r, `import "./mod.boru" FM.x`)
 	if err != nil || got != "7" {
 		t.Fatalf("file import = %q, %v; want 7", got, err)
 	}
 
 	// Renamed file import.
 	r2, _ := miscCovImportReg(t)
-	got, _, err = runMiscCovWith(t, r2, `import [FM N2] "./mod.aql" N2.x`)
+	got, _, err = runMiscCovWith(t, r2, `import [FM N2] "./mod.boru" N2.x`)
 	if err != nil || got != "7" {
 		t.Fatalf("renamed file import = %q, %v; want 7", got, err)
 	}
 
 	// A missing file is an error, not a silent no-op.
 	r3, _ := miscCovImportReg(t)
-	_, _, err = runMiscCovWith(t, r3, `import "./no-such-file.aql"`)
+	_, _, err = runMiscCovWith(t, r3, `import "./no-such-file.boru"`)
 	if err == nil {
 		t.Error("import of a missing file must error")
 	}
@@ -399,7 +399,7 @@ func TestMiscCovImportCheckMode(t *testing.T) {
 	}
 
 	// A loadable file binds its exports for cross-module resolution.
-	out, err = importFileHandler([]Value{NewString("./mod.aql")}, nil, nil, r)
+	out, err = importFileHandler([]Value{NewString("./mod.boru")}, nil, nil, r)
 	if err != nil || out != nil {
 		t.Fatalf("check import of real file = %v, %v; want nil, nil", out, err)
 	}
@@ -413,7 +413,7 @@ func TestMiscCovImportCheckMode(t *testing.T) {
 	}
 
 	// A missing file degrades to a carrier rather than erroring.
-	out, err = importFileHandler([]Value{NewString("./no-such.aql")}, nil, nil, r)
+	out, err = importFileHandler([]Value{NewString("./no-such.boru")}, nil, nil, r)
 	if err != nil || len(out) != 1 || !out[0].Parent.Equal(TModuleInst) {
 		t.Fatalf("check import of missing file = %v, %v; want carrier", out, err)
 	}
@@ -426,13 +426,13 @@ func TestMiscCovImportCheckMode(t *testing.T) {
 
 	// A native module reference with no resolver installed (the bare native
 	// package has none — lang wires it) degrades to a carrier too.
-	out, err = importFileHandler([]Value{NewString("aql:math-util")}, nil, nil, r)
+	out, err = importFileHandler([]Value{NewString("boru:math-util")}, nil, nil, r)
 	if err != nil || len(out) != 1 || !out[0].Parent.Equal(TModuleInst) {
 		t.Fatalf("check import of native module = %v, %v; want carrier", out, err)
 	}
 }
 
-// A native "aql:" import routes through the registry's module resolver; the
+// A native "boru:" import routes through the registry's module resolver; the
 // bare native package has none installed, so wiring a fake one exercises both
 // the resolve+install path and the resolver-missing error.
 func TestMiscCovImportNativeModule(t *testing.T) {
@@ -448,17 +448,17 @@ func TestMiscCovImportNativeModule(t *testing.T) {
 		}
 		return ModuleDesc{
 			ID:      "fakemod",
-			Ref:     "aql:fakemod",
+			Ref:     "boru:fakemod",
 			Kind:    "native",
 			Exports: map[string]*OrderedMap{"NM": om},
 		}, nil
 	}
-	got, _, rerr := runMiscCovWith(t, r, `import "aql:fakemod" NM.x`)
+	got, _, rerr := runMiscCovWith(t, r, `import "boru:fakemod" NM.x`)
 	if rerr != nil || got != "7" {
 		t.Fatalf("native import = %q, %v; want 7", got, rerr)
 	}
 	// A second import of the same module takes the already-loaded path.
-	got, _, rerr = runMiscCovWith(t, r, `import "aql:fakemod" NM.x`)
+	got, _, rerr = runMiscCovWith(t, r, `import "boru:fakemod" NM.x`)
 	if rerr != nil || got != "7" {
 		t.Fatalf("re-import = %q, %v; want 7", got, rerr)
 	}
@@ -468,12 +468,12 @@ func TestMiscCovImportNativeModule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, _, rerr = runMiscCovWith(t, r2, `import "aql:math-util"`)
+	_, _, rerr = runMiscCovWith(t, r2, `import "boru:math-util"`)
 	if rerr == nil || !strings.Contains(rerr.Error(), "resolver not configured") {
 		t.Errorf("resolver-less native import err = %v, want 'resolver not configured'", rerr)
 	}
 	// An empty native module name is rejected before resolution.
-	if _, herr := importFileHandler([]Value{NewString("aql:")}, nil, nil, r2); herr == nil ||
+	if _, herr := importFileHandler([]Value{NewString("boru:")}, nil, nil, r2); herr == nil ||
 		!strings.Contains(herr.Error(), "empty native module name") {
 		t.Errorf("empty native name err = %v, want 'empty native module name'", herr)
 	}

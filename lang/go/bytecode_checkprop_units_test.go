@@ -11,7 +11,7 @@ import (
 // stored-param-body unit (Signature.StoredBodies → compileStoredParamBody)
 // and runs nested on the VM via InvokeCallback. The sharp pin: ITERATION
 // COUNT ADDS NO INTERPRETER ENTRIES — every unattributed entry left is
-// module-load AQL (invariant in the run count).
+// module-load boru (invariant in the run count).
 //
 // The gen body here is `[ 3 4 add ]` (a compilable constant expression), NOT
 // a direct rand call `[r.int 1 9]`: a member-fn read from the opaque Map
@@ -42,7 +42,7 @@ func TestCheckPropIterationsAddNoInterpEntries(t *testing.T) {
 			}
 		})
 		defer disarm()
-		src := fmt.Sprintf("import \"aql:test\" end\ndef res (Test.check-prop \"x\" [ 3 4 add ] [ drop true ] %d 1 0)\nres get \"ok\"", runs)
+		src := fmt.Sprintf("import \"boru:test\" end\ndef res (Test.check-prop \"x\" [ 3 4 add ] [ drop true ] %d 1 0)\nres get \"ok\"", runs)
 		if _, err := a.RunCompiledStrict(src); err != nil {
 			t.Fatalf("run (%d iterations): %v", runs, err)
 		}
@@ -59,10 +59,10 @@ func TestCheckPropIterationsAddNoInterpEntries(t *testing.T) {
 		t.Errorf("interpreter entries scale with the iteration count — the bodies are NOT running as units:\n  2 runs:  %v\n  60 runs: %v", few, many)
 	}
 	// The per-iteration seams specifically must contribute nothing: before
-	// the stored-param-body units the census grew by one CallAQL per body
+	// the stored-param-body units the census grew by one CallBoru per body
 	// per iteration.
-	if few["CallAQL"] != 0 || many["CallAQL"] != 0 {
-		t.Errorf("per-iteration CallAQL entries present (2 runs: %d, 60 runs: %d) — the throwaway-sig path is back", few["CallAQL"], many["CallAQL"])
+	if few["CallBoru"] != 0 || many["CallBoru"] != 0 {
+		t.Errorf("per-iteration CallBoru entries present (2 runs: %d, 60 runs: %d) — the throwaway-sig path is back", few["CallBoru"], many["CallBoru"])
 	}
 }
 
@@ -79,7 +79,7 @@ func TestCheckPropMemberFnGenVariesNotConstant(t *testing.T) {
 	// `n eq 9` is true iff the generator returns the trailing arg 9 every
 	// run. A correct varying generator refutes it (ok=false); the miscompile
 	// left it un-refuted (ok=true — always 9). Pinned under BOTH pipelines.
-	src := `import "aql:test" end
+	src := `import "boru:test" end
 def res (Test.check-prop "varies" [r.int 1 9] [ var [[n] (n eq 9) ] ] 12 1 0)
 res get "ok"`
 	for _, mode := range []string{"compiled", "interp"} {
@@ -105,16 +105,16 @@ res get "ok"`
 
 // TestCheckPropCompiledParity — the compiled and interpreted pipelines agree
 // on check-prop results across the pass / fail / generator-error shapes (the
-// units must preserve CallAQL frame semantics exactly).
+// units must preserve CallBoru frame semantics exactly).
 func TestCheckPropCompiledParity(t *testing.T) {
 	cases := []string{
-		`import "aql:test" end
+		`import "boru:test" end
 def res (Test.check-prop "pass" [r.int 1 9] [ 0 gte ] 6 1 0)
 (res get "ok") (res get "runs")`,
-		`import "aql:test" end
+		`import "boru:test" end
 def res2 (Test.check-prop "fail" [r.int 1 9] [ drop false ] 6 1 0)
 (res2 get "ok") (res2 get "runs")`,
-		`import "aql:test" end
+		`import "boru:test" end
 def res (Test.check-prop "gen-raises" [raise bad_input "boom"] [ 0 gte ] 3 1 0)
 (res get "ok")`,
 	}
@@ -152,7 +152,7 @@ def res (Test.check-prop "gen-raises" [raise bad_input "boom"] [ 0 gte ] 3 1 0)
 // refuse the program: the interpreter fallback runs it with parity — slow,
 // not wrong, exactly the do-registry-replay discipline.
 func TestCheckPropRefusedBodyFallsBackSound(t *testing.T) {
-	const src = `import "aql:test" end
+	const src = `import "boru:test" end
 def res (Test.check-prop "hazard" [def Big Integer 9] [ 0 gte ] 2 1 0)
 res get "ok"`
 	a, err := New()

@@ -1,4 +1,4 @@
-# AQL Bytecode Compiler — Completion Plan (adversarially-verified)
+# boru Bytecode Compiler — Completion Plan (adversarially-verified)
 
 Supersedes the leaf framing in `VOXGIG-COMPILE-LEAVES.0.md`. Produced by a
 15-agent review (3 architecture/roadmap maps → 6 per-leaf root-cause passes →
@@ -20,7 +20,7 @@ in every case the langspec differential is *blind* to the divergence.
 **The one hard contract: compiled output is byte-identical to interpreted
 output.** Enforced by `make verify-bytecode` (`TestSpecCompiledDifferential` /
 `OrFallback` / `TestPropertyDifferential` / combination matrix / `-race` /
-`-tags aqldebug`) plus `crossdiff` (Go-vs-TS) and `test-ts`, all currently
+`-tags borudebug`) plus `crossdiff` (Go-vs-TS) and `test-ts`, all currently
 green. Refusals fall back to the sound interpreter, so they are advisory — a
 *miscompile* is the only real danger.
 
@@ -144,7 +144,7 @@ Splits into two unrelated, independent fixes:
 
 ### Leaf 3 — binary-op operands not adjacent (bloom `count`) — diff 3, flips 0
 - **NOT already done** (the root-cause's "difficulty 1, cleared" was refuted):
-  `bloom.aql` passes only because `bloom-count` is exported as a fn-*value*
+  `bloom.boru` passes only because `bloom-count` is exported as a fn-*value*
   (`bloom-count/r`) and **never called** — an uncalled fn body is never lowered.
   Called, it refuses live.
 - Real cause: `md`/`kd`/`xd` live inside an `if` **else-arm fragment**, where
@@ -162,8 +162,8 @@ each with an unguarded miscompile. The deepest leaf.
 
 ### Leaf 5 — `fold` provenance + the `check diagnostics` gate — diff 4, flips 3
 - **The `check diagnostics` mystery is fully solved**: `CompileCheck`
-  (`aql.go:297-301`) sets `Check.Emit` + `Compiling`, which **re-enters every
-  fn body at each call site** with actual carrier args (to lower it). `aql
+  (`boru.go:297-301`) sets `Check.Emit` + `Compiling`, which **re-enters every
+  fn body at each call site** with actual carrier args (to lower it). `boru
   check` (`Emit==nil`) analyses each body once at its `def` site and never
   re-enters → 0 errors. When a re-entered body does `get`/`raise` over a dynamic
   receiver, `checkModeAssumeSig` emits a `SeverityError` `no_signature`
@@ -174,7 +174,7 @@ each with an unguarded miscompile. The deepest leaf.
   refuses → sound fallback; the diagnostic is redundant and spurious). Then the
   true reason surfaces. **Adversarial caveat**: the fell-through refuse
   (`engine.go:6663`) fires for *both* recoverable union-receiver dispatch and
-  genuine concrete type errors — scope the suppression carefully so `aql check`
+  genuine concrete type errors — scope the suppression carefully so `boru check`
   still reports real top-level unmatched dispatch.
 - **Part 2** is **Stage D** (the file-flipper) — see §1. The three files bottom
   out at three *different* sub-surfaces (tst_unit = Disjunct-receiver `get`;

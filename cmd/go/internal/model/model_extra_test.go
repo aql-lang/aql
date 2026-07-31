@@ -24,7 +24,7 @@ func TestHelpFlagExitsZero(t *testing.T) {
 	if code != 0 {
 		t.Errorf("exit = %d, want 0 (flag.ErrHelp)", code)
 	}
-	if !strings.Contains(errOut, "usage: aql model") {
+	if !strings.Contains(errOut, "usage: boru model") {
 		t.Errorf("stderr should carry the usage; got %q", errOut)
 	}
 }

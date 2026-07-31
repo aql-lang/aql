@@ -12,7 +12,7 @@
 // budget's fixed-point machinery, disjunct partitioning, and the
 // bytecode recording pass land in later phases.
 import type { EmitState } from './emit.ts'
-import { AqlType, TAny } from './type.ts'
+import { BoruType, TAny } from './type.ts'
 import type { Signature } from './signature.ts'
 import { newCarrier, newDynamicCarrier, Value } from './value.ts'
 import type { Registry } from './registry.ts'
@@ -255,7 +255,7 @@ export function carrierResults(
   // A declared return type of Any is statically unknown, so its carrier
   // is dynamic; a known type stays strict unless a dynamic operand makes
   // the whole result contagious. Mirrors carrierResults' Any handling.
-  const mk = (t: AqlType): Value =>
+  const mk = (t: BoruType): Value =>
     contagious || t.equal(TAny) ? newDynamicCarrier(t) : newCarrier(t)
 
   if (sig.returnsFn) {
@@ -303,5 +303,5 @@ export function joinCarriers(a: Value, b: Value): Value {
     if (ta.parts[i] !== tb.parts[i]) break
     common.push(ta.parts[i]!)
   }
-  return newCarrier(common.length > 0 ? new AqlType(common) : TAny)
+  return newCarrier(common.length > 0 ? new BoruType(common) : TAny)
 }

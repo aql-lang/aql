@@ -13,9 +13,9 @@ implemented, shown to break, and reverted.
 
 ## 1. Goal
 
-Compile programs that drive the `aql:test` **declarative** runner —
+Compile programs that drive the `boru:test` **declarative** runner —
 `spec Test.run-spec` — to bytecode that runs on the VM, byte-identical to the
-interpreter. This is the last large bucket keeping the `voxgig-aql/decision`
+interpreter. This is the last large bucket keeping the `voxgig-boru/decision`
 spec/property suites (`decision_unit_spec`, `decision_prop_test`,
 `decision_prop_spec`) on the whole-program interpreter fallback. The decision
 module's **core logic** (`apply-op`, `eval-cond`, `decide`, …) already compiles;
@@ -25,13 +25,13 @@ blocker is specifically the module-fn bodies of the test framework.
 ## 2. How a module fn dispatches (the relevant architecture)
 
 A native module (`lang/go/modules/test.go::BuildTestModule`) builds its own
-**sub-registry** `modReg` via `native.DefaultRegistry()` and runs an AQL preamble
+**sub-registry** `modReg` via `native.DefaultRegistry()` and runs a boru preamble
 into it. Fns defined in that preamble (`run-spec`, `run-cases`, `run-case`, and
 the Go natives `test-describe`, `test-invoke`, `test-record`) carry
 `FnDefInfo.Registry = modReg`.
 
 When such a fn is invoked, `engine.go::execFnDefSig` sees a foreign registry and
-runs the body via `capturedReg.CallAQL(sig, args, captures)` (`registry.go:1072`),
+runs the body via `capturedReg.CallBoru(sig, args, captures)` (`registry.go:1072`),
 which spins a sub-engine over `modReg` so module-private words resolve. The body
 tokens of `run-spec` are spliced and stepped there.
 
@@ -42,7 +42,7 @@ Two members behave differently and are the crux of the problem:
   subject call records into the PARENT's `Emit` and compiles to a `CALL_USER`
   unit — recording threads here.
 - **`test-describe` / the `run-cases` `for` loop / `test-record` / `deq`** run via
-  `CallAQL` in **`modReg`**, whose `Check` is independent of the parent's.
+  `CallBoru` in **`modReg`**, whose `Check` is independent of the parent's.
 
 `AnalyseFnBody` (`eng/go/carrier.go:2230`) is the check-mode body analyser; it
 keys its memo (`FnSummaries`) and recursion guard (`FnInflight`) by
@@ -54,7 +54,7 @@ keys its memo (`FnSummaries`) and recursion guard (`FnInflight`) by
 `CheckState.Mode` lives **per registry** (it is a value field on `Registry`, see
 `eng/go/registry.go:247`). When the top-level program is in check/compile mode,
 `parent.Check.Mode == true` but `modReg.Check.Mode == false`. So when `run-spec`'s
-body runs via `CallAQL` in `modReg`, the body executes **concretely, not in check
+body runs via `CallBoru` in `modReg`, the body executes **concretely, not in check
 mode**:
 
 1. **Side effects fire.** `test-record` is not gated by
@@ -85,7 +85,7 @@ path is the hazard that any future attempt to compile module-fn bodies will trip
 
 ## 4. Why the obvious fix (thread check mode into `modReg`) does NOT work
 
-The tempting fix: around the `CallAQL` in `execFnDefSig`, when the parent is in
+The tempting fix: around the `CallBoru` in `execFnDefSig`, when the parent is in
 check mode, point `modReg.Check` at the parent's check state for the call so the
 body runs in check mode there too (side effects suppressed, carrier-results
 intercept active, recording threaded into the parent's `Emit`).
@@ -128,7 +128,7 @@ module-fn check-path change; the in-repo corpus is not sufficient coverage.**
 
 ## 5. What the real fix must do
 
-Compiling module-fn bodies soundly is **not** a wrapper around `CallAQL`. It needs
+Compiling module-fn bodies soundly is **not** a wrapper around `CallBoru`. It needs
 the check/analysis state to be **split by concern** rather than owned wholesale by
 one registry:
 
@@ -151,7 +151,7 @@ Concretely, the candidate designs are:
    real refactor of `CheckState` ownership (every `r.Check.*` reader moves to the
    threaded object).
 
-2. **Per-call check sub-state.** Give `CallAQL` an explicit "analyse-in-check"
+2. **Per-call check sub-state.** Give `CallBoru` an explicit "analyse-in-check"
    entry that builds a FRESH `CheckState` for the module body, seeded with
    `Mode=true` and the parent's `Emit`, with its OWN memo maps, and that MERGES
    only diagnostics + the uncompilable mark back. This is closer to the failed §4

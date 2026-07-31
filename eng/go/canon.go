@@ -5,7 +5,7 @@ import (
 	"strings"
 )
 
-// canonString renders a String payload as parseable AQL source — the
+// canonString renders a String payload as parseable boru source — the
 // round-trip half of the canon contract. The plain single-quoted form
 // is kept verbatim for ordinary content (the form every spec row and
 // doc example pins); content containing a single quote switches to
@@ -45,7 +45,7 @@ func canonString(s string) string {
 	}
 }
 
-// Canon renders a stack of values as canonical AQL source — a string
+// Canon renders a stack of values as canonical boru source — a string
 // that, when parsed and evaluated, reproduces the input stack. Where it
 // diverges from Value.String:
 //
@@ -56,7 +56,7 @@ func canonString(s string) string {
 //     a round-trip (the /q suffix is only defined for words)
 //
 // Lists and maps are space-separated in both Canon and Value.String
-// (commas are optional in AQL source and the default render omits
+// (commas are optional in boru source and the default render omits
 // them); the atom and quoted-list rules above are what keep Canon
 // distinct from Value.String.
 //
@@ -70,7 +70,7 @@ func Canon(stack []Value) string {
 	return strings.Join(parts, " ")
 }
 
-// CanonValue renders one value as canonical AQL source. See Canon.
+// CanonValue renders one value as canonical boru source. See Canon.
 func CanonValue(v Value) string {
 	// Behavior-driven dispatch for user-defined types: if a non-
 	// builtin type in v.Parent's parent chain has a non-default

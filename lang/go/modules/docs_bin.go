@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:bin-util", map[string]string{
+	registerDocs("boru:bin-util", map[string]string{
 		"band":          "Bitwise AND of two integers.",
 		"base64-decode": "Decode a standard-alphabet base64 string to its bytes.",
 		"base64-encode": "Encode a string's bytes as standard-alphabet base64.",
@@ -40,7 +40,7 @@ func init() {
 	// convention are authored: the bit-index family (which reads in swap
 	// form), the field ops, and the codecs. Results from verified
 	// lang/spec/module-bin.tsv rows.
-	registerExamples("aql:bin-util", map[string][]string{
+	registerExamples("boru:bin-util", map[string][]string{
 		"set":    {`0 BinUtil.set 3                                  ;# 8 — set bit 3 of 0; VALUE first, bit second`},
 		"clear":  {`15 BinUtil.clear 0                               ;# 14`},
 		"toggle": {`5 BinUtil.toggle 1                               ;# 7`},

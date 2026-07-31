@@ -1,7 +1,7 @@
 package native
 
 // NetModuleNatives holds the HTTP / API access words that were moved out of
-// the core registry into the loadable `aql:net` module (namespace `Net`).
+// the core registry into the loadable `boru:net` module (namespace `Net`).
 // They are registered ONLY into that module's sub-registry by
 // modules.BuildNetModule — deliberately absent from the global registry. The
 // handlers themselves still live in their feature files (fetch.go's

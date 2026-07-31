@@ -118,7 +118,7 @@ func TandHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 // are filtered (Never is the identity for tor), and structurally
 // identical alternatives are deduped.
 //
-// Exported because aql's `tall` (typed-all reduction) folds over a
+// Exported because boru's `tall` (typed-all reduction) folds over a
 // list of values via this same intersection. Future higher-order
 // type combinators may want it too.
 func TandValues(a, b Value) Value {
@@ -243,7 +243,7 @@ func TnotHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 }
 
 // TnotReturnsFn is the carrier-mode counterpart: produces the negation
-// carrier so `aql check` propagates the complement type. The result
+// carrier so `boru check` propagates the complement type. The result
 // carries Carrier=true so the carrier-stripping pass preserves its
 // NegationInfo payload (mirrors how TorReturnsFn's disjunct carrier
 // survives toCarrier).

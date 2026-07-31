@@ -2,7 +2,7 @@
 
 Status: **shipped as the default.** A bare function word beginning its own
 dispatch is a forward-collection barrier, uniformly, regardless of arity.
-`AQL_NO_STRICT_BARRIER=1` restores the legacy wait-through behaviour as a
+`BORU_NO_STRICT_BARRIER=1` restores the legacy wait-through behaviour as a
 transitional escape hatch (slated for removal). This note records the
 motivation, the final rule, and the migration.
 
@@ -45,10 +45,10 @@ forms the lang layer synthesizes.
 
 ## History: the opt-in prototype
 
-The rule first shipped behind `AQL_STRICT_BARRIER=1` (default off). The
+The rule first shipped behind `BORU_STRICT_BARRIER=1` (default off). The
 sections below record that prototype's motivation and fallout measurement;
 the rule is now the default and the gate variable inverted
-(`AQL_NO_STRICT_BARRIER`).
+(`BORU_NO_STRICT_BARRIER`).
 
 ## The question
 
@@ -60,7 +60,7 @@ fire — `print` holding 0 of 1, a 2-arg-only fn holding 1 — it keeps
 waiting, and the boundary word's **result** arrives into the open slot.
 That wait-through is what makes these work without parens:
 
-```aql
+```boru
 print add 1 2        ;# add's result feeds print
 size iota 3          ;# iota's result feeds size
 not not 5            ;# unary chaining
@@ -83,7 +83,7 @@ gives, instead of waiting.
 
 ## The prototype
 
-`AQL_STRICT_BARRIER=1` (engine.go: `strictForwardBarrier`,
+`BORU_STRICT_BARRIER=1` (engine.go: `strictForwardBarrier`,
 `strandedForwardError`, called from the two `commitBarrierForward` call
 sites — `stepWord` and `stepWordUsurp`). One exemption: engine-internal
 boundary words (`__`-prefixed frame-tail words) are not source-level
@@ -97,8 +97,8 @@ An earlier revision exempted `def` — first by name, then via a
 function word could keep feeding def's body slot. Both were rejected:
 `def foo add 1 2` silently binding `3` is exactly the wait-through
 class the strict rule exists to kill, and a Go-only signature
-attribute violates the language's expressibility principle — AQL has
-macros, so whatever def can declare, an AQL-authored binder must be
+attribute violates the language's expressibility principle — boru has
+macros, so whatever def can declare, a boru-authored binder must be
 able to declare too.
 
 What survives instead is the **KEYWORD slot** — the language-native
@@ -122,7 +122,7 @@ wait-through — so `def f fn [...]` is pure structural dispatch and
 works identically under the strict rule, while `def x add 1 2`,
 `def s size [1 2 3]`, and `def x:T add 1 2` are stranded (write
 `def x (add 1 2)`). This is Scheme's syntax-rules literals arriving
-in AQL signatures: the same mechanism is what user macros/binders
+in boru signatures: the same mechanism is what user macros/binders
 need for DSL keywords (`for x in xs […]`).
 
 Three kernel seams make keyword slots sound (all in this change):
@@ -215,7 +215,7 @@ is byte-identical.
 
 ## Remaining strict-mode fallout (lang/spec, TestSpecProd)
 
-Default (gate off): green. Under `AQL_STRICT_BARRIER=1`:
+Default (gate off): green. Under `BORU_STRICT_BARRIER=1`:
 
 - After the def constructor keyword forms (but before the dot-access
   barrier): **~38 rows**. The def-idiom family is clean; what remains
@@ -256,7 +256,7 @@ Against:
   nullary-fn arguments (`typeof gensym`) — the places where the
   wait-through is genuinely pleasant. Note the tension: the same
   mechanism that makes `print add 1 2` fragile is the one that gives
-  AQL its partial Polish-notation feel on `Any` slots. A stricter
+  boru its partial Polish-notation feel on `Any` slots. A stricter
   language is a more parenthesised language.
 - The checker must mirror the rule for words whose binding kind is
   unknown at check time (forward references) — stays gradual there.
@@ -268,13 +268,13 @@ Against:
 - ~~def story~~ / ~~keyword overloads for the other closed-set
   constructors~~ — the keyword-slot mechanism and the def constructor
   forms (see the ruling and the constructor-forms section).
-- ~~Surface keyword slots in `aql describe`~~ — `help.SigInfo.Keywords`
+- ~~Surface keyword slots in `boru describe`~~ — `help.SigInfo.Keywords`
   renders a keyword slot as `fn/q` / `gen/q` / `<ctor>/q` instead of a
-  bare `Atom`, so `aql describe def` distinguishes every overload
+  bare `Atom`, so `boru describe def` distinguishes every overload
   (`native_help.go::sigKeywordSlots`, `help.go::writeSigs`). A
   capture-any `/q` slot (no pattern, e.g. `quote`'s `[Atom]`) stays
   bare.
-- ~~The AQL-authored surface~~ — a `/q` param whose atom names no type
+- ~~The boru-authored surface~~ — a `/q` param whose atom names no type
   is a KEYWORD slot: `def between fn [[a:Integer in/q b:Integer] …]`
   matches only the literal word `in` (`fn_params.go::keywordParam`,
   spec `lang/spec/keyword-slot.tsv`). This is the source spelling of
@@ -286,7 +286,7 @@ Against:
   orthogonal to keyword slots; the `fn` form is the canonical spelling.)
 - ~~Extend the check to the dot-access dispatch path~~ — the dot-access
   barrier (above) fires in the check/compile passes too (shared step
-  loop), so `aql check` and the compiler agree with the interpreter.
+  loop), so `boru check` and the compiler agree with the interpreter.
 
 **Not done — and why:**
 

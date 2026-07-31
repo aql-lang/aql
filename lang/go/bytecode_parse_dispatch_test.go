@@ -8,7 +8,7 @@ import (
 // TestCompileParseOverEnclosingParserDef pins Stage 1: compiling a
 // `parse <parser> src` dispatch where the parser is a TOP-LEVEL computed
 // value-def (`def p (Parse.parser g)`) read from inside a fn body — the shape
-// every voxgig-aql/template lexer uses (`def lex fn [… (parse mustache src) …]`).
+// every voxgig-boru/template lexer uses (`def lex fn [… (parse mustache src) …]`).
 //
 // Two coupled fixes make it compile+execute:
 //   - installDef declines to install the non-concrete Function carrier in Defs,
@@ -23,12 +23,12 @@ import (
 //     dispatch). Byte-identical to the interpreter, which passes the
 //     /q-captured name as data to parseFnDispatchHandler.
 func TestCompileParseOverEnclosingParserDef(t *testing.T) {
-	// A custom grammar with an AQL-closure matcher that pushes tokens onto an
+	// A custom grammar with a boru-closure matcher that pushes tokens onto an
 	// enclosing mutable flex accumulator, finalized into a parser VALUE bound at
 	// top level, then read + dispatched from inside a fn body (`parse myp src`)
 	// with the accumulator sliced around the parse — the lexer shape verbatim.
-	src := `import "aql:parse"
-import "aql:parselang"
+	src := `import "boru:parse"
+import "boru:parselang"
 def acc (flex [])
 def g Parse.grammar
 Parse.matcher g lex 5 ([s:String] => [ def _ (acc push {v:s})  {src: s tin:'#TX' val:'t'} ]) end

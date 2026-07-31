@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // Codex round-6 fixes (design/TYPED-CONTAINER-TAG-RETENTION.0.md):

@@ -14,7 +14,7 @@ import (
 // table: the eval flag, a value-taking flag in both spellings, and a
 // boolean. The Execute-level tests cover the real set.
 func splitFlagSet() *flag.FlagSet {
-	fs := flag.NewFlagSet("aql", flag.ContinueOnError)
+	fs := flag.NewFlagSet("boru", flag.ContinueOnError)
 	fs.SetOutput(io.Discard)
 	fs.String("e", "", "")
 	fs.Int64("s", 0, "")
@@ -25,8 +25,8 @@ func splitFlagSet() *flag.FlagSet {
 func writeArgsScript(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	file := filepath.Join(dir, "args.aql")
-	src := "import \"aql:io\"\nIO.args\n"
+	file := filepath.Join(dir, "args.boru")
+	src := "import \"boru:io\"\nIO.args\n"
 	if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -94,7 +94,7 @@ func TestExecuteScriptArgsEmpty(t *testing.T) {
 // In -e mode every positional is a script argument.
 func TestExecuteEvalModeArgs(t *testing.T) {
 	var out, errb bytes.Buffer
-	code := Execute([]string{"-e", `import "aql:io"  IO.args`, "alpha"}, strings.NewReader(""), &out, &errb)
+	code := Execute([]string{"-e", `import "boru:io"  IO.args`, "alpha"}, strings.NewReader(""), &out, &errb)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, errb.String())
 	}
@@ -107,7 +107,7 @@ func TestExecuteEvalModeArgs(t *testing.T) {
 // script argument reaches IO.args instead of erroring as an unknown flag.
 func TestExecuteEvalDashFirstArg(t *testing.T) {
 	var out, errb bytes.Buffer
-	code := Execute([]string{"-e", `import "aql:io"  IO.args`, "--fast", "notes.json"},
+	code := Execute([]string{"-e", `import "boru:io"  IO.args`, "--fast", "notes.json"},
 		strings.NewReader(""), &out, &errb)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, errb.String())
@@ -119,10 +119,10 @@ func TestExecuteEvalDashFirstArg(t *testing.T) {
 }
 
 // A single leading `--` — the historical separator — is stripped so
-// `aql -e … -- --fast` and `aql -e … --fast` agree on IO.args.
+// `boru -e … -- --fast` and `boru -e … --fast` agree on IO.args.
 func TestExecuteEvalSeparatorStripped(t *testing.T) {
 	var out, errb bytes.Buffer
-	code := Execute([]string{"-e", `import "aql:io"  IO.args`, "--", "--fast"},
+	code := Execute([]string{"-e", `import "boru:io"  IO.args`, "--", "--fast"},
 		strings.NewReader(""), &out, &errb)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, errb.String())
@@ -139,7 +139,7 @@ func TestExecuteEvalSeparatorStripped(t *testing.T) {
 // The -e=expr attached form splits its tail the same way.
 func TestExecuteEvalAttachedForm(t *testing.T) {
 	var out, errb bytes.Buffer
-	code := Execute([]string{`-e=import "aql:io"  IO.args`, "--fast"},
+	code := Execute([]string{`-e=import "boru:io"  IO.args`, "--fast"},
 		strings.NewReader(""), &out, &errb)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, errb.String())
@@ -153,7 +153,7 @@ func TestExecuteEvalAttachedForm(t *testing.T) {
 // expression becomes script args).
 func TestExecuteEvalFlagsBeforeExpr(t *testing.T) {
 	var out, errb bytes.Buffer
-	code := Execute([]string{"-s", "5", "-e", `import "aql:io"  IO.args`, "--fast"},
+	code := Execute([]string{"-s", "5", "-e", `import "boru:io"  IO.args`, "--fast"},
 		strings.NewReader(""), &out, &errb)
 	if code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, errb.String())
@@ -207,15 +207,15 @@ func TestSplitEvalTail(t *testing.T) {
 		{"attached -e=", []string{"-e=x", "--fast"}, []string{"-e=x"}, []string{"--fast"}},
 		{"double-dash e", []string{"--e", "x", "y"}, []string{"--e", "x"}, []string{"y"}},
 		{"separator before -e", []string{"--", "-e", "x"}, []string{"--", "-e", "x"}, nil},
-		{"no -e (script)", []string{"prog.aql", "--fast"}, []string{"prog.aql", "--fast"}, nil},
+		{"no -e (script)", []string{"prog.boru", "--fast"}, []string{"prog.boru", "--fast"}, nil},
 
 		// A `-e` AFTER the script path is the program's own argument, so
 		// there is no eval split and nothing may be dropped.
-		{"-e after script path", []string{"prog.aql", "a", "-e", "b", "c", "d"},
-			[]string{"prog.aql", "a", "-e", "b", "c", "d"}, nil},
-		{"-e=x after script path", []string{"prog.aql", "-e=x", "c"},
-			[]string{"prog.aql", "-e=x", "c"}, nil},
-		{"script path only", []string{"prog.aql"}, []string{"prog.aql"}, nil},
+		{"-e after script path", []string{"prog.boru", "a", "-e", "b", "c", "d"},
+			[]string{"prog.boru", "a", "-e", "b", "c", "d"}, nil},
+		{"-e=x after script path", []string{"prog.boru", "-e=x", "c"},
+			[]string{"prog.boru", "-e=x", "c"}, nil},
+		{"script path only", []string{"prog.boru"}, []string{"prog.boru"}, nil},
 
 		// Reaching the script path means stepping over earlier flags'
 		// values: `5` below is -s's value, not a positional.
@@ -225,10 +225,10 @@ func TestSplitEvalTail(t *testing.T) {
 			[]string{"-s=5", "-e", "x"}, []string{"y"}},
 		{"bool flag before -e", []string{"-version", "-e", "x", "y"},
 			[]string{"-version", "-e", "x"}, []string{"y"}},
-		{"value flag then script then -e", []string{"-s", "5", "prog.aql", "-e", "b"},
-			[]string{"-s", "5", "prog.aql", "-e", "b"}, nil},
-		{"bool flag then script then -e", []string{"-version", "prog.aql", "-e", "b"},
-			[]string{"-version", "prog.aql", "-e", "b"}, nil},
+		{"value flag then script then -e", []string{"-s", "5", "prog.boru", "-e", "b"},
+			[]string{"-s", "5", "prog.boru", "-e", "b"}, nil},
+		{"bool flag then script then -e", []string{"-version", "prog.boru", "-e", "b"},
+			[]string{"-version", "prog.boru", "-e", "b"}, nil},
 
 		// An unregistered flag is assumed to take a value. fs.Parse rejects
 		// it regardless, so the guess cannot change the outcome.

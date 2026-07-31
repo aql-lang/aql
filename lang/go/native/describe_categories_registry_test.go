@@ -3,7 +3,7 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // The category table must agree with the ENGINE registry, not merely with
@@ -51,7 +51,7 @@ func TestCategoryWordsMatchEngineRegistry(t *testing.T) {
 
 // Every module id named by the category table must be a module that really
 // exists, or `describe` tells a reader to run an import that will fail.
-// Keyed by module — adding aql:cli / aql:proc / aql:lang later costs one
+// Keyed by module — adding boru:cli / boru:proc / boru:lang later costs one
 // entry each here, rather than one per word.
 func TestCategoryModuleIDsExist(t *testing.T) {
 	known := map[string]bool{}
@@ -62,7 +62,7 @@ func TestCategoryModuleIDsExist(t *testing.T) {
 		for _, id := range c.ModuleIDs() {
 			if !known[id] {
 				t.Errorf("category %q cites module %q, which is not in the module catalog "+
-					"(help_render.go moduleCatalog) — `import \"aql:%s\"` would fail", c.Name, id, id)
+					"(help_render.go moduleCatalog) — `import \"boru:%s\"` would fail", c.Name, id, id)
 			}
 		}
 	}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	pol "github.com/aql-lang/aql/lang/go/policy"
+	pol "github.com/boru-lang/boru/lang/go/policy"
 )
 
 // failWriter fails every Write, for driving encode-failure arms.

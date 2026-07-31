@@ -37,7 +37,7 @@ func TestMarkMoveBasic(t *testing.T) {
 		NewMove(id, "test loop"),
 	}
 
-	result := runAQL(t, r, input)
+	result := runBoru(t, r, input)
 
 	got := buf.String()
 	if got != "xx" {
@@ -86,7 +86,7 @@ func TestMarkMoveOneShotRemoval(t *testing.T) {
 		NewMove(id, "one-shot test"),
 	}
 
-	result := runAQL(t, r, input)
+	result := runBoru(t, r, input)
 
 	got := buf.String()
 	if got != "aa" {
@@ -110,7 +110,7 @@ func TestMarkMoveNotFound(t *testing.T) {
 		NewMove("nonexistent", "test: dangling move"),
 	}
 
-	err = runAQLError(t, r, input)
+	err = runBoruError(t, r, input)
 	if err == nil {
 		t.Fatal("expected error for move with missing mark")
 	}
@@ -166,7 +166,7 @@ func TestMarkMoveMultiplePairs(t *testing.T) {
 		NewMove(id2, "second loop"),
 	}
 
-	result := runAQL(t, r, input)
+	result := runBoru(t, r, input)
 
 	got := buf.String()
 	if got != "aabb" {
@@ -199,7 +199,7 @@ func TestMarkMoveWithLiterals(t *testing.T) {
 		NewMove(id, "literal test"),
 	}
 
-	result := runAQL(t, r, input)
+	result := runBoru(t, r, input)
 
 	// First pass: 1, mark, 2+3=5, move → replays body replacing mark..move range
 	// Stack becomes: [1, 2, 3, add], pointer at index 1
@@ -282,7 +282,7 @@ func TestHaltOnUndefinedStackEntry(t *testing.T) {
 		NewInteger(3),
 	}
 
-	err = runAQLError(t, r, input)
+	err = runBoruError(t, r, input)
 	if err == nil {
 		t.Fatal("expected error for undefined stack entry")
 	}

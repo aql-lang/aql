@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/cmd/go/internal/permsflags"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // langOpts returns a default (no-policy, allow-everything) options value for
@@ -80,10 +80,10 @@ func TestMainBundledFileImportResolvesInMemory(t *testing.T) {
 	// Files map — never on disk — proving the in-memory FS is wired up.
 	entryDir := "/virtual/proj"
 	cfg := Config{
-		Source:   `import "./lib.aql"` + "\n" + `Lib.x`,
+		Source:   `import "./lib.boru"` + "\n" + `Lib.x`,
 		EntryDir: entryDir,
 		Files: map[string][]byte{
-			entryDir + "/lib.aql": []byte(`export "Lib" {x:7}`),
+			entryDir + "/lib.boru": []byte(`export "Lib" {x:7}`),
 		},
 	}
 	var stdout, stderr bytes.Buffer
@@ -110,7 +110,7 @@ func TestPayloadRoundTrip(t *testing.T) {
 	cfg := Config{
 		Source:   "add 1 2",
 		EntryDir: "/x/y",
-		Files:    map[string][]byte{"/x/y/lib.aql": []byte("export \"L\" {a:1}")},
+		Files:    map[string][]byte{"/x/y/lib.boru": []byte("export \"L\" {a:1}")},
 		Registry: "reg",
 		Seed:     99,
 		Compile:  CompileTry,
@@ -187,12 +187,12 @@ func TestEvalColorErrorRendering(t *testing.T) {
 }
 
 // A built binary must see its own command line. Both call sites already
-// passed os.Args[1:] into Main and it was dropped on the floor, so an
-// `aql build` tool on $PATH could not be given an argument — which is not a
+// passed os.Args[1:] into Main and it was dropped on the floor, so a
+// `boru build` tool on $PATH could not be given an argument — which is not a
 // tool. This is the whole point of the packaging story.
 func TestMainSurfacesArgsAsIOArgs(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	cfg := Config{Source: "import \"aql:io\"\nIO.args\n"}
+	cfg := Config{Source: "import \"boru:io\"\nIO.args\n"}
 	if code := Main(cfg, []string{"alpha", "--beta"}, nil, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, stderr.String())
 	}
@@ -208,7 +208,7 @@ func TestMainSurfacesArgsAsIOArgs(t *testing.T) {
 // so a program can iterate unconditionally.
 func TestMainNoArgsIsEmptyList(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	cfg := Config{Source: "import \"aql:io\"\nsize (IO.args)\n"}
+	cfg := Config{Source: "import \"boru:io\"\nsize (IO.args)\n"}
 	if code := Main(cfg, nil, nil, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit %d, stderr: %s", code, stderr.String())
 	}
@@ -227,9 +227,9 @@ func TestMainBundledFilesDoNotHideTheHostFilesystem(t *testing.T) {
 
 	// A bundled file makes cfg.Files non-empty, taking the overlay branch.
 	cfg := Config{
-		Source:   "import \"aql:io\"\nIO.write (make Pathon \"" + target + "\") \"payload\"\n",
+		Source:   "import \"boru:io\"\nIO.write (make Pathon \"" + target + "\") \"payload\"\n",
 		EntryDir: dir,
-		Files:    map[string][]byte{filepath.Join(dir, "bundled.aql"): []byte("export \"B\" {x:1}")},
+		Files:    map[string][]byte{filepath.Join(dir, "bundled.boru"): []byte("export \"B\" {x:1}")},
 	}
 	var stdout, stderr bytes.Buffer
 	if code := Main(cfg, nil, nil, &stdout, &stderr); code != 0 {
@@ -253,7 +253,7 @@ func TestMainEnforcesBakedProfile(t *testing.T) {
 		t.Skipf("read-only profile unavailable: %v", err)
 	}
 	cfg := Config{
-		Source:  "import \"aql:io\"\nIO.write (make Pathon \"" + target + "\") \"x\"\n",
+		Source:  "import \"boru:io\"\nIO.write (make Pathon \"" + target + "\") \"x\"\n",
 		Profile: permsflags.ProfileFromPolicy(prof),
 	}
 	var stdout, stderr bytes.Buffer
@@ -283,13 +283,13 @@ func TestMainRejectsUnresolvableProfile(t *testing.T) {
 
 // --- IO.exit in a built binary ---
 
-// A built tool chooses its own exit status. This is what makes an AQL
+// A built tool chooses its own exit status. This is what makes a boru
 // program usable in a shell pipeline at all: `if mytool …; then` reads the
 // status, and before C1 every built binary could only ever say 0 or 1.
 func TestMainExitCodeIsProcessStatus(t *testing.T) {
 	for _, want := range []int{0, 1, 3, 125} {
 		var stdout, stderr bytes.Buffer
-		src := `import "aql:io"  IO.exit ` + strconv.Itoa(want)
+		src := `import "boru:io"  IO.exit ` + strconv.Itoa(want)
 		if code := Main(Config{Source: src}, nil, nil, &stdout, &stderr); code != want {
 			t.Errorf("IO.exit %d: exit status %d (stderr: %s)", want, code, stderr.String())
 		}
@@ -303,7 +303,7 @@ func TestMainExitCodeIsProcessStatus(t *testing.T) {
 // refusal (status 1) rather than a status.
 func TestMainExitSuppressesResidualAndRefusesRange(t *testing.T) {
 	var stdout, stderr bytes.Buffer
-	if code := Main(Config{Source: `import "aql:io"  42  IO.exit 0`}, nil, nil, &stdout, &stderr); code != 0 {
+	if code := Main(Config{Source: `import "boru:io"  42  IO.exit 0`}, nil, nil, &stdout, &stderr); code != 0 {
 		t.Fatalf("exit status %d, want 0", code)
 	}
 	if strings.Contains(stdout.String(), "42") {
@@ -311,7 +311,7 @@ func TestMainExitSuppressesResidualAndRefusesRange(t *testing.T) {
 	}
 	stdout.Reset()
 	stderr.Reset()
-	if code := Main(Config{Source: `import "aql:io"  IO.exit 200`}, nil, nil, &stdout, &stderr); code != 1 {
+	if code := Main(Config{Source: `import "boru:io"  IO.exit 200`}, nil, nil, &stdout, &stderr); code != 1 {
 		t.Fatalf("out-of-range exit status %d, want 1", code)
 	}
 	if !strings.Contains(stderr.String(), "0..125") {
@@ -319,7 +319,7 @@ func TestMainExitSuppressesResidualAndRefusesRange(t *testing.T) {
 	}
 }
 
-// A BUILT BINARY says nothing about its own execution engine. `aql run` warns
+// A BUILT BINARY says nothing about its own execution engine. `boru run` warns
 // when a whole-program compile refusal drops it onto the interpreter — that is
 // developer-facing performance advice, pinned by
 // run.TestExecuteCompileRefusalWarning — but the same line from a shipped tool

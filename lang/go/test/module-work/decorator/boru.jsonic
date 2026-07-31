@@ -1,0 +1,7 @@
+name: decorator
+main: decorator.boru
+major: 0
+minor: 5
+patch: 3
+files: [decorator.boru]
+deps: {formatter: 2.1.1}

@@ -1,11 +1,11 @@
 openapi: 3.0.3
 info:
-  title: AQL Supervisor API
+  title: boru Supervisor API
   version: 1.0.0
   description: |
-    REST API for inspecting and controlling AQL services managed by
-    a running `aql serve` supervisor. The api service is itself a
-    service (composed under `aql serve`), so its presence in the
+    REST API for inspecting and controlling boru services managed by
+    a running `boru serve` supervisor. The api service is itself a
+    service (composed under `boru serve`), so its presence in the
     process is what makes ctl/tui control possible.
 
     State transitions use the actions-collection pattern: clients
@@ -22,7 +22,7 @@ paths:
       summary: Get supervisor metadata
       description: |
         Returns process-level info about the running supervisor: pid,
-        start time, uptime in seconds, aql version, and the number
+        start time, uptime in seconds, boru version, and the number
         of registered services.
       operationId: getServer
       responses:
@@ -149,7 +149,7 @@ components:
           description: OS process ID of the supervisor.
         version:
           type: string
-          description: AQL CLI version string.
+          description: boru CLI version string.
         startTime:
           type: string
           format: date-time

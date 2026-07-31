@@ -10,7 +10,7 @@ import "fmt"
 // with "makeslice: len out of range".
 const maxPositionedWriteSize = int64(1) << 40 // 1 TiB
 
-// io_binary.go adds binary and positioned I/O to the aql:io read/write words,
+// io_binary.go adds binary and positioned I/O to the boru:io read/write words,
 // using the Scalar/Bytes type (NewBytesValue/AsBytesValue). Binary/positioned
 // forms are file-oriented: read gains {enc:'bytes'} (whole-file bytes) and
 // {offset}/{length} (a byte/text slice); write gains a Bytes payload plus
@@ -136,19 +136,19 @@ func doWriteBytesWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) 
 	}
 	if hasOffset {
 		if atomic {
-			return nil, r.AqlError("write_error", "write: {atomic} cannot combine with {offset} (a positioned splice is inherently in-place)", "write")
+			return nil, r.BoruError("write_error", "write: {atomic} cannot combine with {offset} (a positioned splice is inherently in-place)", "write")
 		}
 		if exclusive {
-			return nil, r.AqlError("write_error", "write: {exclusive} cannot combine with {offset} (an exclusive create starts empty)", "write")
+			return nil, r.BoruError("write_error", "write: {exclusive} cannot combine with {offset} (an exclusive create starts empty)", "write")
 		}
 		if offset < 0 {
-			return nil, r.AqlError("write_error", "write: negative offset", "write")
+			return nil, r.BoruError("write_error", "write: negative offset", "write")
 		}
 		if isStreamPath(path) {
-			return nil, r.AqlError("write_error", "write: cannot use offset with a stream", "write")
+			return nil, r.BoruError("write_error", "write: cannot use offset with a stream", "write")
 		}
 		if err := writeAtOffset(r, path, data, offset); err != nil {
-			return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", err), "write")
+			return nil, r.BoruError("write_error", fmt.Sprintf("write: %v", err), "write")
 		}
 		return []Value{returnPath(args[0])}, nil
 	}

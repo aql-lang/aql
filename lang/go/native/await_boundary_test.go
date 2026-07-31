@@ -5,7 +5,7 @@ import "testing"
 // Unit tests for `await`'s branch-boundary check (native_temporal_await.go).
 // The end-to-end refusals live in lang/go/await_branch_isolation_test.go;
 // these pin the two predicates directly, because the interesting arms are
-// container kinds that are awkward to construct from AQL source and easy
+// container kinds that are awkward to construct from boru source and easy
 // to get silently wrong.
 //
 // Why a type-tag switch and not `send`'s payload-keyed sendableViolation:
@@ -116,7 +116,7 @@ func TestSharedMutableKindFindsNestedContainers(t *testing.T) {
 // TestBranchTokensHandlesBothShapes pins the seam that made this check
 // ship INERT on the default path the first time. A branch body arrives
 // either as the raw token list (interpreted) or as a synthetic fn-value
-// carrying the tokens in its AQLImpl body (compiled). Reading only the
+// carrying the tokens in its BoruImpl body (compiled). Reading only the
 // first leaves the boundary unguarded exactly where most programs run.
 func TestBranchTokensHandlesBothShapes(t *testing.T) {
 	toks := []Value{NewWord("m"), NewWord("set")}
@@ -127,19 +127,19 @@ func TestBranchTokensHandlesBothShapes(t *testing.T) {
 
 	fn := NewFunction(FnDefInfo{
 		Name:       "b",
-		Signatures: []FnSig{{Impl: &AQLImpl{Body: toks}}},
+		Signatures: []FnSig{{Impl: &BoruImpl{Body: toks}}},
 	})
 	if got := branchTokens(fn); len(got) != 2 {
 		t.Errorf("compiled fn-value shape: got %d tokens, want 2 — this is the "+
 			"shape the default path uses", len(got))
 	}
 
-	// A fn-value with no AQL body yields nothing rather than panicking,
+	// A fn-value with no boru body yields nothing rather than panicking,
 	// and a non-list, non-fn element (a bare value branch) is simply not
 	// a body to walk.
 	empty := NewFunction(FnDefInfo{Name: "e"})
 	if got := branchTokens(empty); got != nil {
-		t.Errorf("fn with no AQL sig: got %v, want nil", got)
+		t.Errorf("fn with no boru sig: got %v, want nil", got)
 	}
 	if got := branchTokens(NewInteger(7)); got != nil {
 		t.Errorf("non-body element: got %v, want nil", got)

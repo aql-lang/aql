@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // w9ExtStub supplies erroring implementations of the extended FileOps surface

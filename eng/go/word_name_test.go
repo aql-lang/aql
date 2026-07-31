@@ -84,17 +84,17 @@ func TestValidateWordNameRejects(t *testing.T) {
 			t.Errorf("ValidateWordName(%q) should reject, got nil error", c.name)
 			continue
 		}
-		aql, ok := err.(*AqlError)
+		boru, ok := err.(*BoruError)
 		if !ok {
-			t.Errorf("ValidateWordName(%q): expected *AqlError, got %T", c.name, err)
+			t.Errorf("ValidateWordName(%q): expected *BoruError, got %T", c.name, err)
 			continue
 		}
-		if aql.Code != "invalid_word_name" {
-			t.Errorf("ValidateWordName(%q): wrong code %q", c.name, aql.Code)
+		if boru.Code != "invalid_word_name" {
+			t.Errorf("ValidateWordName(%q): wrong code %q", c.name, boru.Code)
 		}
-		if !strings.Contains(aql.Detail, c.wantInMsg) {
+		if !strings.Contains(boru.Detail, c.wantInMsg) {
 			t.Errorf("ValidateWordName(%q): detail %q should contain %q",
-				c.name, aql.Detail, c.wantInMsg)
+				c.name, boru.Detail, c.wantInMsg)
 		}
 	}
 }

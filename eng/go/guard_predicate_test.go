@@ -2,9 +2,9 @@ package eng
 
 import "testing"
 
-// aqlPredSig builds a single AQL-bodied signature for a predicate fn.
-func aqlPredSig(params []FnParam, returns []*Type, body []Value) Signature {
-	return Signature{Params: params, Returns: returns, Impl: &AQLImpl{Body: body}}
+// boruPredSig builds a single boru-bodied signature for a predicate fn.
+func boruPredSig(params []FnParam, returns []*Type, body []Value) Signature {
+	return Signature{Params: params, Returns: returns, Impl: &BoruImpl{Body: body}}
 }
 
 func installPred(r *Registry, name string, sigs []Signature) {
@@ -12,7 +12,7 @@ func installPred(r *Registry, name string, sigs []Signature) {
 }
 
 // predicateImpliedType's signature-shape gates: only a single-overload,
-// single-named-param, Boolean-returning AQL fn with a recognisable is-T body
+// single-named-param, Boolean-returning boru fn with a recognisable is-T body
 // qualifies. Every rejection path is pinned.
 func TestPredicateImpliedTypeGates(t *testing.T) {
 	if _, ok := predicateImpliedType(nil, "p"); ok {
@@ -33,25 +33,25 @@ func TestPredicateImpliedTypeGates(t *testing.T) {
 	bodyA := []Value{NewWord("x"), NewWord("is"), NewWord("List")}
 
 	// POSITIVE: the canonical is-List predicate.
-	installPred(r, "islist", []Signature{aqlPredSig(xParam, []*Type{TBoolean}, bodyA)})
+	installPred(r, "islist", []Signature{boruPredSig(xParam, []*Type{TBoolean}, bodyA)})
 	if tt, ok := predicateImpliedType(r, "islist"); !ok || !tt.Equal(TList) {
 		t.Errorf("islist = %v/%v, want List/true", tt, ok)
 	}
 
 	// Two real (non-fallback) overloads → decline.
 	installPred(r, "multi", []Signature{
-		aqlPredSig(xParam, []*Type{TBoolean}, bodyA),
-		aqlPredSig([]FnParam{{Name: "y", Type: TAny}}, []*Type{TBoolean},
+		boruPredSig(xParam, []*Type{TBoolean}, bodyA),
+		boruPredSig([]FnParam{{Name: "y", Type: TAny}}, []*Type{TBoolean},
 			[]Value{NewWord("y"), NewWord("is"), NewWord("Map")}),
 	})
 	if _, ok := predicateImpliedType(r, "multi"); ok {
 		t.Error("multi-overload must decline")
 	}
 
-	// Non-AQL implementation (a native GoImpl) → decline.
+	// Non-Boru implementation (a native GoImpl) → decline.
 	installPred(r, "native", []Signature{{Params: xParam, Returns: []*Type{TBoolean}, Impl: &GoImpl{}}})
 	if _, ok := predicateImpliedType(r, "native"); ok {
-		t.Error("non-AQL impl must decline")
+		t.Error("non-Boru impl must decline")
 	}
 
 	// Only a fallback signature (no real overload) → decline.
@@ -61,21 +61,21 @@ func TestPredicateImpliedTypeGates(t *testing.T) {
 	}
 
 	// Two params → decline.
-	installPred(r, "twop", []Signature{aqlPredSig(
+	installPred(r, "twop", []Signature{boruPredSig(
 		[]FnParam{{Name: "x", Type: TAny}, {Name: "y", Type: TAny}}, []*Type{TBoolean}, bodyA)})
 	if _, ok := predicateImpliedType(r, "twop"); ok {
 		t.Error("two-param predicate must decline")
 	}
 
 	// Unnamed param → decline.
-	installPred(r, "unnamed", []Signature{aqlPredSig(
+	installPred(r, "unnamed", []Signature{boruPredSig(
 		[]FnParam{{Name: "", Type: TAny}}, []*Type{TBoolean}, bodyA)})
 	if _, ok := predicateImpliedType(r, "unnamed"); ok {
 		t.Error("unnamed-param predicate must decline")
 	}
 
 	// Non-Boolean return → decline.
-	installPred(r, "intret", []Signature{aqlPredSig(xParam, []*Type{TInteger}, bodyA)})
+	installPred(r, "intret", []Signature{boruPredSig(xParam, []*Type{TInteger}, bodyA)})
 	if _, ok := predicateImpliedType(r, "intret"); ok {
 		t.Error("non-Boolean-return predicate must decline")
 	}

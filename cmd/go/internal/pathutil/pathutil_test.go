@@ -12,13 +12,13 @@ func TestExpandTilde(t *testing.T) {
 		in, home, want string
 	}{
 		{"~", home, home},
-		{"~/.aql", home, filepath.Join(home, ".aql")},
+		{"~/.boru", home, filepath.Join(home, ".boru")},
 		{filepath.Join("~", "a", "b"), home, filepath.Join(home, "a", "b")},
 		{"~/", home, home},
 		{"/abs/path", home, "/abs/path"}, // no tilde
 		{"rel/path", home, "rel/path"},   // no tilde
 		{"~user/x", home, "~user/x"},     // other-user home, untouched
-		{"~/.aql", "", "~/.aql"},         // unknown home, untouched
+		{"~/.boru", "", "~/.boru"},       // unknown home, untouched
 		{"", home, ""},                   // empty
 		{"a~b", home, "a~b"},             // tilde not leading
 	}

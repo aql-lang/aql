@@ -2,7 +2,7 @@
 # =====================================================================		
 # Nodes — List and Map: construction, auto-eval, quoting, interactions		
 # =====================================================================		
-# AQL's two structural Node types:		
+# boru's two structural Node types:		
 #		
 #   List  `[ … ]`     — ordered, heterogeneous sequence (Node/List).		
 #   Map   `{ k:v … }` — keyed associative collection (Node/Map). Keys		

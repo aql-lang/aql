@@ -660,7 +660,7 @@ func TestRoll0(t *testing.T) {
 	}
 }
 
-// TestAbs, TestNegate, TestMin, TestMax moved to internal/nativemod/ (aql:math module).
+// TestAbs, TestNegate, TestMin, TestMax moved to internal/nativemod/ (boru:math module).
 
 // --- Engine tests: modifier forcing ---
 

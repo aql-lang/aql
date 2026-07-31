@@ -1,9 +1,9 @@
-# AQL Language Specification: the aql:tui module (Tier-1 words)
+# boru Language Specification: the boru:tui module (Tier-1 words)
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module of raw-terminal words (design/TUI.0.md §4). They are
 # reached only after `import`, under the `Tui` namespace:
-# `import "aql:tui" Tui.word args`.
+# `import "boru:tui" Tui.word args`.
 #
 #   Tui.open       — take the terminal over via the registered backend
 #   Tui.close      — restore the terminal; idempotent
@@ -23,103 +23,103 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  import binds the Tui namespace
-import "aql:tui" convert List Tui.$module	['Tui']	import binds the Tui namespace
+import "boru:tui" convert List Tui.$module	['Tui']	import binds the Tui namespace
 #
 # §2  negative — unbound without import
 Tui.open {}	ERROR:undefined_word	`Tui` is unbound without `import`
 #
 # §3  the Terminal handle type is exported as a type literal
-import "aql:tui"  canon Tui.Terminal	'Terminal'	Terminal is the terminal-handle type literal
-import "aql:tui"  5 is Tui.Terminal	false	a non-handle value is not a Terminal
+import "boru:tui"  canon Tui.Terminal	'Terminal'	Terminal is the terminal-handle type literal
+import "boru:tui"  5 is Tui.Terminal	false	a non-handle value is not a Terminal
 #
 # §4  no backend registered → the first-class no_backend error. `open`
 #     takes its options map ALWAYS (`Tui.open {}` for defaults): a
 #     zero-arg overload would dispatch eagerly and silently swallow a
 #     following options map (the P7 dispatch finding), so the bare
 #     spelling is not a call.
-import "aql:tui"  Tui.open {}	ERROR:no terminal backend registered	open with options requires a registered backend
-import "aql:tui"  Tui.open {alt-screen: true}	ERROR:no terminal backend registered	alt-screen: true is the accepted spelling of the default takeover
-import "aql:tui"  Tui.open {alt-screen: false}	ERROR:reserved but not yet implemented	the §11.7 inline-tier reservation refuses loudly
-import "aql:tui"  Tui.open {alt-screen: 5}	ERROR:alt-screen: must be a Boolean	the reserved key is type-checked like every option
+import "boru:tui"  Tui.open {}	ERROR:no terminal backend registered	open with options requires a registered backend
+import "boru:tui"  Tui.open {alt-screen: true}	ERROR:no terminal backend registered	alt-screen: true is the accepted spelling of the default takeover
+import "boru:tui"  Tui.open {alt-screen: false}	ERROR:reserved but not yet implemented	the §11.7 inline-tier reservation refuses loudly
+import "boru:tui"  Tui.open {alt-screen: 5}	ERROR:alt-screen: must be a Boolean	the reserved key is type-checked like every option
 #
 # §5  wrong-handle rejections — a live run needs a backend, so each word
 #     pins its dispatch contract instead (module-fn unmatched call)
 #
 # §6  Tier-2 pure words — constructors are data in, data out (pinned by
 #     canon equality); the runtime words pin their guard arms
-import "aql:tui"  Tui.text "hi"	{w:'text' text:'hi' wrap:'truncate'}	text builds the §3.1 leaf shape
-import "aql:tui"  Tui.text "hi" {size: 1}	{w:'text' text:'hi' wrap:'truncate' size:1}	options overlay onto the widget map
-import "aql:tui"  Tui.rows [] {gap: 2}	{w:'rows' children:[] gap:2}	rows carries children and gap
-import "aql:tui"  Tui.cols []	{w:'cols' children:[] gap:0}	cols is the horizontal stack
-import "aql:tui"  Tui.box (Tui.spacer) {title: "t"}	{w:'box' child:{w:'spacer'} title:'t' border:'line'}	box wraps a child with chrome
-import "aql:tui"  Tui.list-view ["a"] {cursor: 0}	{w:'list-view' items:['a'] cursor:0}	list-view carries items and cursor
-import "aql:tui"  Tui.table [{title: "c"}] [[1]]	{w:'table' columns:[{title:'c'}] rows:[[1]] cursor:0}	table carries columns, rows, cursor
-import "aql:tui"  Tui.input "ab"	{w:'input' value:'ab' cursor:2 placeholder:'' focus:false}	input renders state-owned text, cursor at end
-import "aql:tui"  Tui.viewport (Tui.spacer)	{w:'viewport' child:{w:'spacer'} offset:[0 0]}	viewport scrolls a child
-import "aql:tui"  Tui.spacer	{w:'spacer'}	spacer is the flexible filler
-import "aql:tui"  Tui.style {fg: "red"} {fg: "blue" bold: true}	{fg:'blue' bold:true}	style merge: overrides win
-import "aql:tui"  Tui.quit 7	{@quit:7}	quit wraps the final state in the marker map
-import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "backspace" char: "" mods: []}	{w:'input' value:'a' cursor:1 placeholder:'' focus:false}	edit folds a key event into the input
-import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "x" char: "x" mods: []}	{w:'input' value:'abx' cursor:3 placeholder:'' focus:false}	edit inserts a typed character at the cursor
-import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "left" char: "" mods: []}	{w:'input' value:'ab' cursor:1 placeholder:'' focus:false}	edit moves the cursor left
-import "aql:tui"  Tui.edit (Tui.edit (Tui.input "ab") {tag: "key" key: "home" char: "" mods: []}) {tag: "key" key: "delete" char: "" mods: []}	{w:'input' value:'b' cursor:0 placeholder:'' focus:false}	home then delete removes the character under the cursor
-import "aql:tui"  Tui.edit (Tui.input "ab") {tag: "resize" cols: 1 rows: 1}	{w:'input' value:'ab' cursor:2 placeholder:'' focus:false}	a non-key event leaves the input unchanged
-import "aql:tui"  Tui.input "pw" {mask: true}	{w:'input' value:'pw' cursor:2 placeholder:'' focus:false mask:true}	the mask option rides the widget map (the renderer paints bullets)
-import "aql:tui"  Tui.edit (Tui.input "pw" {mask: true}) {tag: "key" key: "x" char: "x" mods: []}	{w:'input' value:'pwx' cursor:3 placeholder:'' focus:false mask:true}	edit preserves the mask across folds
-import "aql:tui"  Tui.input "pw" {mask: 5}	{w:'input' value:'pw' cursor:2 placeholder:'' focus:false mask:5}	options pass through the constructor; the renderer refuses a non-Boolean mask
-import "aql:tui"  Tui.focusable (Tui.rows [(Tui.input "x" {id: "a"})])	['a']	focusable walks ids in document order
-import "aql:tui"  Tui.focusable (Tui.spacer)	[]	a tree without ids has no focusables
-import "aql:tui"  Tui.text 5	ERROR:uncalled_function	text requires a String
-import "aql:tui"  Tui.rows 5	ERROR:uncalled_function	rows requires a children List
-import "aql:tui"  Tui.cols 5	ERROR:uncalled_function	cols requires a children List
-import "aql:tui"  Tui.box 5 {}	ERROR:uncalled_function	box requires a widget Map child
-import "aql:tui"  Tui.list-view 5	ERROR:uncalled_function	list-view requires an items List
-import "aql:tui"  Tui.table 5 []	ERROR:uncalled_function	table requires a columns List
-import "aql:tui"  Tui.input 5	ERROR:uncalled_function	input requires a String value
-import "aql:tui"  Tui.viewport 5	ERROR:uncalled_function	viewport requires a widget Map child
-import "aql:tui"  Tui.style 5 {}	ERROR:uncalled_function	style requires a base Map
-import "aql:tui"  Tui.edit 5 {}	ERROR:uncalled_function	edit requires an input widget Map
-import "aql:tui"  Tui.focusable 5	ERROR:uncalled_function	focusable requires a widget Map tree
-import "aql:tui"  Tui.text "ok" {w: "viewport"}	ERROR:w is reserved	the options overlay cannot override the widget kind
+import "boru:tui"  Tui.text "hi"	{w:'text' text:'hi' wrap:'truncate'}	text builds the §3.1 leaf shape
+import "boru:tui"  Tui.text "hi" {size: 1}	{w:'text' text:'hi' wrap:'truncate' size:1}	options overlay onto the widget map
+import "boru:tui"  Tui.rows [] {gap: 2}	{w:'rows' children:[] gap:2}	rows carries children and gap
+import "boru:tui"  Tui.cols []	{w:'cols' children:[] gap:0}	cols is the horizontal stack
+import "boru:tui"  Tui.box (Tui.spacer) {title: "t"}	{w:'box' child:{w:'spacer'} title:'t' border:'line'}	box wraps a child with chrome
+import "boru:tui"  Tui.list-view ["a"] {cursor: 0}	{w:'list-view' items:['a'] cursor:0}	list-view carries items and cursor
+import "boru:tui"  Tui.table [{title: "c"}] [[1]]	{w:'table' columns:[{title:'c'}] rows:[[1]] cursor:0}	table carries columns, rows, cursor
+import "boru:tui"  Tui.input "ab"	{w:'input' value:'ab' cursor:2 placeholder:'' focus:false}	input renders state-owned text, cursor at end
+import "boru:tui"  Tui.viewport (Tui.spacer)	{w:'viewport' child:{w:'spacer'} offset:[0 0]}	viewport scrolls a child
+import "boru:tui"  Tui.spacer	{w:'spacer'}	spacer is the flexible filler
+import "boru:tui"  Tui.style {fg: "red"} {fg: "blue" bold: true}	{fg:'blue' bold:true}	style merge: overrides win
+import "boru:tui"  Tui.quit 7	{@quit:7}	quit wraps the final state in the marker map
+import "boru:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "backspace" char: "" mods: []}	{w:'input' value:'a' cursor:1 placeholder:'' focus:false}	edit folds a key event into the input
+import "boru:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "x" char: "x" mods: []}	{w:'input' value:'abx' cursor:3 placeholder:'' focus:false}	edit inserts a typed character at the cursor
+import "boru:tui"  Tui.edit (Tui.input "ab") {tag: "key" key: "left" char: "" mods: []}	{w:'input' value:'ab' cursor:1 placeholder:'' focus:false}	edit moves the cursor left
+import "boru:tui"  Tui.edit (Tui.edit (Tui.input "ab") {tag: "key" key: "home" char: "" mods: []}) {tag: "key" key: "delete" char: "" mods: []}	{w:'input' value:'b' cursor:0 placeholder:'' focus:false}	home then delete removes the character under the cursor
+import "boru:tui"  Tui.edit (Tui.input "ab") {tag: "resize" cols: 1 rows: 1}	{w:'input' value:'ab' cursor:2 placeholder:'' focus:false}	a non-key event leaves the input unchanged
+import "boru:tui"  Tui.input "pw" {mask: true}	{w:'input' value:'pw' cursor:2 placeholder:'' focus:false mask:true}	the mask option rides the widget map (the renderer paints bullets)
+import "boru:tui"  Tui.edit (Tui.input "pw" {mask: true}) {tag: "key" key: "x" char: "x" mods: []}	{w:'input' value:'pwx' cursor:3 placeholder:'' focus:false mask:true}	edit preserves the mask across folds
+import "boru:tui"  Tui.input "pw" {mask: 5}	{w:'input' value:'pw' cursor:2 placeholder:'' focus:false mask:5}	options pass through the constructor; the renderer refuses a non-Boolean mask
+import "boru:tui"  Tui.focusable (Tui.rows [(Tui.input "x" {id: "a"})])	['a']	focusable walks ids in document order
+import "boru:tui"  Tui.focusable (Tui.spacer)	[]	a tree without ids has no focusables
+import "boru:tui"  Tui.text 5	ERROR:uncalled_function	text requires a String
+import "boru:tui"  Tui.rows 5	ERROR:uncalled_function	rows requires a children List
+import "boru:tui"  Tui.cols 5	ERROR:uncalled_function	cols requires a children List
+import "boru:tui"  Tui.box 5 {}	ERROR:uncalled_function	box requires a widget Map child
+import "boru:tui"  Tui.list-view 5	ERROR:uncalled_function	list-view requires an items List
+import "boru:tui"  Tui.table 5 []	ERROR:uncalled_function	table requires a columns List
+import "boru:tui"  Tui.input 5	ERROR:uncalled_function	input requires a String value
+import "boru:tui"  Tui.viewport 5	ERROR:uncalled_function	viewport requires a widget Map child
+import "boru:tui"  Tui.style 5 {}	ERROR:uncalled_function	style requires a base Map
+import "boru:tui"  Tui.edit 5 {}	ERROR:uncalled_function	edit requires an input widget Map
+import "boru:tui"  Tui.focusable 5	ERROR:uncalled_function	focusable requires a widget Map tree
+import "boru:tui"  Tui.text "ok" {w: "viewport"}	ERROR:w is reserved	the options overlay cannot override the widget kind
 #
 # §7  standalone terminal utilities (design/TUI-UTILITIES.0.md) — pure,
 #     no backend, no policy scope; escape bytes stay out of this file
 #     (the strip round-trip and width laws pin them; Go tests pin the
 #     exact per-profile sequences)
-import "aql:tui"  Tui.colorize {} "hi"	'hi'	the attribute-less style is the identity — no stray escapes
-import "aql:tui"  Tui.strip-ansi (Tui.colorize {fg: "red" bold: true} "hi")	'hi'	strip-ansi round-trips colorize
-import "aql:tui"  (size (Tui.colorize {fg: "red"} "hi")) gt 2	true	a styled string carries its escape sequences
-import "aql:tui"  Tui.strip-ansi "plain"	'plain'	strip-ansi leaves clean text alone
-import "aql:tui"  Tui.text-width "hi"	2	text-width counts display cells
-import "aql:tui"  Tui.text-width "漢字"	4	CJK is double-width
-import "aql:tui"  Tui.text-width ""	0	the empty string is zero cells
-import "aql:tui"  Tui.text-width (Tui.colorize {fg: "red"} "hi")	2	escapes occupy no display cells
-import "aql:tui"  Tui.colorize 5 "hi"	ERROR:uncalled_function	colorize requires a style Map
-import "aql:tui"  Tui.colorize {} 5	ERROR:uncalled_function	colorize requires the text as a String
-import "aql:tui"  Tui.colorize {fg: 5} "hi"	ERROR:fg: must be a String	style field types are validated
-import "aql:tui"  Tui.colorize {} "hi" {profile: "grayscale"}	ERROR:profile: must be	an unknown color profile is refused
-import "aql:tui"  Tui.strip-ansi 5	ERROR:uncalled_function	strip-ansi requires a String
-import "aql:tui"  Tui.text-width 5	ERROR:uncalled_function	text-width requires a String
-import "aql:tui"  Tui.run {}	ERROR:missing update	run validates the app map before touching the terminal
-import "aql:tui"  Tui.run {update: 5 view: 6}	ERROR:update must be a function	run rejects a non-function update
-import "aql:tui"  Tui.run {service: 5 view: 6}	ERROR:service: must be a Service	the service-shaped config demands a real Service
-import "aql:tui"  Tui.run {service: 5 update: 6 view: 7}	ERROR:service: and update: are exclusive	one fold owner: service or update, never both
-import "aql:tui"  Tui.deliver-events 5 5	ERROR:uncalled_function	deliver-events requires a Terminal and a Pid
-import "aql:tui"  Tui.serve {token: "x"} {}	ERROR:tcp: must be an Integer port	serve requires a tcp: port
-import "aql:tui"  Tui.serve {tcp: "high" token: "x"} {}	ERROR:tcp: must be an Integer port	serve rejects a non-Integer port
-import "aql:tui"  Tui.serve {tcp: 70000 token: "x"} {}	ERROR:tcp: must be an Integer port	serve rejects an out-of-range port
-import "aql:tui"  Tui.serve {tcp: 0} {}	ERROR:token: is required	serve demands an explicit token (or the "none" opt-out)
-import "aql:tui"  Tui.serve {tcp: 0 token: 5} {}	ERROR:token: must be a String	serve rejects a non-String token
-import "aql:tui"  Tui.serve {tcp: 0 token: "x"} {}	ERROR:missing update	serve validates the app map before listening
-import "aql:tui"  Tui.serve {tcp: 0 token: "x" viewers: 0} {}	ERROR:viewers: must be an Integer between 1 and 64	serve rejects a zero viewer cap
-import "aql:tui"  Tui.serve {tcp: 0 token: "x" viewers: "two"} {}	ERROR:viewers: must be an Integer between 1 and 64	serve rejects a non-Integer viewer cap
-import "aql:tui"  Tui.serve {tcp: 0 token: "x" reattach: 5} {}	ERROR:reattach: must be a Boolean	serve rejects a non-Boolean reattach flag
+import "boru:tui"  Tui.colorize {} "hi"	'hi'	the attribute-less style is the identity — no stray escapes
+import "boru:tui"  Tui.strip-ansi (Tui.colorize {fg: "red" bold: true} "hi")	'hi'	strip-ansi round-trips colorize
+import "boru:tui"  (size (Tui.colorize {fg: "red"} "hi")) gt 2	true	a styled string carries its escape sequences
+import "boru:tui"  Tui.strip-ansi "plain"	'plain'	strip-ansi leaves clean text alone
+import "boru:tui"  Tui.text-width "hi"	2	text-width counts display cells
+import "boru:tui"  Tui.text-width "漢字"	4	CJK is double-width
+import "boru:tui"  Tui.text-width ""	0	the empty string is zero cells
+import "boru:tui"  Tui.text-width (Tui.colorize {fg: "red"} "hi")	2	escapes occupy no display cells
+import "boru:tui"  Tui.colorize 5 "hi"	ERROR:uncalled_function	colorize requires a style Map
+import "boru:tui"  Tui.colorize {} 5	ERROR:uncalled_function	colorize requires the text as a String
+import "boru:tui"  Tui.colorize {fg: 5} "hi"	ERROR:fg: must be a String	style field types are validated
+import "boru:tui"  Tui.colorize {} "hi" {profile: "grayscale"}	ERROR:profile: must be	an unknown color profile is refused
+import "boru:tui"  Tui.strip-ansi 5	ERROR:uncalled_function	strip-ansi requires a String
+import "boru:tui"  Tui.text-width 5	ERROR:uncalled_function	text-width requires a String
+import "boru:tui"  Tui.run {}	ERROR:missing update	run validates the app map before touching the terminal
+import "boru:tui"  Tui.run {update: 5 view: 6}	ERROR:update must be a function	run rejects a non-function update
+import "boru:tui"  Tui.run {service: 5 view: 6}	ERROR:service: must be a Service	the service-shaped config demands a real Service
+import "boru:tui"  Tui.run {service: 5 update: 6 view: 7}	ERROR:service: and update: are exclusive	one fold owner: service or update, never both
+import "boru:tui"  Tui.deliver-events 5 5	ERROR:uncalled_function	deliver-events requires a Terminal and a Pid
+import "boru:tui"  Tui.serve {token: "x"} {}	ERROR:tcp: must be an Integer port	serve requires a tcp: port
+import "boru:tui"  Tui.serve {tcp: "high" token: "x"} {}	ERROR:tcp: must be an Integer port	serve rejects a non-Integer port
+import "boru:tui"  Tui.serve {tcp: 70000 token: "x"} {}	ERROR:tcp: must be an Integer port	serve rejects an out-of-range port
+import "boru:tui"  Tui.serve {tcp: 0} {}	ERROR:token: is required	serve demands an explicit token (or the "none" opt-out)
+import "boru:tui"  Tui.serve {tcp: 0 token: 5} {}	ERROR:token: must be a String	serve rejects a non-String token
+import "boru:tui"  Tui.serve {tcp: 0 token: "x"} {}	ERROR:missing update	serve validates the app map before listening
+import "boru:tui"  Tui.serve {tcp: 0 token: "x" viewers: 0} {}	ERROR:viewers: must be an Integer between 1 and 64	serve rejects a zero viewer cap
+import "boru:tui"  Tui.serve {tcp: 0 token: "x" viewers: "two"} {}	ERROR:viewers: must be an Integer between 1 and 64	serve rejects a non-Integer viewer cap
+import "boru:tui"  Tui.serve {tcp: 0 token: "x" reattach: 5} {}	ERROR:reattach: must be a Boolean	serve rejects a non-Boolean reattach flag
 #
-import "aql:tui"  Tui.close 5	ERROR:uncalled_function	close requires a Terminal handle
-import "aql:tui"  Tui.dims 5	ERROR:uncalled_function	dims requires a Terminal handle
-import "aql:tui"  Tui.read-event 5	ERROR:uncalled_function	read-event requires a Terminal handle
-import "aql:tui"  Tui.print-at 5 0 0 "x"	ERROR:uncalled_function	print-at requires a Terminal handle
-import "aql:tui"  Tui.clear 5	ERROR:uncalled_function	clear requires a Terminal handle
-import "aql:tui"  Tui.show 5	ERROR:uncalled_function	show requires a Terminal handle
-import "aql:tui"  Tui.title 5 "s"	ERROR:uncalled_function	title requires a Terminal handle
-import "aql:tui"  Tui.bell 5	ERROR:uncalled_function	bell requires a Terminal handle
+import "boru:tui"  Tui.close 5	ERROR:uncalled_function	close requires a Terminal handle
+import "boru:tui"  Tui.dims 5	ERROR:uncalled_function	dims requires a Terminal handle
+import "boru:tui"  Tui.read-event 5	ERROR:uncalled_function	read-event requires a Terminal handle
+import "boru:tui"  Tui.print-at 5 0 0 "x"	ERROR:uncalled_function	print-at requires a Terminal handle
+import "boru:tui"  Tui.clear 5	ERROR:uncalled_function	clear requires a Terminal handle
+import "boru:tui"  Tui.show 5	ERROR:uncalled_function	show requires a Terminal handle
+import "boru:tui"  Tui.title 5 "s"	ERROR:uncalled_function	title requires a Terminal handle
+import "boru:tui"  Tui.bell 5	ERROR:uncalled_function	bell requires a Terminal handle

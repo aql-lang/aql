@@ -106,7 +106,7 @@ func compareValuesClassified(a, b Value) (n int, viaFamily bool, err error) {
 }
 
 // orderedCompare runs the family-restricted comparison behind the
-// ordering words. It returns the -1/0/1 result, or an [aql/incomparable]
+// ordering words. It returns the -1/0/1 result, or an [boru/incomparable]
 // error when the pair only orders via the cross-type total order — the
 // caller should reach for tcmp instead.
 func orderedCompare(op string, a, b Value) (int, error) {
@@ -124,7 +124,7 @@ func orderedCompare(op string, a, b Value) (int, error) {
 // restricted ordering words (lt / gt / lte / gte / cmp). When BOTH
 // operands are statically determinate it runs the (pure) handler to
 // detect a cross-family pair statically — Integer vs String can never be
-// ordered, for any values — and emits an [aql/incomparable] error
+// ordered, for any values — and emits an [boru/incomparable] error
 // diagnostic, so the mismatch is caught at check time instead of slipping
 // through as a runtime error. With a non-determinate operand the runtime
 // family is unknown, so nothing is flagged. The result carrier (Boolean
@@ -134,7 +134,7 @@ func OrderingReturnsFn(handler Handler, result *Type) ReturnsFunc {
 	return func(args []Value, r *Registry) []Value {
 		if r != nil && len(args) == 2 && orderingDeterminate(args[0]) && orderingDeterminate(args[1]) {
 			if _, err := handler(args, nil, nil, r); err != nil {
-				var ae *AqlError
+				var ae *BoruError
 				if errors.As(err, &ae) && ae.Code == "incomparable" {
 					// Routed through the unique-diagnostic helper for the
 					// caught-body gate: inside `do [...]` the runtime error
@@ -166,10 +166,10 @@ func orderingDeterminate(v Value) bool {
 	return IsConcrete(v) || IsNoneShape(v) || IsBareTypeNode(v)
 }
 
-// incomparableError is the [aql/incomparable] error the restricted
+// incomparableError is the [boru/incomparable] error the restricted
 // ordering words raise for cross-family operands.
 func incomparableError(op string, a, b Value) error {
-	return &AqlError{
+	return &BoruError{
 		Code: "incomparable",
 		Detail: fmt.Sprintf("%s: cannot order %s and %s",
 			op, ValueType(a).String(), ValueType(b).String()),
@@ -781,7 +781,7 @@ func isDeqComparableHandle(v Value) bool {
 // The ordering words lt / gt / lte / gte / cmp are family-restricted:
 // they compare only same-type values, or values a shared same-family
 // Comparer can handle (Integer-vs-Float, two Dates, …). A cross-family
-// pair (Integer-vs-String, List-vs-Map) raises [aql/incomparable] and
+// pair (Integer-vs-String, List-vs-Map) raises [boru/incomparable] and
 // directs the caller to tcmp, which keeps the full cross-type total
 // order. The guard lives in orderedCompare; tcmp (TcmpHandler) bypasses
 // it.
@@ -791,7 +791,7 @@ func isDeqComparableHandle(v Value) bool {
 // NaN. The ordering words lt / lte / gt / gte all yield false in that
 // case (NaN is neither less, equal, nor greater). Cross-family pairs
 // (e.g. Float-vs-String) are NOT unordered here — they fall through to
-// the family guard, which raises [aql/incomparable]. The total-order
+// the family guard, which raises [boru/incomparable]. The total-order
 // words cmp / tcmp / sort deliberately bypass this and give NaN a defined
 // slot (see numberCompareBehavior.Compare).
 func numericUnordered(a, b Value) bool {
@@ -840,7 +840,7 @@ var (
 // CmpHandler implements `cmp` — a three-way comparison restricted to
 // same-family operands. `a b cmp` returns -1 when a sorts before b, 0
 // when they tie, and 1 when a sorts after b, using the same family
-// ordering as lt / gt. Cross-family operands raise [aql/incomparable];
+// ordering as lt / gt. Cross-family operands raise [boru/incomparable];
 // use tcmp for a cross-type total order. The result is normalised to
 // its sign, so a custom `behave compare` body that returns a nonzero
 // magnitude other than ±1 still yields exactly -1 / 0 / 1.

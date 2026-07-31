@@ -4,9 +4,9 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/formatter"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/formatter"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestFmtTreeStructure drives Fmt.tree over source exercising every node kind
@@ -84,8 +84,8 @@ func TestNodeKindNameUnknown(t *testing.T) {
 	}
 }
 
-// TestFmtTreeDeclarativeFormatter is the Phase-3 payoff: a formatter for AQL
-// SOURCE written as a declarative AQL rule table over Fmt.tree, dispatching by
+// TestFmtTreeDeclarativeFormatter is the Phase-3 payoff: a formatter for boru
+// SOURCE written as a declarative boru rule table over Fmt.tree, dispatching by
 // Fmt.kind and recursing through `node.children`. For attachment-free
 // statements (no `:`/`.`/`,` gluing) inline rendering is a plain space-join,
 // so the declarative output equals the built-in Fmt.format byte-for-byte —
@@ -98,7 +98,7 @@ func TestFmtTreeDeclarativeFormatter(t *testing.T) {
 	reg.SetParseFunc(parser.Parse)
 	InstallResolver(reg)
 
-	// The declarative source formatter, written entirely in AQL over Fmt.tree:
+	// The declarative source formatter, written entirely in boru over Fmt.tree:
 	//   - `apply` dispatches a node to its rule via Fmt.kind;
 	//   - `attaches` reproduces the emitter's token-adjacency rule (a comma /
 	//     colon / dot / question glues to the previous token; a token after a
@@ -107,13 +107,13 @@ func TestFmtTreeDeclarativeFormatter(t *testing.T) {
 	//   - `foldstep` folds the children into the inline string, threading the
 	//     previous node so `sepfor` can consult it;
 	//   - `rules` maps every node kind to its layout.
-	// This is the emitter's inline layer expressed as AQL data + a fold — it
+	// This is the emitter's inline layer expressed as boru data + a fold — it
 	// reproduces Fmt.format byte-for-byte for every statement that fits on one
 	// line (the wrapping strategies are the remaining, fork-gated piece).
 	// The whole program also COMPILES (Stage-3 fn-value dispatch); the
 	// compiled twin is TestFmtTreeDeclarativeFormatterCompiledParity
 	// (fmt_compiled_parity_test.go).
-	const rules = `import "aql:fmt"
+	const rules = `import "boru:fmt"
 def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
 def ends-dot fn [nd:Any Any [
   def t (nd.text)

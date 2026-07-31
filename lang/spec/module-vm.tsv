@@ -1,55 +1,55 @@
-# AQL Language Specification: the aql:vm module
+# boru Language Specification: the boru:vm module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable capability module. Import binds the `Vm` namespace, then code
 # is run in an isolated sub-engine under an explicit policy via dot-access:
-# `import "aql:vm"  Vm.run-compute "1 add 2"`. Each word parses the
+# `import "boru:vm"  Vm.run-compute "1 add 2"`. Each word parses the
 # supplied source string, runs it through a fresh engine governed by the
 # resolved policy (composed with the parent's so a child can never widen
 # the parent's permissions), and returns the last residual stack value.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  run — default sandbox profile
-import "aql:vm" Vm.run "1 add 2"	3	runs code in a sandboxed sub-engine, returns the result
+import "boru:vm" Vm.run "1 add 2"	3	runs code in a sandboxed sub-engine, returns the result
 #
 # §2  run-sandbox / run-compute — named built-in profiles
-import "aql:vm" Vm.run-sandbox "5 mul 7"	35	the 'sandbox' profile permits pure computation
-import "aql:vm" Vm.run-compute "1 add 2"	3	the 'compute' profile permits arithmetic
+import "boru:vm" Vm.run-sandbox "5 mul 7"	35	the 'sandbox' profile permits pure computation
+import "boru:vm" Vm.run-compute "1 add 2"	3	the 'compute' profile permits arithmetic
 #
 # §3  run-with — explicit policy supplied as a data map
-import "aql:vm" { scopes: { engine: { words: { default: "allow" } } } } "10 sub 3" Vm.run-with	7	policy map + code; an allow-all engine scope runs the arithmetic
+import "boru:vm" { scopes: { engine: { words: { default: "allow" } } } } "10 sub 3" Vm.run-with	7	policy map + code; an allow-all engine scope runs the arithmetic
 #
-# §4  parse — AQL source → inspectable structure (no evaluation).
+# §4  parse — boru source → inspectable structure (no evaluation).
 #     Returns a QUOTED list of the engine's parse values; element
 #     shapes are implementation-defined for now (design/PARSING.10.md
-#     §3). Parse errors raise [aql/parse_error].
-import "aql:vm" Vm.parse "1 add 2"	(quote [1 word(add) 2])	parses source to a quoted token list without running it
-import "aql:vm" size (Vm.parse "1 add 2")	3	the structure is ordinary data
-import "aql:vm" Vm.parse "1 add ((("	ERROR:parse_error	malformed source raises loudly
+#     §3). Parse errors raise [boru/parse_error].
+import "boru:vm" Vm.parse "1 add 2"	(quote [1 word(add) 2])	parses source to a quoted token list without running it
+import "boru:vm" size (Vm.parse "1 add 2")	3	the structure is ordinary data
+import "boru:vm" Vm.parse "1 add ((("	ERROR:parse_error	malformed source raises loudly
 #
 # ─────────────────────────────────────────────────────────────────────
 # §5  check — static type-check WITHOUT running. Returns a result map
 #     { ok errors warnings diagnostics }; findings are DATA, never raised
 #     (even a syntax error rides back as one error-severity diagnostic),
 #     so callers get one uniform shape. Runs under the parent's policy.
-import "aql:vm" (Vm.check "1 add 2").ok	true	clean source checks ok
-import "aql:vm" (Vm.check "1 add 2").errors	0	…with zero errors
-import "aql:vm" (Vm.check "totally-undefined-word").ok	false	an undefined word fails the check
-import "aql:vm" (Vm.check "totally-undefined-word").errors	1	…and is counted
-import "aql:vm" ((Vm.check "totally-undefined-word").diagnostics.0).code	'undefined_word'	each diagnostic carries a stable code
-import "aql:vm" ((Vm.check "totally-undefined-word").diagnostics.0).severity	'error'	…and a severity
-import "aql:vm" (Vm.check "1 add (((").ok	false	a syntax error is a check finding, not a raised error
-import "aql:vm" ((Vm.check "1 add (((").diagnostics.0).code	'parse_error'	…reported with the parse_error code
-import "aql:vm" (Vm.check "1 add 2  def unused 99").warnings	1	non-fatal findings count as warnings
+import "boru:vm" (Vm.check "1 add 2").ok	true	clean source checks ok
+import "boru:vm" (Vm.check "1 add 2").errors	0	…with zero errors
+import "boru:vm" (Vm.check "totally-undefined-word").ok	false	an undefined word fails the check
+import "boru:vm" (Vm.check "totally-undefined-word").errors	1	…and is counted
+import "boru:vm" ((Vm.check "totally-undefined-word").diagnostics.0).code	'undefined_word'	each diagnostic carries a stable code
+import "boru:vm" ((Vm.check "totally-undefined-word").diagnostics.0).severity	'error'	…and a severity
+import "boru:vm" (Vm.check "1 add (((").ok	false	a syntax error is a check finding, not a raised error
+import "boru:vm" ((Vm.check "1 add (((").diagnostics.0).code	'parse_error'	…reported with the parse_error code
+import "boru:vm" (Vm.check "1 add 2  def unused 99").warnings	1	non-fatal findings count as warnings
 #
 # ─────────────────────────────────────────────────────────────────────
 # §6  compile — run the bytecode compile pass WITHOUT executing. Returns
 #     { ok reason sites }: ok = lowers to bytecode, reason = first offender
 #     when it does not, sites = the dispatch-site census. Refusal is data,
 #     not an error.
-import "aql:vm" (Vm.compile "1 add 2").ok	true	a straight-line program compiles
-import "aql:vm" (Vm.compile "1 add 2").reason	''	…with no refusal reason
-import "aql:vm" ((Vm.compile "1 add 2").sites).mono	1	the dispatch-site census reports one mono call
-import "aql:vm" (Vm.compile "(size (for 5 [i]))").ok	false	a loop-result consumer refuses
-import "aql:vm" (Vm.compile "1 add (((").ok	false	malformed source does not compile
-import "aql:vm" (Vm.compile "1 add (((").reason	'parse error'	…and says why
+import "boru:vm" (Vm.compile "1 add 2").ok	true	a straight-line program compiles
+import "boru:vm" (Vm.compile "1 add 2").reason	''	…with no refusal reason
+import "boru:vm" ((Vm.compile "1 add 2").sites).mono	1	the dispatch-site census reports one mono call
+import "boru:vm" (Vm.compile "(size (for 5 [i]))").ok	false	a loop-result consumer refuses
+import "boru:vm" (Vm.compile "1 add (((").ok	false	malformed source does not compile
+import "boru:vm" (Vm.compile "1 add (((").reason	'parse error'	…and says why

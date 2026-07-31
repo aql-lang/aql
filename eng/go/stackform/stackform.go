@@ -1,8 +1,8 @@
 // Package stackform defines a canonical strict-stack representation
-// of an AQL program. It is the form the property-based-testing
+// of a boru program. It is the form the property-based-testing
 // reducer operates on (design/PBT-PLAN.10.md) and the first half of
 // the work the bytecode-emission proposal in
-// design/aql-bytecode-report.0.md needs.
+// design/boru-bytecode-report.0.md needs.
 //
 // A StackForm is a flat sequence of Ops. Each Op corresponds to one
 // observable engine action — either pushing a literal value onto
@@ -13,7 +13,7 @@
 // call is in strict-stack order with the arity it was matched at.
 //
 // Build a StackForm with Compile(); evaluate it with Eval();
-// render it back to readable AQL with Pretty(). Equivalent
+// render it back to readable boru with Pretty(). Equivalent
 // programs produce equal StackForms (Equal); cost-driven shrinking
 // uses Cost.
 //
@@ -26,7 +26,7 @@
 // the real bytecode path; reach here for PBT shrinking.
 package stackform
 
-import "github.com/aql-lang/aql/eng/go"
+import "github.com/boru-lang/boru/eng/go"
 
 // Op is one element of a StackForm. The concrete variants are
 // PushLit, Call, Quote, DoEval (see below).

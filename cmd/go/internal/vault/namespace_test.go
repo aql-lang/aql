@@ -31,7 +31,7 @@ func TestResolveAliasRef(t *testing.T) {
 	tests := []struct {
 		name string
 		s    *Store
-		env  string // AQL_VAULT_NAMESPACE; "" = unset
+		env  string // BORU_VAULT_NAMESPACE; "" = unset
 		ref  string
 		want string
 		err  bool
@@ -115,7 +115,7 @@ func TestNamespaceDefaultSugarRoundTrip(t *testing.T) {
 	if code, out, _ := runVault(t, "", "get", "--reveal", ":shared"); code != 0 || !strings.Contains(out, "root-val") {
 		t.Errorf("get :shared = %q (code %d), want root-val", out, code)
 	}
-	// AQL_VAULT_NAMESPACE=: forces root for a bare name.
+	// BORU_VAULT_NAMESPACE=: forces root for a bare name.
 	t.Setenv(EnvNamespace, ":")
 	if code, out, _ := runVault(t, "", "get", "--reveal", "shared"); code != 0 || !strings.Contains(out, "root-val") {
 		t.Errorf("get shared with env ':' = %q (code %d), want root-val", out, code)
@@ -268,7 +268,7 @@ func TestExecResolvesDefaultNamespace(t *testing.T) {
 
 func TestExportNamespaceFilterAndImportRemap(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bp")
-	bundle := t.TempDir() + "/b.aqlx"
+	bundle := t.TempDir() + "/b.borux"
 
 	src := t.TempDir()
 	initVaultAt(t, src, "p")

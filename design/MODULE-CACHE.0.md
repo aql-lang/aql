@@ -1,13 +1,13 @@
 # MODULE-CACHE.0 — File-Module Caching & the Singleton Question
 
 This document captures the feasibility findings for adding a
-`require.cache`-style per-registry **file-module cache** to AQL, and the
+`require.cache`-style per-registry **file-module cache** to boru, and the
 one semantic decision that gates it.
 
 It is a sibling to:
 
 - **IMPORTS.10** — the surface behaviour of the `import` word.
-- **NATIVE-MODULES.10** — the `aql:<name>` native-module path.
+- **NATIVE-MODULES.10** — the `boru:<name>` native-module path.
 
 Status: **analysis only — not implemented.** The current behaviour
 (every file `import` re-runs the module body) is unchanged. This doc
@@ -19,16 +19,16 @@ changes observable semantics (see §3).
 
 There are two import dedup behaviours, and they diverge:
 
-- **Native modules** (`aql:math`, …) are loaded **at most once per
+- **Native modules** (`boru:math`, …) are loaded **at most once per
   registry**. `resolveNativeMod` (`lang/go/native/native_module_module.go`)
   checks `r.Modules.IsLoaded(name)` and short-circuits; the load set
   lives on `ModuleRegistry.loaded` (`eng/go/modules.go`).
-- **File modules** (`./lib.aql`, bare names, …) are **never cached**.
+- **File modules** (`./lib.boru`, bare names, …) are **never cached**.
   `loadFileModule` (`native_module_module.go:248`) re-reads, re-parses,
   and re-runs the file body on **every** `import`. Two imports of the
   same file run its body twice and produce independent exports.
 
-Consequence: a diamond import — `a` and `b` both `import "./util.aql"`,
+Consequence: a diamond import — `a` and `b` both `import "./util.boru"`,
 both imported by `main` — evaluates `util` twice. There is also **no
 circular-import support**: with no in-flight registry to hand back, an
 `a → b → a` cycle re-evaluates rather than resolving to a partial export
@@ -63,8 +63,8 @@ resolved := resolveImportPath(parent, path)   // native_module_module.go:253
 ```
 
 The resolved path (not the source string) is the correct key: the same
-relative path `./util.aql` resolves differently from different
-`BaseDir`s, and bare-name / `aql.json`-`main` / `index.aql` resolution
+relative path `./util.boru` resolves differently from different
+`BaseDir`s, and bare-name / `boru.json`-`main` / `index.boru` resolution
 all collapse to one concrete path here.
 
 ### 2.3 Lookup / store
@@ -82,7 +82,7 @@ In `loadFileModule`, after computing `resolved`:
 import graph shares the same cache by reference**, with no per-call-site
 plumbing — the exact "a new config field is inherited everywhere by
 default" property `InheritConfig` was introduced to provide. `a` and `b`
-importing `./util.aql` then hit one shared map automatically.
+importing `./util.boru` then hit one shared map automatically.
 
 This is the same propagation channel as the sub-import resolver fix: the
 bug fix and this feature reuse one mechanism.
@@ -91,14 +91,14 @@ bug fix and this feature reuse one mechanism.
 
 This is not an internal optimization that can be added invisibly. You
 cannot have both "the same instance is returned to every importer" and
-"the body re-runs with fresh state." A cache necessarily switches AQL to
+"the body re-runs with fresh state." A cache necessarily switches boru to
 **Node-style singleton modules**, with two observable changes:
 
 ### 3.1 Module-private state becomes shared
 
 A module that keeps private mutable state and exports closures over it:
 
-```aql
+```boru
 def m {count: 0}
 def bump fn [[] [Integer] [m set 'count' ((m get 'count') add 1)]]
 export "Counter" {bump: bump}
@@ -110,7 +110,7 @@ pointers, and exported `FnDef` values carry `Registry: modReg`
 (`resolveModuleExport`, `native_module_module.go:397`) — on a cache hit
 every importer reuses the one `modReg` and its export maps. This is
 *exactly* Node's `require.cache` behaviour and is usually what people
-want, but it is a behaviour change that existing AQL programs can
+want, but it is a behaviour change that existing boru programs can
 observe.
 
 ### 3.2 Load-time parent context freezes

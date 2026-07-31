@@ -14,13 +14,13 @@ import (
 	"sync/atomic"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// Tier-1 low-level sockets for aql:net — the executable slice of
+// Tier-1 low-level sockets for boru:net — the executable slice of
 // design/NETWORK-SERVERS.0.md §4 and design/NETWORK-CLIENTS.0.md §4:
 //
 //	listen {tcp: <port> host: "…"}       -> Listener     (network.listen gated)
@@ -51,7 +51,7 @@ var (
 )
 
 func registerNetType(path string, id int, b eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterType(path, id, "aql:net", b)
+	t, err := eng.Builtin.RegisterType(path, id, "boru:net", b)
 	if err != nil {
 		native.RecordTypeInitError(fmt.Errorf("net: register %s: %w", path, err))
 	}
@@ -260,7 +260,7 @@ func parseNetAddr(r *native.Registry, v native.Value, word string, listening boo
 	if uv, ok := mp.Get("unix"); ok {
 		path, sErr := uv.AsConcreteString()
 		if sErr != nil || path == "" {
-			return netAddrOpts{}, r.AqlError("net_error", word+": unix: must be a socket path", word)
+			return netAddrOpts{}, r.BoruError("net_error", word+": unix: must be a socket path", word)
 		}
 		out := netAddrOpts{network: "unix", addr: path, host: "unix:" + path}
 		// A unix socket can carry TLS too, and — more to the point —
@@ -273,12 +273,12 @@ func parseNetAddr(r *native.Registry, v native.Value, word string, listening boo
 	}
 	tv, ok := mp.Get("tcp")
 	if !ok {
-		return netAddrOpts{}, r.AqlError("net_error", word+": options need tcp: (or unix:)", word)
+		return netAddrOpts{}, r.BoruError("net_error", word+": options need tcp: (or unix:)", word)
 	}
 	if listening {
 		port, iErr := tv.AsConcreteInteger()
 		if iErr != nil || port < 0 || port > 65535 {
-			return netAddrOpts{}, r.AqlError("net_error", word+": tcp: must be a port Integer (0–65535)", word)
+			return netAddrOpts{}, r.BoruError("net_error", word+": tcp: must be a port Integer (0–65535)", word)
 		}
 		host := ""
 		if hv, ok := mp.Get("host"); ok {
@@ -297,7 +297,7 @@ func parseNetAddr(r *native.Registry, v native.Value, word string, listening boo
 	}
 	addr, sErr := tv.AsConcreteString()
 	if sErr != nil || addr == "" {
-		return netAddrOpts{}, r.AqlError("net_error", word+`: tcp: must be a "host:port" String`, word)
+		return netAddrOpts{}, r.BoruError("net_error", word+`: tcp: must be a "host:port" String`, word)
 	}
 	host, portStr, splitErr := net.SplitHostPort(addr)
 	port := 0
@@ -368,7 +368,7 @@ func listenHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 	}
 	ln, lErr := net.Listen(opts.network, opts.addr)
 	if lErr != nil {
-		return nil, r.AqlError("transport", "listen: "+lErr.Error(), "listen")
+		return nil, r.BoruError("transport", "listen: "+lErr.Error(), "listen")
 	}
 	if tlsCfg != nil {
 		// TLS is a socket OPTION, not a separate API: the wrapped
@@ -386,26 +386,26 @@ func listenHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 // sentinels describe a malformed option, so they read as net_error
 // rather than as a transport fault nobody wrote.
 func listenTLSErr(r *native.Registry, err error) error {
-	var coded *eng.AqlError
+	var coded *eng.BoruError
 	if errors.As(err, &coded) {
 		return err
 	}
-	return r.AqlError("net_error", "listen: "+err.Error(), "listen")
+	return r.BoruError("net_error", "listen: "+err.Error(), "listen")
 }
 
 func acceptHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	nl, ok := asListener(args[0])
 	if !ok {
-		return nil, r.AqlError("net_error", "accept: expected a Listener, got "+args[0].Parent.String(), "accept")
+		return nil, r.BoruError("net_error", "accept: expected a Listener, got "+args[0].Parent.String(), "accept")
 	}
 	within, has, dErr := recvDeadline(args, 1)
 	if dErr != nil {
-		return nil, r.AqlError("net_error", "accept: "+dErr.Error(), "accept")
+		return nil, r.BoruError("net_error", "accept: "+dErr.Error(), "accept")
 	}
 	if has {
 		dl, canDeadline := nl.deadlineOn.(interface{ SetDeadline(time.Time) error })
 		if !canDeadline {
-			return nil, r.AqlError("net_error", "accept: this Listener does not support {within: ms}", "accept")
+			return nil, r.BoruError("net_error", "accept: this Listener does not support {within: ms}", "accept")
 		}
 		if sErr := dl.SetDeadline(time.Now().Add(within)); sErr != nil {
 			return nil, mapNetErr(r, "accept", sErr)
@@ -464,7 +464,7 @@ func connectRawHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	}
 	within, has, dErr := recvDeadline(args, 0) // within: may ride the same options map
 	if dErr != nil {
-		return nil, r.AqlError("net_error", "connect-raw: "+dErr.Error(), "connect-raw")
+		return nil, r.BoruError("net_error", "connect-raw: "+dErr.Error(), "connect-raw")
 	}
 	dialer := net.Dialer{}
 	if has {
@@ -536,7 +536,7 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 	handler := args[1]
 	fnInfo, ok := native.FnDefFromValue(handler)
 	if !ok {
-		return nil, r.AqlError("net_error", "serve-raw: handler must be a function taking the connection Socket", "serve-raw")
+		return nil, r.BoruError("net_error", "serve-raw: handler must be a function taking the connection Socket", "serve-raw")
 	}
 	lv, err := listenHandler(args[:1], nil, nil, r)
 	if err != nil {
@@ -556,7 +556,7 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 	go func() {
 		defer func() {
 			if rec := recover(); rec != nil { //covergate:allow acceptor-goroutine recover body: the loop calls only Accept on a listener serveRawHandler itself minted (failure is an error at the covered 404 arm, never a panic) plus panic-free ForkConcurrent/newSocketValue (§native)
-				fmt.Fprintf(acceptorFork.ErrOutput, "[aql/net] acceptor crashed: %v\n", rec)
+				fmt.Fprintf(acceptorFork.ErrOutput, "[boru/net] acceptor crashed: %v\n", rec)
 			}
 		}()
 		for {
@@ -570,8 +570,8 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 			sock := newSocketValue(conn)
 			go func() {
 				defer func() {
-					if rec := recover(); rec != nil { //covergate:allow per-connection recover body: MatchFnSig is nil-safe and CallAQL runs the handler in a NewTop sub-engine whose own recover converts body panics to internal_error AqlErrors, which flow through the covered error-logging arm (§native)
-						fmt.Fprintf(connFork.ErrOutput, "[aql/net] connection handler crashed: %v\n", rec)
+					if rec := recover(); rec != nil { //covergate:allow per-connection recover body: MatchFnSig is nil-safe and CallBoru runs the handler in a NewTop sub-engine whose own recover converts body panics to internal_error BoruErrors, which flow through the covered error-logging arm (§native)
+						fmt.Fprintf(connFork.ErrOutput, "[boru/net] connection handler crashed: %v\n", rec)
 					}
 					if sc, ok := asSocket(sock); ok {
 						_ = sc.close()
@@ -583,25 +583,25 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 				// acceptor. The handler therefore never sees a Socket
 				// whose peer is unauthenticated.
 				if hErr := tlsServerHandshake(conn, 0, false); hErr != nil {
-					fmt.Fprintf(connFork.ErrOutput, "[aql/net] TLS handshake failed: %v\n", hErr)
+					fmt.Fprintf(connFork.ErrOutput, "[boru/net] TLS handshake failed: %v\n", hErr)
 					return
 				}
 				sig := native.MatchFnSig(handler, []native.Value{sock})
 				if sig == nil {
-					fmt.Fprintf(connFork.ErrOutput, "[aql/net] serve-raw handler does not accept a Socket argument\n")
+					fmt.Fprintf(connFork.ErrOutput, "[boru/net] serve-raw handler does not accept a Socket argument\n")
 					return
 				}
 				// Route through InvokeCallback: when the handler compiled to a
 				// unit (the common capture-free case) and this per-connection fork
 				// is idle, the body runs on the VM (RunUnit) — closing the ~19x
 				// interpreter penalty the networking benchmark measured — else it
-				// falls back to CallAQL, byte-identical.
+				// falls back to CallBoru, byte-identical.
 				if _, hErr := eng.InvokeCallback(connFork, sig, []native.Value{sock}, fnInfo.Captured); hErr != nil {
 					// `closed` is the normal end of a connection; anything
 					// else is a real handler failure worth logging.
-					var ae *eng.AqlError
+					var ae *eng.BoruError
 					if !errors.As(hErr, &ae) || ae.Code != "closed" {
-						fmt.Fprintf(connFork.ErrOutput, "[aql/net] connection handler error: %v\n", hErr)
+						fmt.Fprintf(connFork.ErrOutput, "[boru/net] connection handler error: %v\n", hErr)
 					}
 				}
 			}()
@@ -613,15 +613,15 @@ func serveRawHandler(args []native.Value, _ map[string]native.Value, _ []native.
 func recvHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	sc, ok := asSocket(args[0])
 	if !ok {
-		return nil, r.AqlError("net_error", "recv: expected a Socket, got "+args[0].Parent.String(), "recv")
+		return nil, r.BoruError("net_error", "recv: expected a Socket, got "+args[0].Parent.String(), "recv")
 	}
 	n, nErr := args[1].AsConcreteInteger()
 	if nErr != nil || n < 0 {
-		return nil, r.AqlError("net_error", "recv: byte count must be a non-negative Integer (0 = whatever is available)", "recv")
+		return nil, r.BoruError("net_error", "recv: byte count must be a non-negative Integer (0 = whatever is available)", "recv")
 	}
 	within, has, dErr := recvDeadline(args, 2)
 	if dErr != nil {
-		return nil, r.AqlError("net_error", "recv: "+dErr.Error(), "recv")
+		return nil, r.BoruError("net_error", "recv: "+dErr.Error(), "recv")
 	}
 	sc.rmu.Lock()
 	defer sc.rmu.Unlock()
@@ -646,15 +646,15 @@ func recvHandler(args []native.Value, _ map[string]native.Value, _ []native.Valu
 func recvBytesHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	sc, ok := asSocket(args[0])
 	if !ok {
-		return nil, r.AqlError("net_error", "recv-bytes: expected a Socket, got "+args[0].Parent.String(), "recv-bytes")
+		return nil, r.BoruError("net_error", "recv-bytes: expected a Socket, got "+args[0].Parent.String(), "recv-bytes")
 	}
 	n, nErr := args[1].AsConcreteInteger()
 	if nErr != nil || n < 0 {
-		return nil, r.AqlError("net_error", "recv-bytes: byte count must be a non-negative Integer", "recv-bytes")
+		return nil, r.BoruError("net_error", "recv-bytes: byte count must be a non-negative Integer", "recv-bytes")
 	}
 	within, has, dErr := recvDeadline(args, 2)
 	if dErr != nil {
-		return nil, r.AqlError("net_error", "recv-bytes: "+dErr.Error(), "recv-bytes")
+		return nil, r.BoruError("net_error", "recv-bytes: "+dErr.Error(), "recv-bytes")
 	}
 	sc.rmu.Lock()
 	defer sc.rmu.Unlock()
@@ -664,7 +664,7 @@ func recvBytesHandler(args []native.Value, _ map[string]native.Value, _ []native
 	buf := make([]byte, n)
 	if _, err := io.ReadFull(sc.br, buf); err != nil {
 		if errors.Is(err, io.ErrUnexpectedEOF) {
-			return nil, r.AqlError("closed", "recv-bytes: connection closed mid-frame", "recv-bytes")
+			return nil, r.BoruError("closed", "recv-bytes: connection closed mid-frame", "recv-bytes")
 		}
 		return nil, mapNetErr(r, "recv-bytes", err)
 	}
@@ -674,15 +674,15 @@ func recvBytesHandler(args []native.Value, _ map[string]native.Value, _ []native
 func recvUntilHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	sc, ok := asSocket(args[0])
 	if !ok {
-		return nil, r.AqlError("net_error", "recv-until: expected a Socket, got "+args[0].Parent.String(), "recv-until")
+		return nil, r.BoruError("net_error", "recv-until: expected a Socket, got "+args[0].Parent.String(), "recv-until")
 	}
 	delim, ok := native.AsBytesValue(args[1])
 	if !ok || len(delim) == 0 {
-		return nil, r.AqlError("net_error", "recv-until: delimiter must be a non-empty Bytes (e.g. convert Bytes \"\\n\")", "recv-until")
+		return nil, r.BoruError("net_error", "recv-until: delimiter must be a non-empty Bytes (e.g. convert Bytes \"\\n\")", "recv-until")
 	}
 	within, has, dErr := recvDeadline(args, 2)
 	if dErr != nil {
-		return nil, r.AqlError("net_error", "recv-until: "+dErr.Error(), "recv-until")
+		return nil, r.BoruError("net_error", "recv-until: "+dErr.Error(), "recv-until")
 	}
 	sc.rmu.Lock()
 	defer sc.rmu.Unlock()
@@ -701,7 +701,7 @@ func recvUntilHandler(args []native.Value, _ map[string]native.Value, _ []native
 			if errors.Is(err, io.EOF) && len(out) > 0 {
 				// Peer closed mid-line: surface `closed` — a framing loop
 				// treats the partial tail as a broken frame.
-				return nil, r.AqlError("closed", "recv-until: connection closed before delimiter", "recv-until")
+				return nil, r.BoruError("closed", "recv-until: connection closed before delimiter", "recv-until")
 			}
 			return nil, mapNetErr(r, "recv-until", err)
 		}
@@ -718,11 +718,11 @@ func setReadDeadline(sc *socketConn, within time.Duration, has bool) error {
 func sendBytesHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	data, ok := native.AsBytesValue(args[0])
 	if !ok {
-		return nil, r.AqlError("net_error", "send-bytes: expected Bytes, got "+args[0].Parent.String(), "send-bytes")
+		return nil, r.BoruError("net_error", "send-bytes: expected Bytes, got "+args[0].Parent.String(), "send-bytes")
 	}
 	sc, ok := asSocket(args[1])
 	if !ok {
-		return nil, r.AqlError("net_error", "send-bytes: expected a Socket, got "+args[1].Parent.String(), "send-bytes")
+		return nil, r.BoruError("net_error", "send-bytes: expected a Socket, got "+args[1].Parent.String(), "send-bytes")
 	}
 	sc.wmu.Lock()
 	defer sc.wmu.Unlock()
@@ -735,12 +735,12 @@ func sendBytesHandler(args []native.Value, _ map[string]native.Value, _ []native
 func shutdownHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	sc, ok := asSocket(args[0])
 	if !ok {
-		return nil, r.AqlError("net_error", "shutdown: expected a Socket, got "+args[0].Parent.String(), "shutdown")
+		return nil, r.BoruError("net_error", "shutdown: expected a Socket, got "+args[0].Parent.String(), "shutdown")
 	}
 	half := native.ValToString(args[1])
 	tcp, isTCP := sc.conn.(*net.TCPConn)
 	if !isTCP {
-		return nil, r.AqlError("net_error", "shutdown: half-close is only supported on TCP sockets", "shutdown")
+		return nil, r.BoruError("net_error", "shutdown: half-close is only supported on TCP sockets", "shutdown")
 	}
 	var err error
 	switch half {
@@ -751,7 +751,7 @@ func shutdownHandler(args []native.Value, _ map[string]native.Value, _ []native.
 	case "both":
 		err = sc.close()
 	default:
-		return nil, r.AqlError("net_error", `shutdown: half must be "read", "write" or "both"`, "shutdown")
+		return nil, r.BoruError("net_error", `shutdown: half must be "read", "write" or "both"`, "shutdown")
 	}
 	if err != nil {
 		return nil, mapNetErr(r, "shutdown", err)
@@ -776,15 +776,15 @@ func closeHandler(args []native.Value, _ map[string]native.Value, _ []native.Val
 			_ = closer()
 			return nil, nil
 		}
-		return nil, r.AqlError("net_error", "close: this Service is not a network endpoint", "close")
+		return nil, r.BoruError("net_error", "close: this Service is not a network endpoint", "close")
 	}
-	return nil, r.AqlError("net_error", "close: expected a Socket, Listener or Endpoint", "close")
+	return nil, r.BoruError("net_error", "close: expected a Socket, Listener or Endpoint", "close")
 }
 
 func addrHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	nl, ok := asListener(args[0])
 	if !ok {
-		return nil, r.AqlError("net_error", "addr: expected a Listener, got "+args[0].Parent.String(), "addr")
+		return nil, r.BoruError("net_error", "addr: expected a Listener, got "+args[0].Parent.String(), "addr")
 	}
 	m := native.NewOrderedMap()
 	host, portStr, err := net.SplitHostPort(nl.ln.Addr().String())
@@ -802,7 +802,7 @@ func addrHandler(args []native.Value, _ map[string]native.Value, _ []native.Valu
 func peerHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	sc, ok := asSocket(args[0])
 	if !ok {
-		return nil, r.AqlError("net_error", "peer: expected a Socket, got "+args[0].Parent.String(), "peer")
+		return nil, r.BoruError("net_error", "peer: expected a Socket, got "+args[0].Parent.String(), "peer")
 	}
 	m := native.NewOrderedMap()
 	addr := sc.conn.RemoteAddr()
@@ -824,7 +824,7 @@ func peerHandler(args []native.Value, _ map[string]native.Value, _ []native.Valu
 //
 // This is what makes `require-client:` useful rather than merely
 // restrictive: the TLS layer proves the peer holds a key chaining to a
-// trusted CA, and this word hands the resulting identity to AQL so the
+// trusted CA, and this word hands the resulting identity to boru so the
 // AUTHORIZATION decision — which client may do what — can be written in
 // the language rather than baked into the host.
 //
@@ -835,7 +835,7 @@ func peerHandler(args []native.Value, _ map[string]native.Value, _ []native.Valu
 func peerCertHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	sc, ok := asSocket(args[0])
 	if !ok {
-		return nil, r.AqlError("net_error", "peer-cert: expected a Socket, got "+args[0].Parent.String(), "peer-cert")
+		return nil, r.BoruError("net_error", "peer-cert: expected a Socket, got "+args[0].Parent.String(), "peer-cert")
 	}
 	tconn, isTLS := sc.conn.(*tls.Conn)
 	if !isTLS {
@@ -850,7 +850,7 @@ func peerCertHandler(args []native.Value, _ map[string]native.Value, _ []native.
 
 // certValue projects an X.509 leaf onto the fields an authorization
 // rule actually reads. Names stay Strings (a DN is text, and the
-// distinguished-name grammar is not something AQL should have to
+// distinguished-name grammar is not something boru should have to
 // parse); validity is Instants so `TimeUtil.now` comparisons work; the
 // serial is a String because it is a 20-octet integer that does not fit
 // an Integer.

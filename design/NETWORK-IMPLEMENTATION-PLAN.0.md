@@ -3,7 +3,7 @@
 Implementation plan for the client/server networking + app-building stack —
 the executable slice of `PROCESSES.0.md`, `SERVICES.0.md`,
 `NETWORK-SERVERS.0.md`, and `NETWORK-CLIENTS.0.md`, verified by four apps
-written in AQL (a socket REPL, a todo REST API, a mini-redis, a basic
+written in boru (a socket REPL, a todo REST API, a mini-redis, a basic
 streaming/resumable S3).
 
 ## 0. Design review — what is settled, what this slice takes
@@ -25,7 +25,7 @@ landed:
 - **Policy scopes pre-exist** — `network` (`connect`, and now `listen`) and
   `process`; `fetch.go::checkFetchPolicy` is the gating pattern to copy.
 - Text⇄bytes spellings in the RFC examples (`utf8`, `to-text`) are today's
-  `convert Bytes <String>` / `convert String <Bytes>`; AQL app code uses the
+  `convert Bytes <String>` / `convert String <Bytes>`; boru app code uses the
   landed spellings.
 
 ## 1. Scope decisions for this slice
@@ -49,13 +49,13 @@ the load-bearing core end to end and scopes the rest out explicitly:
    "one request at a time" gen_server guarantee, so one shared service is
    safe under many connection actors, with far less machinery. `server`/
    `serve`/`pool`/supervision are deferred (§4).
-3. **`aql:net` Tier 1** — `Listener`/`Socket` Ideals; `listen {tcp: …}`,
+3. **`boru:net` Tier 1** — `Listener`/`Socket` Ideals; `listen {tcp: …}`,
    `accept`, `connect-raw {tcp: …}`, `serve-raw`, passive `recv`/
    `recv-bytes`/`recv-until` (with `{within: ms}` deadlines), `send-bytes`,
    `close`, `shutdown`; a `NetRuntime` owner (installed via the capability
    registry, shared by forks) tracking sockets for shutdown;
    `network.listen`/`network.connect` gating.
-4. **`aql:net` Tier 2** — a `Codec` is a plain Map `{decode encode}` of AQL
+4. **`boru:net` Tier 2** — a `Codec` is a plain Map `{decode encode}` of boru
    fns (the RFC's extension point, verbatim); built-in codec values `lines`,
    `json-lines`, `http` (Go-backed for robustness, same value shape);
    `listen {tcp codec} <service>` (Go conn-session loop: buffer → decode →
@@ -64,15 +64,15 @@ the load-bearing core end to end and scopes the rest out explicitly:
    `Service` value with a remote transport (synchronous request/reply
    correlation — one in-flight call per endpoint, serialized on the socket);
    HTTP `:param` route matching done in the transport (the RFC's "small
-   router in aql:net" leaning), surfacing `req.params`; `req.@peer`.
-5. **Verification apps, written in AQL:**
-   - **`aql:repl`** — a native module whose implementation is an AQL
-     preamble (the `aql:test` pattern): a line-protocol REPL server
-     (evaluates via `aql:vm`) + client words.
+   router in boru:net" leaning), surfacing `req.params`; `req.@peer`.
+5. **Verification apps, written in boru:**
+   - **`boru:repl`** — a native module whose implementation is a boru
+     preamble (the `boru:test` pattern): a line-protocol REPL server
+     (evaluates via `boru:vm`) + client words.
    - **todo REST API** — the RFC §6.4 shape: patrun routes on
      `method`+`path`, wrap middleware, CRUD over the `http` codec.
    - **mini-redis** — GET/SET/DEL/EXISTS/INCR/KEYS/EXPIRE/TTL/LPUSH/RPUSH/
-     LRANGE/HSET/HGET over a custom AQL codec (inline RESP-ish framing) —
+     LRANGE/HSET/HGET over a custom boru codec (inline RESP-ish framing) —
      the "custom codec written by the user" story (§6.6) exercised for real.
    - **mini-S3** — bucket/object PUT/GET/DELETE/LIST on the **low-level
      tier** (hand-framed HTTP over `recv-until`/`recv-bytes`), streaming
@@ -82,7 +82,7 @@ the load-bearing core end to end and scopes the rest out explicitly:
 **Out of scope, deferred (unchanged from RFC roadmaps):** TLS, active-mode
 sockets (`set-active`), selective receive (`{select:true}`), served-service
 processes + `server`/`serve`/`pool`/supervision/restart, `defer`/`reply`,
-streaming `Stream<T>` values (`aql:stream`), websocket/jsonrpc codecs,
+streaming `Stream<T>` values (`boru:stream`), websocket/jsonrpc codecs,
 UDP, reconnection policy, HTTP/2, distribution.
 
 ## 2. Concrete design points
@@ -128,8 +128,8 @@ UDP, reconnection policy, HTTP/2, distribution.
   `docs_net.go`, policy gating tests, loopback socket Go tests).
 - **P4 — codecs + listen/connect**: `lang/go/modules/net_codec.go`,
   `net_listen.go` (+ end-to-end loopback tests per codec).
-- **P5 — apps**: `lang/go/modules/repl.go` (AQL preamble) + catalog entry;
-  `lang/go/test/apps/` AQL sources for todo/redis/s3 + Go end-to-end tests
+- **P5 — apps**: `lang/go/modules/repl.go` (boru preamble) + catalog entry;
+  `lang/go/test/apps/` boru sources for todo/redis/s3 + Go end-to-end tests
   driving real sockets.
 - **P6 — docs + final sweep**: describe/help coverage, design-doc status
   notes, full pre-commit checklist, push.
@@ -151,7 +151,7 @@ Every phase landed and is verified by tests:
   normalize to the handler's last value; messages are deep-copied at
   the process boundary rather than shared zero-copy (plain Map/List
   ARE mutated in place by flex-adjacent code paths today).
-- **P3/P4 aql:net** — `modules/net_socket.go` (Socket 5009 / Listener
+- **P3/P4 boru:net** — `modules/net_socket.go` (Socket 5009 / Listener
   5010, listen/accept/connect-raw/serve-raw, passive recv* with
   deadlines, closed/timeout/transport vocabulary, policy gating) and
   `modules/net_codec.go` (codec-as-Map extension point; built-in
@@ -159,10 +159,10 @@ Every phase landed and is verified by tests:
   listen-over-service session loops; the `:param` router; Endpoint =
   Service + synchronous remote transport with per-call timeouts;
   `req.body-json`).
-- **P5 apps** — `aql:repl` (native module implemented as an AQL
+- **P5 apps** — `boru:repl` (native module implemented as a boru
   preamble, `modules/repl.go`); `design/examples/apps/`:
-  `todo-api.aql`, `mini-redis.aql` (custom AQL codec),
-  `mini-s3.aql` + `mini-s3-client.aql` (Tier-1 streaming + resumable
+  `todo-api.boru`, `mini-redis.boru` (custom boru codec),
+  `mini-s3.boru` + `mini-s3-client.boru` (Tier-1 streaming + resumable
   upload/download). All driven over real loopback sockets by
   `lang/go/test/apps_test.go`, `modules/net_test.go`,
   `modules/repl_test.go`, `test/process_service_test.go`,
@@ -183,14 +183,14 @@ Post-landing hardening (same branch):
 - **Compiled-subset refusal: foreign fn bodies that construct fn
   values** (`eng/go/core_helpers.go::bodyConstructsFn`). A
   module-preamble fn unit executes against the *dispatching* registry
-  in the VM, so a lambda constructed inside it (aql:repl's served
+  in the VM, so a lambda constructed inside it (boru:repl's served
   handler) escapes with body tokens that no longer resolve
   module-private words (`repl-eval-line`). Only the interpreter's
   foreign-wrapper dispatch (`execFnDefLiteral`) runs such bodies in
   module scope, so the emitter now refuses them and the row falls back
-  to full interpretation — the documented aql:repl endpoint tier in
+  to full interpretation — the documented boru:repl endpoint tier in
   `test/go/langspec/compiled_coverage_test.go`. `tryNativeFnApply`
-  (vm.go) equally declines foreign AQL-bodied sigs so the fn-value
+  (vm.go) equally declines foreign boru-bodied sigs so the fn-value
   fast path can never run a module body against the wrong registry.
 
 Engine/tooling limitations discovered while building the apps (see
@@ -203,7 +203,7 @@ entries. These are candidate fixes for follow-on engine work.
 
 ## 4. Follow-ups this plan leaves open
 
-Supervision (`aql:serve`), active mode, `aql:stream`, TLS, websocket/jsonrpc
+Supervision (`boru:serve`), active mode, `boru:stream`, TLS, websocket/jsonrpc
 codecs, `fetch`-over-`connect` unification, pending-call caps, reconnect —
 all specified in the RFCs; nothing in this slice forecloses them. The
 Service-mutex divergence (§1.2) is forward-compatible: a later `serve`d

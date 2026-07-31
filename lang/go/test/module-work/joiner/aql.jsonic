@@ -1,6 +1,0 @@
-name: joiner
-main: joiner.aql
-major: 0
-minor: 4
-patch: 2
-files: [joiner.aql]

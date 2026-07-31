@@ -1,8 +1,8 @@
 package shrink
 
 import (
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/stackform"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/stackform"
 )
 
 // generateCandidates produces every candidate mutation of `form`

@@ -7,18 +7,18 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestSigOrder runs the signature-matcher ordering spec at sigorder.tsv.
 // Each row exercises one shape of the reversed-lattice sig sort —
 // user-defined scalar / node / object subtypes, Go-defined Ideals
-// (Tensor/Matrix/Vector from aql:matrix), and pattern-driven dispatch.
+// (Tensor/Matrix/Vector from boru:matrix), and pattern-driven dispatch.
 // The runner installs the matrix module so rows can reference Matrix /
-// Tensor / Vector without a per-row `import "aql:matrix-util"`.
+// Tensor / Vector without a per-row `import "boru:matrix-util"`.
 //
 // The unit-test counterpart for user-defined comparators
 // (`behave compare/q`-style custom Comparer on a type) lives in

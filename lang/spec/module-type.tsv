@@ -1,23 +1,23 @@
-# AQL Language Specification: the aql:type module
+# boru Language Specification: the boru:type module
 # Format: input<TAB>expected<TAB>description
 #
 # Loadable module for type-lattice reflection. Import binds the `type`
-# namespace: `import "aql:type-util"  TypeUtil.word Type`.
+# namespace: `import "boru:type-util"  TypeUtil.word Type`.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  parent — the immediate supertype in the lattice
-import "aql:type-util"  TypeUtil.parent Integer	Number	Integer's parent is Number
-import "aql:type-util"  TypeUtil.parent Float	Number	Float's parent is Number
+import "boru:type-util"  TypeUtil.parent Integer	Number	Integer's parent is Number
+import "boru:type-util"  TypeUtil.parent Float	Number	Float's parent is Number
 #
 # §2  root — the branch root
-import "aql:type-util"  TypeUtil.root Integer	Scalar	Integer's branch root is Scalar
-import "aql:type-util"  TypeUtil.root String	Scalar	String's branch root is Scalar
+import "boru:type-util"  TypeUtil.root Integer	Scalar	Integer's branch root is Scalar
+import "boru:type-util"  TypeUtil.root String	Scalar	String's branch root is Scalar
 #
 # §3  swap form
-import "aql:type-util"  Integer TypeUtil.parent	Number	swap form dispatches
+import "boru:type-util"  Integer TypeUtil.parent	Number	swap form dispatches
 #
 # §4  tpartial — make every field of a Record/class type optional (moved here)
-import "aql:type-util"  (TypeUtil.tpartial (refine Record [x:Integer])) istype	true	tpartial yields a type
+import "boru:type-util"  (TypeUtil.tpartial (refine Record [x:Integer])) istype	true	tpartial yields a type
 #
 # §5  negative — unbound without import
 TypeUtil.parent Integer	ERROR:undefined_word	`type` is unbound without `import`
@@ -25,24 +25,24 @@ tpartial (refine Record [x:Integer])	ERROR:undefined_word	tpartial is no longer 
 #
 # §6  reflection & set-algebra over the type lattice
 # alts — the alternatives of a disjunct as a List of types
-import "aql:type-util"  TypeUtil.alts (Integer tor String)	[Integer String]	disjunct alternatives
+import "boru:type-util"  TypeUtil.alts (Integer tor String)	[Integer String]	disjunct alternatives
 # arityof / paramsof / returnsof — function-signature reflection
-import "aql:type-util"  TypeUtil.arityof (fn [[a:Integer b:Integer] [Integer] [a add b]])	2	count of required params
-import "aql:type-util"  TypeUtil.paramsof (fn [[a:Integer b:String] [Integer] [a]])	[Integer String]	param types as a List
-import "aql:type-util"  TypeUtil.returnsof (fn [[a:Integer] [Integer] [a]])	Integer	the return type
+import "boru:type-util"  TypeUtil.arityof (fn [[a:Integer b:Integer] [Integer] [a add b]])	2	count of required params
+import "boru:type-util"  TypeUtil.paramsof (fn [[a:Integer b:String] [Integer] [a]])	[Integer String]	param types as a List
+import "boru:type-util"  TypeUtil.returnsof (fn [[a:Integer] [Integer] [a]])	Integer	the return type
 # brand — a nominal subtype tagged with an atom (swap-arg: tag then base)
-import "aql:type-util"  TypeUtil.brand userid/q Integer	brand:userid	tagged nominal subtype of Integer
+import "boru:type-util"  TypeUtil.brand userid/q Integer	brand:userid	tagged nominal subtype of Integer
 # exclude / extract — TypeScript-style set difference / intersection (swap form: target op what)
-import "aql:type-util"  (Integer tor String) TypeUtil.exclude String	Integer	remove String from the disjunct
-import "aql:type-util"  (Integer tor String) TypeUtil.extract Integer	Integer	keep only the Integer alternative
+import "boru:type-util"  (Integer tor String) TypeUtil.exclude String	Integer	remove String from the disjunct
+import "boru:type-util"  (Integer tor String) TypeUtil.extract Integer	Integer	keep only the Integer alternative
 # lca — least common ancestor in the lattice
-import "aql:type-util"  TypeUtil.lca Integer Float	Number	common supertype of Integer and Float
+import "boru:type-util"  TypeUtil.lca Integer Float	Number	common supertype of Integer and Float
 # merge — combine two record types (swap form: a op b)
-import "aql:type-util"  (refine Record [x:Integer]) TypeUtil.merge (refine Record [y:String])	record{x:Integer y:String}	union of fields
+import "boru:type-util"  (refine Record [x:Integer]) TypeUtil.merge (refine Record [y:String])	record{x:Integer y:String}	union of fields
 # nominal — mint an anonymous nominal alias of a base type
-import "aql:type-util"  (TypeUtil.nominal Integer) istype	true	nominal yields a type
+import "boru:type-util"  (TypeUtil.nominal Integer) istype	true	nominal yields a type
 # omit / pick — drop / retain named fields (swap form: record op [names])
-import "aql:type-util"  (refine Record [x:Integer y:String]) TypeUtil.omit [x/q]	record{y:String}	drop field x
-import "aql:type-util"  (refine Record [x:Integer y:String]) TypeUtil.pick [x/q]	record{x:Integer}	keep only field x
+import "boru:type-util"  (refine Record [x:Integer y:String]) TypeUtil.omit [x/q]	record{y:String}	drop field x
+import "boru:type-util"  (refine Record [x:Integer y:String]) TypeUtil.pick [x/q]	record{x:Integer}	keep only field x
 # required — strip the optional (None) alternative from every field
-import "aql:type-util"  TypeUtil.required (refine Record [x:(Integer tor None)])	record{x:Integer}	make every field required
+import "boru:type-util"  TypeUtil.required (refine Record [x:(Integer tor None)])	record{x:Integer}	make every field required

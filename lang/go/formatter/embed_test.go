@@ -5,54 +5,54 @@ import (
 	"testing"
 )
 
-// TestFormatMarkdown reformats AQL inside ```aql fences and marker
+// TestFormatMarkdown reformats boru inside ```boru fences and marker
 // regions, exercises a longer closing fence and a tilde fence, and leaves
-// non-aql fences, prose, and an empty region untouched.
+// non-boru fences, prose, and an empty region untouched.
 func TestFormatMarkdown(t *testing.T) {
 	src := strings.Join([]string{
 		"# Title",
 		"",
-		"```aql",
+		"```boru",
 		"def  square  fn  [[x:Integer]  [Integer]  [x mul x]]",
 		"````", // a longer closing fence still matches
 		"",
-		"~~~aql",
+		"~~~boru",
 		"def  a   1",
 		"~~~",
 		"",
 		"```text",
-		"def  not  aql",
+		"def  not  boru",
 		"```",
 		"",
-		"<!-- aqlfmt -->",
+		"<!-- borufmt -->",
 		"def  y   2",
-		"<!-- /aqlfmt -->",
+		"<!-- /borufmt -->",
 		"",
-		"<!-- aqlfmt -->",
-		"<!-- /aqlfmt -->",
+		"<!-- borufmt -->",
+		"<!-- /borufmt -->",
 		"end",
 	}, "\n")
 	want := strings.Join([]string{
 		"# Title",
 		"",
-		"```aql",
+		"```boru",
 		"def square fn x:Integer Integer [x mul x]",
 		"````",
 		"",
-		"~~~aql",
+		"~~~boru",
 		"def a 1",
 		"~~~",
 		"",
 		"```text",
-		"def  not  aql",
+		"def  not  boru",
 		"```",
 		"",
-		"<!-- aqlfmt -->",
+		"<!-- borufmt -->",
 		"def y 2",
-		"<!-- /aqlfmt -->",
+		"<!-- /borufmt -->",
 		"",
-		"<!-- aqlfmt -->",
-		"<!-- /aqlfmt -->",
+		"<!-- borufmt -->",
+		"<!-- /borufmt -->",
 		"end",
 	}, "\n")
 	if got := FormatMarkdown(src); got != want {
@@ -66,26 +66,26 @@ func TestFormatMarkdown(t *testing.T) {
 func TestFormatHTML(t *testing.T) {
 	src := strings.Join([]string{
 		"<pre>",
-		"<!-- aqlfmt -->",
+		"<!-- borufmt -->",
 		"def  z   3",
-		"<!-- /aqlfmt -->",
+		"<!-- /borufmt -->",
 		"</pre>",
-		"```aql",
+		"```boru",
 		"def  w  4",
 		"```",
-		"<!-- aqlfmt -->",
+		"<!-- borufmt -->",
 		"def  tail   5",
 	}, "\n")
 	want := strings.Join([]string{
 		"<pre>",
-		"<!-- aqlfmt -->",
+		"<!-- borufmt -->",
 		"def z 3",
-		"<!-- /aqlfmt -->",
+		"<!-- /borufmt -->",
 		"</pre>",
-		"```aql",
+		"```boru",
 		"def  w  4",
 		"```",
-		"<!-- aqlfmt -->",
+		"<!-- borufmt -->",
 		"def tail 5",
 	}, "\n")
 	if got := FormatHTML(src); got != want {
@@ -104,21 +104,21 @@ func TestFenceHelpers(t *testing.T) {
 	if got := leadingFenceRun("``x"); got != "" {
 		t.Errorf("leadingFenceRun short = %q", got)
 	}
-	if got := leadingFenceRun("```aql"); got != "```" {
+	if got := leadingFenceRun("```boru"); got != "```" {
 		t.Errorf("leadingFenceRun backtick = %q", got)
 	}
 	if got := leadingFenceRun("~~~~"); got != "~~~~" {
 		t.Errorf("leadingFenceRun tilde = %q", got)
 	}
 
-	if _, ok := aqlFenceOpen("```"); ok {
-		t.Error("bare fence should not be an aql open")
+	if _, ok := boruFenceOpen("```"); ok {
+		t.Error("bare fence should not be a boru open")
 	}
-	if _, ok := aqlFenceOpen("```go"); ok {
-		t.Error("go fence should not be an aql open")
+	if _, ok := boruFenceOpen("```go"); ok {
+		t.Error("go fence should not be a boru open")
 	}
-	if f, ok := aqlFenceOpen("```aql"); !ok || f != "```" {
-		t.Errorf("aql fence = (%q, %v)", f, ok)
+	if f, ok := boruFenceOpen("```boru"); !ok || f != "```" {
+		t.Errorf("boru fence = (%q, %v)", f, ok)
 	}
 
 	if !isFenceClose("```", "```") {

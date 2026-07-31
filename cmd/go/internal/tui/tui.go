@@ -4,9 +4,9 @@
 // terminal.
 //
 // The tui talks to the api over HTTP, so it does NOT need to be
-// composed under the same supervisor — `aql tui` against an already-
+// composed under the same supervisor — `boru tui` against an already-
 // running supervisor is the common case. When run under a
-// supervisor (via `aql serve ... + tui`) it takes over stdio and
+// supervisor (via `boru serve ... + tui`) it takes over stdio and
 // can't be combined with other stdio services.
 package tui
 
@@ -20,14 +20,14 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/aql-lang/aql/cmd/go/internal/api"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/api"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 // discoveryRetryBudget is how long Start/Run waits for the api
 // service to publish its discovery file. Sized to absorb the
-// startup race in `aql serve ... + api + tui` without making a
+// startup race in `boru serve ... + api + tui` without making a
 // genuinely-absent api take too long to fail.
 const discoveryRetryBudget = 2 * time.Second
 
@@ -50,13 +50,13 @@ func readDiscoveryWithRetry(_ io.Writer) (url, token string, err error) {
 
 type cmdImpl struct{}
 
-// New returns the tui subcommand (callable directly via `aql tui`).
+// New returns the tui subcommand (callable directly via `boru tui`).
 func New() command.Command { return &cmdImpl{} }
 
 func (*cmdImpl) Name() string     { return "tui" }
 func (*cmdImpl) Synopsis() string { return "interactive terminal UI driven by the api service" }
 
-// Run handles `aql tui [--api url] [--token tok]`.
+// Run handles `boru tui [--api url] [--token tok]`.
 func (*cmdImpl) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	apiURL, token, err := parseFlags(args, stderr)
 	if err != nil {
@@ -96,7 +96,7 @@ func parseFlags(args []string, stderr io.Writer) (apiURL, token string, err erro
 	return *a, *t, nil
 }
 
-// Server is the lifecycle-managed wrapper for use under `aql serve`.
+// Server is the lifecycle-managed wrapper for use under `boru serve`.
 type Server struct {
 	apiURL string
 	token  string
@@ -142,7 +142,7 @@ func (s *Server) Start(ctx context.Context) error {
 	s.state.Store(int32(service.StateStarting))
 	defer s.state.Store(int32(service.StateStopped))
 
-	// When composed as a service under `aql serve ... + api + tui`,
+	// When composed as a service under `boru serve ... + api + tui`,
 	// the api service may not have written the discovery file yet.
 	// Retry briefly to absorb that startup race. With an explicit
 	// --api the discovery file isn't consulted at all.

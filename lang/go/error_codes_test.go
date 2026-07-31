@@ -25,24 +25,24 @@ import (
 	"path/filepath"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/policy"
+	eng "github.com/boru-lang/boru/eng/go"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// codeOf runs src and returns the AqlError code of the failure. An empty
+// codeOf runs src and returns the BoruError code of the failure. An empty
 // string means the program either succeeded or failed with a code-less
 // (foreign) error — the exact defect these tests exist to catch, so the
 // two are reported apart.
-func codeOf(t *testing.T, a *lang.AQL, src string) string {
+func codeOf(t *testing.T, a *lang.Boru, src string) string {
 	t.Helper()
 	_, err := a.Run(src)
 	if err == nil {
 		t.Fatalf("expected a failure from:\n%s", src)
 	}
-	var ae *eng.AqlError
+	var ae *eng.BoruError
 	if !errors.As(err, &ae) {
-		t.Fatalf("failure carries no AqlError at all, so it can never have a "+
+		t.Fatalf("failure carries no BoruError at all, so it can never have a "+
 			"code:\n%s\n  → %v", src, err)
 	}
 	return ae.Code
@@ -60,7 +60,7 @@ func TestRuntimeFailuresCarryTheDocumentedCode(t *testing.T) {
 		// A strict read whose CONTAINER is the wrong shape. Its own
 		// check-mode mirror was already coded; the runtime path was not.
 		{"getr a list with a string key", `[1,2] getr "k"`, "getr_error"},
-		{"missing file", `import "aql:io"
+		{"missing file", `import "boru:io"
 IO.read (make Pathon "` + missing + `")`, "read_error"},
 	}
 	for _, c := range cases {
@@ -117,9 +117,9 @@ func TestPolicyRefusalKeepsItsOwnCode(t *testing.T) {
 	if err := os.WriteFile(real, []byte("hello"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	read := `import "aql:io"
+	read := `import "boru:io"
 IO.read (make Pathon "` + real + `")`
-	write := `import "aql:io"
+	write := `import "boru:io"
 IO.write (make Pathon "` + filepath.Join(dir, "out.txt") + `") "x"`
 
 	cases := []struct {
@@ -154,7 +154,7 @@ func TestOrdinaryIOFailureIsNotReportedAsAPolicyRefusal(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	src := `import "aql:io"
+	src := `import "boru:io"
 IO.read (make Pathon "` + filepath.Join(t.TempDir(), "nope.txt") + `")`
 	if got := codeOf(t, a, src); got == "permission_denied" {
 		t.Error("a missing file is not a policy refusal — no policy is even " +
@@ -172,7 +172,7 @@ func TestPermittedFileOpsStillSucceed(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	got, err := a.Run(`import "aql:io"
+	got, err := a.Run(`import "boru:io"
 IO.write (make Pathon "` + path + `") "hello" drop
 IO.read (make Pathon "` + path + `")`)
 	if err != nil {
@@ -201,11 +201,11 @@ IO.read (make Pathon "` + path + `")`)
 // network, no terminal and no vault present. That is also what makes the
 // negative half below meaningful.
 func TestEveryGatedCapabilityRefusalCarriesACode(t *testing.T) {
-	const fetchSrc = `import "aql:net"
+	const fetchSrc = `import "boru:net"
 Net.fetch {url:"http://127.0.0.1:1/x"}`
-	const vaultSrc = `import "aql:vault"
+	const vaultSrc = `import "boru:vault"
 Vault.status`
-	const tuiSrc = `import "aql:tui"
+	const tuiSrc = `import "boru:tui"
 Tui.open {}`
 
 	cases := []struct{ name, pol, src, want string }{
@@ -263,9 +263,9 @@ Tui.open {}`
 // registered.
 func TestGatedCapabilityFailuresAreNotReportedAsRefusals(t *testing.T) {
 	cases := []struct{ name, src string }{
-		{"unreachable host", `import "aql:net"
+		{"unreachable host", `import "boru:net"
 Net.fetch {url:"http://127.0.0.1:1/x"}`},
-		{"vault with no backend", `import "aql:vault"
+		{"vault with no backend", `import "boru:vault"
 Vault.status`},
 	}
 	for _, c := range cases {

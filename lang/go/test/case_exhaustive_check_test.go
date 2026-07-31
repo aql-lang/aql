@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // Static exhaustiveness for `case` (design/case-exhaustiveness.0.md): a
@@ -466,7 +466,7 @@ func TestShorthandFnUnionReturnType(t *testing.T) {
 	// check-only is exactly what let the fix ship half-done: the pattern was
 	// threaded onto ReturnCheckInfo (interpreter) and into
 	// checkBodyReturnConformance (check pass) but NOT onto CompiledFn, so
-	// `aql check` and `RunInterp` rejected the Boolean body while the
+	// `boru check` and `RunInterp` rejected the Boolean body while the
 	// DEFAULT compiled run accepted it and returned `true`. A declared union
 	// return was a comment on the one path most programs take. Whenever a
 	// contract is enforced in more than one engine, assert it in every one —
@@ -736,7 +736,7 @@ func TestCaseRuntimeNoMatchProducesNothing(t *testing.T) {
 }
 
 func TestCaseExhaustiveRunRefusal(t *testing.T) {
-	// `aql check` gating is severity-based: the finding is an error, so a
+	// `boru check` gating is severity-based: the finding is an error, so a
 	// non-exhaustive program FAILS check while the covered twin passes.
 	res := checkDiag(t, `case 9 [1 "one" 2 "two"]`)
 	if res.Summary.Errors == 0 {

@@ -1,7 +1,7 @@
 package eng
 
 // memberBehavior is a TypeBehavior built from a single Go membership
-// predicate. It is the host-Go counterpart of the wiring the AQL
+// predicate. It is the host-Go counterpart of the wiring the boru
 // `def`/`refine`/`tor` path installs automatically: a host that can say
 // "does value v belong to this type?" gets every kernel touch-point for
 // free, instead of hand-implementing (and keeping consistent) Match,
@@ -26,7 +26,7 @@ type memberBehavior struct {
 // concrete values satisfying member. Use it for host (Go) types that are
 // defined by a membership rule — a closed set of values, a tag check, a
 // range — so the type participates in `is`, signature dispatch, `case`,
-// and return checks identically to an AQL-defined refinement, from one
+// and return checks identically to a boru-defined refinement, from one
 // predicate. Pair it with TypeTable.MintMemberType (or pass it to
 // MintTypeWithBehavior / RegisterType) to attach it to a node.
 func MemberBehavior(member func(v Value) bool) TypeBehavior {
@@ -65,14 +65,14 @@ func (b memberBehavior) FormatDelegate() {}
 // MintMemberType mints `name` as a subtype of parent whose inhabitants
 // are exactly the concrete values that conform to parent AND satisfy
 // member, with the full Match/Unify/Format wiring (MemberBehavior)
-// attached. It is the host-Go equivalent of an AQL refinement
+// attached. It is the host-Go equivalent of a boru refinement
 // (`def Name (refine Parent …)`): one call yields a node that behaves
 // like a first-class type across dispatch, `is`, `case` and return
 // checks, and the returned *Type is ready to drop into native signatures
 // and to tag values with.
 //
 // The declared parent is enforced as a gate around `member` — the same
-// guarantee the AQL predicate path gives via its input-type check — so a
+// guarantee the boru predicate path gives via its input-type check — so a
 // permissive or partial predicate cannot admit values outside the
 // family (a `TInteger` member type never accepts a String, however lax
 // the predicate). A value tagged with this node passes the gate via

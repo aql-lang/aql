@@ -5,7 +5,7 @@ package lsp
 import (
 	"fmt"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // publishDiagnostics runs the static checker over the cached buffer
@@ -41,8 +41,8 @@ func (s *server) computeDiagnostics(src string) []Diagnostic {
 		return []Diagnostic{{
 			Range:    Range{},
 			Severity: severityError,
-			Code:     "aql/init",
-			Source:   "aql",
+			Code:     "boru/init",
+			Source:   "boru",
 			Message:  err.Error(),
 		}}
 	}
@@ -56,16 +56,16 @@ func (s *server) computeDiagnostics(src string) []Diagnostic {
 		out = append(out, Diagnostic{
 			Range:    Range{},
 			Severity: severityError,
-			Code:     "aql/check",
-			Source:   "aql",
+			Code:     "boru/check",
+			Source:   "boru",
 			Message:  checkErr.Error(),
 		})
 	}
 	return out
 }
 
-// toLSPDiagnostic translates an AQL CheckDiagnostic to LSP shape.
-// AQL Row/Col are 1-based; LSP is 0-based. The diagnostic range
+// toLSPDiagnostic translates a boru CheckDiagnostic to LSP shape.
+// boru Row/Col are 1-based; LSP is 0-based. The diagnostic range
 // covers the offending word; when Word is empty, fall back to a
 // single-character range at (Row, Col) so the editor still has
 // somewhere to draw a marker.
@@ -109,7 +109,7 @@ func toLSPDiagnostic(d lang.CheckDiagnostic) Diagnostic {
 		},
 		Severity: sev,
 		Code:     d.Code,
-		Source:   "aql",
+		Source:   "boru",
 		Message:  msg,
 	}
 }

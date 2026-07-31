@@ -1,4 +1,4 @@
-// cliexamples_test.go builds the aql binary once and runs each extracted
+// cliexamples_test.go builds the boru binary once and runs each extracted
 // shell example inside a per-example temporary directory, comparing the
 // command's stdout to the documented output.
 //
@@ -20,30 +20,30 @@ import (
 	"testing"
 )
 
-// docFiles are the docs scanned for shell `aql …` examples.
+// docFiles are the docs scanned for shell `boru …` examples.
 var docFiles = []string{"CLI.md", "HOWTO.md"}
 
 func docRoot() string { return filepath.Join("..", "..", "..") }
 
-// buildAQL compiles cmd/go/aql into a temp binary once for the test
+// buildBoru compiles cmd/go/boru into a temp binary once for the test
 // binary's lifetime and returns its path.
-func buildAQL(t *testing.T) string {
+func buildBoru(t *testing.T) string {
 	t.Helper()
-	bin := filepath.Join(t.TempDir(), "aql")
-	cmd := exec.Command("go", "build", "-o", bin, "./aql")
+	bin := filepath.Join(t.TempDir(), "boru")
+	cmd := exec.Command("go", "build", "-o", bin, "./boru")
 	cmd.Dir = filepath.Join(docRoot(), "cmd", "go")
 	if out, err := cmd.CombinedOutput(); err != nil {
-		t.Fatalf("build aql: %v\n%s", err, out)
+		t.Fatalf("build boru: %v\n%s", err, out)
 	}
 	return bin
 }
 
 func TestCLIExamples(t *testing.T) {
-	bin := buildAQL(t)
+	bin := buildBoru(t)
 
 	// Render-parity sanity check: the binary must print the comma-free
 	// canonical form Part A established, matching the doc convention.
-	if got := runAQL(t, bin, t.TempDir(), []string{"do", "[1 2 3]"}); got != "[1 2 3]" {
+	if got := runBoru(t, bin, t.TempDir(), []string{"do", "[1 2 3]"}); got != "[1 2 3]" {
 		t.Fatalf("CLI render sanity: got %q, want %q", got, "[1 2 3]")
 	}
 
@@ -64,7 +64,7 @@ func TestCLIExamples(t *testing.T) {
 				ran++
 				t.Run(sanitise(ex.Raw, ex.Line), func(t *testing.T) {
 					dir := t.TempDir()
-					got := runAQL(t, bin, dir, ex.Args)
+					got := runBoru(t, bin, dir, ex.Args)
 					if got != ex.Expected {
 						t.Errorf("%s\n  got:  %q\n  want: %q", ex.Raw, got, ex.Expected)
 					}
@@ -91,11 +91,11 @@ func needsSandboxSkip(ex CLIExample) string {
 		"registry", "vault", "install", "prep", "clean":
 		return "needs service/network/registry"
 	}
-	// `aql -e EXPR` (legacy eval flag) and `aql do EXPR` are pure-eval.
-	// A bare script path (`aql script.aql`) or `-r ./registry` references
+	// `boru -e EXPR` (legacy eval flag) and `boru do EXPR` are pure-eval.
+	// A bare script path (`boru script.boru`) or `-r ./registry` references
 	// on-disk state that isn't present in a fresh temp dir.
 	for _, a := range ex.Args {
-		if strings.HasSuffix(a, ".aql") || a == "-r" || a == "--registry" {
+		if strings.HasSuffix(a, ".boru") || a == "-r" || a == "--registry" {
 			return "references on-disk file/registry"
 		}
 		if strings.Contains(a, "...") || strings.Contains(a, "$") {
@@ -105,10 +105,10 @@ func needsSandboxSkip(ex CLIExample) string {
 	return ""
 }
 
-// runAQL executes the binary in dir with HOME/TMP/cwd redirected there,
+// runBoru executes the binary in dir with HOME/TMP/cwd redirected there,
 // and returns trimmed stdout. A non-zero exit (or stderr-only output) is
 // surfaced via the returned string so a mismatch shows the diagnostic.
-func runAQL(t *testing.T, bin, dir string, args []string) string {
+func runBoru(t *testing.T, bin, dir string, args []string) string {
 	t.Helper()
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir

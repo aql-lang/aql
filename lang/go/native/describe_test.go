@@ -15,7 +15,7 @@ func TestDescribeIndex(t *testing.T) {
 	for _, want := range []string{
 		"Words:", "math", "compare", // category headers
 		"Modules", "type-util", // module catalog
-		"describe <category>", "describe \"aql:<module>:<word>\"", // drill-in
+		"describe <category>", "describe \"boru:<module>:<word>\"", // drill-in
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("DescribeIndex missing %q in:\n%s", want, out)
@@ -77,11 +77,11 @@ func TestSplitModulePath(t *testing.T) {
 	cases := []struct {
 		in, modRef, word string
 	}{
-		{"aql:type-util", "aql:type-util", ""},
-		{"aql:type-util:tpartial", "aql:type-util", "tpartial"},
+		{"boru:type-util", "boru:type-util", ""},
+		{"boru:type-util:tpartial", "boru:type-util", "tpartial"},
 		{"type-util:tpartial", "type-util", "tpartial"},
-		{"./lib.aql:double", "./lib.aql", "double"},
-		{"aql:type-util:", "aql:type-util", ""},
+		{"./lib.boru:double", "./lib.boru", "double"},
+		{"boru:type-util:", "boru:type-util", ""},
 	}
 	for _, c := range cases {
 		modRef, word := splitModulePath(c.in)

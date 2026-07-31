@@ -7,12 +7,12 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// End-to-end coverage for the aql:vault bridge words (vault.go) over a
+// End-to-end coverage for the boru:vault bridge words (vault.go) over a
 // scripted fake backend — no vault anywhere, per
 // design/VAULT-TUI-PORT.0.md §6.2. Positive paths are paired with the
 // negative contracts (usage, no backend, backend failure, policy
@@ -135,7 +135,7 @@ func TestVaultNoBackendEveryWord(t *testing.T) {
 		if a := vaultMinimalArgs(op); a != "" {
 			expr += " " + a
 		}
-		_, err := runVaultSteps(t, nil, []string{`import "aql:vault"`, expr})
+		_, err := runVaultSteps(t, nil, []string{`import "boru:vault"`, expr})
 		if err == nil || !strings.Contains(err.Error(), op.name+": no vault backend registered") {
 			t.Errorf("%s: expected no_backend, got %v", op.name, err)
 		}
@@ -152,7 +152,7 @@ func TestVaultEveryWordThroughFake(t *testing.T) {
 		if a := vaultMinimalArgs(op); a != "" {
 			expr += " " + a
 		}
-		out, err := runVaultSteps(t, fv, []string{`import "aql:vault"`, expr})
+		out, err := runVaultSteps(t, fv, []string{`import "boru:vault"`, expr})
 		if err != nil {
 			t.Errorf("%s: %v", op.name, err)
 			continue
@@ -180,7 +180,7 @@ func TestVaultResultConversion(t *testing.T) {
 		"secret": nil,
 	}}
 	out, err := runVaultSteps(t, fv, []string{
-		`import "aql:vault"`,
+		`import "boru:vault"`,
 		`def s (Vault.status)`,
 		`join "|" [(convert String s.ok) (convert String s.aliases) s.backend
 		           (convert String s.cost) (join "," s.slots)
@@ -202,7 +202,7 @@ func TestVaultResultConversion(t *testing.T) {
 func TestVaultParamsFlatten(t *testing.T) {
 	fv := &fakeVault{}
 	_, err := runVaultSteps(t, fv, []string{
-		`import "aql:vault"`,
+		`import "boru:vault"`,
 		`Vault.add {alias: "a" value: "k" provider: "openai" expiry: ""}`,
 	})
 	if err != nil {
@@ -218,7 +218,7 @@ func TestVaultParamsFlatten(t *testing.T) {
 	}
 
 	_, err = runVaultSteps(t, fv, []string{
-		`import "aql:vault"`,
+		`import "boru:vault"`,
 		`Vault.rotate {alias: "a" value: "n" revoke-caps: true}`,
 	})
 	if err != nil {
@@ -229,7 +229,7 @@ func TestVaultParamsFlatten(t *testing.T) {
 	}
 
 	_, err = runVaultSteps(t, fv, []string{
-		`import "aql:vault"`,
+		`import "boru:vault"`,
 		`Vault.set-expiry "a" "2026-01-01"`,
 		`Vault.scan ["p1" "p2"]`,
 		`Vault.restore 5`,
@@ -258,7 +258,7 @@ func TestVaultParamsFlatten(t *testing.T) {
 func TestVaultWrapperSwapForm(t *testing.T) {
 	fv := &fakeVault{}
 	_, err := runVaultSteps(t, fv, []string{
-		`import "aql:vault"`,
+		`import "boru:vault"`,
 		`"w" Vault.set-expiry "a"`,
 	})
 	if err != nil {
@@ -283,7 +283,7 @@ func TestVaultUsageNegatives(t *testing.T) {
 		{`Vault.scan [5]`, "scan: paths: elements must be Strings"},
 	}
 	for _, c := range cases {
-		_, err := runVaultSteps(t, nil, []string{`import "aql:vault"`, c.expr})
+		_, err := runVaultSteps(t, nil, []string{`import "boru:vault"`, c.expr})
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Errorf("%s: expected %q, got %v", c.expr, c.want, err)
 		}
@@ -337,7 +337,7 @@ func TestVaultCollectParamsNegativesNoPanic(t *testing.T) {
 // first line.
 func TestVaultBackendErrorMapped(t *testing.T) {
 	fv := &fakeVault{errs: map[string]error{"reveal": errors.New("boom\nsecond line")}}
-	_, err := runVaultSteps(t, fv, []string{`import "aql:vault"`, `Vault.reveal "a"`})
+	_, err := runVaultSteps(t, fv, []string{`import "boru:vault"`, `Vault.reveal "a"`})
 	if err == nil || !strings.Contains(err.Error(), "reveal: boom") {
 		t.Fatalf("expected mapped backend error, got %v", err)
 	}
@@ -373,7 +373,7 @@ func TestVaultPolicyArms(t *testing.T) {
 	}
 	_, dErr := h(nil, nil, nil, reg)
 	// Coded by the gate (native/policy_error.go) so `dot code` can read it.
-	var dAe *native.AqlError
+	var dAe *native.BoruError
 	if !errors.As(dErr, &dAe) || dAe.Code != "capability_not_installed" {
 		t.Fatalf("sandbox status = %v", dErr)
 	}
@@ -534,7 +534,7 @@ func TestVaultDocsComplete(t *testing.T) {
 		t.Fatal(err)
 	}
 	exports := desc.Exports["Vault"]
-	docs := moduleDocs["aql:vault"]
+	docs := moduleDocs["boru:vault"]
 	for _, k := range exports.Keys() {
 		if docs[k] == "" {
 			t.Errorf("export %q has no doc line", k)

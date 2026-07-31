@@ -39,9 +39,9 @@ func TestRequireListArg(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error for a type literal arg")
 	}
-	ae, ok := err.(*AqlError)
+	ae, ok := err.(*BoruError)
 	if !ok {
-		t.Fatalf("expected *AqlError, got %T (%v)", err, err)
+		t.Fatalf("expected *BoruError, got %T (%v)", err, err)
 	}
 	if ae.Code != "insert_at_error" {
 		t.Errorf("code = %q, want %q", ae.Code, "insert_at_error")
@@ -78,9 +78,9 @@ func TestRequireConcreteArgs(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected an error for a type-literal arg")
 	}
-	ae, ok := err.(*AqlError)
+	ae, ok := err.(*BoruError)
 	if !ok {
-		t.Fatalf("expected *AqlError, got %T (%v)", err, err)
+		t.Fatalf("expected *BoruError, got %T (%v)", err, err)
 	}
 	if ae.Code != "for_each_error" {
 		t.Errorf("code = %q, want %q", ae.Code, "for_each_error")

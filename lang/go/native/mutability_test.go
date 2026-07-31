@@ -31,7 +31,7 @@ func TestObjectSetFieldAtom(t *testing.T) {
 	instanceVal := NewClassInstance(TClass, instance)
 
 	// Verify initial value
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		instanceVal, NewWord("dot"), NewWord("name"),
 	})
 	_as0, _ := AsString(result[0])
@@ -40,12 +40,12 @@ func TestObjectSetFieldAtom(t *testing.T) {
 	}
 
 	// Mutate: set name "Bob" on the instance
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		instanceVal, NewWord("set"), NewWord("name"), NewString("Bob"),
 	})
 
 	// Verify mutation persisted (same instance)
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		instanceVal, NewWord("dot"), NewWord("name"),
 	})
 	_as1, _ := AsString(result[0])
@@ -78,13 +78,13 @@ func TestObjectSetFieldString(t *testing.T) {
 	instanceVal := NewClassInstance(TClass, instance)
 
 	// Mutate via string key
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		instanceVal, NewWord("set"), NewString("x"), NewInteger(99),
 	})
 	_ = result
 
 	// Verify
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		instanceVal, NewWord("get"), NewString("x"),
 	})
 	_as2, _ := AsInteger(result[0])
@@ -118,12 +118,12 @@ func TestObjectMutationSharedReference(t *testing.T) {
 	ref2 := NewClassInstance(TClass, instance) // same underlying Fields pointer
 
 	// Mutate via ref1
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		ref1, NewWord("set"), NewWord("v"), NewInteger(42),
 	})
 
 	// Read via ref2 — should see the mutation
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		ref2, NewWord("dot"), NewWord("v"),
 	})
 	_as4, _ := AsInteger(result[0])
@@ -147,7 +147,7 @@ func TestNodeMapIsImmutable(t *testing.T) {
 	m.Set("x", NewInteger(1))
 	mapVal := NewMap(m)
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		mapVal, NewWord("set"), NewWord("x"), NewInteger(99),
 	})
 	if len(result) != 1 {
@@ -180,7 +180,7 @@ func TestNodeListIsImmutable(t *testing.T) {
 	registerIOWords(r)
 	listVal := NewList([]Value{NewInteger(10), NewInteger(20)})
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		listVal, NewWord("set"), NewInteger(0), NewInteger(99),
 	})
 	if len(result) != 1 {
@@ -211,7 +211,7 @@ func TestNodeMapUnchangedAfterObjectSet(t *testing.T) {
 	mapVal := NewMap(m)
 
 	// Map value remains unchanged
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		mapVal, NewWord("dot"), NewWord("x"),
 	})
 	_as5, _ := AsInteger(result[0])
@@ -325,7 +325,7 @@ func TestStoreCOWBasic(t *testing.T) {
 	// set on a Store creates a new COW layer; get resolves through prototype.
 	r, _ := DefaultRegistry()
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("context"), NewWord("set"), NewWord("k"), NewInteger(7),
 		NewEnd(),
 		NewWord("context"), NewWord("dot"), NewWord("k"),

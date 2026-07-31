@@ -87,7 +87,7 @@ func (c *CheckState) SkipsSideEffect() bool {
 
 // ModelsEffects reports whether this registry runs with CONCRETE values but
 // SUBSTITUTED effect backends — the third mode a module body executed during
-// `aql check` runs in. See CheckState.ModelEffects for the contract and for
+// `boru check` runs in. See CheckState.ModelEffects for the contract and for
 // the two classes that stay real.
 func (c *CheckState) ModelsEffects() bool {
 	return c != nil && c.ModelEffects
@@ -154,7 +154,7 @@ func (c *CheckState) Begin() func() {
 }
 
 // BeginCompilePass is Begin() plus the compile-pass arming ritual shared
-// by every bytecode-recording entry point (lang's CompileCheck, aql:vm's
+// by every bytecode-recording entry point (lang's CompileCheck, boru:vm's
 // Vm.compile): install a fresh EmitState, mark the pass as Compiling, and
 // drop the fn-body memos so bodies re-analyse — and re-record — under
 // THIS pass (a summary cached by an earlier plain check would leave its
@@ -380,7 +380,7 @@ func (r *Registry) RescueForwardRefDiagnostics() {
 			}
 			// Dynamic-scope reference: the name lives only in a per-call frame
 			// (a fn parameter or a body-local def), popped before end of pass,
-			// but AQL's dynamic scoping makes it visible to a fn REACHED from
+			// but boru's dynamic scoping makes it visible to a fn REACHED from
 			// the binder's frame. Rescue iff some fn that binds the name can
 			// actually reach the reading fn through the call graph — the SOUND
 			// condition. A name merely bound by an unrelated fn that never

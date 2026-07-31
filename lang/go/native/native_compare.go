@@ -1,6 +1,6 @@
 package native
 
-import "github.com/aql-lang/aql/eng/go"
+import "github.com/boru-lang/boru/eng/go"
 
 // comparisonNatives is the consolidated set of comparison words —
 // lt / gt / lte / gte / cmp / tcmp / eq / neq / deq — plus the closed-
@@ -12,7 +12,7 @@ import "github.com/aql-lang/aql/eng/go"
 // The ordering words (cmp / lt / lte / gt / gte) are FAMILY-RESTRICTED:
 // they compare only same-type values, or values a shared same-family
 // comparer can handle (Integer-vs-Float, two Dates, …). A cross-family
-// pair (Integer-vs-String, List-vs-Map) raises [aql/incomparable]. The
+// pair (Integer-vs-String, List-vs-Map) raises [boru/incomparable]. The
 // total order over ALL values — what sort and the collection words use —
 // is surfaced by `tcmp`, which compares anything. Equality words
 // (eq / neq / deq) stay total: cross-type compares as not-equal, never
@@ -90,7 +90,7 @@ var comparisonNatives = []NativeFunc{
 		// cmp is the three-way comparison: `a b cmp` yields the
 		// Integer -1, 0, or 1 for a sorting before / with / after b.
 		// Family-restricted — cross-family operands raise
-		// [aql/incomparable]; use tcmp for a cross-type total order.
+		// [boru/incomparable]; use tcmp for a cross-type total order.
 		Name:          "cmp",
 		CompileEffect: CompileScalarFold,
 

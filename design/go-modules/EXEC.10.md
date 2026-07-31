@@ -1,22 +1,22 @@
-# `os/exec` → `aql:exec` (`Exec`)
+# `os/exec` → `boru:exec` (`Exec`)
 
 > **Status: design proposal — not implemented (2026-07-16).** This note
-> specifies the curated AQL surface for Go's `os/exec` package. No Go
+> specifies the curated boru surface for Go's `os/exec` package. No Go
 > code exists yet; the note exists so the proposed surface — and
 > especially its **policy gating** — is auditable before any handler is
 > written. Read [`README.10.md`](README.10.md) first for the shared
 > conventions this note assumes. `OS.10.md` §10 and
 > `../STDLIB-COVERAGE.10.md` reserved this module by name ("a future
-> `aql:exec` with its own `process` gate"); this note is that design.
+> `boru:exec` with its own `process` gate"); this note is that design.
 >
-> **Companion:** [`../SIFT.0.md`](../SIFT.0.md) designs `aql:sift`, the
+> **Companion:** [`../SIFT.0.md`](../SIFT.0.md) designs `boru:sift`, the
 > pure module that parses the semi-structured text this module produces.
 > They compose (§4.1) but neither depends on the other.
 
 ## 1. Package & status
 
 Go [`os/exec`](https://pkg.go.dev/os/exec) runs child processes.
-`aql:exec` curates the **synchronous, captured, argv-vector** slice of
+`boru:exec` curates the **synchronous, captured, argv-vector** slice of
 that surface: run one command to completion, capture its output, return
 a value. It is the most dangerous capability in the tree — beyond
 `Os.exit` (which only terminates the host) — because it runs *arbitrary
@@ -43,7 +43,7 @@ and shell-footgun ergonomics. The curated module:
 ## 3. Import & namespace
 
 ```
-import "aql:exec"          # binds the Exec namespace
+import "boru:exec"          # binds the Exec namespace
 ```
 
 Namespace is the plain capitalized package name, **`Exec`** — no `-util`
@@ -58,7 +58,7 @@ Signatures are **top-first, sig order**; every word's inner native uses
 `BarrierPos: -1` so the swap form dispatches (no zero-arg words in this
 module); see `README.10.md` "Argument order & dispatch".
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `exec.Command` + `Run` | `run` | `argv:List opts:Map → Result` / `argv:List → Result` | Run an argv vector to completion; capture stdout, stderr, and the exit code. | Argv is a List of Strings with **execve semantics** — no shell, no globbing, no `$VAR`, no word-splitting. Go's `(output, err)` shapes collapse into the `Result` record (§5); a nonzero exit **returns the record** rather than raising, unless `{check:true}`. |
 | (`/bin/sh -c`) | `sh` | `cmd:String opts:Map → Result` / `cmd:String → Result` | Run one command string under `/bin/sh -c`. | The explicit shell **opt-in**. A separate word — not a `{shell:true}` option — so the policy op differs (`shell` vs `exec`, §7) and auditing is a grep. POSIX hosts only; raises `exec-unsupported` where `/bin/sh` is absent. |
@@ -89,7 +89,7 @@ hardened embedders (§7).
 
 ### 4.1 The sift bridge — `Exec.parse`
 
-The bridge word lives **here**, not in `aql:sift` — sift is pure by
+The bridge word lives **here**, not in `boru:sift` — sift is pure by
 scope decision; running commands is exec's business. `Exec.parse`:
 
 1. resolves and policy-checks the argv (op `exec`, §7);
@@ -104,7 +104,7 @@ scope decision; running commands is exec's business. `Exec.parse`:
    participate via the `family:'fn'` spec form (`SIFT.0.md` §6, added by
    its §16 validation exercise). **No hard module dependency on sift in
    either direction**: with no sift (or preset pack) imported the lookup
-   misses and raises `exec-no-preset` with a hint to `import "aql:sift"`;
+   misses and raises `exec-no-preset` with a hint to `import "boru:sift"`;
 5. dispatches the kind's parser and returns the parsed value.
 
 The kind form `Exec.parse df` looks up the preset's canonical
@@ -135,7 +135,7 @@ messages); `ms` is wall-clock duration.
 | never started (not found / not executable) | **raise** `exec-start` | the command never ran; there is no meaningful record |
 | timeout | **raise** `exec-timeout` (child killed) | a deadline breach is exceptional; folding it into exit codes invites silent misparses |
 
-All raises are ordinary AQL errors, catchable with `do […] error […]` —
+All raises are ordinary boru errors, catchable with `do […] error […]` —
 errors-as-values is preserved.
 
 **Non-UTF8 output:** v1 decodes lossily (invalid bytes → U+FFFD),
@@ -150,7 +150,7 @@ opaque handle type is introduced and no new FixedID is needed (the
 
 ## 6. Errors
 
-`r.AqlError(code, detail, word)` with kebab-case codes (the go-modules
+`r.BoruError(code, detail, word)` with kebab-case codes (the go-modules
 family convention, `README.10.md`; the sift module uses snake codes —
 each matches its own surface's neighborhood). Bad-type args are guarded
 with `RequireConcreteList` / `AsConcreteString` **before** any host call
@@ -165,7 +165,7 @@ with `RequireConcreteList` / `AsConcreteString` **before** any host call
 | `exec-timeout` | `run`, `sh`, `parse` | the `timeout` deadline expired; the child was killed |
 | `exec-nonzero` | `run`/`sh` under `{check:true}`; always `parse` | nonzero exit upgraded to an error |
 | `exec-output-limit` | `run`, `sh`, `parse` | a stream exceeded `limit` bytes |
-| `exec-no-preset` | `parse` | no detection-table entry for the argv0 (hint: `import "aql:sift"` or a preset pack) |
+| `exec-no-preset` | `parse` | no detection-table entry for the argv0 (hint: `import "boru:sift"` or a preset pack) |
 | `exec-unsupported` | `sh` | no `/bin/sh` on this host |
 
 ## 7. Policy / capabilities (CRITICAL)
@@ -235,7 +235,7 @@ spawn**, …) go here too").
   posture, matching fileops today).
 - **Blame chains are free.** Denials are `*policy.Denied` carrying
   `{Code, Scope, Op, Profile, Blame, Args}`
-  (`lang/go/policy/error.go:19`), so `aql policy explain` and the
+  (`lang/go/policy/error.go:19`), so `boru policy explain` and the
   `exec-denied` surface work with no exec-specific code.
 - **Env is an injection surface in both directions** (`LD_PRELOAD`,
   `PATH`, locale). The controls, in order: argv0/path `where` rules
@@ -252,29 +252,29 @@ spawn**, …) go here too").
   **`Exec.run`, never `spawn`**, and this note's prose always says
   "OS command" vs "process (actor)". Both gate under the one `process`
   scope with distinct ops (§7).
-- **`aql:os` ([`OS.10.md`](OS.10.md), designed).** Env/args/identity of
+- **`boru:os` ([`OS.10.md`](OS.10.md), designed).** Env/args/identity of
   *this* process; exec runs *other* programs. `OS.10.md` §10 explicitly
   deferred `os/exec` here.
-- **`aql:stream` (`../STREAM-WORDS.0.md`, designed).** Streaming pipes
+- **`boru:stream` (`../STREAM-WORDS.0.md`, designed).** Streaming pipes
   between long-running processes are that design's future `stream.exec`
   sketch (its §"future extensions"). This module is deliberately
   synchronous whole-capture; the `ExecSpec` option and `Result` shapes
   are chosen so a future `stream.exec` can reuse them.
-- **CLI `aql vault exec`** (`cmd/go/internal/vault/exec.go`). A host
+- **CLI `boru vault exec`** (`cmd/go/internal/vault/exec.go`). A host
   feature that injects vault secrets into a child's env from the CLI —
-  not an AQL word, not this gate. Named here to preempt confusion.
+  not a boru word, not this gate. Named here to preempt confusion.
 - **Go `os/exec` semantics.** Like Go, no shell interpretation by
   default — the argv vector leaves no injection surface. When `sh` is
   unavoidable and interpolation is involved, quote with
   `StringUtil.escape … {tgt:'sh'}` (`native_string.go`).
-- **`aql:sift` ([`../SIFT.0.md`](../SIFT.0.md)).** The consumer of this
+- **`boru:sift` ([`../SIFT.0.md`](../SIFT.0.md)).** The consumer of this
   module's output; composed via `Exec.parse` (§4.1) and the shared
   detection table. Sift stays pure; exec stays parse-agnostic.
 
 ## 9. Examples (args-before form)
 
 ```
-import "aql:exec"
+import "boru:exec"
 
 # run an argv vector; the Result record is data
 def r (["uname" "-srm"] Exec.run)
@@ -296,8 +296,8 @@ do [ ["no-such-tool"] Exec.run ] error [ ]   # returns error(exec-start)
 # probe before running
 "df" Exec.which                        # returns '/usr/bin/df' — or None
 
-# with aql:sift imported, acquisition + parsing folds to one word
-import "aql:sift"
+# with boru:sift imported, acquisition + parsing folds to one word
+import "boru:sift"
 Exec.parse df                          # runs ["df" "-P"]; returns the parsed Table
 ```
 
@@ -305,7 +305,7 @@ Exec.parse df                          # runs ["df" "-P"]; returns the parsed Ta
 
 - **Out of scope (v1):** interactive processes / PTY; inter-process
   pipelines (compose via `r.out` → `{stdin:…}`, or wait for
-  `aql:stream`); signals and a `kill` word (the `timeout` option is the
+  `boru:stream`); signals and a `kill` word (the `timeout` option is the
   only kill); background/daemon children (`run` is synchronous —
   long-lived concurrency is the actor system); streaming output;
   Windows shell semantics (`sh` is POSIX-only in v1); exposing

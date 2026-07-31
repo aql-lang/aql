@@ -1,4 +1,4 @@
-# AQL Language Specification: type-system edge cases 1 — newtype
+# boru Language Specification: type-system edge cases 1 — newtype
 # symmetry + predicate subset symmetry
 # Format: input<TAB>expected<TAB>description
 #

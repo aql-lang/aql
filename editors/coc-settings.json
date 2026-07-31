@@ -1,16 +1,16 @@
-// AQL Language Server for coc.nvim (Vim 8+ / Neovim).
+// boru Language Server for coc.nvim (Vim 8+ / Neovim).
 //
-// Open with :CocConfig and merge the "languageserver.aql" block into
-// your existing coc-settings.json. coc.nvim will spawn `aql lsp`
-// over stdio for any *.aql buffer.
+// Open with :CocConfig and merge the "languageserver.boru" block into
+// your existing coc-settings.json. coc.nvim will spawn `boru lsp`
+// over stdio for any *.boru buffer.
 
 {
   "languageserver": {
-    "aql": {
-      "command": "aql",
+    "boru": {
+      "command": "boru",
       "args": ["lsp"],
-      "filetypes": ["aql"],
-      "rootPatterns": ["aql.jsonic", ".git"],
+      "filetypes": ["boru"],
+      "rootPatterns": ["boru.jsonic", ".git"],
       "trace.server": "off"
     }
   }

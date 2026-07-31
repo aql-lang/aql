@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // runModuleSteps creates a registry with in-memory files and ParseFunc set,
-// then executes a sequence of AQL steps on a shared native.
+// then executes a sequence of boru steps on a shared native.
 func runModuleSteps(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
 	mem := capabilities.NewMem()
@@ -56,11 +56,11 @@ func runModuleSteps(t *testing.T, files map[string]string, steps []string) ([]na
 
 func TestImportFileBasic(t *testing.T) {
 	files := map[string]string{
-		"config.aql": `export "Config" {version:42,name:"myapp"}`,
+		"config.boru": `export "Config" {version:42,name:"myapp"}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./config.aql"`,
+		`import "./config.boru"`,
 		`Config.version`,
 	})
 	if err != nil {
@@ -71,11 +71,11 @@ func TestImportFileBasic(t *testing.T) {
 
 func TestImportFileStringValue(t *testing.T) {
 	files := map[string]string{
-		"config.aql": `export "Config" {version:42,name:"myapp"}`,
+		"config.boru": `export "Config" {version:42,name:"myapp"}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./config.aql"`,
+		`import "./config.boru"`,
 		`Config.name`,
 	})
 	if err != nil {
@@ -88,12 +88,12 @@ func TestImportFileStringValue(t *testing.T) {
 
 func TestImportFileMultipleExports(t *testing.T) {
 	files := map[string]string{
-		"data.aql": `export "A" {x:1}
+		"data.boru": `export "A" {x:1}
 export "B" {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./data.aql"`,
+		`import "./data.boru"`,
 		`A.x`,
 	})
 	if err != nil {
@@ -104,12 +104,12 @@ export "B" {y:2}`,
 
 func TestImportFileMultipleExportsSecond(t *testing.T) {
 	files := map[string]string{
-		"data.aql": `export "A" {x:1}
+		"data.boru": `export "A" {x:1}
 export "B" {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./data.aql"`,
+		`import "./data.boru"`,
 		`B.y`,
 	})
 	if err != nil {
@@ -122,11 +122,11 @@ export "B" {y:2}`,
 
 func TestImportFileRename(t *testing.T) {
 	files := map[string]string{
-		"data.aql": `export "Orig" {x:99}`,
+		"data.boru": `export "Orig" {x:99}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import [Orig Renamed] "./data.aql"`,
+		`import [Orig Renamed] "./data.boru"`,
 		`Renamed.x`,
 	})
 	if err != nil {
@@ -137,12 +137,12 @@ func TestImportFileRename(t *testing.T) {
 
 func TestImportFileMultiRename(t *testing.T) {
 	files := map[string]string{
-		"data.aql": `export "A" {x:1}
+		"data.boru": `export "A" {x:1}
 export "B" {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import [[A AA] [B BB]] "./data.aql"`,
+		`import [[A AA] [B BB]] "./data.boru"`,
 		`AA.x`,
 	})
 	if err != nil {
@@ -153,12 +153,12 @@ export "B" {y:2}`,
 
 func TestImportFileMultiRenameSecond(t *testing.T) {
 	files := map[string]string{
-		"data.aql": `export "A" {x:1}
+		"data.boru": `export "A" {x:1}
 export "B" {y:2}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import [[A AA] [B BB]] "./data.aql"`,
+		`import [[A AA] [B BB]] "./data.boru"`,
 		`BB.y`,
 	})
 	if err != nil {
@@ -172,12 +172,12 @@ export "B" {y:2}`,
 func TestImportFileIsolation(t *testing.T) {
 	// Internal defs should not leak to parent.
 	files := map[string]string{
-		"mod.aql": `def secret 42
+		"mod.boru": `def secret 42
 export "M" {x:1}`,
 	}
 
 	_, err := runModuleSteps(t, files, []string{
-		`import "./mod.aql"`,
+		`import "./mod.boru"`,
 		`secret`,
 	})
 	// "secret" is undefined (not exported) — should error.
@@ -190,12 +190,12 @@ func TestImportFileIsolationFromParent(t *testing.T) {
 	// Parent defs should not be visible inside the file's module.
 	// Use a string value so the map doesn't error on undefined word.
 	files := map[string]string{
-		"mod.aql": `export "M" {val:"foo"}`,
+		"mod.boru": `export "M" {val:"foo"}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
 		`def foo 99`,
-		`import "./mod.aql"`,
+		`import "./mod.boru"`,
 		`M.val`,
 	})
 	if err != nil {
@@ -212,12 +212,12 @@ func TestImportFileIsolationFromParent(t *testing.T) {
 
 func TestImportFileDefExport(t *testing.T) {
 	files := map[string]string{
-		"lib.aql": `def myval 42
+		"lib.boru": `def myval 42
 export "Lib" {myval:myval}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./lib.aql"`,
+		`import "./lib.boru"`,
 		`Lib.myval`,
 	})
 	if err != nil {
@@ -230,11 +230,11 @@ export "Lib" {myval:myval}`,
 
 func TestImportFileMapExport(t *testing.T) {
 	files := map[string]string{
-		"comp.aql": `export "Vals" {x:10,y:20}`,
+		"comp.boru": `export "Vals" {x:10,y:20}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./comp.aql"`,
+		`import "./comp.boru"`,
 		`Vals`,
 	})
 	if err != nil {
@@ -247,11 +247,11 @@ func TestImportFileMapExport(t *testing.T) {
 
 func TestImportFileNoModuleWord(t *testing.T) {
 	files := map[string]string{
-		"simple.aql": `export "Simple" {a:1,b:2,c:3}`,
+		"simple.boru": `export "Simple" {a:1,b:2,c:3}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./simple.aql"`,
+		`import "./simple.boru"`,
 		`Simple.c`,
 	})
 	if err != nil {
@@ -267,12 +267,12 @@ func TestImportFileFunctionListExport(t *testing.T) {
 		// `quote` keeps [1 add] as a literal word list (a quotation):
 		// bare words never degrade to data, so an unquoted [1 add]
 		// would try to evaluate `1 add` and fail on arity.
-		"fns.aql": `def inc quote [1 add]
+		"fns.boru": `def inc quote [1 add]
 export "Fns" {inc:inc}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./fns.aql"`,
+		`import "./fns.boru"`,
 		`Fns.inc`,
 	})
 	if err != nil {
@@ -288,7 +288,7 @@ export "Fns" {inc:inc}`,
 
 func TestImportFileMissing(t *testing.T) {
 	_, err := runModuleSteps(t, map[string]string{}, []string{
-		`import "./missing.aql"`,
+		`import "./missing.boru"`,
 	})
 	if err == nil {
 		t.Fatal("expected error for missing file")
@@ -300,10 +300,10 @@ func TestImportFileMissing(t *testing.T) {
 
 func TestImportFileParseError(t *testing.T) {
 	files := map[string]string{
-		"bad.aql": `((( invalid`,
+		"bad.boru": `((( invalid`,
 	}
 	_, err := runModuleSteps(t, files, []string{
-		`import "./bad.aql"`,
+		`import "./bad.boru"`,
 	})
 	if err == nil {
 		t.Fatal("expected error for parse failure")
@@ -312,10 +312,10 @@ func TestImportFileParseError(t *testing.T) {
 
 func TestImportFileRenameNotFound(t *testing.T) {
 	files := map[string]string{
-		"mod.aql": `export "A" {x:1}`,
+		"mod.boru": `export "A" {x:1}`,
 	}
 	_, err := runModuleSteps(t, files, []string{
-		`import [NoSuch Renamed] "./mod.aql"`,
+		`import [NoSuch Renamed] "./mod.boru"`,
 	})
 	if err == nil {
 		t.Fatal("expected error for missing export in rename")
@@ -329,13 +329,13 @@ func TestImportFileRenameNotFound(t *testing.T) {
 
 func TestImportFileMultipleDefs(t *testing.T) {
 	files := map[string]string{
-		"math.aql": `def pi 3
+		"math.boru": `def pi 3
 def e 2
 export "Math" {pi:pi,e:e}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./math.aql"`,
+		`import "./math.boru"`,
 		`Math.pi`,
 	})
 	if err != nil {
@@ -346,13 +346,13 @@ export "Math" {pi:pi,e:e}`,
 
 func TestImportFileMultipleDefsSecond(t *testing.T) {
 	files := map[string]string{
-		"math.aql": `def pi 3
+		"math.boru": `def pi 3
 def e 2
 export "Math" {pi:pi,e:e}`,
 	}
 
 	result, err := runModuleSteps(t, files, []string{
-		`import "./math.aql"`,
+		`import "./math.boru"`,
 		`Math.e`,
 	})
 	if err != nil {
@@ -526,11 +526,11 @@ func TestImportBareModuleRenameNotFoundError(t *testing.T) {
 	}
 }
 
-// --- Bare module import (CommonJS-style .aql/ resolution) ---
+// --- Bare module import (CommonJS-style .boru/ resolution) ---
 
 func TestImportBareModuleBasic(t *testing.T) {
 	files := map[string]string{
-		".aql/mylib/index.aql": `export "Lib" {version:1,name:"mylib"}`,
+		".boru/mylib/index.boru": `export "Lib" {version:1,name:"mylib"}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "mylib"`,
@@ -544,7 +544,7 @@ func TestImportBareModuleBasic(t *testing.T) {
 
 func TestImportBareModuleStringField(t *testing.T) {
 	files := map[string]string{
-		".aql/mylib/index.aql": `export "Lib" {version:1,name:"mylib"}`,
+		".boru/mylib/index.boru": `export "Lib" {version:1,name:"mylib"}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import "mylib"`,
@@ -558,7 +558,7 @@ func TestImportBareModuleStringField(t *testing.T) {
 
 func TestImportBareModuleWithRename(t *testing.T) {
 	files := map[string]string{
-		".aql/mylib/index.aql": `export "Orig" {val:42}`,
+		".boru/mylib/index.boru": `export "Orig" {val:42}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
 		`import [Orig Renamed] "mylib"`,
@@ -572,7 +572,7 @@ func TestImportBareModuleWithRename(t *testing.T) {
 
 func TestImportBareModuleMultipleExports(t *testing.T) {
 	files := map[string]string{
-		".aql/stuff/index.aql": `export "A" {x:1}
+		".boru/stuff/index.boru": `export "A" {x:1}
 export "B" {y:2}`,
 	}
 	result, err := runModuleSteps(t, files, []string{
@@ -586,7 +586,7 @@ export "B" {y:2}`,
 }
 
 // runModuleStepsWithCwd creates a registry with a simulated working directory,
-// in-memory files, and ParseFunc set, then executes AQL steps.
+// in-memory files, and ParseFunc set, then executes boru steps.
 func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, steps []string) ([]native.Value, error) {
 	t.Helper()
 	mem := capabilities.NewMem()
@@ -631,9 +631,9 @@ func runModuleStepsWithCwd(t *testing.T, cwd string, files map[string]string, st
 // --- Bare module: parent directory walk (1–7 levels) ---
 
 func TestBareModuleResolveLevel1(t *testing.T) {
-	// Module at CWD level: /project/.aql/foo/index.aql
+	// Module at CWD level: /project/.boru/foo/index.boru
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export "Foo" {level:1}`,
+		"/project/.boru/foo/index.boru": `export "Foo" {level:1}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "foo"`, `Foo.level`,
@@ -645,9 +645,9 @@ func TestBareModuleResolveLevel1(t *testing.T) {
 }
 
 func TestBareModuleResolveLevel2(t *testing.T) {
-	// Module one level up: /project/.aql/foo/index.aql, CWD = /project/src
+	// Module one level up: /project/.boru/foo/index.boru, CWD = /project/src
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export "Foo" {level:2}`,
+		"/project/.boru/foo/index.boru": `export "Foo" {level:2}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
 		`import "foo"`, `Foo.level`,
@@ -660,7 +660,7 @@ func TestBareModuleResolveLevel2(t *testing.T) {
 
 func TestBareModuleResolveLevel3(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export "Foo" {level:3}`,
+		"/project/.boru/foo/index.boru": `export "Foo" {level:3}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src/sub", files, []string{
 		`import "foo"`, `Foo.level`,
@@ -673,7 +673,7 @@ func TestBareModuleResolveLevel3(t *testing.T) {
 
 func TestBareModuleResolveLevel4(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export "Foo" {level:4}`,
+		"/project/.boru/foo/index.boru": `export "Foo" {level:4}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/a/b/c", files, []string{
 		`import "foo"`, `Foo.level`,
@@ -686,7 +686,7 @@ func TestBareModuleResolveLevel4(t *testing.T) {
 
 func TestBareModuleResolveLevel5(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export "Foo" {level:5}`,
+		"/project/.boru/foo/index.boru": `export "Foo" {level:5}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/a/b/c/d", files, []string{
 		`import "foo"`, `Foo.level`,
@@ -699,7 +699,7 @@ func TestBareModuleResolveLevel5(t *testing.T) {
 
 func TestBareModuleResolveLevel6(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export "Foo" {level:6}`,
+		"/project/.boru/foo/index.boru": `export "Foo" {level:6}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/a/b/c/d/e", files, []string{
 		`import "foo"`, `Foo.level`,
@@ -712,7 +712,7 @@ func TestBareModuleResolveLevel6(t *testing.T) {
 
 func TestBareModuleResolveLevel7(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/foo/index.aql": `export "Foo" {level:7}`,
+		"/project/.boru/foo/index.boru": `export "Foo" {level:7}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/a/b/c/d/e/f", files, []string{
 		`import "foo"`, `Foo.level`,
@@ -724,9 +724,9 @@ func TestBareModuleResolveLevel7(t *testing.T) {
 }
 
 func TestBareModuleResolveAtRoot(t *testing.T) {
-	// Module at filesystem root: /.aql/foo/index.aql
+	// Module at filesystem root: /.boru/foo/index.boru
 	files := map[string]string{
-		"/.aql/rootmod/index.aql": `export "Root" {found:true}`,
+		"/.boru/rootmod/index.boru": `export "Root" {found:true}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/a/b/c", files, []string{
 		`import "rootmod"`, `Root.found`,
@@ -742,8 +742,8 @@ func TestBareModuleResolveAtRoot(t *testing.T) {
 func TestBareModuleClosestWins(t *testing.T) {
 	// Module exists at both CWD and parent — CWD version wins.
 	files := map[string]string{
-		"/project/src/.aql/foo/index.aql": `export "Foo" {loc:"child"}`,
-		"/project/.aql/foo/index.aql":     `export "Foo" {loc:"parent"}`,
+		"/project/src/.boru/foo/index.boru": `export "Foo" {loc:"child"}`,
+		"/project/.boru/foo/index.boru":     `export "Foo" {loc:"parent"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
 		`import "foo"`, `Foo.loc`,
@@ -757,8 +757,8 @@ func TestBareModuleClosestWins(t *testing.T) {
 func TestBareModuleClosestWinsDeep(t *testing.T) {
 	// Module at level 2 and level 5 — level 2 (closer) wins.
 	files := map[string]string{
-		"/a/b/.aql/mod/index.aql":     `export "Mod" {loc:"level2"}`,
-		"/a/b/c/d/.aql/mod/index.aql": `export "Mod" {loc:"level4"}`,
+		"/a/b/.boru/mod/index.boru":     `export "Mod" {loc:"level2"}`,
+		"/a/b/c/d/.boru/mod/index.boru": `export "Mod" {loc:"level4"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/a/b/c/d/e", files, []string{
 		`import "mod"`, `Mod.loc`,
@@ -772,7 +772,7 @@ func TestBareModuleClosestWinsDeep(t *testing.T) {
 func TestBareModuleFallsThroughToParent(t *testing.T) {
 	// Module only at parent, not at CWD.
 	files := map[string]string{
-		"/project/.aql/util/index.aql": `export "Util" {val:99}`,
+		"/project/.boru/util/index.boru": `export "Util" {val:99}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
 		`import "util"`, `Util.val`,
@@ -786,10 +786,10 @@ func TestBareModuleFallsThroughToParent(t *testing.T) {
 // --- Bare module: siblings (different modules at same level) ---
 
 func TestBareModuleSiblings(t *testing.T) {
-	// Two different modules in the same .aql/ directory.
+	// Two different modules in the same .boru/ directory.
 	files := map[string]string{
-		"/project/.aql/alpha/index.aql": `export "Alpha" {id:"a"}`,
-		"/project/.aql/beta/index.aql":  `export "Beta" {id:"b"}`,
+		"/project/.boru/alpha/index.boru": `export "Alpha" {id:"a"}`,
+		"/project/.boru/beta/index.boru":  `export "Beta" {id:"b"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "alpha"`,
@@ -804,8 +804,8 @@ func TestBareModuleSiblings(t *testing.T) {
 
 func TestBareModuleSiblingsAccessBoth(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/alpha/index.aql": `export "Alpha" {id:"a"}`,
-		"/project/.aql/beta/index.aql":  `export "Beta" {id:"b"}`,
+		"/project/.boru/alpha/index.boru": `export "Alpha" {id:"a"}`,
+		"/project/.boru/beta/index.boru":  `export "Beta" {id:"b"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "alpha"`,
@@ -821,8 +821,8 @@ func TestBareModuleSiblingsAccessBoth(t *testing.T) {
 func TestBareModuleSiblingsAtDifferentLevels(t *testing.T) {
 	// alpha at CWD level, beta at parent level.
 	files := map[string]string{
-		"/project/src/.aql/alpha/index.aql": `export "Alpha" {id:"child-a"}`,
-		"/project/.aql/beta/index.aql":      `export "Beta" {id:"parent-b"}`,
+		"/project/src/.boru/alpha/index.boru": `export "Alpha" {id:"child-a"}`,
+		"/project/.boru/beta/index.boru":      `export "Beta" {id:"parent-b"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
 		`import "alpha"`,
@@ -837,8 +837,8 @@ func TestBareModuleSiblingsAtDifferentLevels(t *testing.T) {
 
 func TestBareModuleSiblingsAtDifferentLevelsSecond(t *testing.T) {
 	files := map[string]string{
-		"/project/src/.aql/alpha/index.aql": `export "Alpha" {id:"child-a"}`,
-		"/project/.aql/beta/index.aql":      `export "Beta" {id:"parent-b"}`,
+		"/project/src/.boru/alpha/index.boru": `export "Alpha" {id:"child-a"}`,
+		"/project/.boru/beta/index.boru":      `export "Beta" {id:"parent-b"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
 		`import "alpha"`,
@@ -857,8 +857,8 @@ func TestBareModuleSameNameDifferentParents(t *testing.T) {
 	// "utils" exists at two different directory levels with different content.
 	// The closest one (child) should win.
 	files := map[string]string{
-		"/project/src/.aql/utils/index.aql": `export "Utils" {scope:"local",ver:2}`,
-		"/project/.aql/utils/index.aql":     `export "Utils" {scope:"global",ver:1}`,
+		"/project/src/.boru/utils/index.boru": `export "Utils" {scope:"local",ver:2}`,
+		"/project/.boru/utils/index.boru":     `export "Utils" {scope:"global",ver:1}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
 		`import "utils"`, `Utils.scope`,
@@ -871,8 +871,8 @@ func TestBareModuleSameNameDifferentParents(t *testing.T) {
 
 func TestBareModuleSameNameDifferentParentsVersion(t *testing.T) {
 	files := map[string]string{
-		"/project/src/.aql/utils/index.aql": `export "Utils" {scope:"local",ver:2}`,
-		"/project/.aql/utils/index.aql":     `export "Utils" {scope:"global",ver:1}`,
+		"/project/src/.boru/utils/index.boru": `export "Utils" {scope:"local",ver:2}`,
+		"/project/.boru/utils/index.boru":     `export "Utils" {scope:"global",ver:1}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
 		`import "utils"`, `Utils.ver`,
@@ -886,7 +886,7 @@ func TestBareModuleSameNameDifferentParentsVersion(t *testing.T) {
 func TestBareModuleSameNameParentWinsWhenChildAbsent(t *testing.T) {
 	// "utils" only at the parent level — should be found via upward walk.
 	files := map[string]string{
-		"/project/.aql/utils/index.aql": `export "Utils" {scope:"global",ver:1}`,
+		"/project/.boru/utils/index.boru": `export "Utils" {scope:"global",ver:1}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project/src", files, []string{
 		`import "utils"`, `Utils.scope`,
@@ -900,9 +900,9 @@ func TestBareModuleSameNameParentWinsWhenChildAbsent(t *testing.T) {
 func TestBareModuleSameNameThreeLevels(t *testing.T) {
 	// "config" at three levels; the closest should win.
 	files := map[string]string{
-		"/a/b/c/.aql/config/index.aql": `export "Config" {env:"dev"}`,
-		"/a/b/.aql/config/index.aql":   `export "Config" {env:"staging"}`,
-		"/a/.aql/config/index.aql":     `export "Config" {env:"prod"}`,
+		"/a/b/c/.boru/config/index.boru": `export "Config" {env:"dev"}`,
+		"/a/b/.boru/config/index.boru":   `export "Config" {env:"staging"}`,
+		"/a/.boru/config/index.boru":     `export "Config" {env:"prod"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/a/b/c", files, []string{
 		`import "config"`, `Config.env`,
@@ -916,8 +916,8 @@ func TestBareModuleSameNameThreeLevels(t *testing.T) {
 func TestBareModuleSameNameThreeLevelsMidWins(t *testing.T) {
 	// "config" at root and mid but NOT at CWD. Mid level wins.
 	files := map[string]string{
-		"/a/b/.aql/config/index.aql": `export "Config" {env:"staging"}`,
-		"/a/.aql/config/index.aql":   `export "Config" {env:"prod"}`,
+		"/a/b/.boru/config/index.boru": `export "Config" {env:"staging"}`,
+		"/a/.boru/config/index.boru":   `export "Config" {env:"prod"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/a/b/c", files, []string{
 		`import "config"`, `Config.env`,
@@ -931,7 +931,7 @@ func TestBareModuleSameNameThreeLevelsMidWins(t *testing.T) {
 // --- Bare module: error cases ---
 
 func TestBareModuleNotFoundDeep(t *testing.T) {
-	// No .aql/ directory anywhere in the hierarchy.
+	// No .boru/ directory anywhere in the hierarchy.
 	_, err := runModuleStepsWithCwd(t, "/a/b/c/d/e/f/g", map[string]string{}, []string{
 		`import "nonexistent"`,
 	})
@@ -946,7 +946,7 @@ func TestBareModuleNotFoundDeep(t *testing.T) {
 func TestBareModuleWrongNameNotFound(t *testing.T) {
 	// "bar" exists but we ask for "baz".
 	files := map[string]string{
-		"/project/.aql/bar/index.aql": `export "Bar" {x:1}`,
+		"/project/.boru/bar/index.boru": `export "Bar" {x:1}`,
 	}
 	_, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "baz"`,
@@ -963,12 +963,12 @@ func TestBareModuleWrongNameNotFound(t *testing.T) {
 
 func TestBareModuleAndFilePathImportCoexist(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/bare/index.aql": `export "Bare" {src:"bare"}`,
-		"/project/local.aql":           `export "Local" {src:"file"}`,
+		"/project/.boru/bare/index.boru": `export "Bare" {src:"bare"}`,
+		"/project/local.boru":            `export "Local" {src:"file"}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
 		`import "bare"`,
-		`import "./local.aql"`,
+		`import "./local.boru"`,
 		`Bare.src`,
 	})
 	if err != nil {
@@ -981,7 +981,7 @@ func TestBareModuleAndFilePathImportCoexist(t *testing.T) {
 
 func TestBareModuleWithMultiRename(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/lib/index.aql": `export "A" {x:1}
+		"/project/.boru/lib/index.boru": `export "A" {x:1}
 export "B" {y:2}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
@@ -996,7 +996,7 @@ export "B" {y:2}`,
 
 func TestBareModuleWithMultiRenameSecond(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/lib/index.aql": `export "A" {x:1}
+		"/project/.boru/lib/index.boru": `export "A" {x:1}
 export "B" {y:2}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
@@ -1013,7 +1013,7 @@ export "B" {y:2}`,
 
 func TestBareModuleWithDefs(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/math/index.aql": `
+		"/project/.boru/math/index.boru": `
 def pi 3
 def e 2
 export "Math" {pi:pi,e:e}`,
@@ -1029,8 +1029,8 @@ export "Math" {pi:pi,e:e}`,
 
 func TestBareModuleImportsJsonReExportsAsMap(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/planets/data.json": `{"earth":{"diameter":12756},"mars":{"diameter":6792}}`,
-		"/project/.aql/planets/index.aql": `import "./data.json" def data end
+		"/project/.boru/planets/data.json": `{"earth":{"diameter":12756},"mars":{"diameter":6792}}`,
+		"/project/.boru/planets/index.boru": `import "./data.json" def data end
 export "Planets" {catalog:data}`,
 	}
 	result, err := runModuleStepsWithCwd(t, "/project", files, []string{
@@ -1045,7 +1045,7 @@ export "Planets" {catalog:data}`,
 
 func TestBareModuleInternalDefsDoNotLeak(t *testing.T) {
 	files := map[string]string{
-		"/project/.aql/secret/index.aql": `
+		"/project/.boru/secret/index.boru": `
 def internal 42
 export "Public" {val:internal}`,
 	}

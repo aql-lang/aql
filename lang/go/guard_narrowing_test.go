@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// checkDiags runs aql check over src and returns (hasErrorSeverity,
+// checkDiags runs boru check over src and returns (hasErrorSeverity,
 // all diagnostic codes joined).
 func checkDiags(t *testing.T, src string) (bool, string) {
 	t.Helper()

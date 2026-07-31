@@ -6,7 +6,7 @@ import "errors"
 // itself doesn't know what capabilities mean — it just stores values
 // keyed by name so word handlers can retrieve them at dispatch time.
 //
-// This is the integration seam between aqleng (the pure execution
+// This is the integration seam between borueng (the pure execution
 // engine) and the host package that supplies real-world services like
 // file I/O, format encoders/decoders, or a SQL store. The host
 // installs a service:

@@ -1,0 +1,850 @@
+# ============================================================================
+# boru:cli — conventional command-line argument parsing, in boru.
+#
+# design/CLI-PROGRAMS.0.md §8 (the surface) and design/CLI-PROGRAMS.1.md §2
+# (the Cli.dispatch / Cli.main split). The runtime surface for invocation is
+# the raw argv vector (IO.args); the CONVENTIONS live here, in library code.
+#
+#   Cli.parse    (spec) (argv)        -> {ok:true  flags args command}
+#                                     |  {ok:false err usage}
+#   Cli.dispatch (spec) (argv)        -> {action code out err flags args command}
+#   Cli.usage    (spec)               -> the rendered help text (no trailing \n)
+#   Cli.main     (spec) (handler/r)   -> the imperative shell (prints, exits)
+#   Cli.main     (spec) (argv) (h/r)  -> ditto, with an explicit argv
+#
+# THREE of the four words are PURE: parse / dispatch / usage take argv as an
+# explicit parameter, never read IO, never raise, never exit. Errors are DATA
+# ({ok:false err usage}), which is what makes them testable — `boru test` cannot
+# inject argv, and an IO.exit inside a test body ends the whole suite file.
+# Only Cli.main touches the world, and it is deliberately three statements long.
+#
+# The parse walk is a FOLD over argv with a module-level step word (cli-step)
+# and an immutable accumulator. The spec is turned into lookup TABLES exactly
+# once (cli-index: long name -> flag record, short letter -> flag record, plus
+# defaults / command set / arg spec), so the step is a table lookup and a small
+# dispatch. The index rides IN the accumulator, because `fold` hands its body
+# only (element, accumulator).
+#
+# Grammar, every row of it pinned by cli_test.boru:
+#   --long value | --long=value | --no-long (a bool flag -> false)
+#   -s value | -sVALUE | clustered shorts -abc | counted shorts -vv
+#   --   ends flag processing; every later token is a positional
+#   -    is a positional (the stdin convention), not a flag
+#   a repeated kind:"string" flag collects its values into a List
+#   kind:"count" counts occurrences; unmentioned flags take their spec default
+#   unknown flag / missing value / arity violation -> {ok:false} + one-line err
+#
+# The spec map:
+#   {name:"av" version:"0.2.0" summary:"…"
+#    flags:[{name:"watch" short:"w" kind:"bool" default:true help:"…"}
+#           {name:"kind" short:"k" kind:"string" value:"KIND" help:"…"}
+#           {name:"verbose" short:"v" kind:"count" help:"-v, -vv…"}]
+#    commands:[{name:"build" summary:"…"}]     # optional; name tier only
+#    args:{name:"files" min:0 max:9 help:"…"}}
+#
+# Every spec string must be QUOTED: a map value is data context, so an unquoted
+# `bool` would execute the word `bool`. A flag with no `kind` is a bool, and a
+# kind that is neither "string" nor "count" is treated as a bool.
+#
+# Two house rules this file obeys throughout, both learned from the compiler:
+#  * a multi-token call used as an `if` ARM is parenthesised — an unparenthesised
+#    one inside a def-bound `if` refuses bytecode compilation ("consumes loop
+#    results") and silently falls back to the interpreter;
+#  * a computed map key is always parenthesised (`m set (k) v`) — a bare `k`
+#    stores the literal name "k", with no diagnostic at all.
+# ============================================================================
+
+import "boru:io"            # Cli.main only (IO.args / IO.write / IO.exit)
+import "boru:string-util"   # indexof — the startswith and split-on-'=' primitive
+
+# ----------------------------------------------------------------------------
+# Small readers. A spec is user data: read every field defensively, never raise.
+# ----------------------------------------------------------------------------
+def cli-str fn [[m:Map k:String d:String] [String] [
+  def v (m get k)
+  if (v is None) [d] [(convert String v)]
+]]
+
+def cli-int fn [[m:Map k:String d:Integer] [Integer] [
+  def v (m get k)
+  if (v is None) [d] [(convert Integer v)]
+]]
+
+def cli-starts fn [[p:String s:String] [Boolean] [ (StringUtil.indexof p s) eq 0 ]]
+
+# right-pad to n runes (n is a small layout width, so the recursion is shallow).
+def cli-pad fn [[s:String n:Integer] [String] [
+  if ((size s) gte n) [s] [ def r (cli-pad (join "" [s " "]) n)  r ]
+]]
+
+# append every element of b onto a. There is no list-concat word; a fold of
+# `push` is the idiom, and it returns `a` unchanged when b is empty.
+def cli-cat-step fn [[e:Any acc:List] [List] [ push e acc ]]
+def cli-cat fn [[a:List b:List] [List] [ def r (fold [cli-cat-step] b a)  r ]]
+
+# ----------------------------------------------------------------------------
+# Spec readers — each yields the empty shape when the key is absent or has the
+# wrong type, so a partial spec parses instead of exploding.
+# ----------------------------------------------------------------------------
+def cli-spec-flags fn [[spec:Map] [List] [
+  def v (spec get "flags")
+  if (v is List) [v] [[]]
+]]
+
+def cli-spec-cmds fn [[spec:Map] [List] [
+  def v (spec get "commands")
+  if (v is List) [v] [[]]
+]]
+
+def cli-spec-args fn [[spec:Map] [Map] [
+  def v (spec get "args")
+  if (v is Map) [v] [{}]
+]]
+
+# ----------------------------------------------------------------------------
+# The index — built ONCE per parse / dispatch / usage call:
+#
+#   {long:{name -> flag}  short:{letter -> flag}  order:[flag …]
+#    defaults:{name -> value}  cmds:{name -> summary}  corder:[name …]
+#    name  version  summary  argspec}
+#
+# A flag record is normalized: {name short kind value help default}.
+# ----------------------------------------------------------------------------
+def cli-flag-of fn [[f:Map] [Map] [
+  def nm (cli-str f "name" "")
+  def sh (cli-str f "short" "")
+  def kd (cli-str f "kind" "bool")
+  def vl (cli-str f "value" "VALUE")
+  def hp (cli-str f "help" "")
+  # `m get <absent>` yields the None TYPE LITERAL, which prints like the `none`
+  # VALUE and is `deq` to it but is NOT `Assert.equal` to it. Normalize here so
+  # a flags map that reaches the caller holds the value (§8's documented
+  # `{watch: true, kind: none, verbose: 0}` shape).
+  def d0 (f get "default")
+  def df (if (d0 is None) [none] [d0])
+  {} set (quote name) nm set (quote short) sh set (quote kind) kd
+     set (quote value) vl set (quote help) hp set (quote default) df
+]]
+
+def cli-register fn [[acc:Map g:Map] [Map] [
+  def nm g.name
+  def sh g.short
+  def lo acc.long
+  def so acc.short
+  def od acc.order
+  def lg (lo set (nm) g)
+  def sg (if (sh eq "") [so] [(so set (sh) g)])
+  acc set (quote long) lg set (quote short) sg set (quote order) (push g od)
+]]
+
+def cli-table-step fn [[f:Map acc:Map] [Map] [ def r (cli-register acc (cli-flag-of f))  r ]]
+
+# true when the spec already owns this long name or this short letter.
+def cli-claims fn [[acc:Map g:Map] [Boolean] [
+  def lo acc.long
+  def so acc.short
+  def nm g.name
+  def sh g.short
+  if (((lo get nm) is None) not) [true] [
+    if (sh eq "") [false] [ ((so get sh) is None) not ]
+  ]
+]]
+
+# --help/-h and --version are added to every spec that has not claimed them, so
+# Cli.parse reports them as ordinary bool flags and Cli.usage lists them. They
+# are deliberately NOT in `defaults`: an untouched flags map stays clean, and an
+# absent --help reads as none rather than false.
+def cli-implicit-flags [
+  {name:"help" short:"h" help:"show this help and exit"}
+  {name:"version" help:"print the version and exit"}
+]
+
+def cli-implicit-step fn [[f:Map acc:Map] [Map] [
+  def g (cli-flag-of f)
+  if (cli-claims acc g) [acc] [ def r (cli-register acc g)  r ]
+]]
+
+# spec defaults: count -> 0, string -> none, anything else -> false, unless the
+# flag declares a `default`.
+def cli-default-step fn [[f:Map acc:Map] [Map] [
+  def g (cli-flag-of f)
+  def nm g.name
+  def kd g.kind
+  def df g.default
+  if (kd eq "count") [ acc set (nm) (if (df is None) [0] [df]) ] [
+  if (kd eq "string") [ acc set (nm) df ] [
+    acc set (nm) (if (df is None) [false] [df]) ]]
+]]
+
+def cli-cmd-step fn [[c:Map acc:Map] [Map] [
+  def nm (cli-str c "name" "")
+  def sm (cli-str c "summary" "")
+  def cs acc.cmds
+  def od acc.corder
+  acc set (quote cmds) (cs set (nm) sm) set (quote corder) (push nm od)
+]]
+
+def cli-index fn [[spec:Map] [Map] [
+  def raw (cli-spec-flags spec)
+  def t1 (fold [cli-table-step] raw {long:{} short:{} order:[]})
+  def t2 (fold [cli-implicit-step] cli-implicit-flags t1)
+  def df (fold [cli-default-step] raw {})
+  def cm (fold [cli-cmd-step] (cli-spec-cmds spec) {cmds:{} corder:[]})
+  def cs cm.cmds
+  def co cm.corder
+  def nm (cli-str spec "name" "program")
+  def vr (cli-str spec "version" "")
+  def sm (cli-str spec "summary" "")
+  def ar (cli-spec-args spec)
+  t2 set (quote defaults) df set (quote cmds) cs set (quote corder) co
+     set (quote name) nm set (quote version) vr set (quote summary) sm
+     set (quote argspec) ar
+]]
+
+# ----------------------------------------------------------------------------
+# The walk state (the fold accumulator), immutable throughout:
+#
+#   ok      false once a usage error is recorded (the step then short-circuits)
+#   err     the one-line error message
+#   flags   name -> value, seeded from idx.defaults
+#   seen    name -> true, so a repeated string flag knows to collect
+#   args    the positionals, in order
+#   pend    the long name of a string flag awaiting its value ("" = none)
+#   pendtok how that flag was spelled, for the error message
+#   nomore  true after a bare `--`
+#   command the selected subcommand (none unless spec.commands is declared)
+#   idx     the lookup tables (fold hands the body only element + accumulator)
+# ----------------------------------------------------------------------------
+def cli-init fn [[ix:Map] [Map] [
+  def df ix.defaults
+  {ok:true err:"" seen:{} args:[] pend:"" pendtok:"" nomore:false command:none
+   cmd0:none cmd0i:0 unknown:false}
+    set (quote flags) df set (quote idx) ix
+]]
+
+def cli-fail fn [[st:Map msg:String] [Map] [ st set (quote ok) false set (quote err) msg ]]
+
+# An unknown flag is failure of a different KIND: `prog --bogus --help` must
+# not print help and exit 0, because that turns a typo in a script into a
+# success. (GNU's tools agree: `ls --bogus --help` exits 2.) Every other
+# failure — a missing value, an arity violation — still yields to a --help
+# the user also typed, which is what makes `prog --help` work under a spec
+# whose min-arity the empty argv cannot satisfy.
+def cli-fail-unknown fn [[st:Map msg:String] [Map] [
+  def s2 (cli-fail st msg)
+  s2 set (quote unknown) true
+]]
+
+# A positional. The FIRST one is also the subcommand candidate — but only if it
+# arrived before any `--` and is not the lone `-`: a file the user explicitly
+# escaped, or named as stdin, must not be swallowed as a verb.
+def cli-arg fn [[st:Map tok:String] [Map] [
+  def ag st.args
+  def cand ((((st.cmd0) is None) and ((st.nomore) not)) and (tok neq "-"))
+  def s2 (if cand [ st set (quote cmd0) tok set (quote cmd0i) (size ag) ] [st])
+  s2 set (quote args) (push tok ag)
+]]
+
+# drop the element at index i, keeping the rest in order.
+def cli-drop-at-step fn [[e:Any acc:Map] [Map] [
+  def n acc.n
+  def keep (if (n eq acc.i) [acc.out] [(push e acc.out)])
+  acc set (quote out) keep set (quote n) (n add 1)
+]]
+
+def cli-drop-at fn [[xs:List i:Integer] [List] [
+  def a0 ({out:[] n:0} set (quote i) i)
+  def rr (fold [cli-drop-at-step] xs a0)
+  rr.out
+]]
+
+# set a flag, marking it seen.
+def cli-put fn [[st:Map nm:String v:Any] [Map] [
+  def fl st.flags
+  def sn st.seen
+  st set (quote flags) (fl set (nm) v) set (quote seen) (sn set (nm) true)
+]]
+
+# set a string flag; a SECOND occurrence collects into a List, in argv order.
+def cli-add fn [[st:Map nm:String v:String] [Map] [
+  def fl st.flags
+  def sn st.seen
+  def old (fl get nm)
+  def nv (if (((sn get nm) is None) not)
+    [ if (old is List) [(push v old)] [(push v (push old []))] ]
+    [v])
+  def r (cli-put st nm nv)
+  r
+]]
+
+# kind:"count" — +1 per occurrence, starting from the spec default (or 0).
+def cli-bump fn [[st:Map nm:String] [Map] [
+  def fl st.flags
+  def old (fl get nm)
+  def n (if (old is Integer) [old] [0])
+  def r (cli-put st nm (n add 1))
+  r
+]]
+
+# ----------------------------------------------------------------------------
+# Long options: --name, --name=value, --no-name.
+# ----------------------------------------------------------------------------
+def cli-long-flag fn [[st:Map f:Map nm:String val:String haseq:Boolean] [Map] [
+  def kd f.kind
+  if (kd eq "string") [
+    if haseq [ def r (cli-add st nm val)  r ]
+             [ st set (quote pend) nm set (quote pendtok) (join "" ["--" nm]) ]
+  ] [
+    if haseq [ def r (cli-fail st (join "" ["flag --" nm " takes no value"]))  r ] [
+      if (kd eq "count") [ def r (cli-bump st nm)  r ] [ def r (cli-put st nm true)  r ]
+    ]
+  ]
+]]
+
+# --no-X clears a bool flag; anything else not in the table is an unknown flag.
+def cli-long-neg fn [[st:Map nm:String haseq:Boolean] [Map] [
+  def ix st.idx
+  def lo ix.long
+  def bse (if (cli-starts "no-" nm) [(slice 3 (size nm) nm)] [""])
+  def g (if (bse eq "") [none] [(lo get bse)])
+  if (g is None) [ def r (cli-fail-unknown st (join "" ["unknown flag: --" nm]))  r ] [
+    def kd g.kind
+    if (kd neq "bool") [ def r (cli-fail-unknown st (join "" ["unknown flag: --" nm]))  r ] [
+      if haseq [ def r (cli-fail st (join "" ["flag --" nm " takes no value"]))  r ]
+               [ def r (cli-put st bse false)  r ]
+    ]
+  ]
+]]
+
+def cli-long fn [[st:Map tok:String] [Map] [
+  def bd (slice 2 (size tok) tok)
+  def ep (StringUtil.indexof "=" bd)
+  def haseq (ep gte 0)
+  def nm (if haseq [(slice 0 ep bd)] [bd])
+  def val (if haseq [(slice (ep add 1) (size bd) bd)] [""])
+  def ix st.idx
+  def lo ix.long
+  def f (lo get nm)
+  if (f is None) [ def r (cli-long-neg st nm haseq)  r ]
+                 [ def r (cli-long-flag st f nm val haseq)  r ]
+]]
+
+# ----------------------------------------------------------------------------
+# Short options: one cluster token, walked rune by rune. A string-valued short
+# takes the REST of the cluster as its value (-kFOO), else the next argv token.
+# ----------------------------------------------------------------------------
+def cli-short-walk fn [[st:Map tok:String i:Integer] [Map] [
+  if (i gte (size tok)) [st] [
+    def c (slice i (i add 1) tok)
+    def ix st.idx
+    def so ix.short
+    def f (so get c)
+    if (f is None) [ def r (cli-fail-unknown st (join "" ["unknown flag: -" c]))  r ] [
+      def nm f.name
+      def kd f.kind
+      if (kd eq "string") [
+        def rest (slice (i add 1) (size tok) tok)
+        if (rest eq "") [ st set (quote pend) nm set (quote pendtok) (join "" ["-" c]) ]
+                        [ def r (cli-add st nm rest)  r ]
+      ] [
+        def nx (if (kd eq "count") [(cli-bump st nm)] [(cli-put st nm true)])
+        def r (cli-short-walk nx tok (i add 1))
+        r
+      ]
+    ]
+  ]
+]]
+
+def cli-short fn [[st:Map tok:String] [Map] [ def r (cli-short-walk st tok 1)  r ]]
+
+# consume the token as the pending flag's value — even when it looks like a
+# flag, which is the GNU convention for a required option argument.
+def cli-take fn [[st:Map tok:String] [Map] [
+  def pd st.pend
+  def nx (cli-add st pd tok)
+  nx set (quote pend) "" set (quote pendtok) ""
+]]
+
+# ----------------------------------------------------------------------------
+# The fold step — one argv token: a table lookup plus a small dispatch.
+# ----------------------------------------------------------------------------
+def cli-step fn [[tok:String st:Map] [Map] [
+  if ((st.ok) not) [st] [
+  if ((st.pend) neq "") [ def r (cli-take st tok)  r ] [
+  if (st.nomore) [ def r (cli-arg st tok)  r ] [
+  if (tok eq "--") [ st set (quote nomore) true ] [
+  if (cli-starts "--" tok) [ def r (cli-long st tok)  r ] [
+  if ((cli-starts "-" tok) and ((size tok) gt 1)) [ def r (cli-short st tok)  r ] [
+    def r (cli-arg st tok)  r ]]]]]]
+]]
+
+# ----------------------------------------------------------------------------
+# Post-walk: a dangling value-taking flag, command selection, arg arity. Each
+# stage is a no-op once ok is false, so the FIRST error is the reported one.
+# ----------------------------------------------------------------------------
+def cli-close-pending fn [[st:Map] [Map] [
+  if ((st.ok) not) [st] [
+    def pd st.pend
+    if (pd eq "") [st] [
+      def pt st.pendtok
+      def r (cli-fail st (join "" ["flag " pt " needs a value"]))
+      r
+    ]
+  ]
+]]
+
+def cli-pick-command fn [[st:Map] [Map] [
+  if ((st.ok) not) [st] [
+    def ix st.idx
+    def co ix.corder
+    if ((size co) eq 0) [st] [
+      def c0 st.cmd0
+      if (c0 is None)
+        [ def r (cli-fail st (join "" ["a command is required (one of: " (join ", " co) ")"]))  r ] [
+        def nm (convert String c0)
+        def cs ix.cmds
+        if ((cs get nm) is None)
+          [ def r (cli-fail st (join "" ["unknown command: " nm]))  r ]
+          [ st set (quote command) nm set (quote args) (cli-drop-at (st.args) (st.cmd0i)) ]
+      ]
+    ]
+  ]
+]]
+
+def cli-check-arity fn [[st:Map] [Map] [
+  if ((st.ok) not) [st] [
+    def ix st.idx
+    def sp ix.argspec
+    def ag st.args
+    def n (size ag)
+    def mn (cli-int sp "min" 0)
+    def mx (sp get "max")
+    def lbl (cli-str sp "name" "argument")
+    if (n lt mn)
+      [ def r (cli-fail st (join "" ["expected at least " (convert String mn) " " lbl ", got " (convert String n)]))  r ] [
+      if (mx is None) [st] [
+        def hi (convert Integer mx)
+        if (n gt hi)
+          [ def r (cli-fail st (join "" ["expected at most " (convert String hi) " " lbl ", got " (convert String n)]))  r ]
+          [st]
+      ]
+    ]
+  ]
+]]
+
+def cli-result fn [[st:Map] [Map] [
+  if ((st.ok) not) [
+    def er st.err
+    def ix st.idx
+    {ok:false} set (quote err) er set (quote usage) (cli-usage-of ix 0)
+  ] [
+    def fl st.flags
+    def ag st.args
+    def cd st.command
+    {ok:true} set (quote flags) fl set (quote args) ag set (quote command) cd
+  ]
+]]
+
+def cli-finish-st fn [[st:Map] [Map] [
+  def a (cli-close-pending st)
+  def b (cli-pick-command a)
+  def c (cli-check-arity b)
+  c
+]]
+
+# The raw end-of-walk STATE. Dispatch needs one bit the public result map
+# deliberately does not carry — whether the failure was an unknown flag, which
+# decides whether a --help elsewhere in argv is honoured — so the state is
+# threaded internally and only `cli-result` shapes the public map.
+def cli-parse-st fn [[ix:Map argv:List] [Map] [
+  def w (fold [cli-step] argv (cli-init ix))
+  def r (cli-finish-st w)
+  r
+]]
+
+def cli-parse-ix fn [[ix:Map argv:List] [Map] [
+  def st (cli-parse-st ix argv)
+  def r (cli-result st)
+  r
+]]
+
+# ----------------------------------------------------------------------------
+# Usage rendering. Pure text assembly — no IO, so no COLUMNS wrapping and no
+# color: §8's tty/NO_COLOR tier would make Cli.usage impure and untestable.
+#
+# Four sections joined by a blank line; an absent section is dropped:
+#
+#   vc 3.1 - a multi-verb tool
+#
+#   usage: vc [options] <command>
+#
+#   commands:
+#     build   build the thing
+#     list
+#
+#   options:
+#     -f, --force    do it anyway
+#     -h, --help     show this help and exit
+#         --version  print the version and exit
+#
+# `join` DROPS empty strings, so the blank lines cannot come from a lines list
+# with "" in it — each section is rendered whole and the sections are joined by
+# "\n\n" after the empty ones are filtered out (cli-sect-step).
+# ----------------------------------------------------------------------------
+def cli-head-line fn [[ix:Map] [String] [
+  def nm ix.name
+  def vr ix.version
+  def sm ix.summary
+  def a (if (vr eq "") [nm] [(join " " [nm vr])])
+  if (sm eq "") [a] [(join "" [a " - " sm])]
+]]
+
+def cli-arg-part fn [[sp:Map] [String] [
+  def nm (cli-str sp "name" "")
+  if (nm eq "") [""] [
+    def mx (sp get "max")
+    def many (if (mx is None) [true] [((convert Integer mx) gt 1)])
+    def core (if many [(join "" ["<" nm ">..."])] [(join "" ["<" nm ">"])])
+    def mn (cli-int sp "min" 0)
+    if (mn lt 1) [(join "" ["[" core "]"])] [core]
+  ]
+]]
+
+def cli-usage-line fn [[ix:Map] [String] [
+  def nm ix.name
+  def co ix.corder
+  def sp ix.argspec
+  def cp (if ((size co) eq 0) [""] [" <command>"])
+  def ap (cli-arg-part sp)
+  def ap2 (if (ap eq "") [""] [(join "" [" " ap])])
+  join "" ["usage: " nm " [options]" cp ap2]
+]]
+
+#   "  -k, --kind KIND"   /   "      --version"  when there is no short form
+def cli-opt-label fn [[f:Map] [String] [
+  def nm f.name
+  def sh f.short
+  def kd f.kind
+  def vl f.value
+  def sp (if (sh eq "") ["    "] [(join "" ["-" sh ", "])])
+  def vp (if (kd eq "string") [(join "" [" " vl])] [""])
+  join "" ["  " sp "--" nm vp]
+]]
+
+def cli-def-note fn [[f:Map] [String] [
+  def df f.default
+  if (df is None) [""] [(join "" [" (default: " (convert String df) ")"])]
+]]
+
+def cli-label-width-step fn [[f:Map acc:Integer] [Integer] [
+  def n (size (cli-opt-label f))
+  if (n gt acc) [n] [acc]
+]]
+
+def cli-name-width-step fn [[s:String acc:Integer] [Integer] [
+  def n (size s)
+  if (n gt acc) [n] [acc]
+]]
+
+def cli-opt-row-step fn [[f:Map acc:Map] [Map] [
+  def hp f.help
+  def w acc.w
+  def ls acc.lines
+  def lb (cli-opt-label f)
+  def tl (join "" [hp (cli-def-note f)])
+  def rows (if (tl eq "") [(push lb [])] [(cli-col-rows (cli-pad lb w) tl w acc.width)])
+  acc set (quote lines) (cli-cat ls rows)
+]]
+
+def cli-cmd-row-step fn [[s:String acc:Map] [Map] [
+  def cs acc.cmds
+  def w acc.w
+  def ls acc.lines
+  def sm (convert String (cs get s))
+  def lb (join "" ["  " s])
+  def rows (if (sm eq "") [(push lb [])] [(cli-col-rows (cli-pad lb w) sm w acc.width)])
+  acc set (quote lines) (cli-cat ls rows)
+]]
+
+def cli-cmd-block fn [[ix:Map width:Integer] [String] [
+  def co ix.corder
+  if ((size co) eq 0) [""] [
+    def cs ix.cmds
+    def w (fold [cli-name-width-step] co 0)
+    def a0 ({lines:[]} set (quote w) (w add 5) set (quote cmds) cs set (quote width) width)
+    def rr (fold [cli-cmd-row-step] co a0)
+    def ls rr.lines
+    def r (join "\n" (cli-cat (push "commands:" []) ls))
+    r
+  ]
+]]
+
+def cli-opt-block fn [[ix:Map width:Integer] [String] [
+  def od ix.order
+  def w (fold [cli-label-width-step] od 0)
+  def a0 ({lines:[]} set (quote w) (w add 2) set (quote width) width)
+  def rr (fold [cli-opt-row-step] od a0)
+  def ls rr.lines
+  def r (join "\n" (cli-cat (push "options:" []) ls))
+  r
+]]
+
+# drop the empty sections, then join what is left with a blank line between.
+# (`secs` is bound to a local first: `fold [step] [a b] []` — a list LITERAL as
+# fold's data with an empty-list initial — mis-infers the body's arg types and
+# fails static analysis, where a bound list is inferred correctly.)
+def cli-sect-step fn [[s:String acc:List] [List] [ if (s eq "") [acc] [(push s acc)] ]]
+
+def cli-usage-of fn [[ix:Map width:Integer] [String] [
+  def hd (cli-head-line ix)
+  def ul (cli-usage-line ix)
+  def cb (cli-cmd-block ix width)
+  def ob (cli-opt-block ix width)
+  def secs (push ob (push cb (push ul (push hd []))))
+  def ss (fold [cli-sect-step] secs [])
+  join "\n\n" ss
+]]
+
+# ----------------------------------------------------------------------------
+# Dispatch — the pure decision layer. `action` is run / help / version / error,
+# `out` and `err` are the exact text to print, `code` is the exit status.
+# ----------------------------------------------------------------------------
+def cli-decide fn [[act:String code:Integer out:String err:String] [Map] [
+  {flags:{} args:[] command:none}
+    set (quote action) act set (quote code) code
+    set (quote out) out set (quote err) err
+]]
+
+def cli-help fn [[ix:Map opts:Map] [Map] [
+  def r (cli-decide "help" 0 (join "" [(cli-render ix opts) "\n"]) "")
+  r
+]]
+
+def cli-version fn [[ix:Map] [Map] [
+  def nm ix.name
+  def vr ix.version
+  def t (if (vr eq "") [nm] [(join " " [nm vr])])
+  def r (cli-decide "version" 0 (join "" [t "\n"]) "")
+  r
+]]
+
+def cli-flag-true fn [[m:Map k:String] [Boolean] [
+  def v (m get k)
+  if (v is Boolean) [v] [false]
+]]
+
+def cli-dispatch-ok fn [[ix:Map r:Map opts:Map] [Map] [
+  def fl r.flags
+  if (cli-flag-true fl "help") [ def x (cli-help ix opts)  x ] [
+    if (cli-flag-true fl "version") [ def x (cli-version ix)  x ] [
+      def ag r.args
+      def cd r.command
+      def d (cli-decide "run" 0 "" "")
+      d set (quote flags) fl set (quote args) ag set (quote command) cd
+    ]
+  ]
+]]
+
+# A parse FAILURE may still have been a help request (`av --bogus --help`, or a
+# spec whose min-arity rejects the empty argv). Re-scan the tokens ahead of any
+# `--` for an exact --help / -h / --version and honour it.
+def cli-prescan-step fn [[tok:String acc:Map] [Map] [
+  if ((acc.stop) or ((acc.hit) neq "")) [acc] [
+    if (tok eq "--") [ acc set (quote stop) true ] [
+      if ((tok eq "--help") or (tok eq "-h")) [ acc set (quote hit) "help" ] [
+        if (tok eq "--version") [ acc set (quote hit) "version" ] [acc]
+      ]
+    ]
+  ]
+]]
+
+def cli-prescan fn [[argv:List] [String] [
+  def a (fold [cli-prescan-step] argv {stop:false hit:""})
+  a.hit
+]]
+
+def cli-dispatch-bad fn [[ix:Map argv:List r:Map opts:Map unk:Boolean] [Map] [
+  def pre (if unk [""] [(cli-prescan argv)])
+  if (pre eq "help") [ def x (cli-help ix opts)  x ] [
+    if (pre eq "version") [ def x (cli-version ix)  x ] [
+      def nm ix.name
+      def er r.err
+      def x (cli-decide "error" 2 "" (join "" [nm ": " er "\n\n" (cli-render ix opts) "\n"]))
+      x
+    ]
+  ]
+]]
+
+# opts is the TERMINAL, handed in: {width color}. Dispatch stays pure — the map
+# is data like any other — and Cli.main is the only caller that knows what the
+# terminal is (design/CLI-PROGRAMS.1.md §3). Cli.dispatch passes {}, so a driver
+# that renders the text itself gets it unwrapped and uncoloured.
+def cli-dispatch-ix fn [[ix:Map argv:List opts:Map] [Map] [
+  def st (cli-parse-st ix argv)
+  def r (cli-result st)
+  if (r.ok) [ def x (cli-dispatch-ok ix r opts)  x ] [ def x (cli-dispatch-bad ix argv r opts (st.unknown))  x ]
+]]
+
+# ----------------------------------------------------------------------------
+# The four exported words.
+# ----------------------------------------------------------------------------
+def cli-w-parse fn [[spec:Map argv:List] [Map] [
+  def r (cli-parse-ix (cli-index spec) argv)
+  r
+]]
+
+def cli-w-dispatch fn [[spec:Map argv:List] [Map] [
+  def r (cli-dispatch-ix (cli-index spec) argv {})
+  r
+]]
+
+# ----------------------------------------------------------------------------
+# Usage OPTIONS — the terminal comes IN, it is never read (CLI-PROGRAMS.1.md §3).
+#
+#   Cli.usage (spec)                          the plain rendering
+#   Cli.usage (spec) {width: 72 color: true}  the caller's terminal, decided
+#
+# The RFC asks for help wrapped to `IO.env "COLUMNS"` and coloured when stdout
+# is a terminal and NO_COLOR is unset. A function that READ those would not be
+# pure, would not run under the spec runner, and would answer differently
+# depending on the terminal that happened to be attached — which is the same
+# thing as being untestable. So Cli.main reads them and passes them here.
+# ----------------------------------------------------------------------------
+def cli-opt-int fn [[m:Map k:String d:Integer] [Integer] [
+  def v (m get k)
+  if (v is Integer) [v] [d]
+]]
+
+def cli-opt-bool fn [[m:Map k:String] [Boolean] [
+  def v (m get k)
+  if (v is Boolean) [v] [false]
+]]
+
+# Split "<label padded to col><text>" into rows no wider than width, with every
+# continuation indented to col so the help text stays under its own option. A
+# width of 0 (the default) means no wrapping at all, which is what a caller
+# that does not know the terminal should get.
+# Greedy word wrap of PLAIN text to a column budget: no prefixes, no padding,
+# just rows of words. The caller owns the layout — cli-col-rows puts the label
+# on the first row and the indent on the rest — which keeps this fn honest
+# about spacing (a fold that also handled the prefix collapsed the label's
+# padding into a single space, and the help column lost its alignment).
+def cli-wrap-step fn [[tok:String acc:Map] [Map] [
+  def cur acc.cur
+  def w acc.w
+  def cand (if (cur eq "") [tok] [(join " " [cur tok])])
+  if ((size cand) lte w) [ acc set (quote cur) cand ] [
+    if (cur eq "") [ acc set (quote out) (push tok acc.out) ] [
+      acc set (quote out) (push cur acc.out) set (quote cur) tok
+    ]
+  ]
+]]
+
+def cli-wrap-words fn [[text:String w:Integer] [List] [
+  def a0 ({out:[] cur:""} set (quote w) w)
+  def rr (fold [cli-wrap-step] (StringUtil.split " " text) a0)
+  def res (if (rr.cur eq "") [rr.out] [(push rr.cur rr.out)])
+  res
+]]
+
+def cli-row-step fn [[row:String acc:Map] [Map] [
+  def pre (if ((size acc.out) eq 0) [acc.lead] [acc.ind])
+  acc set (quote out) (push (join "" [pre row]) acc.out)
+]]
+
+# "<label padded to col><help>", wrapped to width with every continuation
+# indented to col. width 0 (the default) means no wrapping at all, which is
+# what a caller that does not know the terminal should get.
+def cli-col-rows fn [[lead:String text:String col:Integer width:Integer] [List] [
+  def first (join "" [lead text])
+  if (width lte 0) [(push first [])] [
+    if ((size first) lte width) [(push first [])] [
+      def budget (if ((width sub col) lt 8) [8] [(width sub col)])
+      def rows (cli-wrap-words text budget)
+      def a0 ({out:[]} set (quote lead) lead set (quote ind) (cli-pad "" col))
+      def rr (fold [cli-row-step] rows a0)
+      rr.out
+    ]
+  ]
+]]
+
+# ANSI, applied to the two section headers and nothing else: a help screen that
+# highlights every flag is harder to read than one that highlights nothing.
+def cli-colorize-step fn [[line:String acc:List] [List] [
+  def hd (if ((line eq "options:") or (line eq "commands:"))
+            [(join "" ["\u001b[1m" line "\u001b[0m"])] [line])
+  push hd acc
+]]
+
+def cli-render fn [[ix:Map opts:Map] [String] [
+  def w (cli-opt-int opts "width" 0)
+  def txt (cli-usage-of ix w)
+  if ((cli-opt-bool opts "color") not) [txt] [
+    def lines (StringUtil.split "\n" txt {keepEmpty:true})
+    def r (join "\n" (fold [cli-colorize-step] lines []))
+    r
+  ]
+]]
+
+def cli-w-usage fn [
+  [spec:Map] [String] [ def r (cli-usage-of (cli-index spec) 0)  r ]
+  [spec:Map opts:Map] [String] [ def r (cli-render (cli-index spec) opts)  r ]
+]
+
+# The imperative shell, and the ONLY part of this module that touches the world.
+# Print, then either exit with dispatch's code or hand off to the handler (whose
+# Integer return becomes the exit code; anything else is 0).
+#
+# Every row of cli-main-do is deliberately UNCOVERED by cli_test.boru and cannot
+# be otherwise: each arm ends in IO.exit, which `boru test` sees as a raised error
+# that ends the whole suite FILE, so the first arm exercised would kill the run
+# before the second. That unreachability is exactly why the decision logic lives
+# in Cli.dispatch, where every arm is a pure map comparison. Verify this word by
+# reading it — and by the driver runs recorded in the report.
+# The terminal, as DATA — exported as Cli.term-opts. Pure and therefore
+# testable: main reads the three values (COLUMNS, NO_COLOR, is-tty) and hands
+# them here, rather than this deciding anything by reaching for the world
+# itself. A driver that renders usage itself wants the same rule, which is why
+# it is exported rather than private. A COLUMNS that is not a number is ignored
+# rather than fatal — a bad environment variable must not stop a tool printing
+# its own help.
+def cli-digits-step fn [[c:String acc:Boolean] [Boolean] [
+  if (acc not) [false] [ (StringUtil.indexof c "0123456789") gte 0 ]
+]]
+
+def cli-opts-from fn [[cols:Any nocolor:Any tty:Boolean] [Map] [
+  def cs (if (cols is None) [""] [(convert String cols)])
+  def ok ((cs neq "") and (fold [cli-digits-step] (StringUtil.split "" cs) true))
+  def w (if ok [(convert Integer cs)] [0])
+  {} set (quote width) w set (quote color) (tty and (nocolor is None))
+]]
+
+def cli-main-do fn [[spec:Map argv:List h:Function] [Any] [
+  def opts (cli-opts-from (IO.env "COLUMNS") (IO.env "NO_COLOR") (IO.is-tty (IO.stdout)))
+  def d (cli-dispatch-ix (cli-index spec) argv opts)
+  def _o (if ((d.out) neq "") [(IO.write (IO.stdout) (d.out))] [none])
+  def _e (if ((d.err) neq "") [(IO.write (IO.stderr) (d.err))] [none])
+  if ((d.action) neq "run") [ IO.exit (d.code) ] [
+    def ctx ({} set (quote flags) (d.flags) set (quote args) (d.args) set (quote command) (d.command))
+    def rv (ctx h/r apply)
+    if (rv is Integer) [ IO.exit rv ] [ IO.exit 0 ]
+  ]
+]]
+
+def cli-w-main fn [
+  [spec:Map h:Function] [Any] [ def r (cli-main-do spec (IO.args) (h/r))  r ]
+  [spec:Map argv:List h:Function] [Any] [ def r (cli-main-do spec argv (h/r))  r ]
+]
+
+def cli-w-term-opts fn [[cols:Any nocolor:Any tty:Boolean] [Map] [
+  def r (cli-opts-from cols nocolor tty)
+  r
+]]
+
+export "Cli" {
+  parse:     cli-w-parse/r
+  dispatch:  cli-w-dispatch/r
+  usage:     cli-w-usage/r
+  term-opts: cli-w-term-opts/r
+  main:      cli-w-main/r
+}

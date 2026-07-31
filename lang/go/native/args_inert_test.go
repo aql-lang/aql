@@ -8,17 +8,17 @@ import "testing"
 // unification, an unnamed Function arg spliced onto the body frame was
 // re-STEPPED and auto-dispatched against whatever sibling value happened
 // to sit beside it (sibling-dependent firing), while the same argument
-// bound to a name stayed data until referenced. The AQL-source twins live
+// bound to a name stayed data until referenced. The boru-source twins live
 // in lang/spec/module-fnvalue-boundary.tsv; these tests pin the kernel
 // mechanics the rows can't reach: the frame ArgSpan skip, the sub-engine
 // start offset, and the flow-unwind that keeps the per-call stacks
 // balanced when break/continue escape a live frame.
 
-// defineFn defines an AQL fn via source tokens and returns nothing; the
+// defineFn defines a boru fn via source tokens and returns nothing; the
 // fn dispatches by name afterwards.
 func defineFn(t *testing.T, r *Registry, name string, fnBody Value) {
 	t.Helper()
-	_ = runAQL(t, r, []Value{NewWord("def"), NewWord(name), NewWord("fn"), fnBody, NewEnd()})
+	_ = runBoru(t, r, []Value{NewWord("def"), NewWord(name), NewWord("fn"), fnBody, NewEnd()})
 }
 
 // unnamedFnBody builds `fn [[<types>] [<ret>] [body...]]` with UNNAMED
@@ -61,7 +61,7 @@ func TestUnnamedFnArgInertViaValue(t *testing.T) {
 
 	// The paren group resolves the fn value first so forward collection
 	// takes it as the Function arg — the token twin of source `(mk/r)`.
-	res := runAQL(t, r, []Value{NewWord("useai2"), NewOpenParen(), fnVal, NewCloseParen(), NewInteger(14), NewEnd()})
+	res := runBoru(t, r, []Value{NewWord("useai2"), NewOpenParen(), fnVal, NewCloseParen(), NewInteger(14), NewEnd()})
 	if len(res) != 1 {
 		t.Fatalf("residual = %v, want one value", res)
 	}
@@ -76,7 +76,7 @@ func TestUnnamedFnArgInertViaValue(t *testing.T) {
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewOpenParen(), NewWord("args"), NewWord("dot"), NewInteger(0), NewWord("args"), NewWord("dot"), NewInteger(1), NewCloseParen()}),
 	}))
-	res = runAQL(t, r, []Value{NewWord("apai2"), NewOpenParen(), fnVal, NewCloseParen(), NewInteger(14), NewEnd()})
+	res = runBoru(t, r, []Value{NewWord("apai2"), NewOpenParen(), fnVal, NewCloseParen(), NewInteger(14), NewEnd()})
 	if n, _ := AsInteger(res[len(res)-1]); n != 42 {
 		t.Fatalf("explicit apply through args.N = %d, want 42 (a single dispatch)", n)
 	}
@@ -96,7 +96,7 @@ func TestLoneUnnamedFnArgStaysData(t *testing.T) {
 	fnVal := NewFunction(fd)
 	defineFn(t, r, "keepai", unnamedFnBody([]string{"Function"}, "Function"))
 
-	res := runAQL(t, r, []Value{NewWord("keepai"), NewOpenParen(), fnVal, NewCloseParen(), NewEnd()})
+	res := runBoru(t, r, []Value{NewWord("keepai"), NewOpenParen(), fnVal, NewCloseParen(), NewEnd()})
 	if len(res) != 1 {
 		t.Fatalf("residual = %v, want the held fn", res)
 	}
@@ -124,7 +124,7 @@ func TestFlowUnwindKeepsPerCallStacksBalanced(t *testing.T) {
 				t.Fatal(err)
 			}
 			defineFn(t, r, "flw", typedFnBody("x", "Integer", "Any", NewWord(tc.flow)))
-			res := runAQL(t, r, []Value{
+			res := runBoru(t, r, []Value{
 				NewWord("def"), NewWord("accfw"), NewInteger(0), NewEnd(),
 				NewWord("for"), NewInteger(4), NewList([]Value{
 					NewOpenParen(), NewWord("flw"), NewInteger(9), NewCloseParen(),

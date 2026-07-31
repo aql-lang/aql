@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // TestDynamicContextGetGradualMatch demonstrates the bounded dynamic(T)
@@ -11,7 +11,7 @@ import (
 // get` on a statically-untracked key is an escape hatch that emits
 // dynamic(Any) — optimistically compatible — instead of strict
 // Carry<Any>. That dynamic carrier then matches a typed slot under
-// `aql check` (here add's Number) where strict Carry<Any> would not.
+// `boru check` (here add's Number) where strict Carry<Any> would not.
 //
 // `add` has only a [Number, Number] signature (no Any catch-all), so a
 // successful match is the gradual not-disjoint rule at work, not a
@@ -40,7 +40,7 @@ func TestDynamicContextGetGradualMatch(t *testing.T) {
 }
 
 // TestDynamicCarrierRendersInCheckStack pins that a dynamic carrier is
-// surfaced as dynamic(<bound>) in the `aql check` residual stack, so the
+// surfaced as dynamic(<bound>) in the `boru check` residual stack, so the
 // gradual modality is visible rather than masquerading as a strict type.
 func TestDynamicCarrierRendersInCheckStack(t *testing.T) {
 	a, err := lang.New()

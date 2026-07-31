@@ -4,14 +4,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestModuleWrapperInnerSigBarrierPos locks in the dispatch
 // invariant for module FnDef wrappers: when the wrapper's body
 // is a single word that calls a native registered in the wrapper's
-// sub-registry (the standard `aql:math` / `aql:bin` / `aql:type`
+// sub-registry (the standard `boru:math` / `boru:bin` / `boru:type`
 // pattern), the inner native's signature MUST allow forward
 // dispatch (BarrierPos != 0). Otherwise the wrapper FnDef's
 // swap-form auto-invoke fails to match because matchSignature
@@ -22,7 +22,7 @@ import (
 // (stack-only) silently broke swap-form callers of the wrapper
 // — the FnDef would just sit on the stack with the args around
 // it, never invoked. That residue is no longer silent: a failed
-// fn-value dispatch raises [aql/uncalled_function] at the
+// fn-value dispatch raises [boru/uncalled_function] at the
 // dispatch site (design/FN-VALUE-DISPATCH.0.md), so the
 // broken-wiring case pins the LOUD error rather than the quiet
 // no-invoke.
@@ -105,7 +105,7 @@ func TestModuleWrapperRebindPreservesArgHandling(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TAtom}, {Type: native.TList}},
 			Returns:    []*native.Type{native.TString, native.TInteger},
-			Impl:       native.AQL([]native.Value{native.NewWord("qop")}),
+			Impl:       native.Boru([]native.Value{native.NewWord("qop")}),
 			NoEvalArgs: map[int]bool{1: true},
 			BarrierPos: -1,
 		}},
@@ -165,7 +165,7 @@ func buildProbeRegistry(innerBarrier int) *native.Registry {
 		Signatures: []native.FnSig{{
 			Params:  []native.FnParam{{Type: native.TAny}, {Type: native.TAny}},
 			Returns: []*native.Type{native.TInteger},
-			Impl:    native.AQL([]native.Value{native.NewWord("op")}), BarrierPos: -1,
+			Impl:    native.Boru([]native.Value{native.NewWord("op")}), BarrierPos: -1,
 		}},
 		Registry: subReg,
 	})

@@ -9,17 +9,17 @@ import (
 
 	"github.com/chzyer/readline"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 func TestHistoryFile(t *testing.T) {
 	path := historyFile()
-	// Should return a non-empty path containing ".aql_history".
+	// Should return a non-empty path containing ".boru_history".
 	if path == "" {
 		t.Fatal("historyFile() returned empty string")
 	}
-	if !strings.Contains(path, ".aql_history") {
-		t.Errorf("historyFile() = %q, want path containing .aql_history", path)
+	if !strings.Contains(path, ".boru_history") {
+		t.Errorf("historyFile() = %q, want path containing .boru_history", path)
 	}
 }
 

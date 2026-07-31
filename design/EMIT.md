@@ -1,13 +1,13 @@
 # EMIT — value→string emission (the inverse of `parse`)
 
-This note records the design of the `emit` word and the `aql:emitlang` module.
+This note records the design of the `emit` word and the `boru:emitlang` module.
 It is a design record, not a normative spec; the executable spec is
 `lang/spec/module-emitlang.tsv` and the canonical word/module docs come from
-`aql describe emit` / `aql describe aql:emitlang`.
+`boru describe emit` / `boru describe boru:emitlang`.
 
 ## Why
 
-AQL could turn strings into data (`parse <kind> <src>`, the `aql:parselang`
+boru could turn strings into data (`parse <kind> <src>`, the `boru:parselang`
 module + the tabnas decoder family) but had no symmetric word for the inverse —
 turning data structures into strings. `write` encodes to a *file* via
 `Format.Encode`, and a few ad-hoc encoders existed (`valueToJsonic`,
@@ -21,7 +21,7 @@ natural-format default per structure.
 parse : string → value        emit : value → string
 ```
 
-## Shape (mirrors `aql:parselang`)
+## Shape (mirrors `boru:parselang`)
 
 - Core macro word **`emit`** (`lang/go/native/native_macro.go`): expands
   `emit <kind> <opts?> <data>` → `EmitLang get emit_<kind> <data> <opts> end`,
@@ -29,7 +29,7 @@ parse : string → value        emit : value → string
   the required LAST surface arg, `opts` the optional middle one (arity
   disambiguates). The kind is OPTIONAL: a bare `emit <data>` routes to
   `emit_auto`, which picks the value's **natural format**.
-- Module **`aql:emitlang`** (`lang/go/modules/emitlang.go`), `EmitLang`
+- Module **`boru:emitlang`** (`lang/go/modules/emitlang.go`), `EmitLang`
   namespace: per-kind `emit_<name>` exports (sig `[value:Any opts:Map] →
   String`), `emit_auto`, and out-of-band `register` / `kinds`. Host API
   `RegisterHostEmitter` + `RegisterFormatEmitter`.
@@ -83,7 +83,7 @@ Emission is controlled by the optional middle map argument:
 - **csv** — `{separation:sep}` overrides the field separator. (tsv is tab-fixed.)
 - **xml** — `{pretty:true}` indents element children.
 
-Map keys follow AQL's own map semantics (sorted), so emitted output matches the
+Map keys follow boru's own map semantics (sorted), so emitted output matches the
 language's canonical rendering and round-trips through `parse`.
 
 ## Errors

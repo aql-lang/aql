@@ -1,7 +1,7 @@
-# AQL Language Specification: the aql:vault-tui module (the vault TUI app)
+# boru Language Specification: the boru:vault-tui module (the vault TUI app)
 # Format: input<TAB>expected<TAB>description
 #
-# The interactive vault TUI written in AQL (lang/go/modules/vault_tui.aql,
+# The interactive vault TUI written in boru (lang/go/modules/vault_tui.boru,
 # design/VAULT-TUI-PORT.0.md). The module exports the app map and its
 # runner under the `VaultTui` namespace:
 #
@@ -15,10 +15,10 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  import binds the VaultTui namespace
-import "aql:vault-tui" convert List VaultTui.$module	['VaultTui']	import binds the VaultTui namespace
+import "boru:vault-tui" convert List VaultTui.$module	['VaultTui']	import binds the VaultTui namespace
 #
 # §2  the app map builds headless: init state, update fn, view fn
-import "aql:vault-tui"  join "," (keys (VaultTui.app {}))	'init,update,view'	VaultTui.app is the {init update view} map
+import "boru:vault-tui"  join "," (keys (VaultTui.app {}))	'init,update,view'	VaultTui.app is the {init update view} map
 #
 # §3  no terminal backend registered → run refuses with no_backend
-import "aql:vault-tui"  VaultTui.run {}	ERROR:no terminal backend registered	VaultTui.run requires a registered terminal backend
+import "boru:vault-tui"  VaultTui.run {}	ERROR:no terminal backend registered	VaultTui.run requires a registered terminal backend

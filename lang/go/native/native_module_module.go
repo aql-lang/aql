@@ -23,7 +23,7 @@ import (
 //
 // The four slots below are seeded here rather than appended by a module
 // builder, precisely because of that ordering rule: they belong to THIS
-// package, and a program whose first `import "aql:io"` happens inside a
+// package, and a program whose first `import "boru:io"` happens inside a
 // module body would otherwise snapshot the list before the io module had
 // added them — the body would then read an empty environment, an empty
 // argument vector, a stream that is never a terminal, and its own second
@@ -32,7 +32,7 @@ import (
 //   - CapStdinLines — the ONE buffered reader over r.Input; a second one
 //     would consume the importer's bytes.
 //   - CapEnv, CapScriptArgs — a module body is part of the same program
-//     and sees the same world (aql:cli renders help wrapped to COLUMNS).
+//     and sees the same world (boru:cli renders help wrapped to COLUMNS).
 //   - CapStreamProbe — likewise for "is this stream a terminal", which is
 //     half of the colour decision.
 //
@@ -53,7 +53,7 @@ func RunModuleBody(parent *Registry, elems []Value) (ModuleDesc, error) {
 // under `Test.cover` passes the import string + file text; every other caller
 // passes "" (no tagging, no cost).
 func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc string) (ModuleDesc, error) {
-	// `aql check` runs this for real (see the CheckMode note below and eng's
+	// `boru check` runs this for real (see the CheckMode note below and eng's
 	// "module_body_executed_in_check" severity entry), so say so. The command
 	// is documented as "type-check without running", and the body's non-effect
 	// work — every def, every computation — happens here. Emitted per
@@ -145,7 +145,7 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 	}
 	// Host seams that opted in (ModuleInheritedCaps) ride into the module
 	// sub-registry by POINTER, so a module body resolves the same host
-	// backends as the top level (e.g. the aql:tui terminal backend).
+	// backends as the top level (e.g. the boru:tui terminal backend).
 	for _, capName := range ModuleInheritedCaps {
 		if v, capOK, capErr := parent.Capabilities.Get(capName); capErr == nil && capOK {
 			_ = modReg.Capabilities.Set(capName, v)
@@ -183,12 +183,12 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 	modReg.BaseFile = parent.BaseFile
 	// The TCO kill switch must follow module code: intra-module tail
 	// recursion runs on THIS registry (module fns are InstallFnDef'd
-	// here and dispatch via execMatch inside CallAQL's sub-engine), so
+	// here and dispatch via execMatch inside CallBoru's sub-engine), so
 	// a host that disables elision on the parent expects module frames
 	// to nest too. Counters stay per-registry.
 	modReg.TCO.Disable = parent.TCO.Disable
 	// The module's own source text, for error excerpts from fns that
-	// run later via CallAQL on this sub-registry (file imports set it
+	// run later via CallBoru on this sub-registry (file imports set it
 	// to the module file; inline modules inherit the entry source).
 	modReg.Source = parent.Source
 	// CheckMode is deliberately NOT propagated to the module sub-
@@ -204,7 +204,7 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 	// mode strips values to carriers AND substitutes handlers; only the
 	// first breaks module bodies, so ModelEffects carries the second across
 	// on its own: values stay concrete, effect BACKENDS are substituted.
-	// That is what makes `aql check` honest about "type-check without
+	// That is what makes `boru check` honest about "type-check without
 	// running" — the body still runs, and still produces the exports the
 	// checker needs to type `Mod.v`, but its writes go nowhere.
 	//
@@ -250,7 +250,7 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 	//
 	// Compiling splits the two passes exactly. A pure check pass
 	// (Check.Begin — the `check` subcommand, the CLI's quiet pre-flight,
-	// lang.AQL.Check) is nobody's execution and is modelled; a compile pass
+	// lang.Boru.Check) is nobody's execution and is modelled; a compile pass
 	// (Check.BeginCompilePass — RunCompiled/CompileCheck) is the execution
 	// and stays real. Under the CLI's default `check-then-run` that turns
 	// the §D doubling into exactly ONE real execution per importer, which is
@@ -264,7 +264,7 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 	// run InitFunc to seed the child sub-registry with native words.
 	// Using ModuleRegistry.InheritConfig rather than copying fields one
 	// at a time is what keeps a future config field from being silently
-	// dropped here — the Resolver omission that broke `import "aql:math-util"`
+	// dropped here — the Resolver omission that broke `import "boru:math-util"`
 	// from file-imported modules (native imports only worked at the top
 	// level) was exactly that field-by-field bug.
 	modReg.Modules.InheritConfig(parent.Modules)
@@ -304,7 +304,7 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 				Args: []*Type{TAtom, TMap},
 				Impl: Go(func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					if !IsConcrete(eargs[1]) {
-						return nil, parent.AqlError("export_error", "export: value must be a concrete map, got type literal", "export")
+						return nil, parent.BoruError("export_error", "export: value must be a concrete map, got type literal", "export")
 					}
 					_as1, _ := eargs[0].AsConcreteAtom()
 					_m, _ := AsMap(eargs[1])
@@ -317,7 +317,7 @@ func runModuleBodyCover(parent *Registry, elems []Value, coverID, coverSrc strin
 				Args: []*Type{TString, TMap},
 				Impl: Go(func(eargs []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 					if !IsConcrete(eargs[1]) {
-						return nil, parent.AqlError("export_error", "export: value must be a concrete map, got type literal", "export")
+						return nil, parent.BoruError("export_error", "export: value must be a concrete map, got type literal", "export")
 					}
 					_as2, _ := eargs[0].AsConcreteString()
 					_m, _ := AsMap(eargs[1])
@@ -402,29 +402,29 @@ func isDataFile(r *Registry, path string) bool {
 	return f == "json" || f == "jsonic" || f == "csv" || f == "tsv"
 }
 
-// resolveModuleMain checks for .aql/aql.json in the given directory and
+// resolveModuleMain checks for .boru/boru.json in the given directory and
 // returns the main file specified there. If the file doesn't exist or has
-// no main property, returns "index.aql".
+// no main property, returns "index.boru".
 func resolveModuleMain(r *Registry, dir string) string {
-	data, err := EffectiveFileOps(r).ReadFile(filepath.Join(dir, ".aql", "aql.json"))
+	data, err := EffectiveFileOps(r).ReadFile(filepath.Join(dir, ".boru", "boru.json"))
 	if err != nil {
-		return "index.aql"
+		return "index.boru"
 	}
 	var m map[string]any
 	if err := json.Unmarshal(data, &m); err != nil {
-		return "index.aql"
+		return "index.boru"
 	}
 	if main, ok := m["main"].(string); ok && main != "" {
 		return main
 	}
-	return "index.aql"
+	return "index.boru"
 }
 
 // resolveImportPath resolves a file import path. If the registry has a BaseDir
 // set (i.e. we are inside a module loaded from a file), relative paths are
 // resolved against that directory. Otherwise the path is returned as-is
 // (FileOps.ReadFile will resolve it against the process CWD).
-// If the resolved path has no file extension, checks .aql/aql.json for a main
+// If the resolved path has no file extension, checks .boru/boru.json for a main
 // property, falling back to index.lang.
 func resolveImportPath(r *Registry, path string) string {
 	resolved := path
@@ -439,10 +439,10 @@ func resolveImportPath(r *Registry, path string) string {
 }
 
 // resolveBareModule resolves a bare module name (e.g. "foo") by searching for
-// .aql/foo/ starting from the importing module's directory (BaseDir) or the
+// .boru/foo/ starting from the importing module's directory (BaseDir) or the
 // current working directory, and walking up parent directories, following the
 // CommonJS node_modules resolution pattern.
-// Checks .aql/aql.json for a main property, falling back to index.lang.
+// Checks .boru/boru.json for a main property, falling back to index.lang.
 func resolveBareModule(r *Registry, name string) (string, error) {
 	var startDir string
 	if r.BaseDir != "" {
@@ -457,7 +457,7 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 
 	dir := startDir
 	for {
-		modDir := filepath.Join(dir, ".aql", name)
+		modDir := filepath.Join(dir, ".boru", name)
 		main := resolveModuleMain(r, modDir)
 		candidate := filepath.Join(modDir, main)
 		if _, err := EffectiveFileOps(r).ReadFile(candidate); err == nil {
@@ -469,16 +469,16 @@ func resolveBareModule(r *Registry, name string) (string, error) {
 		}
 		dir = parent
 	}
-	return "", fmt.Errorf("import: module %q not found (searched .aql/%s/ from %s to /)", name, name, startDir)
+	return "", fmt.Errorf("import: module %q not found (searched .boru/%s/ from %s to /)", name, name, startDir)
 }
 
 // loadDataFile reads a data file (.json, .jsonic, .csv, .tsv) and returns
-// the result as an AQL value on the stack. Uses doRead so CSV/TSV files
+// the result as a boru value on the stack. Uses doRead so CSV/TSV files
 // get the same table + SQLite handling as the read word.
 func loadDataFile(parent *Registry, path string) ([]Value, error) {
 	format := formatFromExt(parent, path)
 	if format == "" {
-		return nil, parent.AqlError("import_error", fmt.Sprintf("import: unknown format for %s", path), "import")
+		return nil, parent.BoruError("import_error", fmt.Sprintf("import: unknown format for %s", path), "import")
 	}
 	resolved := resolveImportPath(parent, path)
 	result, err := doRead(parent, resolved, "utf8", format, "lf", nil, SrcPos{})
@@ -488,7 +488,7 @@ func loadDataFile(parent *Registry, path string) ([]Value, error) {
 	return result, nil
 }
 
-// loadFileModule reads a file, parses it as AQL, and runs it as a module.
+// loadFileModule reads a file, parses it as boru, and runs it as a module.
 // The child module's BaseDir is set to the directory of the loaded file so
 // that relative imports inside it resolve correctly.
 func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
@@ -519,8 +519,8 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	parent.BaseFile = resolved
 	parent.Source = string(data)
 	// Pass the import string + file text as the coverage id/source so a
-	// `Test.cover [ import "./mod.aql" … ]` body can report `Test.coverage
-	// "./mod.aql"` (the tagging happens BEFORE the body runs, inside the cover
+	// `Test.cover [ import "./mod.boru" … ]` body can report `Test.coverage
+	// "./mod.boru"` (the tagging happens BEFORE the body runs, inside the cover
 	// variant, and is a no-op unless a coverage run is armed).
 	desc, err := runModuleBodyCover(parent, parsed, path, string(data))
 	parent.BaseDir, parent.BaseFile, parent.Source = savedDir, savedFile, savedSrc
@@ -532,7 +532,7 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	desc.File = resolved
 	desc.Folder = modDir
 
-	// If the module's aql.json declares resources, load them as a
+	// If the module's boru.json declares resources, load them as a
 	// "resource" export so they are available as Module.resource.key.
 	if err := loadModuleResources(parent, modDir, &desc); err != nil {
 		return ModuleDesc{}, fmt.Errorf("import: %s: %w", resolved, err)
@@ -541,13 +541,13 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	return desc, nil
 }
 
-// loadModuleResources checks the module's .aql/aql.json for a "resource"
+// loadModuleResources checks the module's .boru/boru.json for a "resource"
 // property (map of key→filename). For each entry it loads the data file
 // from the module directory and adds a "resource" export to the descriptor.
 func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
-	data, err := EffectiveFileOps(r).ReadFile(filepath.Join(modDir, ".aql", "aql.json"))
+	data, err := EffectiveFileOps(r).ReadFile(filepath.Join(modDir, ".boru", "boru.json"))
 	if err != nil {
-		return nil // no aql.json — nothing to do
+		return nil // no boru.json — nothing to do
 	}
 	var m map[string]any
 	if err := json.Unmarshal(data, &m); err != nil {
@@ -591,7 +591,7 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 // linkModuleDebugParent links each export-captured module sub-registry
 // to the IMPORTING registry (eng SetDebugParent), so engines running
 // module fn bodies resolve the importer's LIVE debug hook — the
-// `aql debug` session's stepping descends into module fns, and its
+// `boru debug` session's stepping descends into module fns, and its
 // suppression/detach stay authoritative (a copied hook could fire after
 // the session disarmed itself). Shared by every import form; a no-op
 // for exports that captured no registry.
@@ -636,7 +636,7 @@ func installExports(r *Registry, desc ModuleDesc, names []string) error {
 // carries the signatures under ITS origin — it takes ownership).
 // Provenance is the module ref, so a diamond re-import is idempotent
 // and quiet, while two different modules extending the same unlocked
-// tuple raise [aql/extend_conflict]. When the base word does not
+// tuple raise [boru/extend_conflict]. When the base word does not
 // resolve in r, nothing transplants and the export stays a plain
 // namespaced binding (§4.9 — M.word still works). The transplanted
 // handlers remain closed over the module's sub-registry, so module-
@@ -854,25 +854,25 @@ func resolveModuleExport(modReg *Registry, v Value) Value {
 }
 
 // isNativeModImport returns true if the path looks like a native module
-// import (starts with "aql:").
+// import (starts with "boru:").
 func isNativeModImport(path string) bool {
-	return strings.HasPrefix(path, "aql:")
+	return strings.HasPrefix(path, "boru:")
 }
 
-// resolveNativeMod resolves a native module import (e.g. "aql:math-util").
-// The module name is extracted from the "aql:" prefix and resolved via the
+// resolveNativeMod resolves a native module import (e.g. "boru:math-util").
+// The module name is extracted from the "boru:" prefix and resolved via the
 // registry's NativeModResolver callback. The resolver returns a ModuleDesc
 // whose exports are installed as defs, just like file-based modules.
 // Each native module is loaded at most once per registry.
 func resolveNativeMod(r *Registry, path string) error {
-	name := strings.TrimPrefix(path, "aql:")
+	name := strings.TrimPrefix(path, "boru:")
 	if name == "" {
 		return fmt.Errorf("import: empty native module name in %q", path)
 	}
 	if desc, ok := r.Modules.LoadedDesc(name); ok {
 		// Already resolved once in this registry. Re-bind any namespace
 		// defs that are no longer present — a fn-body / property-body
-		// import installs the namespace via InstallDef, which CallAQL's
+		// import installs the namespace via InstallDef, which CallBoru's
 		// def-cleanup then strips, leaving the module marked loaded but
 		// `pkg` unbound for the next call. Rebinding only the absent names
 		// keeps repeated top-level imports from stacking shadow bindings.
@@ -900,14 +900,14 @@ func resolveNativeMod(r *Registry, path string) error {
 
 // ResolveAnyModule resolves a module reference to its descriptor WITHOUT
 // installing its exports, mirroring import's native / bare / file dispatch. It
-// lets tooling — notably `aql describe` — load and introspect a module that is
+// lets tooling — notably `boru describe` — load and introspect a module that is
 // not one of the resolver's compiled-in builtins ("attempt to load a module if
-// unknown"). For an "aql:" reference the registry must have a module Resolver
+// unknown"). For a "boru:" reference the registry must have a module Resolver
 // installed (modules.InstallResolver). Data-file references are rejected: they
 // have no exports to describe.
 func ResolveAnyModule(r *Registry, ref string) (ModuleDesc, error) {
 	if isNativeModImport(ref) {
-		name := strings.TrimPrefix(ref, "aql:")
+		name := strings.TrimPrefix(ref, "boru:")
 		if name == "" {
 			return ModuleDesc{}, fmt.Errorf("empty native module name in %q", ref)
 		}
@@ -931,7 +931,7 @@ func ResolveAnyModule(r *Registry, ref string) (ModuleDesc, error) {
 
 // ensureExportsBound re-installs any module-namespace defs that are not
 // currently bound. Used when re-importing an already-resolved native
-// module whose namespace binding was torn down (e.g. by CallAQL's
+// module whose namespace binding was torn down (e.g. by CallBoru's
 // fn-body def-cleanup). Only absent names are installed, so a plain
 // repeated top-level import stays a no-op rather than stacking bindings.
 // The re-bind MUST be a real ModuleExport, exactly like the first-load

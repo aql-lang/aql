@@ -29,12 +29,12 @@
       words: {
         default: "deny"
         rules: [
-          { allow: ["import"], where: { module: ["aql:math-util", "aql:time-util", "aql:io", "aql:cli"] } }
+          { allow: ["import"], where: { module: ["boru:math-util", "boru:time-util", "boru:io", "boru:cli"] } }
         ]
       }
       scopes: {
-        "aql:math-util": { words: { default: "allow" } }
-        "aql:time-util": {
+        "boru:math-util": { words: { default: "allow" } }
+        "boru:time-util": {
           words: {
             default: "allow"
             rules: [{ deny: ["sleep"] }]
@@ -43,11 +43,11 @@
         // I/O words live here now; importing the module is allowed so
         // disk.read works, but the actual disk.read / disk.write capability
         // is still gated by the global scope above (write stays denied).
-        "aql:io": { words: { default: "allow" } }
-        // aql:cli is PURE — a spec map and an argument vector in, a decision
+        "boru:io": { words: { default: "allow" } }
+        // boru:cli is PURE — a spec map and an argument vector in, a decision
         // map out — so a sandboxed program may parse its own command line.
         // Without it a sandboxed tool can read IO.args and not interpret them.
-        "aql:cli": { words: { default: "allow" } }
+        "boru:cli": { words: { default: "allow" } }
       }
     }
 

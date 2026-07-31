@@ -3,15 +3,15 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // runNativeModuleSubImport builds a registry wired exactly like the
 // production entry point (lang.New): the native-module Resolver is
-// installed so `import "aql:math-util"` (and friends) resolve. Files are
+// installed so `import "boru:math-util"` (and friends) resolve. Files are
 // served from an in-memory FS. This is the setup the plain memfs helper
 // deliberately omits — it uses a bare DefaultRegistry with no Resolver.
 func runNativeModuleSubImport(t *testing.T, files map[string]string, steps []string) ([]native.Value, error) {
@@ -23,8 +23,8 @@ func runNativeModuleSubImport(t *testing.T, files map[string]string, steps []str
 	}
 	registerIOWords(reg)
 	reg.SetParseFunc(parser.Parse)
-	// The production wiring (lang/go/aql.go:New). Without this a file
-	// imported via "./lib.aql" cannot itself import a native module.
+	// The production wiring (lang/go/boru.go:New). Without this a file
+	// imported via "./lib.boru" cannot itself import a native module.
 	modules.InstallResolver(reg)
 	{
 		prev := reg.Modules.InitFunc
@@ -69,24 +69,24 @@ func runNativeModuleSubImport(t *testing.T, files map[string]string, steps []str
 
 // TestImportedFileCanImportNativeModule is the regression test for the
 // bloom-filter report: "Sub-imports cannot reach native modules. A file
-// imported via ./lib.aql cannot itself import aql:math."
+// imported via ./lib.boru cannot itself import boru:math."
 //
 // Root cause: RunModuleBody ran the imported file in a fresh
 // DefaultRegistry but never propagated parent.Modules.Resolver, so the
-// child's `import "aql:math-util"` hit a nil Resolver and failed with
+// child's `import "boru:math-util"` hit a nil Resolver and failed with
 // "native module resolver not configured".
 func TestImportedFileCanImportNativeModule(t *testing.T) {
 	files := map[string]string{
-		// lib.aql imports a native module and uses it to compute an export.
-		"lib.aql": `import "aql:math-util"
+		// lib.boru imports a native module and uses it to compute an export.
+		"lib.boru": `import "boru:math-util"
 export "Lib" { hi: (MathUtil.ceil 2.3) }`,
 	}
 	result, err := runNativeModuleSubImport(t, files, []string{
-		`import "./lib.aql"`,
+		`import "./lib.boru"`,
 		`Lib.hi`,
 	})
 	if err != nil {
-		t.Fatalf("imported file failed to import aql:math: %v", err)
+		t.Fatalf("imported file failed to import boru:math: %v", err)
 	}
 	assertResult(t, result, "3")
 }
@@ -96,13 +96,13 @@ export "Lib" { hi: (MathUtil.ceil 2.3) }`,
 // importing the native module.
 func TestNativeModuleImportTransitiveDepth(t *testing.T) {
 	files := map[string]string{
-		"deep.aql": `import "aql:math-util"
+		"deep.boru": `import "boru:math-util"
 export "Deep" { r: (MathUtil.round 4.6) }`,
-		"lib.aql": `import "./deep.aql"
+		"lib.boru": `import "./deep.boru"
 export "Lib" { d: (Deep.r) }`,
 	}
 	result, err := runNativeModuleSubImport(t, files, []string{
-		`import "./lib.aql"`,
+		`import "./lib.boru"`,
 		`Lib.d`,
 	})
 	if err != nil {

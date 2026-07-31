@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // The `const` word — singleton types (design/CLASS-OBJECT.10.md §3d).
@@ -43,22 +43,22 @@ var constNative = NativeFunc{
 func constHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	v := args[0]
 	if !IsConcrete(v) {
-		return nil, r.AqlError("const_error",
+		return nil, r.BoruError("const_error",
 			fmt.Sprintf("const: needs a concrete value, got %s", v.String()), "const")
 	}
 	switch v.Data.(type) {
 	case ClassInstanceInfo, ResourceInstanceInfo:
-		return nil, r.AqlErrorHint("const_error",
+		return nil, r.BoruErrorHint("const_error",
 			"const: a mutable instance cannot pin a value", "const",
 			"const exemplars must be immutable — scalars, Lists, or Maps")
 	case *eng.StoreInstanceInfo:
-		return nil, r.AqlErrorHint("const_error",
+		return nil, r.BoruErrorHint("const_error",
 			"const: a mutable Store cannot pin a value", "const",
 			"const exemplars must be immutable — scalars, Lists, or Maps")
 	}
 	if v.Parent.ConformsTo(TFloat) {
 		if f, err := eng.AsFloat(v); err == nil && math.IsNaN(f) {
-			return nil, r.AqlError("const_error",
+			return nil, r.BoruError("const_error",
 				"const: NaN cannot pin a value (NaN is not equal to itself)", "const")
 		}
 	}

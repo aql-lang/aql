@@ -114,7 +114,7 @@ shrink 5`
 // A dynamic-src `mini re` compiles (the transducer-faithful hook records the
 // standard lang_re call instead of refusing) and matches the interpreter.
 func TestMiniReDynamicSrcCompiles(t *testing.T) {
-	src := `import "aql:minilang" end
+	src := `import "boru:minilang" end
 def m fn [[pat:String subj:String] [Any] [
   def r (subj mini re (pat) {})
   r get "ok"

@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // enableFsFlag flips one __sys.fs boolean on a fresh engine context —
-// the AQL `context dot __sys dot fs set <flag> true` toggle, driven from Go.
+// the boru `context dot __sys dot fs set <flag> true` toggle, driven from Go.
 func enableFsFlag(t *testing.T, r *Registry, flag string) {
 	t.Helper()
 	e := New(r)
@@ -51,18 +51,18 @@ func TestOverlayToggleRoutesUnion(t *testing.T) {
 	}
 
 	// Read through the union → the host fixture.
-	res := runAQL(t, r, []Value{NewWord("read"), pathV("fixture.txt")})
+	res := runBoru(t, r, []Value{NewWord("read"), pathV("fixture.txt")})
 	if res[0].String() != "'real'" {
 		t.Errorf("union read = %v", res[0])
 	}
 	// Shadow it and delete it — host unchanged throughout.
-	runAQL(t, r, []Value{NewWord("write"), pathV("fixture.txt"), NewString("shadow")})
-	res = runAQL(t, r, []Value{NewWord("read"), pathV("fixture.txt")})
+	runBoru(t, r, []Value{NewWord("write"), pathV("fixture.txt"), NewString("shadow")})
+	res = runBoru(t, r, []Value{NewWord("read"), pathV("fixture.txt")})
 	if res[0].String() != "'shadow'" {
 		t.Errorf("shadowed read = %v", res[0])
 	}
-	runAQL(t, r, []Value{NewWord("remove"), pathV("fixture.txt")})
-	if err := runAQLError(t, r, []Value{NewWord("read"), pathV("fixture.txt")}); err == nil {
+	runBoru(t, r, []Value{NewWord("remove"), pathV("fixture.txt")})
+	if err := runBoruError(t, r, []Value{NewWord("read"), pathV("fixture.txt")}); err == nil {
 		t.Error("whited-out fixture still readable")
 	}
 	if b, err := host.ReadFile("fixture.txt"); err != nil || string(b) != "real" {
@@ -85,15 +85,15 @@ func TestOverlayToggleOverRealDisk(t *testing.T) {
 	}
 	enableFsFlag(t, r, "overlay")
 
-	res := runAQL(t, r, []Value{NewWord("read"), pathV(fixture)})
+	res := runBoru(t, r, []Value{NewWord("read"), pathV(fixture)})
 	if res[0].String() != "'disk'" {
 		t.Errorf("read of real fixture through overlay = %v", res[0])
 	}
-	runAQL(t, r, []Value{NewWord("write"), pathV(fixture), NewString("changed")})
+	runBoru(t, r, []Value{NewWord("write"), pathV(fixture), NewString("changed")})
 	if b, err := os.ReadFile(fixture); err != nil || string(b) != "disk" {
 		t.Errorf("REAL file mutated: %q (%v)", b, err)
 	}
-	res = runAQL(t, r, []Value{NewWord("read"), pathV(fixture)})
+	res = runBoru(t, r, []Value{NewWord("read"), pathV(fixture)})
 	if res[0].String() != "'changed'" {
 		t.Errorf("union read after shadow write = %v", res[0])
 	}

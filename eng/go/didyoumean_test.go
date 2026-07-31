@@ -145,7 +145,7 @@ func TestUndefinedWordErrorSuggestions(t *testing.T) {
 		t.Errorf("missing did-you-mean:\n%s", rendered)
 	}
 	// A def-bound near-miss is not a builtin — no describe pointer.
-	if strings.Contains(rendered, "aql describe") {
+	if strings.Contains(rendered, "boru describe") {
 		t.Errorf("describe pointer must need a builtin match:\n%s", rendered)
 	}
 }
@@ -175,7 +175,7 @@ func TestUndefinedWordErrorDescribeForBuiltin(t *testing.T) {
 	if !strings.Contains(rendered, "did you mean `"+name+"`") {
 		t.Fatalf("missing did-you-mean for %q:\n%s", typo, rendered)
 	}
-	if !strings.Contains(rendered, "aql describe "+name) {
+	if !strings.Contains(rendered, "boru describe "+name) {
 		t.Errorf("builtin near-miss must add the describe pointer:\n%s", rendered)
 	}
 }
@@ -202,7 +202,7 @@ func TestUndefinedWordCheckDiagSuggestions(t *testing.T) {
 // fork's failure path iterates ITS OWN builtinWords snapshot, so a
 // host Register call on the parent can never fault the iteration (the
 // fatal "concurrent map iteration and map write" a timer callback hit
-// when its undefined-word error raced (*AQL).Register).
+// when its undefined-word error raced (*Boru).Register).
 func TestForkSuggestionsSafeAgainstParentRegister(t *testing.T) {
 	r := covRegistry(t, nil)
 	fork := r.ForkConcurrent()

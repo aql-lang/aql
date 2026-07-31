@@ -1,10 +1,10 @@
-# AQL Language Specification: Collection operations (sort reverse
+# boru Language Specification: Collection operations (sort reverse
 # flatten size take)
 # Format: input<TAB>expected<TAB>description
 #
 # Core list/map words available in the base registry. (Many richer
 # array combinators — each/fold/scan/filter/where/group/unique — live in
-# the `aql:array-util` module and are specified there.)
+# the `boru:array-util` module and are specified there.)
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  sort — ascending by the canonical total order
@@ -22,7 +22,7 @@ size [1 2 3]	3	list length
 size {a:1 b:2}	2	map entry count
 size 'hello'	5	string length
 #
-# (items — map entries as [key value] pairs — moved to the aql:struct
+# (items — map entries as [key value] pairs — moved to the boru:struct
 #  module; see module-struct.tsv.)
 #
 # §6  take count list — leading elements

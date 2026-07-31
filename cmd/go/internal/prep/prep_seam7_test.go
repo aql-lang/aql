@@ -23,15 +23,15 @@ func TestS7n_DoMarshalIndentError(t *testing.T) {
 }
 
 // TestS7n_DoWriteFileFailsWhenDstIsDir drives Do's os.WriteFile
-// failure arm organically: MkdirAll(".aql") is a no-op when the dir
-// already exists, but WriteFile(".aql/aql.json", ...) fails when that
+// failure arm organically: MkdirAll(".boru") is a no-op when the dir
+// already exists, but WriteFile(".boru/boru.json", ...) fails when that
 // path is itself a directory.
 func TestS7n_DoWriteFileFailsWhenDstIsDir(t *testing.T) {
 	dir := writeManifest(t, "name: x")
-	if err := os.MkdirAll(filepath.Join(dir, ".aql", "aql.json"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".boru", "boru.json"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Do(dir); err == nil {
-		t.Error("expected an error when aql.json exists as a directory")
+		t.Error("expected an error when boru.json exists as a directory")
 	}
 }

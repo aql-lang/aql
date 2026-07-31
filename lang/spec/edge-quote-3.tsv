@@ -1,4 +1,4 @@
-# AQL Language Specification: edge-quote-3 — macro edge cases
+# boru Language Specification: edge-quote-3 — macro edge cases
 # Format: input<TAB>expected<TAB>description
 # =====================================================================
 # Edge cases for the macro system beyond macro.tsv's basics: operands

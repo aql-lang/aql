@@ -26,7 +26,7 @@ func TestFetchFunc(t *testing.T) {
 		t.Fatal(err)
 	}
 	Register(r)
-	// fetch moved to aql:net; register the net-module words and verify the
+	// fetch moved to boru:net; register the net-module words and verify the
 	// move preserves its three signatures.
 	for _, n := range NetModuleNatives(MintFetchTypes(r)) {
 		r.RegisterNativeFunc(n)

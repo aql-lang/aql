@@ -12,7 +12,7 @@ package eng
 // BodyOut / Inputs), which RegisterNativeFunc copies onto every signature; the
 // recorder reads it back via the resolved sig.Callable. eng therefore names no
 // specific word — the core transforms (each / fold / scan / do / filter /
-// with-decimal) declare in lang/native, and module words (the aql:test case /
+// with-decimal) declare in lang/native, and module words (the boru:test case /
 // describe bodies) declare in their own module, with no eng↔module coupling.
 // See eng/go/value.go::CallableSpec and review §4.5.
 
@@ -297,7 +297,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// closure's captures — resolved here in the enclosing scope, bound into
 	// the body unit's trailing slots at invocation. A module/global ref is
 	// not a capture (it bakes as a const in the body, or refuses the probe).
-	captures := moduleScopeMutableCaptures(r, bodyToks, ComputeCaptures(r, &FnSig{Impl: AQL(bodyToks)}))
+	captures := moduleScopeMutableCaptures(r, bodyToks, ComputeCaptures(r, &FnSig{Impl: Boru(bodyToks)}))
 	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, pos)
 }
 
@@ -333,7 +333,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 	// ride as closure captures, exactly as the token-body path admits them:
 	// the binding's identity is fixed for the dispatch (a compiled body cannot
 	// rebind a module-scope name), so the value threaded at OpPushClosure
-	// equals every per-run lookup the interpreter's CallAQL makes, and the
+	// equals every per-run lookup the interpreter's CallBoru makes, and the
 	// pointer-backed instance shares mutations across the boundary. See
 	// moduleScopeMutableCaptures. The lambda's LEXICAL captures come first
 	// (already name-sorted per the CapturedBinding contract); the module-scope

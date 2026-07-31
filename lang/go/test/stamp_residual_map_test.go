@@ -8,7 +8,7 @@ import "testing"
 // records its OpMakeMap assembly, so a CALLER fn's unit that compiles the
 // callee nested no longer refuses "body result of unknown provenance".
 // Sound because the interpreter evaluates a multi-token body's trailing
-// computed container IN-frame on every dispatch path (CallAQL-class and
+// computed container IN-frame on every dispatch path (CallBoru-class and
 // same-registry spliced, consumed and unconsumed alike).
 func TestStampTrailingComputedMapNested(t *testing.T) {
 	evs := stampEventsFor(t, `
@@ -63,12 +63,12 @@ module [
 // container keeps its PRE-EXISTING context semantics, untouched by the
 // multi-token change. The top-level spliced direction (the no-closures
 // transparency — the returned container resolves the MODULE binding) is
-// spec-pinned in def-node-binding.tsv §3; here the CallAQL-class module
+// spec-pinned in def-node-binding.tsv §3; here the CallBoru-class module
 // call is pinned: the container evaluates at the callee sub-run's end,
 // IN-frame, so the PARAM wins. (The whole-program compiler refuses this
 // shape — "body result of unknown provenance" — because a single unit
 // cannot serve both directions; the detached runtime stamp may serve the
-// CallAQL-only module path, where in-frame matches.)
+// CallBoru-only module path, where in-frame matches.)
 func TestSingleLiteralBodyTransparencyHolds(t *testing.T) {
 	out := runStampedModule(t, `
 module [
@@ -82,6 +82,6 @@ module [
 	}
 	n, err := asIntegerVal(out[0])
 	if err != nil || n != 9 {
-		t.Fatalf("module-path mk 9 → .a = %v (%v), want the in-frame param 9 (CallAQL direction)", out[0], err)
+		t.Fatalf("module-path mk 9 → .a = %v (%v), want the in-frame param 9 (CallBoru direction)", out[0], err)
 	}
 }

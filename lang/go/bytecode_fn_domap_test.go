@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-// Pins for the fn-internal `do {…}` computed-map body (decision.aql's
+// Pins for the fn-internal `do {…}` computed-map body (decision.boru's
 // evaluator idiom — `{ok:false error:…}` result maps): the dyn-do body
 // residual is runtime-counted, which used to mark the whole fn
 // VARIADIC-returning, so any fixed-arity consumer of its call refused

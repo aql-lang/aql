@@ -32,7 +32,7 @@ func init() {
 		Word:    "bsl",
 		Summary: "Shift integer left by N bits.",
 		Description: "`value bsl count` returns `value << count`. Shifts >= 64 " +
-			"saturate to 0. Negative counts raise [aql/binary_error].",
+			"saturate to 0. Negative counts raise [boru/binary_error].",
 	})
 
 	register(&Entry{

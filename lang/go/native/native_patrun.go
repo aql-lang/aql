@@ -5,8 +5,8 @@ import (
 	"sort"
 	"strings"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native/internal/patrun"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native/internal/patrun"
 )
 
 // Patrun — a mutable pattern→value dispatch table, backed by the vendored
@@ -24,10 +24,10 @@ import (
 //	find {a:1 z:9}    routes      # → 'A'   (unknown key z ignored)
 //	find {x:9}        routes      # → None
 //
-// patrun matches on map[string]string. AQL match-values are SCALARS compared
+// patrun matches on map[string]string. boru match-values are SCALARS compared
 // by string coercion (ValToString): 1 and "1" share a rule; 1.0 ("1.0") and
 // true ("true") key on their own text. A non-scalar pattern value is a loud
-// error. The stored value is any AQL value — typically a function, making a
+// error. The stored value is any boru value — typically a function, making a
 // Patrun a dispatch/router table — so it rides a side table keyed by the
 // pattern's canonical signature (patrun's *string data is that signature).
 
@@ -45,7 +45,7 @@ func registerPatrunType() *eng.Type {
 	return t
 }
 
-// patrunRule is the AQL side of one registered rule: the original pattern Map
+// patrunRule is the boru side of one registered rule: the original pattern Map
 // (for `patterns`), the stored value, and a pre-rendered "k=v,…" for Format.
 type patrunRule struct {
 	raw  Value
@@ -56,7 +56,7 @@ type patrunRule struct {
 // patrunMatcher wraps the vendored patrun trie plus a side table. The trie
 // owns matching (it stores map[string]string patterns and a *string handle —
 // the pattern's canonical signature); the side table maps that signature to
-// the AQL value and raw pattern, and `order` preserves insertion order for
+// the boru value and raw pattern, and `order` preserves insertion order for
 // `patterns`. add/remove mutate in place; a Patrun Value wraps the pointer
 // (ExtensionPayload), so mutation is visible through every copy.
 type patrunMatcher struct {
@@ -221,10 +221,10 @@ func patrunFindReturns(args []Value, r *Registry) []Value {
 func patrunAddHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	m, ok := asPatrun(args[2])
 	if !ok {
-		return nil, r.AqlError("patrun_error", "add: expected a Patrun, got "+args[2].Parent.String(), "add")
+		return nil, r.BoruError("patrun_error", "add: expected a Patrun, got "+args[2].Parent.String(), "add")
 	}
 	if m.valType != nil && !m.valType.Equal(TAny) && !args[1].Is(m.valType) {
-		return nil, r.AqlErrorHint("patrun_error",
+		return nil, r.BoruErrorHint("patrun_error",
 			fmt.Sprintf("add: value must be a %s, got %s", m.valType.Leaf(), args[1].Parent.String()),
 			"add", "this Patrun was declared `patrun "+m.valType.Leaf()+"` — its stored values must be that type")
 	}
@@ -244,13 +244,13 @@ func patrunAddHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 func patrunFindHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	m, ok := asPatrun(args[1])
 	if !ok {
-		return nil, r.AqlError("patrun_error", "find: expected a Patrun, got "+args[1].Parent.String(), "find")
+		return nil, r.BoruError("patrun_error", "find: expected a Patrun, got "+args[1].Parent.String(), "find")
 	}
 	exact := false
 	if len(args) == 3 {
 		b, err := patrunOptBool(args[2], "exact")
 		if err != nil {
-			return nil, r.AqlError("patrun_error", "find: "+err.Error(), "find")
+			return nil, r.BoruError("patrun_error", "find: "+err.Error(), "find")
 		}
 		exact = b
 	}
@@ -278,7 +278,7 @@ func patrunFindHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 func patrunRemoveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	m, ok := asPatrun(args[1])
 	if !ok {
-		return nil, r.AqlError("patrun_error", "remove: expected a Patrun, got "+args[1].Parent.String(), "remove")
+		return nil, r.BoruError("patrun_error", "remove: expected a Patrun, got "+args[1].Parent.String(), "remove")
 	}
 	pat, _, sig, err := coercePattern(args[0], "remove", r)
 	if err != nil {
@@ -300,7 +300,7 @@ func patrunRemoveHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 func patrunPatternsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	m, ok := asPatrun(args[0])
 	if !ok {
-		return nil, r.AqlError("patrun_error", "patterns: expected a Patrun, got "+args[0].Parent.String(), "patterns")
+		return nil, r.BoruError("patrun_error", "patterns: expected a Patrun, got "+args[0].Parent.String(), "patterns")
 	}
 	out := make([]Value, 0, len(m.order))
 	for _, sig := range m.order {
@@ -329,7 +329,7 @@ func coercePattern(pv Value, op string, r *Registry) (map[string]string, []strin
 	for _, k := range mkeys {
 		val, _ := mp.Get(k)
 		if !IsConcrete(val) || !val.Parent.ConformsTo(TScalar) {
-			return nil, nil, "", r.AqlErrorHint("patrun_error",
+			return nil, nil, "", r.BoruErrorHint("patrun_error",
 				fmt.Sprintf("%s: pattern value for %q must be a Scalar, got %s", op, k, val.Parent.String()),
 				op, "patterns match on scalar values (Integer/Float/String/Boolean/Atom)")
 		}

@@ -82,7 +82,7 @@ func TestInitErrorArms(t *testing.T) {
 	t.Run("keyring not writable", func(t *testing.T) {
 		home := testHome(t)
 		// A regular file where the vault folder should go makes MkdirAll fail.
-		if err := os.WriteFile(filepath.Join(home, ".aql"), []byte("x"), 0o600); err != nil {
+		if err := os.WriteFile(filepath.Join(home, ".boru"), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)
 		}
 		if code, _, e := runVault(t, "", "init", "--backend=file"); code == 0 ||

@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // ADR-008 coverage for BuildSiftModule's guard arms not reached by the
 // behavioural suite (lang/spec/module-sift.tsv + sift_test.go) or the seam
-// battery (modules_seam6d_test.go). Mirrors repl_cover_test.go — aql:sift is
-// loaded the same way (embedded sift.aql parsed once, run as a module body).
+// battery (modules_seam6d_test.go). Mirrors repl_cover_test.go — boru:sift is
+// loaded the same way (embedded sift.boru parsed once, run as a module body).
 
 // A parent with no parser configured is refused before any work.
 func TestBuildSiftModuleRequiresParser(t *testing.T) {
@@ -91,7 +91,7 @@ func TestBuildSiftModuleRegisterFallbackWithoutInitFunc(t *testing.T) {
 
 // A sub-registry that cannot resolve the preamble's own imports surfaces the
 // preamble run failure (the run-error arm) — the parent here carries no
-// native-module resolver, so `import "aql:string-util"` fails inside the run.
+// native-module resolver, so `import "boru:string-util"` fails inside the run.
 func TestBuildSiftModulePreambleRunError(t *testing.T) {
 	reg, err := native.DefaultRegistry()
 	if err != nil {

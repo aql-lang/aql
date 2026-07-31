@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // dxRun parses and runs source, returning the canonical render of the
@@ -104,7 +104,7 @@ func TestDXPlainUndefinedNoDefHint(t *testing.T) {
 	}
 }
 
-// §4.3 — `aql check` on a file that imports a sibling must not hard-fail
+// §4.3 — `boru check` on a file that imports a sibling must not hard-fail
 // with `module "" not found`. In check mode the import path literal is
 // stripped to a carrier; the import is treated as opaque and analysis
 // continues instead of erroring.
@@ -117,7 +117,7 @@ func TestDXCheckSiblingImportDoesNotHardFail(t *testing.T) {
 	r.Check.Mode = true
 	defer func() { r.Check.Mode = false }()
 
-	toks, err := parser.Parse(`import "./lib.aql"  def x 5  x add 3`)
+	toks, err := parser.Parse(`import "./lib.boru"  def x 5  x add 3`)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
@@ -150,9 +150,9 @@ func TestDXTopLevelRecover(t *testing.T) {
 	if runErr == nil {
 		t.Fatal("expected the panic to surface as an error")
 	}
-	ae, ok := runErr.(*AqlError)
+	ae, ok := runErr.(*BoruError)
 	if !ok || ae.Code != "internal_error" {
-		t.Fatalf("expected an internal_error AqlError, got %T: %v", runErr, runErr)
+		t.Fatalf("expected an internal_error BoruError, got %T: %v", runErr, runErr)
 	}
 }
 

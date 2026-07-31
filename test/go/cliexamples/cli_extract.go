@@ -1,17 +1,17 @@
-// Package cliexamples extracts and runs the shell-style `aql …` examples
+// Package cliexamples extracts and runs the shell-style `boru …` examples
 // embedded in the CLI docs (CLI.md, HOWTO.md) against the real built
 // binary, so the documented command-line behavior can't drift. Like the
 // docexamples package, the extractor here is pure text→[]CLIExample with
 // no process/exec dependency, so it is unit-testable on its own; the
-// runner (cliexamples_test.go) builds the `aql` binary once and executes
+// runner (cliexamples_test.go) builds the `boru` binary once and executes
 // each example inside a per-example temporary directory.
 //
 // Only invocations that carry an inline output assertion are checked:
 //
-//	aql do '1 add 2'            # prints 3
-//	aql do '"hi" upper'         # => HI
+//	boru do '1 add 2'            # prints 3
+//	boru do '"hi" upper'         # => HI
 //
-// A `<!-- aql-test: skip -->` marker on the line above a fence opts the
+// A `<!-- boru-test: skip -->` marker on the line above a fence opts the
 // whole block out. Invocations whose subcommand needs network, external
 // services, a missing file, or otherwise can't run deterministically in a
 // sandbox are skipped by the runner (see needsSandboxSkip).
@@ -24,7 +24,7 @@ type CLIExample struct {
 	File string // source basename, e.g. "CLI.md"
 	Line int    // 1-based line number
 
-	// Args is the argv (excluding the leading "aql") to pass to the
+	// Args is the argv (excluding the leading "boru") to pass to the
 	// built binary, already shell-split with quotes honored.
 	Args []string
 
@@ -36,9 +36,9 @@ type CLIExample struct {
 	Expected string
 }
 
-const skipMarker = "<!-- aql-test: skip -->"
+const skipMarker = "<!-- boru-test: skip -->"
 
-// Extract pulls every `aql … # prints/=> output` example from a markdown
+// Extract pulls every `boru … # prints/=> output` example from a markdown
 // file. file is the basename recorded on each example; src is the body.
 func Extract(file, src string) []CLIExample {
 	var out []CLIExample
@@ -56,7 +56,7 @@ func Extract(file, src string) []CLIExample {
 				info := strings.TrimSpace(strings.TrimPrefix(trimmed, "```"))
 				// CLI examples live in shell fences (```bash / ```sh /
 				// ```console); a plain ``` is fine too. Anything else
-				// (e.g. ```aql) is not a shell block.
+				// (e.g. ```boru) is not a shell block.
 				switch info {
 				case "", "bash", "sh", "shell", "console":
 					skipBlock = strings.Contains(prev, skipMarker)
@@ -89,7 +89,7 @@ func Extract(file, src string) []CLIExample {
 		cmd = strings.TrimSpace(cmd)
 		// Strip an optional leading shell prompt.
 		cmd = strings.TrimPrefix(cmd, "$ ")
-		args, ok := parseAQLInvocation(cmd)
+		args, ok := parseBoruInvocation(cmd)
 		if !ok {
 			continue
 		}
@@ -145,12 +145,12 @@ func indexUnquotedHash(s string) int {
 	return -1
 }
 
-// parseAQLInvocation shell-splits a command line and, if it invokes
-// `aql`, returns the argv after the program name. Returns ok=false for
-// non-aql commands or ones that don't parse cleanly.
-func parseAQLInvocation(cmd string) ([]string, bool) {
+// parseBoruInvocation shell-splits a command line and, if it invokes
+// `boru`, returns the argv after the program name. Returns ok=false for
+// non-boru commands or ones that don't parse cleanly.
+func parseBoruInvocation(cmd string) ([]string, bool) {
 	toks, ok := shellSplit(cmd)
-	if !ok || len(toks) == 0 || toks[0] != "aql" {
+	if !ok || len(toks) == 0 || toks[0] != "boru" {
 		return nil, false
 	}
 	return toks[1:], true

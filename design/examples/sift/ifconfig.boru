@@ -1,0 +1,189 @@
+# ifconfig.boru — Linux `ifconfig` output (net-tools 2.x) → List of interface Maps.
+#
+# DX probe (illustrative, NOT executable — `boru:sift` is a design PROPOSAL).
+# Exists to pressure-test the Sift.define fn escape hatch of design/SIFT.0.md §7
+# against a real format; go-modules/EXEC.10.md §4.1 is the acquisition side.
+# The friction this file surfaced is recorded in SIFT.0.md §16.
+#
+# Why an fn kind, not a family: an ifconfig block is HETEROGENEOUS — a header
+# line plus keyword-dispatched detail lines, where repeated inet/inet6 lines
+# ACCUMULATE into Lists and the RX/TX counter-line PAIRS deep-merge into nested
+# rx:/tx: Maps. No single family emits that shape, and a flat Table cannot hold
+# it (rows would need nested records) — so: List of Maps, hand-folded, with
+# every LINE shape still parsed declaratively by an inline `pattern` spec.
+# Specs-as-data all the way down; the fn only routes and reshapes.
+#
+# QUOTING: enumerated option values are closed quoted names ('error' 'integer')
+# per SIFT.0.md §5.1. Regexes are '…' strings — backslashes DOUBLED ('\\d' is
+# the pattern \d) — and '\n' in a '…' string is a real newline. Everything here
+# that uses TODAY's machinery (join/fold/filter/set/raise, StringUtil, mini re)
+# is verified against the executable spec suite; only the Sift.* surface and
+# the `pattern` family are proposed.
+
+import "boru:sift"            # Sift.parse / define / check / spec      (PROPOSED)
+import "boru:parselang"       # the `parse <kind>` word + ParseLang.source
+import "boru:string-util"     # StringUtil.split / trim
+import "boru:struct-util"     # StructUtil.merge — the rx/tx pair fold
+
+# ---------------------------------------------------------------------------
+# Sample capture (Linux net-tools 2.10). Multi-line string literals are not a
+# verified surface, so the fixture is '\n'-joined per block, blocks joined by
+# the blank-line separator '\n\n'.
+# ---------------------------------------------------------------------------
+def sample-eth0 (join '\n' [
+  'eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500'
+  '        inet 172.17.0.2  netmask 255.255.0.0  broadcast 172.17.255.255'
+  '        inet6 fe80::42:acff:fe11:2  prefixlen 64  scopeid 0x20<link>'
+  '        ether 02:42:ac:11:00:02  txqueuelen 0  (Ethernet)'
+  '        RX packets 31245  bytes 45671234 (45.6 MB)'
+  '        RX errors 0  dropped 0  overruns 0  frame 0'
+  '        TX packets 18023  bytes 2345678 (2.3 MB)'
+  '        TX errors 0  dropped 0  overruns 0  carrier 0  collisions 0'
+])
+def sample-lo (join '\n' [
+  'lo: flags=73<UP,LOOPBACK,RUNNING>  mtu 65536'
+  '        inet 127.0.0.1  netmask 255.0.0.0'
+  '        inet6 ::1  prefixlen 128  scopeid 0x10<host>'
+  '        loop  txqueuelen 1000  (Local Loopback)'
+  '        RX packets 100  bytes 8000 (8.0 KB)'
+  '        RX errors 0  dropped 0  overruns 0  frame 0'
+  '        TX packets 100  bytes 8000 (8.0 KB)'
+  '        TX errors 0  dropped 0  overruns 0  carrier 0  collisions 0'
+])
+def sample (join '\n\n' [sample-eth0 sample-lo])
+
+# ---------------------------------------------------------------------------
+# Line grammars — one inline `pattern` spec per shape (SIFT.0.md §5.2/§6):
+# named groups become fields, opts.types coerces. Named fields are why these
+# beat raw `mini re` (verified today, but positional-only — the header name is
+#   (line mini re '^([^\\s:]+): flags=(\\d+)') .fst.g get 0   — no names).
+# ---------------------------------------------------------------------------
+
+# Block header: 'eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500'
+def ifc-hdr-spec {
+  family: 'pattern'
+  opts: {re: '^(?P<name>[^\\s:]+): flags=(?P<flagbits>\\d+)<(?P<flagcsv>[^>]*)>\\s+mtu (?P<mtu>\\d+)$'
+         per: 'source'  types: {flagbits:'integer' mtu:'integer'}}
+  doc: 'ifconfig block header — interface name, flag bits, flag CSV, mtu'
+}
+
+# Detail-line dispatch: "first two words, else first word" → entry, a plain Map
+# (patrun would be overkill for exact keys). entry.re/.types feed an inline
+# pattern spec; entry.into names a nested slot (rx/tx pairs DEEP-MERGE there;
+# absent = merge at top level); entry.many:true APPENDS to a List (inet/inet6).
+# RX/TX packet and error shapes stay SEPARATE entries: one alternation regex
+# would leave half its named groups unmatched per line, and folding those
+# fields would clobber the pair merge — see SIFT.0.md §16 (unmatched-group rule).
+# Space-bearing keys cannot be bare, hence the computed `set ('RX packets')`.
+def ifc-line-specs ({
+    inet:  {into:'inet'  many:true
+            re:'^inet (?P<addr>[0-9.]+)\\s+netmask (?P<netmask>[0-9.]+)(\\s+broadcast (?P<broadcast>[0-9.]+))?$'}
+    inet6: {into:'inet6' many:true  types:{prefixlen:'integer'}
+            re:'^inet6 (?P<addr>[0-9a-f:]+)\\s+prefixlen (?P<prefixlen>\\d+)(\\s+scopeid (?P<scopeid>\\S+))?$'}
+    ether: {types:{txqueuelen:'integer'}
+            re:'^ether (?P<ether>[0-9a-f:]+)\\s+txqueuelen (?P<txqueuelen>\\d+)\\s+\\((?P<link>[^)]+)\\)$'}
+    loop:  {types:{txqueuelen:'integer'}
+            re:'^loop\\s+txqueuelen (?P<txqueuelen>\\d+)\\s+\\((?P<link>[^)]+)\\)$'}
+  }
+  set ('RX packets') {into:'rx' types:{packets:'integer' bytes:'integer'}
+                      re:'^RX packets (?P<packets>\\d+)\\s+bytes (?P<bytes>\\d+)'}
+  set ('TX packets') {into:'tx' types:{packets:'integer' bytes:'integer'}
+                      re:'^TX packets (?P<packets>\\d+)\\s+bytes (?P<bytes>\\d+)'}
+  set ('RX errors')  {into:'rx' types:{errors:'integer' dropped:'integer' overruns:'integer' frame:'integer'}
+                      re:'^RX errors (?P<errors>\\d+)\\s+dropped (?P<dropped>\\d+)\\s+overruns (?P<overruns>\\d+)\\s+frame (?P<frame>\\d+)$'}
+  set ('TX errors')  {into:'tx' types:{errors:'integer' dropped:'integer' overruns:'integer' carrier:'integer' collisions:'integer'}
+                      re:'^TX errors (?P<errors>\\d+)\\s+dropped (?P<dropped>\\d+)\\s+overruns (?P<overruns>\\d+)\\s+carrier (?P<carrier>\\d+)\\s+collisions (?P<collisions>\\d+)$'})
+
+# Two-word key beats one-word key; miss → None. split drops empty fields, so
+# runs of spaces are safe; the two-word probe is size-guarded.
+def ifc-entry fn [[line:String] [Any] [
+  def ws (StringUtil.split ' ' line)
+  def k2 (if ((size ws) gt 1) [join ' ' (take 2 ws)] [ws get 0])
+  ((ifc-line-specs get (k2)) otherwise (ifc-line-specs get (ws get 0)))
+]]
+
+# Fold step. NB quotation-fold stack order: the ELEMENT rides on top, so the
+# params read [line acc] (top → sig[0]) — verified against `[] fold [push] […]`.
+def ifc-line fn [[line:String acc:Map] [Map] [
+  def entry (ifc-entry line)
+  if (entry is None) [
+    raise sift_parse_error line     # §10 guidance: fn kinds reuse the sift codes
+  ] [
+    def parsed (Sift.parse {family:'pattern'
+                            opts:{re: entry.re  per:'source'
+                                  types: (entry.types otherwise {})}} line)
+    def into entry.into             # dotted miss → None → merge at top level
+    if (into is None) [ StructUtil.merge acc parsed ] [
+      if entry.many
+        [ acc set (into) (push parsed (acc get (into))) ]   # inet/inet6 accumulate
+        [ StructUtil.merge acc ({} set (into) parsed) ]     # rx/tx pairs deep-merge
+    ]
+  ]
+]]
+
+# One blank-line block → one interface Map. The header is ALWAYS strict (a
+# block without a header is not ifconfig); `strict` governs unknown detail
+# KEYWORDS only ('error' raises, 'skip' drops) — the §5.1 vocabulary honoured
+# BY HAND, since fn kinds get none of the family preprocessing (§16).
+# Param order [strict block]: a quotation body `[ifc-block strict]` is the
+# swap form — the forward token binds sig[0], the stack element sig[1].
+def ifc-block fn [[strict:String block:String] [Map] [
+  def lines (filter ([p:Any] => [(size p.value) gt 0])
+                    (each [StringUtil.trim] (StringUtil.split '\n' block)))
+  def hdr (Sift.parse ifc-hdr-spec (lines get 0))
+  def base {name: hdr.name  flagbits: hdr.flagbits  mtu: hdr.mtu
+            flags: (StringUtil.split ',' hdr.flagcsv)      # 'flags=0<>' → []
+            inet: []  inet6: []}
+  def body (slice 1 (size lines) lines)
+  def body2 (if (strict eq 'skip')
+               [ filter ([p:Any] => [((ifc-entry p.value) is None) not]) body ]
+               [ body ])
+  fold [ifc-line] body2 base
+]]
+
+# The registered fn (ParseLang.register contract, module-parselang.tsv):
+# standard [source opts:Map …] prefix; source resolved via ParseLang.source
+# (String or {src:…}); call-site opts arrive VERBATIM — defaulting and
+# honouring 'strict' is this fn's own job (§16). Linux net-tools only: blocks
+# are blank-line separated (BSD ifconfig is indent-delimited — §16).
+def parse-ifconfig fn [[source:Any opts:Map] [List] [
+  def text (ParseLang.source source)
+  def strict (opts.strict otherwise 'error')   # the shared §5.1 default
+  each [ifc-block strict] (StringUtil.split '\n\n' text)
+]]
+
+Sift.define ifconfig parse-ifconfig/r end   # `end` stops forward collection
+
+# ---------------------------------------------------------------------------
+# Standalone demo (the export below is a no-op when run directly). Today the
+# fn form registers NO detect/doc metadata: `Exec.parse ifconfig` and
+# `read … {fmt:'auto'}` cannot resolve this kind — the composed long form is
+#     import "boru:exec"
+#     parse ifconfig (["ifconfig" "-a"] Exec.run {check:true}).out
+# The family:'fn' spec form proposed in SIFT.0.md §16 closes that gap.
+# ---------------------------------------------------------------------------
+Sift.check ifc-hdr-spec                        # returns [] — the inline spec validates
+def ifcs (parse ifconfig sample)               # a sift fn kind is an ordinary parse kind
+ifcs size                                      # returns 2
+def eth0 (ifcs get 0)
+eth0.mtu                                       # returns 1500
+eth0.rx.packets                                # returns 31245
+((eth0.inet) get 0).broadcast                  # returns '172.17.255.255'
+def lo (ifcs get 1)
+lo.ether                                       # returns None — the loopback has no MAC
+lo.tx.collisions                               # returns 0
+(((lo.inet) get 0) get 'broadcast') is None    # returns true — an optional group that
+                                               # did not participate yields None (§5.2
+                                               # rule pinned by this exercise; also true
+                                               # if the key were simply absent)
+Sift.spec ifconfig                             # returns {name:ifconfig/q family:'fn'}
+
+# Per-call strictness reaches an fn kind only because THIS fn implements it:
+def noisy (join '\n' [sample '        device interrupt 16'])
+(parse ifconfig {strict:'skip'} noisy) size    # returns 2 — the unknown line drops
+do [parse ifconfig noisy] error [dot code]     # returns sift_parse_error/q — loud default
+
+export "Ifconfig" {
+  parse:  parse-ifconfig/r    # also registered as parse kind `ifconfig` at import
+  sample: sample              # fixture for consumers' specs
+}

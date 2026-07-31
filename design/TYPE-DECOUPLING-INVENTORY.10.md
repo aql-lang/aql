@@ -314,18 +314,18 @@ lang/go/modules/modules_test.go
 
 `make test` rollup result at Step 0:
 
-- `github.com/aql-lang/aql/lang/go` ok
-- `github.com/aql-lang/aql/lang/go/native` ok
-- `github.com/aql-lang/aql/lang/go/capabilities` ok
-- `github.com/aql-lang/aql/lang/go/modules` ok
-- `github.com/aql-lang/aql/lang/go/internal/object` ok
-- `github.com/aql-lang/aql/lang/go/native` ok
-- `github.com/aql-lang/aql/lang/go/test` ok
-- `github.com/aql-lang/aql/eng/go` ok
-- `github.com/aql-lang/aql/eng/go/parser` ok
-- `github.com/aql-lang/aql/cmd/go` ok
-- `github.com/aql-lang/aql/lang/go/formatter` ok
-- `github.com/aql-lang/aql/cmd/go/internal/repl` ok
+- `github.com/boru-lang/boru/lang/go` ok
+- `github.com/boru-lang/boru/lang/go/native` ok
+- `github.com/boru-lang/boru/lang/go/capabilities` ok
+- `github.com/boru-lang/boru/lang/go/modules` ok
+- `github.com/boru-lang/boru/lang/go/internal/object` ok
+- `github.com/boru-lang/boru/lang/go/native` ok
+- `github.com/boru-lang/boru/lang/go/test` ok
+- `github.com/boru-lang/boru/eng/go` ok
+- `github.com/boru-lang/boru/eng/go/parser` ok
+- `github.com/boru-lang/boru/cmd/go` ok
+- `github.com/boru-lang/boru/lang/go/formatter` ok
+- `github.com/boru-lang/boru/cmd/go/internal/repl` ok
 
 Note: `make test` in `lang/Makefile` references a `util/go` module
 that doesn't exist in this checkout. The four real modules

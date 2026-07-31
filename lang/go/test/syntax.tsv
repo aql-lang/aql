@@ -1,6 +1,6 @@
-# Comprehensive AQL syntax tests
+# Comprehensive boru syntax tests
 # Format: expression<TAB>expected_result<TAB>error_code
-# Column 1: AQL expression
+# Column 1: boru expression
 # Column 2: string representation of stack top value(s), space-separated
 # Column 3 (optional): error code (syntax_error, signature_error)
 # When column 3 is present, column 2 is ignored (may be empty).

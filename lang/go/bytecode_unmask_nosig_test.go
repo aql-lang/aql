@@ -7,11 +7,11 @@ import (
 
 // TestUnmaskNoSigCheckVsCompile pins the resolution of the check-vs-compile wart
 // Leaf-5 Part 1 targeted: a get over a union (Disjunct) receiver bound by an
-// if-branch (the tst_unit shape) is CLEAN under a plain `aql check` (the fn body
+// if-branch (the tst_unit shape) is CLEAN under a plain `boru check` (the fn body
 // is analysed once at its def site, not re-entered per call). It used to refuse
 // force-compile as the GENERIC "check diagnostics" — a checkModeAssumeSig
 // no_signature ERROR diagnostic, spuriously added on the compile pass, tripped
-// CompileCheck's diagnostic gate (aql.go:297) and masked the real reason. Two
+// CompileCheck's diagnostic gate (boru.go:297) and masked the real reason. Two
 // fixes converge here: Part 1 gates that diagnostic on !Check.Compiling so it is
 // never spuriously added on the compile pass, and the Stage-D poly widening
 // makes this shape COMPILE outright. So now: plain check clean AND it compiles
@@ -45,7 +45,7 @@ func TestUnmaskNoSigCheckVsCompile(t *testing.T) {
 
 // TestNoSigStillReportedInPlainCheck guards the unmask above: suppressing the
 // no_signature diagnostic on a REAL compile pass must NOT suppress it during a
-// plain `aql check`, where a genuine unmatched dispatch is a real static error
+// plain `boru check`, where a genuine unmatched dispatch is a real static error
 // the user must still see. The discriminator MUST be Check.Compiling, NOT
 // Emit==nil / es.active(): a plain check arms a fresh ACTIVE Emit while
 // analysing each fn body (IsolateEmit), so the fn-body-nested case below — a

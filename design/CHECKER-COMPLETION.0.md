@@ -9,8 +9,8 @@ the blanket `!Compiling` gating).
 
 The check-accuracy ratchet held 0 false positives against 5,078 value
 rows, but stayed silent on 241 of 786 ERROR rows (~31%). A classification
-of those 241 (probing each representative shape through `aql check` vs
-`aql do`) showed roughly **half were statically decidable** with
+of those 241 (probing each representative shape through `boru check` vs
+`boru do`) showed roughly **half were statically decidable** with
 machinery the tree already had — the checker knew the fault (a concrete
 key provably missing, a provably out-of-range index, a failing concrete
 assertion) but either reported it below Error severity, modelled it
@@ -102,7 +102,7 @@ the real handler once (top-level straight line, all args concrete — a
 strict none-shape canonicalised to the `none` sentinel so payload probes
 agree with runtime), and mirrors a handler error into a diagnostic with
 the runtime's own code + detail. Wired on: Assert.equal / not-equal /
-ok / match (aql:test — assert-throws runs a BODY and stays runtime-only),
+ok / match (boru:test — assert-throws runs a BODY and stays runtime-only),
 BinUtil.hex-decode / base64-decode, ArrayUtil.insert-at / remove-at,
 MatrixUtil.create, StructUtil.parse / reify (reify gated on
 statically-known target + concrete source), Debug.parse, Vm.parse, and
@@ -156,11 +156,11 @@ inside `do` bodies — `do [undefined-word] error [dot code]` is a WORKING
 program the checker still error-flagged), and the blanket `!Compiling`
 gating made the check and compile passes report DIFFERENT diagnostics
 for the same source (Vm.compile's surfaced diagnostics were a subset of
-`aql check`'s). Three refits replace both workarounds with structure:
+`boru check`'s). Three refits replace both workarounds with structure:
 
 1. **`CheckState.BeginCompilePass()`** — the compile-pass arming ritual
    (fresh EmitState, the Compiling flag, fn-memo drop) extracted into
-   one shared helper used by lang's `CompileCheck` and aql:vm's
+   one shared helper used by lang's `CompileCheck` and boru:vm's
    `Vm.compile`. The hand-rolled copy is how Vm.compile shipped without
    the Compiling flag.
 2. **`CheckDiagnostic.RuntimeMirror`** — mirrors are classified at the

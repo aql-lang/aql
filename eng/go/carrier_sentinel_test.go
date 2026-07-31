@@ -22,8 +22,8 @@ func TestValueHasSentinelCoverage(t *testing.T) {
 		{"paren-expr with break", NewParenExpr([]Value{brk}), true},
 		{"paren-expr without break", NewParenExpr([]Value{NewWord("print")}), false},
 		{"integer (not a body word)", NewInteger(7), false},
-		{"fn value skipped (own scope)", NewFunction(FnDefInfo{Name: "f", Signatures: []Signature{{Impl: AQL([]Value{brk})}}}), false},
-		{"list containing a fn value", NewList([]Value{NewFunction(FnDefInfo{Signatures: []Signature{{Impl: AQL([]Value{brk})}}})}), false},
+		{"fn value skipped (own scope)", NewFunction(FnDefInfo{Name: "f", Signatures: []Signature{{Impl: Boru([]Value{brk})}}}), false},
+		{"list containing a fn value", NewList([]Value{NewFunction(FnDefInfo{Signatures: []Signature{{Impl: Boru([]Value{brk})}}})}), false},
 	}
 	for _, c := range cases {
 		if got := bodyHasSentinel(c.v); got != c.want {

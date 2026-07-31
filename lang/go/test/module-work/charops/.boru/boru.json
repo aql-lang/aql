@@ -1,0 +1,10 @@
+{
+  "files": [
+    "charops.boru"
+  ],
+  "main": "charops.boru",
+  "major": 2,
+  "minor": 3,
+  "name": "charops",
+  "patch": 1
+}

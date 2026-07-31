@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // zzBfHookInstance installs a contract-exercising Go compile hook on the
@@ -15,7 +15,7 @@ import (
 // registration APIs were removed with the frozen namespace. The hook is
 // authoritative at the call site, so a compile pass must either mirror it
 // or refuse.
-func zzBfHookInstance(t *testing.T) *AQL {
+func zzBfHookInstance(t *testing.T) *Boru {
 	t.Helper()
 	a := mustNew(t)
 	native.RegisterMiniCompileGoHook(a.registry, "bf",
@@ -30,7 +30,7 @@ func zzBfHookInstance(t *testing.T) *AQL {
 // does — the flip finding's positive twin (compiled [hi] vs interpreted [HI]
 // before the fix).
 func TestMiniGoHookCompilesIdentically(t *testing.T) {
-	const src = `import "aql:minilang" end mini bf 'hi'`
+	const src = `import "boru:minilang" end mini bf 'hi'`
 	gotC, ran, errC := zzBfHookInstance(t).RunCompiled(src)
 	if !ran || errC != nil {
 		t.Fatalf("hooked mini must run compiled: ran=%v err=%v", ran, errC)
@@ -49,10 +49,10 @@ func TestMiniGoHookCompilesIdentically(t *testing.T) {
 // miscompile a semantics-bearing hook.
 func TestMiniGoHookNonConcreteSrcRefuses(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
-	const src = `import "aql:minilang" end def f fn [[s:String][String][mini bf s]] f 'hi'`
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
+	const src = `import "boru:minilang" end def f fn [[s:String][String][mini bf s]] f 'hi'`
 	a := zzBfHookInstance(t)
 	prog, reason, _, cerr := a.CompileCheck(src)
 	if cerr != nil {
@@ -73,10 +73,10 @@ func TestMiniGoHookNonConcreteSrcRefuses(t *testing.T) {
 // transducer bake. Non-concrete opts (a fn param) is the exercised shape.
 func TestMiniGoHookNonConcreteOptsRefuses(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
-	const src = `import "aql:minilang" end def f fn [[m:Map][String][mini bf 'hi' m]] f {x:1}`
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
+	const src = `import "boru:minilang" end def f fn [[m:Map][String][mini bf 'hi' m]] f {x:1}`
 	a := zzBfHookInstance(t)
 	prog, reason, _, cerr := a.CompileCheck(src)
 	if cerr != nil {
@@ -93,6 +93,6 @@ func TestMiniGoHookNonConcreteOptsRefuses(t *testing.T) {
 	}
 }
 
-// (TestMiniAQLHookRefuses died with the AQL compile-hook surface —
+// (TestMiniBoruHookRefuses died with the boru compile-hook surface —
 // MiniLang.register-compiled is a tombstone now; the frozen-registry raise
 // is pinned in module-minilang.tsv and TestMiniCovRegisterTombstones.)

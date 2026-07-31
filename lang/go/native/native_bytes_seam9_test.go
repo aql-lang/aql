@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // Seam-9 coverage (W9_nativeC) for native_bytes.go: the pack/unpack

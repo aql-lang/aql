@@ -58,7 +58,7 @@ jobs:
         run: make cover-gate
 
       # The project knowledge graph (kg/) must stay in sync with the
-      # sources that generate it: type-check the AQL pipeline, run its
+      # sources that generate it: type-check the boru pipeline, run its
       # test suite, rebuild the bundle, and fail if the committed
       # kg/out/graph.json or kg/out/graph.sql drifts from the rebuild —
       # the "keep the graph updated with each PR" rule, enforced. The
@@ -83,15 +83,15 @@ jobs:
 
       # The VM's hot path reuses one args buffer per run (eng/go/vm.go),
       # sound only while no compiled-reachable native retains its args slice.
-      # -tags aqldebug flips that buffer to a fresh allocation per call
+      # -tags borudebug flips that buffer to a fresh allocation per call
       # (eng/go/vm_args_debug.go), so a retaining handler that would silently
       # corrupt a later dispatch in the release build instead diverges cleanly
       # here. Run the differential + combination + whole-corpus parity gates
       # under the tag so the invariant is guarded as compiled coverage grows.
-      - name: Bytecode args-aliasing gate (aqldebug)
+      - name: Bytecode args-aliasing gate (borudebug)
         run: |
-          ( cd lang/go && go test -tags aqldebug . -run 'Bytecode|Compiled|Emit' )
-          ( cd test/go && go test -tags aqldebug ./langspec/ -run 'TestSpecCompiledDifferential|TestSpecCompiledOrFallback|TestCompiledCombinationParity' )
+          ( cd lang/go && go test -tags borudebug . -run 'Bytecode|Compiled|Emit' )
+          ( cd test/go && go test -tags borudebug ./langspec/ -run 'TestSpecCompiledDifferential|TestSpecCompiledOrFallback|TestCompiledCombinationParity' )
 
       - name: Build WASM
         run: make -C wpg wasm

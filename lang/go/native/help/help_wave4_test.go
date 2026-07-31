@@ -109,7 +109,7 @@ func TestW4FormatDynamicModuleExport(t *testing.T) {
 	info := FuncInfo{
 		Name:        "ArrayUtil.w4-fake",
 		ForwardArgs: true,
-		Module:      "aql:array-util",
+		Module:      "boru:array-util",
 		Doc:         "a module export summary",
 		Sigs:        []SigInfo{w4Sig([]string{"List"}, []string{"List"})},
 	}
@@ -117,7 +117,7 @@ func TestW4FormatDynamicModuleExport(t *testing.T) {
 	if !strings.Contains(out, "ArrayUtil.w4-fake — a module export summary") {
 		t.Errorf("module Doc should be the summary:\n%s", out)
 	}
-	if !strings.Contains(out, "Module: aql:array-util") {
+	if !strings.Contains(out, "Module: boru:array-util") {
 		t.Errorf("expected Module provenance line:\n%s", out)
 	}
 	// With no Entry, the Doc doubles as the description.
@@ -587,7 +587,7 @@ func TestW4Pad(t *testing.T) {
 func TestW4Overview(t *testing.T) {
 	out := Overview()
 	for _, want := range []string{
-		"AQL — a concatenative query language.",
+		"boru — a concatenative query language.",
 		"describe add",
 		TutorialURL,
 		ReferenceURL,
@@ -649,7 +649,7 @@ func TestWriteCategoryRendersModuleWords(t *testing.T) {
 	if !strings.Contains(out, "Words:") {
 		t.Errorf("mixed category lost its core-word header:\n%s", out)
 	}
-	if !strings.Contains(out, "import \"aql:math-util\"") {
+	if !strings.Contains(out, "import \"boru:math-util\"") {
 		t.Errorf("mixed category does not name the import:\n%s", out)
 	}
 	if !strings.Contains(out, "add") || !strings.Contains(out, "sqrt") {
@@ -666,7 +666,7 @@ func TestWriteCategoryRendersModuleWords(t *testing.T) {
 	if strings.Contains(out2, "Words:") {
 		t.Errorf("module-only category should not print a core-word header:\n%s", out2)
 	}
-	if !strings.Contains(out2, "import \"aql:string-util\"") {
+	if !strings.Contains(out2, "import \"boru:string-util\"") {
 		t.Errorf("module-only category does not name the import:\n%s", out2)
 	}
 	if !strings.Contains(out2, "upper") {
@@ -678,20 +678,20 @@ func TestWriteCategoryRendersModuleWords(t *testing.T) {
 	}
 }
 
-// The index listing shows the same import annotation, so `aql describe`
+// The index listing shows the same import annotation, so `boru describe`
 // with no argument is self-sufficient.
 func TestWriteWordsByCategoryAnnotatesModules(t *testing.T) {
 	var b strings.Builder
 	WriteWordsByCategory(&b)
 	out := b.String()
 	for _, want := range []string{
-		"(import \"aql:math-util\")",
-		"(import \"aql:string-util\")",
-		"(import \"aql:bin-util\")",
-		"(import \"aql:logic-util\")",
-		"(import \"aql:type-util\")",
-		"(import \"aql:query\")",
-		"(import \"aql:io\")",
+		"(import \"boru:math-util\")",
+		"(import \"boru:string-util\")",
+		"(import \"boru:bin-util\")",
+		"(import \"boru:logic-util\")",
+		"(import \"boru:type-util\")",
+		"(import \"boru:query\")",
+		"(import \"boru:io\")",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("index listing missing %s:\n%s", want, out)

@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // Typed FLEX nodes (design/TYPED-CONTAINER-TAG-RETENTION.0.md, flex layer).

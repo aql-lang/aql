@@ -1,4 +1,4 @@
-// Capability slot tests, mirroring aqleng/go/capability_test.go.
+// Capability slot tests, mirroring borueng/go/capability_test.go.
 //
 // The two-method form (setCapability + deleteCapability) replaces the
 // older nil-overloaded SetCapability. Storing null/undefined is a real

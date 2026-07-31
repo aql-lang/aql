@@ -20,7 +20,7 @@ import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input 
 # call cannot raise at this input and soundly seats the exact arity. It stays
 # here unledgered as a green pin (the must-COMPILE arm guards it); the Go
 # test's fallback-list comment (bytecode_do_catch_test.go) predates this.
-import "aql:struct-util"  def g StructUtil.parse/r  do [(g "x") 2] error [dot code]	'x' 2
+import "boru:struct-util"  def g StructUtil.parse/r  do [(g "x") 2] error [dot code]	'x' 2
 import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input "boom"] [x] ]] def boom fn [[x:Any] [Any] [ raise bad_input "always" ]] export "M" {dec: dec/r, boom: boom/r} ] end do [M 3] error [dot code]	ModuleExport(M){dec boom} 3
 # PR #280 review (2026-07-20): a BRANCH-VARIANT multi-out region — the body
 # nets 0 or 2 values by arm, no raise involved — is variadic for the same

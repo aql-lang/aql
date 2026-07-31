@@ -151,7 +151,7 @@ proves a class is closed:
 | multi-overload fn built inside a fn (captures) | `owner.Captured != 0` decline |
 | zero-return arms over unnamed params | zero-return residual decline |
 | `def nd (m dot f) print "after" nd` | mid-body dynamic fn apply |
-| `import "aql:math-util"` then `MathUtil.sqrt` | compile-time word |
+| `import "boru:math-util"` then `MathUtil.sqrt` | compile-time word |
 | a `macro` expansion | compile-time word |
 
 `COMPILABLE-SUBSET.md` says of itself: "If they disagree, the code wins and

@@ -82,7 +82,7 @@ func TestC7ExportReadScopeDenied(t *testing.T) {
 	c7requireScope = func(*Session, Op) error { return errors.New("scope denied") }
 
 	t.Setenv(EnvExportPassphrase, "bundlepass")
-	out := filepath.Join(t.TempDir(), "b.aqlx")
+	out := filepath.Join(t.TempDir(), "b.borux")
 	var errb strings.Builder
 	if code := runExport([]string{"--out=" + out}, home, strings.NewReader(""), &errb, &errb); code != 1 {
 		t.Fatalf("read-scope denial code=%d", code)
@@ -99,7 +99,7 @@ func TestC7ExportMarshalError(t *testing.T) {
 	t.Cleanup(func() { jsonMarshal = old })
 	jsonMarshal = func(any) ([]byte, error) { return nil, errors.New("marshal boom") }
 
-	out := filepath.Join(t.TempDir(), "b.aqlx")
+	out := filepath.Join(t.TempDir(), "b.borux")
 	var errb strings.Builder
 	if code := runExport([]string{"--out=" + out}, home, strings.NewReader(""), &errb, &errb); code != 1 {
 		t.Fatalf("marshal error code=%d", code)
@@ -114,7 +114,7 @@ func TestC7ExportSealError(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bundlepass")
 	c7failGCM(t) // gcmFromBlock is used only by the export envelope crypto
 
-	out := filepath.Join(t.TempDir(), "b.aqlx")
+	out := filepath.Join(t.TempDir(), "b.borux")
 	var errb strings.Builder
 	if code := runExport([]string{"--out=" + out}, home, strings.NewReader(""), &errb, &errb); code != 1 {
 		t.Fatalf("seal error code=%d", code)

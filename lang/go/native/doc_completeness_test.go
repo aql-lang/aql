@@ -5,12 +5,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // TestEveryWordHasDescribeDocs is the documentation-completeness gate for the
 // `describe` system: every registered core word must carry a full help Entry
-// (a non-empty Summary AND Description), so `aql describe <word>` never shows
+// (a non-empty Summary AND Description), so `boru describe <word>` never shows
 // "<not described>". Engine-internal marker words (Word/__*) are exempt.
 //
 // Module words are guarded separately by modules.TestModuleExportDocs (each

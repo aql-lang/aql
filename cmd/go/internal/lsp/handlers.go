@@ -15,7 +15,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // server holds the per-connection state.
@@ -126,7 +126,7 @@ func (s *server) handleInitialize(msg *rawMessage) {
 			DocumentFormattingProvider: true,
 		},
 		ServerInfo: &ServerInfo{
-			Name:    "aql-lsp",
+			Name:    "boru-lsp",
 			Version: "0.1.0",
 		},
 	}

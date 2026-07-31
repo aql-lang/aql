@@ -3,8 +3,8 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/formatter"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/formatter"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 func dstr(s string) native.Value { return native.NewString(s) }

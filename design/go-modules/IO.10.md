@@ -1,27 +1,27 @@
-# `aql:io` (filesystem surface) — all filesystem functionality
+# `boru:io` (filesystem surface) — all filesystem functionality
 
-> **Status: design proposal, not implemented (additions).** `aql:io`
+> **Status: design proposal, not implemented (additions).** `boru:io`
 > already exists (`lang/go/native/io_module.go`, namespace `IO`); this
 > note frames it as the **single home for all filesystem functionality**
 > — content I/O, tree mutation, directory listing, metadata (`stat`), and
 > the read-only existence/type **predicates** (`exists`, `is-file`,
-> `is-dir`, `is-symlink`). `aql:os` keeps only the **non-filesystem**
+> `is-dir`, `is-symlink`). `boru:os` keeps only the **non-filesystem**
 > remainder of the Go `os` module (env, args, identity, exit — see
 > [OS.10.md](OS.10.md)). Read [README.10.md](README.10.md) and
 > [`../FILE-ACCESS.10.md`](../FILE-ACCESS.10.md) first.
 
 ## 1. The os / io split
 
-Everything that touches the **filesystem** is `aql:io`. `aql:os` is
+Everything that touches the **filesystem** is `boru:io`. `boru:os` is
 "whatever is left on the Go `os` module" once the filesystem is removed:
 
 | Go `os` surface | Home |
 |---|---|
-| `Open`, `ReadFile`, `WriteFile`, `Create`, `Mkdir`, `Remove`, `Rename`, `ReadDir`, `Stat`, `Lstat`, `*os.File`, the `exists`/`is-*` queries, **and the location getters `Getwd`/`UserHomeDir`/`TempDir`** | **`aql:io`** |
-| `Getenv`/`LookupEnv`/`Setenv`/`Environ`, `Args`, `Hostname`, `Getpid`, `Exit` | **`aql:os`** |
+| `Open`, `ReadFile`, `WriteFile`, `Create`, `Mkdir`, `Remove`, `Rename`, `ReadDir`, `Stat`, `Lstat`, `*os.File`, the `exists`/`is-*` queries, **and the location getters `Getwd`/`UserHomeDir`/`TempDir`** | **`boru:io`** |
+| `Getenv`/`LookupEnv`/`Setenv`/`Environ`, `Args`, `Hostname`, `Getpid`, `Exit` | **`boru:os`** |
 
 Anything that **names or resolves a filesystem path** — including the
-location getters `cwd`/`home-dir`/`temp-dir` — is `aql:io`; `aql:os` keeps
+location getters `cwd`/`home-dir`/`temp-dir` — is `boru:io`; `boru:os` keeps
 only the non-filesystem process/environment remainder. One module, one
 `FileOps` capability, one `fileops` policy scope governs all filesystem
 access.
@@ -29,7 +29,7 @@ access.
 ## 2. Import & namespace
 
 ```
-import "aql:io"          # binds the IO namespace (unchanged)
+import "boru:io"          # binds the IO namespace (unchanged)
 ```
 
 Existing module, unchanged. Words dot-access flat: `IO.read`, `IO.write`,
@@ -50,7 +50,7 @@ path (or any stat failure short of a policy denial) yields `false`, never
 an error (the Python `os.path.exists` posture). They gate on `fileops`
 **read** (`disk.read`).
 
-| Go source | aql word | signature (top-first) | one-line doc | refinement |
+| Go source | boru word | signature (top-first) | one-line doc | refinement |
 |---|---|---|---|---|
 | `os.Stat` (ok) | `exists` | `String → Boolean` | True if a filesystem entry exists at the path. | `(FileInfo,error)` → Boolean; `IsNotExist`/any error → `false`. |
 | `os.Stat` + `!IsDir` | `is-file` | `String → Boolean` | True if the path is a regular file. | follows symlinks; else `false`. |
@@ -62,9 +62,9 @@ an error (the Python `os.path.exists` posture). They gate on `fileops`
 Paths are Strings; all route through the `FileOps` capability (§6).
 Top-first sig order; inner sigs `BarrierPos: -1`. Unlike the §4
 predicates, these **operations surface errors** — a failed `mkdir`/`read`
-is an `AqlError`, not a silent default.
+is a `BoruError`, not a silent default.
 
-| Go source | aql word | signature (top-first) | one-line doc | refinement |
+| Go source | boru word | signature (top-first) | one-line doc | refinement |
 |---|---|---|---|---|
 | `os.ReadFile` | `read` | `String → String` | *(existing)* read a file's content. | a `Bytes`-returning `read-bytes` is the binary variant ([BYTES.10.md](BYTES.10.md)), out of scope here. |
 | `os.WriteFile` | `write` | `path:String content:String →` | *(existing)* write content (truncating). | existing. |
@@ -81,11 +81,11 @@ is an `AqlError`, not a silent default.
 
 ## 5.1 Filesystem locations
 
-The location getters from Go `os` live here, not in `aql:os` — they name
+The location getters from Go `os` live here, not in `boru:os` — they name
 filesystem paths. Zero-arg (inner sigs `BarrierPos: 0`), returning a path
 String.
 
-| Go source | aql word | signature | one-line doc | refinement |
+| Go source | boru word | signature | one-line doc | refinement |
 |---|---|---|---|---|
 | `os.Getwd` | `cwd` | `→ String` | The current working directory. | `(value,error)` → value-or-error `io-cwd`; queries the process/filesystem, so gates on `disk.read`. |
 | `os.UserHomeDir` | `home-dir` | `→ String` | The current user's home directory path. | `(value,error)` → value-or-error `io-home-dir`; env-derived path string. |
@@ -93,7 +93,7 @@ String.
 
 `home-dir`/`temp-dir` derive from the environment (no filesystem read);
 `cwd` queries the working directory. They return path **strings** — they
-do not read content — and pair with `aql:filepath` for manipulation.
+do not read content — and pair with `boru:filepath` for manipulation.
 
 ## 6. Policy / capabilities
 
@@ -119,7 +119,7 @@ the whole filesystem surface.
 
 ## 7. Errors
 
-`r.AqlError(code, …)` with kebab codes (`io-write`, `io-mkdir`,
+`r.BoruError(code, …)` with kebab codes (`io-write`, `io-mkdir`,
 `io-remove`, `io-rename`, `io-copy`, `io-list`, `io-stat`); Go `error`
 unwrapped; `fileops`-denied → the policy `Denied` code; `install:false` →
 `capability_not_installed`. The §4 predicates are **total** (return
@@ -128,12 +128,12 @@ with `AsConcreteString`; never panic.
 
 ## 8. Overlap
 
-- **`aql:os`** — only the non-filesystem remainder of the Go `os` module
+- **`boru:os`** — only the non-filesystem remainder of the Go `os` module
   (env/args/identity/exit, §1). It names no filesystem paths at all — even
-  `cwd`/`home-dir`/`temp-dir` live here in `aql:io` (§5.1). No word
+  `cwd`/`home-dir`/`temp-dir` live here in `boru:io` (§5.1). No word
   overlap.
-- **`aql:filepath` / `aql:path-util`** — pure path-string manipulation;
-  `aql:io` produces the location strings (`cwd`/`home-dir`/`temp-dir`) and
+- **`boru:filepath` / `boru:path-util`** — pure path-string manipulation;
+  `boru:io` produces the location strings (`cwd`/`home-dir`/`temp-dir`) and
   consumes the paths these modules build. No word overlap.
 - **`Bytes` type** — a future `read-bytes` / `Bytes`-accepting `write`
   ([BYTES.10.md](BYTES.10.md)) is the binary path; out of scope here.
@@ -141,7 +141,7 @@ with `AsConcreteString`; never panic.
 ## 9. Examples (args-before form)
 
 ```
-import "aql:io"
+import "boru:io"
 
 "/etc/hosts" IO.exists                           # true   (predicate, total)
 "/etc" IO.is-dir                                  # true

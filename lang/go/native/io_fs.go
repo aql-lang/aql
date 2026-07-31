@@ -8,11 +8,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// io_fs.go holds the aql:io filesystem-structure words — stat, list, remove,
+// io_fs.go holds the boru:io filesystem-structure words — stat, list, remove,
 // move, and copy — plus the shared record/option helpers. Handlers route
 // every filesystem touch through EffectiveFileOps(r) (so the in-memory
 // backing engages under context.__sys.fs) and reuse extractPath for target
@@ -44,7 +44,7 @@ func mtimeUnix(t time.Time) int64 {
 	return t.Unix()
 }
 
-// buildStatRecord turns a host FileInfo into the AQL stat record: a Map with
+// buildStatRecord turns a host FileInfo into the boru stat record: a Map with
 // name/path/type/size/mode/mtime (and target for a symlink). `type` is a
 // FileType atom so `(stat p).type is IO.FileType` holds.
 func buildStatRecord(fi capabilities.FileInfo, path string, fileType *Type) Value {
@@ -74,22 +74,22 @@ func xattrValue(v []byte) Value {
 	return NewBytesValue(v)
 }
 
-// aqlToHostXattr / hostToAqlXattr map plain AQL attribute names onto the
+// boruToHostXattr / hostToBoruXattr map plain boru attribute names onto the
 // host's namespace: Linux user xattrs live in the mandatory `user.`
 // namespace, Darwin uses flat names (capabilities.XattrNamespacePrefix).
-// The word layer owns this mapping, so AQL programs spell `note` on every
-// platform. hostToAqlXattr additionally reports whether the host name IS
+// The word layer owns this mapping, so boru programs spell `note` on every
+// platform. hostToBoruXattr additionally reports whether the host name IS
 // ours — attributes outside the namespace (security.selinux and friends)
 // are not displayable or settable through the io words and are skipped.
-func aqlToHostXattr(name string) string {
+func boruToHostXattr(name string) string {
 	return capabilities.XattrNamespacePrefix + name
 }
 
-func hostToAqlXattr(host string) (string, bool) {
+func hostToBoruXattr(host string) (string, bool) {
 	return stripXattrNS(capabilities.XattrNamespacePrefix, host)
 }
 
-// stripXattrNS is hostToAqlXattr's platform-independent core, split out
+// stripXattrNS is hostToBoruXattr's platform-independent core, split out
 // so BOTH prefix regimes (Linux's "user." and the flat "" of Darwin and
 // the fallback platforms) are testable on any build.
 func stripXattrNS(prefix, host string) (string, bool) {
@@ -114,7 +114,7 @@ func attachXattrs(r *Registry, om Value, path string) error {
 	}
 	xs := NewOrderedMap()
 	for _, host := range names {
-		name, ours := hostToAqlXattr(host)
+		name, ours := hostToBoruXattr(host)
 		if !ours {
 			continue
 		}
@@ -150,7 +150,7 @@ func statHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Val
 		if errors.Is(err, os.ErrNotExist) {
 			return []Value{NewTypeLiteral(TNone)}, nil
 		}
-		return nil, r.AqlError("stat_error", fmt.Sprintf("stat: %v", err), "stat")
+		return nil, r.BoruError("stat_error", fmt.Sprintf("stat: %v", err), "stat")
 	}
 	displayPath := path
 	if resolve {
@@ -161,7 +161,7 @@ func statHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Val
 	rec := buildStatRecord(fi, displayPath, fileType)
 	if xattr {
 		if xerr := attachXattrs(r, rec, path); xerr != nil {
-			return nil, r.AqlError("stat_error", fmt.Sprintf("stat: %v", xerr), "stat")
+			return nil, r.BoruError("stat_error", fmt.Sprintf("stat: %v", xerr), "stat")
 		}
 	}
 	return []Value{rec}, nil
@@ -217,7 +217,7 @@ func listHandler(args []Value, r *Registry, fileType *Type, hasOpts bool) ([]Val
 	path := extractPath(args[0])
 	entries, err := collectEntries(r, path, "", recursive)
 	if err != nil {
-		return nil, r.AqlError("list_error", fmt.Sprintf("list: %v", err), "list")
+		return nil, r.BoruError("list_error", fmt.Sprintf("list: %v", err), "list")
 	}
 	items := make([]Value, 0, len(entries))
 	for _, e := range entries {
@@ -248,7 +248,7 @@ func doRemoveWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 		if force && errors.Is(err, os.ErrNotExist) {
 			return []Value{returnPath(args[0])}, nil
 		}
-		return nil, r.AqlError("remove_error", fmt.Sprintf("remove: %v", err), "remove")
+		return nil, r.BoruError("remove_error", fmt.Sprintf("remove: %v", err), "remove")
 	}
 	return []Value{returnPath(args[0])}, nil
 }
@@ -272,7 +272,7 @@ func refuseOverwrite(r *Registry, opts Value, dst, word string) error {
 		return nil
 	}
 	if _, err := EffectiveFileOps(r).Stat(dst, false); err == nil {
-		return r.AqlError(word+"_error",
+		return r.BoruError(word+"_error",
 			fmt.Sprintf("%s: destination %q already exists (overwrite is false)", word, dst), word)
 	}
 	return nil
@@ -290,7 +290,7 @@ func doMoveWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 	}
 	r.NoteEffect()
 	if err := EffectiveFileOps(r).Rename(src, dst); err != nil {
-		return nil, r.AqlError("move_error", fmt.Sprintf("move: %v", err), "move")
+		return nil, r.BoruError("move_error", fmt.Sprintf("move: %v", err), "move")
 	}
 	return []Value{returnPath(args[1])}, nil
 }
@@ -370,7 +370,7 @@ func doCopyWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 	}
 	r.NoteEffect()
 	if err := doCopy(r, src, dst, recursive); err != nil {
-		return nil, r.AqlError("copy_error", fmt.Sprintf("copy: %v", err), "copy")
+		return nil, r.BoruError("copy_error", fmt.Sprintf("copy: %v", err), "copy")
 	}
 	return []Value{returnPath(args[1])}, nil
 }
@@ -412,7 +412,7 @@ func doLinkWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 		err = EffectiveFileOps(r).Symlink(target, link)
 	}
 	if err != nil {
-		return nil, r.AqlError("link_error", fmt.Sprintf("link: %v", err), "link")
+		return nil, r.BoruError("link_error", fmt.Sprintf("link: %v", err), "link")
 	}
 	return []Value{returnPath(args[1])}, nil
 }
@@ -496,7 +496,7 @@ func applyTouch(ops capabilities.FileOps, path string, opts Value, hasOpts bool)
 				}
 				payload = []byte(s)
 			}
-			if err := ops.XattrSet(path, aqlToHostXattr(name), payload); err != nil {
+			if err := ops.XattrSet(path, boruToHostXattr(name), payload); err != nil {
 				return err
 			}
 		}
@@ -534,7 +534,7 @@ func doTouchWord(args []Value, r *Registry, hasOpts bool) ([]Value, error) {
 	}
 	r.NoteEffect()
 	if err := applyTouch(EffectiveFileOps(r), path, opts, hasOpts); err != nil {
-		return nil, r.AqlError("touch_error", fmt.Sprintf("touch: %v", err), "touch")
+		return nil, r.BoruError("touch_error", fmt.Sprintf("touch: %v", err), "touch")
 	}
 	return []Value{returnPath(args[0])}, nil
 }

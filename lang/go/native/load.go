@@ -77,5 +77,5 @@ func loadHandler(args []Value, ctx map[string]Value, stack []Value, r *Registry)
 		}
 	}
 
-	return nil, r.AqlError("load_error", "load: no record found matching filter", "load")
+	return nil, r.BoruError("load_error", "load: no record found matching filter", "load")
 }

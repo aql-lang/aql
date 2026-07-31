@@ -28,11 +28,11 @@ import (
 func surfaceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	m, err := RequireConcreteMap(args[0], "surface")
 	if err != nil {
-		return nil, r.AqlError("surface_error",
+		return nil, r.BoruError("surface_error",
 			fmt.Sprintf("surface: argument must be a concrete map of operation shapes, got %s", args[0].String()), "surface")
 	}
 	if len(m.Keys()) == 0 {
-		return nil, r.AqlError("surface_error",
+		return nil, r.BoruError("surface_error",
 			"surface: schema must declare at least one operation", "surface")
 	}
 	required := NewOrderedMap()
@@ -40,7 +40,7 @@ func surfaceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		v, _ := m.Get(key)
 		v = ResolveWordValue(v)
 		if !v.Parent.Equal(TFnUndef) {
-			return nil, r.AqlError("surface_error",
+			return nil, r.BoruError("surface_error",
 				fmt.Sprintf("surface: operation %q must be an fnsig shape (e.g. {%s: fnsig [[Self] [Float]]}), got %s",
 					key, key, v.String()), "surface")
 		}
@@ -63,12 +63,12 @@ func exposesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 
 	sinfo, err := AsSurfaceType(surfVal)
 	if err != nil {
-		return nil, r.AqlError("exposes_error",
+		return nil, r.BoruError("exposes_error",
 			fmt.Sprintf("exposes: right side must be a surface type, got %s", surfVal.String()), "exposes")
 	}
-	node, aqlErr := exposerNode(r, candVal)
-	if aqlErr != nil {
-		return nil, aqlErr
+	node, boruErr := exposerNode(r, candVal)
+	if boruErr != nil {
+		return nil, boruErr
 	}
 	if sinfo.Conform[node.ID] {
 		return nil, nil
@@ -95,7 +95,7 @@ func exposesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		}
 	}
 	if len(gaps) > 0 {
-		return nil, r.AqlError("surface_unsatisfied",
+		return nil, r.BoruError("surface_unsatisfied",
 			fmt.Sprintf("exposes: %s does not expose %s:\n  %s",
 				node.Name(), sinfo.Name, strings.Join(gaps, "\n  ")), "exposes")
 	}
@@ -119,7 +119,7 @@ func exposerNode(r *Registry, v Value) (*Type, error) {
 			return canon, nil
 		}
 	}
-	return nil, r.AqlError("exposes_error",
+	return nil, r.BoruError("exposes_error",
 		fmt.Sprintf("exposes: left side must be a named type (a class or refined type), got %s", v.String()), "exposes")
 }
 

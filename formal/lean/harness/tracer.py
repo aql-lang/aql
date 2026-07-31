@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-tracer.py — a "tracer bullet" differential harness for the AQL Lean model.
+tracer.py — a "tracer bullet" differential harness for the boru Lean model.
 
 It drives one thin end-to-end slice through the *whole* pipeline:
 
-    AQL source  ──tokenize──▶  Lean `Tape`  ──lean──▶  model output
+    boru source  ──tokenize──▶  Lean `Tape`  ──lean──▶  model output
         │                                                   │
-        └────────────────── aql do ──────▶ engine output ───┴──▶ compare
+        └───────────────── boru do ──────▶ engine output ───┴──▶ compare
 
 For each program (restricted to the fragment the model covers) it runs
-both the reference `aql` engine and the compiled Lean model, normalizes
+both the reference `boru` engine and the compiled Lean model, normalizes
 their outputs, and asserts they agree. This does not *prove* the engine
 matches the model — it is differential testing — but it turns the
 model↔engine correspondence from "6 hand examples" into a re-runnable
@@ -21,7 +21,7 @@ Usage:
 Env overrides:
     LEAN=/path/to/lean           # default: search PATH, then the repo's
                                  #          linked toolchain
-    AQL=/path/to/aql             # default: build cmd/go/aql into a tempdir
+    BORU=/path/to/boru             # default: build cmd/go/boru into a tempdir
 """
 import os, re, shutil, subprocess, sys, tempfile
 from pathlib import Path
@@ -31,7 +31,7 @@ LEAN_DIR = HERE.parent                            # formal/lean
 REPO = LEAN_DIR.parent.parent                     # repo root
 
 # --- the shared program set (model-covered, homogeneous-type fragment) -------
-# Each entry is AQL source. Coercion cases (`add true 2`, `not 5`) are
+# Each entry is boru source. Coercion cases (`add true 2`, `not 5`) are
 # intentionally excluded: the model is strict there while the engine
 # coerces, so they are a known, documented modeling gap — not a fragment
 # the tracer bullet claims to cover.
@@ -89,26 +89,26 @@ def find_lean() -> str:
     sys.exit("error: `lean` not found (set LEAN=...)")
 
 
-def find_aql(build_dir: Path) -> str:
-    if os.environ.get("AQL"):
-        return os.environ["AQL"]
-    out = build_dir / "aql"
-    print("building aql engine ...", file=sys.stderr)
-    subprocess.run(["go", "build", "-o", str(out), "./aql"],
+def find_boru(build_dir: Path) -> str:
+    if os.environ.get("BORU"):
+        return os.environ["BORU"]
+    out = build_dir / "boru"
+    print("building boru engine ...", file=sys.stderr)
+    subprocess.run(["go", "build", "-o", str(out), "./boru"],
                    cwd=REPO / "cmd" / "go", check=True)
     return str(out)
 
 
 def run_model(lean: str, build_dir: Path) -> dict:
-    """Compile AqlCore (re-checking the proofs) and run all programs once."""
+    """Compile BoruCore (re-checking the proofs) and run all programs once."""
     # 1. compile the model to an .olean so the generated file can import it.
     #    lean requires the input file to live under its cwd (module root),
     #    so compile from LEAN_DIR with a relative path; emit the olean into
     #    build_dir (which becomes the LEAN_PATH root for the import).
-    subprocess.run([lean, "-o", str(build_dir / "AqlCore.olean"), "AqlCore.lean"],
+    subprocess.run([lean, "-o", str(build_dir / "BoruCore.olean"), "BoruCore.lean"],
                    cwd=LEAN_DIR, check=True, capture_output=True, text=True)
     # 2. generate a harness module that prints "<idx>\t<render>" per program
-    lines = ["import AqlCore", "open AqlCore", ""]
+    lines = ["import BoruCore", "open BoruCore", ""]
     tapes = []
     for i, src in enumerate(PROGRAMS):
         tape = tokenize_to_tape(src)
@@ -122,7 +122,7 @@ def run_model(lean: str, build_dir: Path) -> dict:
     lines.append('    IO.println s!"{i}\\t{render (run t)}"')
     (build_dir / "Tracer.lean").write_text("\n".join(lines) + "\n")
     # 3. run it from build_dir (its module root), with LEAN_PATH pointing at
-    #    the compiled olean so `import AqlCore` resolves.
+    #    the compiled olean so `import BoruCore` resolves.
     env = dict(os.environ, LEAN_PATH=str(build_dir))
     res = subprocess.run([lean, "--run", "Tracer.lean"],
                          cwd=build_dir, capture_output=True, text=True, env=env)
@@ -138,13 +138,13 @@ def run_model(lean: str, build_dir: Path) -> dict:
 
 def normalize_engine(stdout: str, stderr: str, rc: int) -> str:
     text = (stdout + stderr).strip()
-    if rc != 0 or text.lower().startswith("error") or "[aql/" in text:
+    if rc != 0 or text.lower().startswith("error") or "[boru/" in text:
         return "ERROR"
     return text.splitlines()[0].strip() if text else ""
 
 
-def run_engine(aql: str, src: str) -> str:
-    res = subprocess.run([aql, "do", src], capture_output=True, text=True)
+def run_engine(boru: str, src: str) -> str:
+    res = subprocess.run([boru, "do", src], capture_output=True, text=True)
     return normalize_engine(res.stdout, res.stderr, res.returncode)
 
 
@@ -152,7 +152,7 @@ def main() -> int:
     lean = find_lean()
     with tempfile.TemporaryDirectory() as td:
         build_dir = Path(td)
-        aql = find_aql(build_dir)
+        boru = find_boru(build_dir)
         model = run_model(lean, build_dir)
 
         print(f"\n  {'PROGRAM':<16} {'MODEL':<10} {'ENGINE':<10} RESULT")
@@ -160,7 +160,7 @@ def main() -> int:
         passed = failed = 0
         for i, src in enumerate(PROGRAMS):
             m = model.get(i, "<none>")
-            e = run_engine(aql, src)
+            e = run_engine(boru, src)
             ok = (m == e)
             passed += ok
             failed += (not ok)

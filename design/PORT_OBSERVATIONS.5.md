@@ -1,10 +1,10 @@
-# Conversion notes: Go → TypeScript port of aqleng
+# Conversion notes: Go → TypeScript port of borueng
 
 This document is the audit trail from porting the Go engine to TypeScript
 under `eng/ts/`. The TS port covers the subset the existing TSV
 specs exercise (Value/Type lattice, Registry+capability, native
 dispatch, signature matching, error paths) and runs the SAME
-`aqleng/test/spec/*.tsv` files via Node 24's built-in `node:test`
+`borueng/test/spec/*.tsv` files via Node 24's built-in `node:test`
 runner with `--experimental-strip-types`.
 
 It is split into three layers:
@@ -218,7 +218,7 @@ Go engine should follow.
 ### 1.4 Stack-only vs forward-collecting — RESOLVED via boundary-aware unified dispatch
 
 The asker correctly noted: is the difference in the *implementation
-functions*, or in the *AQL language itself*? **Both — but the language
+functions*, or in the *boru language itself*? **Both — but the language
 choice is the cause and the implementation is the effect.**
 
 The language semantics. To compare apples to apples, use the SAME
@@ -276,7 +276,7 @@ of the callee.
    designing a new word.
 
 2. **Lock the divergence into specs.** Add TSV rows to
-   `aqleng/test/spec/` covering the same physical stack with both a
+   `borueng/test/spec/` covering the same physical stack with both a
    forward-prec and a stack-only word. The current `1 2 swap → 2 1`
    row passes only because of deepest-first; a parallel
    forward-prec sibling (e.g. `1 2 mul → 2` for the integer `mul`,
@@ -300,7 +300,7 @@ of the callee.
      match.go; the matcher loses a parameter.
 
    The cost is a one-time rewrite of every stack-only handler that
-   currently relies on deepest-first. In aqleng's spec set:
+   currently relies on deepest-first. In borueng's spec set:
    - `swap` (sig `[TAny, TAny]`): handler `(args) => [args[1], args[0]]`
      → keep as-is, but now args[0]=top, args[1]=bottom; the splice still
      produces the swapped pair. Result-equivalent under the new
@@ -322,7 +322,7 @@ of the callee.
    payoff than (3) but cheaper.
 
 The right answer depends on whether any third-party code already
-depends on stack-only deepest-first. If aqleng is the only consumer,
+depends on stack-only deepest-first. If borueng is the only consumer,
 (3) is the better long-term fix.
 
 #### Resolution
@@ -362,11 +362,11 @@ Concrete implications:
 
 Migration scope:
 
-- aqleng spec runners (Go + TS): only `swap` is multi-arg
+- borueng spec runners (Go + TS): only `swap` is multi-arg
   stack-only; handler updated.
 - lang/go/internal/engine native stack ops: swap, over, rot, nip, tuck,
   dup2, swap2, over2 rewritten to top-down indexing.
-- aql/test rows: a small number of test rows assumed the legacy
+- boru/test rows: a small number of test rows assumed the legacy
   swap-form binding (`a f b → F(b, a)`) was the only mirror-violator;
   under the unified rule, the four equivalent forms (`f a b`,
   `b a f`, `b f a` (now also equivalent), `a f b` (still the swap
@@ -423,7 +423,7 @@ are mitigations of varying strength:
 | Wrap in immer / Immutable.js | runtime + ergonomic | full library dependency |
 | Convention only | none | none |
 
-The pragmatic recommendation for aqleng-ts: **`Object.freeze(this)`
+The pragmatic recommendation for borueng-ts: **`Object.freeze(this)`
 in the Value constructor** plus the existing `readonly` modifiers.
 That gives `'use strict'` callers a runtime error if they mutate a
 shared Value; the perf cost is on the order of a single boolean flip
@@ -451,7 +451,7 @@ ported (each is its own follow-up):
 | Unify | Whole `unify.go` — type unification, dependent-leaf checks, structural map/list unify. |
 | Dependent scalars | `DepInteger`, `DepBound`, `DepKind`, etc. |
 | Module subsystem | Module/import/export, `RunModuleBody`, `loadFileModule`, `installExports`. |
-| FnDef / CallAQL | User-defined functions; `def`/`fn`/`undef`/`var`/`call`/`args` words. |
+| FnDef / CallBoru | User-defined functions; `def`/`fn`/`undef`/`var`/`call`/`args` words. |
 | Control flow | `if`/`for`/`do`/`error`, break/continue, `IfCont`/`ForCont`. |
 | Trace / step budget | `Trace`, `traceWrap`, step-budget enforcement. |
 | Mark/Move primitives | `__MK`/`__MV` continuation tokens. |
@@ -492,7 +492,7 @@ predictable.
 ### 3.4 TSV specs are a language-agnostic regression contract
 
 The Go and TS engines now share a regression suite
-(`aqleng/test/spec/*.tsv`). A small CI step that runs both — `go test
+(`borueng/test/spec/*.tsv`). A small CI step that runs both — `go test
 ./eng/go/... -run TestSpec` and `node --test --experimental-strip-types
 eng/ts/src/spec.test.ts` — and fails the build if either does
 locks behavioural equivalence in.

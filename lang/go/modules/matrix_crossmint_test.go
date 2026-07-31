@@ -3,11 +3,11 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestTensorCrossMintMatch drives tensorFormatBehavior.Match's structural
-// arms directly: every `import "aql:matrix-util"` mints its own tensor
+// arms directly: every `import "boru:matrix-util"` mints its own tensor
 // family, and a VALUE (or check-mode carrier) from one mint must match
 // another mint's nodes by payload rank / family kind — the cross-import
 // dispatch fix — while non-tensor values and rank mismatches stay out.

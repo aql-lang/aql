@@ -1,5 +1,5 @@
 // Command genhelp pre-computes help example results by running each
-// expression through the AQL native. Output is written to
+// expression through the boru native. Output is written to
 // lang/go/engine/help/examples_gen.go as a static map.
 //
 //go:generate go run .
@@ -15,10 +15,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // outputPath returns the absolute path of the generated file, derived from

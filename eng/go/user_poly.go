@@ -40,7 +40,7 @@ type userPolyPlan struct {
 //
 // Gates (each keeps compile == interpret):
 //   - >= 2 same-arity arms (else the single-overload path already handles it);
-//   - every arm is an AQL-bodied overload with plain (un-quoted, non-form,
+//   - every arm is a boru-bodied overload with plain (un-quoted, non-form,
 //     non-type-literal) params — the runtime window re-match assumes plain
 //     value args, exactly like OpCallNativePoly;
 //   - every arm declares the IDENTICAL Returns as the committed overload: the
@@ -152,7 +152,7 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 	return plan
 }
 
-// userPolyArmShapeOK gates one arm's SIGNATURE shape: an AQL body, plain
+// userPolyArmShapeOK gates one arm's SIGNATURE shape: a boru body, plain
 // value params (no quote / raw-form / no-eval / type-literal slots — the
 // runtime window re-match binds plain values only), and Returns identical to
 // the committed overload's (both position-wise nil, or Equal types).

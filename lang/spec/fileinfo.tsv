@@ -1,4 +1,4 @@
-# AQL Language Specification: Source-location words (__file __folder)
+# boru Language Specification: Source-location words (__file __folder)
 # Format: input<TAB>expected<TAB>description
 #
 # __file   → the base filename String of the source file the word appears

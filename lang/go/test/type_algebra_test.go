@@ -3,13 +3,13 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // --- Algebraic laws of the type lattice ---
 //
 // `tand` (intersection) and `tor` (union) form a bounded distributive
-// lattice over AQL types:
+// lattice over boru types:
 //
 //   - tand identity = Any         (T tand Any = T)
 //   - tor identity  = Never       (T tor Never = T)

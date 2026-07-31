@@ -16,7 +16,7 @@ import (
 // misses it (the VM's CALL_USER param contract raises == interpreter no_signature).
 // The fix drives its ReturnsFn to record a GUARDED CALL_USER instead of refusing.
 //
-// This is the leaf that gated the aql:test framework (run-cases) and the trie/
+// This is the leaf that gated the boru:test framework (run-cases) and the trie/
 // decision walkers (find-kid / mk-tnode / lex-mustache).
 func TestSingleOverloadUserFnRecovery(t *testing.T) {
 	// MUST compile natively (RunCompiledStrict) — the recovery now records a call.

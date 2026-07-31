@@ -1,7 +1,7 @@
 //go:build js && wasm
 
-// Command wpg/wasm compiles the AQL engine to WebAssembly.
-// Build (from the wpg directory): GOOS=js GOARCH=wasm go build -o aql.wasm ./wasm
+// Command wpg/wasm compiles the boru engine to WebAssembly.
+// Build (from the wpg directory): GOOS=js GOARCH=wasm go build -o boru.wasm ./wasm
 package main
 
 import (
@@ -11,27 +11,27 @@ import (
 	"sync"
 	"syscall/js"
 
-	"github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/formatter"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/formatter"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 func main() {
 	instance, err := lang.New()
 	if err != nil {
-		js.Global().Get("console").Call("error", "aql init failed: "+err.Error())
+		js.Global().Get("console").Call("error", "boru init failed: "+err.Error())
 		return
 	}
 	instance.SetFileOps(lang.NewMemFileOps())
 
-	// aql:tui renders into the page (tuiweb.go): the playground IS a
+	// boru:tui renders into the page (tuiweb.go): the playground IS a
 	// terminal-shaped surface, so full-screen apps run in the browser.
 	if err := modules.RegisterHostTui(instance.NativeRegistry(), modules.TuiSpec{
 		Name: "web",
 		Open: func() (tuikit.Backend, error) { return newWebBackend(), nil },
 	}); err != nil {
-		js.Global().Get("console").Call("error", "aql tui backend: "+err.Error())
+		js.Global().Get("console").Call("error", "boru tui backend: "+err.Error())
 	}
 	installTuiInput()
 
@@ -55,17 +55,17 @@ func main() {
 		return map[string]any{"result": strings.Join(parts, " "), "output": printed}
 	}
 
-	js.Global().Set("aqlEval", js.FuncOf(func(this js.Value, args []js.Value) any {
+	js.Global().Set("boruEval", js.FuncOf(func(this js.Value, args []js.Value) any {
 		if len(args) < 1 {
 			return map[string]any{"error": "missing code argument"}
 		}
 		return runCode(args[0].String())
 	}))
 
-	// aqlEvalAsync(code, callback) runs on a goroutine so a BLOCKING
+	// boruEvalAsync(code, callback) runs on a goroutine so a BLOCKING
 	// program — a Tui.run session — leaves the browser event loop free
 	// to deliver key events; the callback receives the same result map.
-	js.Global().Set("aqlEvalAsync", js.FuncOf(func(this js.Value, args []js.Value) any {
+	js.Global().Set("boruEvalAsync", js.FuncOf(func(this js.Value, args []js.Value) any {
 		if len(args) < 2 {
 			return map[string]any{"error": "missing code or callback argument"}
 		}
@@ -77,7 +77,7 @@ func main() {
 		return nil
 	}))
 
-	js.Global().Set("aqlFmt", js.FuncOf(func(this js.Value, args []js.Value) any {
+	js.Global().Set("boruFmt", js.FuncOf(func(this js.Value, args []js.Value) any {
 		if len(args) < 1 {
 			return ""
 		}
@@ -85,7 +85,7 @@ func main() {
 	}))
 
 	// Signal that the WASM module is ready.
-	if cb := js.Global().Get("__aqlReady"); !cb.IsUndefined() && !cb.IsNull() {
+	if cb := js.Global().Get("__boruReady"); !cb.IsUndefined() && !cb.IsNull() {
 		cb.Invoke()
 	}
 

@@ -5,7 +5,7 @@ package eng
 // for registration.
 //
 // The signatures are plain `Signature` values — the SAME unified dispatch
-// struct AQL `def fn […]` produces. A native author fills the positional
+// struct boru `def fn […]` produces. A native author fills the positional
 // `Signature.Args` (+ optional `Patterns`) construction-convenience fields
 // and a Go `Handler`; `RegisterNativeFunc` → `normalizeSig` derives the
 // authoritative `Params` from them. There is no separate native-sig type.

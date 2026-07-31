@@ -1,4 +1,4 @@
-# AQL Implementation Status
+# boru Implementation Status
 
 Cross-reference of design documents in `design/` against the current
 codebase. Last updated: **2026-06-17** (rebuilt from a full audit of every
@@ -13,12 +13,12 @@ reality to `.10` — `TCO-STAGED`, `LAZY-ARG-RESOLUTION`, and
 `checker-accuracy-review` — and updated their ~50 in-tree references.
 `NUMERIC-TOWER.0` keeps its suffix because it was *superseded* by
 `BIGNUM-0D.10`: its specific design did not land even though bignums did. The
-`aql-bytecode-*.0` cluster keeps `.0` because it is genuinely **partial**
+`boru-bytecode-*.0` cluster keeps `.0` because it is genuinely **partial**
 (Stages 0–5 of 7 landed; default-on pending) — a single completeness digit
 would misstate an in-flight effort either way.
 
 > The canonical list of *words* and *modules* is the tool itself: run
-> `aql describe` (words, categories, modules) and `aql help` (CLI). This
+> `boru describe` (words, categories, modules) and `boru help` (CLI). This
 > document indexes **design docs → code**, not the word catalogue.
 
 ## Summary
@@ -31,7 +31,7 @@ would misstate an in-flight effort either way.
 | Numerics (bignum/0d, binary ops, IEEE-754, overflow) | Complete |
 | Temporal types + core words | Complete (some module words remain) |
 | Modules / imports / native modules / file I/O | Complete |
-| Static checker (carrier abstract interpretation, `aql check`) | Complete |
+| Static checker (carrier abstract interpretation, `boru check`) | Complete |
 | Permissions / capabilities | Complete |
 | Property-based testing harness | Complete |
 | Bytecode compiler + VM | **Staged** — Stages 0–5 landed; default-on pending |
@@ -64,12 +64,12 @@ There are ~19 native modules under `lang/go/modules/`: `array`, `binary`,
 - **Errors** — `raise` + `do … error …`, `native_error_raise.go`,
   `lang/spec/error.tsv`.
 - **Static checker** — carrier-based abstract interpretation (`eng/go/carrier.go`,
-  `check.go`, `aql check`), loud diagnostics.
+  `check.go`, `boru check`), loud diagnostics.
 - **Permissions / capabilities** — `lang/go/policy/` + `lang/go/capabilities/`.
 - **Flex nodes, usurp, reach, surfaces, refine, paren-representation** — landed.
 - **Temporal** — types (`TInstant`/`TDateTime`/`TDate`/`TClkDuration`/…) and
   core timer words; correcting the old "0 of 70" note.
-- **Minilang** — core `mini` word + `aql:minilang` (`re`/`bf` kinds).
+- **Minilang** — core `mini` word + `boru:minilang` (`re`/`bf` kinds).
 - **String interpolation** — backtick templates with `${…}` (jsonic tokens).
 
 ## Fully Implemented
@@ -119,7 +119,7 @@ There are ~19 native modules under `lang/go/modules/`: `array`, `binary`,
 | FOR-LOOP-REVIEW.10 | for-loop sentinels, lazy ForCont. |
 | PAREN-REPRESENTATION.9 | `ParenExpr` handling, `paren_expr_step_test.go`. |
 | BIGNUM-0D.10 / NUMERIC-TOWER.0 (superseded) | `TBigInteger`/`TBigDecimal`, `bignum.tsv`. |
-| BINARY-OPERATIONS.10 / aql-boolean-operations-report.10 | `aql:bin-util` (`band`/`bor`/…), `bitwise.tsv`. |
+| BINARY-OPERATIONS.10 / boru-boolean-operations-report.10 | `boru:bin-util` (`band`/`bor`/…), `bitwise.tsv`. |
 | IEEE-754-COMPLIANCE.8 / INTEGER-OVERFLOW-STRATEGY.5 | numeric semantics in `eng/go`. |
 | TEMPORAL-WORDS.9 | `native_temporal.go` types + core words; some module words remain. |
 
@@ -130,20 +130,20 @@ There are ~19 native modules under `lang/go/modules/`: `array`, `binary`,
 | IMPORTS.10 / NATIVE-MODULES.10 | `native_module_module.go`, ~19 modules. |
 | FILE-ACCESS.10 | FileOps; CSV/TSV/JSON/jsonic/text; `lang/go/capabilities/`. |
 | CARRIER-STATIC-TYPECHECK-REPORT.10 | `eng/go/carrier.go` (2296 lines), `check.go`. |
-| checker-loud-diagnostics-report.10 | check-mode loud gates; `aql check`. |
+| checker-loud-diagnostics-report.10 | check-mode loud gates; `boru check`. |
 | STATIC_ANALYSIS_REPORT.10 | golangci-lint/govulncheck CI. |
 | checker-accuracy-review.10 | findings A1–A9 landed; `check_accuracy_test.go`. |
 | PERMISSIONS.10 / PERMISSIONS-PLAN.10 | `lang/go/policy/` (8 files) + `capabilities/`. |
-| PBT-PLAN.10 / aql_property_based_reduction_report.10 | `modules/test/shrink/`, `modules/test.go`. |
+| PBT-PLAN.10 / boru_property_based_reduction_report.10 | `modules/test/shrink/`, `modules/test.go`. |
 
 ## Partial / Staged
 
 | Document | State |
 |----------|-------|
-| **aql-bytecode-*.0** (baseline, completion, outline, plan, readiness, report, revisions, runtime-independence) | Compiler + VM landed (`eng/go/bytecode.go`, `emit*.go`, `vm*.go`); Stages 0–5 complete (2607 rows compile-or-fallback, 0 divergences); **default-on (Stage 7) pending**. |
-| ARRAYIFICATION.6 | ~27 words across core + `aql:array`; broadcasting rejected (ADR-002). |
+| **boru-bytecode-*.0** (baseline, completion, outline, plan, readiness, report, revisions, runtime-independence) | Compiler + VM landed (`eng/go/bytecode.go`, `emit*.go`, `vm*.go`); Stages 0–5 complete (2607 rows compile-or-fallback, 0 divergences); **default-on (Stage 7) pending**. |
+| ARRAYIFICATION.6 | ~27 words across core + `boru:array`; broadcasting rejected (ADR-002). |
 | MATRIX-WORDS.7 | `modules/matrix.go` (gonum-backed): construction/access/arithmetic done; decompositions, signal, advanced ops missing. |
-| MINILANG.5 | core `mini` + `aql:minilang` (`re`/`bf`); remaining kind catalogue, compile hooks, lexer sugar pending. |
+| MINILANG.5 | core `mini` + `boru:minilang` (`re`/`bf`); remaining kind catalogue, compile hooks, lexer sugar pending. |
 | OBJECT-METHODS.5 | class instances work; method dispatch via signatures, no dedicated method syntax. |
 | dynamic-modality-report.10 | check-mode-only `dynamic(T)` modality (no runtime semantics). |
 | TEMPORAL-WORDS.9 | types + core timer words done; ~remaining module words (extraction/duration/conversion catalogue) pending. |
@@ -154,13 +154,13 @@ There are ~19 native modules under `lang/go/modules/`: `array`, `binary`,
 |----------|-------|
 | PROCESSES.0 | Actor substrate (`spawn`/`self`/`send`/`receive`/`Pid`, bounded mailboxes, registry). RFC; no code. |
 | SERVICES.0 | Service/server model (`service`/`add`/`call`/`send`/`state`, `server`/`serve`, `proxy`, `pool`, transport). RFC; no code. Depends on PROCESSES.0. |
-| STREAM-WORDS.0 | `aql:stream` words. No module. |
-| XML.0 | XML alternate syntax, `cs/` selectors, `aql-embed`. |
+| STREAM-WORDS.0 | `boru:stream` words. No module. |
+| XML.0 | XML alternate syntax, `cs/` selectors, `boru-embed`. |
 | DATAFRAME-WORDS.3 | ~28 SQL-style dataframe words. 0 implemented. |
 | MODULE-CACHE.0 | "Analysis only"; `loadFileModule` re-runs body on each import. |
 | FORWARD-COLLECTION-TRAPS.0 | "Investigations only"; no fix landed. |
-| amop-in-aql-report.0 | Ambient-Oriented Programming feasibility; nothing built. |
-| fsharp-units-in-aql-report.0 | Units-of-measure feasibility; library-only, not built. |
+| amop-in-boru-report.0 | Ambient-Oriented Programming feasibility; nothing built. |
+| fsharp-units-in-boru-report.0 | Units-of-measure feasibility; library-only, not built. |
 
 The actor → service → streaming → XML cluster is the **only major
 design-only feature area**. Their *local* prerequisites already exist
@@ -177,15 +177,15 @@ feature; the suffix reflects how much of what they recommend has landed.
 
 | Document | Topic |
 |----------|-------|
-| AQL-CODE-REVIEW-REPORT.6 | Architecture/safety/duplication audit; many fixes landed. |
+| BORU-CODE-REVIEW-REPORT.6 | Architecture/safety/duplication audit; many fixes landed. |
 | BATTERIES-INCLUDED-REPORT.5 | Stdlib-coverage analysis; partial uptake. |
 | TYPE-SYSTEM-REVIEW.7 | Algebraic/dependent-type review; majority resolved. |
-| AQL-DX-REPORT.5 | DX findings from `aql:decision`; all six resolved/documented. |
-| VOXGIG-AQL-REPORTS.5 / VOXGIG-DX-REPORT.5 | First-hand library/DX reports; many findings since fixed. |
+| BORU-DX-REPORT.5 | DX findings from `boru:decision`; all six resolved/documented. |
+| VOXGIG-BORU-REPORTS.5 / VOXGIG-DX-REPORT.5 | First-hand library/DX reports; many findings since fixed. |
 | WAT-AUDIT.5 | Surprising-behaviour catalogue + remediations. |
 | PORT_OBSERVATIONS.5 | Go→TS engine-port parity notes. |
-| LISP-ANALYSIS.5 | AQL through a Lisp/Scheme lens. |
-| elixir-types-in-aql-report.10 | Elixir set-theoretic types applicability. |
+| LISP-ANALYSIS.5 | boru through a Lisp/Scheme lens. |
+| elixir-types-in-boru-report.10 | Elixir set-theoretic types applicability. |
 | jsonic-matcher-rule-access-report.10 | jsonic matcher rule access (Go-port gap). |
 | REVIEW-NOTES.10 / data-last-audit.10 / TYPE-DECOUPLING-INVENTORY.10 | Implementation/audit records. |
 
@@ -205,7 +205,7 @@ Parity with the codebase, not pending work.
    effort. Phase 1 (in-process `service`/`add`/`call`/`send`/`state`, `prior`/
    `wrap`) needs no new substrate; later phases need processes, then the TCP
    server + transport, then distribution.
-2. **Streaming** (STREAM-WORDS.0): `aql:stream`; pairs with services for
+2. **Streaming** (STREAM-WORDS.0): `boru:stream`; pairs with services for
    network I/O.
 3. **Binary** (`Bytes` + bit-syntax): blocks binary wire protocols; JSON is
    already covered by `Format`/`jsonify`/`reify`.

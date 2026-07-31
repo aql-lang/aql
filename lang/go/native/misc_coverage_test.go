@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // ── Format coverage ──────────────────────────────────────────────────
@@ -224,7 +224,7 @@ func TestTraceCoverage(t *testing.T) {
 	r.Output = &buf
 
 	// trace [1 2 add]
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("trace"),
 		NewList([]Value{NewInteger(1), NewInteger(2), NewWord("add")}),
 	})
@@ -292,7 +292,7 @@ func TestReadWriteJsonic(t *testing.T) {
 	mem.Files["data.jsonic"] = []byte(`{a: 1, b: "hello"}`)
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("read"), pathV("data.jsonic"),
 	})
 	if len(result) != 1 {
@@ -320,7 +320,7 @@ func TestReadWriteJSON(t *testing.T) {
 	mem.Files["data.json"] = []byte(`{"x": 42}`)
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("read"), pathV("data.json"),
 	})
 	if len(result) != 1 {
@@ -341,7 +341,7 @@ func TestReadWriteLines(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("lines"))
 	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewMap(opts), NewString("hello\nworld"), pathV("out.txt"), NewWord("write"),
 	})
 	if len(result) != 1 {
@@ -359,7 +359,7 @@ func TestReadWriteText(t *testing.T) {
 	mem.Files["hello.txt"] = []byte("hello world")
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("read"), pathV("hello.txt"),
 	})
 	if len(result) != 1 {
@@ -382,7 +382,7 @@ func TestWriteStdout(t *testing.T) {
 	r.Output = &buf
 
 	// write to stdout using the explicit "<stdout>" path.
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("write"), NewAtom("stdout"), NewString("hello"),
 	})
 	if len(result) != 1 {
@@ -406,7 +406,7 @@ func TestWriteAppendMode(t *testing.T) {
 	opts := NewOrderedMap()
 	opts.Set("mode", NewString("append"))
 	// All prefix: nearest→sig[0]=path, next→sig[1]=data, deepest→sig[2]=opts
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewMap(opts), NewString("second"), pathV("out.txt"), NewWord("write"),
 	})
 	if len(result) != 1 {
@@ -432,7 +432,7 @@ func TestPrintCoverage(t *testing.T) {
 	// print a map
 	om := NewOrderedMap()
 	om.Set("key", NewString("value"))
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewMap(om), NewWord("print"),
 	})
 	output := buf.String()
@@ -450,7 +450,7 @@ func TestPrintListCoverage(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewList([]Value{NewInteger(1), NewInteger(2)}), NewWord("print"),
 	})
 	output := buf.String()
@@ -555,7 +555,7 @@ func TestModuleImportFromFile(t *testing.T) {
 	registerIOWords(r)
 	mem := capabilities.NewMem()
 	// Module file that exports "greet" with value "hello"
-	mem.Files["mod.aql"] = []byte(`export greet {val: 'world'}`)
+	mem.Files["mod.boru"] = []byte(`export greet {val: 'world'}`)
 	SetHostFileOps(r, mem)
 	r.ParseFunc = func(src string) ([]Value, error) {
 		// Simple parse: export greet {val: 'world'}
@@ -566,8 +566,8 @@ func TestModuleImportFromFile(t *testing.T) {
 		}, nil
 	}
 
-	result := runAQL(t, r, []Value{
-		NewWord("import"), NewString("./mod.aql"),
+	result := runBoru(t, r, []Value{
+		NewWord("import"), NewString("./mod.boru"),
 	})
 	_ = result
 
@@ -584,7 +584,7 @@ func TestModuleImportFileWithRename(t *testing.T) {
 	}
 	registerIOWords(r)
 	mem := capabilities.NewMem()
-	mem.Files["mod2.aql"] = []byte(`export foo {val: 42}`)
+	mem.Files["mod2.boru"] = []byte(`export foo {val: 42}`)
 	SetHostFileOps(r, mem)
 	r.ParseFunc = func(src string) ([]Value, error) {
 		m := NewOrderedMap()
@@ -594,10 +594,10 @@ func TestModuleImportFileWithRename(t *testing.T) {
 		}, nil
 	}
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("import"),
 		NewList([]Value{NewAtom("foo"), NewAtom("bar")}),
-		NewString("./mod2.aql"),
+		NewString("./mod2.boru"),
 	})
 	_ = result
 
@@ -616,7 +616,7 @@ func TestModuleExportWithStringName(t *testing.T) {
 	// Module with string-named export
 	m := NewOrderedMap()
 	m.Set("x", NewInteger(1))
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("module"),
 		NewList([]Value{
 			NewWord("export"), NewString("myexport"), NewMap(m),
@@ -640,7 +640,7 @@ func TestModuleImportSelectedExports(t *testing.T) {
 	m2.Set("y", NewInteger(2))
 
 	// Create module with two exports
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("module"),
 		NewList([]Value{
 			NewWord("export"), NewAtom("a"), NewMap(m1),
@@ -649,7 +649,7 @@ func TestModuleImportSelectedExports(t *testing.T) {
 	})
 
 	// Import only "a" via rename
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("import"),
 		NewList([]Value{NewAtom("a"), NewAtom("alpha")}),
 		result[0],
@@ -672,7 +672,7 @@ func TestModuleImportMultipleRenames(t *testing.T) {
 	m2 := NewOrderedMap()
 	m2.Set("y", NewInteger(2))
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("module"),
 		NewList([]Value{
 			NewWord("export"), NewAtom("p"), NewMap(m1),
@@ -681,7 +681,7 @@ func TestModuleImportMultipleRenames(t *testing.T) {
 	})
 
 	// Import with multiple renames [[p r] [q s]]
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("import"),
 		NewList([]Value{
 			NewList([]Value{NewAtom("p"), NewAtom("r")}),
@@ -700,7 +700,7 @@ func TestModuleImportMultipleRenames(t *testing.T) {
 
 // ── Math binary ops with decimal coverage ────────────────────────────
 
-// TestMathMinMaxFloat moved to internal/nativemod/ (aql:math module).
+// TestMathMinMaxFloat moved to internal/nativemod/ (boru:math module).
 
 // ── Make table ───────────────────────────────────────────────────────
 
@@ -723,7 +723,7 @@ func TestMakeTable(t *testing.T) {
 		NewList([]Value{NewString("Bob"), NewInteger(25)}),
 	})
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), tableType, rowData,
 	})
 	if len(result) != 1 {
@@ -754,7 +754,7 @@ func TestMakeRecordWithBase(t *testing.T) {
 	opts.Set("base", NewBoolean(true))
 	src := NewOrderedMap()
 	src.Set("name", NewString("Alice"))
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), recType, NewMap(src), NewMap(opts),
 	})
 	if len(result) != 1 {
@@ -784,7 +784,7 @@ func TestMakeRecordWithNamedList(t *testing.T) {
 	ym := NewOrderedMap()
 	ym.Set("y", NewString("hi"))
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), recType, NewList([]Value{NewMap(xm), NewMap(ym)}),
 	})
 	if len(result) != 1 {
@@ -798,7 +798,7 @@ func TestMakeConvertFloatToString(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TString), NewFloat(3.14),
 	})
 	_as10, _ := AsString(result[0])
@@ -814,14 +814,14 @@ func TestMakeConvertBoolFromNumber(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewInteger(1),
 	})
 	_as12, _ := AsBoolean(result[0])
 	if !_as12 {
 		t.Error("expected true from 1")
 	}
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewInteger(0),
 	})
 	_as13, _ := AsBoolean(result[0])
@@ -836,14 +836,14 @@ func TestMakeConvertBoolFromNonBoolString(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewString("hello"),
 	})
 	_as14, _ := AsBoolean(result[0])
 	if !_as14 {
 		t.Error("expected true from non-empty string")
 	}
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TBoolean), NewString(""),
 	})
 	_as15, _ := AsBoolean(result[0])
@@ -858,7 +858,7 @@ func TestMakeConvertToAtomFromString(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TAtom), NewString("hello"),
 	})
 	_as16, _ := AsAtom(result[0])
@@ -874,7 +874,7 @@ func TestMakeConvertFloatStringToNumber(t *testing.T) {
 	}
 	registerIOWords(r)
 	// "3.14" to integer should parse as float then truncate
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("make"), NewTypeLiteral(TInteger), NewString("3.14"),
 	})
 	_as17, _ := AsInteger(result[0])

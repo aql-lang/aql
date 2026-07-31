@@ -7,7 +7,7 @@
 // IsValueOfType (which need ChildType payloads) and the Disjunct/Enum
 // membership branches are added by their owning port increments.
 import {
-  AqlType,
+  BoruType,
   TAny,
   TBoolean,
   TInteger,
@@ -57,9 +57,9 @@ const SATURATING_ROOTS = new Set(['Any', 'None', 'Never', 'Absent'])
  *   - a branch root (Scalar/Node/Ideal/Word/Type) has parent Any;
  *   - a degenerate root (Any/None/Never/Absent) has no parent (null).
  */
-export function parentType(t: AqlType): AqlType | null {
+export function parentType(t: BoruType): BoruType | null {
   if (t.parts.length > 1) {
-    return new AqlType(t.parts.slice(0, -1))
+    return new BoruType(t.parts.slice(0, -1))
   }
   if (SATURATING_ROOTS.has(t.parts[0]!)) return null
   return TAny
@@ -96,7 +96,7 @@ export function pathOf(t: Value): Value {
   const parts = t.vType.parts
   const elems: Value[] = []
   for (let i = 0; i < parts.length; i++) {
-    elems.push(newTypeLiteral(new AqlType(parts.slice(0, i + 1))))
+    elems.push(newTypeLiteral(new BoruType(parts.slice(0, i + 1))))
   }
   return newList(elems, { eval: false })
 }

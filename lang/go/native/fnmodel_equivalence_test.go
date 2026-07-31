@@ -31,7 +31,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 var updateGolden = flag.Bool("update", false, "update the equivalence golden file")
@@ -165,7 +165,7 @@ var behaviorCorpus = []struct {
 	{"if-clauselist", `if [false "a" true "b" "c"]`},
 	{"if-bodyeval", `if true [1 add 2] [10 add 20] end`},
 
-	// --- named AQL fns (compile-to-handler path already) ---
+	// --- named boru fns (compile-to-handler path already) ---
 	{"named-fn-simple", `def dbl fn [[n:Integer] [Integer] [n mul 2]]  dbl 21`},
 	{"named-fn-forward", `def f fn [[a:Integer b:Integer] [Integer] [a sub b]]  f 10 3`},
 	{"named-fn-recursive", `def fact fn [[n:Integer] [Integer] [if (n lte 1) [1] [n mul (fact (n sub 1))]]]  fact 5`},
@@ -181,7 +181,7 @@ var behaviorCorpus = []struct {
 	{"fold-sum", `fold [add] [1 2 3 4]`},
 	{"fold-init", `10 fold [add] [1 2 3 4]`},
 
-	// Module-wrapper dispatch (the capturedReg / CallAQL branch of
+	// Module-wrapper dispatch (the capturedReg / CallBoru branch of
 	// execFnDefSig) is exercised separately in the modules package —
 	// see modules/fnmodel_wrapper_equivalence_test.go — because the
 	// native-module resolver is wired there, not in DefaultRegistry.

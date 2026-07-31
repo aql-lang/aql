@@ -1,28 +1,28 @@
--- AQL Language Server for Neovim.
+-- boru Language Server for Neovim.
 --
 -- This file covers both the modern (Neovim 0.11+) vim.lsp.config API
 -- and the historical nvim-lspconfig package. Pick whichever matches
 -- your setup; do not load both.
 
 -- ---------------------------------------------------------------------
--- Filetype detection: associate *.aql with the "aql" filetype so the
--- LSP attaches via filetype = { "aql" }.
+-- Filetype detection: associate *.boru with the "boru" filetype so the
+-- LSP attaches via filetype = { "boru" }.
 -- ---------------------------------------------------------------------
 
-vim.filetype.add({ extension = { aql = "aql" } })
+vim.filetype.add({ extension = { boru = "boru" } })
 
 -- ---------------------------------------------------------------------
 -- Option A: Neovim 0.11+ — vim.lsp.config (the new built-in API).
 -- Drop this into ~/.config/nvim/init.lua (or a file sourced from it).
 -- ---------------------------------------------------------------------
 
-vim.lsp.config("aql", {
-  cmd = { "aql", "lsp" },
-  filetypes = { "aql" },
-  root_markers = { "aql.jsonic", ".git" },
+vim.lsp.config("boru", {
+  cmd = { "boru", "lsp" },
+  filetypes = { "boru" },
+  root_markers = { "boru.jsonic", ".git" },
 })
 
-vim.lsp.enable("aql")
+vim.lsp.enable("boru")
 
 -- ---------------------------------------------------------------------
 -- Option B: nvim-lspconfig (legacy / supported alternative).
@@ -33,15 +33,15 @@ vim.lsp.enable("aql")
 -- local lspconfig = require("lspconfig")
 -- local configs   = require("lspconfig.configs")
 --
--- if not configs.aql then
---   configs.aql = {
+-- if not configs.boru then
+--   configs.boru = {
 --     default_config = {
---       cmd       = { "aql", "lsp" },
---       filetypes = { "aql" },
---       root_dir  = lspconfig.util.root_pattern("aql.jsonic", ".git"),
+--       cmd       = { "boru", "lsp" },
+--       filetypes = { "boru" },
+--       root_dir  = lspconfig.util.root_pattern("boru.jsonic", ".git"),
 --       settings  = {},
 --     },
 --   }
 -- end
 --
--- lspconfig.aql.setup({})
+-- lspconfig.boru.setup({})

@@ -1,6 +1,6 @@
-// Public entry point for the TypeScript port of aqleng.
+// Public entry point for the TypeScript port of borueng.
 
-export { AqlError } from './error.ts'
+export { BoruError } from './error.ts'
 export { cap } from './capability.ts'
 export {
   CheckState,
@@ -63,7 +63,7 @@ export {
   signatureScore,
   sortSignatures,
 } from './signature.ts'
-export type { AqlType } from './type.ts'
+export type { BoruType } from './type.ts'
 export {
   TAbsent,
   TAny,

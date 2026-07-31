@@ -9,7 +9,7 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // testZipBytes builds a deflate archive (name→content), deterministically.

@@ -97,7 +97,7 @@ func TestW9MiniPartialFnWrapperNotFnDef(t *testing.T) {
 	}
 }
 
-// (The miniCompileExport / miniInvokeAQLCompile seams died with the AQL
+// (The miniCompileExport / miniInvokeBoruCompile seams died with the boru
 // compile-hook surface — hooks are Go-only builtin machinery now.)
 
 func TestW9MiniKindRegisteredNonModuleExport(t *testing.T) {

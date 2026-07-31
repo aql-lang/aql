@@ -3,16 +3,16 @@ package test
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 func asIntegerVal(v eng.Value) (int64, error) { return eng.AsInteger(v) }
 
 // stampEventsForNet is stampEventsFor with the module resolver installed,
-// for module bodies that import aql:net (the serve-raw storing shape).
+// for module bodies that import boru:net (the serve-raw storing shape).
 func stampEventsForNet(t *testing.T, src string) []eng.StampEvent {
 	t.Helper()
 	reg, err := native.DefaultRegistry()
@@ -47,7 +47,7 @@ func stampEventsForNet(t *testing.T, src string) []eng.StampEvent {
 func TestStampDynEnvLateArmDrift(t *testing.T) {
 	evs := stampEventsForNet(t, `
 module [
-  import "aql:net"
+  import "boru:net"
   def mk-store fn [[] [Any] [
     def store (service {objects: {}})
     add {op:"append"} ([req:Map state:Any] => [

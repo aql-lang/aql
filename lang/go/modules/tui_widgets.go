@@ -3,7 +3,7 @@ package modules
 import (
 	"unicode"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // The Tier-2 pure words of design/TUI.0.md §3: nine widget constructors
@@ -24,11 +24,11 @@ func buildWidget(kind string, fields []string, values []native.Value, opts nativ
 	if opts.Data != nil {
 		om, err := native.RequireConcreteMap(opts, word)
 		if err != nil {
-			return nil, r.AqlError("tui_error", word+": options must be a Map", word)
+			return nil, r.BoruError("tui_error", word+": options must be a Map", word)
 		}
 		for _, k := range om.Keys() {
 			if k == "w" {
-				return nil, r.AqlError("tui_error",
+				return nil, r.BoruError("tui_error",
 					word+": w is reserved (the constructor sets the widget kind)", word)
 			}
 			v, _ := om.Get(k)
@@ -50,7 +50,7 @@ func optsArg(args []native.Value, at int) native.Value {
 func tuiTextHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	s, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("tui_error", "text: expected a String", "text")
+		return nil, r.BoruError("tui_error", "text: expected a String", "text")
 	}
 	return buildWidget("text", []string{"text", "wrap"},
 		[]native.Value{native.NewString(s), native.NewString("truncate")},
@@ -59,7 +59,7 @@ func tuiTextHandler(args []native.Value, _ map[string]native.Value, _ []native.V
 
 func tuiRowsHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	if _, err := native.RequireConcreteList(args[0], "rows"); err != nil {
-		return nil, r.AqlError("tui_error", "rows: children must be a List", "rows")
+		return nil, r.BoruError("tui_error", "rows: children must be a List", "rows")
 	}
 	return buildWidget("rows", []string{"children", "gap"},
 		[]native.Value{args[0], native.NewInteger(0)},
@@ -68,7 +68,7 @@ func tuiRowsHandler(args []native.Value, _ map[string]native.Value, _ []native.V
 
 func tuiColsHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	if _, err := native.RequireConcreteList(args[0], "cols"); err != nil {
-		return nil, r.AqlError("tui_error", "cols: children must be a List", "cols")
+		return nil, r.BoruError("tui_error", "cols: children must be a List", "cols")
 	}
 	return buildWidget("cols", []string{"children", "gap"},
 		[]native.Value{args[0], native.NewInteger(0)},
@@ -77,7 +77,7 @@ func tuiColsHandler(args []native.Value, _ map[string]native.Value, _ []native.V
 
 func tuiBoxHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	if _, err := native.RequireConcreteMap(args[0], "box"); err != nil {
-		return nil, r.AqlError("tui_error", "box: child must be a widget Map", "box")
+		return nil, r.BoruError("tui_error", "box: child must be a widget Map", "box")
 	}
 	return buildWidget("box", []string{"child", "title", "border"},
 		[]native.Value{args[0], native.NewString(""), native.NewString("line")},
@@ -86,7 +86,7 @@ func tuiBoxHandler(args []native.Value, _ map[string]native.Value, _ []native.Va
 
 func tuiListViewHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	if _, err := native.RequireConcreteList(args[0], "list-view"); err != nil {
-		return nil, r.AqlError("tui_error", "list-view: items must be a List", "list-view")
+		return nil, r.BoruError("tui_error", "list-view: items must be a List", "list-view")
 	}
 	return buildWidget("list-view", []string{"items", "cursor"},
 		[]native.Value{args[0], native.NewInteger(0)},
@@ -95,10 +95,10 @@ func tuiListViewHandler(args []native.Value, _ map[string]native.Value, _ []nati
 
 func tuiTableHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	if _, err := native.RequireConcreteList(args[0], "table"); err != nil {
-		return nil, r.AqlError("tui_error", "table: columns must be a List", "table")
+		return nil, r.BoruError("tui_error", "table: columns must be a List", "table")
 	}
 	if _, err := native.RequireConcreteList(args[1], "table"); err != nil {
-		return nil, r.AqlError("tui_error", "table: rows must be a List", "table")
+		return nil, r.BoruError("tui_error", "table: rows must be a List", "table")
 	}
 	return buildWidget("table", []string{"columns", "rows", "cursor"},
 		[]native.Value{args[0], args[1], native.NewInteger(0)},
@@ -108,7 +108,7 @@ func tuiTableHandler(args []native.Value, _ map[string]native.Value, _ []native.
 func tuiInputHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	s, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("tui_error", "input: expected a String value", "input")
+		return nil, r.BoruError("tui_error", "input: expected a String value", "input")
 	}
 	return buildWidget("input", []string{"value", "cursor", "placeholder", "focus"},
 		[]native.Value{native.NewString(s), native.NewInteger(int64(len([]rune(s)))),
@@ -118,7 +118,7 @@ func tuiInputHandler(args []native.Value, _ map[string]native.Value, _ []native.
 
 func tuiViewportHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	if _, err := native.RequireConcreteMap(args[0], "viewport"); err != nil {
-		return nil, r.AqlError("tui_error", "viewport: child must be a widget Map", "viewport")
+		return nil, r.BoruError("tui_error", "viewport: child must be a widget Map", "viewport")
 	}
 	offset := native.NewList([]native.Value{native.NewInteger(0), native.NewInteger(0)})
 	return buildWidget("viewport", []string{"child", "offset"},
@@ -136,11 +136,11 @@ func tuiSpacerHandler(_ []native.Value, _ map[string]native.Value, _ []native.Va
 func tuiStyleHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	base, err := native.RequireConcreteMap(args[0], "style")
 	if err != nil {
-		return nil, r.AqlError("tui_error", "style: base must be a Map", "style")
+		return nil, r.BoruError("tui_error", "style: base must be a Map", "style")
 	}
 	over, err := native.RequireConcreteMap(args[1], "style")
 	if err != nil {
-		return nil, r.AqlError("tui_error", "style: overrides must be a Map", "style")
+		return nil, r.BoruError("tui_error", "style: overrides must be a Map", "style")
 	}
 	m := native.NewOrderedMap()
 	for _, k := range base.Keys() {
@@ -179,11 +179,11 @@ func isQuitMarker(v native.Value) (native.Value, bool) {
 func tuiEditHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	in, err := native.RequireConcreteMap(args[0], "edit")
 	if err != nil {
-		return nil, r.AqlError("tui_error", "edit: expected an input widget Map", "edit")
+		return nil, r.BoruError("tui_error", "edit: expected an input widget Map", "edit")
 	}
 	ev, err := native.RequireConcreteMap(args[1], "edit")
 	if err != nil {
-		return nil, r.AqlError("tui_error", "edit: expected a key event Map", "edit")
+		return nil, r.BoruError("tui_error", "edit: expected a key event Map", "edit")
 	}
 	value := ""
 	if v, ok := in.Get("value"); ok {
@@ -278,7 +278,7 @@ func printableChar(s string) bool {
 
 func tuiFocusableHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	if _, err := native.RequireConcreteMap(args[0], "focusable"); err != nil {
-		return nil, r.AqlError("tui_error", "focusable: expected a widget tree Map", "focusable")
+		return nil, r.BoruError("tui_error", "focusable: expected a widget tree Map", "focusable")
 	}
 	var ids []native.Value
 	collectFocusable(args[0], &ids)

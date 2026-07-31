@@ -2,7 +2,7 @@ package lang
 
 import "testing"
 
-// Stage-2 property-test pins (voxgig zero-refusals plan): the aql:test
+// Stage-2 property-test pins (voxgig zero-refusals plan): the boru:test
 // PROPERTY surface — `Test.prop NAME [gen] [property]` builds a PropertySpec as
 // DATA, and `Test.run-property` dispatches the Go driver `Test.check-prop`.
 // Every `_prop_spec` corpus file refused at `code-body word each (Stage 2)`,
@@ -13,7 +13,7 @@ import "testing"
 //      bodies arrive DYNAMIC on the declarative surface (`p get "gen"` /
 //      `p get "property"` inside run-property). The NoEvalArgs code-body refusal
 //      fires because a dynamic body is not an inert const. BUT runCheckProp runs
-//      BOTH bodies through parent.CallAQL in fresh ISOLATED frames against the
+//      BOTH bodies through parent.CallBoru in fresh ISOLATED frames against the
 //      module-captured registry — the SAME Go handler under interpreter and VM,
 //      binding only each body's own params (gen: `r`; property: one unnamed).
 //      Name resolution inside a body never touches a compiled frame local, so a
@@ -38,10 +38,10 @@ import "testing"
 // The declarative surface end to end: Test.prop builds a spec, `specs each`
 // runs it via Test.run-property (the exact corpus shape). The gen body uses the
 // seeded rand instance (`r.int`) — which is NEVER compiled: it runs inside
-// runCheckProp's CallAQL, so the dot-method dispatch is an interpreter concern,
+// runCheckProp's CallBoru, so the dot-method dispatch is an interpreter concern,
 // not a compile leaf. Must force-compile clean AND match the interpreter.
 func TestPropSpecDeclarativeSurfaceCompiles(t *testing.T) {
-	stage1aCompiles(t, `import "aql:test" end
+	stage1aCompiles(t, `import "boru:test" end
 def specs [
   (Test.prop "ge1" [ (r.int 1 6) ] [ var [[x] (x gte 1) ] ])
 ]
@@ -53,7 +53,7 @@ Test.fail-count end`)
 // seeded PRNG: the per-spec/per-iteration fail bookkeeping must be identical on
 // both surfaces (fail-count 0 across all).
 func TestPropSpecMultiSpecParity(t *testing.T) {
-	stage1aCompiles(t, `import "aql:test" end
+	stage1aCompiles(t, `import "boru:test" end
 def specs [
   (Test.prop "ge1"  [ (r.int 1 6) ]           [ var [[x] (x gte 1) ] ])
   (Test.prop "str"  [ r.string "abc" 4 ]      [ var [[s] ((s size) lte 4) ] ])
@@ -68,7 +68,7 @@ Test.fail-count end`)
 // path the corpus files exercise). Uses a low, deterministic seed so the first
 // failing iteration replays identically.
 func TestPropSpecFailingPropertyParity(t *testing.T) {
-	stage1aCompiles(t, `import "aql:test" end
+	stage1aCompiles(t, `import "boru:test" end
 def specs [
   (Test.prop "always-fails" [ (r.int 1 6) ] [ var [[x] (x gt 100) ] ])
 ]
@@ -86,7 +86,7 @@ Test.fail-count end`)
 // explicit run/seed/shrink counts. The bodies are inert consts here, so this
 // path already bakes — pinned to guard it against the new dynamic-body handling.
 func TestCheckPropImperativeLiteralCompiles(t *testing.T) {
-	stage1aCompiles(t, `import "aql:test" end
+	stage1aCompiles(t, `import "boru:test" end
 def res (Test.check-prop "ge0" [ (r.int 0 9) ] [ var [[x] (x gte 0) ] ] 20 1 0)
 (res "ok" get)`)
 }
@@ -98,7 +98,7 @@ def res (Test.check-prop "ge0" [ (r.int 0 9) ] [ var [[x] (x gte 0) ] ] 20 1 0)
 // defends), so the program falls back — and must stay result-identical on both
 // surfaces (no miscompile from the exemption over-broadening).
 func TestCheckPropBareAnyBodiesStaySound(t *testing.T) {
-	stage1aSound(t, `import "aql:test" end
+	stage1aSound(t, `import "boru:test" end
 def wrap fn [[g:Any pr:Any] [Map] [ Test.check-prop "n" g pr 5 1 0 ]]
 def res (wrap [ (r.int 1 3) ] [ var [[x] (x gte 1) ] ])
 (res "ok" get)`)

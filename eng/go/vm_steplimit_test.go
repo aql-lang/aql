@@ -36,7 +36,7 @@ func TestVMStepLimitExplicitError(t *testing.T) {
 	if err == nil {
 		t.Fatal("endless tail spin returned nil error, want evaluation_limit")
 	}
-	var ae *AqlError
+	var ae *BoruError
 	if !errors.As(err, &ae) || ae.Code != "evaluation_limit" {
 		t.Fatalf("error = %v, want code evaluation_limit", err)
 	}

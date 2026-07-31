@@ -10,10 +10,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
 )
 
-// runExec implements `aql vault exec`. It resolves the listed
+// runExec implements `boru vault exec`. It resolves the listed
 // aliases against the keyring, injects their values into the
 // environment of a child process, then execs the child with the
 // caller's stdio attached. Secrets only ever appear in the child's
@@ -22,7 +22,7 @@ import (
 //
 // Usage:
 //
-//	aql vault exec [flags] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]
+//	boru vault exec [flags] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]
 //
 // By default an alias maps to an env var of the same name. Use
 // `alias=ENV_NAME` to remap, `--upper` to uppercase the derived
@@ -34,18 +34,18 @@ import (
 // carry several tools' credentials — e.g. publish to npm and push a
 // git tag to GitHub from the same `make publish`:
 //
-//	aql vault exec --for=npm=npm --for=github=vxg:github -- make publish
+//	boru vault exec --for=npm=npm --for=github=vxg:github -- make publish
 //
 // `--ask=ENV_NAME` prompts on the terminal (echo suppressed) and injects
 // the typed value as ENV_NAME in the child — for a secret that is not in
 // the vault. It needs no vault at all, and the value never touches disk,
 // argv, or the audit log. `--ask-passphrase` prompts once for the vault
 // passphrase, validates it against the store, and injects it as
-// AQL_VAULT_PASSPHRASE so nested `aql vault` calls in the child run
+// BORU_VAULT_PASSPHRASE so nested `boru vault` calls in the child run
 // without re-prompting — one prompt for a whole multi-target deploy:
 //
-//	aql vault exec --ask GITHUB_TOKEN -- make tag-push-ts
-//	aql vault exec --ask-passphrase -- make deploy-ts deploy-py deploy-go
+//	boru vault exec --ask GITHUB_TOKEN -- make tag-push-ts
+//	boru vault exec --ask-passphrase -- make deploy-ts deploy-py deploy-go
 func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Split the args at the first `--` separator: everything before
 	// is parsed by our flag set; everything after is the child
@@ -64,7 +64,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	dryRun := fs.Bool("dry-run", false, "inject a filler value instead of the real secret (no passphrase needed); for testing the plumbing, e.g. `npm publish --dry-run`")
 	var askVars repeatedFlag
 	fs.Var(&askVars, "ask", "prompt for a value on the terminal (echo suppressed) and inject it as this env var: `ENV_NAME`; repeatable. For secrets that are not in the vault — no vault needed")
-	askPass := fs.Bool("ask-passphrase", false, "prompt once for the vault passphrase, validate it, and inject it as AQL_VAULT_PASSPHRASE so nested `aql vault` calls in the child run without re-prompting")
+	askPass := fs.Bool("ask-passphrase", false, "prompt once for the vault passphrase, validate it, and inject it as BORU_VAULT_PASSPHRASE so nested `boru vault` calls in the child run without re-prompting")
 	if err := fs.Parse(preArgs); err != nil {
 		return 1
 	}
@@ -75,7 +75,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	forMode := len(forRecipes) > 0
 	askMode := len(askVars) > 0 || *askPass
 	if fs.NArg() < 1 && !forMode && !askMode {
-		fmt.Fprintln(stderr, "error: usage: aql vault exec [--upper] [--prefix=PFX] [--clear-env] [--dry-run] [--for=RECIPE[=alias] ...] [--registry=HOST] [--ask=ENV_NAME ...] [--ask-passphrase] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]")
+		fmt.Fprintln(stderr, "error: usage: boru vault exec [--upper] [--prefix=PFX] [--clear-env] [--dry-run] [--for=RECIPE[=alias] ...] [--registry=HOST] [--ask=ENV_NAME ...] [--ask-passphrase] <alias[=ENV][,alias[=ENV]]...> -- <cmd> [args...]")
 		return 1
 	}
 	if !sawSep || len(cmdArgs) == 0 {
@@ -116,7 +116,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	var vaultPass string
 	if !*dryRun && s != nil {
 		if s.Locked {
-			fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+			fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 			return 1
 		}
 		var err error
@@ -298,7 +298,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	}
 
 	// --ask-passphrase: hand the passphrase (already validated above) to
-	// the child so nested `aql vault` calls authenticate without prompting.
+	// the child so nested `boru vault` calls authenticate without prompting.
 	if *askPass {
 		if _, dup := overrides[EnvPassphrase]; dup {
 			fmt.Fprintf(stderr, "error: --ask-passphrase collides with an injected $%s\n", EnvPassphrase)
@@ -338,7 +338,7 @@ func runExec(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 // It also decides *where* to prompt. The child inherits our stdin
 // (child.Stdin == stdin), so when that stdin is a redirected file or pipe,
 // reading a prompt from it would steal a line meant for the child — e.g.
-// `aql vault exec --ask TOKEN -- cat < payload` would swallow payload's
+// `boru vault exec --ask TOKEN -- cat < payload` would swallow payload's
 // first line. In that case we prompt on the controlling terminal instead,
 // and fail if there is none. A terminal stdin, or any non-file reader
 // (tests, programmatic callers), is prompted on directly.
@@ -384,7 +384,7 @@ func openPromptReader(stdin io.Reader) (*auth.InputReader, func(), error) {
 	return auth.NewInputReader(stdin), func() {}, nil
 }
 
-// readPassphraseVia sources the vault passphrase from AQL_VAULT_PASSPHRASE
+// readPassphraseVia sources the vault passphrase from BORU_VAULT_PASSPHRASE
 // or, failing that, an interactive prompt on the shared reader. It mirrors
 // readPassphrase but reuses the exec's prompt source so a following --ask
 // prompt is not stranded by the passphrase read's buffering.
@@ -409,7 +409,7 @@ func readPassphraseVia(p *promptSource, w io.Writer, prompt string) (string, err
 // dryRunFiller is the placeholder injected for every alias in --dry-run
 // mode. It is deliberately not a real secret and is shaped to be obviously
 // fake if it ever surfaces in a publisher's output or a captured log.
-const dryRunFiller = "AQL-DRY-RUN-FILLER-NOT-A-REAL-SECRET"
+const dryRunFiller = "BORU-DRY-RUN-FILLER-NOT-A-REAL-SECRET"
 
 // resolveSecret returns the value to inject for an alias: the fixed filler
 // in --dry-run mode (no session, no keyring access), otherwise the real

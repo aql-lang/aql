@@ -16,7 +16,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/prep"
+	"github.com/boru-lang/boru/cmd/go/internal/prep"
 )
 
 // zipBytes builds an in-memory zip from name→content pairs. A name
@@ -61,10 +61,10 @@ func serveBody(t *testing.T, body []byte) string {
 func setupModuleDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte("name: host\nmajor: 0\nminor: 1\npatch: 0\nfiles: [index.aql]\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte("name: host\nmajor: 0\nminor: 1\npatch: 0\nfiles: [index.boru]\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, "index.aql"), []byte("1 add 2"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "index.boru"), []byte("1 add 2"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	orig, err := os.Getwd()
@@ -147,14 +147,14 @@ func TestW4InstallDirEntriesAndNestedFiles(t *testing.T) {
 	url := serveBody(t, zipBytes(t, map[string]string{
 		"docs/":          "",
 		"docs/notes.txt": "hi",
-		"aql.jsonic":     "name: mod\n",
+		"boru.jsonic":    "name: mod\n",
 	}))
 	var out, errOut bytes.Buffer
 	code := Run([]string{"-r", url, "mod-0.1.0"}, &out, &errOut)
 	if code != 0 {
 		t.Fatalf("Run = %d, want 0; stderr: %s", code, errOut.String())
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".aql", "mod", "docs", "notes.txt")); err != nil {
+	if _, err := os.Stat(filepath.Join(dir, ".boru", "mod", "docs", "notes.txt")); err != nil {
 		t.Errorf("nested file missing: %s", err)
 	}
 	if !strings.Contains(out.String(), "installed mod@0.1.0") {
@@ -164,8 +164,8 @@ func TestW4InstallDirEntriesAndNestedFiles(t *testing.T) {
 
 func TestW4InstallDestDirBlocked(t *testing.T) {
 	dir := setupModuleDir(t)
-	// .aql/mod exists as a FILE, so MkdirAll(destDir) fails.
-	if err := os.WriteFile(filepath.Join(dir, ".aql", "mod"), []byte("x"), 0644); err != nil {
+	// .boru/mod exists as a FILE, so MkdirAll(destDir) fails.
+	if err := os.WriteFile(filepath.Join(dir, ".boru", "mod"), []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	url := serveBody(t, zipBytes(t, map[string]string{"a.txt": "x"}))
@@ -179,7 +179,7 @@ func TestW4InstallDestDirBlocked(t *testing.T) {
 func TestW4InstallWriteFileBlocked(t *testing.T) {
 	dir := setupModuleDir(t)
 	// destDir/a.txt pre-exists as a DIRECTORY, so WriteFile fails.
-	if err := os.MkdirAll(filepath.Join(dir, ".aql", "mod", "a.txt"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".boru", "mod", "a.txt"), 0755); err != nil {
 		t.Fatal(err)
 	}
 	url := serveBody(t, zipBytes(t, map[string]string{"a.txt": "x"}))
@@ -192,8 +192,8 @@ func TestW4InstallWriteFileBlocked(t *testing.T) {
 
 func TestW4InstallUpdateDepsFails(t *testing.T) {
 	dir := setupModuleDir(t)
-	// Remove aql.jsonic after prep so updateDeps cannot read it.
-	if err := os.Remove(filepath.Join(dir, "aql.jsonic")); err != nil {
+	// Remove boru.jsonic after prep so updateDeps cannot read it.
+	if err := os.Remove(filepath.Join(dir, "boru.jsonic")); err != nil {
 		t.Fatal(err)
 	}
 	url := serveBody(t, zipBytes(t, map[string]string{"a.txt": "x"}))
@@ -202,16 +202,16 @@ func TestW4InstallUpdateDepsFails(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("Run = %d, want 1; stderr: %s", code, errOut.String())
 	}
-	if !strings.Contains(errOut.String(), "updating aql.jsonic") {
+	if !strings.Contains(errOut.String(), "updating boru.jsonic") {
 		t.Errorf("stderr = %q, want updateDeps error", errOut.String())
 	}
 }
 
 func TestW4InstallPrepFails(t *testing.T) {
 	dir := setupModuleDir(t)
-	// Corrupt aql.jsonic so the re-prep after install fails, while
+	// Corrupt boru.jsonic so the re-prep after install fails, while
 	// updateDeps (a plain text rewrite) still succeeds.
-	if err := os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte("[1 2 3]\n"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte("[1 2 3]\n"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	url := serveBody(t, zipBytes(t, map[string]string{"a.txt": "x"}))
@@ -266,11 +266,11 @@ func TestW4InstallDownloadTooLarge(t *testing.T) {
 
 func TestW4InstallDirEntryBlocked(t *testing.T) {
 	dir := setupModuleDir(t)
-	// .aql/mod/docs pre-exists as a FILE, so the dir entry's MkdirAll fails.
-	if err := os.MkdirAll(filepath.Join(dir, ".aql", "mod"), 0755); err != nil {
+	// .boru/mod/docs pre-exists as a FILE, so the dir entry's MkdirAll fails.
+	if err := os.MkdirAll(filepath.Join(dir, ".boru", "mod"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".aql", "mod", "docs"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".boru", "mod", "docs"), []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	url := serveBody(t, zipBytes(t, map[string]string{"docs/": ""}))
@@ -282,12 +282,12 @@ func TestW4InstallDirEntryBlocked(t *testing.T) {
 
 func TestW4InstallParentDirBlocked(t *testing.T) {
 	dir := setupModuleDir(t)
-	// .aql/mod/sub pre-exists as a FILE, so the file entry's parent
+	// .boru/mod/sub pre-exists as a FILE, so the file entry's parent
 	// MkdirAll fails.
-	if err := os.MkdirAll(filepath.Join(dir, ".aql", "mod"), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".boru", "mod"), 0755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.WriteFile(filepath.Join(dir, ".aql", "mod", "sub"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, ".boru", "mod", "sub"), []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	url := serveBody(t, zipBytes(t, map[string]string{"sub/a.txt": "x"}))
@@ -403,12 +403,12 @@ func TestW4InstallEntryTooLarge(t *testing.T) {
 
 // --- updateDeps rewrite branches -------------------------------------------
 
-// withJsonic writes content to aql.jsonic in a fresh cwd and returns a
+// withJsonic writes content to boru.jsonic in a fresh cwd and returns a
 // reader for the rewritten file.
 func withJsonic(t *testing.T, content string) func() string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.WriteFile(filepath.Join(dir, "aql.jsonic"), []byte(content), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "boru.jsonic"), []byte(content), 0644); err != nil {
 		t.Fatal(err)
 	}
 	orig, err := os.Getwd()
@@ -420,7 +420,7 @@ func withJsonic(t *testing.T, content string) func() string {
 	}
 	t.Cleanup(func() { os.Chdir(orig) })
 	return func() string {
-		data, err := os.ReadFile(filepath.Join(dir, "aql.jsonic"))
+		data, err := os.ReadFile(filepath.Join(dir, "boru.jsonic"))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -513,6 +513,6 @@ func TestW4UpdateDepsMissingFile(t *testing.T) {
 	}
 	defer os.Chdir(orig)
 	if err := updateDeps("color", "0.1.0"); err == nil {
-		t.Error("updateDeps without aql.jsonic succeeded, want error")
+		t.Error("updateDeps without boru.jsonic succeeded, want error")
 	}
 }

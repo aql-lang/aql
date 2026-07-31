@@ -11,13 +11,13 @@ import (
 
 	"github.com/chzyer/readline"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/modules"
+	"github.com/boru-lang/boru/eng/go/parser"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/modules"
 
-	"github.com/aql-lang/aql/cmd/go/internal/termback"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/cmd/go/internal/termback"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 
 	udk "github.com/voxgig/udk/go"
 )
@@ -35,11 +35,11 @@ var newRegistry = func() (*native.Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	// Wire the native-module resolver so `import "aql:<name>"` works at the
+	// Wire the native-module resolver so `import "boru:<name>"` works at the
 	// prompt (and so `describe` can load and document modules) — the same
 	// wiring lang.New does for one-shot runs.
 	modules.InstallResolver(reg)
-	// The real-TTY tuikit backend, so aql:tui words reach the terminal
+	// The real-TTY tuikit backend, so boru:tui words reach the terminal
 	// from the prompt too (a duplicate registration is the only failure
 	// and means the backend is already there).
 	_ = modules.RegisterHostTui(reg, termback.Spec())
@@ -103,16 +103,16 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 
 	registry.Output = out
 
-	// One *AQL per session over the persistent registry: each line runs
+	// One *Boru per session over the persistent registry: each line runs
 	// COMPILED-BY-DEFAULT (RunAutoValues — the same CompileTry semantics as
-	// `aql run`), with the interpreter as the sound fallback for refused
+	// `boru run`), with the interpreter as the sound fallback for refused
 	// lines. Check-pass def/import effects persist across lines on the
 	// compiled path by SnapshotForCompile's keep-on-compile contract;
 	// fallback lines interpret against the same registry, so state
 	// persistence is unchanged either way (plan Phase 2).
-	aqlInst, aqlErr := langNewFromRegistry(registry)
-	if aqlErr != nil {
-		fmt.Fprintf(out, "init error: %s\n", aqlErr)
+	boruInst, boruErr := langNewFromRegistry(registry)
+	if boruErr != nil {
+		fmt.Fprintf(out, "init error: %s\n", boruErr)
 		return
 	}
 
@@ -121,7 +121,7 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 	// Diagnostics render with the ANSI palette when out is a real
 	// terminal (NO_COLOR honored); the plain rendering is byte-identical
 	// to the historical output.
-	color := native.ResolveColor(aqlInst.NativeRegistry(), out, "auto")
+	color := native.ResolveColor(boruInst.NativeRegistry(), out, "auto")
 	renderErr := func(err error) string {
 		return renderREPLError(err, color)
 	}
@@ -170,18 +170,18 @@ func startWithPauseGate(in io.Reader, out io.Writer, registryPath string, paused
 			continue
 		}
 
-		result, _, _, err := aqlInst.RunAutoValues(line)
+		result, _, _, err := boruInst.RunAutoValues(line)
 		// Post-Stage-J a whole-line refusal returns compile_refused instead
 		// of the library silently re-running; this surface performs the
-		// fallback itself (the same CompileTry semantics as `aql run`) —
+		// fallback itself (the same CompileTry semantics as `boru run`) —
 		// silently, matching the REPL's historical UX: an interactive line's
 		// performance debt is not worth a per-line warning. Stamping stays
 		// armed across the fallback so callbacks stored by a refused line
 		// keep the VM path for later lines (the compiled mode's contract).
-		var refused *lang.AqlError
+		var refused *lang.BoruError
 		if errors.As(err, &refused) && refused.Code == "compile_refused" {
-			disarm := aqlInst.ArmRuntimeStamping()
-			result, err = aqlInst.RunInterpValues(line)
+			disarm := boruInst.ArmRuntimeStamping()
+			result, err = boruInst.RunInterpValues(line)
 			disarm()
 		}
 		if err != nil {
@@ -230,7 +230,7 @@ func historyFile() string {
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".aql_history")
+	return filepath.Join(home, ".boru_history")
 }
 
 // toReadCloser wraps an io.Reader in an io.ReadCloser if needed.
@@ -241,12 +241,12 @@ func toReadCloser(r io.Reader) io.ReadCloser {
 	return io.NopCloser(r)
 }
 
-// renderREPLError formats an error for the REPL: a structured AqlError
+// renderREPLError formats an error for the REPL: a structured BoruError
 // re-renders through the diagnostic renderer with the ANSI palette when
 // color is on; everything else (and the color-off path) keeps the plain
 // Error() text.
 func renderREPLError(err error, color bool) string {
-	var ae *native.AqlError
+	var ae *native.BoruError
 	if color && errors.As(err, &ae) {
 		return ae.Render(native.RenderOpts{Color: true})
 	}

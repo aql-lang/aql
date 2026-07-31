@@ -5,7 +5,7 @@ import (
 	"sort"
 	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // The "await" word lives in miscNatives (native_misc.go). Below
@@ -101,12 +101,12 @@ func sharedMutableKind(v Value) string {
 }
 
 // branchTokens returns a branch element's body tokens for either shape:
-// the raw token list (interpreted) or the AQLImpl body carried by a
+// the raw token list (interpreted) or the BoruImpl body carried by a
 // compiled fn-value (the shape runParallelBranch unwraps via RunUnit).
 func branchTokens(elem Value) []Value {
 	if fd, ok := elem.Data.(eng.FnDefInfo); ok {
 		for i := range fd.Signatures {
-			if a, isAQL := fd.Signatures[i].Impl.(*eng.AQLImpl); isAQL {
+			if a, isBoru := fd.Signatures[i].Impl.(*eng.BoruImpl); isBoru {
 				return a.Body
 			}
 		}
@@ -184,7 +184,7 @@ func branchSharingViolation(r *Registry, elems []Value) (string, string) {
 	// A branch body arrives in one of two shapes, and checking only the
 	// obvious one is how this check first shipped inert: interpreted, the
 	// element IS the token list; COMPILED, it is a synthetic fn-value
-	// carrier holding the tokens in its AQLImpl body (the
+	// carrier holding the tokens in its BoruImpl body (the
 	// CompileStoresBodyList spawn pattern runParallelBranch unwraps). Miss
 	// the second and the boundary is unguarded on the default path — the
 	// only path most programs take.
@@ -234,7 +234,7 @@ func branchSharingViolation(r *Registry, elems []Value) (string, string) {
 					}
 				}
 				for i := range fd.Signatures {
-					if a, isAQL := fd.Signatures[i].Impl.(*eng.AQLImpl); isAQL {
+					if a, isBoru := fd.Signatures[i].Impl.(*eng.BoruImpl); isBoru {
 						work = append(work, a.Body)
 					}
 				}
@@ -293,7 +293,7 @@ func branchSharingViolation(r *Registry, elems []Value) (string, string) {
 // scope.
 func makeBranchForks(r *Registry, elems []Value) ([]*Registry, error) {
 	if name, kind := branchSharingViolation(r, elems); name != "" {
-		return nil, r.AqlErrorHint("not_sendable",
+		return nil, r.BoruErrorHint("not_sendable",
 			fmt.Sprintf("await: branch reaches `%s`, a mutable %s — a stateful "+
 				"container cannot be shared across concurrent branches", name, kind),
 			"await",
@@ -331,7 +331,7 @@ func runParallelBranch(reg *Registry, elem Value) parallelResult {
 				// A VM soundness bail with NO observable effect: re-run the raw
 				// tokens on the interpreter, exactly as the branch would have run
 				// without the stamp (the C1 fence — see InvokeCallback).
-				if a, isAQL := fd.Signatures[i].Impl.(*eng.AQLImpl); isAQL {
+				if a, isBoru := fd.Signatures[i].Impl.(*eng.BoruImpl); isBoru {
 					return interpretBranchBody(reg, a.Body)
 				}
 			}

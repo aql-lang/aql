@@ -18,7 +18,7 @@ import "fmt"
 // path through Unify consults it.
 //
 // Holds a *Registry because RunPredicate needs to invoke the body
-// through CallAQL — a registry-rooted operation. One Unifier per
+// through CallBoru — a registry-rooted operation. One Unifier per
 // (predicate type, registry); fresh registries get fresh Unifiers
 // installed by InstallType at type-declaration time.
 type predicateUnifier struct {

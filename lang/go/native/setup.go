@@ -3,12 +3,12 @@ package native
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // DefaultRegistry returns a registry populated with every built-in
-// AQL word, plus any additional provider functions passed in. Each
+// boru word, plus any additional provider functions passed in. Each
 // provider is a function that registers extra words.
 //
 // Post engine→native consolidation (May 2026) there is a single
@@ -18,7 +18,7 @@ import (
 //
 // This is the entry point that wires the host-side capabilities
 // (FileOps, format registry, SQLite store) onto the bare
-// eng.Registry returned by eng.NewRegistry. aqleng itself knows
+// eng.Registry returned by eng.NewRegistry. borueng itself knows
 // nothing about these — it just stores them in opaque capability slots
 // for the host's word handlers to retrieve.
 //

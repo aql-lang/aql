@@ -28,13 +28,13 @@ func TestCovAccumAddRows(t *testing.T) {
 
 func TestRenderModuleHTML(t *testing.T) {
 	// row 1 covered, row 3 uncovered, row 2 non-executable; row 1 has a `<`.
-	got := renderModuleHTML("m.aql", "a<b\nplain\nc", []int{1}, []int{3})
+	got := renderModuleHTML("m.boru", "a<b\nplain\nc", []int{1}, []int{3})
 	for _, want := range []string{
 		`class="line covered"`,   // row 1
 		`class="line uncovered"`, // row 3
 		`class="line"`,           // row 2 (non-executable)
 		"a&lt;b",                 // HTML-escaped source
-		"m.aql",                  // header names the module
+		"m.boru",                 // header names the module
 	} {
 		if !strings.Contains(got, want) {
 			t.Errorf("module page missing %q in:\n%s", want, got)
@@ -43,8 +43,8 @@ func TestRenderModuleHTML(t *testing.T) {
 }
 
 func TestRenderIndexHTML(t *testing.T) {
-	got := renderIndexHTML([]indexRow{{id: "m.aql", page: "mod0.html", covered: 3, total: 4}})
-	for _, want := range []string{`href="mod0.html"`, "m.aql", "75.0%", "3 / 4"} {
+	got := renderIndexHTML([]indexRow{{id: "m.boru", page: "mod0.html", covered: 3, total: 4}})
+	for _, want := range []string{`href="mod0.html"`, "m.boru", "75.0%", "3 / 4"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("index missing %q in:\n%s", want, got)
 		}
@@ -55,7 +55,7 @@ func TestRenderIndexHTML(t *testing.T) {
 // module, for the writeHTML tests.
 func oneModuleAccum() *covAccum {
 	a := newCovAccum()
-	a.add("m.aql", "a\nb\nc", []int{1}, []int{3})
+	a.add("m.boru", "a\nb\nc", []int{1}, []int{3})
 	return a
 }
 
@@ -124,10 +124,10 @@ func TestRunCoverageWriteWarning(t *testing.T) {
 	mkdirAll = func(string, os.FileMode) error { return errors.New("mkdir boom") }
 
 	dir := t.TempDir()
-	mod := write(t, filepath.Join(dir, "calc.aql"),
+	mod := write(t, filepath.Join(dir, "calc.boru"),
 		"def one fn [[] [Integer] [1]]\nexport \"Calc\" { one: one/r }\n")
-	f := write(t, filepath.Join(dir, "calc_test.aql"),
-		"import \"aql:test\"\nimport \""+mod+"\"\nTest.test \"one\" [(Calc.one) 1 Assert.equal]\n")
+	f := write(t, filepath.Join(dir, "calc_test.boru"),
+		"import \"boru:test\"\nimport \""+mod+"\"\nTest.test \"one\" [(Calc.one) 1 Assert.equal]\n")
 	code, _, stderr := runCmd("--coverage", "--coverage-dir", filepath.Join(dir, "cov"), "--no-compile", f)
 	if code != 0 {
 		t.Errorf("code = %d, want 0 (a report-write failure must not fail the run)", code)

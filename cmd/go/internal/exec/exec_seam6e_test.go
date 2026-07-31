@@ -13,9 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 func TestRunNewServerError(t *testing.T) {
@@ -35,7 +35,7 @@ func TestRunNewServerError(t *testing.T) {
 
 func TestHandlerInitError(t *testing.T) {
 	orig := langNew
-	langNew = func(...lang.Options) (*lang.AQL, error) { return nil, errors.New("init boom") }
+	langNew = func(...lang.Options) (*lang.Boru, error) { return nil, errors.New("init boom") }
 	t.Cleanup(func() { langNew = orig })
 	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()

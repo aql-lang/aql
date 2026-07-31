@@ -3,24 +3,24 @@ requires = ["setuptools>=61.0"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "aql-pygments-lexer"
+name = "boru-pygments-lexer"
 version = "0.1.0"
-description = "Pygments lexer for AQL, a concatenative, strongly-typed query language."
+description = "Pygments lexer for boru, a concatenative, strongly-typed query language."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
-authors = [{ name = "AQL contributors" }]
-keywords = ["pygments", "lexer", "aql", "syntax highlighting"]
+authors = [{ name = "boru contributors" }]
+keywords = ["pygments", "lexer", "boru", "syntax highlighting"]
 dependencies = ["Pygments>=2.0"]
 
 [project.urls]
-Homepage = "https://github.com/aql-lang/aql"
-Source = "https://github.com/aql-lang/aql/tree/main/editors/pygments"
+Homepage = "https://github.com/boru-lang/boru"
+Source = "https://github.com/boru-lang/boru/tree/main/editors/pygments"
 
 # The entry point Pygments (and Chroma's bridge, and mkdocs/Sphinx) discover:
-# `pygmentize -l aql` works once this package is installed.
+# `pygmentize -l boru` works once this package is installed.
 [project.entry-points."pygments.lexers"]
-aql = "aql_lexer:AqlLexer"
+boru = "boru_lexer:BoruLexer"
 
 [tool.setuptools]
-py-modules = ["aql_lexer"]
+py-modules = ["boru_lexer"]

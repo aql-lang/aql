@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
-// This suite stresses the AQL signature matcher with USER functions
+// This suite stresses the boru signature matcher with USER functions
 // (`def f fn [...]`) carrying pathological argument signatures, focusing on
 // the structure-first, lazy forward-argument resolution
 // (design/LAZY-ARG-RESOLUTION.10.md). It complements lazy_arg_test.go (which

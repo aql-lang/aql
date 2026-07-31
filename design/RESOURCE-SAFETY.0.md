@@ -1,22 +1,22 @@
 # RESOURCE-SAFETY
 
-Design for **guaranteed-cleanup resource safety** in AQL — the `ensure` and
+Design for **guaranteed-cleanup resource safety** in boru — the `ensure` and
 `bracket` core words.
 
 ## Context
 
 This is the implementation-ready expansion of idea #2 from
-`design/effect-oriented-programming-in-aql-report.0.md` ("Resource safety:
+`design/effect-oriented-programming-in-boru-report.0.md` ("Resource safety:
 `ensure` / `bracket` / `scoped`"), which ranked it the clearest concrete gap an
-effect-oriented lens exposes in AQL — and the one place where both EOP lineages
+effect-oriented lens exposes in boru — and the one place where both EOP lineages
 converge on the same primitive (ZIO's `acquireRelease`/`scoped`/`ensuring`, and the
 algebraic-effects `finally` clause).
 
-AQL today reifies a failure as a value (`do […] error […]`, `raise`,
+boru today reifies a failure as a value (`do […] error […]`, `raise`,
 `design/ERRORS.8.md`) but has **no construct that guarantees a finalizer runs**. A
 cleanup step written after a body simply does not execute when the body raises:
 
-```aql
+```boru
 def h (open-something)
 risky-thing-that-might-raise h     # raises → the next line never runs
 h close                            # LEAKED
@@ -34,12 +34,12 @@ subsystems were designed first (`PROCESSES.0.md`, `SERVICES.0.md`,
 
 ### Honest framing: what actually needs cleanup today
 
-A resource-inventory pass found that AQL currently exposes **very few leakable
+A resource-inventory pass found that boru currently exposes **very few leakable
 native handles**:
 
-| Resource | AQL-visible handle? | Released today by |
+| Resource | boru-visible handle? | Released today by |
 | --- | --- | --- |
-| `timeout` / `interval` timers | **Yes** — `Ideal/Timeout`, `Ideal/Interval` | explicit `cancel` (`aql:time-util`) |
+| `timeout` / `interval` timers | **Yes** — `Ideal/Timeout`, `Ideal/Interval` | explicit `cancel` (`boru:time-util`) |
 | File I/O (`read`/`write`) | No | implicit — opened-read-closed inside the handler |
 | HTTP (`fetch`) | No | implicit — `defer resp.Body.Close()` inside the handler |
 | SQLite | No | implicit — host-side `*SQLiteStore.Close()`, `defer stmt.Close()` |
@@ -53,7 +53,7 @@ file/socket handles, the actor-per-connection sockets and process lifecycles of
 `PROCESSES.0.md` phase 3, and any future `open`/`close` or transaction API. Building
 the control structure now, before those handles exist, means they can ship *with*
 their safety story rather than retrofitting one. This RFC states that scope honestly
-rather than implying AQL is leaking handles today.
+rather than implying boru is leaking handles today.
 
 ### Relationship to `ERRORS.8.md`
 
@@ -65,7 +65,7 @@ and catch. No new control-flow primitive is introduced; the only new behaviour i
 
 ### Relationship to the effect report (idea #1)
 
-If static effect inference (`effect-oriented-programming-in-aql-report.0.md` #1)
+If static effect inference (`effect-oriented-programming-in-boru-report.0.md` #1)
 lands, `bracket`/`ensure` are effect-transparent wrappers: the effect set of
 `bracket [acq] [use] [rel]` is the union of the effect sets of its three bodies. They
 add control structure, not effects, so they need no capability of their own (§7).
@@ -97,7 +97,7 @@ add control structure, not effects, so they need no capability of their own (§7
 
 The target is the universal acquire-use-release shape, with cleanup guaranteed:
 
-```aql
+```boru
 # ensure: cleanup always runs, body's outcome is preserved
 ensure [
   start-transaction
@@ -113,10 +113,10 @@ bracket
   [ release-it ]               # runs with the resource on its stack, ALWAYS
 ```
 
-Without this, every effectful AQL program that holds transient state has to
+Without this, every effectful boru program that holds transient state has to
 hand-duplicate its cleanup into a success path and one or more failure handlers — and
 the `break`/`continue` escape path (which is *not* an error and so is invisible to
-`error`) cannot be covered at all from AQL today.
+`error`) cannot be covered at all from boru today.
 
 ## 3. The enabling machinery (already present)
 
@@ -127,7 +127,7 @@ Three existing facts make this a small, low-risk addition:
   runs a quoted body either VM-native (`r.Invoker`) or on a fresh sub-engine sharing
   the registry, pushing `inputs` first. `ensure`/`bracket` route through it unchanged,
   so they inherit compiled-closure execution for free.
-- **AQL failures are Go `error` values returned up the stack** (`eng/go/engine.go`
+- **boru failures are Go `error` values returned up the stack** (`eng/go/engine.go`
   `Run` returns `(nil, err)` and short-circuits on the first failing step). Because
   the failure unwinds as an ordinary Go return, a Go **`defer` in the handler is a
   reliable cleanup hook** — it fires on the error return and on a recovered panic.
@@ -160,7 +160,7 @@ Sketch (illustrative; exact helpers settle during implementation):
 ```go
 func ensureHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (out []Value, retErr error) {
     if !IsConcrete(args[0]) || !IsConcrete(args[1]) {
-        return nil, r.AqlError("ensure_error", "ensure: body and cleanup must be concrete lists", "ensure")
+        return nil, r.BoruError("ensure_error", "ensure: body and cleanup must be concrete lists", "ensure")
     }
     body, cleanup := args[0], args[1]
 
@@ -175,7 +175,7 @@ func ensureHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (ou
         _, cerr := InvokeBody(r, cleanup, nil)
         if r.FlowCtrl != FlowNone {            // cleanup tried to break/continue
             r.FlowCtrl = FlowNone
-            cerr = r.AqlError("ensure_error",
+            cerr = r.BoruError("ensure_error",
                 "ensure: cleanup must not break/continue", "ensure")
         }
         r.FlowCtrl = savedFlow                 // restore the body's signal
@@ -241,14 +241,14 @@ Two failures can coincide (body fails *and* cleanup fails). The rule, leaning on
   propagates; the cleanup error is attached under a `suppressed` key on the primary
   Error's `Data` (`{code:…, message:…}`), so a programmatic `error [handler]` can read
   `e.suppressed` but the formatted report still shows the original cause. This mirrors
-  ZIO's suppressed-cause handling using machinery AQL already has, and never silently
+  ZIO's suppressed-cause handling using machinery boru already has, and never silently
   discards a failure.
 
 `mergeCleanupError(primary, cerr)` in the sketch implements exactly this table.
 
 ## 6. Static analysis (check mode)
 
-In `aql check`, both bodies are walked so their defs and diagnostics propagate
+In `boru check`, both bodies are walked so their defs and diagnostics propagate
 (`RunCarrierBody` / `RunCarrierBodyWithDefs`, `eng/go/carrier.go`):
 
 - `ensure`'s static return carrier = the **body's** carrier result (cleanup's result
@@ -286,9 +286,9 @@ denied by policy would make cleanup *less* reliable, defeating the purpose.
 
 ## 9. Worked examples
 
-```aql
+```boru
 # 1. Timer cleanup (works TODAY — uses the existing timeout/cancel handles)
-import "aql:time-util"
+import "boru:time-util"
 bracket
   [ TimeUtil.interval 1000 [poll] ]      # acquire: returns an Ideal/Interval
   [ afn [tick] [ run-for-a-while ] ]     # use: resource pushed onto the body stack
@@ -365,7 +365,7 @@ Per the repo's positive-with-negative discipline (`lang/go/CLAUDE.md`), a new
 3. **`ensure` arg order** — `ensure [body] [cleanup]` (body first, reads
    chronologically) vs `ensure [cleanup] [body]`. *Leaning body-first* (matches the
    `do [body] error [handler]` reading order: the thing that runs is written first).
-4. **`scoped` shape** — AQL has no block scope below the fn body, so a `scoped`
+4. **`scoped` shape** — boru has no block scope below the fn body, so a `scoped`
    resource that auto-releases "at end of scope" has no obvious scope boundary to bind
    to. Options: (a) make `scoped` pure sugar for a `bracket` whose `use` is the rest
    of the enclosing body (hard without a block construct), or (b) drop `scoped` and

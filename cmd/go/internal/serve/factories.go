@@ -1,4 +1,4 @@
-// factories.go registers the Service factories that `aql serve`
+// factories.go registers the Service factories that `boru serve`
 // can compose. A factory parses one segment's flag tail and returns
 // a ready-to-Start Service. Adding a new service means adding one
 // entry here plus the package's own Service implementation.
@@ -12,21 +12,21 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/api"
-	"github.com/aql-lang/aql/cmd/go/internal/exec"
-	"github.com/aql-lang/aql/cmd/go/internal/lsp"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/cmd/go/internal/permsflags"
-	"github.com/aql-lang/aql/cmd/go/internal/registry"
-	"github.com/aql-lang/aql/cmd/go/internal/repl"
-	"github.com/aql-lang/aql/cmd/go/internal/service"
-	"github.com/aql-lang/aql/cmd/go/internal/tui"
-	"github.com/aql-lang/aql/cmd/go/internal/vault"
+	"github.com/boru-lang/boru/cmd/go/internal/api"
+	"github.com/boru-lang/boru/cmd/go/internal/exec"
+	"github.com/boru-lang/boru/cmd/go/internal/lsp"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/permsflags"
+	"github.com/boru-lang/boru/cmd/go/internal/registry"
+	"github.com/boru-lang/boru/cmd/go/internal/repl"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/tui"
+	"github.com/boru-lang/boru/cmd/go/internal/vault"
 )
 
 // Factory builds one Service from its flag tail. stdin/stdout/stderr
 // are forwarded so stdio-bound services (repl, lsp without -p) wire
-// up correctly when run as a single-service `aql serve` invocation.
+// up correctly when run as a single-service `boru serve` invocation.
 type Factory func(args []string, stdin io.Reader, stdout, stderr io.Writer) (service.Service, error)
 
 // factories is the static name → Factory map. Order matches the
@@ -92,7 +92,7 @@ func execFactory(args []string, _ io.Reader, _, stderr io.Writer) (service.Servi
 	fs.SetOutput(stderr)
 	bind := fs.String("bind", "127.0.0.1:8091", "host:port to bind the exec HTTP server")
 	port := fs.Int("p", 0, "port to listen on (overrides -bind host:port if >0)")
-	registryPath := fs.String("r", "", "registry path passed to AQL instances")
+	registryPath := fs.String("r", "", "registry path passed to boru instances")
 	var pf permsflags.Flags
 	permsflags.Register(fs, &pf)
 	if err := fs.Parse(args); err != nil {
@@ -128,7 +128,7 @@ func vaultProxyFactory(args []string, _ io.Reader, _, stderr io.Writer) (service
 	fs := flag.NewFlagSet("vault-proxy", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	listen := fs.String("listen", "127.0.0.1:8787", "address to listen on (loopback recommended)")
-	home := fs.String("home", "", "vault home directory (default: $AQL_HOME or $HOME)")
+	home := fs.String("home", "", "vault home directory (default: $BORU_HOME or $HOME)")
 	if err := fs.Parse(args); err != nil {
 		return nil, err
 	}

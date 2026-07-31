@@ -1,9 +1,9 @@
-# Releasing aql
+# Releasing boru
 
-The `aql` CLI is distributed as a Go module. Once released, install it with:
+The `boru` CLI is distributed as a Go module. Once released, install it with:
 
 ```bash
-go install github.com/aql-lang/aql/cmd/go/aql@latest
+go install github.com/boru-lang/boru/cmd/go/boru@latest
 ```
 
 ## How the modules fit together
@@ -12,9 +12,9 @@ This repo is a **multi-module** monorepo. Three modules are published:
 
 | Module | Path | Depends on |
 |---|---|---|
-| kernel | `github.com/aql-lang/aql/eng/go` | — |
-| language | `github.com/aql-lang/aql/lang/go` | eng/go |
-| CLI | `github.com/aql-lang/aql/cmd/go` | eng/go, lang/go |
+| kernel | `github.com/boru-lang/boru/eng/go` | — |
+| language | `github.com/boru-lang/boru/lang/go` | eng/go |
+| CLI | `github.com/boru-lang/boru/cmd/go` | eng/go, lang/go |
 
 `calc/go`, `wpg`, `test/go`, and `test/solardemo` are development-only and are
 not published.
@@ -69,13 +69,13 @@ Because each module is tagged **before** the next one pins it, every published
 
 "Bump patch when publishing anything." Each module advances its own patch
 independently (they need not share a number). `cmd/go`'s version is also
-stamped into the `aql -version` string.
+stamped into the `boru -version` string.
 
 ## After a release
 
 Verify from outside the repo:
 
 ```bash
-cd /tmp && GOWORK=off go install github.com/aql-lang/aql/cmd/go/aql@latest
-aql -version
+cd /tmp && GOWORK=off go install github.com/boru-lang/boru/cmd/go/boru@latest
+boru -version
 ```

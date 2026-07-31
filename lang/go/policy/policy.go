@@ -67,12 +67,12 @@ type Limits struct {
 	MaxMemoryBytes int64 `json:"maxMemoryBytes,omitempty"`
 	// MaxOutputBytes bounds captured output (print, etc.). Zero = no bound.
 	MaxOutputBytes int64 `json:"maxOutputBytes,omitempty"`
-	// MaxSubEngineDepth bounds aql:vm nesting depth. Zero =
+	// MaxSubEngineDepth bounds boru:vm nesting depth. Zero =
 	// DefaultMaxSubEngineDepth (8).
 	MaxSubEngineDepth int `json:"maxSubEngineDepth,omitempty"`
 }
 
-// DefaultMaxSubEngineDepth caps aql:vm.run recursion when the policy
+// DefaultMaxSubEngineDepth caps boru:vm.run recursion when the policy
 // does not specify a value. Eight is generous: realistic nesting
 // (test harness inside REPL inside service) stays under three.
 const DefaultMaxSubEngineDepth = 8

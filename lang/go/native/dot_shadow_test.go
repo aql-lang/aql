@@ -6,7 +6,7 @@ import (
 
 // TestDotNotationRegisteredWordKey verifies that dot notation can access
 // map keys that are also registered word names. This is the fix for
-// AQL-DX-REPORT Issue 4: registered words shadow map keys in dot notation.
+// BORU-DX-REPORT Issue 4: registered words shadow map keys in dot notation.
 func TestDotNotationRegisteredWordKey(t *testing.T) {
 	r, err := DefaultRegistry()
 	if err != nil {
@@ -33,7 +33,7 @@ func TestDotNotationRegisteredWordKey(t *testing.T) {
 		t.Run(tt.key, func(t *testing.T) {
 			// Simulate dot notation: map dot key
 			// The key is a Word that names a registered function.
-			result := runAQL(t, r, []Value{
+			result := runBoru(t, r, []Value{
 				NewMap(m), NewWord("dot"), NewWord(tt.key),
 			})
 			if len(result) != 1 || result[0].String() != tt.want {
@@ -58,12 +58,12 @@ func TestDotNotationModuleExportShadow(t *testing.T) {
 
 	// def matrix {trace:"my-trace-fn"}
 	// MatrixUtil.trace → "my-trace-fn" (not the debug trace word)
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("def"), NewWord("Matrix"), NewMap(moduleMap), NewEnd(),
 	})
 
 	// matrix get trace — should do map lookup, not execute trace word
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("Matrix"), NewWord("dot"), NewWord("trace"),
 	})
 	_as0, _ := AsString(result[0])
@@ -85,7 +85,7 @@ func TestDotNotationNormalKeysStillWork(t *testing.T) {
 	m.Set("name", NewString("alice"))
 	m.Set("age", NewInteger(30))
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewMap(m), NewWord("dot"), NewWord("name"),
 	})
 	_as1, _ := AsString(result[0])
@@ -93,7 +93,7 @@ func TestDotNotationNormalKeysStillWork(t *testing.T) {
 		t.Errorf("dot name = %v, want 'alice'", result)
 	}
 
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewMap(m), NewWord("dot"), NewWord("age"),
 	})
 	_as2, _ := AsNumber(result[0])

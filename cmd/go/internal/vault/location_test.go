@@ -107,8 +107,8 @@ func TestCustomFolderViaEnv(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(folder, "vault.keyring")); err != nil {
 		t.Errorf("keyring not in custom folder: %v", err)
 	}
-	// The default ~/.aql is left untouched.
-	if _, err := os.Stat(filepath.Join(home, ".aql", "vault.jsonic")); err == nil {
+	// The default ~/.boru is left untouched.
+	if _, err := os.Stat(filepath.Join(home, ".boru", "vault.jsonic")); err == nil {
 		t.Errorf("store wrongly created under the default folder")
 	}
 	// StorePath reflects the override.
@@ -124,7 +124,7 @@ func TestCustomSuffixViaEnv(t *testing.T) {
 	if code, _, errOut := runVault(t, "", "init", "--backend=file"); code != 0 {
 		t.Fatalf("init: %s", errOut)
 	}
-	base := filepath.Join(home, ".aql")
+	base := filepath.Join(home, ".boru")
 	if _, err := os.Stat(filepath.Join(base, "vault.work.jsonic")); err != nil {
 		t.Errorf("suffixed store missing: %v", err)
 	}

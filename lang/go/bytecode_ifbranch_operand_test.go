@@ -16,7 +16,7 @@ import (
 // arm carriers are the same identity — an identity no-op merge — so the
 // binding's compile seat survives the branch.
 //
-// Reduced from the aless viewer's render fn (voxgig-aql/aless viewer/,
+// Reduced from the aless viewer's render fn (voxgig-boru/aless viewer/,
 // dx-report 2026-07-21 "bytecode status"), which had to branch on a whole
 // widget list rather than bind its middle pane to compile before this fix.
 //

@@ -1,7 +1,7 @@
 package native
 
 import (
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // streamSentinels maps each admitted stream atom to the internal routing
@@ -33,11 +33,11 @@ func isStreamAtom(v Value) bool {
 }
 
 // MintStreamKind mints the StreamKind type into r's type table and
-// returns the node. StreamKind is owned by the aql:io module —
+// returns the node. StreamKind is owned by the boru:io module —
 // BuildIOModule mints one per import into the module's sub-registry (see
 // modules/io.go) — and is deliberately NOT a global builtin: it has no
 // FixedID, is absent from the builtin name index and the FixedID
-// snapshot, and is reachable from AQL only through the module export
+// snapshot, and is reachable from boru only through the module export
 // `IO.StreamKind`. The returned node tags the stdin/stdout/stderr
 // handles and backs that module instance's read/write Stream signatures.
 //

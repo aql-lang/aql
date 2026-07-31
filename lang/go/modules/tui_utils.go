@@ -1,8 +1,8 @@
 package modules
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // The general terminal utilities of design/TUI-UTILITIES.0.md: pure
@@ -18,21 +18,21 @@ func tuiColorizeHandler(args []native.Value, _ map[string]native.Value, _ []nati
 	}
 	text, tErr := args[1].AsConcreteString()
 	if tErr != nil {
-		return nil, r.AqlError("tui_error", "colorize: expected the text as a String", "colorize")
+		return nil, r.BoruError("tui_error", "colorize: expected the text as a String", "colorize")
 	}
 	profileName := ""
 	if len(args) > 2 {
 		opts, oErr := native.RequireConcreteMap(args[2], "colorize")
 		if oErr != nil {
-			return nil, r.AqlError("tui_error", "colorize: options must be a Map", "colorize")
+			return nil, r.BoruError("tui_error", "colorize: options must be a Map", "colorize")
 		}
 		if profileName, oErr = tuiOptString(opts, "profile"); oErr != nil {
-			return nil, r.AqlError("tui_error", "colorize: "+oErr.Error(), "colorize")
+			return nil, r.BoruError("tui_error", "colorize: "+oErr.Error(), "colorize")
 		}
 	}
 	profile, ok := tuikit.ParseProfile(profileName)
 	if !ok {
-		return nil, r.AqlError("tui_error", `colorize: profile: must be "truecolor", "256", "16" or "none"`, "colorize")
+		return nil, r.BoruError("tui_error", `colorize: profile: must be "truecolor", "256", "16" or "none"`, "colorize")
 	}
 	seq := tuikit.SGR(st, profile)
 	if seq == "" {
@@ -45,7 +45,7 @@ func tuiColorizeHandler(args []native.Value, _ map[string]native.Value, _ []nati
 func tuiStripAnsiHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	s, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("tui_error", "strip-ansi: expected a String", "strip-ansi")
+		return nil, r.BoruError("tui_error", "strip-ansi: expected a String", "strip-ansi")
 	}
 	return []native.Value{native.NewString(tuikit.StripANSI(s))}, nil
 }
@@ -53,7 +53,7 @@ func tuiStripAnsiHandler(args []native.Value, _ map[string]native.Value, _ []nat
 func tuiTextWidthHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	s, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("tui_error", "text-width: expected a String", "text-width")
+		return nil, r.BoruError("tui_error", "text-width: expected a String", "text-width")
 	}
 	// DISPLAY width: escapes occupy no cells, so strip before counting
 	return []native.Value{native.NewInteger(int64(tuikit.StringWidth(tuikit.StripANSI(s))))}, nil

@@ -1,11 +1,11 @@
-# TUI-UTILITIES.0.md — general terminal utilities out of `aql:tui`
+# TUI-UTILITIES.0.md — general terminal utilities out of `boru:tui`
 
 Status: **investigation + landed surface** (follow-on to
 [TUI.0.md](TUI.0.md) / [TUI-IMPLEMENTATION-PLAN.0.md](TUI-IMPLEMENTATION-PLAN.0.md),
 user-directed after P5). The question: which parts of the TUI stack are
 useful **independently** of the app framework — to a plain CLI script
 that never opens the terminal, never runs an event loop — and how
-should `aql:tui` expose them? Colorisation is the motivating example.
+should `boru:tui` expose them? Colorisation is the motivating example.
 
 ## 1. What the stack already owns, and what travels
 
@@ -24,16 +24,16 @@ Everything else in the stack (layout solver, widget render, diff,
 backends, the driver) is only meaningful inside a session and does NOT
 graduate to a general utility.
 
-## 2. Placement: pure words on `aql:tui` (not a new `-util` module)
+## 2. Placement: pure words on `boru:tui` (not a new `-util` module)
 
 Two candidate homes were considered:
 
-1. **`aql:tui` pure words** — `Tui.colorize` / `Tui.strip-ansi` /
+1. **`boru:tui` pure words** — `Tui.colorize` / `Tui.strip-ansi` /
    `Tui.text-width`, beside the widget constructors.
-2. **A separate `aql:term-util` (`TermUtil`)** — the naming rule says
+2. **A separate `boru:term-util` (`TermUtil`)** — the naming rule says
    `-util` marks a library of pure helpers, which these are.
 
-**Decision: (1), pure words on `aql:tui`.** The deciding facts:
+**Decision: (1), pure words on `boru:tui`.** The deciding facts:
 
 - The module ALREADY splits cleanly along the pure/capability line:
   the nine constructors, `style`, `edit`, `focusable`, `quit` are pure
@@ -42,7 +42,7 @@ Two candidate homes were considered:
   utilities join an established pure tier; "usable independently" is
   the existing behaviour of that tier, not a new mechanism.
 - One import serves every terminal-adjacent need
-  (`import "aql:tui"  IO.printstr (Tui.colorize {fg: "red"} "boom")`),
+  (`import "boru:tui"  IO.printstr (Tui.colorize {fg: "red"} "boom")`),
   and the style VOCABULARY (`{fg bold underline …}`, color names /
   `#rrggbb` / `256:n`) stays one vocabulary — the same map colorizes a
   string today and styles a widget tomorrow.

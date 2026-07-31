@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // io_lines_test.go — the HOST-DEPENDENT surface of IO.read-line and IO.is-tty.
@@ -29,7 +29,7 @@ func runStdin(t *testing.T, in, src string) []any {
 		t.Fatal(err)
 	}
 	a.NativeRegistry().Input = strings.NewReader(in)
-	res, err := a.Run(`import "aql:io"  ` + src)
+	res, err := a.Run(`import "boru:io"  ` + src)
 	if err != nil {
 		t.Fatalf("%s: %v", src, err)
 	}
@@ -128,7 +128,7 @@ func TestReadLineReaderError(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.NativeRegistry().Input = &failingReader{n: 3}
-	_, runErr := a.Run(`import "aql:io"  IO.read-line (IO.stdin)`)
+	_, runErr := a.Run(`import "boru:io"  IO.read-line (IO.stdin)`)
 	if runErr == nil {
 		t.Fatal("a failing reader was reported as EOF")
 	}
@@ -147,11 +147,11 @@ func TestReadLineRebuildsOnInputSwap(t *testing.T) {
 	}
 	reg := a.NativeRegistry()
 	reg.Input = strings.NewReader("first\nbuffered-but-never-read\n")
-	if _, err := a.Run(`import "aql:io"  IO.read-line (IO.stdin)`); err != nil {
+	if _, err := a.Run(`import "boru:io"  IO.read-line (IO.stdin)`); err != nil {
 		t.Fatal(err)
 	}
 	reg.Input = strings.NewReader("second\n")
-	res, err := a.Run(`import "aql:io"  IO.read-line (IO.stdin)`)
+	res, err := a.Run(`import "boru:io"  IO.read-line (IO.stdin)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -180,7 +180,7 @@ func TestTTYTrueArm(t *testing.T) {
 		{`IO.is-tty (IO.stderr)`, "true"},
 		{`IO.is-tty (IO.stdin)`, "false"}, // absent from the map
 	} {
-		res, err := a.Run(`import "aql:io"  ` + tc.src)
+		res, err := a.Run(`import "boru:io"  ` + tc.src)
 		if err != nil {
 			t.Fatalf("%s: %v", tc.src, err)
 		}
@@ -200,7 +200,7 @@ func TestTTYIsPerStream(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := a.Run(`import "aql:io"  [(IO.is-tty (IO.stdout)) (IO.is-tty (IO.stderr))]`)
+	res, err := a.Run(`import "boru:io"  [(IO.is-tty (IO.stdout)) (IO.is-tty (IO.stderr))]`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -219,7 +219,7 @@ func TestOSStreamProbeRedirectedIsFalse(t *testing.T) {
 	}
 	var buf strings.Builder
 	a.SetOutput(&buf)
-	res, err := a.Run(`import "aql:io"  IO.is-tty (IO.stdout)`)
+	res, err := a.Run(`import "boru:io"  IO.is-tty (IO.stdout)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -247,7 +247,7 @@ func TestTTYUnderUninstalledTerminalScope(t *testing.T) {
 	if probe := native.HostStreamProbe(a.NativeRegistry()); probe != nil {
 		t.Errorf("sandbox uninstalls the terminal scope: probe = %T, want nil", probe)
 	}
-	res, err := a.Run(`import "aql:io"  IO.is-tty (IO.stdout)`)
+	res, err := a.Run(`import "boru:io"  IO.is-tty (IO.stdout)`)
 	if err != nil {
 		t.Fatalf("IO.is-tty raised under a sandbox instead of answering: %v", err)
 	}
@@ -269,7 +269,7 @@ func TestTTYUnderTrustedProfile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := a.Run(`import "aql:io"  IO.is-tty (IO.stdout)`)
+	res, err := a.Run(`import "boru:io"  IO.is-tty (IO.stdout)`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -290,8 +290,8 @@ func TestReadLineSharedAcrossModuleBody(t *testing.T) {
 		t.Fatal(err)
 	}
 	a.NativeRegistry().Input = strings.NewReader("first\nsecond\nthird\n")
-	res, err := a.Run(`import "aql:io"
-import module [ import "aql:io"  def take fn [[] [Any] [IO.read-line (IO.stdin)]]  export "M" {take: take/r} ] end
+	res, err := a.Run(`import "boru:io"
+import module [ import "boru:io"  def take fn [[] [Any] [IO.read-line (IO.stdin)]]  export "M" {take: take/r} ] end
 M.take drop
 IO.read-line (IO.stdin)`)
 	if err != nil {
@@ -318,7 +318,7 @@ func TestReadLineSeekDropsBuffer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	res, err := a.Run(`import "aql:io"
+	res, err := a.Run(`import "boru:io"
 def f (IO.open (make Pathon "` + path + `"))
 def one (IO.read-line f)
 IO.seek f 0 drop
@@ -346,7 +346,7 @@ func (p recordingProbe) IsTerminal(stream string, endpoint any) bool {
 }
 
 // A MODULE BODY gets the terminal probe too, alongside the environment and the
-// argument vector (modules/io.go, ModuleInheritedCaps). aql:cli is the library
+// argument vector (modules/io.go, ModuleInheritedCaps). boru:cli is the library
 // that needs it: its help rendering colours only when stdout is a terminal, and
 // without the inheritance that decision read "never a terminal" one import deep
 // while the importing program read the truth.
@@ -360,7 +360,7 @@ func TestStreamProbeReachesModuleBodies(t *testing.T) {
 	var out strings.Builder
 	a.SetOutput(&out)
 	if _, err := a.Run(`import module [
-  import "aql:io"
+  import "boru:io"
   def m-tty fn [[] [Boolean] [ IO.is-tty (IO.stdout) ]]
   export "M" {tty: m-tty/r}
 ] end
@@ -380,7 +380,7 @@ print (M.tty)`); err != nil {
 // execution mode while the interpreter answered true — the colour decision
 // inverted by an instrument that is supposed to be invisible.
 func TestStreamProbeEndpointIsModeIndependent(t *testing.T) {
-	const src = `import "aql:io"  IO.is-tty (IO.stdout)  IO.is-tty (IO.stderr)  IO.is-tty (IO.stdin)`
+	const src = `import "boru:io"  IO.is-tty (IO.stdout)  IO.is-tty (IO.stderr)  IO.is-tty (IO.stdin)`
 	seen := map[string]map[string]string{}
 	for _, mode := range []string{"interp", "compiled"} {
 		p := recordingProbe{seen: map[string]string{}}

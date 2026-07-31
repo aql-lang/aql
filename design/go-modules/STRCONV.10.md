@@ -1,4 +1,4 @@
-# `aql:strconv` — Go `strconv`
+# `boru:strconv` — Go `strconv`
 
 > **Status: design proposal, not implemented.** A curated, hand-written
 > native module wrapping Go's `strconv`. Read
@@ -10,7 +10,7 @@
 Go [`strconv`](https://pkg.go.dev/strconv) converts between primitive
 values and their textual representations: parse a string to an int /
 uint / float / bool, format a number / bool back to a string, and
-add/strip Go-syntax quoting. This note specifies an idiomatic AQL
+add/strip Go-syntax quoting. This note specifies an idiomatic boru
 surface over that package. Nothing is implemented yet.
 
 ## 2. Why curated
@@ -18,17 +18,17 @@ surface over that package. Nothing is implemented yet.
 The raw `go:` reflection bridge would surface `strconv.ParseInt(s
 string, base int, bitSize int) (int64, error)` verbatim — three
 arguments, a `(value, error)` pair, and a `bitSize` knob that is
-meaningless in AQL (an AQL Integer **is** an `int64`, so `bitSize` is
+meaningless in boru (a boru Integer **is** an `int64`, so `bitSize` is
 always 64). The curated surface drops `bitSize`, splits the
 base-10-vs-explicit-base cases into two readable words, and collapses
-every `(value, error)` into value-or-error via `r.AqlError`. Numeric
+every `(value, error)` into value-or-error via `r.BoruError`. Numeric
 parsing/formatting is common enough in data wrangling to earn a
 first-class, documented, tested surface.
 
 ## 3. Import & namespace
 
 ```
-import "aql:strconv"        # binds the Strconv namespace
+import "boru:strconv"        # binds the Strconv namespace
 ```
 
 The bare package name `strconv` does not clash with any builtin type
@@ -43,12 +43,12 @@ Signatures are **top-first, sig order** (position 0 is the top of the
 stack). All inner native sigs use `BarrierPos: -1` so the swap form
 dispatches.
 
-| Go symbol | aql word | signature (top-first) | one-line doc | aql-ish refinement |
+| Go symbol | boru word | signature (top-first) | one-line doc | boru-ish refinement |
 |---|---|---|---|---|
 | `Atoi(s) (int,err)` | `parse-int` | `[String] -> Integer` | Parse a base-10 integer string. | `Atoi` ≡ `ParseInt(s,10,64)`; `(int,err)` → value-or-error `parse-int`. |
-| `ParseInt(s,base,bitSize) (int64,err)` | `parse-int-base` | `[Integer base, String s] -> Integer` | Parse a signed integer in the given base. | Dropped `bitSize` (AQL Integer is int64). base is the top arg so swap reads `s parse-int-base base`; `0` base means infer from prefix. `(int64,err)` → value-or-error. |
+| `ParseInt(s,base,bitSize) (int64,err)` | `parse-int-base` | `[Integer base, String s] -> Integer` | Parse a signed integer in the given base. | Dropped `bitSize` (boru Integer is int64). base is the top arg so swap reads `s parse-int-base base`; `0` base means infer from prefix. `(int64,err)` → value-or-error. |
 | `ParseUint(s,base,bitSize) (uint64,err)` | `parse-uint` | `[Integer base, String s] -> Integer` | Parse an unsigned integer in the given base. | Dropped `bitSize`. Result returned as Integer; overflow past int64 max errors `parse-uint`. |
-| `ParseFloat(s,bitSize) (float64,err)` | `parse-float` | `[String] -> Float` | Parse a floating-point string. | Dropped `bitSize` (AQL Float is float64). `(float64,err)` → value-or-error `parse-float`. |
+| `ParseFloat(s,bitSize) (float64,err)` | `parse-float` | `[String] -> Float` | Parse a floating-point string. | Dropped `bitSize` (boru Float is float64). `(float64,err)` → value-or-error `parse-float`. |
 | `ParseBool(s) (bool,err)` | `parse-bool` | `[String] -> Boolean` | Parse a boolean ("1","t","true","0","f","false",…). | `(bool,err)` → value-or-error `parse-bool`. |
 | `FormatInt(i,base) string` | `format-int` | `[Integer] -> String` | Format an integer in base 10. | Specialised to base 10 (the common case); total, no error. |
 | `FormatInt(i,base) string` | `format-int-base` | `[Integer base, Integer i] -> String` | Format an integer in the given base (2–36). | base is the top arg; out-of-range base errors `format-int-base`. |
@@ -73,7 +73,7 @@ boundary with `eng.FromNative` / `eng.ToNative` (`eng/go/gobridge.go`).
 
 ## 6. Errors
 
-Go `error` returns unwrap to an `AqlError` via `r.AqlError(code,
+Go `error` returns unwrap to a `BoruError` via `r.BoruError(code,
 detail, word)` with a kebab-case code matching the word:
 
 | code | raised when |
@@ -98,15 +98,15 @@ None — pure value conversion, runs under any policy.
 ## 8. Overlap
 
 None with an existing module. The core engine has literal parsing in
-the parser, but no AQL-user-facing word converts a runtime String to an
-Integer/Float; `aql:strconv` fills that gap. `Fmt.format` (see
+the parser, but no boru-user-facing word converts a runtime String to an
+Integer/Float; `boru:strconv` fills that gap. `Fmt.format` (see
 [FMT.10.md](FMT.10.md)) does printf-style formatting of arbitrary
 values — `Strconv.format-*` is the scalar-specific, base-aware path.
 
 ## 9. Examples (args-before form)
 
 ```
-import "aql:strconv"
+import "boru:strconv"
 
 "42" Strconv.parse-int                 # 42
 "ff" Strconv.parse-int-base 16         # 255   (swap form: s word base)
@@ -123,7 +123,7 @@ import "aql:strconv"
 ## 10. Open questions / out of scope
 
 - **AppendInt / AppendQuote family** — append-to-byte-slice variants are
-  out of scope; AQL has no Bytes type (see [BYTES.10.md](BYTES.10.md))
+  out of scope; boru has no Bytes type (see [BYTES.10.md](BYTES.10.md))
   and string building is already idiomatic via templates / `concat`.
 - **QuoteRune / QuoteToASCII / AppendQuoteRuneToGraphic** — niche quoting
   variants deferred until a real need appears; `quote` covers the common
@@ -146,11 +146,11 @@ Wiring checklist — no Go code here. Reference: `lang/go/modules/math.go`
   Exports: {"Strconv": …}}`.
 - Register `"strconv": BuildStrconvModule` in the `modules` map in
   `lang/go/modules/modules.go`.
-- `lang/go/modules/docs_strconv.go` — `registerDocs("aql:strconv",
+- `lang/go/modules/docs_strconv.go` — `registerDocs("boru:strconv",
   map[string]string{…})` with a one-line summary per export
   (`TestModuleExportDocs` enforces completeness).
 - `lang/spec/module-strconv.tsv` — `input⇥expected⇥description` rows,
-  each leading with `import "aql:strconv"`; every positive row paired
+  each leading with `import "boru:strconv"`; every positive row paired
   with an `ERROR:<substring>` negative sibling (Test discipline,
   `lang/go/CLAUDE.md`).
 - No FixedID entry (no external type), no policy wiring.

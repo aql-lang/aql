@@ -1,27 +1,27 @@
-// Package debugcmd implements the `aql debug` subcommand: the interactive
-// debugger (design/AQL-DEBUGGER.0.md) and the front door to cross-process
+// Package debugcmd implements the `boru debug` subcommand: the interactive
+// debugger (design/BORU-DEBUGGER.0.md) and the front door to cross-process
 // debugging (design/DEBUG-MODULE.0.md §7.2/§7.3).
 //
-//	aql debug [--script F] [--no-check] [--color M] <file.aql> [args...]
-//	    Launch file.aql under the interactive debugger: pause between
+//	boru debug [--script F] [--no-check] [--color M] <file.boru> [args...]
+//	    Launch file.boru under the interactive debugger: pause between
 //	    source lines, stop on Debug.break, inspect the stack / scope /
 //	    backtrace, and evaluate expressions at a pause. --script reads
 //	    debugger commands from a file (batch/CI mode). Runs on the
 //	    interpreter (the trace does not fire on the compiled VM path).
 //
-//	aql debug serve [--bind 127.0.0.1:7777] [--token T] [file.aql]
-//	    Load file.aql (if given) into a runtime, then serve its registry's
+//	boru debug serve [--bind 127.0.0.1:7777] [--token T] [file.boru]
+//	    Load file.boru (if given) into a runtime, then serve its registry's
 //	    debug introspection over HTTP and block until interrupted. Writes a
-//	    discovery file ($TMPDIR/aql-debug.json) so `attach` can find it.
+//	    discovery file ($TMPDIR/boru-debug.json) so `attach` can find it.
 //
-//	aql debug attach [--url U] [--token T] <words|defs|heap|eval|events> [arg]
-//	    Connect to a running `aql debug serve` (via the discovery file or an
+//	boru debug attach [--url U] [--token T] <words|defs|heap|eval|events> [arg]
+//	    Connect to a running `boru debug serve` (via the discovery file or an
 //	    explicit --url) and interrogate it.
 //
 // Serve/attach transport is plain HTTP with an optional Bearer token (a
 // static token or a vault capability id), the same posture as the api
 // service — the host-level realization of the attach/serverless surfaces
-// while the AQL Service model (SERVICES.0.md) and a language-level socket
+// while the boru Service model (SERVICES.0.md) and a language-level socket
 // primitive are still RFC-only.
 package debugcmd
 
@@ -41,14 +41,14 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/check"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/debugger"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/eng/go/parser"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/debugserve"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/cmd/go/internal/check"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/debugger"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/eng/go/parser"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/debugserve"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // langNew is a test seam (design/TEST-SEAMS.10.md); tests swap it to
@@ -73,7 +73,7 @@ func (*cmdImpl) Synopsis() string {
 
 func (*cmdImpl) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if len(args) == 0 {
-		fmt.Fprintln(stderr, "usage: aql debug [flags] <file.aql> | serve | attach ...")
+		fmt.Fprintln(stderr, "usage: boru debug [flags] <file.boru> | serve | attach ...")
 		return 1
 	}
 	switch args[0] {
@@ -82,20 +82,20 @@ func (*cmdImpl) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) in
 	case "attach":
 		return runAttach(args[1:], stdout, stderr)
 	default:
-		// Anything else is an interactive launch: aql debug [flags] <file.aql>
-		// (design/AQL-DEBUGGER.0.md §4).
+		// Anything else is an interactive launch: boru debug [flags] <file.boru>
+		// (design/BORU-DEBUGGER.0.md §4).
 		return runLaunch(args, stdin, stdout, stderr)
 	}
 }
 
 // runLaunch is the interactive-debugger entry: read + preflight the file
-// exactly as `aql run` does, wire a registry, and run the program's
-// tokens under a debugger.Session (design/AQL-DEBUGGER.0.md §4-§5).
+// exactly as `boru run` does, wire a registry, and run the program's
+// tokens under a debugger.Session (design/BORU-DEBUGGER.0.md §4-§5).
 func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("debug", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	script := fs.String("script", "", "read debugger commands from this file instead of stdin (batch/CI mode)")
-	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before debugging (also enabled by AQL_NO_CHECK)")
+	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check before debugging (also enabled by BORU_NO_CHECK)")
 	colorMode := fs.String("color", "auto", "diagnostic color: auto (terminal-only, honors NO_COLOR), always, never")
 	postMortem := fs.Bool("post-mortem", false, "on an uncaught error, open an inspection prompt over the fault state before exiting")
 	breakOnError := fs.Bool("break-on-error", false, "pause at every raise BEFORE it unwinds — including errors a do-handler will catch")
@@ -110,25 +110,25 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	}
 	file := fs.Arg(0)
 	if file == "" {
-		fmt.Fprintln(stderr, "usage: aql debug [--script F] [--no-check] [--color M] <file.aql> [args...]")
+		fmt.Fprintln(stderr, "usage: boru debug [--script F] [--no-check] [--color M] <file.boru> [args...]")
 		return 1
 	}
 	path := pathutil.Expand(file)
 	data, err := os.ReadFile(path)
 	if err != nil {
-		fmt.Fprintf(stderr, "aql debug: read %s: %s\n", file, err)
+		fmt.Fprintf(stderr, "boru debug: read %s: %s\n", file, err)
 		return 1
 	}
 	source := string(data)
 
-	// Check-by-default, mirroring `aql run` (run.Execute): quiet gate,
-	// --no-check / AQL_NO_CHECK to skip.
-	// nil registry: the same call `aql run` makes at this point (run.go), and
+	// Check-by-default, mirroring `boru run` (run.Execute): quiet gate,
+	// --no-check / BORU_NO_CHECK to skip.
+	// nil registry: the same call `boru run` makes at this point (run.go), and
 	// for the same reason — the session's registry is not built until
 	// newRegistry below, so there is no installed EnvOps to read NO_COLOR
 	// from yet, and ResolveColor falls back to the process environment.
 	color := lang.ResolveColor(nil, stderr, *colorMode)
-	if !*noCheck && os.Getenv("AQL_NO_CHECK") == "" {
+	if !*noCheck && os.Getenv("BORU_NO_CHECK") == "" {
 		if cerr := check.PreflightColor(stderr, source, "", 0, false, color); cerr != nil {
 			fmt.Fprintf(stderr, "%s\n", cerr)
 			return 1
@@ -156,20 +156,20 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		}
 		if extra := fs.Args()[1:]; len(extra) > 0 {
 			// Positionals after the script path reach the program as IO.args,
-			// like `aql run`.
+			// like `boru run`.
 			native.SetHostScriptArgs(reg, extra)
 		}
 		return reg, nil
 	}
 	reg, err := newRegistry()
 	if err != nil {
-		fmt.Fprintf(stderr, "aql debug: init: %s\n", err)
+		fmt.Fprintf(stderr, "boru debug: init: %s\n", err)
 		return 1
 	}
 
 	tokens, perr := parser.Parse(source)
 	if perr != nil {
-		fmt.Fprintf(stderr, "aql debug: parse %s: %s\n", file, perr)
+		fmt.Fprintf(stderr, "boru debug: parse %s: %s\n", file, perr)
 		return 1
 	}
 
@@ -177,7 +177,7 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		// Editor mode: stdout carries DAP frames only — no banner, no
 		// prompt, no residual prints. The adapter owns the session.
 		if *script != "" {
-			fmt.Fprintln(stderr, "aql debug: --dap and --script are mutually exclusive")
+			fmt.Fprintln(stderr, "boru debug: --dap and --script are mutually exclusive")
 			return 1
 		}
 		return debugger.RunDAP(reg, debugger.Config{
@@ -189,7 +189,7 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	if *script != "" {
 		f, oerr := os.Open(pathutil.Expand(*script))
 		if oerr != nil {
-			fmt.Fprintf(stderr, "aql debug: script: %s\n", oerr)
+			fmt.Fprintf(stderr, "boru debug: script: %s\n", oerr)
 			return 1
 		}
 		defer func() { _ = f.Close() }()
@@ -207,7 +207,7 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		BreakOnError: *breakOnError,
 		NewRegistry:  newRegistry,
 	})
-	fmt.Fprintf(stdout, "aql debug: %s — type 'help' for commands\n", file)
+	fmt.Fprintf(stdout, "boru debug: %s — type 'help' for commands\n", file)
 	for _, b := range breaks {
 		fmt.Fprintln(stdout, sess.SetBreak(b))
 	}
@@ -216,7 +216,7 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		if *postMortem {
 			sess.PostMortem(rerr)
 		}
-		var ae *lang.AqlError
+		var ae *lang.BoruError
 		if color && errors.As(rerr, &ae) {
 			fmt.Fprintf(stderr, "error: %s\n", ae.Render(lang.RenderOpts{Color: true}))
 		} else {
@@ -225,7 +225,7 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if len(res) > 0 {
-		// Residuals render print-style (FormatForPrint), matching `aql run`
+		// Residuals render print-style (FormatForPrint), matching `boru run`
 		// and the session's own stack/defs renderers.
 		parts := make([]string, len(res))
 		for i, v := range res {
@@ -239,7 +239,7 @@ func runLaunch(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 
 // discoveryPath is where `serve` advertises its URL+token for `attach`.
 func discoveryPath() string {
-	return filepath.Join(os.TempDir(), "aql-debug.json")
+	return filepath.Join(os.TempDir(), "boru-debug.json")
 }
 
 type discovery struct {
@@ -254,7 +254,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	bind := fs.String("bind", "127.0.0.1:7777", "loopback address to serve on")
 	token := fs.String("token", "", "require this Bearer token (a static token or vault capability id)")
 	allowPublic := fs.Bool("allow-public", false, "permit a non-loopback bind (exposes introspection to the network)")
-	step := fs.Bool("step", false, "run the program under the REMOTE stepping debugger: it pauses at the first line awaiting `aql debug attach` actions")
+	step := fs.Bool("step", false, "run the program under the REMOTE stepping debugger: it pauses at the first line awaiting `boru debug attach` actions")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -268,13 +268,13 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 
 	var rem *debugger.Remote
 	if *step {
-		// Stepping mode (AQL-DEBUGGER.0.md §8.3 Phase 4): the program
+		// Stepping mode (BORU-DEBUGGER.0.md §8.3 Phase 4): the program
 		// runs CONCURRENTLY with the server, under a session whose
 		// pauses park awaiting remote actions. It starts paused at the
 		// first line, so an attach client finds it waiting.
 		file := fs.Arg(0)
 		if file == "" {
-			fmt.Fprintln(stderr, "usage: aql debug serve --step [--bind A] [--token T] <file.aql>")
+			fmt.Fprintln(stderr, "usage: boru debug serve --step [--bind A] [--token T] <file.boru>")
 			return 1
 		}
 		path := pathutil.Expand(file)
@@ -335,7 +335,7 @@ func runServe(args []string, stdout, stderr io.Writer) int {
 	writeDiscovery(dp, *bind, *token)
 	defer func() { _ = os.Remove(dp) }()
 
-	fmt.Fprintf(stdout, "aql debug: serving introspection on http://%s (token: %v)\n", *bind, *token != "")
+	fmt.Fprintf(stdout, "boru debug: serving introspection on http://%s (token: %v)\n", *bind, *token != "")
 	if err := srv.ListenAndServeHandler(ctx, *bind, *allowPublic, handler); err != nil {
 		fmt.Fprintf(stderr, "debug serve: %s\n", err)
 		return 1
@@ -396,7 +396,7 @@ func runAttach(args []string, stdout, stderr io.Writer) int {
 
 	rest := fs.Args()
 	if len(rest) == 0 {
-		fmt.Fprintln(stderr, "usage: aql debug attach [--url U] [--token T] "+
+		fmt.Fprintln(stderr, "usage: boru debug attach [--url U] [--token T] "+
 			"<words|defs|heap|eval SRC|events ID|pause|step|next|out|continue|quit|break SPEC|delete SPEC>")
 		return 1
 	}
@@ -449,7 +449,7 @@ func attachVerb(c *debugserve.Client, rest []string, stdout, stderr io.Writer) i
 		fmt.Fprintln(stdout, result)
 	case "events":
 		if len(rest) < 2 {
-			fmt.Fprintln(stderr, "usage: aql debug attach events <invocation-id>")
+			fmt.Fprintln(stderr, "usage: boru debug attach events <invocation-id>")
 			return 1
 		}
 		evs, err := c.Events(rest[1])
@@ -478,7 +478,7 @@ func attachVerb(c *debugserve.Client, rest []string, stdout, stderr io.Writer) i
 		fmt.Fprintln(stdout, "(detached — the program continues to completion)")
 	case "break", "delete":
 		if len(rest) < 2 {
-			fmt.Fprintf(stderr, "usage: aql debug attach %s <line|word>\n", rest[0])
+			fmt.Fprintf(stderr, "usage: boru debug attach %s <line|word>\n", rest[0])
 			return 1
 		}
 		result, err := c.StepBreak(rest[1], rest[0] == "delete")
@@ -487,7 +487,7 @@ func attachVerb(c *debugserve.Client, rest []string, stdout, stderr io.Writer) i
 		}
 		fmt.Fprintln(stdout, result)
 	default:
-		fmt.Fprintf(stderr, "aql debug attach: unknown query %q\n", rest[0])
+		fmt.Fprintf(stderr, "boru debug attach: unknown query %q\n", rest[0])
 		return 1
 	}
 	return 0

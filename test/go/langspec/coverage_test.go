@@ -23,9 +23,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // hermeticExempt lists the few exports that cannot be exercised by a
@@ -43,7 +43,7 @@ var hermeticExempt = map[string]string{
 	// re compile-hook splice (with a carrier users cannot construct), never by
 	// name. Covered by lang/go/test/minilang_compile_test.go.
 	"MiniLang.run-re": "internal compiled-re consumer; reached only via the compile-hook splice (minilang_compile_test.go)",
-	// aql:model wraps github.com/voxgig/model, a build tool: model.New always
+	// boru:model wraps github.com/voxgig/model, a build tool: model.New always
 	// uses the real OS filesystem (reads .jsonic source, writes <base>/<name>.json)
 	// and start/stop spin a background watch goroutine — none of which is a
 	// hermetic, deterministic spec surface. Covered by lang/go/test/model_test.go.
@@ -55,13 +55,13 @@ var hermeticExempt = map[string]string{
 	// Cli.main is the imperative shell over the pure Cli.dispatch
 	// (design/CLI-PROGRAMS.1.md §2): every one of its arms ends in IO.exit,
 	// and a SPEC ROW cannot survive that — the runner would end mid-file and
-	// the rows after it would never run. (The module's own aql:test suite CAN
-	// exercise it, via Assert.throws, and does — cli.aql is at 100% AQL-line
+	// the rows after it would never run. (The module's own boru:test suite CAN
+	// exercise it, via Assert.throws, and does — cli.boru is at 100% boru-line
 	// coverage with an empty allowlist. What is missing here is a hermetic
 	// spec surface, not a test.) The decision each arm acts on is pinned by
 	// the Cli.dispatch rows in lang/spec/module-cli.tsv §4, and the shell is
 	// driven end to end by cmd/go/internal/build/utils_e2e_test.go.
-	"Cli.main": "every arm ends in IO.exit; a spec row cannot survive it (cli_test.aql covers it via Assert.throws; utils_e2e_test.go drives it end to end)",
+	"Cli.main": "every arm ends in IO.exit; a spec row cannot survive it (cli_test.boru covers it via Assert.throws; utils_e2e_test.go drives it end to end)",
 	// Test.cover / Test.coverage measure INTERPRETER line coverage of a module-
 	// under-test: the recorded rows (and thus the report) exist only on the
 	// tree-walk path (the compiled VM never fires the coverage hook), so a spec
@@ -112,10 +112,10 @@ func TestModuleExportCoverage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DefaultRegistry: %v", err)
 	}
-	// AQL-implemented modules (report/test) parse their source via the
+	// boru-implemented modules (report/test) parse their source via the
 	// registry's ParseFunc — mirror lang.New's wiring so Resolve works.
 	reg.SetParseFunc(parser.Parse)
-	// aql:repl's AQL preamble imports aql:net / aql:vm — wire the
+	// boru:repl's boru preamble imports boru:net / boru:vm — wire the
 	// native-module resolver as production does.
 	modules.InstallResolver(reg)
 

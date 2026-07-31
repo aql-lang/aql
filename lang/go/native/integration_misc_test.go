@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // --- ValToString coverage ---
@@ -40,7 +40,7 @@ func TestEngineReadCSVByExtension(t *testing.T) {
 	mem.Files["data.csv"] = []byte("name,age\nAlice,30\nBob,25")
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.csv")})
+	result := runBoru(t, r, []Value{NewWord("read"), pathV("data.csv")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -75,7 +75,7 @@ func TestEngineReadTSVByExtension(t *testing.T) {
 	mem.Files["data.tsv"] = []byte("name\tage\nAlice\t30\nBob\t25")
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.tsv")})
+	result := runBoru(t, r, []Value{NewWord("read"), pathV("data.tsv")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -102,7 +102,7 @@ func TestEngineReadCSVExplicitFormat(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("csv"))
-	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.txt"), NewMap(opts)})
+	result := runBoru(t, r, []Value{NewWord("read"), pathV("data.txt"), NewMap(opts)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -124,7 +124,7 @@ func TestEngineReadOverrideExtension(t *testing.T) {
 
 	opts := NewOrderedMap()
 	opts.Set("fmt", NewString("text"))
-	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.csv"), NewMap(opts)})
+	result := runBoru(t, r, []Value{NewWord("read"), pathV("data.csv"), NewMap(opts)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -149,7 +149,7 @@ func TestEngineReadJSONByExtension(t *testing.T) {
 	mem.Files["data.json"] = []byte(`{"key":"value"}`)
 	SetHostFileOps(r, mem)
 
-	result := runAQL(t, r, []Value{NewWord("read"), pathV("data.json")})
+	result := runBoru(t, r, []Value{NewWord("read"), pathV("data.json")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -167,7 +167,7 @@ func TestEngineInspectBuiltin(t *testing.T) {
 	}
 	registerIOWords(r)
 	// inspect add => word_inspection map
-	result := runAQL(t, r, []Value{NewWord("inspect"), NewWord("add")})
+	result := runBoru(t, r, []Value{NewWord("inspect"), NewWord("add")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -223,7 +223,7 @@ func TestEngineInspectUserDefined(t *testing.T) {
 	}
 	registerIOWords(r)
 	// def double [2 mul] ; inspect double
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("double"), NewList([]Value{NewInteger(2), NewWord("mul")}),
 		NewWord("inspect"), NewWord("double"),
 	})
@@ -251,7 +251,7 @@ func TestEngineInspectUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewWord("inspect"), NewAtom("nonexistent")})
+	result := runBoru(t, r, []Value{NewWord("inspect"), NewAtom("nonexistent")})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 value, got %d", len(result))
 	}
@@ -277,7 +277,7 @@ func TestEngineInspectDotAccess(t *testing.T) {
 	}
 	registerIOWords(r)
 	// inspect upper .name => 'upper'
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("inspect"), NewWord("upper"),
 		NewWord("dot"), NewWord("name"),
 	})
@@ -297,7 +297,7 @@ func TestEngineInspectTypeLiteral(t *testing.T) {
 	}
 	registerIOWords(r)
 	// def Qty number ; inspect Qty
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("Qty"), NewTypeLiteral(TNumber),
 		NewWord("inspect"), NewWord("Qty"),
 	})
@@ -344,7 +344,7 @@ func TestEngineInspectRecordType(t *testing.T) {
 	fields := NewOrderedMap()
 	fields.Set("x", NewTypeLiteral(TNumber))
 	fields.Set("y", NewTypeLiteral(TNumber))
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("Pos"), NewRecordType(fields),
 		NewWord("inspect"), NewWord("Pos"),
 	})
@@ -387,7 +387,7 @@ func TestEngineInspectTypeDotAccess(t *testing.T) {
 	}
 	registerIOWords(r)
 	// def Qty number ; inspect Qty .kind
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("Qty"), NewTypeLiteral(TNumber),
 		NewWord("inspect"), NewWord("Qty"),
 		NewWord("dot"), NewWord("kind"),
@@ -456,7 +456,7 @@ func TestEngineFnReturnTypeCorrect(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("double"),
 	})
@@ -479,7 +479,7 @@ func TestEngineFnReturnTypeWrong(t *testing.T) {
 		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
-	err = runAQLError(t, r, []Value{
+	err = runBoruError(t, r, []Value{
 		NewWord("def"), NewWord("bad"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("bad"),
 	})
@@ -506,7 +506,7 @@ func TestEngineFnReturnCountWrong(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("toomany"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("toomany"),
 	})
@@ -522,7 +522,7 @@ func TestEngineFnReturnCountWrong(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("dup")}),
 	})
-	err = runAQLError(t, r, []Value{
+	err = runBoruError(t, r, []Value{
 		NewWord("def"), NewWord("bad"), NewWord("fn"), fnBody2, NewEnd(),
 		NewInteger(5), NewWord("bad"),
 	})
@@ -547,7 +547,7 @@ func TestEngineFnReturnTypeAny(t *testing.T) {
 		NewList([]Value{NewWord("Any")}),
 		NewList([]Value{}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("identity"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(42), NewWord("identity"),
 	})
@@ -570,7 +570,7 @@ func TestEngineFnReturnTypeUncheckedEmpty(t *testing.T) {
 		NewList([]Value{}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("dbl"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(7), NewWord("dbl"),
 	})
@@ -593,7 +593,7 @@ func TestEngineFnReturnTypeMultipleValues(t *testing.T) {
 		NewList([]Value{NewWord("Number"), NewWord("Number")}),
 		NewList([]Value{NewWord("dup")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("fdup2"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(3), NewWord("fdup2"),
 	})
@@ -618,7 +618,7 @@ func TestEngineFnReturnTypeNamedParams(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("square"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(6), NewWord("square"),
 	})
@@ -643,7 +643,7 @@ func TestEngineFnReturnTypeNamedParamsWrongReturn(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("gt"), NewInteger(10)}),
 	})
-	err = runAQLError(t, r, []Value{
+	err = runBoruError(t, r, []Value{
 		NewWord("def"), NewWord("isbig"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("isbig"),
 	})
@@ -671,7 +671,7 @@ func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
 		NewList([]Value{NewString("1"), NewWord("add")}),
 	})
 	// Test number overload
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("add1"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(10), NewWord("add1"),
 	})
@@ -680,7 +680,7 @@ func TestEngineFnReturnTypeMultiOverload(t *testing.T) {
 		t.Errorf("10 add1 = %v, want 11", result)
 	}
 	// Test string overload
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewString("hello"), NewWord("add1"),
 	})
 	_as124, _ := AsString(result[0])
@@ -709,13 +709,13 @@ func TestPiecemealDef(t *testing.T) {
 	})
 
 	// Define both sigs
-	_ = runAQL(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
 		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewEnd(),
 	})
 
 	// Test number sig
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
 	})
 	_as125, _ := AsInteger(result[0])
@@ -724,7 +724,7 @@ func TestPiecemealDef(t *testing.T) {
 	}
 
 	// Test string sig
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewString("hi"), NewWord("foo"),
 	})
 	_as126, _ := AsString(result[0])
@@ -752,7 +752,7 @@ func TestPiecemealUndefPopsRecent(t *testing.T) {
 	})
 
 	// def number sig, def string sig, undef (pops string sig), test number sig
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
 		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewEnd(),
 		NewWord("undef"), NewWord("foo"), NewEnd(),
@@ -792,12 +792,12 @@ func TestFnUndefTargeted(t *testing.T) {
 	})
 
 	// def both sigs, targeted remove number sig, string sig still works
-	_ = runAQL(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
 		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewEnd(),
 		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewEnd(),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewString("hi"), NewWord("foo"),
 	})
 	if len(result) != 1 {
@@ -833,12 +833,12 @@ func TestFnUndefTargetedReverse(t *testing.T) {
 		NewList([]Value{NewWord("String")}),
 	})
 
-	_ = runAQL(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
 		NewWord("def"), NewString("foo"), NewWord("fn"), strBody, NewEnd(),
 		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewEnd(),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
 	})
 	if len(result) != 1 {
@@ -869,11 +869,11 @@ func TestFnUndefNonExistentNoOp(t *testing.T) {
 		NewList([]Value{NewWord("String")}),
 	})
 
-	_ = runAQL(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), numBody, NewEnd(),
 		NewWord("def"), NewString("foo"), NewWord("fnsig"), undefSpec, NewEnd(),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
 	})
 	if len(result) != 1 {
@@ -936,20 +936,20 @@ func TestPiecemealStackUnwind(t *testing.T) {
 	})
 
 	// Define both
-	_ = runAQL(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), bodyA, NewEnd(),
 		NewWord("def"), NewString("foo"), NewWord("fn"), bodyB, NewEnd(),
 	})
 
 	// Both sigs work
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
 	})
 	_as132, _ := AsInteger(result[0])
 	if len(result) != 1 || _as132 != 9 {
 		t.Fatalf("3 foo = %v, want 9", result)
 	}
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewString("hi"), NewWord("foo"),
 	})
 	_as133, _ := AsString(result[0])
@@ -958,10 +958,10 @@ func TestPiecemealStackUnwind(t *testing.T) {
 	}
 
 	// Undef pops B (string sig), A (number sig) remains
-	_ = runAQL(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("undef"), NewWord("foo"), NewEnd(),
 	})
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewInteger(3), NewWord("foo"),
 	})
 	_as134, _ := AsInteger(result[0])
@@ -1010,7 +1010,7 @@ func TestTypeofMetatypes(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run("typeof-"+tt.name, func(t *testing.T) {
-			result := runAQL(t, r, []Value{tt.typeLit, NewWord("typeof")})
+			result := runBoru(t, r, []Value{tt.typeLit, NewWord("typeof")})
 			if len(result) != 1 {
 				t.Fatalf("expected 1 result, got %d", len(result))
 			}
@@ -1026,13 +1026,13 @@ func TestTypeofMetatypes(t *testing.T) {
 	// Concrete values: typeof returns a Type literal of the value's
 	// exact Parent. Render via String() (leaf).
 	t.Run("typeof-concrete-integer", func(t *testing.T) {
-		result := runAQL(t, r, []Value{NewInteger(42), NewWord("typeof")})
+		result := runBoru(t, r, []Value{NewInteger(42), NewWord("typeof")})
 		if len(result) != 1 || result[0].String() != "Integer" {
 			t.Errorf("typeof 42 = %v, want Integer", result)
 		}
 	})
 	t.Run("typeof-concrete-boolean", func(t *testing.T) {
-		result := runAQL(t, r, []Value{NewBoolean(true), NewWord("typeof")})
+		result := runBoru(t, r, []Value{NewBoolean(true), NewWord("typeof")})
 		if len(result) != 1 || result[0].String() != "Boolean" {
 			t.Errorf("typeof true = %v, want Boolean", result)
 		}
@@ -1067,7 +1067,7 @@ func TestIs_BroadTypeRoot(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAQL(t, r, []Value{tt.val, NewWord("is"), tt.pat})
+			result := runBoru(t, r, []Value{tt.val, NewWord("is"), tt.pat})
 			if len(result) != 1 {
 				t.Fatalf("expected 1 result, got %d", len(result))
 			}
@@ -1090,7 +1090,7 @@ func TestInterpStringLiteral(t *testing.T) {
 	parts := []InterpPart{
 		{Lit: "hello world"},
 	}
-	result := runAQL(t, r, []Value{NewInterpString(parts)})
+	result := runBoru(t, r, []Value{NewInterpString(parts)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -1106,7 +1106,7 @@ func TestInterpStringWithExpression(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewString("world"), NewWord("def"), NewWord("name"), NewEnd(),
 		NewInterpString([]InterpPart{
 			{Lit: "hello "},
@@ -1128,7 +1128,7 @@ func TestInterpStringArithmetic(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInterpString([]InterpPart{
 			{Lit: "answer: "},
 			{Expr: []Value{NewInteger(1), NewWord("add"), NewInteger(2)}},
@@ -1149,7 +1149,7 @@ func TestInterpStringMultipleExprs(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(1), NewWord("def"), NewWord("a"), NewEnd(),
 		NewInteger(2), NewWord("def"), NewWord("b"), NewEnd(),
 		NewInterpString([]InterpPart{
@@ -1169,7 +1169,7 @@ func TestInterpStringMultipleExprs(t *testing.T) {
 
 // TestInterpStringNone pins the regression where a None value interpolated
 // into a template literal collapsed the whole string to a "String" carrier
-// (voxgig-aql/bloom-filter backend report §1). None is non-concrete yet is a
+// (voxgig-boru/bloom-filter backend report §1). None is non-concrete yet is a
 // legitimate runtime value: it must stringify to "None", not flag the part as
 // a dynamic (check-mode-carrier) frontier. `def x None  \`got ${x}\“.
 func TestInterpStringNone(t *testing.T) {
@@ -1178,7 +1178,7 @@ func TestInterpStringNone(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewTypeLiteral(TNone), NewWord("def"), NewWord("x"), NewEnd(),
 		NewInterpString([]InterpPart{
 			{Lit: "got "},
@@ -1209,7 +1209,7 @@ func TestInterpStringTypeLiteral(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInterpString([]InterpPart{
 			{Lit: "type: "},
 			{Expr: []Value{NewInteger(42), NewWord("typeof")}},
@@ -1233,7 +1233,7 @@ func TestInterpStringInMapValue(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(42), NewWord("def"), NewWord("x"), NewEnd(),
 		NewEvalMap(func() *OrderedMap {
 			om := NewOrderedMap()
@@ -1267,7 +1267,7 @@ func TestInterpStringAsWordArg(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInterpString([]InterpPart{
 			{Lit: "hello"},
 		}),
@@ -1301,7 +1301,7 @@ func TestTpartialRejectsNonType(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := runAQLError(t, r, []Value{tc.arg, NewWord("tpartial")})
+			err := runBoruError(t, r, []Value{tc.arg, NewWord("tpartial")})
 			if err == nil {
 				t.Fatal("expected error, got nil")
 			}

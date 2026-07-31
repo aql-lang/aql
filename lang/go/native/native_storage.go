@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // storageNatives covers `set` / `get` / `context`. The unified
@@ -378,7 +378,7 @@ func d2AdoptTyped(r *Registry, container, v Value, word string) (Value, error) {
 	}
 	unified, uok := Unify(elem, v)
 	if !uok {
-		return Value{}, r.AqlError("type_error",
+		return Value{}, r.BoruError("type_error",
 			fmt.Sprintf("%s: value %s does not conform to element type %s", word, v.String(), elem.String()),
 			word)
 	}
@@ -447,7 +447,7 @@ func d2ReTagContainer(r *Registry, typedSrc, result Value, word string) (Value, 
 	}
 	unified, uok := Unify(constraint, result)
 	if !uok {
-		return Value{}, r.AqlError("type_error",
+		return Value{}, r.BoruError("type_error",
 			fmt.Sprintf("%s: a merged value does not conform to element type %s", word, elem.String()), word)
 	}
 	return unified, nil
@@ -592,7 +592,7 @@ func delFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	container := args[1]
 	m, err := AsMutableMap(container)
 	if err != nil {
-		return nil, r.AqlError("del_error", "del: expected a FlexMap, got "+container.Parent.String(), "del")
+		return nil, r.BoruError("del_error", "del: expected a FlexMap, got "+container.Parent.String(), "del")
 	}
 	m.Delete(StoreKey(args[0]))
 	return []Value{container}, nil
@@ -691,7 +691,7 @@ func setClassInstanceReturns(args []Value, r *Registry) []Value {
 func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	container := args[2]
 	if !IsConcrete(container) {
-		return nil, r.AqlError("set_error", "set: cannot set field on type literal", "set")
+		return nil, r.BoruError("set_error", "set: cannot set field on type literal", "set")
 	}
 	oi, ok := container.Data.(ClassInstanceInfo)
 	if !ok {
@@ -707,7 +707,7 @@ func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 			if name == "" {
 				name = container.Parent.Name()
 			}
-			return nil, r.AqlErrorHint("sealed_field",
+			return nil, r.BoruErrorHint("sealed_field",
 				fmt.Sprintf("set: %q is not a field of %s (fields: %s)", key, name, strings.Join(all.Keys(), " ")),
 				"set",
 				"class instances are sealed — declare the field in the class schema, or use a plain map for open data")
@@ -717,7 +717,7 @@ func setClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Reg
 		// defaulted fields constrain to the default's own type).
 		checked, err := MakeClassFieldValue(val, constraint, r)
 		if err != nil {
-			return nil, r.AqlError("type_error",
+			return nil, r.BoruError("type_error",
 				fmt.Sprintf("set: field %q: %s", key, err.Error()), "set")
 		}
 		val = checked
@@ -730,7 +730,7 @@ func setFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	container := args[2]
 	m, err := AsMutableMap(container)
 	if err != nil {
-		return nil, r.AqlError("set_error", "set: expected a FlexMap, got "+container.Parent.String(), "set")
+		return nil, r.BoruError("set_error", "set: expected a FlexMap, got "+container.Parent.String(), "set")
 	}
 	// A typed flex map ({:T}) enforces its element tag on an IN-PLACE write and
 	// stores the recursively re-tagged value — flex only toggles mutability, it
@@ -744,7 +744,7 @@ func setFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// inner is copy-returning and silently lost. Flex handles share.
 	val, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
-		return nil, r.AqlError("set_error", aerr.Error(), "set")
+		return nil, r.BoruError("set_error", aerr.Error(), "set")
 	}
 	m.Set(StoreKey(args[0]), val)
 	return []Value{container}, nil
@@ -758,7 +758,7 @@ func setWeakFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 	container := args[2]
 	wd, err := AsWeakFlexMap(container)
 	if err != nil {
-		return nil, r.AqlError("set_error", "set: expected a WeakFlexMap, got "+container.Parent.String(), "set")
+		return nil, r.BoruError("set_error", "set: expected a WeakFlexMap, got "+container.Parent.String(), "set")
 	}
 	// A typed weak map ({:T}) enforces its element tag on a write,
 	// exactly like the flex column — weakness never drops the element
@@ -846,15 +846,15 @@ func setWeakFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Regi
 	container := args[2]
 	wd, err := AsWeakFlexList(container)
 	if err != nil {
-		return nil, r.AqlError("set_error", "set: expected a WeakFlexList, got "+container.Parent.String(), "set")
+		return nil, r.BoruError("set_error", "set: expected a WeakFlexList, got "+container.Parent.String(), "set")
 	}
 	asInt, ierr := args[0].AsConcreteInteger()
 	if ierr != nil {
-		return nil, r.AqlError("set_error", "set: WeakFlexList index must be a concrete integer", "set")
+		return nil, r.BoruError("set_error", "set: WeakFlexList index must be a concrete integer", "set")
 	}
 	idx := int(asInt)
 	if n := wd.Len(); idx < 0 || idx >= n {
-		return nil, r.AqlErrorHint("set_error",
+		return nil, r.BoruErrorHint("set_error",
 			fmt.Sprintf("set: index %d out of bounds for WeakFlexList (length %d)", idx, n),
 			"set", "use append to grow; note entries may have been collected — length reflects surviving elements")
 	}
@@ -876,7 +876,7 @@ func setWeakFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 	container := args[2]
 	wd, err := AsWeakFlexXml(container)
 	if err != nil {
-		return nil, r.AqlError("set_error", "set: expected a WeakFlexXml, got "+container.Parent.String(), "set")
+		return nil, r.BoruError("set_error", "set: expected a WeakFlexXml, got "+container.Parent.String(), "set")
 	}
 	wd.SetAttr(StoreKey(args[0]), args[1])
 	return []Value{container}, nil
@@ -886,15 +886,15 @@ func setFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	container := args[2]
 	fd, err := AsFlexList(container)
 	if err != nil {
-		return nil, r.AqlError("set_error", "set: expected a FlexList, got "+container.Parent.String(), "set")
+		return nil, r.BoruError("set_error", "set: expected a FlexList, got "+container.Parent.String(), "set")
 	}
 	asInt, ierr := args[0].AsConcreteInteger()
 	if ierr != nil {
-		return nil, r.AqlError("set_error", "set: FlexList index must be a concrete integer", "set")
+		return nil, r.BoruError("set_error", "set: FlexList index must be a concrete integer", "set")
 	}
 	idx := int(asInt)
 	if idx < 0 || idx >= len(fd.Elems) {
-		return nil, r.AqlErrorHint("set_error",
+		return nil, r.BoruErrorHint("set_error",
 			fmt.Sprintf("set: index %d out of bounds for FlexList (length %d)", idx, len(fd.Elems)),
 			"set", "use append to grow a FlexList; sparse FlexLists are an error")
 	}
@@ -906,7 +906,7 @@ func setFlexListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	// Entirely-mutable invariant: adopt a plain Node element into flex.
 	val, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
-		return nil, r.AqlError("set_error", aerr.Error(), "set")
+		return nil, r.BoruError("set_error", aerr.Error(), "set")
 	}
 	fd.Elems[idx] = val
 	return []Value{container}, nil
@@ -916,11 +916,11 @@ func setFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	container := args[2]
 	fd, err := AsFlexXml(container)
 	if err != nil {
-		return nil, r.AqlError("set_error", "set: expected a FlexXml, got "+container.Parent.String(), "set")
+		return nil, r.BoruError("set_error", "set: expected a FlexXml, got "+container.Parent.String(), "set")
 	}
 	name := StoreKey(args[0])
 	if !eng.IsValidXmlName(name) {
-		return nil, r.AqlErrorHint("set_error",
+		return nil, r.BoruErrorHint("set_error",
 			"set: "+name+" is not a valid XML attribute name", "set",
 			"attribute names start with a letter or '_' and contain letters, digits, '-', '.', or ':'")
 	}
@@ -942,7 +942,7 @@ func setFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 func getXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	tag, attr, cren, ok := XmlParts(args[1])
 	if !ok {
-		return nil, r.AqlError("get_error", "get: cannot access field on a non-Xml value", "get")
+		return nil, r.BoruError("get_error", "get: cannot access field on a non-Xml value", "get")
 	}
 	switch getKey(args[0]) {
 	case "tag":
@@ -963,7 +963,7 @@ func getXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 func getrXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	tag, attr, cren, ok := XmlParts(args[1])
 	if !ok {
-		return nil, r.AqlError("getr_error", "getr: cannot access field on a non-Xml value", "getr")
+		return nil, r.BoruError("getr_error", "getr: cannot access field on a non-Xml value", "getr")
 	}
 	switch k := getKey(args[0]); k {
 	case "tag":
@@ -973,7 +973,7 @@ func getrXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	case "cren":
 		return []Value{NewList(cren)}, nil
 	default:
-		return nil, r.AqlError("not_found", fmt.Sprintf("getr: Xml has no field %q (tag / attr / cren)", k), "getr")
+		return nil, r.BoruError("not_found", fmt.Sprintf("getr: Xml has no field %q (tag / attr / cren)", k), "getr")
 	}
 }
 
@@ -1271,7 +1271,7 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	key := args[0]
 	container := args[1]
 	if !IsConcrete(container) {
-		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
+		return nil, r.BoruError("get_error", "get: cannot access property on type literal", "get")
 	}
 	// Integer key: list index access.
 	if key.Parent.ConformsTo(TInteger) {
@@ -1362,7 +1362,7 @@ func getObjectHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	key := args[0]
 	container := args[1]
 	if !IsConcrete(container) {
-		return nil, r.AqlError("get_error", "get: cannot access property on type literal", "get")
+		return nil, r.BoruError("get_error", "get: cannot access property on type literal", "get")
 	}
 	k := getKey(key)
 	if m, err := AsMutableMap(container); err == nil {
@@ -1439,7 +1439,7 @@ func getStoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		// matched by any `case` arm, and the compiled path renders the caret
 		// span at len(Word) — 11 carets for "unknown key" against the
 		// interpreter's 3 for the real token.
-		return nil, r.AqlError("key_error", fmt.Sprintf("unknown key: %s", key), "get")
+		return nil, r.BoruError("key_error", fmt.Sprintf("unknown key: %s", key), "get")
 	}
 	return []Value{val}, nil
 }
@@ -1456,7 +1456,7 @@ func getrStoreHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	key := getKey(args[0])
 	val, ok := store.Get(key)
 	if !ok {
-		return nil, r.AqlError("not_found", fmt.Sprintf("getr: key %q not found in store", key), "getr")
+		return nil, r.BoruError("not_found", fmt.Sprintf("getr: key %q not found in store", key), "getr")
 	}
 	return []Value{val}, nil
 }
@@ -1501,7 +1501,7 @@ func getStoreReturnsFn(args []Value, r *Registry) []Value {
 func contextHandler(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	store := reg.Contexts.Top()
 	if store == nil {
-		return nil, reg.AqlError("context_error", "context: no active context", "context")
+		return nil, reg.BoruError("context_error", "context: no active context", "context")
 	}
 	return []Value{NewStoreValue(TStore, store)}, nil
 }
@@ -1589,7 +1589,7 @@ func setMapTypedReturns(args []Value, r *Registry) []Value {
 func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	_idx, err := args[0].AsConcreteInteger()
 	if err != nil {
-		return nil, r.AqlError("set_error", "set: expected a concrete Integer index", "set")
+		return nil, r.BoruError("set_error", "set: expected a concrete Integer index", "set")
 	}
 	lst, err2 := RequireConcreteList(args[2], "set")
 	if err2 != nil {
@@ -1598,7 +1598,7 @@ func setListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	idx := int(_idx)
 	n := lst.Len()
 	if idx < 0 || idx >= n {
-		return nil, r.AqlError("index_out_of_range",
+		return nil, r.BoruError("index_out_of_range",
 			fmt.Sprintf("set: index %d out of range for list of length %d", idx, n), "set")
 	}
 	// R2: a typed list ([:T]) enforces + recursively re-tags on write (see

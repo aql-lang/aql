@@ -3,23 +3,23 @@
 Status: **design round, implementation-ready; no code.** This is the Phase 6
 "design round first" deliverable required by
 `design/CHECKER-BYTECODE-COMPLETION-PLAN.0.md` §Phase 6. Written against the
-live tree at `f4c56a1` (branch `claude/aql-local-reasoning-design-rb7elj`,
+live tree at `f4c56a1` (branch `claude/boru-local-reasoning-design-rb7elj`,
 2026-07-04), with every load-bearing claim re-verified against committed code,
 committed tests, and a fresh 3,875-row `--force-compile` sweep — not against
 the June design docs, several of which are now materially stale (§1).
 
-Read first: `aql-bytecode-stage3-inlining-plan.0.md` (the June build record),
+Read first: `boru-bytecode-stage3-inlining-plan.0.md` (the June build record),
 `module-fn-checkstate-ownership.7.md` (the ownership project + its closing
 correction), `MODULE-FN-PARAM-SLOT-COMPILATION.0.md` (**the doc that actually
 describes the live architecture** — §9's fn-dispatch unification), and
-`aql-bytecode-next-stages.0.md` §C/§F/§G.
+`boru-bytecode-next-stages.0.md` §C/§F/§G.
 
 ---
 
 ## 0. Live state (measured this session)
 
 Method: the committed census at `f4c56a1` (`test/go/langspec/COMPILED_STATUS.md`)
-plus a full per-row `aql run -force-compile` sweep of all 3,875 spec value rows
+plus a full per-row `boru run -force-compile` sweep of all 3,875 spec value rows
 extracted from `f4c56a1:lang/spec/*.tsv`. The sweep binary was built from the
 working tree (dirty with the concurrent Phase 4.4/4.5 work — options-schema +
 recorder-interface decoupling, both coverage-neutral by design); its refusal
@@ -54,7 +54,7 @@ not named by the census; identify at Stage 0).
 compile" row.** `module-test.tsv:38` — the reproducer Phase 6 names — compiles
 and runs byte-identical **natively** today (probe: `-force-compile` clean,
 `{total:2 passed:2 failed:0}`; pinned by
-`lang/go/bytecode_aqltest_cascade_test.go::TestAqlTestCascade_FlatPassing`,
+`lang/go/bytecode_borutest_cascade_test.go::TestBoruTestCascade_FlatPassing`,
 which asserts **no FALLBACK island**, and by the recursive sub-spec parity
 tests in the same file). `module-rand.tsv:38`, `module-parselang.tsv:23`,
 `macro.tsv:45` (as an expansion-depth error), `def-node-binding.tsv:54`,
@@ -80,7 +80,7 @@ tests in the same file). `module-rand.tsv:38`, `module-parselang.tsv:23`,
    required for this row. Check-time zero-count `for` pruning ALSO landed
    (`TestRunSpecHarnessCompiles` positives) but is an optimisation, not the
    load-bearing mechanism.
-3. **`aql-bytecode-stage3-inlining-plan.0.md`'s status header is real, not
+3. **`boru-bytecode-stage3-inlining-plan.0.md`'s status header is real, not
    aspirational** — its "refusals 5 → 0" series (module-parselang:23,
    module-rand:38, module-test:38, macro:45, def-node-binding:54) landed as
    commits `6874aa9 → e753714` (June 2026), all ancestors of HEAD. Its
@@ -89,13 +89,13 @@ tests in the same file). `module-rand.tsv:38`, `module-parselang.tsv:23`,
    (§3.2 below) remain valid.
 4. **`MODULE-FN-PARAM-SLOT-COMPILATION.0.md` §9's regression note ("run-spec
    no longer compiles NATIVELY") is itself stale**: the four cascade kernel
-   fixes recorded in `bytecode_aqltest_cascade_test.go` (FnSummaries
+   fixes recorded in `bytecode_borutest_cascade_test.go` (FnSummaries
    delete-key, poly registry threading, **genArgs-keyed fn units**, 0-return
    no-provenance residual drop) restored native compilation of the recursive
    harness after the unification. The comment inside
    `TestRunSpecHarnessCompiles` ("FALLBACK ALLOWED") predates that and the
    sibling cascade test's no-island assertion is the current contract.
-5. **`aql-bytecode-next-stages.0.md` Stage C's design ("cross-registry
+5. **`boru-bytecode-next-stages.0.md` Stage C's design ("cross-registry
    EmitState sharing" as future work) is DONE** — `shareCheckState`
    (`f4c56a1:eng/go/engine.go:4705`) plus the unification. Stage C's row list
    is cleared. Stage D (sub-registry poly) partially landed (PolyRef.Reg,
@@ -110,7 +110,7 @@ their failure modes.
 
 ### 2.1 Reverted attempt 1 — capture-threaded islands (built twice, reverted twice)
 
-`design/aql-bytecode-capture-threaded-islands.0.md`. Thread a code body's free
+`design/boru-bytecode-capture-threaded-islands.0.md`. Thread a code body's free
 outer-locals into an `OpFallback` island as named `def` bindings
 (`FallbackSpan.Captures` + install/teardown in `vm.go::runFallback`). Both
 prototypes were **correct and gate-clean** and were still reverted, for a
@@ -132,14 +132,14 @@ byte-identical taxonomy), and the island count is pinned ≤ 1 throughout.
 
 `module-fn-checkstate-ownership.7.md` Step 3 (`tryModuleFnUnit`): route the
 check-mode module-preamble-fn dispatch through its registered `ReturnsFn` (unit
-compile) **while the inline `CallAQL` path still existed for everything else**.
+compile) **while the inline `CallBoru` path still existed for everything else**.
 Measured results:
 
 - did **not** clear module-test:38 (the binding constraint was one level
   deeper — the closure/capture analysis, then deeper again: check-time
   termination of the recursion), and
 - **regressed** coverage (refusals 9 → 10, dispatch-recovery 3 → 4): other
-  module rows' `CallAQL`-recorded carriers differed from the `ReturnsFn`
+  module rows' `CallBoru`-recorded carriers differed from the `ReturnsFn`
   residuals, so a partial reroute perturbed rows it never targeted.
 
 The `.7` closing corrections then mispinned the root cause twice
@@ -185,7 +185,7 @@ The wall fell to the **fn-dispatch unification** (`c5ff7bd`, 2026-06-28,
    (`core_helpers.go:384-…`) so field reads keep their declared types.
    Recursion terminates in the **VM**, over real data, not in the checker.
 4. **The cascade kernel fixes** (pinned by
-   `lang/go/bytecode_aqltest_cascade_test.go`): stale-summary deletion before
+   `lang/go/bytecode_borutest_cascade_test.go`): stale-summary deletion before
    an armed re-record (`core_helpers.go:915`), `PolyRef.Reg` sub-registry
    threading, genArgs-keyed units (a recursive call previously allocated a
    second, empty unit → silent 0-case miscompile), and the 0-return
@@ -260,7 +260,7 @@ declined tier leaves the real state untouched:
    fingerprints arg values for concrete args via their type+payload identity;
    extend the key with a canonical value render if not), so a same-type
    different-value call NEVER reuses baked constants (the exact hazard
-   `aql-bytecode-stage3-inlining-plan.0.md` feature (1) flagged). The unit is
+   `boru-bytecode-stage3-inlining-plan.0.md` feature (1) flagged). The unit is
    still a unit — param slots, param guards, RET checks — so soundness rides
    the same machinery; only const-folding inside the body sees real values.
    Bounded: probe-first, one specialisation per call site, recursion inside a
@@ -359,7 +359,7 @@ rollbacks.
 Discipline for every stage (unchanged from the repo standard): probe-first;
 `make fmt && vet && lint && test`; `make verify-bytecode` (differential +
 whole-corpus fallback parity + combinations + property fuzz + `-race` +
-`aqldebug`, **0 divergences**); crossdiff (0 interpret divergences);
+`borudebug`, **0 divergences**); crossdiff (0 interpret divergences);
 `make status`; ratchets move down only, with rationale; per-stage landing test
 with positive + negative; **gate-clean-or-revert**. No stage may raise the
 island count (§2.1) or migrate rows *into* untargeted buckets.
@@ -410,7 +410,7 @@ Sub-stages, each independently gated, ordered by mechanism reuse:
 
 - **M2a `apply`-over-param-fn** (recursion:90-92; function-valued-operand 3):
   the two coordinated lowering changes already pinned in
-  `aql-bytecode-next-stages.0.md` §"Update": route a fn unit's body residual
+  `boru-bytecode-next-stages.0.md` §"Update": route a fn unit's body residual
   through `resolveDynamicApply`, and extend `trailingApply` to accept a
   `resolveOperand`-able (local) fn. `RecordDynApply` (`emit.go:2214`) is the
   landed intermediate-apply precedent (def-bound applies, `baaf45b7`).
@@ -491,7 +491,7 @@ if layer 1 (Array element typing) is still binding, that work belongs to the
 checker-precision track (parameterised mutable-Array carriers with
 set-widening — genuinely multi-session), NOT to Phase 6. Tier S (value
 specialisation) is implemented only if a live row/file demands it after M5;
-it ships behind `AQL_BC_SPEC=1` (internal env, default off, the `AQL_COMPILE`
+it ships behind `BORU_BC_SPEC=1` (internal env, default off, the `BORU_COMPILE`
 precedent) with the census run both ways in CI until it has a non-zero win,
 else it is deleted, not kept dormant (the capture-threaded lesson: dead
 machinery in the miscompile-sensitive tree is a cost).

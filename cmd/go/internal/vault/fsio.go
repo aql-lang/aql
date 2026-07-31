@@ -14,7 +14,7 @@ import (
 // has reached stable storage.
 //
 // The caller is responsible for ensuring the parent directory exists
-// (the vault writers MkdirAll ~/.aql with 0700 first; the exporter
+// (the vault writers MkdirAll ~/.boru with 0700 first; the exporter
 // writes to a user-chosen directory that must already exist).
 func writeFileAtomic(path string, data []byte, perm os.FileMode) error {
 	dir := filepath.Dir(path)

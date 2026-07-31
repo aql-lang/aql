@@ -4,8 +4,8 @@ import (
 	"errors"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // w9RandListOfHandler returns the rand-list-of native handler bound to a fresh

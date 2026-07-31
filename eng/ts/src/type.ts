@@ -1,4 +1,4 @@
-// AQL types form a slash-separated path lattice.
+// boru types form a slash-separated path lattice.
 //
 // A child type matches a parent pattern: Scalar/String/ProperString
 // matches Scalar/String matches Scalar. The reverse is not true. The
@@ -139,7 +139,7 @@ for (const d of builtinDecls) {
   if (d.alias) LEAF_INDEX.set(d.alias, d.path)
 }
 
-export class AqlType {
+export class BoruType {
   readonly parts: readonly string[]
 
   constructor(parts: readonly string[]) {
@@ -147,13 +147,13 @@ export class AqlType {
   }
 
   /** True iff this type satisfies (conforms to) the given pattern. */
-  matches(pattern: AqlType): boolean {
+  matches(pattern: BoruType): boolean {
     if (pattern.parts.length === 1 && pattern.parts[0] === 'Any') return true
     return this.pathSubtype(pattern)
   }
 
   /** Strict path-prefix subtype: every part of pattern is a part of this at the same index. */
-  pathSubtype(pattern: AqlType): boolean {
+  pathSubtype(pattern: BoruType): boolean {
     if (this.parts.length < pattern.parts.length) return false
     for (let i = 0; i < pattern.parts.length; i++) {
       if (this.parts[i] !== pattern.parts[i]) return false
@@ -161,7 +161,7 @@ export class AqlType {
     return true
   }
 
-  equal(other: AqlType): boolean {
+  equal(other: BoruType): boolean {
     if (this.parts.length !== other.parts.length) return false
     for (let i = 0; i < this.parts.length; i++) {
       if (this.parts[i] !== other.parts[i]) return false
@@ -187,13 +187,13 @@ export class AqlType {
  * expand to their full hierarchy ("Scalar/Number/Integer") via the
  * leaf index, matching the Go engine's NewType + ExpandShortName.
  */
-export function newType(path: string): AqlType {
+export function newType(path: string): BoruType {
   const rawParts = path.split('/')
   for (const p of rawParts) {
     const ch = p[0]
     if (ch && /[a-z]/.test(ch)) {
       throw new Error(
-        `aql: type part ${JSON.stringify(p)} in ${JSON.stringify(path)} must start with an uppercase letter`,
+        `boru: type part ${JSON.stringify(p)} in ${JSON.stringify(path)} must start with an uppercase letter`,
       )
     }
   }
@@ -208,7 +208,7 @@ export function newType(path: string): AqlType {
       parts = full.split('/')
     }
   }
-  return new AqlType(parts)
+  return new BoruType(parts)
 }
 
 // builtinRank returns a type's position in builtinDecls (parent-first
@@ -218,7 +218,7 @@ export function newType(path: string): AqlType {
 // unions in the same tcmp order the Go kernel stores them in, so the
 // cross-engine differential agrees.
 const RANK_BY_PATH = new Map<string, number>(builtinDecls.map((d, i) => [d.path, i]))
-export function builtinRank(t: AqlType): number {
+export function builtinRank(t: BoruType): number {
   const r = RANK_BY_PATH.get(t.parts.join('/'))
   return r === undefined ? Number.MAX_SAFE_INTEGER : r
 }
@@ -281,8 +281,8 @@ export const TDecimal = TFloat
  * `eng.TypeNameTable()` — the user-facing leaf name → Type map the
  * parser and fn-param resolution consult for bare type-name words.
  */
-export function typeNameTable(): Map<string, AqlType> {
-  const m = new Map<string, AqlType>()
+export function typeNameTable(): Map<string, BoruType> {
+  const m = new Map<string, BoruType>()
   for (const [name, path] of BY_NAME) {
     m.set(name, newType(path))
   }

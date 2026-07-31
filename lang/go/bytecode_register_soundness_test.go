@@ -16,7 +16,7 @@ import (
 // unchanged: whichever path RunCompiled takes (compile or fall back), the
 // result (value + error presence) must match the interpreter exactly.
 func TestBoundParserDispatchNeverDiverges(t *testing.T) {
-	const bind = `import "aql:parselang"  import "aql:string-util"  ` +
+	const bind = `import "boru:parselang"  import "boru:string-util"  ` +
 		`def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  `
 	cases := []struct {
 		name string
@@ -56,7 +56,7 @@ func TestBoundParserDispatchNeverDiverges(t *testing.T) {
 // Control: a plain static export read (ParseLang.kinds) must COMPILE — the
 // frozen-registry tombstone does not taint the rest of the module.
 func TestNonRegisterModuleWordStillCompiles(t *testing.T) {
-	src := `import "aql:parselang"  ParseLang.kinds`
+	src := `import "boru:parselang"  ParseLang.kinds`
 	a, _ := New()
 	got, err := a.RunCompiledStrict(src)
 	if err != nil {

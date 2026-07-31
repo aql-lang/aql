@@ -1,20 +1,20 @@
-# `aql:fmt` — a formatter as a core module, and the XSLT question
+# `boru:fmt` — a formatter as a core module, and the XSLT question
 
 Status: Phases 1, 3-rules, 3-vocabulary, 4-embedded, the Phase-2 seam, **and
 the trivia-preserving tabnas CST front end** have **landed**, and the source
 formatter is now **verified corruption-free** (seven `fmt`-corruption bugs
 found and fixed — see "Formatter correctness baseline"). The tabnas front end
 (`formatter.TabnasParse`, driven by `eng/go/parser.LexTokens`) is now the
-formatter's **`DefaultParse`** — `aql fmt`, the `aql:fmt` module, the LSP, and
-the Markdown/HTML embedders all parse through the AQL-configured tabnas lexer.
+formatter's **`DefaultParse`** — `boru fmt`, the `boru:fmt` module, the LSP, and
+the Markdown/HTML embedders all parse through the boru-configured tabnas lexer.
 It re-coalesces tabnas's fine tokens back into the hand-lexer's coarse words
 and is pinned **byte-identical** to the retained hand-lexer (`HandParse`)
-across the whole 73-file `.aql` corpus plus an edge-case battery
+across the whole 73-file `.boru` corpus plus an edge-case battery
 (`formatter/format_tabnas_test.go`). The earlier "impedance mismatch → keep the
 hand-lexer" recommendation is thereby **superseded** — the conversion was
 worked all the way through (see the Phase-2 entry). **Phase 3-full is now also
 DONE**: the formatter's layout decisions live in a declarative RULE TABLE
-**expressed in AQL** — `formatter/fmt-rules.aql`, the stylesheet, embedded
+**expressed in boru** — `formatter/fmt-rules.boru`, the stylesheet, embedded
 and parsed at build time exactly as an XSLT stylesheet is expressed in XML
 — and the Go emitter is the generic PROCESSOR that interprets it (the
 `formatter.Rules` struct is only the stylesheet's compiled form; `Fmt.rules`
@@ -33,16 +33,16 @@ instruction").
 
 ## Context
 
-`aql fmt` today is a CLI subcommand (`cmd/go/internal/fmt`) that calls a
+`boru fmt` today is a CLI subcommand (`cmd/go/internal/fmt`) that calls a
 self-contained, hand-rolled pretty-printer, `formatter.Format(src) string`
 (`lang/go/formatter/format.go`). It has three limitations we want to remove:
 
 1. **No runtime API.** Formatting is reachable only from the shell, not from
-   AQL code. We want `import "aql:fmt"` / `Fmt.format`.
+   boru code. We want `import "boru:fmt"` / `Fmt.format`.
 2. **Rules are baked into Go control flow.** The layout policy (spacing,
    wrapping at 70 cols, type-name capitalisation, map-shorthand expansion,
    `fn` bracketing) is imperative Go. We want the rules expressed
-   **declaratively, as AQL**, so the formatter's policy is data the language
+   **declaratively, as boru**, so the formatter's policy is data the language
    can read and extend — the same "the tool documents/defines itself" stance
    as `describe`.
 3. **Its own tokenizer.** It re-lexes source with a bespoke scanner rather
@@ -53,7 +53,7 @@ self-contained, hand-rolled pretty-printer, `formatter.Format(src) string`
 Plus new behaviour: **72-column** lines (was 70) except **backtick/template
 content is left verbatim**; **single fn params/returns drop their brackets**;
 **all code examples everywhere** (docs, `describe`, …) run through fmt; and a
-way for user code to format **embedded** AQL inside Markdown/HTML via special
+way for user code to format **embedded** boru inside Markdown/HTML via special
 comment markers.
 
 ## Findings that constrain the design
@@ -75,7 +75,7 @@ These come from reading the parser, the module system, and the formatter
   offset), and quote spelling (`Text.Quote` distinguishes `` ` `` / `'` /
   `"`). Custom `LexMatcher`s (priority bands match=1e6 … space=3e6) can
   intercept spans **before** the built-in space/comment consumer — the exact
-  mechanism AQL already uses for template literals and minilang. So a
+  mechanism boru already uses for template literals and minilang. So a
   **lossless CST is buildable on the lexer layer**: comments (medium effort —
   capture is easy, re-attachment to the right node is the work), backtick
   verbatim (low — read `Token.Src`), source-ordered maps (parse maps at the
@@ -84,10 +84,10 @@ These come from reading the parser, the module system, and the formatter
   `formatter` package is a leaf both can import (it has no engine deps today).
   Therefore: the shared driver must stay a **plain package importable by both
   `native` and `modules`**; describe/help (in `native`) cannot call the
-  `aql:fmt` *module* directly (that would be `native → modules → native`).
+  `boru:fmt` *module* directly (that would be `native → modules → native`).
   Doc-example formatting must run at the **CLI / `genhelp`** layer, which
-  already builds a full registry and runs AQL.
-- **F4 — The XSLT substrate already exists.** AQL has, natively:
+  already builds a full registry and runs boru.
+- **F4 — The XSLT substrate already exists.** boru has, natively:
   type/shape **multiple dispatch** (most-specific-wins over the lattice) — a
   direct analogue of `<xsl:template match="…">`; **`patrun`** (property-bag
   router, specificity-ordered, stores fns as values) — a priority/mode table;
@@ -105,11 +105,11 @@ These come from reading the parser, the module system, and the formatter
 
 ```
         ┌─────────────────────────────────────────────┐
-  cmd   │ aql fmt (files, .md/.html)   aql describe    │
+  cmd   │ boru fmt (files, .md/.html)   boru describe  │
         └───────────────┬───────────────────┬─────────┘
                         │ shared Go driver   │ genhelp: examples → fmt
         ┌───────────────▼───────────────┐    │
- modules│ aql:fmt  →  Fmt.format,        │    │
+ modules│ boru:fmt  →  Fmt.format,       │    │
         │            Fmt.* rule vocab    │    │
         └───────────────┬───────────────┘    │
         ┌───────────────▼────────────────────▼─────────┐
@@ -117,7 +117,7 @@ These come from reading the parser, the module system, and the formatter
  pkg    │  ┌─────────────┐  ┌───────────────┐  ┌──────┐ │
         │  │ lossless    │→ │ document      │→ │ emit │ │
         │  │ tabnas CST  │  │ algebra + rule│  │(72col│ │
-        │  │ (param:     │  │ engine (AQL   │  │ back-│ │
+        │  │ (param:     │  │ engine (boru  │  │ back-│ │
         │  │  parser fn) │  │ decl. rules)  │  │ tick)│ │
         │  └─────────────┘  └───────────────┘  └──────┘ │
         └───────────────────────────────────────────────┘
@@ -128,7 +128,7 @@ These come from reading the parser, the module system, and the formatter
 deliberately do **not** route file bytes through `a.Run("… Fmt.format …")`
 (escaping hell, one registry per file). "The CLI calls into the module" is
 satisfied in spirit by a single shared implementation, not by the CLI
-literally dispatching an AQL word per file.
+literally dispatching a boru word per file.
 
 **Parser as a parameter.** `fmtcore.Format` takes a `Parse` function value
 (the lossless tabnas CST builder in production; a stub in tests). This is the
@@ -138,7 +138,7 @@ requirement, made concrete.
 ## The XSLT investigation
 
 The request: *algorithmically investigate whether an XSLT-like approach works,
-and whether XSLT itself could be expressed by `aql:fmt`.*
+and whether XSLT itself could be expressed by `boru:fmt`.*
 
 ### XSLT in one paragraph
 
@@ -153,35 +153,35 @@ processor walks the source tree and, at each node, selects the
 ### Does an XSLT-shaped approach work for formatting?
 
 Formatting *is* a tree transformation: `parse-tree → layout-document → text`.
-The XSLT control model maps onto AQL primitives essentially 1:1 (F4):
+The XSLT control model maps onto boru primitives essentially 1:1 (F4):
 
-| XSLT construct | AQL realisation |
+| XSLT construct | boru realisation |
 |---|---|
 | `<xsl:template match="Integer">` | a rule fn dispatched by node **type/shape** (multiple dispatch, most-specific-wins over the lattice); or a `patrun` pattern keyed on node attributes |
 | template **priority** / import precedence | `patrun` specificity + alphabetical tie-break, or lattice `Rank` |
 | **modes** (`mode="toc"`) | a `mode` key in the `patrun` subject, or a separate rule table |
 | `<xsl:apply-templates select="children">` | `walk` (pre/post-order) or `fold`/`each` over child nodes, re-entering rule dispatch |
-| `<xsl:value-of>` / literal result | AQL producing **document** fragments (the `Fmt.*` vocabulary below) |
+| `<xsl:value-of>` / literal result | boru producing **document** fragments (the `Fmt.*` vocabulary below) |
 | `<xsl:param>` / `<xsl:with-param>` | ordinary fn params / captured closure state |
 
 So an XSLT-style declarative formatter is not only feasible, it is the
-*natural* AQL expression of the problem. The rule set becomes a collection of
+*natural* boru expression of the problem. The rule set becomes a collection of
 `Fmt.rule`-registered fns (or a `patrun` table) keyed by node kind; a driver
 `apply`s them depth-first and folds the resulting document to text.
 
-### Could XSLT *itself* be expressed by `aql:fmt`?
+### Could XSLT *itself* be expressed by `boru:fmt`?
 
 Partly, and instructively:
 
-- **The template-dispatch + apply-templates core: yes.** If `aql:fmt`'s rule
-  engine is generalised from "match AQL fmt-CST nodes" to "match **arbitrary**
+- **The template-dispatch + apply-templates core: yes.** If `boru:fmt`'s rule
+  engine is generalised from "match boru fmt-CST nodes" to "match **arbitrary**
   nodes by pattern, emit a sequence, recurse on selected children", it is a
   general match-driven tree-transform engine — the XSLT execution model. Both
-  are declarative, both Turing-complete, so any XSLT transformation has an
-  `aql:fmt` rule-set equivalent in principle.
+  are declarative, both Turing-complete, so any XSLT transformation has a
+  `boru:fmt` rule-set equivalent in principle.
 - **The gap is XPath.** XSLT's selection power lives in XPath — axes
   (ancestor/descendant/following-sibling), positional predicates
-  (`[position() mod 2]`), and value predicates. AQL's analogues are partial:
+  (`[position() mod 2]`), and value predicates. boru's analogues are partial:
   `Reach`/dotted paths, `StructUtil.getpath`/`selector`, and `patrun`'s
   attribute matching cover child/attribute selection and equality predicates,
   but not the full axis algebra. Expressing arbitrary XSLT would require a
@@ -212,20 +212,20 @@ proposed `Fmt.*` vocabulary (the "formatting words"):
   Map's `{$kind:'entry' key value}` entry nodes, a List's elements, else
   `[]`. **LANDED.**
 
-A Go (or AQL) `Fmt.render width doc` prints the document, and `width` defaults
+A Go (or boru) `Fmt.render width doc` prints the document, and `width` defaults
 to **72**, with `Fmt.verbatim` spans passed through untouched (the
 backtick-verbatim rule falls out of the algebra, not a special case in every
 wrapper).
 
 `Fmt.kind` and `Fmt.children` are deliberately **pure value→value
 transforms** — classification and child-exposure only. Dispatch and recursion
-stay in ordinary AQL: fetch the rule fn from a table keyed by kind, apply it,
-recurse on children. So the rule engine itself is AQL (no fn-invocation or
+stay in ordinary boru: fetch the rule fn from a table keyed by kind, apply it,
+recurse on children. So the rule engine itself is boru (no fn-invocation or
 registry-threading in Go), and a whole formatter reads like an XSLT
 stylesheet — a rule table plus a one-line `apply` driver:
 
 ```
-import "aql:fmt"
+import "boru:fmt"
 def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
 def rules {
   scalar: (nd:Any => (canon nd))
@@ -243,7 +243,7 @@ bytecode compiler leaves to the interpreter). See
 ## Existing rules → declarative form
 
 The current `format.go` rules restated as template rules (Phase 3 encodes
-these as `Fmt.*` AQL):
+these as `Fmt.*` boru):
 
 | Current behaviour (`format.go`) | Template rule |
 |---|---|
@@ -264,8 +264,8 @@ these as `Fmt.*` AQL):
   (`BuildFmtModule`, `FmtNatives` with `format` : String→String wrapping
   `formatter.Format`, `BarrierPos:-1`), `docs_fmt.go`, catalog registration in
   `modules.go` + `help_render.go`, tests in `fmt_test.go` (both handler arms +
-  end-to-end dispatch). `import "aql:fmt"` / `Fmt.format` works; `aql describe
-  "aql:fmt"` lists it; the CLI keeps calling the shared driver.
+  end-to-end dispatch). `import "boru:fmt"` / `Fmt.format` works; `boru describe
+  "boru:fmt"` lists it; the CLI keeps calling the shared driver.
 - **Phase 2 — parser as a parameter, AND the tabnas CST front end (DONE).**
   Seam: `Format(src)` → `FormatWith(src, Parse)`, with `Parse` a
   `func(src) *Node` front end. The layout rules and emitter run on the tree
@@ -273,11 +273,11 @@ these as `Fmt.*` AQL):
   **built and is the default** (`formatter.TabnasParse`, wired as
   `DefaultParse`; the hand-lexer is retained as `HandParse`, the independent
   reference). It is proven byte-identical to the hand-lexer across the whole
-  `.aql` corpus + an edge battery (`TestTabnasParse*`). The build worked the
+  `.boru` corpus + an edge battery (`TestTabnasParse*`). The build worked the
   earlier impedance-mismatch objection all the way through — here is how each
   concern resolved:
   - **Trivia lexing (mechanism).** `eng/go/parser.LexTokens` drives the
-    AQL-configured tabnas lexer with `cfg.IgnoreSet = {}`, so `Next` returns
+    boru-configured tabnas lexer with `cfg.IgnoreSet = {}`, so `Next` returns
     `#SP`/`#LN`/`#CM` verbatim, each carrying `Src` + byte offset `SI`. It
     returns `(tokens, ok)`; `ok` is false when `lex.Err` is set (an
     unterminated string/backtick, a bad token), the signal the front end uses
@@ -286,7 +286,7 @@ these as `Fmt.*` AQL):
     `eng/go/parser` for `LexTokens`. No import cycle
     (`formatter → eng/parser → eng`; eng/parser imports neither back). The
     package's engine-dep-free leaf status was the cost, paid deliberately —
-    reusing the ONE configured lexer beats re-declaring AQL's lex
+    reusing the ONE configured lexer beats re-declaring boru's lex
     customisations in a second place (option (b)'s duplication).
   - **Coarse-vs-fine impedance — re-coalesced, not re-implemented.**
     `tabnasTokenize` accumulates a run of adjacent word-part tokens
@@ -309,7 +309,7 @@ these as `Fmt.*` AQL):
     is regression-locked to the hand-lexer by the corpus differential.
   One supporting finding from the original probe, retained for the record:
   - **The configured lexer's token stream is PROVEN (probe run).** Driving
-    the AQL-configured jsonic (`setupBaseTokens` + the template / bignum /
+    the boru-configured jsonic (`setupBaseTokens` + the template / bignum /
     minilang / xml matchers) via `jsonic.NewLex(src, j.Config())` with
     `lex.Config.IgnoreSet = {}` yields a clean, workable stream: `#TX` word,
     `#NR`/`#BD` number, `#ST` string, `#CM` whole line comment, `#LN`/`#SP`
@@ -333,19 +333,19 @@ these as `Fmt.*` AQL):
   backtick-verbatim (`scanBacktick`), and bracketless single param/return
   (`elideFnBrackets`). The declarative **substrate** is DONE: a
   Wadler/Prettier document algebra (`formatter.Doc`/`RenderDoc`) exposed as
-  the runtime word **`Fmt.render`**, driven by an AQL doc tree
+  the runtime word **`Fmt.render`**, driven by a boru doc tree
   (`{fmt:'group' body:…}` etc.) — "formatting words in the fmt module,
-  expressed as AQL data". The XSLT-style **rule vocabulary** is now also DONE:
+  expressed as boru data". The XSLT-style **rule vocabulary** is now also DONE:
   the two pure words **`Fmt.kind`** (node → dispatch key) and
   **`Fmt.children`** (node → child sequence) make a declarative rule table +
-  a one-line `apply` driver the natural AQL expression of a formatter
+  a one-line `apply` driver the natural boru expression of a formatter
   (`modules/fmtrule.go`, demonstrated end-to-end by
   `TestFmtDeclarativeFormatter` — see "The output side" above). **Phase 3-full
   is DONE** — the built-in layout rules are now DATA and the Go emitter is the
   processor that interprets them:
-  - **The rule table is AQL source.** The canonical table is
-    `formatter/fmt-rules.aql` — a commented AQL stylesheet, embedded and
-    parsed at first use (`rules_aql.go::DefaultRules`); the file is itself
+  - **The rule table is boru source.** The canonical table is
+    `formatter/fmt-rules.boru` — a commented boru stylesheet, embedded and
+    parsed at first use (`rules_boru.go::DefaultRules`); the file is itself
     fmt-clean (laid out in the style it defines — pinned by
     `TestRulesStylesheetFmtClean`), and a broken stylesheet surfaces at
     module construction via `DefaultRulesInitError` (the ADR-005 pattern),
@@ -375,13 +375,13 @@ these as `Fmt.*` AQL):
     strategies — the output method, as xsl:output/indent is processor
     machinery in XSLT — selected and ordered by the stylesheet's
     `strategies` list.
-  - **The AQL surface**: **`Fmt.rules`** returns the canonical table as AQL
+  - **The boru surface**: **`Fmt.rules`** returns the canonical table as boru
     data; **`Fmt.format-with <rules> <src>`** formats under a (partial)
     override table — width, indent, attach, brackets, strategies,
-    statement-starts, fn-word are all overridable from AQL, each validated
+    statement-starts, fn-word are all overridable from boru, each validated
     (unknown keys/kinds/classes/strategies error). The AUTHORITY pin:
     `Fmt.format-with (Fmt.rules) src == Fmt.format src` (spec row + Go
-    round-trip test) — the AQL table is the formatter's configuration, not
+    round-trip test) — the boru table is the formatter's configuration, not
     documentation of it.
   - **How the whitespace question resolved.** The earlier "impedance" fork
     asked how declarative rules could reproduce the emitter's greedy fill
@@ -394,7 +394,7 @@ these as `Fmt.*` AQL):
     No reflow happened and none was needed.
   - **What stays in Go and why.** The processor (recursion, measurement,
     template interpretation) is Go, exactly as an XSLT processor is not
-    written in XSLT — and it keeps `aql fmt`/LSP fast. The fully-AQL path
+    written in XSLT — and it keeps `boru fmt`/LSP fast. The fully-boru path
     remains available and demonstrated for user-defined formatters:
     `Fmt.tree` (the CST as a `$kind`-tagged value tree) + `Fmt.kind` /
     `Fmt.children` dispatch + rule fns (`TestFmtTreeDeclarativeFormatter`
@@ -413,7 +413,7 @@ these as `Fmt.*` AQL):
     formatter, and no rule set emitting into today's Doc algebra can reproduce
     the emitter's output. Consequence: routing `Fmt.format` through the
     declarative Doc-algebra rules — Phase 3-full as written — is **NOT
-    output-preserving**. It re-flows the ENTIRE `.aql` corpus and every
+    output-preserving**. It re-flows the ENTIRE `.boru` corpus and every
     fmt-clean-pinned example/doc block from the emitter's fill style to the
     document algebra's per-line style, colliding with the byte-identical /
     corruption-free / 100%-gate discipline every other phase held to (Phases
@@ -426,11 +426,11 @@ these as `Fmt.*` AQL):
       and the design's intent — but a repo-wide, user-visible formatting
       change requiring explicit sign-off.
     - **(b) Preserve the output.** Reimplement the emitter's exact greedy-fill
-      + fn/trailing-container/statement strategies as AQL rules that emit
+      + fn/trailing-container/statement strategies as boru rules that emit
       strings directly (bypassing the generic Doc algebra), plus a
-      source-`*Node` → AQL-value bridge and engine-driven `Fmt.format`. Keeps
+      source-`*Node` → boru-value bridge and engine-driven `Fmt.format`. Keeps
       byte-identity but is a large multi-session port; the layout rules being
-      AQL (not Go) sit outside the Go coverage gate, only the bridge/driver
+      boru (not Go) sit outside the Go coverage gate, only the bridge/driver
       need Go coverage.
     - **(c) Extend the algebra with a `fill` primitive** matching the
       emitter's greedy wrap, then port onto it (still large; the fn/container
@@ -441,21 +441,21 @@ these as `Fmt.*` AQL):
     templates emit TEXT, whitespace included, so the rules can own the exact
     current whitespace. Implemented as the rules-as-data / processor split
     (see the Phase 3-full DONE entry above): every layout decision moved into
-    `formatter.Rules` (AQL-visible and overridable via `Fmt.rules` /
+    `formatter.Rules` (boru-visible and overridable via `Fmt.rules` /
     `Fmt.format-with`), the emitter became the table's interpreter, and the
-    output stayed byte-identical — no reflow, no imperative AQL
+    output stayed byte-identical — no reflow, no imperative boru
     reimplementation of the walk, no algebra extension needed for the
     default style. (A `fill` Doc primitive, option (c), remains a possible
     future addition for Doc-DATA rule sets that want the greedy style.)
   - **Source bridge BUILT + declarative source formatter DEMONSTRATED.** The
-    piece common to every fork — getting the AQL-source layout tree into AQL
+    piece common to every fork — getting the boru-source layout tree into boru
     values so the rule vocabulary can reach it — is now done: **`Fmt.tree`**
     (`modules/fmttree.go`) parses source and returns its layout CST as a
     `$kind`-tagged value tree (`{$kind:'word'|'list'|… text:… children:[…]}`),
     the shape `Fmt.kind` dispatches on. `formatter.ParseTree` exposes the same
     transformed tree the emitter walks (capitalisation + fn-bracket elision
     applied), so a rule set only decides layout. `TestFmtTreeDeclarativeFormatter`
-    is the payoff: a formatter for **AQL source** written as a declarative AQL
+    is the payoff: a formatter for **boru source** written as a declarative boru
     rule table over `Fmt.tree` (rules keyed by `Fmt.kind`, an `attaches` rule
     reproducing the emitter's token-adjacency logic, and a `fold` over
     `node.children` threading the previous node) reproduces `Fmt.format`
@@ -467,7 +467,7 @@ these as `Fmt.*` AQL):
     (a)/(b)/(c) fork above), NOT the inline layer or the tree-access plumbing,
     both of which are done and covered.
   - **Finding — the imperative reproduction (fork (b)) fights the engine's
-    scoping; the AQL-natural path is Doc-DATA (fork (a)).** Writing the inline
+    scoping; the boru-natural path is Doc-DATA (fork (a)).** Writing the inline
     layer surfaced three distinct engine-scoping frictions that a recursive
     string-building formatter hits but a Doc-DATA one does not: (1) a `get`
     with an integer index in a mutually-recursive fn fails dispatch; (2) a
@@ -475,25 +475,25 @@ these as `Fmt.*` AQL):
     body-local `def` holding a USER-FN result is lost after a subsequent `if`
     in a fold body. Each was worked around (index-free `fold`, bare-word map
     values, compute-the-`if`-first + inline the fn call), but the pattern is
-    clear: reproducing the *imperative* emitter in AQL is not "just more AQL",
+    clear: reproducing the *imperative* emitter in boru is not "just more boru",
     it fights the interpreter — whereas the DATA formatter
     (`TestFmtDeclarativeFormatter`) builds `{fmt:…}` Doc data via `each` and
     hits none of this. So fork (a) (emit Doc data, accept the reflow) is the
-    AQL-*idiomatic* completion and fork (b) (byte-identical imperative port) is
+    boru-*idiomatic* completion and fork (b) (byte-identical imperative port) is
     the one that fights the tool.
     This finding stands as the reason the completion did NOT take fork (b)'s
-    shape (a byte-identical imperative port in AQL): that path fights the
+    shape (a byte-identical imperative port in boru): that path fights the
     interpreter. The landed resolution sidesteps it — the rules moved to
     DATA and the fast Go processor interprets them, so production
     `Fmt.format` keeps its performance, the canonical style is expressed as
-    an AQL-readable/overridable table, and the engine-scoping frictions
-    catalogued above never arise. The fully-AQL vocabulary stays available
+    a boru-readable/overridable table, and the engine-scoping frictions
+    catalogued above never arise. The fully-boru vocabulary stays available
     (and source-capable) for user-defined formatters.
 - **Phase 4 — embedded formatting + fenced doc blocks DONE; describe/inline
-  examples REMAINING.** `aql fmt` reformats ```` ```aql ```` fences and
-  `<!-- aqlfmt --> … <!-- /aqlfmt -->` marker regions in Markdown/HTML (CLI
+  examples REMAINING.** `boru fmt` reformats ```` ```boru ```` fences and
+  `<!-- borufmt --> … <!-- /borufmt -->` marker regions in Markdown/HTML (CLI
   dispatch by extension; runtime words `Fmt.format-markdown` /
-  `Fmt.format-html`). The prose docs' ```` ```aql ```` blocks are now run
+  `Fmt.format-html`). The prose docs' ```` ```boru ```` blocks are now run
   through fmt (README) and pinned fmt-clean by a gate
   (`test/go/docexamples`). A formatter fix keeps a trailing `# comment`
   attached to its statement (never wrapped off), so annotated example lines
@@ -557,7 +557,7 @@ width wrapping):
 6. **Content after a leading block comment dropped** — `## bc ## foo` →
    `## bc ##` (the `foo` deleted), because emitStatement returned only a
    leading comment's text; now only fires for a comment-ONLY statement.
-7. **`##` mis-modelled as a bounded block comment** — AQL has none (`#` and
+7. **`##` mis-modelled as a bounded block comment** — boru has none (`#` and
    `##` both run to end of line; `## c ## print 42` runs nothing, verified),
    but the hand-lexer treated `## … ##` as bounded and REFORMATTED what
    followed as code (`## t ## x is integer` → `## t ## x is Integer`,
@@ -568,7 +568,7 @@ width wrapping):
    exposed the mismodel; the CST investigation paid off before any CST was
    built.
 
-Bugs 4–7 were found by sweeping all repo `.aql` programs (and, for 7, the
+Bugs 4–7 were found by sweeping all repo `.boru` programs (and, for 7, the
 Phase-4 lexer probe); the final verification is that fmt turns **0 of the
 72 parseable files** into unparseable source. The risk was never the
 layout, it was fmt changing what code MEANS.

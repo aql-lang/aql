@@ -1,17 +1,17 @@
 package modules
 
 func init() {
-	registerDocs("aql:debug", map[string]string{
+	registerDocs("boru:debug", map[string]string{
 		"tap":         "Print a value (formatted), then return it unchanged — the pipeline tap `print` can't be.",
 		"label":       "The labelled tap: `<value> \"label\" Debug.label` prints \"label: value\" and returns the value.",
 		"dump":        "Print a value with its type, then return it unchanged.",
 		"assert":      "Raise assertion_failure with a message when the condition is false (`cond msg Debug.assert`).",
 		"todo":        "A typed hole: always raise not_implemented with the given message (returns Never).",
-		"parse":       "Parse AQL source to its token/value list without running it.",
+		"parse":       "Parse boru source to its token/value list without running it.",
 		"deps":        "The distinct word names a quoted body references.",
 		"explain":     "The full `describe` text for a word, returned as a String.",
 		"sig":         "The signatures of a word as structured {args, returns} data.",
-		"body":        "The quoted body of an AQL-defined word; `native` for a host word.",
+		"body":        "The quoted body of a boru-defined word; `native` for a host word.",
 		"watch":       "Print a name's current binding and return it (None if unbound).",
 		"stack":       "A snapshot of the current data stack at the call site, as a List.",
 		"disasm":      "Compile a quoted body to its StackForm disassembly (a String).",
@@ -38,7 +38,7 @@ func init() {
 	// Several of these PASS THEIR VALUE THROUGH, which is what makes them
 	// droppable into a pipeline and is invisible in a [Any] signature.
 	// Results are from verified lang/spec/module-debug.tsv rows.
-	registerExamples("aql:debug", map[string][]string{
+	registerExamples("boru:debug", map[string][]string{
 		"tap": {
 			`42 Debug.tap                                     ;# 42 — prints it AND returns it`,
 			`;# So ` + "`(f x) Debug.tap g`" + ` inspects the middle of a pipeline`,

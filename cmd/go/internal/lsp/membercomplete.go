@@ -4,7 +4,7 @@
 // The receiver's members are resolved in layers:
 //
 //   1. module namespace  — `Rand.` → the module's exports (scanned from the
-//      buffer's `import "aql:…"` statements; no type-check needed).
+//      buffer's `import "boru:…"` statements; no type-check needed).
 //   2. static type       — truncate the buffer right before the dot, run the
 //      checker, and read the receiver's type off the residual stack; then ask
 //      native.MembersOfType for that type's Micron properties / class /
@@ -20,9 +20,9 @@ import (
 	"regexp"
 	"strings"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // completionItemsAt returns member completions when the cursor follows a
@@ -43,7 +43,7 @@ type receiverInfo struct {
 }
 
 // receiverBefore reports whether the cursor sits after a `RECV.` and, if so,
-// describes the receiver. Character is treated as a byte column (AQL code is
+// describes the receiver. Character is treated as a byte column (boru code is
 // ASCII); a multibyte line degrades to the global list rather than misfiring.
 func receiverBefore(src string, pos Position) (receiverInfo, bool) {
 	// Locate the line containing pos.
@@ -98,7 +98,7 @@ func receiverBefore(src string, pos Position) (receiverInfo, bool) {
 	return receiverInfo{word: word, simple: simple, dotOffset: lineStart + dotCol}, true
 }
 
-// isMemberChar reports whether c is an AQL member/identifier char (excludes
+// isMemberChar reports whether c is a boru member/identifier char (excludes
 // '.', which delimits members).
 func isMemberChar(c byte) bool {
 	return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '-'
@@ -150,7 +150,7 @@ func isMapLike(typeName string) bool {
 		strings.Contains(typeName, "Map") && strings.HasPrefix(typeName, "dynamic")
 }
 
-var importRe = regexp.MustCompile(`(?m)^\s*import\s+"aql:([a-z0-9][a-z0-9-]*)"`)
+var importRe = regexp.MustCompile(`(?m)^\s*import\s+"boru:([a-z0-9][a-z0-9-]*)"`)
 
 // importedModuleIDs returns the bare module ids imported in src.
 func importedModuleIDs(src string) []string {

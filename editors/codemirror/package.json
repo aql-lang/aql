@@ -1,35 +1,35 @@
 {
-  "name": "codemirror-lang-aql",
+  "name": "codemirror-lang-boru",
   "version": "0.1.0",
-  "description": "CodeMirror 6 language mode for AQL — the concatenative, strongly-typed query language.",
+  "description": "CodeMirror 6 language mode for boru — the concatenative, strongly-typed query language.",
   "type": "module",
   "license": "MIT",
-  "author": "AQL contributors",
-  "homepage": "https://github.com/aql-lang/aql/tree/main/editors/codemirror",
+  "author": "boru contributors",
+  "homepage": "https://github.com/boru-lang/boru/tree/main/editors/codemirror",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/aql-lang/aql.git",
+    "url": "git+https://github.com/boru-lang/boru.git",
     "directory": "editors/codemirror"
   },
   "keywords": [
-    "aql",
+    "boru",
     "codemirror",
     "codemirror6",
     "language",
     "syntax-highlighting",
     "editor"
   ],
-  "main": "aql.js",
-  "module": "aql.js",
+  "main": "boru.js",
+  "module": "boru.js",
   "exports": {
-    ".": "./aql.js"
+    ".": "./boru.js"
   },
   "files": [
-    "aql.js",
+    "boru.js",
     "README.md"
   ],
   "scripts": {
-    "check": "node --check aql.js"
+    "check": "node --check boru.js"
   },
   "peerDependencies": {
     "@codemirror/language": "^6.0.0",

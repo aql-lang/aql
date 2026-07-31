@@ -1,7 +1,7 @@
 # calc as a learning example for `eng`
 
-Calc is a 350-line Go module that hosts the AQL engine kernel
-(`github.com/aql-lang/aql/eng/go`) and defines its own word vocabulary —
+Calc is a 350-line Go module that hosts the boru engine kernel
+(`github.com/boru-lang/boru/eng/go`) and defines its own word vocabulary —
 no dependency on `lang/`. It exists so the eng↔lang boundary is
 demonstrably an architectural fact: if calc compiles, runs, and
 its tests pass, the kernel is a usable algorithm library.
@@ -9,7 +9,7 @@ its tests pass, the kernel is a usable algorithm library.
 This documentation reads calc as **source material for learning how
 to use eng**, not as documentation of the calculator itself. The
 calculator is a vehicle; the destination is "I can build a
-concatenative interpreter with my own words on top of the AQL
+concatenative interpreter with my own words on top of the boru
 engine."
 
 ## Documentation layout

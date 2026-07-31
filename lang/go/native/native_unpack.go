@@ -4,12 +4,12 @@ import (
 	"fmt"
 	"strings"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // unpackNatives covers the destructuring word `unpack`, which extracts
 // selected entries from a Map (or Record) value and binds each to a
-// bare word in the current scope — AQL's analogue of JavaScript object
+// bare word in the current scope — boru's analogue of JavaScript object
 // destructuring (`const {from, where, select} = query`).
 //
 // Surface (forward form): `unpack [names] map`.
@@ -18,12 +18,12 @@ import (
 //	unpack [x] m            # binds x → 1 in the current scope
 //	x                       # → 1
 //
-// The motivating use case is improving the SQL DX of aql:query: after
-// `import "aql:query"`, the words live under a dot namespace
+// The motivating use case is improving the SQL DX of boru:query: after
+// `import "boru:query"`, the words live under a dot namespace
 // (Query.from, Query.where, …). Destructuring lifts the chosen ones to
 // bare names:
 //
-//	import "aql:query"
+//	import "boru:query"
 //	unpack [select from where] query
 //	select [name age] from people where [age gt 18]
 //
@@ -78,7 +78,7 @@ var unpackNatives = []NativeFunc{
 				Returns:    []*Type{},
 				BarrierPos: -1,
 			},
-			// `unpack 'aql:time-util'`: import a module and bind every word
+			// `unpack 'boru:time-util'`: import a module and bind every word
 			// of every export namespace as a bare local — `now`, `sleep`, …
 			// usable without the `TimeUtil.` prefix.
 			//
@@ -94,7 +94,7 @@ var unpackNatives = []NativeFunc{
 				Returns:    []*Type{},
 				BarrierPos: -1,
 			},
-			// `unpack ExportName 'aql:mod'`: import the module and unpack only
+			// `unpack ExportName 'boru:mod'`: import the module and unpack only
 			// the named export namespace (for multi-export modules). The name
 			// is captured as an atom via /q.
 			{
@@ -109,20 +109,20 @@ var unpackNatives = []NativeFunc{
 }
 
 // resolveModuleDescForUnpack resolves a module name (with or without the
-// "aql:" prefix) to its ModuleDesc via the registry's native-module resolver.
+// "boru:" prefix) to its ModuleDesc via the registry's native-module resolver.
 func resolveModuleDescForUnpack(r *Registry, modName string) (ModuleDesc, error) {
-	name := strings.TrimPrefix(modName, "aql:")
+	name := strings.TrimPrefix(modName, "boru:")
 	if name == "" {
-		return ModuleDesc{}, r.AqlError("unpack_error", "unpack: empty module name", "unpack")
+		return ModuleDesc{}, r.BoruError("unpack_error", "unpack: empty module name", "unpack")
 	}
 	if r.Modules.Resolver == nil {
-		return ModuleDesc{}, r.AqlError("unpack_error", "unpack: module resolver not configured (cannot unpack "+modName+")", "unpack")
+		return ModuleDesc{}, r.BoruError("unpack_error", "unpack: module resolver not configured (cannot unpack "+modName+")", "unpack")
 	}
 	desc, err := r.Modules.Resolver(name, r)
 	if err != nil {
-		return ModuleDesc{}, r.AqlError("unpack_error", "unpack: "+err.Error(), "unpack")
+		return ModuleDesc{}, r.BoruError("unpack_error", "unpack: "+err.Error(), "unpack")
 	}
-	desc.Ref = "aql:" + name
+	desc.Ref = "boru:" + name
 	desc.Kind = "native"
 	return desc, nil
 }
@@ -144,12 +144,12 @@ func unpackExportMap(r *Registry, exportMap *OrderedMap) {
 	}
 }
 
-// unpackModuleHandler implements `unpack 'aql:mod'` — resolve the module and
+// unpackModuleHandler implements `unpack 'boru:mod'` — resolve the module and
 // bind every word of every export namespace as a bare local.
 func unpackModuleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	modName, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("unpack_error", "unpack: module name must be a string", "unpack")
+		return nil, r.BoruError("unpack_error", "unpack: module name must be a string", "unpack")
 	}
 	desc, err := resolveModuleDescForUnpack(r, modName)
 	if err != nil {
@@ -161,16 +161,16 @@ func unpackModuleHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	return nil, nil
 }
 
-// unpackModuleExportHandler implements `unpack ExportName 'aql:mod'` — resolve
+// unpackModuleExportHandler implements `unpack ExportName 'boru:mod'` — resolve
 // the module and unpack only the named export namespace.
 func unpackModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	exportName, err := AsAtom(args[0])
 	if err != nil {
-		return nil, r.AqlError("unpack_error", "unpack: export name must be a word/atom", "unpack")
+		return nil, r.BoruError("unpack_error", "unpack: export name must be a word/atom", "unpack")
 	}
 	modName, err := args[1].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("unpack_error", "unpack: module name must be a string", "unpack")
+		return nil, r.BoruError("unpack_error", "unpack: module name must be a string", "unpack")
 	}
 	desc, err := resolveModuleDescForUnpack(r, modName)
 	if err != nil {
@@ -178,7 +178,7 @@ func unpackModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *R
 	}
 	exportMap, ok := desc.Exports[exportName]
 	if !ok {
-		return nil, r.AqlError("unpack_error", fmt.Sprintf("unpack: export %q not found in module %q", exportName, modName), "unpack")
+		return nil, r.BoruError("unpack_error", fmt.Sprintf("unpack: export %q not found in module %q", exportName, modName), "unpack")
 	}
 	unpackExportMap(r, exportMap)
 	return nil, nil
@@ -202,15 +202,15 @@ func unpackSource(src Value, r *Registry) (get func(string) (Value, bool), keys 
 		if IsRecordType(src) {
 			rec, rErr := AsRecordType(src)
 			if rErr != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
-				return nil, nil, false, r.AqlError("unpack_error", "unpack: source record is malformed", "unpack")
+				return nil, nil, false, r.BoruError("unpack_error", "unpack: source record is malformed", "unpack")
 			}
 			return rec.Fields.Get, rec.Fields.Keys(), true, nil
 		}
-		return nil, nil, false, r.AqlError("unpack_error", "unpack: source must be a map or record", "unpack")
+		return nil, nil, false, r.BoruError("unpack_error", "unpack: source must be a map or record", "unpack")
 	case r.Check.IsActive():
 		return func(string) (Value, bool) { return Value{}, false }, nil, false, nil
 	default:
-		return nil, nil, false, r.AqlError("unpack_error", "unpack: source is not a concrete map", "unpack")
+		return nil, nil, false, r.BoruError("unpack_error", "unpack: source is not a concrete map", "unpack")
 	}
 }
 
@@ -221,16 +221,16 @@ func unpackSource(src Value, r *Registry) (get func(string) (Value, bool), keys 
 // token for unused-def analysis.
 func bindUnpackEntry(r *Registry, localName, srcKey string, get func(string) (Value, bool), proven bool, pos SrcPos) error {
 	if localName == "" {
-		return r.AqlError("unpack_error", "unpack: names must be words, atoms, or strings", "unpack")
+		return r.BoruError("unpack_error", "unpack: names must be words, atoms, or strings", "unpack")
 	}
 	if IsCapitalisedName(localName) {
-		return r.AqlError("unpack_error", "unpack: cannot bind capitalised (type) name "+localName+" — unpack binds values only", "unpack")
+		return r.BoruError("unpack_error", "unpack: cannot bind capitalised (type) name "+localName+" — unpack binds values only", "unpack")
 	}
 	if err := ValidateWordName(localName); err != nil {
 		return err
 	}
 	if r.Defs.IsType(localName) {
-		return r.AqlError("unpack_error", "unpack: name clash — "+localName+" is already a type", "unpack")
+		return r.BoruError("unpack_error", "unpack: name clash — "+localName+" is already a type", "unpack")
 	}
 
 	val, ok := get(srcKey)
@@ -259,7 +259,7 @@ func bindUnpackEntry(r *Registry, localName, srcKey string, get func(string) (Va
 				r.Check.SuppressedRuntimeError = true
 			}
 		} else {
-			return r.AqlError("unpack_error", "unpack: key "+srcKey+" not found in source", "unpack")
+			return r.BoruError("unpack_error", "unpack: key "+srcKey+" not found in source", "unpack")
 		}
 	}
 	_, err := installAndRecordDef(r, localName, val, pos)
@@ -295,7 +295,7 @@ func unpackAllHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		return nil, fmt.Errorf("unpack: %w", err)
 	}
 	if kw != "all" {
-		return nil, r.AqlError("unpack_error", "unpack: expected a name list, the keyword `all`, or a rename map, got "+kw, "unpack")
+		return nil, r.BoruError("unpack_error", "unpack: expected a name list, the keyword `all`, or a rename map, got "+kw, "unpack")
 	}
 	get, keys, proven, err := unpackSource(args[1], r)
 	if err != nil {

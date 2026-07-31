@@ -9,9 +9,9 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // Loopback coverage for the remote tier (tui_serve.go): a real
@@ -51,7 +51,7 @@ func startServe(t *testing.T) (net.Addr, chan error, chan string) {
 			return
 		}
 		out, sErr := runTuiStepsOn(t, reg, []string{
-			`import "aql:tui"`, serveApp,
+			`import "boru:tui"`, serveApp,
 			`def final (Tui.serve {tcp: 0  token: "s3cret"} app)`,
 			`convert String final.n`,
 		})
@@ -241,7 +241,7 @@ func TestTuiServeConfigAndPolicyArms(t *testing.T) {
 	reg := tcReg(t)
 	check := func(opts, app, want string) {
 		t.Helper()
-		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`,
+		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "boru:tui"`,
 			`Tui.serve ` + opts + ` ` + app})
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Fatalf("serve %s = %v, want %q", opts, err, want)
@@ -273,7 +273,7 @@ func TestTuiServeConfigAndPolicyArms(t *testing.T) {
 	sopts.Set("token", native.NewString("x"))
 	_, nErr := tuiServeHandler([]native.Value{native.NewMap(sopts), native.NewMap(native.NewOrderedMap())}, nil, nil, preg)
 	// Coded by the gate; the scope rides in the detail rather than a field.
-	var nAe *native.AqlError
+	var nAe *native.BoruError
 	if !errors.As(nErr, &nAe) || nAe.Code != "capability_not_installed" ||
 		!strings.Contains(nErr.Error(), "network") {
 		t.Fatalf("sandbox serve = %v", nErr)
@@ -292,9 +292,9 @@ func TestTuiServeConfigAndPolicyArms(t *testing.T) {
 		t.Fatal(err)
 	}
 	InstallResolver(sreg)
-	_, tErr := runTuiStepsOn(t, sreg, []string{`import "aql:tui"`,
+	_, tErr := runTuiStepsOn(t, sreg, []string{`import "boru:tui"`,
 		`Tui.serve {tcp: 0  token: "x"} ` + okApp})
-	var tAe *native.AqlError
+	var tAe *native.BoruError
 	if !errors.As(tErr, &tAe) || tAe.Code != "capability_not_installed" ||
 		!strings.Contains(tErr.Error(), "terminal") {
 		t.Fatalf("split-profile serve = %v", tErr)
@@ -307,7 +307,7 @@ func TestTuiServeConfigAndPolicyArms(t *testing.T) {
 	}
 	sq := newSquatter(t, reg2)
 	defer sq.Close()
-	_, aErr := runTuiStepsOn(t, reg2, []string{`import "aql:tui"`,
+	_, aErr := runTuiStepsOn(t, reg2, []string{`import "boru:tui"`,
 		`Tui.serve {tcp: 0  token: "x"} ` + okApp})
 	if aErr == nil || !strings.Contains(aErr.Error(), "already owns the terminal") {
 		t.Fatalf("squatted serve = %v", aErr)
@@ -317,7 +317,7 @@ func TestTuiServeConfigAndPolicyArms(t *testing.T) {
 	oldListen := tuiListen
 	t.Cleanup(func() { tuiListen = oldListen })
 	tuiListen = func(string, string) (net.Listener, error) { return nil, errors.New("no sockets today") }
-	_, lErr := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`,
+	_, lErr := runTuiStepsOn(t, tcReg(t), []string{`import "boru:tui"`,
 		`Tui.serve {tcp: 0  token: "x"} ` + okApp})
 	if lErr == nil || !strings.Contains(lErr.Error(), "no sockets today") {
 		t.Fatalf("listen failure = %v", lErr)
@@ -339,7 +339,7 @@ func TestTuiServeConfigAndPolicyArms(t *testing.T) {
 			_ = ln.Close() // sabotage: accept fails immediately
 			return ln, nil
 		}
-		_, cErr := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`,
+		_, cErr := runTuiStepsOn(t, tcReg(t), []string{`import "boru:tui"`,
 			`Tui.serve {tcp: 0  token: "x"} ` + okApp})
 		if cErr == nil || !strings.Contains(cErr.Error(), "listener closed before a viewer attached") {
 			t.Fatalf("closed listener = %v", cErr)
@@ -541,7 +541,7 @@ func TestTuiWirePaintViewerLoss(t *testing.T) {
 // listen seam then fails so the test stays listener-free).
 func TestTuiServeLazyRuntime(t *testing.T) {
 	reg := tcReg(t)
-	if _, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, serveApp}); err != nil {
+	if _, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, serveApp}); err != nil {
 		t.Fatal(err)
 	}
 	reg.Procs = nil
@@ -571,7 +571,7 @@ func TestTuiServeInsertFailure(t *testing.T) {
 	}
 	errs := make(chan error, 1)
 	go func() {
-		_, sErr := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, serveApp,
+		_, sErr := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, serveApp,
 			`Tui.serve {tcp: 0  token: "s3cret"} app`})
 		errs <- sErr
 	}()
@@ -635,7 +635,7 @@ func TestTuiServeBadViewRaisesServerSide(t *testing.T) {
 			return
 		}
 		_, sErr := runTuiStepsOn(t, reg, []string{
-			`import "aql:tui"`,
+			`import "boru:tui"`,
 			`def app {init: 0
 			  update: ([s:Any e:Map] => [ if (e.tag eq "key") [ Tui.quit s ] [ s ] ])
 			  view: ([s:Any] => [ {w: "zeppelin"} ])}`,
@@ -706,7 +706,7 @@ func TestTuiHandshakeDirect(t *testing.T) {
 			&scriptedConn{in: append(hello, '\n')},
 		}}, nil
 	}
-	_, sErr := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`,
+	_, sErr := runTuiStepsOn(t, tcReg(t), []string{`import "boru:tui"`,
 		`Tui.serve {tcp: 0  token: "x"} {update: ([s:Map e:Map] => [s])  view: ([s:Map] => [Tui.spacer])}`})
 	if sErr == nil || !strings.Contains(sErr.Error(), "listener closed before a viewer attached") {
 		t.Fatalf("accept-write failure = %v", sErr)
@@ -769,7 +769,7 @@ func startServeOpts(t *testing.T, extra string) (net.Addr, chan error, chan stri
 			return
 		}
 		out, sErr := runTuiStepsOn(t, reg, []string{
-			`import "aql:tui"`, serveApp,
+			`import "boru:tui"`, serveApp,
 			`def final (Tui.serve {tcp: 0  token: "s3cret"` + extra + `} app)`,
 			`convert String final.n`,
 		})
@@ -945,7 +945,7 @@ func TestTuiServeReattach(t *testing.T) {
 func TestTuiServeV2ConfigArms(t *testing.T) {
 	check := func(opts, want string) {
 		t.Helper()
-		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`,
+		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "boru:tui"`,
 			`Tui.serve ` + opts + ` {update: ([s:Map e:Map] => [s])  view: ([s:Map] => [Tui.spacer])}`})
 		if err == nil || !strings.Contains(err.Error(), want) {
 			t.Fatalf("serve %s = %v, want %q", opts, err, want)

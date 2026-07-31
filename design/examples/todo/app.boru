@@ -1,0 +1,67 @@
+# app.boru — wire the graph and run it. The "main".
+#
+# DX probe: composition is the test of an architecture. Here every piece snaps
+# together with plain values — services are values, layers are functions over
+# services, a server is a list of services, transport is one more wrapper. No
+# framework registration, no config DSL: just boru.
+#
+# Capability note: `serve` is gated by the `process` scope and `listen` by the
+# `network` scope (§4, PERMISSIONS.10) — both already exist, so a restrictive
+# profile gets the in-process service DX but is hard-denied from spawning
+# processes or opening sockets. Running this file therefore declares intent.
+
+import "boru:serve"          # service / server / serve / pool / wrap / reply
+import "boru:net"          # listen / connect
+import "boru:rand"          # Rand.uuid (session tokens)
+
+import "todo.boru"
+import "sessions.boru"
+import "notify.boru"
+import "auth.boru"
+import "audit.boru"
+
+# --- the singletons ---------------------------------------------------------
+def notify   ( Notify.New {} )
+def sessions ( Sessions.New {} )
+
+# --- the todo store, sharded for multi-user scale ---------------------------
+# One `TodoStore` worker is single-threaded (the gen_server ceiling, §9.1). A
+# `pool` of N workers with consistent-hash routing by `user` gives state
+# AFFINITY — a given user's requests always land on the same worker, so its
+# bucket lives in exactly one place — while spreading users across cores. The
+# pool is itself just a `Service`, so it composes with everything below.
+def todos ( pool [ TodoStore.New {notify: notify} ]
+                 {size: 4  strategy: "hash"  key: "user"} )
+
+# --- cross-cutting layers (newest outermost) --------------------------------
+# Pipeline that a todo request flows through:
+#   audit  ->  session gate  ->  owner guard (clear/remove)  ->  patrun  ->  handler
+def front (
+  Audit.log
+    ( Auth.gate sessions
+        ( Auth.own-guard {op: "remove"}
+            ( Auth.own-guard {op: "clear"} todos ) ) ) )
+
+# --- supervise everything ---------------------------------------------------
+# `restart: "isolated"` = one-for-one: a crashed service is restarted alone,
+# the others keep serving (let-it-crash, §3). Bounded mailboxes give
+# backpressure by default (§8.1).
+#
+# `notify` is lossy telemetry — it must never stall the hot path — so it takes a
+# PER-SERVICE override (`overflow: "drop"`), while the rest inherit the server
+# default `"block"`. The per-service opts map (precedence: per-service > server
+# default > built-in) was added to §8.1 precisely because this app needed it —
+# see README, "one friction the app surfaced".
+def app ( server [ sessions
+                   (notify {mailbox: 4096  overflow: "drop"})   # per-service override
+                   front ]
+               {restart: "isolated"  mailbox: 1024  overflow: "block"} )
+
+# --- expose over HTTP transport ---------------------------------------------
+# `listen` translates wire frames <-> requests (JSON envelope first, §4). The
+# SAME service value is reachable in-process and over the wire; the transport
+# adds nothing to the handler contract.
+listen {http: {port: 8080  path: "/sessions"}} sessions
+listen {http: {port: 8080  path: "/todo"}}     front
+
+serve app          # runs every service as a supervised process; blocks

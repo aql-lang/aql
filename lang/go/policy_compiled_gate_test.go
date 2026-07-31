@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // The compiled-path policy contract (the 2026-07-15 LIFT, user-authorized):

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/test/go/vary"
+	"github.com/boru-lang/boru/test/go/vary"
 )
 
 // TestVarySweepDivergedReport — the diverged-classification file + the

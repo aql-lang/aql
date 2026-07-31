@@ -29,7 +29,7 @@ func init() {
 	register(&Entry{
 		Word:    "sort",
 		Summary: "Sort a list (or a map's entries) into ascending order.",
-		Description: "Orders by AQL's total value order — numeric, not lexical, for numbers. On a map, sorts the " +
+		Description: "Orders by boru's total value order — numeric, not lexical, for numbers. On a map, sorts the " +
 			"entries by key.",
 		Examples: []string{`sort [3 1 2] ; # => [1 2 3]`},
 	})

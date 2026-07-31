@@ -17,7 +17,7 @@ func init() {
 			"logical words). A cross-type pair (e.g. a Boolean and a Number) stays a " +
 			"type error — operations apply within a type, not across.",
 		Notes: []string{
-			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+			"Integer overflow raises [boru/integer_overflow]; use a Float operand for an approximate result.",
 			"Concatenation needs a String: `add 1 \"x\"` → 'x1', but `add true 1` is a type error.",
 			"A user Micron kind can override the field-wise default with its own signature: `def add fn [[a:Kindon b:Kindon] …]`.",
 		},
@@ -34,7 +34,7 @@ func init() {
 			"trailing run of segments, Qion sub subtracts same-currency amounts, and a " +
 			"same-kind Micron pair subtracts field-wise.",
 		Notes: []string{
-			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+			"Integer overflow raises [boru/integer_overflow]; use a Float operand for an approximate result.",
 		},
 	})
 
@@ -46,7 +46,7 @@ func init() {
 			"('ab' mul 'xy' → 'axaybxby'), a same-kind Micron pair multiplies " +
 			"field-wise, and Boolean/Qion/Pathon mul are deliberate errors.",
 		Notes: []string{
-			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+			"Integer overflow raises [boru/integer_overflow]; use a Float operand for an approximate result.",
 		},
 	})
 
@@ -86,59 +86,59 @@ func init() {
 			"Micron pair pows field-wise.",
 		Notes: []string{
 			"Negative exponents produce an error for integer pow.",
-			"Integer overflow raises [aql/integer_overflow]; use a Float operand for an approximate result.",
+			"Integer overflow raises [boru/integer_overflow]; use a Float operand for an approximate result.",
 		},
 	})
 
-	// --- aql:math-util native module (requires: import \"aql:math-util\") ---
+	// --- boru:math-util native module (requires: import \"boru:math-util\") ---
 
 	register(&Entry{
 		Word:        "abs",
 		Summary:     "Return the absolute value of a number.",
 		Description: "Returns the absolute (non-negative) value.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "negate",
 		Summary:     "Negate a number (flip the sign).",
 		Description: "Returns -n for input n.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "min",
 		Summary:     "Return the smaller of two numbers.",
 		Description: "Returns the minimum of two values.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "max",
 		Summary:     "Return the larger of two numbers.",
 		Description: "Returns the maximum of two values.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "sign",
 		Summary:     "Return the sign of a number (-1, 0, or 1).",
 		Description: "Returns -1 for negative, 0 for zero, 1 for positive.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "ceil",
 		Summary:     "Round a number up to the nearest integral value.",
 		Description: "Returns the smallest integral value greater than or equal to the input. Total over the Number family: an Integer or BigInteger returns unchanged, a Float returns an Integer, a BigDecimal returns an integral BigDecimal.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "floor",
 		Summary:     "Round a number down to the nearest integral value.",
 		Description: "Returns the largest integral value less than or equal to the input. Total over the Number family: an Integer or BigInteger returns unchanged, a Float returns an Integer, a BigDecimal returns an integral BigDecimal.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
@@ -147,7 +147,7 @@ func init() {
 		Description: "Rounds to the nearest integer; ties round away from zero.",
 		Notes: []string{
 			"Uses Go's math.Round: 0.5 rounds away from zero.",
-			"Requires: import \"aql:math-util\"",
+			"Requires: import \"boru:math-util\"",
 		},
 	})
 
@@ -155,161 +155,161 @@ func init() {
 		Word:        "trunc",
 		Summary:     "Truncate a number toward zero.",
 		Description: "Removes the fractional part, rounding toward zero. Total over the Number family: an Integer or BigInteger returns unchanged, a Float returns an Integer, a BigDecimal returns an integral BigDecimal.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "round-even",
 		Summary:     "Round a number to the nearest integral value, ties to even.",
 		Description: "Rounds to nearest; halves go to the even neighbour (IEEE-754 roundTiesToEven). `2.5 round-even` is 2, `3.5 round-even` is 4. Contrast `round`, which rounds halves away from zero.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "logb",
 		Summary:     "The unbiased radix-2 exponent of a number.",
 		Description: "Returns the exponent e such that the value is m*2^e with 1 <= |m| < 2 (math.Logb). `8.0 logb` is 3.0.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "scalb",
 		Summary:     "Scale by a power of two: x scalb n = x * 2^n.",
 		Description: "`x scalb n` returns x * 2^n efficiently (math.Ldexp); n is truncated to an integer.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "fma",
 		Summary:     "Fused multiply-add: fma a b c = a*b + c (single rounding).",
 		Description: "`fma a b c` computes a*b + c with only one rounding step (math.FMA), more accurate than a separate mul then add. Use forward form so a*b is the product and c the addend.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "sqrt",
 		Summary:     "Compute the square root.",
 		Description: "Returns the square root of the input.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "cbrt",
 		Summary:     "Compute the cube root.",
 		Description: "Returns the cube root of the input.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "exp",
 		Summary:     "Compute e raised to a power.",
 		Description: "Returns e^x where e is Euler's number.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "log",
 		Summary:     "Compute the natural logarithm.",
 		Description: "Returns the natural logarithm (base e) of the input.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "log2",
 		Summary:     "Compute the base-2 logarithm.",
 		Description: "Returns the base-2 logarithm of the input.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "log10",
 		Summary:     "Compute the base-10 logarithm.",
 		Description: "Returns the base-10 logarithm of the input.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "sin",
 		Summary:     "Compute the sine (input in radians).",
 		Description: "Returns the sine of the input angle in radians.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "cos",
 		Summary:     "Compute the cosine (input in radians).",
 		Description: "Returns the cosine of the input angle in radians.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "tan",
 		Summary:     "Compute the tangent (input in radians).",
 		Description: "Returns the tangent of the input angle in radians.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "asin",
 		Summary:     "Compute the arc sine (result in radians).",
 		Description: "Returns the arc sine of the input. Input must be in [-1, 1].",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "acos",
 		Summary:     "Compute the arc cosine (result in radians).",
 		Description: "Returns the arc cosine of the input. Input must be in [-1, 1].",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "atan",
 		Summary:     "Compute the arc tangent (result in radians).",
 		Description: "Returns the arc tangent of the input.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "atan2",
 		Summary:     "Compute the two-argument arc tangent.",
 		Description: "Returns atan2(y, x): y x atan2. Handles quadrant correctly.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "hypot",
 		Summary:     "Compute the hypotenuse length.",
 		Description: "Returns sqrt(x*x + y*y) without overflow: x y hypot.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "is-nan",
 		Summary:     "Test whether a Float is NaN (not-a-number).",
 		Description: "Returns true when the value is NaN. Use this to detect NaN, since `nan eq nan` is false by IEEE-754.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "is-inf",
 		Summary:     "Test whether a Float is +inf or -inf.",
 		Description: "Returns true when the value is positive or negative infinity.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "is-finite",
 		Summary:     "Test whether a number is finite (neither inf nor NaN).",
 		Description: "Returns true for any finite value. Integers are always finite.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "signbit",
 		Summary:     "Test whether a number's sign bit is set (negative, incl. -0.0).",
 		Description: "Returns true when the value is negative, including negative zero.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
@@ -317,35 +317,35 @@ func init() {
 		Summary: "IEEE-754 remainder: a remainder b, rounding the quotient to nearest.",
 		Description: "Returns a - n*b where n is a/b rounded to the nearest integer (ties to even). " +
 			"Distinct from `mod`, which is the truncated remainder (fmod): `5.0 remainder 3.0` is -1.0 while `5.0 3.0 mod` is 2.0.",
-		Notes: []string{"Requires: import \"aql:math-util\""},
+		Notes: []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "copysign",
 		Summary:     "Combine the magnitude of one number with the sign of another.",
 		Description: "`a copysign b` returns a value with the magnitude of a and the sign of b.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "nextafter",
 		Summary:     "The next representable Float after a, toward b.",
 		Description: "`a nextafter b` returns the adjacent float64 stepping from a toward b.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "pi",
 		Summary:     "Push the constant pi onto the stack.",
 		Description: "Pushes the mathematical constant pi (3.14159...). Stack-only.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 
 	register(&Entry{
 		Word:        "e",
 		Summary:     "Push Euler's number e onto the stack.",
 		Description: "Pushes the mathematical constant e (2.71828...). Stack-only.",
-		Notes:       []string{"Requires: import \"aql:math-util\""},
+		Notes:       []string{"Requires: import \"boru:math-util\""},
 	})
 }
 

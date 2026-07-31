@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // Compiled mini-languages (design/MINILANG.5.md §13). A BUILT-IN kind may
@@ -16,7 +16,7 @@ import (
 // MiniLang.register-compiled — died with the frozen kind namespace;
 // mini_hook_compile_test.go drives the Go-hook machinery directly.)
 
-const mcImp = `import "aql:minilang"  `
+const mcImp = `import "boru:minilang"  `
 
 func mcRun(t *testing.T, src string) any {
 	t.Helper()

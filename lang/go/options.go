@@ -3,7 +3,7 @@ package lang
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // ParseOptions parses a `--options` style jsonic string into a nested

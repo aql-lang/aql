@@ -7,7 +7,7 @@ import (
 )
 
 // Stage-2 loop-carried def rebind pins (voxgig zero-refusals plan): a
-// pre-loop `def` REBOUND inside a for body (decision.aql eval-table-first's
+// pre-loop `def` REBOUND inside a for body (decision.boru eval-table-first's
 // `def found true` inside an arm, read as `found not` the NEXT iteration)
 // used to refuse "operand of unknown provenance … at not" — the rebind's
 // per-round JOIN carrier had no operand home across iterations. The fix is
@@ -46,7 +46,7 @@ func loopCarriedCompilesClean(t *testing.T, src string) {
 	}
 }
 
-// The decision.aql eval-table-first shape in miniature: a conditional rebind
+// The decision.boru eval-table-first shape in miniature: a conditional rebind
 // of TWO pre-loop defs inside a nested arm, with `found` read (`found not`)
 // on the NEXT iteration and `result` read after the loop. First-match
 // semantics: later matches must NOT overwrite.
@@ -92,7 +92,7 @@ func TestLoopCarriedParamRebind(t *testing.T) {
 }
 
 // A COMPUTED pre-loop init (`def result (do {…})` — a map event, the
-// decision.aql shape): the init operand rides the promoted value-def local.
+// decision.boru shape): the init operand rides the promoted value-def local.
 func TestLoopCarriedComputedInit(t *testing.T) {
 	loopCarriedCompilesClean(t, `def tally fn [[xs:List] [Map] [def result (do {ok: false}) def found false for (xs size) [def idx i if (found not) [if ((xs idx get) 10 gt) [def result (do {ok: true}) def found true] []] []] end result]]
 [(tally [2 15 3]) (tally [1 2])]`)
@@ -112,9 +112,9 @@ func TestLoopCarriedZeroIterationsKeepInit(t *testing.T) {
 // carried stores.
 func TestLoopCarriedRebindValueLoopSound(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	stage1aSound(t, `def vals fn [[n:Integer] [List] [def acc 0 [(for n [def acc (acc add 1) acc])]]]
 (vals 3)`)
 }

@@ -1,4 +1,4 @@
-// Spec-driven interpreter tests, mirroring aqleng/go/spec_test.go. Reads the
+// Spec-driven interpreter tests, mirroring borueng/go/spec_test.go. Reads the
 // shared eng/spec/*.tsv corpus and runs each row through the TS interpreter.
 // Fixtures + tokenizer + corpus loader live in ./spec-fixture.ts (shared with
 // the compiled differential gate).
@@ -8,7 +8,7 @@ import { strict as assert } from "node:assert"
 import * as fs from "node:fs"
 import * as path from "node:path"
 
-import { AqlError, Engine, Registry, Value } from "./index.ts"
+import { BoruError, Engine, Registry, Value } from "./index.ts"
 import { SPEC_DIR, parseSpec, registerSpecWords, renderStack, tokenize, type SpecRow } from "./spec-fixture.ts"
 
 function runRow(row: SpecRow): { ok: true; got: string } | { ok: false; err: string } {
@@ -26,7 +26,7 @@ function runRow(row: SpecRow): { ok: true; got: string } | { ok: false; err: str
     const result = new Engine(r).run(values)
     return { ok: true, got: renderStack(result) }
   } catch (e) {
-    if (e instanceof AqlError) {
+    if (e instanceof BoruError) {
       return { ok: false, err: e.message }
     }
     return { ok: false, err: `unexpected: ${(e as Error).message}` }

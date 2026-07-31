@@ -1,4 +1,4 @@
-# AQL Language Specification: the aql:emitlang module + the core `emit` word
+# boru Language Specification: the boru:emitlang module + the core `emit` word
 # Format: input<TAB>expected<TAB>description
 #
 # `emit <kind> <opts?> <data>` is the symmetric inverse of `parse`: it expands
@@ -17,70 +17,70 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  emit — auto (natural format) and explicit json
-import "aql:emitlang"  emit {a:1 b:[2 3]}	'{"a":1,"b":[2,3]}'	bare emit auto-picks json for a Map
-import "aql:emitlang"  emit [1 2 3]	'[1,2,3]'	a List auto-emits as a json array
-import "aql:emitlang"  emit "hi"	'"hi"'	a scalar String auto-emits as json
-import "aql:emitlang"  emit json {a:1 b:"hi"}	'{"a":1,"b":"hi"}'	explicit json kind
-import "aql:emitlang"  EmitLang.emit_json {a:1} {} end	'{"a":1}'	emit is pure sugar — the desugared standard call is equivalent
+import "boru:emitlang"  emit {a:1 b:[2 3]}	'{"a":1,"b":[2,3]}'	bare emit auto-picks json for a Map
+import "boru:emitlang"  emit [1 2 3]	'[1,2,3]'	a List auto-emits as a json array
+import "boru:emitlang"  emit "hi"	'"hi"'	a scalar String auto-emits as json
+import "boru:emitlang"  emit json {a:1 b:"hi"}	'{"a":1,"b":"hi"}'	explicit json kind
+import "boru:emitlang"  EmitLang.emit_json {a:1} {} end	'{"a":1}'	emit is pure sugar — the desugared standard call is equivalent
 #
 # §2  opts — pretty / compact / indent
-import "aql:emitlang"  emit json {pretty:true} {a:1}	'{\n  "a": 1\n}'	opts {pretty:true} → indented json (2-space default)
-import "aql:emitlang"  emit json {indent:4} {a:1}	'{\n    "a": 1\n}'	opts {indent:N} → N-space indentation
-import "aql:emitlang"  emit json {} {a:1}	'{"a":1}'	an explicit empty opts map → compact (the default)
-import "aql:emitlang"  def o {pretty:true} end  emit o {a:1}	'{\n  "a": 1\n}'	the opts map may be a variable — a bare leading word that resolves to a value is opts, not a kind
-import "aql:emitlang"  emit json {indent:-1} {a:1}	'{\n"a": 1\n}'	a negative indent is clamped to 0 (newline-only) — never a strings.Repeat panic
+import "boru:emitlang"  emit json {pretty:true} {a:1}	'{\n  "a": 1\n}'	opts {pretty:true} → indented json (2-space default)
+import "boru:emitlang"  emit json {indent:4} {a:1}	'{\n    "a": 1\n}'	opts {indent:N} → N-space indentation
+import "boru:emitlang"  emit json {} {a:1}	'{"a":1}'	an explicit empty opts map → compact (the default)
+import "boru:emitlang"  def o {pretty:true} end  emit o {a:1}	'{\n  "a": 1\n}'	the opts map may be a variable — a bare leading word that resolves to a value is opts, not a kind
+import "boru:emitlang"  emit json {indent:-1} {a:1}	'{\n"a": 1\n}'	a negative indent is clamped to 0 (newline-only) — never a strings.Repeat panic
 #
 # §3  jsonic — bare identifier keys
-import "aql:emitlang"  emit jsonic {a:1 b:"hi"}	'{a:1,b:"hi"}'	jsonic drops quotes for identifier keys
-import "aql:emitlang"  emit jsonic {"a b":1}	'{"a b":1}'	a non-identifier key stays quoted
+import "boru:emitlang"  emit jsonic {a:1 b:"hi"}	'{a:1,b:"hi"}'	jsonic drops quotes for identifier keys
+import "boru:emitlang"  emit jsonic {"a b":1}	'{"a b":1}'	a non-identifier key stays quoted
 #
 # §4  yaml — block style
-import "aql:emitlang"  emit yaml {a:1}	'a: 1'	a flat map renders one key: value line
-import "aql:emitlang"  emit yaml [1 2]	'- 1\n- 2'	a list renders `- ` items
+import "boru:emitlang"  emit yaml {a:1}	'a: 1'	a flat map renders one key: value line
+import "boru:emitlang"  emit yaml [1 2]	'- 1\n- 2'	a list renders `- ` items
 #
 # §5  csv / tsv — tabular, list of records
-import "aql:emitlang"  emit csv [{a:1 b:2} {a:3 b:4}]	'a,b\n1,2\n3,4\n'	csv header from the first record's keys, then rows
-import "aql:emitlang"  emit tsv [{a:1 b:2}]	'a\tb\n1\t2\n'	tsv uses a tab separator
-import "aql:emitlang"  emit csv {separation:";"} [{a:1 b:2}]	'a;b\n1;2\n'	opts {separation:sep} overrides the csv separator
+import "boru:emitlang"  emit csv [{a:1 b:2} {a:3 b:4}]	'a,b\n1,2\n3,4\n'	csv header from the first record's keys, then rows
+import "boru:emitlang"  emit tsv [{a:1 b:2}]	'a\tb\n1\t2\n'	tsv uses a tab separator
+import "boru:emitlang"  emit csv {separation:";"} [{a:1 b:2}]	'a;b\n1;2\n'	opts {separation:sep} overrides the csv separator
 #
 # §6  toml / ini — map shapes
-import "aql:emitlang"  emit toml {a:1 b:"hi"}	'a = 1\nb = "hi"'	a flat map → top-level key = value lines
-import "aql:emitlang"  emit toml {server:{host:"x"}}	'[server]\nhost = "x"'	a nested map → a [table] header
-import "aql:emitlang"  emit toml {"a b":1}	'"a b" = 1'	a key that is not a bare TOML key is quoted so it round-trips
-import "aql:emitlang"  emit ini {db:{user:"a"}}	'[db]\nuser=a'	a {section:{k:v}} map → an [section] block
-import "aql:emitlang"  emit ini {a:1 b:2}	'a=1\nb=2'	a flat map → bare key=value lines
+import "boru:emitlang"  emit toml {a:1 b:"hi"}	'a = 1\nb = "hi"'	a flat map → top-level key = value lines
+import "boru:emitlang"  emit toml {server:{host:"x"}}	'[server]\nhost = "x"'	a nested map → a [table] header
+import "boru:emitlang"  emit toml {"a b":1}	'"a b" = 1'	a key that is not a bare TOML key is quoted so it round-trips
+import "boru:emitlang"  emit ini {db:{user:"a"}}	'[db]\nuser=a'	a {section:{k:v}} map → an [section] block
+import "boru:emitlang"  emit ini {a:1 b:2}	'a=1\nb=2'	a flat map → bare key=value lines
 #
 # §7  xml — Xml-only
-import "aql:emitlang"  emit xml <r><c>1</c></r>	'<r><c>1</c></r>'	an Xml element round-trips to well-formed XML
+import "boru:emitlang"  emit xml <r><c>1</c></r>	'<r><c>1</c></r>'	an Xml element round-trips to well-formed XML
 #
 # §8  out-of-band exports — kinds / the register tombstone (custom emitters
 #     are def-bound fn VALUES; §fnv pins the value-form contract)
-import "aql:emitlang"  EmitLang.kinds	[json/q jsonic/q yaml/q csv/q tsv/q toml/q ini/q xml/q]	the (fixed) emitter-kind atoms — the built-in family, in fixed order
-import "aql:emitlang"  def up (fn [[value:Any opts:Map] [String] ["UP"]])  emit up {a:1}	'UP'	a def-bound emitter value; emit <name> uses it
+import "boru:emitlang"  EmitLang.kinds	[json/q jsonic/q yaml/q csv/q tsv/q toml/q ini/q xml/q]	the (fixed) emitter-kind atoms — the built-in family, in fixed order
+import "boru:emitlang"  def up (fn [[value:Any opts:Map] [String] ["UP"]])  emit up {a:1}	'UP'	a def-bound emitter value; emit <name> uses it
 #
 # §9  negatives
-import "aql:emitlang"  emit nope {a:1}	ERROR:emit_unknown_lang	unknown explicit kind: expansion-time error at the call site
+import "boru:emitlang"  emit nope {a:1}	ERROR:emit_unknown_lang	unknown explicit kind: expansion-time error at the call site
 emit json {a:1}	ERROR:emit_unknown_lang	emit is core but emitters need the import (no auto-import)
 EmitLang.kinds	ERROR:undefined_word	the namespace is unbound until imported
-import "aql:emitlang"  emit toml [1 2]	ERROR:emit_unsupported	toml cannot represent a top-level List
-import "aql:emitlang"  emit xml {a:1}	ERROR:emit_unsupported	xml only emits an Xml element, not a Map
-import "aql:emitlang"  emit ini {a:{b:{c:1}}}	ERROR:emit_unsupported	ini supports one level of sections, not deeper nesting
-import "aql:emitlang"  emit csv {a:1}	ERROR:emit_unsupported	csv needs a table or list of rows — a bare Map is not tabular
-import "aql:emitlang"  emit csv 1	ERROR:emit_unsupported	csv needs a table or list of rows — a scalar is not tabular
-import "aql:emitlang"  emit toml {a:None}	ERROR:emit_unsupported	toml has no null — an unrepresentable scalar errors rather than corrupting the type
-import "aql:emitlang"  EmitLang.register	ERROR:emit_registry_frozen	the kind namespace is fixed — registration was removed (tombstone)
-import "aql:emitlang"  EmitLang.register up (fn [[value:Any opts:Map] [String] ["UP"]])	ERROR:emit_registry_frozen	a legacy register call fails loudly with the migration hint
+import "boru:emitlang"  emit toml [1 2]	ERROR:emit_unsupported	toml cannot represent a top-level List
+import "boru:emitlang"  emit xml {a:1}	ERROR:emit_unsupported	xml only emits an Xml element, not a Map
+import "boru:emitlang"  emit ini {a:{b:{c:1}}}	ERROR:emit_unsupported	ini supports one level of sections, not deeper nesting
+import "boru:emitlang"  emit csv {a:1}	ERROR:emit_unsupported	csv needs a table or list of rows — a bare Map is not tabular
+import "boru:emitlang"  emit csv 1	ERROR:emit_unsupported	csv needs a table or list of rows — a scalar is not tabular
+import "boru:emitlang"  emit toml {a:None}	ERROR:emit_unsupported	toml has no null — an unrepresentable scalar errors rather than corrupting the type
+import "boru:emitlang"  EmitLang.register	ERROR:emit_registry_frozen	the kind namespace is fixed — registration was removed (tombstone)
+import "boru:emitlang"  EmitLang.register up (fn [[value:Any opts:Map] [String] ["UP"]])	ERROR:emit_registry_frozen	a legacy register call fails loudly with the migration hint
 #
 # §10  every per-kind export covered by its qualified name (ADR-003) — the
 #      desugared standard call `EmitLang.emit_<kind> <data> <opts> end`.
-import "aql:emitlang"  EmitLang.emit_auto {a:1} {} end	'{"a":1}'	emit_auto picks the value's natural format (json for a Map)
-import "aql:emitlang"  EmitLang.emit_jsonic {a:1} {} end	'{a:1}'	emit_jsonic — bare identifier keys
-import "aql:emitlang"  EmitLang.emit_yaml {a:1} {} end	'a: 1'	emit_yaml — block style
-import "aql:emitlang"  EmitLang.emit_csv [{a:1 b:2}] {} end	'a,b\n1,2\n'	emit_csv — tabular
-import "aql:emitlang"  EmitLang.emit_tsv [{a:1 b:2}] {} end	'a\tb\n1\t2\n'	emit_tsv — tab separated
-import "aql:emitlang"  EmitLang.emit_toml {a:1} {} end	'a = 1'	emit_toml — key = value
-import "aql:emitlang"  EmitLang.emit_ini {a:1} {} end	'a=1'	emit_ini — flat key=value
-import "aql:emitlang"  EmitLang.emit_xml <r>1</r> {} end	'<r>1</r>'	emit_xml — Xml element
+import "boru:emitlang"  EmitLang.emit_auto {a:1} {} end	'{"a":1}'	emit_auto picks the value's natural format (json for a Map)
+import "boru:emitlang"  EmitLang.emit_jsonic {a:1} {} end	'{a:1}'	emit_jsonic — bare identifier keys
+import "boru:emitlang"  EmitLang.emit_yaml {a:1} {} end	'a: 1'	emit_yaml — block style
+import "boru:emitlang"  EmitLang.emit_csv [{a:1 b:2}] {} end	'a,b\n1,2\n'	emit_csv — tabular
+import "boru:emitlang"  EmitLang.emit_tsv [{a:1 b:2}] {} end	'a\tb\n1\t2\n'	emit_tsv — tab separated
+import "boru:emitlang"  EmitLang.emit_toml {a:1} {} end	'a = 1'	emit_toml — key = value
+import "boru:emitlang"  EmitLang.emit_ini {a:1} {} end	'a=1'	emit_ini — flat key=value
+import "boru:emitlang"  EmitLang.emit_xml <r>1</r> {} end	'<r>1</r>'	emit_xml — Xml element
 #
 # §fnv  an emitter VALUE as the target — `emit <fn> <opts?> <data>`. The
 #       first operand may BE the emitter: a Function (or a word bound to one)
@@ -88,11 +88,11 @@ import "aql:emitlang"  EmitLang.emit_xml <r>1</r> {} end	'<r>1</r>'	emit_xml —
 #       shared EmitLangFnSigWhy validator (the same prefix the built-in kinds
 #       carry). A built-in kind wins a name collision; without these forms a
 #       Function operand would fall to emit_auto and JSON-emit the fn value.
-import "aql:emitlang"  def up fn [[value:Any opts:Map] [String] ['UP']]  emit up {a:1}	'UP'	a word bound to an emitter fn is the value form spelled by name
-import "aql:emitlang"  emit (fn [[value:Any opts:Map] [String] ['VF']]) {a:1}	'VF'	an anonymous emitter fn used inline
-import "aql:emitlang"  def px fn [[value:Any opts:Map] [String] [(opts get 'p') add (emit value)]]  emit px {p:'X:'} {a:1}	'X:{"a":1}'	3-arg form: opts in the middle, data last — opts reach the fn
+import "boru:emitlang"  def up fn [[value:Any opts:Map] [String] ['UP']]  emit up {a:1}	'UP'	a word bound to an emitter fn is the value form spelled by name
+import "boru:emitlang"  emit (fn [[value:Any opts:Map] [String] ['VF']]) {a:1}	'VF'	an anonymous emitter fn used inline
+import "boru:emitlang"  def px fn [[value:Any opts:Map] [String] [(opts get 'p') add (emit value)]]  emit px {p:'X:'} {a:1}	'X:{"a":1}'	3-arg form: opts in the middle, data last — opts reach the fn
 #
 # §fnv  value-form negatives — the [value opts]→String contract is enforced
-import "aql:emitlang"  emit (fn [[value:Any opts:Map] [Integer] [1]]) {a:1}	ERROR:emit_bad_signature	an emitter must return a String
-import "aql:emitlang"  emit (fn [[a:Integer b:Map] [String] ['x']]) {a:1}	ERROR:emit_bad_signature	the first parameter must be value:Any
-import "aql:emitlang"  emit (Function) {a:1}	ERROR:uncalled_function	the Function TYPE literal is not an emitter value (auto path, unchanged)
+import "boru:emitlang"  emit (fn [[value:Any opts:Map] [Integer] [1]]) {a:1}	ERROR:emit_bad_signature	an emitter must return a String
+import "boru:emitlang"  emit (fn [[a:Integer b:Map] [String] ['x']]) {a:1}	ERROR:emit_bad_signature	the first parameter must be value:Any
+import "boru:emitlang"  emit (Function) {a:1}	ERROR:uncalled_function	the Function TYPE literal is not an emitter value (auto path, unchanged)

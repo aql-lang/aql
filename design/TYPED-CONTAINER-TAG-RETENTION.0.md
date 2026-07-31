@@ -71,7 +71,7 @@ carried by a `typedMapBehavior{elem}` via `MintTypeWithBehavior`,
 `v.Parent`'s behavior.
 
 - **Pros:** values stay concrete (`AsMap` works); reuses the reparent + custom-
-  Behavior machinery; typed containers become *real types* — fits AQL's "def binds,
+  Behavior machinery; typed containers become *real types* — fits boru's "def binds,
   make instantiates" model and makes `typeof` honest.
 - **Cons:** **broad census ripple.** Every `{:T}` value's `Parent` changes from
   `Map` to a minted subtype → touches dispatch admission, `typeof`, comparison
@@ -145,7 +145,7 @@ long-term model but pays a whole-corpus reparent ripple up front; defer it unles
   `elem`). Gate: census/differentials **byte-identical** (the field is inert). This
   de-risks the core-model touch in isolation.
 - **Phase R2 — `set` write-check + result retention (runtime + check).** The
-  maintainer's example now errors at check AND `aql run`. Gate: census green (valid
+  maintainer's example now errors at check AND `boru run`. Gate: census green (valid
   corpus has no non-conforming writes); new pins for reject + conforming-keeps-tag.
 - **Phase R3 — `setpath` deep-write enforcement (DONE); `merge`/`inject` deferred.**
   `setReachNative` enforces the element tag at the leaf write, at runtime, for
@@ -266,7 +266,7 @@ contract. A `{:T}` flex is now first-class:
 
 Known, acceptable limits (precision, not soundness):
 - **Flex writes are RUNTIME-enforced; check is conservative.** A flex node is
-  mutable by reference, so `aql check` does not statically flag a bad flex write
+  mutable by reference, so `boru check` does not statically flag a bad flex write
   (`def m:{:Integer} (flex {a:1}) (m set b/q "wrong")` checks clean, runs-rejects) —
   the runtime is the source of truth. Immutable writes DO have a top-level check
   mirror (`d2CheckWrite`); flex does not, by design.
@@ -305,7 +305,7 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
   1. **Param binds the arg UNTAGGED** → a write inside the fn body escaped
      enforcement (BOTH a plain and a flex argument). `RetagTypedContainerParam`
      re-tags a concrete `{:T}`/`[:T]` arg with the param's element constraint at
-     every binding site (`execFnDefSig`/`CallAQL`/`InstallFnDef` in the
+     every binding site (`execFnDefSig`/`CallBoru`/`InstallFnDef` in the
      interpreter, `checkParamContract` on the compiled path) — so the body write
      is enforced identically in both. Dispatch already element-checks the arg and
      rejects a non-conformer before binding, so the re-tag `Unify` cannot fail.
@@ -334,7 +334,7 @@ DOWNSTREAM write escaped enforcement. All fixes keep the census byte-identical
      compiled-vs-interpreted divergence (compiled retags its locals in
      `checkParamContract`; the interpreter did not retag the args stack).
      `RetagTypedContainerArgs` retags the whole arg slice at each interpreter
-     fn-entry (`InstallFnDef` closure, `execFnDefSig`, `CallAQL`) up front, so the
+     fn-entry (`InstallFnDef` closure, `execFnDefSig`, `CallBoru`) up front, so the
      named binding, the args stack, AND unnamed body-token pushes all see the
      tagged value. Copy-on-write — no allocation when no param is a typed
      container (the leaf fast path stays allocation-free).

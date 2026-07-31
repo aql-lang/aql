@@ -110,7 +110,7 @@ func updateHandler(args []Value, ctx map[string]Value, stack []Value, r *Registr
 	}
 
 	if !found {
-		return nil, r.AqlError("update_error", fmt.Sprintf("update: no record found with id %q", id), "update")
+		return nil, r.BoruError("update_error", fmt.Sprintf("update: no record found with id %q", id), "update")
 	}
 
 	return []Value{NewList(result)}, nil

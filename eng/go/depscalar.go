@@ -278,7 +278,7 @@ func formatDepScalar(leaf string, info DepScalarInfo) string {
 
 // renderDepScalar is the canonical Value-shaped wrapper around
 // formatDepScalar. Every display surface in the engine — Value.String,
-// ValToString, FormatValueJSON, FormatForPrint, aql_error stack
+// ValToString, FormatValueJSON, FormatForPrint, boru_error stack
 // rendering — funnels DepScalar values through here so the surface
 // representation stays consistent across paths and the
 // IsDepScalar→AsDepScalar dance happens in exactly one place.

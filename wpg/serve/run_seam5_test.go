@@ -6,7 +6,7 @@ import (
 	"os"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // run and main are covered through the seams (design/TEST-SEAMS.10.md):
@@ -39,7 +39,7 @@ func TestRunSeams(t *testing.T) {
 	}
 
 	// Constructor failure surfaces as exit 1.
-	newInstance = func(...lang.Options) (*lang.AQL, error) { return nil, errors.New("boom") }
+	newInstance = func(...lang.Options) (*lang.Boru, error) { return nil, errors.New("boom") }
 	if code := run(nil); code != 1 {
 		t.Errorf("run with failing constructor = %d, want 1", code)
 	}

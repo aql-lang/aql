@@ -1,15 +1,15 @@
 package test
 
 import (
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// seedAQL installs the words that moved out of core into loadable modules
-// under their bare names on a lang.AQL test instance, so behaviour/typecheck
+// seedBoru installs the words that moved out of core into loadable modules
+// under their bare names on a lang.Boru test instance, so behaviour/typecheck
 // tests can keep using `upper`, `now`, `band`, … without an explicit import.
-// Production requires `import "aql:<mod>"` (proved by the module-*.tsv specs).
-func seedAQL(a *lang.AQL) {
+// Production requires `import "boru:<mod>"` (proved by the module-*.tsv specs).
+func seedBoru(a *lang.Boru) {
 	moved := [][]native.NativeFunc{
 		native.IOModuleNativeFuncs(native.IOModuleTypes{StreamKind: native.NewStreamKind(), FileType: native.NewFileType(), Watcher: native.NewWatcherType(), File: native.NewFileHandleType(), Lock: native.NewLockType(), Mmap: native.NewMmapType()}),
 		native.StructModuleNatives,

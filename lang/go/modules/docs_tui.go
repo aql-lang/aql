@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:tui", map[string]string{
+	registerDocs("boru:tui", map[string]string{
 		"open":           "Take the terminal over (raw mode + alt-screen) via the registered backend, returning a Terminal handle.",
 		"close":          "Restore the terminal and release the handle; idempotent.",
 		"dims":           "The terminal's current dimensions, as {cols rows}.",
@@ -13,7 +13,7 @@ func init() {
 		"title":          "Set the terminal window title.",
 		"bell":           "Ring the terminal bell.",
 		"run":            "Run an app map {init update view}: events fold through update, the pure view renders, run blocks until quit and returns the final state.",
-		"serve":          "Serve an app map to remote viewers over {tcp token viewers reattach}: trees down, events up (attach with `aql attach`); up to viewers concurrent viewers (default 1), reattach keeps the app alive across viewer loss; returns the final state.",
+		"serve":          "Serve an app map to remote viewers over {tcp token viewers reattach}: trees down, events up (attach with `boru attach`); up to viewers concurrent viewers (default 1), reattach keeps the app alive across viewer loss; returns the final state.",
 		"quit":           "Wrap the final state in the quit marker an update returns to end the app.",
 		"text":           "Build a text widget: a styled leaf line (wrap: \"wrap\" for multi-line).",
 		"rows":           "Build a vertical stack of child widgets.",
@@ -37,7 +37,7 @@ func init() {
 	// of Map does not convey: a view is a value you build, nest and
 	// compare, not a side effect. Results are from verified
 	// lang/spec/module-tui.tsv rows.
-	registerExamples("aql:tui", map[string][]string{
+	registerExamples("boru:tui", map[string][]string{
 		"text": {
 			`Tui.text "hi"                                    ;# {w:'text' text:'hi' wrap:'truncate'}`,
 			`Tui.text "hi" {size: 1}                          ;# widgets are DATA, not draw calls`,

@@ -13,7 +13,7 @@ place — `recordCallOperands` during a whole-program compile pass, on a
 concrete capture-free `FnDefInfo` const sitting directly in a
 `CompileStoresFn` slot. Anything else permanently interpreted:
 
-- **custom AQL codec fns** (`redis-decode`/`redis-encode`): nested inside
+- **custom boru codec fns** (`redis-decode`/`redis-encode`): nested inside
   the codec MAP — `recordCallOperands` never descends into Map operands, so
   no compile pass could ever reach them;
 - **service handlers whose bodies refused** the stored-fn probe (silently —
@@ -21,10 +21,10 @@ concrete capture-free `FnDefInfo` const sitting directly in a
   which is why `-force-compile` success proves nothing about handlers);
 - **module fns applied through the module-export seam** (`MiniRedis.cmd` per
   client-loop iteration): the apply is a deliberate `OpCallDynamic` island
-  whose body ran via `CallAQL`.
+  whose body ran via `CallBoru`.
 
-Measured on `bench/networking/apps/echo_redis.aql`: ~97% of per-request CPU
-in `CallAQL`, compiled ≈ 1.5× interpreted (~1,170 vs ~730 req/s), while the
+Measured on `bench/networking/apps/echo_redis.boru`: ~97% of per-request CPU
+in `CallBoru`, compiled ≈ 1.5× interpreted (~1,170 vs ~730 req/s), while the
 echo microbenchmark (whose handler IS a top-level store-fn const) got ~50×.
 
 ## The primitive
@@ -42,7 +42,7 @@ echo microbenchmark (whose handler IS a top-level store-fn const) got ~50×.
   The Program lives on the ref — GC'd with the value; no global registry.
 - `StampFnValue(r, v) (Value, bool)` — the value-level entry for
   POST-publication values: returns a stamped CLONE (fresh sig slice, fresh
-  `*AQLImpl`) so a store word never mutates a shared impl under concurrent
+  `*BoruImpl`) so a store word never mutates a shared impl under concurrent
   readers. Declines return the input unchanged.
 - `StampFnValueInPlace(r, v) bool` — the PRE-publication twin (module load
   only): stamps via `stampCompiledRef` on the value's own shared impl, so a
@@ -81,7 +81,7 @@ Trigger sites:
    module body runs, every module-scope def holding an eligible fn stamps
    IN PLACE; `execFnDefSig`'s foreign-registry branch then routes a stamped
    module-fn application through `InvokeCallback` at RUNTIME (check mode
-   keeps the pure `CallAQL` analysis path — running a unit during static
+   keeps the pure `CallBoru` analysis path — running a unit during static
    analysis would execute real side effects).
 
 ## Dep freshness — invoke-time (Depth, Gen) snapshots
@@ -95,7 +95,7 @@ names the body reads. Freshness moves to invoke time:
   bumped by every push/pop/replace/truncate/delete/set. nil = compile-time
   ref (no validation); an empty non-nil map = dep-free runtime ref.
 - `InvokeCallback` gates the VM path on `ref.depsFresh(r)`; any mismatch
-  falls to `CallAQL`, which resolves the live binding exactly as the
+  falls to `CallBoru`, which resolves the live binding exactly as the
   interpreter. Fail-safe direction only.
 - Gen (not value ID) is load-bearing: runtime values can carry EMPTY IDs,
   so an undef+redef landing at the same depth would be invisible to a
@@ -142,7 +142,7 @@ refusals had three real causes, all fixed:
    `elemEvalRecordable` so `autoEvalMap`/`autoEvalList` record the container
    instead of leaving an unresolvable residual. Scoped by `isCallbackBodyName`
    to CALLBACK bodies only ("storedfn$body" / "spawnbody$body"): a callback is
-   invoked only via `InvokeCallback` / `CallAQL`, both of which evaluate the
+   invoked only via `InvokeCallback` / `CallBoru`, both of which evaluate the
    residual IN the live frame, so the recorded assembly matches the
    interpreter. A NORMAL user fn applied directly at top level leaves a
    DEFERRED `autoEvalStack` residual the interpreter evaluates AFTER the frame
@@ -155,10 +155,10 @@ refusals had three real causes, all fixed:
 
 | stage | compiled req/s | notes |
 |---|--:|---|
-| baseline | ~1,170 | ~97% of callback CPU in CallAQL |
+| baseline | ~1,170 | ~97% of callback CPU in CallBoru |
 | Phase 1 (codec) | ~2,500 | invokeFn 45%→12% of CPU |
 | Phase 2 (handlers + gradual nesting) | ~7,300 | 15/17 handlers on the VM |
-| Phase 3+4 (KEYS closure, client loop) | ~8,100-11,700 | **CallAQL: zero samples on the steady-state path** |
+| Phase 3+4 (KEYS closure, client loop) | ~8,100-11,700 | **CallBoru: zero samples on the steady-state path** |
 | `-no-compile` (unchanged throughout) | ~700-860 | the interpreter contract |
 
 (The Phase-3+4 range spans a busy and a quiet box; the final quiet-box

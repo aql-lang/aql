@@ -1,4 +1,4 @@
-# AQL Language Specification: Argument Usurping (usurp / /u)
+# boru Language Specification: Argument Usurping (usurp / /u)
 # Format: input<TAB>expected<TAB>description
 #
 # usurp f         → wrap a function so its signature arg order is reversed
@@ -77,7 +77,7 @@ def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  usurp sub2/r 10 3	ERROR:s
 # ─── bind a wrapper to a name and call it as a word (the alias idiom) ───
 # `def fu (usurp …)` binds the reversed wrapper; calling `fu` then
 # dispatches it like any fn. InstallFnDef preserves the wrapper's own
-# handler (it has no AQL body), so the call re-dispatches the original.
+# handler (it has no boru body), so the call re-dispatches the original.
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp (ref sub2))  fu 10 3	-7	named-bound wrapper (by value) dispatches as a word
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp sub2)  fu 10 3	-7	named-bound wrapper (by name) dispatches as a word
 def sub2 fn [[a:Integer b:Integer][Integer][a sub b]]  def fu (usurp sub2)  10 fu 3	7	swap form against the named wrapper

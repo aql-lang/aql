@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# release.sh — publish the aql modules so `go install …@latest` works.
+# release.sh — publish the boru modules so `go install …@latest` works.
 #
 # Releases eng/go, lang/go and cmd/go in DEPENDENCY ORDER. For each module it:
 #   1. auto-bumps the PATCH from the module's latest `<module>/vX.Y.Z` tag
 #      (or v0.0.1 if the module has never been tagged);
-#   2. strips the local `replace github.com/aql-lang/aql/… => ../…` directives
+#   2. strips the local `replace github.com/boru-lang/boru/… => ../…` directives
 #      (a published go.mod MUST NOT contain replace directives, or
 #      `go install …@version` refuses it);
 #   3. pins the sibling `require` lines to the versions just released;
@@ -63,13 +63,13 @@ fi
 
 # The actual go.mod surgery, run only for a real release (see edit_module).
 lang_pin() { ( cd lang/go
-  go mod edit -dropreplace=github.com/aql-lang/aql/eng/go
-  go mod edit -require="github.com/aql-lang/aql/eng/go@v$ENGV"
+  go mod edit -dropreplace=github.com/boru-lang/boru/eng/go
+  go mod edit -require="github.com/boru-lang/boru/eng/go@v$ENGV"
   GOFLAGS=-mod=mod GOWORK=off go mod tidy ); }
 cmd_pin() { ( cd cmd/go
-  go mod edit -dropreplace=github.com/aql-lang/aql/eng/go -dropreplace=github.com/aql-lang/aql/lang/go
-  go mod edit -require="github.com/aql-lang/aql/eng/go@v$ENGV" -require="github.com/aql-lang/aql/lang/go@v$LANGV"
-  # Version lives in cmd/go/main.go (aql/main.go is a thin entrypoint).
+  go mod edit -dropreplace=github.com/boru-lang/boru/eng/go -dropreplace=github.com/boru-lang/boru/lang/go
+  go mod edit -require="github.com/boru-lang/boru/eng/go@v$ENGV" -require="github.com/boru-lang/boru/lang/go@v$LANGV"
+  # Version lives in cmd/go/main.go (boru/main.go is a thin entrypoint).
   perl -i -pe 's{(^var Version = )"[^"]*"}{$1"'"$CMDV"'"}' main.go
   GOFLAGS=-mod=mod GOWORK=off go mod tidy ); }
 
@@ -95,4 +95,4 @@ run "git tag cmd/go/v$CMDV"
 run "git push origin main cmd/go/v$CMDV"
 
 echo "==> Done. Install with:"
-echo "    go install github.com/aql-lang/aql/cmd/go/aql@v$CMDV"
+echo "    go install github.com/boru-lang/boru/cmd/go/boru@v$CMDV"

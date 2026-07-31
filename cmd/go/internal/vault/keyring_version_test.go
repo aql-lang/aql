@@ -101,8 +101,8 @@ func TestKeyringRejectsNewerFormat(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for newer keyring format")
 	}
-	if !strings.Contains(err.Error(), "upgrade aql") {
-		t.Errorf("error should advise upgrading aql, got %q", err.Error())
+	if !strings.Contains(err.Error(), "upgrade boru") {
+		t.Errorf("error should advise upgrading boru, got %q", err.Error())
 	}
 }
 

@@ -4,7 +4,7 @@
 // the supervisor PID. Mode 0600 so other users on the host can't
 // read the token.
 //
-// Default path is $TMPDIR/aql-api.json. There's deliberately no PID
+// Default path is $TMPDIR/boru-api.json. There's deliberately no PID
 // in the name: the well-known location is what makes the no-arg
 // client UX work. Users running multiple supervisors must pass
 // --bind/--token explicitly to one or both clients.
@@ -57,9 +57,9 @@ var fileWrite = (*os.File).Write
 // drive writeDiscoveryFile's close-failure arm (same root-only reason).
 var fileClose = (*os.File).Close
 
-// DefaultDiscoveryPath returns the standard location: $TMPDIR/aql-api.json.
+// DefaultDiscoveryPath returns the standard location: $TMPDIR/boru-api.json.
 func DefaultDiscoveryPath() string {
-	return filepath.Join(tempDirFunc(), "aql-api.json")
+	return filepath.Join(tempDirFunc(), "boru-api.json")
 }
 
 // writeDiscoveryFile drops the file at DefaultDiscoveryPath. Called
@@ -83,7 +83,7 @@ func (s *Server) writeDiscoveryFile() error {
 	// "<path>.tmp" name in a shared temp dir is a symlink-TOCTOU footgun —
 	// os.WriteFile would follow a pre-planted symlink and leak the token.
 	// os.CreateTemp uses O_CREATE|O_EXCL with an unpredictable suffix.
-	f, err := os.CreateTemp(filepath.Dir(path), "aql-api-*.json.tmp")
+	f, err := os.CreateTemp(filepath.Dir(path), "boru-api-*.json.tmp")
 	if err != nil {
 		return err
 	}
@@ -126,7 +126,7 @@ func ReadDiscoveryFile() (url, token string, pid int, err error) {
 	path := DefaultDiscoveryPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return "", "", 0, fmt.Errorf("no api discovery file at %s (is `aql serve ... + api` running?): %w", path, err)
+		return "", "", 0, fmt.Errorf("no api discovery file at %s (is `boru serve ... + api` running?): %w", path, err)
 	}
 	var f discoveryFile
 	if err := json.Unmarshal(data, &f); err != nil {

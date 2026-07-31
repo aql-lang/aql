@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // Stage M2c landing tests — shaped-instance-method dispatch
@@ -29,28 +29,28 @@ import (
 func TestShapedMethodDispatchCompiles(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
 		{"module-log.tsv:53 — statement-position l.info stamps the logger name",
-			`import "aql:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" ; Log.dump 0 get "logger" get`,
+			`import "boru:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" ; Log.dump 0 get "logger" get`,
 			"[http]"},
 		{"module-log.tsv:54 — 2-arg l.info merges defaults under call fields",
-			`import "aql:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" {path:"/x"} ; Log.dump 0 get "attributes" get`,
+			`import "boru:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" {path:"/x"} ; Log.dump 0 get "attributes" get`,
 			"[{svc:'api' path:'/x'}]"},
 		{"module-log.tsv:55 — paren-bounded l.child derives a shaped child logger",
-			`import "aql:log" ; def l (Log.with "a" {x:1}) ; def c (l.child {y:2}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; c.info "m" ; Log.dump 0 get "attributes" get`,
+			`import "boru:log" ; def l (Log.with "a" {x:1}) ; def c (l.child {y:2}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; c.info "m" ; Log.dump 0 get "attributes" get`,
 			"[{x:1 y:2}]"},
 		{"module-log.tsv:56 — call field overrides a logger default",
-			`import "aql:log" ; def l (Log.with "a" {x:1}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.error "boom" {x:2} ; Log.dump 0 get "attributes" get`,
+			`import "boru:log" ; def l (Log.with "a" {x:1}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.error "boom" {x:2} ; Log.dump 0 get "attributes" get`,
 			"[{x:2}]"},
 		{"module-log.tsv:77 — two counter adds record two measurements",
-			`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "requests") ; c.add 1 ; c.add 2 ; Log.measurements size`,
+			`import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "requests") ; c.add 1 ; c.add 2 ; Log.measurements size`,
 			"[2]"},
 		{"module-log.tsv:78 — a counter records its added value",
-			`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "requests") ; c.add 3 ; Log.measurements 0 get "value" get`,
+			`import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "requests") ; c.add 3 ; Log.measurements 0 get "value" get`,
 			"[3]"},
 		{"module-log.tsv:79 — a gauge records gauge-kind measurements",
-			`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def g (Log.gauge "temp") ; g.record 21 ; Log.measurements 0 get "kind" get`,
+			`import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def g (Log.gauge "temp") ; g.record 21 ; Log.measurements 0 get "kind" get`,
 			"[gauge]"},
 		{"module-log.tsv:80 — a histogram records measurement attributes",
-			`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def h (Log.histogram "lat") ; h.record 12 {ep:"/x"} ; Log.measurements 0 get "attributes" get`,
+			`import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def h (Log.histogram "lat") ; h.record 12 {ep:"/x"} ; Log.measurements 0 get "attributes" get`,
 			"[{ep:'/x'}]"},
 	} {
 		fnValueM2Native(t, c.name, c.src, c.want)
@@ -66,13 +66,13 @@ func TestShapedMethodDispatchCompiles(t *testing.T) {
 // stamps the record identically in both engines — the prior sub-registry
 // pass-through printed wall time on the compiled path only.
 func TestShapedMethodEffectOrdering(t *testing.T) {
-	src := `import "aql:log" ; def l (Log.with "ord" {svc:"api"}) ; print "a" ; l.info "req" ; print "b" ; 42`
+	src := `import "boru:log" ; def l (Log.with "ord" {svc:"api"}) ; print "a" ; l.info "req" ; print "b" ; 42`
 	clk := capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)}
 	// One capture stream for BOTH effect channels: print writes through the
 	// registry Output and the console sink writes the record line through the
 	// registry ErrOutput — pointing both at one pipe makes the full effect
 	// order observable as a single byte stream.
-	capture := func(run func(a *AQL)) string {
+	capture := func(run func(a *Boru)) string {
 		rd, w, _ := os.Pipe()
 		a := mustNew(t)
 		a.SetOutput(w)
@@ -84,7 +84,7 @@ func TestShapedMethodEffectOrdering(t *testing.T) {
 		return string(out)
 	}
 	var gotC, gotI []any
-	outC := capture(func(a *AQL) {
+	outC := capture(func(a *Boru) {
 		var compiled bool
 		var err error
 		gotC, compiled, err = a.RunCompiled(src)
@@ -92,7 +92,7 @@ func TestShapedMethodEffectOrdering(t *testing.T) {
 			t.Errorf("effect ordering: compiled=%v err=%v", compiled, err)
 		}
 	})
-	outI := capture(func(a *AQL) {
+	outI := capture(func(a *Boru) {
 		var err error
 		gotI, err = a.RunInterp(src)
 		if err != nil {
@@ -129,16 +129,16 @@ func TestShapedMethodEffectOrdering(t *testing.T) {
 func TestShapedMethodZeroArgLandingsCompile(t *testing.T) {
 	for _, c := range []struct{ name, src, want string }{
 		{"module-log.tsv:72 — span set-attr/finish",
-			`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.set-attr region/q "eu" ; s.finish ; Log.traces 0 get "attributes" get`,
+			`import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.set-attr region/q "eu" ; s.finish ; Log.traces 0 get "attributes" get`,
 			"[{region:'eu'}]"},
 		{"module-log.tsv:73 — span record-error/finish",
-			`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.record-error "boom" ; s.finish ; Log.traces 0 get "status" get`,
+			`import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.record-error "boom" ; s.finish ; Log.traces 0 get "status" get`,
 			"[error]"},
 		{"module-rand.tsv:14 — r.bool (0-arg draw)",
-			`import "aql:rand"  def r (Rand.with-seed 7)  r.bool`,
+			`import "boru:rand"  def r (Rand.with-seed 7)  r.bool`,
 			"[false]"},
 		{"module-rand.tsv:15 — r.float (0-arg draw)",
-			`import "aql:rand"  def r (Rand.with-seed 1)  r.float`,
+			`import "boru:rand"  def r (Rand.with-seed 1)  r.float`,
 			"[0.6046602879796196]"},
 	} {
 		mustCompileWithParity(t, c.src, c.want)
@@ -164,11 +164,11 @@ func TestShapedMethodCapturingMemberStaysRefused(t *testing.T) {
 // on the committed tree). It must now refuse, with faithful fallback.
 func TestShapedMethodComputedArgStaysRefused(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	fnValueM2Refusal(t, "computed arg in the statement window",
-		`import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "n") ; c.add (1 add 2) ; Log.measurements size`,
+		`import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "n") ; c.add (1 add 2) ; Log.measurements size`,
 		"dynamic value precedes residual args")
 }
 
@@ -180,7 +180,7 @@ func TestShapedMethodComputedArgStaysRefused(t *testing.T) {
 // The compiled OpCallDynMethod must detect the count mismatch and defer via
 // internal_error: RunCompiled silently re-runs the interpreter (correct
 // result, fallback), RunCompiledStrict surfaces the internal_error loudly.
-func zzShapedInstance(t *testing.T) *AQL {
+func zzShapedInstance(t *testing.T) *Boru {
 	t.Helper()
 	a := mustNew(t)
 	if err := zzInstallShapedInstance(a); err != nil {
@@ -192,7 +192,7 @@ func zzShapedInstance(t *testing.T) *AQL {
 // zzInstallShapedInstance registers the zz-inst fixture on an existing
 // instance without a *testing.T, so data-driven suites (the frontier cases)
 // can build it too.
-func zzInstallShapedInstance(a *AQL) error {
+func zzInstallShapedInstance(a *Boru) error {
 	subReg, err := native.DefaultRegistry()
 	if err != nil {
 		return err
@@ -213,7 +213,7 @@ func zzInstallShapedInstance(a *AQL) error {
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TAny}},
 			Returns:    []*native.Type{},
-			Impl:       native.AQL([]native.Value{native.NewWord("zz-m")}),
+			Impl:       native.Boru([]native.Value{native.NewWord("zz-m")}),
 			BarrierPos: -1,
 		}},
 		Registry: subReg,
@@ -279,12 +279,12 @@ func TestShapedMethodClaimViolationDefers(t *testing.T) {
 // nowhere; the model records, never runs, the method).
 func TestShapedMethodCompilePassObservationFree(t *testing.T) {
 	a := mustNew(t)
-	src := `import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "n") ; c.add 1 ; Log.measurements size`
+	src := `import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def c (Log.counter "n") ; c.add 1 ; Log.measurements size`
 	prog, reason, _, cerr := a.CompileCheck(src)
 	if cerr != nil || prog == nil {
 		t.Fatalf("observation-free: prog=%v reason=%q cerr=%v", prog != nil, reason, cerr)
 	}
-	got, err := a.RunInterp(`import "aql:log" ; Log.measurements size`)
+	got, err := a.RunInterp(`import "boru:log" ; Log.measurements size`)
 	if err != nil || fmt.Sprint(got) != "[0]" {
 		t.Errorf("compile pass leaked into the sink registry: got %v err %v", got, err)
 	}
@@ -316,7 +316,7 @@ func TestShapedMethodRegisteredShapeCompiles(t *testing.T) {
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TInteger}},
 			Returns:    []*native.Type{native.TInteger},
-			Impl:       native.AQL([]native.Value{native.NewWord("zz-h")}),
+			Impl:       native.Boru([]native.Value{native.NewWord("zz-h")}),
 			BarrierPos: -1,
 		}},
 		Registry: subReg,

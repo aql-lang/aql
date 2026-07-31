@@ -3,10 +3,10 @@ package native
 import (
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// log_metrics.go — phase 5 of aql:log: the OpenTelemetry *metrics*
+// log_metrics.go — phase 5 of boru:log: the OpenTelemetry *metrics*
 // signal. `Log.counter NAME`, `Log.gauge NAME`, and `Log.histogram NAME`
 // return instrument handles (the loggers/spans instance shape); a
 // counter's `add` and a gauge/histogram's `record` method produce a
@@ -168,11 +168,11 @@ func instrumentCtor(word, kind string, lsr *LogSinkRegistry) NativeFunc {
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteString()
 				if err != nil {
-					return nil, r.AqlError("log_error", "instrument name must be a string", word)
+					return nil, r.BoruError("log_error", "instrument name must be a string", word)
 				}
 				inst, err := buildInstrumentInstance(&instrumentState{name: name, kind: kind, lsr: lsr})
 				if err != nil {
-					return nil, r.AqlError("log_error", err.Error(), word)
+					return nil, r.BoruError("log_error", err.Error(), word)
 				}
 				return []Value{NewMap(inst)}, nil
 			}),

@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // mintClientCert issues a self-signed client certificate usable both as
@@ -33,7 +33,7 @@ func mintClientCert(t *testing.T) (certPEM, keyPEM []byte, pool *x509.CertPool) 
 	}
 	tmpl := &x509.Certificate{
 		SerialNumber:          big.NewInt(1),
-		Subject:               pkix.Name{CommonName: "aql-test-client"},
+		Subject:               pkix.Name{CommonName: "boru-test-client"},
 		NotBefore:             time.Now().Add(-time.Hour),
 		NotAfter:              time.Now().Add(time.Hour),
 		KeyUsage:              x509.KeyUsageDigitalSignature | x509.KeyUsageCertSign,
@@ -122,8 +122,8 @@ func TestFetchMutualTLS(t *testing.T) {
 		t.Fatalf("status = %v, want 200", status)
 	}
 	body, _ := m.Get("body")
-	if s, _ := AsString(body); s != "aql-test-client" {
-		t.Errorf("server saw subject %q, want aql-test-client", s)
+	if s, _ := AsString(body); s != "boru-test-client" {
+		t.Errorf("server saw subject %q, want boru-test-client", s)
 	}
 
 	// Without the identity: the server refuses the handshake.

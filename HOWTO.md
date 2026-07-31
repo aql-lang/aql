@@ -1,4 +1,4 @@
-# AQL How-To Guides
+# boru How-To Guides
 
 Short, task-oriented recipes. Each entry assumes you've worked
 through the **[Tutorial](TUTORIAL.md)** and just need an answer to
@@ -7,7 +7,7 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 > **Notation.** In code, a `# returns …` comment shows what an
 > expression evaluates to (`5 double  # returns 10`); in prose we say
 > "`5 double` returns `10`". The comment is ordinary documentation, not
-> special syntax. (AQL has no result arrow — `=>` is the
+> special syntax. (boru has no result arrow — `=>` is the
 > anonymous-function word `afn`.)
 
 ## Index
@@ -37,15 +37,15 @@ through the **[Tutorial](TUTORIAL.md)** and just need an answer to
 * [Type-check before running](#type-check-before-running)
 * [Use modules and imports](#use-modules-and-imports)
 * [Build, install, and publish a module](#build-install-and-publish-a-module)
-* [Use the built-in `aql:time-util` module](#use-the-built-in-aqltime-module)
-* [Use the built-in `aql:matrix-util` module](#use-the-built-in-aqlmatrix-module)
+* [Use the built-in `boru:time-util` module](#use-the-built-in-borutime-module)
+* [Use the built-in `boru:matrix-util` module](#use-the-built-in-borumatrix-module)
 * [Store secrets in the vault](#store-secrets-in-the-vault)
 * [Scan for plaintext credentials on disk](#scan-for-plaintext-credentials-on-disk)
 * [Grant scoped access to an agent](#grant-scoped-access-to-an-agent)
 * [Trace and debug](#trace-and-debug)
 * [Use `end` to stop forward collection](#use-end-to-stop-forward-collection)
 * [Sandbox untrusted code](#sandbox-untrusted-code)
-* [Run AQL as a service](#run-aql-as-a-service)
+* [Run boru as a service](#run-boru-as-a-service)
 * [Inspect permission profiles](#inspect-permission-profiles)
 * [Write a command-line tool](#write-a-command-line-tool)
 
@@ -59,7 +59,7 @@ def double word [dup add]
 
 Custom words compose:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 def quadruple word [double double]
 5 quadruple                   # returns 20
@@ -107,7 +107,7 @@ show 1 2                      # returns '1 and 2'
 2 1 show                      # returns '1 and 2'
 ```
 
-All three calls compute the same thing: AQL fills argument slots by
+All three calls compute the same thing: boru fills argument slots by
 walking forward tokens first (left to right) and then taking from
 the stack top-first. For details see
 **[Tutorial §3](TUTORIAL.md#3-three-ways-to-call-a-word)**.
@@ -198,10 +198,10 @@ flatten -1 [1,[2,[3]]]        # returns [1 2 3] — fully flatten
 ```
 
 The richer array vocabulary — reshaping, ordering, grouping,
-neighborhoods, indexing — lives in the `aql:array-util` module:
+neighborhoods, indexing — lives in the `boru:array-util` module:
 
 ```
-import "aql:array-util"
+import "boru:array-util"
 iota 6 ArrayUtil.reshape [2, 3]   # returns [[0 1 2] [3 4 5]]
 [3,1,2] ArrayUtil.grade           # returns [1 2 0] — sort indices
 [1,2,2,3] ArrayUtil.unique        # returns [1 2 3]
@@ -286,14 +286,14 @@ Use template strings for general value-to-string formatting:
 
 For controlled rounding, import the math module:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-import "aql:math-util"
+import "boru:math-util"
 `${3.14159 100 mul MathUtil.round 100 div}`  # returns '3.14'
 ```
 
-For times, use the `aql:time-util` module — see
-[Use the built-in aql:time-util module](#use-the-built-in-aqltime-module).
+For times, use the `boru:time-util` module — see
+[Use the built-in boru:time-util module](#use-the-built-in-borutime-module).
 
 
 ## Handle errors
@@ -326,13 +326,13 @@ If there is no error, the `error` word is a no-op.
 gathers the results:
 
 ```
-import "aql:time-util" TimeUtil.await [[add 1 2] [add 3 4]]           # returns [3 7]
+import "boru:time-util" TimeUtil.await [[add 1 2] [add 3 4]]           # returns [3 7]
 ```
 
 Choose a mode via an Options map; these mirror JavaScript Promise
 combinators:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 # 'all (default): all must succeed; first error fails the lot
 await {mode: 'all}   [[sleep 10 1] [sleep 10 2]]
@@ -358,8 +358,8 @@ Sharing a **stateful container** (`FlexMap`, `FlexList`, `Store`,
 `Table`, a class instance) across branches is refused — branches run on
 separate goroutines, so an in-place write to one would be a data race:
 
-<!-- aql-test: skip -->
-```aql
+<!-- boru-test: skip -->
+```boru
 def m (make FlexMap {})
 await [[m set a 1] [m set b 2]]
 # error: not_sendable — branch reaches `m`, a mutable FlexMap
@@ -401,11 +401,11 @@ i cancel                               # stop the loop
 
 ## Read and write files
 
-File I/O is in the `aql:io` module and is **Pathon-only** — every target is
+File I/O is in the `boru:io` module and is **Pathon-only** — every target is
 a `Pathon` built with `make Pathon "…"`, never a bare string.
 
 ```
-import "aql:io"
+import "boru:io"
 IO.read (make Pathon "data.json")                # auto-detects JSON
 IO.read (make Pathon "data.csv") {fmt: 'csv}     # explicit format
 IO.read (make Pathon "data.csv") {fmt: 'csv, header: true}
@@ -416,7 +416,7 @@ IO.write (make Pathon "out.tsv") [[1,2],[3,4]] {fmt: 'tsv}
 ```
 
 Supported formats: `json`, `csv`, `tsv`, `jsonic`, `text`. Importing
-`aql:io` also extends the core `list`/`remove` words with a Pathon
+`boru:io` also extends the core `list`/`remove` words with a Pathon
 overload, plus `IO.stat`/`IO.move`/`IO.copy`/`IO.link`/`IO.touch`.
 
 
@@ -426,7 +426,7 @@ The stream handles `IO.stdin`, `IO.stdout`, `IO.stderr` are `StreamKind`
 atoms (not Pathons) and work with `IO.read` and `IO.write`:
 
 ```
-import "aql:io"
+import "boru:io"
 IO.read IO.stdin                       # read once until EOF
 IO.write IO.stdout "hello\n"
 IO.write IO.stderr "error\n"
@@ -450,7 +450,7 @@ fields. `fetch` requires the **`fetch`** capability.
 
 ## Use a SQLite database
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 def db sqlite-open "data.db"
 db sqlite-exec "CREATE TABLE IF NOT EXISTS users (id INTEGER, name TEXT)"
@@ -495,7 +495,7 @@ with `make`. Read fields with the dotted accessor (`.field`) and
 mutate them with `set` (note the arg order — `obj value key set` —
 see [Tutorial §3](TUTORIAL.md#the-argument-order-rule) for why):
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 def Counter (class {count: 0})
 
@@ -530,7 +530,7 @@ the *type* `NestedType` as the field value — `inst.field` is then the type
 literal, not a usable instance. Construct the default with `(make
 NestedType {})`:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 def Bits (class {flag: 0})
 def Foo  (class {bits: (make Bits {})})   # construct the default
@@ -548,7 +548,7 @@ instance.
 
 ### Methods are free functions over the instance
 
-AQL class instances hold **fields, not methods**: the field map has no
+boru class instances hold **fields, not methods**: the field map has no
 method slot and there is no inline dispatch. Putting a body in the map
 (`class {count: 0, inc: [count 1 add]}`) does **not** create a
 callable — that just stores a list under the field `inc`, and `c inc`
@@ -558,7 +558,7 @@ whose first parameter is the instance, then invoke it in stack form
 
 A read-only accessor returns a value derived from the instance:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 def Counter (class {count: 0})
 def doubled fn [[c:Counter] [Integer] [c.count 2 mul]]
@@ -572,7 +572,7 @@ A mutator changes the instance in place. `set` returns nothing, so the
 mutator's output signature is empty (`[]`); re-push the instance at the
 end instead if you want to chain calls:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 def Counter (class {count: 0})
 def bump fn [[c:Counter] [] [c (c.count 1 add) "count" set]]
@@ -633,7 +633,7 @@ types](REFERENCE.md#generic-types)**.
 Bare-word declarations pop from the stack:
 
 ```
-import "aql:math-util"
+import "boru:math-util"
 3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]    # returns 5.0
 ```
 
@@ -678,7 +678,7 @@ For a **side-effecting loop that collects nothing** — mutating an instance,
 accumulating into state — use `for-each`. Unlike `each`, its body may leave
 the stack empty (no throwaway sentinel needed), and it produces no result:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 def Box (class {sum: 0})
 def b (make Box {})
@@ -708,11 +708,11 @@ convert Float 5             # returns 5.0
 
 ## Type-check before running
 
-`aql check` runs the static type-checker without executing:
+`boru check` runs the static type-checker without executing:
 
 ```bash
-aql check script.aql
-aql check -e '1 add "x"'         # reports a type error
+boru check script.boru
+boru check -e '1 add "x"'         # reports a type error
 ```
 
 It also raises **advisories** (info level, non-gating) for likely
@@ -721,7 +721,7 @@ mistakes that still run. For example, the forward-greediness gotcha —
 `3` and strands the `1`:
 
 ```bash
-aql check -e '1 2 add 3 mul'
+boru check -e '1 2 add 3 mul'
 # check: [info] forward_strands_operand: add collected a forward argument
 #   while a Number operand was left unconsumed on the stack — it may be
 #   stranded; group the intended operands, e.g. (… add …)
@@ -734,21 +734,21 @@ The checker also reports, without running anything, a **namespace word
 whose arguments match no signature**:
 
 ```bash
-aql check script.aql
+boru check script.boru
 # check: [error] uncalled_function: call to 'my-get' matched no signature
 ```
 
 This is almost always an argument-order or arity bug, and it is an error
 at runtime as well — raised at the call, so a `do […] error […]` around
 it traps it like any other failure. If you meant to pass the function
-itself rather than call it, say so with `my-get/r`. Running `aql check`
+itself rather than call it, say so with `my-get/r`. Running `boru check`
 as a matter of course — in CI, and before committing — still pays,
 because it finds the bug without executing anything up to it.
 
 To both type-check and then run:
 
 ```bash
-aql -check script.aql
+boru -check script.boru
 ```
 
 Inside the REPL, the same checker is available; see the `:check`
@@ -763,7 +763,7 @@ with the `/r` ref modifier — the export map auto-evaluates, so a bare
 `greet` would be dispatched there (0-arg) rather than exported as the
 function. Values and types export bare:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 import module [
   def base 10
@@ -780,35 +780,35 @@ Import from a file (relative paths must start with `./`, `../`, or
 `/`):
 
 ```
-import "./lib/utils.aql"
+import "./lib/utils.boru"
 ```
 
 Import a built-in native module (registers words under a namespace
 prefix):
 
 ```
-import "aql:math-util"
+import "boru:math-util"
 5 MathUtil.log                            # returns 1.6094379124341003
 ```
 
 Native module words are reached via the namespace prefix
 (`MathUtil.log`, `MathUtil.ceil`, …). The trailing `end` after `import`
 is **only needed when the next token could itself be a module path** —
-without it, `import "aql:math-util" "foo" print` would try to import a
+without it, `import "boru:math-util" "foo" print` would try to import a
 module named `"foo"`. You do **not** need `end` before ordinary use of
 the namespace; `import` takes its path and stops, leaving the rest to run:
 
 ```
-import "aql:math-util"
+import "boru:math-util"
 5 MathUtil.log                            # returns 1.6094379124341003
 (MathUtil.ceil 4.2)                       # the paren runs on its own → 5
 ```
 
-The string-hash and char-code words live in `aql:bin`, handy for
+The string-hash and char-code words live in `boru:bin`, handy for
 building bloom filters and other sketches:
 
 ```
-import "aql:bin-util"
+import "boru:bin-util"
 "A" BinUtil.ord                           # returns 65
 65 BinUtil.chr                            # returns 'A'
 "hello" BinUtil.fnv32                     # returns 1335831723 — 32-bit FNV-1a
@@ -818,7 +818,7 @@ import "aql:bin-util"
 ### One file, two modes: `export` at the top level
 
 `export "Name" {...}` collects a namespace when a file is **imported**.
-At the **top level** — running the file directly (`aql foo.aql`) or in
+At the **top level** — running the file directly (`boru foo.boru`) or in
 the REPL — `export` is a no-op that simply discards its arguments. So a
 single file can both run standalone and export when imported: put the
 `export` last, after whatever standalone code the file runs.
@@ -826,30 +826,30 @@ single file can both run standalone and export when imported: put the
 
 ## Build, install, and publish a module
 
-A module on disk is a directory with an `aql.jsonic` manifest plus
-`.aql` source files. Workflow:
+A module on disk is a directory with a `boru.jsonic` manifest plus
+`.boru` source files. Workflow:
 
 ```bash
-aql prep                     # parse aql.jsonic, write .aql/aql.json
-aql pack                     # build a publishable .zip
-aql register                 # register an account on a registry
-aql login                    # log in
-aql publish                  # upload the current module
-aql install acme/widgets-1.2.3
-aql clean                    # delete .aql/* except dotfiles
+boru prep                     # parse boru.jsonic, write .boru/boru.json
+boru pack                     # build a publishable .zip
+boru register                 # register an account on a registry
+boru login                    # log in
+boru publish                  # upload the current module
+boru install acme/widgets-1.2.3
+boru clean                    # delete .boru/* except dotfiles
 ```
 
 By default operations target the public registry; override with
 `-r <url>`. See [CLI Reference](CLI.md) for full flags.
 
 
-## Use the built-in `aql:time-util` module
+## Use the built-in `boru:time-util` module
 
-The native module name is `"aql:time-util"`; words register under the
+The native module name is `"boru:time-util"`; words register under the
 `time.` namespace prefix.
 
 ```
-import "aql:time-util"
+import "boru:time-util"
 TimeUtil.parse "2026-01-15"               # Date value
 ```
 
@@ -857,10 +857,10 @@ Provides `Date`, `DateTime`, `Instant`, `TimeOfDay`, `Duration`,
 `Timezone` types. See the module source for the complete word list.
 
 
-## Use the built-in `aql:matrix-util` module
+## Use the built-in `boru:matrix-util` module
 
 ```
-import "aql:matrix-util"
+import "boru:matrix-util"
 MatrixUtil.make-vector [1, 2, 3]          # Vector(3)
 ```
 
@@ -870,14 +870,14 @@ linear-algebra operations under the `matrix.` namespace.
 
 ## Write property tests
 
-The `aql:test` module includes a property-based tester. A *property* is a
+The `boru:test` module includes a property-based tester. A *property* is a
 predicate that should hold for every generated input; the framework draws
 random inputs, runs the property against each, and reports the first
 failing case.
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-import "aql:test"
+import "boru:test"
 
 # Test.check-prop  name  [gen]  [property]  runs  seed  max-shrinks
 Test.check-prop "non-negative"
@@ -902,9 +902,9 @@ on the stack — the gen body must produce one. Pack them with `r.list-of`
 (a fixed-length list) or `r.map-from` (a map), then destructure in the
 property body:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-import "aql:test"
+import "boru:test"
 Test.check-prop "pair-of-strings"
   [r.list-of [r.string "abc" 6] 2]    # ONE List of two strings
   [var [[pair]
@@ -921,9 +921,9 @@ rather than the verbose `Test.results` table, and park a
 work-in-progress property with `Test.skip` (a drop-in for
 `Test.check-prop` that records it as skipped without running it):
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-import "aql:test"
+import "boru:test"
 Test.check-prop "ready"   [r.int 0 9] [0 gte] 10 1 0 end
 Test.skip       "flaky"   [r.int 0 9] [false] 10 1 0 end   # parked
 Test.report end print
@@ -933,22 +933,22 @@ Test.report end print
 Test.fail-count end print             # returns 0
 ```
 
-A property body may `import` a native module (e.g. `import "aql:math-util"`)
+A property body may `import` a native module (e.g. `import "boru:math-util"`)
 and use it across every run.
 
 
 ## Write unit tests and declarative specs
 
-For example-based tests, `aql:test` provides `Test.test` (run a body,
+For example-based tests, `boru:test` provides `Test.test` (run a body,
 catch assertion failures) and the `Assert` namespace. A failing case is
 reported **loudly and by name**, and later cases still run:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-import "aql:test"
+import "boru:test"
 [ 1 1 Assert.equal ] "identity holds" Test.test end
 [ 1 2 Assert.equal ] "this one fails" Test.test end
-# FAIL this one fails — [aql/assertion_failure]: Assert.equal: expected 2, got 1
+# FAIL this one fails — [boru/assertion_failure]: Assert.equal: expected 2, got 1
 0 Test.fail-count end Assert.equal end       # gate: no failures allowed
 ```
 
@@ -958,9 +958,9 @@ test, passed as `subject/q`) and a list of `{name in out}` cases;
 `Test.run-spec` invokes the subject on each case's `in` list and
 checks the result against `out`:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-import "aql:test"
+import "boru:test"
 def double fn [[n:Integer] [Integer] [n 2 mul]] end
 
 def s (Test.spec [
@@ -981,28 +981,28 @@ one-line edits.
 
 ## Store secrets in the vault
 
-The `aql` binary ships with a local key vault:
+The `boru` binary ships with a local key vault:
 
 ```bash
-aql vault init
+boru vault init
 
 # Paste a token you copied from a SaaS console: the value is read
 # from the OS clipboard and the clipboard is wiped immediately after.
-aql vault add --from-clipboard --provider=github github_token
+boru vault add --from-clipboard --provider=github github_token
 
 # ...or, in scripts/CI, pipe it in without it touching shell history:
-printf %s "$TOKEN" | aql vault add --from-stdin --provider=github github_token
+printf %s "$TOKEN" | boru vault add --from-stdin --provider=github github_token
 
-aql vault list
-aql vault get github_token                       # redacted
-aql vault grant --agent=ci --ttl=2h github_token # scoped capability
-aql vault exec github_token=GITHUB_TOKEN -- gh repo list
+boru vault list
+boru vault get github_token                       # redacted
+boru vault grant --agent=ci --ttl=2h github_token # scoped capability
+boru vault exec github_token=GITHUB_TOKEN -- gh repo list
 
 # Track when a key needs rotating: attach an optional expiry, then
 # review what is coming due (or overdue).
-aql vault add --expiry=90d --from-stdin --provider=github github_token
-aql vault expiry                                 # pending expiries, soonest first
-aql vault expiry --within=14d                    # only what's due soon
+boru vault add --expiry=90d --from-stdin --provider=github github_token
+boru vault expiry                                 # pending expiries, soonest first
+boru vault expiry --within=14d                    # only what's due soon
 ```
 
 The secret is never passed as a command-line argument (that would
@@ -1015,7 +1015,7 @@ since it may keep a copy the wipe cannot reach.
 
 Aliases can be namespaced — `proj1:github_token` and
 `proj2:github_token` are different keys. Set a default with
-`aql vault config --set namespace.default=proj1` and bare names
+`boru vault config --set namespace.default=proj1` and bare names
 resolve into it (`vault add key` stores `proj1:key`; `vault get key`
 reads it back); `:key` forces the root namespace. Filter reports with
 `vault list --namespace=proj1` or `vault audit --namespace=proj1`
@@ -1034,11 +1034,11 @@ expired alias still resolves. `vault list` shows an `EXPIRES` column,
 and `vault expiry` lists the keys that have one, soonest (and most
 overdue) first, filterable with `--namespace` and `--within`.
 
-By default the vault sits in `~/.aql`; point it elsewhere with
-`--folder`/`AQL_VAULT_FOLDER`, and give the files an inner suffix
-(`vault.work.jsonic`) with `--suffix`/`AQL_VAULT_SUFFIX` so a project or
+By default the vault sits in `~/.boru`; point it elsewhere with
+`--folder`/`BORU_VAULT_FOLDER`, and give the files an inner suffix
+(`vault.work.jsonic`) with `--suffix`/`BORU_VAULT_SUFFIX` so a project or
 team vault can live beside the default one. The flags go before the
-mode (`aql vault --folder=./vault --suffix=team init`); supply the same
+mode (`boru vault --folder=./vault --suffix=team init`); supply the same
 folder and suffix on every command for that vault, or export the env
 vars for the session.
 
@@ -1046,8 +1046,8 @@ Passphrases work the same way: `vault init` and every command that
 opens the file keyring prompt for the vault passphrase with echo
 suppressed, and `vault export`/`import` prompt for the bundle
 passphrase — just run the command and type when asked. The
-environment variables `AQL_VAULT_PASSPHRASE` and
-`AQL_VAULT_EXPORT_PASSPHRASE` exist for contexts that cannot prompt:
+environment variables `BORU_VAULT_PASSPHRASE` and
+`BORU_VAULT_EXPORT_PASSPHRASE` exist for contexts that cannot prompt:
 services (`vault proxy`, `vault mcp`), CI, and pipelines where stdin
 already carries the secret (`--from-stdin`, bundle import from
 stdin). Avoid `export`-ing them in an interactive shell — that puts
@@ -1055,7 +1055,7 @@ the passphrase in your shell history and into the environment of
 every child process; set them per-invocation from a secrets source
 instead.
 
-`aql vault exec <alias[=ENV][,...]> -- <cmd> [args...]` runs an
+`boru vault exec <alias[=ENV][,...]> -- <cmd> [args...]` runs an
 external command with vault secrets injected as environment
 variables — the secret never appears on the command line. Use
 `--upper` to uppercase derived names, `--prefix=PFX` to prepend a
@@ -1066,10 +1066,10 @@ convention, use a recipe — `--for=<tool>` presents the secret exactly
 how that publisher reads it (npm needs no `~/.npmrc` at all):
 
 ```
-aql vault exec --for=npm     npm_token   -- npm publish
-aql vault exec --for=cargo   crates_tok  -- cargo publish
-aql vault exec --for=pypi    pypi_token  -- twine upload dist/*
-aql vault exec --for=hackage hackage_key -- stack upload .   # Stack reads HACKAGE_KEY from env
+boru vault exec --for=npm     npm_token   -- npm publish
+boru vault exec --for=cargo   crates_tok  -- cargo publish
+boru vault exec --for=pypi    pypi_token  -- twine upload dist/*
+boru vault exec --for=hackage hackage_key -- stack upload .   # Stack reads HACKAGE_KEY from env
 ```
 
 `--for` is **repeatable**, and each entry can name its own secret as
@@ -1078,7 +1078,7 @@ once — e.g. publish to npm *and* push a GitHub release tag, each token
 from its own secret:
 
 ```
-aql vault exec --for=npm=npm_token --for=github=gh_pat -- make publish
+boru vault exec --for=npm=npm_token --for=github=gh_pat -- make publish
 ```
 
 Recipes cover the major ecosystems — `npm`/`yarn`/`pnpm`/`bun`,
@@ -1090,13 +1090,13 @@ Recipes cover the major ecosystems — `npm`/`yarn`/`pnpm`/`bun`,
 Tools that take their credential as a flag, on stdin, or via a config
 file — NuGet, Docker, Helm, Maven, Gradle, Conan, pub.dev, JSR — have no
 recipe, but plain `vault exec` still keeps the secret in the vault; e.g.
-`aql vault exec tok -- sh -c 'dotnet nuget push pkg.nupkg --api-key "$tok" -s URL'`.
+`boru vault exec tok -- sh -c 'dotnet nuget push pkg.nupkg --api-key "$tok" -s URL'`.
 See [CLI.md → Publishers without a recipe](CLI.md#publishers-without-a-recipe).
 
-For AQL's own registry, `aql login --vault` keeps the registry token in
-the vault and `aql publish` reads it back automatically.
+For boru's own registry, `boru login --vault` keeps the registry token in
+the vault and `boru publish` reads it back automatically.
 
-Inside AQL, secrets are surfaced via the `vault` capability:
+Inside boru, secrets are surfaced via the `vault` capability:
 
 ```
 vault get "github_token"
@@ -1105,19 +1105,19 @@ vault get "github_token"
 The backend is OS-specific (macOS Keychain, Linux Secret Service,
 Windows Credential Manager, 1Password, or a file fallback).
 
-Prefer the menu-driven UI for day-to-day work: `aql vault -i` opens an
+Prefer the menu-driven UI for day-to-day work: `boru vault -i` opens an
 interactive TUI that browses and edits secrets, capabilities, and
 passwords, and always shows the available keys on screen.
 
 
 ## Scan for plaintext credentials on disk
 
-`aql vault scan` flags secrets that have leaked into files:
+`boru vault scan` flags secrets that have leaked into files:
 
 ```
-aql vault scan .                  # scan a directory tree for secret-like tokens
-aql vault scan --home             # scan credential dotfiles (~/.npmrc, ~/.netrc, ~/.aws/credentials, …)
-aql vault scan --home --match-vault   # …and mark which on-disk creds are already vaulted
+boru vault scan .                  # scan a directory tree for secret-like tokens
+boru vault scan --home             # scan credential dotfiles (~/.npmrc, ~/.netrc, ~/.aws/credentials, …)
+boru vault scan --home --match-vault   # …and mark which on-disk creds are already vaulted
 ```
 
 `scan .` matches provider-token shapes in file contents; `--home`
@@ -1136,16 +1136,16 @@ Rather than hand a CI job or an LLM agent a raw token, mint a
 TTL — and let the broker inject the real secret:
 
 ```
-aql vault grant --agent=ci --hosts=api.openai.com --ttl=2h openai_key
+boru vault grant --agent=ci --hosts=api.openai.com --ttl=2h openai_key
 # → prints a bearer token ONCE; store it as the agent's secret
-aql vault proxy                   # run the loopback broker the agent calls
-aql vault revoke <token-id>       # kill a capability immediately
-aql vault audit --action proxy.request --last 20   # see what the agent did
+boru vault proxy                   # run the loopback broker the agent calls
+boru vault revoke <token-id>       # kill a capability immediately
+boru vault audit --action proxy.request --last 20   # see what the agent did
 ```
 
 The token is stored only as a hash, expires on its TTL, and never
 exposes the underlying secret — the agent talks to the proxy, the
-proxy talks to the provider. `aql vault mcp` does the same over the
+proxy talks to the provider. `boru vault mcp` does the same over the
 Model Context Protocol for MCP-aware agents.
 
 
@@ -1177,14 +1177,14 @@ inspect (quote add)
 
 A word only forward-collects a token it could actually take as an
 argument — a paren or an incompatible value is left to run on its own
-(`import "aql:string-util"` followed by `(StringUtil.upper "hi")` works
+(`import "boru:string-util"` followed by `(StringUtil.upper "hi")` works
 with no terminator). You reach for `end` in the remaining case: when the
 next token *would* be a valid argument but you mean it for the next word.
 The classic example is two adjacent module paths:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-import "aql:math-util" "foo" print     # returns 'foo'
+import "boru:math-util" "foo" print     # returns 'foo'
 ```
 
 Without `end`, `import` would treat `"foo"` as a second module path and
@@ -1203,8 +1203,8 @@ Read more in
 
 ## Sandbox untrusted code
 
-AQL has an opt-in permissions model that can restrict what a program
-is allowed to do — useful for running submitted code (`aql exec`),
+boru has an opt-in permissions model that can restrict what a program
+is allowed to do — useful for running submitted code (`boru exec`),
 embedded scripts, or untrusted plugins. By default there are no
 restrictions; permissions activate only when you pass a `--perms`
 flag or `Options.Policy` to `lang.New`.
@@ -1212,7 +1212,7 @@ flag or `Options.Policy` to `lang.New`.
 ### Built-in profiles
 
 ```bash
-aql policy list
+boru policy list
 ```
 
 Common profiles, most-permissive first:
@@ -1229,10 +1229,10 @@ Common profiles, most-permissive first:
 ### Run code under a profile
 
 ```bash
-aql do --perms=sandbox add 1 2                   # 3
-aql -e 'add 1 2' --perms=read-only               # 3
-aql script.aql --perms-file=./prod-policy.jsonic
-aql exec -p 8091 --perms=sandbox                 # bound at startup
+boru do --perms=sandbox add 1 2                   # 3
+boru -e 'add 1 2' --perms=read-only               # 3
+boru script.boru --perms-file=./prod-policy.jsonic
+boru exec -p 8091 --perms=sandbox                 # bound at startup
 ```
 
 ### Incremental overrides
@@ -1242,16 +1242,16 @@ aql exec -p 8091 --perms=sandbox                 # bound at startup
 FileOps / SQLite / etc. is never constructed).
 
 ```bash
-aql do --perms=sandbox --allow=engine.shell true
-aql exec --perms=trusted --no-install=network --no-install=sqlite
-aql do --perms-inline='{ scopes: { engine: { words: { default: "deny", rules: [{ allow: ["add"] }] } } } }' add 1 2
+boru do --perms=sandbox --allow=engine.shell true
+boru exec --perms=trusted --no-install=network --no-install=sqlite
+boru do --perms-inline='{ scopes: { engine: { words: { default: "deny", rules: [{ allow: ["add"] }] } } } }' add 1 2
 ```
 
 For where-bearing rules (paths, hosts), use `--perms-inline` or a
 `--perms-file`:
 
 ```bash
-aql exec --perms-inline='{
+boru exec --perms-inline='{
   scopes: {
     fileops: { words: {
       default: "deny"
@@ -1263,10 +1263,10 @@ aql exec --perms-inline='{
 
 ### Debug a denial
 
-`aql policy explain` prints why a check would be allowed or denied:
+`boru policy explain` prints why a check would be allowed or denied:
 
 ```bash
-aql policy explain sandbox fileops.write path=/etc/passwd
+boru policy explain sandbox fileops.write path=/etc/passwd
 # profile:  sandbox
 # scope:    fileops
 # op:       write
@@ -1277,15 +1277,15 @@ aql policy explain sandbox fileops.write path=/etc/passwd
 ### Author a custom profile
 
 Profiles are jsonic documents. Drop one in
-`~/.config/aql/policies/<name>.jsonic` to make it loadable by short
-name. See `aql policy show sandbox --json` for a starting point and
+`~/.config/boru/policies/<name>.jsonic` to make it loadable by short
+name. See `boru policy show sandbox --json` for a starting point and
 **[design/PERMISSIONS.10.md](design/PERMISSIONS.10.md)**
 for the full schema.
 
 ### What the model gates
 
 - **`engine` scope** — kernel words (add, dup, def, …).
-- **`modules` scope** — which `aql:*` modules can be imported and
+- **`modules` scope** — which `boru:*` modules can be imported and
   which exports are callable.
 - **Capability scopes** — `fileops`, `network`, `sqlite`, `formats`,
   `env`, `process`, `clock`. Each can be uninstalled with
@@ -1293,26 +1293,26 @@ for the full schema.
 - **`global` scope** — hard caps like `disk.write`, `network`,
   `process`. A global denial overrides any allow rule below it.
 
-The HTTP `aql exec` service deliberately does NOT accept policy in
+The HTTP `boru exec` service deliberately does NOT accept policy in
 the request body — the policy is bound at server startup. Run
-multiple `aql exec` instances on different ports for different
+multiple `boru exec` instances on different ports for different
 policies.
 
-For running AQL-from-AQL with stricter permissions (test harnesses,
-plugin sandboxes), the `aql:vm` native module exposes
+For running boru-from-boru with stricter permissions (test harnesses,
+plugin sandboxes), the `boru:vm` native module exposes
 `Vm.run`/`Vm.run-with` with capability attenuation.
 
 
-## Run AQL as a service
+## Run boru as a service
 
-Beyond the one-shot commands, `aql` ships long-running services. Each
+Beyond the one-shot commands, `boru` ships long-running services. Each
 owns a port or stdio and shuts down gracefully on SIGINT/SIGTERM.
 
 ```bash
-aql registry -r ~/registry -p 8080   # serve modules + auth endpoints over HTTP
-aql exec -bind 127.0.0.1:8091        # HTTP code-execution endpoint (POST /v1/exec)
-aql lsp                              # Language Server on stdio (for editors)
-aql lsp -p 7000                      # …or over TCP
+boru registry -r ~/registry -p 8080   # serve modules + auth endpoints over HTTP
+boru exec -bind 127.0.0.1:8091        # HTTP code-execution endpoint (POST /v1/exec)
+boru lsp                              # Language Server on stdio (for editors)
+boru lsp -p 7000                      # …or over TCP
 ```
 
 Type-check or run code against the HTTP endpoint:
@@ -1325,17 +1325,17 @@ curl -s localhost:8091/v1/exec -d '{"code":"add 1 2"}'   # → 3
 segments with `+`; they share one lifecycle:
 
 ```bash
-aql serve registry -r ~/registry -p 8080 + exec -p 8091 + api
-aql serve --config services.yaml      # …or declare the segments in a file
+boru serve registry -r ~/registry -p 8080 + exec -p 8091 + api
+boru serve --config services.yaml      # …or declare the segments in a file
 ```
 
 The `api` service exposes a control plane. **Drive a running
 supervisor** with `ctl` (or the `tui`):
 
 ```bash
-aql ctl status            # list services and their state
-aql ctl pause exec        # pause / resume / stop a service
-aql tui                   # terminal UI against the same api service
+boru ctl status            # list services and their state
+boru ctl pause exec        # pause / resume / stop a service
+boru tui                   # terminal UI against the same api service
 ```
 
 `ctl` and `tui` discover the api URL and token from the supervisor's
@@ -1344,30 +1344,30 @@ discovery file; pass `--api`/`--token` to target one explicitly.
 
 ## Inspect permission profiles
 
-`aql policy` documents and tests the permission profiles used by
+`boru policy` documents and tests the permission profiles used by
 `--perms` (see [Sandbox untrusted code](#sandbox-untrusted-code)):
 
 ```bash
-aql policy list                       # built-in profiles, most-permissive first
-aql policy show sandbox --json        # the resolved profile as JSON
-aql policy validate ./my-policy.jsonic
-aql policy test sandbox fileops.write path=/etc/passwd   # exit 0 = allowed, 1 = denied
-aql policy explain sandbox fileops.write path=/etc/passwd  # the blame chain
+boru policy list                       # built-in profiles, most-permissive first
+boru policy show sandbox --json        # the resolved profile as JSON
+boru policy validate ./my-policy.jsonic
+boru policy test sandbox fileops.write path=/etc/passwd   # exit 0 = allowed, 1 = denied
+boru policy explain sandbox fileops.write path=/etc/passwd  # the blame chain
 ```
 
 
 ## Write a command-line tool
 
-An AQL program becomes a Unix tool through four pieces: it reads its
+A boru program becomes a Unix tool through four pieces: it reads its
 arguments, it reads its input, it writes its output, and it chooses an exit
-code. `aql:cli` supplies the first, `aql:io` the rest, and `aql build` turns
-the result into an executable that needs no `aql` on the target machine.
+code. `boru:cli` supplies the first, `boru:io` the rest, and `boru build` turns
+the result into an executable that needs no `boru` on the target machine.
 
 The whole shape of a tool:
 
-```aql
-import "aql:cli"
-import "aql:io"
+```boru
+import "boru:cli"
+import "boru:io"
 
 def spec {
   name:"greet"
@@ -1395,18 +1395,18 @@ returned Integer becomes the process's exit code. Run it with arguments the
 same way you will ship it:
 
 ```bash
-aql run greet.aql --loud ada grace     # ["ada", "grace"]
-aql run greet.aql --help               # generated help, exit 0
-aql run greet.aql                      # "expected at least 1 names, got 0", exit 2
+boru run greet.boru --loud ada grace     # ["ada", "grace"]
+boru run greet.boru --help               # generated help, exit 0
+boru run greet.boru                      # "expected at least 1 names, got 0", exit 2
 ```
 
 ### Parse without dispatching
 
 `Cli.main` reads `IO.args` and exits, which is what a program wants and what a
-*test* cannot survive — `aql test` cannot inject an argument vector, and an
+*test* cannot survive — `boru test` cannot inject an argument vector, and an
 exit ends the file. So the decision is available separately, as data:
 
-```aql
+```boru
 Cli.parse (spec) ["--loud" "ada"] # {ok:true flags:{…} args:['ada']}
 Cli.dispatch (spec) ["--help"] # {action:'help' code:0 out:'…' err:''}
 ```
@@ -1418,8 +1418,8 @@ them. Every program in [`utils/`](utils/) is written this way.
 
 ### Read input a line at a time
 
-```aql
-import "aql:io"
+```boru
+import "boru:io"
 for [0 1000000000] [
   def line (IO.read-line (IO.stdin))
   if (line is None) [break] [print line]
@@ -1446,7 +1446,7 @@ nothing" (what `grep` returns for no match), 2 a usage error.
 
 ### Colour, only when it is wanted
 
-```aql
+```boru
 def colour ((IO.is-tty (IO.stdout)) and ((IO.env "NO_COLOR") is None))
 ```
 
@@ -1456,16 +1456,16 @@ stdout piped while stderr is still a terminal.
 ### Build it
 
 ```bash
-aql check greet.aql            # aql build does NOT check — do it yourself
-aql build greet.aql -o greet
+boru check greet.boru            # boru build does NOT check — do it yourself
+boru build greet.boru -o greet
 ./greet --loud ada
 ```
 
 The binary carries the program, the runtime, and any files it imported, so it
-runs where `aql` does not. It can also carry a **permissions profile**:
+runs where `boru` does not. It can also carry a **permissions profile**:
 
 ```bash
-aql build greet.aql -o greet-ro -perms read-only
+boru build greet.boru -o greet-ro -perms read-only
 ```
 
 The build always succeeds; the profile constrains the program when it *runs*.

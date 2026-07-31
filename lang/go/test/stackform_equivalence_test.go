@@ -3,7 +3,7 @@
 //
 //	stackform.Eval(reg, stackform.Compile(reg, src)) == native.Engine.Run(src)
 //
-// for representative AQL programs. Lives here in lang/go/test rather
+// for representative boru programs. Lives here in lang/go/test rather
 // than eng/go/stackform_test because the stackform package can't
 // import the language layer (upward dependency) but the test needs
 // real native words (math, comparison, etc.) to exercise.
@@ -12,10 +12,10 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/eng/go/stackform"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/stackform"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 func stackformReg(t *testing.T) *native.Registry {

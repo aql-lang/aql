@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // Span is a host-facing, read-only view of a span, passed to a host
@@ -26,7 +26,7 @@ type Span struct {
 }
 
 // SpanEvent is a host-facing view of a timestamped span event, so a
-// host OTel/Datadog sink can export events added by AQL code via
+// host OTel/Datadog sink can export events added by boru code via
 // Span.add-event.
 type SpanEvent struct {
 	Name       string
@@ -38,7 +38,7 @@ type SpanEvent struct {
 // ownership of trace identity: when the host owns tracing (e.g. an OTel
 // SDK with its own sampler), it returns the real trace/span ids it
 // minted, and the module restamps the span — and every record emitted
-// inside it — with those ids so AQL logs correlate with the host's
+// inside it — with those ids so boru logs correlate with the host's
 // exported trace. A zero value (both empty) keeps the module's local,
 // deterministic ids.
 type SpanContext struct {
@@ -87,7 +87,7 @@ func valToNativeMap(v Value) map[string]any {
 	return nil
 }
 
-// log_sinks.go — phase 3 of aql:log: provider hooks. A sink is a named
+// log_sinks.go — phase 3 of boru:log: provider hooks. A sink is a named
 // consumer of records (and, in later phases, spans and measurements).
 // Beyond the three built-ins, sinks are pluggable two ways, modelled on
 // the parse/emit host-registration pattern:
@@ -96,7 +96,7 @@ func valToNativeMap(v Value) map[string]any {
 //     a LogSinkSpec — e.g. an OpenTelemetry / Datadog bridge that
 //     translates the neutral LogRecord to its SDK. This is the seam
 //     that keeps the OTel SDK a HOST dependency, never a runtime one.
-//   - from AQL, `Log.register FN NAME MIN` installs an AQL function as a
+//   - from boru, `Log.register FN NAME MIN` installs a boru function as a
 //     sink: FN is invoked with the record Map for every admitted record.
 //
 // Registering a sink also attaches it (the common intent — you
@@ -122,7 +122,7 @@ type LogSinkSpec struct {
 
 // RegisterHostLogSink installs a host sink on r, creating and installing
 // a default LogSinkRegistry first if the module has not been imported
-// yet (so a host can pre-attach an OTel sink before `import "aql:log"`).
+// yet (so a host can pre-attach an OTel sink before `import "boru:log"`).
 // The sink is registered AND attached. Validation errors (bad name,
 // nil OnRecord, name collision) are returned.
 func RegisterHostLogSink(r *Registry, spec LogSinkSpec) error {
@@ -189,7 +189,7 @@ func (lsr *LogSinkRegistry) RegisterSink(spec LogSinkSpec) error {
 	return lsr.installSink(s)
 }
 
-// registerFnSink installs an AQL function as a sink. The function is
+// registerFnSink installs a boru function as a sink. The function is
 // invoked (in a sub-engine over the live registry, so it resolves
 // module / global defs) with the record Map for every admitted record.
 func (lsr *LogSinkRegistry) registerFnSink(name string, min LogLevel, fn Value) error {
@@ -208,7 +208,7 @@ func (lsr *LogSinkRegistry) registerFnSink(name string, min LogLevel, fn Value) 
 	return lsr.installSink(s)
 }
 
-// logRegisterNative is `Log.register FN NAME MIN` — install an AQL
+// logRegisterNative is `Log.register FN NAME MIN` — install a boru
 // function as a sink at the given minimum level.
 func logRegisterNative(lsr *LogSinkRegistry) NativeFunc {
 	return NativeFunc{
@@ -227,7 +227,7 @@ func logRegisterNative(lsr *LogSinkRegistry) NativeFunc {
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[1].AsConcreteAtom()
 				if err != nil {
-					return nil, r.AqlError("log_error", "sink name must be an atom", "Log.register")
+					return nil, r.BoruError("log_error", "sink name must be an atom", "Log.register")
 				}
 				min, err := levelArg(r, args[2], "Log.register")
 				if err != nil {
@@ -237,7 +237,7 @@ func logRegisterNative(lsr *LogSinkRegistry) NativeFunc {
 					return nil, err
 				}
 				if err := lsr.registerFnSink(name, min, args[0]); err != nil {
-					return nil, r.AqlError("sink-exists", err.Error(), "Log.register")
+					return nil, r.BoruError("sink-exists", err.Error(), "Log.register")
 				}
 				return nil, nil
 			}),

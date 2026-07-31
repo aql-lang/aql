@@ -1,4 +1,4 @@
-// Browser-backend e2e for aql:tui in the wasm playground (the RFC §9
+// Browser-backend e2e for boru:tui in the wasm playground (the RFC §9
 // playground tier): load the bundled page, run a counter app, drive it
 // with real keystrokes, quit, and assert the final state lands back in
 // the REPL. Opt-in (needs a built bundle and a chromium):
@@ -11,7 +11,7 @@
 const pwModule = process.env.PLAYWRIGHT_MODULE || 'playwright';
 const { chromium } = require(pwModule);
 
-const bundle = process.env.AQL_PLAYGROUND ||
+const bundle = process.env.BORU_PLAYGROUND ||
   require('path').resolve(__dirname, '../../docs/index.html');
 
 (async () => {
@@ -22,10 +22,10 @@ const bundle = process.env.AQL_PLAYGROUND ||
   page.on('console', m => { if (m.type() === 'error') console.log('PAGE-ERR:', m.text()); });
   await page.goto('file://' + bundle);
 
-  await page.waitForFunction(() => typeof aqlEvalAsync === 'function', { timeout: 60000 });
+  await page.waitForFunction(() => typeof boruEvalAsync === 'function', { timeout: 60000 });
   console.log('engine ready');
 
-  const app = `import "aql:tui"
+  const app = `import "boru:tui"
 def final (Tui.run {init: 0  title: "counter"
   update: ([s:Any e:Map] => [ if (e.key eq "up") [ (s add 1) ] [ if (e.key eq "q") [ Tui.quit s ] [ s ] ] ])
   view: ([s:Any] => [ Tui.text (convert String s) ])})

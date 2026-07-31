@@ -1,16 +1,16 @@
-# Todo over TUI — a DX probe for the `aql:tui` design
+# Todo over TUI — a DX probe for the `boru:tui` design
 
 > **GRADUATED (implementation plan P5).** The probe apps this README
-> describes were rewritten onto the landed `aql:tui` surface and moved
+> describes were rewritten onto the landed `boru:tui` surface and moved
 > to `../apps/` as working, tested examples:
 >
-> - `todo-tui.aql` + `todo-tui-served.aql` → **`../apps/todo-tui.aql`**
+> - `todo-tui.boru` + `todo-tui-served.boru` → **`../apps/todo-tui.boru`**
 >   (one module: `TodoTui.run` / `TodoTui.serve` over the same app map),
 >   driven by `TestAppTodoTUI` (`lang/go/test/app_todo_tui_test.go`, a
 >   scripted virtual terminal) and `TestTuiServeGraduatedTodoApp`
 >   (`lang/go/modules/tui_serve_app_test.go`, a real wire viewer).
-> - `todo-tui-client.aql` → **`../apps/todo-tui-client.aql`** (the
->   REST-backed client against the real `todo-api.aql`), driven by
+> - `todo-tui-client.boru` → **`../apps/todo-tui-client.boru`** (the
+>   REST-backed client against the real `todo-api.boru`), driven by
 >   `TestAppTodoTUIClient` end to end over loopback HTTP.
 > - `todo-tui_test.go` (the speculative harness sketch) → superseded by
 >   the real tests above; the frame-history contract it demanded (F2)
@@ -20,10 +20,10 @@
 > landed language): the guard-list `case` became zone-routing `if` +
 > value-dispatch `case` (matched value pushed — blocks open with
 > `drop`); `append` (flex-only) became `push`; bare `min`/`max` became
-> `MathUtil.*` (`aql:math-util`); `filter`/`each` take quotation bodies
+> `MathUtil.*` (`boru:math-util`); `filter`/`each` take quotation bodies
 > (`filter [ dot done ] xs`); `parse "json"` / `emit "json"` became
-> `parse json` / `emit json` (atom kinds, `aql:parselang` /
-> `aql:emitlang`); `sub a b` forward-form arithmetic became swap form
+> `parse json` / `emit json` (atom kinds, `boru:parselang` /
+> `boru:emitlang`); `sub a b` forward-form arithmetic became swap form
 > (`a sub 1`); a `help` local collided with the built-in help system;
 > the app map is bound with `def` before returning (body locals tear
 > down before a trailing literal evaluates); statement-position `spawn`
@@ -32,7 +32,7 @@
 
 This folder was a **developer-experience experiment**, not runnable code. It
 rewrites the repo's canonical validation app — the todo list of
-`../apps/todo-api.aql` (the `NETWORK-SERVERS.0.md` §6.4 verification app,
+`../apps/todo-api.boru` (the `NETWORK-SERVERS.0.md` §6.4 verification app,
 validated end-to-end by `TestAppTodoAPI` in `lang/go/test/apps_test.go`) —
 against the proposed `../../TUI.0.md` surface — words that **do not exist
 yet** — to answer the two questions an RFC cannot answer about itself:
@@ -44,7 +44,7 @@ yet** — to answer the two questions an RFC cannot answer about itself:
 Everything compiles only in the imagination. `Tui.*` words are the RFC's;
 non-Tui spellings (`each`, `append`, list-index `get`, `parse "json"` /
 `emit "json"`, `/r` references as map values) are illustrative and would be
-confirmed against `aql describe`. The value is the *shape* of the code, not
+confirmed against `boru describe`. The value is the *shape* of the code, not
 its execution.
 
 > The `.0` suffix follows the repo convention: design-only, implementation
@@ -61,15 +61,15 @@ remote viewer. Small, but it touches every layer of the design:
 
 | File | Layer | What it demonstrates |
 | --- | --- | --- |
-| `todo-tui.aql` | **§2 loop + §3 widgets** | the §6.4 CRUD contract as a key-driven `update`/`view` pair; focus-as-state across two zones; `Tui.edit`; constraint layout; quit-as-a-value returning the final state |
-| `todo-tui-client.aql` | **§2.3 effects + `aql:net`** | the same UI as a *client of the real `todo-api.aql`*: every mutation is a `spawn`ed HTTP round trip that `send`s results home; the uniform failure contract surfaces on the status line |
-| `todo-tui-served.aql` | **§6 remote tier** | the same app **map** under `Tui.serve` + an `aql attach` transcript; v1 session rules (token, one viewer, disconnect-quits) |
+| `todo-tui.boru` | **§2 loop + §3 widgets** | the §6.4 CRUD contract as a key-driven `update`/`view` pair; focus-as-state across two zones; `Tui.edit`; constraint layout; quit-as-a-value returning the final state |
+| `todo-tui-client.boru` | **§2.3 effects + `boru:net`** | the same UI as a *client of the real `todo-api.boru`*: every mutation is a `spawn`ed HTTP round trip that `send`s results home; the uniform failure contract surfaces on the status line |
+| `todo-tui-served.boru` | **§6 remote tier** | the same app **map** under `Tui.serve` + a `boru attach` transcript; v1 session rules (token, one viewer, disconnect-quits) |
 | `todo-tui_test.go` | **§8 testing** | the speculative graduation of `TestAppTodoAPI`: same mem-FS harness + `"|"`-joined final-state assertions, with scripted key events replacing scripted HTTP calls and golden *frames* replacing golden bodies; negatives paired throughout |
 
 ### Event lifecycle (a `space` toggle, standalone)
 
 ```
-key press           driver (native Go)                      app (AQL, pure-ish)
+key press           driver (native Go)                      app (boru, pure-ish)
 ---------           ------------------                      -------------------
 space ──decode──▶ Backend.Events() ─▶ input pump ─▶ mailbox (real Process)
                                                     └▶ PopFront ─▶ update state {tag:"key" key:"space"}
@@ -83,7 +83,7 @@ The client variant inserts a process hop: `enter` → `update` spawns a
 worker (state marked `syncing`, one paint) → worker `POST`s then re-fetches
 then `send {tag:"loaded" …}` → the message re-enters the same mailbox → a
 second `update`/paint. The served variant replaces the two ends:
-`aql attach` encodes the key as a json-line up; the tree comes back as a
+`boru attach` encodes the key as a json-line up; the tree comes back as a
 json-line down and is laid out client-side. **The app file is identical in
 all three placements** — that is the §0 sendable-data invariant doing its
 job, and it held.
@@ -122,16 +122,16 @@ the goldens in `todo-tui_test.go` are written against it.
 **Verdict: one sentence of RFC prevents a whole class of un-servable
 examples.** `Tui.run` and `Tui.serve` both take the `{init update view}`
 map; an example exporting only a `run`-shaped word cannot be served.
-`todo-tui.aql` exports `app:` (the map constructor) *and* `run:` (the local
-sugar); `todo-tui-served.aql` is then a one-word change.
+`todo-tui.boru` exports `app:` (the map constructor) *and* `run:` (the local
+sugar); `todo-tui-served.boru` is then a one-word change.
 **Resolved:** §5.3 now states the idiom explicitly.
 
 ### F4 — No `wrap` analog for cross-cutting event observation (§11.1)
 **Verdict: the REST app's best trick has no TUI counterpart yet.**
-`todo-api.aql` counts every request in a three-line `wrap` with zero
+`todo-api.boru` counts every request in a three-line `wrap` with zero
 handler edits; mirroring a `hits` counter in the TUI means editing
 `update` (or hand-wrapping the update word). Livable in v1 — a manual
-wrapper is three lines of AQL — but it is the same itch §11.1 scratches:
+wrapper is three lines of boru — but it is the same itch §11.1 scratches:
 a service-shaped app would inherit `wrap`/`prior` for free. Folded into
 F1's §11.1 amendment; no separate change.
 
@@ -164,7 +164,7 @@ lifecycle traffic imposed zero ceremony. Worker messages arriving
 as the RFC promised.
 
 ### F8 — UI state wants an ordered list; the server keeps a map
-**Verdict: expected divergence, no RFC change.** `todo-api.aql` keeps
+**Verdict: expected divergence, no RFC change.** `todo-api.boru` keeps
 todos as an id-keyed map with `None` tombstones (transport- and
 patch-friendly); a cursor-driven UI wants a stable *ordered* list. The
 standalone app keeps a list plus the same `next` counter; the client
@@ -201,8 +201,8 @@ docs, nothing more.
 - App model, event vocabulary, quit/teardown: `../../TUI.0.md` §2
 - Widget trees, constraints, focus-as-state: `../../TUI.0.md` §3
 - Backend seam + `VirtualBackend` (incl. the F2 frame history): `../../TUI.0.md` §4, §8.1
-- Remote tier (`Tui.serve` / `aql attach`): `../../TUI.0.md` §6
-- The mirrored REST app + its live test: `../apps/todo-api.aql`,
+- Remote tier (`Tui.serve` / `boru attach`): `../../TUI.0.md` §6
+- The mirrored REST app + its live test: `../apps/todo-api.boru`,
   `lang/go/test/apps_test.go` (`TestAppTodoAPI`)
 - Actor substrate the workers ride: `../../PROCESSES.0.md` §3–4, §6
 - The aspirational-probe convention this folder follows:

@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// testHome sets AQL_HOME to a fresh temp dir and a known passphrase,
+// testHome sets BORU_HOME to a fresh temp dir and a known passphrase,
 // returning the temp dir. The dir is auto-cleaned by t.TempDir().
 func testHome(t *testing.T) string {
 	t.Helper()
@@ -348,7 +348,7 @@ func TestNoSubcommandPrintsUsage(t *testing.T) {
 	if code == 0 {
 		t.Fatal("expected non-zero exit")
 	}
-	if !strings.Contains(errOut, "Usage: aql vault") {
+	if !strings.Contains(errOut, "Usage: boru vault") {
 		t.Errorf("missing usage banner: %q", errOut)
 	}
 }

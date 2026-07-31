@@ -3,10 +3,10 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// binRegistry returns a registry with the aql:bin module installed.
+// binRegistry returns a registry with the boru:bin module installed.
 func binRegistry(t *testing.T) *native.Registry {
 	t.Helper()
 	r, err := native.DefaultRegistry()
@@ -414,7 +414,7 @@ func TestBinFnv32(t *testing.T) {
 
 func TestBinFnv64NonNegativeAndStable(t *testing.T) {
 	seen := map[int64]string{}
-	for _, s := range []string{"", "a", "b", "hello", "world", "aql:bin-util"} {
+	for _, s := range []string{"", "a", "b", "hello", "world", "boru:bin-util"} {
 		out := runBin(t, append([]native.Value{native.NewString(s)}, dotChain("fnv64")...))
 		n, _ := native.AsInteger(out[0])
 		if n < 0 {

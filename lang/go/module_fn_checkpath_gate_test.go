@@ -22,9 +22,9 @@ import (
 // would miss (b) when the program falls back; the diagnostic-count baseline is
 // what catches the collision breakage.
 //
-// WHY aql:test. aql:test IS a native sub-registry module (BuildTestModule) whose
-// preamble defines AQL fns with named params + real bodies (`run-spec`,
-// `run-cases`, `run-case`) — the exact CallAQL-across-the-module-boundary path
+// WHY boru:test. boru:test IS a native sub-registry module (BuildTestModule) whose
+// preamble defines boru fns with named params + real bodies (`run-spec`,
+// `run-cases`, `run-case`) — the exact CallBoru-across-the-module-boundary path
 // the refactor touches, and the literal locus of module-test.tsv:38. The cases
 // below cover the §7 surface reachable with an in-repo module: a SUBJECT-style
 // dynamic dispatch (run-case invokes the spec's subject), CROSS-BOUNDARY
@@ -46,14 +46,14 @@ func TestModuleFnCheckPathGate(t *testing.T) {
 		{
 			// subject dispatch + multiple cases (module-test.tsv:38)
 			"run-spec subject dispatch, 2 cases",
-			`import "aql:test"  def double fn [[n:Integer][Integer][n 2 mul]] end ` +
+			`import "boru:test"  def double fn [[n:Integer][Integer][n 2 mul]] end ` +
 				`def s {name:"d" subject:double/q cases:[{name:"a" in:[3] out:6} {name:"b" in:[0] out:0}] subs:[]} end ` +
 				`s Test.run-spec end Test.summary`,
 		},
 		{
 			// cross-boundary recursion: run-spec recurses over sub-specs
 			"run-spec recursion over sub-specs",
-			`import "aql:test"  def inc fn [[n:Integer][Integer][n 1 add]] end ` +
+			`import "boru:test"  def inc fn [[n:Integer][Integer][n 1 add]] end ` +
 				`def child {name:"c" subject:inc/q cases:[{name:"a" in:[1] out:2}] subs:[]} end ` +
 				`def top {name:"t" subject:inc/q cases:[{name:"b" in:[2] out:3}] subs:[child]} end ` +
 				`top Test.run-spec end Test.summary`,
@@ -62,7 +62,7 @@ func TestModuleFnCheckPathGate(t *testing.T) {
 			// a program fn whose NAME collides with a module preamble fn
 			// (run-case) — the §4 same-name-across-the-boundary case
 			"program fn name-colliding with module preamble fn",
-			`import "aql:test"  def run-case fn [[x:Integer][Integer][x 100 add]] end ` +
+			`import "boru:test"  def run-case fn [[x:Integer][Integer][x 100 add]] end ` +
 				`def sq fn [[n:Integer][Integer][n n mul]] end ` +
 				`def s {name:"q" subject:sq/q cases:[{name:"a" in:[3] out:9}] subs:[]} end ` +
 				`s Test.run-spec end (run-case 5)`,
@@ -70,7 +70,7 @@ func TestModuleFnCheckPathGate(t *testing.T) {
 		{
 			// a FAILING case is recorded (not a crash / not a spurious error)
 			"run-spec with a failing case",
-			`import "aql:test"  def double fn [[n:Integer][Integer][n 2 mul]] end ` +
+			`import "boru:test"  def double fn [[n:Integer][Integer][n 2 mul]] end ` +
 				`def s {name:"d" subject:double/q cases:[{name:"a" in:[3] out:999}] subs:[]} end ` +
 				`s Test.run-spec end Test.summary`,
 		},

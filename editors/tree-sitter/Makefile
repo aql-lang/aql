@@ -1,6 +1,6 @@
 VERSION := 0.0.1
 
-LANGUAGE_NAME := tree-sitter-aql
+LANGUAGE_NAME := tree-sitter-boru
 
 # repository
 SRC_DIR := src

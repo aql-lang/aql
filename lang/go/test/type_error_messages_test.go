@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // --- Typed-def error messages name the type ---
@@ -21,7 +21,7 @@ func runErr(t *testing.T, src string) error {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	_, err = a.Run(src)
 	if err == nil {
 		t.Fatalf("expected an error from %q, got none", src)

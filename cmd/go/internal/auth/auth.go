@@ -42,10 +42,10 @@ type UserStore struct {
 	dir string
 }
 
-// ClientUser represents the locally-stored login state (~/.aql/user.jsonic).
-// DefaultRegistryTokenAlias is the vault alias `aql login --vault` /
-// `aql publish --vault` use for the registry token when none is given.
-const DefaultRegistryTokenAlias = "aql-registry-token"
+// ClientUser represents the locally-stored login state (~/.boru/user.jsonic).
+// DefaultRegistryTokenAlias is the vault alias `boru login --vault` /
+// `boru publish --vault` use for the registry token when none is given.
+const DefaultRegistryTokenAlias = "boru-registry-token"
 
 type ClientUser struct {
 	Username string `json:"username"`
@@ -53,8 +53,8 @@ type ClientUser struct {
 	Token    string `json:"token"`
 	Registry string `json:"registry"`
 	// TokenVault, when set, names the vault alias holding the registry
-	// token instead of storing it in cleartext in Token. `aql login
-	// --vault` sets it; `aql publish` reads the token back from the vault.
+	// token instead of storing it in cleartext in Token. `boru login
+	// --vault` sets it; `boru publish` reads the token back from the vault.
 	TokenVault string `json:"token_vault,omitempty"`
 }
 
@@ -288,9 +288,9 @@ func (ir *InputReader) ReadPassword(prompt string, w io.Writer) (string, error) 
 	return strings.TrimSpace(line), nil
 }
 
-// SaveClientUser writes user.jsonic to {homeDir}/.aql/user.jsonic.
+// SaveClientUser writes user.jsonic to {homeDir}/.boru/user.jsonic.
 func SaveClientUser(homeDir string, cu *ClientUser) error {
-	dir := filepath.Join(homeDir, ".aql")
+	dir := filepath.Join(homeDir, ".boru")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return err
 	}
@@ -302,9 +302,9 @@ func SaveClientUser(homeDir string, cu *ClientUser) error {
 	return os.WriteFile(filepath.Join(dir, "user.jsonic"), []byte(content), 0600)
 }
 
-// LoadClientUser reads {homeDir}/.aql/user.jsonic.
+// LoadClientUser reads {homeDir}/.boru/user.jsonic.
 func LoadClientUser(homeDir string) (*ClientUser, error) {
-	data, err := os.ReadFile(filepath.Join(homeDir, ".aql", "user.jsonic"))
+	data, err := os.ReadFile(filepath.Join(homeDir, ".boru", "user.jsonic"))
 	if err != nil {
 		return nil, err
 	}

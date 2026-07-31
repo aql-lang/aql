@@ -90,9 +90,9 @@ removed and `unused` is enforced on those files again.
 
 ### Error-handling refactor (post architecture review, May 2026)
 
-CLAUDE.md names `r.AqlError(code, detail, word)` as the canonical
+CLAUDE.md names `r.BoruError(code, detail, word)` as the canonical
 handler-side error path (it threads the source position the engine
-needs for `--> row:col` site extracts and the structured `[aql/<code>]`
+needs for `--> row:col` site extracts and the structured `[boru/<code>]`
 prefix). Pre-refactor, native handlers almost universally returned
 bare `fmt.Errorf` errors instead, which dropped both pieces of context.
 
@@ -102,7 +102,7 @@ converted in a mechanical pass:
 ```
 return nil, fmt.Errorf("op: detail %d", n)
 →
-return nil, r.AqlError("op_error", fmt.Sprintf("op: detail %d", n), "op")
+return nil, r.BoruError("op_error", fmt.Sprintf("op: detail %d", n), "op")
 ```
 
 The opname prefix is kept in the detail so existing substring-match
@@ -117,12 +117,12 @@ are deliberately not converted:
    for `errors.Is`/`errors.As`.
 2. Calls inside helper functions that don't have a `*Registry` in
    scope (e.g. parser utilities in `query.go`'s SQL builders).
-3. Calls that construct an `&AqlError{…}` literal directly — already
+3. Calls that construct an `&BoruError{…}` literal directly — already
    structured, just bypass the helper.
 
 The remaining sites can be ratcheted down in follow-up PRs by
 plumbing the registry through helpers, or by adding a
-`MakeAqlError(code, detail, word, src, hint)` variant for the
+`MakeBoruError(code, detail, word, src, hint)` variant for the
 no-registry path.
 
 ### Looked at but left alone
@@ -131,7 +131,7 @@ no-registry path.
 second look but defensible as designed:
 
 - `lang/go/native/native_module_module.go` (`loadModuleResources`) — a
-  malformed `.aql/aql.json` is treated as "no resources" rather than an
+  malformed `.boru/boru.json` is treated as "no resources" rather than an
   error. A typo would silently disable a module's resources.
 - `lang/go/native/native_type.go:321` — a predicate-evaluation error inside
   `x is SomePredicate` yields `false` rather than propagating.
@@ -308,7 +308,7 @@ The previously-noted cross-module clone — the spec-runner harness,
 which had `eng/go/spec_test.go` and `lang/go/test/spec_runner_test.go`
 implementing the same "read `.tsv`, parse tokens, run an engine,
 compare output" loop — has been extracted into the new
-`github.com/aql-lang/aql/util/go/specrunner` module. Both test files
+`github.com/boru-lang/boru/util/go/specrunner` module. Both test files
 now call `specrunner.RunDir(t, ..., func(input) ([]eng.Value, error)
 {...})` and just supply their own engine setup.
 

@@ -3,14 +3,14 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // Wave-9 (cluster nativeA) shared drivers for the *_seam9_test.go
 // coverage suites (design/TEST-SEAMS.10.md). Uniquely W9-prefixed so
 // they never collide with any other wave's shared helpers when patches
 // are merged. Most nativeA error/edge arms are reached by calling the
-// handler directly with crafted args; the AQL entry points cover arms
+// handler directly with crafted args; the boru entry points cover arms
 // that only fire through real dispatch.
 
 // w9Reg returns a fresh default registry with the parser installed.

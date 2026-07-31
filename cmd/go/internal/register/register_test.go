@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/cmd/go/internal/registry"
+	"github.com/boru-lang/boru/cmd/go/internal/registry"
 )
 
 func TestRunRegisterCLI(t *testing.T) {

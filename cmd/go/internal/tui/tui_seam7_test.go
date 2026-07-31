@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-// TestS7n_RunUsesDiscoveryFileForAPIAndToken drives the `aql tui`
+// TestS7n_RunUsesDiscoveryFileForAPIAndToken drives the `boru tui`
 // Run function's "apiURL empty → discovery fills apiURL, and token
 // empty → discovery fills token too" arms (tui.go). The analogous
 // arms in Server.Start are already covered by

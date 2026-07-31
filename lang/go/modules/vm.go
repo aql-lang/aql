@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // resolveFn is the module resolver used by sub-engines. It's
@@ -17,7 +17,7 @@ func init() {
 	resolveFn = Resolve
 }
 
-// BuildVMModule creates the "aql:vm" native module. The module
+// BuildVMModule creates the "boru:vm" native module. The module
 // exposes one canonical operation — run code in a sub-engine with
 // an explicit policy — and a small surface of conveniences:
 //
@@ -48,7 +48,7 @@ func BuildVMModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Construct a sub-registry for the module's words. Module exports
 	// are dispatched through this sub-registry; the parent's policy
 	// is consulted for module.call gating elsewhere.
-	subReg, err := newModuleRegistry("aql:vm", vmNatives(parent))
+	subReg, err := newModuleRegistry("boru:vm", vmNatives(parent))
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -137,14 +137,14 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 			}},
 		},
 		{
-			// vm-parse — AQL source → inspectable structure, a step
+			// vm-parse — boru source → inspectable structure, a step
 			// below Vm.run: parse and return the token/value sequence
 			// as a QUOTED list (it never auto-evaluates), without
 			// running anything. The element shapes are the engine's
 			// own parse values (words, literals, structural markers)
 			// and are implementation-defined for now — see
 			// design/PARSING.10.md §3. Parse errors raise
-			// [aql/parse_error] with the same message the CLI prints.
+			// [boru/parse_error] with the same message the CLI prints.
 			Name: "vm-parse",
 			// Pure parse of the literal (see Debug.parse): the dry-pass
 			// mirror flags top-level malformed source at check time.
@@ -156,7 +156,7 @@ func vmNatives(parent *native.Registry) []native.NativeFunc {
 					}
 					tokens, perr := parent.ParseFunc(code)
 					if perr != nil {
-						return nil, r.AqlError("parse_error",
+						return nil, r.BoruError("parse_error",
 							fmt.Sprintf("Vm.parse: %v", perr), "Vm.parse")
 					}
 					lst := native.NewList(tokens)
@@ -416,7 +416,7 @@ func checkInSubEngine(parent *native.Registry, src string) (native.Value, error)
 
 // compileInSubEngine runs the bytecode compile pass over src in a fresh
 // sub-engine WITHOUT executing it, and returns a result map
-// { ok, reason, sites }. It mirrors lang.(*AQL).CompileCheck's refusal
+// { ok, reason, sites }. It mirrors lang.(*Boru).CompileCheck's refusal
 // ladder but reports the outcome as data instead of a (Program, reason)
 // pair — refusal is never an error here. Policy handling matches
 // checkInSubEngine.
@@ -534,7 +534,7 @@ func severityString(s native.CheckSeverity) string {
 	return string(s)
 }
 
-// policyFromMapValue converts an AQL Map value (as received in a
+// policyFromMapValue converts a boru Map value (as received in a
 // Vm.run-with arg) into a policy.Policy.
 func policyFromMapValue(v native.Value) (policy.Policy, error) {
 	if !native.IsConcrete(v) {
@@ -543,7 +543,7 @@ func policyFromMapValue(v native.Value) (policy.Policy, error) {
 	if _, err := native.RequireConcreteMap(v, "Vm.run-with policy"); err != nil {
 		return nil, err
 	}
-	// Convert the AQL map to a generic map[string]any for the policy loader.
+	// Convert the boru map to a generic map[string]any for the policy loader.
 	// RequireConcreteMap has already established that v is a concrete map
 	// backed by an OrderedMap payload, so native.ValueToAny always yields a
 	// map[string]any here (see native.valueToAny's TMap arm) — the assertion

@@ -1,8 +1,8 @@
-# Time and Date Operations Word Design for AQL
+# Time and Date Operations Word Design for boru
 
 ## Context
 
-AQL currently has no date/time types or words. The type system (`types.go`) is extensible, and `time` is already imported in `value.go`. This design defines time/date types and words for AQL, drawing from the JavaScript Temporal API as the conceptual model and using Go's `time` package as the implementation backend. The design complements the existing dataframe words (`doc/DATAFRAME-WORDS.md`) — all scalar date words compose with `apply`, `sift`, `group`, etc. for column-level operations.
+boru currently has no date/time types or words. The type system (`types.go`) is extensible, and `time` is already imported in `value.go`. This design defines time/date types and words for boru, drawing from the JavaScript Temporal API as the conceptual model and using Go's `time` package as the implementation backend. The design complements the existing dataframe words (`doc/DATAFRAME-WORDS.md`) — all scalar date words compose with `apply`, `sift`, `group`, etc. for column-level operations.
 
 **Deliverable:** New design document at `lang/doc/design/TEMPORAL-WORDS.9.md`.
 
@@ -14,7 +14,7 @@ AQL currently has no date/time types or words. The type system (`types.go`) is e
 > (`unix` / `unix-ms` / `unix-ns`) and wall-clock (`now-local` /
 > `today` / `today-utc`), and output-only formatting (`to-string`
 > / `to-iso` / `format`). There is no symmetric text-input path —
-> AQL programs that need to read date strings should pre-parse them
+> boru programs that need to read date strings should pre-parse them
 > in their source system or use Unix epochs. Affected sections below
 > are marked with **REMOVED**.
 
@@ -24,7 +24,7 @@ AQL currently has no date/time types or words. The type system (`types.go`) is e
 
 ### Where Temporal Is Sufficient
 
-Temporal covers the vast majority of real-world date/time operations. Its type separation (PlainDate vs PlainTime vs Instant vs ZonedDateTime) is a genuine design improvement over prior datetime APIs. The explicit Duration type with calendar-aware components (years, months) solves a class of bugs that plague Go's `time.Duration`. For AQL, Temporal provides a sound conceptual model for:
+Temporal covers the vast majority of real-world date/time operations. Its type separation (PlainDate vs PlainTime vs Instant vs ZonedDateTime) is a genuine design improvement over prior datetime APIs. The explicit Duration type with calendar-aware components (years, months) solves a class of bugs that plague Go's `time.Duration`. For boru, Temporal provides a sound conceptual model for:
 
 - Unambiguous date construction and parsing
 - Component extraction (year, month, day, dayOfWeek, weekOfYear, etc.)
@@ -40,18 +40,18 @@ Temporal covers the vast majority of real-world date/time operations. Its type s
 | **Monotonic clock** | No concept | `time.Time` carries monotonic reading for reliable elapsed measurement |
 | **Flexible parsing** | ISO 8601 only | `time.Parse` with reference-time layouts handles arbitrary formats |
 | **Batch performance** | JS heap allocation per object | Go `time.Time` is a struct (no GC pressure for million-row columns) |
-| **Duration ambiguity** | 10-component Duration conflates calendar and clock spans | AQL splits into CalDuration (years/months/days) and ClkDuration (hours down to ns) |
-| **Business periods** | No quarter, fiscal year, start-of-period | AQL adds `quarter`, `start-of`, `end-of` as first-class words |
-| **Multiple calendars** | Supports Hebrew, Islamic, etc. | Go is Gregorian-only; AQL defers non-Gregorian to future work |
+| **Duration ambiguity** | 10-component Duration conflates calendar and clock spans | boru splits into CalDuration (years/months/days) and ClkDuration (hours down to ns) |
+| **Business periods** | No quarter, fiscal year, start-of-period | boru adds `quarter`, `start-of`, `end-of` as first-class words |
+| **Multiple calendars** | Supports Hebrew, Islamic, etc. | Go is Gregorian-only; boru defers non-Gregorian to future work |
 | **Unix timestamps** | Requires going through Instant.epochNanoseconds | Go has direct `Unix()`, `UnixMilli()`, `UnixMicro()`, `UnixNano()` |
 
 ### Verdict
 
-Temporal's conceptual model is sufficient as the design foundation. Go fills three practical gaps: monotonic elapsed time, batch/column performance, and flexible format parsing. AQL uses Temporal's type distinctions as its mental model but implements against Go's `time.Time` internally.
+Temporal's conceptual model is sufficient as the design foundation. Go fills three practical gaps: monotonic elapsed time, batch/column performance, and flexible format parsing. boru uses Temporal's type distinctions as its mental model but implements against Go's `time.Time` internally.
 
 ---
 
-## Recommended AQL Type Hierarchy
+## Recommended boru Type Hierarchy
 
 ```
 Scalar/
@@ -72,11 +72,11 @@ PlainYearMonth and PlainMonthDay are rare in data work. They can be represented 
 
 ### Why Two Duration Subtypes?
 
-This is the key insight from comparing Temporal and Go. Calendar durations (1 month, 2 years) are fundamentally different from clock durations (3 hours, 500ms). A month is not a fixed number of nanoseconds. Go punts on this entirely (no month/year in Duration). Temporal conflates them into one type with 10 fields. AQL makes the distinction explicit: adding a CalDuration to a Date yields a Date; adding a ClkDuration to a DateTime yields a DateTime.
+This is the key insight from comparing Temporal and Go. Calendar durations (1 month, 2 years) are fundamentally different from clock durations (3 hours, 500ms). A month is not a fixed number of nanoseconds. Go punts on this entirely (no month/year in Duration). Temporal conflates them into one type with 10 fields. boru makes the distinction explicit: adding a CalDuration to a Date yields a Date; adding a ClkDuration to a DateTime yields a DateTime.
 
 ### Why Instant Separate from DateTime?
 
-This is Temporal's best idea. An Instant is an absolute point in time (UTC). A DateTime is a wall-clock reading without timezone context. Confusing these is the source of countless bugs. In Go, both are `time.Time`, distinguished only by Location. AQL makes the distinction at the type level.
+This is Temporal's best idea. An Instant is an absolute point in time (UTC). A DateTime is a wall-clock reading without timezone context. Confusing these is the source of countless bugs. In Go, both are `time.Time`, distinguished only by Location. boru makes the distinction at the type level.
 
 ---
 
@@ -300,14 +300,14 @@ Units: `"year"`, `"quarter"`, `"month"`, `"week"`, `"day"`, `"hour"`, `"minute"`
 ## Composable Workflow Examples
 
 ### Age calculation from birthdays
-```aql
+```boru
 people apply birthday [date]
        mutate {age:(birthday until today dur-years)}
        sortby age
 ```
 
 ### Monthly revenue aggregation
-```aql
+```boru
 sales apply order_date [date]
       sift {order_date:(is-after "2023-01-01" date)}
       mutate {month_start:(order_date start-of "month")}
@@ -316,7 +316,7 @@ sales apply order_date [date]
 ```
 
 ### Timezone conversion for global team
-```aql
+```boru
 meetings apply utc_time [instant]
          mutate {
            ny_time:(utc_time "America/New_York" tz to-local format "Jan 02, 3:04 PM")
@@ -325,7 +325,7 @@ meetings apply utc_time [instant]
 ```
 
 ### Invoice due dates
-```aql
+```boru
 invoices apply invoice_date [date]
          mutate {due_date:(invoice_date add 30 days)}
          sift {due_date:(is-before today)}
@@ -333,7 +333,7 @@ invoices apply invoice_date [date]
 ```
 
 ### Pipeline timing (Go monotonic clock)
-```aql
+```boru
 now
 ... expensive-operation ...
 elapsed total-seconds
@@ -341,7 +341,7 @@ elapsed total-seconds
 ```
 
 ### ~~Parsing messy date formats~~ — **REMOVED**
-```aql
+```boru
 # REMOVED in Step 11 of TYPE-DECOUPLING.10.md; left for design history only.
 raw-data apply date_str [auto-date]
          dropna date_str
@@ -388,5 +388,5 @@ Following the existing `native_*.go` pattern:
 ## Verification
 
 - `lang/go/test/temporal_test.go` — test each word category
-- Run: `cd aql && go test ./... -run TestTemporal -v`
+- Run: `cd boru && go test ./... -run TestTemporal -v`
 - Test composition with dataframe words: `apply`, `sift`, `mutate`, `groupby`

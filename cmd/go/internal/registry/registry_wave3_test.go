@@ -55,7 +55,7 @@ func TestRunRegistryPortInUse(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit = %d, want 1; stderr: %s", code, stderr.String())
 	}
-	if !strings.Contains(stdout.String(), "aql registry serving") {
+	if !strings.Contains(stdout.String(), "boru registry serving") {
 		t.Errorf("stdout = %q, want serving banner", stdout.String())
 	}
 	if !strings.Contains(stderr.String(), "listen") {
@@ -198,8 +198,8 @@ func TestPublishBodyReadError(t *testing.T) {
 
 func TestPublishRejectsTraversalPathInZip(t *testing.T) {
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: evil\nmajor: 1\nminor: 0\npatch: 0\nfiles: [evil.aql]\n",
-		"../evil":    "gotcha",
+		"boru.jsonic": "name: evil\nmajor: 1\nminor: 0\npatch: 0\nfiles: [evil.boru]\n",
+		"../evil":     "gotcha",
 	})
 	w := publishDirect(t.TempDir(), zipData)
 	if w.Code != http.StatusBadRequest {
@@ -212,8 +212,8 @@ func TestPublishRejectsTraversalPathInZip(t *testing.T) {
 
 func TestPublishRejectsAbsolutePathInZip(t *testing.T) {
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: evil\nmajor: 1\nminor: 0\npatch: 0\nfiles: [evil.aql]\n",
-		"/abs/evil":  "gotcha",
+		"boru.jsonic": "name: evil\nmajor: 1\nminor: 0\npatch: 0\nfiles: [evil.boru]\n",
+		"/abs/evil":   "gotcha",
 	})
 	w := publishDirect(t.TempDir(), zipData)
 	if w.Code != http.StatusBadRequest {
@@ -226,21 +226,21 @@ func TestPublishRejectsAbsolutePathInZip(t *testing.T) {
 
 func TestPublishRejectsNonMapJsonic(t *testing.T) {
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "[1, 2, 3]",
+		"boru.jsonic": "[1, 2, 3]",
 	})
 	w := publishDirect(t.TempDir(), zipData)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400", w.Code)
 	}
-	if !strings.Contains(w.Body.String(), "invalid aql.jsonic") {
-		t.Errorf("body = %q, want invalid aql.jsonic", w.Body.String())
+	if !strings.Contains(w.Body.String(), "invalid boru.jsonic") {
+		t.Errorf("body = %q, want invalid boru.jsonic", w.Body.String())
 	}
 }
 
 func TestPublishRejectsSlashInModuleName(t *testing.T) {
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: 'a/b'\nmajor: 1\nminor: 0\npatch: 0\nfiles: [x.aql]\n",
-		"x.aql":      "1",
+		"boru.jsonic": "name: 'a/b'\nmajor: 1\nminor: 0\npatch: 0\nfiles: [x.boru]\n",
+		"x.boru":      "1",
 	})
 	w := publishDirect(t.TempDir(), zipData)
 	if w.Code != http.StatusBadRequest {
@@ -253,7 +253,7 @@ func TestPublishRejectsSlashInModuleName(t *testing.T) {
 
 func TestPublishRejectsNonStringFilesEntry(t *testing.T) {
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: numfiles\nmajor: 1\nminor: 0\npatch: 0\nfiles: [1]\n",
+		"boru.jsonic": "name: numfiles\nmajor: 1\nminor: 0\npatch: 0\nfiles: [1]\n",
 	})
 	w := publishDirect(t.TempDir(), zipData)
 	if w.Code != http.StatusBadRequest {
@@ -269,14 +269,14 @@ func TestPublishCannotOpenJsonicEntry(t *testing.T) {
 	// offset 0 of a single-entry zip) leaves the central directory — and
 	// therefore zip.NewReader — intact, but entry Open fails.
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: mod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [mod.aql]\n",
+		"boru.jsonic": "name: mod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [mod.boru]\n",
 	})
 	zipData[0] = 'X'
 	w := publishDirect(t.TempDir(), zipData)
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "cannot read aql.jsonic") {
+	if !strings.Contains(w.Body.String(), "cannot read boru.jsonic") {
 		t.Errorf("body = %q, want cannot-read error", w.Body.String())
 	}
 }
@@ -285,9 +285,9 @@ func TestPublishCannotReadJsonicEntry(t *testing.T) {
 	// Corrupting the compressed data (which starts right after the
 	// 30-byte local header plus the entry name) keeps Open working but
 	// fails the decompressing read.
-	name := "aql.jsonic"
+	name := "boru.jsonic"
 	zipData := makeModuleZip(t, map[string]string{
-		name: "name: mod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [mod.aql]\n",
+		name: "name: mod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [mod.boru]\n",
 	})
 	for i := 30 + len(name); i < 30+len(name)+8; i++ {
 		zipData[i] ^= 0xFF
@@ -296,7 +296,7 @@ func TestPublishCannotReadJsonicEntry(t *testing.T) {
 	if w.Code != http.StatusBadRequest {
 		t.Fatalf("status = %d, want 400; body: %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "cannot read aql.jsonic") {
+	if !strings.Contains(w.Body.String(), "cannot read boru.jsonic") {
 		t.Errorf("body = %q, want cannot-read error", w.Body.String())
 	}
 }
@@ -306,8 +306,8 @@ func TestPublishServerErrorOnUnwritableZipPath(t *testing.T) {
 	// existence probe error (so no 409) and the final write fail: 500.
 	longName := strings.Repeat("n", 300)
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: " + longName + "\nmajor: 1\nminor: 0\npatch: 0\nfiles: [mod.aql]\n",
-		"mod.aql":    "1",
+		"boru.jsonic": "name: " + longName + "\nmajor: 1\nminor: 0\npatch: 0\nfiles: [mod.boru]\n",
+		"mod.boru":    "1",
 	})
 	w := publishDirect(t.TempDir(), zipData)
 	if w.Code != http.StatusInternalServerError {
@@ -324,8 +324,8 @@ func TestPublishServerErrorWhenRegistryDirUncreatable(t *testing.T) {
 		t.Fatal(err)
 	}
 	zipData := makeModuleZip(t, map[string]string{
-		"aql.jsonic": "name: mod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [mod.aql]\n",
-		"mod.aql":    "1",
+		"boru.jsonic": "name: mod\nmajor: 1\nminor: 0\npatch: 0\nfiles: [mod.boru]\n",
+		"mod.boru":    "1",
 	})
 	w := publishDirect(filepath.Join(blocker, "sub"), zipData)
 	if w.Code != http.StatusInternalServerError {

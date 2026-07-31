@@ -7,19 +7,19 @@ import (
 	"hash/fnv"
 	"math/bits"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // sign63Mask clears the sign bit of a 64-bit hash so the result is a
-// non-negative AQL Integer (0 … 2^63-1). Probabilistic structures index
+// non-negative boru Integer (0 … 2^63-1). Probabilistic structures index
 // with `hash mod m`, and a negative dividend would produce a negative
 // index — so the hash words deliberately return non-negative values.
 const sign63Mask = 0x7FFFFFFFFFFFFFFF
 
-// BuildBinaryModule creates the "aql:bin-util" native module — rotates,
+// BuildBinaryModule creates the "boru:bin-util" native module — rotates,
 // bit-counting, single-bit operators, and slice/construct routines.
 // The core bitwise operators (band, bor, bxor, bnot, bsl, bsr, busr)
-// are AQL built-ins; this module covers the second tier.
+// are boru built-ins; this module covers the second tier.
 //
 // After import, words are accessed via dot notation: BinUtil.popcount,
 // BinUtil.rotl, BinUtil.test, etc. The `b` prefix is dropped on module words
@@ -27,7 +27,7 @@ const sign63Mask = 0x7FFFFFFFFFFFFFFF
 //
 // See design/BINARY-OPERATIONS.10.md.
 func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
-	subReg, err := newModuleRegistry("aql:bin-util", binaryModuleNatives)
+	subReg, err := newModuleRegistry("boru:bin-util", binaryModuleNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -63,7 +63,7 @@ func BuildBinaryModule(parent *native.Registry) (native.ModuleDesc, error) {
 
 	// Character codes: String -> Integer (`ord`) and Integer -> String
 	// (`chr`). These replace the O(95) printable-ASCII alphabet trick that
-	// every char-code-needing AQL library otherwise has to roll by hand.
+	// every char-code-needing boru library otherwise has to roll by hand.
 	// See §9.8 in the DX report.
 	exports.Set("ord", makeTypedFnDef("ord", subReg, native.TInteger, native.TString))
 	exports.Set("chr", makeTypedFnDef("chr", subReg, native.TString, native.TInteger))
@@ -291,7 +291,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					return nil, err
 				}
 				if n < 0 || n >= 64 {
-					return nil, r.AqlError("range_error",
+					return nil, r.BoruError("range_error",
 						fmt.Sprintf("BinUtil.test: bit index out of range [0, 64): %d", n), "test")
 				}
 				return []native.Value{native.NewBoolean((uint64(x)>>uint(n))&1 != 0)}, nil
@@ -314,7 +314,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					return nil, err
 				}
 				if n < 0 || n >= 64 {
-					return nil, r.AqlError("range_error",
+					return nil, r.BoruError("range_error",
 						fmt.Sprintf("BinUtil.set: bit index out of range [0, 64): %d", n), "set")
 				}
 				return []native.Value{native.NewInteger(int64(uint64(x) | (uint64(1) << uint(n))))}, nil
@@ -337,7 +337,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					return nil, err
 				}
 				if n < 0 || n >= 64 {
-					return nil, r.AqlError("range_error",
+					return nil, r.BoruError("range_error",
 						fmt.Sprintf("BinUtil.clear: bit index out of range [0, 64): %d", n), "clear")
 				}
 				return []native.Value{native.NewInteger(int64(uint64(x) &^ (uint64(1) << uint(n))))}, nil
@@ -360,7 +360,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					return nil, err
 				}
 				if n < 0 || n >= 64 {
-					return nil, r.AqlError("range_error",
+					return nil, r.BoruError("range_error",
 						fmt.Sprintf("BinUtil.toggle: bit index out of range [0, 64): %d", n), "toggle")
 				}
 				return []native.Value{native.NewInteger(int64(uint64(x) ^ (uint64(1) << uint(n))))}, nil
@@ -393,7 +393,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					return nil, err
 				}
 				if lo < 0 || hi > 64 || lo > hi {
-					return nil, r.AqlError("range_error",
+					return nil, r.BoruError("range_error",
 						fmt.Sprintf("BinUtil.extract: invalid bit range [%d, %d)", lo, hi), "extract")
 				}
 				width := uint(hi - lo)
@@ -437,7 +437,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					return nil, err
 				}
 				if lo < 0 || hi > 64 || lo > hi {
-					return nil, r.AqlError("range_error",
+					return nil, r.BoruError("range_error",
 						fmt.Sprintf("BinUtil.insert: invalid bit range [%d, %d)", lo, hi), "insert")
 				}
 				width := uint(hi - lo)
@@ -471,7 +471,7 @@ var binaryModuleNatives = []native.NativeFunc{
 				}
 				rs := []rune(s)
 				if len(rs) == 0 {
-					return nil, r.AqlError("range_error", "BinUtil.ord: empty string has no codepoint", "ord")
+					return nil, r.BoruError("range_error", "BinUtil.ord: empty string has no codepoint", "ord")
 				}
 				return []native.Value{native.NewInteger(int64(rs[0]))}, nil
 			}),
@@ -490,7 +490,7 @@ var binaryModuleNatives = []native.NativeFunc{
 					return nil, err
 				}
 				if n < 0 || n > 0x10FFFF {
-					return nil, r.AqlError("range_error",
+					return nil, r.BoruError("range_error",
 						fmt.Sprintf("BinUtil.chr: codepoint %d out of range [0, 0x10FFFF]", n), "chr")
 				}
 				return []native.Value{native.NewString(string(rune(n)))}, nil
@@ -608,7 +608,7 @@ func base64DecodeHandler(args []native.Value, _ map[string]native.Value, _ []nat
 	}
 	b, derr := base64.StdEncoding.DecodeString(s)
 	if derr != nil {
-		return nil, r.AqlError("decode_error",
+		return nil, r.BoruError("decode_error",
 			fmt.Sprintf("BinUtil.base64-decode: invalid base64: %v", derr), "base64-decode")
 	}
 	return []native.Value{native.NewString(string(b))}, nil
@@ -621,7 +621,7 @@ func hexDecodeHandler(args []native.Value, _ map[string]native.Value, _ []native
 	}
 	b, derr := hex.DecodeString(s)
 	if derr != nil {
-		return nil, r.AqlError("decode_error",
+		return nil, r.BoruError("decode_error",
 			fmt.Sprintf("BinUtil.hex-decode: invalid hex: %v", derr), "hex-decode")
 	}
 	return []native.Value{native.NewString(string(b))}, nil

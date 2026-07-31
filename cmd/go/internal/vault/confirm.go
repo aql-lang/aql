@@ -14,7 +14,7 @@ package vault
 //	    `password rm`), --yes plus the explicit target argument is the
 //	    signal, so callers pass deliberate=true there.
 //
-// Passphrase env vars (AQL_VAULT_PASSPHRASE / AQL_VAULT_NEW_PASSPHRASE)
+// Passphrase env vars (BORU_VAULT_PASSPHRASE / BORU_VAULT_NEW_PASSPHRASE)
 // authenticate but do NOT satisfy destructive confirmation — the
 // deliberate flag is still required when there is no TTY.
 
@@ -25,7 +25,7 @@ import (
 	"os"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
 )
 
 // errAborted is returned when the user declines a confirmation prompt.

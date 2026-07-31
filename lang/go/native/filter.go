@@ -9,7 +9,7 @@ import (
 // The "filter" word is registered via the consolidated Natives slice in
 // natives.go.
 //
-// filterHandler calls voxgigstruct.Filter with an AQL callback as predicate.
+// filterHandler calls voxgigstruct.Filter with a boru callback as predicate.
 // The callback receives a map with "key" and "value" fields and should return
 // a boolean indicating whether to keep the item.
 // filterHandler keeps the elements for which the callback returns true. The
@@ -116,11 +116,11 @@ func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 			return nil, fmt.Errorf("filter: key %q: %w", k, err)
 		}
 		if len(res) == 0 {
-			return nil, r.AqlError("filter_error", fmt.Sprintf("filter: key %q: predicate produced no result", k), "filter")
+			return nil, r.BoruError("filter_error", fmt.Sprintf("filter: key %q: predicate produced no result", k), "filter")
 		}
 		top := res[len(res)-1]
 		if !top.Parent.ConformsTo(TBoolean) || !IsConcrete(top) {
-			return nil, r.AqlError("filter_error", fmt.Sprintf("filter: key %q: predicate must produce a Boolean, got %s", k, top.Parent.Name()), "filter")
+			return nil, r.BoruError("filter_error", fmt.Sprintf("filter: key %q: predicate must produce a Boolean, got %s", k, top.Parent.Name()), "filter")
 		}
 		if b, _ := AsBoolean(top); b {
 			out.Set(k, v)
@@ -136,7 +136,7 @@ func filterMapFunction(cb Value, mapVal Value, r *Registry) ([]Value, error) {
 // filter natively, the body operand lowered to OpPushClosure) runs through the
 // InvokeBody seam — its named param binds to the cbArgs shape the closure was
 // compiled against ({key,value} pair for a list, KeyVal for a map). An
-// interpreter FnDefINFO lambda matches a signature and runs through CallAQL. The
+// interpreter FnDefINFO lambda matches a signature and runs through CallBoru. The
 // two shapes are byte-identical to the handler: both consume cbArgs and yield a
 // Boolean predicate result.
 func runFilterCallback(r *Registry, cb Value, cbArgs []Value) ([]Value, error) {
@@ -151,7 +151,7 @@ func runFilterCallback(r *Registry, cb Value, cbArgs []Value) ([]Value, error) {
 	if fd, ok := cb.Data.(FnDefInfo); ok {
 		caps = fd.Captured
 	}
-	return r.CallAQL(sig, cbArgs, caps)
+	return r.CallBoru(sig, cbArgs, caps)
 }
 
 // filterBodyHandler is the quotation form of filter: `filter [body] xs`
@@ -166,7 +166,7 @@ func runFilterCallback(r *Registry, cb Value, cbArgs []Value) ([]Value, error) {
 // (matching the Reach form, filterReachHandler).
 func filterBodyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("filter_error", "filter: expected a concrete body list", "filter")
+		return nil, r.BoruError("filter_error", "filter: expected a concrete body list", "filter")
 	}
 	keep := func(elem Value, label string) (bool, error) {
 		res, err := InvokeBody(r, args[0], []Value{elem})
@@ -174,11 +174,11 @@ func filterBodyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 			return false, fmt.Errorf("filter: %s: %w", label, err)
 		}
 		if len(res) == 0 {
-			return false, r.AqlError("filter_error", fmt.Sprintf("filter: %s: body produced no result", label), "filter")
+			return false, r.BoruError("filter_error", fmt.Sprintf("filter: %s: body produced no result", label), "filter")
 		}
 		top := res[len(res)-1]
 		if !top.Parent.ConformsTo(TBoolean) || !IsConcrete(top) {
-			return false, r.AqlError("filter_error", fmt.Sprintf("filter: %s: body must produce a Boolean, got %s", label, top.Parent.Name()), "filter")
+			return false, r.BoruError("filter_error", fmt.Sprintf("filter: %s: body must produce a Boolean, got %s", label, top.Parent.Name()), "filter")
 		}
 		b, _ := AsBoolean(top)
 		return b, nil
@@ -216,7 +216,7 @@ func filterBodyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		// #4 (round 3): filter (quotation map form) — retain the source {:T} tag.
 		return []Value{d2RetainElem(NewMap(out), args[1])}, nil
 	default:
-		return nil, r.AqlError("filter_error", "filter: quotation form expects a concrete list or map", "filter")
+		return nil, r.BoruError("filter_error", "filter: quotation form expects a concrete list or map", "filter")
 	}
 }
 
@@ -273,6 +273,6 @@ func filterReachHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 		// #4 (round 3): filter (lens map form) — retain the source {:T} tag.
 		return []Value{d2RetainElem(NewMap(out), args[1])}, nil
 	default:
-		return nil, r.AqlError("filter_error", "filter: lens form expects a concrete list or map", "filter")
+		return nil, r.BoruError("filter_error", "filter: lens form expects a concrete list or map", "filter")
 	}
 }

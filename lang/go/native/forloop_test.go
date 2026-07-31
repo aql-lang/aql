@@ -17,7 +17,7 @@ func TestForCount(t *testing.T) {
 	r.Output = &buf
 
 	// for 3 [print i] → prints "0\n1\n2\n"
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("for"),
 		NewInteger(3),
 		NewList([]Value{NewWord("print"), NewWord("i")}),
@@ -45,7 +45,7 @@ func TestForRange(t *testing.T) {
 	r.Output = &buf
 
 	// for [2,5] [print i] → prints "2\n3\n4\n"
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("for"),
 		NewList([]Value{NewInteger(2), NewInteger(5)}),
 		NewList([]Value{NewWord("print"), NewWord("i")}),
@@ -72,7 +72,7 @@ func TestForRangeStep(t *testing.T) {
 	r.Output = &buf
 
 	// for [0,10,3] [print i] → prints "0\n3\n6\n9\n"
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("for"),
 		NewList([]Value{NewInteger(0), NewInteger(10), NewInteger(3)}),
 		NewList([]Value{NewWord("print"), NewWord("i")}),
@@ -98,7 +98,7 @@ func TestForZeroIterations(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("for"),
 		NewInteger(0),
 		NewList([]Value{NewWord("print"), NewString("x")}),
@@ -121,7 +121,7 @@ func TestForBodyAccumulates(t *testing.T) {
 	registerIOWords(r)
 
 	// for 3 [i] → each iteration pushes i to results → [0, 1, 2]
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("for"),
 		NewInteger(3),
 		NewList([]Value{NewWord("i")}),
@@ -148,7 +148,7 @@ func TestForPrintstr(t *testing.T) {
 	var buf bytes.Buffer
 	r.Output = &buf
 
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("for"),
 		NewInteger(3),
 		NewList([]Value{NewWord("printstr"), NewString("x")}),
@@ -172,7 +172,7 @@ func TestForBreak(t *testing.T) {
 	// for 10 [(if [i eq 3] [break]) print i]
 	// Use parens to scope the if so print i is not captured as its else branch.
 	// Should print 0, 1, 2 then break.
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("for"),
 		NewInteger(10),
 		NewList([]Value{
@@ -204,7 +204,7 @@ func TestForContinue(t *testing.T) {
 
 	// for 5 [(if [i eq 2] [continue]) print i]
 	// Should print 0, 1, 3, 4 (skip 2)
-	runAQL(t, r, []Value{
+	runBoru(t, r, []Value{
 		NewWord("for"),
 		NewInteger(5),
 		NewList([]Value{
@@ -231,7 +231,7 @@ func TestForStepZero(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	err = runAQLError(t, r, []Value{
+	err = runBoruError(t, r, []Value{
 		NewWord("for"),
 		NewList([]Value{NewInteger(0), NewInteger(10), NewInteger(0)}),
 		NewList([]Value{NewWord("i")}),
@@ -255,7 +255,7 @@ func TestForNegativeStep(t *testing.T) {
 	r.Output = &buf
 
 	// for [5,0,-1] [print i] → prints "5\n4\n3\n2\n1\n"
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("for"),
 		NewList([]Value{NewInteger(5), NewInteger(0), NewInteger(-1)}),
 		NewList([]Value{NewWord("print"), NewWord("i")}),
@@ -283,7 +283,7 @@ func TestForNoStackGrowth(t *testing.T) {
 	r.Output = &buf
 
 	// for 1000 [printstr ""] — 1000 iterations, body is tiny
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("for"),
 		NewInteger(1000),
 		NewList([]Value{NewWord("printstr"), NewString("")}),

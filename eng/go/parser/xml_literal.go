@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -29,7 +29,7 @@ func setupXmlGrammar(j *jsonic.Jsonic, t parserTokens) {
 		setBO(rs, []jsonic.StateAction{
 			func(r *jsonic.Rule, ctx *jsonic.Context) {
 				// Arm the matcher for the next token (the element body).
-				r.EnsureK()["aql_xml"] = true
+				r.EnsureK()["boru_xml"] = true
 			},
 		})
 		setOpen(rs, []*jsonic.AltSpec{
@@ -37,7 +37,7 @@ func setupXmlGrammar(j *jsonic.Jsonic, t parserTokens) {
 				// Disarm immediately: the lookahead token the Close
 				// alternate lexes must not scan a following sibling
 				// `<…>` as part of this element.
-				delete(r.K, "aql_xml")
+				delete(r.K, "boru_xml")
 				r.Node = r.O0.Val
 			}},
 		})
@@ -50,7 +50,7 @@ func setupXmlGrammar(j *jsonic.Jsonic, t parserTokens) {
 }
 
 // setupXmlMatcher registers the lex matcher that, when armed by the xml
-// rule's BO (rule.K["aql_xml"]), scans the whole balanced element that
+// rule's BO (rule.K["boru_xml"]), scans the whole balanced element that
 // follows the already-consumed `<` and emits one #XML token carrying the
 // built Node/Xml value. It runs ONLY when armed, so it never touches the
 // generics `<` (which is lexed outside the xml rule) or any other `<`.
@@ -59,7 +59,7 @@ func setupXmlMatcher(j *jsonic.Jsonic, t parserTokens) {
 		if rule == nil {
 			return nil
 		}
-		if armed, _ := rule.K["aql_xml"].(bool); !armed {
+		if armed, _ := rule.K["boru_xml"].(bool); !armed {
 			return nil
 		}
 		cursor := lex.Cursor()

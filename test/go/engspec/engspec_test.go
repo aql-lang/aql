@@ -1,6 +1,6 @@
 // Spec-runner test for the engine kernel — runs the shared corpus at
-// aql/eng/spec/*.tsv (sibling of eng/go/ and eng/ts/, so Go and TypeScript
-// ports run the same .tsv files). Each row is parsed with the AQL parser
+// boru/eng/spec/*.tsv (sibling of eng/go/ and eng/ts/, so Go and TypeScript
+// ports run the same .tsv files). Each row is parsed with the boru parser
 // (eng/go/parser) and run against a fresh eng.Registry pre-populated with
 // kernel-only spec-runner fixtures (q-suffixed plus minimal copies of
 // the words eng/spec rows exercise — def, fn, dup, …). After the
@@ -9,7 +9,7 @@
 // isolation against the same .tsv corpus.
 //
 // The "q" suffix on most fixtures marks them as SPEC-RUNNER FIXTURES,
-// distinct from production AQL words of the same root name. Language-
+// distinct from production boru words of the same root name. Language-
 // fundamental keywords (def, fn, quote, args, refine, typeof,
 // is, none, end, …) keep their bare names because what's being tested
 // IS the keyword itself, not a fixture for it.
@@ -25,9 +25,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/test/go/specrunner"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/test/go/specrunner"
 )
 
 // specReplayCounter is bumped per call to the `replayq` test fixture so
@@ -437,14 +437,14 @@ func registerEngSpecDefinition(r *eng.Registry) {
 	typedDef := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 		nameMap, _ := eng.AsMap(args[0])
 		if nameMap == nil || nameMap.Len() != 1 {
-			return nil, &eng.AqlError{Code: "type_error", Detail: "def: typed-name map must have exactly one key"}
+			return nil, &eng.BoruError{Code: "type_error", Detail: "def: typed-name map must have exactly one key"}
 		}
 		name := nameMap.Keys()[0]
 		if err := eng.ValidateWordName(name); err != nil {
 			return nil, err
 		}
 		if reg.Defs.IsType(name) {
-			return nil, &eng.AqlError{Code: "type_error", Detail: "def " + name + ": name clash — already a type"}
+			return nil, &eng.BoruError{Code: "type_error", Detail: "def " + name + ": name clash — already a type"}
 		}
 		constraint, _ := nameMap.Get(name)
 		if resolved, _, _ := reg.ResolveTypedNameValue(constraint); resolved.Data != nil || resolved.Parent != nil {
@@ -452,7 +452,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 		}
 		body := args[1]
 		if !eng.IsValueOfType(body, constraint) {
-			return nil, &eng.AqlError{
+			return nil, &eng.BoruError{
 				Code:   "type_error",
 				Detail: "def " + name + ": value " + body.String() + " does not satisfy declared type " + constraint.String(),
 			}
@@ -490,12 +490,12 @@ func registerEngSpecDefinition(r *eng.Registry) {
 			return nil, err
 		}
 		if !eng.IsConcrete(args[2]) {
-			return nil, &eng.AqlError{Code: "type_error", Detail: "def fn: body must be a concrete list"}
+			return nil, &eng.BoruError{Code: "type_error", Detail: "def fn: body must be a concrete list"}
 		}
 		lst, _ := eng.AsList(args[2])
 		elems := lst.Slice()
 		if len(elems) == 0 || len(elems)%3 != 0 {
-			return nil, &eng.AqlError{Code: "fn_invalid_spec", Detail: "fn: list length must be a non-zero multiple of 3"}
+			return nil, &eng.BoruError{Code: "fn_invalid_spec", Detail: "fn: list length must be a non-zero multiple of 3"}
 		}
 		fnDef, err := eng.ParseFnDef(reg, elems)
 		if err != nil {
@@ -566,12 +566,12 @@ func registerEngSpecDefinition(r *eng.Registry) {
 			NoEvalArgs: map[int]bool{0: true},
 			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 				if !eng.IsConcrete(args[0]) {
-					return nil, &eng.AqlError{Code: "type_error", Detail: "fn: argument must be a concrete list"}
+					return nil, &eng.BoruError{Code: "type_error", Detail: "fn: argument must be a concrete list"}
 				}
 				lst, _ := eng.AsList(args[0])
 				elems := lst.Slice()
 				if len(elems) == 0 || len(elems)%3 != 0 {
-					return nil, &eng.AqlError{Code: "fn_invalid_spec", Detail: "fn: list length must be a non-zero multiple of 3"}
+					return nil, &eng.BoruError{Code: "fn_invalid_spec", Detail: "fn: list length must be a non-zero multiple of 3"}
 				}
 				fnDef, err := eng.ParseFnDef(reg, elems)
 				if err != nil {
@@ -664,7 +664,7 @@ func registerEngSpecDefinition(r *eng.Registry) {
 				if eng.IsCapitalisedName(name) {
 					entry, ok := reg.Defs.PopEntry(name)
 					if !ok {
-						return nil, &eng.AqlError{Code: "type_error", Detail: "undef " + name + ": no such type binding"}
+						return nil, &eng.BoruError{Code: "type_error", Detail: "undef " + name + ": no such type binding"}
 					}
 					if entry.TypeDef != nil {
 						reg.Types.Retire(entry.TypeDef)
@@ -768,7 +768,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {
 				list := args[0]
 				if !eng.IsConcrete(list) {
-					return nil, &eng.AqlError{Code: "type_error", Detail: "enum: argument must be a concrete list"}
+					return nil, &eng.BoruError{Code: "type_error", Detail: "enum: argument must be a concrete list"}
 				}
 				var childType eng.Value
 				hasChild := false
@@ -786,7 +786,7 @@ func registerEngSpecTypeWords(r *eng.Registry) {
 						e = eng.NewAtom(w.Name)
 					}
 					if hasChild && !eng.IsValueOfType(e, childType) {
-						return nil, &eng.AqlError{
+						return nil, &eng.BoruError{
 							Code:   "type_error",
 							Detail: "enum: element " + e.String() + " does not satisfy child type " + childType.String(),
 						}
@@ -1257,7 +1257,7 @@ func registerEngSpecFnSig(r *eng.Registry) {
 			NoEvalArgs: map[int]bool{0: true},
 			Impl: eng.Go(func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, reg *eng.Registry) ([]eng.Value, error) {
 				if !eng.IsConcrete(args[0]) {
-					return nil, &eng.AqlError{
+					return nil, &eng.BoruError{
 						Code:   "fnsig_invalid_spec",
 						Detail: "fnsig: argument must be a concrete list",
 					}
@@ -1265,7 +1265,7 @@ func registerEngSpecFnSig(r *eng.Registry) {
 				lst, _ := eng.AsList(args[0])
 				spec := lst.Slice()
 				if len(spec) == 0 || len(spec)%2 != 0 {
-					return nil, &eng.AqlError{
+					return nil, &eng.BoruError{
 						Code:   "fnsig_invalid_spec",
 						Detail: "fnsig: list length must be a non-zero multiple of 2 (input output pairs); use `fn` for the with-body form",
 					}
@@ -1335,7 +1335,7 @@ func registerEngSpecBoolean(r *eng.Registry) {
 func registerEngSpecDo(r *eng.Registry) {
 	listH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 		if !eng.IsConcrete(args[0]) {
-			return nil, &eng.AqlError{
+			return nil, &eng.BoruError{
 				Code:   "type_error",
 				Detail: "do: argument must be a concrete list, got type literal",
 			}
@@ -1429,7 +1429,7 @@ func registerEngSpecTypeOps(r *eng.Registry) {
 	})
 }
 
-// TestSpec runs aql/eng/spec/*.tsv against the engine kernel — a fresh
+// TestSpec runs boru/eng/spec/*.tsv against the engine kernel — a fresh
 // eng.Registry populated by registerSpecWords, which installs only
 // the spec-runner fixtures eng/spec needs (q-suffixed probes plus
 // minimal in-test copies of the dispatching words). The shared TSV

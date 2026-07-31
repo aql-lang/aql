@@ -5,22 +5,22 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
-// The aontu PARSER ships built-in with aql:parselang. aontu
+// The aontu PARSER ships built-in with boru:parselang. aontu
 // (github.com/rjrodger/aontu) is a CUE-inspired unification config dialect;
 // AontuParse wraps the upstream Go port (the repo's go/ module), wired in as
 // a built-in `parse` kind. Like the tabnas family, no host registration is
 // needed — importing the module is enough for `parse aontu <text>` to parse,
 // unify and generate a Node of Maps and Lists.
 
-const aontuImp = `import "aql:parselang"  `
+const aontuImp = `import "boru:parselang"  `
 
 // aStr runs src and renders the single result to a string, so an Integer
 // result (returned as an int64 by lang.Run) compares cleanly against the
 // expected text.
-func aStr(t *testing.T, a *lang.AQL, src string) string {
+func aStr(t *testing.T, a *lang.Boru, src string) string {
 	t.Helper()
 	return fmt.Sprintf("%v", runLast(t, a, src))
 }

@@ -17,7 +17,7 @@ func TestStepEndNoForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewInteger(1), NewEnd()})
+	result := runBoru(t, r, []Value{NewInteger(1), NewEnd()})
 	_as32, _ := AsInteger(result[0])
 	if len(result) != 1 || _as32 != 1 {
 		t.Errorf("expected [1], got %v", result)
@@ -31,7 +31,7 @@ func TestDefEndExplicit(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("foo"), NewInteger(42), NewEnd(),
 		NewWord("foo"),
 	})
@@ -48,7 +48,7 @@ func TestParenResolvesForward(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewOpenParen(), NewInteger(1), NewWord("add"), NewInteger(2), NewCloseParen(),
 	})
 	_as34, _ := AsInteger(result[0])
@@ -63,7 +63,7 @@ func TestUnmatchedCloseParen(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	err = runAQLError(t, r, []Value{NewInteger(1), NewCloseParen()})
+	err = runBoruError(t, r, []Value{NewInteger(1), NewCloseParen()})
 	if err == nil {
 		t.Fatal("expected error for unmatched close paren")
 	}
@@ -266,7 +266,7 @@ func TestFnMultiSignature(t *testing.T) {
 	}
 	registerIOWords(r)
 	// def f fn [[x:number] [number] [x mul x] [x:string] [string] [x upper]]
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("f"), NewWord("fn"),
 		NewList([]Value{
 			NewList([]Value{NewImplicitMap(singleMap("x", NewTypeLiteral(TNumber)))}),
@@ -892,7 +892,7 @@ func TestStepEndWithForwardBeforeEnd(t *testing.T) {
 	}
 	registerIOWords(r)
 	// def myval 42 end 1 add myval
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("myval"), NewInteger(42), NewEnd(),
 		NewInteger(1), NewWord("add"), NewWord("myval"),
 	})
@@ -909,7 +909,7 @@ func TestStepEndTerminatesDef(t *testing.T) {
 	}
 	registerIOWords(r)
 	// def a [1 add] end 10 a
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("a"),
 		NewWord("word"), NewList([]Value{NewInteger(1), NewWord("add")}),
 		NewEnd(),

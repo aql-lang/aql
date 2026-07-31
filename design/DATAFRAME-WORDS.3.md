@@ -1,10 +1,10 @@
-# Dataframe Operations Word Design for AQL
+# Dataframe Operations Word Design for boru
 
 ## Context
 
-AQL has a full SQL-like query system (`select/from/where/order/group/join/etc.`) that builds `QueryBuilder` objects and executes via SQLite. This design provides a **complementary** set of dataframe-style words that operate directly on table values on the stack in AQL's concatenative style. These are separate from the select-style words and intended for interactive data exploration and transformation pipelines.
+boru has a full SQL-like query system (`select/from/where/order/group/join/etc.`) that builds `QueryBuilder` objects and executes via SQLite. This design provides a **complementary** set of dataframe-style words that operate directly on table values on the stack in boru's concatenative style. These are separate from the select-style words and intended for interactive data exploration and transformation pipelines.
 
-Tables in AQL are `TList` values with `TableData` payload (schema + rows). Records are schema definitions (`RecordTypeInfo` with ordered field map). The new words operate on these types directly.
+Tables in boru are `TList` values with `TableData` payload (schema + rows). Records are schema definitions (`RecordTypeInfo` with ordered field map). The new words operate on these types directly.
 
 ---
 
@@ -562,7 +562,7 @@ dates apply date year [slice 0 4]
 ## Composable Workflow Examples
 
 ### Filter, aggregate, and sort
-```aql
+```boru
 # Total sales > 100 by city, sorted descending
 people sift {sales:(gt 100)} groupby city {total:(sum sales)} sortby [total desc]
 # city    total
@@ -572,7 +572,7 @@ people sift {sales:(gt 100)} groupby city {total:(sum sales)} sortby [total desc
 ```
 
 ### Multi-step pipeline
-```aql
+```boru
 set people ("file/people.csv" read)
 
 # Clean: fill missing ages, remove dupes, add tax column
@@ -585,14 +585,14 @@ people shape
 ```
 
 ### Column extraction and aggregation
-```aql
+```boru
 people col sales mean          # 154
 people col age mean            # 31.5
 people col city dedup          # [Dublin, Cork, Galway] as list
 ```
 
 ### Join and reshape
-```aql
+```boru
 set regions ("file/regions.csv" read)
 people merge regions city pick [name city region]
 ```
@@ -654,6 +654,6 @@ Each word (or word family) follows the existing pattern of one file per word:
 ### Verification
 - Add test file: `lang/go/test/dataframe_test.go` with test cases for each word
 - Use existing CSV test data or create `test/testdata/people.csv`
-- Run: `cd aql && go test ./... -run TestDataframe -v`
+- Run: `cd boru && go test ./... -run TestDataframe -v`
 - Verify composition: test multi-word pipelines
 - Verify type safety: test error cases (wrong types, missing columns)

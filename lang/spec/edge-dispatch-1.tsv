@@ -1,4 +1,4 @@
-# AQL Language Specification: Dispatch edge cases 1 — overload order,
+# boru Language Specification: Dispatch edge cases 1 — overload order,
 # first-match over sorted signatures, the add numeric-vs-concat lattice,
 # and numeric promotion families.
 # Format: input<TAB>expected<TAB>description
@@ -16,7 +16,7 @@
 # [Scalar String] concatenate — so concatenation fires only when AT
 # LEAST ONE operand is a String; every other Scalar pairing (Boolean +
 # Integer, Atom + Integer, …) matches no overload and raises
-# [aql/signature_error] instead of silently stringifying.
+# [boru/signature_error] instead of silently stringifying.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  add concat lattice — positives (result = args[1] ++ args[0])
@@ -34,7 +34,7 @@ add "" 1	'1'	EmptyString is still a String — concat with the empty string
 add false ""	'false'	String + Boolean via the empty string: coercion, not truthiness
 add 2.5 "x"	'x2.5'	Float + String: the Float's string form is spliced in
 #
-# §2  add concat lattice — negatives ([aql/signature_error]: no overload)
+# §2  add concat lattice — negatives ([boru/signature_error]: no overload)
 add true 1	ERROR:no signature matches	Boolean + Integer: neither operand is a String
 1 add true	ERROR:no signature matches	mixed split of the same pair fails identically
 true add 1	ERROR:no signature matches	and the other mixed split too — no slot order admits it
@@ -106,5 +106,5 @@ def g fn [[x:(Integer tor String)][String]["dis"] [x:Integer][String]["int"]] g 
 def g fn [[x:Integer][String]["int"] [x:(Integer tor String)][String]["dis"]] g 1	'dis'	…independent of listing order — the sort decides
 #
 # §7  module FnDef wrappers — an unmatched call fails as uncalled_function
-import "aql:math-util" MathUtil.min 3 5	3	a module word dispatches like a native
-import "aql:math-util" MathUtil.min "a" "b"	ERROR:uncalled_function	unmatched module-fn call is left as data and reported distinctly from [aql/signature_error]
+import "boru:math-util" MathUtil.min 3 5	3	a module word dispatches like a native
+import "boru:math-util" MathUtil.min "a" "b"	ERROR:uncalled_function	unmatched module-fn call is left as data and reported distinctly from [boru/signature_error]

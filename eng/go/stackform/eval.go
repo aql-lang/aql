@@ -1,7 +1,7 @@
 package stackform
 
 import (
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // Flatten serialises a StackForm into a token sequence the kernel

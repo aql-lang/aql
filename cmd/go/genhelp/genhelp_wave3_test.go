@@ -3,8 +3,8 @@ package main
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestSeedMemFS verifies seedMemFS installs the in-memory filesystem

@@ -3,14 +3,14 @@ package native
 // This file contains the helpers and parsers used by the `fn` word.
 // The fn handler itself lives in native_definition.go.
 
-// parseFnDef, parseFnUndefSpec: re-exported from aqleng via
+// parseFnDef, parseFnUndefSpec: re-exported from borueng via
 // aliases.go (canonical implementations live in eng/go/fn_def.go).
 
-// parseFnReturns: re-exported from aqleng via aliases.go
+// parseFnReturns: re-exported from borueng via aliases.go
 // (canonical implementation lives in eng/go/fn_params.go).
 
 // parseFnParams, resolveSigType, resolveTypeName: re-exported from
-// aqleng via aliases.go (canonical implementations live in
+// borueng via aliases.go (canonical implementations live in
 // eng/go/fn_params.go).
 
 // MatchFnSig finds the first FnSig in a FnDef value whose params match
@@ -55,10 +55,10 @@ func MatchFnSig(fn Value, args []Value) *FnSig {
 	return nil
 }
 
-// ExpandOptionalSigs: re-exported from aqleng via aliases.go
-// InstallFnDef: re-exported from aqleng via aliases.go
-// CallAQL: re-exported from aqleng via aliases.go
-// InstallDef: re-exported from aqleng via aliases.go
-// FnDefsOverlap: re-exported from aqleng via aliases.go
-// UninstallDef: re-exported from aqleng via aliases.go
-// UninstallFnSigs: re-exported from aqleng via aliases.go
+// ExpandOptionalSigs: re-exported from borueng via aliases.go
+// InstallFnDef: re-exported from borueng via aliases.go
+// CallBoru: re-exported from borueng via aliases.go
+// InstallDef: re-exported from borueng via aliases.go
+// FnDefsOverlap: re-exported from borueng via aliases.go
+// UninstallDef: re-exported from borueng via aliases.go
+// UninstallFnSigs: re-exported from borueng via aliases.go

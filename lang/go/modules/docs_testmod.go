@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:test", map[string]string{
+	registerDocs("boru:test", map[string]string{
 		// Test namespace
 		"test":           "Define and run a test case, recording its outcome.",
 		"it":             "Alias for test; define and run a single test case.",
@@ -30,11 +30,11 @@ func init() {
 		"throws":    "Assert that evaluating a body raises an error.",
 	})
 
-	// The assertion words take their operands in the AQL swap order
+	// The assertion words take their operands in the boru swap order
 	// (actual, then expected), and the runner words take a BODY — neither
 	// of which the generated permutations can show. Results are from
 	// verified lang/spec/module-test.tsv rows.
-	registerExamples("aql:test", map[string][]string{
+	registerExamples("boru:test", map[string][]string{
 		"test": {
 			`Test.test "adds" [(1 add 1) 2 Assert.equal]`,
 			`Test.fail-count                                  ;# 0`,

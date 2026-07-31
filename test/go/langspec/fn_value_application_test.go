@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // TestFnValueApplicationCompiles pins the fn-value application milestone
-// (design/STAGE3-INLINING-DESIGN-ROUND.0.md Stage M2, aql-bytecode-plan.0.md
+// (design/STAGE3-INLINING-DESIGN-ROUND.0.md Stage M2, boru-bytecode-plan.0.md
 // §2.4b): the `OpCallDynamic`-family lowerings compile every fn-value
 // application SHAPE the corpus exercises. Positive rows must produce a native
 // Program (no interpreter island); the deliberate miscompile-E auto-dispatch
@@ -33,7 +33,7 @@ func TestFnValueApplicationCompiles(t *testing.T) {
 		// M2c — shaped instance-method dispatch (l.info) + typed list-of-record
 		// element reads. module-log.tsv:53.
 		{"instance-method-dispatch",
-			`import "aql:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" ; Log.dump 0 get "logger" get`},
+			`import "boru:log" ; def l (Log.with "http" {svc:"api"}) ; Log.add-sink memory/q ; Log.remove-sink console/q ; l.info "req" ; Log.dump 0 get "logger" get`},
 		// M2d — fn-value-as-operand (two-lambda higher-order form).
 		// corpus-core.tsv:134.
 		{"fn-value-as-operand-walk",
@@ -65,8 +65,8 @@ func TestFnValueApplicationCompiles(t *testing.T) {
 		name string
 		src  string
 	}{
-		{"rand-zero-arg-method-bool", `import "aql:rand"  def r (Rand.with-seed 7)  r.bool`},
-		{"rand-zero-arg-method-float", `import "aql:rand"  def r (Rand.with-seed 1)  r.float`},
+		{"rand-zero-arg-method-bool", `import "boru:rand"  def r (Rand.with-seed 7)  r.bool`},
+		{"rand-zero-arg-method-float", `import "boru:rand"  def r (Rand.with-seed 1)  r.float`},
 	}
 	for _, c := range guarded {
 		t.Run(c.name, func(t *testing.T) {

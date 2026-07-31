@@ -4,9 +4,9 @@ Supplements `design/CLI-PROGRAMS.0.md`. That note is the RFC for the whole
 C1–C6 arc; this one records two decisions the RFC does not contain, each
 made because implementing the RFC as written would not have worked.
 
-## 1. `aql build -perms` bakes a `*policy.Profile`, and it is a default
+## 1. `boru build -perms` bakes a `*policy.Profile`, and it is a default
 
-**Landed** with C1 (`aql build` argv + overlay + baked policy).
+**Landed** with C1 (`boru build` argv + overlay + baked policy).
 
 The RFC says the built binary should carry its build-time permissions. The
 obvious spelling — put the `policy.Policy` on `buildrt.Config` — cannot
@@ -19,7 +19,7 @@ compiled back with `policy.CompileProfile` in `buildrt.Main`.
 **It is a default, not a boundary.** The trailer is plain JSON behind a
 magic+length marker with no integrity check, so anyone holding the binary
 can strip or rewrite the profile. What a baked profile does is constrain
-the PROGRAM — which is what a tool author shipping an AQL script wants:
+the PROGRAM — which is what a tool author shipping a boru script wants:
 "this tool never writes files" is a property of the tool, enforced against
 the tool's own code. It is not a sandbox against an adversary who has the
 executable. `CLI.md` says so, and must keep saying so.
@@ -36,7 +36,7 @@ shows the profile is what decided.
 
 The RFC's §8 surface is:
 
-```aql
+```boru
 Cli.main (spec) handler/r
 ```
 
@@ -45,8 +45,8 @@ which parses `IO.args`, prints usage or version and exits 0 for
 exits 2 on a usage error, and otherwise calls the handler.
 
 **The decision logic must be reachable without running the program.** A
-module written in AQL is gated by the `sift_coverage_test.go` pattern —
-every executable row of `cli.aql` covered by `cli_test.aql`, with a small
+module written in boru is gated by the `sift_coverage_test.go` pattern —
+every executable row of `cli.boru` covered by `cli_test.boru`, with a small
 allowlist whose entries are each *asserted to be genuinely uncovered* — and
 `Cli.main` ends in `IO.exit`, which ends whatever is running it. More
 importantly, a spec ROW cannot survive an exit at all, so a surface that
@@ -66,7 +66,7 @@ Cli.main (spec) handler/r    →  the three-line shell
   and `err` are the exact text to print; `code` is the exit status the
   driver should use. It never prints, never exits, never reads the
   environment. Every arm is therefore reachable from a spec row and from
-  `cli_test.aql`, and the interesting logic — flag grammar, clustering,
+  `cli_test.boru`, and the interesting logic — flag grammar, clustering,
   `--flag=value`, `--no-X`, `--`, arity, unknown-flag errors, usage
   rendering — lives here.
 - **`Cli.main` is the shell**: call `Cli.dispatch`, print `out` to stdout or
@@ -77,9 +77,9 @@ Cli.main (spec) handler/r    →  the three-line shell
   **Correction (2026-07-30):** the first cut of this note assumed the shell's
   rows would have to be allowlisted, because an exiting arm cannot be
   exercised by a runner that treats an exit as a file failure. That is wrong.
-  `IO.exit` RAISES the reserved `aql/exit`, and `Assert.throws` observes a
+  `IO.exit` RAISES the reserved `boru/exit`, and `Assert.throws` observes a
   raise — so the arms are reachable from the module's own suite after all,
-  and `cli.aql` ships at **100% AQL-line coverage with an empty allowlist**.
+  and `cli.boru` ships at **100% boru-line coverage with an empty allowlist**.
   (A plain `do […] error […]` genuinely does not catch an exit — deliberately,
   so a program cannot swallow its own termination — which is what made the
   wrong conclusion plausible.) The split still stands on its own merits: the
@@ -87,7 +87,7 @@ Cli.main (spec) handler/r    →  the three-line shell
   to act on it itself. It just is not forced by the coverage gate.
 
 This is the same shape the RFC itself recommends elsewhere — a pure core
-with an imperative rind — and it is what makes "written in AQL, gated like
+with an imperative rind — and it is what makes "written in boru, gated like
 Go" possible rather than aspirational.
 
 ### Consequence for callers
@@ -130,7 +130,7 @@ round (no local alias fns and no recursion in the parse machinery; native
 `is`-chains rather than multi-sig dispatch over argv values) are treated as
 hypotheses to re-verify against the current engine rather than as standing
 constraints — several sharp edges named there have since been fixed, and
-`design/AQL-SHARP-EDGES.0.md` is the live list.
+`design/BORU-SHARP-EDGES.0.md` is the live list.
 
 ## 5. Follow-ups from the PR #319 review
 
@@ -150,7 +150,7 @@ contradicts, not here.
 
 **Status: open, and the recommendation is to leave it.**
 
-`cli.aql`'s header says a spec is read defensively and that parse errors come
+`cli.boru`'s header says a spec is read defensively and that parse errors come
 back as data (`{ok:false err usage}`). That is true of the ARGUMENT VECTOR,
 which is genuinely untrusted input, and it is not true of the SPEC: a
 non-convertible numeric field (`args:{min:"many"}`) or a non-Map element in
@@ -163,7 +163,7 @@ being written, discovered the first time it runs. A raise at that point is a
 better report than a `{ok:false}` the author has to remember to check.
 
 Two things would change that assessment, and are the trigger for revisiting:
-a program that BUILDS a spec at runtime from configuration, or an `aql:cli`
+a program that BUILDS a spec at runtime from configuration, or a `boru:cli`
 caller that accepts a spec across a trust boundary. Neither exists today.
 
 If it is fixed, the shape is a `Cli.check-spec (spec)` returning
@@ -190,11 +190,11 @@ passes for the wrong reason, is worse than none.
    and write its own input, and assert `got.code == 0` alongside the stdout
    check so a missing operand can never again masquerade as a flag defect.
 
-2. **The build inherits an ambient `AQL_POLICY`.** `buildUtil` calls the real
-   subcommand, and `permsflags.Resolve` falls back to `AQL_POLICY_FILE` /
-   `AQL_POLICY` when no `-perms` flag is given. Five of the six tests build
+2. **The build inherits an ambient `BORU_POLICY`.** `buildUtil` calls the real
+   subcommand, and `permsflags.Resolve` falls back to `BORU_POLICY_FILE` /
+   `BORU_POLICY` when no `-perms` flag is given. Five of the six tests build
    without `-perms`, so whatever policy the environment names is silently baked
-   into those binaries: `AQL_POLICY=read-only go test -run TestUtilsCatEndToEnd`
+   into those binaries: `BORU_POLICY=read-only go test -run TestUtilsCatEndToEnd`
    fails with empty stdout and exit 1. The failure direction is the less
    dangerous one — a PERMISSIVE ambient policy would instead mask a real
    regression. `permsflags_test.go` already pins both variables with

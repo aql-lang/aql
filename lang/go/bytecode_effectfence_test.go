@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // The C1 effect fence on RunCompiled's two fallback arms (eng effects.go,
@@ -71,7 +71,7 @@ func TestRuntimeBailBeforeEffectStillFallsBack(t *testing.T) {
 // zzCheckEmit registers `zz-emit`, a RunInCheckMode word that WRITES to the
 // registry output when it executes — so the CHECK pass itself emits an
 // observable effect, the way a module body printing at import time does.
-func zzCheckEmit(a *AQL) {
+func zzCheckEmit(a *Boru) {
 	a.Register("zz-emit", native.Signature{
 		Args:       []*native.Type{},
 		Returns:    []*native.Type{},
@@ -232,7 +232,7 @@ func TestStaleLedgerEffectDoesNotBlockFallback(t *testing.T) {
 func TestFileWriteNotesEffectLedger(t *testing.T) {
 	a := mustNew(t)
 	before := a.registry.Effects.Count()
-	got, err := a.RunInterp(`import "aql:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://a.txt") "hi"  IO.read (make Pathon "mem://a.txt")`)
+	got, err := a.RunInterp(`import "boru:io"  context dot __sys dot fs set mem true  IO.write (make Pathon "mem://a.txt") "hi"  IO.read (make Pathon "mem://a.txt")`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -297,12 +297,12 @@ func TestCheckErrorAfterCheckEffectSurfacesItself(t *testing.T) {
 	}
 }
 
-// --- the foreign-error (non-AqlError) bail class ----------------------------
+// --- the foreign-error (non-BoruError) bail class ----------------------------
 
 // zzForeignBoom registers `zz-boom`, a plain native whose handler returns a
-// foreign Go error — the non-AqlError class runtimeShouldFallback also
+// foreign Go error — the non-BoruError class runtimeShouldFallback also
 // resolves by re-running the interpreter.
-func zzForeignBoom(t *testing.T) *AQL {
+func zzForeignBoom(t *testing.T) *Boru {
 	t.Helper()
 	a := mustNew(t)
 	a.Register("zz-boom", native.Signature{
@@ -356,11 +356,11 @@ func TestForeignErrorBailWithoutEffectFallsBack(t *testing.T) {
 	}
 }
 
-// The hatch twin: AQL_COMPILE_FALLBACK=1 restores the pre-Stage-J silent
+// The hatch twin: BORU_COMPILE_FALLBACK=1 restores the pre-Stage-J silent
 // interpreter fallback for one release — the refused row then runs
 // interpreted and yields its canonical interpreter result.
 func TestRefusalHatchRestoresFallback(t *testing.T) {
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	a := mustNew(t)
 	var out bytes.Buffer
 	a.SetOutput(&out)
@@ -392,7 +392,7 @@ func TestCheckPassIsEffectFree(t *testing.T) {
 		`1 add 2`,
 		`print "hello"`,
 		`def f fn [[x:Integer] [Integer] [x mul 2]] f 21`,
-		`import "aql:math-util" ; MathUtil.sqrt 16.0`,
+		`import "boru:math-util" ; MathUtil.sqrt 16.0`,
 		`def xs [1 2 3] xs each [dup mul]`,
 	} {
 		a := mustNew(t)

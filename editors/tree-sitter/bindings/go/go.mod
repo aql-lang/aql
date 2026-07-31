@@ -1,4 +1,4 @@
-module github.com/tree-sitter/tree-sitter-aql
+module github.com/tree-sitter/tree-sitter-boru
 
 go 1.22
 

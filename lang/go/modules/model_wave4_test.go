@@ -9,19 +9,19 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// Wave-4 coverage for modules/model.go — the aql:model module (Model.new /
+// Wave-4 coverage for modules/model.go — the boru:model module (Model.new /
 // run / start / stop / model), the spec decoding (parseSpec, buildActions,
 // actionFnAndStep, parseStep), the action bridge (makeAction,
 // interpretActionResult), the FileOps-backed model.FS (fileOpsFS,
 // synthFileInfo), and the small Map readers — each positive path paired
 // with the loud rejection.
 
-const mw4Imp = `import "aql:model"  `
+const mw4Imp = `import "boru:model"  `
 
 // mw4Reg builds a resolver-wired registry with an in-memory FileOps, so the
 // whole model pipeline (inline scratch dir, source reads, model.json write)

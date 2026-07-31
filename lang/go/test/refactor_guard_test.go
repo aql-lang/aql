@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // This file pins the behaviour touched by the duplication-removal
@@ -75,9 +75,9 @@ func TestGuardForwardCollectedWordErrorHasPosition(t *testing.T) {
 	if runErr == nil {
 		t.Fatal("expected error for f 1 \"x\"")
 	}
-	ae, ok := runErr.(*native.AqlError)
+	ae, ok := runErr.(*native.BoruError)
 	if !ok {
-		t.Fatalf("expected *AqlError, got %T: %v", runErr, runErr)
+		t.Fatalf("expected *BoruError, got %T: %v", runErr, runErr)
 	}
 	if ae.Row != 2 {
 		t.Errorf("expected error Row=2 (the call site), got %d", ae.Row)
@@ -154,7 +154,7 @@ func TestGuardDefUnusedDiagnosticHasPosition(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	res, err := a.Check("def unused-thing 1\n42")
 	if err != nil {
 		t.Fatalf("check: %v", err)

@@ -8,7 +8,7 @@ import (
 
 // publishRecipe presents a single vault secret in the exact environment
 // form a tool reads its credential from, so
-// `aql vault exec --for=<name> <alias> -- <cmd>` is a one-liner and the
+// `boru vault exec --for=<name> <alias> -- <cmd>` is a one-liner and the
 // token never touches disk or argv. Every recipe here is pure environment
 // injection (no temp files, a single secret). Tools that read their
 // credential another way (maven, gradle, conan, docker/helm, nuget's

@@ -5,8 +5,8 @@ import (
 	"os"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // permissionedFileOps wraps a FileOps implementation, gating each

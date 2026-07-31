@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // io_lines_cov_test.go — sameReader's arms, and the crash it exists to
@@ -227,10 +227,10 @@ func TestSetHostStreamProbeArms(t *testing.T) {
 	}
 }
 
-// --- the handler arms AQL cannot reach ---
+// --- the handler arms boru cannot reach ---
 
 // The signatures admit only StreamKind and File, so these guards are
-// unreachable from AQL source — but they are the difference between a clear
+// unreachable from boru source — but they are the difference between a clear
 // error and a wrong answer if a future signature admits something looser.
 func TestLineReaderForRejectsNonStreams(t *testing.T) {
 	r, err := DefaultRegistry()

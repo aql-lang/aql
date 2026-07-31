@@ -1,10 +1,10 @@
-# AQL Language Specification: error-taxonomy edge cases
+# boru Language Specification: error-taxonomy edge cases
 # Format: input<TAB>expected<TAB>description
 #
 # Edge-case battery over the error system (design/ERRORS.8.md): the
 # three raise forms and their payloads, do-boundary reification and
 # code routing, taxonomy precision for the native codes, the
-# pattern-match no-op contract of `error`, and the aql:test assertion
+# pattern-match no-op contract of `error`, and the boru:test assertion
 # words. Companion to error.tsv (the §1-§4 basics live there; nothing
 # here duplicates a row from that file). Where a row's natural result
 # would be an Any-bounded carrier (a field read off a caught Error),
@@ -24,7 +24,7 @@ raise {}	ERROR:raise_error	an empty spec map has neither code nor message
 raise {code: aa/q}	ERROR:raise_error	message is required in the map form
 raise {code: 42, message: "m"}	ERROR:raise_error	a numeric code is rejected — atom or string only
 def m "boom" raise m	ERROR:user_error	a bound message binding reads through the String slot
-def c io_error/q def msg "disk" raise c msg	ERROR:aql/c]	GOTCHA: the code slot is /q — a bound word raises code `c`, NOT its atom value
+def c io_error/q def msg "disk" raise c msg	ERROR:boru/c]	GOTCHA: the code slot is /q — a bound word raises code `c`, NOT its atom value
 def f fn [[x:Integer] [Integer] [raise too_big "big"]] do [f 1] error [dot code] eq too_big/q	true	a raise inside a fn body propagates to the caller's do boundary
 do [[1 2 3] each [drop raise aa "boom"]] error [dot code] eq aa/q	true	a raise inside an each body aborts the iteration to the boundary
 [raise "x"]	ERROR:user_error	a deferred list auto-evaluates at the drain — its raise still aborts
@@ -112,15 +112,15 @@ none error [drop 0] typeof	None	None is not an Error
 do [5] error [drop 1] error [drop 2] eq 5	true	chained error words are all no-ops on a success value
 #
 # ─────────────────────────────────────────────────────────────────────
-# §5  aql:test assertions — pass, fail, and sequencing
-import "aql:test" Assert.equal 1 1 end 7	7	a passing Assert.equal returns nothing and execution continues
-import "aql:test" Assert.not-equal 1 2 end 7	7	a passing Assert.not-equal is silent
-import "aql:test" Assert.ok 5 end 7	7	any truthy value passes Assert.ok
-import "aql:test" Assert.match "ell" "hello" end 7	7	a contained substring passes Assert.match
-import "aql:test" Assert.throws [1 0 div] end 7	7	a raising body passes Assert.throws
-import "aql:test" Assert.not-equal 3 3	ERROR:assertion_failure	equal sides fail not-equal
-import "aql:test" Assert.ok none	ERROR:assertion_failure	none is falsy for Assert.ok
-import "aql:test" Assert.match "zz" "hello"	ERROR:assertion_failure	a missing substring fails Assert.match
-import "aql:test" Assert.throws [1]	ERROR:assertion_failure	a non-raising body fails Assert.throws
-import "aql:test" Test.test "f" [Assert.equal 1 2] end Test.fail-count	1	Test.test catches an assertion_failure and records it — later cases still run
-import "aql:test" Test.test "f" [Assert.ok none] end Test.summary	{total:1 passed:0 failed:1}	…a falsy Assert.ok records the same way
+# §5  boru:test assertions — pass, fail, and sequencing
+import "boru:test" Assert.equal 1 1 end 7	7	a passing Assert.equal returns nothing and execution continues
+import "boru:test" Assert.not-equal 1 2 end 7	7	a passing Assert.not-equal is silent
+import "boru:test" Assert.ok 5 end 7	7	any truthy value passes Assert.ok
+import "boru:test" Assert.match "ell" "hello" end 7	7	a contained substring passes Assert.match
+import "boru:test" Assert.throws [1 0 div] end 7	7	a raising body passes Assert.throws
+import "boru:test" Assert.not-equal 3 3	ERROR:assertion_failure	equal sides fail not-equal
+import "boru:test" Assert.ok none	ERROR:assertion_failure	none is falsy for Assert.ok
+import "boru:test" Assert.match "zz" "hello"	ERROR:assertion_failure	a missing substring fails Assert.match
+import "boru:test" Assert.throws [1]	ERROR:assertion_failure	a non-raising body fails Assert.throws
+import "boru:test" Test.test "f" [Assert.equal 1 2] end Test.fail-count	1	Test.test catches an assertion_failure and records it — later cases still run
+import "boru:test" Test.test "f" [Assert.ok none] end Test.summary	{total:1 passed:0 failed:1}	…a falsy Assert.ok records the same way

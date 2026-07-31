@@ -32,8 +32,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // SpecClock freezes time to the corpus instant (langspec's specClock) so
@@ -44,9 +44,9 @@ var SpecClock = capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, tim
 // classifier arms that a healthy build cannot reach (a genuine divergence, a
 // FALLBACK island, instance-construction failure).
 var (
-	langNew      = func() (*lang.AQL, error) { return lang.New() }
-	compileCheck = (*lang.AQL).CompileCheck
-	runCompiled  = (*lang.AQL).RunCompiled
+	langNew      = func() (*lang.Boru, error) { return lang.New() }
+	compileCheck = (*lang.Boru).CompileCheck
+	runCompiled  = (*lang.Boru).RunCompiled
 	disasm       = func(p *lang.Program) string { return p.Disassemble() }
 )
 
@@ -97,7 +97,7 @@ func LoadSeeds(dir string) ([]Seed, error) {
 
 // Sample returns a deterministic n-seed sample ordered by a stable hash
 // priority. Samples NEST: Sample(s, n) is a prefix of Sample(s, m) for
-// n < m, so cranking breadth (AQL_VARY_SEEDS) strictly ADDS variants and a
+// n < m, so cranking breadth (BORU_VARY_SEEDS) strictly ADDS variants and a
 // bucket observed at the default breadth stays observed at any larger one —
 // the property the CI ledger's stale arm relies on. n <= 0 or n >= len
 // returns all seeds (in priority order).

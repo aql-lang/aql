@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // --- Predicate evaluation: sandbox + CheckMode handling ---
@@ -13,7 +13,7 @@ import (
 // evaluation (used by both `def x:Foo v` and `v is Foo`). Two
 // behaviours pinned here:
 //
-//   - **CheckMode short-circuit.** Under `aql check`, predicate
+//   - **CheckMode short-circuit.** Under `boru check`, predicate
 //     bodies cannot usefully run against carrier-typed inputs —
 //     `(x is String)` always says false on a carrier, so every
 //     typed binding would error during static analysis. The helper
@@ -33,7 +33,7 @@ func TestPredicateSandbox_TypeMutationIsContained(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	src := `def Sneaky fn [x:Any Any [
   def Leaked Integer
   x
@@ -60,7 +60,7 @@ func TestPredicateSandbox_IsAlsoSandboxed(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	_, err = a.Run(`def Sneaky fn [x:Any Any [
   def LeakedB Integer
   x
@@ -78,14 +78,14 @@ def n:LeakedB 1`)
 // CheckMode short-circuit: a typed binding `def n:Bbd v` that would
 // fail at runtime against a carrier (because `(v is String)`
 // returns false on the carrier payload) should NOT error during
-// `aql check`. The check accepts the binding so analysis flows past
+// `boru check`. The check accepts the binding so analysis flows past
 // the typed slot; runtime catches actual violations later.
 func TestPredicateCheckMode_TypedBindingAccepted(t *testing.T) {
 	a, err := lang.New()
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	res, err := a.Check(`def Bbd fn [x:Any Any [if (x is String) [x] [None]]]
 def s:Bbd "hello"
 s`)
@@ -111,7 +111,7 @@ func TestDepScalarCheckMode_CarrierAccepted(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	res, err := a.Check(`def G10 (Integer gt 10)
 def x:G10 15`)
 	if err != nil {
@@ -131,7 +131,7 @@ func TestDepScalarCheckMode_CrossBaseStillRejects(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	_, err = a.Check(`def G10 (Integer gt 10)
 def s:G10 "hi"`)
 	// Check mode collects diagnostics but may not return a hard
@@ -152,7 +152,7 @@ func TestPredicateRuntime_StillErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	_, err = a.Run(`def Bbd fn [x:Any Any [if (x is String) [x] [None]]]
 def n:Bbd 99`)
 	if err == nil {

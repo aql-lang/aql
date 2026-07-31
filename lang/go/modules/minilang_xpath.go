@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/antchfx/xpath"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // The `xp` mini-language: query a Node/Xml document with XPath
@@ -25,17 +25,17 @@ import (
 // carrying the scalar. An integral number coerces to Integer (`count` → 2),
 // otherwise Float (`sum` → 5.5).
 //
-// The immutable AQL XML tree carries no parent links and no document root,
+// The immutable boru XML tree carries no parent links and no document root,
 // which the antchfx evaluator's cursor model needs, so the handler first
 // mirrors the subtree into an xpNode tree (parent/sibling links + a synthetic
 // root) and walks it through the xpNav NodeNavigator. Each element node keeps
-// a back-reference to its source AQL value so a match converts straight back
+// a back-reference to its source boru value so a match converts straight back
 // without re-rendering.
 //
 // The mirror is the deliberate adapter, not a stopgap. antchfx clones the
 // navigator at essentially every axis step / predicate (Copy()), so the mirror
 // trades one O(n) build for O(1) Copy and O(1) parent/sibling hops; a
-// path-stack navigator over the AQL values in place would make every Copy
+// path-stack navigator over the boru values in place would make every Copy
 // O(depth) (re-deriving siblings from the parent's Cren), i.e. O(nodes·depth)
 // overall — slower, not lazier. Adding parent pointers to the kernel
 // XmlElementPayload is the wrong direction: Node/Xml is an immutable by-value
@@ -69,7 +69,7 @@ func miniCompiledXPath(src string) (*xpath.Expr, error) {
 	return e, nil
 }
 
-// xpNode is a navigable mirror of one AQL Node/Xml node. Only element and text
+// xpNode is a navigable mirror of one boru Node/Xml node. Only element and text
 // nodes are tree nodes; attributes hang off their element as xpAttr (the
 // navigator visits them via MoveToNextAttribute, matching the XPath model).
 type xpNode struct {
@@ -81,7 +81,7 @@ type xpNode struct {
 	parent   *xpNode
 	prev     *xpNode      // previous sibling, nil for the first
 	next     *xpNode      // next sibling, nil for the last
-	aql      native.Value // the source AQL Xml value (ElementNode only)
+	boru     native.Value // the source boru Xml value (ElementNode only)
 }
 
 type xpAttr struct {
@@ -99,10 +99,10 @@ func buildXpTree(doc native.Value) *xpNode {
 	return root
 }
 
-// buildXpElement mirrors one AQL Xml element (and its subtree) into an xpNode.
+// buildXpElement mirrors one boru Xml element (and its subtree) into an xpNode.
 func buildXpElement(v native.Value) *xpNode {
 	tag, attr, cren, _ := native.XmlParts(v)
-	n := &xpNode{typ: xpath.ElementNode, name: tag, aql: v}
+	n := &xpNode{typ: xpath.ElementNode, name: tag, boru: v}
 	if attr != nil {
 		for _, k := range attr.Keys() {
 			av, _ := attr.Get(k)
@@ -269,24 +269,24 @@ func (x *xpNav) MoveTo(other xpath.NodeNavigator) bool {
 func miniXPathHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	src, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("mini_error", "xp: src: "+err.Error(), "lang_xp")
+		return nil, r.BoruError("mini_error", "xp: src: "+err.Error(), "lang_xp")
 	}
 	doc := args[2]
 	if !native.IsXmlValue(doc) {
-		return nil, r.AqlErrorHint("mini_error",
+		return nil, r.BoruErrorHint("mini_error",
 			"xp: expected an Xml element, got "+doc.Parent.String(), "lang_xp",
 			"the xp document must be a Node/Xml value (an <tag>…</tag> literal)")
 	}
 	expr, perr := miniCompiledXPath(src)
 	if perr != nil {
-		return nil, r.AqlErrorHint("mini_parse_error", "xp: "+perr.Error(), "lang_xp",
+		return nil, r.BoruErrorHint("mini_parse_error", "xp: "+perr.Error(), "lang_xp",
 			"write an XPath like //book/title, //@id or count(//item)")
 	}
 	result := expr.Evaluate(newXpNav(buildXpTree(doc)))
 	return []native.Value{native.NewList(xpResultToList(result))}, nil
 }
 
-// xpResultToList projects an antchfx XPath result into AQL values. A node-set
+// xpResultToList projects an antchfx XPath result into boru values. A node-set
 // yields one value per matched node; a scalar (boolean/number/string) yields a
 // single-element list.
 func xpResultToList(result any) []native.Value {
@@ -308,12 +308,12 @@ func xpResultToList(result any) []native.Value {
 	}
 }
 
-// xpNodeToValue converts one matched node back to an AQL value: an element node
+// xpNodeToValue converts one matched node back to a boru value: an element node
 // to its source Node/Xml value (so it composes with the xml-* words), an
 // attribute or text node to its String value.
 func xpNodeToValue(nav xpath.NodeNavigator) native.Value {
-	if n, ok := nav.(*xpNav); ok && n.attr == -1 && native.IsXmlValue(n.cur.aql) {
-		return n.cur.aql
+	if n, ok := nav.(*xpNav); ok && n.attr == -1 && native.IsXmlValue(n.cur.boru) {
+		return n.cur.boru
 	}
 	return native.NewString(nav.Value())
 }

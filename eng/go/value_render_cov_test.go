@@ -244,15 +244,15 @@ func TestErrorValueAccessors(t *testing.T) {
 	if info.Message != "plain failure" || info.Code != "" {
 		t.Errorf("plain error info = %+v", info)
 	}
-	// AqlError: code preserved for dispatch.
-	ae := MakeAqlError("type_error", "typed failure", "w", "", "")
+	// BoruError: code preserved for dispatch.
+	ae := MakeBoruError("type_error", "typed failure", "w", "", "")
 	av := NewError(ae)
 	ainfo, _ := AsError(av)
 	if ainfo.Code != "type_error" {
-		t.Errorf("AqlError code lost: %+v", ainfo)
+		t.Errorf("BoruError code lost: %+v", ainfo)
 	}
 	if !strings.Contains(ainfo.Message, "typed failure") {
-		t.Errorf("AqlError message lost: %+v", ainfo)
+		t.Errorf("BoruError message lost: %+v", ainfo)
 	}
 	// Negative.
 	if _, err := AsError(NewInteger(1)); err == nil {

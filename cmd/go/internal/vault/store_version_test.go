@@ -13,7 +13,7 @@ import (
 func writeStoreFile(t *testing.T, data []byte) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".aql"), 0700); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".boru"), 0700); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(StorePath(dir), data, 0600); err != nil {
@@ -122,7 +122,7 @@ func TestLoadMigratesV3Golden(t *testing.T) {
 	}
 }
 
-// TestLoadRejectsFutureVersion ensures a store written by a newer aql
+// TestLoadRejectsFutureVersion ensures a store written by a newer boru
 // is refused, not parsed leniently (which would silently strip unknown
 // fields on the next save).
 func TestLoadRejectsFutureVersion(t *testing.T) {
@@ -133,8 +133,8 @@ func TestLoadRejectsFutureVersion(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error loading a future-version store")
 	}
-	if !strings.Contains(err.Error(), "upgrade aql") {
-		t.Errorf("error should advise upgrading aql, got %q", err.Error())
+	if !strings.Contains(err.Error(), "upgrade boru") {
+		t.Errorf("error should advise upgrading boru, got %q", err.Error())
 	}
 }
 
@@ -150,8 +150,8 @@ func TestLoadRejectsFutureVersionViaStatus(t *testing.T) {
 	if code == 0 {
 		t.Fatal("expected non-zero exit for future-version store")
 	}
-	if !strings.Contains(errOut, "upgrade aql") {
-		t.Errorf("status error should advise upgrading aql, got %q", errOut)
+	if !strings.Contains(errOut, "upgrade boru") {
+		t.Errorf("status error should advise upgrading boru, got %q", errOut)
 	}
 }
 
@@ -216,7 +216,7 @@ func TestPolicyRejectsFutureVersion(t *testing.T) {
 	if code == 0 {
 		t.Fatal("expected non-zero exit for future-version policy")
 	}
-	if !strings.Contains(errOut, "upgrade aql") {
-		t.Errorf("policy error should advise upgrading aql, got %q", errOut)
+	if !strings.Contains(errOut, "upgrade boru") {
+		t.Errorf("policy error should advise upgrading boru, got %q", errOut)
 	}
 }

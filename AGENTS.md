@@ -1,8 +1,8 @@
-# AGENTS.md — agent guide to the AQL repository
+# AGENTS.md — agent guide to the boru repository
 
-**AQL** is a concatenative, strongly-typed query language implemented in
+**boru** is a concatenative, strongly-typed query language implemented in
 Go: programs are sequences of *words* that transform a *stack*. The
-reference implementation ships as a single `aql` binary (REPL, type
+reference implementation ships as a single `boru` binary (REPL, type
 checker, formatter, LSP, registry client, vault, supervisor). New to the
 repo? Skim [README.md](README.md) first.
 
@@ -14,71 +14,71 @@ linked source — it is authoritative, this page is just the index.
 > ships a machine-readable map of itself: modules, documents, tools,
 > and core concepts, with every relation backed by a quoted passage
 > from the docs — [`kg/out/graph.json`](kg/out/graph.json), built by
-> the AQL pipeline in [`kg/`](kg/README.md). Read it to orient fast;
-> query it with `kg/queries.aql`. **If your PR changes the repository's
+> the boru pipeline in [`kg/`](kg/README.md). Read it to orient fast;
+> query it with `kg/queries.boru`. **If your PR changes the repository's
 > structure, tooling, or documentation set, update
-> [`kg/project/aql-project.jsonic`](kg/project/aql-project.jsonic) and
+> [`kg/project/boru-project.jsonic`](kg/project/boru-project.jsonic) and
 > rebuild with `make -C kg graph` so the committed graph stays
 > current** (the build is deterministic — unchanged input, unchanged
 > bytes).
 
 
-## First: let the tool document itself (`aql describe` / `aql help`)
+## First: let the tool document itself (`boru describe` / `boru help`)
 
 Before grepping source or guessing a word's signature, **ask the binary**.
-The `aql` CLI documents both the language and itself, and that output is
+The `boru` CLI documents both the language and itself, and that output is
 generated from the *live engine* — signatures, precedence, type lattice,
 and worked examples are the real ones the runtime uses, so they cannot
 drift from the code the way prose can. For "what does this word do / what
-are its signatures / which module is it in", `aql describe` is the source
+are its signatures / which module is it in", `boru describe` is the source
 of truth; reach for it first.
 
 Run it without building anything:
 
 ```bash
-cd cmd/go && go run ./aql <args>      # e.g. go run ./aql describe add
+cd cmd/go && go run ./boru <args>      # e.g. go run ./boru describe add
 ```
 
 or build the binary once and call it directly:
 
 ```bash
-cd cmd/go && make build               # → cmd/go/bin/aql
-./bin/aql describe add
+cd cmd/go && make build               # → cmd/go/bin/boru
+./bin/boru describe add
 ```
 
 There are **two** discovery systems.
 
-### `aql describe` — the *language* (words, categories, modules)
+### `boru describe` — the *language* (words, categories, modules)
 
 | Command | Shows |
 |---------|-------|
-| `aql describe` | A categorised guide: every built-in word grouped by category, then the loadable modules. Start here. |
-| `aql describe <word>` | One word in full: summary, precedence, all signatures, worked examples, notes. e.g. `aql describe add` |
-| `aql describe <category>` | The words in one category. e.g. `aql describe math` (categories: math, compare, boolean, binary, string, stack, storage, control, type, query, io, help) |
-| `aql describe aql:<module>` | A module's summary and the words it exports. e.g. `aql describe aql:type-util` |
-| `aql describe aql:<module>:<word>` | One exported word of a module, with provenance. e.g. `aql describe aql:type-util:tpartial` |
+| `boru describe` | A categorised guide: every built-in word grouped by category, then the loadable modules. Start here. |
+| `boru describe <word>` | One word in full: summary, precedence, all signatures, worked examples, notes. e.g. `boru describe add` |
+| `boru describe <category>` | The words in one category. e.g. `boru describe math` (categories: math, compare, boolean, binary, string, stack, storage, control, type, query, io, help) |
+| `boru describe boru:<module>` | A module's summary and the words it exports. e.g. `boru describe boru:type-util` |
+| `boru describe boru:<module>:<word>` | One exported word of a module, with provenance. e.g. `boru describe boru:type-util:tpartial` |
 
 If the name isn't a known word/category/module, `describe` tries to **load
-it as a module** (installed package or `./file.aql`) and document that. So
-`aql describe ./mylib.aql` works too.
+it as a module** (installed package or `./file.boru`) and document that. So
+`boru describe ./mylib.boru` works too.
 
-### `aql help` — the *CLI* (subcommands and their flags)
+### `boru help` — the *CLI* (subcommands and their flags)
 
 | Command | Shows |
 |---------|-------|
-| `aql help` | An introduction plus every subcommand (run, do, check, fmt, vault, lsp, serve, …). |
-| `aql help <subcommand>` | One subcommand's summary; then run `aql <subcommand> -h` for its full flag set. e.g. `aql help vault` |
+| `boru help` | An introduction plus every subcommand (run, do, check, fmt, vault, lsp, serve, …). |
+| `boru help <subcommand>` | One subcommand's summary; then run `boru <subcommand> -h` for its full flag set. e.g. `boru help vault` |
 
 Rule of thumb: **`help` = the tool, `describe` = the language.**
 
 ### In the REPL
 
-`aql repl` (or just `aql` with no args). The same two systems are at the
+`boru repl` (or just `boru` with no args). The same two systems are at the
 prompt, plus REPL meta-commands:
 
-- Words: `describe` and `help` are ordinary AQL words. An argument that
+- Words: `describe` and `help` are ordinary boru words. An argument that
   contains `:` or `.` (a module ref or a dotted export) is source syntax,
-  so quote it: `describe "aql:type-util"`, `describe "aql:type-util:tpartial"`.
+  so quote it: `describe "boru:type-util"`, `describe "boru:type-util:tpartial"`.
 - Meta-commands (lines starting with `/`): `/describe [name]` (takes its
   argument raw — no quoting), `/help` (overview + the meta-command list),
   `/stack [n]`.
@@ -90,11 +90,11 @@ Full REPL reference: [CLI.md → REPL meta-commands](CLI.md#repl-meta-commands).
 
 | If you want to … | Read |
 |------------------|------|
-| Learn AQL step by step | [TUTORIAL.md](TUTORIAL.md) |
+| Learn boru step by step | [TUTORIAL.md](TUTORIAL.md) |
 | A recipe for a specific task | [HOWTO.md](HOWTO.md) |
-| The precise behaviour of a syntax form, type, or word | [REFERENCE.md](REFERENCE.md) — or `aql describe <word>` for one word |
-| Understand *why* AQL is designed the way it is | [EXPLANATION.md](EXPLANATION.md) |
-| Drive the `aql` binary (every subcommand, REPL) | [CLI.md](CLI.md) |
+| The precise behaviour of a syntax form, type, or word | [REFERENCE.md](REFERENCE.md) — or `boru describe <word>` for one word |
+| Understand *why* boru is designed the way it is | [EXPLANATION.md](EXPLANATION.md) |
+| Drive the `boru` binary (every subcommand, REPL) | [CLI.md](CLI.md) |
 | The key architectural decisions and their rationale | [ADR.md](ADR.md) |
 | The recorded non-uniformities of the language and their verdicts | [NUR.md](NUR.md) |
 | The formal semantics | [FORMAL-SPEC.md](FORMAL-SPEC.md) |
@@ -115,7 +115,7 @@ Faster, scoped iteration:
 
 ```bash
 cd lang/go && go test ./native/ -run TestSomething -v
-cd cmd/go  && make build        # builds cmd/go/bin/aql
+cd cmd/go  && make build        # builds cmd/go/bin/boru
 cd wpg     && make wasm          # builds the docs/ wasm playground
 ```
 
@@ -150,13 +150,13 @@ A few rules from those guides that bite hardest when missed:
 
 | Path | What it is |
 |------|------------|
-| `cmd/go/` | The `aql` CLI / REPL (and the `help`/`describe` plumbing). |
+| `cmd/go/` | The `boru` CLI / REPL (and the `help`/`describe` plumbing). |
 | `lang/go/` | The language layer: public `lang` API + the `native` word library + loadable `modules`. |
 | `eng/go/` | Engine kernel, jsonic parser, kernel spec runner. |
 | `lang/spec/` | The executable language spec (TSV files). |
 | `calc/go/` | A small calculator built on `eng` (learning example). |
 | `wpg/` | The wasm web playground. |
 | `test/` | Shared TSV spec-runner scaffolding and HTTP fixtures. |
-| `kg/` | The project knowledge graph: an evidence-backed AQL pipeline and its generated bundle. |
-| `utils/` | A coreutils subset written in AQL — real programs that prove the CLI story (argv, exit codes, streams, baked permissions). |
+| `kg/` | The project knowledge graph: an evidence-backed boru pipeline and its generated bundle. |
+| `utils/` | A coreutils subset written in boru — real programs that prove the CLI story (argv, exit codes, streams, baked permissions). |
 | `design/` | Internal design notes and proposals (historical record). |

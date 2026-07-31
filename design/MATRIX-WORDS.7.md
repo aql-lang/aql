@@ -1,8 +1,8 @@
-# Matrix Operations Word Design for AQL
+# Matrix Operations Word Design for boru
 
 ## Context
 
-AQL has comprehensive scalar math builtins (add, sub, mul, div, pow, sqrt, trig, etc.) and planned dataframe words for tabular data. This design introduces matrix operations — a distinct domain covering linear algebra, signal processing, ML feature engineering, and scientific computing. While AQL is a scripting/query language, a pragmatic subset of matrix operations enables useful workflows: computing correlations, transforming coordinates, solving linear systems, and preparing data for ML pipelines.
+boru has comprehensive scalar math builtins (add, sub, mul, div, pow, sqrt, trig, etc.) and planned dataframe words for tabular data. This design introduces matrix operations — a distinct domain covering linear algebra, signal processing, ML feature engineering, and scientific computing. While boru is a scripting/query language, a pragmatic subset of matrix operations enables useful workflows: computing correlations, transforming coordinates, solving linear systems, and preparing data for ML pipelines.
 
 ---
 
@@ -961,7 +961,7 @@ Example:
 ## Composable Workflow Examples
 
 ### Basic matrix creation and multiplication
-```aql
+```boru
 set a ([[1 2] [3 4]] matrix)
 set b (mat-eye 2)
 a b mul
@@ -969,7 +969,7 @@ a b mul
 ```
 
 ### Solving a linear system (2x + 3y = 8, x + y = 3)
-```aql
+```boru
 set coeffs ([[2 3] [1 1]] matrix)
 set rhs ([[8] [3]] matrix)
 coeffs rhs mat-solve
@@ -977,14 +977,14 @@ coeffs rhs mat-solve
 ```
 
 ### Computing column means from a table
-```aql
+```boru
 set data (people mat-from-table [age sales])
 data mat-col-mean
 # list of means for each column
 ```
 
 ### PCA-style workflow (center, covariance, eigendecompose)
-```aql
+```boru
 set X (data matrix)
 set means (X mat-col-mean)
 # center the data: subtract column means
@@ -999,7 +999,7 @@ cov mat-eigen
 ```
 
 ### Element-wise math (existing words, no mat-apply needed)
-```aql
+```boru
 set m ([[1 4 9] [16 25 36]] matrix)
 m sqrt                          # [[1 2 3] [4 5 6]]
 m log                           # element-wise natural log
@@ -1009,14 +1009,14 @@ m 0 max                         # clamp negatives to zero (ReLU)
 ```
 
 ### Element-wise function application (for arbitrary quoted code)
-```aql
+```boru
 set m ([[1 4 9] [16 25 36]] matrix)
 m mat-apply [sqrt]
 # [[1 2 3] [4 5 6]]
 ```
 
 ### Composing with dataframe words
-```aql
+```boru
 # Correlation matrix from table columns
 set data (sales-data mat-from-table [price volume returns])
 set means (data mat-col-mean)

@@ -26,7 +26,7 @@ func TestS7n_RunSIGINTCleanShutdown(t *testing.T) {
 	}()
 
 	deadline := time.Now().Add(5 * time.Second)
-	for !strings.Contains(stdout.String(), "aql registry serving") {
+	for !strings.Contains(stdout.String(), "boru registry serving") {
 		if time.Now().After(deadline) {
 			t.Fatalf("serving banner never appeared; stdout=%q stderr=%q", stdout.String(), stderr.String())
 		}

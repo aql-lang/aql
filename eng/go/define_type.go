@@ -2,16 +2,16 @@ package eng
 
 import "strings"
 
-// Host-Go type definition that routes through the SAME installer the AQL
+// Host-Go type definition that routes through the SAME installer the boru
 // `def Name body` word uses (InstallType — see the def handler in
 // lang/go/native/native_definition.go, which calls eng.InstallType). A
 // host gets every type kind the language supports — alias, nominal
 // newtype (refine), value/type union (tor), negation (tnot), refined
 // scalar, record, object, schema — with the full behaviour wiring
-// (unifier, canon, dispatch) the AQL path installs, and the minted *Type
+// (unifier, canon, dispatch) the boru path installs, and the minted *Type
 // back for use in native signatures. This is the construction-axis
 // counterpart to MintMemberType (which covers the one case InstallType
-// cannot: a membership rule expressed as a Go func rather than an AQL
+// cannot: a membership rule expressed as a Go func rather than a boru
 // body).
 
 // DefineType installs `name` with `body` exactly as the `def` word does,
@@ -33,7 +33,7 @@ func (r *Registry) DefineType(name string, body Value) (*Type, error) {
 	}
 	t := r.LookupTypeName(name)
 	if t == nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
-		return nil, &AqlError{
+		return nil, &BoruError{
 			Code:   "type_error",
 			Detail: "type " + name + ": installed but did not resolve",
 		}
@@ -45,21 +45,21 @@ func (r *Registry) DefineType(name string, body Value) (*Type, error) {
 // host-Go equivalent of `def Name (v0 tor v1 tor …)`. The alternatives
 // may be concrete values (a closed enumeration, e.g. atoms) or type
 // literals (a union, e.g. `Integer tor String`); membership is the same
-// disjunct rule the AQL `tor` path installs. Returns the minted *Type.
+// disjunct rule the boru `tor` path installs. Returns the minted *Type.
 func (r *Registry) DefineEnum(name string, alternatives ...Value) (*Type, error) {
 	return r.DefineType(name, NewDisjunct(alternatives))
 }
 
 // DefineMemberType installs `name` as the type whose inhabitants are the
 // concrete values satisfying member — a membership rule expressed as a Go
-// func, the one case DefineType's AQL-body path cannot cover. It mints
+// func, the one case DefineType's boru-body path cannot cover. It mints
 // the node with the full MemberBehavior wiring AND binds the name (so it
 // resolves in source and exports like a `def`-installed type), then
 // returns the *Type.
 //
 // (MintMemberType is the lower primitive — mint only, no name binding —
 // for module-scoped types reached solely through an export, like
-// aql:io's StreamKind. DefineMemberType is the def-style sibling that
+// boru:io's StreamKind. DefineMemberType is the def-style sibling that
 // also binds the name.)
 func (r *Registry) DefineMemberType(name string, parent *Type, member func(v Value) bool) (*Type, error) {
 	// Same name validation InstallType applies — capitalisation, no part

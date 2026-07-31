@@ -9,7 +9,7 @@ the executable spec is [`lang/spec/bignum.tsv`](../lang/spec/bignum.tsv).
 
 ## Motivation
 
-`Integer` (int64, overflows → `[aql/integer_overflow]`) and `Float`
+`Integer` (int64, overflows → `[boru/integer_overflow]`) and `Float`
 (IEEE-754 binary64) leave two gaps a query language — where money and
 large aggregates live — cannot ignore:
 
@@ -41,7 +41,7 @@ with the `0d` prefix.
    promotes to the widest operand (`1 add 0d2` → BigInteger,
    `0d2 add 0d0.5` → BigDecimal, `1 add 0d0.5` → BigDecimal). The legacy
    `Integer ⊕ Float → Float` rule is **unchanged**. `BigInteger ⊕ Float`
-   and `BigDecimal ⊕ Float` are an **`[aql/type_error]`** — the exact
+   and `BigDecimal ⊕ Float` are an **`[boru/type_error]`** — the exact
    types never silently degrade to a binary Float (matches Python
    `Decimal`+`float`, C#).
 

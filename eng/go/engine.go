@@ -19,10 +19,10 @@ import (
 // dispatch): group it as `(context) eq (context)`. The SOLE exemption is
 // structural, not arity-based: a dot-access chain (`m.a`, `MathUtil.now`)
 // is implicitly-parenthesized navigation, so its `dot` dispatch is grouped
-// and the outer word sees one value. AQL_NO_STRICT_BARRIER=1 restores the
+// and the outer word sees one value. BORU_NO_STRICT_BARRIER=1 restores the
 // legacy wait-through behaviour (transitional; slated for removal). See
 // design/STRICT-FORWARD-BARRIER.0.md.
-var strictForwardBarrier = os.Getenv("AQL_NO_STRICT_BARRIER") == ""
+var strictForwardBarrier = os.Getenv("BORU_NO_STRICT_BARRIER") == ""
 
 // stackHeadroom is the extra capacity allocated beyond current need,
 // so that most insert/splice operations avoid heap allocation.
@@ -33,7 +33,7 @@ const stackHeadroom = 8
 // describing what happened on the previous step.
 type TraceCallback func(step int, pointer int, stack []Value, note string)
 
-// Engine is the AQL stack machine.
+// Engine is the boru stack machine.
 //
 // Execution model: `tape` is a rewriting tape, not a LIFO stack. The
 // input program is loaded onto it whole; `pointer` then walks forward
@@ -58,7 +58,7 @@ type Engine struct {
 	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
 	// debugLabel names the CALL this engine's run realises, when the
-	// dispatch knows it (CallAQLNamed: a module fn body run in its own
+	// dispatch knows it (CallBoruNamed: a module fn body run in its own
 	// sub-engine, whose Defs-based frame leaves no tape marks). A debug
 	// host reads it back through EngineState.Label so a backtrace can
 	// name the module fn. Empty for every other engine.
@@ -179,7 +179,7 @@ type RecorderSkipper interface {
 // Recorder receives events as the Engine executes a program. Used by
 // the eng/go/stackform package to build a canonical strict-stack
 // representation of a program (see design/PBT-PLAN.10.md and
-// design/aql-bytecode-report.0.md). Nil by default; install via
+// design/boru-bytecode-report.0.md). Nil by default; install via
 // Engine.SetRecorder.
 //
 // Recorder is called at the two semantic actions that define a
@@ -249,7 +249,7 @@ func (e *Engine) SetTrace(t TraceCallback) { e.trace = t }
 // the CLI via `--options steps:N`. Unset (zero) keeps the defaults below.
 const (
 	DefaultStepLimit    = 10_000_000 // top-level engine cap
-	DefaultSubStepLimit = 10_000_000 // sub-engine cap (autoEvalMap, CallAQL, etc.)
+	DefaultSubStepLimit = 10_000_000 // sub-engine cap (autoEvalMap, CallBoru, etc.)
 )
 
 // stepLimitFor resolves the effective step budget: the registry's
@@ -286,7 +286,7 @@ func NewTop(registry *Registry) *Engine {
 }
 
 // SetSource sets the original source text for error reporting.
-// When set, AqlErrors include source extracts showing the error location.
+// When set, BoruErrors include source extracts showing the error location.
 func (e *Engine) SetSource(src string) {
 	e.source = src
 }
@@ -294,7 +294,7 @@ func (e *Engine) SetSource(src string) {
 // faultReturn fires the trace one final time — with a "fault: <err>"
 // note and step -1 — before Run surfaces err, so a debug host can pause
 // AT the raise with the tape and pointer still live (pause-before-
-// unwind, design/AQL-DEBUGGER.0.md §6.1). Every Run-loop error return
+// unwind, design/BORU-DEBUGGER.0.md §6.1). Every Run-loop error return
 // routes through it; a nil trace makes it a pass-through, so the
 // non-debug error path is unchanged.
 func (e *Engine) faultReturn(err error) error {
@@ -676,7 +676,7 @@ func fnCourtesyDispatches(r *Registry, name string, fn *FnDefInfo) bool {
 // sigError builds the full diagnostic for a signature mismatch: the
 // shared name-only Detail, the received-arguments note, per-candidate
 // verdicts, and the fix suggestions.
-func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
+func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *BoruError {
 	// A word starved by a VOID argument group (a parenthesised call in
 	// its argument range that produced no value, recorded by
 	// stepCloseParen) reports the causing expression, not the generic
@@ -701,7 +701,7 @@ func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 		reorder = e.reorderHint(name, fn)
 	}
 	ae := e.noMatchError(name, fn, written, pos, reorder)
-	return e.maybeAddFnShapeHint(ae).(*AqlError)
+	return e.maybeAddFnShapeHint(ae).(*BoruError)
 }
 
 // noMatchError assembles the unmatched-dispatch diagnostic. It is a
@@ -709,7 +709,7 @@ func (e *Engine) sigError(name string, fn *FnDefInfo, pos SrcPos) *AqlError {
 // (diag_msg.go) — the SAME builder the compiled VM's runtime guards
 // call, so an interpreter and a compiled no-signature error are
 // byte-identical over the same failing tuple.
-func (e *Engine) noMatchError(name string, fn *FnDefInfo, written []Value, pos SrcPos, reorder string) *AqlError {
+func (e *Engine) noMatchError(name string, fn *FnDefInfo, written []Value, pos SrcPos, reorder string) *BoruError {
 	return noMatchDiag(e.effectiveSource(), name, fn, written, pos, reorder)
 }
 
@@ -792,11 +792,11 @@ func (e *Engine) pendingForwardFunc() string {
 	return ""
 }
 
-// insufficientArgsError builds a detailed AqlError for forward argument
+// insufficientArgsError builds a detailed BoruError for forward argument
 // collection failure (not enough arguments after the word).
-func (e *Engine) insufficientArgsError(name string, expected int, pos SrcPos) *AqlError {
+func (e *Engine) insufficientArgsError(name string, expected int, pos SrcPos) *BoruError {
 	src := e.effectiveSource()
-	ae := makeAqlErrorAt("signature_error", insufficientArgsDetail(name, expected), name, src, "", pos)
+	ae := makeBoruErrorAt("signature_error", insufficientArgsDetail(name, expected), name, src, "", pos)
 	ae.Notes = append(ae.Notes, "stack: "+describeStackTypes(e.tape, e.pointer))
 	return ae
 }
@@ -831,8 +831,8 @@ func (e *Engine) undefinedWordHint(name string) string {
 // suggestion for the two known blame-shift shapes (undefinedWordHint),
 // the did-you-mean near-miss over everything nameable in this registry,
 // and the describe pointer when the nearest miss is a builtin word.
-func (e *Engine) undefinedWordError(name string, pos SrcPos) *AqlError {
-	ae := &AqlError{
+func (e *Engine) undefinedWordError(name string, pos SrcPos) *BoruError {
+	ae := &BoruError{
 		Code:       "undefined_word",
 		Detail:     undefinedWordDetail(name),
 		Src:        name,
@@ -886,7 +886,7 @@ func (e *Engine) didYouMeanSuggestions(name string) []DiagSuggestion {
 // nearest collected atom below the pointer), since a void value
 // expression is its classic blame-shift shape (VOXGIG B3:
 // `def r (returns-nothing 1)`).
-func (e *Engine) voidArgErrorFor(name string, pos SrcPos) *AqlError {
+func (e *Engine) voidArgErrorFor(name string, pos SrcPos) *BoruError {
 	matched := false
 	for _, vg := range e.voidGroups {
 		if vg == name {
@@ -909,13 +909,13 @@ func (e *Engine) voidArgErrorFor(name string, pos SrcPos) *AqlError {
 				break
 			}
 		}
-		return makeAqlErrorAt("def_error",
+		return makeBoruErrorAt("def_error",
 			"def: expression produced no value to bind to '"+n+"'",
 			"def", src,
 			"hint: the called word returns nothing — call it without def, or give it a return value",
 			pos)
 	}
-	return makeAqlErrorAt("no_value_error",
+	return makeBoruErrorAt("no_value_error",
 		"argument expression produced no value for "+name,
 		name, src,
 		"hint: a parenthesised argument evaluated to nothing — give it a return value, or drop it from the call",
@@ -954,13 +954,13 @@ func stampResultPos(vals []Value, pos *SrcPos) {
 }
 
 // stampErrPos attaches the currently-dispatched word's position to a
-// handler-produced AqlError that has none. A handler raises its error while
+// handler-produced BoruError that has none. A handler raises its error while
 // the engine is executing a specific word (at the pointer), so that word's
 // position is the genuine location of the failure — no text-search guess.
-// Errors that already carry a position, and non-AqlError errors, are left
+// Errors that already carry a position, and non-BoruError errors, are left
 // untouched.
 func (e *Engine) stampErrPos(err error) error {
-	ae, ok := err.(*AqlError)
+	ae, ok := err.(*BoruError)
 	if !ok {
 		return err
 	}
@@ -988,7 +988,7 @@ func (e *Engine) stampErrPos(err error) error {
 	return err
 }
 
-// returnCountError builds a detailed AqlError for wrong number of return
+// returnCountError builds a detailed BoruError for wrong number of return
 // values. The detail text is shared with the VM via returnCountErrorText;
 // the declaration span is interpreter-side enrichment (phase 5).
 // stripTapeAscriptions removes any dispatch ascription (`v as T`) from the
@@ -1004,13 +1004,13 @@ func (e *Engine) stripTapeAscriptions(lo, hi int) {
 	}
 }
 
-func (e *Engine) returnCountError(rc ReturnCheckInfo, expected, got int) *AqlError {
+func (e *Engine) returnCountError(rc ReturnCheckInfo, expected, got int) *BoruError {
 	return buildReturnCountError(e.effectiveSource(), rc.FuncName, expected, got, rc.Pos, rc.Decl)
 }
 
 // validateReturnTypes checks the top nret residual values (results[extra:])
 // against a ReturnCheck's declared return types, returning the first mismatch
-// as an AqlError (nil when all conform). Extracted from stepCloseParen so that
+// as a BoruError (nil when all conform). Extracted from stepCloseParen so that
 // hot path stays under the cyclomatic-complexity gate.
 //
 // Uses the membership predicate v.Is(exp) — the SAME question the parameter
@@ -1055,18 +1055,18 @@ func (e *Engine) validateReturnTypes(rc ReturnCheckInfo, results []Value, extra 
 	return nil
 }
 
-// returnTypeError builds a detailed AqlError for a return type mismatch. The
+// returnTypeError builds a detailed BoruError for a return type mismatch. The
 // detail/hint text is shared with the VM via returnTypeErrorText; the two
 // secondary spans — where the offending value was produced, and where the
 // return contract was declared — are interpreter-side enrichment (phase 5).
-func (e *Engine) returnTypeError(rc ReturnCheckInfo, index int, expected *Type, got Value) *AqlError {
+func (e *Engine) returnTypeError(rc ReturnCheckInfo, index int, expected *Type, got Value) *BoruError {
 	return buildReturnTypeError(e.effectiveSource(), rc.FuncName, index, expected, got, rc.Pos, rc.Decl)
 }
 
 // attachDeclSpan labels the return contract's declaration site as a
 // secondary span. A zero declaration site attaches nothing — the
 // no-guessed-locations rule; the declared type is already in the Detail.
-func attachDeclSpan(ae *AqlError, decl DeclSite, label string) {
+func attachDeclSpan(ae *BoruError, decl DeclSite, label string) {
 	if decl.Pos.Row <= 0 {
 		return
 	}
@@ -1089,23 +1089,23 @@ func (e *Engine) currentPos() SrcPos {
 	return SrcPos{}
 }
 
-// syntaxError builds a detailed AqlError for a syntax error.
-func (e *Engine) syntaxError(msg, token string) *AqlError {
+// syntaxError builds a detailed BoruError for a syntax error.
+func (e *Engine) syntaxError(msg, token string) *BoruError {
 	src := e.effectiveSource()
-	return makeAqlErrorAt("syntax_error", msg, token, src, "", e.currentPos())
+	return makeBoruErrorAt("syntax_error", msg, token, src, "", e.currentPos())
 }
 
-// runtimeError builds a detailed AqlError for a runtime error.
-func (e *Engine) runtimeError(code, detail, word, hint string) *AqlError {
+// runtimeError builds a detailed BoruError for a runtime error.
+func (e *Engine) runtimeError(code, detail, word, hint string) *BoruError {
 	src := e.effectiveSource()
-	return makeAqlErrorAt(code, detail, word, src, hint, e.currentPos())
+	return makeBoruErrorAt(code, detail, word, src, hint, e.currentPos())
 }
 
 // evalLimitError reports that evaluation hit the step-count guard before
 // the program finished — the explicit, honest diagnosis for a runaway
 // (non-terminating or pathologically deep) program, replacing the
 // phantom "unmatched opening parenthesis" the old silent break produced.
-func (e *Engine) evalLimitError(limit int) *AqlError {
+func (e *Engine) evalLimitError(limit int) *BoruError {
 	return e.runtimeError("evaluation_limit",
 		fmt.Sprintf("evaluation exceeded the step limit of %d — the program ran too long (an infinite loop or unbounded recursion?)", limit),
 		"",
@@ -1116,7 +1116,7 @@ func (e *Engine) evalLimitError(limit int) *AqlError {
 // loud failure for unbounded consumption (a runaway splicing onto the
 // tape without bound). Distinct from evalLimitError, which is the
 // step-count (CPU) guard; this is the memory guard.
-func (e *Engine) tapeExhaustedError() *AqlError {
+func (e *Engine) tapeExhaustedError() *BoruError {
 	return e.runtimeError("tape_exhausted",
 		fmt.Sprintf("evaluation tape exhausted its growth ceiling of %d entries — the program consumed unbounded space (an infinite loop or unbounded recursion?)", e.tape.MaxCap()),
 		"",
@@ -1128,7 +1128,7 @@ func (e *Engine) tapeExhaustedError() *AqlError {
 // without the tape importing io.
 func (e *Engine) tapeWarn(msg string) {
 	if e.registry != nil && e.registry.ErrOutput != nil {
-		fmt.Fprintf(e.registry.ErrOutput, "aql: warning: %s\n", msg)
+		fmt.Fprintf(e.registry.ErrOutput, "boru: warning: %s\n", msg)
 	}
 }
 
@@ -1191,7 +1191,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 
 	// Last-resort panic guard at the top-level engine boundary. A bug in
 	// any handler or in the step loop should surface to the user as a
-	// clean AQL error, never as a goroutine stack trace. Only the
+	// clean boru error, never as a goroutine stack trace. Only the
 	// outermost (NewTop) engine recovers; sub-engines let the panic
 	// propagate so it unwinds to here with the original stack intact for
 	// the debug detail. Errors returned normally are untouched.
@@ -1199,10 +1199,10 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		defer func() {
 			if rec := recover(); rec != nil {
 				result = nil
-				runErr = makeAqlErrorAt("internal_error",
+				runErr = makeBoruErrorAt("internal_error",
 					fmt.Sprintf("internal engine error: %v", rec),
 					"", e.effectiveSource(),
-					"this is a bug in AQL; please report it", e.currentPos())
+					"this is a bug in boru; please report it", e.currentPos())
 			}
 		}()
 	}
@@ -1538,7 +1538,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		if spec := e.registry.TakePendingGen(); spec != nil {
 			PopGenBindings(e.registry, spec)
 			if !e.registry.Check.IsActive() {
-				return nil, makeAqlError("gen_without_constructor",
+				return nil, makeBoruError("gen_without_constructor",
 					"gen: parameter spec was not consumed by a type constructor",
 					"gen", e.effectiveSource(),
 					"hint: follow gen [...] with refine Record [...], class {...}, fnsig [...], or fn [...]")
@@ -1808,7 +1808,7 @@ func (e *Engine) pendingForwardWantsRawParen() bool {
 // that a group NO surviving overload consumes is left raw (an OpenParen
 // boundary that `matchSignature` stops at) rather than speculatively run.
 //
-// For `import "aql:string-util" (StringUtil.indexof ...)`: the leading
+// For `import "boru:string-util" (StringUtil.indexof ...)`: the leading
 // String literal prunes the viable set to `[String]` (arity 1); at position
 // 1 the paren is consumed by no viable overload, so it is left raw — import
 // selects `[String]`, installs the namespace, and the paren then runs as an
@@ -2487,7 +2487,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
 		}
-		return &AqlError{
+		return &BoruError{
 			Code:       "illegal_ref",
 			Detail:     detail,
 			Src:        w.Name,
@@ -2591,7 +2591,7 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 			e.tape.Set(e.pointer, placeholder)
 			return e.stepLiteral()
 		}
-		return &AqlError{
+		return &BoruError{
 			Code:       "illegal_ref",
 			Detail:     detail,
 			Src:        w.Name,
@@ -2889,7 +2889,7 @@ func (e *Engine) stepWord(val Value) error {
 
 	// Retry fallback for words with forward-collecting sigs: when
 	// nearest-first matching fails, retry with deepest-first
-	// (ForceStack). Handles CallAQL sub-engines where FnDef args are
+	// (ForceStack). Handles CallBoru sub-engines where FnDef args are
 	// placed in deepest-first order on the input stack.
 	if sig == nil && fn.HasForwardSigs() && !w.ForceStack {
 		wDeep := w
@@ -3066,7 +3066,7 @@ func (e *Engine) tagCheckModeDefRead(top *Value, name string) {
 // when the deepest stack-bound slot is Any-typed (the genuine footgun, if3's
 // {Any,Any,Any}); a concretely-typed receiver-first idiom (`xs set 0 v`,
 // `s slice j e`) binds correctly and stays quiet — without that gate the
-// advisory over-fired ~190 false info across the voxgig-aql libraries. Extracted
+// advisory over-fired ~190 false info across the voxgig-boru libraries. Extracted
 // from stepWord so the hot dispatch path stays under the cyclomatic-complexity
 // gate. See design/FORWARD-STRAND-ADVISORY.10.md, ERRORS.8.md §6.2.
 func (e *Engine) checkMixedFormAdvisories(w WordInfo, sig *Signature, positions []int, pos SrcPos, fwdCount, stkCount int) {
@@ -3614,7 +3614,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		return nil
 	}
 
-	// Tail calls (design/TCO-STAGED.10.md): an AQL fn-body dispatch
+	// Tail calls (design/TCO-STAGED.10.md): a boru fn-body dispatch
 	// (Sig.FnFrame non-nil — natives skip on the nil check) sitting in
 	// tail position of an enclosing fn frame is counted; when the
 	// eligibility gate passes (no binding mutations during arg
@@ -3709,17 +3709,17 @@ func (e *Engine) maybeAddFnShapeHint(err error) error {
 	if err == nil {
 		return nil
 	}
-	aqlErr, ok := err.(*AqlError)
-	if !ok || aqlErr.Code != "signature_error" {
+	boruErr, ok := err.(*BoruError)
+	if !ok || boruErr.Code != "signature_error" {
 		return err
 	}
 	if !e.isFnShapeTypedBindingContext() {
 		return err
 	}
-	aqlErr.Suggestions = append(aqlErr.Suggestions, DiagSuggestion{
-		Message: "this is a typed-binding context expecting a function value — did you mean `" + aqlErr.Src + "/q`?",
+	boruErr.Suggestions = append(boruErr.Suggestions, DiagSuggestion{
+		Message: "this is a typed-binding context expecting a function value — did you mean `" + boruErr.Src + "/q`?",
 	})
-	return aqlErr
+	return boruErr
 }
 
 // spliceMatchResults replaces the word and its matched args on the
@@ -4699,7 +4699,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		v, _ := m.Get(key)
 		resolvedKey := key
 
-		// Computed key: evaluate the key text as AQL code to get
+		// Computed key: evaluate the key text as boru code to get
 		// the actual string key. E.g., {[a]:1} with def a 'x' → {x:1}
 		if ckSet[key] {
 			keyResult, err := runPooledSub(e.registry, []Value{NewWord(key)}, false)
@@ -5146,7 +5146,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// resolves the authored sigs (it is idempotent on already-compiled
 	// ones) and attaches the body-runner for anonymous fns.
 	//
-	// A value carrying a FOREIGN sub-registry (a module wrapper, or an AQL
+	// A value carrying a FOREIGN sub-registry (a module wrapper, or a boru
 	// fn defined inside a module preamble) is NOT a stable own-sig handle:
 	// it must resolve the real (inner) definition in that sub-registry, so
 	// it falls through to the name-lookup branch below. Anonymous closures
@@ -5214,7 +5214,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 	// Retry fallback for words with forward-collecting sigs: when
 	// nearest-first matching fails, retry with deepest-first
-	// (ForceStack). Mirrors stepWord's CallAQL-input recovery.
+	// (ForceStack). Mirrors stepWord's CallBoru-input recovery.
 	if sig == nil && fn.HasForwardSigs() && !w.ForceStack {
 		wDeep := w
 		wDeep.ForceStack = true
@@ -5243,7 +5243,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 
 	// Fall through to FnSig-based pure-stack matching when
 	// matchSignature finds nothing — this preserves the legacy
-	// anonymous-fn-on-stack dispatch for AQL fns whose Sigs carry
+	// anonymous-fn-on-stack dispatch for boru fns whose Sigs carry
 	// named params. The same path runs when matched but the sig
 	// has no Go Handler AND this isn't an `afn`-produced lambda:
 	// predicate-type FnDefs landing bare are intentionally inert.
@@ -5281,7 +5281,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// the engine re-processes the Function value with all args on
 	// the stack — which routes through this same execFnDefLiteral
 	// entry. This branch runs whether the sig has a Go Handler
-	// (registered native) or only an AQL body (anonymous FnDef from
+	// (registered native) or only a boru body (anonymous FnDef from
 	// `afn` / `=>`); in both cases matchSignature found valid
 	// positions and we need the forward args on the stack before
 	// the body / handler runs.
@@ -5308,17 +5308,17 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	//     so args flow straight through in sig order — no body
 	//     execution, no token splicing, no push reordering.
 	//
-	//  2. **AQL fn defined inside a module preamble** (e.g.
+	//  2. **Boru fn defined inside a module preamble** (e.g.
 	//     decision.cond, defined via `def cond fn […]` in the
-	//     module's AQL source). The body references module-private
+	//     module's boru source). The body references module-private
 	//     types/words that only resolve in fnDef.Registry, so we must
-	//     run it in that registry via CallAQL. These fns use NAMED
-	//     params, so CallAQL's named-param binding (InstallDef by
+	//     run it in that registry via CallBoru. These fns use NAMED
+	//     params, so CallBoru's named-param binding (InstallDef by
 	//     name) sidesteps any unnamed-param push ordering issues.
 	//
 	// See design/SIG-ORDER-REFACTOR.10.md for the architecture history.
 	//
-	// Only AQL-BODIED definitions take the sub-registry path: a trivial-
+	// Only BORU-BODIED definitions take the sub-registry path: a trivial-
 	// delegation wrapper (Body=[Word(inner)]) or a module-preamble fn (real
 	// Body). A reference to a Go NATIVE living in the sub-registry carries
 	// Body-less sigs and a real Go Handler — it must dispatch straight
@@ -5367,10 +5367,10 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 				e.traceNote = "call " + fnDef.Name
 			}
 			// ONE dispatch path, no exceptions: a module wrapper — trivial-delegation
-			// OR a real AQL body — dispatches through execMatch, exactly like a named
+			// OR a real boru body — dispatches through execMatch, exactly like a named
 			// fn and a bare-word call. So a fn body is ANALYSED/COMPILED the SAME way
 			// regardless of how the fn was reached: a param-slot unit via the matched
-			// sig's ReturnsFn, NOT a separate def-stack CallAQL run that left Function
+			// sig's ReturnsFn, NOT a separate def-stack CallBoru run that left Function
 			// params slot-less and unreachable to a closure capture (the sort
 			// comp-capture leaf — a fundamental dispatch-path divergence). match.Reg
 			// carries the sub-registry so the body's module-private words resolve there
@@ -5519,7 +5519,7 @@ func (e *Engine) upcomingArgs(valIdx int) []Value {
 }
 
 // execFnDefSigStackMatch is the legacy pure-stack dispatch path for
-// AQL-defined functions whose signatures carry named params. Used as a
+// boru-defined functions whose signatures carry named params. Used as a
 // fallback when matchSignature's aggregate match returns nothing.
 func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []Value) error {
 	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
@@ -5536,7 +5536,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	// can emit body diagnostics under generalised carrier args that the legacy
 	// inline-splice path (execFnDefSig) did not — the check-accuracy ratchet
 	// pins that pure-check behaviour. Excludes foreign-sub-registry fns (their
-	// body must run via CallAQL in that registry — the execFnDefLiteral
+	// body must run via CallBoru in that registry — the execFnDefLiteral
 	// sub-registry branch handles them) and macros.
 	checkFnValue := e.registry != nil && e.registry.Check.Mode && !fnDef.Anonymous && !fnDef.Macro &&
 		(fnDef.Registry == nil || fnDef.Registry == e.registry) &&
@@ -5659,7 +5659,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	// let the top-level end-of-run drain raise only if NOTHING consumed it.
 	// "Unconsumed" turned out not to mean "not consumed by a higher-order
 	// word": any Any-typed slot cleared the residue, so `print (IO.read
-	// "/nonexistent")` printed the FUNCTION and exited 0, and `aql check`
+	// "/nonexistent")` printed the FUNCTION and exited 0, and `boru check`
 	// reported it clean. Composition that wants the value as data now says
 	// so — `f/r` — and the judgement no longer depends on what happens to
 	// the value afterwards.
@@ -5713,7 +5713,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 					})
 				}
 			} else {
-				return makeAqlErrorAt("uncalled_function", detail,
+				return makeBoruErrorAt("uncalled_function", detail,
 					fnDef.Name, e.effectiveSource(),
 					"hint: check the call's argument types and arity — or use "+fnDef.Name+"/r to push the function as a value deliberately",
 					pos)
@@ -5755,7 +5755,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 // buildFnBodyReturnsFn ARMS the body analysis via StartFnCompile, so the body
 // (with its `__pa` tail) is captured INSIDE its own CALL_USER unit and the
 // call site records a CALL_USER — identical to the named-fn path. See
-// design/aql-bytecode-stage3-inlining-plan.0.md "THE shared crux:
+// design/boru-bytecode-stage3-inlining-plan.0.md "THE shared crux:
 // body-bearing fn-VALUE dispatch (__pa)".
 func (e *Engine) spliceFnValueCheckResult(valIdx, nArgs int, fnDef FnDefInfo, sig *FnSig, args []Value) error {
 	returns := buildFnBodyReturnsFn(e.registry, fnDef.Name, *sig, fnDef)
@@ -5818,7 +5818,7 @@ func (e *Engine) spliceFnCheckTail(valIdx, nArgs int, result []Value) {
 // on: every site that needs a dispatchable FnDefInfo from authored sigs
 // routes through here rather than constructing the struct inline.
 //
-// Each compiled Signature is given a Go Handler (the shared AQL body-
+// Each compiled Signature is given a Go Handler (the shared boru body-
 // runner, buildFnBodyHandler) and a check-mode ReturnsFn
 // (buildFnBodyReturnsFn), so a Function value dispatches through the
 // uniform execMatch path exactly like a registered native — no
@@ -5858,7 +5858,7 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 				HasGen:       fnDef.Gen != nil,
 				InstallNames: fnInstallNames(sig, fnDef.Captured),
 			}
-			compiled.Impl = &AQLImpl{
+			compiled.Impl = &BoruImpl{
 				Body:     sig.body(),
 				FnFrame:  meta,
 				dispatch: buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta),
@@ -5916,7 +5916,7 @@ func shareCheckStateFrom(owner, caller *Registry) func() {
 }
 
 // execFnDefSig executes a matched FnDef signature. If capturedReg is non-nil
-// (module closure), execution uses CallAQL on that registry. Otherwise, body
+// (module closure), execution uses CallBoru on that registry. Otherwise, body
 // tokens are spliced into the current engine's stack.
 func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry, anonymous bool) error {
 	nArgs := len(sig.Params)
@@ -5975,7 +5975,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	}
 
 	if capturedReg != nil && (capturedReg != e.registry || e.registry.Lookup("__pa") == nil) {
-		// Execute in the captured module's registry via CallAQL.
+		// Execute in the captured module's registry via CallBoru.
 		// Pass the FnDef's lexical captures so the body sees them as
 		// defs (alongside the module-registry's own bindings).
 		//
@@ -5988,7 +5988,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		// lang/spec/module-fnvalue-boundary.tsv). Gated on the frame
 		// protocol being EXECUTABLE: the splice tail's `__pa` word is
 		// registered by the language layer, so a bare kernel registry (an
-		// eng-only embedder, the kernel test harnesses) keeps the CallAQL
+		// eng-only embedder, the kernel test harnesses) keeps the CallBoru
 		// path, whose per-call cleanup is Go-side and needs no words.
 		var captures []CapturedBinding
 		var fnLabel string
@@ -6005,13 +6005,13 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			// Check mode ANALYSES the body — always the interpreter path
 			// (running a stamped unit here would execute real side effects
 			// during static analysis).
-			result, err = capturedReg.CallAQLNamed(sig, args, captures, fnLabel)
+			result, err = capturedReg.CallBoruNamed(sig, args, captures, fnLabel)
 		} else {
 			// Runtime: a module fn stamped at load (StampFnValueInPlace,
 			// RunModuleBody) runs its unit on the VM — the module
 			// sub-registry is idle from the caller's perspective, so
 			// InvokeCallback starts a fresh RunUnit there; an unstamped or
-			// stale-dep sig falls to CallAQL inside the seam, byte-identical
+			// stale-dep sig falls to CallBoru inside the seam, byte-identical
 			// to the old direct call. This retires the per-call interpreter
 			// hop for module-export application (the mini-redis client loop:
 			// `MiniRedis.cmd` per iteration).
@@ -6031,7 +6031,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 			skipSet[valIdx] = true
 			dst := firstArgIdx
 			for i := firstArgIdx; i <= valIdx; i++ {
-				if !skipSet[i] { //covergate:allow execFnDefSig cross-registry CallAQL result-splice interior (structural cell copy-down): post arguments-are-inert flip, foreign fn values dispatch via the compiled-value path first, so no corpus shape reaches these splice arms; kept as defensive splice-correctness arms (design/ARG-SEMANTICS-UNIFICATION.0.md §7) (§kernel)
+				if !skipSet[i] { //covergate:allow execFnDefSig cross-registry CallBoru result-splice interior (structural cell copy-down): post arguments-are-inert flip, foreign fn values dispatch via the compiled-value path first, so no corpus shape reaches these splice arms; kept as defensive splice-correctness arms (design/ARG-SEMANTICS-UNIFICATION.0.md §7) (§kernel)
 					e.tape.Set(dst, e.tape.At(i))
 					dst++
 				}
@@ -6091,7 +6091,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	// args in top-first sig order (matchSignature convention).
 	// Named params bind by name; unnamed params push to body tokens in
 	// i-order. No reordering — same convention as InstallFnDef and
-	// CallAQL. See design/SIG-ORDER-REFACTOR.10.md.
+	// CallBoru. See design/SIG-ORDER-REFACTOR.10.md.
 	unnamedCount := 0
 	for i, p := range sig.Params {
 		if p.Name != "" {
@@ -6116,7 +6116,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	defSnapshot := e.registry.Defs.Snapshot()
 
 	// Append the sig's body tokens directly: append COPIES them into
-	// tokens' backing array, and sig.body() (the shared AQLImpl.Body) is
+	// tokens' backing array, and sig.body() (the shared BoruImpl.Body) is
 	// never mutated here, so the previous intermediate make+copy was a
 	// redundant per-call allocation (design/INTERPRETER-SPEED-PLAN.10.md #5).
 	tokens = append(tokens, sig.body()...)
@@ -6282,7 +6282,7 @@ func (e *Engine) commitBarrierForward() bool {
 		return false
 	}
 	// The commit must consume EXACTLY the claimed args through a real
-	// overload. AQL-bodied fns carry a synthetic 0-arg Fallback in the
+	// overload. boru-bodied fns carry a synthetic 0-arg Fallback in the
 	// aggregate dispatch table (it exists to raise a clean
 	// "no matching signature" error); matching it here would commit a
 	// waiting word to its own failure — `g 1 def x 5 x` must keep
@@ -6329,7 +6329,7 @@ func (e *Engine) commitBarrierForward() bool {
 // is pending (the normal case). Engine-internal frame-tail words
 // (__pa and friends) are exempt: they are not source-level statement
 // boundaries.
-func (e *Engine) strandedForwardError(boundary string) *AqlError {
+func (e *Engine) strandedForwardError(boundary string) *BoruError {
 	if strings.HasPrefix(boundary, "__") {
 		return nil
 	}
@@ -6353,7 +6353,7 @@ func (e *Engine) strandedForwardError(boundary string) *AqlError {
 			"a function word is a barrier and never feeds forward collection (strict rule); "+
 			"group the call in parens so its RESULT becomes the argument: %s (%s …)",
 		fwd.FuncName, missing, boundary, fwd.FuncName, boundary)
-	return makeAqlErrorAt("signature_error", detail, fwd.FuncName,
+	return makeBoruErrorAt("signature_error", detail, fwd.FuncName,
 		e.effectiveSource(), "", fwd.Pos)
 }
 
@@ -6471,7 +6471,7 @@ func (e *Engine) stepDefCleanup(val Value, markerIdx int) error {
 	if info.EvalResidual {
 		// A COMPUTING body's residual pending containers evaluate
 		// IN-frame — before the body-local defs pop — so the spliced
-		// dispatch path agrees with the CallAQL sub-run drain (mini-s3's
+		// dispatch path agrees with the CallBoru sub-run drain (mini-s3's
 		// s3-parse-range trailing `{from: from upto: upto}`; previously
 		// the spliced path deferred the container to the CONSUMER scope,
 		// where the body-locals are gone — the residual-timing fork,
@@ -6508,7 +6508,7 @@ func (e *Engine) stepDefCleanup(val Value, markerIdx int) error {
 				// The error unwinds the run, so the frame's remaining
 				// parked tail (__pa, the undef pairs) never steps —
 				// replay its registry effects before propagating,
-				// exactly as CallAQL's inline cleanup runs on a body
+				// exactly as CallBoru's inline cleanup runs on a body
 				// error. Otherwise a do-error trap upstream would
 				// resume with the callee's params/args/locals still
 				// bound in the caller's scope.
@@ -7684,7 +7684,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	// re-zeroed per candidate — the previous per-candidate make was ~17%
 	// of all interpreter allocations) and the resolved-index map (tail
 	// cells). Per-invocation (NOT engine-level) is load-bearing: a
-	// predicate-typed param runs AQL during sigTypeMatches (RunPredicate),
+	// predicate-typed param runs boru during sigTypeMatches (RunPredicate),
 	// so matchSignature can nest — each nested call owns its own buffer.
 	// A success return hands the positions slice to the caller (ownership
 	// transfers; this call never touches the buffer again and the
@@ -8126,7 +8126,7 @@ func (e *Engine) checkModeFallbackPositions(n int) []int {
 	// close when its assumed arity exceeds the real arg count; splicing those out
 	// then deletes tokens across the `)` boundary and leaves a phantom "unmatched
 	// opening parenthesis" in a later (balanced) fn body — the emergent whole-module
-	// paren bleed (template.aql's first-word / after-word / parts errors).
+	// paren bleed (template.boru's first-word / after-word / parts errors).
 	depth := 0
 	for i := e.pointer + 1; remaining > 0 && i < e.tape.Len(); i++ {
 		v := e.tape.At(i)
@@ -8293,13 +8293,13 @@ func singleOverloadRecoverable(sig *Signature, fn *FnDefInfo) bool {
 	if realOverloads != 1 || has0ArgReal || sole == nil {
 		return false
 	}
-	// AQL-BODIED user fn ONLY (Codex PR #211 review #2). A core native (one-sig
+	// BORU-BODIED user fn ONLY (Codex PR #211 review #2). A core native (one-sig
 	// with a ReturnsFn, e.g. `enum`) and a trivial-delegation module wrapper
 	// (body = [Word(inner)] short-circuiting to an inner native) do NOT get the
 	// guarded CALL_USER param contract, so their unmatched dispatch is not
-	// deferrable. The discriminator is a real AQL body (len(Body) > 0), NOT a nil
-	// Handler: an AQL fn defined in a module preamble carries a synthesized CallAQL
-	// Handler yet is genuinely AQL-bodied (the `engine-known` case) — gating on
+	// deferrable. The discriminator is a real boru body (len(Body) > 0), NOT a nil
+	// Handler: a boru fn defined in a module preamble carries a synthesized CallBoru
+	// Handler yet is genuinely boru-bodied (the `engine-known` case) — gating on
 	// Handler==nil wrongly excludes it. Core natives have an empty Body; delegation
 	// wrappers are caught by trivialDelegationTarget.
 	if _, isDelegation := trivialDelegationTarget(sole); isDelegation {
@@ -8495,7 +8495,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			return nil
 		}
 		// A single-overload user fn over a disjunct-typed operand recovers here
-		// (e.g. the aql:test framework's run-cases inside test-describe's body);
+		// (e.g. the boru:test framework's run-cases inside test-describe's body);
 		// record a guarded CALL_USER instead of refusing (it splices its own
 		// returns). Reached from the eng harness since the partitioned-dispatch
 		// recording landed (carrier_ljoin_test.go drives the recovery arm).
@@ -8541,7 +8541,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 		resume()
 		// Re-match over the dispatching registry: a module sub-registry word
-		// (the test framework's `test-record`, run via CallAQL in the module's
+		// (the test framework's `test-record`, run via CallBoru in the module's
 		// sub-registry) must re-match over THAT registry at run time, not the
 		// main one, or callPoly's Lookup misses it. e.registry is the same
 		// sub-registry pointer the compiled run reaches (it lives on the module
@@ -8562,7 +8562,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// the body unit and record a GUARDED CALL_USER — buildFnBodyReturnsFn's
 		// SetUnitParamTypes installs the param contract the VM enforces at entry, so a
 		// runtime arg that misses the sole sig raises exactly as the interpreter does.
-		// This is what unblocks the aql:test framework (run-cases) and the trie/
+		// This is what unblocks the boru:test framework (run-cases) and the trie/
 		// decision walkers (find-kid / mk-tnode / lex-mustache). A MULTI-overload fn
 		// stays refused below (Cluster C): one baked overload would raise where the
 		// interpreter runtime-dispatches a sibling.
@@ -8583,7 +8583,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// On a REAL compile pass (Compiling) the MarkUncompilable already refuses
 		// and Finalize surfaces THIS reason, so an error-severity no_signature
 		// diagnostic here would only mask it as the generic "check diagnostics"
-		// (aql.go:297). On a plain check pass this branch is still reachable —
+		// (boru.go:297). On a plain check pass this branch is still reachable —
 		// IsolateEmit arms a fresh ACTIVE Emit while analysing each fn body — and
 		// there the diagnostic IS the genuine static report, so gate it on
 		// !Compiling, matching the fall-through path below.
@@ -8662,7 +8662,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// sub-probe (the over-suppression that dropping it inside the suspend branch
 	// caused), while a compile pass never adds it (Finalize surfaces the
 	// MarkUncompilable reason; a diagnostic would only mask it as the generic
-	// "check diagnostics", aql.go:297). Do NOT additionally gate on
+	// "check diagnostics", boru.go:297). Do NOT additionally gate on
 	// `bestMatch >= 0`: this fall-through is reached only when matchSignature
 	// already FAILED to commit, so a positive best-fit score here is a
 	// best-effort guess (a bare type-literal or wildcard operand that

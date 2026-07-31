@@ -314,8 +314,8 @@ func TestOutputCapture(t *testing.T) {
 
 // --- Error reporting ----------------------------------------------------
 
-func TestAqlErrorPropagation(t *testing.T) {
-	// A handler that explicitly returns an AqlError must surface that
+func TestBoruErrorPropagation(t *testing.T) {
+	// A handler that explicitly returns a BoruError must surface that
 	// error from Run with the same code.
 	r, _ := NewRegistry()
 	r.RegisterNativeFunc(NativeFunc{
@@ -324,7 +324,7 @@ func TestAqlErrorPropagation(t *testing.T) {
 		Signatures: []Signature{{
 			Args: []*Type{TInteger},
 			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
-				return nil, reg.AqlError("test_failure", "always fails", "bork")
+				return nil, reg.BoruError("test_failure", "always fails", "bork")
 			}), BarrierPos: -1,
 		}},
 	})

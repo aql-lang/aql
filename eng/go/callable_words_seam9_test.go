@@ -35,7 +35,7 @@ func TestW9MutableInstanceRef(t *testing.T) {
 }
 
 func TestW9LambdaHookCompatible(t *testing.T) {
-	body := AQL([]Value{NewWord("x")})
+	body := Boru([]Value{NewWord("x")})
 
 	// No own sig (empty) → decline.
 	if _, ok := lambdaHookCompatible(&FnDefInfo{}, nil, ClosureInValue, false); ok {
@@ -55,7 +55,7 @@ func TestW9LambdaHookCompatible(t *testing.T) {
 	}
 	// A body carrying a flow-control sentinel → decline.
 	sentinel := &FnDefInfo{Signatures: []Signature{{
-		Params: []FnParam{{Name: "a"}}, Impl: AQL([]Value{NewWord("break")}),
+		Params: []FnParam{{Name: "a"}}, Impl: Boru([]Value{NewWord("break")}),
 	}}}
 	if _, ok := lambdaHookCompatible(sentinel, []Value{NewInteger(1)}, ClosureInValue, false); ok {
 		t.Error("a sentinel body should decline")

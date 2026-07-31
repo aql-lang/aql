@@ -1,0 +1,470 @@
+# ============================================================================
+# grep — print the lines of each input that match a pattern.
+#
+#   grep [-i|--ignore-case] [-v|--invert-match] [-c|--count]
+#        [-n|--line-number] PATTERN [FILE…]
+#
+# PATTERN is a Go/RE2 regular expression, run through `mini re`
+# (boru:minilang's MiniLang.lang_re — the same engine `+re/…/` uses). With no
+# FILE, or when FILE is "-", the input is standard input. Input is STREAMED one
+# line at a time with IO.read-line — never slurped — so grep works on a file
+# larger than memory and on a pipe that is still open.
+#
+# When more than one FILE is named, every output line is prefixed with the
+# input's name, as GNU grep does; standard input is spelled "(standard input)"
+# in that prefix. -n adds the 1-based line number, which restarts at 1 for each
+# input. -c suppresses the lines and prints one count per input instead.
+#
+# Exit codes — the conventional grep tri-state:
+#   0  at least one line was selected
+#   1  no line was selected, and nothing went wrong
+#   2  an error: a usage error (unknown flag, missing PATTERN — from
+#      Cli.dispatch), an invalid regular expression, or an input that could not
+#      be opened or read. An error outranks a match: a run that both matched
+#      and failed exits 2, which is what GNU grep does.
+#
+# Structure: every decision is a PURE fn taking its input as parameters
+# (grep-bool / grep-num / grep-pattern / grep-check / grep-select /
+# grep-label / grep-format / grep-count-line / grep-files / grep-opts /
+# grep-code), and grep-main takes ARGV as a parameter and returns the exit code
+# rather than exiting, so tests/grep_test.boru can drive the whole program —
+# `boru test` cannot inject an argument vector. Only grep-fail / grep-bad /
+# grep-chunk / grep-drain / grep-pump / grep-one / grep-walk / grep-run touch
+# the world.
+#
+# Note that grep-check and grep-select are pure DESPITE calling the regex
+# engine: MiniLang.lang_re reads no IO and raises only on a malformed pattern,
+# which grep-check turns into data (the message, or "" when the pattern
+# compiles). That is what makes the regex half unit-testable.
+# ============================================================================
+
+import "boru:cli"
+import "boru:io"
+import "boru:minilang"
+
+# ----------------------------------------------------------------------------
+# Pure helpers.
+# ----------------------------------------------------------------------------
+
+# Read a boolean flag defensively: an absent flag, or one holding something
+# that is not a Boolean, reads as false.
+def grep-bool fn [[fl:Map k:String] [Boolean] [
+  def v (fl get k)
+  if (v is Boolean) [v] [false]
+]]
+
+# Read a counter out of the per-input state map, defensively.
+def grep-num fn [[st:Map k:String] [Integer] [
+  def v (st get k)
+  if (v is Integer) [v] [0]
+]]
+
+# -i is expressed to the engine as RE2's inline (?i) flag rather than as a
+# separate case-folding pass, so the folding is the regex engine's own and
+# applies to character classes and unicode alike.
+def grep-pattern fn [[raw:String icase:Boolean] [String] [
+  if icase [(join "" ["(?i)" raw])] [raw]
+]]
+
+# Compile-check a pattern by running it once against the empty subject.
+# Returns "" when the pattern is good, and the engine's own message when it is
+# not — errors as DATA, so the caller decides the exit code and this fn stays
+# pure and testable.
+def grep-check fn [[pat:String] [String] [
+  def r (do [
+    def _q (MiniLang.lang_re pat {limit:1} "")
+    ""
+  ] error [
+    def e end
+    def msg (e.message)
+    msg
+  ])
+  r
+]]
+
+# Is this line selected? {limit:1} because the answer is a yes/no — grep never
+# needs the second match, and capping the scan keeps a pathological line from
+# collecting thousands of match records. -v inverts the answer, never the
+# pattern.
+def grep-select fn [[line:String pat:String inv:Boolean] [Boolean] [
+  def r (MiniLang.lang_re pat {limit:1} line)
+  def hit (r.ok)
+  if inv [(hit not)] [hit]
+]]
+
+# How an input is NAMED in a prefix. The operand "-" is standard input, and GNU
+# grep spells that "(standard input)" rather than "-".
+def grep-label fn [[name:String] [String] [
+  if (name eq "-") ["(standard input)"] [name]
+]]
+
+# ----------------------------------------------------------------------------
+# Colour. --color takes auto | always | never, and `auto` is the interesting
+# one: it means "colour if the output is a terminal", which is the only reason
+# `grep --color=auto` in a .bashrc does not fill a pipe with escape codes.
+#
+# The DECISION is pure and takes the world as three parameters — the mode, is
+# standard output a terminal, and is NO_COLOR set. That is the same split
+# design/CLI-PROGRAMS.1.md §3 records for Cli.usage: a fn that reads the
+# terminal cannot be tested against a terminal other than the one it is
+# running in. grep-run does the reading (IO.is-tty, IO.env) and hands the
+# answers here.
+#
+# NO_COLOR (https://no-color.org) wins over `auto` but NOT over an explicit
+# `--color=always`, which is what every implementation that honours it does:
+# the variable is a default, the flag is an instruction.
+def grep-color-on fn [[mode:String tty:Boolean nocolor:Boolean] [Boolean] [
+  if (mode eq "never") [false] [
+    if (mode eq "always") [true] [ (tty and (nocolor not)) ]
+  ]
+]]
+
+# The --color value, defensively. The spec declares default:"never", so an
+# absent flag already arrives as "never"; a REPEATED --color arrives as a List
+# (boru:cli's contract for a repeated string flag) and the last one wins, which
+# is what every long-option parser does.
+#
+# DIVERGENCE FROM GNU, deliberate: a bare `--color` with no value is not
+# accepted here, because kind:"string" makes the next token the value —
+# `grep --color pattern file` would take "pattern" as the colour mode. GNU
+# resolves this with an optional-argument option, which boru:cli does not have.
+# Spell it `--color=auto`, which is also the spelling every .bashrc uses.
+def grep-when fn [[fl:Map] [String] [
+  def v (fl get "color")
+  if (v is None) ["never"] [
+    if (v is List) [
+      def n (size v)
+      if (n eq 0) ["never"] [ (convert String (v get (n sub 1))) ]
+    ] [ (convert String v) ]
+  ]
+]]
+
+# An unknown --color value is a usage error, not a silent fallback.
+def grep-color-ok fn [[mode:String] [Boolean] [
+  ((mode eq "auto") or ((mode eq "always") or (mode eq "never")))
+]]
+
+# The matched text is wrapped in bold red, GNU grep's default. The escapes are
+# written as \u001b so the source stays plain ASCII text.
+def grep-paint-one fn [[s:String] [String] [ join "" ["\u001b[01;31m" s "\u001b[0m"] ]]
+
+# BYTE offsets, not rune offsets. MiniLang.lang_re reports `i`/`e` in BYTES
+# while `slice` and `size` count RUNES — recorded as NUR047, because doing the
+# obvious thing here is correct on ASCII and silently corrupts any line with a
+# multi-byte rune in it. So the slicing is done on Bytes and converted back,
+# which is exact for every input.
+def grep-cut fn [[b:Any lo:Integer hi:Integer] [String] [
+  if (lo gte hi) [""] [ (convert String (slice lo hi b)) ]
+]]
+
+def grep-paint-at fn [[b:Any ms:List i:Integer at:Integer out:List] [List] [
+  if (i gte (size ms)) [
+    def _t (push (grep-cut b at (size b)) out)
+    out
+  ] [
+    def m (ms get i)
+    def lo m.i
+    def hi m.e
+    def _g (push (grep-cut b at lo) out)
+    def _m (push (grep-paint-one (grep-cut b lo hi)) out)
+    def r (grep-paint-at b ms (i add 1) hi out)
+    r
+  ]
+]]
+
+# The line with every match highlighted. An unmatched line comes back
+# unchanged, which is what -v needs: an inverted selection has no match to
+# paint, and painting the whole line would be wrong.
+def grep-paint fn [[line:String pat:String on:Boolean] [String] [
+  if (on not) [line] [
+    def r (MiniLang.lang_re pat {} line)
+    if ((r.ok) not) [line] [
+      def b (convert Bytes line)
+      def out (flex [])
+      def parts (grep-paint-at b (r.ms) 0 0 out)
+      def j (join "" parts)
+      j
+    ]
+  ]
+]]
+
+# One output line, terminator included: "[NAME:][LINENO:]TEXT\n".
+def grep-format fn [[line:String k:Integer name:String numbered:Boolean pfx:Boolean] [String] [
+  def np (if pfx [(join "" [name ":"])] [""])
+  def lp (if numbered [(join "" [(convert String k) ":"])] [""])
+  join "" [np lp line "\n"]
+]]
+
+# The -c line for one input: "[NAME:]COUNT\n".
+def grep-count-line fn [[name:String c:Integer pfx:Boolean] [String] [
+  def np (if pfx [(join "" [name ":"])] [""])
+  join "" [np (convert String c) "\n"]
+]]
+
+# args[0] is PATTERN; everything after it is an input. No input at all means
+# standard input, spelled "-", so there is exactly one code path downstream.
+def grep-tail-step fn [[e:Any acc:Map] [Map] [
+  def i acc.i
+  def out (if (i eq 0) [acc.out] [(push e acc.out)])
+  acc set (quote out) out set (quote i) (i add 1)
+]]
+
+def grep-files fn [[ag:List] [List] [
+  def rr (fold [grep-tail-step] ag {out:[] i:0})
+  def xs rr.out
+  if ((size xs) eq 0) [(push "-" [])] [xs]
+]]
+
+# The options bundle carried through the streaming loop, as plain data.
+def grep-opts fn [[pat:String fl:Map pfx:Boolean col:Boolean] [Map] [
+  {} set (quote pat) pat
+     set (quote inv) (grep-bool fl "invert-match")
+     set (quote cnt) (grep-bool fl "count")
+     set (quote num) (grep-bool fl "line-number")
+     set (quote pfx) pfx
+     set (quote col) col
+]]
+
+# The tri-state. An error outranks everything; otherwise a match is 0 and a
+# clean miss is 1.
+def grep-code fn [[matched:Boolean errored:Boolean] [Integer] [
+  if errored [2] [ if matched [0] [1] ]
+]]
+
+# The read loop runs in chunks (see grep-chunk); the chunk doubles from 64 up
+# to a ceiling of 8192. Ramping keeps the wasted post-EOF reads of the final
+# chunk below the number of lines actually read — so a two-line file costs 64
+# reads, not 8192 — while the ceiling keeps grep-drain's recursion depth at
+# lines/8192 rather than lines.
+def grep-next-chunk fn [[m:Integer] [Integer] [ if (m gte 8192) [8192] [(m mul 2)] ]]
+
+# ----------------------------------------------------------------------------
+# The streaming read loop. Reads one line, decides, writes at most one line;
+# nothing is retained, so memory is O(longest line).
+#
+# There is no `break` here, and that is deliberate: `for` has no unbounded
+# form, and under the tree-walking interpreter a `break` escapes not only its
+# own loop but the rest of the enclosing fn body and the return value of every
+# fn up the call chain (cat.boru documents the same defect). So this loop runs a
+# fixed count, ignores reads that come back none, and reports how many lines it
+# actually consumed; grep-drain calls it until it returns 0. Identical in both
+# run modes, and it compiles.
+# ----------------------------------------------------------------------------
+def grep-chunk fn [[h:Any st:Map name:String opt:Map m:Integer] [Integer] [
+  def before (grep-num st "n")
+  for [0 m] [
+    def line (IO.read-line h)
+    if ((line is None) not) [
+      def k ((grep-num st "n") add 1)
+      def _n (st set (quote n) k)
+      def s (convert String line)
+      if (grep-select s (opt.pat) (opt.inv)) [
+        def _c (st set (quote c) ((grep-num st "c") add 1))
+        def _w (if (opt.cnt) [none]
+                 [(IO.write (IO.stdout)
+                    (grep-format (grep-paint s (opt.pat) (opt.col))
+                                 k name (opt.num) (opt.pfx)))])
+      ] []
+    ] []
+  ]
+  def got ((grep-num st "n") sub before)
+  got
+]]
+
+# Drain one open handle to EOF, a chunk at a time. Returns the number of lines
+# read from this input.
+def grep-drain fn [[h:Any st:Map name:String opt:Map m:Integer] [Integer] [
+  def got (grep-chunk h st name opt m)
+  if (got eq 0) [(grep-num st "n")] [
+    def r (grep-drain h st name opt (grep-next-chunk m))
+    r
+  ]
+]]
+
+# One whole input: fresh line/count state (so -n restarts per input, as GNU
+# grep does), drain, then the -c line if that is what was asked for. Returns
+# the number of SELECTED lines.
+def grep-pump fn [[h:Any name:String opt:Map] [Integer] [
+  def st (flex {n:0 c:0})
+  def _d (grep-drain h st name opt 64)
+  def c (grep-num st "c")
+  def _o (if (opt.cnt) [(IO.write (IO.stdout) (grep-count-line name c (opt.pfx)))] [none])
+  c
+]]
+
+# One diagnostic on stderr — never stdout — and the error sentinel. -1 is not a
+# count; grep-walk reads it as "this input failed".
+def grep-fail fn [[name:String msg:String] [Integer] [
+  (IO.write (IO.stderr) (join "" ["grep: " name ": " msg "\n"])) drop
+  -1
+]]
+
+# A bad regular expression is fatal before any input is touched.
+def grep-bad fn [[msg:String] [Integer] [
+  (IO.write (IO.stderr) (join "" ["grep: " msg "\n"])) drop
+  2
+]]
+
+# ----------------------------------------------------------------------------
+# One operand. "-" is standard input; anything else is opened, streamed and
+# closed. An open or read failure (missing file, a directory, a permission
+# error) is reported on stderr and yields the -1 sentinel — grep keeps going
+# with the remaining operands, which is the coreutils contract. `do … error`
+# costs a bytecode refusal for THIS fn only, and it runs once per operand, not
+# per line, so the read loop above stays compiled.
+# ----------------------------------------------------------------------------
+def grep-one fn [[name:String opt:Map] [Integer] [
+  def lbl (grep-label name)
+  if (name eq "-") [
+    def a (do [
+      def c (grep-pump (IO.stdin) lbl opt)
+      c
+    ] error [
+      def e end
+      def z (grep-fail lbl (e.message))
+      z
+    ])
+    a
+  ] [
+    def b (do [
+      def h (IO.open (make Pathon name))
+      def c (grep-pump h lbl opt)
+      IO.close h
+      c
+    ] error [
+      def e end
+      def z (grep-fail lbl (e.message))
+      z
+    ])
+    b
+  ]
+]]
+
+# Walk the operands in order, carrying the two bits the exit code is made of.
+def grep-walk fn [[names:List i:Integer opt:Map acc:Map] [Map] [
+  if (i gte (size names)) [acc] [
+    def c (grep-one (convert String (names get i)) opt)
+    def a2 (if (c lt 0) [(acc set (quote errored) true)] [
+      if (c gt 0) [(acc set (quote matched) true)] [acc]])
+    def r (grep-walk names (i add 1) opt a2)
+    r
+  ]
+]]
+
+# ----------------------------------------------------------------------------
+# The spec and the handler.
+# ----------------------------------------------------------------------------
+def spec {
+  name:    "grep"
+  version: "0.1.0"
+  summary: "print lines matching a pattern"
+  flags: [
+    {name:"ignore-case"  short:"i" kind:"bool" help:"match without regard to case"}
+    {name:"invert-match" short:"v" kind:"bool" help:"select the lines that do NOT match"}
+    {name:"count"        short:"c" kind:"bool" help:"print only a count of selected lines per input"}
+    {name:"line-number"  short:"n" kind:"bool" help:"prefix each output line with its line number"}
+    {name:"color"        kind:"string" value:"WHEN" default:"never"
+     help:"highlight matches: auto (a terminal only), always, or never"}
+  ]
+  args: {name:"operand" min:1 help:"PATTERN, then the files to search; - or nothing means standard input"}
+}
+
+def grep-run fn [[ctx:Map] [Integer] [
+  def fl ctx.flags
+  def ag ctx.args
+  def raw (convert String (ag get 0))
+  def pat (grep-pattern raw (grep-bool fl "ignore-case"))
+  def bad (grep-check pat)
+  if (bad neq "") [ def z (grep-bad bad)  z ] [
+    # The three facts about the world, read HERE and nowhere else, so every
+    # decision below is a pure fn of them.
+    def when (grep-when fl)
+    if ((grep-color-ok when) not) [
+      def y (grep-bad (join "" ["invalid argument '" when "' for '--color'"]))
+      y
+    ] [
+    def col (grep-color-on when (IO.is-tty (IO.stdout)) (((IO.env "NO_COLOR") is None) not))
+    def files (grep-files ag)
+    def pfx ((size files) gt 1)
+    def opt (grep-opts pat fl pfx col)
+    def acc (grep-walk files 0 opt {matched:false errored:false})
+    def code (grep-code (acc.matched) (acc.errored))
+    code
+  ]]
+]]
+
+# ----------------------------------------------------------------------------
+# The whole program, minus the exit — `Cli.dispatch` plus the three lines
+# `Cli.main` would have run (design/CLI-PROGRAMS.1.md §2 documents exactly this
+# split): print `out`, print `err`, and take the exit code from dispatch unless
+# the action is "run", in which case the handler's Integer is the status.
+# --help and --version still print and exit 0, a usage error still prints to
+# stderr and exits 2.
+#
+# It takes argv as a PARAMETER, which is what lets tests/grep_test.boru drive
+# the whole program — `boru test` cannot inject an argument vector, and this fn
+# never calls IO.exit.
+#
+# The handler is called from HERE rather than handed to `Cli.main` because
+# `Cli.main` invokes its handler from inside the boru:cli module, and under the
+# tree-walking interpreter the handler body then cannot see this file's
+# module-level defs at all: `Cli.main (spec) (grep-run/r)` dies "undefined
+# word: grep-bool" under -no-compile while the bytecode compiler resolves it
+# — a run-mode difference, re-verified today with a three-line probe. cat.boru
+# records the same defect and the same workaround.
+# ----------------------------------------------------------------------------
+def grep-main fn [[argv:List] [Integer] [
+  def d (Cli.dispatch (spec) argv)
+  def _out (if ((d.out) neq "") [(IO.write (IO.stdout) (d.out))] [none])
+  def _err (if ((d.err) neq "") [(IO.write (IO.stderr) (d.err))] [none])
+  def code (if ((d.action) neq "run") [(d.code)] [(grep-run d)])
+  code
+]]
+
+# The pure fns, plus the spec and the argv-taking entry point, for the suite: a
+# module's private defs are NOT visible to an importer, so anything a test
+# touches has to be exported.
+export "Grep" {
+  bool:      grep-bool/r
+  num:       grep-num/r
+  pattern:   grep-pattern/r
+  check:     grep-check/r
+  select:    grep-select/r
+  label:     grep-label/r
+  format:    grep-format/r
+  countLine: grep-count-line/r
+  files:     grep-files/r
+  opts:      grep-opts/r
+  code:      grep-code/r
+  when:      grep-when/r
+  colorOn:   grep-color-on/r
+  colorOk:   grep-color-ok/r
+  paint:     grep-paint/r
+  nextChunk: grep-next-chunk/r
+  fail:      grep-fail/r
+  bad:       grep-bad/r
+  one:       grep-one/r
+  main:      grep-main/r
+  spec:      spec
+}
+
+# ----------------------------------------------------------------------------
+# The standalone guard, and the only IO.exit.
+#
+# tests/grep_test.boru reaches the fns above with `import "./grep.boru"`, and an
+# import RUNS the imported file's top level. Unguarded, that would make the
+# suite run grep itself — and the IO.exit that follows would end the suite file
+# before a single case had run.
+#
+# The discriminator is a host capability, not a heuristic: `boru run` installs
+# the OS environment view (lang/go/boru.go, Options.Env) and `boru test` does not
+# install one at all, so IO.env-all is structurally {} under `boru test` and the
+# process environment under `boru run` and in a built binary. The argv disjunct
+# closes all but one corner of the remaining gap.
+# ----------------------------------------------------------------------------
+def grep-standalone ((((IO.env-all) size) gt 0) or (((IO.args) size) gt 0))
+
+if grep-standalone [
+  def grep-rc (grep-main (IO.args))
+  IO.exit grep-rc;
+] []

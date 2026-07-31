@@ -57,7 +57,7 @@ func TestExecStoreAndCommandErrors(t *testing.T) {
 func TestExecAskPassphraseArms(t *testing.T) {
 	t.Run("env passphrase is used and validated", func(t *testing.T) {
 		w4EnvelopeVault(t) // EnvPassphrase = test-pass
-		code, out, e := runVault(t, "", "exec", "--ask-passphrase", "--", "sh", "-c", "printf '%s' \"$AQL_VAULT_PASSPHRASE\"")
+		code, out, e := runVault(t, "", "exec", "--ask-passphrase", "--", "sh", "-c", "printf '%s' \"$BORU_VAULT_PASSPHRASE\"")
 		if code != 0 {
 			t.Fatalf("exec --ask-passphrase with env pass: %s", e)
 		}

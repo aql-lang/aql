@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, interactive-widget=resizes-content">
-<title>AQL REPL</title>
+<title>boru REPL</title>
 <style>
   :root {
     --bg: #1e1e2e;
@@ -241,7 +241,7 @@
 </head>
 <body>
 <header>
-  <h1>AQL REPL</h1>
+  <h1>boru REPL</h1>
   <span class="subtitle">concatenative query language</span>
   <span id="buildinfo" title="latest commit / tag / date">__BUILD_INFO__</span>
   <span id="status" class="status-loading">loading wasm...</span>
@@ -249,7 +249,7 @@
 
 <div id="repl-view">
   <div id="output">
-    <div class="line line-info">Loading AQL engine...</div>
+    <div class="line line-info">Loading boru engine...</div>
   </div>
   <div class="hint" id="hint"></div>
   <div id="input-area">
@@ -265,7 +265,7 @@
 </div>
 
 <div id="tui-view" hidden>
-  <div id="tui-titlebar"><span id="tui-title">aql:tui</span>
+  <div id="tui-titlebar"><span id="tui-title">boru:tui</span>
     <span id="tui-hint">keys go to the app &middot; Ctrl-\ force-quits</span></div>
   <pre id="tui-screen" tabindex="0"></pre>
 </div>
@@ -298,7 +298,7 @@
   var sessionHistory = [];
   var historyIdx = -1;
   var ready = false;
-  var STORAGE_KEY = 'aql_repl_history';
+  var STORAGE_KEY = 'boru_repl_history';
   var MAX_HISTORY = 500;
 
   var isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
@@ -434,9 +434,9 @@
   }
 
   function fmtCode(code) {
-    if (typeof aqlFmt === 'function') {
+    if (typeof boruFmt === 'function') {
       try {
-        var f = aqlFmt(code).replace(/\n+$/, '');
+        var f = boruFmt(code).replace(/\n+$/, '');
         if (f) return f;
       } catch(e) {}
     }
@@ -516,17 +516,17 @@
   // --- Load sql.js then Go WASM ---
   var go = new Go();
 
-  window.__aqlReady = function() {
+  window.__boruReady = function() {
     ready = true;
     clearOutput();
-    addLine('line-info', 'AQL Web REPL ready. Type expressions and press Enter.');
+    addLine('line-info', 'boru Web REPL ready. Type expressions and press Enter.');
     addLine('line-info', 'Examples: 1 add 2  |  "hello" upper  |  def double [dup add]  |  5 double');
     status.textContent = 'ready';
     status.className = 'status-ready';
     input.disabled = false;
     runBtn.disabled = false;
     historyBtn.disabled = false;
-    input.placeholder = 'Enter AQL expression...';
+    input.placeholder = 'Enter boru expression...';
     input.focus();
   };
 
@@ -539,16 +539,16 @@
     return bytes.buffer;
   }
 
-  function loadAqlWasm() {
+  function loadBoruWasm() {
     var p;
-    if (typeof window.__aqlWasmB64 === 'string') {
+    if (typeof window.__boruWasmB64 === 'string') {
       // Single-file bundle: decode inline base64.
-      p = WebAssembly.instantiate(b64ToArrayBuffer(window.__aqlWasmB64), go.importObject);
+      p = WebAssembly.instantiate(b64ToArrayBuffer(window.__boruWasmB64), go.importObject);
     } else {
       // Multi-file: fetch from server.
-      p = WebAssembly.instantiateStreaming(fetch('aql.wasm'), go.importObject)
+      p = WebAssembly.instantiateStreaming(fetch('boru.wasm'), go.importObject)
         .catch(function() {
-          return fetch('aql.wasm').then(function(r) { return r.arrayBuffer(); })
+          return fetch('boru.wasm').then(function(r) { return r.arrayBuffer(); })
             .then(function(b) { return WebAssembly.instantiate(b, go.importObject); });
         });
     }
@@ -557,13 +557,13 @@
     }).catch(function(err) {
       status.textContent = 'error';
       status.className = 'status-error';
-      addLine('line-error', 'Failed to load AQL WASM: ' + err.message);
+      addLine('line-error', 'Failed to load boru WASM: ' + err.message);
     });
   }
 
   function initSqlAndStart() {
     if (typeof initSqlJs !== 'function') {
-      loadAqlWasm();
+      loadBoruWasm();
       return;
     }
     var opts = {};
@@ -576,10 +576,10 @@
     }
     initSqlJs(opts).then(function(SQL) {
       window.__sqlJS = SQL;
-      loadAqlWasm();
+      loadBoruWasm();
     }).catch(function(err) {
       addLine('line-info', 'Note: SQLite unavailable (' + err.message + ')');
-      loadAqlWasm();
+      loadBoruWasm();
     });
   }
 
@@ -609,38 +609,38 @@
     var display = fmtDisplay(code);
     addLine('line-input', '>> ' + display, fmtCode(code));
     try {
-      if (typeof aqlEvalAsync === 'function') {
+      if (typeof boruEvalAsync === 'function') {
         // async keeps the browser loop free while a Tui.run session
         // blocks the engine goroutine (keys must keep flowing)
-        aqlEvalAsync(code, showResult);
+        boruEvalAsync(code, showResult);
       } else {
-        showResult(aqlEval(code));
+        showResult(boruEval(code));
       }
     } catch(e) {
       addLine('line-error', '  error: ' + e.message, e.message);
     }
   }
 
-  // --- aql:tui browser terminal (the wasm webBackend's JS half) ---
+  // --- boru:tui browser terminal (the wasm webBackend's JS half) ---
   var tuiView = document.getElementById('tui-view');
   var tuiScreen = document.getElementById('tui-screen');
   var tuiTitle = document.getElementById('tui-title');
-  window.aqlTuiOpen = function(title) {
+  window.boruTuiOpen = function(title) {
     tuiView.hidden = false;
     if (title) tuiTitle.textContent = title;
     tuiScreen.focus();
     return {cols: 80, rows: 24};
   };
-  window.aqlTuiFrame = function(html) { tuiScreen.innerHTML = html; };
-  window.aqlTuiTitle = function(t) { tuiTitle.textContent = t; };
-  window.aqlTuiClose = function() {
+  window.boruTuiFrame = function(html) { tuiScreen.innerHTML = html; };
+  window.boruTuiTitle = function(t) { tuiTitle.textContent = t; };
+  window.boruTuiClose = function() {
     tuiView.hidden = true;
     tuiScreen.innerHTML = '';
-    tuiTitle.textContent = 'aql:tui';
+    tuiTitle.textContent = 'boru:tui';
     input.focus();
   };
-  window.aqlTuiCursor = function(x, y, visible) { /* cursor is drawn by focused inputs */ };
-  window.aqlTuiBell = function() {
+  window.boruTuiCursor = function(x, y, visible) { /* cursor is drawn by focused inputs */ };
+  window.boruTuiBell = function() {
     tuiView.style.borderColor = '#e5e510';
     setTimeout(function() { tuiView.style.borderColor = ''; }, 150);
   };
@@ -651,7 +651,7 @@
     ' ': 'space'
   };
   tuiScreen.addEventListener('keydown', function(e) {
-    if (typeof aqlTuiKey !== 'function') return;
+    if (typeof boruTuiKey !== 'function') return;
     var key = tuiKeyNames[e.key];
     var ch = '';
     if (!key) {
@@ -660,7 +660,7 @@
       ch = e.ctrlKey || e.altKey ? '' : e.key;
     }
     e.preventDefault();
-    aqlTuiKey(key, ch, e.ctrlKey, e.altKey, e.shiftKey);
+    boruTuiKey(key, ch, e.ctrlKey, e.altKey, e.shiftKey);
   });
 
   input.addEventListener('input', function() {

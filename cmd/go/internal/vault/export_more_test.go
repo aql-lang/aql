@@ -16,7 +16,7 @@ func TestExportRefusalPaths(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bp")
 	dir := t.TempDir()
 	initVaultAt(t, dir, "p")
-	bundle := filepath.Join(t.TempDir(), "b.aqlx")
+	bundle := filepath.Join(t.TempDir(), "b.borux")
 
 	// Nothing to export.
 	if code, _, errOut := runVault(t, "", "export", "--out="+bundle); code == 0 ||
@@ -79,7 +79,7 @@ func TestExportNamespaceFilterSelects(t *testing.T) {
 		return got
 	}
 	// --namespace=proj exports only the namespace.
-	b1 := filepath.Join(t.TempDir(), "proj.aqlx")
+	b1 := filepath.Join(t.TempDir(), "proj.borux")
 	if code, _, e := runVault(t, "", "export", "--namespace=proj", "--out="+b1); code != 0 {
 		t.Fatalf("export proj: %s", e)
 	}
@@ -87,7 +87,7 @@ func TestExportNamespaceFilterSelects(t *testing.T) {
 		t.Errorf("proj filter selected %v", got)
 	}
 	// --namespace=: exports the root only.
-	b2 := filepath.Join(t.TempDir(), "root.aqlx")
+	b2 := filepath.Join(t.TempDir(), "root.borux")
 	if code, _, e := runVault(t, "", "export", "--namespace=:", "--out="+b2); code != 0 {
 		t.Fatalf("export root: %s", e)
 	}
@@ -95,7 +95,7 @@ func TestExportNamespaceFilterSelects(t *testing.T) {
 		t.Errorf("root filter selected %v", got)
 	}
 	// Named aliases combine with the filter.
-	b3 := filepath.Join(t.TempDir(), "named.aqlx")
+	b3 := filepath.Join(t.TempDir(), "named.borux")
 	if code, _, e := runVault(t, "", "export", "--namespace=proj", "--out="+b3, "proj:one", "rootkey"); code != 0 {
 		t.Fatalf("export named: %s", e)
 	}
@@ -116,7 +116,7 @@ func TestImportBundleRemapAndPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	bundle := filepath.Join(t.TempDir(), "b.aqlx")
+	bundle := filepath.Join(t.TempDir(), "b.borux")
 	if err := os.WriteFile(bundle, blob, 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -173,13 +173,13 @@ func TestImportBundleRemapAndPrefix(t *testing.T) {
 func TestOpenExportMalformedEnvelopes(t *testing.T) {
 	// Not a bundle at all.
 	if _, err := openExport([]byte("PLAINTEXT"), "p"); err == nil ||
-		!strings.Contains(err.Error(), "not an aql vault export bundle") {
+		!strings.Contains(err.Error(), "not a boru vault export bundle") {
 		t.Errorf("non-bundle: %v", err)
 	}
 	// A future envelope format asks for an upgrade.
 	future := append([]byte(exportMagic), byte(exportEnvelopeFormat+1))
 	future = append(future, bytes.Repeat([]byte{0}, 64)...)
-	if _, err := openExport(future, "p"); err == nil || !strings.Contains(err.Error(), "upgrade aql") {
+	if _, err := openExport(future, "p"); err == nil || !strings.Contains(err.Error(), "upgrade boru") {
 		t.Errorf("future format: %v", err)
 	}
 	// Format zero is unknown.
@@ -239,14 +239,14 @@ func TestImportBundleFutureInnerVersionViaFile(t *testing.T) {
 	t.Setenv(EnvExportPassphrase, "bp")
 	plain, _ := json.Marshal(exportBundle{Version: exportVersion + 5})
 	blob, _ := sealExport(plain, "bp")
-	bundle := filepath.Join(t.TempDir(), "b.aqlx")
+	bundle := filepath.Join(t.TempDir(), "b.borux")
 	if err := os.WriteFile(bundle, blob, 0o600); err != nil {
 		t.Fatal(err)
 	}
 	dir := t.TempDir()
 	initVaultAt(t, dir, "p")
 	if code, _, errOut := runVault(t, "", "import", bundle); code == 0 ||
-		!strings.Contains(errOut, "upgrade aql") {
+		!strings.Contains(errOut, "upgrade boru") {
 		t.Errorf("future inner version: %q", errOut)
 	}
 }

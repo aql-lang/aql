@@ -40,7 +40,7 @@ func (r *Registry) ForkConcurrent() *Registry {
 	fork.Defs = r.Defs.Clone()
 	fork.Types = r.Types.CloneDynamic()
 	// builtinWords is read-MOSTLY, not read-only: a host Register call
-	// on the parent ((*AQL).Register) writes it while a fork's failure
+	// on the parent ((*Boru).Register) writes it while a fork's failure
 	// path may be ITERATING it for did-you-mean candidates
 	// (RegisteredWordNames via SuggestionCandidates) — a fatal
 	// concurrent map fault. Snapshot it here (on the parent-owning

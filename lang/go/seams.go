@@ -1,6 +1,6 @@
 package lang
 
-import "github.com/aql-lang/aql/lang/go/native"
+import "github.com/boru-lang/boru/lang/go/native"
 
 // newDefaultRegistryWithPolicy is a test seam (design/TEST-SEAMS.10.md):
 // tests swap it (with a t.Cleanup restore) to drive New's

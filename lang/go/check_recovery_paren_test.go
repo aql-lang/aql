@@ -11,7 +11,7 @@ import (
 // before the group's `)`, the recovery used to gather candidate positions PAST the
 // close-paren; splicing those out then deleted tokens across the `)` boundary and
 // left a phantom "unmatched opening parenthesis" — the emergent whole-module paren
-// bleed (template.aql's first-word/after-word/parts fn_body_errors). The fix tracks
+// bleed (template.boru's first-word/after-word/parts fn_body_errors). The fix tracks
 // forward-group depth and stops at the enclosing `)`.
 //
 // `need2` (2-arg) is dispatched over `((d get 0) size)` (one group arg, an Any-typed
@@ -19,7 +19,7 @@ import (
 // recovery over-reaches. The program must now check WITHOUT any unmatched-paren error
 // (other diagnostics like a no_signature over the gradual arg are unrelated).
 func TestRecoveryNoPhantomParen(t *testing.T) {
-	const src = `import "aql:string-util"
+	const src = `import "boru:string-util"
 def need2 fn [ [a:String b:String] [Integer] [ 1 ] ]
 def after fn [ [s:String] [String] [ (StringUtil.trim (slice 0 1 s)) ] ]
 def d [ {x:1} ]

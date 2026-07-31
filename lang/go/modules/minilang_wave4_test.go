@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"github.com/antchfx/xpath"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 	tabnasexpr "github.com/tabnas/expr/go"
 )
 
@@ -109,7 +109,7 @@ func TestMiniWave4MathRejections(t *testing.T) {
 
 // TestMiniWave4MathInternals pins the depth guard and the malformed-AST arms
 // of evalFormula / evalApply that a real parse cannot produce, plus
-// aqlToMval's domain projection.
+// boruToMval's domain projection.
 func TestMiniWave4MathInternals(t *testing.T) {
 	if _, err := evalFormula(1.0, nil, maxFormulaDepth+1); err == nil {
 		t.Error("depth overflow must be malformed")
@@ -146,17 +146,17 @@ func TestMiniWave4MathInternals(t *testing.T) {
 		t.Errorf("unknown operator: %v, want unsupported operator", err)
 	}
 
-	if mv, ok := aqlToMval(native.NewInteger(4)); !ok || !mv.isInt || mv.i != 4 {
-		t.Errorf("aqlToMval(4) = %+v %v", mv, ok)
+	if mv, ok := boruToMval(native.NewInteger(4)); !ok || !mv.isInt || mv.i != 4 {
+		t.Errorf("boruToMval(4) = %+v %v", mv, ok)
 	}
-	if mv, ok := aqlToMval(native.NewFloat(2.5)); !ok || mv.isInt || mv.f != 2.5 {
-		t.Errorf("aqlToMval(2.5) = %+v %v", mv, ok)
+	if mv, ok := boruToMval(native.NewFloat(2.5)); !ok || mv.isInt || mv.f != 2.5 {
+		t.Errorf("boruToMval(2.5) = %+v %v", mv, ok)
 	}
-	if _, ok := aqlToMval(native.NewString("x")); ok {
-		t.Error("aqlToMval(String) must refuse")
+	if _, ok := boruToMval(native.NewString("x")); ok {
+		t.Error("boruToMval(String) must refuse")
 	}
-	if _, ok := aqlToMval(native.NewTypeLiteral(native.TInteger)); ok {
-		t.Error("aqlToMval(type literal) must refuse")
+	if _, ok := boruToMval(native.NewTypeLiteral(native.TInteger)); ok {
+		t.Error("boruToMval(type literal) must refuse")
 	}
 	if got := (mval{i: 3, isInt: true}).asFloat(); got != 3.0 {
 		t.Errorf("asFloat(int 3) = %v", got)

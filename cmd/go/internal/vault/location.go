@@ -6,20 +6,20 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 )
 
 // Vault location customization.
 //
-// By default the vault lives in the folder {home}/.aql, with files
+// By default the vault lives in the folder {home}/.boru, with files
 // named vault.<ext> — vault.jsonic (metadata), vault.keyring (the file
 // backend), vault.lock, and vault.audit.jsonl. Two knobs override this,
 // each settable either by a global flag placed before the mode or by an
 // environment variable:
 //
-//	--folder PATH  / AQL_VAULT_FOLDER  put the vault in PATH instead of
-//	                                   {home}/.aql.
-//	--suffix NAME  / AQL_VAULT_SUFFIX  name the files vault.NAME.<ext>,
+//	--folder PATH  / BORU_VAULT_FOLDER  put the vault in PATH instead of
+//	                                   {home}/.boru.
+//	--suffix NAME  / BORU_VAULT_SUFFIX  name the files vault.NAME.<ext>,
 //	                                   so several vaults can share one
 //	                                   folder without colliding.
 //
@@ -27,26 +27,26 @@ import (
 // promotes the flag value into the environment so every resolver below
 // reads a single source of truth.
 const (
-	// EnvFolder overrides the vault folder ({home}/.aql by default).
-	EnvFolder = "AQL_VAULT_FOLDER"
+	// EnvFolder overrides the vault folder ({home}/.boru by default).
+	EnvFolder = "BORU_VAULT_FOLDER"
 	// EnvSuffix inserts an inner file-name segment: vault.<suffix>.jsonic.
-	EnvSuffix = "AQL_VAULT_SUFFIX"
+	EnvSuffix = "BORU_VAULT_SUFFIX"
 )
 
 // vaultFolder returns the folder holding the vault's files: the
-// AQL_VAULT_FOLDER override when set, otherwise {homeDir}/.aql. A leading
+// BORU_VAULT_FOLDER override when set, otherwise {homeDir}/.boru. A leading
 // ~ in the override is expanded to homeDir (see pathutil.ExpandTilde),
 // and a relative override is resolved against the process working folder.
 func vaultFolder(homeDir string) string {
 	if f := os.Getenv(EnvFolder); f != "" {
 		return pathutil.ExpandTilde(f, homeDir)
 	}
-	return filepath.Join(homeDir, ".aql")
+	return filepath.Join(homeDir, ".boru")
 }
 
 // vaultFileName builds one of the vault's inner file names for the
 // given extension, inserting the configured suffix as
-// vault.<suffix>.<ext> when AQL_VAULT_SUFFIX is set, otherwise
+// vault.<suffix>.<ext> when BORU_VAULT_SUFFIX is set, otherwise
 // vault.<ext>. ext is the part after the leading "vault.", e.g.
 // "jsonic", "keyring", "lock", or "audit.jsonl".
 func vaultFileName(ext string) string {

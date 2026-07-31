@@ -3,11 +3,11 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // Regression tests for the DX-driven checker-accuracy fixes that brought the
-// voxgig-aql library corpus to zero check warnings/info: the mixed_form_call
+// voxgig-boru library corpus to zero check warnings/info: the mixed_form_call
 // Any-slot gate, and the unused_def fixes (ever-used semantics, the
 // construction-self-use suppression, the opaque code-body use-scan, and the
 // Reach-receiver walk). Each keeps its genuine true-positive while clearing the
@@ -19,7 +19,7 @@ func checkCounts(t *testing.T, src string) (errs, warns, mixedForm, unused int) 
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	res, err := a.Check(src)
 	if err != nil {
 		t.Fatalf("check: %v", err)

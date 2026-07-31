@@ -5,7 +5,7 @@ import (
 	mathrand "math/rand"
 	"sync"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // randState holds a PRNG instance. Each instance is independent —
@@ -17,11 +17,11 @@ type randState struct {
 	rng *mathrand.Rand
 }
 
-// BuildRandModule creates the "aql:rand" native module.
+// BuildRandModule creates the "boru:rand" native module.
 //
 // The top-level `rand` namespace is **non-deterministic by default**:
 // at module-build time we seed once from the host clock so a fresh
-// `import "aql:rand"` produces genuinely random values.
+// `import "boru:rand"` produces genuinely random values.
 //
 // For deterministic / reproducible sequences (property tests, demo
 // fixtures, replayable simulations) use `Rand.with-seed N` — it
@@ -30,7 +30,7 @@ type randState struct {
 // `one-of`). The instance has its own PRNG sourced from `N` and does
 // not affect the top-level rand or any other instance.
 //
-//	import "aql:rand"
+//	import "boru:rand"
 //	Rand.int 0 100              # random, [0, 100)
 //	def r (Rand.with-seed 42)   # isolated, seeded with 42
 //	r.int 0 100                 # deterministic at seed 42
@@ -123,10 +123,10 @@ func newRandState(seed int64) *randState {
 // top-level `rand` namespace (`int`, `bool`, `float`, `string`,
 // `one-of`), each closing over a private PRNG seeded with `seed`.
 //
-// Exposed so other modules (notably aql:test's PBT framework) can
-// build deterministic rand instances without going through AQL-level
+// Exposed so other modules (notably boru:test's PBT framework) can
+// build deterministic rand instances without going through boru-level
 // `Rand.with-seed N` invocation. The returned Map is functionally
-// identical to what `Rand.with-seed N` produces from AQL.
+// identical to what `Rand.with-seed N` produces from Boru.
 func BuildSeededRandInstance(seed int64) (*native.OrderedMap, error) {
 	state := newRandState(seed)
 	return buildRandExportsForState(state)
@@ -260,7 +260,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 						return nil, err
 					}
 					if hi <= lo {
-						return nil, r.AqlError("rand_error",
+						return nil, r.BoruError("rand_error",
 							fmt.Sprintf("Rand.int: hi (%d) <= lo (%d); range must be non-empty", hi, lo),
 							"Rand.int")
 					}
@@ -319,7 +319,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 						return nil, err
 					}
 					if length < 0 {
-						return nil, r.AqlError("rand_error",
+						return nil, r.BoruError("rand_error",
 							fmt.Sprintf("Rand.string: length (%d) < 0", length), "Rand.string")
 					}
 					runes := []rune(charset)
@@ -327,7 +327,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 						if length == 0 {
 							return []native.Value{native.NewString("")}, nil
 						}
-						return nil, r.AqlError("rand_error",
+						return nil, r.BoruError("rand_error",
 							"Rand.string: empty charset", "Rand.string")
 					}
 					out := make([]rune, length)
@@ -364,7 +364,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 						return nil, err
 					}
 					if n < 0 {
-						return nil, r.AqlError("rand_error",
+						return nil, r.BoruError("rand_error",
 							fmt.Sprintf("Rand.list-of: length (%d) < 0", n), "Rand.list-of")
 					}
 					out := make([]native.Value, 0, n)
@@ -377,7 +377,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 								return nil, fmt.Errorf("evaluating Rand.list-of[%d]: %w", i, err)
 							}
 							if len(res) == 0 {
-								return nil, r.AqlError("rand_error",
+								return nil, r.BoruError("rand_error",
 									fmt.Sprintf("Rand.list-of[%d]: body produced no value", i), "Rand.list-of")
 							}
 							out = append(out, res[len(res)-1])
@@ -396,7 +396,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 							return nil, fmt.Errorf("evaluating Rand.list-of[%d]: %w", i, err)
 						}
 						if len(res) == 0 {
-							return nil, r.AqlError("rand_error",
+							return nil, r.BoruError("rand_error",
 								fmt.Sprintf("Rand.list-of[%d]: body produced no value", i),
 								"Rand.list-of")
 						}
@@ -434,7 +434,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 							return nil, fmt.Errorf("evaluating Rand.map-from[%s]: %w", key, err)
 						}
 						if len(res) == 0 {
-							return nil, r.AqlError("rand_error",
+							return nil, r.BoruError("rand_error",
 								fmt.Sprintf("Rand.map-from[%s]: body produced no value", key),
 								"Rand.map-from")
 						}
@@ -457,7 +457,7 @@ func randNativesForState(state *randState) []native.NativeFunc {
 					}
 					n := lst.Len()
 					if n == 0 {
-						return nil, r.AqlError("rand_error",
+						return nil, r.BoruError("rand_error",
 							"Rand.one-of: empty list", "Rand.one-of")
 					}
 					state.mu.Lock()

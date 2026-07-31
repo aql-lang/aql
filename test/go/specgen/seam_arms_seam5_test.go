@@ -9,8 +9,8 @@ import (
 	"sync/atomic"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	lang "github.com/aql-lang/aql/lang/go"
+	eng "github.com/boru-lang/boru/eng/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // exitCodeAsync drives fn with osExit swapped to a stub that records
@@ -61,7 +61,7 @@ func TestWorkerLangNewFailures(t *testing.T) {
 	prevCPU, prevNew := numCPU, langNew
 	t.Cleanup(func() { numCPU, langNew = prevCPU, prevNew })
 	numCPU = func() int { return 0 } // also drives the single-worker floor
-	langNew = func() (*lang.AQL, error) { return nil, errors.New("no lang") }
+	langNew = func() (*lang.Boru, error) { return nil, errors.New("no lang") }
 
 	dir := t.TempDir()
 	passing := writeTSV(t, dir, "passing.tsv", "#kept: 1 of 1 scanned (max-len 1)\n1\t1\n")
@@ -108,7 +108,7 @@ func TestExtendFiveRegistryFailure(t *testing.T) {
 func TestExtractPassingCompiledDivergence(t *testing.T) {
 	prev := runCompiled
 	t.Cleanup(func() { runCompiled = prev })
-	runCompiled = func(*lang.AQL, string) ([]any, bool, error) {
+	runCompiled = func(*lang.Boru, string) ([]any, bool, error) {
 		return []any{"divergent"}, true, nil
 	}
 
@@ -143,7 +143,7 @@ func TestFrontierCheckerFirstViolation(t *testing.T) {
 	prevCPU, prevCC := numCPU, compileCheck
 	t.Cleanup(func() { numCPU, compileCheck = prevCPU, prevCC })
 	numCPU = func() int { return 0 }
-	compileCheck = func(*lang.AQL, string) (*lang.Program, string, lang.CheckResult, error) {
+	compileCheck = func(*lang.Boru, string) (*lang.Program, string, lang.CheckResult, error) {
 		res := lang.CheckResult{Diagnostics: []lang.CheckDiagnostic{{Severity: lang.SeverityError}}}
 		return prog, "", res, nil
 	}
@@ -175,7 +175,7 @@ func TestFreshDivergenceArms(t *testing.T) {
 	t.Run("lang.New failure", func(t *testing.T) {
 		prev := langNew
 		t.Cleanup(func() { langNew = prev })
-		langNew = func() (*lang.AQL, error) { return nil, errors.New("no lang") }
+		langNew = func() (*lang.Boru, error) { return nil, errors.New("no lang") }
 		if note, real := freshDivergence("1"); real || note != "" {
 			t.Errorf("freshDivergence with failing lang.New = (%q, %v), want (\"\", false)", note, real)
 		}
@@ -183,7 +183,7 @@ func TestFreshDivergenceArms(t *testing.T) {
 	t.Run("error divergence", func(t *testing.T) {
 		prev := runCompiled
 		t.Cleanup(func() { runCompiled = prev })
-		runCompiled = func(*lang.AQL, string) ([]any, bool, error) {
+		runCompiled = func(*lang.Boru, string) ([]any, bool, error) {
 			return nil, true, errors.New("compiled boom")
 		}
 		note, real := freshDivergence("1")
@@ -194,7 +194,7 @@ func TestFreshDivergenceArms(t *testing.T) {
 	t.Run("value divergence", func(t *testing.T) {
 		prev := runCompiled
 		t.Cleanup(func() { runCompiled = prev })
-		runCompiled = func(*lang.AQL, string) ([]any, bool, error) {
+		runCompiled = func(*lang.Boru, string) ([]any, bool, error) {
 			return []any{"zzz"}, true, nil
 		}
 		note, real := freshDivergence("1")
@@ -230,7 +230,7 @@ func TestExtendFiveMismatchPath(t *testing.T) {
 	prevCPU, prevRC := numCPU, runCompiled
 	t.Cleanup(func() { numCPU, runCompiled = prevCPU, prevRC })
 	numCPU = func() int { return 1 }
-	runCompiled = func(*lang.AQL, string) ([]any, bool, error) {
+	runCompiled = func(*lang.Boru, string) ([]any, bool, error) {
 		return []any{"zzz"}, true, nil
 	}
 

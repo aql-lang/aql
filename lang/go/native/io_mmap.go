@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // io_mmap.go — memory-mapped files. IO.mmap maps a file's bytes into a
 // Mmap resource; `read region {offset length enc}` COPIES bytes out (a
-// read must never hand AQL a slice that a later close unmaps — a
+// read must never hand boru a slice that a later close unmaps — a
 // use-after-free), `write region bytes {offset}` splices INTO the mapping
 // in place, IO.flush syncs, and the polymorphic IO.close unmaps.
 
@@ -145,7 +145,7 @@ func doMmapWord(args []Value, r *Registry, mmapType *Type) ([]Value, error) {
 	r.NoteEffect()
 	region, err := EffectiveFileOps(r).Mmap(path, offset, length, writable)
 	if err != nil {
-		return nil, r.AqlError("mmap_error", fmt.Sprintf("mmap: %v", err), "mmap")
+		return nil, r.BoruError("mmap_error", fmt.Sprintf("mmap: %v", err), "mmap")
 	}
 	info := &MmapInfo{ID: GenerateID("M_"), Path: path, Writable: writable, region: region}
 	return []Value{eng.NewValueRaw(mmapType, ExtensionPayload{Body: info})}, nil
@@ -154,11 +154,11 @@ func doMmapWord(args []Value, r *Registry, mmapType *Type) ([]Value, error) {
 // readMmapWord reads from a mapped region: {offset}/{length} window it,
 // {enc} decodes ('bytes' returns Bytes, else text). The bytes are COPIED
 // out of the mapping so a later close (munmap) can never invalidate the
-// AQL value.
+// boru value.
 func readMmapWord(args []Value, r *Registry) ([]Value, error) {
 	mi, ok := asMmapInfo(args[0])
 	if !ok {
-		return nil, r.AqlError("read_error", fmt.Sprintf("read: not a Mmap region (got %s)", args[0].Parent), "read")
+		return nil, r.BoruError("read_error", fmt.Sprintf("read: not a Mmap region (got %s)", args[0].Parent), "read")
 	}
 	enc := "utf8"
 	offset, length := 0, -1
@@ -175,14 +175,14 @@ func readMmapWord(args []Value, r *Registry) ([]Value, error) {
 	}
 	out, werr := mi.read(offset, length)
 	if werr != nil {
-		return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", werr), "read")
+		return nil, r.BoruError("read_error", fmt.Sprintf("read: %v", werr), "read")
 	}
 	if enc == "bytes" || enc == "binary" {
 		return []Value{NewBytesValue(out)}, nil
 	}
 	text, derr := decodeEnc(out, enc)
 	if derr != nil {
-		return nil, r.AqlError("read_error", fmt.Sprintf("read: %v", derr), "read")
+		return nil, r.BoruError("read_error", fmt.Sprintf("read: %v", derr), "read")
 	}
 	return []Value{NewString(text)}, nil
 }
@@ -193,14 +193,14 @@ func readMmapWord(args []Value, r *Registry) ([]Value, error) {
 func writeMmapWord(args []Value, r *Registry) ([]Value, error) {
 	mi, ok := asMmapInfo(args[0])
 	if !ok {
-		return nil, r.AqlError("write_error", fmt.Sprintf("write: not a Mmap region (got %s)", args[0].Parent), "write")
+		return nil, r.BoruError("write_error", fmt.Sprintf("write: not a Mmap region (got %s)", args[0].Parent), "write")
 	}
 	if !mi.Writable {
-		return nil, r.AqlError("write_error", "write: this Mmap region is read-only", "write")
+		return nil, r.BoruError("write_error", "write: this Mmap region is read-only", "write")
 	}
 	data, err := handleWriteBytes(args[1])
 	if err != nil {
-		return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", err), "write")
+		return nil, r.BoruError("write_error", fmt.Sprintf("write: %v", err), "write")
 	}
 	offset := 0
 	if len(args) > 2 {
@@ -210,7 +210,7 @@ func writeMmapWord(args []Value, r *Registry) ([]Value, error) {
 	}
 	r.NoteEffect()
 	if err := mi.write(data, offset); err != nil {
-		return nil, r.AqlError("write_error", fmt.Sprintf("write: %v", err), "write")
+		return nil, r.BoruError("write_error", fmt.Sprintf("write: %v", err), "write")
 	}
 	return []Value{args[0]}, nil
 }

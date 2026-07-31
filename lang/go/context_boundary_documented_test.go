@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // TestDocumentedContextBoundaries pins the boundary list EXPLANATION.md
@@ -44,7 +44,7 @@ func TestDocumentedContextBoundaries(t *testing.T) {
 		{"outer", `outer [ drop drop context set y 1 5 ] [1] [2]`, contained, contained},
 		{"scan", `scan [ drop drop context set y 1 5 ] [1]`, contained, contained},
 		{"for-each", `for-each [ drop context set y 1 5 ] [1]`, contained, contained},
-		{"await", `import "aql:time-util" end
+		{"await", `import "boru:time-util" end
 TimeUtil.await [ [ context set y 1 5 ] ]`, contained, contained},
 
 		// ---- NOT boundaries in either engine ----

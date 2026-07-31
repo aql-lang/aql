@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BuildTimeModule creates the "aql:time-util" native module.
+// BuildTimeModule creates the "boru:time-util" native module.
 func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	subReg, err := newDefaultRegistry()
 	if err != nil {
@@ -20,7 +20,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// so they must draw IDs from the importing tree's counter (see eng
 	// TypeTable.mintID and the BuildIOModule / StreamKind precedent).
 	subReg.Types.AdoptSeqFrom(parent.Types)
-	subReg.Types.MintOwner = "aql:time-util"
+	subReg.Types.MintOwner = "boru:time-util"
 	tt := native.MintTemporalModuleTypes(subReg)
 
 	for _, n := range timeNatives(tt) {
@@ -192,7 +192,7 @@ func dateDiffCalendarDuration(from, to time.Time) native.CalDurationData {
 
 // ISO 8601 duration parsing (parseISO8601Duration) and auto-date
 // layout tables (autoDateLayouts) removed at the parser-hand-off
-// step. AQL no longer parses dates / times / durations from
+// step. boru no longer parses dates / times / durations from
 // strings; construct via numeric helpers (cal-dur, years, months,
 // days, hours, …) or via current-time sources (today, now-local,
 // unix, unix-ms, unix-ns).

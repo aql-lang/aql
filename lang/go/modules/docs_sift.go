@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:sift", map[string]string{
+	registerDocs("boru:sift", map[string]string{
 		"define":   "Register a spec-map as a named parse kind: define NAME SPEC.",
 		"parse":    "Parse a source with an inline spec-map or a registered kind name.",
 		"kinds":    "List the atoms of every sift-registered kind (families, presets, user defines).",
@@ -15,7 +15,7 @@ func init() {
 	// the family atom is the whole API — a signature of [Atom Map String]
 	// names it without saying what may go there. Results are from verified
 	// lang/spec/module-sift.tsv rows.
-	registerExamples("aql:sift", map[string][]string{
+	registerExamples("boru:sift", map[string][]string{
 		"families": {`Sift.families                                    ;# [kv/q blocks/q columns/q dsv/q fixed/q pattern/q]`},
 		"kinds":    {`Sift.kinds                                       ;# the families plus any Sift.define'd names`},
 		"parse": {

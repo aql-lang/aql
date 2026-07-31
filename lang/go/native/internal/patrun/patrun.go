@@ -1,5 +1,5 @@
 // Vendored from github.com/rjrodger/patrun (go/, commit 9aa8183), MIT (see LICENSE).
-// MODIFIED for AQL: the optional gex-glob MatchValue is removed — AQL has its own
+// MODIFIED for boru: the optional gex-glob MatchValue is removed — boru has its own
 // gex (lang/go/modules/gex.go) and importing it here would form a cycle. The core
 // trie and the stdlib interval matcher are unchanged. Scalar-equality matching is
 // applied by the caller (lang/go/native/native_patrun.go) coercing Scalar values

@@ -1,4 +1,4 @@
-# AQL Vault — MFA / TOTP Codes (Design)
+# boru Vault — MFA / TOTP Codes (Design)
 
 **Status: design only — not implemented.** This note captures the
 shape of the feature, the security tradeoff that gates it, and a
@@ -16,7 +16,7 @@ You have enabled multifactor authentication. Please enter OTP code.
 Code:
 ```
 
-The vault already injects the long-lived token (`aql vault exec
+The vault already injects the long-lived token (`boru vault exec
 --for=gem=gem_token -- gem push …`), but the interactive OTP prompt
 breaks an otherwise unattended flow. The question: can the vault also
 produce the OTP, given the user already has MFA configured on a phone?
@@ -107,18 +107,18 @@ recipe/env model and toward a small generator primitive.
 
 ## 6. Proposed design
 
-### 6.1 Primary: an `aql vault otp <alias>` subcommand
+### 6.1 Primary: a `boru vault otp <alias>` subcommand
 
 A generator that prints the current code, composed into the publish
 command via shell substitution:
 
 ```bash
 # store the seed once (paste the otpauth:// URI or the base32 secret)
-aql vault add --from-stdin gem_mfa
+boru vault add --from-stdin gem_mfa
 
 # generate a live code on demand:
-gem push --otp "$(aql vault otp gem_mfa)" pkg.gem
-npm publish --otp="$(aql vault otp npm_mfa)"
+gem push --otp "$(boru vault otp gem_mfa)" pkg.gem
+npm publish --otp="$(boru vault otp npm_mfa)"
 ```
 
 Behaviour: unlock (reuse the standard auth path) → read the seed for
@@ -133,7 +133,7 @@ Why a subcommand rather than a recipe:
 - **Nothing leaks to a long-lived env var.** The code is on the argv of
   one short-lived process and expires in ~30 s.
 - **Composes with the token path.** Token via
-  `exec --for=gem=gem_token -- gem push --otp "$(aql vault otp gem_mfa)"
+  `exec --for=gem=gem_token -- gem push --otp "$(boru vault otp gem_mfa)"
   …`; the repeatable `--for` (already shipped) carries the token while
   the substitution supplies the OTP.
 
@@ -148,7 +148,7 @@ time (instead of returning a stored secret). This reuses the existing
 recipe machinery and the repeatable `--for`:
 
 ```bash
-aql vault exec --for=gem=gem_token --for=gem-otp=gem_mfa -- gem push …
+boru vault exec --for=gem=gem_token --for=gem-otp=gem_mfa -- gem push …
 ```
 
 This is a thin add-on over §6.1 and should follow it, not lead — the
@@ -201,7 +201,7 @@ interactive 2FA entirely, and the ecosystem is moving that way:
 - **Automation / granular tokens.** npm "automation" tokens and
   RubyGems API keys can be scoped to skip MFA-for-writes.
 
-The `aql vault otp` subcommand targets the *interactive local publish*
+The `boru vault otp` subcommand targets the *interactive local publish*
 case — where you'd otherwise reach for your phone every push — not CI.
 PyPI/`twine` and cargo are non-goals (no OTP on upload).
 

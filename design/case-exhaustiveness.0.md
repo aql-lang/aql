@@ -7,10 +7,10 @@ a default, and predicates are meaningful (interval / is-coverage).
 
 ## The rule
 
-`aql check` requires a `case`'s clauses to be **exhaustive** over the
+`boru check` requires a `case`'s clauses to be **exhaustive** over the
 scrutinee's static type. A default-less `case` whose clause matches do
 not provably cover the scrutinee is an **error-severity** finding,
-`case_not_exhaustive`, which gates `aql check`, refuses `aql run` at
+`case_not_exhaustive`, which gates `boru check`, refuses `boru run` at
 preflight, and refuses compilation (it is deliberately NOT a
 `RuntimeMirror`: no-match is not a runtime error — the runtime keeps the
 spec-pinned produce-nothing behaviour — so the finding is a model-level

@@ -1,7 +1,7 @@
-# AQL Language Specification: scalar edge cases 4 — temporal values
+# boru Language Specification: scalar edge cases 4 — temporal values
 # Format: input<TAB>expected<TAB>description
 #
-# Deterministic temporal edges via aql:time-util: every input is a FIXED
+# Deterministic temporal edges via boru:time-util: every input is a FIXED
 # unix epoch (never the clock), so the rows are reproducible anywhere.
 # Covers construction + typeof for each Time leaf, chronological
 # comparison at the Time LCA (cross-leaf cmp/lt/sort), epoch round-trips,
@@ -20,90 +20,90 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  construction and the Time leaves
-import "aql:time-util"  typeof (TimeUtil.unix 0)	Instant	unix seconds construct an Instant
-import "aql:time-util"  TimeUtil.unix -86400	1969-12-31T00:00:00Z	negative epochs (pre-1970) work
-import "aql:time-util"  typeof (TimeUtil.to-date (TimeUtil.unix 0))	Date	to-date narrows to the Date leaf
-import "aql:time-util"  typeof (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 0)))	DateTime	to-datetime lifts a Date to midnight
-import "aql:time-util"  typeof (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 0))))	TimeOfDay	TimeOfDay is its own leaf
-import "aql:time-util"  TimeUtil.unix-ms 1700000000123	2023-11-14T22:13:20.123Z	sub-second precision survives and renders
-import "aql:time-util"  TimeUtil.to-unix (TimeUtil.unix -1)	-1	negative epochs round-trip
-import "aql:time-util"  TimeUtil.to-unix-ms (TimeUtil.unix-ms 1700000000123)	1700000000123	millisecond round-trip is exact
+import "boru:time-util"  typeof (TimeUtil.unix 0)	Instant	unix seconds construct an Instant
+import "boru:time-util"  TimeUtil.unix -86400	1969-12-31T00:00:00Z	negative epochs (pre-1970) work
+import "boru:time-util"  typeof (TimeUtil.to-date (TimeUtil.unix 0))	Date	to-date narrows to the Date leaf
+import "boru:time-util"  typeof (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 0)))	DateTime	to-datetime lifts a Date to midnight
+import "boru:time-util"  typeof (TimeUtil.to-time-of-day (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 0))))	TimeOfDay	TimeOfDay is its own leaf
+import "boru:time-util"  TimeUtil.unix-ms 1700000000123	2023-11-14T22:13:20.123Z	sub-second precision survives and renders
+import "boru:time-util"  TimeUtil.to-unix (TimeUtil.unix -1)	-1	negative epochs round-trip
+import "boru:time-util"  TimeUtil.to-unix-ms (TimeUtil.unix-ms 1700000000123)	1700000000123	millisecond round-trip is exact
 #
 # §2  durations — negative components and truncating totals
-import "aql:time-util"  TimeUtil.days -3	P0Y0M-3D	negative calendar durations render component-wise
-import "aql:time-util"  TimeUtil.weeks -1	P0Y0M-7D	weeks lower to days, sign preserved
-import "aql:time-util"  TimeUtil.hours -2	-2h0m0s	negative clock duration
-import "aql:time-util"  TimeUtil.dur-sign (TimeUtil.days -3)	-1	dur-sign sees the negative
-import "aql:time-util"  TimeUtil.dur-sign (TimeUtil.cal-dur 0 0 0)	0	the zero duration has sign 0
-import "aql:time-util"  TimeUtil.total-hours (TimeUtil.hours -2)	-2.0	totals carry the sign
-import "aql:time-util"  TimeUtil.ns 1500000	1.5ms	nanoseconds render at the natural unit
-import "aql:time-util"  TimeUtil.total-ms (TimeUtil.ns 1500000)	1.0	total-ms TRUNCATES sub-millisecond remainder (Go Milliseconds())
-import "aql:time-util"  TimeUtil.diff (TimeUtil.unix 5) (TimeUtil.unix 5)	0s	zero clock duration renders as 0s
-import "aql:time-util"  TimeUtil.diff (TimeUtil.unix 0) (TimeUtil.unix 90)	-1m30s	diff is first-minus-second — an earlier first is negative
+import "boru:time-util"  TimeUtil.days -3	P0Y0M-3D	negative calendar durations render component-wise
+import "boru:time-util"  TimeUtil.weeks -1	P0Y0M-7D	weeks lower to days, sign preserved
+import "boru:time-util"  TimeUtil.hours -2	-2h0m0s	negative clock duration
+import "boru:time-util"  TimeUtil.dur-sign (TimeUtil.days -3)	-1	dur-sign sees the negative
+import "boru:time-util"  TimeUtil.dur-sign (TimeUtil.cal-dur 0 0 0)	0	the zero duration has sign 0
+import "boru:time-util"  TimeUtil.total-hours (TimeUtil.hours -2)	-2.0	totals carry the sign
+import "boru:time-util"  TimeUtil.ns 1500000	1.5ms	nanoseconds render at the natural unit
+import "boru:time-util"  TimeUtil.total-ms (TimeUtil.ns 1500000)	1.0	total-ms TRUNCATES sub-millisecond remainder (Go Milliseconds())
+import "boru:time-util"  TimeUtil.diff (TimeUtil.unix 5) (TimeUtil.unix 5)	0s	zero clock duration renders as 0s
+import "boru:time-util"  TimeUtil.diff (TimeUtil.unix 0) (TimeUtil.unix 90)	-1m30s	diff is first-minus-second — an earlier first is negative
 #
 # §3  chronological comparison at the Time LCA — cross-leaf cmp/lt work
 #     by instant (module-time.tsv pins that eq stays leaf-strict)
-import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) cmp (TimeUtil.unix 1577836800)	0	Date vs Instant at the same moment: cmp ties (eq is false — see module-time.tsv §19)
-import "aql:time-util"  (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 0))) cmp (TimeUtil.unix 0)	0	DateTime vs Instant ties at the same moment too
-import "aql:time-util"  (TimeUtil.unix 0) lt (TimeUtil.unix 1)	true	Instants order chronologically
-import "aql:time-util"  (TimeUtil.to-date (TimeUtil.unix 0)) lt (TimeUtil.unix 1700000000)	true	a Date orders against an Instant across leaves
-import "aql:time-util"  (TimeUtil.unix 100) tcmp (TimeUtil.unix 200)	-1	tcmp agrees inside the Time band
-import "aql:time-util"  [(TimeUtil.unix 300) (TimeUtil.unix 100) (TimeUtil.unix 200)] sort	[1970-01-01T00:01:40Z 1970-01-01T00:03:20Z 1970-01-01T00:05:00Z]	sort is chronological
-import "aql:time-util"  [(TimeUtil.unix 100) (TimeUtil.to-date (TimeUtil.unix 0))] sort	[1970-01-01 1970-01-01T00:01:40Z]	mixed Date/Instant sort by instant: midnight first
-import "aql:time-util"  TimeUtil.compare (TimeUtil.unix 100) (TimeUtil.unix 200)	ERROR:uncalled_function	TimeUtil.compare is Date-typed — Instants use core cmp/lt instead
+import "boru:time-util"  (TimeUtil.to-date (TimeUtil.unix 1577836800)) cmp (TimeUtil.unix 1577836800)	0	Date vs Instant at the same moment: cmp ties (eq is false — see module-time.tsv §19)
+import "boru:time-util"  (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 0))) cmp (TimeUtil.unix 0)	0	DateTime vs Instant ties at the same moment too
+import "boru:time-util"  (TimeUtil.unix 0) lt (TimeUtil.unix 1)	true	Instants order chronologically
+import "boru:time-util"  (TimeUtil.to-date (TimeUtil.unix 0)) lt (TimeUtil.unix 1700000000)	true	a Date orders against an Instant across leaves
+import "boru:time-util"  (TimeUtil.unix 100) tcmp (TimeUtil.unix 200)	-1	tcmp agrees inside the Time band
+import "boru:time-util"  [(TimeUtil.unix 300) (TimeUtil.unix 100) (TimeUtil.unix 200)] sort	[1970-01-01T00:01:40Z 1970-01-01T00:03:20Z 1970-01-01T00:05:00Z]	sort is chronological
+import "boru:time-util"  [(TimeUtil.unix 100) (TimeUtil.to-date (TimeUtil.unix 0))] sort	[1970-01-01 1970-01-01T00:01:40Z]	mixed Date/Instant sort by instant: midnight first
+import "boru:time-util"  TimeUtil.compare (TimeUtil.unix 100) (TimeUtil.unix 200)	ERROR:uncalled_function	TimeUtil.compare is Date-typed — Instants use core cmp/lt instead
 #
 # §4  fixed-zone conversions — offsets, names, and DST on both sides
-import "aql:time-util"  TimeUtil.to-local (TimeUtil.tz 'Asia/Tokyo') (TimeUtil.unix 1700000000)	2023-11-15T07:13:20	+09:00 rolls the calendar day forward
-import "aql:time-util"  TimeUtil.tz-offset (TimeUtil.tz 'Asia/Tokyo') (TimeUtil.unix 1700000000)	'+09:00'	Tokyo has no DST — a fixed +09:00
-import "aql:time-util"  TimeUtil.tz-name (TimeUtil.tz 'Europe/Dublin')	'Europe/Dublin'	tz-name echoes the IANA id
-import "aql:time-util"  TimeUtil.is-dst (TimeUtil.tz-utc) (TimeUtil.unix 1700000000)	false	UTC never observes DST
-import "aql:time-util"  TimeUtil.tz-offset (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615698000)	'-05:00'	NY two hours before the 2021 spring-forward: still EST
-import "aql:time-util"  TimeUtil.tz-offset (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615705200)	'-04:00'	…at 07:00Z the offset has jumped to EDT
-import "aql:time-util"  TimeUtil.is-dst (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615698000)	false	is-dst flips across the same boundary
-import "aql:time-util"  TimeUtil.is-dst (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615705200)	true	…to true after 07:00Z
-import "aql:time-util"  TimeUtil.to-local (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615705200)	2021-03-14T03:00:00	the first post-transition wall time is 03:00 — 02:xx never exists
-import "aql:time-util"  TimeUtil.to-local (TimeUtil.tz 'America/New_York') (add (TimeUtil.unix 1615698000) (TimeUtil.hours 2))	2021-03-14T03:00:00	00:00 EST + 2 ABSOLUTE hours lands at 03:00 EDT — the wall clock skips an hour
-import "aql:time-util"  TimeUtil.to-local (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1636263000)	2021-11-07T01:30:00	fall-back: 05:30Z is the FIRST 01:30 (EDT)…
-import "aql:time-util"  TimeUtil.to-local (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1636266600)	2021-11-07T01:30:00	…and 06:30Z is the SECOND 01:30 (EST) — two instants, one wall time
-import "aql:time-util"  TimeUtil.tz-offset (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1636263000)	'-04:00'	the repeated wall hour is disambiguated by offset: first pass EDT
-import "aql:time-util"  TimeUtil.tz-offset (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1636266600)	'-05:00'	…second pass EST
-import "aql:time-util"  TimeUtil.to-instant (TimeUtil.tz 'America/New_York') (add (add (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1615680000))) (TimeUtil.hours 2)) (TimeUtil.minutes 30))	2021-03-14T06:30:00Z	anchoring the NONEXISTENT 02:30 wall time normalises across the gap
-import "aql:time-util"  TimeUtil.to-instant (TimeUtil.tz 'America/New_York') (add (add (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1636243200))) (TimeUtil.hours 1)) (TimeUtil.minutes 30))	2021-11-07T05:30:00Z	anchoring the AMBIGUOUS 01:30 picks the first (EDT) instant
-import "aql:time-util"  TimeUtil.to-instant (TimeUtil.tz 'America/New_York') (TimeUtil.to-local (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615705200))	2021-03-14T07:00:00Z	to-local then to-instant round-trips even just past the gap
-import "aql:time-util"  TimeUtil.to-instant (TimeUtil.tz-utc) (TimeUtil.to-local (TimeUtil.tz-utc) (TimeUtil.unix 1700000000))	2023-11-14T22:13:20Z	the UTC round-trip is the identity
+import "boru:time-util"  TimeUtil.to-local (TimeUtil.tz 'Asia/Tokyo') (TimeUtil.unix 1700000000)	2023-11-15T07:13:20	+09:00 rolls the calendar day forward
+import "boru:time-util"  TimeUtil.tz-offset (TimeUtil.tz 'Asia/Tokyo') (TimeUtil.unix 1700000000)	'+09:00'	Tokyo has no DST — a fixed +09:00
+import "boru:time-util"  TimeUtil.tz-name (TimeUtil.tz 'Europe/Dublin')	'Europe/Dublin'	tz-name echoes the IANA id
+import "boru:time-util"  TimeUtil.is-dst (TimeUtil.tz-utc) (TimeUtil.unix 1700000000)	false	UTC never observes DST
+import "boru:time-util"  TimeUtil.tz-offset (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615698000)	'-05:00'	NY two hours before the 2021 spring-forward: still EST
+import "boru:time-util"  TimeUtil.tz-offset (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615705200)	'-04:00'	…at 07:00Z the offset has jumped to EDT
+import "boru:time-util"  TimeUtil.is-dst (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615698000)	false	is-dst flips across the same boundary
+import "boru:time-util"  TimeUtil.is-dst (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615705200)	true	…to true after 07:00Z
+import "boru:time-util"  TimeUtil.to-local (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615705200)	2021-03-14T03:00:00	the first post-transition wall time is 03:00 — 02:xx never exists
+import "boru:time-util"  TimeUtil.to-local (TimeUtil.tz 'America/New_York') (add (TimeUtil.unix 1615698000) (TimeUtil.hours 2))	2021-03-14T03:00:00	00:00 EST + 2 ABSOLUTE hours lands at 03:00 EDT — the wall clock skips an hour
+import "boru:time-util"  TimeUtil.to-local (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1636263000)	2021-11-07T01:30:00	fall-back: 05:30Z is the FIRST 01:30 (EDT)…
+import "boru:time-util"  TimeUtil.to-local (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1636266600)	2021-11-07T01:30:00	…and 06:30Z is the SECOND 01:30 (EST) — two instants, one wall time
+import "boru:time-util"  TimeUtil.tz-offset (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1636263000)	'-04:00'	the repeated wall hour is disambiguated by offset: first pass EDT
+import "boru:time-util"  TimeUtil.tz-offset (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1636266600)	'-05:00'	…second pass EST
+import "boru:time-util"  TimeUtil.to-instant (TimeUtil.tz 'America/New_York') (add (add (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1615680000))) (TimeUtil.hours 2)) (TimeUtil.minutes 30))	2021-03-14T06:30:00Z	anchoring the NONEXISTENT 02:30 wall time normalises across the gap
+import "boru:time-util"  TimeUtil.to-instant (TimeUtil.tz 'America/New_York') (add (add (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 1636243200))) (TimeUtil.hours 1)) (TimeUtil.minutes 30))	2021-11-07T05:30:00Z	anchoring the AMBIGUOUS 01:30 picks the first (EDT) instant
+import "boru:time-util"  TimeUtil.to-instant (TimeUtil.tz 'America/New_York') (TimeUtil.to-local (TimeUtil.tz 'America/New_York') (TimeUtil.unix 1615705200))	2021-03-14T07:00:00Z	to-local then to-instant round-trips even just past the gap
+import "boru:time-util"  TimeUtil.to-instant (TimeUtil.tz-utc) (TimeUtil.to-local (TimeUtil.tz-utc) (TimeUtil.unix 1700000000))	2023-11-14T22:13:20Z	the UTC round-trip is the identity
 #
 # §5  calendar arithmetic — leap day, month-end normalisation, year edges
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.add-days 1 (TimeUtil.to-date (TimeUtil.unix 1582934400)))	'2020-03-01'	the day after Feb 29 is Mar 1
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.add-days 1 (TimeUtil.to-date (TimeUtil.unix 1614470400)))	'2021-03-01'	…and after Feb 28 in a common year
-import "aql:time-util"  sub (TimeUtil.to-date (TimeUtil.unix 1583020800)) (TimeUtil.days 1)	2020-02-29	stepping back from Mar 1 recovers the leap day
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.add-days 1 (TimeUtil.to-date (TimeUtil.unix 1609372800)))	'2021-01-01'	the year boundary
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.add-months 1 (TimeUtil.to-date (TimeUtil.unix 1580428800)))	'2020-03-02'	Jan 31 + 1 month NORMALISES: Feb 31 spills to Mar 2 (Go AddDate)
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.add-months 1 (TimeUtil.to-date (TimeUtil.unix 1582934400)))	'2020-03-29'	Feb 29 + 1 month is Mar 29 (no spill needed)
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.add-years 1 (TimeUtil.to-date (TimeUtil.unix 1582934400)))	'2021-03-01'	Feb 29 + 1 year spills to Mar 1 in the common year
-import "aql:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1577836800)) (TimeUtil.weeks 2)	2020-01-15	weeks ride the transplanted add as 14 days
-import "aql:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1577836800)) (TimeUtil.days -1)	2019-12-31	a negative duration steps backward across the year
-import "aql:time-util"  TimeUtil.until (TimeUtil.to-date (TimeUtil.unix 1583020800)) (TimeUtil.to-date (TimeUtil.unix 1577836800))	P0Y2M0D	until (later) (earlier) spans forward two months
-import "aql:time-util"  TimeUtil.since (TimeUtil.to-date (TimeUtil.unix 1577836800)) (TimeUtil.to-date (TimeUtil.unix 1583020800))	P0Y2M0D	since (earlier) (later) agrees
-import "aql:time-util"  TimeUtil.until (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 0))	P0Y0M0D	the empty span
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.add-days 1 (TimeUtil.to-date (TimeUtil.unix 1582934400)))	'2020-03-01'	the day after Feb 29 is Mar 1
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.add-days 1 (TimeUtil.to-date (TimeUtil.unix 1614470400)))	'2021-03-01'	…and after Feb 28 in a common year
+import "boru:time-util"  sub (TimeUtil.to-date (TimeUtil.unix 1583020800)) (TimeUtil.days 1)	2020-02-29	stepping back from Mar 1 recovers the leap day
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.add-days 1 (TimeUtil.to-date (TimeUtil.unix 1609372800)))	'2021-01-01'	the year boundary
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.add-months 1 (TimeUtil.to-date (TimeUtil.unix 1580428800)))	'2020-03-02'	Jan 31 + 1 month NORMALISES: Feb 31 spills to Mar 2 (Go AddDate)
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.add-months 1 (TimeUtil.to-date (TimeUtil.unix 1582934400)))	'2020-03-29'	Feb 29 + 1 month is Mar 29 (no spill needed)
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.add-years 1 (TimeUtil.to-date (TimeUtil.unix 1582934400)))	'2021-03-01'	Feb 29 + 1 year spills to Mar 1 in the common year
+import "boru:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1577836800)) (TimeUtil.weeks 2)	2020-01-15	weeks ride the transplanted add as 14 days
+import "boru:time-util"  add (TimeUtil.to-date (TimeUtil.unix 1577836800)) (TimeUtil.days -1)	2019-12-31	a negative duration steps backward across the year
+import "boru:time-util"  TimeUtil.until (TimeUtil.to-date (TimeUtil.unix 1583020800)) (TimeUtil.to-date (TimeUtil.unix 1577836800))	P0Y2M0D	until (later) (earlier) spans forward two months
+import "boru:time-util"  TimeUtil.since (TimeUtil.to-date (TimeUtil.unix 1577836800)) (TimeUtil.to-date (TimeUtil.unix 1583020800))	P0Y2M0D	since (earlier) (later) agrees
+import "boru:time-util"  TimeUtil.until (TimeUtil.to-date (TimeUtil.unix 0)) (TimeUtil.to-date (TimeUtil.unix 0))	P0Y0M0D	the empty span
 #
 # §6  leap years, century rule, ISO-week and year-day boundaries
-import "aql:time-util"  TimeUtil.is-leap-year (TimeUtil.to-date (TimeUtil.unix 946684800))	true	2000 IS a leap year (divisible by 400)
-import "aql:time-util"  TimeUtil.is-leap-year (TimeUtil.to-date (TimeUtil.unix 4102444800))	false	2100 is NOT (the century rule)
-import "aql:time-util"  TimeUtil.days-in-month (TimeUtil.to-date (TimeUtil.unix 1580515200))	29	Feb 2020 has 29 days
-import "aql:time-util"  TimeUtil.days-in-month (TimeUtil.to-date (TimeUtil.unix 4105123200))	28	Feb 2100 has 28 — the century rule reaches days-in-month
-import "aql:time-util"  TimeUtil.days-in-year (TimeUtil.to-date (TimeUtil.unix 1577836800))	366	2020 has 366 days
-import "aql:time-util"  TimeUtil.year-day (TimeUtil.to-date (TimeUtil.unix 1609372800))	366	Dec 31 of a leap year is ordinal day 366
-import "aql:time-util"  TimeUtil.iso-week (TimeUtil.to-date (TimeUtil.unix 1609459200))	53	2021-01-01 belongs to ISO week 53 OF 2020 (a Friday)
-import "aql:time-util"  TimeUtil.weekday-name (TimeUtil.to-date (TimeUtil.unix 1582934400))	'Saturday'	the 2020 leap day was a Saturday
-import "aql:time-util"  TimeUtil.format 'Mon Jan 2 2006' (TimeUtil.to-date (TimeUtil.unix 1582934400))	'Sat Feb 29 2020'	Go-layout formatting of the leap day
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.start-of 'week' (TimeUtil.to-date (TimeUtil.unix 1700000000)))	'2023-11-13'	ISO weeks start Monday
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.start-of 'quarter' (TimeUtil.to-date (TimeUtil.unix 1700000000)))	'2023-10-01'	Nov 14 is in Q4
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.end-of 'year' (TimeUtil.to-date (TimeUtil.unix 1700000000)))	'2023-12-31'	end of the year
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.end-of 'month' (TimeUtil.to-date (TimeUtil.unix 1580515200)))	'2020-02-29'	end-of month lands ON the leap day
+import "boru:time-util"  TimeUtil.is-leap-year (TimeUtil.to-date (TimeUtil.unix 946684800))	true	2000 IS a leap year (divisible by 400)
+import "boru:time-util"  TimeUtil.is-leap-year (TimeUtil.to-date (TimeUtil.unix 4102444800))	false	2100 is NOT (the century rule)
+import "boru:time-util"  TimeUtil.days-in-month (TimeUtil.to-date (TimeUtil.unix 1580515200))	29	Feb 2020 has 29 days
+import "boru:time-util"  TimeUtil.days-in-month (TimeUtil.to-date (TimeUtil.unix 4105123200))	28	Feb 2100 has 28 — the century rule reaches days-in-month
+import "boru:time-util"  TimeUtil.days-in-year (TimeUtil.to-date (TimeUtil.unix 1577836800))	366	2020 has 366 days
+import "boru:time-util"  TimeUtil.year-day (TimeUtil.to-date (TimeUtil.unix 1609372800))	366	Dec 31 of a leap year is ordinal day 366
+import "boru:time-util"  TimeUtil.iso-week (TimeUtil.to-date (TimeUtil.unix 1609459200))	53	2021-01-01 belongs to ISO week 53 OF 2020 (a Friday)
+import "boru:time-util"  TimeUtil.weekday-name (TimeUtil.to-date (TimeUtil.unix 1582934400))	'Saturday'	the 2020 leap day was a Saturday
+import "boru:time-util"  TimeUtil.format 'Mon Jan 2 2006' (TimeUtil.to-date (TimeUtil.unix 1582934400))	'Sat Feb 29 2020'	Go-layout formatting of the leap day
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.start-of 'week' (TimeUtil.to-date (TimeUtil.unix 1700000000)))	'2023-11-13'	ISO weeks start Monday
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.start-of 'quarter' (TimeUtil.to-date (TimeUtil.unix 1700000000)))	'2023-10-01'	Nov 14 is in Q4
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.end-of 'year' (TimeUtil.to-date (TimeUtil.unix 1700000000)))	'2023-12-31'	end of the year
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.end-of 'month' (TimeUtil.to-date (TimeUtil.unix 1580515200)))	'2020-02-29'	end-of month lands ON the leap day
 #
 # §7  negatives — type discipline at the temporal boundaries
-import "aql:time-util"  TimeUtil.add (TimeUtil.unix 0) (TimeUtil.days 1)	ERROR:uncalled_function	Instant + CalendarDuration is a TYPE error by design (months have no fixed length)
-import "aql:time-util"  TimeUtil.add (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 0))) (TimeUtil.days 1)	ERROR:uncalled_function	DateTime + CalendarDuration is rejected too — calendar maths needs a Date
-import "aql:time-util"  TimeUtil.to-iso (TimeUtil.unix 0)	ERROR:uncalled_function	to-iso is Date-typed — an Instant does not dispatch
-import "aql:time-util"  TimeUtil.format '2006' (TimeUtil.to-utc (TimeUtil.unix 0))	ERROR:uncalled_function	format is Date-typed — a DateTime does not dispatch
-import "aql:time-util"  do [TimeUtil.tz 'Nope/Zone'] error [dot message]	'tz: unknown timezone: "Nope/Zone"'	an unknown IANA id raises at construction
+import "boru:time-util"  TimeUtil.add (TimeUtil.unix 0) (TimeUtil.days 1)	ERROR:uncalled_function	Instant + CalendarDuration is a TYPE error by design (months have no fixed length)
+import "boru:time-util"  TimeUtil.add (TimeUtil.to-datetime (TimeUtil.to-date (TimeUtil.unix 0))) (TimeUtil.days 1)	ERROR:uncalled_function	DateTime + CalendarDuration is rejected too — calendar maths needs a Date
+import "boru:time-util"  TimeUtil.to-iso (TimeUtil.unix 0)	ERROR:uncalled_function	to-iso is Date-typed — an Instant does not dispatch
+import "boru:time-util"  TimeUtil.format '2006' (TimeUtil.to-utc (TimeUtil.unix 0))	ERROR:uncalled_function	format is Date-typed — a DateTime does not dispatch
+import "boru:time-util"  do [TimeUtil.tz 'Nope/Zone'] error [dot message]	'tz: unknown timezone: "Nope/Zone"'	an unknown IANA id raises at construction

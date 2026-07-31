@@ -11,15 +11,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/debugger"
-	"github.com/aql-lang/aql/eng/go/parser"
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/debugserve"
+	"github.com/boru-lang/boru/cmd/go/internal/debugger"
+	"github.com/boru-lang/boru/eng/go/parser"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/debugserve"
 )
 
 // stepTestServer mounts a real program under a Remote-fronted session on
 // an httptest server — the attach verbs' in-process twin of
-// `aql debug serve --step`. The routes go through the debugserve
+// `boru debug serve --step`. The routes go through the debugserve
 // server's real Auth gate (empty token: open).
 func stepTestServer(t *testing.T, src string) (*debugserve.Client, *debugger.Remote, func()) {
 	t.Helper()
@@ -32,7 +32,7 @@ func stepTestServer(t *testing.T, src string) (*debugserve.Client, *debugger.Rem
 	reg.Output = &progOut
 	sess := debugger.New(reg, debugger.Config{
 		In: strings.NewReader(""), Out: &bytes.Buffer{},
-		File: "remote.aql", Source: src,
+		File: "remote.boru", Source: src,
 	})
 	rem := debugger.NewRemote(sess)
 	toks, perr := parser.Parse(src)
@@ -74,7 +74,7 @@ func TestAttachStepVerbs(t *testing.T) {
 	}
 
 	code, out, _ := run("pause")
-	if code != 0 || !strings.Contains(out, "paused at remote.aql:1  def a 1") {
+	if code != 0 || !strings.Contains(out, "paused at remote.boru:1  def a 1") {
 		t.Fatalf("pause: %d %q", code, out)
 	}
 	code, out, _ = run("break", "3")
@@ -82,11 +82,11 @@ func TestAttachStepVerbs(t *testing.T) {
 		t.Fatalf("break: %d %q", code, out)
 	}
 	code, out, _ = run("step")
-	if code != 0 || !strings.Contains(out, "paused at remote.aql:2  def b 2") {
+	if code != 0 || !strings.Contains(out, "paused at remote.boru:2  def b 2") {
 		t.Fatalf("step: %d %q", code, out)
 	}
 	code, out, _ = run("continue")
-	if code != 0 || !strings.Contains(out, "breakpoint: line 3 — at remote.aql:3  a add b") {
+	if code != 0 || !strings.Contains(out, "breakpoint: line 3 — at remote.boru:3  a add b") {
 		t.Fatalf("continue: %d %q", code, out)
 	}
 	code, out, _ = run("delete", "3")
@@ -137,7 +137,7 @@ func TestAttachStepVerbErrors(t *testing.T) {
 	}
 	var out, errOut bytes.Buffer
 	if code := attachVerb(c, []string{"break"}, &out, &errOut); code != 1 ||
-		!strings.Contains(errOut.String(), "usage: aql debug attach break") {
+		!strings.Contains(errOut.String(), "usage: boru debug attach break") {
 		t.Errorf("bare break: %d %q", code, errOut.String())
 	}
 }
@@ -184,7 +184,7 @@ func TestAttachStepPollTimeout(t *testing.T) {
 
 func TestRenderStepStateArms(t *testing.T) {
 	if got := renderStepState(debugserve.StepState{State: "paused", Row: 0, InBody: true,
-		File: "f.aql", Line: "", Stack: "[]"}); !strings.Contains(got, "at f.aql:? (in body)") {
+		File: "f.boru", Line: "", Stack: "[]"}); !strings.Contains(got, "at f.boru:? (in body)") {
 		t.Errorf("in-body unknown-row = %q", got)
 	}
 	if got := renderStepState(debugserve.StepState{State: "exited", Exit: "boom"}); got != "exited: boom" {
@@ -203,7 +203,7 @@ func TestServeStepShutdownDrains(t *testing.T) {
 	// its side effects land before runServe returns 0.
 	dir := t.TempDir()
 	t.Setenv("TMPDIR", dir)
-	prog := filepath.Join(dir, "p.aql")
+	prog := filepath.Join(dir, "p.boru")
 	if err := os.WriteFile(prog, []byte("print \"zz-serve-step\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -212,7 +212,7 @@ func TestServeStepShutdownDrains(t *testing.T) {
 	go func() {
 		done <- runServe([]string{"--bind", "127.0.0.1:0", "--step", prog}, &out, &errOut)
 	}()
-	dp := filepath.Join(dir, "aql-debug.json")
+	dp := filepath.Join(dir, "boru-debug.json")
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		if _, err := os.Stat(dp); err == nil {
@@ -243,7 +243,7 @@ func TestServeStepProgramErrorExitsOne(t *testing.T) {
 	// The drained program erroring is reported and turns the exit code.
 	dir := t.TempDir()
 	t.Setenv("TMPDIR", dir)
-	prog := filepath.Join(dir, "p.aql")
+	prog := filepath.Join(dir, "p.boru")
 	if err := os.WriteFile(prog, []byte("1 div 0\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -252,7 +252,7 @@ func TestServeStepProgramErrorExitsOne(t *testing.T) {
 	go func() {
 		done <- runServe([]string{"--bind", "127.0.0.1:0", "--step", prog}, &out, &errOut)
 	}()
-	dp := filepath.Join(dir, "aql-debug.json")
+	dp := filepath.Join(dir, "boru-debug.json")
 	deadline := time.Now().Add(10 * time.Second)
 	for {
 		if _, err := os.Stat(dp); err == nil {
@@ -279,16 +279,16 @@ func TestServeStepProgramErrorExitsOne(t *testing.T) {
 func TestServeStepArgErrors(t *testing.T) {
 	var out, errOut bytes.Buffer
 	if code := runServe([]string{"--step"}, &out, &errOut); code != 1 ||
-		!strings.Contains(errOut.String(), "usage: aql debug serve --step") {
+		!strings.Contains(errOut.String(), "usage: boru debug serve --step") {
 		t.Errorf("no file: %d %q", code, errOut.String())
 	}
 	errOut.Reset()
-	if code := runServe([]string{"--step", filepath.Join(t.TempDir(), "zz.aql")}, &out, &errOut); code != 1 ||
+	if code := runServe([]string{"--step", filepath.Join(t.TempDir(), "zz.boru")}, &out, &errOut); code != 1 ||
 		!strings.Contains(errOut.String(), "read") {
 		t.Errorf("missing file: %d %q", code, errOut.String())
 	}
 	errOut.Reset()
-	bad := filepath.Join(t.TempDir(), "bad.aql")
+	bad := filepath.Join(t.TempDir(), "bad.boru")
 	if err := os.WriteFile(bad, []byte("(\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}

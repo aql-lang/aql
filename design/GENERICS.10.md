@@ -17,7 +17,7 @@ from the original text below). The load-bearing deviations:
   reservation (§15f).
 - **D15** — sugar desugars at parse time; macros/quote/Vm.parse see
   only the canonical stream (§15f).
-- **§8.2** — `Comparable` landed as a SURFACE in aql:decision, not a
+- **§8.2** — `Comparable` landed as a SURFACE in boru:decision, not a
   tor-alias (§15h).
 
 User-facing docs: REFERENCE.md "Generic types", TUTORIAL §13,
@@ -34,13 +34,13 @@ aged well; §15 lists what is now cheaper, what is newly in scope
 lock-down.**
 
 Related design notes:
-- `elixir-types-in-aql-report.10.md` — set-theoretic refinements (`tnot`
+- `elixir-types-in-boru-report.10.md` — set-theoretic refinements (`tnot`
   negation, the `dynamic(T)` modality, dead-overload detection). It names
   generics the *convergent frontier*; this note is the parametric half of
   that frontier.
-- `checker-loud-diagnostics-report.10.md` — the `aql check` diagnostic
+- `checker-loud-diagnostics-report.10.md` — the `boru check` diagnostic
   framework the generics diagnostics slot into.
-- `aql-bytecode-report.0.md` — the compiler thesis §10 builds on.
+- `boru-bytecode-report.0.md` — the compiler thesis §10 builds on.
 
 **Naming note.** The instantiation word is **`of`** (`Box of [Integer]`),
 not `apply`: `apply` is already a registered word for function
@@ -50,7 +50,7 @@ reads `of`.
 
 ## 1. Motivation
 
-The AQL type system already has records, typed lists/maps, fn-shape
+The boru type system already has records, typed lists/maps, fn-shape
 types, predicate types, dependent scalars, and a `tand`/`tor`/`Never`/
 `Any` algebra (soon closed under negation via `tnot`). What is missing
 is **parametric polymorphism** — the ability to write a single type or
@@ -77,7 +77,7 @@ Concrete pain points users hit today:
 
 A type-parameter list is — structurally — an ordered list with one
 entry per parameter, where each entry carries a name plus optional
-constraint and default. AQL already has lists; AQL already has words
+constraint and default. boru already has lists; boru already has words
 that take quoted lists and do interesting things with them (`def`,
 `fn`, `refine`, `for`, …). Generics fit the same mould.
 
@@ -121,7 +121,7 @@ design:
 6. Be **inferable** wherever the existing signature-matcher already
    has enough information — e.g. `Box<Integer>` should be inferable
    from a value of `{value: 42}` without an explicit annotation.
-7. Preserve `aql check` (carrier-based static checking) coverage —
+7. Preserve `boru check` (carrier-based static checking) coverage —
    generics must produce carriers that the checker can refine.
 
 **Non-goals (deferred).**
@@ -150,7 +150,7 @@ What the parser and engine already use, that bears on the design:
 - **Type algebra uses `tand` / `tor`** — `Integer tor String`. The
   `extends` constraint takes any type expression, so the algebra
   composes for free: `(T extends Number tand Comparable)`. With
-  **negation** (`tnot`, per `elixir-types-in-aql-report.10.md` item 1)
+  **negation** (`tnot`, per `elixir-types-in-boru-report.10.md` item 1)
   the bound may also exclude — `(T extends Number tand tnot Integer)`.
   Checking a negated bound is a *disjointness* test
   (`arg tand bound ≠ Never`), which is exactly the decision procedure
@@ -200,7 +200,7 @@ T extends Comparable
 
 Signature: `extends [Atom/q TypeExpr] -> [GenParam]`. Forward-collects
 the right-hand type expression. Errors with
-`[aql/extends_outside_gen]` if invoked outside a `gen` parameter
+`[boru/extends_outside_gen]` if invoked outside a `gen` parameter
 list.
 
 ### 5.3 `default` — attach a default
@@ -320,8 +320,8 @@ def map gen [T U] fn [[fn:Mapper of [T U]  [:T]] [:U] [/* body */]]
 
 The sugar layer commits to the rule **`<` is only ever the start of a
 generic argument list**. Any `<` not followed by a valid type-param
-or type-arg list is a `[aql/syntax_error]`. This is a hard, long-term
-commitment: AQL will not later add `<` as a comparison operator
+or type-arg list is a `[boru/syntax_error]`. This is a hard, long-term
+commitment: boru will not later add `<` as a comparison operator
 (comparisons stay on `lt`/`gt`/`lte`/`gte`).
 
 Whitespace is irrelevant: `Box<T>`, `Box< T >`, and `Box <T>` all
@@ -347,7 +347,7 @@ downstream code consumes unchanged.
 
 At each `of`, for each parameter `T extends C`, run
 `isSubtype(arg, C)` — the same predicate used by `is`. Failure
-produces `[aql/constraint_violation]` with a hint pointing at the
+produces `[boru/constraint_violation]` with a hint pointing at the
 parameter declaration site (using `WithPos`). When `C` contains a
 negation (`tnot`), the check is the disjointness form noted in §4.
 
@@ -406,7 +406,7 @@ Both forms degrade gracefully — explicit annotation always works.
   (`Box of [dynamic(Integer tor String)]`); both flow through
   substitution as ordinary type values. A `dynamic()` argument makes
   the instantiation gradually-typed in that parameter — the
-  compatibility/narrowing rules of `elixir-types-in-aql-report.10.md`
+  compatibility/narrowing rules of `elixir-types-in-boru-report.10.md`
   item 2 then apply per field, rather than the strict invariance above.
 
 ### 7.7 Recursion and F-bounds
@@ -416,10 +416,10 @@ permitted. Substitution memoises on `(schema, normalised args)` to
 avoid loops. F-bounds work because of §7.3: the placeholder for `T`
 is in scope while the constraint is evaluated.
 
-## 8. Case study: the `aql:decision` module
+## 8. Case study: the `boru:decision` module
 
 `modules/decision.go` is a DMN-style decision module
-(decision tables and decision trees) implemented in pure AQL. It is
+(decision tables and decision trees) implemented in pure boru. It is
 a good case study because it has three independent shapes of
 `Any`-punt that generics resolve in distinct ways.
 
@@ -428,7 +428,7 @@ a good case study because it has three independent shapes of
 Every record that carries a decision result types it as `Any` (or
 `Map`):
 
-```aql
+```boru
 def Rule       refine Record [when:Map  then:Map]
 def DTable     refine Record [kind:String  rules:List  hit-policy:String]
 def DTree      refine Record [kind:String  root:Atom  nodes:List]
@@ -443,7 +443,7 @@ caller has to dynamic-check.
 
 Threading a single result parameter `R` through the schema fixes it:
 
-```aql
+```boru
 def Rule<R>     refine Record [when:Pred  then:R]
 def DTable<R>   refine Record [kind:String  rules:[:Rule<R>]  hit-policy:HitPolicy]
 def LeafNode<R> refine Record [id:Atom  kind:String  result:R]
@@ -456,7 +456,7 @@ def decide fn [[model:(DTable<R> tor DTree<R>)  input:Map]
 
 Or, in the canonical form:
 
-```aql
+```boru
 def Rule gen [R] refine Record [when:Pred  then:R]
 def decide gen [R] fn [
   [model:((DTable of [R]) tor (DTree of [R]))  input:Map]
@@ -472,14 +472,14 @@ precision into every call site of `decide`.
 
 `apply-op` is fully untyped:
 
-```aql
+```boru
 def apply-op fn [[rhs:Any  op:String  lhs:Any] [Boolean] [...]]
 ```
 
 `"hello" lt 5` passes the static check today because both operands
 satisfy `Any`. A bounded type parameter rejects it:
 
-```aql
+```boru
 def Comparable (Integer tor Decimal tor String)
 
 def apply-op<T extends Comparable> fn [
@@ -497,7 +497,7 @@ module function, unrelated to the `apply`/`of` words.)
 `Pred` flattens three structurally distinct cases into one record
 with `children:Any`:
 
-```aql
+```boru
 def Pred refine Record [kind:String  op:String  children:Any]
 ```
 
@@ -506,7 +506,7 @@ sub-predicate for `not`. Generics don't directly fix this — the
 right shape is a tagged union — but they unblock the cleaner
 formulation:
 
-```aql
+```boru
 def AllPred  refine Record [kind:String  op:String  children:[:Pred]]
 def AnyPred  refine Record [kind:String  op:String  children:[:Pred]]
 def NotPred  refine Record [kind:String  op:String  children:Pred]
@@ -516,7 +516,7 @@ def Pred (AllPred tor AnyPred tor NotPred tor CondPred)
 
 Builder functions then return the precise variant:
 
-```aql
+```boru
 def all-of fn [[children:[:Pred]] [AllPred] [
   make AllPred {kind:"group" op:"all" children:children}
 ]]
@@ -532,7 +532,7 @@ benefits from the disjunct refactor more than from generics per se.
 - **`Cond.value:Any`** is genuinely heterogeneous per condition: each
   `Cond` compares a different input field, so the value type varies
   row-by-row. This is a path-dependent / dependent-record problem,
-  not a parametric one. Best left as `Any` until AQL grows a
+  not a parametric one. Best left as `Any` until boru grows a
   dependent-record story.
 - **The `collect` hit policy returns `[:R]`, not `R`.** Different
   hit policies have different return-type variants, which
@@ -565,7 +565,7 @@ tool (disjuncts, dependent records, or just leaving them as `Any`).
 
 ## 9. Static check mode
 
-`aql check` runs programs through the same engine in **carrier mode** —
+`boru check` runs programs through the same engine in **carrier mode** —
 literals become type-only abstractions, dispatch and signature
 matching are unchanged, and `Returns` / `ReturnsFn` annotations on
 each `NativeSig` propagate types through call sites. Generics integrate
@@ -626,7 +626,7 @@ carriers and capture the bindings:
 If the same parameter unifies against two incompatible types, take
 their `tor`. If unification fails outright, emit a diagnostic and
 fall back to **`dynamic()`** for that binding (per
-`elixir-types-in-aql-report.10.md` item 2) so analysis continues with
+`elixir-types-in-boru-report.10.md` item 2) so analysis continues with
 a gradually-compatible type rather than a strict-top `Any` that would
 spuriously fail every downstream concrete slot.
 
@@ -683,7 +683,7 @@ branch joins? TypeScript's pragmatic answer is "covariant by default,
 fix it later" — recommendation is to do the same and revisit if
 mutation patterns make it unsound in practice. Note that once `tnot`
 lands, the algebra is the **Boolean closure** of the lattice
-(`elixir-types-in-aql-report.10.md` item 1), which is the proper
+(`elixir-types-in-boru-report.10.md` item 1), which is the proper
 framework to decide variance *semantically* — a parameter is
 covariant iff substituting a subtype yields a denotational subtype —
 rather than by the TypeScript default. Worth revisiting then.
@@ -781,7 +781,7 @@ earlier, higher-priority one. Two points of contact:
 
 ## 10. Static compilation
 
-The proposed AQL bytecode compiler (`design/aql-bytecode-report.0.md`)
+The proposed boru bytecode compiler (`design/boru-bytecode-report.0.md`)
 is "the carrier checker with a recording side effect" — every dispatch
 decision the checker makes statically becomes a `CALL_NATIVE sig_id`
 in the bytecode, and dynamic corners fall back to the interpreter over
@@ -1072,7 +1072,7 @@ unconstrained-param strictness, per-schema disjunct collapse).
   cannot use `<` for comparisons or as an operator anywhere. Document
   this in `LANGREF.md`'s syntax section as a hard rule.
 - **Carrier-checker complexity.** Substitution must thread through
-  the carrier path or `aql check` regresses. Plan to write
+  the carrier path or `boru check` regresses. Plan to write
   carrier-specific tests in Phase 2 alongside the dispatch work.
 - **Performance.** Repeated instantiations with the same args (e.g.
   `Box of [Integer]` mentioned 50 times) hit the
@@ -1345,7 +1345,7 @@ unconstrained-param strictness, per-schema disjunct collapse).
 > bind as parameters (`Outer of [Box of [Integer]]`). Battery:
 > generics.tsv §8.
 
-## 15h. Landed state — Phase 8: higher-order verification + aql:decision retrofit (2026-06-11)
+## 15h. Landed state — Phase 8: higher-order verification + boru:decision retrofit (2026-06-11)
 
 > **Phase 8 LANDED**, with one plan adjustment and two upstream
 > dispatch fixes the dogfood surfaced. Higher-order verification:
@@ -1362,7 +1362,7 @@ unconstrained-param strictness, per-schema disjunct collapse).
 > the OTHER sig's matched args — it now selects by param
 > correspondence with the matched signature
 > (`TestModuleWrapperSigBodyPairing`). Retrofit: `Comparable` is a
-> SURFACE in aql:decision (superseding §8.2's tor-alias) with the
+> SURFACE in boru:decision (superseding §8.2's tor-alias) with the
 > scalar builtins declared via `exposes`; `apply-op` is
 > `gen [(T extends Comparable)]` for the ORDERING ops with an Any
 > overload for eq/neq (equality is universal) that RAISES
@@ -1475,7 +1475,7 @@ in-memory parsing. The review below is against that state.
    `fnsig [[T] [U]]`, noting the map-literal parens gotcha surfaces
    hit (`{m: (fnsig …)}`).
 5. **Claiming core words now has a demonstrated migration hazard.**
-   Landing `case` broke the `aql:test` module preamble (`def case` →
+   Landing `case` broke the `boru:test` module preamble (`def case` →
    reserved_word; renamed `test-case`). `default` is especially
    collision-prone in user code. Phase 1 should include the sweep
    step: grep module preambles + the spec corpus for bindings of the
@@ -1487,8 +1487,8 @@ in-memory parsing. The review below is against that state.
    dispatchable. §9.2's `constraint_violation` (pointing at the
    parameter declaration via `WithPos`) and `unbound_param` (listing
    the unbound parameters — open question 5) were already written in
-   this spirit; the error infrastructure they need (`AqlErrorHint`,
-   `makeAqlErrorAt`) exists now. Note `arity_mismatch` already exists
+   this spirit; the error infrastructure they need (`BoruErrorHint`,
+   `makeBoruErrorAt`) exists now. Note `arity_mismatch` already exists
    as a code — reuse is consistent.
 7. **Small synergy:** `case` matches via unify, so instantiations
    work as `case` matches for free (`case v [(Box of [Integer])

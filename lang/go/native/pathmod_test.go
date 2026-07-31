@@ -3,8 +3,8 @@ package native
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 // TestPathModifiers pins the `/`-modifier-on-a-paren/path feature: the

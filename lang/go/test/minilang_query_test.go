@@ -5,15 +5,15 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // The `jp` (JSONPath, github.com/ohler55/ojg) and `jq` (jq filter,
 // github.com/itchyny/gojq) mini-languages query a document — the stack subject,
 // which may be a Node (Map/List), a class instance, Table or Record. Both ship
-// built-in with aql:minilang and return a List of results.
+// built-in with boru:minilang and return a List of results.
 
-const qImp = `import "aql:minilang"  `
+const qImp = `import "boru:minilang"  `
 
 // TestMiniQuerySubjectTypes pins that jp and jq work over every supported
 // subject shape (the document conversion path). A Map/Record subject needs an
@@ -94,7 +94,7 @@ func TestMiniQueryInKinds(t *testing.T) {
 	}
 }
 
-func mustRun(t *testing.T, a *lang.AQL, src string) any {
+func mustRun(t *testing.T, a *lang.Boru, src string) any {
 	t.Helper()
 	res, err := a.Run(src)
 	if err != nil {

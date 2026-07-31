@@ -6,11 +6,11 @@
 // check mode) through the TS engine and returns one record per row. Success
 // rows carry the canonical result string (renderStack / renderCheck — which
 // must equal the Go engine's eng.Canon / renderCheck); error rows carry the
-// AqlError taxonomy code, so error-parity is compared by code, not message.
+// BoruError taxonomy code, so error-parity is compared by code, not message.
 import * as fs from 'node:fs'
 import * as path from 'node:path'
 
-import { AqlError, Engine, Registry, type Value } from './index.ts'
+import { BoruError, Engine, Registry, type Value } from './index.ts'
 import { CHECK_SPEC_DIR, parseCheckSpec, runCheckRow } from './check-fixture.ts'
 import { SPEC_DIR, parseSpec, registerSpecWords, renderStack, tokenize } from './spec-fixture.ts'
 
@@ -40,7 +40,7 @@ function valueResult(input: string): { ok: boolean; out: string } {
     const out = new Engine(fresh()).run(values)
     return { ok: true, out: renderStack(out) }
   } catch (e) {
-    if (e instanceof AqlError) return { ok: false, out: e.code }
+    if (e instanceof BoruError) return { ok: false, out: e.code }
     return { ok: false, out: `UNEXPECTED:${(e as Error).message}` }
   }
 }
@@ -49,7 +49,7 @@ function checkResult(input: string): { ok: boolean; out: string } {
   try {
     return { ok: true, out: runCheckRow(input) }
   } catch (e) {
-    if (e instanceof AqlError) return { ok: false, out: e.code }
+    if (e instanceof BoruError) return { ok: false, out: e.code }
     return { ok: false, out: `ERR:${(e as Error).message}` }
   }
 }

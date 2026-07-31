@@ -3,7 +3,7 @@ package eng
 import "errors"
 
 // ArgsStack is the per-call args list stack. Each fn-body invocation
-// (CallAQL, execFnDefSig) pushes the caller's args list before
+// (CallBoru, execFnDefSig) pushes the caller's args list before
 // executing the body; the body retrieves the current list via the
 // `args` word. Nested calls push their own list so each level sees
 // only its own args.

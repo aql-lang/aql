@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // parseFlags registers the shared flag set, parses argv, and returns
@@ -28,8 +28,8 @@ func parseFlags(t *testing.T, argv ...string) *Flags {
 // clearPolicyEnv guards the env-fallback path against ambient state.
 func clearPolicyEnv(t *testing.T) {
 	t.Helper()
-	t.Setenv("AQL_POLICY", "")
-	t.Setenv("AQL_POLICY_FILE", "")
+	t.Setenv("BORU_POLICY", "")
+	t.Setenv("BORU_POLICY_FILE", "")
 }
 
 // writePolicy drops a minimal named profile file and returns its path.
@@ -140,7 +140,7 @@ func TestResolvePermsInline(t *testing.T) {
 func TestResolveEnvPolicyFileFallback(t *testing.T) {
 	clearPolicyEnv(t)
 	path := writePolicy(t, "envfile")
-	t.Setenv("AQL_POLICY_FILE", path)
+	t.Setenv("BORU_POLICY_FILE", path)
 	pol, err := parseFlags(t).Resolve()
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -152,7 +152,7 @@ func TestResolveEnvPolicyFileFallback(t *testing.T) {
 
 func TestResolveEnvPolicyFallback(t *testing.T) {
 	clearPolicyEnv(t)
-	t.Setenv("AQL_POLICY", "sandbox")
+	t.Setenv("BORU_POLICY", "sandbox")
 	pol, err := parseFlags(t).Resolve()
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -164,7 +164,7 @@ func TestResolveEnvPolicyFallback(t *testing.T) {
 
 func TestResolveExplicitFlagBeatsEnv(t *testing.T) {
 	clearPolicyEnv(t)
-	t.Setenv("AQL_POLICY", "sandbox")
+	t.Setenv("BORU_POLICY", "sandbox")
 	pol, err := parseFlags(t, "--perms", "full").Resolve()
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -261,17 +261,17 @@ func TestResolveInstallToggles(t *testing.T) {
 
 func TestResolveNoInstallSubscope(t *testing.T) {
 	clearPolicyEnv(t)
-	pol, err := parseFlags(t, "--perms", "full", "--no-install", "modules.aql:math").Resolve()
+	pol, err := parseFlags(t, "--perms", "full", "--no-install", "modules.boru:math").Resolve()
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
 	mods := pol.Scope("modules")
-	sub, ok := mods.Scopes["aql:math"]
+	sub, ok := mods.Scopes["boru:math"]
 	if !ok {
-		t.Fatalf("modules subscopes missing aql:math: %+v", mods.Scopes)
+		t.Fatalf("modules subscopes missing boru:math: %+v", mods.Scopes)
 	}
 	if sub.Installed() {
-		t.Error("--no-install modules.aql:math should uninstall the subscope")
+		t.Error("--no-install modules.boru:math should uninstall the subscope")
 	}
 }
 

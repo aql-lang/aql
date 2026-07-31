@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestMemberCompleteHelpers covers the edge branches of the pure helpers so the
@@ -78,11 +78,11 @@ func TestModuleMemberItemsMisses(t *testing.T) {
 	s := newServer(strings.NewReader(""), io.Discard, io.Discard)
 
 	// A valid import, but the receiver word is not one of its namespaces.
-	if items := s.moduleMemberItems("import \"aql:rand\"\n", "NotANamespace"); items != nil {
+	if items := s.moduleMemberItems("import \"boru:rand\"\n", "NotANamespace"); items != nil {
 		t.Errorf("non-namespace receiver = %v, want nil", items)
 	}
 	// A syntactically-valid but unknown module id fails to resolve.
-	if items := s.moduleMemberItems("import \"aql:no-such-module\"\n", "Whatever"); items != nil {
+	if items := s.moduleMemberItems("import \"boru:no-such-module\"\n", "Whatever"); items != nil {
 		t.Errorf("unresolvable module = %v, want nil", items)
 	}
 
@@ -93,7 +93,7 @@ func TestModuleMemberItemsMisses(t *testing.T) {
 		return nil, errors.New("boom")
 	}
 	s2 := newServer(strings.NewReader(""), io.Discard, io.Discard)
-	if items := s2.moduleMemberItems("import \"aql:rand\"\n", "Rand"); items != nil {
+	if items := s2.moduleMemberItems("import \"boru:rand\"\n", "Rand"); items != nil {
 		t.Errorf("nil registry = %v, want nil", items)
 	}
 }

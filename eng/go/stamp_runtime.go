@@ -8,7 +8,7 @@ package eng
 // compiled. A fn value constructed at runtime — a service handler lambda
 // added inside an interpreted module-fn body, a custom codec fn resolved
 // from a codec map — is never visible to any compile pass, so its sig
-// carries no ref and InvokeCallback permanently falls back to CallAQL.
+// carries no ref and InvokeCallback permanently falls back to CallBoru.
 //
 // StampDetachedFn closes that gap: it compiles such a body to a standalone
 // one-unit *Program OUTSIDE any whole-program pass, on an isolated fork of
@@ -22,7 +22,7 @@ package eng
 // names its body reads. Instead the ref carries a depSnap — per dep name,
 // the DefTable shadow depth and mutation generation at stamp time — which
 // InvokeCallback validates on every invoke (CompiledFnRef.depsFresh); any
-// mismatch degrades to CallAQL, which resolves the live binding exactly as
+// mismatch degrades to CallBoru, which resolves the live binding exactly as
 // the interpreter would.
 
 // StampDetachedFn compiles a runtime-constructed, capture-free fn VALUE's
@@ -163,7 +163,7 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 	}
 	// Arm the JIT re-stamp box (REFUSAL-CLOSURE.0 §7c): the stamp inputs ride
 	// the ref so a later dep rebind re-compiles against the live bindings at
-	// invoke time (jitRestamp) instead of degrading permanently to CallAQL.
+	// invoke time (jitRestamp) instead of degrading permanently to CallBoru.
 	// fd here carries the §7a identity-minted capture clone, so a re-stamp
 	// needs no re-clone.
 	ref.restamp = &restampBox{fd: fd, sigIdx: sigIdx, pos: pos}
@@ -174,7 +174,7 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 // restampMaxTries bounds the TOTAL re-compiles one detached ref may pay
 // across its lifetime: a dep that keeps rebinding between invokes would
 // otherwise cost a compile per invoke — after the budget the seam stays on
-// CallAQL, which resolves the live binding exactly as the interpreter.
+// CallBoru, which resolves the live binding exactly as the interpreter.
 const restampMaxTries = 3
 
 // jitRestamp is InvokeCallback's stale-ref recovery (REFUSAL-CLOSURE.0 §7c):
@@ -211,9 +211,9 @@ func (ref *CompiledFnRef) jitRestamp(r *Registry) *CompiledFnRef {
 
 // StampFnValue is the value-level entry over StampDetachedFn: given a fn
 // VALUE (an FnDefInfo payload), it compiles the body and returns a CLONE of
-// the value whose own AQL sig carries the ref. The clone is deliberate — the
+// the value whose own boru sig carries the ref. The clone is deliberate — the
 // input may be a published, shared value (a module binding, an interned
-// const), and mutating its shared *AQLImpl from a store word would race
+// const), and mutating its shared *BoruImpl from a store word would race
 // concurrent readers; the compile-time stampCompiledRef mutates only
 // pre-publication interned consts. On any decline (not a fn value, already
 // stamped, capturing, ineligible shape, refusing body, policy off) it
@@ -251,7 +251,7 @@ func StampFnValue(r *Registry, v Value) (Value, bool) {
 			sigs = make([]Signature, len(fd.Signatures))
 			copy(sigs, fd.Signatures)
 		}
-		na := *(sigs[i].Impl.(*AQLImpl))
+		na := *(sigs[i].Impl.(*BoruImpl))
 		na.Compiled = ref
 		sigs[i].Impl = &na
 	}
@@ -267,7 +267,7 @@ func StampFnValue(r *Registry, v Value) (Value, bool) {
 }
 
 // StampFnValueInPlace is StampFnValue for PRE-PUBLICATION values: it stamps
-// the ref onto the value's own shared *AQLImpl (stampCompiledRef) instead of
+// the ref onto the value's own shared *BoruImpl (stampCompiledRef) instead of
 // cloning. Callers must guarantee the value has not escaped to concurrent
 // readers — the one sanctioned site is module load (RunModuleBody), where the
 // module's def bindings and its export map share impl pointers and both must
@@ -295,7 +295,7 @@ func StampFnValueInPlace(r *Registry, v Value) bool {
 		if !ok {
 			continue
 		}
-		fd.Signatures[i].Impl.(*AQLImpl).Compiled = ref
+		fd.Signatures[i].Impl.(*BoruImpl).Compiled = ref
 		any = true
 	}
 	return any

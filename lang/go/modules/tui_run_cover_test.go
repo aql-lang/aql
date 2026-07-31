@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // Direct-driver cover arms for tui_run.go that the engine path routes
@@ -17,7 +17,7 @@ import (
 
 func trcApp(t *testing.T, reg *native.Registry, src string) native.Value {
 	t.Helper()
-	out, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, src})
+	out, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, src})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestTuiRunConfigOptionArms(t *testing.T) {
 		{base + `  mouse: "yes"}`, "mouse: must be a Boolean"},
 		{base + `  title: 5}`, "title: must be a String"},
 	} {
-		_, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, `Tui.run ` + c.cfg})
+		_, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, `Tui.run ` + c.cfg})
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Fatalf("cfg %s = %v", c.cfg, err)
 		}
@@ -76,7 +76,7 @@ func TestTuiRunPolicyLazyAndBackendFailure(t *testing.T) {
 	_, rErr := tuiRunHandler([]native.Value{native.NewMap(native.NewOrderedMap())}, nil, nil, preg)
 	// The gate now codes the refusal, so the scope is no longer a struct
 	// field to read — it rides in the detail, which is the form the user sees.
-	var rAe *native.AqlError
+	var rAe *native.BoruError
 	if !errors.As(rErr, &rAe) || rAe.Code != "capability_not_installed" ||
 		!strings.Contains(rErr.Error(), "terminal") {
 		t.Fatalf("sandbox run = %v", rErr)
@@ -99,7 +99,7 @@ func TestTuiRunPolicyLazyAndBackendFailure(t *testing.T) {
 	vb2 := tuikit.NewVirtualBackend(4, 2)
 	vb2.OpenErr = errors.New("no surface")
 	reg2 := trcRegWithBackend(t, vb2)
-	_, err2 := runTuiStepsOn(t, reg2, []string{`import "aql:tui"`,
+	_, err2 := runTuiStepsOn(t, reg2, []string{`import "boru:tui"`,
 		`Tui.run {update: ([s:Map e:Map] => [s])  view: ([s:Map] => [Tui.spacer])}`})
 	if err2 == nil || !strings.Contains(err2.Error(), "no surface") {
 		t.Fatalf("backend failure = %v", err2)
@@ -111,7 +111,7 @@ func TestTuiRunPolicyLazyAndBackendFailure(t *testing.T) {
 	// insert on a shut-down runtime fails cleanly
 	reg3 := trcRegWithBackend(t, tuikit.NewVirtualBackend(4, 2))
 	reg3.Procs.Shutdown()
-	_, err3 := runTuiStepsOn(t, reg3, []string{`import "aql:tui"`,
+	_, err3 := runTuiStepsOn(t, reg3, []string{`import "boru:tui"`,
 		`Tui.run {update: ([s:Map e:Map] => [s])  view: ([s:Map] => [Tui.spacer])}`})
 	if err3 == nil || !strings.Contains(err3.Error(), "shut down") {
 		t.Fatalf("down-runtime run = %v", err3)
@@ -121,7 +121,7 @@ func TestTuiRunPolicyLazyAndBackendFailure(t *testing.T) {
 func TestTuiRunUpdateViewContractArms(t *testing.T) {
 	run := func(vb *tuikit.VirtualBackend, src string) error {
 		reg := trcRegWithBackend(t, vb)
-		_, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, src})
+		_, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, src})
 		return err
 	}
 	// update raising ON the init event
@@ -229,7 +229,7 @@ func TestTuiRunRuntimeShutdownMidRun(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(4, 2)
 	reg := trcRegWithBackend(t, vb)
 	app := &tuiApp{init: native.NewInteger(9)}
-	src := `import "aql:tui"  def u ([s:Any e:Map] => [s])  def v ([s:Any] => [Tui.spacer])`
+	src := `import "boru:tui"  def u ([s:Any e:Map] => [s])  def v ([s:Any] => [Tui.spacer])`
 	out, err := runTuiStepsOn(t, reg, []string{src, `[u/r v/r]`})
 	if err != nil {
 		t.Fatal(err)
@@ -407,7 +407,7 @@ func TestTuiWidgetResidualArms(t *testing.T) {
 func TestTuiRunViewerGoneArms(t *testing.T) {
 	reg := tcReg(t)
 	src := `def u ([s:Any e:Map] => [s])  def v ([s:Any] => [Tui.spacer])`
-	out, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`, src, `[u/r v/r]`})
+	out, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`, src, `[u/r v/r]`})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -477,7 +477,7 @@ func TestTuiRunServiceShapedApp(t *testing.T) {
 		vb.Inject(ev)
 	}
 	reg := trcRegWithBackend(t, vb)
-	out, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`,
+	out, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`,
 		`def svc (service {n: 0  events: 0})`,
 		`add {tag: "key"  key: "up"} ([ev:Map state:Any] => [
 		   (state set n (add 1 state.n)) drop
@@ -511,7 +511,7 @@ func TestTuiRunServiceConfigArms(t *testing.T) {
 		{`{service: (service {})  init: 5  ` + view + `}`, "service: and init: are exclusive"},
 		{`{service: (service {})}`, "missing view"},
 	} {
-		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "aql:tui"`, `Tui.run ` + c.cfg})
+		_, err := runTuiStepsOn(t, tcReg(t), []string{`import "boru:tui"`, `Tui.run ` + c.cfg})
 		if err == nil || !strings.Contains(err.Error(), c.want) {
 			t.Fatalf("cfg %s = %v, want %q", c.cfg, err, c.want)
 		}
@@ -520,7 +520,7 @@ func TestTuiRunServiceConfigArms(t *testing.T) {
 	vb := tuikit.NewVirtualBackend(4, 2)
 	vb.Inject(tuikit.Event{Tag: "key", Key: "x", Char: "x"})
 	reg := trcRegWithBackend(t, vb)
-	_, err := runTuiStepsOn(t, reg, []string{`import "aql:tui"`,
+	_, err := runTuiStepsOn(t, reg, []string{`import "boru:tui"`,
 		`def svc (service {})`,
 		`add {tag: "key"} ([ev:Map state:Any] => [ raise "handler-boom" ]) svc`,
 		`Tui.run {service: svc  view: ([s:Any] => [Tui.spacer])}`,

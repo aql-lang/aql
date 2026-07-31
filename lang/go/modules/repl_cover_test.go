@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // ADR-008 coverage for BuildReplModule's guard arms not reached by the
@@ -90,7 +90,7 @@ func TestBuildReplModuleRegisterFallbackWithoutInitFunc(t *testing.T) {
 
 // A sub-registry that cannot resolve the preamble's own imports surfaces
 // the preamble run failure (the run-error arm) — the parent here carries
-// no native-module resolver, so `import "aql:net"` fails inside the
+// no native-module resolver, so `import "boru:net"` fails inside the
 // preamble run.
 func TestBuildReplModulePreambleRunError(t *testing.T) {
 	reg, err := native.DefaultRegistry()

@@ -6,11 +6,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // fixedLogClock freezes time so emitted record timestamps are
@@ -53,7 +53,7 @@ func runLog(t *testing.T, reg *native.Registry, src string) []eng.Value {
 // frozen timestamp, the message, and the structured fields.
 func TestLogConsoleDefault(t *testing.T) {
 	reg, buf := newLogReg(t)
-	runLog(t, reg, `import "aql:log" ; Log.warn "disk low" {pct:91 mount:"/"}`)
+	runLog(t, reg, `import "boru:log" ; Log.warn "disk low" {pct:91 mount:"/"}`)
 	got := buf.String()
 	for _, want := range []string{"2021-01-01T00:00:00Z", "WARN", "disk low", "pct=91", "mount=/"} {
 		if !strings.Contains(got, want) {
@@ -69,7 +69,7 @@ func TestLogConsoleDefault(t *testing.T) {
 // not written to the console at all.
 func TestLogLevelThreshold(t *testing.T) {
 	reg, buf := newLogReg(t)
-	runLog(t, reg, `import "aql:log" ; Log.set-level error/q ; Log.warn "ignored" ; Log.error "kept"`)
+	runLog(t, reg, `import "boru:log" ; Log.set-level error/q ; Log.warn "ignored" ; Log.error "kept"`)
 	got := buf.String()
 	if strings.Contains(got, "ignored") {
 		t.Errorf("sub-threshold WARN should be dropped, got %q", got)
@@ -83,7 +83,7 @@ func TestLogLevelThreshold(t *testing.T) {
 // object carrying the OTel severity number and the attributes.
 func TestLogJSONFormat(t *testing.T) {
 	reg, buf := newLogReg(t)
-	runLog(t, reg, `import "aql:log" ; Log.set-format json/q ; Log.info "hi" {n:7}`)
+	runLog(t, reg, `import "boru:log" ; Log.set-format json/q ; Log.info "hi" {n:7}`)
 	got := strings.TrimSpace(buf.String())
 	for _, want := range []string{`"level":"INFO"`, `"severity":9`, `"msg":"hi"`, `"n":7`} {
 		if !strings.Contains(got, want) {
@@ -97,7 +97,7 @@ func TestLogJSONFormat(t *testing.T) {
 // number + text, body, attributes).
 func TestLogMemoryRecordFields(t *testing.T) {
 	reg, _ := newLogReg(t)
-	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.error "boom" {code:42} ; Log.dump`)
+	out := runLog(t, reg, `import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.error "boom" {code:42} ; Log.dump`)
 	if len(out) != 1 {
 		t.Fatalf("want one result (the dump list), got %d", len(out))
 	}
@@ -140,7 +140,7 @@ func TestLogMemoryRecordFields(t *testing.T) {
 // sink when both are attached.
 func TestLogFanOut(t *testing.T) {
 	reg, buf := newLogReg(t)
-	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.info "twice" ; Log.dump size`)
+	out := runLog(t, reg, `import "boru:log" ; Log.add-sink memory/q ; Log.info "twice" ; Log.dump size`)
 	if !strings.Contains(buf.String(), "twice") {
 		t.Errorf("console sink did not receive the record: %q", buf.String())
 	}
@@ -161,13 +161,13 @@ func TestLogPolicyBlocksSinkInstall(t *testing.T) {
 	native.SetHostPolicy(reg, pol)
 
 	// add-sink is denied as an error.
-	vals, _ := parser.Parse(`import "aql:log" ; Log.add-sink memory/q`)
+	vals, _ := parser.Parse(`import "boru:log" ; Log.add-sink memory/q`)
 	if _, err := native.NewTop(reg).Run(vals); err == nil {
 		t.Error("add-sink under log.install=false should error")
 	}
 
 	// emit is dropped silently (no error, nothing written).
-	vals2, _ := parser.Parse(`import "aql:log" ; Log.info "silent"`)
+	vals2, _ := parser.Parse(`import "boru:log" ; Log.info "silent"`)
 	if _, err := native.NewTop(reg).Run(vals2); err != nil {
 		t.Errorf("emit under a restrictive policy must not error, got %v", err)
 	}
@@ -185,7 +185,7 @@ func TestLogPolicyAllowsByDefault(t *testing.T) {
 		t.Fatalf("policy: %v", err)
 	}
 	native.SetHostPolicy(reg, pol)
-	runLog(t, reg, `import "aql:log" ; Log.info "ok"`)
+	runLog(t, reg, `import "boru:log" ; Log.info "ok"`)
 	if !strings.Contains(buf.String(), "ok") {
 		t.Errorf("permissive policy should allow emission, got %q", buf.String())
 	}
@@ -199,7 +199,7 @@ func TestLogHostPreattachedSink(t *testing.T) {
 	lsr := native.NewLogSinkRegistry()
 	lsr.SetLevel(native.LevelError) // host-chosen threshold
 	native.SetHostLogSinks(reg, lsr)
-	out := runLog(t, reg, `import "aql:log" ; Log.get-level`)
+	out := runLog(t, reg, `import "boru:log" ; Log.get-level`)
 	if len(out) != 1 || native.FormatForPrint(out[0]) != "error" {
 		t.Errorf("module should use the host-installed registry (level error), got %v", out)
 	}
@@ -210,13 +210,13 @@ func TestLogHostPreattachedSink(t *testing.T) {
 // than a panic — the CLAUDE.md Panic-Prevention discipline.
 func TestLogNoPanicTypeLiterals(t *testing.T) {
 	srcs := []string{
-		`import "aql:log" ; Log.set-level Atom`,
-		`import "aql:log" ; Log.enabled Atom`,
-		`import "aql:log" ; Log.set-format Atom`,
-		`import "aql:log" ; Log.add-sink Atom`,
-		`import "aql:log" ; Log.remove-sink Atom`,
-		`import "aql:log" ; Log.info Any`,
-		`import "aql:log" ; Log.log Atom String`,
+		`import "boru:log" ; Log.set-level Atom`,
+		`import "boru:log" ; Log.enabled Atom`,
+		`import "boru:log" ; Log.set-format Atom`,
+		`import "boru:log" ; Log.add-sink Atom`,
+		`import "boru:log" ; Log.remove-sink Atom`,
+		`import "boru:log" ; Log.info Any`,
+		`import "boru:log" ; Log.log Atom String`,
 	}
 	for _, src := range srcs {
 		func() {
@@ -239,7 +239,7 @@ func TestLogNoPanicTypeLiterals(t *testing.T) {
 // merges its bound default attributes into the console output.
 func TestLogContextualLogger(t *testing.T) {
 	reg, buf := newLogReg(t)
-	runLog(t, reg, `import "aql:log" ; def l (Log.with "http" {svc:"api"}) ; l.warn "slow" {ms:30}`)
+	runLog(t, reg, `import "boru:log" ; def l (Log.with "http" {svc:"api"}) ; l.warn "slow" {ms:30}`)
 	got := buf.String()
 	for _, want := range []string{"WARN", "slow", "svc=api", "ms=30"} {
 		if !strings.Contains(got, want) {
@@ -252,7 +252,7 @@ func TestLogContextualLogger(t *testing.T) {
 // parent's defaults plus its own, and does not mutate the parent's.
 func TestLogChildLoggerIndependent(t *testing.T) {
 	reg, _ := newLogReg(t)
-	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def p (Log.with "a" {region:"eu"}) ; def c (p.child {req:"1"}) ; c.info "child" ; p.info "parent" ; Log.dump`)
+	out := runLog(t, reg, `import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def p (Log.with "a" {region:"eu"}) ; def c (p.child {req:"1"}) ; c.info "child" ; p.info "parent" ; Log.dump`)
 	list, err := native.RequireConcreteList(out[0], "dump")
 	if err != nil || list.Len() != 2 {
 		t.Fatalf("want two records, got %v", out)
@@ -281,21 +281,21 @@ func mustField(t *testing.T, rec native.Value, key string) native.Value {
 	return v
 }
 
-// TestLogAqlFnSink verifies an AQL function registered via Log.register
+// TestLogBoruFnSink verifies a boru function registered via Log.register
 // is invoked once per admitted record, and that the sink's minimum
 // level filters records below it. The sink prints the record body to
 // the registry Output, which the test observes.
-func TestLogAqlFnSink(t *testing.T) {
+func TestLogBoruFnSink(t *testing.T) {
 	reg, _ := newLogReg(t)
 	var out bytes.Buffer
 	reg.Output = &out
-	runLog(t, reg, `import "aql:log" ; Log.remove-sink console/q ; Log.register (fn [[rec:Any] [] [rec "body" get print]]) tap/q warn/q ; Log.info "lo" ; Log.warn "hi"`)
+	runLog(t, reg, `import "boru:log" ; Log.remove-sink console/q ; Log.register (fn [[rec:Any] [] [rec "body" get print]]) tap/q warn/q ; Log.info "lo" ; Log.warn "hi"`)
 	got := out.String()
 	if strings.Contains(got, "lo") {
 		t.Errorf("INFO is below the sink's warn minimum and must not reach it, got %q", got)
 	}
 	if !strings.Contains(got, "hi") {
-		t.Errorf("WARN must reach the AQL function sink, got %q", got)
+		t.Errorf("WARN must reach the boru function sink, got %q", got)
 	}
 }
 
@@ -313,7 +313,7 @@ func TestLogHostSink(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RegisterHostLogSink: %v", err)
 	}
-	runLog(t, reg, `import "aql:log" ; Log.info "hello" {k:1}`)
+	runLog(t, reg, `import "boru:log" ; Log.info "hello" {k:1}`)
 	if len(got) != 1 {
 		t.Fatalf("host sink received %d records, want 1", len(got))
 	}
@@ -347,7 +347,7 @@ func TestLogHostSinkValidation(t *testing.T) {
 // the span's trace-id and span-id (neutral trace-context propagation).
 func TestLogSpanPropagation(t *testing.T) {
 	reg, _ := newLogReg(t)
-	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "op" [Log.info "inside"] ; Log.dump`)
+	out := runLog(t, reg, `import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.with-span "op" [Log.info "inside"] ; Log.dump`)
 	list, err := native.RequireConcreteList(out[0], "dump")
 	if err != nil || list.Len() != 1 {
 		t.Fatalf("want one record, got %v", out)
@@ -373,7 +373,7 @@ func TestLogHostSpanSink(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RegisterHostLogSink: %v", err)
 	}
-	runLog(t, reg, `import "aql:log" ; Log.with-span "checkout" [Log.info "x"]`)
+	runLog(t, reg, `import "boru:log" ; Log.with-span "checkout" [Log.info "x"]`)
 	if len(started) != 1 || len(ended) != 1 {
 		t.Fatalf("want one start and one end, got %d/%d", len(started), len(ended))
 	}
@@ -398,7 +398,7 @@ func TestLogSpanErrorStatus(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RegisterHostLogSink: %v", err)
 	}
-	vals, _ := parser.Parse(`import "aql:log" ; Log.with-span "op" [raise "boom"]`)
+	vals, _ := parser.Parse(`import "boru:log" ; Log.with-span "op" [raise "boom"]`)
 	if _, err := native.NewTop(reg).Run(vals); err == nil {
 		t.Error("with-span must re-raise the body error")
 	}
@@ -421,7 +421,7 @@ func TestLogMetrics(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RegisterHostLogSink: %v", err)
 	}
-	runLog(t, reg, `import "aql:log" ; def c (Log.counter "requests") ; c.add 4 {region:"eu"}`)
+	runLog(t, reg, `import "boru:log" ; def c (Log.counter "requests") ; c.add 4 {region:"eu"}`)
 	if len(got) != 1 {
 		t.Fatalf("host sink received %d measurements, want 1", len(got))
 	}
@@ -451,7 +451,7 @@ func TestLogHostOwnsTraceIds(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("RegisterHostLogSink: %v", err)
 	}
-	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.with-span "op" [Log.info "x"] ; Log.dump`)
+	out := runLog(t, reg, `import "boru:log" ; Log.add-sink memory/q ; Log.with-span "op" [Log.info "x"] ; Log.dump`)
 	list, _ := native.RequireConcreteList(out[0], "dump")
 	if list.Len() != 1 {
 		t.Fatalf("want one record, got %v", out)
@@ -465,7 +465,7 @@ func TestLogHostOwnsTraceIds(t *testing.T) {
 // captured trace history cannot be rewritten after the fact.
 func TestLogEndedSpanFrozen(t *testing.T) {
 	reg, _ := newLogReg(t)
-	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.finish ; s.set-attr leaked/q "yes" ; Log.traces 0 get "attributes" get`)
+	out := runLog(t, reg, `import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; def s (Log.span "m") ; s.finish ; s.set-attr leaked/q "yes" ; Log.traces 0 get "attributes" get`)
 	if got := native.FormatForPrint(out[0]); got != "{}" {
 		t.Errorf("ended-span attributes = %q, want {} (post-finish mutation must be rejected)", got)
 	}
@@ -475,7 +475,7 @@ func TestLogEndedSpanFrozen(t *testing.T) {
 // measurements together.
 func TestLogClearAllBuffers(t *testing.T) {
 	reg, _ := newLogReg(t)
-	out := runLog(t, reg, `import "aql:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "r" ; Log.with-span "s" [Log.info "x"] ; def c (Log.counter "n") ; c.add 1 ; Log.clear ; [(Log.dump size) (Log.traces size) (Log.measurements size)]`)
+	out := runLog(t, reg, `import "boru:log" ; Log.add-sink memory/q ; Log.remove-sink console/q ; Log.info "r" ; Log.with-span "s" [Log.info "x"] ; def c (Log.counter "n") ; c.add 1 ; Log.clear ; [(Log.dump size) (Log.traces size) (Log.measurements size)]`)
 	if got := native.FormatForPrint(out[0]); got != "[0, 0, 0]" {
 		t.Errorf("after clear, [records spans measurements] sizes = %q, want [0, 0, 0]", got)
 	}
@@ -486,12 +486,12 @@ func TestLogClearAllBuffers(t *testing.T) {
 func TestLogEnabledReflectsGates(t *testing.T) {
 	reg, _ := newLogReg(t)
 	// At/above threshold with a sink attached → enabled.
-	out := runLog(t, reg, `import "aql:log" ; Log.enabled info/q`)
+	out := runLog(t, reg, `import "boru:log" ; Log.enabled info/q`)
 	if native.FormatForPrint(out[0]) != "true" {
 		t.Errorf("info should be enabled by default, got %v", native.FormatForPrint(out[0]))
 	}
 	// All sinks detached → not enabled even at/above threshold.
-	out2 := runLog(t, reg, `import "aql:log" ; Log.remove-sink console/q ; Log.enabled info/q`)
+	out2 := runLog(t, reg, `import "boru:log" ; Log.remove-sink console/q ; Log.enabled info/q`)
 	if native.FormatForPrint(out2[0]) != "false" {
 		t.Errorf("with no attached sink, enabled should be false, got %v", native.FormatForPrint(out2[0]))
 	}
@@ -501,7 +501,7 @@ func TestLogEnabledReflectsGates(t *testing.T) {
 // and trace/span correlation fields in both formats.
 func TestLogConsoleCorrelation(t *testing.T) {
 	reg, buf := newLogReg(t)
-	runLog(t, reg, `import "aql:log" ; Log.set-format json/q ; def l (Log.logger "http") ; Log.with-span "op" [l.info "x"]`)
+	runLog(t, reg, `import "boru:log" ; Log.set-format json/q ; def l (Log.logger "http") ; Log.with-span "op" [l.info "x"]`)
 	got := buf.String()
 	for _, want := range []string{`"logger":"http"`, `"trace-id":`, `"span-id":`} {
 		if !strings.Contains(got, want) {
@@ -510,7 +510,7 @@ func TestLogConsoleCorrelation(t *testing.T) {
 	}
 }
 
-// TestLogCheckModeWalksSpanBody verifies aql check analyses a with-span
+// TestLogCheckModeWalksSpanBody verifies boru check analyses a with-span
 // body — an undefined word inside it is flagged statically, not only at
 // runtime.
 func TestLogCheckModeWalksSpanBody(t *testing.T) {
@@ -520,7 +520,7 @@ func TestLogCheckModeWalksSpanBody(t *testing.T) {
 	}
 	reg.SetParseFunc(parser.Parse)
 	InstallResolver(reg)
-	vals, err := parser.Parse(`import "aql:log" ; Log.with-span "op" [definitely-not-a-word]`)
+	vals, err := parser.Parse(`import "boru:log" ; Log.with-span "op" [definitely-not-a-word]`)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}

@@ -5,7 +5,7 @@ import "sort"
 // MaxArgs is the maximum number of arguments a signature may declare.
 const MaxArgs = 32
 
-// Handler is the unified function handler type for all AQL words.
+// Handler is the unified function handler type for all boru words.
 // It receives the matched arguments, the current context map, the
 // resolved stack (only populated for FullStack signatures), and the
 // registry.
@@ -99,7 +99,7 @@ func normalizeSig(s *Signature) {
 			}
 			patterns[i] = *p.Pattern
 		}
-		// AQL-declared /q params (FnParam.Quote, from `name:Atom/q`)
+		// boru-declared /q params (FnParam.Quote, from `name:Atom/q`)
 		// merge INTO QuoteArgs — the field every dispatch-side reader
 		// consults — without disturbing native-set entries (two
 		// declaration surfaces, one per-position property).
@@ -109,7 +109,7 @@ func normalizeSig(s *Signature) {
 		// in the legacy-Args branch above), so re-writing it would mutate the
 		// package-level author map that every Registry shares — a data race
 		// under concurrent registration. Skipping the redundant write keeps
-		// the shared native map read-only; the AQL path (QuoteArgs nil/absent)
+		// the shared native map read-only; the boru path (QuoteArgs nil/absent)
 		// still populates its own per-parse map.
 		if p.Quote && !s.QuoteArgs[i] {
 			if s.QuoteArgs == nil {
@@ -460,7 +460,7 @@ func sigArgMatches(sig *Signature, idx int, v Value) bool {
 // this rejection check follows suit. The value `none` is also
 // legitimate at a TNone slot — None has a single inhabitant and
 // that's it. This covers the spec runner's NewNone() (Data != nil
-// sentinel value with Parent=TNone) AND production aql's
+// sentinel value with Parent=TNone) AND production boru's
 // `NewTypeLiteral(TNone)` (Data == nil, value IS the TNone lattice
 // node — its own Parent is nil since None is a degenerate root).
 func rejectsTypeLiteral(v Value, expectedType *Type) bool {

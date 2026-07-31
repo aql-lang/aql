@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // valuesEqual compares two eng.Value instances for equality.
@@ -1293,7 +1293,7 @@ func TestParseIntegerLiteralExact(t *testing.T) {
 }
 
 // TestParseIntegerLiteralOverflow pins that a decimal integer literal
-// outside the int64 range is a hard [aql/integer_overflow] error rather
+// outside the int64 range is a hard [boru/integer_overflow] error rather
 // than a silent fall-back to Float.
 func TestParseIntegerLiteralOverflow(t *testing.T) {
 	for _, src := range []string{
@@ -1306,9 +1306,9 @@ func TestParseIntegerLiteralOverflow(t *testing.T) {
 			t.Errorf("Parse(%q): expected an integer_overflow error, got nil", src)
 			continue
 		}
-		ae, ok := err.(*eng.AqlError)
+		ae, ok := err.(*eng.BoruError)
 		if !ok || ae.Code != "integer_overflow" {
-			t.Errorf("Parse(%q): expected [aql/integer_overflow], got %v", src, err)
+			t.Errorf("Parse(%q): expected [boru/integer_overflow], got %v", src, err)
 			continue
 		}
 		if ae.Row == 0 {
@@ -1375,9 +1375,9 @@ func TestParseLeadingDotRejected(t *testing.T) {
 	// forms (which jsonic lexes as one number token) are all rejected.
 	for _, src := range []string{".5", ".0", ".name", "!.x", "-.5", "+.5"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.AqlError)
+		ae, ok := err.(*eng.BoruError)
 		if !ok || ae.Code != "syntax_error" {
-			t.Errorf("Parse(%q): expected [aql/syntax_error], got %v", src, err)
+			t.Errorf("Parse(%q): expected [boru/syntax_error], got %v", src, err)
 		}
 	}
 	// These must still parse cleanly.
@@ -1393,9 +1393,9 @@ func TestParseLeadingDotRejected(t *testing.T) {
 func TestParseUnderscoreSeparators(t *testing.T) {
 	for _, src := range []string{"1__0", "1_", "1_000__0", "0xFF__FF", "1__0.5"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.AqlError)
+		ae, ok := err.(*eng.BoruError)
 		if !ok || ae.Code != "syntax_error" {
-			t.Errorf("Parse(%q): expected [aql/syntax_error] for misplaced _, got %v", src, err)
+			t.Errorf("Parse(%q): expected [boru/syntax_error] for misplaced _, got %v", src, err)
 		}
 	}
 	for _, src := range []string{"1_0", "1_000_000", "0xFF_FF", "1_000.5", "-1_0"} {
@@ -1419,31 +1419,31 @@ func TestParseBasePrefixOverflowAndMin(t *testing.T) {
 	}
 	for _, src := range []string{"0x8000000000000000", "0xFFFFFFFFFFFFFFFF"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.AqlError)
+		ae, ok := err.(*eng.BoruError)
 		if !ok || ae.Code != "integer_overflow" {
-			t.Errorf("Parse(%q): expected [aql/integer_overflow], got %v", src, err)
+			t.Errorf("Parse(%q): expected [boru/integer_overflow], got %v", src, err)
 		}
 	}
 }
 
 // TestParseDigitLedTokens pins that a digit-led token — which can never
 // be a word (ValidateWordName forbids a digit first) — is diagnosed as a
-// number: an out-of-range value is [aql/float_overflow]; any other
+// number: an out-of-range value is [boru/float_overflow]; any other
 // digit-led junk (including the digit-first `2dup`, now renamed to
-// `dup2`) is a malformed-numeric [aql/syntax_error].
+// `dup2`) is a malformed-numeric [boru/syntax_error].
 func TestParseDigitLedTokens(t *testing.T) {
 	for _, src := range []string{"1e309", "1e400", "-1e400"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.AqlError)
+		ae, ok := err.(*eng.BoruError)
 		if !ok || ae.Code != "float_overflow" {
-			t.Errorf("Parse(%q): expected [aql/float_overflow], got %v", src, err)
+			t.Errorf("Parse(%q): expected [boru/float_overflow], got %v", src, err)
 		}
 	}
 	for _, src := range []string{"1e", "1foo", "5x", "2dup", "0x1p4"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.AqlError)
+		ae, ok := err.(*eng.BoruError)
 		if !ok || ae.Code != "syntax_error" {
-			t.Errorf("Parse(%q): expected malformed-number [aql/syntax_error], got %v", src, err)
+			t.Errorf("Parse(%q): expected malformed-number [boru/syntax_error], got %v", src, err)
 		}
 	}
 	// In-range numbers and letter-led words still parse without error.
@@ -1458,9 +1458,9 @@ func TestParseDigitLedTokens(t *testing.T) {
 // is located at the offending literal, not at the start of the line.
 func TestParseIntegerLiteralOverflowPos(t *testing.T) {
 	_, err := Parse("add 1 9223372036854775808")
-	ae, ok := err.(*eng.AqlError)
+	ae, ok := err.(*eng.BoruError)
 	if !ok {
-		t.Fatalf("expected *eng.AqlError, got %v", err)
+		t.Fatalf("expected *eng.BoruError, got %v", err)
 	}
 	if ae.Row != 1 || ae.Col != 7 {
 		t.Errorf("expected position 1:7 (the literal), got %d:%d", ae.Row, ae.Col)
@@ -2452,8 +2452,8 @@ func TestParseMapKeyModifierRejected(t *testing.T) {
 			t.Errorf("Parse(%q) expected illegal_key error, got nil", src)
 			continue
 		}
-		if !strings.Contains(err.Error(), "aql/illegal_key") {
-			t.Errorf("Parse(%q) error = %q, want it to contain aql/illegal_key", src, err.Error())
+		if !strings.Contains(err.Error(), "boru/illegal_key") {
+			t.Errorf("Parse(%q) error = %q, want it to contain boru/illegal_key", src, err.Error())
 		}
 	}
 }
@@ -2656,7 +2656,7 @@ func TestParseBacktickOnlyLiteral(t *testing.T) {
 // --- Words starting with '-' (CLI flag style) ---
 //
 // `-h`, `--help`, `--limit` need to parse as Words so a CLI built
-// on the engine (e.g. sdkgen go-cli) can register them as native AQL
+// on the engine (e.g. sdkgen go-cli) can register them as native boru
 // words and dispatch the same way as any other word. The grammar
 // preserves the existing number-literal precedence — `-3.14`,
 // `-42`, `+5` still tokenise as numbers because matchNumber only

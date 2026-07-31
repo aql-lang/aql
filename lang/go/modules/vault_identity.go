@@ -4,9 +4,9 @@ import (
 	"crypto/tls"
 	"fmt"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TVaultIdentity is the opaque handle `Vault.identity` returns: a
@@ -23,7 +23,7 @@ import (
 var TVaultIdentity = registerVaultType("Ideal/VaultIdentity", 5012, vaultIdentityBehavior{})
 
 func registerVaultType(path string, id int, b eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterType(path, id, "aql:vault", b)
+	t, err := eng.Builtin.RegisterType(path, id, "boru:vault", b)
 	if err != nil {
 		native.RecordTypeInitError(fmt.Errorf("vault: register %s: %w", path, err))
 	}
@@ -86,7 +86,7 @@ func VaultIdentityName(v native.Value) (string, bool) {
 func vaultIdentityHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
 	alias, err := args[0].AsConcreteString()
 	if err != nil || alias == "" {
-		return nil, r.AqlError("vault_error", "identity: alias must be a non-empty String", "identity")
+		return nil, r.BoruError("vault_error", "identity: alias must be a non-empty String", "identity")
 	}
 	name := "vault:" + alias
 	native.RegisterClientIdentity(r, name, capabilities.IdentityFunc(
@@ -98,7 +98,7 @@ func vaultIdentityHandler(args []native.Value, _ map[string]native.Value, _ []na
 
 // vaultCertificate reveals the alias through the host vault backend and
 // parses it as a PEM bundle. The reveal happens in HOST Go under the
-// vault's own `reveal` gate — the bytes never become an AQL value, which
+// vault's own `reveal` gate — the bytes never become a boru value, which
 // is the whole point of the handle.
 func vaultCertificate(r *native.Registry, alias string) (*tls.Certificate, error) {
 	spec := hostVaultSpec(r)

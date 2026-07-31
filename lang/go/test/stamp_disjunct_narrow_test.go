@@ -13,7 +13,7 @@ import "testing"
 func TestStampDisjunctArgNarrowsToParam(t *testing.T) {
 	evs := stampEventsForNet(t, `
 module [
-  import "aql:net"
+  import "boru:net"
   def s2-send-resp fn [[conn:Any status:Integer extra:List body:Bytes] [Any] [
     def hdrs (push (join "" ["content-length: " (convert String (size body))]) extra)
     def head (join "\r\n" (unshift (join "" ["HTTP/1.1 " (convert String status) " S"]) hdrs))

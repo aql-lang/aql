@@ -1,4 +1,4 @@
-// LSP protocol types used by the aql language server. Only the
+// LSP protocol types used by the boru language server. Only the
 // fields we actually read or write are modelled — JSON marshaling
 // happily ignores extras the client sends.
 //

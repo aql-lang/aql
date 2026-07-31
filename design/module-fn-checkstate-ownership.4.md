@@ -21,9 +21,9 @@ only the §5a memo-key commit (`6665be3`) and the `.0`–`.4` design record.
   `ModuleBodyDepth > 0`.
 - `CheckState.DropModuleBodyErrors()` drops error-severity ModuleBody
   diagnostics at end of pass, wired in beside `RescueForwardRefDiagnostics`
-  in both `Check` and `CompileCheck` (`lang/go/aql.go`).
+  in both `Check` and `CompileCheck` (`lang/go/boru.go`).
 - `execFnDefSig`: a value-threading probe (env-gated) that points the module
-  sub-registry's `Check` at the parent pass's for the `CallAQL`, bumps
+  sub-registry's `Check` at the parent pass's for the `CallBoru`, bumps
   `ModuleBodyDepth`, and copies the mutated state back.
 
 ## 2. Result A — suppression works for in-body diagnostics (29 → 14)
@@ -135,10 +135,10 @@ removes the concrete-fold dependency.
 ## 7. Reproduction
 
 ```bash
-git clone https://github.com/voxgig-aql/decision /tmp/decision
-cd /home/user/aql/cmd/go && go build -o bin/aql ./aql
+git clone https://github.com/voxgig-boru/decision /tmp/decision
+cd /home/user/boru/cmd/go && go build -o bin/boru ./boru
 # baseline: compilable suites are green ONLY via the concrete fold
-cd /tmp/decision && BYTECODE_AQL=/home/user/aql/cmd/go/bin/aql bash test/diverge.sh
+cd /tmp/decision && BYTECODE_BORU=/home/user/boru/cmd/go/bin/boru bash test/diverge.sh
 # with §5b threading (any form), --force-compile on the compilable suites
 # refuses at `code-body word test-test (Stage 2)` — §6 is required.
 ```

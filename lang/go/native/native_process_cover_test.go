@@ -2,7 +2,7 @@ package native
 
 // Coverage for lang/go/native/native_process.go (design/TEST-SEAMS.10.md
 // discipline): direct handler calls with crafted args drive the error arms
-// the AQL surface cannot reach deterministically (runtime shutdown, full
+// the boru surface cannot reach deterministically (runtime shutdown, full
 // mailboxes, crafted payloads), and seam5Run drives the clause-parsing and
 // routing arms from source. Per lang/go/CLAUDE.md every negative case is
 // paired with the positive behaviour it protects.
@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 func wantProcErr(t *testing.T, err error, sub string) {
@@ -130,10 +130,10 @@ func TestProcessCoverSpawnDeniedByPolicy(t *testing.T) {
 		t.Fatal("sandbox policy must deny spawn")
 	}
 	// The gate codes the refusal (policy_error.go), so what escapes is a
-	// dispatchable AqlError rather than the internal *policy.Denied.
-	var ae *AqlError
+	// dispatchable BoruError rather than the internal *policy.Denied.
+	var ae *BoruError
 	if !errors.As(err, &ae) {
-		t.Fatalf("expected a coded AqlError, got %T (%v)", err, err)
+		t.Fatalf("expected a coded BoruError, got %T (%v)", err, err)
 	}
 }
 

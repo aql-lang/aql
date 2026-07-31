@@ -3,9 +3,9 @@ package test
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 const stage5Mod = `import module [def fact fn [[n:Integer acc:Integer] [Integer] [if (n lte 0) [acc] [fact (n sub 1) (acc add n)]]] export "MU" {fact: fact/r}] `
@@ -13,8 +13,8 @@ const stage5Mod = `import module [def fact fn [[n:Integer acc:Integer] [Integer]
 // TestModuleRecursionGetsTCO pins the Stage-5 reality discovered by
 // tracing: module preamble fns are InstallFnDef'd in the MODULE
 // registry, so intra-module tail recursion dispatches through
-// execMatch inside CallAQL's sub-engine and Stages 1-4b already apply
-// — one CallAQL boundary crossing per entry, O(1) tape inside. The
+// execMatch inside CallBoru's sub-engine and Stages 1-4b already apply
+// — one CallBoru boundary crossing per entry, O(1) tape inside. The
 // counters live on the MODULE registry (each import universe has its
 // own); the exported fn value carries it.
 func TestModuleRecursionGetsTCO(t *testing.T) {
@@ -40,9 +40,9 @@ func TestModuleRecursionGetsTCO(t *testing.T) {
 	if reg.TCO.Detected != 0 {
 		t.Errorf("main registry detected %d; module recursion runs on the module registry", reg.TCO.Detected)
 	}
-	// Depth 50: the entry call crosses via CallAQL (not a tail call,
+	// Depth 50: the entry call crosses via CallBoru (not a tail call,
 	// no enclosing frame); the first in-body call has no frame above
-	// the unwrapped CallAQL body (declined); the remaining 49 recurse
+	// the unwrapped CallBoru body (declined); the remaining 49 recurse
 	// frame-to-frame and replace.
 	if fd.Registry.TCO.Detected != 49 || fd.Registry.TCO.Replaced != 49 {
 		t.Errorf("module registry detected/replaced = %d/%d, want 49/49",

@@ -5,7 +5,7 @@ is **the carrier type-checker run with a recording side effect**: every
 dispatch the checker resolves in a typed region is recorded as a classified
 event, and `Finalize` linearises the trace into a `Program`. Anything the
 recorder cannot prove it can lower **faithfully** is refused, and the caller
-(`lang.(*AQL).RunCompiled`) silently falls back to the interpreter. The worst
+(`lang.(*Boru).RunCompiled`) silently falls back to the interpreter. The worst
 failure mode is therefore *slow, not wrong*.
 
 This document is the **positive** statement of what compiles and why. The code
@@ -67,7 +67,7 @@ identity no-op merge), preserving the seat; a GENUINE reassignment gives
 the arms differing IDs and keeps the fresh-ID join (a branch RESULT must
 not collide with an arm's live local). Pinned by
 `lang/go/bytecode_ifbranch_operand_test.go` (reduced from the aless
-viewer's render fn — voxgig-aql/aless, dx-report 2026-07-21).
+viewer's render fn — voxgig-boru/aless, dx-report 2026-07-21).
 
 ---
 
@@ -86,7 +86,7 @@ viewer's render fn — voxgig-aql/aless, dx-report 2026-07-21).
 | Higher-order code body | the body compiles to a capture-resolved closure unit and the driving word invokes it via the VM seam | `PUSH_CLOSURE` + `CALL_NATIVE` |
 | └ `var`-body that captures/refs an enclosing binding | the `var` cleanup is emitted as the 1-arg-only `__varundef` (not the overloaded `undef`), so the body's dynamic-Any residual can no longer mis-match `undef name fnUndefSpec`'s `TFnUndef` slot in check mode — the cleanup dispatches identically (1-arg unbind) in check and at runtime, so the loop binding never leaks into the capture set | same closure unit; cleanup lowers to a `__varundef` `CALL_NATIVE` |
 | Fn-value as DATA | introspection (`typeof`/`arityof`/…) or a residual/member, never an INVOKED fn value | baked const / `OpCallDynamic` at the residual boundary |
-| Fn-value APPLIED at a fn-body tail | the body's count-mismatched residual carries a Function-typed **or DYNAMIC** value (a map get over `Any` — the aql:fmt stylesheet driver `def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]`), and the recorded trace proves the window is the body's LAST statement (no event recorded after the window's last producer — `replayIsBodyTail`); an out-of-order residual re-pushes in exact token order via `replayForceOrder` promotion | `OpCallDynFrame` + `RetReplay`: the frame's token region re-steps at the RET under `execFnDefLiteral`'s own runtime rule — a callable value applies exactly as the interpreter's pointer would (forward collection included), a NON-callable value stays data and the RET raises the interpreter's own return-count error |
+| Fn-value APPLIED at a fn-body tail | the body's count-mismatched residual carries a Function-typed **or DYNAMIC** value (a map get over `Any` — the boru:fmt stylesheet driver `def apply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]`), and the recorded trace proves the window is the body's LAST statement (no event recorded after the window's last producer — `replayIsBodyTail`); an out-of-order residual re-pushes in exact token order via `replayForceOrder` promotion | `OpCallDynFrame` + `RetReplay`: the frame's token region re-steps at the RET under `execFnDefLiteral`'s own runtime rule — a callable value applies exactly as the interpreter's pointer would (forward collection included), a NON-callable value stays data and the RET raises the interpreter's own return-count error |
 | Computed list literal | top-level only, every element a core-builtin (deterministic) result or const | `MAKE_LIST n` |
 | Computed map literal | every value operand resolves AND the map is CONSUMED in-frame (a word/fn arg, incl. `make`'s body) — not a deferred residual (a bare map tail, evaluated after its frame pops). Sound in fn bodies / branches / loops: `OpMakeMap` re-assembles a fresh map per run, never frozen | `OpMakeMap` (keys ride in `MakeMaps`, values popped) |
 | └ list-valued entry (`{n:[expr]}`, the `do {map}` idiom) | the value list's elements all resolve; the list WRAPPER is recorded inline (interleaved per value, in stack order) as a nested `OpMakeList`, bypassing its top-frame guard because it is a consumed operand of the enclosing in-frame `OpMakeMap` | nested `OpMakeList` then `OpMakeMap` |
@@ -213,11 +213,11 @@ them when widening the subset:
   programs (arithmetic, `if`/`for`/`case`, `each`/`fold`/`scan`/`filter`,
   maps, array/object mutation, closures/captures, apply/usurp, direct named-fn
   calls) checked for the same agreement, with shrinking. Crank via
-  `AQL_FUZZ_SEEDS` / `AQL_FUZZ_ITERS`.
-- **`-tags aqldebug`** (`make verify-bytecode`) — re-runs the differential and
+  `BORU_FUZZ_SEEDS` / `BORU_FUZZ_ITERS`.
+- **`-tags borudebug`** (`make verify-bytecode`) — re-runs the differential and
   property gates with a fresh args slice per `CALL_NATIVE`, so a native that
   illegally retains its args slice corrupts nothing and is localised here.
 - **`eng/go/bytecode_constbake_test.go`** — pins the §4 mutation-safety
   whitelist.
 - **`make verify-bytecode`** — the full bracket: fmt/vet/lint, the gates above,
-  `-race` concurrency gates, and the aqldebug lane.
+  `-race` concurrency gates, and the borudebug lane.

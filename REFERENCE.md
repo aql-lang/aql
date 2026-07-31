@@ -1,15 +1,15 @@
-# AQL Reference
+# boru Reference
 
-Information-oriented reference for AQL syntax, types, and the
-built-in word library. For learning AQL, start with the
+Information-oriented reference for boru syntax, types, and the
+built-in word library. For learning boru, start with the
 **[Tutorial](TUTORIAL.md)**. For task-oriented recipes, see the
-**[How-To Guides](HOWTO.md)**. For *why* AQL is shaped the way it
+**[How-To Guides](HOWTO.md)**. For *why* boru is shaped the way it
 is, see the **[Explanation](EXPLANATION.md)**.
 
 > **Notation.** Throughout, a trailing `# returns …` comment shows what
 > an expression evaluates to (`mul 2 3  # returns 6`); in prose we say
 > "`mul 2 3` returns `6`". The comment is ordinary documentation (`#`
-> begins a line comment), not special syntax. AQL has no result arrow:
+> begins a line comment), not special syntax. boru has no result arrow:
 > `=>` is itself a word — the anonymous-function arrow, sugar for `afn`
 > — so results are written as comments rather than with `=>`.
 
@@ -93,7 +93,7 @@ every named type you define with `def`.
   (`_1`, `1_`, `1__0`) are a syntax error.
 - All integer literals — decimal **and** base-prefixed — are parsed
   exactly at every magnitude in range, and a value outside the int64
-  range raises `[aql/integer_overflow]`. It never silently wraps or loses
+  range raises `[boru/integer_overflow]`. It never silently wraps or loses
   precision. (This includes the hex int64 minimum `-0x8000000000000000`.)
 
 **Float** is IEEE-754 `binary64` (see
@@ -116,9 +116,9 @@ every named type you define with `def`.
   which are exact and range-checked. Do **not** use scientific notation
   for a value you need to be an exact `Integer` — `1e19` exceeds the
   int64 range and silently becomes an (inexact) `Float`, whereas the
-  decimal `10000000000000000000` is a clean `[aql/integer_overflow]`.
+  decimal `10000000000000000000` is a clean `[boru/integer_overflow]`.
 - **Infinity:** write the `inf` / `-inf` literal. An *overflowing*
-  float literal such as `1e309` raises `[aql/float_overflow]` (you cannot
+  float literal such as `1e309` raises `[boru/float_overflow]` (you cannot
   spell ±∞ by overflowing a literal); use `inf`, or compute it
   (`mul 1e308 10`).
 - **Tiny values:** the smallest positive subnormal is `5e-324`; a literal
@@ -159,7 +159,7 @@ promotes to the widest operand: `add 1 0d2` → `0d3` (BigInteger),
 existing `Integer ⊕ Float` rule is **unchanged** (`add 1 2.0` → `3.0`).
 
 **A Big type never silently becomes a `Float`.** Mixing an exact Big
-type with a binary `Float` in arithmetic is an `[aql/type_error]`
+type with a binary `Float` in arithmetic is an `[boru/type_error]`
 (`add 0d2 1.0`, `add 0d0.1 0.2`) — degrading to `Float` would throw away
 the exactness the Big types exist to provide. Convert one operand
 explicitly first. For the same reason `convert BigInteger 3.14` and
@@ -234,8 +234,8 @@ Commas are optional inside list and map literals — `[1 2 3]` and
 `[1, 2, 3]` are equivalent. Two things to know:
 
 * An **empty element** — a leading or repeated comma (`[,1]`, `[1,,2]`)
-  — is a **syntax error** (`[aql/syntax_error]`), not a fabricated
-  `null`. AQL has no implicit hole value; write `none` for an explicit
+  — is a **syntax error** (`[boru/syntax_error]`), not a fabricated
+  `null`. boru has no implicit hole value; write `none` for an explicit
   empty value. (A trailing comma, `[1,]`, is fine.)
 * A **duplicate key** in a map literal is accepted silently and the
   last value wins: `{a: 1, a: 2}` returns `{a:2}`.
@@ -281,14 +281,14 @@ Letters stack in any order (`foo/sq` ≡ `foo/qs`), each at most once;
 with nothing, and digits form one contiguous run. When `q` is present
 the result is an atom and any companion shape letters are ignored. An
 **invalid combination spelled from the modifier letters** (`add/fs`,
-`foo/qr`, `add/1f2`) is a loud `[aql/syntax_error]` — never a silent
+`foo/qr`, `add/1f2`) is a loud `[boru/syntax_error]` — never a silent
 fall-through. A suffix containing any other character is not a modifier
 at all: the whole token is one plain word, which is how the full type
 paths (`Scalar/Number/Integer`) parse.
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-lower/f "ABC"                 # returns 'abc' — (lower is in aql:string-util — StringUtil.lower)
+lower/f "ABC"                 # returns 'abc' — (lower is in boru:string-util — StringUtil.lower)
 "DEF" lower/s                 # returns 'def'
 lower/1 "GHI"                 # returns 'ghi'
 ```
@@ -338,13 +338,13 @@ desugars to `{foo?: foo}`, i.e. the value becomes
 **Only unquoted identifiers trigger the shorthand.** A quoted key
 (`{'foo'}`, `{"foo"}`) or a non-identifier (`{123}`) is a parse error —
 write the explicit `key: value` form for those. The pretty-printer
-(`aql fmt`) normalises every shorthand back to its explicit form
+(`boru fmt`) normalises every shorthand back to its explicit form
 (`{foo}` → `{foo:foo}`, `{foo/r}` → `{foo:foo/r}`, `{foo?}` →
 `{foo?:foo}`).
 
 **A word modifier belongs on a value, never on a bare key.** It is
 legal on a shorthand entry (`{foo/r}` — the token is the value) but an
-error on an explicit pair: `{foo/r: 1}` raises `[aql/illegal_key]`,
+error on an explicit pair: `{foo/r: 1}` raises `[boru/illegal_key]`,
 because the `/r` could only attach to the key `foo`, which is just a
 name. If you genuinely need a `/` in a key, make it a literal with a
 quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
@@ -369,7 +369,7 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   when one of its signatures could actually take it; a parenthesised
   expression or a value of an incompatible type is left to run on its
   own. So `import "mod"` takes its path and stops — no `end` needed
-  before using the namespace (`import "aql:math-util"` then
+  before using the namespace (`import "boru:math-util"` then
   `5 MathUtil.log`).
 * **Empty parens.** `()` is the empty expression: it yields no value
   (`5 () add 3` returns `8`) and nests freely (`(())`, `(add 1 ())`).
@@ -403,12 +403,12 @@ quoted key (`{'a/b': 1}`) or a computed key (`{[a/b]: 1}`).
   execution are captured by `quote`.)
 * **Macros.** A `macro` runs at expansion time on its operands *as
   code* and splices the result into the call site — new syntax in
-  AQL itself. See **[Macros](#macros)**.
+  boru itself. See **[Macros](#macros)**.
 * **`end`.** Forces the nearest waiting word to stop forward
   collection — needed only when the next token would otherwise be a
-  valid argument (e.g. `import "aql:math-util" "foo" print`). `;`
+  valid argument (e.g. `import "boru:math-util" "foo" print`). `;`
   is a synonym.
-* **`aql check` advisories.** The checker raises non-gating advisories
+* **`boru check` advisories.** The checker raises non-gating advisories
   (info level) for likely mistakes that still run — notably the
   forward-greediness gotcha `1 2 add 3 mul` (returns `5`, not `9`;
   group as `(1 2 add) 3 mul`). See
@@ -453,7 +453,7 @@ Any
 │   │   └── Phonon                   -- E.164 telephone number
 │   └── Time
 │       ├── Date, DateTime, Instant
-│       └── (aql:time-util owns TimeOfDay, Duration
+│       └── (boru:time-util owns TimeOfDay, Duration
 │            with CalendarDuration | ClockDuration, and Timezone —
 │            module-minted per import, e.g. TimeUtil.CalendarDuration)
 ├── Node
@@ -468,9 +468,9 @@ Any
 │   ├── Record, Options, Error
 │   ├── Store, Table
 │   └── (module-minted per import — the owning module exports
-│        the literals: aql:net owns Fetch with Request | Response
-│        (Net.Response); aql:time-util owns Timeout and Interval
-│        (TimeUtil.Timeout); aql:matrix-util owns Tensor with
+│        the literals: boru:net owns Fetch with Request | Response
+│        (Net.Response); boru:time-util owns Timeout and Interval
+│        (TimeUtil.Timeout); boru:matrix-util owns Tensor with
 │        Matrix | Vector (MatrixUtil.Matrix))
 ├── Word
 │   └── (internal control words)
@@ -671,7 +671,7 @@ is absolute when a separator follows the colon (`C:\x`) and
 drive-relative otherwise (`C:x`). Anything without a drive prefix stays
 POSIX — only `/` splits, `\` is an ordinary character, and the `volume`
 is empty (so `'//a//b'` is `/a/b`, never a volume). (Write drive paths
-with `/` in AQL source — single-quoted strings treat `\` as an escape.)
+with `/` in boru source — single-quoted strings treat `\` as an escape.)
 
 Both construction forms run the *same* validator — the map form
 re-renders through the string parser — and the derived properties
@@ -725,7 +725,7 @@ refine Emailon {extra:String}            # returns error: validation contract
 a name ending in the suffix `on` (case-sensitive, at least three
 characters): `Pathon`, `Emailon`, `Urlon`, `Baron`. A bind that
 violates it — including an alias like `def Mail Emailon` — raises
-`[aql/micron_name]`. The rule is one-directional: names ending in
+`[boru/micron_name]`. The rule is one-directional: names ending in
 `on` elsewhere in the lattice (`Duration`, `Function`, `Negation`)
 are not Microns.
 
@@ -938,7 +938,7 @@ def Box<T> class {value:T}
 typeof (make Box {value:42})               # returns Box of [Integer]
 ```
 
-In `aql check`, a generic fn's body is checked once at the
+In `boru check`, a generic fn's body is checked once at the
 definition against its parameter bounds (operations on a bare `T`
 must be justified by the bound), and each call site refines the
 declared return through the inferred bindings.
@@ -991,7 +991,7 @@ forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 `add` concatenates when **at least one operand is a `String`**: the other
 scalar is rendered to text and the result is a `String`, so `"a" add "b"`
 returns `'ab'` and `1 add "x"` returns `'1x'`. Two non-`String` scalars do
-NOT concatenate — `add true 1` is a `[aql/type_error]`, not `'true1'`.
+NOT concatenate — `add true 1` is a `[boru/type_error]`, not `'true1'`.
 Every scalar type and Micron kind instead defines all six arithmetic words
 *within its own type* — see [Within-type operations](#within-type-operations)
 below.
@@ -1012,7 +1012,7 @@ Two further sharp edges on numbers:
   wrap.** An `Integer` holds any whole number in
   `-9223372036854775808..9223372036854775807` (int64). A literal outside
   that range, or an `add`/`sub`/`mul`/`pow` whose result would leave it,
-  raises `[aql/integer_overflow]` rather than silently wrapping or
+  raises `[boru/integer_overflow]` rather than silently wrapping or
   degrading to a `Float`: `2 pow 63` and `add 9223372036854775807 1` both
   error. Make an operand a `Float` (e.g. `add 9223372036854775807 1.0`)
   for an approximate IEEE-754 result. (Arbitrary-precision integers are a
@@ -1035,10 +1035,10 @@ Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 `floor`, `ceil`, `round`, `trunc`, `sqrt`, `cbrt`, `exp`, `log`,
 `log2`, `log10`, `sin`, `cos`, `tan`, `asin`, `acos`, `atan`,
 `atan2`, `hypot`, constants `MathUtil.pi`, `MathUtil.e`) live in the
-**`aql:math`** native module. Import to use:
+**`boru:math`** native module. Import to use:
 
 ```
-import "aql:math-util"
+import "boru:math-util"
 MathUtil.abs -5                   # returns 5
 MathUtil.floor 3.7                # returns 3
 MathUtil.sqrt 16                  # returns 4.0
@@ -1053,7 +1053,7 @@ operand unchanged, `sign` yields an `Integer`).
 
 The six arithmetic words are **total within every scalar type and every
 Micron kind** — applied within a type, never across it (a cross-type pair
-is a `[aql/type_error]`). Some of these are unusual, but each is defined.
+is a `[boru/type_error]`). Some of these are unusual, but each is defined.
 
 **`String` / `Atom` — the occurrence package.** `add` concatenates; the
 rest operate on occurrences of the right operand in the left (an `Atom`
@@ -1067,14 +1067,14 @@ mirrors this on its name, so string-producing ops return an `Atom`):
 | `mul` | operand-major Cartesian character product | `"ab" mul "xy"` → `'axaybxby'` |
 | `pow` | the left repeated once per character of the right | `"ab" pow "xy"` → `'abab'` |
 
-Dividing or modding by an empty string is an `[aql/arith_error]` (the
+Dividing or modding by an empty string is an `[boru/arith_error]` (the
 string analogue of division by zero).
 
 **`Bytes`** mirror the same occurrence package over byte subsequences
 (`add` concatenates).
 
 **`Boolean`** arithmetic is a **defined error**: `add true false` raises
-`[aql/type_error]` — `Boolean` carries the logical words (`and` / `or` /
+`[boru/type_error]` — `Boolean` carries the logical words (`and` / `or` /
 `xor` / `not`), not arithmetic.
 
 **Microns.** A same-kind pair with no more-specific signature falls to the
@@ -1093,10 +1093,10 @@ specificity; where none is defined, the field-wise map default applies.
 def Pointon refine Micron {x:Integer y:Integer}
 (make Pointon {x:1 y:2}) add (make Pointon {x:10 y:20})   # {x:11 y:22}
 (make Qion "USD 12.50") add (make Qion "USD 2.25")        # USD 14.75
-(make Pathon "usr/local") add (make Pathon "bin/aql")     # usr/local/bin/aql
+(make Pathon "usr/local") add (make Pathon "bin/boru")     # usr/local/bin/boru
 ```
 
-**Time family** (needs `import "aql:time-util"`, read in forward form
+**Time family** (needs `import "boru:time-util"`, read in forward form
 `sub a b` = a − b): subtracting two same-leaf points yields a duration
 (`Date − Date` → `CalendarDuration` in days; `DateTime`/`Instant`/
 `TimeOfDay` → `ClockDuration`); durations of the same leaf `add`/`sub`; and
@@ -1126,34 +1126,34 @@ work, convert to `Bytes` (`(convert Bytes "héllo") size` is 6).
 
 | Word | Description | Example |
 |------|-------------|---------|
-import "aql:string-util" | `StringUtil.upper` | Uppercase | `StringUtil.upper "hello"` returns `'HELLO'` |
-import "aql:string-util" | `StringUtil.lower` | Lowercase | `StringUtil.lower "ABC"` returns `'abc'` |
-import "aql:string-util" | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"]` returns `'ab'` |
-import "aql:string-util" | `StringUtil.split` | Split string by separator (subject last) | `StringUtil.split "," "a,b"` returns `['a','b']` |
-import "aql:string-util" | `StringUtil.contains` | Substring test (haystack last) | `StringUtil.contains "ell" "hello"` returns `true` |
-import "aql:string-util" | `StringUtil.indexof` | Index of a needle in a haystack — **haystack last**: `indexof needle haystack` (string only; for the list form see `ArrayUtil.indices` under [List and array words](#list-and-array-words)) | `StringUtil.indexof "ll" "hello"` returns `2` |
+import "boru:string-util" | `StringUtil.upper` | Uppercase | `StringUtil.upper "hello"` returns `'HELLO'` |
+import "boru:string-util" | `StringUtil.lower` | Lowercase | `StringUtil.lower "ABC"` returns `'abc'` |
+import "boru:string-util" | `StringUtil.concat` | Join list elements into a string | `StringUtil.concat ["a","b"]` returns `'ab'` |
+import "boru:string-util" | `StringUtil.split` | Split string by separator (subject last) | `StringUtil.split "," "a,b"` returns `['a','b']` |
+import "boru:string-util" | `StringUtil.contains` | Substring test (haystack last) | `StringUtil.contains "ell" "hello"` returns `true` |
+import "boru:string-util" | `StringUtil.indexof` | Index of a needle in a haystack — **haystack last**: `indexof needle haystack` (string only; for the list form see `ArrayUtil.indices` under [List and array words](#list-and-array-words)) | `StringUtil.indexof "ll" "hello"` returns `2` |
 | `slice` | Substring; negative indices ok | `"hello" slice 1 3` returns `'el'` |
-import "aql:string-util" | `StringUtil.replace` | Replace pattern (subject last) | `StringUtil.replace "l" "r" "hello"` returns `'herlo'` |
-import "aql:string-util" | `StringUtil.repeat` | Repeat string (subject last) | `StringUtil.repeat 3 "ab"` returns `'ababab'` |
-import "aql:string-util" | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  "` returns `'hi'` |
-import "aql:string-util" | `StringUtil.pad` | Pad to width | `"hi" StringUtil.pad 5` returns `'hi   '` |
-import "aql:string-util" | `StringUtil.match` | Substring match, returns a struct (subject last) | `StringUtil.match "b" "abc"` |
+import "boru:string-util" | `StringUtil.replace` | Replace pattern (subject last) | `StringUtil.replace "l" "r" "hello"` returns `'herlo'` |
+import "boru:string-util" | `StringUtil.repeat` | Repeat string (subject last) | `StringUtil.repeat 3 "ab"` returns `'ababab'` |
+import "boru:string-util" | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  "` returns `'hi'` |
+import "boru:string-util" | `StringUtil.pad` | Pad to width | `"hi" StringUtil.pad 5` returns `'hi   '` |
+import "boru:string-util" | `StringUtil.match` | Substring match, returns a struct (subject last) | `StringUtil.match "b" "abc"` |
 
 #### Options examples
 
 The subject string is the **last** string operand; an Options map trails it:
 
 ```
-import "aql:string-util" StringUtil.split   ","    "a,,b"  {keepEmpty: true}            # returns ['a' '' 'b']
-import "aql:string-util" StringUtil.contains "Ell"  "hello" {cs: "insensitive"}          # returns true
-import "aql:string-util" StringUtil.replace "a" "b" "aaa"   {scope: "all"}               # returns 'bbb'
+import "boru:string-util" StringUtil.split   ","    "a,,b"  {keepEmpty: true}            # returns ['a' '' 'b']
+import "boru:string-util" StringUtil.contains "Ell"  "hello" {cs: "insensitive"}          # returns true
+import "boru:string-util" StringUtil.replace "a" "b" "aaa"   {scope: "all"}               # returns 'bbb'
 ```
 
 ### Boolean
 
 The built-in boolean words are `and`, `or`, `not`, and `xor`. The
 remaining gates — `nand`, `nor`, `xnor`, `implies`, `iff` — live in
-the `aql:logic-util` module and are called qualified after importing
+the `boru:logic-util` module and are called qualified after importing
 it.
 
 | Word | Description | Example |
@@ -1162,8 +1162,8 @@ it.
 | `or` | Logical OR (short-circuit) | `true or false` returns `true` |
 | `not` | Logical NOT | `not true` returns `false` |
 | `xor` | Exclusive OR | `true xor true` returns `false` |
-| `LogicUtil.nand` | NOT AND (needs `aql:logic-util`) | `LogicUtil.nand true true` returns `false` |
-| `LogicUtil.implies` | Implication (needs `aql:logic-util`) | `true LogicUtil.implies false` returns `false` |
+| `LogicUtil.nand` | NOT AND (needs `boru:logic-util`) | `LogicUtil.nand true true` returns `false` |
+| `LogicUtil.implies` | Implication (needs `boru:logic-util`) | `true LogicUtil.implies false` returns `false` |
 
 > **`and` / `or` return an operand, not a coerced boolean.** They
 > short-circuit and yield the value that decided the result, of
@@ -1178,7 +1178,7 @@ The **ordering** words (`cmp`, `lt`, `lte`, `gt`, `gte`) are
 shared same-family comparer can handle (`Integer`↔`Float` via `Number`,
 two `Date`s, `EmptyString`↔`ProperString` via `String`, the
 instant-bearing `Time` leaves chronologically). A cross-family pair
-(`Integer`↔`String`, `List`↔`Map`) raises `[aql/incomparable]`.
+(`Integer`↔`String`, `List`↔`Map`) raises `[boru/incomparable]`.
 
 `tcmp` is the **unrestricted** total order — it compares *any* two
 values (the same order `sort` and the collection words use), returning
@@ -1208,7 +1208,7 @@ restricted words refuse. See
 
 ```
 1 lt 2.0                      # returns true        — Integer vs Float (shared Number)
-1 lt "a"                      # returns error       — [aql/incomparable]; use tcmp
+1 lt "a"                      # returns error       — [boru/incomparable]; use tcmp
 1 tcmp "a"                    # returns -1          — Integer ranks below String
 [3 "a" 1 true] sort           # returns [true 1 3 'a']   — sort uses the total order
 ```
@@ -1242,12 +1242,12 @@ restricted words refuse. See
 > **Core bindings are frozen; core words are open.** `def`/`undef` may
 > not rebind a built-in word to a *value*, nor touch the literals
 > `true`/`false`/`none` — `def add 42`, `def true …`, `undef if` all
-> raise `[aql/reserved_word]`. But `def <built-in> fn […]` **merges**
+> raise `[boru/reserved_word]`. But `def <built-in> fn […]` **merges**
 > the fn's signatures into the word in the current scope (fn body /
 > module body / top level) — a *word extension*: new argument-type
 > tuples append after the built-in's own (locked) signatures, so no
 > previously-valid call changes its dispatch; a tuple exactly matching
-> a locked signature raises `[aql/locked_signature]`; `undef <word>`
+> a locked signature raises `[boru/locked_signature]`; `undef <word>`
 > pops the extension. The sealed words `def` / `make` / `word` cannot
 > be extended at all. A module exports its merged word like any fn
 > (`export "M" {add: add/r}`) and importing the module transplants the
@@ -1255,9 +1255,9 @@ restricted words refuse. See
 > word only with at least one **user-minted** argument type per
 > signature — a type the module creates with `refine` or `class`.
 > Built-in types don't qualify, whether kernel (`Integer`, `Map`, …)
-> or registered by `aql:` modules (`Date`, `Matrix`, …): a
+> or registered by `boru:` modules (`Date`, `Matrix`, …): a
 > builtin-only tuple like `[Integer Map]` raises
-> `[aql/extend_owner]`, so `add 1 {}` can never start working
+> `[boru/extend_owner]`, so `add 1 {}` can never start working
 > because of an import (top-level programs are unrestricted). See
 > `lang/spec/open-words.tsv` and `design/OPEN-WORDS.0.md`.
 > Re-`def`ing your **own** words still shadows as before (`def x 1; def
@@ -1269,7 +1269,7 @@ restricted words refuse. See
 `word v` wraps its (unevaluated) argument in a splice marker. When the
 marker reaches the evaluation pointer it is replaced by its payload: a
 plain list contributes its **top-level elements**, any other value
-contributes itself. This is AQL's spread operator, and it works inline,
+contributes itself. This is boru's spread operator, and it works inline,
 bound, and in argument positions:
 
 ```
@@ -1326,7 +1326,7 @@ below). A mismatch is an error, not a silent pass:
 
 ```
 def bad fn [[] [Integer] ['hi']]
-bad                           # returns [aql/type_error] return value 1: expected Integer got ProperString
+bad                           # returns [boru/type_error] return value 1: expected Integer got ProperString
 ```
 
 Multiple triples declare overloads (the engine tries each in order);
@@ -1471,11 +1471,11 @@ strict rule holds at parameters and returns:
 def Pos (refine Integer)
 42 is Pos                                          # returns false
 def g fn [[n:Pos] [Integer] [n]]
-42 g                                               # returns [aql/signature_error] cannot call `g` — no signature matches the arguments
+42 g                                               # returns [boru/signature_error] cannot call `g` — no signature matches the arguments
 def x:Pos 42   x g                                 # returns 42
 
 def mk fn [[] [Pos] [7]]
-mk                                                 # returns [aql/type_error] return value 1: expected Pos got Integer
+mk                                                 # returns [boru/type_error] return value 1: expected Pos got Integer
 def mk2 fn [[] [Pos] [def x:Pos 7 x]]
 mk2                                                # returns 7
 ```
@@ -1492,12 +1492,12 @@ def Big (Integer gt 10)
 5  is Big                                          # returns false
 def g fn [[n:Big] [Integer] [n]]
 50 g                                               # returns 50
-5  g                                               # returns [aql/signature_error] cannot call `g` — no signature matches the arguments
+5  g                                               # returns [boru/signature_error] cannot call `g` — no signature matches the arguments
 
 def mk fn [[] [Big] [50]]
 mk                                                 # returns 50
 def mkbad fn [[] [Big] [5]]
-mkbad                                              # returns [aql/type_error] return value 1: expected Big got Integer
+mkbad                                              # returns [boru/type_error] return value 1: expected Big got Integer
 ```
 
 The newtype-vs-subset distinction and its cross-language rationale are
@@ -1552,9 +1552,9 @@ differs.
 
 **Runaway taxonomy.** The two non-terminating shapes fail on the
 resource they actually consume: an infinite *tail* loop is pure CPU
-and trips the step budget (`[aql/evaluation_limit]`); unbounded
+and trips the step budget (`[boru/evaluation_limit]`); unbounded
 *non-tail* recursion grows the evaluation tape and trips its ceiling
-(`[aql/tape_exhausted]`). Non-tail recursion is linear time and
+(`[boru/tape_exhausted]`). Non-tail recursion is linear time and
 linear space in the depth — fine to four-to-five-digit depths under
 the default tape ceiling, but prefer a tail accumulator (or `for`)
 when the depth is unbounded.
@@ -1567,7 +1567,7 @@ module boundary once, and recursion inside it is eliminated as above.
 A **macro** is `fn`'s expand-time sibling: a transformer the engine runs on
 its operands **as unevaluated code**, whose returned token list is **spliced
 into the call site** in place of the call. Macros add new syntax / control
-forms in AQL itself, rather than in Go.
+forms in boru itself, rather than in Go.
 
 | Word | Description | Example |
 |------|-------------|---------|
@@ -1600,7 +1600,7 @@ written, so the body runs only when `x gt 10` is false.
 #### The template — `quote`, `unquote`, `splice`
 
 The template is an ordinary `quote [ … ]` region (default-data, the opposite of
-AQL's default-eval). Inside it:
+boru's default-eval). Inside it:
 
 * bare tokens are literal code of the expansion;
 * **`unquote x`** inserts `x` as **one grouped node** — a bare parameter name
@@ -1671,7 +1671,7 @@ before the call.
 | Word | Description | Example |
 |------|-------------|---------|
 | `if` | Conditional; else branch optional | `if (5 gt 3) ["y"] ["n"]` |
-| `case` | Dispatch on a value: match/block pairs + optional default. `aql check` requires the clauses to cover the scrutinee's static type (`case_not_exhaustive` error); the default is not needed when the type disjunctions are met | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
+| `case` | Dispatch on a value: match/block pairs + optional default. `boru check` requires the clauses to cover the scrutinee's static type (`case_not_exhaustive` error); the default is not needed when the type disjunctions are met | `case 2 [1 "one" 2 "two" "many"]` returns `'two'` |
 | `for` | Numeric loop (counter or range) | `for 5 [42]` |
 | `do` | Evaluate list as program | `do [add 1 2]` returns `3` |
 | `error` | Handle an error value (a non-Error result passes through) | `do [1 div 0] error [drop 42]` |
@@ -1710,10 +1710,10 @@ case 5 [[gt 3] "big" "small"]             # 'big'  — [gt 3] runs as `5 gt 3`
 case "x" [Integer "int" String "str"]     # 'str'  — a type literal matches its members
 ```
 
-**`case` is statically exhaustive.** `aql check` requires the clauses
+**`case` is statically exhaustive.** `boru check` requires the clauses
 to cover the scrutinee's static type: a default-less `case` with a
 provably-uncoverable value is an error, `case_not_exhaustive`, which
-fails the check and refuses `aql run` at preflight. Coverage is proven
+fails the check and refuses `boru run` at preflight. Coverage is proven
 in the sound direction only — a clause counts only when every runtime
 value of an alternative provably matches it — so the checker may
 conservatively demand a default it cannot prove unnecessary, but it
@@ -1905,7 +1905,7 @@ iota 5 each [dup mul]     # returns [0 1 4 9 16]
 
 These are built-in (no import needed): the constructors, basic slicing,
 and `flatten`/`size`. The specialised array vocabulary lives in the
-[`aql:array-util` module](#the-aqlarray-module) below.
+[`boru:array-util` module](#the-boruarray-module) below.
 
 | Word | Description | Example |
 |------|-------------|---------|
@@ -1915,21 +1915,21 @@ and `flatten`/`size`. The specialised array vocabulary lives in the
 | `shed` | Drop first N | `[1,2,3,4] shed 2` returns `[3,4]` |
 | `reverse` | Reverse order | `[1,2,3] reverse` returns `[3,2,1]` |
 | `flatten` | Remove one nesting level; `flatten N` removes N; `flatten -1` fully flattens | `[[1,2],[3]] flatten` returns `[1,2,3]`; `flatten -1 [1,[2,[3]]]` returns `[1,2,3]` |
-import "aql:array-util" | `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent). Forward form `indices <needles> <haystack>` — haystack last | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
+import "boru:array-util" | `ArrayUtil.indices` | Index of each needle in the haystack (`-1` when absent). Forward form `indices <needles> <haystack>` — haystack last | `ArrayUtil.indices [20,99,10] [10,20,30]` returns `[1,-1,0]` |
 | `size` | Element / key count of a collection — works on any value (see [Size](#size)) | `[1,2,3] size` returns `3` |
 
 A deep flatten is `flatten -1` (the core `flatten` word with a negative
 depth) — there is deliberately no `ArrayUtil.flatten` (see
 [ADR-001](ADR.md#adr-001)). Substring search is the string-only
-`StringUtil.indexof` (`aql:string-util`); the list-membership lookup is
-the distinctly-named `ArrayUtil.indices` (`aql:array-util`) — one word per
+`StringUtil.indexof` (`boru:string-util`); the list-membership lookup is
+the distinctly-named `ArrayUtil.indices` (`boru:array-util`) — one word per
 job, rather than one overloaded name.
 
-### The `aql:array-util` module
+### The `boru:array-util` module
 
 The specialised APL-style array vocabulary lives in a built-in module,
-imported with `import "aql:array-util"` and reached via the `array.` prefix.
-This keeps the global namespace lean (mirroring how `aql:math` gates
+imported with `import "boru:array-util"` and reached via the `array.` prefix.
+This keeps the global namespace lean (mirroring how `boru:math` gates
 `sin`/`cos`/…). Per [ADR-001](ADR.md#adr-001) no name here shadows a core
 word: deep flatten stays a core overload (`flatten -1`), and the
 list-membership lookup is the distinctly-named `ArrayUtil.indices` rather
@@ -1937,7 +1937,7 @@ than a duplicate of the string word `indexof`. `transpose` has no core
 counterpart and so appears here under its plain name.
 
 ```
-import "aql:array-util"
+import "boru:array-util"
 iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 ```
 
@@ -2120,14 +2120,14 @@ word — `size` subsumes it.
 > container (Map / List / Store / class instance / module), so a numeric literal
 > before a `.` is a **syntax error**, not a `get` on a number. In
 > particular `1.2.3` (a malformed numeric literal), `1 . 2`, and
-> `5 . foo` all raise `[aql/syntax_error]: a number has no members`. A
+> `5 . foo` all raise `[boru/syntax_error]: a number has no members`. A
 > plain `Float` like `5.0` is unaffected.
 
 > **A bare word key is a *literal* name — like JavaScript `.key`. Wrap a
 > variable (or any expression) in parens to use its *value* as the key —
-> like `[expr]`.** `()` is to AQL what `[]` is to JS member access:
+> like `[expr]`.** `()` is to boru what `[]` is to JS member access:
 >
-> | JavaScript | AQL | meaning |
+> | JavaScript | boru | meaning |
 > |------------|-----|---------|
 > | `xs.i`     | `xs dot i` or `xs.i` | literal key/index named `i` |
 > | `xs[i]`    | `xs get i`           | computed — the **value** of `i` |
@@ -2160,7 +2160,7 @@ consequences:
   the bound function and *advances the pointer* — it never calls the
   function in place.** `/r` is legal **only** for function words; a name
   bound to a non-function value (a plain value, a type) raises
-  `[aql/illegal_ref]`, because a bare value name already pushes its value
+  `[boru/illegal_ref]`, because a bare value name already pushes its value
   — there is no call/value asymmetry for `/r` to break. The same rule
   applies to the `ref` word. The reference holds at any arity and in any
   position (top level, list element, paren, `do`-block, map value): `g/r`
@@ -2266,7 +2266,7 @@ converts back through validation.
 > and `Float` nodes: `3.9 convert Integer` and even `3.0 convert
 > Integer` both error. To go from `Float` to `Integer`, use a
 > rounding word (`MathUtil.floor`, `MathUtil.round`, `MathUtil.trunc`
-> from `aql:math-util`). Note `make` is more permissive than
+> from `boru:math-util`). Note `make` is more permissive than
 > `convert`: a `:Number` record field accepts a numeric **string** and
 > coerces it (`make Point ["1" "2"]` returns `{x:1 y:2}`).
 
@@ -2293,7 +2293,7 @@ Row`. See **[HOWTO: Define a record/table/object type](HOWTO.md#define-a-record-
 | Word | Description |
 |------|-------------|
 | `inspect` | Structured view of a value, word, or type |
-| `canon` | Render a value as canonical AQL source (a String) |
+| `canon` | Render a value as canonical boru source (a String) |
 | `trace` | Evaluate a list with step-by-step tracing |
 
 **`canon` is round-trippable for data.** The result is the same
@@ -2364,7 +2364,7 @@ Requires the `sqlite` capability.
 | Word | Description | Example |
 |------|-------------|---------|
 | `module` | Define a module inline | `module [def x 1]` |
-| `import` | Import a module by name or file | `import "lib.aql"` |
+| `import` | Import a module by name or file | `import "lib.boru"` |
 
 `import` binds each `export "Name" {…}` to a **`ModuleExport`** instance.
 A `ModuleExport` is *transparent* — `MathUtil.sqrt 16.0` still calls the
@@ -2373,24 +2373,24 @@ export name) and `Name.$module`, the **`Module`** descriptor it belongs
 to. A `Module` (`Ideal/Module`) has fields `id`, `kind`
 (`native`/`file`/`inline`), `file`, `folder`, and `exports`:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-import aql:math
+import boru:math
 typeof Math                   # returns ModuleExport
 MathUtil.$name                    # returns 'Math'
-MathUtil.$module.id               # returns 'aql:math'
+MathUtil.$module.id               # returns 'boru:math'
 MathUtil.$module.kind             # returns 'native'
 MathUtil.$module.exports          # returns ['Math']
 ```
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
 import utils [def f [dup add]]
 utils.f 3                     # returns 6
 
-import aql:time-util
+import boru:time-util
 
-import [helper as h] "lib/utils.aql"
+import [helper as h] "lib/utils.boru"
 ```
 
 ### Concurrency
@@ -2432,37 +2432,37 @@ refine Record [x:Number] unify {x:1}  # returns '~unify-fail' false — records 
 | `help` | Print a language overview and how to use `describe` |
 | `describe` | Document a word: signatures, examples, and notes (e.g. `describe add`) |
 
-At the command line, `aql help` documents the CLI and its subcommands,
-while `aql describe [word\|module]` documents the language. In the REPL,
+At the command line, `boru help` documents the CLI and its subcommands,
+while `boru describe [word\|module]` documents the language. In the REPL,
 `/help` prints the overview and `/describe <word>` looks one up.
 
 
 ## Built-in modules
 
 Built-in modules ship with the binary but are not auto-loaded —
-`import aql:xxx` to enable. Each binds one capital-initial namespace
-(`import "aql:math-util"` → `MathUtil.sqrt`). The `-util` suffix marks
+`import boru:xxx` to enable. Each binds one capital-initial namespace
+(`import "boru:math-util"` → `MathUtil.sqrt`). The `-util` suffix marks
 a utility library of pure helper functions; capability / framework
 modules keep plain names.
 
 | Module | Namespace | What's inside |
 |--------|-----------|---------------|
-| `aql:math-util` | `MathUtil` | Extended numerics: trig, statistics, special functions, IEEE-754 classifiers. |
-| `aql:array-util` | `ArrayUtil` | Specialised APL-style array vocabulary (see above). |
-| `aql:string-util` | `StringUtil` | String words — `upper`, `split`, `indexof` (haystack-last), `replace`, … all subject-last. |
-| `aql:struct-util` | `StructUtil` | voxgig-struct data words — `clone`, `getpath`, `setpath`, `merge`, `walk`, `transform`, `jsonify`, … |
-| `aql:bin-util` | `BinUtil` | Bitwise ops plus `popcount`, `clz`, `ctz`, `bitlen`, `fnv32`/`fnv64`, and `base64`/`hex` `-encode`/`-decode`. |
-| `aql:logic-util` | `LogicUtil` | Derived boolean connectives — `nand`, `nor`, `xnor`, `iff`, `implies`. |
-| `aql:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
-| `aql:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
-| `aql:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
-| `aql:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (AQL-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), `args` (the script's argument vector), `env` / `env-all` (read-only environment: one variable by name, or the whole visible map), `exit` (end the program with a status, 0..125), `read-line` (the next line of a stream or File handle, none at EOF), `is-tty` (is this stream a terminal?), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
-| `aql:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
-| `aql:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
-| `aql:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
-| `aql:query` | `Query` | SQL-flavoured query pipeline. |
-| `aql:report` | `Report` | Tabular result reporting. |
-| `aql:vm` | `Vm` | Run AQL source in-memory — `run`, `run-with`, `run-sandbox`, `run-compute`. |
+| `boru:math-util` | `MathUtil` | Extended numerics: trig, statistics, special functions, IEEE-754 classifiers. |
+| `boru:array-util` | `ArrayUtil` | Specialised APL-style array vocabulary (see above). |
+| `boru:string-util` | `StringUtil` | String words — `upper`, `split`, `indexof` (haystack-last), `replace`, … all subject-last. |
+| `boru:struct-util` | `StructUtil` | voxgig-struct data words — `clone`, `getpath`, `setpath`, `merge`, `walk`, `transform`, `jsonify`, … |
+| `boru:bin-util` | `BinUtil` | Bitwise ops plus `popcount`, `clz`, `ctz`, `bitlen`, `fnv32`/`fnv64`, and `base64`/`hex` `-encode`/`-decode`. |
+| `boru:logic-util` | `LogicUtil` | Derived boolean connectives — `nand`, `nor`, `xnor`, `iff`, `implies`. |
+| `boru:type-util` | `TypeUtil` | Type utilities — `tpartial`, … |
+| `boru:time-util` | `TimeUtil` | `now`, `parse`, `format`, `add`, `diff`, `date`, `datetime`, `instant`, `timeofday`, `duration`, `timezone`, timers. |
+| `boru:matrix-util` | `MatrixUtil` | Tensor / Matrix / Vector types and linear algebra. |
+| `boru:io` | `IO` | File & stream I/O — `read`/`write` (text/binary/positioned/atomic/exclusive), `open`/`seek`/`flush`/`close` (stateful `File` handles), `lock`/`unlock` (advisory locks), `mmap` (memory-mapped files), `stat`, `move`, `copy`, `link`, `touch`, `folder`, `temp` (unique temp files/dirs), `space` (volume/disk info), `watch`/`unwatch` (change events, `{recursive match}` + overflow marker), `mount`/`unmount` (boru-implemented filesystems and read-only/copy-on-write ZIP archives), `stdin`/`stdout`/`stderr`, `printstr`, `trace` (only `print` stays in core), `args` (the script's argument vector), `env` / `env-all` (read-only environment: one variable by name, or the whole visible map), `exit` (end the program with a status, 0..125), `read-line` (the next line of a stream or File handle, none at EOF), `is-tty` (is this stream a terminal?), plus Pathon overloads that extend the core `list`/`remove` words. Every filesystem target is a `Pathon` (`make Pathon "…"`), never a bare string. |
+| `boru:net` | `Net` | HTTP / API words — `fetch`, `prepare`, `direct`. |
+| `boru:test` | `Test`, `Assert` | Unit tests, declarative specs, property-based testing. |
+| `boru:rand` | `Rand` | Seeded random generators (drives `Test.check-prop`). |
+| `boru:query` | `Query` | SQL-flavoured query pipeline. |
+| `boru:report` | `Report` | Tabular result reporting. |
+| `boru:vm` | `Vm` | Run boru source in-memory — `run`, `run-with`, `run-sandbox`, `run-compute`. |
 
 > **`StructUtil.merge` is a deep, index-wise merge** — lists merge
 > element-by-element (`{kids:[99]} {kids:[10,20]} StructUtil.merge`
@@ -2471,7 +2471,7 @@ modules keep plain names.
 > `StructUtil.setpath`: `{a:1,b:2} StructUtil.setpath "b" 3` returns
 > `{a:1, b:3}` (deep paths work too: `setpath "a/b/c" v`).
 
-> **`aql:io` filesystem surface.** File I/O is **Pathon-only**: every
+> **`boru:io` filesystem surface.** File I/O is **Pathon-only**: every
 > target is a `Scalar/Micron/Pathon` built with `make Pathon "…"` — a bare
 > string is refused, so a file target is type-distinct from an arbitrary
 > string and from a stream handle, and one polymorphic verb dispatches on
@@ -2563,13 +2563,13 @@ modules keep plain names.
 > so watch behaviour is part of the same real/mem parity surface as every
 > other io word.
 >
-> **Mounting an AQL-implemented filesystem.** `IO.mount {read: fn, …}`
-> installs a map of AQL handler functions as the host filesystem — every
-> io word then routes through them, so AQL code can expose any backing
+> **Mounting a boru-implemented filesystem.** `IO.mount {read: fn, …}`
+> installs a map of boru handler functions as the host filesystem — every
+> io word then routes through them, so boru code can expose any backing
 > (a flex map, a table, a service) as a filesystem:
 >
 > ```
-> import "aql:io"
+> import "boru:io"
 > def files (flex {})
 > IO.mount {
 >   read:  (p:Pathon => [files get `${p}`])
@@ -2599,7 +2599,7 @@ modules keep plain names.
 > zip" whose edits live only in memory (the archive on disk never changes):
 >
 > ```
-> import "aql:io"
+> import "boru:io"
 > IO.mount (make Pathon "bundle.zip")        # read-only
 > IO.read (make Pathon "manifest.json")      # served from the archive
 > IO.unmount
@@ -2608,7 +2608,7 @@ modules keep plain names.
 > ```
 >
 > `list` and `remove` are different: rather than a namespaced `IO.list` /
-> `IO.remove`, importing `aql:io` **extends the core `list` / `remove`
+> `IO.remove`, importing `boru:io` **extends the core `list` / `remove`
 > words** with a Pathon overload (design/OPEN-WORDS.0.md), so the BARE words
 > gain filesystem behaviour — `list p {detail, recursive, match}` enumerates a
 > directory, `remove p {recursive, force}` deletes a path. The overload
@@ -2632,7 +2632,7 @@ Every engine error renders as a structured diagnostic report, designed
 to help fix the problem rather than merely name it:
 
 ```
-[aql/signature_error]: cannot call `wp` — no signature matches the arguments
+[boru/signature_error]: cannot call `wp` — no signature matches the arguments
   --> 2:1
   1 | def wp fn [[policy:String n:Integer] [Integer] [n]]
   2 | wp 3 "collect"
@@ -2644,7 +2644,7 @@ to help fix the problem rather than merely name it:
     (String, Integer) — did you swap the arguments? expected: wp policy:String n:Integer
 ```
 
-The shape is always: the `[aql/<code>]` header with the detail line, a
+The shape is always: the `[boru/<code>]` header with the detail line, a
 `-->` position (or the honest `source position unknown` — locations are
 never guessed), the source excerpt with a `^^^` caret under the failing
 token, then zero or more of:
@@ -2660,13 +2660,13 @@ token, then zero or more of:
 * **`= help:` lines** — actionable fixes: ``did you mean `upper`?``
   (near-miss suggestions for undefined words, misspelt keys, and
   unknown type names), "did you swap the arguments?", the
-  forward-grouping parens fix, and `see aql describe <word>` pointers.
+  forward-grouping parens fix, and `see boru describe <word>` pointers.
 
 `error.Error()` (and every string-matching surface: spec rows, logs,
 JSON, the wasm playground) is always the plain rendering; interactive
 terminals opt into the ANSI palette via `--color` (see CLI.md). Hosts
 embedding the engine reach the structure itself — code, positions,
-spans, notes, suggestions — via `errors.As` with `*lang.AqlError` and
+spans, notes, suggestions — via `errors.As` with `*lang.BoruError` and
 re-render with `Render(lang.RenderOpts{Color: true})`.
 
 ## Error codes
@@ -2708,7 +2708,7 @@ reads `e.code`, `e.message`, and any payload keys (`e.got`), and
 | `not_found` | Strict lookup (`!.`, `getr`) found no key. |
 | `read_error` | A read failed — a missing path, an unreadable stream, undecodable content. |
 | `write_error` | A write failed — an unwritable path, a refused exclusive create, a failed atomic rename. |
-| `stat_error` | `IO.stat` failed. `aql:io` reports per-word codes, one per operation — there is no single `io_error`. |
+| `stat_error` | `IO.stat` failed. `boru:io` reports per-word codes, one per operation — there is no single `io_error`. |
 | `list_error` | `IO.list` failed. |
 | `remove_error` | `IO.remove` failed. |
 | `move_error` | `IO.move` failed. |
@@ -2795,12 +2795,12 @@ error [ dot code case [
 
 ## CLI reference
 
-This section is a compact index of the `aql` binary. It is generated
-from the same source as the live help — `aql help` lists the
-subcommands and `aql help <subcommand>` summarises one — and the full
+This section is a compact index of the `boru` binary. It is generated
+from the same source as the live help — `boru help` lists the
+subcommands and `boru help <subcommand>` summarises one — and the full
 operational documentation, with every flag and worked examples, is
 [CLI.md](CLI.md). For the *language* (words, categories, modules) use
-`aql describe` instead; see [AGENTS.md](AGENTS.md) for the
+`boru describe` instead; see [AGENTS.md](AGENTS.md) for the
 `help` (tool) vs `describe` (language) split.
 
 ### Subcommands
@@ -2809,28 +2809,28 @@ One-shot commands (run and exit):
 
 | Subcommand | Purpose | Key flags |
 |------------|---------|-----------|
-| `run` / `aql [script]` | Execute a script, `-e` expression, or (no args) the REPL | `-e`, `-check`, `-compile`, `-options`, `--perms`, `--allow`/`--deny` |
-| `do <words…>` | Evaluate the arguments as one AQL expression and print the result | `--perms`, `--allow`/`--deny`, `--compile` |
+| `run` / `boru [script]` | Execute a script, `-e` expression, or (no args) the REPL | `-e`, `-check`, `-compile`, `-options`, `--perms`, `--allow`/`--deny` |
+| `do <words…>` | Evaluate the arguments as one boru expression and print the result | `--perms`, `--allow`/`--deny`, `--compile` |
 | `check [script]` | Static type-check; print diagnostics | `--json`, `--soft`, `--emit`, `-e` |
-| `fmt [file…]` | Format `.aql` files in place (whole tree if no args) | — |
+| `fmt [file…]` | Format `.boru` files in place (whole tree if no args) | — |
 | `describe [name]` | Document a word, category, or module (the *language*) | — |
 | `help [subcommand]` | CLI usage, or one subcommand's summary | — |
-| `prep [dir]` | Parse `aql.jsonic` → `.aql/aql.json` | — |
+| `prep [dir]` | Parse `boru.jsonic` → `.boru/boru.json` | — |
 | `pack [dir]` | Build a publishable module zip (runs `prep` first) | — |
-| `clean [dir]` | Delete `.aql/*` except dotfiles | — |
+| `clean [dir]` | Delete `.boru/*` except dotfiles | — |
 | `install <name>-x.y.z` | Download and install a module from a registry | `-r <url>` |
 | `register` | Create an account on a registry | `-r <url>` |
 | `login` | Log in to a registry; store the token | `-r <url>`, `--vault`, `--vault-alias` |
 | `publish [dir]` | Pack and upload the current module | `-r <url>`, `--vault`, `--vault-alias` |
 | `vault <mode>` | Manage the local key vault (see below) | `--folder`, `--suffix`, `-i` |
 | `policy <op>` | Inspect permission profiles: `list`, `show`, `validate`, `test`, `explain` | — |
-| `ctl <op> [svc]` | Control a running `aql serve`: `status`, `info`, `pause`, `resume`, `stop` | `--api`, `--token` |
+| `ctl <op> [svc]` | Control a running `boru serve`: `status`, `info`, `pause`, `resume`, `stop` | `--api`, `--token` |
 
 Long-running services (stay up; composable under `serve`):
 
 | Service | Purpose | Key flags |
 |---------|---------|-----------|
-| `repl` | Interactive read-eval-print loop (also bare `aql`) | `-r` |
+| `repl` | Interactive read-eval-print loop (also bare `boru`) | `-r` |
 | `registry` | Serve modules + auth endpoints over HTTP | `-r <folder>`, `-p <port>` |
 | `lsp` | Language Server over stdio (default) or TCP | `-p <port>`, `-host` |
 | `exec` | HTTP code-execution endpoint (`POST /v1/exec`) | `-bind`, `-p`, `-r`, `--perms` |
@@ -2839,9 +2839,9 @@ Long-running services (stay up; composable under `serve`):
 
 ### Vault modes
 
-`aql vault [--folder=PATH] [--suffix=NAME] <mode> [args…]`, or
-`aql vault -i` for the interactive TUI. Passphrases are prompted
-hidden; set `AQL_VAULT_PASSPHRASE` only for non-interactive use.
+`boru vault [--folder=PATH] [--suffix=NAME] <mode> [args…]`, or
+`boru vault -i` for the interactive TUI. Passphrases are prompted
+hidden; set `BORU_VAULT_PASSPHRASE` only for non-interactive use.
 Backends: `auto` (default), `keychain`, `secret-service`, `wincred`,
 `file`, `1password`.
 
@@ -2893,8 +2893,8 @@ and the REPL). A *policy* is a set of allow/deny rules over
 | `--deny-global <cap>` | Lower a global hard cap (repeatable) |
 | `--policy-dry-run` | Observe-only: log what the policy would do, allow every call |
 
-Environment fallbacks: `AQL_POLICY`, `AQL_POLICY_FILE`. Bytecode
-compilation: `-compile` / `AQL_COMPILE` enable it, `AQL_NO_COMPILE`
+Environment fallbacks: `BORU_POLICY`, `BORU_POLICY_FILE`. Bytecode
+compilation: `-compile` / `BORU_COMPILE` enable it, `BORU_NO_COMPILE`
 disables.
 
 ### Exit codes

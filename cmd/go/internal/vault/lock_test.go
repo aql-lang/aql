@@ -10,7 +10,7 @@ import (
 // many goroutines each commit a distinct alias through mutateStore;
 // because each reloads under the lock, every alias must survive. The
 // flock excludes across separate open descriptions, so this exercises
-// the same path two aql processes would take. Without the lock (or the
+// the same path two boru processes would take. Without the lock (or the
 // reload), concurrent read-modify-write loses most of the additions.
 func TestMutateStoreConcurrentNoLostUpdates(t *testing.T) {
 	home := testHome(t)

@@ -6,13 +6,13 @@ import (
 )
 
 // Wave-4 coverage for the wide tail: filter.go (all three forms),
-// native_error_raise.go (raise + Error field access), the aql:struct
+// native_error_raise.go (raise + Error field access), the boru:struct
 // words merge/items/jsonify/parse (struct_module.go + merge.go +
 // jsonify.go + parse_text.go), native_fileinfo.go (__folder/__file),
 // and the small check-mode ReturnsFns (size, clone, io_stream,
 // transform.valueToMap).
 
-// w4StructReg returns a registry with the aql:struct natives registered
+// w4StructReg returns a registry with the boru:struct natives registered
 // bare (merge, items, jsonify, getpath, …) — the same set
 // modules.BuildStructModule wraps.
 func w4StructReg(t *testing.T) *Registry {
@@ -306,7 +306,7 @@ func TestW4StructGetpath(t *testing.T) {
 
 func TestW4FileInfoWords(t *testing.T) {
 	r := w3TypeReg()
-	r.BaseFile = "/tmp/mods/m.aql"
+	r.BaseFile = "/tmp/mods/m.boru"
 	w3TypeWantReg := func(src, want string) {
 		t.Helper()
 		got, err := w3Run(t, r, src)
@@ -317,7 +317,7 @@ func TestW4FileInfoWords(t *testing.T) {
 			t.Errorf("%q = %q, want %q", src, got, want)
 		}
 	}
-	w3TypeWantReg(`__file`, `'m.aql'`)
+	w3TypeWantReg(`__file`, `'m.boru'`)
 	got, err := w3Run(t, r, `__folder`)
 	if err != nil || !strings.Contains(got, "mods") {
 		t.Errorf("__folder = %q (%v)", got, err)

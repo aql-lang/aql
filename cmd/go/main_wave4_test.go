@@ -1,7 +1,7 @@
 // Wave-4 coverage for the top-level dispatcher helpers: versionString
 // (published and dev-build branches) and the runEmbedded no-payload
 // path.
-package aql
+package boru
 
 import (
 	"strings"

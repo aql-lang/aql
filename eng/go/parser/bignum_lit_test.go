@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // TestParseBigIntegerLiteral pins that `0d…` (no dot/exponent) parses to a
@@ -70,9 +70,9 @@ func TestParseBigDecimalLiteralDotSplit(t *testing.T) {
 func TestParseBigNumberMalformed(t *testing.T) {
 	for _, src := range []string{"0d", "0d1__0"} {
 		_, err := Parse(src)
-		ae, ok := err.(*eng.AqlError)
+		ae, ok := err.(*eng.BoruError)
 		if !ok || ae.Code != "syntax_error" {
-			t.Errorf("Parse(%q): expected [aql/syntax_error], got %v", src, err)
+			t.Errorf("Parse(%q): expected [boru/syntax_error], got %v", src, err)
 		}
 	}
 }

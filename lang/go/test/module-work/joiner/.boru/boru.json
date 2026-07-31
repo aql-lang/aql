@@ -1,0 +1,10 @@
+{
+  "files": [
+    "joiner.boru"
+  ],
+  "main": "joiner.boru",
+  "major": 0,
+  "minor": 4,
+  "name": "joiner",
+  "patch": 2
+}

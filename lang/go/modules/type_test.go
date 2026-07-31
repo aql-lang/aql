@@ -3,11 +3,11 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// typeRegistry returns a registry with the aql:type module installed.
+// typeRegistry returns a registry with the boru:type module installed.
 func typeRegistry(t *testing.T) *native.Registry {
 	t.Helper()
 	r, err := native.DefaultRegistry()

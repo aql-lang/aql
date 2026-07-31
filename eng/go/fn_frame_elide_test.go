@@ -108,7 +108,7 @@ func TestTCOEligibleGates(t *testing.T) {
 	snap := f.r.Defs.Snapshot()
 	e.tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: snap, Registry: f.r})}, 4)
 	base := frameTailScan{Meta: f.meta, TailStart: 0}
-	sig := &Signature{Impl: &AQLImpl{FnFrame: f.meta}}
+	sig := &Signature{Impl: &BoruImpl{FnFrame: f.meta}}
 	muts := f.r.Defs.Mutations()
 
 	if !e.tcoEligible(base, sig, muts) {
@@ -132,7 +132,7 @@ func TestTCOEligibleGates(t *testing.T) {
 	if e.tcoEligible(frameTailScan{Meta: genMeta, TailStart: 0}, sig, muts) {
 		t.Error("a generic enclosing frame must decline")
 	}
-	if e.tcoEligible(base, &Signature{Impl: &AQLImpl{FnFrame: genMeta}}, muts) {
+	if e.tcoEligible(base, &Signature{Impl: &BoruImpl{FnFrame: genMeta}}, muts) {
 		t.Error("a generic callee must decline")
 	}
 	// Binding mutation during arg auto-eval.
@@ -143,7 +143,7 @@ func TestTCOEligibleGates(t *testing.T) {
 	// the callee would rebind them.
 	capScan := base
 	capScan.UndefNames = []string{"Foo"}
-	capSig := &Signature{Impl: &AQLImpl{FnFrame: &FnFrameMeta{Name: "f", InstallNames: []string{"Foo"}}}}
+	capSig := &Signature{Impl: &BoruImpl{FnFrame: &FnFrameMeta{Name: "f", InstallNames: []string{"Foo"}}}}
 	if e.tcoEligible(capScan, capSig, muts) {
 		t.Error("capitalised teardown names must decline (type-retire path)")
 	}
@@ -158,14 +158,14 @@ func TestTCOEligibleNameCoverage(t *testing.T) {
 
 	// A torn-down param the callee rebinds is covered…
 	scan := frameTailScan{Meta: f.meta, TailStart: 0, UndefNames: []string{"n"}}
-	rebinds := &Signature{Impl: &AQLImpl{FnFrame: &FnFrameMeta{Name: "g", InstallNames: []string{"n"}}}}
+	rebinds := &Signature{Impl: &BoruImpl{FnFrame: &FnFrameMeta{Name: "g", InstallNames: []string{"n"}}}}
 	if !e.tcoEligible(scan, rebinds, muts) {
 		t.Error("a param the callee rebinds must be eligible")
 	}
 	// …but a callee that does NOT rebind it must decline: a dynamic
 	// read of the caller's param anywhere in the callee chain would
 	// see undefined where nesting shows the live binding.
-	noRebind := &Signature{Impl: &AQLImpl{FnFrame: &FnFrameMeta{Name: "g"}}}
+	noRebind := &Signature{Impl: &BoruImpl{FnFrame: &FnFrameMeta{Name: "g"}}}
 	if e.tcoEligible(scan, noRebind, muts) {
 		t.Error("a torn-down param the callee does not rebind must decline")
 	}
@@ -179,7 +179,7 @@ func TestTCOEligibleNameCoverage(t *testing.T) {
 	if e.tcoEligible(clean, noRebind, muts) {
 		t.Error("a body-local the callee does not rebind must decline")
 	}
-	rebindsTmp := &Signature{Impl: &AQLImpl{FnFrame: &FnFrameMeta{Name: "g", InstallNames: []string{"tmp"}}}}
+	rebindsTmp := &Signature{Impl: &BoruImpl{FnFrame: &FnFrameMeta{Name: "g", InstallNames: []string{"tmp"}}}}
 	if !e.tcoEligible(clean, rebindsTmp, muts) {
 		t.Error("a body-local the callee rebinds must be eligible")
 	}
@@ -198,7 +198,7 @@ func TestTCOEligibleDeclinesForeignRegistryFrames(t *testing.T) {
 	}
 	e.tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: foreign.Defs.Snapshot(), Registry: foreign})}, 4)
 	scan := frameTailScan{Meta: f.meta, TailStart: 0}
-	if e.tcoEligible(scan, &Signature{Impl: &AQLImpl{FnFrame: f.meta}}, f.r.Defs.Mutations()) {
+	if e.tcoEligible(scan, &Signature{Impl: &BoruImpl{FnFrame: f.meta}}, f.r.Defs.Mutations()) {
 		t.Error("a foreign-registry frame must decline")
 	}
 }

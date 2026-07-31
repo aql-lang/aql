@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/formatter"
+	"github.com/boru-lang/boru/lang/go/formatter"
 )
 
 // exampleSkeleton reduces a snippet to its structural content: whitespace,

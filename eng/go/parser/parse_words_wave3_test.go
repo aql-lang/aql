@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // --- shared wave3 helpers ---
@@ -248,12 +248,12 @@ func TestParseWave3NumberEdgeErrors(t *testing.T) {
 	for _, c := range cases {
 		_, err := parseWave3(t, c.src)
 		if err == nil {
-			t.Errorf("Parse(%q): expected [aql/%s], got nil", c.src, c.code)
+			t.Errorf("Parse(%q): expected [boru/%s], got nil", c.src, c.code)
 			continue
 		}
-		ae, ok := err.(*eng.AqlError)
+		ae, ok := err.(*eng.BoruError)
 		if !ok || ae.Code != c.code {
-			t.Errorf("Parse(%q): expected [aql/%s], got %v", c.src, c.code, err)
+			t.Errorf("Parse(%q): expected [boru/%s], got %v", c.src, c.code, err)
 		}
 	}
 }
@@ -289,9 +289,9 @@ func TestParseWave3BigNumMalformed(t *testing.T) {
 	// A `0d` prefix with a non-digit body is a clean 0d syntax error.
 	for _, src := range []string{"0dx", "0de", "0d1_"} {
 		_, err := parseWave3(t, src)
-		ae, ok := err.(*eng.AqlError)
+		ae, ok := err.(*eng.BoruError)
 		if !ok || ae.Code != "syntax_error" {
-			t.Errorf("Parse(%q): expected [aql/syntax_error], got %v", src, err)
+			t.Errorf("Parse(%q): expected [boru/syntax_error], got %v", src, err)
 		}
 	}
 	// `0d.` — the matcher declines (no digit), the residue is a malformed

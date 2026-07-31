@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/policy"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 func loadPolicy(t *testing.T, name string) policy.Policy {
@@ -92,7 +92,7 @@ func TestModulesScopeDeniesImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.RunInterp(`import "aql:math-util"`)
+	_, err = a.RunInterp(`import "boru:math-util"`)
 	if err == nil {
 		t.Fatal("expected import to be denied")
 	}
@@ -107,7 +107,7 @@ func TestModulesScopeAllowsSpecificModule(t *testing.T) {
 				words: {
 					default: "deny"
 					rules: [
-						{ allow: ["import"], where: { module: ["aql:math-util"] } }
+						{ allow: ["import"], where: { module: ["boru:math-util"] } }
 					]
 				}
 			}
@@ -120,8 +120,8 @@ func TestModulesScopeAllowsSpecificModule(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := a.RunInterp(`import "aql:math-util"`); err != nil {
-		t.Errorf("aql:math should be allowed: %v", err)
+	if _, err := a.RunInterp(`import "boru:math-util"`); err != nil {
+		t.Errorf("boru:math should be allowed: %v", err)
 	}
 }
 
@@ -140,7 +140,7 @@ func TestModulesScopeUninstall(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = a.RunInterp(`import "aql:math-util"`)
+	_, err = a.RunInterp(`import "boru:math-util"`)
 	if err == nil {
 		t.Fatal("expected import to be refused")
 	}
@@ -203,7 +203,7 @@ func TestEngineDenialErrorContent(t *testing.T) {
 	}
 	_, err = a.RunInterp("5 sub 1")
 	var d *policy.Denied
-	// The engine wraps the Denied in an AqlError; the .Error()
+	// The engine wraps the Denied in a BoruError; the .Error()
 	// string surfaces it. We can't direct-assert As(*Denied)
 	// because the engine wraps it.
 	if err == nil {

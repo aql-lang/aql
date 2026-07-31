@@ -1,4 +1,4 @@
-# AQL Word Signatures
+# boru Word Signatures
 
 All words listed alphabetically with their registered signatures (in match
 order — first match wins), return values, and notes on special argument
@@ -398,7 +398,7 @@ scalar type literal AND the forward arg is concrete; otherwise the
 | `print` | `[Any]` | `[]` | Print value to stdout with newline | — |
 
 (`printstr`, `read`, `write`, `stdin`, `stdout`, `stderr`, `trace` moved
-to the `aql:io` module — `IO.` namespace. `print` is the only output word
+to the `boru:io` module — `IO.` namespace. `print` is the only output word
 that stays in core.)
 
 

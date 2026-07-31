@@ -7,7 +7,7 @@ import (
 )
 
 // TestReadWriteSecretRoundTrip exercises the exported ReadSecret/
-// WriteSecret helpers that aql login/publish use, on a legacy vault and
+// WriteSecret helpers that boru login/publish use, on a legacy vault and
 // then on an envelope (scoped-password) vault.
 func TestReadWriteSecretRoundTrip(t *testing.T) {
 	home := testHome(t)

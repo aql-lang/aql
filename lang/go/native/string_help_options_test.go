@@ -6,14 +6,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native/help"
+	"github.com/boru-lang/boru/lang/go/native/help"
 )
 
 // The help text for a string word lists the options it honours; strOptKeys
 // decides which ones it ACCEPTS. Nothing tied the two together, and they
 // drifted the moment the key sets became enforced: `u` was a parsed-but-never-
 // read field, so it was dropped from every key set, while six help entries
-// went on advertising it. `aql describe aql:string-util:split` therefore
+// went on advertising it. `boru describe boru:string-util:split` therefore
 // prescribed `{u:true}`, and the runtime answered `string_option_error`.
 //
 // Documentation that prescribes a rejected input is worse than no

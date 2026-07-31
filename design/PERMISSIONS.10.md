@@ -1,11 +1,11 @@
-# PERMISSIONS.10 — Capability-Scoped Permissions for AQL
+# PERMISSIONS.10 — Capability-Scoped Permissions for boru
 
 ## Status: Implemented (Phases 1–8 landed; PR-by-PR on `claude/sleepy-hamilton-7OYSz`)
 
-This document records the design of AQL's permissions model: the JSON
+This document records the design of boru's permissions model: the JSON
 profile shape, the uniform scope structure with hard caps and
 subscopes, the wrapped-capability enforcement layer, the CLI surface,
-and the planned `aql:vm` native module that uses the same mechanism
+and the planned `boru:vm` native module that uses the same mechanism
 to provide sandboxed sub-engine execution. It is the canonical
 reference for `lang/go/policy` (forthcoming), the permissioned
 capability wrappers, and the `--perms*` / `--allow` / `--deny` /
@@ -38,7 +38,7 @@ capability wrappers, and the `--perms*` / `--allow` / `--deny` /
 - **The HTTP exec service is policy-immutable.** Policy is set at
   service startup; requests cannot supply or modify it. Run multiple
   exec instances on different ports for different policies.
-- **The `aql:vm` native module exposes sub-engine execution** under
+- **The `boru:vm` native module exposes sub-engine execution** under
   a further-restricted policy. Capability attenuation: a sub-engine's
   policy must be a subset of its parent's effective policy.
 
@@ -46,11 +46,11 @@ capability wrappers, and the `--perms*` / `--allow` / `--deny` /
 
 ## Motivation
 
-AQL is increasingly used in contexts where untrusted or
+boru is increasingly used in contexts where untrusted or
 semi-trusted code runs inside a trusted host:
 
-1. The new `aql exec` HTTP service evaluates code submitted by
-   clients. Without a permissions model, anything an `aql` binary
+1. The new `boru exec` HTTP service evaluates code submitted by
+   clients. Without a permissions model, anything a `boru` binary
    can do — read `/etc`, open sockets, write files, fork processes —
    is reachable from a curl request.
 2. Plugin and extension scenarios (REPL extensions, embedded scripts
@@ -165,7 +165,7 @@ earlier — IAM/AppArmor-style).
 
 ### Defaults
 
-The defaults are **allow-everything**. A `*lang.AQL` with no policy
+The defaults are **allow-everything**. A `*lang.Boru` with no policy
 runs without any check. A profile with no `scopes` block is allow
 everything. A scope with no fields acts as
 `{install: true, words: {default: "allow", rules: []}, scopes: {}}`.
@@ -216,15 +216,15 @@ engine scope.
 
 Two-layer:
 
-- **Outer**: `modules.words` controls which module IDs (`aql:math`,
-  `aql:time`, etc.) can be imported.
+- **Outer**: `modules.words` controls which module IDs (`boru:math`,
+  `boru:time`, etc.) can be imported.
 - **Inner**: `modules.scopes.<module-id>.words` controls which
   exports of that module are callable once imported. Same scope
   shape applied recursively.
 
 Setting `modules.install = false` disables the module system
 entirely — the resolver is not attached. `import` returns
-`[aql/modules_disabled]` before any policy lookup.
+`[boru/modules_disabled]` before any policy lookup.
 
 Setting `modules.scopes.<id>.install = false` is equivalent to
 denying the module ID in `modules.words` — the resolver refuses to
@@ -237,7 +237,7 @@ declaration is more readable.
 
 - `<cap>.install = false` removes the capability from the registry.
   The slot is empty; `HostX(r)` returns `nil`; handlers that try to
-  reach it raise `[aql/capability_not_installed]: <cap>`.
+  reach it raise `[boru/capability_not_installed]: <cap>`.
 - `<cap>.words.{default, rules}` controls calls to installed
   capabilities. Operations and where-predicates are
   capability-specific (paths for fileops, host/port for network,
@@ -286,16 +286,16 @@ declaration is more readable.
     "modules": {
       "words": {
         "default": "deny",
-        "rules": [{ "allow": ["aql:math-util", "aql:time-util"] }]
+        "rules": [{ "allow": ["boru:math-util", "boru:time-util"] }]
       },
       "scopes": {
-        "aql:math-util": {
+        "boru:math-util": {
           "words": {
             "default": "allow",
             "rules": [{ "deny": ["pow"] }]
           }
         },
-        "aql:time-util": {
+        "boru:time-util": {
           "words": {
             "default": "allow",
             "rules": [{ "deny": ["sleep"] }]
@@ -309,11 +309,11 @@ declaration is more readable.
         "default": "deny",
         "rules": [
           { "allow": ["read"],
-            "where": { "path": ["/tmp/aql/**", "/srv/data/**"] } },
+            "where": { "path": ["/tmp/boru/**", "/srv/data/**"] } },
           { "deny":  ["read"],
             "where": { "path": ["**/.git/**", "**/secrets/**"] } },
           { "allow": ["write"],
-            "where": { "path": ["/tmp/aql/**"],
+            "where": { "path": ["/tmp/boru/**"],
                        "maxBytes": [1048576] } }
         ]
       }
@@ -338,7 +338,7 @@ declaration is more readable.
         "default": "deny",
         "rules": [
           { "allow": ["read"],
-            "where": { "name": ["LANG", "TZ", "AQL_*"] } }
+            "where": { "name": ["LANG", "TZ", "BORU_*"] } }
         ]
       }
     }
@@ -426,14 +426,14 @@ inheritance can be added later with explicit precedence if needed.
 ## Built-in profiles
 
 These ship in the binary. Resolution order: built-ins first, then
-`$XDG_CONFIG_HOME/aql/policies/<name>.jsonic`, then user-defined
-aliases in `~/.aqlrc`.
+`$XDG_CONFIG_HOME/boru/policies/<name>.jsonic`, then user-defined
+aliases in `~/.borurc`.
 
 | Name | Description |
 |---|---|
 | `full` | Default. Allow everything. Equivalent to no policy. |
 | `trusted` | All capabilities installed; all defaults allow. |
-| `sandbox` | Hard-deny `disk.write`, `network`, `process`. Read disk allowed; engine words allowed; modules allow `aql:math` only. The baseline sandbox. |
+| `sandbox` | Hard-deny `disk.write`, `network`, `process`. Read disk allowed; engine words allowed; modules allow `boru:math` only. The baseline sandbox. |
 | `compute` | Pure computation. All caps `install: false` except formats decode (in-memory only). No I/O at all. |
 | `read-only` | Read disk + read env vars + parse formats. No writes, no network, no process. |
 | `client` | Read disk + outbound HTTPS to a configurable allowlist. No writes, no inbound network. |
@@ -616,7 +616,7 @@ Module resolver consults the policy at `import`:
 // lang/go/modules/modules.go (sketch)
 func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
     if pol := native.HostPolicy(parent); pol != nil {
-        if err := pol.Check("modules", "import", policy.Args{"module": "aql:" + name}); err != nil {
+        if err := pol.Check("modules", "import", policy.Args{"module": "boru:" + name}); err != nil {
             return native.ModuleDesc{}, err
         }
     }
@@ -630,7 +630,7 @@ And per-export dispatch:
 // When dispatching a module-imported word "math.sin":
 if pol := HostPolicy(r); pol != nil {
     if err := pol.Check("modules", "call", policy.Args{
-        "module": "aql:math-util",
+        "module": "boru:math-util",
         "export": "sin",
     }); err != nil {
         return err
@@ -674,12 +674,12 @@ ends `.jsonic`/`.json` → file path; otherwise → profile name.
 
 Repeated flags accumulate; each invocation adds one rule. The path
 is `scope.op` or `scope.subscope.op` (e.g. `engine.add`,
-`modules.aql:math`, `modules.aql:math.sin`).
+`modules.boru:math`, `modules.boru:math.sin`).
 
 Where-bearing rules (paths, hosts, byte limits) cannot be expressed
 as atomic flags. Use `--perms-inline` or `--perms-file` for those.
 
-### Process baseline in `aql serve`
+### Process baseline in `boru serve`
 
 The top-level `--perms*` flag (before any segment) is the **process
 baseline**: a hard cap every service in the process inherits. Each
@@ -687,7 +687,7 @@ segment can carry its own `--perms*` flags that further restrict
 within the baseline.
 
 ```bash
-aql serve --perms=baseline \
+boru serve --perms=baseline \
     exec -p 8091 --perms=sandbox-public \
   + exec -p 8092 --perms=sandbox-internal \
   + lsp  -p 9000 --perms=trusted
@@ -698,7 +698,7 @@ in baseline cannot be relaxed by any segment.
 
 For multiple instances of the same service type with different
 policies, segment aliasing (planned: `<type>@<alias>` syntax) is
-required since `aql serve` rejects duplicate segment names.
+required since `boru serve` rejects duplicate segment names.
 
 ### Per-request: deliberately omitted
 
@@ -707,21 +707,21 @@ body. The policy is bound at service startup; clients cannot supply
 or modify it. Deployments needing per-client policies run multiple
 exec instances (one per policy, on different ports/tokens).
 
-### Authoring subcommand: `aql policy`
+### Authoring subcommand: `boru policy`
 
 ```bash
-aql policy list                                # all available profiles
-aql policy show <name>                         # pretty-print resolved profile
-aql policy show <name> --json                  # raw JSON
-aql policy diff <a> <b>                        # difference between profiles
-aql policy resolve <name> --allow=engine.add   # show post-flag policy
+boru policy list                                # all available profiles
+boru policy show <name>                         # pretty-print resolved profile
+boru policy show <name> --json                  # raw JSON
+boru policy diff <a> <b>                        # difference between profiles
+boru policy resolve <name> --allow=engine.add   # show post-flag policy
 
-aql policy new <name> --extends <base>         # creates user policy file
-aql policy edit <name>                         # $EDITOR on the file
-aql policy validate <path>                     # schema + sanity check
+boru policy new <name> --extends <base>         # creates user policy file
+boru policy edit <name>                         # $EDITOR on the file
+boru policy validate <path>                     # schema + sanity check
 
-aql policy test <name> --check=<scope>.<op>    # exit 0 allowed, 1 denied
-aql policy explain <name> \
+boru policy test <name> --check=<scope>.<op>    # exit 0 allowed, 1 denied
+boru policy explain <name> \
     --check=fileops.write \
     --args=path=/tmp/foo,bytes=1024            # which rule decided, why
 ```
@@ -734,7 +734,7 @@ rule that would change the answer.
 ### Dry-run mode
 
 ```bash
-aql exec --perms=sandbox --policy-dry-run script.aql
+boru exec --perms=sandbox --policy-dry-run script.boru
 # stderr:
 # [policy] WOULD-DENY fileops.write path=/etc/hosts          (line 12)
 # [policy] WOULD-ALLOW engine.add                            (line 22)
@@ -747,25 +747,25 @@ Workflow: run with dry-run, audit the log, remove dry-run.
 ### Environment fallback
 
 ```bash
-AQL_POLICY=sandbox aql do '1 add 2'
-AQL_POLICY_FILE=./prod-policy.jsonic aql script.aql
+BORU_POLICY=sandbox boru do '1 add 2'
+BORU_POLICY_FILE=./prod-policy.jsonic boru script.boru
 ```
 
-Precedence: explicit `--perms*` flags > `AQL_POLICY*` env >
-in-script frontmatter (`#aql:policy=sandbox`) > default `full`.
+Precedence: explicit `--perms*` flags > `BORU_POLICY*` env >
+in-script frontmatter (`#boru:policy=sandbox`) > default `full`.
 
 ---
 
-## The `aql:vm` native module — sandboxed sub-engine execution
+## The `boru:vm` native module — sandboxed sub-engine execution
 
 The same policy mechanism that protects the host registry can be
-used by AQL code itself to spawn restricted sub-engines. The
-`aql:vm` module exposes this surface.
+used by boru code itself to spawn restricted sub-engines. The
+`boru:vm` module exposes this surface.
 
 ### Words
 
-```aql
-import "aql:vm"
+```boru
+import "boru:vm"
 
 # Run code in the default-sandboxed sub-engine.
 "1 add 2" vm.run                          # → 3
@@ -795,9 +795,9 @@ import "aql:vm"
 package modules
 
 import (
-    lang "github.com/aql-lang/aql/lang/go"
-    "github.com/aql-lang/aql/lang/go/native"
-    "github.com/aql-lang/aql/lang/go/policy"
+    lang "github.com/boru-lang/boru/lang/go"
+    "github.com/boru-lang/boru/lang/go/native"
+    "github.com/boru-lang/boru/lang/go/policy"
 )
 
 func BuildVMModule(parent *native.Registry) (native.ModuleDesc, error) {
@@ -856,12 +856,12 @@ capability-attenuation pattern (Deno workers, browser iframes with
 ### Composition
 
 Sub-engines compose recursively. An outer engine spawns a sub-engine;
-the sub-engine can itself `import` `aql:vm` and spawn its own
+the sub-engine can itself `import` `boru:vm` and spawn its own
 further-restricted sub-engine. Each layer is bounded by its parent's
 effective policy. The chain is finite (depth limit configurable as a
 limit field; default 8) to prevent runaway recursion.
 
-### Use cases enabled by `aql:vm`
+### Use cases enabled by `boru:vm`
 
 1. **Property testing harness**. A trusted test runner spawns
    sub-engines to evaluate candidate solutions under restricted
@@ -869,11 +869,11 @@ limit field; default 8) to prevent runaway recursion.
 2. **REPL extensions and macros**. User-written REPL meta-commands
    run in a sandboxed sub-engine — a misbehaving macro can't
    exfiltrate environment variables or write files.
-3. **Untrusted formula evaluation**. AQL embedded in spreadsheet or
+3. **Untrusted formula evaluation**. boru embedded in spreadsheet or
    reporting tools: formulae from untrusted sources run in
    sub-engines.
 4. **Module loading with policy**. `import` could grow a
-   `with-policy` form: `import "aql:third-party"-with {...}` —
+   `with-policy` form: `import "boru:third-party"-with {...}` —
    the imported module runs under the specified policy.
 5. **The wasm playground (`wpg`)**. The browser playground can
    default to `sandbox` for shared sessions; users can opt up to
@@ -885,7 +885,7 @@ limit field; default 8) to prevent runaway recursion.
 
 ### Why this works (capability hygiene)
 
-Three invariants make `aql:vm` sound:
+Three invariants make `boru:vm` sound:
 
 - **Sub-engine has its own registry.** Capability slots are not
   shared with the parent. Wrapped capabilities use the child policy.
@@ -894,12 +894,12 @@ Three invariants make `aql:vm` sound:
   check happens before `lang.New`.
 - **No shared mutable state.** The parent's def table, args stack,
   context store are not visible from the sub-engine. (Marshalled
-  values are by-copy.) This is the same isolation `aql serve` uses
+  values are by-copy.) This is the same isolation `boru serve` uses
   to keep multiple service engines independent.
 
 The structural guarantee that made the host-side enforcement sound
 (wrapped capabilities, no ambient authority) carries directly into
-the AQL-level surface. `vm.run` is not "a privileged escape hatch";
+the boru-level surface. `vm.run` is not "a privileged escape hatch";
 it's "the same enforcement, exposed as a word."
 
 ---
@@ -920,7 +920,7 @@ it's "the same enforcement, exposed as a word."
 | OpenBSD pledge/unveil | Voluntary syscall + path narrowing | Per-process | Underrated |
 | Capsicum | Capability mode, fd-based | Process-level | Minimal & sound |
 
-AQL's design borrows: the **per-command allowlist** (safe-tcl), the
+boru's design borrows: the **per-command allowlist** (safe-tcl), the
 **uniform JSON shape** (IAM), the **profile-files-with-glob-rules**
 shape (AppArmor), the **wrap-the-capability** structural guarantee
 (WASI / OCAP), the **last-match-wins** ordering (IAM/AppArmor), and
@@ -989,7 +989,7 @@ Inside a module body (`e.registry` is the policy-free child):
   check are all skipped. A top-level program under a restrictive policy can
   therefore circumvent it wholesale by moving the denied imports and
   capability calls into an imported file or inline `module [ … ]` body —
-  reachable through a single `import "./m.aql"` that the policy did not
+  reachable through a single `import "./m.boru"` that the policy did not
   gate.
 
 ### What bounds it (and what makes it worse)
@@ -1001,14 +1001,14 @@ Inside a module body (`e.registry` is the policy-free child):
   `IO.read` / `IO.write` inside a file or inline module body stay policed
   even though `HostPolicy(child)` is `nil`. Only checks that re-read the
   policy off the registry leak.
-- **`aql:vm` sub-engines are exempt.** `Vm.run` deliberately
+- **`boru:vm` sub-engines are exempt.** `Vm.run` deliberately
   `policy.Compose`s the parent policy and installs it on the sub-engine
   (`newSubEngineRegistry` → `newDefaultRegistryWithPolicy(pol)`), so the
   [Why this works](#why-this-works-capability-hygiene) reasoning holds
   there — the gap is specific to the `import` path, not sub-engines.
-- **The hybrid AQL-app loaders are strictly worse.** `aql:sift`,
-  `aql:repl`, and `aql:vault-tui` build their child with a bare
-  `newDefaultRegistry()` and run an embedded AQL program on it. With no
+- **The hybrid boru-app loaders are strictly worse.** `boru:sift`,
+  `boru:repl`, and `boru:vault-tui` build their child with a bare
+  `newDefaultRegistry()` and run an embedded boru program on it. With no
   policy present, that child's `fileops` **and** `sqlite` slots are
   installed *fresh and unwrapped* (the `SetHostX` hooks wrap only when a
   policy is present) — so on these loaders even file and database effects
@@ -1025,7 +1025,7 @@ Propagate the policy into every child registry at import — minimally by
 adding `CapPolicy` to `native.ModuleInheritedCaps`, or (properly, per the
 attenuation design) by having `RunModuleBody` and the native-module install
 path install `effective`-parameterised capability *wrappers* plus a
-composed child `CapPolicy`, the way `aql:vm` already does. The per-edge
+composed child `CapPolicy`, the way `boru:vm` already does. The per-edge
 grant algebra and the `Compose`-not-inherit rule live in
 [MODULE-SECURITY.0](MODULE-SECURITY.0.md) §5.2 and §6. A regression test
 should pin a policy that denies `vault` (and one that denies a nested
@@ -1040,20 +1040,20 @@ should pin a policy that denies `vault` (and one that denies a nested
   host process under cgroups.
 - **Side-channel attacks.** Timing oracles, cache-based attacks etc.
   are out of scope — handle at the OS/container layer.
-- **Network capability is unimplemented.** AQL doesn't currently
+- **Network capability is unimplemented.** boru doesn't currently
   have a first-class network word set. When one is added (planned
   for `fetch`-family generalisation), it slots into `scopes.network`
   with the same shape.
-- **Process capability is unimplemented.** Likewise — AQL has no
+- **Process capability is unimplemented.** Likewise — boru has no
   shell word today. If one is ever added, it requires the `process`
   scope plus the `process` global cap.
-- **Cryptographic operation policy.** A future `aql:crypto` module
+- **Cryptographic operation policy.** A future `boru:crypto` module
   could gate `sign`/`verify`/`encrypt`/`decrypt` via its own subscope
-  under `modules.scopes.aql:crypto`.
+  under `modules.scopes.boru:crypto`.
 - **User identity and multi-tenancy at the policy layer.** The
   policy doesn't know about users. Bind a user to a policy at the
   application layer (e.g. token → policy lookup in the exec
-  service's auth middleware) before the AQL instance is constructed.
+  service's auth middleware) before the boru instance is constructed.
 
 ---
 
@@ -1069,7 +1069,7 @@ should pin a policy that denies `vault` (and one that denies a nested
   trivial. If users want layered profiles
   (`base + audit + tenant`), do they want explicit precedence or
   list ordering? Defer until requested.
-- **Policy versioning at runtime**: `aql ctl` (the supervisor
+- **Policy versioning at runtime**: `boru ctl` (the supervisor
   control plane) could grow `policy reload` for the exec service.
   Mid-flight requests keep their existing engine; new requests
   pick up the new policy. Possible but not in scope here.
@@ -1081,7 +1081,7 @@ should pin a policy that denies `vault` (and one that denies a nested
 - [FILE-ACCESS.10](FILE-ACCESS.10.md) — the FileOps capability
   abstraction that this generalises.
 - [NATIVE-MODULES.10](NATIVE-MODULES.10.md) — module system the
-  `aql:vm` module slots into.
+  `boru:vm` module slots into.
 - [IMPORTS.10](IMPORTS.10.md) — module resolution path the policy
   hooks into.
 - [MODULE-SECURITY.0](MODULE-SECURITY.0.md) — the transitive-dependency

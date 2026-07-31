@@ -19,7 +19,7 @@ import (
 //	name     — resolves into the default namespace when one is active,
 //	           else the root namespace
 //
-// The default namespace comes from AQL_VAULT_NAMESPACE, then the
+// The default namespace comes from BORU_VAULT_NAMESPACE, then the
 // `namespace.default` config key (`vault config --set
 // namespace.default=proj`). The value `:` explicitly means root —
 // useful for one-shot overrides of a configured default. There is no
@@ -28,7 +28,7 @@ import (
 // exists) rather than quietly using a different namespace's secret.
 const (
 	// EnvNamespace overrides the configured default namespace.
-	EnvNamespace = "AQL_VAULT_NAMESPACE"
+	EnvNamespace = "BORU_VAULT_NAMESPACE"
 	// configNamespaceKey is the vault-config key holding the default.
 	configNamespaceKey = "namespace.default"
 	// rootNamespaceRef is how the root namespace is spelled wherever a
@@ -68,7 +68,7 @@ func aliasNamespace(a Alias) string {
 func validNamespaceName(s string) bool { return validAliasSegment(s) }
 
 // defaultNamespace returns the active default namespace ("" = root):
-// AQL_VAULT_NAMESPACE wins over the namespace.default config key, and
+// BORU_VAULT_NAMESPACE wins over the namespace.default config key, and
 // the value ":" explicitly selects root (overriding a configured
 // default). An invalid value is an error rather than a silent root
 // fallback — a typo must not change which secret a bare name means.

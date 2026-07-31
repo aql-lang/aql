@@ -1,6 +1,6 @@
-# AQL Tutorial
+# boru Tutorial
 
-This tutorial teaches AQL from the ground up. It is meant to be read
+This tutorial teaches boru from the ground up. It is meant to be read
 in order, with the REPL open at your side — type every example and
 poke at it. By the end you'll be comfortable with forward calls and
 the underlying stack model, the type system, defining typed
@@ -13,10 +13,10 @@ a word, see the **[Reference](REFERENCE.md)**.
 
 > **Notation.** In code, a trailing `# returns …` comment shows what an
 > expression evaluates to — `square 4  # returns 16` — and in a REPL
-> transcript the same appears after the prompt: `aql> square 4  #
+> transcript the same appears after the prompt: `boru> square 4  #
 > returns 16`. The comment is ordinary documentation (`#` begins a line
 > comment), not special syntax; in prose we just say "`square 4`
-> returns `16`". (AQL has no result arrow — `=>` is real syntax, the
+> returns `16`". (boru has no result arrow — `=>` is real syntax, the
 > anonymous-function word `afn` — which is why results are written as
 > comments here.) Note also that the REPL clears the stack after each
 > line, so a multi-step computation that relies on leftover stack
@@ -30,37 +30,37 @@ carries local `replace` directives, so `go install …@latest` is
 not yet supported):
 
 ```bash
-git clone https://github.com/aql-lang/aql
-cd aql/cmd/go && go install ./aql
-aql
+git clone https://github.com/boru-lang/boru
+cd boru/cmd/go && go install ./boru
+boru
 ```
 
 You should see:
 
 ```
-aql 0.1.0-dev
-aql>
+boru 0.1.0-dev
+boru>
 ```
 
-The prompt accepts AQL expressions. Press `Enter` to evaluate.
+The prompt accepts boru expressions. Press `Enter` to evaluate.
 `Ctrl-D` (or `exit`) leaves the REPL.
 
 You can also evaluate a one-liner from the shell:
 
 ```bash
-aql do 'add 1 2'
+boru do 'add 1 2'
 # 3
 ```
 
 Or run a file:
 
 ```bash
-aql script.aql
-aql -e '10 sub 3'
+boru script.boru
+boru -e '10 sub 3'
 ```
 
 (`-e` evaluates one expression and exits. Uppercasing a string needs
-the string-util module — `aql -e 'import "aql:string-util"
+the string-util module — `boru -e 'import "boru:string-util"
 StringUtil.upper "hello"'` — see [§5: Strings](#5-strings).)
 
 
@@ -72,9 +72,9 @@ value by itself is just itself — whatever your line leaves behind is
 what the REPL prints:
 
 ```
-aql> add 1 2                         # returns 3
-aql> mul 4 5                         # returns 20
-aql> 42                              # returns 42
+boru> add 1 2                         # returns 3
+boru> mul 4 5                         # returns 20
+boru> 42                              # returns 42
 ```
 
 Two pieces of punctuation you'll use from the start:
@@ -84,8 +84,8 @@ its result feeds the surrounding call — exactly what you'd expect
 from a conventional language:
 
 ```
-aql> add 1 (mul 2 3)                 # returns 7
-aql> mul (add 1 2) (10 sub 3)        # returns 21
+boru> add 1 (mul 2 3)                 # returns 7
+boru> mul (add 1 2) (10 sub 3)        # returns 21
 ```
 
 (`10 sub 3` is `10 - 3` written infix — more on that in §3.)
@@ -95,9 +95,9 @@ runs in order, and the line's combined results are printed. `;` is
 just punctuation for the word `end` — the two are interchangeable:
 
 ```
-aql> add 1 2; mul 3 4
+boru> add 1 2; mul 3 4
 3 12
-aql> def x 5; mul x x                # returns 25
+boru> def x 5; mul x x                # returns 25
 ```
 
 You'll see `;` (or `end`) constantly after `def` and `import` lines,
@@ -108,13 +108,13 @@ separating setup from the expression that uses it.
 
 You've been writing the **forward** form — arguments after the word —
 which is the recommended style for new code. The same `add` also
-works **infix** and, because AQL is concatenative under the hood,
+works **infix** and, because boru is concatenative under the hood,
 **all-stack**:
 
 ```
-aql> add 1 2        # returns 3 — forward: both args after the word
-aql> 1 add 2        # returns 3 — infix: one before, one after
-aql> 1 2 add        # returns 3 — all-stack: both args before the word
+boru> add 1 2        # returns 3 — forward: both args after the word
+boru> 1 add 2        # returns 3 — infix: one before, one after
+boru> 1 2 add        # returns 3 — all-stack: both args before the word
 ```
 
 The all-stack form is the *stack machine* showing through: a literal
@@ -124,7 +124,7 @@ both and pushes their sum. Values nothing consumes stay on the
 stack — that's what the REPL prints:
 
 ```
-aql> 1 2 3
+boru> 1 2 3
 1 2 3
 ```
 
@@ -134,7 +134,7 @@ Until then, forward form does everything you need.
 
 ### The argument-order rule
 
-When a word runs, AQL fills its parameter slots `args[0]`, `args[1]`,
+When a word runs, boru fills its parameter slots `args[0]`, `args[1]`,
 … in this order:
 
 1. **Take tokens after the word, in source order**, into `args[0]`,
@@ -148,9 +148,9 @@ So for an asymmetric operation like `sub` (whose handler computes
 "a minus b"), all three call forms compute the same thing:
 
 ```
-aql> 10 sub 3       # returns 7 — infix: args[0]=3 (forward), args[1]=10 (stack) → 10 - 3
-aql> sub 3 10       # returns 7 — all-forward: args[0]=3 (first), args[1]=10 (second) → 10 - 3
-aql> 10 3 sub       # returns 7 — all-stack: args[0]=top=3, args[1]=10 → 10 - 3
+boru> 10 sub 3       # returns 7 — infix: args[0]=3 (forward), args[1]=10 (stack) → 10 - 3
+boru> sub 3 10       # returns 7 — all-forward: args[0]=3 (first), args[1]=10 (second) → 10 - 3
+boru> 10 3 sub       # returns 7 — all-stack: args[0]=top=3, args[1]=10 → 10 - 3
 ```
 
 The pattern: `a sub b` always means `a - b`, no matter where `a` and
@@ -163,11 +163,11 @@ User-defined functions follow the same rule. For
 `def show fn [[a:Number b:Number] [String] [`${a} and ${b}`]]`:
 
 ```
-aql> show 1 2       # forward: args[0]=1=a, args[1]=2=b
+boru> show 1 2       # forward: args[0]=1=a, args[1]=2=b
 '1 and 2'
-aql> 2 show 1       # mixed: args[0]=1 (forward)=a, args[1]=2 (stack)=b
+boru> 2 show 1       # mixed: args[0]=1 (forward)=a, args[1]=2 (stack)=b
 '1 and 2'
-aql> 2 1 show       # all-stack: args[0]=top=1=a, args[1]=2=b
+boru> 2 1 show       # all-stack: args[0]=top=1=a, args[1]=2=b
 '1 and 2'
 ```
 
@@ -182,35 +182,35 @@ type. Arithmetic auto-promotes. The core arithmetic words live at
 the top level:
 
 ```
-aql> mul 4 5            # returns 20
-aql> 2 pow 10           # returns 1024
-aql> 7 div 2            # returns 3 — integer division
-aql> 7.0 div 2          # returns 3.5 — float: real division
-aql> 10 mod 3           # returns 1
-aql> 10 sub 3           # returns 7 — a sub b ≡ a - b (see §3)
+boru> mul 4 5            # returns 20
+boru> 2 pow 10           # returns 1024
+boru> 7 div 2            # returns 3 — integer division
+boru> 7.0 div 2          # returns 3.5 — float: real division
+boru> 10 mod 3           # returns 1
+boru> 10 sub 3           # returns 7 — a sub b ≡ a - b (see §3)
 ```
 
 For absolute value, rounding, roots, logs, trig, and the standard
-constants, import the `aql:math-util` module — its words register
+constants, import the `boru:math-util` module — its words register
 under the `MathUtil.` namespace (the pattern for every built-in
-module: the `aql:NAME-util` id binds the `NameUtil` namespace; see
+module: the `boru:NAME-util` id binds the `NameUtil` namespace; see
 the [module table in §20](#20-modules--namespaces-and-imports)):
 
 ```
-aql> import "aql:math-util"
-aql> MathUtil.abs -5        # returns 5
-aql> MathUtil.min 3 5       # returns 3
-aql> MathUtil.max 3 5       # returns 5
-aql> MathUtil.floor 3.7     # returns 3
-aql> MathUtil.ceil 3.2      # returns 4
-aql> MathUtil.round 3.5     # returns 4
-aql> MathUtil.trunc 3.9     # returns 3
-aql> MathUtil.sqrt 16       # returns 4.0
-aql> MathUtil.log MathUtil.e    # returns 1.0
-aql> MathUtil.sin 0         # returns 0.0
-aql> MathUtil.hypot 3 4     # returns 5.0
-aql> MathUtil.pi            # returns 3.141592653589793
-aql> MathUtil.e             # returns 2.718281828459045
+boru> import "boru:math-util"
+boru> MathUtil.abs -5        # returns 5
+boru> MathUtil.min 3 5       # returns 3
+boru> MathUtil.max 3 5       # returns 5
+boru> MathUtil.floor 3.7     # returns 3
+boru> MathUtil.ceil 3.2      # returns 4
+boru> MathUtil.round 3.5     # returns 4
+boru> MathUtil.trunc 3.9     # returns 3
+boru> MathUtil.sqrt 16       # returns 4.0
+boru> MathUtil.log MathUtil.e    # returns 1.0
+boru> MathUtil.sin 0         # returns 0.0
+boru> MathUtil.hypot 3 4     # returns 5.0
+boru> MathUtil.pi            # returns 3.141592653589793
+boru> MathUtil.e             # returns 2.718281828459045
 ```
 
 
@@ -218,7 +218,7 @@ aql> MathUtil.e             # returns 2.718281828459045
 
 Strings use single or double quotes (they're interchangeable):
 
-The `aql:string-util` words put the **subject string last** (the data-last
+The `boru:string-util` words put the **subject string last** (the data-last
 grain), so the clearest all-forward form is `WORD arg… subject` — e.g.
 `split sep input`, `contains needle haystack`, `indexof needle haystack`,
 `replace search repl input`. This also lets the subject flow from a pipeline
@@ -226,30 +226,30 @@ grain), so the clearest all-forward form is `WORD arg… subject` — e.g.
 [§3: the argument-order rule](#the-argument-order-rule).
 
 ```
-aql> import "aql:string-util" "hello" StringUtil.upper                 # returns 'HELLO'
-aql> import "aql:string-util" "HELLO" StringUtil.lower                 # returns 'hello'
-aql> import "aql:string-util" StringUtil.split "," "hello,world"       # returns ['hello' 'world'] — subject (input) LAST
-aql> import "aql:string-util" ["a","b","c"] StringUtil.concat          # returns 'abc' — joins list elements
-aql> import "aql:string-util" StringUtil.contains "ell" "hello"        # returns true — haystack LAST
-aql> import "aql:string-util" StringUtil.indexof "ll" "hello"          # returns 2 — haystack LAST: `indexof needle haystack`
-aql> "hello" slice 1 3             # returns 'el'
-aql> import "aql:string-util" StringUtil.replace "l" "r" "hello"       # returns 'herlo' — subject (input) LAST
-aql> import "aql:string-util" "  hi  " StringUtil.trim                 # returns 'hi'
-aql> import "aql:string-util" "hi" StringUtil.pad 5                    # returns 'hi   '
+boru> import "boru:string-util" "hello" StringUtil.upper                 # returns 'HELLO'
+boru> import "boru:string-util" "HELLO" StringUtil.lower                 # returns 'hello'
+boru> import "boru:string-util" StringUtil.split "," "hello,world"       # returns ['hello' 'world'] — subject (input) LAST
+boru> import "boru:string-util" ["a","b","c"] StringUtil.concat          # returns 'abc' — joins list elements
+boru> import "boru:string-util" StringUtil.contains "ell" "hello"        # returns true — haystack LAST
+boru> import "boru:string-util" StringUtil.indexof "ll" "hello"          # returns 2 — haystack LAST: `indexof needle haystack`
+boru> "hello" slice 1 3             # returns 'el'
+boru> import "boru:string-util" StringUtil.replace "l" "r" "hello"       # returns 'herlo' — subject (input) LAST
+boru> import "boru:string-util" "  hi  " StringUtil.trim                 # returns 'hi'
+boru> import "boru:string-util" "hi" StringUtil.pad 5                    # returns 'hi   '
 ```
 
 Backtick template strings interpolate `${...}` expressions:
 
 ```
-aql> def name "world"
-aql> `hello ${name}`               # returns 'hello world'
-aql> `2 + 3 = ${add 2 3}`         # returns '2 + 3 = 5'
+boru> def name "world"
+boru> `hello ${name}`               # returns 'hello world'
+boru> `2 + 3 = ${add 2 3}`         # returns '2 + 3 = 5'
 ```
 
 Templates nest:
 
 ```
-aql> `a${`inner ${add 1 2}`}b`     # returns 'ainner 3b'
+boru> `a${`inner ${add 1 2}`}b`     # returns 'ainner 3b'
 ```
 
 
@@ -258,14 +258,14 @@ aql> `a${`inner ${add 1 2}`}b`     # returns 'ainner 3b'
 When the stack model isn't quite enough, these words rearrange it:
 
 ```
-aql> 5 dup              # returns 5 5 — duplicate top
-aql> 1 2 swap           # returns 2 1 — exchange top two
-aql> 1 2 3 drop         # returns 1 2 — discard top
-aql> 1 2 over           # returns 1 2 1 — copy second to top
-aql> 1 2 3 rot          # returns 2 3 1 — rotate top three
-aql> 1 2 nip            # returns 2 — remove second
-aql> 1 2 tuck           # returns 2 1 2 — copy top below second
-aql> depth              # returns 0 — current stack size
+boru> 5 dup              # returns 5 5 — duplicate top
+boru> 1 2 swap           # returns 2 1 — exchange top two
+boru> 1 2 3 drop         # returns 1 2 — discard top
+boru> 1 2 over           # returns 1 2 1 — copy second to top
+boru> 1 2 3 rot          # returns 2 3 1 — rotate top three
+boru> 1 2 nip            # returns 2 — remove second
+boru> 1 2 tuck           # returns 2 1 2 — copy top below second
+boru> depth              # returns 0 — current stack size
 ```
 
 Most of the time you won't need these — forward collection covers
@@ -278,8 +278,8 @@ fights you.
 Lists use square brackets, maps use braces:
 
 ```
-aql> [1, 2, 3]                       # returns [1 2 3]
-aql> {name: "Alice", age: 30}        # returns {name:'Alice' age:30} — source order
+boru> [1, 2, 3]                       # returns [1 2 3]
+boru> {name: "Alice", age: 30}        # returns {name:'Alice' age:30} — source order
 ```
 
 Commas are optional inside literals — both `[1 2 3]` and `[1, 2, 3]`
@@ -289,9 +289,9 @@ A map entry can be just a bare name — `{foo}` is shorthand for
 `{foo: foo}`, the same as in JavaScript:
 
 ```
-aql> def x 1
-aql> def y 2
-aql> {x y}                           # returns {x:1 y:2}
+boru> def x 1
+boru> def y 2
+boru> {x y}                           # returns {x:1 y:2}
 ```
 
 (See [Reference: Map field shorthand](REFERENCE.md#map-field-shorthand)
@@ -300,23 +300,23 @@ for the `/r` and `?` variants.)
 The dot operator accesses fields by name or by index:
 
 ```
-aql> {name: "Alice"} . name          # returns 'Alice'
-aql> [10, 20, 30] . 1                # returns 20
-aql> {a: {b: 99}} . a . b            # returns 99
+boru> {name: "Alice"} . name          # returns 'Alice'
+boru> [10, 20, 30] . 1                # returns 20
+boru> {a: {b: 99}} . a . b            # returns 99
 ```
 
 Use `!.` (also called `getr`) when the key *must* exist — it raises
 an error instead of returning `none`:
 
 ```
-aql> {x:1} !. y                      # returns error: key "y" not found
+boru> {x:1} !. y                      # returns error: key "y" not found
 ```
 
 Lists and maps nest freely:
 
 ```
-aql> [{x:1, y:2}, {x:3, y:4}]
-aql> {users: ["Alice", "Bob"], count: 2}
+boru> [{x:1, y:2}, {x:3, y:4}]
+boru> {users: ["Alice", "Bob"], count: 2}
 ```
 
 
@@ -325,30 +325,30 @@ aql> {users: ["Alice", "Bob"], count: 2}
 Use `def` to give a value (or a code block) a name:
 
 ```
-aql> def x 42
-aql> x                               # returns 42
+boru> def x 42
+boru> x                               # returns 42
 ```
 
 When the body is a list, calling the word *runs* the list:
 
 ```
-aql> def double word [dup add]
-aql> 5 double                        # returns 10
-aql> 3 double double                 # returns 12
+boru> def double word [dup add]
+boru> 5 double                        # returns 10
+boru> 3 double double                 # returns 12
 ```
 
 Composition is concatenation:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-aql> def quadruple word [double double]
-aql> 5 quadruple                     # returns 20
+boru> def quadruple word [double double]
+boru> 5 quadruple                     # returns 20
 ```
 
 To remove a definition use `undef`:
 
 ```
-aql> undef x
+boru> undef x
 ```
 
 
@@ -358,17 +358,17 @@ aql> undef x
 `[input-sig] [output-sig] [body]` triples:
 
 ```
-aql> def square fn [[x:Number] [Number] [mul x x]]
-aql> square 5                        # returns 25
-aql> square 2.5                      # returns 6.25
+boru> def square fn [[x:Number] [Number] [mul x x]]
+boru> square 5                        # returns 25
+boru> square 2.5                      # returns 6.25
 ```
 
 For the common one-signature, one-parameter case there is also a
 3-arg form — the triple without the wrapping list:
 
 ```
-aql> def square fn x:Number [Number] [mul x x]
-aql> square 5                        # returns 25
+boru> def square fn x:Number [Number] [mul x x]
+boru> square 5                        # returns 25
 ```
 
 The 3-arg form's input must not be a list (a list after `fn` always
@@ -379,23 +379,23 @@ Named parameters (like `x:Number`) bind to stack values automatically
 inside the body. You can also use the implicit `args` list:
 
 ```
-aql> def greet fn [[String] [String] [`hello ${args.0}`]]
-aql> greet "world"                   # returns 'hello world'
+boru> def greet fn [[String] [String] [`hello ${args.0}`]]
+boru> greet "world"                   # returns 'hello world'
 ```
 
 Multiple signatures give you ad-hoc polymorphism — first match wins:
 
 ```
-aql> def inc fn [
+boru> def inc fn [
   [Integer] [Integer] [add 1]
   [Float] [Float] [add 1.0]
 ]
-aql> inc 5                           # returns 6
-aql> inc 2.5                         # returns 3.5
+boru> inc 5                           # returns 6
+boru> inc 2.5                         # returns 3.5
 ```
 
-From here on, make **`aql check`** part of your loop: it type-checks
-a file (or a one-liner via `aql check -e '…'`) without running it,
+From here on, make **`boru check`** part of your loop: it type-checks
+a file (or a one-liner via `boru check -e '…'`) without running it,
 and it catches exactly the mistakes typed functions introduce —
 no-matching-signature calls, a function value called with arguments
 that fit none of its signatures, a body that can't produce the
@@ -411,8 +411,8 @@ running. Check first, then run.
 The branches are lists (which is why they're not evaluated up-front):
 
 ```
-aql> if (5 gt 3) ["yes"] ["no"]      # returns 'yes'
-aql> 0 if ["truthy"] ["falsy"]       # returns 'falsy'
+boru> if (5 gt 3) ["yes"] ["no"]      # returns 'yes'
+boru> 0 if ["truthy"] ["falsy"]       # returns 'falsy'
 ```
 
 The condition is coerced to a boolean by **presence, not content**.
@@ -425,56 +425,56 @@ rather than relying on string truthiness.
 `for` iterates over a numeric range, pushing the counter into the
 body each step:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-aql> for 5 [dup mul]                 # returns 0 1 4 9 16
-aql> for [1, 4] [dup mul]            # returns 1 4 9
-aql> for [0, 10, 2] [dup mul]        # returns 0 4 16 36 64
+boru> for 5 [dup mul]                 # returns 0 1 4 9 16
+boru> for [1, 4] [dup mul]            # returns 1 4 9
+boru> for [0, 10, 2] [dup mul]        # returns 0 4 16 36 64
 ```
 
 `break` and `continue` work inside the body:
 
 ```
-aql> for 10 [dup gt 5 if [break]]
+boru> for 10 [dup gt 5 if [break]]
 ```
 
 
 ## 11. Higher-order list words
 
-These are the bread-and-butter of array programming in AQL. Note
+These are the bread-and-butter of array programming in boru. Note
 how the multi-list combinators use the all-forward call shape so
 each list argument lands in a predictable slot — see
 [§3: the argument-order rule](#the-argument-order-rule).
 
 ```
-aql> [1, 2, 3] each [dup mul]        # returns [1 4 9]
-aql> fold [add] [1, 2, 3, 4, 5] 0    # returns 15 — body, data, init
-aql> scan [add] [1, 2, 3]            # returns [1 3 6]
+boru> [1, 2, 3] each [dup mul]        # returns [1 4 9]
+boru> fold [add] [1, 2, 3, 4, 5] 0    # returns 15 — body, data, init
+boru> scan [add] [1, 2, 3]            # returns [1 3 6]
 ```
 
 Sequence-building:
 
 ```
-aql> iota 5                          # returns [0 1 2 3 4]
-aql> range 2 6                       # returns [2 3 4 5]
-aql> [1, 2, 3] reverse                # returns [3 2 1]
+boru> iota 5                          # returns [0 1 2 3 4]
+boru> range 2 6                       # returns [2 3 4 5]
+boru> [1, 2, 3] reverse                # returns [3 2 1]
 ```
 
-Reshaping, ordering, and grouping live in the `aql:array-util` module
+Reshaping, ordering, and grouping live in the `boru:array-util` module
 (reached via the `ArrayUtil.` prefix after importing):
 
 ```
-aql> import "aql:array-util"
-aql> iota 6 ArrayUtil.reshape [2, 3]     # returns [[0 1 2] [3 4 5]]
-aql> [1, 2, 2, 3] ArrayUtil.unique       # returns [1 2 3]
-aql> [3, 1, 2] ArrayUtil.grade           # returns [1 2 0]
+boru> import "boru:array-util"
+boru> iota 6 ArrayUtil.reshape [2, 3]     # returns [[0 1 2] [3 4 5]]
+boru> [1, 2, 2, 3] ArrayUtil.unique       # returns [1 2 3]
+boru> [3, 1, 2] ArrayUtil.grade           # returns [1 2 0]
 ```
 
 `outer` and `inner` are APL-style array combinators (built-in):
 
 ```
-aql> outer [mul] [10, 20] [1, 2]     # returns [[10 20] [20 40]]
-aql> inner [add] [mul] [3, 4] [1, 2] # body order: combine, product
+boru> outer [mul] [10, 20] [1, 2]     # returns [[10 20] [20 40]]
+boru> inner [add] [mul] [3, 4] [1, 2] # body order: combine, product
 ```
 
 
@@ -484,26 +484,26 @@ Every value has a type, organised into a hierarchy. Inspect a
 value's type with `typeof`, or walk its ancestry with `pathof`:
 
 ```
-aql> typeof 42                       # returns Integer
-aql> typeof "hello"                  # returns ProperString
-aql> typeof [1, 2]                   # returns List
-aql> pathof Integer                  # returns [Scalar Number Integer]
+boru> typeof 42                       # returns Integer
+boru> typeof "hello"                  # returns ProperString
+boru> typeof [1, 2]                   # returns List
+boru> pathof Integer                  # returns [Scalar Number Integer]
 ```
 
 Use `is` to test membership against any ancestor in the hierarchy:
 
 ```
-aql> 42 is Integer                   # returns true
-aql> 42 is Number                    # returns true
-aql> 42 is Scalar                    # returns true
-aql> 42 is String                    # returns false
+boru> 42 is Integer                   # returns true
+boru> 42 is Number                    # returns true
+boru> 42 is Scalar                    # returns true
+boru> 42 is String                    # returns false
 ```
 
 Convert with `convert`:
 
 ```
-aql> convert Integer "42"            # returns 42
-aql> convert String 42               # returns '42'
+boru> convert Integer "42"            # returns 42
+boru> convert String 42               # returns '42'
 ```
 
 
@@ -515,13 +515,13 @@ list-of-rows-conforming-to-a-record. Define both with
 `make` to instantiate:
 
 ```
-aql> def Point refine Record [x:Number y:Number]
-aql> make Point [3 4]                # returns {x:3 y:4}
-aql> make Point {x:1 y:2}            # returns {x:1 y:2}
+boru> def Point refine Record [x:Number y:Number]
+boru> make Point [3 4]                # returns {x:3 y:4}
+boru> make Point {x:1 y:2}            # returns {x:1 y:2}
 
-aql> def Row refine Record [name:String qty:Integer]
-aql> def Inventory refine Table Row
-aql> make Inventory [["Widget" 5] ["Bolt" 12]]
+boru> def Row refine Record [name:String qty:Integer]
+boru> def Inventory refine Table Row
+boru> make Inventory [["Widget" 5] ["Bolt" 12]]
   # returns [{name:'Widget' qty:5} {name:'Bolt' qty:12}]
 ```
 
@@ -529,9 +529,9 @@ Field constraints can be disjunctive — `(String tor none)` means
 "string or absent":
 
 ```
-aql> def Person refine Record [name:String nick:(String tor none)]
-aql> make Person {name:"Alice" nick:"ace"}     # returns {name:'Alice' nick:'ace'}
-aql> make Person {name:"Bob"}                  # returns {name:'Bob' nick:None}
+boru> def Person refine Record [name:String nick:(String tor none)]
+boru> make Person {name:"Alice" nick:"ace"}     # returns {name:'Alice' nick:'ace'}
+boru> make Person {name:"Bob"}                  # returns {name:'Bob' nick:None}
 ```
 
 The omitted field holds the absence marker, which canonical rendering
@@ -545,11 +545,11 @@ angle brackets and instantiated with concrete arguments. Each
 instantiation is a real, distinct type:
 
 ```
-aql> def Box<T> class {value:T}
-aql> def b:Box<Integer> {value:42}
-aql> typeof b                        # returns Box of [Integer]
-aql> b is Box                        # returns true
-aql> b is Box<String>                # returns false
+boru> def Box<T> class {value:T}
+boru> def b:Box<Integer> {value:42}
+boru> typeof b                        # returns Box of [Integer]
+boru> b is Box                        # returns true
+boru> b is Box<String>                # returns false
 ```
 
 Generic *functions* use the spelled-out form — `def first gen [T]
@@ -567,8 +567,8 @@ the end of the block. Bare-word declarations pop from the stack
 rule):
 
 ```
-aql> import "aql:math-util"
-aql> 3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]   # returns 5.0
+boru> import "boru:math-util"
+boru> 3 4 var [[a b] (a mul a) add (b mul b) MathUtil.sqrt]   # returns 5.0
 ```
 
 The first element of the list is the binding list. The remaining
@@ -576,7 +576,7 @@ elements are the body. `a` here binds to `4` (top of stack), `b` to
 `3`. Inline values:
 
 ```
-aql> var [[[x 2] [y 10]] add x y]               # returns 12
+boru> var [[[x 2] [y 10]] add x y]               # returns 12
 ```
 
 
@@ -586,7 +586,7 @@ A list literal evaluates its contents by default and keeps the
 results *as a list* — `[add 1 2]` becomes `[3]`, not `3`:
 
 ```
-aql> [add 1 2]                       # returns [3]
+boru> [add 1 2]                       # returns [3]
 ```
 
 Use `quote` to hold a list as unevaluated data instead (see below).
@@ -594,14 +594,14 @@ Use `quote` to hold a list as unevaluated data instead (see below).
 rather than in a list:
 
 ```
-aql> do [add 1 2]                    # returns 3
-aql> do {x: [add 3 4], y: 5}        # returns {x:7 y:5}
+boru> do [add 1 2]                    # returns 3
+boru> do {x: [add 3 4], y: 5}        # returns {x:7 y:5}
 ```
 
 `quote` prevents a single token from being interpreted:
 
 ```
-aql> quote foo                       # returns foo/q
+boru> quote foo                       # returns foo/q
 ```
 
 
@@ -610,7 +610,7 @@ aql> quote foo                       # returns foo/q
 `quote` lets you *hold* code as data. A **macro** lets you *transform*
 it: a macro runs at expansion time on its arguments **as code** and
 splices the result into the call site. Where `fn` receives values, a
-macro receives unevaluated forms — so you can build new syntax in AQL
+macro receives unevaluated forms — so you can build new syntax in boru
 itself.
 
 You write a macro with `macro [[params] [body]]`. The body produces a
@@ -618,8 +618,8 @@ template — a `quote [ … ]` list — with `unquote` marking the holes
 where the operands go:
 
 ```
-aql> def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
-aql> twice 5                         # returns 10
+boru> def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
+boru> twice 5                         # returns 10
 ```
 
 `twice 5` isn't a function call — it *rewrites itself* into the code
@@ -627,8 +627,8 @@ aql> twice 5                         # returns 10
 `macroexpand` (it doesn't run the result):
 
 ```
-aql> def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
-aql> macroexpand (twice 5)           # returns [5 word(add) 5]
+boru> def twice (macro [[e] [ quote [ unquote e add unquote e ] ]])
+boru> macroexpand (twice 5)           # returns [5 word(add) 5]
 ```
 
 (It's a *token list* — `add` shows as `word(add)` because it's an
@@ -639,8 +639,8 @@ forms. Here is an `unless` — `if`, but inverted — that takes its
 condition and body unevaluated:
 
 ```
-aql> def unless (macro [[cond body] [ quote [ if unquote cond [] unquote body ] ]])
-aql> unless false [42]               # returns 42
+boru> def unless (macro [[cond body] [ quote [ if unquote cond [] unquote body ] ]])
+boru> unless false [42]               # returns 42
 ```
 
 `splice` is `unquote`'s sibling: it spreads a *list* operand's elements
@@ -651,9 +651,9 @@ is automatically renamed, so it can never clash with one of your
 variables — even if the names match:
 
 ```
-aql> def myor (macro [[a b] [ quote [ def tmp unquote a  if tmp [tmp] [unquote b] ] ]])
-aql> def tmp 42
-aql> myor false tmp                  # returns 42
+boru> def myor (macro [[a b] [ quote [ def tmp unquote a  if tmp [tmp] [unquote b] ] ]])
+boru> def tmp 42
+boru> myor false tmp                  # returns 42
 ```
 
 The template's `tmp` and your `tmp` stay separate; `myor` returns your
@@ -670,10 +670,10 @@ Errors are values, not exceptions. `do` catches them and the
 `error` word pattern-matches:
 
 ```
-aql> do [1 div 0]
+boru> do [1 div 0]
 Error(div: division by zero)
 
-aql> do [1 div 0] error [drop 42]    # returns 42
+boru> do [1 div 0] error [drop 42]    # returns 42
 ```
 
 The pattern is `do [risky] error [handler]`. Inside the handler the
@@ -683,28 +683,28 @@ or inspect its fields with `.`.
 
 ## 18. Concurrency with `await`
 
-`await` (in the `aql:time-util` module) runs a list of code blocks
+`await` (in the `boru:time-util` module) runs a list of code blocks
 in parallel and collects the results:
 
 ```
-aql> import "aql:time-util" TimeUtil.await [[add 1 2] [add 3 4]]     # returns [3 7]
+boru> import "boru:time-util" TimeUtil.await [[add 1 2] [add 3 4]]     # returns [3 7]
 ```
 
 Pick a mode via an options map — these mirror JavaScript Promise
 combinators:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-aql> await {mode: 'all}   [[sleep 10 1] [sleep 10 2]]
+boru> await {mode: 'all}   [[sleep 10 1] [sleep 10 2]]
   # returns [1 2] — all must succeed
 
-aql> await {mode: 'first} [[sleep 100 1] [sleep 10 2]]
+boru> await {mode: 'first} [[sleep 100 1] [sleep 10 2]]
   # returns 2 — race winner
 
-aql> await {mode: 'any}   [[1 div 0] [sleep 10 42]]
+boru> await {mode: 'any}   [[1 div 0] [sleep 10 42]]
   # returns 42 — first non-error
 
-aql> await {mode: 'full}  [[1] [1 div 0]]
+boru> await {mode: 'full}  [[1] [1 div 0]]
   # returns [{status:'ok,value:1},{status:'error value:...}]
 ```
 
@@ -712,23 +712,23 @@ Schedule deferred work with `timeout` and `interval`, cancel with
 `cancel`:
 
 ```
-aql> def t timeout 1000 [print "fired"]
-aql> t cancel
+boru> def t timeout 1000 [print "fired"]
+boru> t cancel
 ```
 
 
 ## 19. Reading and writing files
 
-File I/O lives in the `aql:io` module, and every filesystem target is a
+File I/O lives in the `boru:io` module, and every filesystem target is a
 `Pathon` micron built with `make Pathon "…"` — a bare string is not
 accepted, so a file path is type-distinct from ordinary text.
 
 ```
-aql> import "aql:io"
-aql> IO.read (make Pathon "data.json")
-aql> IO.read (make Pathon "data.csv") {fmt: 'csv}
-aql> IO.write (make Pathon "out.txt") "hello"
-aql> IO.write (make Pathon "out.json") {x:1, y:2}
+boru> import "boru:io"
+boru> IO.read (make Pathon "data.json")
+boru> IO.read (make Pathon "data.csv") {fmt: 'csv}
+boru> IO.write (make Pathon "out.txt") "hello"
+boru> IO.write (make Pathon "out.json") {x:1, y:2}
 ```
 
 Supported formats: `json`, `csv`, `tsv`, `jsonic`, `text`. By
@@ -736,7 +736,7 @@ default the format is inferred from the extension. `IO.read IO.stdin`
 and `IO.write IO.stdout "..."` work too (the stream handles are not
 Pathons — they are `StreamKind` atoms).
 
-Importing `aql:io` also extends the core `list` and `remove` words with a
+Importing `boru:io` also extends the core `list` and `remove` words with a
 Pathon overload, so `list (make Pathon "dir")` enumerates a directory and
 `remove (make Pathon "f")` deletes a path — the same bare words that list a
 table or remove a record, now polymorphic over a filesystem path.
@@ -751,44 +751,44 @@ A *module* is a fresh evaluation context. Define one inline with
 the `module` form, calling `export "namespace" {…}` to publish
 bindings:
 
-<!-- aql-test: skip -->
+<!-- boru-test: skip -->
 ```
-aql> import module [
+boru> import module [
        def helper [dup add]
        def greet fn [[name:String] [String] [`hello ${name}`]]
        export "utils" {helper: helper, greet: greet}
      ]
-aql> "Ada" utils.greet               # returns 'hello Ada'
+boru> "Ada" utils.greet               # returns 'hello Ada'
 ```
 
 Import from a file (path must start with `./`, `../`, or `/`):
 
 ```
-aql> import "./lib/utils.aql"
+boru> import "./lib/utils.boru"
 ```
 
-Built-in native modules are imported as quoted `aql:` ids; each one
+Built-in native modules are imported as quoted `boru:` ids; each one
 binds a single capital-initial namespace. The rule of thumb: a
 `-util` id binds the matching `NameUtil` namespace; capability and
 framework modules keep plain names:
 
 | Import id | Namespace | | Import id | Namespace |
 |-----------|-----------|-|-----------|-----------|
-| `aql:math-util` | `MathUtil` | | `aql:io` | `IO` |
-| `aql:array-util` | `ArrayUtil` | | `aql:net` | `Net` |
-| `aql:string-util` | `StringUtil` | | `aql:test` | `Test`, `Assert` |
-| `aql:struct-util` | `StructUtil` | | `aql:rand` | `Rand` |
-| `aql:time-util` | `TimeUtil` | | `aql:query` | `Query` |
-| `aql:type-util` | `TypeUtil` | | `aql:report` | `Report` |
-| `aql:matrix-util` | `MatrixUtil` | | `aql:vm` | `Vm` |
-| `aql:bin-util` | `BinUtil` | | `aql:logic-util` | `LogicUtil` |
+| `boru:math-util` | `MathUtil` | | `boru:io` | `IO` |
+| `boru:array-util` | `ArrayUtil` | | `boru:net` | `Net` |
+| `boru:string-util` | `StringUtil` | | `boru:test` | `Test`, `Assert` |
+| `boru:struct-util` | `StructUtil` | | `boru:rand` | `Rand` |
+| `boru:time-util` | `TimeUtil` | | `boru:query` | `Query` |
+| `boru:type-util` | `TypeUtil` | | `boru:report` | `Report` |
+| `boru:matrix-util` | `MatrixUtil` | | `boru:vm` | `Vm` |
+| `boru:bin-util` | `BinUtil` | | `boru:logic-util` | `LogicUtil` |
 
 (The full per-module word lists are in
 **[Reference: Built-in modules](REFERENCE.md#built-in-modules)**.)
 
 ```
-aql> import "aql:math-util"
-aql> MathUtil.log 5                      # returns 1.6094379124341003
+boru> import "boru:math-util"
+boru> MathUtil.log 5                      # returns 1.6094379124341003
 ```
 
 The trailing `end` is needed only when the token after `import`
@@ -797,12 +797,12 @@ The trailing `end` is needed only when the token after `import`
 list), so `import` takes its path and stops with no `end`:
 
 ```
-aql> import "aql:math-util"
-aql> 5 MathUtil.log                      # returns 1.6094379124341003
+boru> import "boru:math-util"
+boru> 5 MathUtil.log                      # returns 1.6094379124341003
 ```
 
 But a word (`MathUtil.…`) or a string right after `import` *would* be
-collected — `import "aql:math-util" "foo" print` needs the `end`,
+collected — `import "boru:math-util" "foo" print` needs the `end`,
 or `import` would try to load `"foo"`. Note that in a script file a
 line break does **not** stop collection (the REPL evaluates line by
 line, a file is one program) — so in files, the robust habit is
@@ -811,8 +811,8 @@ line, a file is one program) — so in files, the robust habit is
 
 ## 21. Manage secrets with the vault
 
-`aql` ships a local secrets vault for third-party API keys and tokens.
-This walkthrough creates a vault — under `~/.aql` or a folder you
+`boru` ships a local secrets vault for third-party API keys and tokens.
+This walkthrough creates a vault — under `~/.boru` or a folder you
 choose — adds keys by typing or pasting them, tags them with optional
 expiry reminders, moves the vault to another machine, and injects the
 secrets into other programs — all without a secret, a passphrase, or a
@@ -822,18 +822,18 @@ is a no-echo prompt.
 
 Two passphrases appear: the **vault passphrase** unlocks the local
 keyring, and a separate **export passphrase** protects a bundle in
-transit. Both are always prompted; the `AQL_VAULT_PASSPHRASE` /
-`AQL_VAULT_EXPORT_PASSPHRASE` environment variables exist only for
+transit. Both are always prompted; the `BORU_VAULT_PASSPHRASE` /
+`BORU_VAULT_EXPORT_PASSPHRASE` environment variables exist only for
 non-interactive use (services, CI) and are intentionally avoided here.
 
 ### Create the vault
 
-The `file` backend stores everything under `~/.aql`, which is what
+The `file` backend stores everything under `~/.boru`, which is what
 makes a vault portable. The passphrase is typed, confirmed, and may
 not be empty.
 
 ```bash
-aql vault init --backend=file
+boru vault init --backend=file
 #   Set vault passphrase:        (hidden)
 #   Confirm passphrase:          (hidden)
 ```
@@ -844,7 +844,7 @@ with `--folder`, and give its files an inner suffix with `--suffix`
 side by side in one folder:
 
 ```bash
-aql vault --folder=./team-vault --suffix=work init --backend=file
+boru vault --folder=./team-vault --suffix=work init --backend=file
 #   Set vault passphrase:        (hidden)
 #   Confirm passphrase:          (hidden)
 #   vault initialized: backend=file store=team-vault/vault.work.jsonic
@@ -852,10 +852,10 @@ aql vault --folder=./team-vault --suffix=work init --backend=file
 
 The `--folder`/`--suffix` flags are global, so they go *before* the
 mode, and they describe *where the vault is* — pass the same pair to
-every command that touches it (or export `AQL_VAULT_FOLDER` /
-`AQL_VAULT_SUFFIX` for the session). A flag wins over the matching
+every command that touches it (or export `BORU_VAULT_FOLDER` /
+`BORU_VAULT_SUFFIX` for the session). A flag wins over the matching
 environment variable. The rest of this walkthrough uses the default
-`~/.aql` vault.
+`~/.boru` vault.
 
 ### Add keys — paste or type
 
@@ -863,7 +863,7 @@ Paste a token you just copied from a SaaS console. The value is read
 straight from the OS clipboard and the clipboard is wiped afterwards:
 
 ```bash
-aql vault add --from-clipboard --provider=github github_token
+boru vault add --from-clipboard --provider=github github_token
 #   Vault passphrase:            (hidden)
 #   stored github_token (backend=file, 40 bytes)
 #   clipboard cleared (pbpaste/pbcopy)
@@ -877,7 +877,7 @@ when the key should be rotated (a date, an RFC3339 timestamp, or a
 duration from now like `90d` or `720h`):
 
 ```bash
-aql vault add --provider=openai --expiry=2026-12-31 openai_key
+boru vault add --provider=openai --expiry=2026-12-31 openai_key
 #   Secret value:                (hidden)
 #   Vault passphrase:            (hidden)
 #   stored openai_key (backend=file, 51 bytes)
@@ -885,23 +885,23 @@ aql vault add --provider=openai --expiry=2026-12-31 openai_key
 ```
 
 Namespacing lets two projects share a key name: a `ns:` prefix becomes
-part of the stored name. (`aql vault config --set namespace.default=proj`
+part of the stored name. (`boru vault config --set namespace.default=proj`
 then makes bare names resolve into `proj` automatically.)
 
 ```bash
-aql vault add --from-clipboard proj:deploy_key
+boru vault add --from-clipboard proj:deploy_key
 ```
 
 Inspect what's stored — names and metadata only, never values. The
 listing includes an `EXPIRES` column (a dash when no expiry is set):
 
 ```bash
-aql vault list
-aql vault get github_token            # redacted; add --reveal to spot-check
+boru vault list
+boru vault get github_token            # redacted; add --reveal to spot-check
 ```
 
 > The secret is never a command-line argument, so don't write
-> `aql vault add github_token 'ghp_...'` — that would leak it to your
+> `boru vault add github_token 'ghp_...'` — that would leak it to your
 > shell history. Use `--from-clipboard`, the prompt, or (for scripts)
 > `--from-stdin`.
 
@@ -913,8 +913,8 @@ any time without touching the secret, and clear it when the key is
 rotated:
 
 ```bash
-aql vault expiry set github_token 90d     # also accepts a date or RFC3339 stamp
-aql vault expiry clear github_token       # drop the reminder
+boru vault expiry set github_token 90d     # also accepts a date or RFC3339 stamp
+boru vault expiry clear github_token       # drop the reminder
 ```
 
 Review what's pending with `vault expiry`. It lists only keys that carry
@@ -922,15 +922,15 @@ an expiry, soonest (and most overdue) first, with a human status; narrow
 it by namespace or to a due-soon window:
 
 ```bash
-aql vault expiry
+boru vault expiry
 #   ALIAS                    NAMESPACE        EXPIRES               STATUS
 #   openai_key               (root)           2026-12-31T00:00:00Z  in 203d
 
-aql vault expiry --within=30d             # only keys due within 30 days (or overdue)
-aql vault expiry --namespace=proj         # only the proj namespace (':' = root)
+boru vault expiry --within=30d             # only keys due within 30 days (or overdue)
+boru vault expiry --namespace=proj         # only the proj namespace (':' = root)
 ```
 
-You can also pin an expiry while rotating a key — `aql vault rotate
+You can also pin an expiry while rotating a key — `boru vault rotate
 --expiry=90d openai_key` — and a rotation without `--expiry` keeps the
 existing reminder.
 
@@ -940,14 +940,14 @@ existing reminder.
 passphrase, independent of the host keystore, into one file:
 
 ```bash
-aql vault export --out=vault.aqlx
+boru vault export --out=vault.borux
 #   Vault passphrase:            (hidden)   # unlock the source vault
 #   Set export passphrase:       (hidden)   # protects the bundle in transit
 #   Confirm export passphrase:   (hidden)
-#   exported 3 secret(s) to vault.aqlx
+#   exported 3 secret(s) to vault.borux
 ```
 
-Copy `vault.aqlx` to the other machine by any means (scp, USB, …).
+Copy `vault.borux` to the other machine by any means (scp, USB, …).
 
 ### Import on a different machine
 
@@ -957,11 +957,11 @@ passphrase has to match what you set above. `import` auto-detects a
 bundle versus a `.env` file.
 
 ```bash
-aql vault init --backend=file
+boru vault init --backend=file
 #   Set vault passphrase:        (hidden)
 #   Confirm passphrase:          (hidden)
 
-aql vault import vault.aqlx
+boru vault import vault.borux
 #   Export passphrase:           (hidden)   # the bundle passphrase from export
 #   Vault passphrase:            (hidden)   # this machine's vault passphrase
 #   imported github_token
@@ -969,7 +969,7 @@ aql vault import vault.aqlx
 #   imported proj:deploy_key
 #   imported 3 secret(s)
 
-aql vault list                            # confirm the keys arrived
+boru vault list                            # confirm the keys arrived
 ```
 
 The destination vault can also live wherever you like. Supply the same
@@ -977,13 +977,13 @@ The destination vault can also live wherever you like. Supply the same
 that one vault throughout:
 
 ```bash
-aql vault --folder=/srv/vault --suffix=prod init --backend=file
-aql vault --folder=/srv/vault --suffix=prod import vault.aqlx
-aql vault --folder=/srv/vault --suffix=prod list
+boru vault --folder=/srv/vault --suffix=prod init --backend=file
+boru vault --folder=/srv/vault --suffix=prod import vault.borux
+boru vault --folder=/srv/vault --suffix=prod list
 ```
 
 Existing aliases are skipped unless you pass `--overwrite`. Once
-imported, securely delete the transit file (`shred -u vault.aqlx`).
+imported, securely delete the transit file (`shred -u vault.borux`).
 Expiry reminders are local to a vault and aren't carried in the bundle,
 so re-set them on the destination (`vault expiry set …`) if you want
 them there too.
@@ -996,28 +996,28 @@ never logged — and propagates the child's exit code.
 
 ```bash
 # alias `github_token` becomes $github_token in the child process:
-aql vault exec github_token -- gh repo list
+boru vault exec github_token -- gh repo list
 #   Vault passphrase:            (hidden)
 
 # Remap to the env-var name a tool expects:
-aql vault exec github_token=GITHUB_TOKEN -- gh auth status
+boru vault exec github_token=GITHUB_TOKEN -- gh auth status
 
 # Inject several at once; --upper derives UPPERCASE names:
-aql vault exec --upper github_token,openai_key -- ./deploy.sh
+boru vault exec --upper github_token,openai_key -- ./deploy.sh
 #   → $GITHUB_TOKEN and $OPENAI_KEY in the child
 
 # A namespaced alias surfaces under its base name ($deploy_key):
-aql vault exec proj:deploy_key -- terraform apply
+boru vault exec proj:deploy_key -- terraform apply
 
 # --clear-env runs in a sanitized environment (keeps only
 # PATH/HOME/USER/SHELL/TERM/LANG/LC_ALL/TMPDIR plus the injected keys):
-aql vault exec --clear-env openai_key=OPENAI_API_KEY -- ./untrusted-tool
+boru vault exec --clear-env openai_key=OPENAI_API_KEY -- ./untrusted-tool
 ```
 
 To run many commands without retyping the vault passphrase each time,
-start the loopback broker (`aql vault proxy`) and hand tools scoped,
+start the loopback broker (`boru vault proxy`) and hand tools scoped,
 expiring capability tokens instead of the secrets themselves — see the
-**[CLI Reference](CLI.md#aql-vault)** for the proxy, capabilities,
+**[CLI Reference](CLI.md#boru-vault)** for the proxy, capabilities,
 `vault mv`, and `vault verify`.
 
 ### Publish with a recipe
@@ -1027,7 +1027,7 @@ Package publishers each read their token from a different place. A
 tool expects — no `~/.npmrc` edit, nothing on the command line:
 
 ```bash
-aql vault exec --for=npm npm_token -- npm publish
+boru vault exec --for=npm npm_token -- npm publish
 ```
 
 `--for` is repeatable, and each entry can name its own secret, so one
@@ -1035,7 +1035,7 @@ command can credential several tools at once — publish to npm *and*
 push a GitHub release tag, each from its own secret:
 
 ```bash
-aql vault exec --for=npm=npm_token --for=github=gh_pat -- make publish
+boru vault exec --for=npm=npm_token --for=github=gh_pat -- make publish
 ```
 
 ### Scan for leaked secrets
@@ -1044,61 +1044,61 @@ aql vault exec --for=npm=npm_token --for=github=gh_pat -- make publish
 `--home`, into the credential dotfiles tools leave lying around:
 
 ```bash
-aql vault scan .          # secret-like tokens in this directory tree
-aql vault scan --home     # plaintext creds in ~/.npmrc, ~/.netrc, ~/.aws/credentials, …
+boru vault scan .          # secret-like tokens in this directory tree
+boru vault scan --home     # plaintext creds in ~/.npmrc, ~/.netrc, ~/.aws/credentials, …
 ```
 
 It masks every value and exits non-zero when it finds something, so it
 drops straight into a pre-commit hook or CI. Move a finding into the
 vault, then delete the plaintext.
 
-Prefer a menu to flags? `aql vault -i` opens an interactive TUI over
+Prefer a menu to flags? `boru vault -i` opens an interactive TUI over
 everything above.
 
 
 ## 22. Build and publish a module
 
-A reusable AQL module is a directory with an `aql.jsonic` manifest. The
+A reusable boru module is a directory with a `boru.jsonic` manifest. The
 build-and-publish path is a short pipeline:
 
 ```bash
-aql prep                 # parse aql.jsonic → .aql/aql.json
-aql pack                 # build a publishable zip under .aql/_pack/
-aql register             # one-time: create an account on a registry
-aql login                # authenticate; store the token (add --vault to keep it in the vault)
-aql publish              # pack + upload the current module
-aql clean                # remove .aql/* build artifacts
+boru prep                 # parse boru.jsonic → .boru/boru.json
+boru pack                 # build a publishable zip under .boru/_pack/
+boru register             # one-time: create an account on a registry
+boru login                # authenticate; store the token (add --vault to keep it in the vault)
+boru publish              # pack + upload the current module
+boru clean                # remove .boru/* build artifacts
 ```
 
 On another machine, pull a published module into a project and import
 it:
 
 ```bash
-aql install mymod-1.0.0  # download into .aql/ and record the dependency
+boru install mymod-1.0.0  # download into .boru/ and record the dependency
 ```
 
 The registry URL defaults to a local server; pass `-r <url>` to target
-another, and run your own with `aql registry -r ~/registry -p 8080`.
+another, and run your own with `boru registry -r ~/registry -p 8080`.
 
 
 ## 23. Where to next
 
 - **[How-To Guides](HOWTO.md)** — practical recipes by task.
 - **[Reference](REFERENCE.md)** — every word, every type.
-- **[Explanation](EXPLANATION.md)** — the design choices behind AQL.
-- **[CLI Reference](CLI.md)** — `aql do`, `aql check`, `aql fmt`,
-  `aql serve`, and the rest of the binary.
+- **[Explanation](EXPLANATION.md)** — the design choices behind boru.
+- **[CLI Reference](CLI.md)** — `boru do`, `boru check`, `boru fmt`,
+  `boru serve`, and the rest of the binary.
 
 Common next steps:
 
-* Run `aql help` for an in-REPL word list, then `aql help <word>`
+* Run `boru help` for an in-REPL word list, then `boru help <word>`
   for a specific signature.
-* Try `aql check script.aql` to type-check before running.
-* Run `aql fmt script.aql` to canonicalise indentation.
-* Build a small module, package it with `aql pack`, and publish it
-  with `aql publish`.
-* Serve AQL over HTTP or to an editor: `aql registry`, `aql exec`,
-  `aql lsp`, or several at once under `aql serve` — see
-  [How-To → Run AQL as a service](HOWTO.md#run-aql-as-a-service).
+* Try `boru check script.boru` to type-check before running.
+* Run `boru fmt script.boru` to canonicalise indentation.
+* Build a small module, package it with `boru pack`, and publish it
+  with `boru publish`.
+* Serve boru over HTTP or to an editor: `boru registry`, `boru exec`,
+  `boru lsp`, or several at once under `boru serve` — see
+  [How-To → Run boru as a service](HOWTO.md#run-boru-as-a-service).
 
-Welcome to AQL.
+Welcome to boru.

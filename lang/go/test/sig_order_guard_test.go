@@ -4,8 +4,8 @@
 // fix for the module-closure branch in execFnDefLiteral.
 //
 // Pre-refactor state:
-//   - AQL named-param fns dispatch top-first via matchSignature (PASS).
-//   - AQL unnamed-param fns dispatch top-first via matchSignature (PASS).
+//   - boru named-param fns dispatch top-first via matchSignature (PASS).
+//   - boru unnamed-param fns dispatch top-first via matchSignature (PASS).
 //   - Module wrappers with heterogeneous-type Params that mirror the
 //     inner native's Args (top-first) FAIL to dispatch because the
 //     module-closure branch in execFnDefLiteral re-matches via
@@ -19,9 +19,9 @@ package test
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 func setupRandReg(t *testing.T) *native.Registry {
@@ -48,10 +48,10 @@ func runSrc(t *testing.T, r *native.Registry, src string) ([]native.Value, error
 	return e.Run(vals)
 }
 
-// TestSigOrder_NamedAqlFn_TopFirst pins the current behavior: an AQL
+// TestSigOrder_NamedBoruFn_TopFirst pins the current behavior: a boru
 // fn with named heterogeneous params binds the FIRST source param to
 // the TOP of the outer stack. Must pass before AND after the refactor.
-func TestSigOrder_NamedAqlFn_TopFirst(t *testing.T) {
+func TestSigOrder_NamedBoruFn_TopFirst(t *testing.T) {
 	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -76,10 +76,10 @@ func TestSigOrder_NamedAqlFn_TopFirst(t *testing.T) {
 	}
 }
 
-// TestSigOrder_NamedAqlFn_RejectsBottomFirst confirms the inverse: a
+// TestSigOrder_NamedBoruFn_RejectsBottomFirst confirms the inverse: a
 // call that would only succeed under bottom-first matching is
 // correctly rejected. Same invariant — must hold pre and post.
-func TestSigOrder_NamedAqlFn_RejectsBottomFirst(t *testing.T) {
+func TestSigOrder_NamedBoruFn_RejectsBottomFirst(t *testing.T) {
 	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)
@@ -93,10 +93,10 @@ func TestSigOrder_NamedAqlFn_RejectsBottomFirst(t *testing.T) {
 	}
 }
 
-// TestSigOrder_UnnamedAqlFn_TopFirst pins unnamed-param AQL fns are
+// TestSigOrder_UnnamedBoruFn_TopFirst pins unnamed-param boru fns are
 // also top-first via matchSignature on the compiled Signatures. args.0
 // references the i-th sig position counted from the stack top.
-func TestSigOrder_UnnamedAqlFn_TopFirst(t *testing.T) {
+func TestSigOrder_UnnamedBoruFn_TopFirst(t *testing.T) {
 	r, err := native.DefaultRegistry()
 	if err != nil {
 		t.Fatal(err)

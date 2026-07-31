@@ -6,9 +6,9 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // Direct unit coverage for net_codec.go's package-level pieces: the
@@ -124,18 +124,18 @@ func TestInvokeFnDirectArms(t *testing.T) {
 	}
 }
 
-func TestInvokeFnAQLArms(t *testing.T) {
-	// An AQL-authored codec function whose body fails at run time.
+func TestInvokeFnBoruArms(t *testing.T) {
+	// A boru-authored codec function whose body fails at run time.
 	reg, vals, err := runNetStepsReg(t, []string{`([b:Any] => [zzz-undefined-codec-word])`})
 	if err != nil {
 		t.Fatalf("build failing lambda: %v", err)
 	}
 	fn := vals[len(vals)-1]
 	if _, iErr := invokeFn(reg, fn, native.NewInteger(1)); iErr == nil {
-		t.Error("failing AQL codec body must surface its error")
+		t.Error("failing boru codec body must surface its error")
 	}
 
-	// An AQL-authored codec function producing no values yields None.
+	// A boru-authored codec function producing no values yields None.
 	reg2, vals2, err := runNetStepsReg(t, []string{`([b:Any] => [b drop])`})
 	if err != nil {
 		t.Fatalf("build empty lambda: %v", err)
@@ -143,10 +143,10 @@ func TestInvokeFnAQLArms(t *testing.T) {
 	fn2 := vals2[len(vals2)-1]
 	res, iErr := invokeFn(reg2, fn2, native.NewInteger(1))
 	if iErr != nil {
-		t.Fatalf("empty AQL codec body: %v", iErr)
+		t.Fatalf("empty boru codec body: %v", iErr)
 	}
 	if native.IsConcrete(res) || res.String() != "None" {
-		t.Errorf("empty AQL codec body must yield None, got %v", res)
+		t.Errorf("empty boru codec body must yield None, got %v", res)
 	}
 }
 

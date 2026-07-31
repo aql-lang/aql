@@ -26,7 +26,7 @@
 #		
 # Type lattice		
 # ------------		
-# AQL has two concrete numeric types under the same Number root:		
+# boru has two concrete numeric types under the same Number root:		
 #		
 #   Scalar/Number/Integer  — written as digits with optional leading minus		
 #   Scalar/Number/Float  — written with a decimal point		
@@ -166,7 +166,7 @@ negq 0.0	-0.0	Float zero → -0.0 (IEEE sign flip; +0.0 and -0.0 are distinct bi
 		
 # ---------- 5. The 0.1 + 0.2 float artefact ----------		
 # IEEE 754 binary float cannot represent 0.1 or 0.2 exactly. Their		
-# sum is 0.30000000000000004, never 0.3. aqleng preserves this		
+# sum is 0.30000000000000004, never 0.3. borueng preserves this		
 # verbatim — no display rounding, no silent truncation. See		
 # SPEC_REPORT.md §2 for the exact-decimal-port plan that would		
 # change this row.		

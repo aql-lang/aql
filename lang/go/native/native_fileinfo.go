@@ -6,7 +6,7 @@ import (
 )
 
 // fileInfoNatives registers the source-location words __folder and __file.
-// They report the location of the AQL source FILE in which they appear:
+// They report the location of the boru source FILE in which they appear:
 //
 //   - __folder → the absolute directory Path of the current file.
 //   - __file   → the base filename String of the current file.

@@ -1,12 +1,12 @@
 # The `Bytes` type — a first-class binary leaf + bit-syntax
 
 > **Status: design proposal, not implemented.** This note specifies a new
-> AQL value type, `Bytes`, the foundation for all binary-adjacent
+> boru value type, `Bytes`, the foundation for all binary-adjacent
 > functionality, together with its **storage & memory model** (§4) and the
 > **`make`/`unpack` bit-syntax** (§7) that binary wire protocols are written
 > against. The heavier binary words (cryptographic hashes, HMAC,
 > CRC, base/hex encodings, secure random, UUIDs) live in the expanded
-> `aql:bin-util` module — see [BIN-UTIL.10.md](BIN-UTIL.10.md). The type, its
+> `boru:bin-util` module — see [BIN-UTIL.10.md](BIN-UTIL.10.md). The type, its
 > literal, its interop overloads, and the bit-syntax are **core** (no import).
 > Read [README.10.md](README.10.md) for the shared conventions.
 >
@@ -22,9 +22,9 @@
 > `typeof p → Header`), `convert Bytes <inst>` serialises the instance to wire
 > `Bytes`, and `unpack` / `unpack-prefix` decode wire `Bytes` back into an
 > instance (§7) — there is no `make Bytes [spec]` data-vs-spec overload and no
-> `bytes` word; crypto/encoding/hash/uuid stay in `aql:bin-util`; (3) hex/binary
+> `bytes` word; crypto/encoding/hash/uuid stay in `boru:bin-util`; (3) hex/binary
 > byte constants are the **`+hb/…/` and `+bb/…/` minilang kinds**
-> (`import "aql:minilang"`), **not** a core lexer literal — there is no `0x"…"`
+> (`import "boru:minilang"`), **not** a core lexer literal — there is no `0x"…"`
 > or `b"…"` form (see §6); (4) the memory model is **zero-copy share +
 > copy-on-ingest** (this supersedes the earlier `DeepCloner` decision — see §4).
 > The layout-as-type and no-secondary-parsing decisions are recorded in
@@ -36,7 +36,7 @@
 
 ## 1. Why a type (not List[Integer] or String)
 
-AQL has no binary representation today: file reads degrade to `String`
+boru has no binary representation today: file reads degrade to `String`
 (UTF-8), and `eng.FromNative`/`ToNative` (`eng/go/gobridge.go`) have **no
 `[]byte` case** — a Go byte slice falls through to a best-effort
 `fmt.Sprintf` string. Every binary operation (hashing, base64/hex, HMAC, CRC,
@@ -54,7 +54,7 @@ The two cheaper models were rejected:
 - **`String`** — composes with file reads but is lossy for non-UTF-8 data and
   conflates text with bytes.
 
-A real `Bytes` leaf makes binary **first-class and aql-native**: `x is Bytes`
+A real `Bytes` leaf makes binary **first-class and boru-native**: `x is Bytes`
 works, values render as hex, comparison is byte-lexicographic, `[]byte`
 round-trips through the Go bridge unchanged, and — because the backing slice is
 never mutated in place (§4) — a `Bytes` is **shared zero-copy** across forks,
@@ -133,7 +133,7 @@ a `Bytes` is **shared by reference on clone** and pays nothing:
 
 ### 4.2 Copy-on-ingest at trust boundaries
 
-The one place a defensive copy is mandatory is where a `[]byte` enters AQL from
+The one place a defensive copy is mandatory is where a `[]byte` enters boru from
 code that may still mutate it:
 
 - **`eng.FromNative([]byte)`** copies the incoming slice before wrapping it. A
@@ -181,7 +181,7 @@ carries Go's standard slice-retention caveat:
 core words). A `Bytes` overload is a more-specific signature that wins dispatch
 over the generic `[Scalar …]`/`[Any …]` form, so `convert`/`slice`/`add` "just
 work" on Bytes the way they already do on String/List/Number. Heavier binary
-operations (crypto, encodings, hashing, random, UUID) live in `aql:bin-util`
+operations (crypto, encodings, hashing, random, UUID) live in `boru:bin-util`
 (BIN-UTIL.10.md), each accepting `String | Bytes`.
 
 | operation | word | form |
@@ -225,12 +225,12 @@ reuses the class instance path — see §7 / §14.)
 ## 6. Hex / binary constants — the `+hb/…/` and `+bb/…/` minilang kinds
 
 Byte constants for protocol magic numbers and fixtures are written with two
-**`aql:minilang` kinds** rather than a bespoke core lexer literal: `hb` (hex
+**`boru:minilang` kinds** rather than a bespoke core lexer literal: `hb` (hex
 bytes) and `bb` (binary bytes), invoked through the standard `+name<delim>src<delim>`
 literal sugar:
 
-```aql
-import "aql:minilang"
+```boru
+import "boru:minilang"
 
 +hb/deadbeef/       # Bytes<de ad be ef>
 +hb/de ad be ef/    # Bytes<de ad be ef>   (whitespace/`_` group, ignored)
@@ -249,7 +249,7 @@ import "aql:minilang"
   forms are equivalent — see `lang/spec/module-minilang.tsv` §6.
 - **Why a minilang kind, not a `0x"…"` core literal.** Byte constants are an
   *occasional* need, dominated by the network/binary code that already imports
-  `aql:minilang` for its other DSLs; folding them into the existing
+  `boru:minilang` for its other DSLs; folding them into the existing
   `+name/src/` lexer sugar avoids a new core token and the `0x`-prefix
   disambiguation it would require (`0xff` stays the `Integer` 255 —
   `isBasePrefixedInteger`, `eng/go/parser/parse.go` — untouched). There is **no**
@@ -264,7 +264,7 @@ import "aql:minilang"
 ## 7. Frame types — `BinarySpec : Binary :: Class : Object`
 
 Erlang's bit syntax (`<<Len:16, Body:Len/binary>>`) is what makes binary code
-short *and* safe. AQL's equivalent reuses the **class/object** machinery
+short *and* safe. boru's equivalent reuses the **class/object** machinery
 wholesale, by the analogy **`BinarySpec : Binary :: Class : Object`**:
 
 - **`BinarySpec`** is the spec **kind** — the type-of-a-frame-type, exactly as
@@ -297,7 +297,7 @@ unpack Header wire                                           # → a Binary inst
 > `name:u16/be` raw and `strings.Split`/`strconv`-interpreted it; that second
 > grammar is removed). The seg-`type` is a plain String the codec enum-dispatches
 > on (data interpretation, not parsing); the whole layout is macro-constructable
-> and JSON-serialisable. It is also **not** an `aql:minilang` (`MINILANG.5.md`)
+> and JSON-serialisable. It is also **not** a `boru:minilang` (`MINILANG.5.md`)
 > kind — those take an opaque String `src`; this is structured data.
 
 > **Caveat — `is Class` leaks; `is BinarySpec`/`is Binary` not yet wired.**
@@ -409,13 +409,13 @@ resolves `len` with no scope dependency.
 
 ## 8. Usage examples
 
-Forward form. `import "aql:bin-util"` only where a crypto/encoding word appears,
-`import "aql:minilang"` where an `+hb/…/` / `+bb/…/` constant appears; the type
+Forward form. `import "boru:bin-util"` only where a crypto/encoding word appears,
+`import "boru:minilang"` where an `+hb/…/` / `+bb/…/` constant appears; the type
 and bit-syntax need no import.
 
-```aql
+```boru
 # hex/binary constants via the minilang kinds; 0xff (no quote) stays an Integer
-import "aql:minilang"
+import "boru:minilang"
 +hb/deadbeef/                              # Bytes<de ad be ef>
 +bb/01001100/                              # Bytes<4c>
 0xff                                       # 255
@@ -451,7 +451,7 @@ def drain fn [[buf:Bytes] [Never] [
 ]]
 
 # core ↔ bin-util handoff: hash a Bytes, render hex
-import "aql:bin-util"
+import "boru:bin-util"
 convert Bytes "hello"  BinUtil.sha256  BinUtil.hex-encode
   # "2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824"
 
@@ -499,7 +499,7 @@ BIN-UTIL.10.md, not on the type.)
   `convert Bytes` / `convert String` are the explicit, lossless bridge, where
   previously binary silently became a (possibly lossy) String at the I/O
   boundary.
-- **`aql:bin-util`** (BIN-UTIL.10.md) — owns crypto/HMAC/CRC/encodings/random/
+- **`boru:bin-util`** (BIN-UTIL.10.md) — owns crypto/HMAC/CRC/encodings/random/
   UUID; all consume/produce `Bytes`. §4.1 of that doc ("Bytes interop") now
   points here: those interop words are **core**, not module words.
 - **`NETWORK-SERVERS.0.md` / `NETWORK-CLIENTS.0.md`** — `recv-frame`,
@@ -513,7 +513,7 @@ BIN-UTIL.10.md, not on the type.)
 
 - **Binary file I/O** — an `IO.read-bytes` (and `IO.write` accepting `Bytes`)
   yielding/consuming `Bytes` instead of String is the natural follow-on, but
-  lives in `aql:io`; out of scope here. Cross-reference once Bytes lands.
+  lives in `boru:io`; out of scope here. Cross-reference once Bytes lands.
 - **Sub-byte endianness** — `bits(n)` for `n > 8` spanning bytes uses the
   segment's `/be`/`/le`; the exact bit-order for non-byte-multiple spans is
   pinned to big-endian-bit-order in the spec rows (Erlang's default). Confirm
@@ -534,7 +534,7 @@ Aligned with `NETWORK-SERVERS.0.md` §11 Phase A (the binary prerequisite):
   `convert`/`slice`/`add` Bytes overloads (§5). No literal, no bit-syntax.
   Independently useful (hashing, file I/O). **(landed)**
 - **Phase A2 — the `+hb/…/` / `+bb/…/` minilang kinds** (§6). Two generator
-  kinds registered in `aql:minilang`, reusing the existing `+name/src/` literal
+  kinds registered in `boru:minilang`, reusing the existing `+name/src/` literal
   sugar — no core lexer change. **(landed)**
 - **Phase A3 — frame types** (§7): the `BinarySpec` spec kind +
   `def Header (refine BinarySpec [layout])` building a sealed class, `make`

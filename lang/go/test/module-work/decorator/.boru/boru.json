@@ -1,0 +1,13 @@
+{
+  "deps": {
+    "formatter": "2.1.1"
+  },
+  "files": [
+    "decorator.boru"
+  ],
+  "main": "decorator.boru",
+  "major": 0,
+  "minor": 5,
+  "name": "decorator",
+  "patch": 3
+}

@@ -9,13 +9,13 @@ import (
 	"testing"
 	"time"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/capabilities"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/capabilities"
 )
 
 // Finding A / C — RunCompiled resolves a compiled-mode INTERNAL error (a VM
 // lowering assertion or a recovered handler panic) by re-running on the
-// interpreter, but surfaces genuine AQL runtime errors (type_error, the
+// interpreter, but surfaces genuine boru runtime errors (type_error, the
 // resource ceilings) as-is. runtimeShouldFallback is the decision point.
 func TestRuntimeShouldFallback(t *testing.T) {
 	cases := []struct {
@@ -23,12 +23,12 @@ func TestRuntimeShouldFallback(t *testing.T) {
 		err  error
 		want bool
 	}{
-		{"internal_error falls back", eng.MakeAqlError("internal_error", "boom", "", "", ""), true},
-		{"foreign (non-AQL) error falls back", errors.New("some go error"), true},
-		{"type_error surfaces", eng.MakeAqlError("type_error", "bad", "", "", ""), false},
-		{"evaluation_limit surfaces (fast-fail by design)", eng.MakeAqlError("evaluation_limit", "too long", "", "", ""), false},
-		{"tape_exhausted surfaces", eng.MakeAqlError("tape_exhausted", "too big", "", "", ""), false},
-		{"signature_error surfaces", eng.MakeAqlError("signature_error", "no sig", "", "", ""), false},
+		{"internal_error falls back", eng.MakeBoruError("internal_error", "boom", "", "", ""), true},
+		{"foreign (non-Boru) error falls back", errors.New("some go error"), true},
+		{"type_error surfaces", eng.MakeBoruError("type_error", "bad", "", "", ""), false},
+		{"evaluation_limit surfaces (fast-fail by design)", eng.MakeBoruError("evaluation_limit", "too long", "", "", ""), false},
+		{"tape_exhausted surfaces", eng.MakeBoruError("tape_exhausted", "too big", "", "", ""), false},
+		{"signature_error surfaces", eng.MakeBoruError("signature_error", "no sig", "", "", ""), false},
 	}
 	for _, c := range cases {
 		if got := runtimeShouldFallback(c.err); got != c.want {
@@ -47,7 +47,7 @@ func TestRunCompiledSurfacesGenuineError(t *testing.T) {
 	}
 	// An integer overflow is a genuine RUNTIME error the emitter still compiles
 	// (concrete args) and the VM raises. It must surface FROM THE COMPILED PATH
-	// (not be masked by a fallback) with the AQL taxonomy intact, matching the
+	// (not be masked by a fallback) with the boru taxonomy intact, matching the
 	// interpreter.
 	const src = `1000000 pow 1000000`
 	_, compiled, errC := a.RunCompiled(src)
@@ -62,12 +62,12 @@ func TestRunCompiledSurfacesGenuineError(t *testing.T) {
 }
 
 func codeOf(err error) string {
-	var ae *eng.AqlError
+	var ae *eng.BoruError
 	if errors.As(err, &ae) {
 		return ae.Code
 	}
 	if err != nil {
-		return "non-aql"
+		return "non-boru"
 	}
 	return ""
 }
@@ -109,7 +109,7 @@ func TestLoopFixedPointNoReRecord(t *testing.T) {
 // instead of refusing "operand shape needs reordering". `setpath recv k v`
 // with a computed receiver is the driving shape.
 func TestThreeArgComputedReceiverLowers(t *testing.T) {
-	const src = `import "aql:struct-util" (StructUtil.setpath (flex {a:1}) "b" 2) dot b`
+	const src = `import "boru:struct-util" (StructUtil.setpath (flex {a:1}) "b" 2) dot b`
 
 	a, err := New()
 	if err != nil {
@@ -376,9 +376,9 @@ func TestComputedArmConditions(t *testing.T) {
 // refused (the negative half).
 func TestBothComputedIfLowers(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	const src = `add 10 (if (1 eq 1) (add 1 2) (sub 9 4))`
 	a, err := New()
 	if err != nil {
@@ -706,9 +706,9 @@ func TestWordSpliceCompilesNative(t *testing.T) {
 // reducible compiler work, not irreducible reflection.
 func TestMacroexpandCompilesNative(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	for _, c := range []struct {
 		src  string
 		want string
@@ -1044,7 +1044,7 @@ func TestMapLambdaCompilesNative(t *testing.T) {
 	}
 }
 
-// query DSL (aql:query) — the SQL-style query words are trivial-delegation
+// query DSL (boru:query) — the SQL-style query words are trivial-delegation
 // module wrappers over inner natives. The clause words (select/where/order/
 // group/having/limit/offset/distinct/on/using) carry NoEvalArgs whose clause is
 // an inert word-list (`[name age]`, `[age gt 1]`) the compiler now bakes as a
@@ -1059,7 +1059,7 @@ func TestMapLambdaCompilesNative(t *testing.T) {
 // + exact compiled/interpreted parity (the compiler must not change behaviour),
 // not the lazy-query rendering itself.
 func TestQueryDSLCompilesNative(t *testing.T) {
-	const imp = `import "aql:query"  `
+	const imp = `import "boru:query"  `
 	for _, src := range []string{
 		imp + `Query.select [name age]`,
 		imp + `Query.where [age gt 1] (Query.select [name])`,
@@ -1143,8 +1143,8 @@ func TestReachLensCompilesNative(t *testing.T) {
 		{`def xs [10 20 30]  apply $.1 xs`, "[20]"},
 		{`def p {name:"ada"}  apply $!.name p`, "[ada]"},
 		{`def p {name:"ada"}  typeof (rebind $.name p)`, "[Reach]"},
-		{`import "aql:struct-util"  StructUtil.getpath $.a.b {a:{b:7}}`, "[7]"},
-		{`import "aql:struct-util"  StructUtil.setpath $.a.b 99 {a:{b:1} c:2}`, "[{a:{b:99} c:2}]"},
+		{`import "boru:struct-util"  StructUtil.getpath $.a.b {a:{b:7}}`, "[7]"},
+		{`import "boru:struct-util"  StructUtil.setpath $.a.b 99 {a:{b:1} c:2}`, "[{a:{b:99} c:2}]"},
 	} {
 		a, _ := New()
 		prog, reason, _, cerr := a.CompileCheck(c.src)
@@ -1301,12 +1301,12 @@ func TestModuleSyntheticConstFold(t *testing.T) {
 		src  string
 		want string
 	}{
-		{`import "aql:math-util"  MathUtil.$name`, "[MathUtil]"},
-		{`import "aql:math-util"  typeof MathUtil.$module`, "[Module]"},
-		{`import "aql:math-util"  MathUtil.$module is Module`, "[true]"},
-		{`import "aql:math-util"  MathUtil.$module.name`, "[aql:math-util]"},
-		{`import "aql:math-util"  MathUtil.$module.kind`, "[native]"},
-		{`import "aql:math-util"  MathUtil.$module.exports`, "[['MathUtil']]"},
+		{`import "boru:math-util"  MathUtil.$name`, "[MathUtil]"},
+		{`import "boru:math-util"  typeof MathUtil.$module`, "[Module]"},
+		{`import "boru:math-util"  MathUtil.$module is Module`, "[true]"},
+		{`import "boru:math-util"  MathUtil.$module.name`, "[boru:math-util]"},
+		{`import "boru:math-util"  MathUtil.$module.kind`, "[native]"},
+		{`import "boru:math-util"  MathUtil.$module.exports`, "[['MathUtil']]"},
 		// the VALUE, not the declared type Map/List (the convert-folding bug guard)
 		{`import module [export "Foo" {a:1 b:2}] convert Map Foo`, "[{a:1 b:2}]"},
 		{`import module [export "Foo" {a:1 b:2}] convert List Foo`, "[[1 2]]"},
@@ -1514,7 +1514,7 @@ func TestPRReviewFindings(t *testing.T) {
 	// re-running it concretely (twice), performing/doubling the side effect at
 	// compile time. The fold now declines an impure expression; a PURE container
 	// value still folds and compiles.
-	effOut := func(run func(*AQL, string)) string {
+	effOut := func(run func(*Boru, string)) string {
 		old := os.Stdout
 		r, w, _ := os.Pipe()
 		os.Stdout = w
@@ -1525,8 +1525,8 @@ func TestPRReviewFindings(t *testing.T) {
 		out, _ := io.ReadAll(r)
 		return string(out)
 	}
-	ci := effOut(func(a *AQL, s string) { a.Run(s) })
-	cc := effOut(func(a *AQL, s string) { a.RunCompiled(s) })
+	ci := effOut(func(a *Boru, s string) { a.Run(s) })
+	cc := effOut(func(a *Boru, s string) { a.RunCompiled(s) })
 	if ci != cc || ci != "x\n" {
 		t.Errorf("#2 effect parity: interp print=%q compiled print=%q (want %q once)", ci, cc, "x\n")
 	}
@@ -1548,7 +1548,7 @@ func TestPRReviewFindings(t *testing.T) {
 func TestHeterogeneousArityBinaryOpCompiles(t *testing.T) {
 	const src = `context set 'n' 5 end ( context get 'n' ) add3 ( context get 'n' ) add3 ( context get 'n' )`
 
-	mk := func() *AQL {
+	mk := func() *Boru {
 		a, err := New()
 		if err != nil {
 			t.Fatal(err)
@@ -1637,9 +1637,9 @@ func TestStepBudgetNoSpuriousLimit(t *testing.T) {
 // args by a stack OpCallDynamic. `(mk2 5) 10` -> 11.
 func TestFactoryApplyCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	const factory = `def mk2 fn [[x:Integer] [Function] [([x:Integer] => [x add 1])]] `
 
 	// POSITIVE — the factory result applied to an arg compiles natively to 11,
@@ -1691,7 +1691,7 @@ func TestFactoryApplyCompiles(t *testing.T) {
 	}
 }
 
-func mustNew(t *testing.T) *AQL {
+func mustNew(t *testing.T) *Boru {
 	t.Helper()
 	a, err := New()
 	if err != nil {
@@ -1817,9 +1817,9 @@ func TestIslandBurndownEmptyBodyAndCaseTrap(t *testing.T) {
 			t.Errorf("%s: fell back at run time", c.name)
 		}
 		_, errI := mustNew(t).Run(c.src)
-		var aeC, aeI *eng.AqlError
+		var aeC, aeI *eng.BoruError
 		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
-			t.Errorf("%s: expected AqlError from both engines, got c=%v i=%v", c.name, errC, errI)
+			t.Errorf("%s: expected BoruError from both engines, got c=%v i=%v", c.name, errC, errI)
 			continue
 		}
 		if aeC.Code != c.code || aeI.Code != c.code {
@@ -1878,7 +1878,7 @@ func TestCodequoteCompilesNative(t *testing.T) {
 	}
 }
 
-// Found via the voxgig-aql/decision project's diverge.sh (--force-compile over
+// Found via the voxgig-boru/decision project's diverge.sh (--force-compile over
 // suites that use `each [var [[v] … 0]]`). `var` is a block-with-locals (let)
 // word: its handler SPLICES def/body/undef tokens onto the tape for the engine
 // to re-step. RunInCheckMode lets the recorder FOLLOW that splice, so the inline
@@ -2020,13 +2020,13 @@ func TestTopTakingClosureTrim(t *testing.T) {
 // of a carrier renders its type tag ("dynamic(Any)"), which the interpreter
 // never produces, so baking it diverges. evalInterpString now returns a String
 // CARRIER and refuses recording for such a string, so the program falls back to
-// the interpreter and builds the real value. Found via voxgig-aql/decision
+// the interpreter and builds the real value. Found via voxgig-boru/decision
 // prop suites (`  pass: ${nm}` where nm = a get over the each-element carrier).
 func TestInterpStringRuntimePartCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	// nm is a field read over the each-element carrier → a runtime hole. It now
 	// lowers to OpInterp (the VM rebuilds the string from the popped hole at run
 	// time) rather than refusing the program. Compiled == interp, no carrier leak,
@@ -2225,7 +2225,7 @@ func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
 	// NEGATIVE: with the import present, a VALID kind must NOT trap — it compiles
 	// (or faithfully falls back) and produces the real value, never an
 	// *_unknown_lang error.
-	const ok = `import "aql:minilang"  ("AbcD" mini re '[a-z]+').fst.m`
+	const ok = `import "boru:minilang"  ("AbcD" mini re '[a-z]+').fst.m`
 	gotC, _, errC := mustNew(t).RunCompiled(ok)
 	gotI, errI := mustNew(t).Run(ok)
 	if errC != nil || errI != nil {
@@ -2243,10 +2243,10 @@ func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
 // keys) does not refuse the program — the trap truncates it.
 func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
-	const src = `import "aql:math-util"  MathUtil!.nope`
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
+	const src = `import "boru:math-util"  MathUtil!.nope`
 	prog, reason, _, cerr := mustNew(t).CompileCheck(src)
 	if cerr != nil {
 		t.Fatalf("%q: check error %v", src, cerr)
@@ -2268,7 +2268,7 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 
 	// NEGATIVE 1: a VALID getr export must NOT trap — it compiles and produces
 	// the real value, with compiled/interp parity.
-	const okGetr = `import "aql:math-util"  MathUtil!.sqrt 16.0`
+	const okGetr = `import "boru:math-util"  MathUtil!.sqrt 16.0`
 	if p, _, _, _ := mustNew(t).CompileCheck(okGetr); p != nil {
 		if dis := p.Disassemble(); strings.Contains(dis, "TRAP") {
 			t.Errorf("valid dotr must not trap:\n%s", dis)
@@ -2285,7 +2285,7 @@ func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
 
 	// NEGATIVE 2: `get` (not getr) of a MISSING key returns None, never traps —
 	// only getr raises not_found, so the get path stays on the shared ReturnsFn.
-	const okGet = `import "aql:math-util"  MathUtil.nope`
+	const okGet = `import "boru:math-util"  MathUtil.nope`
 	if _, _, eGet := mustNew(t).RunCompiled(okGet); eGet != nil {
 		t.Errorf("dot of a missing key must not error, got %v", eGet)
 	}
@@ -2457,7 +2457,7 @@ func TestUserCallResidualAboveLiteral(t *testing.T) {
 	// branch (zero-count `for` pruning over `subs: []` drops the unreachable
 	// recursive branch; see TestRunSpecHarnessCompiles). Whatever the tier, the
 	// compiled run must stay byte-identical to the interpreter — pin that parity.
-	const harness = `import "aql:test"  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
+	const harness = `import "boru:test"  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
 	gotC, _, errC := mustNew(t).RunCompiled(harness)
 	gotI, errI := mustNew(t).Run(harness)
 	if (errC == nil) != (errI == nil) || fmt.Sprint(gotC) != fmt.Sprint(gotI) {
@@ -2483,14 +2483,14 @@ func TestRunSpecHarnessCompiles(t *testing.T) {
 	//
 	// SOUNDNESS (always): compile == interpret. FALLBACK ALLOWED: since the
 	// fn-dispatch unification (all fns compile their body as a unit via execMatch,
-	// no separate inline CallAQL path), Test.run-spec no longer compiles NATIVELY —
+	// no separate inline CallBoru path), Test.run-spec no longer compiles NATIVELY —
 	// the recursive code-body word `test-describe` (run-spec → test-describe →
 	// run-spec) hits the recursive-closure-compilation limit the inline path used to
 	// mask via data-driven recursion termination. So run-spec falls back to the
 	// interpreter (sound). Restoring native compilation is the
 	// recursive-code-body-closure follow-up (design/MODULE-FN-PARAM-SLOT-COMPILATION.0.md
 	// §8); until then this asserts the soundness invariant, not native coverage.
-	const harness = `"aql:test" import end  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
+	const harness = `"boru:test" import end  def double fn [[n:Integer] [Integer] [n 2 mul]] end def s {name: "doubling" subject: double/q cases: [{name: "d3" in: [3] out: 6} {name: "d0" in: [0] out: 0}] subs: []} end s Test.run-spec end Test.summary`
 	gotC, _, errC := mustNew(t).RunCompiled(harness) // fallback allowed
 	gotI, errI := mustNew(t).Run(harness)
 	if errC != nil || errI != nil {
@@ -2708,7 +2708,7 @@ func TestZeroOutputDynamicPolyCompiles(t *testing.T) {
 // faithful — verified by the differential corpus, which compares the post-
 // mutation observable result.
 func TestSetOverDynamicReceiverPolyCompiles(t *testing.T) {
-	const imp = `import "aql:io"  `
+	const imp = `import "boru:io"  `
 	cases := []struct{ src, want string }{
 		// 0-output Store mutation over a dynamic context receiver, then a read of
 		// the mutated context through IO.write / IO.read.
@@ -2794,7 +2794,7 @@ func TestSetOverDynamicReceiverConsumedCompiles(t *testing.T) {
 // OpCallDynamic — callDynamic applies sqrt on the else path (→ 4.0) and leaves
 // [99 16] on the then path. One compiled program is faithful on both branches.
 func TestConditionalBranchApplyCompiles(t *testing.T) {
-	const imp = `import "aql:math-util" `
+	const imp = `import "boru:math-util" `
 	cases := []struct{ src, want string }{
 		{imp + `def n 5 if (n eq 0) [99] MathUtil.sqrt 16`, "[4.0]"},          // else: sqrt 16 → 4.0
 		{imp + `def n 0 if (n eq 0) [99] MathUtil.sqrt 16`, "[99 16]"},        // then: 99, 16 stays
@@ -2862,11 +2862,11 @@ func TestConditionalBranchApplyCompiles(t *testing.T) {
 func TestSubRegistryPolyCompiles(t *testing.T) {
 	cases := []struct{ src, want string }{
 		// Dynamic input (the setpath result) into getpath — the poly row.
-		{`import "aql:struct-util"  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[7]"},
+		{`import "boru:struct-util"  StructUtil.getpath $.a.b (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[7]"},
 		// Static-input baseline still compiles (a plain baked CALL_NATIVE).
-		{`import "aql:struct-util"  StructUtil.getpath $.a.b {a:{b:1}}`, "[1]"},
+		{`import "boru:struct-util"  StructUtil.getpath $.a.b {a:{b:1}}`, "[1]"},
 		// A dynamic miss returns None — the re-match picks the same overload.
-		{`import "aql:struct-util"  StructUtil.getpath $.a.z (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[None]"},
+		{`import "boru:struct-util"  StructUtil.getpath $.a.z (StructUtil.setpath $.a.b 7 {a:{b:1}})`, "[None]"},
 	}
 	for _, c := range cases {
 		prog, reason, _, cerr := mustNew(t).CompileCheck(c.src)
@@ -3074,9 +3074,9 @@ func TestStageAVariadicBranchResult(t *testing.T) {
 // (internal_error vs the interpreter's signature_error for f 0).
 func TestStageAVariadicSoundnessGate(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	mustRefuse := []string{
 		// A 0-or-1 variadic fn result consumed by add.
 		`def f fn [[n:Integer] [] [if (n lte 0) [] [n mul 2]]]  f 3 add 1`,
@@ -3124,9 +3124,9 @@ func TestStageAVariadicSoundnessGate(t *testing.T) {
 // interpreter.
 func TestReturnedCapturingClosureApply(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	positive := []struct {
 		src  string
 		want string
@@ -3176,14 +3176,14 @@ func TestReturnedCapturingClosureApply(t *testing.T) {
 }
 
 // TestParseLangFnValueDispatchCompiles pins body-bearing fn-VALUE dispatch
-// for a def-bound AQL parser (module-parselang:23): the bound parser fn,
+// for a def-bound boru parser (module-parselang:23): the bound parser fn,
 // called with args — directly or through the `parse` sugar — lowers to a
 // CALL_USER unit (its `__pa` tail captured INSIDE the unit) instead of
 // leaking `__pa` into the top-level residual. (The former sub-feature A,
 // check-time registration, died with the frozen kind namespace — the
 // negative below pins the tombstone's cross-engine parity instead.)
 func TestParseLangFnValueDispatchCompiles(t *testing.T) {
-	const reg = `"aql:parselang" import end  "aql:string-util" import end  ` +
+	const reg = `"boru:parselang" import end  "boru:string-util" import end  ` +
 		`def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  `
 
 	// POSITIVE: the desugared direct call (row 23) and the `parse` sugar
@@ -3224,7 +3224,7 @@ func TestParseLangFnValueDispatchCompiles(t *testing.T) {
 
 	// NEGATIVE: the registration surface is a TOMBSTONE — `ParseLang.register`
 	// raises parse_registry_frozen identically in BOTH engines.
-	dbl := `"aql:parselang" import end  ParseLang.register`
+	dbl := `"boru:parselang" import end  ParseLang.register`
 	_, _, eC := mustNew(t).RunCompiled(dbl)
 	_, eI := mustNew(t).Run(dbl)
 	if codeOf(eC) != "parse_registry_frozen" {
@@ -3237,7 +3237,7 @@ func TestParseLangFnValueDispatchCompiles(t *testing.T) {
 
 func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 	clk := capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)}
-	newClocked := func() *AQL {
+	newClocked := func() *Boru {
 		a := mustNew(t)
 		a.SetClock(clk)
 		return a
@@ -3247,7 +3247,7 @@ func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 	// is island-free, and is byte-identical to the interpreter across seeds.
 	for _, seed := range []int{0, 1, 2, 3, 7, 42, 99, 123} {
 		src := fmt.Sprintf(
-			`"aql:rand" import end  def r (Rand.with-seed %d)  r.list-of [Rand.int 0 10] 3`, seed)
+			`"boru:rand" import end  def r (Rand.with-seed %d)  r.list-of [Rand.int 0 10] 3`, seed)
 		prog, reason, _, cerr := newClocked().CompileCheck(src)
 		if cerr != nil {
 			t.Fatalf("seed %d: check error %v", seed, cerr)
@@ -3277,7 +3277,7 @@ func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 
 	// POSITIVE: the spec row's exact expected value at the spec clock+seed.
 	{
-		const src = `"aql:rand" import end  def r (Rand.with-seed 2)  r.list-of [Rand.int 0 10] 3`
+		const src = `"boru:rand" import end  def r (Rand.with-seed 2)  r.list-of [Rand.int 0 10] 3`
 		gotC, compiled, eC := newClocked().RunCompiled(src)
 		if !compiled || eC != nil {
 			t.Fatalf("row 38: compiled=%v err=%v", compiled, eC)
@@ -3299,7 +3299,7 @@ func TestRandCarrierReceiverClosureCompiles(t *testing.T) {
 	// below is the real correctness contract (byte-identical at every seed).
 	for _, seed := range []int{2, 5, 42} {
 		src := fmt.Sprintf(
-			`"aql:rand" import end  def r (Rand.with-seed %d)  r.list-of [r.int 0 10] 3`, seed)
+			`"boru:rand" import end  def r (Rand.with-seed %d)  r.list-of [r.int 0 10] 3`, seed)
 		prog, _, _, _ := newClocked().CompileCheck(src)
 		if prog != nil && strings.Contains(prog.Disassemble(), "PUSH_CLOSURE") &&
 			!strings.Contains(prog.Disassemble(), "CALL_DYNAMIC") &&
@@ -3596,9 +3596,9 @@ func TestFnBodyContainerLiteralIdentity(t *testing.T) {
 // collapse / per closure arity, which one OpCallDynamic cannot model.
 func TestFnValueAutoApplyRefusals(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	refusals := []struct{ name, src, want string }{
 		{"deferred-field dot auto-invoke", `def make42 fn [[] [Integer] [42]]  {f:make42/r}.f`, "auto-dispatches"},
 		{"paren get auto-invoke", `def make42 fn [[] [Integer] [42]]  def m {f:make42/r}  (m get f/q)`, "auto-dispatches"},
@@ -3666,9 +3666,9 @@ func TestFnValueAutoApplyRefusals(t *testing.T) {
 // ascend shape keeps its refusal (sound interpreter fallback).
 func TestWalkHookClosureCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	parity := []struct{ name, src, want string }{
 		{"tier-2 corpus row (empty-flex ascend consumed as 4th arg)",
 			`def acc (flex [])  walk {mode: "depth"} {a:1 b:[2 3]} (m:Any => [acc (m.path) append])  acc`,
@@ -3825,9 +3825,9 @@ func TestUnmatchedDispatchTrapCompiles(t *testing.T) {
 		}
 		// Byte-identical taxonomy: code (above) AND detail; position present
 		// whenever the interpreter's is (the full-corpus error lane's contract).
-		var aeC, aeI *eng.AqlError
+		var aeC, aeI *eng.BoruError
 		if !errors.As(errC, &aeC) || !errors.As(errI, &aeI) {
-			t.Fatalf("%s: non-AQL error: compiled=%v interp=%v", c.name, errC, errI)
+			t.Fatalf("%s: non-Boru error: compiled=%v interp=%v", c.name, errC, errI)
 		}
 		if aeC.Detail != aeI.Detail {
 			t.Errorf("%s: detail divergence:\n  compiled=%q\n  interp=%q", c.name, aeC.Detail, aeI.Detail)
@@ -3874,9 +3874,9 @@ func TestUnmatchedDispatchTrapPreservesPriorEffects(t *testing.T) {
 // dispatch whose runtime outcome can differ from the static one.
 func TestUnmatchedDispatchTrapNegatives(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	// (The former "carrier operand declines" negative — `5 inc apply` —
 	// became a POSITIVE with the Phase 6 M4 carrier-disjointness extension,
 	// and since OpDispatchRematch landed the whole single-carrier-window
@@ -4113,7 +4113,7 @@ func TestTypedDefBindCompiles(t *testing.T) {
 
 	// Validation failures raise the byte-identical error — the interpreter's
 	// defTypedHandler raises a PLAIN position-less error (fmt.Errorf; probe:
-	// stampErrPos only positions AqlErrors), so byte-identical INCLUDING
+	// stampErrPos only positions BoruErrors), so byte-identical INCLUDING
 	// position means the full rendered text matches exactly, with no position
 	// added by either engine. Asserted through RunCompiledStrict so the error
 	// provably comes from the VM's OpBindTyped, not from a silent interpreter
@@ -4168,9 +4168,9 @@ func TestTypedDefBindCompiles(t *testing.T) {
 // probe-confirmed divergences before the fix, both now sound refusals.
 func TestPR225P1Refusals(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	// (1) A fn-body literal EMBEDDING an enclosing binding's container:
 	// interp = fresh spine + SHARED member, which neither a deep-clone
 	// freshen nor a shared const models — must refuse; fallback restores
@@ -4227,9 +4227,9 @@ func TestPR225P1Refusals(t *testing.T) {
 // negative twins pin what must KEEP refusing.
 func TestFilterLambdaCaptureCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	parity := []struct{ name, src, want string }{
 		{"enclosing-fn param capture (list pair shape)",
 			`def f (fn [[y:Integer] [List] [ filter ([e:Any] => [ e.value gte y ]) [3 7 9] ]]) f 5`,

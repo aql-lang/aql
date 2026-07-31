@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/formatter"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/formatter"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// ruleMap builds an AQL map value from alternating key/value pairs.
+// ruleMap builds a boru map value from alternating key/value pairs.
 func ruleMap(pairs ...any) native.Value {
 	m := native.NewOrderedMap()
 	for i := 0; i < len(pairs); i += 2 {
@@ -25,7 +25,7 @@ func strList(ss ...string) native.Value {
 	return native.NewList(out)
 }
 
-// TestFmtRulesAuthorityRoundTrip is the authority pin: the AQL rendering of
+// TestFmtRulesAuthorityRoundTrip is the authority pin: the boru rendering of
 // the canonical rule table, read back through valueToRules, reproduces
 // Fmt.format byte-for-byte across representative shapes. The table IS the
 // formatter's configuration, not documentation of it.
@@ -111,7 +111,7 @@ func TestFmtRulesValueShape(t *testing.T) {
 
 // TestFormatWithOverrides drives Fmt.format-with through the handler for
 // each table dimension and checks it matches the equivalent Go-built Rules
-// — the AQL surface controls the same processor.
+// — the boru surface controls the same processor.
 func TestFormatWithOverrides(t *testing.T) {
 	run := func(rules native.Value, src string) string {
 		t.Helper()
@@ -254,7 +254,7 @@ func TestValueToRulesRejects(t *testing.T) {
 }
 
 // TestBuildFmtModuleStylesheetError pins the surfaced-at-construction
-// path: a recorded stylesheet init error (the embedded fmt-rules.aql
+// path: a recorded stylesheet init error (the embedded fmt-rules.boru
 // failing to parse — a build defect) makes BuildFmtModule refuse loudly
 // instead of formatting with a zero table. Uses the formatter's test seam
 // (SwapDefaultRulesErr), mirroring the native.TypeInitError pattern.

@@ -1,4 +1,4 @@
-// Stage-5 concurrency gate (design/aql-bytecode-plan.0.md §Stage 5:
+// Stage-5 concurrency gate (design/boru-bytecode-plan.0.md §Stage 5:
 // "Race detector (go test -race) over the concurrent spec rows in
 // compiled mode"). The concurrent words — await (parallel bodies),
 // timeout, interval, cancel — fork an isolated registry per branch
@@ -15,7 +15,7 @@ import (
 )
 
 func TestSpecCompiledConcurrentRowsRaceFree(t *testing.T) {
-	const tu = `import "aql:time-util" `
+	const tu = `import "boru:time-util" `
 	cases := []struct {
 		src  string
 		want string

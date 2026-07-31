@@ -13,7 +13,7 @@ func TestEngineConvert(t *testing.T) {
 	}
 	registerIOWords(r)
 	// 99 convert String
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(99), NewWord("convert"), NewWord("String"),
 	})
 	_as22, _ := AsString(result[0])
@@ -28,7 +28,7 @@ func TestEngineTypeof(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewWord("typeof"), NewInteger(42)})
+	result := runBoru(t, r, []Value{NewWord("typeof"), NewInteger(42)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -40,7 +40,7 @@ func TestEngineBase(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewWord("base"), NewTypeLiteral(TInteger)})
+	result := runBoru(t, r, []Value{NewWord("base"), NewTypeLiteral(TInteger)})
 	_as23, _ := AsInteger(result[0])
 	if len(result) != 1 || _as23 != 0 {
 		t.Errorf("base integer = %v, want 0", result)
@@ -55,7 +55,7 @@ func TestEngineDef(t *testing.T) {
 	registerIOWords(r)
 	// def inc [1 add] end 5 inc
 	body := NewList([]Value{NewInteger(1), NewWord("add")})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("inc"), NewWord("word"), body, NewEnd(),
 		NewInteger(5), NewWord("inc"),
 	})
@@ -134,7 +134,7 @@ func TestEngineUnify(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewInteger(1), NewTypeLiteral(TNumber), NewWord("unify")})
+	result := runBoru(t, r, []Value{NewInteger(1), NewTypeLiteral(TNumber), NewWord("unify")})
 	if len(result) != 2 {
 		t.Fatalf("expected 2 results, got %d", len(result))
 	}
@@ -151,7 +151,7 @@ func TestEngineDo(t *testing.T) {
 	}
 	registerIOWords(r)
 	list := NewList([]Value{NewInteger(1), NewWord("add"), NewInteger(2)})
-	result := runAQL(t, r, []Value{NewWord("do"), list})
+	result := runBoru(t, r, []Value{NewWord("do"), list})
 	_as27, _ := AsInteger(result[0])
 	if len(result) != 1 || _as27 != 3 {
 		t.Errorf("do [1 add 2] = %v, want 3", result)
@@ -166,7 +166,7 @@ func TestEngineDoMap(t *testing.T) {
 	registerIOWords(r)
 	m := NewOrderedMap()
 	m.Set("x", NewList([]Value{NewInteger(3), NewWord("add"), NewInteger(4)}))
-	result := runAQL(t, r, []Value{NewWord("do"), NewMap(m)})
+	result := runBoru(t, r, []Value{NewWord("do"), NewMap(m)})
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -178,7 +178,7 @@ func TestEngineOr(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("or"), NewBoolean(false)})
+	result := runBoru(t, r, []Value{NewBoolean(true), NewWord("or"), NewBoolean(false)})
 	_as28, _ := AsBoolean(result[0])
 	if len(result) != 1 || !_as28 {
 		t.Errorf("true or false = %v, want true", result)
@@ -191,7 +191,7 @@ func TestEngineAnd(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("and"), NewBoolean(false)})
+	result := runBoru(t, r, []Value{NewBoolean(true), NewWord("and"), NewBoolean(false)})
 	_as29, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as29 {
 		t.Errorf("true and false = %v, want false", result)
@@ -204,7 +204,7 @@ func TestEngineNot(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewBoolean(true), NewWord("not")})
+	result := runBoru(t, r, []Value{NewBoolean(true), NewWord("not")})
 	_as30, _ := AsBoolean(result[0])
 	if len(result) != 1 || _as30 {
 		t.Errorf("true not = %v, want false", result)
@@ -227,7 +227,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	octOpts.Set("base", NewString("oct"))
 
 	// 10 convert String {base:hex} → 'a'
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(10), NewWord("convert"), NewWord("String"), NewMap(hexOpts),
 	})
 	_as31, _ := AsString(result[0])
@@ -236,7 +236,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	}
 
 	// 255 convert String {base:HEX} → 'FF'
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewInteger(255), NewWord("convert"), NewWord("String"), NewMap(HEXOpts),
 	})
 	_as32, _ := AsString(result[0])
@@ -245,7 +245,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	}
 
 	// 10 convert String {base:bin} → '1010'
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewInteger(10), NewWord("convert"), NewWord("String"), NewMap(binOpts),
 	})
 	_as33, _ := AsString(result[0])
@@ -254,7 +254,7 @@ func TestEngineConvertStringVariants(t *testing.T) {
 	}
 
 	// 8 convert String {base:oct} → '10'
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewInteger(8), NewWord("convert"), NewWord("String"), NewMap(octOpts),
 	})
 	_as34, _ := AsString(result[0])
@@ -270,7 +270,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 	}
 	registerIOWords(r)
 	// "42" convert Number → 42
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewString("42"), NewWord("convert"), NewWord("Number"),
 	})
 	_as35, _ := AsInteger(result[0])
@@ -286,7 +286,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 	octOpts.Set("base", NewString("oct"))
 
 	// "ff" convert Number {base:hex} → 255
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewString("ff"), NewWord("convert"), NewWord("Number"), NewMap(hexOpts),
 	})
 	_as36, _ := AsInteger(result[0])
@@ -295,7 +295,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 	}
 
 	// "1010" convert Number {base:bin} → 10
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewString("1010"), NewWord("convert"), NewWord("Number"), NewMap(binOpts),
 	})
 	_as37, _ := AsInteger(result[0])
@@ -304,7 +304,7 @@ func TestEngineConvertToNumber(t *testing.T) {
 	}
 
 	// "10" convert Number {base:oct} → 8
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewString("10"), NewWord("convert"), NewWord("Number"), NewMap(octOpts),
 	})
 	_as38, _ := AsInteger(result[0])
@@ -320,7 +320,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	}
 	registerIOWords(r)
 	// 1 convert Boolean → true
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(1), NewWord("convert"), NewWord("Boolean"),
 	})
 	_as39, _ := AsBoolean(result[0])
@@ -329,7 +329,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	}
 
 	// 0 convert Boolean → false
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewInteger(0), NewWord("convert"), NewWord("Boolean"),
 	})
 	_as40, _ := AsBoolean(result[0])
@@ -338,7 +338,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	}
 
 	// "true" convert Boolean → true
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewString("true"), NewWord("convert"), NewWord("Boolean"),
 	})
 	_as41, _ := AsBoolean(result[0])
@@ -347,7 +347,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	}
 
 	// "" convert Boolean → false
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewString(""), NewWord("convert"), NewWord("Boolean"),
 	})
 	_as42, _ := AsBoolean(result[0])
@@ -356,7 +356,7 @@ func TestEngineConvertToBoolean(t *testing.T) {
 	}
 
 	// true convert Boolean → true (passthrough)
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewBoolean(true), NewWord("convert"), NewWord("Boolean"),
 	})
 	_as43, _ := AsBoolean(result[0])
@@ -385,7 +385,7 @@ func TestEngineBaseTypes(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			result := runAQL(t, r, []Value{NewWord("base"), NewTypeLiteral(tt.typeLit)})
+			result := runBoru(t, r, []Value{NewWord("base"), NewTypeLiteral(tt.typeLit)})
 			if len(result) != 1 || result[0].String() != tt.wantStr {
 				t.Errorf("base %s = %v, want %s", tt.name, result, tt.wantStr)
 			}
@@ -405,7 +405,7 @@ func TestEngineFn(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(7), NewWord("double"),
 	})
@@ -429,7 +429,7 @@ func TestEngineFnNamed(t *testing.T) {
 		NewList([]Value{NewWord("Number")}),
 		NewList([]Value{NewWord("x"), NewWord("mul"), NewWord("x")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("square"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("square"),
 	})
@@ -453,7 +453,7 @@ func TestEngineFnCatterPrefixOnly(t *testing.T) {
 		NewList([]Value{NewWord("add")}),
 	})
 	// All prefix: nearest→sig[0]=Integer, next→sig[1]=String
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewEnd(),
 		NewString("a"), NewInteger(1), NewWord("catter"),
 	})
@@ -475,7 +475,7 @@ func TestEngineFnCatterPartialForward(t *testing.T) {
 		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewEnd(),
 		NewWord("catter"), NewInteger(2), NewString("b"),
 	})
@@ -497,7 +497,7 @@ func TestEngineFnCatterFullForward(t *testing.T) {
 		NewList([]Value{NewWord("String")}),
 		NewList([]Value{NewWord("add")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("catter"), NewWord("fn"), fnBody, NewEnd(),
 		NewWord("catter"), NewInteger(3), NewString("c"),
 	})
@@ -533,7 +533,7 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 		tokens := append(append([]Value{}, defTokens...),
 			NewString("A"), NewString("B"), NewString("C"), NewWord("joiner"),
 		)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		_as46, _ := AsString(result[0])
 		if len(result) != 1 || _as46 != "CBA" {
 			t.Errorf(`"A" "B" "C" joiner = %v, want ["CBA"]`, result)
@@ -551,7 +551,7 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 		tokens := append(append([]Value{}, defTokens...),
 			NewString("A"), NewWord("joiner"), NewString("B"), NewString("C"),
 		)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		_as47, _ := AsString(result[0])
 		if len(result) != 1 || _as47 != "BCA" {
 			t.Errorf(`"A" joiner "B" "C" = %v, want ["BCA"]`, result)
@@ -569,7 +569,7 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 		tokens := append(append([]Value{}, defTokens...),
 			NewString("A"), NewString("B"), NewWord("joiner"), NewString("C"),
 		)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		_as48, _ := AsString(result[0])
 		if len(result) != 1 || _as48 != "CBA" {
 			t.Errorf(`"A" "B" joiner "C" = %v, want ["CBA"]`, result)
@@ -587,7 +587,7 @@ func TestEngineFnConcatArgOrder(t *testing.T) {
 		tokens := append(append([]Value{}, defTokens...),
 			NewWord("joiner"), NewString("A"), NewString("B"), NewString("C"),
 		)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		_as49, _ := AsString(result[0])
 		if len(result) != 1 || _as49 != "ABC" {
 			t.Errorf(`joiner "A" "B" "C" = %v, want ["ABC"]`, result)
@@ -627,7 +627,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+		result := runBoru(t, r, append(append([]Value{}, defTokens...),
 			NewString("Z"), NewBoolean(true), NewInteger(7), NewString("X"), NewWord("mix4"),
 		))
 		_as50, _ := AsString(result[0])
@@ -644,7 +644,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+		result := runBoru(t, r, append(append([]Value{}, defTokens...),
 			NewString("Z"), NewWord("mix4"), NewString("X"), NewInteger(7), NewBoolean(true),
 		))
 		_as51, _ := AsString(result[0])
@@ -660,7 +660,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+		result := runBoru(t, r, append(append([]Value{}, defTokens...),
 			NewWord("mix4"), NewString("X"), NewInteger(7), NewBoolean(true), NewString("Z"),
 		))
 		_as52, _ := AsString(result[0])
@@ -676,7 +676,7 @@ func TestEngineFnConcatArgOrder4Mixed(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+		result := runBoru(t, r, append(append([]Value{}, defTokens...),
 			NewWord("mix4"), NewString("X"), NewInteger(7), NewBoolean(true), NewString("Z"),
 		))
 		_as53, _ := AsString(result[0])
@@ -710,7 +710,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+		result := runBoru(t, r, append(append([]Value{}, defTokens...),
 			NewString("z"), NewBoolean(false), NewFloat(1.5), NewInteger(3), NewString("a"),
 			NewWord("mix5"),
 		))
@@ -727,7 +727,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+		result := runBoru(t, r, append(append([]Value{}, defTokens...),
 			NewWord("mix5"), NewString("a"), NewInteger(3),
 			NewFloat(1.5), NewBoolean(false), NewString("z"),
 		))
@@ -744,7 +744,7 @@ func TestEngineFnConcatArgOrder5Mixed(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		result := runAQL(t, r, append(append([]Value{}, defTokens...),
+		result := runBoru(t, r, append(append([]Value{}, defTokens...),
 			NewWord("mix5"), NewString("a"), NewInteger(3),
 			NewFloat(1.5), NewBoolean(false), NewString("z"),
 		))
@@ -791,7 +791,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		}
 		tokens := append(append([]Value{}, defTokens...), argValsReversed...)
 		tokens = append(tokens, NewWord("mix7"))
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		_as57, _ := AsString(result[0])
 		if len(result) != 1 || _as57 != want {
 			t.Errorf("all-prefix mix7 = %v, want [%q]", result, want)
@@ -807,7 +807,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		}
 		tokens := append(append([]Value{}, defTokens...), NewWord("mix7"))
 		tokens = append(tokens, argVals...)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		_as58, _ := AsString(result[0])
 		if len(result) != 1 || _as58 != want {
 			t.Errorf("mix7 all-forward = %v, want [%q]", result, want)
@@ -825,7 +825,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		tokens := append(append([]Value{}, defTokens...), argVals[6]) // "r7" prefix
 		tokens = append(tokens, NewWord("mix7"))
 		tokens = append(tokens, argVals[:6]...) // "p1" 2 3.5 true "q4" 56 forward
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		_as59, _ := AsString(result[0])
 		if len(result) != 1 || _as59 != want {
 			t.Errorf("1+6 mix7 = %v, want [%q]", result, want)
@@ -841,7 +841,7 @@ func TestEngineFnConcatArgOrder7Mixed(t *testing.T) {
 		}
 		tokens := append(append([]Value{}, defTokens...), NewWord("mix7"))
 		tokens = append(tokens, argVals...)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		_as60, _ := AsString(result[0])
 		if len(result) != 1 || _as60 != want {
 			t.Errorf("all-forward mix7 = %v, want [%q]", result, want)
@@ -886,7 +886,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 			NewWord("cat3"), NewString("A"), NewString("B"), NewString("C"),
 			NewEnd(), NewString("trailing"),
 		)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		if len(result) != 2 {
 			t.Fatalf("cat3 A B C end trailing: got %d results, want 2: %v", len(result), result)
 		}
@@ -913,7 +913,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 			NewString("Z"), NewWord("cat4"), NewString("X"), NewInteger(7), NewBoolean(true),
 			NewEnd(), NewString("after"),
 		)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		if len(result) != 2 {
 			t.Fatalf("Z cat4 X 7 true end after: got %d results, want 2: %v", len(result), result)
 		}
@@ -944,7 +944,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 			NewWord("cat3"), NewString("D"), NewString("E"), NewString("F"), NewEnd(),
 			NewCloseParen(),
 		)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		if len(result) != 2 {
 			t.Fatalf("two cat3 calls: got %d results, want 2: %v", len(result), result)
 		}
@@ -979,7 +979,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 			NewWord("cat3"), NewString("x"), NewString("y"), NewString("z"), NewEnd(),
 			NewCloseParen(),
 		)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		if len(result) != 2 {
 			t.Fatalf("cat4+cat3 with end: got %d results, want 2: %v", len(result), result)
 		}
@@ -1008,7 +1008,7 @@ func TestEngineFnConcatArgOrderEndDisambiguate(t *testing.T) {
 			NewString("P"), NewString("Q"), NewWord("cat3"), NewString("R"),
 			NewEnd(), NewString("extra"),
 		)
-		result := runAQL(t, r, tokens)
+		result := runBoru(t, r, tokens)
 		if len(result) != 2 {
 			t.Fatalf("P Q cat3 R end extra: got %d results, want 2: %v", len(result), result)
 		}
@@ -1061,7 +1061,7 @@ func TestEngineFnLiteralType(t *testing.T) {
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(2)}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(0), NewWord("adder"),
 	})
@@ -1084,7 +1084,7 @@ func TestEngineFnLiteralTypeNoMatch(t *testing.T) {
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(2)}),
 	})
-	err = runAQLError(t, r, []Value{
+	err = runBoruError(t, r, []Value{
 		NewWord("def"), NewWord("adder"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("adder"),
 	})
@@ -1109,7 +1109,7 @@ func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
 		NewList([]Value{NewWord("Integer")}),
 		NewList([]Value{NewWord("add"), NewInteger(20)}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("handler"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(0), NewWord("handler"),
 	})
@@ -1118,7 +1118,7 @@ func TestEngineFnLiteralTypeMultiSig(t *testing.T) {
 		t.Errorf("0 handler = %v, want 10", result)
 	}
 
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewInteger(1), NewWord("handler"),
 	})
 	_as80, _ := AsInteger(result[0])
@@ -1146,7 +1146,7 @@ func TestEngineFnDefPrefixOnly(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
 	// 5 doubler — 5 is on stack, doubler takes it as prefix arg
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWordModified("doubler", -1, true, false), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(5), NewWord("doubler"),
 	})
@@ -1175,12 +1175,12 @@ func TestEngineFnDefPrefixOnlyNoForwardCollection(t *testing.T) {
 		NewList([]Value{NewWord("x"), NewWord("x"), NewWord("add")}),
 	})
 	// Define using string name (def sig selection changed with new type hierarchy).
-	_ = runAQL(t, r, []Value{
+	_ = runBoru(t, r, []Value{
 		NewWord("def"), NewString("doubler"), NewWord("fn"), fnBody, NewEnd(),
 	})
 
 	// Prefix call with arg on stack should work.
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(5), NewWord("doubler"),
 	})
 	_as82, _ := AsInteger(result[0])
@@ -1220,7 +1220,7 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 	})
 
 	// foo "x" → "xQ" (string matches sig 1: "x" add "Q")
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewEnd(),
 		NewString("x"), NewWord("foo"),
 	})
@@ -1230,7 +1230,7 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 	}
 
 	// foo 1 → "1P" (integer matches sig 2: 1 add "P")
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(1), NewWord("foo"),
 	})
@@ -1240,7 +1240,7 @@ func TestEngineFnAbbreviatedSignature(t *testing.T) {
 	}
 
 	// foo 99 → "NN" (literal 99 matches sig 3: drop "NN")
-	result = runAQL(t, r, []Value{
+	result = runBoru(t, r, []Value{
 		NewWord("def"), NewString("foo"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(99), NewWord("foo"),
 	})
@@ -1264,7 +1264,7 @@ func TestEngineFnAbbreviatedSimple(t *testing.T) {
 		NewWord("Number"),
 		NewList([]Value{NewWord("dup"), NewWord("add")}),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("double"), NewWord("fn"), fnBody, NewEnd(),
 		NewInteger(7), NewWord("double"),
 	})
@@ -1310,7 +1310,7 @@ func TestEngineFnFactorial(t *testing.T) {
 		{7, 5040},
 	}
 	for _, tc := range tests {
-		result := runAQL(t, r, []Value{
+		result := runBoru(t, r, []Value{
 			NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewEnd(),
 			NewInteger(tc.input), NewWord("fact"),
 		})
@@ -1439,7 +1439,7 @@ func TestEngineFnFactorialNamedZero(t *testing.T) {
 		{7, 5040},
 	}
 	for _, tc := range tests {
-		result := runAQL(t, r, []Value{
+		result := runBoru(t, r, []Value{
 			NewWord("def"), NewString("fact"), NewWord("fn"), fnBody, NewEnd(),
 			NewInteger(tc.input), NewWord("fact"),
 		})
@@ -1462,7 +1462,7 @@ func TestEngineTypeRecord(t *testing.T) {
 	yf := NewOrderedMap()
 	yf.Set("y", NewTypeLiteral(TNumber))
 	fields := NewList([]Value{NewMap(xf), NewMap(yf)})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("Point"), NewWord("refine"), NewWord("Record"), fields, NewEnd(),
 		NewWord("Point"),
 	})
@@ -1484,7 +1484,7 @@ func TestEngineMakeRecord(t *testing.T) {
 	yf.Set("y", NewTypeLiteral(TString))
 	fields := NewList([]Value{NewMap(xf), NewMap(yf)})
 	vals := NewList([]Value{NewInteger(1), NewString("hi")})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewWord("def"), NewWord("P"), NewWord("refine"), NewWord("Record"), fields, NewEnd(),
 		NewWord("make"), NewWord("P"), vals,
 	})
@@ -1510,7 +1510,7 @@ func TestEngineUnifyMaps(t *testing.T) {
 	m1.Set("x", NewInteger(1))
 	m2 := NewOrderedMap()
 	m2.Set("x", NewInteger(1))
-	result := runAQL(t, r, []Value{NewMap(m1), NewMap(m2), NewWord("unify")})
+	result := runBoru(t, r, []Value{NewMap(m1), NewMap(m2), NewWord("unify")})
 	_as91, _ := AsBoolean(result[1])
 	if len(result) != 2 || !_as91 {
 		t.Errorf("{x:1} unify {x:1} = %v, want true", result)
@@ -1525,7 +1525,7 @@ func TestEngineUnifyLists(t *testing.T) {
 	registerIOWords(r)
 	l1 := NewList([]Value{NewInteger(1), NewInteger(2)})
 	l2 := NewList([]Value{NewInteger(1), NewInteger(2)})
-	result := runAQL(t, r, []Value{l1, l2, NewWord("unify")})
+	result := runBoru(t, r, []Value{l1, l2, NewWord("unify")})
 	_as92, _ := AsBoolean(result[1])
 	if len(result) != 2 || !_as92 {
 		t.Errorf("[1,2] unify [1,2] = %v, want true", result)
@@ -1538,7 +1538,7 @@ func TestEngineUnifyFail(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewInteger(1), NewString("a"), NewWord("unify")})
+	result := runBoru(t, r, []Value{NewInteger(1), NewString("a"), NewWord("unify")})
 	_as93, _ := AsBoolean(result[1])
 	if len(result) != 2 || _as93 {
 		t.Errorf("1 unify 'a' = %v, want false", result)
@@ -1553,7 +1553,7 @@ func TestEngineUnifyTypedList(t *testing.T) {
 	registerIOWords(r)
 	tl := NewTypedList(NewTypeLiteral(TNumber))
 	cl := NewList([]Value{NewInteger(1), NewInteger(2)})
-	result := runAQL(t, r, []Value{tl, cl, NewWord("unify")})
+	result := runBoru(t, r, []Value{tl, cl, NewWord("unify")})
 	_as94, _ := AsBoolean(result[1])
 	if len(result) != 2 || !_as94 {
 		t.Errorf("[:number] unify [1,2] = %v, want true", result)
@@ -1570,7 +1570,7 @@ func TestEngineUnifyTypedMap(t *testing.T) {
 	cm := NewOrderedMap()
 	cm.Set("a", NewInteger(1))
 	cm.Set("b", NewInteger(2))
-	result := runAQL(t, r, []Value{tm, NewMap(cm), NewWord("unify")})
+	result := runBoru(t, r, []Value{tm, NewMap(cm), NewWord("unify")})
 	_as95, _ := AsBoolean(result[1])
 	if len(result) != 2 || !_as95 {
 		t.Errorf("{:number} unify {a:1,b:2} = %v, want true", result)
@@ -1584,7 +1584,7 @@ func TestEngineDisjunct(t *testing.T) {
 	}
 	registerIOWords(r)
 	// string tor none
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewTypeLiteral(TString), NewWord("tor"), NewTypeLiteral(TNone),
 	})
 	if len(result) != 1 || !IsDisjunct(result[0]) {
@@ -1603,7 +1603,7 @@ func TestEngineVar(t *testing.T) {
 		NewList([]Value{NewWord("x")}),
 		NewWord("x"), NewWord("mul"), NewWord("x"),
 	})
-	result := runAQL(t, r, []Value{
+	result := runBoru(t, r, []Value{
 		NewInteger(5), NewWord("var"), varBody,
 	})
 	_as96, _ := AsInteger(result[0])
@@ -1618,7 +1618,7 @@ func TestEngineAddStrings(t *testing.T) {
 		t.Fatal(err)
 	}
 	registerIOWords(r)
-	result := runAQL(t, r, []Value{NewString("hello"), NewWord("add"), NewString(" world")})
+	result := runBoru(t, r, []Value{NewString("hello"), NewWord("add"), NewString(" world")})
 	_as97, _ := AsString(result[0])
 	if len(result) != 1 || _as97 != "hello world" {
 		t.Errorf("'hello' add ' world' = %v, want 'hello world'", result)

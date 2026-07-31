@@ -1,6 +1,6 @@
 package vault
 
-// tui_model.go — the root bubbletea model for `aql vault -i`.
+// tui_model.go — the root bubbletea model for `boru vault -i`.
 //
 // The root owns a stack of screens (push to drill in, esc to pop) and draws
 // a fixed 3-zone chrome around the active screen: a header showing the
@@ -435,7 +435,7 @@ func (m *rootModel) View() string {
 
 // titleLine is the top chrome line: the app name + version.
 func (m *rootModel) titleLine() string {
-	s := tuiHeaderBar.Render("aql vault")
+	s := tuiHeaderBar.Render("boru vault")
 	if v := headerVersion(); v != "" {
 		s += "  " + tuiDimStyle.Render(v)
 	}
@@ -479,11 +479,11 @@ func shortenHome(path, home string) string {
 }
 
 // vaultLocationFlags renders the --folder/--suffix flags that target the
-// ACTIVE vault, or "" when it is the default (~/.aql, no suffix). Sample
+// ACTIVE vault, or "" when it is the default (~/.boru, no suffix). Sample
 // commands need these so copy-paste runs against the right vault.
 func (m *rootModel) vaultLocationFlags() string {
 	var fl []string
-	if m.ctl.folder != homeAQLDir(m.ctl.homeDir) {
+	if m.ctl.folder != homeBoruDir(m.ctl.homeDir) {
 		fl = append(fl, "--folder="+shortenHome(m.ctl.folder, m.ctl.homeDir))
 	}
 	if m.ctl.suffix != "" {
@@ -492,18 +492,18 @@ func (m *rootModel) vaultLocationFlags() string {
 	return strings.Join(fl, " ")
 }
 
-// execPrefix is "aql vault" plus the active vault's location flags.
+// execPrefix is "boru vault" plus the active vault's location flags.
 func (m *rootModel) execPrefix() string {
 	if fl := m.vaultLocationFlags(); fl != "" {
-		return "aql vault " + fl
+		return "boru vault " + fl
 	}
-	return "aql vault"
+	return "boru vault"
 }
 
-// withVaultLocation injects the active vault's location flags into an
-// "aql vault …" command so it targets the right vault.
+// withVaultLocation injects the active vault's location flags into a
+// "boru vault …" command so it targets the right vault.
 func (m *rootModel) withVaultLocation(cmd string) string {
-	const base = "aql vault"
+	const base = "boru vault"
 	if fl := m.vaultLocationFlags(); fl != "" && strings.HasPrefix(cmd, base+" ") {
 		return base + " " + fl + cmd[len(base):]
 	}

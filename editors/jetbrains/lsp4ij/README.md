@@ -1,7 +1,7 @@
-# LSP4IJ template files for AQL
+# LSP4IJ template files for boru
 
 These files describe the **user-defined language server** that talks to
-`aql lsp`. LSP4IJ (the Red Hat "LSP4IJ" plugin for IntelliJ-based IDEs)
+`boru lsp`. LSP4IJ (the Red Hat "LSP4IJ" plugin for IntelliJ-based IDEs)
 lets you create such a server entirely from its UI — there is **no
 single dotfile** the IDE reads on startup. The files here therefore serve
 two purposes:
@@ -15,7 +15,7 @@ two purposes:
    A template folder is exactly this shape:
 
    ```
-   AQL/
+   boru/
      template.json               # name + command + file/language mappings
      settings.json               # per-feature toggles (optional)
      initializationOptions.json  # LSP `initialize.initializationOptions` (optional)
@@ -24,11 +24,11 @@ two purposes:
    Point the importer at the folder that contains these files.
 
 > **Accuracy note.** LSP4IJ's template-folder layout is stable across
-> recent releases, but the plugin is developed independently of AQL and
-> its JSON schema is not part of AQL's compatibility surface. If your
+> recent releases, but the plugin is developed independently of boru and
+> its JSON schema is not part of boru's compatibility surface. If your
 > LSP4IJ version rejects an import, fall back to the UI steps in the
 > parent README — those always work. The only field that truly matters is
-> the **command**, `aql lsp`, and the **`*.aql`** mapping.
+> the **command**, `boru lsp`, and the **`*.boru`** mapping.
 
 ## Files
 
@@ -40,18 +40,18 @@ two purposes:
 
 ## Adjusting the command
 
-`template.json` uses the bare command `aql lsp`, which resolves `aql`
+`template.json` uses the bare command `boru lsp`, which resolves `boru`
 from your PATH. To pin an explicit binary, replace the `programArgs`
 value with an absolute path, quoting if it contains spaces:
 
 ```json
-"programArgs": { "default": "/usr/local/bin/aql lsp" }
+"programArgs": { "default": "/usr/local/bin/boru lsp" }
 ```
 
 ```json
-"programArgs": { "windows": "\"C:\\Program Files\\aql\\aql.exe\" lsp" }
+"programArgs": { "windows": "\"C:\\Program Files\\boru\\boru.exe\" lsp" }
 ```
 
-`aql lsp` speaks LSP over **stdio**, which is what LSP4IJ's user-defined
-servers use. (`aql lsp -p <port>` serves the same protocol over TCP for
+`boru lsp` speaks LSP over **stdio**, which is what LSP4IJ's user-defined
+servers use. (`boru lsp -p <port>` serves the same protocol over TCP for
 remote-attach, but LSP4IJ spawns a process, so stdio is the right choice.)

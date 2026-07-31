@@ -3,12 +3,12 @@ package lang
 import (
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// Stage-6 measurement harness (design/aql-bytecode-plan.0.md Stage 6):
+// Stage-6 measurement harness (design/boru-bytecode-plan.0.md Stage 6):
 // compare compiled-mode EXECUTION against the interpreter on the
 // Stage-0 baseline shapes, with parse/compile cost amortised out so the
 // numbers isolate the dispatch machinery the bytecode VM eliminates.

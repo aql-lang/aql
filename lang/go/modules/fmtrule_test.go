@@ -3,8 +3,8 @@ package modules
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // TestFmtKindHandler drives every classification arm of Fmt.kind: an
@@ -110,7 +110,7 @@ func TestFmtChildrenHandler(t *testing.T) {
 }
 
 // TestFmtDeclarativeFormatter proves the whole point of the rule vocabulary:
-// a complete formatter written as a declarative AQL rule table + a one-line
+// a complete formatter written as a declarative boru rule table + a one-line
 // apply driver, dispatching by Fmt.kind, recursing through Fmt.children, and
 // laying the result out with the Fmt.render document algebra. The program
 // formats a nested value {a:1 b:{c:2}}; the `b` entry's Map value recurses,
@@ -129,7 +129,7 @@ func TestFmtDeclarativeFormatter(t *testing.T) {
 	reg.SetParseFunc(parser.Parse)
 	InstallResolver(reg)
 
-	const prog = `import "aql:fmt"
+	const prog = `import "boru:fmt"
 def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
 def rules {
   scalar: (nd:Any => (canon nd))

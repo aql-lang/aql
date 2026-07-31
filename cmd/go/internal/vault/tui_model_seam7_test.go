@@ -155,9 +155,9 @@ func TestT7_ModelLockedHeaderAndStatus(t *testing.T) {
 // TestT7_ModelExecPrefixNonDefault drives execPrefix's location-flags arm.
 func TestT7_ModelExecPrefixNonDefault(t *testing.T) {
 	m := newTestModel(t)
-	m.ctl.folder = filepath.Join(m.ctl.homeDir, ".vxgaql")
+	m.ctl.folder = filepath.Join(m.ctl.homeDir, ".vxgboru")
 	m.ctl.suffix = "sdk"
-	if got := m.execPrefix(); !strings.HasPrefix(got, "aql vault --folder=") {
+	if got := m.execPrefix(); !strings.HasPrefix(got, "boru vault --folder=") {
 		t.Errorf("execPrefix for a non-default vault = %q", got)
 	}
 }

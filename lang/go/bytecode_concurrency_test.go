@@ -6,10 +6,10 @@ import (
 	"sync"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
-// Stage 6 island reuse (design/aql-bytecode-plan.0.md Stage 6): the VM
+// Stage 6 island reuse (design/boru-bytecode-plan.0.md Stage 6): the VM
 // reuses ONE sub-engine across every OpFallback in a RunProgram,
 // reloading its tape in place rather than allocating a fresh engine+tape
 // per island — a hot fallback island in a loop is no longer a
@@ -49,7 +49,7 @@ func TestCompiledIslandReuseNoStateLeak(t *testing.T) {
 	}
 }
 
-// Stage 5 concurrency (design/aql-bytecode-plan.0.md §Stage 5): a
+// Stage 5 concurrency (design/boru-bytecode-plan.0.md §Stage 5): a
 // compiled Program and all its tables (Code, Consts, Types, Sigs,
 // Fallbacks, Fns, Debug) are IMMUTABLE after compile, so concurrent
 // executions can share one *Program. All mutable VM state — the
@@ -76,7 +76,7 @@ func TestCompiledConcurrencyRaceFree(t *testing.T) {
 		// await: per-branch fork units (CompileStoresBodyList) — every program
 		// run spawns branch goroutines that RunUnit the SHARED Program's units
 		// on their forks, so this is the nested-concurrency stamp gate.
-		{`import "aql:time-util" TimeUtil.await [[1 add 2] [3 mul 4]]`, "[3 12]"},
+		{`import "boru:time-util" TimeUtil.await [[1 add 2] [3 mul 4]]`, "[3 12]"},
 	}
 
 	for _, c := range cases {

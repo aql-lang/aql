@@ -1,10 +1,10 @@
 package modules
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BuildArrayModule creates the "aql:array-util" native module. It registers the
+// BuildArrayModule creates the "boru:array-util" native module. It registers the
 // Go-implemented array words into an isolated sub-registry and returns a
 // ModuleDesc with an "array" export containing FnDef wrappers for each word.
 //
@@ -22,12 +22,12 @@ import (
 // list-membership lookup lives here as `ArrayUtil.indices` (for each
 // needle, its index in the haystack, or -1 when absent); it is a distinct
 // name, not a shadow of the string word `indexof` (which is string-only,
-// in aql:string-util).
+// in boru:string-util).
 func BuildArrayModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Create an isolated sub-registry with the specialised array words.
 	// They are deliberately absent from the global registry (see
 	// native_array.go).
-	subReg, err := newModuleRegistry("aql:array-util", native.ArrayModuleNatives)
+	subReg, err := newModuleRegistry("boru:array-util", native.ArrayModuleNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -64,7 +64,7 @@ type arrWord struct {
 	noEval   map[int]bool
 }
 
-// arrayExports is the export table for aql:array. export is the clean
+// arrayExports is the export table for boru:array. export is the clean
 // namespaced name (array.<export>); internal is the underlying native
 // word registered in the sub-registry — identical except for the three
 // collision-avoiding "arr-" words, which reclaim their clean names here.

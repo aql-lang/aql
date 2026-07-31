@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// bt wraps s in backticks (an AQL interpolated-string literal) — Go raw strings
+// bt wraps s in backticks (a boru interpolated-string literal) — Go raw strings
 // cannot contain a backtick, so build the source by concatenation.
 func bt(s string) string { return "`" + s + "`" }
 
@@ -17,7 +17,7 @@ func bt(s string) string { return "`" + s + "`" }
 // whole body was "not inert" and the call refused "code-body word
 // test-check-prop (Stage 2)".
 func TestCheckPropInterpStringModuleScope(t *testing.T) {
-	src := `import "aql:test" end
+	src := `import "boru:test" end
 def res (Test.check-prop "x" [r.int 1 9] [ var [[k] (` + bt("v${k}") + `) eq ` + bt("v${k}") + ` ] ] 5 1 0)
 res get "ok"`
 	a, _ := New()
@@ -48,10 +48,10 @@ res get "ok"`
 // to (the leaf's central soundness boundary).
 func TestCheckPropInterpStringFnScopeRefuses(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
-	src := `import "aql:test" end
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
+	src := `import "boru:test" end
 def run-props fn [[pfx:Integer] [Boolean] [
   def res (Test.check-prop "x" [r.int 1 9] [ var [[k] (` + bt("${pfx}-${k}") + `) eq ` + bt("${pfx}-${k}") + ` ] ] 5 1 0)
   res get "ok"

@@ -8,10 +8,10 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
-// `aql check` is documented as "type-check without running", but it runs
+// `boru check` is documented as "type-check without running", but it runs
 // imported module bodies for real. Two deliberate decisions compose to
 // produce that:
 //
@@ -145,15 +145,15 @@ func checkAndRun(t *testing.T, src string) (checkOut, runOut string) {
 	return cbuf.String(), rbuf.String()
 }
 
-// TestCheckModelsModuleBodyFileWrites is the headline: `aql check` no longer
+// TestCheckModelsModuleBodyFileWrites is the headline: `boru check` no longer
 // touches the filesystem through an imported module body. The same program run
 // for real still writes, so the modelling is scoped to the check pass and not
 // a blanket disable.
 func TestCheckModelsModuleBodyFileWrites(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "written.txt")
-	mod := writeModule(t, dir, "m.aql", `
-import "aql:io" end
+	mod := writeModule(t, dir, "m.boru", `
+import "boru:io" end
 IO.write (make Pathon '`+target+`') 'from the module body' drop
 export "M" {v: 1}
 `)
@@ -194,8 +194,8 @@ M.v`
 func TestCheckModelledWriteIsReadableInSameBody(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "roundtrip.txt")
-	mod := writeModule(t, dir, "m.aql", `
-import "aql:io" end
+	mod := writeModule(t, dir, "m.boru", `
+import "boru:io" end
 IO.write (make Pathon '`+target+`') 'staged' drop
 def back (IO.read (make Pathon '`+target+`'))
 export "M" {v: back}
@@ -234,8 +234,8 @@ M.v`
 func TestCheckModelledBodyStillReadsRealFiles(t *testing.T) {
 	dir := t.TempDir()
 	cfg := writeModule(t, dir, "cfg.txt", "real-config")
-	mod := writeModule(t, dir, "m.aql", `
-import "aql:io" end
+	mod := writeModule(t, dir, "m.boru", `
+import "boru:io" end
 def cfg (IO.read (make Pathon '`+cfg+`'))
 export "M" {v: cfg}
 `)
@@ -285,12 +285,12 @@ M.v`)
 func TestModelledEffectsPropagateThroughNestedImports(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "nested.txt")
-	inner := writeModule(t, dir, "inner.aql", `
-import "aql:io" end
+	inner := writeModule(t, dir, "inner.boru", `
+import "boru:io" end
 IO.write (make Pathon '`+target+`') 'inner wrote this' drop
 export "Inner" {v: 1}
 `)
-	outer := writeModule(t, dir, "outer.aql", `
+	outer := writeModule(t, dir, "outer.boru", `
 import '`+inner+`' end
 export "Outer" {v: Inner.v}
 `)
@@ -317,7 +317,7 @@ Outer.v`
 func TestModellingDoesNotLeakOutsideCheck(t *testing.T) {
 	dir := t.TempDir()
 	target := filepath.Join(dir, "toplevel.txt")
-	src := `import "aql:io" end
+	src := `import "boru:io" end
 IO.write (make Pathon '` + target + `') 'top level' drop`
 
 	a, err := lang.New()

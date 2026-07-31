@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:rand", map[string]string{
+	registerDocs("boru:rand", map[string]string{
 		"int":       "Random integer in the half-open range [lo, hi).",
 		"bool":      "Random boolean.",
 		"float":     "Random float in [0.0, 1.0).",
@@ -16,7 +16,7 @@ func init() {
 	// signatures hide entirely: the module words draw from a shared
 	// source, while `with-seed` hands back a reproducible one whose
 	// methods are reached with dot access.
-	registerExamples("aql:rand", map[string][]string{
+	registerExamples("boru:rand", map[string][]string{
 		"with-seed": {
 			`def r (Rand.with-seed 42)`,
 			`r.int 0 100                                      ;# 75 — same seed, same sequence, every run`,

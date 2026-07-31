@@ -1,15 +1,15 @@
 package native
 
 // registerIOWords installs the words that were moved OUT of core into loadable
-// modules (aql:io, aql:struct, aql:net, aql:bin bitwise, aql:type-util's
+// modules (boru:io, boru:struct, boru:net, boru:bin bitwise, boru:type-util's
 // tpartial, …) under their bare names into a test registry. The handlers are
 // unchanged by the move; this helper lets the native-package behaviour tests
 // keep exercising them without an explicit import. Production code must
-// `import "aql:<mod>"` and use the namespace (IO.read, StructUtil.merge, BinUtil.band,
+// `import "boru:<mod>"` and use the namespace (IO.read, StructUtil.merge, BinUtil.band,
 // …) — proved by the module-*.tsv specs.
 //
 // Idempotent: a no-op if the words are already present, so it is safe to call
-// from the shared runners (runAQL, …) on a registry that some test seeded.
+// from the shared runners (runBoru, …) on a registry that some test seeded.
 func registerIOWords(r *Registry) {
 	if r == nil || r.Lookup("read") != nil {
 		return
@@ -34,7 +34,7 @@ func registerIOWords(r *Registry) {
 	// transplant their Pathon overloads onto the core list / remove words so
 	// the bare-word behaviour tests can call `list`/`remove` on a Pathon.
 	for _, ext := range IOWordExtensions(fileType) {
-		if err := TransplantExtension(r, ext, "aql:io", "aql:io"); err != nil {
+		if err := TransplantExtension(r, ext, "boru:io", "boru:io"); err != nil {
 			panic(err)
 		}
 	}

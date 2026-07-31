@@ -1,10 +1,10 @@
 package modules
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BuildQueryModule creates the "aql:query" native module. It registers
+// BuildQueryModule creates the "boru:query" native module. It registers
 // the Go-implemented SQL-style query DSL words into an isolated
 // sub-registry and returns a ModuleDesc with a "query" export containing
 // FnDef wrappers for each word.
@@ -12,7 +12,7 @@ import (
 // After import, words are accessed via dot notation, in natural SQL
 // order:
 //
-//	import "aql:query"
+//	import "boru:query"
 //	Query.select [name age]
 //	  Query.from people
 //	  Query.where [age gt 18]
@@ -27,8 +27,8 @@ import (
 func BuildQueryModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// Create an isolated sub-registry with the query words. They are
 	// deliberately absent from the global registry — query is only
-	// reachable through `import "aql:query"`.
-	subReg, err := newModuleRegistry("aql:query", native.QueryNatives)
+	// reachable through `import "boru:query"`.
+	subReg, err := newModuleRegistry("boru:query", native.QueryNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}
@@ -77,7 +77,7 @@ type qWord struct {
 	params   []qParam
 }
 
-// queryExports is the export table for aql:query. Each export name is
+// queryExports is the export table for boru:query. Each export name is
 // the namespaced word (query.<export>); internal is the underlying
 // native word registered in the sub-registry (identical here).
 //
@@ -109,7 +109,7 @@ var queryExports = []qWord{
 
 // InstallQueryExports builds the query module and installs its exports
 // as defs in the given registry — the test-setup convenience equivalent
-// to running `import "aql:query"`.
+// to running `import "boru:query"`.
 func InstallQueryExports(r *native.Registry) error {
 	desc, err := BuildQueryModule(r)
 	if err != nil {

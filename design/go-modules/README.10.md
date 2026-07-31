@@ -1,9 +1,9 @@
-# Curated Go-stdlib AQL modules
+# Curated Go-stdlib boru modules
 
 > **Status: design proposal.** Nothing in this folder is implemented yet.
-> Each `<PKG>.10.md` note specifies a *curated, hand-written* native AQL
+> Each `<PKG>.10.md` note specifies a *curated, hand-written* native boru
 > module that wraps one Go standard-library package with an **idiomatic
-> ("aql-ish") API** — not a mechanical 1:1 mirror of the Go signatures.
+> ("boru-ish") API** — not a mechanical 1:1 mirror of the Go signatures.
 > The docs exist so the proposed surface is auditable before any Go code
 > is written.
 
@@ -17,7 +17,7 @@ bridge* (`import "go:net/url"`) that auto-exposes any host-registered Go
 package with raw, `Any`-typed, machine-derived signatures. This folder is
 the **complementary** path:
 
-| | Reflection bridge (`go:`) | Curated modules (`aql:`) — this folder |
+| | Reflection bridge (`go:`) | Curated modules (`boru:`) — this folder |
 |---|---|---|
 | Surface | every registered Go symbol, mechanically | a chosen, renamed, reshaped subset |
 | Signatures | `reflect.Type`, `Any` boundaries | real lattice types, refined arg order |
@@ -33,23 +33,23 @@ mechanism (below).
 
 ## Scope of this family — *new packages only*
 
-These notes cover Go packages that have **no AQL-user-facing surface
+These notes cover Go packages that have **no boru-user-facing surface
 today**. The packages already exposed by an existing module are out of
 scope and are NOT to be re-specified or disturbed:
 
-- `math`, `math/big` → `aql:math-util` (`MathUtil`)
-- `strings`, `regexp`, `unicode` → `aql:string-util` (`StringUtil`) — **now expanded** with Unicode classification, see below
-- `time` (+ clock/async) → `aql:time-util` (`TimeUtil`)
-- `math/bits`, `hash/fnv` → `aql:bin-util` (`BinUtil`) — **now expanded**, see below
-- `math/rand` → `aql:rand` (`Rand`)
-- `net/http` → `aql:net` (`Net`)
-- `io`, file ops → `aql:io` (`IO`)
-- `sort` → core `sort` + `aql:array-util` (`grade`/`sortby`)
+- `math`, `math/big` → `boru:math-util` (`MathUtil`)
+- `strings`, `regexp`, `unicode` → `boru:string-util` (`StringUtil`) — **now expanded** with Unicode classification, see below
+- `time` (+ clock/async) → `boru:time-util` (`TimeUtil`)
+- `math/bits`, `hash/fnv` → `boru:bin-util` (`BinUtil`) — **now expanded**, see below
+- `math/rand` → `boru:rand` (`Rand`)
+- `net/http` → `boru:net` (`Net`)
+- `io`, file ops → `boru:io` (`IO`)
+- `sort` → core `sort` + `boru:array-util` (`grade`/`sortby`)
 
 > **Consolidation (deviates from strict 1:1).** All *binary-adjacent*
 > functionality — cryptographic hashes, HMAC, secure random, CRC, hex /
 > base32 / base64 / base128 / ascii85 encoding, and GUIDs — is
-> **concentrated into the existing `aql:bin-util` module** rather than
+> **concentrated into the existing `boru:bin-util` module** rather than
 > split into one module per Go package. It builds on a new first-class
 > [`Bytes`](BYTES.10.md) type. See [BIN-UTIL.10.md](BIN-UTIL.10.md) and
 > [BYTES.10.md](BYTES.10.md). This superseded and removed the earlier
@@ -58,18 +58,18 @@ scope and are NOT to be re-specified or disturbed:
 > **Consolidation (deviates from strict 1:1).** All *Unicode*
 > functionality — per-string rune classification (`is-alpha`,
 > `is-digit`, `is-space`, …) and case mapping — is **folded into the
-> existing `aql:string-util` module** rather than split into a separate
-> `aql:unicode` module. See [STRING-UTIL.10.md](STRING-UTIL.10.md). This
+> existing `boru:string-util` module** rather than split into a separate
+> `boru:unicode` module. See [STRING-UTIL.10.md](STRING-UTIL.10.md). This
 > superseded and removed the earlier standalone UNICODE note.
 
-Where a new module's domain *touches* one of these (e.g. `aql:csv` vs the
+Where a new module's domain *touches* one of these (e.g. `boru:csv` vs the
 `parselang`/`emitlang` CSV words), the per-package note calls out the
 overlap and the dividing line in its **Overlap** section. It does not
 move or change the existing words.
 
 ## The roster
 
-One AQL module per Go package. Namespaces are the plain capitalized
+One boru module per Go package. Namespaces are the plain capitalized
 package name; the `-util` id + `*Util` namespace is used **only** when the
 bare namespace would collide with a builtin type (`Path`, `String`,
 `Time`, `Type`, `Array`, `Matrix`, …) or an existing module namespace
@@ -78,57 +78,57 @@ bare namespace would collide with a builtin type (`Path`, `String`,
 
 | Go package | doc | import id | namespace | policy gate |
 |---|---|---|---|---|
-| `strconv` | [STRCONV](STRCONV.10.md) | `aql:strconv` | `Strconv` | none |
-| `fmt` | [FMT](FMT.10.md) | `aql:fmt` | `Fmt` | none |
-| `net/url` | [NET-URL](NET-URL.10.md) | `aql:url` | `Url` | none |
-| `path` | [PATH](PATH.10.md) | `aql:path-util` | `PathUtil` | none |
-| `path/filepath` | [PATH-FILEPATH](PATH-FILEPATH.10.md) | `aql:filepath` | `FilePath` | none (pure string ops) |
-| `os` | [OS](OS.10.md) | `aql:os` | `Os` | `env`, `process`, `system-info` |
-| `os/exec` | [EXEC](EXEC.10.md) | `aql:exec` | `Exec` | `process` |
-| `runtime` | [RUNTIME](RUNTIME.10.md) | `aql:runtime` | `Runtime` | `system-info` |
-| `encoding/csv` | [ENCODING-CSV](ENCODING-CSV.10.md) | `aql:csv` | `Csv` | none |
-| `text/template` | [TEXT-TEMPLATE](TEXT-TEMPLATE.10.md) | `aql:template` | `Template` | none |
-| `html` | [HTML](HTML.10.md) | `aql:html` | `Html` | none |
-| `net/mail` | [NET-MAIL](NET-MAIL.10.md) | `aql:mail` | `Mail` | none |
-| `math/cmplx` | [MATH-CMPLX](MATH-CMPLX.10.md) | `aql:cmplx` | `Cmplx` | none |
+| `strconv` | [STRCONV](STRCONV.10.md) | `boru:strconv` | `Strconv` | none |
+| `fmt` | [FMT](FMT.10.md) | `boru:fmt` | `Fmt` | none |
+| `net/url` | [NET-URL](NET-URL.10.md) | `boru:url` | `Url` | none |
+| `path` | [PATH](PATH.10.md) | `boru:path-util` | `PathUtil` | none |
+| `path/filepath` | [PATH-FILEPATH](PATH-FILEPATH.10.md) | `boru:filepath` | `FilePath` | none (pure string ops) |
+| `os` | [OS](OS.10.md) | `boru:os` | `Os` | `env`, `process`, `system-info` |
+| `os/exec` | [EXEC](EXEC.10.md) | `boru:exec` | `Exec` | `process` |
+| `runtime` | [RUNTIME](RUNTIME.10.md) | `boru:runtime` | `Runtime` | `system-info` |
+| `encoding/csv` | [ENCODING-CSV](ENCODING-CSV.10.md) | `boru:csv` | `Csv` | none |
+| `text/template` | [TEXT-TEMPLATE](TEXT-TEMPLATE.10.md) | `boru:template` | `Template` | none |
+| `html` | [HTML](HTML.10.md) | `boru:html` | `Html` | none |
+| `net/mail` | [NET-MAIL](NET-MAIL.10.md) | `boru:mail` | `Mail` | none |
+| `math/cmplx` | [MATH-CMPLX](MATH-CMPLX.10.md) | `boru:cmplx` | `Cmplx` | none |
 
 `Mail` and `Cmplx` are flagged niche.
 
-### Binary-adjacent (consolidated into `aql:bin-util`)
+### Binary-adjacent (consolidated into `boru:bin-util`)
 
 Not 1:1 modules — these fold into the one expanded module plus a new type:
 
 | Area | doc | home | policy gate |
 |---|---|---|---|
-| crypto hashes, HMAC, secure random, CRC, hex/base32/base64/base128/ascii85, GUIDs | [BIN-UTIL](BIN-UTIL.10.md) | `aql:bin-util` (`BinUtil`) | none, except `random`/`uuid` (entropy) |
+| crypto hashes, HMAC, secure random, CRC, hex/base32/base64/base128/ascii85, GUIDs | [BIN-UTIL](BIN-UTIL.10.md) | `boru:bin-util` (`BinUtil`) | none, except `random`/`uuid` (entropy) |
 | first-class binary leaf type | [BYTES](BYTES.10.md) | `Bytes` type (global builtin) | none |
 
 Covers the Go packages `crypto/{sha256,sha512,sha1,md5,hmac,rand}`,
 `hash/{crc32,crc64}`, `encoding/{hex,base32,base64,ascii85}`, a custom
 base128 codec, and `github.com/google/uuid`.
 
-### Text / Unicode (consolidated into `aql:string-util`)
+### Text / Unicode (consolidated into `boru:string-util`)
 
 Not a 1:1 module — Go `unicode` per-rune classification + case folds into
 the existing whole-string utility module:
 
 | Area | doc | home | policy gate |
 |---|---|---|---|
-| Unicode classification (`is-alpha`/`is-digit`/`is-space`/…) + case mapping | [STRING-UTIL](STRING-UTIL.10.md) | `aql:string-util` (`StringUtil`) | none |
+| Unicode classification (`is-alpha`/`is-digit`/`is-space`/…) + case mapping | [STRING-UTIL](STRING-UTIL.10.md) | `boru:string-util` (`StringUtil`) | none |
 
-### Filesystem (all in `aql:io`)
+### Filesystem (all in `boru:io`)
 
-`aql:io` owns **all** filesystem functionality — content I/O, tree
+`boru:io` owns **all** filesystem functionality — content I/O, tree
 mutation, directory listing, `stat`, the read-only existence/type
 predicates (`exists`/`is-file`/`is-dir`/`is-symlink`), and the
-location getters (`cwd`/`home-dir`/`temp-dir`). `aql:os`
+location getters (`cwd`/`home-dir`/`temp-dir`). `boru:os`
 ([OS](OS.10.md)) keeps only the **non-filesystem** remainder of the Go
 `os` module (env, args, identity, exit). Both share the one `FileOps`
 capability + `fileops` policy scope.
 
 | Area | doc | home | policy gate |
 |---|---|---|---|
-| filesystem content / tree / listing / stat / existence predicates | [IO](IO.10.md) | `aql:io` (`IO`) | `fileops` (`disk.read`/`disk.write`) |
+| filesystem content / tree / listing / stat / existence predicates | [IO](IO.10.md) | `boru:io` (`IO`) | `fileops` (`disk.read`/`disk.write`) |
 
 ## Shared conventions (every note assumes these)
 
@@ -169,7 +169,7 @@ references. Register the builder in the `modules` map in
   (`eng/go/gobridge.go`): String↔`string`, Integer↔int kinds,
   Float↔float kinds, Boolean↔`bool`, List↔slice, Map↔`map[string]any`,
   None↔`nil`.
-- A Go value with no AQL counterpart (`*url.URL`, a parsed
+- A Go value with no boru counterpart (`*url.URL`, a parsed
   `*template.Template`, a `*csv.Reader`) is held in an
   `ExtensionPayload` and surfaced as a **registered external type**
   via `RegisterExternalBuiltin` with a `FixedID` from the documented
@@ -184,8 +184,8 @@ references. Register the builder in the `modules` map in
 
 - Never panic (`eng/go/CLAUDE.md` "Panic Prevention"). Guard args with
   `AsConcreteString`/`RequireConcreteList`/etc. before use.
-- Signal failure with `r.AqlError(code, detail, word)` using a
-  kebab-case `code`. A Go `error` return is unwrapped to an `AqlError`;
+- Signal failure with `r.BoruError(code, detail, word)` using a
+  kebab-case `code`. A Go `error` return is unwrapped to a `BoruError`;
   a Go `(value, ok)` pair collapses to either value-or-`None` or
   value-or-error, whichever reads better (the note states which).
 
@@ -198,8 +198,8 @@ references. Register the builder in the `modules` map in
   (`policy.KnownScopes`): `fileops`, `network`, `sqlite`, `formats`,
   `env`, `process`, `clock`; coarse caps (`policy.GlobalOps`):
   `disk.read`, `disk.write`, `network`, `process`, `env`, `clock`,
-  `system-info`, `mutate`. So `aql:os` env words gate on `env`, process
-  words on `process`, and `aql:runtime`/host-info on the `system-info`
+  `system-info`, `mutate`. So `boru:os` env words gate on `env`, process
+  words on `process`, and `boru:runtime`/host-info on the `system-info`
   global cap. Host-backed effects (entropy for `crypto/rand`, any file
   read) go through a capability seam like `FileOps`, not direct OS calls
   — see `io.go`.
@@ -207,10 +207,10 @@ references. Register the builder in the `modules` map in
 ### Docs, spec, and naming plumbing
 
 - Every export gets a one-line summary in a `docs_<id>.go` file via
-  `registerDocs("aql:<id>", map[string]string{…})` (`docs.go`);
+  `registerDocs("boru:<id>", map[string]string{…})` (`docs.go`);
   `TestModuleExportDocs` fails if any export lacks one.
 - Behaviour is pinned by a `lang/spec/module-<id>.tsv` suite
-  (`input⇥expected⇥description`, rows lead with `import "aql:<id>"`).
+  (`input⇥expected⇥description`, rows lead with `import "boru:<id>"`).
   Per **Test discipline** (`lang/go/CLAUDE.md`) every positive row needs
   a negative sibling (`ERROR:<substring>`).
 - Exported names must be capitalized. Words are kebab-case.
@@ -225,10 +225,10 @@ Each `<PKG>.10.md` follows this structure:
    proposal, not implemented".
 2. **Why curated** — one or two lines: what the refined surface buys
    over the raw `go:` bridge for this package.
-3. **Import & namespace** — `import "aql:<id>"` → `<Namespace>`; the
+3. **Import & namespace** — `import "boru:<id>"` → `<Namespace>`; the
    clash rationale if `-util` is used.
-4. **API** — the core table: Go symbol → aql word (kebab) → signature
-   (top-first) → one-line doc → **aql-ish refinement** (what changed and
+4. **API** — the core table: Go symbol → boru word (kebab) → signature
+   (top-first) → one-line doc → **boru-ish refinement** (what changed and
    why: `(v, ok)`→value-or-None/error, variadic→List, flags→options Map,
    dropped/renamed/merged words, type overloads).
 5. **Types** — kernel types used; any opaque external handle (rare) with

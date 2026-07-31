@@ -1472,7 +1472,7 @@ func TestTryReturnedClosureProbeFails(t *testing.T) {
 	// a body that references an unknown word so the probe compile refuses.
 	lam := Signature{
 		Params:     []FnParam{{Name: "y", Type: nil}},
-		Impl:       AQL([]Value{NewWord("no_such_word_zzz9")}),
+		Impl:       Boru([]Value{NewWord("no_such_word_zzz9")}),
 		Returns:    []*Type{TInteger},
 		BarrierPos: -1,
 	}
@@ -1571,7 +1571,7 @@ func TestFinalizeResidualArms(t *testing.T) {
 // skipped, a non-fn member misses, and a bool-only tag (zero member) reports
 // no pinpointed value.
 func TestReadFnMemberValueArms(t *testing.T) {
-	fn := Value{Parent: TFunction, Data: FnDefInfo{Name: "d", Signatures: []Signature{{Impl: AQL([]Value{NewInteger(1)})}}}}
+	fn := Value{Parent: TFunction, Data: FnDefInfo{Name: "d", Signatures: []Signature{{Impl: Boru([]Value{NewInteger(1)})}}}}
 	om := NewOrderedMap()
 	om.Set("f", fn)
 	fnMap := NewMap(om)

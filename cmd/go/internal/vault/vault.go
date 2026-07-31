@@ -11,15 +11,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/auth"
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/auth"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 )
 
 // Env names recognised by every mode.
 const (
-	EnvPassphrase = "AQL_VAULT_PASSPHRASE"
-	EnvHome       = "AQL_HOME" // used in tests; overrides os.UserHomeDir
+	EnvPassphrase = "BORU_VAULT_PASSPHRASE"
+	EnvHome       = "BORU_HOME" // used in tests; overrides os.UserHomeDir
 )
 
 type cmd struct{}
@@ -33,7 +33,7 @@ func (*cmd) Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdin, stdout, stderr)
 }
 
-// Run handles `aql vault [--folder=F] [--suffix=S] <mode> [args...]`.
+// Run handles `boru vault [--folder=F] [--suffix=S] <mode> [args...]`.
 func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	// Pull the global --folder/--suffix location flags out first; what
 	// remains is the mode and its own arguments.
@@ -70,7 +70,7 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 	homeDir, err := homeDir()
 	if err != nil {
 		// A folder override makes the home location irrelevant — every
-		// vault path resolves from AQL_VAULT_FOLDER instead — so don't
+		// vault path resolves from BORU_VAULT_FOLDER instead — so don't
 		// fail just because the OS can't report a home folder.
 		if os.Getenv(EnvFolder) == "" {
 			fmt.Fprintf(stderr, "error: %s\n", err)
@@ -149,23 +149,23 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 }
 
 func printUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: aql vault [--folder=PATH] [--suffix=NAME] <mode> [args...]")
-	fmt.Fprintln(w, "       aql vault -i   (interactive TUI — manage the vault with a menu)")
+	fmt.Fprintln(w, "Usage: boru vault [--folder=PATH] [--suffix=NAME] <mode> [args...]")
+	fmt.Fprintln(w, "       boru vault -i   (interactive TUI — manage the vault with a menu)")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Modes:")
 	for _, m := range modeDocs {
 		fmt.Fprintf(w, "  %-10s %s\n", m.name, m.summary)
 	}
 	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Interactive: aql vault -i opens a menu-driven TUI (switch vaults, browse & edit")
+	fmt.Fprintln(w, "Interactive: boru vault -i opens a menu-driven TUI (switch vaults, browse & edit")
 	fmt.Fprintln(w, "  secrets, capabilities, passwords, maintenance); keys are shown on screen.")
 	fmt.Fprintln(w, "Backends: auto (default), keychain, secret-service, wincred, file, 1password.")
-	fmt.Fprintln(w, "Passphrases are prompted interactively (hidden); set AQL_VAULT_PASSPHRASE only for non-interactive use.")
+	fmt.Fprintln(w, "Passphrases are prompted interactively (hidden); set BORU_VAULT_PASSPHRASE only for non-interactive use.")
 	fmt.Fprintln(w, "Namespaces: qualify aliases as ns:name; bare names use the default namespace")
-	fmt.Fprintln(w, "  (vault config --set namespace.default=NS, or AQL_VAULT_NAMESPACE; ':' = root, :name forces root).")
-	fmt.Fprintln(w, "Location: the vault lives in ~/.aql with files vault.<part> by default. Override the")
-	fmt.Fprintln(w, "  folder with --folder/AQL_VAULT_FOLDER and the file suffix (vault.<suffix>.jsonic)")
-	fmt.Fprintln(w, "  with --suffix/AQL_VAULT_SUFFIX; pass the same values to every command on that vault.")
+	fmt.Fprintln(w, "  (vault config --set namespace.default=NS, or BORU_VAULT_NAMESPACE; ':' = root, :name forces root).")
+	fmt.Fprintln(w, "Location: the vault lives in ~/.boru with files vault.<part> by default. Override the")
+	fmt.Fprintln(w, "  folder with --folder/BORU_VAULT_FOLDER and the file suffix (vault.<suffix>.jsonic)")
+	fmt.Fprintln(w, "  with --suffix/BORU_VAULT_SUFFIX; pass the same values to every command on that vault.")
 }
 
 type modeDoc struct{ name, summary string }
@@ -203,7 +203,7 @@ var modeDocs = []modeDoc{
 
 // --- shared helpers --------------------------------------------------------
 
-// homeDir resolves the directory holding ~/.aql, honoring AQL_HOME
+// homeDir resolves the directory holding ~/.boru, honoring BORU_HOME
 // for tests.
 func homeDir() (string, error) {
 	if h := os.Getenv(EnvHome); h != "" {
@@ -220,14 +220,14 @@ func requireStore(homeDir string) (*Store, error) {
 		return nil, err
 	}
 	if s == nil {
-		return nil, errors.New("vault not initialized; run `aql vault init`")
+		return nil, errors.New("vault not initialized; run `boru vault init`")
 	}
 	return s, nil
 }
 
 // openKeyring resolves the backend recorded in s and prompts for
 // the file passphrase when needed. The passphrase is sourced from
-// AQL_VAULT_PASSPHRASE if set, then from stdin (echo suppressed)
+// BORU_VAULT_PASSPHRASE if set, then from stdin (echo suppressed)
 // when stdin is a terminal.
 func openKeyring(s *Store, homeDir string, stdin io.Reader, stdout io.Writer, prompt string) (keyring, error) {
 	backend := s.Backend
@@ -251,7 +251,7 @@ func openKeyring(s *Store, homeDir string, stdin io.Reader, stdout io.Writer, pr
 		pass = p
 	}
 	if pass == "" {
-		return nil, errors.New("file backend requires a passphrase; run interactively to be prompted, or set AQL_VAULT_PASSPHRASE for non-interactive use")
+		return nil, errors.New("file backend requires a passphrase; run interactively to be prompted, or set BORU_VAULT_PASSPHRASE for non-interactive use")
 	}
 	return selectKeyring(BackendFile, vaultFolder(homeDir), pass)
 }
@@ -278,7 +278,7 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 	}
 	// For the file backend, capture a passphrase up front so future
 	// operations can require it. A non-empty passphrase is mandatory;
-	// it is read from AQL_VAULT_PASSPHRASE if set, otherwise prompted
+	// it is read from BORU_VAULT_PASSPHRASE if set, otherwise prompted
 	// for twice with echo suppressed.
 	if chosen == BackendFile {
 		pass := os.Getenv(EnvPassphrase)
@@ -301,7 +301,7 @@ func runInit(args []string, homeDir string, stdin io.Reader, stdout, stderr io.W
 			pass = p1
 		}
 		if pass == "" {
-			fmt.Fprintln(stderr, "error: empty passphrase — the file keyring would be effectively unencrypted (its salt is stored alongside the ciphertext, so anyone who can read ~/.aql/vault.keyring could recover every secret). Choose a non-empty passphrase, or set AQL_VAULT_PASSPHRASE.")
+			fmt.Fprintln(stderr, "error: empty passphrase — the file keyring would be effectively unencrypted (its salt is stored alongside the ciphertext, so anyone who can read ~/.boru/vault.keyring could recover every secret). Choose a non-empty passphrase, or set BORU_VAULT_PASSPHRASE.")
 			return 1
 		}
 		// Initialize an empty keyring file so its presence and
@@ -358,7 +358,7 @@ func runStatus(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if s == nil {
-		fmt.Fprintln(stdout, "vault: not initialized (run `aql vault init`)")
+		fmt.Fprintln(stdout, "vault: not initialized (run `boru vault init`)")
 		return 0
 	}
 	active := s.ActiveCapabilities(time.Now())
@@ -434,7 +434,7 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault add [--from-env=VAR | --from-stdin | --from-clipboard | --provider=...] [--namespace=NS] [--expiry=WHEN] [--ip-whitelist=IPs] <[ns:]alias>\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault add [--from-env=VAR | --from-stdin | --from-clipboard | --provider=...] [--namespace=NS] [--expiry=WHEN] [--ip-whitelist=IPs] <[ns:]alias>\n")
 		return 1
 	}
 	expiresAt, err := parseExpiryFlag(*expiry)
@@ -486,7 +486,7 @@ func runAdd(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Wr
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 	alias, err := resolveAliasRef(s, aliasRef)
@@ -627,7 +627,7 @@ func runGet(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault get [--reveal] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault get [--reveal] <alias>\n")
 		return 1
 	}
 	s, err := requireStore(homeDir)
@@ -636,7 +636,7 @@ func runGet(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 	_, alias, err := findAliasRef(s, fs.Arg(0))
@@ -744,7 +744,7 @@ func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault rm [--yes] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault rm [--yes] <alias>\n")
 		return 1
 	}
 	s, err := requireStore(homeDir)
@@ -799,7 +799,7 @@ func runRemove(args []string, homeDir string, stdout, stderr io.Writer) int {
 // export bundle (recognized by its magic header) is handled by
 // importBundle; anything else is parsed as a .env file. The two share
 // the --namespace/--provider/--prefix flags; --overwrite and the
-// AQL_VAULT_EXPORT_PASSPHRASE are bundle-only.
+// BORU_VAULT_EXPORT_PASSPHRASE are bundle-only.
 func runImport(args []string, homeDir string, stdin io.Reader, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault import", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -855,7 +855,7 @@ func importDotenv(data []byte, srcName string, fromStdin bool, homeDir string, s
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 	// .env keys are bare names, so they follow the same resolution rule
@@ -984,13 +984,13 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 	methods := fs.String("methods", "", "comma-separated HTTP methods (default any)")
 	ttl := fs.Duration("ttl", 2*time.Hour, "lifetime before the capability expires")
 	maxCalls := fs.Int("max-calls", 0, "max total proxy calls (0 = unlimited)")
-	maxCostCents := fs.Int("max-cost-cents", 0, "max total cost in cents from X-AQL-Vault-Cost-Cents (0 = unlimited)")
+	maxCostCents := fs.Int("max-cost-cents", 0, "max total cost in cents from X-Boru-Vault-Cost-Cents (0 = unlimited)")
 	approval := fs.Bool("require-approval", false, "advisory: proxy will deny until a human flips this off")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault grant [--agent=NAME] [--hosts=H,H] [--methods=GET,POST] [--ttl=2h] [--max-calls=N] [--max-cost-cents=N] [--require-approval] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault grant [--agent=NAME] [--hosts=H,H] [--methods=GET,POST] [--ttl=2h] [--max-calls=N] [--max-cost-cents=N] [--require-approval] <alias>\n")
 		return 1
 	}
 	s, err := requireStore(homeDir)
@@ -999,7 +999,7 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 	_, alias, err := w8findAliasRef(s, fs.Arg(0))
@@ -1074,7 +1074,7 @@ func runRevoke(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault revoke <capability-id>\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault revoke <capability-id>\n")
 		return 1
 	}
 	id := fs.Arg(0)
@@ -1212,7 +1212,7 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: aql vault rotate [--from-env=VAR | --from-stdin | --from-clipboard | --revoke-caps] [--expiry=WHEN] [--ip-whitelist=IPs] [--yes] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault rotate [--from-env=VAR | --from-stdin | --from-clipboard | --revoke-caps] [--expiry=WHEN] [--ip-whitelist=IPs] [--yes] <alias>\n")
 		return 1
 	}
 	expiresAt, err := parseExpiryFlag(*expiry)
@@ -1245,7 +1245,7 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 	_, alias, err := w8findAliasRef(s, fs.Arg(0))

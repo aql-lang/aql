@@ -4,11 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// Wave-6 agent-D coverage for the aql:debug module internals: every
+// Wave-6 agent-D coverage for the boru:debug module internals: every
 // per-argument concrete-value rejection arm (signature dispatch shields
 // them from wrong-typed values, so the handlers are invoked directly, the
 // wave-3/wave-4 precedent), the parser-not-configured and body-error arms

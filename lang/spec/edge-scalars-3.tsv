@@ -1,7 +1,7 @@
-# AQL Language Specification: scalar edge cases 3 — strings, atoms, booleans
+# boru Language Specification: scalar edge cases 3 — strings, atoms, booleans
 # Format: input<TAB>expected<TAB>description
 #
-# String-edge coverage via aql:string-util (the empty string through
+# String-edge coverage via boru:string-util (the empty string through
 # every word, byte-vs-rune semantics on multi-byte text, replace's
 # {scope}/{count} interplay, split round-trips, template-literal
 # interpolation), the EmptyString/ProperString membership split, Atom
@@ -11,24 +11,24 @@
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  the empty string through every string word
-import "aql:string-util"  StringUtil.upper ''	''	upper of empty is empty
-import "aql:string-util"  StringUtil.lower ''	''	lower of empty is empty
-import "aql:string-util"  StringUtil.trim ''	''	trim of empty is empty
-import "aql:string-util"  StringUtil.split ',' ''	[]	splitting the EMPTY string yields the empty list, not ['']
-import "aql:string-util"  StringUtil.split '' ''	[]	…even with the empty separator
-import "aql:string-util"  StringUtil.contains '' 'abc'	true	the empty needle is contained in everything
-import "aql:string-util"  StringUtil.contains '' ''	true	…including the empty haystack
-import "aql:string-util"  StringUtil.contains 'a' ''	false	a real needle is never in the empty haystack
-import "aql:string-util"  StringUtil.indexof '' 'abc'	0	the empty needle matches at position 0
-import "aql:string-util"  StringUtil.indexof '' ''	0	…also in the empty haystack
-import "aql:string-util"  StringUtil.indexof 'abc' ''	-1	haystack-last: nothing is found IN the empty string
-import "aql:string-util"  StringUtil.replace 'a' 'b' ''	''	replace in the empty subject is a no-op
-import "aql:string-util"  StringUtil.replace '' 'X' 'ab'	'Xab'	an empty search string inserts once at the front (first-occurrence default)
-import "aql:string-util"  StringUtil.repeat 0 'ab'	''	repeat 0 is the empty string
-import "aql:string-util"  StringUtil.repeat 3 ''	''	repeating the empty string stays empty
-import "aql:string-util"  StringUtil.pad 3 ''	'   '	padding the empty string is all spaces
-import "aql:string-util"  StringUtil.changecase '' {style: 'upper'}	''	changecase of empty is empty
-import "aql:string-util"  StringUtil.normalize ''	''	normalize of empty is empty
+import "boru:string-util"  StringUtil.upper ''	''	upper of empty is empty
+import "boru:string-util"  StringUtil.lower ''	''	lower of empty is empty
+import "boru:string-util"  StringUtil.trim ''	''	trim of empty is empty
+import "boru:string-util"  StringUtil.split ',' ''	[]	splitting the EMPTY string yields the empty list, not ['']
+import "boru:string-util"  StringUtil.split '' ''	[]	…even with the empty separator
+import "boru:string-util"  StringUtil.contains '' 'abc'	true	the empty needle is contained in everything
+import "boru:string-util"  StringUtil.contains '' ''	true	…including the empty haystack
+import "boru:string-util"  StringUtil.contains 'a' ''	false	a real needle is never in the empty haystack
+import "boru:string-util"  StringUtil.indexof '' 'abc'	0	the empty needle matches at position 0
+import "boru:string-util"  StringUtil.indexof '' ''	0	…also in the empty haystack
+import "boru:string-util"  StringUtil.indexof 'abc' ''	-1	haystack-last: nothing is found IN the empty string
+import "boru:string-util"  StringUtil.replace 'a' 'b' ''	''	replace in the empty subject is a no-op
+import "boru:string-util"  StringUtil.replace '' 'X' 'ab'	'Xab'	an empty search string inserts once at the front (first-occurrence default)
+import "boru:string-util"  StringUtil.repeat 0 'ab'	''	repeat 0 is the empty string
+import "boru:string-util"  StringUtil.repeat 3 ''	''	repeating the empty string stays empty
+import "boru:string-util"  StringUtil.pad 3 ''	'   '	padding the empty string is all spaces
+import "boru:string-util"  StringUtil.changecase '' {style: 'upper'}	''	changecase of empty is empty
+import "boru:string-util"  StringUtil.normalize ''	''	normalize of empty is empty
 #
 # §2  ONE character unit — every string count and index is CHARACTERS
 #     (Unicode runes), matching the occurrence ops mul/pow (NUR007 fix —
@@ -38,10 +38,10 @@ import "aql:string-util"  StringUtil.normalize ''	''	normalize of empty is empty
 size 'héllo'	5	size is the CHARACTER length: é is one character
 size '日本語'	3	three CJK characters
 size (convert Bytes 'héllo')	6	…the byte length lives on Bytes: é is two bytes in UTF-8
-size (import "aql:string-util"  StringUtil.split '' 'héllo')	5	split '' walks the same five characters size counts
-import "aql:string-util"  StringUtil.split '' '日本語'	['日' '本' '語']	multi-byte runes split cleanly, never mid-byte
-import "aql:string-util"  StringUtil.indexof 'l' 'héllo'	2	indexof reports a CHARACTER index (h=0 é=1 l=2)
-import "aql:string-util"  StringUtil.indexof 'l' 'héllo' {from: 3}	3	…and {from} is a character index too (the second l)
+size (import "boru:string-util"  StringUtil.split '' 'héllo')	5	split '' walks the same five characters size counts
+import "boru:string-util"  StringUtil.split '' '日本語'	['日' '本' '語']	multi-byte runes split cleanly, never mid-byte
+import "boru:string-util"  StringUtil.indexof 'l' 'héllo'	2	indexof reports a CHARACTER index (h=0 é=1 l=2)
+import "boru:string-util"  StringUtil.indexof 'l' 'héllo' {from: 3}	3	…and {from} is a character index too (the second l)
 'héllo' slice 1 3	'él'	slice cuts at character boundaries
 'héllo' slice 1 2	'é'	…never through a multi-byte rune (was invalid UTF-8)
 'héllo' slice -2	'hél'	a negative start drops characters from the end
@@ -51,40 +51,40 @@ import "aql:string-util"  StringUtil.indexof 'l' 'héllo' {from: 3}	3	…and {fr
 'héllo' slice 3 1	''	an inverted range is the empty string
 'hé' slice -9	''	a negative start past the front empties
 'hé' slice 0 -9	''	…and so does a negative end past the front
-import "aql:string-util"  StringUtil.indexof 'l' 'héllo' {occ: "last"}	3	{occ: last} reports the last l's character index
-import "aql:string-util"  StringUtil.indexof 'l' 'héllo' {from: 9}	-1	a {from} past the character length finds nothing
-import "aql:string-util"  StringUtil.indexof 'l' 'héllo' {from: 5}	-1	…and a {from} AT the character length searches the empty tail
-import "aql:string-util"  StringUtil.replace 'l' 'X' 'héllo' {from: 99}	'héllo'	replace clamps an over-length {from} — nothing to the right, unchanged
-import "aql:string-util"  StringUtil.indexof 'L' 'héllo' {cs: "insensitive"}	2	case-insensitive indices are character indices too
-import "aql:string-util"  StringUtil.split '本' '日本語'	['日' '語']	a multi-byte SEPARATOR works
-import "aql:string-util"  StringUtil.replace '語' 'ご' '日本語'	'日本ご'	replace is rune-safe
-import "aql:string-util"  StringUtil.repeat 2 '日'	'日日'	repeat is rune-faithful on multi-byte input
-size (import "aql:string-util"  StringUtil.pad 4 'ñ')	4	pad pads to a CHARACTER width: ñ + 3 spaces
-import "aql:string-util"  (StringUtil.match 'l' 'héllo') dot fst dot i	2	match indices are character indices too
-import "aql:string-util"  (StringUtil.match '' 'éé' {scope: "all"}) dot ms	[{m:'' i:0 e:0} {m:'' i:1 e:1} {m:'' i:2 e:2}]	an empty pattern matches at every character BOUNDARY, end included (PR #306 review)
-import "aql:string-util"  (StringUtil.match '' 'éé') dot fst	{m:'' i:0 e:0}	…and the default first-scope reports the leading boundary
-import "aql:string-util"  StringUtil.indexof 'a' 'İİa' {mode: "shell", cs: "insensitive", occ: "last"}	2	insensitive shell offsets stay in the ORIGINAL string (İ narrows when folded — PR #306 review)
-import "aql:string-util"  StringUtil.pad 4 {fill: '😀'} 'hé'	'hé😀😀'	a multi-byte fill pads whole characters
-import "aql:string-util"  StringUtil.pad 200000000 {fill: '😀'} 'x'	ERROR:exceeds	the byte cap holds under a multi-byte fill — checked as a PROJECTION, before allocating (PR #306 review)
-import "aql:string-util"  StringUtil.upper 'straße'	'STRAßE'	ß has no simple-case uppercase — it survives (no SS expansion)
-import "aql:string-util"  StringUtil.lower 'ΣΙΓΜΑ'	'σιγμα'	simple case mapping: no final-sigma ς at the word end
-import "aql:string-util"  StringUtil.upper 'ñé'	'ÑÉ'	accented Latin uppercases per rune
+import "boru:string-util"  StringUtil.indexof 'l' 'héllo' {occ: "last"}	3	{occ: last} reports the last l's character index
+import "boru:string-util"  StringUtil.indexof 'l' 'héllo' {from: 9}	-1	a {from} past the character length finds nothing
+import "boru:string-util"  StringUtil.indexof 'l' 'héllo' {from: 5}	-1	…and a {from} AT the character length searches the empty tail
+import "boru:string-util"  StringUtil.replace 'l' 'X' 'héllo' {from: 99}	'héllo'	replace clamps an over-length {from} — nothing to the right, unchanged
+import "boru:string-util"  StringUtil.indexof 'L' 'héllo' {cs: "insensitive"}	2	case-insensitive indices are character indices too
+import "boru:string-util"  StringUtil.split '本' '日本語'	['日' '語']	a multi-byte SEPARATOR works
+import "boru:string-util"  StringUtil.replace '語' 'ご' '日本語'	'日本ご'	replace is rune-safe
+import "boru:string-util"  StringUtil.repeat 2 '日'	'日日'	repeat is rune-faithful on multi-byte input
+size (import "boru:string-util"  StringUtil.pad 4 'ñ')	4	pad pads to a CHARACTER width: ñ + 3 spaces
+import "boru:string-util"  (StringUtil.match 'l' 'héllo') dot fst dot i	2	match indices are character indices too
+import "boru:string-util"  (StringUtil.match '' 'éé' {scope: "all"}) dot ms	[{m:'' i:0 e:0} {m:'' i:1 e:1} {m:'' i:2 e:2}]	an empty pattern matches at every character BOUNDARY, end included (PR #306 review)
+import "boru:string-util"  (StringUtil.match '' 'éé') dot fst	{m:'' i:0 e:0}	…and the default first-scope reports the leading boundary
+import "boru:string-util"  StringUtil.indexof 'a' 'İİa' {mode: "shell", cs: "insensitive", occ: "last"}	2	insensitive shell offsets stay in the ORIGINAL string (İ narrows when folded — PR #306 review)
+import "boru:string-util"  StringUtil.pad 4 {fill: '😀'} 'hé'	'hé😀😀'	a multi-byte fill pads whole characters
+import "boru:string-util"  StringUtil.pad 200000000 {fill: '😀'} 'x'	ERROR:exceeds	the byte cap holds under a multi-byte fill — checked as a PROJECTION, before allocating (PR #306 review)
+import "boru:string-util"  StringUtil.upper 'straße'	'STRAßE'	ß has no simple-case uppercase — it survives (no SS expansion)
+import "boru:string-util"  StringUtil.lower 'ΣΙΓΜΑ'	'σιγμα'	simple case mapping: no final-sigma ς at the word end
+import "boru:string-util"  StringUtil.upper 'ñé'	'ÑÉ'	accented Latin uppercases per rune
 #
 # §3  split / concat round-trips and separator edges
-import "aql:string-util"  StringUtil.concat (StringUtil.split '' 'hello')	'hello'	split '' then concat is the identity
-import "aql:string-util"  StringUtil.concat (StringUtil.split ',' 'a,b,c')	'abc'	split on a separator then concat DROPS the separators
-import "aql:string-util"  StringUtil.split ',' 'a,,b'	['a' 'b']	split DROPS empty fields: adjacent separators leave no trace
-import "aql:string-util"  StringUtil.split ',' ','	[]	a lone separator splits to NOTHING (both fields empty, both dropped)
-import "aql:string-util"  StringUtil.split ',' 'a,'	['a']	a trailing separator adds no empty field
+import "boru:string-util"  StringUtil.concat (StringUtil.split '' 'hello')	'hello'	split '' then concat is the identity
+import "boru:string-util"  StringUtil.concat (StringUtil.split ',' 'a,b,c')	'abc'	split on a separator then concat DROPS the separators
+import "boru:string-util"  StringUtil.split ',' 'a,,b'	['a' 'b']	split DROPS empty fields: adjacent separators leave no trace
+import "boru:string-util"  StringUtil.split ',' ','	[]	a lone separator splits to NOTHING (both fields empty, both dropped)
+import "boru:string-util"  StringUtil.split ',' 'a,'	['a']	a trailing separator adds no empty field
 #
 # §4  replace — {scope}/{count} interplay
-import "aql:string-util"  StringUtil.replace '.' '-' 'a.b.c' {scope: 'all'}	'a-b-c'	{scope:'all'} replaces every occurrence
-import "aql:string-util"  StringUtil.replace '.' '-' 'a.b.c' {count: 2}	'a-b.c'	{count} WITHOUT {scope:'all'} is inert — still first-only
-import "aql:string-util"  StringUtil.replace '.' '-' 'a.b.c' {scope: 'all' count: 2}	'a-b-c'	{scope:'all' count:2} caps at two — here that is all of them
-import "aql:string-util"  StringUtil.replace '.' '-' 'a.b.c' {scope: 'all' count: 1}	'a-b.c'	{scope:'all' count:1} caps at one
-import "aql:string-util"  StringUtil.replace 'aa' 'b' 'aaaa' {scope: 'all'}	'bb'	matches are non-overlapping, left to right
-import "aql:string-util"  StringUtil.replace '' 'X' 'ab' {scope: 'all'}	'XaXbX'	empty search with {scope:'all'} inserts at every boundary
-import "aql:string-util"  StringUtil.replace 'z' 'y' 'abc' {scope: 'all'}	'abc'	no match is a no-op, not an error
+import "boru:string-util"  StringUtil.replace '.' '-' 'a.b.c' {scope: 'all'}	'a-b-c'	{scope:'all'} replaces every occurrence
+import "boru:string-util"  StringUtil.replace '.' '-' 'a.b.c' {count: 2}	'a-b.c'	{count} WITHOUT {scope:'all'} is inert — still first-only
+import "boru:string-util"  StringUtil.replace '.' '-' 'a.b.c' {scope: 'all' count: 2}	'a-b-c'	{scope:'all' count:2} caps at two — here that is all of them
+import "boru:string-util"  StringUtil.replace '.' '-' 'a.b.c' {scope: 'all' count: 1}	'a-b.c'	{scope:'all' count:1} caps at one
+import "boru:string-util"  StringUtil.replace 'aa' 'b' 'aaaa' {scope: 'all'}	'bb'	matches are non-overlapping, left to right
+import "boru:string-util"  StringUtil.replace '' 'X' 'ab' {scope: 'all'}	'XaXbX'	empty search with {scope:'all'} inserts at every boundary
+import "boru:string-util"  StringUtil.replace 'z' 'y' 'abc' {scope: 'all'}	'abc'	no match is a no-op, not an error
 #
 # §5  template literals — every scalar kind interpolates, holes nest
 `x ${1 add 2.5}`	'x 3.5'	a computed Float hole
@@ -156,8 +156,8 @@ false otherwise 9	false	…and false passes too
 xor 1 0	true	xor COERCES truthiness (returns a Boolean, unlike and/or)
 xor '' ''	false	two falsy strings xor to false
 xor none 1	true	none is falsy, 1 is truthy
-import "aql:logic-util"  LogicUtil.nand 1 0	true	the derived connectives coerce truthiness too
-import "aql:logic-util"  LogicUtil.implies 0 ''	true	implies on falsy operands (false → false is true)
+import "boru:logic-util"  LogicUtil.nand 1 0	true	the derived connectives coerce truthiness too
+import "boru:logic-util"  LogicUtil.implies 0 ''	true	implies on falsy operands (false → false is true)
 all []	true	all of nothing is vacuously true
 any []	false	any of nothing is false
 all [1 'x']	true	all coerces element truthiness
@@ -202,5 +202,5 @@ do [convert Float ''] error [dot message]	'convert: cannot convert "" to float'	
 (do [convert BigInteger 'nope'] error [dot message]) eq 'convert: cannot convert "nope" to BigInteger'	true	malformed Big input errors cleanly (byte-exact message)
 do [0d9223372036854775807 add 0d1 convert Integer] error [dot message]	'convert: 0d9223372036854775808 overflows Integer (int64) range'	a Big above int64 max refuses to narrow
 'abc' get 0	ERROR:signature_error	strings are scalars, not indexable collections
-import "aql:string-util"  StringUtil.upper 5	ERROR:uncalled_function	string words reject non-String subjects
-import "aql:string-util"  StringUtil.split 5 'ab'	ERROR:uncalled_function	…including a non-String separator
+import "boru:string-util"  StringUtil.upper 5	ERROR:uncalled_function	string words reject non-String subjects
+import "boru:string-util"  StringUtil.split 5 'ab'	ERROR:uncalled_function	…including a non-String separator

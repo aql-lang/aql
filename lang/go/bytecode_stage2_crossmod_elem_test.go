@@ -65,7 +65,7 @@ func crossmodRefuses(t *testing.T, src string) {
 // DYNAMIC result of a Map field read, feeding `each` with a reach-lens body.
 // Previously refused "dynamic input at each"; now compiles + parity.
 func TestItemsOverDynamicReceiverEachCompiles(t *testing.T) {
-	crossmodCompiles(t, `import "aql:struct-util"
+	crossmodCompiles(t, `import "boru:struct-util"
 def edge-cols fn [[nd:Map] [List] [ ((nd "kids" get) StructUtil.items) each $.1 ]]
 (edge-cols {kids: {a:{x:1} b:{x:2}}})`)
 }
@@ -75,7 +75,7 @@ def edge-cols fn [[nd:Map] [List] [ ((nd "kids" get) StructUtil.items) each $.1 
 // result dynamic, `size` would still commit but the each itself would have
 // refused; this pins the whole chain compiling end-to-end.
 func TestItemsEachResultFeedsTypedConsumer(t *testing.T) {
-	crossmodCompiles(t, `import "aql:struct-util"
+	crossmodCompiles(t, `import "boru:struct-util"
 def n-cols fn [[nd:Map] [Integer] [ (((nd "kids" get) StructUtil.items) each $.1) size ]]
 (n-cols {kids: {a:{x:1} b:{x:2} c:{x:3}}})`)
 }
@@ -84,7 +84,7 @@ def n-cols fn [[nd:Map] [Integer] [ (((nd "kids" get) StructUtil.items) each $.1
 // feeding a `fold` (the same declared-List return, consumed by the
 // fold-collection overload). A bonus advance in the same family.
 func TestItemsOverDynamicReceiverFoldCompiles(t *testing.T) {
-	crossmodCompiles(t, `import "aql:struct-util"
+	crossmodCompiles(t, `import "boru:struct-util"
 def drop-first fn [[nd:Map] [Map] [
   ({} ((nd "kids" get) StructUtil.items) [
     var [[pair acc] acc set ((pair get 0)) (pair get 1) ]
@@ -102,7 +102,7 @@ func TestItemsEachAllPathsSound(t *testing.T) {
 		`(edge-cols {kids: {a:{x:1}}})`,
 		`(edge-cols {kids: {a:{x:1} b:{x:2}}})`,
 	} {
-		crossmodSound(t, `import "aql:struct-util"
+		crossmodSound(t, `import "boru:struct-util"
 def edge-cols fn [[nd:Map] [List] [ ((nd "kids" get) StructUtil.items) each $.1 ]]
 `+call)
 	}
@@ -114,9 +114,9 @@ def edge-cols fn [[nd:Map] [List] [ ((nd "kids" get) StructUtil.items) each $.1 
 // stays dynamic and `each` soundly falls back to the interpreter.
 func TestEachOverDynamicAnyStillRefuses(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	crossmodRefuses(t, `def f fn [[m:Map] [List] [ (m "xs" get) each $.0 ]]
 (f {xs: [[1 2] [3 4]]})`)
 }

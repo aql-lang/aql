@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-// arrayNatives (core) and ArrayModuleNatives (the aql:array module)
+// arrayNatives (core) and ArrayModuleNatives (the boru:array module)
 // are both derived from allArrayNatives below. The split follows one
 // rule: words that take a quoted code body, the basic constructors,
 // and everyday slicing stay in core; the specialised APL-style data
@@ -450,8 +450,8 @@ var allArrayNatives = []NativeFunc{
 		}},
 	},
 	{
-		// compress: mask-based selection. No code body, so it is an
-		// aql:array module word like where/replicate.
+		// compress: mask-based selection. No code body, so it is a
+		// boru:array module word like where/replicate.
 		Name: "compress",
 
 		Signatures: []Signature{{
@@ -462,7 +462,7 @@ var allArrayNatives = []NativeFunc{
 	},
 	{
 		// eachrank: depth-targeted map — specialised APL/J vocabulary, so
-		// it lives in the aql:array module. The quoted body is captured
+		// it lives in the boru:array module. The quoted body is captured
 		// via NoEvalArgs.
 		Name: "eachrank",
 
@@ -475,7 +475,7 @@ var allArrayNatives = []NativeFunc{
 	},
 	{
 		// foldaxis: axis reduction — specialised APL/J vocabulary, so it
-		// lives in the aql:array module. The quoted body is captured via
+		// lives in the boru:array module. The quoted body is captured via
 		// NoEvalArgs.
 		Name: "foldaxis",
 
@@ -489,7 +489,7 @@ var allArrayNatives = []NativeFunc{
 }
 
 // arrayCoreNames is the set of array words that remain built-in. The
-// rest of allArrayNatives moves to the aql:array module. See the
+// rest of allArrayNatives moves to the boru:array module. See the
 // allArrayNatives comment for the rationale behind the split.
 var arrayCoreNames = map[string]bool{
 	"iota": true, "range": true,
@@ -499,8 +499,8 @@ var arrayCoreNames = map[string]bool{
 
 // arrayNatives are the core array words registered globally (see
 // register.go). ArrayModuleNatives are the specialised words that the
-// aql:array module registers into its own sub-registry instead — they
-// are NOT globally available, matching how aql:math gates sin/cos/etc.
+// boru:array module registers into its own sub-registry instead — they
+// are NOT globally available, matching how boru:math gates sin/cos/etc.
 var arrayNatives, ArrayModuleNatives = func() (core, module []NativeFunc) {
 	for _, n := range allArrayNatives {
 		if arrayCoreNames[n.Name] {
@@ -529,7 +529,7 @@ func arrayWordErrCode(word string) string {
 // RequireConcreteList, whose message format differs.
 func requireListArg(r *Registry, v Value, word, what string) (ReadList, error) {
 	if !IsConcrete(v) {
-		return ReadList{}, r.AqlError(arrayWordErrCode(word), word+": expected "+what, word)
+		return ReadList{}, r.BoruError(arrayWordErrCode(word), word+": expected "+what, word)
 	}
 	list, _ := AsList(v)
 	return list, nil
@@ -542,7 +542,7 @@ func requireListArg(r *Registry, v Value, word, what string) (ReadList, error) {
 func requireConcreteArgs(r *Registry, word, what string, vals ...Value) error {
 	for _, v := range vals {
 		if !IsConcrete(v) {
-			return r.AqlError(arrayWordErrCode(word), word+": expected "+what, word)
+			return r.BoruError(arrayWordErrCode(word), word+": expected "+what, word)
 		}
 	}
 	return nil
@@ -588,10 +588,10 @@ func iotaHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	_as0, _ := args[0].AsConcreteInteger()
 	n := int(_as0)
 	if n < 0 {
-		return nil, r.AqlError("iota_error", fmt.Sprintf("iota: negative count %d", n), "iota")
+		return nil, r.BoruError("iota_error", fmt.Sprintf("iota: negative count %d", n), "iota")
 	}
 	if n > maxArrayElems {
-		return nil, r.AqlError("iota_error", fmt.Sprintf("iota: count %d exceeds the cap of %d", n, maxArrayElems), "iota")
+		return nil, r.BoruError("iota_error", fmt.Sprintf("iota: count %d exceeds the cap of %d", n, maxArrayElems), "iota")
 	}
 	elems := make([]Value, n)
 	for i := 0; i < n; i++ {
@@ -622,7 +622,7 @@ func rangeTwoHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 // past stop in the step direction) yields [].
 func buildRange(start, stop, step int64, r *Registry) ([]Value, error) {
 	if step == 0 {
-		return nil, r.AqlError("range_error", "range: step must be non-zero", "range")
+		return nil, r.BoruError("range_error", "range: step must be non-zero", "range")
 	}
 	elems := []Value{}
 	if step > 0 {
@@ -707,14 +707,14 @@ func reshapeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		_as1, _ := AsInteger(shapeList.Get(i))
 		dims[i] = int(_as1)
 		if dims[i] < 0 {
-			return nil, r.AqlError("reshape_error", fmt.Sprintf("reshape: negative dimension %d", dims[i]), "reshape")
+			return nil, r.BoruError("reshape_error", fmt.Sprintf("reshape: negative dimension %d", dims[i]), "reshape")
 		}
 		// Bound each dimension. Without this, a single huge dim (e.g. 2^62)
 		// drives buildNested's make([]Value, dims[0]) into a panicking /
 		// OOMing allocation even when the overall product passes the
 		// length check (e.g. [2^62, 0] over empty data). See ADR-005.
 		if dims[i] > maxArrayElems {
-			return nil, r.AqlError("reshape_error", fmt.Sprintf("reshape: dimension %d exceeds the cap of %d", dims[i], maxArrayElems), "reshape")
+			return nil, r.BoruError("reshape_error", fmt.Sprintf("reshape: dimension %d exceeds the cap of %d", dims[i], maxArrayElems), "reshape")
 		}
 	}
 	flat := flattenList(args[1])
@@ -792,7 +792,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	}
 	first := outer.Get(0)
 	if !first.Parent.ConformsTo(TList) || !IsConcrete(first) {
-		return nil, r.AqlError("transpose_error", "transpose: expected rank-2 list", "transpose")
+		return nil, r.BoruError("transpose_error", "transpose: expected rank-2 list", "transpose")
 	}
 	_lst, _ := AsList(first)
 	cols := _lst.Len()
@@ -800,7 +800,7 @@ func arrTransposeHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 		sub := outer.Get(i)
 		_subLst, _ := AsList(sub)
 		if !sub.Parent.ConformsTo(TList) || !IsConcrete(sub) || _subLst.Len() != cols {
-			return nil, r.AqlError("transpose_error", "transpose: expected rectangular rank-2 list", "transpose")
+			return nil, r.BoruError("transpose_error", "transpose: expected rectangular rank-2 list", "transpose")
 		}
 	}
 	rows := outer.Len()
@@ -1013,7 +1013,7 @@ func atHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 		_as4, _ := AsInteger(indices.Get(i))
 		idx := int(_as4)
 		if idx < 0 || idx >= dataLen {
-			return nil, r.AqlError("at_error", fmt.Sprintf("at: index %d out of bounds (length %d)", idx, dataLen), "at")
+			return nil, r.BoruError("at_error", fmt.Sprintf("at: index %d out of bounds (length %d)", idx, dataLen), "at")
 		}
 		result[i] = data.Get(idx)
 	}
@@ -1031,7 +1031,7 @@ func atHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 func insertAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	_idx, err := args[0].AsConcreteInteger()
 	if err != nil {
-		return nil, r.AqlError("insert_at_error", "insert-at: expected a concrete Integer index", "insert-at")
+		return nil, r.BoruError("insert_at_error", "insert-at: expected a concrete Integer index", "insert-at")
 	}
 	data, err := requireListArg(r, args[2], "insert-at", "a concrete data list")
 	if err != nil {
@@ -1040,7 +1040,7 @@ func insertAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	idx := int(_idx)
 	n := data.Len()
 	if idx < 0 || idx > n {
-		return nil, r.AqlError("index_out_of_range", fmt.Sprintf("insert-at: index %d out of range for list of length %d (valid: 0..%d)", idx, n, n), "insert-at")
+		return nil, r.BoruError("index_out_of_range", fmt.Sprintf("insert-at: index %d out of range for list of length %d (valid: 0..%d)", idx, n, n), "insert-at")
 	}
 	// insert-at adds args[1] as a NEW element — enforce it against the data's
 	// [:T] element type (like push/set), storing the recursively-retagged value,
@@ -1066,7 +1066,7 @@ func insertAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 func removeAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	_idx, err := args[0].AsConcreteInteger()
 	if err != nil {
-		return nil, r.AqlError("remove_at_error", "remove-at: expected a concrete Integer index", "remove-at")
+		return nil, r.BoruError("remove_at_error", "remove-at: expected a concrete Integer index", "remove-at")
 	}
 	data, err := requireListArg(r, args[1], "remove-at", "a concrete data list")
 	if err != nil {
@@ -1075,10 +1075,10 @@ func removeAtHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	idx := int(_idx)
 	n := data.Len()
 	if n == 0 {
-		return nil, r.AqlError("index_out_of_range", "remove-at: cannot remove from an empty list", "remove-at")
+		return nil, r.BoruError("index_out_of_range", "remove-at: cannot remove from an empty list", "remove-at")
 	}
 	if idx < 0 || idx >= n {
-		return nil, r.AqlError("index_out_of_range", fmt.Sprintf("remove-at: index %d out of range for list of length %d (valid: 0..%d)", idx, n, n-1), "remove-at")
+		return nil, r.BoruError("index_out_of_range", fmt.Sprintf("remove-at: index %d out of range for list of length %d (valid: 0..%d)", idx, n, n-1), "remove-at")
 	}
 	result := make([]Value, 0, n-1)
 	for i := 0; i < n; i++ {
@@ -1150,7 +1150,7 @@ func memberHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 
 // ---- indices ----
 
-// indicesHandler backs ArrayUtil.indices (aql:array-util): for each
+// indicesHandler backs ArrayUtil.indices (boru:array-util): for each
 // needle in the first list, its index in the second (haystack) list, or
 // -1 when absent. Vectorised lookup — returns a list of indices, one per
 // needle. The first match wins for duplicate haystack entries.
@@ -1283,7 +1283,7 @@ func replicateHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		_as5, _ := AsInteger(counts.Get(i))
 		c := int(_as5)
 		if c < 0 {
-			return nil, r.AqlError("replicate_error", fmt.Sprintf("replicate: negative count %d at index %d", c, i), "replicate")
+			return nil, r.BoruError("replicate_error", fmt.Sprintf("replicate: negative count %d at index %d", c, i), "replicate")
 		}
 		elem := data.Get(i)
 		for j := 0; j < c; j++ {
@@ -1314,7 +1314,7 @@ func expandHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	for i := 0; i < mask.Len(); i++ {
 		if CoerceBoolean(mask.Get(i)) {
 			if dataIdx >= data.Len() {
-				return nil, r.AqlError("expand_error", "expand: not enough data elements for mask", "expand")
+				return nil, r.BoruError("expand_error", "expand: not enough data elements for mask", "expand")
 			}
 			result[i] = data.Get(dataIdx)
 			dataIdx++
@@ -1336,7 +1336,7 @@ func windowHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	size := int(_as6)
 	length := list.Len()
 	if size <= 0 {
-		return nil, r.AqlError("window_error", fmt.Sprintf("window: size must be positive, got %d", size), "window")
+		return nil, r.BoruError("window_error", fmt.Sprintf("window: size must be positive, got %d", size), "window")
 	}
 	if size > length {
 		return []Value{NewList([]Value{})}, nil
@@ -1417,7 +1417,7 @@ func eachHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 			return nil, fmt.Errorf("each: element %d: %w", i, err)
 		}
 		if len(res) == 0 {
-			return nil, reg.AqlError("each_error", fmt.Sprintf("each: element %d: body produced no result", i), "each")
+			return nil, reg.BoruError("each_error", fmt.Sprintf("each: element %d: body produced no result", i), "each")
 		}
 		results[i] = res[len(res)-1] // take top of stack
 	}
@@ -1683,7 +1683,7 @@ func foldNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Registr
 	}
 	dataList, _ := AsList(args[1])
 	if dataList.Len() == 0 {
-		return nil, reg.AqlError("fold_error", "fold: empty list with no initial value", "fold")
+		return nil, reg.BoruError("fold_error", "fold: empty list with no initial value", "fold")
 	}
 	init := dataList.Get(0)
 	// Create a sub-list from element 1 onwards
@@ -1744,7 +1744,7 @@ func doFold(reg *Registry, acc Value, body Value, data ReadList) ([]Value, error
 			return nil, fmt.Errorf("fold: step %d: %w", i, err)
 		}
 		if len(res) == 0 {
-			return nil, reg.AqlError("fold_error", fmt.Sprintf("fold: step %d: body produced no result", i), "fold")
+			return nil, reg.BoruError("fold_error", fmt.Sprintf("fold: step %d: body produced no result", i), "fold")
 		}
 		acc = res[len(res)-1]
 	}
@@ -1776,7 +1776,7 @@ func scanHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 			return nil, fmt.Errorf("scan: step %d: %w", i, err)
 		}
 		if len(res) == 0 {
-			return nil, reg.AqlError("scan_error", fmt.Sprintf("scan: step %d: body produced no result", i), "scan")
+			return nil, reg.BoruError("scan_error", fmt.Sprintf("scan: step %d: body produced no result", i), "scan")
 		}
 		acc = res[len(res)-1]
 		results[i] = acc
@@ -1829,7 +1829,7 @@ func outerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 				return nil, fmt.Errorf("outer: (%d,%d): %w", i, j, err)
 			}
 			if len(res) == 0 {
-				return nil, reg.AqlError("outer_error", fmt.Sprintf("outer: (%d,%d): body produced no result", i, j), "outer")
+				return nil, reg.BoruError("outer_error", fmt.Sprintf("outer: (%d,%d): body produced no result", i, j), "outer")
 			}
 			row[j] = res[len(res)-1]
 		}
@@ -1862,7 +1862,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 	// 1D case: zip then fold
 	if left.Len() > 0 && !left.Get(0).Parent.ConformsTo(TList) {
 		if left.Len() != right.Len() {
-			return nil, reg.AqlError("inner_error", "inner: vectors must have same length", "inner")
+			return nil, reg.BoruError("inner_error", "inner: vectors must have same length", "inner")
 		}
 		// Apply pair-op to each pair. InvokeBody is the single body-running
 		// seam (as in `outer`): under the VM it drives the compiled closure,
@@ -1874,7 +1874,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 				return nil, fmt.Errorf("inner: pair %d: %w", i, err)
 			}
 			if len(res) == 0 {
-				return nil, reg.AqlError("inner_error", fmt.Sprintf("inner: pair %d: no result", i), "inner")
+				return nil, reg.BoruError("inner_error", fmt.Sprintf("inner: pair %d: no result", i), "inner")
 			}
 			paired[i] = res[len(res)-1]
 		}
@@ -1886,7 +1886,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 				return nil, fmt.Errorf("inner: fold %d: %w", i, err)
 			}
 			if len(res) == 0 {
-				return nil, reg.AqlError("inner_error", fmt.Sprintf("inner: fold %d: no result", i), "inner")
+				return nil, reg.BoruError("inner_error", fmt.Sprintf("inner: fold %d: no result", i), "inner")
 			}
 			acc = res[len(res)-1]
 		}
@@ -1905,7 +1905,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 		for j := 0; j < len(rightCols); j++ {
 			rightCol := rightCols[j]
 			if leftRow.Len() != len(rightCol) {
-				return nil, reg.AqlError("inner_error", "inner: dimension mismatch", "inner")
+				return nil, reg.BoruError("inner_error", "inner: dimension mismatch", "inner")
 			}
 			// Pair then fold, through the same InvokeBody seam as the 1D case.
 			paired := make([]Value, leftRow.Len())
@@ -1915,7 +1915,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 					return nil, err
 				}
 				if len(res) == 0 {
-					return nil, reg.AqlError("inner_error", fmt.Sprintf("inner: pair (%d,%d,%d): no result", i, j, k), "inner")
+					return nil, reg.BoruError("inner_error", fmt.Sprintf("inner: pair (%d,%d,%d): no result", i, j, k), "inner")
 				}
 				paired[k] = res[len(res)-1]
 			}
@@ -1926,7 +1926,7 @@ func innerHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 					return nil, err
 				}
 				if len(res) == 0 {
-					return nil, reg.AqlError("inner_error", fmt.Sprintf("inner: fold (%d,%d,%d): no result", i, j, k), "inner")
+					return nil, reg.BoruError("inner_error", fmt.Sprintf("inner: fold (%d,%d,%d): no result", i, j, k), "inner")
 				}
 				acc = res[len(res)-1]
 			}
@@ -1984,10 +1984,10 @@ func compressHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 func eachrankHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	depth, err := args[0].AsConcreteInteger()
 	if err != nil {
-		return nil, reg.AqlError("eachrank_error", "eachrank: rank must be an integer", "eachrank")
+		return nil, reg.BoruError("eachrank_error", "eachrank: rank must be an integer", "eachrank")
 	}
 	if depth < 0 {
-		return nil, reg.AqlError("eachrank_error", fmt.Sprintf("eachrank: negative rank %d", depth), "eachrank")
+		return nil, reg.BoruError("eachrank_error", fmt.Sprintf("eachrank: negative rank %d", depth), "eachrank")
 	}
 	if err := requireConcreteArgs(reg, "eachrank", "concrete body and data lists", args[1], args[2]); err != nil {
 		return nil, err
@@ -2001,7 +2001,7 @@ func eachrankHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 	total := listDepth(args[2])
 	descend := total - int(depth)
 	if descend < 0 {
-		return nil, reg.AqlError("eachrank_error", fmt.Sprintf("eachrank: rank %d exceeds data rank %d", depth, total), "eachrank")
+		return nil, reg.BoruError("eachrank_error", fmt.Sprintf("eachrank: rank %d exceeds data rank %d", depth, total), "eachrank")
 	}
 	return eachrankWalk(reg, descend, bodySlice, args[2])
 }
@@ -2031,12 +2031,12 @@ func eachrankWalk(reg *Registry, depth int, bodySlice []Value, cell Value) ([]Va
 			return nil, fmt.Errorf("eachrank: %w", err)
 		}
 		if len(res) == 0 {
-			return nil, reg.AqlError("eachrank_error", "eachrank: body produced no result", "eachrank")
+			return nil, reg.BoruError("eachrank_error", "eachrank: body produced no result", "eachrank")
 		}
 		return []Value{res[len(res)-1]}, nil
 	}
 	if !cell.Parent.ConformsTo(TList) || !IsConcrete(cell) {
-		return nil, reg.AqlError("eachrank_error", fmt.Sprintf("eachrank: rank exceeds nesting depth at %v", cell), "eachrank")
+		return nil, reg.BoruError("eachrank_error", fmt.Sprintf("eachrank: rank exceeds nesting depth at %v", cell), "eachrank")
 	}
 	list, _ := AsList(cell)
 	out := make([]Value, list.Len())
@@ -2059,10 +2059,10 @@ func eachrankWalk(reg *Registry, depth int, bodySlice []Value, cell Value) ([]Va
 func foldaxisHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	axis, err := args[0].AsConcreteInteger()
 	if err != nil {
-		return nil, reg.AqlError("foldaxis_error", "foldaxis: axis must be an integer", "foldaxis")
+		return nil, reg.BoruError("foldaxis_error", "foldaxis: axis must be an integer", "foldaxis")
 	}
 	if axis != 0 && axis != 1 {
-		return nil, reg.AqlError("foldaxis_error", fmt.Sprintf("foldaxis: axis must be 0 or 1, got %d", axis), "foldaxis")
+		return nil, reg.BoruError("foldaxis_error", fmt.Sprintf("foldaxis: axis must be 0 or 1, got %d", axis), "foldaxis")
 	}
 	if err := requireConcreteArgs(reg, "foldaxis", "concrete body and data lists", args[1], args[2]); err != nil {
 		return nil, err
@@ -2073,14 +2073,14 @@ func foldaxisHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry)
 	}
 	// Validate a rectangular rank-2 list.
 	if !rows.Get(0).Parent.ConformsTo(TList) || !IsConcrete(rows.Get(0)) {
-		return nil, reg.AqlError("foldaxis_error", "foldaxis: expected a rank-2 list", "foldaxis")
+		return nil, reg.BoruError("foldaxis_error", "foldaxis: expected a rank-2 list", "foldaxis")
 	}
 	first, _ := AsList(rows.Get(0))
 	cols := first.Len()
 	for i := 1; i < rows.Len(); i++ {
 		ri, _ := AsList(rows.Get(i))
 		if !rows.Get(i).Parent.ConformsTo(TList) || !IsConcrete(rows.Get(i)) || ri.Len() != cols {
-			return nil, reg.AqlError("foldaxis_error", "foldaxis: expected a rectangular rank-2 list", "foldaxis")
+			return nil, reg.BoruError("foldaxis_error", "foldaxis: expected a rectangular rank-2 list", "foldaxis")
 		}
 	}
 	// axis 1 reduces each row directly; axis 0 reduces each column, i.e.

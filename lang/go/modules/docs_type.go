@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:type-util", map[string]string{
+	registerDocs("boru:type-util", map[string]string{
 		"alts":      "The alternatives of a disjunct as a List of types.",
 		"arityof":   "Count of a function type's required parameters.",
 		"brand":     "Mint a nominal subtype of a base type tagged by an atom.",
@@ -23,7 +23,7 @@ func init() {
 	// These words take TYPES as values, so the generated permutations
 	// (which substitute data) cannot demonstrate any of them. Results are
 	// from verified lang/spec/module-type.tsv rows.
-	registerExamples("aql:type-util", map[string][]string{
+	registerExamples("boru:type-util", map[string][]string{
 		"parent": {`TypeUtil.parent Integer                          ;# Number — one step up the lattice`},
 		"root":   {`TypeUtil.root Integer                            ;# Scalar — the top of its family`},
 		"lca":    {`TypeUtil.lca Integer Float                       ;# Number — least common ancestor`},

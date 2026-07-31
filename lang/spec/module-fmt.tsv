@@ -1,71 +1,71 @@
-# AQL Language Specification: the aql:fmt module
+# boru Language Specification: the boru:fmt module
 # Format: input<TAB>expected<TAB>description
 #
 # The source pretty-printer, exposed as a runtime API. Fmt.format formats
-# AQL source text into canonical layout (normalised spacing, a trailing
-# newline) and shares its implementation with the `aql fmt` CLI. The result
+# boru source text into canonical layout (normalised spacing, a trailing
+# newline) and shares its implementation with the `boru fmt` CLI. The result
 # is the formatted string, so the expected column is the canonical
 # single-quoted rendering with the trailing newline shown as \n.
 #
 # The non-concrete-argument error arm is pinned by a Go test
 # (lang/go/modules/fmt_test.go) rather than an ERROR row here.
 #
-import "aql:fmt" end Fmt.format "[ a  b  c ]"	'[a b c]\n'	Fmt.format collapses list spacing and adds a trailing newline
-import "aql:fmt" end Fmt.format "{ a:1   b:2 }"	'{a:1 b:2}\n'	Fmt.format normalises map spacing
-import "aql:fmt" end Fmt.format "def x 1"	'def x 1\n'	Fmt.format keeps canonical source but ensures a trailing newline
-import "aql:fmt" end Fmt.format "def double fn [[x:Integer] [Integer] [x mul 2]]"	'def double fn x:Integer Integer [x mul 2]\n'	Fmt.format drops brackets around a single fn param and return
-import "aql:fmt" end Fmt.format "def   f   (+re/[a-z]+/)"	'def f (+re/[a-z]+/)\n'	Fmt.format keeps a minilang literal verbatim (its [ ] + delimiters are not re-tokenised) while normalising the surrounding spacing
-import "aql:fmt" end Fmt.format "+gex|a*b|"	'+gex|a*b|\n'	Fmt.format leaves a pipe-delimited minilang literal untouched
-import "aql:fmt" end Fmt.format "size none"	'size none\n'	Fmt.format keeps the lowercase none VALUE verbatim (never rewrites it to the None type)
-import "aql:fmt" end Fmt.format "list 1 2 3"	'list 1 2 3\n'	Fmt.format keeps the list constructor word verbatim (never rewrites it to the List type)
-import "aql:fmt" end Fmt.format "x is integer"	'x is Integer\n'	Fmt.format still capitalises a genuine lowercase type name
-import "aql:fmt" end Fmt.format "def sum3 fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]] end sum3 1 2 3"	'def sum3 fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]]\n  end sum3 1 2 3\n'	Fmt.format never drops statements that trail a fn definition (no truncation)
-import "aql:fmt" end Fmt.format-markdown "```aql\ndef  x  1\n```"	'```aql\ndef x 1\n```'	Fmt.format-markdown reformats a fenced aql block
-import "aql:fmt" end Fmt.format-html "<!-- aqlfmt -->\ndef  z   3\n<!-- /aqlfmt -->"	'<!-- aqlfmt -->\ndef z 3\n<!-- /aqlfmt -->'	Fmt.format-html reformats a marker region, leaving the rest
-import "aql:fmt" end Fmt.render 40 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}	'a b'	Fmt.render lays a doc flat when it fits the width
-import "aql:fmt" end Fmt.render 1 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}	'a\nb'	Fmt.render breaks a doc that does not fit the width
-import "aql:fmt" end Fmt.render 20 {fmt:'indent' by:-1 body:{fmt:'concat' parts:[{fmt:'hardline'} 'x']}}	'\nx'	a NEGATIVE document indent clamps to column 0 (no strings.Repeat panic — PR #298 review P1)
+import "boru:fmt" end Fmt.format "[ a  b  c ]"	'[a b c]\n'	Fmt.format collapses list spacing and adds a trailing newline
+import "boru:fmt" end Fmt.format "{ a:1   b:2 }"	'{a:1 b:2}\n'	Fmt.format normalises map spacing
+import "boru:fmt" end Fmt.format "def x 1"	'def x 1\n'	Fmt.format keeps canonical source but ensures a trailing newline
+import "boru:fmt" end Fmt.format "def double fn [[x:Integer] [Integer] [x mul 2]]"	'def double fn x:Integer Integer [x mul 2]\n'	Fmt.format drops brackets around a single fn param and return
+import "boru:fmt" end Fmt.format "def   f   (+re/[a-z]+/)"	'def f (+re/[a-z]+/)\n'	Fmt.format keeps a minilang literal verbatim (its [ ] + delimiters are not re-tokenised) while normalising the surrounding spacing
+import "boru:fmt" end Fmt.format "+gex|a*b|"	'+gex|a*b|\n'	Fmt.format leaves a pipe-delimited minilang literal untouched
+import "boru:fmt" end Fmt.format "size none"	'size none\n'	Fmt.format keeps the lowercase none VALUE verbatim (never rewrites it to the None type)
+import "boru:fmt" end Fmt.format "list 1 2 3"	'list 1 2 3\n'	Fmt.format keeps the list constructor word verbatim (never rewrites it to the List type)
+import "boru:fmt" end Fmt.format "x is integer"	'x is Integer\n'	Fmt.format still capitalises a genuine lowercase type name
+import "boru:fmt" end Fmt.format "def sum3 fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]] end sum3 1 2 3"	'def sum3 fn [[a:Integer b:Integer c:Integer] [Integer] [a add b add c]]\n  end sum3 1 2 3\n'	Fmt.format never drops statements that trail a fn definition (no truncation)
+import "boru:fmt" end Fmt.format-markdown "```boru\ndef  x  1\n```"	'```boru\ndef x 1\n```'	Fmt.format-markdown reformats a fenced boru block
+import "boru:fmt" end Fmt.format-html "<!-- borufmt -->\ndef  z   3\n<!-- /borufmt -->"	'<!-- borufmt -->\ndef z 3\n<!-- /borufmt -->'	Fmt.format-html reformats a marker region, leaving the rest
+import "boru:fmt" end Fmt.render 40 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}	'a b'	Fmt.render lays a doc flat when it fits the width
+import "boru:fmt" end Fmt.render 1 {fmt:"group" body:{fmt:"concat" parts:["a" {fmt:"line"} "b"]}}	'a\nb'	Fmt.render breaks a doc that does not fit the width
+import "boru:fmt" end Fmt.render 20 {fmt:'indent' by:-1 body:{fmt:'concat' parts:[{fmt:'hardline'} 'x']}}	'\nx'	a NEGATIVE document indent clamps to column 0 (no strings.Repeat panic — PR #298 review P1)
 #
 # The XSLT-style rule vocabulary: Fmt.kind supplies a node's dispatch key
 # (an XSLT match pattern) and Fmt.children its child sequence
 # (apply-templates' node list). Both are pure value->value transforms, so a
 # declarative rule table + a four-line apply driver — the whole formatter —
-# is ordinary AQL (see the end-to-end loop in modules/fmtrule_test.go).
+# is ordinary boru (see the end-to-end loop in modules/fmtrule_test.go).
 #
-import "aql:fmt" end {a:1} Fmt.kind	map/q	Fmt.kind classifies an untagged Map as 'map'
-import "aql:fmt" end [1 2] Fmt.kind	list/q	Fmt.kind classifies a List as 'list'
-import "aql:fmt" end 5 Fmt.kind	scalar/q	Fmt.kind classifies a scalar leaf as 'scalar'
-import "aql:fmt" end {$kind:'entry' key:'a'} Fmt.kind	entry/q	Fmt.kind reports a $kind-tagged Map's own tag
-import "aql:fmt" end {a:1 b:2} Fmt.children	[{$kind:entry/q key:'a' value:1} {$kind:entry/q key:'b' value:2}]	Fmt.children yields one entry node per Map key
-import "aql:fmt" end [7 8] Fmt.children	[7 8]	Fmt.children yields a List's elements verbatim
-import "aql:fmt" end 5 Fmt.children	[]	Fmt.children yields no children for a scalar leaf
+import "boru:fmt" end {a:1} Fmt.kind	map/q	Fmt.kind classifies an untagged Map as 'map'
+import "boru:fmt" end [1 2] Fmt.kind	list/q	Fmt.kind classifies a List as 'list'
+import "boru:fmt" end 5 Fmt.kind	scalar/q	Fmt.kind classifies a scalar leaf as 'scalar'
+import "boru:fmt" end {$kind:'entry' key:'a'} Fmt.kind	entry/q	Fmt.kind reports a $kind-tagged Map's own tag
+import "boru:fmt" end {a:1 b:2} Fmt.children	[{$kind:entry/q key:'a' value:1} {$kind:entry/q key:'b' value:2}]	Fmt.children yields one entry node per Map key
+import "boru:fmt" end [7 8] Fmt.children	[7 8]	Fmt.children yields a List's elements verbatim
+import "boru:fmt" end 5 Fmt.children	[]	Fmt.children yields no children for a scalar leaf
 #
-# Fmt.tree bridges AQL SOURCE into the same $kind-tagged value tree, so the
+# Fmt.tree bridges boru SOURCE into the same $kind-tagged value tree, so the
 # rule vocabulary can format real code, not just data (see the declarative
 # source formatter in modules/fmttree_test.go).
 #
-import "aql:fmt" end Fmt.kind (Fmt.tree "x")	root/q	Fmt.tree parses source into a $kind-tagged CST whose root node classifies as 'root'
-import "aql:fmt" end (((Fmt.tree "foo") get "children") get 0) get "text"	'foo'	Fmt.tree exposes each node's text and children, so a rule set can walk real AQL source
+import "boru:fmt" end Fmt.kind (Fmt.tree "x")	root/q	Fmt.tree parses source into a $kind-tagged CST whose root node classifies as 'root'
+import "boru:fmt" end (((Fmt.tree "foo") get "children") get 0) get "text"	'foo'	Fmt.tree exposes each node's text and children, so a rule set can walk real boru source
 #
 # The declarative rule table: Fmt.rules exposes the canonical layout
-# stylesheet as AQL data; Fmt.format-with formats under a (partial)
+# stylesheet as boru data; Fmt.format-with formats under a (partial)
 # override table. Rules are DATA and the emitter is the processor that
 # interprets them (the XSLT split); whitespace — attachment, indent,
 # width, fill-wrapping — is owned by the rules, which is why overriding
 # them changes it and why the canonical table reproduces Fmt.format
 # byte-for-byte (the authority row below).
 #
-import "aql:fmt" end (Fmt.rules) get "width"	72	the canonical rule table carries the 72-column width as data
-import "aql:fmt" end Fmt.format-with {} "def  x  1"	'def x 1\n'	an empty override table formats with the canonical rules
-import "aql:fmt" end eq (Fmt.format-with (Fmt.rules) "a, b; c") (Fmt.format "a, b; c")	true	the AQL rule table is AUTHORITATIVE: feeding Fmt.rules back reproduces Fmt.format
-import "aql:fmt" end Fmt.format-with {width:20} "[alpha bravo charlie delta]"	'[alpha bravo\n      charlie delta\n  ]\n'	width is a rule: 20 columns wraps the list with the greedy fill
-import "aql:fmt" end Fmt.format-with {attach:{comma:'none'}} "a, b"	'a , b\n'	attachment is a rule: detaching comma spaces it like any word
-import "aql:fmt" end Fmt.format-with {templates:{list:['<' apply/q '>']}} "[1 2]"	'<1 2>\n'	a TEMPLATE override: the literals around the apply/q recursion op are the list's brackets
-import "aql:fmt" end ((Fmt.rules) get "templates") get "list"	['[' apply/q ']']	the canonical list template — literals around the recursion op, the XSLT-template analogue
-import "aql:fmt" end Fmt.format-with {strategies:['bogus']} "a"	ERROR:unknown strategy	an unknown statement strategy is rejected, not silently ignored
-import "aql:fmt" end Fmt.format-with {widht:72} "a"	ERROR:unknown rule key	a misspelled rule key is rejected (typo protection)
-import "aql:fmt" end Fmt.format-with {width:'x'} "a"	ERROR:width must be an Integer	a non-integer width is rejected
-import "aql:fmt" import "aql:minilang" end (Fmt.tree "def x 1") mini sp 'count(//children)' {}	[4]	sp (structure-path) selects into the Fmt.tree CST — the path minilang over AQL structure
+import "boru:fmt" end (Fmt.rules) get "width"	72	the canonical rule table carries the 72-column width as data
+import "boru:fmt" end Fmt.format-with {} "def  x  1"	'def x 1\n'	an empty override table formats with the canonical rules
+import "boru:fmt" end eq (Fmt.format-with (Fmt.rules) "a, b; c") (Fmt.format "a, b; c")	true	the boru rule table is AUTHORITATIVE: feeding Fmt.rules back reproduces Fmt.format
+import "boru:fmt" end Fmt.format-with {width:20} "[alpha bravo charlie delta]"	'[alpha bravo\n      charlie delta\n  ]\n'	width is a rule: 20 columns wraps the list with the greedy fill
+import "boru:fmt" end Fmt.format-with {attach:{comma:'none'}} "a, b"	'a , b\n'	attachment is a rule: detaching comma spaces it like any word
+import "boru:fmt" end Fmt.format-with {templates:{list:['<' apply/q '>']}} "[1 2]"	'<1 2>\n'	a TEMPLATE override: the literals around the apply/q recursion op are the list's brackets
+import "boru:fmt" end ((Fmt.rules) get "templates") get "list"	['[' apply/q ']']	the canonical list template — literals around the recursion op, the XSLT-template analogue
+import "boru:fmt" end Fmt.format-with {strategies:['bogus']} "a"	ERROR:unknown strategy	an unknown statement strategy is rejected, not silently ignored
+import "boru:fmt" end Fmt.format-with {widht:72} "a"	ERROR:unknown rule key	a misspelled rule key is rejected (typo protection)
+import "boru:fmt" end Fmt.format-with {width:'x'} "a"	ERROR:width must be an Integer	a non-integer width is rejected
+import "boru:fmt" import "boru:minilang" end (Fmt.tree "def x 1") mini sp 'count(//children)' {}	[4]	sp (structure-path) selects into the Fmt.tree CST — the path minilang over boru structure
 
 # Stage-3 fn-value dispatch (landed 2026-07-21): the declarative-formatter
 # driver shape — a rule fn FETCHED from a Map at runtime and applied to the

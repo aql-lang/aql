@@ -1,7 +1,7 @@
 package modules
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // wrap.go — the shared builders behind every native module's FnDef
@@ -67,7 +67,7 @@ func makeModuleFnDef(n native.NativeFunc, subReg *native.Registry) native.Value 
 		fnSigs[i] = native.FnSig{
 			Params:     params,
 			Returns:    s.Returns,
-			Impl:       native.AQL([]native.Value{native.NewWord(n.Name)}),
+			Impl:       native.Boru([]native.Value{native.NewWord(n.Name)}),
 			NoEvalArgs: s.NoEvalArgs,
 			BarrierPos: s.BarrierPos,
 			// Carry the inner native's check-mode ReturnsFn onto the wrapper
@@ -116,7 +116,7 @@ func makeWrapFnDef(wordName string, subReg *native.Registry, sigs ...wrapSig) na
 		fnSigs[i] = native.FnSig{
 			Params:        s.params,
 			Returns:       s.returns,
-			Impl:          native.AQL([]native.Value{native.NewWord(wordName)}),
+			Impl:          native.Boru([]native.Value{native.NewWord(wordName)}),
 			NoEvalArgs:    s.noEval,
 			NoEvalMapArgs: s.noEvalMap,
 			QuoteArgs:     s.quoteArgs,

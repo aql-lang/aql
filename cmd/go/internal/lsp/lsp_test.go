@@ -11,7 +11,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/formatter"
+	"github.com/boru-lang/boru/lang/go/formatter"
 )
 
 // client drives the LSP server in tests via in-memory pipes. A
@@ -244,13 +244,13 @@ func TestDidOpenPublishesDiagnostics(t *testing.T) {
 	c.send(rpcRequest{JSONRPC: "2.0", ID: 1, Method: "initialize", Params: map[string]any{}})
 	c.recvResponse(1)
 
-	uri := "file:///tmp/bad.aql"
+	uri := "file:///tmp/bad.boru"
 	c.send(rpcNotification{
 		JSONRPC: "2.0",
 		Method:  "textDocument/didOpen",
 		Params: DidOpenTextDocumentParams{
 			TextDocument: TextDocumentItem{
-				URI: uri, LanguageID: "aql", Version: 1, Text: "upper 42",
+				URI: uri, LanguageID: "boru", Version: 1, Text: "upper 42",
 			},
 		},
 	})
@@ -297,12 +297,12 @@ func TestHoverReturnsHelp(t *testing.T) {
 	c.send(rpcRequest{JSONRPC: "2.0", ID: 1, Method: "initialize", Params: map[string]any{}})
 	c.recvResponse(1)
 
-	uri := "file:///tmp/hover.aql"
+	uri := "file:///tmp/hover.boru"
 	c.send(rpcNotification{
 		JSONRPC: "2.0",
 		Method:  "textDocument/didOpen",
 		Params: DidOpenTextDocumentParams{
-			TextDocument: TextDocumentItem{URI: uri, LanguageID: "aql", Version: 1, Text: "1 add 2"},
+			TextDocument: TextDocumentItem{URI: uri, LanguageID: "boru", Version: 1, Text: "1 add 2"},
 		},
 	})
 
@@ -330,12 +330,12 @@ func TestCompletionLists(t *testing.T) {
 	c.send(rpcRequest{JSONRPC: "2.0", ID: 1, Method: "initialize", Params: map[string]any{}})
 	c.recvResponse(1)
 
-	uri := "file:///tmp/c.aql"
+	uri := "file:///tmp/c.boru"
 	c.send(rpcNotification{
 		JSONRPC: "2.0",
 		Method:  "textDocument/didOpen",
 		Params: DidOpenTextDocumentParams{
-			TextDocument: TextDocumentItem{URI: uri, LanguageID: "aql", Version: 1, Text: ""},
+			TextDocument: TextDocumentItem{URI: uri, LanguageID: "boru", Version: 1, Text: ""},
 		},
 	})
 
@@ -370,7 +370,7 @@ func TestFormattingProducesTextEdit(t *testing.T) {
 	c.send(rpcRequest{JSONRPC: "2.0", ID: 1, Method: "initialize", Params: map[string]any{}})
 	c.recvResponse(1)
 
-	uri := "file:///tmp/fmt.aql"
+	uri := "file:///tmp/fmt.boru"
 	src := "1   add    2"
 	want := formatter.Format(src)
 
@@ -378,7 +378,7 @@ func TestFormattingProducesTextEdit(t *testing.T) {
 		JSONRPC: "2.0",
 		Method:  "textDocument/didOpen",
 		Params: DidOpenTextDocumentParams{
-			TextDocument: TextDocumentItem{URI: uri, LanguageID: "aql", Version: 1, Text: src},
+			TextDocument: TextDocumentItem{URI: uri, LanguageID: "boru", Version: 1, Text: src},
 		},
 	})
 
@@ -428,13 +428,13 @@ func TestParseErrorReportedAsDiagnostic(t *testing.T) {
 	c.send(rpcRequest{JSONRPC: "2.0", ID: 1, Method: "initialize", Params: map[string]any{}})
 	c.recvResponse(1)
 
-	uri := "file:///tmp/parse.aql"
+	uri := "file:///tmp/parse.boru"
 	c.send(rpcNotification{
 		JSONRPC: "2.0",
 		Method:  "textDocument/didOpen",
 		Params: DidOpenTextDocumentParams{
 			TextDocument: TextDocumentItem{
-				URI: uri, LanguageID: "aql", Version: 1, Text: `"unterminated`,
+				URI: uri, LanguageID: "boru", Version: 1, Text: `"unterminated`,
 			},
 		},
 	})

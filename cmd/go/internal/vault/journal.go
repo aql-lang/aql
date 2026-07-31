@@ -275,7 +275,7 @@ func journalKeepFromConfig(s *Store) int {
 
 // --- history / restore CLI -------------------------------------------------
 
-// runHistory implements `aql vault history [--limit=N]` — the
+// runHistory implements `boru vault history [--limit=N]` — the
 // event-sourced generation timeline from vault.jsonic.log.
 func runHistory(args []string, homeDir string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault history", flag.ContinueOnError)
@@ -319,7 +319,7 @@ func printHistory(stdout io.Writer, recs []journalRecord) {
 	}
 }
 
-// runRestore implements `aql vault restore`. Without --rekey-style
+// runRestore implements `boru vault restore`. Without --rekey-style
 // access to slot crypto (the journal is redacted), it restores the
 // metadata layer — aliases, agents, lock state, and a monotonic
 // capability merge — from a past generation, while PRESERVING the
@@ -366,7 +366,7 @@ func runRestore(args []string, homeDir string, stdin io.Reader, stdout, stderr i
 		return 0
 	}
 	if *gen <= 0 {
-		fmt.Fprintln(stderr, "error: specify --generation=G (see `aql vault history`) or --list")
+		fmt.Fprintln(stderr, "error: specify --generation=G (see `boru vault history`) or --list")
 		return 1
 	}
 	rec, err := c7findJournalGeneration(homeDir, *gen)

@@ -1,0 +1,13 @@
+{
+  "deps": {
+    "styler": "1.0.7"
+  },
+  "files": [
+    "textkit.boru"
+  ],
+  "main": "textkit.boru",
+  "major": 3,
+  "minor": 2,
+  "name": "textkit",
+  "patch": 0
+}

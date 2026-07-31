@@ -109,7 +109,7 @@ def params fn [[b:Box] [Map] [ do {n: [b.n], p: [b.p]} ]]
 		// A VARIADIC-returning source (`maybe = if … [x] []`) has static nout==1
 		// but leaves 0 values at runtime for the empty arm. Promoting it emitted
 		// a lone STORE_LOCAL that underflowed the VM (compile != interpret — the
-		// `mk -1` crash Codex flagged on aql-lang/aql#261). It must refuse and
+		// `mk -1` crash Codex flagged on boru-lang/boru#261). It must refuse and
 		// fall back; the value-producing call still matches the interpreter.
 		{"variadic-returning dyn-bind source refuses, interp runs",
 			`def Box class { n:Integer p:Float }

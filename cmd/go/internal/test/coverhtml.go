@@ -9,8 +9,8 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // mkdirAll and writeFile are test seams (design/TEST-SEAMS.10.md) over the os

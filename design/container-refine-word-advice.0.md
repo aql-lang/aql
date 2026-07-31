@@ -18,7 +18,7 @@ The surface is aspect-oriented: a plain nominal refine names the type, and
 **word-keyed advice** installed via `behave` intercepts the container words
 that establish or perturb the invariant:
 
-```aql
+```boru
 def Uniq (refine List)
 behave make/q (fn [[v:Uniq] [Uniq] [v unique]])
 behave push/q (fn [[v:Uniq] [Uniq] [v unique]])
@@ -28,7 +28,7 @@ make Uniq [3 1 2 1]          ; → [3 1 2], typeof → Uniq
 (make Uniq [1 2]) push 3     ; → [1 2 3], still Uniq
 ```
 
-```aql
+```boru
 def Sorted (refine List)
 behave make/q (fn [[v:Sorted] [Sorted] [v sort]])
 behave push/q (fn [[v:Sorted] [Sorted] [v sort]])
@@ -41,7 +41,7 @@ the base handler keeps doing exactly what it does today — advice runs on its
 result. A rejecting invariant raises from the advice body and surfaces as the
 word's error:
 
-```aql
+```boru
 def NonEmpty (refine List)
 behave pop/q (fn [[v:NonEmpty] [NonEmpty]
   [if (v size eq 0) [raise would_empty "NonEmpty cannot be emptied"] [v]]])
@@ -59,7 +59,7 @@ Three dead ends were verified before landing on this design:
   the `is`/dispatch/return boundaries.
 - **Builtin words are frozen.** `def make …` is refused
   (`native_definition.go`'s `reservedWordError` on `IsBuiltinWord`), so
-  "wrap `make` in AQL" is not available; interception must be a hook the
+  "wrap `make` in boru" is not available; interception must be a hook the
   builtin handlers themselves consult.
 - **The `usurp`/`ref` family is value-level.** `usurp`, `force-arity`,
   `stack-args` wrap a *function value* (argument permutation / barrier
@@ -68,7 +68,7 @@ Three dead ends were verified before landing on this design:
 
 What the tree *does* have is `behave`
 (`lang/go/native/native_behave.go`): a closed table of capability slots
-(`compare`, `canon`, `nodify`, `unify`) that attaches an AQL fn body to a
+(`compare`, `canon`, `nodify`, `unify`) that attaches a boru fn body to a
 **user** type by additively wrapping its `TypeBehavior` (`userBehavior`),
 running the body through a sub-engine with re-entrancy guards, and inferring
 the target type from the fn's first parameter. That is precisely the AOP
@@ -246,7 +246,7 @@ terminates instead of looping.
 exactly: push the param as a def (the declared name, so `fn [[v:Uniq] …]`
 bodies read naturally; `"a"` fallback preserves the compare/canon
 convention), run via `eng.NewTop(r).Run(tokens)` (the behave sub-engine
-precedent — NOT `InvokeBody`/`CallAQL`, keeping all five capability runners on
+precedent — NOT `InvokeBody`/`CallBoru`, keeping all five capability runners on
 one seam), wrap an error as `behave <word> <Type>: …` so the calling word
 surfaces it. Output validation, in this order:
 
@@ -406,12 +406,12 @@ behave row already lives). The TS engine runs only the shared kernel corpus
 ## 7. Verification sketch
 
 ```bash
-aql -e 'def Uniq (refine List) behave make/q (fn [[v:Uniq] [Uniq] [v unique]]) behave push/q (fn [[v:Uniq] [Uniq] [v unique]]) make Uniq [3 1 2 1]'
+boru -e 'def Uniq (refine List) behave make/q (fn [[v:Uniq] [Uniq] [v unique]]) behave push/q (fn [[v:Uniq] [Uniq] [v unique]]) make Uniq [3 1 2 1]'
 # → [3 1 2]
-aql -e '… (make Uniq [1 2]) push 1'            # → [1 2]
-aql -e '… typeof ((make Uniq [1 2]) push 1)'   # → Uniq
-aql -e '… def f fn [[x:Uniq] [Uniq] [x push 9]] f (make Uniq [1 9])'  # nominal param/return pass
-aql -e '… f [1 2]'                             # → ERROR: plain List is not a Uniq
+boru -e '… (make Uniq [1 2]) push 1'            # → [1 2]
+boru -e '… typeof ((make Uniq [1 2]) push 1)'   # → Uniq
+boru -e '… def f fn [[x:Uniq] [Uniq] [x push 9]] f (make Uniq [1 9])'  # nominal param/return pass
+boru -e '… f [1 2]'                             # → ERROR: plain List is not a Uniq
 ```
 
 Plus the behave spec files, the Stage-2 `RunCompiled` fallback Go test, a
@@ -428,7 +428,7 @@ and the full pre-commit gate per stage. (The dedup word is `unique`,
   *before* the base op runs (cheaper than build-then-raise).
 - **Native compilation of advice-carrying dispatches** — an interpreter
   island threading the advice body, once the Stage-5 island machinery grows
-  capture support (see `aql-bytecode-capture-threaded-islands.0.md`).
+  capture support (see `boru-bytecode-capture-threaded-islands.0.md`).
 - **Wiring `Hasher`** — set-like dedup at O(n) instead of the O(n²) a naive
   `unique` body implies; also what a real `Set` type would want.
 - **Weak references** — a value-identity/GC axis, unrelated to structural

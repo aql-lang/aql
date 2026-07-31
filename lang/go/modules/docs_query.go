@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:query", map[string]string{
+	registerDocs("boru:query", map[string]string{
 		"select":    "Seed a query, projecting the named columns (empty = all).",
 		"from":      "Set the source table, resolved by name from context.",
 		"where":     "Attach a WHERE condition clause to filter rows.",
@@ -27,7 +27,7 @@ func init() {
 	// it, so a query is written as a left-to-right chain. That shape is
 	// the entire API and no per-word signature shows it, which is why
 	// every word here carries the same worked chain.
-	registerExamples("aql:query", map[string][]string{
+	registerExamples("boru:query", map[string][]string{
 		"select": {
 			`Query.select [name age] Query.from people Query.where [age gt 25]`,
 			`  Query.order [age desc] Query.limit 10`,

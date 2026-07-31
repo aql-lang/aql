@@ -31,7 +31,7 @@ conversation used before §7a settled on surface/exposes.
 > **S2 landed (2026-06-10) — checker integration:** `fnsig` runs in
 > check mode (RunInCheckMode), so surface schemas carry REAL shapes
 > statically and `exposes` is fully static-checkable — a missing
-> operation or wrong-return overload fails `aql check` with the same
+> operation or wrong-return overload fails `boru check` with the same
 > `surface_unsatisfied` gap listing the runtime raises. A required
 > operation called on a surface-typed carrier types via the
 > contract's shape with Self := the surface node
@@ -44,7 +44,7 @@ conversation used before §7a settled on surface/exposes.
 > loudly through the assume-sig path (pinned by negative tests —
 > `lang/go/test/surface_check_test.go`). This discharges the
 > declaration-time-check caveat's main hazard: a stale contract is
-> now caught by `aql check`.
+> now caught by `boru check`.
 
 ## 1. Decisions
 
@@ -106,7 +106,7 @@ Circle implements Shape
 # checks NOW: for every required name, an overload exists whose
 # Self positions accept Circle and whose returns conform after
 # Self := Circle substitution. On failure:
-#   [aql/trait_unsatisfied]: Circle does not satisfy Shape —
+#   [boru/trait_unsatisfied]: Circle does not satisfy Shape —
 #     missing: perimeter (fn [[Circle] [Float]])
 #   hint: define the listed overloads before `implements`
 
@@ -193,7 +193,7 @@ binary operations are symmetric without ceremony:
 something receiver-based interfaces handle awkwardly.
 
 Precedent: CLOS, Dylan, and Julia all attach methods to **generic
-functions**, not classes — classes are data plus a tag. AQL's
+functions**, not classes — classes are data plus a tag. boru's
 concatenative call syntax adds the trick that `c area` *reads* like a
 receiver method call while having no receiver semantics at all.
 
@@ -211,7 +211,7 @@ solved here.)
   analyser type calls to required words via the trait sigs with
   `Self := <carrier type>` substituted — slotting into the existing
   carrier inference rather than degrading to `Any`.
-- `implements` itself is fully static-checkable; `aql check` runs the
+- `implements` itself is fully static-checkable; `boru check` runs the
   same completeness check without executing bodies.
 - Dead-overload detection composes: an overload required only via a
   trait is *not* dead while the trait has members.
@@ -279,7 +279,7 @@ Candidate replacements (all verified unclaimed):
 | `concept` | C++20's name for *exactly this* — a named, checkable predicate over types whose primary job is constraining generics, which is also this design's primary consumer (`T extends Shape`); no duck-typing or wire baggage; verb pairs available: `models` (the C++ literature's own verb), `satisfies`, `implements` | abstract-sounding; C++ mindshare smaller than Java/Rust |
 | `contract` | says precisely what it does — a checked obligation; design-by-contract heritage matches the loud-completeness-check culture | legal flavour; Solidity gave it smart-contract baggage; 8 chars |
 | `role` | short; reads naturally with classes ("Circle plays the Shape role"); DCI heritage | Raku/Moose roles *carry code* (mixin-flavoured), inviting the same confusion trait has |
-| `ability` | plain-English capability reading ("types with the Shape ability") | adjacent to AQL's existing *capabilities* (runtime I/O feature flags, REFERENCE.md) — real confusion risk |
+| `ability` | plain-English capability reading ("types with the Shape ability") | adjacent to boru's existing *capabilities* (runtime I/O feature flags, REFERENCE.md) — real confusion risk |
 
 ~~Leaning: `concept`~~ — superseded by review (2026-06-09):
 **`surface`** is the proposed term, and it is the strongest candidate
@@ -294,7 +294,7 @@ yet:
   no mixin history (trait), no single-language mindshare (concept).
 - The conformance verb pairs naturally: `Circle exposes Shape`
   (verified unclaimed, as are `surface` and `Self`).
-- One honest caveat: AQL's contributor docs use "surface" as prose
+- One honest caveat: boru's contributor docs use "surface" as prose
   jargon ("surface form", "surface syntax"). Measured: zero uses in
   the user-facing docs (REFERENCE/TUTORIAL), 8 total in
   CLAUDE/EXPLANATION — a small mechanical sweep to "syntax form"
@@ -331,7 +331,7 @@ Rename this file to `SURFACES.10.md` when the term is confirmed.
    look up the word's overload table (FnDef Signatures + native
    sigs), substitute `Self := Circle`, and require a sig whose Self
    positions accept Circle (contravariant) and whose returns conform
-   (covariant). Failure: `[aql/surface_unsatisfied]` listing each
+   (covariant). Failure: `[boru/surface_unsatisfied]` listing each
    missing name with its expected substituted sig. Success: record
    Circle in the surface's conformance set. Idempotent.
 3. Membership: a `surfaceUnifier` Behavior on the minted node —
@@ -414,4 +414,4 @@ surface are untouched.
    generics implementation phase.
 4. **Seeded standard traits** — which contracts ship named
    (`Comparable`, `Sizable`, `Showable`?), and where they live
-   (core vs `aql:type-util`). Decide alongside the behave bridge.
+   (core vs `boru:type-util`). Decide alongside the behave bridge.

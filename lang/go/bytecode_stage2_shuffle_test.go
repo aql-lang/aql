@@ -3,7 +3,7 @@ package lang
 import "testing"
 
 // Stage-2 shuffle-elision pins (voxgig zero-refusals plan): the
-// mutual-recursion-through-a-token-each shape (decision.aql eval-pred-all/any
+// mutual-recursion-through-a-token-each shape (decision.boru eval-pred-all/any
 // — `(children each [input swap eval-pred]) all`) refused as "dynamic input at
 // swap": the each-body element of an untyped List is a DYNAMIC carrier, and
 // the pure stack shuffles (single all-Any signature, identity returns) fell
@@ -24,7 +24,7 @@ import "testing"
 // The differential corpus never sees this off-corpus shape family, so pin it
 // (the memory-noted RunCompiledStrict discipline).
 
-// The decision.aql eval-pred cascade in miniature: ep-all/ep-any/ep-not are
+// The decision.boru eval-pred cascade in miniature: ep-all/ep-any/ep-not are
 // MUTUALLY RECURSIVE with ep THROUGH a token-body each closure whose `input`
 // is the enclosing fn's param (a lexical capture). All node kinds — and-group,
 // or-group, not-group, bare leaf, empty children — must compile and match the
@@ -102,7 +102,7 @@ func TestDynamicSwapTwoNetBodyStaysSound(t *testing.T) {
 (two [1 2 3])`)
 }
 
-// The loop-carried def rebind (decision.aql eval-table-first's `def found
+// The loop-carried def rebind (decision.boru eval-table-first's `def found
 // true` inside a for-arm, read as `found not` next iteration) COMPILES since
 // the loop-persistent frame slots landed (NoteLoopCarried / RecordDefRebind /
 // evStore — see bytecode_stage2_loopcarried_test.go for the full battery).

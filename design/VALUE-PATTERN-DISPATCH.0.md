@@ -8,7 +8,7 @@ addition, so a future scoped effort can pick it up without re-deriving it.
 ## Context
 
 `case` exhaustiveness landed in July 2026 (`design/case-exhaustiveness.0.md`,
-`lang/go/native/case_exhaustive.go`): `aql check` requires a `case`'s clauses
+`lang/go/native/case_exhaustive.go`): `boru check` requires a `case`'s clauses
 to cover the scrutinee's static type. That feature is deliberately scoped to
 the `case` construct. This note covers the *other* dispatch site the same idea
 motivates — **function value-pattern overloads** — and the precision gap that
@@ -82,7 +82,7 @@ the blocker.
 
 The value never reaches the partition AS a disjunct in real programs, and even
 a concrete member fails to dispatch through a variable. The decisive
-comparison (against `cmd/go/bin/aql check`):
+comparison (against `cmd/go/bin/boru check`):
 
 | Program | Result |
 |---|---|
@@ -136,7 +136,7 @@ could ship self-contained.)
    through variables, not just enums).
 
 Both are error-severity paths (`no_signature` / `partial_dispatch` gate
-`aql check`), deserving their own design + review.
+`boru check`), deserving their own design + review.
 
 ## Recommendation
 
@@ -148,7 +148,7 @@ Both are error-severity paths (`no_signature` / `partial_dispatch` gate
 
 ## Reproductions
 
-Runnable against `cmd/go/bin/aql check`:
+Runnable against `cmd/go/bin/boru check`:
 
 ```
 # false no_signature via untyped variable (the core gap)

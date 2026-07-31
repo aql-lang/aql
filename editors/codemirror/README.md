@@ -1,7 +1,7 @@
-# codemirror-lang-aql
+# codemirror-lang-boru
 
-A [CodeMirror 6](https://codemirror.net/) language mode for **AQL** — the
-concatenative, strongly-typed query language (`.aql`).
+A [CodeMirror 6](https://codemirror.net/) language mode for **boru** — the
+concatenative, strongly-typed query language (`.boru`).
 
 It is implemented as a
 [`StreamLanguage`](https://codemirror.net/docs/ref/#language.StreamLanguage)
@@ -10,7 +10,7 @@ and stays dependency-light: the only runtime dependency is a peer dependency on
 `@codemirror/language` (plus `@codemirror/state`, and `@codemirror/view` for a
 running editor).
 
-This mode also drives the **AQL web playground**.
+This mode also drives the **boru web playground**.
 
 ## What it highlights
 
@@ -18,7 +18,7 @@ This mode also drives the **AQL web playground**.
   lines).
 - All three string kinds — `'single'`, `"double"`, and `` `template ${expr}` ``
   backtick strings, where the `${ … }` interpolation is tokenised as embedded
-  AQL code.
+  boru code.
 - Every number form: decimal ints/floats (with `_` digit separators and
   exponents), `0x` hex, `0b` binary, `0d` big integers, and an optional leading
   `-`.
@@ -32,12 +32,12 @@ This mode also drives the **AQL web playground**.
   arity, and combinations (`/sq`, `/2`, …).
 
 The token vocabulary and faces mirror the reference Emacs mode
-([`editors/emacs/aql-mode.el`](../emacs/aql-mode.el)).
+([`editors/emacs/boru-mode.el`](../emacs/boru-mode.el)).
 
 ## Install
 
 ```sh
-npm install codemirror-lang-aql \
+npm install codemirror-lang-boru \
   @codemirror/language @codemirror/state @codemirror/view
 ```
 
@@ -46,7 +46,7 @@ app already uses (CodeMirror 6, `^6.0.0`).
 
 ## Usage
 
-Add the `aql()` extension to your editor's extensions. Pair it with a syntax
+Add the `boru()` extension to your editor's extensions. Pair it with a syntax
 highlighting extension (e.g. `@codemirror/language`'s `syntaxHighlighting` with
 the `defaultHighlightStyle`, or a theme such as `@codemirror/theme-one-dark`)
 so the token classes are painted.
@@ -59,12 +59,12 @@ import {
   syntaxHighlighting,
   defaultHighlightStyle,
 } from "@codemirror/language";
-import { aql } from "codemirror-lang-aql";
+import { boru } from "codemirror-lang-boru";
 
 const state = EditorState.create({
   doc: 'def add-two fn [[x:Integer] [Integer] [ x 2 add ]]',
   extensions: [
-    aql(),
+    boru(),
     syntaxHighlighting(defaultHighlightStyle),
     keymap.of(defaultKeymap),
   ],
@@ -77,8 +77,8 @@ You can also import the language object directly if you prefer to assemble the
 extension array yourself:
 
 ```js
-import { aqlLanguage } from "codemirror-lang-aql";
-// aqlLanguage is a StreamLanguage; aql() returns [aqlLanguage].
+import { boruLanguage } from "codemirror-lang-boru";
+// boruLanguage is a StreamLanguage; boru() returns [boruLanguage].
 ```
 
 The mode advertises `languageData` for the host editor:
@@ -90,13 +90,13 @@ The mode advertises `languageData` for the host editor:
 ## Demo
 
 Open [`index.html`](index.html) in a browser — it loads CodeMirror from
-[esm.sh](https://esm.sh) and mounts an editor over a sample AQL program, so you
+[esm.sh](https://esm.sh) and mounts an editor over a sample boru program, so you
 can eyeball the highlighting without a build step.
 
 ## Self-check
 
 ```sh
-node --check aql.js
+node --check boru.js
 ```
 
 `node --check` only parses the module, so the peer-dependency import does not

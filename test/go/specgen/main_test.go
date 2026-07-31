@@ -21,8 +21,8 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	lang "github.com/aql-lang/aql/lang/go"
+	eng "github.com/boru-lang/boru/eng/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // ---- pure helpers ---------------------------------------------------------
@@ -120,12 +120,12 @@ func TestErrorClass(t *testing.T) {
 		err  error
 		want string
 	}{
-		{errors.New("[aql/div_by_zero]: divided by zero"), "ERROR:div_by_zero"},
-		{errors.New("[aql/signature_error]: no matching signature"), "ERROR:signature_error"},
-		{errors.New("[aql/x] terse"), "ERROR:x"},
+		{errors.New("[boru/div_by_zero]: divided by zero"), "ERROR:div_by_zero"},
+		{errors.New("[boru/signature_error]: no matching signature"), "ERROR:signature_error"},
+		{errors.New("[boru/x] terse"), "ERROR:x"},
 		// An empty code (']' immediately after the prefix) is not stable —
 		// falls back to the generic sentinel.
-		{errors.New("[aql/]: empty code"), "ERROR:"},
+		{errors.New("[boru/]: empty code"), "ERROR:"},
 		{errors.New("plain error text"), "ERROR:"},
 	}
 	for _, c := range cases {
@@ -580,7 +580,7 @@ func checkFullMatrix(t *testing.T, full string) map[string]string {
 
 	header := readAll(t, full)
 	for _, want := range []string{
-		"# AQL Language Specification: Syntax Combination Matrix (GENERATED)",
+		"# boru Language Specification: Syntax Combination Matrix (GENERATED)",
 		fmt.Sprintf("# Alphabet (%d atoms): %s", len(alphabet), strings.Join(alphabet, " ")),
 		"# §1  1-element sequences",
 		"# §2  2-element sequences",

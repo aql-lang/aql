@@ -3,12 +3,12 @@ package test
 import (
 	"bufio"
 	"fmt"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 	"os"
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/parser"
 )
 
 func TestOptionsParams(t *testing.T) {

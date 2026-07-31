@@ -11,7 +11,7 @@ import (
 // silently RET zero values. A short-lived residual-drop (b70bb884's #4) made
 // such a unit succeed with an empty stack where the interpreter raised — e.g. a
 // deferred map expression that reads a param after its scope is gone. The
-// aql:test cascade that motivated #4 no longer needs it (the genArgs-keyed
+// boru:test cascade that motivated #4 no longer needs it (the genArgs-keyed
 // recursion fix superseded it), so #4 was removed; these pin that compile ==
 // interpret for the shapes it would have miscompiled. The langspec differential
 // does not cover these exact shapes.

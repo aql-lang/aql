@@ -12,7 +12,7 @@ import (
 // functions and their aggregator (registerAll). The public Register entry
 // point in native.go installs every entry into a registry.
 var Natives = []NativeFunc{
-	// `implies` (with nand/nor/iff/xnor) moved to the aql:logic-util module —
+	// `implies` (with nand/nor/iff/xnor) moved to the boru:logic-util module —
 	// see native/logic_module.go.
 
 	// ---- control flow ----
@@ -106,7 +106,7 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// `folder` (filesystem op) moved to the aql:io module — see io_module.go.
+	// `folder` (filesystem op) moved to the boru:io module — see io_module.go.
 
 	// ---- string slice ----
 	stringSliceNative(),
@@ -123,7 +123,7 @@ var Natives = []NativeFunc{
 	},
 
 	// now / sleep / interval / cancel (with timeout / await) moved to the
-	// aql:time-util module — see native/time_async_module.go.
+	// boru:time-util module — see native/time_async_module.go.
 
 	// ---- list (table query) ----
 	{
@@ -217,10 +217,10 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// `pad` (with the rest of the string words) moved to the aql:string-util
+	// `pad` (with the rest of the string words) moved to the boru:string-util
 	// module — see native/string_module.go.
 
-	// fetch / prepare / direct moved to the aql:net module — see net_module.go.
+	// fetch / prepare / direct moved to the boru:net module — see net_module.go.
 
 	// ---- flatten ----
 	{
@@ -264,7 +264,7 @@ var Natives = []NativeFunc{
 		},
 	},
 
-	// jsonify moved to the aql:struct module — see struct_module.go.
+	// jsonify moved to the boru:struct module — see struct_module.go.
 
 	// ---- listops (push/pop/unshift/shift) ----
 	// Each word carries a FlexList sig alongside the plain List sig.
@@ -554,7 +554,7 @@ func decodeReachSegments(elems []Value, r *Registry) ([]ReachSeg, error) {
 		segs = append(segs, seg)
 	}
 	if getrNext {
-		return nil, r.AqlError("reach_error", "reach: trailing `!` with no following key", "reach")
+		return nil, r.BoruError("reach_error", "reach: trailing `!` with no following key", "reach")
 	}
 	return segs, nil
 }
@@ -671,7 +671,7 @@ func nowHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value,
 func sleepHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms < 0 {
-		return nil, r.AqlError("sleep_error", fmt.Sprintf("sleep: milliseconds must be non-negative, got %d", ms), "sleep")
+		return nil, r.BoruError("sleep_error", fmt.Sprintf("sleep: milliseconds must be non-negative, got %d", ms), "sleep")
 	}
 	time.Sleep(time.Duration(ms) * time.Millisecond)
 	return nil, nil
@@ -690,7 +690,7 @@ func (tt TemporalModuleTypes) intervalAtomHandler(args []Value, ctx map[string]V
 func (tt TemporalModuleTypes) startInterval(args []Value, r *Registry, isList bool) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms <= 0 {
-		return nil, r.AqlError("interval_error", fmt.Sprintf("interval: milliseconds must be positive, got %d", ms), "interval")
+		return nil, r.BoruError("interval_error", fmt.Sprintf("interval: milliseconds must be positive, got %d", ms), "interval")
 	}
 	callback := args[1]
 
@@ -727,7 +727,7 @@ func (tt TemporalModuleTypes) startInterval(args []Value, r *Registry, isList bo
 func cancelTimeoutHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	ti, ok := args[0].Data.(*TimeoutInfo)
 	if !ok {
-		return nil, r.AqlError("cancel-timeout_error", fmt.Sprintf("cancel-timeout: not a Timeout value (got %s)", args[0].Parent), "cancel-timeout")
+		return nil, r.BoruError("cancel-timeout_error", fmt.Sprintf("cancel-timeout: not a Timeout value (got %s)", args[0].Parent), "cancel-timeout")
 	}
 	if ti.Timer != nil {
 		ti.Timer.Stop()
@@ -741,7 +741,7 @@ func cancelTimeoutHandler(args []Value, _ map[string]Value, _ []Value, r *Regist
 func cancelIntervalHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	ii, ok := args[0].Data.(*IntervalInfo)
 	if !ok {
-		return nil, r.AqlError("cancel-interval_error", fmt.Sprintf("cancel-interval: not an Interval value (got %s)", args[0].Parent), "cancel-interval")
+		return nil, r.BoruError("cancel-interval_error", fmt.Sprintf("cancel-interval: not an Interval value (got %s)", args[0].Parent), "cancel-interval")
 	}
 	if ii.Ticker != nil {
 		ii.Ticker.Stop()

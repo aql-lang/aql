@@ -4,22 +4,22 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// Runtime stamping of CUSTOM AQL codec fns at resolveCodec (Phase 1 of
+// Runtime stamping of CUSTOM boru codec fns at resolveCodec (Phase 1 of
 // design/RUNTIME-STAMPING.0.md): an armed registry compiles the map's
 // decode/encode bodies to detached units so per-request invokeFn dispatch
 // runs on the VM; an unarmed registry (the -no-compile contract) and the
 // Go-backed built-in codecs are untouched. Positive + negative per
 // lang/go/CLAUDE.md.
 
-// customCodecSteps defines a newline-framed AQL codec equivalent in shape to
+// customCodecSteps defines a newline-framed boru codec equivalent in shape to
 // mini-redis's (convert / index / slice body — the compilable subset).
 var customCodecSteps = []string{
-	`import "aql:string-util"`,
+	`import "boru:string-util"`,
 	`def my-decode (fn [[buf:Any] [Any] [
 		def txt (convert String buf)
 		def idx (StringUtil.indexof "\n" txt)
@@ -71,11 +71,11 @@ func codecRef(t *testing.T, v native.Value) *eng.CompiledFnRef {
 	return nil
 }
 
-// Armed: resolveCodec stamps both custom AQL fns (finalized Prog present) and
+// Armed: resolveCodec stamps both custom boru fns (finalized Prog present) and
 // the symmetric client-side defaults alias the SAME stamped clones (one
 // compile per direction, not two). Unarmed: nothing is stamped. Built-in
 // Go codecs are never touched either way.
-func TestResolveCodecStampsCustomAQLFns(t *testing.T) {
+func TestResolveCodecStampsCustomBoruFns(t *testing.T) {
 	armed := stampNetReg(t, true, customCodecSteps)
 	cdcVal, ok := armed.Defs.Top("cdc")
 	if !ok {
@@ -127,7 +127,7 @@ func TestResolveCodecStampsCustomAQLFns(t *testing.T) {
 
 	// A built-in Go codec resolves through the same path with zero stamping —
 	// its fast dispatch needs no unit.
-	linesSteps := []string{`import "aql:net"`, `def cdc Net.lines`}
+	linesSteps := []string{`import "boru:net"`, `def cdc Net.lines`}
 	armedLines := stampNetReg(t, true, linesSteps)
 	linesVal, _ := armedLines.Defs.Top("cdc")
 	cfL, err := resolveCodec(armedLines, linesVal, "listen")
@@ -143,7 +143,7 @@ func TestResolveCodecStampsCustomAQLFns(t *testing.T) {
 // (armed) and interpreted (unarmed) — the end-to-end differential over real
 // loopback sockets, exercising the stamped decode/encode per request.
 func TestCustomCodecStampedDifferential(t *testing.T) {
-	echoSteps := append(append([]string{`import "aql:net"`}, customCodecSteps...),
+	echoSteps := append(append([]string{`import "boru:net"`}, customCodecSteps...),
 		`def svc (service {})`,
 		`add {} ([req:Map state:Any] => [ {line: req.line} ]) svc`,
 		`def ln (Net.listen {tcp: 0 codec: cdc} svc)`,
@@ -179,7 +179,7 @@ func TestCustomCodecStampedDifferential(t *testing.T) {
 // {need: 1} partial-read arm and then the completed parse — the same reply
 // as the interpreted codec.
 func TestCustomCodecStampedSplitWrite(t *testing.T) {
-	serveSteps := append(append([]string{`import "aql:net"`, `import "aql:time-util"`}, customCodecSteps...),
+	serveSteps := append(append([]string{`import "boru:net"`, `import "boru:time-util"`}, customCodecSteps...),
 		`def svc (service {})`,
 		`add {} ([req:Map state:Any] => [ {line: req.line} ]) svc`,
 		`def ln (Net.listen {tcp: 0 codec: cdc} svc)`,

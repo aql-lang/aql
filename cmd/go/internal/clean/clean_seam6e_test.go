@@ -14,8 +14,8 @@ import (
 
 func TestRunRemoveAllError(t *testing.T) {
 	dir := t.TempDir()
-	aqlDir := filepath.Join(dir, ".aql")
-	if err := os.MkdirAll(filepath.Join(aqlDir, "cache"), 0o755); err != nil {
+	boruDir := filepath.Join(dir, ".boru")
+	if err := os.MkdirAll(filepath.Join(boruDir, "cache"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	orig := osRemoveAll

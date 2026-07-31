@@ -3,7 +3,7 @@ package repl
 import (
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // The REPL builds its registry by hand and runs it through

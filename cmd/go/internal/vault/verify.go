@@ -19,7 +19,7 @@ type keyringLister interface {
 	list() ([]string, error)
 }
 
-// runVerify implements `aql vault verify [--prune]`. It reconciles the
+// runVerify implements `boru vault verify [--prune]`. It reconciles the
 // two files the vault depends on — the metadata store (vault.jsonic)
 // and the secret keyring — and reports inconsistencies that a crash
 // between their separate writes, or a partial import, could leave:
@@ -79,7 +79,7 @@ func runVerify(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 			return err
 		}
 		if s == nil {
-			return errors.New("vault not initialized; run `aql vault init`")
+			return errors.New("vault not initialized; run `boru vault init`")
 		}
 
 		// Enumerate the keyring once when the backend supports it; this

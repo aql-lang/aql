@@ -1,4 +1,4 @@
-// Capabilities are the integration seam between aqleng (the engine)
+// Capabilities are the integration seam between borueng (the engine)
 // and a host package that supplies real-world services like fileops,
 // format encoders, or a SQL store.
 //
@@ -13,7 +13,7 @@
 import type { Registry } from './registry.ts'
 
 /**
- * Typed convenience accessor. Mirrors `aqleng.Cap[T]` from Go.
+ * Typed convenience accessor. Mirrors `borueng.Cap[T]` from Go.
  * Returns the stored value cast to T (UNCHECKED CAST — see file
  * header) along with `true`, or `undefined` and `false` when the
  * capability is missing.

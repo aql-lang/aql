@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // TestLoadSeeds — value rows load with file/line provenance; comments,
@@ -189,7 +189,7 @@ func TestClassifySeamArms(t *testing.T) {
 			swap(t)
 			calls := 0
 			real := lang.New
-			langNew = func() (*lang.AQL, error) {
+			langNew = func() (*lang.Boru, error) {
 				calls++
 				if calls == fail {
 					return nil, errors.New("boom")
@@ -200,13 +200,13 @@ func TestClassifySeamArms(t *testing.T) {
 			if r.Outcome != CheckReject || !strings.Contains(r.Detail, "harness: boom") {
 				t.Errorf("fail@%d: %v %q, want harness check-reject", fail, r.Outcome, r.Detail)
 			}
-			langNew = func() (*lang.AQL, error) { return lang.New() }
+			langNew = func() (*lang.Boru, error) { return lang.New() }
 		}
 	})
 
 	t.Run("compileCheck hard error", func(t *testing.T) {
 		swap(t)
-		compileCheck = func(*lang.AQL, string) (*lang.Program, string, lang.CheckResult, error) {
+		compileCheck = func(*lang.Boru, string) (*lang.Program, string, lang.CheckResult, error) {
 			return nil, "check error", lang.CheckResult{}, errors.New("kaput")
 		}
 		r := Classify("1 add 2")
@@ -226,7 +226,7 @@ func TestClassifySeamArms(t *testing.T) {
 
 	t.Run("runtime bail", func(t *testing.T) {
 		swap(t)
-		runCompiled = func(*lang.AQL, string) ([]any, bool, error) {
+		runCompiled = func(*lang.Boru, string) ([]any, bool, error) {
 			return nil, false, errors.New("bailed")
 		}
 		r := Classify("1 add 2")
@@ -237,7 +237,7 @@ func TestClassifySeamArms(t *testing.T) {
 
 	t.Run("error divergence", func(t *testing.T) {
 		swap(t)
-		runCompiled = func(*lang.AQL, string) ([]any, bool, error) {
+		runCompiled = func(*lang.Boru, string) ([]any, bool, error) {
 			return nil, true, errors.New("phantom")
 		}
 		r := Classify("1 add 2")
@@ -248,7 +248,7 @@ func TestClassifySeamArms(t *testing.T) {
 
 	t.Run("value divergence", func(t *testing.T) {
 		swap(t)
-		runCompiled = func(*lang.AQL, string) ([]any, bool, error) {
+		runCompiled = func(*lang.Boru, string) ([]any, bool, error) {
 			return []any{int64(99)}, true, nil
 		}
 		r := Classify("1 add 2")

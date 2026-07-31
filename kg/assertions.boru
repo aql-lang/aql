@@ -1,0 +1,158 @@
+# assertions.boru — assertion construction and the claim/conflict policy.
+#
+# Claim policy (kg/README.md §claims):
+#   - every assertion carries at least one evidence record (validated in
+#     validate.boru; build-assertion refuses an empty evidence list here,
+#     because an unsupported claim must never be constructed silently)
+#   - conflicting claims are PRESERVED: when a single-valued predicate
+#     (schema.boru) has two or more accepted claims (asserted / inferred /
+#     estimated / disputed — not superseded, not unresolved) with
+#     distinct canonical objects on one subject, every member of the
+#     group is re-marked "disputed" — nothing is overwritten or discarded
+#   - a conflict auto-resolves ONLY when the objects canonicalize to the
+#     same value (then there is no conflict at all: the assertions are
+#     duplicates and share one id) — everything else goes to review
+
+import "boru:struct-util"
+import "./util.boru"
+import "./schema.boru"
+import "./identifiers.boru"
+import "./entities.boru"
+
+# Build an assertion from a spec map (the KgAssertion fields, minus id),
+# deriving the deterministic id from the canonical content + the sorted
+# evidence source ids. An empty evidence list is refused loudly — an
+# unsupported claim must never be constructed.
+def build-assertion fn spec:Map Map [
+  def evidence (KgUtil.list-at spec "evidence")
+  def subject_id (KgUtil.get-or spec "subject_id" "")
+  def predicate (KgUtil.get-or spec "predicate" "")
+  if ((evidence size) eq 0)
+    [raise kg_no_evidence
+        `assertion ${subject_id} ${predicate} has no evidence`
+    ]
+    []
+  def object (KgUtil.get-or spec "object" {})
+  def valid_from (KgUtil.get-or spec "valid_from" none)
+  def valid_to (KgUtil.get-or spec "valid_to" none)
+  def source_ids (each [dot source_id] evidence)
+  def id
+    (KgId.assertion-id subject_id predicate object valid_from valid_to
+        source_ids
+    )
+    KgSchema.mk-assertion
+    {id:id
+      subject_id:subject_id
+      predicate:predicate
+      object:object
+      evidence:evidence
+      confidence:(KgUtil.get-or spec "confidence" 1.0)
+      status:(KgUtil.get-or spec "status" "asserted")
+      valid_from:valid_from
+      valid_to:valid_to
+      recorded_at:(KgUtil.get-or spec "recorded_at" "")
+      rule:(KgUtil.get-or spec "rule" none)
+    }
+]
+
+# Group key for conflict detection: subject | predicate.
+def claim-key fn a:Map String [`${a.subject_id}|${a.predicate}`]
+
+# Two assertions carry the same claim value when their objects
+# canonicalize identically.
+def same-object fn [[a:Map b:Map] [Boolean] [
+  (KgId.canon-of a.object) eq (KgId.canon-of b.object)
+]]
+
+# Mark the conflict groups. Input: the full assertion list. Output:
+# {assertions conflicts} where conflicts is a list of
+# {subject_id predicate assertion_ids} — one per single-valued predicate
+# carrying 2+ distinct object values — and assertions is the same list
+# with every member of a conflict group re-marked "disputed" (superseded
+# and already-disputed members keep their stronger status).
+def mark-conflicts fn assertions:List Map [
+  def contested
+    (filter
+        [var
+            [[a]
+                ((KgSchema.term-approved a.predicate
+                        KgSchema.single-valued-predicates
+                    )
+                    and
+                    (not
+                        ((a.status eq "superseded") or
+                            (a.status eq "unresolved")
+                        )
+                    )
+                )
+            ]
+        ]
+        assertions
+    )
+  def groups
+    (fold
+        [var
+            [[a acc]
+              def k (claim-key a)
+              def cur (acc get k)
+              def lst (if (cur is None) [[]] [cur]) acc set (k)
+                (push a lst)
+            ]
+        ]
+        contested {}
+    )
+  def conflict-keys
+    (filter
+        [var
+            [[k]
+              def grp (groups get k)
+              def canons
+                (KgEnt.distinct-sorted
+                    (each [var [[a] KgId.canon-of a.object]] grp)
+                )
+                (canons size) gt 1
+            ]
+        ]
+        (sort (keys groups))
+    )
+  def conflicted-ids
+    (flatten
+        (each [var [[k] each [dot id] (groups get k)]] conflict-keys)
+    )
+  def conflicts
+    (each
+        [var
+            [[k]
+              def grp (groups get k)
+              def head (grp get 0) KgUtil.as-map
+                {subject_id:head.subject_id
+                  predicate:head.predicate
+                  assertion_ids:(sort (each [dot id] grp))
+                }
+            ]
+        ]
+        conflict-keys
+    )
+  def marked
+    (each
+        [var
+            [[a]
+              def hit (((filter [eq a.id] conflicted-ids) size) gt 0)
+              if
+                ((hit and (not (a.status eq "superseded"))) and
+                    (not (a.status eq "unresolved"))
+                )
+                [StructUtil.setpath "status" "disputed" a] [a]
+            ]
+        ]
+        assertions
+    )
+    KgUtil.as-map {assertions:marked conflicts:conflicts}
+]
+
+export "KgAst" {
+  build-assertion:build-assertion/r
+  claim-key:claim-key/r
+  same-object:same-object/r
+  mark-conflicts:mark-conflicts/r
+}

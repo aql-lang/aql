@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // TestAsValidateDynamicArms pins asValidate's gradual admission over

@@ -1,0 +1,319 @@
+# ============================================================================
+# wc — count lines, words and bytes.
+#
+#   wc [-l] [-w] [-c] [FILE…]
+#
+# With no FILE, or with FILE `-`, wc reads standard input. With no flag it
+# prints all three counts; any combination of -l/-w/-c selects a subset, and
+# the columns are always printed in the conventional order lines, words,
+# bytes — never in the order the flags were written. A `total` row follows
+# when more than one FILE operand is given.
+#
+# Counting rules, chosen to match POSIX / GNU wc:
+#   lines  the number of NEWLINE characters (an unterminated last line is
+#          therefore not counted, exactly as wc does)
+#   words  the number of maximal runs of non-whitespace, where whitespace is
+#          space, tab, newline, carriage return, vertical tab and form feed
+#   bytes  the length of the input in BYTES, not runes (`convert Bytes`)
+#
+# The word rule is the POSIX one, i.e. GNU's behaviour in a UTF-8 locale
+# (`LC_ALL=C.utf8 wc`). GNU in the C locale additionally requires a word's
+# characters to be PRINTABLE, so it does not count "—" or a stray control
+# byte as a word; this program does. Lines and bytes are identical in either
+# locale.
+#
+# Column width: every count is right-aligned in a field as wide as the widest
+# count this run will print, minimum 1. That is GNU's layout for file
+# operands; GNU pads to a fixed 7 when it reads a pipe, and this program does
+# not — it has already slurped the input, so it knows the real width.
+#
+# EXIT CODES
+#   0  every input was counted
+#   1  at least one input could not be read; the readable ones are still
+#      counted and reported, and the failure is named on stderr
+#   2  a usage error — an unknown flag, a bad value (Cli.dispatch's contract,
+#      which is Cli.main's contract; see the shell at the foot of this file)
+#
+# All the counting, selection and layout live in PURE fns that take their
+# input as parameters (tests/wc_test.boru drives those); only wc-slurp,
+# wc-gather-step and `run` touch the world.
+# ============================================================================
+
+import "boru:cli"
+import "boru:io"
+import "boru:string-util"
+
+# ----------------------------------------------------------------------------
+# Counting — pure, over a slurped String.
+# ----------------------------------------------------------------------------
+
+# Every ASCII whitespace character except the space itself, which is the
+# character the others are normalised ONTO before the word split.
+def wc-spaces ["\t" "\n" "\r" "\v" "\f"]
+
+def wc-flat-step fn [[c:String acc:String] [String] [
+  def r (StringUtil.replace c " " acc {scope:"all"})
+  r
+]]
+
+# `StringUtil.split` DROPS empty fields unless {keepEmpty:true}, so splitting
+# whitespace-normalised text on a single space yields exactly the maximal runs
+# of non-whitespace — wc's definition of a word.
+def wc-words fn [[text:String] [Integer] [
+  def flat (fold [wc-flat-step] wc-spaces text)
+  def n (size (StringUtil.split " " flat))
+  n
+]]
+
+# …and with {keepEmpty:true} the field count is one more than the separator
+# count, so `parts - 1` is the number of newlines. "" -> [""] -> 0.
+def wc-lines fn [[text:String] [Integer] [
+  def n ((size (StringUtil.split "\n" text {keepEmpty:true})) sub 1)
+  n
+]]
+
+# `size` on a String is its RUNE length; the byte length is the size of its
+# UTF-8 encoding. The round trip is exact even for input that is not valid
+# UTF-8 — a raw read keeps the bytes, and `convert Bytes` hands them back
+# unchanged (verified against a 5000-byte /dev/urandom file).
+def wc-bytes fn [[text:String] [Integer] [
+  def n (size (convert Bytes text))
+  n
+]]
+
+def wc-count fn [[text:String] [Map] [
+  {} set (quote lines) (wc-lines text)
+     set (quote words) (wc-words text)
+     set (quote bytes) (wc-bytes text)
+]]
+
+def wc-add fn [[a:Map b:Map] [Map] [
+  {} set (quote lines) ((a.lines) add (b.lines))
+     set (quote words) ((a.words) add (b.words))
+     set (quote bytes) ((a.bytes) add (b.bytes))
+]]
+
+def wc-zero {lines: 0 words: 0 bytes: 0}
+
+# ----------------------------------------------------------------------------
+# Column selection — the canonical order, filtered by the flags.
+# ----------------------------------------------------------------------------
+def wc-all-columns ["lines" "words" "bytes"]
+
+def wc-flag fn [[flags:Map k:String] [Boolean] [
+  def v (flags get k)
+  if (v is Boolean) [v] [false]
+]]
+
+def wc-columns fn [[flags:Map] [List] [
+  def l (wc-flag flags "lines")
+  def w (wc-flag flags "words")
+  def c (wc-flag flags "bytes")
+  if ((l or w) or c) [
+    def a (if l [(push "lines" [])] [[]])
+    def b (if w [(push "words" a)] [a])
+    def d (if c [(push "bytes" b)] [b])
+    d
+  ] [wc-all-columns]
+]]
+
+# ----------------------------------------------------------------------------
+# Layout — pure text assembly.
+# ----------------------------------------------------------------------------
+
+# right-align in a field of n runes (n is a small column width, so the
+# recursion is shallow).
+def wc-lpad fn [[s:String n:Integer] [String] [
+  if ((size s) gte n) [s] [ def r (wc-lpad (join "" [" " s]) n)  r ]
+]]
+
+# The grand total dominates every column, so its digit counts give the width
+# of the whole report — no second pass over the rows is needed.
+def wc-width-step fn [[k:String acc:Map] [Map] [
+  def t acc.t
+  def w acc.w
+  def d (size (convert String (t get k)))
+  if (d gt w) [ acc set (quote w) d ] [acc]
+]]
+
+def wc-width fn [[total:Map sel:List] [Integer] [
+  def a0 ({w: 1} set (quote t) total)
+  def rr (fold [wc-width-step] sel a0)
+  rr.w
+]]
+
+# NB every concatenation below is `join ""`, never `join " "` or `join "\n"`.
+# A SINGLE-CHARACTER separator makes `join` strip that character from each
+# element's edges and collapse internal runs of it (voxgigstruct.Join's
+# "merging separator chars as needed" — the same rule that drops empty
+# elements). `join " " [" 2" " 5" "29"]` is therefore " 2 5 29", not the
+# " 2  5 29" a padded column needs, with no diagnostic. `join ""` does no
+# merging, so the separator is written into the list instead.
+def wc-cell-step fn [[k:String acc:Map] [Map] [
+  def c acc.counts
+  def w acc.w
+  def t acc.text
+  def cell (wc-lpad (convert String (c get k)) w)
+  def nx (if (t eq "") [cell] [(join "" [t " " cell])])
+  acc set (quote text) nx
+]]
+
+# one report row: the selected counts, then the label when there is one.
+def wc-row fn [[counts:Map sel:List w:Integer label:String] [String] [
+  def a0 ({text: ""} set (quote counts) counts set (quote w) w)
+  def rr (fold [wc-cell-step] sel a0)
+  def body rr.text
+  if (label eq "") [body] [(join "" [body " " label])]
+]]
+
+def wc-total-step fn [[it:Map acc:Map] [Map] [
+  def r (wc-add acc (it.counts))
+  r
+]]
+
+def wc-total fn [[items:List] [Map] [
+  def r (fold [wc-total-step] items wc-zero)
+  r
+]]
+
+def wc-row-step fn [[it:Map acc:Map] [Map] [
+  def sel acc.sel
+  def w acc.w
+  def rs acc.rows
+  def r (wc-row (it.counts) sel w (it.label))
+  acc set (quote rows) (push r rs)
+]]
+
+def wc-line-step fn [[row:String acc:String] [String] [
+  def r (join "" [acc row "\n"])
+  r
+]]
+
+# The whole of stdout, trailing newline included; "" when nothing was counted.
+# `items` is a List of {label counts}.
+def wc-report fn [[items:List sel:List showtotal:Boolean] [String] [
+  def tot (wc-total items)
+  def w (wc-width tot sel)
+  def a0 ({rows: []} set (quote sel) sel set (quote w) w)
+  def rr (fold [wc-row-step] items a0)
+  def rows0 rr.rows
+  def rows (if showtotal [(push (wc-row tot sel w "total") rows0)] [rows0])
+  def out (fold [wc-line-step] rows "")
+  out
+]]
+
+def wc-diag fn [[name:String err:String] [String] [
+  def r (join "" ["wc: " name ": " err "\n"])
+  r
+]]
+
+# ----------------------------------------------------------------------------
+# The world: reading an operand, and the handler.
+# ----------------------------------------------------------------------------
+def wc-stdin-only ["-"]
+
+def wc-names fn [[argv:List] [List] [
+  if ((size argv) eq 0) [wc-stdin-only] [argv]
+]]
+
+# NEITHER option is decoration; a bare `IO.read` gets wc wrong twice over.
+#
+#   {fmt:"text"}  IO.read picks a DECODER FROM THE FILE EXTENSION. `wc a.md`
+#                 without this parses markdown and hands back a document tree
+#                 (or a parse error on any .md that is not valid jsonic);
+#                 .json, .csv, .tsv and friends behave the same way. wc counts
+#                 characters, so the format must be pinned to plain text.
+#   {nl:"raw"}    a text read rewrites every "\r\n" and every lone "\r" to
+#                 "\n" before you see the bytes. A CRLF file would lose one
+#                 byte per line (6 reported as 4) and a classic-Mac CR file
+#                 would report lines wc says it does not have (0 becomes 2).
+#
+# Together they are byte-exact, on files and on stdin alike.
+def wc-raw fn [[name:String] [String] [
+  if (name eq "-") [(convert String (IO.read (IO.stdin) {fmt: "text" nl: "raw"}))]
+                   [(convert String (IO.read (make Pathon name) {fmt: "text" nl: "raw"}))]
+]]
+
+# Errors are DATA: {ok:true text} or {ok:false err}. A read that raises is
+# caught here, so one unreadable operand never ends the run.
+def wc-slurp fn [[name:String] [Map] [
+  def r (do [ {ok: true} set (quote text) (wc-raw name) ] error [ dot message ])
+  if (r is Map) [r] [ {ok: false} set (quote err) (convert String r) ]
+]]
+
+def wc-gather-step fn [[name:String acc:Map] [Map] [
+  def s (wc-slurp name)
+  if (s.ok) [
+    def lab (if (acc.named) [name] [""])
+    def it ({} set (quote label) lab set (quote counts) (wc-count (s.text)))
+    acc set (quote items) (push it (acc.items))
+  ] [
+    def _e (IO.write (IO.stderr) (wc-diag name (s.err)))
+    acc set (quote fails) ((acc.fails) add 1)
+  ]
+]]
+
+def spec {
+  name:    "wc"
+  version: "0.1.0"
+  summary: "count lines, words and bytes"
+  flags: [
+    {name: "lines" short: "l" kind: "bool" help: "print the newline count"}
+    {name: "words" short: "w" kind: "bool" help: "print the word count"}
+    {name: "bytes" short: "c" kind: "bool" help: "print the byte count"}
+  ]
+  args: {name: "files" min: 0 help: "files to count; - or none is stdin"}
+}
+
+def run fn [[ctx:Map] [Integer] [
+  def sel (wc-columns (ctx.flags))
+  def argv (ctx.args)
+  def names (wc-names argv)
+  def a0 ({items: [] fails: 0} set (quote named) ((size argv) gt 0))
+  def g (fold [wc-gather-step] names a0)
+  def out (wc-report (g.items) sel ((size argv) gt 1))
+  def _o (if (out eq "") [none] [(IO.write (IO.stdout) out)])
+  if ((g.fails) gt 0) [1] [0]
+]]
+
+# :wc-core-end:  <- tests/wc_test.boru slices this file HERE and evaluates
+# everything above it, so the suite asserts against the SHIPPED source rather
+# than a copy of it. Keep the marker on its own line, and keep every impure
+# statement below it.
+#
+# ----------------------------------------------------------------------------
+# The imperative shell. This is `Cli.main (spec) (run/r)` UNROLLED into the
+# three statements cli-main-do performs — dispatch, print, exit — and the
+# unrolling is deliberate, not stylistic:
+#
+#   DEFECT (interpreter-only, reproduced today). A handler invoked from INSIDE
+#   a module body cannot see its own file's module-level bindings under
+#   `boru run -no-compile`; the default compiled mode resolves them fine. So
+#   `Cli.main (spec) (run/r)` — which applies the handler inside boru:cli —
+#   dies with `undefined word: wc-columns` under the interpreter while working
+#   under the compiler. Minimal repro, with no boru:cli in it: put
+#
+#       def mm-call fn [[h:Function] [Any] [ def r ({} h/r apply)  r ]]
+#       export "MM" { call: mm-call/r }
+#
+#   in mod.boru; then in a main file that imports it,
+#
+#       def konst 41
+#       def run fn [[ctx:Map] [Integer] [ def k (konst add 1)  k ]]
+#       print (MM.call (run/r))       # compiled: 42   -no-compile: undefined word: konst
+#
+#   (The repro is written as prose because `boru build`'s bundler scans
+#   COMMENTS for relative imports and fails on a commented-out one.)
+#
+# `Cli.dispatch` is pure and takes argv as a parameter, so calling `run` HERE,
+# at file scope, sidesteps the defect entirely. The user-visible contract is
+# unchanged: the text printed for --help / --version / a usage error and the
+# exit codes are `Cli.dispatch`'s, which is exactly what `Cli.main` prints.
+# ----------------------------------------------------------------------------
+def d (Cli.dispatch (spec) (IO.args))
+def _out (if ((d.out) neq "") [(IO.write (IO.stdout) (d.out))] [none])
+def _err (if ((d.err) neq "") [(IO.write (IO.stderr) (d.err))] [none])
+def ctx ({} set (quote flags) (d.flags) set (quote args) (d.args)
+            set (quote command) (d.command))
+def code (if ((d.action) neq "run") [(d.code)] [(run ctx)])
+IO.exit code;

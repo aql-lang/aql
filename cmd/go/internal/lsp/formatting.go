@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf16"
 
-	"github.com/aql-lang/aql/lang/go/formatter"
+	"github.com/boru-lang/boru/lang/go/formatter"
 )
 
 // buildFormattingEdits returns the TextEdit slice for textDocument/

@@ -8,7 +8,7 @@ import (
 
 // Error-code enumeration.
 //
-// An AQL error code is a DISPATCH CONTRACT, not a log string. Programs
+// A boru error code is a DISPATCH CONTRACT, not a log string. Programs
 // branch on it:
 //
 //	do [risky] error [dot code case [not_found/q "…" read_error/q "…"]]
@@ -58,7 +58,7 @@ import (
 
 // ErrorCode is one registered code and the layer that owns it.
 type ErrorCode struct {
-	// Code is the bare name, without the "aql/" render prefix — the exact
+	// Code is the bare name, without the "boru/" render prefix — the exact
 	// string `dot code` yields and a `case` arm matches.
 	Code string
 	// Owner is the registering layer's id (OwnerKernel for the kernel).
@@ -69,7 +69,7 @@ type ErrorCode struct {
 // enforces is DISPATCHABILITY, not house style: a code has to be spellable as
 // a `case` arm, so lower-case, starting with a letter, and no whitespace.
 //
-// A hyphen is allowed because AQL word names use them freely (`for-each`,
+// A hyphen is allowed because boru word names use them freely (`for-each`,
 // `with-decimal`) and four codes follow suit — `expected-byte`,
 // `bad-encoding`, `cancel-timeout_error`, `cancel-interval_error`. Snake_case
 // is the overwhelming convention (233 of 237) and the right choice for a new
@@ -134,7 +134,7 @@ func ErrorCodeInitError() error {
 
 // ErrorCodes returns every registered code, sorted by name. This is the data
 // source for tooling that has to enumerate codes rather than guess at them —
-// an `aql explain <code>`, a REFERENCE.md generator, an editor completion
+// a `boru explain <code>`, a REFERENCE.md generator, an editor completion
 // list.
 func ErrorCodes() []ErrorCode {
 	out := make([]ErrorCode, 0, len(errorCodeRegistry))

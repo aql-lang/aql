@@ -17,7 +17,7 @@ import (
 //
 // Both are legitimate: feeding the VM malformed bytecode simulates exactly the
 // compiler-bug shape each guard defends against, and the VM's contract is to
-// return an internal_error AqlError (RunCompiled then re-runs the interpreter).
+// return an internal_error BoruError (RunCompiled then re-runs the interpreter).
 
 func seam7Reg(t *testing.T) *Registry {
 	t.Helper()
@@ -29,14 +29,14 @@ func seam7Reg(t *testing.T) *Registry {
 	return r
 }
 
-// wantInternal asserts err is a non-nil *AqlError carrying the internal_error
+// wantInternal asserts err is a non-nil *BoruError carrying the internal_error
 // taxonomy whose message contains sub.
 func wantInternal(t *testing.T, err error, sub string) {
 	t.Helper()
 	if err == nil {
 		t.Fatalf("want internal_error containing %q, got nil", sub)
 	}
-	var ae *AqlError
+	var ae *BoruError
 	if errors.As(err, &ae) {
 		if ae.Code != "internal_error" {
 			t.Fatalf("want internal_error, got %q (%v)", ae.Code, err)
@@ -507,7 +507,7 @@ func seam7DelegReg(t *testing.T) (r *Registry, inc, fail Value) {
 			Args:    []*Type{TInteger},
 			Returns: []*Type{TInteger}, BarrierPos: -1,
 			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-				return nil, r.AqlError("value_error", "cfail: boom", "cfail")
+				return nil, r.BoruError("value_error", "cfail: boom", "cfail")
 			}),
 		}},
 	})
@@ -519,7 +519,7 @@ func seam7DelegReg(t *testing.T) (r *Registry, inc, fail Value) {
 			Name: name, Registry: r,
 			Signatures: []Signature{{
 				Args: []*Type{TInteger}, Returns: []*Type{TInteger}, BarrierPos: -1,
-				Impl: AQL([]Value{NewWord(name)}),
+				Impl: Boru([]Value{NewWord(name)}),
 			}},
 		})
 	}
@@ -640,7 +640,7 @@ func seam7UserFail(r *Registry) Value {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TInteger}},
 			Returns: []*Type{TInteger}, BarrierPos: BarrierAllForward,
-			Impl: AQL([]Value{NewWord("cfail"), NewWord("n")}),
+			Impl: Boru([]Value{NewWord("cfail"), NewWord("n")}),
 		}},
 	})
 }
@@ -673,7 +673,7 @@ func TestSeam7MatchUserPolyUnitShapeMismatch(t *testing.T) {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TAny}},
 			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
-			Impl: AQL([]Value{NewWord("n")}),
+			Impl: Boru([]Value{NewWord("n")}),
 		}},
 	})
 	fd := r.Lookup("cpoly")
@@ -704,7 +704,7 @@ func TestSeam7CallUserPolyParamContract(t *testing.T) {
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TAny}},
 			Returns: []*Type{TAny}, BarrierPos: BarrierAllForward,
-			Impl: AQL([]Value{NewWord("n")}),
+			Impl: Boru([]Value{NewWord("n")}),
 		}},
 	})
 	fd := r.Lookup("cpoly2")

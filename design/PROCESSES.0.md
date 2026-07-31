@@ -1,10 +1,10 @@
 # PROCESSES
 
-Design for BEAM-style **processes & actors** in AQL — phase 1, core actors.
+Design for BEAM-style **processes & actors** in boru — phase 1, core actors.
 
 ## Context
 
-The end goal is to make AQL capable of writing **highly efficient and safe
+The end goal is to make boru capable of writing **highly efficient and safe
 network servers and clients** — primarily JSON APIs, eventually binary wire
 protocols. The most battle-tested architecture for that problem is the Erlang
 **BEAM**: huge numbers of cheap, isolated processes that communicate only by
@@ -15,7 +15,7 @@ what makes high-concurrency network code both efficient and easy to reason about
 (We adopt this shape but, unlike BEAM, with **bounded** mailboxes and
 **pattern-matched dispatch** rather than skip-and-save selective receive — see §1.)
 
-AQL today is a concatenative data/query language with only **fork-join**
+boru today is a concatenative data/query language with only **fork-join**
 concurrency (`await`, `timeout`, `interval` in
 `lang/go/native/native_temporal_await.go`). It has no long-lived process, no
 mailbox, and no message passing. But it already owns the *hardest* piece of a
@@ -29,7 +29,7 @@ BEAM-like runtime:
 - **patrun** (`lang/go/native/internal/patrun/`, wired up in
   `lang/go/native/native_patrun.go`) is a trie pattern matcher that is a natural
   engine for **pattern-matched message dispatch** (and, opt-in, selective receive).
-- AQL values are **immutability-first** (`eng/go/clone.go`): scalars, plain
+- boru values are **immutability-first** (`eng/go/clone.go`): scalars, plain
   `List`, plain `Map`, and type/function values are never mutated in place. Only
   `Object`, `Array`, and `Store` are mutable. Immutable values can therefore be
   shared between goroutines with no copy and no race — exactly the property a
@@ -41,7 +41,7 @@ PIDs, and a named process registry. This document specifies them.
 This is a **design RFC only — no implementation code yet**, matching how other
 subsystems were designed first (`STREAM-WORDS.0.md`, `PERMISSIONS-PLAN.10.md`).
 
-### Relationship to `aql:stream`
+### Relationship to `boru:stream`
 
 `STREAM-WORDS.0.md` designs a *module* for back-pressured, bounded pipelines
 (fan-out/fan-in over data). This document is complementary and lower-level:
@@ -105,7 +105,7 @@ dispatch**:
 - Each handler is a loop that `receive`s — matching each incoming message (a
   parsed JSON request, a timer tick, a shutdown signal) against patrun clauses
   and running the matched body.
-- State lives *inside* the process (as ordinary AQL bindings in its forked
+- State lives *inside* the process (as ordinary boru bindings in its forked
   registry), never shared, so there are no locks in user code.
 
 > **Dispatch, not selective receive (decided).** The primary `receive` consumes
@@ -120,7 +120,7 @@ dispatch**:
 
 This RFC delivers the concurrency substrate for that model. The networking and
 binary-codec layers that complete the end-goal are scoped as later phases and
-enumerated honestly in the [gap analysis](#8-gap-analysis). AQL's stated stance
+enumerated honestly in the [gap analysis](#8-gap-analysis). boru's stated stance
 is that it "is a query/data language, not a systems language"
 (`BATTERIES-INCLUDED-REPORT.5.md`); actors are introduced as *controlled,
 capability-gated* concurrency, not as an invitation to write arbitrary systems
@@ -129,12 +129,12 @@ code.
 ## 2. BEAM → Go mapping
 
 The architecture maps each BEAM fundamental onto a standard Go construct plus an
-existing AQL primitive. Nothing here requires a custom scheduler or a new memory
+existing boru primitive. Nothing here requires a custom scheduler or a new memory
 model.
 
-| BEAM concept | Go / AQL realization |
+| BEAM concept | Go / boru realization |
 | --- | --- |
-| Lightweight process | a goroutine running an AQL body on its own `ForkConcurrent()` registry |
+| Lightweight process | a goroutine running a boru body on its own `ForkConcurrent()` registry |
 | Per-process heap isolation | forked registry + **immutable-only messages** (no shared mutable state crosses a `send`) |
 | PID | a new opaque **`Pid`** Ideal value (precedent: `Timeout`/`Interval` Ideals) wrapping a `*process` handle |
 | Mailbox | per-process goroutine-safe queue: a slice guarded by a mutex/`sync.Cond`, **bounded** with a configurable overflow policy (`SERVICES.0.md` §8.1; BEAM's are unbounded — we deliberately diverge) |
@@ -144,7 +144,7 @@ model.
 | Preemptive scheduling | the Go runtime scheduler (note: no per-process *fairness* guarantees — acceptable for phase 1) |
 | "Let it crash" | phase 1 has no supervision, but every process goroutine **must `recover()`** so a crash terminates only that process (logged), never the host |
 | Process exit / cleanup | goroutine returns → mailbox closed, table + name entries removed |
-| Shutdown / cancellation | a **`context.Context`** on `ProcessRuntime` (new to AQL) so the host can cancel all processes on exit and avoid goroutine leaks |
+| Shutdown / cancellation | a **`context.Context`** on `ProcessRuntime` (new to boru) so the host can cancel all processes on exit and avoid goroutine leaks |
 
 The key enabling fact: `ForkConcurrent()` does a **shallow struct copy**
 (`fork := *r`) and then replaces the *mutable* fields with isolated clones. Any
@@ -333,7 +333,7 @@ bounded by construction. Most code never needs `{select: true}`.
 ## 4. Language surface (new core words)
 
 All names verified collision-free against existing native word registrations.
-Signatures use AQL's top-first argument convention with `describe`-ready
+Signatures use boru's top-first argument convention with `describe`-ready
 summaries and examples.
 
 - **`spawn [body] -> Pid`** — start a process running `body` (a quoted list,
@@ -379,14 +379,14 @@ machinery). Properties:
 ## 6. Message-isolation rule (immutable-only)
 
 `send` enforces the BEAM "no shared mutable state" guarantee by **value class**
-rather than by copying, leaning on AQL's existing mutability taxonomy
+rather than by copying, leaning on boru's existing mutability taxonomy
 (`eng/go/clone.go`, `lang/go/native/mutability_test.go`):
 
 - **Sendable (immutable):** all scalars (Integer, Float, BigInteger,
   BigDecimal, String, Boolean, Atom, Path, None), the Time family, plain `List`,
   plain `Map`, `Pid`, type/function values — anything never mutated in place.
 - **Rejected (mutable):** `Object`, `Array`, `Store`, and any typed/mutable
-  variants thereof. `send` raises a clear AQL `Error` (proposed code
+  variants thereof. `send` raises a clear boru `Error` (proposed code
   `not_sendable`, message naming the offending type) and does not enqueue.
 
 Rationale: immutable values are safe to share across goroutines by reference, so
@@ -412,7 +412,7 @@ built-in profiles (`sandbox`, `compute`, `read-only`) **cannot spawn
 processes**, while `trusted`/`full` can. Denials carry the usual blame chain
 (profile name, rule, resolved scope). `send`/`receive`/registry operations act
 only within an already-granted process and need no additional capability beyond
-`spawn`. This composes with the sandboxed sub-engine model (`aql:vm`): a child
+`spawn`. This composes with the sandboxed sub-engine model (`boru:vm`): a child
 policy can attenuate away the process capability entirely.
 
 ## 8. Gap analysis
@@ -423,12 +423,12 @@ What this RFC adds, and what still blocks the network-server end-goal:
   `send` / `receive` (pattern-matched dispatch; bounded opt-in selective receive);
   named process registry; the first use of `context.Context` in the engine (for
   shutdown/cancellation).
-- **Still missing — networking (phase 3):** AQL has **no TCP/socket server** —
+- **Still missing — networking (phase 3):** boru has **no TCP/socket server** —
   only the HTTP *client* `fetch` (`lang/go/native/fetch.go`,
-  `aql:net`). A listener/acceptor primitive (Go `net`/`net/http`) is required
+  `boru:net`). A listener/acceptor primitive (Go `net`/`net/http`) is required
   for actor-per-connection servers.
 - **Still missing — binary (phase ≥3):** there is **no `Bytes`/binary value
-  type and no bit-syntax** (only the `aql:bin-util` integer bitwise words and
+  type and no bit-syntax** (only the `boru:bin-util` integer bitwise words and
   base conversion via `convert`). Binary wire protocols need a `Bytes` payload
   and an Erlang-style binary-construction/match facility. **JSON is already
   covered** by the `Format` interface plus `jsonify`/`reify`.
@@ -460,7 +460,7 @@ A counter actor demonstrating spawn → register → tagged-map messages →
 pattern-matched dispatch. (Illustrative surface; exact syntax settles during
 implementation.)
 
-```aql
+```boru
 # The actor body: a loop that holds its count as a binding and
 # dispatches three message shapes (front message matched against the clauses).
 def counter-loop fn [[n:Integer] [Never] [

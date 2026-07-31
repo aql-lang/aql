@@ -12,7 +12,7 @@ import (
 // is not any one line's, but an interactive `IO.exit 3` must still be
 // distinguishable from `IO.exit 0`.
 func TestReplExitEndsTheSession(t *testing.T) {
-	in := strings.NewReader("import \"aql:io\"\nIO.exit 3\n1 add 2\n")
+	in := strings.NewReader("import \"boru:io\"\nIO.exit 3\n1 add 2\n")
 	out := &bytes.Buffer{}
 	Start(in, out, "")
 	if !strings.Contains(out.String(), "exit 3") {
@@ -26,7 +26,7 @@ func TestReplExitEndsTheSession(t *testing.T) {
 // An out-of-range code is an ordinary error: the session survives it and
 // the next line still runs.
 func TestReplExitRangeRefusedKeepsSession(t *testing.T) {
-	in := strings.NewReader("import \"aql:io\"\nIO.exit 200\n1 add 2\n")
+	in := strings.NewReader("import \"boru:io\"\nIO.exit 200\n1 add 2\n")
 	out := &bytes.Buffer{}
 	Start(in, out, "")
 	if !strings.Contains(out.String(), "0..125") {

@@ -120,7 +120,7 @@ func TestDispatchCacheHitAndInvalidate(t *testing.T) {
 // module's ONE sub-registry, so every concurrent execution (a serve-raw
 // connection handler, a spawned process, an await branch) that dispatches
 // a module word runs Lookup against the same Registry — the shape behind
-// the flaky aql:net socket tests, where the unguarded cache map raced
+// the flaky boru:net socket tests, where the unguarded cache map raced
 // (concurrent map read/write is a runtime fatal, not just a detector
 // finding). The goroutines mix cache WRITES (a name each goroutine looks
 // up first, plus per-goroutine names) with cache READS (shared hot names

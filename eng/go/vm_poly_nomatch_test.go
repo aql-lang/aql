@@ -82,7 +82,7 @@ func TestPolyNoMatchRaiseBuildsDiagnostic(t *testing.T) {
 	if err == nil {
 		t.Fatal("a valid spec must raise")
 	}
-	ae, ok := err.(*AqlError)
+	ae, ok := err.(*BoruError)
 	if !ok || ae.Code != "signature_error" {
 		t.Fatalf("raise = %v, want signature_error", err)
 	}
@@ -329,12 +329,12 @@ func TestBestEffortNoMatch(t *testing.T) {
 func TestVmDeferAltAttaches(t *testing.T) {
 	r := covRegistry(t, nil)
 	plain := vmDeferAlt(r, seam7Dbg, 0, "vm:poly-no-match", "x", nil)
-	if ae, ok := plain.(*AqlError); !ok || ae.Code != "internal_error" || ae.DeferAlt != nil {
+	if ae, ok := plain.(*BoruError); !ok || ae.Code != "internal_error" || ae.DeferAlt != nil {
 		t.Errorf("a nil alt must be a plain defer, got %v", plain)
 	}
-	alt := &AqlError{Code: "signature_error", Detail: "d"}
+	alt := &BoruError{Code: "signature_error", Detail: "d"}
 	err := vmDeferAlt(r, seam7Dbg, 0, "vm:poly-no-match", "x", alt)
-	ae, ok := err.(*AqlError)
+	ae, ok := err.(*BoruError)
 	if !ok || ae.Code != "internal_error" || ae.DeferAlt != alt {
 		t.Errorf("the alt must ride the internal defer, got %v", err)
 	}
@@ -349,9 +349,9 @@ func TestUserPolyNoMatchAltCoverageScreen(t *testing.T) {
 	InstallFnDef(r, "upnm", FnDefInfo{
 		Signatures: []Signature{
 			{Params: []FnParam{{Name: "a", Type: TInteger}}, Returns: []*Type{TAny},
-				BarrierPos: BarrierAllForward, Impl: AQL([]Value{NewWord("a")})},
+				BarrierPos: BarrierAllForward, Impl: Boru([]Value{NewWord("a")})},
 			{Params: []FnParam{{Name: "a", Type: TString}}, Returns: []*Type{TAny},
-				BarrierPos: BarrierAllForward, Impl: AQL([]Value{NewWord("a")})},
+				BarrierPos: BarrierAllForward, Impl: Boru([]Value{NewWord("a")})},
 		},
 	})
 	fd := r.Lookup("upnm")
@@ -366,7 +366,7 @@ func TestUserPolyNoMatchAltCoverageScreen(t *testing.T) {
 		SigIdx: []int{0, 1}, Units: []int{0, 1},
 		Impls: []SigImpl{fd.Signatures[0].Impl, fd.Signatures[1].Impl}}
 	_, _, err := vc.matchUserPoly(full, window, seam7Dbg, 0)
-	ae, ok := err.(*AqlError)
+	ae, ok := err.(*BoruError)
 	if !ok || ae.DeferAlt == nil || ae.DeferAlt.Code != "signature_error" {
 		t.Errorf("a covering subset must ride the alt, got %v", err)
 	}
@@ -374,7 +374,7 @@ func TestUserPolyNoMatchAltCoverageScreen(t *testing.T) {
 		SigIdx: []int{0}, Units: []int{0},
 		Impls: []SigImpl{fd.Signatures[0].Impl}}
 	_, _, err = vc.matchUserPoly(partial, window, seam7Dbg, 0)
-	ae, ok = err.(*AqlError)
+	ae, ok = err.(*BoruError)
 	if !ok || ae.Code != "internal_error" || ae.DeferAlt != nil {
 		t.Errorf("an uncovered live arm must keep the plain defer, got %v", err)
 	}

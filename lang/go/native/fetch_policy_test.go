@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 func TestFetchPolicyAllowsWithFull(t *testing.T) {
@@ -28,13 +28,13 @@ func TestFetchPolicyDeniedBySandbox(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected sandbox to deny fetch")
 	}
-	// The gate CODES the refusal (policy_error.go): it returns an AqlError
+	// The gate CODES the refusal (policy_error.go): it returns a BoruError
 	// carrying the code, not the raw *policy.Denied, so a program can reach it
 	// through `do [...] error [dot code]`. Asserting the code is asserting what
 	// a user can actually observe; the *Denied is an internal shape.
-	var ae *AqlError
+	var ae *BoruError
 	if !errors.As(err, &ae) {
-		t.Fatalf("expected a coded AqlError, got %T (%v)", err, err)
+		t.Fatalf("expected a coded BoruError, got %T (%v)", err, err)
 	}
 	// sandbox uninstalls network → capability_not_installed code.
 	if ae.Code != "capability_not_installed" {

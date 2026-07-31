@@ -1,16 +1,16 @@
 package modules
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BuildIOModule creates the "aql:io" native module. It registers the I/O
+// BuildIOModule creates the "boru:io" native module. It registers the I/O
 // words (formerly core) into an isolated sub-registry and returns a
 // ModuleDesc with an "IO" export containing FnDef wrappers for each word.
 //
 // After import, the words are accessed via dot notation:
 //
-//	import "aql:io"
+//	import "boru:io"
 //	"data.csv" IO.read                 # read a file
 //	"out.txt" "hello" IO.write          # write a file
 //	IO.stdin                           # read all of stdin
@@ -32,7 +32,7 @@ func BuildIOModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// the Parent tag on the stdin/stdout/stderr handles), so it must draw
 	// its ID from the importing tree's counter — see eng TypeTable.mintID.
 	subReg.Types.AdoptSeqFrom(parent.Types)
-	subReg.Types.MintOwner = "aql:io"
+	subReg.Types.MintOwner = "boru:io"
 	// StreamKind — the type of the stdin/stdout/stderr handles — is owned
 	// by this module: minted per import into the sub-registry, never a
 	// global builtin. It tags the handles and types the read/write Stream

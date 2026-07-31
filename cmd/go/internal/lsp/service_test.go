@@ -1,5 +1,5 @@
 // Tests for the Service-shaped LSP server wrapper (service.go) and
-// the `aql lsp` subcommand (lsp.go). Stdio sessions are driven with
+// the `boru lsp` subcommand (lsp.go). Stdio sessions are driven with
 // pre-framed input buffers (fully deterministic); TCP sessions dial
 // the listener that Start binds. Blocking-transport tests use io.Pipe
 // plus ctx-cancel/Stop to prove Start unwinds promptly.
@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/cmd/go/internal/service"
+	"github.com/boru-lang/boru/cmd/go/internal/service"
 )
 
 // syncBuffer is a mutex-guarded bytes.Buffer safe to share between
@@ -125,8 +125,8 @@ func TestStdioServerCleanSession(t *testing.T) {
 	if srv.Status() != service.StateStopped {
 		t.Errorf("post-Start Status() = %s, want stopped", srv.Status())
 	}
-	if !strings.Contains(out.String(), "aql-lsp") {
-		t.Errorf("expected initialize response naming aql-lsp, got %q", out.String())
+	if !strings.Contains(out.String(), "boru-lsp") {
+		t.Errorf("expected initialize response naming boru-lsp, got %q", out.String())
 	}
 
 	md := srv.Metadata()
@@ -225,8 +225,8 @@ func TestTCPServerCleanSession(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read initialize response: %s", err)
 	}
-	if !strings.Contains(string(data), "aql-lsp") {
-		t.Errorf("initialize response = %s, want to contain aql-lsp", data)
+	if !strings.Contains(string(data), "boru-lsp") {
+		t.Errorf("initialize response = %s, want to contain boru-lsp", data)
 	}
 
 	if _, err := conn.Write(frameBytes(t, rpcRequest{JSONRPC: "2.0", ID: 2, Method: "shutdown"})); err != nil {
@@ -382,7 +382,7 @@ func TestTCPServerEmptyHostDefaultsToLoopback(t *testing.T) {
 	}
 }
 
-// --- `aql lsp` subcommand (lsp.go) ---
+// --- `boru lsp` subcommand (lsp.go) ---
 
 func TestLSPCommandMetadata(t *testing.T) {
 	c := New()
@@ -408,7 +408,7 @@ func TestLSPCommandRunStdioCleanSession(t *testing.T) {
 	if code != 0 {
 		t.Errorf("Run = %d, want 0 for clean handshake (stderr: %s)", code, stderr.String())
 	}
-	if !strings.Contains(out.String(), "aql-lsp") {
+	if !strings.Contains(out.String(), "boru-lsp") {
 		t.Errorf("expected initialize response on stdout, got %q", out.String())
 	}
 }

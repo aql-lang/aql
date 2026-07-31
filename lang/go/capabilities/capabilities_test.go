@@ -126,7 +126,7 @@ func TestOSFileOpsWriteCreatesDir(t *testing.T) {
 
 func TestOSFileOpsReadNotFound(t *testing.T) {
 	o := &OSFileOps{}
-	_, err := o.ReadFile("/tmp/nonexistent_aql_test_file.txt")
+	_, err := o.ReadFile("/tmp/nonexistent_boru_test_file.txt")
 	if err == nil {
 		t.Fatal("expected error for missing file")
 	}

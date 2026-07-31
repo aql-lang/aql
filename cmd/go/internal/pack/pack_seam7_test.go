@@ -18,7 +18,7 @@ func TestS7n_ZipCreateEntryError(t *testing.T) {
 		return nil, errors.New("boom-zip-create")
 	}
 
-	dir := writeModule(t, goodJsonic, map[string]string{"index.aql": "1 add 2"})
+	dir := writeModule(t, goodJsonic, map[string]string{"index.boru": "1 add 2"})
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{dir}, &stdout, &stderr)
 	if code != 1 {
@@ -39,7 +39,7 @@ func TestS7n_ZipWriteEntryError(t *testing.T) {
 		return 0, errors.New("boom-zip-write")
 	}
 
-	dir := writeModule(t, goodJsonic, map[string]string{"index.aql": "1 add 2"})
+	dir := writeModule(t, goodJsonic, map[string]string{"index.boru": "1 add 2"})
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{dir}, &stdout, &stderr)
 	if code != 1 {
@@ -55,7 +55,7 @@ func TestS7n_ZipWriteEntryError(t *testing.T) {
 // module still produces a valid, readable zip — i.e. the seam
 // indirection itself changes nothing observable.
 func TestS7n_ZipCreateAndWriteEntryDefaultsWork(t *testing.T) {
-	dir := writeModule(t, goodJsonic, map[string]string{"index.aql": "3 add 4"})
+	dir := writeModule(t, goodJsonic, map[string]string{"index.boru": "3 add 4"})
 	var stdout, stderr bytes.Buffer
 	code := Run([]string{dir}, &stdout, &stderr)
 	if code != 0 {
@@ -68,7 +68,7 @@ func TestS7n_ZipCreateAndWriteEntryDefaultsWork(t *testing.T) {
 	}
 	defer zr.Close()
 	for _, f := range zr.File {
-		if f.Name != "index.aql" {
+		if f.Name != "index.boru" {
 			continue
 		}
 		rc, err := f.Open()

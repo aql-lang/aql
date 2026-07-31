@@ -1,11 +1,11 @@
-# tree-sitter-aql
+# tree-sitter-boru
 
 A [tree-sitter](https://tree-sitter.github.io/tree-sitter/) grammar for
-**AQL** — a concatenative, strongly-typed query language (source extension
-`.aql`). It powers syntax highlighting and structural editing in Neovim
+**boru** — a concatenative, strongly-typed query language (source extension
+`.boru`). It powers syntax highlighting and structural editing in Neovim
 (nvim-treesitter), Helix, Zed, Emacs (`treesit`), and GitHub Linguist.
 
-Because AQL is *concatenative*, this grammar is deliberately **pragmatic**:
+Because boru is *concatenative*, this grammar is deliberately **pragmatic**:
 it models the token / lexeme layer faithfully (comments, the three string
 kinds with `${…}` interpolation, every number form, words, capitalised type
 identifiers, operators / brackets, and the `/modifier` suffixes) and then
@@ -28,7 +28,7 @@ never `ERROR`s on real, well-formed files.
 
 Keyword vs builtin vs user-word is discriminated in `queries/highlights.scm`
 by matching the `word` node's text against the authoritative vocabulary
-lists (kept in sync with `editors/emacs/aql-mode.el` and `aql describe`).
+lists (kept in sync with `editors/emacs/boru-mode.el` and `boru describe`).
 
 ## Build & test
 
@@ -39,14 +39,14 @@ Requires the [tree-sitter CLI](https://github.com/tree-sitter/tree-sitter/blob/m
 # from editors/tree-sitter/
 tree-sitter generate        # regenerate src/parser.c from grammar.js
 tree-sitter test            # run the corpus tests in test/corpus/
-tree-sitter parse FILE.aql  # dump the parse tree of a file
+tree-sitter parse FILE.boru  # dump the parse tree of a file
 ```
 
 Quick smoke test over the repository's real programs:
 
 ```bash
-tree-sitter parse ../../lang/go/test/solardemo.aql
-tree-sitter parse ../../design/examples/todo/todo.aql
+tree-sitter parse ../../lang/go/test/solardemo.boru
+tree-sitter parse ../../design/examples/todo/todo.boru
 ```
 
 ### Is the generated `src/` committed?
@@ -69,24 +69,24 @@ Until the parser is upstreamed, register it as a custom grammar:
 
 ```lua
 local parsers = require("nvim-treesitter.parsers").get_parser_configs()
-parsers.aql = {
+parsers.boru = {
   install_info = {
     -- point at this directory (local path or a git URL + subdir)
-    url = "https://github.com/aql-lang/aql",
+    url = "https://github.com/boru-lang/boru",
     location = "editors/tree-sitter",
     files = { "src/parser.c" },
     branch = "main",
   },
-  filetype = "aql",
+  filetype = "boru",
 }
 
--- associate the .aql extension with the `aql` filetype
-vim.filetype.add({ extension = { aql = "aql" } })
+-- associate the .boru extension with the `boru` filetype
+vim.filetype.add({ extension = { boru = "boru" } })
 ```
 
-Then `:TSInstall aql`. Copy `queries/highlights.scm` and
+Then `:TSInstall boru`. Copy `queries/highlights.scm` and
 `queries/injections.scm` into your config's
-`queries/aql/` directory (or let nvim-treesitter pick them up from the
+`queries/boru/` directory (or let nvim-treesitter pick them up from the
 installed parser). Highlighting uses the standard capture names, so no
 `:TSEnable` extras are needed.
 
@@ -96,18 +96,18 @@ In `~/.config/helix/languages.toml`:
 
 ```toml
 [[language]]
-name = "aql"
-scope = "source.aql"
-file-types = ["aql"]
+name = "boru"
+scope = "source.boru"
+file-types = ["boru"]
 comment-token = "#"
 indent = { tab-width = 2, unit = "  " }
 
 [language.grammar]
-name = "aql"
-source = { git = "https://github.com/aql-lang/aql", subpath = "editors/tree-sitter", rev = "main" }
+name = "boru"
+source = { git = "https://github.com/boru-lang/boru", subpath = "editors/tree-sitter", rev = "main" }
 ```
 
-Copy the queries into `~/.config/helix/runtime/queries/aql/`
+Copy the queries into `~/.config/helix/runtime/queries/boru/`
 (`highlights.scm`, `injections.scm`), then:
 
 ```bash
@@ -121,37 +121,37 @@ Zed loads tree-sitter grammars via an extension. In your extension's
 `extension.toml`:
 
 ```toml
-[grammars.aql]
-repository = "https://github.com/aql-lang/aql"
+[grammars.boru]
+repository = "https://github.com/boru-lang/boru"
 path = "editors/tree-sitter"
 commit = "<pinned-sha>"
 ```
 
-Add a `languages/aql/config.toml` (`name = "AQL"`, `grammar = "aql"`,
-`path_suffixes = ["aql"]`, `line_comments = ["# ", "// "]`) and copy
-`highlights.scm` / `injections.scm` into `languages/aql/`.
+Add a `languages/boru/config.toml` (`name = "boru"`, `grammar = "boru"`,
+`path_suffixes = ["boru"]`, `line_comments = ["# ", "// "]`) and copy
+`highlights.scm` / `injections.scm` into `languages/boru/`.
 
 ### Emacs (treesit, Emacs 29+)
 
 ```elisp
 (add-to-list 'treesit-language-source-alist
-             '(aql "https://github.com/aql-lang/aql" "main" "editors/tree-sitter/src"))
-(treesit-install-language-grammar 'aql)
-(add-to-list 'auto-mode-alist '("\\.aql\\'" . aql-ts-mode))
+             '(boru "https://github.com/boru-lang/boru" "main" "editors/tree-sitter/src"))
+(treesit-install-language-grammar 'boru)
+(add-to-list 'auto-mode-alist '("\\.boru\\'" . boru-ts-mode))
 ```
 
-(A `treesit`-based `aql-ts-mode` can reuse the capture names in
-`highlights.scm`; the classic font-lock `aql-mode` lives in
-`editors/emacs/aql-mode.el`.)
+(A `treesit`-based `boru-ts-mode` can reuse the capture names in
+`highlights.scm`; the classic font-lock `boru-mode` lives in
+`editors/emacs/boru-mode.el`.)
 
 ## Layout
 
 ```
 editors/tree-sitter/
-├── grammar.js              # the grammar (name: 'aql')
+├── grammar.js              # the grammar (name: 'boru')
 ├── queries/
 │   ├── highlights.scm      # standard-capture highlighting
-│   └── injections.scm      # (minimal — AQL embeds no foreign DSLs by default)
+│   └── injections.scm      # (minimal — boru embeds no foreign DSLs by default)
 ├── test/corpus/basics.txt  # tree-sitter test cases
 ├── src/                    # GENERATED and committed (parser.c, *.json)
 ├── bindings/               # node / rust / python / go / swift / c bindings
@@ -162,4 +162,4 @@ editors/tree-sitter/
 
 ## License
 
-MIT (same as the parent AQL repository).
+MIT (same as the parent boru repository).

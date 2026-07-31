@@ -23,7 +23,7 @@ func TestForCountRejectsNonConcrete(t *testing.T) {
 	if err == nil {
 		t.Fatal("non-concrete count returned no error (silent zero-iteration)")
 	}
-	if ae := asAqlErr(err); ae == nil || ae.Code != "for_error" {
+	if ae := asBoruErr(err); ae == nil || ae.Code != "for_error" {
 		t.Fatalf("non-concrete count error = %v, want for_error", err)
 	}
 
@@ -50,9 +50,9 @@ func TestParseRangeRejectsNonConcrete(t *testing.T) {
 	}
 }
 
-// asAqlErr unwraps an AqlError for code assertions; nil if not one.
-func asAqlErr(err error) *AqlError {
-	var ae *AqlError
+// asBoruErr unwraps a BoruError for code assertions; nil if not one.
+func asBoruErr(err error) *BoruError {
+	var ae *BoruError
 	if errors.As(err, &ae) {
 		return ae
 	}

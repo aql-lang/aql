@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // --- MetaRegistry unit tests ---
@@ -212,7 +212,7 @@ func TestMetaHelpNoArgs(t *testing.T) {
 	if !strings.Contains(output, "REPL meta-commands") {
 		t.Error("expected 'REPL meta-commands' header")
 	}
-	if !strings.Contains(output, "AQL") {
+	if !strings.Contains(output, "boru") {
 		t.Error("expected language overview in output")
 	}
 }
@@ -303,7 +303,7 @@ func TestMetaDescribeCategory(t *testing.T) {
 	}
 }
 
-// /describe aql:<module>:<word> reaches describe verbatim — the colon form is
+// /describe boru:<module>:<word> reaches describe verbatim — the colon form is
 // not mangled by the meta-arg parser — and resolves through the wired resolver.
 func TestMetaDescribeModuleWord(t *testing.T) {
 	reg, err := newRegistry()
@@ -313,16 +313,16 @@ func TestMetaDescribeModuleWord(t *testing.T) {
 	mr := NewMetaRegistry()
 	out := &bytes.Buffer{}
 	ctx := &MetaContext{Out: out, Registry: reg}
-	if _, err := mr.ParseAndRun("/describe aql:type-util:tpartial", ctx); err != nil {
+	if _, err := mr.ParseAndRun("/describe boru:type-util:tpartial", ctx); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	o := out.String()
-	if !strings.Contains(o, "TypeUtil.tpartial") || !strings.Contains(o, "Module: aql:type-util") {
+	if !strings.Contains(o, "TypeUtil.tpartial") || !strings.Contains(o, "Module: boru:type-util") {
 		t.Errorf("expected module-word docs, got:\n%s", o)
 	}
 }
 
-// The resolver is wired into the REPL registry, so `import "aql:<name>"` works
+// The resolver is wired into the REPL registry, so `import "boru:<name>"` works
 // at the prompt (regression: it used to fail with "resolver not configured").
 func TestReplRegistryResolvesNativeModules(t *testing.T) {
 	reg, err := newRegistry()

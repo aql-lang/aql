@@ -7,7 +7,7 @@ import "testing"
 // exercise them: errorConvertBehavior's Match/Equal and
 // memberBehavior.Equal are plain kernel-default delegates.
 func TestDisplacedBehaviorMatchArms(t *testing.T) {
-	ev := NewError(&AqlError{Code: "x", Detail: "m"})
+	ev := NewError(&BoruError{Code: "x", Detail: "m"})
 	if !(errorConvertBehavior{}).Match(ev, TError) {
 		t.Fatal("an Error value matches TError via the default delegate")
 	}

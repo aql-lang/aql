@@ -6,7 +6,7 @@ import (
 
 	jsonic "github.com/tabnas/jsonic/go"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // --- ParseConfig (the CLI --options backing parser) ---

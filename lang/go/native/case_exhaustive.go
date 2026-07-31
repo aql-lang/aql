@@ -5,7 +5,7 @@ import (
 	"sort"
 	"strings"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // Static exhaustiveness checking for `case` (design/case-exhaustiveness.0.md).
@@ -491,7 +491,7 @@ func caseMatchCovers(r *Registry, m, alt Value, depth int) bool {
 
 // caseIvalsCover reports whether the union of the clause intervals
 // covers every value of the numeric alternative type at. ONLY the
-// Integer family can be interval-total: AQL's Integer is exactly int64,
+// Integer family can be interval-total: boru's Integer is exactly int64,
 // so totality is covering [MinInt64, MaxInt64] with ℤ-adjacency
 // ((-∞,3] ∪ [4,∞) covers it). Float and Number can NEVER be proven
 // total by comparisons — nan is a Float inhabitant and every ordered
@@ -535,7 +535,7 @@ func caseIvalsCover(ivals []caseIval, at *Type) bool {
 }
 
 // caseIntSpan converts one interval to the CLOSED int64 range it covers
-// over AQL's Integer domain (exactly int64 — so an absent end saturates
+// over boru's Integer domain (exactly int64 — so an absent end saturates
 // to MinInt64/MaxInt64). Integer bounds stay exact; float bounds
 // floor/ceil onto the neighbouring integer with explicit range guards
 // (float64(MaxInt64) is 2^63, above every Integer). ok=false → the

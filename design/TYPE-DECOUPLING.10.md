@@ -580,7 +580,7 @@ number of sites that need it, not as a parallel accessor family.
 1. Each caller that today writes `n, _ := v.AsInteger()` becomes:
    ```go
    ip, ok := v.Data.(eng.IntPayload)
-   if !ok { return r.AqlError("type_error", ...) }
+   if !ok { return r.BoruError("type_error", ...) }
    n := ip.N
    ```
    Or in idiomatic switch form when several types are handled:
@@ -778,7 +778,7 @@ free-form text input. The path now is:
   `dt to-iso`, `dt format "2006-01-02"`, `dt to-string`
 
 Eliminates the parser/temporal coupling without a spec rebaseline:
-any AQL source that needed ISO input was using the explicit `time-date
+any boru source that needed ISO input was using the explicit `time-date
 "2024-01-15"` form, which becomes a deprecation/removal in the
 domain-module surface (eng kernel unaffected).
 
@@ -826,7 +826,7 @@ After — entirely module-local:
 // lang/go/native/color/types.go
 package color
 
-import "github.com/aql-lang/aql/eng/go"
+import "github.com/boru-lang/boru/eng/go"
 
 var TColor *eng.Type
 
@@ -902,7 +902,7 @@ func rgbHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.
 Host wires it from `DefaultRegistry()` or an import-resolver:
 
 ```go
-// lang/aql.go
+// lang/boru.go
 color.Register(r)
 ```
 
@@ -911,14 +911,14 @@ color.Register(r)
 `TColor.Behavior` (and the optional `Comparer`). The kernel never
 mentions `colorPayload`, `Color`, or `RGB`.
 
-### 5.2 Adding a new type from an AQL source module
+### 5.2 Adding a new type from a boru source module
 
 All three flavours that work today continue to work — but now they
 flow through the same Behavior pipeline as plugin types.
 
 **Refinement** — `def Foo (refine Integer)`:
 
-```aql
+```boru
 def Foo (refine Integer)
 def x:Foo 5
 def y:Foo 'hello'    # error: 'hello' is not a Foo
@@ -956,13 +956,13 @@ invisible to `eng/`.
 
 ### 5.3 Cross-module type export
 
-```aql
-# colors.aql
+```boru
+# colors.boru
 def Color (refine Record [r:Integer g:Integer b:Integer])
 def Palette (refine Object { primary:Color secondary:Color })
 
-# main.aql
-'colors.aql' module
+# main.boru
+'colors.boru' module
 def p:Palette { primary:{r:255 g:0 b:0} secondary:{r:0 g:0 b:255} }
 ```
 

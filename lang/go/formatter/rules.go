@@ -3,12 +3,12 @@ package formatter
 // Rules is the declarative layout rule table the formatter interprets — the
 // stylesheet of the XSLT-style split the design settled on
 // (design/fmt-module-and-xslt.0.md, Phase 3): the RULES are data (this
-// table, exposed to AQL as `Fmt.rules` and consumed by `Fmt.format-with`),
+// table, exposed to boru as `Fmt.rules` and consumed by `Fmt.format-with`),
 // and the emitter is the generic PROCESSOR that interprets them, exactly as
 // an XSLT processor interprets templates. Every layout decision the
 // formatter makes — where whitespace goes, what glues to what, how overflow
 // wraps — reads from this table; none is hardcoded in the walk. DefaultRules
-// reproduces the canonical AQL style byte-for-byte.
+// reproduces the canonical boru style byte-for-byte.
 //
 // Whitespace is owned BY the rules, not by an output algebra: attach classes
 // say which tokens glue (no space), Indent says how container bodies and
@@ -75,9 +75,9 @@ type Rules struct {
 	Strategies []string
 }
 
-// The canonical rule table is NOT defined here: it is EXPRESSED IN AQL in
-// fmt-rules.aql (the stylesheet, embedded and parsed at first use — see
-// rules_aql.go::DefaultRules). This Go struct is the stylesheet's compiled
+// The canonical rule table is NOT defined here: it is EXPRESSED IN boru in
+// fmt-rules.boru (the stylesheet, embedded and parsed at first use — see
+// rules_boru.go::DefaultRules). This Go struct is the stylesheet's compiled
 // form; the processor below interprets whichever table it is given.
 
 // StrategyNames lists the statement layout templates the processor knows,
@@ -156,7 +156,7 @@ func newRenderer(ru Rules) *renderer {
 // maxPad caps a single padding run. Indentation deeper than this is
 // nonsensical for source layout; the cap keeps a hostile rule table (a
 // huge Indent reaching pad via Fmt.format-with) from forcing an absurd
-// allocation. The AQL boundary additionally range-validates width/indent.
+// allocation. The boru boundary additionally range-validates width/indent.
 const maxPad = 1 << 16
 
 // pad returns n spaces, clamping a negative n to zero and an absurd n to

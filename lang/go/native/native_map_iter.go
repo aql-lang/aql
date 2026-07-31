@@ -45,7 +45,7 @@ func newMapBody(reg *Registry, body Value, word string) (mapBody, error) {
 		return mb, nil
 	}
 	if !IsConcrete(body) {
-		return mapBody{}, reg.AqlError(word+"_error", word+": body must be a quotation list or a lambda", word)
+		return mapBody{}, reg.BoruError(word+"_error", word+": body must be a quotation list or a lambda", word)
 	}
 	bl, _ := AsList(body)
 	return mapBody{tokens: bl.Slice()}, nil
@@ -107,7 +107,7 @@ func (mb mapBody) callLambda(reg *Registry, args []Value) (Value, bool, error) {
 	if sig == nil {
 		return Value{}, false, fmt.Errorf("no matching lambda signature for %d argument(s)", len(args))
 	}
-	res, err := reg.CallAQL(sig, args, mb.caps)
+	res, err := reg.CallBoru(sig, args, mb.caps)
 	if err != nil {
 		return Value{}, false, err
 	}
@@ -134,11 +134,11 @@ func runQuotationBody(reg *Registry, tokens []Value, pushed []Value) (Value, boo
 // requireConcreteMap unwraps a concrete Map arg or returns a clear error.
 func requireConcreteMap(reg *Registry, v Value, word string) (ReadMap, error) {
 	if !IsConcrete(v) || !v.Parent.ConformsTo(TMap) {
-		return nil, reg.AqlError(word+"_error", word+": expected a concrete map", word)
+		return nil, reg.BoruError(word+"_error", word+": expected a concrete map", word)
 	}
 	m, _ := AsMap(v)
 	if m == nil {
-		return nil, reg.AqlError(word+"_error", word+": expected a concrete map", word)
+		return nil, reg.BoruError(word+"_error", word+": expected a concrete map", word)
 	}
 	return m, nil
 }
@@ -167,7 +167,7 @@ func eachMapHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 			return nil, fmt.Errorf("each: key %q: %w", k, err)
 		}
 		if !ok {
-			return nil, reg.AqlError("each_error", fmt.Sprintf("each: key %q: body produced no result", k), "each")
+			return nil, reg.BoruError("each_error", fmt.Sprintf("each: key %q: body produced no result", k), "each")
 		}
 		out.Set(k, res)
 	}
@@ -221,7 +221,7 @@ func foldMapNoInitHandler(args []Value, _ map[string]Value, _ []Value, reg *Regi
 	}
 	keys := data.Keys()
 	if len(keys) == 0 {
-		return nil, reg.AqlError("fold_error", "fold: empty map with no initial value", "fold")
+		return nil, reg.BoruError("fold_error", "fold: empty map with no initial value", "fold")
 	}
 	first, _ := data.Get(keys[0])
 	return doFoldMap(reg, args[0], first, data, 1)
@@ -244,7 +244,7 @@ func doFoldMap(reg *Registry, body, acc Value, data ReadMap, start int) ([]Value
 			return nil, fmt.Errorf("fold: key %q: %w", k, err)
 		}
 		if !ok {
-			return nil, reg.AqlError("fold_error", fmt.Sprintf("fold: key %q: body produced no result", k), "fold")
+			return nil, reg.BoruError("fold_error", fmt.Sprintf("fold: key %q: body produced no result", k), "fold")
 		}
 		acc = res
 	}
@@ -283,7 +283,7 @@ func scanMapHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 			return nil, fmt.Errorf("scan: key %q: %w", k, err)
 		}
 		if !ok {
-			return nil, reg.AqlError("scan_error", fmt.Sprintf("scan: key %q: body produced no result", k), "scan")
+			return nil, reg.BoruError("scan_error", fmt.Sprintf("scan: key %q: body produced no result", k), "scan")
 		}
 		acc = res
 		out.Set(k, acc)

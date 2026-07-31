@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 func sigArgsStr(s eng.Signature) string {
@@ -20,7 +20,7 @@ func sigArgsStr(s eng.Signature) string {
 }
 
 // TestNoDeadNativeOverloads is the kernel regression gate for
-// unreachable signatures. AQL dispatch is first-match-wins over
+// unreachable signatures. boru dispatch is first-match-wins over
 // SortSignatures' order, so a registered word must not declare an
 // overload that an earlier, higher-priority signature already subsumes
 // — it could never win. This catches sig-ordering and duplicate-signature

@@ -3,7 +3,7 @@ package test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // Recursion summaries (design/checker-accuracy-review.10.md A2).

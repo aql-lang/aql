@@ -1,7 +1,7 @@
-# AQL Language Specification: Float special values (inf / -inf / nan)
+# boru Language Specification: Float special values (inf / -inf / nan)
 # Format: input<TAB>expected<TAB>description
 #
-# AQL exposes the IEEE-754 special values as lowercase reserved literals,
+# boru exposes the IEEE-754 special values as lowercase reserved literals,
 # following the true / false / none convention: `inf`, `-inf`, `nan`.
 # They are parser-emitted Floats and render back to the same tokens, so
 # print∘parse is identity. See design/IEEE-754-COMPLIANCE.8.md (Tier 0).

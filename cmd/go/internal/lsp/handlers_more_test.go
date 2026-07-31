@@ -13,7 +13,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/formatter"
+	"github.com/boru-lang/boru/lang/go/formatter"
 )
 
 // runServer feeds the framed input to a fresh server and returns the
@@ -83,7 +83,7 @@ func didOpenFrame(t *testing.T, uri, text string) []byte {
 	return frameBytes(t, rpcNotification{
 		JSONRPC: "2.0", Method: "textDocument/didOpen",
 		Params: DidOpenTextDocumentParams{
-			TextDocument: TextDocumentItem{URI: uri, LanguageID: "aql", Version: 1, Text: text},
+			TextDocument: TextDocumentItem{URI: uri, LanguageID: "boru", Version: 1, Text: text},
 		},
 	})
 }
@@ -223,7 +223,7 @@ func TestRunRequestsWithoutIDAreIgnored(t *testing.T) {
 // --- didChange / didClose ---
 
 func TestDidChangeRefreshesDiagnostics(t *testing.T) {
-	uri := "file:///tmp/change.aql"
+	uri := "file:///tmp/change.boru"
 	var input bytes.Buffer
 	input.Write(didOpenFrame(t, uri, "upper 42")) // type error → diagnostics
 	input.Write(frameBytes(t, rpcNotification{
@@ -252,7 +252,7 @@ func TestDidChangeRefreshesDiagnostics(t *testing.T) {
 }
 
 func TestDidChangeLastContentChangeWins(t *testing.T) {
-	uri := "file:///tmp/multi.aql"
+	uri := "file:///tmp/multi.boru"
 	last := "1   add    2"
 	var input bytes.Buffer
 	input.Write(didOpenFrame(t, uri, "1 add 2"))
@@ -293,7 +293,7 @@ func TestDidChangeLastContentChangeWins(t *testing.T) {
 }
 
 func TestDidCloseClearsDiagnosticsAndBuffer(t *testing.T) {
-	uri := "file:///tmp/close.aql"
+	uri := "file:///tmp/close.boru"
 	var input bytes.Buffer
 	input.Write(didOpenFrame(t, uri, "upper 42"))
 	input.Write(frameBytes(t, rpcNotification{
@@ -360,7 +360,7 @@ func TestDidNotificationsWithBadParamsAreLogged(t *testing.T) {
 // --- hover / formatting request edges ---
 
 func TestHoverRequestEdges(t *testing.T) {
-	uri := "file:///tmp/hoveredge.aql"
+	uri := "file:///tmp/hoveredge.boru"
 	var input bytes.Buffer
 	input.Write(didOpenFrame(t, uri, "1 add 2"))
 	// id=1: unknown buffer → null.
@@ -423,7 +423,7 @@ func TestHoverRequestEdges(t *testing.T) {
 }
 
 func TestFormattingRequestEdges(t *testing.T) {
-	uri := "file:///tmp/fmtedge.aql"
+	uri := "file:///tmp/fmtedge.boru"
 	clean := formatter.Format("1   add 2") // idempotent input → no edits
 	var input bytes.Buffer
 	input.Write(didOpenFrame(t, uri, clean))

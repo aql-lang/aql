@@ -1,5 +1,5 @@
 // Command covergate merges Go cover profiles produced with
-// -coverpkg=github.com/aql-lang/aql/... across every module's test run
+// -coverpkg=github.com/boru-lang/boru/... across every module's test run
 // and enforces the repo's coverage floor (ADR-008: 100% at all times).
 //
 // Each input profile may cover an overlapping statement set (lang's
@@ -39,7 +39,7 @@ import (
 // observe exit codes without killing the process.
 var osExit = os.Exit
 
-const modulePrefix = "github.com/aql-lang/aql/"
+const modulePrefix = "github.com/boru-lang/boru/"
 
 // pragmaMarker is the inline comment that excludes the coverage block(s)
 // opening on its line from the floor. The text after it is the REQUIRED

@@ -327,7 +327,7 @@ bytecode_edge_findings_test.go.
   the invoke seam already dispatches through MatchFnSig BEFORE
   InvokeCallback, so the matched sig's own `Impl.Compiled` ref IS the
   sig table. As landed: `storedSigEligible` replaces the
-  single-own-sig gate (per-sig: own, AQL body, non-empty,
+  single-own-sig gate (per-sig: own, boru body, non-empty,
   sentinel-free); the compile-time store-fn bake loops every stampable
   sig (per-sig unit + ref, `compileStoredFnUnit(fd, sigIdx, pos)`);
   the runtime path gains `StampDetachedSig(r, fd, sigIdx, pos)` with
@@ -340,7 +340,7 @@ bytecode_edge_findings_test.go.
   ...PartialStamp (end-to-end service dispatch: the two-arity handler
   shape that never stamped, both units on the VM, parity), and the eng
   stamp-gate/report pins flipped to per-sig.
-- **Stale-dep refs degrade permanently to CallAQL**: **LANDED
+- **Stale-dep refs degrade permanently to CallBoru**: **LANDED
   2026-07-16.** InvokeCallback, on depsFresh failure, re-runs
   StampDetachedFn against the live bindings via a per-ref restampBox
   (CompiledFnRef.restamp — allocated by StampDetachedFn only, so
@@ -349,15 +349,15 @@ bytecode_edge_findings_test.go.
   under a mutex serialising concurrent invokers of one shared sig; each
   re-stamp snapshots the new generations, a stable rebind pays ONE
   compile then runs the VM again, and restampMaxTries (3) bounds a hot
-  rebinding loop — after the budget the seam stays on CallAQL (slow,
+  rebinding loop — after the budget the seam stays on CallBoru (slow,
   not wrong). Pinned in TestInvokeCallbackJITRestamp (freshen-to-live-
   value parity, twin reuse without recompile, budget exhaustion,
   disarmed decline). This is also the mechanism for the plan's Phase-6
   "JIT detached-unit cache" item.
 
-## 8. AQL-written mini compile hooks — keep the opt-out
+## 8. boru-written mini compile hooks — keep the opt-out
 
-An AQL compile hook is a macro whose check-time expansion is
+A boru compile hook is a macro whose check-time expansion is
 CONTRACTUALLY not the runtime expansion (MINILANG.5.md §13): the hook
 may read state that exists only at runtime. Both compile strategies are
 unsound or self-defeating: baking the check-time expansion violates the
@@ -484,7 +484,7 @@ soundly with interpreter parity today. The groups:
 **Subsumption (2026-07-21, Stage-3 fn-value dispatch):** the "result
 above a literal" arm is PARTIALLY subsumed for the fn-body BODY-TAIL
 dynamic-apply shape — a count-mismatched residual carrying a `Dynamic`
-value (the aql:fmt stylesheet driver `[nd (rules get (Fmt.kind nd))]`)
+value (the boru:fmt stylesheet driver `[nd (rules get (Fmt.kind nd))]`)
 now arms the whole-frame replay (`noteDynFrameReplay` widened to
 `Dynamic`; `replayForceOrder` re-pushes the out-of-order residual in
 token order; `replayIsBodyTail` proves the tail by recorded-trace seq)
@@ -539,11 +539,11 @@ and the **§9 inventory** (the L-DO part-2 residues, the seven
 probe-verified shapes, the guard-owned declines, and whatever the §9.4
 tail audit does not retire). The envelope is empty for every expressible
 shape only once §9 is also worked off; at that point the
-`AQL_COMPILE_FALLBACK` hatch plus the hatched legacy pins (49 at this
+`BORU_COMPILE_FALLBACK` hatch plus the hatched legacy pins (49 at this
 writing — the authoritative count is
-`git grep -c 'Setenv("AQL_COMPILE_FALLBACK"' -- '*_test.go'`; each
+`git grep -c 'Setenv("BORU_COMPILE_FALLBACK"' -- '*_test.go'`; each
 landing shifts it) can be retired on schedule, after re-pointing the
 stamp-suite pins per §9.2.
 
-The external validation for all of this remains the voxgig-aql sweep
+The external validation for all of this remains the voxgig-boru sweep
 (steps 7–9 re-baseline) in a session sourced from that org.

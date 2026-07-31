@@ -8,7 +8,7 @@ import (
 )
 
 // TestSnapshotThenBlock: on an envelope vault, a mutation that finds
-// vault.jsonic edited outside aql quarantines the offending file and
+// vault.jsonic edited outside boru quarantines the offending file and
 // refuses; `vault restore` then recovers and mutations resume.
 func TestSnapshotThenBlock(t *testing.T) {
 	home := testHome(t)
@@ -39,8 +39,8 @@ func TestSnapshotThenBlock(t *testing.T) {
 	if code == 0 {
 		t.Fatal("mutation should be blocked after an external edit")
 	}
-	if !strings.Contains(errOut, "changed outside aql") {
-		t.Errorf("error = %q, want a 'changed outside aql' message", errOut)
+	if !strings.Contains(errOut, "changed outside boru") {
+		t.Errorf("error = %q, want a 'changed outside boru' message", errOut)
 	}
 	q, _ := filepath.Glob(StorePath(home) + ".external.*")
 	if len(q) == 0 {

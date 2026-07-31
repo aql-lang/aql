@@ -291,7 +291,7 @@ func TestW8_RunExportSealError(t *testing.T) {
 	c7scryptKey = func(string, []byte) ([]byte, error) { return nil, errW8Boom }
 
 	t.Setenv(EnvExportPassphrase, "bundlepass")
-	out := filepath.Join(t.TempDir(), "b.aqlx")
+	out := filepath.Join(t.TempDir(), "b.borux")
 	var errb strings.Builder
 	if code := runExport([]string{"--out=" + out}, home, strings.NewReader(""), &errb, &errb); code != 1 {
 		t.Fatalf("seal error should return 1, got %d (stderr=%q)", code, errb.String())

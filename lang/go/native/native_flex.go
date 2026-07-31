@@ -1,6 +1,6 @@
 package native
 
-import "github.com/aql-lang/aql/eng/go"
+import "github.com/boru-lang/boru/eng/go"
 
 // flexNatives installs the flex-node words:
 //
@@ -180,22 +180,22 @@ func nodeReturns(args []Value, _ *Registry) []Value {
 
 func flexHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("flex_error", "flex: expected a concrete map or list, got "+args[0].String(), "flex")
+		return nil, r.BoruError("flex_error", "flex: expected a concrete map or list, got "+args[0].String(), "flex")
 	}
 	out, err := eng.FlexDeepCopy(args[0])
 	if err != nil {
-		return nil, r.AqlError("flex_error", err.Error(), "flex")
+		return nil, r.BoruError("flex_error", err.Error(), "flex")
 	}
 	return []Value{out}, nil
 }
 
 func nodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
-		return nil, r.AqlError("node_error", "node: expected a concrete map or list, got "+args[0].String(), "node")
+		return nil, r.BoruError("node_error", "node: expected a concrete map or list, got "+args[0].String(), "node")
 	}
 	out, err := eng.NodeDeepCopy(args[0])
 	if err != nil { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
-		return nil, r.AqlError("node_error", err.Error(), "node")
+		return nil, r.BoruError("node_error", err.Error(), "node")
 	}
 	return []Value{out}, nil
 }
@@ -203,7 +203,7 @@ func nodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 func appendElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fd, err := AsFlexList(args[1])
 	if err != nil {
-		return nil, r.AqlError("append_error", "append: expected a FlexList, got "+args[1].Parent.String(), "append")
+		return nil, r.BoruError("append_error", "append: expected a FlexList, got "+args[1].Parent.String(), "append")
 	}
 	// A typed flex list ([:T]) enforces + recursively re-tags on a grow.
 	tagged, werr := d2AdoptTyped(r, args[1], args[0], "append")
@@ -214,7 +214,7 @@ func appendElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	// flexed on the way in (eng.AdoptIntoFlex; flex handles share).
 	elem, aerr := eng.AdoptIntoFlex(tagged)
 	if aerr != nil {
-		return nil, r.AqlError("append_error", aerr.Error(), "append")
+		return nil, r.BoruError("append_error", aerr.Error(), "append")
 	}
 	fd.Elems = append(fd.Elems, elem)
 	return []Value{args[1]}, nil
@@ -225,7 +225,7 @@ func appendElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 func appendWeakElemHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	wd, err := AsWeakFlexList(args[1])
 	if err != nil {
-		return nil, r.AqlError("append_error", "append: expected a WeakFlexList, got "+args[1].Parent.String(), "append")
+		return nil, r.BoruError("append_error", "append: expected a WeakFlexList, got "+args[1].Parent.String(), "append")
 	}
 	// Typed weak list ([:T]) enforcement on grow, mirroring the flex
 	// column — weakness never drops the element contract.
@@ -244,7 +244,7 @@ func appendWeakElemHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 func appendWeakXmlChildHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	wd, err := AsWeakFlexXml(args[1])
 	if err != nil {
-		return nil, r.AqlError("append_error", "append: expected a WeakFlexXml, got "+args[1].Parent.String(), "append")
+		return nil, r.BoruError("append_error", "append: expected a WeakFlexXml, got "+args[1].Parent.String(), "append")
 	}
 	if refusal := wd.AppendChild(args[0]); refusal != nil {
 		return nil, WeakRefusalError(r, "append", "WeakFlexXml", refusal)
@@ -255,13 +255,13 @@ func appendWeakXmlChildHandler(args []Value, _ map[string]Value, _ []Value, r *R
 func appendXmlChildHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fd, err := AsFlexXml(args[1])
 	if err != nil {
-		return nil, r.AqlError("append_error", "append: expected a FlexXml, got "+args[1].Parent.String(), "append")
+		return nil, r.BoruError("append_error", "append: expected a FlexXml, got "+args[1].Parent.String(), "append")
 	}
 	// A flex tree stays entirely mutable: a plain Node/Xml child is
 	// deep-flexed on the way in; flex handles share.
 	child, aerr := eng.AdoptIntoFlex(args[0])
 	if aerr != nil {
-		return nil, r.AqlError("append_error", aerr.Error(), "append")
+		return nil, r.BoruError("append_error", aerr.Error(), "append")
 	}
 	fd.Cren = append(fd.Cren, child)
 	return []Value{args[1]}, nil
@@ -270,17 +270,17 @@ func appendXmlChildHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 func appendXmlListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fd, err := AsFlexXml(args[1])
 	if err != nil {
-		return nil, r.AqlError("append_error", "append: expected a FlexXml, got "+args[1].Parent.String(), "append")
+		return nil, r.BoruError("append_error", "append: expected a FlexXml, got "+args[1].Parent.String(), "append")
 	}
 	src, err := RequireConcreteList(args[0], "append")
 	if err != nil {
-		return nil, r.AqlError("append_error", err.Error(), "append")
+		return nil, r.BoruError("append_error", err.Error(), "append")
 	}
 	elems := src.Slice()
 	for _, el := range elems {
 		child, aerr := eng.AdoptIntoFlex(el)
 		if aerr != nil {
-			return nil, r.AqlError("append_error", aerr.Error(), "append")
+			return nil, r.BoruError("append_error", aerr.Error(), "append")
 		}
 		fd.Cren = append(fd.Cren, child)
 	}
@@ -290,11 +290,11 @@ func appendXmlListHandler(args []Value, _ map[string]Value, _ []Value, r *Regist
 func appendListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	fd, err := AsFlexList(args[1])
 	if err != nil {
-		return nil, r.AqlError("append_error", "append: expected a FlexList, got "+args[1].Parent.String(), "append")
+		return nil, r.BoruError("append_error", "append: expected a FlexList, got "+args[1].Parent.String(), "append")
 	}
 	src, err := RequireConcreteList(args[0], "append")
 	if err != nil {
-		return nil, r.AqlError("append_error", err.Error(), "append")
+		return nil, r.BoruError("append_error", err.Error(), "append")
 	}
 	// Slice() snapshots before the grow, so `append f f` (self-concat)
 	// is well-defined. Each appended element is enforced + re-tagged against
@@ -309,7 +309,7 @@ func appendListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		}
 		a, aerr := eng.AdoptIntoFlex(tagged)
 		if aerr != nil {
-			return nil, r.AqlError("append_error", aerr.Error(), "append")
+			return nil, r.BoruError("append_error", aerr.Error(), "append")
 		}
 		adopted[i] = a
 	}

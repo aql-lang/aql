@@ -1,7 +1,7 @@
-# voxgig-aql compile leaves — trie suites, post-3-fix state (continuation of .1)
+# voxgig-boru compile leaves — trie suites, post-3-fix state (continuation of .1)
 
 Continuation of `VOXGIG-COMPILE-LEAVES.1.md`, scoped to the **trie** repo after
-the three Stage-D fixes landed (branch `claude/voxgig-aql-baseline-pctxto`,
+the three Stage-D fixes landed (branch `claude/voxgig-boru-baseline-pctxto`,
 commit `3e94429`: the `AnalyseFnBody` quota skip, the `RecordDynBind` capID
 override, and the `doListReturnsFn` fallible-multi-value refusal). Those fixes
 made the four `*_prop_spec` + `trie_unit_spec` suites compile natively and the
@@ -12,7 +12,7 @@ follow-up can implement them one at a time behind the usual gates
 (`verify-bytecode` byte-identical + off-corpus `RunCompiledStrict`-vs-`Run`
 regression + `--compile`==interpret sweep + `cover-gate` 100%).
 
-Current trie split (aql branch build, `203ea2f` + the 3 fixes):
+Current trie split (boru branch build, `203ea2f` + the 3 fixes):
 
 | Suite | `--force-compile` | Unmasked reason |
 |---|---|---|
@@ -32,7 +32,7 @@ swallowed on decline). Unmasked by an env-gated print of `probe.Reason` at the
 
 Surfaces in the four `*_unit_test` codec-roundtrip cases:
 
-```aql
+```boru
 def msg (do [ ((s TrieSet.encode) TrieMap.decode) "no-raise" ]
          error [ var [[e] convert String (e "message" get) ] ])
 ```
@@ -77,9 +77,9 @@ literal the word grabs — a real accounting feature. One suite.
 ## L-JOIN — recursive branch-join accumulator, operand provenance (FULLY TRACED)
 
 Surfaces in `trie_smoke_test` via `TstSet.longest-prefix` → the recursive
-`longest-t` (and `radix.aql`'s `node-at`). Minimal off-corpus repro:
+`longest-t` (and `radix.boru`'s `node-at`). Minimal off-corpus repro:
 
-```aql
+```boru
 def rec fn [
   [nd:Any key:Any consumed:Any best:Any] [Any] [
     if (nd eq none) [best] [
@@ -137,7 +137,7 @@ before operands are captured). Both are core recursive-analysis /
 `EmitState.producedBy` changes with real regression surface against the
 byte-identical differential; a fix must ship with an off-corpus
 `RunCompiledStrict`-vs-`Run` regression on the repro above. This is the only
-one of the three that blocks LIBRARY code (`tst.aql`, `radix.aql`), not just a
+one of the three that blocks LIBRARY code (`tst.boru`, `radix.boru`), not just a
 test file — and it is a genuine provenance BUG, not a missing feature.
 
 ---
@@ -160,10 +160,10 @@ shapes), the trie `--compile`==interpret sweep (green output, not merely
 
 ## L-DUP — a chained whole-program duplication miscompile (found while probing)
 
-Attempting the SAFEST possible way to close L-JOIN — a behaviour-preserving AQL
+Attempting the SAFEST possible way to close L-JOIN — a behaviour-preserving boru
 restructure of `longest-t` (push the `end`-node choice into the arms, so no
-branch-join is fed to the recursion) — makes `tst.aql`'s `longest-t` compile
-natively (verified in isolation). But in the FULL `trie_smoke_test.aql` (four
+branch-join is fed to the recursion) — makes `tst.boru`'s `longest-t` compile
+natively (verified in isolation). But in the FULL `trie_smoke_test.boru` (four
 imports, ~30 top-level statements, a mix of now-compiling and still-falling-back
 sections) it converts a SOUND full fallback into a broken compile: `--compile`
 emits the **entire program output twice** (61 lines vs the interpreter's 31),
@@ -172,11 +172,11 @@ while `--no-compile` is correct. Reverted immediately.
 This is the chained-leaf hazard from `.1`/`.0` again: clearing an outer refusal
 unhides a deeper one. **Root cause now confirmed** (`--force-compile` on the
 refactored full smoke): the compiled run prints every section, then raises
-`[aql/internal_error]: bytecode: internal: dynamic-scope read miss for` \`np\`
+`[boru/internal_error]: bytecode: internal: dynamic-scope read miss for` \`np\`
 at the BurstMap `decode` section (`src 261:13`) — a NEW deeper leaf (**L-NP**: a
-fold/var-body local `np` in `burst.aql` misses under the compiled dynamic-scope
+fold/var-body local `np` in `burst.boru` misses under the compiled dynamic-scope
 path, the same class the `.1` critical-finding flagged). `RunCompiledReason`
-(`lang/go/aql.go:750-768`) catches that runtime bail via `runtimeShouldFallback`
+(`lang/go/boru.go:750-768`) catches that runtime bail via `runtimeShouldFallback`
 and re-runs the WHOLE program on the interpreter — but `RestoreForCompile` only
 rolls back registry SCOPES, it cannot un-`print` the compiled run's
 already-emitted output, so every side effect is doubled. On the CURRENT library

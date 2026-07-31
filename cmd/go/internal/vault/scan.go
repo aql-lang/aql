@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 )
 
 // secretPattern is one named regex over file contents. The Name
@@ -64,7 +64,7 @@ type scanResult struct {
 	Alias   string // populated if the value matches a stored alias
 }
 
-// runScan implements `aql vault scan`. By default it walks the
+// runScan implements `boru vault scan`. By default it walks the
 // current directory, matching provider-token shapes in file contents;
 // one or more paths may be passed positionally to scan a focused
 // subtree (e.g. `vault scan .env src/`). With --home it additionally
@@ -197,7 +197,7 @@ func scanPath(p string, maxBytes int64, vaultIndex map[string]string) ([]scanRes
 func isSkippedDir(name string) bool {
 	switch name {
 	case ".git", "node_modules", "vendor", "dist", "build", ".venv", "venv",
-		"__pycache__", ".idea", ".vscode", ".aql":
+		"__pycache__", ".idea", ".vscode", ".boru":
 		return true
 	}
 	return false

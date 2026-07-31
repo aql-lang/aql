@@ -44,7 +44,7 @@ func TestProbeWideningComputedRangeStartStep(t *testing.T) {
 
 func TestProbeWideningZeroArgMethodLanding(t *testing.T) {
 	mustCompileWithParity(t,
-		`import "aql:rand"  def r (Rand.with-seed 7)  r get "bool" eq false`, "[true]")
+		`import "boru:rand"  def r (Rand.with-seed 7)  r get "bool" eq false`, "[true]")
 }
 
 func TestProbeWideningBehaveStoresFn(t *testing.T) {

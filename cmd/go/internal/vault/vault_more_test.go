@@ -23,7 +23,7 @@ func TestCommandWrapper(t *testing.T) {
 	if code := c.Run([]string{"help"}, strings.NewReader(""), &out, &errb); code != 0 {
 		t.Errorf("help exit = %d", code)
 	}
-	if !strings.Contains(out.String(), "Usage: aql vault") {
+	if !strings.Contains(out.String(), "Usage: boru vault") {
 		t.Errorf("help output: %q", out.String())
 	}
 }
@@ -56,7 +56,7 @@ func TestRunLocationHandling(t *testing.T) {
 }
 
 func TestRunWithoutHomeDir(t *testing.T) {
-	// No AQL_HOME and no HOME: commands fail...
+	// No BORU_HOME and no HOME: commands fail...
 	t.Setenv(EnvHome, "")
 	t.Setenv("HOME", "")
 	t.Setenv(EnvFolder, "")

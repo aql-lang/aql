@@ -11,7 +11,7 @@ import "fmt"
 // two hand-kept copies of the format strings; the copies are gone — both build
 // the text here and wrap it in their own error-construction plumbing (the
 // interpreter stamps a SrcPos + effectiveSource; the VM routes through
-// r.AqlError* / stampAt).
+// r.BoruError* / stampAt).
 
 // returnTypeErrorText is the detail + hint for a fn return-type mismatch:
 // funcName's index-th (1-based) return value was expected to be `expected` but
@@ -37,9 +37,9 @@ func returnCountErrorText(funcName string, expected, got int) string {
 // can point inside its shared unit), which is why the produced-value span
 // attaches on the value's OWN position whenever it has one — an
 // engine-independent decision, so the span labels match across engines.
-func buildReturnTypeError(source, funcName string, index int, expected *Type, got Value, primaryPos SrcPos, decl DeclSite) *AqlError {
+func buildReturnTypeError(source, funcName string, index int, expected *Type, got Value, primaryPos SrcPos, decl DeclSite) *BoruError {
 	detail, hint := returnTypeErrorText(funcName, index, expected, got)
-	ae := makeAqlErrorAt("type_error", detail, funcName, source, hint, primaryPos)
+	ae := makeBoruErrorAt("type_error", detail, funcName, source, hint, primaryPos)
 	if gp := got.Pos(); gp.Row > 0 {
 		ae.Spans = append(ae.Spans, DiagSpan{
 			Pos:   gp,
@@ -52,8 +52,8 @@ func buildReturnTypeError(source, funcName string, index int, expected *Type, go
 
 // buildReturnCountError assembles the COMPLETE return-count diagnostic — the
 // shared detail text plus the declaration span — so both engines match.
-func buildReturnCountError(source, funcName string, expected, got int, primaryPos SrcPos, decl DeclSite) *AqlError {
-	ae := makeAqlErrorAt("type_error", returnCountErrorText(funcName, expected, got), funcName, source, "", primaryPos)
+func buildReturnCountError(source, funcName string, expected, got int, primaryPos SrcPos, decl DeclSite) *BoruError {
+	ae := makeBoruErrorAt("type_error", returnCountErrorText(funcName, expected, got), funcName, source, "", primaryPos)
 	attachDeclSpan(ae, decl,
 		fmt.Sprintf("the declaration of `%s` expects %d return value(s)", funcName, expected))
 	return ae

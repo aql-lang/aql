@@ -1,0 +1,173 @@
+# ============================================================
+# todo-tui.boru — the todo list as a full-screen TUI, written in boru.
+#
+# The TUI.0.md verification app, graduated from the speculative probe
+# in ../tui/ onto the LANDED boru:tui surface: same domain state as
+# ../apps/todo-api.boru (id/text/done, a `next` id counter), driven by
+# key events instead of REST verbs. Exercised end to end on a virtual
+# terminal by lang/go/test/app_todo_tui_test.go and over a real wire
+# by the serve test in lang/go/modules.
+#
+#   import "./todo-tui.boru"
+#   def final (TodoTui.run {})       # blocks until quit; returns state
+#
+#   # …or serve the SAME app map to a remote `boru attach` viewer:
+#   def final (TodoTui.serve {tcp: 9700  token: "s3cret"})
+#
+#   focus: entry            focus: list          anywhere
+#   ------------            -----------          --------
+#   type    edit the entry  up/down  move        tab     switch focus
+#   enter   add the todo    space    toggle done ctrl-c  quit
+#                           d        delete      ctrl-\  quit (always)
+#                           q        quit
+#
+# The app returns its final state, so it composes mid-pipeline:
+#   (TodoTui.run {}).todos
+# ============================================================
+
+import "boru:tui"
+import "boru:math-util"
+
+# --- pure list helpers ------------------------------------------------
+
+def replace-at fn [[items:List i:Integer t:Any] [List] [
+  flatten [(take i items) [t] (shed (i add 1) items)]
+]]
+
+def remove-at fn [[items:List i:Integer] [List] [
+  flatten [(take i items) (shed (i add 1) items)]
+]]
+
+def clamp-sel fn [[sel:Integer n:Integer] [Integer] [
+  MathUtil.max 0 (MathUtil.min sel (n sub 1))
+]]
+
+# --- domain actions (state in, state out — all pure) -------------------
+
+def add-todo fn state:Map Map [
+  def text state.entry.value
+  if (text eq "") [state]
+    [def todo {id:(convert String state.next) text:text done:false}
+      def st2 (state set todos (push todo state.todos))
+      def st3 (st2 set next (state.next add 1))
+        # a fresh, empty entry widget — the input's value lives in app state
+      st3 set entry (Tui.input "" {placeholder:"what needs doing?"})
+    ]
+]
+
+def toggle-sel fn state:Map Map [
+  if ((size state.todos) eq 0) [state]
+    [def t (state.todos get state.sel)
+        # build a FRESH map for the changed row (immutable update)
+      def t2 {id:(t.id) text:(t.text) done:((t.done) not)} state set
+        todos (replace-at state.todos state.sel t2)
+    ]
+]
+
+def delete-sel fn state:Map Map [
+  if ((size state.todos) eq 0) [state]
+    [def st2 (state set todos (remove-at state.todos state.sel)) st2
+        set sel (clamp-sel st2.sel (size st2.todos))
+    ]
+]
+
+# --- update: fold one event into the state -----------------------------
+# Zone routing by `if`, then value-dispatch `case` on the key inside the
+# list zone (TUI.0.md §2.2; the landed case pushes the matched value, so
+# blocks open with `drop`). The two focus zones are the realistic cost
+# of focus-as-state (§3.4): every routed key names its zone here.
+
+def entry-key fn [[state:Map ev:Map] [Map] [
+  if (ev.key eq "enter") [add-todo state]
+    [state set entry (Tui.edit state.entry ev) # the standard fold
+    ]
+]]
+
+def list-key fn [[state:Map ev:Map] [Map] [
+  case ev.key
+    ["up"
+        [drop state set sel
+            (clamp-sel (state.sel sub 1) (size state.todos))
+        ]
+        "down"
+        [drop state set sel
+            (clamp-sel (state.sel add 1) (size state.todos))
+        ]
+        "space" [drop toggle-sel state] "d" [drop delete-sel state] "q"
+        [drop Tui.quit state] state
+    ]
+]]
+
+def todo-update fn [[state:Map ev:Map] [Map] [
+  # lifecycle events (init/resize/focus/…) — nothing to do here
+  if ((ev has "key") not) [state]
+    [if (ev.key eq "tab")
+        [state set focus
+            (if (state.focus eq "entry") ["list"] ["entry"])
+        ]
+        [if (state.focus eq "entry") [entry-key state ev]
+            [list-key state ev]
+        ]
+    ]
+]]
+
+# --- view: pure — state in, widget tree out (§3) ------------------------
+
+def todo-label fn t:Map String [
+  join "" [(if t.done ["[x] "] ["[ ] "]) t.text]
+]
+
+def todo-view fn state:Map Map [
+  def n (size state.todos)
+  def done-n (size (filter [dot done] state.todos))
+  def hint
+    (if (state.focus eq "entry")
+        ["type to edit · enter add · tab to list"]
+        ["up/down move · space toggle · d delete · q quit · tab to entry"
+        ]
+    )
+    Tui.rows
+    [(Tui.box (state.entry set focus (state.focus eq "entry"))
+            {title:"new todo" border:"round" size:3}
+        )
+        (Tui.box
+            (Tui.list-view (each [todo-label] state.todos)
+                {cursor:state.sel}
+            )
+            {title:(join ""
+                  ["todos " (convert String done-n) "/"
+                      (convert String n)
+                  ]
+              )
+              border:"round"
+              size:{flex:1}
+            }
+        )
+        (Tui.text hint {style:{fg:"grey"} size:1})
+    ]
+]
+
+# --- the app map + entry points -----------------------------------------
+# `app` exports the {init update view} map itself so the SAME app runs
+# under Tui.run (locally), Tui.serve (remotely), and a test harness —
+# the run/serve reuse idiom of TUI.0.md §5.
+
+def todo-app fn opts:Map Map [
+  {init:{todos:[]
+        next:1
+        sel:0
+        focus:"entry"
+        entry:(Tui.input "" {placeholder:"what needs doing?"})
+      }
+      update:todo-update/r
+      view:todo-view/r
+    }
+]
+
+def todo-run fn opts:Map Map [Tui.run (todo-app opts)]
+
+def todo-serve fn opts:Map Map [
+  Tui.serve {tcp:(opts.tcp) token:(opts.token)} (todo-app opts)
+]
+
+export "TodoTui" {app:todo-app/r run:todo-run/r serve:todo-serve/r}

@@ -1,6 +1,6 @@
 package native
 
-import "github.com/aql-lang/aql/eng/go"
+import "github.com/boru-lang/boru/eng/go"
 
 // inspectNatives installs `inspect` — the machine-readable
 // counterpart of `help` for words, values, and types.
@@ -47,7 +47,7 @@ var inspectNatives = []NativeFunc{
 		},
 	},
 
-	// canon — render any value as canonical AQL source (eng.CanonValue):
+	// canon — render any value as canonical boru source (eng.CanonValue):
 	// the same renderer the spec suites and the doc-example harness
 	// compare against. For DATA values — scalars, atoms (`name/q`),
 	// paths, none, type literals, plain and flex Node trees — the
@@ -126,7 +126,7 @@ func buildInspection(r *Registry, name string) Value {
 		result.Set("kind", NewAtom("native"))
 	}
 
-	// Iterate the full aggregate dispatch table (which, for an AQL fn,
+	// Iterate the full aggregate dispatch table (which, for a boru fn,
 	// includes the synthetic 0-arg fallback rendered as {args:[]}) so the
 	// inspect surface matches the dispatcher's view.
 	var sigMaps []Value

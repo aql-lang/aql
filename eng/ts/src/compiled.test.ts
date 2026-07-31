@@ -13,7 +13,7 @@ import { strict as assert } from 'node:assert'
 
 import { canon } from './canon.ts'
 import {
-  AqlError,
+  BoruError,
   Engine,
   type FnParam,
   type FnSig,
@@ -333,7 +333,7 @@ function registerFixtures(r: Registry): void {
             }
             return []
           }
-          throw new AqlError('trap_error', 'trapq: deliberate runtime trap', 'trapq')
+          throw new BoruError('trap_error', 'trapq: deliberate runtime trap', 'trapq')
         },
       },
     ],
@@ -510,7 +510,7 @@ function freshRegistry(): Registry {
   return r
 }
 
-// Run `fn`, capturing either its residual or the code of an AqlError it
+// Run `fn`, capturing either its residual or the code of a BoruError it
 // throws — so a compiled run and an interpreter run can be compared for
 // error parity (both must error with the same code, or both succeed).
 type Outcome = { residual: Value[] } | { code: string }
@@ -518,7 +518,7 @@ function outcome(fn: () => Value[]): Outcome {
   try {
     return { residual: fn() }
   } catch (e) {
-    if (e instanceof AqlError) return { code: e.code }
+    if (e instanceof BoruError) return { code: e.code }
     throw e
   }
 }

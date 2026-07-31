@@ -93,7 +93,7 @@ error).
 
 `Scalar/Path` (filesystem: `PathInfo{Parts []string, Abs bool}`) is unrelated
 and untouched; the data-access concept is the new `Ideal/Reach`. The
-`aql:struct-util` list-path words keep their names (`getpath`/`setpath`/
+`boru:struct-util` list-path words keep their names (`getpath`/`setpath`/
 `inject`) and gain the ability to accept a `Reach`.
 
 ---
@@ -240,7 +240,7 @@ prioritized:
 - **rebind the receiver:** apply a reach to a *different* value — the
   reusable-accessor use, one `.name` reach applied across many records
   (`people each .name`). Requires receiverless reach (§11).
-- read/write/update **reuse** `aql:struct-util` rather than inventing words:
+- read/write/update **reuse** `boru:struct-util` rather than inventing words:
   teach `getpath`/`setpath`/`inject` to accept a `Reach`, giving the lens trio
   `getpath r m` (read), `setpath r v m` (immutable set), `update r fn m`
   (functional over), plus `delpath`/`has`.

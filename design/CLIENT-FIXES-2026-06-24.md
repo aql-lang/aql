@@ -1,11 +1,11 @@
-# Client-library fixes — voxgig-aql trie / decision / bloom-filter
+# Client-library fixes — voxgig-boru trie / decision / bloom-filter
 
 **Date:** 2026-06-24
-**Upstream branch:** `claude/aql-client-issues-6b8new` (aql-lang/aql)
+**Upstream branch:** `claude/boru-client-issues-6b8new` (boru-lang/boru)
 **Driven by:** the three client verification reports —
-[`trie/AQL-MAIN-VERIFICATION.md`](https://github.com/voxgig-aql/trie/blob/main/AQL-MAIN-VERIFICATION.md),
-[`decision/aql-main-verification-2026-06-23.md`](https://github.com/voxgig-aql/decision/blob/main/aql-main-verification-2026-06-23.md),
-[`bloom-filter/aql-backend-report.md`](https://github.com/voxgig-aql/bloom-filter/blob/main/aql-backend-report.md).
+[`trie/BORU-MAIN-VERIFICATION.md`](https://github.com/voxgig-boru/trie/blob/main/BORU-MAIN-VERIFICATION.md),
+[`decision/boru-main-verification-2026-06-23.md`](https://github.com/voxgig-boru/decision/blob/main/boru-main-verification-2026-06-23.md),
+[`bloom-filter/boru-backend-report.md`](https://github.com/voxgig-boru/bloom-filter/blob/main/boru-backend-report.md).
 
 This note tells each client project **what changed upstream, what is now
 fixed, what remains, and how to re-pin.**
@@ -17,7 +17,7 @@ fixed, what remains, and how to re-pin.**
 | Commit | Fix | Clients it unblocks |
 |---|---|---|
 | `f247557` | **`None` / type-literal template interpolation.** `` `got ${x}` `` with a `None` (or `typeof`) value rendered `"String"` and corrupted `raise` codes (`raise_error` instead of `bad_input`). | bloom-filter §1 (the `make-validates-input` interpreter failure) |
-| `f247557` | **`convert` return-type modeling.** `convert Float x` modeled its result as the bare `Float` *type literal*, so downstream `mul`/`div`/`add` raised a false `no_signature`. Now returns a *value* of the target type (like `make`). | bloom-filter §2, decision (`convert` in `decision.aql`) |
+| `f247557` | **`convert` return-type modeling.** `convert Float x` modeled its result as the bare `Float` *type literal*, so downstream `mul`/`div`/`add` raised a false `no_signature`. Now returns a *value* of the target type (like `make`). | bloom-filter §2, decision (`convert` in `decision.boru`) |
 | `1b7b9ae` | **`OpInterp`.** Interpolated strings with runtime-computed holes (`` `got ${x}` `` for a fn param, `` `${1 add 2}` ``, `` `${typeof x}` ``) now compile to bytecode instead of refusing. | all three (smoke/print paths) |
 | `a0604d7` | **`fold [push]` false positive.** `push`'s `[Any List]` overload declared no `Returns`, so a fold accumulator widened to `Any` and the next `push` failed `no_signature`. | decision (`no_signature: push`), trie |
 | `a0604d7` | **`for` multi-value-body miscompile.** `for 2 ['e' 'f']` compiled to `[f f]` instead of `[e f e f]`; now islands faithfully. | (correctness, all) |
@@ -33,11 +33,11 @@ across the whole language surface.
 
 ## Per-client status (after the fixes)
 
-Measured from each repo root (so the relative `import "./*.aql"` resolves).
+Measured from each repo root (so the relative `import "./*.boru"` resolves).
 
 > **FINAL (this branch):** all six client modules — `radix`, `trie`, `tst`,
 > `burst`, `decision`, `bloom` — and EVERY one of their test suites (unit /
-> spec / prop / smoke) now `aql check` with **0 errors**. The per-suite tables
+> spec / prop / smoke) now `boru check` with **0 errors**. The per-suite tables
 > below record the reduction history; the closing fixes are documented under
 > "Polymorphic dynamic dispatch …" near the end. The sections below are kept as
 > the historical record of how the count came down.
@@ -101,7 +101,7 @@ needing a concrete receiver (`get`, `add`, a user walker like
 `find-kid`/`trie-insert`) failed `no_signature` against it — even though it
 dispatches fine at runtime.
 
-```aql
+```boru
 def g fn [[v:Any] [Any] [v get "x"]] end   g {x:1}   # was: no_signature: get  →  now: clean
 ```
 
@@ -134,7 +134,7 @@ transitive analysis):
    When the result is then *consumed* — trie's `((nd "kids" get) set ch child)
    … mk-node` — that missing value cascades into a false `undefined_word` on
    the consumer's bound param and a `no_signature` on the consuming call (and,
-   transitively, the `kids`/`mk-node` errors in `trie.aql`). At runtime the
+   transitively, the `kids`/`mk-node` errors in `trie.boru`). At runtime the
    receiver is a concrete `Map`, so `set` returns 1 value and the code is
    correct.
 
@@ -164,11 +164,11 @@ at the single resolution chokepoints:
   in-map reference values uniformly.
 - The collecting export handler's `resolveModuleExport` and the top-level
   no-op `export` handler (`lang/go/native`) — a standalone module file
-  (`aql check trie.aql`) reaches the no-op, which now records each export-map
+  (`boru check trie.boru`) reaches the no-op, which now records each export-map
   value as a use of its def in check mode.
 
 Effect on the clients (modules + suites): `unused_def` warnings fell from **133
-to 10** — `trie.aql` 31→0, `burst.aql` 32→0, `decision.aql` 14→3, `bloom.aql`
+to 10** — `trie.boru` 31→0, `burst.boru` 32→0, `decision.boru` 14→3, `bloom.boru`
 9→1. The fix is sound by construction (a genuinely unreferenced def is still
 flagged — pinned by `lang/go/unused_def_export_test.go`'s negative half) and
 leaves the checker's error-frontier ratchet untouched. The residue is body-
@@ -207,12 +207,12 @@ suppressed, never a nested helper call (a real error in a helper, or in a
 recursive fn's own first analysis, is still reported — pinned by the two
 negative halves of `lang/go/recursive_reanalysis_test.go`).
 
-Effect on the clients (`aql check`): `radix.aql` 53→23, `tst.aql` 62→36,
+Effect on the clients (`boru check`): `radix.boru` 53→23, `tst.boru` 62→36,
 `burst.aml` 30→4 errors. All ratchets (`pinnedAnyFrontierRows`,
 `pinnedTypeSoundnessViolations`), the differential + property gates, and the
 full suite stay green.
 
-### Dynamic carrier vs the Node family (landed) — `trie.aql` now 0 errors
+### Dynamic carrier vs the Node family (landed) — `trie.boru` now 0 errors
 
 The non-recursive slice was a **matching** bug, now fixed. A gradual (dynamic)
 carrier matches a slot unless its bound is *provably disjoint*, and the
@@ -222,7 +222,7 @@ return narrowed to a dynamic `List`/`Map` carrier (a fn result derived from a
 dynamic arg) failed to match a `Node`-typed `get`/`set` receiver — `get`'s
 List/Map access goes through its `[key, Node]` overloads (there is no `List`
 receiver sig), so the dynamic List/Map receiver was rejected. This drove
-`trie.aql`'s `fuzzy-go`/`kid-items`/`get`/`build-row` cluster.
+`trie.boru`'s `fuzzy-go`/`kid-items`/`get`/`build-row` cluster.
 
 `sigTypeMatches` now checks conformance in **both directions** (`X ⊑ t` — the
 value IS a t; or `t ⊑ X` — it MIGHT be, the gradual optimism) before the `tand`
@@ -232,11 +232,11 @@ pinned by `eng/go/dynamic_carrier_match_test.go` (with disjoint negatives) and
 `lang/go/dynamic_container_get_test.go`. All accuracy ratchets, the differential
 + property gates, and the full suite stay green.
 
-Effect: **`trie.aql` 9→0**, `radix.aql` 23→20, `tst.aql` 36→26, `burst.aql`
+Effect: **`trie.boru` 9→0**, `radix.boru` 23→20, `tst.boru` 36→26, `burst.boru`
 4→2. The cumulative client error-level reduction across the six modules is now
 **≈177 → ≈60**.
 
-### Options / Record value vs a Map/Node slot (landed) — `bloom.aql` 10→1
+### Options / Record value vs a Map/Node slot (landed) — `bloom.boru` 10→1
 
 `Options` and `Record` are structural keyword/field-map types but are lattice-
 rooted under `Ideal`, so an `opts:Options` carrier does **not** `ConformsTo`
@@ -248,7 +248,7 @@ matches an Options/Record-conforming value against any Map/Node-family slot,
 aligning the check-mode carrier with the runtime value (whose payload Parent is
 `TMap`). Pinned by `lang/go/dynamic_container_get_test.go`.
 
-Effect: **`bloom.aql` 10→1**.
+Effect: **`bloom.boru` 10→1**.
 
 ### Body params narrowed to their declared type (landed) — 4/6 modules clean
 
@@ -264,12 +264,12 @@ that param type before body analysis (sound — the arg already passed the param
 match, so a disjoint arg never reaches here; precision is preserved for
 concrete/conforming args). Pinned by `lang/go/param_narrowing_test.go`.
 
-Effect: **`decision.aql` 2→0, `bloom.aql` 1→0, `burst.aql` 2→0**, `radix.aql`
-20→11, `tst.aql` 26→15. **Four of the six client modules now check fully clean**
+Effect: **`decision.boru` 2→0, `bloom.boru` 1→0, `burst.boru` 2→0**, `radix.boru`
+20→11, `tst.boru` 26→15. **Four of the six client modules now check fully clean**
 (trie, burst, bloom, decision); cumulative error-level across all six is now
 **≈177 → ≈26**.
 
-### Branch merges stay gradual (landed) — `tst.aql` 15→0, 5/6 clean
+### Branch merges stay gradual (landed) — `tst.boru` 15→0, 5/6 clean
 
 `JoinCarriers` (the `if`/loop/case arm merge) dropped the gradual modality: a
 merge of a concrete arm and a dynamic arm produced a STRICT disjunct, which a
@@ -282,9 +282,9 @@ result dynamic when either arm is dynamic (the same gradual contagion a dynamic
 operand already spreads through a dispatch result). Pinned by
 `lang/go/join_carriers_dynamic_test.go` (with a strict-union negative).
 
-Effect: **`tst.aql` 15→0**. **Five of the six client modules now check fully
+Effect: **`tst.boru` 15→0**. **Five of the six client modules now check fully
 clean** (trie, tst, burst, bloom, decision); cumulative error-level across all
-six is now **≈177 → ≈11** (only `radix.aql` remains).
+six is now **≈177 → ≈11** (only `radix.boru` remains).
 
 ### Fold accumulator inherits the seed's gradual modality (landed) — radix 11→4
 
@@ -295,7 +295,7 @@ default `NewCarrier(Any)` — a STRICT Any accumulator — so every `acc … get
 `common-prefix-len`, seeded with `(do {n: …, ok: …})`). Pinned by
 `lang/go/fold_dynamic_seed_test.go`.
 
-Effect: **`radix.aql` 11→4**. Cumulative error-level across the six modules is
+Effect: **`radix.boru` 11→4**. Cumulative error-level across the six modules is
 now **≈177 → ≈4** (only radix's node splitter remains).
 
 ### Mixed-arity refinement over a dynamic receiver (landed) — radix 4→3
@@ -313,11 +313,11 @@ get-result of unknown type) and its `midkids` cascade.
 
 ### Polymorphic dynamic dispatch — receiver narrowing, return widening, param re-bind, builder merge (landed) — radix/tst node walkers 0, ALL six modules clean
 
-The last residue — `radix.aql`'s recursive edge splitter and `tst.aql`'s
+The last residue — `radix.boru`'s recursive edge splitter and `tst.boru`'s
 node-rebuild walkers reached through their `Map`/`set`/`make` surface — closed
 with four interlocking gradual-dispatch fixes. All validated against the pinned
 ratchets (false positives **114→105**, type-soundness held at **12**), the
-differential / property / `-race` / `aqldebug` bytecode gates (`make
+differential / property / `-race` / `borudebug` bytecode gates (`make
 verify-bytecode`), and the full suite.
 
 1. **Polymorphic-slot use does not narrow a dynamic binding.**
@@ -432,11 +432,11 @@ variadic that must still refuse).
 ```bash
 # Build the branch tip
 REF=<branch-tip-sha>
-curl -fsSL "https://codeload.github.com/aql-lang/aql/tar.gz/$REF" | tar -xz -C /tmp/aql --strip-components=1
-( cd /tmp/aql/cmd/go && GOFLAGS=-mod=mod go build -o /tmp/aql-bin ./aql )
+curl -fsSL "https://codeload.github.com/boru-lang/boru/tar.gz/$REF" | tar -xz -C /tmp/boru --strip-components=1
+( cd /tmp/boru/cmd/go && GOFLAGS=-mod=mod go build -o /tmp/boru-bin ./boru )
 
-# From each client repo ROOT (so ./*.aql imports resolve):
-/tmp/aql-bin test/<suite>.aql            # interpret
-/tmp/aql-bin check test/<suite>.aql      # check
-/tmp/aql-bin --compile test/<suite>.aql  # compile (interpreter-fallback ok)
+# From each client repo ROOT (so ./*.boru imports resolve):
+/tmp/boru-bin test/<suite>.boru            # interpret
+/tmp/boru-bin check test/<suite>.boru      # check
+/tmp/boru-bin --compile test/<suite>.boru  # compile (interpreter-fallback ok)
 ```

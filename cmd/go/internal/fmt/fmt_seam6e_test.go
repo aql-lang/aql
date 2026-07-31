@@ -38,7 +38,7 @@ func TestRunWalkError(t *testing.T) {
 
 func TestRunWriteFileError(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "p.aql")
+	path := filepath.Join(dir, "p.boru")
 	if err := os.WriteFile(path, []byte("  add   1   2"), 0o644); err != nil {
 		t.Fatal(err)
 	}

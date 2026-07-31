@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// RecordTypeInitError is the exported funnel sibling packages (aql:net's
+// RecordTypeInitError is the exported funnel sibling packages (boru:net's
 // Socket/Listener registration) use to surface init-time type failures at
 // registry construction. Pin both directions: a real error is recorded
 // (and restored so later constructions stay clean), a nil is ignored.

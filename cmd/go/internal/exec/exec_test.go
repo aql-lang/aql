@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
 // post sends a JSON body to path on srv, decodes the response into
@@ -96,7 +96,7 @@ func TestExecStringResult(t *testing.T) {
 	defer srv.Close()
 
 	var got execResponse
-	post(t, srv, "/v1/exec", execRequest{Code: `import "aql:string-util" "hello" StringUtil.upper`}, &got)
+	post(t, srv, "/v1/exec", execRequest{Code: `import "boru:string-util" "hello" StringUtil.upper`}, &got)
 	if got.Error != "" {
 		t.Fatalf("unexpected error: %s", got.Error)
 	}
@@ -150,14 +150,14 @@ func TestExecEmptyStack(t *testing.T) {
 	}
 }
 
-func TestExecAQLError(t *testing.T) {
+func TestExecBoruError(t *testing.T) {
 	srv := httptest.NewServer(Handler("", nil))
 	defer srv.Close()
 
 	// `add` with no args is a runtime error.
 	var got execResponse
 	status := post(t, srv, "/v1/exec", execRequest{Code: "add"}, &got)
-	// AQL errors are returned at HTTP 200 with the error field set.
+	// boru errors are returned at HTTP 200 with the error field set.
 	if status != http.StatusOK {
 		t.Fatalf("status = %d, want 200", status)
 	}
@@ -227,7 +227,7 @@ func TestExecRequestsAreIndependent(t *testing.T) {
 	defer srv.Close()
 
 	// A `def` in one request must not leak into the next request,
-	// since each request runs in a fresh AQL instance.
+	// since each request runs in a fresh boru instance.
 	var got1 execResponse
 	post(t, srv, "/v1/exec", execRequest{Code: "def x 42"}, &got1)
 	if got1.Error != "" {

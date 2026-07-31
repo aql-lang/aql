@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/lang/go"
+	"github.com/boru-lang/boru/lang/go"
 )
 
 // --- DepScalar safety: don't fall through scalar dispatch ---
@@ -24,7 +24,7 @@ func runOK(t *testing.T, src string) []any {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	got, err := a.Run(src)
 	if err != nil {
 		t.Fatalf("run %q: %v", src, err)
@@ -90,7 +90,7 @@ func TestDepScalar_LtTotalOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	got, err := a.Run(`(Integer gt 10) lt (Integer gt 20)`)
 	if err != nil {
 		t.Fatalf("comparing DepScalars with lt errored: %v", err)
@@ -103,7 +103,7 @@ func TestDepScalar_LtTotalOrder(t *testing.T) {
 	}
 }
 
-// --- formatValueJSON / aql_error: render the constraint, no panic ---
+// --- formatValueJSON / boru_error: render the constraint, no panic ---
 
 // `print` formats via formatForPrint — already guarded but keep the
 // regression test so any future reorder doesn't lose it.
@@ -112,7 +112,7 @@ func TestDepScalar_PrintRendersConstraint(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("print panicked: %v", r)
@@ -132,7 +132,7 @@ func TestDepScalar_NoPanicOnHotPaths(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("hot-path panicked on DepScalar: %v", r)
@@ -197,7 +197,7 @@ func TestDepScalar_InSig_String_RejectsOutOfBound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	_, err = a.Run(`def f fn [[s:(String lt "z")] [Boolean] [true]]
 "z" f`)
 	if err == nil {
@@ -210,7 +210,7 @@ func TestDepScalar_InSig_Atom_RejectsOutOfBound(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	_, err = a.Run(`def f fn [[a:(Atom gt foo/q)] [Boolean] [true]]
 foo/q f`)
 	if err == nil {
@@ -262,7 +262,7 @@ func TestDepScalar_BoundToRefineSubtype_InspectShowsSubtype(t *testing.T) {
 	if err != nil {
 		t.Fatalf("new: %v", err)
 	}
-	seedAQL(a)
+	seedBoru(a)
 	got, err := a.Run(`def Pos refine Integer
 def x:Pos (Integer gt 10)
 inspect x`)

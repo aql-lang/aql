@@ -5,11 +5,11 @@ import (
 	"sync"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/policy"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// log_module.go implements the Go-side machinery for the `aql:log`
+// log_module.go implements the Go-side machinery for the `boru:log`
 // native module (namespace `Log`). The module builder and FnDef
 // wrappers live in modules/log.go; this file owns the value types
 // (LogLevel, LogRecord), the fan-out sink registry, the built-in
@@ -25,7 +25,7 @@ import (
 //
 // Per-import state (the level, format, attached sinks, capture buffer)
 // lives in ONE *LogSinkRegistry captured by the word closures at
-// module-build time — the same pattern aql:rand uses for its PRNG
+// module-build time — the same pattern boru:rand uses for its PRNG
 // (modules/rand.go). The registry passed to a handler at dispatch is
 // used only for the live ErrOutput / Clock / Policy seams, exactly as
 // `print` reaches them.
@@ -123,7 +123,7 @@ type LogRecord struct {
 }
 
 // toMap renders a LogRecord as a Record-shaped Map, the form Log.dump
-// returns so AQL code (and spec rows) can inspect captured records.
+// returns so boru code (and spec rows) can inspect captured records.
 // Field order matches design/LOG-MODULE.10.md §3.2.
 func (rec LogRecord) toMap() Value {
 	m := NewOrderedMap()
@@ -219,7 +219,7 @@ type LogSinkRegistry struct {
 // NewLogSinkRegistry returns a default sink registry (level INFO, text
 // format, console attached, memory/null available). Exposed so a host
 // can construct one, pre-attach an OTel/Datadog sink, and install it
-// with SetHostLogSinks before the AQL program runs `import "aql:log"`.
+// with SetHostLogSinks before the boru program runs `import "boru:log"`.
 func NewLogSinkRegistry() *LogSinkRegistry { return newLogSinkRegistry() }
 
 // newLogSinkRegistry builds the default registry: level INFO, text
@@ -502,11 +502,11 @@ func renderJSON(rec LogRecord) string {
 	return string(bs)
 }
 
-// LogModuleNativeFuncs builds the Go-implemented words for the aql:log
+// LogModuleNativeFuncs builds the Go-implemented words for the boru:log
 // module, all closing over the single per-import sink registry `lsr`.
 // They are registered ONLY into the module's sub-registry by
 // modules.BuildLogModule — deliberately absent from the global
-// registry, like the aql:io words.
+// registry, like the boru:io words.
 func LogModuleNativeFuncs(lsr *LogSinkRegistry) []NativeFunc {
 	funcs := []NativeFunc{
 		logSetLevelNative(lsr),
@@ -683,11 +683,11 @@ func logGenericNative(lsr *LogSinkRegistry) NativeFunc {
 func levelArg(r *Registry, v Value, word string) (LogLevel, error) {
 	name, err := v.AsConcreteAtom()
 	if err != nil {
-		return 0, r.AqlError("log_error", "level must be an atom (trace/debug/info/warn/error/fatal)", word)
+		return 0, r.BoruError("log_error", "level must be an atom (trace/debug/info/warn/error/fatal)", word)
 	}
 	lvl, ok := parseLevel(name)
 	if !ok {
-		return 0, r.AqlError("log_error", "unknown level: "+name, word)
+		return 0, r.BoruError("log_error", "unknown level: "+name, word)
 	}
 	return lvl, nil
 }
@@ -762,10 +762,10 @@ func logSetFormatNative(lsr *LogSinkRegistry) NativeFunc {
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteAtom()
 				if err != nil {
-					return nil, r.AqlError("log_error", "format must be an atom (text/json)", "Log.set-format")
+					return nil, r.BoruError("log_error", "format must be an atom (text/json)", "Log.set-format")
 				}
 				if name != "text" && name != "json" {
-					return nil, r.AqlError("log_error", "unknown format: "+name+" (want text or json)", "Log.set-format")
+					return nil, r.BoruError("log_error", "unknown format: "+name+" (want text or json)", "Log.set-format")
 				}
 				lsr.SetFormat(name)
 				return nil, nil
@@ -798,13 +798,13 @@ func logAddSinkNative(lsr *LogSinkRegistry) NativeFunc {
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteAtom()
 				if err != nil {
-					return nil, r.AqlError("log_error", "sink name must be an atom", "Log.add-sink")
+					return nil, r.BoruError("log_error", "sink name must be an atom", "Log.add-sink")
 				}
 				if err := checkLogInstall(r, "Log.add-sink", name); err != nil {
 					return nil, err
 				}
 				if !lsr.Available(name) {
-					return nil, r.AqlError("unknown-sink", "no registered sink named "+name, "Log.add-sink")
+					return nil, r.BoruError("unknown-sink", "no registered sink named "+name, "Log.add-sink")
 				}
 				lsr.Attach(name)
 				return nil, nil
@@ -823,7 +823,7 @@ func logRemoveSinkNative(lsr *LogSinkRegistry) NativeFunc {
 			Impl: Go(func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 				name, err := args[0].AsConcreteAtom()
 				if err != nil {
-					return nil, r.AqlError("log_error", "sink name must be an atom", "Log.remove-sink")
+					return nil, r.BoruError("log_error", "sink name must be an atom", "Log.remove-sink")
 				}
 				if err := checkLogInstall(r, "Log.remove-sink", name); err != nil {
 					return nil, err
@@ -844,7 +844,7 @@ func checkLogInstall(r *Registry, word, sink string) error {
 		return nil
 	}
 	if err := pol.Check("log", "install", policy.Args{"sink": sink}); err != nil {
-		return r.AqlError("log_error", "sink management denied by policy: "+err.Error(), word)
+		return r.BoruError("log_error", "sink management denied by policy: "+err.Error(), word)
 	}
 	return nil //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 }

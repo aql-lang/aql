@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 func runDefForm(t *testing.T, src string) ([]Value, error) {

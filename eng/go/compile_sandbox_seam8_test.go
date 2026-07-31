@@ -24,15 +24,15 @@ func TestW8SnapshotRestoreModuleRoundTrip(t *testing.T) {
 	if r.Modules == nil {
 		t.Skip("registry has no module registry")
 	}
-	r.Modules.MarkLoaded("aql:w8", ModuleDesc{ID: "mod_w8"})
+	r.Modules.MarkLoaded("boru:w8", ModuleDesc{ID: "mod_w8"})
 	s := r.SnapshotForCompile() // exercises the loaded-module copy loop
 	// Mutate then restore.
-	r.Modules.MarkLoaded("aql:extra", ModuleDesc{ID: "mod_extra"})
+	r.Modules.MarkLoaded("boru:extra", ModuleDesc{ID: "mod_extra"})
 	r.RestoreForCompile(s)
-	if !r.Modules.IsLoaded("aql:w8") {
+	if !r.Modules.IsLoaded("boru:w8") {
 		t.Fatal("snapshot must preserve the originally-loaded module")
 	}
-	if r.Modules.IsLoaded("aql:extra") {
+	if r.Modules.IsLoaded("boru:extra") {
 		t.Fatal("restore must drop the post-snapshot module")
 	}
 }

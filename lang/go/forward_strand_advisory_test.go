@@ -3,7 +3,7 @@ package lang_test
 import (
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // The "forward greediness" advisory: in check mode, flag the
@@ -53,7 +53,7 @@ func TestForwardStrandAdvisory_FiresOnGotcha(t *testing.T) {
 // abstract Map/List param reads dynamic(Any)), so a body-internal strand value is
 // a carrier and is skipped. Detecting it would require running the body with
 // concrete EXAMPLE args — exactly the dynamic-help eval that produced false
-// positives (decision.aql) and was made hermetic. So in-body strand detection is
+// positives (decision.boru) and was made hermetic. So in-body strand detection is
 // intentionally dropped (the advisory is info-severity, non-gating); the
 // soundness of no-false-positives wins over a best-effort body advisory.
 func TestForwardStrandAdvisory_QuietInBody(t *testing.T) {

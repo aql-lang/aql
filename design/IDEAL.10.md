@@ -23,7 +23,7 @@ It does **not** change behaviour by itself.
 
 ## 1. Motivation
 
-The `type` word (post `TYPE-UNIFORM`) is AQL's single type
+The `type` word (post `TYPE-UNIFORM`) is boru's single type
 constructor. Its handler, `typeHandler` in
 `lang/go/native/native_type.go`, dispatches with a hard-coded
 if-else chain:
@@ -283,7 +283,7 @@ g .nodes                               ; access — the dotted accessor
 
 We accept this because:
 
-- **One grammar.** AQL has exactly one parser — a single jsonic
+- **One grammar.** boru has exactly one parser — a single jsonic
   grammar (`eng/go/parser`). Per-plugin grammar extension means
   runtime grammar mutation: a large complexity, ambiguity, and
   audit-safety cost for a small ergonomic gain.
@@ -382,7 +382,7 @@ externally-registered Ideal with stable IDs.
 
 Higher-kinded types — abstracting over type *constructors* rather
 than types — were discussed earlier as a long-horizon question. Full
-HKT is a large language-design commitment AQL has not made. Ideals do
+HKT is a large language-design commitment boru has not made. Ideals do
 not make it; they **remove the structural blocker** and supply the
 substrate. Concretely:
 
@@ -396,7 +396,7 @@ commits to.
 **What Ideals then give a future HKT layer, for free:**
 
 - **A runtime-queryable kind on every value.** `v.Parent.Ideal` lets
-  AQL code branch on "what kind of structure is this" without
+  boru code branch on "what kind of structure is this" without
   knowing the concrete type. That is *ad-hoc kind-polymorphism*
   already: a generic `empty`, `size`, or structural `map` word can
   consult the Ideal and act uniformly across `Table` / `Array` /
@@ -412,7 +412,7 @@ commits to.
   base argument, *composing* Ideals becomes a library problem, not a
   kernel-grammar problem.
 
-**The AQL-idiomatic shape of HKT.** AQL checks types against a
+**The boru-idiomatic shape of HKT.** boru checks types against a
 runtime lattice and treats static analysis as a best-effort
 check-mode pass. The Ideal-enabled form of HKT matches that
 philosophy: kind-polymorphism is **runtime dispatch on
@@ -568,7 +568,7 @@ containers belong under `Node`.
 always parses. A *kind* is per-`Registry`: `r.Ideals` is populated
 when the module is imported (`BuildMatrixModule` calls
 `registerTensorIdeals`). There is no global Ideal table. Before
-`import "aql:matrix"`, `Matrix` names a type but `refine Matrix` /
+`import "boru:matrix"`, `Matrix` names a type but `refine Matrix` /
 `make Matrix` raise "the Matrix type-kind is not available" — the
 disabled-kind path. This is §4's per-`Registry` isolation made
 concrete: identity is global, *capability* is registry-scoped.

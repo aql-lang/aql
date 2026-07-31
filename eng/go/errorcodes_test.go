@@ -60,7 +60,7 @@ func TestRegisterErrorCodesRejectsABadName(t *testing.T) {
 	withErrorCodeRegistry(t)
 	errorCodeInitErrs = nil
 
-	RegisterErrorCodes("aql:test", "NotSnakeCase")
+	RegisterErrorCodes("boru:test", "NotSnakeCase")
 	err := ErrorCodeInitError()
 	if err == nil {
 		t.Fatal("a code that cannot be spelled in a case arm must be refused")
@@ -81,27 +81,27 @@ func TestRegisterErrorCodesRejectsTwoOwners(t *testing.T) {
 	withErrorCodeRegistry(t)
 	errorCodeInitErrs = nil
 
-	RegisterErrorCodes("aql:one", "shared_code_probe")
+	RegisterErrorCodes("boru:one", "shared_code_probe")
 	if err := ErrorCodeInitError(); err != nil {
 		t.Fatalf("the first registration must succeed: %v", err)
 	}
 	// Same owner again is a NO-OP, not an error: a layer whose initialiser
 	// runs twice must stay harmless.
-	RegisterErrorCodes("aql:one", "shared_code_probe")
+	RegisterErrorCodes("boru:one", "shared_code_probe")
 	if err := ErrorCodeInitError(); err != nil {
 		t.Fatalf("re-registering under the same owner must be a no-op: %v", err)
 	}
 
-	RegisterErrorCodes("aql:two", "shared_code_probe")
+	RegisterErrorCodes("boru:two", "shared_code_probe")
 	err := ErrorCodeInitError()
 	if err == nil {
 		t.Fatal("two owners for one code must be refused")
 	}
-	if !strings.Contains(err.Error(), "aql:one") || !strings.Contains(err.Error(), "aql:two") {
+	if !strings.Contains(err.Error(), "boru:one") || !strings.Contains(err.Error(), "boru:two") {
 		t.Errorf("the error must name both claimants, got %v", err)
 	}
 	// The first owner keeps it — a refused second claim must not overwrite.
-	if ec, _ := LookupErrorCode("shared_code_probe"); ec.Owner != "aql:one" {
+	if ec, _ := LookupErrorCode("shared_code_probe"); ec.Owner != "boru:one" {
 		t.Errorf("owner = %q, want the first claimant to keep it", ec.Owner)
 	}
 }

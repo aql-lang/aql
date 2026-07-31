@@ -1,6 +1,6 @@
 .PHONY: build test vet fmt lint vuln clean
 
-# This module (github.com/aql-lang/aql/test/solardemo) is a standalone
+# This module (github.com/boru-lang/boru/test/solardemo) is a standalone
 # HTTP fixture used by the lang/go API tests. It has no sibling deps.
 
 build:

@@ -15,7 +15,7 @@ gap (fib ~215×, loops ~60× Python) is the execution model itself:
 per-token dispatch over 72-byte values with per-call overload matching.
 
 CPython is not a tree-walker. Its "interpreter" parses to bytecode and
-runs a tight dispatch loop — exactly AQL's compiled mode, which already
+runs a tight dispatch loop — exactly boru's compiled mode, which already
 runs fib at ~235ms wall (≈10× Python wall, most of it fixed startup) on
 the same fixtures. **"Interpreter performance like Python" means doing
 what Python does: compile transparently, fall back rarely.** The tier
@@ -35,7 +35,7 @@ top-level statement stream stays tree-walked (cheap, once-per-statement).
    across copies, like `FnFrameMeta`): `{calls atomic.Int32, state
    atomic.Int32 /* cold | compiling | compiled | refused */, prog
    *Program}`. `buildFnBodyHandler`'s fast path increments; at
-   `tierThreshold` (default 16; `AQL_TIER=0` disables) it attempts
+   `tierThreshold` (default 16; `BORU_TIER=0` disables) it attempts
    promotion once.
 2. **Promotion = the EXISTING compile pipeline over a synthetic call.**
    Run `BeginCompilePass` + the recorder over the token stream
@@ -53,14 +53,14 @@ top-level statement stream stays tree-walked (cheap, once-per-statement).
    island-engine pattern in reverse — `vm.go` already runs Programs with
    an interpreter fallback island INSIDE it, so a VM-refused shape
    degrades composably). Args in, results out — the same contract
-   CallAQL has. Flow-control (`break`/`continue` escaping a compiled
+   CallBoru has. Flow-control (`break`/`continue` escaping a compiled
    body) already has a defined VM translation (`flowUnwind`,
    engine.go).
 4. **Invalidation.** Promotion pins the per-name `Defs.Gen` of every
    word the unit resolved (the dispatch-cache counter, registry.go). A
    gen bump on any pinned name → `state = cold`, counter reset — same
    invalidation discipline the F3 analysis established.
-5. **Observability.** `aql run --no-tier` and trace hooks force the
+5. **Observability.** `boru run --no-tier` and trace hooks force the
    tree-walker (tracing disables promotion — the trace IS the
    tree-walk); `Debug.profile` reports tier states per fn.
 
@@ -73,7 +73,7 @@ top-level statement stream stays tree-walked (cheap, once-per-statement).
 - The recursion/closure/break/args frame tests from the F5 series run
   tiered; ForkConcurrent under `-race` (fnHeat is shared state).
 - Alloc/latency gates: `TestInterpAllocCeilings` gains tiered twins;
-  `bench/interp` gains an `aql-interp-tiered` column.
+  `bench/interp` gains a `boru-interp-tiered` column.
 
 ## Expected outcome (measured basis)
 
@@ -114,7 +114,7 @@ Two load-bearing facts from reading the execution surface:
 
 ## Sequencing
 
-- **T1** `fnHeat` + promotion skeleton behind `AQL_TIER` (default off),
+- **T1** `fnHeat` + promotion skeleton behind `BORU_TIER` (default off),
   promotion via the sandboxed compile pass, dispatch short-circuit,
   spec-suite differential at threshold 1. Land dark.
 - **T2** invalidation (gen pinning), trace/debug interplay, fork safety;

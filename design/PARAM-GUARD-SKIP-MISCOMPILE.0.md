@@ -95,7 +95,7 @@ The runtime param guard LANDED: `CompiledFn.Params` (threaded from `sigParams`
 via `SetUnitParamTypes`) is enforced at `OpCallUser` entry by `checkParamContract`
 (`vm.go`), raising the byte-identical `signature_error` the interpreter raises.
 The reported `List`→`m:Map` laundering (and the whole PLAIN-type class) is fixed:
-compiled and interpreter both raise `[aql/signature_error]`.
+compiled and interpreter both raise `[boru/signature_error]`.
 
 An adversarial sweep (~137 programs, 4 families) verified two things and found
 one residual:

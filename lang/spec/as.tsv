@@ -1,4 +1,4 @@
-# AQL Language Specification: `as` — call-site signature selection (dispatch ascription)
+# boru Language Specification: `as` — call-site signature selection (dispatch ascription)
 # Format: input<TAB>expected<TAB>description
 #
 # `v as T` returns v UNCHANGED, carrying a match-time ascription: the

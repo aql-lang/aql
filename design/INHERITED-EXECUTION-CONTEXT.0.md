@@ -6,9 +6,9 @@
 
 ## 1. Problem
 
-AQL already has an implicit context store with inherited, prototype-like semantics. That store is useful for application configuration and dynamically scoped values, but platform work introduces a second, stricter requirement: operations such as HTTP requests, database calls, filesystem work, timers and asynchronous tasks need a common way to observe cancellation, deadlines, identity, policy and tracing information.
+boru already has an implicit context store with inherited, prototype-like semantics. That store is useful for application configuration and dynamically scoped values, but platform work introduces a second, stricter requirement: operations such as HTTP requests, database calls, filesystem work, timers and asynchronous tasks need a common way to observe cancellation, deadlines, identity, policy and tracing information.
 
-Go solves part of this problem with `context.Context`, passed explicitly through every participating call. Node.js solves a related problem with `AsyncLocalStorage`, which associates data with an asynchronous execution chain. AQL should adopt neither interface verbatim. It already has language-level inherited context, so the AQL-native design should use that strength while adding runtime guarantees that the general context store does not currently promise.
+Go solves part of this problem with `context.Context`, passed explicitly through every participating call. Node.js solves a related problem with `AsyncLocalStorage`, which associates data with an asynchronous execution chain. boru should adopt neither interface verbatim. It already has language-level inherited context, so the boru-native design should use that strength while adding runtime guarantees that the general context store does not currently promise.
 
 Without a composable execution context, each API must invent timeout options and explicitly forward them through every intermediate call. Scoped timeout helpers would merely recreate an implicit context under another name. Deep cancellation and request-scoped metadata therefore require a runtime-level facility.
 
@@ -16,13 +16,13 @@ Without a composable execution context, each API must invent timeout options and
 
 Introduce an **inherited execution context** as a core runtime facility.
 
-It is not an `aql:context` platform module. It is part of evaluation and task semantics, beneath modules such as `aql:time`, `aql:net`, `aql:os`, database modules and future server frameworks.
+It is not a `boru:context` platform module. It is part of evaluation and task semantics, beneath modules such as `boru:time`, `boru:net`, `boru:os`, database modules and future server frameworks.
 
 The existing user context store remains available for its current purposes. The execution context is an extension or protected lane, not a replacement.
 
 ## 3. Conceptual model
 
-Each running AQL task has an execution-context frame. A child task inherits its parent frame and may derive a child frame with overrides. Frames should be immutable or copy-on-write from the point of view of ordinary AQL code.
+Each running boru task has an execution-context frame. A child task inherits its parent frame and may derive a child frame with overrides. Frames should be immutable or copy-on-write from the point of view of ordinary boru code.
 
 The context contains separate typed lanes rather than an unstructured global bag:
 
@@ -82,7 +82,7 @@ Platform APIs should accept the implicit current scope by default. Explicit scop
 
 ## 7. Reserved system namespace
 
-A runtime-controlled namespace is desirable, potentially using AQL's `$` convention. The exact syntax is unresolved and is covered by the separate dollar-namespace discovery note.
+A runtime-controlled namespace is desirable, potentially using boru's `$` convention. The exact syntax is unresolved and is covered by the separate dollar-namespace discovery note.
 
 Regardless of syntax, ordinary context mutation must not be able to forge lifecycle, identity-policy or capability state. Runtime mutation requires privileged internal APIs.
 
@@ -113,7 +113,7 @@ Important rules:
 - Access to a known protected slot has a known result type.
 - A capability-gated operation may be statically rejected when the policy is compile-time known.
 - Unknown runtime policy remains a runtime check; the checker must not pretend authorization is proven.
-- Cancellation paths must be represented in effect or error analysis if AQL later formalizes effects.
+- Cancellation paths must be represented in effect or error analysis if boru later formalizes effects.
 - Protected values must not silently degrade to generic maps.
 - Scope-producing words must have precise block result types.
 
@@ -143,7 +143,7 @@ This design must preserve the following established constraints:
 - New module words must not shadow core words.
 - Public native exports require language-level spec coverage.
 - New words are forward-collecting unless intrinsically stack-oriented.
-- Errors cross the Go/AQL boundary as AQL errors rather than panics.
+- Errors cross the Go/boru boundary as boru errors rather than panics.
 - No private parser or mini-language should be introduced for scope configuration.
 - Native Go implementation requires corresponding Go tests.
 

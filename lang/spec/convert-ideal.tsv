@@ -1,4 +1,4 @@
-# AQL Language Specification: convert <Ideal> to Map / List
+# boru Language Specification: convert <Ideal> to Map / List
 # Format: input<TAB>expected<TAB>description
 #
 # Every Ideal value can be converted to a Map or List via
@@ -30,5 +30,5 @@ import module [export "Foo" {a:1}] convert List Foo.$module	['Foo']	…and to it
 def Foo (class {}) convert Integer (make Foo {})	ERROR:signature	no Ideal→Scalar convert
 #
 # §5  Matrix / Tensor → nested rows (List) and {shape values} (Map)
-import "aql:matrix-util" convert List (MatrixUtil.eye 2)	[[1.0 0.0] [0.0 1.0]]	a matrix → nested rows
-import "aql:matrix-util" convert Map (MatrixUtil.eye 2)	{shape:[2 2] values:[1.0 0.0 0.0 1.0]}	…and a shape/values map
+import "boru:matrix-util" convert List (MatrixUtil.eye 2)	[[1.0 0.0] [0.0 1.0]]	a matrix → nested rows
+import "boru:matrix-util" convert Map (MatrixUtil.eye 2)	{shape:[2 2] values:[1.0 0.0 0.0 1.0]}	…and a shape/values map

@@ -1,11 +1,11 @@
 //go:build js && wasm
 
-// tuiweb.go — the browser Backend for aql:tui (the RFC §9 playground
+// tuiweb.go — the browser Backend for boru:tui (the RFC §9 playground
 // tier, closed by the P7 follow-ups): frames render into the page as
 // styled HTML rows, key events flow back from the page's keydown
 // handler. The playground page provides the JS half as global hooks —
-// aqlTuiOpen/aqlTuiFrame/aqlTuiCursor/aqlTuiTitle/aqlTuiBell/
-// aqlTuiClose — and calls the Go-exposed aqlTuiKey/aqlTuiResize to
+// boruTuiOpen/boruTuiFrame/boruTuiCursor/boruTuiTitle/boruTuiBell/
+// boruTuiClose — and calls the Go-exposed boruTuiKey/boruTuiResize to
 // feed input. Missing hooks are tolerated (the backend no-ops), so the
 // engine build never depends on page structure.
 package main
@@ -18,12 +18,12 @@ import (
 	"sync/atomic"
 	"syscall/js"
 
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // webBackend implements tuikit.Backend on the playground page. One
 // instance per Tui.open/run; the LAST opened instance owns the
-// aqlTuiKey/aqlTuiResize input hooks (a playground shows one app).
+// boruTuiKey/boruTuiResize input hooks (a playground shows one app).
 // mu serializes event sends with Close: a JS input callback must never
 // send on a channel the app goroutine is concurrently closing.
 type webBackend struct {
@@ -60,7 +60,7 @@ func (w *webBackend) Open(opts tuikit.OpenOpts) (tuikit.Info, error) {
 	webCurrentMu.Lock()
 	webCurrent = w
 	webCurrentMu.Unlock()
-	dims := callHook("aqlTuiOpen", opts.Title)
+	dims := callHook("boruTuiOpen", opts.Title)
 	if dims.Type() == js.TypeObject {
 		if c := dims.Get("cols"); c.Type() == js.TypeNumber && c.Int() > 0 {
 			w.cols = c.Int()
@@ -80,7 +80,7 @@ func (w *webBackend) Close() error {
 	}
 	close(w.events)
 	w.mu.Unlock()
-	callHook("aqlTuiClose")
+	callHook("boruTuiClose")
 	return nil
 }
 
@@ -94,22 +94,22 @@ func (w *webBackend) Present(f *tuikit.Frame) error {
 	if w.closed.Load() {
 		return errors.New("web terminal is closed")
 	}
-	callHook("aqlTuiFrame", frameHTML(f))
+	callHook("boruTuiFrame", frameHTML(f))
 	return nil
 }
 
 func (w *webBackend) SetCursor(x, y int, visible bool) error {
-	callHook("aqlTuiCursor", x, y, visible)
+	callHook("boruTuiCursor", x, y, visible)
 	return nil
 }
 
 func (w *webBackend) SetTitle(title string) error {
-	callHook("aqlTuiTitle", title)
+	callHook("boruTuiTitle", title)
 	return nil
 }
 
 func (w *webBackend) Bell() error {
-	callHook("aqlTuiBell")
+	callHook("boruTuiBell")
 	return nil
 }
 
@@ -137,7 +137,7 @@ func webDeliver(ev tuikit.Event) {
 
 // installTuiInput exposes the page-callable input feeders.
 func installTuiInput() {
-	js.Global().Set("aqlTuiKey", js.FuncOf(func(this js.Value, args []js.Value) any {
+	js.Global().Set("boruTuiKey", js.FuncOf(func(this js.Value, args []js.Value) any {
 		if len(args) < 2 {
 			return nil
 		}
@@ -154,7 +154,7 @@ func installTuiInput() {
 		webDeliver(tuikit.Event{Tag: "key", Key: args[0].String(), Char: args[1].String(), Mods: mods})
 		return nil
 	}))
-	js.Global().Set("aqlTuiResize", js.FuncOf(func(this js.Value, args []js.Value) any {
+	js.Global().Set("boruTuiResize", js.FuncOf(func(this js.Value, args []js.Value) any {
 		if len(args) < 2 {
 			return nil
 		}

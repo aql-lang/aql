@@ -3,7 +3,7 @@
 # Principle: Multiple residual values on the stack are the result.		
 # =====================================================================		
 #		
-# AQL is a stack machine. A program is a sequence of tokens that push,		
+# boru is a stack machine. A program is a sequence of tokens that push,		
 # pop, and transform stack entries. There is no distinguished 'return		
 # slot': whatever values remain on the stack at end-of-Run() are the		
 # result, in source order (first-pushed at the bottom, last-pushed		
@@ -22,7 +22,7 @@
 # ----------------		
 # Many languages with 'every expression has one value' semantics		
 # would silently coerce a multi-value residual into a tuple, a		
-# discard, or an error. AQL does not — leaving N values is a		
+# discard, or an error. boru does not — leaving N values is a		
 # first-class outcome. Code generators and pretty-printers depend		
 # on this so a reader can mentally simulate the stack from the		
 # source without a wrapping layer to track.		

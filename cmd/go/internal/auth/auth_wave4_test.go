@@ -192,7 +192,7 @@ func TestW4SaveClientUserVaultAlias(t *testing.T) {
 	if err := SaveClientUser(home, cu); err != nil {
 		t.Fatalf("SaveClientUser: %s", err)
 	}
-	data, err := os.ReadFile(filepath.Join(home, ".aql", "user.jsonic"))
+	data, err := os.ReadFile(filepath.Join(home, ".boru", "user.jsonic"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -211,14 +211,14 @@ func TestW4SaveClientUserVaultAlias(t *testing.T) {
 }
 
 func TestW4SaveClientUserMkdirError(t *testing.T) {
-	// homeDir/.aql exists as a FILE, so MkdirAll fails.
+	// homeDir/.boru exists as a FILE, so MkdirAll fails.
 	home := t.TempDir()
-	if err := os.WriteFile(filepath.Join(home, ".aql"), []byte("x"), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(home, ".boru"), []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
 	cu := &ClientUser{Username: "alice"}
 	if err := SaveClientUser(home, cu); err == nil {
-		t.Error("SaveClientUser with .aql-as-file succeeded, want error")
+		t.Error("SaveClientUser with .boru-as-file succeeded, want error")
 	}
 }
 
@@ -230,7 +230,7 @@ func TestW4LoadClientUserMissing(t *testing.T) {
 
 func TestW4LoadClientUserSkipsJunkLines(t *testing.T) {
 	home := t.TempDir()
-	dir := filepath.Join(home, ".aql")
+	dir := filepath.Join(home, ".boru")
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		t.Fatal(err)
 	}

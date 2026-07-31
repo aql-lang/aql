@@ -1,0 +1,45 @@
+# store-test.boru — the store conformance suite (the seneca-store-test analog).
+#
+# DX probe (illustrative, NOT executable). Every store module (mem, dynamo, …)
+# must satisfy the SAME behavioural contract; this is that checklist, expressed as
+# representative call+expected scenarios against a bus with the store-under-test
+# mounted. When the `boru:entity` words exist, these become positive AND negative
+# rows under lang/spec/*.tsv (per the repo's test discipline) — here they are
+# illustrative `call`s with `# =>` expectations.
+#
+# `conformance <store>` mounts the store as the default and runs every scenario.
+
+import "boru:entity"
+import "boru:test" # Test.eq (illustrative assertion)
+
+export "StoreTest" {conformance:conformance/r}
+
+def conformance fn store:Service None [
+  def bus (Entity.bus) Entity.mount {} store bus
+  def u (Entity.make "sys/user" bus) # 1. SAVE assigns an id on insert.
+  def saved (Entity.save (Entity.field "name" "Alice" u)) Test.eq
+    (none? ((Entity.data saved) dot id)) false # => id present
+  def id ((Entity.data saved) dot id)
+    # 2. LOAD by id round-trips the row.
+  def back (Entity.load u id) Test.eq ((Entity.data back) dot name)
+    "Alice" # => "Alice"
+  # 3. SAVE with an id present UPDATES (no duplicate insert).
+  def renamed (Entity.save (Entity.field "name" "Alicia" back)) Test.eq
+    ((Entity.data (Entity.load u id)) dot name) "Alicia"
+    # => updated in place
+  # 4. LIST with an AND query returns only rows matching ALL conditions.
+  Entity.save (Entity.field "name" "Bob" (Entity.field "team" "x" u))
+    Entity.save
+    (Entity.field "name" "Cara" (Entity.field "team" "y" u))
+  def team-x (Entity.list u {team:"x"} {}) Test.eq (size team-x) 1
+    # => only Bob
+  # 5. LIST opts: limit + sort (meta in opts, not Seneca `$`).
+  def top2 (Entity.list u {} {sort:{name:1} limit:2}) Test.eq
+    (size top2) 2 # => first two by name
+  # 6. REMOVE deletes by id; a subsequent load is None.
+  Entity.remove u id Test.eq (none? (Entity.load u id)) true # => gone
+  # 7. (documented, not asserted here) UPSERT RACE: concurrent inserts on a
+  #    unique field must not duplicate — requires a unique index in the backend.
+  #    seneca-dynamo-store flags this as a known bug; conformance pins the rule.
+  None
+]

@@ -24,7 +24,7 @@ func TestW4CommandMethods(t *testing.T) {
 	if code := c.Run(nil, nil, &out, nil); code != 0 {
 		t.Errorf("Run(nil) = %d, want 0", code)
 	}
-	if !strings.Contains(out.String(), "AQL language reference") {
+	if !strings.Contains(out.String(), "boru language reference") {
 		t.Errorf("index output missing header: %.120q", out.String())
 	}
 }
@@ -35,7 +35,7 @@ func TestW4IndexListsWordsAndModules(t *testing.T) {
 		t.Fatalf("Run(nil) = %d, want 0", code)
 	}
 	s := out.String()
-	for _, want := range []string{"Words:", "Modules", "Drill in:", "aql describe <word>"} {
+	for _, want := range []string{"Words:", "Modules", "Drill in:", "boru describe <word>"} {
 		if !strings.Contains(s, want) {
 			t.Errorf("index missing %q", want)
 		}
@@ -51,7 +51,7 @@ func TestW4Category(t *testing.T) {
 	if !strings.Contains(s, "add") {
 		t.Errorf("math category missing add: %.200q", s)
 	}
-	if !strings.Contains(s, "aql describe <word>") {
+	if !strings.Contains(s, "boru describe <word>") {
 		t.Errorf("category footer missing: %.200q", s)
 	}
 }
@@ -97,8 +97,8 @@ func TestW4BareModuleName(t *testing.T) {
 		t.Fatalf("Run(array-util) = %d, want 0; out=%s", code, out.String())
 	}
 	s := out.String()
-	if !strings.Contains(s, "aql:array-util") {
-		t.Errorf("module render missing aql:array-util: %.200q", s)
+	if !strings.Contains(s, "boru:array-util") {
+		t.Errorf("module render missing boru:array-util: %.200q", s)
 	}
 	if !strings.Contains(s, "ArrayUtil.shape") {
 		t.Errorf("module render missing exported word list: %.300q", s)
@@ -115,16 +115,16 @@ func TestW4UnknownName(t *testing.T) {
 	if !strings.Contains(s, "no description available") {
 		t.Errorf("missing not-found line: %.200q", s)
 	}
-	if !strings.Contains(s, "Run 'aql describe'") {
+	if !strings.Contains(s, "Run 'boru describe'") {
 		t.Errorf("missing hint line: %.200q", s)
 	}
 }
 
-func TestW4ModulePathWithAqlPrefix(t *testing.T) {
+func TestW4ModulePathWithBoruPrefix(t *testing.T) {
 	var out bytes.Buffer
-	code := Run([]string{"aql:array-util"}, &out)
+	code := Run([]string{"boru:array-util"}, &out)
 	if code != 0 {
-		t.Fatalf("Run(aql:array-util) = %d, want 0; out=%s", code, out.String())
+		t.Fatalf("Run(boru:array-util) = %d, want 0; out=%s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "Load with import") {
 		t.Errorf("module render missing import hint: %.300q", out.String())
@@ -133,9 +133,9 @@ func TestW4ModulePathWithAqlPrefix(t *testing.T) {
 
 func TestW4ModulePathWord(t *testing.T) {
 	var out bytes.Buffer
-	code := Run([]string{"aql:array-util:shape"}, &out)
+	code := Run([]string{"boru:array-util:shape"}, &out)
 	if code != 0 {
-		t.Fatalf("Run(aql:array-util:shape) = %d, want 0; out=%s", code, out.String())
+		t.Fatalf("Run(boru:array-util:shape) = %d, want 0; out=%s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "shape") {
 		t.Errorf("module word docs missing shape: %.300q", out.String())
@@ -152,9 +152,9 @@ func TestW4ModulePathWordWithoutPrefix(t *testing.T) {
 
 func TestW4ModulePathMissingWord(t *testing.T) {
 	var out bytes.Buffer
-	code := Run([]string{"aql:array-util:zz-nope"}, &out)
+	code := Run([]string{"boru:array-util:zz-nope"}, &out)
 	if code != 1 {
-		t.Fatalf("Run(aql:array-util:zz-nope) = %d, want 1", code)
+		t.Fatalf("Run(boru:array-util:zz-nope) = %d, want 1", code)
 	}
 	s := out.String()
 	if !strings.Contains(s, "has no exported word") {
@@ -167,9 +167,9 @@ func TestW4ModulePathMissingWord(t *testing.T) {
 
 func TestW4ModulePathUnknownModule(t *testing.T) {
 	var out bytes.Buffer
-	code := Run([]string{"aql:zz-no-such-module"}, &out)
+	code := Run([]string{"boru:zz-no-such-module"}, &out)
 	if code != 1 {
-		t.Fatalf("Run(aql:zz-no-such-module) = %d, want 1", code)
+		t.Fatalf("Run(boru:zz-no-such-module) = %d, want 1", code)
 	}
 	if !strings.Contains(out.String(), "cannot load module") {
 		t.Errorf("missing cannot-load message: %.300q", out.String())
@@ -180,11 +180,11 @@ func TestW4SplitModulePath(t *testing.T) {
 	cases := []struct {
 		in, mod, word string
 	}{
-		{"aql:type-util:foo", "aql:type-util", "foo"},
-		{"aql:type-util", "aql:type-util", ""},
+		{"boru:type-util:foo", "boru:type-util", "foo"},
+		{"boru:type-util", "boru:type-util", ""},
 		{"type-util:foo", "type-util", "foo"},
 		{"type-util", "type-util", ""},
-		{"aql:m:a:b", "aql:m", "a:b"},
+		{"boru:m:a:b", "boru:m", "a:b"},
 	}
 	for _, c := range cases {
 		mod, word := splitModulePath(c.in)
@@ -209,7 +209,7 @@ func TestW4ExportHelpers(t *testing.T) {
 	if err != nil {
 		t.Fatalf("newRegistry: %s", err)
 	}
-	desc, err := resolveModule(reg, "aql:array-util")
+	desc, err := resolveModule(reg, "boru:array-util")
 	if err != nil {
 		t.Fatalf("resolveModule: %s", err)
 	}
@@ -279,7 +279,7 @@ func TestW4FileModuleFallback(t *testing.T) {
 	// one more chance as a loadable module. A relative file path takes
 	// the file-module load path.
 	dir := t.TempDir()
-	mod := filepath.Join(dir, "w4mod.aql")
+	mod := filepath.Join(dir, "w4mod.boru")
 	src := "def w4double fn [[n:Integer] [Integer] [(n 2 mul)]]\n\nexport \"W4\" {double:w4double/r}\n"
 	if err := os.WriteFile(mod, []byte(src), 0644); err != nil {
 		t.Fatal(err)
@@ -294,9 +294,9 @@ func TestW4FileModuleFallback(t *testing.T) {
 	defer os.Chdir(orig)
 
 	var out bytes.Buffer
-	code := Run([]string{"./w4mod.aql"}, &out)
+	code := Run([]string{"./w4mod.boru"}, &out)
 	if code != 0 {
-		t.Fatalf("Run(./w4mod.aql) = %d, want 0; out=%s", code, out.String())
+		t.Fatalf("Run(./w4mod.boru) = %d, want 0; out=%s", code, out.String())
 	}
 	if !strings.Contains(out.String(), "W4.double") {
 		t.Errorf("file module render missing W4.double: %.300q", out.String())

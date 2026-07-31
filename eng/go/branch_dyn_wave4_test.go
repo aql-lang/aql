@@ -161,13 +161,13 @@ func registerUserPoly2(r *Registry) {
 			{
 				Params:     []FnParam{{Name: "n", Type: TInteger}},
 				Returns:    []*Type{TInteger},
-				Impl:       AQL(parenBody(NewWord("cadd"), NewWord("n"), NewInteger(1))),
+				Impl:       Boru(parenBody(NewWord("cadd"), NewWord("n"), NewInteger(1))),
 				BarrierPos: BarrierAllForward,
 			},
 			{
 				Params:     []FnParam{{Name: "s", Type: TString}},
 				Returns:    []*Type{TInteger},
-				Impl:       AQL(parenBody(NewInteger(-1))),
+				Impl:       Boru(parenBody(NewInteger(-1))),
 				BarrierPos: BarrierAllForward,
 			},
 		},
@@ -381,14 +381,14 @@ func TestFnConcreteSingleValuedOrCarrier(t *testing.T) {
 	}
 	one := NewFnDef(FnDefInfo{Signatures: []Signature{{
 		Params: []FnParam{{Name: "x", Type: TInteger}}, Returns: []*Type{TInteger},
-		Impl: AQL([]Value{NewWord("x")}), BarrierPos: BarrierAllForward,
+		Impl: Boru([]Value{NewWord("x")}), BarrierPos: BarrierAllForward,
 	}}})
 	if !fnConcreteSingleValuedOrCarrier(one) {
 		t.Error("single-return fn refused")
 	}
 	zero := NewFnDef(FnDefInfo{Signatures: []Signature{{
 		Params: []FnParam{{Name: "x", Type: TInteger}},
-		Impl:   AQL([]Value{NewWord("x")}), BarrierPos: BarrierAllForward,
+		Impl:   Boru([]Value{NewWord("x")}), BarrierPos: BarrierAllForward,
 	}}})
 	if fnConcreteSingleValuedOrCarrier(zero) {
 		t.Error("zero-return fn admitted")

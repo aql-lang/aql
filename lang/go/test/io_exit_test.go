@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // io_exit_test.go — the LANGUAGE half of IO.exit: what the runtime hands a
 // driver, and what happens at the boundaries that must not honour it. The
-// per-driver decisions (process status for `aql run` / `aql do` / a built
-// binary, and `aql test`'s per-file handling) are in cmd/go.
+// per-driver decisions (process status for `boru run` / `boru do` / a built
+// binary, and `boru test`'s per-file handling) are in cmd/go.
 
 func runExit(t *testing.T, src string) error {
 	t.Helper()
@@ -18,7 +18,7 @@ func runExit(t *testing.T, src string) error {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, runErr := a.Run(`import "aql:io"  ` + src)
+	_, runErr := a.Run(`import "boru:io"  ` + src)
 	return runErr
 }
 
@@ -83,7 +83,7 @@ func TestIOExitCrossesDo(t *testing.T) {
 	}
 	// The same `do` still catches an ordinary raise as data.
 	a, _ := lang.New()
-	res, rerr := a.Run(`import "aql:io"  do [raise {code:'boom' message:'bang'}]`)
+	res, rerr := a.Run(`import "boru:io"  do [raise {code:'boom' message:'bang'}]`)
 	if rerr != nil {
 		t.Fatalf("ordinary raise should still be caught: %v", rerr)
 	}
@@ -101,7 +101,7 @@ func TestIOExitCannotEscapeSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, runErr := a.Run(`import "aql:vm"  Vm.run-sandbox "import \"aql:io\" IO.exit 5"`)
+	_, runErr := a.Run(`import "boru:vm"  Vm.run-sandbox "import \"boru:io\" IO.exit 5"`)
 	if runErr == nil {
 		t.Fatal("a sub-program's exit request vanished entirely")
 	}

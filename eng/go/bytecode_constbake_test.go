@@ -150,7 +150,7 @@ func TestIsInertConstTableTypeBody(t *testing.T) {
 }
 
 // A dot-access reach (`r.int`) inside a NEVER-evaluated code body (a NoEvalArgs
-// operand the driving word stores / drops / CallAQLs — Test.prop / Test.skip /
+// operand the driving word stores / drops / CallBorus — Test.prop / Test.skip /
 // Test.check-prop — or a quoted list) is pure DATA: the VM pushes the baked
 // compound verbatim and never expands a reach (in-place expansion is an
 // interpreter behaviour). So a receiver reach rides as a const MEMBER even

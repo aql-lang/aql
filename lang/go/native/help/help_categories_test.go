@@ -37,7 +37,7 @@ func TestCategoryCoverage(t *testing.T) {
 }
 
 // TestCategoryNamesUnique guards against two categories sharing a name, which
-// would make `aql describe <name>` ambiguous.
+// would make `boru describe <name>` ambiguous.
 func TestCategoryNamesUnique(t *testing.T) {
 	seen := map[string]bool{}
 	for _, c := range categories {
@@ -71,7 +71,7 @@ func TestLookupCategory(t *testing.T) {
 		t.Errorf("CategoryOf(not-a-word) = %q; want empty", got)
 	}
 	// A MODULE-provided word is categorised too. `upper` lives in
-	// aql:string-util, so it is not in Category.Words — resolving it
+	// boru:string-util, so it is not in Category.Words — resolving it
 	// requires the module arm. Omitting this case would report "" for all
 	// 80 module words, which is what the pre-split table effectively did.
 	if got := CategoryOf("upper"); got != "string" {

@@ -5,8 +5,8 @@
 > upstream jsonic bump — tabnas/jsonic v0.2.0 is pinned and reached
 > read-only from the module cache, so `pairval` can't be edited here; the
 > BC route is designed against a swappable `Meta["ko"]` contract so an
-> upstream bump can replace it later. The `aql_ck` leak (§2.6) is fixed
-> first (a `defer delete(r.K, "aql_ck")` in the computed-key BC), then a
+> upstream bump can replace it later. The `boru_ck` leak (§2.6) is fixed
+> first (a `defer delete(r.K, "boru_ck")` in the computed-key BC), then a
 > `ko` order channel records each pair's final union key in source order
 > (first-position/last-value dedup, base-name normalization for
 > shorthand/optional, verbatim quoted/computed keys — the five §3.2
@@ -58,7 +58,7 @@
 > pinned container predicates (lang/spec/refine-flex.tsv), and the
 > third seam — base-dispatch delegation for override bodies — is
 > closed by the `as` dispatch-ascription word (OPEN-WORDS.1 §9;
-> lang/spec/as.tsv; the full pure-AQL SortedFlexMap acceptance runs
+> lang/spec/as.tsv; the full pure-boru SortedFlexMap acceptance runs
 > in lang/go/test/sorted_user_test.go). A super-style word was built
 > first and rejected on DX grounds (§7b.1-3 keep that history).
 
@@ -99,7 +99,7 @@ Superseding the FLEX-ATTRS.0 `attr` proposal:
 - **D2** — the instance-**attributes idea is scrapped**.
 - **D3** — a **`WeakFlexMap`** type is added as a **subtype of
   FlexMap** (values weak w.r.t. garbage collection).
-- **D4** — a **`sorted`** utility word in a new **`aql:node-util`**
+- **D4** — a **`sorted`** utility word in a new **`boru:node-util`**
   module returns **`SortedMap` / `SortedFlexMap`** — module-exported
   subtypes of Map / FlexMap — as clones with keys re-sorted, with set
   and key-iteration overrides that maintain sorted key order.
@@ -157,13 +157,13 @@ in a library, which is where Python/JS/Java/Clojure all keep them.
    contract depends on `'$' < letters`, `jsonify.go:34-36`) while
    `IO.write {fmt:"json"}` preserves insertion order. The kg pipeline
    content-addresses assertion ids on jsonify's sorted output
-   (`canon-of = StructUtil.jsonify`, `kg/identifiers.aql:36-71`).
-5. **`Debug.gc` exists** (`aql:debug` → `runtime.GC()`;
+   (`canon-of = StructUtil.jsonify`, `kg/identifiers.boru:36-71`).
+5. **`Debug.gc` exists** (`boru:debug` → `runtime.GC()`;
    module-debug.tsv pins only `typeof` because the numbers are
    nondeterministic). Exactly one GC-dependent Go test exists
    (`bytecode_allocguard_test.go:26`).
 6. A pre-existing parser bug surfaced during verification: the
-   computed-key `aql_ck` K-flag **leaks to subsequent pairs** —
+   computed-key `boru_ck` K-flag **leaks to subsequent pairs** —
    `def k 'zz' def aa 5 {[k]:1 aa:2}` → `{5:2 zz:1}` (the bare key
    `aa` is wrongly evaluated as computed). The D1 order channel sits
    directly on this machinery.
@@ -192,7 +192,7 @@ existing grammar extension writes into and loses duplicate handling):
    `Meta["sh"]` list, `grammar.go:992-1006`): works against pinned
    jsonic v0.2.0 but carries five special cases across four grammar
    extension paths — the `{foo?:v}` double-fire hazard, the live
-   `aql_ck` leak (§2.6, must be fixed first), base-name normalization
+   `boru_ck` leak (§2.6, must be fixed first), base-name normalization
    for `{foo/r}`/`{foo?}`, verbatim qk/ck keys, and duplicate dedup.
 2. **Upstream jsonic write** — `pairval` (jsonic `grammar.go:15-42`)
    has the key and the MapRef in hand at exactly ONE site; appending
@@ -255,7 +255,7 @@ serializers later. (`IO.write` emit = representation-faithful;
 `jsonify` = canonicalizing; document jsonify as such.)
 
 One asymmetry becomes visible and must be documented: the same text
-parses ordered as an AQL literal but sorted through `StructUtil.parse`
+parses ordered as a boru literal but sorted through `StructUtil.parse`
 (until the jsonic hook reaches it — the upstream route in §3.2 closes
 this too; decoded json/yaml/toml stays sorted regardless, upstream
 maps are unordered).
@@ -417,17 +417,17 @@ word. Bonus: the refusal rows are deterministically spec-able —
 proper positive+negative TSV pairs at the domain boundary.
 
 **The refusal error is fully customisable** — the diagnostic
-machinery is multi-channel (`AqlError.Notes` → `= note:` lines,
+machinery is multi-channel (`BoruError.Notes` → `= note:` lines,
 `Suggestions` → `= help:` fixes, primary caret + secondary labeled
-spans; `eng/go/aql_error.go:18-53`, `diag_render.go`), with live
+spans; `eng/go/boru_error.go:18-53`, `diag_render.go`), with live
 precedents of the teachable-refusal pattern at the FlexList bounds
 error ("use append to grow a FlexList; sparse FlexLists are an
-error", `native_storage.go:608-612`, via `r.AqlErrorHint`) and the
+error", `native_storage.go:608-612`, via `r.BoruErrorHint`) and the
 Micron erroring sigs. Proposed rendering, pinned by a negative spec
 row per refused kind:
 
 ```
-error: [aql/weak_value_error]: set: cannot store an immutable Map in a WeakFlexMap
+error: [boru/weak_value_error]: set: cannot store an immutable Map in a WeakFlexMap
   --> 2:11
   2 | set cfg/q {mode:'fast'} w
     |           ^^^^^^^^^^^^^ this Map is a value, not a handle
@@ -480,7 +480,7 @@ on `ConformsTo(TWeakFlexMap)` and record per-key `T ∪ None` joins
 bound holds" survives collection, since collection removes entries
 rather than corrupting them). FLEX-ATTRS.0 proved the attr design
 could never surface weakness statically; the type does it for free.
-And the LSP objection is smaller than it looks in AQL specifically:
+And the LSP objection is smaller than it looks in boru specifically:
 map `get` is already None-partial (absent keys read as None), so the
 static contract of `get` is unchanged — what weakens is the checker's
 frame property, which is exactly the subsystem that can now see the
@@ -511,7 +511,7 @@ with near-zero kernel churn, no snapshot machinery, no silent-failure
 modes, and the identical spec limitation (collection is equally
 untestable in both designs — this axis does not discriminate). JS
 refused weak iteration deliberately; Java/Python allow it and their
-docs are standing warning labels; AQL's values (exact-canon specs,
+docs are standing warning labels; boru's values (exact-canon specs,
 compile==interpret parity, loud failures) point toward refusing.
 **If** live-cache introspection via the Map vocabulary is a hard
 requirement, WeakFlexMap is shippable under this contract: the §4.2
@@ -574,7 +574,7 @@ mediation) — and only the first is expressible at the module layer.
 A type whose invariant depends on which imports are in scope is a
 convention, not a type. So:
 
-- **`sorted`** — a pure clone-resort word in `aql:node-util` (a new
+- **`sorted`** — a pure clone-resort word in `boru:node-util` (a new
   module; full registration checklist applies): Map → re-sorted plain
   clone; FlexMap → FlexDeepCopy + resort. **Byte-order comparator
   only** (verified: byte order exactly reproduces pre-D1 literal
@@ -584,7 +584,7 @@ convention, not a type. So:
   that killed attrs). A comparator-taking one-shot reorder returning
   a plain map could be a later, separate word.
 - **`SortedMap`** — a **content-predicate member type**
-  (`MintMemberType(TMap, keysAscending)` — the aql:io StreamKind /
+  (`MintMemberType(TMap, keysAscending)` — the boru:io StreamKind /
   minilang pattern): `x is NodeUtil.SortedMap` decidable by content,
   sig-slot usable in module words, canon-safe (values canon as plain
   maps), module-absent-safe, equality-neutral. Subset semantics — a
@@ -655,7 +655,7 @@ discipline (§4.2), to eng/go/CLAUDE.md when implementation starts.
    upstream) + convertMapData/convertTypedMap + the three TS render
    call-sites + the 14 rows/1 test/3 docs/~11 prose edits + the
    duplicate-policy and eval-order rows + the scope-doctrine and
-   equality-matrix prose in nodes.tsv, with the `aql_ck` leak fix
+   equality-matrix prose in nodes.tsv, with the `boru_ck` leak fix
    folded in. Ship the plain `sorted` word + predicate SortedMap in
    the same release (P1.5) — it is D1's migration story and is
    regime-invariant (a sorted map's insertion order IS sorted).
@@ -680,8 +680,8 @@ D1 — insertion order:
 1. **Mechanism** — bump tabnas/jsonic so `pairval` writes
    `Meta["keyorder"]` at its one site (also fixing SafeParse, the
    json5/jsonc kinds, and the `parse`-word boundary), or build the
-   AQL-side grammar-BC channel against pinned v0.2.0 as a swappable
-   shim? Leaning: upstream. Is the `aql_ck` K-flag leak fixed in the
+   boru-side grammar-BC channel against pinned v0.2.0 as a swappable
+   shim? Leaning: upstream. Is the `boru_ck` K-flag leak fixed in the
    same change?
 2. **Scope pin** — confirm the doctrine: Node
    construction/render/iteration = insertion order; jsonify,

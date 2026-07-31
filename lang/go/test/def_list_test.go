@@ -4,17 +4,17 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // registerIOWords installs the words moved OUT of core into loadable modules
-// (aql:io, aql:struct, aql:net, aql:bin bitwise, aql:type-util's tpartial, …)
+// (boru:io, boru:struct, boru:net, boru:bin bitwise, boru:type-util's tpartial, …)
 // under their bare names into a test registry. The handlers are unchanged by
 // the move; this harness helper lets the behaviour suites keep exercising them
-// without an explicit import. Production code must `import "aql:<mod>"` and use
+// without an explicit import. Production code must `import "boru:<mod>"` and use
 // the namespace (IO.read, BinUtil.band, …) — proved by the module-*.tsv specs.
 // Idempotent (guards on `read`).
 func registerIOWords(reg *native.Registry) {
@@ -53,16 +53,16 @@ func runNativeSteps(t *testing.T, files map[string]string, steps []string) ([]na
 	native.SetHostFileOps(reg, mem)
 	native.Register(reg)
 	modules.InstallMathExports(reg)
-	// Struct words (merge/walk/clone/…) moved to aql:struct; install the
+	// Struct words (merge/walk/clone/…) moved to boru:struct; install the
 	// Struct namespace so tests can call StructUtil.merge etc. without wiring
 	// the full module resolver.
 	if err := modules.InstallStructExports(reg); err != nil {
 		t.Fatal(err)
 	}
 	// I/O words (read/write/stdin/stdout/stderr/printstr/trace) moved out of
-	// core into aql:io. The internal behaviour suite exercises the unchanged
+	// core into boru:io. The internal behaviour suite exercises the unchanged
 	// handlers under their bare names via this harness helper; production
-	// requires `import "aql:io"` + IO.read (proved by module-io.tsv).
+	// requires `import "boru:io"` + IO.read (proved by module-io.tsv).
 	registerIOWords(reg)
 
 	eng := native.NewTop(reg)

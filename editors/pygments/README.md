@@ -1,14 +1,14 @@
-# AQL for Pygments
+# boru for Pygments
 
-`aql_lexer.py` is a [Pygments](https://pygments.org/) lexer for AQL
-(`.aql`) — a concatenative, strongly-typed query language. Use it to
-syntax-highlight AQL code blocks in documentation (MkDocs, Sphinx),
+`boru_lexer.py` is a [Pygments](https://pygments.org/) lexer for boru
+(`.boru`) — a concatenative, strongly-typed query language. Use it to
+syntax-highlight boru code blocks in documentation (MkDocs, Sphinx),
 with `pygmentize`, or anywhere the Chroma-compatible token names are
 consumed.
 
 It highlights: line comments (`#` and `//`) and `/* … */` block
 comments; single-, double- and backtick **template** strings (with
-`\`-escapes and `${ … }` interpolation of embedded AQL); decimal /
+`\`-escapes and `${ … }` interpolation of embedded boru); decimal /
 hex (`0x`) / binary (`0b`) / big-integer (`0d`) numbers and floats;
 the constants `true false none inf nan`; the structural/query
 **keywords** and the **builtin** library words; capitalised **type
@@ -18,8 +18,8 @@ names / module namespaces**; and the `/q /s /f /r /t /u` (and
 ## Install
 
 The lexer is a one-module package that registers the
-`pygments.lexers` entry point `aql = aql_lexer:AqlLexer`, so after
-installing it `pygmentize -l aql` — and MkDocs / Sphinx — find it
+`pygments.lexers` entry point `boru = boru_lexer:BoruLexer`, so after
+installing it `pygmentize -l boru` — and MkDocs / Sphinx — find it
 automatically.
 
 ```bash
@@ -28,13 +28,13 @@ cd editors/pygments
 pip install .
 
 # ...or straight from GitHub
-pip install "git+https://github.com/aql-lang/aql#subdirectory=editors/pygments"
+pip install "git+https://github.com/boru-lang/boru#subdirectory=editors/pygments"
 ```
 
 Verify the entry point is registered:
 
 ```bash
-pygmentize -L lexers | grep -i aql       # -> * aql:  AQL ...
+pygmentize -L lexers | grep -i boru       # -> * boru:  boru ...
 ```
 
 ## Use it
@@ -42,48 +42,48 @@ pygmentize -L lexers | grep -i aql       # -> * aql:  AQL ...
 **Highlight a file (installed):**
 
 ```bash
-pygmentize -l aql -f terminal256 path/to/program.aql      # ANSI, for a terminal
-pygmentize -l aql -f html -O full -o out.html program.aql # standalone HTML page
+pygmentize -l boru -f terminal256 path/to/program.boru      # ANSI, for a terminal
+pygmentize -l boru -f html -O full -o out.html program.boru # standalone HTML page
 ```
 
 **Without installing** — point Pygments straight at the module with
 `-x` (the `file.py:ClassName` form):
 
 ```bash
-pygmentize -x -l aql_lexer.py:AqlLexer -f terminal256 program.aql
+pygmentize -x -l boru_lexer.py:BoruLexer -f terminal256 program.boru
 ```
 
 Run this from the `editors/pygments/` directory (or add it to
-`PYTHONPATH`) so `aql_lexer.py` is importable.
+`PYTHONPATH`) so `boru_lexer.py` is importable.
 
 ## MkDocs (`mkdocs-material` / `pymdownx.highlight`)
 
 Install the lexer in the same environment as MkDocs, then reference the
 language by its alias in fenced code blocks — no extra config needed
-because the entry point makes `aql` a first-class Pygments language:
+because the entry point makes `boru` a first-class Pygments language:
 
-<pre><code>```aql
+<pre><code>```boru
 def New fn [[opts:Map] [Service] [ add {op: "create"} ]]
 ```</code></pre>
 
-If you pin lexers explicitly, add `aql` under
+If you pin lexers explicitly, add `boru` under
 `markdown_extensions` → `pymdownx.highlight`:
 
 ```yaml
 markdown_extensions:
   - pymdownx.highlight:
       use_pygments: true
-      # `aql` resolves via the installed entry point; nothing else to do.
+      # `boru` resolves via the installed entry point; nothing else to do.
   - pymdownx.superfences
 ```
 
 ## Sphinx
 
-Install the lexer in Sphinx's environment. The entry point makes `aql`
+Install the lexer in Sphinx's environment. The entry point makes `boru`
 usable directly:
 
 ```rst
-.. code-block:: aql
+.. code-block:: boru
 
    def New fn [[opts:Map] [Service] [ add {op: "create"} ]]
 ```
@@ -93,23 +93,23 @@ or `highlight_language` in `conf.py`:
 
 ```python
 # conf.py
-highlight_language = "aql"
+highlight_language = "boru"
 ```
 
 If you prefer not to install a package, register the class in
-`conf.py` instead (put `aql_lexer.py` next to `conf.py` or on
+`conf.py` instead (put `boru_lexer.py` next to `conf.py` or on
 `sys.path`):
 
 ```python
 # conf.py
 from sphinx.highlighting import lexers
-from aql_lexer import AqlLexer
-lexers["aql"] = AqlLexer()
+from boru_lexer import BoruLexer
+lexers["boru"] = BoruLexer()
 ```
 
 ## Token mapping
 
-| AQL construct                                   | Pygments token          |
+| boru construct                                   | Pygments token          |
 | ----------------------------------------------- | ----------------------- |
 | `# …`, `// …`                                    | `Comment.Single`        |
 | `/* … */`                                        | `Comment.Multiline`     |
@@ -130,17 +130,17 @@ lexers["aql"] = AqlLexer()
 ## Develop / self-check
 
 ```bash
-python3 -m py_compile aql_lexer.py     # compiles clean
+python3 -m py_compile boru_lexer.py     # compiles clean
 # with pygments installed, tokenise a file and assert no Error tokens:
 python3 - <<'PY'
-from aql_lexer import AqlLexer
+from boru_lexer import BoruLexer
 from pygments.token import Error
-src = open("../../design/examples/todo/todo.aql").read()
-assert not any(t is Error for t, _ in AqlLexer().get_tokens(src))
+src = open("../../design/examples/todo/todo.boru").read()
+assert not any(t is Error for t, _ in BoruLexer().get_tokens(src))
 print("ok: no Error tokens")
 PY
 ```
 
 The vocabulary (keywords / builtins / constants) is kept in sync with
-the reference Emacs mode [`editors/emacs/aql-mode.el`](../emacs/aql-mode.el)
-and with `aql describe`.
+the reference Emacs mode [`editors/emacs/boru-mode.el`](../emacs/boru-mode.el)
+and with `boru describe`.

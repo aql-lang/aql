@@ -24,7 +24,7 @@ const (
 	// supports is refused, so a stale agent fails loudly instead of
 	// silently misbehaving.
 	proxyProtocol  = 1
-	headerProtocol = "X-AQL-Vault-Protocol"
+	headerProtocol = "X-Boru-Vault-Protocol"
 )
 
 // Proxy is the local credential broker. It listens on a loopback
@@ -111,7 +111,7 @@ func newBrokerClient(headerTimeout time.Duration) *http.Client {
 	return &http.Client{Transport: tr, CheckRedirect: noRedirect}
 }
 
-// runProxy implements `aql vault proxy`.
+// runProxy implements `boru vault proxy`.
 func runProxy(args []string, homeDir string, stdout, stderr io.Writer) int {
 	fs := flag.NewFlagSet("vault proxy", flag.ContinueOnError)
 	fs.SetOutput(stderr)
@@ -133,7 +133,7 @@ func runProxy(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if s.Locked {
-		fmt.Fprintln(stderr, "error: vault is locked; run `aql vault unlock`")
+		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
 
@@ -295,7 +295,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		var aerr error
 		sess, aerr = authenticate(s, p.homeDir, nil, io.Discard, "")
 		if aerr != nil {
-			writeDenied(w, http.StatusServiceUnavailable, "vault unavailable; set AQL_VAULT_PASSPHRASE for file backend")
+			writeDenied(w, http.StatusServiceUnavailable, "vault unavailable; set BORU_VAULT_PASSPHRASE for file backend")
 			p.log(started, r, alias, http.StatusServiceUnavailable, "no-keyring")
 			return
 		}
@@ -336,7 +336,7 @@ func (p *Proxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// Persist the call against the capability *before* streaming
 	// the body so a crash mid-stream cannot cause the quota to be
 	// silently bypassed.
-	costCents := parseCostHeader(resp.Header.Get("X-AQL-Vault-Cost-Cents"))
+	costCents := parseCostHeader(resp.Header.Get("X-Boru-Vault-Cost-Cents"))
 	p.recordUse(tok.ID, costCents)
 
 	copyHeadersExceptHop(w.Header(), resp.Header)

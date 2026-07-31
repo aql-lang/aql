@@ -4,15 +4,15 @@ import (
 	"sort"
 	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// aql:test line-coverage feature. `Test.cover [body]` runs a test body with the
+// boru:test line-coverage feature. `Test.cover [body]` runs a test body with the
 // engine coverage hook (eng/go/coverage.go) armed, accumulating the source rows
 // the module-under-test executes; `Test.coverage <id>` reports the percentage
 // against the module's DENOMINATOR — every executable row of its registered
-// source (a module loader calls RegisterCoverSource + SetCoverID; aql:sift and
+// source (a module loader calls RegisterCoverSource + SetCoverID; boru:sift and
 // every user file-module do). The hook fires from BOTH engines — the compiled
 // VM (the normal, fast mode: a module fn stamped to a bytecode unit) and the
 // interpreter step loop (an unstamped/uncompilable fn) — into one collector.
@@ -23,7 +23,7 @@ import (
 // bare-word return compiles into the preceding expression's result, carrying no
 // distinct instruction for its own row), so compiled coverage can miss rows the
 // interpreter records — never the reverse. Measure with the interpreter
-// (`aql test --coverage --no-compile`, or a Test.cover run on the interpreter)
+// (`boru test --coverage --no-compile`, or a Test.cover run on the interpreter)
 // when the goal is to drive a module to 100%.
 
 const capTestCover = "Test.cover.active"
@@ -71,7 +71,7 @@ func activeCover(parent *native.Registry) *testCover {
 
 // ArmCoverageCollector arms reg's coverage hook to record into the SAME
 // collector CoverageFor / Test.coverage report from, returning the disarm func.
-// The `aql test --coverage` runner arms it BEFORE running a test file so that
+// The `boru test --coverage` runner arms it BEFORE running a test file so that
 // (a) reg.CoverageArmed() is true when the file imports a user module — which
 // makes loadFileModule tag the module and register its source (feature C) —
 // and (b) the module's executed rows accumulate for CoverageFor to report. It
@@ -82,7 +82,7 @@ func ArmCoverageCollector(reg *native.Registry) func() {
 
 // CoverageFor reports executable-line coverage for a registered cover source id
 // against the rows recorded into reg's active collector — the Go twin of the
-// Test.coverage word, for the aql test --coverage runner. It returns the SORTED
+// Test.coverage word, for the boru test --coverage runner. It returns the SORTED
 // covered and uncovered executable row numbers (so the runner can both count
 // them and colour each source line in an HTML report), and ok. The covered
 // count is len(covered) and the total is len(covered)+len(uncovered). ok is
@@ -197,7 +197,7 @@ func coverNatives(parent *native.Registry) []native.NativeFunc {
 			// line coverage. This is the PROGRAMMATIC / manual coverage form (its
 			// body usually contains `import`, which is not closure-compilable, so
 			// the body itself tree-walks — but the module fns it calls still run
-			// compiled when stamping is on). The `aql test --coverage` runner arms
+			// compiled when stamping is on). The `boru test --coverage` runner arms
 			// the same hook externally and runs whole test files COMPILED by
 			// default, so a `Test.test` case body's module calls record on the VM
 			// (add --no-compile for the interpreter's line-granular coverage).
@@ -233,11 +233,11 @@ func coverNatives(parent *native.Registry) []native.NativeFunc {
 					}
 					src, ok := parent.CoverSource(id)
 					if !ok {
-						return nil, r.AqlError("test_cover_no_source", "no coverage source registered for id: "+id, "test-coverage")
+						return nil, r.BoruError("test_cover_no_source", "no coverage source registered for id: "+id, "test-coverage")
 					}
 					denom := coverDenominator(parent, src)
 					if denom == nil {
-						return nil, r.AqlError("test_cover_bad_source", "coverage source failed to parse for id: "+id, "test-coverage")
+						return nil, r.BoruError("test_cover_bad_source", "coverage source failed to parse for id: "+id, "test-coverage")
 					}
 					covered := activeCover(parent).coveredRows(id)
 					var uncovered []int

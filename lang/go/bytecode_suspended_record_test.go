@@ -19,9 +19,9 @@ import (
 // frame — an OpLookupDynScope `q` with no coherent OpBindDynScope. At runtime it
 // missed (vm:dyn-scope-miss) and, under Test.test's per-case error trap, surfaced
 // as a spurious FAIL instead of the clean whole-program fallback.
-const suspendedRecordProg = `import "aql:test"
+const suspendedRecordProg = `import "boru:test"
 module [
-  import "aql:string-util"
+  import "boru:string-util"
   def split-seg fn [ [s:String] [List] [
     def out (flex [])
     def res (do {cur:[""] q:[""]} (iota (s size)) [ var [[i acc]

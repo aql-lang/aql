@@ -62,7 +62,7 @@ func applyTheme(mode themeMode, detectedDark bool) {
 	}
 }
 
-// --- prefs file (~/.aql/tui.jsonic) ---------------------------------------
+// --- prefs file (~/.boru/tui.jsonic) ---------------------------------------
 
 const tuiPrefsFile = "tui.jsonic"
 
@@ -71,7 +71,7 @@ type tuiPrefs struct {
 }
 
 func tuiPrefsPath(homeDir string) string {
-	return filepath.Join(homeAQLDir(homeDir), tuiPrefsFile)
+	return filepath.Join(homeBoruDir(homeDir), tuiPrefsFile)
 }
 
 // loadTUIPrefs reads UI preferences; a missing or unreadable file yields
@@ -93,7 +93,7 @@ func saveTUIPrefs(homeDir string, p tuiPrefs) error {
 	if homeDir == "" {
 		return nil
 	}
-	if err := os.MkdirAll(homeAQLDir(homeDir), 0700); err != nil {
+	if err := os.MkdirAll(homeBoruDir(homeDir), 0700); err != nil {
 		return err
 	}
 	data, err := t7jsonMarshalIndent(p, "", "  ")

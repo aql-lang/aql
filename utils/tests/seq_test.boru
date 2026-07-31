@@ -1,0 +1,507 @@
+# ============================================================================
+# seq — unit suite (boru:test), shaped like lang/go/modules/cli_test.boru.
+#
+#   boru test tests/seq_test.boru          (run from utils/)
+#
+# `boru test` cannot inject an argument vector and an IO.exit ends the suite
+# file, so seq.boru keeps every decision in pure fns and exports them, and its
+# one IO.exit sits behind the standalone guard at the bottom of that file.
+# This suite therefore covers four tiers:
+#
+#   1. the pure fns   — parsing, scaling, formatting, padding, widths, the
+#                       term count, and the argv rewrite
+#   2. the plan       — operands to {a s n d w}, and every failure as DATA
+#   3. the argv contract — Cli.parse / Cli.dispatch against seq's own spec
+#   4. the program    — Seq.render returns the EXACT stdout text seq would
+#                       print, and Seq.main takes argv as a PARAMETER and
+#                       returns the exit code instead of exiting
+#
+# Tier 4's Seq.main cases write seq's normal output to stdout (a stream
+# cannot be redirected in-process), so a few short sequences appear in the
+# run. That is the program working; the assertions are on the returned code.
+#
+# Every expectation in tiers 1, 2 and 4 was checked against GNU coreutils
+# seq 9.4 before it was written down; the three places where seq deliberately
+# differs (--help text, --version text, a usage error exiting 2 rather than
+# 1) are called out where they are pinned.
+# ============================================================================
+
+import "boru:test"
+import "boru:cli"
+import "boru:string-util"
+import "./seq.boru"
+
+# ----------------------------------------------------------------------------
+# 1. Pure fns.
+# ----------------------------------------------------------------------------
+Test.describe "seq-starts / seq-zeros / seq-pow10" [
+  Test.test "a prefix is found at 0" [ Assert.equal true (Seq.starts "-" "-5") ]
+  Test.test "a non-prefix is not" [ Assert.equal false (Seq.starts "-" "5-") ]
+  Test.test "an absent needle is not a prefix" [ Assert.equal false (Seq.starts "+" "-5") ]
+  Test.test "every string starts with the empty string" [ Assert.equal true (Seq.starts "" "x") ]
+  Test.test "three zeros" [ Assert.equal "000" (Seq.zeros 3) ]
+  Test.test "zero zeros is the empty string" [ Assert.equal "" (Seq.zeros 0) ]
+  Test.test "a negative count is also the empty string, not a raise" [
+    Assert.equal "" (Seq.zeros (0 sub 4))
+  ]
+  Test.test "10^0 is 1" [ Assert.equal 1 (Seq.pow10 0) ]
+  Test.test "10^3 is 1000" [ Assert.equal 1000 (Seq.pow10 3) ]
+  Test.test "10^9 is the largest scale seq will build" [ Assert.equal 1000000000 (Seq.pow10 9) ]
+  Test.test "a negative exponent clamps to 1" [ Assert.equal 1 (Seq.pow10 (0 sub 2)) ]
+]
+
+Test.describe "seq-parse-num" [
+  Test.test "a plain integer has precision 0" [
+    Assert.equal {ok:true n:5 p:0} (Seq.parseNum "5")
+  ]
+  Test.test "a decimal is scaled by its own precision" [
+    Assert.equal {ok:true n:250 p:2} (Seq.parseNum "2.50")
+  ]
+  Test.test "trailing zeros are significant to the precision" [
+    Assert.equal {ok:true n:10 p:1} (Seq.parseNum "1.0")
+  ]
+  Test.test "a leading minus negates the scaled value" [
+    Assert.equal {ok:true n:-25 p:2} (Seq.parseNum "-0.25")
+  ]
+  Test.test "a leading plus is accepted and ignored" [
+    Assert.equal {ok:true n:7 p:0} (Seq.parseNum "+7")
+  ]
+  Test.test "leading zeros do not change the value" [
+    Assert.equal {ok:true n:7 p:0} (Seq.parseNum "007")
+  ]
+  Test.test "a bare fraction needs no integer part" [
+    Assert.equal {ok:true n:5 p:1} (Seq.parseNum ".5")
+  ]
+  Test.test "a trailing point contributes no precision" [
+    Assert.equal {ok:true n:5 p:0} (Seq.parseNum "5.")
+  ]
+  Test.test "negative zero is zero" [
+    Assert.equal {ok:true n:0 p:0} (Seq.parseNum "-0")
+  ]
+  Test.test "the empty string is not a number" [
+    Assert.equal {ok:false n:0 p:0} (Seq.parseNum "")
+  ]
+  Test.test "a lone sign is not a number" [
+    Assert.equal {ok:false n:0 p:0} (Seq.parseNum "-")
+  ]
+  Test.test "a lone point is not a number" [
+    Assert.equal {ok:false n:0 p:0} (Seq.parseNum ".")
+  ]
+  Test.test "letters are not a number" [
+    Assert.equal {ok:false n:0 p:0} (Seq.parseNum "abc")
+  ]
+  Test.test "a trailing letter poisons the whole token" [
+    Assert.equal {ok:false n:0 p:0} (Seq.parseNum "5x")
+  ]
+  Test.test "two decimal points are refused" [
+    Assert.equal {ok:false n:0 p:0} (Seq.parseNum "1.2.3")
+  ]
+  Test.test "leading whitespace is refused — seq does not trim" [
+    Assert.equal {ok:false n:0 p:0} (Seq.parseNum " 7")
+  ]
+  Test.test "exponent notation is refused rather than silently misread" [
+    Assert.equal {ok:false n:0 p:0} (Seq.parseNum "1e3")
+  ]
+  Test.test "inf is refused" [ Assert.equal {ok:false n:0 p:0} (Seq.parseNum "inf") ]
+  Test.test "9 fractional digits is the last accepted precision" [
+    Assert.equal true ((Seq.parseNum "0.123456789") dot ok)
+  ]
+  Test.test "10 fractional digits is refused, not silently overflowed" [
+    Assert.equal false ((Seq.parseNum "0.1234567890") dot ok)
+  ]
+  Test.test "seq-numeric is the ok bit, so -1 reads as an operand" [
+    Assert.equal true (Seq.numeric "-1")
+  ]
+  Test.test "…and -w does not" [ Assert.equal false (Seq.numeric "-w") ]
+]
+
+Test.describe "seq-scale" [
+  Test.test "same precision is the identity" [ Assert.equal 25 (Seq.scale 25 2 2) ]
+  Test.test "widening by one decimal multiplies by ten" [ Assert.equal 250 (Seq.scale 25 2 3) ]
+  Test.test "an integer widened to two decimals" [ Assert.equal 700 (Seq.scale 7 0 2) ]
+  Test.test "a negative value scales with its sign" [ Assert.equal (0 sub 700) (Seq.scale (0 sub 7) 0 2) ]
+]
+
+Test.describe "seq-fmt" [
+  Test.test "precision 0 prints the integer itself" [ Assert.equal "42" (Seq.fmt 42 0) ]
+  Test.test "a negative integer keeps its sign" [ Assert.equal "-42" (Seq.fmt (0 sub 42) 0) ]
+  Test.test "precision 1 inserts the point" [ Assert.equal "2.5" (Seq.fmt 25 1) ]
+  Test.test "precision 2 pads the fraction with a leading zero" [ Assert.equal "2.05" (Seq.fmt 205 2) ]
+  Test.test "a value below one still prints its integer 0" [ Assert.equal "0.5" (Seq.fmt 5 1) ]
+  Test.test "a negative decimal keeps the sign in front" [ Assert.equal "-0.25" (Seq.fmt (0 sub 25) 2) ]
+  Test.test "a whole number at precision 2 keeps both decimals" [ Assert.equal "3.00" (Seq.fmt 300 2) ]
+  Test.test "zero at precision 3" [ Assert.equal "0.000" (Seq.fmt 0 3) ]
+]
+
+Test.describe "seq-pad" [
+  Test.test "a short number is zero-filled" [ Assert.equal "007" (Seq.pad "7" 3) ]
+  Test.test "an exact-width number is untouched" [ Assert.equal "123" (Seq.pad "123" 3) ]
+  Test.test "an over-wide number is never truncated" [ Assert.equal "1234" (Seq.pad "1234" 3) ]
+  Test.test "a width of 0 is a no-op, which is the no--w case" [ Assert.equal "7" (Seq.pad "7" 0) ]
+  Test.test "the sign stays in FRONT of the padding" [ Assert.equal "-05" (Seq.pad "-5" 3) ]
+  Test.test "a sign already filling the width is left alone" [ Assert.equal "-5" (Seq.pad "-5" 2) ]
+  Test.test "a decimal pads on the left of the integer part" [ Assert.equal "08.0" (Seq.pad "8.0" 4) ]
+]
+
+Test.describe "seq-num-width / seq-field-width" [
+  Test.test "plain digits count as written, so 007 is three columns" [
+    Assert.equal 3 (Seq.numWidth "007" 0)
+  ]
+  Test.test "a leading + is dropped before measuring" [ Assert.equal 1 (Seq.numWidth "+7" 0) ]
+  Test.test "a leading - is NOT dropped" [ Assert.equal 2 (Seq.numWidth "-7" 0) ]
+  Test.test "at display precision 0 everything from the point is cut" [
+    Assert.equal 3 (Seq.numWidth "100.5" 0)
+  ]
+  Test.test "a trailing point contributes nothing at precision 0" [
+    Assert.equal 1 (Seq.numWidth "5." 0)
+  ]
+  Test.test "at display precision 1 the point and one digit are added back" [
+    Assert.equal 4 (Seq.numWidth "10" 1)
+  ]
+  Test.test "…and the operand's own leading zeros survive it" [
+    Assert.equal 4 (Seq.numWidth "01.5" 1)
+  ]
+  Test.test "a bare fraction has no integer column at all" [
+    Assert.equal 2 (Seq.numWidth ".5" 1)
+  ]
+  Test.test "the field is the wider endpoint" [ Assert.equal 2 (Seq.fieldWidth "1" "10" 0) ]
+  Test.test "…in either order" [ Assert.equal 3 (Seq.fieldWidth "007" "9" 0) ]
+  Test.test "a decimal endpoint widens the field for both" [
+    Assert.equal 4 (Seq.fieldWidth "0.5" "10" 1)
+  ]
+]
+
+Test.describe "seq-count" [
+  Test.test "1..5 by 1 is five terms" [ Assert.equal 5 (Seq.count 1 1 5) ]
+  Test.test "a single term when first equals last" [ Assert.equal 1 (Seq.count 3 1 3) ]
+  Test.test "a step that overshoots still yields the first term" [ Assert.equal 1 (Seq.count 1 10 5) ]
+  Test.test "1 2 10 stops at 9 — five terms, not six" [ Assert.equal 5 (Seq.count 1 2 10) ]
+  Test.test "an unreachable last with a positive step is empty" [ Assert.equal 0 (Seq.count 5 1 1) ]
+  Test.test "a negative step counts downward" [ Assert.equal 5 (Seq.count 5 (0 sub 1) 1) ]
+  Test.test "an unreachable last with a negative step is empty" [ Assert.equal 0 (Seq.count 1 (0 sub 1) 5) ]
+  Test.test "a negative step over negative values" [ Assert.equal 5 (Seq.count (0 sub 1) (0 sub 1) (0 sub 5)) ]
+  Test.test "a zero step yields nothing rather than looping forever" [ Assert.equal 0 (Seq.count 1 0 5) ]
+  Test.test "the count is exact for a scaled decimal walk — 0.1 0.05 0.5 at scale 100" [
+    Assert.equal 9 (Seq.count 10 5 50)
+  ]
+]
+
+Test.describe "seq-first-bad" [
+  Test.test "all-numeric operands report no offender" [
+    Assert.equal {bad:false tok:""} (Seq.firstBad ["1" "2" "3"] 0)
+  ]
+  Test.test "the FIRST offender is the one reported" [
+    Assert.equal {bad:true tok:"x"} (Seq.firstBad ["1" "x" "y"] 0)
+  ]
+  Test.test "an empty operand is an offender, and is named as such" [
+    Assert.equal {bad:true tok:""} (Seq.firstBad [""] 0)
+  ]
+  Test.test "an empty operand list has no offender" [
+    Assert.equal {bad:false tok:""} (Seq.firstBad [] 0)
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# The argv rewrite: a leading-minus operand is an operand, not a flag.
+# ----------------------------------------------------------------------------
+Test.describe "seq-takes-value" [
+  Test.test "the long spelling takes the next token" [ Assert.equal true (Seq.takesValue "--separator") ]
+  Test.test "--separator=x carries its own value" [ Assert.equal false (Seq.takesValue "--separator=x") ]
+  Test.test "-s at the end of its cluster pends" [ Assert.equal true (Seq.takesValue "-s") ]
+  Test.test "-ws pends too — s is still last" [ Assert.equal true (Seq.takesValue "-ws") ]
+  Test.test "-s, carries its value, so it does not pend" [ Assert.equal false (Seq.takesValue "-s,") ]
+  Test.test "-ss separates with 's' rather than pending" [ Assert.equal false (Seq.takesValue "-ss") ]
+  Test.test "-w takes no value" [ Assert.equal false (Seq.takesValue "-w") ]
+  Test.test "a bare operand takes no value" [ Assert.equal false (Seq.takesValue "5") ]
+  Test.test "a lone - takes no value" [ Assert.equal false (Seq.takesValue "-") ]
+]
+
+Test.describe "seq-argv" [
+  Test.test "an all-operand argv is fenced off with one --" [
+    Assert.equal ["--" "1" "5"] (Seq.argv ["1" "5"])
+  ]
+  Test.test "a negative step survives as an OPERAND, in place" [
+    Assert.equal ["--" "5" "-1" "1"] (Seq.argv ["5" "-1" "1"])
+  ]
+  Test.test "flags move in front of the fence, operands keep their order" [
+    Assert.equal ["-w" "--" "1" "5"] (Seq.argv ["1" "-w" "5"])
+  ]
+  Test.test "a flag VALUE is never mistaken for an operand" [
+    Assert.equal ["-s" "5" "--" "1" "3"] (Seq.argv ["-s" "5" "1" "3"])
+  ]
+  Test.test "…including the long spelling" [
+    Assert.equal ["--separator" "-1" "--" "1" "3"] (Seq.argv ["--separator" "-1" "1" "3"])
+  ]
+  Test.test "a glued short value needs no protection" [
+    Assert.equal ["-s," "--" "1" "3"] (Seq.argv ["-s," "1" "3"])
+  ]
+  Test.test "an argv with no operands gets no fence at all" [
+    Assert.equal ["--help"] (Seq.argv ["--help"])
+  ]
+  Test.test "the empty argv passes straight through" [ Assert.equal [] (Seq.argv []) ]
+  Test.test "a user's own -- is absorbed, not doubled" [
+    Assert.equal ["--" "1" "5"] (Seq.argv ["--" "1" "5"])
+  ]
+  Test.test "after the user's --, even a flag-looking token stays an operand" [
+    Assert.equal ["--" "-w"] (Seq.argv ["--" "-w"])
+  ]
+  Test.test "a non-numeric operand stays where the flags are" [
+    Assert.equal ["abc"] (Seq.argv ["abc"])
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 2. The plan — operands in, {ok err a s n d w} out. Errors are DATA.
+# ----------------------------------------------------------------------------
+Test.describe "seq-plan" [
+  Test.test "one operand means 1..LAST by 1" [
+    Assert.equal {ok:true err:"" a:1 s:1 n:5 d:0 w:1} (Seq.plan ["5"])
+  ]
+  Test.test "two operands set FIRST and LAST" [
+    Assert.equal {ok:true err:"" a:2 s:1 n:4 d:0 w:1} (Seq.plan ["2" "5"])
+  ]
+  Test.test "three operands set the step, and the count stops before LAST" [
+    Assert.equal {ok:true err:"" a:1 s:2 n:5 d:0 w:2} (Seq.plan ["1" "2" "10"])
+  ]
+  Test.test "a negative step walks downward" [
+    Assert.equal {ok:true err:"" a:5 s:-1 n:5 d:0 w:1} (Seq.plan ["5" "-1" "1"])
+  ]
+  Test.test "an unreachable LAST is an EMPTY plan, not an error" [
+    Assert.equal {ok:true err:"" a:5 s:1 n:0 d:0 w:1} (Seq.plan ["5" "1"])
+  ]
+  Test.test "decimals are held as scaled integers at the display precision" [
+    Assert.equal {ok:true err:"" a:1 s:1 n:5 d:1 w:3} (Seq.plan ["0.1" "0.1" "0.5"])
+  ]
+  Test.test "LAST does not widen the display precision (seq 1 10.5 prints integers)" [
+    Assert.equal {ok:true err:"" a:1 s:1 n:10 d:0 w:2} (Seq.plan ["1" "10.5"])
+  ]
+  Test.test "…but LAST is still exact internally: 1 2 100.5 stops at 99" [
+    Assert.equal 50 ((Seq.plan ["1" "2" "100.5"]) dot n)
+  ]
+  Test.test "the -w width is carried even when -w was not given" [
+    Assert.equal 3 ((Seq.plan ["007" "010"]) dot w)
+  ]
+  Test.test "a zero step is refused, with the operand quoted back" [
+    Assert.equal {ok:false err:"invalid zero step: 0" a:0 s:0 n:0 d:0 w:0} (Seq.plan ["1" "0" "5"])
+  ]
+  Test.test "a zero step written as a decimal is refused too" [
+    Assert.equal "invalid zero step: 0.0" ((Seq.plan ["1" "0.0" "5"]) dot err)
+  ]
+  Test.test "a non-numeric operand is refused, and named" [
+    Assert.equal "invalid numeric argument: abc" ((Seq.plan ["abc"]) dot err)
+  ]
+  Test.test "the FIRST non-numeric operand is the one named" [
+    Assert.equal "invalid numeric argument: x" ((Seq.plan ["1" "x" "y"]) dot err)
+  ]
+  Test.test "no operands at all is a plan error, not a raise" [
+    Assert.equal "expected 1 to 3 operands" ((Seq.plan []) dot err)
+  ]
+  Test.test "four operands likewise" [
+    Assert.equal "expected 1 to 3 operands" ((Seq.plan ["1" "2" "3" "4"]) dot err)
+  ]
+  Test.test "a failed plan is not ok" [ Assert.equal false ((Seq.plan ["1" "0" "5"]) dot ok) ]
+]
+
+# ----------------------------------------------------------------------------
+# Terms and chunks.
+# ----------------------------------------------------------------------------
+Test.describe "seq-term / seq-chunk" [
+  Test.test "term 0 is FIRST itself" [ Assert.equal "1" (Seq.term 1 2 0 0 0) ]
+  Test.test "term i is FIRST + i*STEP, computed from the origin" [
+    Assert.equal "9" (Seq.term 1 2 0 0 4)
+  ]
+  Test.test "a term is formatted at the display precision" [
+    Assert.equal "0.3" (Seq.term 1 1 1 0 2)
+  ]
+  Test.test "a term is padded to the field width when one is given" [
+    Assert.equal "03" (Seq.term 1 1 0 2 2)
+  ]
+  Test.test "the whole sequence as one chunk" [
+    Assert.equal "1\n2\n3" (Seq.chunk 1 1 0 0 "\n" 0 3)
+  ]
+  Test.test "a custom separator goes BETWEEN terms only" [
+    Assert.equal "1,2,3" (Seq.chunk 1 1 0 0 "," 0 3)
+  ]
+  Test.test "an empty range renders as the empty string" [
+    Assert.equal "" (Seq.chunk 1 1 0 0 "," 0 0)
+  ]
+  Test.test "a chunk that does not start at 0 leads with the separator" [
+    Assert.equal ",4,5" (Seq.chunk 1 1 0 0 "," 3 5)
+  ]
+  Test.test "so chunks concatenate to exactly the whole render" [
+    Assert.equal (Seq.chunk 1 1 0 0 "," 0 5)
+                 (join "" [(Seq.chunk 1 1 0 0 "," 0 2) (Seq.chunk 1 1 0 0 "," 2 5)])
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 3. The argv contract — seq's own spec, read by the pure half of boru:cli.
+# ----------------------------------------------------------------------------
+Test.describe "argv" [
+  Test.test "one operand, both flags at their defaults" [
+    Assert.equal {ok:true flags:{separator:none equal-width:false} args:["5"] command:none}
+                 (Cli.parse (Seq.spec) ["5"])
+  ]
+  Test.test "-s takes the next token as the separator" [
+    Assert.equal "," (((Cli.parse (Seq.spec) ["-s" "," "5"]) dot flags) get "separator")
+  ]
+  Test.test "-s, glues its value to the letter" [
+    Assert.equal "," (((Cli.parse (Seq.spec) ["-s," "5"]) dot flags) get "separator")
+  ]
+  Test.test "--separator=VALUE works too" [
+    Assert.equal ":" (((Cli.parse (Seq.spec) ["--separator=:" "5"]) dot flags) get "separator")
+  ]
+  Test.test "-w sets equal-width" [
+    Assert.equal true (((Cli.parse (Seq.spec) ["-w" "5"]) dot flags) get "equal-width")
+  ]
+  Test.test "-ws clusters: the bool is set and s pends on the next token" [
+    Assert.equal {separator:"," equal-width:true}
+                 ((Cli.parse (Seq.spec) ["-ws" "," "5"]) dot flags)
+  ]
+  Test.test "min arity 1: no operand is a usage error" [
+    Assert.equal "expected at least 1 operand, got 0" ((Cli.parse (Seq.spec) []) dot err)
+  ]
+  Test.test "max arity 3: a fourth operand is a usage error" [
+    Assert.equal "expected at most 3 operand, got 4"
+                 ((Cli.parse (Seq.spec) ["1" "2" "3" "4"]) dot err)
+  ]
+  Test.test "an unknown flag is data, not a raise" [
+    Assert.equal "unknown flag: -x" ((Cli.parse (Seq.spec) ["-x"]) dot err)
+  ]
+  Test.test "--help dispatches to the help action" [
+    Assert.equal "help" ((Cli.dispatch (Seq.spec) ["--help"]) dot action)
+  ]
+  Test.test "--version prints the name and version" [
+    Assert.equal "seq 0.1.0\n" ((Cli.dispatch (Seq.spec) ["--version"]) dot out)
+  ]
+  Test.test "a usage error dispatches to code 2 — seq's one departure from GNU, which uses 1" [
+    Assert.equal 2 ((Cli.dispatch (Seq.spec) ["-x"]) dot code)
+  ]
+  Test.test "a usage error writes nothing to stdout" [
+    Assert.equal "" ((Cli.dispatch (Seq.spec) ["-x"]) dot out)
+  ]
+]
+
+Test.describe "seq-bool / seq-sep" [
+  Test.test "a true flag reads true" [ Assert.equal true (Seq.bool {equal-width:true} "equal-width") ]
+  Test.test "an absent flag reads false — it does not raise" [ Assert.equal false (Seq.bool {} "equal-width") ]
+  Test.test "a non-Boolean flag value reads false" [ Assert.equal false (Seq.bool {equal-width:"y"} "equal-width") ]
+  Test.test "an unset --separator is a newline" [ Assert.equal "\n" (Seq.sep {}) ]
+  Test.test "a none-valued --separator is a newline" [ Assert.equal "\n" (Seq.sep {separator:none}) ]
+  Test.test "a given separator is used verbatim" [ Assert.equal "," (Seq.sep {separator:","}) ]
+  Test.test "an explicitly empty separator is honoured, not defaulted" [
+    Assert.equal "" (Seq.sep {separator:""})
+  ]
+  Test.test "a repeated --separator takes the LAST one, as coreutils does" [
+    Assert.equal ";" (Seq.sep {separator:[":" ";"]})
+  ]
+  Test.test "an empty list falls back to a newline rather than raising" [
+    Assert.equal "\n" (Seq.sep {separator:[]})
+  ]
+]
+
+# ----------------------------------------------------------------------------
+# 4. The program: Seq.render is the exact stdout text, Seq.main the exit code.
+# Each expectation below was produced by GNU coreutils seq 9.4 first.
+# ----------------------------------------------------------------------------
+Test.describe "seq-render — the exact bytes" [
+  Test.test "seq 5" [ Assert.equal "1\n2\n3\n4\n5\n" (Seq.render ["5"] "\n" false) ]
+  Test.test "seq 2 5" [ Assert.equal "2\n3\n4\n5\n" (Seq.render ["2" "5"] "\n" false) ]
+  Test.test "seq 1 2 10 — the last term is 9, not 11" [
+    Assert.equal "1\n3\n5\n7\n9\n" (Seq.render ["1" "2" "10"] "\n" false)
+  ]
+  Test.test "seq 5 -1 1 — a negative step" [
+    Assert.equal "5\n4\n3\n2\n1\n" (Seq.render ["5" "-1" "1"] "\n" false)
+  ]
+  Test.test "seq -1 -1 -5 — negative all the way down" [
+    Assert.equal "-1\n-2\n-3\n-4\n-5\n" (Seq.render ["-1" "-1" "-5"] "\n" false)
+  ]
+  Test.test "seq -s , 1 5 — the separator goes between, the newline at the end" [
+    Assert.equal "1,2,3,4,5\n" (Seq.render ["1" "5"] "," false)
+  ]
+  Test.test "seq -s '' 1 3 — an empty separator concatenates" [
+    Assert.equal "123\n" (Seq.render ["1" "3"] "" false)
+  ]
+  Test.test "seq 5 1 — an empty sequence prints NOTHING, not even a newline" [
+    Assert.equal "" (Seq.render ["5" "1"] "\n" false)
+  ]
+  Test.test "seq 3 3 — first equals last is one term" [
+    Assert.equal "3\n" (Seq.render ["3" "3"] "\n" false)
+  ]
+  Test.test "seq 0.1 0.1 0.5 — exact decimals, no float drift" [
+    Assert.equal "0.1\n0.2\n0.3\n0.4\n0.5\n" (Seq.render ["0.1" "0.1" "0.5"] "\n" false)
+  ]
+  Test.test "seq 1 0.5 3 — the step sets the display precision" [
+    Assert.equal "1.0\n1.5\n2.0\n2.5\n3.0\n" (Seq.render ["1" "0.5" "3"] "\n" false)
+  ]
+  Test.test "seq 1 10.5 — LAST does NOT set the display precision" [
+    Assert.equal "1\n2\n3\n4\n5\n6\n7\n8\n9\n10\n" (Seq.render ["1" "10.5"] "\n" false)
+  ]
+  Test.test "seq -0.5 0.25 0.5 — crossing zero keeps the sign right" [
+    Assert.equal "-0.50\n-0.25\n0.00\n0.25\n0.50\n" (Seq.render ["-0.5" "0.25" "0.5"] "\n" false)
+  ]
+  Test.test "seq 0.1 0.05 0.5 — a step finer than FIRST widens the display" [
+    Assert.equal "0.10\n0.15\n0.20\n0.25\n0.30\n0.35\n0.40\n0.45\n0.50\n"
+                 (Seq.render ["0.1" "0.05" "0.5"] "\n" false)
+  ]
+  Test.test "seq -w 1 10" [
+    Assert.equal "01\n02\n03\n04\n05\n06\n07\n08\n09\n10\n" (Seq.render ["1" "10"] "\n" true)
+  ]
+  Test.test "seq -w -5 5 — the sign counts toward the width" [
+    Assert.equal "-5\n-4\n-3\n-2\n-1\n00\n01\n02\n03\n04\n05\n" (Seq.render ["-5" "5"] "\n" true)
+  ]
+  Test.test "seq -w 007 010 — the operands are measured AS WRITTEN" [
+    Assert.equal "007\n008\n009\n010\n" (Seq.render ["007" "010"] "\n" true)
+  ]
+  Test.test "seq -w +7 9 — a leading + is not a column" [
+    Assert.equal "7\n8\n9\n" (Seq.render ["+7" "9"] "\n" true)
+  ]
+  Test.test "seq -w 8 0.5 10 — the width covers the widened decimal" [
+    Assert.equal "08.0\n08.5\n09.0\n09.5\n10.0\n" (Seq.render ["8" "0.5" "10"] "\n" true)
+  ]
+  Test.test "seq -w 1 2 10 — -w measures the ENDPOINT 10, though 9 is the last term" [
+    Assert.equal "01\n03\n05\n07\n09\n" (Seq.render ["1" "2" "10"] "\n" true)
+  ]
+  Test.test "seq -w 1 1 10.50 — a fractional LAST does not widen a precision-0 field" [
+    Assert.equal "01\n02\n03\n04\n05\n06\n07\n08\n09\n10\n" (Seq.render ["1" "1" "10.50"] "\n" true)
+  ]
+  Test.test "-s and -w compose" [
+    Assert.equal "08,09,10,11,12\n" (Seq.render ["08" "12"] "," true)
+  ]
+  Test.test "an empty sequence prints nothing under -w either" [
+    Assert.equal "" (Seq.render ["5" "1"] "\n" true)
+  ]
+  Test.test "a failed plan renders no stdout at all" [
+    Assert.equal "" (Seq.render ["1" "0" "5"] "\n" false)
+  ]
+  Test.test "a 4096-term chunk boundary is crossed without a seam" [
+    Assert.equal 5000 (size (StringUtil.split "\n" (Seq.render ["5000"] "\n" false)))
+  ]
+]
+
+# Seq.main takes argv as a PARAMETER and RETURNS the exit code instead of
+# exiting, which is the only reason these can be tested at all. They print
+# their sequences to the runner's stdout on the way past.
+Test.describe "exit codes" [
+  Test.test "a good sequence exits 0" [ Assert.equal 0 (Seq.main ["3"]) ]
+  Test.test "an empty sequence is still a success" [ Assert.equal 0 (Seq.main ["5" "1"]) ]
+  Test.test "a negative step exits 0 — and needs no -- from the user" [
+    Assert.equal 0 (Seq.main ["3" "-1" "1"])
+  ]
+  Test.test "flags after the operands still parse" [ Assert.equal 0 (Seq.main ["1" "-w" "3"]) ]
+  Test.test "a zero step exits 1" [ Assert.equal 1 (Seq.main ["1" "0" "5"]) ]
+  Test.test "a zero step spelled -0 exits 1 as well" [ Assert.equal 1 (Seq.main ["1" "-0" "5"]) ]
+  Test.test "a non-numeric operand exits 1" [ Assert.equal 1 (Seq.main ["abc"]) ]
+  Test.test "--help exits 0" [ Assert.equal 0 (Seq.main ["--help"]) ]
+  Test.test "--version exits 0" [ Assert.equal 0 (Seq.main ["--version"]) ]
+  Test.test "an unknown flag exits 2" [ Assert.equal 2 (Seq.main ["-x"]) ]
+  Test.test "no operand at all exits 2" [ Assert.equal 2 (Seq.main []) ]
+  Test.test "four operands exit 2" [ Assert.equal 2 (Seq.main ["1" "2" "3" "4"]) ]
+  Test.test "a value-taking flag with no value exits 2" [ Assert.equal 2 (Seq.main ["-s"]) ]
+  Test.test "an operand too large for Integer is one line on stderr and exit 1" [
+    Assert.equal 1 (Seq.main ["99999999999999999999"])
+  ]
+  Test.test "seq-fail always yields the failure code" [
+    Assert.equal 1 (Seq.fail "boom")      # the text itself goes to stderr
+  ]
+]

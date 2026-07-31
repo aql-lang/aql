@@ -1,4 +1,4 @@
-# Property-Based Testing for AQL
+# Property-Based Testing for boru
 
 > **STATUS: ALL STAGES + ALL FOLLOW-UPS COMPLETE (2026-05-28)**
 >
@@ -13,7 +13,7 @@
 >
 > What landed:
 > - Stage 0d (7d46b68): expandDottedWord doc cleanup.
-> - Stage 1 (7d46b68 + 4ca8ffc): aql:rand module with
+> - Stage 1 (7d46b68 + 4ca8ffc): boru:rand module with
 >   `rand.with-seed N` for deterministic instances; top-level is
 >   non-deterministic by default; half-open `[lo, hi)` range.
 > - Stage 2 (7d46b68): `gen` policy profile.
@@ -35,7 +35,7 @@
 >   that adds policy weights + literal-complexity (intMagnitude,
 >   string length, list size) on top of `stackform.Cost`.
 > - Stage 6 (this commit): `modules/decision_pbt_spec_test.go` —
->   three end-to-end demos against `aql:decision`:
+>   three end-to-end demos against `boru:decision`:
 >   `EvalCondAlwaysReturnsBoolean` (pipeline sanity), `GreaterThan
 >   SelfIsAlwaysFalse` (real invariant, X > X is false for any X),
 >   and `NegativeControl_ShrinksFailingInput` (deliberately-buggy
@@ -45,7 +45,7 @@
 > - Stage 5 (aab4fcc): the greedy `Reduce` loop in
 >   `shrink/reduce.go` + rewrite families in `shrink/candidates.go`
 >   (drop-op, integer/decimal/string/boolean/list shrinking,
->   recursive Quote-body shrinking). Integration with `aql:test`
+>   recursive Quote-body shrinking). Integration with `boru:test`
 >   in `runCheckProp`: on failure, calls `shrinkFailingInput` which
 >   wraps the value in a single-PushLit StackForm and lets the
 >   reducer try smaller alternatives, re-running the property body
@@ -57,7 +57,7 @@
 >   Records, `test.check-prop` Go native (6-arg: name, gen,
 >   property, runs, seed, max-shrinks), `test.prop` Go constructor
 >   (preserves gen/property bodies via NoEvalArgs + Quoted=true),
->   AQL `run-property` fn that destructures a PropertySpec map.
+>   boru `run-property` fn that destructures a PropertySpec map.
 >   Generator bodies bind `r` to a fresh seeded rand instance per
 >   iteration (seed+i). Property bodies receive the generated value
 >   on the stack and must return Boolean. Failure recorded with
@@ -100,7 +100,7 @@
 
 ## Context
 
-`aql:test` currently supports declarative table-driven specs only — every case has fixed `in`/`out`. The next capability is **property-based testing (PBT)**: assert that a predicate holds for many randomly-generated inputs, and when it fails, automatically reduce the failing input to a minimal counterexample.
+`boru:test` currently supports declarative table-driven specs only — every case has fixed `in`/`out`. The next capability is **property-based testing (PBT)**: assert that a predicate holds for many randomly-generated inputs, and when it fails, automatically reduce the failing input to a minimal counterexample.
 
 ### Terminology
 
@@ -108,38 +108,38 @@
 |---------|------------|--------------|
 | **PBT** | Property-Based Testing | Run a predicate against N randomly-generated inputs; on failure, shrink. |
 | **PRNG** | Pseudo-Random Number Generator | Seeded deterministic source of randomness (Go's `math/rand`). |
-| **Stack form** | (no abbreviation) | A canonical, surface-syntax-free representation of an AQL program — every word call is in strict-stack order, no forward collection, no dotted access, no paren regrouping. The form the shrinker operates on. This plan uses **"stack form"** (not "IR") for two reasons: (a) it matches the terminology in `design/aql-bytecode-report.0.md` (the parent design doc this aligns with — see below) and `design/aql_property_based_reduction_report.10.md:229`; (b) "IR" is overloaded compiler jargon implying SSA-like passes that don't apply here. |
+| **Stack form** | (no abbreviation) | A canonical, surface-syntax-free representation of a boru program — every word call is in strict-stack order, no forward collection, no dotted access, no paren regrouping. The form the shrinker operates on. This plan uses **"stack form"** (not "IR") for two reasons: (a) it matches the terminology in `design/boru-bytecode-report.0.md` (the parent design doc this aligns with — see below) and `design/boru_property_based_reduction_report.10.md:229`; (b) "IR" is overloaded compiler jargon implying SSA-like passes that don't apply here. |
 | **MDL** | Minimum Description Length | Cost-model principle: prefer the program with the smallest description (under a fixed cost table) that still triggers the failure. |
-| **AQL-G** | AQL **G**enerator profile | A restricted policy profile (the report's name) that permits math + `aql:rand` + `aql:decision` and denies side-effecting words. The reducer re-evaluates candidates under this profile. |
+| **BORU-G** | boru **G**enerator profile | A restricted policy profile (the report's name) that permits math + `boru:rand` + `boru:decision` and denies side-effecting words. The reducer re-evaluates candidates under this profile. |
 
 ### Why the 4-layer design
 
-The design in `design/aql_property_based_reduction_report.10.md` argues that the most interesting PBT formulation for AQL is **counterexample shrinking as failure-preserving program compression**: don't shrink the JSON value, shrink the *generator program* that produced it, using an MDL cost model over the program's stack form. The four layers are:
+The design in `design/boru_property_based_reduction_report.10.md` argues that the most interesting PBT formulation for boru is **counterexample shrinking as failure-preserving program compression**: don't shrink the JSON value, shrink the *generator program* that produced it, using an MDL cost model over the program's stack form. The four layers are:
 
 ```
-1  Surface AQL authoring                              (existing)
-2  Pure embedded AQL-G profile                        (build)
+1  Surface boru authoring                              (existing)
+2  Pure embedded BORU-G profile                        (build)
 3  Canonical typed strict-stack form                  (build — see Stack form alignment below)
 4  Failure-preserving reducer over stack form         (build)
 ```
 
 ### Stack form alignment with the bytecode design
 
-`design/aql-bytecode-report.0.md` already proposes a recording mode on top of the existing check pass that emits a flat strict-stack instruction stream — its central thesis is "the compiler is the checker with a recording side effect" (lines 61-74). The check pass at `eng/go/check.go:35-49` and `eng/go/engine.go:213-272` already runs `matchSignature` at every call site and resolves every dispatch decision; the bytecode report's plan is to add a recording buffer so those decisions become an emitted instruction stream.
+`design/boru-bytecode-report.0.md` already proposes a recording mode on top of the existing check pass that emits a flat strict-stack instruction stream — its central thesis is "the compiler is the checker with a recording side effect" (lines 61-74). The check pass at `eng/go/check.go:35-49` and `eng/go/engine.go:213-272` already runs `matchSignature` at every call site and resolves every dispatch decision; the bytecode report's plan is to add a recording buffer so those decisions become an emitted instruction stream.
 
 This plan adopts that architecture directly. Concretely:
 
 - **Stack form** here is the higher-fidelity tier the bytecode report calls the "flat linear sequence of fixed-arity operations" (line 119) **before** instruction selection. Word names are preserved (not interned to `sig_id`), no `SWAP`/`ROLL` synthesis, no jump-label resolution — those are encoding choices for a future runtime bytecode. PBT shrinking needs the higher tier (readable, rewritable, pretty-printable).
 - The pass that emits stack form is the check pass with an optional `RecordForm` flag. When the flag is on, every successful `matchSignature` writes a `Call{Name, Arity}` op; every literal push writes `PushLit{V}`; every quoted body recurses. When the flag is off, check mode behaves exactly as today.
-- This work is therefore also concrete groundwork for the bytecode VM described in `aql-bytecode-report.0.md`. The future bytecode emitter becomes a downstream consumer of stack form (or an alternative recording fidelity in the same pass), rather than a parallel implementation.
+- This work is therefore also concrete groundwork for the bytecode VM described in `boru-bytecode-report.0.md`. The future bytecode emitter becomes a downstream consumer of stack form (or an alternative recording fidelity in the same pass), rather than a parallel implementation.
 
-Decision tables and predicates (`aql:decision`) are the chosen experimental subject: hit-policy invariants and De Morgan-style predicate rewrites have non-trivial properties that real-world generators can shake out.
+Decision tables and predicates (`boru:decision`) are the chosen experimental subject: hit-policy invariants and De Morgan-style predicate rewrites have non-trivial properties that real-world generators can shake out.
 
 ### Locked-in scope choices
 
 - **Full 4-layer architecture** (not just value-level shrinking).
-- **`aql:rand` as a standalone module, `test.gen-*` re-exports** for ergonomics.
-- **`PropertySpec` Record** in `aql:test`, mirroring `TestSpec`.
+- **`boru:rand` as a standalone module, `test.gen-*` re-exports** for ergonomics.
+- **`PropertySpec` Record** in `boru:test`, mirroring `TestSpec`.
 - **Shrink the generator program** via lowering to IR.
 
 ### Critical design constraint (one matcher, one truth)
@@ -151,7 +151,7 @@ Emitting stack form requires knowing, **per call site**, which signature was cho
 Investigation result (Phase 1 exploration):
 - `matchSignature` (engine.go:2828, *not* match.go — match.go contains `patternsOk` at line 22) is **pure**: no stack mutation, no token consumption, no registry writes.
 - The check pass (`eng/go/check.go` + `engine.go::Engine.Run` with `r.Check.Mode = true`) calls `matchSignature` at every word in source order and resolves every dispatch decision via carriers. It does **not** today emit a stack-form trace — `CheckState` at `eng/go/registry.go:108-168` only accumulates diagnostics, fn summaries, and def-usage info.
-- Adding a recording buffer to `CheckState` (`CheckState.Form *StackForm`, gated by `CheckState.RecordForm bool`) gives stack-form emission as a check-pass side effect at ~5% overhead when enabled and zero when not. This matches the architecture proposed by `aql-bytecode-report.0.md` and means there is exactly *one* matcher driving both checking and form emission.
+- Adding a recording buffer to `CheckState` (`CheckState.Form *StackForm`, gated by `CheckState.RecordForm bool`) gives stack-form emission as a check-pass side effect at ~5% overhead when enabled and zero when not. This matches the architecture proposed by `boru-bytecode-report.0.md` and means there is exactly *one* matcher driving both checking and form emission.
 
 This is a multi-stage build (~2300 LOC + tests). The plan breaks it into stages that can each be reviewed and committed independently.
 
@@ -159,7 +159,7 @@ This is a multi-stage build (~2300 LOC + tests). The plan breaks it into stages 
 
 ## Stage 0 — Reusable foundation: check-pass stack-form recording + doc cleanup (~600 LOC)
 
-This stage is independently valuable beyond PBT — it delivers half of what `design/aql-bytecode-report.0.md` proposes (the recording side effect; the bytecode encoder/VM remain future work). Any future analyser, formatter, optimiser, or runtime back-end benefits from a canonical stack form produced by the existing check pass. Stage 0 is shipped as its own commit and tested in isolation; the later PBT stages build on top of it without needing changes here.
+This stage is independently valuable beyond PBT — it delivers half of what `design/boru-bytecode-report.0.md` proposes (the recording side effect; the bytecode encoder/VM remain future work). Any future analyser, formatter, optimiser, or runtime back-end benefits from a canonical stack form produced by the existing check pass. Stage 0 is shipped as its own commit and tested in isolation; the later PBT stages build on top of it without needing changes here.
 
 ### 0a — Stack form types + recording buffer (~150 LOC)
 
@@ -167,7 +167,7 @@ This stage is independently valuable beyond PBT — it delivers half of what `de
 
 **New file**: `eng/go/stackform/stackform.go`
 ```go
-// StackForm is a canonical strict-stack representation of an AQL program.
+// StackForm is a canonical strict-stack representation of a boru program.
 // Word calls are in stack order, forward collection has been resolved,
 // dotted access has been normalised to get-calls, paren grouping is gone.
 // Produced by the check pass when RecordForm is enabled (see eng/check.go).
@@ -213,7 +213,7 @@ func Compile(reg *eng.Registry, tokens []eng.Value) (*StackForm, []eng.CheckDiag
 - **One matcher.** `matchSignature` is unchanged; it is the single source of truth for wiring decisions. Both dispatch and form-recording observe its output.
 - **One walker.** Adding a separate lowering pass would re-walk the source and risk divergence from the check pass's behaviour (eg quoted-body resolution, type-driven dispatch, paren handling). Folding into check mode eliminates that risk.
 - **Zero overhead when off.** `RecordForm == false` branches around every emit; runtime cost matches today's check pass.
-- **Re-uses existing carrier-mode forward-arg resolution.** Per `aql-bytecode-report.0.md:101-117`: by the time `execMatch` fires for a call site, forward args have already been pushed as carriers in sig order via `rearrangeForForward`. So `Call{Name, Arity}` correctly references the most recent N pushes regardless of surface form.
+- **Re-uses existing carrier-mode forward-arg resolution.** Per `boru-bytecode-report.0.md:101-117`: by the time `execMatch` fires for a call site, forward args have already been pushed as carriers in sig order via `rearrangeForForward`. So `Call{Name, Arity}` correctly references the most recent N pushes regardless of surface form.
 
 **Tests**: `eng/go/stackform/stackform_test.go` exercises forward-arg / swap-form / stack-only / `/s` / `/f` / `BarrierPos`-mid cases (mirroring `lang/go/CLAUDE.md` "The unified algorithm" table) and asserts the recorded ops match expected golden forms.
 
@@ -221,7 +221,7 @@ func Compile(reg *eng.Registry, tokens []eng.Value) (*StackForm, []eng.CheckDiag
 
 **Files** (under `eng/go/stackform/`):
 - `serialise.go` — `Flatten(*StackForm) []eng.Value` re-serialises stack form to a flat token sequence that runs in pure strict-stack order. Because the form is already strict-stack, this is a direct walk: `PushLit` → emit the value; `Call` → emit the word name (which the engine will then run in stack-only mode); `Quote` → emit a list-literal containing the recursively flattened body.
-- `print.go` — `Pretty(*StackForm) string` produces readable AQL. The printer is purely cosmetic; the stack form itself stays strict-stack.
+- `print.go` — `Pretty(*StackForm) string` produces readable boru. The printer is purely cosmetic; the stack form itself stays strict-stack.
 - `eval.go` — `Eval(form *StackForm, reg *eng.Registry) ([]eng.Value, error)` is a thin convenience wrapper: `Flatten` → `native.New(reg).Run`. Useful for callers like the shrinker that want "run this form and tell me the result" without manual token splicing.
 
 **Output-equivalence tests** — the hard correctness gate (`stackform/equivalence_test.go`):
@@ -243,13 +243,13 @@ This corpus is the foundation everything else in this PR (and the future bytecod
 
 **Files modified**:
 - `lang/go/CLAUDE.md:178` — currently reads `"expandDottedWord() — transforms foo.a.b into ( foo get a get b )"`. Replace with accurate text: dot tokens (`#DT`) are lexed by jsonic and converted to `Word("get")` during top-level value conversion in `parse.go::convertTopLevelValue`; chained access composes naturally because each `get` call produces the receiver for the next.
-- `design/AQL-DX-REPORT.5.md` (~lines 48, 182) — replace "parser's dot expansion emits it as a word" / "change the dot expansion to emit string literal keys" with precise wording: the dot-to-word conversion in `parse.go::convertTopLevelValue` emits `Word("get")` followed by the next token as-is (a Word, hence the shadowing concern); the proposed fix is to emit the key as a `String` literal rather than a `Word`, at that conversion site (not via any imagined expansion pass).
+- `design/BORU-DX-REPORT.5.md` (~lines 48, 182) — replace "parser's dot expansion emits it as a word" / "change the dot expansion to emit string literal keys" with precise wording: the dot-to-word conversion in `parse.go::convertTopLevelValue` emits `Word("get")` followed by the next token as-is (a Word, hence the shadowing concern); the proposed fix is to emit the key as a `String` literal rather than a `Word`, at that conversion site (not via any imagined expansion pass).
 
 This is a small textual cleanup but worth doing in Stage 0 so the PBT design documents that follow can cite an accurate kernel reference. It also removes a future trip-hazard: anyone reading `CLAUDE.md` and searching for `expandDottedWord` will currently get zero results and waste time figuring out what changed.
 
 ---
 
-## Stage 1 — `aql:rand` (foundation, ~400 LOC)
+## Stage 1 — `boru:rand` (foundation, ~400 LOC)
 
 Seeded deterministic randomness. Standalone module — useful beyond testing (demo data, sampling, Monte Carlo).
 
@@ -277,13 +277,13 @@ Add `"rand": BuildRandModule` to the modules map in `lang/go/modules/modules.go:
 
 ---
 
-## Stage 2 — AQL-G policy profile (~60 LOC)
+## Stage 2 — BORU-G policy profile (~60 LOC)
 
 The pure profile from the report §7. Used to evaluate generator programs and shrink candidates safely.
 
 **New file**: `lang/go/policy/profiles/gen.jsonic`
 
-Starting from `compute.jsonic` (allows math only): also allow `aql:rand` and `aql:decision` (for testing decision properties), keep `mutate` allowed (for `def` local bindings inside generator bodies), tighten `maxStepBudget` to `200000`, leave `clock` denied.
+Starting from `compute.jsonic` (allows math only): also allow `boru:rand` and `boru:decision` (for testing decision properties), keep `mutate` allowed (for `def` local bindings inside generator bodies), tighten `maxStepBudget` to `200000`, leave `clock` denied.
 
 **Rationale for limits**: the reducer re-evaluates a generator program ~1000 times during candidate exploration; each must terminate quickly. Step-budget is the natural fuel mechanism — already wired through `r.Check.StepBudget` in eng.
 
@@ -293,10 +293,10 @@ Documented in `design/NATIVE-MODULES.10.md` under a new "Profiles" subsection.
 
 ## Stage 3 — `PropertySpec` + `test.check-prop` (~300 LOC, no shrinking yet)
 
-Property API in `aql:test`, value-loop only. Confirms generators and properties wire up correctly before we build the reducer.
+Property API in `boru:test`, value-loop only. Confirms generators and properties wire up correctly before we build the reducer.
 
 **Files modified**
-- `lang/go/modules/test.go` — extend the AQL preamble + add Go natives.
+- `lang/go/modules/test.go` — extend the boru preamble + add Go natives.
 
 **Preamble additions** (Record types alongside existing TestCase/TestSet):
 ```
@@ -321,9 +321,9 @@ def PropertyResult refine Record [
 ```
 
 **New Go natives** (in `testNatives()` at `modules/test.go:195`):
-- `test-check-prop` — sig `[String List List Integer Integer Integer]` (name, gen-body, prop-body, runs, seed, max-shrinks). Loops `runs` times: seed RNG (via the rand module's capability), run gen-body in a sub-engine under `aql:gen` policy (reuse the `runInSubEngine` pattern from `modules/vm.go:167-202`), take top of stack as the generated value, push it and run prop-body, expect a Boolean on top. On failure, record `failing-input` and (in this stage) leave shrunk fields as None. Record into the active `testRun` via the existing `runCase` path (lines 462-490).
+- `test-check-prop` — sig `[String List List Integer Integer Integer]` (name, gen-body, prop-body, runs, seed, max-shrinks). Loops `runs` times: seed RNG (via the rand module's capability), run gen-body in a sub-engine under `boru:gen` policy (reuse the `runInSubEngine` pattern from `modules/vm.go:167-202`), take top of stack as the generated value, push it and run prop-body, expect a Boolean on top. On failure, record `failing-input` and (in this stage) leave shrunk fields as None. Record into the active `testRun` via the existing `runCase` path (lines 462-490).
 
-**AQL spec runner extension** (in the preamble): add a `run-property` fn that takes a `PropertySpec` Map and calls `test-check-prop` with its fields. Extend `run-spec` so a TestSpec whose `subs` contain PropertySpec values dispatches to `run-property` (discriminate by checking for the `gen` key — or add a tag field). For schema cleanliness, prefer renaming TestSpec's `subs:List` semantically to "child specs of any shape (TestSpec or PropertySpec)".
+**boru spec runner extension** (in the preamble): add a `run-property` fn that takes a `PropertySpec` Map and calls `test-check-prop` with its fields. Extend `run-spec` so a TestSpec whose `subs` contain PropertySpec values dispatches to `run-property` (discriminate by checking for the `gen` key — or add a tag field). For schema cleanliness, prefer renaming TestSpec's `subs:List` semantically to "child specs of any shape (TestSpec or PropertySpec)".
 
 **Exports** (extending lines 706-738):
 - `PropertySpec`, `PropertyResult`, `check-prop`, `prop` (constructor), `run-property`.
@@ -394,7 +394,7 @@ func Reduce(initial Program, eval func(Program) Outcome, profile *Profile) Progr
 
 Phase 4 stretch (report §15-§16, **deferred**): bounded best-first search, exact small-program search. Add `TODO`-pinned hooks but don't implement.
 
-**Integration with Stage 3**: extend `test-check-prop` to, on failure, call `stackform.Compile(reg, gen-body) → shrink.Reduce(form, evalFn, policy) → stackform.Pretty(reduced)`. The `evalFn` closure runs the reduced form under the AQL-G profile (`stackform.Eval` + sub-engine) and returns `Fail` iff the property predicate returns `false` on the resulting value (and `Invalid` on eval errors). `PropertyResult.shrunk-input`, `shrunk-source`, `shrunk-cost` populated.
+**Integration with Stage 3**: extend `test-check-prop` to, on failure, call `stackform.Compile(reg, gen-body) → shrink.Reduce(form, evalFn, policy) → stackform.Pretty(reduced)`. The `evalFn` closure runs the reduced form under the BORU-G profile (`stackform.Eval` + sub-engine) and returns `Fail` iff the property predicate returns `false` on the resulting value (and `Invalid` on eval errors). `PropertyResult.shrunk-input`, `shrunk-source`, `shrunk-cost` populated.
 
 ---
 
@@ -403,7 +403,7 @@ Phase 4 stretch (report §15-§16, **deferred**): bounded best-first search, exa
 The proof-of-life. Three properties that exercise non-trivial invariants:
 
 **New files**
-- `lang/go/modules/decision_pbt_spec.aql`.
+- `lang/go/modules/decision_pbt_spec.boru`.
 - `lang/go/modules/decision_pbt_spec_test.go`.
 
 **Properties**:
@@ -429,14 +429,14 @@ End-to-end smoke (after Stage 5):
 cd lang/go && go test ./modules/ -run TestDecisionPBT -v
 ```
 
-Expected output: every property in `decision_pbt_spec.aql` passes 100 runs at seed 1; the negative-control test shows shrinking reduces input cost by ≥80% before reporting.
+Expected output: every property in `decision_pbt_spec.boru` passes 100 runs at seed 1; the negative-control test shows shrinking reduces input cost by ≥80% before reporting.
 
 REPL smoke check:
 ```bash
-cd cmd/go/aql && go run . repl
-> import "aql:test"
-> import "aql:rand"
-> import "aql:report"
+cd cmd/go/boru && go run . repl
+> import "boru:test"
+> import "boru:rand"
+> import "boru:report"
 > def my-prop {name:"reverse-twice" gen:[[1 10 rand.int] 5 rand.list-of] property:[reverse reverse args.0 deq] runs:50 seed:1 max-shrinks:50}
 > my-prop test.run-property
 > test.results report.table print
@@ -452,27 +452,27 @@ cd cmd/go/aql && go run . repl
 - `lang/go/modules/rand.go`, `rand_test.go`.
 - `lang/go/policy/profiles/gen.jsonic`.
 - `lang/go/modules/test/shrink/{policy,cost,reduce,candidates}.go` + tests.
-- `lang/go/modules/decision_pbt_spec.aql`, `decision_pbt_spec_test.go`.
+- `lang/go/modules/decision_pbt_spec.boru`, `decision_pbt_spec_test.go`.
 
 **Modified**
 - `eng/go/registry.go` (Stage 0b) — add `RecordForm bool` and `Form *stackform.StackForm` fields to `CheckState`. No behavioural change when `RecordForm == false`.
 - `eng/go/engine.go` (Stage 0b) — add Op-emission at the literal-push site and at `execMatch` (around line 807-946); recursive recording for `NoEvalArgs` quoted bodies. Guarded by `c.RecordForm`.
 - `lang/go/native/aliases.go` (Stage 0) — re-export the `stackform` package's public types (`StackForm`, `Op`, `Compile`, `Eval`, `Pretty`, `Cost`).
 - `lang/go/CLAUDE.md:178` (Stage 0d) — replace the stale `expandDottedWord()` description with accurate dot-token-to-`Word("get")` conversion text.
-- `design/AQL-DX-REPORT.5.md` (Stage 0d) — fix the "parser's dot expansion" language at the two affected sections.
-- `design/aql-bytecode-report.0.md` (Stage 0 — small addition) — cross-reference note that the recording side-effect described in §1.2 is now implemented in `eng/go/stackform/` at the stack-form fidelity tier; the bytecode-encoder tier remains future work.
+- `design/BORU-DX-REPORT.5.md` (Stage 0d) — fix the "parser's dot expansion" language at the two affected sections.
+- `design/boru-bytecode-report.0.md` (Stage 0 — small addition) — cross-reference note that the recording side-effect described in §1.2 is now implemented in `eng/go/stackform/` at the stack-form fidelity tier; the bytecode-encoder tier remains future work.
 - `lang/go/modules/modules.go` — register `"rand"`.
 - `lang/go/modules/test.go` — extend preamble + add `test-check-prop`, `test-run-property` natives + new exports.
-- `design/NATIVE-MODULES.10.md` — document `aql:rand`, the `gen` profile, the PropertySpec API, and the new `eng/go/stackform/` package.
+- `design/NATIVE-MODULES.10.md` — document `boru:rand`, the `gen` profile, the PropertySpec API, and the new `eng/go/stackform/` package.
 
 **Reused (do not duplicate)**
 - `eng/go/engine.go::matchSignature` (line 2828) — the **only** source of signature-matching truth. Stage 0 hooks stack-form recording into the check pass at this call site; nothing in the plan re-implements matching. Re-implementing this logic is explicitly forbidden by the design.
 - `eng/go/match.go::patternsOk` (line 22) — predicate sig-pattern checker, already used by `matchSignature`.
-- `eng/go/check.go::CheckState.Begin` and `eng/go/engine.go::Engine.Run` (check-mode path) — Stage 0 reuses this entire walker as the stack-form emitter, adding only the `RecordForm` switch and Op-append calls at existing dispatch points. The architecture is exactly the one outlined in `design/aql-bytecode-report.0.md:61-74`.
-- `lang/go/modules/vm.go:167-202` `runInSubEngine` pattern for evaluating generator programs under the AQL-G profile.
+- `eng/go/check.go::CheckState.Begin` and `eng/go/engine.go::Engine.Run` (check-mode path) — Stage 0 reuses this entire walker as the stack-form emitter, adding only the `RecordForm` switch and Op-append calls at existing dispatch points. The architecture is exactly the one outlined in `design/boru-bytecode-report.0.md:61-74`.
+- `lang/go/modules/vm.go:167-202` `runInSubEngine` pattern for evaluating generator programs under the BORU-G profile.
 - `lang/go/modules/test.go:183-190` `activeRun` capability pattern.
 - `lang/go/modules/test.go:544-560` `invokeSubject` for property predicate dispatch.
-- `eng/go/registry.go::CallAQL` (already used by the test runner) for invoking fn-shaped generators.
+- `eng/go/registry.go::CallBoru` (already used by the test runner) for invoking fn-shaped generators.
 - `eng/go/compare.go::DeepEqual` / `ExactEqual` for fingerprinting candidates.
 
 ---

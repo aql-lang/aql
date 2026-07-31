@@ -1,5 +1,5 @@
 // Spec-runner test for the production-language spec suite at
-// aql/lang/spec/. Each TSV row is parsed with the AQL parser
+// boru/lang/spec/. Each TSV row is parsed with the boru parser
 // (eng/go/parser) and run against a fresh production registry
 // (native.DefaultRegistry + native.Register) — the full language
 // layer, so these specs can exercise any registered word (record /
@@ -20,20 +20,20 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/capabilities"
-	"github.com/aql-lang/aql/lang/go/modules"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/test/go/specrunner"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/capabilities"
+	"github.com/boru-lang/boru/lang/go/modules"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/test/go/specrunner"
 )
 
 // specClock freezes time at a fixed instant so temporal words (`now`,
-// aql:time) and the default aql:rand seed are deterministic in specs.
+// boru:time) and the default boru:rand seed are deterministic in specs.
 var specClock = capabilities.FixedClock{T: time.Date(2021, 1, 1, 0, 0, 0, 0, time.UTC)}
 
-// TestSpecProd runs the .tsv spec files under aql/lang/spec/ against a
-// production-aql registry (native.DefaultRegistry + native.Register).
+// TestSpecProd runs the .tsv spec files under boru/lang/spec/ against a
+// production-boru registry (native.DefaultRegistry + native.Register).
 // These specs cover the production language layer — words and types
 // that aren't part of the eng kernel (record, object, make, get/set on
 // Stores, Resource / Entity, …). They sit at lang/spec/ to mirror the
@@ -67,13 +67,13 @@ func runSpecProd(t *testing.T, tcoDisabled bool) {
 		// originally written for engspec (object, record, inspect, …)
 		// can run under the production setup too.
 		specrunner.RegisterQFixtures(reg)
-		// Wire the parser so the AQL-implemented modules (report, test)
+		// Wire the parser so the boru-implemented modules (report, test)
 		// can parse their source on import — exactly what lang.New() does
-		// in production. Without this `import "aql:report"` fails with
+		// in production. Without this `import "boru:report"` fails with
 		// "parser not configured".
 		reg.SetParseFunc(parser.Parse)
 		// Install the loadable-module resolver so specs can `import
-		// "aql:math-util"` etc. — matching what lang.New() wires up in
+		// "boru:math-util"` etc. — matching what lang.New() wires up in
 		// production. Without this the module words are unreachable and
 		// the formal spec could not cover them.
 		modules.InstallResolver(reg)

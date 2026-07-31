@@ -1,16 +1,16 @@
 package modules
 
 import (
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BuildLogModule creates the "aql:log" native module (namespace `Log`).
+// BuildLogModule creates the "boru:log" native module (namespace `Log`).
 // It registers the logging words into an isolated sub-registry and
 // returns a ModuleDesc whose "Log" export carries FnDef wrappers.
 //
 // After import, the words are accessed via dot notation:
 //
-//	import "aql:log"
+//	import "boru:log"
 //	Log.info "server started"                       # INFO record → console
 //	Log.warn "slow query" {ms:1200 table:"orders"}   # …with structured fields
 //	warn/q Log.set-level                              # raise the global threshold
@@ -28,8 +28,8 @@ import (
 // Policy exactly as the core `print` word does.
 func BuildLogModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// One sink registry per import, captured by every word closure (the
-	// aql:rand state pattern). A host may pre-install one via
-	// SetHostLogSinks(parent, …) before `import "aql:log"` runs — e.g. to
+	// boru:rand state pattern). A host may pre-install one via
+	// SetHostLogSinks(parent, …) before `import "boru:log"` runs — e.g. to
 	// attach an OTel sink — and we honour it; otherwise a default
 	// (console attached) is created AND installed on the parent, so a host
 	// that calls RegisterHostLogSink AFTER importing reaches this same
@@ -41,7 +41,7 @@ func BuildLogModule(parent *native.Registry) (native.ModuleDesc, error) {
 		native.SetHostLogSinks(parent, lsr)
 	}
 	logNatives := native.LogModuleNativeFuncs(lsr)
-	subReg, err := newModuleRegistry("aql:log", logNatives)
+	subReg, err := newModuleRegistry("boru:log", logNatives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

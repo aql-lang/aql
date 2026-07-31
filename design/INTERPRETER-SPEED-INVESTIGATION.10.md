@@ -1,4 +1,4 @@
-# Why interpreted AQL is slow — investigation & data (2026-07)
+# Why interpreted boru is slow — investigation & data (2026-07)
 
 ## Results after the fixes (all six root causes landed)
 
@@ -35,23 +35,23 @@ per-cause implementation notes and the commit log.
 
 ## Question
 
-Interpreted AQL (`AQL_NO_COMPILE=1`, the tree-walking engine) runs
-"at least two orders of magnitude" slower than compiled AQL (the
+Interpreted boru (`BORU_NO_COMPILE=1`, the tree-walking engine) runs
+"at least two orders of magnitude" slower than compiled boru (the
 bytecode VM), where we expected roughly one. We want the *interpreter*
 to land in the same ballpark as CPython / Ruby. This note measures the
 gap across languages, profiles the interpreter on the measured shapes,
 attributes the cost, and lists prioritized fixes.
 
 Fixtures + harness: `bench/interp/` (three equivalent programs — `fib`,
-`loopsum`, `nestloop` — in AQL, Python, Ruby, Node; `run.sh` reports
+`loopsum`, `nestloop` — in boru, Python, Ruby, Node; `run.sh` reports
 best-of-N wall-clock and checks the outputs match).
 
 ## The gap, in numbers
 
 Best-of-3 wall-clock (ms), 4-core Xeon @ 2.80GHz, Go 1.24. Startup is
-~20 ms (aql) / ~17 ms (python) / ~81 ms (ruby) / ~50 ms (node).
+~20 ms (boru) / ~17 ms (python) / ~81 ms (ruby) / ~50 ms (node).
 
-| workload | aql-interp | aql-compiled | python | ruby | node |
+| workload | boru-interp | boru-compiled | python | ruby | node |
 |---|---:|---:|---:|---:|---:|
 | fib(24)          | 20,757 | 418 | 23 | 83 | 51 |
 | loopsum (100k)   |  3,429 | 115 | 25 | 80 | 47 |
@@ -176,7 +176,7 @@ interp column:
   counter; invalidate on `def`/`undef`. Removes ~14% of allocations and
   the repeated `aggregateDispatch`. Highest value-for-effort.
 - **Pool the paren-operand sub-eval tape** the same way `InvokeBody`
-  was pooled (side-finding #2 in `design/aql-bytecode-baseline.0.md`,
+  was pooled (side-finding #2 in `design/boru-bytecode-baseline.0.md`,
   still open). Removes the 13% `NewTapeWith` and helps recursion most.
 - **Lazy / cheaper value IDs** — don't mint an ID until something needs
   one.
@@ -196,7 +196,7 @@ Structural, larger, pays back across interp *and* VM:
 Strategic:
 
 - The compiled VM is already ~15× of CPython and most of that is
-  startup/compile. If the goal is "AQL fast", **widen what compiles**
+  startup/compile. If the goal is "boru fast", **widen what compiles**
   and make compile the default for scripts (it already is) rather than
   chasing the interpreter all the way to CPython — the tree-walker's
   ceiling is bounded by the 184-byte value and re-planned dispatch.
@@ -208,7 +208,7 @@ Strategic:
 ```bash
 # cross-language wall-clock
 cd cmd/go && make build
-AQL=$PWD/bin/aql bash ../../bench/interp/run.sh 5
+BORU=$PWD/bin/boru bash ../../bench/interp/run.sh 5
 
 # interp vs compiled microbenchmarks + profiles
 cd lang/go

@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // The fn-predicate bind's DECLINED-record refusal (the concrete-permitting

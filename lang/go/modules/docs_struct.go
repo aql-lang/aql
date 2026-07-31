@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:struct-util", map[string]string{
+	registerDocs("boru:struct-util", map[string]string{
 		"clone":     "Deep-copy a value.",
 		"getpath":   "Read the value at a dotted path.",
 		"setpath":   "Write a value at a path, returning a new structure.",
@@ -21,7 +21,7 @@ func init() {
 	// Results from verified lang/spec/module-struct.tsv rows. These words
 	// take a PATH or a SHAPE as data, so what a caller needs to see is the
 	// notation — which the [String Map] signature cannot carry.
-	registerExamples("aql:struct-util", map[string][]string{
+	registerExamples("boru:struct-util", map[string][]string{
 		"getpath": {
 			`StructUtil.getpath "a.b" {a:{b:42}}              ;# 42 — dotted path into nested data`,
 			`StructUtil.getpath "name" {name:'Alice'}         ;# 'Alice'`,

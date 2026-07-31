@@ -4,11 +4,11 @@ import (
 	"fmt"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // fmt_compiled_parity_test.go pins the Stage-3 fn-value dispatch graduation
-// for the aql:fmt declarative-formatter demos: the `apply` driver
+// for the boru:fmt declarative-formatter demos: the `apply` driver
 // (`def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]` — a Function
 // value fetched from a map at runtime, applied to a waiting value) COMPILES
 // via the whole-frame dynamic-apply replay (OpCallDynFrame + RetReplay) and
@@ -49,7 +49,7 @@ func runBothEngines(t *testing.T, prog string) (compiled, interpreted string) {
 // TestFmtDeclarativeFormatterCompiledParity is the compiled twin of
 // TestFmtDeclarativeFormatter (fmtrule_test.go): the data-tree demo.
 func TestFmtDeclarativeFormatterCompiledParity(t *testing.T) {
-	const prog = `import "aql:fmt"
+	const prog = `import "boru:fmt"
 def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
 def rules {
   scalar: (nd:Any => (canon nd))
@@ -70,7 +70,7 @@ Fmt.render 72 (fmtapply {a:1 b:{c:2}})`
 // TestFmtTreeDeclarativeFormatter (fmttree_test.go): the source-tree demo,
 // exercised over a nested-paren statement (dispatch + recursion + fold).
 func TestFmtTreeDeclarativeFormatterCompiledParity(t *testing.T) {
-	const prog = `import "aql:fmt"
+	const prog = `import "boru:fmt"
 def fmtapply fn [nd:Any Any [nd (rules get (Fmt.kind nd))]]
 def inline fn [nd:Any Any [
   def r ({s:"" p:none} fold [foldstep] (nd.children))

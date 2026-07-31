@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// TestParseParserCheckResolvesInFnBody pins the template.aql check leaf: a
+// TestParseParserCheckResolvesInFnBody pins the template.boru check leaf: a
 // parser finalized with `def myk (Parse.parser g)` and then used by
 // `parse myk` INSIDE a fn body must check WITHOUT a false parse_unknown_lang.
 //
@@ -16,8 +16,8 @@ import (
 // (no binding, no kind) must STILL error — the leniency is scoped to
 // Function-family bindings.
 func TestParseParserCheckResolvesInFnBody(t *testing.T) {
-	const resolves = `import "aql:parse"
-import "aql:parselang"
+	const resolves = `import "boru:parse"
+import "boru:parselang"
 def g Parse.grammar
 Parse.abnf g "op = \"x\"" {start:'op'} end
 def myk (Parse.parser g) end
@@ -35,8 +35,8 @@ def lex fn [ [s:String] [List] [ def _ (parse myk s) [1] ] ]
 
 	// NEGATIVE: a name that is neither a kind nor a binding must still raise
 	// parse_unknown_lang (the leniency is keyed on an actual Function binding).
-	const unknown = `import "aql:parse"
-import "aql:parselang"
+	const unknown = `import "boru:parse"
+import "boru:parselang"
 def lex fn [ [s:String] [List] [ def _ (parse nosuchkind s) [1] ] ]
 (lex "x") print`
 

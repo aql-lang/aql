@@ -1,7 +1,7 @@
 package modules
 
 func init() {
-	registerDocs("aql:matrix-util", map[string]string{
+	registerDocs("boru:matrix-util", map[string]string{
 		"col":       "One column of a matrix as a list.",
 		"cols":      "Number of columns in a matrix.",
 		"create":    "Build a matrix from a list of equal-length rows.",
@@ -32,7 +32,7 @@ func init() {
 	// nearly every example needs a `values` call to show the contents —
 	// which the generated permutations never do. Results are from verified
 	// lang/spec/module-matrix.tsv rows.
-	registerExamples("aql:matrix-util", map[string][]string{
+	registerExamples("boru:matrix-util", map[string][]string{
 		"create": {
 			`MatrixUtil.create [[1 2] [3 4]]                  ;# Matrix(2x2) — an opaque handle`,
 			`MatrixUtil.values (MatrixUtil.create [[1 2] [3 4]])   ;# [1.0 2.0 3.0 4.0] — read it back, row-major`,

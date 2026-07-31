@@ -8,7 +8,7 @@ import (
 	"strings"
 	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // io_lines.go — incremental line reads (IO.read-line) and the buffered
@@ -278,7 +278,7 @@ func readLineHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	}
 	line, ok, rerr := src.ReadLine()
 	if rerr != nil {
-		return nil, r.AqlErrorAt("read_error",
+		return nil, r.BoruErrorAt("read_error",
 			"read-line: "+rerr.Error(), "read-line", args[0].Pos())
 	}
 	if !ok {
@@ -301,17 +301,17 @@ func lineReaderFor(v Value, r *Registry) (lineSource, error) {
 	}
 	name, aerr := v.AsConcreteAtom()
 	if aerr != nil {
-		return nil, r.AqlErrorAt("read_error",
+		return nil, r.BoruErrorAt("read_error",
 			"read-line: not a stream or File handle", "read-line", v.Pos())
 	}
 	switch streamSentinels[name] {
 	case pathStdin:
 		return stdinLineSource{r}, nil
 	case pathStdout, pathStderr:
-		return nil, r.AqlErrorAt("read_error",
+		return nil, r.BoruErrorAt("read_error",
 			"read-line: cannot read from an output stream", "read-line", v.Pos())
 	}
-	return nil, r.AqlErrorAt("read_error",
+	return nil, r.BoruErrorAt("read_error",
 		"read-line: not a stream or File handle", "read-line", v.Pos())
 }
 
@@ -332,10 +332,10 @@ func lineReaderFor(v Value, r *Registry) (lineSource, error) {
 func ttyHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name, err := args[0].AsConcreteAtom()
 	if err != nil {
-		return nil, r.AqlErrorAt("is_tty_error", "is-tty: not a stream handle", "is-tty", args[0].Pos())
+		return nil, r.BoruErrorAt("is_tty_error", "is-tty: not a stream handle", "is-tty", args[0].Pos())
 	}
 	if _, ok := streamSentinels[name]; !ok {
-		return nil, r.AqlErrorAt("is_tty_error", "is-tty: not a stream handle", "is-tty", args[0].Pos())
+		return nil, r.BoruErrorAt("is_tty_error", "is-tty: not a stream handle", "is-tty", args[0].Pos())
 	}
 	probe := HostStreamProbe(r)
 	if probe == nil {

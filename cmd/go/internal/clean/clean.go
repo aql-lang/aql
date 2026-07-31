@@ -1,5 +1,5 @@
-// Package clean implements `aql clean [dir]` — delete everything in
-// .aql/ except dotfiles.
+// Package clean implements `boru clean [dir]` — delete everything in
+// .boru/ except dotfiles.
 package clean
 
 import (
@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 )
 
 // osRemoveAll is a test seam (design/TEST-SEAMS.10.md); tests swap it to
@@ -24,12 +24,12 @@ type cmd struct{}
 func New() command.Command { return &cmd{} }
 
 func (*cmd) Name() string     { return "clean" }
-func (*cmd) Synopsis() string { return "delete .aql/* except dotfiles" }
+func (*cmd) Synopsis() string { return "delete .boru/* except dotfiles" }
 func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	return Run(args, stdout, stderr)
 }
 
-// Run handles `aql clean [dir]`.
+// Run handles `boru clean [dir]`.
 func Run(args []string, stdout, stderr io.Writer) int {
 	dir := "."
 	if len(args) > 0 {
@@ -37,8 +37,8 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		dir = pathutil.Expand(args[0])
 	}
 
-	aqlDir := filepath.Join(dir, ".aql")
-	entries, err := os.ReadDir(aqlDir)
+	boruDir := filepath.Join(dir, ".boru")
+	entries, err := os.ReadDir(boruDir)
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -48,13 +48,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 		if strings.HasPrefix(e.Name(), ".") {
 			continue
 		}
-		path := filepath.Join(aqlDir, e.Name())
+		path := filepath.Join(boruDir, e.Name())
 		if err := osRemoveAll(path); err != nil {
 			fmt.Fprintf(stderr, "error: %s\n", err)
 			return 1
 		}
 	}
 
-	fmt.Fprintf(stdout, "cleaned %s\n", aqlDir)
+	fmt.Fprintf(stdout, "cleaned %s\n", boruDir)
 	return 0
 }

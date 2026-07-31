@@ -1,8 +1,8 @@
-# AQL — Lean formalization + differential harness (prototype)
+# boru — Lean formalization + differential harness (prototype)
 
-A machine-checked prototype of AQL's core semantics in Lean 4, plus a
+A machine-checked prototype of boru's core semantics in Lean 4, plus a
 "tracer-bullet" harness that differential-tests the model against the
-real `aql` engine. This is the first concrete step of the milestone-6
+real `boru` engine. This is the first concrete step of the milestone-6
 plan in
 [`design/FORMAL-VERIFICATION.0.md`](../../design/FORMAL-VERIFICATION.0.md):
 a *deep embedding* of a tractable fragment of the abstract machine
@@ -12,14 +12,14 @@ specified in [`FORMAL-SPEC.md`](../../FORMAL-SPEC.md) §4 and §6.
 
 | File | What it is |
 |------|-----------|
-| [`AqlCore.lean`](AqlCore.lean) | the model (library): syntax, values, words, forward collection, evaluation, the theorems |
+| [`BoruCore.lean`](BoruCore.lean) | the model (library): syntax, values, words, forward collection, evaluation, the theorems |
 | [`Demo.lean`](Demo.lean) | a runnable wrapper (`lean --run Demo.lean`) printing the executable sanity checks |
-| [`harness/tracer.py`](harness/tracer.py) | the differential harness: runs each program through **both** the model and `aql do`, then compares |
+| [`harness/tracer.py`](harness/tracer.py) | the differential harness: runs each program through **both** the model and `boru do`, then compares |
 | [`lean-toolchain`](lean-toolchain) | pins `leanprover/lean4:v4.15.0` |
 
 ## What the model covers
 
-`AqlCore.lean` models two value types (`Int`, `Bool`), variable-arity
+`BoruCore.lean` models two value types (`Int`, `Bool`), variable-arity
 words (unary `not`; binary `add`/`sub`/`mul` and comparisons
 `gt`/`lt`/`eq`), the data stack, the `end` barrier, and — the point of
 the exercise — **forward collection** (`FORMAL-SPEC` §6.4): a word
@@ -27,7 +27,7 @@ gathering up to `arity` leading literals to its right, filling any
 remaining slots from the stack top-first, and leaving leftover literals
 on the stack (the engine's `add 1 2 7 => 3 7`).
 
-### Theorems (machine-checked; `lean AqlCore.lean` exits 0, no `sorry`)
+### Theorems (machine-checked; `lean BoruCore.lean` exits 0, no `sorry`)
 
 | Theorem | Statement |
 |---|---|
@@ -41,7 +41,7 @@ on the stack (the engine's `add 1 2 7 => 3 7`).
 
 ## What the model deliberately does NOT cover
 
-The engine is *coercive* where this model is *strict*: `aql do 'add true
+The engine is *coercive* where this model is *strict*: `boru do 'add true
 2'` is `"2true"` and `'not 5'` is `false`, whereas the model treats a
 type-mismatched argument vector as a stuck signature error. Those
 coercion rules — and user functions, modules, effects, concurrency,
@@ -54,13 +54,13 @@ and engine agree.
 `harness/tracer.py` drives one thin slice through the whole pipeline:
 
 ```
-AQL source ──tokenize──▶ Lean Tape ──lean──▶ model output
+boru source ──tokenize──▶ Lean Tape ──lean──▶ model output
      │                                            │
-     └──────────── aql do ─────▶ engine output ───┴──▶ compare
+     └─────────── boru do ─────▶ engine output ───┴──▶ compare
 ```
 
-It compiles `AqlCore.lean` (re-checking the proofs), generates a Lean
-module that evaluates every program, runs the reference `aql` engine on
+It compiles `BoruCore.lean` (re-checking the proofs), generates a Lean
+module that evaluates every program, runs the reference `boru` engine on
 the same sources, normalizes both outputs, and asserts agreement.
 
 This is **differential testing, not proof**: it can *refute* "the model
@@ -81,12 +81,12 @@ standard Lean install ([`elan`](https://github.com/leanprover/elan)):
 
 ```bash
 cd formal/lean
-lean AqlCore.lean                 # type-check the proofs (exit 0, no `sorry`)
+lean BoruCore.lean                 # type-check the proofs (exit 0, no `sorry`)
 python3 harness/tracer.py         # differential-test against the engine
 ```
 
-The harness builds the `aql` engine itself (`go build` in `cmd/go`).
-Override discovery with `LEAN=/path/to/lean` and/or `AQL=/path/to/aql`.
+The harness builds the `boru` engine itself (`go build` in `cmd/go`).
+Override discovery with `LEAN=/path/to/lean` and/or `BORU=/path/to/boru`.
 
 ### Offline / restricted-network install
 
@@ -97,7 +97,7 @@ If `elan`'s default download host is blocked but GitHub is reachable:
 2. download `lean-4.15.0-linux.tar.zst` from
    `github.com/leanprover/lean4/releases`, decompress (`zstd`, or
    `python3 -c 'import zstandard,sys; ...'`) and untar;
-3. `elan toolchain link aqlproto <extracted-dir>`.
+3. `elan toolchain link boruproto <extracted-dir>`.
 
 Because the pinned `lean-toolchain` names a channel `elan` would try to
 fetch from the blocked host, invoke the linked binary directly in such

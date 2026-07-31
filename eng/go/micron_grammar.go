@@ -3,10 +3,10 @@ package eng
 // Micron literal grammars — each builtin Micron leaf owns a tabnas
 // grammar (github.com/tabnas/parser/go) that recognizes its literal
 // string form and, via the alternate's action, constructs the
-// appropriate AQL value. The three grammars MERGE (the tabnas
+// appropriate boru value. The three grammars MERGE (the tabnas
 // (*Tabnas).Merge operation — commutative, alternates interleaved
 // deterministically) into the ONE grammar MicronFromString parses
-// with, so the micron minilang (`+m:…`, aql:minilang) dispatches on
+// with, so the micron minilang (`+m:…`, boru:minilang) dispatches on
 // literal SHAPE and returns the appropriate type.
 //
 // Division of labour per leaf:
@@ -144,7 +144,7 @@ var micronParseMu sync.Mutex
 // (micronEmailonGrammar / micronUrlonGrammar / micronPathonGrammar)
 // and the merge dispatches on shape — Emailon, then Urlon, then the
 // Pathon catch-all — returning the appropriate type. The `+m:…`
-// minilang literal (aql:minilang, kind micron / short form m) routes
+// minilang literal (boru:minilang, kind micron / short form m) routes
 // here.
 func MicronFromString(s string) (Value, error) {
 	if s == "" {
@@ -158,7 +158,7 @@ func MicronFromString(s string) (Value, error) {
 	}
 	m, err := micronMergedGrammar()
 	if err != nil {
-		return Value{}, &AqlError{Code: "type_error",
+		return Value{}, &BoruError{Code: "type_error",
 			Detail: fmt.Sprintf("micron: literal grammar unavailable: %v", err)}
 	}
 	micronParseMu.Lock()
@@ -169,12 +169,12 @@ func MicronFromString(s string) (Value, error) {
 		if i := strings.IndexByte(msg, '\n'); i >= 0 {
 			msg = msg[:i]
 		}
-		return Value{}, &AqlError{Code: "type_error",
+		return Value{}, &BoruError{Code: "type_error",
 			Detail: fmt.Sprintf("micron: cannot parse literal %q: %s", s, msg)}
 	}
 	v, ok := node.(Value)
 	if !ok {
-		return Value{}, &AqlError{Code: "type_error",
+		return Value{}, &BoruError{Code: "type_error",
 			Detail: fmt.Sprintf("micron: literal %q did not produce a value", s)}
 	}
 	return v, nil

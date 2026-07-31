@@ -269,7 +269,7 @@ func CanonicalType(r *Registry, t *Type) *Type {
 
 // predicateSandbox holds the slice/map state that RunPredicate
 // snapshots before invoking a predicate body. DefStacks is NOT
-// included — CallAQL handles that itself. r.Check is preserved by
+// included — CallBoru handles that itself. r.Check is preserved by
 // reference (the entire CheckState struct is copied) so any
 // per-call diagnostics or step counters set during the predicate
 // don't leak.

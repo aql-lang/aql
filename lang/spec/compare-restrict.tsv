@@ -3,7 +3,7 @@
 # shared same-family comparer handles (Integer-vs-Float via Number, two
 # Dates, EmptyString-vs-ProperString via String, …). A cross-family pair
 # (Integer-vs-String, List-vs-Map, value-vs-cross-family-type-literal)
-# raises [aql/incomparable] and directs the caller to tcmp. The full
+# raises [boru/incomparable] and directs the caller to tcmp. The full
 # total order itself is exercised in compare.tsv via tcmp.
 #
 # Equality (eq / neq / deq) is NOT restricted: cross-type compares as
@@ -25,7 +25,7 @@ Number cmp Integer	-1	two same-family type literals, by rank
 [1 2] cmp [1 3]	-1	same type (List) — element-wise
 {a:1} cmp {a:2}	-1	same type (Map)
 
-# ── Cross-family ordering errors ([aql/incomparable]) ─────────────────
+# ── Cross-family ordering errors ([boru/incomparable]) ────────────────
 1 cmp 'a'	ERROR:incomparable	Integer vs String
 1 lt 'a'	ERROR:incomparable	Integer vs String
 'a' gt 1	ERROR:incomparable	String vs Integer

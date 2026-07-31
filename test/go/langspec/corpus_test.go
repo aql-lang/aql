@@ -3,7 +3,7 @@ package langspec
 // TestCorpusThreeModes is the explicit gate for the generated word/structure
 // corpus (lang/spec/corpus-*.tsv): every row must INTERPRET, CHECK (zero
 // error-level diagnostics), and COMPILE (RunCompiled returns the interpreter's
-// result) without error. The corpus is harvested from `aql describe` examples
+// result) without error. The corpus is harvested from `boru describe` examples
 // (core + every native module export) plus hand-written code-structure variants,
 // then verified here so the three execution surfaces stay in lockstep across the
 // whole language surface — not just the curated per-feature specs.
@@ -22,8 +22,8 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	lang "github.com/boru-lang/boru/lang/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 func TestCorpusThreeModes(t *testing.T) {

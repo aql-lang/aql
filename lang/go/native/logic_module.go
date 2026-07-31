@@ -1,7 +1,7 @@
 package native
 
 // LogicModuleNatives holds the derived boolean connectives moved out of core
-// into the aql:logic-util module (LogicUtil namespace):
+// into the boru:logic-util module (LogicUtil namespace):
 //
 //	nand     not (a and b)
 //	nor      not (a or b)

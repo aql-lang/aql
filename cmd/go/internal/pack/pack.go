@@ -1,6 +1,6 @@
-// Package pack implements `aql pack [dir]` — run prep, then zip up
-// the files listed in aql.jsonic (plus aql.jsonic itself) into
-// .aql/_pack/<name>-<version>.zip.
+// Package pack implements `boru pack [dir]` — run prep, then zip up
+// the files listed in boru.jsonic (plus boru.jsonic itself) into
+// .boru/_pack/<name>-<version>.zip.
 package pack
 
 import (
@@ -10,9 +10,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/aql-lang/aql/cmd/go/internal/command"
-	"github.com/aql-lang/aql/cmd/go/internal/pathutil"
-	"github.com/aql-lang/aql/cmd/go/internal/prep"
+	"github.com/boru-lang/boru/cmd/go/internal/command"
+	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
+	"github.com/boru-lang/boru/cmd/go/internal/prep"
 )
 
 type cmd struct{}
@@ -42,7 +42,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 	name, _ := m["name"].(string)
 	if name == "" {
-		fmt.Fprintf(stderr, "error: aql.jsonic missing name\n")
+		fmt.Fprintf(stderr, "error: boru.jsonic missing name\n")
 		return 1
 	}
 
@@ -53,11 +53,11 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 	rawFiles, ok := m["files"].([]any)
 	if !ok {
-		fmt.Fprintf(stderr, "error: aql.jsonic missing files list\n")
+		fmt.Fprintf(stderr, "error: boru.jsonic missing files list\n")
 		return 1
 	}
 
-	files := []string{"aql.jsonic"}
+	files := []string{"boru.jsonic"}
 	for _, f := range rawFiles {
 		if s, ok := f.(string); ok {
 			files = append(files, s)
@@ -65,7 +65,7 @@ func Run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	zipName := fmt.Sprintf("%s-%s.zip", name, version)
-	packDir := filepath.Join(dir, ".aql", "_pack")
+	packDir := filepath.Join(dir, ".boru", "_pack")
 	if err := os.MkdirAll(packDir, 0755); err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1

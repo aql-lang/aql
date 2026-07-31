@@ -9,7 +9,7 @@ Companion reading: `FORWARD-COLLECTION-PHASES.10.md`, `FORWARD-COLLECTION-TRAPS.
 
 ## Context
 
-The AQL compiler lowers bytecode from a check-mode analysis pass. Under `--compile`
+The boru compiler lowers bytecode from a check-mode analysis pass. Under `--compile`
 (the default, silent-fallback mode) the compiled program is contractually
 **byte-identical** to the interpreter — it either matches or falls back, never
 diverges. A dispatch over a strict `Any`-carrier **receiver** violates that contract:
@@ -30,7 +30,7 @@ interpreter does not).
 **Already shipped (`f85f0f72`):** check-prop gen/property bodies (stored-param
 units) now use `ParamInputCarrier` (a dynamic/gradual carrier) instead of
 `NewCarrier`, so their inputs match gradually. Safe because scoped to stored bodies
-(genuinely runtime-typed inputs); passes every differential. All six voxgig-aql
+(genuinely runtime-typed inputs); passes every differential. All six voxgig-boru
 libraries fully compile. This document addresses the *remaining* general case: an
 ordinary user fn with an `Any`-typed param used as a dispatch receiver.
 
@@ -202,14 +202,14 @@ re-dispatch.
 
 - `test/go/langspec`: `TestCompiledCoverage` (zero-divergence census — must not
   regress; ceiling should DROP in Phase 1), `TestSpecCompiledDifferential`
-  (`≥ minCompiledRows`), `TestVariationDifferential` (`AQL_VARY_SEEDS=100 …`),
+  (`≥ minCompiledRows`), `TestVariationDifferential` (`BORU_VARY_SEEDS=100 …`),
   `TestOnlyMetaFallsBack` (tier ratchets). Run: `cd test/go/langspec && go test ./...`.
 - `lang/go`: `TestRunCompiledStrict` (force-compile), the `Disassemble()` opcode pins
   in `lang/go/bytecode_*_test.go`.
 - `make cover-gate` (100% floor; new statements need covering tests in
   `lang/go/bytecode_*_test.go`).
 - `make fmt && make vet && make lint && make test`.
-- **Voxgig differential**: rebuild `aql`, re-run the six libraries' four-surface
+- **Voxgig differential**: rebuild `boru`, re-run the six libraries' four-surface
   harness (interpret / check / `--compile` parity / `--force-compile`); expect no
   regression and the general shape now compiling.
 - **New pins** (`lang/go/bytecode_gradual_receiver_test.go`): the general shape
@@ -244,7 +244,7 @@ re-dispatch.
 
 ## Verification (end-to-end, for the eventual implementation)
 
-1. Repro before/after with a built `aql`: `aql run --force-compile` (exit 0 = full)
+1. Repro before/after with a built `boru`: `boru run --force-compile` (exit 0 = full)
    and `--no-compile` vs `--compile` parity on
    `def g fn [[x:Any][Any][x]] def f fn [[xs:Any][List][(xs Sort.quick
    Sort.by-number end)]] (([7 9 11 5 8] g) f)`.

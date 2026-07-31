@@ -89,9 +89,9 @@ func fnValueM2Refusal(t *testing.T, name, src, wantReason string) {
 
 func TestApplyOverParamFnCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	for _, c := range []struct{ name, src, want string }{
 		{"recursion.tsv:91 — apply over a Function param",
 			`def myfn ([x:Integer] => [x add 1000]) def runner fn [[myfn:Function v:Integer] [Integer] [v myfn/r apply]] def doubler ([x:Integer] => [x mul 2]) runner (doubler/r) 5`,
@@ -128,9 +128,9 @@ func TestApplyOverParamFnCompiles(t *testing.T) {
 
 func TestPathModifierMapFnCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	for _, c := range []struct{ name, src, want string }{
 		{"path-modifier.tsv:17 — /u leading apply",
 			`def m {a:add/r} end m.a/u 1 2`, "[3]"},
@@ -173,19 +173,19 @@ func TestPathModifierMapFnCompiles(t *testing.T) {
 
 func TestLogRegisterSinkCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	// module-log.tsv:62 — a pure fn literal bakes as a const operand
 	// (CompileStoresFn); the sink registry mutates at RUN time only.
 	fnValueM2Native(t, "module-log.tsv:62 — register a pure fn sink",
-		`import "aql:log" ; Log.register (fn [[rec:Any] [] []]) tap/q info/q ; Log.sinks`,
+		`import "boru:log" ; Log.register (fn [[rec:Any] [] []]) tap/q info/q ; Log.sinks`,
 		"[[console tap]]")
 
 	// module-log.tsv:83 — the duplicate-name error surfaces byte-identically
 	// from the compiled CALL_NATIVE.
 	{
-		src := `import "aql:log" ; Log.register (fn [[rec:Any] [] []]) console/q info/q`
+		src := `import "boru:log" ; Log.register (fn [[rec:Any] [] []]) console/q info/q`
 		_, compiled, errC := mustNew(t).RunCompiled(src)
 		_, errI := mustNew(t).Run(src)
 		if !compiled {
@@ -200,7 +200,7 @@ func TestLogRegisterSinkCompiles(t *testing.T) {
 	// body) is not a bakeable const: the register dispatch refuses and the
 	// program falls back faithfully.
 	fnValueM2Refusal(t, "capturing sink fn stays refused",
-		`import "aql:log" ; def f fn [[p:String] [List] [Log.register (fn [[rec:Any] [] [p print]]) tap/q info/q Log.sinks]] f "x"`,
+		`import "boru:log" ; def f fn [[p:String] [List] [Log.register (fn [[rec:Any] [] [p print]]) tap/q info/q Log.sinks]] f "x"`,
 		"log-register")
 }
 
@@ -208,23 +208,23 @@ func TestLogRegisterSinkCompiles(t *testing.T) {
 
 func TestIsFnValueOperandCompiles(t *testing.T) {
 	// Legacy refusal+fallback-parity contract: pins the one-release
-	// AQL_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
+	// BORU_COMPILE_FALLBACK=1 hatch behavior (Stage J flipped the default
 	// to compile_refused; migrate this contract or retire it with the hatch).
-	t.Setenv("AQL_COMPILE_FALLBACK", "1")
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
 	for _, c := range []struct{ name, src, want string }{
 		{"module-minilang.tsv:306 — matcher fn is its minted kind",
-			`import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Re)`, "[true]"},
+			`import "boru:minilang"  (+re/[a-z]+/) is (MiniLang.Re)`, "[true]"},
 		{"module-minilang.tsv:307 — sibling kind rejected",
-			`import "aql:minilang"  (+re/[a-z]+/) is (MiniLang.Gex)`, "[false]"},
+			`import "boru:minilang"  (+re/[a-z]+/) is (MiniLang.Gex)`, "[false]"},
 		{"module-minilang.tsv:309 — fn value against the Function root",
-			`import "aql:minilang"  (+re/[a-z]+/) is Function`, "[true]"},
+			`import "boru:minilang"  (+re/[a-z]+/) is Function`, "[true]"},
 		{"module-minilang.tsv:315 — def-aliased member type",
-			`import "aql:minilang"  def Rex (MiniLang.Re)  (+re/[a-z]+/) is Rex`, "[true]"},
+			`import "boru:minilang"  def Rex (MiniLang.Re)  (+re/[a-z]+/) is Rex`, "[true]"},
 		// Inline `(lambda)/r` — the dispatch-mod marker must survive the check
 		// pass's carrier strip (toCarrier) so it parks the lambda exactly as
 		// the runtime does, instead of leaking into the residual as a phantom.
 		{"module-minilang.tsv:314 — inline parked lambda as the is-value",
-			`import "aql:minilang"  ([x:Any] => [x])/r is (MiniLang.Re)`, "[false]"},
+			`import "boru:minilang"  ([x:Any] => [x])/r is (MiniLang.Re)`, "[false]"},
 		{"marker-drop parity: /r on a non-fn paren result is a no-op",
 			`(1 add 2)/r`, "[3]"},
 	} {

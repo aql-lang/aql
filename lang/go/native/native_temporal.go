@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/aql-lang/aql/eng/go"
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // The Scalar/Time type family splits across two owners:
@@ -16,7 +16,7 @@ import (
 //     they order chronologically through the Scalar/Time Comparer,
 //     and their identities are baked into serialised Value IDs.
 //
-//   - aql:time-util (per-import module mints, no FixedIDs): TimeOfDay,
+//   - boru:time-util (per-import module mints, no FixedIDs): TimeOfDay,
 //     Duration and its CalendarDuration / ClockDuration leaves, and Timezone.
 //     BuildTimeModule mints them per import via
 //     MintTemporalModuleTypes below — the StreamKind pattern
@@ -39,7 +39,7 @@ var (
 )
 
 // TemporalModuleTypes are the Scalar/Time leaves owned by
-// aql:time-util, minted per import into the module's sub-registry by
+// boru:time-util, minted per import into the module's sub-registry by
 // MintTemporalModuleTypes. Their values escape to the importer (a
 // `TimeUtil.days 3` result is a CalendarDuration), so the mints draw IDs
 // from the importing tree's counter — BuildTimeModule adopts the
@@ -59,7 +59,7 @@ type TemporalModuleTypes struct {
 }
 
 // MintTemporalModuleTypes mints the module-owned temporal types into
-// r's type table (r is aql:time-util's sub-registry) and returns the
+// r's type table (r is boru:time-util's sub-registry) and returns the
 // nodes. Parents mint first so the children's Parent chains resolve;
 // the whole set hangs under the global Scalar/Time root, so the
 // family Comparer and lattice ordering see them exactly where the
@@ -79,7 +79,7 @@ func MintTemporalModuleTypes(r *Registry) TemporalModuleTypes {
 }
 
 func registerTemporalType(path string, fixedID int, behavior eng.TypeBehavior) *eng.Type {
-	t, err := eng.Builtin.RegisterType(path, fixedID, "aql:time-util", behavior)
+	t, err := eng.Builtin.RegisterType(path, fixedID, "boru:time-util", behavior)
 	if err != nil {
 		// Init-time registration error — recorded, not panicked.
 		// See ADR-005 and typeinit.go.

@@ -34,9 +34,9 @@ func deeplyNested(depth int) string {
 // emitNode is memoised because layout is try-then-fall-back: a statement is
 // rendered inline before any strategy may reject it, and the wrap path then
 // re-renders every child at the continuation indent. Uncached, a subtree
-// nested D deep was rendered on the order of 2^D times — kg/validate.aql
+// nested D deep was rendered on the order of 2^D times — kg/validate.boru
 // (749 lines, nesting ~10) took 53 s to format against 48 ms to parse.
-// A regression here does not fail loudly; it just makes `aql fmt` and the
+// A regression here does not fail loudly; it just makes `boru fmt` and the
 // LSP's formatting provider unusable, so the budget is asserted.
 func TestFormatDeepNestingStaysFast(t *testing.T) {
 	// Wall-clock assertion — meaningless under the race detector, which

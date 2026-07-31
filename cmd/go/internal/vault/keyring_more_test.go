@@ -137,7 +137,7 @@ func TestOnePasswordKeyring(t *testing.T) {
 	if k.Name() != BackendOnePassword {
 		t.Error("name")
 	}
-	if k.itemTitle("x") != "aql:x" {
+	if k.itemTitle("x") != "boru:x" {
 		t.Errorf("itemTitle = %q", k.itemTitle("x"))
 	}
 	if k.opVault() != "Private" {
@@ -293,7 +293,7 @@ func TestEnvelopeFileKeyringContainer(t *testing.T) {
 	if err := os.WriteFile(kr.path(), append(futuristic, []byte("{}")...), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := kr.loadFile(); err == nil || !strings.Contains(err.Error(), "upgrade aql") {
+	if _, err := kr.loadFile(); err == nil || !strings.Contains(err.Error(), "upgrade boru") {
 		t.Errorf("future container: %v", err)
 	}
 	// Corrupt JSON body.
@@ -347,7 +347,7 @@ func TestDecryptBlobLegacyAndHeaderedEdges(t *testing.T) {
 	// Headered: future format, unknown format, truncated.
 	future := append([]byte(keyringMagic), byte(keyringFormat+1))
 	if _, err := decryptBlob(append(future, make([]byte, 64)...), "p"); err == nil ||
-		!strings.Contains(err.Error(), "upgrade aql") {
+		!strings.Contains(err.Error(), "upgrade boru") {
 		t.Errorf("headered future: %v", err)
 	}
 	zero := append([]byte(keyringMagic), byte(0))

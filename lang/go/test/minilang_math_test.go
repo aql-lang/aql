@@ -5,17 +5,17 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // The `m` mini-language evaluates a traditional maths formula whose variables
 // are bound by the named params, backed by github.com/tabnas/expr. It ships
-// built-in with aql:minilang.
+// built-in with boru:minilang.
 
-const mImp = `import "aql:minilang"  `
+const mImp = `import "boru:minilang"  `
 
 // TestMiniMathEval pins the arithmetic, operator precedence/associativity, and
-// the AQL numeric coercion (integer domain vs float domain).
+// the boru numeric coercion (integer domain vs float domain).
 func TestMiniMathEval(t *testing.T) {
 	cases := []struct {
 		expr string

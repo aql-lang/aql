@@ -5,7 +5,7 @@ package policy
 // bounding-set pattern: a child cannot grant more than its parent
 // allows, regardless of how the child's rules are written.
 //
-// The composed policy is used by the aql:vm module to construct
+// The composed policy is used by the boru:vm module to construct
 // sub-engines: the runtime check that a sub-engine cannot exceed
 // its parent's permissions is enforced structurally, by routing
 // every dispatch through both layers. There is no way for a child

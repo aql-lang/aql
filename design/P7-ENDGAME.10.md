@@ -1,7 +1,7 @@
 # P7 Endgame — record (.10)
 
 Status: **landed** (2026-07-04, branch
-`claude/aql-local-reasoning-design-rb7elj`). The closing record of the
+`claude/boru-local-reasoning-design-rb7elj`). The closing record of the
 checker/bytecode completion program executed against
 [`CHECKER-BYTECODE-COMPLETION-PLAN.0.md`](CHECKER-BYTECODE-COMPLETION-PLAN.0.md)
 (whose execution log carries the per-landing detail) and the Phase-6
@@ -26,13 +26,13 @@ staged sweep specified by
 Throughout: false positives 0/3313, differential and
 compile-or-fallback **0 divergences** at every landing, `VERIFY
 PASSED` (including `-race`, combinations, property-fuzz, and
-`aqldebug` lanes) and full `make test` before every commit.
+`borudebug` lanes) and full `make test` before every commit.
 
 > **Addendum (2026-07-04, maintainer direction):** the default flip in
 > action 1 was landed and then **reverted to opt-in** — compiled mode
 > is OFF by default, controlled by the checker-style flag family
-> `--compile` / `--force-compile` / `--no-compile` (+ `AQL_COMPILE` /
-> `AQL_FORCE_COMPILE` / `AQL_NO_COMPILE`, the `--no` twin winning over
+> `--compile` / `--force-compile` / `--no-compile` (+ `BORU_COMPILE` /
+> `BORU_FORCE_COMPILE` / `BORU_NO_COMPILE`, the `--no` twin winning over
 > everything). The safety case below still holds and the flip remains
 > a one-line change whenever the maintainer chooses to take it; the
 > other two endgame actions (the gated frontier, the standing
@@ -60,8 +60,8 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 > module fn-value-boundary rows (dynamic apply inside fn units), and
 > one fn-value-reaches-`drop` row — see the tier ledger in
 > `compiled_coverage_test.go` (`refusalGate = 9`). With that,
-> `ResolveCompileMode` returns `CompileTry` by default (`aql run` /
-> `aql do`), `EvalOptions` drives TRY, and `aql build` bakes TRY with
+> `ResolveCompileMode` returns `CompileTry` by default (`boru run` /
+> `boru do`), `EvalOptions` drives TRY, and `boru build` bakes TRY with
 > a new `--no-compile` opt-out (a frozen binary has no env knobs).
 > The `--no` twin and the env kill switch win over everything,
 > unchanged. **The whole-program fallback stays** (maintainer
@@ -80,7 +80,7 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 > bodies whose apply is the LAST statement — replayIsBodyTail — since
 > the replay fires at the RET and a later effectful statement would
 > otherwise reorder ahead of the callee's effects); the RET
-> then takes the **RetReplay** discipline (the CallAQL trim-only
+> then takes the **RetReplay** discipline (the CallBoru trim-only
 > return path for foreign-registry fns, count-exact-or-defer so a
 > runtime-variable residual falls back soundly). And the per-iteration
 > loop apply extends to Function params (`applyFn` re-push, apply-first
@@ -109,9 +109,9 @@ PASSED` (including `-race`, combinations, property-fuzz, and
 
 1. **Compiled mode is the default.** `ResolveCompileMode` returns
    `CompileTry` with no flags — the Stage-7 flip the rollout contract
-   reserved (`AQL_NO_COMPILE` is the kill switch; `--force-compile`
+   reserved (`BORU_NO_COMPILE` is the kill switch; `--force-compile`
    still upgrades refusal to a loud error; the legacy `--compile` /
-   `AQL_COMPILE` opt-ins are accepted no-ops). Safety case: the
+   `BORU_COMPILE` opt-ins are accepted no-ops). Safety case: the
    fallback is silent and sound ("slow, not wrong"), and the
    differential gates hold byte-identical values *and* error taxonomy
    across the 3,875-row corpus, the combination matrix, and the fuzz
@@ -152,4 +152,4 @@ The voxgig force-compile sweep (M5) remains blocked-external — the
 client corpus is not in this environment; the 35/48 figure from PR
 #224 is the last measured value and the sweep re-run is owed at the
 next environment that carries it. Bytecode serialization for
-`aql build` remains explicitly unproposed.
+`boru build` remains explicitly unproposed.

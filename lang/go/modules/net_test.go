@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// End-to-end coverage for the aql:net socket tier (net_socket.go) and
+// End-to-end coverage for the boru:net socket tier (net_socket.go) and
 // codec tier (net_codec.go), over real loopback sockets on ephemeral
 // ports (`{tcp: 0}` + `Net.addr`). Positive paths are paired with the
 // negative contracts (timeout, closed, no codec, policy denial) per
@@ -57,7 +57,7 @@ func lastString(t *testing.T, vals []native.Value) string {
 // bytes in, raw bytes out, framing by recv-until.
 func TestNetServeRawEcho(t *testing.T) {
 	out, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def nl (convert Bytes "\n")`,
 		`def ln (Net.serve-raw {tcp: 0} ([conn:Any] => [
 		   def line (Net.recv-until conn nl {within: 5000})
@@ -83,7 +83,7 @@ func TestNetServeRawEcho(t *testing.T) {
 // recv-bytes reads exactly n; the listener side uses accept directly.
 func TestNetListenAcceptRecvBytes(t *testing.T) {
 	out, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def ln (Net.listen {tcp: 0})`,
 		`def lna (Net.addr ln)`,
 		`def port lna.port`,
@@ -113,7 +113,7 @@ func TestNetListenAcceptRecvBytes(t *testing.T) {
 // A recv deadline on a silent peer raises `timeout` — the slow-loris guard.
 func TestNetRecvTimeoutRaises(t *testing.T) {
 	_, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def ln (Net.listen {tcp: 0})`,
 		`def lna (Net.addr ln)`,
 		`def port lna.port`,
@@ -129,7 +129,7 @@ func TestNetRecvTimeoutRaises(t *testing.T) {
 // never allowed to block a runner forever when {within} is given.
 func TestNetAcceptTimeoutRaises(t *testing.T) {
 	_, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def ln (Net.listen {tcp: 0})`,
 		`Net.accept ln {within: 60}`,
 	})
@@ -143,7 +143,7 @@ func TestNetAcceptTimeoutRaises(t *testing.T) {
 // must not inherit the expired deadline.
 func TestNetAcceptWithinAcceptsPending(t *testing.T) {
 	out, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def ln (Net.listen {tcp: 0})`,
 		`def lna (Net.addr ln)`,
 		`def port lna.port`,
@@ -169,7 +169,7 @@ func TestNetAcceptWithinAcceptsPending(t *testing.T) {
 // Reading from a peer-closed socket raises `closed`.
 func TestNetRecvClosedRaises(t *testing.T) {
 	_, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def ln (Net.serve-raw {tcp: 0} ([conn:Any] => [ Net.close conn ]))`,
 		`def lna (Net.addr ln)`,
 		`def port lna.port`,
@@ -184,7 +184,7 @@ func TestNetRecvClosedRaises(t *testing.T) {
 // Dialing a dead port raises `transport`.
 func TestNetConnectRefusedRaisesTransport(t *testing.T) {
 	_, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		// Bind + close a listener to get a port that is now dead.
 		`def ln (Net.listen {tcp: 0})`,
 		`def lna (Net.addr ln)`,
@@ -205,7 +205,7 @@ func TestNetBadOptionsRejected(t *testing.T) {
 		`Net.connect-raw {tcp: 39001}`, // dial wants "host:port" String
 		`Net.connect-raw {}`,           // no tcp:
 	} {
-		_, err := runNetSteps(t, []string{`import "aql:net"`, src})
+		_, err := runNetSteps(t, []string{`import "boru:net"`, src})
 		if err == nil || !strings.Contains(err.Error(), "net_error") {
 			t.Errorf("%s: want net_error, got %v", src, err)
 		}
@@ -249,7 +249,7 @@ func TestNetListenPolicyAllowedByFull(t *testing.T) {
 
 func TestNetLinesCodecEndToEnd(t *testing.T) {
 	out, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def echo-svc (service {})`,
 		`add {} ([req:Map state:Any] => [ join "" ["<" req.line ">"] ]) echo-svc`,
 		`def ln (Net.listen {tcp: 0 codec: Net.lines} echo-svc)`,
@@ -271,7 +271,7 @@ func TestNetLinesCodecEndToEnd(t *testing.T) {
 
 func TestNetJSONLinesCodecEndToEnd(t *testing.T) {
 	out, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def svc (service {})`,
 		`add {op:"sum"} ([req:Map state:Any] => [ {result: (add req.a req.b)} ]) svc`,
 		`def ln (Net.listen {tcp: 0 codec: Net.json-lines} svc)`,
@@ -296,7 +296,7 @@ func TestNetJSONLinesCodecEndToEnd(t *testing.T) {
 // surface req.params, unmatched paths become a 404 error reply.
 func TestNetHTTPCodecWithRouteParams(t *testing.T) {
 	out, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def api (service {})`,
 		`add {method:"GET" path:"/hello"} ([req:Map state:Any] => [ {greeting: "hi"} ]) api`,
 		`add {method:"GET" path:"/items/:id"} ([req:Map state:Any] => [ {item: req.params.id} ]) api`,
@@ -322,13 +322,13 @@ func TestNetHTTPCodecWithRouteParams(t *testing.T) {
 	}
 }
 
-// A custom codec written in AQL — the §6.6 extension point: a trivial
+// A custom codec written in boru — the §6.6 extension point: a trivial
 // "shout" protocol (frames end in "!") defined as a plain {decode
 // encode} map of lambdas.
-func TestNetCustomAQLCodec(t *testing.T) {
+func TestNetCustomBoruCodec(t *testing.T) {
 	out, err := runNetSteps(t, []string{
-		`import "aql:net"`,
-		`import "aql:string-util"`,
+		`import "boru:net"`,
+		`import "boru:string-util"`,
 		`def bang (convert Bytes "!")`,
 		`def shout-codec {
 		   decode: ([buf:Any] => [
@@ -367,7 +367,7 @@ func TestNetCustomAQLCodec(t *testing.T) {
 // listen without a codec is refused — a wire protocol is never implicit.
 func TestNetListenServiceRequiresCodec(t *testing.T) {
 	_, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		`def svc (service {})`,
 		`Net.listen {tcp: 0} svc`,
 	})
@@ -379,7 +379,7 @@ func TestNetListenServiceRequiresCodec(t *testing.T) {
 // An endpoint call deadline on a stalled server raises `timeout`.
 func TestNetEndpointCallTimeout(t *testing.T) {
 	_, err := runNetSteps(t, []string{
-		`import "aql:net"`,
+		`import "boru:net"`,
 		// A raw listener that accepts but never replies.
 		`def ln (Net.serve-raw {tcp: 0} ([conn:Any] => [ Net.recv-bytes conn 999999 {within: 10000} ]))`,
 		`def lna (Net.addr ln)`,

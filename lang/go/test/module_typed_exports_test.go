@@ -5,10 +5,10 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
-// geoModule is an AQL module, defined inline and imported, that exports
+// geoModule is a boru module, defined inline and imported, that exports
 // two USER-DEFINED TYPES and two functions whose signatures accept those
 // types:
 //

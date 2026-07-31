@@ -1,9 +1,9 @@
-# AQL Language Specification: KEYWORD SLOTS in fn signatures
+# boru Language Specification: KEYWORD SLOTS in fn signatures
 # Format: input<TAB>expected<TAB>description
 #
 # A /q param whose atom names NO type is a KEYWORD slot: it matches
 # exactly that one literal word (binding-agnostically, like every /q
-# slot). This is the AQL-source spelling of the keyword slots the def
+# slot). This is the boru-source spelling of the keyword slots the def
 # constructor forms use internally (`def name fn […]` matches the
 # literal word `fn`) — the syntax-rules-literal mechanism, usable for
 # user binder / DSL keywords. The kernel branch is patternsOk

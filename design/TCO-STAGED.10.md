@@ -12,7 +12,7 @@ taxonomy is honest (tail → `evaluation_limit`, non-tail →
 existed for deep tail chains that now run in O(1)), and
 `Registry.TCO.Disable` is demoted to a diagnostic (turning it off now
 breaks the documented resource semantics). Residual non-guarantee
-items (the same-registry CallAQL value branch, an `execFnDefSig`
+items (the same-registry CallBoru value branch, an `execFnDefSig`
 probe hook, native-module config propagation) are recorded under the
 Stage-5 findings. Companion to `TCO.10.md`
 (the deferred frame-replacement design): this note re-reviews that
@@ -120,9 +120,9 @@ Findings for the remaining stages:
   (`lang/go/test/tco_module_test.go`, recursion.tsv §11):
   module-preamble fns are `InstallFnDef`'d **in the module registry**,
   so intra-module calls — including all module-fn self/mutual
-  recursion — dispatch by NAME through `execMatch` inside `CallAQL`'s
-  sub-engine, and **Stages 1–4b already apply**: one CallAQL boundary
-  crossing per entry, the first in-body call declined (the CallAQL
+  recursion — dispatch by NAME through `execMatch` inside `CallBoru`'s
+  sub-engine, and **Stages 1–4b already apply**: one CallBoru boundary
+  crossing per entry, the first in-body call declined (the CallBoru
   body is unwrapped — no enclosing frame), every further call
   replaced. Depth 100000 runs in O(1) tape through the module
   boundary; counters live on the module registry (per import
@@ -137,7 +137,7 @@ Findings for the remaining stages:
     popped on its behalf (hardening motivated by the F4 fn-value
     dispatch fix, which compiles foreign-registry values).
   Residual, separately gateable, deliberately not rushed:
-  - `execFnDefSig`'s CallAQL branch when `capturedReg == e.registry`
+  - `execFnDefSig`'s CallBoru branch when `capturedReg == e.registry`
     (a module-fn VALUE applied inside its own module — callbacks
     passed back in): one sub-engine per call today. Routing it onto
     the splice branch is a small flip, but it moves the drain/flow
@@ -158,7 +158,7 @@ Findings for the remaining stages:
 - Go-constructed `FnSig`s must set `BarrierPos: BarrierAllForward`
   explicitly (the Go zero means all-stack) — bit the taxonomy test;
   already documented in the kernel guide.
-- `lang.AQL` exposes no registry accessor, so kill-switch tests live in
+- `lang.Boru` exposes no registry accessor, so kill-switch tests live in
   `lang/go/test` (registry-level harness) rather than against the
   public API. If hosts need the switch, `lang.Options` would grow a
   field — defer until someone asks.
@@ -423,9 +423,9 @@ which is strictly inside any enclosing held region), but that is an
 audit conclusion to write down, not assume. If any site is doubtful,
 gate Stage 4 to top-level dispatch first and lift after the audit.
 
-### Stage 5 — CallAQL trampoline (module fns)
+### Stage 5 — CallBoru trampoline (module fns)
 
-Separate Go-recursive path (`Registry.CallAQL`, captured
+Separate Go-recursive path (`Registry.CallBoru`, captured
 sub-registry); its TCO analogue is a standard trampoline — detect the
 tail self-call and loop within one Run invocation. Independent code
 path, independently testable, needs its own dispatch trace first (the
@@ -466,14 +466,14 @@ reversible; that is most of why the stages are ordered this way.
 - **Explicit `recur` word** (TCO.10.md's stepping stone): *not*
   "trivially correct" as described. Non-tail `recur` (`n add (recur
   (n sub 1))`) hits exactly the §1c hazards, so a safe `recur` needs
-  the same probe (or a checker pass that AQL doesn't have) — at which
+  the same probe (or a checker pass that boru doesn't have) — at which
   point it is Stage 3 with extra permanent syntax users must learn
   and the natural spelling still unoptimised. The detection dry-run
   (Stage 2) delivers the de-risking `recur` promised, without the API
   commitment. Recommend dropping it.
 - **Library-level relief valve**: a native `iterate`-style word (apply
   a Function value to a seed until a sentinel, looping in Go around
-  `CallAQL`) gives users constant-space functional iteration *today*
+  `CallBoru`) gives users constant-space functional iteration *today*
   with zero dispatch-core risk. Orthogonal to all stages; worth
   considering if expressiveness pressure arrives before Stage 4. `for`
   already covers the imperative shape.

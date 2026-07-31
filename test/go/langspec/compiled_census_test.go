@@ -23,7 +23,7 @@ import (
 	"sync"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // census is the whole-corpus tally: the per-row disposition (native /
@@ -39,7 +39,7 @@ type census struct {
 	refusalBuckets map[string]int // normaliseReason -> count, over refused rows only
 	refusedRows    []refusedRow   // one entry per refused row, in corpus order
 
-	// Re-scoped P7 partition (design/aql-bytecode-completion.0.md §3) over the
+	// Re-scoped P7 partition (design/boru-bytecode-completion.0.md §3) over the
 	// not-fully-native rows (refused OR islanded): tier 1 interpreter-only
 	// (permanent), tier 2 reducible (TODO), allowlisted error rows, and the
 	// remaining compute frontier.

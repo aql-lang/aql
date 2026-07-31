@@ -3,7 +3,7 @@ package native
 import (
 	"fmt"
 
-	eng "github.com/aql-lang/aql/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // This file holds the user-facing error words (design/ERRORS.8.md §2,
@@ -13,9 +13,9 @@ import (
 //	raise bad_input "expected a list"     explicit code (bare word ok)
 //	raise {code: bad_input, message: "…", got: 42}
 //
-// `raise` constructs the same AqlError native handlers return, so the
+// `raise` constructs the same BoruError native handlers return, so the
 // engine's existing abort/catch machinery applies unchanged: uncaught
-// it formats as [aql/<code>], and `do [body] error [handler]` catches
+// it formats as [boru/<code>], and `do [body] error [handler]` catches
 // it as the same Ideal/Error value native errors produce. Extra spec-
 // map keys ride along on the Error value (ErrorInfo.Data) for
 // programmatic handlers; the formatter prints code + message only.
@@ -107,7 +107,7 @@ func raiseReturns(args []Value, r *Registry) []Value {
 					code = c
 				}
 			}
-			detail = fmt.Sprintf("raise: unconditionally raises [aql/%s]: %s", code, msg)
+			detail = fmt.Sprintf("raise: unconditionally raises [boru/%s]: %s", code, msg)
 		}
 		eng.CheckAddUniqueDiagnostic(r, "unconditional_raise", detail, "raise", args[0].Pos())
 	}
@@ -117,32 +117,32 @@ func raiseReturns(args []Value, r *Registry) []Value {
 func raiseMessageHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	msg, err := args[0].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("raise_error", "raise: message must be a concrete string", "raise")
+		return nil, r.BoruError("raise_error", "raise: message must be a concrete string", "raise")
 	}
-	return nil, r.AqlError("user_error", msg, "raise")
+	return nil, r.BoruError("user_error", msg, "raise")
 }
 
 func raiseCodeMessageHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	code, err := args[0].AsConcreteAtom()
 	if err != nil {
-		return nil, r.AqlError("raise_error", "raise: code must be an atom (a bare word works: raise bad_input \"…\")", "raise")
+		return nil, r.BoruError("raise_error", "raise: code must be an atom (a bare word works: raise bad_input \"…\")", "raise")
 	}
 	msg, err := args[1].AsConcreteString()
 	if err != nil {
-		return nil, r.AqlError("raise_error", "raise: message must be a concrete string", "raise")
+		return nil, r.BoruError("raise_error", "raise: message must be a concrete string", "raise")
 	}
-	return nil, r.AqlError(code, msg, "raise")
+	return nil, r.BoruError(code, msg, "raise")
 }
 
 func raiseSpecHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	m, err := RequireConcreteMap(args[0], "raise")
 	if err != nil {
-		return nil, r.AqlError("raise_error", "raise: spec must be a concrete map", "raise")
+		return nil, r.BoruError("raise_error", "raise: spec must be a concrete map", "raise")
 	}
 	codeVal, hasCode := m.Get("code")
 	msgVal, hasMsg := m.Get("message")
 	if !hasCode || !hasMsg {
-		return nil, r.AqlErrorHint("raise_error",
+		return nil, r.BoruErrorHint("raise_error",
 			"raise: spec map needs both 'code' and 'message' keys", "raise",
 			`hint: raise {code: bad_input, message: "expected a list"} — extra keys ride along for the handler`)
 	}
@@ -151,13 +151,13 @@ func raiseSpecHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		if s, serr := codeVal.AsConcreteString(); serr == nil {
 			code = s
 		} else {
-			return nil, r.AqlError("raise_error",
+			return nil, r.BoruError("raise_error",
 				fmt.Sprintf("raise: code must be an atom or string, got %s", codeVal.String()), "raise")
 		}
 	}
 	msg, merr := msgVal.AsConcreteString()
 	if merr != nil {
-		return nil, r.AqlError("raise_error",
+		return nil, r.BoruError("raise_error",
 			fmt.Sprintf("raise: message must be a string, got %s", msgVal.String()), "raise")
 	}
 	var data *OrderedMap
@@ -171,7 +171,7 @@ func raiseSpecHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 		v, _ := m.Get(k)
 		data.Set(k, v)
 	}
-	ae := MakeAqlError(code, msg, "raise", r.Source, "")
+	ae := MakeBoruError(code, msg, "raise", r.Source, "")
 	ae.Data = data
 	return nil, ae
 }
@@ -212,7 +212,7 @@ func getErrorFieldHandler(args []Value, _ map[string]Value, _ []Value, r *Regist
 	key := ValToString(args[0])
 	ei, err := AsError(args[1])
 	if err != nil {
-		return nil, r.AqlError("get_error", "get: not an error value", "get")
+		return nil, r.BoruError("get_error", "get: not an error value", "get")
 	}
 	switch key {
 	case "code":

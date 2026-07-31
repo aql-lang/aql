@@ -1,113 +1,113 @@
-# AQL Language Specification: the aql:sift module
+# boru Language Specification: the boru:sift module
 # Format: input<TAB>expected<TAB>description
 #
-# aql:sift — the semi-structured-text tier (design/SIFT.0.md), implemented in
-# AQL (lang/go/modules/sift.aql). Six format families (kv, blocks, columns,
+# boru:sift — the semi-structured-text tier (design/SIFT.0.md), implemented in
+# boru (lang/go/modules/sift.boru). Six format families (kv, blocks, columns,
 # dsv, fixed, pattern) drive the Sift namespace (Sift.parse / define / kinds /
 # families / spec / detect / check); a spec-map is a parser expressed as data.
 # v1 surface is the Sift namespace only — a module body runs in a discarded
 # sub-registry and so cannot register a global `parse <kind>`. Every row leads
-# with `import "aql:sift"`.
+# with `import "boru:sift"`.
 #
 # ─────────────────────────────────────────────────────────────────────
 # §1  families — the six format-family atoms
-import "aql:sift"  Sift.families	[kv/q blocks/q columns/q dsv/q fixed/q pattern/q]	the six format families, in order
+import "boru:sift"  Sift.families	[kv/q blocks/q columns/q dsv/q fixed/q pattern/q]	the six format families, in order
 #
 # §2  kv — key/value lines → Map
-import "aql:sift"  Sift.parse kv/q {sep:':'} "a: 1\nb: 2"	{a:'1' b:'2'}	kv splits on the first separator; values are strings by default
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'integer'} "a: 1\nb: 2") dot a	1	vtype coerces every value
-import "aql:sift"  (Sift.parse kv/q {sep:':' names:'normalize'} "MemTotal: 4") dot mem-total	'4'	names:'normalize' kebab-cases the key
-import "aql:sift"  (Sift.parse kv/q {sep:':' names:'normalize' vtype:'size'} "MemTotal: 16297200 kB") dot mem-total	16688332800	vtype:'size' scales a kB value to Integer bytes
-import "aql:sift"  Sift.parse kv/q {sep:'=' unquote:true} "N=\"x\""	{N:'x'}	unquote strips one matched quote pair
-import "aql:sift"  Sift.parse kv/q {sep:':' repeat:'first'} "a: 1\na: 2"	{a:'1'}	repeat:'first' keeps the first value
-import "aql:sift"  Sift.parse kv/q {sep:':' repeat:'last'} "a: 1\na: 2"	{a:'2'}	repeat:'last' keeps the last value
-import "aql:sift"  Sift.parse kv/q {sep:':' repeat:'list'} "a: 1\na: 2"	{a:['1' '2']}	repeat:'list' collects duplicates into a list
-import "aql:sift"  Sift.parse kv/q {sep:':' repeat:'error'} "a: 1\na: 2"	ERROR:sift_parse_error	repeat:'error' rejects a duplicate key
-import "aql:sift"  Sift.parse kv/q {sep:':'} "bad line"	ERROR:sift_parse_error	a line with no separator raises under the default strict
-import "aql:sift"  Sift.parse kv/q {sep:':' strict:'skip'} "bad\na: 1"	{a:'1'}	strict:'skip' drops the malformed line
-import "aql:sift"  Sift.parse kv/q {sep:':' vtype:'integer' strict:'skip'} "a: x\nb: 2"	{b:2}	strict:'skip' drops a coercion failure
-import "aql:sift"  Sift.parse kv/q {sep:':' vtype:'integer'} "a: x"	ERROR:sift_type_error	a coercion failure raises under the default strict
-import "aql:sift"  Sift.parse kv/q {sep:':' repeat:'nope'} "a: 1"	ERROR:sift_spec_error	an unknown repeat mode is a spec error
+import "boru:sift"  Sift.parse kv/q {sep:':'} "a: 1\nb: 2"	{a:'1' b:'2'}	kv splits on the first separator; values are strings by default
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'integer'} "a: 1\nb: 2") dot a	1	vtype coerces every value
+import "boru:sift"  (Sift.parse kv/q {sep:':' names:'normalize'} "MemTotal: 4") dot mem-total	'4'	names:'normalize' kebab-cases the key
+import "boru:sift"  (Sift.parse kv/q {sep:':' names:'normalize' vtype:'size'} "MemTotal: 16297200 kB") dot mem-total	16688332800	vtype:'size' scales a kB value to Integer bytes
+import "boru:sift"  Sift.parse kv/q {sep:'=' unquote:true} "N=\"x\""	{N:'x'}	unquote strips one matched quote pair
+import "boru:sift"  Sift.parse kv/q {sep:':' repeat:'first'} "a: 1\na: 2"	{a:'1'}	repeat:'first' keeps the first value
+import "boru:sift"  Sift.parse kv/q {sep:':' repeat:'last'} "a: 1\na: 2"	{a:'2'}	repeat:'last' keeps the last value
+import "boru:sift"  Sift.parse kv/q {sep:':' repeat:'list'} "a: 1\na: 2"	{a:['1' '2']}	repeat:'list' collects duplicates into a list
+import "boru:sift"  Sift.parse kv/q {sep:':' repeat:'error'} "a: 1\na: 2"	ERROR:sift_parse_error	repeat:'error' rejects a duplicate key
+import "boru:sift"  Sift.parse kv/q {sep:':'} "bad line"	ERROR:sift_parse_error	a line with no separator raises under the default strict
+import "boru:sift"  Sift.parse kv/q {sep:':' strict:'skip'} "bad\na: 1"	{a:'1'}	strict:'skip' drops the malformed line
+import "boru:sift"  Sift.parse kv/q {sep:':' vtype:'integer' strict:'skip'} "a: x\nb: 2"	{b:2}	strict:'skip' drops a coercion failure
+import "boru:sift"  Sift.parse kv/q {sep:':' vtype:'integer'} "a: x"	ERROR:sift_type_error	a coercion failure raises under the default strict
+import "boru:sift"  Sift.parse kv/q {sep:':' repeat:'nope'} "a: 1"	ERROR:sift_spec_error	an unknown repeat mode is a spec error
 #
 # §3  blocks — blank-line-separated kv blocks → List of Maps
-import "aql:sift"  size (Sift.parse blocks/q {} "a: 1\n\nb: 2")	2	two blank-separated blocks (kvsep defaults to ':')
-import "aql:sift"  size (Sift.parse blocks/q {sep:'indent'} "eth0:\n  a: 1\nlo:\n  b: 2")	2	sep:'indent' starts a block at each unindented line
-import "aql:sift"  Sift.parse blocks/q {sep:'bad'} "a: 1"	ERROR:sift_spec_error	an unknown block separator is a spec error
+import "boru:sift"  size (Sift.parse blocks/q {} "a: 1\n\nb: 2")	2	two blank-separated blocks (kvsep defaults to ':')
+import "boru:sift"  size (Sift.parse blocks/q {sep:'indent'} "eth0:\n  a: 1\nlo:\n  b: 2")	2	sep:'indent' starts a block at each unindented line
+import "boru:sift"  Sift.parse blocks/q {sep:'bad'} "a: 1"	ERROR:sift_spec_error	an unknown block separator is a spec error
 #
 # §4  columns — whitespace-aligned table with header → Table
-import "aql:sift"  size (Sift.parse columns/q {} "H1 H2\n1 2\n3 4")	2	the header row is consumed; two data rows
-import "aql:sift"  Sift.parse columns/q {header:false} "1 2"	ERROR:sift_spec_error	header:false requires fields
+import "boru:sift"  size (Sift.parse columns/q {} "H1 H2\n1 2\n3 4")	2	the header row is consumed; two data rows
+import "boru:sift"  Sift.parse columns/q {header:false} "1 2"	ERROR:sift_spec_error	header:false requires fields
 #
 # §5  dsv — delimited rows, no header → Table
-import "aql:sift"  size (Sift.parse dsv/q {sep:':' fields:['u' 'p']} "root:x\ndaemon:y")	2	dsv with a literal separator and named fields
-import "aql:sift"  size (Sift.parse dsv/q {sep:':'} "a:b:c")	1	default auto-names c1..cN
+import "boru:sift"  size (Sift.parse dsv/q {sep:':' fields:['u' 'p']} "root:x\ndaemon:y")	2	dsv with a literal separator and named fields
+import "boru:sift"  size (Sift.parse dsv/q {sep:':'} "a:b:c")	1	default auto-names c1..cN
 #
 # §6  fixed — fixed-width columns → Table
-import "aql:sift"  size (Sift.parse fixed/q {widths:[3 3]} "abcdef")	1	fixed-width by consecutive widths
-import "aql:sift"  Sift.parse fixed/q {} "abc"	ERROR:sift_spec_error	fixed needs cols or widths
+import "boru:sift"  size (Sift.parse fixed/q {widths:[3 3]} "abcdef")	1	fixed-width by consecutive widths
+import "boru:sift"  Sift.parse fixed/q {} "abc"	ERROR:sift_spec_error	fixed needs cols or widths
 #
 # §7  pattern — regex with named groups → Map / Table
-import "aql:sift"  (Sift.parse pattern/q {re:'^(?P<a>\\w+) (?P<b>\\d+)$'} "x 5") dot b	'5'	named groups become fields
-import "aql:sift"  (Sift.parse pattern/q {re:'^(?P<a>\\w+)(?: (?P<b>\\d+))?$'} "x") dot b	none	a non-participating optional group yields None
-import "aql:sift"  Sift.parse pattern/q {re:'no groups'} "x"	ERROR:sift_spec_error	pattern requires at least one named group
-import "aql:sift"  Sift.parse pattern/q {re:'(?P<a>z)'} "x"	ERROR:sift_parse_error	no match raises under the default strict
-import "aql:sift"  Sift.parse pattern/q {re:'(?P<a>z)' strict:'skip'} "x"	none	no match under strict:'skip' yields None
+import "boru:sift"  (Sift.parse pattern/q {re:'^(?P<a>\\w+) (?P<b>\\d+)$'} "x 5") dot b	'5'	named groups become fields
+import "boru:sift"  (Sift.parse pattern/q {re:'^(?P<a>\\w+)(?: (?P<b>\\d+))?$'} "x") dot b	none	a non-participating optional group yields None
+import "boru:sift"  Sift.parse pattern/q {re:'no groups'} "x"	ERROR:sift_spec_error	pattern requires at least one named group
+import "boru:sift"  Sift.parse pattern/q {re:'(?P<a>z)'} "x"	ERROR:sift_parse_error	no match raises under the default strict
+import "boru:sift"  Sift.parse pattern/q {re:'(?P<a>z)' strict:'skip'} "x"	none	no match under strict:'skip' yields None
 #
 # §8  Sift.parse — inline spec and by-name
-import "aql:sift"  Sift.parse {family:'kv' opts:{sep:'='}} "a=1"	{a:'1'}	an inline spec parses without registering
-import "aql:sift"  Sift.parse {family:'nope'} "x"	ERROR:sift_spec_error	an unknown family in an inline spec is a spec error
-import "aql:sift"  Sift.parse "missing" "x"	ERROR:sift_unknown_kind	an unknown kind name is rejected
+import "boru:sift"  Sift.parse {family:'kv' opts:{sep:'='}} "a=1"	{a:'1'}	an inline spec parses without registering
+import "boru:sift"  Sift.parse {family:'nope'} "x"	ERROR:sift_spec_error	an unknown family in an inline spec is a spec error
+import "boru:sift"  Sift.parse "missing" "x"	ERROR:sift_unknown_kind	an unknown kind name is rejected
 #
 # §9  define / spec / kinds / detect
-import "aql:sift"  Sift.define ex {family:'kv' opts:{sep:'='}} end  Sift.parse ex/q "a=1"	{a:'1'}	a defined kind is an ordinary parse kind
-import "aql:sift"  Sift.define ex {family:'kv'} end  (Sift.spec ex) dot family	kv/q	Sift.spec returns the merged spec
-import "aql:sift"  Sift.define ex {family:'kv'} end  Sift.define ex {family:'dsv'}	ERROR:sift_kind_exists	a genuine re-definition collides
-import "aql:sift"  Sift.define kv {family:'kv'}	ERROR:sift_kind_exists	a name that collides with a family is rejected
-import "aql:sift"  Sift.define Bad {family:'kv'}	ERROR:sift_bad_name	a capitalised kind name is rejected
-import "aql:sift"  Sift.spec nope	ERROR:sift_unknown_kind	Sift.spec on an unknown kind is rejected
-import "aql:sift"  Sift.define m {family:'kv' detect:{path:["/proc/meminfo"]}} end  Sift.detect "/proc/meminfo"	m/q	detect resolves a path to its kind
-import "aql:sift"  Sift.detect "/nope"	none	an undetected path yields None
-import "aql:sift"  Sift.define p {family:'columns' detect:{cmd:{match:["ps"]}}} end  Sift.detect ["ps" "aux"]	p/q	detect resolves an argv0 basename to its kind
-import "aql:sift"  Sift.define a {family:'kv' detect:{path:["/x"]}} end  Sift.define b {family:'kv' detect:{path:["/x"]}}	ERROR:sift_detect_conflict	two kinds cannot claim one path
+import "boru:sift"  Sift.define ex {family:'kv' opts:{sep:'='}} end  Sift.parse ex/q "a=1"	{a:'1'}	a defined kind is an ordinary parse kind
+import "boru:sift"  Sift.define ex {family:'kv'} end  (Sift.spec ex) dot family	kv/q	Sift.spec returns the merged spec
+import "boru:sift"  Sift.define ex {family:'kv'} end  Sift.define ex {family:'dsv'}	ERROR:sift_kind_exists	a genuine re-definition collides
+import "boru:sift"  Sift.define kv {family:'kv'}	ERROR:sift_kind_exists	a name that collides with a family is rejected
+import "boru:sift"  Sift.define Bad {family:'kv'}	ERROR:sift_bad_name	a capitalised kind name is rejected
+import "boru:sift"  Sift.spec nope	ERROR:sift_unknown_kind	Sift.spec on an unknown kind is rejected
+import "boru:sift"  Sift.define m {family:'kv' detect:{path:["/proc/meminfo"]}} end  Sift.detect "/proc/meminfo"	m/q	detect resolves a path to its kind
+import "boru:sift"  Sift.detect "/nope"	none	an undetected path yields None
+import "boru:sift"  Sift.define p {family:'columns' detect:{cmd:{match:["ps"]}}} end  Sift.detect ["ps" "aux"]	p/q	detect resolves an argv0 basename to its kind
+import "boru:sift"  Sift.define a {family:'kv' detect:{path:["/x"]}} end  Sift.define b {family:'kv' detect:{path:["/x"]}}	ERROR:sift_detect_conflict	two kinds cannot claim one path
 #
 # §10  check
-import "aql:sift"  Sift.kinds	[kv/q blocks/q columns/q dsv/q fixed/q pattern/q]	Sift.kinds lists every registered kind (the six families at import)
-import "aql:sift"  Sift.check {family:'kv'}	[]	a valid spec yields no issues
-import "aql:sift"  (Sift.check {family:'bogus'}) dot 0 dot code	sift_spec_error/q	check reports the issue code
-import "aql:sift"  size (Sift.check {family:'kv' junk:1})	1	check reports an unknown-key issue without raising
+import "boru:sift"  Sift.kinds	[kv/q blocks/q columns/q dsv/q fixed/q pattern/q]	Sift.kinds lists every registered kind (the six families at import)
+import "boru:sift"  Sift.check {family:'kv'}	[]	a valid spec yields no issues
+import "boru:sift"  (Sift.check {family:'bogus'}) dot 0 dot code	sift_spec_error/q	check reports the issue code
+import "boru:sift"  size (Sift.check {family:'kv' junk:1})	1	check reports an unknown-key issue without raising
 #
 # §11  coercions, preprocessing, and family options (branch coverage)
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'float'} "a: 1.5") dot a	1.5	float coercion
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'boolean'} "a: yes") dot a	true	boolean coercion accepts yes/no/on/off/1/0
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'boolean'} "a: nope") dot a	ERROR:sift_type_error	a non-boolean value raises
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'percent'} "a: 55%") dot a	55.0	percent strips the sign to a Float
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'auto'} "a: 42") dot a	42	auto infers Integer
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'auto'} "a: 4.5") dot a	4.5	auto infers Float
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'auto'} "a: true") dot a	true	auto infers Boolean
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'auto'} "a: hello") dot a	'hello'	auto falls back to String
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'size'} "a: 2 MiB") dot a	2097152	size understands MiB
-import "aql:sift"  (Sift.parse kv/q {sep:':' vtype:'integer'} "a:") dot a	none	an empty cell under a typed column is None
-import "aql:sift"  Sift.parse kv/q {sep:':' vtype:'nope'} "a: 1"	ERROR:sift_spec_error	an unknown vtype is a spec error
-import "aql:sift"  (Sift.parse kv/q {sep:':' skip:1} "drop\na: 1") dot a	'1'	skip drops leading lines
-import "aql:sift"  size (Sift.parse dsv/q {sep:':' chop:1} "a\nb\nc")	2	chop drops trailing lines
-import "aql:sift"  size (Sift.parse dsv/q {sep:':' comment:'#'} "a\n#skip\nb")	2	comment drops full-line comments
-import "aql:sift"  Sift.parse kv/q {sep:':' skip:-1} "a: 1"	ERROR:sift_spec_error	a negative skip is rejected
-import "aql:sift"  Sift.parse kv/q {sep:':' strict:'nope'} "a: 1"	ERROR:sift_spec_error	an unknown strict mode is rejected
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'float'} "a: 1.5") dot a	1.5	float coercion
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'boolean'} "a: yes") dot a	true	boolean coercion accepts yes/no/on/off/1/0
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'boolean'} "a: nope") dot a	ERROR:sift_type_error	a non-boolean value raises
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'percent'} "a: 55%") dot a	55.0	percent strips the sign to a Float
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'auto'} "a: 42") dot a	42	auto infers Integer
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'auto'} "a: 4.5") dot a	4.5	auto infers Float
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'auto'} "a: true") dot a	true	auto infers Boolean
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'auto'} "a: hello") dot a	'hello'	auto falls back to String
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'size'} "a: 2 MiB") dot a	2097152	size understands MiB
+import "boru:sift"  (Sift.parse kv/q {sep:':' vtype:'integer'} "a:") dot a	none	an empty cell under a typed column is None
+import "boru:sift"  Sift.parse kv/q {sep:':' vtype:'nope'} "a: 1"	ERROR:sift_spec_error	an unknown vtype is a spec error
+import "boru:sift"  (Sift.parse kv/q {sep:':' skip:1} "drop\na: 1") dot a	'1'	skip drops leading lines
+import "boru:sift"  size (Sift.parse dsv/q {sep:':' chop:1} "a\nb\nc")	2	chop drops trailing lines
+import "boru:sift"  size (Sift.parse dsv/q {sep:':' comment:'#'} "a\n#skip\nb")	2	comment drops full-line comments
+import "boru:sift"  Sift.parse kv/q {sep:':' skip:-1} "a: 1"	ERROR:sift_spec_error	a negative skip is rejected
+import "boru:sift"  Sift.parse kv/q {sep:':' strict:'nope'} "a: 1"	ERROR:sift_spec_error	an unknown strict mode is rejected
 #
 # §12  columns / dsv / fixed / pattern option branches
-import "aql:sift"  (Sift.parse columns/q {fields:['a' 'b']} "H1 H2\n1 2") dot 0 dot a	'1'	fields override consumes but ignores the header
-import "aql:sift"  (Sift.parse columns/q {} "%CPU CMD\n9 top") dot 0 dot cpu	'9'	headers normalize (%CPU → cpu)
-import "aql:sift"  (Sift.parse columns/q {label:'kind'} "used free\nMem: 9 1") dot 0 dot kind	'Mem'	label mode names the row by its first token
-import "aql:sift"  ((Sift.parse columns/q {fields:['a' 'z2'] header:false} "one two three") get 0) get 'z2'	'two three'	the last column is greedy
-import "aql:sift"  (Sift.parse dsv/q {limit:2 fields:['a' 'b']} "x y z") dot 0 dot b	'y z'	dsv limit makes the last field greedy
-import "aql:sift"  (Sift.parse fixed/q {cols:[[0 3] [3 -1]] fields:['a' 'b']} "abcdefg") dot 0 dot b	'defg'	fixed cols with -1 reaching end of line
-import "aql:sift"  Sift.parse fixed/q {cols:[[0 1] [1 2]] widths:[1]} "ab"	ERROR:sift_spec_error	cols and widths are mutually exclusive spans vs fields count
-import "aql:sift"  (Sift.parse pattern/q {re:'(?P<n>\\d+)' per:'line' vtype:'integer'} "x 1\ny 2") dot 0 dot n	1	pattern per:'line' yields a row per matching line
-import "aql:sift"  size (Sift.parse pattern/q {re:'(?P<n>\\d+)' per:'line' strict:'skip'} "a\nx 1")	1	per:'line' with strict:'skip' drops non-matching lines
-import "aql:sift"  Sift.parse pattern/q {re:'(?P<n>\\d+)' per:'nope'} "1"	ERROR:sift_spec_error	an unknown per mode is rejected
-import "aql:sift"  Sift.parse pattern/q {re:'([bad'} "x"	ERROR:sift_spec_error	a malformed regexp is a spec error
+import "boru:sift"  (Sift.parse columns/q {fields:['a' 'b']} "H1 H2\n1 2") dot 0 dot a	'1'	fields override consumes but ignores the header
+import "boru:sift"  (Sift.parse columns/q {} "%CPU CMD\n9 top") dot 0 dot cpu	'9'	headers normalize (%CPU → cpu)
+import "boru:sift"  (Sift.parse columns/q {label:'kind'} "used free\nMem: 9 1") dot 0 dot kind	'Mem'	label mode names the row by its first token
+import "boru:sift"  ((Sift.parse columns/q {fields:['a' 'z2'] header:false} "one two three") get 0) get 'z2'	'two three'	the last column is greedy
+import "boru:sift"  (Sift.parse dsv/q {limit:2 fields:['a' 'b']} "x y z") dot 0 dot b	'y z'	dsv limit makes the last field greedy
+import "boru:sift"  (Sift.parse fixed/q {cols:[[0 3] [3 -1]] fields:['a' 'b']} "abcdefg") dot 0 dot b	'defg'	fixed cols with -1 reaching end of line
+import "boru:sift"  Sift.parse fixed/q {cols:[[0 1] [1 2]] widths:[1]} "ab"	ERROR:sift_spec_error	cols and widths are mutually exclusive spans vs fields count
+import "boru:sift"  (Sift.parse pattern/q {re:'(?P<n>\\d+)' per:'line' vtype:'integer'} "x 1\ny 2") dot 0 dot n	1	pattern per:'line' yields a row per matching line
+import "boru:sift"  size (Sift.parse pattern/q {re:'(?P<n>\\d+)' per:'line' strict:'skip'} "a\nx 1")	1	per:'line' with strict:'skip' drops non-matching lines
+import "boru:sift"  Sift.parse pattern/q {re:'(?P<n>\\d+)' per:'nope'} "1"	ERROR:sift_spec_error	an unknown per mode is rejected
+import "boru:sift"  Sift.parse pattern/q {re:'([bad'} "x"	ERROR:sift_spec_error	a malformed regexp is a spec error
 #
 # §13  spec-map, opts overlay, and blocks table
-import "aql:sift"  Sift.parse {family:'kv' opts:{sep:':'}} {sep:'='} "a=1"	{a:'1'}	call-site opts overlay the spec's opts
-import "aql:sift"  size (Sift.parse blocks/q {table:true} "a: 1\nb: 2\n\na: 3\nb: 4")	2	blocks table:true builds a table (list of unified-column row maps)
-import "aql:sift"  Sift.parse {family:'fn'} "x"	ERROR:sift_spec_error	family:'fn' (the fn escape hatch) is deferred to a follow-up (design/SIFT.0.md §16)
+import "boru:sift"  Sift.parse {family:'kv' opts:{sep:':'}} {sep:'='} "a=1"	{a:'1'}	call-site opts overlay the spec's opts
+import "boru:sift"  size (Sift.parse blocks/q {table:true} "a: 1\nb: 2\n\na: 3\nb: 4")	2	blocks table:true builds a table (list of unified-column row maps)
+import "boru:sift"  Sift.parse {family:'fn'} "x"	ERROR:sift_spec_error	family:'fn' (the fn escape hatch) is deferred to a follow-up (design/SIFT.0.md §16)

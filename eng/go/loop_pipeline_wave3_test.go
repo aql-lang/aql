@@ -22,14 +22,14 @@ import (
 func cforRun(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	n, err := args[0].AsConcreteInteger()
 	if err != nil {
-		return nil, r.AqlError("for_error", "cfor: count must be a concrete Integer", "cfor")
+		return nil, r.BoruError("for_error", "cfor: count must be a concrete Integer", "cfor")
 	}
 	if n <= 0 {
 		return nil, nil
 	}
 	body := args[1]
 	if !IsConcrete(body) {
-		return nil, r.AqlError("for_error", "cfor: body must be a concrete list", "cfor")
+		return nil, r.BoruError("for_error", "cfor: body must be a concrete list", "cfor")
 	}
 	lst, _ := AsList(body)
 	bodySlice := lst.Slice()

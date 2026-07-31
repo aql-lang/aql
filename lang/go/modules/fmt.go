@@ -1,49 +1,49 @@
 package modules
 
 import (
-	"github.com/aql-lang/aql/lang/go/formatter"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/formatter"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// BuildFmtModule creates the "aql:fmt" native module: the source
-// pretty-printer, exposed as a runtime AQL API under the "Fmt" namespace.
+// BuildFmtModule creates the "boru:fmt" native module: the source
+// pretty-printer, exposed as a runtime boru API under the "Fmt" namespace.
 //
 // After import, the words are accessed via dot notation:
 //
-//	import "aql:fmt"
+//	import "boru:fmt"
 //	Fmt.format "def   x    1"        # => "def x 1\n"  — canonical layout
 //
 // The word wraps the shared, dependency-free driver in lang/go/formatter
-// (formatter.Format). The `aql fmt` CLI subcommand calls that SAME driver
+// (formatter.Format). The `boru fmt` CLI subcommand calls that SAME driver
 // directly on file bytes, so the command line and the language share one
 // implementation — a single source of formatting truth rather than two
 // paths that can drift (see design/FMT-MODULE.md, "Shared driver").
 //
-// aql:fmt is a capability/DSL module, so its namespace is the plain "Fmt"
+// boru:fmt is a capability/DSL module, so its namespace is the plain "Fmt"
 // (not the "*Util" form reserved for utility-helper libraries) — matching
-// aql:io -> IO and aql:net -> Net (lang/go/CLAUDE.md, "Naming rule").
+// boru:io -> IO and boru:net -> Net (lang/go/CLAUDE.md, "Naming rule").
 func BuildFmtModule(parent *native.Registry) (native.ModuleDesc, error) {
-	// Surface a stylesheet-parse failure (the embedded fmt-rules.aql — the
-	// rules are EXPRESSED IN AQL, see formatter/rules_aql.go) at module
+	// Surface a stylesheet-parse failure (the embedded fmt-rules.boru — the
+	// rules are EXPRESSED IN boru, see formatter/rules_boru.go) at module
 	// construction rather than formatting with a zero table — the ADR-005
 	// recorded-error pattern (native.TypeInitError precedent).
 	if err := formatter.DefaultRulesInitError(); err != nil {
 		return native.ModuleDesc{}, err
 	}
-	return buildDelegatingModule(parent, "aql:fmt", "Fmt", FmtNatives)
+	return buildDelegatingModule(parent, "boru:fmt", "Fmt", FmtNatives)
 }
 
-// FmtNatives is the NativeFunc slice for the aql:fmt module's
+// FmtNatives is the NativeFunc slice for the boru:fmt module's
 // Go-implemented words. Each wraps a function in lang/go/formatter so the
 // language-level word and the CLI share one driver:
 //
-//   - format          — format an AQL source string (canonical rule table).
-//   - format-markdown — reformat AQL inside ```aql fences and
-//     <!-- aqlfmt --> … <!-- /aqlfmt --> regions of a
+//   - format          — format a boru source string (canonical rule table).
+//   - format-markdown — reformat boru inside ```boru fences and
+//     <!-- borufmt --> … <!-- /borufmt --> regions of a
 //     Markdown document, leaving the rest untouched.
-//   - format-html     — reformat AQL inside <!-- aqlfmt --> regions of an
+//   - format-html     — reformat boru inside <!-- borufmt --> regions of an
 //     HTML document, leaving the rest untouched.
-//   - rules           — the canonical layout rule table as AQL data.
+//   - rules           — the canonical layout rule table as boru data.
 //   - format-with     — format under a (partial) rule-table override.
 //   - tree            — the layout CST as a $kind-tagged value tree.
 //   - render          — the document algebra (see fmtdoc.go).

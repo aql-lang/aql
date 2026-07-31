@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # TCP echo round-trip benchmark in plain Python (socket + threading).
-# Same protocol as echo_aql.aql: one persistent connection, newline-framed,
+# Same protocol as echo_boru.boru: one persistent connection, newline-framed,
 # 20000 timed round-trips (+1 warm-up). TCP_NODELAY enabled on both ends to
-# match Go/AQL defaults.
+# match Go/boru defaults.
 import socket
 import threading
 import time

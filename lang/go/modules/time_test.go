@@ -4,10 +4,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// timeRegistry returns a registry with the aql:time module loaded.
+// timeRegistry returns a registry with the boru:time module loaded.
 func timeRegistry(t *testing.T) *native.Registry {
 	t.Helper()
 	r, err := native.DefaultRegistry()
@@ -103,7 +103,7 @@ func TestTimeModuleExports(t *testing.T) {
 
 func TestTimeTz(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("tz", native.NewString("UTC")))
+	result := runBoru(t, r, callTimeDot("tz", native.NewString("UTC")))
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -115,7 +115,7 @@ func TestTimeTz(t *testing.T) {
 
 func TestTimeUnix(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("unix", native.NewInteger(1710500000)))
+	result := runBoru(t, r, callTimeDot("unix", native.NewInteger(1710500000)))
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -127,7 +127,7 @@ func TestTimeUnix(t *testing.T) {
 
 func TestTimeUnixMs(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("unix-ms", native.NewInteger(1710500000000)))
+	result := runBoru(t, r, callTimeDot("unix-ms", native.NewInteger(1710500000000)))
 	ins := native.AsInstant(result[0])
 	if ins.UnixMilli() != 1710500000000 {
 		t.Errorf("expected unix-ms 1710500000000, got %d", ins.UnixMilli())
@@ -138,7 +138,7 @@ func TestTimeUnixMs(t *testing.T) {
 
 func TestTimeNowLocal(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("now-local"))
+	result := runBoru(t, r, callTimeDot("now-local"))
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -149,7 +149,7 @@ func TestTimeNowLocal(t *testing.T) {
 
 func TestTimeToday(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("today"))
+	result := runBoru(t, r, callTimeDot("today"))
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -161,7 +161,7 @@ func TestTimeToday(t *testing.T) {
 
 func TestTimeTodayUtc(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("today-utc"))
+	result := runBoru(t, r, callTimeDot("today-utc"))
 	if len(result) != 1 {
 		t.Fatalf("expected 1 result, got %d", len(result))
 	}
@@ -175,7 +175,7 @@ func TestTimeTodayUtc(t *testing.T) {
 
 func TestTimeYear(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("year", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
+	result := runBoru(t, r, callTimeDot("year", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
 	v, _ := native.AsInteger(result[0])
 	if v != 2024 {
 		t.Errorf("year = %d, want 2024", v)
@@ -184,7 +184,7 @@ func TestTimeYear(t *testing.T) {
 
 func TestTimeMonth(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("month", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
+	result := runBoru(t, r, callTimeDot("month", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
 	v, _ := native.AsInteger(result[0])
 	if v != 3 {
 		t.Errorf("month = %d, want 3", v)
@@ -193,7 +193,7 @@ func TestTimeMonth(t *testing.T) {
 
 func TestTimeDay(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("day", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
+	result := runBoru(t, r, callTimeDot("day", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
 	v, _ := native.AsInteger(result[0])
 	if v != 15 {
 		t.Errorf("day = %d, want 15", v)
@@ -203,7 +203,7 @@ func TestTimeDay(t *testing.T) {
 func TestTimeWeekday(t *testing.T) {
 	r := timeRegistry(t)
 	// 2024-03-15 is Friday → ISO weekday 5
-	result := runAQL(t, r, callTimeDot("weekday", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
+	result := runBoru(t, r, callTimeDot("weekday", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
 	v, _ := native.AsInteger(result[0])
 	if v != 5 {
 		t.Errorf("weekday = %d, want 5 (Friday)", v)
@@ -212,7 +212,7 @@ func TestTimeWeekday(t *testing.T) {
 
 func TestTimeYearDay(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("year-day", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
+	result := runBoru(t, r, callTimeDot("year-day", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
 	v, _ := native.AsInteger(result[0])
 	if v != 75 {
 		t.Errorf("year-day = %d, want 75", v)
@@ -221,7 +221,7 @@ func TestTimeYearDay(t *testing.T) {
 
 func TestTimeWeekdayName(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("weekday-name", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
+	result := runBoru(t, r, callTimeDot("weekday-name", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
 	s, _ := native.AsString(result[0])
 	if s != "Friday" {
 		t.Errorf("weekday-name = %q, want %q", s, "Friday")
@@ -230,7 +230,7 @@ func TestTimeWeekdayName(t *testing.T) {
 
 func TestTimeMonthName(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("month-name", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
+	result := runBoru(t, r, callTimeDot("month-name", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
 	s, _ := native.AsString(result[0])
 	if s != "March" {
 		t.Errorf("month-name = %q, want %q", s, "March")
@@ -239,7 +239,7 @@ func TestTimeMonthName(t *testing.T) {
 
 func TestTimeIsoWeek(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("iso-week", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
+	result := runBoru(t, r, callTimeDot("iso-week", native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))))
 	v, _ := native.AsInteger(result[0])
 	if v != 11 {
 		t.Errorf("iso-week = %d, want 11", v)
@@ -255,7 +255,7 @@ func TestTimeQuarter(t *testing.T) {
 		{1, 1}, {3, 1}, {4, 2}, {6, 2}, {7, 3}, {9, 3}, {10, 4}, {12, 4},
 	}
 	for _, tt := range tests {
-		result := runAQL(t, r, callTimeDot("quarter", native.NewDate(time.Date(2024, tt.month, 1, 0, 0, 0, 0, time.UTC))))
+		result := runBoru(t, r, callTimeDot("quarter", native.NewDate(time.Date(2024, tt.month, 1, 0, 0, 0, 0, time.UTC))))
 		v, _ := native.AsInteger(result[0])
 		if v != tt.want {
 			t.Errorf("quarter(month=%d) = %d, want %d", tt.month, v, tt.want)
@@ -276,7 +276,7 @@ func TestTimeDaysInMonth(t *testing.T) {
 	}
 	for _, tt := range tests {
 		d := native.NewDate(parseDate(t, tt.date))
-		result := runAQL(t, r, callTimeDot("days-in-month", d))
+		result := runBoru(t, r, callTimeDot("days-in-month", d))
 		v, _ := native.AsInteger(result[0])
 		if v != tt.want {
 			t.Errorf("days-in-month(%s) = %d, want %d", tt.date, v, tt.want)
@@ -286,7 +286,7 @@ func TestTimeDaysInMonth(t *testing.T) {
 
 func TestTimeDaysInYear(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("days-in-year", native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))))
+	result := runBoru(t, r, callTimeDot("days-in-year", native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))))
 	v, _ := native.AsInteger(result[0])
 	if v != 366 {
 		t.Errorf("days-in-year(2024) = %d, want 366", v)
@@ -306,7 +306,7 @@ func TestTimeLeapYear(t *testing.T) {
 	}
 	for _, tt := range tests {
 		d := native.NewDate(parseDate(t, tt.date))
-		result := runAQL(t, r, callTimeDot("is-leap-year", d))
+		result := runBoru(t, r, callTimeDot("is-leap-year", d))
 		b, _ := native.AsBoolean(result[0])
 		if b != tt.want {
 			t.Errorf("is-leap-year(%s) = %v, want %v", tt.date, b, tt.want)
@@ -317,7 +317,7 @@ func TestTimeLeapYear(t *testing.T) {
 func TestTimeToUnix(t *testing.T) {
 	r := timeRegistry(t)
 	ins := native.NewInstant(time.Unix(1710500000, 0))
-	result := runAQL(t, r, callTimeDot("to-unix", ins))
+	result := runBoru(t, r, callTimeDot("to-unix", ins))
 	v, _ := native.AsInteger(result[0])
 	if v != 1710500000 {
 		t.Errorf("to-unix = %d, want 1710500000", v)
@@ -327,7 +327,7 @@ func TestTimeToUnix(t *testing.T) {
 func TestTimeToUnixMs(t *testing.T) {
 	r := timeRegistry(t)
 	ins := native.NewInstant(time.UnixMilli(1710500000123))
-	result := runAQL(t, r, callTimeDot("to-unix-ms", ins))
+	result := runBoru(t, r, callTimeDot("to-unix-ms", ins))
 	v, _ := native.AsInteger(result[0])
 	if v != 1710500000123 {
 		t.Errorf("to-unix-ms = %d, want 1710500000123", v)
@@ -341,13 +341,13 @@ func TestTimeBeforeAfter(t *testing.T) {
 	d1 := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	d2 := native.NewDate(time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC))
 
-	result := runAQL(t, r, callTimeDot("is-before", d1, d2))
+	result := runBoru(t, r, callTimeDot("is-before", d1, d2))
 	b, _ := native.AsBoolean(result[0])
 	if !b {
 		t.Error("expected 2024-01-01 is-before 2024-12-31 = true")
 	}
 
-	result = runAQL(t, r, callTimeDot("is-after", d1, d2))
+	result = runBoru(t, r, callTimeDot("is-after", d1, d2))
 	b, _ = native.AsBoolean(result[0])
 	if b {
 		t.Error("expected 2024-01-01 is-after 2024-12-31 = false")
@@ -357,7 +357,7 @@ func TestTimeBeforeAfter(t *testing.T) {
 func TestTimeEqual(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("is-equal", d, d))
+	result := runBoru(t, r, callTimeDot("is-equal", d, d))
 	b, _ := native.AsBoolean(result[0])
 	if !b {
 		t.Error("expected same date is-equal = true")
@@ -369,7 +369,7 @@ func TestTimeEqual(t *testing.T) {
 func TestTimeToString(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("to-string", d))
+	result := runBoru(t, r, callTimeDot("to-string", d))
 	s, _ := native.AsString(result[0])
 	if s != "2024-03-15" {
 		t.Errorf("to-string = %q, want %q", s, "2024-03-15")
@@ -379,7 +379,7 @@ func TestTimeToString(t *testing.T) {
 func TestTimeFormat(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("format", d, native.NewString("02 Jan 2006")))
+	result := runBoru(t, r, callTimeDot("format", d, native.NewString("02 Jan 2006")))
 	s, _ := native.AsString(result[0])
 	if s != "15 Mar 2024" {
 		t.Errorf("format = %q, want %q", s, "15 Mar 2024")
@@ -389,7 +389,7 @@ func TestTimeFormat(t *testing.T) {
 func TestTimeToIso(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("to-iso", d))
+	result := runBoru(t, r, callTimeDot("to-iso", d))
 	s, _ := native.AsString(result[0])
 	if s != "2024-03-15" {
 		t.Errorf("to-iso = %q, want %q", s, "2024-03-15")
@@ -401,7 +401,7 @@ func TestTimeToIso(t *testing.T) {
 func TestTimeAddDays(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("add-days", d, native.NewInteger(10)))
+	result := runBoru(t, r, callTimeDot("add-days", d, native.NewInteger(10)))
 	got := native.AsDate(result[0])
 	want := time.Date(2024, 3, 25, 0, 0, 0, 0, time.UTC)
 	if !got.Equal(want) {
@@ -412,7 +412,7 @@ func TestTimeAddDays(t *testing.T) {
 func TestTimeAddMonths(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 1, 31, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("add-months", d, native.NewInteger(1)))
+	result := runBoru(t, r, callTimeDot("add-months", d, native.NewInteger(1)))
 	got := native.AsDate(result[0])
 	want := time.Date(2024, 3, 2, 0, 0, 0, 0, time.UTC)
 	if !got.Equal(want) {
@@ -423,7 +423,7 @@ func TestTimeAddMonths(t *testing.T) {
 func TestTimeAddYears(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("add-years", d, native.NewInteger(2)))
+	result := runBoru(t, r, callTimeDot("add-years", d, native.NewInteger(2)))
 	got := native.AsDate(result[0])
 	want := time.Date(2026, 3, 15, 0, 0, 0, 0, time.UTC)
 	if !got.Equal(want) {
@@ -438,7 +438,7 @@ func TestNowStandardWord(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// `now` moved to aql:time-util; register the time/async words bare to
+	// `now` moved to boru:time-util; register the time/async words bare to
 	// exercise the unchanged handler (production uses TimeUtil.now).
 	for _, n := range native.TimeAsyncModuleNatives(native.MintTemporalModuleTypes(r)) {
 		r.RegisterNativeFunc(n)
@@ -460,7 +460,7 @@ func TestNowStandardWord(t *testing.T) {
 
 func TestTimeDurYears(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("years", native.NewInteger(2)))
+	result := runBoru(t, r, callTimeDot("years", native.NewInteger(2)))
 	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Years != 2 || cd.Months != 0 || cd.Days != 0 {
 		t.Errorf("2 years = %+v, want {2 0 0}", cd)
@@ -469,7 +469,7 @@ func TestTimeDurYears(t *testing.T) {
 
 func TestTimeDurMonths(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("months", native.NewInteger(6)))
+	result := runBoru(t, r, callTimeDot("months", native.NewInteger(6)))
 	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Months != 6 {
 		t.Errorf("6 months = %+v, want {0 6 0}", cd)
@@ -478,7 +478,7 @@ func TestTimeDurMonths(t *testing.T) {
 
 func TestTimeDurWeeks(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("weeks", native.NewInteger(2)))
+	result := runBoru(t, r, callTimeDot("weeks", native.NewInteger(2)))
 	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Days != 14 {
 		t.Errorf("2 weeks = %+v, want {0 0 14}", cd)
@@ -487,7 +487,7 @@ func TestTimeDurWeeks(t *testing.T) {
 
 func TestTimeDurDays(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("days", native.NewInteger(30)))
+	result := runBoru(t, r, callTimeDot("days", native.NewInteger(30)))
 	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Days != 30 {
 		t.Errorf("30 days = %+v, want {0 0 30}", cd)
@@ -496,7 +496,7 @@ func TestTimeDurDays(t *testing.T) {
 
 func TestTimeDurHours(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("hours", native.NewInteger(3)))
+	result := runBoru(t, r, callTimeDot("hours", native.NewInteger(3)))
 	d, ok := native.AsClockDuration(result[0])
 	if !ok || d != 3*time.Hour {
 		t.Errorf("3 hours = %v, want %v", d, 3*time.Hour)
@@ -505,7 +505,7 @@ func TestTimeDurHours(t *testing.T) {
 
 func TestTimeDurMinutes(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("minutes", native.NewInteger(90)))
+	result := runBoru(t, r, callTimeDot("minutes", native.NewInteger(90)))
 	d, ok := native.AsClockDuration(result[0])
 	if !ok || d != 90*time.Minute {
 		t.Errorf("90 minutes = %v, want %v", d, 90*time.Minute)
@@ -514,7 +514,7 @@ func TestTimeDurMinutes(t *testing.T) {
 
 func TestTimeDurSeconds(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("seconds", native.NewInteger(30)))
+	result := runBoru(t, r, callTimeDot("seconds", native.NewInteger(30)))
 	d, ok := native.AsClockDuration(result[0])
 	if !ok || d != 30*time.Second {
 		t.Errorf("30 seconds = %v, want %v", d, 30*time.Second)
@@ -523,7 +523,7 @@ func TestTimeDurSeconds(t *testing.T) {
 
 func TestTimeDurMs(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("ms", native.NewInteger(500)))
+	result := runBoru(t, r, callTimeDot("ms", native.NewInteger(500)))
 	d, ok := native.AsClockDuration(result[0])
 	if !ok || d != 500*time.Millisecond {
 		t.Errorf("500 ms = %v, want %v", d, 500*time.Millisecond)
@@ -532,7 +532,7 @@ func TestTimeDurMs(t *testing.T) {
 
 func TestTimeCalDur(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("cal-dur", native.NewInteger(1), native.NewInteger(6), native.NewInteger(15)))
+	result := runBoru(t, r, callTimeDot("cal-dur", native.NewInteger(1), native.NewInteger(6), native.NewInteger(15)))
 	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Years != 1 || cd.Months != 6 || cd.Days != 15 {
 		t.Errorf("cal-dur 1 6 15 = %+v, want {1 6 15}", cd)
@@ -546,7 +546,7 @@ func TestTimeCalDur(t *testing.T) {
 
 func TestTimeTotalHours(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("total-hours", timeTT(t, r).NewClockDuration(90*time.Minute)))
+	result := runBoru(t, r, callTimeDot("total-hours", timeTT(t, r).NewClockDuration(90*time.Minute)))
 	v, _ := native.AsNumber(result[0])
 	if v != 1.5 {
 		t.Errorf("total-hours(90min) = %v, want 1.5", v)
@@ -555,7 +555,7 @@ func TestTimeTotalHours(t *testing.T) {
 
 func TestTimeTotalMinutes(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("total-minutes", timeTT(t, r).NewClockDuration(2*time.Hour)))
+	result := runBoru(t, r, callTimeDot("total-minutes", timeTT(t, r).NewClockDuration(2*time.Hour)))
 	v, _ := native.AsNumber(result[0])
 	if v != 120.0 {
 		t.Errorf("total-minutes(2h) = %v, want 120", v)
@@ -564,7 +564,7 @@ func TestTimeTotalMinutes(t *testing.T) {
 
 func TestTimeTotalSeconds(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("total-seconds", timeTT(t, r).NewClockDuration(90*time.Second)))
+	result := runBoru(t, r, callTimeDot("total-seconds", timeTT(t, r).NewClockDuration(90*time.Second)))
 	v, _ := native.AsNumber(result[0])
 	if v != 90.0 {
 		t.Errorf("total-seconds(90s) = %v, want 90", v)
@@ -573,7 +573,7 @@ func TestTimeTotalSeconds(t *testing.T) {
 
 func TestTimeTotalMs(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("total-ms", timeTT(t, r).NewClockDuration(2*time.Second+500*time.Millisecond)))
+	result := runBoru(t, r, callTimeDot("total-ms", timeTT(t, r).NewClockDuration(2*time.Second+500*time.Millisecond)))
 	v, _ := native.AsNumber(result[0])
 	if v != 2500.0 {
 		t.Errorf("total-ms(2.5s) = %v, want 2500", v)
@@ -582,7 +582,7 @@ func TestTimeTotalMs(t *testing.T) {
 
 func TestTimeDurYearsExtract(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("dur-years", timeTT(t, r).NewCalendarDuration(1, 6, 15)))
+	result := runBoru(t, r, callTimeDot("dur-years", timeTT(t, r).NewCalendarDuration(1, 6, 15)))
 	v, _ := native.AsInteger(result[0])
 	if v != 1 {
 		t.Errorf("dur-years = %d, want 1", v)
@@ -591,7 +591,7 @@ func TestTimeDurYearsExtract(t *testing.T) {
 
 func TestTimeDurMonthsExtract(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("dur-months", timeTT(t, r).NewCalendarDuration(1, 6, 15)))
+	result := runBoru(t, r, callTimeDot("dur-months", timeTT(t, r).NewCalendarDuration(1, 6, 15)))
 	v, _ := native.AsInteger(result[0])
 	if v != 6 {
 		t.Errorf("dur-months = %d, want 6", v)
@@ -600,7 +600,7 @@ func TestTimeDurMonthsExtract(t *testing.T) {
 
 func TestTimeDurDaysExtract(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("dur-days", timeTT(t, r).NewCalendarDuration(1, 6, 15)))
+	result := runBoru(t, r, callTimeDot("dur-days", timeTT(t, r).NewCalendarDuration(1, 6, 15)))
 	v, _ := native.AsInteger(result[0])
 	if v != 15 {
 		t.Errorf("dur-days = %d, want 15", v)
@@ -609,17 +609,17 @@ func TestTimeDurDaysExtract(t *testing.T) {
 
 func TestTimeDurSign(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalendarDuration(1, 0, 0)))
+	result := runBoru(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalendarDuration(1, 0, 0)))
 	v, _ := native.AsInteger(result[0])
 	if v != 1 {
 		t.Errorf("dur-sign(+) = %d, want 1", v)
 	}
-	result = runAQL(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalendarDuration(-1, 0, 0)))
+	result = runBoru(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalendarDuration(-1, 0, 0)))
 	v, _ = native.AsInteger(result[0])
 	if v != -1 {
 		t.Errorf("dur-sign(-) = %d, want -1", v)
 	}
-	result = runAQL(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalendarDuration(0, 0, 0)))
+	result = runBoru(t, r, callTimeDot("dur-sign", timeTT(t, r).NewCalendarDuration(0, 0, 0)))
 	v, _ = native.AsInteger(result[0])
 	if v != 0 {
 		t.Errorf("dur-sign(0) = %d, want 0", v)
@@ -632,7 +632,7 @@ func TestTimeUntil(t *testing.T) {
 	r := timeRegistry(t)
 	d1 := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	d2 := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("until", d1, d2))
+	result := runBoru(t, r, callTimeDot("until", d1, d2))
 	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Years != 0 || cd.Months != 2 || cd.Days != 14 {
 		t.Errorf("until = %+v, want {0 2 14}", cd)
@@ -643,7 +643,7 @@ func TestTimeSince(t *testing.T) {
 	r := timeRegistry(t)
 	d1 := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 	d2 := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("since", d1, d2))
+	result := runBoru(t, r, callTimeDot("since", d1, d2))
 	cd, ok := native.AsCalendarDuration(result[0])
 	if !ok || cd.Years != 0 || cd.Months != 2 || cd.Days != 14 {
 		t.Errorf("since = %+v, want {0 2 14}", cd)
@@ -654,7 +654,7 @@ func TestTimeDiffInstants(t *testing.T) {
 	r := timeRegistry(t)
 	i1 := native.NewInstant(time.Date(2024, 1, 1, 10, 0, 0, 0, time.UTC))
 	i2 := native.NewInstant(time.Date(2024, 1, 1, 12, 30, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("diff", i1, i2))
+	result := runBoru(t, r, callTimeDot("diff", i1, i2))
 	d, ok := native.AsClockDuration(result[0])
 	if !ok || d != 2*time.Hour+30*time.Minute {
 		t.Errorf("diff = %v, want 2h30m", d)
@@ -668,13 +668,13 @@ func TestTimeCompare(t *testing.T) {
 	d1 := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	d2 := native.NewDate(time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC))
 
-	result := runAQL(t, r, callTimeDot("compare", d1, d2))
+	result := runBoru(t, r, callTimeDot("compare", d1, d2))
 	v, _ := native.AsInteger(result[0])
 	if v != -1 {
 		t.Errorf("compare(d1, d2) = %d, want -1", v)
 	}
 
-	result = runAQL(t, r, callTimeDot("compare", d1, d1))
+	result = runBoru(t, r, callTimeDot("compare", d1, d1))
 	v, _ = native.AsInteger(result[0])
 	if v != 0 {
 		t.Errorf("compare(d1, d1) = %d, want 0", v)
@@ -687,7 +687,7 @@ func TestTimeBetween(t *testing.T) {
 	start := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	end := native.NewDate(time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC))
 
-	result := runAQL(t, r, callTimeDot("is-between", d, start, end))
+	result := runBoru(t, r, callTimeDot("is-between", d, start, end))
 	b, _ := native.AsBoolean(result[0])
 	if !b {
 		t.Error("expected is-between = true")
@@ -698,7 +698,7 @@ func TestTimeEarliest(t *testing.T) {
 	r := timeRegistry(t)
 	d1 := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	d2 := native.NewDate(time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("earliest", d1, d2))
+	result := runBoru(t, r, callTimeDot("earliest", d1, d2))
 	got := native.AsDate(result[0])
 	if got.Year() != 2024 || got.Month() != 1 || got.Day() != 1 {
 		t.Errorf("earliest = %v, want 2024-01-01", got)
@@ -709,7 +709,7 @@ func TestTimeLatest(t *testing.T) {
 	r := timeRegistry(t)
 	d1 := native.NewDate(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	d2 := native.NewDate(time.Date(2024, 12, 31, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("latest", d1, d2))
+	result := runBoru(t, r, callTimeDot("latest", d1, d2))
 	got := native.AsDate(result[0])
 	if got.Year() != 2024 || got.Month() != 12 || got.Day() != 31 {
 		t.Errorf("latest = %v, want 2024-12-31", got)
@@ -721,7 +721,7 @@ func TestTimeLatest(t *testing.T) {
 func TestTimeToDate(t *testing.T) {
 	r := timeRegistry(t)
 	dt := native.NewDateTime(time.Date(2024, 3, 15, 10, 30, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("to-date", dt))
+	result := runBoru(t, r, callTimeDot("to-date", dt))
 	got := native.AsDate(result[0])
 	if got.Hour() != 0 || got.Day() != 15 {
 		t.Errorf("to-date = %v, want midnight 2024-03-15", got)
@@ -731,7 +731,7 @@ func TestTimeToDate(t *testing.T) {
 func TestTimeToTimeOfDay(t *testing.T) {
 	r := timeRegistry(t)
 	dt := native.NewDateTime(time.Date(2024, 3, 15, 14, 30, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("to-time-of-day", dt))
+	result := runBoru(t, r, callTimeDot("to-time-of-day", dt))
 	tod := native.AsTimeOfDay(result[0])
 	if tod != 14*time.Hour+30*time.Minute {
 		t.Errorf("to-time-of-day = %v, want 14h30m", tod)
@@ -741,7 +741,7 @@ func TestTimeToTimeOfDay(t *testing.T) {
 func TestTimeToDatetime(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("to-datetime", d))
+	result := runBoru(t, r, callTimeDot("to-datetime", d))
 	if !result[0].Parent.ConformsTo(native.TDateTime) {
 		t.Errorf("to-datetime type = %s, want DateTime", result[0].Parent)
 	}
@@ -751,7 +751,7 @@ func TestTimeToInstant(t *testing.T) {
 	r := timeRegistry(t)
 	dt := native.NewDateTime(time.Date(2024, 3, 15, 10, 0, 0, 0, time.UTC))
 	tz := timeTT(t, r).NewTimezone(time.UTC)
-	result := runAQL(t, r, callTimeDot("to-instant", dt, tz))
+	result := runBoru(t, r, callTimeDot("to-instant", dt, tz))
 	if !result[0].Parent.ConformsTo(native.TInstant) {
 		t.Errorf("to-instant type = %s, want Instant", result[0].Parent)
 	}
@@ -761,7 +761,7 @@ func TestTimeToLocal(t *testing.T) {
 	r := timeRegistry(t)
 	ins := native.NewInstant(time.Date(2024, 3, 15, 10, 0, 0, 0, time.UTC))
 	tz := timeTT(t, r).NewTimezone(time.UTC)
-	result := runAQL(t, r, callTimeDot("to-local", ins, tz))
+	result := runBoru(t, r, callTimeDot("to-local", ins, tz))
 	if !result[0].Parent.ConformsTo(native.TDateTime) {
 		t.Errorf("to-local type = %s, want DateTime", result[0].Parent)
 	}
@@ -770,7 +770,7 @@ func TestTimeToLocal(t *testing.T) {
 func TestTimeToUtc(t *testing.T) {
 	r := timeRegistry(t)
 	ins := native.NewInstant(time.Date(2024, 3, 15, 10, 0, 0, 0, time.UTC))
-	result := runAQL(t, r, callTimeDot("to-utc", ins))
+	result := runBoru(t, r, callTimeDot("to-utc", ins))
 	if !result[0].Parent.ConformsTo(native.TDateTime) {
 		t.Errorf("to-utc type = %s, want DateTime", result[0].Parent)
 	}
@@ -782,19 +782,19 @@ func TestTimeStartOf(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 
-	result := runAQL(t, r, callTimeDot("start-of", d, native.NewString("month")))
+	result := runBoru(t, r, callTimeDot("start-of", d, native.NewString("month")))
 	got := native.AsDate(result[0])
 	if got.Day() != 1 || got.Month() != 3 {
 		t.Errorf("start-of month = %v, want 2024-03-01", got)
 	}
 
-	result = runAQL(t, r, callTimeDot("start-of", d, native.NewString("year")))
+	result = runBoru(t, r, callTimeDot("start-of", d, native.NewString("year")))
 	got = native.AsDate(result[0])
 	if got.Month() != 1 || got.Day() != 1 {
 		t.Errorf("start-of year = %v, want 2024-01-01", got)
 	}
 
-	result = runAQL(t, r, callTimeDot("start-of", d, native.NewString("quarter")))
+	result = runBoru(t, r, callTimeDot("start-of", d, native.NewString("quarter")))
 	got = native.AsDate(result[0])
 	if got.Month() != 1 || got.Day() != 1 {
 		t.Errorf("start-of quarter = %v, want 2024-01-01", got)
@@ -805,13 +805,13 @@ func TestTimeEndOf(t *testing.T) {
 	r := timeRegistry(t)
 	d := native.NewDate(time.Date(2024, 3, 15, 0, 0, 0, 0, time.UTC))
 
-	result := runAQL(t, r, callTimeDot("end-of", d, native.NewString("month")))
+	result := runBoru(t, r, callTimeDot("end-of", d, native.NewString("month")))
 	got := native.AsDate(result[0])
 	if got.Day() != 31 || got.Month() != 3 {
 		t.Errorf("end-of month = %v, want 2024-03-31", got)
 	}
 
-	result = runAQL(t, r, callTimeDot("end-of", d, native.NewString("year")))
+	result = runBoru(t, r, callTimeDot("end-of", d, native.NewString("year")))
 	got = native.AsDate(result[0])
 	if got.Month() != 12 || got.Day() != 31 {
 		t.Errorf("end-of year = %v, want 2024-12-31", got)
@@ -822,7 +822,7 @@ func TestTimeEndOf(t *testing.T) {
 
 func TestTimeTzUtc(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("tz-utc"))
+	result := runBoru(t, r, callTimeDot("tz-utc"))
 	loc := native.AsTimezone(result[0])
 	if loc == nil || loc.String() != "UTC" {
 		t.Errorf("tz-utc = %v, want UTC", loc)
@@ -831,7 +831,7 @@ func TestTimeTzUtc(t *testing.T) {
 
 func TestTimeTzName(t *testing.T) {
 	r := timeRegistry(t)
-	result := runAQL(t, r, callTimeDot("tz-name", timeTT(t, r).NewTimezone(time.UTC)))
+	result := runBoru(t, r, callTimeDot("tz-name", timeTT(t, r).NewTimezone(time.UTC)))
 	s, _ := native.AsString(result[0])
 	if s != "UTC" {
 		t.Errorf("tz-name = %q, want UTC", s)
@@ -842,7 +842,7 @@ func TestTimeTzOffset(t *testing.T) {
 	r := timeRegistry(t)
 	ins := native.NewInstant(time.Date(2024, 6, 15, 12, 0, 0, 0, time.UTC))
 	tz := timeTT(t, r).NewTimezone(time.UTC)
-	result := runAQL(t, r, callTimeDot("tz-offset", ins, tz))
+	result := runBoru(t, r, callTimeDot("tz-offset", ins, tz))
 	s, _ := native.AsString(result[0])
 	if s != "+00:00" {
 		t.Errorf("tz-offset UTC = %q, want +00:00", s)
@@ -855,7 +855,7 @@ func TestTimeTzOffset(t *testing.T) {
 
 // --- add/sub with temporal types (module word extensions) ---
 //
-// The temporal overloads live on aql:time-util as word extensions of
+// The temporal overloads live on boru:time-util as word extensions of
 // core add/sub; installing the module's exports transplants them, so
 // the bare words dispatch them exactly as they did when they sat on
 // the core signatures.

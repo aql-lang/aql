@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // The `+name<delim>src<delim>` shortcut is terse lexer sugar for
@@ -18,7 +18,7 @@ import (
 // `mini` call, so stack subjects, a trailing opts map, the unknown-kind
 // error, and check mode all behave the same.
 
-const miniImp = `import "aql:minilang"  `
+const miniImp = `import "boru:minilang"  `
 
 func litRun(t *testing.T, src string) any {
 	t.Helper()

@@ -3,14 +3,14 @@ package modules
 import (
 	"fmt"
 
-	"github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
+	"github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
 )
 
 // This file makes Tensor, Matrix and Vector first-class type-kinds —
 // Ideals (see eng/go/ideal.go and design/IDEAL.10.md). Matrix
 // and Vector refine Tensor: a Matrix is a rank-2 tensor, a Vector a
-// rank-1 tensor. The kinds are registered when `aql:matrix` is
+// rank-1 tensor. The kinds are registered when `boru:matrix` is
 // imported, after which `type` constructs shaped tensor types and
 // `make` instantiates them.
 
@@ -39,7 +39,7 @@ func tensorTypeInfo(v native.Value) (TensorTypeInfo, bool) {
 // type-kinds into r.Ideals. Matrix and Vector refine Tensor, so
 // disabling the Tensor kind disables the whole family. Called from
 // BuildMatrixModule, so the kinds become available exactly when
-// `aql:matrix` is imported — a host module dynamically extending the
+// `boru:matrix` is imported — a host module dynamically extending the
 // type system, the property the Ideal registry exists to provide.
 func registerTensorIdeals(r *native.Registry, tt TensorModuleTypes) {
 	if r == nil {
@@ -95,13 +95,13 @@ func tensorAccepts(vt *eng.Type, kind string) func(native.Value) bool {
 func tensorConstruct(kind string, vt *eng.Type) func(base, arg native.Value, r *native.Registry) ([]native.Value, error) {
 	return func(base, arg native.Value, r *native.Registry) ([]native.Value, error) {
 		if base.Data != nil {
-			return nil, r.AqlError("type_error",
+			return nil, r.BoruError("type_error",
 				fmt.Sprintf("refine %s: a shaped tensor type has no subtyping — construct from the bare %s literal", kind, kind),
 				"refine")
 		}
 		shape, err := parseTensorShapeSpec(kind, arg)
 		if err != nil {
-			return nil, r.AqlError("type_error", err.Error(), "refine")
+			return nil, r.BoruError("type_error", err.Error(), "refine")
 		}
 		return []native.Value{eng.NewExtension(vt, TensorTypeInfo{Kind: kind, Shape: shape})}, nil
 	}

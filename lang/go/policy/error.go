@@ -2,15 +2,15 @@ package policy
 
 import "fmt"
 
-// Error codes attached to *Denied. These mirror the AQL error codes
-// surfaced through the engine's r.AqlError machinery; the engine
-// adapter copies these onto the produced AqlError when a *Denied
+// Error codes attached to *Denied. These mirror the boru error codes
+// surfaced through the engine's r.BoruError machinery; the engine
+// adapter copies these onto the produced BoruError when a *Denied
 // bubbles up.
 const (
-	CodePermissionDenied       = "aql/permission_denied"
-	CodeCapabilityNotInstalled = "aql/capability_not_installed"
-	CodeModulesDisabled        = "aql/modules_disabled"
-	CodePolicyAttenuation      = "aql/policy_attenuation"
+	CodePermissionDenied       = "boru/permission_denied"
+	CodeCapabilityNotInstalled = "boru/capability_not_installed"
+	CodeModulesDisabled        = "boru/modules_disabled"
+	CodePolicyAttenuation      = "boru/policy_attenuation"
 )
 
 // Denied is the error returned by Policy.Check / CheckGlobal /
@@ -18,7 +18,7 @@ const (
 // surface "denied by which profile, which rule, on which args."
 type Denied struct {
 	// Code is one of the CodeXxx constants above. Routed onto the
-	// AqlError code by the engine adapter.
+	// BoruError code by the engine adapter.
 	Code string
 	// Scope is the scope that produced the denial ("fileops",
 	// "global", "modules", etc.).
@@ -33,15 +33,15 @@ type Denied struct {
 	//   - "fileops.words rule #3"            — denied by an explicit rule
 	//   - "fileops.words default=deny"       — no rule matched; default denies
 	//   - "fileops.install=false"            — capability uninstalled
-	//   - "modules.scopes.aql:math missing"  — module subscope absent
+	//   - "modules.scopes.boru:math missing"  — module subscope absent
 	Blame string
 	// Args captures the request that was denied (path, host:port,
-	// module name, …). Stored for tooling (aql policy explain) to
+	// module name, …). Stored for tooling (boru policy explain) to
 	// echo back.
 	Args Args
 }
 
-// Error returns the human-readable form used by AqlError detail.
+// Error returns the human-readable form used by BoruError detail.
 func (d *Denied) Error() string {
 	switch d.Code {
 	case CodeCapabilityNotInstalled:

@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/aql-lang/aql/eng/go/parser"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/tuikit"
+	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/tuikit"
 )
 
 // ADR-008 coverage for BuildVaultTuiModule's guard arms, mirroring
-// sift_cover_test.go — aql:vault-tui is loaded the same way (embedded
-// vault_tui.aql parsed once, run as a module body). The app's live
+// sift_cover_test.go — boru:vault-tui is loaded the same way (embedded
+// vault_tui.boru parsed once, run as a module body). The app's live
 // behaviour is driven end-to-end by lang/go/test/app_vault_tui_test.go.
 
 // A parent with no parser configured is refused before any work.
@@ -64,7 +64,7 @@ func TestBuildVaultTuiModuleLoadsAndInheritsCaps(t *testing.T) {
 		}
 	}
 	// docs cover the whole export surface
-	docs := moduleDocs["aql:vault-tui"]
+	docs := moduleDocs["boru:vault-tui"]
 	for _, k := range exports.Keys() {
 		if docs[k] == "" {
 			t.Errorf("export %q has no doc line", k)
@@ -135,7 +135,7 @@ func TestBuildVaultTuiModuleRegisterFallbackWithoutInitFunc(t *testing.T) {
 
 // A sub-registry that cannot resolve the preamble's own imports
 // surfaces the preamble run failure — the parent here carries no
-// native-module resolver, so `import "aql:tui"` fails inside the run.
+// native-module resolver, so `import "boru:tui"` fails inside the run.
 func TestBuildVaultTuiModulePreambleRunError(t *testing.T) {
 	reg, err := native.DefaultRegistry()
 	if err != nil {

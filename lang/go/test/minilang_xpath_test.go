@@ -5,14 +5,14 @@ import (
 	"strings"
 	"testing"
 
-	lang "github.com/aql-lang/aql/lang/go"
+	lang "github.com/boru-lang/boru/lang/go"
 )
 
 // The `xp` mini-language (github.com/antchfx/xpath) queries a Node/Xml document
 // — the stack subject, an <tag>…</tag> literal — with XPath. It ships built-in
-// with aql:minilang and returns a List of results, the same shape as jp / jq.
+// with boru:minilang and returns a List of results, the same shape as jp / jq.
 
-const xpImp = `import "aql:minilang"  `
+const xpImp = `import "boru:minilang"  `
 
 // TestMiniXPathResults pins the result projection for each XPath result kind: a
 // node-set of elements (→ Node/Xml values), text and attribute nodes (→

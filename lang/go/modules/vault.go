@@ -6,12 +6,12 @@ import (
 	"strings"
 	"sync"
 
-	eng "github.com/aql-lang/aql/eng/go"
-	"github.com/aql-lang/aql/lang/go/native"
-	"github.com/aql-lang/aql/lang/go/policy"
+	eng "github.com/boru-lang/boru/eng/go"
+	"github.com/boru-lang/boru/lang/go/native"
+	"github.com/boru-lang/boru/lang/go/policy"
 )
 
-// The aql:vault module — the `Vault` namespace, the language-level bridge
+// The boru:vault module — the `Vault` namespace, the language-level bridge
 // to the host's secret vault (design/VAULT-TUI-PORT.0.md §3).
 //
 // The module ships the WORDS — argument validation, policy gating, and
@@ -21,7 +21,7 @@ import (
 // RegisterHostTui. With no backend registered every word raises
 // `no_backend` — the natural state of the spec harness, wasm, and CI.
 //
-//	import "aql:vault"
+//	import "boru:vault"
 //	Vault.status                       # {ok backend locked aliases …}
 //	Vault.secrets                      # [{alias provider …} …]
 //	Vault.reveal "stripe"              # the secret value (reveal-gated)
@@ -34,7 +34,7 @@ import (
 //
 // The op strings handed to VaultSpec.Do are the user-facing word names
 // ("add", "reveal", …). Inner natives carry a `vault-` prefix to stay
-// clear of same-named core words in the sub-registry (the aql:log
+// clear of same-named core words in the sub-registry (the boru:log
 // rename pattern); the export keys are the clean spellings.
 
 // VaultSpec describes a host-provided vault backend. Do executes one
@@ -42,8 +42,8 @@ import (
 // (map-shaped args are flattened into params by key). The result may be
 // nil (no-result ops), or any composition of string / bool / int /
 // int64 / float64 / []any / map[string]any — vaultAnyToValue projects
-// it onto AQL values. Session state (active vault, cached passphrase)
-// belongs to the host adapter, never to AQL (VAULT-TUI-PORT.0.md §5.1).
+// it onto boru values. Session state (active vault, cached passphrase)
+// belongs to the host adapter, never to boru (VAULT-TUI-PORT.0.md §5.1).
 type VaultSpec struct {
 	// Name identifies the backend in diagnostics ("cli", "fake", …).
 	Name string
@@ -82,7 +82,7 @@ func init() {
 
 // RegisterHostVault installs a vault backend on reg — the embedder seam
 // of design/VAULT-TUI-PORT.0.md §3.1. Registration may happen before or
-// after the program imports "aql:vault": the words resolve the backend
+// after the program imports "boru:vault": the words resolve the backend
 // at dispatch time, not at module build.
 func RegisterHostVault(reg *native.Registry, spec VaultSpec) error {
 	if spec.Name == "" {
@@ -229,11 +229,11 @@ var vaultOps = []vaultOp{
 
 // vaultInnerName is the sub-registry spelling of a vault word — a
 // `vault-` prefix keeps `add`, `remove`, `copy`, … clear of the
-// same-named core words (the aql:log rename pattern).
+// same-named core words (the boru:log rename pattern).
 func vaultInnerName(op string) string { return "vault-" + op }
 
 func vaultUsage(r *native.Registry, word, msg string) error {
-	return r.AqlError("vault_usage", word+": "+msg, word)
+	return r.BoruError("vault_usage", word+": "+msg, word)
 }
 
 // vaultCollectParams validates one op's args against its param specs
@@ -294,7 +294,7 @@ func vaultCollectParams(op vaultOp, args []native.Value, r *native.Registry) (ma
 	return params, nil
 }
 
-// vaultAnyToValue projects a backend result onto an AQL value. Map keys
+// vaultAnyToValue projects a backend result onto a boru value. Map keys
 // are emitted in sorted order so results canon deterministically; an
 // unrecognised shape degrades to its string form rather than erroring.
 func vaultAnyToValue(v any) native.Value {
@@ -349,11 +349,11 @@ func makeVaultHandler(op vaultOp) func([]native.Value, map[string]native.Value, 
 		}
 		spec := hostVaultSpec(r)
 		if spec == nil {
-			return nil, r.AqlError("no_backend", op.name+": no vault backend registered", op.name)
+			return nil, r.BoruError("no_backend", op.name+": no vault backend registered", op.name)
 		}
 		res, doErr := spec.Do(op.name, params)
 		if doErr != nil {
-			return nil, r.AqlError("vault", op.name+": "+firstLine(doErr.Error()), op.name)
+			return nil, r.BoruError("vault", op.name+": "+firstLine(doErr.Error()), op.name)
 		}
 		if op.ret == nil {
 			return nil, nil
@@ -401,8 +401,8 @@ func vaultNatives() []native.NativeFunc {
 		})
 	}
 	// `identity` is not a generic Do-dispatch word: it mints an opaque
-	// credential handle rather than projecting a vault result onto an
-	// AQL value, so it carries its own handler (vault_identity.go).
+	// credential handle rather than projecting a vault result onto a
+	// boru value, so it carries its own handler (vault_identity.go).
 	out = append(out, native.NativeFunc{
 		Name: vaultInnerName("identity"),
 		Signatures: []native.Signature{{
@@ -415,12 +415,12 @@ func vaultNatives() []native.NativeFunc {
 	return out
 }
 
-// BuildVaultModule creates the "aql:vault" native module: the op-table
+// BuildVaultModule creates the "boru:vault" native module: the op-table
 // words in an isolated sub-registry behind trivial-delegation wrappers,
 // exported under their clean spellings.
 func BuildVaultModule(parent *native.Registry) (native.ModuleDesc, error) {
 	natives := vaultNatives()
-	subReg, err := newModuleRegistry("aql:vault", natives)
+	subReg, err := newModuleRegistry("boru:vault", natives)
 	if err != nil {
 		return native.ModuleDesc{}, err
 	}

@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// CompileProfile is the seam a BAKED policy comes back through: `aql build
+// CompileProfile is the seam a BAKED policy comes back through: `boru build
 // -perms …` flattens a Policy to a *Profile, JSON-encodes it into the
 // binary's trailer, and the built binary compiles it back on startup. The
 // trailer has no integrity check, so a corrupt or absent profile is an

@@ -1,0 +1,277 @@
+# ============================================================================
+# uniq — report or omit repeated ADJACENT lines.
+#
+#   uniq [-c|--count] [-d|--repeated] [-u|--unique] [-i|--ignore-case] [FILE]
+#
+# With no FILE, or when FILE is "-", the input is standard input.
+#
+# Exit codes:
+#   0  the input was read and the result written
+#   1  the input could not be opened or read; the diagnostic goes to stderr
+#   2  usage error — unknown flag, or -d together with -u (from Cli.dispatch
+#      and from uniq-opts respectively)
+#
+# ADJACENT is the whole point, and the thing people get wrong about uniq: it
+# does not de-duplicate a file, it collapses RUNS. `uniq` on unsorted input
+# leaves distant duplicates alone, which is why `sort | uniq` is the idiom and
+# why this program sits next to sort.boru. sort's own -u does the other job —
+# the two are deliberately both here, and the suite pins the difference.
+#
+# It STREAMS, unlike sort: a run is decided by the previous line alone, so uniq
+# needs O(1) memory no matter how large the input. That is the property that
+# makes it worth writing rather than expressing as three lines of sort.
+#
+# One input only, as GNU uniq has it: the second operand of GNU uniq is an
+# OUTPUT file, not a second input. Rather than half-implement that, this takes
+# a single input and writes to standard output — the shape everyone actually
+# uses. A second operand is a usage error rather than a silently ignored
+# argument.
+#
+# Structure: every decision is a pure fn taking its input as parameters, and
+# uniq-main takes ARGV as a parameter and returns the exit code.
+# ============================================================================
+
+import "boru:cli"
+import "boru:io"
+import "boru:string-util"
+
+# ----------------------------------------------------------------------------
+# Pure helpers.
+# ----------------------------------------------------------------------------
+
+def uniq-bool fn [[fl:Map k:String] [Boolean] [
+  def v (fl get k)
+  if (v is Boolean) [v] [false]
+]]
+
+# -i folds case for COMPARISON only; the line printed is the FIRST of its run,
+# in its own case, which is what GNU uniq does.
+def uniq-key fn [[line:String icase:Boolean] [String] [
+  if icase [(StringUtil.lower line)] [line]
+]]
+
+# Does a run of n copies get printed? -d wants runs (n > 1), -u wants
+# singletons (n == 1), neither wants everything, and both together is refused
+# at option-validation time rather than silently meaning "nothing".
+def uniq-emit fn [[n:Integer dups:Boolean only:Boolean] [Boolean] [
+  if dups [(n gt 1)] [ if only [(n eq 1)] [true] ]
+]]
+
+# One output record. -c prefixes the run length in a 7-wide right-aligned
+# column followed by a space, which is the GNU layout.
+def uniq-pad fn [[s:String n:Integer] [String] [
+  if ((size s) gte n) [s] [ def r (uniq-pad (join "" [" " s]) n)  r ]
+]]
+
+def uniq-line fn [[line:String n:Integer counted:Boolean] [String] [
+  def pre (if counted [(join "" [(uniq-pad (convert String n) 7) " "])] [""])
+  join "" [pre line "\n"]
+]]
+
+# ----------------------------------------------------------------------------
+# The run machine. State is {prev key n started}, and every transition is here
+# so the whole of uniq's behaviour is one pure fn of (state, line).
+#
+# `step` folds one more line in: same key extends the run, a different key
+# closes the previous run (emitting it if it qualifies) and starts a new one.
+# `flush` closes the final run, which is the case a naive implementation drops
+# — the last run has no successor to trigger it.
+# ----------------------------------------------------------------------------
+def uniq-start fn [[] [Map] [ {prev:"" key:"" n:0 started:false out:""} ]]
+
+def uniq-close fn [[st:Map dups:Boolean only:Boolean counted:Boolean] [String] [
+  if ((st.started) not) [""] [
+    if (uniq-emit (st.n) dups only) [(uniq-line (st.prev) (st.n) counted)] [""]
+  ]
+]]
+
+def uniq-step fn [[st:Map line:String icase:Boolean dups:Boolean only:Boolean counted:Boolean] [Map] [
+  def k (uniq-key line icase)
+  if ((st.started) and ((st.key) eq k)) [
+    def same ({} set (quote prev) (st.prev) set (quote key) k
+                 set (quote n) ((st.n) add 1) set (quote started) true
+                 set (quote out) "")
+    same
+  ] [
+    def flushed (uniq-close st dups only counted)
+    def fresh ({} set (quote prev) line set (quote key) k
+                  set (quote n) 1 set (quote started) true
+                  set (quote out) flushed)
+    fresh
+  ]
+]]
+
+# The whole transform over a list of lines — pure, so every flag combination is
+# a case in the suite rather than a file on disk.
+def uniq-apply-at fn [[ls:List i:Integer st:Map icase:Boolean dups:Boolean only:Boolean counted:Boolean acc:List] [Map] [
+  if (i gte (size ls)) [st] [
+    def nx (uniq-step st (convert String (ls get i)) icase dups only counted)
+    def _p (if ((nx.out) neq "") [(push (nx.out) acc)] [none])
+    def r (uniq-apply-at ls (i add 1) nx icase dups only counted acc)
+    r
+  ]
+]]
+
+def uniq-apply fn [[ls:List icase:Boolean dups:Boolean only:Boolean counted:Boolean] [String] [
+  def acc (flex [])
+  def fin (uniq-apply-at ls 0 (uniq-start) icase dups only counted acc)
+  def tail (uniq-close fin dups only counted)
+  def _p (if (tail neq "") [(push tail acc)] [none])
+  def r (join "" acc)
+  r
+]]
+
+# ----------------------------------------------------------------------------
+# Option validation — pure, so every refusal is pinned by the suite.
+# ----------------------------------------------------------------------------
+def uniq-bad fn [[msg:String] [Map] [
+  {ok:false icase:false dups:false only:false counted:false} set (quote err) msg
+]]
+
+def uniq-opts fn [[fl:Map ops:List] [Map] [
+  def dups (uniq-bool fl "repeated")
+  def only (uniq-bool fl "unique")
+  if (dups and only) [(uniq-bad "printing all duplicated lines and repeated counts is meaningless")] [
+    if ((size ops) gt 1) [(uniq-bad "extra operand — uniq reads one input and writes to standard output")] [
+      def good ({ok:true err:""} set (quote icase) (uniq-bool fl "ignore-case")
+                                 set (quote dups) dups set (quote only) only
+                                 set (quote counted) (uniq-bool fl "count"))
+      good
+    ]
+  ]
+]]
+
+def uniq-fail fn [[name:String msg:String] [Integer] [
+  (IO.write (IO.stderr) (join "" ["uniq: " name ": " msg "\n"])) drop
+  1
+]]
+
+def uniq-usage-fail fn [[msg:String] [Integer] [
+  (IO.write (IO.stderr) (join "" ["uniq: " msg "\n"])) drop
+  2
+]]
+
+# ----------------------------------------------------------------------------
+# The streaming loop. A run is decided by the previous line alone, so the
+# state map is all uniq ever holds — the input can be any size.
+#
+# The loop has no `break`, for the reason cat.boru documents at length.
+# ----------------------------------------------------------------------------
+def uniq-next-chunk fn [[m:Integer] [Integer] [ if (m gte 8192) [8192] [(m mul 2)] ]]
+
+def uniq-chunk fn [[h:Any box:Map op:Map m:Integer] [Integer] [
+  def before (box get "n")
+  for [0 m] [
+    def line (IO.read-line h)
+    if ((line is None) not) [
+      def _n (box set (quote n) ((box get "n") add 1))
+      def nx (uniq-step (box get "st") (convert String line)
+                        (op.icase) (op.dups) (op.only) (op.counted))
+      def _s (box set (quote st) nx)
+      def _w (if ((nx.out) neq "") [(IO.write (IO.stdout) (nx.out))] [none])
+    ] []
+  ]
+  def got ((box get "n") sub before)
+  got
+]]
+
+def uniq-pump fn [[h:Any box:Map op:Map m:Integer] [Integer] [
+  def got (uniq-chunk h box op m)
+  if (got eq 0) [(box get "n")] [
+    def r (uniq-pump h box op (uniq-next-chunk m))
+    r
+  ]
+]]
+
+def uniq-one fn [[name:String op:Map] [Integer] [
+  def box (flex {n:0 st:(uniq-start)})
+  def rc (if (name eq "-") [
+    def a (do [
+      def _p (uniq-pump (IO.stdin) box op 64)
+      0
+    ] error [
+      def e end
+      def c (uniq-fail "-" (e.message))
+      c
+    ])
+    a
+  ] [
+    def b (do [
+      def h (IO.open (make Pathon name))
+      def _p (uniq-pump h box op 64)
+      IO.close h
+      0
+    ] error [
+      def e end
+      def c (uniq-fail name (e.message))
+      c
+    ])
+    b
+  ])
+  # The final run has no successor to close it, so it is closed here. It is
+  # emitted even when the read failed part way, because the runs already seen
+  # were real — the exit code is what reports the failure.
+  def tail (uniq-close (box get "st") (op.dups) (op.only) (op.counted))
+  def _w (if (tail neq "") [(IO.write (IO.stdout) tail)] [none])
+  rc
+]]
+
+# ----------------------------------------------------------------------------
+# The spec and the handler.
+# ----------------------------------------------------------------------------
+def spec {
+  name:    "uniq"
+  version: "0.1.0"
+  summary: "report or omit repeated adjacent lines"
+  flags: [
+    {name:"count"       short:"c" kind:"bool" help:"prefix each line with the length of its run"}
+    {name:"repeated"    short:"d" kind:"bool" help:"print only lines that are repeated"}
+    {name:"unique"      short:"u" kind:"bool" help:"print only lines that are NOT repeated"}
+    {name:"ignore-case" short:"i" kind:"bool" help:"fold case when comparing"}
+  ]
+  args: {name:"file" min:0 help:"the file to read; - or nothing means standard input"}
+}
+
+def uniq-run fn [[ctx:Map] [Integer] [
+  def ops (ctx.args)
+  def op (uniq-opts (ctx.flags) ops)
+  if ((op.ok) not) [ def bad (uniq-usage-fail (op.err))  bad ] [
+    def name (if ((size ops) eq 0) ["-"] [(convert String (ops get 0))])
+    def rc (uniq-one name op)
+    rc
+  ]
+]]
+
+def uniq-main fn [[argv:List] [Integer] [
+  def d (Cli.dispatch (spec) argv)
+  def _out (if ((d.out) neq "") [(IO.write (IO.stdout) (d.out))] [none])
+  def _err (if ((d.err) neq "") [(IO.write (IO.stderr) (d.err))] [none])
+  def code (if ((d.action) neq "run") [(d.code)] [(uniq-run d)])
+  code
+]]
+
+export "Uniq" {
+  bool:      uniq-bool/r
+  key:       uniq-key/r
+  emit:      uniq-emit/r
+  pad:       uniq-pad/r
+  line:      uniq-line/r
+  start:     uniq-start/r
+  close:     uniq-close/r
+  step:      uniq-step/r
+  apply:     uniq-apply/r
+  opts:      uniq-opts/r
+  fail:      uniq-fail/r
+  nextChunk: uniq-next-chunk/r
+  one:       uniq-one/r
+  main:      uniq-main/r
+  spec:      spec
+}
+
+# The standalone guard — see cat.boru.
+def uniq-standalone ((((IO.env-all) size) gt 0) or (((IO.args) size) gt 0))
+
+if uniq-standalone [
+  def uniq-rc (uniq-main (IO.args))
+  IO.exit uniq-rc;
+] []
