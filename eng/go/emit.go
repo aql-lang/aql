@@ -5769,12 +5769,20 @@ func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, po
 	// seed) would replicate it instead of re-running per iteration. Those refuse.
 	ops := make([]emitOperand, len(ins))
 	for i := range ins {
-		// A TYPE-pattern list (`[Integer]`, `[Integer String]`) is the operand of
-		// the type machinery (`Box of [Integer]`, `x is [Integer String]`), not a
-		// DATA list to assemble — baking it as an OpMakeList breaks that dispatch.
-		// A genuine data list never holds a bare type node.
+		// A bare type node element is a first-class SINGLETON VALUE (ADR-010 /
+		// NUR051), not declaration-only syntax: it assembles through the same
+		// interned canonical-ID type operand a standalone bare type node
+		// resolves to (OpPushType), so the runtime element is the canonical
+		// registry node — `[None]` compiles exactly as it interprets, and a
+		// computed list that feeds the type machinery (`x is […]`) carries the
+		// identical canonical nodes the interpreter's list would. A node with
+		// no canonical ID has no runtime home and still refuses.
 		if IsBareTypeNode(ins[i]) {
-			return false
+			if ins[i].ID == "" {
+				return false
+			}
+			ops[len(ins)-1-i] = typeOperand(es.internType(ins[i]))
+			continue
 		}
 		// A non-builtin (user-fn / module) producing word is NOT refused: the element
 		// resolves to its recorded EVENT (CALL_USER / CALL_NATIVE_POLY / make), and
@@ -5824,10 +5832,20 @@ func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, imp
 	// ops[0] is the LAST value (laid out on top), ops[N-1] the first (deepest).
 	ops := make([]emitOperand, len(vals))
 	for i := range vals {
-		// A bare type node value means a TYPE-pattern map (`{a:Integer}`) — the
-		// operand of `is`/`typeof`, not a data map to assemble. Never a make body.
+		// A bare type node member is a first-class SINGLETON VALUE (ADR-010 /
+		// NUR051), not declaration-only syntax: it assembles through the same
+		// interned canonical-ID type operand a standalone bare type node
+		// resolves to (OpPushType), so the runtime member is the canonical
+		// registry node — identical to the interpreter's map, `is`/`typeof`
+		// dispatch over the assembled map included. `{x: a  r: None}` therefore
+		// compiles exactly as it interprets. A node with no canonical ID has no
+		// runtime home and still refuses.
 		if IsBareTypeNode(vals[i]) {
-			return false
+			if vals[i].ID == "" {
+				return false
+			}
+			ops[len(vals)-1-i] = typeOperand(es.internType(vals[i]))
+			continue
 		}
 		// A computed value produced by `make` (a mutable instance) is exactly what
 		// this assembly exists to thread as a fresh per-run event — unlike

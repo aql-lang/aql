@@ -352,10 +352,14 @@ func (scalarCompareBehavior) Compare(a, b Value) (int, error) {
 	return comparePathons(a, b), nil
 }
 
-// comparePathons orders two Pathon values by three keys in turn: shorter
-// paths (fewer segments) sort first, then segment by segment in
-// reverse lexical order, then a relative path before an absolute one.
-// scalarCompareBehavior routes the Pathon-vs-Pathon case here.
+// comparePathons orders two Pathon values by the NATURAL total order
+// (NUR012): volume/drive first, then absolute paths before relative
+// ones, then segment by segment in FORWARD lexical order, and finally
+// shorter-prefix-first — so a directory sorts immediately before its
+// contents (`a`, `a/b`, `a/z`, `b/a`), the order a filesystem walk
+// prints. This replaced the historical reverse-lex order, whose
+// rationale was argued nowhere. scalarCompareBehavior routes the
+// Pathon-vs-Pathon case here.
 func comparePathons(a, b Value) int {
 	// DepScalar pair: order by canonical form (forward lex on the
 	// rendered "(base op bound)" string). They have no numeric
@@ -384,32 +388,38 @@ func comparePathons(a, b Value) int {
 		}
 		return strings.Compare(a.String(), b.String())
 	}
+	// 1. Volume/drive — driveless "" sorts first, drive/UNC paths group
+	//    by volume before anything else.
+	if c := strings.Compare(ap.Volume, bp.Volume); c != 0 {
+		return c
+	}
+	// 2. Absolute paths sort before relative ones.
+	switch {
+	case ap.Abs && !bp.Abs:
+		return -1
+	case !ap.Abs && bp.Abs:
+		return 1
+	}
+	// 3. Segment-by-segment FORWARD lexical comparison. Comparing the
+	//    parts directly, rather than the "/"-joined render, keeps the
+	//    separator byte from skewing the order.
+	n := len(ap.Parts)
+	if len(bp.Parts) < n {
+		n = len(bp.Parts)
+	}
+	for i := 0; i < n; i++ {
+		if c := strings.Compare(ap.Parts[i], bp.Parts[i]); c != 0 {
+			return c
+		}
+	}
+	// 4. Shared prefix — the shorter path (the directory) sorts first.
 	switch {
 	case len(ap.Parts) < len(bp.Parts):
 		return -1
 	case len(ap.Parts) > len(bp.Parts):
 		return 1
 	}
-	// Equal segment count — compare segment by segment in reverse
-	// lexical order. Comparing the parts directly, rather than the
-	// "/"-joined render, keeps the separator byte from skewing the
-	// order.
-	for i := range ap.Parts {
-		if c := strings.Compare(bp.Parts[i], ap.Parts[i]); c != 0 {
-			return c
-		}
-	}
-	// Same size and segments — a relative path sorts before an
-	// absolute one.
-	switch {
-	case !ap.Abs && bp.Abs:
-		return -1
-	case ap.Abs && !bp.Abs:
-		return 1
-	}
-	// Otherwise identical structure — order by volume so drive/UNC paths
-	// stay distinct and totally ordered (driveless "" sorts first).
-	return strings.Compare(ap.Volume, bp.Volume)
+	return 0
 }
 
 // init attaches the scalar Comparers to their owning kernel types.

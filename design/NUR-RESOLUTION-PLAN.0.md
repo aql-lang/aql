@@ -148,15 +148,20 @@ Documentation should compare with JavaScript, Python, Ruby, and the
 Lisp family. (Not yet applied to the register's NUR011 record — the
 `req` design belongs with the equality work re-opened under NUR031.)
 
-### NUR-012 — Resolve by fix (recorded; stays Pending)
+### NUR-012 — Resolve by fix — **RESOLVED (this session)**
 
-Natural total ordering: (1) drive, (2) absolute, (3) relative,
-(4) forward lexical segment comparison, (5) shorter prefix first.
-Additional Pathon work: `add` join semantics with duplicate-separator
-prevention, comprehensive tests. Investigations: anchor removal
-operators, `mod`, HTTP module interaction, parameterised microns.
-Speculative design idea: parameterised Pathon/Urlon route-parameter
-types for HTTP frameworks.
+Natural total ordering implemented in `comparePathons`
+(`eng/go/compare_scalar_behaviors.go`): (1) drive/volume, (2) absolute
+before relative, (3) forward lexical segment comparison, (4) shorter
+prefix first — `sort` now yields the filesystem-walk order
+(`/e a a/b/c a/z b/a`). The `add` join was verified to prevent
+duplicate separators by construction (segments are structural) and to
+refuse an absolute right operand loudly; both pinned in
+`lang/spec/scalar-micron-ops.tsv` §8 and `lang/spec/micron.tsv` §7.
+Docs updated (REFERENCE.md §Ordering, design/TYPE-ORDERING.10.md).
+Record deleted. Investigations retained (not commitments): anchor
+removal operators, `mod`, HTTP module interaction, parameterised
+Pathon/Urlon route-parameter types (speculative).
 
 ### NUR-013 — Investigation (recorded; stays Pending)
 
@@ -194,10 +199,12 @@ implementation purposes such as deterministic signature ordering).
 Both the NUR record and an ADR should explain the separation (ADR
 candidate 5).
 
-### NUR-025 — Documentation fix (recorded; stays Pending)
+### NUR-025 — Documentation fix — **RESOLVED (this session)**
 
-Remove the nonexistent `## ##` comment syntax from REFERENCE; document
-the actually supported forms (`#`, `//`, `/* */`).
+REFERENCE.md §Comments now documents the real forms (`#`, `//`,
+`/* */`) and explicitly states `## ##` does not exist; the new
+`lang/spec/comments.tsv` pins every form, the `##`-is-a-line-comment
+behaviour, and the unterminated-`/*` syntax error. Record deleted.
 
 ### NUR-026 — FIX (root cause + decision recorded; stays Pending)
 
@@ -224,8 +231,13 @@ G13a no longer reproduce** (fixed by unrelated work — the design note
 now says so); **G9, G10, G12, G13b still reproduce**. The umbrella was
 split into four per-item records:
 
-- **NUR048 (G9)** — `case` DEFAULT arm mis-collects. **FIX**: the
-  DEFAULT arm shall isolate its stack exactly the way matched arms do.
+- **NUR048 (G9)** — `case` DEFAULT arm mis-collects. **FIX —
+  RESOLVED (this session)**: a match-position word bound to a function
+  value (provably never a genuine match) now heads an open-call
+  default arm that runs isolated with the case value pushed first,
+  exactly like a matched arm (`caseDefaultStart`/`isCaseOpenCallHead`,
+  mirrored in the checker, desugar, and exhaustiveness passes; pinned
+  in `lang/spec/case.tsv` §7). Record deleted.
 - **NUR049 (G10)** — `(dot message)` receiverless in an `error`
   handler. Root principle: the paren barrier is one-directional
   today. **FIX**: make it symmetric — a group completes from its own
@@ -244,12 +256,16 @@ split into four per-item records:
   running the repro to pin which path yields `__FN`.
 - **NUR051 (G13b)** — a type-literal map value refuses to
   bytecode-compile ("body result of unknown provenance"). Root
-  cause: the emitter has no provenance representation for a bare
-  type node in data position. **FIX**: intern nested bare type nodes
-  (`OpPushType`/`internType`) wherever they occur; implementer
-  checklist in the record. `0 eq Integer` → false is correct and not
-  evidence against types-as-values (`Integer eq Integer` → true —
-  singleton value, structural equality).
+  cause: the emitter had no provenance representation for a bare
+  type node in data position. **FIX — RESOLVED (this session)**:
+  `RecordMakeMap` / `recordMakeListInner` now intern a bare type node
+  member as a canonical-ID type operand (`OpPushType`) instead of
+  refusing; `{r: None}`, `[a None]`, `{k: Integer}` compile exactly
+  as they interpret (parity rows in `lang/spec/bytecode-migrated.tsv`;
+  the `None` → `none` workaround guidance is retired). Record
+  deleted. `0 eq Integer` → false remains correct and is not evidence
+  against types-as-values (`Integer eq Integer` → true — singleton
+  value, structural equality).
 
 ## Proposed ADR-010 — Types are values (added to ADR.md as Proposed)
 

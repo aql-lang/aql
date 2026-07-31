@@ -755,10 +755,18 @@ func TestRecordMakeListRefusals(t *testing.T) {
 	if es.RecordMakeList(nil, []Value{NewInteger(1)}, NewInteger(0), SrcPos{}) {
 		t.Fatal("non-top-frame make-list should decline")
 	}
-	// A bare type node element → declines (type-pattern list, not data).
+	// A bare type node element with a canonical ID INTERNS as a type
+	// operand and records (ADR-010 / NUR051 — `[a None]` is data)…
 	es = NewEmitState()
-	if es.recordMakeListInner(nil, []Value{NewTypeLiteral(TInteger)}, NewInteger(0), SrcPos{}) {
-		t.Fatal("type-pattern list should decline")
+	if !es.recordMakeListInner(nil, []Value{NewTypeLiteral(TInteger)}, NewInteger(0), SrcPos{}) {
+		t.Fatal("type-node element with a canonical ID should intern and record")
+	}
+	// …while one with NO canonical ID has no runtime home → declines.
+	es = NewEmitState()
+	noID := NewTypeLiteral(TInteger)
+	noID.ID = ""
+	if es.recordMakeListInner(nil, []Value{noID}, NewInteger(0), SrcPos{}) {
+		t.Fatal("type node with no canonical ID should decline")
 	}
 }
 
@@ -768,9 +776,18 @@ func TestRecordMakeMapRefusals(t *testing.T) {
 	if es.RecordMakeMap(nil, []string{"a"}, nil, false, NewInteger(0), SrcPos{}) {
 		t.Fatal("key/val mismatch should decline")
 	}
-	// bare type node value → declines.
-	if es.RecordMakeMap(nil, []string{"a"}, []Value{NewTypeLiteral(TInteger)}, false, NewInteger(0), SrcPos{}) {
-		t.Fatal("type-pattern map should decline")
+	// A bare type node value with a canonical ID INTERNS as a type
+	// operand and records (ADR-010 / NUR051 — `{r: None}` is data)…
+	es = NewEmitState()
+	if !es.RecordMakeMap(nil, []string{"a"}, []Value{NewTypeLiteral(TInteger)}, false, NewInteger(0), SrcPos{}) {
+		t.Fatal("type-node value with a canonical ID should intern and record")
+	}
+	// …while one with NO canonical ID has no runtime home → declines.
+	es = NewEmitState()
+	noID := NewTypeLiteral(TInteger)
+	noID.ID = ""
+	if es.RecordMakeMap(nil, []string{"a"}, []Value{noID}, false, NewInteger(0), SrcPos{}) {
+		t.Fatal("type node with no canonical ID should decline")
 	}
 }
 

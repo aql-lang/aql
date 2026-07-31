@@ -245,7 +245,13 @@ Commas are optional inside list and map literals — `[1 2 3]` and
 | Syntax | Scope |
 |--------|-------|
 | `# text` | Line — to end of line |
-| `## text ##` | Block — delimited |
+| `// text` | Line — to end of line |
+| `/* text */` | Block — delimited, may span lines |
+
+There is no `## text ##` block form — a `##` opens an ordinary `#`
+line comment (the rest of the line is ignored; a second `##` closes
+nothing). An unterminated `/*` is a parse error
+(`[boru/unterminated_comment]`).
 
 ### Grouping
 
@@ -735,7 +741,10 @@ def Bad refine Micron {x:String}         # returns error: micron_name
 
 **Ordering.** Same-kind Microns order by content. Most kinds order by
 canonical render, but four carry a custom numeric order where lexical
-render would be wrong: `Pathon` keeps its historical segment order;
+render would be wrong: `Pathon` orders naturally — volume/drive, then
+absolute before relative, then forward-lexical segments, then
+shorter-prefix-first, so a directory sorts immediately before its
+contents (`a` < `a/b` < `a/z` < `b/a`);
 `Semveron` by SemVer 2.0.0 precedence (`1.9.0 < 1.10.0`, `1.0.0-rc.1 <
 1.0.0`); `Cidron` by family then network address then prefix (`10.0.0.0/8
 < 10.0.0.0/16`, all v4 before v6); `Coloron` by the `(r,g,b,a)` channel

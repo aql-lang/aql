@@ -81,3 +81,17 @@ def Big (Integer gt 10) def f fn [[x:Integer][String][case x [Big "big" [lte 10]
 def Pos refine Integer def Neg refine Integer def PN (Pos tor Neg) def f fn [[x:PN][String][case x [Pos "p" Neg "n"]]] def y:Pos 5 f y	'p'	newtype alternatives are covered by their own clauses — Integer would cover NEITHER (nominal boundary)
 def Pos refine Integer def Neg refine Integer def PN (Pos tor Neg) def f fn [[x:PN][String][case x [[is Pos] "pos" [is Neg] "neg"]]] def y:Neg 7 f y	'neg'	…[is T] predicates cover nominally too
 case 2 [1 "one" 2 "two"]	'two'	a concrete scrutinee that provably matches a clause needs no default
+#
+# §7  the open-call default arm (NUR048 fix, was SHARP-EDGES G9). A
+#     match-position word bound to a FUNCTION VALUE can never be a
+#     genuine match (a function unifies with nothing), so it heads an
+#     OPEN-CALL default: the rest of the list is one default arm, run
+#     exactly like a matched code-body arm — isolated, value pushed
+#     first — instead of being torn into bogus (match, block) pairs
+#     whose last token leaked out as the silent "result".
+def g fn [[s:Map e:Map] [Map] [s]] def st {a:1} def ev {k:9} case "z" ["q" ["quit"] g st ev]	'z' {a:1}	an open-call default collects its own written args (was: silently returned ev)
+def g fn [[s:Map e:Map] [Map] [s]] def st {a:1} def ev {k:9} case "q" ["q" ["quit"] g st ev]	'q' 'quit'	a matching pair still wins; the open-call default is not taken
+def g fn [[s:Map e:Map] [Map] [s]] def st {a:1} def ev {k:9} case "z" ["q" ["quit"] (g st ev)]	{a:1}	the paren spelling keeps its meaning: a single-element default block
+def h fn [[s:String] [String] [s add "!"]] case "z" ["q" ["quit"] h]	'z!'	a single trailing fn word dispatches against the case value in isolation
+def red "R" case "R" [red "matched" "other"]	'matched'	a bare word bound to a NON-fn value keeps its match reading (resolves to the def'd value)
+case zed/q [zed "matched" "other"]	'matched'	…and an unbound bare word keeps its atom-match reading

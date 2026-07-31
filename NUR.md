@@ -55,23 +55,19 @@ commit.
 | # | Title | Surfaced by |
 |---|-------|-------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
-| [NUR012](#nur012) | Pathon orders segments in reverse lexical order | 2026-07-22 uniformity review |
 | [NUR013](#nur013) | NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt | 2026-07-22 uniformity review |
 | [NUR014](#nur014) | Cross-leaf numeric magnitude equality is leaf-pair-dependent | 2026-07-22 uniformity review |
 | [NUR018](#nur018) | Store and Error are excluded from `make` | 2026-07-22 uniformity review |
 | [NUR019](#nur019) | `slice` is the String family's core straggler | 2026-07-22 uniformity review |
 | [NUR022](#nur022) | `del` covers a fraction of `set`'s containers | 2026-07-22 uniformity review |
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
-| [NUR025](#nur025) | Comment forms: documented `## ##` does not exist; `//` and `/* */` do, undocumented | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | re-opened 2026-07-31 (was Allowed 2026-07-24) |
 | [NUR031](#nur031) | Module/ModuleExport values are not `eq`/`deq` to themselves | re-opened in part 2026-07-31 (was Allowed 2026-07-24) |
 | [NUR037](#nur037) | A fn-local fn used as a higher-order body word breaks in compiled mode only | re-opened 2026-07-31 (was Allowed 2026-07-30) |
 | [NUR038](#nur038) | Two consecutive statements headed by a 1-arg Any module export misfire silently | re-opened 2026-07-31 (was Allowed 2026-07-30) |
-| [NUR048](#nur048) | A `case` DEFAULT arm forward-collects the case machinery's stack | 2026-07-31 split of NUR029 (G9) |
 | [NUR049](#nur049) | The paren barrier is one-directional: a group can reach backward for a receiver | 2026-07-31 split of NUR029 (G10) |
 | [NUR050](#nur050) | An `/r`-parked fn (`Word/__FN`) does not satisfy a `Function`-typed param | 2026-07-31 split of NUR029 (G12) |
-| [NUR051](#nur051) | A bare type literal in map/list data position refuses to bytecode-compile | 2026-07-31 split of NUR029 (G13b) |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -461,36 +457,6 @@ re-opened under NUR031; this record's allowance is unchanged.
 
 ---
 
-## NUR012 — Pathon orders segments in reverse lexical order {#nur012}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** name-like scalars order forward-lexicographically (String,
-Atom, Word).
-**Divergence:** Pathon orders fewer-segments-first, then segment-by-
-segment in REVERSE lexical order (`sort [b/a a/z]` keeps `b/a` first —
-verified live), then relative-before-absolute; the same function orders
-DepScalar pairs forward-lex, so one comparator houses both directions.
-**Evidence:** `eng/go/compare_scalar_behaviors.go:359-413` (reverse at
-`:398`, forward DepScalar tail at `:366`).
-**Documentation status:** stated as fact (design/TYPE-ORDERING.10.md:74,
-REFERENCE.md:728 — which calls it "historical"); the rationale for
-reverse is argued nowhere.
-
-**Verdict (maintainer, 2026-07-31 — resolve by fix,
-`design/NUR-RESOLUTION-PLAN.0.md`):** Pathon gets a **natural total
-ordering**: (1) drive, (2) absolute paths, (3) relative paths, (4)
-segment-by-segment **forward** lexical comparison, (5) shorter prefix
-first. Additional Pathon work scheduled with the fix: define join
-semantics for `add` (duplicate separators must be impossible by
-construction) and a comprehensive test battery. Recorded
-investigations (not commitments): anchor-removal operators, a possible
-`mod` reading, HTTP-module interaction, and — explicitly speculative —
-parameterised Pathon/Urlon micron types carrying route parameters for
-HTTP frameworks. Stays Pending until the ordering fix lands.
-
----
-
 ## NUR013 — NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt {#nur013}
 
 **Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
@@ -733,32 +699,6 @@ the resolution plan (semantic vs deterministic ordering).
 
 ---
 
-## NUR025 — Comment forms: documented `## ##` does not exist; `//` and `/* */` do, undocumented {#nur025}
-
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
-
-**Rule:** REFERENCE §Comments defines the comment vocabulary: `# text`
-(line) and `## text ##` (block).
-**Divergence:** `##` does not open a block — `1 ## hi ## add 2` → `1`
-(rest of line ignored; the second `##` closes nothing). The actual
-block form is `/* */` (`1 /* hi */ add 2` → `3`) and `//` is a second
-working line form — both inherited jsonic defaults, absent from
-REFERENCE.
-**Evidence:** REFERENCE.md:243-248; `parse_error.go:67`
-(`unterminated_comment: /*`); `parse_test.go:563`.
-**Documentation status:** the documented form is wrong and the working
-forms are undocumented.
-
-**Verdict (maintainer, 2026-07-31 — resolve by documentation fix,
-`design/NUR-RESOLUTION-PLAN.0.md`):** the decision is taken in the
-documentation direction: **remove the nonexistent `## text ##` block
-form from REFERENCE** and **document the forms the parser actually
-accepts** (`# text` line, `// text` line, `/* text */` block), with
-spec rows pinning each. No parser change. Stays Pending until the doc
-fix and its pinning rows land.
-
----
-
 ## NUR026 — Escape sets diverge between quoted strings and templates {#nur026}
 
 **Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
@@ -941,7 +881,8 @@ acceptance:
   `Module`/`ModuleExport` values DO reach `eq`/`deq` and return
   `false` **including against themselves** — a silent violation of
   reflexive equality, the same half-handled-value-kind pattern as
-  NUR050/NUR051. A wrong answer, delivered quietly.
+  NUR050 (and the since-resolved NUR051). A wrong answer, delivered
+  quietly.
 
 **Standing requirement (maintainer, 2026-07-31):** every value —
 functions and modules included — must eventually fall under equality,
@@ -1036,10 +977,10 @@ re-classifies the record:
   defect: distinct from NUR050's type-identity mismatch.
 - **But the same family.** It rhymes with the recurring theme — the
   bytecode compiler failing to treat functions/values as first-class
-  where the interpreter does: NUR051 (type literals as data refuse to
-  compile), NUR050 (function references fail dispatch), and here,
-  function *bindings* as captured values failing name resolution when
-  compiled.
+  where the interpreter does: NUR051 (type literals as data refused to
+  compile — since RESOLVED: the emitter interns them per ADR-010),
+  NUR050 (function references fail dispatch), and here, function
+  *bindings* as captured values failing name resolution when compiled.
 - **"Slow, not wrong" is genuinely violated.** `boru check` reports
   clean while the DEFAULT runtime fails with `undefined_word` on a
   working program — exactly the failure mode
@@ -1650,33 +1591,6 @@ are written explicitly.
 
 ---
 
-## NUR048 — A `case` DEFAULT arm forward-collects the case machinery's stack {#nur048}
-
-**Status:** Pending · **Recorded:** 2026-07-31 · **Surfaced by:** split
-of NUR029 (design/BORU-SHARP-EDGES.0.md G9; originally the vault-TUI
-port)
-
-**Rule:** matched and default `case` arms behave identically — the
-same construct behaves the same across sibling forms.
-**Divergence:** a **matched** arm runs with an isolated stack, but the
-DEFAULT (last) arm runs with the case machinery's own values still on
-the stack, so an *open* call there (`vt-screen-key state ev`)
-forward-collects those stray values as extra arguments. In the vault
-app this silently turned an event map into the whole app state.
-Workaround: parenthesize the default call — `(vt-screen-key state ev)`.
-**Evidence:** `design/BORU-SHARP-EDGES.0.md` §G9 (minimal repro);
-re-verified against the binary 2026-07-30.
-
-**Verdict (maintainer, 2026-07-31 — resolve by fix,
-`design/NUR-RESOLUTION-PLAN.0.md`):** fix as the design note suggests.
-The DEFAULT arm shall isolate its stack **exactly the way matched arms
-do** — matched and default arms must behave identically. This is a
-genuine sibling-form inconsistency in the engine, not merely a
-documentation gap. Stays Pending until the isolation fix lands (with
-positive/negative spec rows, including the open-call-in-default shape).
-
----
-
 ## NUR049 — The paren barrier is one-directional: a group can reach backward for a receiver {#nur049}
 
 **Status:** Pending · **Recorded:** 2026-07-31 · **Surfaced by:** split
@@ -1793,78 +1707,3 @@ Open items before implementing: run the repro to pin which path
 yields `__FN` (and why the map/dot path already works); choose 2a vs
 2b; record the choice as an ADR. Relates to proposed ADR-010 (types
 are values) and to the NUR031 remainder (function equality).
-
----
-
-## NUR051 — A bare type literal in map/list data position refuses to bytecode-compile {#nur051}
-
-**Status:** Pending · **Recorded:** 2026-07-31 · **Surfaced by:** split
-of NUR029 (design/BORU-SHARP-EDGES.0.md G13b; compiler-limit)
-
-**Rule:** **types are values** (EXPLANATION.md, "Generics as memoised
-type construction") — a type literal is a first-class value that may
-occur anywhere a value can, and anything that runs interpreted must
-also compile (`design/COMPILABLE-SUBSET.md`, "slow, not wrong").
-**Divergence:** `def f fn [[a:Integer] [Map] [ def m {x: a  r: None}
-m ]]` refuses to bytecode-compile — `fn f: body result of unknown
-provenance` — while the lowercase-`none` twin compiles; the
-interpreter runs both. The G13a def-bind cure does not help: the
-provenance gap is the **type literal**, not a deferred residual.
-**Root cause (source-traced, 2026-07-31):** "provenance" here is
-emitter-specific — for each value a body leaves on the stack, the
-emitter must tie it to a runtime operand source (`resolveOperand`,
-`eng/go/emit.go:1597`: capture slot, producing event, local slot,
-bare-type-node table entry via `OpPushType` — which requires a
-non-empty type ID — then constant/materialisation and dynamic-scope
-rescue); when every branch declines it calls `MarkUncompilable("fn
-<name>: body result of unknown provenance")` (`emit.go:3336`). A bare
-type literal is `Data == nil` and not a carrier (`IsBareTypeNode`,
-`eng/go/util.go:61`; `IsTypeBody` builds on it,
-`core_helpers.go:2084`); the lowercase `none` value carries a non-nil
-sentinel payload, so it flows through the normal operand paths. A
-capital `None` nested as a **map member** inside a fn frame arrives
-with no producing event, no local/capture slot, and no interned type
-ID the emitter recognises in that position — every branch declines.
-The compiler simply has no provenance representation for a type
-literal used as ordinary **data**: it models type literals only as
-type-declaration machinery (signatures, schemas), flattening away
-their first-class-value status. The interpreter honours the doctrine;
-the divergence is compile-only.
-**Equality clarification (maintainer, 2026-07-31 — for the
-implementer):** `0 eq Integer` → false is CORRECT and is *not*
-evidence that a type literal "isn't a value" — the operands are simply
-different values (a scalar vs the type-literal **singleton value**
-inhabiting that type position). `Integer eq Integer` → true, borne out
-by `ExactEqual`'s structural type-body arm (`eng/go/compare.go:
-358-361`); cross-type comparison is `teq`. Treat a bare type literal
-as a first-class singleton value with structural equality — never as
-non-value declaration syntax.
-
-**Verdict (maintainer, 2026-07-31 — resolve by fix,
-`design/NUR-RESOLUTION-PLAN.0.md`):** restore "types are values" at
-the compile layer so it matches the interpreter: teach the emitter to
-give a bare type node a first-class, **interned type-operand
-identity wherever it occurs** — nested map/list members included —
-the same `OpPushType`/`internType` path a standalone bare type node
-already gets (`emit.go:1655`). Then `{r: None}` compiles identically
-to how it interprets. Implementer checklist:
-
-- a bare type node used as a map/list member reaches `internType` /
-  `OpPushType` rather than requiring a producing event or local slot;
-- the interned operand carries a stable canonical registry ID (the
-  `IsBareTypeNode(v) && v.ID != ""` branch must fire for nested
-  members — mint/carry the ID);
-- preserve the existing ID-collision guard (a `make` result
-  inheriting a type literal's ID must still resolve as its own
-  operand, not as the type);
-- compile tests for a type literal in map and list members, def-bound
-  and returned bare, single- and multi-token bodies; assert compiled
-  output matches interpreted (`{r: None}`, `[None]`, `{k: Integer}`);
-- retire the `None` → `none` workaround guidance
-  (design/BORU-SHARP-EDGES.0.md §G13b) once the compiler admits
-  type-literals-as-values; `none`/`None` compare-equal behaviour is
-  unchanged.
-
-Motivates proposed **ADR-010 — Types are values** (see ADR.md), which
-turns the doctrine into a checkable cross-layer contract. Stays
-Pending until the emitter fix lands.

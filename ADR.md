@@ -804,7 +804,8 @@ checkable contract so future features cannot silently regress it.
 ### Consequences (proposed)
 
 - Fixes NUR051/G13b **by mandate**: the compiler must intern nested
-  type literals.
+  type literals. (Implemented 2026-07-31 — `RecordMakeMap` /
+  `recordMakeListInner` intern bare type nodes; NUR051 resolved.)
 - Adds a standing test obligation: for every value-position construct,
   a type literal must behave identically interpreted vs compiled.
 - Clarifies the equality model in one place — `eq` is value equality;

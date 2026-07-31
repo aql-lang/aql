@@ -594,28 +594,36 @@ func TestTypeLiteralFirstRule(t *testing.T) {
 }
 
 func TestComparePathons(t *testing.T) {
+	// NUR012 natural order: volume → absolute-first → forward lex →
+	// shorter-prefix-first (a directory sorts before its contents).
 	p2 := NewPathon([]string{"a", "b"}, false)
 	p3 := NewPathon([]string{"a", "b", "c"}, false)
 	if mustCmp(t, p2, p3) != -1 {
-		t.Error("shorter path not first")
+		t.Error("prefix (directory) not first")
 	}
 	if mustCmp(t, p3, p2) != 1 {
-		t.Error("longer path not after")
+		t.Error("longer path not after its prefix")
 	}
-	// Same length: reverse lexical per segment.
+	// Forward lexical per segment.
 	pa := NewPathon([]string{"a"}, false)
 	pb := NewPathon([]string{"b"}, false)
-	if mustCmp(t, pa, pb) != 1 {
-		t.Error("reverse-lex segment order broken")
+	if mustCmp(t, pa, pb) != -1 {
+		t.Error("forward-lex segment order broken")
 	}
-	// Same segments: relative before absolute.
+	// Same segments: absolute before relative.
 	rel := NewPathon([]string{"x"}, false)
 	abs := NewPathon([]string{"x"}, true)
-	if mustCmp(t, rel, abs) != -1 || mustCmp(t, abs, rel) != 1 {
-		t.Error("rel/abs order broken")
+	if mustCmp(t, abs, rel) != -1 || mustCmp(t, rel, abs) != 1 {
+		t.Error("abs/rel order broken")
 	}
 	if mustCmp(t, rel, NewPathon([]string{"x"}, false)) != 0 {
 		t.Error("identical paths not 0")
+	}
+	// Volume is the first key: a driveless path sorts before a drive one
+	// regardless of segments.
+	drive := NewPathonVol("c:", []string{"a"}, true)
+	if mustCmp(t, NewPathon([]string{"z"}, false), drive) != -1 {
+		t.Error("driveless path not before a drive path")
 	}
 	// Type-literal-first within the Pathon family.
 	if mustCmp(t, NewTypeLiteral(TPathon), rel) != -1 {

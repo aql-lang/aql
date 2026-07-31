@@ -59,9 +59,12 @@ half-built when the binding vanishes.
 
 ### G9 — a multi-arg call in a `case` DEFAULT slot mis-collects  ·  *sharp-edge*
 
-> **Status: still reproduces (re-verified 2026-07-30). Registered as
-> [NUR048](../NUR.md#nur048)** — verdict (2026-07-31): FIX; the
-> DEFAULT arm shall isolate its stack exactly the way matched arms do.
+> **Status: FIXED (NUR048, resolved 2026-07-31).** A match-position
+> word bound to a function value now heads an OPEN-CALL default arm:
+> the residue runs isolated with the case value pushed first, exactly
+> like a matched arm (`caseDefaultStart` /`isCaseOpenCallHead`,
+> lang/go/native/conditional.go; rows in lang/spec/case.tsv §7). The
+> parenthesized workaround below is no longer required.
 
 ```
 case ev.key [
@@ -188,11 +191,13 @@ def f fn [[a:Integer] [Map] [ def y (a add 1)  {x: a  y: y} ]]   # COMPILES
 
 ### G13b — a *type-literal* map value refuses even when def-bound  ·  *compiler-limit (distinct root cause)*
 
-> **Status: still reproduces (re-verified 2026-07-30). Registered as
-> [NUR051](../NUR.md#nur051)** — verdict (2026-07-31): FIX; give a bare
-> type node an interned type-operand identity in data position
-> (`OpPushType`), per proposed ADR-010 "Types are values". The
-> `None` → `none` workaround below retires when that lands.
+> **Status: FIXED (NUR051, resolved 2026-07-31).** A bare type node in
+> map/list DATA position now interns as a canonical-ID type operand
+> (`OpPushType`) in RecordMakeMap / recordMakeListInner, per ADR-010
+> "Types are values" — `{r: None}`, `[a None]`, `{k: Integer}` compile
+> exactly as they interpret (rows in lang/spec/bytecode-migrated.tsv).
+> The `None` → `none` workaround below is RETIRED — kept only as
+> history.
 
 ```
 def f fn [[a:Integer] [Map] [ def m {x: a  r: None}  m ]]   # STILL refuses
@@ -281,13 +286,14 @@ and `design/NUR-RESOLUTION-PLAN.0.md`).
 | G8  | recovered-raise binding teardown | engine-bug? | **no longer reproduces** (fixed by unrelated work) |
 | G12 | `/r` fn ≠ `Function` param | engine-bug? | reproduces → **NUR050**: fix needed, mechanism deferred (function type vs reference; ADR-level) |
 | G10 | `def why (dot message)` in `error` | latent-bug | reproduces → **NUR049**: symmetric paren barrier; fix `todo-tui-client.boru` + failing-sync test |
-| G9  | `case` default slot collection | sharp-edge | reproduces → **NUR048**: isolate the DEFAULT arm's stack like matched arms |
+| G9  | `case` default slot collection | sharp-edge | **FIXED** (NUR048 resolved 2026-07-31 — open-call default runs isolated like a matched arm) |
 | G11 | returned list literal laziness | sharp-edge | **no longer reproduces** (fixed by unrelated work) |
 | G13a| single-token bare-map body | compiler-limit | **no longer reproduces** (single-token now compiles) |
-| G13b| type-literal map value | compiler-limit | reproduces → **NUR051**: intern nested bare type nodes (`OpPushType`); proposed ADR-010 |
+| G13b| type-literal map value | compiler-limit | **FIXED** (NUR051 resolved 2026-07-31 — nested bare type nodes intern as `OpPushType` operands; ADR-010) |
 
-The four live items are all verdict-carrying NUR records now; a
-per-item fix retires its per-item record. The two dead engine items
-(G8, G11) and the dead compiler item (G13a) were fixed by unrelated
-work — which this register only noticed on re-verification, the cost
-of the original umbrella entry.
+The two live items (G10 → NUR049, G12 → NUR050) carry verdict-bearing
+NUR records; a per-item fix retires its record — as G9 (NUR048) and
+G13b (NUR051) now demonstrate. The two dead engine items (G8, G11) and
+the dead compiler item (G13a) were fixed by unrelated work — which the
+register only noticed on re-verification, the cost of the original
+umbrella entry.

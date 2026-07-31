@@ -105,12 +105,15 @@ entirely in boru are collected in **`design/BORU-SHARP-EDGES.0.md`** —
 minimal repros, root-cause hypotheses, workarounds, and a triage table.
 Re-verified 2026-07-30: G8 (recovered-`raise` binding teardown), G11
 (returned-list-literal laziness) and G13a (single-token bare-map body)
-**no longer reproduce** — fixed by unrelated work. The four live items
-carry per-item NUR records with fix verdicts (2026-07-31): G9
-`case`-default collection → NUR048, G10 `(dot message)` receiverless in
-an `error` handler → NUR049, G12 an `/r`-parked fn not satisfying a
-`Function` param → NUR050, G13b a type-literal map value refusing to
-compile → NUR051. Read the note before re-deriving a workaround.
+**no longer reproduce** — fixed by unrelated work. G9 (`case`-default
+collection, NUR048) and G13b (type-literal map values refusing to
+compile, NUR051) were **resolved 2026-07-31** — an open-call `case`
+default now runs isolated like a matched arm, and nested bare type
+nodes intern as type operands (ADR-010). The two live items carry
+per-item NUR records with fix verdicts: G10 `(dot message)`
+receiverless in an `error` handler → NUR049, G12 an `/r`-parked fn not
+satisfying a `Function` param → NUR050. Read the note before
+re-deriving a workaround.
 
 ## Build & Test
 
