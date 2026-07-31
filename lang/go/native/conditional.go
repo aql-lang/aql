@@ -111,15 +111,38 @@ func caseDefaultStart(r *Registry, elems []Value) (int, bool) {
 	return len(elems), false
 }
 
+// caseNormalizeClauses collapses an OPEN-CALL default region — trailing
+// tokens headed by a function word (caseDefaultStart stopping early), or
+// a single trailing fn-headed word — into ONE synthetic code-body block,
+// so every downstream walk (the runtime clause walk, the branch join,
+// the compile desugar, the exhaustiveness passes) sees the standard
+// pairs-plus-single-default shape and treats the arm exactly like a
+// matched code-body arm (NUR048/G9). A clause list already in standard
+// shape is returned unchanged.
+func caseNormalizeClauses(r *Registry, elems []Value) []Value {
+	start, hasDefault := caseDefaultStart(r, elems)
+	if !hasDefault {
+		return elems
+	}
+	rest := elems[start:]
+	if len(rest) == 1 && !isCaseOpenCallHead(r, rest[0]) {
+		return elems
+	}
+	out := make([]Value, 0, start+1)
+	out = append(out, elems[:start]...)
+	out = append(out, NewList(append([]Value(nil), rest...)))
+	return out
+}
+
 // caseClauses runs the `case` word's clause walk (see caseHandler):
 // v is the captured value; elems are the raw clause-list elements —
-// match/block pairs with an optional trailing default (single element,
-// or an open-call spanning the tail — see caseDefaultStart). Returns
-// the matched block's result stack.
+// match/block pairs with an optional trailing default (a single
+// element; an open-call tail is first collapsed into a synthetic block
+// by caseNormalizeClauses). Returns the matched block's result stack.
 func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
-	start, hasDefault := caseDefaultStart(r, elems)
+	elems = caseNormalizeClauses(r, elems)
 	i := 0
-	for ; i < start; i += 2 {
+	for ; i+1 < len(elems); i += 2 {
 		match := elems[i]
 		matched := false
 		if isCodeBody(match) {
@@ -173,22 +196,14 @@ func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
 			return runCaseBody(r, v, elems[i+1])
 		}
 	}
-	if !hasDefault {
-		return nil, nil
+	if i < len(elems) {
+		// Trailing odd element: the default clause (an open-call tail
+		// arrives here as one synthetic code-body block and so runs in
+		// an isolated sub-engine with the case value pushed first —
+		// exactly like a matched arm, NUR048/G9).
+		return runCaseBody(r, v, elems[i])
 	}
-	rest := elems[start:]
-	if len(rest) == 1 && !isCaseOpenCallHead(r, rest[0]) {
-		// Trailing odd element: the plain default clause.
-		return runCaseBody(r, v, rest[0])
-	}
-	// An open-call default — trailing tokens headed by a function word —
-	// runs EXACTLY like a matched code-body arm: in an isolated
-	// sub-engine with the case value pushed first as resolved data, so
-	// the call collects its own written arguments and can never reach
-	// the enclosing stack or continuation (NUR048/G9). Before this rule
-	// the pair walk mispaired the tokens and the arm's LAST token leaked
-	// out as the silent "result".
-	return RunResolved(r, []Value{v}, rest)
+	return nil, nil
 }
 
 // caseReturnsFn type-checks a `case` and, when bytecode emission is active,
@@ -248,10 +263,8 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 			}
 			if isCodeBody(clauses) {
 				if lst, _ := AsList(clauses); !lst.IsNil() {
-					elems := lst.Slice()
-					if start, _ := caseDefaultStart(r, elems); start == 2 &&
-						len(elems) == 3 && !isCodeBody(elems[1]) && !isCodeBody(elems[2]) &&
-						!isCaseOpenCallHead(r, elems[2]) {
+					elems := caseNormalizeClauses(r, lst.Slice())
+					if len(elems) == 3 && !isCodeBody(elems[1]) && !isCodeBody(elems[2]) {
 						// `[do]` + the normal guard tokens: do runs the body once,
 						// leaving its value as the scrutinee for the match.
 						cond := NewList(append([]Value{NewWord("do")}, caseGuardTokens(v, elems[0])...))
@@ -280,7 +293,11 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	if lst.IsNil() {
 		return dynAny
 	}
-	elems := lst.Slice()
+	// An open-call default tail collapses into one synthetic code-body
+	// block up front (NUR048/G9), so the coverage pass, the compile
+	// desugar, and the branch join all see the standard shape and lower
+	// the arm exactly like a matched block.
+	elems := caseNormalizeClauses(r, lst.Slice())
 	// Static coverage pass (case_exhaustive.go) — BEFORE the compile-desugar /
 	// plain-check paths diverge, so both report identical findings: a
 	// default-less case whose clauses don't cover the scrutinee's static type
@@ -301,14 +318,8 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	// directly, and a COMPUTED top-level scrutinee (`case (1 add 1) […]`) that
 	// planValueDefLocals then promotes to a frame local once the fragment reads
 	// are recorded. if3ReturnsFn returns the branch-join type AND records the
-	// lowering. An OPEN-CALL default (caseDefaultStart stopping early, or a
-	// trailing fn-headed word — NUR048/G9) is NOT desugared: the runtime runs
-	// that arm as an isolated body, and the island / whole-program fallback
-	// keeps owning its compilation.
-	start, _ := caseDefaultStart(r, elems)
-	plainShape := start >= len(elems)-1 &&
-		(start == len(elems) || !isCaseOpenCallHead(r, elems[start]))
-	if plainShape && r.Check.Recorder().CanSeatAcrossFragment(v) {
+	// lowering.
+	if r.Check.Recorder().CanSeatAcrossFragment(v) {
 		cond := NewList(caseGuardTokens(v, elems[0]))
 		then := NewList(caseBlockTokens(v, elems[1]))
 		rest := buildCaseChain(v, elems, 2)
@@ -332,8 +343,8 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 func caseBranchJoin(r *Registry, v Value, elems []Value) []Value {
 	var out Value
 	have := false
-	joinTokens := func(toks []Value) {
-		stk := RunCarrierBody(r, NewList(toks))
+	join := func(block Value) {
+		stk := RunCarrierBody(r, NewList(caseBlockTokens(v, block)))
 		res := NewCarrier(TNone)
 		if len(stk) > 0 {
 			res = stk[len(stk)-1]
@@ -344,20 +355,12 @@ func caseBranchJoin(r *Registry, v Value, elems []Value) []Value {
 			out, have = res, true
 		}
 	}
-	join := func(block Value) { joinTokens(caseBlockTokens(v, block)) }
-	start, hasDefault := caseDefaultStart(r, elems)
-	for i := 0; i < start; i += 2 {
+	i := 0
+	for ; i+1 < len(elems); i += 2 {
 		join(elems[i+1]) // clause block (odd-indexed; the even index is the match)
 	}
-	if hasDefault {
-		rest := elems[start:]
-		if len(rest) == 1 && !isCaseOpenCallHead(r, rest[0]) {
-			join(rest[0]) // trailing default block
-		} else {
-			// Open-call default: mirrors caseClauses' RunResolved arm —
-			// the residue runs as one body with the case value pushed.
-			joinTokens(append([]Value{v}, rest...))
-		}
+	if i < len(elems) {
+		join(elems[i]) // trailing default block
 	}
 	if !have {
 		return []Value{NewDynamicCarrier(TAny)}

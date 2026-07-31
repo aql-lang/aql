@@ -89,8 +89,8 @@ case 2 [1 "one" 2 "two"]	'two'	a concrete scrutinee that provably matches a clau
 #     exactly like a matched code-body arm — isolated, value pushed
 #     first — instead of being torn into bogus (match, block) pairs
 #     whose last token leaked out as the silent "result".
-def g fn [[s:Map e:Map] [Map] [s]] def st {a:1} def ev {k:9} case "z" ["q" ["quit"] g st ev]	'z' {a:1}	an open-call default collects its own written args (was: silently returned ev)
-def g fn [[s:Map e:Map] [Map] [s]] def st {a:1} def ev {k:9} case "q" ["q" ["quit"] g st ev]	'q' 'quit'	a matching pair still wins; the open-call default is not taken
+def g fn [[s:Map e:Map] [Map] [s]] def st {a:1} def ev {k:9} case "z" ["q" [drop "quit"] g st ev nip]	{a:1}	an open-call default collects its own written args (was: silently returned ev); the arm consumes the pushed value like any block
+def g fn [[s:Map e:Map] [Map] [s]] def st {a:1} def ev {k:9} case "q" ["q" [drop "quit"] g st ev nip]	'quit'	a matching pair still wins; the open-call default is not taken
 def g fn [[s:Map e:Map] [Map] [s]] def st {a:1} def ev {k:9} case "z" ["q" ["quit"] (g st ev)]	{a:1}	the paren spelling keeps its meaning: a single-element default block
 def h fn [[s:String] [String] [s add "!"]] case "z" ["q" ["quit"] h]	'z!'	a single trailing fn word dispatches against the case value in isolation
 def red "R" case "R" [red "matched" "other"]	'matched'	a bare word bound to a NON-fn value keeps its match reading (resolves to the def'd value)

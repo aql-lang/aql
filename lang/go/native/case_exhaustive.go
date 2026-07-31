@@ -695,13 +695,10 @@ func checkCaseExhaustiveness(r *Registry, v Value, clauses Value, elems []Value)
 	if !v.Carrier && r.Check.FnBodyDepth > 0 {
 		return
 	}
-	// The default region mirrors caseClauses: the trailing odd element,
-	// or an open-call arm starting at a fn-headed match position
-	// (caseDefaultStart, NUR048/G9) — either way it catches everything.
-	start, hasDefault := caseDefaultStart(r, elems)
+	hasDefault := len(elems)%2 == 1
 
-	matches := make([]caseClauseMatch, 0, start/2)
-	for i := 0; i < start; i += 2 {
+	matches := make([]caseClauseMatch, 0, len(elems)/2)
+	for i := 0; i+1 < len(elems); i += 2 {
 		matches = append(matches, resolveCaseMatch(r, elems[i]))
 	}
 
@@ -837,15 +834,14 @@ func checkCaseCodeBodyScrutinee(r *Registry, v Value, clauses Value) {
 	if lst.IsNil() { //covergate:allow AsList of a concrete code-body list is never nil (an empty list is non-nil with zero elements)
 		return
 	}
-	elems := lst.Slice()
-	// Mirrors caseClauses' default region: a trailing odd element or an
-	// open-call arm (caseDefaultStart) both count as the catch-all.
-	start, hasDefault := caseDefaultStart(r, elems)
-	if hasDefault {
+	// An open-call default tail counts as the catch-all: normalize it
+	// into the standard single-default shape first (NUR048/G9).
+	elems := caseNormalizeClauses(r, lst.Slice())
+	if len(elems)%2 == 1 {
 		return
 	}
-	matches := make([]caseClauseMatch, 0, start/2)
-	for i := 0; i < start; i += 2 {
+	matches := make([]caseClauseMatch, 0, len(elems)/2)
+	for i := 0; i+1 < len(elems); i += 2 {
 		matches = append(matches, resolveCaseMatch(r, elems[i]))
 	}
 	if caseHasAnyClause(r, matches) {
