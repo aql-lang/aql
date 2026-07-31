@@ -1664,11 +1664,48 @@ resolves to via `ResolveTypeName`, `eng/go/fn_params.go:721`) and
 `/r` path via `ResolveRef` *does* wrap an FnDef binding as
 `NewFunction` (Parent `TFunction`; `IsFunctionRef` checks it —
 `eng/go/core_ref.go:26-63`), which **contradicts** the reproducing
-`__FN` failure — so the failing repro likely takes a different path
-(the `/r`-on-a-group-result DispatchModInfo path, or a re-mark when
-the parked value lands directly in a param slot, where the map-store
-path goes through a wrap the direct arrival skips). Unconfirmed —
-needs the repro run against the binary to pin the exact path.
+`__FN` failure — so the failing repro likely takes a different path.
+
+**Investigation COMPLETED (2026-07-31, run against the binary) — the
+open item is answered, and the answer corrects this record's premise.**
+The runtime **never produces a `__FN` value that fails conformance**;
+the failure decomposes into two separate defects:
+
+1. **The runtime failure is COLLECTION-level, not type-level.** The
+   forward plan walk (`matchSignature` step 1.4; the same rule as
+   `polyReachBound`'s "a function word stops forward collection",
+   `eng/go/engine.go:465`) treats ANY word bound to a function — a
+   def'd fn, or a def-bound Function value — as a hard barrier, and
+   decides this BEFORE the trailing `/r` DispatchMod marker is
+   visible. `wa` therefore under-fills (1 of 2 args) and raises; the
+   reference is never collected at all. The marker consumption
+   (`execFnDefLiteral`, `engine.go:5192`) sets `Quoted=true` on an
+   already-stepped value — too late for a collector that stopped at
+   the word.
+2. **The `__FN` in the diagnostic is the CHECKER's model, not the
+   runtime's.** Check mode resolves the word to the raw def binding
+   (`NewFnDef` → `Word/__FN`) and reports `got (Map, __FN)` — a
+   *misdiagnosis* of the real (collection) failure. Everywhere the
+   reference actually lands as data it is `TFunction` and **already
+   satisfies `act:Function` today**: `wa {x:1} (some-fn/r)` works,
+   `wa {x:1} m.run` works, the stack form `some-fn/r {x:1} wa`
+   works; `typeof` reports `Function` for every parked form.
+3. **Where the two types actually live:** the def table stores
+   `NewFnDef` (`Word/__FN`); every value-facing surface wraps to
+   `NewFunction` (`ResolveRef`; `stepWord`'s
+   expecting-Function arrival path, `engine.go:2657`; `usurp`; the
+   `fn`/`afn` constructors). The call-vs-data discriminator at the
+   pointer is the **`Quoted` flag, not the Parent** — so the Parent
+   split is largely vestigial, leaking only through the checker's
+   model and the module-export fn resolution
+   (`native_module_module.go` returns `NewFnDef` — the `__FN`
+   residual NUR038 observed). 84 non-test `TFnDef` references
+   repo-wide, mostly OR-paired with `TFunction`.
+4. A precedent for slot-aware admission already exists:
+   `hasPendingForwardExpectingFunction` (`engine.go:7571`) resolves a
+   bare word to `NewFunction` when a parked forward's next slot
+   expects exactly `TFunction` — arrival path only; it does not
+   rescue the plan-walk barrier.
 **Framing (maintainer, 2026-07-31):** this is a fundamental confusion
 between **a function itself and a reference to a function**, with a
 confused implementation. boru is stack-based: a zero-arg function on
