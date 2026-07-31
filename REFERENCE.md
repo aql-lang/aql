@@ -1053,7 +1053,11 @@ operand unchanged, `sign` yields an `Integer`).
 
 The six arithmetic words are **total within every scalar type and every
 Micron kind** — applied within a type, never across it (a cross-type pair
-is a `[boru/type_error]`). Some of these are unusual, but each is defined.
+is a `[boru/type_error]`). The **sole language-level exception** is
+`String` `add`, which concatenates when at least one operand is a
+`String` (see [Arithmetic](#arithmetic) above); no other word, and no
+other type — `Atom` and `Bytes` included — crosses scalar types. Some of
+these are unusual, but each is defined.
 
 **`String` / `Atom` — the occurrence package.** `add` concatenates; the
 rest operate on occurrences of the right operand in the left (an `Atom`

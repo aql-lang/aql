@@ -96,7 +96,7 @@
 # 4. pow asymmetry: a negative exponent is an ERROR for integer pow but
 #    a Float exponent (or base) makes it legal (real-valued). Contagion
 #    changes whether the op is even defined, not just the type.
-2 -1 pow	ERROR:negative exponent	II rejects a negative exponent
+2 -1 pow	ERROR:negative exponent	II rejects a negative exponent (coded arith_error — NUR010 fix)
 2 -1.0 pow	0.5	a Float exponent is allowed → real reciprocal
 2.0 -1 pow	0.5	a Float base also flips it to the real path
 

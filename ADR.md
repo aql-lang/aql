@@ -750,3 +750,67 @@ modes motivated formalizing this:
   Because the bundle is versioned the same way, an older `boru` refuses a
   newer bundle rather than mishandling it. `import` auto-detects whether
   its input is a bundle or a `.env` file.
+
+---
+
+## ADR-010 — Types are values: type literals are first-class, singleton values everywhere {#adr-010}
+
+**Status:** Proposed · **Date:** 2026-07-31 · Recorded on maintainer
+instruction via `design/NUR-RESOLUTION-PLAN.0.md` (motivated by
+NUR051/G13b; reinforced by NUR050/G12)
+
+### Decision (proposed)
+
+1. **A type literal is a value** — a first-class value that may appear
+   anywhere a value may appear: bound with `def`, stored as a map/list
+   member, returned from a function, passed as an argument, matched in
+   `case`, etc. No layer may treat a type literal as declaration-only
+   syntax valid solely in signatures and schemas.
+
+2. **A type literal is a singleton value**: the single value inhabiting
+   that type position. Therefore `Integer eq Integer` is **true**
+   (structural type equality — `ExactEqual`'s type-body arm,
+   `eng/go/compare.go:358-361`), while `0 eq Integer` is **false**
+   because the operands are a scalar value and a type value — a genuine
+   value-vs-value mismatch, NOT evidence that the type "isn't a value".
+   Cross-type comparison is `teq`.
+
+3. **Uniform obligation across all layers.** The interpreter, the type
+   checker, and the bytecode compiler honour (1) and (2) identically.
+   Any construct that runs interpreted with a type literal in value
+   position MUST also compile; a compiler refusal on a
+   type-literal-as-value is a **bug**, not an accepted limit.
+
+4. **Provenance requirement (compiler).** The bytecode emitter assigns
+   a bare type node a first-class, interned type-operand identity
+   wherever it occurs — nested in map/list members included (the
+   `OpPushType`/`internType` path, `eng/go/emit.go:1655`) — and never
+   falls through to "body result of unknown provenance" for a type
+   literal used as data.
+
+### Context
+
+boru already states the doctrine informally — "types are values"
+(EXPLANATION.md, "Generics as memoised type construction": a schema is
+a value holding a type body; `typeof` names an instantiation because it
+IS a type). But because it was never encoded as a strict cross-layer
+invariant, individual layers drifted: the bytecode compiler modelled
+type literals as type-declaration machinery only and refuses
+`{r: None}` in a fn body (NUR051/G13b), and the function-vs-reference
+confusion (NUR050/G12) is the same class of error — a value kind one
+layer honours and another flattens. An ADR makes "types are values" a
+checkable contract so future features cannot silently regress it.
+
+### Consequences (proposed)
+
+- Fixes NUR051/G13b **by mandate**: the compiler must intern nested
+  type literals.
+- Adds a standing test obligation: for every value-position construct,
+  a type literal must behave identically interpreted vs compiled.
+- Clarifies the equality model in one place — `eq` is value equality;
+  `Integer eq Integer` → true; `0 eq Integer` → false; `teq` for
+  cross-type — preventing the "type literals aren't values"
+  misreading.
+- Relates to (does not supersede) the pending NUR050 decision: a
+  single, principled `Function` value type is consistent with, and
+  reinforced by, this record.

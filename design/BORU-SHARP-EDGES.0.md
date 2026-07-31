@@ -35,6 +35,10 @@ Classification legend:
 
 ### G8 — a recovered `raise` inside a map-literal value tears down the enclosing fn's bindings  ·  *engine-bug (candidate)*
 
+> **Status (re-verified 2026-07-30): NO LONGER REPRODUCES.** Fixed by
+> unrelated work; the entry is kept for history. Recorded via the
+> NUR029 umbrella (split 2026-07-31 — see NUR.md).
+
 ```
 def g   fn [[] [String] [ do [ raise "boom" ] error [ dot message ] ]]
 def bad fn [[t:String] [Map]  [ {title: t  text: (g)} ]]
@@ -54,6 +58,10 @@ half-built when the binding vanishes.
   teardown into the recovering frame.
 
 ### G9 — a multi-arg call in a `case` DEFAULT slot mis-collects  ·  *sharp-edge*
+
+> **Status: still reproduces (re-verified 2026-07-30). Registered as
+> [NUR048](../NUR.md#nur048)** — verdict (2026-07-31): FIX; the
+> DEFAULT arm shall isolate its stack exactly the way matched arms do.
 
 ```
 case ev.key [
@@ -75,6 +83,11 @@ app state, because the default arm captured the event instead of dispatching.
 
 ### G10 — `def why (dot message)` in an `error` handler never works  ·  *latent-bug (shipped code)*
 
+> **Status: still reproduces (re-verified 2026-07-30). Registered as
+> [NUR049](../NUR.md#nur049)** — verdict (2026-07-31): FIX by making
+> the paren barrier symmetric (a group may not reach backward past its
+> open paren); fix `todo-tui-client.boru` and test its error arms.
+
 ```
 do [ … ] error [ def why (dot message)  … ]     # → dot: no receiver
 ```
@@ -93,6 +106,9 @@ result to a helper that takes it from the stack (`vt-err-text`,
 
 ### G11 — a list literal returned as a fn result evaluates lazily, after body teardown  ·  *sharp-edge*
 
+> **Status (re-verified 2026-07-30): NO LONGER REPRODUCES.** Fixed by
+> unrelated work; kept for history (NUR029 umbrella, split 2026-07-31).
+
 ```
 def row fn [[a:Map] [List] [ [ (vt-str a.name) (vt-str a.provider) ] ]]
 # → undefined word: a   (raised at the CALL SITE that consumes the list)
@@ -109,6 +125,11 @@ snapshots it in-frame.
   snapshot its lexical bindings like `def` does.
 
 ### G12 — an `/r`-parked fn does not match a `Function`-typed param  ·  *engine-bug (candidate)*
+
+> **Status: still reproduces (re-verified 2026-07-30). Registered as
+> [NUR050](../NUR.md#nur050)** — verdict (2026-07-31): FIX needed,
+> mechanism deferred — one principled `Function` type with
+> reference-vs-call distinguished at the call site (ADR-level).
 
 ```
 def wa fn [[s:Map act:Function] [Map] [ act s ]]
@@ -142,6 +163,10 @@ The interpreter runs all of these correctly; only the bytecode compiler
 
 ### G13a — a *single-token* bare computed-map body refuses  ·  *compiler-limit*
 
+> **Status (re-verified 2026-07-30): NO LONGER REPRODUCES** — a
+> single-token bare computed-map body now compiles. Fixed by unrelated
+> work; kept for history (NUR029 umbrella, split 2026-07-31).
+
 ```
 def f fn [[a:Integer] [Map] [ {x: (a add 1)} ]]      # single-token body
 # --force-compile → force-compile: fn f: body result of unknown provenance
@@ -162,6 +187,12 @@ def f fn [[a:Integer] [Map] [ def y (a add 1)  {x: a  y: y} ]]   # COMPILES
 - **Confirmed** (this repo, today): single-token refuses; multi-token compiles.
 
 ### G13b — a *type-literal* map value refuses even when def-bound  ·  *compiler-limit (distinct root cause)*
+
+> **Status: still reproduces (re-verified 2026-07-30). Registered as
+> [NUR051](../NUR.md#nur051)** — verdict (2026-07-31): FIX; give a bare
+> type node an interned type-operand identity in data position
+> (`OpPushType`), per proposed ADR-010 "Types are values". The
+> `None` → `none` workaround below retires when that lands.
 
 ```
 def f fn [[a:Integer] [Map] [ def m {x: a  r: None}  m ]]   # STILL refuses
@@ -241,18 +272,22 @@ never exercised."*
 
 ## 4. Triage
 
-| # | Finding | Class | Suggested action |
-|---|---|---|---|
-| G8  | recovered-raise binding teardown | engine-bug? | minimal repro → file issue; decide contain-vs-leak semantics |
-| G12 | `/r` fn ≠ `Function` param | engine-bug? | file issue; the map/dot path proves it can dispatch |
-| G10 | `def why (dot message)` in `error` | latent-bug | fix `todo-tui-client.boru` + add a failing-sync test |
-| G9  | `case` default slot collection | sharp-edge | doc in the `case` reference; consider isolating the default arm |
-| G11 | returned list literal laziness | sharp-edge | doc in the quotation/eval reference |
-| G13a| single-token bare-map body | compiler-limit | widen to single-token (multi-token already landed); low priority |
-| G13b| type-literal map value | compiler-limit | teach provenance for type-literal map values (the app's one instance, `vt-detail`, is already fixed to `none`) |
+Re-verified against the binary 2026-07-30; per-item NUR records and
+verdicts issued 2026-07-31 (the NUR029 umbrella was split — see NUR.md
+and `design/NUR-RESOLUTION-PLAN.0.md`).
 
-The two `engine-bug?` items (G8, G12) are the highest-value follow-ups: each
-is a small standalone repro, and if confirmed, each removes a workaround the
-app currently carries. G10 is a real defect in shipped example code with an
-untested error path. The compiler items are genuinely optional — the
-interpreter path is correct and is what actually runs.
+| # | Finding | Class | Status → action |
+|---|---|---|---|
+| G8  | recovered-raise binding teardown | engine-bug? | **no longer reproduces** (fixed by unrelated work) |
+| G12 | `/r` fn ≠ `Function` param | engine-bug? | reproduces → **NUR050**: fix needed, mechanism deferred (function type vs reference; ADR-level) |
+| G10 | `def why (dot message)` in `error` | latent-bug | reproduces → **NUR049**: symmetric paren barrier; fix `todo-tui-client.boru` + failing-sync test |
+| G9  | `case` default slot collection | sharp-edge | reproduces → **NUR048**: isolate the DEFAULT arm's stack like matched arms |
+| G11 | returned list literal laziness | sharp-edge | **no longer reproduces** (fixed by unrelated work) |
+| G13a| single-token bare-map body | compiler-limit | **no longer reproduces** (single-token now compiles) |
+| G13b| type-literal map value | compiler-limit | reproduces → **NUR051**: intern nested bare type nodes (`OpPushType`); proposed ADR-010 |
+
+The four live items are all verdict-carrying NUR records now; a
+per-item fix retires its per-item record. The two dead engine items
+(G8, G11) and the dead compiler item (G13a) were fixed by unrelated
+work — which this register only noticed on re-verification, the cost
+of the original umbrella entry.

@@ -87,6 +87,8 @@ inf pow 0.0	1.0	IEEE: pow(x, 0) is 1 even for x = inf
 nan pow 0.0	1.0	…and even for NaN
 2.0 pow -1	0.5	a Float base admits a negative Integer exponent (real reciprocal)
 0.0 pow -1	inf	IEEE: pow(+0, negative) is +inf
+2 pow -1	ERROR:arith_error	Integer pow rejects a negative exponent with a CODED error (NUR010 fix)
+do [2 pow -1] error [dot code]	arith_error/q	…and the code is catchable, same as the div/mod/overflow siblings
 #
 # §8  the two rounding regimes — round ties AWAY from zero, round-even
 #     ties to even (IEEE roundTiesToEven); floor/ceil are directional.

@@ -103,13 +103,14 @@ they sound. The same rule is stated in the `ADR.md` header.
 Language- and compiler-level sharp edges found by writing a large app
 entirely in boru are collected in **`design/BORU-SHARP-EDGES.0.md`** —
 minimal repros, root-cause hypotheses, workarounds, and a triage table.
-Two are engine-bug candidates (G8 recovered-`raise` binding teardown;
-G12 an `/r`-parked fn not satisfying a `Function` param); one is a latent
-bug in shipped example code (G10 `def why (dot message)` in an `error`
-handler, in `design/examples/apps/todo-tui-client.boru`); the rest are
-`case`-default collection (G9), returned-list-literal laziness (G11), and
-two bytecode-compiler refusals (G13a single-token bare-map body, G13b a
-type-literal map value). Read it before re-deriving a workaround.
+Re-verified 2026-07-30: G8 (recovered-`raise` binding teardown), G11
+(returned-list-literal laziness) and G13a (single-token bare-map body)
+**no longer reproduce** — fixed by unrelated work. The four live items
+carry per-item NUR records with fix verdicts (2026-07-31): G9
+`case`-default collection → NUR048, G10 `(dot message)` receiverless in
+an `error` handler → NUR049, G12 an `/r`-parked fn not satisfying a
+`Function` param → NUR050, G13b a type-literal map value refusing to
+compile → NUR051. Read the note before re-deriving a workaround.
 
 ## Build & Test
 

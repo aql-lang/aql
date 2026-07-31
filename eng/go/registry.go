@@ -1164,9 +1164,10 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"unconditional_raise": SeverityError,
 	// Concrete-operand arithmetic that provably faults at runtime, on the
 	// same top-level straight line: an int64 overflow (integer_overflow,
-	// the runtime's own code) or an uncoded arithmetic raise — div/mod by
-	// a static zero, pow's negative exponent (native_math.go
-	// returnsIntArithChecked / returnsDivMod).
+	// the runtime's own code) or an arith_error raise — div/mod by a
+	// static zero, pow's negative exponent (native_math.go
+	// returnsIntArithChecked / returnsDivMod; all coded since the NUR010
+	// fix, so the static code is the runtime's own).
 	"integer_overflow": SeverityError,
 	"arith_error":      SeverityError,
 	// `convert` of a PROVEN-Float source into a Big target — the one
