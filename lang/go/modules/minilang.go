@@ -109,16 +109,16 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 		if _, exists := exports.Get(name); exists { //covergate:allow module provably-invariant / grammar-defensive guard (§modules)
 			return // defensive: the built-in kind set is name-disjoint
 		}
-		// MintTypeWithBehavior + a bare MemberBehavior rather than
-		// MintMemberType: the auto parent gate would reject a
-		// DEF-BOUND partial, which lives under Word/__FN (FnDef), not
-		// Type/Function — function values have two lattice homes, and
-		// the FnDefInfo-payload probe covers both.
-		t := subReg.Types.MintTypeWithBehavior(name, native.TFunction,
-			eng.MemberBehavior(func(v native.Value) bool {
+		// The standard member-type path: since ADR-011 collapsed
+		// Word/__FN into Type/Function, EVERY fn value (def-bound
+		// partials included) conforms to TFunction, so MintMemberType's
+		// parent gate admits them and the historical
+		// MintTypeWithBehavior workaround is gone.
+		t := subReg.Types.MintMemberType(name, native.TFunction,
+			func(v native.Value) bool {
 				info, ok := v.Data.(native.FnDefInfo)
 				return ok && info.MiniKind == kind
-			}))
+			})
 		exports.Set(name, native.NewTypeLiteral(t))
 	}
 

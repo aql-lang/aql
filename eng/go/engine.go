@@ -947,7 +947,7 @@ func (e *Engine) voidArgErrorFor(name string, pos SrcPos) *BoruError {
 
 // stampResultPos stamps pos onto handler-produced values that lack a source
 // position: ReturnCheck markers (so a return-type error built later knows the
-// call site) and freshly-constructed Function/FnDef values (so an anonymous
+// call site) and freshly-constructed Function values (so an anonymous
 // `fn`/`afn` value carries its construction site for downstream errors). Only
 // zero-Pos entries are touched, so values that already carry a position — a
 // stored fn passed through, a literal — are left alone.
@@ -2743,7 +2743,7 @@ func (e *Engine) stepWord(val Value) error {
 
 	// If a pending forward expects TFunction, resolve this word to a
 	// function reference value rather than executing it. The word must
-	// have a FnDef entry in DefStacks.
+	// have an FnDefInfo entry in DefStacks.
 	if e.hasPendingForwardExpectingFunction() {
 		// Wrap the aggregate dispatch view so the reference carries every
 		// overload of the name (across stacked defs), not just the topmost
@@ -3375,7 +3375,7 @@ func (e *Engine) refuseStrandedMemberFn(positions []int) {
 		// read is the hazard this guard owns (design/EDGE-SPEC-FINDINGS.0.md §2):
 		// its result is a checker-typed dynamic(Any) whose PROVENANCE (memberFnRead)
 		// marks it as a fn-valued member surfaced by a get-family read. A bare
-		// Function/FnDef value here (a `c/r` param ref, a factory closure) is a
+		// Function value here (a `c/r` param ref, a factory closure) is a
 		// DIFFERENT boundary (M2a `apply`, the residual leading/trailing apply) with
 		// its own handling — do NOT claim it, or those refuse with the wrong reason.
 		if es.memberFnRead(v.ID) {
@@ -3750,7 +3750,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		e.recorder.OnCall(match.Name, n, len(results))
 	}
 
-	// Stamp handler-produced ReturnCheck markers and fresh Function/FnDef
+	// Stamp handler-produced ReturnCheck markers and fresh Function
 	// values that lack a position with the call-site word's position, so a
 	// return-type error (named-fn body or anonymous fn value) points at the
 	// call/construction rather than the last textual occurrence of the name.
@@ -4158,7 +4158,7 @@ func (e *Engine) stepLiteral() error {
 		if e.registry.Check.IsActive() && e.tryDynamicFnValueDispatch(valIdx) {
 			return nil
 		}
-		// If the value is a FnDef/TFunction, execute it. Quoted function
+		// If the value is a Function, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.tape.At(valIdx)
 		if val.Parent.Equal(TFunction) &&
@@ -4360,7 +4360,7 @@ func (e *Engine) stepLiteral() error {
 	return nil
 }
 
-// execFnDefLiteral handles a FnDef or TFunction value that has landed on the
+// execFnDefLiteral handles a Function value (an FnDefInfo payload) that has landed on the
 // stack without a pending forward. It tries to match the function's signatures
 // against preceding resolved stack values and, if a match is found, executes
 // autoEvalStack walks the final stack and auto-evaluates lists and maps
@@ -6609,21 +6609,29 @@ func fnValueHasZeroArgSig(v Value) bool {
 	return false
 }
 
-// fnValueOnlyZeroArgSigs reports whether every one of a function's
-// signatures is 0-arg (a pure property-read fn — `IO.stdin`,
-// `TimeUtil.today-utc`). Such a value has no arg-taking overload the
-// NUR035 reach-group deferral needs to protect, so it dispatches inside
-// its group. A sig-less value answers false (nothing provable).
+// fnValueOnlyZeroArgSigs reports whether every REAL (non-Fallback)
+// signature of a function is 0-arg and at least one exists — a pure
+// property-read fn (`IO.stdin`, `TimeUtil.today-utc`). Such a member
+// never forward-collects at a landing: it auto-fires with no operands
+// and any following values belong to the NEXT dispatch. The single
+// canonical predicate for both engines' models of that shape: the
+// interpreter's NUR035 reach-group deferral exemption (execFnDefLiteral
+// — it dispatches inside its group) and the shaped-method 0-arg landing
+// model (method_shape.go — the 0-arg model applies even with an inert
+// window after the member). A sig-less or fallback-only value answers
+// false (nothing provable).
 func fnValueOnlyZeroArgSigs(fd FnDefInfo) bool {
-	if len(fd.Signatures) == 0 {
-		return false
-	}
+	real := false
 	for i := range fd.Signatures {
+		if fd.Signatures[i].Fallback {
+			continue
+		}
 		if fd.Signatures[i].TotalArgs() != 0 {
 			return false
 		}
+		real = true
 	}
-	return true
+	return real
 }
 
 // implicitEnd resolves a forward early when a type mismatch occurs.

@@ -193,30 +193,17 @@ func TestCompiledCoverage(t *testing.T) {
 	// return discipline), and a for-body per-iteration apply of a Function
 	// param lowers to OpCallDynamic in source order (apply-first / apply-last),
 	// with an escaping break/continue crossing the island to the enclosing
-	// compiled loop (escapedFlow). What remains (2026-07-13, corpus 6267):
-	// ONE tier — 9 "unmatched dispatch recovered" soundness rows, pinned
-	// row-exact in compiled_refusals_test.go (knownRefusals, the
-	// authoritative per-row ledger):
-	//   2  apply rows — a bare fn auto-fires on the value before `apply`
-	//      sees it, so `apply` recovers an unmatched dispatch the
-	//      interpreter raises at runtime.
-	//   4  generics wrong-instantiation rows — a generic-typed param called
-	//      with the WRONG instantiation is a runtime no-match; the checker's
-	//      recovery is a best guess.
-	//   1  variadic-if result feeding `each` over a recovered dispatch.
-	//   1  locally/module-redefined `add` overload — an operand outside the
-	//      overload stays a no-match.
-	//   1  word-splice reaching an fn call (code splice is NOT spread).
-	// All are ERROR rows the interpreter raises at runtime; a compiled best
-	// guess could diverge, so the fallback owns them until the sound runtime
-	// re-dispatch mechanism lands
-	// (design/RUNTIME-INDEPENDENCE-COMPLETION-PLAN.0.md, Phase 3). The
-	// 11-row inventory this comment previously carried (convert-ideal /
-	// forward-barrier / user-types / open-words / module-repl / carrier-
-	// parity rows) described an earlier corpus generation; those rows now
-	// compile and the carrier-parity error doctrine they recorded lives on
-	// in DIAGNOSTICS.0.md.
-	const refusalGate = 3 // ratcheted 9 -> 3 (2026-07-14): OpDispatchRematch compiles the six single-carrier-window dispatch rows to runtime rematches; the three left are the wide-window / courtesy-screen / splice shapes (knownRefusals)
+	// compiled loop (escapedFlow). Every tier has since CLOSED: the last
+	// "unmatched dispatch recovered" soundness rows graduated to terminal
+	// runtime rematches (OpDispatchRematch and the render-bound variants) on
+	// 2026-07-15 — the per-row history lives in compiled_refusals_test.go,
+	// whose knownRefusals map is EMPTY and whose header states the standing
+	// rule: an entry added there must carry a soundness proof, and the goal
+	// is for the map to stay empty. The main corpus therefore compiles with
+	// ZERO refusals; rows the compiler cannot yet model live in the frontier
+	// ledger (frontier_spec_test.go), outside this ratchet, each with a
+	// stated graduation criterion.
+	const refusalGate = 0 // ratcheted 3 -> 0 (2026-08-01): the three wide-window / courtesy-screen / splice shapes graduated 2026-07-15; the corpus has held 0 refusals since, so the gate now pins it
 	const islandGate = 0  // was 1 — error.tsv:25 (`do [1 div 0]`) now compiles NATIVE: a static-zero integer div/mod raises value-dependently, and CompileValueDiverges lets a closure body ending in it compile as a divergent terminal (no RET, the catching `do` wraps the raised error) instead of islanding — the last compute-frontier island cleared, so the program NEVER re-enters the tree-walker mid-run.
 	if refused > refusalGate {
 		t.Errorf("compile refusals %d exceed the documented-tier gate %d — classify the new rows into a named tier (design/P7-ENDGAME.10.md) or fix the regression", refused, refusalGate)
