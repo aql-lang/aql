@@ -803,7 +803,7 @@ type emitUnit struct {
 	// the interpreter does (and DEFERS on a miss, a sound fallback), so a name
 	// match is a safe commit signal for an otherwise un-ID-able mutable read.
 	enclosingBindNames map[string]bool
-	// pendingApply lists the value IDs of Function/FnDef-typed CARRIERS this
+	// pendingApply lists the value IDs of Function-typed CARRIERS this
 	// unit's body dispatched through the `apply` word (a param/captured
 	// comparator: `v comp/r apply`). The check engine cannot re-step a carrier
 	// the way it re-steps a concrete fn, so the dispatch is elided and the
@@ -3411,7 +3411,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 				return
 			}
 			// A USER fn whose residual COUNT mismatches AND whose residual carries a
-			// Function/FnDef VALUE — or a DYNAMIC value that may turn out to be one
+			// Function VALUE — or a DYNAMIC value that may turn out to be one
 			// (a map get over Any: the stylesheet fn-value-dispatch idiom) — is a
 			// possible UNAPPLIED fn-value-call: `(fnv 100)` pushes [fnv, 100] without
 			// applying, where the interpreter applies fnv → ONE value. The
@@ -3966,7 +3966,7 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 // body fragment (body.applyArgs) so lowerFragment emits the OpCallDynamic per
 // iteration. Returns true when the shape was recognised and seated.
 //
-// Soundness: bodyStk[0] must be a Function/FnDef-typed CARRIER (always callable —
+// Soundness: bodyStk[0] must be a Function-typed CARRIER (always callable —
 // the one inert fn shape, an `f/r` reference, is a concrete const, not a carrier)
 // produced by an event (so it lands on the sim top after the body events lower),
 // and every trailing arg must be a non-fn, non-dynamic value resolving to a
@@ -4389,7 +4389,7 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 		if _, ok := args[0].Data.(FnDefInfo); ok {
 			return true
 		}
-		// `apply` of a Function/FnDef-typed CARRIER (a `comp:Function` param or
+		// `apply` of a Function-typed CARRIER (a `comp:Function` param or
 		// captured comparator inside a fn body — `v comp/r apply`, Stage M2a):
 		// the check engine cannot re-step a carrier, so the identity result
 		// flows to the body residual as an fn value. Elide the dispatch and
@@ -4407,10 +4407,10 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 		}
 	}
 	// Compile-time NAME RESOLUTION: a get/getr whose result is a
-	// statically-known callable or namespace (a module export wrapper,
-	// a module-export instance) executed during the check pass —
+	// statically-known callable or namespace (a raw fn export, a module
+	// namespace) executed during the check pass —
 	// `MathUtil.sqrt 16.0` is the tokens `MathUtil get sqrt 16.0`, and
-	// the resolved wrapper's own dispatch records the REAL call (the
+	// the resolved export's own dispatch records the REAL call (the
 	// inner native's sig through execMatch on this engine, so CALL_
 	// NATIVE parity holds). Elide the resolution event; if the value
 	// instead flows somewhere data-like, downstream provenance refuses
@@ -5592,6 +5592,13 @@ func containerFnAutoDispatchRisk(args []Value) bool {
 // value). A lone 0-arg sig among others is just the phantom — the fn needs
 // args, reads as data in both engines, and the applied member-call shapes
 // (`m.b 2`, pinned by TestEmitFnValueFieldCallCompiles) keep compiling.
+//
+// DELIBERATELY distinct from the kernel's Fallback-flag predicates
+// (fnValueHasZeroArgSig / fnValueOnlyZeroArgSigs, engine.go): this one
+// inspects check-mode PARKED values whose phantom 0-arg sig is not
+// Fallback-flagged, so it discriminates by COUNT. Do not merge them —
+// on a real [0-arg, 1-arg] overload set without a phantom the two
+// families answer differently, and each is pinned by its own tests.
 func fnValueZeroArg(v Value) bool {
 	d, ok := v.Data.(FnDefInfo)
 	if !ok {
@@ -7130,7 +7137,7 @@ func (es *EmitState) topLevelEventBySeq(seq int) *emitEvent {
 // reason for an fn-value shape the static residual cannot reproduce.
 //
 // Handled: a dynamic value LEADING the residual with static args after it
-// (`r.int 0 100`); a Function/FnDef CARRIER leading it (the factory `(mk2 5)
+// (`r.int 0 100`); a Function CARRIER leading it (the factory `(mk2 5)
 // 10`); and a single dynamic / fn value TRAILING one static arg (`5 m.f`,
 // `[..] r.one-of`) — rotated to [fn, arg] so the reconciliation lays it out
 // like the leading boundary, with OpCallDynamicTrailing restoring the fn-on-top
@@ -7146,7 +7153,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	if len(residual) >= 2 && residual[0].Dynamic && !es.methodShapeAnnotated(residual[0].ID) {
 		applyDynamic = !anyDynamicTail(residual)
 	}
-	// Leading Function/FnDef CARRIER (the factory pattern: a returned closure now
+	// Leading Function CARRIER (the factory pattern: a returned closure now
 	// on the stack) with no dynamic / fn value after it. A carrier always applies
 	// — the one non-applied shape (an inert `f/r`) is a CONCRETE const, not a
 	// carrier — so the carrier bit resolves the apply-vs-inert ambiguity.
@@ -7215,7 +7222,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	// it verbatim, auto-apply hazard included — the arm fires ONLY at these
 	// refusal points, never on a shape the ordinary lowering handles. Also
 	// dynamic whose static bound provably excludes every callable (the
-	// sigTypeMatches not-disjoint rule against Function/FnDef): such a value
+	// sigTypeMatches not-disjoint rule against Function): such a value
 	// can never auto-apply to the values above it, so both engines leave it
 	// as data and the residual renders identically (a narrowed flex-shape
 	// read — dynamic(FlexMap) — sitting under later statement results,
@@ -8004,7 +8011,7 @@ func dynFrameWindow(u *emitUnit, rec *fnUnitRec, vals []Value) (int, bool) {
 	return 0, false
 }
 
-// isFnTypedCarrier reports whether v is a Function/FnDef-typed CARRIER — a
+// isFnTypedCarrier reports whether v is a Function-typed CARRIER — a
 // [Function]-returning call result on the simulated stack (e.g. `(mk2 5)`), as
 // distinct from a CONCRETE baked fn value (Carrier false, the introspection /
 // inert-`/r` case). The carrier bit is what resolves the apply-vs-inert
@@ -8042,13 +8049,14 @@ func closureResidualHasUnappliedFn(bodyStk []Value) bool {
 }
 
 // isFnValueResidual reports whether v is ANY fn value — a concrete FnDefInfo (a
-// baked /r reference) or a Function/FnDef-typed value (carrier or not). Used to
+// baked /r reference) or a Function-typed value (carrier or not). Used to
 // keep a fn value out of the trailing-arg positions of a leading-fn apply.
 func isFnValueResidual(v Value) bool {
-	if _, ok := v.Data.(FnDefInfo); ok {
-		return true
-	}
-	return v.Parent != nil && v.Parent.ConformsTo(TFunction)
+	// One body with the VM's runtime test (isAppliableFn, vm.go): the
+	// recorder's residual question and the VM's apply question are the
+	// SAME question, and post-ADR-011 both reduce to Function
+	// conformance (the payload arm covers values mid-construction).
+	return isAppliableFn(v)
 }
 
 // fnConcreteSingleValuedOrCarrier reports whether the fn VALUE v is safe to

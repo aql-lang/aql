@@ -96,7 +96,7 @@ const (
 	OpCallNativePoly
 	// OpCallDynamic applies a runtime FUNCTION value to Arg trailing args:
 	// the value sits below the Arg args on the stack. If it is callable (a
-	// compiled closure, or an FnDef the interpreter auto-applies — a method
+	// compiled closure, or a Function the interpreter auto-applies — a method
 	// field like `r.int`), it is invoked and the result replaces value+args;
 	// if it is NOT callable, the value and args stay on the stack unchanged
 	// (matching the interpreter, which leaves a non-callable residual). This
@@ -398,7 +398,7 @@ const (
 	// 71/72). Arg indexes Program.Consts (a String holding the name); the VM
 	// reads r.Defs.Top(name) exactly as the interpreter's stepWord
 	// substitution does. A miss, or a binding the substitution would NOT
-	// push as a simple value (an FnDef/class dispatch, a splice/reach
+	// push as a simple value (a Function/class dispatch, a splice/reach
 	// marker), defers to the interpreter via internal_error
 	// (runtimeShouldFallback — slow, not wrong). The binder side is
 	// OpBindDynScope: the whole-program lowering pass installs it in every

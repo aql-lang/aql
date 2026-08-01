@@ -26,7 +26,7 @@ func InstallDef(r *Registry, name string, body Value, stackOnly ...bool) {
 
 // InstallFrameBinding installs a per-call fn-frame binding (a named
 // param or a lexical capture). Unlike InstallDef it is a lexical
-// SHADOW: a Function/FnDef-valued binding pushes a fresh dispatch entry
+// SHADOW: a Function-valued binding pushes a fresh dispatch entry
 // that shadows — never removes — an outer same-named binding, so the
 // caller's binding is restored intact when the frame's teardown pops
 // this entry. InstallDef's overlap-removal models top-level
@@ -841,7 +841,7 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 // (returnCountErrorText — the __RC arity rule, which discards bottom extras
 // only up to unnamedCount, the fn's unconsumed unnamed-arg allowance). Only a
 // count the analysis knows exactly flags: a variadic spread models 0-or-more
-// values, and a Function/FnDef in the residual may be an unapplied fn-value
+// values, and a Function in the residual may be an unapplied fn-value
 // call the static model over-counts (the emit.go cluster-E shape) — both
 // skip. The short side (len < declared) stays with the runtime arity error —
 // EXCEPT the all-concrete-call EMPTY residual on the top-level straight
@@ -1027,7 +1027,7 @@ func hasCheckDiagnostic(r *Registry, code, detail string) bool {
 	return false
 }
 
-// stackHasFnValue reports whether any residual value is a Function/FnDef —
+// stackHasFnValue reports whether any residual value is a Function —
 // the shape whose static count can over-report (an unapplied fn-value call
 // the interpreter applies at runtime; see emit.go's cluster-E refusal).
 func stackHasFnValue(stk []Value) bool {
@@ -1151,7 +1151,7 @@ func residualProvablyDisjoint(got Value, exp *Type) bool {
 	}
 	// An OPAQUE union residual (Parent=Disjunct with no readable
 	// alternatives — the payload was stripped upstream) denotes "one of
-	// several types" — nothing is provable about it. And a Function/FnDef
+	// several types" — nothing is provable about it. And a Function
 	// residual sits on the fn-value-call frontier: `v f/r apply` leaves an
 	// UNAPPLIED Function in the abstract residual where the runtime calls
 	// it (the "fn-value-call boundary" imprecision class), so a Function
@@ -2146,7 +2146,7 @@ func IsTypeBody(v Value) bool {
 	if v.Parent.Equal(TFnUndef) {
 		return true
 	}
-	// Predicate type: a FnDef / Function whose body returns a Boolean.
+	// Predicate type: a Function whose body returns a Boolean.
 	if v.Parent.Equal(TFunction) {
 		return true
 	}
@@ -2162,7 +2162,7 @@ func IsTypeBody(v Value) bool {
 }
 
 // PredicateInputType returns the concrete input type of a
-// predicate-shaped fn body (a Function or FnDef whose first sig
+// predicate-shaped fn body (a Function whose first sig
 // takes exactly one argument with a declared type other than Any).
 // Returns nil if v isn't a predicate type or the input type is Any
 // or unset — those bodies stay parented at TFunction, the

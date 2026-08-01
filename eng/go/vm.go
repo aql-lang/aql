@@ -687,7 +687,7 @@ func (vc *vmContext) matchUserPoly(pr *UserPolyRef, stack []Value, curDebug []Sr
 
 // callDynamic applies a runtime fn VALUE (sitting below n trailing args) to
 // those args — the fn-value-call boundary (plan P4). A compiled closure runs
-// VM-native via the re-entrant runner; any other callable (an FnDef method
+// VM-native via the re-entrant runner; any other callable (a Function member
 // like `r.int`) is applied through the island sub-engine, which auto-applies
 // it exactly as the interpreter does. A NON-callable value is left as the
 // residual untouched, so a dynamic value that turns out to be data does not
@@ -1159,7 +1159,7 @@ func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, b
 }
 
 // isAppliableFn reports whether a runtime value is a callable the interpreter
-// would auto-apply: a Function-typed value or an FnDef payload.
+// would auto-apply: a Function-typed value or an FnDefInfo payload.
 func isAppliableFn(v Value) bool {
 	if _, ok := v.Data.(FnDefInfo); ok {
 		return true
@@ -1845,7 +1845,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 		case OpLookupDynScope:
 			// The interpreter's stepWord simple-value substitution, at run
 			// time: read the name's live binding. A miss, or a binding the
-			// substitution would DISPATCH instead of push (an FnDef / class /
+			// substitution would DISPATCH instead of push (a Function / class /
 			// splice / reach), defers to the interpreter (slow, not wrong).
 			name, nerr := p.Consts[in.Arg].AsConcreteString()
 			if nerr != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)

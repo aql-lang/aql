@@ -267,15 +267,9 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 	// landing already compiled through the identical arity-0 claim).
 	winEnd := valIdx
 	if !allZeroArgSigs(fn) {
-		for i := valIdx + 1; i < e.tape.Len(); i++ {
-			tv := e.tape.At(i)
-			if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) {
-				break
-			}
-			if !evalFixedWindowToken(tv) {
-				return nil, nil, false
-			}
-			winEnd = i
+		var winOK bool
+		if winEnd, winOK = e.inertStatementWindow(valIdx); !winOK {
+			return nil, nil, false
 		}
 	}
 	if winEnd == valIdx || allZeroArgSigs(fn) {
@@ -334,22 +328,47 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 	return sig, positions, true
 }
 
-// allZeroArgSigs reports whether every non-fallback signature of a native
-// takes zero args — such a member never forward-collects at landing: it
-// auto-fires with no operands and any following values belong to the next
-// dispatch, so the 0-arg model applies even with an inert window after it.
-func allZeroArgSigs(fn *FnDefInfo) bool {
-	any := false
-	for i := range fn.Signatures {
-		if fn.Signatures[i].Fallback {
-			continue
+// statementWindowBoundary reports whether v ends a statement window for
+// the check-side apply models: an engine marker or an explicit
+// statement/paren boundary. The single boundary set shared by every
+// scanner below — it must stay aligned with what the interpreter's own
+// forward collection treats as a hard stop.
+func statementWindowBoundary(v Value) bool {
+	return IsMark(v) || IsMove(v) || IsCloseParen(v) || IsEnd(v)
+}
+
+// inertStatementWindow scans the statement window after valIdx: every
+// token up to the first boundary (statementWindowBoundary) must be inert
+// and evaluation-fixed. Returns the index of the last window token
+// (valIdx itself when the window is empty) and ok=false when a non-fixed
+// token — a word, a paren, a carrier — sits inside the window: the
+// interpreter could dispatch or collect through it in ways a flat
+// consume cannot mirror, so the caller's model declines. The ONE scanner
+// behind both the shaped-method window and the dynamic fn-value window;
+// tryMemberFnArrivalDispatch applies the same per-token test over its
+// arity-bounded span.
+func (e *Engine) inertStatementWindow(valIdx int) (winEnd int, ok bool) {
+	winEnd = valIdx
+	for i := valIdx + 1; i < e.tape.Len(); i++ {
+		tv := e.tape.At(i)
+		if statementWindowBoundary(tv) {
+			break
 		}
-		if fn.Signatures[i].TotalArgs() != 0 {
-			return false
+		if !evalFixedWindowToken(tv) {
+			return winEnd, false
 		}
-		any = true
+		winEnd = i
 	}
-	return any
+	return winEnd, true
+}
+
+// allZeroArgSigs delegates to the kernel's canonical pure-property-fn
+// predicate (fnValueOnlyZeroArgSigs, engine.go) — the shaped-method
+// 0-arg landing model and the interpreter's NUR035 deferral exemption
+// must answer this question identically, so there is exactly one
+// implementation.
+func allZeroArgSigs(fn *FnDefInfo) bool {
+	return fnValueOnlyZeroArgSigs(*fn)
 }
 
 // fnDefName names a function value for a refusal message.
@@ -375,7 +394,7 @@ func (e *Engine) shapedMethodReturnArity(sig *Signature, args []Value, pos SrcPo
 }
 
 // dynamicBoundConformsToFunction reports whether a dynamic carrier's static
-// BOUND could be a callable — its Parent conforms to Function/FnDef, or (the
+// BOUND could be a callable — its Parent conforms to Function, or (the
 // typed-patrun `find` shape) one alternative of its disjunct bound does. Only
 // a Function-bearing bound may auto-dispatch a forward window; a
 // dynamic(String|None) etc. must strand its trailing values as data (the
@@ -424,21 +443,11 @@ func (e *Engine) tryDynamicFnValueDispatch(valIdx int) bool {
 	if !v.Dynamic || v.Quoted || !dynamicBoundConformsToFunction(v) {
 		return false
 	}
-	// The forward window: every token from the carrier to the statement
-	// boundary must be inert and evaluation-fixed (the same admission the
-	// shaped-method window uses). A word/paren/marker in the window declines
-	// the model — the interpreter would dispatch or collect through it in ways
-	// a flat consume cannot mirror.
-	winEnd := valIdx
-	for i := valIdx + 1; i < e.tape.Len(); i++ {
-		tv := e.tape.At(i)
-		if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) {
-			break
-		}
-		if !evalFixedWindowToken(tv) {
-			return false
-		}
-		winEnd = i
+	// The forward window: the same inert, evaluation-fixed statement-window
+	// admission the shaped-method model uses (one shared scanner).
+	winEnd, winOK := e.inertStatementWindow(valIdx)
+	if !winOK {
+		return false
 	}
 	if winEnd == valIdx {
 		return false // no args — a bare dynamic fn value stays data (both engines)
@@ -570,8 +579,7 @@ func (e *Engine) tryMemberFnArrivalDispatch(valIdx int) bool {
 	args := make([]Value, n)
 	for i := 1; i <= n; i++ {
 		tv := e.tape.At(valIdx + i)
-		if IsMark(tv) || IsMove(tv) || IsCloseParen(tv) || IsEnd(tv) ||
-			!evalFixedWindowToken(tv) {
+		if statementWindowBoundary(tv) || !evalFixedWindowToken(tv) {
 			return false
 		}
 		args[i-1] = tv
