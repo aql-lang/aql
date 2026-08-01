@@ -1316,6 +1316,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	e.marks = nil
 	e.voidGroups = nil
 	e.traceNote = ""
+	// The one-shot completion seal is per-run scratch too: a prior run
+	// that armed it on its very last allowed step (eval_limit before the
+	// callee's re-step consumed it) must not force an unrelated value at
+	// the same index of the NEXT program into stack-only mode (NUR038).
+	e.sealFnValue = false
 	e.pointer = e.consumeStartAt()
 
 	// stepLimit is always set by the constructors (New / NewTop); the
@@ -5302,11 +5307,15 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// deferral exists to keep a 0-arg OVERLOAD from silently eclipsing
 	// the arg-taking signatures — `IO.env "HOME"` answering with the
 	// whole environment, NUR035 — which cannot happen when there are no
-	// arg-taking signatures to eclipse.)
+	// arg-taking signatures to eclipse.) The exception itself yields to
+	// an EXPLICIT modifier: a Word/__DM marker after the group's close
+	// paren (`m.z/r`, `m.z/q`) states data intent, and dispatching here
+	// would consume the fn before the post-collapse marker peek could
+	// see it — so a marked 0-arg read defers like any other fn.
 	if valIdx > 0 && valIdx+1 < e.tape.Len() &&
 		e.tape.At(valIdx-1).ReachGroup && IsOpenParen(e.tape.At(valIdx-1)) &&
 		IsCloseParen(e.tape.At(valIdx+1)) &&
-		!fnValueOnlyZeroArgSigs(fnDef) {
+		(!fnValueOnlyZeroArgSigs(fnDef) || e.dispatchModAt(valIdx+2)) {
 		e.pointer++
 		return nil
 	}
@@ -6366,7 +6375,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 // runtime would collect it optimistically).
 func (e *Engine) reachFnWouldClaim(fnVal Value, idx int) bool {
 	fd, isFn := fnVal.Data.(FnDefInfo)
-	if !isFn || len(fd.Signatures) == 0 {
+	if !isFn || !fnHasForwardSigPast(fd, 0) {
 		return false
 	}
 	probe, kind := e.forwardClaimProbe(idx)
@@ -6399,7 +6408,14 @@ func (e *Engine) reachFnWouldClaim(fnVal Value, idx int) bool {
 // sig, not just position `completed`.
 func (e *Engine) fnValueWouldWiden(fnVal Value, completed, idx int) bool {
 	fd, isFn := fnVal.Data.(FnDefInfo)
-	if !isFn || len(fd.Signatures) == 0 {
+	if !isFn || !fnHasForwardSigPast(fd, completed) {
+		// No overload is wider than the completed collection — nothing
+		// can widen, whatever the next token is. Checked BEFORE the
+		// probe: an optimistic probe (a group / reach next) must not
+		// suppress the seal of a single-arity value call (`m.l 5 m.l 7`
+		// with a 1-arg lambda — the second reach is the next STATEMENT,
+		// and skipping the seal here re-opened the misfire this whole
+		// mechanism exists to close).
 		return false
 	}
 	probe, kind := e.forwardClaimProbe(idx)
@@ -6422,6 +6438,33 @@ func (e *Engine) fnValueWouldWiden(fnVal Value, completed, idx int) bool {
 			if sigArgMatches(sig, slot, probe) {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// dispatchModAt reports whether a dispatch-modifier marker (Word/__DM —
+// the parser's `/r` / `/q` emission) sits at tape index idx. Used by the
+// 0-arg property-call exception above to yield to explicit data intent.
+func (e *Engine) dispatchModAt(idx int) bool {
+	if idx >= e.tape.Len() {
+		return false
+	}
+	_, ok := AsDispatchMod(e.tape.At(idx))
+	return ok
+}
+
+// fnHasForwardSigPast reports whether the function carries some REAL
+// forward-eligible overload with more than `floor` args — the
+// precondition for both claim tests above. Without one, the fn can
+// neither claim a first argument (floor 0) nor widen a completed
+// collection (floor = the completed count), so even an optimistic probe
+// (a group / reach next, result type unknowable) proves nothing.
+func fnHasForwardSigPast(fd FnDefInfo, floor int) bool {
+	for i := range fd.Signatures {
+		sig := &fd.Signatures[i]
+		if sig.TotalArgs() > floor && !sig.Fallback && sig.BarrierPos != 0 {
+			return true
 		}
 	}
 	return false
@@ -6539,6 +6582,8 @@ func (e *Engine) forwardClaimProbe(idx int) (Value, int) {
 			return top, probeValue // a plain value binding steps to this value
 		case wi.Name == "true" || wi.Name == "false":
 			return NewBoolean(wi.Name == "true"), probeValue
+		case wi.Name == "none":
+			return NewNone(), probeValue // reserved literal, like true/false (polyReachBound parity)
 		default:
 			return Value{}, probeNone // unbound / type-name words: not a proven claim
 		}

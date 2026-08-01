@@ -172,6 +172,44 @@ func TestNur038MidCollectionMixedArityPropertyRead(t *testing.T) {
 	}
 }
 
+func TestNur038ZeroArgRefStaysData(t *testing.T) {
+	// The 0-arg property-call exception yields to an EXPLICIT /r: the
+	// dot-read stays a Function reference, it is not invoked (the
+	// PR-review finding — dispatching inside the group consumed the fn
+	// before the post-group marker peek could see the /r).
+	_, res := runSealCase(t,
+		`def z fn [[] [Integer] [42]] end def m {z: z/r} end typeof m.z/r`)
+	if len(res) != 1 || res[0].String() != "Function" {
+		t.Errorf("residual = %v, want [Function] (the /r read is a reference, not a call)", res)
+	}
+	// The unmarked twin stays a property CALL.
+	_, res = runSealCase(t,
+		`def z fn [[] [Integer] [42]] end def m {z: z/r} end m.z`)
+	if len(res) != 1 {
+		t.Fatalf("residual = %v, want [42]", res)
+	}
+	if n, _ := native.AsInteger(res[0]); n != 42 {
+		t.Errorf("residual = %v, want [42] (the unmarked read dispatches)", res)
+	}
+}
+
+func TestNur038LambdaTwinCallsSeal(t *testing.T) {
+	// The CI-caught regression (frontier-nur038-seal.tsv's lambda row):
+	// a single-arity ANONYMOUS value call must seal even though the
+	// next token is the second reach (an optimistic probe) — no wider
+	// overload exists, so nothing can widen.
+	_, res := runSealCase(t,
+		`def m {l: ([q:Any] => [q])} end m.l 5 m.l 7`)
+	if len(res) != 2 {
+		t.Fatalf("residual = %v, want [5 7]", res)
+	}
+	a, _ := native.AsInteger(res[0])
+	b, _ := native.AsInteger(res[1])
+	if a != 5 || b != 7 {
+		t.Errorf("residual = %v, want [5 7] (each lambda call is its own statement)", res)
+	}
+}
+
 func TestNur038MidCollectionStrictStaysLoud(t *testing.T) {
 	// A value parked mid-collection when a function WORD begins its own
 	// dispatch stays LOUD (the strict-forward-barrier rule; the bare

@@ -45,6 +45,11 @@ func TestNur038ReachFnWouldClaim(t *testing.T) {
 		{"a group is an optimistic claim", intFn, NewOpenParen(), true},
 		{"a stack-only sig claims nothing forward", stackOnly, NewInteger(5), false},
 		{"a sig-less value claims nothing", Value{Parent: TFunction, Data: FnDefInfo{Name: "z"}}, NewInteger(5), false},
+		{"none is a reserved literal, like true", anyFn, NewWord("none"), true},
+		{"a typed slot refuses none", intFn, NewWord("none"), false},
+		{"a 0-arg-only fn claims nothing, even a group", Value{Parent: TFunction, Data: FnDefInfo{Name: "p0", Signatures: []Signature{
+			{BarrierPos: -1},
+		}}}, NewOpenParen(), false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -90,6 +95,12 @@ func TestNur038FnValueWouldWiden(t *testing.T) {
 		{"slots past the barrier are not forward-eligible", barriered, 1, optsMap, false},
 		{"a statement boundary widens nothing", concatLike, 1, NewEnd(), false},
 		{"a group is an optimistic widen", concatLike, 1, NewOpenParen(), true},
+		// The PR-review P1 (the lambda twin-call CI failure): an
+		// optimistic probe must NOT report widening when no overload is
+		// wider than the completed count — `m.l 5 m.l 7` completes the
+		// 1-arg lambda with the second REACH as the next token, and
+		// skipping the seal there re-opened the swallow.
+		{"an optimistic probe without a wider sig widens nothing", concatLike, 2, NewOpenParen(), false},
 		{"a non-fn value widens nothing", NewInteger(1), 0, NewInteger(5), false},
 	}
 	for _, c := range cases {
@@ -195,6 +206,25 @@ func TestNur038ArrivalGateFallsBackToImplicitEnd(t *testing.T) {
 	}
 	if !isFnDefValue(e.tape.At(2)) {
 		t.Fatalf("tape[2] = %v, want the surviving call head", e.tape.At(2))
+	}
+}
+
+func TestNur038SealClearedAtRunEntry(t *testing.T) {
+	// The seal is per-run scratch: a prior run that armed it on its
+	// final allowed step (eval_limit before the callee's re-step) must
+	// not leak into the next program on a reused engine.
+	r := covRegistry(t, nil)
+	e := NewTop(r)
+	e.sealFnValue, e.sealFnValueIdx = true, 0
+	res, err := e.Run([]Value{NewInteger(1)})
+	if err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if len(res) != 1 {
+		t.Fatalf("residual = %v, want [1]", res)
+	}
+	if e.sealFnValue {
+		t.Error("a stale seal must be cleared at Run entry")
 	}
 }
 
