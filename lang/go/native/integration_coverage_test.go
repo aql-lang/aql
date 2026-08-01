@@ -368,8 +368,8 @@ func TestIntegModuleImportAll(t *testing.T) {
 
 	// Now "stuff" should be defined as a map with val: 99
 	result := runBoru(t, r, []Value{NewWord("stuff")})
-	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
-		t.Fatalf("stuff should be a ModuleExport, got %v", result)
+	if len(result) != 1 || ModuleNSOf(result[0]) == nil {
+		t.Fatalf("stuff should be a module namespace, got %v", result)
 	}
 	v, ok := moduleExportGet(result[0], "val")
 	_as9, _ := AsInteger(v)
@@ -397,8 +397,8 @@ func TestIntegModuleImportRename(t *testing.T) {
 	runBoru(t, r, []Value{NewWord("import"), renameList, NewWord("mymod2")})
 
 	result := runBoru(t, r, []Value{NewWord("renamed")})
-	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
-		t.Fatalf("renamed should be a ModuleExport, got %v", result)
+	if len(result) != 1 || ModuleNSOf(result[0]) == nil {
+		t.Fatalf("renamed should be a module namespace, got %v", result)
 	}
 }
 
@@ -427,8 +427,8 @@ func TestIntegModuleImportMultiRename(t *testing.T) {
 	runBoru(t, r, []Value{NewWord("import"), renameList, NewWord("mm")})
 
 	result := runBoru(t, r, []Value{NewWord("newA")})
-	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
-		t.Fatalf("newA should be a ModuleExport, got %v", result)
+	if len(result) != 1 || ModuleNSOf(result[0]) == nil {
+		t.Fatalf("newA should be a module namespace, got %v", result)
 	}
 }
 
@@ -471,8 +471,8 @@ func TestIntegValToAtomOrStringWord(t *testing.T) {
 	runBoru(t, r, []Value{NewWord("import"), renameList, NewWord("wmod")})
 
 	result := runBoru(t, r, []Value{NewWord("wordRenamed")})
-	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
-		t.Fatalf("wordRenamed should be a ModuleExport, got %v", result)
+	if len(result) != 1 || ModuleNSOf(result[0]) == nil {
+		t.Fatalf("wordRenamed should be a module namespace, got %v", result)
 	}
 }
 
@@ -495,8 +495,8 @@ func TestIntegImportSingleRenameWord(t *testing.T) {
 	runBoru(t, r, []Value{NewWord("import"), NewAtom("NewName"), NewWord("mymod")})
 
 	result := runBoru(t, r, []Value{NewWord("NewName")})
-	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
-		t.Fatalf("NewName should be a ModuleExport, got %v", result)
+	if len(result) != 1 || ModuleNSOf(result[0]) == nil {
+		t.Fatalf("NewName should be a module namespace, got %v", result)
 	}
 }
 
@@ -518,8 +518,8 @@ func TestIntegImportSingleRenameAtom(t *testing.T) {
 	runBoru(t, r, []Value{NewWord("import"), NewAtom("Renamed"), NewWord("mymod")})
 
 	result := runBoru(t, r, []Value{NewWord("Renamed")})
-	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
-		t.Fatalf("Renamed should be a ModuleExport, got %v", result)
+	if len(result) != 1 || ModuleNSOf(result[0]) == nil {
+		t.Fatalf("Renamed should be a module namespace, got %v", result)
 	}
 }
 

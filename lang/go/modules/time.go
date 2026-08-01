@@ -154,7 +154,7 @@ func BuildTimeModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// namespaced. The duration operand types are this import's mints,
 	// which is what satisfies the module-scope user-type rule.
 	for _, ext := range native.TemporalArithmeticExtensions(tt) {
-		exports.Set(ext.Extends, native.NewFnDef(ext))
+		exports.Set(ext.Extends, native.NewFunction(ext))
 	}
 
 	return moduleDesc(parent, "TimeUtil", subReg, exports), nil

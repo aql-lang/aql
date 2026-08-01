@@ -398,7 +398,7 @@ func InstallType(r *Registry, name string, body Value) error {
 		r.Defs.PushType(name, def, NewValueRaw(def, info))
 	} else if inputT := PredicateInputType(body); inputT != nil {
 		// Predicate type with a concrete input type: mint the *Type
-		// parented at the input rather than at TFnDef so values
+		// parented at the input rather than at TFunction so values
 		// rewrapped by the typed-bind path inherit input-side
 		// capabilities (Integer's Number-branch Comparer, etc.)
 		// through the lattice walk. Predicate types declared with

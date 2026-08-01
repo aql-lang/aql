@@ -515,7 +515,7 @@ func seam7DelegReg(t *testing.T) (r *Registry, inc, fail Value) {
 		t.Fatalf("registration: %v", err)
 	}
 	deleg := func(name string) Value {
-		return NewFnDef(FnDefInfo{
+		return NewFunction(FnDefInfo{
 			Name: name, Registry: r,
 			Signatures: []Signature{{
 				Args: []*Type{TInteger}, Returns: []*Type{TInteger}, BarrierPos: -1,
@@ -635,7 +635,7 @@ func TestSeam7ClosureApplyErrorArms(t *testing.T) {
 // the island sub-engine to error, exercising each apply method's island error
 // arm. (A named param disqualifies it from the trivial-delegation fast path.)
 func seam7UserFail(r *Registry) Value {
-	return NewFnDef(FnDefInfo{
+	return NewFunction(FnDefInfo{
 		Name: "cuserfail", Registry: r,
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TInteger}},

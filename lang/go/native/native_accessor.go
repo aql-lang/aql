@@ -83,10 +83,10 @@ var accessorNatives = []NativeFunc{
 			// key answers false. Wins over [Key | Node] by specificity.
 			{Args: []*Type{TAtom, TXml}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasXmlHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TXml}, BarrierPos: 1, Impl: Go(hasXmlHandler), Returns: []*Type{TBoolean}},
-			// [Key | ModuleExport] / [Key | Module] — presence over the
-			// same lookup get/getr read, synthetics included (NUR021).
-			{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasModuleExportHandler), Returns: []*Type{TBoolean}},
-			{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(hasModuleExportHandler), Returns: []*Type{TBoolean}},
+			// [Key | Module] — presence over the same descriptor lookup
+			// get/getr read (NUR021). A module NAMESPACE is a plain Map
+			// (facet-carrying), so it takes the [Key | Node] rows above;
+			// hasNodeHandler answers the $name/$module synthetics there.
 			{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(hasModuleInstHandler), Returns: []*Type{TBoolean}},
 			{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(hasModuleInstHandler), Returns: []*Type{TBoolean}},
 			// [Key | None] — total: an absent parent answers false.
@@ -124,9 +124,10 @@ func accessorGetrSignatures() []Signature {
 		{Args: []*Type{TString, TClass}, BarrierPos: 1, Impl: Go(getrObjectHandler), ReturnsFn: getrObjectReturns},
 		{Args: []*Type{TAtom, TResource}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrObjectHandler), Returns: []*Type{TAny}},
 		{Args: []*Type{TString, TResource}, BarrierPos: 1, Impl: Go(getrObjectHandler), Returns: []*Type{TAny}},
-		// [Key | ModuleExport] / [Key | Module]
-		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrModuleExportHandler), ReturnsFn: moduleExportGetrReturns},
-		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(getrModuleExportHandler), ReturnsFn: moduleExportGetrReturns},
+		// [Key | Module] — descriptor fields. A module NAMESPACE is a
+		// plain Map (facet-carrying) and takes the [Key | Node] rows
+		// above; getrMapHandler answers its synthetics and raises the
+		// module-flavored miss there.
 		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getrModuleInstHandler), ReturnsFn: moduleInstGetReturns},
 		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(getrModuleInstHandler), ReturnsFn: moduleInstGetReturns},
 		// [Key | Micron] — strict structured-scalar property read
@@ -170,6 +171,11 @@ func hasNodeHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([
 		// Fall through to map lookup with stringified key (get parity).
 	}
 	k := getKey(key)
+	// A module namespace additionally answers its facet synthetics —
+	// presence agrees with what get/getr can read (NUR021).
+	if _, ok := moduleNSGetSynthetic(container, k); ok {
+		return []Value{NewBoolean(true)}, nil
+	}
 	if m, _ := AsMap(container); m != nil {
 		_, ok := m.Get(k)
 		return []Value{NewBoolean(ok)}, nil
@@ -227,18 +233,11 @@ func hasXmlHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]
 	return []Value{NewBoolean(false)}, nil
 }
 
-// hasModuleExportHandler / hasModuleInstHandler answer presence over
-// the SAME lookups the get/getr handlers read (moduleExportGet /
-// moduleGet), so the three siblings agree on what is bound. Total — a
-// type literal answers false where the getters raise.
-func hasModuleExportHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
-	if !IsConcrete(args[1]) {
-		return []Value{NewBoolean(false)}, nil
-	}
-	_, ok := moduleExportGet(args[1], getKey(args[0]))
-	return []Value{NewBoolean(ok)}, nil
-}
-
+// hasModuleInstHandler answers presence over the SAME lookup the
+// get/getr handlers read (moduleGet), so the three siblings agree on
+// what is bound. Total — a type literal answers false where the getters
+// raise. (Module NAMESPACE presence — export fields + synthetics — rides
+// the plain-map hasNodeHandler above.)
 func hasModuleInstHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
 		return []Value{NewBoolean(false)}, nil
@@ -308,6 +307,12 @@ func getrXmlReturns(args []Value, r *Registry) []Value {
 // stored value is `none` produces the same carrier shape and succeeds at
 // runtime. Everything non-concrete keeps getNodeReturns' gradual result.
 func getrNodeReturns(args []Value, r *Registry) []Value {
+	// A module NAMESPACE receiver (facet map) takes its own strict-read
+	// model — raw export resolution, and a not_found TRAP for a provably
+	// missing export — instead of the mutable-map miss diagnostic below.
+	if out, ok := moduleNSGetrReturns(args, r); ok {
+		return out
+	}
 	out := getNodeReturns(args, r)
 	if r == nil || !r.Check.IsActive() || len(args) != 2 ||
 		!IsConcrete(args[0]) || !IsConcrete(args[1]) {
@@ -424,6 +429,12 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 		}
 	}
 	k := getKey(key)
+	// A module namespace answers $name/$module from its facet, and a
+	// missing export raises the module-flavored miss (the strict export
+	// contract) instead of the generic map wording.
+	if val, ok := moduleNSGetSynthetic(container, k); ok {
+		return []Value{val}, nil
+	}
 	m, _ := AsMap(container)
 	if m == nil {
 		// Same code, same message, as this handler's own check-mode mirror
@@ -434,6 +445,9 @@ func getrMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	}
 	val, ok := m.Get(k)
 	if !ok {
+		if eng.ModuleNSOf(container) != nil {
+			return nil, moduleNSGetrMiss(r, container, k, key.Pos())
+		}
 		return nil, notFoundKeyError(r, fmt.Sprintf("getr: key %q not found in map", k), k, key.Pos(), m.Keys())
 	}
 	return []Value{val}, nil

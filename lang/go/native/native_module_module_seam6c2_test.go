@@ -225,7 +225,7 @@ func TestSeam6C2InstallExportsNamedSubset(t *testing.T) {
 func TestSeam6C2TransplantSealedWordExtensionRejected(t *testing.T) {
 	r := seam5Reg(t)
 	em := NewOrderedMap()
-	em.Set("def", NewFnDef(NewWordExtension(OwnerProgram, "def", nil)))
+	em.Set("def", NewFunction(NewWordExtension(OwnerProgram, "def", nil)))
 	desc := ModuleDesc{ID: "m2", Ref: "evil", Exports: map[string]*OrderedMap{"pkg": em}}
 	err := installExports(r, desc, nil)
 	if err == nil || !strings.Contains(err.Error(), "sealed word") {
@@ -236,7 +236,7 @@ func TestSeam6C2TransplantSealedWordExtensionRejected(t *testing.T) {
 func TestSeam6C2ResolveNativeModInstallError(t *testing.T) {
 	r := seam5Reg(t)
 	em := NewOrderedMap()
-	em.Set("def", NewFnDef(NewWordExtension(OwnerProgram, "def", nil)))
+	em.Set("def", NewFunction(NewWordExtension(OwnerProgram, "def", nil)))
 	desc := ModuleDesc{ID: "m3", Ref: "boru:evil", Exports: map[string]*OrderedMap{"pkg": em}}
 	r.Modules.Resolver = func(name string, _ *Registry) (ModuleDesc, error) {
 		if name != "evil" {
@@ -252,8 +252,8 @@ func TestSeam6C2ResolveNativeModInstallError(t *testing.T) {
 
 func TestSeam6C2ResolveModuleExportFnDefValue(t *testing.T) {
 	r := seam5Reg(t)
-	out := resolveModuleExport(r, NewFnDef(FnDefInfo{Name: "f0"}))
-	if !out.Parent.Equal(TFnDef) {
+	out := resolveModuleExport(r, NewFunction(FnDefInfo{Name: "f0"}))
+	if !out.Parent.Equal(TFunction) {
 		t.Fatalf("expected FnDef result, got %v", out.Parent)
 	}
 	info, ok := out.Data.(FnDefInfo)
@@ -275,9 +275,9 @@ func TestSeam6C2ResolveModuleExportTypeBodyArms(t *testing.T) {
 	r := seam5Reg(t)
 
 	// Type binding whose body is an FnDef with no registry: rebound as FnDef.
-	r.Defs.PushType("T1", TInteger, NewFnDef(FnDefInfo{Name: "T1"}))
+	r.Defs.PushType("T1", TInteger, NewFunction(FnDefInfo{Name: "T1"}))
 	out := resolveModuleExport(r, NewString("T1"))
-	if !out.Parent.Equal(TFnDef) {
+	if !out.Parent.Equal(TFunction) {
 		t.Fatalf("expected FnDef from type body, got %v", out.Parent)
 	}
 	if info, ok := out.Data.(FnDefInfo); !ok || info.Registry != r {
@@ -302,9 +302,9 @@ func TestSeam6C2ResolveModuleExportTypeBodyArms(t *testing.T) {
 func TestSeam6C2ResolveModuleExportDefArms(t *testing.T) {
 	r := seam5Reg(t)
 
-	r.Defs.Push("g1", NewFnDef(FnDefInfo{Name: "g1"}))
+	r.Defs.Push("g1", NewFunction(FnDefInfo{Name: "g1"}))
 	out := resolveModuleExport(r, NewString("g1"))
-	if !out.Parent.Equal(TFnDef) {
+	if !out.Parent.Equal(TFunction) {
 		t.Fatalf("expected FnDef from def stack, got %v", out.Parent)
 	}
 	if info, ok := out.Data.(FnDefInfo); !ok || info.Registry != r {

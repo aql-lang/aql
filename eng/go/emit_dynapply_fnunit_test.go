@@ -166,7 +166,7 @@ func TestSetLoopBodyApplySourceOrderGate(t *testing.T) {
 	es, _ = newES()
 	cfn := NewCarrier(TFunction)
 	cfn.ID = "cfn"
-	es.origByID["cfn"] = NewFnDef(FnDefInfo{Name: "", Signatures: []Signature{{Returns: []*Type{TAny}, BarrierPos: -1}}})
+	es.origByID["cfn"] = NewFunction(FnDefInfo{Name: "", Signatures: []Signature{{Returns: []*Type{TAny}, BarrierPos: -1}}})
 	body = &EmitFragment{}
 	if es.setLoopBodyApply(body, []Value{cfn, arg(1, 10)}) {
 		t.Error("a const fn operand must decline the loop apply")

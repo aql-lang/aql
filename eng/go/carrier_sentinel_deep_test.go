@@ -9,11 +9,11 @@ import "testing"
 // body). The def-bound rows double as a minimal harness for the Lookup
 // resolution (a pushed fn binding IS the name's dispatch table).
 func TestBodyHasSentinelDeepArms(t *testing.T) {
-	breakFn := NewFnDef(FnDefInfo{Name: "zzleak", Signatures: []Signature{{
+	breakFn := NewFunction(FnDefInfo{Name: "zzleak", Signatures: []Signature{{
 		Params: []FnParam{{Name: "x", Type: TInteger}}, Returns: []*Type{TInteger},
 		Impl: Boru([]Value{NewWord("break"), NewInteger(7)}), BarrierPos: BarrierAllForward,
 	}}})
-	cleanFn := NewFnDef(FnDefInfo{Name: "zzclean", Signatures: []Signature{{
+	cleanFn := NewFunction(FnDefInfo{Name: "zzclean", Signatures: []Signature{{
 		Params: []FnParam{{Name: "x", Type: TInteger}}, Returns: []*Type{TInteger},
 		Impl: Boru([]Value{NewWord("x")}), BarrierPos: BarrierAllForward,
 	}}})

@@ -32,7 +32,8 @@ import (
 // pattern's canonical signature (patrun's *string data is that signature).
 
 // TPatrun is Ideal/Patrun. FixedID 5004 — next free in the 5000–9999
-// kernel/language band (Module 5000, ModuleExport 5001, KeyVal 5002,
+// kernel/language band (Module 5000, the retired ModuleExport wrapper 5001,
+// KeyVal 5002,
 // MiniLangCompiled 5003). See eng/go/CLAUDE.md "FixedID Allocation".
 var TPatrun = registerPatrunType()
 

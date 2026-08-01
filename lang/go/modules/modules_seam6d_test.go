@@ -212,7 +212,7 @@ func TestSeam6DResolvePerModuleInstallFalse(t *testing.T) {
 // map, and an export whose provenance is already fully populated.
 func TestSeam6DStampExportProvenanceSkips(t *testing.T) {
 	om := native.NewOrderedMap()
-	pre := native.NewFnDef(native.FnDefInfo{
+	pre := native.NewFunction(native.FnDefInfo{
 		Name:   "w",
 		Module: "boru:already",
 		Export: "Already",

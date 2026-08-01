@@ -249,7 +249,7 @@ func getMicronReturns(args []Value, r *Registry) []Value {
 	if schema, ok := eng.MicronSchemaFor(t); ok {
 		if fv, ok := schema.Get(key); ok {
 			ft := ValueType(fv)
-			if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+			if ft == nil || ft.ConformsTo(TFunction) {
 				return dyn
 			}
 			return []Value{NewCarrier(ft)}

@@ -53,3 +53,15 @@ def m {s:sub/r} end usurp (forward-args (m.s)) 10 3	7	usurp ∘ forward-args
 def m {s:sub/r} end force-arity 2 (usurp (m.s)) 10 3	7	force-arity ∘ usurp
 def m {s:sub/r} end 10 3 stack-args (force-arity 2 (m.s))	7	stack-args ∘ force-arity
 def m {a:add/r} end force-arity 2 (usurp (forward-args (m.a))) 1 2	3	three deep
+#
+# §NUR050 — a `/r`-marked word feeds forward collection as its REFERENCE
+# value (it is NOT a function-word barrier: the call-site marker is
+# explicit "data, not call" intent). All six spellings of passing a
+# reference into a Function-typed param agree; a BARE fn name remains a
+# barrier (a bare name is a call).
+def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] wa {x:1} sf/r	{x:1}	direct forward /r reference fills the Function slot (the NUR050 repro)
+def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] wa {x:1} (sf/r)	{x:1}	paren-grouped reference (already worked) is unchanged
+def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] def mm {run: sf/r} wa {x:1} mm.run	{x:1}	map-stored reference via dot (already worked) is unchanged
+def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] sf/r {x:1} wa	{x:1}	stack form (already worked) is unchanged
+def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] def hr (sf/r) wa {x:1} hr/r	{x:1}	a def-bound reference passes as hr/r (bare hr is a call, per the model)
+def sf fn [[m:Map] [Map] [m]] def wa fn [[s:Map act:Function] [Map] [act s]] wa {x:1} sf	{x:1}	a bare fn name before a Function-TYPED slot resolves as a reference — the slot declares the intent (the planner's designed TFunction intercept, un-broken by the ADR-011 collapse); before a non-Function slot a bare fn word remains a call/barrier

@@ -1164,9 +1164,10 @@ var checkCodeSeverity = map[string]CheckSeverity{
 	"unconditional_raise": SeverityError,
 	// Concrete-operand arithmetic that provably faults at runtime, on the
 	// same top-level straight line: an int64 overflow (integer_overflow,
-	// the runtime's own code) or an uncoded arithmetic raise — div/mod by
-	// a static zero, pow's negative exponent (native_math.go
-	// returnsIntArithChecked / returnsDivMod).
+	// the runtime's own code) or an arith_error raise — div/mod by a
+	// static zero, pow's negative exponent (native_math.go
+	// returnsIntArithChecked / returnsDivMod; all coded since the NUR010
+	// fix, so the static code is the runtime's own).
 	"integer_overflow": SeverityError,
 	"arith_error":      SeverityError,
 	// `convert` of a PROVEN-Float source into a Big target — the one
@@ -1603,7 +1604,7 @@ func (r *Registry) upsertFnDef(name string, sigs ...Signature) {
 	}
 	SortSignatures(fnDef.Signatures)
 	fnDef.MaxForwardArgs = calcMaxForwardArgs(fnDef.Signatures)
-	r.Defs.Push(name, NewFnDef(fnDef))
+	r.Defs.Push(name, NewFunction(fnDef))
 }
 
 // calcMaxForwardArgs returns the maximum number of forward args
@@ -2375,7 +2376,7 @@ func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, 
 // not-None), and an error for malformed predicates or invocation
 // failures.
 //
-// The constraint must be a TFnDef or TFunction value carrying
+// The constraint must be a TFunction value carrying
 // FnDefInfo with a single-arg first signature. Predicate types
 // from `type Foo fn [x:Any Any [body]]` always satisfy this; other
 // shapes return an error.
@@ -2396,7 +2397,7 @@ func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, 
 // rolled back. r.defStacks is already protected by CallBoru's own
 // snapshot.
 func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched bool, err error) {
-	if !constraint.Parent.Equal(TFnDef) && !constraint.Parent.Equal(TFunction) {
+	if !constraint.Parent.Equal(TFunction) {
 		return Value{}, false, fmt.Errorf("RunPredicate: constraint is not a fn (got %s)", constraint.Parent.String())
 	}
 	fnDef, ok := constraint.Data.(FnDefInfo)

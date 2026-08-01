@@ -57,6 +57,20 @@ type Engine struct {
 	recorder  Recorder        // optional StackForm recorder; see stackform package
 	stepLimit int             // hard cap on the Run loop; always positive, set by the New/NewTop constructors below
 	marks     map[string]bool // active mark IDs (for mark/move control flow)
+	// sealFnValue / sealFnValueIdx: one-shot commit seal for a VALUE-called
+	// function whose forward collection just COMPLETED. Completion re-steps
+	// the callee stack-only; a WORD callee gets that via the /s token
+	// rewrite (forceStackWord), but a first-class Function value has no
+	// WordInfo to stamp — before this seal its re-step re-planned
+	// forward-first, so a completed Any window stayed open and reached
+	// across the statement boundary, swallowing the next statement's
+	// tokens (NUR038: `IO.printstr "A" IO.printstr "B"` printed B, then A,
+	// then stranded a fn value — silently). The completion site arms the
+	// seal for the callee's index; execFnDefLiteral consumes it on the
+	// immediately-following step and matches stack-only, exactly like the
+	// word twin's /s retry.
+	sealFnValue    bool
+	sealFnValueIdx int
 	// debugLabel names the CALL this engine's run realises, when the
 	// dispatch knows it (CallBoruNamed: a module fn body run in its own
 	// sub-engine, whose Defs-based frame leaves no tape marks). A debug
@@ -462,6 +476,12 @@ func (e *Engine) polyReachBound() (int, bool) {
 			}
 			if top, ok := e.registry.Defs.Top(wi.Name); ok {
 				if _, isFn := top.Data.(FnDefInfo); isFn {
+					if wi.ForceRef {
+						// `/r`: the word denotes its REFERENCE value —
+						// one claimable datum, not a call (NUR050/G12).
+						n++
+						continue
+					}
 					break // a function word stops forward collection
 				}
 				n++ // a plain value binding: the word steps to exactly one value
@@ -476,6 +496,9 @@ func (e *Engine) polyReachBound() (int, bool) {
 			// REGISTERED word never reaches here — registration pushes its
 			// FnDefInfo binding, so Defs.Top caught it above.)
 			return 0, false
+		}
+		if v.ReachGroup && !v.Quoted && isFnDefValue(v) && e.reachFnWouldClaim(v, i+1) {
+			break // a reach-collapsed named fn with a claim is the next CALL — a barrier (NUR038)
 		}
 		if IsConcrete(v) || v.Carrier {
 			n++
@@ -947,7 +970,7 @@ func stampResultPos(vals []Value, pos *SrcPos) {
 				rc.Pos = *pos
 				vals[i] = NewReturnCheck(rc)
 			}
-		case vals[i].Parent.Equal(TFunction) || vals[i].Parent.Equal(TFnDef):
+		case vals[i].Parent.Equal(TFunction):
 			vals[i].pos = pos
 		}
 	}
@@ -1293,6 +1316,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	e.marks = nil
 	e.voidGroups = nil
 	e.traceNote = ""
+	// The one-shot completion seal is per-run scratch too: a prior run
+	// that armed it on its very last allowed step (eval_limit before the
+	// callee's re-step consumed it) must not force an unrelated value at
+	// the same index of the NEXT program into stack-only mode (NUR038).
+	e.sealFnValue = false
 	e.pointer = e.consumeStartAt()
 
 	// stepLimit is always set by the constructors (New / NewTop); the
@@ -1505,7 +1533,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	}
 
 	// Implicit end-of-input: resolve any pending forwards from the stack.
-	if err := e.resolveOrphanedForwards(); err != nil {
+	if err := e.resolveOrphanedForwards(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		return nil, e.faultReturn(err)
 	}
 
@@ -1900,12 +1928,7 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 	// viableConsumes reports whether any still-viable signature collects a
 	// forward argument at position pos (i.e. pos is within its barrier).
 	viableConsumes := func(pos int) bool {
-		for _, vs := range viable {
-			if pos < vs.barrier {
-				return true
-			}
-		}
-		return false
+		return viableConsumesAt(viable, pos)
 	}
 
 	// pruneViable drops every signature that a concrete forward value at
@@ -2036,7 +2059,18 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 			// and pre-evaluated the NEXT statement's groups. A WORD at
 			// scanIdx (the group collapsed to zero values and the next
 			// token slid in) prunes only through its resolved binding.
-			pruneResolvedPatterns(pos, e.tape.At(scanIdx))
+			// A tagged reach-collapsed named fn that WOULD CLAIM its
+			// next token is a CALL head — the group resolved a callee,
+			// not an operand: stop the scan (the fn-word barrier's
+			// value twin, NUR038). A claim-less one is an operand, and
+			// so is one filling a FUNCTION slot of the collecting word
+			// (`usurp (m dot a)` — the higher-order consumer wants the
+			// fn itself; Any slots stay barred).
+			res := e.tape.At(scanIdx)
+			if e.reachCallHeadBarrier(res, viable, pos, scanIdx) {
+				break
+			}
+			pruneResolvedPatterns(pos, res)
 			pos++
 			scanIdx++
 			continue
@@ -2173,10 +2207,17 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		// `undef foo`, a raw/form/type slot, a matching KEYWORD literal like
 		// def's `fn`) — there the function word is the argument, not a
 		// barrier, and the scan must walk past it.
-		if IsWord(tok) && !capturesForwardToken(fn, pos, tok) {
-			if wi, werr := AsWord(tok); werr == nil && e.registry.Lookup(wi.Name) != nil {
-				break
-			}
+		if IsWord(tok) && !capturesForwardToken(fn, pos, tok) && e.fnWordBarrierAt(tok) {
+			break
+		}
+
+		// A tagged reach-collapsed named fn already in the window (a
+		// re-plan after the arrival gate closed a statement) that WOULD
+		// CLAIM its next token is a CALL head — the fn-word barrier's
+		// value twin (NUR038): stop. A claim-less one is an operand, and
+		// so is one filling a FUNCTION slot of the collecting word.
+		if e.reachCallHeadBarrier(tok, viable, pos, scanIdx) {
+			break
 		}
 
 		// Non-group token. A concrete literal carries a final type that
@@ -2201,6 +2242,19 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 		scanIdx++
 	}
 	return nil
+}
+
+// fnWordBarrierAt reports whether a scan token is a bare function word
+// acting as a forward-collection barrier: registered as a function and
+// NOT `/r`-marked. An `/r`-marked word is NO barrier — it denotes its
+// REFERENCE value (inert data), never a call; the call-site marker is
+// explicit intent (NUR050/G12). The scan then counts it as an ordinary
+// optimistic position, and stepWordRef resolves and DELIVERS the
+// Function value to the parked forward at arrival (the phase-2 half of
+// this rule — keep in sync per design/FORWARD-COLLECTION-PHASES.10.md).
+func (e *Engine) fnWordBarrierAt(tok Value) bool {
+	wi, werr := AsWord(tok)
+	return werr == nil && e.registry.Lookup(wi.Name) != nil && !wi.ForceRef
 }
 
 // sigRawSlot reports whether signature sig captures position pos structurally
@@ -2601,6 +2655,21 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 		}
 	}
 	v.pos = val.pos
+	// A reference denotes DATA. When a parked forward in this paren
+	// scope is still collecting, deliver the reference through the
+	// normal literal step so it ARRIVES like any value and fills the
+	// waiting slot (`wa {x:1} some-fn/r` — NUR050/G12; the phase-1 scan
+	// counts the /r-marked word as an ordinary position, this is the
+	// phase-2 half). Delivered UNQUOTED, exactly like the
+	// expecting-Function arrival path below — a Quoted delivery binds a
+	// quoted param, which the VM honours as data while the interpreter
+	// dispatches it: an engine divergence the differential gate catches.
+	// The former unconditional set+advance left the value BEHIND the
+	// pointer, so the forward stranded at end of run.
+	if e.hasPendingForwardCollecting() {
+		e.tape.Set(e.pointer, v)
+		return e.stepLiteral()
+	}
 	e.tape.Set(e.pointer, v)
 	// (The use is recorded inside ResolveRef, covering this `/r` path, the
 	// `ref` word, and export-map reference values alike.)
@@ -2614,6 +2683,24 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 	}
 	e.pointer++
 	return nil
+}
+
+// hasPendingForwardCollecting reports whether a parked Forward in the
+// current paren scope is still collecting arguments — the generic twin
+// of hasPendingForwardExpectingFunction, used by stepWordRef to decide
+// whether a `/r` reference should ARRIVE (feed the forward) rather than
+// be pushed behind the pointer.
+func (e *Engine) hasPendingForwardCollecting() bool {
+	for i := e.pointer - 1; i >= 0; i-- {
+		if IsOpenParen(e.tape.At(i)) {
+			break
+		}
+		if IsForward(e.tape.At(i)) {
+			fwd, _ := AsForward(e.tape.At(i))
+			return fwd.CollectedArgs < fwd.Sig.TotalArgs()
+		}
+	}
+	return false
 }
 
 func (e *Engine) stepWord(val Value) error {
@@ -4074,7 +4161,7 @@ func (e *Engine) stepLiteral() error {
 		// If the value is a FnDef/TFunction, execute it. Quoted function
 		// values are treated as data (not executed).
 		val := e.tape.At(valIdx)
-		if (val.Parent.Equal(TFnDef) || val.Parent.Equal(TFunction)) &&
+		if val.Parent.Equal(TFunction) &&
 			val.Data != nil && !val.Quoted {
 			if _, ok := val.Data.(FnDefInfo); ok {
 				return e.execFnDefLiteral(valIdx)
@@ -4113,6 +4200,60 @@ func (e *Engine) stepLiteral() error {
 			e.tape.Set(valIdx, atom)
 			matches = true
 		}
+		// A named function that a REACH-LOWERED group collapsed to (the
+		// transient ReachGroup tag) and that WOULD COLLECT from the
+		// tokens after it is a CALL, not data — the value twin of the
+		// fn-word collection barrier (NUR038). A bare fn word in the
+		// window stops collection; the SAME function reached through a
+		// dot-access (`5 m.p m.p 7`, `IO.printstr "A" IO.printstr "B"` —
+		// the second callee resolving mid-collection with ITS argument
+		// right after it) must stop it too, or the open window swallows
+		// the next statement whole. The call-vs-data decision mirrors
+		// execFnDefLiteral's own: a reach-read fn with NOTHING to claim
+		// stays data (`typeof IO.stdin`, `def sqrt MathUtil.sqrt` — the
+		// pinned reference idioms). A slot that SPECIFICALLY expects a
+		// Function always admits (the designed reference intercept,
+		// e.g. `each`); explicit data intent spells `/r` — either
+		// already Quoted, or the group's trailing Word/__DM marker
+		// consumed here exactly as execFnDefLiteral's peek does
+		// (`def g M.w/r`: the fn arrives mid-collection before that
+		// peek can run); user-written reference expressions ((inc/r),
+		// (usurp sub2)) carry no tag.
+		if matches && val.ReachGroup && !val.Quoted &&
+			!sigArgType(fwd.Sig, nextIdx).ConformsTo(TFunction) {
+			marked := false
+			if valIdx+1 < e.tape.Len() {
+				if _, ok := AsDispatchMod(e.tape.At(valIdx + 1)); ok {
+					e.tape.Remove(valIdx + 1)
+					val.Quoted = true
+					e.tape.Set(valIdx, val)
+					marked = true
+				}
+			}
+			switch {
+			case marked:
+				// `/r` data intent — collected below as the reference.
+			case fnValueHasZeroArgSig(val):
+				// A 0-arg overload makes the dot-read a PROPERTY call
+				// (`typeof IO.stdin` → the stream, `def g Parse.grammar`
+				// → the grammar): dispatch it in place — it consumes
+				// nothing, so no cross-statement swallow is possible —
+				// and its RESULT arrives at this still-pending window.
+				return e.execFnDefLiteral(valIdx)
+			case e.reachFnWouldClaim(val, valIdx+1):
+				// The dot-read fn is the NEXT dispatch — commit the
+				// pending forward with the args it already claimed (the
+				// same dispatch an explicit `end` would trigger; the
+				// else-less guard fires: `if (bad) [raise …] M.log x`),
+				// or resolve it from the stack when no smaller-arity
+				// overload can fire. Either way the window closes HERE
+				// and the fn re-steps as its own statement.
+				if e.commitBarrierForward() {
+					return nil
+				}
+				return e.implicitEnd(fwdIdx)
+			}
+		}
 		if !matches {
 			// Type mismatch — implicit end: resolve forward from stack.
 			return e.implicitEnd(fwdIdx)
@@ -4121,6 +4262,10 @@ func (e *Engine) stepLiteral() error {
 
 	// Remove the value from its current position.
 	val := e.tape.At(valIdx)
+	// A collected value's reach-collapse tag is spent — the slot that
+	// admitted it (a Function slot / a quoted reference) has decided the
+	// call-vs-data question, and the tag must not ride into the binding.
+	val.ReachGroup = false
 	e.tape.Remove(valIdx)
 
 	// After removal, adjust indices if valIdx was before them.
@@ -4160,9 +4305,25 @@ func (e *Engine) stepLiteral() error {
 			funcIdx--
 		}
 
-		if funcIdx < e.tape.Len() && IsWord(e.tape.At(funcIdx)) {
-			w, _ := AsWord(e.tape.At(funcIdx))
-			e.forceStackWord(funcIdx, w)
+		if funcIdx < e.tape.Len() {
+			if IsWord(e.tape.At(funcIdx)) {
+				w, _ := AsWord(e.tape.At(funcIdx))
+				e.forceStackWord(funcIdx, w)
+			} else if v := e.tape.At(funcIdx); isFnDefValue(v) &&
+				!e.fnValueWouldWiden(v, fwd.CollectedArgs+fwd.StackArgs, funcIdx+1) {
+				// A VALUE-called function (a dot-read export, a stored
+				// fn, a lambda) has no WordInfo to stamp /s on. Arm the
+				// one-shot seal instead, so the re-step below matches
+				// stack-only exactly like the word twin — without it the
+				// re-plan preferred the forward window again and a
+				// completed Any collection reached across the statement
+				// boundary (NUR038). EXCEPTION: a WIDER overload that
+				// claims the next forward token keeps the collection
+				// open (arity widening — `concat parts {sep}`); the
+				// plan barrier still stops a re-plan at a reach-read
+				// call head, so widening cannot cross a statement.
+				e.sealFnValue, e.sealFnValueIdx = true, funcIdx
+			}
 		}
 
 		// Rearrange values for forward-first matching: forward args at
@@ -5086,7 +5247,22 @@ func (e *Engine) concreteEvalOnce(items []Value) (Value, bool) {
 // module-internal words are available. Otherwise, body tokens are spliced
 // into the current engine's stack.
 func (e *Engine) execFnDefLiteral(valIdx int) error {
+	// Consume the one-shot completion seal (armed by the collection-
+	// completion site when the callee is a VALUE, not a word). Consumed
+	// unconditionally — the seal targets the immediately-following
+	// re-step only, so a stale flag must never leak to a later value at
+	// the same index.
+	sealed := e.sealFnValue && e.sealFnValueIdx == valIdx
+	e.sealFnValue = false
+
 	val := e.tape.At(valIdx)
+	// The reach-collapse tag is spent the moment the call-vs-data
+	// decision is made here — it must never ride into a binding or a
+	// container (the Quoted transience discipline).
+	if val.ReachGroup {
+		val.ReachGroup = false
+		e.tape.Set(valIdx, val)
+	}
 	fnDef, ok := val.Data.(FnDefInfo)
 	if !ok {
 		e.pointer++
@@ -5124,9 +5300,22 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	// content (`(Mod.f a b)`) is a real call whatever emitted it. Peeling
 	// happens exactly once, because collapsing the group discards the marker
 	// along with it.
+	// EXCEPTION: a 0-ARG-ONLY function has no arg-taking overload the
+	// empty window could shadow — its only call form IS nullary, so the
+	// dot-read is a PROPERTY call (`TimeUtil.today-utc`, `IO.stdin`) that
+	// dispatches right here and the group collapses to its result. (The
+	// deferral exists to keep a 0-arg OVERLOAD from silently eclipsing
+	// the arg-taking signatures — `IO.env "HOME"` answering with the
+	// whole environment, NUR035 — which cannot happen when there are no
+	// arg-taking signatures to eclipse.) The exception itself yields to
+	// an EXPLICIT modifier: a Word/__DM marker after the group's close
+	// paren (`m.z/r`, `m.z/q`) states data intent, and dispatching here
+	// would consume the fn before the post-collapse marker peek could
+	// see it — so a marked 0-arg read defers like any other fn.
 	if valIdx > 0 && valIdx+1 < e.tape.Len() &&
 		e.tape.At(valIdx-1).ReachGroup && IsOpenParen(e.tape.At(valIdx-1)) &&
-		IsCloseParen(e.tape.At(valIdx+1)) {
+		IsCloseParen(e.tape.At(valIdx+1)) &&
+		(!fnValueOnlyZeroArgSigs(fnDef) || e.dispatchModAt(valIdx+2)) {
 		e.pointer++
 		return nil
 	}
@@ -5183,6 +5372,13 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 	}
 
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
+	if sealed {
+		// The value's own forward collection just completed and laid its
+		// args out in stack form beneath it — match stack-only and commit,
+		// the word twin's /s retry. Without this the forward-first re-plan
+		// reopened the window over the NEXT statement's tokens (NUR038).
+		w.ForceStack = true
+	}
 
 	// A `/r` or `/q` modifier on a paren / dotted-path result is emitted by
 	// the parser as a Word/__DM marker right after the group (/u /s /f /N
@@ -6165,6 +6361,271 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 	return nil
 }
 
+// reachFnWouldClaim reports whether the reach-read function value fnVal
+// would CLAIM the token at idx as its own first forward argument — the
+// call half of the NUR038 arrival gate's call-vs-data decision. The test
+// is SIG-AWARE: the token's statically-knowable value must fit some
+// signature's leading forward-eligible slot (sqrt(Number) claims a `16`
+// but not a `[99]` list — the list is the enclosing if's arm, the fn is
+// its OTHER arm, the branch-apply feature). A statement boundary, a
+// close paren, an fn-word barrier, an unresolvable word, or nothing at
+// all leaves the fn with no claim (data — the pinned `typeof IO.stdin`
+// / `def sqrt MathUtil.sqrt` reference idioms). A group/reach/interp
+// token has an unknowable result type and counts as claimable (the
+// runtime would collect it optimistically).
+func (e *Engine) reachFnWouldClaim(fnVal Value, idx int) bool {
+	fd, isFn := fnVal.Data.(FnDefInfo)
+	if !isFn || !fnHasForwardSigPast(fd, 0) {
+		return false
+	}
+	probe, kind := e.forwardClaimProbe(idx)
+	switch kind {
+	case probeNone:
+		return false
+	case probeOptimistic:
+		return true
+	}
+	for i := range fd.Signatures {
+		sig := &fd.Signatures[i]
+		if sig.TotalArgs() == 0 || sig.Fallback || sig.BarrierPos == 0 {
+			continue // nothing to claim forward
+		}
+		if sigArgMatches(sig, 0, probe) {
+			return true
+		}
+	}
+	return false
+}
+
+// fnValueWouldWiden is the completion site's ARITY-WIDENING test: after a
+// value-called collection completes at `completed` args, could a WIDER
+// overload (more total args) claim the token at idx instead? The unified
+// split rule lets the re-plan REDISTRIBUTE the already-collected args to
+// the stack side of the wider sig (`concat parts {sep}` completes the
+// 1-arg [List] plan; the 2-arg [Map List] overload then takes the map
+// forward at sig[0] with the list deep on the stack at sig[1]), so the
+// next token is tested against EVERY forward-eligible slot of each wider
+// sig, not just position `completed`.
+func (e *Engine) fnValueWouldWiden(fnVal Value, completed, idx int) bool {
+	fd, isFn := fnVal.Data.(FnDefInfo)
+	if !isFn || !fnHasForwardSigPast(fd, completed) {
+		// No overload is wider than the completed collection — nothing
+		// can widen, whatever the next token is. Checked BEFORE the
+		// probe: an optimistic probe (a group / reach next) must not
+		// suppress the seal of a single-arity value call (`m.l 5 m.l 7`
+		// with a 1-arg lambda — the second reach is the next STATEMENT,
+		// and skipping the seal here re-opened the misfire this whole
+		// mechanism exists to close).
+		return false
+	}
+	probe, kind := e.forwardClaimProbe(idx)
+	switch kind {
+	case probeNone:
+		return false
+	case probeOptimistic:
+		return true
+	}
+	for i := range fd.Signatures {
+		sig := &fd.Signatures[i]
+		if sig.TotalArgs() <= completed || sig.Fallback || sig.BarrierPos == 0 {
+			continue // not wider / nothing forward-eligible
+		}
+		limit := sig.BarrierPos
+		if limit < 0 || limit > sig.TotalArgs() {
+			limit = sig.TotalArgs()
+		}
+		for slot := 0; slot < limit; slot++ {
+			if sigArgMatches(sig, slot, probe) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// dispatchModAt reports whether a dispatch-modifier marker (Word/__DM —
+// the parser's `/r` / `/q` emission) sits at tape index idx. Used by the
+// 0-arg property-call exception above to yield to explicit data intent.
+func (e *Engine) dispatchModAt(idx int) bool {
+	if idx >= e.tape.Len() {
+		return false
+	}
+	_, ok := AsDispatchMod(e.tape.At(idx))
+	return ok
+}
+
+// fnHasForwardSigPast reports whether the function carries some REAL
+// forward-eligible overload with more than `floor` args — the
+// precondition for both claim tests above. Without one, the fn can
+// neither claim a first argument (floor 0) nor widen a completed
+// collection (floor = the completed count), so even an optimistic probe
+// (a group / reach next, result type unknowable) proves nothing.
+func fnHasForwardSigPast(fd FnDefInfo, floor int) bool {
+	for i := range fd.Signatures {
+		sig := &fd.Signatures[i]
+		if sig.TotalArgs() > floor && !sig.Fallback && sig.BarrierPos != 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// tagReachCollapsedFn stamps ReachGroup provenance onto the single value
+// a reach-lowered group (`m.p` → `( m dot p )`) collapsed to at idx,
+// when that value is a NAMED function: an unmarked dot-access to a
+// function is a CALL, never claimable data for a pending Any window
+// (NUR038 — the value twin of the fn-word barrier). The tag is
+// transient, exactly like Quoted: the arrival path clears it when the
+// value is collected (a Function-typed slot — the designed reference
+// intercept), and execFnDefLiteral clears it the moment the
+// call-vs-data decision is made, so it never rides into a binding or a
+// container. User-written parens carry no ReachGroup and tag nothing;
+// `/r` data intent arrives Quoted and is never refused.
+func (e *Engine) tagReachCollapsedFn(idx, closeIdx int, wasReachGroup bool) {
+	if !wasReachGroup || closeIdx != idx+2 || idx >= e.tape.Len() {
+		return
+	}
+	v := e.tape.At(idx)
+	if fd, isFn := v.Data.(FnDefInfo); isFn &&
+		fd.Name != "" && !fd.Anonymous && !v.Quoted {
+		v.ReachGroup = true
+		e.tape.Set(idx, v)
+	}
+}
+
+// viableConsumesAt reports whether any still-viable signature collects a
+// forward argument at position pos (i.e. pos is within its barrier).
+// Free-function body of resolveForwardArgs' viableConsumes closure,
+// extracted for that function's complexity cap.
+func viableConsumesAt(viable []viableSig, pos int) bool {
+	for _, vs := range viable {
+		if pos < vs.barrier {
+			return true
+		}
+	}
+	return false
+}
+
+// reachCallHeadBarrier is resolveForwardArgs' NUR038 stop test: a tagged
+// reach-collapsed named fn at scanIdx that WOULD CLAIM its next token is
+// a CALL head — the fn-word barrier's value twin — and stops the forward
+// scan. A claim-less fn is an operand, and so is one filling a
+// FUNCTION-conforming slot of some still-viable overload at pos
+// (`usurp (m dot a)` — the higher-order consumer wants the fn itself;
+// Any slots stay barred: Any also admits a fn value, but as a swallowed
+// call head, which is the misfire the barrier exists for).
+func (e *Engine) reachCallHeadBarrier(tok Value, viable []viableSig, pos, scanIdx int) bool {
+	if !tok.ReachGroup || tok.Quoted || !isFnDefValue(tok) {
+		return false
+	}
+	for _, vs := range viable {
+		if pos < vs.barrier && sigWantsFunctionAt(vs.sig, pos) {
+			return false // the fn is this overload's own Function operand
+		}
+	}
+	return e.reachFnWouldClaim(tok, scanIdx+1)
+}
+
+// sigWantsFunctionAt reports whether sig position pos declares a
+// Function-conforming operand slot — a slot for which a reach-collapsed
+// fn value is DATA (a higher-order word's Function param), exempt from
+// the NUR038 call-head barrier. An Any slot is NOT a Function slot: Any
+// also admits a fn value, but as a swallowed call head, which is exactly
+// the misfire the barrier exists for.
+func sigWantsFunctionAt(sig *Signature, pos int) bool {
+	if pos >= sig.TotalArgs() {
+		return false
+	}
+	st := sigArgType(sig, pos)
+	return st != nil && st.ConformsTo(TFunction)
+}
+
+// Probe classifications returned by forwardClaimProbe.
+const (
+	probeNone       = iota // boundary / barrier / unbound: no claim provable
+	probeOptimistic        // expression result unknowable: optimistic claim
+	probeValue             // a concrete probe value to sig-match
+)
+
+// forwardClaimProbe classifies the token at idx for the claim tests
+// above: probeNone (a boundary / fn-word barrier / unbound word /
+// nothing there — no claim is provable), probeOptimistic (a group /
+// reach / interp expression whose result type is unknowable — the
+// runtime collects it optimistically), or probeValue with the value the
+// token would contribute (a literal, a binding's value, a `/r`
+// reference).
+func (e *Engine) forwardClaimProbe(idx int) (Value, int) {
+	if idx >= e.tape.Len() {
+		return Value{}, probeNone
+	}
+	v := e.tape.At(idx)
+	switch {
+	case IsEnd(v) || IsCloseParen(v) || IsForward(v):
+		return Value{}, probeNone
+	case IsOpenParen(v) || IsParenExpr(v) || IsReach(v) || IsInterpString(v) || IsXmlInterp(v):
+		return Value{}, probeOptimistic
+	case IsWord(v):
+		wi, werr := AsWord(v)
+		if werr != nil { //covergate:allow AsWord cannot fail after an IsWord guard — the payload IS a WordInfo (§engine)
+			return Value{}, probeNone
+		}
+		if wi.ForceRef {
+			// `/r`: one Function reference datum
+			return Value{Parent: TFunction, Data: FnDefInfo{}}, probeValue
+		}
+		top, bound := e.registry.Defs.Top(wi.Name)
+		switch {
+		case bound:
+			if _, topFn := top.Data.(FnDefInfo); topFn {
+				return Value{}, probeNone // an fn word is a barrier
+			}
+			return top, probeValue // a plain value binding steps to this value
+		case wi.Name == "true" || wi.Name == "false":
+			return NewBoolean(wi.Name == "true"), probeValue
+		case wi.Name == "none":
+			return NewNone(), probeValue // reserved literal, like true/false (polyReachBound parity)
+		default:
+			return Value{}, probeNone // unbound / type-name words: not a proven claim
+		}
+	default:
+		return v, probeValue // a concrete literal
+	}
+}
+
+// fnValueHasZeroArgSig reports whether a function value carries a 0-arg
+// overload — the shape that makes an unmarked dot-read a PROPERTY call
+// (it dispatches consuming nothing, so it can never swallow a following
+// statement). Part of the NUR038 arrival gate's call-vs-data decision.
+func fnValueHasZeroArgSig(v Value) bool {
+	fd, ok := v.Data.(FnDefInfo)
+	if !ok {
+		return false
+	}
+	for i := range fd.Signatures {
+		if fd.Signatures[i].TotalArgs() == 0 && !fd.Signatures[i].Fallback {
+			return true
+		}
+	}
+	return false
+}
+
+// fnValueOnlyZeroArgSigs reports whether every one of a function's
+// signatures is 0-arg (a pure property-read fn — `IO.stdin`,
+// `TimeUtil.today-utc`). Such a value has no arg-taking overload the
+// NUR035 reach-group deferral needs to protect, so it dispatches inside
+// its group. A sig-less value answers false (nothing provable).
+func fnValueOnlyZeroArgSigs(fd FnDefInfo) bool {
+	if len(fd.Signatures) == 0 {
+		return false
+	}
+	for i := range fd.Signatures {
+		if fd.Signatures[i].TotalArgs() != 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // implicitEnd resolves a forward early when a type mismatch occurs.
 func (e *Engine) implicitEnd(fwdIdx int) error {
 	fwd, _ := AsForward(e.tape.At(fwdIdx))
@@ -6916,7 +7377,15 @@ func (e *Engine) cleanMarks() {
 
 // stepOpenParen replaces the "(" word with an open-paren marker.
 func (e *Engine) stepOpenParen() error {
-	e.tape.Set(e.pointer, NewOpenParen())
+	np := NewOpenParen()
+	// Preserve the reach-lowered provenance: a `m.p` group's OpenParen
+	// carries ReachGroup, which the no-call-inside-the-group rule
+	// (execFnDefLiteral, NUR035) and the collapsed-result call tag
+	// (stepCloseParen, NUR038) both read. The fresh marker must not
+	// silently wipe it — the pre-evaluated window path (evalParenGroupAt)
+	// steps the marker through here, unlike the main-loop path.
+	np.ReachGroup = e.tape.At(e.pointer).ReachGroup
+	e.tape.Set(e.pointer, np)
 	e.pointer++
 	return nil
 }
@@ -7005,6 +7474,7 @@ func (e *Engine) stepCloseParen() error {
 	if openIdx < 0 {
 		return e.syntaxError("unmatched closing parenthesis", ")")
 	}
+	wasReachGroup := e.tape.At(openIdx).ReachGroup
 
 	// Resolve any forwards inside the paren scope via implicit end.
 	// We loop because resolving a forward may cause re-evaluation.
@@ -7273,6 +7743,11 @@ func (e *Engine) stepCloseParen() error {
 	e.tape.Remove(closeIdx)
 	e.tape.Remove(openIdx)
 
+	// A REACH-LOWERED group that collapsed to a single named function
+	// value tags the result — extracted to tagReachCollapsedFn for the
+	// stepCloseParen complexity cap (NUR038).
+	e.tagReachCollapsedFn(openIdx, closeIdx, wasReachGroup)
+
 	// Recorder hook: the values that survived inside the paren will
 	// be re-encountered by the main loop after we set pointer back
 	// to openIdx (below). They were already emitted to the recorder
@@ -7411,6 +7886,11 @@ func (e *Engine) curryOrStack(funcIdx int, collectedCount int, stackArgCount ...
 	}
 
 	if funcIdx >= e.tape.Len() || !IsWord(e.tape.At(funcIdx)) {
+		// A VALUE callee re-steps and re-plans in full — its own forward
+		// window (`(concat parts {sep})`) must stay claimable so a wider
+		// arity can still match. A reach-read CALL head in that window
+		// cannot re-open the closed statement: the tagged value is a plan
+		// barrier (matchSignature / resolveForwardArgs, NUR038).
 		e.pointer = funcIdx
 		return
 	}
@@ -7844,7 +8324,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					// value (mirror of stepWord's r.Types lookup so the
 					// planner's expected type matches what stepWord
 					// will actually push at runtime). Predicate types
-					// arrive as TFnDef/TFunction values; plan against
+					// arrive as TFunction values; plan against
 					// that Parent for sig matching.
 					if tv, ok := e.registry.TopTypeBody(ww.Name); ok {
 						if sigArgMatches(sig, fwd, tv) || expectedType.Equal(TAny) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
@@ -7856,7 +8336,17 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						break // named-type value doesn't fit this slot
 					}
 
-					// 1.4: function word — boundary, stop.
+					// 1.4: function word — boundary, stop. A `/r`-marked
+					// word is NO boundary in principle (it denotes its
+					// REFERENCE value, NUR050/G12) — but since the ADR-011
+					// collapse its Defs binding IS a Function value, so
+					// every slot that can admit the reference (a Function
+					// slot, an Any slot) already claimed it in the
+					// def-binding branch above; a /r word reaching here
+					// faces a slot no Function can fill and stops the scan
+					// exactly like its unmarked twin. (Lookup and Defs.Top
+					// read the same store, so this arm is only reached on
+					// the def-binding branch's typed fall-through.)
 					if e.registry.Lookup(ww.Name) != nil {
 						break
 					}
@@ -7902,6 +8392,19 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 
 				// Open paren marker: boundary, stop forward scan.
 				if IsOpenParen(tok) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+					break
+				}
+
+				// A reach-collapsed NAMED function value (the transient
+				// ReachGroup tag) that WOULD CLAIM its next token is a
+				// CALL head — the value twin of the fn-word boundary
+				// above (NUR038): it stops the forward scan exactly as
+				// its bare-word spelling would. One with no claim is an
+				// operand (a branch arm, a reference) and scans on, as
+				// does one filling this sig's own Function slot.
+				if tok.ReachGroup && !tok.Quoted && isFnDefValue(tok) &&
+					!sigWantsFunctionAt(sig, fwd) &&
+					e.reachFnWouldClaim(tok, scanIdx+1) {
 					break
 				}
 

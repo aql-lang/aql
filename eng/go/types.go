@@ -64,7 +64,6 @@ var (
 	TParenExpr      = mustType("Word/__PE")
 	TInterpString   = mustType("Word/__IS")
 	TXmlInterp      = mustType("Word/__XI")
-	TFnDef          = mustType("Word/__FN")
 	TFnUndef        = mustType("Type/FunctionSignature")
 	TReturnCheck    = mustType("Word/__RC")
 	TDefCleanup     = mustType("Word/__IN/__DC")

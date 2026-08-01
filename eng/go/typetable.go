@@ -806,7 +806,9 @@ var builtinDecls = []builtinDecl{
 	// runtime marker like __IS: the engine evaluates it in place to a
 	// Node/Xml. See design/XML-LITERAL.0.md §4 and core_xml.go.
 	{Path: "Word/__XI", FixedID: 109, IsInternal: true, Rank: 50_100_005_500},
-	{Path: "Word/__FN", FixedID: 23, IsInternal: true, Alias: "Fndef", Rank: 50_100_006_000},
+	// Word/__FN (FixedID 23, "Fndef") — RETIRED 2026-07-31 (ADR-011):
+	// collapsed into Type/Function; there is exactly one function type.
+	// The FixedID is retired, never recycled.
 	{Path: "Word/__RC", FixedID: 25, IsInternal: true, Alias: "Returncheck", Rank: 50_100_007_000},
 	{Path: "Word/__MK", FixedID: 27, IsInternal: true, Alias: "Mark", Rank: 50_100_008_000},
 	{Path: "Word/__MV", FixedID: 28, IsInternal: true, Alias: "Move", Rank: 50_100_009_000},

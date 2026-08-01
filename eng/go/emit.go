@@ -1288,7 +1288,7 @@ func (es *EmitState) MarkUncompilable(reason string) {
 		// is at-or-after the trap and therefore unreachable — the interpreter
 		// raises at the trap and never reaches it. Finalize truncates to the
 		// trap and drops the residual, so its refusal is moot (e.g. `getr` of a
-		// missing ModuleExport key: the getr IS the trap, and its own
+		// missing module-namespace key: the getr IS the trap, and its own
 		// operand-provenance residual must not refuse the program).
 		return
 	}
@@ -1567,7 +1567,7 @@ func (es *EmitState) SplitEventRegionBind(name string, v Value) (Value, bool) {
 	// The parked-fn screen: a Function among the SPILLED rest auto-applies in
 	// the interpreter when a later value lands above it — keep those refused
 	// (the same hazard the loop-region screens guard).
-	if v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
+	if v.Parent != nil && v.Parent.ConformsTo(TFunction) {
 		return Value{}, false
 	}
 	elemType := TAny
@@ -3798,7 +3798,7 @@ func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []Value) {
 	}
 	ops := make([]emitOperand, 0, len(stk))
 	for i := range stk {
-		if sigTypeMatches(stk[i], TFunction) || sigTypeMatches(stk[i], TFnDef) {
+		if sigTypeMatches(stk[i], TFunction) {
 			return
 		}
 		op, ok := es.resolveOperand(stk[i])
@@ -3875,7 +3875,7 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 			// ACROSS iterations (iteration k's top sits below k+1's first) —
 			// so a verbatim accumulation would diverge. Keep those refused.
 			for i := range bodyStk {
-				if sigTypeMatches(bodyStk[i], TFunction) || sigTypeMatches(bodyStk[i], TFnDef) {
+				if sigTypeMatches(bodyStk[i], TFunction) {
 					es.MarkUncompilable("for: body nets multiple values per iteration")
 					return
 				}
@@ -3912,7 +3912,7 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 			lp.bodyOut, lp.hasBodyOut = bodyOut, true
 			if pr, okP := es.producedBy[bodyStk[0].ID]; okP && bodyOut.kind == opEvent &&
 				es.eventInfo[pr.seq].splitBound &&
-				!sigTypeMatches(bodyStk[0], TFunction) && !sigTypeMatches(bodyStk[0], TFnDef) {
+				!sigTypeMatches(bodyStk[0], TFunction) {
 				// The body's sole residual is a SPLIT-BOUND region (S9.2a: `for 3
 				// [ def acc (for 2 [1]) ]` — the def consumed the first value,
 				// the statically-counted rest is the iteration's contribution).
@@ -4664,7 +4664,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 	introspect := sig.CompileEffect.Has(CompileReadsFn)
 	inertFn := introspect || sig.CompileEffect.Has(CompileStoresFn)
 	for i, t := range sig.ArgTypes() {
-		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+		if t != nil && t.ConformsTo(TFunction) {
 			if inertFn || sig.FnInertArgs[i] {
 				continue
 			}
@@ -5215,7 +5215,7 @@ func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
 	if len(es.units) == 1 && es.reg != nil && es.reg.Check.FnBodyDepth == 0 {
 		root, depth = true, es.reg.Defs.Depth(name)
 	}
-	if root && !IsConcrete(v) && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef)) {
+	if root && !IsConcrete(v) && v.Parent.ConformsTo(TFunction) {
 		// A top-level computed fn value-def (`def op (Parse.parser g)`) that
 		// installDef declined to install in Defs (the compiled-closure machinery
 		// owns the name): record its ID + name so a deeper fn body reading the
@@ -5769,12 +5769,20 @@ func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, po
 	// seed) would replicate it instead of re-running per iteration. Those refuse.
 	ops := make([]emitOperand, len(ins))
 	for i := range ins {
-		// A TYPE-pattern list (`[Integer]`, `[Integer String]`) is the operand of
-		// the type machinery (`Box of [Integer]`, `x is [Integer String]`), not a
-		// DATA list to assemble — baking it as an OpMakeList breaks that dispatch.
-		// A genuine data list never holds a bare type node.
+		// A bare type node element is a first-class SINGLETON VALUE (ADR-010 /
+		// NUR051), not declaration-only syntax: it assembles through the same
+		// interned canonical-ID type operand a standalone bare type node
+		// resolves to (OpPushType), so the runtime element is the canonical
+		// registry node — `[None]` compiles exactly as it interprets, and a
+		// computed list that feeds the type machinery (`x is […]`) carries the
+		// identical canonical nodes the interpreter's list would. A node with
+		// no canonical ID has no runtime home and still refuses.
 		if IsBareTypeNode(ins[i]) {
-			return false
+			if ins[i].ID == "" {
+				return false
+			}
+			ops[len(ins)-1-i] = typeOperand(es.internType(ins[i]))
+			continue
 		}
 		// A non-builtin (user-fn / module) producing word is NOT refused: the element
 		// resolves to its recorded EVENT (CALL_USER / CALL_NATIVE_POLY / make), and
@@ -5824,10 +5832,20 @@ func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, imp
 	// ops[0] is the LAST value (laid out on top), ops[N-1] the first (deepest).
 	ops := make([]emitOperand, len(vals))
 	for i := range vals {
-		// A bare type node value means a TYPE-pattern map (`{a:Integer}`) — the
-		// operand of `is`/`typeof`, not a data map to assemble. Never a make body.
+		// A bare type node member is a first-class SINGLETON VALUE (ADR-010 /
+		// NUR051), not declaration-only syntax: it assembles through the same
+		// interned canonical-ID type operand a standalone bare type node
+		// resolves to (OpPushType), so the runtime member is the canonical
+		// registry node — identical to the interpreter's map, `is`/`typeof`
+		// dispatch over the assembled map included. `{x: a  r: None}` therefore
+		// compiles exactly as it interprets. A node with no canonical ID has no
+		// runtime home and still refuses.
 		if IsBareTypeNode(vals[i]) {
-			return false
+			if vals[i].ID == "" {
+				return false
+			}
+			ops[len(vals)-1-i] = typeOperand(es.internType(vals[i]))
+			continue
 		}
 		// A computed value produced by `make` (a mutable instance) is exactly what
 		// this assembly exists to thread as a fresh per-run event — unlike
@@ -7204,7 +7222,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	// edge-containers-2.tsv:76).
 	for i := 0; i+1 < len(residual); i++ {
 		if residual[i].Dynamic &&
-			(sigTypeMatches(residual[i], TFunction) || sigTypeMatches(residual[i], TFnDef)) {
+			sigTypeMatches(residual[i], TFunction) {
 			if es.markWindowSeq != 0 {
 				return residual, OpCallDynMixedFromMark, ""
 			}
@@ -7895,7 +7913,7 @@ func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Valu
 				continue
 			}
 		}
-		if v.Dynamic || (v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef))) {
+		if v.Dynamic || (v.Parent != nil && v.Parent.ConformsTo(TFunction)) {
 			if w, ok := dynFrameWindow(u, rec, vals); ok && es.replayIsBodyTail(rec.frag, vals[len(vals)-w:]) {
 				rec.dynFrameW = w
 				rec.retReplay = true
@@ -7993,7 +8011,7 @@ func dynFrameWindow(u *emitUnit, rec *fnUnitRec, vals []Value) (int, bool) {
 // ambiguity in Finalize: a carrier lead auto-applies, a concrete fn does not.
 func isFnTypedCarrier(v Value) bool {
 	return v.Carrier && v.Parent != nil &&
-		(v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef))
+		v.Parent.ConformsTo(TFunction)
 }
 
 // closureResidualHasUnappliedFn reports whether a closure body's residual
@@ -8015,7 +8033,7 @@ func isFnTypedCarrier(v Value) bool {
 // carrier, not preceded by args — so it still compiles.
 func closureResidualHasUnappliedFn(bodyStk []Value) bool {
 	for i, v := range bodyStk {
-		dynMaybeFn := v.Dynamic && (sigTypeMatches(v, TFunction) || sigTypeMatches(v, TFnDef)) && i+1 < len(bodyStk)
+		dynMaybeFn := v.Dynamic && sigTypeMatches(v, TFunction) && i+1 < len(bodyStk)
 		if isFnTypedCarrier(v) || dynMaybeFn || (isFnValueResidual(v) && (i > 0 || i+1 < len(bodyStk))) {
 			return true
 		}
@@ -8030,7 +8048,7 @@ func isFnValueResidual(v Value) bool {
 	if _, ok := v.Data.(FnDefInfo); ok {
 		return true
 	}
-	return v.Parent != nil && (v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef))
+	return v.Parent != nil && v.Parent.ConformsTo(TFunction)
 }
 
 // fnConcreteSingleValuedOrCarrier reports whether the fn VALUE v is safe to

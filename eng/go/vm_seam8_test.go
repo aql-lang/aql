@@ -37,7 +37,7 @@ func w8Deleg0(t *testing.T, r *Registry, name string, impl Handler) Value {
 	if err := r.Err(); err != nil {
 		t.Fatalf("register %s: %v", name, err)
 	}
-	return NewFnDef(FnDefInfo{
+	return NewFunction(FnDefInfo{
 		Name: name, Registry: r,
 		Signatures: []Signature{{
 			Returns: []*Type{TAny}, BarrierPos: -1,
@@ -146,7 +146,7 @@ func w8Deleg1(t *testing.T, r *Registry, name string, impl Handler) Value {
 	if err := r.Err(); err != nil {
 		t.Fatalf("register %s: %v", name, err)
 	}
-	return NewFnDef(FnDefInfo{
+	return NewFunction(FnDefInfo{
 		Name: name, Registry: r,
 		Signatures: []Signature{{
 			Args: []*Type{TInteger}, Returns: []*Type{TAny}, BarrierPos: -1,
@@ -177,7 +177,7 @@ func TestW8CallDynMethodIslandSuccess(t *testing.T) {
 	// A non-delegation user fn (named param disqualifies the fast path) that
 	// returns its arg cleanly: callDynMethod islands it and the guard SUCCESS
 	// return commits the shaped result (vm.go:657).
-	fn := NewFnDef(FnDefInfo{
+	fn := NewFunction(FnDefInfo{
 		Name: "w8okmethod", Registry: r,
 		Signatures: []Signature{{
 			Params:  []FnParam{{Name: "n", Type: TInteger}},

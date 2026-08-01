@@ -89,3 +89,12 @@ import module [ def dec fn [[bad:Boolean x:Any] [Any] [ if bad [raise bad_input 
 5 do [raise aa "x"] error [drop 9] add 1	5 10
 5 do [7] error [drop 9] add 1	5 8
 1 2 3 do [7] error [drop 9] add 1	1 2 3 8
+#
+# NUR051 (SHARP-EDGES G13b): a bare type literal in map/list DATA position
+# is a first-class singleton value (ADR-010) — it interns as a canonical-ID
+# type operand and the assembly compiles exactly as it interprets. These
+# rows were the pre-fix refusals ("body result of unknown provenance").
+def f fn [[a:Integer] [Map] [ def m {x: a  r: None}  m ]] (f 1)	{x:1 r:None}
+def f fn [[a:Integer] [List] [ def l [a None]  l ]] (f 1)	[1 None]
+def f fn [[a:Integer] [Map] [ def m {x: a  k: Integer}  m ]] (f 2)	{x:2 k:Integer}
+def f fn [[a:Integer] [Map] [ {x: a  r: None} ]] (f 3)	{x:3 r:None}

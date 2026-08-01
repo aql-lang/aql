@@ -1,10 +1,11 @@
-# boru Language Specification: Module / ModuleExport (Ideal types)
+# boru Language Specification: module namespaces + Module (Ideal type)
 # Format: input<TAB>expected<TAB>description
 #
-# `import` binds each `export "Name" {…}` to a ModuleExport instance
-# (Ideal/ModuleExport). A ModuleExport is TRANSPARENT — `X.field` returns
-# the raw export, so calling/using exports is unchanged — and carries two
-# synthetic names:
+# `import` binds each `export "Name" {…}` to a PLAIN MAP of the raw
+# exports carrying the module-namespace facet (NUR038 retired the
+# Ideal/ModuleExport wrapper type — exported values are just plain
+# values). `X.field` returns the raw export, so calling/using exports is
+# unchanged, and the facet answers two synthetic names:
 #   X.$name    → the export name (String)
 #   X.$module  → the owning Module instance (Ideal/Module)
 # A Module (Ideal/Module) is the shared descriptor with normal fields
@@ -12,9 +13,9 @@
 # (import "boru:math-util"); the bound namespace is CamelCase (MathUtil).
 #
 # ─────────────────────────────────────────────────────────────────────
-# §1  the bound namespace is a ModuleExport, transparent for use
-import "boru:math-util"  typeof MathUtil	ModuleExport	import binds a ModuleExport
-import "boru:math-util"  MathUtil is ModuleExport	true	…of the Ideal/ModuleExport type
+# §1  the bound namespace is a plain Map, transparent for use
+import "boru:math-util"  typeof MathUtil	Map	import binds a plain namespace Map
+import "boru:math-util"  MathUtil is Map	true	…a genuine Node/Map value
 import "boru:math-util"  MathUtil.sqrt 16.0	4.0	transparent: exports are used as before
 import "boru:math-util"  MathUtil.$name	'MathUtil'	$name is the export name
 #
@@ -31,17 +32,18 @@ import "boru:type-util"  TypeUtil.$module.kind	'native'	type-util is native too
 #
 # §4  inline modules — `import module […]` binds all exports; kind="inline"
 import module [export "Foo" {a:1 b:2}]  Foo.a	1	inline export field access
-import module [export "Foo" {a:1 b:2}]  typeof Foo	ModuleExport	inline binds a ModuleExport
+import module [export "Foo" {a:1 b:2}]  typeof Foo	Map	inline binds a plain namespace Map
 import module [export "Foo" {a:1 b:2}]  Foo.$module.kind	'inline'	inline kind
 import module [export "A" {x:1} export "B" {y:2}]  A.$module.exports	['A' 'B']	exports lists every export of the module
 import module [export "A" {x:1} export "B" {y:2}]  B.y	2	a second export is independently accessible
 import module [export "A" {x:1} export "B" {y:2}]  A.$module is B.$module	true	all exports of a module share one Module instance
 #
 # §5  rename import — $name keeps the original export name
-import [Foo Bar] module [export "Foo" {a:1}]  Bar.a	1	renamed binding still a ModuleExport
+import [Foo Bar] module [export "Foo" {a:1}]  Bar.a	1	renamed binding still a namespace
 import [Foo Bar] module [export "Foo" {a:1}]  Bar.$name	'Foo'	$name is the declared export name, not the alias
 #
-# §6  negative — a missing export via getr (!.) errors
+# §6  strict lookup (!.) — synthetics resolve; a missing export errors
+import "boru:math-util"  MathUtil!.$name	'MathUtil'	the facet synthetics answer under the strict accessor too
 import "boru:math-util"  MathUtil!.nope	ERROR:not_found	unknown export raises not_found (the documented strict-lookup code)
 #
 # §7  minted-type identity is per-mint, across module boundaries.

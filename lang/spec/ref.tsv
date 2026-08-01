@@ -50,8 +50,10 @@ def x 5  ref x	ERROR:illegal_ref	ref on a non-fn binding is rejected
 nope/r	ERROR:undefined_word	/r on an unbound name
 ref nope	ERROR:undefined_word	ref on an unbound name
 #
-# §7  Gotcha — a bare reffed word does NOT resolve as another word's
-#     forward argument; it must be grouped in parens (or use the value
-#     from a binding). `typeof inc/r` reads the literal ref-word token
-#     before it resolves, so dispatch of `typeof` fails.
-def inc fn [[n:Integer][Integer][n add 1]]  typeof inc/r	ERROR:signature_error	bare /r as a forward arg doesn't resolve — group it: typeof (inc/r)
+# §7  A `/r`-marked word feeds forward collection as its REFERENCE
+#     value (NUR050 fix): it is not a function-word barrier, so it
+#     resolves directly as another word's forward argument. (This
+#     retired the historical gotcha where `typeof inc/r` stranded with
+#     a signature_error and had to be grouped as `typeof (inc/r)`.)
+def inc fn [[n:Integer][Integer][n add 1]]  typeof inc/r	Function	bare /r resolves as a forward arg (was the grouping gotcha)
+def inc fn [[n:Integer][Integer][n add 1]]  typeof (inc/r)	Function	…and the paren spelling still agrees

@@ -198,7 +198,7 @@ export "IO" {mode:mode}`,
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "ModuleExport(Math){pi}")
+	assertResult(t, result, "Module(Math){pi}")
 }
 
 func TestBarrelTopLevelCombineSecond(t *testing.T) {

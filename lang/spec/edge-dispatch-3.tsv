@@ -102,8 +102,8 @@ import "boru:emitlang" emit/1 {a:1}	'{"a":1}'	emit/1 forces the bare auto-emit a
 import "boru:emitlang" emit/2 json {a:1}	'{"a":1}'	emit/2 forces kind + data
 import "boru:emitlang" emit/3 json {} {a:1}	'{"a":1}'	emit/3 forces kind + opts + data
 {a:1} get/2 a/q	1	get/2 pins the 2-arg container read
-import "boru:string-util" StringUtil.split/2 "," "a,b"	ERROR:force-arity	/N does not reach through a module's dotted wrapper — pinned limitation
-import "boru:string-util" StringUtil.split/3 "," "a,b" {}	ERROR:force-arity	…for any forced arity
+import "boru:string-util" StringUtil.split/2 "," "a,b"	['a' 'b']	/N reaches through a module's dotted wrapper (fixed by the ADR-011 collapse — the export is a plain Function now)
+import "boru:string-util" StringUtil.split/3 "," "a,b" {}	['a' 'b']	…for any forced arity
 #
 # §8  0-arg courtesy dispatch and the grouped-call hint
 def f fn [[][Integer][42]] f	42	a 0-arg fn dispatches bare

@@ -3,30 +3,37 @@ package native
 import (
 	"fmt"
 	"sort"
-	"strings"
 
 	"github.com/boru-lang/boru/eng/go"
 )
 
-// Module / ModuleExport — the Ideal types that describe an imported module.
+// Module namespaces — what `import` binds — and the Ideal/Module
+// descriptor type.
 //
-// When boru code runs `import "boru:math-util"`, the bound name `Math` is a
-// ModuleExport instance (one per `export "Name" {…}` declaration). A
-// ModuleExport is transparent: `MathUtil.sqrt` reads the raw exported value
-// (so `MathUtil.sqrt 16.0 → 4.0` still works), while the synthetic names
-// `$module` and `$name` expose metadata:
+// When boru code runs `import "boru:math-util"`, the bound name `MathUtil`
+// is a PLAIN MAP of the raw exports (one per `export "Name" {…}`
+// declaration) carrying the kernel's module-namespace FACET
+// (eng.ModuleNSInfo — NUR038: provenance is a facet on a plain value,
+// never a wrapper type that masks the value). Exported values are exactly
+// what the module exported — a fn stays a Function, a constant stays that
+// constant, a type stays a plain type — while the facet answers the
+// synthetic names `$name` and `$module`:
 //
 //	MathUtil.sqrt          → the exported sqrt function (raw, callable)
-//	MathUtil.$name         → 'Math'                (the export name)
-//	MathUtil.$module       → the Module instance   (Ideal/Module)
-//	MathUtil.$module.id    → 'boru:math'            (the module reference)
+//	MathUtil.$name         → 'MathUtil'               (the export name)
+//	MathUtil.$module       → the Module instance      (Ideal/Module)
+//	MathUtil.$module.name  → 'boru:math-util'         (the module reference)
 //
 // A Module instance (Ideal/Module) is the descriptor shared by all of a
-// module's ModuleExports via $module. Its normal fields are id, kind,
+// module's namespaces via $module. Its normal fields are name, kind,
 // file, folder, and exports (the list of export names).
+//
+// (The former Ideal/ModuleExport wrapper type — FixedID 5001 — is
+// RETIRED: the FixedID is never recycled. See the fixedid stability
+// test's retired table.)
 
-// moduleExportFieldModule and …Name are the synthetic keys a ModuleExport
-// answers in addition to its exported fields.
+// moduleExportFieldModule and …Name are the synthetic keys a module
+// namespace answers in addition to its exported fields.
 const (
 	moduleExportFieldModule = "$module"
 	moduleExportFieldName   = "$name"
@@ -38,10 +45,6 @@ const (
 // type.
 var TModuleInst = registerModuleType("Ideal/Module", 5000)
 
-// TModuleExport is Ideal/ModuleExport — the per-export namespace instance
-// type that `import` binds.
-var TModuleExport = registerModuleType("Ideal/ModuleExport", 5001)
-
 func registerModuleType(path string, fixedID int) *Type {
 	t, err := eng.Builtin.RegisterType(path, fixedID, eng.OwnerKernel, moduleTypeBehavior{path: path})
 	if err != nil {
@@ -52,38 +55,29 @@ func registerModuleType(path string, fixedID int) *Type {
 	return t
 }
 
-// moduleExportInfo is the payload behind an Ideal/ModuleExport value.
-type moduleExportInfo struct {
-	Name   string      // the export name, e.g. "Math"
-	Fields *OrderedMap // exported word → value (the raw exports)
-	Module Value       // the owning Module instance (Ideal/Module)
-}
-
-// ExportFields implements eng.ExportFieldsCarrier so the kernel's
-// module-export growth ledger (eng/go/module_export_growth.go) can key
-// per-export-map state by the Fields pointer without importing this type.
-func (m *moduleExportInfo) ExportFields() *OrderedMap { return m.Fields }
-
 // NewModuleInstance builds an Ideal/Module value wrapping a ModuleDesc. The
 // descriptor metadata (Ref/Kind/File/Folder) and the export names are
-// surfaced as the id/kind/file/folder/exports fields; the carried Exports
+// surfaced as the name/kind/file/folder/exports fields; the carried Exports
 // map is what `import` installs.
 func NewModuleInstance(desc ModuleDesc) Value {
 	return Value{Parent: TModuleInst, Data: ExtensionPayload{Body: desc}}
 }
 
-// NewModuleExport builds an Ideal/ModuleExport value binding `name` to its
-// exported fields and owning Module.
-func NewModuleExport(name string, fields *OrderedMap, module Value) Value {
+// NewModuleNamespace builds the value `import` binds for one export: a
+// PLAIN Map over the export fields, carrying the module-namespace facet
+// (export name + owning Module descriptor). The map payload is the
+// module's own export *OrderedMap — shared, not copied — so runtime
+// export growth (the DSL `register` family) is visible through the
+// binding, and the kernel's growth ledger (module_export_growth.go) keys
+// per-map state on the same pointer.
+func NewModuleNamespace(name string, fields *OrderedMap, module Value) Value {
 	if fields == nil {
 		fields = NewOrderedMap()
 	}
-	return Value{Parent: TModuleExport, Data: ExtensionPayload{Body: &moduleExportInfo{
-		Name: name, Fields: fields, Module: module,
-	}}}
+	return eng.WithModuleNS(NewMap(fields), name, module)
 }
 
-// asModuleDesc / asModuleExportInfo unwrap the ExtensionPayload.
+// asModuleDesc unwraps the ExtensionPayload behind an Ideal/Module value.
 func asModuleDesc(v Value) (ModuleDesc, bool) {
 	if ep, ok := v.Data.(ExtensionPayload); ok {
 		d, ok := ep.Body.(ModuleDesc)
@@ -92,32 +86,61 @@ func asModuleDesc(v Value) (ModuleDesc, bool) {
 	return ModuleDesc{}, false
 }
 
-func asModuleExportInfo(v Value) (*moduleExportInfo, bool) {
-	if ep, ok := v.Data.(ExtensionPayload); ok {
-		me, ok := ep.Body.(*moduleExportInfo)
-		return me, ok
+// moduleNSFields returns the export-fields map behind a bound module
+// namespace (a concrete Map carrying the module-namespace facet), or nil
+// for anything else.
+func moduleNSFields(v Value) *OrderedMap {
+	if eng.ModuleNSOf(v) == nil || !IsConcrete(v) {
+		return nil
 	}
-	return nil, false
+	if mp, ok := v.Data.(eng.MapPayload); ok {
+		return mp.M
+	}
+	return nil
 }
 
-// moduleExportGet resolves a key against a ModuleExport: the synthetic
-// $module / $name, otherwise an exported field. ok=false when the key is
-// neither synthetic nor an export.
-func moduleExportGet(v Value, key string) (Value, bool) {
-	me, ok := asModuleExportInfo(v)
+// moduleNamespaceBound reports whether name is bound to a module
+// namespace (a facet-carrying Map) in the current scope.
+func moduleNamespaceBound(r *Registry, name string) bool {
+	top, ok := r.Defs.Top(name)
+	return ok && moduleNSFields(top) != nil
+}
+
+// moduleNamespaceExport returns the target export from the module
+// namespace bound as name. ok=false when the name is unbound, not a
+// namespace, or lacks the export.
+func moduleNamespaceExport(r *Registry, name, target string) (Value, bool) {
+	top, ok := r.Defs.Top(name)
 	if !ok {
+		return Value{}, false
+	}
+	fields := moduleNSFields(top)
+	if fields == nil {
+		return Value{}, false
+	}
+	return fields.Get(target)
+}
+
+// moduleExportGet resolves a key against a module namespace: the synthetic
+// $module / $name from the facet, otherwise an exported field from the
+// map. ok=false when v carries no facet or the key is neither synthetic
+// nor an export.
+func moduleExportGet(v Value, key string) (Value, bool) {
+	ns := eng.ModuleNSOf(v)
+	if ns == nil {
 		return Value{}, false
 	}
 	switch key {
 	case moduleExportFieldName:
-		return NewString(me.Name), true
+		return NewString(ns.Name), true
 	case moduleExportFieldModule:
-		return me.Module, true
+		return ns.Module, true
 	}
-	if me.Fields == nil {
+	fields := moduleNSFields(v)
+	if fields == nil {
 		return Value{}, false
 	}
-	return me.Fields.Get(key)
+	return fields.Get(key)
 }
 
 // moduleKind returns a Module's kind, defaulting "" to "inline".
@@ -183,7 +206,7 @@ func moduleInstGetReturns(args []Value, _ *Registry) []Value {
 	return dyn
 }
 
-// moduleTypeBehavior renders Module / ModuleExport values and matches
+// moduleTypeBehavior renders Module descriptor values and matches
 // nominally (DefaultBehavior semantics for Match/Equal).
 type moduleTypeBehavior struct {
 	path string
@@ -193,13 +216,6 @@ func (moduleTypeBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehav
 func (moduleTypeBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
 
 func (b moduleTypeBehavior) Format(v Value) string {
-	if me, ok := asModuleExportInfo(v); ok {
-		var keys []string
-		if me.Fields != nil {
-			keys = me.Fields.Keys()
-		}
-		return fmt.Sprintf("ModuleExport(%s){%s}", me.Name, strings.Join(keys, " "))
-	}
 	if desc, ok := asModuleDesc(v); ok {
 		ref := desc.Ref
 		if ref == "" {
@@ -210,47 +226,57 @@ func (b moduleTypeBehavior) Format(v Value) string {
 	return b.path
 }
 
-// ---- get / getr handlers for Module and ModuleExport ----
+// ---- module-namespace hooks for the shared map accessor family ----
+//
+// A namespace dispatches the ORDINARY map get/getr/has/dot sigs (it IS a
+// Map); these helpers add the facet-only behaviours the retired
+// Ideal/ModuleExport sigs used to own: the $name/$module synthetics, the
+// module-flavored strict-miss error, and the check-mode raw-export
+// resolution.
 
-func getModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[1]) {
-		return nil, r.BoruError("get_error", "get: cannot access property on type literal", "get")
+// moduleNSGetSynthetic answers the $name/$module synthetics for a facet
+// map. ok=false for a non-namespace receiver or a plain key (which then
+// takes the normal map read).
+func moduleNSGetSynthetic(container Value, key string) (Value, bool) {
+	if eng.ModuleNSOf(container) == nil {
+		return Value{}, false
 	}
-	if val, ok := moduleExportGet(args[1], getKey(args[0])); ok {
-		return []Value{val}, nil
+	switch key {
+	case moduleExportFieldName, moduleExportFieldModule:
+		return moduleExportGet(container, key)
 	}
-	return []Value{NewTypeLiteral(TNone)}, nil
+	return Value{}, false
 }
 
-func getrModuleExportHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if !IsConcrete(args[1]) {
-		return nil, r.BoruError("getr_error", "getr: cannot access property on type literal", "getr")
-	}
-	k := getKey(args[0])
-	if val, ok := moduleExportGet(args[1], k); ok {
-		return []Value{val}, nil
-	}
+// moduleNSGetrMiss builds the strict-read miss error for a module
+// namespace — "export … not found in module", with the did-you-mean
+// suggestion over the export keys — replacing the generic map wording so
+// a typo'd export points at the module contract, not at a mutable map.
+func moduleNSGetrMiss(r *Registry, container Value, k string, keyPos eng.SrcPos) error {
 	var keys []string
-	if me, ok := asModuleExportInfo(args[1]); ok && me.Fields != nil {
-		keys = me.Fields.Keys()
+	if fields := moduleNSFields(container); fields != nil {
+		keys = fields.Keys()
 	}
-	return nil, notFoundKeyError(r, fmt.Sprintf("getr: export %q not found in module", k), k, args[0].Pos(), keys)
+	return notFoundKeyError(r, fmt.Sprintf("getr: export %q not found in module", k), k, keyPos, keys)
 }
 
-// moduleExportGetReturns is the check-mode counterpart for `get`/`getr`
-// on a ModuleExport. Without it `Pkg.fn` resolves to a bare Any carrier
-// under static analysis, and every downstream use of an imported export
-// loses its type (a function export can no longer be dispatched or
-// checked). When the ModuleExport and key are both concrete — which they
-// are for `Pkg.key` access, since the key arrives as a /q-captured atom —
-// it returns the raw export value: a function export keeps its FnDefInfo
-// (toCarrier preserves it, so it stays dispatchable), a data export
-// becomes a carrier of its concrete type. Anything unresolved degrades
-// to Any, matching the previous behaviour.
-func moduleExportGetReturns(args []Value, _ *Registry) []Value {
-	if len(args) == 2 && IsConcrete(args[1]) {
+// moduleNSGetReturns is the check-mode read over a module namespace for
+// `get`/`dot`. Without it `Pkg.fn` would take the plain-map narrowing —
+// which deliberately degrades a Function field to dynamic(Any) and reads
+// a missing key as None. A namespace needs the opposite on both counts:
+// the raw export value rides out (a function export keeps its FnDefInfo,
+// so it stays dispatchable — toCarrier preserves it), and a MISSING key
+// stays a strict Any because a module's keyspace can GROW at run time
+// (the DSL `register` family; the growth ledger governs which absences
+// may fold — module_export_growth.go). ok=false for a non-namespace
+// receiver.
+func moduleNSGetReturns(args []Value) ([]Value, bool) {
+	if len(args) != 2 || eng.ModuleNSOf(args[1]) == nil || !IsConcrete(args[1]) {
+		return nil, false
+	}
+	if IsConcrete(args[0]) {
 		if val, ok := moduleExportGet(args[1], getKey(args[0])); ok {
-			return []Value{val}
+			return []Value{val}, true
 		}
 	}
 	// A missing / unresolved export stays a strict Any: emitting
@@ -258,48 +284,53 @@ func moduleExportGetReturns(args []Value, _ *Registry) []Value {
 	// a likely typo worse than the strict fallback (which fails loudly
 	// at the next typed slot). Dynamic escape hatches are for genuinely
 	// unknown VALUES, not unresolved names.
-	return []Value{NewCarrier(TAny)}
+	return []Value{NewCarrier(TAny)}, true
 }
 
-// moduleExportGetrReturns is the getr-specific check-mode ReturnsFn. It mirrors
-// moduleExportGetReturns for a resolvable export, but for a CONCRETE ModuleExport
-// with a MISSING key it records a TERMINAL not_found trap (top-level only): getr
-// raises not_found at runtime for a missing export (getrModuleExportHandler), so
-// the compiled program raises the byte-identical error here via OpTrap instead of
-// refusing downstream on the unmaterialisable Any residual. RecordTrap truncates
-// the program to the trap, dropping the residual — so the getr-on-ModuleExport
-// residual limit (which refuses even valid keys) never gets a chance to refuse
-// this row. A nested occurrence declines the trap (off the top frame) and keeps
-// the lenient Any fallback. `get` (which returns None for a missing key) stays on
-// the shared moduleExportGetReturns.
-func moduleExportGetrReturns(args []Value, r *Registry) []Value {
-	if len(args) == 2 && IsConcrete(args[1]) {
+// moduleNSGetrReturns is the getr-specific check-mode read over a module
+// namespace. It mirrors moduleNSGetReturns for a resolvable export, but
+// for a MISSING concrete key it records a TERMINAL not_found trap
+// (top-level only): getr raises not_found at runtime for a missing
+// export, so the compiled program raises the byte-identical error here
+// via OpTrap instead of refusing downstream on the unmaterialisable Any
+// residual. RecordTrap truncates the program to the trap, dropping the
+// residual. A nested occurrence declines the trap (off the top frame)
+// and keeps the lenient Any fallback. ok=false for a non-namespace
+// receiver.
+func moduleNSGetrReturns(args []Value, r *Registry) ([]Value, bool) {
+	if len(args) != 2 || eng.ModuleNSOf(args[1]) == nil || !IsConcrete(args[1]) {
+		return nil, false
+	}
+	if IsConcrete(args[0]) {
 		k := getKey(args[0])
 		if val, ok := moduleExportGet(args[1], k); ok {
-			return []Value{val}
+			return []Value{val}, true
 		}
-		// A module's export map is sealed at import, so a concrete-key miss
-		// is ALSO a check diagnostic (the strict-read contract, same text).
-		// A RuntimeMirror: the refusal loop skips it, so the trap below
+		// A module's export map is sealed at import (boru-level; runtime
+		// growers are ledger-modelled), so a concrete-key miss is ALSO a
+		// check diagnostic (the strict-read contract, same text). A
+		// RuntimeMirror: the refusal loop skips it, so the trap below
 		// keeps compiling (TestModuleExportGetrNotFoundTrapCompiles pins
 		// it).
 		if r.Check.IsActive() {
 			eng.CheckAddUniqueDiagnostic(r, "not_found",
 				fmt.Sprintf("getr: export %q not found in module", k), "getr", args[0].Pos())
 		}
-		// Record the SAME rich error the runtime handler raises (with the
+		// Record the SAME rich error the runtime path raises (with the
 		// did-you-mean suggestion over the export keys) so the compiled trap
-		// is byte-identical to the interpreter's getrModuleExportHandler.
+		// is byte-identical to the interpreter's miss.
 		var keys []string
-		if me, ok := asModuleExportInfo(args[1]); ok && me.Fields != nil {
-			keys = me.Fields.Keys()
+		if fields := moduleNSFields(args[1]); fields != nil {
+			keys = fields.Keys()
 		}
 		ferr := buildNotFoundKeyError(r,
 			fmt.Sprintf("getr: export %q not found in module", k), k, args[0].Pos(), keys)
 		r.Check.Recorder().RecordTrapErr(ferr, args[0].Pos())
 	}
-	return []Value{NewCarrier(TAny)}
+	return []Value{NewCarrier(TAny)}, true
 }
+
+// ---- get / getr handlers for the Module descriptor ----
 
 func getModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[1]) {
@@ -327,20 +358,10 @@ func getrModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 // and integration tests; ok=false for non-Module values.
 func AsModuleDesc(v Value) (ModuleDesc, bool) { return asModuleDesc(v) }
 
-// ToMap / ToList implement eng.IdealConverter for Module / ModuleExport.
-// A ModuleExport projects to its exported fields; a Module projects to its
-// descriptor (id/kind/file/folder/exports).
+// ToMap / ToList implement eng.IdealConverter for the Module descriptor:
+// it projects to its descriptor fields (name/kind/file/folder/exports).
+// (A module NAMESPACE needs no converter — it already IS a Map.)
 func (moduleTypeBehavior) ToMap(v Value) (Value, error) {
-	if me, ok := asModuleExportInfo(v); ok {
-		out := NewOrderedMap()
-		if me.Fields != nil {
-			for _, k := range me.Fields.Keys() {
-				val, _ := me.Fields.Get(k)
-				out.Set(k, val)
-			}
-		}
-		return NewMap(out), nil
-	}
 	if desc, ok := asModuleDesc(v); ok {
 		out := NewOrderedMap()
 		out.Set("name", NewString(desc.Ref))
@@ -359,16 +380,6 @@ func (moduleTypeBehavior) ToMap(v Value) (Value, error) {
 }
 
 func (moduleTypeBehavior) ToList(v Value) (Value, error) {
-	if me, ok := asModuleExportInfo(v); ok {
-		var vals []Value
-		if me.Fields != nil {
-			for _, k := range me.Fields.Keys() {
-				val, _ := me.Fields.Get(k)
-				vals = append(vals, val)
-			}
-		}
-		return NewList(vals), nil
-	}
 	if desc, ok := asModuleDesc(v); ok {
 		names := moduleExportNames(desc)
 		elems := make([]Value, len(names))

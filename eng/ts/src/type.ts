@@ -92,7 +92,7 @@ const builtinDecls: BuiltinDecl[] = [
   { path: 'Word/__PE', internal: true },
   { path: 'Word/__IS', internal: true },
   { path: 'Word/__XI', internal: true },
-  { path: 'Word/__FN', alias: 'Fndef', internal: true },
+  // Word/__FN ('Fndef') retired — collapsed into Type/Function (ADR-011).
   { path: 'Word/__RC', alias: 'Returncheck', internal: true },
   { path: 'Word/__MK', alias: 'Mark', internal: true },
   { path: 'Word/__MV', alias: 'Move', internal: true },
@@ -268,7 +268,6 @@ export const TOpenParen = newType('Word/__OP')
 export const TMark = newType('Word/__MK')
 export const TMove = newType('Word/__MV')
 export const TSplice = newType('Word/__SP')
-export const TFnDef = newType('Word/__FN')
 export const TInterpString = newType('Word/__IS')
 export const TParenExpr = newType('Word/__PE')
 export const TXmlInterp = newType('Word/__XI')

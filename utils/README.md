@@ -64,9 +64,11 @@ of a running program, and so cannot be checked from inside boru at all:
 
 Learned by writing them, and each one prevents a silent failure:
 
-- **Terminate every statement with `end`** when its head is a module export.
-  Two consecutive unterminated statements can invert and drop one of the calls
-  with no diagnostic (NUR038).
+- **Terminating a module-export statement with `end` is no longer required**
+  (kept as style here): two consecutive unterminated statements used to invert
+  and drop one of the calls with no diagnostic (NUR038, resolved — a completed
+  value-called collection now seals, and a dot-read callee is a collection
+  barrier like its bare-word twin). `end` remains good hygiene for readers.
 - **Swallow every residual.** The driver prints whatever the program leaves on
   the stack, so `IO.write` and `flex set` results must be dropped
   (`(IO.write …) drop`), and a program that has finished should end with

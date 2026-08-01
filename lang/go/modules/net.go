@@ -56,7 +56,7 @@ func BuildNetModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// answers `.status` directly. Same mechanism boru:matrix-util uses for
 	// add/sub/mul, anchored on this import's minted Fetch type.
 	for _, ext := range native.FetchAccessorExtensions(ft) {
-		exports.Set(ext.Extends, native.NewFnDef(ext))
+		exports.Set(ext.Extends, native.NewFunction(ext))
 	}
 	// Built-in codec values (plain {decode encode} maps whose functions
 	// carry Go handlers): `listen {tcp: 8080 codec: Net.http} svc`.

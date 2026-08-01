@@ -3,7 +3,7 @@
 #
 # Edge-case battery over the module system: the inline `module […]`
 # body as a FRESH evaluation context, export map shapes and the
-# referent (`fn/r`) vs bare-name export rule, ModuleExport
+# referent (`fn/r`) vs bare-name export rule, module namespaces
 # transparency and the $name/$module synthetics, import renaming,
 # module-vs-importer scope, and dispatch through module fn wrappers
 # (swap form, argument order, preamble fns with private helpers).
@@ -32,7 +32,7 @@ import module [export "M" {cfg: {k: 1}}] M.cfg.k	1	a nested map export reads thr
 import module [export "M" {xs: [1 2 3]}] M.xs size	3	a list export is plain data
 import module [export "M" {t: Integer}] def x:(M.t) 5 x	5	an exported TYPE anchors importer annotations
 import module [export "foo" {a:1}] foo.a	1	a lowercase export name is accepted — it binds like any export
-import module [export "foo" {a:1}] typeof foo	ModuleExport	…as a regular ModuleExport
+import module [export "foo" {a:1}] typeof foo	Map	…as a regular namespace Map
 import module [export Foo {a:1}]	ERROR:undefined_word	the export name must be a String — a bare word is evaluated (and is unbound)
 import module [export "M" 42]	ERROR:no signature matches	a non-map export payload has no export sig
 #
@@ -50,7 +50,7 @@ import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {
 import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/r}] 10 3 M.sub2	-7	GOTCHA all-stack: sig position 0 is TOP of stack — a=3 b=10
 import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {sub2: p/r}] 10 M.sub2 3	-7	swap form: the forward arg fills position 0 (a=3), the stack arg b=10
 #
-# §6  ModuleExport transparency and the synthetics
+# §6  namespace transparency and the facet synthetics
 import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] B.$module.exports	['A' 'B' 'C']	the descriptor lists every export, in declaration order
 import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] A.$module is C.$module	true	all exports share ONE Module instance
 import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] B.$module.exports 0 get eq "A"	true	descriptor fields are plain values — list reads compose

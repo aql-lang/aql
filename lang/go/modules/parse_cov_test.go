@@ -599,7 +599,7 @@ func TestParseCovIsCallableValueDirect(t *testing.T) {
 	if !isCallableValue(fn) {
 		t.Error("a Function value is callable")
 	}
-	fd := native.NewFnDef(native.FnDefInfo{Name: "g"})
+	fd := native.NewFunction(native.FnDefInfo{Name: "g"})
 	if !isCallableValue(fd) {
 		t.Error("an FnDef value is callable")
 	}

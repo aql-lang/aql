@@ -127,8 +127,8 @@ var macroNatives = []NativeFunc{
 			// The mini-language VALUE form — `mini <fn> <src> <opts?>`:
 			// the first operand IS the transducer, a fn (or a word bound to
 			// one, handled in miniHandler) whose every signature opens with
-			// the standard [src opts] prefix. An anonymous fn literal is
-			// TFunction; a def'd fn or module export is TFnDef.
+			// the standard [src opts] prefix. Every fn value — anonymous
+			// literal, def'd fn, module export — is TFunction (ADR-011).
 			{
 				Args:    []*Type{TFunction, TString, TMap},
 				Impl:    Go(miniHandler, RunInCheck()),
@@ -136,16 +136,6 @@ var macroNatives = []NativeFunc{
 			},
 			{
 				Args:    []*Type{TFunction, TString},
-				Impl:    Go(miniHandler, RunInCheck()),
-				Returns: []*Type{TAny}, BarrierPos: -1,
-			},
-			{
-				Args:    []*Type{TFnDef, TString, TMap},
-				Impl:    Go(miniHandler, RunInCheck()),
-				Returns: []*Type{TAny}, BarrierPos: -1,
-			},
-			{
-				Args:    []*Type{TFnDef, TString},
 				Impl:    Go(miniHandler, RunInCheck()),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
@@ -211,16 +201,6 @@ var macroNatives = []NativeFunc{
 				Returns: []*Type{TString}, BarrierPos: -1,
 			},
 			{
-				Args:    []*Type{TFnDef, TAny, TAny},
-				Impl:    Go(emitHandler, RunInCheck()),
-				Returns: []*Type{TString}, BarrierPos: -1,
-			},
-			{
-				Args:    []*Type{TFnDef, TAny},
-				Impl:    Go(emitHandler, RunInCheck()),
-				Returns: []*Type{TString}, BarrierPos: -1,
-			},
-			{
 				Args:    []*Type{TAny, TAny},
 				Impl:    Go(emitHandler, RunInCheck()),
 				Returns: []*Type{TString}, BarrierPos: -1,
@@ -275,19 +255,6 @@ var macroNatives = []NativeFunc{
 			},
 			{
 				Args:    []*Type{TFunction, TAny},
-				Impl:    Go(parseHandler, RunInCheck()),
-				Returns: []*Type{TAny}, BarrierPos: -1,
-			},
-			// A def'd fn or a module export (e.g. `(ParseLang.parse_json)`)
-			// is a TFnDef value, a separate family from an anonymous fn's
-			// TFunction — both spell the same ParseLang-value form.
-			{
-				Args:    []*Type{TFnDef, TMap, TAny},
-				Impl:    Go(parseHandler, RunInCheck()),
-				Returns: []*Type{TAny}, BarrierPos: -1,
-			},
-			{
-				Args:    []*Type{TFnDef, TAny},
 				Impl:    Go(parseHandler, RunInCheck()),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 			},
@@ -419,7 +386,7 @@ func macroexpandHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 // (2-arg form normalizes to {}). src/opts are spliced as collected — they may
 // be carriers in check mode; only the kind must be concrete.
 func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if args[0].Parent.ConformsTo(TFunction) || args[0].Parent.ConformsTo(TFnDef) {
+	if args[0].Parent.ConformsTo(TFunction) {
 		return miniFnExpand(args[0], args, r)
 	}
 	kind, err := args[0].AsConcreteAtom()
@@ -443,7 +410,7 @@ func miniHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 		// resolves through the per-pass fn-carrier side table
 		// (checkFnCarrierBind) instead, like parse.
 		top, bound := r.Defs.Top(kind)
-		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+		if !bound || !top.Parent.ConformsTo(TFunction) {
 			if v, hit := checkFnCarrierBind(r, kind); hit {
 				top, bound = v, true
 			} else {
@@ -648,15 +615,7 @@ const miniSubjParam = "__mini_subject"
 // miniKindExport returns the kind's wrapper FnDef from the bound
 // MiniLang namespace.
 func miniKindExport(r *Registry, target string) (Value, bool) {
-	top, ok := r.Defs.Top("MiniLang")
-	if !ok {
-		return Value{}, false
-	}
-	info, ok := asModuleExportInfo(top)
-	if !ok || info.Fields == nil {
-		return Value{}, false
-	}
-	return info.Fields.Get(target)
+	return moduleNamespaceExport(r, "MiniLang", target)
 }
 
 // miniPartialFn builds the partially-applied Function for a FILTER
@@ -732,28 +691,15 @@ var miniPartialSeq int
 // now, discovered via miniGoHook.)
 
 // miniNamespaceBound reports whether the `MiniLang` namespace is bound to a
-// ModuleExport in the current scope.
+// module namespace in the current scope.
 func miniNamespaceBound(r *Registry) bool {
-	top, ok := r.Defs.Top("MiniLang")
-	if !ok {
-		return false
-	}
-	_, ok = asModuleExportInfo(top)
-	return ok
+	return moduleNamespaceBound(r, "MiniLang")
 }
 
 // miniKindRegistered reports whether `lang_<kind>` is an export of the bound
 // MiniLang namespace.
 func miniKindRegistered(r *Registry, target string) bool {
-	top, ok := r.Defs.Top("MiniLang")
-	if !ok {
-		return false
-	}
-	info, ok := asModuleExportInfo(top)
-	if !ok || info.Fields == nil {
-		return false
-	}
-	_, ok = info.Fields.Get(target)
+	_, ok := moduleNamespaceExport(r, "MiniLang", target)
 	return ok
 }
 
@@ -769,7 +715,7 @@ func miniKindRegistered(r *Registry, target string) bool {
 // IS the parser (no kind lookup), and the call expands to the direct fn call
 // — see parseFnExpand.
 func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	if args[0].Parent.ConformsTo(TFunction) || args[0].Parent.ConformsTo(TFnDef) {
+	if args[0].Parent.ConformsTo(TFunction) {
 		return parseFnExpand(args[0], args, r)
 	}
 	kind, err := args[0].AsConcreteAtom()
@@ -794,7 +740,7 @@ func parseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		// name — and resolves through the per-pass fn-carrier side table
 		// (checkFnCarrierBind) instead.
 		top, bound := r.Defs.Top(kind)
-		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+		if !bound || !top.Parent.ConformsTo(TFunction) {
 			if v, hit := checkFnCarrierBind(r, kind); hit {
 				top, bound = v, true
 			} else {
@@ -1008,14 +954,9 @@ func EmitLangFnSigWhy(fnDef FnDefInfo) string {
 }
 
 // parseNamespaceBound reports whether the `ParseLang` namespace is bound to a
-// ModuleExport in the current scope.
+// module namespace in the current scope.
 func parseNamespaceBound(r *Registry) bool {
-	top, ok := r.Defs.Top("ParseLang")
-	if !ok {
-		return false
-	}
-	_, ok = asModuleExportInfo(top)
-	return ok
+	return moduleNamespaceBound(r, "ParseLang")
 }
 
 // capParseLangFnDispatch holds the parselang-fn-dispatch *Signature — the
@@ -1070,15 +1011,7 @@ func recordParseLangFnDispatch(r *Registry, fn Value, args []Value) (Value, bool
 // parseKindRegistered reports whether `parse_<kind>` is an export of the
 // bound ParseLang namespace.
 func parseKindRegistered(r *Registry, target string) bool {
-	top, ok := r.Defs.Top("ParseLang")
-	if !ok {
-		return false
-	}
-	info, ok := asModuleExportInfo(top)
-	if !ok || info.Fields == nil {
-		return false
-	}
-	_, ok = info.Fields.Get(target)
+	_, ok := moduleNamespaceExport(r, "ParseLang", target)
 	return ok
 }
 
@@ -1101,7 +1034,7 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// The emitter VALUE form — `emit <fn> <opts?> <data>` (sigs 4-7): the
 	// first operand IS the emitter, so no kind classification happens.
 	if len(args) >= 2 &&
-		(args[0].Parent.ConformsTo(TFunction) || args[0].Parent.ConformsTo(TFnDef)) {
+		args[0].Parent.ConformsTo(TFunction) {
 		return emitFnExpand(args[0], args, r)
 	}
 	// Try to read the leading operand as a kind name (a /q'd bare word).
@@ -1124,7 +1057,7 @@ func emitHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 	// fn-carrier side table (checkFnCarrierBind), like parse.
 	if leadingKind && !explicit {
 		top, bound := r.Defs.Top(kind)
-		if !bound || !(top.Parent.ConformsTo(TFunction) || top.Parent.ConformsTo(TFnDef)) {
+		if !bound || !top.Parent.ConformsTo(TFunction) {
 			if v, hit := checkFnCarrierBind(r, kind); hit {
 				top, bound = v, true
 			} else {
@@ -1238,27 +1171,14 @@ func emitFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 }
 
 // emitNamespaceBound reports whether the `EmitLang` namespace is bound to a
-// ModuleExport in the current scope.
+// module namespace in the current scope.
 func emitNamespaceBound(r *Registry) bool {
-	top, ok := r.Defs.Top("EmitLang")
-	if !ok {
-		return false
-	}
-	_, ok = asModuleExportInfo(top)
-	return ok
+	return moduleNamespaceBound(r, "EmitLang")
 }
 
 // emitKindRegistered reports whether `emit_<kind>` is an export of the bound
 // EmitLang namespace.
 func emitKindRegistered(r *Registry, target string) bool {
-	top, ok := r.Defs.Top("EmitLang")
-	if !ok {
-		return false
-	}
-	info, ok := asModuleExportInfo(top)
-	if !ok || info.Fields == nil {
-		return false
-	}
-	_, ok = info.Fields.Get(target)
+	_, ok := moduleNamespaceExport(r, "EmitLang", target)
 	return ok
 }

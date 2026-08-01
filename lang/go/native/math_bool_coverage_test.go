@@ -1,7 +1,9 @@
 package native
 
 import (
+	"errors"
 	"math"
+	"strings"
 	"testing"
 )
 
@@ -28,10 +30,18 @@ func TestMathPow(t *testing.T) {
 	if _as1 != 1 {
 		t.Errorf("5 pow 0 = %v, want 1", result[0])
 	}
-	// Negative exponent should error
+	// Negative exponent should error, and the error carries the
+	// arith_error code like every sibling arithmetic fault (NUR010).
 	err := runBoruError(t, r, []Value{NewInteger(2), NewWord("pow"), NewInteger(-1)})
 	if err == nil {
 		t.Error("expected error for negative exponent")
+	}
+	var be *BoruError
+	if !errors.As(err, &be) || be.Code != "arith_error" {
+		t.Errorf("negative-exponent error = %v, want a BoruError coded arith_error", err)
+	}
+	if !strings.Contains(be.Detail, "pow: negative exponent -1") {
+		t.Errorf("negative-exponent detail = %q, want the pinned runtime message", be.Detail)
 	}
 	// Float pow
 	result = runBoru(t, r, []Value{NewFloat(2), NewWord("pow"), NewFloat(0.5)})

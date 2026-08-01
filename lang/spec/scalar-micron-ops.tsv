@@ -96,6 +96,7 @@ def Pointon refine Micron {x:Integer y:Integer} def add fn [[a:Pointon b:Pointon
 # ─────────────────────────────────────────────────────────────────────
 # §8  Pathon — add joins, sub strips a trailing run of segments
 (make Pathon "usr/local") add (make Pathon "bin/boru")	usr/local/bin/boru	Pathon add joins relative segments
+(make Pathon "a/b/") add (make Pathon "c")	a/b/c	segments are structural, so a trailing separator can never duplicate (NUR012)
 (make Pathon "usr/local/bin") sub (make Pathon "local/bin")	usr	Pathon sub strips a matching trailing run
 (make Pathon "usr/local/bin") sub (make Pathon "zzz")	usr/local/bin	Pathon sub with no matching suffix is unchanged
 (make Pathon "usr") add (make Pathon "/bin")	ERROR:absolute path	Pathon join of an absolute right operand errors

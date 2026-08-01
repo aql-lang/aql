@@ -129,7 +129,7 @@ func (s *StoreShapeInfo) RecordVal(v Value) {
 	if s == nil || s.ValsPoisoned {
 		return
 	}
-	if v.Parent == nil || v.Parent.ConformsTo(TFunction) || v.Parent.ConformsTo(TFnDef) ||
+	if v.Parent == nil || v.Parent.ConformsTo(TFunction) ||
 		IsReach(v) || IsSplice(v) {
 		s.ValsPoisoned = true
 		s.Vals = Value{}
@@ -238,7 +238,7 @@ func MintFlexShapeCarrier(src Value, depth int) (Value, bool) {
 	ss, _ := StoreShapeOf(out)
 	for _, k := range m.Keys() {
 		fv, _ := m.Get(k)
-		if fv.Parent == nil || fv.Parent.ConformsTo(TFunction) || fv.Parent.ConformsTo(TFnDef) ||
+		if fv.Parent == nil || fv.Parent.ConformsTo(TFunction) ||
 			IsReach(fv) || IsSplice(fv) {
 			continue // dispatch-bearing: absent key reads dynamic(Any)
 		}
@@ -287,7 +287,7 @@ func ShapeFieldRead(v Value) Value {
 		return NewDynamicCarrierValue(v)
 	}
 	ft := ValueType(v)
-	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+	if ft == nil || ft.ConformsTo(TFunction) {
 		return NewDynamicCarrier(TAny)
 	}
 	return NewDynamicCarrier(ft)

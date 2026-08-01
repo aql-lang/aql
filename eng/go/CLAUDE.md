@@ -360,8 +360,8 @@ Ideal — built-in or user-defined, in Go or boru — is convertible.
 Return `ErrNoConverter` to decline and keep walking. Concrete
 projections are installed for Class instances (→ fields), Store
 (→ entries), Error (→ {message}), Table (→ rows /
-columnar map), and — in their owning packages — ModuleExport
-(→ exports), Module (→ descriptor), Tensor/Matrix/Vector (→ nested
+columnar map), and — in their owning packages — Module
+(→ descriptor), Tensor/Matrix/Vector (→ nested
 rows / {shape,values}), Fetch Request/Response (→ their map), and
 Timeout/Interval (→ {id,ms}). Each is a behavior whose `Format`
 delegates to the kernel default so rendering is unchanged.
@@ -379,7 +379,8 @@ constants) **iff** one of these holds:
    `ReturnCheck`, `DefCleanup`, `ParenExpr`, `InterpString`,
    `Module`.
 3. It is a meta-type used by `is`/`typeof`/`inspect`: `Type`,
-   `Function`, `FnDef`, `FnUndef`, `Disjunct`, `Enum`.
+   `Function`, `FnUndef`, `Disjunct`, `Enum`. (`FnDef` — `Word/__FN`
+   — was collapsed into `Function`; ADR-011.)
 4. It is a structural type used by `make`/`record`/`class`:
    `Record`, `Options`, `Table`, `ChildType`, `Class`,
    `Resource`, `Store`, `Error`, and the `Scalar/Micron`

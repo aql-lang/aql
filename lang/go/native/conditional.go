@@ -71,11 +71,76 @@ func ifClause(elems []Value) []Value {
 	return elseBranch
 }
 
+// isCaseOpenCallHead reports whether a match-position clause element is a
+// bare word bound to a FUNCTION VALUE (a def'd fn or a parked Function).
+// Such an element can never be a genuine match — a function value unifies
+// with nothing (NUR031) — so it must be the head of an OPEN-CALL default
+// arm (`case k [ "q" [quit] vt-screen-key state ev ]`, NUR048/G9): the
+// pair walk that would otherwise tear the call into a bogus (match, block)
+// pair stops here and the rest of the list is the default body. Bare words
+// NOT bound to a function keep their atom-match reading (`case c/q [ red
+// "R" … ]`), so only provably-uncallable-as-match heads change meaning.
+func isCaseOpenCallHead(r *Registry, m Value) bool {
+	if !IsWord(m) {
+		return false
+	}
+	w, _ := AsWord(m)
+	bound, ok := r.ResolveTypedName(w.Name)
+	if !ok {
+		return false
+	}
+	return bound.Parent.Equal(TFunction)
+}
+
+// caseDefaultStart returns the index where the clause list's trailing
+// DEFAULT arm begins, and whether one exists. Pairs walk two at a time;
+// the default is normally the single trailing odd element, but an
+// open-call head in match position (isCaseOpenCallHead) starts the
+// default early and it spans every remaining element. The pairs region
+// elems[:start] always has even length.
+func caseDefaultStart(r *Registry, elems []Value) (int, bool) {
+	i := 0
+	for ; i+1 < len(elems); i += 2 {
+		if isCaseOpenCallHead(r, elems[i]) {
+			return i, true
+		}
+	}
+	if i < len(elems) {
+		return i, true
+	}
+	return len(elems), false
+}
+
+// caseNormalizeClauses collapses an OPEN-CALL default region — trailing
+// tokens headed by a function word (caseDefaultStart stopping early), or
+// a single trailing fn-headed word — into ONE synthetic code-body block,
+// so every downstream walk (the runtime clause walk, the branch join,
+// the compile desugar, the exhaustiveness passes) sees the standard
+// pairs-plus-single-default shape and treats the arm exactly like a
+// matched code-body arm (NUR048/G9). A clause list already in standard
+// shape is returned unchanged.
+func caseNormalizeClauses(r *Registry, elems []Value) []Value {
+	start, hasDefault := caseDefaultStart(r, elems)
+	if !hasDefault {
+		return elems
+	}
+	rest := elems[start:]
+	if len(rest) == 1 && !isCaseOpenCallHead(r, rest[0]) {
+		return elems
+	}
+	out := make([]Value, 0, start+1)
+	out = append(out, elems[:start]...)
+	out = append(out, NewList(append([]Value(nil), rest...)))
+	return out
+}
+
 // caseClauses runs the `case` word's clause walk (see caseHandler):
 // v is the captured value; elems are the raw clause-list elements —
-// match/block pairs with an optional trailing default. Returns the
-// matched block's result stack.
+// match/block pairs with an optional trailing default (a single
+// element; an open-call tail is first collapsed into a synthetic block
+// by caseNormalizeClauses). Returns the matched block's result stack.
 func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
+	elems = caseNormalizeClauses(r, elems)
 	i := 0
 	for ; i+1 < len(elems); i += 2 {
 		match := elems[i]
@@ -132,7 +197,10 @@ func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
 		}
 	}
 	if i < len(elems) {
-		// Trailing odd element: the default clause.
+		// Trailing odd element: the default clause (an open-call tail
+		// arrives here as one synthetic code-body block and so runs in
+		// an isolated sub-engine with the case value pushed first —
+		// exactly like a matched arm, NUR048/G9).
 		return runCaseBody(r, v, elems[i])
 	}
 	return nil, nil
@@ -195,7 +263,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 			}
 			if isCodeBody(clauses) {
 				if lst, _ := AsList(clauses); !lst.IsNil() {
-					elems := lst.Slice()
+					elems := caseNormalizeClauses(r, lst.Slice())
 					if len(elems) == 3 && !isCodeBody(elems[1]) && !isCodeBody(elems[2]) {
 						// `[do]` + the normal guard tokens: do runs the body once,
 						// leaving its value as the scrutinee for the match.
@@ -225,7 +293,11 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	if lst.IsNil() {
 		return dynAny
 	}
-	elems := lst.Slice()
+	// An open-call default tail collapses into one synthetic code-body
+	// block up front (NUR048/G9), so the coverage pass, the compile
+	// desugar, and the branch join all see the standard shape and lower
+	// the arm exactly like a matched block.
+	elems := caseNormalizeClauses(r, lst.Slice())
 	// Static coverage pass (case_exhaustive.go) — BEFORE the compile-desugar /
 	// plain-check paths diverge, so both report identical findings: a
 	// default-less case whose clauses don't cover the scrutinee's static type

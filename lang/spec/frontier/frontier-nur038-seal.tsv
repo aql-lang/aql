@@ -1,0 +1,24 @@
+# NUR038 statement seal — twin value-called statements (the misfire class,
+# fixed 2026-08-01). A completed value-called forward collection now SEALS
+# (stack-only re-step, the /s word twin), and a reach-read named fn that
+# would collect is an arrival BARRIER (committed via commitBarrierForward
+# or resolved from the stack), so consecutive dot-access calls each bind
+# their own arguments in source order. These rows are the value-returning
+# twin-call matrix: semantically green on the interpreter, compile-REFUSED
+# on the pre-existing residual-ordering limitation ("dynamic value
+# precedes residual args (fn-value-call boundary)") — two dynamic call
+# results in one program residual exceed the Stage-1 lowering. Sound
+# interpreter fallback (differential-clean). Graduation = the residual
+# lowering handling multiple dynamic results, at which point the ledger
+# entries delete and the rows move to lang/spec/fn-value.tsv §6.
+def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 5 m.p 7	5 7	consecutive Any-param value calls each bind their own arg
+def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 1 m.p 2 m.p 3	1 2 3	three in a row — every window closes at its own statement
+def g fn [[a:Any b:Any] [Any] [(a mul 100) add b]] end def m {g: g/r} end m.g 1 2 m.g 3 4	102 304	two-arg windows close at their own arity, not at the next call
+import module [def p fn [[x:Any] [Any] [x]] export "M" {p: p/r}] end M.p 5 M.p 7	5 7	module-export twins seal identically (the original NUR038 shape)
+def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end 5 m.p m.p 7	5 7	stack form then forward form — the seal is form-agnostic
+def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p (1 add 2) m.p 7	3 7	a computed first argument still seals before the second call
+def m {l: ([x:Any] => [x])} end m.l 5 m.l 7	5 7	afn lambda values seal too
+def f fn [[x:Any] [Any] [x]] end def h fn [[y:Any] [Any] [y]] end def m {p: f/r} end m.p 5 h 7	5 7	value call then bare-word call (the word barrier, unchanged)
+def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end (m.p 5) (m.p 7)	5 7	explicit parens as the seal (unchanged)
+def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 5 end m.p 7	5 7	explicit `end` as the seal (unchanged)
+def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/r} end m.e 5 m.e 7	5 7	an arg-bearing overload wins over its 0-arg twin, per statement (the NUR035 guard holds under the seal)

@@ -279,12 +279,13 @@ func accessorGetSignatures() []Signature {
 		// integer key is a LIST index (handled precisely downstream by
 		// tryFoldStaticIndex) or a stringified map key — getNodeReturns
 		// must not stringify-and-miss an integer over a list.
+		// A module NAMESPACE (a plain Map carrying the module-namespace
+		// facet) dispatches these same rows: getNodeHandler answers the
+		// $name/$module synthetics from the facet, and getNodeReturns
+		// resolves exports to their raw values in check mode.
 		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getNodeReturns},
 		{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getNodeReturns},
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getIntKeyReturns},
-		// [Key | ModuleExport] — transparent export access + $module/$name
-		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getModuleExportHandler), ReturnsFn: moduleExportGetReturns},
-		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(getModuleExportHandler), ReturnsFn: moduleExportGetReturns},
 		// [Key | Module] — descriptor fields (id/kind/file/folder/exports)
 		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getModuleInstHandler), ReturnsFn: moduleInstGetReturns},
 		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(getModuleInstHandler), ReturnsFn: moduleInstGetReturns},
@@ -1036,7 +1037,7 @@ func recordSchemaFieldReturns(rt RecordTypeInfo, key Value) []Value {
 		return []Value{NewDynamicCarrierValue(NewRecordType(nested.Fields))}
 	}
 	ft := ValueType(fv)
-	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+	if ft == nil || ft.ConformsTo(TFunction) {
 		return dyn
 	}
 	return []Value{NewDynamicCarrier(ft)}
@@ -1082,6 +1083,12 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	dyn := []Value{NewDynamicCarrier(TAny)}
 	if len(args) != 2 {
 		return dyn
+	}
+	// A module NAMESPACE receiver (facet map) takes its own read model:
+	// raw export values (a fn export stays dispatchable) and strict-Any
+	// misses (the keyspace can grow) — see moduleNSGetReturns.
+	if out, ok := moduleNSGetReturns(args); ok {
+		return out
 	}
 	key, container := args[0], args[1]
 	if !IsConcrete(key) {
@@ -1176,11 +1183,11 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	// and would collide in operand-provenance tracking). A NON-closure wrapper
 	// (`r.int`, RNG-bound) stays dynamic so it does not bake a seed-specific
 	// handler -- it takes the runtime CALL_DYNAMIC path instead.
-	if (val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef)) &&
+	if val.Parent.ConformsTo(TFunction) &&
 		isClosureBearingWrapper(val) {
 		return []Value{CloneValue(val)}
 	}
-	if val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef) ||
+	if val.Parent.ConformsTo(TFunction) ||
 		IsReach(val) || IsSplice(val) {
 		// Shaped-instance-method annotation (Stage M2c, eng/method_shape.go):
 		// a NON-closure delegation wrapper member (`l.info`, `c.add`, `r.int`)
@@ -1191,7 +1198,7 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 		// NoteMethodShape vets the member (delegation wrapper only, never a
 		// genuine 0-arg overload — the miscompile-E auto-dispatch class stays
 		// refused); everything it declines keeps the bare dynamic Any.
-		if r != nil && (val.Parent.ConformsTo(TFunction) || val.Parent.ConformsTo(TFnDef)) {
+		if r != nil && val.Parent.ConformsTo(TFunction) {
 			out := NewDynamicCarrier(TAny)
 			r.Check.NoteMethodShape(out, val)
 			return []Value{out}
@@ -1250,7 +1257,7 @@ func getIntKeyReturns(args []Value, r *Registry) []Value {
 		return []Value{NewCarrier(TNone)} // out-of-range index reads as None
 	}
 	el := list.Get(i)
-	if el.Parent.ConformsTo(TFunction) || el.Parent.ConformsTo(TFnDef) ||
+	if el.Parent.ConformsTo(TFunction) ||
 		IsReach(el) || IsSplice(el) {
 		return dyn
 	}
@@ -1287,6 +1294,11 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	}
 	// String/atom/word key: map property access.
 	k := getKey(key)
+	// A module namespace answers $name/$module from its facet; every
+	// other key falls through to the plain map read below.
+	if val, ok := moduleNSGetSynthetic(container, k); ok {
+		return []Value{val}, nil
+	}
 	if m, _ := AsMap(container); m != nil {
 		val, ok := m.Get(k)
 		if !ok {
@@ -1324,7 +1336,7 @@ func getObjectReturns(args []Value, r *Registry) []Value {
 		return []Value{NewCarrier(TNone)} // sealed / absent field reads as None
 	}
 	ft := ValueType(fv)
-	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+	if ft == nil || ft.ConformsTo(TFunction) {
 		return dyn
 	}
 	return []Value{NewCarrier(ft)}
@@ -1352,7 +1364,7 @@ func getResourceReturns(args []Value, r *Registry) []Value {
 		return []Value{NewCarrier(TNone)} // absent field reads as None
 	}
 	ft := ValueType(fv)
-	if ft == nil || ft.ConformsTo(TFunction) || ft.ConformsTo(TFnDef) {
+	if ft == nil || ft.ConformsTo(TFunction) {
 		return dyn
 	}
 	return []Value{NewCarrier(ft)}

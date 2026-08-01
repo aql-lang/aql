@@ -103,13 +103,19 @@ they sound. The same rule is stated in the `ADR.md` header.
 Language- and compiler-level sharp edges found by writing a large app
 entirely in boru are collected in **`design/BORU-SHARP-EDGES.0.md`** —
 minimal repros, root-cause hypotheses, workarounds, and a triage table.
-Two are engine-bug candidates (G8 recovered-`raise` binding teardown;
-G12 an `/r`-parked fn not satisfying a `Function` param); one is a latent
-bug in shipped example code (G10 `def why (dot message)` in an `error`
-handler, in `design/examples/apps/todo-tui-client.boru`); the rest are
-`case`-default collection (G9), returned-list-literal laziness (G11), and
-two bytecode-compiler refusals (G13a single-token bare-map body, G13b a
-type-literal map value). Read it before re-deriving a workaround.
+Re-verified 2026-07-30: G8 (recovered-`raise` binding teardown), G11
+(returned-list-literal laziness) and G13a (single-token bare-map body)
+**no longer reproduce** — fixed by unrelated work. G9 (`case`-default
+collection, NUR048), G13b (type-literal map values refusing to
+compile, NUR051) and G12 (an `/r`-parked fn not satisfying a
+`Function` param, NUR050) were **resolved 2026-07-31** — an open-call
+`case` default runs isolated like a matched arm, nested bare type
+nodes intern as type operands (ADR-010), and there is exactly one
+function type (`Word/__FN` collapsed into `Type/Function`; `/r`-marked
+words feed forward collection as references — ADR-011). The one live
+item carries a per-item NUR record with a fix verdict: G10
+`(dot message)` receiverless in an `error` handler → NUR049. Read the
+note before re-deriving a workaround.
 
 ## Build & Test
 
@@ -735,31 +741,42 @@ lexing, use the `addMatcher` helper with the rule-aware `LexMatcher` signature
 `func(lex *Lex, rule *Rule) *Token` to read `rule.K`/`rule.N` maps.
 See the template string interpolation rules for a complete example.
 
-## Module / ModuleExport instances
+## Module namespaces + the Module descriptor
 
-`import` does NOT bind a plain Map. Each `export "Name" {…}` becomes an
-**`Ideal/ModuleExport`** instance (`native.TModuleExport`), and all of a
-module's exports share one **`Ideal/Module`** descriptor
+`import` binds each `export "Name" {…}` to a **PLAIN Map** of the raw
+exports carrying the kernel's **module-namespace facet**
+(`eng.ModuleNSInfo`, a nil-by-default pointer on `Value` — NUR038
+retired the former `Ideal/ModuleExport` wrapper type; FixedID 5001 is
+retired, never recycled). Exported values are exactly what the module
+exported — a fn stays a `Function`, a constant stays that constant, a
+type stays a plain type — so `typeof MathUtil → Map` and ordinary map
+words (`keys`, `size`, `each`) work directly on a namespace. All of a
+module's namespaces share one **`Ideal/Module`** descriptor
 (`native.TModuleInst`), reachable via the synthetic `$module`.
 
-- `NewModuleExport(name, fields, module)` — `name` (→ `.$name`), an
-  `*OrderedMap` of the raw exports, and the owning Module. A
-  ModuleExport is **transparent**: `get`/`getr` and their literal-key twins
-  `dot`/`dotr` (`native_module_types.go`) return the raw export for a plain
-  key (so `MathUtil.sqrt 16.0`, which lowers to `MathUtil dot sqrt`,
-  dispatches unchanged) and the synthetic value for `$module` / `$name`.
-- `NewModuleInstance(moduleInfo{ID,Kind,File,Folder,Exports})` — the
-  descriptor. `name`/`kind`/`file`/`folder`/`exports` are read via `get`.
-- Instances are backed by `ExtensionPayload` (lang-layer; no eng payload
-  type). `NewModuleInstance(desc)` (`native_module_module.go`) builds the
-  shared Module at install time; `ModuleDesc.{Ref,Kind,File,Folder}` are
+- `NewModuleNamespace(name, fields, module)` —
+  `eng.WithModuleNS(NewMap(fields), name, module)`: `name` (→ `.$name`),
+  the module's own export `*OrderedMap` (shared, not copied — runtime
+  export growth and the kernel growth ledger key on the pointer), and
+  the owning Module. The namespace dispatches the ORDINARY map
+  `get`/`getr`/`has`/`dot`/`dotr` sigs; the facet-only behaviours hook
+  in via `moduleNSGetSynthetic` / `moduleNSGetReturns` /
+  `moduleNSGetrReturns` / `moduleNSGetrMiss`
+  (`native_module_types.go`): the `$module`/`$name` synthetics, the
+  module-flavored `not_found` ("export … not found in module"), and the
+  check-mode raw-export resolution (a fn export keeps its `FnDefInfo`;
+  a missing key stays strict Any because the keyspace can grow).
+  A namespace renders compactly as `Module(Name){key key …}`
+  (`eng/go/coretype_list_map_behaviors.go`).
+- `NewModuleInstance(desc)` — the descriptor (`ExtensionPayload`
+  carrying the full `ModuleDesc`); `name`/`kind`/`file`/`folder`/
+  `exports` are read via `get`. `ModuleDesc.{Ref,Kind,File,Folder}` are
   populated by `Resolve` (native), `loadFileModule` (file), and
-  `RunModuleBody` (inline). FixedIDs: Module 5000, ModuleExport 5001.
+  `RunModuleBody` (inline). FixedID: Module 5000.
 
-`module […]` itself now produces an `Ideal/Module` (carrying the full
-`ModuleDesc`) and `import` consumes it — so `typeof (module […]) → Module`
-and the old internal carrier type `Word/__MD` was retired. `AsModuleDesc`
-unwraps the `ModuleDesc` for hosts.
+`module […]` itself produces an `Ideal/Module` and `import` consumes it —
+so `typeof (module […]) → Module`. `AsModuleDesc` unwraps the
+`ModuleDesc` for hosts.
 
 See `lang/spec/module-instance.tsv` + `test/module_instance_test.go`.
 

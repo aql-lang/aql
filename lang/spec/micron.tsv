@@ -387,15 +387,21 @@ def Baron refine Micron {foo:String} end (make Baron {foo:'hi'}) eq (make Baron 
 def Workon refine Emailon end (make Workon 'a@b.c') eq (make Emailon 'a@b.c')	true
 
 # ─────────────────────────────────────────────────────────────────────
-# §7  Ordering — Pathon keeps its historical order (segment count, then
-#     reverse-lex segments, then relative-before-absolute); other leaves
+# §7  Ordering — Pathon orders by the NATURAL total order (NUR012 fix:
+#     volume/drive, then absolute before relative, then forward-lex
+#     segments, then shorter-prefix-first — a directory sorts before
+#     its contents, the order a filesystem walk prints); other leaves
 #     order by canonical render; cross-kind pairs are cmp-incomparable
 #     but tcmp-ordered by Rank (Micron < Pathon < Emailon < Urlon).
 (make Emailon 'a@b.c') cmp (make Emailon 'a@b.c')	0
 (make Emailon 'a@b.c') cmp (make Emailon 'b@b.c')	-1
 (make Emailon 'b@b.c') cmp (make Emailon 'a@b.c')	1
 (make Urlon 'https://a.co/x') cmp (make Urlon 'https://b.co/x')	-1
-(make Pathon 'a') cmp (make Pathon ['a' 'b'])	-1	shorter path first — verbatim old order
+(make Pathon 'a') cmp (make Pathon ['a' 'b'])	-1	a directory sorts before its contents (shorter shared prefix first)
+(make Pathon ['a' 'z']) cmp (make Pathon ['b' 'a'])	-1	forward-lex segments: a/z before b/a (NUR012 — was reverse-lex)
+(make Pathon ['a' 'z']) lt (make Pathon ['b' 'a'])	true	…and the relationals agree
+(make Pathon '/e') cmp (make Pathon 'a')	-1	an absolute path sorts before a relative one
+sort [(make Pathon 'b/a') (make Pathon 'a/z') (make Pathon '/e') (make Pathon 'a') (make Pathon 'a/b/c')]	[/e a a/b/c a/z b/a]	the natural walk order: absolute first, then relatives with each directory before its contents
 # type-literal-first inside the family
 Emailon cmp (make Emailon 'a@b.c')	-1
 Pathon cmp (make Pathon 'a')	-1

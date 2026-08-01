@@ -71,7 +71,7 @@ RANK             TYPE PATH                  REPRESENTATIVE LITERAL          NOTE
 20_400_000_000   Scalar/String              String
 20_410_000_000   Scalar/String/EmptyString  EmptyString   ''                 sole inhabitant
 20_420_000_000   Scalar/String/ProperString ProperString  'apple'  'banana'  lex
-20_500_000_000   Scalar/Path                Path      a/b/c   /abs/path      length → reverse-lex
+20_500_000_000   Scalar/Path                Path      a/b/c   /abs/path      volume → abs-first → lex → prefix-first (NUR012)
 
 ─── external/user Scalar band (2.1·10¹⁰) ────────────────────────────────────────────────────
 21_000_000_000   Scalar/Time                (make Date '2026-05-23')         external — Time family

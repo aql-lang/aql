@@ -229,7 +229,7 @@ func TestS6aIsModuleInnerSigGuards(t *testing.T) {
 	r := newTestRegistry(t)
 	sub := newTestRegistry(t)
 	em := NewOrderedMap()
-	em.Set("s6aw", NewValueRaw(TFnDef, FnDefInfo{Registry: sub, Name: "s6aw"}))
+	em.Set("s6aw", NewValueRaw(TFunction, FnDefInfo{Registry: sub, Name: "s6aw"}))
 	r.Modules.MarkLoaded("s6amod", ModuleDesc{
 		ID: "s6amod",
 		Exports: map[string]*OrderedMap{
@@ -898,7 +898,7 @@ func TestS6aDynOutNativeOKFnValueDataDeclines(t *testing.T) {
 	r := newTestRegistry(t)
 	armEmit(r)
 	sig := &Signature{Args: []*Type{TAny}}
-	args := []Value{NewValueRaw(TFnDef, FnDefInfo{Name: "s6afn"})}
+	args := []Value{NewValueRaw(TFunction, FnDefInfo{Name: "s6afn"})}
 	outs := []Value{NewDynamicCarrier(TAny)}
 	if dynOutNativeOK(r, "s6adynv", sig, args, outs) {
 		t.Error("a concrete fn-valued arg must refuse the dyn-out bake")
@@ -919,7 +919,7 @@ func TestS6aTryRecordPolyFnValueDataDeclines(t *testing.T) {
 		t.Fatalf("registration: %v", err)
 	}
 	sig := &r.Lookup("s6apolyv").Signatures[0]
-	args := []Value{NewValueRaw(TFnDef, FnDefInfo{Name: "s6afn2"})}
+	args := []Value{NewValueRaw(TFunction, FnDefInfo{Name: "s6afn2"})}
 	if tryRecordPoly(r, "s6apolyv", sig, args, []Value{NewDynamicCarrier(TAny)}, SrcPos{}, false, nil, false, nil) {
 		t.Error("a concrete fn-valued arg must not poly")
 	}

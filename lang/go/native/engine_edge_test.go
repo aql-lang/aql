@@ -3283,8 +3283,8 @@ func TestModuleImportBasic(t *testing.T) {
 	if len(result2) != 1 {
 		t.Fatalf("Foo: got %d results, want 1", len(result2))
 	}
-	if !result2[0].Parent.Equal(TModuleExport) {
-		t.Errorf("Foo: type = %s, want ModuleExport", result2[0].Parent)
+	if ModuleNSOf(result2[0]) == nil {
+		t.Errorf("Foo: type = %s, want a module namespace", result2[0].Parent)
 	}
 }
 
@@ -3361,8 +3361,8 @@ func TestModuleDefSubject(t *testing.T) {
 	// import my-mod should work.
 	runBoru(t, r, []Value{NewWord("import"), NewWord("my-mod")})
 	result2 := runBoru(t, r, []Value{NewWord("M")})
-	if len(result2) != 1 || !result2[0].Parent.Equal(TModuleExport) {
-		t.Errorf("import my-mod: M = %v, want ModuleExport", result2)
+	if len(result2) != 1 || ModuleNSOf(result2[0]) == nil {
+		t.Errorf("import my-mod: M = %v, want a module namespace", result2)
 	}
 }
 

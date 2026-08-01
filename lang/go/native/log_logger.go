@@ -62,7 +62,7 @@ func wrapLoggerFnDef(n NativeFunc, subReg *Registry) Value {
 			BarrierPos: -1,
 		}
 	}
-	return NewFnDef(FnDefInfo{Name: n.Name, Signatures: sigs, Registry: subReg})
+	return NewFunction(FnDefInfo{Name: n.Name, Signatures: sigs, Registry: subReg})
 }
 
 // loggerNatives builds the instance methods closing over st.

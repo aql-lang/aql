@@ -240,7 +240,7 @@ func TestImportFileMapExport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	assertResult(t, result, "ModuleExport(Vals){x y}")
+	assertResult(t, result, "Module(Vals){x y}")
 }
 
 // --- No module word needed (just exports) ---

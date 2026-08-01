@@ -19,7 +19,7 @@ func unifyFnUndefShape(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *
 		undef, fn = b, a
 		fnShape = sa
 	}
-	if fnShape != ShapeFnDef && fnShape != ShapeFunction {
+	if fnShape != ShapeFunction {
 		return Value{}, unifyFail("FnUndef requires a function value on the other side", a, b)
 	}
 	if FnUndefMatchesFnDef(undef, fn) {

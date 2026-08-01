@@ -223,9 +223,6 @@ func resolveTestExport(modReg *native.Registry, v native.Value) native.Value {
 	if fnDef, ok := v.Data.(native.FnDefInfo); ok {
 		if fnDef.Registry == nil {
 			fnDef.Registry = modReg
-			if v.Parent.Equal(native.TFnDef) {
-				return native.NewFnDef(fnDef)
-			}
 			return native.NewFunction(fnDef)
 		}
 		return v
@@ -245,9 +242,6 @@ func resolveTestExport(modReg *native.Registry, v native.Value) native.Value {
 	if tv, ok := modReg.TopTypeBody(name); ok {
 		if fnDef, ok := tv.Data.(native.FnDefInfo); ok && fnDef.Registry == nil {
 			fnDef.Registry = modReg
-			if tv.Parent.Equal(native.TFnDef) {
-				return native.NewFnDef(fnDef)
-			}
 			return native.NewFunction(fnDef)
 		}
 		return tv
@@ -255,9 +249,6 @@ func resolveTestExport(modReg *native.Registry, v native.Value) native.Value {
 	if val, ok := modReg.Defs.Top(name); ok {
 		if fnDef, ok := val.Data.(native.FnDefInfo); ok && fnDef.Registry == nil {
 			fnDef.Registry = modReg
-			if val.Parent.Equal(native.TFnDef) {
-				return native.NewFnDef(fnDef)
-			}
 			return native.NewFunction(fnDef)
 		}
 		return val

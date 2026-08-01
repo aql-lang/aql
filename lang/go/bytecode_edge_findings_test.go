@@ -332,8 +332,11 @@ func TestMemberFnArrivalDeclineFences(t *testing.T) {
 		{"anonymous member", `def m {double: ([n:Integer] => [n mul 2])} m.double 21 eq 42`, false, "[true]"},
 		// 0-arg member: the read-guard's auto-fire class — sound refusal.
 		{"zero-arg member", `def z fn [[][Integer][7]] def m {z: z/r} m.z eq 7`, false, "[true]"},
-		// Quoted-param member: the plain-value-args assumption fails.
-		{"quoted param member", `def q fn [[k:Atom/q][Integer][9]] def m {q: q/r} m.q foo eq 9`, false, "[foo 9 9]"},
+		// Quoted-param member: the arrival model's plain-value-args
+		// assumption fails, so the COMPILE declines — but the interpreter
+		// now runs it right: the NUR038 arrival path converts the bare
+		// word through the /q slot (`m.q foo` ≡ `q foo` → 9, then 9 eq 9).
+		{"quoted param member", `def q fn [[k:Atom/q][Integer][9]] def m {q: q/r} m.q foo eq 9`, false, "[true]"},
 		// Two-return member: the single-result claim fails — sound refusal.
 		{"two-return member", `def t fn [[n:Integer][Integer Integer][n n]] def m {t: t/r} m.t 3 eq 3`, false, "[3 true]"},
 		// The member read ends the tape: no window — the fn stays data.

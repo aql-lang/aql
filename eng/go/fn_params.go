@@ -304,7 +304,7 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 // positional param) or the implicit single-pair map `{name: word(Pkg)}`
 // (named param); the literal dot segments then walk from the word's
 // binding via ApplyReach (the same Stage-1 lowering a bare `Pkg.Type`
-// expression uses, so ModuleExport transparency and getr strictness are
+// expression uses, so module-namespace transparency and getr strictness are
 // identical). The reached value must be a bare type literal.
 func dottedParamType(r *Registry, elem Value) (FnParam, bool) {
 	if r == nil {

@@ -245,7 +245,13 @@ Commas are optional inside list and map literals — `[1 2 3]` and
 | Syntax | Scope |
 |--------|-------|
 | `# text` | Line — to end of line |
-| `## text ##` | Block — delimited |
+| `// text` | Line — to end of line |
+| `/* text */` | Block — delimited, may span lines |
+
+There is no `## text ##` block form — a `##` opens an ordinary `#`
+line comment (the rest of the line is ignored; a second `##` closes
+nothing). An unterminated `/*` is a parse error
+(`[boru/unterminated_comment]`).
 
 ### Grouping
 
@@ -735,7 +741,10 @@ def Bad refine Micron {x:String}         # returns error: micron_name
 
 **Ordering.** Same-kind Microns order by content. Most kinds order by
 canonical render, but four carry a custom numeric order where lexical
-render would be wrong: `Pathon` keeps its historical segment order;
+render would be wrong: `Pathon` orders naturally — volume/drive, then
+absolute before relative, then forward-lexical segments, then
+shorter-prefix-first, so a directory sorts immediately before its
+contents (`a` < `a/b` < `a/z` < `b/a`);
 `Semveron` by SemVer 2.0.0 precedence (`1.9.0 < 1.10.0`, `1.0.0-rc.1 <
 1.0.0`); `Cidron` by family then network address then prefix (`10.0.0.0/8
 < 10.0.0.0/16`, all v4 before v6); `Coloron` by the `(r,g,b,a)` channel
@@ -1053,7 +1062,11 @@ operand unchanged, `sign` yields an `Integer`).
 
 The six arithmetic words are **total within every scalar type and every
 Micron kind** — applied within a type, never across it (a cross-type pair
-is a `[boru/type_error]`). Some of these are unusual, but each is defined.
+is a `[boru/type_error]`). The **sole language-level exception** is
+`String` `add`, which concatenates when at least one operand is a
+`String` (see [Arithmetic](#arithmetic) above); no other word, and no
+other type — `Atom` and `Bytes` included — crosses scalar types. Some of
+these are unusual, but each is defined.
 
 **`String` / `Atom` — the occurrence package.** `add` concatenates; the
 rest operate on occurrences of the right operand in the left (an `Atom`
@@ -2366,9 +2379,10 @@ Requires the `sqlite` capability.
 | `module` | Define a module inline | `module [def x 1]` |
 | `import` | Import a module by name or file | `import "lib.boru"` |
 
-`import` binds each `export "Name" {…}` to a **`ModuleExport`** instance.
-A `ModuleExport` is *transparent* — `MathUtil.sqrt 16.0` still calls the
-exported function — and carries two synthetic names: `Name.$name` (the
+`import` binds each `export "Name" {…}` to a **plain `Map`** of the raw
+exports — an exported fn stays a `Function`, an exported type stays a
+plain type, and ordinary map words (`keys`, `size`) read the namespace
+directly. The binding carries two synthetic names: `Name.$name` (the
 export name) and `Name.$module`, the **`Module`** descriptor it belongs
 to. A `Module` (`Ideal/Module`) has fields `id`, `kind`
 (`native`/`file`/`inline`), `file`, `folder`, and `exports`:
@@ -2376,7 +2390,7 @@ to. A `Module` (`Ideal/Module`) has fields `id`, `kind`
 <!-- boru-test: skip -->
 ```
 import boru:math
-typeof Math                   # returns ModuleExport
+typeof Math                   # returns Map
 MathUtil.$name                    # returns 'Math'
 MathUtil.$module.id               # returns 'boru:math'
 MathUtil.$module.kind             # returns 'native'

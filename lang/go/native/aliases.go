@@ -134,7 +134,6 @@ var (
 	// TFetchFunction / TFetchRequest / TFetchResponse moved to
 	// lang/go/native/fetch.go at Step 8. References use native.TFetch*
 	// directly; this aliases block no longer re-exports them.
-	TFnDef    = eng.TFnDef
 	TFnUndef  = eng.TFnUndef
 	TForward  = eng.TForward
 	TFunction = eng.TFunction
@@ -516,11 +515,11 @@ var (
 	NewError       = eng.NewError
 	NewEvalList    = eng.NewEvalList
 	NewEvalMap     = eng.NewEvalMap
-	NewFnDef       = eng.NewFnDef
 	NewFnUndef     = eng.NewFnUndef
 	NewForward     = eng.NewForward
 	NewFunction    = eng.NewFunction
 	NewImplicitMap = eng.NewImplicitMap
+	ModuleNSOf     = eng.ModuleNSOf
 	// NewInstant moved to lang/go/engine/native_temporal.go (Step 8).
 	NewInteger       = eng.NewInteger
 	NewBigInteger    = eng.NewBigInteger

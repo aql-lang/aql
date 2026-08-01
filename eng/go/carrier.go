@@ -483,18 +483,20 @@ func toCarrier(v Value) Value {
 	// definition (the parameters + body `of` instantiates). Stripping it to a
 	// bare carrier loses the schema, so IsTypeSchema goes false and `of`
 	// rejects it — e.g. a schema exported from a module and read back through
-	// `Pkg.Box` (whose ModuleExport get returns the stored value, carrier-
+	// `Pkg.Box` (whose namespace-map get returns the stored value, carrier-
 	// stripped) could no longer be instantiated `Pkg.Box of [Integer]`. Same
 	// rationale as the FnDef / Disjunct / Module payload preservations above.
 	if _, ok := v.Data.(*TypeSchemaInfo); ok {
 		return v
 	}
-	// Keep MODULE instances (Ideal/Module, Ideal/ModuleExport) concrete, same
-	// rationale as FnDefInfo: stripping nulls the ExtensionPayload descriptor /
-	// exports, so `MathUtil.$module` would become an opaque carrier the
-	// get-resolution elision can no longer follow. They are immutable and
-	// import-bound, so a pure read of one (`$name`, `$module.name`, `convert
-	// Map …`) const-folds (tryFoldModuleConst).
+	// Keep MODULE values concrete, same rationale as FnDefInfo: stripping
+	// nulls the Ideal/Module descriptor's ExtensionPayload, so
+	// `MathUtil.$module` would become an opaque carrier the get-resolution
+	// elision can no longer follow. They are immutable and import-bound, so
+	// a pure read of one (`$name`, `$module.name`, `convert Map …`)
+	// const-folds (tryFoldModuleConst). A module NAMESPACE needs no arm of
+	// its own — it is a plain facet-carrying Map, already preserved by the
+	// TMap guard above (facets ride every Value copy).
 	if isModuleFamilyValue(v) {
 		return v
 	}
@@ -1136,25 +1138,24 @@ func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
 // The PURE reader words whose result over a compile-time-known module value is a
 // compile-time constant (get / getr / convert / typeof / is / size / has) now
 // DECLARE CompileModuleFold on their NativeFunc (lang layer). `import` binds an
-// immutable, deterministic ModuleExport / Module instance, so a read over it
+// immutable, deterministic namespace map / Module instance, so a read over it
 // always yields the same value — baked rather than re-read at run time. See
 // tryFoldModuleConst.
 
-// isModuleFamilyValue reports whether v is a concrete module instance — an
-// Ideal/Module descriptor or an Ideal/ModuleExport namespace (the values
-// `import` binds). Identified by the stable registered type PATH (FixedIDs
-// 5000/5001 in the lang layer) so the eng-level fold needs no lang import. These
-// instances are immutable and produced deterministically by `import`, so a pure
-// read of one is a compile-time constant.
+// isModuleFamilyValue reports whether v is a concrete module value — an
+// Ideal/Module descriptor, or a module NAMESPACE (a plain Map carrying the
+// module-namespace facet — the value `import` binds; NUR038 retired the
+// Ideal/ModuleExport wrapper type). The descriptor is identified by its
+// stable registered type PATH (FixedID 5000 in the lang layer), the
+// namespace by its kernel facet, so the eng-level fold needs no lang
+// import. These values are immutable and produced deterministically by
+// `import`, so a pure read of one is a compile-time constant (runtime
+// export growth is ledger-modelled — module_export_growth.go).
 func isModuleFamilyValue(v Value) bool {
 	if !IsConcrete(v) || v.Parent == nil {
 		return false
 	}
-	switch v.Parent.Path() {
-	case "Ideal/Module", "Ideal/ModuleExport":
-		return true
-	}
-	return false
+	return ModuleNSOf(v) != nil || v.Parent.Path() == "Ideal/Module"
 }
 
 // constFoldAgrees reports whether two const-fold probe evaluations produced
@@ -1319,7 +1320,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 		return false
 	}
 	for _, t := range sig.ArgTypes() {
-		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+		if t != nil && t.ConformsTo(TFunction) {
 			return false
 		}
 	}
@@ -1532,7 +1533,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// (apply/usurp, an atom-keyed method get): the value would need dynamic
 	// INVOCATION (the fn-value-call boundary, P4). Keep those out of poly.
 	for _, t := range sig.ArgTypes() {
-		if t != nil && (t.ConformsTo(TFunction) || t.ConformsTo(TFnDef)) {
+		if t != nil && t.ConformsTo(TFunction) {
 			return false
 		}
 	}
@@ -2546,7 +2547,7 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 	// concrete, the reachable concrete returns are a tighter, trustworthy
 	// union and an unknown-return overload must still suppress refinement — a
 	// partially-known call should not be blanket-widened to Any (that
-	// mis-narrowed trie's `child` through a `get` whose ModuleExport overload
+	// mis-narrowed trie's `child` through a `get` whose module-namespace overload
 	// then looked reachable).
 	allUnknown := len(args) > 0
 	for _, a := range args {

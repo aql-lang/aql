@@ -71,16 +71,8 @@ func TestHasXmlHandlerNonXmlIsFalse(t *testing.T) {
 
 func TestHasModuleHandlersNonConcreteIsFalse(t *testing.T) {
 	r := gapsTestReg(t)
-	lit := NewTypeLiteral(TModuleExport)
-	out, err := hasModuleExportHandler([]Value{NewString("x"), lit}, nil, nil, r)
-	if err != nil {
-		t.Fatalf("has is total, got error: %v", err)
-	}
-	if b, _ := AsBoolean(out[0]); b {
-		t.Error("a ModuleExport type literal binds nothing — want false")
-	}
 	mlit := NewTypeLiteral(TModuleInst)
-	out, err = hasModuleInstHandler([]Value{NewString("kind"), mlit}, nil, nil, r)
+	out, err := hasModuleInstHandler([]Value{NewString("kind"), mlit}, nil, nil, r)
 	if err != nil {
 		t.Fatalf("has is total, got error: %v", err)
 	}

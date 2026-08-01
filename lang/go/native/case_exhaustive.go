@@ -834,7 +834,9 @@ func checkCaseCodeBodyScrutinee(r *Registry, v Value, clauses Value) {
 	if lst.IsNil() { //covergate:allow AsList of a concrete code-body list is never nil (an empty list is non-nil with zero elements)
 		return
 	}
-	elems := lst.Slice()
+	// An open-call default tail counts as the catch-all: normalize it
+	// into the standard single-default shape first (NUR048/G9).
+	elems := caseNormalizeClauses(r, lst.Slice())
 	if len(elems)%2 == 1 {
 		return
 	}

@@ -57,7 +57,7 @@ func classifyNode(v Value) (emitNodeKind, []walkEntry) {
 			return emitMap, entries
 		}
 		if v.Parent.ConformsTo(TIdeal) {
-			// Object / Store / Error / ModuleExport / … project to a Map.
+			// Object / Store / Error / Module / … project to a Map.
 			return emitMap, entries
 		}
 	}

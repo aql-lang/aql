@@ -208,7 +208,7 @@ func zzInstallShapedInstance(a *Boru) error {
 			}),
 		}},
 	})
-	wrapper := native.NewFnDef(native.FnDefInfo{
+	wrapper := native.NewFunction(native.FnDefInfo{
 		Name: "zz-m",
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TAny}},
@@ -311,7 +311,7 @@ func TestShapedMethodRegisteredShapeCompiles(t *testing.T) {
 			}),
 		}},
 	})
-	wrapper := native.NewFnDef(native.FnDefInfo{
+	wrapper := native.NewFunction(native.FnDefInfo{
 		Name: "zz-h",
 		Signatures: []native.FnSig{{
 			Params:     []native.FnParam{{Type: native.TInteger}},

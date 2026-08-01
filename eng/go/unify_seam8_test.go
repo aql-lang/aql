@@ -8,20 +8,20 @@ package eng
 import "testing"
 
 // w8predFn builds a value that satisfies isPredicateFnValue: parented at
-// TFnDef with a single-param non-fallback signature.
+// TFunction with a single-param non-fallback signature.
 func w8predFn() Value {
-	return NewValueRaw(TFnDef, FnDefInfo{
+	return NewValueRaw(TFunction, FnDefInfo{
 		Signatures: []Signature{{Params: []FnParam{{Name: "x", Type: TInteger}}}},
 	})
 }
 
 func TestW8IsPredicateFnValueGuards(t *testing.T) {
-	// Parent is TFnDef but payload is not a FnDefInfo.
-	if isPredicateFnValue(NewValueRaw(TFnDef, IntPayload{N: 1})) {
+	// Parent is TFunction but payload is not a FnDefInfo.
+	if isPredicateFnValue(NewValueRaw(TFunction, IntPayload{N: 1})) {
 		t.Fatal("non-FnDefInfo payload is not a predicate fn")
 	}
 	// FnDefInfo with no own signature.
-	if isPredicateFnValue(NewValueRaw(TFnDef, FnDefInfo{})) {
+	if isPredicateFnValue(NewValueRaw(TFunction, FnDefInfo{})) {
 		t.Fatal("FnDefInfo with no own sig is not a predicate fn")
 	}
 	// Positive: a single-param sig IS a predicate fn.

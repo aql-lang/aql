@@ -189,6 +189,33 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// dirty-stack prefix forces its promotion — the same exact-arity seat
 	// hazard as the fallible regions.
 	`7 def b true  do [1 2 (if b [] [9 9])]`: {why: "PR #280 review: branch-variant multi-out do region promoted under a dirty-stack prefix", failsWith: "variadic result promoted to frame slots"},
+
+	// NUR038 statement-seal twin-call matrix (frontier-nur038-seal.tsv):
+	// semantically green under the seal + arrival barrier; compile-refused
+	// on the pre-existing residual-ordering limitation — two dynamic call
+	// results in one program residual exceed the Stage-1 lowering. Sound
+	// interpreter fallback. Graduation = multi-dynamic-result residual
+	// lowering; the rows then move to lang/spec/fn-value.tsv §6.
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 5 m.p 7`:                                {why: "NUR038 seal: twin value-call residual", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 1 m.p 2 m.p 3`:                          {why: "NUR038 seal: triple value-call residual", failsWith: "fn-value-call boundary"},
+	`def g fn [[a:Any b:Any] [Any] [(a mul 100) add b]] end def m {g: g/r} end m.g 1 2 m.g 3 4`:      {why: "NUR038 seal: two-arg twin windows", failsWith: "fn-value-call boundary"},
+	`import module [def p fn [[x:Any] [Any] [x]] export "M" {p: p/r}] end M.p 5 M.p 7`:               {why: "NUR038 seal: module-export twins (the original shape)", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end 5 m.p m.p 7`:                                {why: "NUR038 seal: stack form then forward form", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p (1 add 2) m.p 7`:                        {why: "NUR038 seal: computed first argument", failsWith: "fn-value-call boundary"},
+	`def m {l: ([x:Any] => [x])} end m.l 5 m.l 7`:                                                    {why: "NUR038 seal: lambda twins", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def h fn [[y:Any] [Any] [y]] end def m {p: f/r} end m.p 5 h 7`: {why: "NUR038 seal: value call then bare-word call", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end (m.p 5) (m.p 7)`:                            {why: "NUR038 seal: explicit paren seals", failsWith: "fn-value-call boundary"},
+	`def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 5 end m.p 7`:                            {why: "NUR038 seal: explicit end seals", failsWith: "fn-value-call boundary"},
+	`def e fn [[] [Integer] [42] [x:Any] [Any] [x]] end def m {e: e/r} end m.e 5 m.e 7`:              {why: "NUR038 seal: mixed 0/1-arg overload twins (NUR035 guard)", failsWith: "fn value read from a container auto-dispatches"},
+
+	// Namespace capture at a macro-expanded call site (the NUR038 wrapper
+	// retirement's re-bucketed refusal — see frontier-capture-namespace.tsv):
+	// an inner fn capturing a body-imported module namespace has no bakeable
+	// operand home at the `parse` macro's expanded call site. Successor to
+	// the graduated "closure captures a runtime-minted value" bucket (the
+	// wrapper refused earlier, at capture-slot numbering). Full graduation =
+	// a capture-slot lowering that materialises the namespace binding.
+	`def zzvfn fn [[] [] [import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc {trace:true} 'x + y') get 1]] zzvfn`: {why: "inner fn captures the body-imported ParseLang namespace; no bakeable operand home at the macro-expanded call site", failsWith: "capture ParseLang of calc unreachable at a call site"},
 	// GRADUATED 2026-07-17 (§9.1): the `do [M 3] error [dot code]` row
 	// compiles — an identity-less dyn-body out (the module-export instance)
 	// now mints a fresh ID at the record, restoring its tape placement and

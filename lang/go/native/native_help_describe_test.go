@@ -11,7 +11,7 @@ import (
 // Module/Export/Doc provenance and a single 2-arg forward-eligible sig,
 // mirroring what a module maker + stampExportProvenance produce.
 func fnDefWithProvenance() Value {
-	return NewFnDef(FnDefInfo{
+	return NewFunction(FnDefInfo{
 		Name:   "indices",
 		Module: "boru:array-util",
 		Export: "ArrayUtil",
@@ -53,7 +53,7 @@ func TestFnDefFuncInfoProvenance(t *testing.T) {
 }
 
 // TestBuildQualifiedFuncInfo resolves a dotted name against the namespace
-// binding `import` installs (a ModuleExport in the def stack), and asserts
+// binding `import` installs (a facet-carrying namespace Map in the def stack), and asserts
 // the negative cases return nil rather than mis-resolving.
 func TestBuildQualifiedFuncInfo(t *testing.T) {
 	r, err := DefaultRegistry()
@@ -62,7 +62,7 @@ func TestBuildQualifiedFuncInfo(t *testing.T) {
 	}
 	fields := NewOrderedMap()
 	fields.Set("indices", fnDefWithProvenance())
-	r.Defs.Push("ArrayUtil", NewModuleExport("ArrayUtil", fields, Value{}))
+	r.Defs.Push("ArrayUtil", NewModuleNamespace("ArrayUtil", fields, Value{}))
 
 	info := BuildQualifiedFuncInfo(r, "ArrayUtil.indices")
 	if info == nil {

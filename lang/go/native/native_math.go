@@ -44,6 +44,22 @@ func integerOverflowError(op string, a, b int64) error {
 	}
 }
 
+// negativeExponentError reports an Integer `pow` with a negative
+// exponent as a coded arith_error, like every other arithmetic fault
+// (div/mod-by-zero raise arith_error, range faults integer_overflow).
+// It was the one arithmetic raise shipped as a bare fmt.Errorf — no
+// `[boru/…]` code, invisible to code-based error handling (NUR010,
+// resolved by this constructor). Integer pow is defined only for
+// exp >= 0; the Float path computes the real reciprocal instead
+// (`2.0 pow -1` → 0.5), which is what the hint points at.
+func negativeExponentError(exp int64) error {
+	return &BoruError{
+		Code:   "arith_error",
+		Detail: fmt.Sprintf("pow: negative exponent %d", exp),
+		Hint:   "use a Float operand (e.g. `2.0 pow -1`) if a real-valued reciprocal is acceptable",
+	}
+}
+
 // checkedAddInt, checkedSubInt, checkedMulInt return (result, true) on
 // success and (_, false) on int64 overflow. They test the overflow
 // condition before computing so they never rely on wrap behaviour.
@@ -168,7 +184,7 @@ func mulIntFault(a, b int64) error {
 
 func powIntFault(a, b int64) error {
 	if a < 0 {
-		return fmt.Errorf("pow: negative exponent %d", a)
+		return negativeExponentError(a)
 	}
 	if _, ok := checkedPowInt(b, a); !ok {
 		return integerOverflowError("pow", a, b)
@@ -276,7 +292,7 @@ var (
 	powTowerOps = towerOps{
 		intFn: func(a, b int64) (Value, error) {
 			if a < 0 {
-				return Value{}, fmt.Errorf("pow: negative exponent %d", a)
+				return Value{}, negativeExponentError(a)
 			}
 			result, ok := checkedPowInt(b, a)
 			if !ok {
@@ -286,7 +302,7 @@ var (
 		},
 		bigFn: func(a, b *big.Int) (Value, error) {
 			if a.Sign() < 0 { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
-				return Value{}, fmt.Errorf("pow: negative exponent")
+				return Value{}, &BoruError{Code: "arith_error", Detail: "pow: negative exponent"}
 			}
 			return NewBigInteger(new(big.Int).Exp(b, a, nil)), nil
 		},

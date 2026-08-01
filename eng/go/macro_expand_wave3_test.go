@@ -256,7 +256,7 @@ func TestMacroTemplateErrors(t *testing.T) {
 
 	// A macro with no signatures at all.
 	r5 := covRegistry(t, nil)
-	r5.Defs.Push("msigless", NewFnDef(FnDefInfo{Name: "msigless", Macro: true}))
+	r5.Defs.Push("msigless", NewFunction(FnDefInfo{Name: "msigless", Macro: true}))
 	_, err = NewTop(r5).Run([]Value{NewWord("msigless"), NewInteger(1)})
 	if err == nil || !strings.Contains(err.Error(), "no signature") {
 		t.Errorf("sig-less macro: err = %v", err)

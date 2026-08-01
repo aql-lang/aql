@@ -1288,14 +1288,16 @@ func TestScalarKeepAndCarrierIdentity(t *testing.T) {
 }
 
 // module-synthetic const-fold — a PURE read over an import-bound module value is
-// a compile-time constant. `import` binds an immutable, deterministic Module /
-// ModuleExport, so `MathUtil.$name`, `X.$module.name`, `convert Map/List Foo`,
-// and `typeof`/`is` over a Module always yield the same value. The checker's
-// recorded RESULT is the declared TYPE (a Map/Boolean carrier), not the value,
-// so tryFoldModuleConst RE-EVALUATES the dispatch concretely (check mode off,
-// twice, must agree) and bakes the real value — `convert Map Foo` -> the export
-// MAP, never the type literal `Map` (the bug this guards). Module instances are
-// kept concrete through toCarrier so the $module chain resolves.
+// a compile-time constant. `import` binds an immutable, deterministic namespace
+// map + Module descriptor, so `MathUtil.$name`, `X.$module.name`, and
+// `typeof`/`is`/`convert` over a Module always yield the same value. The
+// checker's recorded RESULT is the declared TYPE (a Map/Boolean carrier), not
+// the value, so tryFoldModuleConst RE-EVALUATES the dispatch concretely (check
+// mode off, twice, must agree) and bakes the real value — `convert List
+// Foo.$module` -> the export-name LIST, never the type literal (the bug this
+// guards). Module values are kept concrete through toCarrier so the $module
+// chain resolves. (A namespace itself is a plain Map — `convert` no longer
+// applies to it; convert-ideal.tsv pins the refusal.)
 func TestModuleSyntheticConstFold(t *testing.T) {
 	for _, c := range []struct {
 		src  string
@@ -1307,9 +1309,7 @@ func TestModuleSyntheticConstFold(t *testing.T) {
 		{`import "boru:math-util"  MathUtil.$module.name`, "[boru:math-util]"},
 		{`import "boru:math-util"  MathUtil.$module.kind`, "[native]"},
 		{`import "boru:math-util"  MathUtil.$module.exports`, "[['MathUtil']]"},
-		// the VALUE, not the declared type Map/List (the convert-folding bug guard)
-		{`import module [export "Foo" {a:1 b:2}] convert Map Foo`, "[{a:1 b:2}]"},
-		{`import module [export "Foo" {a:1 b:2}] convert List Foo`, "[[1 2]]"},
+		// the VALUE, not the declared type List (the convert-folding bug guard)
 		{`import module [export "Foo" {a:1}] convert List Foo.$module`, "[['Foo']]"},
 	} {
 		a, _ := New()
@@ -2236,9 +2236,9 @@ func TestMiniParseUnknownLangTrapCompiles(t *testing.T) {
 	}
 }
 
-// getr-on-ModuleExport not_found: `MathUtil!.nope` (getr of a MISSING export)
+// getr-on-namespace not_found: `MathUtil!.nope` (getr of a MISSING export)
 // raises not_found at runtime. The compile pass records a top-level not_found
-// OpTrap (moduleExportGetrReturns) and MarkUncompilable is a no-op once a trap is
+// OpTrap (moduleNSGetrReturns) and MarkUncompilable is a no-op once a trap is
 // set, so the getr's own unmaterialisable residual (which refuses even valid
 // keys) does not refuse the program — the trap truncates it.
 func TestModuleExportGetrNotFoundTrapCompiles(t *testing.T) {
@@ -2797,7 +2797,7 @@ func TestConditionalBranchApplyCompiles(t *testing.T) {
 	const imp = `import "boru:math-util" `
 	cases := []struct{ src, want string }{
 		{imp + `def n 5 if (n eq 0) [99] MathUtil.sqrt 16`, "[4.0]"},          // else: sqrt 16 → 4.0
-		{imp + `def n 0 if (n eq 0) [99] MathUtil.sqrt 16`, "[99 16]"},        // then: 99, 16 stays
+		{imp + `def n 0 if (n eq 0) [99] MathUtil.sqrt 16`, "[99 4.0]"},       // NUR038 seal: the trailing-fn+arg is its OWN call — the guard commits, then sqrt 16 runs
 		{imp + `def n 0 if (n eq 0) MathUtil.sqrt [99] 16`, "[4.0]"},          // then-arm fn mirror
 		{imp + `def n 5 if (n eq 0) MathUtil.sqrt [99] 16`, "[99 16]"},        // else: 99, 16 stays
 		{imp + `def n 5 if (n eq 0) [99] MathUtil.sqrt`, "[fn sqrt(Number)]"}, // no trailing: bare fn value

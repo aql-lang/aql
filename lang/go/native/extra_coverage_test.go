@@ -114,7 +114,7 @@ func TestExtraStringDisjunct(t *testing.T) {
 
 func TestExtraStringFnDef(t *testing.T) {
 	// Function definition: the default branch should handle it
-	v := NewFnDef(FnDefInfo{Signatures: []FnSig{{
+	v := NewFunction(FnDefInfo{Signatures: []FnSig{{
 		Params: []FnParam{{Name: "x", Type: TInteger}},
 		Impl:   Boru([]Value{NewInteger(1)}), BarrierPos: -1,
 	}}})

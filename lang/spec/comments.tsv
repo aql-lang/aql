@@ -1,0 +1,17 @@
+# boru Language Specification: comment forms (NUR025 fix)
+# Format: input<TAB>expected<TAB>description
+#
+# The parser accepts exactly three comment forms: `# text` (line),
+# `// text` (line), and `/* text */` (block, may span lines). The
+# historically-documented `## text ##` block form DOES NOT EXIST — a
+# `##` opens an ordinary `#` line comment (the rest of the line is
+# ignored; the second `##` closes nothing). REFERENCE.md §Comments
+# documents the real set; these rows pin it.
+1 add 2 # line comment	3	`#` ignores to end of line
+1 # add 2	1	…so everything after `#` is gone, including calls
+1 add 2 // line comment	3	`//` is a second line form (jsonic-inherited)
+1 // add 2	1	…with identical to-end-of-line scope
+1 /* block */ add 2	3	`/* */` is the block form — the call survives around it
+1 add /* 9 */ 2	3	a block comment can sit between a word and its args
+1 ## not a block ## add 2	1	`##` is NOT a block opener: it is a `#` line comment, so the rest of the line is ignored
+1 /* unterminated	ERROR:this comment is never closed	an unclosed block comment is a loud syntax_error
