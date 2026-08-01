@@ -5581,36 +5581,46 @@ func containerFnAutoDispatchRisk(args []Value) bool {
 	return false
 }
 
-// fnValueZeroArg reports whether v is a function VALUE with a GENUINE
-// zero-param overload — the shape the interpreter auto-dispatches the moment
-// it lands with no operands (containerFnAutoDispatchRisk). A parked user fn
-// structurally carries ONE phantom 0-arg Signature alongside its declared
-// overloads (probe-verified: 0-param make42 parks as [0 0], 2-param cmp2 as
-// [2 0], a 0+1-overload fn as [1 0 0], while builtins park phantom-free —
-// `add` is [3 2 2 2 2]). So a genuine 0-param overload shows as EITHER two
-// 0-arg sigs (real + phantom) OR a single sig that is 0-arg (phantom-free
-// value). A lone 0-arg sig among others is just the phantom — the fn needs
-// args, reads as data in both engines, and the applied member-call shapes
-// (`m.b 2`, pinned by TestEmitFnValueFieldCallCompiles) keep compiling.
+// fnValueZeroArg reports whether v is a function VALUE whose LANDING the
+// read-guard must refuse: it carries a genuine 0-arg overload the
+// interpreter auto-fires the moment the value lands with no operands
+// (containerFnAutoDispatchRisk), in a shape the compiled landing does
+// not yet model. Built from the kernel's canonical Fallback-flag
+// predicates (fnValueHasZeroArgSig / fnValueOnlyZeroArgSigs, engine.go)
+// — this replaced a count-based phantom heuristic that encoded the same
+// verdicts opaquely.
 //
-// DELIBERATELY distinct from the kernel's Fallback-flag predicates
-// (fnValueHasZeroArgSig / fnValueOnlyZeroArgSigs, engine.go): this one
-// inspects check-mode PARKED values whose phantom 0-arg sig is not
-// Fallback-flagged, so it discriminates by COUNT. Do not merge them —
-// on a real [0-arg, 1-arg] overload set without a phantom the two
-// families answer differently, and each is pinned by its own tests.
+// The refusal set is REPRESENTATION-dependent, and deliberately so —
+// probe-verified (2026-08-01) on `m.x` with a 0-arg+1-arg overload set:
+//   - the DIRECT-literal spelling `{x: (fn …)}` compiles and agrees
+//     (7/7): the check pass runs the interpreter loop over the concrete
+//     member, and the recorded events model the fire;
+//   - the PARKED spelling `{x: mx/r}` (an aggregate view, recognisable
+//     by its synthetic Fallback sig) compiled to the raw fn value —
+//     a silent divergence — so it must refuse until the landing model
+//     covers parked mixed-overload members (the tracked graduation;
+//     frontier-nur038-seal.tsv's mixed-overload row pins the refusal).
+//
+// A pure property fn (every real overload 0-arg) refuses in BOTH
+// representations. Merging the two arms = extending the compiled
+// landing model, not editing this predicate.
 func fnValueZeroArg(v Value) bool {
 	d, ok := v.Data.(FnDefInfo)
 	if !ok {
 		return false
 	}
-	zeros := 0
+	if !fnValueHasZeroArgSig(v) {
+		return false // no genuine 0-arg overload: needs args, lands as data
+	}
+	if fnValueOnlyZeroArgSigs(d) {
+		return true // pure property fn: auto-fires in both representations
+	}
 	for i := range d.Signatures {
-		if d.Signatures[i].TotalArgs() == 0 {
-			zeros++
+		if d.Signatures[i].Fallback {
+			return true // parked aggregate view: mixed-set landing unmodelled
 		}
 	}
-	return zeros >= 2 || (zeros == 1 && len(d.Signatures) == 1)
+	return false // direct literal: the recorded events model the fire
 }
 
 // concreteMapKey returns the map-key string a get-family dispatch reads,

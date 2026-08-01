@@ -82,10 +82,20 @@ func TestRemoteFullSession(t *testing.T) {
 		t.Fatalf("break = %q (%v)", res, err)
 	}
 	act, err := c.StepAction("continue")
-	if err != nil || act.State != "running" {
-		t.Fatalf("action = %+v (%v)", act, err)
+	if err != nil {
+		t.Fatalf("action error: %v", err)
 	}
-	st = waitPaused(t, c, st.Seq)
+	switch act.State {
+	case "running":
+		st = waitPaused(t, c, st.Seq)
+	case "paused":
+		// On a loaded machine the engine can hit the breakpoint before
+		// the continue ack is composed, so the ack already carries the
+		// pause — same protocol outcome, merged into one response.
+		st = act
+	default:
+		t.Fatalf("action = %+v", act)
+	}
 	if st.Detail != "breakpoint: line 3" || st.Row != 3 || st.Stack != "[]" {
 		t.Fatalf("bp stop = %+v", st)
 	}

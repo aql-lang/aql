@@ -589,9 +589,23 @@ func TestFnValueZeroArg(t *testing.T) {
 	if !fnValueZeroArg(fnVal(Signature{})) {
 		t.Fatal("single 0-arg sig should be a genuine 0-param fn")
 	}
-	// A lone 0-arg sig among others is just the phantom.
+	// A DIRECT-literal mixed overload set (a real 0-arg among arg-taking
+	// sigs, no synthetic Fallback): the recorded events model the fire,
+	// so the read-guard does not refuse it.
 	if fnValueZeroArg(fnVal(Signature{Args: []*Type{TInteger}}, Signature{})) {
-		t.Fatal("phantom-only 0-arg among args should not count")
+		t.Fatal("a direct-literal mixed overload set compiles — no refusal")
+	}
+	// The PARKED spelling of the same mixed set (the aggregate view,
+	// recognisable by its synthetic Fallback sig): the landing is
+	// unmodelled, so the guard must refuse — the representation gap the
+	// predicate's doc records.
+	if !fnValueZeroArg(fnVal(Signature{Args: []*Type{TInteger}}, Signature{}, Signature{Fallback: true})) {
+		t.Fatal("a parked mixed overload set must refuse until the landing model covers it")
+	}
+	// A parked ARG-taking fn (no real 0-arg overload, just the synthetic
+	// Fallback): lands as data in both engines — no refusal.
+	if fnValueZeroArg(fnVal(Signature{Args: []*Type{TInteger}}, Signature{Fallback: true})) {
+		t.Fatal("a parked args-only fn lands as data — no refusal")
 	}
 	if fnValueZeroArg(NewInteger(1)) {
 		t.Fatal("non-fn value is not a 0-param fn")
