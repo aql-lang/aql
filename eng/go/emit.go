@@ -1288,7 +1288,7 @@ func (es *EmitState) MarkUncompilable(reason string) {
 		// is at-or-after the trap and therefore unreachable — the interpreter
 		// raises at the trap and never reaches it. Finalize truncates to the
 		// trap and drops the residual, so its refusal is moot (e.g. `getr` of a
-		// missing ModuleExport key: the getr IS the trap, and its own
+		// missing module-namespace key: the getr IS the trap, and its own
 		// operand-provenance residual must not refuse the program).
 		return
 	}

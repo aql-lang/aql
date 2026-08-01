@@ -2379,9 +2379,10 @@ Requires the `sqlite` capability.
 | `module` | Define a module inline | `module [def x 1]` |
 | `import` | Import a module by name or file | `import "lib.boru"` |
 
-`import` binds each `export "Name" {…}` to a **`ModuleExport`** instance.
-A `ModuleExport` is *transparent* — `MathUtil.sqrt 16.0` still calls the
-exported function — and carries two synthetic names: `Name.$name` (the
+`import` binds each `export "Name" {…}` to a **plain `Map`** of the raw
+exports — an exported fn stays a `Function`, an exported type stays a
+plain type, and ordinary map words (`keys`, `size`) read the namespace
+directly. The binding carries two synthetic names: `Name.$name` (the
 export name) and `Name.$module`, the **`Module`** descriptor it belongs
 to. A `Module` (`Ideal/Module`) has fields `id`, `kind`
 (`native`/`file`/`inline`), `file`, `folder`, and `exports`:
@@ -2389,7 +2390,7 @@ to. A `Module` (`Ideal/Module`) has fields `id`, `kind`
 <!-- boru-test: skip -->
 ```
 import boru:math
-typeof Math                   # returns ModuleExport
+typeof Math                   # returns Map
 MathUtil.$name                    # returns 'Math'
 MathUtil.$module.id               # returns 'boru:math'
 MathUtil.$module.kind             # returns 'native'

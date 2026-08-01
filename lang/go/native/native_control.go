@@ -431,7 +431,9 @@ func wordMayRaise(name string, r *Registry) bool {
 		// […]`).
 		return r.Lookup(name) != nil
 	}
-	if p := v.Parent; p != nil && p.ConformsTo(TModuleExport) {
+	if ModuleNSOf(v) != nil {
+		// A bound module NAMESPACE (facet-carrying Map): stepping through
+		// it can reach module machinery, so it counts fallible.
 		return true
 	}
 	fd, isFn := v.Data.(FnDefInfo)

@@ -34,20 +34,15 @@ package eng
 // any future module whose exports can grow mid-program.
 //
 // The ledger is keyed by the export map POINTER (the §4 discipline: aliasing
-// is pointer-payload, not ID-graph — the StoreShapeInfo precedent), and the
-// kernel reaches the pointer through ExportFieldsCarrier so it never imports
-// the lang layer's payload type.
+// is pointer-payload, not ID-graph — the StoreShapeInfo precedent). A bound
+// module namespace IS a plain Map over the module's export *OrderedMap
+// (carrying the module-namespace facet — NUR038 retired the wrapper type),
+// so the kernel reads the pointer straight off the receiver with AsMap; no
+// lang-layer payload type is involved.
 
 // capModuleExportGrowth is the capability slot holding the per-registry
 // growth table.
 const capModuleExportGrowth = "engine.module.export-growth"
-
-// ExportFieldsCarrier is implemented by the lang layer's module-export
-// payload body (the ExtensionPayload behind an Ideal/ModuleExport value) so
-// the kernel can key per-export-map side state without knowing the type.
-type ExportFieldsCarrier interface {
-	ExportFields() *OrderedMap
-}
 
 // exportGrowthLedger is one export map's per-pass growth record.
 type exportGrowthLedger struct {
@@ -136,11 +131,11 @@ func ResetModuleExportGrowth(r *Registry) {
 }
 
 // moduleExportAbsenceStable reports whether a MISSING-key get over a module
-// export receiver is provably still missing at run time: the receiver's
+// namespace receiver is provably still missing at run time: the receiver's
 // export map has a growth ledger (all program-reachable growers are
 // check-modelled), the ledger is unpoisoned, and the requested key is not
 // among the pass's noted adds. args are the dispatch operands (any order —
-// the receiver is the ModuleExport-family value, the key the concrete
+// the receiver is the facet-carrying namespace Map, the key the concrete
 // Atom/String operand); an unrecognisable shape declines.
 func moduleExportAbsenceStable(r *Registry, args []Value) bool {
 	var fields *OrderedMap
@@ -148,13 +143,13 @@ func moduleExportAbsenceStable(r *Registry, args []Value) bool {
 	haveKey := false
 	for _, a := range args {
 		if isModuleFamilyValue(a) {
-			if ep, ok := a.Data.(ExtensionPayload); ok {
-				if fc, ok := ep.Body.(ExportFieldsCarrier); ok && fields == nil {
-					fields = fc.ExportFields()
+			if ModuleNSOf(a) != nil && fields == nil {
+				if mp, ok := a.Data.(MapPayload); ok && mp.M != nil {
+					fields = mp.M
 					continue
 				}
 			}
-			return false // a Module descriptor / opaque export — not modelled
+			return false // a Module descriptor / second namespace — not modelled
 		}
 		if haveKey {
 			return false // two key candidates — not the 2-operand get shape

@@ -279,12 +279,13 @@ func accessorGetSignatures() []Signature {
 		// integer key is a LIST index (handled precisely downstream by
 		// tryFoldStaticIndex) or a stringified map key — getNodeReturns
 		// must not stringify-and-miss an integer over a list.
+		// A module NAMESPACE (a plain Map carrying the module-namespace
+		// facet) dispatches these same rows: getNodeHandler answers the
+		// $name/$module synthetics from the facet, and getNodeReturns
+		// resolves exports to their raw values in check mode.
 		{Args: []*Type{TAtom, TNode}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getNodeReturns},
 		{Args: []*Type{TString, TNode}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getNodeReturns},
 		{Args: []*Type{TInteger, TNode}, BarrierPos: 1, Impl: Go(getNodeHandler), ReturnsFn: getIntKeyReturns},
-		// [Key | ModuleExport] — transparent export access + $module/$name
-		{Args: []*Type{TAtom, TModuleExport}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getModuleExportHandler), ReturnsFn: moduleExportGetReturns},
-		{Args: []*Type{TString, TModuleExport}, BarrierPos: 1, Impl: Go(getModuleExportHandler), ReturnsFn: moduleExportGetReturns},
 		// [Key | Module] — descriptor fields (id/kind/file/folder/exports)
 		{Args: []*Type{TAtom, TModuleInst}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1, Impl: Go(getModuleInstHandler), ReturnsFn: moduleInstGetReturns},
 		{Args: []*Type{TString, TModuleInst}, BarrierPos: 1, Impl: Go(getModuleInstHandler), ReturnsFn: moduleInstGetReturns},
@@ -1083,6 +1084,12 @@ func getNodeReturns(args []Value, r *Registry) []Value {
 	if len(args) != 2 {
 		return dyn
 	}
+	// A module NAMESPACE receiver (facet map) takes its own read model:
+	// raw export values (a fn export stays dispatchable) and strict-Any
+	// misses (the keyspace can grow) — see moduleNSGetReturns.
+	if out, ok := moduleNSGetReturns(args); ok {
+		return out
+	}
 	key, container := args[0], args[1]
 	if !IsConcrete(key) {
 		return dyn
@@ -1287,6 +1294,11 @@ func getNodeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 	}
 	// String/atom/word key: map property access.
 	k := getKey(key)
+	// A module namespace answers $name/$module from its facet; every
+	// other key falls through to the plain map read below.
+	if val, ok := moduleNSGetSynthetic(container, k); ok {
+		return []Value{val}, nil
+	}
 	if m, _ := AsMap(container); m != nil {
 		val, ok := m.Get(k)
 		if !ok {

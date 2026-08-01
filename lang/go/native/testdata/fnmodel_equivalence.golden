@@ -197,7 +197,6 @@ WORD do
   [Node/Map] barrier=1 returns=[Any]
   [Node/List] barrier=1 noeval={0} +returnsfn
 WORD dot
-  [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/String Ideal/Module] barrier=1 +returnsfn
   [Scalar/String Ideal/Class] barrier=1 +returnsfn
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
@@ -207,7 +206,6 @@ WORD dot
   [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/String Scalar/Micron] barrier=1 +returnsfn
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
-  [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Module] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Class] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
@@ -218,7 +216,6 @@ WORD dot
   [Scalar/Atom Scalar/Micron] barrier=1 quote={0} +returnsfn
   [Any None] barrier=1 returns=[None]
 WORD dotr
-  [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/String Ideal/Module] barrier=1 +returnsfn
   [Scalar/String Ideal/Class] barrier=1 +returnsfn
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
@@ -227,7 +224,6 @@ WORD dotr
   [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/String Scalar/Micron] barrier=1 +returnsfn
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
-  [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Module] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Class] barrier=1 quote={0} +returnsfn
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} +returnsfn
@@ -331,7 +327,6 @@ WORD gen
 WORD gensym
   [] barrier=0 runcheck returns=[Scalar/Atom]
 WORD get
-  [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/String Ideal/Module] barrier=1 +returnsfn
   [Scalar/String Ideal/Class] barrier=1 +returnsfn
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
@@ -341,7 +336,6 @@ WORD get
   [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/String Scalar/Micron] barrier=1 +returnsfn
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
-  [Scalar/Atom Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Module] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Class] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Store] barrier=1 +returnsfn
@@ -355,7 +349,6 @@ WORD getpath
   [Ideal/Reach Any] barrier=2 returns=[Any]
   [Scalar/String Any] barrier=2 returns=[Any]
 WORD getr
-  [Scalar/String Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/String Ideal/Module] barrier=1 +returnsfn
   [Scalar/String Ideal/Class] barrier=1 +returnsfn
   [Scalar/String Ideal/Store] barrier=1 +returnsfn
@@ -364,7 +357,6 @@ WORD getr
   [Scalar/String Node] barrier=1 +returnsfn
   [Scalar/String Scalar/Micron] barrier=1 +returnsfn
   [Scalar/Number/Integer Node] barrier=1 +returnsfn
-  [Scalar/Atom Ideal/ModuleExport] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Module] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Class] barrier=1 +returnsfn
   [Scalar/Atom Ideal/Store] barrier=1 +returnsfn
@@ -382,7 +374,6 @@ WORD gte
 WORD guard
   [Any Scalar/Boolean] barrier=1 +returnsfn
 WORD has
-  [Scalar/String Ideal/ModuleExport] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Ideal/Module] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Ideal/Class] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Ideal/Store] barrier=1 returns=[Scalar/Boolean]
@@ -391,7 +382,6 @@ WORD has
   [Scalar/String Node] barrier=1 returns=[Scalar/Boolean]
   [Scalar/String Scalar/Micron] barrier=1 returns=[Scalar/Boolean]
   [Scalar/Number/Integer Node] barrier=1 returns=[Scalar/Boolean]
-  [Scalar/Atom Ideal/ModuleExport] barrier=1 quote={0} returns=[Scalar/Boolean]
   [Scalar/Atom Ideal/Module] barrier=1 quote={0} returns=[Scalar/Boolean]
   [Scalar/Atom Ideal/Class] barrier=1 quote={0} returns=[Scalar/Boolean]
   [Scalar/Atom Ideal/Store] barrier=1 quote={0} returns=[Scalar/Boolean]

@@ -41,27 +41,36 @@ func TestW9ModuleExportGrowthGuards(t *testing.T) {
 	}
 }
 
-// exportCarrierW9 is a test ExportFieldsCarrier body for wrapping in an
-// ExtensionPayload behind a synthetic Ideal/ModuleExport value.
-type exportCarrierW9 struct{ m *OrderedMap }
-
-func (e exportCarrierW9) ExportFields() *OrderedMap { return e.m }
-
-// absenceArgsW9 builds the [moduleExportValue, keyAtom] operand pair.
+// absenceArgsW9 builds the [namespaceValue, keyAtom] operand pair. The
+// namespace is what `import` binds: a plain Map over the export fields,
+// carrying the module-namespace facet.
 func absenceArgsW9(fields *OrderedMap, key string) []Value {
-	mt := &Type{tmeta: &typeMeta{Name: "Ideal/ModuleExport"}}
-	mod := Value{Parent: mt, Data: ExtensionPayload{Body: exportCarrierW9{m: fields}}}
+	mod := WithModuleNS(NewMap(fields), "E", Value{})
 	return []Value{mod, NewAtom(key)}
 }
 
 func TestW9ModuleExportAbsenceStableDeclines(t *testing.T) {
 	r := newTestRegistry(t)
 
-	// A module-family value whose payload is NOT an ExportFieldsCarrier → decline.
+	// A Module DESCRIPTOR (not a namespace) → decline: only a namespace
+	// map's fields are ledger-modelled.
 	mt := &Type{tmeta: &typeMeta{Name: "Ideal/Module"}}
 	opaque := Value{Parent: mt, Data: ExtensionPayload{Body: 42}}
 	if moduleExportAbsenceStable(r, []Value{opaque, NewAtom("k")}) {
 		t.Error("an opaque module descriptor must decline")
+	}
+
+	// A facet-carrying value whose payload is not a MapPayload → decline
+	// (defensive: the facet is only ever stamped on maps).
+	odd := WithModuleNS(NewInteger(1), "E", Value{})
+	if moduleExportAbsenceStable(r, []Value{odd, NewAtom("k")}) {
+		t.Error("a non-map facet carrier must decline")
+	}
+
+	// Two namespace operands → not the 2-operand get shape.
+	ns := absenceArgsW9(NewOrderedMap(), "")[0]
+	if moduleExportAbsenceStable(r, []Value{ns, ns}) {
+		t.Error("two namespace operands must decline")
 	}
 
 	// Two key candidates → not the 2-operand get shape.

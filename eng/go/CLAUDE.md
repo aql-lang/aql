@@ -360,8 +360,8 @@ Ideal — built-in or user-defined, in Go or boru — is convertible.
 Return `ErrNoConverter` to decline and keep walking. Concrete
 projections are installed for Class instances (→ fields), Store
 (→ entries), Error (→ {message}), Table (→ rows /
-columnar map), and — in their owning packages — ModuleExport
-(→ exports), Module (→ descriptor), Tensor/Matrix/Vector (→ nested
+columnar map), and — in their owning packages — Module
+(→ descriptor), Tensor/Matrix/Vector (→ nested
 rows / {shape,values}), Fetch Request/Response (→ their map), and
 Timeout/Interval (→ {id,ms}). Each is a behavior whose `Format`
 delegates to the kernel default so rendering is unchanged.

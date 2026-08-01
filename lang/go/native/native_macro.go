@@ -615,15 +615,7 @@ const miniSubjParam = "__mini_subject"
 // miniKindExport returns the kind's wrapper FnDef from the bound
 // MiniLang namespace.
 func miniKindExport(r *Registry, target string) (Value, bool) {
-	top, ok := r.Defs.Top("MiniLang")
-	if !ok {
-		return Value{}, false
-	}
-	info, ok := asModuleExportInfo(top)
-	if !ok || info.Fields == nil {
-		return Value{}, false
-	}
-	return info.Fields.Get(target)
+	return moduleNamespaceExport(r, "MiniLang", target)
 }
 
 // miniPartialFn builds the partially-applied Function for a FILTER
@@ -699,28 +691,15 @@ var miniPartialSeq int
 // now, discovered via miniGoHook.)
 
 // miniNamespaceBound reports whether the `MiniLang` namespace is bound to a
-// ModuleExport in the current scope.
+// module namespace in the current scope.
 func miniNamespaceBound(r *Registry) bool {
-	top, ok := r.Defs.Top("MiniLang")
-	if !ok {
-		return false
-	}
-	_, ok = asModuleExportInfo(top)
-	return ok
+	return moduleNamespaceBound(r, "MiniLang")
 }
 
 // miniKindRegistered reports whether `lang_<kind>` is an export of the bound
 // MiniLang namespace.
 func miniKindRegistered(r *Registry, target string) bool {
-	top, ok := r.Defs.Top("MiniLang")
-	if !ok {
-		return false
-	}
-	info, ok := asModuleExportInfo(top)
-	if !ok || info.Fields == nil {
-		return false
-	}
-	_, ok = info.Fields.Get(target)
+	_, ok := moduleNamespaceExport(r, "MiniLang", target)
 	return ok
 }
 
@@ -975,14 +954,9 @@ func EmitLangFnSigWhy(fnDef FnDefInfo) string {
 }
 
 // parseNamespaceBound reports whether the `ParseLang` namespace is bound to a
-// ModuleExport in the current scope.
+// module namespace in the current scope.
 func parseNamespaceBound(r *Registry) bool {
-	top, ok := r.Defs.Top("ParseLang")
-	if !ok {
-		return false
-	}
-	_, ok = asModuleExportInfo(top)
-	return ok
+	return moduleNamespaceBound(r, "ParseLang")
 }
 
 // capParseLangFnDispatch holds the parselang-fn-dispatch *Signature — the
@@ -1037,15 +1011,7 @@ func recordParseLangFnDispatch(r *Registry, fn Value, args []Value) (Value, bool
 // parseKindRegistered reports whether `parse_<kind>` is an export of the
 // bound ParseLang namespace.
 func parseKindRegistered(r *Registry, target string) bool {
-	top, ok := r.Defs.Top("ParseLang")
-	if !ok {
-		return false
-	}
-	info, ok := asModuleExportInfo(top)
-	if !ok || info.Fields == nil {
-		return false
-	}
-	_, ok = info.Fields.Get(target)
+	_, ok := moduleNamespaceExport(r, "ParseLang", target)
 	return ok
 }
 
@@ -1205,27 +1171,14 @@ func emitFnExpand(fn Value, args []Value, r *Registry) ([]Value, error) {
 }
 
 // emitNamespaceBound reports whether the `EmitLang` namespace is bound to a
-// ModuleExport in the current scope.
+// module namespace in the current scope.
 func emitNamespaceBound(r *Registry) bool {
-	top, ok := r.Defs.Top("EmitLang")
-	if !ok {
-		return false
-	}
-	_, ok = asModuleExportInfo(top)
-	return ok
+	return moduleNamespaceBound(r, "EmitLang")
 }
 
 // emitKindRegistered reports whether `emit_<kind>` is an export of the bound
 // EmitLang namespace.
 func emitKindRegistered(r *Registry, target string) bool {
-	top, ok := r.Defs.Top("EmitLang")
-	if !ok {
-		return false
-	}
-	info, ok := asModuleExportInfo(top)
-	if !ok || info.Fields == nil {
-		return false
-	}
-	_, ok = info.Fields.Get(target)
+	_, ok := moduleNamespaceExport(r, "EmitLang", target)
 	return ok
 }

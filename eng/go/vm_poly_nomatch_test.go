@@ -273,6 +273,10 @@ func TestPolyReachBound(t *testing.T) {
 		{"concrete+carrier count", []Value{word, NewInteger(1), NewCarrier(TInteger)}, 0, 2, true},
 		{"def value word counts one", []Value{word, NewWord("pnmval")}, 0, 1, true},
 		{"def fn word stops", []Value{word, NewWord("pnmfn"), NewInteger(1)}, 0, 0, true},
+		// A `/r`-marked fn word is NO stop — it denotes its REFERENCE value
+		// (one claimable datum, NUR050/G12), so the walk counts it and the
+		// following token.
+		{"def fn word /r counts one", []Value{word, NewWordRef("pnmfn"), NewInteger(1)}, 0, 2, true},
 		{"reserved literal counts", []Value{word, NewWord("true")}, 0, 1, true},
 		// A REGISTERED word takes the same FnDefInfo-binding stop as a def'd
 		// fn — registration pushes the binding Defs.Top catches.

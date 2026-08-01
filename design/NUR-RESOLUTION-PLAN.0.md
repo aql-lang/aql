@@ -293,26 +293,34 @@ differs. Outcomes:
 - **NUR-031** (opaque-value equality) — re-opened **in part**. The
   Store/Error/Timeout/Interval resolutions stand; Function/FnDef/Word
   dispatch-rejection is accepted as current behaviour;
-  **Module/ModuleExport self-inequality is an open defect** (silent
-  reflexivity violation). Standing requirement: every value —
-  functions and modules included — falls under equality, at minimum
-  reflexive. Mechanism awaits NUR050/ADR-010 and the Behavior-routing
-  ADR; track together.
+  **Module self-inequality is an open defect** (silent reflexivity
+  violation). The NAMESPACE half resolved by construction with the
+  2026-07-31 NUR038 facet refactor (a namespace is a plain Map: `M eq
+  M → true`); the `Ideal/Module` DESCRIPTOR half remains open.
+  Standing requirement: every value — functions and modules included
+  — falls under equality, at minimum reflexive. Mechanism awaits
+  NUR050/ADR-010 and the Behavior-routing ADR; track together.
 - **NUR-037** (fn-local fn undefined when compiled) — re-opened as an
   open defect. Mechanism: closure-capture gap (distinct from G12's
   type identity, same first-class-values family). "Slow, not wrong"
   is genuinely violated. Fix: capture enclosing local fn bindings
   (preferred) or refuse at check time.
 - **NUR-038** (module-export statement misfire) — re-opened as an
-  open defect with root cause: the forward-collection scan's
-  function-word stop never fires because every export is wrapped as
-  `TModuleExport` (not `FnDefInfo`), and an `Any` param removes the
-  type gate. Proposed ADR-level fix: module provenance as an optional
-  nil-by-default facet on `Value` (the `elem`/`asc`/`dynFrom`/`pos`
-  pattern) instead of a wrapper type — an exported fn stays a
-  Function and the class of "the wrapper doesn't behave like the
-  thing it wraps" bugs collapses. Caveats: Sealed Payload preserved;
-  no inline bytes on `Value`.
+  open defect. The facet refactor proposed here **landed 2026-07-31**:
+  `Ideal/ModuleExport` (FixedID 5001) is retired; `import` binds a
+  plain export Map carrying the kernel `ModuleNSInfo` facet
+  (`eng.WithModuleNS` / `eng.ModuleNSOf`), exports ride raw, and the
+  wrapper-masking bug class is closed (NUR031's namespace-equality
+  half resolved by construction). **The misfire itself survives** —
+  the retest proved the original root-cause hypothesis wrong: it
+  reproduces byte-identically with a `def`-bound plain map holding a
+  zero-return `Any`-param fn (no modules), because the statement head
+  is a DOT-ACCESS (a Reach), never a bare fn-bound word, so the
+  forward scan's function-word stop cannot fire under ANY binding
+  representation. The remaining fix lives in forward collection's
+  treatment of dot-access statement heads; the `end` house rule
+  stands as the mitigation. See the NUR038 record for the repro
+  matrix.
 - **NUR-039 through NUR-047** — re-examined; no decision recorded in
   this review differs from the file, so their Allowed records stand.
 
@@ -328,7 +336,9 @@ differs. Outcomes:
    refinement, NUR023).
 5. **Semantic vs deterministic ordering** (NUR024).
 6. **Module provenance as a Value facet** (NUR038) — ADR-level,
-   recorded in its NUR record. (The companion "one Function type"
+   recorded in its NUR record; **implemented 2026-07-31** (wrapper
+   retired, facet live), awaiting explicit maintainer instruction
+   before an ADR entry is written. (The companion "one Function type"
    candidate became **ADR-011**, Accepted, with NUR050's resolution.)
 
 Per the ADR.md rule, none of these becomes an ADR entry until the

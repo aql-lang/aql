@@ -77,9 +77,10 @@ def m <a>text</a> end m has tag/q	true	has agrees with what dot reads
 def m <a>text</a> end m has cren/q	true	…cren is bound on every element
 def m <a>text</a> end m has nope/q	false	an unknown field is not bound
 
-# ---- Module / ModuleExport: presence joins the family (NUR021 fix) ----
+# ---- Module namespace / descriptor: presence joins the family (NUR021 fix) ----
 import module [export "M" {x: 1}] end M has x/q	true	has sees a bound export
 import module [export "M" {x: 1}] end M has y/q	false	…and answers false where getr raises
+import module [export "M" {x: 1}] end M has $name/q	true	…and sees the facet synthetics (agrees with dot/get)
 import module [export "M" {x: 1}] end (M get $module/q) has kind/q	true	has reads the Module descriptor fields too
 import module [export "M" {x: 1}] end (M get $module/q) has zzz/q	false	…and stays total on an unknown one
 

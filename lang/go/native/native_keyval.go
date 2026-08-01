@@ -23,7 +23,8 @@ import (
 // from map iteration".
 //
 // FixedID 5002 is the next free id in the 5000–9999 kernel/language band,
-// after Module (5000) and ModuleExport (5001). See eng/go/CLAUDE.md
+// after Module (5000) and the retired ModuleExport wrapper (5001,
+// never recycled — NUR038). See eng/go/CLAUDE.md
 // "FixedID Allocation".
 var TKeyVal = registerKeyValType()
 

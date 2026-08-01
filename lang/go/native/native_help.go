@@ -122,7 +122,7 @@ func makeDynamicEval(r *Registry) func(string) (string, error) {
 // dotted name, the namespace is unbound (module not imported), or the word
 // is not an exported function. This is the runtime `describe` path; it needs
 // no access to the modules package because the namespace value is already a
-// ModuleExport bound in r.Defs.
+// facet-carrying namespace Map bound in r.Defs.
 func BuildQualifiedFuncInfo(r *Registry, name string) *help.FuncInfo {
 	dot := strings.IndexByte(name, '.')
 	if dot <= 0 || dot >= len(name)-1 {

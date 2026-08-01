@@ -653,8 +653,8 @@ func TestEngineCoreModuleImportAll(t *testing.T) {
 	runBoru(t, r, []Value{NewWord("import"), NewWord("cmod")})
 
 	result := runBoru(t, r, []Value{NewWord("coreExp")})
-	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
-		t.Fatalf("coreExp should be a ModuleExport, got %v", result)
+	if len(result) != 1 || ModuleNSOf(result[0]) == nil {
+		t.Fatalf("coreExp should be a module namespace, got %v", result)
 	}
 	v, ok := moduleExportGet(result[0], "v")
 	_as31, _ := AsInteger(v)
@@ -680,8 +680,8 @@ func TestEngineCoreModuleImportRename(t *testing.T) {
 	runBoru(t, r, []Value{NewWord("import"), renameList, NewWord("rmod")})
 
 	result := runBoru(t, r, []Value{NewWord("newName")})
-	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
-		t.Fatalf("newName should be a ModuleExport, got %v", result)
+	if len(result) != 1 || ModuleNSOf(result[0]) == nil {
+		t.Fatalf("newName should be a module namespace, got %v", result)
 	}
 }
 
@@ -709,8 +709,8 @@ func TestEngineCoreModuleImportMultiRename(t *testing.T) {
 	runBoru(t, r, []Value{NewWord("import"), renameList, NewWord("mmod")})
 
 	result := runBoru(t, r, []Value{NewWord("ra")})
-	if len(result) != 1 || !result[0].Parent.Equal(TModuleExport) {
-		t.Fatalf("ra should be a ModuleExport, got %v", result)
+	if len(result) != 1 || ModuleNSOf(result[0]) == nil {
+		t.Fatalf("ra should be a module namespace, got %v", result)
 	}
 }
 

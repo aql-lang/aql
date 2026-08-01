@@ -63,9 +63,9 @@ commit.
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | re-opened 2026-07-31 (was Allowed 2026-07-24) |
-| [NUR031](#nur031) | Module/ModuleExport values are not `eq`/`deq` to themselves | re-opened in part 2026-07-31 (was Allowed 2026-07-24) |
+| [NUR031](#nur031) | Module/Function values are not `eq`/`deq` to themselves | re-opened in part 2026-07-31 (was Allowed 2026-07-24); namespace half resolved by the NUR038 facet refactor |
 | [NUR037](#nur037) | A fn-local fn used as a higher-order body word breaks in compiled mode only | re-opened 2026-07-31 (was Allowed 2026-07-30) |
-| [NUR038](#nur038) | Two consecutive statements headed by a 1-arg Any module export misfire silently | re-opened 2026-07-31 (was Allowed 2026-07-30) |
+| [NUR038](#nur038) | Two consecutive statements headed by a 1-arg Any dot-access fn misfire silently | re-opened 2026-07-31 (was Allowed 2026-07-30); wrapper-retirement half landed — misfire proven module-independent, still open |
 | [NUR049](#nur049) | The paren barrier is one-directional: a group can reach backward for a receiver | 2026-07-31 split of NUR029 (G10) |
 
 Pending records use a compact form (rule / divergence / evidence /
@@ -896,6 +896,18 @@ acceptance:
   NUR050 (and the since-resolved NUR051). A wrong answer, delivered
   quietly.
 
+  **Namespace half RESOLVED by construction (2026-07-31):** the
+  NUR038 facet refactor retired the `Ideal/ModuleExport` wrapper —
+  `import` now binds a plain export Map (module-namespace facet), so
+  a namespace takes the ordinary Node equality arms: `M eq M → true`
+  (shared `*OrderedMap` identity), `M deq M → true`, and two
+  content-equal namespaces of DIFFERENT exports compare `eq → false`
+  / `deq → true`, exactly the Map contract. The remaining module
+  defect is the `Ideal/Module` DESCRIPTOR only: `M.$module eq
+  M.$module → false` (still `ExtensionPayload`-backed, still falls
+  to the terminal arm) — in scope for the Behavior-routing design
+  below alongside Function/Word identity.
+
 **Standing requirement (maintainer, 2026-07-31):** every value —
 functions and modules included — must eventually fall under equality,
 at minimum reflexively (a value is `eq`/`deq` to itself). The
@@ -1124,16 +1136,55 @@ path). Then:
   the `Module` facet without ever ceasing to be an fn.
 
 This collapses the whole class of "ModuleExport doesn't behave like
-the thing it wraps" bugs, this record among them: with no wrapper,
-there is nothing to diverge. Caveats the ADR must honour: preserve
-**Sealed Payload** (the facet may hold an opaque module handle the
-kernel does not inspect — compatible, but must be deliberate), and
-**no inline bytes** on `Value` (a nil-by-default pointer facet, never
-an inline field — `Value` is copied on every stack push and the
-struct comments are emphatic). Recorded alongside the other ADR
-candidates in `design/NUR-RESOLUTION-PLAN.0.md`; same recurring theme
-as NUR050/NUR051/NUR037 — an abstraction stopping a function-valued
+the thing it wraps" bugs. Caveats honoured: **Sealed Payload** (the
+facet holds a Value the kernel treats opaquely), and **no inline
+bytes** on `Value` (a nil-by-default pointer facet, never an inline
+field — `Value` is copied on every stack push and the struct comments
+are emphatic). Recorded alongside the other ADR candidates in
+`design/NUR-RESOLUTION-PLAN.0.md`; same recurring theme as
+NUR050/NUR051/NUR037 — an abstraction stopping a function-valued
 thing from behaving as a first-class function.
+
+### Facet refactor landed; misfire retested — NOT fixed, and NOT module-caused (2026-07-31)
+
+The wrapper retirement above is **implemented** (this branch):
+`Ideal/ModuleExport` (FixedID 5001, retired) is gone; `import` binds a
+plain export Map carrying the kernel `ModuleNSInfo` facet
+(`eng/go/value.go`), exports ride raw (a fn export IS a `Function`,
+`typeof Pkg → Map`, map words read a namespace directly), and every
+consumer — accessors, macros, growth ledger, const-fold, render —
+reads the facet. The class of wrapper-masking bugs is closed, and the
+NUR031 namespace-equality defect resolved by construction (`M eq M →
+true`).
+
+**But the retest shows this record's misfire survives unchanged** —
+and a minimal repro proves it was never module-specific:
+
+```
+def pr fn [[x:Any] [] [import "boru:io" IO.printstr x]]
+def m {p: pr/r}
+m.p "A\n"
+m.p "B\n"
+```
+
+prints `B`, then `A`, leaves ` fn pr(Any)` on the stack, exits 0 — the
+byte-identical failure with a **plain map bound by `def`**, no module
+machinery at all (and at the pre-refactor HEAD the same program fails
+the same way). A value-RETURNING variant fails differently: `m.p 5 ⏎
+m.p 7` yields `5 fn (Any) 7` — the SECOND statement's fn strands
+undispatched. Terminating statement 1 with `end` fixes both, exactly
+as with the module form.
+
+**Corrected root cause:** the earlier analysis blamed the wrapper
+("a module export is not bound as FnDefInfo, so the fn-word barrier
+never fires"). Wrong — the barrier miss is about the statement HEAD
+being a **dot-access** (`m.p` / `IO.printstr` — a Reach, expanded via
+`dot`), which is not a bare fn-bound word under any binding
+representation; the forward scan treats the Reach as one claimable
+datum (`polyReachBound`'s `IsConcrete` arm) instead of a barrier. The
+fix must live in forward collection's treatment of dot-access
+statement heads — orthogonal to the module system. The `end`
+house rule stands as the mitigation.
 ---
 
 

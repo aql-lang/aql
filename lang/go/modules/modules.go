@@ -96,8 +96,7 @@ func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
 // moduleDocs table, see docs.go). Done once here rather than in every
 // per-module maker — the makers stay free of provenance/doc plumbing and the
 // docs live as data in one place. Values a builder already populated are left
-// untouched. Type exports and other non-function values are skipped. The
-// Value's Parent (FnDef vs Function) is preserved so dispatch is unchanged.
+// untouched. Type exports and other non-function values are skipped.
 func stampExportProvenance(desc native.ModuleDesc) {
 	for ns, om := range desc.Exports {
 		if om == nil {
@@ -129,11 +128,7 @@ func stampExportProvenance(desc native.ModuleDesc) {
 			if !changed {
 				continue
 			}
-			if v.Parent == native.TFunction {
-				om.Set(key, native.NewFunction(*fn))
-			} else {
-				om.Set(key, native.NewFunction(*fn))
-			}
+			om.Set(key, native.NewFunction(*fn))
 		}
 	}
 }

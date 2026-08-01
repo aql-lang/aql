@@ -584,8 +584,9 @@ func loadModuleResources(r *Registry, modDir string, desc *ModuleDesc) error {
 
 // installExports installs all exports from a module descriptor as defs.
 // If names is nil, all exports are installed using their original names.
-// Each export is bound as a ModuleExport whose $module points at the shared
-// Module instance. Word-extension clones found in the export maps are
+// Each export is bound as a plain namespace Map whose module-namespace
+// facet points at the shared Module instance (NewModuleNamespace).
+// Word-extension clones found in the export maps are
 // additionally transplanted into r (see transplantWordExtensions) —
 // the only error path.
 // linkModuleDebugParent links each export-captured module sub-registry
@@ -614,13 +615,13 @@ func installExports(r *Registry, desc ModuleDesc, names []string) error {
 	mod := NewModuleInstance(desc)
 	if names == nil {
 		for name, exportMap := range desc.Exports {
-			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
+			InstallDef(r, name, NewModuleNamespace(name, exportMap, mod))
 		}
 		return transplantWordExtensions(r, desc)
 	}
 	for _, name := range names {
 		if exportMap, ok := desc.Exports[name]; ok {
-			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
+			InstallDef(r, name, NewModuleNamespace(name, exportMap, mod))
 		}
 	}
 	return transplantWordExtensions(r, desc)
@@ -741,7 +742,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 			if !ok {
 				return fmt.Errorf("import: export %q not found in module", fromName)
 			}
-			InstallDef(r, toName, NewModuleExport(fromName, exportMap, mod))
+			InstallDef(r, toName, NewModuleNamespace(fromName, exportMap, mod))
 		}
 	} else {
 		// Single rename pair: [from to]
@@ -754,7 +755,7 @@ func installRenamedExports(r *Registry, desc ModuleDesc, renameList []Value) err
 		if !ok {
 			return fmt.Errorf("import: export %q not found in module", fromName)
 		}
-		InstallDef(r, toName, NewModuleExport(fromName, exportMap, mod))
+		InstallDef(r, toName, NewModuleNamespace(fromName, exportMap, mod))
 	}
 	// Renaming the namespace does not opt out of the module's word
 	// extensions — the extension targets the base word, not the
@@ -774,7 +775,7 @@ func installSingleRename(r *Registry, desc ModuleDesc, newName string) error {
 		return fmt.Errorf("import: rename requires module with exactly one export, got %d", len(desc.Exports))
 	}
 	for name, exportMap := range desc.Exports {
-		InstallDef(r, newName, NewModuleExport(name, exportMap, mod))
+		InstallDef(r, newName, NewModuleNamespace(name, exportMap, mod))
 	}
 	return transplantWordExtensions(r, desc)
 }
@@ -925,15 +926,16 @@ func ResolveAnyModule(r *Registry, ref string) (ModuleDesc, error) {
 // module whose namespace binding was torn down (e.g. by CallBoru's
 // fn-body def-cleanup). Only absent names are installed, so a plain
 // repeated top-level import stays a no-op rather than stacking bindings.
-// The re-bind MUST be a real ModuleExport, exactly like the first-load
-// installExports — a plain Map here made the re-bound namespace a
-// DIFFERENT value kind (asModuleExportInfo fails), so mini/parse kind
-// lookups and `$module`/`$name` reads broke after any teardown+re-import.
+// The re-bind MUST be a real facet-carrying namespace, exactly like the
+// first-load installExports — a facet-LESS Map here would make the
+// re-bound namespace a different value kind (moduleNSFields fails), so
+// mini/parse kind lookups and `$module`/`$name` reads would break after
+// any teardown+re-import.
 func ensureExportsBound(r *Registry, desc ModuleDesc) {
 	mod := NewModuleInstance(desc)
 	for name, exportMap := range desc.Exports {
 		if !r.Defs.Has(name) {
-			InstallDef(r, name, NewModuleExport(name, exportMap, mod))
+			InstallDef(r, name, NewModuleNamespace(name, exportMap, mod))
 		}
 	}
 }

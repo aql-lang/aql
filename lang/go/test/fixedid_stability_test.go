@@ -104,9 +104,11 @@ func TestFixedIDStability(t *testing.T) {
 		// Tensor family (former FixedIDs 2000-2002) moved to
 		// boru:matrix-util as per-import module mints with no FixedID —
 		// see MintTensorTypes and design/OPEN-WORDS.0.md.
-		"Ideal/Module":       5000,
-		"Ideal/ModuleExport": 5001,
-		"Node/Map/KeyVal":    5002, // map-iteration entry — lang/go/native/native_keyval.go
+		"Ideal/Module": 5000,
+		// FixedID 5001 retired with Ideal/ModuleExport (the namespace
+		// wrapper): a bound module namespace is a plain Map carrying the
+		// kernel module-namespace facet (NUR038). Not recycled.
+		"Node/Map/KeyVal": 5002, // map-iteration entry — lang/go/native/native_keyval.go
 		// 5003 (MiniLangCompiled), 5005 (ParseGrammar), 5006 (Model)
 		// retired — per-import module mints now (boru:minilang /
 		// boru:parse / boru:model own them; see design/OPEN-WORDS.0.md).

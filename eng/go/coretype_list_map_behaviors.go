@@ -148,6 +148,13 @@ func (mapFormatBehavior) Format(v Value) string {
 	if m == nil {
 		return "{}"
 	}
+	// A module NAMESPACE (facet-carrying Map) renders compactly as its
+	// export-key summary: the values are typically whole fn definitions
+	// (and, transitively, other namespaces), so the plain k:v body would
+	// spill entire module APIs into stack traces and REPL echoes.
+	if ns := ModuleNSOf(v); ns != nil {
+		return "Module(" + ns.Name + "){" + strings.Join(m.Keys(), " ") + "}"
+	}
 	return "{" + joinEntries(m, Value.String) + "}"
 }
 

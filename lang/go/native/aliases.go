@@ -519,6 +519,7 @@ var (
 	NewForward     = eng.NewForward
 	NewFunction    = eng.NewFunction
 	NewImplicitMap = eng.NewImplicitMap
+	ModuleNSOf     = eng.ModuleNSOf
 	// NewInstant moved to lang/go/engine/native_temporal.go (Step 8).
 	NewInteger       = eng.NewInteger
 	NewBigInteger    = eng.NewBigInteger

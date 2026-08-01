@@ -128,10 +128,10 @@ func TestEnsureExportsBoundRebindsModuleExport(t *testing.T) {
 		t.Fatalf("run: %v", err)
 	}
 	if fmt.Sprint(got) != "[0 MiniLang]" {
-		t.Errorf("got %v, want [0 MiniLang] (the re-bound namespace must be a ModuleExport carrying $name)", got)
+		t.Errorf("got %v, want [0 MiniLang] (the re-bound namespace must carry the module-namespace facet answering $name)", got)
 	}
 	// And the re-bound namespace serves kind lookups (the mini matcher
-	// dispatches through asModuleExportInfo — the exact read that broke).
+	// dispatches through the namespace facet — the exact read that broke).
 	src2 := `def f fn [[] [Integer] [import "boru:minilang" 0]]  (f)  import "boru:minilang"  +re/[a-z]+/ typeof`
 	b, _ := New()
 	got2, err2 := b.RunInterp(src2)

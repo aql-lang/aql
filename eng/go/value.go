@@ -1316,6 +1316,20 @@ type Value struct {
 	// overwhelming majority of values (no ascription) don't carry it. Read
 	// via AscribedType() (nil-safe), set/clear via SetAscribed.
 	asc *Type
+	// modns marks a MAP value as a module NAMESPACE — the value `import`
+	// binds for each `export "Name" {…}`. Behind a nil-by-default pointer
+	// so the overwhelming majority of values carry no inline bytes for it
+	// (the pos/dynFrom/elem/asc discipline). The map's own payload IS the
+	// export set; the facet carries only the PROVENANCE the retired
+	// Ideal/ModuleExport wrapper used to encode — the export name
+	// (`$name`) and the owning Module descriptor (`$module`) — so an
+	// exported fn stays a Function, an exported constant stays that
+	// constant, and an exported type stays a plain type (NUR038:
+	// provenance is a facet on a plain value, never a wrapper
+	// type that masks the value). Read via ModuleNSOf (nil-safe free
+	// function); set via WithModuleNS. The Sealed-Payload rule is
+	// untouched: the facet holds a Value the kernel treats opaquely.
+	modns *ModuleNSInfo
 
 	// One-byte fields, clustered so they pack without padding.
 	IsInternal bool       // Word/__XX runtime markers — not user-facing
@@ -1492,6 +1506,38 @@ func (v *Value) SetElemConstraint(c Value) {
 		return
 	}
 	v.elem = &c
+}
+
+// ModuleNSInfo is the module-namespace facet a bound export map carries
+// (the modns field): the export name and the owning Module descriptor.
+// It replaces the retired Ideal/ModuleExport wrapper type (NUR038) —
+// the namespace VALUE is a plain Map; this is provenance only.
+type ModuleNSInfo struct {
+	// Name is the declared export name (`X.$name`), which a rename
+	// import deliberately does NOT alias.
+	Name string
+	// Module is the owning Ideal/Module descriptor (`X.$module`),
+	// shared by every export of one module. The kernel treats it
+	// opaquely (Sealed Payload — the descriptor's ExtensionPayload is
+	// never inspected here).
+	Module Value
+}
+
+// ModuleNSOf returns the module-namespace facet carried by v, or nil for
+// the overwhelming majority of values that are not bound module
+// namespaces. Nil-safe.
+func ModuleNSOf(v Value) *ModuleNSInfo {
+	return v.modns
+}
+
+// WithModuleNS returns v (a plain export Map) carrying the module-
+// namespace facet. The copy discipline matches the other facets: every
+// Value copy shares the pointer, so the provenance travels with the
+// namespace wherever it flows (re-export, def-binding, container
+// storage) without the value ever ceasing to be a plain Map.
+func WithModuleNS(v Value, name string, module Value) Value {
+	v.modns = &ModuleNSInfo{Name: name, Module: module}
+	return v
 }
 
 // AscribedType returns the value's dispatch ascription (`v as T`), or nil

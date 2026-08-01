@@ -54,7 +54,7 @@ func TestDoCatchMultiValueArity(t *testing.T) {
 		// A NATIVE module fn bound to a NAME (Module set, no boru body) — the
 		// fnDefMayRaise Module!="" path. StructUtil.parse can raise on bad input.
 		`import "boru:struct-util"  def g StructUtil.parse/r  do [(g "x") 2] error [dot code]`,
-		// A bare module-export VALUE in the body — the wordMayRaise TModuleExport path.
+		// A bare module-NAMESPACE VALUE in the body — the wordMayRaise facet-map path.
 		mod + `do [M 3] error [dot code]`,
 		// A fallible call nested inside a branch-arm LIST within a paren — the
 		// nested-list recursion (`(if … [M.boom] …)`).

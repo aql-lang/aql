@@ -6,7 +6,7 @@
 # bake decision refuses a body carrying a capitalised def
 # (eng bodyHasReplayHazard) so the interpreter owns these rows with full
 # parity, and the import half compiles natively as a closure unit after the
-# ensureExportsBound ModuleExport re-bind fix. Value defs (`do [def b 5 …]`)
+# ensureExportsBound namespace re-bind fix. Value defs (`do [def b 5 …]`)
 # were never affected. Full graduation = the Phase 6 JIT detached-unit
 # cache compiles these bodies as units, at which point the rows compile
 # natively and their ledger entries delete.

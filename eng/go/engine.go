@@ -1511,7 +1511,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	}
 
 	// Implicit end-of-input: resolve any pending forwards from the stack.
-	if err := e.resolveOrphanedForwards(); err != nil {
+	if err := e.resolveOrphanedForwards(); err != nil { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		return nil, e.faultReturn(err)
 	}
 
@@ -7907,17 +7907,17 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					}
 
 					// 1.4: function word — boundary, stop. A `/r`-marked
-					// word is NO boundary: it denotes its REFERENCE
-					// value (NUR050/G12), so it claims this slot as a
-					// Function datum when the sig admits one.
+					// word is NO boundary in principle (it denotes its
+					// REFERENCE value, NUR050/G12) — but since the ADR-011
+					// collapse its Defs binding IS a Function value, so
+					// every slot that can admit the reference (a Function
+					// slot, an Any slot) already claimed it in the
+					// def-binding branch above; a /r word reaching here
+					// faces a slot no Function can fill and stops the scan
+					// exactly like its unmarked twin. (Lookup and Defs.Top
+					// read the same store, so this arm is only reached on
+					// the def-binding branch's typed fall-through.)
 					if e.registry.Lookup(ww.Name) != nil {
-						if ww.ForceRef &&
-							(sigArgMatches(sig, fwd, Value{Parent: TFunction}) || expectedType.Equal(TAny)) {
-							positions[fwd] = scanIdx
-							fwd++
-							scanIdx++
-							continue
-						}
 						break
 					}
 

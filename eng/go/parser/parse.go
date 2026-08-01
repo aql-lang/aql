@@ -341,7 +341,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 		// `.key` / `!.key` segments → one group `( recv get k … )`.
 		if isChainReceiver(items[i]) && i+1 < len(items) && startsDot(items, i+1) {
 			// A reach receiver must be something `get` can index into (a
-			// Map, List, Store, Object, ModuleExport, …). A number has no
+			// Map, List, Store, Object, module namespace, …). A number has no
 			// members, so a numeric literal before a `.` can never be a
 			// valid reach — `1.2.3` (a malformed numeric literal), `1 . 2`,
 			// or `5 . foo`. Reject it here with a clear message rather than
@@ -745,7 +745,7 @@ func isNumberLiteral(item any) bool {
 
 // numberReceiverError rejects a `.`-access whose receiver is a numeric
 // literal. `get`'s receiver is always a container (Map / List / Store /
-// Object / ModuleExport / …) — a number has no members — so `1.2.3` (a
+// Object / module namespace / …) — a number has no members — so `1.2.3` (a
 // malformed numeric literal), `1 . 2`, or `5 . foo` can never be a valid
 // reach. Caught at parse time instead of surfacing the runtime
 // "no matching signature for get".

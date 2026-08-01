@@ -9,8 +9,9 @@ import (
 )
 
 // TestModuleInstanceFileModule covers the file-module variation of the
-// Module / ModuleExport model: a module loaded from a file has kind="file"
-// with file/folder populated, while exports stay transparently usable.
+// module namespace / Module descriptor model: a module loaded from a file
+// has kind="file" with file/folder populated, while exports stay
+// transparently usable and the namespace is a plain facet-carrying Map.
 func TestModuleInstanceFileModule(t *testing.T) {
 	files := map[string]string{
 		"proj/lib.boru": `export "Lib" {answer: 42}`,
@@ -24,8 +25,8 @@ func TestModuleInstanceFileModule(t *testing.T) {
 		return res[len(res)-1]
 	}
 
-	if got := run(`Lib`).Parent; !got.Equal(native.TModuleExport) {
-		t.Errorf("typeof Lib = %s, want ModuleExport", got)
+	if ns := run(`Lib`); eng.ModuleNSOf(ns) == nil || !ns.Parent.Equal(native.TMap) {
+		t.Errorf("Lib = %s (type %s), want a facet-carrying namespace Map", ns.String(), ns.Parent)
 	}
 	if v := run(`Lib.answer`); func() bool { n, _ := native.AsInteger(v); return n != 42 }() {
 		t.Errorf("Lib.answer = %s, want 42", v.String())

@@ -178,6 +178,40 @@ func TestW8MatchSignatureForwardTypePathMismatch(t *testing.T) {
 	}
 }
 
+func TestW8MatchSignatureForwardRefWordTypeGate(t *testing.T) {
+	// A `/r`-marked fn word in the forward window (NUR050/G12): a slot
+	// that admits its reference value claims it via the def-binding
+	// branch (post-ADR-011 the binding IS a Function), while a slot no
+	// Function can fill falls through to the 1.4 function-word stop —
+	// the /r claim is type-gated.
+	r := covRegistry(t, nil)
+	r.RegisterNativeFunc(NativeFunc{Name: "w8refnat", Signatures: []Signature{
+		{Args: []*Type{TInteger}, BarrierPos: -1, Impl: Go(func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+			return args, nil
+		})},
+	}})
+	if err := r.Err(); err != nil {
+		t.Fatalf("register: %v", err)
+	}
+	e := NewTop(r)
+	e.tape = NewTape([]Value{NewInteger(0), NewWordRef("w8refnat")}, stackHeadroom)
+	e.pointer = 0
+	fn := mkFn(Signature{Args: []*Type{TFunction}, BarrierPos: 1})
+	sig, positions, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, nil)
+	if sig == nil || positions[0] != 1 {
+		t.Errorf("a /r word should claim the forward Function slot; sig=%v pos=%v", sig, positions)
+	}
+	// Negative pair: a String slot refuses the reference datum — the /r
+	// word stays a barrier and the sig goes unmatched.
+	e2 := NewTop(r)
+	e2.tape = NewTape([]Value{NewInteger(0), NewWordRef("w8refnat")}, stackHeadroom)
+	e2.pointer = 0
+	strFn := mkFn(Signature{Args: []*Type{TString}, BarrierPos: 1})
+	if sig, _, _ := e2.matchSignature(strFn, WordInfo{ArgCount: -1}, nil); sig != nil {
+		t.Errorf("a /r word must not claim a String slot, got %v", sig)
+	}
+}
+
 func TestW8MatchSignatureDefensiveQuoteStackWordMatch(t *testing.T) {
 	// Defensive branch: a Word arriving on the stack at a /q position whose
 	// expected type IS atom-family is admitted (positions filled).
@@ -1036,6 +1070,44 @@ func TestW8ResolveOrphanedReEvalForward(t *testing.T) {
 	e.pointer = 0
 	if err := e.resolveOrphanedForwards(); err != nil {
 		t.Fatalf("resolveOrphanedForwards: %v", err)
+	}
+}
+
+func TestW8ResolveOrphanedReEvalWordError(t *testing.T) {
+	// A word that errors when the retry loop re-steps it (an unbound name)
+	// propagates the error out of resolveOrphanedForwards.
+	r := covRegistry(t, nil)
+	e := NewTop(r)
+	fwd := NewForward(ForwardInfo{FuncName: "cadd", FuncIndex: 0})
+	e.tape = NewTape([]Value{NewWord("w8-no-such-word"), fwd}, stackHeadroom)
+	e.pointer = 0
+	if err := e.resolveOrphanedForwards(); err == nil {
+		t.Fatal("expected the retry loop to surface the stepWord error")
+	}
+}
+
+func TestW8RunOrphanedForwardRetryError(t *testing.T) {
+	// A pending forward whose func word is UNBOUND mid-collection (a
+	// dispatched word tore the binding down) still fails LOUDLY at
+	// end-of-input — Run surfaces a fault rather than silently dropping
+	// the half-collected call. (The organic producers error in the main
+	// loop; resolveOrphanedForwards' own error return is the allowlisted
+	// §engine defensive arm, covered directly by the ReEvalWordError
+	// sibling above.)
+	r := covRegistry(t, func(r *Registry) {
+		r.RegisterNativeFunc(NativeFunc{Name: "w8unbind", Signatures: []Signature{{
+			Impl: Go(func(_ []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+				reg.Defs.Delete("cadd")
+				return nil, nil
+			}),
+			Returns: []*Type{}, BarrierPos: -1,
+		}}})
+	})
+	// cadd parks a 2-arg forward; w8unbind is a fn-word barrier, so it
+	// dispatches (removing cadd's binding) instead of being collected.
+	_, err := NewTop(r).Run([]Value{NewWord("cadd"), NewWord("w8unbind")})
+	if err == nil {
+		t.Fatal("Run must surface the retry-step error for the unbound func word")
 	}
 }
 

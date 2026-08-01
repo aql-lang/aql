@@ -6,7 +6,7 @@ import (
 
 // W9_nativeB — coverage for native_macro.go handlers and the namespace
 // resolution helpers (mini / parse / emit). The namespace helpers each do
-// an independent Defs.Top + asModuleExportInfo lookup; the guard arms are
+// an independent Defs.Top + namespace-facet lookup; the guard arms are
 // driven directly by binding the namespace to a plain value or leaving it
 // unbound. See design/TEST-SEAMS.10.md.
 
@@ -74,9 +74,9 @@ func TestW9MiniKindExportUnbound(t *testing.T) {
 
 func TestW9MiniKindExportNonModuleExport(t *testing.T) {
 	r := seam5Reg(t)
-	r.Defs.Push("MiniLang", NewInteger(5)) // bound, but not a ModuleExport
+	r.Defs.Push("MiniLang", NewInteger(5)) // bound, but not a module namespace
 	if _, ok := miniKindExport(r, "lang_re"); ok {
-		t.Fatal("miniKindExport must fail when MiniLang is not a ModuleExport")
+		t.Fatal("miniKindExport must fail when MiniLang is not a module namespace")
 	}
 }
 
@@ -91,7 +91,7 @@ func TestW9MiniPartialFnWrapperNotFnDef(t *testing.T) {
 	r := seam5Reg(t)
 	fields := NewOrderedMap()
 	fields.Set("lang_re", NewInteger(5)) // export is not an FnDef
-	r.Defs.Push("MiniLang", NewModuleExport("MiniLang", fields, Value{}))
+	r.Defs.Push("MiniLang", NewModuleNamespace("MiniLang", fields, Value{}))
 	if _, ok := miniPartialFn(r, "re", "lang_re", []Value{NewEnd()}); ok {
 		t.Fatal("miniPartialFn must decline when the export is not an FnDef")
 	}
@@ -104,7 +104,7 @@ func TestW9MiniKindRegisteredNonModuleExport(t *testing.T) {
 	r := seam5Reg(t)
 	r.Defs.Push("MiniLang", NewInteger(5))
 	if miniKindRegistered(r, "lang_re") {
-		t.Fatal("miniKindRegistered must be false when MiniLang is not a ModuleExport")
+		t.Fatal("miniKindRegistered must be false when MiniLang is not a module namespace")
 	}
 }
 
@@ -114,7 +114,7 @@ func TestW9ParseKindRegisteredNonModuleExport(t *testing.T) {
 	r := seam5Reg(t)
 	r.Defs.Push("ParseLang", NewInteger(5))
 	if parseKindRegistered(r, "parse_calc") {
-		t.Fatal("parseKindRegistered must be false when ParseLang is not a ModuleExport")
+		t.Fatal("parseKindRegistered must be false when ParseLang is not a module namespace")
 	}
 }
 
@@ -122,7 +122,7 @@ func TestW9EmitKindRegisteredNonModuleExport(t *testing.T) {
 	r := seam5Reg(t)
 	r.Defs.Push("EmitLang", NewInteger(5))
 	if emitKindRegistered(r, "emit_json") {
-		t.Fatal("emitKindRegistered must be false when EmitLang is not a ModuleExport")
+		t.Fatal("emitKindRegistered must be false when EmitLang is not a module namespace")
 	}
 }
 

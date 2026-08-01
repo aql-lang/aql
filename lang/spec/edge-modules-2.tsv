@@ -2,7 +2,7 @@
 # Format: input<TAB>expected<TAB>description
 #
 # Continuation of edge-modules-1.tsv: export bookkeeping (duplicates,
-# trailing body code, ModuleExport re-export), module bodies that
+# trailing body code, namespace re-export), module bodies that
 # fail, minted types crossing the boundary with their constructors,
 # the unpack module forms, and the builtin wrappers' numeric /
 # ordering vocabulary under edge operands.
@@ -14,7 +14,7 @@ import module [export "M" {a:1} def z 9] M.a	1	body statements after an export s
 import module [def a 1 end def b 2 end export "M" {s: (a add b)}] M.s	3	`end`-separated body statements sequence like any program
 import module [export "A" {x:1} export "B" {y:2}] B.$name	'B'	each namespace carries its own $name
 import [[Foo X]] module [export "Foo" {a:1}] X.$name	'Foo'	a pair-renamed binding keeps the DECLARED export name
-import module [import module [export "I" {v: 40}] export "O" {I: I}] O.I.v	40	a ModuleExport itself can be re-exported — the inner namespace rides out whole
+import module [import module [export "I" {v: 40}] export "O" {I: I}] O.I.v	40	a namespace itself can be re-exported — the inner namespace rides out whole
 def m (module [export "MM" {v: 1}]) import m end import m end MM.v	1	importing the same Module value twice is idempotent
 #
 # §2  failing module bodies

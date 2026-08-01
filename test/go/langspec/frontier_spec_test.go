@@ -189,6 +189,15 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// dirty-stack prefix forces its promotion — the same exact-arity seat
 	// hazard as the fallible regions.
 	`7 def b true  do [1 2 (if b [] [9 9])]`: {why: "PR #280 review: branch-variant multi-out do region promoted under a dirty-stack prefix", failsWith: "variadic result promoted to frame slots"},
+
+	// Namespace capture at a macro-expanded call site (the NUR038 wrapper
+	// retirement's re-bucketed refusal — see frontier-capture-namespace.tsv):
+	// an inner fn capturing a body-imported module namespace has no bakeable
+	// operand home at the `parse` macro's expanded call site. Successor to
+	// the graduated "closure captures a runtime-minted value" bucket (the
+	// wrapper refused earlier, at capture-slot numbering). Full graduation =
+	// a capture-slot lowering that materialises the namespace binding.
+	`def zzvfn fn [[] [] [import "boru:parselang"  import "boru:string-util"  def calc (fn [[source:Any opts:Map] [List] [StringUtil.split ' ' (ParseLang.source source)]])  end  (parse calc {trace:true} 'x + y') get 1]] zzvfn`: {why: "inner fn captures the body-imported ParseLang namespace; no bakeable operand home at the macro-expanded call site", failsWith: "capture ParseLang of calc unreachable at a call site"},
 	// GRADUATED 2026-07-17 (§9.1): the `do [M 3] error [dot code]` row
 	// compiles — an identity-less dyn-body out (the module-export instance)
 	// now mints a fresh ID at the record, restoring its tape placement and

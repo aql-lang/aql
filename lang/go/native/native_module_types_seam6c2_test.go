@@ -4,6 +4,8 @@ import (
 	"errors"
 	"strings"
 	"testing"
+
+	"github.com/boru-lang/boru/eng/go"
 )
 
 // Seam-6 coverage for native_module_types.go, typeinit.go, and setup.go
@@ -74,11 +76,30 @@ func TestSeam6C2DefaultRegistryProviderAndErr(t *testing.T) {
 	}
 }
 
-func TestSeam6C2NewModuleExportNilFields(t *testing.T) {
-	v := NewModuleExport("E", nil, Value{})
-	me, ok := asModuleExportInfo(v)
-	if !ok || me.Fields == nil {
+func TestSeam6C2NewModuleNamespaceNilFields(t *testing.T) {
+	v := NewModuleNamespace("E", nil, Value{})
+	if ModuleNSOf(v) == nil {
+		t.Fatal("namespace must carry the module-namespace facet")
+	}
+	if fields := moduleNSFields(v); fields == nil || len(fields.Keys()) != 0 {
 		t.Fatal("nil fields must be defaulted to an empty map")
+	}
+	if !v.Parent.Equal(TMap) {
+		t.Fatalf("namespace must be a plain Map, got %v", v.Parent)
+	}
+}
+
+func TestSeam6C2ModuleNSFieldsNonNamespace(t *testing.T) {
+	// A facet-less value answers nil fields.
+	if moduleNSFields(NewInteger(1)) != nil {
+		t.Fatal("integer must not answer namespace fields")
+	}
+	// A facet-carrying value whose payload is not a map answers nil too
+	// (defensive: the facet is only ever stamped on maps by
+	// NewModuleNamespace, but the reader must not assume).
+	odd := eng.WithModuleNS(NewInteger(1), "E", Value{})
+	if moduleNSFields(odd) != nil {
+		t.Fatal("non-map payload must answer nil fields")
 	}
 }
 
@@ -92,16 +113,70 @@ func TestSeam6C2AsModuleDescNonModule(t *testing.T) {
 	}
 }
 
-func TestSeam6C2ModuleExportGetNilFieldsInfo(t *testing.T) {
-	v := Value{Parent: TModuleExport, Data: ExtensionPayload{Body: &moduleExportInfo{Name: "E"}}}
-	if _, ok := moduleExportGet(v, "missing"); ok {
+func TestSeam6C2ModuleExportGetArms(t *testing.T) {
+	// A facet-less value answers nothing.
+	if _, ok := moduleExportGet(NewInteger(1), "$name"); ok {
+		t.Fatal("a facet-less value must answer no keys")
+	}
+	// A facet-carrying non-map answers synthetics but no fields.
+	odd := eng.WithModuleNS(NewInteger(1), "E", Value{})
+	if _, ok := moduleExportGet(odd, "missing"); ok {
 		t.Fatal("nil fields must answer no keys")
 	}
-	// The synthetic keys still resolve.
-	if name, ok := moduleExportGet(v, "$name"); !ok {
+	// The synthetic keys resolve from the facet.
+	if name, ok := moduleExportGet(odd, "$name"); !ok {
 		t.Fatal("$name must resolve")
 	} else if s, _ := AsString(name); s != "E" {
 		t.Fatalf("expected export name E, got %v", name)
+	}
+	mod := NewModuleInstance(ModuleDesc{Ref: "m"})
+	fields := NewOrderedMap()
+	fields.Set("a", NewInteger(1))
+	ns := NewModuleNamespace("E", fields, mod)
+	if got, ok := moduleExportGet(ns, "$module"); !ok || !got.Parent.Equal(TModuleInst) {
+		t.Fatalf("$module must resolve to the Module descriptor, got %v", got)
+	}
+	if got, ok := moduleExportGet(ns, "a"); !ok {
+		t.Fatal("field a must resolve")
+	} else if n, _ := AsInteger(got); n != 1 {
+		t.Fatalf("expected 1, got %v", got)
+	}
+	if _, ok := moduleExportGet(ns, "missing"); ok {
+		t.Fatal("missing field must not resolve")
+	}
+}
+
+func TestSeam6C2ModuleNamespaceBoundAndExport(t *testing.T) {
+	r := seam5Reg(t)
+	// Unbound name.
+	if moduleNamespaceBound(r, "Nope") {
+		t.Fatal("unbound name must not report a namespace")
+	}
+	if _, ok := moduleNamespaceExport(r, "Nope", "x"); ok {
+		t.Fatal("unbound name must answer no exports")
+	}
+	// Bound, but not a namespace.
+	r.Defs.Push("NotNS", NewInteger(5))
+	if moduleNamespaceBound(r, "NotNS") {
+		t.Fatal("a non-namespace binding must not report a namespace")
+	}
+	if _, ok := moduleNamespaceExport(r, "NotNS", "x"); ok {
+		t.Fatal("a non-namespace binding must answer no exports")
+	}
+	// Bound namespace: present and missing exports.
+	fields := NewOrderedMap()
+	fields.Set("x", NewInteger(7))
+	r.Defs.Push("NS", NewModuleNamespace("NS", fields, Value{}))
+	if !moduleNamespaceBound(r, "NS") {
+		t.Fatal("a bound namespace must report true")
+	}
+	if v, ok := moduleNamespaceExport(r, "NS", "x"); !ok {
+		t.Fatal("export x must resolve")
+	} else if n, _ := AsInteger(v); n != 7 {
+		t.Fatalf("expected 7, got %v", v)
+	}
+	if _, ok := moduleNamespaceExport(r, "NS", "y"); ok {
+		t.Fatal("a missing export must not resolve")
 	}
 }
 
@@ -159,14 +234,28 @@ func TestSeam6C2ModuleBehaviorFormatFallback(t *testing.T) {
 	}
 }
 
-func TestSeam6C2ModuleExportHandlersTypeLiteral(t *testing.T) {
+func TestSeam6C2ModuleNSSyntheticAndMiss(t *testing.T) {
 	r := seam5Reg(t)
-	lit := NewTypeLiteral(TModuleExport)
-	if _, err := getModuleExportHandler([]Value{NewString("k"), lit}, nil, nil, r); err == nil {
-		t.Fatal("get on a type literal must error")
+	fields := NewOrderedMap()
+	fields.Set("a", NewInteger(1))
+	ns := NewModuleNamespace("E", fields, NewModuleInstance(ModuleDesc{Ref: "m"}))
+	// Synthetics answer through the shared map handlers' hook…
+	if v, ok := moduleNSGetSynthetic(ns, "$name"); !ok {
+		t.Fatal("$name must resolve via the synthetic hook")
+	} else if s, _ := AsString(v); s != "E" {
+		t.Fatalf("expected E, got %v", v)
 	}
-	if _, err := getrModuleExportHandler([]Value{NewString("k"), lit}, nil, nil, r); err == nil {
-		t.Fatal("getr on a type literal must error")
+	// …while plain keys and non-namespaces fall through to the map read.
+	if _, ok := moduleNSGetSynthetic(ns, "a"); ok {
+		t.Fatal("a plain export key must fall through to the map read")
+	}
+	if _, ok := moduleNSGetSynthetic(NewInteger(1), "$name"); ok {
+		t.Fatal("a non-namespace must not answer synthetics")
+	}
+	// The strict-miss error carries the module wording + the export keys.
+	err := moduleNSGetrMiss(r, ns, "zz", eng.SrcPos{})
+	if err == nil || !strings.Contains(err.Error(), `export "zz" not found in module`) {
+		t.Fatalf("expected the module-flavored miss, got %v", err)
 	}
 }
 
