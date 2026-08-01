@@ -1,4 +1,4 @@
-.PHONY: all build install test test-race test-ts vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-html cover-html-open \
+.PHONY: all build install test test-race test-ts vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
         spec-gen spec-test \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-lang publish-cmd release tags \
@@ -350,22 +350,46 @@ COVER_DIR := coverage
 # `make test` already passes 20m for the same reason, and without it here the
 # gate fails at the MODULE step (not the threshold check) on a loaded machine,
 # which reads as a coverage failure and is not one.
+#
+# The gate runs in SMALLER STEPS, individually addressable for iteration:
+#
+#   make cover-profile             profile every module (the slow loop)
+#   make cover-profile m=eng/go    refresh ONE module's .xout profile
+#   make cover-check               analysis only, over the .xout files
+#                                  already in $(COVER_DIR) (fast)
+#   make cover-gate                full re-profile + check — the
+#                                  authoritative ADR-008 gate
+#
+# After a change confined to one module's tests, `make cover-profile
+# m=<module> cover-check` re-verifies in that module's time instead of the
+# whole loop. CAVEAT: cover-check merges whatever profiles are on disk, so
+# mixing vintages is only sound while the measured files' line numbers are
+# unchanged since the older profiles were written (coverage blocks are
+# keyed by position); after edits to covered source, re-profile every
+# module whose suites reach it — when in doubt, run the full cover-gate.
 GATE_FLOOR ?= 100
 GATE_PKGS := github.com/boru-lang/boru/...
-cover-gate:
+COVER_MODS = $(if $(m),$(m),$(MODULES))
+cover-profile:
 	@mkdir -p $(COVER_DIR)
-	@set -e; t0=$$(date +%s); n=0; total=$$(echo "$(MODULES)" | wc -w); \
-	for m in $(MODULES); do \
+	@set -e; t0=$$(date +%s); n=0; total=$$(echo "$(COVER_MODS)" | wc -w); \
+	for m in $(COVER_MODS); do \
 	  n=$$((n + 1)); tm=$$(date +%s); \
-	  echo "==> cover-gate $$m [$$n/$$total, $$((100 * (n - 1) / total))% done, $$((tm - t0))s elapsed]"; \
+	  echo "==> cover-profile $$m [$$n/$$total, $$((100 * (n - 1) / total))% done, $$((tm - t0))s elapsed]"; \
 	  out="$(abspath $(COVER_DIR))/$$(echo $$m | tr '/' '_').xout"; \
 	  ( cd $$m && go test -timeout 25m -coverpkg="$(GATE_PKGS)" -coverprofile=$$out ./... > "$$out.log" 2>&1 ) \
-	    || { echo "==> cover-gate $$m FAILED — last lines of $$out.log:"; tail -40 "$$out.log"; exit 1; }; \
+	    || { echo "==> cover-profile $$m FAILED — last lines of $$out.log:"; tail -40 "$$out.log"; exit 1; }; \
 	  te=$$(date +%s); \
 	  echo "    $$m profiled in $$((te - tm))s [$$((100 * n / total))% done, $$((te - t0))s elapsed]"; \
-	done; \
-	echo "==> cover-gate analysis [$$(($$(date +%s) - t0))s elapsed]"
+	done
+
+cover-check:
+	@echo "==> cover-check ($(abspath $(COVER_DIR))/*.xout)"
 	@cd test/go && go run ./covergate -threshold $(GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/*.xout
+
+cover-gate:
+	@$(MAKE) --no-print-directory cover-profile
+	@$(MAKE) --no-print-directory cover-check
 	@echo "==> cover-gate done"
 
 cover:
