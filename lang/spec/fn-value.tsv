@@ -74,3 +74,28 @@ import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  
 import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  M.w	fn w[[x:Integer][Integer][word(x)]]	a bare reference with no argument is still a VALUE, not a call
 import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  M.w/r	fn w[[x:Integer][Integer][word(x)]]	/r means "the function is what I want" — no dispatch, no error
 import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  def g M.w/r  g 5	5	and the parked value is still callable, which is what a caller wanted it for
+#
+# §6  a value-called dispatch SEALS at collection completion (NUR038).
+#     Completing a forward collection re-steps the callee stack-only — the
+#     /s rewrite named words get (forceStackWord). A function VALUE has no
+#     WordInfo to stamp, so before the seal the re-step re-planned
+#     forward-first: a completed Any window stayed open, reached across the
+#     statement boundary, claimed the NEXT statement's tokens (its dot-read
+#     fn value included), bound the LAST arrival, stranded the earlier
+#     collects, and ran side effects in reverse — silently, exit 0. The
+#     engine now (1) seals a completed value-called collection with a
+#     one-shot stack-only re-step, and (2) treats a reach-read named fn
+#     that WOULD COLLECT as a barrier at arrival (committing the pending
+#     window as `end` would — commitBarrierForward — or resolving it from
+#     the stack), so consecutive value-called statements each bind their
+#     own arguments. Print-order and zero-return twins are pinned in
+#     lang/go/test/nur038_seal_test.go (a TSV row can't assert stdout
+#     order, and the `m.p typeof` strict "still waiting" twin is a Go
+#     test there too — the compiled path models that window differently,
+#     the pre-existing check-vs-run class §5 already notes); the
+#     twin-call VALUE rows live in
+#     lang/spec/frontier/frontier-nur038-seal.tsv — semantically green,
+#     compile-refused on the pre-existing residual-ordering limitation
+#     ("dynamic value precedes residual args").
+def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 5 add 1	6	a sealed call composes with a following word statement
+def i fn [[x:Integer] [Integer] [x add 1]] end def m {i: i/r} end m.i 5 m.i 7	6 8	typed twins — the type gate already isolated these; unchanged

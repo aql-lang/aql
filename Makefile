@@ -354,12 +354,19 @@ GATE_FLOOR ?= 100
 GATE_PKGS := github.com/boru-lang/boru/...
 cover-gate:
 	@mkdir -p $(COVER_DIR)
-	@set -e; for m in $(MODULES); do \
-	  echo "==> cover-gate $$m"; \
+	@set -e; t0=$$(date +%s); n=0; total=$$(echo "$(MODULES)" | wc -w); \
+	for m in $(MODULES); do \
+	  n=$$((n + 1)); tm=$$(date +%s); \
+	  echo "==> cover-gate $$m [$$n/$$total, $$((100 * (n - 1) / total))% done, $$((tm - t0))s elapsed]"; \
 	  out="$(abspath $(COVER_DIR))/$$(echo $$m | tr '/' '_').xout"; \
-	  ( cd $$m && go test -timeout 25m -coverpkg="$(GATE_PKGS)" -coverprofile=$$out ./... > /dev/null ); \
-	done
-	cd test/go && go run ./covergate -threshold $(GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/*.xout
+	  ( cd $$m && go test -timeout 25m -coverpkg="$(GATE_PKGS)" -coverprofile=$$out ./... > "$$out.log" 2>&1 ) \
+	    || { echo "==> cover-gate $$m FAILED — last lines of $$out.log:"; tail -40 "$$out.log"; exit 1; }; \
+	  te=$$(date +%s); \
+	  echo "    $$m profiled in $$((te - tm))s [$$((100 * n / total))% done, $$((te - t0))s elapsed]"; \
+	done; \
+	echo "==> cover-gate analysis [$$(($$(date +%s) - t0))s elapsed]"
+	@cd test/go && go run ./covergate -threshold $(GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/*.xout
+	@echo "==> cover-gate done"
 
 cover:
 	@mkdir -p $(COVER_DIR)

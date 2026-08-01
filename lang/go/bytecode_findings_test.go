@@ -2797,7 +2797,7 @@ func TestConditionalBranchApplyCompiles(t *testing.T) {
 	const imp = `import "boru:math-util" `
 	cases := []struct{ src, want string }{
 		{imp + `def n 5 if (n eq 0) [99] MathUtil.sqrt 16`, "[4.0]"},          // else: sqrt 16 → 4.0
-		{imp + `def n 0 if (n eq 0) [99] MathUtil.sqrt 16`, "[99 16]"},        // then: 99, 16 stays
+		{imp + `def n 0 if (n eq 0) [99] MathUtil.sqrt 16`, "[99 4.0]"},       // NUR038 seal: the trailing-fn+arg is its OWN call — the guard commits, then sqrt 16 runs
 		{imp + `def n 0 if (n eq 0) MathUtil.sqrt [99] 16`, "[4.0]"},          // then-arm fn mirror
 		{imp + `def n 5 if (n eq 0) MathUtil.sqrt [99] 16`, "[99 16]"},        // else: 99, 16 stays
 		{imp + `def n 5 if (n eq 0) [99] MathUtil.sqrt`, "[fn sqrt(Number)]"}, // no trailing: bare fn value

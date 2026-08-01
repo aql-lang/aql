@@ -305,22 +305,31 @@ differs. Outcomes:
   type identity, same first-class-values family). "Slow, not wrong"
   is genuinely violated. Fix: capture enclosing local fn bindings
   (preferred) or refuse at check time.
-- **NUR-038** (module-export statement misfire) — re-opened as an
-  open defect. The facet refactor proposed here **landed 2026-07-31**:
-  `Ideal/ModuleExport` (FixedID 5001) is retired; `import` binds a
-  plain export Map carrying the kernel `ModuleNSInfo` facet
-  (`eng.WithModuleNS` / `eng.ModuleNSOf`), exports ride raw, and the
-  wrapper-masking bug class is closed (NUR031's namespace-equality
-  half resolved by construction). **The misfire itself survives** —
-  the retest proved the original root-cause hypothesis wrong: it
-  reproduces byte-identically with a `def`-bound plain map holding a
-  zero-return `Any`-param fn (no modules), because the statement head
-  is a DOT-ACCESS (a Reach), never a bare fn-bound word, so the
-  forward scan's function-word stop cannot fire under ANY binding
-  representation. The remaining fix lives in forward collection's
-  treatment of dot-access statement heads; the `end` house rule
-  stands as the mitigation. See the NUR038 record for the repro
-  matrix.
+- **NUR-038** (module-export statement misfire) — **RESOLVED
+  2026-08-01** (record deleted; number retired). Two halves landed:
+  (1) the facet refactor proposed here (2026-07-31): `Ideal/
+  ModuleExport` (FixedID 5001) retired; `import` binds a plain export
+  Map carrying the kernel `ModuleNSInfo` facet, exports ride raw, the
+  wrapper-masking bug class closed (NUR031's namespace-equality half
+  resolved by construction). The retest then proved the original
+  root-cause hypothesis wrong — the misfire reproduced with a
+  `def`-bound plain map (no modules) — and traced the true mechanism:
+  a COMPLETED forward collection re-steps its callee stack-only via
+  the `/s` word rewrite, which a function VALUE cannot carry, so the
+  re-plan reopened the window forward-first and swallowed the next
+  statement. (2) The engine fix (2026-08-01): a one-shot stack-only
+  SEAL for completed value-called collections (`Engine.sealFnValue`),
+  the reach-collapse CALL tag + arrival gate (an unmarked dot-read fn
+  that would collect is a barrier like its bare-word twin; explicit
+  data spells `/r`; 0-arg-only fns are property calls dispatching in
+  place — the NUR035 deferral narrowed accordingly), and ReachGroup
+  provenance preserved through `stepOpenParen`. The claim tests are
+  sig-aware, so arity widening (`concat parts {sep}` — the wider
+  overload's swap slot) and higher-order Function operands
+  (`usurp (m dot a)`) keep their pre-fix dispatch. Pinned in
+  `lang/spec/fn-value.tsv` §6 + `lang/go/test/nur038_seal_test.go`;
+  the `end` house rule is retired as a requirement
+  (`utils/README.md`).
 - **NUR-039 through NUR-047** — re-examined; no decision recorded in
   this review differs from the file, so their Allowed records stand.
 
