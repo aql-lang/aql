@@ -218,7 +218,10 @@ becoming ordinary kind atoms (no lexer involvement):
 
 (`re` ✅ is also landed — all matches by default, `{ok ms fst lst n}`
 with capture groups `g` per match, `opts.limit`; the other `re-*`
-forms remain future kinds.)
+forms remain future kinds. Each match is `{m i e g}`, and `i`/`e` are
+**RUNE indices** into the subject — the unit every boru index means, so
+they compose with `slice`/`size` directly (NUR047: Go's regexp reports
+byte offsets; `reMatchResult` converts them in one incremental pass).)
 
 (Names are atoms, so longer readable names are free where the
 two-letter forms are cryptic — `re-sub` rather than rev 1's `rs/`.

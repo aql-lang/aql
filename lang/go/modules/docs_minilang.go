@@ -3,7 +3,9 @@ package modules
 func init() {
 	registerDocs("boru:minilang", map[string]string{
 		"lang_re": "Go regular-expression match: `mini re <pattern>` — subject from the stack, " +
-			"match structure {ok ms fst lst n} out; each match is {m i e g}. opts: {limit:I}.",
+			"match structure {ok ms fst lst n} out; each match is {m i e g}, where i/e are RUNE " +
+			"indices into the subject (the unit slice/size count — compose with slice directly). " +
+			"opts: {limit:I}.",
 		"lang_bf": "Brainfuck: `mini bf <program>` — output String; `,` reads the stack input " +
 			"(filter form) or opts.in. opts: {in:S, steps:I execution budget}.",
 		"lang_gex": "Glob-expression select: `mini gex <pattern>` (or `+gex/<pattern>/`) — " +
@@ -92,6 +94,7 @@ func init() {
 			`("a1b2c3" mini re '\\d').n                       ;# 3 — how many matched`,
 			`("a1b2c3" mini re '\\d' {limit:2}).n             ;# 2`,
 			`("zz" mini re 'a+').ok                           ;# false`,
+			`("日本語c" mini re 'c').fst.i                     ;# 3 — i/e are RUNE indices, slice-composable`,
 			`(('abc-123' mini re '([a-z]+)-(\\d+)')).fst.g    ;# ['abc' '123'] — capture groups`,
 			`;# The SUBJECT comes first and the pattern second, so a`,
 			`;# pipeline reads left to right. +re/[a-z]+/ is the literal form.`,

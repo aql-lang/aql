@@ -545,8 +545,9 @@ Test.describe "grep-paint" [
   Test.test "the whole line matching is still just one wrap" [
     Assert.equal "\u001b[01;31mabc\u001b[0m" (Grep.paint "abc" ".+" true)
   ]
-  # NUR047: the regex reports BYTE offsets while `slice` counts RUNES. These
-  # three cases are what would fail if the painter sliced by rune index — and
+  # NUR047 (resolved): the regex reports RUNE offsets — the unit `slice`
+  # counts — and the painter slices the String directly by them. These three
+  # cases are what would fail if the offsets ever regressed to BYTES — and
   # they would pass on every ASCII input, which is exactly why they are here.
   Test.test "a match AFTER multi-byte runes lands in the right place" [
     Assert.equal "日本語\u001b[01;31mc\u001b[0m" (Grep.paint "日本語c" "c" true)

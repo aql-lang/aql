@@ -148,26 +148,26 @@ def grep-color-ok fn [[mode:String] [Boolean] [
 # written as \u001b so the source stays plain ASCII text.
 def grep-paint-one fn [[s:String] [String] [ join "" ["\u001b[01;31m" s "\u001b[0m"] ]]
 
-# BYTE offsets, not rune offsets. MiniLang.lang_re reports `i`/`e` in BYTES
-# while `slice` and `size` count RUNES — recorded as NUR047, because doing the
-# obvious thing here is correct on ASCII and silently corrupts any line with a
-# multi-byte rune in it. So the slicing is done on Bytes and converted back,
-# which is exact for every input.
-def grep-cut fn [[b:Any lo:Integer hi:Integer] [String] [
-  if (lo gte hi) [""] [ (convert String (slice lo hi b)) ]
+# RUNE offsets, like every other index in the language. MiniLang.lang_re
+# reports `i`/`e` in the unit `slice` and `size` count (NUR047, resolved), so
+# the match offsets slice the String directly — no conversion. (The former
+# byte-offset contract forced a Bytes round-trip here; that workaround is
+# gone, and tests/grep_test.boru pins the composition on multi-byte lines.)
+def grep-cut fn [[s:String lo:Integer hi:Integer] [String] [
+  if (lo gte hi) [""] [ (slice lo hi s) ]
 ]]
 
-def grep-paint-at fn [[b:Any ms:List i:Integer at:Integer out:List] [List] [
+def grep-paint-at fn [[s:String ms:List i:Integer at:Integer out:List] [List] [
   if (i gte (size ms)) [
-    def _t (push (grep-cut b at (size b)) out)
+    def _t (push (grep-cut s at (size s)) out)
     out
   ] [
     def m (ms get i)
     def lo m.i
     def hi m.e
-    def _g (push (grep-cut b at lo) out)
-    def _m (push (grep-paint-one (grep-cut b lo hi)) out)
-    def r (grep-paint-at b ms (i add 1) hi out)
+    def _g (push (grep-cut s at lo) out)
+    def _m (push (grep-paint-one (grep-cut s lo hi)) out)
+    def r (grep-paint-at s ms (i add 1) hi out)
     r
   ]
 ]]
@@ -179,9 +179,8 @@ def grep-paint fn [[line:String pat:String on:Boolean] [String] [
   if (on not) [line] [
     def r (MiniLang.lang_re pat {} line)
     if ((r.ok) not) [line] [
-      def b (convert Bytes line)
       def out (flex [])
-      def parts (grep-paint-at b (r.ms) 0 0 out)
+      def parts (grep-paint-at line (r.ms) 0 0 out)
       def j (join "" parts)
       j
     ]
