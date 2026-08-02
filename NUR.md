@@ -376,7 +376,7 @@ arithmetic, and it is deliberate.** Concatenation-with-coercion is the
 overwhelmingly common string operation, the coercion is total and
 canonical (every Scalar has one string render), and the overloads
 require **at least one** String operand, so they never manufacture a
-cross-FAMILY concatenation: `add true 1` raises
+concatenation of two NON-String operands: `add true 1` raises
 `[boru/signature_error]` — no concat overload matches without a String,
 and no within-type arm matches a Boolean/Integer pair either, so the
 refusal is a dispatch miss rather than the registered `type_error`
@@ -472,7 +472,8 @@ independently raised errors with equal code/message/payload are `eq`);
 and `Timeout`/`Interval` are opaque handles whose identity IS their
 value, so their `deq` is by REFERENCE. The `Module` descriptor joined
 the second group on 2026-08-02 under the same rule (NUR031, "Descriptor
-half RESOLVED" — a bolded lead-in inside §"The remainder, reviewed"). All are
+half RESOLVED" — a bolded lead-in inside §"The remainder,
+reviewed"). All are
 the rule applied to Ideals that have no second level to offer, not
 departures from it — but the rule as quoted above does not say so, and
 this record is where a reader looks first.
@@ -863,12 +864,22 @@ pinned list — `apply`'s one-argument `[Function]` signature, and
 `__casematch`'s two-argument `[Any Any]` signature (user-reachable and
 describable: `boru describe
 __casematch` prints "Precedence: stack"; the `__` prefix is convention,
-not enforcement). Secondarily, 0-arg words split between `BarrierPos:
-0` (`now`, `math-pi`, the clock words, `break`/`continue`, `gensym`,
-`__folder`/`__file`, `spacer`) and `-1` (`stdin`/`stdout`/`stderr`)
-against the stated "MUST use -1" rule — provably inert, since
-`registry.go:1594-1596` normalizes `-1` to `TotalArgs()`, but a literal
-deviation.
+not enforcement).
+
+Secondarily, the guidance for **0-arg** words is itself split, and the
+registrations follow it inconsistently. ADR-004 says every word ships
+forward-eligible (`BarrierPos: -1`) "unless their semantics are
+intrinsically about the stack", while `design/go-modules/README.10.md`
+:156 and `RUNTIME.10.md`:50-54 both say "zero-arg constants use
+`BarrierPos: 0`" and call that "correct" because there is no arg to
+collect. Most 0-arg words follow the latter (`now`, `math-pi`/`math-e`,
+the clock words, `break`/`continue`, `gensym`, `__folder`/`__file`,
+`spacer`); `boru:io`'s `stdin`/`stdout`/`stderr` use `-1` instead. The
+split is provably inert — `eng/go/registry.go:1594-1596` normalizes
+`-1` to `TotalArgs()`, which is 0 at zero args, so the stored
+signatures are byte-identical — but two documents give opposite
+defaults for the same case, and that is what the refined ADR has to
+settle.
 **Evidence** (paths relative to the repo root):
 `lang/go/native/native_ref.go:50-67` (`apply`, rationale comment at
 :51-54, `BarrierPos: 0` at :67);
@@ -1053,10 +1064,11 @@ benign: no index is lost — both occurrences are retained under the
 shared key — and the same fold is what makes `group` total over the
 common **non-reflexive** keys. Two mechanisms produce them: `nan` is
 `DeqKeyed` but never `DeepEqual` to itself under the IEEE rule NUR013
-records, while fn/Word values, user-declared every value that reaches
-`DeepEqual`'s unsupported fall-through — which NUR031 tracks and
-`DeqNeverEqual` mirrors — and any container or instance transitively
-holding one. That set is not closed, and enumerating it has proved
+records, while everything that reaches `DeepEqual`'s unsupported
+fall-through — which NUR031 tracks and `DeqNeverEqual` mirrors — is
+never equal to itself, as is any container or instance transitively
+holding one. That second set is not closed, and enumerating it has
+proved
 error-prone; the reliable test is `x deq x`. Values known to be in it:
 functions and words, host payloads, `class` type values and refinements
 of one, disjunction types (`tor`, and `enum` on top of it), `fnsig` and
@@ -1289,8 +1301,10 @@ that work, not a commitment ADR-011 made. NUR050 is resolved and
 retired, so there is nothing left to track alongside; what ADR-011 did
 record in its Consequences is the deferral itself — "Two references to
 the same function still compare unstably … that is function IDENTITY,
-the NUR031 equality work, deliberately not solved here"
-(ADR.md:885-889) — which is the work this record inherits. Note the
+the NUR031 equality work, deliberately not solved here" (ADR.md,
+§Consequences; its parenthesised `(f/r) tcmp (f/r)` → -1 example
+predates the collapse and no longer runs — see the table above for the
+current spellings) — which is the work this record inherits. Note the
 Sealed Payload constraint
 stands and was honoured by the descriptor fix: module handles are
 backed by `ExtensionPayload`, which the kernel deliberately does not
@@ -1564,8 +1578,8 @@ since the already-canonical corpus cannot detect this.
 ### Why allowed
 
 Formatting does not change behaviour — all 995 cases in `utils/` pass either
-way, verified — so what the non-idempotence costs is a clean tree and readable
-sources, not correctness. It converges at the second pass, so a `fmt` target
+way, verified — so what the non-idempotence costs is a clean tree and
+readable sources, not correctness. It converges at the second pass, so a `fmt` target
 that ran twice would be stable; the reason not to paper over it that way is
 that the intermediate layout runs statements together on one line, which is
 most of what a formatter is for.
@@ -1840,8 +1854,8 @@ list argument.
 **Evidence:** the session above (verified 2026-08-02, current binary);
 `lang/go/context_boundary_differential_test.go:61-64` (the
 `wantDiverge` field and its required `why`) and its four marked rows
-at :109-131; EXPLANATION.md §"Store and context", the "Two caveats" paragraph,
-tells users about the split ("a
+at :109-131; EXPLANATION.md §"Store and context", the "Two caveats"
+paragraph, tells users about the split ("a
 `case` clause body and an auto-evaluated list are boundaries when
 interpreted but not when compiled … The interpreter's answer is the
 intended one");
@@ -1915,8 +1929,13 @@ zero as a real magnitude. So this is a dropped-error bug against a rule
 the kernel states explicitly, not a precision-loss bug. The arithmetic
 path is unaffected (`add 0d1 0d2` → `0d3`), which is why it survived.
 **Documentation status:** undocumented, and contradicted by what IS
-documented — `design/TRUTHINESS.0.md` states one presence rule for all
-numbers. NUR001's allowance is about content-vs-presence and survives
+documented in three places: `design/TRUTHINESS.0.md` states one presence
+rule for all numbers; REFERENCE.md's `if`-truthiness falsy list is
+"`false`, `0` (and `0.0`), `none`, the empty list `[]`/empty map `{}`,
+and the empty string `""`" with "**Everything else is true**"; and the
+shipped `boru describe convert` help says the same. Every Big value
+violates all three. NUR001's allowance is about content-vs-presence and
+survives
 untouched — all three consumers agree here, wrongly and uniformly.
 This is a defect in the shared rule itself, not in the sharing.
 **Proposed verdict:** fix. Stop discarding `AsNumber`'s refusal: branch
@@ -1929,4 +1948,4 @@ it here would reproduce this defect for magnitudes that underflow. Spec
 rows should pin `if 0d1`, `convert Boolean 0d1` and `make Boolean 0d1`
 true with their `0d0` twins false, in both engines. This is a wrong answer
 delivered quietly, in the same class as the half-handled value kinds
-NUR031 and the retired NUR050/NUR051 record.
+NUR031 tracks and the retired NUR050/NUR051 records.

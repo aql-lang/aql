@@ -2310,7 +2310,7 @@ converts back through validation.
 > judges only presence — empty String / `0` / `none` / empty collection
 > are false, everything else is true, so `convert Boolean "false"` is
 > **true**. Pass the options map `{truthy: true}` to parse a String
-> YAML-style first: `yes`/`no`/`true`/`false`/`on`/`off` (case-
+> YAML-style first: `y`/`yes`/`true`/`on` and `n`/`no`/`false`/`off` (case-
 > insensitive, surrounding whitespace trimmed) map to their booleans,
 > e.g. `convert Boolean {truthy: true} "no"` returns `false`. Any string
 > that is **not** a recognised token falls back to presence coercion
