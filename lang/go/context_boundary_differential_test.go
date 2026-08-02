@@ -168,6 +168,39 @@ m.f 1 drop
 context has y`},
 	}
 
+	// The RATCHET. The per-row checks below already fail when a recorded
+	// divergence heals (good news, move the row) or when an agreeing row
+	// regresses. Neither catches the third direction: adding a NEW
+	// `wantDiverge` row, which papers over a fresh regression and still
+	// passes. An inventory that can grow silently is a licence, not a
+	// budget — so the count is pinned, and enlarging it has to be a
+	// deliberate, reviewable edit to this number with a reason.
+	//
+	// This may only go DOWN. NUR054 records the open divergence and the
+	// semantics call is already made — the interpreter is canonical — so
+	// every one of these rows is scheduled to become an agreeing row once
+	// the emitted context-frame opcode pair lands.
+	const openDivergenceBudget = 4
+	open := 0
+	for _, c := range cases {
+		if c.wantDiverge {
+			open++
+		}
+	}
+	if open > openDivergenceBudget {
+		t.Errorf("interpreter/compiler context-boundary divergences: %d, budget %d.\n"+
+			"A NEW divergence was added. The contract (design/COMPILABLE-SUBSET.md) is "+
+			"that a form the compiler cannot lower faithfully must be REFUSED, not "+
+			"answered differently — 'slow, not wrong'. If this row is genuinely "+
+			"unavoidable for now, raise the budget deliberately and say why in NUR054.",
+			open, openDivergenceBudget)
+	}
+	if open < openDivergenceBudget {
+		t.Errorf("interpreter/compiler context-boundary divergences: %d, budget %d.\n"+
+			"That is PROGRESS — lower the budget to %d so it cannot silently drift "+
+			"back up, and update NUR054.", open, openDivergenceBudget, open)
+	}
+
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if c.wantDiverge && c.why == "" {
