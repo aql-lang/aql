@@ -396,13 +396,13 @@ func ExactEqual(a, b Value) bool {
 
 	// Opaque Ideal handles (NUR031). eq is the REFERENCE half of the
 	// two-equalities rule: a pointer-backed handle (Store, Timeout,
-	// Interval) is eq iff it is the SAME handle. Error is a value-like
-	// Ideal with no reference, so eq compares its fields (eq ≡ deq there,
-	// like a scalar leaf). Before this rule every handle fell through to
-	// the terminal `false` — not even eq to itself. The code/opaque
-	// values (Function, Module, Word) stay below: they carry no stable
-	// reference these value-copied payloads could compare (NUR031 keeps
-	// them as an argued remainder).
+	// Interval, the Module descriptor) is eq iff it is the SAME handle.
+	// Error is a value-like Ideal with no reference, so eq compares its
+	// fields (eq ≡ deq there, like a scalar leaf). Before this rule every
+	// handle fell through to the terminal `false` — not even eq to
+	// itself. The code values (Function, Word) stay below: they carry no
+	// stable reference these value-copied payloads could compare (NUR031
+	// keeps them as an argued remainder).
 	if eq, handled := opaqueIdealExactEqual(a, b); handled {
 		return eq
 	}
@@ -658,10 +658,10 @@ func DeepEqual(a, b Value) bool {
 
 	// Opaque Ideal handles (NUR031). deq is the DEEP-VALUE half of the
 	// rule: a Store by its own entries (the same projection as `convert
-	// Map`), Error by its fields; the pure timer handles (Timeout,
-	// Interval) have no deeper structure than their identity, so deq is
-	// their reference identity, matching eq. Code/opaque values
-	// (Function, Module, Word) stay below at the terminal `false`.
+	// Map`), Error by its fields; the pure handles (Timeout, Interval,
+	// the Module descriptor) have no deeper structure than their
+	// identity, so deq is their reference identity, matching eq. Code
+	// values (Function, Word) stay below at the terminal `false`.
 	if eq, handled := opaqueIdealDeepEqual(a, b); handled {
 		return eq
 	}
@@ -673,8 +673,9 @@ func DeepEqual(a, b Value) bool {
 // opaqueIdealExactEqual is the `eq` (reference) half of NUR031 for the
 // opaque Ideal handles that would otherwise fall through to `false`.
 // Returns (result, true) when a is such a handle; (false, false) to let
-// the caller reach its own fall-through. A pointer-backed handle is eq
-// iff it is the SAME pointer; Error (a value struct) is eq by fields.
+// the caller reach its own fall-through. A pointer-backed handle (Store,
+// Timeout, Interval, the boxed Module descriptor) is eq iff it is the
+// SAME pointer; Error (a value struct) is eq by fields.
 func opaqueIdealExactEqual(a, b Value) (bool, bool) {
 	switch av := a.Data.(type) {
 	case *StoreInstanceInfo:
@@ -692,8 +693,33 @@ func opaqueIdealExactEqual(a, b Value) (bool, bool) {
 		// type as well as equal fields (a `refine Error` subtype is not
 		// eq to a plain Error).
 		return ok && a.Parent.Equal(b.Parent) && errorInfoEqual(av, bv), true
+	case ExtensionPayload:
+		return moduleDescIdentity(av, b)
 	}
 	return false, false
+}
+
+// moduleDescIdentity is the shared eq/deq arm for the Ideal/Module
+// DESCRIPTOR (NUR031, narrow half): an ExtensionPayload boxing a
+// *ModuleDesc. The descriptor is an opaque handle whose identity IS its
+// value — like Timeout/Interval, eq and deq are both pointer identity
+// (per-import-instance: every namespace bound by one import shares one
+// boxed pointer through Value copies). handled=false for any OTHER
+// ExtensionPayload body (host/plugin payloads the kernel does not
+// inspect — they keep the terminal fall-through). It must NEVER apply
+// Go == to a bare ModuleDesc: the struct holds a map and is not a
+// comparable type, so that would panic at runtime.
+func moduleDescIdentity(av ExtensionPayload, b Value) (bool, bool) {
+	ad, ok := av.Body.(*ModuleDesc)
+	if !ok {
+		return false, false
+	}
+	bp, ok := b.Data.(ExtensionPayload)
+	if !ok {
+		return false, true
+	}
+	bd, ok := bp.Body.(*ModuleDesc)
+	return ok && ad == bd, true
 }
 
 // opaqueIdealDeepEqual is the `deq` (deep-value) half of NUR031. It
@@ -721,6 +747,11 @@ func opaqueIdealDeepEqual(a, b Value) (bool, bool) {
 	case ErrorInfo:
 		bv, ok := b.Data.(ErrorInfo)
 		return ok && a.Parent.Equal(b.Parent) && errorInfoEqual(av, bv), true
+	case ExtensionPayload:
+		// The Module descriptor: deq is its reference identity, matching
+		// eq (see moduleDescIdentity — an opaque handle with no deeper
+		// structure than its identity, like the timers).
+		return moduleDescIdentity(av, b)
 	}
 	return false, false
 }
@@ -766,10 +797,11 @@ func errorInfoEqual(a, b ErrorInfo) bool {
 }
 
 // isDeqComparableHandle reports whether v is an opaque Ideal handle that
-// NUR031 made deq-comparable (Store, Error, Timeout, Interval) — as
-// opposed to a code/opaque value (Function, Module, Word) that remains
-// equal to nothing. Used by DeqKey to bucket these into a pairwise-scan
-// family (by handleKind) instead of the DeqNeverEqual fast path.
+// NUR031 made deq-comparable (Store, Error, Timeout, Interval, the
+// Module descriptor) — as opposed to a code value (Function, Word) that
+// remains equal to nothing. Used by DeqKey to bucket these into a
+// pairwise-scan family (by handleKind) instead of the DeqNeverEqual
+// fast path.
 func isDeqComparableHandle(v Value) bool {
 	return handleKind(v) != ""
 }

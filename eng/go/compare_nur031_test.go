@@ -5,8 +5,9 @@ import "testing"
 // NUR031: the opaque Ideal handles are eq/deq-comparable instead of
 // equal to nothing. Store gets reference identity (eq) and structural
 // entry equality (deq); Error compares by fields (eq ≡ deq); the timer
-// handles compare by identity under both. The code/opaque values
-// (Function, Module, Word) stay equal to nothing — an argued remainder.
+// handles and the Module descriptor (a boxed *ModuleDesc behind an
+// ExtensionPayload) compare by identity under both. The code values
+// (Function, Word) stay equal to nothing — an argued remainder.
 
 func storeVal(entries map[string]Value) Value {
 	return NewStoreValue(TStore, &StoreInstanceInfo{Data: entries})
@@ -181,6 +182,69 @@ func TestNUR031TimerEquality(t *testing.T) {
 	}
 }
 
+// moduleDescVal wraps a *ModuleDesc the way NewModuleInstance (lang)
+// does: an ExtensionPayload boxing the pointer — the descriptor's
+// identity under eq/deq.
+func moduleDescVal(d *ModuleDesc) Value {
+	return NewValueRaw(TIdeal, ExtensionPayload{Body: d})
+}
+
+// TestNUR031ModuleDescriptorEquality pins the narrow re-opened half of
+// NUR031: the Ideal/Module descriptor is an identity-equal opaque
+// handle — eq and deq are both pointer identity over the boxed
+// *ModuleDesc (per-import-instance, the exact Timeout/Interval mirror).
+// The equality must never apply Go == to a bare ModuleDesc (the struct
+// holds a map and is not comparable — that panics).
+func TestNUR031ModuleDescriptorEquality(t *testing.T) {
+	d := &ModuleDesc{ID: "m1", Exports: map[string]*OrderedMap{"A": NewOrderedMap()}}
+	mA := moduleDescVal(d)
+	mB := moduleDescVal(d) // same descriptor instance
+	// A structurally identical but DISTINCT descriptor instance.
+	twin := moduleDescVal(&ModuleDesc{ID: "m1", Exports: map[string]*OrderedMap{"A": NewOrderedMap()}})
+	other := moduleDescVal(&ModuleDesc{ID: "m2"})
+
+	// Same instance: reflexively eq and deq.
+	if !ExactEqual(mA, mB) {
+		t.Error("the same Module descriptor instance must be eq to itself")
+	}
+	if !DeepEqual(mA, mB) {
+		t.Error("...and deq to itself")
+	}
+	// Distinct instances: never equal, even structurally identical —
+	// identity IS the descriptor's value.
+	if ExactEqual(mA, twin) || DeepEqual(mA, twin) {
+		t.Error("distinct descriptor instances must not be eq/deq, even with equal contents")
+	}
+	if ExactEqual(mA, other) || DeepEqual(mA, other) {
+		t.Error("descriptors of different modules must not be eq/deq")
+	}
+	// Descriptor vs a DIFFERENT ExtensionPayload body: false, via the
+	// handled=true arm (a is a descriptor, b's body is not).
+	hostPayload := NewValueRaw(TIdeal, ExtensionPayload{Body: 42})
+	if ExactEqual(mA, hostPayload) || DeepEqual(mA, hostPayload) {
+		t.Error("a descriptor must not equal a non-descriptor ExtensionPayload")
+	}
+	// The mirrored pair (a's body is not a *ModuleDesc): handled=false —
+	// the terminal fall-through keeps host payloads equal to nothing,
+	// including themselves.
+	if ExactEqual(hostPayload, mA) || DeepEqual(hostPayload, mA) {
+		t.Error("a non-descriptor ExtensionPayload must not equal a descriptor")
+	}
+	if ExactEqual(hostPayload, hostPayload) || DeepEqual(hostPayload, hostPayload) {
+		t.Error("a host ExtensionPayload stays equal to nothing (unchanged by NUR031)")
+	}
+	// Descriptor vs a non-Ideal / non-ExtensionPayload value: false.
+	if ExactEqual(mA, NewInteger(1)) || DeepEqual(mA, NewInteger(1)) {
+		t.Error("descriptor vs non-Ideal must be unequal")
+	}
+	// The eq/deq arm dispatches on the PAYLOAD, so a reparented alias
+	// (same boxed pointer, other Parent) stays equal — like the timers.
+	alias := NewValueRaw(TStoreSystem, ExtensionPayload{Body: d})
+	if !ExactEqual(mA, alias) || !DeepEqual(mA, alias) {
+		t.Error("a reparented descriptor alias (same boxed pointer) must stay eq/deq")
+	}
+}
+
 // TestNUR031HandleFamilyByKind is the regression guard for the timer
 // deqFam defect the PR #311 review caught: a timer's deq is pointer
 // identity (Parent-independent), so a timer reparented to a `refine`
@@ -212,11 +276,23 @@ func TestNUR031HandleFamilyByKind(t *testing.T) {
 	}
 	// handleKind classifies each handle and nothing else.
 	if handleKind(storeVal(nil)) != "Store" || handleKind(errVal("c", "m", nil)) != "Error" ||
-		handleKind(base) != "Timeout" || handleKind(NewValueRaw(TIdeal, &IntervalInfo{ID: "i"})) != "Interval" {
+		handleKind(base) != "Timeout" || handleKind(NewValueRaw(TIdeal, &IntervalInfo{ID: "i"})) != "Interval" ||
+		handleKind(moduleDescVal(&ModuleDesc{ID: "m"})) != "Module" {
 		t.Fatal("handleKind must tag each deq-comparable handle by payload kind")
 	}
 	if handleKind(NewInteger(1)) != "" {
 		t.Fatal("handleKind must return empty for a non-handle")
+	}
+	// An ExtensionPayload whose body is NOT a *ModuleDesc is a host
+	// payload, not a handle.
+	if handleKind(NewValueRaw(TIdeal, ExtensionPayload{Body: 42})) != "" {
+		t.Fatal("handleKind must return empty for a non-descriptor ExtensionPayload")
+	}
+	// A Module descriptor alias (same boxed pointer, other Parent) shares
+	// the deq family, like the timer alias above.
+	md := &ModuleDesc{ID: "fam"}
+	if deqFam(moduleDescVal(md)) != deqFam(NewValueRaw(TStoreSystem, ExtensionPayload{Body: md})) {
+		t.Fatal("descriptor aliases must share a deq family")
 	}
 }
 
@@ -230,6 +306,7 @@ func TestNUR031DeqKeyClassification(t *testing.T) {
 		errVal("c", "m", nil),
 		NewValueRaw(TIdeal, &TimeoutInfo{ID: "t"}),
 		NewValueRaw(TIdeal, &IntervalInfo{ID: "i"}),
+		moduleDescVal(&ModuleDesc{ID: "m"}),
 	} {
 		if _, c := DeqKey(v); c != DeqUnkeyed {
 			t.Errorf("handle %T must be DeqUnkeyed, got class %d", v.Data, c)
@@ -241,6 +318,21 @@ func TestNUR031DeqKeyClassification(t *testing.T) {
 	// A code value stays never-equal.
 	if _, c := DeqKey(NewWord("f")); c != DeqNeverEqual {
 		t.Error("a Word must stay DeqNeverEqual")
+	}
+	// A non-descriptor ExtensionPayload (host payload) stays never-equal.
+	if _, c := DeqKey(NewValueRaw(TIdeal, ExtensionPayload{Body: 42})); c != DeqNeverEqual {
+		t.Error("a host ExtensionPayload must stay DeqNeverEqual")
+	}
+	// A DeqIndex finds the SAME descriptor instance among seen values but
+	// never merges a distinct instance (identity is the deq relation).
+	md := &ModuleDesc{ID: "m"}
+	var midx DeqIndex
+	midx.Add(moduleDescVal(md))
+	if midx.FirstMatch(moduleDescVal(md)) != 0 {
+		t.Error("DeqIndex must find the same descriptor instance")
+	}
+	if midx.FirstMatch(moduleDescVal(&ModuleDesc{ID: "m"})) != -1 {
+		t.Error("DeqIndex must not match a distinct descriptor instance")
 	}
 	// DeqIndex finds a structural store twin (deq), not an eq-only match.
 	var idx DeqIndex

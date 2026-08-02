@@ -31,8 +31,9 @@ import (
 // Containers propagate unkeyedness up from their children.
 //
 // DeqNeverEqual marks values that reach DeepEqual's unsupported
-// fall-through (stores, functions, timers, …): deq-equal to nothing,
-// including themselves, so scans can skip them entirely.
+// fall-through (functions, words, uncompared host payloads, …):
+// deq-equal to nothing, including themselves, so scans can skip them
+// entirely.
 
 // DeqKeyClass classifies how a value participates in bucketed deq
 // scans — see the contract above.
@@ -238,14 +239,15 @@ func deqKeyAtDepth(v Value, depth int) (string, DeqKeyClass) {
 	}
 
 	// NUR031: an opaque Ideal handle that is now deq-comparable pairwise
-	// (Store by entries, Error by fields, a timer by identity). No sound
-	// per-value key, so scan it within its handle family.
+	// (Store by entries, Error by fields, a timer or Module descriptor
+	// by identity). No sound per-value key, so scan it within its handle
+	// family.
 	if isDeqComparableHandle(v) {
 		return "", DeqUnkeyed
 	}
 
-	// DeepEqual's unsupported fall-through — code/opaque values
-	// (functions, modules, words): deq-equal to nothing.
+	// DeepEqual's unsupported fall-through — code values (functions,
+	// words) and uncompared host payloads: deq-equal to nothing.
 	return "", DeqNeverEqual
 }
 
@@ -287,10 +289,10 @@ func deqFam(v Value) string {
 }
 
 // handleKind returns the payload-kind tag of a deq-comparable opaque
-// handle (Store, Error, Timeout, Interval), or "" for anything else.
-// Parent-independent by design — see deqFam.
+// handle (Store, Error, Timeout, Interval, the Module descriptor), or
+// "" for anything else. Parent-independent by design — see deqFam.
 func handleKind(v Value) string {
-	switch v.Data.(type) {
+	switch d := v.Data.(type) {
 	case *StoreInstanceInfo:
 		return "Store"
 	case ErrorInfo:
@@ -299,6 +301,13 @@ func handleKind(v Value) string {
 		return "Timeout"
 	case *IntervalInfo:
 		return "Interval"
+	case ExtensionPayload:
+		// Only the Ideal/Module DESCRIPTOR (a boxed *ModuleDesc) is a
+		// deq-comparable handle; every other ExtensionPayload body is a
+		// host/plugin payload the kernel does not compare.
+		if _, ok := d.Body.(*ModuleDesc); ok {
+			return "Module"
+		}
 	}
 	return ""
 }

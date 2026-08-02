@@ -107,6 +107,7 @@ context set 'x' 5 end def g fn [[] [Integer] [context get 'x']] (g)	5	a fn body 
 def g fn [[] [Integer] [context set 'y' 7 end context get 'y']] (g) context get 'y'	7 7	a fn body runs in the SAME engine — its context write PERSISTS after the call (contrast `do`)
 (context) deq (context)	true	NUR031: a Store deq-equals itself — its deep value is its own entries
 def s1 (context) def s2 (context) (s1 deq s2)	true	…two captures of the one context are the same handle, so also deq
+import "boru:array-util" import module [export "A" {x:1} export "B" {y:2}] import module [export "C" {z:3}] size (ArrayUtil.unique [A.$module B.$module C.$module])	2	NUR031: the deq scan merges the SHARED Module descriptor (A/B — one instance) and keeps the distinct one (C) — the Module handle family in unique's DeqIndex
 
 # ====================================================================
 # §8  class-instance writes are in place and visible through every view

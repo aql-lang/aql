@@ -53,11 +53,18 @@ import module [def p fn [[a:Integer b:Integer] [Integer] [a sub b]] export "M" {
 # §6  namespace transparency and the facet synthetics
 import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] B.$module.exports	['A' 'B' 'C']	the descriptor lists every export, in declaration order
 import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] A.$module is C.$module	true	all exports share ONE Module instance
+import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] A.$module eq C.$module	true	NUR031: the shared instance is also eq — the descriptor is an identity-equal opaque handle
+import module [export "A" {x:1} export "B" {y:2}] A.$module deq B.$module	true	…and deq mirrors eq: identity IS the descriptor's deep value (like the timer handles)
+import module [export "M" {a:1}] M.$module eq M.$module	true	a descriptor is reflexively eq (NUR031 — this was false before the fix)
+import module [export "M" {a:1}] M.$module deq M.$module	true	…and reflexively deq
+import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module eq B.$module	false	two inline modules are two instances — never eq…
+import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module deq B.$module	false	…nor deq: identity-only, the descriptors' contents are never compared
 import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] B.$module.exports 0 get eq "A"	true	descriptor fields are plain values — list reads compose
 import module [export "M" {a:1}] M.$module.name size	0	an inline module has no reference name (empty string)
 import module [export "foo" {a:1}] foo.$module.kind eq "inline"	true	the synthetics work on a lowercase export too
 import module [export "M" {a:1}] M!.b	ERROR:not_found	…and raises not_found under the strict one
 import "boru:test" Test.$module is Assert.$module	true	a module may bind SEVERAL namespaces — one shared descriptor
+import "boru:test" Test.$module eq Assert.$module	true	…which is eq across them (the eq analogue of the shared-instance `is` row)
 import "boru:test" Assert.$module.exports	['Assert' 'Test']	…which lists both exports
 import "boru:string-util" StringUtil.$module.kind eq "native"	true	builtin modules carry kind native
 import "boru:logic-util" LogicUtil.$module.name eq "boru:logic-util"	true	…and their boru: reference as the name
@@ -93,6 +100,8 @@ import module [import "boru:math-util" def s fn [[x:Float] [Float] [MathUtil.sqr
 #
 # §10  import misc
 import "boru:math-util" import "boru:math-util" MathUtil.sqrt 4.0	2.0	a duplicate import is idempotent
+import "boru:string-util" import "boru:string-util" StringUtil.$module eq StringUtil.$module	true	…and a cache no-op: the binding keeps its ONE descriptor instance across a repeat import
+import "boru:string-util" def a StringUtil.$module undef StringUtil import "boru:string-util" a eq StringUtil.$module	false	GOTCHA: re-import after undef REBUILDS the binding with a FRESH descriptor — identity is per-import-instance (NUR031)
 import "boru:math-util" end MathUtil.sqrt 25.0	5.0	`end` after an import id is always safe
 #
 # §11  builtin wrappers under edge inputs

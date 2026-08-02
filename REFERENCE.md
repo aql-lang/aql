@@ -1221,8 +1221,11 @@ restricted words refuse. See
 > A **bare type literal is not a value**: `0 eq Integer` and `0 deq Integer`
 > are `false` (a numeric literal is not the number 0); compare *types* with
 > `teq`. `Error` is a value-like Ideal, so `eq`/`deq` compare its fields.
-> The only values with no equality are **code/opaque values** — functions,
-> modules, words.
+> The `Module` descriptor (`M.$module`) is an **identity-equal opaque
+> handle**: `eq` and `deq` are both true exactly for the same descriptor
+> instance (all of one import's namespaces share it), never across
+> distinct instances. The only values with no equality are **code
+> values** — functions and words.
 
 ```
 1 lt 2.0                      # returns true        — Integer vs Float (shared Number)

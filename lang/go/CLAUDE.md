@@ -772,10 +772,11 @@ module's namespaces share one **`Ideal/Module`** descriptor
   A namespace renders compactly as `Module(Name){key key …}`
   (`eng/go/coretype_list_map_behaviors.go`).
 - `NewModuleInstance(desc)` — the descriptor (`ExtensionPayload`
-  carrying the full `ModuleDesc`); `name`/`kind`/`file`/`folder`/
-  `exports` are read via `get`. `ModuleDesc.{Ref,Kind,File,Folder}` are
-  populated by `Resolve` (native), `loadFileModule` (file), and
-  `RunModuleBody` (inline). FixedID: Module 5000.
+  boxing a `*ModuleDesc` — the pointer is the descriptor's eq/deq
+  IDENTITY, per-import-instance, NUR031); `name`/`kind`/`file`/
+  `folder`/`exports` are read via `get`. `ModuleDesc.{Ref,Kind,File,
+  Folder}` are populated by `Resolve` (native), `loadFileModule`
+  (file), and `RunModuleBody` (inline). FixedID: Module 5000.
 
 `module […]` itself produces an `Ideal/Module` and `import` consumes it —
 so `typeof (module […]) → Module`. `AsModuleDesc` unwraps the

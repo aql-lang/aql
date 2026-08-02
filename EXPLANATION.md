@@ -486,13 +486,16 @@ comparing contents deeply: `["a"] eq ["a"]` is false, `["a"] deq
 ["a"]` is true; two distinct stores holding the same entries are `deq`
 but not `eq`. `Error` is a value-like Ideal — an immutable value with
 no handle — so `eq` and `deq` both compare its fields, coinciding like
-a scalar. Words that operate on values use `deq`: the collection words
-(`ArrayUtil.unique`/`member`/`indices`/`group`) dedup, test, and group
-by the `deq` class. The only values with no equality are **code /
-opaque values** — functions, modules, words: a function's "value" is
-opaque code, so `eq`/`deq` either reject it (functions, words) or
-report it unequal (modules), an accepted remainder recorded as NUR031
-in [NUR.md](NUR.md).
+a scalar. The `Module` descriptor (`M.$module`) is an identity-equal
+opaque handle: `eq` and `deq` are both its instance identity (every
+namespace one import binds shares the instance; distinct imports are
+distinct instances). Words that operate on values use `deq`: the
+collection words (`ArrayUtil.unique`/`member`/`indices`/`group`)
+dedup, test, and group by the `deq` class. The only values with no
+settled equality are **code values** — functions and words: a
+function's "value" is opaque code with no stable identity canon, so
+`deq` reports it unequal even to itself — an accepted remainder
+recorded as NUR031 in [NUR.md](NUR.md).
 
 A bare type literal sorts strictly below every concrete inhabitant
 of its family (same-family, so the restricted words allow it — but

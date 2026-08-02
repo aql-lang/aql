@@ -107,9 +107,32 @@ func TestSeam6C2AsModuleDescNonModule(t *testing.T) {
 	if _, ok := AsModuleDesc(NewInteger(1)); ok {
 		t.Fatal("integer must not unwrap as ModuleDesc")
 	}
+	// An ExtensionPayload whose Body is not a boxed *ModuleDesc (a host
+	// payload, or a legacy by-value ModuleDesc) must not unwrap either.
+	if _, ok := AsModuleDesc(Value{Parent: TModuleInst, Data: ExtensionPayload{Body: 42}}); ok {
+		t.Fatal("non-descriptor ExtensionPayload must not unwrap")
+	}
+	if _, ok := AsModuleDesc(Value{Parent: TModuleInst, Data: ExtensionPayload{Body: ModuleDesc{ID: "m"}}}); ok {
+		t.Fatal("a by-value ModuleDesc body must not unwrap — the payload boxes a pointer")
+	}
+	// A nil boxed pointer is defensively refused, never dereferenced.
+	if _, ok := AsModuleDesc(Value{Parent: TModuleInst, Data: ExtensionPayload{Body: (*ModuleDesc)(nil)}}); ok {
+		t.Fatal("a nil *ModuleDesc body must not unwrap")
+	}
 	// Positive pair.
-	if _, ok := AsModuleDesc(NewModuleInstance(ModuleDesc{ID: "m"})); !ok {
+	if d, ok := AsModuleDesc(NewModuleInstance(ModuleDesc{ID: "m"})); !ok || d.ID != "m" {
 		t.Fatal("module instance must unwrap")
+	}
+	// NUR031: each NewModuleInstance call boxes a FRESH pointer, so two
+	// instances built from one ModuleDesc are eq-distinct, while copies
+	// of one instance share the identity.
+	src := ModuleDesc{ID: "m"}
+	inst := NewModuleInstance(src)
+	if !eng.ExactEqual(inst, inst) || !eng.DeepEqual(inst, inst) {
+		t.Fatal("a module instance must be eq/deq to itself")
+	}
+	if eng.ExactEqual(inst, NewModuleInstance(src)) {
+		t.Fatal("two separately-built instances must be eq-distinct (per-import-instance identity)")
 	}
 }
 

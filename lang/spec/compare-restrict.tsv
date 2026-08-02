@@ -108,11 +108,16 @@ true tcmp 5	-1	Boolean ranks below Number
 # ── Opaque Ideal handles: eq/deq no longer equal to nothing (NUR031) ──
 # A Store gets reference identity (eq) and deep entry value (deq); an
 # Error is a value-like Ideal, so eq and deq both compare its fields;
-# the timer handles compare by identity. Before this rule every one of
-# these was equal to nothing, not even itself.
+# the timer handles and the Module descriptor compare by identity.
+# Before this rule every one of these was equal to nothing, not even
+# itself.
 def s (context) (s eq s)	true	a Store is eq to itself — reference identity, the Ideal half of the rule
 def s (context) (s deq s)	true	…and deq to itself
 (do [raise "boom"]) eq (do [raise "boom"])	true	two Errors with equal fields are eq (a value-like Ideal: eq compares fields)
 (do [raise "boom"]) deq (do [raise "boom"])	true	deq agrees with eq on an Error
 (do [raise "boom"]) eq (do [raise "bang"])	false	different messages are not equal
 (do [raise bad_input "x"]) eq (do [raise other "x"])	false	different codes are not equal
+import module [export "M" {a:1}] M.$module eq M.$module	true	a Module descriptor is reflexively eq — an identity-equal opaque handle (NUR031, narrow half)
+import module [export "M" {a:1}] M.$module deq M.$module	true	…and reflexively deq: identity IS its deep value, like the timers
+import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module eq B.$module	false	two module instances are never eq…
+import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module deq B.$module	false	…nor deq — identity-only, the descriptors' contents are never compared

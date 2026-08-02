@@ -311,7 +311,11 @@ compiler refuses to put it in a Value.
 
 For plugin/host-supplied payloads, use `ExtensionPayload` — its
 `Body any` is the explicit escape hatch the kernel does NOT
-inspect.
+inspect. One recorded accommodation (NUR031): the eq/deq arms
+(`moduleDescIdentity` in compare.go, `handleKind` in
+compare_deqkey.go) assert `Body` to the kernel-owned `*ModuleDesc`
+for POINTER IDENTITY only — the Module descriptor is an
+identity-equal opaque handle; its fields are never read.
 
 ## Type Behavior
 

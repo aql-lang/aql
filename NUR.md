@@ -59,7 +59,7 @@ commit.
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | re-opened 2026-07-31 (was Allowed 2026-07-24) |
-| [NUR031](#nur031) | Module/Function values are not `eq`/`deq` to themselves | re-opened in part 2026-07-31 (was Allowed 2026-07-24); namespace half resolved by the NUR038 facet refactor |
+| [NUR031](#nur031) | Function/Word values are not `eq`/`deq` to themselves | re-opened in part 2026-07-31 (was Allowed 2026-07-24); both module halves resolved (namespace by the NUR038 facet refactor, descriptor 2026-08-02) |
 | [NUR037](#nur037) | A fn-local fn used as a higher-order body word breaks in compiled mode only | re-opened 2026-07-31 (was Allowed 2026-07-30) |
 | [NUR049](#nur049) | The paren barrier is one-directional: a group can reach backward for a receiver | 2026-07-31 split of NUR029 (G10) |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
@@ -970,10 +970,13 @@ into a broader Map-key-identity review. Unresolved until then.
 
 ## NUR031 — Code/opaque values have no value equality {#nur031}
 
-**Status:** Pending (re-opened **in part**) · **Re-opened:** 2026-07-31
-(maintainer review, `design/NUR-RESOLUTION-PLAN.0.md`; was Allowed
-2026-07-24 — the resolved handle equalities below stand; the
-re-opened part is the Module/Function/Word remainder)
+**Status:** Pending (re-opened **in part**; narrowed 2026-08-02) ·
+**Re-opened:** 2026-07-31 (maintainer review,
+`design/NUR-RESOLUTION-PLAN.0.md`; was Allowed 2026-07-24 — the
+resolved handle equalities below stand). The re-opened part was the
+Module/Function/Word remainder; **the Module half is now resolved
+(2026-08-02, both namespace and descriptor)**, so what remains open
+is **Function/Word identity** and the Behavior-routing design.
 
 ### The uniform rule
 
@@ -1048,26 +1051,40 @@ acceptance:
   a namespace takes the ordinary Node equality arms: `M eq M → true`
   (shared `*OrderedMap` identity), `M deq M → true`, and two
   content-equal namespaces of DIFFERENT exports compare `eq → false`
-  / `deq → true`, exactly the Map contract. The remaining module
-  defect is the `Ideal/Module` DESCRIPTOR only: `M.$module eq
-  M.$module → false` (still `ExtensionPayload`-backed, still falls
-  to the terminal arm) — in scope for the Behavior-routing design
-  below alongside Function/Word identity.
+  / `deq → true`, exactly the Map contract.
 
-**Standing requirement (maintainer, 2026-07-31):** every value —
-functions and modules included — must eventually fall under equality,
-at minimum reflexively (a value is `eq`/`deq` to itself). The
-function-type-vs-value question is now settled (ADR-011: one
-`Function` type; NUR050 resolved), so the remaining mechanism is
-function IDENTITY (stable canon independent of the binding name) plus
-the Behavior routing below. The likely shape — routing `eq`/`deq` through the type's
-`Behavior` for Ideals rather than the kernel's hardcoded arms (the
-future ADR the 2026-07-24 record deferred to) — is plausibly the same
-architectural change NUR050's resolution needs; track them together.
-Note the Sealed Payload constraint stands: module handles are backed
-by `ExtensionPayload`, which the kernel deliberately does not inspect
-(eng/go/CLAUDE.md "Sealed Payload") — reference identity does not
-require inspecting it.
+  **Descriptor half RESOLVED (2026-08-02):** `Ideal/Module` now
+  follows the opaque-handle rule the Timeout/Interval arms
+  established — an opaque handle's identity IS its value, so `eq` and
+  `deq` are both reference identity. `NewModuleInstance` boxes a
+  `*ModuleDesc` in its `ExtensionPayload` (the payload wrapper is
+  KEPT: four kernel arms key on `ExtensionPayload`, and `ModuleDesc`
+  holds a Go map so `==` on the bare struct would panic), and the
+  kernel compares that pointer. `M.$module eq M.$module → true`,
+  `deq` likewise; descriptors of different modules compare false.
+  The Sealed Payload rule is honoured — the kernel asserts the
+  payload to its own type for IDENTITY only and never reads a field.
+  The module defect this record raised is therefore closed; the
+  reflexivity requirement below is met for modules.
+
+**Standing requirement (maintainer, 2026-07-31; module half
+discharged 2026-08-02):** every value — functions and modules
+included — must eventually fall under equality, at minimum
+reflexively (a value is `eq`/`deq` to itself). **Modules now
+satisfy it** (namespace and descriptor, above). The
+function-type-vs-value question is settled (ADR-011: one `Function`
+type; NUR050 resolved), so what this record still tracks is function
+IDENTITY — a stable canon independent of the binding name, since
+canon/render today keys on the name a function was reached through —
+plus the Behavior routing. The likely shape — routing `eq`/`deq`
+through the type's `Behavior` for Ideals rather than the kernel's
+hardcoded arms (the future ADR the 2026-07-24 record deferred to) —
+is plausibly the same architectural change NUR050's resolution
+needs; track them together. Note the Sealed Payload constraint
+stands and was honoured by the descriptor fix: module handles are
+backed by `ExtensionPayload`, which the kernel deliberately does not
+inspect (eng/go/CLAUDE.md "Sealed Payload") — reference identity
+compares the boxed pointer without reading a field.
 
 ### Evidence
 
