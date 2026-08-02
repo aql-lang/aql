@@ -296,11 +296,19 @@ differs. Outcomes:
   dispatch-rejection is accepted as current behaviour;
   **Module self-inequality is an open defect** (silent reflexivity
   violation). The NAMESPACE half resolved by construction with the
-  2026-07-31 NUR038 facet refactor (a namespace is a plain Map: `M eq
-  M → true`); the `Ideal/Module` DESCRIPTOR half remains open.
+  NUR038 facet refactor (a namespace is a plain Map: `M eq M → true`);
+  the `Ideal/Module` DESCRIPTOR half remains open.
   Standing requirement: every value — functions and modules included
   — falls under equality, at minimum reflexive. Mechanism awaits
   NUR050/ADR-010 and the Behavior-routing ADR; track together.
+
+  *(Superseded 2026-08-02 — see the register, which is current. The
+  namespace half landed 2026-08-01 in commit `d8f93d3`, not 2026-07-31;
+  the DESCRIPTOR half is RESOLVED as of 2026-08-02; and NUR050 is
+  resolved and retired, so there is nothing left to track alongside.
+  What NUR031 still tracks is Function/Word identity — including the
+  namespace `deq` residue, since a namespace exporting functions is not
+  `deq`-reflexive.)*
 - **NUR-037** (fn-local fn undefined when compiled) — re-opened as an
   open defect. Mechanism: closure-capture gap (distinct from G12's
   type identity, same first-class-values family). "Slow, not wrong"

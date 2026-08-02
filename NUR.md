@@ -55,23 +55,28 @@ here. An entry leaves this list only by becoming **Resolved** or
 **Allowed** in its record below — keep the two in sync in the same
 commit.
 
-| # | Title | Surfaced by |
-|---|-------|-------------|
+| # | Title | Surfaced by / status |
+|---|-------|----------------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
 | [NUR022](#nur022) | `del` covers a fraction of `set`'s containers | 2026-07-22 uniformity review |
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
-| [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | re-opened 2026-07-31 (was Allowed 2026-07-24) |
-| [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name | re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
+| [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | PR #309 review (Codex P1); re-opened 2026-07-31 (was Allowed 2026-07-24) |
+| [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
 | [NUR049](#nur049) | Inside an unchecked `error` handler, a paren group's unsatisfiable receiver fails at runtime only | 2026-07-31 split of NUR029 (G10); premise narrowed 2026-08-02 |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR053](#nur053) | The truthiness consumers do not share one domain | 2026-08-02 NUR register review |
 | [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler | 2026-08-02 NUR register review |
+| [NUR055](#nur055) | Every Big numeric value is falsy, not just zero | 2026-08-02 NUR register review |
 
-Pending records use a compact form (rule / divergence / evidence /
-documentation status, plus a proposed verdict where one is obvious);
-they are expanded to the full argued form when the maintainer issues
-the verdict.
+Pending records normally use a compact form (rule / divergence /
+evidence / documentation status, plus a proposed verdict where one is
+obvious). A record argued to a **resolve-by-fix** verdict keeps the
+compact form and appends the verdict, since the fix — not prose — is
+what will close it; a record **re-opened from Allowed** keeps the
+argued form it already had, with the superseded allowance retained as
+data. Expansion to the full argued form is what an **Allowed** verdict
+requires.
 
 ---
 
@@ -132,9 +137,9 @@ arithmetic word by specificity (the refinement escape).
 ### The divergence
 
 `convert Boolean "false"` → `true`. Boolean conversion applies the
-truthiness rule — of the values `convert` accepts, only `false`,
-numeric zero in any leaf (`0`/`0.0`/`0d0`) and `""` are false; a
-String's characters are never inspected. (The language's falsy set also contains `none`, `[]` and
+truthiness rule — `false`, `0`/`0.0` and `""` are false; a String's
+characters are never inspected. (The Big leaves are currently ALL
+false, including `0d1` — a separate defect, recorded as NUR055.) (The language's falsy set also contains `none`, `[]` and
 `{}`, but `convert`'s source slot is Scalar-only and refuses all three
 with a `signature_error` — the domain split recorded as NUR053.)
 
@@ -292,8 +297,10 @@ The scalar branch families carry structural leaves: `String` has
 `Scalar/Boolean` and `Scalar/Atom` are leaf-less — direct children of
 `Scalar` with no builtin subtypes (no `True`/`False` lattice nodes).
 `Scalar/Bytes` is a third leaf-less child, registered from the language
-layer (`native_bytes.go`) rather than declared in `builtinDecls`; the
-same reasoning covers it.
+layer (`native_bytes.go`) rather than declared in `builtinDecls`. The
+same reasoning covers it with one caveat: Bytes is NOT a DepScalar
+refinement base (NUR009), so of the two value-level substitutes named
+below only `refine Bytes` stands in for it.
 
 ### Why allowed
 
@@ -342,9 +349,12 @@ distinctions into the structural layer — the wrong home for them.
 Scalar arithmetic is **same-type arithmetic**: the six words are
 "applied within a type, never across it" — REFERENCE.md §"Within-type
 operations". A cross-type pair has no signature and raises
-`[boru/signature_error]`; the deliberately-registered refusals —
-`Big`⊕`Float`, Boolean arithmetic (NUR000), and a cross-KIND Micron
-pair — raise `[boru/type_error]` with a specific message instead.
+`[boru/signature_error]`. Where a signature is *deliberately registered
+to refuse*, the failure is instead a coded error with a specific
+message — `[boru/type_error]` for `Big`⊕`Float`, for Boolean
+arithmetic (NUR000), for a cross-KIND Micron pair, and for several
+within-kind Micron restrictions (`mul` on two Qions); `[boru/arith_error]`
+for a Qion currency mismatch.
 
 ### The divergence
 
@@ -444,12 +454,14 @@ stroke): **for Scalars, `eq` and `deq` are the same and based on
 values; for Nodes and Ideals, `eq` is by reference, `deq` is by
 value.**
 
-The Ideal half carries two argued carve-outs, both minted by NUR031's
-2026-07-24 verdict and recorded there rather than here: `Error` is a
+The Ideal half carries argued carve-outs, recorded in NUR031 rather
+than here. NUR031's 2026-07-24 verdict minted two: `Error` is a
 *value-like* Ideal with no handle, so its `eq` is by VALUE (two
 independently raised errors with equal code/message/payload are `eq`);
-and `Timeout`/`Interval`/the `Module` descriptor are opaque handles
-whose identity IS their value, so their `deq` is by REFERENCE. Both are
+and `Timeout`/`Interval` are opaque handles whose identity IS their
+value, so their `deq` is by REFERENCE. The `Module` descriptor joined
+the second group on 2026-08-02 under the same rule (NUR031
+§"Descriptor half RESOLVED"). All are
 the rule applied to Ideals that have no second level to offer, not
 departures from it — but the rule as quoted above does not say so, and
 this record is where a reader looks first.
@@ -726,9 +738,10 @@ that is the sequence home.
   `lang/go/native/native_bytes.go` — the String+List signature pairs
   plus the Bytes overloads: one polymorphic word.
 - `boru describe slice` — all nine signatures, unqualified.
-- REFERENCE.md string table — the row now carries the "core sequence
-  word, also slices List and Bytes" parenthetical (fixed with this
-  verdict).
+- REFERENCE.md:1160 — the string-table row now carries the "core
+  *sequence* word, no import — also slices List and Bytes; filed under
+  the `list` describe category, see NUR019" parenthetical (fixed with
+  this verdict).
 - `lang/go/native/help/help_categories.go` — the string category's
   description now points at core `slice` (fixed with this verdict).
 - `lang/spec/edge-scalars-3.tsv:45-53`, `corpus-core.tsv:119`,
@@ -796,9 +809,10 @@ FlexList/WeakFlexList and FlexXml/WeakFlexXml absences are not.
 `boru describe set` lists 19 signatures, `boru describe del` four.
 **Documentation status:** partially documented.
 
-**Note on the rule (2026-08-02 review):** `set` and `del` are both
-WRITERS, so this record's pair is a writer/writer pair, not the
-reader/writer pair the rule originally named. The reader, `get`,
+**Note on the rule (2026-08-02 review):** the rule above was
+originally phrased "paired reader/writer words cover the same
+containers", which mis-describes the pair: `set` and `del` are both
+WRITERS. The reader, `get`,
 covers a third and wider set again (Module, Class, Store, Error,
 Resource, Xml, Node, Micron, None) — so container coverage is not
 uniform across the storage column at all. That wider spread is
@@ -914,11 +928,11 @@ the resolution plan (semantic vs deterministic ordering).
 
 ### Evidence
 
-- REFERENCE.md §Comparison (:1197-1254) — both regimes documented with
+- REFERENCE.md §Comparison (:1199-1255) — both regimes documented with
   the rationale: the ordering words are "**family-restricted**" and
-  raise `[boru/incomparable]` across families (:1200-1204), `tcmp` is
-  "the **unrestricted** total order" (:1206), and the callout at
-  :1212-1214 states "different types are simply *not equal* … Only the
+  raise `[boru/incomparable]` across families (:1202-1206), `tcmp` is
+  "the **unrestricted** total order" (:1208), and the callout at
+  :1214-1216 states "different types are simply *not equal* … Only the
   **ordering** words restrict".
 - `eng/go/compare.go` (family restriction raising `incomparable`);
   `eng/go/compare_types.go` (tcmp's Rank-based total order);
@@ -1014,10 +1028,11 @@ same-named atom, `deq`-unequal) yields the single group
 The fold is forced by `group`'s Map return shape and is arguably
 benign: no index is lost — both occurrences are retained under the
 shared key — and the same fold is what makes `group` total over the
-common **non-reflexive** keys (`nan` is `deq`-unequal to itself —
-container type literals were a second instance when this was written,
-but NUR034 made them reflexive, so `List deq List` is now true and
-they group through `deq`, not the render fold), giving
+common **non-reflexive** keys — `nan`, plus fn/Word values and bare
+type values, all `deq`-unequal to themselves via NUR031's `deq`
+fall-through (container type literals were another instance when this
+was written, but NUR034 made them reflexive, so `List deq List` is now
+true and they group through `deq`, not the render fold) — giving
 `group [nan nan]` → `{nan:[0 1]}` where raising on a render collision
 would make grouping NaN-bearing data a hard error. The lossless
 `[[rep group] …]` pair shape was rejected as breaking `group`'s Map
@@ -1056,7 +1071,7 @@ into a broader Map-key-identity review. Unresolved until then.
 - `lang/spec/module-array.tsv` §3 — `group [Integer Integer/q]` →
   `{Integer:[0 1]}` and `group [nan nan] [1 2]` → `{nan:[1 2]}` pin
   both the collision fold and the non-reflexive fold.
-- REFERENCE.md:1996-2000 — states the render-key fold, but scoped to
+- REFERENCE.md:1998-2002 — states the render-key fold, but scoped to
   `group` ("`group`'s map keys stay rendered strings") rather than as
   the language-wide fact about Map keys that the re-open argues is the
   root cause. That the general statement is undocumented is part of
@@ -1139,8 +1154,10 @@ acceptance:
   `[Any Any]` and DO admit fn values arriving as **container data** —
   but only for a fn that cannot auto-invoke at the read: a 0-arg fn
   read out of a map (`m.run`) dispatches on the spot, so that spelling
-  compares call RESULTS, not functions. Using `f/r` directly, which
-  behaves identically on both engines, the current answers are:
+  compares call RESULTS, not functions. Using `f/r` directly — a shape
+  the compiler refuses ("function value reaches eq"), so the default
+  and `-no-compile` paths both run it interpreted and agree — the
+  current answers are:
 
   ```
   def f fn [[n:Integer] [Integer] [add n 1]]
@@ -1233,8 +1250,9 @@ that work, not a commitment ADR-011 made. NUR050 is resolved and
 retired, so there is nothing left to track alongside; what ADR-011 did
 record in its Consequences is the deferral itself — "Two references to
 the same function still compare unstably … that is function IDENTITY,
-the NUR031 equality work, deliberately not solved here" (ADR.md:884-888)
-— which is the work this record inherits. Note the Sealed Payload constraint
+the NUR031 equality work, deliberately not solved here"
+(ADR.md:885-889) — which is the work this record inherits. Note the
+Sealed Payload constraint
 stands and was honoured by the descriptor fix: module handles are
 backed by `ExtensionPayload`, which the kernel deliberately does not
 inspect (eng/go/CLAUDE.md "Sealed Payload") — reference identity
@@ -1409,9 +1427,9 @@ accidental partial signal of exactly that condition.
   the linguist samples do the same. Making `set` evaluate its key would
   change all of them.
 - lang/go/CLAUDE.md:303-316 — the "**`dot` / `dotr` vs `get` / `getr`
-  (CRITICAL)**" bullet inside §"Jsonic Token Usage" (a bolded lead-in,
-  not a section) — the deliberate split this record's divergence leaks
-  from.
+  (CRITICAL)**" bullet inside §"Parser Customization" (a bolded
+  lead-in, not a section) — the deliberate split this record's
+  divergence leaks from.
 
 ---
 
@@ -1626,7 +1644,8 @@ every dispatch scan (`resolvedIndicesBeforeInto`,
 `commitBarrierForward`) stops at the OpenParen, so the group is
 dynamically sealed today. What remains of the defect is (a) the
 failure is not **static** — error-handler bodies are wholly unchecked
-(`error [zzz-undefined]` passes `boru check` clean; the seeded
+(`do [ raise bad_input "boom" ]  error [zzz-undefined]` passes
+`boru check` clean; the seeded
 handler-body run in `errorReturnsFn` exists but is gated to the
 compile pass), and (b) the engine's own help text actively recommends
 the broken idiom (`strandedForwardError` /
@@ -1805,3 +1824,47 @@ may complete compiled and abort interpreted). That one is
 one-directional, argued in place, and pinned by
 `TestStepBudgetNoSpuriousLimit`; it is a candidate for its own
 **Allowed** record rather than part of this defect.
+
+---
+
+## NUR055 — Every Big numeric value is falsy, not just zero {#nur055}
+
+**Status:** Pending · **Recorded:** 2026-08-02 · **Surfaced by:** NUR
+register review (verifying NUR001's falsy-set enumeration)
+
+**Rule:** one truthiness model over all of `Number`
+(`design/TRUTHINESS.0.md`): a number is false when it is zero and true
+otherwise, uniformly across the leaves — Integer, Float, BigInteger and
+BigDecimal are one family, and NUR014 records that they compare by
+magnitude (`0d1 eq 1` → true).
+**Divergence:** the Big leaves are **uniformly false**, whatever their
+value:
+
+```
+$ boru do 'print (convert Boolean 0d1)'    # false   — should be true
+$ boru do 'print (convert Boolean 0d2)'    # false
+$ boru do 'print (convert Boolean 0d1.5)'  # false
+$ boru do 'print (if 0d1 ["T"] ["F"])'     # F
+$ boru do 'print (make Boolean 0d1)'       # false
+$ boru do 'print (convert Boolean 1)'      # true    — the Integer twin
+```
+
+So `0d1 eq 1` is true while `if 0d1` and `if 1` disagree: two values
+the language calls equal have opposite truth. Every consumer of the
+truthiness model inherits it — `if`, `convert Boolean`, `make Boolean`,
+and the `and`/`or` connectives.
+**Evidence:** the session above (verified 2026-08-02, current binary).
+Root cause: `eng/go/core_helpers.go::CoerceBoolean`'s Number arm is
+`n, _ := AsNumber(v); return n != 0`, and `AsNumber` yields the float64
+channel, which is 0 for a Big-backed value — so the zero test answers
+"zero" for every BigInteger and BigDecimal. The arithmetic path is
+unaffected (`add 0d1 0d2` → `0d3`), which is why this survived.
+**Documentation status:** undocumented, and contradicted by what IS
+documented — `design/TRUTHINESS.0.md` states one presence rule for all
+numbers, and NUR001 (Allowed) rests its argument on that rule holding.
+**Proposed verdict:** fix. Make `CoerceBoolean`'s Number arm Big-aware
+(test the exact value rather than the float64 projection), with spec
+rows pinning `if 0d1`, `convert Boolean 0d1`, `make Boolean 0d1` true
+and their `0d0` twins false, in both engines. This is a wrong answer
+delivered quietly, in the same class as the half-handled value kinds
+NUR031 and the retired NUR050/NUR051 record.

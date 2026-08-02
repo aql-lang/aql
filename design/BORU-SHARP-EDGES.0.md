@@ -86,10 +86,19 @@ app state, because the default arm captured the event instead of dispatching.
 
 ### G10 — `def why (dot message)` in an `error` handler never works  ·  *latent-bug (shipped code)*
 
-> **Status: still reproduces (re-verified 2026-07-30). Registered as
-> [NUR049](../NUR.md#nur049)** — verdict (2026-07-31): FIX by making
-> the paren barrier symmetric (a group may not reach backward past its
-> open paren); fix `todo-tui-client.boru` and test its error arms.
+> **Status: the failure still reproduces, but the diagnosis below did
+> not survive. Registered as [NUR049](../NUR.md#nur049).** The
+> 2026-07-31 verdict was FIX by making the paren barrier symmetric; the
+> 2026-08-02 investigation retracted its premise — the group is already
+> sealed dynamically, in every probed context, so there is no backward
+> reach to close. What remains is (a) the failure is not STATIC:
+> `error` handler bodies are wholly unchecked, so `boru check` reports
+> nothing, and (b) the engine's own diagnostics
+> (`strandedForwardError`, `forwardParensSuggestion`) recommend the
+> broken parenthesised spelling. Repairs still owed: both shipped
+> examples — `todo-tui-client.boru` and
+> `design/examples/todo/audit.boru:29` (`err: (dot code)`) — plus a
+> test that forces a sync failure so the error arms actually run.
 
 ```
 do [ … ] error [ def why (dot message)  … ]     # → dot: no receiver
@@ -290,7 +299,7 @@ and `design/NUR-RESOLUTION-PLAN.0.md`).
 |---|---|---|---|
 | G8  | recovered-raise binding teardown | engine-bug? | **no longer reproduces** (fixed by unrelated work) |
 | G12 | `/r` fn ≠ `Function` param | engine-bug? | **FIXED** (NUR050 resolved 2026-07-31 — /r collection admission + the ADR-011 one-Function-type collapse) |
-| G10 | `def why (dot message)` in `error` | latent-bug | reproduces → **NUR049**: symmetric paren barrier; fix `todo-tui-client.boru` + failing-sync test |
+| G10 | `def why (dot message)` in `error` | latent-bug | reproduces → **NUR049**: premise narrowed 2026-08-02 (no backward reach; the group is already sealed). Open: staticize the unchecked handler body, fix the diagnostics that suggest it, repair `todo-tui-client.boru` + `todo/audit.boru:29`, add a failing-sync test |
 | G9  | `case` default slot collection | sharp-edge | **FIXED** (NUR048 resolved 2026-07-31 — open-call default runs isolated like a matched arm) |
 | G11 | returned list literal laziness | sharp-edge | **no longer reproduces** (fixed by unrelated work) |
 | G13a| single-token bare-map body | compiler-limit | **no longer reproduces** (single-token now compiles) |

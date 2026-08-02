@@ -1068,11 +1068,13 @@ operand unchanged, `sign` yields an `Integer`).
 
 The six arithmetic words are **total within every scalar type and every
 Micron kind** — applied within a type, never across it. A cross-type
-pair simply has no signature, so it raises `[boru/signature_error]`;
-the combinations that are *deliberately registered to refuse* —
-`Big`⊕`Float`, `Boolean` arithmetic, and a cross-**kind** Micron pair —
-raise `[boru/type_error]` with a specific message instead. The **sole
-language-level exception** is
+pair simply has no signature, so it raises `[boru/signature_error]`.
+Where a signature is *deliberately registered to refuse*, you get a
+coded error with a specific message instead: `[boru/type_error]` for
+`Big`⊕`Float`, for `Boolean` arithmetic, for a cross-**kind** Micron
+pair, and for within-kind Micron restrictions such as `mul` on two
+`Qion`s; `[boru/arith_error]` for a `Qion` currency mismatch. The
+**sole language-level exception** is
 `String` `add`, which concatenates when at least one operand is a
 `String` (see [Arithmetic](#arithmetic) above); no other word, and no
 other type — `Atom` and `Bytes` included — crosses scalar types. Some of
