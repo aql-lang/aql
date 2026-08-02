@@ -63,6 +63,7 @@ commit.
 | [NUR031](#nur031) | Module/Function values are not `eq`/`deq` to themselves | re-opened in part 2026-07-31 (was Allowed 2026-07-24); namespace half resolved by the NUR038 facet refactor |
 | [NUR037](#nur037) | A fn-local fn used as a higher-order body word breaks in compiled mode only | re-opened 2026-07-31 (was Allowed 2026-07-30) |
 | [NUR049](#nur049) | The paren barrier is one-directional: a group can reach backward for a receiver | 2026-07-31 split of NUR029 (G10) |
+| [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -1584,3 +1585,66 @@ intentionally open a paren expecting to consume an enclosing stack
 value; if such patterns exist and are sanctioned, they need an
 explicit alternative (e.g. `$`-receiver forms) before the barrier
 closes.
+
+**Investigation update (2026-08-02, NUR-EFFORT-TRIAGE probing):** the
+record's premise is narrower than written. The backward *reach* does
+NOT reproduce in any probed context — `5 (add 3)`,
+`{m:"hi"} (dot "m")`, the def/word/branch/data variants, and the
+error-arm form all fail **deterministically at runtime already**:
+every dispatch scan (`resolvedIndicesBeforeInto`,
+`commitBarrierForward`) stops at the OpenParen, so the group is
+dynamically sealed today. What remains of the defect is (a) the
+failure is not **static** — error-handler bodies are wholly unchecked
+(`error [zzz-undefined]` passes `boru check` clean; the seeded
+handler-body run in `errorReturnsFn` exists but is gated to the
+compile pass), and (b) the engine's own help text actively recommends
+the broken idiom (`strandedForwardError` /
+`forwardParensSuggestion` suggest `def (dot …)` forms whose every
+candidate needs a stack-barrier receiver). The compatibility check
+the verdict requires came back clean: a corpus sweep (lang/spec,
+utils, design/examples, lang/go/modules) found no sanctioned
+point-free pattern relying on backward reach — the only
+enclosing-stack-dependent groups are the broken error-arm idioms
+themselves, including a second latent instance at
+`design/examples/todo/audit.boru:29` (`err: (dot code)`). The fix
+scope is therefore: staticize the handler-body check, fix the help
+text, repair both shipped examples, and pin the symmetry with a spec
+battery; the working replacement form (`dot message def why;`) is
+verified.
+
+---
+
+## NUR052 — Store enumeration reads the top COW layer; lookup walks the chain {#nur052}
+
+**Status:** Pending · **Recorded:** 2026-08-02 · **Surfaced by:**
+NUR-EFFORT-TRIAGE probing of NUR022 (del/set symmetry)
+
+**Rule:** a container's enumeration agrees with its lookup — the keys
+a Store *shows* (`size`, `convert Map`, `each`) are the keys it
+*answers for* (`get`, `has`).
+**Divergence:** Store enumeration reads only the newest copy-on-write
+layer while lookup walks the full prototype chain:
+
+```
+$ boru do 'context set a/q 1  context set b/q 2
+           print (size (context))            # 1
+           print ((context) get a/q)         # 1   — lookup sees a
+           print ((context) has a/q)         # true
+           print (convert Map (context))'    # {"b": 2} — enumeration does not
+```
+
+Two sets, two live keys by lookup, one key by enumeration.
+**Evidence:** the session above (verified 2026-08-02, current binary);
+`eng/go/value.go::StoreInstanceInfo.Get` (prototype-chain walk) vs
+`eng/go/convert_ideal.go::storeEntryMap` (own-entry projection).
+**Documentation status:** NUR031's resolved Store-equality arm
+describes `deq` as "the same own-entry projection as `convert Map`" —
+so the asymmetry also leaks into which Stores compare `deq`-equal.
+Not otherwise documented.
+**Proposed verdict:** investigate then fix or argue — either
+enumeration walks the chain (with masking, so a child layer's key
+shadows its parent's), or lookup is documented as deliberately
+chain-walking while enumeration is own-layer (and the words' docs say
+which they use). Any `del`-symmetry work under NUR022 must land on
+whichever answer is chosen (a tombstoned key must be invisible to
+BOTH).
