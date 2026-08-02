@@ -499,6 +499,7 @@ var (
 	// NewCalendarDuration moved to lang/go/engine/native_temporal.go (Step 8).
 	NewCarrier               = eng.NewCarrier
 	StampFnValueInPlace      = eng.StampFnValueInPlace
+	StampModuleCallGates     = eng.StampModuleCallGates
 	NewElementCarrier        = eng.NewElementCarrier
 	ElementCarrierFromValue  = eng.ElementCarrierFromValue
 	NewCarrierTypedList      = eng.NewCarrierTypedList

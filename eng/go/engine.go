@@ -3452,6 +3452,16 @@ func (e *Engine) dynShuffleConsumerAt(idx int) bool {
 
 // execMatch executes a matched signature, splicing args and results.
 func (e *Engine) execMatch(match *MatchResult) error {
+	// Per-export module policy gate (NUR045): every named- and value-
+	// dispatch route funnels its matched signature through here — the
+	// direct wrapper call (`TimeUtil.sleep 800`), the module-preamble
+	// fn call, AND the rebound laundering path (`def s TimeUtil.sleep/r
+	// s 300`, whose rebinding copied the stamped inner sigs) — so ONE
+	// gate covers them all. Nil ModuleCall (any non-module signature)
+	// costs one pointer test; check mode is skipped inside the helper.
+	if err := e.policyGateModuleCall(match.Sig.ModuleCall); err != nil {
+		return err
+	}
 	n := match.Sig.TotalArgs()
 
 	// Use recorded positions if available, otherwise derive from stack.
@@ -6115,6 +6125,13 @@ func shareCheckStateFrom(owner, caller *Registry) func() {
 // (module closure), execution uses CallBoru on that registry. Otherwise, body
 // tokens are spliced into the current engine's stack.
 func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg *Registry, anonymous bool) error {
+	// Per-export module policy gate (NUR045): the body-splicing twin of
+	// execMatch's gate — a module boru-fn VALUE dispatched through the
+	// legacy stack-match path (execFnDefSigStackMatch) or the degenerate
+	// wrapper branch carries the stamped identity on its own FnSig.
+	if err := e.policyGateModuleCall(sig.ModuleCall); err != nil {
+		return err
+	}
 	nArgs := len(sig.Params)
 	indices := e.resolvedIndicesBefore(nArgs)
 
@@ -6663,6 +6680,19 @@ func (e *Engine) policyGateWord(name string) error {
 		return wc.CheckWord(name)
 	}
 	return nil
+}
+
+// policyGateModuleCall consults the per-export module policy before a
+// module-export dispatch — the modules.call twin of policyGateWord
+// (NUR045). gate is the ModuleCallID stamped onto the dispatched
+// signature at module-resolution time (StampModuleCallGates); nil (a
+// non-module signature) allows in one pointer test. Like the word
+// gate it MUST skip check mode — static analysis sees every dispatch
+// so type-checking stays meaningful, and denial is a runtime verdict.
+// The checker error is returned verbatim so the compiled twin
+// (vmContext.gateModuleCall) raises the identical denial.
+func (e *Engine) policyGateModuleCall(gate *ModuleCallID) error {
+	return policyGateModuleCallReg(e.registry, gate)
 }
 
 // commitBarrierForward applies the argument-order rule's "another

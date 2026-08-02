@@ -113,13 +113,16 @@ type vmContext struct {
 	// and runVMEntry's exit restore truncates to it on EVERY path (error
 	// unwind included), so a failed run never leaks args entries.
 	argsFloor int
-	// gateReg/gateWC cache the engine word policy's checker per registry —
-	// the VM twin of the interpreter's policyGateWord consults it at every
-	// named dispatch, and LookupWordChecker's capability-store walk is too
-	// costly per call on the hot path. A pointer-compare refresh keeps the
-	// cache correct across foreign-unit registry switches.
+	// gateReg/gateWC/gateMC cache the engine policy's checkers per
+	// registry — the VM twins of the interpreter's policyGateWord /
+	// policyGateModuleCall consult them at every named / module-export
+	// dispatch, and the capability-store walk behind LookupWordChecker /
+	// LookupModuleCallChecker is too costly per call on the hot path. A
+	// pointer-compare refresh keeps the cache correct across
+	// foreign-unit registry switches.
 	gateReg *Registry
 	gateWC  WordChecker
+	gateMC  ModuleCallChecker
 	// dynBinds is the live dynamic-scope binding trail (OpBindDynScope),
 	// shared across re-entrant closure runs (they nest strictly): frames
 	// record their entry depth (vmFrame.dynBase), RET truncates back, and
@@ -539,6 +542,13 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 		return nil, vmDeferAlt(r, curDebug, pc, "vm:poly-no-match",
 			"CALL_NATIVE_POLY no match for "+pr.Word+"; deferring to interpreter for the canonical signature_error",
 			bestEffortNoMatch(r, fn, pr.Word, window, curDebug, pc))
+	}
+	// Per-export module policy gate (NUR045): a module poly word's
+	// re-match resolved a stamped sub-registry sig — the same identity
+	// the interpreter's execMatch gate reads, checked AFTER the match so
+	// the gate applies to the overload that actually dispatches.
+	if err := vc.gateModuleCall(dispReg, mr.Sig.ModuleCall); err != nil {
+		return nil, err
 	}
 	// StripAscribed at delivery: the re-match above consumed the ascribed
 	// view; the handler receives the REAL values (execMatch parity).
@@ -1207,13 +1217,43 @@ func (vc *vmContext) runFallback(reg *Registry, fb *FallbackSpan, stack []Value,
 // on either engine. Internal markers are exempt exactly as there; check mode
 // never runs on the VM, so that skip has no twin here.
 func (vc *vmContext) gateWord(curReg *Registry, name string) error {
-	if vc.gateReg != curReg {
-		vc.gateReg, vc.gateWC = curReg, LookupWordChecker(curReg)
-	}
+	vc.refreshGates(curReg)
 	if vc.gateWC == nil || isInternalMarker(name) {
 		return nil
 	}
 	if err := vc.gateWC.CheckWord(name); err != nil {
+		return PolicyDenied{Err: err}
+	}
+	return nil
+}
+
+// refreshGates re-resolves the cached policy checkers when the dispatch
+// registry changed (a foreign-unit switch). One lookup refreshes both
+// the word and the module-call checker — they live on the same
+// CapPolicy slot.
+func (vc *vmContext) refreshGates(curReg *Registry) {
+	if vc.gateReg != curReg {
+		vc.gateReg, vc.gateWC, vc.gateMC = curReg, LookupWordChecker(curReg), LookupModuleCallChecker(curReg)
+	}
+}
+
+// gateModuleCall consults the per-export module policy before a compiled
+// module-export dispatch — the VM twin of the interpreter's
+// policyGateModuleCall (NUR045): the same checker object raises the same
+// error, so a denied export fails identically on either engine. gate is
+// the ModuleCallID stamped onto the dispatched signature (or derived
+// from the unit's owning registry for CALL_USER); nil allows in one
+// pointer test. Check mode never runs on the VM, so that skip has no
+// twin here — exactly as in gateWord.
+func (vc *vmContext) gateModuleCall(curReg *Registry, gate *ModuleCallID) error {
+	if gate == nil {
+		return nil
+	}
+	vc.refreshGates(curReg)
+	if vc.gateMC == nil {
+		return nil
+	}
+	if err := vc.gateMC.CheckModuleCall(gate.Module, gate.Export); err != nil {
 		return PolicyDenied{Err: err}
 	}
 	return nil
@@ -1614,6 +1654,14 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if err := vc.gateNamedCall(curReg, s.Word, len(stack), n, "CALL_NATIVE underflow at ", curDebug, pc); err != nil {
 				return nil, err
 			}
+			// Per-export module policy gate (NUR045): a baked module
+			// native (`TimeUtil.sleep 800` — the direct compiled route)
+			// carries the stamped identity on its recorded sig; the
+			// rebound laundering path (`def s TimeUtil.sleep/r  s 300`)
+			// baked a stamped copy too, whatever s.Word says.
+			if err := vc.gateModuleCall(curReg, s.Sig.ModuleCall); err != nil {
+				return nil, err
+			}
 			// One argument convention: position 0 is the top of stack.
 			// Reuse a per-RunProgram scratch buffer instead of allocating
 			// an args slice every dispatch — the dominant per-CALL_NATIVE
@@ -1786,6 +1834,16 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			fn := &p.Fns[in.Arg]
 			if err := vc.gateNamedCall(curReg, fn.Name, len(stack), fn.NParams, "CALL_USER underflow at ", curDebug, pc); err != nil {
 				return nil, err
+			}
+			// Per-export module policy gate (NUR045): a module-preamble
+			// fn's compiled unit carries its owning sub-registry
+			// (CompiledFn.Reg), whose ModuleRef was stamped at module
+			// resolution — the CALL_USER twin of the interpreter's
+			// execMatch gate over the stamped stored sig.
+			if fn.Reg != nil && fn.Reg.ModuleRef != "" {
+				if err := vc.gateModuleCall(curReg, &ModuleCallID{Module: fn.Reg.ModuleRef, Export: fn.Name}); err != nil {
+					return nil, err
+				}
 			}
 			nl := make([]Value, fn.NLocals)
 			for i := 0; i < fn.NParams; i++ {

@@ -276,7 +276,7 @@ from the code in three material ways.
 | Network fetch | `fetch.go::checkFetchPolicy` → `Check("network","connect",{url,host,port})` | **live** |
 | Log emit / sink install | `log_module.go::logAllowed` → `Check("log",…)` | **live** |
 | `install:false` structural denial | `SetHostFileOps`/`Formats`/`SQLite`/`LogSinks` delete the slot; accessor returns a not-installed stub | **live** |
-| Module *export* call | policy evaluator `checkModuleCall` (`Check("modules","call",{module,export})`) | **STUB — fully implemented + tested, but zero production callers.** Per-export deny rules (e.g. `boru:time deny sleep`) are dead. |
+| Module *export* call | policy evaluator `checkModuleCall` (`Check("modules","call",{module,export})`) | **LIVE (NUR045, 2026-08-02).** The export's policy identity is stamped onto its dispatchable signatures at module-resolution time (`eng.StampModuleCallGates`); every dispatch chokepoint on both engines gates on that stamp, so per-export deny rules (e.g. `boru:time-util deny sleep`) are enforced — including through a parked fn value. Profiles with no per-export rules pay one precomputed boolean. |
 | SQLite / env / process / clock per-op | `GlobalsFor` binds them, but no production `Check("sqlite"/"env"/"process"/"clock",…)` | **inert** (only `Installed(sqlite)` on/off is enforced) |
 | `mutate` / `system-info` hard-caps | in the enum; no `GlobalsFor` binding; no production `CheckGlobal` callers | **inert** |
 
@@ -591,8 +591,8 @@ scaffolded:
 1. **Per-edge attenuated install** (§5.2): `RunModuleBody` installs `effective`
    wrappers instead of inheriting parent slots; propagate `CapPolicy` to the
    child. *(fixes the §3.4 inherit-all gap)*
-2. **Wire the per-export gate**: give `checkModuleCall` (`Check("modules","call",…)`)
-   its missing production call site at module-export dispatch, so per-export
+2. ~~**Wire the per-export gate**~~ — **DONE (NUR045, 2026-08-02).** The
+   production call site exists at module-export dispatch on both engines, so per-export
    denies (e.g. `deny sleep`) actually bite. *(fixes the §3.2 stub)*
 3. **Bound the depth**: enforce `MaxSubEngineDepth` with a counter in
    `runInSubEngine` / the import path, so a maliciously deep transitive chain
@@ -1178,8 +1178,9 @@ single verifiable, attributable unit.
   and globals exist but no boru word reads an env var, spawns a process, or reads
   system info yet; the gates are scaffolding. When those words land, they must
   route through the scopes on day one.
-- **The per-export gate and the `Limits` enforcement are stubs** (§3.2, §3.6) —
-  until wired, per-export denies and every declared budget are inert.
+- **`Limits` enforcement is a stub** (§3.6) — until wired, every declared
+  budget is inert. (The per-export gate, §3.2, was wired by NUR045 on
+  2026-08-02 and is live on both engines.)
 
 ---
 

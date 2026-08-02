@@ -9,6 +9,19 @@ type Compiled struct {
 	name   string
 	scopes map[string]*Scope
 	limits Limits
+	// hasPerExportRules is the compile-time static short-circuit for
+	// CheckModuleCall: true iff the modules scope could deny SOME
+	// (module, export) call — it is uninstalled, or at least one
+	// per-module subscope carries a rule, a non-allow default, or
+	// install:false. False (the common case: full/trusted and every
+	// profile without per-module words blocks) lets the per-dispatch
+	// module-call gate answer allow with one boolean test instead of
+	// a scope walk — the answer to the recorded hot-path concern,
+	// sound because the decision depends only on {module, export}
+	// (no runtime args reach the subscope predicates). Deliberately
+	// an over-approximation: a subscope whose rules are all allows
+	// still sets it (the full Check then allows), never the reverse.
+	hasPerExportRules bool
 }
 
 // Compile resolves p's extends chain (looking up parents via the
@@ -41,7 +54,36 @@ func (p *Profile) Compile(resolver func(name string) (*Profile, error)) (*Compil
 	if out.scopes == nil {
 		out.scopes = map[string]*Scope{}
 	}
+	out.hasPerExportRules = moduleCallCouldDeny(out.scopes["modules"])
 	return out, nil
+}
+
+// moduleCallCouldDeny reports whether the resolved modules scope can
+// deny ANY Check("modules","call") — the precompute behind
+// Compiled.hasPerExportRules. It must be true whenever the full walk
+// could return non-nil for some (module, export): the scope itself
+// uninstalled (checkModuleCall's caller denies first), or a subscope
+// that is uninstalled, carries a non-allow words default, or carries
+// at least one rule (over-approximated: an all-allow rule list still
+// counts — the full walk then allows, so the approximation is sound
+// and only costs those profiles the walk).
+func moduleCallCouldDeny(s *Scope) bool {
+	if s == nil {
+		return false
+	}
+	if !s.Installed() {
+		return true
+	}
+	for _, sub := range s.Scopes {
+		if sub == nil {
+			continue
+		}
+		if !sub.Installed() || len(sub.Words.Rules) > 0 ||
+			(sub.Words.Default != "" && sub.Words.Default != EffectAllow) {
+			return true
+		}
+	}
+	return false
 }
 
 // resolveChain walks the extends chain bottom-up, merging parent

@@ -184,6 +184,26 @@ func (c *Compiled) CheckWord(name string) error {
 	return c.Check("engine", name, nil)
 }
 
+// CheckModuleCall verifies one module-export dispatch against the
+// per-module subscope rules — the per-export twin of CheckWord,
+// consumed by eng/ through the one-method ModuleCallChecker shim.
+//
+// The per-(module, export) decision is FULLY STATIC: the subscope
+// where-predicates see only {module, export}, never runtime args. So
+// a profile whose modules scope cannot deny any call (no subscopes
+// with rules, deny-defaults, or install:false — the common case,
+// precomputed as hasPerExportRules at Compile time) answers allow in
+// O(1), and the per-dispatch cost on such profiles is one boolean
+// test. Profiles that DO carry per-export rules take the full
+// Check("modules", "call") walk, whose Denied carries the standard
+// subscope blame ("modules.scopes.<id>.words rule #N").
+func (c *Compiled) CheckModuleCall(module, export string) error {
+	if !c.hasPerExportRules {
+		return nil
+	}
+	return c.Check("modules", "call", Args{"module": module, "export": export})
+}
+
 // evalWords runs the last-match-wins rule loop. Returns the final
 // decision and the index of the matching rule (or -1 if none
 // matched, in which case the default applied).

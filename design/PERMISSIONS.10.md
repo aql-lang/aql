@@ -624,7 +624,13 @@ func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
 }
 ```
 
-And per-export dispatch:
+And per-export dispatch — **implemented 2026-08-02 (NUR045)**, though
+not by a check at each dispatch site: the export's policy identity is
+stamped onto its dispatchable signatures once at module-resolution time
+(`eng.StampModuleCallGates`), and every chokepoint on both engines gates
+on that stamp, so no dispatch route can be missed and an unruled profile
+pays one precomputed boolean. The shape of the check is as sketched:
+
 
 ```go
 // When dispatching a module-imported word "math.sin":

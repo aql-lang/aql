@@ -397,6 +397,19 @@ type FnSig struct {
 	// arriving from a DIFFERENT module raises [boru/extend_conflict],
 	// while identical provenance (diamond re-import) is idempotent.
 	Origin string
+	// ModuleCall, when non-nil, names the module export this signature
+	// dispatches — the {module, export} identity the per-export policy
+	// gate (Check("modules","call")) verifies at every dispatch site on
+	// BOTH engines (interpreter execMatch / execFnDefSigStackMatch /
+	// CallBoru; VM CALL_NATIVE / CALL_USER / poly re-match /
+	// tryNativeFnApply). Stamped ONCE at module resolution
+	// (StampModuleCallGates) onto the export map's own sigs AND the
+	// sub-registry's stored inner sigs, so every signature copy that
+	// descends from them — dispatch aggregates, `def w Pkg.word`
+	// rebindings (the fn-as-data laundering path), fn-value captures,
+	// compiled SigRef/PolyRef re-matches — carries the identity. Nil
+	// for every non-module signature: the gates cost one pointer test.
+	ModuleCall *ModuleCallID
 	// CoreDefault marks a core-provided UNLOCKED default overload that the
 	// kernel appends to a builtin word (RegisterCoreDefault) — the Micron
 	// field-wise arithmetic default is the sole user. Unlike a locked

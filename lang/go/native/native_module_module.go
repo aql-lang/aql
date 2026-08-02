@@ -531,6 +531,9 @@ func loadFileModule(parent *Registry, path string) (ModuleDesc, error) {
 	desc.Kind = "file"
 	desc.File = resolved
 	desc.Folder = modDir
+	// NUR045: stamp the per-export policy identity as soon as the
+	// module's addressable id is known (see StampModuleCallGates).
+	StampModuleCallGates(desc.Exports, desc.Ref)
 
 	// If the module's boru.json declares resources, load them as a
 	// "resource" export so they are available as Module.resource.key.
@@ -883,6 +886,10 @@ func resolveNativeMod(r *Registry, path string) error {
 	if err != nil {
 		return fmt.Errorf("import: %w", err)
 	}
+	// NUR045: stamp the per-export policy identity before the exports
+	// are installed, so every binding that flows out of installExports
+	// (and every sig copied from one) carries the gate.
+	StampModuleCallGates(desc.Exports, "boru:"+name)
 	if err := installExports(r, desc, nil); err != nil {
 		return err
 	}
