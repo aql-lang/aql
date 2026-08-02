@@ -119,7 +119,15 @@ func TestMarkWindowDeclinesKeepParity(t *testing.T) {
 	// window arms on the variadic CALL event but the lowered stack is the
 	// call's seated results, not the window's event slots, so verifyMarkWindow
 	// pins the mismatch and the program falls back whole.
+	//
+	// Re-diagnosed 2026-08-02 (NUR037): this row's `f` is a fn-local fn —
+	// declared inside the `wrap` lambda's body and then named from the `do`
+	// code body — which a compiled unit cannot resolve at all, so the
+	// admission predicate refuses one stage before the mark window ever arms.
+	// Same sound refusal, earlier and truer diagnosis (the third such
+	// re-diagnosis of this row). Parity is what this test guards and it holds:
+	// the program falls back whole and answers exactly as the interpreter does.
 	mwRefusedWithParity(t,
 		`def wrap ([] => [def f fn [[x:Any] [Any] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]]) wrap`,
-		"mark-window residual does not match the lowered stack")
+		"code-body names fn-local fn `f` at `do` (a compiled unit cannot resolve an enclosing fn's local fn binding)")
 }

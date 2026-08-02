@@ -143,6 +143,21 @@ the interpreter then owns the whole program:
   — except `get`/`getr`/`set` and module-inner natives over inert atom keys.
 - **Code-body word** — a `NoEvalArgs` body that is not inert (a computed paren,
   or a body carrying a flow-control sentinel that targets an enclosing frame).
+- **Code-body naming a FN-LOCAL fn** (NUR037) — a body word whose current
+  binding is a `Function` installed INSIDE the enclosing fn being compiled
+  (the ComputeCaptures scope rule: `Depth(name) > TopFnBaseline()[name]`),
+  e.g. `def step fn […]` followed by `for-each [step] xs` in the same body.
+  The interpreter resolves the name per run through the def stack; a compiled
+  program never executes the enclosing body's def, so any admission that
+  bakes the NAME — the island span, the CALL_NATIVE const-bake, the closure
+  probe — turns a working program into `undefined_word`. `bodyRefsFnLocalFn`
+  (carrier.go) refuses at the `recordDispatchOutcome` seam, gating all three
+  paths at once. Deliberately narrow: module-scope callbacks (`TopFnBaseline`
+  nil, or depth ≤ baseline) and fn-local VALUE defs (the closure path's
+  lexical captures) keep compiling, as do structured-lowering words (if /
+  for) and structurally-desugared dispatches (case's branch chain), whose
+  bodies record as inline events with no name bake. Closure capture of
+  fn-local fn bindings remains a possible future widening.
 - **Dynamic input / opaque output** — a dynamic carrier reached the site, or the
   checker could not type the result (unannotated / opaque wrapper) — except a
   concrete-args core builtin whose dynamic result is merely a declared-`Any`

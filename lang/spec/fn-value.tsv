@@ -99,3 +99,23 @@ import module [ def w fn [[x:Integer] [Integer] [x]] export "M" {w: w/r} ] end  
 #     ("dynamic value precedes residual args").
 def f fn [[x:Any] [Any] [x]] end def m {p: f/r} end m.p 5 add 1	6	a sealed call composes with a following word statement
 def i fn [[x:Integer] [Integer] [x add 1]] end def m {i: i/r} end m.i 5 m.i 7	6 8	typed twins — the type gate already isolated these; unchanged
+#
+# §7  fn-local fns as higher-order body words REFUSE compilation (NUR037).
+#     A fn bound by `def … fn` INSIDE another fn and then NAMED as a
+#     code-body word (`for-each [step] xs`) resolves per run through the
+#     def stack, which a compiled program never populates — the enclosing
+#     body's def is compiled away — so every record-time admission that
+#     baked the NAME (the island span, the CALL_NATIVE const-bake, the
+#     closure probe) turned a working program into undefined_word in the
+#     DEFAULT mode only. bodyRefsFnLocalFn (eng/go/carrier.go) now refuses
+#     the whole program at compile admission, so the interpreter owns it
+#     ("slow, not wrong"; design/COMPILABLE-SUBSET.md §5). The refusing
+#     shapes are pinned in lang/go/test/nur037_fnlocal_test.go — a spec
+#     value row must compile (refusalCeiling 0). The rows here pin the
+#     twins the refusal must NEVER over-match, holding both engines to
+#     them through the differential gate: module-scope callbacks (the
+#     utils house-rule shape) and a fn-local VALUE read (the closure
+#     path's lexical capture).
+def stp fn [[e:Integer] [Integer] [e add 1]] end each [stp] [1 2]	[2 3]	a module-scope fn named as an each body word keeps compiling
+def acc (flex {}) end def stp fn [[e:String] [Any] [acc set (e) true]] end for-each [stp] ['x' 'y'] end acc	(flex {x:true y:true})	a module-scope fn as a for-each body word keeps compiling
+def g fn [[xs:List] [Any] [def n 10 each [n add] xs]] end g [1 2]	[11 12]	a fn-local VALUE def read by the body is a lexical capture, not a refusal

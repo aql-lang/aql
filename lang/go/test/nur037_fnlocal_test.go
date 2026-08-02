@@ -1,0 +1,187 @@
+package test
+
+import (
+	"fmt"
+	"strings"
+	"testing"
+
+	lang "github.com/boru-lang/boru/lang/go"
+)
+
+// NUR037: a fn declared inside another fn's body and named as a
+// higher-order body word (`for-each [step] xs`) resolved under the
+// interpreter but died with undefined_word under the DEFAULT compiled
+// mode — the compile pass admitted the body (the check-time registry
+// resolves `step`) and baked the NAME, which the VM's runtime registry
+// never binds (the enclosing body's `def step fn` is compiled away).
+// The resolution is a REFUSAL: bodyRefsFnLocalFn (eng/go/carrier.go)
+// detects the shape at compile admission and marks the program
+// uncompilable, so the interpreter owns the whole run — "slow, not
+// wrong" restored. Closure capture of fn-local fn bindings remains a
+// possible future widening.
+//
+// These cases live here rather than in lang/spec because the fn-local
+// shapes deliberately REFUSE compilation and the spec corpus enforces
+// refusalCeiling = 0 (every spec value row must compile) — the same
+// placement precedent as fn_triple_compiled_test.go. The module-scope
+// twins (which must KEEP compiling) are pinned in lang/spec/fn-value.tsv
+// §7 where the differential gate holds both engines to them.
+
+// nur037Repro is the recorded repro: a fn-local fn as a for-each body
+// word, accumulating into a captured flex map.
+const nur037Repro = `
+def collect fn [[xs:List] [Any] [
+  def acc (flex {})
+  def step fn [[e:String] [Any] [ acc set (e) true ]]
+  for-each [step] xs
+  acc
+]]
+collect ["x" "y"]
+`
+
+// nur037Each is the `each` variant — the same fn-local-fn shape across
+// the higher-order family (it leaked through the island path where
+// for-each leaked through the CALL_NATIVE const-bake).
+const nur037Each = `
+def collect fn [[xs:List] [Any] [
+  def step fn [[e:Integer] [Integer] [e add 1]]
+  each [step] xs
+]]
+collect [1 2]
+`
+
+// runBothEngines runs src through the default compiled entry point and
+// the interpreter, returning (defaultOut, wasCompiled, interpOut). A
+// compile_refused from the library is handled the way the CLI handles
+// it (warn-and-fall-back): the refusal guarantees no observable effect
+// escaped, so the default-mode result is an explicit interpreter re-run
+// on a fresh instance, with wasCompiled=false.
+func runBothEngines(t *testing.T, src string) (string, bool, string) {
+	t.Helper()
+	ac, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	comp, wasCompiled, cerr := ac.RunCompiled(src)
+	if cerr != nil {
+		if !strings.Contains(cerr.Error(), "compile_refused") {
+			t.Fatalf("default (compiled-mode) run errored: %v", cerr)
+		}
+		af, ferr := lang.New()
+		if ferr != nil {
+			t.Fatalf("lang.New: %v", ferr)
+		}
+		comp, cerr = af.RunInterp(src)
+		if cerr != nil {
+			t.Fatalf("fallback interpreter run errored: %v", cerr)
+		}
+		wasCompiled = false
+	}
+	ai, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	interp, ierr := ai.RunInterp(src)
+	if ierr != nil {
+		t.Fatalf("interpreter run errored: %v", ierr)
+	}
+	return fmt.Sprint(comp), wasCompiled, fmt.Sprint(interp)
+}
+
+func TestNur037FnLocalFnForEachAgrees(t *testing.T) {
+	comp, wasCompiled, interp := runBothEngines(t, nur037Repro)
+	if wasCompiled {
+		t.Error("the fn-local-fn for-each shape must REFUSE compilation (the bake leaks the name)")
+	}
+	if comp != interp {
+		t.Errorf("default mode = %q diverges from interpreter = %q", comp, interp)
+	}
+	if !strings.Contains(interp, "x:true") || !strings.Contains(interp, "y:true") {
+		t.Errorf("interpreter result = %q, want the {x:true y:true} accumulator", interp)
+	}
+}
+
+func TestNur037FnLocalFnEachAgrees(t *testing.T) {
+	comp, wasCompiled, interp := runBothEngines(t, nur037Each)
+	if wasCompiled {
+		t.Error("the fn-local-fn each shape must REFUSE compilation (the island bakes the name)")
+	}
+	if comp != interp {
+		t.Errorf("default mode = %q diverges from interpreter = %q", comp, interp)
+	}
+	if interp != "[[2 3]]" {
+		t.Errorf("interpreter result = %q, want [[2 3]]", interp)
+	}
+}
+
+func TestNur037RefusalReasonNamesTheShape(t *testing.T) {
+	a, err := lang.New()
+	if err != nil {
+		t.Fatalf("lang.New: %v", err)
+	}
+	_, wasCompiled, reason, rerr := a.RunCompiledReason(nur037Repro)
+	if wasCompiled {
+		t.Fatal("the repro must refuse compilation")
+	}
+	// Stage J: a genuine performance refusal surfaces as compile_refused
+	// (the CLI warns and falls back); the reason names the shape.
+	if rerr != nil && !strings.Contains(rerr.Error(), "compile_refused") {
+		t.Fatalf("run: %v", rerr)
+	}
+	if !strings.Contains(reason, "fn-local fn `step`") {
+		t.Errorf("refusal reason = %q, want the fn-local-fn reason naming step", reason)
+	}
+}
+
+func TestNur037CheckStaysClean(t *testing.T) {
+	// The refusal is a compile-admission decision, not a check error:
+	// the program is valid and `boru check` must stay clean on it.
+	for _, src := range []string{nur037Repro, nur037Each} {
+		a, err := lang.New()
+		if err != nil {
+			t.Fatalf("lang.New: %v", err)
+		}
+		res, cerr := a.Check(src)
+		if cerr != nil {
+			t.Fatalf("check errored: %v", cerr)
+		}
+		if res.Summary.Errors != 0 || res.Summary.Warnings != 0 {
+			t.Errorf("check: %d error(s), %d warning(s); want clean (refusal is not a check error)",
+				res.Summary.Errors, res.Summary.Warnings)
+		}
+	}
+}
+
+func TestNur037ModuleScopeCallbackStillCompiles(t *testing.T) {
+	// The negative contract: the SAME callback hoisted to module scope
+	// (the utils-corpus house-rule shape) must KEEP compiling and agree.
+	src := `
+def step fn [[e:Integer] [Integer] [e add 1]]
+each [step] [1 2]
+`
+	comp, wasCompiled, interp := runBothEngines(t, src)
+	if !wasCompiled {
+		t.Error("a module-scope callback must keep compiling (the refusal must not over-match)")
+	}
+	if comp != interp || comp != "[[2 3]]" {
+		t.Errorf("compiled = %q, interpreted = %q; want both [[2 3]]", comp, interp)
+	}
+}
+
+func TestNur037FnLocalValueDefStillCompilesClosure(t *testing.T) {
+	// A fn-local VALUE def read by the body (the lexical-capture shape)
+	// is the closure path's territory and must not be caught by the
+	// fn-local-FN refusal: the program still runs identically in both
+	// modes, whatever the compile decision for the enclosing unit.
+	src := `
+def f fn [[xs:List] [Any] [
+  def n 10
+  each [n add] xs
+]]
+f [1 2]
+`
+	comp, _, interp := runBothEngines(t, src)
+	if comp != interp || comp != "[[11 12]]" {
+		t.Errorf("compiled = %q, interpreted = %q; want both [[11 12]]", comp, interp)
+	}
+}

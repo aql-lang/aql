@@ -60,7 +60,6 @@ commit.
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | re-opened 2026-07-31 (was Allowed 2026-07-24) |
 | [NUR031](#nur031) | Function/Word values are not `eq`/`deq` to themselves | re-opened in part 2026-07-31 (was Allowed 2026-07-24); both module halves resolved (namespace by the NUR038 facet refactor, descriptor 2026-08-02) |
-| [NUR037](#nur037) | A fn-local fn used as a higher-order body word breaks in compiled mode only | re-opened 2026-07-31 (was Allowed 2026-07-30) |
 | [NUR049](#nur049) | The paren barrier is one-directional: a group can reach backward for a receiver | 2026-07-31 split of NUR029 (G10) |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 
@@ -1096,93 +1095,6 @@ compares the boxed pointer without reading a field.
   §8, `lang/spec/edge-containers-2.tsv`, `lang/spec/edge-errors-2.tsv`.
 
 
----
-
-
-## NUR037 — A fn-local fn used as a higher-order body word breaks in compiled mode only {#nur037}
-
-**Status:** Pending · **Re-opened:** 2026-07-31 (maintainer review,
-`design/NUR-RESOLUTION-PLAN.0.md`; was Allowed 2026-07-30) ·
-**Surfaced by:** C3 `boru:cli` scouting (design/CLI-PROGRAMS.0.md §8)
-
-**Rule:** the two execution engines agree. A program's meaning does not
-depend on whether the bytecode compiler accepted it — `design/COMPILABLE-
-SUBSET.md` states the contract as "slow, not wrong", and the whole-corpus
-differential exists to hold the two engines to the same answers.
-
-**Divergence:** a fn declared INSIDE another fn's body and then named as a
-higher-order body word resolves under the interpreter and is UNDEFINED
-under the compiler:
-
-```
-def collect fn [[xs:List] [Any] [
-  def acc (flex {})
-  def step fn [[e:String] [Any] [ acc set (e) true ]]
-  for-each [step] xs
-  acc
-]]
-print (collect ["x" "y"])
-```
-
-- `boru check` → `0 error(s), 0 warning(s), 0 info`
-- `boru run -no-compile` → `{x:true y:true}`
-- `boru run` (the DEFAULT) → `error: for-each: element 0: [boru/undefined_word]:
-  undefined word: step`, caret on `[step]`
-
-Hoisting the same `def step fn` to module scope makes all three agree.
-
-**Evidence:** the three commands above, on the current binary. The shape is
-not exotic: a helper local to the function that uses it is the obvious way
-to write a callback, and `sift.boru`'s inline comment about "a fold body will
-not compile" is this defect seen from a different angle (its stated form —
-that `fold` bodies as such refuse — does NOT reproduce; module-level body
-fns compile fine).
-
-**Documentation status:** undocumented. `design/BORU-SHARP-EDGES.0.md` does
-not list it, and nothing warns that the default mode has a smaller name
-resolution scope than the interpreter.
-
-**Proposed verdict:** fix. A compiled fn unit must capture the enclosing
-frame's local fn bindings, or the compiler must refuse the shape (a refusal
-is merely slow; an `undefined_word` on a working program is wrong). The
-check pass reporting clean while the default runtime fails is the part that
-makes this a trap rather than a limitation.
-
-
-
-### Why re-opened (2026-07-31) — an open defect, not a benign allowance
-
-The 2026-07-30 allowance leaned on the trigger being narrow and the
-workaround mechanical (declare callbacks at module scope — written
-into `utils/README.md`'s house rules and exercised through the
-compiled path by the Go suite). That mitigation **stands**, but it
-documents *around* the defect rather than closing it, and the review
-re-classifies the record:
-
-- **The mechanism is a closure-capture gap** — the compiled fn unit
-  does not capture the enclosing frame's local fn bindings, so `step`
-  is simply out of scope in compiled mode. A scope / name-resolution
-  defect: distinct from NUR050's (since-resolved) type-identity
-  mismatch.
-- **But the same family.** It rhymes with the recurring theme — the
-  bytecode compiler failing to treat functions/values as first-class
-  where the interpreter does: NUR051 (type literals as data refused to
-  compile — since RESOLVED: the emitter interns them per ADR-010),
-  NUR050 (function references failed dispatch — since RESOLVED:
-  stage-1 collection admission + the ADR-011 collapse), and here, function
-  *bindings* as captured values failing name resolution when compiled.
-- **"Slow, not wrong" is genuinely violated.** `boru check` reports
-  clean while the DEFAULT runtime fails with `undefined_word` on a
-  working program — exactly the failure mode
-  `design/COMPILABLE-SUBSET.md` forbids.
-
-**Fix direction:** a compiled fn unit must capture the enclosing
-frame's local fn bindings (proper closure capture — preferred), OR the
-compiler must refuse the shape at check time (a refusal is merely
-slow; an `undefined_word` on a working program is wrong). Track
-alongside the (now-resolved) NUR050/NUR051 first-class-values work even
-though the concrete mechanism here is closure capture, not type
-identity. The house rule remains the mitigation until the fix lands.
 ---
 
 
