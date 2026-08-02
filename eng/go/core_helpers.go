@@ -1955,6 +1955,16 @@ func CoerceBoolean(v Value) bool {
 		b, _ := AsBoolean(v)
 		return b
 	case ValueType(v).ConformsTo(TNumber):
+		// AsNumber REFUSES the arbitrary-precision leaves rather than
+		// projecting them (value.go: "use AsFloatApprox for a lossy
+		// float64"), so its error must not be dropped here — the
+		// accompanying zero would read as a real magnitude and make
+		// EVERY Big value falsy, `0d1` included, while `0d1 eq 1` is
+		// true (NUR055). Test the exact value instead; AsFloatApprox
+		// would not do, since a small enough BigDecimal underflows.
+		if numIsBig(v) {
+			return !bigNumIsZero(v)
+		}
 		n, _ := AsNumber(v)
 		return n != 0
 	case ValueType(v).Equal(TNone):
@@ -2523,4 +2533,20 @@ func ExpandOptionalSigs(name string, sigs []FnSig) []FnSig {
 		}
 	}
 	return expanded
+}
+
+// bigNumIsZero reports whether an arbitrary-precision numeric leaf is
+// exactly zero. Split out of CoerceBoolean so the truthiness test never
+// routes a Big value through the float64 channel: AsNumber refuses them
+// outright, and AsFloatApprox would flatten a sufficiently small
+// BigDecimal to 0.0. A value whose accessor fails is not provably zero,
+// so it stays truthy — the same direction the non-Big arm takes for an
+// unreadable payload.
+func bigNumIsZero(v Value) bool {
+	if v.Parent.ConformsTo(TBigInteger) {
+		bi, err := AsBigInteger(v)
+		return err == nil && bi != nil && bi.Sign() == 0
+	}
+	bd, err := AsBigDecimal(v)
+	return err == nil && bd != nil && bd.IsZero()
 }

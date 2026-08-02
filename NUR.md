@@ -67,7 +67,6 @@ commit.
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR053](#nur053) | The truthiness consumers do not share one domain | 2026-08-02 NUR register review |
 | [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler | 2026-08-02 NUR register review |
-| [NUR055](#nur055) | Every Big numeric value is falsy, not just zero | 2026-08-02 NUR register review |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -137,14 +136,14 @@ arithmetic word by specificity (the refinement escape).
 ### The divergence
 
 `convert Boolean "false"` → `true`. Boolean conversion applies the
-truthiness rule — `false`, `0`/`0.0` and `""` are false; a String's
-characters are never inspected.
+truthiness rule — `false`, numeric zero in any leaf
+(`0`/`0.0`/`0d0`) and `""` are false; a String's characters are never
+inspected.
 
-Two neighbouring defects are recorded separately and do not disturb
-this allowance. The Big leaves are currently ALL false, `0d1`
-included (NUR055). And the language's falsy set also contains `none`,
-`[]` and `{}`, but `convert`'s source slot is Scalar-only and refuses
-all three with a `signature_error` (NUR053).
+One neighbouring defect is recorded separately and does not disturb
+this allowance: the language's falsy set also contains `none`, `[]`
+and `{}`, but `convert`'s source slot is Scalar-only and refuses all
+three with a `signature_error` (NUR053).
 
 ### Why allowed
 
@@ -1888,64 +1887,3 @@ may complete compiled and abort interpreted). That one is
 one-directional, argued in place, and pinned by
 `TestStepBudgetNoSpuriousLimit`; it is a candidate for its own
 **Allowed** record rather than part of this defect.
-
----
-
-## NUR055 — Every Big numeric value is falsy, not just zero {#nur055}
-
-**Status:** Pending · **Recorded:** 2026-08-02 · **Surfaced by:** NUR
-register review (verifying NUR001's falsy-set enumeration)
-
-**Rule:** one truthiness model over all of `Number`
-(`design/TRUTHINESS.0.md`): a number is false when it is zero and true
-otherwise, uniformly across the leaves — Integer, Float, BigInteger and
-BigDecimal are one family, and NUR014 records that the cross-leaf
-collapse holds wherever it can hold exactly — `0d1 eq 1` → true, which
-is the case here.
-**Divergence:** the Big leaves are **uniformly false**, whatever their
-value:
-
-```
-$ boru do 'print (convert Boolean 0d1)'    # false   — should be true
-$ boru do 'print (convert Boolean 0d2)'    # false
-$ boru do 'print (convert Boolean 0d1.5)'  # false
-$ boru do 'print (if 0d1 ["T"] ["F"])'     # F
-$ boru do 'print (make Boolean 0d1)'       # false
-$ boru do 'print (convert Boolean 1)'      # true    — the Integer twin
-```
-
-So `0d1 eq 1` is true while `if 0d1` and `if 1` disagree: two values
-the language calls equal have opposite truth. Every consumer of the
-truthiness model inherits it — `if`, `convert Boolean`, `make Boolean`,
-and the `and`/`or` connectives (`1 or 2` → `1` but `0d1 or 2` → `2`).
-**Evidence:** the session above (verified 2026-08-02, current binary).
-Root cause: `eng/go/core_helpers.go::CoerceBoolean`'s Number arm is
-`n, _ := AsNumber(v); return n != 0` — and `AsNumber`
-(`eng/go/value.go:3133-3147`) deliberately **refuses** the Big leaves
-rather than projecting them, returning `(0, error)` with "is
-arbitrary-precision; use AsFloatApprox for a lossy float64". The arm
-discards that refusal with `n, _ :=` and reads the accompanying Go
-zero as a real magnitude. So this is a dropped-error bug against a rule
-the kernel states explicitly, not a precision-loss bug. The arithmetic
-path is unaffected (`add 0d1 0d2` → `0d3`), which is why it survived.
-**Documentation status:** undocumented, and contradicted by what IS
-documented in three places: `design/TRUTHINESS.0.md` states one presence
-rule for all numbers; REFERENCE.md's `if`-truthiness falsy list is
-"`false`, `0` (and `0.0`), `none`, the empty list `[]`/empty map `{}`,
-and the empty string `""`" with "**Everything else is true**"; and the
-shipped `boru describe convert` help says the same. Every Big value
-violates all three. NUR001's allowance is about content-vs-presence and
-survives
-untouched — all three consumers agree here, wrongly and uniformly.
-This is a defect in the shared rule itself, not in the sharing.
-**Proposed verdict:** fix. Stop discarding `AsNumber`'s refusal: branch
-on the Big leaves (`numIsBig`, `eng/go/compare_scalar_behaviors.go`)
-and test the exact `BigInteger`/`BigDecimal` value, as `toRatExact`
-does there. Note that `compare_deqkey.go`'s Number arm is NOT the
-pattern to copy: its Big path takes `AsFloatApprox` deliberately,
-because a bucket key only needs to be disambiguated pairwise — reusing
-it here would reproduce this defect for magnitudes that underflow. Spec
-rows should pin `if 0d1`, `convert Boolean 0d1` and `make Boolean 0d1`
-true with their `0d0` twins false, in both engines. This is a wrong answer
-delivered quietly, in the same class as the half-handled value kinds
-NUR031 tracks and the retired NUR050/NUR051 records.
