@@ -240,16 +240,16 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// a static provenance representation for the module-namespace
 	// synthetics (the capture-namespace family above); the rows then
 	// move back into edge-modules-1.tsv and compare-restrict.tsv.
-	`import module [export "M" {a:1}] M.$module eq M.$module`: {why: "NUR031: descriptor reflexive eq", failsWith: "operand of unknown provenance"},
-	`import module [export "M" {a:1}] M.$module deq M.$module`: {why: "NUR031: descriptor reflexive deq", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module eq B.$module`: {why: "NUR031: distinct descriptors are not eq", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module deq B.$module`: {why: "NUR031: distinct descriptors are not deq", failsWith: "operand of unknown provenance"},
+	`import module [export "M" {a:1}] M.$module eq M.$module`:                                                                                                             {why: "NUR031: descriptor reflexive eq", failsWith: "operand of unknown provenance"},
+	`import module [export "M" {a:1}] M.$module deq M.$module`:                                                                                                            {why: "NUR031: descriptor reflexive deq", failsWith: "operand of unknown provenance"},
+	`import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module eq B.$module`:                                                                            {why: "NUR031: distinct descriptors are not eq", failsWith: "operand of unknown provenance"},
+	`import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module deq B.$module`:                                                                           {why: "NUR031: distinct descriptors are not deq", failsWith: "operand of unknown provenance"},
 	`import "boru:array-util" import module [export "A" {x:1} export "B" {y:2}] import module [export "C" {z:3}] size (ArrayUtil.unique [A.$module B.$module C.$module])`: {why: "NUR031: the Module handle family in unique's DeqIndex", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] A.$module eq C.$module`: {why: "NUR031: one module, many namespaces — one shared descriptor", failsWith: "operand of unknown provenance"},
-	`import module [export "A" {x:1} export "B" {y:2}] A.$module deq B.$module`: {why: "NUR031: sibling namespaces of ONE module share a descriptor (deq mirrors eq)", failsWith: "operand of unknown provenance"},
-	`import "boru:test" Test.$module eq Assert.$module`: {why: "NUR031: a native module's sibling namespaces share one descriptor", failsWith: "operand of unknown provenance"},
-	`import "boru:string-util" import "boru:string-util" StringUtil.$module eq StringUtil.$module`: {why: "NUR031: repeat import is a cache no-op — same descriptor instance", failsWith: "operand of unknown provenance"},
-	`import "boru:string-util" def a StringUtil.$module undef StringUtil import "boru:string-util" a eq StringUtil.$module`: {why: "NUR031: re-import after undef mints a FRESH descriptor (identity is per-import-instance)", failsWith: "operand of unknown provenance"},
+	`import module [export "A" {x:1} export "B" {y:2} export "C" {z:3}] A.$module eq C.$module`:                                                                           {why: "NUR031: one module, many namespaces — one shared descriptor", failsWith: "operand of unknown provenance"},
+	`import module [export "A" {x:1} export "B" {y:2}] A.$module deq B.$module`:                                                                                           {why: "NUR031: sibling namespaces of ONE module share a descriptor (deq mirrors eq)", failsWith: "operand of unknown provenance"},
+	`import "boru:test" Test.$module eq Assert.$module`:                                                                                                                   {why: "NUR031: a native module's sibling namespaces share one descriptor", failsWith: "operand of unknown provenance"},
+	`import "boru:string-util" import "boru:string-util" StringUtil.$module eq StringUtil.$module`:                                                                        {why: "NUR031: repeat import is a cache no-op — same descriptor instance", failsWith: "operand of unknown provenance"},
+	`import "boru:string-util" def a StringUtil.$module undef StringUtil import "boru:string-util" a eq StringUtil.$module`:                                               {why: "NUR031: re-import after undef mints a FRESH descriptor (identity is per-import-instance)", failsWith: "operand of unknown provenance"},
 
 	// Net drivers — plan Phase 5: per-iteration mark/collect in the for: lowering.
 
