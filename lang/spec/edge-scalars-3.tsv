@@ -180,6 +180,13 @@ convert Boolean 'false'	true	the text 'false' is not parsed — a non-empty Stri
 convert Boolean 'no'	true	ANY non-empty text is true — even 'no'
 convert Boolean 0	false	numeric zero converts to false
 convert Boolean 3.5	true	non-zero Float converts to true
+convert Boolean 0d0	false	arbitrary-precision zero converts to false, like every other numeric zero
+convert Boolean 0d1	true	…and a non-zero BigInteger is true — the Big leaves are NOT uniformly falsy (was: every Big value false)
+convert Boolean 0d1.5	true	…nor is a non-zero BigDecimal
+convert Boolean 0d0.0	false	…while a BigDecimal zero is false
+if 0d1 ['T'] ['F']	'T'	the same rule reaches `if`: a non-zero Big value takes the true branch
+if 0d0 ['T'] ['F']	'F'	…and a Big zero takes the false branch
+make Boolean 0d1	true	…and `make Boolean`, the third consumer of the one truthiness rule
 convert Boolean {truthy:true} 'yes'	true	truthy option: a YAML boolean token parses
 convert Boolean {truthy:true} 'no'	false	…and 'no' parses to false
 convert Boolean {truthy:true} 'Off'	false	…YAML tokens are matched case-insensitively

@@ -8,7 +8,7 @@ func init() {
 			"string, boolean conversions. An optional options Map provides settings: " +
 			"`base` (radix for numeric conversions, e.g. {base:'hex'}), `truthy` " +
 			"(when true, `convert Boolean` parses a String YAML-style — " +
-			"yes/no/true/false/on/off, case-insensitive — falling back to presence " +
+			"y/yes/true/on and n/no/false/off, case-insensitive — falling back to presence " +
 			"coercion for any other string), and `accuracy` (with the companion " +
 			"`places`) which opts in to the otherwise-refused `Float → BigDecimal` " +
 			"conversion. A binary Float is inexact, so `accuracy` states which reading " +

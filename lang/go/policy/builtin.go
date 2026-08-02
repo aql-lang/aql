@@ -80,7 +80,7 @@ func builtinProfileData(name string) (data []byte, ok bool) {
 // per-module subscopes are strings nothing else validates, so
 // lang/go/modules cross-checks them against the real module registry
 // (a typo there silently allows a module that does not exist and forbids the
-// one that was meant — see the NUR that closed on two of them).
+// one that was meant — NUR043 closed on two of them, commit 8900edf).
 func BuiltinProfile(name string) (*Profile, error) {
 	data, ok := builtinProfileData(name)
 	if !ok {

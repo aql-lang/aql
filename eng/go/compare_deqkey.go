@@ -76,8 +76,9 @@ func deqKeyAtDepth(v Value, depth int) (string, DeqKeyClass) {
 	// families; the scalar families already agree). Bucket by type
 	// identity BEFORE the numeric branch so `Integer` never shares 0's
 	// bucket. Two container literals (`List`, `Map`) whose renders match
-	// still land here and are resolved pairwise by DeepEqual (which
-	// keeps `List deq List` false), so the bucket stays a sound filter.
+	// still land here and are resolved pairwise by DeepEqual (whose
+	// NUR034 type-literal arm answers `List deq List` true and
+	// `List deq Map` false), so the bucket stays a sound filter.
 	if IsBareTypeNode(v) {
 		return "tlit:" + ValueType(v).ID, DeqKeyed
 	}

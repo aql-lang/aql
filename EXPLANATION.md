@@ -318,7 +318,7 @@ add 1 2                           # returns 3 — Integer + Integer
 add 1.0 2                         # returns 3.0 — Float + Number, promotes
 "a" add "b"                       # returns 'ab' — String + Scalar, concatenates
 add 1 "x"                         # returns 'x1' — Scalar + String, the Integer coerces
-add true 1                        # type error — neither operand is a String
+add true 1                        # signature_error — no overload takes Boolean+Integer
 ```
 
 The same `add` covers numeric addition and string concatenation —
@@ -326,7 +326,8 @@ not because it has an `if isString` inside, but because its signatures
 match different argument shapes. Concatenation lives in two overloads,
 `[String, Scalar]` and `[Scalar, String]`, so it fires only when *at
 least one* operand is a `String`; a `Boolean`+`Number` pair matches
-neither and is a type error rather than a silent stringification.
+neither and is a `[boru/signature_error]` dispatch miss rather than a
+silent stringification.
 
 This makes the type system *active*: it isn't just for verification,
 it drives behaviour.
@@ -491,11 +492,18 @@ opaque handle: `eq` and `deq` are both its instance identity (every
 namespace one import binds shares the instance; distinct imports are
 distinct instances). Words that operate on values use `deq`: the
 collection words (`ArrayUtil.unique`/`member`/`indices`/`group`)
-dedup, test, and group by the `deq` class. The only values with no
-settled equality are **code values** — functions and words: a
-function's "value" is opaque code with no stable identity canon, so
-`deq` reports it unequal even to itself — an accepted remainder
-recorded as NUR031 in [NUR.md](NUR.md).
+dedup, test, and group by the `deq` class. Some values have no settled
+equality — they are not `deq` even to themselves. **Code values**
+(functions and words) are the headline case: a function's "value" is
+opaque code with no stable identity canon. Several kinds of type value
+behave the same way (`class` types and refinements of one, `tor`/`enum`
+disjunctions, `fnsig`, `surface`, and uninstantiated `gen` schemas), as
+do host payloads. That is an OPEN remainder recorded as NUR031 in
+[NUR.md](NUR.md), where it is Pending, not allowed. One consequence to
+expect: a container holding any of them is not `deq` to itself either,
+which includes the export map of any module that exports a function —
+every module in the standard library. (`nan` is separately
+non-reflexive, by the IEEE rule.)
 
 A bare type literal sorts strictly below every concrete inhabitant
 of its family (same-family, so the restricted words allow it — but

@@ -34,12 +34,14 @@ pow 2 0.5	0.25	`pow 2 0.5` = 0.5^2 = 0.25
 #
 # §3  add concatenates as String only when AT LEAST ONE operand is a
 #     String; the other Scalar coerces (b ++ a, mirroring b OP a). Two
-#     non-String scalars match neither overload → type error (WAT §G).
+#     non-String scalars of DIFFERENT families match no overload →
+#     signature_error (the WAT §G design, landed); a same-type pair still
+#     has its within-type arm.
 add 1 'x'	'x1'	Integer + String → String concat 'x'++'1' (one operand is a String)
 add 'a' 'b'	'ba'	String + String concatenates in b++a order
 add true 'x'	'xtrue'	Boolean + String → the String operand admits concat, Boolean coerces
 add 'x' 2.5	'2.5x'	String + Float coerces the Float to its string form
-add true 1	ERROR:no signature matches	Boolean + Integer: neither is a String → no concat, type error
+add true 1	ERROR:no signature matches	Boolean + Integer: neither is a String → no concat, so no overload matches (signature_error, not the registered Boolean type_error below)
 add true false	ERROR:arithmetic is not defined on Boolean	two Booleans: the within-type defined error, spec-pinned (was silently 'falsetrue'; see scalar-micron-ops.tsv)
 #
 # §4  numeric equivalence across leaves

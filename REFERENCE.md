@@ -1000,7 +1000,8 @@ forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 `add` concatenates when **at least one operand is a `String`**: the other
 scalar is rendered to text and the result is a `String`, so `"a" add "b"`
 returns `'ab'` and `1 add "x"` returns `'1x'`. Two non-`String` scalars do
-NOT concatenate — `add true 1` is a `[boru/type_error]`, not `'true1'`.
+NOT concatenate — `add true 1` is a `[boru/signature_error]` (no overload
+matches without a `String` operand), not `'true1'`.
 Every scalar type and Micron kind instead defines all six arithmetic words
 *within its own type* — see [Within-type operations](#within-type-operations)
 below.
@@ -1066,8 +1067,14 @@ operand unchanged, `sign` yields an `Integer`).
 ### Within-type operations
 
 The six arithmetic words are **total within every scalar type and every
-Micron kind** — applied within a type, never across it (a cross-type pair
-is a `[boru/type_error]`). The **sole language-level exception** is
+Micron kind** — applied within a type, never across it. A cross-type
+pair simply has no signature, so it raises `[boru/signature_error]`.
+Where a signature is *deliberately registered to refuse*, you get a
+coded error with a specific message instead: `[boru/type_error]` for
+`Big`⊕`Float`, for `Boolean` arithmetic, for a cross-**kind** Micron
+pair, and for within-kind Micron restrictions such as `mul` on two
+`Qion`s; `[boru/arith_error]` for a `Qion` currency mismatch. The
+**sole language-level exception** is
 `String` `add`, which concatenates when at least one operand is a
 `String` (see [Arithmetic](#arithmetic) above); no other word, and no
 other type — `Atom` and `Bytes` included — crosses scalar types. Some of
@@ -1224,8 +1231,11 @@ restricted words refuse. See
 > The `Module` descriptor (`M.$module`) is an **identity-equal opaque
 > handle**: `eq` and `deq` are both true exactly for the same descriptor
 > instance (all of one import's namespaces share it), never across
-> distinct instances. The only values with no equality are **code
-> values** — functions and words.
+> distinct instances. Values with no `deq` equality — not `deq` even to
+> themselves — include **code values** (functions and words), several
+> kinds of type value (`class` and refinements of one, `tor`/`enum`,
+> `fnsig`, `surface`, and uninstantiated `gen` schemas), host payloads,
+> and any container holding one. The reliable test is `x deq x`.
 
 ```
 1 lt 2.0                      # returns true        — Integer vs Float (shared Number)
@@ -1993,7 +2003,11 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 > one entry: this folds `deq`-distinct look-alikes (the type literal
 > `Integer` and the atom `Integer/q`), and — because `nan` is
 > `deq`-unequal to itself — it also groups all `nan` keys together
-> (`group [nan nan]` → `{nan:[0,1]}`).
+> (`group [nan nan]` → `{nan:[0,1]}`). The same fold catches every
+> other value that is not `deq` to itself — function and word values,
+> `class`/`tor`/`enum`/`fnsig`/`surface` and generic-schema type values,
+> host payloads, and any container holding one. `unique` keeps those
+> apart, so `group` and `unique` can disagree on the same list.
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
 | `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
 
@@ -2296,7 +2310,7 @@ converts back through validation.
 > judges only presence — empty String / `0` / `none` / empty collection
 > are false, everything else is true, so `convert Boolean "false"` is
 > **true**. Pass the options map `{truthy: true}` to parse a String
-> YAML-style first: `yes`/`no`/`true`/`false`/`on`/`off` (case-
+> YAML-style first: `y`/`yes`/`true`/`on` and `n`/`no`/`false`/`off` (case-
 > insensitive, surrounding whitespace trimmed) map to their booleans,
 > e.g. `convert Boolean {truthy: true} "no"` returns `false`. Any string
 > that is **not** a recognised token falls back to presence coercion

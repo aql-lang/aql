@@ -145,8 +145,9 @@ Introduce a complete equality family:
 This separates three notions many languages conflate. Performance
 note: Bytes equality may be O(n); `req` gives constant-time identity.
 Documentation should compare with JavaScript, Python, Ruby, and the
-Lisp family. (Not yet applied to the register's NUR011 record — the
-`req` design belongs with the equality work re-opened under NUR031.)
+Lisp family. (Applied to the register's NUR011 record on 2026-07-31;
+the `req` design travels with the equality work re-opened under
+NUR031.)
 
 ### NUR-012 — Resolve by fix — **RESOLVED (this session)**
 
@@ -247,6 +248,17 @@ split into four per-item records:
   sanctioned point-free patterns that consume enclosing stack values
   need an explicit alternative (e.g. `$`-receiver forms) if they
   exist.
+
+  *(Superseded 2026-08-02 — see the register, which is current. The
+  one-directional premise is RETRACTED: the group is already sealed
+  dynamically in every probed context, so there is no backward reach to
+  close, and the record was retitled. What remains is that the failure
+  is not STATIC — `error` handler bodies are wholly unchecked — plus
+  the engine diagnostics that recommend the broken parenthesised
+  spelling, and two shipped examples to repair
+  (`todo-tui-client.boru` and `design/examples/todo/audit.boru:29`).
+  The compatibility sweep came back clean: no sanctioned point-free
+  pattern relies on backward reach.)*
 - **NUR050 (G12)** — `/r`-parked fn vs `Function` param. **FIX —
   RESOLVED (this session, ADR-011)**: the repro was pinned (a
   collection-barrier failure plus a checker misdiagnosis, not a
@@ -295,11 +307,19 @@ differs. Outcomes:
   dispatch-rejection is accepted as current behaviour;
   **Module self-inequality is an open defect** (silent reflexivity
   violation). The NAMESPACE half resolved by construction with the
-  2026-07-31 NUR038 facet refactor (a namespace is a plain Map: `M eq
-  M → true`); the `Ideal/Module` DESCRIPTOR half remains open.
+  NUR038 facet refactor (a namespace is a plain Map: `M eq M → true`);
+  the `Ideal/Module` DESCRIPTOR half remains open.
   Standing requirement: every value — functions and modules included
   — falls under equality, at minimum reflexive. Mechanism awaits
   NUR050/ADR-010 and the Behavior-routing ADR; track together.
+
+  *(Superseded 2026-08-02 — see the register, which is current. The
+  namespace half landed 2026-08-01 in commit `d8f93d3`, not 2026-07-31;
+  the DESCRIPTOR half is RESOLVED as of 2026-08-02; and NUR050 is
+  resolved and retired, so there is nothing left to track alongside.
+  What NUR031 still tracks is Function/Word identity — including the
+  namespace `deq` residue, since a namespace exporting functions is not
+  `deq`-reflexive.)*
 - **NUR-037** (fn-local fn undefined when compiled) — re-opened as an
   open defect. Mechanism: closure-capture gap (distinct from G12's
   type identity, same first-class-values family). "Slow, not wrong"
