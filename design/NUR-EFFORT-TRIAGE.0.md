@@ -29,6 +29,11 @@
 > fixed in the same commit, and the Store enumeration asymmetry was
 > recorded as **NUR052**. Per-item outcomes are marked ✅ below.
 
+**Row titles are as-of-triage.** Several records have since been
+retitled by their verdicts — NUR019 is now "`slice` is a core sequence
+word, not a String straggler" and NUR014 "…depends on the leaf pair AND
+the value". [NUR.md](../NUR.md) is authoritative for titles.
+
 **Effort scale.** *low* = half a day or less (doc/config/one-liner
 plus pins). *low-medium* = about one day (localized code change, a
 few files). *medium* = 2–4 days (multi-file or cross-layer, moderate
@@ -52,7 +57,7 @@ already recorded.
 | 3 | ✅ **NUR019** — `slice` is the String family's core straggler | low | Document the real rationale — `slice` is a core *sequence* word polymorphic over String/List/Bytes (9 unqualified signatures), kin of `size`/`take`/`reverse` — plus two filing fixes (REFERENCE.md:1160 parenthetical, `help_categories.go` string-category Desc). The MOVE alternative is medium and semantically worse (it would split a polymorphic word). | Maintainer ALLOW on the sequence-word rationale. |
 | 4 | ✅ **NUR041** — the `read-only` profile denies file reads | low | Pure config+pins: an allow block for `fileops` read-ops in `read-only.jsonic` (merge semantics verified safe), the sandbox.jsonic comment correction, additive policy-test pins, e2e comment updates. Fix semantics live-verified via the equivalent `-allow fileops.read`. | Verdict is recorded (fix listed first). Two small choices: `read` alone vs the coherent `read`+`stat`+`list` set, and whether the **same latent gap found in the `client` profile** (see findings below) rides along. |
 | 5 | ✅ **NUR013** — NaN total-order slot vs IEEE relationals | low-medium | The maintainer-directed totalOrder comparison is done in substance: boru already conforms for its single observable quiet NaN; the one fixable gap is **signed zeros** (`-0.0 tcmp 0.0` → 0; totalOrder wants −0 first). Fix = a Signbit tiebreak in `numberCompareBehavior.Compare` (float + big-rat paths), a relational carve-out so `-0.0 lt 0.0` stays false, flipped/new spec rows, and the writeup across IEEE-754-COMPLIANCE / TYPE-ORDERING / REFERENCE. NaN sign/payload ordering is unobservable in boru → argued acceptance. | Final Allowed verdict over the residual divergences once the comparison is recorded. If the maintainer accepts the zeros tie instead, the whole item collapses to *low* (writeup + record). |
-| 6 | ✅ **NUR031 (narrow half)** — Module descriptor reflexive equality | low-medium | `M.$module eq M.$module → false` today. Exact in-repo precedent (Timeout/Interval opaque handles): two arms in `opaqueIdealExactEqual`/`DeepEqual`, a `handleKind` case in `compare_deqkey.go`, one payload tweak in `NewModuleInstance` (box a `*ModuleDesc` — `ModuleDesc` itself is not Go-comparable), tests + ~8 spec rows + REFERENCE.md:1219 amendment. Satisfies the standing "at minimum reflexive" requirement for modules. | One maintainer choice: identity token (boxed pointer = per-import identity, the safe mirror; vs `ModuleDesc.ID` = per-load identity, cross-import `eq`, needs an ID audit). **Rewrites the record, does not close it** — Function/Word identity and Behavior routing stay design-gated. |
+| 6 | ✅ **NUR031 (narrow half)** — Module descriptor reflexive equality | low-medium | `M.$module eq M.$module → false` today. Exact in-repo precedent (Timeout/Interval opaque handles): two arms in `opaqueIdealExactEqual`/`DeepEqual`, a `handleKind` case in `compare_deqkey.go`, one payload tweak in `NewModuleInstance` (box a `*ModuleDesc` — `ModuleDesc` itself is not Go-comparable), tests + ~8 spec rows + REFERENCE.md:1221 amendment. Satisfies the standing "at minimum reflexive" requirement for modules. | One maintainer choice: identity token (boxed pointer = per-import identity, the safe mirror; vs `ModuleDesc.ID` = per-load identity, cross-import `eq`, needs an ID audit). **Rewrites the record, does not close it** — Function/Word identity and Behavior routing stay design-gated. |
 | 7 | ✅ **NUR037** — fn-local fn undefined in compiled mode only | low-medium | The per-unit refuse-and-fall-back mechanism already exists (`MarkUncompilable` → interpreter re-run, the NUR051 precedent), and the scope test needed already exists as the ComputeCaptures rule. Fix = one predicate + one guard site in `recordDispatchOutcome`, refusing units whose code body names a fn-local fn — default run, `-no-compile`, and `check` then agree ("slow, not wrong" restored). Day is spent on coverage tests, differential-gate spec rows, and retiring the house-rule docs. | None — the recorded verdict explicitly sanctions refusal ("a refusal is merely slow"). The preferred closure-capture fix remains available later as a *medium* widening and does not gate deleting the record. |
 | 8 | ✅ **NUR044** — `boru build` skips `run`'s preflight | low-medium | The shared preflight exists (`check.PreflightColor`); wiring it into build with `-no-check`/`BORU_NO_CHECK` is ~15 lines. The real content is the discovered **import-anchoring trap**: check resolves relative imports against the cwd, build against the entry dir (verified live) — the preflight needs a baseDir-aware variant anchored to `cfg.EntryDir` or the fix breaks the existing multi-file e2e. All inside cmd/go; no spec impact. | None — the recorded verdict directs exactly this. |
 | 9 | ✅ **NUR047** — regex match offsets are bytes in a rune-indexed language | low-medium | One construction site (`reMatchResult`, shared by `lang_re` and `run-re`): a single-pass byte→rune conversion covers everything; check-mode shape is unit-agnostic. Every existing offset pin is ASCII, so no expectation churn. Remove grep.boru's Bytes workaround; its three multi-byte pinning tests keep their expected strings verbatim and simply invert their meaning (they now guard the fix). New non-ASCII spec rows + doc-string updates. | Effectively none — the recorded verdict states the preference ("fix by returning rune offsets"); a scheduling nod flips the record from Allowed to fixed. |
@@ -146,8 +151,10 @@ maintainer pick, but each is a genuinely small unit of honest work:
   paren, so backward reach fails deterministically *today* (the
   record's "reaches backward" claim did not reproduce in any context;
   see findings). The real defect is that the failure isn't *static*:
-  error-handler bodies are wholly unchecked (`error [zzz-undefined]`
-  checks clean). The fix is un-gating the already-written seeded
+  error-handler bodies are wholly unchecked
+  (`do [ raise bad_input "boom" ]  error [zzz-undefined]` checks clean;
+  the bare `error [zzz-undefined]` written here originally does not
+  parse — `error` needs a receiver). The fix is un-gating the already-written seeded
   handler-body check run in `errorReturnsFn` (diagnostics only, not
   the compile-gated narrowing), triaging what it newly surfaces
   (~61 corpus handlers, ~75 spec rows), fixing the misleading
@@ -169,9 +176,11 @@ maintainer pick, but each is a genuinely small unit of honest work:
   language-wide Map-keys-as-rendered-strings question.
 - **NUR031 — full closure.** Function/Word identity (stable canon
   independent of binding name) and routing Ideal equality through the
-  type's Behavior — the ADR the record defers to, tracked with the
-  NUR050 lineage. The narrow module-descriptor half above is the part
-  that doesn't need to wait.
+  type's Behavior — the ADR the record defers to. (NUR050 is since
+  resolved and retired, so there is no companion record left to track
+  it with; and the namespace `deq` residue belongs here too.) The
+  narrow module-descriptor half above is the part that doesn't need to
+  wait.
 
 ---
 

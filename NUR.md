@@ -55,8 +55,8 @@ here. An entry leaves this list only by becoming **Resolved** or
 **Allowed** in its record below — keep the two in sync in the same
 commit.
 
-| # | Title | Surfaced by / status |
-|---|-------|----------------------|
+| # | Title | Surfaced by / provenance |
+|---|-------|--------------------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
 | [NUR022](#nur022) | `del` covers a fraction of `set`'s containers | 2026-07-22 uniformity review |
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
@@ -138,10 +138,13 @@ arithmetic word by specificity (the refinement escape).
 
 `convert Boolean "false"` → `true`. Boolean conversion applies the
 truthiness rule — `false`, `0`/`0.0` and `""` are false; a String's
-characters are never inspected. (The Big leaves are currently ALL
-false, including `0d1` — a separate defect, recorded as NUR055.) (The language's falsy set also contains `none`, `[]` and
-`{}`, but `convert`'s source slot is Scalar-only and refuses all three
-with a `signature_error` — the domain split recorded as NUR053.)
+characters are never inspected.
+
+Two neighbouring defects are recorded separately and do not disturb
+this allowance. The Big leaves are currently ALL false, `0d1`
+included (NUR055). And the language's falsy set also contains `none`,
+`[]` and `{}`, but `convert`'s source slot is Scalar-only and refuses
+all three with a `signature_error` (NUR053).
 
 ### Why allowed
 
@@ -298,9 +301,10 @@ The scalar branch families carry structural leaves: `String` has
 `Scalar` with no builtin subtypes (no `True`/`False` lattice nodes).
 `Scalar/Bytes` is a third leaf-less child, registered from the language
 layer (`native_bytes.go`) rather than declared in `builtinDecls`. The
-same reasoning covers it with one caveat: Bytes is NOT a DepScalar
-refinement base (NUR009), so of the two value-level substitutes named
-below only `refine Bytes` stands in for it.
+same reasoning covers it with one caveat: of the value-level
+substitutes named below, the DepScalar refinement path does NOT apply
+to Bytes — it is not a supported refinement base, which is NUR009 —
+so only `refine Bytes` mints a nominal split for it.
 
 ### Why allowed
 
@@ -460,8 +464,8 @@ than here. NUR031's 2026-07-24 verdict minted two: `Error` is a
 independently raised errors with equal code/message/payload are `eq`);
 and `Timeout`/`Interval` are opaque handles whose identity IS their
 value, so their `deq` is by REFERENCE. The `Module` descriptor joined
-the second group on 2026-08-02 under the same rule (NUR031
-§"Descriptor half RESOLVED"). All are
+the second group on 2026-08-02 under the same rule (NUR031, "Descriptor
+half RESOLVED" — a bolded lead-in inside §"The remainder, reviewed"). All are
 the rule applied to Ideals that have no second level to offer, not
 departures from it — but the rule as quoted above does not say so, and
 this record is where a reader looks first.
@@ -484,8 +488,9 @@ remains the aliasing probe.
   equalities, one rule.**", a lead-in inside §"Type ordering", added
   with this verdict); `design/LISP-ANALYSIS.5.md` (the original
   argument).
-- NUR031 §"What was resolved" — the `Error` and `Timeout`/`Interval`/
-  `Module` carve-outs named above, with their implementing arms.
+- NUR031 §"What was resolved" — the `Error` and `Timeout`/`Interval`
+  carve-outs and their implementing arms; NUR031 "Descriptor half
+  RESOLVED" (2026-08-02) — the `Module` descriptor.
 - `lang/spec/module-array.tsv` — the collection words' `deq`-basis
   battery pins the value side of the rule.
 
@@ -746,7 +751,8 @@ that is the sequence home.
   description now points at core `slice` (fixed with this verdict).
 - `lang/spec/edge-scalars-3.tsv:45-53`, `corpus-core.tsv:119`,
   `corpus-structures.tsv:14` — both string and list behaviour pinned;
-  NUR039 independently pins the negative-start semantics.
+  the negative-start semantics are NUR039's subject and are not
+  spec-pinned by either record.
 
 ---
 
@@ -1028,11 +1034,16 @@ same-named atom, `deq`-unequal) yields the single group
 The fold is forced by `group`'s Map return shape and is arguably
 benign: no index is lost — both occurrences are retained under the
 shared key — and the same fold is what makes `group` total over the
-common **non-reflexive** keys — `nan`, plus fn/Word values and bare
-type values, all `deq`-unequal to themselves via NUR031's `deq`
-fall-through (container type literals were another instance when this
-was written, but NUR034 made them reflexive, so `List deq List` is now
-true and they group through `deq`, not the render fold) — giving
+common **non-reflexive** keys. Two mechanisms produce them: `nan` is
+`DeqKeyed` but never `DeepEqual` to itself under the IEEE rule NUR013
+records, while fn/Word values, user-declared class/record type values
+(`def P class {…}` — `P deq P` → false) and host payloads reach
+`DeepEqual`'s unsupported fall-through, which NUR031 tracks and
+`DeqNeverEqual` mirrors. Any container or instance transitively holding
+one inherits it. (Bare type LITERALS are not in this set — `List`,
+`Integer` and friends were non-reflexive when this record was written,
+but NUR034 made them reflexive, so `List deq List` is now true and they
+group through `deq`, not the render fold.) The fold gives
 `group [nan nan]` → `{nan:[0 1]}` where raising on a render collision
 would make grouping NaN-bearing data a hard error. The lossless
 `[[rep group] …]` pair shape was rejected as breaking `group`'s Map
@@ -1421,7 +1432,7 @@ accidental partial signal of exactly that condition.
   \"k\", with no diagnostic at all."
 - **Elsewhere the repo does rely on the quoting reading**, which is the
   real reason the fix is riskier than the confusion:
-  `lang/go/modules/vault_tui.boru` — shipped, `//go:embed`-ed — has ~66
+  `lang/go/modules/vault_tui.boru` — shipped, `//go:embed`-ed — has 77
   bare-word key sites (`state set screens …`, `state set status …`),
   and `kg/report.boru:334`, `design/examples/apps/todo-tui.boru:52` and
   the linguist samples do the same. Making `set` evaluate its key would
@@ -1760,11 +1771,12 @@ recorded)
 the `RunCompiled` contract as "identical results either way, the flag
 only changes the execution engine", and its `LIMITATION` note
 immediately below claims "the step budget is **the one place** this is
-NOT byte-for-byte transparent". NUR037 established the fallback
-discipline: where the compiled path cannot match the interpreter it
-must **refuse** the unit and fall back, so a divergence is "slow, not
-wrong" (`design/COMPILABLE-SUBSET.md`:7-9, restated at §1 "The
-contract"). NUR051 is the contrary
+NOT byte-for-byte transparent". `design/COMPILABLE-SUBSET.md`:7-9 (§1
+"The contract") states the fallback discipline: where the compiled path
+cannot lower faithfully it must **refuse** the unit and fall back, so a
+divergence is "slow, not wrong". NUR037 was a violation of that
+discipline, resolved by making the compiler refuse. NUR051 is the
+contrary
 precedent and sharpens the point — there the refusal ITSELF was the
 recorded defect ("anything that runs interpreted must also compile"),
 and ADR-010 resolved it by mandating the emitter intern nested type
@@ -1808,10 +1820,11 @@ the divergence is treated as a temporary shortfall with no verdict.
 this is not a refusal — the compiled unit runs and writes to a
 different store — so the "slow, not wrong" escape does not apply as
 recorded. Either the compiler brackets the four forms, or the
-compiled path refuses units containing them (the NUR037/NUR051
-mechanism), or the interpreter's boundary set is itself narrowed to
-what the compiler can honour and the change is argued at the language
-level. The `verse-report` note asks for the interpreter's own
+compiled path refuses units containing them (the NUR037 mechanism —
+noting that NUR051/ADR-010 is precisely why refusal is the weaker
+option here: there a refusal was itself ruled a bug), or the
+interpreter's boundary set is itself narrowed to what the compiler can
+honour and the change is argued at the language level. The `verse-report` note asks for the interpreter's own
 inconsistency to be settled first; that ordering looks right.
 Whichever way it lands, `boru.go`'s "the one place" wording needs
 correcting — either to name this as the second exception, or to
@@ -1835,8 +1848,9 @@ register review (verifying NUR001's falsy-set enumeration)
 **Rule:** one truthiness model over all of `Number`
 (`design/TRUTHINESS.0.md`): a number is false when it is zero and true
 otherwise, uniformly across the leaves — Integer, Float, BigInteger and
-BigDecimal are one family, and NUR014 records that they compare by
-magnitude (`0d1 eq 1` → true).
+BigDecimal are one family, and NUR014 records that the cross-leaf
+collapse holds wherever it can hold exactly — `0d1 eq 1` → true, which
+is the case here.
 **Divergence:** the Big leaves are **uniformly false**, whatever their
 value:
 
@@ -1852,19 +1866,28 @@ $ boru do 'print (convert Boolean 1)'      # true    — the Integer twin
 So `0d1 eq 1` is true while `if 0d1` and `if 1` disagree: two values
 the language calls equal have opposite truth. Every consumer of the
 truthiness model inherits it — `if`, `convert Boolean`, `make Boolean`,
-and the `and`/`or` connectives.
+and the `and`/`or` handlers (though `or`'s `[Any Any]` overload is
+currently unreachable at dispatch, so only `and` demonstrates it:
+`and 0d1 true` → `0d1`).
 **Evidence:** the session above (verified 2026-08-02, current binary).
 Root cause: `eng/go/core_helpers.go::CoerceBoolean`'s Number arm is
-`n, _ := AsNumber(v); return n != 0`, and `AsNumber` yields the float64
-channel, which is 0 for a Big-backed value — so the zero test answers
-"zero" for every BigInteger and BigDecimal. The arithmetic path is
-unaffected (`add 0d1 0d2` → `0d3`), which is why this survived.
+`n, _ := AsNumber(v); return n != 0` — and `AsNumber`
+(`eng/go/value.go:3133-3147`) deliberately **refuses** the Big leaves
+rather than projecting them, returning `(0, error)` with "is
+arbitrary-precision; use AsFloatApprox for a lossy float64". The arm
+discards that refusal with `n, _ :=` and reads the accompanying Go
+zero as a real magnitude. So this is a dropped-error bug against a rule
+the kernel states explicitly, not a precision-loss bug. The arithmetic
+path is unaffected (`add 0d1 0d2` → `0d3`), which is why it survived.
 **Documentation status:** undocumented, and contradicted by what IS
 documented — `design/TRUTHINESS.0.md` states one presence rule for all
-numbers, and NUR001 (Allowed) rests its argument on that rule holding.
-**Proposed verdict:** fix. Make `CoerceBoolean`'s Number arm Big-aware
-(test the exact value rather than the float64 projection), with spec
-rows pinning `if 0d1`, `convert Boolean 0d1`, `make Boolean 0d1` true
-and their `0d0` twins false, in both engines. This is a wrong answer
+numbers. NUR001's allowance is about content-vs-presence and survives
+untouched — all three consumers agree here, wrongly and uniformly.
+This is a defect in the shared rule itself, not in the sharing.
+**Proposed verdict:** fix. Stop discarding `AsNumber`'s refusal: branch
+on the Big leaves and test the exact `BigInteger`/`BigDecimal` value,
+the pattern `eng/go/compare_deqkey.go`'s Number arm already uses. Spec
+rows should pin `if 0d1`, `convert Boolean 0d1` and `make Boolean 0d1`
+true with their `0d0` twins false, in both engines. This is a wrong answer
 delivered quietly, in the same class as the half-handled value kinds
 NUR031 and the retired NUR050/NUR051 record.

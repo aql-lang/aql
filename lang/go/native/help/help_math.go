@@ -13,12 +13,13 @@ func init() {
 			"Micron kind: Atom add Atom concatenates the names, Bytes add Bytes " +
 			"concatenates, a same-kind Micron pair combines field-wise (rebuilt through " +
 			"the kind's make validator; Qion adds same-currency amounts, Pathon joins " +
-			"paths), and Boolean add Boolean is a deliberate type error (use the " +
-			"logical words). A cross-type pair (e.g. a Boolean and a Number) stays a " +
-			"type error — operations apply within a type, not across.",
+			"paths), and Boolean add Boolean is a deliberate [boru/type_error] (use the " +
+			"logical words). A cross-type pair (e.g. a Boolean and a Number) matches no " +
+			"overload at all, so it raises [boru/signature_error] — operations apply " +
+			"within a type, not across.",
 		Notes: []string{
 			"Integer overflow raises [boru/integer_overflow]; use a Float operand for an approximate result.",
-			"Concatenation needs a String: `add 1 \"x\"` → 'x1', but `add true 1` is a type error.",
+			"Concatenation needs a String: `add 1 \"x\"` → 'x1', but `add true 1` raises [boru/signature_error] (no overload without a String).",
 			"A user Micron kind can override the field-wise default with its own signature: `def add fn [[a:Kindon b:Kindon] …]`.",
 		},
 	})

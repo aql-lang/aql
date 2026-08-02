@@ -1207,13 +1207,15 @@ func (g *deqGrouper) add(key, v Value) {
 	}
 	// NUR030 (Pending): a Map key is a string, so two deq-DISTINCT keys
 	// that render identically must share one group entry. This also
-	// folds the NON-REFLEXIVE keys — `nan`, plus fn/Word values and bare
-	// type values, all deq-unequal to themselves (NUR031's deq
-	// fall-through, mirrored here as DeqNeverEqual) — so
-	// `group [nan nan]` is `{nan:[0 1]}` rather than an error.
-	// (Container type literals were another such key until NUR034 made
-	// them reflexive; `List deq List` is true now, so they fold through
-	// the deq probe above, not through this render key.) The
+	// folds the NON-REFLEXIVE keys, which arrive by two routes: `nan` is
+	// DeqKeyed, but the bucket's pairwise DeepEqual is false for it
+	// (IEEE), so the probe above misses and this render key catches it;
+	// fn/Word values, user-declared class/record type values and host
+	// payloads get DeqNeverEqual from DeqKey, mirroring DeepEqual's
+	// unsupported fall-through (NUR031). Either way `group [nan nan]`
+	// is `{nan:[0 1]}` rather than an error. (Bare type LITERALS are NOT
+	// in this set: NUR034 made them reflexive, so `List deq List` is
+	// true and they fold through the deq probe above.) The
 	// rare genuinely-distinct collision (the type literal `Integer` and
 	// the atom `Integer/q`, both rendering "Integer") co-groups too;
 	// no index is lost, and the alternative — erroring — would break

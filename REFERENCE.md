@@ -2000,7 +2000,11 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 > one entry: this folds `deq`-distinct look-alikes (the type literal
 > `Integer` and the atom `Integer/q`), and — because `nan` is
 > `deq`-unequal to itself — it also groups all `nan` keys together
-> (`group [nan nan]` → `{nan:[0,1]}`).
+> (`group [nan nan]` → `{nan:[0,1]}`). The same fold catches every
+> other value that is not `deq` to itself: function and word values,
+> user-declared class/record type values, and any container holding
+> one. `unique` keeps those apart, so `group` and `unique` can disagree
+> on the same list.
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
 | `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
 

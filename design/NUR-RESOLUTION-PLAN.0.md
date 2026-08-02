@@ -248,6 +248,17 @@ split into four per-item records:
   sanctioned point-free patterns that consume enclosing stack values
   need an explicit alternative (e.g. `$`-receiver forms) if they
   exist.
+
+  *(Superseded 2026-08-02 — see the register, which is current. The
+  one-directional premise is RETRACTED: the group is already sealed
+  dynamically in every probed context, so there is no backward reach to
+  close, and the record was retitled. What remains is that the failure
+  is not STATIC — `error` handler bodies are wholly unchecked — plus
+  the engine diagnostics that recommend the broken parenthesised
+  spelling, and two shipped examples to repair
+  (`todo-tui-client.boru` and `design/examples/todo/audit.boru:29`).
+  The compatibility sweep came back clean: no sanctioned point-free
+  pattern relies on backward reach.)*
 - **NUR050 (G12)** — `/r`-parked fn vs `Function` param. **FIX —
   RESOLVED (this session, ADR-011)**: the repro was pinned (a
   collection-barrier failure plus a checker misdiagnosis, not a
