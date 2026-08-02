@@ -799,8 +799,14 @@ func TestWeakXmlDeleteAttr(t *testing.T) {
 	v := NewWeakFlexXml("a")
 	wd := v.Data.(*WeakFlexXmlData)
 
-	// No attribute map yet: deleting must be a no-op, not a nil write.
-	wd.DeleteAttr("gone")
+	// No attribute map at all (the constructor allocates one, but a
+	// zero-struct payload — the same shape TestWeakMapSetValueZeroStruct
+	// drives — does not): deleting must be a no-op, not a nil write.
+	var zero WeakFlexXmlData
+	zero.DeleteAttr("gone")
+	if zero.Attr != nil {
+		t.Fatal("DeleteAttr on a nil Attr must not allocate")
+	}
 
 	wd.SetAttr("b", NewString("1"))
 	wd.SetAttr("c", NewString("2"))

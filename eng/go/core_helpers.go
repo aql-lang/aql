@@ -1949,7 +1949,15 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 // value that RENDERS as "false" is an unresolved boolean literal reaching
 // truthiness as a Word/Atom (a bare `false` clause, a quoted `false`
 // atom) and keeps its boolean reading.
+//
+// A type may OVERRIDE all of that with the Truther capability
+// (truthy.go) — the cascade below is the default, not the only answer.
+// No kernel type implements Truther, so the walk is inert until
+// something opts in.
 func CoerceBoolean(v Value) bool {
+	if res, ok := truthinessOf(v); ok {
+		return res
+	}
 	switch {
 	case ValueType(v).ConformsTo(TBoolean):
 		b, _ := AsBoolean(v)

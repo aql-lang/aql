@@ -233,4 +233,24 @@ func TestPrecedenceMixedIgnoresZeroArgRows(t *testing.T) {
 	if got := precedenceShape(info); got != precedenceStack {
 		t.Errorf("a nullary row beside stack rows must stay stack, got %v", got)
 	}
+
+	// The RENDERER skips them too, and must not count one into a group:
+	// a nullary row sources no arguments, so reporting it under "look
+	// ahead" or "from the stack" would inflate whichever group it landed
+	// in. `dot` and `apply` have no nullary overload, but nothing stops
+	// a word from having one alongside disagreeing rows.
+	mixedWithNullary := FuncInfo{Name: "w", ForwardArgs: true,
+		Sigs: []SigInfo{fwdSig(), fwdSig("A", "B"), stackSig("A")}}
+	if got := precedenceShape(mixedWithNullary); got != precedenceMixed {
+		t.Fatalf("fixture must be mixed, got %v", got)
+	}
+	out := FormatDynamic(mixedWithNullary)
+	for _, want := range []string{
+		"1 signature looks ahead for every argument.",
+		"1 signature takes every argument from the stack.",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the nullary row was counted into a group; missing %q in:\n%s", want, out)
+		}
+	}
 }

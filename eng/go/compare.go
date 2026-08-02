@@ -666,6 +666,15 @@ func DeepEqual(a, b Value) bool {
 		return eq
 	}
 
+	// Last chance before the terminal verdict: a type that installed the
+	// DeepEqualer capability answers for its own values. Placing the walk
+	// HERE rather than at the top is what makes it additive — it can only
+	// turn this `false` into a real answer, never override an arm above.
+	// See deepequal_capability.go.
+	if eq, handled := deepEqualCapability(a, b); handled {
+		return eq
+	}
+
 	// Different types or unsupported — not equal.
 	return false
 }

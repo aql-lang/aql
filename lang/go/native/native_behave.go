@@ -3,6 +3,8 @@ package native
 import (
 	"errors"
 	"fmt"
+	"sort"
+	"strings"
 
 	"github.com/boru-lang/boru/eng/go"
 )
@@ -10,19 +12,24 @@ import (
 // behave BEHAVIOR FN
 //
 // Installs a user-defined capability on a type. The first arg is the
-// behavior name (Atom — `compare/q`, `canon/q`, `nodify/q`, …); the
+// behavior name (Atom — `compare/q`, `canon/q`, `truthy/q`, …); the
 // second is a Function whose sig declares the target type and shape:
 //
 //	behave compare/q (fn [[Foo Foo] [Integer] [body]])
 //	behave canon/q   (fn [[Foo]     [String]  [body]])
 //	behave nodify/q  (fn [[Foo]     [Any]     [body]])
+//	behave unify/q   (fn [[Foo Foo] [Foo]     [body]])
+//	behave truthy/q  (fn [[Foo]     [Boolean] [body]])
+//	behave deq/q     (fn [[Foo Foo] [Boolean] [body]])
+//	behave size/q    (fn [[Foo]     [Integer] [body]])
 //
 // The handler validates the fn's first sig against the behavior's
 // declared shape, extracts the target type from the input params,
 // looks the type up in the registry, and wraps its TypeBehavior so
 // the body runs whenever the kernel dispatches the corresponding
 // capability (CompareValues for compare, Value.String for canon,
-// NodifyValue for nodify).
+// NodifyValue for nodify, Unify for unify, CoerceBoolean for truthy,
+// DeepEqual for deq, SizeOf for size).
 //
 // Calling `behave` again on the same type with the same or a
 // different behavior is additive — the existing userBehavior wrapper
@@ -113,13 +120,46 @@ var behaviors = map[string]behaviorEntry{
 		validate: validateUnifySig,
 		install:  func(u *userBehavior, body []eng.Value) { u.unifyBody = body },
 	},
+	// The three slots below close the gap between what the kernel can
+	// dispatch and what boru can install. `Sizer` already existed and was
+	// reachable only from Go; `Truther` and `DeepEqualer` are new kernel
+	// capabilities added for exactly this reason — a type could say how it
+	// orders, renders, unifies and projects, but not whether it is empty
+	// or when two of its values are the same.
+	"truthy": {
+		validate: validateTruthySig,
+		install:  func(u *userBehavior, body []eng.Value) { u.truthyBody = body },
+	},
+	"deq": {
+		validate: validateDeqSig,
+		install:  func(u *userBehavior, body []eng.Value) { u.deqBody = body },
+	},
+	"size": {
+		validate: validateSizeSig,
+		install:  func(u *userBehavior, body []eng.Value) { u.sizeBody = body },
+	},
+}
+
+// knownBehaviorNames renders the installable slots for the unknown-name
+// error. Derived from the table rather than written out, so a slot added
+// to `behaviors` cannot go unmentioned — the four-name literal this
+// replaced was already stale the moment the table grew.
+func knownBehaviorNames() string {
+	names := make([]string, 0, len(behaviors))
+	for n := range behaviors {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	return strings.Join(names, ", ")
 }
 
 func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
 	be, ok := behaviors[name]
 	if !ok {
-		return nil, r.BoruError("behave_error", fmt.Sprintf("behave %s: unknown behavior name; known: compare, canon, nodify, unify", name), "behave")
+		return nil, r.BoruError("behave_error",
+			fmt.Sprintf("behave %s: unknown behavior name; known: %s", name, knownBehaviorNames()),
+			"behave")
 	}
 
 	fnVal := args[1]
@@ -277,6 +317,62 @@ func validateUnifySig(sig eng.FnSig) (*eng.Type, error) {
 	return t0, nil
 }
 
+// validateTruthySig enforces shape `[[T] [Boolean] [body]]` and returns
+// T. The body decides what a value of T means in a boolean position —
+// `if`, the connectives, loop conditions. Without it a type outside the
+// kernel's truthiness cascade is simply truthy whatever it holds.
+func validateTruthySig(sig eng.FnSig) (*eng.Type, error) {
+	if len(sig.Params) != 1 {
+		return nil, fmt.Errorf("truthy: fn must take 1 arg (got %d)", len(sig.Params))
+	}
+	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(eng.TBoolean) {
+		return nil, fmt.Errorf("truthy: fn must return Boolean")
+	}
+	t := sig.Params[0].Type
+	if t == nil {
+		return nil, fmt.Errorf("truthy: param must declare a type")
+	}
+	return t, nil
+}
+
+// validateDeqSig enforces shape `[[T T] [Boolean] [body]]` and returns
+// T — the same two-same-type shape `compare` requires, since deep
+// equality is likewise a closed operation on T.
+func validateDeqSig(sig eng.FnSig) (*eng.Type, error) {
+	if len(sig.Params) != 2 {
+		return nil, fmt.Errorf("deq: fn must take 2 args (got %d)", len(sig.Params))
+	}
+	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(eng.TBoolean) {
+		return nil, fmt.Errorf("deq: fn must return Boolean")
+	}
+	t0 := sig.Params[0].Type
+	t1 := sig.Params[1].Type
+	if t0 == nil || t1 == nil {
+		return nil, fmt.Errorf("deq: both params must declare a type")
+	}
+	if !t0.Equal(t1) {
+		return nil, fmt.Errorf("deq: both params must be the same type (got %s and %s)", t0, t1)
+	}
+	return t0, nil
+}
+
+// validateSizeSig enforces shape `[[T] [Integer] [body]]` and returns T.
+// The body answers `size` for values of T — the kernel rule being "the
+// length of the collection the value stands for".
+func validateSizeSig(sig eng.FnSig) (*eng.Type, error) {
+	if len(sig.Params) != 1 {
+		return nil, fmt.Errorf("size: fn must take 1 arg (got %d)", len(sig.Params))
+	}
+	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(eng.TInteger) {
+		return nil, fmt.Errorf("size: fn must return Integer")
+	}
+	t := sig.Params[0].Type
+	if t == nil {
+		return nil, fmt.Errorf("size: param must declare a type")
+	}
+	return t, nil
+}
+
 // userBehavior is the shared wrapper type that carries one or more
 // boru-bodied capability slots on a target *Type. The TypeBehavior
 // surface (Match / Format / Equal) delegates to the previous
@@ -302,9 +398,15 @@ type userBehavior struct {
 	nodifyBody  []Value
 	unifyBody   []Value
 	unifyTarget *eng.Type // T from `behave unify/q (fn [[T T] [_] [...]])`
+	truthyBody  []Value
+	deqBody     []Value
+	sizeBody    []Value
 	inRender    bool
 	inNodify    bool
 	inUnify     bool
+	inTruthy    bool
+	inDeq       bool
+	inSize      bool
 }
 
 // Match delegates to prev — `behave` does not currently install
@@ -536,6 +638,136 @@ func (u *userBehavior) runNodifyBody(v Value) (Value, error) {
 	}
 	if len(result) == 0 {
 		return Value{}, fmt.Errorf("behave nodify %s: body produced no result", u.typeName)
+	}
+	return result[len(result)-1], nil
+}
+
+// Truthy runs the installed truthiness body if any, else delegates to
+// prev's Truther, else signals ErrNoTruther so CoerceBoolean falls back
+// to the kernel's family cascade.
+//
+// Re-entrancy is guarded like Format's: a body that puts the value back
+// into a boolean position (`if a [...]`) would otherwise loop through
+// CoerceBoolean → Truthy → body → CoerceBoolean. On re-entry the guard
+// declines, so the inner test gets the cascade's reading and the loop
+// terminates.
+func (u *userBehavior) Truthy(v Value) (bool, error) {
+	if len(u.truthyBody) == 0 {
+		if tr, ok := u.prev.(eng.Truther); ok {
+			return tr.Truthy(v)
+		}
+		return false, eng.ErrNoTruther
+	}
+	if u.inTruthy {
+		return false, eng.ErrNoTruther
+	}
+	u.inTruthy = true
+	defer func() { u.inTruthy = false }()
+	return u.runTruthyBody(v)
+}
+
+func (u *userBehavior) runTruthyBody(v Value) (bool, error) {
+	top, err := u.runUnaryBody(u.truthyBody, v, "truthy")
+	if err != nil {
+		return false, err
+	}
+	if !top.Parent.ConformsTo(eng.TBoolean) {
+		return false, fmt.Errorf("behave truthy %s: body must return Boolean, got %s",
+			u.typeName, top.Parent.String())
+	}
+	return eng.AsBoolean(top)
+}
+
+// DeepEqualValues runs the installed deq body if any, else delegates to
+// prev's DeepEqualer, else signals ErrNoDeepEqualer so DeepEqual
+// continues its walk and reaches its terminal verdict.
+func (u *userBehavior) DeepEqualValues(a, b Value) (bool, error) {
+	if len(u.deqBody) == 0 {
+		if de, ok := u.prev.(eng.DeepEqualer); ok {
+			return de.DeepEqualValues(a, b)
+		}
+		return false, eng.ErrNoDeepEqualer
+	}
+	if u.inDeq {
+		return false, eng.ErrNoDeepEqualer
+	}
+	u.inDeq = true
+	defer func() { u.inDeq = false }()
+	return u.runDeqBody(a, b)
+}
+
+func (u *userBehavior) runDeqBody(a, b Value) (bool, error) {
+	r := u.registry
+	if r == nil {
+		return false, fmt.Errorf("behave deq %s: no registry attached", u.typeName)
+	}
+	r.Defs.Push("a", a)
+	r.Defs.Push("b", b)
+	defer r.Defs.Pop("a")
+	defer r.Defs.Pop("b")
+
+	tokens := append([]Value{}, u.deqBody...)
+	result, err := eng.RunPooledTop(r, tokens)
+	if err != nil {
+		return false, fmt.Errorf("behave deq %s: %w", u.typeName, err)
+	}
+	if len(result) == 0 {
+		return false, fmt.Errorf("behave deq %s: body produced no result", u.typeName)
+	}
+	top := result[len(result)-1]
+	if !top.Parent.ConformsTo(eng.TBoolean) {
+		return false, fmt.Errorf("behave deq %s: body must return Boolean, got %s",
+			u.typeName, top.Parent.String())
+	}
+	return eng.AsBoolean(top)
+}
+
+// Size runs the installed size body if any, else delegates to prev's
+// Sizer, else reports 0 — SizeOf is total and has no decline channel,
+// and 0 is what it already reports for a type with no Sizer in its
+// lattice. A body that errors reports 0 for the same reason.
+func (u *userBehavior) Size(v Value) int {
+	if len(u.sizeBody) == 0 {
+		if sz, ok := u.prev.(eng.Sizer); ok {
+			return sz.Size(v)
+		}
+		return 0
+	}
+	if u.inSize {
+		return 0
+	}
+	u.inSize = true
+	defer func() { u.inSize = false }()
+	top, err := u.runUnaryBody(u.sizeBody, v, "size")
+	if err != nil || !top.Parent.ConformsTo(eng.TInteger) {
+		return 0
+	}
+	n, err := eng.AsInteger(top)
+	if err != nil {
+		return 0
+	}
+	return int(n)
+}
+
+// runUnaryBody runs a one-argument capability body with the value bound
+// to `a` and returns the top of the resulting stack. Shared by the
+// truthy and size slots, whose only difference is the return type they
+// then demand.
+func (u *userBehavior) runUnaryBody(body []Value, v Value, slot string) (Value, error) {
+	r := u.registry
+	if r == nil {
+		return Value{}, fmt.Errorf("behave %s %s: no registry attached", slot, u.typeName)
+	}
+	r.Defs.Push("a", v)
+	defer r.Defs.Pop("a")
+
+	tokens := append([]Value{}, body...)
+	result, err := eng.RunPooledTop(r, tokens)
+	if err != nil {
+		return Value{}, fmt.Errorf("behave %s %s: %w", slot, u.typeName, err)
+	}
+	if len(result) == 0 {
+		return Value{}, fmt.Errorf("behave %s %s: body produced no result", slot, u.typeName)
 	}
 	return result[len(result)-1], nil
 }
