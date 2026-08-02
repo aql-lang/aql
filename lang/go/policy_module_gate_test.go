@@ -139,3 +139,57 @@ func TestModuleCallGateIsAddressedByModuleID(t *testing.T) {
 		t.Errorf("got %v, want [4.0]", got)
 	}
 }
+
+// A module-preamble boru fn gates on its EXPORT key, not the
+// module-private fn name its compiled unit carries — the compiled
+// CALL_USER arm reads the stamped identity rather than reconstructing
+// one. Before this, `Cli.usage` denied on the interpreter and RAN
+// compiled: the exact bypass class NUR045 exists to close.
+func denyCliUsagePolicy(t *testing.T) Policy {
+	t.Helper()
+	pol, err := policy.LoadInline(`{
+		name: "no-usage",
+		scopes: {
+			modules: {
+				words: { default: "allow" },
+				scopes: { "boru:cli": { words: { default: "allow", rules: [{ deny: ["usage"] }] } } }
+			}
+		}
+	}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return pol
+}
+
+func TestModuleCallGateBoruPreambleFnBothEngines(t *testing.T) {
+	pol := denyCliUsagePolicy(t)
+	const src = `import "boru:cli"  Cli.usage {name:"x" flags:{}}`
+
+	a, _ := New(Options{Policy: pol})
+	_, errI := a.RunInterp(src)
+	if errI == nil || !strings.Contains(errI.Error(), "permission denied") {
+		t.Fatalf("interpreter must deny a boru-preamble export: %v", errI)
+	}
+	b, _ := New(Options{Policy: pol})
+	_, ran, _, errC := b.RunCompiledReason(src)
+	if errC == nil || !strings.Contains(errC.Error(), "permission denied") {
+		t.Fatalf("compiled must deny it too (ran=%v): %v", ran, errC)
+	}
+	if fmt.Sprint(errC) != fmt.Sprint(errI) {
+		t.Errorf("boru-fn deny parity: compiled=%v interp=%v", errC, errI)
+	}
+}
+
+func TestModuleCallGateBoruPreambleUnruledExportRuns(t *testing.T) {
+	pol := denyCliUsagePolicy(t)
+	const src = `import "boru:cli"  Cli.parse {name:"x" flags:{}} ["x"]`
+	a, _ := New(Options{Policy: pol})
+	if _, err := a.RunInterp(src); err != nil {
+		t.Errorf("an unruled boru-fn export must run (interp): %v", err)
+	}
+	b, _ := New(Options{Policy: pol})
+	if _, ran, _, err := b.RunCompiledReason(src); err != nil || !ran {
+		t.Errorf("an unruled boru-fn export must run (compiled, ran=%v): %v", ran, err)
+	}
+}

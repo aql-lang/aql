@@ -1841,7 +1841,10 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			// resolution — the CALL_USER twin of the interpreter's
 			// execMatch gate over the stamped stored sig.
 			if fn.Reg != nil && fn.Reg.ModuleRef != "" {
-				if err := vc.gateModuleCall(curReg, &ModuleCallID{Module: fn.Reg.ModuleRef, Export: fn.Name}); err != nil {
+				// Read the STAMPED identity: the unit's own name is the
+				// module-private fn name, not the export key the policy
+				// addresses, so reconstructing one here would miss the rule.
+				if err := vc.gateModuleCall(curReg, StampedModuleCall(fn.Reg, fn.Name)); err != nil {
 					return nil, err
 				}
 			}
