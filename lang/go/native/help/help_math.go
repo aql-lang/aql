@@ -14,9 +14,10 @@ func init() {
 			"concatenates, a same-kind Micron pair combines field-wise (rebuilt through " +
 			"the kind's make validator; Qion adds same-currency amounts, Pathon joins " +
 			"paths), and Boolean add Boolean is a deliberate [boru/type_error] (use the " +
-			"logical words). A cross-type pair (e.g. a Boolean and a Number) matches no " +
-			"overload at all, so it raises [boru/signature_error] — operations apply " +
-			"within a type, not across.",
+			"logical words). Operations apply within a type, not across: a pair that " +
+			"matches no signature at all — a Boolean and a Number, say — raises " +
+			"[boru/signature_error], while a pair whose refusal is registered, such as " +
+			"a cross-KIND Micron pair, raises [boru/type_error] with a specific message.",
 		Notes: []string{
 			"Integer overflow raises [boru/integer_overflow]; use a Float operand for an approximate result.",
 			"Concatenation needs a String: `add 1 \"x\"` → 'x1', but `add true 1` raises [boru/signature_error] (no overload without a String).",

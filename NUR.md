@@ -301,10 +301,12 @@ The scalar branch families carry structural leaves: `String` has
 `Scalar` with no builtin subtypes (no `True`/`False` lattice nodes).
 `Scalar/Bytes` is a third leaf-less child, registered from the language
 layer (`native_bytes.go`) rather than declared in `builtinDecls`. The
-same reasoning covers it with one caveat: of the value-level
-substitutes named below, the DepScalar refinement path does NOT apply
-to Bytes — it is not a supported refinement base, which is NUR009 —
-so only `refine Bytes` mints a nominal split for it.
+same reasoning covers it with one caveat: of the two value-level
+substitutes named below, `case` literal coverage does not reach Bytes
+(the domain is infinite) and DepScalar refinement construction is not
+available for it either (it is not a supported refinement base —
+NUR009). The nominal-split route, `refine Bytes`, does work, and is
+what stands in for subtypes here.
 
 ### Why allowed
 
@@ -313,8 +315,9 @@ family to have leaves, and nothing dispatches on their presence. There
 is no useful structural split of Boolean — `True`/`False` subtypes would
 duplicate what value-level machinery already provides uniformly (`case`
 literal coverage per NUR002, and DepScalar refinements: `(Boolean gte
-true)` *is* the true-only subset, since Boolean is a supported
-refinement base like every other well-known scalar). Users who want a
+true)` *is* the true-only subset, since Boolean is one of the supported
+refinement bases — `canonicalBaseType` admits Integer, Float, Number,
+String, Boolean and Atom). Users who want a
 nominal split can mint it (`refine Boolean`), which participates in
 dispatch by specificity like any refinement.
 
@@ -751,8 +754,10 @@ that is the sequence home.
   description now points at core `slice` (fixed with this verdict).
 - `lang/spec/edge-scalars-3.tsv:45-53`, `corpus-core.tsv:119`,
   `corpus-structures.tsv:14` — both string and list behaviour pinned;
-  the negative-start semantics are NUR039's subject and are not
-  spec-pinned by either record.
+  the two-argument negative-start form is pinned at
+  `edge-scalars-3.tsv:47,52`. NUR039's actual divergence — a negative
+  start in the THREE-argument form discarding `end` — is pinned by no
+  spec row.
 
 ---
 
@@ -864,8 +869,8 @@ deviation.
 **Evidence:** `native_ref.go:50-67` (`apply`, rationale comment at
 :51-54, `BarrierPos: 0` at :67); `native_control.go:131-137`
 (`__casematch`); REFERENCE.md:961-981 (the pinned list);
-`time_async_module.go:26`; `modules/math.go:342,353`;
-`native_fileinfo.go:25,33`; `modules/tui_widgets.go:332`;
+`time_async_module.go:26`; `modules/math.go:342` (`math-pi`; `math-e`
+at :353 is the same shape); `native_fileinfo.go:25,33`; `modules/tui_widgets.go:332`;
 `io_module.go:91`.
 **Documentation status:** worse than undocumented — actively
 contradicted. `boru describe apply` prints "Precedence: forward —
@@ -1036,14 +1041,16 @@ benign: no index is lost — both occurrences are retained under the
 shared key — and the same fold is what makes `group` total over the
 common **non-reflexive** keys. Two mechanisms produce them: `nan` is
 `DeqKeyed` but never `DeepEqual` to itself under the IEEE rule NUR013
-records, while fn/Word values, user-declared class/record type values
-(`def P class {…}` — `P deq P` → false) and host payloads reach
-`DeepEqual`'s unsupported fall-through, which NUR031 tracks and
-`DeqNeverEqual` mirrors. Any container or instance transitively holding
-one inherits it. (Bare type LITERALS are not in this set — `List`,
-`Integer` and friends were non-reflexive when this record was written,
-but NUR034 made them reflexive, so `List deq List` is now true and they
-group through `deq`, not the render fold.) The fold gives
+records, while fn/Word values, user-declared **class** type values
+(`def P class {…}` — `P deq P` → false, and any `refine` of one) and
+host payloads reach `DeepEqual`'s unsupported fall-through, which
+NUR031 tracks and `DeqNeverEqual` mirrors. Any container or instance
+transitively holding one inherits it. (Record, Options, Table and
+Micron type values are NOT in this set — they are `deq`-reflexive. Nor
+are the container/root literals any longer: `List`, `Map` and `Any`
+were non-reflexive when this record was written, but NUR034 made them
+reflexive, so `List deq List` is now true and they group through `deq`,
+not the render fold.) The fold gives
 `group [nan nan]` → `{nan:[0 1]}` where raising on a render collision
 would make grouping NaN-bearing data a hard error. The lossless
 `[[rep group] …]` pair shape was rejected as breaking `group`'s Map
@@ -1113,9 +1120,10 @@ NUR038 facet refactor, descriptor 2026-08-02), so what remains open is
   through, so two references to one function agree only when they were
   reached through the same name.
 
-Host `ExtensionPayload` values and bare type values share the same
-`deq` fall-through (`P deq P` → false for a `def P class {…}`); they
-are not separately recorded, and a fix here should cover them.
+Host `ExtensionPayload` values and user-declared **class** type values
+share the same `deq` fall-through (`P deq P` → false for a
+`def P class {…}`); they are not separately recorded, and a fix here
+should cover them.
 
 ### The uniform rule
 
@@ -1126,7 +1134,7 @@ deep value equality. Every value should at least be equal to itself.
 
 When surfaced (PR #309 review), the rule held only for the structural
 families (lists, maps, XML, class/resource instances). Every other
-Ideal — Store, Error, Timer, Interval, Function, Module — fell through
+Ideal — Store, Error, Timeout, Interval, Function, Module — fell through
 both `ExactEqual` and `DeepEqual` to `false`: not `eq` to itself, not
 `deq` to itself.
 
@@ -1217,9 +1225,10 @@ acceptance:
   module exporting a **function** gives `M deq M → false`
   (`IO deq IO`, `Test deq Test`, `StringUtil deq StringUtil` are all
   false today), because `DeepEqual`'s Map arm recurses into the export
-  values and fn values hit its terminal `false`. Exported bare **type**
-  values fail the same way (`def P class {…}` then `export {P: P}`
-  gives `M deq M → false`, since `P deq P` is false). This is not a
+  values and fn values hit its terminal `false`. Exported **class**
+  type values fail the same way (`def P class {…}` then `export {P: P}`
+  gives `M deq M → false`, since `P deq P` is false); exporting a bare
+  type literal does not — `export {L: List}` stays reflexive. This is not a
   module defect and not unlanded module work — a plain `{a:1 g:(f/r)}`
   Map behaves identically — it is the Function/Word `deq`
   fall-through below, seen through a namespace. Nothing in `lang/spec`
@@ -1520,8 +1529,8 @@ form.
 
 **The mechanism (corrected 2026-08-02).** This record originally
 proposed that "the first pass measures widths against a pre-wrap layout
-decision it then invalidates". `design/NUR-EFFORT-TRIAGE.0.md:134-143`
-(the NUR046 bullet; the cause statement at :135-136) investigated and
+decision it then invalidates". `design/NUR-EFFORT-TRIAGE.0.md:139-148`
+(the NUR046 bullet; the cause statement at :140-141) investigated and
 found otherwise: the true cause is **re-parse
 statement-segmentation drift** (root-level newlines emitted by pass 1
 change how pass 2 segments statements). The width-memoisation framing
@@ -1771,8 +1780,9 @@ recorded)
 the `RunCompiled` contract as "identical results either way, the flag
 only changes the execution engine", and its `LIMITATION` note
 immediately below claims "the step budget is **the one place** this is
-NOT byte-for-byte transparent". `design/COMPILABLE-SUBSET.md`:7-9 (§1
-"The contract") states the fallback discipline: where the compiled path
+NOT byte-for-byte transparent". `design/COMPILABLE-SUBSET.md`:7-9 (the
+preamble, restated at §1 "The contract", :23-35) states the fallback
+discipline: where the compiled path
 cannot lower faithfully it must **refuse** the unit and fall back, so a
 divergence is "slow, not wrong". NUR037 was a violation of that
 discipline, resolved by making the compiler refuse. NUR051 is the
@@ -1824,8 +1834,9 @@ compiled path refuses units containing them (the NUR037 mechanism —
 noting that NUR051/ADR-010 is precisely why refusal is the weaker
 option here: there a refusal was itself ruled a bug), or the
 interpreter's boundary set is itself narrowed to what the compiler can
-honour and the change is argued at the language level. The `verse-report` note asks for the interpreter's own
-inconsistency to be settled first; that ordering looks right.
+honour and the change is argued at the language level. The
+`verse-report` note asks for the interpreter's own inconsistency to be
+settled first; that ordering looks right.
 Whichever way it lands, `boru.go`'s "the one place" wording needs
 correcting — either to name this as the second exception, or to
 disappear because the exception did.
@@ -1866,9 +1877,7 @@ $ boru do 'print (convert Boolean 1)'      # true    — the Integer twin
 So `0d1 eq 1` is true while `if 0d1` and `if 1` disagree: two values
 the language calls equal have opposite truth. Every consumer of the
 truthiness model inherits it — `if`, `convert Boolean`, `make Boolean`,
-and the `and`/`or` handlers (though `or`'s `[Any Any]` overload is
-currently unreachable at dispatch, so only `and` demonstrates it:
-`and 0d1 true` → `0d1`).
+and the `and`/`or` connectives (`1 or 2` → `1` but `0d1 or 2` → `2`).
 **Evidence:** the session above (verified 2026-08-02, current binary).
 Root cause: `eng/go/core_helpers.go::CoerceBoolean`'s Number arm is
 `n, _ := AsNumber(v); return n != 0` — and `AsNumber`
@@ -1885,8 +1894,12 @@ numbers. NUR001's allowance is about content-vs-presence and survives
 untouched — all three consumers agree here, wrongly and uniformly.
 This is a defect in the shared rule itself, not in the sharing.
 **Proposed verdict:** fix. Stop discarding `AsNumber`'s refusal: branch
-on the Big leaves and test the exact `BigInteger`/`BigDecimal` value,
-the pattern `eng/go/compare_deqkey.go`'s Number arm already uses. Spec
+on the Big leaves (`numIsBig`, `eng/go/compare_scalar_behaviors.go`)
+and test the exact `BigInteger`/`BigDecimal` value, as `toRatExact`
+does there. Note that `compare_deqkey.go`'s Number arm is NOT the
+pattern to copy: its Big path takes `AsFloatApprox` deliberately,
+because a bucket key only needs to be disambiguated pairwise — reusing
+it here would reproduce this defect for magnitudes that underflow. Spec
 rows should pin `if 0d1`, `convert Boolean 0d1` and `make Boolean 0d1`
 true with their `0d0` twins false, in both engines. This is a wrong answer
 delivered quietly, in the same class as the half-handled value kinds

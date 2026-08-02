@@ -18,8 +18,11 @@ import (
 // and add carries the [TString, TScalar] / [TScalar, TString]
 // string-concatenation overloads, used when AT LEAST ONE input is a
 // String (the other Scalar coerces to its string form). Two
-// non-String scalars match neither overload, so the pair raises
-// [boru/signature_error] (a dispatch miss, not a registered refusal).
+// non-String scalars miss those two overloads and fall to whatever else
+// is registered for the pair: the [TNumber, TNumber] arm, the within-type
+// arms in native_scalar_ops.go (including the deliberate [Boolean Boolean]
+// refusal, a [boru/type_error]), or — matching nothing — a
+// [boru/signature_error] dispatch miss.
 //
 // All [TNumber, TNumber] handlers compute b op a (i.e.
 // args[1] op args[0]). Under §1.4 the swap form `a op b` is the
