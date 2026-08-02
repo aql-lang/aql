@@ -125,7 +125,17 @@ func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 		ar, aok := toRatExact(a)
 		br, bok := toRatExact(b)
 		if aok && bok {
-			return ar.Cmp(br), nil
+			if c := ar.Cmp(br); c != 0 {
+				return c, nil
+			}
+			// Magnitude tie — apply the signed-zero totalOrder slot here
+			// too, or transitivity breaks across the 0 / 0d0 / -0.0
+			// triangle (-0.0 < 0 and 0 = 0d0 force -0.0 < 0d0). Only a
+			// Float -0.0 counts as negative zero: big.Rat has no signed
+			// zero, so a BigDecimal "-0" spelling (apd's Negative flag
+			// surviving Text('f') → "-0") cannot leak through — every
+			// BigDecimal/BigInteger/Integer zero slots as +0.
+			return signedZeroOrder(a, b), nil
 		}
 		return 0, ErrNoComparer
 	}
@@ -175,8 +185,46 @@ func (numberCompareBehavior) Compare(a, b Value) (int, error) {
 	case af > bf:
 		return 1, nil
 	default:
-		return 0, nil
+		// Magnitude tie. IEEE totalOrder (§5.10) places -0 strictly
+		// before +0, so the signed zeros must not tie in the total order
+		// (they did before NUR013 — `sort [0.0 -0.0]` was a no-op).
+		// Only a Float -0.0 counts as negative zero; an Integer 0 slots
+		// as +0. The relational words lt/lte/gt/gte do NOT see this
+		// order — the signedZeroPair guard in compare.go keeps them on
+		// the IEEE §5.11 rule (-0 == +0), and eq/deq compare floats via
+		// Go ==, where -0.0 == 0.0 already holds.
+		return signedZeroOrder(a, b), nil
 	}
+}
+
+// signedZeroOrder is the totalOrder (§5.10) tiebreak for a magnitude-
+// equal numeric pair: the Float negative zero sorts strictly before
+// every positive zero (Float 0.0, Integer 0, BigInteger/BigDecimal
+// zeros), and any other magnitude-equal pair — including two -0.0s —
+// ties. Callers invoke it only after the magnitudes compared equal, so
+// a non-zero pair always hits the aNeg == bNeg (both false) arm.
+func signedZeroOrder(a, b Value) int {
+	aNeg, bNeg := isNegZeroFloat(a), isNegZeroFloat(b)
+	switch {
+	case aNeg == bNeg:
+		return 0
+	case aNeg:
+		return -1
+	default:
+		return 1
+	}
+}
+
+// isNegZeroFloat reports whether v is the Float negative zero — the
+// ONLY value that slots as -0 in the total order. Integer 0 and the
+// Big zeros (0n0, 0d0 — including a BigDecimal negative-zero spelling)
+// are not Floats and slot as +0.
+func isNegZeroFloat(v Value) bool {
+	if !v.Parent.ConformsTo(TFloat) {
+		return false
+	}
+	f, err := AsFloat(v)
+	return err == nil && f == 0 && math.Signbit(f)
 }
 
 // numIsBig reports whether v is an arbitrary-precision numeric leaf.

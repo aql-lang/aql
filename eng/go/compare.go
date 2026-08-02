@@ -810,17 +810,50 @@ func isNaNValue(v Value) bool {
 	return err == nil && math.IsNaN(f)
 }
 
+// signedZeroPair reports whether a relational comparison of a and b is
+// an IEEE ±0 pair: both concrete numbers of zero magnitude with the
+// Float negative zero on at least one side. IEEE §5.11 defines
+// -0 == +0, so lt/lte/gt/gte must treat the pair as EQUAL even though
+// the total order behind cmp/tcmp/sort now places -0.0 strictly before
+// every positive zero (totalOrder §5.10, NUR013) — without this guard
+// the totalOrder fix would CREATE an IEEE violation (-0.0 lt 0.0 →
+// true). The zero-magnitude probe runs in the exact big.Rat domain so
+// the cross-leaf pairs (Integer 0, BigInteger/BigDecimal zeros vs
+// -0.0) are guarded too.
+func signedZeroPair(a, b Value) bool {
+	if !isNegZeroFloat(a) && !isNegZeroFloat(b) {
+		return false
+	}
+	return isZeroNumber(a) && isZeroNumber(b)
+}
+
+// isZeroNumber reports whether v is a concrete number of exactly zero
+// magnitude (either sign), across all four numeric leaves.
+func isZeroNumber(v Value) bool {
+	if !isConcreteNumber(v) {
+		return false
+	}
+	r, ok := toRatExact(v)
+	return ok && r.Sign() == 0
+}
+
 // relationalHandler builds the handler for one ordering word: the IEEE
 // *unordered* rule first (NaN on either side → false, see
-// numericUnordered), then the family-restricted orderedCompare with
-// keep() mapping the three-way result onto the word's truth condition.
-// The four words are the same function with one comparator swapped —
-// building them from one factory keeps the NaN rule and the arg order
-// (args[1] vs args[0], the `a OP b` reading convention) from drifting.
+// numericUnordered), then the IEEE signed-zero equality (±0 pairs are
+// EQUAL per §5.11, see signedZeroPair — the total order's -0 < +0 slot
+// must not leak into the relationals), then the family-restricted
+// orderedCompare with keep() mapping the three-way result onto the
+// word's truth condition. The four words are the same function with
+// one comparator swapped — building them from one factory keeps the
+// NaN and ±0 rules and the arg order (args[1] vs args[0], the `a OP b`
+// reading convention) from drifting.
 func relationalHandler(op string, keep func(int) bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
 	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if numericUnordered(args[0], args[1]) {
 			return []Value{NewBoolean(false)}, nil
+		}
+		if signedZeroPair(args[0], args[1]) {
+			return []Value{NewBoolean(keep(0))}, nil
 		}
 		cmp, err := orderedCompare(op, args[1], args[0])
 		if err != nil {

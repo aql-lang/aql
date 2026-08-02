@@ -47,13 +47,13 @@ catalogue) — a much larger effort, partly impractical on the wasm target.
 | **binary64 format** (§3.4) | Go `float64` | ✅ conformant |
 | **Correctly-rounded `+ − × ÷`** (§5.4) | hardware, via the Float handler path | ✅ |
 | **Correctly-rounded `sqrt`** (§5.4) | `MathUtil.sqrt` → `math.Sqrt` | ✅ |
-| **`±0`** distinct, `−0 == +0` (§5.11) | `0.0 -1.0 mul → -0.0`; `-0.0 eq 0.0 → true` | ✅ |
+| **`±0`** distinct, `−0 == +0` (§5.11) | `0.0 -1.0 mul → -0.0`; `-0.0 eq 0.0 → true`; `-0.0 lt 0.0 → false` (relationals keep ±0 equal despite the totalOrder slot below) | ✅ |
 | **±∞ propagation** (§6.1) | overflow → `+Inf.0` / `-Inf.0` | ✅ (produced by overflow) |
 | **Subnormals** (§3.4) | stored/propagated (`5e-324` survives) | ✅ |
 | **NaN propagation** (§6.2) | `√−8 → NaN`, propagates through ops | ✅ (quiet only) |
 | **`x ÷ 0 → ±∞`, `0÷0 → NaN`** (§7.3) | Float: ✅ (±inf/nan); Integer: hard error by design; no sticky flag | ✅ value / ❌ flag |
 | **NaN comparison = unordered** (§5.11) | `eq/neq/lt/lte/gt/gte` all correct (false for NaN) | ✅ Tier 0 |
-| **`totalOrder` predicate** (§5.10) | `cmp`/`tcmp`/`sort` place NaN greatest (deterministic) | ✅ Tier 0 |
+| **`totalOrder` predicate** (§5.10) | `cmp`/`tcmp`/`sort`: `-0.0` strictly before `+0` (NUR013) and NaN greatest — conforming for signed zeros and for the single observable qNaN; NaN sign/payload ordering has no boru surface (one `nan` literal, rendering collapses the sign) | ✅ Tier 0 (NaN sign/payload: recorded acceptance — unobservable) |
 | **Directed rounding modes** (§4.3) | only the hardware default (ties-to-even) | ❌ |
 | **Sticky exception flags** (§7) | none | ❌ |
 | **`remainder` (round-to-nearest)** (§5.3.1) | `MathUtil.remainder` (`mod` stays truncated `fmod`) | ✅ |
@@ -242,6 +242,31 @@ unparseable `+Inf.0`/`NaN.0`), so print∘parse is identity. Verified by
 > the result is order-independent (`min nan 5` and `min 5 nan` are both
 > 5); only when every operand is NaN is the result NaN. This treats NaN
 > as "missing", which suits a data/query language.
+
+> **Signed zeros in the total order — resolved (NUR013).** The
+> `totalOrder` (§5.10) comparison, recorded: IEEE orders `-qNaN < -inf <
+> neg finite < -0 < +0 < pos finite < +inf < +qNaN` (with NaN
+> sign/payload ordering); boru's total order is now `-inf < neg finite <
+> -0.0 < +0 < pos finite < inf < nan`. Conforming on **signed zeros** —
+> `numberCompareBehavior.Compare` breaks a zero-magnitude tie by
+> `math.Signbit`, in both the float-projection path and the exact
+> big-rat path, so `-0.0 cmp 0.0 → -1` and `sort [0.0 -0.0] → [-0.0
+> 0.0]`. Only the Float `-0.0` slots as `-0`; Integer `0` and the Big
+> zeros (`0d0`, `0n0` — including a negative-zero decimal spelling,
+> which `big.Rat` normalises away) slot as `+0`, keeping the order
+> transitive across leaves. Conforming on **NaN placement** for the
+> single observable quiet NaN; NaN *sign/payload* ordering is a recorded
+> acceptance — boru has one `nan` literal and rendering collapses the
+> sign (`nan -1.0 mul → nan`), so the divergence is unobservable. The
+> relational words are carved out (`signedZeroPair` beside
+> `numericUnordered` in `eng/go/compare.go`): `lt`/`lte`/`gt`/`gte`
+> treat every ±0 pair as equal per §5.11 (`-0.0 lt 0.0 → false`,
+> `-0.0 lte 0.0 → true`), and `eq`/`deq` stay true (Go float `==`) —
+> so the total order now distinguishes a pair `eq` equates, the exact
+> inverse of the NaN asymmetry (`nan cmp nan → 0`, `nan eq nan →
+> false`). Both asymmetries are the same recorded two-regime split.
+> Verified by `lang/spec/float-special.tsv` (signed-zero section),
+> `lang/spec/edge-scalars-2.tsv` §1, and `eng/go/compare_zero_test.go`.
 
 **Tier 1 — IEEE arithmetic *semantics* (the realistic compliance target).**
 - ✅ Decision (1) above: `Float` div/mod by zero → `±∞`/NaN, not error;

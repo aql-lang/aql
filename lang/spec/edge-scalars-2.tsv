@@ -13,9 +13,9 @@
 -0.0 typeof	Float	-0.0 is a Float
 -0.0 eq 0.0	true	IEEE: -0 == +0
 -0.0 deq 0.0	true	deq agrees
--0.0 cmp 0.0	0	the total order also ties the zeros
--0.0 lt 0.0	false	not less — they are equal
-0 lte -0.0	true	Integer zero vs -0.0 across leaves
+-0.0 cmp 0.0	-1	the total order follows IEEE totalOrder: -0 strictly before +0 (NUR013)
+-0.0 lt 0.0	false	but the relationals keep IEEE §5.11: not less — they are equal
+0 lte -0.0	true	Integer zero vs -0.0 across leaves (relationals treat ±0 as equal)
 0.0 mul -1.0	-0.0	negation of +0 produces -0 (the sign bit is real)
 -0.0 mul -1.0	0.0	…and back
 -0.0 add 0.0	0.0	IEEE: (-0) + (+0) is +0 under round-to-nearest
@@ -31,8 +31,8 @@ import "boru:math-util"  MathUtil.signbit 0.0	false	…and the positive one
 import "boru:math-util"  MathUtil.abs -0.0	0.0	abs normalises the sign away
 import "boru:math-util"  MathUtil.sign -0.0	0	sign treats -0.0 as zero
 import "boru:math-util"  3.0 MathUtil.copysign -0.0	-3.0	copysign reads -0.0's sign bit (a magnitude-0 sign donor works)
-[-0.0 0.0] sort	[-0.0 0.0]	the zeros tie, so sort is a stable no-op…
-[0.0 -0.0] sort	[0.0 -0.0]	…in either input order (no IEEE totalOrder -0 < +0 here)
+[-0.0 0.0] sort	[-0.0 0.0]	sort follows IEEE totalOrder: -0.0 first (already in order here)…
+[0.0 -0.0] sort	[-0.0 0.0]	…and reordered when it isn't (NUR013 — was a tie/no-op before)
 #
 # §2  inf/nan indeterminate forms (the determinate ones are in
 #     float-special.tsv)

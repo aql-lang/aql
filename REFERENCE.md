@@ -1039,6 +1039,11 @@ Two further sharp edges on numbers:
   what `cmp`, `tcmp`, and `sort` use — NaN is treated as the greatest
   value (`-inf < finite < inf < nan`), so sorting a list with a NaN is
   deterministic (NaN sorts last) rather than leaving it unordered.
+  The total order also follows IEEE `totalOrder` for the signed zeros:
+  `-0.0` sorts strictly before every positive zero (`-0.0 cmp 0.0` is
+  `-1`; `sort [0.0 -0.0]` is `[-0.0 0.0]`; Integer `0` and `0d0` slot
+  with `+0`), while the relationals and `eq` keep the IEEE ±0 equality
+  (`-0.0 lt 0.0` is `false`, `-0.0 eq 0.0` is `true`).
 
 Additional numeric words (`abs`, `negate`, `sign`, `min`, `max`,
 `floor`, `ceil`, `round`, `trunc`, `sqrt`, `cbrt`, `exp`, `log`,

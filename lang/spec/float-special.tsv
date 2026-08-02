@@ -7,12 +7,14 @@
 # print∘parse is identity. See design/IEEE-754-COMPLIANCE.8.md (Tier 0).
 #
 # Comparison has TWO regimes, deliberately:
-#   * cmp / tcmp / sort use a TOTAL order — NaN sorts after every other
-#     value (greatest); -inf < finite < inf < nan. This is what the
-#     collection words need (a non-total comparator silently corrupts
-#     sort — the bug this fixed).
-#   * lt / lte / gt / gte use IEEE *unordered* — any comparison involving
-#     NaN is false. eq is false for NaN, neq is true.
+#   * cmp / tcmp / sort use a TOTAL order — the IEEE totalOrder (§5.10)
+#     placement: -inf < -0.0 < +0 < pos finite < inf < nan (NaN
+#     greatest; the Float -0.0 strictly before every positive zero).
+#     This is what the collection words need (a non-total comparator
+#     silently corrupts sort — the bug this fixed).
+#   * lt / lte / gt / gte use IEEE §5.11 — any comparison involving
+#     NaN is *unordered* (false), and ±0 compare EQUAL. eq is false
+#     for NaN, true for ±0 pairs; neq is the negation.
 
 # ───────── literals & round-trip rendering ─────────
 inf	inf	+infinity literal
@@ -59,6 +61,44 @@ inf nan cmp	-1	inf sorts before NaN
 nan 5.0 tcmp	1	tcmp agrees with cmp on the total order
 [3.0 nan 1.0 2.0] sort	[1.0 2.0 3.0 nan]	NaN sorts last (was left UNSORTED before the fix)
 [inf 1.0 -inf nan 0.0] sort	[-inf 0.0 1.0 inf nan]	full ordering across specials
+
+# ───────── signed zeros: totalOrder in cmp/tcmp/sort, IEEE ±0 equality in the relationals ─────────
+# NUR013: IEEE totalOrder (§5.10) places -0 strictly before +0, and the
+# total order now honours it. Only the Float -0.0 slots as -0; Integer 0
+# and the Big zeros (0n0 / 0d0 — including any negative-zero decimal
+# spelling, since big.Rat has no signed zero) slot as +0, keeping the
+# order transitive across the 0 / 0d0 / -0.0 triangle. The relational
+# words keep IEEE §5.11 (-0 == +0): lt/gt false, lte/gte true. eq/deq
+# stay true — so the total order now DISTINGUISHES a pair eq equates,
+# the exact inverse of the NaN asymmetry (nan cmp nan = 0, nan eq nan
+# = false). Both asymmetries are the recorded two-regime split.
+-0.0 cmp 0.0	-1	totalOrder: -0 strictly before +0
+0.0 cmp -0.0	1	…and the mirror
+-0.0 tcmp 0.0	-1	tcmp agrees
+-0.0 cmp -0.0	0	two negative zeros tie
+0 tcmp -0.0	1	Integer 0 slots as +0 (cross-leaf)
+0d0 tcmp -0.0	1	BigDecimal 0d0 slots as +0 (exact big path)
+0 tcmp 0d0	0	…keeping the 0 / 0d0 / -0.0 triangle transitive
+[0.0 -0.0] sort	[-0.0 0.0]	sort follows totalOrder: -0.0 first
+[0.0 nan -0.0 1.0 -inf] sort	[-inf -0.0 0.0 1.0 nan]	full slotting: -inf < -0.0 < +0 < finite < nan
+-0.0 lt 0.0	false	relationals keep IEEE §5.11: ±0 are equal
+-0.0 lte 0.0	true	…so lte is true
+0.0 lte -0.0	true	…in both directions
+-0.0 gt 0.0	false	not greater either
+-0.0 gte 0.0	true	gte is true
+0 gte -0.0	true	cross-leaf relational: Integer 0 vs -0.0 stays equal
+0d0 lte -0.0	true	…and BigDecimal 0d0 vs -0.0
+-0.0 eq 0.0	true	eq keeps IEEE equality (Go float ==)
+-0.0 deq 0.0	true	deq agrees
+-0.0 neq 0.0	false	so neq is false
+# The deq-based collection words are untouched by the total-order
+# change (unique/group dedup by deq, where ±0 are one value); min/max
+# on a ±0 pair return one of the two equal zeros (IEEE-2008
+# minNum/maxNum permits either).
+import "boru:array-util"  ArrayUtil.unique [0.0 -0.0]	[0.0]	unique dedups by deq: ±0 collapse to the first…
+import "boru:array-util"  ArrayUtil.unique [-0.0 0.0]	[-0.0]	…whichever sign comes first
+import "boru:math-util"  MathUtil.min -0.0 0.0	0.0	min on a ±0 pair yields a zero (the pair is relationally equal)
+import "boru:math-util"  MathUtil.max -0.0 0.0	0.0	max too — both results eq both inputs
 
 # ───────── reserved: the literals cannot be redefined ─────────
 def inf 5	ERROR:	`inf` is a reserved literal — def is rejected

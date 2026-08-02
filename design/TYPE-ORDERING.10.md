@@ -328,6 +328,37 @@ a NaN is involved) via `numericUnordered` in `eng/go/compare.go` — they
 do **not** read the total-order slot. `eq` stays false for NaN (so `neq`
 is true). See `design/IEEE-754-COMPLIANCE.8.md` Tier 0.
 
+### Signed zeros in the total order
+
+The same two-regime split covers the signed zeros (NUR013). The
+recorded `totalOrder` (§5.10) comparison: IEEE orders `-qNaN < -inf <
+neg finite < -0 < +0 < pos finite < +inf < +qNaN`; boru's total order
+is `-inf < neg finite < -0.0 < +0 < pos finite < inf < nan` —
+conforming on signed zeros and on the placement of the single
+observable quiet NaN, with NaN sign/payload ordering a recorded
+acceptance (unobservable: one `nan` literal, rendering collapses the
+sign).
+
+Concretely, `numberCompareBehavior.Compare` breaks a zero-magnitude
+tie by `math.Signbit`: the Float `-0.0` sorts **strictly before every
+positive zero** (`-0.0 cmp 0.0 → -1`, `sort [0.0 -0.0] → [-0.0
+0.0]`). Only the Float `-0.0` slots as `-0` — Integer `0` and the Big
+zeros (`0d0` / `0n0`, including a negative-zero decimal spelling,
+which the exact `big.Rat` domain normalises away) slot as `+0`, so
+the tiebreak applies identically in the float-projection path and the
+big-rat path and the `0` / `0d0` / `-0.0` triangle stays transitive
+(`0 tcmp -0.0 → 1`, `0d0 tcmp -0.0 → 1`, `0 tcmp 0d0 → 0`).
+
+The relational words are carved out via `signedZeroPair` (beside
+`numericUnordered` in `eng/go/compare.go`): `lt` / `lte` / `gt` /
+`gte` treat every ±0 pair as EQUAL per IEEE §5.11 (`-0.0 lt 0.0 →
+false`, `-0.0 lte 0.0 → true`), and `eq` / `deq` stay true (Go float
+`==`). So the total order distinguishes a pair `eq` equates — the
+exact inverse of the NaN asymmetry (`nan cmp nan → 0`, `nan eq nan →
+false`); both are the one recorded two-regime split. The deq-based
+collection words (`unique`, `group`) are unaffected — they never read
+the total order for equality.
+
 ### `none` and `Never`
 
 `none` and `Never` are degenerate roots with no Comparer-bearing

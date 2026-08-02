@@ -55,7 +55,6 @@ commit.
 | # | Title | Surfaced by |
 |---|-------|-------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
-| [NUR013](#nur013) | NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt | 2026-07-22 uniformity review |
 | [NUR022](#nur022) | `del` covers a fraction of `set`'s containers | 2026-07-22 uniformity review |
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
@@ -453,31 +452,84 @@ re-opened under NUR031; this record's allowance is unchanged.
 
 ---
 
-## NUR013 — NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt {#nur013}
+## NUR013 — Two ordering regimes: a lawful total order and IEEE relationals {#nur013}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Allowed · **Date:** 2026-08-02 (recorded Pending
+2026-07-22; the 2026-07-31 investigation verdict discharged below;
+verdict: maintainer, accepting the recommendation in
+`design/NUR-EFFORT-TRIAGE.0.md`)
 
-**Rule:** one ordering answer per value pair within one word family.
-**Divergence:** `cmp`/`tcmp`/`sort` give NaN a defined slot (sorts
-greatest; two NaNs tie) while `lt`/`lte`/`gt`/`gte` apply the IEEE
-unordered rule (always false); also `nan eq nan` is false while
-`nan cmp nan` is 0.
-**Evidence:** `compare_scalar_behaviors.go:152-171`;
-`compare.go:590-624`; `compare_nan_test.go`; `lang/spec/float-special.tsv`.
-**Documentation status:** extensively argued
-(design/TYPE-ORDERING.10.md §"NaN in the total order",
-design/IEEE-754-COMPLIANCE.8.md Tier 0). **Proposed verdict:** allow —
-IEEE-754 compliance for the relationals plus a lawful total order for
-sort is the standard resolution of an unsatisfiable constraint set.
+### The uniform rule
 
-**Verdict (maintainer, 2026-07-31 — investigation,
-`design/NUR-RESOLUTION-PLAN.0.md`):** before the allow is issued,
-compare boru's total-order behaviour against **IEEE-754 `totalOrder`**
-(§5.10): where the current `cmp`/`tcmp`/`sort` slotting of NaN (and of
-signed zeros, if applicable) differs from `totalOrder`, conform where
-practical. If conformance is impractical, the divergence from
-`totalOrder` itself becomes part of this record's argued acceptance.
-Stays Pending until the comparison is run and recorded.
+One ordering answer per value pair within one word family.
+
+### The divergence
+
+`cmp`/`tcmp`/`sort` give NaN a defined slot (sorts greatest; two NaNs
+tie) while `lt`/`lte`/`gt`/`gte` apply the IEEE unordered rule (always
+false); `nan eq nan` is false while `nan cmp nan` is 0. Signed zeros
+now add a mirror-image case in the other direction: `-0.0 cmp 0.0` is
+-1 while `-0.0 eq 0.0` is true and `-0.0 lt 0.0` is false.
+
+### The `totalOrder` comparison (the 2026-07-31 verdict, discharged)
+
+IEEE-754 §5.10 `totalOrder` requires
+`−qNaN < −inf < negative finite < −0 < +0 < positive finite < +inf <
++qNaN`, with NaNs further ordered by sign and payload. boru's order
+was compared against it point by point:
+
+- **NaN slotting — conforming, for boru's observable NaN.** boru
+  exposes exactly one quiet NaN: there is a single `nan` literal, sign
+  is not observable (`nan -1.0 mul` renders `nan`), and no payload is
+  reachable. For a single positive qNaN, `totalOrder` demands exactly
+  what boru does — greatest, above `+inf`, tying with itself.
+- **NaN sign/payload ordering — impractical, and accepted.** Ordering
+  negative NaNs below `−inf` and ordering by payload would require
+  making NaN sign and payload observable values in the language, which
+  nothing else in boru does and no boru program can produce. The
+  divergence is therefore vacuous at the language level; per the
+  verdict's own terms it is folded into this record's acceptance.
+- **Signed zeros — was nonconforming, now FIXED.** `-0.0 tcmp 0.0`
+  answered 0; `totalOrder` requires −0 before +0. The total order now
+  slots negative zero first (`sort [0.0 -0.0]` → `[-0.0 0.0]`), with
+  Integer `0` and BigDecimal `0d0` slotting as +0 so the cross-leaf
+  triangle stays transitive.
+
+### Why allowed
+
+The two regimes are deliberate and are the standard resolution of an
+unsatisfiable constraint set — the same architecture NUR024 records as
+**semantic** vs **deterministic** ordering:
+
+- **The relationals** (`lt`/`lte`/`gt`/`gte`) answer a *mathematical*
+  question and therefore obey IEEE-754: NaN comparisons are false
+  (§5.11), and ±0 compare equal. A language that silently ordered NaN
+  in `lt` would be wrong by the numeric standard its floats implement.
+- **The total order** (`cmp`/`tcmp`/`sort`) answers "give me a lawful,
+  deterministic arrangement of these values". It must be total and
+  antisymmetric or `sort` is not a function; that requires a slot for
+  NaN and a decision on ±0, which is precisely what `totalOrder`
+  specifies and what boru now implements.
+
+Because the relationals must keep IEEE ±0 equality while the total
+order separates the zeros, the relational path carries an explicit
+signed-zero carve-out beside the NaN one. That carve-out is part of
+this acceptance, not a new divergence: it is the same
+semantic-vs-deterministic split applied to the other special value.
+
+### Evidence
+
+- `eng/go/compare_scalar_behaviors.go` — the NaN slot and the
+  Signbit tiebreak (float projection and big-rat paths, keeping
+  Integer/BigDecimal zeros at +0).
+- `eng/go/compare.go` — the relational unordered/signed-zero guards
+  that keep `lt`/`lte`/`gt`/`gte` IEEE-conforming.
+- `eng/go/compare_nan_test.go`, `eng/go/compare_zero_test.go` — both
+  regimes, positive and negative.
+- `lang/spec/float-special.tsv` (signed-zero and NaN sections),
+  `lang/spec/edge-scalars-2.tsv` (the cmp/sort rows).
+- `design/IEEE-754-COMPLIANCE.8.md` §5.10 — the conformance record
+  above; `design/TYPE-ORDERING.10.md` §"NaN in the total order".
 
 ---
 
