@@ -132,6 +132,33 @@ func TestReadOnlyInheritsSandbox(t *testing.T) {
 	if err := p.Check("env", "read", Args{"name": "PWD"}); err == nil {
 		t.Error("read-only should not allow env.read for PWD")
 	}
+	// NUR041 (resolved): read-only grants the read-like fileops the
+	// name promises — read, stat, list — while write-like ops stay
+	// under the inherited default deny.
+	for _, op := range []string{"read", "stat", "list"} {
+		if err := p.Check("fileops", op, Args{"path": "/tmp/x"}); err != nil {
+			t.Errorf("read-only should allow fileops.%s, got %v", op, err)
+		}
+	}
+	for _, op := range []string{"write", "mkdir", "remove", "rename", "link", "chmod"} {
+		if err := p.Check("fileops", op, Args{"path": "/tmp/x"}); err == nil {
+			t.Errorf("read-only should deny fileops.%s", op)
+		}
+	}
+}
+
+func TestClientAllowsReadLikeFileops(t *testing.T) {
+	// client promises "read disk, no writes" (HOWTO) — the same
+	// NUR041 gap, fixed in the same stroke.
+	p := mustLoad(t, "client")
+	for _, op := range []string{"read", "stat", "list"} {
+		if err := p.Check("fileops", op, Args{"path": "/tmp/x"}); err != nil {
+			t.Errorf("client should allow fileops.%s, got %v", op, err)
+		}
+	}
+	if err := p.Check("fileops", "write", Args{"path": "/tmp/x"}); err == nil {
+		t.Error("client should deny fileops.write")
+	}
 }
 
 func TestTrustedAllowsAll(t *testing.T) {

@@ -195,7 +195,11 @@ passes for the wrong reason, is worse than none.
    `BORU_POLICY` when no `-perms` flag is given. Five of the six tests build
    without `-perms`, so whatever policy the environment names is silently baked
    into those binaries: `BORU_POLICY=read-only go test -run TestUtilsCatEndToEnd`
-   fails with empty stdout and exit 1. The failure direction is the less
+   fails with empty stdout and exit 1. (Recorded before NUR041's
+   resolution: `read-only` now allows `fileops.read`/`stat`/`list`, so
+   a cat that only reads succeeds under it — the ambient-bake hazard
+   this item records is unchanged, but that particular repro now needs
+   a write-performing tool.) The failure direction is the less
    dangerous one — a PERMISSIVE ambient policy would instead mask a real
    regression. `permsflags_test.go` already pins both variables with
    `t.Setenv`, so this is a deviation from the repo's own convention rather

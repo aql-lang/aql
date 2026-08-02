@@ -1218,59 +1218,6 @@ ambiguity resolves.
 ---
 
 
-## NUR041 — The `read-only` profile denies file READS {#nur041}
-
-**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
-scouting (design/CLI-PROGRAMS.1.md §1)
-
-**Rule:** a profile's name and its documented intent describe what it
-permits. `sandbox.jsonic`'s own comment says "importing the module is
-allowed so disk.read works, but the actual disk.read / disk.write capability
-is still gated by the global scope above".
-
-**Divergence:** `read-only` allows the `disk.read` GLOBAL but inherits
-`fileops.words { default: "deny" }` from `sandbox`, and the scope check
-denies first, so reading a file is refused under a profile whose name
-promises exactly that:
-
-```
-$ boru policy explain read-only fileops.read path=ro.txt
-decision: DENY   blame: fileops.words default=deny
-$ boru run -perms read-only -e 'import "boru:io" print (IO.read (make Pathon "ro.txt") {fmt:"text"})'
-error: [boru/read_error]: read: permission denied: fileops.read
-       (policy "read-only": fileops.words default=deny …)
-```
-
-`-allow fileops.read` is required to make a read-only profile read.
-
-**Evidence:** the two commands above. Symmetrically, the write half needs
-BOTH `-allow-global disk.write` and `-allow fileops.write`; the global cap
-and the scope rule are independent gates and either can deny alone.
-
-**Documentation status:** actively misleading — the profile name, and
-sandbox.jsonic's intent comment, both say the opposite of the behaviour.
-
-**Proposed verdict:** fix the profile (allow `fileops.read` in `read-only`,
-which is what the name means) or rename it, and correct the sandbox comment
-either way. A profile nobody can read a file under is not the read-only
-profile a tool author reaches for.
-
-
-
-### Why allowed
-
-Accepted with a caveat that belongs in the record rather than only in a commit
-message: the profile's NAME is what misleads. "read-only" reads as "reads are
-fine, writes are not", and it denies both. Nothing about the enforcement is
-wrong — the profile simply does not grant what its name implies.
-
-**Evidence that pins it:** `cmd/go/internal/build/utils_e2e_test.go` builds the
-baked-permissions pair against `-perms read-only` and records the behaviour at
-the call site, and `utils/tee.boru`'s header states it too, so the next author
-to reach for the profile meets the caveat before the surprise.
----
-
-
 ## NUR042 — `-policy-dry-run` is documented and does nothing {#nur042}
 
 **Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
