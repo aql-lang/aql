@@ -67,6 +67,7 @@ commit.
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR053](#nur053) | The truthiness consumers do not share one domain | 2026-08-02 NUR register review |
 | [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler | 2026-08-02 NUR register review |
+| [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in | 2026-08-02 NUR register review |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -1866,6 +1867,27 @@ which they use). Any `del`-symmetry work under NUR022 must land on
 whichever answer is chosen (a tombstoned key must be invisible to
 BOTH).
 
+**NUR022's `del` landed 2026-08-02 and satisfies that constraint**
+without deciding the record. `CowDel` writes a tombstone into a NEW
+layer whose own `Data` is empty, so a deleted key is invisible to
+lookup (Get honours the tombstone) and invisible to enumeration
+(there is no own entry to enumerate) — verified:
+
+```
+$ boru do 'context set a/q 1 context set b/q 2 context del b/q end
+           print ((context) has b/q)        # false
+           print (convert Map (context))    # {}
+           print (size (context))           # 0
+           print ((context) has a/q)'       # true — still reachable by lookup
+```
+
+The `{}` / `0` in that session is this record's divergence, not the
+delete: enumeration under-reports `a` exactly as it did before. So the
+tombstone is neutral here — it does not deepen the split and does not
+close it, and whichever answer this record takes, the tombstone
+follows it for free (a chain-walking enumeration would need to honour
+`Deleted`, which is the same predicate `Get` already applies).
+
 ---
 
 ## NUR053 — The truthiness consumers do not share one domain {#nur053}
@@ -1917,6 +1939,19 @@ source slot to `Any` so the three consumers coincide (the uniform
 answer, and `convert` already has a total presence rule to apply), or
 state the Scalar-only domain at TRUTHINESS.0.md and at `convert`'s
 documentation and argue why conversion is narrower than coercion.
+
+**Note (2026-08-02): the RULE is now pluggable; the DOMAIN split is
+untouched.** `CoerceBoolean` gained a `Truther` capability walk, so a
+type can define what its values mean in a boolean position instead of
+inheriting the family cascade's render-based guess (see the capability
+work landed with this review). That reaches all three consumers
+uniformly — `convert`'s own path, `coerceBooleanTruthy`, delegates to
+`CoerceBoolean` after its YAML-token check, so there is exactly one
+truthiness implementation and the capability applies to every caller
+of it. What the capability does NOT do is widen `convert Boolean`'s
+source slot: a List, Map or None source still fails to match a
+signature and never reaches the rule at all. That is this record's
+divergence, and it stands unchanged.
 
 ---
 
@@ -1999,3 +2034,65 @@ may complete compiled and abort interpreted). That one is
 one-directional, argued in place, and pinned by
 `TestStepBudgetNoSpuriousLimit`; it is a candidate for its own
 **Allowed** record rather than part of this defect.
+
+---
+
+## NUR056 — `make`-constructibility is the one capability with no opt-in {#nur056}
+
+**Status:** Pending · **Recorded:** 2026-08-02 · **Surfaced by:** NUR
+register review (auditing the TypeBehavior capability surface)
+
+> Numbered 056, not 055: NUR055 was opened and resolved earlier in this
+> same review (`cde2d3f` then `b5051be` — Big numeric values reading as
+> uniformly falsy), and a resolved record's number is retired forever.
+
+**Rule:** a type says how it participates in a kernel operation
+through its Behavior — one mechanism, reachable from Go via a
+capability interface and from boru via a `behave` slot.
+
+**Divergence:** every kernel operation follows that rule except
+construction. Ordering, rendering, membership, unification, hashing,
+walking, projection, const-baking, truthiness, deep equality and size
+are all capability-dispatched, and seven of them have `behave` slots
+(`compare`, `canon`, `nodify`, `unify`, `truthy`, `deq`, `size`).
+`make` has neither: its scalar arm is a closed switch over the kernel
+leaves, and its Ideal arm dispatches through a *registry* of Ideal
+kinds rather than through the type's Behavior.
+
+```
+$ boru do 'def C (refine Float) behave make/q (fn [[String] [C] [1.0]])'
+  error: behave make: unknown behavior name;
+         known: canon, compare, deq, nodify, size, truthy, unify
+```
+
+So a user type can define what it MEANS in every operation that
+consumes it, and nothing about how it is BUILT. A Go-side Ideal can
+(via `Ideal.Instantiate`), which makes this also a Go-vs-boru
+asymmetry, not only a missing capability.
+
+**Evidence** (paths relative to the repo root):
+`eng/go/core_make.go` — `MakeConvert`'s `default:` arm raising
+"make: unsupported target type" is the closed scalar switch;
+`MakeObjHandler`'s `reg.Ideals.For(targetVal).Instantiate` is the
+Go-only Ideal hook. `lang/go/native/native_behave.go` — the
+`behaviors` table, seven entries, no construction slot.
+`eng/go/typebehavior.go` — the capability interfaces that do exist.
+
+**Documentation status:** undocumented. `boru describe behave` now
+lists the seven installable slots, and nothing states that
+construction is not among them or why.
+
+**Proposed verdict:** argue or fix. The fix is a `Maker` capability
+(`fn [[Any] [T]]`, dispatched by `MakeConvert` before its switch and
+by `MakeObjHandler` before the Ideals registry) plus a `behave make/q`
+slot, which would make the capability surface complete. The argument
+for allowing it is that construction is not a property of a value —
+there is no receiver to dispatch on, only a target type and an
+arbitrary source — so it belongs to the type's CONSTRUCTOR
+registration rather than to its value Behavior, and the Ideals
+registry is the right home. If that argument is taken, it should be
+stated where the capability list is documented, since the list is
+otherwise read as exhaustive. Note that this record does NOT block on
+the sentinel-values programme or on NUR018 (`Store`/`Error`
+deliberately not being `make` targets) — those decide WHICH types
+construct, this decides WHO gets to say how.
