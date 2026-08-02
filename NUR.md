@@ -62,8 +62,8 @@ commit.
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | re-opened 2026-07-31 (was Allowed 2026-07-24) |
-| [NUR031](#nur031) | Function/Word values are not `eq`/`deq` to themselves | re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
-| [NUR049](#nur049) | A paren group's unsatisfiable barrier receiver fails at runtime, never statically | 2026-07-31 split of NUR029 (G10); premise narrowed 2026-08-02 |
+| [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name | re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
+| [NUR049](#nur049) | Inside an unchecked `error` handler, a paren group's unsatisfiable receiver fails at runtime only | 2026-07-31 split of NUR029 (G10); premise narrowed 2026-08-02 |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR053](#nur053) | The truthiness consumers do not share one domain | 2026-08-02 NUR register review |
 | [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler | 2026-08-02 NUR register review |
@@ -133,8 +133,8 @@ arithmetic word by specificity (the refinement escape).
 
 `convert Boolean "false"` → `true`. Boolean conversion applies the
 truthiness rule — of the values `convert` accepts, only `false`,
-`0`/`0.0` and `""` are false; a String's characters are never
-inspected. (The language's falsy set also contains `none`, `[]` and
+numeric zero in any leaf (`0`/`0.0`/`0d0`) and `""` are false; a
+String's characters are never inspected. (The language's falsy set also contains `none`, `[]` and
 `{}`, but `convert`'s source slot is Scalar-only and refuses all three
 with a `signature_error` — the domain split recorded as NUR053.)
 
@@ -277,7 +277,7 @@ leans on.
 
 ---
 
-## NUR004 — Boolean and Atom have no lattice subtypes {#nur004}
+## NUR004 — Boolean, Atom and Bytes have no lattice subtypes {#nur004}
 
 **Status:** Allowed · **Date:** 2026-07-22
 
@@ -342,9 +342,9 @@ distinctions into the structural layer — the wrong home for them.
 Scalar arithmetic is **same-type arithmetic**: the six words are
 "applied within a type, never across it" — REFERENCE.md §"Within-type
 operations". A cross-type pair has no signature and raises
-`[boru/signature_error]`; only the two deliberately-registered
-refusals (`Big`⊕`Float`, and Boolean arithmetic per NUR000) raise
-`[boru/type_error]`.
+`[boru/signature_error]`; the deliberately-registered refusals —
+`Big`⊕`Float`, Boolean arithmetic (NUR000), and a cross-KIND Micron
+pair — raise `[boru/type_error]` with a specific message instead.
 
 ### The divergence
 
@@ -793,7 +793,7 @@ Microns); `del` covers Map and FlexMap only. The List exclusion is
 documented (pointing at pop/shift/remove-at); the Store, Class,
 FlexList/WeakFlexList and FlexXml/WeakFlexXml absences are not.
 **Evidence:** `native_storage.go:25-193` (`set`) vs `:194-237` (`del`);
-`boru describe set` lists 20 signatures, `boru describe del` four.
+`boru describe set` lists 19 signatures, `boru describe del` four.
 **Documentation status:** partially documented.
 
 **Note on the rule (2026-08-02 review):** `set` and `del` are both
@@ -829,10 +829,11 @@ Pending until the fix lands.
 Forth vocabulary, pinned as a closed list in REFERENCE; a new
 stack-only word "needs the same justification weight as a new
 init-time panic".
-**Divergence:** two multi-argument words carry `BarrierPos: 0`
+**Divergence:** two argument-taking words carry `BarrierPos: 0`
 (stack-only) with a code-comment-only rationale and are not in the
-pinned list — `apply`'s `[Function]` signature, and `__casematch`'s
-`[Any Any]` signature (user-reachable and describable: `boru describe
+pinned list — `apply`'s one-argument `[Function]` signature, and
+`__casematch`'s two-argument `[Any Any]` signature (user-reachable and
+describable: `boru describe
 __casematch` prints "Precedence: stack"; the `__` prefix is convention,
 not enforcement). Secondarily, 0-arg words split between `BarrierPos:
 0` (`now`, `math-pi`, the clock words, `break`/`continue`, `gensym`,
@@ -913,11 +914,11 @@ the resolution plan (semantic vs deterministic ordering).
 
 ### Evidence
 
-- REFERENCE.md §Comparison (:1196-1239) — both regimes documented with
+- REFERENCE.md §Comparison (:1197-1254) — both regimes documented with
   the rationale: the ordering words are "**family-restricted**" and
-  raise `[boru/incomparable]` across families (:1199-1203), `tcmp` is
-  "the **unrestricted** total order" (:1205), and the callout at
-  :1211-1213 states "different types are simply *not equal* … Only the
+  raise `[boru/incomparable]` across families (:1200-1204), `tcmp` is
+  "the **unrestricted** total order" (:1206), and the callout at
+  :1212-1214 states "different types are simply *not equal* … Only the
   **ordering** words restrict".
 - `eng/go/compare.go` (family restriction raising `incomparable`);
   `eng/go/compare_types.go` (tcmp's Rank-based total order);
@@ -1055,7 +1056,7 @@ into a broader Map-key-identity review. Unresolved until then.
 - `lang/spec/module-array.tsv` §3 — `group [Integer Integer/q]` →
   `{Integer:[0 1]}` and `group [nan nan] [1 2]` → `{nan:[1 2]}` pin
   both the collision fold and the non-reflexive fold.
-- REFERENCE.md:1991-1994 — states the render-key fold, but scoped to
+- REFERENCE.md:1996-2000 — states the render-key fold, but scoped to
   `group` ("`group`'s map keys stay rendered strings") rather than as
   the language-wide fact about Map keys that the re-open argues is the
   root cause. That the general statement is undocumented is part of
@@ -1063,7 +1064,7 @@ into a broader Map-key-identity review. Unresolved until then.
 
 ---
 
-## NUR031 — Function/Word values are not `eq`/`deq` to themselves {#nur031}
+## NUR031 — Function/Word values are not `deq` to themselves; `eq` and order key on the binding name {#nur031}
 
 **Status:** Pending · **Recorded:** 2026-07-23 · **Surfaced by:**
 PR #309 review (Codex P2) · **Re-opened in part:** 2026-07-31
@@ -1071,16 +1072,24 @@ PR #309 review (Codex P2) · **Re-opened in part:** 2026-07-31
 2026-07-24 — the resolved handle equalities below stand) · **Narrowed:**
 2026-08-02
 
-The record was originally titled "Code/opaque values have no value
-equality". That title is retired: Store, Error, Timeout, Interval and
-both Module facets now have equality (below), so the only values it
-still describes are Function and Word. The re-opened part was the
-Module/Function/Word remainder; **the Module half is resolved**
-(namespace 2026-08-01 by the NUR038 facet refactor, descriptor
-2026-08-02), so what remains open is **Function/Word identity** — a fn
-value is never `deq` to itself, and two references to the same function
-are neither `eq` nor stably ordered (`(f/r) eq (f/r)` → false,
-`deq` → false, `tcmp` → -1) — plus the Behavior-routing design.
+The record's previous title, in force since 2026-07-24, was
+"Code/opaque values have no value equality" (it was first recorded as
+"Opaque Ideals: `eq` and `deq` are both always false, even
+self-compare"). That title is retired: Store, Error, Timeout, Interval
+and the Module descriptor now have equality, and a module namespace has
+`eq` (below). The re-opened part was the Module/Function/Word
+remainder; **the Module half is resolved** (namespace 2026-08-01 by the
+NUR038 facet refactor, descriptor 2026-08-02), so what remains open is
+**Function/Word identity**:
+
+- a fn value is never `deq` to itself, and
+- `eq` and `tcmp` key on the **binding name** a function was reached
+  through, so two references to one function agree only when they were
+  reached through the same name.
+
+Host `ExtensionPayload` values and bare type values share the same
+`deq` fall-through (`P deq P` → false for a `def P class {…}`); they
+are not separately recorded, and a fix here should cover them.
 
 ### The uniform rule
 
@@ -1130,29 +1139,34 @@ acceptance:
   `[Any Any]` and DO admit fn values arriving as **container data** —
   but only for a fn that cannot auto-invoke at the read: a 0-arg fn
   read out of a map (`m.run`) dispatches on the spot, so that spelling
-  compares call RESULTS, not functions. With an arity that forces the
-  value to stay a value (`def m {g: (f/r)}` for a 1-arg `f`), the
-  current answers are:
+  compares call RESULTS, not functions. Using `f/r` directly, which
+  behaves identically on both engines, the current answers are:
 
   ```
-  m.g eq  m.g      →  true    # same wrap, and ADR-011 made the Parents agree
-  m.g deq m.g      →  false   # DeqNeverEqual — deq is never-equal for fns
-  (f/r) eq  (f/r)  →  false   # two wraps of the same function
-  (f/r) deq (f/r)  →  false
-  (f/r) tcmp (f/r) →  -1      # per-wrap tie-break, not a total order
+  def f fn [[n:Integer] [Integer] [add n 1]]
+  def a (f/r)   def b (f/r)          # two BINDINGS of one function
+
+  f/r eq   f/r   →  true     # same binding name
+  f/r deq  f/r   →  false    # deq is never-equal for fn values
+  f/r tcmp f/r   →  0
+
+  a/r eq   b/r   →  false    # different binding names, one function
+  a/r tcmp b/r   →  -1       # …and b/r tcmp a/r → 1: a real order,
+  a/r deq  a/r   →  false    #    but keyed on the CANON, i.e. the name
   ```
 
-  `ExactEqual`'s type-body arm requires Parent equality, so before the
-  ADR-011 collapse even the same-wrap `eq` failed when Parents differed
-  (`Word/__FN` vs `Type/Function`) — that case is RETIRED (one Function
-  type; NUR050 resolved), which is why `m.g eq m.g` is true today. What
-  remains is the rest: `deq` is never-equal for fn values at all, and
-  canon/render keys on the BINDING NAME a function was reached through
-  (`def a (f/r)` canons `fn a[…]`), so two references to the same
-  function are neither `eq` nor stably ordered — pre-existing, not a
-  collapse regression. Function identity — what makes two references
-  "the same function" — is exactly this record's open design work.
-  Tolerable while the deeper question below is open.
+  `ExactEqual`'s type-body arm (`compare.go:359`) requires Parent
+  equality, so before the ADR-011 collapse even the same-name `eq`
+  failed when Parents differed (`Word/__FN` vs `Type/Function`) — that
+  case is RETIRED (one Function type; NUR050 resolved), which is why
+  `f/r eq f/r` is true today. What remains is the rest: `deq` is
+  never-equal for fn values at all, and canon/render keys on the
+  BINDING NAME (`def a (f/r)` canons `fn a[…]`, `def b (f/r)` canons
+  `fn b[…]`), so two references to one function are `eq`-false and
+  order apart whenever the names differ — pre-existing, not a collapse
+  regression. Function identity — what makes two references "the same
+  function" — is exactly this record's open design work. Tolerable
+  while the deeper question below is open.
 - **Re-classified as an open defect (NOT a benign allowance):**
   `Module`/`ModuleExport` values DO reach `eq`/`deq` and return
   `false` **including against themselves** — a silent violation of
@@ -1161,7 +1175,7 @@ acceptance:
   quietly.
 
   **Namespace half RESOLVED by construction (2026-08-01, commit
-  `7c444a4`):** the NUR038 facet refactor retired the
+  `d8f93d3`):** the NUR038 facet refactor retired the
   `Ideal/ModuleExport` wrapper — `import` now binds a plain export Map
   (module-namespace facet), so a namespace takes the ordinary Node
   equality arms with no module special-casing at all: `M eq M → true`
@@ -1169,18 +1183,21 @@ acceptance:
   exports compare `eq → false`, exactly the Map contract.
 
   The `deq` side inherits that contract *including its limits*. A
-  namespace is `deq`-reflexive only when every export is
-  `deq`-comparable: `{x:1 y:"two"}`-style exports give `M deq M → true`
-  and content-equal-but-distinct namespaces `deq → true`, while any
+  namespace is `deq`-reflexive only when every export is itself
+  `deq`-reflexive: `{x:1 y:"two"}`-style exports give `M deq M → true`
+  and content-equal-but-distinct namespaces `deq → true`, while a
   module exporting a **function** gives `M deq M → false`
   (`IO deq IO`, `Test deq Test`, `StringUtil deq StringUtil` are all
   false today), because `DeepEqual`'s Map arm recurses into the export
-  values and fn values reach `DeqNeverEqual`. This is not a module
-  defect and not unlanded module work — a plain `{a:1 g:(f/r)}` Map
-  behaves identically — it is the Function/Word gap below, seen through
-  a namespace. Fixing function identity restores namespace `deq` with
-  zero module-specific change. Nothing in `lang/spec` pins namespace
-  `deq` either way, which is why the over-claim survived.
+  values and fn values hit its terminal `false`. Exported bare **type**
+  values fail the same way (`def P class {…}` then `export {P: P}`
+  gives `M deq M → false`, since `P deq P` is false). This is not a
+  module defect and not unlanded module work — a plain `{a:1 g:(f/r)}`
+  Map behaves identically — it is the Function/Word `deq`
+  fall-through below, seen through a namespace. Nothing in `lang/spec`
+  pins namespace `deq` either way (its only module eq/deq rows, in
+  `frontier/frontier-nur031-module-eq.tsv`, are all `.$module`
+  descriptor rows), which is why the over-claim survived.
 
   **Descriptor half RESOLVED (2026-08-02):** `Ideal/Module` now
   follows the opaque-handle rule the Timeout/Interval arms
@@ -1202,19 +1219,22 @@ included — must eventually fall under equality, at minimum
 reflexively (a value is `eq`/`deq` to itself). **Modules satisfy it
 for `eq` unconditionally, and for `deq` on the descriptor
 unconditionally**; a namespace satisfies `deq`-reflexivity only when
-no export is a function, and that residue is the Function/Word gap
-itself, not a module gap. The function-type-vs-value question is
+every export does, and the exports that do not (functions, bare type
+values) are the general `deq` fall-through, not a module gap. The
+function-type-vs-value question is
 settled (ADR-011: one `Function` type; NUR050 resolved), so what this
 record still tracks is function IDENTITY — a stable canon independent
 of the binding name, since canon/render today keys on the name a
 function was reached through — plus the Behavior routing. The likely
 shape — routing `eq`/`deq` through the type's `Behavior` for Ideals
 rather than the kernel's hardcoded arms (the future ADR the
-2026-07-24 record deferred to) — is the architectural change the
-ADR-011 collapse deferred rather than performed: NUR050 is resolved
-and retired, so there is nothing left to track alongside, but its
-resolution deliberately left Behavior-routed equality unbuilt, and
-that is the work this record inherits. Note the Sealed Payload constraint
+2026-07-24 record deferred to) — is this record's own proposal for
+that work, not a commitment ADR-011 made. NUR050 is resolved and
+retired, so there is nothing left to track alongside; what ADR-011 did
+record in its Consequences is the deferral itself — "Two references to
+the same function still compare unstably … that is function IDENTITY,
+the NUR031 equality work, deliberately not solved here" (ADR.md:884-888)
+— which is the work this record inherits. Note the Sealed Payload constraint
 stands and was honoured by the descriptor fix: module handles are
 backed by `ExtensionPayload`, which the kernel deliberately does not
 inspect (eng/go/CLAUDE.md "Sealed Payload") — reference identity
@@ -1222,12 +1242,16 @@ compares the boxed pointer without reading a field.
 
 ### Evidence
 
-- `eng/go/compare.go` — the resolved handle arms, the Map arm of
-  `DeepEqual` that recurses into export values, and the terminal
-  `false` that Function/Word values still reach.
-- `eng/go/compare_deqkey.go` — `DeqNeverEqual`, the classification that
-  makes a fn value `deq`-equal to nothing including itself, and hence
-  makes a function-exporting namespace non-`deq`-reflexive.
+- `eng/go/compare.go` — the resolved handle arms; the type-body arm at
+  :359 that answers `eq` true for a same-canon fn pair; the Map arm of
+  `DeepEqual` (:517, arm at :587-605) that recurses into export values
+  via `deqMapEntries` (:502); and
+  `DeepEqual`'s terminal `false`, which is what answers `f/r deq f/r`
+  and `IO deq IO`.
+- `eng/go/compare_deqkey.go:48` — `DeqNeverEqual`, which MIRRORS that
+  fall-through for the bucketed collection scans
+  (`unique`/`member`/`indices`/`group`, `native_array.go:939,1140,
+  1169,1195`). It is not on the `deq` word's own path.
 - `lang/go/native/native_module_types.go` — the plain export Map
   carrying the module-namespace facet, and the `ExtensionPayload`-backed
   descriptor handle.
@@ -1287,22 +1311,23 @@ guard that matters is an *upstream* one:
 
 **Correction (2026-08-02 review).** This record previously claimed the
 pin was that `cut-chars-rng` "clamps the start explicitly". It does
-not: `cut-chars-rng` (utils/cut.boru:325-331) computes
+not: `cut-chars-rng` (utils/cut.boru:329-335) computes
 `def a ((rg get 0) sub 1)` with no start clamp and clamps only the
 END (`def b (if (hi gt n) [n] [hi])`); its `if (a gte b)` guard is an
 empty-range test that a negative `a` against a positive `b` passes
 straight through. Replaying its body with `lo = 0` reproduces this
 record's own divergence inside the function that was cited as its pin.
-The register inherited the error from the source comment at
-utils/cut.boru:322-325, which mis-describes its own function. The
-acceptance survives — the real guard is the upstream `lo < 1`
+The register inherited the error from the source comment above that
+function, which mis-described its own body until this review corrected
+it (the comment now runs utils/cut.boru:322-328 and says the opposite).
+The acceptance survives — the real guard is the upstream `lo < 1`
 rejection above, so `cut` is correct today — but the local fragility
 is now recorded rather than mis-pinned.
 
 **Correction (2026-08-02 review).** The motivating example previously
 given here — `slice (ep add 1) (size tok) tok` where `ep` is `-1` from
 a failed `indexof` — does not exhibit this divergence: `(ep add 1)` is
-`0`, a positive start, and `end` is honoured normally. It illustrates
+`0`, a NON-NEGATIVE start, and `end` is honoured normally. It illustrates
 an off-by-one, not the negative-start collapse. The spelling that does
 trigger it is the same call without the `add 1`.
 
@@ -1367,17 +1392,26 @@ accidental partial signal of exactly that condition.
 
 - The three calls above, and the three `boru check` runs behind the
   warning claim.
-- **No call site in the repo depends on which way the ambiguity
-  resolves**, because no bare word is ever passed to `set`'s key slot:
-  `utils/` spells every computed key `(quote k)` (117 sites, 0
-  exceptions), and `lang/go/modules/cli.boru` uses `(quote …)` for its
-  40 literal keys and the parenthesised value form (`set (nm) …`) for
-  its 8 computed ones. Its house rule at cli.boru:53-54 states the
-  convention: "a computed map key is always parenthesised
-  (`m set (k) v`) — a bare `k` stores the literal name \"k\", with no
-  diagnostic at all."
-- lang/go/CLAUDE.md §"dot / dotr vs get / getr" — the deliberate split
-  this record's divergence leaks from.
+- **The two files this record was scouted from never pass a bare word
+  to `set`'s key slot**, so neither depends on which way the ambiguity
+  resolves: `utils/` spells every LITERAL key `(quote k)` (117 sites, 0
+  exceptions), and `lang/go/modules/cli.boru` uses `(quote …)` at its
+  75 literal-key sites (42 distinct names) and the parenthesised value
+  form (`set (nm) …`) at its 8 computed ones. Its house rule at
+  cli.boru:53-54 states the convention: "a computed map key is always
+  parenthesised (`m set (k) v`) — a bare `k` stores the literal name
+  \"k\", with no diagnostic at all."
+- **Elsewhere the repo does rely on the quoting reading**, which is the
+  real reason the fix is riskier than the confusion:
+  `lang/go/modules/vault_tui.boru` — shipped, `//go:embed`-ed — has ~66
+  bare-word key sites (`state set screens …`, `state set status …`),
+  and `kg/report.boru:334`, `design/examples/apps/todo-tui.boru:52` and
+  the linguist samples do the same. Making `set` evaluate its key would
+  change all of them.
+- lang/go/CLAUDE.md:303-316 — the "**`dot` / `dotr` vs `get` / `getr`
+  (CRITICAL)**" bullet inside §"Jsonic Token Usage" (a bolded lead-in,
+  not a section) — the deliberate split this record's divergence leaks
+  from.
 
 ---
 
@@ -1386,12 +1420,16 @@ accidental partial signal of exactly that condition.
 **Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** the C3 utils
 suite (`utils/`)
 
-**Rule:** a formatter is idempotent. `fmt(fmt(x)) == fmt(x)`, so "formatted"
+### The uniform rule
+
+A formatter is idempotent. `fmt(fmt(x)) == fmt(x)`, so "formatted"
 is a property a file either has or does not, a `make fmt` target converges,
 and a formatting check can be a single-pass diff. `make fmt-docs` and
 `kg/Makefile`'s restored `fmt` target both rely on this.
 
-**Divergence:** on a `def name fn [[params] [Returns] [body]]` whose header
+### The divergence
+
+On a `def name fn [[params] [Returns] [body]]` whose header
 does not fit the width, the FIRST pass and the SECOND pass produce different
 layouts. It converges at pass 2 — passes 2..n are identical — so the fixed
 point exists; one application simply does not reach it.
@@ -1420,10 +1458,8 @@ def cat-format fn
   ]
 ```
 
-**Evidence:** the repro above. Across `utils/*.boru` the same thing happens to
-all six programs (the five `tests/*.boru` suites are already at their fixed
-point after one pass, which is why the divergence is easy to miss); program
-output is unchanged in every case, and every one still passes `boru check`.
+The blast radius is in §Evidence below; program output is unchanged in
+every affected file, and every one still passes `boru check`.
 
 **Why it matters:** three ways.
 
@@ -1442,7 +1478,9 @@ output is unchanged in every case, and every one still passes `boru check`.
    *repo's already-canonical* corpus, where pass 1 is already the fixed
    point. Non-canonical input is the untested axis.
 
-**Documentation status:** `kg/Makefile:25-28` claims idempotence in so
+### Documentation status
+
+`kg/Makefile:25-28` claims idempotence in so
 many words — "the formatter is idempotent, so once they are canonical
 this is a no-op on the tree and `make all` leaves nothing to commit" —
 with `fmt` inside its `all` target (kg/Makefile:11). kg's own sources
@@ -1453,8 +1491,9 @@ form.
 
 **The mechanism (corrected 2026-08-02).** This record originally
 proposed that "the first pass measures widths against a pre-wrap layout
-decision it then invalidates". `design/NUR-EFFORT-TRIAGE.0.md:124-125`
-investigated and found otherwise: the true cause is **re-parse
+decision it then invalidates". `design/NUR-EFFORT-TRIAGE.0.md:134-143`
+(the NUR046 bullet; the cause statement at :135-136) investigated and
+found otherwise: the true cause is **re-parse
 statement-segmentation drift** (root-level newlines emitted by pass 1
 change how pass 2 segments statements). The width-memoisation framing
 is retired.
@@ -1502,7 +1541,7 @@ had rotted by a factor of two.
 
 ---
 
-## NUR049 — A paren group's unsatisfiable barrier receiver fails at runtime, never statically {#nur049}
+## NUR049 — Inside an unchecked `error` handler, a paren group's unsatisfiable receiver fails at runtime only {#nur049}
 
 **Status:** Pending · **Recorded:** 2026-07-31 · **Surfaced by:** split
 of NUR029 (design/BORU-SHARP-EDGES.0.md G10; a latent bug in shipped
@@ -1516,7 +1555,10 @@ the paren opens a fresh collection context with `dot` first inside it,
 where the group supplies only one token, so no `dot` signature can be
 satisfied. It fails **at runtime**, with
 `[boru/signature_error]: cannot call `dot` — no signature matches the
-arguments`, and `boru check` reports nothing. The unparenthesized
+arguments`, and `boru check` reports nothing — **because `error`
+handler bodies are unchecked**, not because the checker cannot see it:
+the same `(dot a)` group at statement level or inside an ordinary fn
+body IS reported as a `no_signature` error. The unparenthesized
 `dot message def why;` form works.
 **Mechanism:** `dot` has 18 registered signatures — 16 from
 `native_storage.go` `accessorGetSignatures`, all `BarrierPos: 1`
@@ -1534,17 +1576,22 @@ ships in `design/examples/apps/todo-tui-client.boru`'s error arms and
 at `design/examples/todo/audit.boru:29` (`err: (dot code)`), which no
 test exercises.
 **Documentation status:** actively wrong. The engine's own diagnostics
-(`strandedForwardError` / `forwardParensSuggestion`,
-`eng/go/diag_msg.go:73-74,107-110`) suggest `def (dot …)` forms whose
-every candidate needs a stack-barrier receiver — the tool recommends
-the spelling this record is about.
+suggest the parenthesised form: `strandedForwardError`
+(`eng/go/engine.go:6831-6856`, message at :6849-6853) literally spells
+the fix `def (dot …)`, and `forwardParensSuggestion`
+(`eng/go/diag_msg.go:107-110`, called at :73-74) offers `(dot …)`. Both
+name a spelling whose candidates cannot be satisfied inside the group —
+the 16 accessor rows want a stack-barrier receiver the group seals off,
+and the two Error rows want two forward arguments the group does not
+supply. The tool recommends the very spelling this record is about.
 
 **Title correction (2026-08-02).** This record was titled "The paren
 barrier is one-directional: a group can reach backward for a
 receiver". That premise is false and is retracted by the investigation
 update below: the group is dynamically sealed today, in every probed
 context. The heading and the blocking-list row now name what actually
-remains — a provable failure that is not proved.
+remains — a provable failure that goes unproved, in the one body the
+checker does not visit.
 
 **Verdict (maintainer, 2026-07-31 — resolve by fix,
 `design/NUR-RESOLUTION-PLAN.0.md`; recorded verbatim, but see the
@@ -1662,8 +1709,11 @@ $ boru do 'print (convert Boolean none)'
   error: [boru/signature_error]: cannot call `convert` — no signature matches the arguments
 ```
 
-The same holds for `[]` and `{}`. `boru describe convert` shows no
-signature admitting List, Map or None.
+The same holds for `[]` and `{}`. No `convert Boolean` signature admits
+a List, Map or None SOURCE: with a Scalar target only `[Scalar Scalar]`
+and `[Scalar Map Scalar]` (the options form) match, and both are
+Scalar-sourced. (`boru describe convert` does list `[Bytes List]` and
+`[List Bytes]`, but those are other targets — `convert Bytes xs` works.)
 **Evidence:** the session above (verified 2026-08-02, current binary);
 `lang/go/native/native_type.go` — `convert`'s Scalar-typed source
 slots and `coerceBooleanTruthy`; `design/TRUTHINESS.0.md:58-67` — the
@@ -1691,10 +1741,15 @@ recorded)
 the `RunCompiled` contract as "identical results either way, the flag
 only changes the execution engine", and its `LIMITATION` note
 immediately below claims "the step budget is **the one place** this is
-NOT byte-for-byte transparent". NUR037 and NUR051 established that
-where the compiled path cannot match the interpreter it must
-**refuse** the unit and fall back, so a divergence is "slow, not
-wrong".
+NOT byte-for-byte transparent". NUR037 established the fallback
+discipline: where the compiled path cannot match the interpreter it
+must **refuse** the unit and fall back, so a divergence is "slow, not
+wrong" (`design/COMPILABLE-SUBSET.md`:7-9, restated at §1 "The
+contract"). NUR051 is the contrary
+precedent and sharpens the point — there the refusal ITSELF was the
+recorded defect ("anything that runs interpreted must also compile"),
+and ADR-010 resolved it by mandating the emitter intern nested type
+literals rather than decline them.
 **Divergence:** which call forms open a context write boundary is not
 the same on the two engines; the compiled path does not refuse, it
 answers differently; and this is reachable on the **default** path, so
@@ -1706,7 +1761,9 @@ case 1 [ 1 [ context set y 1 5 ] 2 [ 6 ] ]
 print (context has y)
 
 $ boru run cb.boru               # true   — default (compiled)
+1 5                              #   (residual stack, identical on both)
 $ boru run -no-compile cb.boru   # false  — interpreted
+1 5
 ```
 
 The interpreter's answer is the intended one, so the default path is
@@ -1715,9 +1772,9 @@ four such forms as `wantDiverge`: a `case` clause body, an `otherwise`
 list argument, a `def name [list]` auto-evaluation, and an unused fn
 list argument.
 **Evidence:** the session above (verified 2026-08-02, current binary);
-`lang/go/context_boundary_differential_test.go:61-63` (the
+`lang/go/context_boundary_differential_test.go:61-64` (the
 `wantDiverge` field and its required `why`) and its four marked rows
-at :109-131; EXPLANATION.md:795-799 tells users about the split ("a
+at :109-131; EXPLANATION.md:795-802 tells users about the split ("a
 `case` clause body and an auto-evaluated list are boundaries when
 interpreted but not when compiled … The interpreter's answer is the
 intended one");

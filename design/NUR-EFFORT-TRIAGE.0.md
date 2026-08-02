@@ -227,7 +227,7 @@ the history reads one-record-per-commit. Deviations worth noting:
 - **NUR045's implementation improved on this document's sketch** (see
   above): stamping at resolution time rather than gating site by
   site, which reduces the "missed dispatch route" risk by construction
-  rather than by inventory. **It did not eliminate it** — two commits
+  rather than by inventory. **It did not eliminate it** — four commits
   later, `09e2f14` closed a real bypass of exactly that class: a module
   fn defined in a boru preamble was denied on the interpreter and RAN
   compiled, because the compiled `CALL_USER` arm reconstructed the
