@@ -59,8 +59,18 @@ func registerModuleType(path string, fixedID int) *Type {
 // descriptor metadata (Ref/Kind/File/Folder) and the export names are
 // surfaced as the name/kind/file/folder/exports fields; the carried Exports
 // map is what `import` installs.
+//
+// The payload BOXES the descriptor (ExtensionPayload{Body: *ModuleDesc}):
+// the pointer is the descriptor's IDENTITY under eq/deq (NUR031 — the
+// kernel's opaqueIdealExactEqual/DeepEqual arms compare it, exactly like
+// the *TimeoutInfo/*IntervalInfo handles), so every Value copy of one
+// instance stays eq to itself while each NewModuleInstance call mints a
+// distinct instance (per-import-instance identity). The ExtensionPayload
+// wrapper itself is load-bearing — several kernel arms key on it (const
+// interning, resolution elision, ConstBakeable refusal, ID minting) — so
+// the payload must stay an ExtensionPayload, never a bare *ModuleDesc.
 func NewModuleInstance(desc ModuleDesc) Value {
-	return Value{Parent: TModuleInst, Data: ExtensionPayload{Body: desc}}
+	return Value{Parent: TModuleInst, Data: ExtensionPayload{Body: &desc}}
 }
 
 // NewModuleNamespace builds the value `import` binds for one export: a
@@ -77,11 +87,13 @@ func NewModuleNamespace(name string, fields *OrderedMap, module Value) Value {
 	return eng.WithModuleNS(NewMap(fields), name, module)
 }
 
-// asModuleDesc unwraps the ExtensionPayload behind an Ideal/Module value.
+// asModuleDesc unwraps the ExtensionPayload behind an Ideal/Module value
+// (a boxed *ModuleDesc — see NewModuleInstance).
 func asModuleDesc(v Value) (ModuleDesc, bool) {
 	if ep, ok := v.Data.(ExtensionPayload); ok {
-		d, ok := ep.Body.(ModuleDesc)
-		return d, ok
+		if d, ok := ep.Body.(*ModuleDesc); ok && d != nil {
+			return *d, true
+		}
 	}
 	return ModuleDesc{}, false
 }

@@ -890,6 +890,10 @@ and check residuals.
 - The compiler frontier is unchanged by this record: direct fn-value
   application compiles; `each`/`fold` as fn-body words remain a
   Stage-2 refusal (slow, not wrong), and NUR037 (fn-local fn capture)
-  remains the open wrong-answer compile gap, tracked separately.
+  — the wrong-answer compile gap tracked separately at the time — has
+  since been closed by a compile-admission refusal (`bodyRefsFnLocalFn`,
+  eng/go/carrier.go): the shape now falls back to the interpreter
+  whole-program ("slow, not wrong" restored; closure capture of
+  fn-local fn bindings remains a possible future widening).
 - Reinforces ADR-010: a function value is one more first-class value
   kind every layer treats identically.

@@ -124,6 +124,10 @@ func resolveModuleDescForUnpack(r *Registry, modName string) (ModuleDesc, error)
 	}
 	desc.Ref = "boru:" + name
 	desc.Kind = "native"
+	// NUR045: the export's policy identity is stamped onto its
+	// dispatchable signatures once, here, where the resolved id is
+	// first known — every dispatch gate downstream is a pointer test.
+	StampModuleCallGates(desc.Exports, desc.Ref)
 	return desc, nil
 }
 

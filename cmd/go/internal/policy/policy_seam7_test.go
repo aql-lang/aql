@@ -38,6 +38,7 @@ type fakePolicy struct{ name string }
 func (f fakePolicy) Check(scope, op string, args pol.Args) error { return errors.New("boom-check") }
 func (f fakePolicy) CheckGlobal(name string) error               { return nil }
 func (f fakePolicy) CheckWord(name string) error                 { return nil }
+func (f fakePolicy) CheckModuleCall(module, export string) error { return nil }
 func (f fakePolicy) Installed(scope string) bool                 { return true }
 func (f fakePolicy) Scope(name string) pol.Scope                 { return pol.Scope{} }
 func (f fakePolicy) Limits() pol.Limits                          { return pol.Limits{} }

@@ -21,5 +21,16 @@
         rules: []
       }
     }
+
+    // client promises "read disk, no writes" (HOWTO): allow the
+    // read-like fileops alongside the disk.read global — the two are
+    // independent gates (the same gap as read-only's NUR041).
+    fileops: {
+      words: {
+        rules: [
+          { allow: ["read", "stat", "list"] }
+        ]
+      }
+    }
   }
 }

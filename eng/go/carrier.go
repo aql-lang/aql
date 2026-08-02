@@ -1080,6 +1080,23 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 			}
 		}
 	}
+	// NUR037 refusal: a code body naming a FN-LOCAL fn cannot lower soundly
+	// on any path below — the closure probe, the island span, and the plain
+	// CALL_NATIVE const-bake all bake a NAME the VM's runtime registry never
+	// binds (the enclosing body's `def … fn` is compiled away), turning a
+	// working program into undefined_word. Refuse the whole program up front
+	// so the interpreter owns it. A dispatch a structured ReturnsFn hook
+	// already recorded (case's branch-chain desugar — alreadyProduced)
+	// lowered its clause bodies as inline events with no name bake, so it is
+	// not a leak path and keeps compiling; see bodyRefsFnLocalFn for the
+	// scope rule.
+	if es := r.Check.Recorder(); es.active() && !(len(out) == 1 && es.alreadyProduced(out[0].ID)) {
+		if name, hit := bodyRefsFnLocalFn(r, sig, args); hit {
+			es.MarkUncompilable("code-body names fn-local fn `" + name + "` at `" + word +
+				"` (a compiled unit cannot resolve an enclosing fn's local fn binding)")
+			return
+		}
+	}
 	if !tryRecordMethodApply(r, word, args, out, pos) &&
 		!tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&
@@ -1943,6 +1960,67 @@ func bodyFreeForFallback(r *Registry, body Value) bool {
 		free = false
 	})
 	return free
+}
+
+// bodyRefsFnLocalFn reports whether any NoEvalArgs code-body arg of a
+// body-consuming dispatch (a CompileFallbackBody word, or one declaring a
+// CallableSpec) names a FN-LOCAL FN: a bare body Word whose current r.Defs
+// binding both lives INSIDE the enclosing fn being compiled (the
+// ComputeCaptures scope rule — Depth(name) > TopFnBaseline()[name]) and
+// holds a Function value. Returns the first such name.
+//
+// The shape is the NUR037 leak: the interpreter resolves the body word per
+// run through r.Defs, but a compiled program never executes the enclosing
+// body's `def step fn […]` (the fn unit is static), so every record-time
+// admission that bakes the NAME — the island span (bodyFreeForFallback
+// resolves it via r.Lookup against the CHECK-time registry), the plain
+// CALL_NATIVE const-bake (the body list is inert data to isInertConst),
+// and the closure probe (whose body compile binds the check-time overload)
+// — leaves the VM raising undefined_word on a program the interpreter
+// runs. recordDispatchOutcome therefore refuses the whole program up front
+// ("slow, not wrong" — design/COMPILABLE-SUBSET.md §5).
+//
+// Scope-matching is deliberately NARROW, mirroring ComputeCaptures:
+//   - module-scope callbacks (TopFnBaseline nil, or Depth ≤ baseline) keep
+//     compiling — the utils-corpus house-rule shape;
+//   - fn-local VALUE defs (a non-Function binding, e.g. the mini-redis
+//     KEYS accumulator) are legitimately handled by the closure path's
+//     lexical captures and must NOT match;
+//   - structured-lowering words (if / for — NoEvalArgs but neither
+//     CompileFallbackBody nor Callable) record their bodies as inline
+//     events (a fn-local dispatch lowers to CALL_USER by unit ref, no
+//     name bake), so the family gate excludes them.
+func bodyRefsFnLocalFn(r *Registry, sig *Signature, args []Value) (string, bool) {
+	if sig == nil || len(sig.NoEvalArgs) == 0 ||
+		(!sig.CompileEffect.Has(CompileFallbackBody) && sig.Callable == nil) {
+		return "", false
+	}
+	baseline := r.TopFnBaseline()
+	if baseline == nil {
+		return "", false // module scope: no enclosing fn, nothing is fn-local
+	}
+	for i := range args {
+		if !sig.NoEvalArgs[i] {
+			continue
+		}
+		name := ""
+		WalkBodyWords([]Value{args[i]}, func(w WordInfo, _ Value) {
+			if name != "" {
+				return
+			}
+			v, bound := r.Defs.Top(w.Name)
+			if !bound || r.Defs.Depth(w.Name) <= baseline[w.Name] {
+				return
+			}
+			if _, isFn := v.Data.(FnDefInfo); isFn {
+				name = w.Name
+			}
+		})
+		if name != "" {
+			return name, true
+		}
+	}
+	return "", false
 }
 
 // bodyHasSentinel reports whether a code body contains a flow-control

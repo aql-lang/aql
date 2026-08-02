@@ -55,17 +55,13 @@ commit.
 | # | Title | Surfaced by |
 |---|-------|-------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
-| [NUR013](#nur013) | NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt | 2026-07-22 uniformity review |
-| [NUR014](#nur014) | Cross-leaf numeric magnitude equality is leaf-pair-dependent | 2026-07-22 uniformity review |
-| [NUR018](#nur018) | Store and Error are excluded from `make` | 2026-07-22 uniformity review |
-| [NUR019](#nur019) | `slice` is the String family's core straggler | 2026-07-22 uniformity review |
 | [NUR022](#nur022) | `del` covers a fraction of `set`'s containers | 2026-07-22 uniformity review |
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | re-opened 2026-07-31 (was Allowed 2026-07-24) |
-| [NUR031](#nur031) | Module/Function values are not `eq`/`deq` to themselves | re-opened in part 2026-07-31 (was Allowed 2026-07-24); namespace half resolved by the NUR038 facet refactor |
-| [NUR037](#nur037) | A fn-local fn used as a higher-order body word breaks in compiled mode only | re-opened 2026-07-31 (was Allowed 2026-07-30) |
+| [NUR031](#nur031) | Function/Word values are not `eq`/`deq` to themselves | re-opened in part 2026-07-31 (was Allowed 2026-07-24); both module halves resolved (namespace by the NUR038 facet refactor, descriptor 2026-08-02) |
 | [NUR049](#nur049) | The paren barrier is one-directional: a group can reach backward for a receiver | 2026-07-31 split of NUR029 (G10) |
+| [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 
 Pending records use a compact form (rule / divergence / evidence /
 documentation status, plus a proposed verdict where one is obvious);
@@ -455,85 +451,235 @@ re-opened under NUR031; this record's allowance is unchanged.
 
 ---
 
-## NUR013 — NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt {#nur013}
+## NUR013 — Two ordering regimes: a lawful total order and IEEE relationals {#nur013}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Allowed · **Date:** 2026-08-02 (recorded Pending
+2026-07-22; the 2026-07-31 investigation verdict discharged below;
+verdict: maintainer, accepting the recommendation in
+`design/NUR-EFFORT-TRIAGE.0.md`)
 
-**Rule:** one ordering answer per value pair within one word family.
-**Divergence:** `cmp`/`tcmp`/`sort` give NaN a defined slot (sorts
-greatest; two NaNs tie) while `lt`/`lte`/`gt`/`gte` apply the IEEE
-unordered rule (always false); also `nan eq nan` is false while
-`nan cmp nan` is 0.
-**Evidence:** `compare_scalar_behaviors.go:152-171`;
-`compare.go:590-624`; `compare_nan_test.go`; `lang/spec/float-special.tsv`.
-**Documentation status:** extensively argued
-(design/TYPE-ORDERING.10.md §"NaN in the total order",
-design/IEEE-754-COMPLIANCE.8.md Tier 0). **Proposed verdict:** allow —
-IEEE-754 compliance for the relationals plus a lawful total order for
-sort is the standard resolution of an unsatisfiable constraint set.
+### The uniform rule
 
-**Verdict (maintainer, 2026-07-31 — investigation,
-`design/NUR-RESOLUTION-PLAN.0.md`):** before the allow is issued,
-compare boru's total-order behaviour against **IEEE-754 `totalOrder`**
-(§5.10): where the current `cmp`/`tcmp`/`sort` slotting of NaN (and of
-signed zeros, if applicable) differs from `totalOrder`, conform where
-practical. If conformance is impractical, the divergence from
-`totalOrder` itself becomes part of this record's argued acceptance.
-Stays Pending until the comparison is run and recorded.
+One ordering answer per value pair within one word family.
+
+### The divergence
+
+`cmp`/`tcmp`/`sort` give NaN a defined slot (sorts greatest; two NaNs
+tie) while `lt`/`lte`/`gt`/`gte` apply the IEEE unordered rule (always
+false); `nan eq nan` is false while `nan cmp nan` is 0. Signed zeros
+now add a mirror-image case in the other direction: `-0.0 cmp 0.0` is
+-1 while `-0.0 eq 0.0` is true and `-0.0 lt 0.0` is false.
+
+### The `totalOrder` comparison (the 2026-07-31 verdict, discharged)
+
+IEEE-754 §5.10 `totalOrder` requires
+`−qNaN < −inf < negative finite < −0 < +0 < positive finite < +inf <
++qNaN`, with NaNs further ordered by sign and payload. boru's order
+was compared against it point by point:
+
+- **NaN slotting — conforming, for boru's observable NaN.** boru
+  exposes exactly one quiet NaN: there is a single `nan` literal, sign
+  is not observable (`nan -1.0 mul` renders `nan`), and no payload is
+  reachable. For a single positive qNaN, `totalOrder` demands exactly
+  what boru does — greatest, above `+inf`, tying with itself.
+- **NaN sign/payload ordering — impractical, and accepted.** Ordering
+  negative NaNs below `−inf` and ordering by payload would require
+  making NaN sign and payload observable values in the language, which
+  nothing else in boru does and no boru program can produce. The
+  divergence is therefore vacuous at the language level; per the
+  verdict's own terms it is folded into this record's acceptance.
+- **Signed zeros — was nonconforming, now FIXED.** `-0.0 tcmp 0.0`
+  answered 0; `totalOrder` requires −0 before +0. The total order now
+  slots negative zero first (`sort [0.0 -0.0]` → `[-0.0 0.0]`), with
+  Integer `0` and BigDecimal `0d0` slotting as +0 so the cross-leaf
+  triangle stays transitive.
+
+### Why allowed
+
+The two regimes are deliberate and are the standard resolution of an
+unsatisfiable constraint set — the same architecture NUR024 records as
+**semantic** vs **deterministic** ordering:
+
+- **The relationals** (`lt`/`lte`/`gt`/`gte`) answer a *mathematical*
+  question and therefore obey IEEE-754: NaN comparisons are false
+  (§5.11), and ±0 compare equal. A language that silently ordered NaN
+  in `lt` would be wrong by the numeric standard its floats implement.
+- **The total order** (`cmp`/`tcmp`/`sort`) answers "give me a lawful,
+  deterministic arrangement of these values". It must be total and
+  antisymmetric or `sort` is not a function; that requires a slot for
+  NaN and a decision on ±0, which is precisely what `totalOrder`
+  specifies and what boru now implements.
+
+Because the relationals must keep IEEE ±0 equality while the total
+order separates the zeros, the relational path carries an explicit
+signed-zero carve-out beside the NaN one. That carve-out is part of
+this acceptance, not a new divergence: it is the same
+semantic-vs-deterministic split applied to the other special value.
+
+### Evidence
+
+- `eng/go/compare_scalar_behaviors.go` — the NaN slot and the
+  Signbit tiebreak (float projection and big-rat paths, keeping
+  Integer/BigDecimal zeros at +0).
+- `eng/go/compare.go` — the relational unordered/signed-zero guards
+  that keep `lt`/`lte`/`gt`/`gte` IEEE-conforming.
+- `eng/go/compare_nan_test.go`, `eng/go/compare_zero_test.go` — both
+  regimes, positive and negative.
+- `lang/spec/float-special.tsv` (signed-zero and NaN sections),
+  `lang/spec/edge-scalars-2.tsv` (the cmp/sort rows).
+- `design/IEEE-754-COMPLIANCE.8.md` §5.10 — the conformance record
+  above; `design/TYPE-ORDERING.10.md` §"NaN in the total order".
 
 ---
 
 ## NUR014 — Cross-leaf numeric magnitude equality is leaf-pair-dependent {#nur014}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Allowed · **Date:** 2026-08-02 (recorded Pending
+2026-07-22; verdict: maintainer, accepting the recommendation in
+`design/NUR-EFFORT-TRIAGE.0.md`)
 
-**Rule:** "leaves of the same family compare by magnitude"
-(`1 cmp 1.0` → 0, `1 eq 1.0` → true).
-**Divergence:** the collapse holds for Integer↔Float and Integer↔Big
-but NOT Float↔BigDecimal: `Float 0.1 ≠ 0d0.1` (exact big.Rat compare of
-the float's true binary value). Magnitude equality is thus a per-pair
-property, not a family invariant.
-**Evidence:** `compare_scalar_behaviors.go:111-179,195-226`.
-**Documentation status:** deliberate (in-code rationale cites Python's
-`Decimal('0.1') == 0.1 → False`); user-facing at REFERENCE.md:197,501.
-**Proposed verdict:** allow — mathematically honest; the alternative
-(rounding Big to float64) silently collapses distinct values.
+### The uniform rule
+
+Leaves of the same family compare by magnitude: `1 cmp 1.0` → 0,
+`1 eq 1.0` → true.
+
+### The divergence
+
+The collapse holds for Integer↔Float and Integer↔Big but NOT
+Float↔BigDecimal: `0.1 eq 0d0.1` → false (an exact big.Rat compare of
+the float's true binary value against the exact decimal). Magnitude
+equality is thus a per-pair property, not a family invariant.
+
+### Why allowed
+
+The divergence is **mathematically honest**: the Float written `0.1`
+IS NOT one-tenth — it is the nearest binary64 value,
+0.1000000000000000055511151231257827…, and the exact big.Rat compare
+reports that truthfully. Every collapse that *can* hold exactly does
+hold (`1 eq 1.0`, `1 eq 0d1`, `0d0.5 eq 0.5` — dyadic values convert
+exactly), so the family invariant fails only where the mathematics
+itself fails. The alternative — rounding BigDecimal through float64 to
+force the collapse — would silently equate distinct values, defeating
+the reason BigDecimal exists; it would also contradict the
+exactness-preserving design that already makes mixed Big⊕Float
+arithmetic a defined error. The behaviour is Python's
+(`Decimal('0.1') == 0.1` → False), for the same reason.
+
+### Evidence
+
+- `eng/go/compare_scalar_behaviors.go` — `numberCompareBehavior.
+  Compare` and `toRatExact` (the in-code rationale comments cite the
+  Python precedent).
+- REFERENCE.md:195-200 — the user-facing statement of the honest
+  result, with the exact-value explanation.
+- `lang/spec/bignum.tsv:47-63` — pins both directions: the collapses
+  that hold (`0d5 eq 5`, `1 cmp 0d1.0` → 0, `0d0.5 eq 0.5`) and the
+  one that must not (`0.1 eq 0d0.1` → false).
+- `lang/spec/edge-scalars-1.tsv:24-25` — both `cmp` directions of the
+  non-collapse.
 
 ---
 
 ## NUR018 — Store and Error are excluded from `make` {#nur018}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Allowed · **Date:** 2026-08-02 (recorded Pending
+2026-07-22; verdict: maintainer, accepting the recommendation in
+`design/NUR-EFFORT-TRIAGE.0.md`)
 
-**Rule:** TYPE-UNIFORM — `make` instantiates the structural
-type-kinds; the kernel guide groups Record, Options, Table, Class,
-Store, Error and the Micron family together as the `make`/`record`/
-`class` structural set (eng/go/CLAUDE.md §"Where a Type Lives" rule 4).
-**Divergence:** `make Store {}` and `make Error {message:"x"}` raise
-`[boru/unsupported]: make: unsupported target type` (verified live)
-while Record/Options/Table/Class/Micron are `make` targets — Store and
-Error construct only through their dedicated words.
-**Evidence:** `eng/go/core_make.go:31-37` (`isTypeLike`).
-**Documentation status:** likely deliberate but stated nowhere; needs a
-one-line verdict.
+### The uniform rule
+
+`make` instantiates the structural type-kinds; the kernel guide groups
+Record, Options, Table, Class, Store, Error and the Micron family
+together as the `make`/`record`/`class` structural set
+(eng/go/CLAUDE.md §"Where a Type Lives" rule 4).
+
+### The divergence
+
+`make Store {}` and `make Error {message:"x"}` raise
+`[boru/unsupported]: make: unsupported target type` while
+Record/Options/Table/Class/Micron are `make` targets — Store and Error
+construct only through their dedicated words.
+
+### Why allowed
+
+`make` targets are the **schema-bearing** structural kinds: a
+Record/Options/Table/Class/Micron declares a shape, and `make`
+instantiates a value against that shape. Store and Error carry no
+user-declared schema and their constructors are semantically loaded in
+ways a bare `make` cannot honour: a Store IS its position in the
+context machinery (`StoreInstanceInfo` carries the parent-chain and
+COW-layer state that `eng/go/registry.go`'s context words establish —
+a detached `make Store {}` would have to invent an answer to "whose
+child is it?"), and an Error's identity is its passage through
+`raise`/`trap` (`describe raise`: "construct an Ideal/Error"), so
+error construction always flows through the raising path that stamps
+code and context. The kernel-guide grouping this record measured
+against is about **kernel residence** (where the types live), not
+about `make`-constructibility — clarified at the rule itself with this
+verdict. The exclusion is loud (a coded `unsupported` error, not a
+dispatch miss), and the dedicated constructors are the documented
+route.
+
+### Evidence
+
+- `eng/go/core_make.go` — `isTypeLike` (the deliberate omission) and
+  the covered `unsupported target type` arm.
+- `eng/spec/make.tsv` — negative rows pinning both exclusions
+  (`make Store {}` and `make Error {message:'x'}` → ERROR).
+- eng/go/CLAUDE.md §"Where a Type Lives" rule 4 — the
+  kernel-residence clarification landed with this verdict.
+- REFERENCE.md — the `make` documentation states the exclusion and
+  names the dedicated constructors.
 
 ---
 
-## NUR019 — `slice` is the String family's core straggler {#nur019}
+## NUR019 — `slice` is a core sequence word, not a String straggler {#nur019}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Allowed · **Date:** 2026-08-02 (recorded Pending
+2026-07-22 as "the String family's core straggler"; verdict:
+maintainer, accepting the recommendation in
+`design/NUR-EFFORT-TRIAGE.0.md`)
 
-**Rule:** the string vocabulary moved to `boru:string-util`; moved
-words are not available unqualified (lang/go/CLAUDE.md §"Package
-layout").
-**Divergence:** `slice` alone stays core — REFERENCE's string table
-lists it unqualified between two `StringUtil.*` rows — and `boru
-describe` files it under `list`, not `string`. The likely reason
-(it is polymorphic over String and List, i.e. a sequence word) is
-stated nowhere.
-**Evidence:** `lang/go/native/natives.go:372-382`; REFERENCE.md:1117;
-`help_categories.go:40-49`.
-**Documentation status:** undocumented rationale.
+### The uniform rule
+
+The string vocabulary moved to `boru:string-util`; moved words are not
+available unqualified (lang/go/CLAUDE.md §"Package layout").
+
+### The divergence (as recorded)
+
+`slice` alone stayed core — REFERENCE's string table listed it
+unqualified between two `StringUtil.*` rows, and `boru describe` files
+it under `list`, not `string`, with the reason stated nowhere.
+
+### Why allowed
+
+The move rule does not apply because **`slice` is not a String-family
+word**: it is a core *sequence* word, polymorphic over String, List,
+and Bytes (nine unqualified signatures spanning all three), kin of
+`size`/`take`/`reverse`, which also stayed core for the same reason.
+Relocating it to `StringUtil` would force splitting one polymorphic
+word — the List and Bytes overloads cannot live in a string namespace
+— which is a semantically worse outcome than the filing confusion this
+record flagged. What WAS wrong was the filing: REFERENCE's string
+table presented `slice` as if it were an unqualified string word, and
+the describe categories did not say where to find it. Both filings are
+fixed with this verdict; the `list` category placement stands, because
+that is the sequence home.
+
+### Evidence
+
+- `lang/go/native/natives.go:372-385` and
+  `lang/go/native/native_bytes.go` — the String+List signature pairs
+  plus the Bytes overloads: one polymorphic word.
+- `boru describe slice` — all nine signatures, unqualified.
+- REFERENCE.md string table — the row now carries the "core sequence
+  word, also slices List and Bytes" parenthetical (fixed with this
+  verdict).
+- `lang/go/native/help/help_categories.go` — the string category's
+  description now points at core `slice` (fixed with this verdict).
+- `lang/spec/edge-scalars-3.tsv:45-53`, `corpus-core.tsv:119`,
+  `corpus-structures.tsv:14` — both string and list behaviour pinned;
+  NUR039 independently pins the negative-start semantics.
 
 ---
 
@@ -823,10 +969,13 @@ into a broader Map-key-identity review. Unresolved until then.
 
 ## NUR031 — Code/opaque values have no value equality {#nur031}
 
-**Status:** Pending (re-opened **in part**) · **Re-opened:** 2026-07-31
-(maintainer review, `design/NUR-RESOLUTION-PLAN.0.md`; was Allowed
-2026-07-24 — the resolved handle equalities below stand; the
-re-opened part is the Module/Function/Word remainder)
+**Status:** Pending (re-opened **in part**; narrowed 2026-08-02) ·
+**Re-opened:** 2026-07-31 (maintainer review,
+`design/NUR-RESOLUTION-PLAN.0.md`; was Allowed 2026-07-24 — the
+resolved handle equalities below stand). The re-opened part was the
+Module/Function/Word remainder; **the Module half is now resolved
+(2026-08-02, both namespace and descriptor)**, so what remains open
+is **Function/Word identity** and the Behavior-routing design.
 
 ### The uniform rule
 
@@ -901,26 +1050,40 @@ acceptance:
   a namespace takes the ordinary Node equality arms: `M eq M → true`
   (shared `*OrderedMap` identity), `M deq M → true`, and two
   content-equal namespaces of DIFFERENT exports compare `eq → false`
-  / `deq → true`, exactly the Map contract. The remaining module
-  defect is the `Ideal/Module` DESCRIPTOR only: `M.$module eq
-  M.$module → false` (still `ExtensionPayload`-backed, still falls
-  to the terminal arm) — in scope for the Behavior-routing design
-  below alongside Function/Word identity.
+  / `deq → true`, exactly the Map contract.
 
-**Standing requirement (maintainer, 2026-07-31):** every value —
-functions and modules included — must eventually fall under equality,
-at minimum reflexively (a value is `eq`/`deq` to itself). The
-function-type-vs-value question is now settled (ADR-011: one
-`Function` type; NUR050 resolved), so the remaining mechanism is
-function IDENTITY (stable canon independent of the binding name) plus
-the Behavior routing below. The likely shape — routing `eq`/`deq` through the type's
-`Behavior` for Ideals rather than the kernel's hardcoded arms (the
-future ADR the 2026-07-24 record deferred to) — is plausibly the same
-architectural change NUR050's resolution needs; track them together.
-Note the Sealed Payload constraint stands: module handles are backed
-by `ExtensionPayload`, which the kernel deliberately does not inspect
-(eng/go/CLAUDE.md "Sealed Payload") — reference identity does not
-require inspecting it.
+  **Descriptor half RESOLVED (2026-08-02):** `Ideal/Module` now
+  follows the opaque-handle rule the Timeout/Interval arms
+  established — an opaque handle's identity IS its value, so `eq` and
+  `deq` are both reference identity. `NewModuleInstance` boxes a
+  `*ModuleDesc` in its `ExtensionPayload` (the payload wrapper is
+  KEPT: four kernel arms key on `ExtensionPayload`, and `ModuleDesc`
+  holds a Go map so `==` on the bare struct would panic), and the
+  kernel compares that pointer. `M.$module eq M.$module → true`,
+  `deq` likewise; descriptors of different modules compare false.
+  The Sealed Payload rule is honoured — the kernel asserts the
+  payload to its own type for IDENTITY only and never reads a field.
+  The module defect this record raised is therefore closed; the
+  reflexivity requirement below is met for modules.
+
+**Standing requirement (maintainer, 2026-07-31; module half
+discharged 2026-08-02):** every value — functions and modules
+included — must eventually fall under equality, at minimum
+reflexively (a value is `eq`/`deq` to itself). **Modules now
+satisfy it** (namespace and descriptor, above). The
+function-type-vs-value question is settled (ADR-011: one `Function`
+type; NUR050 resolved), so what this record still tracks is function
+IDENTITY — a stable canon independent of the binding name, since
+canon/render today keys on the name a function was reached through —
+plus the Behavior routing. The likely shape — routing `eq`/`deq`
+through the type's `Behavior` for Ideals rather than the kernel's
+hardcoded arms (the future ADR the 2026-07-24 record deferred to) —
+is plausibly the same architectural change NUR050's resolution
+needs; track them together. Note the Sealed Payload constraint
+stands and was honoured by the descriptor fix: module handles are
+backed by `ExtensionPayload`, which the kernel deliberately does not
+inspect (eng/go/CLAUDE.md "Sealed Payload") — reference identity
+compares the boxed pointer without reading a field.
 
 ### Evidence
 
@@ -932,93 +1095,6 @@ require inspecting it.
   §8, `lang/spec/edge-containers-2.tsv`, `lang/spec/edge-errors-2.tsv`.
 
 
----
-
-
-## NUR037 — A fn-local fn used as a higher-order body word breaks in compiled mode only {#nur037}
-
-**Status:** Pending · **Re-opened:** 2026-07-31 (maintainer review,
-`design/NUR-RESOLUTION-PLAN.0.md`; was Allowed 2026-07-30) ·
-**Surfaced by:** C3 `boru:cli` scouting (design/CLI-PROGRAMS.0.md §8)
-
-**Rule:** the two execution engines agree. A program's meaning does not
-depend on whether the bytecode compiler accepted it — `design/COMPILABLE-
-SUBSET.md` states the contract as "slow, not wrong", and the whole-corpus
-differential exists to hold the two engines to the same answers.
-
-**Divergence:** a fn declared INSIDE another fn's body and then named as a
-higher-order body word resolves under the interpreter and is UNDEFINED
-under the compiler:
-
-```
-def collect fn [[xs:List] [Any] [
-  def acc (flex {})
-  def step fn [[e:String] [Any] [ acc set (e) true ]]
-  for-each [step] xs
-  acc
-]]
-print (collect ["x" "y"])
-```
-
-- `boru check` → `0 error(s), 0 warning(s), 0 info`
-- `boru run -no-compile` → `{x:true y:true}`
-- `boru run` (the DEFAULT) → `error: for-each: element 0: [boru/undefined_word]:
-  undefined word: step`, caret on `[step]`
-
-Hoisting the same `def step fn` to module scope makes all three agree.
-
-**Evidence:** the three commands above, on the current binary. The shape is
-not exotic: a helper local to the function that uses it is the obvious way
-to write a callback, and `sift.boru`'s inline comment about "a fold body will
-not compile" is this defect seen from a different angle (its stated form —
-that `fold` bodies as such refuse — does NOT reproduce; module-level body
-fns compile fine).
-
-**Documentation status:** undocumented. `design/BORU-SHARP-EDGES.0.md` does
-not list it, and nothing warns that the default mode has a smaller name
-resolution scope than the interpreter.
-
-**Proposed verdict:** fix. A compiled fn unit must capture the enclosing
-frame's local fn bindings, or the compiler must refuse the shape (a refusal
-is merely slow; an `undefined_word` on a working program is wrong). The
-check pass reporting clean while the default runtime fails is the part that
-makes this a trap rather than a limitation.
-
-
-
-### Why re-opened (2026-07-31) — an open defect, not a benign allowance
-
-The 2026-07-30 allowance leaned on the trigger being narrow and the
-workaround mechanical (declare callbacks at module scope — written
-into `utils/README.md`'s house rules and exercised through the
-compiled path by the Go suite). That mitigation **stands**, but it
-documents *around* the defect rather than closing it, and the review
-re-classifies the record:
-
-- **The mechanism is a closure-capture gap** — the compiled fn unit
-  does not capture the enclosing frame's local fn bindings, so `step`
-  is simply out of scope in compiled mode. A scope / name-resolution
-  defect: distinct from NUR050's (since-resolved) type-identity
-  mismatch.
-- **But the same family.** It rhymes with the recurring theme — the
-  bytecode compiler failing to treat functions/values as first-class
-  where the interpreter does: NUR051 (type literals as data refused to
-  compile — since RESOLVED: the emitter interns them per ADR-010),
-  NUR050 (function references failed dispatch — since RESOLVED:
-  stage-1 collection admission + the ADR-011 collapse), and here, function
-  *bindings* as captured values failing name resolution when compiled.
-- **"Slow, not wrong" is genuinely violated.** `boru check` reports
-  clean while the DEFAULT runtime fails with `undefined_word` on a
-  working program — exactly the failure mode
-  `design/COMPILABLE-SUBSET.md` forbids.
-
-**Fix direction:** a compiled fn unit must capture the enclosing
-frame's local fn bindings (proper closure capture — preferred), OR the
-compiler must refuse the shape at check time (a refusal is merely
-slow; an `undefined_word` on a working program is wrong). Track
-alongside the (now-resolved) NUR050/NUR051 first-class-values work even
-though the concrete mechanism here is closure capture, not type
-identity. The house rule remains the mitigation until the fix lands.
 ---
 
 
@@ -1124,217 +1200,6 @@ ambiguity resolves.
 ---
 
 
-## NUR041 — The `read-only` profile denies file READS {#nur041}
-
-**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
-scouting (design/CLI-PROGRAMS.1.md §1)
-
-**Rule:** a profile's name and its documented intent describe what it
-permits. `sandbox.jsonic`'s own comment says "importing the module is
-allowed so disk.read works, but the actual disk.read / disk.write capability
-is still gated by the global scope above".
-
-**Divergence:** `read-only` allows the `disk.read` GLOBAL but inherits
-`fileops.words { default: "deny" }` from `sandbox`, and the scope check
-denies first, so reading a file is refused under a profile whose name
-promises exactly that:
-
-```
-$ boru policy explain read-only fileops.read path=ro.txt
-decision: DENY   blame: fileops.words default=deny
-$ boru run -perms read-only -e 'import "boru:io" print (IO.read (make Pathon "ro.txt") {fmt:"text"})'
-error: [boru/read_error]: read: permission denied: fileops.read
-       (policy "read-only": fileops.words default=deny …)
-```
-
-`-allow fileops.read` is required to make a read-only profile read.
-
-**Evidence:** the two commands above. Symmetrically, the write half needs
-BOTH `-allow-global disk.write` and `-allow fileops.write`; the global cap
-and the scope rule are independent gates and either can deny alone.
-
-**Documentation status:** actively misleading — the profile name, and
-sandbox.jsonic's intent comment, both say the opposite of the behaviour.
-
-**Proposed verdict:** fix the profile (allow `fileops.read` in `read-only`,
-which is what the name means) or rename it, and correct the sandbox comment
-either way. A profile nobody can read a file under is not the read-only
-profile a tool author reaches for.
-
-
-
-### Why allowed
-
-Accepted with a caveat that belongs in the record rather than only in a commit
-message: the profile's NAME is what misleads. "read-only" reads as "reads are
-fine, writes are not", and it denies both. Nothing about the enforcement is
-wrong — the profile simply does not grant what its name implies.
-
-**Evidence that pins it:** `cmd/go/internal/build/utils_e2e_test.go` builds the
-baked-permissions pair against `-perms read-only` and records the behaviour at
-the call site, and `utils/tee.boru`'s header states it too, so the next author
-to reach for the profile meets the caveat before the surprise.
----
-
-
-## NUR042 — `-policy-dry-run` is documented and does nothing {#nur042}
-
-**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
-scouting
-
-**Rule:** a flag the CLI advertises does what it says, or does not exist.
-
-**Divergence:** `-policy-dry-run` is advertised on `boru run` and `boru build`
-as "observe-only: log what the policy would do but allow every call". It is
-parsed, read at exactly one site (to stop the resolver returning nil), and
-never wraps the policy in an observe-only decorator. Nothing is logged and
-nothing is allowed:
-
-```
-$ boru run -perms read-only -policy-dry-run -e 'import "boru:io"  IO.write (make Pathon "dry.txt") "x" {fmt:"text"}'
-error: [boru/write_error]: write: permission denied: fileops.write …
-```
-
-**Evidence:** the command above; `grep -rn DryRun --include=*.go cmd/go
-lang/go` outside tests returns only the flag's registration and that single
-read.
-
-**Documentation status:** documented in the flag's own help text, which is
-the whole problem.
-
-**Proposed verdict:** implement the decorator (a policy wrapper that logs
-the decision and returns nil) or remove the flag. A security-adjacent flag
-that silently does nothing is worse than no flag, because it invites exactly
-the "I checked with dry-run first" workflow it cannot support.
-
-
-
-### Why allowed
-
-A flag that is documented and inert is a small defect with a specific hazard: a
-user may believe they have PREVIEWED a policy when they have previewed nothing.
-That hazard is what this record keeps visible until the flag is either
-implemented or withdrawn.
-
-**Evidence that pins it:** the record carries the measurement showing the flag
-changes nothing, so a future implementation has its acceptance test already
-written.
----
-
-
-## NUR044 — `boru build` skips the static check `boru run` performs {#nur044}
-
-**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
-scouting
-
-**Rule:** the CLI's entry points agree about whether a program is valid.
-`boru run` performs a preflight check and refuses to execute a program with a
-check error.
-
-**Divergence:** `boru build` performs no check at all, so a program `boru run`
-refuses to run builds successfully and ships:
-
-```
-$ echo 'nosuchword 1 2' > bad.boru
-$ boru build bad.boru -o badbin
-wrote badbin              # exit 0
-$ ./badbin
-error: [boru/undefined_word]: undefined word: nosuchword    # exit 1
-$ boru run bad.boru
-check: [error] undefined_word: …  →  refuses to run
-```
-
-**Evidence:** the session above.
-
-**Documentation status:** `CLI.md` describes the preflight for `run` and
-does not say `build` omits it.
-
-**Proposed verdict:** fix — `boru build` should run the same preflight and
-refuse by default (with a `-no-check` escape hatch mirroring `run`'s). The
-asymmetry is worst exactly where it matters: the artefact that outlives the
-session is the one nothing validated.
-
-
-
-### Why allowed
-
-`boru build` producing an unchecked binary is a gap in the tool, not in the
-language, and it is covered by a build-time convention: check first, then
-build.
-
-**Evidence that pins it:** `utils/Makefile`'s `check` target exists precisely
-for this and its comment names this record — "the only thing standing between a
-typo and a shipped binary". `make -C utils all` runs `check` before anything
-else, and the end-to-end Go test builds only sources that suite has checked.
----
-
-
-## NUR045 — Per-export module gating is dead schema: `sandbox`'s `deny: ["sleep"]` does not deny {#nur045}
-
-**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
-scouting
-
-**Rule:** a policy rule a shipped profile declares is enforced. The policy
-engine has one evaluation path and every scope reaches it through
-`Policy.Check`.
-
-**Divergence:** the `modules` scope has a second, per-export half —
-`modules.scopes."boru:x".words`, keyed by export name — with a full
-implementation (`checkModuleCall`, `evaluate.go`) and unit tests. **Nothing
-in production ever calls it.** `Check("modules", "call", …)` appears only in
-`lang/go/policy/*_test.go`; the sole production `modules` checks are the
-import gate and the per-module `Installed()` flag
-(`lang/go/modules/modules.go`). So every per-export rule in every shipped
-profile is inert:
-
-```
-$ time boru do -perms sandbox 'import "boru:time-util"  TimeUtil.sleep 1500'
-real 0m1.531s          # it slept; sandbox.jsonic declares deny: ["sleep"]
-$ time boru do -perms full 'import "boru:time-util"  TimeUtil.sleep 1500'
-real 0m1.532s          # identical
-```
-
-**Evidence:** the timing above; `grep -rn 'Check("modules"' --include=*.go`
-outside tests returns exactly one line, and its op is `"import"`. The
-`deny: ["sleep"]` rule in `sandbox.jsonic` is the only per-export rule any
-shipped profile carries, which is why nobody noticed.
-
-**Why it matters:** `sleep` is the DoS vector a hosted evaluator reaches for
-`sandbox` to close. A profile that says it denies a word and does not is a
-false guarantee, and the false guarantee is in the security layer.
-
-**Documentation status:** `evaluate.go`'s own doc comment describes the
-per-export gate as working ("per-export rules live in the per-module
-subscope"), and `sandbox.jsonic` reads as though it works.
-
-**Proposed verdict:** fix — call `Check("modules", "call", {module, export})`
-at module-export dispatch — or delete the schema and the rule, and say in
-`lang/go/policy` that module gating is import-granularity only. The choice
-is a real one: the check would run on every module-word call, so its cost
-belongs to the maintainer's judgement, not to a bug fix. What must not
-survive is a profile declaring a denial it does not perform.
-
-
-### Why allowed
-
-**This is a false guarantee in the security layer, and the acceptance does not
-make it a safe one.** `sandbox.jsonic` declares `deny: ["sleep"]`, the
-per-export gate that would enforce it is never called in production, and the
-measured behaviour is that a sandboxed program sleeps exactly as long as an
-unsandboxed one. A profile that states a denial it does not perform is worse
-than one that states nothing, because a reader budgets for it.
-
-What is allowed is the SCHEMA remaining in place while unenforced. Closing it
-means either calling the gate on every module-export dispatch — a cost on the
-hot path, which is a maintainer's judgement rather than a bug fix — or deleting
-the rule and saying that module gating is import-granularity only.
-
-**Evidence that pins it:** the record carries the timing measurement showing
-the two profiles behave identically, so whichever direction is chosen has its
-acceptance test already written. Until then, no shipped profile should be
-described to a user as denying a word.
----
-
 ## NUR046 — `boru fmt` is not idempotent: one pass is not a fixed point {#nur046}
 
 **Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** the C3 utils
@@ -1424,74 +1289,6 @@ and its comment names this record and explains why — the same posture
 cannot silently start churning on every build.
 ---
 
-## NUR047 — Regex match offsets are BYTE indices; every string word around them is RUNE-indexed {#nur047}
-
-**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** the C3 utils
-suite (`grep --color`)
-
-**Rule:** boru counts strings in RUNES, uniformly. `size "日本語"` is 3,
-`slice 1 2 "日本語"` is `本`, `StringUtil.split ""` yields runes, and
-`REFERENCE.md` states the rune convention for the string family as a whole.
-It is one of the language's cleaner uniformities — a user never has to ask
-which unit a string word means.
-
-**Divergence:** the match records `MiniLang.lang_re` returns carry `i` and `e`
-in BYTES.
-
-```
-$ boru do 'import "boru:minilang"  print (MiniLang.lang_re "c" {} "日本語c")'
-{"ok": true, "ms": [{"m": "c", "i": 9, "e": 10, …}], …}
-
-$ boru do 'print (size "日本語c")'
-4
-```
-
-The match is at rune index 3 of a 4-rune string; the record says 9..10. Every
-consumer that does the obvious thing — `slice (m.i) (m.e) line`, the whole
-point of returning offsets — is therefore wrong on any line containing a
-non-ASCII rune, and RIGHT on every ASCII line, which is the worst possible
-failure distribution: it passes every casual test and corrupts real data.
-
-**Evidence:** the two commands above. `utils/grep.boru`'s `--color` highlighter
-is the in-repo consumer; it works around this by converting the line to Bytes,
-slicing in bytes, and converting back (`convert String (slice i e (convert
-Bytes line))`), which is correct but is exactly the kind of thing a uniform
-convention exists to make unnecessary.
-
-**Why it matters:** offsets are only useful for indexing back into the
-subject, and the one indexing word available (`slice`) uses the other unit.
-The two halves of the feature do not compose. A highlighter, a linter, a
-syntax-colourer, and an LSP `Diagnostic` range all want exactly this and all
-hit it — Phase 5's server would meet it in `textDocument/publishDiagnostics`,
-where LSP itself specifies UTF-16 code units, making three units in play.
-
-**Documentation status:** the unit is not stated at all. `boru describe` for
-the regex words does not say, and nothing in `REFERENCE.md` marks the match
-record as an exception to the rune convention.
-
-**Proposed verdict:** fix by returning rune offsets, since that is what the
-rest of the language means by an index — and it is the half users can act on.
-If byte offsets must be kept (they are what Go's regexp returns, and
-converting costs a scan), then the record should carry BOTH, named so the
-unit is impossible to mistake, and the rune convention's exception must be
-documented everywhere the match record is.
-
-### Why allowed
-
-The unit mismatch is real and its failure distribution is the worst kind —
-correct on every ASCII input, silently corrupting on the first multi-byte one —
-but it is confined to consumers that index back into the subject with the
-returned offsets, and those consumers can be exact today by slicing in Bytes.
-
-**Evidence that pins it:** `utils/grep.boru`'s `--color` highlighter is the
-in-repo consumer; it converts to Bytes, slices, and converts back, and
-`utils/tests/grep_test.boru` carries three cases (a match after multi-byte
-runes, a multi-byte match, an astral rune) that exist ONLY to fail if that
-workaround is removed. All three would pass on ASCII input, which is why they
-are written explicitly.
-
----
-
 ## NUR049 — The paren barrier is one-directional: a group can reach backward for a receiver {#nur049}
 
 **Status:** Pending · **Recorded:** 2026-07-31 · **Surfaced by:** split
@@ -1543,3 +1340,66 @@ intentionally open a paren expecting to consume an enclosing stack
 value; if such patterns exist and are sanctioned, they need an
 explicit alternative (e.g. `$`-receiver forms) before the barrier
 closes.
+
+**Investigation update (2026-08-02, NUR-EFFORT-TRIAGE probing):** the
+record's premise is narrower than written. The backward *reach* does
+NOT reproduce in any probed context — `5 (add 3)`,
+`{m:"hi"} (dot "m")`, the def/word/branch/data variants, and the
+error-arm form all fail **deterministically at runtime already**:
+every dispatch scan (`resolvedIndicesBeforeInto`,
+`commitBarrierForward`) stops at the OpenParen, so the group is
+dynamically sealed today. What remains of the defect is (a) the
+failure is not **static** — error-handler bodies are wholly unchecked
+(`error [zzz-undefined]` passes `boru check` clean; the seeded
+handler-body run in `errorReturnsFn` exists but is gated to the
+compile pass), and (b) the engine's own help text actively recommends
+the broken idiom (`strandedForwardError` /
+`forwardParensSuggestion` suggest `def (dot …)` forms whose every
+candidate needs a stack-barrier receiver). The compatibility check
+the verdict requires came back clean: a corpus sweep (lang/spec,
+utils, design/examples, lang/go/modules) found no sanctioned
+point-free pattern relying on backward reach — the only
+enclosing-stack-dependent groups are the broken error-arm idioms
+themselves, including a second latent instance at
+`design/examples/todo/audit.boru:29` (`err: (dot code)`). The fix
+scope is therefore: staticize the handler-body check, fix the help
+text, repair both shipped examples, and pin the symmetry with a spec
+battery; the working replacement form (`dot message def why;`) is
+verified.
+
+---
+
+## NUR052 — Store enumeration reads the top COW layer; lookup walks the chain {#nur052}
+
+**Status:** Pending · **Recorded:** 2026-08-02 · **Surfaced by:**
+NUR-EFFORT-TRIAGE probing of NUR022 (del/set symmetry)
+
+**Rule:** a container's enumeration agrees with its lookup — the keys
+a Store *shows* (`size`, `convert Map`, `each`) are the keys it
+*answers for* (`get`, `has`).
+**Divergence:** Store enumeration reads only the newest copy-on-write
+layer while lookup walks the full prototype chain:
+
+```
+$ boru do 'context set a/q 1  context set b/q 2
+           print (size (context))            # 1
+           print ((context) get a/q)         # 1   — lookup sees a
+           print ((context) has a/q)         # true
+           print (convert Map (context))'    # {"b": 2} — enumeration does not
+```
+
+Two sets, two live keys by lookup, one key by enumeration.
+**Evidence:** the session above (verified 2026-08-02, current binary);
+`eng/go/value.go::StoreInstanceInfo.Get` (prototype-chain walk) vs
+`eng/go/convert_ideal.go::storeEntryMap` (own-entry projection).
+**Documentation status:** NUR031's resolved Store-equality arm
+describes `deq` as "the same own-entry projection as `convert Map`" —
+so the asymmetry also leaks into which Stores compare `deq`-equal.
+Not otherwise documented.
+**Proposed verdict:** investigate then fix or argue — either
+enumeration walks the chain (with masking, so a child layer's key
+shadows its parent's), or lookup is documented as deliberately
+chain-walking while enumeration is own-layer (and the words' docs say
+which they use). Any `del`-symmetry work under NUR022 must land on
+whichever answer is chosen (a tombstoned key must be invisible to
+BOTH).

@@ -75,9 +75,13 @@ Learned by writing them, and each one prevents a silent failure:
   `IO.exit 0;`.
 - **Accumulate into `flex`**, not into an immutable Map or List: the immutable
   form is quadratic, and these programs read files.
-- **Declare callbacks at top level**, never inside another fn: a fn-local
-  callback resolves under the interpreter and is undefined under the compiler
-  (NUR037).
+- **Prefer declaring callbacks at top level** rather than inside another fn.
+  This is now style advice, not a defect workaround: a fn-local callback used
+  as a higher-order body word once resolved under the interpreter and died
+  with `undefined_word` under the compiler (NUR037); the compiler now refuses
+  that shape and the interpreter runs the whole program instead — correct,
+  just slower. A module-scope callback keeps the program on the compiled
+  path.
 - **Take argv as a parameter** in anything you want to test — `boru test`
   cannot inject an argument vector. Take the *environment* and the *terminal*
   as parameters too, for the same reason: a fn that reads them can only ever

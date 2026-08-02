@@ -116,7 +116,16 @@ type Registry struct {
 	// would surprise importers (`add 1 {}` suddenly working) and breaks
 	// forward compatibility the day core claims the tuple as a locked
 	// signature. See design/OPEN-WORDS.0.md "Implementation notes".
-	ModuleScope    bool
+	ModuleScope bool
+	// ModuleRef is the resolved import id when this registry is a
+	// MODULE's sub-registry ("boru:time-util", "./lib.boru") — the
+	// module half of the per-export policy identity. Stamped once by
+	// StampModuleCallGates at module resolution; empty ("") means "not
+	// a module registry" (unambiguous: a resolved module ref is never
+	// empty). Read by the compiled CALL_USER gate, whose CompiledFn
+	// carries the owning registry but no signature to read a
+	// ModuleCallID from.
+	ModuleRef      string
 	errs           []error           // registration errors accumulated during setup
 	ready          bool              // true after initial setup; triggers dynamic help generation
 	OnRegisterHook func(name string) // called when a function is registered after startup
@@ -2104,6 +2113,15 @@ func (r *Registry) CallBoru(sig *FnSig, args []Value, captures []CapturedBinding
 // so a debug host's backtrace can name the call — a module fn's frame
 // is Defs-based and leaves no tape marks to reconstruct a name from.
 func (r *Registry) CallBoruNamed(sig *FnSig, args []Value, captures []CapturedBinding, label string) ([]Value, error) {
+	// Per-export policy gate: a module fn invoked as a HOST callback
+	// (InvokeCallback → CallBoru on the importer's registry) is a
+	// module-export dispatch like any other and must not slip past the
+	// engine-side gates. Ordinary module-fn calls reach CallBoru on the
+	// module's OWN sub-registry (no CapPolicy installed there), so
+	// intra-module and already-gated dispatches pass through untouched.
+	if err := policyGateModuleCallReg(r, sig.ModuleCall); err != nil {
+		return nil, err
+	}
 	// Observability seam (interp_entry.go): the interpreter fn-call path.
 	r.noteInterp("CallBoru")
 	// Build token sequence (same as InstallFnDef handler).

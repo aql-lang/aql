@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	eng "github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/lang/go/native"
@@ -725,17 +726,42 @@ func miniGexShapeReturns(args []native.Value, _ *native.Registry) []native.Value
 	}
 }
 
+// runeOffsetScanner converts ascending BYTE offsets in a subject to RUNE
+// indices in one incremental forward scan (O(len subject) total). Top-level
+// regexp match spans arrive ordered and non-overlapping, so each converted
+// offset is >= its predecessor and the scan never restarts; a zero-width
+// match (i == e, or a match starting where the previous one ended) repeats
+// an offset, which advances nothing and returns the same rune index.
+type runeOffsetScanner struct {
+	subject string
+	bytePos int
+	runePos int
+}
+
+func (sc *runeOffsetScanner) runeIdx(byteOff int) int {
+	for sc.bytePos < byteOff {
+		_, size := utf8.DecodeRuneInString(sc.subject[sc.bytePos:])
+		sc.bytePos += size
+		sc.runePos++
+	}
+	return sc.runePos
+}
+
 // reMatchResult builds the standard re match structure {ok ms fst lst n} —
 // shared by the runtime kind (lang_re, compiles per call via the memo) and the
 // compiled consumer (run-re, gets a precompiled regexp from the carrier).
+// Go's regexp reports BYTE offsets; each match's i/e are converted to RUNE
+// indices (the unit every boru index means — slice/size compose directly,
+// NUR047) via one incremental runeOffsetScanner pass over the subject.
 func reMatchResult(re *regexp.Regexp, subject string, limit int64) native.Value {
 	idxs := re.FindAllStringSubmatchIndex(subject, int(limit))
 	matches := make([]native.Value, 0, len(idxs))
+	sc := &runeOffsetScanner{subject: subject}
 	for _, ix := range idxs {
 		mm := native.NewOrderedMap()
 		mm.Set("m", native.NewString(subject[ix[0]:ix[1]]))
-		mm.Set("i", native.NewInteger(int64(ix[0])))
-		mm.Set("e", native.NewInteger(int64(ix[1])))
+		mm.Set("i", native.NewInteger(int64(sc.runeIdx(ix[0]))))
+		mm.Set("e", native.NewInteger(int64(sc.runeIdx(ix[1]))))
 		groups := make([]native.Value, 0, len(ix)/2-1)
 		for g := 1; g < len(ix)/2; g++ {
 			s, e := ix[2*g], ix[2*g+1]

@@ -396,13 +396,13 @@ func ExactEqual(a, b Value) bool {
 
 	// Opaque Ideal handles (NUR031). eq is the REFERENCE half of the
 	// two-equalities rule: a pointer-backed handle (Store, Timeout,
-	// Interval) is eq iff it is the SAME handle. Error is a value-like
-	// Ideal with no reference, so eq compares its fields (eq ≡ deq there,
-	// like a scalar leaf). Before this rule every handle fell through to
-	// the terminal `false` — not even eq to itself. The code/opaque
-	// values (Function, Module, Word) stay below: they carry no stable
-	// reference these value-copied payloads could compare (NUR031 keeps
-	// them as an argued remainder).
+	// Interval, the Module descriptor) is eq iff it is the SAME handle.
+	// Error is a value-like Ideal with no reference, so eq compares its
+	// fields (eq ≡ deq there, like a scalar leaf). Before this rule every
+	// handle fell through to the terminal `false` — not even eq to
+	// itself. The code values (Function, Word) stay below: they carry no
+	// stable reference these value-copied payloads could compare (NUR031
+	// keeps them as an argued remainder).
 	if eq, handled := opaqueIdealExactEqual(a, b); handled {
 		return eq
 	}
@@ -658,10 +658,10 @@ func DeepEqual(a, b Value) bool {
 
 	// Opaque Ideal handles (NUR031). deq is the DEEP-VALUE half of the
 	// rule: a Store by its own entries (the same projection as `convert
-	// Map`), Error by its fields; the pure timer handles (Timeout,
-	// Interval) have no deeper structure than their identity, so deq is
-	// their reference identity, matching eq. Code/opaque values
-	// (Function, Module, Word) stay below at the terminal `false`.
+	// Map`), Error by its fields; the pure handles (Timeout, Interval,
+	// the Module descriptor) have no deeper structure than their
+	// identity, so deq is their reference identity, matching eq. Code
+	// values (Function, Word) stay below at the terminal `false`.
 	if eq, handled := opaqueIdealDeepEqual(a, b); handled {
 		return eq
 	}
@@ -673,8 +673,9 @@ func DeepEqual(a, b Value) bool {
 // opaqueIdealExactEqual is the `eq` (reference) half of NUR031 for the
 // opaque Ideal handles that would otherwise fall through to `false`.
 // Returns (result, true) when a is such a handle; (false, false) to let
-// the caller reach its own fall-through. A pointer-backed handle is eq
-// iff it is the SAME pointer; Error (a value struct) is eq by fields.
+// the caller reach its own fall-through. A pointer-backed handle (Store,
+// Timeout, Interval, the boxed Module descriptor) is eq iff it is the
+// SAME pointer; Error (a value struct) is eq by fields.
 func opaqueIdealExactEqual(a, b Value) (bool, bool) {
 	switch av := a.Data.(type) {
 	case *StoreInstanceInfo:
@@ -692,8 +693,33 @@ func opaqueIdealExactEqual(a, b Value) (bool, bool) {
 		// type as well as equal fields (a `refine Error` subtype is not
 		// eq to a plain Error).
 		return ok && a.Parent.Equal(b.Parent) && errorInfoEqual(av, bv), true
+	case ExtensionPayload:
+		return moduleDescIdentity(av, b)
 	}
 	return false, false
+}
+
+// moduleDescIdentity is the shared eq/deq arm for the Ideal/Module
+// DESCRIPTOR (NUR031, narrow half): an ExtensionPayload boxing a
+// *ModuleDesc. The descriptor is an opaque handle whose identity IS its
+// value — like Timeout/Interval, eq and deq are both pointer identity
+// (per-import-instance: every namespace bound by one import shares one
+// boxed pointer through Value copies). handled=false for any OTHER
+// ExtensionPayload body (host/plugin payloads the kernel does not
+// inspect — they keep the terminal fall-through). It must NEVER apply
+// Go == to a bare ModuleDesc: the struct holds a map and is not a
+// comparable type, so that would panic at runtime.
+func moduleDescIdentity(av ExtensionPayload, b Value) (bool, bool) {
+	ad, ok := av.Body.(*ModuleDesc)
+	if !ok {
+		return false, false
+	}
+	bp, ok := b.Data.(ExtensionPayload)
+	if !ok {
+		return false, true
+	}
+	bd, ok := bp.Body.(*ModuleDesc)
+	return ok && ad == bd, true
 }
 
 // opaqueIdealDeepEqual is the `deq` (deep-value) half of NUR031. It
@@ -721,6 +747,11 @@ func opaqueIdealDeepEqual(a, b Value) (bool, bool) {
 	case ErrorInfo:
 		bv, ok := b.Data.(ErrorInfo)
 		return ok && a.Parent.Equal(b.Parent) && errorInfoEqual(av, bv), true
+	case ExtensionPayload:
+		// The Module descriptor: deq is its reference identity, matching
+		// eq (see moduleDescIdentity — an opaque handle with no deeper
+		// structure than its identity, like the timers).
+		return moduleDescIdentity(av, b)
 	}
 	return false, false
 }
@@ -766,10 +797,11 @@ func errorInfoEqual(a, b ErrorInfo) bool {
 }
 
 // isDeqComparableHandle reports whether v is an opaque Ideal handle that
-// NUR031 made deq-comparable (Store, Error, Timeout, Interval) — as
-// opposed to a code/opaque value (Function, Module, Word) that remains
-// equal to nothing. Used by DeqKey to bucket these into a pairwise-scan
-// family (by handleKind) instead of the DeqNeverEqual fast path.
+// NUR031 made deq-comparable (Store, Error, Timeout, Interval, the
+// Module descriptor) — as opposed to a code value (Function, Word) that
+// remains equal to nothing. Used by DeqKey to bucket these into a
+// pairwise-scan family (by handleKind) instead of the DeqNeverEqual
+// fast path.
 func isDeqComparableHandle(v Value) bool {
 	return handleKind(v) != ""
 }
@@ -810,17 +842,50 @@ func isNaNValue(v Value) bool {
 	return err == nil && math.IsNaN(f)
 }
 
+// signedZeroPair reports whether a relational comparison of a and b is
+// an IEEE ±0 pair: both concrete numbers of zero magnitude with the
+// Float negative zero on at least one side. IEEE §5.11 defines
+// -0 == +0, so lt/lte/gt/gte must treat the pair as EQUAL even though
+// the total order behind cmp/tcmp/sort now places -0.0 strictly before
+// every positive zero (totalOrder §5.10, NUR013) — without this guard
+// the totalOrder fix would CREATE an IEEE violation (-0.0 lt 0.0 →
+// true). The zero-magnitude probe runs in the exact big.Rat domain so
+// the cross-leaf pairs (Integer 0, BigInteger/BigDecimal zeros vs
+// -0.0) are guarded too.
+func signedZeroPair(a, b Value) bool {
+	if !isNegZeroFloat(a) && !isNegZeroFloat(b) {
+		return false
+	}
+	return isZeroNumber(a) && isZeroNumber(b)
+}
+
+// isZeroNumber reports whether v is a concrete number of exactly zero
+// magnitude (either sign), across all four numeric leaves.
+func isZeroNumber(v Value) bool {
+	if !isConcreteNumber(v) {
+		return false
+	}
+	r, ok := toRatExact(v)
+	return ok && r.Sign() == 0
+}
+
 // relationalHandler builds the handler for one ordering word: the IEEE
 // *unordered* rule first (NaN on either side → false, see
-// numericUnordered), then the family-restricted orderedCompare with
-// keep() mapping the three-way result onto the word's truth condition.
-// The four words are the same function with one comparator swapped —
-// building them from one factory keeps the NaN rule and the arg order
-// (args[1] vs args[0], the `a OP b` reading convention) from drifting.
+// numericUnordered), then the IEEE signed-zero equality (±0 pairs are
+// EQUAL per §5.11, see signedZeroPair — the total order's -0 < +0 slot
+// must not leak into the relationals), then the family-restricted
+// orderedCompare with keep() mapping the three-way result onto the
+// word's truth condition. The four words are the same function with
+// one comparator swapped — building them from one factory keeps the
+// NaN and ±0 rules and the arg order (args[1] vs args[0], the `a OP b`
+// reading convention) from drifting.
 func relationalHandler(op string, keep func(int) bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
 	return func(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		if numericUnordered(args[0], args[1]) {
 			return []Value{NewBoolean(false)}, nil
+		}
+		if signedZeroPair(args[0], args[1]) {
+			return []Value{NewBoolean(keep(0))}, nil
 		}
 		cmp, err := orderedCompare(op, args[1], args[0])
 		if err != nil {

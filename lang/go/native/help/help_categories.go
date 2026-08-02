@@ -79,7 +79,7 @@ var categories = []Category{
 		map[string][]string{"bin-util": {
 			"band", "bor", "bxor", "bnot", "bsl", "bsr", "busr",
 		}}},
-	{"string", "String manipulation.", nil,
+	{"string", "String manipulation. (Substring extraction is the core sequence word `slice`, filed under `list` — no import needed.)", nil,
 		map[string][]string{"string-util": {
 			"upper", "lower", "concat", "split", "trim", "contains", "indexof",
 			"replace", "changecase", "normalize", "repeat", "pad", "match", "escape",

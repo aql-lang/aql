@@ -619,6 +619,17 @@ modules (`import "boru:math-util"`, …) are already part of the runtime and
 need no bundling. An import that is neither a `boru:` module nor an explicit
 `.boru`/`.lang` file path is rejected at build time.
 
+**Every build pre-flights by default.** `boru build` runs the same static
+pre-flight as `boru run` (see [`boru check`](#boru-check)) and refuses to
+produce a binary if any error is found — a type bug that would abort the
+built tool's very first execution fails the *build* instead, with the
+diagnostics on stderr. The gate is quiet on a clean program, resolves
+relative file imports against the entry file's directory (exactly how the
+built binary will resolve them, wherever the build is invoked from), and —
+like `boru check` — executes imported file-module bodies to learn their
+exports. `--no-check` (or `BORU_NO_CHECK=1`) skips the pre-flight and
+builds anyway.
+
 Flags:
 
 | Flag | Meaning |
@@ -630,9 +641,10 @@ Flags:
 | `-r <registry>` | Registry path baked into the binary. |
 | `-s <seed>` | Random seed baked into the binary. |
 | `--options <jsonic>` | Engine [`--options`](#--options--engine-options-as-jsonic) baked in (validated at build time). |
+| `--no-check` | Skip the static pre-flight check and build anyway (env: `BORU_NO_CHECK=1`). |
 
-A missing source file, an unbundlable import, or (for `--native`) a failed
-`go build` exits non-zero with the error on stderr.
+A missing source file, an unbundlable import, a failed pre-flight check, or
+(for `--native`) a failed `go build` exits non-zero with the error on stderr.
 
 
 ## Debugging
@@ -1415,7 +1427,6 @@ Every command that builds a `lang.Boru` accepts these flags:
 | `--deny-global OP` | Lower a global hard cap. |
 | `--no-install scope` | Remove a capability slot entirely. |
 | `--install scope` | Force-install (overrides inherited install=false). |
-| `--policy-dry-run` | Observe-only (logs but allows). |
 
 Environment fallbacks (consulted when no `--perms*` flag is set):
 

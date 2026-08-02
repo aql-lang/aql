@@ -33,6 +33,17 @@ type Policy interface {
 	// dedicated method so eng/ can take it via a one-method interface.
 	CheckWord(name string) error
 
+	// CheckModuleCall is the narrow shim the engine's module-export
+	// dispatch gates call — the per-export twin of CheckWord.
+	// Equivalent to Check("modules", "call", {module, export}), but
+	// exposed as a dedicated method so eng/ can take it via a
+	// one-method interface (eng.ModuleCallChecker), and so the
+	// implementation can short-circuit in O(1) for profiles that
+	// declare no per-export rules (the common case — the decision is
+	// fully static per (module, export), so a profile-compile-time
+	// bit answers it).
+	CheckModuleCall(module, export string) error
+
 	// Installed reports whether the given capability scope is
 	// installed in this policy. Used by SetHostX hooks to skip
 	// constructing a wrapper (and the underlying capability) when
@@ -126,6 +137,14 @@ var KnownScopes = []string{
 // policy/ — the engine only needs to ask "is this word allowed?".
 type WordChecker interface {
 	CheckWord(name string) error
+}
+
+// ModuleCallChecker is the engine-side per-export shim, mirroring
+// WordChecker: the engine's module-export dispatch gates ask "may
+// this (module, export) be called?" without importing policy/.
+// The eng twin is eng.ModuleCallChecker (policy_hook.go).
+type ModuleCallChecker interface {
+	CheckModuleCall(module, export string) error
 }
 
 // GlobalsFor returns the global ops the (scope, op) pair touches. A

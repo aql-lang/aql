@@ -158,3 +158,38 @@ func TestComposeLimitsTakesMostRestrictive(t *testing.T) {
 		t.Errorf("MaxStepBudget = %d, want 100 (smaller)", lim.MaxStepBudget)
 	}
 }
+
+// The composed CheckModuleCall is deny-wins like every other composed
+// check: the parent's denial short-circuits before the child is asked
+// (NUR045).
+func TestComposedCheckModuleCallParentDenies(t *testing.T) {
+	parent, err := LoadInline(`{
+		name: "p",
+		scopes: { modules: { words: { default: "allow" }, scopes: {
+			"boru:time-util": { words: { default: "allow", rules: [{ deny: ["sleep"] }] } }
+		} } }
+	}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	child, err := LoadInline(`{ name: "c", scopes: { engine: { words: { default: "allow" } } } }`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := Compose(parent, child)
+	if err := c.CheckModuleCall("boru:time-util", "sleep"); err == nil {
+		t.Error("the parent's per-export denial must win over a permissive child")
+	}
+	if err := c.CheckModuleCall("boru:time-util", "now"); err != nil {
+		t.Errorf("an unruled export must pass both halves: %v", err)
+	}
+}
+
+// moduleCallCouldDeny walks the modules scope's subscopes; a nil
+// subscope entry is skipped rather than dereferenced.
+func TestModuleCallCouldDenySkipsNilSubscope(t *testing.T) {
+	s := &Scope{Scopes: map[string]*Scope{"boru:x": nil}}
+	if moduleCallCouldDeny(s) {
+		t.Error("a nil subscope contributes no denial")
+	}
+}

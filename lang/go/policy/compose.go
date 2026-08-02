@@ -54,6 +54,13 @@ func (c *composed) CheckWord(name string) error {
 	return c.child.CheckWord(name)
 }
 
+func (c *composed) CheckModuleCall(module, export string) error {
+	if err := c.parent.CheckModuleCall(module, export); err != nil {
+		return err
+	}
+	return c.child.CheckModuleCall(module, export)
+}
+
 func (c *composed) Installed(scope string) bool {
 	// AND: a scope is installed in the composed policy only if both
 	// layers permit its installation.

@@ -22,5 +22,20 @@
         ]
       }
     }
+
+    // What the profile's name promises: file READS work. The scope
+    // check and the global disk.read cap are independent gates, so the
+    // read-like fileops (read/stat/list) must be allowed here too —
+    // sandbox's inherited default deny previously refused reads under
+    // a profile named read-only (NUR041, resolved). Write-like ops
+    // (write/mkdir/remove/rename/link/chmod) stay denied by the
+    // inherited default AND the global disk.write deny.
+    fileops: {
+      words: {
+        rules: [
+          { allow: ["read", "stat", "list"] }
+        ]
+      }
+    }
   }
 }

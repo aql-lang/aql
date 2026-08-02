@@ -624,7 +624,13 @@ func Resolve(name string, parent *native.Registry) (native.ModuleDesc, error) {
 }
 ```
 
-And per-export dispatch:
+And per-export dispatch — **implemented 2026-08-02 (NUR045)**, though
+not by a check at each dispatch site: the export's policy identity is
+stamped onto its dispatchable signatures once at module-resolution time
+(`eng.StampModuleCallGates`), and every chokepoint on both engines gates
+on that stamp, so no dispatch route can be missed and an unruled profile
+pays one precomputed boolean. The shape of the check is as sketched:
+
 
 ```go
 // When dispatching a module-imported word "math.sin":
@@ -732,6 +738,13 @@ the resolved profile chain, the active globals, and a suggested
 rule that would change the answer.
 
 ### Dry-run mode
+
+> **Status: not implemented.** The observe-only decorator this section
+> designs was never built; the `--policy-dry-run` flag shipped inert
+> (parsed but never wired to anything) and was removed under NUR042 —
+> a security-adjacent flag that does nothing is worse than no flag.
+> This section remains the spec if the decorator is ever genuinely
+> needed.
 
 ```bash
 boru exec --perms=sandbox --policy-dry-run script.boru

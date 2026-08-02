@@ -492,6 +492,26 @@ func TestUtilsBakedPermissionsPair(t *testing.T) {
 		}
 	})
 
+	t.Run("the read-only build can READ a named file (NUR041 resolved)", func(t *testing.T) {
+		// read-only means reads work: the profile allows the read-like
+		// fileops (read/stat/list) while writes stay denied. cat is
+		// the suite's file reader, baked under the same profile as the
+		// denied tee half.
+		catDir := t.TempDir()
+		reader := buildUtil(t, catDir, "cat", "-perms", "read-only")
+		src := filepath.Join(catDir, "ro-in.txt")
+		if err := os.WriteFile(src, []byte("readable\n"), 0o644); err != nil {
+			t.Fatalf("writing fixture: %v", err)
+		}
+		got := runUtil(t, reader, "", nil, src)
+		if got.code != 0 {
+			t.Fatalf("code=%d stderr=%q, want 0 — read-only must allow file reads", got.code, got.stderr)
+		}
+		if got.stdout != "readable\n" {
+			t.Fatalf("stdout=%q, want %q", got.stdout, "readable\n")
+		}
+	})
+
 	t.Run("the permissive build writes exactly the same bytes it was given", func(t *testing.T) {
 		target := filepath.Join(allowedDir, "allowed-out.txt")
 		got := runUtil(t, allowed, "payload\n", nil, target)

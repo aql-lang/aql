@@ -118,6 +118,77 @@ func TestMiniCovRe(t *testing.T) {
 	}
 }
 
+// TestMiniCovReRuneOffsets pins NUR047's resolution on both re paths:
+// each match's i/e are RUNE indices into the subject — Go's regexp
+// reports byte offsets and reMatchResult converts them in one incremental
+// pass — so they compose with `slice` directly. Covers a match after
+// multi-byte runes, a multi-byte match, an astral rune, and the
+// zero-width case (i == e, one match per rune boundary).
+func TestMiniCovReRuneOffsets(t *testing.T) {
+	r := mcovReg(t)
+
+	// Transducer path (lang_re): a match after three 3-byte runes.
+	li := mcovRun(t, r, mcovImp+`('日本語c' MiniLang.lang_re 'c' {} end).fst.i`)
+	if n, _ := li[0].AsConcreteInteger(); n != 3 {
+		t.Errorf("lang_re fst.i = %v, want rune index 3 (bytes said 9)", li[0])
+	}
+	le := mcovRun(t, r, mcovImp+`('日本語c' MiniLang.lang_re 'c' {} end).fst.e`)
+	if n, _ := le[0].AsConcreteInteger(); n != 4 {
+		t.Errorf("lang_re fst.e = %v, want rune index 4 (bytes said 10)", le[0])
+	}
+
+	// Compiled path (mini re → run-re) agrees, and the offsets compose
+	// with the rune-counting slice — the composition NUR047 recorded as
+	// broken (it returned '' under byte offsets).
+	comp := mcovRun(t, r, mcovImp+`def r ('日本語c' mini re 'c') end  slice (r.fst.i) (r.fst.e) '日本語c'`)
+	if s, _ := comp[0].AsConcreteString(); s != "c" {
+		t.Errorf("slice by rune offsets = %v, want 'c'", comp[0])
+	}
+
+	// A multi-byte MATCH spans runes 1..3, never bytes 1..7.
+	me := mcovRun(t, r, mcovImp+`('a日本b' mini re '日本').fst.e`)
+	if n, _ := me[0].AsConcreteInteger(); n != 3 {
+		t.Errorf("multi-byte match fst.e = %v, want 3 (bytes said 7)", me[0])
+	}
+
+	// An astral (4-byte) rune is ONE index step.
+	ae := mcovRun(t, r, mcovImp+`('x🎉y' mini re '🎉').fst.e`)
+	if n, _ := ae[0].AsConcreteInteger(); n != 2 {
+		t.Errorf("astral match fst.e = %v, want 2 (bytes said 5)", ae[0])
+	}
+
+	// Zero-width matches: one per rune boundary, i == e at each.
+	zn := mcovRun(t, r, mcovImp+`('日a' mini re '').n`)
+	if n, _ := zn[0].AsConcreteInteger(); n != 3 {
+		t.Errorf("zero-width n = %v, want 3 (boundaries 0 1 2)", zn[0])
+	}
+	zi := mcovRun(t, r, mcovImp+`('日a' mini re '').lst.i`)
+	if n, _ := zi[0].AsConcreteInteger(); n != 2 {
+		t.Errorf("zero-width lst.i = %v, want 2 (byte 4)", zi[0])
+	}
+	ze := mcovRun(t, r, mcovImp+`('日a' mini re '').lst.e`)
+	if n, _ := ze[0].AsConcreteInteger(); n != 2 {
+		t.Errorf("zero-width lst.e = %v, want 2 — i == e", ze[0])
+	}
+}
+
+// TestMiniCovRuneOffsetScanner drives the converter directly: ascending
+// offsets convert in one forward scan, a repeated offset (a zero-width
+// match, or a match abutting its predecessor) advances nothing, and a
+// multi-byte / astral rune counts as one index step.
+func TestMiniCovRuneOffsetScanner(t *testing.T) {
+	sc := &runeOffsetScanner{subject: "a日🎉b"}
+	// byte layout: a=0, 日=1..3, 🎉=4..7, b=8, end=9
+	for _, c := range []struct{ byteOff, want int }{
+		{0, 0}, {0, 0}, // zero-width at the start: repeated, no advance
+		{1, 1}, {4, 2}, {4, 2}, {8, 3}, {9, 4},
+	} {
+		if got := sc.runeIdx(c.byteOff); got != c.want {
+			t.Errorf("runeIdx(%d) = %d, want %d", c.byteOff, got, c.want)
+		}
+	}
+}
+
 // TestMiniCovReNegatives pins the loud failures of both re paths: a
 // malformed pattern (hook defers to the transducer's error) and a
 // non-Integer limit.

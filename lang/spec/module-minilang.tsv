@@ -312,3 +312,23 @@ import "boru:minilang"  def cnt fn [[src:String opts:Map subject:String] [Intege
 import "boru:minilang"  mini (fn [[a:Integer] [Integer] [a]]) 'x'	ERROR:mini_bad_signature	a non-transducer fn is rejected (bad prefix)
 import "boru:minilang"  def k 42  mini k 'x'	ERROR:mini_unknown_lang	a non-fn binding is not a transducer — unknown kind unchanged
 import "boru:minilang"  mini (Function) 'x'	ERROR:signature_error	the Function TYPE literal is not a transducer value
+#
+# §ru  match offsets are RUNE indices (NUR047 resolved). Go's regexp reports
+#      BYTE offsets; reMatchResult converts each match's i/e to rune indices
+#      in one incremental pass, so re offsets mean what every boru index
+#      means (the unit slice/size count — same contract StringUtil.match
+#      pins in edge-scalars-3.tsv) and compose with slice directly. Both
+#      paths are pinned: the mini sugar / +re literal run the COMPILED
+#      run-re consumer, the desugared MiniLang.lang_re call the transducer.
+import "boru:minilang"  ("日本語c" mini re 'c').fst.i	3	a match after multi-byte runes: i is the RUNE index (byte offsets said 9)
+import "boru:minilang"  ("日本語c" mini re 'c').fst.e	4	…and e the rune end (byte offsets said 10)
+import "boru:minilang"  def r ("日本語c" mini re 'c') end  slice (r.fst.i) (r.fst.e) "日本語c"	'c'	the point: offsets compose with rune slice — this was '' under byte offsets
+import "boru:minilang"  def d ("日本語c" MiniLang.lang_re 'c' {} end) end  d.fst.i	3	the desugared transducer path converts identically
+import "boru:minilang"  ("日本語c" +re/c/).fst.i	3	the compiled literal path too — run-re shares the conversion
+import "boru:minilang"  ("a日本b" mini re '日本').fst.i	1	a multi-byte MATCH starts at rune 1 (bytes said 1 by luck of the prefix)
+import "boru:minilang"  ("a日本b" mini re '日本').fst.e	3	…and ends at rune 3, never mid-rune (bytes said 7)
+import "boru:minilang"  ("x🎉y" mini re '🎉').fst.i	1	an astral (4-byte) rune is ONE index step
+import "boru:minilang"  ("x🎉y" mini re '🎉').fst.e	2	…so the match spans runes 1..2 (bytes said 1..5)
+import "boru:minilang"  ("日a" mini re '').n	3	zero-width matches land at every rune boundary: 0 1 2
+import "boru:minilang"  ("日a" mini re '').lst.i	2	…the last sits at rune 2 (byte 4), with i == e
+import "boru:minilang"  ("日a" mini re '').lst.e	2	…zero-width: e equals i at the converted boundary

@@ -87,7 +87,10 @@ Language-agnostic content stays at the top of each component:
   `await`/`cancel` → `boru:time-util` (`TimeUtil.`); `tpartial` → `boru:type-util`
   (`TypeUtil.`); `folder` → `boru:io`; and the derived boolean connectives
   `nand`/`nor`/`xnor`/`iff`/`implies` → `boru:logic-util` (`LogicUtil.`).
-  All moved words are no longer available unqualified.
+  All moved words are no longer available unqualified. (`slice` is NOT
+  a string-family straggler: it is a core *sequence* word polymorphic
+  over String/List/Bytes, kin of `size`/`take`/`reverse`, which stay
+  core for the same reason — NUR019.)
 - `test/` — integration tests and TSV spec runners.
 
 ## ADRs — only on explicit instruction
@@ -769,10 +772,11 @@ module's namespaces share one **`Ideal/Module`** descriptor
   A namespace renders compactly as `Module(Name){key key …}`
   (`eng/go/coretype_list_map_behaviors.go`).
 - `NewModuleInstance(desc)` — the descriptor (`ExtensionPayload`
-  carrying the full `ModuleDesc`); `name`/`kind`/`file`/`folder`/
-  `exports` are read via `get`. `ModuleDesc.{Ref,Kind,File,Folder}` are
-  populated by `Resolve` (native), `loadFileModule` (file), and
-  `RunModuleBody` (inline). FixedID: Module 5000.
+  boxing a `*ModuleDesc` — the pointer is the descriptor's eq/deq
+  IDENTITY, per-import-instance, NUR031); `name`/`kind`/`file`/
+  `folder`/`exports` are read via `get`. `ModuleDesc.{Ref,Kind,File,
+  Folder}` are populated by `Resolve` (native), `loadFileModule`
+  (file), and `RunModuleBody` (inline). FixedID: Module 5000.
 
 `module […]` itself produces an `Ideal/Module` and `import` consumes it —
 so `typeof (module […]) → Module`. `AsModuleDesc` unwraps the
