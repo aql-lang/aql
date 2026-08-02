@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/boru-lang/boru/cmd/go/internal/buildrt"
+	"github.com/boru-lang/boru/cmd/go/internal/check"
 	"github.com/boru-lang/boru/cmd/go/internal/command"
 	"github.com/boru-lang/boru/cmd/go/internal/pathutil"
 	"github.com/boru-lang/boru/cmd/go/internal/permsflags"
@@ -56,6 +57,7 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	noCompileFlag := fs.Bool("no-compile", false, "bake interpreter-only execution into the binary; wins over --compile/--force-compile")
 	forceCompileFlag := fs.Bool("force-compile", false, "bake REQUIRED bytecode compilation into the binary")
 	optionsStr := fs.String("options", "", "engine options as jsonic, baked in (e.g. tape:initial:65536)")
+	noCheck := fs.Bool("no-check", false, "skip the static pre-flight check (also: BORU_NO_CHECK=1)")
 	// -perms/-allow/-deny bake the resolved policy into the binary, so a
 	// shipped tool carries its author's declared permissions.
 	var pf permsflags.Flags
@@ -112,6 +114,24 @@ func (*cmd) Run(args []string, _ io.Reader, stdout, stderr io.Writer) int {
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
+	}
+
+	// CHECK-BY-DEFAULT (NUR044): the same static pre-flight `boru run`
+	// enforces, so `build` refuses to ship a binary whose first execution
+	// would abort on a check error. -no-check / BORU_NO_CHECK=1 opt out,
+	// mirroring run's escape hatch. The gate is quiet: diagnostics print
+	// only when the build is about to be refused. Relative file imports
+	// are anchored to cfg.EntryDir — the directory the BUILT binary will
+	// resolve them against (buildrt.Main sets BaseDir to EntryDir) — not
+	// the build-time cwd, so a multi-file program builds from anywhere.
+	// Like `boru check`, the pre-flight executes imported file-module
+	// bodies (with modelled writes) to learn their exports.
+	if !*noCheck && os.Getenv("BORU_NO_CHECK") == "" {
+		color := lang.ResolveColor(nil, stderr, "auto")
+		if cerr := check.PreflightColorAt(stderr, cfg.Source, *registry, seed, false, color, cfg.EntryDir); cerr != nil {
+			fmt.Fprintf(stderr, "%s\n", cerr)
+			return 1
+		}
 	}
 
 	outPath := *out

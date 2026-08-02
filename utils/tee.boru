@@ -29,11 +29,11 @@
 # runs exactly that pair, which is why this program's write path is a single
 # obvious call rather than something clever.
 #
-# NOTE the `-perms read-only` caveat recorded in NUR.md: `boru build` does not
-# run the static check that `boru run` does (NUR044). It changes what the
-# failure message looks like, not what the pair proves. (The former second
-# caveat — read-only denying file READS — was NUR041, resolved: the profile
-# now allows fileops read/stat/list.)
+# NOTE: two caveats used to live here, both since resolved in NUR.md's
+# history. NUR041 — read-only denying file READS — is fixed: the profile now
+# allows fileops read/stat/list. NUR044 — `boru build` skipping `boru run`'s
+# static check — is fixed: build runs the same pre-flight and refuses on
+# error, with `-no-check` / BORU_NO_CHECK=1 as the opt-out.
 #
 # Structure, as everywhere here: the decisions are pure fns taking their input
 # as parameters, and tee-main takes ARGV as a parameter and returns the exit

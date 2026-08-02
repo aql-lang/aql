@@ -94,6 +94,81 @@ func TestRunMissingSourceFile(t *testing.T) {
 	}
 }
 
+// --- Run: check-by-default gate (NUR044) ---
+
+func TestRunRefusesProgramFailingCheck(t *testing.T) {
+	dir := t.TempDir()
+	src := write(t, dir, "bad.boru", "nosuchword 1 2")
+	out := filepath.Join(dir, "badbin")
+
+	code, _, stderr := runBuild(t, src, "-o", out)
+	if code != 1 {
+		t.Fatalf("exit = %d, want 1; stderr: %s", code, stderr)
+	}
+	if !strings.Contains(stderr, "check failed") {
+		t.Errorf("stderr = %q, want check failed", stderr)
+	}
+	if !strings.Contains(stderr, "undefined_word") {
+		t.Errorf("stderr = %q, want the undefined_word diagnostic", stderr)
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Errorf("refused build must write no artefact; stat %s: %v", out, err)
+	}
+}
+
+func TestRunNoCheckFlagSkipsGate(t *testing.T) {
+	dir := t.TempDir()
+	src := write(t, dir, "bad.boru", "nosuchword 1 2")
+	out := filepath.Join(dir, "badbin")
+
+	code, stdout, stderr := runBuild(t, src, "-o", out, "-no-check")
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr)
+	}
+	if !strings.Contains(stdout, "wrote "+out) {
+		t.Errorf("stdout = %q, want wrote line", stdout)
+	}
+	if _, err := os.Stat(out); err != nil {
+		t.Errorf("-no-check must still produce the artefact: %v", err)
+	}
+}
+
+func TestRunBoruNoCheckEnvSkipsGate(t *testing.T) {
+	t.Setenv("BORU_NO_CHECK", "1")
+	dir := t.TempDir()
+	src := write(t, dir, "bad.boru", "nosuchword 1 2")
+	out := filepath.Join(dir, "badbin")
+
+	code, stdout, stderr := runBuild(t, src, "-o", out)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0; stderr: %s", code, stderr)
+	}
+	if !strings.Contains(stdout, "wrote "+out) {
+		t.Errorf("stdout = %q, want wrote line", stdout)
+	}
+}
+
+func TestRunGateAnchorsImportsToEntryDir(t *testing.T) {
+	// The pre-flight must resolve `import "./lib.boru"` against the entry
+	// file's directory — how the BUILT binary will resolve it — not the
+	// build-time cwd. The test process cwd is the package dir, foreign to
+	// the temp dir, so this build succeeds only with the EntryDir anchor
+	// (the full run-the-binary version of this pin is
+	// TestUtilsBuiltBinaryIgnoresSameNamedHostFiles).
+	dir := t.TempDir()
+	write(t, dir, "lib.boru", `export "Lib" {x: 1}`+"\n")
+	src := write(t, dir, "main.boru", "import \"./lib.boru\"\nLib.x\n")
+	out := filepath.Join(dir, "main-built")
+
+	code, stdout, stderr := runBuild(t, src, "-o", out)
+	if code != 0 {
+		t.Fatalf("exit = %d, want 0 (import must anchor to the entry dir); stderr: %s", code, stderr)
+	}
+	if !strings.Contains(stdout, "wrote "+out) {
+		t.Errorf("stdout = %q, want wrote line", stdout)
+	}
+}
+
 // --- Run: self-embed happy path (copies the test binary; no toolchain) ---
 
 func TestRunSelfEmbedSuccess(t *testing.T) {

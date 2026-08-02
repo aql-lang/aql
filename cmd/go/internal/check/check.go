@@ -258,11 +258,28 @@ func Preflight(stderr io.Writer, source, registry string, seed int64, verbose bo
 }
 
 // PreflightColor is Preflight with the color decision resolved by the
-// caller (the run subcommand's --color flag).
+// caller (the run subcommand's --color flag). Relative file imports
+// resolve against the process cwd — exactly how the run that follows
+// will resolve them.
 func PreflightColor(stderr io.Writer, source, registry string, seed int64, verbose, color bool) error {
+	return PreflightColorAt(stderr, source, registry, seed, verbose, color, "")
+}
+
+// PreflightColorAt is PreflightColor with relative file imports anchored
+// to baseDir instead of the process cwd. `boru build` (NUR044) needs the
+// anchor: a built binary resolves `import "./lib.boru"` against the
+// build-time entry directory (buildrt.Main sets NativeRegistry().BaseDir
+// to cfg.EntryDir), so its pre-flight must ask the same question or a
+// perfectly buildable multi-file program invoked from a foreign cwd
+// would be refused. An empty baseDir keeps the cwd behaviour run/debug
+// want — for them, cwd IS how the subsequent execution resolves imports.
+func PreflightColorAt(stderr io.Writer, source, registry string, seed int64, verbose, color bool, baseDir string) error {
 	a, err := langNew(lang.Options{Registry: registry, Seed: seed})
 	if err != nil {
 		return fmt.Errorf("init error: %s", err)
+	}
+	if baseDir != "" {
+		a.NativeRegistry().BaseDir = baseDir
 	}
 	res, cerr := a.Check(source)
 	// Quiet by default (check-by-default runs this on EVERY execution):

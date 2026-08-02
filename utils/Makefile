@@ -25,8 +25,11 @@ build-boru:
 
 # Static type-check every program and every test.
 #
-# `boru build` does NOT check (NUR044), so this target is the only thing
-# standing between a typo and a shipped binary.
+# `boru build` now runs this same check itself and refuses on error
+# (NUR044, resolved), so a typo can no longer reach a shipped binary.
+# The target stays useful all the same: it is the only check that reaches
+# tests/*.boru, which are never built, and it reports every program's
+# diagnostics in one pass instead of at each build.
 check:
 	@for f in *.boru tests/*.boru; do \
 	  echo "check $$f"; \

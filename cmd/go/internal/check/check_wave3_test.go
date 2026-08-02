@@ -420,6 +420,28 @@ func TestPreflightCheckError(t *testing.T) {
 	}
 }
 
+func TestPreflightColorAtAnchorsRelativeImports(t *testing.T) {
+	// `boru build`'s pre-flight (NUR044) must resolve relative file imports
+	// against the ENTRY directory — what the built binary will do — not the
+	// process cwd. The test cwd is the package dir, foreign to dir, so the
+	// anchored call passes only because baseDir wins over the cwd.
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "lib.boru"), []byte(`export "Lib" {x: 1}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	source := "import \"./lib.boru\"\nLib.x\n"
+	var stderr bytes.Buffer
+	if err := PreflightColorAt(&stderr, source, "", 0, false, false, dir); err != nil {
+		t.Fatalf("anchored preflight: %v; stderr: %s", err, stderr.String())
+	}
+	// An empty baseDir keeps the cwd behaviour run/debug rely on: from this
+	// foreign cwd the import misses and the check refuses.
+	stderr.Reset()
+	if err := PreflightColorAt(&stderr, source, "", 0, false, false, ""); err == nil {
+		t.Fatal("unanchored preflight resolved ./lib.boru from a foreign cwd; want refusal")
+	}
+}
+
 // --- --color flag parsing ---------------------------------------------------
 
 func TestRunCLIColorFlag(t *testing.T) {

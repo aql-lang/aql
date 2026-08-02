@@ -1219,53 +1219,6 @@ ambiguity resolves.
 ---
 
 
-## NUR044 — `boru build` skips the static check `boru run` performs {#nur044}
-
-**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
-scouting
-
-**Rule:** the CLI's entry points agree about whether a program is valid.
-`boru run` performs a preflight check and refuses to execute a program with a
-check error.
-
-**Divergence:** `boru build` performs no check at all, so a program `boru run`
-refuses to run builds successfully and ships:
-
-```
-$ echo 'nosuchword 1 2' > bad.boru
-$ boru build bad.boru -o badbin
-wrote badbin              # exit 0
-$ ./badbin
-error: [boru/undefined_word]: undefined word: nosuchword    # exit 1
-$ boru run bad.boru
-check: [error] undefined_word: …  →  refuses to run
-```
-
-**Evidence:** the session above.
-
-**Documentation status:** `CLI.md` describes the preflight for `run` and
-does not say `build` omits it.
-
-**Proposed verdict:** fix — `boru build` should run the same preflight and
-refuse by default (with a `-no-check` escape hatch mirroring `run`'s). The
-asymmetry is worst exactly where it matters: the artefact that outlives the
-session is the one nothing validated.
-
-
-
-### Why allowed
-
-`boru build` producing an unchecked binary is a gap in the tool, not in the
-language, and it is covered by a build-time convention: check first, then
-build.
-
-**Evidence that pins it:** `utils/Makefile`'s `check` target exists precisely
-for this and its comment names this record — "the only thing standing between a
-typo and a shipped binary". `make -C utils all` runs `check` before anything
-else, and the end-to-end Go test builds only sources that suite has checked.
----
-
-
 ## NUR045 — Per-export module gating is dead schema: `sandbox`'s `deny: ["sleep"]` does not deny {#nur045}
 
 **Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
