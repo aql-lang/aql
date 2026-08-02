@@ -535,7 +535,8 @@ A new "How do I sandbox boru code?" section walking through:
 
 1. Pick a built-in profile.
 2. Run with `--perms=<name>`.
-3. Use `--policy-dry-run` to audit.
+3. Use `--policy-dry-run` to audit. *(Never shipped — the inert flag
+   was removed under NUR042; see "Cross-phase: dry-run mode" below.)*
 4. Add `--allow=` / `--deny=` for tweaks.
 5. Author a custom profile when the tweaks don't fit a flag.
 
@@ -686,6 +687,11 @@ ones.
 ---
 
 ## Cross-phase: dry-run mode
+
+> **Status: not implemented.** This cross-phase item never landed:
+> the CLI registered `--policy-dry-run` but no decorator existed, so
+> the flag was inert and was removed under NUR042. The spec below is
+> kept for reintroduction if observe-only mode is genuinely needed.
 
 `--policy-dry-run` flag installs a wrapping policy that logs every
 check decision but always returns allow. Implemented in

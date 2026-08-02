@@ -1219,51 +1219,6 @@ ambiguity resolves.
 ---
 
 
-## NUR042 — `-policy-dry-run` is documented and does nothing {#nur042}
-
-**Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms
-scouting
-
-**Rule:** a flag the CLI advertises does what it says, or does not exist.
-
-**Divergence:** `-policy-dry-run` is advertised on `boru run` and `boru build`
-as "observe-only: log what the policy would do but allow every call". It is
-parsed, read at exactly one site (to stop the resolver returning nil), and
-never wraps the policy in an observe-only decorator. Nothing is logged and
-nothing is allowed:
-
-```
-$ boru run -perms read-only -policy-dry-run -e 'import "boru:io"  IO.write (make Pathon "dry.txt") "x" {fmt:"text"}'
-error: [boru/write_error]: write: permission denied: fileops.write …
-```
-
-**Evidence:** the command above; `grep -rn DryRun --include=*.go cmd/go
-lang/go` outside tests returns only the flag's registration and that single
-read.
-
-**Documentation status:** documented in the flag's own help text, which is
-the whole problem.
-
-**Proposed verdict:** implement the decorator (a policy wrapper that logs
-the decision and returns nil) or remove the flag. A security-adjacent flag
-that silently does nothing is worse than no flag, because it invites exactly
-the "I checked with dry-run first" workflow it cannot support.
-
-
-
-### Why allowed
-
-A flag that is documented and inert is a small defect with a specific hazard: a
-user may believe they have PREVIEWED a policy when they have previewed nothing.
-That hazard is what this record keeps visible until the flag is either
-implemented or withdrawn.
-
-**Evidence that pins it:** the record carries the measurement showing the flag
-changes nothing, so a future implementation has its acceptance test already
-written.
----
-
-
 ## NUR044 — `boru build` skips the static check `boru run` performs {#nur044}
 
 **Status:** Allowed · **Recorded:** 2026-07-30 · **Verdict:** maintainer, 2026-07-30 · **Surfaced by:** C3 baked-perms

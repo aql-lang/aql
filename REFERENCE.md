@@ -2905,7 +2905,6 @@ and the REPL). A *policy* is a set of allow/deny rules over
 | `--deny <scope.op>` | Add a deny rule (repeatable) |
 | `--allow-global <cap>` | Raise a global hard cap (repeatable) |
 | `--deny-global <cap>` | Lower a global hard cap (repeatable) |
-| `--policy-dry-run` | Observe-only: log what the policy would do, allow every call |
 
 Environment fallbacks: `BORU_POLICY`, `BORU_POLICY_FILE`. Bytecode
 compilation: `-compile` / `BORU_COMPILE` enable it, `BORU_NO_COMPILE`

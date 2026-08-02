@@ -289,17 +289,6 @@ func TestResolveBadScopeOpForms(t *testing.T) {
 	}
 }
 
-func TestResolveDryRunAloneYieldsBase(t *testing.T) {
-	clearPolicyEnv(t)
-	pol, err := parseFlags(t, "--policy-dry-run").Resolve()
-	if err != nil {
-		t.Fatalf("Resolve: %v", err)
-	}
-	if pol == nil || pol.Name() != "full" {
-		t.Errorf("policy = %v, want the full base (dry-run forces a policy)", pol)
-	}
-}
-
 func TestResolveModsOnFileBase(t *testing.T) {
 	clearPolicyEnv(t)
 	path := writePolicy(t, "filebase")

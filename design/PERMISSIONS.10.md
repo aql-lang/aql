@@ -733,6 +733,13 @@ rule that would change the answer.
 
 ### Dry-run mode
 
+> **Status: not implemented.** The observe-only decorator this section
+> designs was never built; the `--policy-dry-run` flag shipped inert
+> (parsed but never wired to anything) and was removed under NUR042 —
+> a security-adjacent flag that does nothing is worse than no flag.
+> This section remains the spec if the decorator is ever genuinely
+> needed.
+
 ```bash
 boru exec --perms=sandbox --policy-dry-run script.boru
 # stderr:

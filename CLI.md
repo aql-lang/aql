@@ -1415,7 +1415,6 @@ Every command that builds a `lang.Boru` accepts these flags:
 | `--deny-global OP` | Lower a global hard cap. |
 | `--no-install scope` | Remove a capability slot entirely. |
 | `--install scope` | Force-install (overrides inherited install=false). |
-| `--policy-dry-run` | Observe-only (logs but allows). |
 
 Environment fallbacks (consulted when no `--perms*` flag is set):
 

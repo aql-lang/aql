@@ -45,7 +45,6 @@ type Flags struct {
 	DenyGlobal  stringList
 	NoInstall   stringList
 	Install     stringList
-	DryRun      bool
 }
 
 // Register attaches every flag to fs. Pass a *Flags whose lifetime
@@ -69,8 +68,6 @@ func Register(fs *flag.FlagSet, f *Flags) {
 		"set scope.install=false (repeatable; form: scope or scope.subscope)")
 	fs.Var(&f.Install, "install",
 		"set scope.install=true (repeatable; overrides extends)")
-	fs.BoolVar(&f.DryRun, "policy-dry-run", false,
-		"observe-only: log what the policy would do but allow every call")
 }
 
 // Resolve produces the final policy from all flag inputs. Returns
@@ -124,7 +121,7 @@ func (f *Flags) Resolve() (policy.Policy, error) {
 	hasMods := len(f.Allow) > 0 || len(f.Deny) > 0 ||
 		len(f.AllowGlobal) > 0 || len(f.DenyGlobal) > 0 ||
 		len(f.NoInstall) > 0 || len(f.Install) > 0
-	if base == nil && !hasMods && !f.DryRun {
+	if base == nil && !hasMods {
 		return nil, nil
 	}
 	if base == nil {
