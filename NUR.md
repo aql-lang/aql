@@ -813,15 +813,17 @@ argument; a second unqualified IO word would need its own NUR.
 
 **Rule:** the storage-column words cover the same containers — a key
 that `set` can write, `del` can remove.
-**Divergence:** `set` dispatches over Class, Store, FlexXml,
-WeakFlexXml, FlexMap, WeakFlexMap, Map, List, FlexList, WeakFlexList
-(and carries a registered `type_error` refusal for the immutable
-Microns); `del` covers Map and FlexMap only. The List exclusion is
-documented (pointing at pop/shift/remove-at); the Store, Class,
-FlexList/WeakFlexList and FlexXml/WeakFlexXml absences are not.
-**Evidence:** `native_storage.go:25-193` (`set`) vs `:194-237` (`del`);
-`boru describe set` lists 19 signatures, `boru describe del` four.
-**Documentation status:** partially documented.
+**Divergence (as recorded, now FIXED — see below):** `set` dispatched
+over Class, Store, FlexXml, WeakFlexXml, FlexMap, WeakFlexMap, Map,
+List, FlexList, WeakFlexList (and carried a registered `type_error`
+refusal for the immutable Microns); `del` covered Map and FlexMap
+only. The List exclusion was documented (pointing at
+pop/shift/remove-at); the Store, Class, FlexList/WeakFlexList and
+FlexXml/WeakFlexXml absences were not. `boru describe set` listed 19
+signatures, `boru describe del` four.
+**Documentation status:** documented — `lang/spec/flex.tsv` §12 now
+states the per-container contract, and every refusal carries its own
+message.
 
 **Note on the rule (2026-08-02 review):** the rule above was
 originally phrased "paired reader/writer words cover the same
@@ -845,6 +847,90 @@ option-like APIs) — it needs its own design document because it
 potentially touches many language facilities, but **NUR022 must not
 wait on it**: the del/set symmetry fix proceeds independently. Stays
 Pending until the fix lands.
+
+### Investigation step (2026-08-02): the distinction is real, with one hole
+
+An absent key and a key bound to `none` are distinguishable, so
+deletion is not expressible as `set key none` and the word earns its
+place:
+
+| probe | `{a:1}` | `{a:1 b:none}` |
+| --- | --- | --- |
+| `has b/q` | `false` | `true` |
+| `size` | `1` | `2` |
+| `keys` | `["a"]` | `["a", "b"]` |
+
+and the two containers are not `eq`: `{a:1} eq {a:1 b:none}` → `false`.
+
+`del` and `set … none` therefore produce different containers:
+`({a:1 b:2} del b) eq ({a:1 b:2} set b none)` → `false`.
+
+The hole is **`get`**. Reading an absent key and reading a
+present-none key both yield something whose `typeof` is `None` and
+which answers `eq none` → true, `deq none` → true, `eq None` → true.
+They *render* differently (`None` for the miss, `none` for the
+binding — type literal vs value), but no comparison operator
+separates them. So the distinction is observable through `has` /
+`size` / `keys` / `eq`, and invisible through the reader. That is
+the shape the **sentinel-values programme** the verdict opened has to
+settle (a distinct miss sentinel would close it); it is recorded here
+as context, not as a separate divergence.
+
+### Fix (2026-08-02): the container sets are now identical
+
+`del` dispatches over exactly the eleven containers `set` does, with
+the same key shapes (String and Atom for keyed containers, Integer
+for indexed) — 19 signatures each. Each container either removes the
+slot or refuses with its own message:
+
+| container | `del` |
+| --- | --- |
+| Map | copy-returning — a new map without the key |
+| FlexMap, WeakFlexMap | in place, returns the node |
+| FlexXml, WeakFlexXml | removes an **attribute** — the slot `set` writes |
+| Store | copy-on-write, via a tombstone layer (`CowDel`) |
+| Class | refused — a declared field is sealed |
+| Micron | refused — immutable, mirroring `set`'s own refusal |
+| List, FlexList, WeakFlexList | refused — names pop / shift / `ArrayUtil.remove-at` |
+
+The refusals are **registered signatures**, not sig-absence, for the
+reason `set`'s Micron form is: an absent signature raises an opaque
+`signature_error`, a present one raises the specific message, and
+negative spec rows can pin it.
+
+The Store form needed new kernel machinery. `CowSet` layers a binding
+over the old store because that store may be shared with an enclosing
+scope; removal cannot work by subtraction, since there is nothing in
+the new layer to leave out. So `CowDel` writes a **tombstone** and
+`StoreInstanceInfo.Get` stops there — the key reads absent from the
+deleting layer down while the layer that owns it is untouched. Own
+`Data` beats a tombstone, so a `set` after a `del` re-binds; clones
+carry tombstones, or a cloned prototype chain would resurrect every
+deleted key.
+
+Gate: `lang/go/native/native_del_symmetry_test.go` asserts the two
+words carry the **same** container set and the same key shapes, and
+fails in both directions — so a container added to `set` cannot
+silently reopen the gap, and a `del`-only container is caught too.
+Behaviour: `lang/spec/flex.tsv` §12; kernel:
+`eng/go/store_tombstone_test.go`.
+
+### What is left for a maintainer
+
+One asymmetry survives on purpose and needs a verdict, because under
+the rule as literally worded it is still a divergence: **`set` can
+write a declared Class field and `del` cannot remove it.**
+
+The argument for allowing it: a class field is a **slot**, not a key.
+The inverse of writing a value to a slot is writing a different
+value, not deleting the slot — an instance missing a declared field
+would no longer satisfy its own type. The same reading is what makes
+the List refusal correct (`set` replaces at an index; removal shifts
+the tail, which is a different operation). If that slot-vs-key line
+is the right one, the rule should be restated as "a **key** that
+`set` can write, `del` can remove" with slots explicitly out of
+scope, and this record becomes Allowed. Stays **Pending** on that
+verdict.
 
 ---
 
@@ -889,18 +975,44 @@ REFERENCE.md §"Stack manipulation" (the pinned list);
 shape); `lang/go/native/native_fileinfo.go:25,33`;
 `lang/go/modules/tui_widgets.go:332`;
 `lang/go/native/io_module.go:91`.
-**Documentation status:** worse than undocumented — actively
-contradicted. `boru describe apply` prints "Precedence: forward —
-looks ahead for arguments first. apply x y <=> y apply x <=> y x
-apply"; the stated equivalence is false for the `[Function]` row
-(`apply f/r 5` raises a signature_error, `5 f/r apply` works). The
-cause is broader than this record's two words:
-`lang/go/native/help/help.go:253-260` branches on a single binary
-`info.ForwardArgs` flag, so EVERY mixed-barrier word prints the full
-forward equivalence chain including a spelling it refuses — `dot`,
-the subject of NUR049, among them. The ADR's closed list does not
-contain either exception, and the diagnostic gap is wider than the
-list.
+**Documentation status:** undocumented, no longer contradicted. Until
+2026-08-02 it was worse than undocumented: `boru describe apply`
+printed "Precedence: forward — looks ahead for arguments first. apply
+x y <=> y apply x <=> y x apply", and the stated equivalence is false
+for the `[Function]` row (`apply f/r 5` raises a signature_error,
+`5 f/r apply` works). The cause was broader than this record's two
+words — the renderer branched on a single binary `info.ForwardArgs`
+flag, so EVERY mixed-barrier word printed the full forward
+equivalence chain including a spelling it refuses. Measured blast
+radius: **20 of the 249 describable core words** — `or`, `otherwise`,
+`get`, `getr`, `dot`, `dotr`, `has`, `apply`, `guard`, `error`,
+`exposes`, `of`, `extends`, `default`, `tor`, `tand`, `teq`, `is`,
+`as`, `tis`. `dot` is the subject of NUR049 (16 of its 18 rows are
+mixed-barrier); `or` is the plainest: the help advertised
+`or x y <=> y or x <=> y x or`, and `or false true` raises
+`insufficient_args` while `false true or` → true. Its sibling `and`
+carries the `-1` sentinel and is genuinely all-forward, so the two
+connectives really do differ — the help just could not say so.
+
+That misreport is **fixed**. `precedenceShape` in
+`lang/go/native/help/help.go` classifies a word by whether its
+signatures agree about argument sourcing; `writePrecedenceMixed`
+renders the disagreeing case as a per-group count plus the one
+spelling that satisfies every row — full stack form, which always
+dispatches because a forward-eligible position accepts a stack value
+too (verified: `5 inc/r apply` → 6, `xs $.1 apply` → the indexed
+element, `m a/q dot` → the field). Uniform words are untouched:
+`add` still prints the forward chain, `dup` the stack line, and a
+module export whose wrapper carries the unnormalized `-1` sentinel
+(`ArrayUtil.indices`) still reads as forward.
+Tests: `lang/go/native/help/precedence_test.go` pins all three shapes
+and both directions — a genuinely uniform word must keep its
+unqualified line, and a mixed one must never claim one.
+
+What remains undocumented is the *rule* the diagnostic now reports
+around: ADR-004's closed list contains neither exception, and nothing
+states why a word occupies its category. That is the gap the verdict
+below directs at, and it is why this record stays Pending.
 
 **Verdict (maintainer, 2026-07-31 — resolve by ADR refinement,
 `design/NUR-RESOLUTION-PLAN.0.md`):** ADR-004 is **incomplete**, and
