@@ -1071,15 +1071,25 @@ func (ri ResourceInstanceInfo) GetField(name string) (Value, bool) {
 type StoreInstanceInfo struct {
 	TypeName  string             // full type path, e.g. "Object/Store" or "Object/Store/System"
 	Data      map[string]Value   // own key-value pairs (COW layer)
+	Deleted   map[string]bool    // tombstones: keys this layer hides from Prototype
 	Prototype *StoreInstanceInfo // prototype chain for key lookup / COW base
 	Parent    *StoreInstanceInfo // containing Store (for COW propagation), nil if root
 	ParentKey string             // key in Parent that references this Store
 }
 
-// Get looks up a key in this store, walking the prototype chain if not found.
+// Get looks up a key in this store, walking the prototype chain if not
+// found. A TOMBSTONE stops the walk: `del` on a Store cannot remove an
+// inherited key from the layer that owns it (that layer is shared), so the
+// deleting layer records the key as hidden and lookup reports it absent —
+// the same shape as a JS prototype chain's own-property shadowing, except
+// the shadow is "no value" rather than a value. Data wins over Deleted:
+// a set after a del re-binds the key in the same layer.
 func (si *StoreInstanceInfo) Get(key string) (Value, bool) {
 	if v, ok := si.Data[key]; ok {
 		return v, true
+	}
+	if si.Deleted[key] {
+		return Value{}, false
 	}
 	if si.Prototype != nil {
 		return si.Prototype.Get(key)

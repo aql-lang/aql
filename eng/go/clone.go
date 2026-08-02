@@ -204,6 +204,14 @@ func (c *cloner) cloneStore(s *StoreInstanceInfo) *StoreInstanceInfo {
 			}
 		}
 	}
+	// Tombstones travel with the layer: a clone that dropped them would
+	// resurrect every deleted key through the cloned prototype chain.
+	if s.Deleted != nil {
+		out.Deleted = make(map[string]bool, len(s.Deleted))
+		for k, d := range s.Deleted {
+			out.Deleted[k] = d
+		}
+	}
 	out.Prototype = c.cloneStore(s.Prototype)
 	return out
 }

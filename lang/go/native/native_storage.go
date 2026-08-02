@@ -192,18 +192,53 @@ var storageNatives = []NativeFunc{
 		},
 	},
 	{
-		// del removes a key from a map, completing the storage column
-		// rule `set` established: FlexMap deletes IN PLACE and returns
-		// the node for chaining; an immutable Map returns a NEW map
-		// without the key and leaves the receiver untouched. A missing
-		// key is a no-op in both forms (deletion is idempotent, the
-		// same totality posture as `has`). Keys are strings or atoms,
-		// computed keys via parens: `m del (k)`. This is the in-place
-		// FlexMap deletion design/FLEX-NODES.10.md names as future
-		// work; list element removal stays with the list words
-		// (pop/shift, ArrayUtil.remove-at).
+		// del removes a key from a container, completing the storage
+		// column rule `set` established: it dispatches over EXACTLY the
+		// containers `set` does (NUR022), and each one either removes the
+		// slot or says why it will not.
+		//
+		//   - Map: immutable — returns a NEW map without the key and
+		//     leaves the receiver untouched.
+		//   - FlexMap / WeakFlexMap: in-place; returns the node for
+		//     chaining.
+		//   - FlexXml / WeakFlexXml: removes an ATTRIBUTE, the slot set
+		//     writes. Children are grown by `append` and removed by the
+		//     node words, exactly as on the set side.
+		//   - Store: copy-on-write, via a tombstone layer (CowDel).
+		//   - Class: a declared field cannot be removed — the shape is
+		//     SEALED. Registered refusal.
+		//   - Micron: immutable. Registered refusal, mirroring set's.
+		//   - List / FlexList / WeakFlexList: index removal SHIFTS the
+		//     tail, which is not the inverse of set's in-place replace.
+		//     Registered refusal naming the words that do it.
+		//
+		// The refusals are registered signatures rather than sig-absence
+		// for the reason set's Micron form is: an absent sig raises an
+		// opaque dispatch failure, a present one raises the specific
+		// message, and negative spec rows can pin it.
+		//
+		// A missing key is a no-op wherever removal is supported
+		// (deletion is idempotent — the same totality posture as `has`).
+		// Keys are strings or atoms, computed keys via parens:
+		// `m del (k)`.
 		Name: "del",
 		Signatures: []Signature{
+			// Store (copy-on-write, mirroring set's Store form: writes
+			// nothing to the stack, the context layer is the effect).
+			{
+				Args:      []*Type{TString, TStore},
+				Impl:      Go(delStoreHandler),
+				Returns:   []*Type{},
+				ReturnsFn: delStoreReturnsFn, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TStore},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(delStoreHandler),
+				Returns:   []*Type{},
+				ReturnsFn: delStoreReturnsFn, BarrierPos: -1,
+			},
+
 			// Map (immutable — copy-returning, mirroring set's Map form).
 			{
 				Args:      []*Type{TString, TMap},
@@ -232,6 +267,101 @@ var storageNatives = []NativeFunc{
 				Impl:      Go(delFlexMapHandler),
 				Returns:   []*Type{TFlexMap},
 				ReturnsFn: delFlexMapReturns, BarrierPos: -1,
+			},
+
+			// WeakFlexMap. The dedicated sig is forced for the same
+			// reason set's is: the inherited FlexMap handler's
+			// AsMutableMap refuses the weak payload by design.
+			{
+				Args:      []*Type{TString, TWeakFlexMap},
+				Impl:      Go(delWeakFlexMapHandler),
+				Returns:   []*Type{TWeakFlexMap},
+				ReturnsFn: delWeakFlexMapReturns, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TWeakFlexMap},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(delWeakFlexMapHandler),
+				Returns:   []*Type{TWeakFlexMap},
+				ReturnsFn: delWeakFlexMapReturns, BarrierPos: -1,
+			},
+
+			// FlexXml / WeakFlexXml (in-place attribute delete).
+			{
+				Args:    []*Type{TString, TFlexXml},
+				Impl:    Go(delFlexXmlHandler),
+				Returns: []*Type{TFlexXml}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TFlexXml},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(delFlexXmlHandler),
+				Returns:   []*Type{TFlexXml}, BarrierPos: -1,
+			},
+			{
+				Args:    []*Type{TString, TWeakFlexXml},
+				Impl:    Go(delWeakFlexXmlHandler),
+				Returns: []*Type{TWeakFlexXml}, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TWeakFlexXml},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(delWeakFlexXmlHandler),
+				Returns:   []*Type{TWeakFlexXml}, BarrierPos: -1,
+			},
+
+			// Class (SEALED — always errors): a declared field is part
+			// of the class shape, so removing one would leave an
+			// instance that no longer satisfies its own type.
+			{
+				Args:      []*Type{TString, TClass},
+				Impl:      Go(delClassInstanceHandler),
+				Returns:   []*Type{},
+				ReturnsFn: delClassInstanceReturns, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TClass},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(delClassInstanceHandler),
+				Returns:   []*Type{},
+				ReturnsFn: delClassInstanceReturns, BarrierPos: -1,
+			},
+
+			// Micron (IMMUTABLE — always errors), mirroring set's pair.
+			{
+				Args:      []*Type{TString, TMicron},
+				Impl:      Go(delMicronHandler),
+				Returns:   []*Type{},
+				ReturnsFn: delMicronReturns, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TAtom, TMicron},
+				QuoteArgs: map[int]bool{0: true},
+				Impl:      Go(delMicronHandler),
+				Returns:   []*Type{},
+				ReturnsFn: delMicronReturns, BarrierPos: -1,
+			},
+
+			// List / FlexList / WeakFlexList (always error): removal at
+			// an index shifts the tail, so it is not set's inverse. The
+			// sigs exist to name the words that do it.
+			{
+				Args:      []*Type{TInteger, TList},
+				Impl:      Go(delListHandler),
+				Returns:   []*Type{},
+				ReturnsFn: delListReturns, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TInteger, TFlexList},
+				Impl:      Go(delListHandler),
+				Returns:   []*Type{},
+				ReturnsFn: delListReturns, BarrierPos: -1,
+			},
+			{
+				Args:      []*Type{TInteger, TWeakFlexList},
+				Impl:      Go(delListHandler),
+				Returns:   []*Type{},
+				ReturnsFn: delListReturns, BarrierPos: -1,
 			},
 		},
 	},
@@ -597,6 +727,156 @@ func delFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 	}
 	m.Delete(StoreKey(args[0]))
 	return []Value{container}, nil
+}
+
+// delWeakFlexMapHandler is the WeakFlexMap form of del. It mirrors
+// delFlexMapHandler; the separate handler exists because the weak
+// payload has its own accessor (AsMutableMap refuses it by design).
+// Unlike set's weak form there is no value to classify, so this cannot
+// raise weak_value_error.
+func delWeakFlexMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[1]
+	wd, err := AsWeakFlexMap(container)
+	if err != nil {
+		return nil, r.BoruError("del_error",
+			"del: expected a WeakFlexMap, got "+container.Parent.String(), "del")
+	}
+	wd.DeleteKey(StoreKey(args[0]))
+	return []Value{container}, nil
+}
+
+// delWeakFlexMapReturns is the check-mode twin of weakSetMapReturns
+// minus both mirrors it runs: del stores nothing, so neither the
+// weak-domain refusal nor the typed-write enforcement can fire. The
+// receiver passes through, matching the in-place runtime contract.
+func delWeakFlexMapReturns(args []Value, _ *Registry) []Value {
+	if len(args) != 2 {
+		return []Value{NewCarrier(TWeakFlexMap)}
+	}
+	return []Value{args[1]}
+}
+
+// delFlexXmlHandler removes one ATTRIBUTE of a FlexXml element — the
+// slot set writes, so the pair is symmetric. Children are grown by
+// `append` and are not addressed by name; an absent attribute is a
+// no-op. The name is NOT validity-checked the way set's is: set refuses
+// an invalid name to keep one from being created, while removing a name
+// that could never have been created is already a no-op.
+func delFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[1]
+	fd, err := AsFlexXml(container)
+	if err != nil {
+		return nil, r.BoruError("del_error",
+			"del: expected a FlexXml, got "+container.Parent.String(), "del")
+	}
+	if fd.Attr != nil {
+		fd.Attr.Delete(StoreKey(args[0]))
+	}
+	return []Value{container}, nil
+}
+
+// delWeakFlexXmlHandler is delFlexXmlHandler over the weak payload.
+// Attributes are part of the element and always strong, so weakness
+// changes nothing about deletion.
+func delWeakFlexXmlHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	container := args[1]
+	wd, err := AsWeakFlexXml(container)
+	if err != nil {
+		return nil, r.BoruError("del_error",
+			"del: expected a WeakFlexXml, got "+container.Parent.String(), "del")
+	}
+	wd.DeleteAttr(StoreKey(args[0]))
+	return []Value{container}, nil
+}
+
+// delStoreHandler is the Store form of del: a copy-on-write tombstone
+// layer, mirroring set's CowSet. Like set's Store form it returns
+// nothing — the context layer is the effect. Removing a key that was
+// never bound is a no-op.
+func delStoreHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
+	store, err := AsStore(args[1])
+	if err != nil {
+		return nil, reg.BoruError("del_error",
+			"del: expected a Store, got "+args[1].Parent.String(), "del")
+	}
+	CowDel(store, StoreKey(args[0]), reg)
+	return nil, nil
+}
+
+// delStoreReturnsFn is the check-mode twin of setStoreReturnsFn, and
+// the inverse of what it records: a deleted key must STOP narrowing.
+// The shape model is join-only monotone, so forgetting is expressed by
+// widening the key to dynamic Any — exactly as delFlexMapReturns does
+// for the flex column. The flat context tracker is widened too, since
+// it is the fallback unshaped readers consult.
+func delStoreReturnsFn(args []Value, r *Registry) []Value {
+	if r == nil || len(args) < 2 {
+		return nil
+	}
+	key := StoreKey(args[0])
+	if !r.Check.Compiling {
+		if ss, ok := eng.StoreShapeOf(args[1]); ok {
+			ss.RecordKey(key, NewCarrier(TAny))
+		}
+	}
+	r.Check.RecordContextSet(key, NewCarrier(TAny))
+	return nil
+}
+
+// delClassInstanceHandler is the SEALED contract stated as a refusal.
+// A class declares its fields; an instance missing one would no longer
+// satisfy its own type, so there is no coherent removal — the field is
+// cleared by writing to it, not by deleting it. Registered rather than
+// absent for the same reason set's Micron form is: a specific message
+// beats an opaque dispatch failure.
+func delClassInstanceHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return nil, r.BoruErrorHint("type_error", delClassDetail(args), "del",
+		"a class declares its fields — set the field to a new value instead")
+}
+
+func delClassDetail(args []Value) string {
+	name := "Class"
+	if len(args) == 2 && args[1].Parent != nil {
+		name = args[1].Parent.Leaf()
+	}
+	return fmt.Sprintf("del: %s fields are sealed — a declared field cannot be removed", name)
+}
+
+// delClassInstanceReturns is the guaranteed-error mirror of the
+// always-erroring handler.
+func delClassInstanceReturns(args []Value, r *Registry) []Value {
+	if r != nil && r.Check.IsActive() && len(args) == 2 {
+		eng.CheckAddUniqueDiagnostic(r, "type_error", delClassDetail(args), "del", args[0].Pos())
+	}
+	return []Value{}
+}
+
+// delListHandler refuses index removal on every list flavour. set
+// REPLACES at an index and leaves length alone; removing at an index
+// shifts the tail, so it is a different operation with different words
+// — which the hint names. The sig exists to say that rather than to
+// fail opaquely.
+func delListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return nil, r.BoruErrorHint("type_error", delListDetail(args), "del", delListHint)
+}
+
+const delListHint = "removing an element shifts the tail, which `set` does not do — " +
+	"use pop / shift, or ArrayUtil.remove-at for an arbitrary index"
+
+func delListDetail(args []Value) string {
+	name := "List"
+	if len(args) == 2 && args[1].Parent != nil {
+		name = args[1].Parent.Leaf()
+	}
+	return fmt.Sprintf("del: cannot remove an element of a %s by index", name)
+}
+
+// delListReturns is the guaranteed-error mirror of delListHandler.
+func delListReturns(args []Value, r *Registry) []Value {
+	if r != nil && r.Check.IsActive() && len(args) == 2 {
+		eng.CheckAddUniqueDiagnostic(r, "type_error", delListDetail(args), "del", args[0].Pos())
+	}
+	return []Value{}
 }
 
 // delMapTypedReturns is the check-mode mirror of delMapHandler's

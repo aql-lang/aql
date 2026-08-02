@@ -390,6 +390,24 @@ func (d *WeakFlexMapData) SetValue(key string, v Value) *WeakRefusal {
 	return nil
 }
 
+// DeleteKey removes one entry, dropping its slot and its position in the
+// insertion order. It is SetValue's inverse and cannot refuse: removal
+// has no value to classify against the weak domain. A key that is not
+// present is a no-op, so `del` stays idempotent.
+func (d *WeakFlexMapData) DeleteKey(key string) {
+	d.sweep()
+	if _, exists := d.slots[key]; !exists {
+		return
+	}
+	delete(d.slots, key)
+	for i, k := range d.keys {
+		if k == key {
+			d.keys = append(d.keys[:i], d.keys[i+1:]...)
+			break
+		}
+	}
+}
+
 // ── list operations ──────────────────────────────────────────────────
 
 // sweep splice-compacts dead slots, preserving survivor order.
@@ -483,6 +501,15 @@ func (d *WeakFlexXmlData) SetAttr(key string, v Value) {
 		d.Attr = NewOrderedMap()
 	}
 	d.Attr.Set(key, v)
+}
+
+// DeleteAttr removes one attribute. Children are not attributes and are
+// unaffected; an absent name is a no-op.
+func (d *WeakFlexXmlData) DeleteAttr(key string) {
+	if d.Attr == nil {
+		return
+	}
+	d.Attr.Delete(key)
 }
 
 // AppendChild classifies and appends one child element.
