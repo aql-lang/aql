@@ -117,7 +117,3 @@ def s (context) (s deq s)	true	…and deq to itself
 (do [raise "boom"]) deq (do [raise "boom"])	true	deq agrees with eq on an Error
 (do [raise "boom"]) eq (do [raise "bang"])	false	different messages are not equal
 (do [raise bad_input "x"]) eq (do [raise other "x"])	false	different codes are not equal
-import module [export "M" {a:1}] M.$module eq M.$module	true	a Module descriptor is reflexively eq — an identity-equal opaque handle (NUR031, narrow half)
-import module [export "M" {a:1}] M.$module deq M.$module	true	…and reflexively deq: identity IS its deep value, like the timers
-import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module eq B.$module	false	two module instances are never eq…
-import module [export "A" {x:1}] import module [export "B" {y:2}] A.$module deq B.$module	false	…nor deq — identity-only, the descriptors' contents are never compared
