@@ -130,4 +130,13 @@ func TestMarkWindowDeclinesKeepParity(t *testing.T) {
 	mwRefusedWithParity(t,
 		`def wrap ([] => [def f fn [[x:Any] [Any] [raise bad_input "nope"]]  do [(f 5) 2] error [dot code]]) wrap`,
 		"code-body names fn-local fn `f` at `do` (a compiled unit cannot resolve an enclosing fn's local fn binding)")
+
+	// The same shape with `f` hoisted to MODULE scope: NUR037's admission
+	// predicate does not fire (a module-scope callback compiles fine), so
+	// the program reaches the mark window and declines there — this is the
+	// row that keeps verifyMarkWindow's own decline exercised now that the
+	// fn-local twin above refuses earlier.
+	mwRefusedWithParity(t,
+		`def f fn [[x:Any] [Any] [raise bad_input "nope"]]  def wrap ([] => [do [(f 5) 2] error [dot code]])  wrap`,
+		"mark-window residual does not match the lowered stack")
 }
