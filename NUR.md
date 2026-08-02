@@ -375,13 +375,17 @@ stringify the non-String operand (`add "x" 5` → `'5x'`), while Atom
 arithmetic, and it is deliberate.** Concatenation-with-coercion is the
 overwhelmingly common string operation, the coercion is total and
 canonical (every Scalar has one string render), and the overloads
-require **at least one** String operand, so two non-String scalars
-still refuse (`add true 1` raises `[boru/signature_error]`: with no
-String operand no overload matches, so the refusal is a dispatch miss
-rather than the registered `type_error` NUR000 installs for Boolean
-arithmetic — "string-or-bust" is expressed directly in the signature
-set). The Pending record's framing
-— that Atom and Bytes "do not mirror it" — treated the trio as an
+require **at least one** String operand, so they never manufacture a
+cross-FAMILY concatenation: `add true 1` raises
+`[boru/signature_error]` — no concat overload matches without a String,
+and no within-type arm matches a Boolean/Integer pair either, so the
+refusal is a dispatch miss rather than the registered `type_error`
+NUR000 installs for Boolean arithmetic. ("String-or-bust" governs the
+concat overloads only; two non-String scalars of the SAME type still
+have their within-type arm — `add 1 2` → 3, `add a/q b/q` → 'ba'.)
+
+The Pending record's framing — that Atom and Bytes "do not mirror it" —
+treated the trio as an
 architectural grouping obliged to move together; the verdict is that
 the String/Atom/Bytes occurrence-package parallel is a **documentary
 comparison, not an architectural grouping**. Nothing requires Atom or
@@ -487,9 +491,8 @@ remains the aliasing probe.
   `DeepEqual` via `scalarFamilyEqual`, so eq and deq can never drift
   on a scalar; `sameContainer` identity arms for compounds).
 - REFERENCE.md §Comparison ("**`eq` is identity for compounds; `deq`
-  is structural — by design**"); EXPLANATION.md:480 ("**Two
-  equalities, one rule.**", a lead-in inside §"Type ordering", added
-  with this verdict); `design/LISP-ANALYSIS.5.md` (the original
+  is structural — by design**"); EXPLANATION.md §"Type ordering", the "**Two equalities, one rule.**"
+  lead-in (added with this verdict); `design/LISP-ANALYSIS.5.md` (the original
   argument).
 - NUR031 §"What was resolved" — the `Error` and `Timeout`/`Interval`
   carve-outs and their implementing arms; NUR031 "Descriptor half
@@ -866,19 +869,28 @@ not enforcement). Secondarily, 0-arg words split between `BarrierPos:
 against the stated "MUST use -1" rule — provably inert, since
 `registry.go:1594-1596` normalizes `-1` to `TotalArgs()`, but a literal
 deviation.
-**Evidence:** `native_ref.go:50-67` (`apply`, rationale comment at
-:51-54, `BarrierPos: 0` at :67); `native_control.go:131-137`
-(`__casematch`); REFERENCE.md:961-981 (the pinned list);
-`time_async_module.go:26`; `modules/math.go:342` (`math-pi`; `math-e`
-at :353 is the same shape); `native_fileinfo.go:25,33`; `modules/tui_widgets.go:332`;
-`io_module.go:91`.
+**Evidence** (paths relative to the repo root):
+`lang/go/native/native_ref.go:50-67` (`apply`, rationale comment at
+:51-54, `BarrierPos: 0` at :67);
+`lang/go/native/native_control.go:131-137` (`__casematch`);
+REFERENCE.md §"Stack manipulation" (the pinned list);
+`lang/go/native/time_async_module.go:26`;
+`lang/go/modules/math.go:342` (`math-pi`; `math-e` at :353 is the same
+shape); `lang/go/native/native_fileinfo.go:25,33`;
+`lang/go/modules/tui_widgets.go:332`;
+`lang/go/native/io_module.go:91`.
 **Documentation status:** worse than undocumented — actively
 contradicted. `boru describe apply` prints "Precedence: forward —
 looks ahead for arguments first. apply x y <=> y apply x <=> y x
-apply", because the help header reports the MAX BarrierPos across a
-word's signatures; the stated equivalence is false for the `[Function]`
-row (`apply f/r 5` raises a signature_error, `5 f/r apply` works). The
-ADR's closed list does not contain either exception.
+apply"; the stated equivalence is false for the `[Function]` row
+(`apply f/r 5` raises a signature_error, `5 f/r apply` works). The
+cause is broader than this record's two words:
+`lang/go/native/help/help.go:253-260` branches on a single binary
+`info.ForwardArgs` flag, so EVERY mixed-barrier word prints the full
+forward equivalence chain including a spelling it refuses — `dot`,
+the subject of NUR049, among them. The ADR's closed list does not
+contain either exception, and the diagnostic gap is wider than the
+list.
 
 **Verdict (maintainer, 2026-07-31 — resolve by ADR refinement,
 `design/NUR-RESOLUTION-PLAN.0.md`):** ADR-004 is **incomplete**, and
@@ -939,7 +951,7 @@ the resolution plan (semantic vs deterministic ordering).
 
 ### Evidence
 
-- REFERENCE.md §Comparison (:1199-1255) — both regimes documented with
+- REFERENCE.md §Comparison — both regimes documented with
   the rationale: the ordering words are "**family-restricted**" and
   raise `[boru/incomparable]` across families (:1202-1206), `tcmp` is
   "the **unrestricted** total order" (:1208), and the callout at
@@ -1041,16 +1053,18 @@ benign: no index is lost — both occurrences are retained under the
 shared key — and the same fold is what makes `group` total over the
 common **non-reflexive** keys. Two mechanisms produce them: `nan` is
 `DeqKeyed` but never `DeepEqual` to itself under the IEEE rule NUR013
-records, while fn/Word values, user-declared **class** type values
-(`def P class {…}` — `P deq P` → false, and any `refine` of one) and
-host payloads reach `DeepEqual`'s unsupported fall-through, which
-NUR031 tracks and `DeqNeverEqual` mirrors. Any container or instance
-transitively holding one inherits it. (Record, Options, Table and
-Micron type values are NOT in this set — they are `deq`-reflexive. Nor
-are the container/root literals any longer: `List`, `Map` and `Any`
-were non-reflexive when this record was written, but NUR034 made them
-reflexive, so `List deq List` is now true and they group through `deq`,
-not the render fold.) The fold gives
+records, while fn/Word values, user-declared every value that reaches
+`DeepEqual`'s unsupported fall-through — which NUR031 tracks and
+`DeqNeverEqual` mirrors — and any container or instance transitively
+holding one. That set is not closed, and enumerating it has proved
+error-prone; the reliable test is `x deq x`. Values known to be in it:
+functions and words, host payloads, `class` type values and refinements
+of one, disjunction types (`tor`, and `enum` on top of it), `fnsig` and
+`surface` types, and any uninstantiated `gen` schema whatever its base.
+Values known NOT to be in it: concrete Record/Options/Table/Micron type
+values, and — since NUR034 — the container/root literals `List`, `Map`
+and `Any`, which were non-reflexive when this record was written and
+now group through `deq` rather than the render fold. The fold gives
 `group [nan nan]` → `{nan:[0 1]}` where raising on a render collision
 would make grouping NaN-bearing data a hard error. The lossless
 `[[rep group] …]` pair shape was rejected as breaking `group`'s Map
@@ -1089,7 +1103,8 @@ into a broader Map-key-identity review. Unresolved until then.
 - `lang/spec/module-array.tsv` §3 — `group [Integer Integer/q]` →
   `{Integer:[0 1]}` and `group [nan nan] [1 2]` → `{nan:[1 2]}` pin
   both the collision fold and the non-reflexive fold.
-- REFERENCE.md:1998-2002 — states the render-key fold, but scoped to
+- REFERENCE.md, the ArrayUtil `deq`-membership callout ("`group`'s map
+  keys stay rendered strings") — states the render-key fold, but scoped to
   `group` ("`group`'s map keys stay rendered strings") rather than as
   the language-wide fact about Map keys that the re-open argues is the
   root cause. That the general statement is undocumented is part of
@@ -1120,10 +1135,12 @@ NUR038 facet refactor, descriptor 2026-08-02), so what remains open is
   through, so two references to one function agree only when they were
   reached through the same name.
 
-Host `ExtensionPayload` values and user-declared **class** type values
-share the same `deq` fall-through (`P deq P` → false for a
-`def P class {…}`); they are not separately recorded, and a fix here
-should cover them.
+Host `ExtensionPayload` values share the same `deq` fall-through, as do
+several kinds of type value — `class` types and refinements of one,
+disjunction/`enum` types, `fnsig` and `surface` types, and any
+uninstantiated `gen` schema (`P deq P` → false for a
+`def P class {…}`; likewise `def E enum ['a' 'b']`). None is separately
+recorded, and a fix here should cover them all.
 
 ### The uniform rule
 
@@ -1225,10 +1242,12 @@ acceptance:
   module exporting a **function** gives `M deq M → false`
   (`IO deq IO`, `Test deq Test`, `StringUtil deq StringUtil` are all
   false today), because `DeepEqual`'s Map arm recurses into the export
-  values and fn values hit its terminal `false`. Exported **class**
-  type values fail the same way (`def P class {…}` then `export {P: P}`
-  gives `M deq M → false`, since `P deq P` is false); exporting a bare
-  type literal does not — `export {L: List}` stays reflexive. This is not a
+  values and fn values hit its terminal `false`. Exporting any other
+  value that reaches that fall-through does the same — a `class` type,
+  an `enum`, a `gen` schema (`export {P: P}` for `def P class {…}`
+  gives `M deq M → false`, since `P deq P` is false) — while exporting
+  a bare type literal does not: `export {L: List}` stays reflexive.
+  This is not a
   module defect and not unlanded module work — a plain `{a:1 g:(f/r)}`
   Map behaves identically — it is the Function/Word `deq`
   fall-through below, seen through a namespace. Nothing in `lang/spec`
@@ -1256,9 +1275,9 @@ included — must eventually fall under equality, at minimum
 reflexively (a value is `eq`/`deq` to itself). **Modules satisfy it
 for `eq` unconditionally, and for `deq` on the descriptor
 unconditionally**; a namespace satisfies `deq`-reflexivity only when
-every export does, and the exports that do not (functions, bare type
-values) are the general `deq` fall-through, not a module gap. The
-function-type-vs-value question is
+every export does, and the exports that do not (functions, and the
+type values that share their fall-through) are the general `deq` gap,
+not a module gap. The function-type-vs-value question is
 settled (ADR-011: one `Function` type; NUR050 resolved), so what this
 record still tracks is function IDENTITY — a stable canon independent
 of the binding name, since canon/render today keys on the name a
@@ -1441,8 +1460,9 @@ accidental partial signal of exactly that condition.
   \"k\", with no diagnostic at all."
 - **Elsewhere the repo does rely on the quoting reading**, which is the
   real reason the fix is riskier than the confusion:
-  `lang/go/modules/vault_tui.boru` — shipped, `//go:embed`-ed — has 77
-  bare-word key sites (`state set screens …`, `state set status …`),
+  `lang/go/modules/vault_tui.boru` — shipped, `//go:embed`-ed — has 77 bare-word key
+  sites (`grep -oE '\bset +[a-z][a-zA-Z0-9_-]*'`; 75 excluding the two
+  that follow a `-`-suffixed word) (`state set screens …`, `state set status …`),
   and `kg/report.boru:334`, `design/examples/apps/todo-tui.boru:52` and
   the linguist samples do the same. Making `set` evaluate its key would
   change all of them.
@@ -1757,11 +1777,16 @@ Scalar-sourced. (`boru describe convert` does list `[Bytes List]` and
 `lang/go/native/native_type.go` — `convert`'s Scalar-typed source
 slots and `coerceBooleanTruthy`; `design/TRUTHINESS.0.md:58-67` — the
 statement this contradicts, whose own example is `make Boolean [1]`.
-**Documentation status:** mis-documented rather than undocumented —
-TRUTHINESS.0.md asserts the shared rule without the domain caveat, and
-NUR001 (Allowed) rests its rationale on the same assertion. NUR001's
-allowance is about *content vs presence* and survives; this record is
-the domain question it was silently carrying.
+**Documentation status:** mis-documented rather than undocumented. Three
+places assert the shared rule without the domain caveat:
+`design/TRUTHINESS.0.md` §2, REFERENCE.md's `convert Boolean`
+description ("judges only presence — empty String / `0` / `none` /
+empty collection are false"), and the SHIPPED help text
+(`boru describe convert`: "pure presence coercion: empty String / 0 /
+none / empty collection are …"). NUR001 (Allowed) rests its rationale
+on the same assertion; its allowance is about *content vs presence* and
+survives — this record is the domain question it was silently
+carrying.
 **Proposed verdict:** argue or fix — either widen `convert Boolean`'s
 source slot to `Any` so the three consumers coincide (the uniform
 answer, and `convert` already has a total presence rule to apply), or
@@ -1815,7 +1840,8 @@ list argument.
 **Evidence:** the session above (verified 2026-08-02, current binary);
 `lang/go/context_boundary_differential_test.go:61-64` (the
 `wantDiverge` field and its required `why`) and its four marked rows
-at :109-131; EXPLANATION.md:795-802 tells users about the split ("a
+at :109-131; EXPLANATION.md §"Store and context", the "Two caveats" paragraph,
+tells users about the split ("a
 `case` clause body and an auto-evaluated list are boundaries when
 interpreted but not when compiled … The interpreter's answer is the
 intended one");

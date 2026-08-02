@@ -1231,9 +1231,11 @@ restricted words refuse. See
 > The `Module` descriptor (`M.$module`) is an **identity-equal opaque
 > handle**: `eq` and `deq` are both true exactly for the same descriptor
 > instance (all of one import's namespaces share it), never across
-> distinct instances. The values with no equality are **code values**
-> (functions and words), user-declared **class** type values, and any
-> container holding one.
+> distinct instances. Values with no `deq` equality — not `deq` even to
+> themselves — include **code values** (functions and words), several
+> kinds of type value (`class` and refinements of one, `tor`/`enum`,
+> `fnsig`, `surface`, and uninstantiated `gen` schemas), host payloads,
+> and any container holding one. The reliable test is `x deq x`.
 
 ```
 1 lt 2.0                      # returns true        — Integer vs Float (shared Number)
@@ -2002,9 +2004,10 @@ iota 6 ArrayUtil.reshape [2,3]        # returns [[0 1 2] [3 4 5]]
 > `Integer` and the atom `Integer/q`), and — because `nan` is
 > `deq`-unequal to itself — it also groups all `nan` keys together
 > (`group [nan nan]` → `{nan:[0,1]}`). The same fold catches every
-> other value that is not `deq` to itself: function and word values,
-> user-declared **class** type values, and any container holding one. `unique` keeps those apart, so `group` and `unique` can disagree
-> on the same list.
+> other value that is not `deq` to itself — function and word values,
+> `class`/`tor`/`enum`/`fnsig`/`surface` and generic-schema type values,
+> host payloads, and any container holding one. `unique` keeps those
+> apart, so `group` and `unique` can disagree on the same list.
 | `ArrayUtil.window` | Sliding window of size N | `[1,2,3,4] ArrayUtil.window 2` |
 | `ArrayUtil.pairs` | Adjacent pairs | `ArrayUtil.pairs [1,2,3]` returns `[[1,2],[2,3]]` |
 

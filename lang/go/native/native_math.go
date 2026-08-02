@@ -18,10 +18,11 @@ import (
 // and add carries the [TString, TScalar] / [TScalar, TString]
 // string-concatenation overloads, used when AT LEAST ONE input is a
 // String (the other Scalar coerces to its string form). Two
-// non-String scalars miss those two overloads and fall to whatever else
-// is registered for the pair: the [TNumber, TNumber] arm, the within-type
-// arms in native_scalar_ops.go (including the deliberate [Boolean Boolean]
-// refusal, a [boru/type_error]), or — matching nothing — a
+// non-String scalars miss the concat overloads and fall to whatever else
+// is registered for the pair: the [TNumber, TNumber] arm (add 1 2 -> 3),
+// the within-type arms in native_scalar_ops.go (add a/q b/q -> 'ba';
+// including the deliberate [Boolean Boolean] refusal, a
+// [boru/type_error]), or — a cross-family pair matching nothing — a
 // [boru/signature_error] dispatch miss.
 //
 // All [TNumber, TNumber] handlers compute b op a (i.e.

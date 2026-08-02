@@ -134,8 +134,9 @@ def go fn [[] [Integer] [("x" add 1) takesint]] end
 		t.Errorf("a provable String-concat result fed into an Integer param must still be flagged")
 	}
 
-	// NEGATIVE 2: string-or-bust is preserved — two non-String scalars match
-	// neither the numeric nor the concat overload.
+	// NEGATIVE 2: string-or-bust is preserved — a Boolean/Integer pair
+	// matches neither the numeric nor the concat overload. (A same-type
+	// non-String pair still has its within-type arm: `add 1 2` is 3.)
 	stringOrBust := `print ((add true 1)) end`
 	if n := errCount(t, stringOrBust); n == 0 {
 		t.Errorf("add of two non-String scalars (string-or-bust) must still be flagged")
