@@ -252,10 +252,13 @@ func FormatDynamic(info FuncInfo) string {
 
 	// Precedence
 	b.WriteByte('\n')
-	if info.ForwardArgs {
+	switch precedenceShape(info) {
+	case precedenceMixed:
+		writePrecedenceMixed(&b, info)
+	case precedenceForward:
 		b.WriteString("Precedence: forward — looks ahead for arguments first.\n")
 		writePrecedenceExamples(&b, info)
-	} else {
+	default:
 		b.WriteString("Precedence: stack — arguments must be on the stack.\n")
 		writePrecedenceExamplesStack(&b, info)
 	}
@@ -817,4 +820,150 @@ func writeWrapped(b *strings.Builder, text string, width int, indent string) {
 		lineLen += len(w)
 	}
 	b.WriteByte('\n')
+}
+
+// Precedence shapes. A word's signatures do not have to agree about where
+// their arguments come from, and until 2026-08-02 this renderer assumed
+// they did: it branched on a single `ForwardArgs` flag, which is true when
+// ANY signature is forward-eligible. Every word with a MIXED barrier
+// therefore advertised the full forward equivalence chain — including
+// spellings it refuses. `apply` is the recorded case (NUR023): its
+// `[Function]` row is stack-only, so `apply f/r 5` raises a signature
+// error while the help says `apply x y <=> y apply x <=> y x apply`. It is
+// not alone — `dot` (NUR049's subject) has sixteen `BarrierPos: 1` rows
+// that take their receiver from the stack, and advertised the same false
+// chain.
+type precedenceKind int
+
+const (
+	precedenceStack precedenceKind = iota
+	precedenceForward
+	precedenceMixed
+)
+
+// sigIsAllForward reports whether every position of a signature can be
+// filled by looking ahead. BarrierPos is the boundary: positions
+// [BarrierPos..N-1] always come from the stack.
+//
+// A NEGATIVE BarrierPos is the "-1" sentinel for all-forward-eligible.
+// The registry normalizes it to TotalArgs() when a native is registered
+// (eng/go/registry.go), but an FnSig carried on an FnDefInfo — every
+// module-export wrapper, which the wrapper rule requires to declare -1 —
+// still holds the raw sentinel when it reaches here. Normalizing in these
+// two predicates keeps that shape from reading as stack-only.
+func sigIsAllForward(s SigInfo) bool {
+	return s.BarrierPos < 0 || s.BarrierPos >= len(s.Args)
+}
+
+// sigIsStackOnly reports whether a signature takes nothing forward.
+func sigIsStackOnly(s SigInfo) bool { return s.BarrierPos == 0 }
+
+// precedenceShape classifies a word by whether its signatures AGREE about
+// argument sourcing. A word only earns the unqualified "forward" or
+// "stack" line when they all agree; anything else is reported as varying,
+// because a single line cannot be true of every row.
+//
+// Zero-arg words are deliberately excluded from the mixed path: with no
+// arguments to source, BarrierPos is inert (the registry normalizes -1 to
+// TotalArgs(), which is 0), so both readings describe the same nothing.
+// Which of the two they should declare is a live convention question
+// recorded as NUR023, not something for this renderer to take a side on.
+func precedenceShape(info FuncInfo) precedenceKind {
+	maxArgs := 0
+	for _, s := range info.Sigs {
+		if len(s.Args) > maxArgs {
+			maxArgs = len(s.Args)
+		}
+	}
+	if maxArgs == 0 || len(info.Sigs) == 0 {
+		if info.ForwardArgs {
+			return precedenceForward
+		}
+		return precedenceStack
+	}
+
+	allForward, allStack := true, true
+	for _, s := range info.Sigs {
+		if len(s.Args) == 0 {
+			continue // inert; see the doc comment
+		}
+		if !sigIsAllForward(s) {
+			allForward = false
+		}
+		if !sigIsStackOnly(s) {
+			allStack = false
+		}
+	}
+	switch {
+	case allForward:
+		return precedenceForward
+	case allStack:
+		return precedenceStack
+	default:
+		return precedenceMixed
+	}
+}
+
+// writePrecedenceMixed reports a word whose signatures disagree, naming the
+// split per group rather than asserting one chain that is false for some
+// rows. It shows the ONE spelling that satisfies every signature — full
+// stack form always does, since a forward-eligible position accepts a
+// stack value too — so a reader has something that always works.
+func writePrecedenceMixed(b *strings.Builder, info FuncInfo) {
+	b.WriteString("Precedence: varies by signature — see the split below.\n")
+
+	var forward, mixed, stack []SigInfo
+	for _, s := range info.Sigs {
+		if len(s.Args) == 0 {
+			continue
+		}
+		switch {
+		case sigIsAllForward(s):
+			forward = append(forward, s)
+		case sigIsStackOnly(s):
+			stack = append(stack, s)
+		default:
+			mixed = append(mixed, s)
+		}
+	}
+
+	// verb is the bare stem; a one-row group needs the -s form. Both stems
+	// used here are regular, so stem+"s" is the whole of the agreement.
+	line := func(verb, rest string, group []SigInfo) {
+		if len(group) == 0 {
+			return
+		}
+		b.WriteString("  ")
+		b.WriteString(strconv.Itoa(len(group)))
+		if len(group) == 1 {
+			b.WriteString(" signature " + verb + "s ")
+		} else {
+			b.WriteString(" signatures " + verb + " ")
+		}
+		b.WriteString(rest)
+		b.WriteByte('\n')
+	}
+	line("look", "ahead for every argument.", forward)
+	line("take", "a leading argument forward and the rest from the stack.", mixed)
+	line("take", "every argument from the stack.", stack)
+
+	maxArgs := 0
+	for _, s := range info.Sigs {
+		if len(s.Args) > maxArgs {
+			maxArgs = len(s.Args)
+		}
+	}
+	if maxArgs > 3 {
+		maxArgs = 3
+	}
+	vars := []string{"x", "y", "z"}[:maxArgs]
+	var parts []string
+	for i := maxArgs - 1; i >= 0; i-- {
+		parts = append(parts, vars[i])
+	}
+	parts = append(parts, info.Name)
+	b.WriteString("  Full stack form satisfies every signature:  ")
+	b.WriteString(strings.Join(parts, " "))
+	b.WriteString("\n  Which forward spellings dispatch depends on the signature matched;\n")
+	b.WriteString("  see the list below.\n")
 }
