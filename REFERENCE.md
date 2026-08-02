@@ -1000,7 +1000,8 @@ forms `a b sub`, `a sub b`, and `sub b a` compute `a - b`.
 `add` concatenates when **at least one operand is a `String`**: the other
 scalar is rendered to text and the result is a `String`, so `"a" add "b"`
 returns `'ab'` and `1 add "x"` returns `'1x'`. Two non-`String` scalars do
-NOT concatenate — `add true 1` is a `[boru/type_error]`, not `'true1'`.
+NOT concatenate — `add true 1` is a `[boru/signature_error]` (no overload
+matches without a `String` operand), not `'true1'`.
 Every scalar type and Micron kind instead defines all six arithmetic words
 *within its own type* — see [Within-type operations](#within-type-operations)
 below.
@@ -1066,8 +1067,11 @@ operand unchanged, `sign` yields an `Integer`).
 ### Within-type operations
 
 The six arithmetic words are **total within every scalar type and every
-Micron kind** — applied within a type, never across it (a cross-type pair
-is a `[boru/type_error]`). The **sole language-level exception** is
+Micron kind** — applied within a type, never across it. A cross-type
+pair simply has no signature, so it raises `[boru/signature_error]`;
+the two combinations that are *deliberately registered to refuse* —
+`Big`⊕`Float` and `Boolean` arithmetic — raise `[boru/type_error]` with
+a specific message instead. The **sole language-level exception** is
 `String` `add`, which concatenates when at least one operand is a
 `String` (see [Arithmetic](#arithmetic) above); no other word, and no
 other type — `Atom` and `Bytes` included — crosses scalar types. Some of

@@ -494,8 +494,10 @@ collection words (`ArrayUtil.unique`/`member`/`indices`/`group`)
 dedup, test, and group by the `deq` class. The only values with no
 settled equality are **code values** — functions and words: a
 function's "value" is opaque code with no stable identity canon, so
-`deq` reports it unequal even to itself — an accepted remainder
-recorded as NUR031 in [NUR.md](NUR.md).
+`deq` reports it unequal even to itself — an OPEN remainder recorded
+as NUR031 in [NUR.md](NUR.md), where it is Pending, not allowed. One
+consequence to expect: a container holding a function is not `deq` to
+itself either, which includes the export map an `import` binds.
 
 A bare type literal sorts strictly below every concrete inhabitant
 of its family (same-family, so the restricted words allow it — but

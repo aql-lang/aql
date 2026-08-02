@@ -1186,7 +1186,9 @@ func indicesHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 // map's keys stay RENDERED strings (a map key is a string), taken from
 // each class's FIRST occurrence. Two keys that render identically share
 // one entry — deq-equal keys by design, and deq-DISTINCT keys because a
-// string can name only one (NUR030, Allowed): this is what makes
+// string can name only one (NUR030, Pending — re-opened 2026-07-31,
+// so this fold is current behaviour, not a settled verdict): this is
+// what makes
 // `group [nan nan]` fold to `{nan:[0 1]}` (NaN is deq-unequal to
 // itself) instead of erroring.
 type deqGrouper struct {
@@ -1203,11 +1205,13 @@ func (g *deqGrouper) add(key, v Value) {
 		g.groups[ri] = append(g.groups[ri], v)
 		return
 	}
-	// NUR030 (Allowed): a Map key is a string, so two deq-DISTINCT keys
+	// NUR030 (Pending): a Map key is a string, so two deq-DISTINCT keys
 	// that render identically must share one group entry. This also
-	// folds the common NON-REFLEXIVE keys — `nan` (deq-unequal to
-	// itself) and the bare container literals (`List deq List` is false)
-	// — so `group [nan nan]` is `{nan:[0 1]}` rather than an error. The
+	// folds the remaining NON-REFLEXIVE key, `nan` (deq-unequal to
+	// itself) — so `group [nan nan]` is `{nan:[0 1]}` rather than an
+	// error. (Container type literals were a second such key until
+	// NUR034 made them reflexive; `List deq List` is true now, so they
+	// fold through the deq probe above, not through this render key.) The
 	// rare genuinely-distinct collision (the type literal `Integer` and
 	// the atom `Integer/q`, both rendering "Integer") co-groups too;
 	// no index is lost, and the alternative — erroring — would break

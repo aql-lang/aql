@@ -1,13 +1,21 @@
 # NUR Effort Triage — the low/medium-effort resolutions
 
-> **Status:** point-in-time triage, 2026-08-02. Every open record in
-> [NUR.md](../NUR.md) — the 12 Pending entries plus the six Allowed
-> entries that carry a standing fix proposal — was assessed for the
-> effort of its *recorded or most plausible resolution path*, grounded
+> **Status:** point-in-time triage, 2026-08-02. The 12 Pending entries
+> in [NUR.md](../NUR.md), plus six of the eight Allowed entries that
+> carried a standing fix proposal, were assessed for the effort of
+> their *recorded or most plausible resolution path*, grounded
 > in code inspection and live reproduction on a freshly built binary
 > (every divergence assessed below was re-confirmed to reproduce,
 > except where noted). This document **ranks; it does not decide** —
 > verdicts remain the maintainer's, per NUR.md's own rules.
+>
+> **Scope correction (2026-08-02 register review).** The header
+> previously claimed to cover "the six Allowed entries that carry a
+> standing fix proposal". There were **eight** at the triage commit:
+> NUR039 (`slice` negative start) and NUR040 (`set` bare computed key)
+> also carried `**Proposed verdict:**` blocks and were never assessed
+> here. Both have since been expanded to the argued Allowed form in
+> the register; neither is triaged for effort.
 >
 > **Worked (2026-08-02).** The maintainer accepted this triage's
 > recommendations and the batch was implemented in the same session:
@@ -103,11 +111,14 @@ maintainer pick, but each is a genuinely small unit of honest work:
   radius and a heavy cover-gate bill on the error branches. One
   unstated sub-choice worth a one-line confirmation: templates'
   unknown-escape handling flips from keep-backslash to drop-backslash.
-- **NUR042 — dry-run decorator (preferred path).** ~100 LOC decorator
+- ~~**NUR042 — dry-run decorator (preferred path).** ~100 LOC decorator
   modeled on the composed-policy precedent, but the flag is registered
   on **six** subcommands (not two), the build path must bake a config
   bit, and there's a wrap-ordering hazard (flattening the wrapper
-  would silently bake an allow-all profile).
+  would silently bake an allow-all profile).~~ **MOOT** — NUR042 was
+  resolved by the other disjunct (remove the inert flag, commit
+  `339f1cb`); the record is deleted and `-policy-dry-run` is gone, so
+  this is no longer a schedulable option against any record.
 - ✅ **NUR045 — per-export gate, enforce path. DONE.** The two
   findings carried the maintainer's cost call toward enforcing: the
   per-(module,export) decision is *fully static*, and `boru policy
@@ -215,8 +226,15 @@ the history reads one-record-per-commit. Deviations worth noting:
   deletions — an allowance stays in the register by design.
 - **NUR045's implementation improved on this document's sketch** (see
   above): stamping at resolution time rather than gating site by
-  site, which removes the "missed dispatch route" risk structurally
-  instead of by inventory.
+  site, which reduces the "missed dispatch route" risk by construction
+  rather than by inventory. **It did not eliminate it** — two commits
+  later, `09e2f14` closed a real bypass of exactly that class: a module
+  fn defined in a boru preamble was denied on the interpreter and RAN
+  compiled, because the compiled `CALL_USER` arm reconstructed the
+  policy identity from the unit's own (module-private) fn name instead
+  of the export key, so no rule matched. The arm now reads the
+  stamper's `StampedModuleCall`. "Structurally" overstated it; the
+  claim is corrected here rather than left standing.
 - **One existing test re-diagnosed, not weakened**: NUR037's refusal
   fires earlier than a mark-window decline for one shape that was
   already refusing; parity — what that test guards — is unchanged,
@@ -224,3 +242,11 @@ the history reads one-record-per-commit. Deviations worth noting:
 
 Still open and untouched by this batch: NUR009, NUR022, NUR023,
 NUR026, NUR030, NUR046, NUR049, and the new NUR052.
+
+**Correction (2026-08-02 register review).** That list is neither the
+blocking list nor the set of open records, and reads as though it were
+the "8" named above. The blocking list at the time was NUR009, NUR022,
+NUR023, NUR026, NUR030, **NUR031**, NUR049, NUR052 — NUR031 is Pending
+and was omitted here, while NUR046 is Allowed and is not on it. NUR039
+and NUR040 are open Allowed records and are absent from both. The
+register's own table is authoritative.

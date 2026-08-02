@@ -322,7 +322,10 @@ def cut-out fn [[keep:Boolean body:String] [Map] [
 # -c never needs the characters as a LIST: a normalized range is a contiguous
 # run, so one rune-indexed `slice` per range reproduces it exactly. `slice`
 # clamps its end silently, but a NEGATIVE start makes it ignore the end
-# entirely, so the start is clamped here rather than relied upon.
+# entirely (NUR039), so this helper must never see one. It does NOT clamp the
+# start itself — `a` is used as computed, and only the end is clamped below.
+# The guard is upstream: cut-span and cut-point reject `lo < 1` before any
+# range reaches here, so `a` is always >= 0.
 def cut-chars-rng fn [[line:String rg:List out:List] [List] [
   def n (size line)
   def a ((rg get 0) sub 1)

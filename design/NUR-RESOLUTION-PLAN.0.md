@@ -145,8 +145,9 @@ Introduce a complete equality family:
 This separates three notions many languages conflate. Performance
 note: Bytes equality may be O(n); `req` gives constant-time identity.
 Documentation should compare with JavaScript, Python, Ruby, and the
-Lisp family. (Not yet applied to the register's NUR011 record — the
-`req` design belongs with the equality work re-opened under NUR031.)
+Lisp family. (Applied to the register's NUR011 record on 2026-07-31;
+the `req` design travels with the equality work re-opened under
+NUR031.)
 
 ### NUR-012 — Resolve by fix — **RESOLVED (this session)**
 
