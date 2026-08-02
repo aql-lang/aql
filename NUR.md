@@ -56,9 +56,6 @@ commit.
 |---|-------|-------------|
 | [NUR009](#nur009) | Bytes excluded from the DepScalar refinement bases | 2026-07-22 uniformity review |
 | [NUR013](#nur013) | NaN: total-order slot in cmp/sort, IEEE-unordered in lt/gt | 2026-07-22 uniformity review |
-| [NUR014](#nur014) | Cross-leaf numeric magnitude equality is leaf-pair-dependent | 2026-07-22 uniformity review |
-| [NUR018](#nur018) | Store and Error are excluded from `make` | 2026-07-22 uniformity review |
-| [NUR019](#nur019) | `slice` is the String family's core straggler | 2026-07-22 uniformity review |
 | [NUR022](#nur022) | `del` covers a fraction of `set`'s containers | 2026-07-22 uniformity review |
 | [NUR023](#nur023) | Stack-only registrations outside ADR-004's closed list | 2026-07-22 uniformity review |
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
@@ -485,55 +482,152 @@ Stays Pending until the comparison is run and recorded.
 
 ## NUR014 — Cross-leaf numeric magnitude equality is leaf-pair-dependent {#nur014}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Allowed · **Date:** 2026-08-02 (recorded Pending
+2026-07-22; verdict: maintainer, accepting the recommendation in
+`design/NUR-EFFORT-TRIAGE.0.md`)
 
-**Rule:** "leaves of the same family compare by magnitude"
-(`1 cmp 1.0` → 0, `1 eq 1.0` → true).
-**Divergence:** the collapse holds for Integer↔Float and Integer↔Big
-but NOT Float↔BigDecimal: `Float 0.1 ≠ 0d0.1` (exact big.Rat compare of
-the float's true binary value). Magnitude equality is thus a per-pair
-property, not a family invariant.
-**Evidence:** `compare_scalar_behaviors.go:111-179,195-226`.
-**Documentation status:** deliberate (in-code rationale cites Python's
-`Decimal('0.1') == 0.1 → False`); user-facing at REFERENCE.md:197,501.
-**Proposed verdict:** allow — mathematically honest; the alternative
-(rounding Big to float64) silently collapses distinct values.
+### The uniform rule
+
+Leaves of the same family compare by magnitude: `1 cmp 1.0` → 0,
+`1 eq 1.0` → true.
+
+### The divergence
+
+The collapse holds for Integer↔Float and Integer↔Big but NOT
+Float↔BigDecimal: `0.1 eq 0d0.1` → false (an exact big.Rat compare of
+the float's true binary value against the exact decimal). Magnitude
+equality is thus a per-pair property, not a family invariant.
+
+### Why allowed
+
+The divergence is **mathematically honest**: the Float written `0.1`
+IS NOT one-tenth — it is the nearest binary64 value,
+0.1000000000000000055511151231257827…, and the exact big.Rat compare
+reports that truthfully. Every collapse that *can* hold exactly does
+hold (`1 eq 1.0`, `1 eq 0d1`, `0d0.5 eq 0.5` — dyadic values convert
+exactly), so the family invariant fails only where the mathematics
+itself fails. The alternative — rounding BigDecimal through float64 to
+force the collapse — would silently equate distinct values, defeating
+the reason BigDecimal exists; it would also contradict the
+exactness-preserving design that already makes mixed Big⊕Float
+arithmetic a defined error. The behaviour is Python's
+(`Decimal('0.1') == 0.1` → False), for the same reason.
+
+### Evidence
+
+- `eng/go/compare_scalar_behaviors.go` — `numberCompareBehavior.
+  Compare` and `toRatExact` (the in-code rationale comments cite the
+  Python precedent).
+- REFERENCE.md:195-200 — the user-facing statement of the honest
+  result, with the exact-value explanation.
+- `lang/spec/bignum.tsv:47-63` — pins both directions: the collapses
+  that hold (`0d5 eq 5`, `1 cmp 0d1.0` → 0, `0d0.5 eq 0.5`) and the
+  one that must not (`0.1 eq 0d0.1` → false).
+- `lang/spec/edge-scalars-1.tsv:24-25` — both `cmp` directions of the
+  non-collapse.
 
 ---
 
 ## NUR018 — Store and Error are excluded from `make` {#nur018}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Allowed · **Date:** 2026-08-02 (recorded Pending
+2026-07-22; verdict: maintainer, accepting the recommendation in
+`design/NUR-EFFORT-TRIAGE.0.md`)
 
-**Rule:** TYPE-UNIFORM — `make` instantiates the structural
-type-kinds; the kernel guide groups Record, Options, Table, Class,
-Store, Error and the Micron family together as the `make`/`record`/
-`class` structural set (eng/go/CLAUDE.md §"Where a Type Lives" rule 4).
-**Divergence:** `make Store {}` and `make Error {message:"x"}` raise
-`[boru/unsupported]: make: unsupported target type` (verified live)
-while Record/Options/Table/Class/Micron are `make` targets — Store and
-Error construct only through their dedicated words.
-**Evidence:** `eng/go/core_make.go:31-37` (`isTypeLike`).
-**Documentation status:** likely deliberate but stated nowhere; needs a
-one-line verdict.
+### The uniform rule
+
+`make` instantiates the structural type-kinds; the kernel guide groups
+Record, Options, Table, Class, Store, Error and the Micron family
+together as the `make`/`record`/`class` structural set
+(eng/go/CLAUDE.md §"Where a Type Lives" rule 4).
+
+### The divergence
+
+`make Store {}` and `make Error {message:"x"}` raise
+`[boru/unsupported]: make: unsupported target type` while
+Record/Options/Table/Class/Micron are `make` targets — Store and Error
+construct only through their dedicated words.
+
+### Why allowed
+
+`make` targets are the **schema-bearing** structural kinds: a
+Record/Options/Table/Class/Micron declares a shape, and `make`
+instantiates a value against that shape. Store and Error carry no
+user-declared schema and their constructors are semantically loaded in
+ways a bare `make` cannot honour: a Store IS its position in the
+context machinery (`StoreInstanceInfo` carries the parent-chain and
+COW-layer state that `eng/go/registry.go`'s context words establish —
+a detached `make Store {}` would have to invent an answer to "whose
+child is it?"), and an Error's identity is its passage through
+`raise`/`trap` (`describe raise`: "construct an Ideal/Error"), so
+error construction always flows through the raising path that stamps
+code and context. The kernel-guide grouping this record measured
+against is about **kernel residence** (where the types live), not
+about `make`-constructibility — clarified at the rule itself with this
+verdict. The exclusion is loud (a coded `unsupported` error, not a
+dispatch miss), and the dedicated constructors are the documented
+route.
+
+### Evidence
+
+- `eng/go/core_make.go` — `isTypeLike` (the deliberate omission) and
+  the covered `unsupported target type` arm.
+- `eng/spec/make.tsv` — negative rows pinning both exclusions
+  (`make Store {}` and `make Error {message:'x'}` → ERROR).
+- eng/go/CLAUDE.md §"Where a Type Lives" rule 4 — the
+  kernel-residence clarification landed with this verdict.
+- REFERENCE.md — the `make` documentation states the exclusion and
+  names the dedicated constructors.
 
 ---
 
-## NUR019 — `slice` is the String family's core straggler {#nur019}
+## NUR019 — `slice` is a core sequence word, not a String straggler {#nur019}
 
-**Status:** Pending · **Recorded:** 2026-07-22 · **Surfaced by:** full-repo uniformity review
+**Status:** Allowed · **Date:** 2026-08-02 (recorded Pending
+2026-07-22 as "the String family's core straggler"; verdict:
+maintainer, accepting the recommendation in
+`design/NUR-EFFORT-TRIAGE.0.md`)
 
-**Rule:** the string vocabulary moved to `boru:string-util`; moved
-words are not available unqualified (lang/go/CLAUDE.md §"Package
-layout").
-**Divergence:** `slice` alone stays core — REFERENCE's string table
-lists it unqualified between two `StringUtil.*` rows — and `boru
-describe` files it under `list`, not `string`. The likely reason
-(it is polymorphic over String and List, i.e. a sequence word) is
-stated nowhere.
-**Evidence:** `lang/go/native/natives.go:372-382`; REFERENCE.md:1117;
-`help_categories.go:40-49`.
-**Documentation status:** undocumented rationale.
+### The uniform rule
+
+The string vocabulary moved to `boru:string-util`; moved words are not
+available unqualified (lang/go/CLAUDE.md §"Package layout").
+
+### The divergence (as recorded)
+
+`slice` alone stayed core — REFERENCE's string table listed it
+unqualified between two `StringUtil.*` rows, and `boru describe` files
+it under `list`, not `string`, with the reason stated nowhere.
+
+### Why allowed
+
+The move rule does not apply because **`slice` is not a String-family
+word**: it is a core *sequence* word, polymorphic over String, List,
+and Bytes (nine unqualified signatures spanning all three), kin of
+`size`/`take`/`reverse`, which also stayed core for the same reason.
+Relocating it to `StringUtil` would force splitting one polymorphic
+word — the List and Bytes overloads cannot live in a string namespace
+— which is a semantically worse outcome than the filing confusion this
+record flagged. What WAS wrong was the filing: REFERENCE's string
+table presented `slice` as if it were an unqualified string word, and
+the describe categories did not say where to find it. Both filings are
+fixed with this verdict; the `list` category placement stands, because
+that is the sequence home.
+
+### Evidence
+
+- `lang/go/native/natives.go:372-385` and
+  `lang/go/native/native_bytes.go` — the String+List signature pairs
+  plus the Bytes overloads: one polymorphic word.
+- `boru describe slice` — all nine signatures, unqualified.
+- REFERENCE.md string table — the row now carries the "core sequence
+  word, also slices List and Bytes" parenthetical (fixed with this
+  verdict).
+- `lang/go/native/help/help_categories.go` — the string category's
+  description now points at core `slice` (fixed with this verdict).
+- `lang/spec/edge-scalars-3.tsv:45-53`, `corpus-core.tsv:119`,
+  `corpus-structures.tsv:14` — both string and list behaviour pinned;
+  NUR039 independently pins the negative-start semantics.
 
 ---
 

@@ -137,8 +137,10 @@ make Options { a:1 } typeof	Map
 # Conversion failures produce concrete error messages.		
 		
 make Integer 'abc'	ERROR:cannot convert	non-numeric strings cannot become Integers
-make Float 'x'	ERROR:cannot convert	
-make Number 'y'	ERROR:cannot convert	
+make Float 'x'	ERROR:cannot convert
+make Number 'y'	ERROR:cannot convert
+make Store {}	ERROR:unsupported target type	NUR018: Store is minted by the context machinery, never by make
+make Error {message:'x'}	ERROR:unsupported target type	NUR018: Error constructs through raise, never by make
 make Pathon 99	ERROR:Pathon source must be a list or string	Pathon requires list/string source
 make Path 'a/b'	ERROR:	the bare Path name is gone — hard-renamed to Pathon (go: undefined_word; ts errors differently until the port catches up — the exact code is pinned in lang/spec/micron.tsv)
 		

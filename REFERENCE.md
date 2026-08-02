@@ -1145,7 +1145,7 @@ import "boru:string-util" | `StringUtil.concat` | Join list elements into a stri
 import "boru:string-util" | `StringUtil.split` | Split string by separator (subject last) | `StringUtil.split "," "a,b"` returns `['a','b']` |
 import "boru:string-util" | `StringUtil.contains` | Substring test (haystack last) | `StringUtil.contains "ell" "hello"` returns `true` |
 import "boru:string-util" | `StringUtil.indexof` | Index of a needle in a haystack — **haystack last**: `indexof needle haystack` (string only; for the list form see `ArrayUtil.indices` under [List and array words](#list-and-array-words)) | `StringUtil.indexof "ll" "hello"` returns `2` |
-| `slice` | Substring; negative indices ok | `"hello" slice 1 3` returns `'el'` |
+| `slice` | Substring; negative indices ok (core *sequence* word, no import — also slices List and Bytes; filed under the `list` describe category, see NUR019) | `"hello" slice 1 3` returns `'el'` |
 import "boru:string-util" | `StringUtil.replace` | Replace pattern (subject last) | `StringUtil.replace "l" "r" "hello"` returns `'herlo'` |
 import "boru:string-util" | `StringUtil.repeat` | Repeat string (subject last) | `StringUtil.repeat 3 "ab"` returns `'ababab'` |
 import "boru:string-util" | `StringUtil.trim` | Trim whitespace or chars | `StringUtil.trim "  hi  "` returns `'hi'` |
@@ -2267,7 +2267,7 @@ converts back through validation.
 | `convert` | Parse/serialise a scalar to a type | `convert Integer "42"` returns `42` |
 | `base` | Zero / base value for a type | `base Integer` returns `0` |
 | `refine` | Build a refinement of a base type | `class {count:0}` |
-| `make` | Construct typed value or instance | `make Point [1 2]` |
+| `make` | Construct typed value or instance. `Store` and `Error` are deliberately not `make` targets (NUR018): Stores are minted by the context machinery, Errors by `raise` — `make` on either is a coded `unsupported` error | `make Point [1 2]` |
 | `gen` | Declare type parameters for the next constructor | `def Box gen [T] class {value:T}` |
 | `of` | Instantiate a generic schema | `Box of [Integer]` |
 | `extends` | Bound a parameter inside a `gen` entry | `gen [(T extends Number)]` |

@@ -386,7 +386,11 @@ constants) **iff** one of these holds:
    `Resource`, `Store`, `Error`, and the `Scalar/Micron`
    structured-scalar family (`Micron`, `Pathon`, `Emailon`,
    `Urlon` — micron.go owns their Ideal, Behavior, and the
-   `-on` naming rule).
+   `-on` naming rule). This grouping is about **kernel
+   residence**, not `make`-constructibility: `Store` and
+   `Error` are deliberately not `make` targets (NUR018) —
+   Stores are minted by the context machinery and Errors by
+   `raise`.
 
 Everything else — domain types like `Date`, `DateTime`,
 `CalDuration`, `Matrix`, `Timeout`, `Interval`,

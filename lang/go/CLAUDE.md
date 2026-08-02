@@ -87,7 +87,10 @@ Language-agnostic content stays at the top of each component:
   `await`/`cancel` → `boru:time-util` (`TimeUtil.`); `tpartial` → `boru:type-util`
   (`TypeUtil.`); `folder` → `boru:io`; and the derived boolean connectives
   `nand`/`nor`/`xnor`/`iff`/`implies` → `boru:logic-util` (`LogicUtil.`).
-  All moved words are no longer available unqualified.
+  All moved words are no longer available unqualified. (`slice` is NOT
+  a string-family straggler: it is a core *sequence* word polymorphic
+  over String/List/Bytes, kin of `size`/`take`/`reverse`, which stay
+  core for the same reason — NUR019.)
 - `test/` — integration tests and TSV spec runners.
 
 ## ADRs — only on explicit instruction
