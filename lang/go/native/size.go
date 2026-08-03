@@ -1,5 +1,7 @@
 package native
 
+import "github.com/boru-lang/boru/eng/go"
+
 // The "size" word is registered via the consolidated Natives slice in
 // natives.go. It reports the natural size of any value through the
 // kernel's Sizer behaviour — see eng.SizeOf for the per-type rules.
@@ -23,6 +25,15 @@ func sizeReturns(args []Value, _ *Registry) []Value {
 	}
 	v := args[0]
 	if !IsConcrete(v) {
+		return carrier
+	}
+	// The fold below assumes SizeOf answers with the PHYSICAL element
+	// count — true only when the Sizer that owns the dispatch is the
+	// kernel family node's. A user type in the chain (a refinement with
+	// `behave size` installed) answers with its own body, so folding
+	// the container length would make the checker model a size the
+	// runtime never reports (and prune loops that actually run).
+	if owner := eng.SizeOwner(v.Parent); owner != nil && owner.Origin != eng.OriginBuiltin {
 		return carrier
 	}
 	switch {

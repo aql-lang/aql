@@ -247,6 +247,16 @@ func deqKeyAtDepth(v Value, depth int) (string, DeqKeyClass) {
 		return "", DeqUnkeyed
 	}
 
+	// A type that installed the DeepEqualer capability answers pairwise
+	// for values DeepEqual would otherwise reject at its terminal arm —
+	// so those values are scannable, not never-equal. Without this arm
+	// the index diverges from DeepEqual: Add files the value nowhere,
+	// FirstMatch answers -1, and `unique` keeps what `deq` calls a
+	// duplicate. deqFam gives the same values a per-owner scan family.
+	if DeepEqualerOwner(ValueType(v)) != nil {
+		return "", DeqUnkeyed
+	}
+
 	// DeepEqual's unsupported fall-through — code values (functions,
 	// words) and uncompared host payloads: deq-equal to nothing.
 	return "", DeqNeverEqual
@@ -285,6 +295,17 @@ func deqFam(v Value) string {
 	// per-kind split keeps the scan tight.
 	if k := handleKind(v); k != "" {
 		return "H:" + k
+	}
+	// Capability-carrying values scan within the family of the OWNING
+	// node — the nearest ancestor implementing DeepEqualer. Sound and
+	// tight: DeepEqual consults the capability via the LCA walk, and two
+	// values whose nearest owners differ have an LCA strictly above
+	// both, where no DeepEqualer exists — so they can never match and
+	// need never share a scan family. Without a family here the
+	// DeqUnkeyed classification above is inert (Add files unkeyed
+	// entries by family; FirstMatch scans allByFam only).
+	if owner := DeepEqualerOwner(ValueType(v)); owner != nil {
+		return "DE:" + owner.ID
 	}
 	return ""
 }

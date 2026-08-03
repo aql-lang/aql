@@ -54,8 +54,21 @@ func TestW4FormatMinimalEntry(t *testing.T) {
 
 // --- FormatDynamic ----------------------------------------------------------
 
+// w4Sig builds an ALL-FORWARD signature: BarrierPos == len(args) is what
+// a forward-eligible word actually carries. The zero value would mean
+// BarrierPos 0 — stack-only — which no forward word has, and pairing that
+// with `ForwardArgs: true` describes a word that cannot exist (the flag is
+// DERIVED from the signatures via FnDefInfo.HasForwardSigs). Keeping the
+// fixture coherent matters now that the renderer reads the barrier per
+// signature rather than trusting the flag.
 func w4Sig(args []string, rets []string) SigInfo {
-	return SigInfo{Args: args, Returns: rets}
+	return SigInfo{Args: args, Returns: rets, BarrierPos: len(args)}
+}
+
+// w4SigStack builds a stack-only signature (BarrierPos 0), the shape a
+// word like `dup` carries.
+func w4SigStack(args []string, rets []string) SigInfo {
+	return SigInfo{Args: args, Returns: rets, BarrierPos: 0}
 }
 
 func TestW4FormatDynamicForwardNonCommutative(t *testing.T) {
@@ -89,7 +102,7 @@ func TestW4FormatDynamicStackOnly(t *testing.T) {
 	info := FuncInfo{
 		Name:        "w4-stacky",
 		ForwardArgs: false,
-		Sigs:        []SigInfo{w4Sig([]string{"Integer", "Integer"}, []string{"Integer"})},
+		Sigs:        []SigInfo{w4SigStack([]string{"Integer", "Integer"}, []string{"Integer"})},
 	}
 	out := FormatDynamic(info)
 	if !strings.Contains(out, "Precedence: stack") {
@@ -191,8 +204,12 @@ func TestW4FormatDynamicWideSigClamped(t *testing.T) {
 	if !strings.Contains(out, "w4-wide x y z") {
 		t.Errorf("expected clamped 3-var precedence example:\n%s", out)
 	}
-	// Stack-only wide word takes the clamped stack rendering path.
+	// Stack-only wide word takes the clamped stack rendering path. The
+	// signatures flip with the flag: a stack-only word carries BarrierPos 0.
 	info.ForwardArgs = false
+	info.Sigs = []SigInfo{w4SigStack(
+		[]string{"Integer", "Integer", "Integer", "Integer"},
+		[]string{"Integer"})}
 	out = FormatDynamic(info)
 	if !strings.Contains(out, "z y x w4-wide") {
 		t.Errorf("expected clamped stack precedence example:\n%s", out)

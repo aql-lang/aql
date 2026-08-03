@@ -240,14 +240,30 @@ def iv (flex [1]) typeof (push iv []).0	List	plain-list push snapshots a flex el
 def iv (flex [1]) typeof (unshift iv []).0	List	plain-list unshift snapshots too
 
 # ====================================================================
-# 12. del — in-place key deletion on FlexMap (copy-returning on Map)
+# 12. del — removal across every container `set` writes
 # ====================================================================
-# `del key node` completes the storage column rule `set` established:
-# a FlexMap deletes IN PLACE and returns the node (aliases observe the
-# removal); an immutable Map returns a NEW map without the key. A
-# missing key is a no-op in both forms. Keys are strings or atoms;
-# computed keys via parens. No List form: element removal stays with
-# the list words (pop / shift / ArrayUtil.remove-at).
+# `del key container` completes the storage column rule `set`
+# established, and dispatches over EXACTLY the containers `set` does
+# (NUR022). Each one either removes the slot or says why it will not:
+#
+#   Map                    copy-returning — a NEW map without the key
+#   FlexMap / WeakFlexMap  in place, returns the node (aliases observe)
+#   FlexXml / WeakFlexXml  removes an ATTRIBUTE, the slot set writes
+#   Store                  copy-on-write, via a tombstone layer
+#   Class                  refused — a declared field is sealed
+#   Micron                 refused — immutable, like set's form
+#   List / FlexList /      refused — index removal SHIFTS the tail, so
+#     WeakFlexList         it is not set's inverse; pop / shift /
+#                          ArrayUtil.remove-at do that
+#
+# The refusals are registered signatures, not sig-absence, so each
+# raises its own message instead of an opaque dispatch failure. A
+# missing key is a no-op wherever removal is supported. Keys are
+# strings or atoms; computed keys via parens.
+#
+# `del` is NOT `set key none`: an absent key and a key bound to none
+# are distinguishable (`has`, `size`, `keys`, and container `eq` all
+# tell them apart), so the two writes produce different containers.
 
 def f (flex {a:1 b:2}) (f del "a")	(flex {b:2})	FlexMap del removes the key in place
 def f (flex {a:1 b:2}) ((f del "a") eq f)	true	…and returns the receiver node itself
@@ -260,6 +276,45 @@ def k "b" (flex {a:1 b:2}) del (k)	(flex {a:1})	computed key via parens
 def m {a:1 b:2} (m del "a") drop m	{a:1 b:2}	…and leaves the receiver untouched
 {a:1} del zz	{a:1}	Map del of a missing key: unchanged copy
 del "a" 5	ERROR:signature	scalars have no del
-del "a" [1 2]	ERROR:signature	no List form — use pop/shift/ArrayUtil.remove-at
-del "a" (flex [1 2])	ERROR:signature	no FlexList form either
+del "a" [1 2]	ERROR:signature	a list is indexed, not keyed — a String key matches no sig
+del "a" (flex [1 2])	ERROR:signature	same for a FlexList
 del 0 {a:1}	ERROR:signature	an integer key is not a map key
+
+# --- WeakFlexMap: in place, like FlexMap (the weak payload needs its own
+# --- handler, not because deletion differs but because AsMutableMap
+# --- refuses the payload by design)
+def w (make WeakFlexMap {a:1 b:2}) (w del "a")	(make WeakFlexMap {b:2})	WeakFlexMap del removes the key in place
+def w (make WeakFlexMap {a:1 b:2}) ((w del "a") eq w)	true	…and returns the receiver node
+def w (make WeakFlexMap {a:1}) ((w del "zz") eq w)	true	missing key: no-op
+def w (make WeakFlexMap {a:1 b:2}) (w del a) size	1	atom keys quote here too
+
+# --- FlexXml / WeakFlexXml: del removes an ATTRIBUTE — the slot set writes
+def x (flex <a b='1' c='2'/>) (x del "b")	<a c="2"/>	FlexXml del removes the attribute
+def x (flex <a b='1'>hi</a>) (x del "b")	<a>hi</a>	children are untouched — they are not attributes
+def x (flex <a b='1'/>) ((x del "zz") eq x)	true	missing attribute: no-op, same node back
+def x (flex <a/>) ((x del "zz") eq x)	true	no attributes at all: still a no-op
+def x (flex <a b='1' c='2'/>) def w (make WeakFlexXml x) (w del "b")	(make WeakFlexXml <a c="2"/>)	weakness does not change attribute deletion
+
+# --- Store: copy-on-write, mirroring set's Store form (no stack result)
+context set 'k' 7 end context del 'k' end context has 'k'	false	Store del removes the binding
+context set 'k' 7 end context del 'k' end context get 'k'	ERROR:unknown key	…and the strict reader misses, as for a key never set
+context del 'zz' end context has 'zz'	false	deleting an unbound key is a no-op
+context set 'k' 1 end context del 'k' end context set 'k' 2 end context get 'k'	2	a set after a del re-binds in the same layer
+# The layer-local half — a tombstone hides an INHERITED key without touching
+# the layer that owns it — needs a scope-pushing word, and every one of those
+# is a code-body word the compiler refuses, so it cannot live in this corpus.
+# eng/go/store_tombstone_test.go covers it directly.
+
+# --- refusals: each names its own reason rather than failing opaquely
+def P (class {n:Integer}) def p (make P {n:1}) (p del "n")	ERROR:sealed	a declared class field cannot be removed
+(make Pathon "/x") del "kind"	ERROR:immutable	Micron del mirrors set's immutability refusal
+[1 2] del 0	ERROR:cannot remove an element	index removal shifts the tail — not set's inverse
+(flex [1 2]) del 0	ERROR:cannot remove an element	same for a FlexList
+(make WeakFlexList [1 2]) del 0	ERROR:cannot remove an element	…and a WeakFlexList
+
+# --- del is not `set key none`: the absent/present-none distinction is real
+{a:1 b:2} del b	{a:1}	del removes the key
+{a:1 b:2} set b none	{a:1 b:none}	set none KEEPS the key, bound to none
+({a:1 b:2} del b) eq ({a:1 b:2} set b none)	false	so the two writes differ
+({a:1} has b) eq ({a:1 b:none} has b)	false	`has` is what tells them apart
+{a:1 b:none} size	2	…and so does size — a none-bound key is a key

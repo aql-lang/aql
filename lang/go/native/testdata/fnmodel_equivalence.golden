@@ -171,10 +171,25 @@ WORD default
   [Any Type/GenParam] barrier=1 runcheck returns=[Type/GenParam]
   [Any Type] barrier=1 runcheck typearg={1} returns=[Type/GenParam]
 WORD del
+  [Scalar/String Ideal/Class] barrier=2 +returnsfn
+  [Scalar/String Ideal/Store] barrier=2 +returnsfn
+  [Scalar/String Node/Xml/FlexXml/WeakFlexXml] barrier=2 returns=[Node/Xml/FlexXml/WeakFlexXml]
+  [Scalar/String Node/Xml/FlexXml] barrier=2 returns=[Node/Xml/FlexXml]
+  [Scalar/String Node/Map/FlexMap/WeakFlexMap] barrier=2 returns=[Node/Map/FlexMap/WeakFlexMap] +returnsfn
   [Scalar/String Node/Map/FlexMap] barrier=2 returns=[Node/Map/FlexMap] +returnsfn
   [Scalar/String Node/Map] barrier=2 returns=[Node/Map] +returnsfn
+  [Scalar/String Scalar/Micron] barrier=2 +returnsfn
+  [Scalar/Number/Integer Node/List/FlexList/WeakFlexList] barrier=2 +returnsfn
+  [Scalar/Number/Integer Node/List/FlexList] barrier=2 +returnsfn
+  [Scalar/Number/Integer Node/List] barrier=2 +returnsfn
+  [Scalar/Atom Ideal/Class] barrier=2 quote={0} +returnsfn
+  [Scalar/Atom Ideal/Store] barrier=2 quote={0} +returnsfn
+  [Scalar/Atom Node/Xml/FlexXml/WeakFlexXml] barrier=2 quote={0} returns=[Node/Xml/FlexXml/WeakFlexXml]
+  [Scalar/Atom Node/Xml/FlexXml] barrier=2 quote={0} returns=[Node/Xml/FlexXml]
+  [Scalar/Atom Node/Map/FlexMap/WeakFlexMap] barrier=2 quote={0} returns=[Node/Map/FlexMap/WeakFlexMap] +returnsfn
   [Scalar/Atom Node/Map/FlexMap] barrier=2 quote={0} returns=[Node/Map/FlexMap] +returnsfn
   [Scalar/Atom Node/Map] barrier=2 quote={0} returns=[Node/Map] +returnsfn
+  [Scalar/Atom Scalar/Micron] barrier=2 quote={0} +returnsfn
 WORD depth
   [] barrier=0 fullstack
 WORD deq
