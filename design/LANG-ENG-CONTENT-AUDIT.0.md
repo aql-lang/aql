@@ -8,7 +8,8 @@
 > `design/NUR-RESOLUTION-PLAN.0.md`) — per the standing rule, no ADR
 > entry is written until the maintainer explicitly instructs it.
 >
-> Surfaced NURs: [NUR057](../NUR.md#nur057), [NUR058](../NUR.md#nur058).
+> Surfaced NURs: [NUR057](../NUR.md#nur057), [NUR058](../NUR.md#nur058),
+> [NUR059](../NUR.md#nur059), [NUR060](../NUR.md#nur060).
 
 ## 0. The boundary principle (maintainer direction, 2026-08-03)
 
@@ -254,12 +255,148 @@ address. Staged:
   fixes the `nor`/`xnor` module-load assumption and the `print`
   effect predicate (route through the effects machinery instead of a
   name).
+- **Stage 6 — parser type-name opacity** (§6): the parser stops
+  resolving capitalised names; one canonical engine resolver takes
+  over everywhere. Independent of stages 2-5 and can run earlier;
+  listed last only because it needs its own spec re-pinning round.
 
-Stages 0-1 need no ADR. Stages 2-5 change residence/ownership and
-should land under the ADR this document feeds (candidate 2), on
-maintainer instruction.
+Stages 0-1 need no ADR. Stages 2-6 change residence/ownership or
+pinned language semantics and should land under the ADR this document
+feeds (candidate 2), on maintainer instruction.
 
-## 6. Constraints on every stage
+## 6. Parser type-name opacity (maintainer direction, 2026-08-03)
+
+> **The parser must have no dependency on eng's type inventory:
+> capitalised type names are returned by the parser as opaque tokens,
+> exactly as word names are, and the engine resolves them late.**
+
+Today the parser resolves capitalised names in ONE production site —
+`parseWord` (`eng/go/parser/parse.go:1444-1601`), reached from both
+word context and data context — via a package-level alias of the
+builtin name table (`parse.go:17`) plus `eng.ResolveTypePath` for
+slash paths (`parse.go:1555-1560`). (A second site,
+`resolveTextValue` `parse.go:1249`, is production-dead — test-only
+callers.)
+
+### 6.1 The directive's model already half-operates — by accident
+
+`eng.refreshTypeNames` (`eng/go/types.go:128-130`, called from
+`RegisterType`) REBINDS eng's map var; the parser's `var typeNames =
+eng.TypeNameTable()` captured the map at parser package init and goes
+stale. So every type registered after parser init — `Bytes`, the Time
+family, `Timeout`/`Interval`, Matrix, plugins — already parses as a
+plain Word and resolves late in the engine. Verified live:
+
+```
+boru do 'quote [Date Integer Bytes]'   →  [word(Date) Integer word(Bytes)]
+boru do 'typeof Date'                  →  Time
+```
+
+Three resolution regimes coexist: init-frozen kernel builtins
+(parse-time literal), late-registered globals (Word, engine-late),
+user types (Word, engine-late). Parse output depends on package-init
+order — and the `refreshTypeNames` doc comment ("so freshly-installed
+types are immediately resolvable … in the parser") is false in
+production. Recorded as **NUR059**. The directive ELIMINATES the
+split rather than introducing late resolution.
+
+### 6.2 The engine already owns the late cascade
+
+`stepWord` resolves a capitalised Word by priority: registry type
+binding (`TopTypeBody`, `engine.go:2771-2791` — how user `def Foo`
+types work), then live builtin table + type path
+(`engine.go:2927-2934`). The plan-time forward scan mirrors it
+(`engine.go:8361-8419`), as do the compile emitter
+(`emit.go:4856-4880`, "mirror stepWord's type-name cascade exactly"),
+guards (`guard_predicate.go:109-131`), and fn-sig parsing
+(`fn_params.go` is fully name-based: `ResolveSigType`,
+`lookupTypeNameInRegistry`). Auto-evaluated lists and map values run
+sub-engines through `stepWord`, so evaluated data positions resolve
+too. Consequently these contexts need NO new logic: top-level words,
+evaluated list elements, map values, fn-sig params and returns, case
+arms, `is`/`typeof` operands.
+
+### 6.3 The genuine gaps (what stage 6 must build)
+
+The sites with no late pass, or with divergent partial cascades —
+each is a per-site re-implementation of the same lookup, which is
+itself the non-uniformity:
+
+| Gap | Today | Fix |
+|---|---|---|
+| `def x:Integer 5` typed-name annotation | the `{x:T}` map is `NoEvalMapArgs`-raw and `ResolveTypedNameValue` (`registry.go:2379-2389`) is registry-ONLY → `def_error` for builtins-as-Words (user types already work) | canonical resolver (below) |
+| Typed-container children `[:T]` / `{:T}` | `ChildTypeInfo.Child` has NO general resolver — and this is ALREADY BROKEN for user types: `[x] is [:Foo]` → silent false, `def xs:[:Foo]` errors; only parser-eager builtins, gen placeholders, and predicate types work (**NUR060**, unpinned by any spec row) | resolve `Child` at consumption via the canonical resolver — fixes user types too |
+| `{a?:T}` optional fields | parser builds the `(T tor None tor Absent)` disjunct and runs `SimplifyDisjunctAlts` AT PARSE TIME (`parse.go:909-918`) — parse-time lattice reasoning; a Word alt never resolves (`ResolveWordsDeep` has no Disjunct descent) | move construction + simplification engine-side |
+| `quote Integer` / Atom-`/q` capture | the forward scan claims a Word for a `/q` slot BEFORE the type fallback (`engine.go:8306-8319` vs `:8402`), so `quote Integer` → Atom and `inspect Integer` degrades (`inspectAtomHandler` is registry-only) | `/q` consumers of type names gain the builtin arm (the `native_process.go:491-508` template) |
+| `ResolveWordValue` (unify prepass, `core_helpers.go:2294-2311`) | builtin-table ONLY — no registry arm, no path arm; becomes the busiest resolver post-change | route through the canonical resolver |
+
+**The canonical resolver** is the stage's actual deliverable: ONE eng
+function — Defs/`TopTypeBody` (user & shadowing) → live builtin table
+→ type path — that `stepWord`, the plan scan, `ResolveWordValue`,
+`ResolveTypedNameValue`, `ResolveFieldType`, child-type resolution,
+and every `/q` consumer route through. This is the type-name analog
+of stage 5's word-role table: the engine resolves; the parser is
+name-blind. `InstallType`'s existing conflicts-with-existing-name
+guard keeps builtins non-shadowable (and `def Integer 5` starts
+failing with the PROPER error instead of a `signature_error`).
+
+### 6.4 The semantic decision to make explicitly
+
+Quoted containers are inert data — never auto-evaluated — so after
+the change `quote [String Float]` holds `[word(String) word(Float)]`,
+exactly as `quote [Foo Date]` already does today. The
+"retain their meaning inside quotations" guarantee
+(`parse.go:1553-1556`) becomes consumption-time rather than
+parse-time: the meaning survives wherever the quotation is executed
+or passed to a name-aware consumer (verified: `do (quote [Foo])`,
+sig parsing, case, unify), but render/`eq`/ordering of quotations-as-
+data change. This is the uniform semantics (builtins behave like
+every other type name) and is taken as intended by the directive; it
+must be stated in REFERENCE.md and re-pinned.
+
+Token choice: the opaque token is a plain **Word in both contexts** —
+NOT an Atom. `ParseFnParams` reserves the atom-in-type-slot space for
+`/q` keyword params (`fn_params.go:101-110,182-200`); Atom emission
+would collide with it.
+
+### 6.5 Blast radius (measured)
+
+~3,414 of 9,671 spec inputs mention a builtin type name, but most
+recover through the existing engine passes. The hard core: 3 rows pin
+`quote <TypeName>` (`eng/spec/types.tsv:116-118`), ~60-70 rows change
+behaviour (quoted containers, typed-container children, `{a?:T}`),
+and ~245 expected-column strings pin container renders that flip
+`Integer` → `word(Integer)` wherever resolution lands after
+rendering. Also in scope: the check-accuracy ratchet
+(`pinnedFalsePositives=0` over all 7,264 lang/spec rows — every
+data-context name the resolver misses is a new false positive), ~20
+parser test functions pinning `NewTypeLiteral` output, `genhelp`
+generated artifacts, and — critically — the **TypeScript engine**:
+`eng/ts/src/spec-fixture.ts:1853-1859` eagerly resolves type names
+"mirroring the parser's TypeNameTable lookup" and the cross-engine
+differential gate (`test/go/engspec/crossdiff_test.go`) hard-fails
+value divergence, so the TS side must change in lockstep.
+
+### 6.6 What this buys toward "parser has no dep on eng"
+
+The parser references 57 distinct eng symbols (~265 uses). Stage 6
+removes the type-CONTENT class: `TypeNameTable`, `ResolveTypePath`,
+the `NewTypeLiteral` resolution sites, `SimplifyDisjunctAlts` +
+`TNone`/`TAbsent`/`NewDisjunct` (with the `{a?:T}` move), and the
+semantic half of the `ChildEntry` constructors. What remains is
+mechanism vocabulary: ~20 neutral value constructors (`Value`,
+`NewWord`, `NewString`, `BoruError`, …) and ~25 engine-marker
+constructors (`NewEnd`, `NewParenExpr`, `NewReach`, `NewSplice`,
+`NewInterpString`, the XML family) — the parser's OUTPUT TYPE is
+`[]eng.Value`, so it speaks the engine's token vocabulary by
+construction. That is consistent with §0.1 (the vocabulary is
+mechanics, not content). Full extraction — a neutral AST plus an
+eng-side conversion layer — would sever even that, but it must be
+designed against the Single-Pass Parsing rule (eng/go/CLAUDE.md): the
+conversion layer must BE the single walk, not a second pass. Deferred
+as open question 4.
+
+## 7. Constraints on every stage
 
 - **FixedIDs are wire-stable** — moves preserve path + ID; the gate is
   `lang/go/test/fixedid_stability_test.go` (its own home moves with
@@ -273,7 +410,7 @@ maintainer instruction.
   (`kg/project/boru-project.jsonic`) gain the new component when it is
   created.
 
-## 7. Open questions
+## 8. Open questions
 
 1. Component name: `types/go` vs `scalar/go` vs folding into a future
    stdlib component. (`types` clashes with nothing today; `-util`
@@ -285,6 +422,12 @@ maintainer instruction.
    vocabulary, `iso4217.go`, `core_xml.go`, and the `-on` naming rule
    fail the mechanism test but are deeply wired into `make`/refine;
    scope and sequence separately.
-4. Whether `eng/go/parser` is itself content: proposal — it stays in
-   eng as the reference front end, but its emitted names route through
-   the stage-5 table so a second language can supply its own grammar.
+4. Whether `eng/go/parser` is itself content: partially answered by
+   §6 — after stage 6 the parser carries zero type-inventory
+   knowledge and only mechanism vocabulary; its emitted WORD names
+   route through the stage-5 table. The remaining question is full
+   extraction (neutral AST + eng-side converter, §6.6), deferred: it
+   must be designed against the Single-Pass Parsing rule, and the XML
+   literal matcher builds finished eng Values inside the lexer
+   (`xml_literal.go:16-19`), so extraction re-plumbs that pipeline
+   too.
