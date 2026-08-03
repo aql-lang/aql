@@ -444,6 +444,11 @@ reviewed individually. A new ADR describing ownership of the kernel
 type hierarchy is required before the migration lands (recorded as ADR
 candidate 2 in the resolution plan). This record stays Pending until
 that remediation (or a narrower argued verdict) closes it.
+**ADR-012 (2026-08-03) retargets the remediation's destination:** the
+ownership rule is recorded, but the migrations consolidate in the new
+`types/go` component with capability opt-ins (the refinement-base
+capability closes this record), not in eng — the kernel stays
+content-free.
 
 ---
 

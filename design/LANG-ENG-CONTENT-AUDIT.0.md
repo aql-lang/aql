@@ -3,10 +3,10 @@
 > **Status:** Working design note. Records the 2026-08-03 full audit of
 > `lang/go` content that is structurally load-bearing for the `eng/go`
 > kernel, the maintainer's boundary principle, and the proposal that
-> answers it. This document is the source material for **ADR candidate
-> 2** ("Ownership of the global Node/Scalar hierarchy",
-> `design/NUR-RESOLUTION-PLAN.0.md`) — per the standing rule, no ADR
-> entry is written until the maintainer explicitly instructs it.
+> answers it. This document was the source material for **ADR-012**
+> ("The kernel is mechanism"), recorded 2026-08-03 on maintainer
+> approval — it discharges ADR candidate 2 of
+> `design/NUR-RESOLUTION-PLAN.0.md`.
 >
 > Surfaced NURs: [NUR057](../NUR.md#nur057), [NUR058](../NUR.md#nur058),
 > [NUR059](../NUR.md#nur059), [NUR060](../NUR.md#nur060).
