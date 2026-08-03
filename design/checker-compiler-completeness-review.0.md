@@ -223,3 +223,102 @@ Open items, most-significant first:
   bodies only for now" — captures compile today);
   `interp_entry.go` lists a `vm:shaped-method` bail site that no longer
   exists.
+
+## 8. Recommendations — the path to full compilation
+
+### 8.1 Restore the parity contract first (P0)
+
+1. **Refuse the chained forward-apply window.** In the fn-unit finish,
+   count the pending dynamic applies in the residual window: more than
+   one fn-typed local/event awaiting application — or any apply whose
+   consumer is itself inside the window (the `f (g x)` nesting) —
+   must `MarkUncompilable`, exactly as the `apply`-word spelling
+   already does (emit.go:3392). Pin both spellings side by side, with
+   the `def r (g x) f r` split as the keeps-compiling control, and add
+   ledgered frontier rows so the later graduation is measured.
+2. **Screen lambda-callback admission by quote polarity.**
+   `tryRecordLambdaClosure` must decline a lambda whose param pattern
+   is quote-typed (`Atom`, the `/q` family) unless the interpreter's
+   own application rule would fire — cheapest is to consult the same
+   predicate the interpreter uses (the `sigTypeMatches` single-funnel
+   precedent). Pin the literal-vs-computed collection pair.
+3. **Widen the property fuzzer's generator axes.** Both defects lived
+   in generator blind spots: it spells apply/usurp and closures, but
+   not *chained* fn-param application inside fn bodies, nor quote-typed
+   lambda params over computed collections. Add axes: apply spelling
+   (forward vs `apply` vs `/r`), apply depth (1–3), lambda param
+   polarity, collection provenance (literal / computed / gradual).
+   This is the highest-leverage single change — every divergence this
+   review and the miscompile hunt found was off-corpus, and the
+   differential gates are blind by construction to shapes the
+   generator cannot spell.
+4. **Name the diagnostic in the `check diagnostics` refusal.**
+   `CompileCheck` holds the diagnostics list at the refusal site
+   (boru.go:466); format the first code+position into the reason. It is
+   the only refusal string that currently names nothing.
+
+### 8.2 Convert the HOF refusals into capability (P1, by leverage ÷ risk)
+
+1. **Stage G proper — general dynamic apply inside fn units.** The one
+   mechanism that natively compiles `compose`, mid-body applies, and
+   curried chains: route the fn-unit body residual through
+   `resolveDynamicApply` (today wired only into the program-residual
+   `Finalize`) and extend `trailingApply` to accept a
+   `resolveOperand`-able fn (event OR frame local), lowering chained
+   applies to consecutive `OpCallDynamic`s in token order. This also
+   retires the §8.1(1) refusal. Known two-coordinated-lowering-changes
+   project (`boru-bytecode-next-stages.0.md`); high soundness risk —
+   land it *behind* the §8.1(3) fuzzer widening.
+2. **Full-stack words** — an event-producing lowering
+   (`OpDepth`/`OpPick`/`OpRoll` minting runtime provenance), per the
+   survey's ranking: the only class that adds capability rather than
+   relaxing a soundness gate.
+3. **Multi-overload user fn over gradual-Any with differing arm
+   returns** — record the join of the arms' returns and dispatch via
+   the existing `OpCallUserPoly` re-match; census before/after, since
+   the dynamic output may re-refuse downstream. The `Atom/q`-slot
+   variant falls out if the re-match window learns to bind quoted
+   values.
+4. **Container-fn auto-dispatch** — a member-read op carrying the
+   interpreter's own 0-arg-satisfiable auto-invoke rule.
+5. **The ledgered families** (NUR038 twin value-calls, NUR031
+   `$module` provenance, L-DO variadic regions, namespace capture) —
+   ledger-first, one mechanism per family.
+6. **`do…error` island arity** — lift the single-output island model
+   with the existing mark/variadic-region machinery
+   (`OpStackMark`/`OpDropToMark`) so a handler netting no value
+   threads correctly.
+
+### 8.3 Define the finish line honestly (P2)
+
+Literal 100% is not the target and should not be: compile-time words
+execute during check by design, the step-budget metering divergence is
+deliberate, and the designed-keeps exist because compiling them would
+change meaning. Recommend stating the finish line as: (a) **zero
+divergences** — differential + fuzzer green over a generator that can
+spell every language construct; (b) every runtime-reachable construct
+either **compiles natively or carries a designed-keep entry** with
+rationale (the REFUSAL-CLOSURE audit format), driving the 27 open
+raise-sites to zero *open*; (c) every refusal **loud and
+self-explanatory**. Under that definition, Stage G kills the
+fn-value-in-body cluster, branch/loop residual modeling kills the
+unknown-provenance tails, and the recovery/poly funnels go last.
+
+### 8.4 Checker (parallel track)
+
+1. **NUR049** — check `error [handler]` bodies in the plain pass
+   (unify with the compile-mode seeded run).
+2. **One diagnostic surface for both passes** — no diagnostic should
+   exist that `CompileCheck` can see and `check -json` cannot.
+3. **Any-frontier headroom** — spend the 0.37 points deliberately:
+   precision work on the top feeders (module-io, module-sift) or an
+   argued ceiling bump, before a corpus batch trips the gate.
+4. **In-body mirrors** — bounded concrete re-analysis at monomorphic
+   all-concrete call sites, mirrors-only, so the dynamic-help FP class
+   that killed concrete-example-arg analysis stays dead.
+
+### 8.5 Docs
+
+Refresh or header-annotate the stale status docs (§7) and fix the two
+stale code comments. Cheap, and they actively mislead — this review
+initially chased the "19 refusals / informational ratchets" claim.
