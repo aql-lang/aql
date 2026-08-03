@@ -107,11 +107,17 @@ func insufficientArgsDetail(name string, expected int) string {
 // forwardParensSuggestion is the shared "group the call in parens" fix
 // for a forward-collecting word starved by the next word — raised both
 // by the interpreter's sigError and the registry's 0-arg fallback.
+// The caveat sentence keeps the fix honest for barrier-receiver words
+// (`dot` and the accessor family): a paren group seals the enclosing
+// stack, so a word whose receiver slot reads from the stack may never
+// match inside one (NUR049) — the sequential spelling is the fallback.
 func forwardParensSuggestion(name string) string {
 	return "forward args for " + name +
 		" may have run into the next word; group the call in parens so its " +
 		"RESULT becomes the argument — (" + name + " …). `end` / `;` only ends " +
-		"the statement — it does NOT turn a following word into a nested call."
+		"the statement — it does NOT turn a following word into a nested call. " +
+		"If " + name + " reads a value from the enclosing stack (a paren seals " +
+		"the stack off), run it first and use its result in sequence instead."
 }
 
 // describeSuggestion points a dispatch failure at the word's full

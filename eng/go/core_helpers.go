@@ -1291,6 +1291,25 @@ func planUserPolyDispatch(r *Registry, es EmitRecorder, word string, args []Valu
 	return plan, true
 }
 
+// quoteParamCarrierBind reports whether a matched user-fn signature binds a
+// COMPUTED (carrier) argument to an Atom-typed or /q param. Quote capture is
+// forward-only: at the runtime pointer such a slot binds only a bare Word
+// collected forward — a delivered stack value never matches (`def f fn
+// [[k:Atom] [Atom] [k]] f 'meta'` raises no_signature on every engine).
+// Check-mode matching is looser (a strict Atom carrier satisfies the slot),
+// so a closure-unit compile that admits the bind records an application the
+// runtime rejects. Consulted only inside closure-unit compilation — the one
+// scope where the mismatch produced a compile≠interpret divergence.
+func quoteParamCarrierBind(sigParams []FnParam, args []Value) bool {
+	for i, p := range sigParams {
+		if (p.Quote || (p.Type != nil && p.Type.ConformsTo(TAtom))) &&
+			i < len(args) && args[i].Carrier {
+			return true
+		}
+	}
+	return false
+}
+
 func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*Value, len(s.Params))
@@ -1390,6 +1409,23 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		fnUnit := -1
 		var finishFn func([]Value)
 		polyPlan, polyBarred := planUserPolyDispatch(r, es, nameCopy, args, declaredReturns)
+		// A /q (quote-capture) param binds only a bare Word collected forward
+		// at the runtime pointer — a plain stack value never matches it
+		// (`def f fn [[k:Atom] [Atom] [k]] f 'meta'` raises no_signature on
+		// every engine). Check-mode matching is looser: a STRICT Atom-typed
+		// carrier (a lambda callback's element input) satisfies the slot, so
+		// a closure-body probe records an application the runtime rejects —
+		// compiled `each [[k:Atom] => […]] (keys m)` APPLIED the lambda where
+		// the interpreter leaves it data (checker-compiler-completeness-review
+		// §2.2). Latch the probe uncompilable: the closure admission declines,
+		// the word's Stage-2 refusal stands, and the interpreter's own rule
+		// owns the program. Outside closure units every probed /q arrival
+		// already models faithfully (top-level no-match parity, the dynamic-
+		// carrier recovery refusal), so the guard stays scoped.
+		if emitES, isES := es.(*EmitState); isES && emitES.inClosureUnit() &&
+			quoteParamCarrierBind(sigParams, args) {
+			emitES.MarkUncompilable("fn " + nameCopy + ": Atom-typed param bound to a computed value in a closure body (quote capture is forward-only)")
+		}
 		// A FOREIGN-registry fn whose body constructs a fn value USED to
 		// refuse wholesale (the compiled unit executed against the
 		// dispatching registry, losing module scope for the constructed
@@ -1693,10 +1729,13 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				es.RecordUserCall(fnUnit, args, out, pos)
 			} else if polyPlan != nil {
 				// Ambiguous multi-overload dispatch with every arm baked: record
-				// the runtime-re-matched poly call (OpCallUserPoly). The out
-				// carriers are the committed sig's declared returns — identical
-				// across arms by the poly gate, so downstream typing is sound
-				// whichever arm the VM selects.
+				// the runtime-re-matched poly call (OpCallUserPoly). Positions
+				// where the arms' declared returns AGREE keep the committed
+				// sig's carriers; positions where they DIFFER take the plan's
+				// return-join carrier (§8.2(3) — the runtime value is whichever
+				// arm the VM selects, a branch join), so downstream typing never
+				// rides one arm's unproven commitment.
+				polyPlan.substituteJoinedOuts(out)
 				pos := SrcPos{}
 				if len(args) > 0 {
 					pos = args[0].Pos()

@@ -29,6 +29,16 @@
       metadata: { repository: "boru-lang/boru" }
     }
     {
+      id: "src:completeness-review"
+      kind: "text"
+      locator: "design/checker-compiler-completeness-review.0.md"
+      title: "Type checker + bytecode compiler — completeness review"
+      retrieved_at: null
+      content_hash: "completeness-review-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
       id: "src:cli-md"
       kind: "text"
       locator: "CLI.md"
@@ -84,6 +94,8 @@
     { key: "vault-wire", type: "Concept", label: "vault wire protocol"
       attributes: { role: "read-only, HashiCorp-style HTTP API for secret provision (boru vault serve), authenticated by capability tokens" } }
     { key: "design-notes", type: "Document", label: "design/ notes" }
+    { key: "completeness-review", type: "Document", label: "design/checker-compiler-completeness-review.0.md"
+      attributes: { role: "the 2026-08 checker/compiler completeness review and its §9 implementation record — the living index of the HOF-compilation graduations and the remaining frontier work" } }
     { key: "org", type: "Organization", label: "boru-lang" }
   ]
   assertions: [
@@ -257,5 +269,10 @@
       evidence: [{ source: "src:readme", locator: "Repository layout",
         quote: "Internal design notes and proposals." }]
       confidence: 0.9 }
+    { subject: "completeness-review", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:completeness-review", locator: "title",
+        quote: "Type checker + bytecode compiler — completeness review" }]
+      confidence: 0.95 }
   ]
 }

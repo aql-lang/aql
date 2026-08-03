@@ -126,7 +126,16 @@ the interpreter then owns the whole program:
   compile time, emits nothing; a residual that depends on its *runtime* error
   (a check-mode-suppressed error) also refuses.
 - **Context-dependent word** — `args` / `__pa` (no per-call args stack in a VM
-  frame), `FullStack` words.
+  frame). `FullStack` words (depth/pick/roll) GRADUATED for provably-exact
+  stacks (2026-08-03, `EmitState.FoldFullStack`): the dispatch folds
+  statically — depth's count bakes as a concrete const, pick re-pushes the
+  picked entry, roll re-seats the true permutation — and ELIDES (no opcode,
+  no event). The exactness gate is the soundness argument: top frame of the
+  top unit, no open mark window, every stack entry a known operand home with
+  no variadic producer, concrete in-range `n`. Anything else declines to the
+  historical refusal. Pinned by `eng/go/fold_fullstack_test.go` +
+  corpus-core rows; the remaining event-permutation sub-frontier is
+  ledgered in `frontier-full-stack.tsv`.
 - **Fn-INVOKING word** — `apply` of a non-re-stepped value, `is` over a
   predicate fn: their handlers re-step the fn on the tape, which the VM cannot
   honour. (Fn-INTROSPECTION words are exempt — they only read the value.) A
@@ -169,7 +178,37 @@ the interpreter then owns the whole program:
   what still refuses here is the MID-BODY shape — an event recorded after
   the apply window's producer (`[nd (m get "k") print "after"]`), whose
   effects a RET-time replay would reorder — pinned by
-  `TestEdgeFindingDynamicFnValueApplyBodyTail` (§6, edge findings).
+  `TestEdgeFindingDynamicFnValueApplyBodyTail` (§6, edge findings) — and
+  the **CHAINED forward apply over a MULTI-ARG inner group** (`f (g x y)`):
+  the replay window may hold at most ONE applicable value
+  (`noteDynFrameReplay`'s `replayApplicables == 1` arm, 2026-08-02 — the
+  flat re-push loses the inner group's collapse, so a two-applicable
+  window compiled the RET count error where the interpreter applies both
+  fns). The ONE-ARG chain graduated 2026-08-03 (the Stage-G single-arg
+  increment): `(g x)` with `g` a named param/capture collapses to a
+  `RecordDynApply` event at the paren — one-arg leading and trailing
+  collection converge inside a sealed named frame, at every runtime arity
+  — so `compose`, `twice`, and mid-body `(g x) add 100` compile NATIVELY
+  (`EmitState.DynApplyLeadEligible` gates the admission; rows in
+  `lang/spec/fn-value.tsv` §8). The def-split spelling
+  (`def r (f x) f r`) graduated the same day: `checkModeParenFnCollapse`
+  killed its checker false positive on the plain surface, and
+  `replayIsBodyTail`'s `windowReadsID` arm (a dyn-bind of a value the
+  window reads is not a reorderable event) armed its body tail — both
+  spellings now compile natively (completeness-review §9.8). Pinned by
+  `TestChainedForwardApplyCompiles` / `TestMultiArgChainedApplyRefuses` /
+  `TestTailProofNegatives`; only the sel1 control remains in
+  `frontier-chained-apply.tsv`; graduation of the rest = Stage G proper.
+- **Quote-typed lambda callback** — a lambda whose param is Atom-typed (a
+  /q quote-capture slot, `fn_params.go`) admitted as a HOF callback over a
+  COMPUTED collection: the runtime never binds a delivered stack value to
+  a /q slot, so the interpreter leaves the lambda as DATA where the
+  compiled callback APPLIED it (`each [[k:Atom] => […]] (keys m)` —
+  compiled `signature_error` vs interpreted `[fn (Atom)]`). Screened at
+  BOTH admissions (2026-08-02): `lambdaHookCompatible`'s quote arm
+  (lambda-value bodies) and `quoteParamCarrierBind` at the user-fn
+  dispatch record (token bodies, closure units only). Pinned by
+  `TestQuoteLambdaCallbackParity` + `eng/go/quote_lambda_screen_test.go`.
 
 The **branch-join narrow-preservation** rule (§2) removed a former
 over-refusal here — an enclosing local read inside both `if` arms and

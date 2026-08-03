@@ -590,6 +590,109 @@ func genInterpProg(r *rand.Rand) *gnode {
 	return &gnode{op: "interpprog", kids: kids}
 }
 
+// genHofProg — the higher-order / fn-value AXES the review's two live
+// divergences lived in (checker-compiler-completeness-review.0.md §8.1(3)),
+// none of which the prior families could spell:
+//
+//   - apply SPELLING: the forward call `f (g x)`, the `apply` word over a
+//     `/r` reference, and the def-split `def r (f x) f r`;
+//   - apply DEPTH: 1–3 chained applications of Function-typed params;
+//   - lambda param POLARITY: value-typed (Integer) vs quote-typed (Atom —
+//     a /q capture slot the runtime never binds from a delivered value);
+//   - collection PROVENANCE for a HOF callback: literal list, computed
+//     (a filter result / `keys`), gradual (laundered through an [Any] fn).
+//
+// Many of these shapes REFUSE compilation by design — the oracle skips a
+// refusal (comp=false), so the gate is exactly the contract: whatever
+// COMPILES must agree with the interpreter. The compose miscompile and the
+// Atom-lambda callback divergence both COMPILED wrongly; either would have
+// been caught at seed time had this family existed.
+func genHofProg(r *rand.Rand) *gnode {
+	n := &gnode{op: "hofprog", cat: cInt, n: r.Intn(5)}
+	// Three shared Integer literals parameterise every variant (and give the
+	// shrinker something to reduce).
+	for i := 0; i < 3; i++ {
+		n.kids = append(n.kids, &gnode{op: "lit", cat: cInt, n: 1 + r.Intn(5)})
+	}
+	switch n.n {
+	case 0: // chained forward apply, depth 1-3
+		n.cmp = []string{"d1", "d2", "d3"}[r.Intn(3)]
+	case 1: // apply-word spelling, single or double window
+		n.cmp = []string{"one", "two"}[r.Intn(2)]
+	case 2: // def-split spelling
+		n.cmp = "split"
+	case 3: // HOF callback: param polarity x collection provenance
+		n.cmp = []string{"int", "atom"}[r.Intn(2)] +
+			"-" + []string{"lit", "computed", "gradual"}[r.Intn(3)]
+	default: // factory / curried chain, single or double apply
+		n.cmp = []string{"c1", "c2"}[r.Intn(2)]
+	}
+	return n
+}
+
+// renderHofProg renders genHofProg's variants. Every program is closed (no
+// free names) and Integer-resulting where it succeeds; error outcomes are
+// fine — the oracle compares taxonomy.
+func renderHofProg(n *gnode) string {
+	k1, k2, k3 := fmt.Sprint(n.kids[0].n), fmt.Sprint(n.kids[1].n), fmt.Sprint(n.kids[2].n)
+	lamAdd := "([za:Integer] => [za add " + k1 + "])"
+	lamMul := "([zb:Integer] => [zb mul " + k2 + "])"
+	switch n.n {
+	case 0:
+		body := "f x"
+		switch n.cmp {
+		case "d2":
+			body = "f (g x)"
+		case "d3":
+			body = "f (g (f x))"
+		}
+		return "def zh fn [[f:Function g:Function x:Integer] [Integer] [" + body + "]] zh " +
+			lamAdd + " " + lamMul + " " + k3
+	case 1:
+		if n.cmp == "two" {
+			return "def zh fn [[c1:Function c2:Function v:Integer] [Integer] [v c1/r apply c2/r apply]] zh (" +
+				lamAdd + "/r) (" + lamMul + "/r) " + k3
+		}
+		return "def zh fn [[c1:Function v:Integer] [Integer] [v c1/r apply]] zh (" + lamAdd + "/r) " + k3
+	case 2:
+		return "def zh fn [[f:Function x:Integer] [Integer] [def zr (f x) f zr]] zh " + lamAdd + " " + k3
+	case 3:
+		pol, prov, _ := strings.Cut(n.cmp, "-")
+		var lam, coll string
+		if pol == "atom" {
+			lam = "[[zk:Atom] => [zk]]"
+			switch prov {
+			case "lit":
+				coll = "['a' 'b']"
+			case "computed":
+				coll = "(keys {a:" + k1 + " b:" + k2 + "})"
+			default:
+				coll = "(zid (keys {a:" + k1 + "}))"
+			}
+		} else {
+			lam = "[[zk:Integer] => [zk add " + k1 + "]]"
+			switch prov {
+			case "lit":
+				coll = "[" + k1 + " " + k2 + " " + k3 + "]"
+			case "computed":
+				coll = "(filter [gt 0] [" + k1 + " " + k2 + " " + k3 + "])"
+			default:
+				coll = "(zid [" + k1 + " " + k2 + "])"
+			}
+		}
+		if prov == "gradual" {
+			return "def zid fn [[zx:Any] [Any] [zx]] each " + lam + " " + coll
+		}
+		return "each " + lam + " " + coll
+	default:
+		if n.cmp == "c2" {
+			return "def zmk fn [[zx:Integer] [Function] [([zy:Integer] => [([zz:Integer] => [zx add zy add zz])])]] (((zmk " +
+				k1 + ") " + k2 + ") " + k3 + ")"
+		}
+		return "def zmk fn [[zx:Integer] [Function] [([zy:Integer] => [zx add zy])]] ((zmk " + k1 + ") " + k2 + ")"
+	}
+}
+
 // renderFnDef renders a fn VALUE: a named-fn `(fn [[params][Integer][body]])` or
 // an afn lambda `([params] => [body])`. The body is already rendered in the
 // param scope.
@@ -706,7 +809,7 @@ func sleaf(r *rand.Rand, c cat) *gnode {
 }
 
 func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
-	switch r.Intn(13) {
+	switch r.Intn(14) {
 	case 0:
 		return genArrProg(r), nil
 	case 1:
@@ -725,6 +828,8 @@ func genProgram(r *rand.Rand, depth int) (*gnode, []string) {
 		return genGradualAnyProg(r), nil // gradual-Any boundary (miscompile classes C & D)
 	case 8:
 		return genInterpProg(r), nil // template strings → OpInterp
+	case 9:
+		return genHofProg(r), nil // HOF/fn-value axes (apply spelling/depth, quote polarity, collection provenance)
 	}
 	scope := []string{}
 	var stmts []*gnode
@@ -1015,6 +1120,8 @@ func render(n *gnode, scope []string) string {
 			n.cmp + " n)]]] (f0 " + fmt.Sprint(n.n) + " " + init + ")"
 	case "catchlit", "catchprog", "anyprog", "interpprog":
 		return renderProgOp(n, scope)
+	case "hofprog":
+		return renderHofProg(n)
 	case "def":
 		return "def v" + fmt.Sprint(n.n) + " " + render(n.kids[0], scope)
 	case "seq":

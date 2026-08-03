@@ -86,19 +86,21 @@ app state, because the default arm captured the event instead of dispatching.
 
 ### G10 — `def why (dot message)` in an `error` handler never works  ·  *latent-bug (shipped code)*
 
-> **Status: the failure still reproduces, but the diagnosis below did
-> not survive. Registered as [NUR049](../NUR.md#nur049).** The
-> 2026-07-31 verdict was FIX by making the paren barrier symmetric; the
-> 2026-08-02 investigation retracted its premise — the group is already
-> sealed dynamically, in every probed context, so there is no backward
-> reach to close. What remains is (a) the failure is not STATIC:
-> `error` handler bodies are wholly unchecked, so `boru check` reports
-> nothing, and (b) the engine's own diagnostics
-> (`strandedForwardError`, `forwardParensSuggestion`) recommend the
-> broken parenthesised spelling. Repairs still owed: both shipped
-> examples — `todo-tui-client.boru` and
-> `design/examples/todo/audit.boru:29` (`err: (dot code)`) — plus a
-> test that forces a sync failure so the error arms actually run.
+> **Status: RESOLVED (NUR049 retired 2026-08-03).** The failure is now
+> STATIC: `error` handler bodies are checked on the plain pass
+> (`errorReturnsFn`'s seeded body run, un-gated from the compile pass),
+> so the sealed-group idiom flags `no_signature` at `boru check` time
+> and a handler typo flags `undefined_word`
+> (`lang/go/check_error_handler_test.go`). The engine's suggestions no
+> longer recommend only the dead spelling — `strandedForwardError`
+> offers the sequential form for barrier-receiver boundary words and
+> `forwardParensSuggestion` carries the sealed-stack caveat
+> (`eng/go/barrier_receiver_hint_test.go`). Both shipped examples are
+> repaired: `todo-tui-client.boru`'s four arms use
+> `dot message def why end …`, and `todo/audit.boru` binds the code
+> sequentially and re-raises via `convert Map raise` (its `record` sink
+> is now 0-return — the old `[None] [ None ]` spelling netted two
+> values per arm).
 
 ```
 do [ … ] error [ def why (dot message)  … ]     # → dot: no receiver
@@ -299,7 +301,7 @@ and `design/NUR-RESOLUTION-PLAN.0.md`).
 |---|---|---|---|
 | G8  | recovered-raise binding teardown | engine-bug? | **no longer reproduces** (fixed by unrelated work) |
 | G12 | `/r` fn ≠ `Function` param | engine-bug? | **FIXED** (NUR050 resolved 2026-07-31 — /r collection admission + the ADR-011 one-Function-type collapse) |
-| G10 | `def why (dot message)` in `error` | latent-bug | reproduces → **NUR049**: premise narrowed 2026-08-02 (no backward reach; the group is already sealed). Open: staticize the unchecked handler body, fix the diagnostics that suggest it, repair `todo-tui-client.boru` + `todo/audit.boru:29`, add a failing-sync test |
+| G10 | `def why (dot message)` in `error` | latent-bug | **FIXED** (NUR049 resolved 2026-08-03 — handler bodies checked on the plain pass, suggestions offer the sequential form, both shipped examples repaired) |
 | G9  | `case` default slot collection | sharp-edge | **FIXED** (NUR048 resolved 2026-07-31 — open-call default runs isolated like a matched arm) |
 | G11 | returned list literal laziness | sharp-edge | **no longer reproduces** (fixed by unrelated work) |
 | G13a| single-token bare-map body | compiler-limit | **no longer reproduces** (single-token now compiles) |
@@ -343,9 +345,9 @@ Exposure today: a fork must (1) touch a value of a behave'd type in a
 capability position and (2) race the parent or a sibling doing the
 same. No spec row does; the single-goroutine path is unaffected.
 
-The one live item (G10 → NUR049) carries a verdict-bearing NUR
-record; a per-item fix retires its record — as G9 (NUR048), G12
-(NUR050) and G13b (NUR051) now demonstrate. The two dead engine items (G8, G11) and
+No live items remain: G10 (NUR049) resolved 2026-08-03, joining G9
+(NUR048), G12 (NUR050) and G13b (NUR051) — each per-item fix retired
+its record. The two dead engine items (G8, G11) and
 the dead compiler item (G13a) were fixed by unrelated work — which the
 register only noticed on re-verification, the cost of the original
 umbrella entry.

@@ -2,6 +2,62 @@
 Full classification of all 71 MarkUncompilable / refusal raise-sites.
 5 subsumed | 23 designed-keep | 16 defensive-only | 27 open.
 
+## Completeness-review landings update (2026-08-03, PR #327)
+
+The checker-compiler-completeness-review implementation
+(design/checker-compiler-completeness-review.0.md §9) landed the named
+mechanism — fully or for a bounded first shape — at SIX of the open
+sites. Evidence is the flipped/held pins in the suites; every graduation
+went through the full gate chain (census 7253 rows, 6872/6872 compilable
+rows native, 0 refusals, 0 islands, differential green).
+
+- **`core_helpers.go:1032`-family (gradual-Any multi-overload) — the §6
+  join mechanism LANDED** (review §9.11): "type the call residual as the
+  dynamic join of the arms' returns" is exactly `userPolyPlan.outs` +
+  `recordCallElided`'s poly-alias arm. Differing-declared-returns arm
+  sets now compile via OpCallUserPoly (frontier-poly-join rows graduated
+  to fn-value.tsv §9; the strict-disjunct twin flipped in
+  TestProbeWideningUnionReturnPoly). The site remains reachable for the
+  residual-carrying-arm declines (unitNetsZero and siblings) — the
+  narrowed §6 residual-typing tail, ledgered with the count-mismatch
+  negative in bytecode_poly_join_test.go.
+- **`emit.go:3124` (mid-body dynamic apply) — the Stage-G paren-collapse
+  LANDED the one-arg leading shape** (review §9.6b): `(g x) add 100`
+  compiles natively (TestChainedForwardApplyCompiles). The site remains
+  for the `apply`-word mid-body spelling (fnValueM2Refusal pins hold).
+- **`emit.go:3157` (unapplied fn-value in fn-body residual) — the
+  fn-body dynamic-apply lowering LANDED for the convergent shapes**:
+  compose / twice / depth-3 chains / both def-split spellings compile
+  (§9.6b/§9.8 — the paren-collapse + the replayIsBodyTail windowReadsID
+  arm). The site remains for the CHAINED MULTI-ARG apply (`f (g x y)`,
+  TestMultiArgChainedApplyRefuses) — the spellings' collection orders
+  diverge beyond one argument, so the remaining shape needs the
+  token-order OpCallDynamic chain, not the convergence argument.
+- **`engine.go:6959` (leading paren-bounded fn-value apply) —
+  RecordDynApply extended to the leading case LANDED for the eligible
+  leads** (DynApplyLeadEligible: a Function-typed param/capture slot of
+  an open named-param fn unit). The site remains for event-provenance
+  and non-member dynamic leads, where the probe evidence (§9.6b) shows
+  the convergence argument does NOT hold — those keep their machinery.
+- **The full-stack refusal family — FoldFullStack LANDED** (review
+  §9.6a): depth/pick/roll over provably-exact stacks elide statically;
+  the family's remaining reachable shapes are ledgered
+  (frontier-full-stack.tsv: the event-permuting roll, the closure-unit
+  occurrence).
+- **The zero-netting `error` handler (post-audit site,
+  native_control.go) — the §8.2(6) proven-raise increment LANDED**
+  (review §9.13): a strict-Error do-result fixes the arity at zero and
+  the dispatch records a 0-output call (stripResidualShapeOK want-0).
+  The maybe-raising variable-arity twin keeps the refusal
+  (frontier-do-error-arity.tsv).
+
+Adjudication note (review §9.14): the open set's residual entries all
+retain a NAMED future mechanism and a pinned reachable fixture — under
+the review's §8.3 finish line (zero divergences; every construct native
+or adjudicated; every refusal loud and self-explanatory) the audit is
+CURRENT and no site is un-adjudicated. The three finish-line clauses
+hold on the 2026-08-03 tree.
+
 ## Probe-sweep + landings update (2026-07-17, feat/refusal-closure-tail)
 
 A 6-agent worktree-isolated probe sweep re-tested every open site (plus the

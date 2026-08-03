@@ -49,9 +49,11 @@ type InterpEntry struct {
 type BailEvent struct {
 	// Site names the defer site class: "vm:poly-no-match",
 	// "vm:poly-nout-drift", "vm:user-poly-unresolved", "vm:user-poly-drift",
-	// "vm:user-poly-no-match", "vm:shaped-method",
-	// "vm:shaped-method-not-appliable", "vm:dyn-scope-miss",
-	// "vm:dyn-scope-dispatching", "vm:dyn-scope-active-token",
+	// "vm:user-poly-no-match", "vm:rematch-matched",
+	// "vm:shaped-method-not-appliable", "vm:splice-active-payload",
+	// "vm:dyn-scope-miss", "vm:dyn-scope-dispatching",
+	// "vm:dyn-scope-active-token", "vm:dyn-scope-data-miss",
+	// "vm:dyn-scope-data-class", "vm:dyn-scope-data-active-token",
 	// "vm:dyn-frame-replay".
 	Site string
 	// Reason is the defer's message text (what vmErrAt wraps).

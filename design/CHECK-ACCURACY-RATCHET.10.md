@@ -94,4 +94,23 @@ INFORMATIONAL ONLY (reported via t.Logf; the RATIO is gated below). was 195 — 
 
 ### Ratio ceiling history
 
+**HOLD decision 2026-08-03 (completeness-review §8.4.3 close).** Measured
+375/6039 ≈ 6.2%, headroom ≈ 0.8pt — roughly double the 0.37pt the August
+completeness review flagged, because the corpus has since grown mostly
+PRECISE rows (the HOF/chained-apply graduations land concrete-integer
+results) while the frontier count grew slowly. The top feeders
+(module-io 48, module-sift 37) were re-probed and remain the
+INHERENTLY-dynamic category this history already adjudicated: Sift.parse's
+kind→family→shape resolution is a runtime catalog lookup (and the
+declared-disjunct experiment below verified a `(Map tor List)` return does
+not narrow the descend-into-body analysis), IO.trace is a value
+pass-through, and the IO stat/read family's returns are fs-state-dependent.
+Narrowing any of them without the kind→shape front risks the
+type-soundness ratchet (pinnedTypeSoundnessViolations = 0) for zero honest
+precision. DECISION: the ceiling HOLDS at 7; the named next front stays
+"check-mode kind→shape resolution for Sift.parse" (lower the ceiling when
+it lands); revisit the hold if a measured run reports the ratio above
+6.5% — that margin, not a corpus batch, is the tripwire the review asked
+to manage deliberately.
+
 was 6 — boru:sift landed as a pure-boru core module with a DYNAMIC parse surface: Sift.parse / detect / spec / check are boru export fns the checker DESCENDS into, and the kind→family→shape resolution is a runtime catalog lookup, so a parse result is dynamic(Any) and every value row reading INTO it via dot/get is inherently Any — the same category as the parselang `parse json → get → Any` rows already counted here (a declared `(Map tor List)` return does NOT help: the descend-into-body analysis keeps the residual dynamic(Any), verified empirically). The 38 new module-sift.tsv frontier rows lift the GLOBAL ratio 253/5047 ≈ 5.0% → 327/5416 ≈ 6.0% — ordinary corpus growth from a parse-dense module, NOT a systemic precision regression (no fix widened results across the board; TestCheckAccuracyRatchet false positives held at 0 and TestCheckTypeSoundness held). Restoring the pre-July-2026 ceiling re-establishes ~1.0pt headroom; the ceiling tracks the achievable floor, which rose because the corpus gained inherently-dynamic parse surface. Lower it again when a check-mode kind→shape resolution front narrows Sift.parse. was 7 — measured 253/5047 ≈ 5.0% July 2026 after the Error-field-read narrowing (errorFieldReturns: a literal-key read off an Error carrier narrows `code`→Atom∪None / `message`→String instead of dynamic(Any), clearing the direct bound-error reads `e dot code` / `e.message`; the `error [handler]` catch form stays Any — its return joins the handler residual with the do pass-through value, so Any dominates — and payload-key reads stay Any, both inherent), +1.0pt headroom. Prior: was 8 — measured 195/3306 ≈ 5.9% July 2026 after Phase-4.2 store-identity context typing (StoreShapeInfo carriers for context/flex/patrun; frontier 220 → 195), +1.1pt headroom. Prior: was 12 — measured 220/3306 ≈ 6.7% July 2026 after the Phase-4.3 G7 return-annotation sweep (declared-Any DSL parser returns shaped/folded: minilang re/gex, parselang pure-source folds, StructUtil, Vm reports, make-record schemas; frontier 381 → 220), +1.3pt headroom; measured 345/3050 ≈ 11.3% June 2026 (pre-review baseline was 354/3045 ≈ 11.6%), +0.7pt headroom

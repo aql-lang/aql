@@ -3643,6 +3643,17 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			}
 			preserved := e.resolvedStackBeforeFrom(base, sortedIndices)
 			results := match.Sig.checkFullStackFn()(match.Args, preserved, e.registry)
+			// Compile pass: a full-stack word over a provably-exact stack
+			// folds statically — the dispatch elides and the fold's outputs
+			// carry known provenance (EmitState.FoldFullStack), so
+			// depth/pick/roll compile instead of dying at Finalize as
+			// residuals of unknown provenance. A declined fold keeps the
+			// twin's carrier results and the historical refusal path.
+			if es, isES := e.registry.Check.Recorder().(*EmitState); isES {
+				if folded, ok := es.FoldFullStack(name, match.Args, preserved); ok {
+					results = folded
+				}
+			}
 			e.tape.Splice(base, end+1-base, results...)
 			e.pointer = base
 			return nil
@@ -6852,8 +6863,40 @@ func (e *Engine) strandedForwardError(boundary string) *BoruError {
 			"a function word is a barrier and never feeds forward collection (strict rule); "+
 			"group the call in parens so its RESULT becomes the argument: %s (%s …)",
 		fwd.FuncName, missing, boundary, fwd.FuncName, boundary)
+	// A boundary word with a stack-barrier slot (`dot` and the accessor
+	// family: the receiver sits beyond BarrierPos, readable only from the
+	// ENCLOSING stack) may not work grouped — a paren seals the stack the
+	// barrier slot must reach (NUR049: `def why (dot message)` starves every
+	// candidate where the sequential form works). Offer the sequential
+	// spelling alongside, so the help never names only a dead form.
+	if e.barrierReceiverWord(boundary) {
+		detail += fmt.Sprintf(
+			"; note `%s` reads its receiver from the enclosing stack, which a paren "+
+				"group seals off — if the grouped form cannot match, run it first and "+
+				"bind its result in sequence instead: %s … %s",
+			boundary, boundary, fwd.FuncName)
+	}
 	return makeBoruErrorAt("signature_error", detail, fwd.FuncName,
 		e.effectiveSource(), "", fwd.Pos)
+}
+
+// barrierReceiverWord reports whether any registered signature of word
+// reads a slot from the enclosing stack (BarrierPos < TotalArgs). For such
+// a word the "group the call in parens" fix can starve the barrier slot —
+// the paren seals the enclosing stack (NUR049) — so suggestions offer the
+// sequential spelling too.
+func (e *Engine) barrierReceiverWord(name string) bool {
+	fd := e.registry.Lookup(name)
+	if fd == nil {
+		return false
+	}
+	for i := range fd.Signatures {
+		s := &fd.Signatures[i]
+		if s.BarrierPos >= 0 && s.BarrierPos < s.TotalArgs() {
+			return true
+		}
+	}
+	return false
 }
 
 // noteSpeculativeBarrierCommit emits the speculative_forward_commit
@@ -7498,6 +7541,142 @@ func (e *Engine) recordParenLeadingApply(es EmitRecorder, first, openIdx, closeI
 	return closeIdx
 }
 
+// parenLeadFnApplyIdx classifies the Stage-G LEADING one-arg fn-carrier
+// apply window — `(g x)` where g is a Function-typed param/capture slot of
+// an open NAMED-PARAM fn unit (checker-compiler-completeness-review
+// §8.2(1)/§9.6b): inside such a unit the paren seals the frame off, so the
+// one-arg leading and trailing spellings CONVERGE for EVERY runtime fn (a
+// mismatched arity no-matches identically in both), and the shape may
+// record through the SAME RecordDynApply event `(x g)` would. Returns the
+// lead's tape index only when the window is exactly [eligible lead, one
+// non-fn argument]; -1 keeps every other shape on its own machinery: a
+// DYNAMIC lead recordParenLeadingApply's guarded method path, a CONCRETE
+// fn the auto-dispatch paths (it applied for real during the check step),
+// an EVENT lead the curried paths (DynApplyLeadEligible declines it —
+// RecordDynApply would hard-refuse), an unnamed-param frame the
+// whole-frame replay (its leading collection can reach beneath the
+// window), and a multi-arg lead (count > 2) is never collapsed — beyond
+// one argument the spellings' collection orders diverge — so a bare
+// multi-arg body tail rides the single-applicable whole-frame replay
+// while a CHAINED one (`f (g x y)`) refuses on the two-applicable window.
+func (e *Engine) parenLeadFnApplyIdx(es EmitRecorder, openIdx, closeIdx, count, lastIdx int) int {
+	if count != 2 {
+		return -1
+	}
+	last := e.tape.At(lastIdx)
+	if last.Dynamic || isFnValueResidual(last) {
+		return -1
+	}
+	for i := openIdx + 1; i < closeIdx; i++ {
+		v := e.tape.At(i)
+		if isRecordableLiteral(v) {
+			if !v.Dynamic && !v.Quoted && isFnTypedCarrier(v) && es.DynApplyLeadEligible(v) {
+				return i
+			}
+			break
+		}
+	}
+	return -1
+}
+
+// checkModeParenFnCollapse collapses a fn-CARRIER apply window on the PLAIN
+// check surface — the recorder is inactive or suspended (a construction-time
+// AnalyseFnBody, a bare `check` run), so nothing records; the tape model
+// simply nets what the interpreter nets. Two shapes, mirroring the compile
+// pass's RecordDynApply admissions exactly so the two surfaces report the
+// same diagnostics (completeness-review §8.4.2):
+//
+//   - TRAILING carrier apply `(a b comp)` — the runtime applies comp over
+//     the whole window (the comparator convention), netting ONE value;
+//   - LEADING one-arg carrier apply `(g x)` — the arity where leading and
+//     trailing collection converge (§9.6b), netting ONE value or raising
+//     identically in both spellings.
+//
+// The window collapses to ONE dynamic(Any) carrier — the honest gradual
+// model of "some single runtime result". Without this the un-collapsed
+// [carrier, arg] residual nets TWO values and stalls a pending `def`'s
+// collection, flagging `undefined_word` on the def-bound name in a program
+// that runs clean — the §9.4 def-split FALSE POSITIVE (the check_run_fp
+// +74 class). A CONCRETE fn value in either position is untouched: the
+// check step dispatches it for real. A Dynamic lead keeps the
+// tryDynamicFnValueDispatch path. Multi-arg leading windows stay
+// un-collapsed (the spellings' collection orders diverge beyond one
+// argument — same edge as the compile side). Returns the possibly-shrunk
+// closeIdx.
+func (e *Engine) checkModeParenFnCollapse(openIdx, closeIdx int) int {
+	if !e.registry.Check.Mode {
+		return closeIdx
+	}
+	count, lastIdx, leadIdx := 0, -1, -1
+	for i := openIdx + 1; i < closeIdx; i++ {
+		v := e.tape.At(i)
+		if !isRecordableLiteral(v) {
+			continue
+		}
+		if count == 0 && !v.Dynamic && !v.Quoted && isFnTypedCarrier(v) {
+			leadIdx = i
+		}
+		count++
+		lastIdx = i
+	}
+	if count < 2 {
+		return closeIdx
+	}
+	last := e.tape.At(lastIdx)
+	trailing := !last.Dynamic && !last.Quoted && isFnTypedCarrier(last)
+	leading := leadIdx >= 0 && count == 2 && !last.Dynamic && !isFnValueResidual(last)
+	if !trailing && !leading {
+		return closeIdx
+	}
+	anchor := lastIdx
+	if leading {
+		anchor = leadIdx
+	}
+	out := NewCarrier(TAny)
+	out.Dynamic = true
+	out.ID = GenerateID(IDPrefixForType(TAny))
+	out.pos = e.tape.At(anchor).pos
+	// Seat the collapsed carrier at the window's first recordable literal
+	// and splice every later one out.
+	seat := -1
+	for i := openIdx + 1; i < closeIdx; i++ {
+		if isRecordableLiteral(e.tape.At(i)) {
+			seat = i
+			break
+		}
+	}
+	e.tape.Set(seat, out)
+	for i := closeIdx - 1; i > seat; i-- {
+		if isRecordableLiteral(e.tape.At(i)) {
+			e.tape.Remove(i)
+			closeIdx--
+		}
+	}
+	return closeIdx
+}
+
+// recordParenLeadFnApply records the classified [lead, arg] window
+// (parenLeadFnApplyIdx) as the trailing spelling's RecordDynApply event —
+// the compiled artifact is literally `(x g)`'s, so parity holds by
+// construction — substituting the event's out carrier for the lead and
+// splicing the argument out. This is what compiles compose natively: the
+// inner `(g x)` becomes an event, and the outer `f <event>` rides the
+// single-applicable RetReplay body tail. On a decline the window is left
+// intact for the downstream machinery (sound refusal-or-replay). Returns
+// the possibly-shrunk closeIdx.
+func (e *Engine) recordParenLeadFnApply(es EmitRecorder, leadFn, lastIdx, closeIdx int) int {
+	lead := e.tape.At(leadFn)
+	out := NewCarrier(TAny)
+	out.ID = GenerateID(IDPrefixForType(TAny))
+	out.pos = lead.pos
+	if es.RecordDynApply([]Value{e.tape.At(lastIdx)}, lead, out, lead.Pos()) {
+		e.tape.Set(leadFn, out)
+		e.tape.Remove(lastIdx)
+		closeIdx--
+	}
+	return closeIdx
+}
+
 func (e *Engine) stepCloseParen() error {
 	closeIdx := e.pointer
 
@@ -7725,6 +7904,7 @@ func (e *Engine) stepCloseParen() error {
 				lastIdx = i
 			}
 		}
+		leadFn := e.parenLeadFnApplyIdx(es, openIdx, closeIdx, count, lastIdx)
 		// Classify the paren's fn-value-call boundary. The TRAILING case is checked
 		// FIRST: when the LAST value is a concrete Function applied to the preceding
 		// args, it is the sound paren-bounded apply (`(prev key comp)`, or
@@ -7769,11 +7949,25 @@ func (e *Engine) stepCloseParen() error {
 			} else {
 				es.RegisterTrailingApply(last.ID, count-1)
 			}
+		case leadFn >= 0:
+			// LEADING one-arg fn-carrier apply (the Stage-G increment) —
+			// classified by parenLeadFnApplyIdx, recorded by
+			// recordParenLeadFnApply (both extracted for the stepCloseParen
+			// complexity cap).
+			closeIdx = e.recordParenLeadFnApply(es, leadFn, lastIdx, closeIdx)
 		case first >= 0 && count >= 2:
 			// LEADING dynamic apply (REFUSAL-CLOSURE §9.2e) — extracted to
 			// recordParenLeadingApply for the stepCloseParen complexity cap.
 			closeIdx = e.recordParenLeadingApply(es, first, openIdx, closeIdx)
 		}
+	} else {
+		// PLAIN check surface (no active recorder — a bare `check` run, or a
+		// construction-time AnalyseFnBody under a suspended compile pass):
+		// collapse a fn-carrier apply window to the ONE dynamic value the
+		// interpreter nets — checkModeParenFnCollapse (the §9.4 def-split
+		// FP fix; it guards on check mode itself and was extracted for the
+		// stepCloseParen complexity cap).
+		closeIdx = e.checkModeParenFnCollapse(openIdx, closeIdx)
 	}
 
 	// Remove the close paren (higher index first) and open paren.
@@ -9056,6 +9250,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		if es := e.registry.Check.Recorder(); es.active() {
 			sw := sigOrderArgs(args, nStack)
 			if plan := tryCompileUserPolyArms(e.registry, es, w.Name, sw, sig.Returns); plan != nil {
+				plan.substituteJoinedOuts(out)
 				es.RecordUserPolyCall(w.Name, e.registry, plan.sigIdx, plan.units, plan.impls, plan.sigs, sw, out, pos)
 				e.spliceCheckResults(positions, out)
 				return nil

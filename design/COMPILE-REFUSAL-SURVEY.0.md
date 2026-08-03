@@ -87,6 +87,17 @@ word's result has no producing event the compiler can address. A
 signature-matching opcode has nothing to contribute; what this needs is a
 lowering that models the word's output as an event with provenance.
 
+> **GRADUATED (2026-08-03)** for provably-exact stacks:
+> `EmitState.FoldFullStack` statically folds the dispatch — depth bakes
+> the count as a concrete const, pick re-pushes the picked entry
+> (event targets promoted to value-def locals), roll re-seats the true
+> permutation — no opcode, no event, the elision IS the lowering. Rows
+> in `lang/spec/corpus-core.tsv`; the remaining sub-frontier (a roll
+> permuting two EVENT results — beyond the Stage-1 residual ordering)
+> is ledgered in `frontier-full-stack.tsv`. Inexact contexts (variadic
+> regions, dynamic n, nested frames, out-of-range n) keep the sound
+> refusal.
+
 ### 3b. Multi-overload user fn whose arms declare different returns
 
 ```
@@ -112,6 +123,15 @@ negative, and it modifies the return-typing model that produced two defects
 in `verse-report-defects-investigation.0.md` (C's arity widening, F's
 dropped return pattern).
 
+> **GRADUATED 2026-08-03** (completeness-review §9.11): the join landed —
+> `userPolyPlan.outs` records a dynamic carrier at the arms' common
+> ancestor, `userPolyArmShapeOK` relaxed to count + nil-ness agreement,
+> and the first-match-partition widening now PRESERVES the recorded
+> identity (that orphaning, not the join itself, was the real blocker).
+> Both shapes above compile natively; the risk note held — no
+> previously-compiling row regressed. Arms with differing return COUNTS
+> keep the refusal (`bytecode_poly_join_test.go`).
+
 ### 3c. Multi-overload user fn with a quoted (`Atom/q`) param slot
 
 ```
@@ -122,6 +142,13 @@ g (id 5)
 
 Same gate, different clause: "the runtime window re-match binds plain
 values only".
+
+> **GRADUATED (measured 2026-08-03):** this class now COMPILES — the
+> `a:Atom` + `a:Integer` twin over `(id 5)` runs natively, pinned as
+> the control row in `lang/spec/frontier/frontier-poly-join.tsv`. §3a,
+> §3b and §3d remain live and are now ledgered
+> (`frontier-full-stack.tsv`, `frontier-poly-join.tsv`,
+> `frontier-do-error-arity.tsv`) so their graduations are measured.
 
 ### 3d. `do […] error […]` + a trailing expression
 
