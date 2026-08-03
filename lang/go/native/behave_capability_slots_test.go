@@ -268,3 +268,68 @@ behave nope/q (fn [[T] [Boolean] [true]])`)
 		t.Errorf("the error echoes the bad name into the known list: %s", msg)
 	}
 }
+
+// TestBehaveSizeDoesNotSwallowTheWalk pins the regression the PR #325
+// review surfaced: the wrapper satisfies eng.Sizer structurally whether
+// or not a size body was installed, and Sizer has no decline channel —
+// so installing ANY slot must not change `size` for a type that never
+// installed one. Before the fix, `behave canon` alone turned an Integer
+// refine's size from the magnitude rule into 0.
+func TestBehaveSizeDoesNotSwallowTheWalk(t *testing.T) {
+	v := bcTop(t, `
+def Level (refine Integer)
+behave canon/q (fn [[Level] [String] ["L"]])
+def x:Level 7
+size x`)
+	if n, err := eng.AsInteger(v); err != nil || n != 7 {
+		t.Errorf("size = %s (%v), want 7 — a canon-only install must keep the magnitude rule", v.String(), err)
+	}
+}
+
+// TestBehaveSizeCheckerDoesNotFold pins the checker half (PR #325
+// review, Codex P1): sizeReturns folds a concrete container to its
+// physical element count, which is only faithful when the kernel Sizer
+// owns the dispatch. A `behave size` on a List refinement answers with
+// its own body at runtime, so the static fold must yield to a carrier.
+func TestBehaveSizeCheckerDoesNotFold(t *testing.T) {
+	r := w9Reg(t)
+	if _, err := w9Run(t, r, `
+def Bag (refine List)
+behave size/q (fn [[Bag] [Integer] [99]])`); err != nil {
+		t.Fatalf("install: %v", err)
+	}
+	ty := r.LookupTypeName("Bag")
+	if ty == nil {
+		t.Fatal("Bag was not installed")
+	}
+	bag := w9List(NewInteger(1), NewInteger(2), NewInteger(3))
+	bag.Parent = ty
+
+	out := sizeReturns([]Value{bag}, r)
+	if len(out) != 1 {
+		t.Fatalf("sizeReturns = %v, want one value", out)
+	}
+	if IsConcrete(out[0]) {
+		t.Errorf("the fold fired despite the size body: %s — runtime answers 99, "+
+			"a folded 3 makes the checker model a size the runtime never reports",
+			out[0].String())
+	}
+
+	// Both negatives: a plain list still folds (the fold is the point),
+	// and a refinement WITHOUT a size body folds too — its Sizer owner
+	// is still the kernel List node.
+	plain := w9List(NewInteger(1), NewInteger(2))
+	out = sizeReturns([]Value{plain}, r)
+	if n, err := eng.AsInteger(out[0]); err != nil || n != 2 {
+		t.Errorf("plain-list fold regressed: %v (%v)", out[0].String(), err)
+	}
+	if _, err := w9Run(t, r, `def Sack (refine List)`); err != nil {
+		t.Fatalf("Sack: %v", err)
+	}
+	sack := w9List(NewInteger(1), NewInteger(2))
+	sack.Parent = r.LookupTypeName("Sack")
+	out = sizeReturns([]Value{sack}, r)
+	if n, err := eng.AsInteger(out[0]); err != nil || n != 2 {
+		t.Errorf("a body-less refinement must keep the fold: %v (%v)", out[0].String(), err)
+	}
+}

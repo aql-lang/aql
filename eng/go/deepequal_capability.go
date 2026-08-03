@@ -30,6 +30,23 @@ type DeepEqualer interface {
 // body for this pair, so the parent-chain walk continues.
 var ErrNoDeepEqualer = errors.New("no deep equaler")
 
+// DeepEqualerOwner returns the nearest ancestor of t (t included) whose
+// Behavior implements DeepEqualer, or nil. It is the single-value
+// counterpart of the pairwise walk below, used by the deq-key
+// CLASSIFIER: a value whose chain carries a DeepEqualer is pairwise
+// comparable, so DeqKey must not class it never-equal — otherwise
+// DeepEqual and the DeqIndex behind `unique` / `member` / indices
+// disagree about the same pair (the capability's answer would be
+// unreachable through the index).
+func DeepEqualerOwner(t *Type) *Type {
+	for ; t != nil; t = t.Parent {
+		if _, ok := t.Behavior().(DeepEqualer); ok {
+			return t
+		}
+	}
+	return nil
+}
+
 // deepEqualCapability walks the two values' lowest common ancestor up
 // the parent chain looking for a DeepEqualer — the same shape the
 // Comparer walk uses, so a type installs equality and ordering the same

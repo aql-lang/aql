@@ -18,12 +18,47 @@ import (
 // length. A type with no Sizer in its lattice — None, a Date, a
 // bare scalar — sizes 0.
 func SizeOf(v Value) int {
-	for t := v.Parent; t != nil; t = t.Parent {
+	return sizeOfFrom(v.Parent, v)
+}
+
+// sizeOfFrom is SizeOf's walk starting at an arbitrary chain position.
+// Split out so a wrapper Behavior that satisfies Sizer structurally but
+// has no size rule of its own can CONTINUE the walk above its owning
+// node — Sizer has no decline channel (it is total, unlike Comparer),
+// so "keep walking" must be expressed by re-entering the walk here.
+func sizeOfFrom(t *Type, v Value) int {
+	for ; t != nil; t = t.Parent {
 		if sz, ok := t.Behavior().(Sizer); ok {
 			return sz.Size(v)
 		}
 	}
 	return 0
+}
+
+// SizeOfAbove reports what SizeOf would answer if the walk started
+// ABOVE t — the escape hatch for a Sizer-shaped wrapper installed on t
+// that has nothing to say for this value (see sizeOfFrom).
+func SizeOfAbove(t *Type, v Value) int {
+	if t == nil {
+		return 0
+	}
+	return sizeOfFrom(t.Parent, v)
+}
+
+// SizeOwner returns the type node whose Sizer answers SizeOf for a
+// value of type t — the nearest ancestor (t included) implementing
+// Sizer — or nil when no Sizer exists in the chain (SizeOf reports 0).
+// The static analyser uses it to decide whether a fold over the
+// PHYSICAL element count is faithful: only when the owner is the
+// kernel node itself, not a user type that may have installed its own
+// size rule.
+func SizeOwner(t *Type) *Type {
+	for ; t != nil; t = t.Parent {
+		if _, ok := t.Behavior().(Sizer); ok {
+			return t
+		}
+	}
+	return nil
 }
 
 // The Size methods below attach the Sizer capability to the kernel

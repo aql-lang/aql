@@ -483,6 +483,14 @@ func exampleVal(typeName string, counter *int) string {
 //
 // Both ExampleExprs (generator) and writeExamples (renderer) call this
 // so the pre-computed result map always lines up with what is shown.
+// examplePrefixes picks how many arguments each generated example
+// places BEFORE the word (the stack side). The choice is PER SIGNATURE,
+// from its own barrier: positions [BarrierPos..N-1] always come from
+// the stack, so an example may put at most BarrierPos args forward. The
+// word-wide ForwardArgs flag is not enough — a mixed-barrier word like
+// `or` (BarrierPos 1) would get the all-forward `or true false`, which
+// the live engine refuses with a signature_error; the help must not
+// teach a spelling describe's own Precedence section says is invalid.
 func examplePrefixes(info FuncInfo, sig SigInfo) []int {
 	nArgs := len(sig.Args)
 	if nArgs == 0 {
@@ -491,10 +499,17 @@ func examplePrefixes(info FuncInfo, sig SigInfo) []int {
 	if !info.ForwardArgs {
 		return []int{nArgs}
 	}
-	if nArgs == 2 && isNonCommutative2Arg(info) {
+	barrier := sig.BarrierPos
+	if barrier < 0 || barrier > nArgs {
+		// -1 is the unnormalized all-forward sentinel (module-wrapper
+		// FnSigs carry it raw); an over-wide barrier means the same.
+		barrier = nArgs
+	}
+	minPrefix := nArgs - barrier
+	if nArgs == 2 && isNonCommutative2Arg(info) && minPrefix == 0 {
 		return []int{0, 1}
 	}
-	return []int{0}
+	return []int{minPrefix}
 }
 
 // sigHasExampleVals reports whether every argument type in sig has a

@@ -254,3 +254,65 @@ func TestPrecedenceMixedIgnoresZeroArgRows(t *testing.T) {
 		}
 	}
 }
+
+// TestExamplePrefixesFollowTheBarrier pins the second half of the
+// mixed-precedence fix (PR #325 review, Codex P2): the Precedence
+// section stopped claiming a spelling the engine refuses, but the
+// generated EXAMPLES were still built from the word-wide flag, so
+// `describe or` taught `or true false` — an all-forward spelling its
+// [Boolean Boolean] BarrierPos-1 signature raises signature_error on.
+// The prefix (how many args sit before the word) must come from each
+// signature's own barrier: at most BarrierPos args may go forward.
+func TestExamplePrefixesFollowTheBarrier(t *testing.T) {
+	fwd := FuncInfo{Name: "w", ForwardArgs: true}
+	stack := FuncInfo{Name: "w", ForwardArgs: false}
+	cases := []struct {
+		name string
+		info FuncInfo
+		sig  SigInfo
+		want []int
+	}{
+		{"all-forward keeps prefix 0", fwd, fwdSig("A", "B"), []int{0}},
+		{"sentinel -1 reads all-forward", fwd, sentinelSig("A", "B"), []int{0}},
+		{"stack-only word places every arg before", stack, stackSig("A", "B"), []int{2}},
+		// The regression: an `or`-shaped sig must place its stack arg
+		// before the word — prefix 1, never 0.
+		{"mixed barrier 1 of 2", fwd, mixedSig(1, "A", "B"), []int{1}},
+		{"mixed barrier 1 of 3", fwd, mixedSig(1, "A", "B", "C"), []int{2}},
+		{"mixed barrier 2 of 3", fwd, mixedSig(2, "A", "B", "C"), []int{1}},
+		// A stack-only SIG on a word whose other sigs are forward.
+		{"stack-only sig on a forward word", fwd, stackSig("A"), []int{1}},
+		{"zero args yields no examples", fwd, fwdSig(), nil},
+	}
+	for _, c := range cases {
+		got := examplePrefixes(c.info, c.sig)
+		if len(got) != len(c.want) {
+			t.Errorf("%s: prefixes = %v, want %v", c.name, got, c.want)
+			continue
+		}
+		for i := range got {
+			if got[i] != c.want[i] {
+				t.Errorf("%s: prefixes = %v, want %v", c.name, got, c.want)
+				break
+			}
+		}
+	}
+}
+
+// TestMixedExamplesRespectTheBarrier drives the whole render: a mixed
+// word's generated examples must never spell more forward args than the
+// matched signature's barrier admits.
+func TestMixedExamplesRespectTheBarrier(t *testing.T) {
+	// An `or`-shaped word: two Boolean args, barrier 1. The only sound
+	// two-arg spelling puts one arg before the word.
+	info := FuncInfo{Name: "orlike", ForwardArgs: true,
+		Sigs: []SigInfo{mixedSig(1, "Boolean", "Boolean")}}
+	out := FormatDynamic(info)
+	if strings.Contains(out, "orlike true false") {
+		t.Errorf("the all-forward spelling is back — the sig refuses it:\n%s", out)
+	}
+	if !strings.Contains(out, " orlike ") && !strings.Contains(out, "\n  orlike") {
+		// The example must still exist, in the one-before form.
+		t.Errorf("no example generated for the mixed word:\n%s", out)
+	}
+}

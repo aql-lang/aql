@@ -247,3 +247,128 @@ func TestDeepEqualCapabilityIsAdditive(t *testing.T) {
 		t.Error("string deep equality regressed")
 	}
 }
+
+// ── deq-index consistency (PR #325 review, Codex P1) ─────────────────
+//
+// DeepEqual and the DeqIndex behind `unique` / `member` / indices must
+// agree. Before the classifier learned about the capability, a
+// DeepEqualer-carrying value was classed DeqNeverEqual: Add filed it
+// nowhere, FirstMatch answered -1, and `unique` kept what `deq` called
+// a duplicate.
+
+func TestDeqIndexConsultsDeepEqualCapability(t *testing.T) {
+	// The capability says every pair of this type is equal.
+	a, b := capDeqPair(t, "IndexedEqualIdeal", capDeqBehavior{equal: true})
+	if !DeepEqual(a, b) {
+		t.Fatal("fixture: the pair must be DeepEqual")
+	}
+
+	var idx DeqIndex
+	if got := idx.Add(a); got != 0 {
+		t.Fatalf("Add(a) = %d, want 0", got)
+	}
+	if got := idx.FirstMatch(b); got != 0 {
+		t.Errorf("FirstMatch(b) = %d, want 0 — the index must agree with DeepEqual", got)
+	}
+
+	// The classification behind that: scannable, in a real family.
+	if _, class := DeqKey(a); class != DeqUnkeyed {
+		t.Errorf("DeqKey class = %v, want DeqUnkeyed", class)
+	}
+	if fam := deqFam(a); fam == "" {
+		t.Error("deqFam must give capability values a scan family — an empty family makes DeqUnkeyed inert")
+	}
+
+	// A capability that answers false: scannable but never matching.
+	c, d := capDeqPair(t, "IndexedUnequalIdeal", capDeqBehavior{equal: false})
+	var idx2 DeqIndex
+	idx2.Add(c)
+	if got := idx2.FirstMatch(d); got != -1 {
+		t.Errorf("FirstMatch = %d, want -1 — the capability said not equal", got)
+	}
+}
+
+func TestDeqIndexCapabilityFamiliesDoNotCross(t *testing.T) {
+	// Two DIFFERENT capability-carrying types: their LCA sits above both
+	// owners, where no DeepEqualer exists, so they can never match — and
+	// must not share a scan family (the tightness half of the fix).
+	// Minted in ONE registry: minted IDs are deterministic per registry,
+	// so two fresh registries would mint ID-colliding nodes that
+	// Type.Equal conflates.
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatalf("NewRegistry: %v", err)
+	}
+	tyA := r.Types.MintType("FamAIdeal", TIdeal)
+	tyA.ensureTMeta().Behavior = capDeqBehavior{equal: true}
+	tyB := r.Types.MintType("FamBIdeal", TIdeal)
+	tyB.ensureTMeta().Behavior = capDeqBehavior{equal: true}
+	a := NewExtension(tyA, "one")
+	b := NewExtension(tyB, "two")
+	if DeepEqual(a, b) {
+		t.Fatal("fixture: cross-owner pairs must not be DeepEqual")
+	}
+	if deqFam(a) == deqFam(b) {
+		t.Errorf("different owners must scan in different families, both %q", deqFam(a))
+	}
+	var idx DeqIndex
+	idx.Add(a)
+	if got := idx.FirstMatch(b); got != -1 {
+		t.Errorf("FirstMatch across owners = %d, want -1", got)
+	}
+}
+
+func TestDeqIndexNeverEqualPreservedWithoutCapability(t *testing.T) {
+	// The negative direction: with NO DeepEqualer in the chain the
+	// terminal classification stands, exactly as before the capability.
+	a, b := capDeqPair(t, "PlainIndexIdeal", nil)
+	if _, class := DeqKey(a); class != DeqNeverEqual {
+		t.Errorf("DeqKey class = %v, want DeqNeverEqual for a plain host payload", class)
+	}
+	var idx DeqIndex
+	idx.Add(a)
+	if got := idx.FirstMatch(b); got != -1 {
+		t.Errorf("FirstMatch = %d, want -1", got)
+	}
+	// Reflexive probe included: never-equal means equal to NOTHING.
+	if got := idx.FirstMatch(a); got != -1 {
+		t.Errorf("FirstMatch(self) = %d, want -1", got)
+	}
+}
+
+// ── size helpers (the fold guard's primitives) ───────────────────────
+
+func TestSizeOwnerAndAbove(t *testing.T) {
+	// A List's chain is owned by the kernel List node's Sizer.
+	if owner := SizeOwner(TList); owner == nil || !owner.Equal(TList) {
+		t.Errorf("SizeOwner(TList) = %v, want the List node itself", owner)
+	}
+	// A branch with NO Sizer anywhere — None's chain tops out at Any —
+	// has no owner, matching SizeOf's 0.
+	if owner := SizeOwner(TNone); owner != nil {
+		t.Errorf("SizeOwner(TNone) = %v, want nil", owner)
+	}
+	if got := SizeOf(NewTypeLiteral(TNone)); got != 0 {
+		t.Errorf("SizeOf(none) = %d, want 0", got)
+	}
+
+	// SizeOfAbove: resuming the walk above the List node skips the
+	// element-count rule and finds nothing (List's parent chain has no
+	// Sizer for a list payload)…
+	lst := NewList([]Value{NewInteger(1), NewInteger(2)})
+	if got := SizeOfAbove(TList, lst); got == 2 {
+		t.Error("SizeOfAbove must skip the node it is called on")
+	}
+	// …while resuming above an Integer refinement still reaches the
+	// Number magnitude rule — the arm userBehavior.Size leans on.
+	ref := capType(t, "SizeRef", TInteger, nil)
+	seven := NewInteger(7)
+	seven.Parent = ref
+	if got := SizeOfAbove(ref, seven); got != 7 {
+		t.Errorf("SizeOfAbove(refine Integer, 7) = %d, want the magnitude 7", got)
+	}
+	// A nil start is the zero answer, not a walk.
+	if got := SizeOfAbove(nil, seven); got != 0 {
+		t.Errorf("SizeOfAbove(nil) = %d, want 0", got)
+	}
+}

@@ -197,6 +197,7 @@ func behaveHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 			prev:     target.Behavior(),
 			registry: r,
 			typeName: target.Leaf(),
+			target:   target,
 		}
 		target.SetBehavior(ub)
 	}
@@ -386,9 +387,15 @@ func validateSizeSig(sig eng.FnSig) (*eng.Type, error) {
 // → Value.String. The per-Parent inRender guard breaks the loop by
 // falling back to the previous Behavior's Format on re-entry. A
 // parallel inNodify guard handles `tonode`-bodies that recurse into
-// the same Parent. The guards are scoped to the wrapper —
-// concurrent rendering across goroutines doesn't share them, matching
-// the kernel's general single-goroutine engine model.
+// the same Parent, and inTruthy/inDeq/inSize the same for the newer
+// slots. The guards assume the kernel's single-goroutine engine model:
+// they are SAME-GOROUTINE re-entry breaks, not synchronization.
+// ForkConcurrent registries share the *Type node and therefore this
+// wrapper, so a concurrent branch dispatching a capability races on
+// the flags and runs the body against the INSTALLING registry — the
+// known limitation recorded as design/BORU-SHARP-EDGES.0.md G14; the
+// fix (fork-local capability execution state) needs its own design
+// pass and applies to all seven slots alike.
 type userBehavior struct {
 	prev        eng.TypeBehavior
 	registry    *Registry
@@ -398,15 +405,18 @@ type userBehavior struct {
 	nodifyBody  []Value
 	unifyBody   []Value
 	unifyTarget *eng.Type // T from `behave unify/q (fn [[T T] [_] [...]])`
-	truthyBody  []Value
-	deqBody     []Value
-	sizeBody    []Value
-	inRender    bool
-	inNodify    bool
-	inUnify     bool
-	inTruthy    bool
-	inDeq       bool
-	inSize      bool
+	// target is the type node this wrapper is installed on — what
+	// Size's keep-walking arm resumes SizeOf's chain walk above.
+	target     *eng.Type
+	truthyBody []Value
+	deqBody    []Value
+	sizeBody   []Value
+	inRender   bool
+	inNodify   bool
+	inUnify    bool
+	inTruthy   bool
+	inDeq      bool
+	inSize     bool
 }
 
 // Match delegates to prev — `behave` does not currently install
@@ -723,28 +733,34 @@ func (u *userBehavior) runDeqBody(a, b Value) (bool, error) {
 }
 
 // Size runs the installed size body if any, else delegates to prev's
-// Sizer, else reports 0 — SizeOf is total and has no decline channel,
-// and 0 is what it already reports for a type with no Sizer in its
-// lattice. A body that errors reports 0 for the same reason.
+// Sizer, else CONTINUES SizeOf's walk above the owning type. That last
+// arm is load-bearing: this wrapper satisfies eng.Sizer structurally
+// whether or not a size body was ever installed, so without it a
+// `behave canon` on an Integer refine would silently change `size x`
+// from the magnitude rule to 0 — the walk would stop here with nothing
+// to say. Sizer has no decline channel (unlike Truther/DeepEqualer),
+// so "not mine" is expressed by re-entering the walk via SizeOfAbove.
+// A body that errors or returns a non-Integer also falls through to
+// the walk, for the same reason erroring Truther bodies do.
 func (u *userBehavior) Size(v Value) int {
-	if len(u.sizeBody) == 0 {
+	sizeAbove := func() int {
 		if sz, ok := u.prev.(eng.Sizer); ok {
 			return sz.Size(v)
 		}
-		return 0
+		return eng.SizeOfAbove(u.target, v)
 	}
-	if u.inSize {
-		return 0
+	if len(u.sizeBody) == 0 || u.inSize {
+		return sizeAbove()
 	}
 	u.inSize = true
 	defer func() { u.inSize = false }()
 	top, err := u.runUnaryBody(u.sizeBody, v, "size")
 	if err != nil || !top.Parent.ConformsTo(eng.TInteger) {
-		return 0
+		return sizeAbove()
 	}
 	n, err := eng.AsInteger(top)
 	if err != nil {
-		return 0
+		return sizeAbove()
 	}
 	return int(n)
 }
