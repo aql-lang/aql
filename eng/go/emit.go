@@ -4098,6 +4098,80 @@ func (es *EmitState) RememberOriginal(v Value) {
 	es.origByID[v.ID] = v
 }
 
+// FoldFullStack statically folds a full-stack word — depth / pick / roll —
+// when the recorder can prove the simulated stack is EXACT, so the dispatch
+// ELIDES: no event records, no opcode runs, and the fold's outputs carry
+// known provenance (the P1.2 capability, checker-compiler-completeness-
+// review §8.2(2); the class was previously a blanket provenance refusal).
+//
+//   - depth  → the count is the preserved stack's length, baked as a fresh
+//     CONCRETE Integer (resolveOperand materialises it as a const);
+//   - pick n → a COPY of the picked entry (same ID — the re-push resolves
+//     to the original's operand; an event-produced pick target is promoted
+//     to a value-def frame local so both references have a home);
+//   - roll n → the true permutation of the preserved entries (every ID kept;
+//     the residual reconciliation's ordering machinery lays it out).
+//
+// Exactness is the whole soundness argument: the fold bakes the CHECK
+// model's stack, so it is admitted only where that model provably mirrors
+// the interpreter — the top frame of the top unit, no open mark window, and
+// every preserved entry either a known operand home (event / local /
+// materialisable const / type node) with no variadic producer (a variadic
+// region's runtime count is not its model count). Anything else declines
+// and the historical refusal path stands (slow, not wrong). An
+// out-of-range n declines too: the interpreter raises there, and the
+// fallback keeps the raise byte-identical.
+func (es *EmitState) FoldFullStack(word string, args, preserved []Value) ([]Value, bool) {
+	if es == nil || !es.active() || es.suspended > 0 || !es.Compilable ||
+		len(es.frames) != 1 || len(es.units) != 1 || es.markWindowSeq != 0 {
+		return nil, false
+	}
+	for _, v := range preserved {
+		if v.ID == "" {
+			return nil, false
+		}
+		if pr, ok := es.producedBy[v.ID]; ok {
+			if es.eventInfo[pr.seq].variadicResult {
+				return nil, false
+			}
+			continue
+		}
+		if _, ok := es.units[0].localByID[v.ID]; ok {
+			continue
+		}
+		if IsConcrete(v) || IsBareTypeNode(v) {
+			continue
+		}
+		return nil, false
+	}
+	switch word {
+	case "depth":
+		n := NewInteger(int64(len(preserved)))
+		n.ID = GenerateID(IDPrefixForType(TInteger))
+		return append(append([]Value(nil), preserved...), n), true
+	case "pick", "roll":
+		if len(args) != 1 || !IsConcrete(args[0]) {
+			return nil, false
+		}
+		nn, err := AsInteger(args[0])
+		if err != nil || nn < 0 || int(nn) >= len(preserved) {
+			return nil, false
+		}
+		idx := len(preserved) - 1 - int(nn)
+		if word == "pick" {
+			picked := preserved[idx]
+			es.MarkValueDef(picked)
+			return append(append([]Value(nil), preserved...), picked), true
+		}
+		out := make([]Value, 0, len(preserved))
+		out = append(out, preserved[:idx]...)
+		out = append(out, preserved[idx+1:]...)
+		out = append(out, preserved[idx])
+		return out, true
+	}
+	return nil, false
+}
+
 // RecordTrap records a TERMINAL trap for a check-mode-suppressed runtime error
 // (an orphan gen, an unpack of a missing key): the checker is lenient at this
 // point but the interpreter errors, so the compiled program raises the

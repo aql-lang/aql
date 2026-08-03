@@ -1,13 +1,18 @@
-# Full-stack words (depth/pick/roll) — the P1.2 capability target
-# (checker-compiler-completeness-review.0.md §8.2(2); COMPILE-REFUSAL-
-# SURVEY.0.md §3a). Deliberately off-corpus until now: a full-stack word's
-# result has no producing event the compiler can address, so the whole
-# program refuses ("residual value of unknown provenance") and falls back.
-# The survey ranks this the only remaining class whose fix ADDS capability
-# (an event-producing lowering minting runtime provenance — OpDepth/OpPick/
-# OpRoll) rather than relaxing a soundness gate. Graduation = that lowering;
-# the ledger entries then delete and the rows move to the main corpus.
-1 2 depth	1 2 2	depth reports the stack size and leaves the stack intact
-1 2 3 1 pick	1 2 3 2	pick copies the value at depth n (0 = top) onto the top
-1 2 3 1 roll	1 3 2	roll rotates the value at depth n to the top
-1 2 depth add 0	1 2 2	a full-stack result consumed by a downstream dispatch
+# Full-stack words (depth/pick/roll) — GRADUATED 2026-08-03 for exact
+# top-level stacks (checker-compiler-completeness-review.0.md §8.2(2)):
+# EmitState.FoldFullStack statically folds the dispatch when the simulated
+# stack is provably exact — depth bakes the count as a concrete const,
+# pick re-pushes the picked entry (an event target is promoted to a
+# value-def local), roll re-seats the true permutation — so the elided
+# dispatch needs no opcode and no event. The graduated rows moved to
+# lang/spec/corpus-core.tsv where the census owns them.
+#
+# The REMAINING sub-frontier is the row below: a roll that permutes two
+# EVENT results asks the program-residual reconciliation to re-push call
+# results in a non-production order, which exceeds the Stage-1 residual
+# discipline — the fold produces the right model and the LOWERING declines
+# (sound interpreter fallback). Graduation = residual ordering beyond
+# Stage 1 (the forceOrder machinery generalised to program residuals), at
+# which point the ledger entry deletes and the row joins corpus-core.
+(1 add 2) (3 add 4) 1 roll	7 3	two event results permuted: the residual re-push order exceeds Stage 1
+[10 20] each [drop 1 2 3 1 pick]	[2 2]	a full-stack word inside a wrapped code body islands (fold gated to the top unit; the island is the sound seam)

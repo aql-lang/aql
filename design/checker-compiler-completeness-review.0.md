@@ -430,6 +430,36 @@ forbids half-landing (DESIGN-DX-AND-BYTECODE-STATUS-REVIEW's closing
 rule), now with the §8.1(3) fuzzer in place as the safety net the
 sequencing required.
 
+### 9.6a §8.2(2) LANDED — full-stack words graduate for exact stacks
+
+`EmitState.FoldFullStack` (emit.go, wired at the check-mode full-stack
+dispatch in engine.go) statically folds `depth`/`pick`/`roll` when the
+simulated stack is provably exact — the dispatch ELIDES: `depth` bakes
+its count as a concrete const, `pick` re-pushes the picked entry (an
+event target is promoted to a value-def local, riding the same
+double-reference machinery as `dup`), and `roll` re-seats the true
+permutation. No new opcode and no event — which is a *stronger* result
+than the §8.2(2) sketch (an event-producing lowering): the elision has
+zero runtime surface to get wrong, and the whole risk concentrates in
+the exactness gate (top frame of the top unit, no open mark window,
+every entry a known operand home, no variadic producer, concrete
+in-range `n`). Inexact contexts decline to the historical refusal —
+including out-of-range `n`, where the interpreter's raise stays
+byte-identical via fallback. Graduated rows moved to
+`lang/spec/corpus-core.tsv`; the one remaining sub-frontier (a roll
+permuting two EVENT results — the program-residual re-push order
+exceeds Stage 1) is ledgered in `frontier-full-stack.tsv`. Pins:
+`eng/go/fold_fullstack_test.go` (every gate arm), the corpus rows
+(differential-owned).
+
+A bookkeeping correction from this landing: the committed
+`COMPILED_STATUS.md` census this review's §1 quoted (6996 rows) had
+been STALE — the staleness check is deliberately informational
+(`compiled_status_test.go`), and the corpus had grown to 7241 rows
+without a refresh. The binding truth was always the ratchet gates
+(refusals 0 / islands 0), which held at both counts and still hold at
+the regenerated 7246 (including the five graduated rows).
+
 ### 9.7 Still open
 
 Stage G proper and the rest of P1's mechanisms (§8.2/§9.6), the

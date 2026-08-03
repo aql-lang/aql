@@ -126,7 +126,16 @@ the interpreter then owns the whole program:
   compile time, emits nothing; a residual that depends on its *runtime* error
   (a check-mode-suppressed error) also refuses.
 - **Context-dependent word** — `args` / `__pa` (no per-call args stack in a VM
-  frame), `FullStack` words.
+  frame). `FullStack` words (depth/pick/roll) GRADUATED for provably-exact
+  stacks (2026-08-03, `EmitState.FoldFullStack`): the dispatch folds
+  statically — depth's count bakes as a concrete const, pick re-pushes the
+  picked entry, roll re-seats the true permutation — and ELIDES (no opcode,
+  no event). The exactness gate is the soundness argument: top frame of the
+  top unit, no open mark window, every stack entry a known operand home with
+  no variadic producer, concrete in-range `n`. Anything else declines to the
+  historical refusal. Pinned by `eng/go/fold_fullstack_test.go` +
+  corpus-core rows; the remaining event-permutation sub-frontier is
+  ledgered in `frontier-full-stack.tsv`.
 - **Fn-INVOKING word** — `apply` of a non-re-stepped value, `is` over a
   predicate fn: their handlers re-step the fn on the tape, which the VM cannot
   honour. (Fn-INTROSPECTION words are exempt — they only read the value.) A

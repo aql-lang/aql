@@ -87,6 +87,17 @@ word's result has no producing event the compiler can address. A
 signature-matching opcode has nothing to contribute; what this needs is a
 lowering that models the word's output as an event with provenance.
 
+> **GRADUATED (2026-08-03)** for provably-exact stacks:
+> `EmitState.FoldFullStack` statically folds the dispatch — depth bakes
+> the count as a concrete const, pick re-pushes the picked entry
+> (event targets promoted to value-def locals), roll re-seats the true
+> permutation — no opcode, no event, the elision IS the lowering. Rows
+> in `lang/spec/corpus-core.tsv`; the remaining sub-frontier (a roll
+> permuting two EVENT results — beyond the Stage-1 residual ordering)
+> is ledgered in `frontier-full-stack.tsv`. Inexact contexts (variadic
+> regions, dynamic n, nested frames, out-of-range n) keep the sound
+> refusal.
+
 ### 3b. Multi-overload user fn whose arms declare different returns
 
 ```

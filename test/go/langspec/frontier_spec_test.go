@@ -205,15 +205,21 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	`def twice fn [[f:Function x:Integer] [Integer] [f (f x)]] twice ([n:Integer] => [n add 1]) 5`:                                           {why: "self-composition: the same multi-applicable window", failsWith: "unapplied fn-value in body residual"},
 	`def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5`:                                   {why: "def-split spelling: the def-bound fn-param apply trips the open undefined_word checker FP (check_fn_param_apply_def_fp_test.go)", failsWith: "check diagnostics"},
 
-	// Full-stack words (frontier-full-stack.tsv) — the P1.2 capability
-	// target: depth/pick/roll results have no producing event, so the
-	// program refuses on provenance (designed-keep until an
-	// event-producing lowering mints runtime provenance —
-	// completeness-review §8.2(2)).
-	`1 2 depth`:       {why: "full-stack word: result has no producing event", failsWith: "residual value of unknown provenance"},
-	`1 2 3 1 pick`:    {why: "full-stack word: result has no producing event", failsWith: "residual value of unknown provenance"},
-	`1 2 3 1 roll`:    {why: "full-stack word: result has no producing event", failsWith: "residual value of unknown provenance"},
-	`1 2 depth add 0`: {why: "full-stack result consumed downstream: the operand has no compile home", failsWith: "operand of unknown provenance"},
+	// Full-stack words GRADUATED 2026-08-03 (EmitState.FoldFullStack —
+	// static fold over a provably-exact stack; rows moved to
+	// corpus-core.tsv). The remaining sub-frontier
+	// (frontier-full-stack.tsv): a roll permuting two EVENT results asks
+	// the program residual to re-push call results in a non-production
+	// order — beyond the Stage-1 residual discipline. The fold models it
+	// correctly; the LOWERING declines. Graduation = program-residual
+	// ordering beyond Stage 1.
+	`(1 add 2) (3 add 4) 1 roll`: {why: "two event results permuted by roll: the residual re-push order exceeds Stage 1", failsWith: "residual shape beyond Stage 1"},
+	// A full-stack word inside a wrapped code body compiles WITH an island
+	// (the fold is gated to the top unit; the body's island machinery owns
+	// the occurrence — sound interpreter re-entry, parity held). Graduation
+	// = per-unit exactness for the fold. Same bucket pinned in
+	// varyRefusalLedger ("islanded").
+	`[10 20] each [drop 1 2 3 1 pick]`: {why: "full-stack word in a code body: the fold declines outside the top unit; the island seam owns it", failsWith: "islanded"},
 
 	// Gradual-Any to a multi-overload user fn with DIFFERING arm returns
 	// (frontier-poly-join.tsv) — the P1.3 target: userPolyArmShapeOK

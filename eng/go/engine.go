@@ -3643,6 +3643,17 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			}
 			preserved := e.resolvedStackBeforeFrom(base, sortedIndices)
 			results := match.Sig.checkFullStackFn()(match.Args, preserved, e.registry)
+			// Compile pass: a full-stack word over a provably-exact stack
+			// folds statically — the dispatch elides and the fold's outputs
+			// carry known provenance (EmitState.FoldFullStack), so
+			// depth/pick/roll compile instead of dying at Finalize as
+			// residuals of unknown provenance. A declined fold keeps the
+			// twin's carrier results and the historical refusal path.
+			if es, isES := e.registry.Check.Recorder().(*EmitState); isES {
+				if folded, ok := es.FoldFullStack(name, match.Args, preserved); ok {
+					results = folded
+				}
+			}
 			e.tape.Splice(base, end+1-base, results...)
 			e.pointer = base
 			return nil
