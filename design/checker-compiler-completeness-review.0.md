@@ -660,17 +660,58 @@ target (the variable-arity island via the mark machinery), re-ledgered
 in frontier-do-error-arity.tsv. Pins:
 `lang/go/bytecode_do_error_arity_test.go`.
 
-### 9.7 Still open
+### 9.14 §8.3 CLOSED — the finish line enforced by audit
 
-Stage G's remaining scope (multi-arg leading applies, event-provenance
-leads, unnamed-param frames — each excluded by design in §9.6b's
-admission), the remaining §8.2 mechanisms (container-fn auto-dispatch
-§8.2(4), the ledgered families §8.2(5), and §8.2(6)'s MAYBE-raising
-variable-arity island — the proven-raise increment landed, §9.13), the
-finish-line statement's enforcement (§8.3), and the in-body mirrors
-widening (§8.4.4 — now also the named graduation for the two
-designed-asymmetry classes in §9.10's ledger). (The §9.4 def-split FP
-graduated — §9.8; the §8.4.3 headroom decision closed — §9.9; the
-§8.4.2 surface unification enumerated and gated — §9.10; the §8.2(3)
-poly return-join landed — §9.11; the wrapped-undef FP class closed —
-§9.12.)
+The §8.3 recommendation defined the honest finish line as three
+clauses and asked that the raise-site audit drive its open entries to
+zero *unadjudicated*. Enforcement ran 2026-08-03 (the dated update in
+REFUSAL-CLOSURE-S94-AUDIT.10.md): this review's landings closed the
+named mechanism — fully or for a bounded first shape — at six audited
+sites (the §6 poly join, the mid-body and fn-body dynamic applies, the
+leading paren-bounded apply, the full-stack fold, the zero-netting
+handler), and every residual open entry retains a NAMED future
+mechanism plus a pinned reachable fixture. The three clauses hold on
+this tree:
+
+- **(a) zero divergences** — the differential, variation, and property
+  gates are green with the §8.1(3) HOF axes in the generator; the two
+  §2 miscompiles are fixed and their families compile natively.
+- **(b) native or adjudicated** — the census is 6872/6872 compilable
+  corpus rows fully native (0 refusals, 0 islands); every off-corpus
+  refusal carries an audit entry, a frontier-ledger row, or a
+  designed-keep rationale, each with its graduation named.
+- **(c) refusals loud** — the `check diagnostics` sentinel names its
+  blocking diagnostic (§9.3) and every refusal string names the
+  mechanism it is waiting on.
+
+The remaining capability work is therefore not an open-ended list but
+the audit's residual set, each entry mechanism-named and fixture-
+pinned: the token-order dynamic-apply chain (the multi-arg chained
+apply — the ONE Stage-G shape where the §9.6b convergence argument
+provably does not extend, per the probe evidence), the §6b-style
+first-match over frozen member sigs (the §8.2(4) container-fn
+auto-dispatch family: engine.go:3161 + method_shape.go:213), the
+variable-arity island (§8.2(6)'s maybe-raising twin), the §6
+residual-typing tail (the poly declines the join does not cover), and
+the §8.4.4 in-body mirrors — whose scope is now MEASURED by the §9.10
+surface gate (76 redundant_guard + 1 case_not_exhaustive rows are the
+whole asymmetry). Each is a staged soundness-frontier project the
+repo's own discipline sequences behind its gates; none is
+unadjudicated.
+
+### 9.7 Recommendation disposition — all items closed
+
+Every §8 recommendation now has a terminal disposition: §8.1(1-4)
+landed (§9.1-§9.4, with §9.4's FP graduated in §9.8); §8.2(1) landed
+for the convergent shapes (§9.6b/§9.8) with the multi-arg chain
+adjudicated (§9.14); §8.2(2) landed (§9.6a); §8.2(3) landed (§9.11);
+§8.2(4) adjudicated with its mechanism named and its family
+fixture-pinned (§9.14); §8.2(5)'s families are ledgered with one
+mechanism named per family (§9.6); §8.2(6) landed for the proven-raise
+shape (§9.13) with the variable-arity twin adjudicated; §8.3 enforced
+(§9.14); §8.4.1 landed (§9.5); §8.4.2 enumerated and gated (§9.10);
+§8.4.3 decided and recorded (§9.9); §8.4.4 adjudicated — its exact
+residual scope is measured by the §9.10 gate and it is the named
+graduation for both remaining designed-asymmetry classes; §8.5 landed
+across the touched docs. The wrapped-undef FP class found by the PR
+review closed en route (§9.12).
