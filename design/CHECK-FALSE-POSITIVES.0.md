@@ -99,6 +99,11 @@ The stricter **compile pass** (`a.CompileCheck`, used by the `boru check
 handler lambdas (`[req:Map state:Any] => [ def expires state.expires … ]`). It
 does not gate `boru run` and is a distinct facet (compile-pass analysis of a
 service-handler closure body with a `state:Any` param), tracked for a follow-up.
+**DEAD 2026-08-03**: re-probed after the def-split collapse work
+(completeness-review §9.8) — mini-redis now CompileChecks clean (no refusal,
+no compile-only diagnostics). The remaining compile-only diagnostic classes
+are enumerated and gated corpus-wide by `TestDiagnosticSurfaceParity`
+(test/go/langspec/diag_surface_test.go; review §9.10).
 
 **Update 2026-08-02**: compile-pass-only diagnostics are now *visible* — a
 `-force-compile` refusal names the first blocking diagnostic
@@ -109,3 +114,12 @@ application — flags `undefined_word: zr` in the PLAIN pass too, on a
 program that runs clean. Pinned expected-open in
 `lang/go/check_fn_param_apply_def_fp_test.go`; triage in
 `test/go/langspec/check_run_fp_test.go` (the +74 entry).
+
+**Update 2026-08-03**: the def-split class is FIXED —
+`checkModeParenFnCollapse` (eng/go/engine.go) collapses a fn-carrier
+apply window to the one dynamic(Any) value the interpreter nets on the
+plain check surface, for exactly the shapes the compile pass's
+`RecordDynApply` admits, so the pending def completes.
+`check_fn_param_apply_def_fp_test.go` flipped to its positive form (with
+a genuine-typo negative), and the check_run_fp pin ratcheted 218 → 161.
+See checker-compiler-completeness-review.0.md §9.8.

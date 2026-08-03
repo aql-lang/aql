@@ -190,10 +190,15 @@ the interpreter then owns the whole program:
   collection converge inside a sealed named frame, at every runtime arity
   — so `compose`, `twice`, and mid-body `(g x) add 100` compile NATIVELY
   (`EmitState.DynApplyLeadEligible` gates the admission; rows in
-  `lang/spec/fn-value.tsv` §8). Pinned by
-  `TestChainedForwardApplyCompiles` / `TestMultiArgChainedApplyRefuses` +
-  the `frontier-chained-apply.tsv` ledger (def-split FP row remains);
-  graduation of the rest = Stage G proper.
+  `lang/spec/fn-value.tsv` §8). The def-split spelling
+  (`def r (f x) f r`) graduated the same day: `checkModeParenFnCollapse`
+  killed its checker false positive on the plain surface, and
+  `replayIsBodyTail`'s `windowReadsID` arm (a dyn-bind of a value the
+  window reads is not a reorderable event) armed its body tail — both
+  spellings now compile natively (completeness-review §9.8). Pinned by
+  `TestChainedForwardApplyCompiles` / `TestMultiArgChainedApplyRefuses` /
+  `TestTailProofNegatives`; only the sel1 control remains in
+  `frontier-chained-apply.tsv`; graduation of the rest = Stage G proper.
 - **Quote-typed lambda callback** — a lambda whose param is Atom-typed (a
   /q quote-capture slot, `fn_params.go`) admitted as a HOF callback over a
   COMPUTED collection: the runtime never binds a delivered stack value to

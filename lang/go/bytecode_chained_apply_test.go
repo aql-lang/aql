@@ -30,6 +30,12 @@ func TestChainedForwardApplyCompiles(t *testing.T) {
 	fnValueM2Native(t, "mid-body apply: the collapsed event feeds a further word",
 		`def m1 fn [[g:Function x:Integer] [Integer] [(g x) add 100]] m1 ([n:Integer] => [n mul 2]) 4`,
 		"[108]")
+	fnValueM2Native(t, "def-split: apply seats in a def, tail applies the bound name",
+		`def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5`,
+		"[7]")
+	fnValueM2Native(t, "trailing-spelling def-split twin",
+		`def tds fn [[g:Function x:Integer] [Integer] [def r (x g) g r]] tds ([n:Integer] => [n add 1]) 5`,
+		"[7]")
 	fnValueM2Native(t, "bare multi-arg body tail (g x y) — the frame replay owns it",
 		`def use2 fn [[g:Function x:Integer y:Integer] [Integer] [(g x y)]] use2 ([[a:Integer b:Integer] [Integer] [a sub b]] fn) 10 3`,
 		"[7]")
@@ -93,5 +99,23 @@ func TestMultiArgChainedApplyRefuses(t *testing.T) {
 
 	fnValueM2Refusal(t, "chained apply over a two-arg inner group f (g x y)",
 		`def c2 fn [[f:Function g:Function x:Integer y:Integer] [Integer] [f (g x y)]] c2 ([n:Integer] => [n mul 2]) ([[a:Integer b:Integer] [Integer] [a sub b]] fn) 10 3`,
+		"unapplied fn-value in body residual")
+}
+
+// TestTailProofNegatives pins what the replayIsBodyTail windowReadsID
+// widening (the def-split graduation's third step) must NOT arm: only a
+// dyn-BIND of a value the window itself reads may be skipped by the
+// event-order proof. An EFFECTFUL event between the apply and the tail, or
+// a bind of an UNRELATED value, still declines — the RET-time replay would
+// otherwise reorder the tail apply against it. Both refuse soundly with
+// interpreter-parity fallback.
+func TestTailProofNegatives(t *testing.T) {
+	t.Setenv("BORU_COMPILE_FALLBACK", "1")
+
+	fnValueM2Refusal(t, "an effect event between the def-split and the tail",
+		`def ld fn [[g:Function x:Integer] [Integer] [def r (g x) print "mid" g r]] ld ([n:Integer] => [n mul 2]) 14`,
+		"unapplied fn-value in body residual")
+	fnValueM2Refusal(t, "a later bind of an UNRELATED value",
+		`def ld fn [[g:Function x:Integer] [Integer] [g x def q 9 g q]] ld ([n:Integer] => [n mul 2]) 14`,
 		"unapplied fn-value in body residual")
 }

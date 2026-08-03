@@ -724,6 +724,16 @@ type EmitState struct {
 	// in lockstep (the Finalize-order constraint: markBefore is read during
 	// lowerEvents, the dynOp is decided after). seqs start at 1.
 	markWindowSeq int
+	// lastUserPoly notes the OpCallUserPoly event RecordUserPolyCall just
+	// recorded, so recordCallElided's poly-alias arm can re-link the SAME
+	// dispatch when the caller (carrierResults) rebuilds the out carriers
+	// after the ReturnsFn returned — the gradual first-match-partition
+	// widening mints FRESH result IDs, which would otherwise orphan the
+	// recorded event and re-refuse the dispatch generically ("user fn call …
+	// Stage 3") on a program whose poly plan compiled every arm (the
+	// §8.2(3) return-join). Cleared by every appendEvent: only the
+	// immediately following generic record of the same word may consume it.
+	lastUserPoly *lastUserPolyNote
 	// loopCarried is the stack of OPEN armed-loop carried-def scopes (one per
 	// nested AnalyseLoopBody running with loop capture). Each maps a rebound
 	// pre-loop def NAME to the unit frame slot carrying it across iterations;
@@ -1378,7 +1388,16 @@ func (es *EmitState) TakeFragment() *EmitFragment {
 }
 
 // appendEvent adds an event to the current frame and returns its seq.
+// lastUserPolyNote identifies the just-recorded OpCallUserPoly event for
+// recordCallElided's poly-alias arm (see the EmitState.lastUserPoly field).
+type lastUserPolyNote struct {
+	word string
+	seq  int
+	nout int
+}
+
 func (es *EmitState) appendEvent(ev emitEvent) int {
+	es.lastUserPoly = nil
 	n := len(es.frames) - 1
 	// Dead code after a divergent terminal, IN A FRAGMENT: a diverging call
 	// (raise, or a static-zero div/mod — CompileValueDiverges) never returns, so
@@ -3677,6 +3696,7 @@ func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx,
 	for i := range outs {
 		es.setProducedAt(outs[i], seq, i)
 	}
+	es.lastUserPoly = &lastUserPolyNote{word: word, seq: seq, nout: len(outs)}
 }
 
 // DynApplyLeadEligible reports whether the paren-collapse may record a
@@ -4468,6 +4488,19 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 // structured hook, or a compile-time name resolution that produces nothing the
 // VM runs. The caller returns without recording when this is true.
 func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []Value) bool {
+	// §8.2(3) poly-alias: the ReturnsFn recorded THIS dispatch as
+	// OpCallUserPoly, and the caller then rebuilt the out carriers (the
+	// gradual first-match-partition widening mints fresh IDs) — alias the
+	// rebuilt IDs onto the recorded event and elide the generic record, so
+	// downstream operand resolution reaches the poly event under the
+	// widened carriers' identities.
+	if lp := es.lastUserPoly; lp != nil && lp.word == word && len(outs) == lp.nout {
+		for i := range outs {
+			es.setProducedAt(outs[i], lp.seq, i)
+		}
+		es.lastUserPoly = nil
+		return true
+	}
 	// A dispatch whose output is already registered was recorded by a
 	// structured hook (RecordBranch owns the `if` dispatch; a user-fn
 	// ReturnsFn owns its RecordUserCall — including multi-return calls) —
@@ -8110,9 +8143,23 @@ func (es *EmitState) replayIsBodyTail(frag *EmitFragment, window []Value) bool {
 	}
 	if anchorSeq >= 0 {
 		for i := range frag.events {
-			if frag.events[i].seq > anchorSeq {
-				return false
+			if frag.events[i].seq <= anchorSeq {
+				continue
 			}
+			// A dyn-BIND of a value the window itself READS is not a
+			// reorderable effect: the window can only read the def-bound
+			// value AFTER the bind (same value instance — ID equality, so a
+			// rebind of a different value never matches), which puts the
+			// interpreter's tail apply after the bind, and the VM keeps the
+			// same order (the bind op at its position, the replay at RET).
+			// This is what lets the def-split idiom `def r (f x) f r` arm:
+			// the def's evDynBind lands between r's producer and the tail
+			// (§9.4 graduation, checker-compiler-completeness-review).
+			if ev := &frag.events[i]; ev.kind == evDynBind && ev.dyn != nil &&
+				ev.dyn.val.ID != "" && windowReadsID(window, ev.dyn.val.ID) {
+				continue
+			}
+			return false
 		}
 		return true
 	}
@@ -8132,6 +8179,18 @@ func (es *EmitState) replayIsBodyTail(frag *EmitFragment, window []Value) bool {
 		}
 	}
 	return true
+}
+
+// windowReadsID reports whether the replay window holds the value with the
+// given ID — the read that makes a later dyn-bind of that same value a
+// non-reorderable event for replayIsBodyTail.
+func windowReadsID(window []Value, id string) bool {
+	for _, v := range window {
+		if v.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // dynFrameWindow classifies a fn-body residual that carries an unapplied

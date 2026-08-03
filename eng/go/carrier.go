@@ -993,6 +993,14 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 		// other reachable returns. Widen the (single) result to the union
 		// of all reachable returns. No-op for the common case (one
 		// reachable return), so unobservable with return-uniform words.
+		// The widening MINTS a fresh identity (NewDynamicCarrierValue) — a
+		// user-poly ReturnsFn that already recorded the call under the old
+		// out[0].ID is re-linked by recordCallElided's poly-alias arm (the
+		// §8.2(3) return-join), which rebinds the rebuilt outs onto the
+		// recorded event; preserving the old ID here instead reclassified
+		// an unrelated compiling flex-set row's residual ("call result
+		// above a literal") — the fresh mint is load-bearing for the
+		// residual model.
 		if len(out) == 1 {
 			if len(reachable) >= 2 {
 				alts := make([]Value, len(reachable))

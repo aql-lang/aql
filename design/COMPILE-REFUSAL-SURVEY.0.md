@@ -123,6 +123,15 @@ negative, and it modifies the return-typing model that produced two defects
 in `verse-report-defects-investigation.0.md` (C's arity widening, F's
 dropped return pattern).
 
+> **GRADUATED 2026-08-03** (completeness-review §9.11): the join landed —
+> `userPolyPlan.outs` records a dynamic carrier at the arms' common
+> ancestor, `userPolyArmShapeOK` relaxed to count + nil-ness agreement,
+> and the first-match-partition widening now PRESERVES the recorded
+> identity (that orphaning, not the join itself, was the real blocker).
+> Both shapes above compile natively; the risk note held — no
+> previously-compiling row regressed. Arms with differing return COUNTS
+> keep the refusal (`bytecode_poly_join_test.go`).
+
 ### 3c. Multi-overload user fn with a quoted (`Atom/q`) param slot
 
 ```

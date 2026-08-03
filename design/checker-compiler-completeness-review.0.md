@@ -394,6 +394,8 @@ class recorded (`check_run_fp_test.go`), expected-open ledger pin
 `lang/go/check_fn_param_apply_def_fp_test.go`, and the
 `frontier-chained-apply.tsv` def-split row keyed to it. Graduation =
 the strict-Function-carrier collapse on the plain-check surface.
+(GRADUATED same-day — §9.8: `checkModeParenFnCollapse` is exactly that
+collapse, and the pin ratcheted 218 → 161.)
 
 ### 9.5 §8.4.1 CLOSED — NUR049 resolved (handler bodies checked)
 
@@ -496,13 +498,136 @@ FP row and the sel1 control. Pins: `lang/go/bytecode_chained_apply_test.go`
 (native chain + arity-mismatch parity + the multi-arg chained refusal),
 `eng/go/dynapply_lead_test.go` (every admission arm, white-box).
 
+### 9.8 §9.4 def-split FP GRADUATED — the plain-surface collapse + the tail proof
+
+Two coordinated widenings close the §9.4 false positive and, with it,
+the whole chained-apply frontier family except the multi-arg edge:
+
+1. **`checkModeParenFnCollapse`** (engine.go) — the PLAIN check
+   surface's twin of the paren collapse. The FP's true mechanism turned
+   out one layer deeper than §9.4 recorded: the diagnostic arises in the
+   CONSTRUCTION-time `AnalyseFnBody` run, where the recorder is
+   suspended, so even after §9.6b the compile pass refused on a
+   diagnostic minted before any unit compiled. On a check-mode paren
+   close with no active recorder, a fn-carrier apply window now
+   collapses to the ONE dynamic(Any) value the interpreter nets — for
+   exactly the shapes `RecordDynApply` admits (trailing `(a b comp)`,
+   leading one-arg `(g x)`), keeping the two diagnostic surfaces
+   aligned (§8.4.2). The pending `def` completes, the undefined_word
+   class is dead: `pinnedCheckRunDivergent` ratcheted 218 → 161 (the
+   −57 measured share), and `check_fn_param_apply_def_fp_test.go`
+   flipped to its positive form with a genuine-typo negative.
+2. **`replayIsBodyTail` + `windowReadsID`** (emit.go) — with the FP
+   gone, the stage spelling `def r (f x) f r` reached the fn-unit
+   finish and exposed a conservative decline: the def's `evDynBind`
+   lands between the window's producer and the body tail, failing the
+   event-order proof. A dyn-BIND of a value the window itself READS is
+   not a reorderable event — the window can only read the def-bound
+   value after the bind (same value instance, ID equality, so a rebind
+   of a different value never matches), which orders the tail apply
+   after the bind in BOTH engines. The skip arms the def-split body
+   tail; an effectful event between (`print "mid"`) and a bind of an
+   unrelated value still decline (`TestTailProofNegatives`).
+
+The def-split rows (both spellings) moved to `lang/spec/fn-value.tsv`
+§8; frontier-chained-apply.tsv retains only the sel1 control and its
+ledger entries are gone — the family's one remaining refusal is the
+multi-arg chained apply, pinned in `bytecode_chained_apply_test.go`.
+
+### 9.9 §8.4.3 CLOSED — the Any-frontier headroom decision (hold at 7)
+
+Re-measured 2026-08-03: 375/6039 ≈ 6.2% against the 7% ceiling — the
+0.37pt margin this review flagged has roughly doubled, because the
+corpus has since grown mostly precise rows (the §9.6b/§9.8 graduations
+land concrete results) while the frontier count grew slowly. The top
+feeders were re-probed (module-io 48 rows, module-sift 37) and remain
+the inherently-dynamic category the ratchet history already
+adjudicated: Sift.parse's kind→shape is a runtime catalog lookup (the
+recorded experiment shows a declared disjunct return does not narrow
+the descend-into-body analysis), IO.trace is a value pass-through, and
+the stat/read family is fs-state-dependent — narrowing any without a
+real kind→shape front risks the type-soundness ratchet for no honest
+precision. DECISION (recorded in design/CHECK-ACCURACY-RATCHET.10.md's
+ceiling history): hold the ceiling at 7; the named next front stays the
+check-mode kind→shape resolution for Sift.parse; revisit if a measured
+run reports above 6.5%.
+
+### 9.10 §8.4.2 CLOSED — the diagnostic surfaces are enumerated and gated
+
+The full-corpus sweep the recommendation lacked now exists and is a
+standing gate: `TestDiagnosticSurfaceParity`
+(test/go/langspec/diag_surface_test.go) runs BOTH surfaces over every
+spec row and requires every compile-only diagnostic to fall in an
+adjudicated class ledger (new class → fail; stale class → fail).
+Measured 2026-08-03: 85 of 7168 rows, six classes. The dominant class
+(`redundant_guard`, 76) is a DESIGNED asymmetry — the compile pass
+analyses fn units per concrete instantiation, so it proves guard
+redundancy the plain pass's one abstract body analysis cannot; its
+graduation is §8.4.4's in-body mirrors (as is the one
+`case_not_exhaustive` witness). The closure-factory def-stall vestiges
+(`unused_def`/`undefined_word`, 10 rows, non-blocking — the rows
+compile and run) name their graduation (seating a returned-closure
+event in a pending def); `macro_not_expandable` (2) is a designed
+stage asymmetry (the plain pass has no expansion step); one
+`type_error` word-splice witness names the splice-body return model.
+The review-time witness — mini-redis's compile-pass-only
+`undefined_word: expires` — was re-probed and is DEAD (the app now
+CompileChecks clean; the §9.8 collapse work killed it), recorded in
+CHECK-FALSE-POSITIVES.0.md.
+
+### 9.11 §8.2(3) LANDED — the poly return-join over gradual-Any
+
+A gradual-Any (or strict-disjunct) arg to a multi-overload user fn
+whose arms declare DIFFERING return types now compiles natively via the
+existing OpCallUserPoly re-match. Three coordinated pieces:
+
+1. **`userPolyArmShapeOK`** relaxed from Returns-identical to COUNT +
+   position-wise nil-ness agreement — the call site bakes a fixed nout,
+   so the count must agree; the types may differ.
+2. **`tryCompileUserPolyArms`** computes the position-wise JOIN of the
+   arms' returns (`userPolyPlan.outs`): a DYNAMIC carrier bounded at
+   the arms' common ancestor — "one of the arms' types, decided at run
+   time", the same gradual shape a mixed branch merge carries — which
+   `substituteJoinedOuts` swaps in for the committed overload's carrier
+   at both record sites, so downstream typing never rides one arm's
+   unproven commitment. Identical-return sets are byte-identical (no
+   position joins).
+3. **`recordCallElided`'s poly-alias arm** — the actual blocker was
+   identity plumbing, not the join: `applyGradualContagion`'s
+   first-match-partition widening mints a FRESH carrier after the
+   ReturnsFn returns, orphaning the recorded poly event, so the
+   dispatch re-refused generically ("user fn call … Stage 3") even with
+   every arm compiled. `RecordUserPolyCall` now leaves a one-shot note
+   (`EmitState.lastUserPoly`, cleared by every appendEvent) and the
+   generic record path consumes it: the rebuilt out IDs alias onto the
+   recorded event (`setProducedAt`) and the generic record elides — so
+   downstream typing rides the widened dynamic union under identities
+   that resolve to the poly event. (A first attempt PRESERVED the old
+   ID through the widening instead; that leaked owned identities into
+   unrelated dispatches' residual models and reclassified a compiling
+   flex-set corpus row as a Stage-1 refusal — the census's refusal
+   gate caught it, and the alias approach keeps the widening's fresh
+   mint load-bearing.)
+
+Graduations: both frontier-poly-join.tsv differing-return rows moved to
+`lang/spec/fn-value.tsv` §9 and their ledger entries deleted; the
+strict-disjunct twin (`g (h true)` over a declared-union return) flipped
+from an expected-refusal probe pin to a parity pin
+(`TestProbeWideningUnionReturnPoly`). Pins:
+`lang/go/bytecode_poly_join_test.go` (native + the count-mismatch
+negative — arms with differing return COUNTS keep the refusal).
+The recommendation's census-risk note held: no previously-compiling row
+regressed (the join fires only where the set previously refused).
+
 ### 9.7 Still open
 
 Stage G's remaining scope (multi-arg leading applies, event-provenance
 leads, unnamed-param frames — each excluded by design in §9.6b's
-admission) and the rest of P1's mechanisms (§8.2/§9.6), the
-finish-line statement's enforcement (§8.3), the remaining
-one-diagnostic-surface classes (§8.4.2 — the closure-render
-compile-pass diagnostics, now at least visible via §9.3), the
-Any-frontier headroom decision (§8.4.3), the in-body mirrors widening
-(§8.4.4), and the §9.4 def-split checker FP's graduation.
+admission), the remaining §8.2 mechanisms (container-fn auto-dispatch
+§8.2(4), the ledgered families §8.2(5), the do…error variable-arity
+island §8.2(6)), the finish-line statement's enforcement (§8.3), and
+the in-body mirrors widening (§8.4.4 — now also the named graduation
+for the two designed-asymmetry classes in §9.10's ledger). (The §9.4
+def-split FP graduated — §9.8; the §8.4.3 headroom decision closed —
+§9.9; the §8.4.2 surface unification enumerated and gated — §9.10; the
+§8.2(3) poly return-join landed — §9.11.)

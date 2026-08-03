@@ -195,18 +195,20 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// whole-frame replay's flat window lost the paren structure: compiled
 	// RET count-error, interpreted 14), then a sound refusal
 	// (noteDynFrameReplay declines a window with >1 applicable value).
-	// GRADUATED 2026-08-03 (the Stage-G single-arg increment): a leading
-	// Function-typed carrier with ONE argument — `(g x)` where g is a
-	// param — records the same RecordDynApply event the trailing spelling
-	// `(x g)` does (one-arg leading and trailing collection converge), so
-	// the inner group collapses to an event and the outer apply rides the
-	// single-applicable RetReplay tail. compose and twice moved to
-	// lang/spec/fn-value.tsv §8. The def-split row remains: it refuses one
-	// stage earlier, on the def-bound fn-param-apply `undefined_word`
-	// diagnostic — an OPEN checker FALSE POSITIVE (the program runs clean;
-	// pinned expected-open in lang/go/check_fn_param_apply_def_fp_test.go,
-	// the check_run_fp +74 class); same sound fallback either way.
-	`def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5`: {why: "def-split spelling: the def-bound fn-param apply trips the open undefined_word checker FP (check_fn_param_apply_def_fp_test.go)", failsWith: "check diagnostics"},
+	// GRADUATED 2026-08-03 in three coordinated steps: (1) the Stage-G
+	// single-arg increment — a leading one-arg fn-carrier apply `(g x)`
+	// records the trailing spelling's RecordDynApply event (compose/twice →
+	// fn-value.tsv §8); (2) checkModeParenFnCollapse — the plain-surface
+	// collapse twin — killed the def-split checker FP
+	// (check_fn_param_apply_def_fp_test.go is the positive pin); (3) the
+	// replayIsBodyTail windowReadsID widening — a dyn-bind of a value the
+	// window reads is not a reorderable event — armed the def-split body
+	// tail, so the stage row compiles natively too (fn-value.tsv §8). The
+	// family's remaining refusal is the CHAINED MULTI-ARG apply
+	// (`f (g x y)`), ledgered above in the emit-refusal families via
+	// lang/go/bytecode_chained_apply_test.go's TestMultiArgChainedApplyRefuses
+	// (no separate frontier entry: the two-applicable window refusal is the
+	// §9.1 class, "unapplied fn-value in body residual").
 
 	// Full-stack words GRADUATED 2026-08-03 (EmitState.FoldFullStack —
 	// static fold over a provably-exact stack; rows moved to
@@ -224,13 +226,16 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// varyRefusalLedger ("islanded").
 	`[10 20] each [drop 1 2 3 1 pick]`: {why: "full-stack word in a code body: the fold declines outside the top unit; the island seam owns it", failsWith: "islanded"},
 
-	// Gradual-Any to a multi-overload user fn with DIFFERING arm returns
-	// (frontier-poly-join.tsv) — the P1.3 target: userPolyArmShapeOK
-	// requires every arm's Returns to match the committed contract, so the
-	// join-recording graduation is what compiles these
-	// (completeness-review §8.2(3)).
-	`def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 5)`:   {why: "poly arms declare differing returns; one recorded output type would lie for the unselected arm", failsWith: "ambiguous dispatch, no poly re-match"},
-	`def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 'x')`: {why: "the sibling input selecting the other arm — same gate", failsWith: "ambiguous dispatch, no poly re-match"},
+	// Gradual-Any to a multi-overload user fn with DIFFERING arm returns —
+	// the P1.3 target — GRADUATED 2026-08-03 (completeness-review §8.2(3)/
+	// §9.11): tryCompileUserPolyArms records the position-wise JOIN of the
+	// arms' returns (userPolyPlan.outs — a dynamic carrier at the arms'
+	// common ancestor), userPolyArmShapeOK relaxed to count + nil-ness
+	// agreement, and applyGradualContagion's first-match-partition widening
+	// preserves the recorded identity (out[0].ID) so the poly event
+	// survives to the elision. Both rows compile natively via
+	// OpCallUserPoly (moved to lang/spec/fn-value.tsv §9; pinned in
+	// lang/go/bytecode_poly_join_test.go with the count-mismatch negative).
 
 	// `do … error` with a zero-netting handler (frontier-do-error-arity
 	// .tsv) — the P1.6 target: the single-output island model cannot

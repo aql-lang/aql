@@ -134,3 +134,17 @@ def g fn [[xs:List] [Any] [def n 10 each [n add] xs]] end g [1 2]	[11 12]	a fn-l
 #     differential gate (native pins: lang/go/bytecode_chained_apply_test.go).
 def compose fn [[f:Function g:Function x:Integer] [Integer] [f (g x)]] compose ([a:Integer] => [a mul 2]) ([b:Integer] => [b add 3]) 4	14	the canonical compose: outer param fn applied to the inner param fn's result
 def twice fn [[f:Function x:Integer] [Integer] [f (f x)]] twice ([n:Integer] => [n add 1]) 5	7	self-composition — the same fn value read twice, applied at two depths
+def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5	7	the def-split idiom: the apply seats in a def, the tail applies over the bound name (replayIsBodyTail's windowReadsID arm)
+def tds fn [[g:Function x:Integer] [Integer] [def r (x g) g r]] tds ([n:Integer] => [n add 1]) 5	7	the trailing-spelling def-split twin — same seating through the trailing RecordDynApply event
+#
+# §9  gradual-Any into a multi-overload user fn with DIFFERING arm returns.
+#     The checker cannot statically commit an arm, and until 2026-08-03 one
+#     recorded output type would lie for the unselected arm, so the shape
+#     refused ("ambiguous dispatch, no poly re-match"). The §8.2(3)
+#     return-join graduation records the JOIN of the arms' returns (a
+#     dynamic carrier at the arms' common ancestor) and the VM's
+#     OpCallUserPoly re-match selects the concrete arm — whichever arm
+#     runs, downstream typing rides the join, never one arm's unproven
+#     commitment (pins: lang/go/bytecode_poly_join_test.go).
+def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 5)	1	differing arm returns: Integer arm selected at runtime
+def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 'x')	's'	differing arm returns: String arm selected at runtime

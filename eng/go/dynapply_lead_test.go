@@ -94,3 +94,16 @@ func TestDynApplyLeadEligible(t *testing.T) {
 		t.Error("a captured slot with a parent-unit event entry must stay eligible")
 	}
 }
+
+// TestWindowReadsID pins the replay tail-proof's window-read probe (the
+// §9.8 dyn-bind skip): only a value the window actually holds reads.
+func TestWindowReadsID(t *testing.T) {
+	w := NewCarrier(TFunction)
+	w.ID = "g1"
+	if !windowReadsID([]Value{w}, "g1") {
+		t.Error("a window value's own ID must read")
+	}
+	if windowReadsID([]Value{w}, "zz") {
+		t.Error("an ID absent from the window must not read")
+	}
+}

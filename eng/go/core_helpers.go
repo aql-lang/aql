@@ -1729,10 +1729,13 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				es.RecordUserCall(fnUnit, args, out, pos)
 			} else if polyPlan != nil {
 				// Ambiguous multi-overload dispatch with every arm baked: record
-				// the runtime-re-matched poly call (OpCallUserPoly). The out
-				// carriers are the committed sig's declared returns — identical
-				// across arms by the poly gate, so downstream typing is sound
-				// whichever arm the VM selects.
+				// the runtime-re-matched poly call (OpCallUserPoly). Positions
+				// where the arms' declared returns AGREE keep the committed
+				// sig's carriers; positions where they DIFFER take the plan's
+				// return-join carrier (§8.2(3) — the runtime value is whichever
+				// arm the VM selects, a branch join), so downstream typing never
+				// rides one arm's unproven commitment.
+				polyPlan.substituteJoinedOuts(out)
 				pos := SrcPos{}
 				if len(args) > 0 {
 					pos = args[0].Pos()

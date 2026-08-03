@@ -1,15 +1,14 @@
 # Multi-overload user fn over a gradual-Any arg with DIFFERING arm returns
 # — the P1.3 capability target (checker-compiler-completeness-review.0.md
-# §8.2(3); COMPILE-REFUSAL-SURVEY.0.md §3b/§3c). The gate is
-# userPolyArmShapeOK: the call site records ONE output type, so arms with
-# mismatched Returns refuse ("gradual-Any arg to multi-overload user fn:
-# ambiguous dispatch, no poly re-match") — a deliberate soundness refusal.
-# Graduation = recording the JOIN of the arms' returns and dispatching via
-# the existing OpCallUserPoly re-match, with the census re-measured (the
-# dynamic output may re-refuse downstream — the recommendation's own
-# risk note). The survey's §3c quoted-slot variant has since GRADUATED —
-# the last row compiles natively today and rides here as the
+# §8.2(3); COMPILE-REFUSAL-SURVEY.0.md §3b/§3c) — GRADUATED 2026-08-03
+# (review §9.11): tryCompileUserPolyArms records the position-wise JOIN of
+# the arms' returns (a dynamic carrier at the arms' common ancestor;
+# userPolyPlan.outs), userPolyArmShapeOK relaxed to count + nil-ness
+# agreement, and the first-match-partition widening preserves the recorded
+# identity so the poly event survives to the record elision. The differing-
+# return rows moved to lang/spec/fn-value.tsv §9; native + negative pins in
+# lang/go/bytecode_poly_join_test.go (arms with differing return COUNTS
+# keep the refusal — the call site bakes a fixed nout). The survey's §3c
+# quoted-slot variant graduated earlier and rides below as the
 # keeps-compiling control.
-def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 5)	1	differing arm returns: Integer arm selected at runtime
-def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 'x')	's'	differing arm returns: String arm selected at runtime
 def id fn [[x:Any] [Any] [x]] def g fn [[a:Atom] [String] ['atom'] [a:Integer] [String] ['int']] g (id 5)	'int'	control: an Atom (/q) slot among the arms no longer bars the poly re-match — compiles natively
