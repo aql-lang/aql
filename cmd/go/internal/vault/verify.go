@@ -138,10 +138,13 @@ func runVerify(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 			fmt.Fprintf(stdout, "note: orphan detection is unavailable for the %s backend\n", kr.Name())
 		}
 
-		// 3. Capabilities bound to an alias that no longer exists.
+		// 3. Capabilities bound to an alias that no longer exists. A
+		//    namespace wildcard ("*" / "ns:*") binds a namespace, not one
+		//    alias record — no stored alias can ever equal it — so it is
+		//    never dangling, and pruning it would revoke a valid token.
 		for i := range s.Capabilities {
 			c := &s.Capabilities[i]
-			if c.Revoked {
+			if c.Revoked || wildcardAlias(c.Alias) {
 				continue
 			}
 			if a, _ := s.FindAlias(c.Alias); a == nil {

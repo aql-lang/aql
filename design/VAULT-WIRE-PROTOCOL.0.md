@@ -52,6 +52,19 @@ log.
 - Every response advertises `X-Boru-Vault-Protocol: 1`; a client
   declaring a newer protocol is refused `400`, mirroring the proxy's
   negotiation.
+- Every response carries `Cache-Control: no-store` — behind the
+  operator's reverse proxy, a shared cache must never replay one
+  caller's secret to the next.
+- LIST is bounded by every gate a GET enforces: the capability, the
+  serving session's namespace scope, and the per-alias IP whitelist. A
+  name a client could never read is not a name it gets to learn — and a
+  temporary broker password past its expiry stops answering lists too.
+- Store-loading failures answer with a fixed `vault store unreadable`;
+  the path/parse detail stays in server-side logs, never in a response
+  to an unauthenticated caller.
+- `sys/health` writes an access-log line but no audit record: liveness
+  probes arrive every few seconds and record no secret-relevant act, so
+  auditing them would only grow the log without bound.
 
 ## Authorization model
 

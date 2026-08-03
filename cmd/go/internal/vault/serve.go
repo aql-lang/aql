@@ -149,6 +149,10 @@ func (v *serveServer) Serve(ctx context.Context) error {
 func (v *serveServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	started := time.Now()
 	w.Header().Set(headerProtocol, strconv.Itoa(serveProtocol))
+	// Every response either carries a secret or reveals vault state, and
+	// the documented deployment puts a reverse proxy in front: a shared
+	// cache must never store one caller's answer for the next.
+	w.Header().Set("Cache-Control", "no-store")
 	if h := r.Header.Get(headerProtocol); h != "" {
 		if n, err := strconv.Atoi(h); err == nil && n > serveProtocol {
 			writeWireError(w, http.StatusBadRequest, fmt.Sprintf(
@@ -201,7 +205,10 @@ func (v *serveServer) handleHealth(w http.ResponseWriter, r *http.Request, start
 		"standby":     false,
 		"version":     fmt.Sprintf("boru-vault-wire/%d", serveProtocol),
 	})
-	v.log(started, r, "", code, "health")
+	// Access line only, no audit record: a service manager probing
+	// liveness every few seconds would otherwise grow the audit log
+	// forever with entries that record no secret-relevant act.
+	v.logline(started, r, "", code, "health")
 }
 
 // authWire authenticates the request's client token into its capability
@@ -217,7 +224,10 @@ func (v *serveServer) authWire(w http.ResponseWriter, r *http.Request, started t
 	}
 	s, err := requireStore(v.homeDir)
 	if err != nil {
-		writeWireError(w, http.StatusServiceUnavailable, err.Error())
+		// The error text names the store path and the parse/IO detail —
+		// operator information. This caller has not even authenticated
+		// yet, so it gets the same fixed phrase the health endpoint uses.
+		writeWireError(w, http.StatusServiceUnavailable, "vault store unreadable")
 		v.log(started, r, alias, http.StatusServiceUnavailable, "no-store")
 		return nil, nil
 	}
@@ -369,7 +379,23 @@ func (v *serveServer) handleList(w http.ResponseWriter, r *http.Request, started
 	if s == nil {
 		return
 	}
-	keys := serveListKeys(s, tok, ns)
+	// Listing runs under the same session a read would, so every gate a
+	// GET enforces also bounds what a LIST reveals: a broker password
+	// scoped away from a namespace cannot enumerate its names, an alias
+	// IP-whitelisted away from this client stays invisible, and a
+	// temporary broker password past its expiry stops answering here too.
+	sess := v.sess
+	if sess == nil {
+		var aerr error
+		sess, aerr = authenticate(s, v.homeDir, nil, io.Discard, "")
+		if aerr != nil {
+			writeWireError(w, http.StatusServiceUnavailable, "vault unavailable; set BORU_VAULT_PASSPHRASE for file backend")
+			v.log(started, r, "", http.StatusServiceUnavailable, "no-keyring")
+			return
+		}
+		defer sess.Close()
+	}
+	keys := serveListKeys(s, tok, ns, sess, clientIP(r.RemoteAddr))
 	if len(keys) == 0 {
 		// Same convention as a missing secret: 404, empty errors.
 		writeWireError(w, http.StatusNotFound)
@@ -391,15 +417,24 @@ func (v *serveServer) recordUse(capID string) {
 
 // serveListKeys returns the sorted wire-protocol list entries visible to
 // capability c at level ns: readable root names and "<ns>/" folders when
-// ns is "", or the readable base names inside namespace ns.
-func serveListKeys(s *Store, c *Capability, ns string) []string {
+// ns is "", or the readable base names inside namespace ns. "Readable"
+// means readable in full: an alias the serving session's scope or the
+// alias's own IP whitelist would refuse to GET is not listed either — a
+// name a client could never read is not a name it gets to learn.
+func serveListKeys(s *Store, c *Capability, ns string, sess *Session, client string) []string {
 	seen := map[string]struct{}{}
 	for i := range s.Aliases {
-		name := s.Aliases[i].Name
-		if !capabilityCoversAlias(c, name) {
+		a := &s.Aliases[i]
+		if !capabilityCoversAlias(c, a.Name) {
 			continue
 		}
-		ans, base := splitAlias(name)
+		if len(a.IPWhitelist) > 0 && !ipAllowed(client, a.IPWhitelist) {
+			continue
+		}
+		if requireScopeNS(sess, OpRead, valueNamespace(a.Name)) != nil {
+			continue
+		}
+		ans, base := splitAlias(a.Name)
 		switch {
 		case ns == "" && ans == "":
 			seen[base] = struct{}{}
@@ -503,14 +538,20 @@ func writeWireJSON(w http.ResponseWriter, code int, body any) {
 	w.Write(append(data, '\n'))
 }
 
-// log writes one redacted access line and a structured audit event.
-// The client token and the secret value are never written.
-func (v *serveServer) log(started time.Time, r *http.Request, alias string, status int, tag string) {
+// logline writes one redacted access line. The client token and the
+// secret value are never written.
+func (v *serveServer) logline(started time.Time, r *http.Request, alias string, status int, tag string) {
 	if v.stdout != nil {
 		fmt.Fprintf(v.stdout, "%s %s %s alias=%s status=%d outcome=%s dur=%s\n",
 			time.Now().UTC().Format(time.RFC3339), r.Method, r.URL.Path,
 			alias, status, tag, time.Since(started).Truncate(time.Millisecond))
 	}
+}
+
+// log writes the access line and a structured audit event — every
+// outcome except the unaudited health probe goes through here.
+func (v *serveServer) log(started time.Time, r *http.Request, alias string, status int, tag string) {
+	v.logline(started, r, alias, status, tag)
 	_ = appendAudit(v.homeDir, AuditEvent{
 		Action:  "serve.request",
 		Actor:   "serve",

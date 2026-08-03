@@ -296,6 +296,9 @@ func TestServeHealth(t *testing.T) {
 		if ct := w.Header().Get("Content-Type"); ct != "application/json" {
 			t.Errorf("content-type = %q", ct)
 		}
+		if cc := w.Header().Get("Cache-Control"); cc != "no-store" {
+			t.Errorf("Cache-Control = %q, want no-store", cc)
+		}
 	})
 	t.Run("bad method", func(t *testing.T) {
 		home := testHome(t)
@@ -361,8 +364,11 @@ func TestServeAuthArms(t *testing.T) {
 		home := serveFixture(t)
 		w4CorruptStore(t, home)
 		w := serveReq(t, newServeServer(home), "GET", "/v1/secret/data/r", "sometoken")
-		if w.Code != http.StatusServiceUnavailable {
-			t.Errorf("corrupt store = %d", w.Code)
+		if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "vault store unreadable") {
+			t.Errorf("corrupt store = %d, %q", w.Code, w.Body.String())
+		}
+		if strings.Contains(w.Body.String(), home) {
+			t.Errorf("store path leaked to an unauthenticated caller: %q", w.Body.String())
 		}
 	})
 	t.Run("sealed", func(t *testing.T) {
@@ -673,6 +679,49 @@ func TestServeList(t *testing.T) {
 			t.Errorf("namespace list = %d, %q", w.Code, w.Body.String())
 		}
 	})
+	t.Run("list requires a session", func(t *testing.T) {
+		home := serveFixture(t)
+		token := grantWire(t, "*")
+		setPass(t, "")
+		w := serveReq(t, newServeServer(home), "LIST", "/v1/secret/metadata", token)
+		if w.Code != http.StatusServiceUnavailable || !strings.Contains(w.Body.String(), "vault unavailable") {
+			t.Errorf("sessionless list = %d, %q", w.Code, w.Body.String())
+		}
+	})
+	t.Run("scope bounds what a list reveals", func(t *testing.T) {
+		// The reader password covers only proj; a root wildcard token must
+		// not learn root names through a broker it cannot read them from.
+		w4EnvelopeVault(t)
+		if code, _, e := runVault(t, "root-v\n", "add", "--from-stdin", "rootkey"); code != 0 {
+			t.Fatalf("seed rootkey: %s", e)
+		}
+		rootTok := grantWire(t, "*")
+		projTok := grantWire(t, "proj:*")
+		setPass(t, "reader-pass")
+		home := os.Getenv(EnvHome)
+		srv := newServeServer(home)
+		w := serveReq(t, srv, "LIST", "/v1/secret/metadata", rootTok)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("scope-filtered root list = %d, want 404", w.Code)
+		}
+		// The namespace the password does cover still lists normally.
+		w = serveReq(t, srv, "LIST", "/v1/secret/metadata/proj", projTok)
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), `"keys":["k"]`) {
+			t.Errorf("in-scope list = %d, %q", w.Code, w.Body.String())
+		}
+	})
+	t.Run("ip whitelist bounds what a list reveals", func(t *testing.T) {
+		home := serveFixture(t)
+		t.Setenv("SERVE_LIST_ROT", "rotated")
+		if code, _, e := runVault(t, "", "rotate", "--from-env=SERVE_LIST_ROT", "--ip-whitelist=203.0.113.0/24", "--yes", "r"); code != 0 {
+			t.Fatalf("rotate: %s", e)
+		}
+		token := grantWire(t, "*")
+		w := serveReq(t, newServeServer(home), "LIST", "/v1/secret/metadata", token)
+		if w.Code != http.StatusNotFound {
+			t.Errorf("ip-filtered list = %d, want 404 (alias visible from a denied IP)", w.Code)
+		}
+	})
 	t.Run("nothing visible is a bare 404", func(t *testing.T) {
 		home := serveFixture(t)
 		token := grantWire(t, "proj:k")
@@ -785,7 +834,7 @@ func TestServePureHelpers(t *testing.T) {
 	})
 	t.Run("serveListKeys dedupes folders", func(t *testing.T) {
 		s := &Store{Aliases: []Alias{{Name: "ns:a"}, {Name: "ns:b"}}}
-		got := serveListKeys(s, &Capability{Alias: "ns:*"}, "")
+		got := serveListKeys(s, &Capability{Alias: "ns:*"}, "", nil, "")
 		if len(got) != 1 || got[0] != "ns/" {
 			t.Errorf("root folders = %v", got)
 		}
@@ -853,4 +902,86 @@ func TestGrantWildcards(t *testing.T) {
 			t.Errorf("proxy with wildcard token = %d, want 403", w.Code)
 		}
 	})
+}
+
+// TestServeGuardsAllInterfacesBind proves --listen=:PORT (which Go binds
+// on every interface) is refused without --allow-public, for serve and
+// the proxy alike.
+func TestServeGuardsAllInterfacesBind(t *testing.T) {
+	testHome(t)
+	for _, mode := range []string{"serve", "proxy"} {
+		code, _, errOut := runVault(t, "", mode, "--listen=:0")
+		if code == 0 || !strings.Contains(errOut, "not a loopback address") {
+			t.Errorf("%s --listen=:0 = %d, %q (must refuse an all-interfaces bind)", mode, code, errOut)
+		}
+	}
+}
+
+// TestVerifyKeepsWildcardCapabilities: a namespace wildcard binds a
+// namespace, not an alias record, so verify must not call it dangling —
+// and --prune must not revoke it.
+func TestVerifyKeepsWildcardCapabilities(t *testing.T) {
+	home := serveFixture(t)
+	token := grantWire(t, "proj:*")
+	if code, out, errOut := runVault(t, "", "verify", "--prune"); code != 0 {
+		t.Fatalf("verify with a wildcard grant = %d, %q %q", code, out, errOut)
+	}
+	// The token still works after the prune: nothing was revoked.
+	w := serveReq(t, newServeServer(home), "GET", "/v1/secret/data/proj/k", token)
+	if w.Code != http.StatusOK {
+		t.Errorf("wildcard token after verify --prune = %d, want 200", w.Code)
+	}
+}
+
+// TestRotateRevokesCoveringWildcard: rotating with --revoke-caps is the
+// incident-response path, so a wildcard capability that can read the
+// rotated alias must die with the exact-match ones.
+func TestRotateRevokesCoveringWildcard(t *testing.T) {
+	home := serveFixture(t)
+	wildTok := grantWire(t, "proj:*")
+	otherTok := grantWire(t, "r")
+	t.Setenv("SERVE_WILD_ROT", "fresh-value")
+	if code, out, errOut := runVault(t, "", "rotate", "--from-env=SERVE_WILD_ROT", "--revoke-caps", "--yes", "proj:k"); code != 0 {
+		t.Fatalf("rotate: %q %q", out, errOut)
+	} else if !strings.Contains(out, "revoked 1 capability") {
+		t.Errorf("rotate output should count the wildcard revocation: %q", out)
+	}
+	srv := newServeServer(home)
+	w := serveReq(t, srv, "GET", "/v1/secret/data/proj/k", wildTok)
+	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "revoked") {
+		t.Errorf("covering wildcard after rotate --revoke-caps = %d, %q (must be revoked)", w.Code, w.Body.String())
+	}
+	// A capability on an uncovered alias is untouched.
+	w = serveReq(t, srv, "GET", "/v1/secret/data/r", otherTok)
+	if w.Code != http.StatusOK {
+		t.Errorf("unrelated capability after rotate = %d, want 200", w.Code)
+	}
+}
+
+// TestServeHealthIsNotAudited: liveness probes write an access line but
+// no audit record, so a probing service manager cannot grow the audit
+// log forever.
+func TestServeHealthIsNotAudited(t *testing.T) {
+	home := serveFixture(t)
+	var outb bytes.Buffer
+	srv := newServeServer(home)
+	srv.stdout = &outb
+	if w := serveReq(t, srv, "GET", "/v1/sys/health", ""); w.Code != http.StatusOK {
+		t.Fatalf("health = %d", w.Code)
+	}
+	if !strings.Contains(outb.String(), "outcome=health") {
+		t.Errorf("health should still write an access line: %q", outb.String())
+	}
+	audit, _ := os.ReadFile(auditPath(home))
+	if strings.Contains(string(audit), "serve.request") {
+		t.Errorf("health probe reached the audit log: %s", audit)
+	}
+	// A denied secret read IS audited — the log exists for those.
+	if w := serveReq(t, srv, "GET", "/v1/secret/data/r", ""); w.Code != http.StatusForbidden {
+		t.Fatalf("tokenless read should be 403")
+	}
+	audit, _ = os.ReadFile(auditPath(home))
+	if !strings.Contains(string(audit), "serve.request") {
+		t.Errorf("denied read missing from the audit log: %s", audit)
+	}
 }

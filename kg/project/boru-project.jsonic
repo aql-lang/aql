@@ -28,6 +28,16 @@
       authority: "primary"
       metadata: { repository: "boru-lang/boru" }
     }
+    {
+      id: "src:cli-md"
+      kind: "text"
+      locator: "CLI.md"
+      title: "CLI.md subcommand reference"
+      retrieved_at: null
+      content_hash: "cli-md-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
   ]
   entities: [
     { key: "boru", type: "Concept", label: "boru language"
@@ -71,6 +81,8 @@
     { key: "lang-guide", type: "Document", label: "lang/go/CLAUDE.md" }
     { key: "vault", type: "Concept", label: "secrets vault"
       attributes: { role: "encrypted API-key / token store, driven by the boru vault subcommand" } }
+    { key: "vault-wire", type: "Concept", label: "vault wire protocol"
+      attributes: { role: "read-only, HashiCorp-style HTTP API for secret provision (boru vault serve), authenticated by capability tokens" } }
     { key: "design-notes", type: "Document", label: "design/ notes" }
     { key: "org", type: "Organization", label: "boru-lang" }
   ]
@@ -234,6 +246,11 @@
       object: { kind: "entity", entity: "binary" }
       evidence: [{ source: "src:readme", locator: "Overview",
         quote: "a secrets vault" }]
+      confidence: 0.95 }
+    { subject: "vault-wire", predicate: "part_of"
+      object: { kind: "entity", entity: "vault" }
+      evidence: [{ source: "src:cli-md", locator: "The vault",
+        quote: "HTTP wire protocol for secret provision" }]
       confidence: 0.95 }
     { subject: "design-notes", predicate: "part_of"
       object: { kind: "entity", entity: "repo" }

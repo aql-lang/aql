@@ -1297,7 +1297,10 @@ func runRotate(args []string, homeDir string, stdin io.Reader, stdout, stderr io
 	if *revokeCaps {
 		if err := mutateStore(homeDir, func(s *Store) error {
 			for i := range s.Capabilities {
-				if s.Capabilities[i].Alias == alias && !s.Capabilities[i].Revoked {
+				// Cover, not equal: a namespace wildcard capability can read
+				// this alias too, and leaving it live would let the very
+				// token being rotated away fetch the replacement value.
+				if capabilityCoversAlias(&s.Capabilities[i], alias) && !s.Capabilities[i].Revoked {
 					s.Capabilities[i].Revoked = true
 					revoked++
 				}
@@ -1366,6 +1369,16 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+// wildcardAlias reports whether a stored capability binding is a
+// namespace wildcard ("*" or "ns:*") rather than a concrete alias name.
+// Bookkeeping that walks capabilities by alias (verify's dangling check,
+// rotate's revocation sweep) must treat these as namespace bindings, not
+// as references to an alias record that could exist.
+func wildcardAlias(alias string) bool {
+	_, base := splitAlias(alias)
+	return base == "*"
 }
 
 // grantAliasRef resolves the target of `vault grant`: a concrete alias
