@@ -346,6 +346,9 @@ still-compiling single-apply controls), `lang/spec/frontier/
 frontier-chained-apply.tsv` + its `frontierCompileLedger` entries
 (graduation = Stage G). The single-applicable stylesheet shapes and the
 `apply`-word spelling keep compiling — full suite + census green.
+(Superseded same-day by §9.6b: the compose family GRADUATED — the
+refusal now covers only the multi-arg chained shape and the def-split
+FP row.)
 
 ### 9.2 §2.2 CLOSED — quote-polarity screen on lambda callbacks
 
@@ -460,9 +463,44 @@ without a refresh. The binding truth was always the ratchet gates
 (refusals 0 / islands 0), which held at both counts and still hold at
 the regenerated 7246 (including the five graduated rows).
 
+### 9.6b §8.2(1) FIRST INCREMENT — compose compiles (one-arg leading apply)
+
+The Stage-G single-arg increment lands: `stepCloseParen`'s paren-collapse
+now records a LEADING one-arg fn-carrier apply — `(g x)` where `g` is a
+Function-typed param/capture slot of an open NAMED-PARAM fn unit — through
+the SAME `RecordDynApply` event the trailing spelling `(x g)` records. The
+soundness argument is convergence, and it is probe-backed at every edge:
+inside a named-param unit the paren seals the frame off, so the one-arg
+leading and trailing spellings reach the same call for EVERY runtime fn —
+a mismatched arity (0-arg, 2-arg, multi-return callee) no-matches
+identically in both engines (`TestLeadApplyArityMismatchParity`). The
+admission (`EmitState.DynApplyLeadEligible`) is deliberately narrow, each
+exclusion its own probe: an UNNAMED-param frame re-pushes args beneath the
+region — the interpreter's leading collection reaches past the sealed
+window (`(args.0 args.1)` over a two-arg fn nets 28 where the trailing
+model no-matches) — so those frames keep the whole-frame replay; an
+EVENT-provenance lead (`((mk 1) 2)`) keeps the curried machinery
+(`RecordDynApply` hard-refuses event fns); closure units decline; a
+multi-arg lead is never collapsed (beyond one argument the spellings'
+collection orders diverge — the bare body tail `(g x y)` rides the
+single-applicable frame replay, the chained `f (g x y)` refuses).
+
+The effect is §2.1's headline gap closed for the canonical shapes:
+`compose` (`f (g x)`) → 14, `twice` → 7, the depth-3 chain → 22, and the
+mid-body `(g x) add 100` → 108 all compile NATIVELY — the inner group
+collapses to an event and the outer apply rides §9.1's single-applicable
+RetReplay body tail. Graduations: the compose/twice frontier rows moved to
+`lang/spec/fn-value.tsv` §8 (census 7246 → 7248, still 100% native), their
+ledger entries deleted; `frontier-chained-apply.tsv` retains the def-split
+FP row and the sel1 control. Pins: `lang/go/bytecode_chained_apply_test.go`
+(native chain + arity-mismatch parity + the multi-arg chained refusal),
+`eng/go/dynapply_lead_test.go` (every admission arm, white-box).
+
 ### 9.7 Still open
 
-Stage G proper and the rest of P1's mechanisms (§8.2/§9.6), the
+Stage G's remaining scope (multi-arg leading applies, event-provenance
+leads, unnamed-param frames — each excluded by design in §9.6b's
+admission) and the rest of P1's mechanisms (§8.2/§9.6), the
 finish-line statement's enforcement (§8.3), the remaining
 one-diagnostic-surface classes (§8.4.2 — the closure-render
 compile-pass diagnostics, now at least visible via §9.3), the

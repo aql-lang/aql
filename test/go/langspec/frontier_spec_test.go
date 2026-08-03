@@ -193,17 +193,20 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// Chained forward application of Function params (frontier-chained-apply
 	// .tsv) — the compose family, a live MISCOMPILE until 2026-08-02 (the
 	// whole-frame replay's flat window lost the paren structure: compiled
-	// RET count-error, interpreted 14). noteDynFrameReplay now declines a
-	// window with >1 applicable value, so the shape is a sound refusal.
-	// Graduation = Stage G proper (fn-unit dynamic apply; the rows then
-	// move to lang/spec/fn-value.tsv). The def-split row refuses one stage
-	// earlier, on the def-bound fn-param-apply `undefined_word` diagnostic —
-	// an OPEN checker FALSE POSITIVE (the program runs clean; pinned
-	// expected-open in lang/go/check_fn_param_apply_def_fp_test.go, the
-	// check_run_fp +74 class); same sound fallback either way.
-	`def compose fn [[f:Function g:Function x:Integer] [Integer] [f (g x)]] compose ([a:Integer] => [a mul 2]) ([b:Integer] => [b add 3]) 4`: {why: "chained forward apply: two applicable values in the replay window (the inner group never collapsed in the check run)", failsWith: "unapplied fn-value in body residual"},
-	`def twice fn [[f:Function x:Integer] [Integer] [f (f x)]] twice ([n:Integer] => [n add 1]) 5`:                                           {why: "self-composition: the same multi-applicable window", failsWith: "unapplied fn-value in body residual"},
-	`def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5`:                                   {why: "def-split spelling: the def-bound fn-param apply trips the open undefined_word checker FP (check_fn_param_apply_def_fp_test.go)", failsWith: "check diagnostics"},
+	// RET count-error, interpreted 14), then a sound refusal
+	// (noteDynFrameReplay declines a window with >1 applicable value).
+	// GRADUATED 2026-08-03 (the Stage-G single-arg increment): a leading
+	// Function-typed carrier with ONE argument — `(g x)` where g is a
+	// param — records the same RecordDynApply event the trailing spelling
+	// `(x g)` does (one-arg leading and trailing collection converge), so
+	// the inner group collapses to an event and the outer apply rides the
+	// single-applicable RetReplay tail. compose and twice moved to
+	// lang/spec/fn-value.tsv §8. The def-split row remains: it refuses one
+	// stage earlier, on the def-bound fn-param-apply `undefined_word`
+	// diagnostic — an OPEN checker FALSE POSITIVE (the program runs clean;
+	// pinned expected-open in lang/go/check_fn_param_apply_def_fp_test.go,
+	// the check_run_fp +74 class); same sound fallback either way.
+	`def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5`: {why: "def-split spelling: the def-bound fn-param apply trips the open undefined_word checker FP (check_fn_param_apply_def_fp_test.go)", failsWith: "check diagnostics"},
 
 	// Full-stack words GRADUATED 2026-08-03 (EmitState.FoldFullStack —
 	// static fold over a provably-exact stack; rows moved to

@@ -179,13 +179,21 @@ the interpreter then owns the whole program:
   the apply window's producer (`[nd (m get "k") print "after"]`), whose
   effects a RET-time replay would reorder — pinned by
   `TestEdgeFindingDynamicFnValueApplyBodyTail` (§6, edge findings) — and
-  the **CHAINED forward apply** (`compose`'s `f (g x)`, self-composition
-  `f (f x)`): the replay window may hold at most ONE applicable value
+  the **CHAINED forward apply over a MULTI-ARG inner group** (`f (g x y)`):
+  the replay window may hold at most ONE applicable value
   (`noteDynFrameReplay`'s `replayApplicables == 1` arm, 2026-08-02 — the
   flat re-push loses the inner group's collapse, so a two-applicable
   window compiled the RET count error where the interpreter applies both
-  fns). Pinned by `TestChainedForwardApplyRefuses` + the
-  `frontier-chained-apply.tsv` ledger; graduation = Stage G proper.
+  fns). The ONE-ARG chain graduated 2026-08-03 (the Stage-G single-arg
+  increment): `(g x)` with `g` a named param/capture collapses to a
+  `RecordDynApply` event at the paren — one-arg leading and trailing
+  collection converge inside a sealed named frame, at every runtime arity
+  — so `compose`, `twice`, and mid-body `(g x) add 100` compile NATIVELY
+  (`EmitState.DynApplyLeadEligible` gates the admission; rows in
+  `lang/spec/fn-value.tsv` §8). Pinned by
+  `TestChainedForwardApplyCompiles` / `TestMultiArgChainedApplyRefuses` +
+  the `frontier-chained-apply.tsv` ledger (def-split FP row remains);
+  graduation of the rest = Stage G proper.
 - **Quote-typed lambda callback** — a lambda whose param is Atom-typed (a
   /q quote-capture slot, `fn_params.go`) admitted as a HOF callback over a
   COMPUTED collection: the runtime never binds a delivered stack value to

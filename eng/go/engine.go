@@ -7541,6 +7541,66 @@ func (e *Engine) recordParenLeadingApply(es EmitRecorder, first, openIdx, closeI
 	return closeIdx
 }
 
+// parenLeadFnApplyIdx classifies the Stage-G LEADING one-arg fn-carrier
+// apply window — `(g x)` where g is a Function-typed param/capture slot of
+// an open NAMED-PARAM fn unit (checker-compiler-completeness-review
+// §8.2(1)/§9.6b): inside such a unit the paren seals the frame off, so the
+// one-arg leading and trailing spellings CONVERGE for EVERY runtime fn (a
+// mismatched arity no-matches identically in both), and the shape may
+// record through the SAME RecordDynApply event `(x g)` would. Returns the
+// lead's tape index only when the window is exactly [eligible lead, one
+// non-fn argument]; -1 keeps every other shape on its own machinery: a
+// DYNAMIC lead recordParenLeadingApply's guarded method path, a CONCRETE
+// fn the auto-dispatch paths (it applied for real during the check step),
+// an EVENT lead the curried paths (DynApplyLeadEligible declines it —
+// RecordDynApply would hard-refuse), an unnamed-param frame the
+// whole-frame replay (its leading collection can reach beneath the
+// window), and a multi-arg lead (count > 2) is never collapsed — beyond
+// one argument the spellings' collection orders diverge — so a bare
+// multi-arg body tail rides the single-applicable whole-frame replay
+// while a CHAINED one (`f (g x y)`) refuses on the two-applicable window.
+func (e *Engine) parenLeadFnApplyIdx(es EmitRecorder, openIdx, closeIdx, count, lastIdx int) int {
+	if count != 2 {
+		return -1
+	}
+	last := e.tape.At(lastIdx)
+	if last.Dynamic || isFnValueResidual(last) {
+		return -1
+	}
+	for i := openIdx + 1; i < closeIdx; i++ {
+		v := e.tape.At(i)
+		if isRecordableLiteral(v) {
+			if !v.Dynamic && !v.Quoted && isFnTypedCarrier(v) && es.DynApplyLeadEligible(v) {
+				return i
+			}
+			break
+		}
+	}
+	return -1
+}
+
+// recordParenLeadFnApply records the classified [lead, arg] window
+// (parenLeadFnApplyIdx) as the trailing spelling's RecordDynApply event —
+// the compiled artifact is literally `(x g)`'s, so parity holds by
+// construction — substituting the event's out carrier for the lead and
+// splicing the argument out. This is what compiles compose natively: the
+// inner `(g x)` becomes an event, and the outer `f <event>` rides the
+// single-applicable RetReplay body tail. On a decline the window is left
+// intact for the downstream machinery (sound refusal-or-replay). Returns
+// the possibly-shrunk closeIdx.
+func (e *Engine) recordParenLeadFnApply(es EmitRecorder, leadFn, lastIdx, closeIdx int) int {
+	lead := e.tape.At(leadFn)
+	out := NewCarrier(TAny)
+	out.ID = GenerateID(IDPrefixForType(TAny))
+	out.pos = lead.pos
+	if es.RecordDynApply([]Value{e.tape.At(lastIdx)}, lead, out, lead.Pos()) {
+		e.tape.Set(leadFn, out)
+		e.tape.Remove(lastIdx)
+		closeIdx--
+	}
+	return closeIdx
+}
+
 func (e *Engine) stepCloseParen() error {
 	closeIdx := e.pointer
 
@@ -7768,6 +7828,7 @@ func (e *Engine) stepCloseParen() error {
 				lastIdx = i
 			}
 		}
+		leadFn := e.parenLeadFnApplyIdx(es, openIdx, closeIdx, count, lastIdx)
 		// Classify the paren's fn-value-call boundary. The TRAILING case is checked
 		// FIRST: when the LAST value is a concrete Function applied to the preceding
 		// args, it is the sound paren-bounded apply (`(prev key comp)`, or
@@ -7812,6 +7873,12 @@ func (e *Engine) stepCloseParen() error {
 			} else {
 				es.RegisterTrailingApply(last.ID, count-1)
 			}
+		case leadFn >= 0:
+			// LEADING one-arg fn-carrier apply (the Stage-G increment) —
+			// classified by parenLeadFnApplyIdx, recorded by
+			// recordParenLeadFnApply (both extracted for the stepCloseParen
+			// complexity cap).
+			closeIdx = e.recordParenLeadFnApply(es, leadFn, lastIdx, closeIdx)
 		case first >= 0 && count >= 2:
 			// LEADING dynamic apply (REFUSAL-CLOSURE §9.2e) — extracted to
 			// recordParenLeadingApply for the stepCloseParen complexity cap.

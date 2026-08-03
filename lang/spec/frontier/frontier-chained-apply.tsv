@@ -2,15 +2,20 @@
 # (design/checker-compiler-completeness-review.0.md §2.1, found 2026-08-02 as
 # a live miscompile: the whole-frame replay's flat window lost the source's
 # paren structure, so `f (g x)` compiled the RET count error where the
-# interpreter applies both fns). noteDynFrameReplay now declines a window
-# holding MORE THAN ONE applicable value (Function-typed or Dynamic), so
-# these rows are sound whole-program refusals with interpreter parity.
-# Graduation = Stage G proper (general dynamic apply inside fn units:
-# resolveDynamicApply routed into the fn-unit finish, trailingApply over
-# frame-local fns, chained applies as consecutive OpCallDynamic in token
-# order), at which point the ledger entries delete and the rows move into
-# the main corpus (lang/spec/fn-value.tsv).
-def compose fn [[f:Function g:Function x:Integer] [Integer] [f (g x)]] compose ([a:Integer] => [a mul 2]) ([b:Integer] => [b add 3]) 4	14	the canonical compose: outer param fn applied to the inner param fn's result
-def twice fn [[f:Function x:Integer] [Integer] [f (f x)]] twice ([n:Integer] => [n add 1]) 5	7	self-composition — the same window with one fn value read twice
+# interpreter applies both fns; noteDynFrameReplay then refused the >1-
+# applicable window soundly). GRADUATED 2026-08-03 (the Stage-G single-arg
+# increment): a leading Function-typed carrier applied to ONE argument —
+# `(g x)` with g a param — records the same RecordDynApply event as the
+# trailing spelling `(x g)` (one-arg leading and trailing collection
+# converge), so the inner group collapses to an event and the outer apply
+# rides the single-applicable RetReplay body tail. compose and twice moved
+# to lang/spec/fn-value.tsv §8. Remaining sub-frontier here: the def-split
+# spelling refuses one stage earlier on the OPEN def-bound fn-param-apply
+# checker false positive (check_fn_param_apply_def_fp_test.go); graduation
+# = that FP's fix. The paren-collapse records only the one-arg shape (the
+# arity where the spellings' collection orders converge): a bare multi-arg
+# body tail `(g x y)` rides the single-applicable whole-frame replay, while
+# a CHAINED multi-arg apply `f (g x y)` keeps refusing on the two-applicable
+# window (pinned in lang/go/bytecode_chained_apply_test.go).
 def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5	7	the def-split idiom: refuses on the open def-bound fn-param-apply checker FP (check_fn_param_apply_def_fp_test.go)
 def sel1 fn [[f:Function g:Function x:Integer] [Integer] [f x]] sel1 ([a:Integer] => [a mul 2]) ([b:Integer] => [b add 3]) 4	8	control: two Function params, ONE applicable in the window — keeps compiling natively

@@ -3679,6 +3679,47 @@ func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx,
 	}
 }
 
+// DynApplyLeadEligible reports whether the paren-collapse may record a
+// LEADING one-arg fn-carrier apply over v (the Stage-G increment,
+// stepCloseParen): true only inside an open NAMED-PARAM fn unit where v is
+// one of the unit's own slots (a param or capture read). The admission is
+// deliberately narrow, each exclusion probe-backed:
+//   - an UNNAMED-param frame re-pushes its args beneath the region, so the
+//     interpreter's leading collection can reach past the sealed window the
+//     trailing model records (`(args.0 args.1)` over a two-arg runtime fn
+//     nets 28 interpreted where the trailing model no-matches) — those
+//     frames keep the whole-frame replay;
+//   - a CLOSURE unit's analysis frame is the CallableSpec inputs, not a
+//     per-call named frame — outside the probe evidence, so it declines;
+//   - an EVENT-provenance lead (a direct call result, `((mk 1) 2)`) keeps
+//     the curried/auto-dispatch machinery — RecordDynApply hard-refuses an
+//     event fn (runtime quote state unknown), so admitting one here would
+//     turn a compiling shape into a refusal. A CAPTURE may carry a
+//     parent-unit event entry yet resolves to its own slot (capID
+//     precedence), so it stays eligible.
+//
+// Within an eligible unit, one-arg leading and trailing spellings CONVERGE
+// for every runtime arity: the paren seals the named frame off, so a
+// mismatched runtime fn (0-arg, 2-arg, multi-return) no-matches identically
+// in both spellings (probe-pinned across arities in
+// lang/go/bytecode_chained_apply_test.go).
+func (es *EmitState) DynApplyLeadEligible(v Value) bool {
+	if !es.active() || len(es.openUnitRecs) == 0 || es.inClosureUnit() {
+		return false
+	}
+	if es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]].nUnnamed > 0 {
+		return false
+	}
+	u := es.units[len(es.units)-1]
+	if _, isLocal := u.localByID[v.ID]; !isLocal {
+		return false
+	}
+	if _, produced := es.producedBy[v.ID]; produced && !u.capID[v.ID] {
+		return false
+	}
+	return true
+}
+
 // RecordDynApply records a paren-bounded TRAILING fn-value apply (`(a b comp)`):
 // the runtime fn VALUE `fn` applied to `args` (in source order — args[0] pushed
 // first / deepest), netting the single result `out`. Recorded as an EVENT so the
