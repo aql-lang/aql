@@ -4868,12 +4868,9 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 		if IsWord(a) && es.reg != nil {
 			if w, wErr := AsWord(a); wErr == nil &&
 				w.ArgCount == -1 && !w.ForceStack && !w.ForceForward && !w.ForceRef && !w.ForceUsurp {
-				// Mirror stepWord's type-name cascade exactly: the kernel
-				// name table, then the external-builtin path resolver, then
-				// the registry's dynamic type bindings.
-				if t, tOK := typeNames[w.Name]; tOK {
-					a = NewTypeLiteral(t)
-				} else if t, tOK := ResolveTypePath(w.Name); tOK {
+				// Mirror stepWord's type-name cascade exactly — the
+				// builtin arm of the canonical resolver (resolve.go).
+				if t, tOK := ResolveBuiltinTypeName(w.Name); tOK {
 					a = NewTypeLiteral(t)
 				}
 			}

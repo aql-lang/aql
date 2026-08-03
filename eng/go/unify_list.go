@@ -122,6 +122,25 @@ func unifyListFamily(a Value, sa ValueShape, b Value, sb ValueShape) (Value, *Un
 // IsConcrete false) has no readable elements — unify gradually to its own
 // kind, tagged, rather than dereferencing nil (the flex-[:T] panic twin).
 // See design/TYPED-CONTAINER-TAG-RETENTION.0.md.
+// reparentSwappedElem applies the Typed-Def Reparent discipline
+// (eng/go/CLAUDE.md) to a container-child unify result: Unify of a
+// concrete element against a bare-refine child returns the TYPE
+// LITERAL (the documented Unify-swap), and binding that literal would
+// replace the element's data with the type name. Return the source
+// element reparented to the canonical minted type instead — the same
+// construction `def x:Foo 42` performs at scalar typed defs.
+// Non-swap results pass through untouched.
+func reparentSwappedElem(src, unified Value) Value {
+	if !IsBareTypeNode(unified) || !IsConcrete(src) {
+		return unified
+	}
+	t := ValueType(unified)
+	if r := currentUnifyRegistry(); r != nil {
+		t = CanonicalType(r, t)
+	}
+	return ReparentValue(src, t)
+}
+
 func unifyTypedListWithConcrete(concrete, childType Value) (Value, *UnifyError) {
 	if !IsConcrete(concrete) {
 		// A carrier (a check-mode abstract list with no readable elements) tags
@@ -131,9 +150,13 @@ func unifyTypedListWithConcrete(concrete, childType Value) (Value, *UnifyError) 
 		return out, nil
 	}
 	lst, _ := AsList(concrete) // concrete list-family (plain or flex) → readable
-	result, err := unifyZip(lst.Len(), constAt(childType), sliceAt(lst.Slice()))
+	elems := lst.Slice()
+	result, err := unifyZip(lst.Len(), constAt(childType), sliceAt(elems))
 	if err != nil {
 		return Value{}, err
+	}
+	for i := range result {
+		result[i] = reparentSwappedElem(elems[i], result[i])
 	}
 	var out Value
 	if IsFlexList(concrete) {

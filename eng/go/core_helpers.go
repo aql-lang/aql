@@ -2290,24 +2290,11 @@ func IsLiteralTypeBody(v Value) bool {
 
 // ResolveWordValue converts a word value to its semantic value.
 // Words named "true"/"false" become booleans, known type names become type
-// literals, and other words become atoms (bare strings).
+// literals, and other words become atoms (bare strings). Registry-free —
+// runs only the builtin arm of the canonical cascade (resolve.go); sites
+// with a Registry in hand use ResolveWordValueR.
 func ResolveWordValue(v Value) Value {
-	if !IsWord(v) {
-		return v
-	}
-	_as1, _ := AsWord(v)
-	name := _as1.Name
-	switch name {
-	case "true":
-		return NewBoolean(true)
-	case "false":
-		return NewBoolean(false)
-	default:
-		if t, ok := typeNames[name]; ok {
-			return NewTypeLiteral(t)
-		}
-		return NewAtom(name)
-	}
+	return resolveWordValue(v, nil)
 }
 
 // SimplifyDisjunctAlts filters Never, dedupes structurally identical

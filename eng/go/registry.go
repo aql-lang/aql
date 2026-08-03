@@ -2382,10 +2382,17 @@ func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, 
 	}
 	w, _ := AsWord(v)
 	rv, hit := r.ResolveTypedName(w.Name)
-	if !hit {
-		return v, w.Name, false
+	if hit {
+		return rv, w.Name, true
 	}
-	return rv, w.Name, true
+	// Builtin arm of the canonical cascade (resolve.go): a name the
+	// registry does not bind may still be a live builtin — any type
+	// registered after parser init arrives here as a Word (`def
+	// x:Bytes …`, `x is Date`), exactly like a user type (NUR059).
+	if t, bOK := ResolveBuiltinTypeName(w.Name); bOK {
+		return NewTypeLiteral(t), w.Name, true
+	}
+	return v, w.Name, false
 }
 
 // RunPredicate invokes a predicate-type fn against a candidate

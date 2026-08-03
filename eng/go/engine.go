@@ -2924,11 +2924,7 @@ func (e *Engine) stepWord(val Value) error {
 			e.tape.Set(e.pointer, NewAtom("null"))
 			return nil
 		}
-		if t, ok := typeNames[w.Name]; ok {
-			e.tape.Set(e.pointer, NewTypeLiteral(t))
-			return nil
-		}
-		if t, ok := ResolveTypePath(w.Name); ok {
+		if t, ok := ResolveBuiltinTypeName(w.Name); ok {
 			e.tape.Set(e.pointer, NewTypeLiteral(t))
 			return nil
 		}
@@ -8399,16 +8395,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						}
 						break
 					}
-					if tn, isType := typeNames[ww.Name]; isType {
-						if sigArgMatches(sig, fwd, NewTypeLiteral(tn)) {
-							positions[fwd] = scanIdx
-							fwd++
-							scanIdx++
-							continue
-						}
-						break
-					}
-					if tn, isType := ResolveTypePath(ww.Name); isType {
+					if tn, isType := ResolveBuiltinTypeName(ww.Name); isType {
 						if sigArgMatches(sig, fwd, NewTypeLiteral(tn)) {
 							positions[fwd] = scanIdx
 							fwd++

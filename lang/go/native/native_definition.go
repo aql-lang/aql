@@ -1162,7 +1162,11 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				name, body.String(), describeType())
 		}
 	}
-	unified, ok := Unify(body, constraint)
+	// Registry-armed: a container constraint may carry a bare
+	// type-name child (`def xs:[:Foo]`) that only the registry can
+	// resolve (NUR060) — the registry-free Unify degraded it to an
+	// Atom and refused every value.
+	unified, ok := UnifyR(body, constraint, r)
 	if !ok {
 		if r.Check.IsActive() {
 			r.Check.AddDiagnostic(CheckDiagnostic{

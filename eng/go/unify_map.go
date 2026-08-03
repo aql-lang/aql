@@ -190,6 +190,13 @@ func unifyTypedMapWithConcrete(concrete, childType Value) (Value, *UnifyError) {
 	if err != nil {
 		return Value{}, err
 	}
+	if om, mErr := AsMutableMap(res); mErr == nil {
+		for _, k := range om.Keys() {
+			uv, _ := om.Get(k)
+			sv, _ := m.Get(k)
+			om.Set(k, reparentSwappedElem(sv, uv))
+		}
+	}
 	if IsFlexMap(concrete) {
 		om, _ := AsMutableMap(res) // res is a fresh plain Map — reuse its OrderedMap
 		res = NewFlexMap(om)
