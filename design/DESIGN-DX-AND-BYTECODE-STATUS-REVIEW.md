@@ -1,5 +1,16 @@
 # Design DX reports + bytecode-compiler status — consolidated review
 
+> **STALE (2026-08-02).** The compiler status in §1 has been overtaken:
+> the corpus now compiles at **0 refusals / 0 islands** and the
+> refusal/island ratchets are **hard gates** (`refusalGate`/`islandGate`
+> in `test/go/langspec/compiled_coverage_test.go`), no longer
+> "informational"; the 19/23-refusal frontier described below graduated.
+> Live truth: `test/go/langspec/COMPILED_STATUS.md` (regenerate with
+> `make status`) and the frontier ledgers
+> (`test/go/langspec/frontier_spec_test.go`). The DX-report closeouts in
+> §2–§5 remain accurate. See
+> `checker-compiler-completeness-review.0.md` for the 2026-08 state.
+
 _Reviewed 2026-06-25. This note closes out a full pass over every design
 **DX report** and the **bytecode-compiler status**: each item is
 re-verified against the live `main` tree (not the report's original

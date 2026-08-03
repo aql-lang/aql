@@ -6852,8 +6852,40 @@ func (e *Engine) strandedForwardError(boundary string) *BoruError {
 			"a function word is a barrier and never feeds forward collection (strict rule); "+
 			"group the call in parens so its RESULT becomes the argument: %s (%s …)",
 		fwd.FuncName, missing, boundary, fwd.FuncName, boundary)
+	// A boundary word with a stack-barrier slot (`dot` and the accessor
+	// family: the receiver sits beyond BarrierPos, readable only from the
+	// ENCLOSING stack) may not work grouped — a paren seals the stack the
+	// barrier slot must reach (NUR049: `def why (dot message)` starves every
+	// candidate where the sequential form works). Offer the sequential
+	// spelling alongside, so the help never names only a dead form.
+	if e.barrierReceiverWord(boundary) {
+		detail += fmt.Sprintf(
+			"; note `%s` reads its receiver from the enclosing stack, which a paren "+
+				"group seals off — if the grouped form cannot match, run it first and "+
+				"bind its result in sequence instead: %s … %s",
+			boundary, boundary, fwd.FuncName)
+	}
 	return makeBoruErrorAt("signature_error", detail, fwd.FuncName,
 		e.effectiveSource(), "", fwd.Pos)
+}
+
+// barrierReceiverWord reports whether any registered signature of word
+// reads a slot from the enclosing stack (BarrierPos < TotalArgs). For such
+// a word the "group the call in parens" fix can starve the barrier slot —
+// the paren seals the enclosing stack (NUR049) — so suggestions offer the
+// sequential spelling too.
+func (e *Engine) barrierReceiverWord(name string) bool {
+	fd := e.registry.Lookup(name)
+	if fd == nil {
+		return false
+	}
+	for i := range fd.Signatures {
+		s := &fd.Signatures[i]
+		if s.BarrierPos >= 0 && s.BarrierPos < s.TotalArgs() {
+			return true
+		}
+	}
+	return false
 }
 
 // noteSpeculativeBarrierCommit emits the speculative_forward_commit

@@ -1,5 +1,12 @@
 # Type checker + bytecode compiler — completeness review
 
+> **STATUS (2026-08-03): the P0 track landed** — see §9 for the
+> implementation record. §2's two divergences are CLOSED (sound refusals
+> with parity pins), §3's opaque sentinel now names its blocking
+> diagnostic, and the property fuzzer carries the §8.1(3) axes — which
+> promptly surfaced a further pre-existing checker false positive, now
+> ledgered expected-open (§9.4).
+
 _Reviewed 2026-08-02 at `a727962`. Method: built the CLI from HEAD and
 probed shapes directly (`do` under default / `-force-compile` /
 `-no-compile`, `check -json`); ran the langspec gates
@@ -322,3 +329,112 @@ unknown-provenance tails, and the recovery/poly funnels go last.
 Refresh or header-annotate the stale status docs (§7) and fix the two
 stale code comments. Cheap, and they actively mislead — this review
 initially chased the "19 refusals / informational ratchets" claim.
+
+## 9. Implementation record (2026-08-03)
+
+### 9.1 §2.1 CLOSED — chained forward apply refuses
+
+`noteDynFrameReplay` (emit.go) arms the whole-frame replay only when the
+window holds exactly ONE applicable value (`replayApplicables`): the flat
+re-push loses the source's paren structure, so a two-applicable window —
+`compose`'s `f (g x)`, `f (f x)` — compiled the RET count error where the
+interpreter applies both fns. The chained shapes now refuse (`unapplied
+fn-value in body residual`) with faithful fallback: default mode returns
+14/7. Pins: `eng/go/emit_dynapply_fnunit_test.go` (white-box decline
+arms), `lang/go/bytecode_chained_apply_test.go` (both spellings + the
+still-compiling single-apply controls), `lang/spec/frontier/
+frontier-chained-apply.tsv` + its `frontierCompileLedger` entries
+(graduation = Stage G). The single-applicable stylesheet shapes and the
+`apply`-word spelling keep compiling — full suite + census green.
+
+### 9.2 §2.2 CLOSED — quote-polarity screen on lambda callbacks
+
+An Atom-typed lambda param is a /q quote-capture slot the runtime never
+binds from a delivered value, so the interpreter leaves such a lambda as
+data in the callback position. Two screens restore parity:
+`lambdaHookCompatible`'s quote arm (lambda-value bodies) and
+`quoteParamCarrierBind` consulted at the user-fn dispatch record inside
+closure units only (token bodies) — `each`/`fold` over `(keys m)` now
+refuse to the interpreter's own result, and the `filter` sibling
+compiles with the identical error. Top-level /q no-match parity was
+already exact and is untouched. Pins:
+`eng/go/quote_lambda_screen_test.go`,
+`lang/go/bytecode_quote_lambda_test.go`.
+
+### 9.3 §3 / §8.1(4) CLOSED — the sentinel names its diagnostic
+
+`RunCompiledStrict` appends the first blocking diagnostic to the
+`check diagnostics` refusal (`checkDiagnosticsDetail`, lang/go/boru.go)
+— `force-compile: check diagnostics: [undefined_word] undefined word: a`
+— using the same predicate the `CompileCheck` gate refused on. The
+sentinel string itself is unchanged (the fallback classifier compares it
+by equality), as is the `Vm.compile` programmatic mirror. Pin:
+`TestRunCompiledStrict/check-diagnostics refusal names the blocking
+diagnostic`.
+
+### 9.4 §8.1(3) LANDED — fuzzer axes; a new FP surfaced and ledgered
+
+`genHofProg` (compiled_property_test.go) adds the four axes: apply
+spelling (forward / `apply`-word / `/r`), apply depth 1–3, lambda param
+quote polarity, collection provenance (literal / computed / gradual).
+A cranked run (8 seeds × 3000; 16,312 compiled programs) reports **0
+divergences**. The axes immediately surfaced a pre-existing PLAIN-pass
+checker false positive the old grammar could not spell: `def zr (f x)`
+— a def bound to a Function-param application — flags
+`undefined_word: zr` on a clean-running program (the strict Function
+carrier's un-collapsed group residual stalls the pending def; the
+`tryDynamicFnValueDispatch` collapse admits only DYNAMIC bounds and its
+evaluation-fixed window scanner rejects param reads — a first widening
+attempt confirmed both facts and was reverted as out-of-scope for a
+bounded landing). Triage: `pinnedCheckRunDivergent` 144 → 218 with the
+class recorded (`check_run_fp_test.go`), expected-open ledger pin
+`lang/go/check_fn_param_apply_def_fp_test.go`, and the
+`frontier-chained-apply.tsv` def-split row keyed to it. Graduation =
+the strict-Function-carrier collapse on the plain-check surface.
+
+### 9.5 §8.4.1 CLOSED — NUR049 resolved (handler bodies checked)
+
+`errorReturnsFn`'s seeded handler-body run covers the PLAIN pass
+(native_control.go, un-gated 2026-08-03): a handler typo flags
+`undefined_word` statically, the sealed-group `(dot message)` idiom is
+PROVEN `no_signature` at check time, the working idioms stay clean, and
+the plain-pass `error` bound narrows to the compile pass's join
+(`do [7] error [drop 9]` → dynamic(Integer)). Corpus-safe by
+construction — every corpus row already passed this analysis in the
+compile pass. The record's full fix scope landed: the misleading help
+text now offers the sequential spelling for barrier-receiver boundary
+words (`strandedForwardError` + `forwardParensSuggestion`,
+`barrierReceiverWord`), and both shipped examples are repaired
+(`todo-tui-client.boru` ×4 arms; `todo/audit.boru`'s handler +
+its `record` sink, whose `[None] [ None ]` spelling netted two values).
+NUR049 is retired from NUR.md per the register protocol. Pins:
+`lang/go/check_error_handler_test.go`,
+`eng/go/barrier_receiver_hint_test.go`. This also advances §8.4.2: the
+`error`-handler surface is now identical across the two passes.
+
+### 9.6 P1 groundwork LANDED; the capability mechanisms stay staged
+
+The §8.2 targets are now LEDGERED (measurable, per the ledger-first
+discipline) where they weren't: `frontier-chained-apply.tsv` (Stage G's
+graduation rows, §9.1), `frontier-full-stack.tsv` (depth/pick/roll —
+previously off-corpus entirely), `frontier-poly-join.tsv` (the
+differing-arm-returns gate; its Atom-slot sibling turned out already
+GRADUATED — the survey's §3c refusal compiles natively today and rides
+as the control row), and `frontier-do-error-arity.tsv` (the
+zero-netting handler). The capability mechanisms themselves — Stage G's
+two coordinated lowering changes, the OpDepth/OpPick/OpRoll family, the
+return-join user-poly recording, the container auto-invoke op, the
+variable-arity island — remain the staged projects §8.2 sequences: each
+is census-gated soundness-frontier work the repo's own discipline
+forbids half-landing (DESIGN-DX-AND-BYTECODE-STATUS-REVIEW's closing
+rule), now with the §8.1(3) fuzzer in place as the safety net the
+sequencing required.
+
+### 9.7 Still open
+
+Stage G proper and the rest of P1's mechanisms (§8.2/§9.6), the
+finish-line statement's enforcement (§8.3), the remaining
+one-diagnostic-surface classes (§8.4.2 — the closure-render
+compile-pass diagnostics, now at least visible via §9.3), the
+Any-frontier headroom decision (§8.4.3), the in-body mirrors widening
+(§8.4.4), and the §9.4 def-split checker FP's graduation.

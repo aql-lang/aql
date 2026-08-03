@@ -63,7 +63,6 @@ commit.
 | [NUR026](#nur026) | Escape sets diverge between quoted strings and templates | 2026-07-22 uniformity review |
 | [NUR030](#nur030) | `group` co-groups deq-distinct keys that render identically | PR #309 review (Codex P1); re-opened 2026-07-31 (was Allowed 2026-07-24) |
 | [NUR031](#nur031) | Function/Word values are not `deq` to themselves; `eq` and order key on the binding name | PR #309 review (Codex P2); re-opened in part 2026-07-31 (was Allowed 2026-07-24); module namespace resolved 2026-08-01 by the NUR038 facet refactor, descriptor 2026-08-02 — modulo the fn-export residue this record still tracks |
-| [NUR049](#nur049) | Inside an unchecked `error` handler, a paren group's unsatisfiable receiver fails at runtime only | 2026-07-31 split of NUR029 (G10); premise narrowed 2026-08-02 |
 | [NUR052](#nur052) | Store enumeration reads the top COW layer; lookup walks the chain | 2026-08-02 NUR-EFFORT-TRIAGE probing |
 | [NUR053](#nur053) | The truthiness consumers do not share one domain | 2026-08-02 NUR register review |
 | [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler | 2026-08-02 NUR register review |
@@ -1609,111 +1608,6 @@ and the blast radius reaches shipped `lang/go/modules/*.boru`, a scope
 the record never mentioned. An **Allowed** record carries "the evidence
 that pins it … so the acceptance cannot silently rot"; this evidence
 had rotted by a factor of two.
-
----
-
-## NUR049 — Inside an unchecked `error` handler, a paren group's unsatisfiable receiver fails at runtime only {#nur049}
-
-**Status:** Pending · **Recorded:** 2026-07-31 · **Surfaced by:** split
-of NUR029 (design/BORU-SHARP-EDGES.0.md G10; a latent bug in shipped
-example code) · **Premise narrowed:** 2026-08-02
-
-**Rule:** a failure the checker can prove is reported statically, and
-the engine's own suggestions name a form that works.
-**Divergence:** inside an `error` handler the raised error is on the
-stack, and the idiom `error [ def why (dot message) … ]` fails —
-the paren opens a fresh collection context with `dot` first inside it,
-where the group supplies only one token, so no `dot` signature can be
-satisfied. It fails **at runtime**, with
-`[boru/signature_error]: cannot call `dot` — no signature matches the
-arguments`, and `boru check` reports nothing — **because `error`
-handler bodies are unchecked**, not because the checker cannot see it:
-the same `(dot a)` group at statement level or inside an ordinary fn
-body IS reported as a `no_signature` error. The unparenthesized
-`dot message def why;` form works.
-**Mechanism:** `dot` has 18 registered signatures — 16 from
-`native_storage.go` `accessorGetSignatures`, all `BarrierPos: 1`
-(receiver in the barrier slot, satisfiable only from the enclosing
-stack, which the group seals), plus two from
-`native_error_raise.go:83-84` (`[String Error]`, `[Atom Error]`) at
-`BarrierPos: -1` — all-forward, normalized to `TotalArgs()` = 2 by
-`registry.go:1594-1596`, so they want two forward arguments and the
-group offers one. Every candidate therefore misses. The parser guards
-the *sugar* form (a leading `.`/`!.` is a parse-time
-`danglingDotError`, `eng/go/parser/parse.go:444,763`) but the bare word
-`dot` bypasses the guard.
-**Evidence:** `design/BORU-SHARP-EDGES.0.md` §G10; the broken idiom
-ships in `design/examples/apps/todo-tui-client.boru`'s error arms and
-at `design/examples/todo/audit.boru:29` (`err: (dot code)`), which no
-test exercises.
-**Documentation status:** actively wrong. The engine's own diagnostics
-suggest the parenthesised form: `strandedForwardError`
-(`eng/go/engine.go:6831-6856`, message at :6849-6853) literally spells
-the fix `def (dot …)`, and `forwardParensSuggestion`
-(`eng/go/diag_msg.go:107-110`, called at :73-74) offers `(dot …)`. Both
-name a spelling whose candidates cannot be satisfied inside the group —
-the 16 accessor rows want a stack-barrier receiver the group seals off,
-and the two Error rows want two forward arguments the group does not
-supply. The tool recommends the very spelling this record is about.
-
-**Title correction (2026-08-02).** This record was titled "The paren
-barrier is one-directional: a group can reach backward for a
-receiver". That premise is false and is retracted by the investigation
-update below: the group is dynamically sealed today, in every probed
-context. The heading and the blocking-list row now name what actually
-remains — a provable failure that goes unproved, in the one body the
-checker does not visit.
-
-**Verdict (maintainer, 2026-07-31 — resolve by fix,
-`design/NUR-RESOLUTION-PLAN.0.md`; recorded verbatim, but see the
-2026-08-02 update below, which finds the runtime half already
-satisfied and narrows the outstanding work to the static half):** make
-the paren barrier **symmetric**. A parenthesized expression must fully
-complete using
-only what is inside the parens; it may not optimistically wait for, or
-reach out to, any value beyond the open paren — grouping into a
-self-contained sub-expression is the purpose of parens, so the barrier
-must hold in both directions. Consequences: `(dot message)` then fails
-**deterministically and statically** — the barrier-slot receiver can
-provably never be satisfied from inside an empty group, so the checker
-proves the underflow instead of deferring to runtime (subsuming the
-optimistic-barrier gap for this case). With the fix: correct the
-shipped example (`todo-tui-client.boru`) to the unparenthesized
-`dot message` form, and add a test forcing a sync failure so its error
-arms actually run.
-**Compatibility check before landing:** this is a real semantic
-change. Verify it does not break sanctioned point-free patterns that
-intentionally open a paren expecting to consume an enclosing stack
-value; if such patterns exist and are sanctioned, they need an
-explicit alternative (e.g. `$`-receiver forms) before the barrier
-closes.
-
-**Investigation update (2026-08-02, NUR-EFFORT-TRIAGE probing):** the
-record's premise is narrower than written. The backward *reach* does
-NOT reproduce in any probed context — `5 (add 3)`,
-`{m:"hi"} (dot "m")`, the def/word/branch/data variants, and the
-error-arm form all fail **deterministically at runtime already**:
-every dispatch scan (`resolvedIndicesBeforeInto`,
-`commitBarrierForward`) stops at the OpenParen, so the group is
-dynamically sealed today. What remains of the defect is (a) the
-failure is not **static** — error-handler bodies are wholly unchecked
-(`do [ raise bad_input "boom" ]  error [zzz-undefined]` passes
-`boru check` clean; the seeded
-handler-body run in `errorReturnsFn` exists but is gated to the
-compile pass), and (b) the engine's own help text actively recommends
-the broken idiom (`strandedForwardError` /
-`forwardParensSuggestion` suggest `def (dot …)` forms whose every
-candidate needs a stack-barrier receiver). The compatibility check
-the verdict requires came back clean: a corpus sweep (lang/spec,
-utils, design/examples, lang/go/modules) found no sanctioned
-point-free pattern relying on backward reach — the only
-enclosing-stack-dependent groups are the broken error-arm idioms
-themselves, including a second latent instance at
-`design/examples/todo/audit.boru:29` (`err: (dot code)`). The fix
-scope is therefore: staticize the handler-body check, fix the help
-text, repair both shipped examples, and pin the symmetry with a spec
-battery; the working replacement form (`dot message def why;`) is
-verified.
 
 ---
 

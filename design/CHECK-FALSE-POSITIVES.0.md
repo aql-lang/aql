@@ -99,3 +99,13 @@ The stricter **compile pass** (`a.CompileCheck`, used by the `boru check
 handler lambdas (`[req:Map state:Any] => [ def expires state.expires … ]`). It
 does not gate `boru run` and is a distinct facet (compile-pass analysis of a
 service-handler closure body with a `state:Any` param), tracked for a follow-up.
+
+**Update 2026-08-02**: compile-pass-only diagnostics are now *visible* — a
+`-force-compile` refusal names the first blocking diagnostic
+(`check diagnostics: [undefined_word] …`, `lang.checkDiagnosticsDetail`)
+instead of the bare sentinel. A sibling class was ledgered from the widened
+property fuzzer: `def zr (f x)` — a def bound to a Function-PARAM
+application — flags `undefined_word: zr` in the PLAIN pass too, on a
+program that runs clean. Pinned expected-open in
+`lang/go/check_fn_param_apply_def_fp_test.go`; triage in
+`test/go/langspec/check_run_fp_test.go` (the +74 entry).

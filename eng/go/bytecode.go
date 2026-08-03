@@ -82,8 +82,10 @@ const (
 	// as the word's operand; at run time the word's native handler
 	// invokes it through the VM's re-entrant runner via the InvokeBody
 	// seam — never the interpreter (plan P2). Capture-carrying closures
-	// take their captures from the operand stack below the closure (not
-	// yet emitted; capture-free bodies only for now).
+	// take their captures from the operand stack below the closure
+	// (CompiledFn.NCaptures trailing slots, popped into
+	// ClosurePayload.Captures — the lower.go opClosure lowering pushes
+	// each capture operand first).
 	OpPushClosure
 	// OpCallNativePoly dispatches PolyRefs[Arg].Word at RUN time: it runs
 	// the kernel's own MatchSignature over the word's signatures against the

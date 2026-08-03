@@ -115,10 +115,12 @@ compile, NUR051) and G12 (an `/r`-parked fn not satisfying a
 `case` default runs isolated like a matched arm, nested bare type
 nodes intern as type operands (ADR-010), and there is exactly one
 function type (`Word/__FN` collapsed into `Type/Function`; `/r`-marked
-words feed forward collection as references — ADR-011). The one live
-item carries a per-item NUR record with a fix verdict: G10
-`(dot message)` receiverless in an `error` handler → NUR049. Read the
-note before re-deriving a workaround.
+words feed forward collection as references — ADR-011). G10
+(`(dot message)` receiverless in an `error` handler) was **resolved
+2026-08-03**, retiring NUR049: `error` handler bodies are checked on
+the plain pass (`errorReturnsFn`'s seeded run, un-gated), the paren
+suggestions carry the sealed-stack caveat, and both shipped examples
+are repaired. Read the note before re-deriving a workaround.
 
 ## Build & Test
 
