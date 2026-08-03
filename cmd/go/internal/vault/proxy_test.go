@@ -505,6 +505,9 @@ func TestIsLoopback(t *testing.T) {
 		{"localhost:8787", true},
 		{"[::1]:8787", true},
 		{"0.0.0.0:8787", false},
+		// An empty host binds every interface, which is exactly what the
+		// loopback guard exists to refuse.
+		{":8787", false},
 		{"192.168.1.1:8787", false},
 		{"badport", false},
 	}
