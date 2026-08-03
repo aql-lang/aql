@@ -45,6 +45,36 @@ func TestRunCompiledStrict(t *testing.T) {
 		}
 	})
 
+	t.Run("check-diagnostics refusal names the blocking diagnostic", func(t *testing.T) {
+		// The bare "check diagnostics" sentinel names nothing — and its
+		// blocking diagnostic can be COMPILE-PASS-ONLY (`boru check` prints
+		// zero diagnostics for this program, which runs clean interpreted).
+		// The force-compile boundary appends the first blocking diagnostic's
+		// code and detail (completeness review §8.1(4)).
+		a, _ := New()
+		_, err := a.RunCompiledStrict(
+			`def mkadd fn [[k:Integer] [Function] [([y:Integer] => [k add y])]] def a (mkadd 4) a 10`)
+		if err == nil {
+			t.Fatal("expected a check-diagnostics refusal, got nil")
+		}
+		if !strings.Contains(err.Error(), "check diagnostics: [") {
+			t.Errorf("the refusal must name the blocking diagnostic, got %q", err.Error())
+		}
+	})
+
+	t.Run("a plain refusal reason stays unannotated", func(t *testing.T) {
+		// checkDiagnosticsDetail is sentinel-gated: a performance refusal's
+		// reason must pass through untouched.
+		if got := checkDiagnosticsDetail("residual value of unknown provenance", CheckResult{}); got != "" {
+			t.Errorf("a non-sentinel reason must not gain a detail, got %q", got)
+		}
+		// The sentinel with NO blocking diagnostic on record (defensive —
+		// CompileCheck only returns it after finding one) appends nothing.
+		if got := checkDiagnosticsDetail("check diagnostics", CheckResult{}); got != "" {
+			t.Errorf("a diagnostic-less sentinel must append nothing, got %q", got)
+		}
+	})
+
 	t.Run("side effects roll back on a refusal", func(t *testing.T) {
 		// An uncompilable program that ALSO binds a name must not leak that
 		// binding into the registry when force mode aborts (the snapshot/restore

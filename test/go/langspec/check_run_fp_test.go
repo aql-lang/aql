@@ -42,7 +42,20 @@ import (
 // raises at the dispatch site instead of being judged as end-of-run residue,
 // so 38 generated programs the checker flagged and the runtime then ran
 // clean now fail at runtime too — check and run agree where they diverged.
-const pinnedCheckRunDivergent = 144
+// +74 August 2026: the HOF/fn-value generator axes (genHofProg — apply
+// spelling/depth, lambda quote polarity, collection provenance;
+// checker-compiler-completeness-review.0.md §8.1(3)) both reshuffled the
+// deterministic stream AND surfaced a pre-existing checker FALSE POSITIVE
+// the prior grammar could not spell: `def zr (f x) f zr` inside a fn body —
+// a def bound to a Function-PARAM application — flags `undefined_word: zr`
+// on a program that runs clean (the strict Function carrier's un-collapsed
+// [f, x] group residual stalls the pending def's collection; the
+// tryDynamicFnValueDispatch collapse admits only DYNAMIC bounds and its
+// inert-window scanner rejects param reads). Triaged as a genuine open
+// checker FP, pinned expected-open in
+// lang/go/check_fn_param_apply_def_fp_test.go so its fix is measured; the
+// class is a bounded share of this count and the pin drops when it lands.
+const pinnedCheckRunDivergent = 218
 
 // TestCheckRunFalsePositive generates the property fuzzer's program corpus
 // and ratchets the count of check-rejected-but-running programs.

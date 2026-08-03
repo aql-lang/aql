@@ -1182,14 +1182,14 @@ func (a *Boru) RunCompiledStrict(src string) ([]any, error) {
 	if !wasArmed {
 		defer a.registry.DisableRuntimeStamping()
 	}
-	prog, reason, _, err := a.CompileCheck(src)
+	prog, reason, res, err := a.CompileCheck(src)
 	if err != nil {
 		a.registry.RestoreForCompile(snap)
 		return nil, err
 	}
 	if prog == nil {
 		a.registry.RestoreForCompile(snap)
-		return nil, errors.New("force-compile: " + forceCompileReason(reason))
+		return nil, errors.New("force-compile: " + forceCompileReason(reason) + checkDiagnosticsDetail(reason, res))
 	}
 	result, err := eng.RunProgram(prog, a.registry)
 	if err != nil {
@@ -1210,6 +1210,26 @@ func forceCompileReason(reason string) string {
 		return "program is not compilable"
 	}
 	return reason
+}
+
+// checkDiagnosticsDetail names the first blocking diagnostic behind the
+// "check diagnostics" refusal sentinel. The bare sentinel names nothing —
+// it was force-compile's one unexplained refusal (the completeness review's
+// §3 DX gap), doubly opaque because the blocking diagnostic can be
+// compile-pass-only (`boru check` prints nothing). The sentinel string
+// itself is load-bearing — the fallback classifier compares it by equality
+// — so the detail is appended only at this user-facing boundary, with the
+// same predicate the CompileCheck gate refused on.
+func checkDiagnosticsDetail(reason string, res CheckResult) string {
+	if reason != "check diagnostics" {
+		return ""
+	}
+	for _, d := range res.Diagnostics {
+		if !d.RuntimeMirror && (d.Severity == SeverityError || d.CaughtAtRuntime) {
+			return ": [" + d.Code + "] " + d.Detail
+		}
+	}
+	return ""
 }
 
 // fenceBlockedFallback annotates a compiled-mode error whose silent
