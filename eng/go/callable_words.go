@@ -536,10 +536,12 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	if spec.BodyOut == BodyOutResidual && len(outs) > 1 && !closureResidualExact(probe, probeUnit, len(outs)) {
 		return false
 	}
-	// Strip-input shape screen (`error`): admit only the two residual shapes
-	// the runtime nets ONE value from — everything else declines to the
-	// refusal path, exactly as before.
-	if spec.StripsUnconsumedInput && !stripResidualShapeOK(probe, probeUnit) {
+	// Strip-input shape screen (`error`): admit the two residual shapes the
+	// runtime nets ONE value from, or — when the dispatch recorded ZERO
+	// outputs (the proven-raise zero-netting handler, completeness-review
+	// §8.2(6)) — the empty residual the runtime nets nothing from.
+	// Everything else declines to the refusal path, exactly as before.
+	if spec.StripsUnconsumedInput && !stripResidualShapeOK(probe, probeUnit, len(outs)) {
 		return false
 	}
 
@@ -579,15 +581,22 @@ func closureResidualExact(es *EmitState, unit, want int) bool {
 }
 
 // stripResidualShapeOK reports whether a strip-input word's probe-compiled
-// closure unit leaves one of the two residual shapes its handler nets ONE
-// runtime value from: a single-value residual (the body consumed or replaced
-// the input — including the empty `error []` body, whose residual is the
-// input itself), or a 2-value residual whose BOTTOM is the unconsumed input
-// (param local 0) that the handler's identity probe strips (errorHandler's
-// stack-neutrality rule). A diverging body never RETs (the re-raise
-// propagates out of InvokeBody in both engines) and is exempt. Anything else
-// — variadic, dynamic-apply tails, deeper residuals — declines.
-func stripResidualShapeOK(es *EmitState, unit int) bool {
+// closure unit leaves a residual its handler's runtime netting agrees with
+// the recorded dispatch about. want is the dispatch's recorded output count:
+//   - want 1 (the historical contract): a single-value residual (the body
+//     consumed or replaced the input — including the empty `error []` body,
+//     whose residual is the input itself), or a 2-value residual whose
+//     BOTTOM is the unconsumed input (param local 0) that the handler's
+//     identity probe strips (errorHandler's stack-neutrality rule);
+//   - want 0 (the §8.2(6) zero-netting graduation): an EMPTY residual — the
+//     body consumed the seeded input and produced nothing, so the handler
+//     nets nothing and the 0-output dispatch seats nothing; the ReturnsFn
+//     measured the same body, so the counts agree by construction.
+//
+// A diverging body never RETs (the re-raise propagates out of InvokeBody in
+// both engines) and is exempt. Anything else — variadic, dynamic-apply
+// tails, deeper residuals, a count the dispatch did not record — declines.
+func stripResidualShapeOK(es *EmitState, unit, want int) bool {
 	if es == nil || unit < 0 || unit >= len(es.fnRecs) {
 		return false
 	}
@@ -599,11 +608,13 @@ func stripResidualShapeOK(es *EmitState, unit int) bool {
 		return false
 	}
 	switch len(rec.outOps) {
+	case 0:
+		return want == 0
 	case 1:
-		return true
+		return want == 1
 	case 2:
 		op := rec.outOps[0]
-		return op.kind == opLocal && op.idx == 0
+		return want == 1 && op.kind == opLocal && op.idx == 0
 	}
 	return false
 }

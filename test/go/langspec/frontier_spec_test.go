@@ -238,11 +238,16 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// lang/go/bytecode_poly_join_test.go with the count-mismatch negative).
 
 	// `do … error` with a zero-netting handler (frontier-do-error-arity
-	// .tsv) — the P1.6 target: the single-output island model cannot
-	// express a handler that nets no value, and the refusal REPLACED a
-	// leaked internal_error (survey §3d), so it stays until the
-	// variable-arity island lands (completeness-review §8.2(6)).
-	`do [1 div 0] error [drop] end 2 add 3`: {why: "zero-netting handler: the single-output island model would leave the stack one short on the raise path", failsWith: "handler nets no value"},
+	// .tsv) — the P1.6 target, GRADUATED 2026-08-03 for the PROVEN-raise
+	// shape (completeness-review §9.13): a strict Error do-result fixes the
+	// arity at zero, errorReturnsFn returns it truthfully, and the
+	// strip-input shape screen's want-0 arm admits the empty residual —
+	// the row compiles natively (moved to the main corpus; pinned in
+	// lang/go/bytecode_do_error_arity_test.go). The MAYBE-raising twin
+	// below keeps the refusal: a dynamic Error bound has variable arity
+	// (pass-through 1 vs caught 0), the true remaining §8.2(6) target
+	// (the variable-arity island via the mark machinery).
+	`def xs [0] do [1 div (xs 0 getr)] error [drop] end 2 add 3`: {why: "maybe-raising body with a zero-netting handler: the pass-through nets one where the caught path nets zero — no fixed seat", failsWith: "handler nets no value"},
 
 	// NUR038 statement-seal twin-call matrix (frontier-nur038-seal.tsv):
 	// semantically green under the seal + arrival barrier; compile-refused

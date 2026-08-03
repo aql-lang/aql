@@ -82,11 +82,11 @@ func TestClosureResidualScreens(t *testing.T) {
 	if closureResidualExact(nil, 0, 1) {
 		t.Errorf("nil EmitState: want false")
 	}
-	if stripResidualShapeOK(nil, 0) {
+	if stripResidualShapeOK(nil, 0, 1) {
 		t.Errorf("nil EmitState: want false")
 	}
 	es := NewEmitState()
-	if closureResidualExact(es, 3, 1) || stripResidualShapeOK(es, 3) {
+	if closureResidualExact(es, 3, 1) || stripResidualShapeOK(es, 3, 1) {
 		t.Errorf("out-of-range unit: want false")
 	}
 
@@ -107,29 +107,39 @@ func TestClosureResidualScreens(t *testing.T) {
 	// local 0) at the bottom; deeper/variadic/dyn shapes decline.
 	rec := &fnUnitRec{name: "s", outOps: []emitOperand{{kind: opConst}}}
 	es.fnRecs = append(es.fnRecs, rec)
-	if !stripResidualShapeOK(es, 1) {
+	if !stripResidualShapeOK(es, 1, 1) {
 		t.Errorf("1-op residual: want true")
 	}
+	if stripResidualShapeOK(es, 1, 0) {
+		t.Errorf("1-op residual with want=0: want false (count disagreement)")
+	}
 	rec.outOps = []emitOperand{{kind: opLocal, idx: 0}, {kind: opConst}}
-	if !stripResidualShapeOK(es, 1) {
+	if !stripResidualShapeOK(es, 1, 1) {
 		t.Errorf("2-op residual with input bottom: want true")
 	}
 	rec.outOps = []emitOperand{{kind: opConst}, {kind: opConst}}
-	if stripResidualShapeOK(es, 1) {
+	if stripResidualShapeOK(es, 1, 1) {
 		t.Errorf("2-op residual with non-input bottom: want false")
 	}
 	rec.outOps = []emitOperand{{kind: opLocal, idx: 0}, {kind: opConst}, {kind: opConst}}
-	if stripResidualShapeOK(es, 1) {
+	if stripResidualShapeOK(es, 1, 1) {
 		t.Errorf("3-op residual: want false")
+	}
+	rec.outOps = nil
+	if !stripResidualShapeOK(es, 1, 0) {
+		t.Errorf("empty residual with want=0: want true (the zero-netting handler)")
+	}
+	if stripResidualShapeOK(es, 1, 1) {
+		t.Errorf("empty residual with want=1: want false")
 	}
 	rec.outOps = []emitOperand{{kind: opConst}}
 	rec.dynTrailArity = 2
-	if stripResidualShapeOK(es, 1) {
+	if stripResidualShapeOK(es, 1, 1) {
 		t.Errorf("dynTrail residual: want false")
 	}
 	rec.dynTrailArity = 0
 	rec.variadic = true
-	if stripResidualShapeOK(es, 1) {
+	if stripResidualShapeOK(es, 1, 1) {
 		t.Errorf("variadic strip residual: want false")
 	}
 }

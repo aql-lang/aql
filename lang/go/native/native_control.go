@@ -1337,6 +1337,20 @@ func errorReturnsFn(args []Value, r *Registry) []Value {
 		// that compiles correctly today. A residual >1 that the strip cannot
 		// reduce is already declined further down the pipeline, so it needs
 		// nothing from here either.
+		//
+		// A PROVEN raise (a strict, non-dynamic Error do-result — the body
+		// always raises, so the pass-through arm is statically dead) makes
+		// the zero a FIXED arity, not a variable one: the handler runs on
+		// every execution and nets nothing, so the dispatch records a
+		// 0-output call — the same truth-telling the zero-return user-fn
+		// path performs — and the residual matches the runtime exactly
+		// (completeness-review §8.2(6), the zero-netting-handler
+		// graduation). A DYNAMIC Error bound keeps the refusal: there the
+		// runtime may not raise, the pass-through nets one where the caught
+		// path nets zero, and a fixed seat cannot carry both.
+		if !args[1].Dynamic && args[1].Parent != nil && args[1].Parent.ConformsTo(TError) {
+			return nil
+		}
 		if es := r.Check.Recorder(); es.Active() {
 			es.MarkUncompilable(
 				"error: handler nets no value — the single-output island model " +

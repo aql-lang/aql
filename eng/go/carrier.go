@@ -3552,9 +3552,16 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	raiseCond := !keep && !condFrag
 	if raiseCond {
 		r.Check.CondBodyDepth++
+		// A rolled-back CONDITIONAL body is a speculative region: an
+		// `undef` of an enclosing binding inside it must not leak the
+		// deletion into the model (SpecUndefBlocked — the wrapped-undef FP
+		// class). keep=true (`do`) leaks by design; a condition fragment
+		// runs unconditionally, so its undefs are real on both engines.
+		r.Check.PushSpecBaseline(snapshot)
 	}
 	result, err := sub.Run(tokens)
 	if raiseCond {
+		r.Check.PopSpecBaseline()
 		r.Check.CondBodyDepth--
 	}
 	r.Check.NestedBodyDepth--
@@ -4676,6 +4683,12 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// (RescueForwardRefDiagnostics).
 	r.Check.FnBodyDepth++
 	defer func() { r.Check.FnBodyDepth-- }()
+	// A fn body is a speculative region too (it runs only if called): an
+	// `undef` of an enclosing binding inside it must not leak the deletion
+	// into the pass model (SpecUndefBlocked — the wrapped-undef FP class;
+	// frame teardown pops in-region bindings and stays untouched).
+	r.Check.PushSpecBaseline(r.Defs.Snapshot())
+	defer r.Check.PopSpecBaseline()
 
 	// Push this fn onto the named-fn stack so its body-local defs and
 	// undefined_word diagnostics attribute to it, and record its parameters as

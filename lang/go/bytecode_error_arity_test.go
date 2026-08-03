@@ -33,54 +33,42 @@ import (
 // compile and an unreported runtime bail. The exception is the shape that
 // matters most — once the guarded block has emitted OUTPUT the fallback is
 // deliberately blocked, because re-running would duplicate it, and the
-// `internal_error` reaches the user in the default configuration. That is
-// the case TestErrorHandlerFencedFallbackIsUserVisible pins.
+// `internal_error` reaches the user in the default configuration.
+//
+// UPDATE 2026-08-03 (completeness-review §9.13): the PROVEN-raise shapes
+// GRADUATED — a strict Error do-result fixes the handler's zero as the
+// call's true arity, so the dispatch records a 0-output call and compiles
+// natively (no island, no phantom slot, no re-run hazard). The refusal
+// remains only where zero is not the whole story (a def over the 0-value
+// result; a never-raising body whose pass-through nets one) — see
+// TestErrorHandlerZeroResidualDisposition.
 
-// TestErrorHandlerZeroResidualRefuses pins the refusal for every shape that
-// produced an underflow, and pins that the answer still matches the
-// interpreter.
-func TestErrorHandlerZeroResidualRefuses(t *testing.T) {
-	cases := []struct{ name, src string }{
-		// The reported repro: a trailing expression consumes the phantom slot.
-		{"trailing expression", `do [1 div 0] error [drop]
-2 add 3`},
-		// A LEADING value instead — the phantom lands under it.
-		{"leading value", `1
-do [1 div 0] error [drop]`},
-		// Bound with def: the phantom is consumed by BIND_GLOBAL instead.
-		{"def-bound", `def x (do [1 div 0] error [drop])
-x`},
-		// No raise at all: the handler never runs, but the ReturnsFn still
-		// measured its residual, so the same model error applies.
-		{"handler never fires", `do [1] error [drop]
-2 add 3`},
-	}
-	for _, c := range cases {
+// TestErrorHandlerZeroResidualDisposition pins the post-§9.13 split of the
+// zero-residual handler shapes. The PROVEN-raise cases (a strict Error
+// do-result — the pass-through arm statically dead) compile NATIVELY: the
+// zero is a fixed arity, errorReturnsFn returns it truthfully as a 0-output
+// dispatch, and the strip-input shape screen's want-0 arm admits the empty
+// handler residual. The shapes where zero is NOT the whole story keep the
+// refusal with faithful interpreter parity: a def over the 0-value result
+// (nothing to bind — both engines error identically), and a NEVER-raising
+// body (the pass-through delivers one value the handler model does not).
+func TestErrorHandlerZeroResidualDisposition(t *testing.T) {
+	// GRADUATED — proven-raise shapes compile natively with parity.
+	fnValueM2Native(t, "trailing expression", "do [1 div 0] error [drop]\n2 add 3", "[5]")
+	fnValueM2Native(t, "leading value", "1\ndo [1 div 0] error [drop]", "[1]")
+
+	// KEPT — refusal + identical outcome on both engines.
+	for _, c := range []struct{ name, src string }{
+		{"def-bound (nothing to bind)", "def x (do [1 div 0] error [drop])\nx"},
+		{"handler never fires (pass-through nets one)", "do [1] error [drop]\n2 add 3"},
+	} {
 		t.Run(c.name, func(t *testing.T) {
 			a, _ := New()
-			prog, reason, _, _ := a.CompileCheck(c.src)
+			prog, _, _, _ := a.CompileCheck(c.src)
 			if prog != nil {
-				t.Fatalf("must refuse: a zero-residual error handler cannot be "+
-					"modelled by the single-output island, but it compiled to:\n%s",
-					prog.Disassemble())
+				t.Fatalf("must refuse, compiled to:\n%s", prog.Disassemble())
 			}
-			if !strings.Contains(reason, "single-output") {
-				t.Errorf("refusal reason %q should name the island's single-output "+
-					"limit so the next reader knows which model is short, not which "+
-					"word is unsupported", reason)
-			}
-			if !strings.Contains(reason, "no value") {
-				t.Errorf("refusal reason %q should say the handler nets NO value: "+
-					"the refusal is deliberately scoped to zero, not to \"any arity "+
-					"but one\" — see TestErrorHandlerMultiResidualStillCompiles",
-					reason)
-			}
-			// Refusal is only acceptable because the fallback is sound: the
-			// program must still run, and agree with the interpreter. Each
-			// arm gets a FRESH instance — a CompileCheck pass installs the
-			// program's defs, so reusing `a` here would let the check pass's
-			// `def x` satisfy the run's lookup and hide the very divergence
-			// this asserts.
+			// Default mode must agree with the interpreter on value AND error.
 			ra, _ := New()
 			got, err := ra.Run(c.src)
 			b, _ := New()
@@ -101,29 +89,28 @@ x`},
 	}
 }
 
-// TestErrorHandlerFencedFallbackIsUserVisible is the variant that makes this
-// a default-path defect rather than a -force-compile curiosity. A `print`
-// inside the guarded block emits output before the underflow, so the
-// whole-program fallback refuses to rescue the run — re-running would
-// duplicate the output — and the internal_error surfaces to the user with
-// the engine's own "report this as a compiler bug" note attached.
-//
-// Post-fix the program must refuse at COMPILE time, which is before any
-// output exists, so the interpreter runs it once and cleanly.
-func TestErrorHandlerFencedFallbackIsUserVisible(t *testing.T) {
+// TestErrorHandlerFencedOutputCompilesNatively — historically the variant
+// that made the zero-residual bug a default-path defect: output inside the
+// guarded block blocked the whole-program fallback (re-running would
+// duplicate it), so the island model's phantom slot surfaced an
+// internal_error to the user. Post-§9.13 the shape compiles NATIVELY — a
+// 0-output dispatch, no island, no re-run — so the output is emitted once
+// and the result matches the interpreter.
+func TestErrorHandlerFencedOutputCompilesNatively(t *testing.T) {
 	const src = `do [1 print  1 div 0] error [drop]
 2 add 3`
 	a, _ := New()
-	if prog, _, _, _ := a.CompileCheck(src); prog != nil {
-		t.Fatalf("must refuse before any output is emitted, compiled to:\n%s",
-			prog.Disassemble())
+	prog, reason, _, _ := a.CompileCheck(src)
+	if prog == nil {
+		t.Fatalf("the proven-raise fenced shape must compile natively, refused: %q", reason)
+	}
+	if strings.Contains(prog.Disassemble(), "FALLBACK") {
+		t.Fatalf("must compile WITHOUT an island (a fallback would re-run the emitted output):\n%s", prog.Disassemble())
 	}
 	ra, _ := New()
 	got, err := ra.Run(src)
 	if err != nil {
-		t.Fatalf("default mode must not surface an error once the compile is "+
-			"refused up front (this is the shape the effects fence made "+
-			"user-visible): %v", err)
+		t.Fatalf("default mode errored: %v", err)
 	}
 	b, _ := New()
 	want, _ := b.RunInterp(src)

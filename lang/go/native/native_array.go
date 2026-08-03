@@ -1577,7 +1577,12 @@ func analyseHigherOrderBodyVals(r *Registry, body Value, vals ...Value) []Value 
 	// the body run; Suspend (above) stops recording but still lets the refusal
 	// latch the program's compilability.
 	r.Check.CondBodyDepth++
+	// The body is a speculative region (zero iterations possible): an
+	// `undef` of an enclosing binding inside it must not leak the deletion
+	// into the pass model (SpecUndefBlocked — the wrapped-undef FP class).
+	r.Check.PushSpecBaseline(r.Defs.Snapshot())
 	result, err := sub.Run(input)
+	r.Check.PopSpecBaseline()
 	r.Check.CondBodyDepth--
 	if err != nil {
 		r.Check.AddDiagnostic(CheckDiagnostic{

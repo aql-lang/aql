@@ -619,15 +619,58 @@ negative — arms with differing return COUNTS keep the refusal).
 The recommendation's census-risk note held: no previously-compiling row
 regressed (the join fires only where the set previously refused).
 
+### 9.12 The wrapped-undef FP class CLOSED (PR #327 review find)
+
+The Codex review of PR #327 surfaced a checker false positive my §9.5
+un-gating had EXTENDED but not created: an `undef` of an enclosing
+binding inside a speculative region committed the deletion to the pass
+model even though the region may never run — `def x 1 do [7] error
+[undef x 9] x` flagged `undefined_word: x` on a clean program, and the
+same leak fired from each-bodies over empty collections and UNCALLED fn
+bodies (pre-existing, probe-verified). The fix is a def-depth baseline
+per speculative region (`CheckState.SpecBaselines`, pushed by the
+rolled-back nested-body run, the fn-body analysis, and the higher-order
+body analysis) consulted by the `undef` handler
+(`Registry.SpecUndefBlocked`): a pop of a binding at or below the
+region-entry depth is kept in the model — lenient in the one direction
+check mode is allowed to be — while in-region bindings (params, body
+defs) still pop, so frame teardown is untouched, and top-level +
+`do`-body undefs still commit (leak fidelity). Pins:
+`lang/go/check_undef_spec_region_test.go` (three FP shapes clean, three
+commit shapes still committing). Of the review's four findings, the
+other three: the kg gap was real (the review doc now has an
+evidence-backed node), and the FoldFullStack host-overload and
+leading-apply no-match claims did NOT reproduce — both engines agree
+(pinned as standing parity tests in
+`bytecode_do_error_arity_test.go`).
+
+### 9.13 §8.2(6) FIRST INCREMENT — the proven-raise zero-netting handler
+
+The ledgered `do [1 div 0] error [drop] end 2 add 3` row compiles
+natively: a PROVEN raise (a strict Error do-result — the pass-through
+arm statically dead) makes the handler's zero a FIXED arity, so
+`errorReturnsFn` returns it truthfully (a 0-output dispatch, the same
+truth-telling the zero-return user-fn path performs) and the
+strip-input shape screen admits the empty handler residual
+(`stripResidualShapeOK`'s want-0 arm, threaded the recorded out count).
+No island, no new opcode — the closure path carries it. The
+MAYBE-raising twin (a dynamic Error bound) keeps the refusal: variable
+arity (pass-through 1 vs caught 0) is the true remaining §8.2(6)
+target (the variable-arity island via the mark machinery), re-ledgered
+in frontier-do-error-arity.tsv. Pins:
+`lang/go/bytecode_do_error_arity_test.go`.
+
 ### 9.7 Still open
 
 Stage G's remaining scope (multi-arg leading applies, event-provenance
 leads, unnamed-param frames — each excluded by design in §9.6b's
 admission), the remaining §8.2 mechanisms (container-fn auto-dispatch
-§8.2(4), the ledgered families §8.2(5), the do…error variable-arity
-island §8.2(6)), the finish-line statement's enforcement (§8.3), and
-the in-body mirrors widening (§8.4.4 — now also the named graduation
-for the two designed-asymmetry classes in §9.10's ledger). (The §9.4
-def-split FP graduated — §9.8; the §8.4.3 headroom decision closed —
-§9.9; the §8.4.2 surface unification enumerated and gated — §9.10; the
-§8.2(3) poly return-join landed — §9.11.)
+§8.2(4), the ledgered families §8.2(5), and §8.2(6)'s MAYBE-raising
+variable-arity island — the proven-raise increment landed, §9.13), the
+finish-line statement's enforcement (§8.3), and the in-body mirrors
+widening (§8.4.4 — now also the named graduation for the two
+designed-asymmetry classes in §9.10's ledger). (The §9.4 def-split FP
+graduated — §9.8; the §8.4.3 headroom decision closed — §9.9; the
+§8.4.2 surface unification enumerated and gated — §9.10; the §8.2(3)
+poly return-join landed — §9.11; the wrapped-undef FP class closed —
+§9.12.)

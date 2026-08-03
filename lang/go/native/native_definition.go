@@ -1207,6 +1207,17 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 
 func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	name := defName(args[0])
+	// A speculative check region (a rolled-back nested body, a fn-body
+	// analysis) must not commit the deletion of an ENCLOSING binding: the
+	// region may never run, so popping here leaked `undefined_word` onto
+	// clean programs (`def x 1 do [7] error [undef x 9] x` — the
+	// wrapped-undef FP class; eng.Registry.SpecUndefBlocked). The binding
+	// stays in the model — lenient in the one direction check mode is
+	// allowed to be. In-region bindings still pop (teardown untouched);
+	// top-level and `do`-body undefs still commit (leak fidelity).
+	if r.SpecUndefBlocked(name) {
+		return nil, nil
+	}
 	if r.IsBuiltinWord(name) {
 		// A word-extension clone on top of a built-in name is an
 		// ordinary def — `undef` pops it, restoring the pre-merge
