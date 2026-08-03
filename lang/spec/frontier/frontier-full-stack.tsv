@@ -1,0 +1,13 @@
+# Full-stack words (depth/pick/roll) — the P1.2 capability target
+# (checker-compiler-completeness-review.0.md §8.2(2); COMPILE-REFUSAL-
+# SURVEY.0.md §3a). Deliberately off-corpus until now: a full-stack word's
+# result has no producing event the compiler can address, so the whole
+# program refuses ("residual value of unknown provenance") and falls back.
+# The survey ranks this the only remaining class whose fix ADDS capability
+# (an event-producing lowering minting runtime provenance — OpDepth/OpPick/
+# OpRoll) rather than relaxing a soundness gate. Graduation = that lowering;
+# the ledger entries then delete and the rows move to the main corpus.
+1 2 depth	1 2 2	depth reports the stack size and leaves the stack intact
+1 2 3 1 pick	1 2 3 2	pick copies the value at depth n (0 = top) onto the top
+1 2 3 1 roll	1 3 2	roll rotates the value at depth n to the top
+1 2 depth add 0	1 2 2	a full-stack result consumed by a downstream dispatch

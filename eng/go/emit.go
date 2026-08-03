@@ -7923,6 +7923,15 @@ func (es *EmitState) noteApplyLoopReplay(rec *fnUnitRec, ops []emitOperand) []em
 // the previous compile-with-symmetric-RET-error assumption diverged the
 // moment the runtime value was callable. Returns true when no such value
 // exists or the replay window was seated; false keeps the refusal.
+//
+// The window must hold exactly ONE applicable value. The replay re-pushes
+// VALUES — the source's paren structure is gone — so a window carrying TWO
+// applicables is the chained forward apply `f (g x)` whose INNER group never
+// collapsed in the check run: the flat re-step hands the outer fn the RAW
+// inner fn where the interpreter hands it the inner APPLICATION's result
+// (`compose` → compiled count-error, interpreted 14). One applicable is
+// faithful by construction (the pinned stylesheet shapes: every other window
+// value is already the evaluated form its source group collapses to).
 func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Value, extra int) bool {
 	for i, v := range vals {
 		if i < extra && i < rec.nUnnamed {
@@ -7931,7 +7940,8 @@ func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Valu
 			}
 		}
 		if v.Dynamic || (v.Parent != nil && v.Parent.ConformsTo(TFunction)) {
-			if w, ok := dynFrameWindow(u, rec, vals); ok && es.replayIsBodyTail(rec.frag, vals[len(vals)-w:]) {
+			if w, ok := dynFrameWindow(u, rec, vals); ok && es.replayIsBodyTail(rec.frag, vals[len(vals)-w:]) &&
+				replayApplicables(vals[len(vals)-w:]) == 1 {
 				rec.dynFrameW = w
 				rec.retReplay = true
 				return true
@@ -7940,6 +7950,19 @@ func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Valu
 		}
 	}
 	return true
+}
+
+// replayApplicables counts the window values the whole-frame replay's
+// re-step could APPLY — a Function-typed value or a Dynamic (maybe-callable)
+// carrier. noteDynFrameReplay arms only when this is exactly 1.
+func replayApplicables(window []Value) int {
+	n := 0
+	for _, v := range window {
+		if v.Dynamic || (v.Parent != nil && v.Parent.ConformsTo(TFunction)) {
+			n++
+		}
+	}
+	return n
 }
 
 // replayIsBodyTail reports whether the replay window is the body's LAST

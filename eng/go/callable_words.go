@@ -396,6 +396,18 @@ func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape, a
 		if pt == nil {
 			continue
 		}
+		// Quote-polarity screen: an Atom-typed param IS a /q quote-capture
+		// slot (fn_params.go — `k:Atom` parses to FnParam.Quote), which binds
+		// only a bare Word collected forward at the runtime pointer — never
+		// the stack value a callback delivers. The interpreter therefore
+		// leaves such a lambda as DATA in every HOF word (each/fold/filter
+		// over `(keys m)` → a list of fn values). Admitting it here compiled
+		// an APPLYING callback — a live compile≠interpret divergence
+		// (checker-compiler-completeness-review.0.md §2.2). Declining keeps
+		// the refusal → interpreter fallback → parity.
+		if lam.QuoteArgs[i] || pt.ConformsTo(TAtom) {
+			return nil, false
+		}
 		if shape == ClosureInKeyVal && inputs[i].Parent.ConformsTo(TMap) {
 			if !pt.ConformsTo(TMap) && !TMap.ConformsTo(pt) {
 				return nil, false

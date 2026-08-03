@@ -169,7 +169,24 @@ the interpreter then owns the whole program:
   what still refuses here is the MID-BODY shape — an event recorded after
   the apply window's producer (`[nd (m get "k") print "after"]`), whose
   effects a RET-time replay would reorder — pinned by
-  `TestEdgeFindingDynamicFnValueApplyBodyTail` (§6, edge findings).
+  `TestEdgeFindingDynamicFnValueApplyBodyTail` (§6, edge findings) — and
+  the **CHAINED forward apply** (`compose`'s `f (g x)`, self-composition
+  `f (f x)`): the replay window may hold at most ONE applicable value
+  (`noteDynFrameReplay`'s `replayApplicables == 1` arm, 2026-08-02 — the
+  flat re-push loses the inner group's collapse, so a two-applicable
+  window compiled the RET count error where the interpreter applies both
+  fns). Pinned by `TestChainedForwardApplyRefuses` + the
+  `frontier-chained-apply.tsv` ledger; graduation = Stage G proper.
+- **Quote-typed lambda callback** — a lambda whose param is Atom-typed (a
+  /q quote-capture slot, `fn_params.go`) admitted as a HOF callback over a
+  COMPUTED collection: the runtime never binds a delivered stack value to
+  a /q slot, so the interpreter leaves the lambda as DATA where the
+  compiled callback APPLIED it (`each [[k:Atom] => […]] (keys m)` —
+  compiled `signature_error` vs interpreted `[fn (Atom)]`). Screened at
+  BOTH admissions (2026-08-02): `lambdaHookCompatible`'s quote arm
+  (lambda-value bodies) and `quoteParamCarrierBind` at the user-fn
+  dispatch record (token bodies, closure units only). Pinned by
+  `TestQuoteLambdaCallbackParity` + `eng/go/quote_lambda_screen_test.go`.
 
 The **branch-join narrow-preservation** rule (§2) removed a former
 over-refusal here — an enclosing local read inside both `if` arms and

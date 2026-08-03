@@ -190,6 +190,46 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// hazard as the fallible regions.
 	`7 def b true  do [1 2 (if b [] [9 9])]`: {why: "PR #280 review: branch-variant multi-out do region promoted under a dirty-stack prefix", failsWith: "variadic result promoted to frame slots"},
 
+	// Chained forward application of Function params (frontier-chained-apply
+	// .tsv) — the compose family, a live MISCOMPILE until 2026-08-02 (the
+	// whole-frame replay's flat window lost the paren structure: compiled
+	// RET count-error, interpreted 14). noteDynFrameReplay now declines a
+	// window with >1 applicable value, so the shape is a sound refusal.
+	// Graduation = Stage G proper (fn-unit dynamic apply; the rows then
+	// move to lang/spec/fn-value.tsv). The def-split row refuses one stage
+	// earlier, on the def-bound fn-param-apply `undefined_word` diagnostic —
+	// an OPEN checker FALSE POSITIVE (the program runs clean; pinned
+	// expected-open in lang/go/check_fn_param_apply_def_fp_test.go, the
+	// check_run_fp +74 class); same sound fallback either way.
+	`def compose fn [[f:Function g:Function x:Integer] [Integer] [f (g x)]] compose ([a:Integer] => [a mul 2]) ([b:Integer] => [b add 3]) 4`: {why: "chained forward apply: two applicable values in the replay window (the inner group never collapsed in the check run)", failsWith: "unapplied fn-value in body residual"},
+	`def twice fn [[f:Function x:Integer] [Integer] [f (f x)]] twice ([n:Integer] => [n add 1]) 5`:                                           {why: "self-composition: the same multi-applicable window", failsWith: "unapplied fn-value in body residual"},
+	`def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5`:                                   {why: "def-split spelling: the def-bound fn-param apply trips the open undefined_word checker FP (check_fn_param_apply_def_fp_test.go)", failsWith: "check diagnostics"},
+
+	// Full-stack words (frontier-full-stack.tsv) — the P1.2 capability
+	// target: depth/pick/roll results have no producing event, so the
+	// program refuses on provenance (designed-keep until an
+	// event-producing lowering mints runtime provenance —
+	// completeness-review §8.2(2)).
+	`1 2 depth`:       {why: "full-stack word: result has no producing event", failsWith: "residual value of unknown provenance"},
+	`1 2 3 1 pick`:    {why: "full-stack word: result has no producing event", failsWith: "residual value of unknown provenance"},
+	`1 2 3 1 roll`:    {why: "full-stack word: result has no producing event", failsWith: "residual value of unknown provenance"},
+	`1 2 depth add 0`: {why: "full-stack result consumed downstream: the operand has no compile home", failsWith: "operand of unknown provenance"},
+
+	// Gradual-Any to a multi-overload user fn with DIFFERING arm returns
+	// (frontier-poly-join.tsv) — the P1.3 target: userPolyArmShapeOK
+	// requires every arm's Returns to match the committed contract, so the
+	// join-recording graduation is what compiles these
+	// (completeness-review §8.2(3)).
+	`def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 5)`:   {why: "poly arms declare differing returns; one recorded output type would lie for the unselected arm", failsWith: "ambiguous dispatch, no poly re-match"},
+	`def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 'x')`: {why: "the sibling input selecting the other arm — same gate", failsWith: "ambiguous dispatch, no poly re-match"},
+
+	// `do … error` with a zero-netting handler (frontier-do-error-arity
+	// .tsv) — the P1.6 target: the single-output island model cannot
+	// express a handler that nets no value, and the refusal REPLACED a
+	// leaked internal_error (survey §3d), so it stays until the
+	// variable-arity island lands (completeness-review §8.2(6)).
+	`do [1 div 0] error [drop] end 2 add 3`: {why: "zero-netting handler: the single-output island model would leave the stack one short on the raise path", failsWith: "handler nets no value"},
+
 	// NUR038 statement-seal twin-call matrix (frontier-nur038-seal.tsv):
 	// semantically green under the seal + arrival barrier; compile-refused
 	// on the pre-existing residual-ordering limitation — two dynamic call

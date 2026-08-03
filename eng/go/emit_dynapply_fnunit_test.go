@@ -77,6 +77,30 @@ func TestNoteDynFrameReplayArms(t *testing.T) {
 	if rec3.dynFrameW != 1 || !rec3.retReplay {
 		t.Errorf("dynamic replay window = %d retReplay=%v, want 1/true", rec3.dynFrameW, rec3.retReplay)
 	}
+	// TWO applicable values in the window — the chained forward apply
+	// `f (g x)` over NAMED params (no unnamed prefix, so the window is the
+	// whole residual): the flat re-push lost the inner group's collapse, the
+	// re-step is unprovable — decline, keep the refusal.
+	u4 := &emitUnit{localByID: map[string]int{"f": 0, "g": 1, "x": 2}}
+	rec4 := &fnUnitRec{nParams: 3, nUnnamed: 0, returns: []*Type{TAny}}
+	xv := NewCarrier(TInteger)
+	xv.ID = "x"
+	if es.noteDynFrameReplay(u4, rec4, []Value{daFnCarrier("f"), daFnCarrier("g"), xv}, 2) {
+		t.Error("a window with two applicable fn values must keep the refusal")
+	}
+	if rec4.retReplay {
+		t.Error("a declined multi-applicable replay must not mark the rec")
+	}
+	// The mixed shape — a Function value AND a Dynamic maybe-callable in one
+	// window — declines the same way.
+	u5 := &emitUnit{localByID: map[string]int{"f": 0}}
+	rec5 := &fnUnitRec{nParams: 1, nUnnamed: 0, returns: []*Type{TAny}}
+	dyn2 := NewCarrier(TAny)
+	dyn2.Dynamic = true
+	dyn2.ID = "d1"
+	if es.noteDynFrameReplay(u5, rec5, []Value{daFnCarrier("f"), dyn2}, 1) {
+		t.Error("a Function + Dynamic window must keep the refusal")
+	}
 }
 
 func TestNoteApplyLoopReplayArms(t *testing.T) {

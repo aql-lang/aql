@@ -1,0 +1,10 @@
+# `do … error` whose handler nets NO value, followed by more program —
+# the P1.6 capability target (checker-compiler-completeness-review.0.md
+# §8.2(6); COMPILE-REFUSAL-SURVEY.0.md §3d). The single-output island model
+# would leave the stack one short on the raise path, so the shape refuses
+# deliberately (this refusal REPLACED a leaked internal_error — the C fix in
+# verse-report-defects-investigation.0.md; it cannot become a main-corpus
+# row under either state). Graduation = a variable-arity island via the
+# existing mark machinery (OpStackMark/OpDropToMark) threading a
+# zero-value handler correctly.
+do [1 div 0] error [drop] end 2 add 3	5	a zero-netting handler followed by a consuming statement

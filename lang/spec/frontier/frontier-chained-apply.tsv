@@ -1,0 +1,16 @@
+# Chained forward application of Function-typed params — the compose family
+# (design/checker-compiler-completeness-review.0.md §2.1, found 2026-08-02 as
+# a live miscompile: the whole-frame replay's flat window lost the source's
+# paren structure, so `f (g x)` compiled the RET count error where the
+# interpreter applies both fns). noteDynFrameReplay now declines a window
+# holding MORE THAN ONE applicable value (Function-typed or Dynamic), so
+# these rows are sound whole-program refusals with interpreter parity.
+# Graduation = Stage G proper (general dynamic apply inside fn units:
+# resolveDynamicApply routed into the fn-unit finish, trailingApply over
+# frame-local fns, chained applies as consecutive OpCallDynamic in token
+# order), at which point the ledger entries delete and the rows move into
+# the main corpus (lang/spec/fn-value.tsv).
+def compose fn [[f:Function g:Function x:Integer] [Integer] [f (g x)]] compose ([a:Integer] => [a mul 2]) ([b:Integer] => [b add 3]) 4	14	the canonical compose: outer param fn applied to the inner param fn's result
+def twice fn [[f:Function x:Integer] [Integer] [f (f x)]] twice ([n:Integer] => [n add 1]) 5	7	self-composition — the same window with one fn value read twice
+def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5	7	the def-split idiom: refuses on the open def-bound fn-param-apply checker FP (check_fn_param_apply_def_fp_test.go)
+def sel1 fn [[f:Function g:Function x:Integer] [Integer] [f x]] sel1 ([a:Integer] => [a mul 2]) ([b:Integer] => [b add 3]) 4	8	control: two Function params, ONE applicable in the window — keeps compiling natively

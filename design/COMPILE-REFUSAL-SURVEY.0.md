@@ -123,6 +123,13 @@ g (id 5)
 Same gate, different clause: "the runtime window re-match binds plain
 values only".
 
+> **GRADUATED (measured 2026-08-03):** this class now COMPILES — the
+> `a:Atom` + `a:Integer` twin over `(id 5)` runs natively, pinned as
+> the control row in `lang/spec/frontier/frontier-poly-join.tsv`. §3a,
+> §3b and §3d remain live and are now ledgered
+> (`frontier-full-stack.tsv`, `frontier-poly-join.tsv`,
+> `frontier-do-error-arity.tsv`) so their graduations are measured.
+
 ### 3d. `do […] error […]` + a trailing expression
 
 ```
