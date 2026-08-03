@@ -306,6 +306,44 @@ and `design/NUR-RESOLUTION-PLAN.0.md`).
 | G11 | returned list literal laziness | sharp-edge | **no longer reproduces** (fixed by unrelated work) |
 | G13a| single-token bare-map body | compiler-limit | **no longer reproduces** (single-token now compiles) |
 | G13b| type-literal map value | compiler-limit | **FIXED** (NUR051 resolved 2026-07-31 — nested bare type nodes intern as `OpPushType` operands; ADR-010) |
+| G14 | `behave` bodies vs concurrent forks | latent-bug | recorded 2026-08-03 (PR #325 review) — see below |
+
+### G14 — `behave` capability bodies are not fork-safe
+
+Recorded from PR #325's review (Codex P1), which flagged the three new
+capability slots (`truthy`/`deq`/`size`); on investigation the shape is
+**shared by all seven** — `compare`/`canon`/`nodify`/`unify` predate it.
+
+A `userBehavior` wrapper (`lang/go/native/native_behave.go`) sits on the
+canonical `*Type` node, which `ForkConcurrent` registries SHARE (the
+fork clones the def table and the dynamic type-table maps, not the type
+nodes). The wrapper closes over the registry that ran `behave`, and its
+per-slot re-entrancy flags (`inRender`/`inNodify`/`inUnify`/`inTruthy`/
+`inDeq`/`inSize`) are unsynchronized fields. So when a concurrent
+branch (`await`, the timer words) dispatches a capability on a behave'd
+type:
+
+- the body runs via `RunPooledTop` against the ORIGINAL registry's
+  DefTable and engine pool, mutating state the parent goroutine may be
+  using — a data race, not just a stale view;
+- two branches invoking the same wrapper race on the re-entrancy flag
+  itself, and one can be wrongly declined (the flag is a same-goroutine
+  re-entry guard being read cross-goroutine).
+
+Why it is not fixed inline: the capability interfaces (`Compare(a,b)`,
+`Truthy(v)`, …) carry no registry, so the wrapper cannot resolve "the
+dispatching fork's registry" at call time — that is an interface-shape
+change across every kernel dispatch site. A mutex is not sufficient
+either: serializing the bodies still leaves them mutating the parent's
+DefTable concurrently with the parent's own execution, and a naive
+mutex deadlocks on same-goroutine re-entry (which the flags exist to
+allow). The real fix is fork-local capability execution state —
+per-dispatch resolution of the executing registry, with the re-entry
+guard carried alongside it — and needs its own design pass.
+
+Exposure today: a fork must (1) touch a value of a behave'd type in a
+capability position and (2) race the parent or a sibling doing the
+same. No spec row does; the single-goroutine path is unaffected.
 
 No live items remain: G10 (NUR049) resolved 2026-08-03, joining G9
 (NUR048), G12 (NUR050) and G13b (NUR051) — each per-item fix retired

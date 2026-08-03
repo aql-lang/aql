@@ -82,6 +82,31 @@ func setMicronReturns(args []Value, r *Registry) []Value {
 	return []Value{}
 }
 
+// delMicronHandler is setMicronHandler's twin: a Micron is immutable, so
+// removing a property is refused for the same reason writing one is, and
+// by the same mechanism — an explicit erroring signature rather than
+// sig-absence, so the negative spec rows can pin the message.
+func delMicronHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	return nil, r.BoruError("type_error", delMicronDetail(args), "del")
+}
+
+func delMicronDetail(args []Value) string {
+	kind := "Micron"
+	if len(args) == 2 && args[1].Parent != nil {
+		kind = args[1].Parent.Leaf()
+	}
+	return fmt.Sprintf("del: %s values are immutable — construct a new one with make", kind)
+}
+
+// delMicronReturns is the check-mode mirror of the always-erroring
+// handler, mirroring setMicronReturns.
+func delMicronReturns(args []Value, r *Registry) []Value {
+	if r != nil && r.Check.IsActive() && len(args) == 2 {
+		eng.CheckAddUniqueDiagnostic(r, "type_error", delMicronDetail(args), "del", args[0].Pos())
+	}
+	return []Value{}
+}
+
 // getrMicronReturns is getMicronReturns plus the strict-read contract:
 // a statically-known miss — a concrete key that no property of the
 // receiver's (known) kind can answer — is a guaranteed runtime

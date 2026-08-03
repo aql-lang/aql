@@ -360,6 +360,7 @@ var (
 	CommonAncestorType        = eng.CommonAncestorType
 	CompareValues             = eng.CompareValues
 	CowSet                    = eng.CowSet
+	CowDel                    = eng.CowDel
 	DataListElemTypeFromValue = eng.DataListElemTypeFromValue
 	StaticListLen             = eng.StaticListLen
 	ExpandOptionalSigs        = eng.ExpandOptionalSigs

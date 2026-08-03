@@ -168,14 +168,16 @@ func runProxy(args []string, homeDir string, stdout, stderr io.Writer) int {
 }
 
 // isLoopback reports whether host:port resolves to a loopback IP
-// without performing DNS. Unknown shapes are treated as
-// non-loopback so the warning fires by default.
+// without performing DNS. Unknown shapes are treated as non-loopback so
+// the warning fires by default — and so is an EMPTY host (":8200"),
+// because net/http binds an empty host to every interface, which is
+// exactly the exposure the guard exists to catch.
 func isLoopback(addr string) bool {
 	host, _, err := net.SplitHostPort(addr)
 	if err != nil {
 		return false
 	}
-	if host == "" || host == "localhost" {
+	if host == "localhost" {
 		return true
 	}
 	ip := net.ParseIP(host)

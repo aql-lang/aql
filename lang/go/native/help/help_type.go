@@ -329,9 +329,21 @@ func init() {
 		Examples:    []string{`istype Integer ; # => true`, `istype 5 ; # => false`},
 	})
 	register(&Entry{
-		Word:        "behave",
-		Summary:     "Install custom behaviour (compare / format / match) on a type.",
-		Description: "`behave Type fn` attaches a behaviour function so the type participates in cmp/sort, rendering, or `is` with custom semantics — how a user or external type opts into kernel operations.",
+		Word:    "behave",
+		Summary: "Install a capability on a type: compare, canon, nodify, unify, truthy, deq, size.",
+		Description: "`behave NAME fn` attaches a body the kernel runs whenever it dispatches that capability for the type in the fn's first param — how a user or external type opts into kernel operations instead of inheriting a default. " +
+			"`compare` (fn [[T T] [Integer]]) drives cmp/sort/lt/gt; `canon` (fn [[T] [String]]) drives rendering; `nodify` (fn [[T] [Any]]) drives the Node projection behind jsonify; `unify` (fn [[T T] [T]]) drives type unification; " +
+			"`truthy` (fn [[T] [Boolean]]) decides what a value means in a boolean position — `if`, the connectives, loop conditions; `deq` (fn [[T T] [Boolean]]) decides deep equality; `size` (fn [[T] [Integer]]) answers `size`. " +
+			"Installs accumulate: a second `behave` on the same type adds a slot without dropping the first. Builtin types are refused — refine one first.",
+		Examples: []string{
+			`def Level (refine Integer) behave truthy/q (fn Level Boolean [a gt 5]) def lo:Level 3 if lo ['yes'] ['no'] ; # => 'no'`,
+			`def Level (refine Integer) behave size/q (fn Level Integer [42]) def x:Level 3 size x ; # => 42`,
+		},
+		Notes: []string{
+			"The body sees the operands as `a` (and `b` for the two-argument slots).",
+			"A slot is scoped to the type that installed it — a plain Integer keeps the kernel rule.",
+			"Descendants inherit their branch's capability; the kernel walks the parent chain nearest-first.",
+		},
 	})
 	register(&Entry{
 		Word:        "fnsig",

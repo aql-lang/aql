@@ -756,3 +756,70 @@ func TestMakeWeakCarriesElemConstraint(t *testing.T) {
 		t.Fatal("untagged source grew a constraint")
 	}
 }
+
+// ── deletion (the `del` half of the storage column, NUR022) ──────────
+
+func TestWeakMapDeleteKey(t *testing.T) {
+	_, wd := freshWeakMap()
+	for _, k := range []string{"a", "b", "c"} {
+		if r := wd.SetValue(k, NewInteger(1)); r != nil {
+			t.Fatalf("set %s refused: %+v", k, r)
+		}
+	}
+
+	// Removing a middle key must drop it from the ORDER as well as the
+	// slots — a stale key would resurface as a zero-value entry.
+	wd.DeleteKey("b")
+	snap := wd.snapshot()
+	if got := strings.Join(snap.Keys(), ","); got != "a,c" {
+		t.Fatalf("keys = %s, want a,c", got)
+	}
+	if _, ok := snap.Get("b"); ok {
+		t.Fatal("deleted key still readable")
+	}
+
+	// Idempotent and total: deleting an absent key changes nothing.
+	wd.DeleteKey("b")
+	wd.DeleteKey("never")
+	if got := strings.Join(wd.snapshot().Keys(), ","); got != "a,c" {
+		t.Fatalf("after no-op deletes keys = %s, want a,c", got)
+	}
+
+	// A re-set after a delete appends at the END — the key is genuinely
+	// gone, not merely hidden, so it does not reclaim its old position.
+	if r := wd.SetValue("b", NewInteger(2)); r != nil {
+		t.Fatalf("re-set refused: %+v", r)
+	}
+	if got := strings.Join(wd.snapshot().Keys(), ","); got != "a,c,b" {
+		t.Fatalf("keys = %s, want a,c,b", got)
+	}
+}
+
+func TestWeakXmlDeleteAttr(t *testing.T) {
+	v := NewWeakFlexXml("a")
+	wd := v.Data.(*WeakFlexXmlData)
+
+	// No attribute map at all (the constructor allocates one, but a
+	// zero-struct payload — the same shape TestWeakMapSetValueZeroStruct
+	// drives — does not): deleting must be a no-op, not a nil write.
+	var zero WeakFlexXmlData
+	zero.DeleteAttr("gone")
+	if zero.Attr != nil {
+		t.Fatal("DeleteAttr on a nil Attr must not allocate")
+	}
+
+	wd.SetAttr("b", NewString("1"))
+	wd.SetAttr("c", NewString("2"))
+	wd.DeleteAttr("b")
+	if _, ok := wd.Attr.Get("b"); ok {
+		t.Fatal("deleted attribute still present")
+	}
+	if _, ok := wd.Attr.Get("c"); !ok {
+		t.Fatal("delete removed the wrong attribute")
+	}
+	// Absent name is a no-op.
+	wd.DeleteAttr("never")
+	if wd.Attr.Len() != 1 {
+		t.Fatalf("attr count = %d, want 1", wd.Attr.Len())
+	}
+}

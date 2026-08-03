@@ -99,11 +99,20 @@ var unflaggedPins = map[string]int{
 	// edge-scalars-3.tsv: the pad byte-cap PROJECTION row (PR #306
 	// review — a multi-byte fill exceeding maxStringResultBytes) is a
 	// value-dependent resource bound, the runtime's job.
-	"edge-scalars-3.tsv":  1,
-	"edge-types-2.tsv":    3,
-	"edge-types-3.tsv":    3,
-	"error.tsv":           1,
-	"flex.tsv":            9,
+	"edge-scalars-3.tsv": 1,
+	"edge-types-2.tsv":   3,
+	"edge-types-3.tsv":   3,
+	"error.tsv":          1,
+	// flex.tsv: 9 -> 10 with the NUR022 `del` rows. The tenth is the Store
+	// delete-then-read row, unflagged for exactly the reason accessor.tsv's
+	// entry above gives — a context store is OPEN-WORLD, so a static miss
+	// is never proven. delStoreReturnsFn widens the deleted key to dynamic
+	// Any rather than recording it absent, because the shape model is
+	// join-only monotone: "definitely gone" is a narrowing claim a later
+	// set on another path would falsify. The five `del` REFUSAL rows in
+	// the same batch (Class, Micron, List, FlexList, WeakFlexList) ARE all
+	// flagged by their guaranteed-error mirrors.
+	"flex.tsv":            10,
 	"forward-barrier.tsv": 1,
 	"generics-class.tsv":  3,
 	"generics-fn.tsv":     1,

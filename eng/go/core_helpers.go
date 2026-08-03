@@ -1988,7 +1988,15 @@ func UninstallFnSigs(r *Registry, name string, specs FnUndefInfo) {
 // value that RENDERS as "false" is an unresolved boolean literal reaching
 // truthiness as a Word/Atom (a bare `false` clause, a quoted `false`
 // atom) and keeps its boolean reading.
+//
+// A type may OVERRIDE all of that with the Truther capability
+// (truthy.go) — the cascade below is the default, not the only answer.
+// No kernel type implements Truther, so the walk is inert until
+// something opts in.
 func CoerceBoolean(v Value) bool {
+	if res, ok := truthinessOf(v); ok {
+		return res
+	}
 	switch {
 	case ValueType(v).ConformsTo(TBoolean):
 		b, _ := AsBoolean(v)
@@ -2101,6 +2109,51 @@ func CowSet(store *StoreInstanceInfo, key string, val Value, r *Registry) {
 	// initial COW layer (prototype = the store argument) or the last
 	// loop's newParent (prototype = a parent the loop condition proved
 	// non-nil).
+	r.Contexts.UpdateChain(current.Prototype, current)
+}
+
+// CowDel performs a copy-on-write delete on a Store — the `del` twin of
+// CowSet, and deliberately the same shape: a new layer over the old store,
+// then the same parent-chain propagation and ctxStack rebind.
+//
+// The one difference is what the new layer carries. CowSet writes the key
+// into Data; CowDel writes it into Deleted, because the key may live in a
+// prototype layer that other scopes still share and must not be edited.
+// Get honours the tombstone, so the key reads as absent from this layer
+// down. Deleting a key that was never present is a no-op layer — harmless,
+// and it keeps `del` idempotent and total, matching the Map/FlexMap forms.
+func CowDel(store *StoreInstanceInfo, key string, r *Registry) {
+	newStore := &StoreInstanceInfo{
+		TypeName:  store.TypeName,
+		Deleted:   map[string]bool{key: true},
+		Prototype: store,
+		Parent:    store.Parent,
+		ParentKey: store.ParentKey,
+	}
+
+	current := newStore
+	parent := store.Parent
+	parentKey := store.ParentKey
+
+	for parent != nil {
+		newParent := &StoreInstanceInfo{
+			TypeName:  parent.TypeName,
+			Data:      map[string]Value{parentKey: NewStoreValue(nil, current)},
+			Prototype: parent,
+			Parent:    parent.Parent,
+			ParentKey: parent.ParentKey,
+		}
+		current.Parent = newParent
+		current.ParentKey = parentKey
+
+		current = newParent
+		parentKey = parent.ParentKey
+		parent = parent.Parent
+	}
+
+	// current.Prototype is non-nil for the same reason it is in CowSet:
+	// current is either newStore (prototype = store) or the last newParent
+	// (prototype = a parent the loop condition proved non-nil).
 	r.Contexts.UpdateChain(current.Prototype, current)
 }
 
