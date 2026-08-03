@@ -924,6 +924,7 @@ boru vault verify                        # reconcile store + keyring (--prune re
 boru vault export --out=vault.borux       # portable, passphrase-encrypted bundle
 boru vault import vault.borux             # restore a bundle (or a .env file)
 boru vault grant --agent=ci --ttl=2h github_token   # issue scoped capability token
+boru vault grant --agent=svc 'proj:*'    # namespace-wildcard capability: read all of proj via the wire protocol
 boru vault revoke <token-id>             # revoke a token
 boru vault providers                     # list provider presets (built-in + custom)
 boru vault provider add --url=https://api.corp.example --auth-style=header:X-Corp-Key corp   # define a custom upstream preset
@@ -945,6 +946,7 @@ boru vault password list                 # list keyslots (with scope/namespaces 
 boru vault history                       # content-revision history (newest first)
 boru vault restore 7                     # restore metadata to generation 7 (admin)
 boru vault proxy                         # run local credential broker (loopback only)
+boru vault serve                         # HTTP wire protocol for secret provision (HashiCorp-Vault-style, read-only)
 boru vault mcp                           # stdio MCP server over aliases
 boru vault exec gh,openai -- mycmd       # run mycmd with secrets in env
 boru vault exec --ask GITHUB_TOKEN -- make tag-push   # prompt (echo off) for a value not in the vault, inject as $GITHUB_TOKEN
@@ -979,6 +981,32 @@ A few modes that need more than one line:
   client IP), and only bites once the proxy is bound off-loopback
   (`proxy --allow-public`). An empty whitelist means no restriction.
   Shown in `vault list` (the `IP-WHITELIST` column) and the TUI detail.
+
+- **`serve`** runs the **wire protocol**: a read-only HTTP API for
+  secret *provision*, shaped after HashiCorp Vault's KV v2 surface so a
+  client needs only an address and a token — stock Vault client
+  libraries (and the sekreto secret-provider library) work unchanged.
+  `GET /v1/secret/data/<name>` (or `<ns>/<name>`) returns the secret in
+  the KV v2 response shape (the value under `data.data.value`); `LIST
+  /v1/secret/metadata[/<ns>]` (or `GET …?list=true`) enumerates the
+  keys the token may read; `GET /v1/sys/health` reports liveness
+  (`503` when locked, `501` when uninitialized); `GET
+  /v1/auth/token/lookup-self` describes the presented token. Clients
+  authenticate with a capability bearer token from `vault grant`,
+  presented as the `X-Vault-Token` header (HashiCorp convention) or an
+  `Authorization: Bearer` credential. A capability names one alias, or
+  a **namespace wildcard** — `vault grant 'proj:*'` — letting one
+  token read every secret in exactly one namespace. Wildcards resolve
+  like names: a bare `'*'` means the active default namespace (root
+  when none is set), `':*'` forces root. They work only on `serve`,
+  never on the proxy or MCP broker (those resolve capabilities by
+  exact alias and fail closed).
+  Capability TTL, `--methods`, `--max-calls`, `--require-approval`,
+  and the per-alias `--ip-whitelist` are all enforced, and each secret
+  read debits the call quota. Binds loopback `127.0.0.1:8200` by
+  default (`--listen`, `--allow-public`); the surface is deliberately
+  read-only — provisioning hands secrets out, mutation stays on the
+  authenticated CLI.
 
 - **`lock` / `unlock`** flip a flag in the store that blocks `get` and
   `grant` (and most mutations) without destroying anything — useful
@@ -1179,15 +1207,17 @@ services, CI, and stdin pipelines; prefer setting them per-invocation
 over `export`-ing them into an interactive shell, where they would
 land in shell history and every child process's environment.
 
-`boru vault grant` issues a scoped capability for an alias and prints
-a one-time bearer **token**; only the token's hash is stored, so save
-it when shown. The credential broker (`boru vault proxy`) authenticates
-that token and never accepts a prefix of it, and binds to loopback
-only unless you pass `--allow-public`. The MCP server (`boru vault mcp
---agent=NAME`) is gated the same way: it exposes and forwards only
-aliases the named agent has been granted a capability for, enforcing
-the same TTL, host/method allowlists, and call/cost quotas. The file
-backend requires a non-empty passphrase.
+`boru vault grant` issues a scoped capability for an alias (or a
+namespace wildcard like `'proj:*'`) and prints a one-time bearer
+**token**; only the token's hash is stored, so save it when shown. The
+credential broker (`boru vault proxy`) authenticates that token and
+never accepts a prefix of it, and binds to loopback only unless you
+pass `--allow-public`. The wire protocol (`boru vault serve`) accepts
+the same tokens for direct secret reads under the same policy checks.
+The MCP server (`boru vault mcp --agent=NAME`) is gated the same way:
+it exposes and forwards only aliases the named agent has been granted
+a capability for, enforcing the same TTL, host/method allowlists, and
+call/cost quotas. The file backend requires a non-empty passphrase.
 
 Two quota caveats to know when relying on `grant`'s quantitative
 limits. **`--max-calls` is a soft cap under concurrency**: the check

@@ -119,6 +119,8 @@ func Run(args []string, stdin io.Reader, stdout, stderr io.Writer) int {
 		return runConfig(rest, homeDir, stdout, stderr)
 	case "proxy":
 		return runProxy(rest, homeDir, stdout, stderr)
+	case "serve":
+		return runServe(rest, homeDir, stdout, stderr)
 	case "provider", "providers":
 		return runProvider(rest, homeDir, stdout, stderr)
 	case "folder", "folders", "vaults", "list-vaults":
@@ -188,6 +190,7 @@ var modeDocs = []modeDoc{
 	{"unlock", "mark the vault unlocked"},
 	{"config", "view or set vault configuration"},
 	{"proxy", "run a local credential broker for agents and tools"},
+	{"serve", "serve secrets read-only over a HashiCorp-Vault-style wire protocol"},
 	{"providers", "list provider presets; `provider add --url=U NAME` defines a custom one"},
 	{"folder", "list vault folders; `folder add <dir>` registers an existing vault"},
 	{"scan", "scan files for leaked secret-like strings (--home checks credential dotfiles)"},
@@ -990,7 +993,7 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	if fs.NArg() < 1 {
-		fmt.Fprintf(stderr, "error: usage: boru vault grant [--agent=NAME] [--hosts=H,H] [--methods=GET,POST] [--ttl=2h] [--max-calls=N] [--max-cost-cents=N] [--require-approval] <alias>\n")
+		fmt.Fprintf(stderr, "error: usage: boru vault grant [--agent=NAME] [--hosts=H,H] [--methods=GET,POST] [--ttl=2h] [--max-calls=N] [--max-cost-cents=N] [--require-approval] <alias | 'ns:*' | '*'>\n")
 		return 1
 	}
 	s, err := requireStore(homeDir)
@@ -1002,7 +1005,7 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "error: vault is locked; run `boru vault unlock`")
 		return 1
 	}
-	_, alias, err := w8findAliasRef(s, fs.Arg(0))
+	alias, wild, err := grantAliasRef(s, fs.Arg(0))
 	if err != nil {
 		fmt.Fprintf(stderr, "error: %s\n", err)
 		return 1
@@ -1013,7 +1016,9 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 		if s.Locked {
 			return errLocked
 		}
-		if a, _ := s.FindAlias(alias); a == nil {
+		// A wildcard names a namespace, not one alias, so there is no
+		// single record whose existence the grant depends on.
+		if a, _ := s.FindAlias(alias); a == nil && !wild {
 			return fmt.Errorf("no alias named %q", alias)
 		}
 		_, tk, err := c7newCapability(s, alias, *agent, splitCSV(*hosts), splitCSV(*methods), *ttl)
@@ -1043,6 +1048,9 @@ func runGrant(args []string, homeDir string, stdout, stderr io.Writer) int {
 	fmt.Fprintf(stdout, "token:      %s\n", token)
 	fmt.Fprintln(stdout, "  (use this token as the proxy Bearer credential — it is shown once; only its hash is stored)")
 	fmt.Fprintf(stdout, "alias:      %s\n", tok.Alias)
+	if wild {
+		fmt.Fprintf(stdout, "  (namespace wildcard — grants read of every %q-namespace secret, wire protocol only: `boru vault serve`)\n", nsLabel(valueNamespace(alias)))
+	}
 	if tok.Agent != "" {
 		fmt.Fprintf(stdout, "agent:      %s\n", tok.Agent)
 	}
@@ -1358,6 +1366,40 @@ func splitCSV(s string) []string {
 		}
 	}
 	return out
+}
+
+// grantAliasRef resolves the target of `vault grant`: a concrete alias
+// reference, or a namespace wildcard authorizing reads of one whole
+// namespace through the wire protocol (`boru vault serve`). Wildcards
+// follow the same resolution rule as names — a bare "*" means the
+// active default namespace (root when none is set), ":*" forces root,
+// "ns:*" is explicit — so `grant` sugar cannot drift from `add`/`get`.
+// The proxy and MCP brokers resolve capabilities by exact alias name
+// and no stored alias can contain '*' (validAlias rejects it), so a
+// wildcard capability fails closed everywhere except the serve
+// endpoint.
+func grantAliasRef(s *Store, ref string) (alias string, wild bool, err error) {
+	if !strings.HasSuffix(ref, "*") {
+		_, alias, err = w8findAliasRef(s, ref)
+		return alias, false, err
+	}
+	switch {
+	case ref == "*":
+		ns, err := defaultNamespace(s)
+		if err != nil {
+			return "", false, err
+		}
+		if ns == "" {
+			return "*", true, nil
+		}
+		return ns + ":*", true, nil
+	case ref == rootNamespaceRef+"*":
+		return "*", true, nil
+	}
+	if ns, base := splitAlias(ref); base == "*" && validNamespaceName(ns) {
+		return ref, true, nil
+	}
+	return "", false, fmt.Errorf("invalid wildcard alias %q (use '*' or ':*' for the root namespace, or 'ns:*' for namespace ns)", ref)
 }
 
 // validAlias accepts a stored alias name: either one segment of the
