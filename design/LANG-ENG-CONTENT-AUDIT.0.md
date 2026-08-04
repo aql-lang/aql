@@ -412,6 +412,71 @@ as open question 4.
   (`kg/project/boru-project.jsonic`) gain the new component when it is
   created.
 
+## 7A. Stage-5 first half — marker desugaring (maintainer direction, 2026-08-04)
+
+> **Desugaring moves out of the parser so the parser needs no specific
+> words: the parser emits kernel STRUCTURAL MARKERS; the engine lowers
+> each marker to word dispatches, resolving names through the sugar-
+> role table the language layer binds at registration.**
+
+The pattern already exists three times: `.`/`!.` → `Reach` (lowered
+by the engine), `/r`/`/q` → `DispatchMod` (peeked by
+`execFnDefLiteral`), `word` → the `__SP` splice marker (fired by
+`stepLiteral`). This direction finishes the migration for the sugars
+that still emit word names, and supersedes ADR-012 rule 3's "emitted-
+name table as configuration" clause (amendment recorded on the ADR):
+the parser emits NO names at all.
+
+### The invariant (gateable)
+
+**The parser never invents a name.** Its output vocabulary is
+literals, kernel structural markers, and `Word(name)` only where the
+user literally wrote that name. Enforced by a regression gate over
+`eng/go/parser` forbidding string-literal word construction.
+
+### Mechanism
+
+- **Sugar-role table** (`eng`): a small Registry table mapping a
+  closed set of roles — Usurp, StackArgs, ForwardArgs, ForceArity,
+  Lambda (afn), GenHead (gen), GenApply (of), Mini — to word names.
+  The language layer binds names at registration; a registry with no
+  binding for a stepped role fails loudly, the `undefined_word`
+  precedent. `calc` keeps proving the kernel runs with zero bindings.
+- **One marker type** (`SugarMarker`, a kernel structural type under
+  residence rule 2) carrying the role plus any payload (force-arity's
+  N, mini's kind+source, angle's name+items). Stepped at the pointer,
+  it splices its expansion — role-resolved word tokens — and
+  re-steps, the `__SP` pattern. Position is preserved, so pre-group
+  markers (`/u /s /f /N`) forward-collect exactly as the emitted
+  words did.
+- **Compile**: markers lower during the recording pass, so the
+  recorder sees ordinary word-dispatch events — the same reason the
+  `Reach` → accessor path compiles today. Markers surviving as inert
+  data (quoted) need canon forms.
+- **Angle head vs use-site**: the parser emits the SAME `AngleGroup`
+  marker in both positions and the `def`-recognition branch
+  (`parse.go:461`) is deleted. The engine disambiguates at arrival: a
+  marker arriving at a pending QuoteArgs (name-capture) slot lowers
+  to the head form (`Name gen [params]` — the kernel's pending-gen
+  machine takes over); a marker stepped free lowers to the use-site
+  paren (`Name of [args]`).
+- **`{a?:T}` stays in the parser.** Its desugar synthesizes kernel
+  TYPE literals (None/Absent), not words — out of scope for
+  word-blindness and already resolution-clean post-stage-6.
+
+### Consequences
+
+- New kernel marker payloads + canon/render forms; `Vm.parse` and
+  raw-capturing macro output show markers (the `generics-sugar.tsv`
+  raw-stream rows re-pin once more).
+- The TS port's crossdiff known-divergence list grows per converted
+  sugar until `eng/ts` lands its own marker lowering (the stage-6
+  precedent).
+- Landing order: role table + marker mechanism; then `/u /s /f /N`
+  (extends the DispatchMod precedent), `/t`, mini; then arrow; then
+  the angle family (deleting the parser's only word-recognition
+  site).
+
 ## 8. Open questions
 
 1. Component name: `types/go` vs `scalar/go` vs folding into a future

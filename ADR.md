@@ -945,6 +945,17 @@ word or type names.** Concretely:
    words whose semantics the kernel co-hosts (binder, accessors,
    splice, apply, break/continue, …), with the parser taking its
    emitted-name table as configuration.
+
+   > **Amendment (2026-08-04) — the parser emits no names at all.**
+   > The "emitted-name table as configuration" clause is superseded:
+   > desugaring moves OUT of the parser entirely. The parser emits
+   > kernel STRUCTURAL MARKERS (the `Reach`/`DispatchMod`/`__SP`
+   > precedent, extended to every sugar), and the engine lowers each
+   > marker to word dispatches through the sugar-role table the
+   > language layer binds at registration. The resulting invariant is
+   > gateable: the parser never invents a name — its output contains
+   > `Word(name)` only where the user wrote that name. Design:
+   > `design/LANG-ENG-CONTENT-AUDIT.0.md` §7A.
 4. **The parser is type-name-opaque.** Capitalised names parse as
    plain Words in every context; ONE canonical engine resolver
    (def table → live builtin table → type path) replaces today's
