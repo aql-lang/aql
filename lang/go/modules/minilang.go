@@ -8,6 +8,7 @@ import (
 	"sync"
 	"unicode/utf8"
 
+	basic "github.com/boru-lang/boru/basic/go"
 	eng "github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/lang/go/native"
 )
@@ -279,7 +280,7 @@ func BuildMiniLangModule(parent *native.Registry) (native.ModuleDesc, error) {
 	// ---- kind: micron (short form: m) — Micron literal ------------------
 	// [src opts] → [Micron]. `+m:alice@example.com` (≡ mini m
 	// 'alice@example.com') parses the source with the ONE merged tabnas
-	// grammar (eng.MicronFromString): each builtin Micron leaf owns a
+	// grammar (basic.MicronFromString): each builtin Micron leaf owns a
 	// tabnas literal grammar and the (*Tabnas).Merge combination
 	// dispatches on shape — Emailon, then Urlon, then Pathon — so the
 	// literal returns the appropriate type. Pathon's grammar accepts any
@@ -580,7 +581,7 @@ func miniMicronLitFrozenHandler(_ []native.Value, _ map[string]native.Value, _ [
 
 // miniMicronHandler is the micron/m transducer — args[0]=src, args[1]=opts
 // (none defined). It parses with the ONE builtin merged grammar
-// (eng.MicronFromString): the leaf set is fixed — Emailon, then Urlon,
+// (basic.MicronFromString): the leaf set is fixed — Emailon, then Urlon,
 // then the Pathon catch-all — so there is no per-registry state and no
 // merge rebuild.
 func miniMicronHandler(args []native.Value, _ map[string]native.Value, _ []native.Value, r *native.Registry) ([]native.Value, error) {
@@ -588,7 +589,7 @@ func miniMicronHandler(args []native.Value, _ map[string]native.Value, _ []nativ
 	if err != nil {
 		return nil, r.BoruError("mini_parse_error", fmt.Sprintf("micron: src: %v", err), "lang_micron")
 	}
-	v, merr := eng.MicronFromString(src)
+	v, merr := basic.MicronFromString(src)
 	if merr != nil {
 		return nil, r.BoruError("mini_parse_error", fmt.Sprintf("micron: %v", merr), "lang_micron")
 	}

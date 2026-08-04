@@ -418,7 +418,7 @@ func TestFreshenDefaultCopiesSharedMutables(t *testing.T) {
 // --- makePathon ---------------------------------------------------------------
 
 func TestMakePathon(t *testing.T) {
-	out, err := makePathon(NewString("usr/local/bin"), false)
+	out, err := MakePathon(NewString("usr/local/bin"), false)
 	if err != nil {
 		t.Fatalf("makePathon: %v", err)
 	}
@@ -433,7 +433,7 @@ func TestMakePathon(t *testing.T) {
 		t.Errorf("parts = %v, want 3 segments", p.Parts)
 	}
 
-	abs, err := makePathon(NewString("/etc/hosts"), true)
+	abs, err := MakePathon(NewString("/etc/hosts"), true)
 	if err != nil {
 		t.Fatalf("makePathon abs: %v", err)
 	}
@@ -443,7 +443,7 @@ func TestMakePathon(t *testing.T) {
 	}
 
 	// Negative: non-string source.
-	if _, err := makePathon(NewInteger(1), false); err == nil {
+	if _, err := MakePathon(NewInteger(1), false); err == nil {
 		t.Error("integer accepted as pathon source")
 	}
 	// Negative accessor.
@@ -454,9 +454,9 @@ func TestMakePathon(t *testing.T) {
 
 func TestMakePathonWindows(t *testing.T) {
 	mkVal := func(s string) Value {
-		out, err := makePathon(NewString(s), false)
+		out, err := MakePathon(NewString(s), false)
 		if err != nil {
-			t.Fatalf("makePathon(%q): %v", s, err)
+			t.Fatalf("MakePathon(%q): %v", s, err)
 		}
 		return out[0]
 	}
@@ -511,7 +511,7 @@ func TestMakePathonWindows(t *testing.T) {
 	// List form is POSIX: a leading "/" on the first element marks absolute,
 	// each element splits on "/" (a backslash is an ordinary character), and
 	// the result never carries a volume.
-	labs, err := makePathon(NewList([]Value{NewString("/a"), NewString("b/c")}), false)
+	labs, err := MakePathon(NewList([]Value{NewString("/a"), NewString("b/c")}), false)
 	if err != nil {
 		t.Fatalf("list makePathon: %v", err)
 	}

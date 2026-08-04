@@ -1,4 +1,4 @@
-package eng
+package basic
 
 // Scalar/Micron — the structured-scalar family.
 //
@@ -47,56 +47,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/apd/v3"
+
+	eng "github.com/boru-lang/boru/eng/go"
 )
-
-// MicronTypeInfo is the type body produced by `refine Micron {fields}`
-// — the kernel analogue of ClassTypeInfo. InstallType's Micron branch
-// fills in Name/Type when the body is bound to a capitalised name.
-type MicronTypeInfo struct {
-	Name   string
-	Type   *Type
-	Fields *OrderedMap
-}
-
-// MicronPayload is the instance payload for Emailon / Urlon / user
-// Microns. Fields holds only the PRIMARY fields — derived properties
-// (Emailon's address, Urlon's href) are synthesized at read time and
-// never stored, so content equality compares primary fields only.
-// Pathon keeps its own PathonPayload (io words and the fileinfo path
-// consume it).
-type MicronPayload struct{ Fields *OrderedMap }
-
-// IsMicronType reports whether v is a Micron type body (the
-// `refine Micron {fields}` construction result).
-func IsMicronType(v Value) bool {
-	_, ok := v.Data.(MicronTypeInfo)
-	return ok
-}
-
-// AsMicronType returns the MicronTypeInfo payload.
-func AsMicronType(v Value) (MicronTypeInfo, error) {
-	if info, ok := v.Data.(MicronTypeInfo); ok {
-		return info, nil
-	}
-	return MicronTypeInfo{}, fmt.Errorf("AsMicronType: not a Micron type body (got %T)", v.Data)
-}
-
-// IsMicronValue reports whether v carries a MicronPayload (an Emailon /
-// Urlon / user-Micron instance). Pathon values carry PathonPayload —
-// probe with IsPathon.
-func IsMicronValue(v Value) bool {
-	_, ok := v.Data.(MicronPayload)
-	return ok
-}
-
-// AsMicronFields returns the primary-field map of a MicronPayload
-// instance.
-func AsMicronFields(v Value) (*OrderedMap, error) {
-	if p, ok := v.Data.(MicronPayload); ok {
-		return p.Fields, nil
-	}
-	return nil, fmt.Errorf("AsMicronFields: not a Micron instance (got %T)", v.Data)
-}
 
 // requireMicronName enforces the Micron naming rule: the last
 // slash-part of a name bound under Scalar/Micron must end in the
@@ -139,7 +92,6 @@ func requireMicronName(name string) error {
 //     kinds → field-map render); Pathon delegates to the kernel
 //     default (segments join).
 type micronBehavior struct {
-	defaultBehavior
 	kind *Type
 	// info is the field schema for user-minted kinds (set by
 	// InstallType's Micron branch); nil for the root and the builtin
@@ -147,6 +99,8 @@ type micronBehavior struct {
 	// constructing a newtype of a user kind.
 	info *MicronTypeInfo
 }
+
+func (micronBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
 
 func (micronBehavior) Format(v Value) string {
 	if IsMicronValue(v) {
@@ -160,33 +114,33 @@ func (micronBehavior) Format(v Value) string {
 		}
 		return "Micron " + NewMap(info.Fields).String()
 	}
-	return kernelFormatDefault(v)
+	return eng.DefaultBehavior.Format(v)
 }
 
 func (micronBehavior) Equal(a, b Value) bool {
 	if ap, ok := a.Data.(PathonPayload); ok {
 		if bp, ok := b.Data.(PathonPayload); ok {
-			return pathonContentEqual(ap.Info, bp.Info)
+			return PathonContentEqual(ap.Info, bp.Info)
 		}
 		return false
 	}
 	if am, ok := a.Data.(MicronPayload); ok {
 		if bm, ok := b.Data.(MicronPayload); ok {
-			return mapsEqual(am.Fields, bm.Fields)
+			return eng.MicronFieldsEqual(am.Fields, bm.Fields)
 		}
 		return false
 	}
-	return valuesEqualDefault(a, b)
+	return eng.DefaultBehavior.Equal(a, b)
 }
 
 func (mb micronBehavior) Compare(a, b Value) (int, error) {
 	// Type-literal-first rule, inside the family only (the cross-family
 	// scalar catch-all on TScalar stays Rank-only).
-	if c, ok := litVsConcreteOrder(a, b); ok {
+	if c, ok := eng.LitVsConcreteOrder(a, b); ok {
 		return c, nil
 	}
 	if IsBareTypeNode(a) && IsBareTypeNode(b) {
-		return litVsLitOrder(a, b), nil
+		return eng.LitVsLitOrder(a, b), nil
 	}
 	// Two concrete Microns. This Comparer owns the pair only when it
 	// sits on a leaf kind — the LCA walk lands there exactly when both
@@ -198,7 +152,7 @@ func (mb micronBehavior) Compare(a, b Value) (int, error) {
 		return 0, ErrNoComparer
 	}
 	if mb.kind.ConformsTo(TPathon) {
-		return comparePathons(a, b), nil
+		return eng.ComparePathons(a, b), nil
 	}
 	if mb.kind.ConformsTo(TSemveron) {
 		return compareSemverons(a, b), nil
@@ -226,28 +180,13 @@ func micronCompareKey(v Value) string {
 	return CanonValue(v)
 }
 
-// pathonContentEqual is Pathon's content equality: same segments, same
-// absolute/relative flag — exactly the pairs comparePathons orders as
-// 0, so eq/deq agree with cmp on paths.
-func pathonContentEqual(a, b PathonInfo) bool {
-	if a.Abs != b.Abs || a.Volume != b.Volume || len(a.Parts) != len(b.Parts) {
-		return false
-	}
-	for i := range a.Parts {
-		if a.Parts[i] != b.Parts[i] {
-			return false
-		}
-	}
-	return true
-}
-
 // micronRender is the canonical render for MicronPayload instances:
 // Emailon → the address (user@host), Urlon → the href, user kinds →
 // the field-map render. Also the Compare key for non-Pathon leaves.
 func micronRender(v Value) string {
 	fields, err := AsMicronFields(v)
 	if err != nil {
-		return kernelFormatDefault(v)
+		return eng.DefaultBehavior.Format(v)
 	}
 	switch {
 	case v.Parent.ConformsTo(TEmailon):
@@ -330,22 +269,53 @@ func micronHostonAuthority(fields *OrderedMap) string {
 
 func init() {
 	// Attach the family Behavior to the root and every builtin leaf.
-	// Package vars (the T* nodes) initialise before init() runs, so
-	// the pointers are live — same pattern as the scalar Comparer
-	// installs in compare_scalar_behaviors.go.
-	TMicron.ensureTMeta().Behavior = micronBehavior{kind: TMicron}
-	TPathon.ensureTMeta().Behavior = micronBehavior{kind: TPathon}
-	TEmailon.ensureTMeta().Behavior = micronBehavior{kind: TEmailon}
-	TUrlon.ensureTMeta().Behavior = micronBehavior{kind: TUrlon}
-	TIpon.ensureTMeta().Behavior = micronBehavior{kind: TIpon}
-	THoston.ensureTMeta().Behavior = micronBehavior{kind: THoston}
-	TSemveron.ensureTMeta().Behavior = micronBehavior{kind: TSemveron}
-	TCidron.ensureTMeta().Behavior = micronBehavior{kind: TCidron}
-	TMacon.ensureTMeta().Behavior = micronBehavior{kind: TMacon}
-	TColoron.ensureTMeta().Behavior = micronBehavior{kind: TColoron}
-	TMimon.ensureTMeta().Behavior = micronBehavior{kind: TMimon}
-	TQion.ensureTMeta().Behavior = micronBehavior{kind: TQion}
-	TPhonon.ensureTMeta().Behavior = micronBehavior{kind: TPhonon}
+	// The identities are kernel-declared (eng builtinDecls — the
+	// Resource/Entity precedent); the content layer attaches their
+	// Behaviors at import, exactly as the RegisterType path would.
+	// Package init is single-threaded, so the global-table writes are
+	// safe; T* pointers are live because basic's aliases initialise
+	// before init() runs.
+	for _, t := range []*Type{
+		TMicron, TPathon, TEmailon, TUrlon, TIpon, THoston, TSemveron,
+		TCidron, TMacon, TColoron, TMimon, TQion, TPhonon,
+	} {
+		t.SetBehavior(micronBehavior{kind: t})
+	}
+	// The display-string backstop for wrapper-Behavior micron values
+	// renders through this bridge (eng value.go).
+	eng.RegisterMicronRenderBridge(micronRender)
+}
+
+// ValidateSubtypeName implements eng.SubtypeNamer (ADR-012 rule 5): the
+// family's -on naming rule, applied by the kernel to every subtype
+// minted beneath a Micron kind — typed defs, bare-nominal refines,
+// dependent scalars, host member types.
+func (micronBehavior) ValidateSubtypeName(name string) error {
+	return requireMicronName(name)
+}
+
+// MintSubtypeBehavior implements eng.MicronSubtypeMinter: a
+// `refine Micron {fields}` body bound to a capitalised name mints its
+// subtype with the family Behavior carrying the schema, so `make`
+// finds it through the parent walk.
+func (micronBehavior) MintSubtypeBehavior(def *Type, info *MicronTypeInfo) TypeBehavior {
+	return micronBehavior{kind: def, info: info}
+}
+
+// InstallMicronIdeals registers the family's Ideal descriptor on r —
+// `refine Micron {fields}` construction and `make ‹kind› data`
+// instantiation. The kernel no longer registers the family
+// (registerKernelIdeals dropped it with the content move); every
+// registry that should construct microns installs this, the way
+// lang's installIdeals wires Object/Record/Table.
+func InstallMicronIdeals(r *Registry) {
+	r.Ideals.Register(&eng.Ideal{
+		Name:        "Micron",
+		Enabled:     true,
+		Accepts:     micronAccepts,
+		Construct:   micronConstruct,
+		Instantiate: micronInstantiate,
+	})
 }
 
 // MicronProperty reads a named property of a Micron instance: the
@@ -2301,44 +2271,6 @@ func CheckMicronConstruction(r *Registry, target, src Value, pos SrcPos) {
 	}
 }
 
-// CheckAddUniqueDiagnostic adds a check-mode diagnostic unless an
-// identical one (code+detail+position) is already recorded — ReturnsFns
-// run once per analysed call shape, and a body can be analysed under
-// several shapes. Every caller mirrors a GUARANTEED runtime error over
-// exactly-known operands, so the diagnostic is stamped RuntimeMirror
-// (the compile pipeline does not refuse on it — the recording model is
-// exact) and inside an error-catching `do` body AddDiagnostic
-// re-attributes it to a caught info finding. A caught (downgraded)
-// entry never blocks a later REAL emission of the same finding at
-// another site, so the dedupe skips it.
-func CheckAddUniqueDiagnostic(r *Registry, code, detail, word string, pos SrcPos) {
-	CheckAddUnique(r, CheckDiagnostic{
-		Code:          code,
-		Detail:        detail,
-		Word:          word,
-		Row:           pos.Row,
-		Col:           pos.Col,
-		RuntimeMirror: true,
-	})
-}
-
-// CheckAddUnique is CheckAddUniqueDiagnostic's dedupe over a diagnostic the
-// caller shapes itself — for a finding that must NOT be stamped
-// RuntimeMirror because the compile pipeline should refuse on it. That is
-// the MODEL-UNDERMINING class (eng/go/CLAUDE.md): a mirror promises the
-// program compiles and then raises the identical error, which is false when
-// dispatch itself did not resolve (`no_signature`, `undefined_word`,
-// `uncalled_function` — there is no call to compile).
-func CheckAddUnique(r *Registry, d CheckDiagnostic) {
-	for _, prev := range r.Check.Diagnostics {
-		if prev.Code == d.Code && prev.Detail == d.Detail &&
-			prev.Row == d.Row && prev.Col == d.Col && !prev.CaughtAtRuntime {
-			return
-		}
-	}
-	r.Check.AddDiagnostic(d)
-}
-
 // ---- the Micron Ideal (refine / make dispatch) ----
 
 // micronAccepts is the Ideal dispatch predicate: a bare lattice node
@@ -2416,7 +2348,7 @@ func micronInstantiateAt(typ, data Value, r *Registry) ([]Value, error) {
 			Detail: "make: Micron is abstract — construct a leaf (Pathon / Emailon / Urlon / Ipon / Hoston / Semveron / Cidron / Macon / Coloron / Mimon / Qion / Phonon) or a user-defined Micron kind",
 			Hint:   "define one with: def Nameon refine Micron {field:Type}"}
 	case kind.Equal(TPathon):
-		return makePathon(data, false)
+		return MakePathon(data, false)
 	case kind.Equal(TEmailon):
 		return makeEmailon(data)
 	case kind.Equal(TUrlon):
@@ -2448,7 +2380,7 @@ func micronInstantiateAt(typ, data Value, r *Registry) ([]Value, error) {
 		var err error
 		switch {
 		case t.Equal(TPathon):
-			out, err = makePathon(data, false)
+			out, err = MakePathon(data, false)
 		case t.Equal(TEmailon):
 			out, err = makeEmailon(data)
 		case t.Equal(TUrlon):

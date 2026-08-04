@@ -705,10 +705,11 @@ var builtinDecls = []builtinDecl{
 	// dot/get). Micron takes the positional slot Scalar/Path held
 	// before it moved into the family as Pathon; the family sits
 	// between String and the external Scalar band, so cross-family
-	// ordering is unchanged by the move. Every Micron subtype's name
-	// MUST end in the suffix "on" (Pathon / Emailon / Urlon / user
-	// mints) — enforced at bind time by requireMicronName
-	// (core_type.go). Pathon keeps Path's historical FixedID 47:
+	// ordering is unchanged by the move. The identities stay
+	// kernel-declared here; the family CONTENT — validators,
+	// grammars, Behaviors, the -on naming rule (a SubtypeNamer
+	// capability the bind sites consult generically) — lives in
+	// basic/go/micron.go. Pathon keeps Path's historical FixedID 47:
 	// formatFixedID derives serialised IDs from the path ROOT only,
 	// so the rename is byte-identical on the wire.
 	{Path: "Scalar/Micron", FixedID: 111, Rank: 20_500_000_000},

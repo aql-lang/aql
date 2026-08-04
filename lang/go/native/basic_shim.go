@@ -26,14 +26,18 @@ var (
 
 // Helpers still referenced by the word files that stay in this package.
 var (
-	defName                  = basic.DefName
-	doEvalList               = basic.DoEvalList
-	checkFnCarrierBind       = basic.CheckFnCarrierBind
-	installAndRecordDef      = basic.InstallAndRecordDef
-	lookupResourceTypeByName = basic.LookupResourceTypeByName
-	genWrapSchema            = basic.GenWrapSchema
-	genUnsupported           = basic.GenUnsupported
-	recordTypeInitErr        = basic.RecordTypeInitError
+	defName                      = basic.DefName
+	doEvalList                   = basic.DoEvalList
+	checkFnCarrierBind           = basic.CheckFnCarrierBind
+	installAndRecordDef          = basic.InstallAndRecordDef
+	lookupResourceTypeByName     = basic.LookupResourceTypeByName
+	genWrapSchema                = basic.GenWrapSchema
+	installMicronIdeals          = basic.InstallMicronIdeals
+	basicCheckMicronConstruction = basic.CheckMicronConstruction
+	basicMicronProperty          = basic.MicronProperty
+	basicMicronSchemaFor         = basic.MicronSchemaFor
+	genUnsupported               = basic.GenUnsupported
+	recordTypeInitErr            = basic.RecordTypeInitError
 )
 
 // Exported passthroughs used by sibling packages (lang/go/modules, the

@@ -390,14 +390,26 @@ constants) **iff** one of these holds:
    — was collapsed into `Function`; ADR-011.)
 4. It is a structural type used by `make`/`record`/`class`:
    `Record`, `Options`, `Table`, `ChildType`, `Class`,
-   `Resource`, `Store`, `Error`, and the `Scalar/Micron`
-   structured-scalar family (`Micron`, `Pathon`, `Emailon`,
-   `Urlon` — micron.go owns their Ideal, Behavior, and the
-   `-on` naming rule). This grouping is about **kernel
+   `Resource`, `Store`, `Error`. This grouping is about **kernel
    residence**, not `make`-constructibility: `Store` and
    `Error` are deliberately not `make` targets (NUR018) —
    Stores are minted by the context machinery and Errors by
    `raise`.
+
+   The `Scalar/Micron` structured-scalar family splits across the
+   boundary (the Resource/Entity precedent): the IDENTITIES —
+   paths, FixedIDs, positional Ranks, interval labels — stay in
+   `builtinDecls`, together with the sealed payloads, their
+   accessors, and Pathon's construction plumbing
+   (`micron_kernel.go`, `core_make.go`), while the CONTENT — the
+   twelve leaf validators, the literal grammars, the family
+   Behavior/Comparer, `iso4217.go`, and the `-on` naming rule —
+   lives in `basic/go/micron.go` and plugs back in through
+   capabilities (rule 5): the family Ideal is registered per
+   registry by `basic.InstallMicronIdeals`, the `-on` rule rides
+   the `SubtypeNamer` Behavior capability, typed-def minting asks
+   `MicronSubtypeMinter`, and the display backstop renders through
+   `RegisterMicronRenderBridge`. The kernel names no Micron leaf.
 
 Everything else — domain types like `Date`, `DateTime`,
 `CalDuration`, `Matrix`, `Timeout`, `Interval`,

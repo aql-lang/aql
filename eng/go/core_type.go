@@ -323,20 +323,26 @@ func InstallType(r *Registry, name string, body Value) error {
 		return err
 	}
 	if IsMicronType(body) {
-		// `def Baron refine Micron {foo:String}` route: the Micron
+		// `def Baron refine Micron {foo:String}` route: the family
 		// Ideal's Construct produced a MicronTypeInfo body; mint the
-		// kind under Scalar/Micron, install the family Behavior (with
-		// the schema attached so `make` can find it through the parent
-		// walk), and enforce the naming rule — every type under Micron
-		// must have a name ending in "on".
+		// kind under the family root and apply the root's capabilities
+		// (ADR-012 rule 5): the SubtypeNamer naming rule and the
+		// MicronSubtypeMinter Behavior (which carries the schema so
+		// `make` can find it through the parent walk). The content
+		// layer (basic/go/micron.go) supplies both; without it the
+		// mint keeps DefaultBehavior.
 		info, _ := AsMicronType(body)
-		if err := requireMicronName(name); err != nil {
+		if err := validateSubtypeNameFor(body.Parent, name); err != nil {
 			return err
 		}
-		def := r.Types.MintType(name, TMicron)
+		def := r.Types.MintType(name, body.Parent)
 		info.Name = name
 		info.Type = def
-		def.ensureTMeta().Behavior = micronBehavior{kind: def, info: &info}
+		bhv := DefaultBehavior
+		if m, ok := body.Parent.Behavior().(MicronSubtypeMinter); ok {
+			bhv = m.MintSubtypeBehavior(def, &info)
+		}
+		def.ensureTMeta().Behavior = bhv
 		r.Defs.PushType(name, def, NewValueRaw(def, info))
 	} else if IsClassType(body) {
 		info, _ := AsClassType(body)
@@ -455,13 +461,12 @@ func InstallType(r *Registry, name string, body Value) error {
 				Detail: "type " + name + ": refine prefab missing from lattice",
 			}
 		}
-		// A bare nominal refine of a Micron kind (`def Workon refine
-		// Emailon`) is a newtype inside the family — the naming rule
-		// applies.
-		if def.Parent != nil && def.Parent.ConformsTo(TMicron) {
-			if err := requireMicronName(name); err != nil {
-				return err
-			}
+		// A bare nominal refine inside a family with a naming rule
+		// (`def Workon refine Emailon` — the Micron -on rule, a
+		// SubtypeNamer capability on the family Behaviors) is a
+		// newtype: the rule applies.
+		if err := validateSubtypeNameFor(def.Parent, name); err != nil {
+			return err
 		}
 		def.ensureTMeta().Name = name
 		body.ensureTMeta().Name = name
@@ -524,12 +529,11 @@ func InstallType(r *Registry, name string, body Value) error {
 				Detail: "type " + name + ": DepScalar body unreadable: " + err.Error(),
 			}
 		}
-		// Defensive: a dependent scalar over a Micron base would still
-		// mint under the family, so the naming rule applies.
-		if body.Parent != nil && body.Parent.ConformsTo(TMicron) {
-			if err := requireMicronName(name); err != nil {
-				return err
-			}
+		// Defensive: a dependent scalar over a base with a subtype
+		// naming rule (a Micron kind) still mints under the family,
+		// so the rule applies.
+		if err := validateSubtypeNameFor(body.Parent, name); err != nil {
+			return err
 		}
 		def := r.Types.MintType(name, body.Parent)
 		installDepScalarUnifier(def, body.Parent, di, name)
@@ -547,11 +551,10 @@ func InstallType(r *Registry, name string, body Value) error {
 		}
 		// Aliases mint a node under the aliased type, so `def Mail
 		// Emailon` would put Mail inside the Micron family — the
-		// naming rule applies (`def Mailon Emailon` passes).
-		if parent != nil && parent.ConformsTo(TMicron) {
-			if err := requireMicronName(name); err != nil {
-				return err
-			}
+		// family's SubtypeNamer rule applies (`def Mailon Emailon`
+		// passes).
+		if err := validateSubtypeNameFor(parent, name); err != nil {
+			return err
 		}
 		def := r.Types.MintType(name, parent)
 		r.Defs.PushType(name, def, body)

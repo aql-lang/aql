@@ -25,6 +25,7 @@ import (
 	"strings"
 	"testing"
 
+	basic "github.com/boru-lang/boru/basic/go"
 	"github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/eng/go/parser"
 	"github.com/boru-lang/boru/test/go/specrunner"
@@ -39,6 +40,11 @@ var specReplayCounter int
 // variants tailored for spec coverage of the dispatch / value /
 // type-lattice core.
 func registerSpecWords(r *eng.Registry) {
+	// The Micron family's Ideal (refine/make construction) moved to the
+	// base layer with the family content (ADR-013 / audit §8A) — the
+	// kernel no longer registers it, so the corpus's micron rows get it
+	// from basic, exactly as the fixtures below supply the word surface.
+	basic.InstallMicronIdeals(r)
 	toFloat := func(v eng.Value) float64 {
 		if v.Parent.ConformsTo(eng.TInteger) {
 			n, _ := eng.AsInteger(v)

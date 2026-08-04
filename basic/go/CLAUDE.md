@@ -36,6 +36,18 @@ wrong, not the go.mod.
   - `native_temporal.go` — the `Scalar/Time` family (FixedIDs
     1000-1003): registrations, Behaviors/Comparers, constructors,
     and the `boru:time-util` module mints.
+  - `micron.go` + `micron_grammar.go` + `iso4217.go` — the
+    `Scalar/Micron` structured-scalar family's CONTENT: the twelve
+    leaf validators/constructors, the merged literal grammar
+    (`MicronFromString`), the family Behavior/Comparer, the
+    property tables, the currency table, and the `-on` naming
+    rule. The identities stay kernel-declared (eng builtinDecls,
+    the Resource/Entity precedent); the content plugs in through
+    eng's capabilities — `InstallMicronIdeals` per registry (called
+    by `Register` here, lang's `Register`, module sub-registries,
+    and the engspec fixture set), the `SubtypeNamer` /
+    `MicronSubtypeMinter` Behavior capabilities, and the render
+    bridge.
   - `types_bytes.go` — `Scalar/Bytes` (1009): registration,
     Behavior (render/equality/ordering/size/const-bake), the Go
     bridge wiring, and the constructor/unwrapper pair. The bytes

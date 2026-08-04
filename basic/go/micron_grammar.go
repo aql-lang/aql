@@ -1,4 +1,4 @@
-package eng
+package basic
 
 // Micron literal grammars — each builtin Micron leaf owns a tabnas
 // grammar (github.com/tabnas/parser/go) that recognizes its literal
@@ -59,7 +59,7 @@ func micronLiteralGrammar(tag, token string, pattern *regexp.Regexp, order []str
 				if err != nil {
 					// The gate matched but the constructor refused —
 					// fall to the family catch-all, like the cascade.
-					if out, perr := makePathon(NewString(s), false); perr == nil {
+					if out, perr := MakePathon(NewString(s), false); perr == nil {
 						v = out[0]
 					}
 				}
@@ -105,7 +105,7 @@ func micronPathonGrammar(order []string) *tabnas.Tabnas {
 	return micronLiteralGrammar("Pathon", "#PATHON",
 		regexp.MustCompile(`\A\S+\z`), order,
 		func(s string) (Value, error) {
-			out, err := makePathon(NewString(s), false)
+			out, err := MakePathon(NewString(s), false)
 			if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 				return Value{}, err
 			}
@@ -150,7 +150,7 @@ func MicronFromString(s string) (Value, error) {
 	if s == "" {
 		// An empty span never reaches the lexer's match tokens —
 		// preserve the family rule directly (the empty relative path).
-		out, err := makePathon(NewString(s), false)
+		out, err := MakePathon(NewString(s), false)
 		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return Value{}, err
 		}

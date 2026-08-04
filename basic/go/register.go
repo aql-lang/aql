@@ -25,6 +25,7 @@ func Register(r *Registry) {
 	}
 	r.RegisterNativeFunc(ConstNative)
 	InstallResourceTypes(r)
+	InstallMicronIdeals(r)
 	for _, n := range ControlNatives {
 		r.RegisterNativeFunc(n)
 	}

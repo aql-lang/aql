@@ -40,7 +40,7 @@ func TestKernelRenderTable(t *testing.T) {
 		{"list", NewList([]Value{NewInteger(1), NewInteger(2)}), "1"},
 		{"map", NewMap(m), "k"},
 		{"error", NewError(errors.New("boom")), "boom"},
-		{"pathon", func() Value { out, _ := makePathon(NewString("a/b"), true); return out[0] }(), "/a/b"},
+		{"pathon", func() Value { out, _ := MakePathon(NewString("a/b"), true); return out[0] }(), "/a/b"},
 		{"big-integer", NewBigInteger(big.NewInt(12345)), "12345"},
 	}
 	for _, c := range cases {

@@ -1,4 +1,4 @@
-package eng
+package basic
 
 // Seam-6b cluster B5: unit tests exercising previously-unreached blocks
 // in micron.go (the Micron family Behavior, constructors, and the make
@@ -162,7 +162,7 @@ func TestS6b5MicronInstantiateNewtypeOfUserKind(t *testing.T) {
 	fields.Set("a", NewTypeLiteral(TString))
 	kind := r.Types.MintType("S6b5Kindon", TMicron)
 	info := MicronTypeInfo{Name: "S6b5Kindon", Type: kind, Fields: fields}
-	kind.ensureTMeta().Behavior = micronBehavior{kind: kind, info: &info}
+	kind.SetBehavior(micronBehavior{kind: kind, info: &info})
 
 	// A bare nominal newtype of that kind: the walk must find the user
 	// kind's schema on the parent chain and construct through it.

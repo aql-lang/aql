@@ -87,19 +87,6 @@ func TestS6b0InstallTypeForeignRefinePrefab(t *testing.T) {
 	}
 }
 
-func TestS6b0InstallTypeDepScalarOverMicronNeedsOnName(t *testing.T) {
-	r := newTestRegistry(t)
-	dep := NewDepScalar(DepGT, NewInteger(10))
-	if !dep.IsDepScalar() {
-		t.Fatal("premise: NewDepScalar builds a DepScalar")
-	}
-	dep.Parent = TPathon // a dependent scalar over a Micron base
-	err := InstallType(r, "S6b0Bad", dep)
-	if err == nil || !strings.Contains(err.Error(), "must end in the suffix 'on'") {
-		t.Fatalf("expected the Micron naming error, got %v", err)
-	}
-}
-
 // --- core_boundedtype.go -----------------------------------------------------------
 
 func TestS6b0AsBoundedTypeUndenotingChild(t *testing.T) {

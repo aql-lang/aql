@@ -1107,8 +1107,12 @@ spec rows.
   eng. Matrix/Tensor stay module-owned — they are types exported
   by `boru:matrix`, and that is where they live (maintainer
   decision, 2026-08-04, settling the audit's open question 2).
-  The reverse audit (Micron family, `iso4217.go`, `core_xml.go`)
-  remains its own separately-sequenced stage: those are pinned by
-  the kernel spec corpus and mirrored by `eng/ts`, so the move
-  needs capability prerequisites first — the scoping is recorded
-  in `design/LANG-ENG-CONTENT-AUDIT.0.md` §8A.
+  The reverse audit landed too (follow-up instruction, same day):
+  the Micron family's content — validators, grammars, Behaviors,
+  `iso4217.go`, the `-on` rule — moved to `basic`, plugged back in
+  through eng capabilities (`SubtypeNamer`, `MicronSubtypeMinter`,
+  `InstallMicronIdeals`, the render bridge) with the identities
+  kernel-declared so ordering, the wire format, the kernel spec
+  corpus, and `eng/ts` are untouched. `core_xml.go` stays kernel
+  (parser-emitted type; spec-pinned rendering) — the full record
+  is `design/LANG-ENG-CONTENT-AUDIT.0.md` §8A.

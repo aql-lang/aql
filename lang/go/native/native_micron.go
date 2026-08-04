@@ -4,7 +4,7 @@ package native
 //
 // Microns are object-like scalars: `get`/`dot` read their named
 // properties (primary fields plus the derived address/href/parts/abs —
-// eng.MicronProperty owns the property table), `getr`/`dotr` are the
+// basic.MicronProperty owns the property table), `getr`/`dotr` are the
 // strict twins (a miss errors instead of reading none), `has` answers
 // presence, and `set` is an EXPLICIT error — Microns are immutable, and
 // the erroring signature pins a clear message where sig-absence would
@@ -24,7 +24,7 @@ func getMicronHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) 
 	if !IsConcrete(recv) {
 		return nil, r.BoruError("get_error", "get: cannot access property on type literal", "get")
 	}
-	if val, ok := eng.MicronProperty(recv, getKey(key)); ok {
+	if val, ok := basicMicronProperty(recv, getKey(key)); ok {
 		return []Value{val}, nil
 	}
 	// Total read: an absent property (unknown key, or an optional
@@ -40,7 +40,7 @@ func getrMicronHandler(args []Value, _ map[string]Value, _ []Value, r *Registry)
 		return nil, r.BoruError("getr_error", "getr: cannot access property on type literal", "getr")
 	}
 	k := getKey(key)
-	if val, ok := eng.MicronProperty(recv, k); ok {
+	if val, ok := basicMicronProperty(recv, k); ok {
 		return []Value{val}, nil
 	}
 	return nil, r.BoruError("not_found",
@@ -52,7 +52,7 @@ func hasMicronHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) 
 	if !IsConcrete(recv) {
 		return []Value{NewBoolean(false)}, nil
 	}
-	_, ok := eng.MicronProperty(recv, getKey(args[0]))
+	_, ok := basicMicronProperty(recv, getKey(args[0]))
 	return []Value{NewBoolean(ok)}, nil
 }
 
@@ -131,7 +131,7 @@ func getrMicronReturns(args []Value, r *Registry) []Value {
 // reads (modeled on getObjectReturns). A concrete receiver answers
 // precisely from the instance itself; a carrier receiver narrows from
 // the static per-kind field tables (user kinds from their schema via
-// eng.MicronSchemaFor). Optional Urlon fields (port/path/query/
+// basic.MicronSchemaFor). Optional Urlon fields (port/path/query/
 // fragment) are per-instance, so a carrier read of those stays
 // dynamic.
 func getMicronReturns(args []Value, r *Registry) []Value {
@@ -142,7 +142,7 @@ func getMicronReturns(args []Value, r *Registry) []Value {
 	recv := args[1]
 	key := getKey(args[0])
 	if IsConcrete(recv) {
-		if val, ok := eng.MicronProperty(recv, key); ok {
+		if val, ok := basicMicronProperty(recv, key); ok {
 			if ft := ValueType(val); ft != nil {
 				return []Value{NewCarrier(ft)}
 			}
@@ -271,7 +271,7 @@ func getMicronReturns(args []Value, r *Registry) []Value {
 		}
 		return []Value{NewCarrier(TNone)}
 	}
-	if schema, ok := eng.MicronSchemaFor(t); ok {
+	if schema, ok := basicMicronSchemaFor(t); ok {
 		if fv, ok := schema.Get(key); ok {
 			ft := ValueType(fv)
 			if ft == nil || ft.ConformsTo(TFunction) {

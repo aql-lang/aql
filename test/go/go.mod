@@ -3,13 +3,13 @@ module github.com/boru-lang/boru/test/go
 go 1.24.7
 
 require (
+	github.com/boru-lang/boru/basic/go v0.0.0
 	github.com/boru-lang/boru/eng/go v0.0.0
 	github.com/boru-lang/boru/lang/go v0.0.0
 )
 
 require (
 	github.com/antchfx/xpath v1.3.6 // indirect
-	github.com/boru-lang/boru/basic/go v0.0.0 // indirect
 	github.com/cockroachdb/apd/v3 v3.2.3 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/fsnotify/fsnotify v1.10.1 // indirect

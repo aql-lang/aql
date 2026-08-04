@@ -30,7 +30,7 @@ func TestNewPathonFromString(t *testing.T) {
 		}
 	}
 	// Parity with the `make Pathon` string arm.
-	made, err := makePathon(NewString("x/y"), false)
+	made, err := MakePathon(NewString("x/y"), false)
 	if err != nil {
 		t.Fatal(err)
 	}

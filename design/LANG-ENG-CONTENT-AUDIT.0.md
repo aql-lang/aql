@@ -660,48 +660,52 @@ middle component landed (ADR-013, the `basic/go` module):
    `BuildMatrixModule` (the Time pattern: a module-owned family, no
    component relocation).
 
-3. **The reverse audit (eng → basic) — scoped by inspection; stays a
-   separately-sequenced stage.** The §4 forward moves all landed
-   (Time family, Bytes, Patrun/Pid/Service → `basic`; Module and
-   KeyVal → eng as `builtinDecls` entries with their FixedIDs and
-   EXPLICIT external-band Ranks, so every pre-move ordering result
-   is preserved while the string probes in `carrier.go` /
-   `callable_words.go` are deleted). The reverse candidates are
-   harder than the forward ones, for reasons the mechanism test
-   alone does not surface:
+3. **The reverse audit (eng → basic) — landed for the Micron family
+   (2026-08-04, follow-up maintainer instruction); `core_xml.go`
+   stays.** The §4 forward moves all landed first (Time family,
+   Bytes, Patrun/Pid/Service → `basic`; Module and KeyVal → eng as
+   `builtinDecls` entries with their FixedIDs and EXPLICIT
+   external-band Ranks, so every pre-move ordering result is
+   preserved while the string probes in `carrier.go` /
+   `callable_words.go` are deleted). The Micron move then ran the
+   prerequisites it needed as capability seams, all inside eng:
 
-   - **The kernel spec corpus pins them.** `eng/spec/make.tsv`
-     carries a Pathon-construction section; `typeof.tsv` /
-     `types.tsv` pin the Micron lattice. The kernel spec runner runs
-     against eng ALONE, so Micron machinery leaving eng changes the
-     kernel's own tested contract, not just a file's address.
-   - **The TS engine mirrors them.** `eng/ts/src` implements the
-     Micron family in the kernel twin, and the cross-engine
-     differential replays the same corpus through both engines — a
-     Go-side move needs an `eng/ts` lockstep restructure (the same
-     constraint ADR-012 records for parser opacity).
-   - **Construction is kernel-armed.** `core_make.go` constructs
-     Pathons directly, `core_type.go`/`define_type.go` enforce the
-     `-on` rule and mint user Micron kinds with `micronBehavior` at
-     the typed-def bind sites, and the Micron Ideal registers in
-     `registerKernelIdeals`.
-   - **Rank is positional.** The family holds kernel Ranks
-     20.5-20.62e9, BELOW the external Scalar band (21e9); naive
-     re-registration reorders cross-family comparisons (e.g.
-     Pathon vs the Time family). A move needs explicit-Rank
-     external registration (the Module/KeyVal precedent, run in
-     reverse).
+   - **Identity stays kernel-declared** (the Resource/Entity
+     precedent): builtinDecls keeps the family's paths, FixedIDs,
+     and positional Ranks, so ordering and the wire format are
+     untouched and no explicit-Rank registration API was needed.
+     The sealed payloads (`MicronTypeInfo` / `MicronPayload` /
+     `PathonPayload`), their accessors, Pathon's construction
+     plumbing (`MakePathon`, `NewPathonFromString` — a host API),
+     and the generic check-dedupe helpers stay in eng
+     (`micron_kernel.go`, `core_make.go`, `check.go`).
+   - **The `-on` naming rule became the `SubtypeNamer` Behavior
+     capability** (rule 5): the four bind sites in `core_type.go` /
+     `define_type.go` consult `validateSubtypeNameFor` generically;
+     the rule's implementation rides the family Behavior in basic.
+   - **Typed-def minting asks `MicronSubtypeMinter`**: InstallType's
+     MicronTypeInfo arm mints under the body's parent and takes the
+     subtype Behavior from the root Behavior's hook instead of
+     naming `micronBehavior`.
+   - **The family Ideal moved out of `registerKernelIdeals`**:
+     `basic.InstallMicronIdeals` registers the full descriptor per
+     registry — lang's `Register`, module sub-registries
+     (`Modules.InitFunc`), and the engspec fixture set install it
+     the way they install the other fixture providers.
+     `MakeScalarHandler` reaches the family through the generic
+     Ideal dispatch (and the 3-arg opts form now threads its
+     registry instead of passing nil).
+   - **The display backstop renders through a bridge**
+     (`RegisterMicronRenderBridge`, the `RegisterBytesBridge`
+     shape); with no content layer linked the arm falls through to
+     the generic rendering.
+   - **The corpus did not move**: the kernel spec runner registers
+     `basic.InstallMicronIdeals` alongside its hand-rolled fixture
+     words, so `eng/spec`'s micron rows run unchanged, and the
+     cross-engine differential (and `eng/ts`, untouched) keeps the
+     same row stream.
 
-   Prerequisites for the eventual stage, in order: (a) the `-on`
-   naming rule becomes a registration-time capability consulted
-   generically by `InstallType` (rule 5); (b) Micron leaf
-   validators/grammars register through the Ideal rather than
-   kernel arms; (c) explicit-Rank external registration; (d) the
-   Micron rows of the kernel corpus re-home (or the corpus gains a
-   layered-runner story); (e) `eng/ts` lockstep. `iso4217.go`
-   travels with Qion whenever (a)-(e) land. `core_xml.go` is the
-   same class with a smaller surface — the Xml TYPE is
-   parser-emitted (rule 1, kernel forever) and only the Behavior
-   could move, but kernel spec rows pin XML rendering and the
-   List/Map render behaviors it mirrors cannot leave, so it stays
-   with them.
+   `iso4217.go` travelled with Qion. `core_xml.go` remains kernel:
+   the Xml TYPE is parser-emitted (rule 1) and kernel spec rows pin
+   XML rendering alongside the List/Map render behaviors it
+   mirrors, so the Behavior stays with them.

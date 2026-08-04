@@ -504,7 +504,7 @@ func MakeClassFieldValue(val Value, constraint Value, r *Registry) (Value, error
 // yield ["a" "b"]. A leading "/" on the source — the string, or the
 // first list element — marks the path absolute; the abs argument
 // (from a `{ abs:… }` option map) forces it absolute regardless.
-func makePathon(srcVal Value, abs bool) ([]Value, error) {
+func MakePathon(srcVal Value, abs bool) ([]Value, error) {
 	switch {
 	case srcVal.Parent.ConformsTo(TString) && srcVal.Data != nil:
 		// The string form recognises a Windows drive ("C:\..." / "C:/...")
@@ -846,19 +846,11 @@ func registerKernelIdeals(r *Registry) {
 			return MakeRecordR(recType, data, false, r)
 		},
 	})
-	// The "Micron" Ideal owns the structured-scalar family: `refine
-	// Micron {fields}` constructs user kinds (micron.go) and `make`
-	// instantiates the builtin leaves (Pathon / Emailon / Urlon), user
-	// kinds, and their newtypes. Construct is kernel-resident (unlike
-	// Object/Record/Table, whose constructors the language layer wires
-	// in installIdeals) because the family needs no surface handlers.
-	r.Ideals.Register(&Ideal{
-		Name:        "Micron",
-		Enabled:     true,
-		Accepts:     micronAccepts,
-		Construct:   micronConstruct,
-		Instantiate: micronInstantiate,
-	})
+	// The "Micron" Ideal moved to the family's content layer
+	// (basic/go/micron.go — InstallMicronIdeals registers the full
+	// descriptor per registry), so the kernel no longer names the
+	// structured-scalar family here; MakeScalarHandler reaches it
+	// through the generic Ideal dispatch below.
 	r.Ideals.Register(&Ideal{
 		Name:    "Table",
 		Enabled: true,
@@ -917,7 +909,7 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 				abs, _ = AsBoolean(v)
 			}
 		}
-		return makePathon(srcVal, abs)
+		return MakePathon(srcVal, abs)
 	}
 
 	// Pass reg through so the Ideal-registry dispatch in MakeHandler
@@ -928,13 +920,16 @@ func MakeWithOpts(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([
 // MakeScalarHandler converts a scalar value to a target scalar type.
 func MakeScalarHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, srcVal := args[0], args[1]
-	// The Micron family (Pathon / Emailon / Urlon, user kinds — whose
-	// resolved def body is a MicronTypeInfo, not a bare literal — and
-	// their newtypes) constructs through the family dispatcher: the
-	// same routine the Micron Ideal's Instantiate runs, so the scalar
-	// sig path and the generic make path agree.
-	if micronAccepts(targetVal) {
-		return micronInstantiate(targetVal, srcVal, reg)
+	// A scalar target claimed by a registered Ideal kind (the Micron
+	// family — whose resolved def body is a MicronTypeInfo, not a bare
+	// literal — and its newtypes) constructs through that Ideal's
+	// Instantiate: the same routine the generic make path runs, so the
+	// scalar sig path and the generic make path agree. The content
+	// layer registers the family descriptor (InstallMicronIdeals).
+	if reg != nil {
+		if id := reg.Ideals.For(targetVal); id != nil && id.Instantiate != nil {
+			return id.Instantiate(targetVal, srcVal, reg)
+		}
 	}
 	if targetVal.Data != nil {
 		return nil, fmt.Errorf("make: expected a type literal, got %s", targetVal.String())
@@ -1076,7 +1071,7 @@ func MakeObjHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) 
 }
 
 // MakeScalarOptsHandler is the 3-arg [ScalarType, Map, Any] make handler.
-func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
+func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]Value, error) {
 	targetVal, optsVal, srcVal := args[0], args[1], args[2]
 	if IsBareTypeNode(targetVal) && targetVal.Equal(TPathon) {
 		abs := false
@@ -1085,9 +1080,12 @@ func MakeScalarOptsHandler(args []Value, _ map[string]Value, _ []Value, _ *Regis
 				abs, _ = AsBoolean(v)
 			}
 		}
-		return makePathon(srcVal, abs)
+		return MakePathon(srcVal, abs)
 	}
-	return MakeScalarHandler([]Value{targetVal, srcVal}, nil, nil, nil)
+	// Thread the registry through: the scalar handler's Ideal dispatch
+	// (the Micron family) needs it — a nil registry would silently drop
+	// the family for the 3-arg opts form.
+	return MakeScalarHandler([]Value{targetVal, srcVal}, nil, nil, reg)
 }
 
 // MakeConvert converts a source value to a target scalar type.

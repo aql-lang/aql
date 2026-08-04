@@ -778,16 +778,21 @@ func TestValuesEqualDefaultShapes(t *testing.T) {
 	if valuesEqualDefault(NewList([]Value{NewInteger(1)}), NewList([]Value{NewString("1")})) {
 		t.Error("cross-family elements equal")
 	}
-	// Micron payloads: content equality; mixed kinds unequal.
-	e1, err := makeEmailon(NewString("a@b.co"))
-	if err != nil {
-		t.Fatalf("makeEmailon: %v", err)
+	// Micron payloads: content equality; mixed kinds unequal. Built
+	// from the kernel payload directly — the Emailon VALIDATOR is
+	// content (basic/go/micron.go), but the payload and its equality
+	// are kernel machinery, which is what this test pins.
+	emailon := func() Value {
+		om := NewOrderedMap()
+		om.Set("user", NewString("a"))
+		om.Set("host", NewString("b.co"))
+		return NewValueRaw(TEmailon, MicronPayload{Fields: om})
 	}
-	e2, _ := makeEmailon(NewString("a@b.co"))
-	if !valuesEqualDefault(e1[0], e2[0]) {
+	e1, e2 := emailon(), emailon()
+	if !valuesEqualDefault(e1, e2) {
 		t.Error("equal emailons unequal")
 	}
-	if valuesEqualDefault(e1[0], NewInteger(1)) || valuesEqualDefault(NewInteger(1), e1[0]) {
+	if valuesEqualDefault(e1, NewInteger(1)) || valuesEqualDefault(NewInteger(1), e1) {
 		t.Error("emailon equal to integer")
 	}
 	// Pathon content equality.

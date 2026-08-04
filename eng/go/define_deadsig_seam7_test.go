@@ -8,16 +8,6 @@ import "testing"
 
 // --- define_type.go -------------------------------------------------------
 
-func TestS7DefineMemberTypeMicronNaming(t *testing.T) {
-	r := newTestRegistry(t)
-	// A member type minted under the Micron branch must carry the -on
-	// suffix; a plain capitalised name is rejected.
-	_, err := r.DefineMemberType("S7Bad", TMicron, func(Value) bool { return true })
-	if err == nil {
-		t.Error("a Micron-parented member type without the -on suffix must fail")
-	}
-}
-
 // --- sigimpl.go -----------------------------------------------------------
 
 func TestS7SigImplMarkersAndNilImpl(t *testing.T) {

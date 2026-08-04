@@ -128,7 +128,7 @@ func valuesEqualDefault(a, b Value) bool {
 	}
 	if ap, aok := a.Data.(PathonPayload); aok {
 		bp, bok := b.Data.(PathonPayload)
-		return bok && pathonContentEqual(ap.Info, bp.Info)
+		return bok && PathonContentEqual(ap.Info, bp.Info)
 	}
 	if _, bok := b.Data.(PathonPayload); bok {
 		return false

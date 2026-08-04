@@ -1,4 +1,4 @@
-package eng
+package basic
 
 // iso4217 maps an active ISO 4217 alpha-3 currency code to its
 // minor-unit exponent (the number of decimal places in the currency's

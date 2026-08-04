@@ -39,6 +39,8 @@ type (
 	BoolPayload          = eng.BoolPayload
 	AtomPayload          = eng.AtomPayload
 	PathonPayload        = eng.PathonPayload
+	MicronPayload        = eng.MicronPayload
+	MicronTypeInfo       = eng.MicronTypeInfo
 	ListPayload          = eng.ListPayload
 	FlexListData         = eng.FlexListData
 	MapPayload           = eng.MapPayload
@@ -524,12 +526,22 @@ var (
 	NewImplicitMap = eng.NewImplicitMap
 	ModuleNSOf     = eng.ModuleNSOf
 	// NewInstant moved to lang/go/engine/native_temporal.go (Step 8).
-	NewInteger       = eng.NewInteger
-	NewBigInteger    = eng.NewBigInteger
-	NewBigDecimal    = eng.NewBigDecimal
-	FormatBigInteger = eng.FormatBigInteger
-	FormatBigDecimal = eng.FormatBigDecimal
-	NewInterpString  = eng.NewInterpString
+	NewInteger               = eng.NewInteger
+	IsMicronValue            = eng.IsMicronValue
+	IsMicronType             = eng.IsMicronType
+	InstallType              = eng.InstallType
+	AsMicronType             = eng.AsMicronType
+	MakePathon               = eng.MakePathon
+	CanonValue               = eng.CanonValue
+	ErrNoComparer            = eng.ErrNoComparer
+	CheckAddUniqueDiagnostic = eng.CheckAddUniqueDiagnostic
+	AsMicronFields           = eng.AsMicronFields
+	PathonContentEqual       = eng.PathonContentEqual
+	NewBigInteger            = eng.NewBigInteger
+	NewBigDecimal            = eng.NewBigDecimal
+	FormatBigInteger         = eng.FormatBigInteger
+	FormatBigDecimal         = eng.FormatBigDecimal
+	NewInterpString          = eng.NewInterpString
 	// NewInterval moved to lang/go/engine/native_misc.go (Step 8).
 	NewList               = eng.NewList
 	NewFlexList           = eng.NewFlexList

@@ -489,3 +489,20 @@ func init() {
 	TScalar.ensureTMeta().Behavior = scalarCompareBehavior{}
 	TWord.ensureTMeta().Behavior = wordCompareBehavior{}
 }
+
+// Exported spellings of the family-Comparer doctrine helpers, for
+// family Comparers that live OUTSIDE the kernel (the Micron family's,
+// in basic/go — the first external family Comparer). The rule they
+// implement is documented in CLAUDE.md "Comparison & Ordering": every
+// family Comparer opens with the type-literal-first probe; Pathon
+// pairs keep the verbatim segment order.
+
+// LitVsConcreteOrder is litVsConcreteOrder for external Comparers.
+func LitVsConcreteOrder(a, b Value) (int, bool) { return litVsConcreteOrder(a, b) }
+
+// LitVsLitOrder is litVsLitOrder for external Comparers.
+func LitVsLitOrder(a, b Value) int { return litVsLitOrder(a, b) }
+
+// ComparePathons is comparePathons for external Comparers — the
+// kernel-owned Pathon segment order (the payload stays kernel).
+func ComparePathons(a, b Value) int { return comparePathons(a, b) }
