@@ -1,4 +1,4 @@
-package native
+package basic
 
 // This file contains the helpers and parsers used by the `fn` word.
 // The fn handler itself lives in native_definition.go.

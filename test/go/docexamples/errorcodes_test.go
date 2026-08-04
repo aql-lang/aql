@@ -73,8 +73,10 @@ import (
 // gate tolerated them because extra entries only made it more permissive.
 // The blank import of lang/go/native is what registers the language layer's
 // codes — the enumeration is per-build by design (see eng/go/errorcodes.go),
-// so the gate has to link the layers it means to check.
-var codeSourceRoots = []string{"eng/go", "lang/go"}
+// so the gate has to link the layers it means to check. `basic/go` carries
+// the fundamental words' minting sites (def / if / case / fn / var / gen …)
+// since the ADR-013 layering split.
+var codeSourceRoots = []string{"eng/go", "basic/go", "lang/go"}
 
 // codeMintPatterns match every shape that ATTACHES an error code to an
 // error or a diagnostic. Capture group 1 is the code.

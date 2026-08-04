@@ -39,7 +39,9 @@ jobs:
         run: make vet
 
       - name: Lint assertions
-        run: make -C lang/go lint-assertions
+        run: |
+          make -C basic/go lint-assertions
+          make -C lang/go lint-assertions
 
       - name: Lint (golangci-lint, all modules)
         run: make lint

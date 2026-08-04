@@ -48,19 +48,21 @@ clean:
 	go clean -testcache
 
 # Publish a new tagged release.
-#   make publish V=0.1.0           # eng/go pinned to v0.1.0 as well
-#   make publish V=0.1.0 ENG=0.1.0 # explicit eng version
+#   make publish V=0.1.0                        # eng+basic pinned to v0.1.0 too
+#   make publish V=0.1.0 ENG=0.1.0 BASIC=0.1.0  # explicit sibling versions
 #
-# Updates the `require github.com/boru-lang/boru/eng/go` line to the
-# pinned eng version (so consumers resolve a real tag), commits, tags
-# `lang/go/v$(V)`, pushes. The wildcard `replace` directive keeps local
-# development resolving to ../../eng/go regardless of the require version.
+# Updates the `require github.com/boru-lang/boru/eng/go` and
+# `…/basic/go` lines to the pinned sibling versions (so consumers
+# resolve real tags), commits, tags `lang/go/v$(V)`, pushes. The
+# `replace` directives keep local development resolving to the in-tree
+# siblings regardless of the require versions.
 publish: test
-	@test -n "$(V)" || (echo "Usage: make publish V=x.y.z [ENG=x.y.z]" && exit 1)
-	@ENG_VER=$${ENG:-$(V)}; \
+	@test -n "$(V)" || (echo "Usage: make publish V=x.y.z [ENG=x.y.z] [BASIC=x.y.z]" && exit 1)
+	@ENG_VER=$${ENG:-$(V)}; BASIC_VER=$${BASIC:-$(V)}; \
 	  perl -i -pe 's{(github\.com/boru-lang/boru/eng/go) v\S+}{$$1 v'$$ENG_VER'}' go.mod; \
+	  perl -i -pe 's{(github\.com/boru-lang/boru/basic/go) v\S+}{$$1 v'$$BASIC_VER'}' go.mod; \
 	  cd ../.. && git add lang/go/go.mod && \
-	  (git diff --cached --quiet || git commit -m "lang/go: v$(V) (eng/go v'$$ENG_VER')") && \
+	  (git diff --cached --quiet || git commit -m "lang/go: v$(V) (eng/go v'$$ENG_VER', basic/go v'$$BASIC_VER')") && \
 	  git tag lang/go/v$(V) && \
 	  git push origin main lang/go/v$(V)
 	@if command -v gh >/dev/null 2>&1; then \

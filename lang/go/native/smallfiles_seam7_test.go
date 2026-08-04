@@ -87,9 +87,8 @@ func TestParseTextRejectsNonString(t *testing.T) {
 }
 
 func TestRegisterKeyValTypeDuplicate(t *testing.T) {
-	saved := typeInitErrs
-	t.Cleanup(func() { typeInitErrs = saved })
-	typeInitErrs = nil
+	saved := SwapTypeInitErrs(nil)
+	t.Cleanup(func() { SwapTypeInitErrs(saved) })
 
 	// Re-registering the already-installed Node/Map/KeyVal path records the
 	// failure via recordTypeInitErr (ADR-005) instead of panicking.

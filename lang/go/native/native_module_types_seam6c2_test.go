@@ -12,9 +12,8 @@ import (
 // (design/TEST-SEAMS.10.md).
 
 func TestSeam6C2RegisterModuleTypeDuplicateRecorded(t *testing.T) {
-	saved := typeInitErrs
-	t.Cleanup(func() { typeInitErrs = saved })
-	typeInitErrs = nil
+	saved := SwapTypeInitErrs(nil)
+	t.Cleanup(func() { SwapTypeInitErrs(saved) })
 
 	// The nil arm: recording no error records nothing.
 	recordTypeInitErr(nil)

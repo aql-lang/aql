@@ -1,4 +1,4 @@
-package native
+package basic
 
 import (
 	"fmt"
@@ -7,13 +7,13 @@ import (
 	"github.com/boru-lang/boru/eng/go"
 )
 
-// definitionNatives covers the binding / function-definition words:
+// DefinitionNatives covers the binding / function-definition words:
 // def, undef, var, fn, args, __pa.
 //
 // Pure helpers used by these handlers (parseFnDef, parseFnParams,
-// MatchFnSig, defName, defStackOnly, etc.) live alongside their
+// MatchFnSig, DefName, DefStackOnly, etc.) live alongside their
 // callers in native_definition_fn.go and native_definition_helpers.go.
-var definitionNatives = []NativeFunc{
+var DefinitionNatives = []NativeFunc{
 	{
 		Name: "def",
 
@@ -27,7 +27,7 @@ var definitionNatives = []NativeFunc{
 				// raw / spliced body use `def name word value`.
 				Args:          []*Type{TMap, TAny},
 				NoEvalMapArgs: map[int]bool{0: true},
-				Impl:          Go(defTypedHandler, RunInCheck()),
+				Impl:          Go(DefTypedHandler, RunInCheck()),
 				Returns:       []*Type{},
 				BarrierPos:    -1,
 			},
@@ -35,18 +35,18 @@ var definitionNatives = []NativeFunc{
 			// class {…}`, `def name gen [T] fn [...]`, … — are NOT
 			// listed here: they are synthesized mechanically from the
 			// blessed constructors' own signature tables at the end of
-			// Register (registerDefKeywordForms), so a constructor
+			// Register (RegisterDefKeywordForms), so a constructor
 			// overload added later propagates to def automatically.
 			{
 				Args:       []*Type{TString, TAny},
-				Impl:       Go(defHandler, RunInCheck()),
+				Impl:       Go(DefHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TAtom, TAny},
 				QuoteArgs:  map[int]bool{0: true},
-				Impl:       Go(defHandler, RunInCheck()),
+				Impl:       Go(DefHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,
 			},
@@ -71,14 +71,14 @@ var definitionNatives = []NativeFunc{
 			},
 			{
 				Args:       []*Type{TString, TFnUndef},
-				Impl:       Go(undefFnHandler, RunInCheck()),
+				Impl:       Go(UndefFnHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TAtom, TFnUndef},
 				QuoteArgs:  map[int]bool{0: true},
-				Impl:       Go(undefFnHandler, RunInCheck()),
+				Impl:       Go(UndefFnHandler, RunInCheck()),
 				Returns:    []*Type{},
 				BarrierPos: -1,
 			},
@@ -91,7 +91,7 @@ var definitionNatives = []NativeFunc{
 		// form (`undef name fnUndefSpec`): the var splice runs the cleanup with the
 		// body's RESIDUAL still on the stack, and in check mode that residual is a
 		// dynamic-Any carrier which gradually matches the 2-arg form's TFnUndef
-		// slot — so `undef name` mis-dispatched to undefFnHandler and errored
+		// slot — so `undef name` mis-dispatched to UndefFnHandler and errored
 		// ("expected fn undef spec"), leaking the loop binding and refusing the
 		// closure. A dedicated 1-arg-only word can never mis-match the residual, so
 		// it dispatches identically (1-arg unbind) in check mode and at runtime —
@@ -128,7 +128,7 @@ var definitionNatives = []NativeFunc{
 		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Impl:       Go(varHandler, RunInCheck()),
+			Impl:       Go(VarHandler, RunInCheck()),
 			Returns:    []*Type{TAny}, BarrierPos: -1,
 		}},
 	},
@@ -173,14 +173,14 @@ var definitionNatives = []NativeFunc{
 				// barrier and breaks every synthesized `def … fn …` form
 				// (measured). Closing it needs return patterns on FnSig;
 				// see design/verse-report-defects-investigation.0.md §F.
-				Impl:       Go(fnTripleHandler, RunInCheck()),
+				Impl:       Go(FnTripleHandler, RunInCheck()),
 				Returns:    []*Type{TFunction},
 				BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Impl:       Go(fnHandler, RunInCheck()),
+				Impl:       Go(FnHandler, RunInCheck()),
 				Returns:    []*Type{TFunction},
 				BarrierPos: -1,
 			},
@@ -211,7 +211,7 @@ var definitionNatives = []NativeFunc{
 			// lose IS to autoEvalMap. See fn above.
 			NoEvalMapArgs: map[int]bool{1: true},
 			RawParens:     map[int]bool{0: true},
-			Impl:          Go(afnHandler, RunInCheck()),
+			Impl:          Go(AfnHandler, RunInCheck()),
 			Returns:       []*Type{TFunction},
 			BarrierPos:    -1,
 		}},
@@ -222,7 +222,7 @@ var definitionNatives = []NativeFunc{
 		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Impl:       Go(fnsigHandler, RunInCheck()),
+			Impl:       Go(FnsigHandler, RunInCheck()),
 			// Pure construction — runs in check mode too, so surface
 			// schemas carry REAL shapes statically and `exposes` is
 			// fully static-checkable (design/SURFACES.10.md S2). A
@@ -235,7 +235,7 @@ var definitionNatives = []NativeFunc{
 		Name: "args",
 
 		Signatures: []Signature{{
-			Impl:    Go(argsHandler),
+			Impl:    Go(ArgsHandler),
 			Returns: []*Type{TList}, BarrierPos: -1,
 		}},
 	},
@@ -243,7 +243,7 @@ var definitionNatives = []NativeFunc{
 		Name: "__pa",
 
 		Signatures: []Signature{{
-			Impl:    Go(popArgsHandler),
+			Impl:    Go(PopArgsHandler),
 			Returns: []*Type{}, BarrierPos: -1,
 		}},
 	},
@@ -251,12 +251,12 @@ var definitionNatives = []NativeFunc{
 
 // ---- def ----
 
-// installAndRecordDef binds name→value and records the def for check-mode
+// InstallAndRecordDef binds name→value and records the def for check-mode
 // unused-def analysis at pos (the def-name token's position). Every
 // successful def / typed-def branch ends with this exact pair followed by a
 // `return nil, nil`, so it is consolidated here. The optional stackOnly flag
 // is forwarded to InstallDef (only the plain `def` path sets it).
-func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stackOnly ...bool) ([]Value, error) {
+func InstallAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stackOnly ...bool) ([]Value, error) {
 	// A def's own INSTALL must not count as a USE of the name. Installing a
 	// fn runs its construction-time body pass, which resolves the fn's own
 	// name (recursion support) and records a spurious self-use; an uncalled
@@ -325,7 +325,7 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 	// fn-carrier side table they consult.
 	if checking && !IsConcrete(value) &&
 		value.Parent.ConformsTo(TFunction) {
-		noteCheckFnCarrierBind(r, name, value)
+		NoteCheckFnCarrierBind(r, name, value)
 	}
 	return outs, nil
 }
@@ -338,8 +338,8 @@ func installAndRecordDef(r *Registry, name string, value Value, pos SrcPos, stac
 // (ResetCheckFnCarrierBinds) — like the module-export growth ledger.
 const capCheckFnCarrierBinds = "engine.check.fn-carrier-binds"
 
-// noteCheckFnCarrierBind records name → carrier in the per-pass table.
-func noteCheckFnCarrierBind(r *Registry, name string, v Value) {
+// NoteCheckFnCarrierBind records name → carrier in the per-pass table.
+func NoteCheckFnCarrierBind(r *Registry, name string, v Value) {
 	if m, ok, _ := eng.Cap[map[string]Value](r, capCheckFnCarrierBinds); ok && m != nil {
 		m[name] = v
 		return
@@ -347,9 +347,9 @@ func noteCheckFnCarrierBind(r *Registry, name string, v Value) {
 	_ = r.Capabilities.Set(capCheckFnCarrierBinds, map[string]Value{name: v})
 }
 
-// checkFnCarrierBind returns the fn carrier def-bound to name during this
+// CheckFnCarrierBind returns the fn carrier def-bound to name during this
 // check pass, if any.
-func checkFnCarrierBind(r *Registry, name string) (Value, bool) {
+func CheckFnCarrierBind(r *Registry, name string) (Value, bool) {
 	m, ok, _ := eng.Cap[map[string]Value](r, capCheckFnCarrierBinds)
 	if !ok || m == nil {
 		return Value{}, false
@@ -394,21 +394,21 @@ var defKeywordConstructors = []string{
 // angle sugar desugars to exactly this token shape (parser/parse.go).
 var defGenChainTails = []string{"fn", "class", "refine", "fnsig"}
 
-// defFormVia returns the run implementation for a synthesized def
+// DefFormVia returns the run implementation for a synthesized def
 // keyword overload: construct the bound value by dispatching the
 // captured constructor's own signature over the operands after the
 // keyword — the capture is binding-agnostic like every /q slot, so
 // the builtin constructor semantics apply regardless of shadowing —
-// then delegate binding to the ordinary defHandler path (capitalised-
+// then delegate binding to the ordinary DefHandler path (capitalised-
 // name / extension / value-bind branches behave identically to a
 // value that arrived at a parked def). genChain forms run gen's
 // handler over the params list first, so the tail constructor picks
 // up the pending gen spec exactly as in the wait-through sequence.
-func defFormVia(base *Signature, offset int, genChain bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
+func DefFormVia(base *Signature, offset int, genChain bool) func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
 	return func(args []Value, named map[string]Value, stack []Value, r *Registry) ([]Value, error) {
 		ctorArgs := args[offset:]
 		if genChain {
-			if _, err := genHandler([]Value{args[2]}, nil, nil, r); err != nil {
+			if _, err := GenHandler([]Value{args[2]}, nil, nil, r); err != nil {
 				return nil, err
 			}
 			// The chain signature DEFERRED evaluation of the tail's
@@ -461,7 +461,7 @@ func defFormVia(base *Signature, offset int, genChain bool) func([]Value, map[st
 			return nil, err
 		}
 		// Every blessed constructor signature returns exactly one value.
-		return defHandler([]Value{args[0], vals[0]}, named, stack, r)
+		return DefHandler([]Value{args[0], vals[0]}, named, stack, r)
 	}
 }
 
@@ -498,7 +498,7 @@ func synthDefKeywordSigNamed(ctor string, base *Signature, genChain bool, nameTy
 	args = append(args, base.Args...)
 	// Mirror the base's per-position VALUE patterns, shifted by offset.
 	// STRUCTURAL capture slots (/q, raw paren, form, type-literal) are
-	// excluded up front (hasStructuralSlots), but a value Pattern is a
+	// excluded up front (HasStructuralSlots), but a value Pattern is a
 	// dispatch CONSTRAINT, not a capture — it must travel with its slot
 	// so the keyword form dispatches on the same predicate the bare
 	// constructor does. This is load-bearing for fn's two forms: the
@@ -515,7 +515,7 @@ func synthDefKeywordSigNamed(ctor string, base *Signature, genChain bool, nameTy
 	if genChain {
 		// DEFER every tail operand's evaluation: a schema map/list may
 		// reference the gen placeholders, which are only bound once the
-		// form handler has run gen (defFormVia re-applies the tail's
+		// form handler has run gen (DefFormVia re-applies the tail's
 		// own evaluation policy afterwards).
 		for p := range base.Args {
 			noEval[p+offset] = true
@@ -530,14 +530,14 @@ func synthDefKeywordSigNamed(ctor string, base *Signature, genChain bool, nameTy
 		Args:       args,
 		QuoteArgs:  quote,
 		Patterns:   patterns,
-		Impl:       Go(defFormVia(base, offset, genChain), RunInCheck()),
+		Impl:       Go(DefFormVia(base, offset, genChain), RunInCheck()),
 		Returns:    []*Type{},
 		BarrierPos: -1,
 	}
 	if len(noEval) > 0 {
 		sig.NoEvalArgs = noEval
 	}
-	sig.NoEvalMapArgs = shiftPosFlags(base.NoEvalMapArgs, offset)
+	sig.NoEvalMapArgs = ShiftPosFlags(base.NoEvalMapArgs, offset)
 	if genChain {
 		// Deferral covers map operands too (NoEvalArgs does not gate
 		// map auto-evaluation; NoEvalMapArgs does).
@@ -548,17 +548,17 @@ func synthDefKeywordSigNamed(ctor string, base *Signature, genChain bool, nameTy
 			sig.NoEvalMapArgs[p+offset] = true
 		}
 	}
-	sig.RawParens = shiftPosFlags(base.RawParens, offset)
-	sig.FormArgs = shiftPosFlags(base.FormArgs, offset)
-	sig.TypeArgs = shiftPosFlags(base.TypeArgs, offset)
+	sig.RawParens = ShiftPosFlags(base.RawParens, offset)
+	sig.FormArgs = ShiftPosFlags(base.FormArgs, offset)
+	sig.TypeArgs = ShiftPosFlags(base.TypeArgs, offset)
 	return sig
 }
 
-// hasStructuralSlots reports whether a signature captures any position
+// HasStructuralSlots reports whether a signature captures any position
 // structurally — /q word capture, raw paren, macro form, or type-
 // literal slot. Such signatures are excluded from the def keyword
-// mirror (see registerDefKeywordForms).
-func hasStructuralSlots(sig *Signature) bool {
+// mirror (see RegisterDefKeywordForms).
+func HasStructuralSlots(sig *Signature) bool {
 	if len(sig.QuoteArgs) > 0 || len(sig.RawParens) > 0 ||
 		len(sig.FormArgs) > 0 || len(sig.TypeArgs) > 0 {
 		return true
@@ -566,9 +566,9 @@ func hasStructuralSlots(sig *Signature) bool {
 	return false
 }
 
-// shiftPosFlags returns src's per-position flags shifted by `by`
+// ShiftPosFlags returns src's per-position flags shifted by `by`
 // positions (nil/empty in → nil out).
-func shiftPosFlags(src map[int]bool, by int) map[int]bool {
+func ShiftPosFlags(src map[int]bool, by int) map[int]bool {
 	if len(src) == 0 {
 		return nil
 	}
@@ -579,10 +579,10 @@ func shiftPosFlags(src map[int]bool, by int) map[int]bool {
 	return dst
 }
 
-// registerDefKeywordForms synthesizes def's keyword overloads from the
+// RegisterDefKeywordForms synthesizes def's keyword overloads from the
 // blessed constructors' live signature tables. Called at the end of
 // Register, after every constructor slice has registered.
-func registerDefKeywordForms(r *Registry) {
+func RegisterDefKeywordForms(r *Registry) {
 	synth := func(ctor string, genChain bool) {
 		fnDef := r.Lookup(ctor)
 		if fnDef == nil {
@@ -604,7 +604,7 @@ func registerDefKeywordForms(r *Registry) {
 			// Among the blessed constructors this only excludes
 			// quote's word-capture sig; `def a quote foo` spells as
 			// `def a foo/q`.
-			if hasStructuralSlots(&base) {
+			if HasStructuralSlots(&base) {
 				continue
 			}
 			r.Register("def", synthDefKeywordSigNamed(ctor, &base, genChain, TAtom))
@@ -619,9 +619,9 @@ func registerDefKeywordForms(r *Registry) {
 	}
 }
 
-func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	name := defName(args[0])
-	stackOnly := defStackOnly(args[0])
+func DefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	name := DefName(args[0])
+	stackOnly := DefStackOnly(args[0])
 	body := args[1]
 	if IsCapitalisedName(name) {
 		// `def` is the universal binder (design/TYPE-UNIFORM.10.md
@@ -634,7 +634,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	if err := ValidateWordName(name); err != nil {
 		return nil, fmt.Errorf("def %s: %w", name, err)
 	}
-	if handled, err := defWordExtension(r, name, body, args[0].Pos()); handled {
+	if handled, err := DefWordExtension(r, name, body, args[0].Pos()); handled {
 		return nil, err
 	}
 	if r.IsBuiltinWord(name) {
@@ -643,10 +643,10 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	if r.Defs.IsType(name) {
 		return nil, r.BoruError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
-	return installAndRecordDef(r, name, body, args[0].Pos(), stackOnly)
+	return InstallAndRecordDef(r, name, body, args[0].Pos(), stackOnly)
 }
 
-// defWordExtension routes `def <word> fn […]` on a word that carries
+// DefWordExtension routes `def <word> fn […]` on a word that carries
 // LOCKED signatures — a built-in, or a module-wrapper rebinding that
 // inherited locked inner sigs — to the open-words merge
 // (design/OPEN-WORDS.0.md): the fn's signatures merge into a word
@@ -656,7 +656,7 @@ func defHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // (the REPL/iterate idiom — §4.1), and a non-fn body on a built-in
 // keeps the reserved_word refusal. Sealed words (`def`, `make`,
 // `word`) refuse inside InstallWordExtension.
-func defWordExtension(r *Registry, name string, body Value, pos SrcPos) (bool, error) {
+func DefWordExtension(r *Registry, name string, body Value, pos SrcPos) (bool, error) {
 	if !body.Parent.Equal(TFunction) {
 		return false, nil
 	}
@@ -682,7 +682,7 @@ func defWordExtension(r *Registry, name string, body Value, pos SrcPos) (bool, e
 	if existing == nil || !eng.HasLockedSigs(existing) {
 		return false, nil
 	}
-	// Mirror installAndRecordDef's use-snapshot: the merge's
+	// Mirror InstallAndRecordDef's use-snapshot: the merge's
 	// construction-time body pass resolves the word's own name and
 	// would otherwise record a spurious self-use.
 	checking := r.Check.IsActive()
@@ -715,7 +715,7 @@ func reservedWordError(r *Registry, op, name string) error {
 
 // markRefineDefUncompilable refuses bytecode compilation of a typed-def whose
 // refinement constraint could not be recorded as a typed-bind event — the
-// fallback behind recordTypedBindOrRefuse. The COMMON dynamic refinement
+// fallback behind RecordTypedBindOrRefuse. The COMMON dynamic refinement
 // shapes (predicate type / bare-refine newtype / DepScalar subset over a
 // param or computed carrier) now compile: RecordTypedBind emits an OpBindTyped
 // that runs the interpreter's own validate/reparent at run time (RunTypedBind,
@@ -724,14 +724,14 @@ func reservedWordError(r *Registry, op, name string) error {
 // body whose operand has no resolvable provenance, where compiling would have
 // to guess the stack layout. Object / alias / schema typed-defs do not route
 // here.
-// markTypedContainerDefUncompilable refuses compilation of a typed-container
+// MarkTypedContainerDefUncompilable refuses compilation of a typed-container
 // def (`def m:{:T} …` / `def xs:[:T] …`) whose body is NON-concrete (a flex /
 // carrier body). Such a body's element validation and tag-minting happen at
 // runtime only (Unify over the concrete value); the compiled path has no
 // typed-container bind to mirror that, so it would silently drop the tag and
 // skip enforcement. Falling back to the interpreter keeps the two surfaces in
 // agreement. A concrete body validates statically and compiles faithfully.
-func markTypedContainerDefUncompilable(r *Registry, name string, body, constraint Value) {
+func MarkTypedContainerDefUncompilable(r *Registry, name string, body, constraint Value) {
 	if IsConcrete(body) || (!IsTypedMap(constraint) && !IsTypedList(constraint)) {
 		return
 	}
@@ -753,7 +753,7 @@ func markRefineDefUncompilable(r *Registry, name string, body Value) {
 	}
 }
 
-// defFnPredicateBind is defTypedHandler's fn-PREDICATE branch (extracted for
+// defFnPredicateBind is DefTypedHandler's fn-PREDICATE branch (extracted for
 // gocyclo): validate/transform via the predicate, reparent per the
 // interpreter's decision, and record the runtime bind — for CONCRETE bodies
 // too, since the predicate is a runtime evaluation (the 2026-07-15 flip
@@ -805,26 +805,26 @@ func defFnPredicateBind(r *Registry, name, typeName string, constraint, body Val
 	// short-circuited on the carrier in check mode, so the runtime bind is
 	// the first real evaluation. reparentTo carries the SAME reparent
 	// decision the interpreter just took, so the two engines agree.
-	out = recordTypedBindOrRefuseConcrete(r, func() eng.TypedBindSpec {
+	out = RecordTypedBindOrRefuseConcrete(r, func() eng.TypedBindSpec {
 		predCons := constraint
 		return eng.TypedBindSpec{
 			Kind: eng.TypedBindPredicate, Name: name, Describe: describeType(),
 			Def: reparentTo, Cons: &predCons,
 		}
-	}, body, out, pos, func() { markFnPredicateBindUncompilable(r, name) })
-	return installAndRecordDef(r, name, out, pos)
+	}, body, out, pos, func() { MarkFnPredicateBindUncompilable(r, name) })
+	return InstallAndRecordDef(r, name, out, pos)
 }
 
-// markFnPredicateBindUncompilable refuses compilation when a fn-predicate
+// MarkFnPredicateBindUncompilable refuses compilation when a fn-predicate
 // typed-def's bind record declined: the predicate is a runtime evaluation
 // for every body shape, so there is no sound bake — slow, not wrong.
-func markFnPredicateBindUncompilable(r *Registry, name string) {
+func MarkFnPredicateBindUncompilable(r *Registry, name string) {
 	if es := r.Check.Recorder(); es.Active() {
 		es.MarkUncompilable("typed-def `" + name + "`: fn-predicate bind is runtime-evaluated (no compiled bind at this site)")
 	}
 }
 
-// recordTypedBindOrRefuse threads a refinement typed-def through the bytecode
+// RecordTypedBindOrRefuse threads a refinement typed-def through the bytecode
 // recorder: on success the returned binding carries a fresh provenance ID
 // registered against a typed-bind event (OpBindTyped re-runs the SAME
 // validate/reparent over the runtime value — RunTypedBind), and the program
@@ -836,7 +836,7 @@ func markFnPredicateBindUncompilable(r *Registry, name string) {
 // the raw operand the runtime bind consumes. mkSpec is a THUNK so the spec
 // (its Describe renders the constraint) is only built when a bind is actually
 // recorded — a plain interpreter run pays nothing it did not pay before.
-func recordTypedBindOrRefuse(r *Registry, mkSpec func() eng.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
+func RecordTypedBindOrRefuse(r *Registry, mkSpec func() eng.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
 	if es := r.Check.Recorder(); es.Active() && !IsConcrete(body) {
 		if out, ok := es.RecordTypedBind(mkSpec(), body, bound, pos); ok {
 			return out
@@ -846,11 +846,11 @@ func recordTypedBindOrRefuse(r *Registry, mkSpec func() eng.TypedBindSpec, body,
 	return bound
 }
 
-// recordTypedBindOrRefuseConcrete is recordTypedBindOrRefuse WITHOUT the
+// RecordTypedBindOrRefuseConcrete is RecordTypedBindOrRefuse WITHOUT the
 // concrete-body decline: the fn-PREDICATE bind is a runtime evaluation for
 // every body shape (the predicate can transform, raise, or read live state),
 // so a concrete operand records the bind rather than riding the const pool.
-func recordTypedBindOrRefuseConcrete(r *Registry, mkSpec func() eng.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
+func RecordTypedBindOrRefuseConcrete(r *Registry, mkSpec func() eng.TypedBindSpec, body, bound Value, pos SrcPos, refuse func()) Value {
 	if es := r.Check.Recorder(); es.Active() {
 		if out, ok := es.RecordTypedBind(mkSpec(), body, bound, pos); ok {
 			return out
@@ -860,13 +860,13 @@ func recordTypedBindOrRefuseConcrete(r *Registry, mkSpec func() eng.TypedBindSpe
 	return bound
 }
 
-// resolveResourceTypeInfo returns the ResourceTypeInfo a typed-def
+// ResolveResourceTypeInfo returns the ResourceTypeInfo a typed-def
 // annotation denotes, and true, for a Resource/Entity constraint. A
 // word-resolved annotation already carries the ResourceTypeInfo body;
 // a bare Resource-family type literal (the shape `def e:Entity {…}`
 // produces, since builtin type names parse to literals in data context)
 // is resolved from the type binding by its lattice-leaf name.
-func resolveResourceTypeInfo(r *Registry, constraint Value) (ResourceTypeInfo, bool) {
+func ResolveResourceTypeInfo(r *Registry, constraint Value) (ResourceTypeInfo, bool) {
 	if IsResourceType(constraint) {
 		info, _ := AsResourceType(constraint)
 		return info, true
@@ -878,23 +878,23 @@ func resolveResourceTypeInfo(r *Registry, constraint Value) (ResourceTypeInfo, b
 	// Resource/Entity def bindings resolve to a ResourceType, so this
 	// never hijacks a non-Resource annotation.
 	if r != nil && IsBareTypeNode(constraint) {
-		if info, ok := lookupResourceTypeByName(r, constraint.String()); ok {
+		if info, ok := LookupResourceTypeByName(r, constraint.String()); ok {
 			return info, true
 		}
 	}
 	return ResourceTypeInfo{}, false
 }
 
-// lookupResourceTypeByName resolves a Resource/Entity ResourceTypeInfo
+// LookupResourceTypeByName resolves a Resource/Entity ResourceTypeInfo
 // from a type name. Resource and Entity are installed as def bindings
-// (installResourceTypes), so — unlike a user class, which is a type
+// (InstallResourceTypes), so — unlike a user class, which is a type
 // binding reachable via TopTypeBody — their schema is found through the
 // def store.
-func lookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool) {
+func LookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool) {
 	if r == nil || name == "" {
 		return ResourceTypeInfo{}, false
 	}
-	v, ok := r.Defs.Top(resourceDefKey(name))
+	v, ok := r.Defs.Top(ResourceDefKey(name))
 	if !ok {
 		return ResourceTypeInfo{}, false
 	}
@@ -905,7 +905,7 @@ func lookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool)
 	return info, true
 }
 
-func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func DefTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	nameMap, _ := AsMap(args[0])
 	if nameMap == nil || nameMap.Len() == 0 {
 		return nil, r.BoruError("def_error", "def: typed-name map must have exactly one key, got empty/non-concrete map", "def")
@@ -1033,20 +1033,20 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// downstream `b typeof` then compiles). Outside emit mode this is a
 			// no-op and the concrete instance is bound.
 			if carrier, ok := eng.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
-				return installAndRecordDef(r, name, carrier, args[0].Pos())
+				return InstallAndRecordDef(r, name, carrier, args[0].Pos())
 			}
 			result, err := eng.MakeObject(info, body, r)
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
 			}
-			return installAndRecordDef(r, name, result[0], args[0].Pos())
+			return InstallAndRecordDef(r, name, result[0], args[0].Pos())
 		}
 		if IsClassInstance(body) {
 			oi, _ := AsClassInstance(body)
 			// Accept if the instance's nominal type matches the
 			// declared one (covers `def x:Person make Person {…}`).
 			if oi.TypeRef != nil && oi.TypeRef.ID == info.ID {
-				return installAndRecordDef(r, name, body, args[0].Pos())
+				return InstallAndRecordDef(r, name, body, args[0].Pos())
 			}
 		}
 	}
@@ -1057,12 +1057,12 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// the emit-mode RecordTypedDefMake carrier is recorded identically.
 	// Unlike user class names (which parse as Words and resolve to their
 	// ClassTypeInfo), the builtin Resource/Entity names parse to BARE
-	// type literals in data context, so resolveResourceTypeInfo also
+	// type literals in data context, so ResolveResourceTypeInfo also
 	// looks the schema up by name when the constraint carries no body.
-	if resInfo, isRes := resolveResourceTypeInfo(r, constraint); isRes {
+	if resInfo, isRes := ResolveResourceTypeInfo(r, constraint); isRes {
 		if body.Parent.Equal(TMap) {
 			if carrier, ok := eng.RecordTypedDefMake(r, constraint, body, args[0].Pos()); ok {
-				return installAndRecordDef(r, name, carrier, args[0].Pos())
+				return InstallAndRecordDef(r, name, carrier, args[0].Pos())
 			}
 			provided, merr := AsMutableMap(body)
 			if merr != nil {
@@ -1072,13 +1072,13 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			if err != nil {
 				return nil, fmt.Errorf("def %s: %w", name, err)
 			}
-			return installAndRecordDef(r, name, result[0], args[0].Pos())
+			return InstallAndRecordDef(r, name, result[0], args[0].Pos())
 		}
 		if IsResourceInstance(body) {
 			ri, _ := AsResourceInstance(body)
 			// Accept a pre-made instance whose nominal type matches.
 			if ri.TypeRef != nil && ri.TypeRef.ID == resInfo.ID {
-				return installAndRecordDef(r, name, body, args[0].Pos())
+				return InstallAndRecordDef(r, name, body, args[0].Pos())
 			}
 		}
 	}
@@ -1103,7 +1103,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			// predicate, no registry — over the runtime value, raising the
 			// byte-identical unify error on failure and binding Unify's result
 			// (base tag kept, no reparent) on success.
-			bound := recordTypedBindOrRefuse(r, func() eng.TypedBindSpec {
+			bound := RecordTypedBindOrRefuse(r, func() eng.TypedBindSpec {
 				depCons := constraint
 				return eng.TypedBindSpec{
 					Kind: eng.TypedBindDepScalar, Name: name, Describe: describeType(), Cons: &depCons,
@@ -1113,7 +1113,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 					es.MarkUncompilable("typed-def `" + name + "`: DepScalar predicate validation is interpreter-only")
 				}
 			})
-			return installAndRecordDef(r, name, bound, args[0].Pos())
+			return InstallAndRecordDef(r, name, bound, args[0].Pos())
 		}
 	}
 	// User-minted bare-refine subtype (`def Foo refine Integer`): the
@@ -1148,13 +1148,13 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				// A DYNAMIC body records a typed-bind event: OpBindTyped re-runs
 				// this exact Unify-against-builtin-ancestor + reparent over the
 				// runtime value, so compiled typeof/sig-dispatch see the newtype.
-				bound := recordTypedBindOrRefuse(r, func() eng.TypedBindSpec {
+				bound := RecordTypedBindOrRefuse(r, func() eng.TypedBindSpec {
 					return eng.TypedBindSpec{
 						Kind: eng.TypedBindRefine, Name: name, Describe: describeType(), Def: def,
 					}
 				}, body, ReparentValue(body, def), args[0].Pos(),
 					func() { markRefineDefUncompilable(r, name, body) })
-				return installAndRecordDef(r, name, bound, args[0].Pos())
+				return InstallAndRecordDef(r, name, bound, args[0].Pos())
 			}
 			if r.Check.IsActive() {
 				r.Check.AddDiagnostic(CheckDiagnostic{
@@ -1165,7 +1165,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 					Row:  args[0].Pos().Row,
 					Col:  args[0].Pos().Col,
 				})
-				return installAndRecordDef(r, name, NewCarrier(def), args[0].Pos())
+				return InstallAndRecordDef(r, name, NewCarrier(def), args[0].Pos())
 			}
 			return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
 				name, body.String(), describeType())
@@ -1186,7 +1186,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				Row:  args[0].Pos().Row,
 				Col:  args[0].Pos().Col,
 			})
-			return installAndRecordDef(r, name, NewCarrier(constraint.Parent), args[0].Pos())
+			return InstallAndRecordDef(r, name, NewCarrier(constraint.Parent), args[0].Pos())
 		}
 		return nil, fmt.Errorf("def %s: value %s does not unify with declared type %s",
 			name, body.String(), describeType())
@@ -1199,7 +1199,7 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 	// tag and skip enforcement. Refuse compilation → the def falls back to the
 	// interpreter, which enforces. A CONCRETE body is validated statically above
 	// and compiles faithfully (the plain {:T} map case is unaffected).
-	markTypedContainerDefUncompilable(r, name, body, constraint)
+	MarkTypedContainerDefUncompilable(r, name, body, constraint)
 	// FnUndef constraint (`def f:Mapper fn […]`): after Unify
 	// confirms the function shape matches Mapper, rewrap the
 	// Parent so dispatch keys off Mapper rather than the generic
@@ -1213,13 +1213,13 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			unified = ReparentValue(unified, def)
 		}
 	}
-	return installAndRecordDef(r, name, unified, args[0].Pos())
+	return InstallAndRecordDef(r, name, unified, args[0].Pos())
 }
 
 // ---- undef ----
 
 func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	name := defName(args[0])
+	name := DefName(args[0])
 	// A speculative check region (a rolled-back nested body, a fn-body
 	// analysis) must not commit the deletion of an ENCLOSING binding: the
 	// region may never run, so popping here leaked `undefined_word` onto
@@ -1272,8 +1272,8 @@ func undefHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	return nil, nil
 }
 
-func undefFnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	name := defName(args[0])
+func UndefFnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	name := DefName(args[0])
 	undefInfo, ok := args[1].Data.(FnUndefInfo)
 	if !ok {
 		return nil, fmt.Errorf("undef: expected fn undef spec, got %s", args[1].String())
@@ -1284,7 +1284,7 @@ func undefFnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([
 
 // ---- var ----
 
-func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func VarHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	list := args[0]
 	if !list.Parent.Equal(TList) {
 		return nil, r.BoruError("var_error", "var: argument must be a list", "var")
@@ -1360,12 +1360,12 @@ func varHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 
 // ---- fn ----
 
-// fnHandler always produces a Function value. The list must be a
+// FnHandler always produces a Function value. The list must be a
 // non-zero multiple of 3 (input/output/body triples). For the
 // type-only / shape form (input/output pairs, no body) use the
 // separate `fnsig` word — registered via eng.RegisterCoreFnSig
 // from register.go.
-func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func FnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	// A pending gen spec (`def identity gen [T] fn [[x:T] [T] [x]]`)
 	// makes this a GENERIC fn: the placeholders stay bound while
 	// ParseFnParams resolves the sigs (so `x:T` types against the
@@ -1385,10 +1385,10 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 	if len(elems) == 0 || len(elems)%3 != 0 {
 		return failGenErr(r, genSpec, r.BoruError("fn_error", "fn: list length must be a non-zero multiple of 3 (input output body triples); use `fnsig` for the type-only form, or the 3-arg form `fn input output body` for a single triple with a non-list input", "fn"))
 	}
-	return fnConstruct(r, elems, genSpec)
+	return FnConstruct(r, elems, genSpec)
 }
 
-// fnTripleHandler — the 3-arg single-triple form `fn input output body`.
+// FnTripleHandler — the 3-arg single-triple form `fn input output body`.
 // The three args are one signature triple without the wrapping list:
 // `fn x:Integer [Integer] [x mul 2]` ≡ `fn [[x:Integer] [Integer] [x mul 2]]`.
 // The input must NOT be a list (the sig's `tnot List` Pattern enforces
@@ -1398,7 +1398,7 @@ func fnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Valu
 // list), the same convention afn applies — so a bare type, an implicit
 // pair (x:Integer), an explicit map, or a literal pattern all work as
 // the single param. Multi-param triples need the spec-list form.
-func fnTripleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func FnTripleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	genSpec := r.TakePendingGen()
 	// Defensive twin of the sig's `tnot List` Pattern: dispatch never
 	// routes a list input here, but check-mode fallbacks and direct
@@ -1423,7 +1423,7 @@ func fnTripleHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 			break
 		}
 	}
-	return fnConstruct(r, args[:3], genSpec)
+	return FnConstruct(r, args[:3], genSpec)
 }
 
 // failGenErr unwinds a pending gen spec's placeholder bindings before
@@ -1436,13 +1436,13 @@ func failGenErr(r *Registry, genSpec *GenSpecInfo, err error) ([]Value, error) {
 	return nil, err
 }
 
-// fnConstruct is the shared construction core behind both fn forms:
+// FnConstruct is the shared construction core behind both fn forms:
 // elems is the flat triple stream ([input output body …]) already
 // validated to a non-zero multiple of 3. Parses the FnDefInfo, attaches
 // a pending gen spec, computes lexical captures, and runs the
 // check-mode analyses (declaration-time generic body check, dead
 // overload detection).
-func fnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, error) {
+func FnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, error) {
 	failGen := func(err error) ([]Value, error) {
 		return failGenErr(r, genSpec, err)
 	}
@@ -1535,7 +1535,7 @@ func fnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 		for _, d := range eng.DeadSignatures(fnDef.Signatures) {
 			r.Check.AddDiagnostic(eng.CheckDiagnostic{
 				Code:   "unreachable_signature",
-				Detail: "fn overload " + fnSigArgList(d.Sig) + " is unreachable — the earlier signature " + fnSigArgList(d.ShadowedBy) + " already accepts every call it would match",
+				Detail: "fn overload " + FnSigArgList(d.Sig) + " is unreachable — the earlier signature " + FnSigArgList(d.ShadowedBy) + " already accepts every call it would match",
 				Word:   "fn",
 			})
 		}
@@ -1544,9 +1544,9 @@ func fnConstruct(r *Registry, elems []Value, genSpec *GenSpecInfo) ([]Value, err
 	return []Value{NewFunction(fnDef)}, nil
 }
 
-// fnSigArgList renders a signature's argument types as a short
+// FnSigArgList renders a signature's argument types as a short
 // `[Integer String]` list for the unreachable_signature diagnostic.
-func fnSigArgList(s eng.Signature) string {
+func FnSigArgList(s eng.Signature) string {
 	ts := s.ArgTypes()
 	parts := make([]string, len(ts))
 	for i, t := range ts {
@@ -1559,7 +1559,7 @@ func fnSigArgList(s eng.Signature) string {
 	return "[" + strings.Join(parts, " ") + "]"
 }
 
-// afnHandler — `afn input body` constructs an anonymous Function value
+// AfnHandler — `afn input body` constructs an anonymous Function value
 // with a single signature. Mirrors the per-triple shape of ParseFnDef
 // (eng/go/fn_def.go) for one triple: auto-wraps non-list input and body
 // into single-element lists, parses params via the shared
@@ -1567,7 +1567,7 @@ func fnSigArgList(s eng.Signature) string {
 // Anonymous=true. Static Returns is conservative so call sites that
 // inspect the type without invoking see `Any`; check-mode dispatch
 // reads the Anonymous flag and runs AnalyseFnBody for real propagation.
-func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func AfnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	// `afn` is normally encountered as the swap form `input afn body`
 	// (because `input => body` desugars to this), which makes args[1]
 	// the source-left operand (input sig) and args[0] the source-right
@@ -1575,7 +1575,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	inputSig := args[1]
 	body := args[0]
 
-	// Same rule as fnTripleHandler: a COMPUTED operand (a check-mode
+	// Same rule as FnTripleHandler: a COMPUTED operand (a check-mode
 	// carrier — e.g. `(2 add 3) afn [body]`) makes the construction
 	// interpreter-only, or the compiled unit would intern the check-time
 	// Function with the carrier baked in where the live value belongs.
@@ -1625,7 +1625,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 	return []Value{NewFunction(fnDef)}, nil
 }
 
-// fnsigHandler — `fnsig [input output …]` produces a function-SHAPE
+// FnsigHandler — `fnsig [input output …]` produces a function-SHAPE
 // type literal (FnUndef) from input/output sig pairs. The type-only
 // counterpart to `fn` — same grammar, no body. The list length must
 // be a non-zero multiple of 2 (each pair is one signature). The
@@ -1636,7 +1636,7 @@ func afnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Val
 // FnUndef is structural: any function value whose registered
 // signatures satisfy every pair in the FnUndef matches. See
 // eng/go/fnsig.go::FnUndefMatchesFnDef.
-func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func FnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, &BoruError{
 			Code:   "fnsig_invalid_spec",
@@ -1662,14 +1662,14 @@ func fnsigHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	// schema (`def Mapper gen [T U] fnsig [[T] [U]]`): the
 	// placeholders were live while ParseFnParams resolved T/U above.
 	if g := r.TakePendingGen(); g != nil {
-		return genWrapSchema(r, g, NewFnUndef(info), SchemaFnSig)
+		return GenWrapSchema(r, g, NewFnUndef(info), SchemaFnSig)
 	}
 	return []Value{NewFnUndef(info)}, nil
 }
 
 // ---- args / __pa ----
 
-func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func ArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	top, ok, err := r.Args.Top()
 	if err != nil {
 		return nil, err
@@ -1680,7 +1680,7 @@ func argsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value
 	return []Value{top}, nil
 }
 
-func popArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func PopArgsHandler(_ []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	// The Args pop and the FnBaseline pop must move together (closure-
 	// capture detection on subsequent fn constructions reads the
 	// baseline). eng.PopFrameArgs is the single home of that pairing,

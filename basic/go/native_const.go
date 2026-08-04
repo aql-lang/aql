@@ -1,4 +1,4 @@
-package native
+package basic
 
 import (
 	"fmt"
@@ -29,18 +29,18 @@ import (
 // are rejected (their contents drift under aliasing, so they cannot
 // pin a value), and a Float NaN exemplar is rejected (NaN's non-equal-
 // to-itself semantics would make the type uninhabitable).
-var constNative = NativeFunc{
+var ConstNative = NativeFunc{
 	Name: "const",
 
 	Signatures: []Signature{{
 		Args:       []*Type{TAny},
-		Impl:       Go(constHandler, RunInCheck()),
+		Impl:       Go(ConstHandler, RunInCheck()),
 		Returns:    []*Type{TAny},
 		BarrierPos: -1,
 	}},
 }
 
-func constHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func ConstHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	v := args[0]
 	if !IsConcrete(v) {
 		return nil, r.BoruError("const_error",

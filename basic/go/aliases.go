@@ -1,13 +1,12 @@
-// Package engine is a thin shim over the eng module: it re-exports
-// eng's types and functions so the surrounding lang codebase can import
-// "github.com/boru-lang/boru/lang/go/native" while the actual engine
-// machinery lives in the standalone eng module.
+// Package basic is the boru base language layer: the fundamental
+// words (stack, definition, control, type-generics) and the predefined
+// global content types (the Scalar/Time family, Resource/Entity),
+// registered against the eng kernel. It depends on eng ONLY (ADR-013).
 //
-// Word-defining files (native_*.go, format.go, query.go, sqlite.go,
-// fileio.go, conditional.go, forloop.go) continue to live here. Anything
-// that's truly engine machinery (Registry, Value, *Type, signatures,
-// matching, unification, …) is now in eng.
-package native
+// This file is the eng shim: it re-exports eng's types and functions
+// so the word files in this package can stay eng-agnostic, mirroring
+// lang/go/native/aliases.go.
+package basic
 
 import (
 	"github.com/boru-lang/boru/eng/go"
@@ -365,10 +364,10 @@ var (
 	StaticListLen             = eng.StaticListLen
 	ExpandOptionalSigs        = eng.ExpandOptionalSigs
 	parseFnParams             = eng.ParseFnParams
-	parseFnReturns            = eng.ParseFnReturns
-	resolveSigType            = eng.ResolveSigType
 	resolveTypeName           = eng.ResolveTypeName
 	TandValues                = eng.TandValues
+	parseFnDef                = eng.ParseFnDef
+	parseFnUndefSpec          = eng.ParseFnUndefSpec
 	ValidateWordName          = eng.ValidateWordName
 	TypeOf                    = eng.TypeOf
 	TypeNameOf                = eng.TypeNameOf
@@ -627,12 +626,9 @@ var (
 	ValuesEqual            = eng.ValuesEqual
 	WithPos                = eng.WithPos
 	// `make` helpers, ported alongside the make word in eng/go/core_make.go.
-	makeConvert      = eng.MakeConvert
-	makeFieldValue   = eng.MakeFieldValue
 	ResolveFieldType = eng.ResolveFieldType
 
 	// `get`/`set` helper, ported with those words to eng/go/core_storage.go.
-	getKey = eng.GetKey
 )
 
 // Sugar roles (eng/go/sugar.go — ADR-012 rule 3, 2026-08-04

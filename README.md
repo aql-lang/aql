@@ -164,6 +164,7 @@ Suggested reading orders:
 |------|------------|
 | `cmd/go/` | The `boru` CLI / REPL (`github.com/boru-lang/boru/cmd/go`). |
 | `lang/go/` | The language layer: public `lang` API and the consolidated `native` word library. |
+| `basic/go/` | The base language layer: fundamental words and predefined content types, on eng only (ADR-013). |
 | `eng/go/` | Engine kernel, parser, and kernel spec runner. |
 | `calc/go/` | A small calculator built directly on `eng` (learning example). |
 | `wpg/` | The wasm web playground (`wpg/wasm` + `wpg/serve`). |

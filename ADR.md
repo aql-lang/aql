@@ -1000,3 +1000,108 @@ the moved types a single owned home instead of scatter across
   FixedID stability gate guards every type move; a new regression
   gate forbids word-name string literals in eng outside the role
   table, so the boundary cannot silently re-erode.
+
+---
+
+## ADR-013 — The base language is a component: `eng ← basic ← lang ← cmd` is a hard dependency chain {#adr-013}
+
+**Status:** Accepted · **Date:** 2026-08-04 · Recorded on explicit
+maintainer instruction; realises the middle component ADR-012 rule 1
+planned (there provisionally named `types/go` — the naming was
+`design/LANG-ENG-CONTENT-AUDIT.0.md` §8's open question 1, settled
+here) and widens its charter to the fundamental words.
+
+### Decision
+
+**A new component `basic/` (Go module
+`github.com/boru-lang/boru/basic/go`) is the boru base language
+layer, and the module dependencies around it are HARD RULES:**
+
+1. **`basic` depends on `eng`, and on `eng` only.** Its `go.mod`
+   requires no other boru sibling and no host-capability
+   dependency (no sqlite, no filesystem abstraction, no format
+   stack). A change that adds one is wrong by definition; fix the
+   design, not the go.mod.
+2. **`lang` depends on `basic`** (and, as before, on `eng`). The
+   full word library builds ON the base layer; nothing in `basic`
+   may reach up into `lang` — Go's import-cycle rule makes the
+   reverse edge impossible, and rule 1 keeps the dependency list
+   closed so the layering cannot erode by accretion.
+3. The resulting chain is `eng ← basic ← lang ← cmd` (`calc`
+   stays an eng-only client; `wpg` and the test harnesses sit with
+   `cmd` at the top). Skipping edges downward (lang → eng,
+   cmd → eng) remain legal; every upward edge is forbidden.
+
+**`basic` owns two kinds of content**, moved out of `lang`:
+
+- **The fundamental words** — the vocabulary every boru-family
+  surface needs before any library word: the forth-style stack
+  words (`dup`, `swap`, `drop`, `over`, `rot`, `nip`, `tuck`,
+  `dup2`, `swap2`, `drop2`, `over2`, `depth`, `pick`, `roll`);
+  the definition family (`def`, `undef`, `var`, `fn`, `afn`,
+  `fnsig`, `args`, `const`, and the synthesized def keyword
+  forms); the control-flow family (`do`, `if`, `case`, `for`,
+  `break`, `continue`, `error`); and the type-generics words
+  (`gen`, `extends`, `default`, `of`), which the def keyword
+  forms are coupled to. Word NAMES stay a language-layer
+  decision exactly as ADR-012 rule 3 requires — `basic` is a
+  registrant against the kernel, never kernel machinery.
+- **The predefined global content types** with their type-local
+  logic (Behaviors, Comparers, constructors, module mints) — the
+  ADR-012 rule 1 middle home. Landed with this record: the
+  `Scalar/Time` family (FixedIDs 1000-1003), the
+  `Resource`/`Entity` definitions, and the init-time
+  registration-error machinery. Following as staged moves under
+  the same rule: `Scalar/Bytes` (1009) and
+  `Patrun`/`Pid`/`Service` (5004/5007/5008), whose registrations
+  are still interleaved with their word files. NOT moving:
+  `Ideal/Module` (5000) and `Node/Map/KeyVal` (5002), which are
+  kernel-bound (ADR-012 rule 1 migrates them INTO eng), and the
+  lattice roots `Scalar`/`Node`/`Ideal` themselves with the
+  kernel-resident branches, which are mechanism and stay
+  eng-declared ("Where a Type Lives", eng/go/CLAUDE.md).
+
+### Context
+
+The 2026-08-03 audit (`design/LANG-ENG-CONTENT-AUDIT.0.md` §5)
+answered the types-residence question with a three-way rule and a
+middle component, provisionally `types/go`. Deciding the component's
+name forced the charter question: the fundamental words have the
+same shape as the global types — content every boru-family language
+needs, expressible against eng alone — and leaving them in `lang`
+would make the smallest useful language drag the full library
+module (sqlite, formats, HTTP). `basic` names the union: base
+types + base words. The maintainer instructed the component, its
+dependency rules, and this record on 2026-08-04.
+
+`lang` keeps its word files' spellings through a thin shim
+(`lang/go/native/basic_shim.go`, the `aliases.go` pattern one layer
+up), and its `Register` still applies the moved registration groups
+at the historical points, so registration order — which overload
+appends depend on — is unchanged. Behaviour is identical: the moved
+words remain core built-ins with the same names, signatures, and
+spec rows.
+
+### Consequences
+
+- Layering becomes `eng ← basic ← lang ← cmd`. A future language
+  imports eng and, optionally, basic; `calc` is unchanged.
+- **Enforcement is mechanical.** Go's compiler rejects upward
+  imports (cycles), and `basic/go`'s deps gate
+  (`basic/go/depsgate_test.go`) pins rule 1: the module's only
+  boru-sibling requirement is `eng/go`. FixedIDs are untouched —
+  `lang/go/test/fixedid_stability_test.go` still guards the wire
+  format across the move.
+- ADR-008's 100% coverage gate applies to `basic/go` from its
+  first commit; the cover gate's merged cross-suite profile
+  (`-coverpkg` spanning the repo) means lang's suites keep
+  covering the moved statements.
+- The Makefile fan-out (`MODULES`, `RACE_MODULES`), CI, the
+  publish targets, and `scripts/release.sh` gain `basic/go`
+  between `eng/go` and `lang/go`; a coordinated release tags all
+  four in dependency order.
+- The staged follow-ups inherit their schedule from ADR-012:
+  Bytes and Patrun/Pid/Service move to `basic` when their word
+  files' registrations are disentangled; Module/KeyVal land in
+  eng per ADR-012; Matrix/Tensor residence stays the audit's open
+  question 2.

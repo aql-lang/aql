@@ -1,4 +1,4 @@
-package native
+package basic
 
 import (
 	"math"
@@ -21,7 +21,7 @@ import (
 // with covering an alternative only when every runtime inhabitant of the
 // alternative provably matches it. Three coverage channels compose:
 //
-//   - value/type matches, via the same UnifyR relation caseClauses
+//   - value/type matches, via the same UnifyR relation CaseClauses
 //     applies, restricted by the NEWTYPE BOUNDARY (caseTypeCovers): a
 //     base-type clause does not cover a user-minted newtype alternative;
 //   - [is T] predicates, via the runtime is-relation (the plain lattice
@@ -192,7 +192,7 @@ type caseClauseMatch struct {
 	pos SrcPos
 }
 
-// resolveCaseMatch mirrors caseClauses' match-position resolution: a bare
+// resolveCaseMatch mirrors CaseClauses' match-position resolution: a bare
 // word resolves through the def table (user types, def'd values) and then
 // ResolveWordValue (true/false/type names, else an Atom of the name). A
 // code-body list is a predicate: comparison predicates ([gt 3]) and
@@ -334,13 +334,13 @@ func parseCaseIsPred(r *Registry, m Value) (Value, bool) {
 	return Value{}, false
 }
 
-// caseNumericValue reads a concrete Integer or Float value exactly:
+// CaseNumericValue reads a concrete Integer or Float value exactly:
 // isInt distinguishes the exact int64 from the float64 (which also
 // carries the runtime's cross-leaf projection float64(i) for integers).
 // NaN and infinities are returned as-is — the CALLERS decide (a NaN
 // scrutinee is uncoverable by comparisons; a non-finite BOUND makes the
 // predicate unrecognizable).
-func caseNumericValue(v Value) (isInt bool, i int64, f float64, ok bool) {
+func CaseNumericValue(v Value) (isInt bool, i int64, f float64, ok bool) {
 	if !IsConcrete(v) {
 		return false, 0, 0, false
 	}
@@ -363,7 +363,7 @@ func caseNumericValue(v Value) (isInt bool, i int64, f float64, ok bool) {
 // float bound (nan, inf) is rejected — ordered comparisons against nan
 // are always false, so such a predicate is not an interval.
 func caseBoundLiteral(v Value) (caseIvalBound, bool) {
-	isInt, i, f, ok := caseNumericValue(v)
+	isInt, i, f, ok := CaseNumericValue(v)
 	if !ok || (!isInt && (math.IsNaN(f) || math.IsInf(f, 0))) {
 		return caseIvalBound{}, false
 	}
@@ -643,7 +643,7 @@ func caseIvalContainsValue(iv caseIval, isInt bool, i int64, f float64) bool {
 }
 
 // addCaseDiagnostic appends a case coverage finding, deduplicated by
-// code+position (detail excluded): caseReturnsFn runs once per analysed
+// code+position (detail excluded): CaseReturnsFn runs once per analysed
 // call shape, and a later shape re-analyses the same site with a NARROWED
 // scrutinee (`f 5` re-runs the body with x:Integer) whose detail differs —
 // the first finding, from the generalized declared-domain analysis, is the
@@ -677,7 +677,7 @@ func renderCaseAlts(alts []Value) string {
 }
 
 // checkCaseExhaustiveness is the shared static coverage pass over a case's
-// raw clause elements, run by caseReturnsFn BEFORE the plain-check /
+// raw clause elements, run by CaseReturnsFn BEFORE the plain-check /
 // compile-desugar paths diverge so both report identical findings.
 //
 //   - no default and some alternative uncovered → case_not_exhaustive (error)
@@ -778,7 +778,7 @@ func checkCaseExhaustiveness(r *Registry, v Value, clauses Value, elems []Value)
 				covered[ai] = caseIvalsCover(ivals, CanonicalType(r, &alt))
 				continue
 			}
-			if isInt, i, x, ok := caseNumericValue(alt); ok {
+			if isInt, i, x, ok := CaseNumericValue(alt); ok {
 				for _, iv := range ivals {
 					if iv.base != nil && !alt.Is(iv.base) {
 						continue
@@ -827,7 +827,7 @@ func checkCaseExhaustiveness(r *Registry, v Value, clauses Value, elems []Value)
 // the clause list must carry its own catch-all — a trailing default or
 // an Any clause.
 func checkCaseCodeBodyScrutinee(r *Registry, v Value, clauses Value) {
-	if !isCodeBody(clauses) { //covergate:allow caseReturnsFn's stack-form swap moves a non-code-body clause arg OUT of the code-body-scrutinee branch, so clauses is always a code body here
+	if !isCodeBody(clauses) { //covergate:allow CaseReturnsFn's stack-form swap moves a non-code-body clause arg OUT of the code-body-scrutinee branch, so clauses is always a code body here
 		return
 	}
 	lst, _ := AsList(clauses)

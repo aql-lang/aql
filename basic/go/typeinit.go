@@ -1,4 +1,4 @@
-package native
+package basic
 
 // Init-time type-registration errors.
 //
@@ -40,6 +40,13 @@ func SwapTypeInitErrs(errs []error) []error {
 // funnel init-time failures through the same surfaced-at-construction
 // channel.
 func RecordTypeInitError(err error) { recordTypeInitErr(err) }
+
+// TypeInitErrs returns a copy of the recorded init-error list. Like
+// SwapTypeInitErrs it exists for sibling packages' coverage tests,
+// which assert on how many errors a registration arm recorded.
+func TypeInitErrs() []error {
+	return append([]error(nil), typeInitErrs...)
+}
 
 // TypeInitError returns the first init-time type-registration error, or
 // nil. Surfaced by DefaultRegistryWithPolicy so a bad registration is

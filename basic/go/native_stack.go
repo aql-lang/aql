@@ -1,15 +1,15 @@
-package native
+package basic
 
 import "fmt"
 
-// stackNatives covers the stack-manipulation primitives. All are
+// StackNatives covers the stack-manipulation primitives. All are
 // stack-only (ForwardArgs=false). Argument convention is
 // post-§1.4 unified: args[0] is the top of stack, args[1] is the
 // next-deeper element, etc. Splice ordering: the returned []Value
 // is laid back onto the stack in source order, so an N-arg word
 // that returns the same N values produces the inputs unchanged
 // (see swap for a worked example).
-var stackNatives = []NativeFunc{
+var StackNatives = []NativeFunc{
 	{
 		Name: "dup",
 
@@ -122,7 +122,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []Signature{{
 			Args:       []*Type{TInteger},
-			Impl:       Go(pickHandler, FullStack(), CheckFullStack(pickCheckFullStack)),
+			Impl:       Go(pickHandler, FullStack(), CheckFullStack(PickCheckFullStack)),
 			BarrierPos: 0,
 		}},
 	},
@@ -131,7 +131,7 @@ var stackNatives = []NativeFunc{
 
 		Signatures: []Signature{{
 			Args:       []*Type{TInteger},
-			Impl:       Go(rollHandler, FullStack(), CheckFullStack(rollCheckFullStack)),
+			Impl:       Go(rollHandler, FullStack(), CheckFullStack(RollCheckFullStack)),
 			BarrierPos: 0,
 		}},
 	},
@@ -198,7 +198,7 @@ func pickHandler(args []Value, _ map[string]Value, stack []Value, _ *Registry) (
 	return append(stack, stack[len(stack)-1-n]), nil
 }
 
-func pickCheckFullStack(_ []Value, stack []Value, _ *Registry) []Value {
+func PickCheckFullStack(_ []Value, stack []Value, _ *Registry) []Value {
 	if len(stack) == 0 {
 		return append(append([]Value(nil), stack...), NewCarrier(TAny))
 	}
@@ -226,7 +226,7 @@ func rollHandler(args []Value, _ map[string]Value, stack []Value, _ *Registry) (
 	return result, nil
 }
 
-func rollCheckFullStack(_ []Value, stack []Value, _ *Registry) []Value {
+func RollCheckFullStack(_ []Value, stack []Value, _ *Registry) []Value {
 	if len(stack) == 0 {
 		return nil
 	}
@@ -237,41 +237,4 @@ func rollCheckFullStack(_ []Value, stack []Value, _ *Registry) []Value {
 	}
 	out[len(out)-1] = NewCarrier(t)
 	return out
-}
-
-// listEdgeElemReturns is the check-mode narrower for pop (last=true) and
-// shift (last=false) over a plain List: the removed ELEMENT's type is the
-// statically-known edge element's type when the list is concrete —
-// `pop [1 2 3]` yields (…, Integer) instead of (…, dynamic(Any)). The
-// remaining-list slot keeps the declared List carrier. A non-concrete or
-// statically-empty list (the runtime raises on empty) falls back to the
-// declared shape.
-func listEdgeElemReturns(last bool) ReturnsFunc {
-	return func(args []Value, _ *Registry) []Value {
-		fallback := []Value{NewCarrier(TList), NewDynamicCarrier(TAny)}
-		if len(args) != 1 || !IsConcrete(args[0]) {
-			return fallback
-		}
-		list, err := AsList(args[0])
-		if err != nil || list.IsNil() || list.Len() == 0 {
-			return fallback
-		}
-		elem := list.Get(0)
-		if last {
-			elem = list.Get(list.Len() - 1)
-		}
-		if elem.Undefined {
-			return fallback
-		}
-		et := ValueType(elem)
-		if et == nil || et.Equal(TAny) {
-			return fallback
-		}
-		c := NewCarrier(et)
-		// A carrier / dynamic element propagates its own gradual claim.
-		if elem.Dynamic {
-			c.Dynamic = true
-		}
-		return []Value{NewCarrier(TList), c}
-	}
 }

@@ -201,9 +201,8 @@ func TestSeam7TemporalBehaviorMethods(t *testing.T) {
 }
 
 func TestSeam7RegisterTemporalTypeDuplicate(t *testing.T) {
-	saved := typeInitErrs
-	t.Cleanup(func() { typeInitErrs = saved })
-	typeInitErrs = nil
+	saved := SwapTypeInitErrs(nil)
+	t.Cleanup(func() { SwapTypeInitErrs(saved) })
 	// Re-registering an existing FixedID records an init error rather than
 	// panicking (ADR-005).
 	registerTemporalType("Scalar/Time", 1000, timeCompareBehavior{})

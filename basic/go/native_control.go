@@ -1,17 +1,17 @@
-package native
+package basic
 
-// controlNatives covers the control-flow words: do, if, for, break,
+// ControlNatives covers the control-flow words: do, if, for, break,
 // continue, error.
 //
-// Helpers used by these handlers (spliceArg, runForLoop, parseRange,
+// Helpers used by these handlers (spliceArg, RunForLoop, ParseRange,
 // forCarrierReturns, etc.) live alongside the slice in this file or
 // in conditional.go / forloop.go for the helpers that are
 // independently testable.
-var controlNatives = []NativeFunc{
+var ControlNatives = []NativeFunc{
 	{
 		Name: "do",
 		// do [body] — runs the body with no inputs and returns its ENTIRE
-		// residual (doListHandler returns InvokeBody's full result), so the
+		// residual (DoListHandler returns InvokeBody's full result), so the
 		// closure compiles count-agnostic (BodyOutResidual) and a multi-value
 		// literal body (`do [10 20 30]`) lowers to a true closure whose unit
 		// RETs all N values — no longer a baked-const list re-run through an
@@ -24,8 +24,8 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Impl:       Go(doListHandler),
-				ReturnsFn:  doListReturnsFn, BarrierPos: -1,
+				Impl:       Go(DoListHandler),
+				ReturnsFn:  DoListReturnsFn, BarrierPos: -1,
 				// Only the LIST (code-body) sig islands — its NoEvalArgs body
 				// re-enters the interpreter. The Map sig is a pure value eval
 				// whose arg auto-evaluates BEFORE the handler, so it bakes a
@@ -40,7 +40,7 @@ var controlNatives = []NativeFunc{
 			},
 			{
 				Args:    []*Type{TMap},
-				Impl:    Go(doMapHandler),
+				Impl:    Go(DoMapHandler),
 				Returns: []*Type{TAny}, BarrierPos: -1,
 				// CompileDynBody here too: a GRADUAL operand can commit to
 				// this sig at check time while the runtime value is a List —
@@ -64,7 +64,7 @@ var controlNatives = []NativeFunc{
 				Args:       []*Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
 				Impl:       Go(if2Handler),
-				ReturnsFn:  if2ReturnsFn, BarrierPos:
+				ReturnsFn:  If2ReturnsFn, BarrierPos:
 
 				// Clause-list form: `if [c1 b1 c2 b2 … else]`. Even elements
 				// are conditions, the following odd element is that clause's
@@ -81,8 +81,8 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TList},
 				NoEvalArgs: map[int]bool{0: true},
-				Impl:       Go(ifListHandler),
-				ReturnsFn:  ifListReturnsFn, BarrierPos: -1,
+				Impl:       Go(IfListHandler),
+				ReturnsFn:  IfListReturnsFn, BarrierPos: -1,
 			},
 		},
 	},
@@ -116,8 +116,8 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TAny, TAny},
 				NoEvalArgs: map[int]bool{0: true, 1: true},
-				Impl:       Go(caseHandler),
-				ReturnsFn:  caseReturnsFn,
+				Impl:       Go(CaseHandler),
+				ReturnsFn:  CaseReturnsFn,
 				Returns:    []*Type{TAny}, BarrierPos: -1,
 			},
 		},
@@ -125,13 +125,13 @@ var controlNatives = []NativeFunc{
 	{
 		// __casematch is the internal guard the compiled `case` desugar
 		// emits for a non-predicate clause: `v match __casematch` applies the
-		// SAME UnifyR the interpreter's caseClauses uses, so a bare-refine
+		// SAME UnifyR the interpreter's CaseClauses uses, so a bare-refine
 		// newtype (`Pos`) matches structurally exactly as case does — which
 		// the `is` word (nominal) would not. Not user-facing.
 		Name: "__casematch",
 		Signatures: []Signature{{
 			Args:       []*Type{TAny, TAny},
-			Impl:       Go(caseMatchHandler),
+			Impl:       Go(CaseMatchHandler),
 			Returns:    []*Type{TBoolean},
 			BarrierPos: 0,
 		}},
@@ -143,13 +143,13 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TInteger, TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Impl:       Go(forCountHandler),
+				Impl:       Go(ForCountHandler),
 				ReturnsFn:  forIntegerListReturnsFn, BarrierPos: -1,
 			},
 			{
 				Args:       []*Type{TList, TList},
 				NoEvalArgs: map[int]bool{1: true},
-				Impl:       Go(forRangeHandler),
+				Impl:       Go(ForRangeHandler),
 				ReturnsFn:  forListListReturnsFn, BarrierPos: -1,
 			},
 		},
@@ -186,7 +186,7 @@ var controlNatives = []NativeFunc{
 		// and compiles; one that IGNORES it (`["fallback"]`) leaves error+result
 		// (nets 2) — StripsUnconsumedInput admits that shape too: the handler's
 		// runtime identity probe strips the unconsumed error from the residual
-		// bottom (errorHandler), so the closure nets ONE value either way and
+		// bottom (ErrorHandler), so the closure nets ONE value either way and
 		// compiles natively instead of islanding.
 		CompileEffect: CompileFallbackBody,
 		Callable: &CallableSpec{BodyPos: 0, BodyOut: 1, StripsUnconsumedInput: true, Inputs: func(_ []Value) []Value {
@@ -204,12 +204,12 @@ var controlNatives = []NativeFunc{
 			{
 				Args:       []*Type{TList, TAny},
 				NoEvalArgs: map[int]bool{0: true},
-				Impl:       Go(errorHandler),
+				Impl:       Go(ErrorHandler),
 				// BarrierPos 1: the handler list is forward-collected, but the
 				// do-result (position 1) MUST come from the stack — never a trailing
 				// token. The former TError sig filtered a following `3` by type; the
 				// merged Any sig would otherwise grab it (`error [print] 3 mul 4`).
-				ReturnsFn: errorReturnsFn,
+				ReturnsFn: ErrorReturnsFn,
 				Returns:   []*Type{TAny}, BarrierPos: 1,
 			},
 		},
@@ -218,7 +218,7 @@ var controlNatives = []NativeFunc{
 
 // ---- do handlers ----
 
-func doListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func DoListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, r.BoruError("do_error", "do: argument must be a concrete list, got type literal", "do")
 	}
@@ -246,7 +246,7 @@ func doListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	return result, nil
 }
 
-func doListReturnsFn(args []Value, r *Registry) []Value {
+func DoListReturnsFn(args []Value, r *Registry) []Value {
 	body := args[0]
 	if IsWord(body) {
 		w, _ := AsWord(body)
@@ -286,7 +286,7 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	if !(IsConcrete(body) && body.Parent.ConformsTo(TList)) {
 		return []Value{NewDynamicCarrier(TAny)}
 	}
-	// `do` TRAPS every body error at runtime (doListHandler surfaces it as
+	// `do` TRAPS every body error at runtime (DoListHandler surfaces it as
 	// an Error value), so a guaranteed-runtime-error mirror firing inside
 	// this body is not a program error — raise CaughtBodyDepth so those
 	// emitters (CheckAddUniqueDiagnostic, emitIndexOOB) stay silent here.
@@ -300,7 +300,7 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 		// for `do` (the error-catching word) that is exactly the shape a
 		// raising body leaves: `raise …` (and an integer div/mod by a static
 		// zero) yields no carrier, and at runtime `do` catches the error and
-		// surfaces it as an Error VALUE (doListHandler's `NewError(err)`).
+		// surfaces it as an Error VALUE (DoListHandler's `NewError(err)`).
 		// Model that residual as an Error carrier so a downstream field read
 		// (`e dot code`, `e.message`, `convert Map e`) matches the [_ Error]
 		// accessor sigs instead of failing no_signature.
@@ -315,7 +315,7 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 		}
 		return nil
 	}
-	// `do` leaves the body's ENTIRE residual stack (doListHandler returns the
+	// `do` leaves the body's ENTIRE residual stack (DoListHandler returns the
 	// full InvokeBody result), so a multi-value literal body — `do [10 20 30]`
 	// — nets three values, not one. Returning only the last (stk[len-1])
 	// under-reported the arity and made the checked stack contradict the
@@ -326,7 +326,7 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	// just not natively compiled.
 	//
 	// COMPILE PASS: a multi-value body that can RAISE has a runtime-VARIABLE
-	// count — `do` CATCHES a body raise into ONE Error value (doListHandler),
+	// count — `do` CATCHES a body raise into ONE Error value (DoListHandler),
 	// so the count is N on no-raise but 1 caught, and a static N-seat
 	// underflows on the caught path (`def msg (do [(s decode) "x"] error
 	// […])`). This ReturnsFn is the single point that both computes the
@@ -340,7 +340,7 @@ func doListReturnsFn(args []Value, r *Registry) []Value {
 	if r.Check.Compiling {
 		r.Check.Recorder().SetCatchVariadic(len(stk) > 1 && doBodyMayRaise(body, r))
 		// A single-value FALLIBLE body's do-residual is scalar-OR-Error at run time:
-		// do CATCHES a body raise into an Error value (doListHandler's NewError), so a
+		// do CATCHES a body raise into an Error value (DoListHandler's NewError), so a
 		// body whose declared happy-path residual is a SCALAR actually yields an Error
 		// when it raises. Widen the scalar to the (scalar tor Error) union so a
 		// downstream Error accessor (`.code`, `.message`, `convert Map e`) dispatches
@@ -457,17 +457,17 @@ func fnDefMayRaise(fd *FnDefInfo) bool {
 	return len(fd.Signatures) > 0
 }
 
-func doMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	result, err := doEvalMapValue(r, args[0])
+func DoMapHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+	result, err := DoEvalMapValue(r, args[0])
 	if err != nil {
 		return nil, err
 	}
 	return []Value{result}, nil
 }
 
-// doEvalList evaluates a top-level list of tokens in a sub-engine.
+// DoEvalList evaluates a top-level list of tokens in a sub-engine.
 // Errors are caught and returned as a single error value on the stack.
-func doEvalList(r *Registry, elems []Value) ([]Value, error) {
+func DoEvalList(r *Registry, elems []Value) ([]Value, error) {
 	sub := New(r)
 	input := make([]Value, len(elems))
 	copy(input, elems)
@@ -492,9 +492,9 @@ func doEvalDataList(r *Registry, elems []Value) ([]Value, error) {
 	return sub.Run(input)
 }
 
-// doEvalMapValue recursively evaluates list values within a map. Used
+// DoEvalMapValue recursively evaluates list values within a map. Used
 // by `do` to walk a map literal and evaluate any embedded code lists.
-func doEvalMapValue(r *Registry, v Value) (Value, error) {
+func DoEvalMapValue(r *Registry, v Value) (Value, error) {
 	if v.Parent.Equal(TList) && v.Data != nil && !IsTypedList(v) && !IsTableType(v) {
 		_lst, _ := AsList(v)
 		results, err := doEvalDataList(r, _lst.Slice())
@@ -511,7 +511,7 @@ func doEvalMapValue(r *Registry, v Value) (Value, error) {
 		out := NewOrderedMap()
 		for _, key := range m.Keys() {
 			val, _ := m.Get(key)
-			evaluated, err := doEvalMapValue(r, val)
+			evaluated, err := DoEvalMapValue(r, val)
 			if err != nil {
 				return Value{}, err
 			}
@@ -584,7 +584,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 	// non-recording — the emit path keeps the folded condition EVENT and its
 	// existing const/join lowering, so the compiled differential is untouched.
 	if !es.Recorder().Active() {
-		if out, ok := reduceStaticIf(r, args[0], args[1], &args[2]); ok {
+		if out, ok := ReduceStaticIf(r, args[0], args[1], &args[2]); ok {
 			return out
 		}
 	}
@@ -774,7 +774,7 @@ func staticCondArm(cond Value) (takeThen bool, ok bool) {
 	return false, false
 }
 
-// reduceStaticIf reduces an `if` whose condition is a statically-known bare
+// ReduceStaticIf reduces an `if` whose condition is a statically-known bare
 // Boolean to its TAKEN arm, in PLAIN-CHECK mode only (callers gate on
 // !es.Recorder().Active() — the emit lowering has no representation for an
 // `if` that evaporates into its arm value; see native_control.go's other
@@ -783,7 +783,7 @@ func staticCondArm(cond Value) (takeThen bool, ok bool) {
 // where the else arm is a bare module-export Function value that must
 // forward-collect the token following the `if`. elseArm is nil for the 2-arg
 // (if2) form: a false condition then nets no value (matching the runtime).
-func reduceStaticIf(r *Registry, cond, thenArm Value, elseArm *Value) ([]Value, bool) {
+func ReduceStaticIf(r *Registry, cond, thenArm Value, elseArm *Value) ([]Value, bool) {
 	takeThen, ok := staticCondArm(cond)
 	if !ok {
 		return nil, false
@@ -791,9 +791,9 @@ func reduceStaticIf(r *Registry, cond, thenArm Value, elseArm *Value) ([]Value, 
 	// Warn on the dead arm, mirroring the const path — but only when a dead
 	// arm actually exists (a 2-arg true `if` has no else to call unreachable).
 	if !takeThen {
-		emitUnreachableBranch(r, false, "then")
+		EmitUnreachableBranch(r, false, "then")
 	} else if elseArm != nil {
-		emitUnreachableBranch(r, true, "else")
+		EmitUnreachableBranch(r, true, "else")
 	}
 	if takeThen {
 		return reduceStaticArm(r, cond, thenArm, true), true
@@ -804,9 +804,9 @@ func reduceStaticIf(r *Registry, cond, thenArm Value, elseArm *Value) ([]Value, 
 	return reduceStaticArm(r, cond, *elseArm, false), true
 }
 
-// emitUnreachableBranch records the constant-condition dead-branch warning
+// EmitUnreachableBranch records the constant-condition dead-branch warning
 // shared by the if2/if3 const paths.
-func emitUnreachableBranch(r *Registry, lit bool, dead string) {
+func EmitUnreachableBranch(r *Registry, lit bool, dead string) {
 	r.Check.AddDiagnostic(CheckDiagnostic{
 		Code:   "unreachable_branch",
 		Detail: "if condition is a constant " + BoolWord(lit) + "; " + dead + "-branch is unreachable",
@@ -863,14 +863,14 @@ func analyseCondFragment(r *Registry, cond Value) (*EmitFragment, []Value) {
 	return es.TakeFragment(), stk
 }
 
-func if2ReturnsFn(args []Value, r *Registry) []Value {
+func If2ReturnsFn(args []Value, r *Registry) []Value {
 	es := r.Check
 	// Plain-check static reduction (else-less if): a folded bare-Boolean
 	// condition reduces to the then residual (true) or nothing (false),
 	// instead of the phantom Disjunct(then, None) the join path produces.
 	// Gated to non-recording, like if3ReturnsFn.
 	if !es.Recorder().Active() {
-		if out, ok := reduceStaticIf(r, args[0], args[1], nil); ok {
+		if out, ok := ReduceStaticIf(r, args[0], args[1], nil); ok {
 			return out
 		}
 	}
@@ -914,10 +914,10 @@ func if2ReturnsFn(args []Value, r *Registry) []Value {
 	return []Value{out}
 }
 
-// ifListHandler implements the clause-list form `if [c1 b1 c2 b2 … else]`.
+// IfListHandler implements the clause-list form `if [c1 b1 c2 b2 … else]`.
 // It hands the (raw, NoEval'd) list's elements to ifClause, which produces
 // the token stream the engine then runs.
-func ifListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func IfListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, r.BoruError("if_error", "if: clause-list argument must be a concrete list, got a type literal", "if")
 	}
@@ -925,7 +925,7 @@ func ifListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 	return ifClause(_lst.Slice()), nil
 }
 
-// caseHandler implements both call shapes of `case`:
+// CaseHandler implements both call shapes of `case`:
 //
 //	case <value> [m1 b1 … default]    forward form (canonical)
 //	<value> case [m1 b1 … default]    stack-value form
@@ -938,7 +938,7 @@ func ifListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]
 // evaluates the code body; dispatching on a LIST value requires the
 // forward form). The value, if a code body, is executed and its LAST
 // result captured — it must produce one, loudly.
-func caseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func CaseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	v, clauses := args[0], args[1]
 	if isCodeBody(v) && !isCodeBody(clauses) {
 		v, clauses = clauses, v
@@ -963,16 +963,16 @@ func caseHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Va
 			"case: clause list must be a concrete list of match/block pairs (optional trailing default)", "case")
 	}
 	lst, _ := AsList(clauses)
-	return caseClauses(r, v, lst.Slice())
+	return CaseClauses(r, v, lst.Slice())
 }
 
-// ifListReturnsFn type-checks the clause-list form: the result is the
+// IfListReturnsFn type-checks the clause-list form: the result is the
 // join of every clause body's last value plus the else clause (or None
 // when there is no else, since an unmatched `if` produces nothing).
 // Condition bodies are still run for their diagnostics but don't
 // contribute to the return type. Unlike if3/if2 this does no per-clause
 // guard narrowing — multi-clause narrowing isn't modelled.
-func ifListReturnsFn(args []Value, r *Registry) []Value {
+func IfListReturnsFn(args []Value, r *Registry) []Value {
 	if !IsConcrete(args[0]) || !args[0].Parent.Equal(TList) {
 		return []Value{NewCarrier(TAny)}
 	}
@@ -1009,7 +1009,7 @@ func ifListReturnsFn(args []Value, r *Registry) []Value {
 
 // ---- for / break / continue handlers ----
 
-func forCountHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func ForCountHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	// Reject a non-concrete count (a DepScalar/refinement Integer, a carrier)
 	// rather than silently coercing it to zero and running the loop zero
 	// times — the VM's OpForSetup (eng/go/vm.go) raises for_error here, so
@@ -1019,23 +1019,23 @@ func forCountHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return nil, r.BoruError("for_error", "for: count must be a concrete Integer", "for")
 	}
 	body := args[1]
-	return runForLoop(r, 0, n, 1, "i", body)
+	return RunForLoop(r, 0, n, 1, "i", body)
 }
 
-func forRangeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func ForRangeHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, r.BoruError("for_error", "for: range must be a concrete list, got type literal", "for")
 	}
 	_lst, _ := AsList(args[0])
 	rangeSpec := _lst.Slice()
 	body := args[1]
-	start, end, step, err := parseRange(rangeSpec)
+	start, end, step, err := ParseRange(rangeSpec)
 	if err != nil {
 		// for_error matches the VM's OpForSetup taxonomy (eng/go/vm.go) so a
 		// malformed/non-concrete range errors the same way in both engines.
 		return nil, r.BoruError("for_error", "for: "+err.Error(), "for")
 	}
-	return runForLoop(r, start, end, step, "i", body)
+	return RunForLoop(r, start, end, step, "i", body)
 }
 
 func forIntegerListReturnsFn(args []Value, r *Registry) []Value {
@@ -1066,7 +1066,7 @@ func forListListReturnsFn(args []Value, r *Registry) []Value {
 // recording: the final round's events are captured as a fragment and
 // RecordLoop lowers the loop (FOR_SETUP/FOR_NEXT with the iterator
 // as a VM local). The count form lowers as the range [0, n, 1]; the
-// range form decomposes a LITERAL integer range via parseRange
+// range form decomposes a LITERAL integer range via ParseRange
 // (computed ranges record nothing and the generic path refuses).
 func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value, countArg int) []Value {
 	body := args[len(args)-1]
@@ -1099,7 +1099,7 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 				}
 			case cv.Parent.ConformsTo(TList):
 				if lst, err := AsList(cv); err == nil && !lst.IsNil() {
-					if st, en, sp, perr := parseRange(lst.Slice()); perr == nil && loopIterations(st, en, sp) == 0 {
+					if st, en, sp, perr := ParseRange(lst.Slice()); perr == nil && LoopIterations(st, en, sp) == 0 {
 						zero = true
 					}
 				}
@@ -1114,7 +1114,7 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	// emit FOR_SETUP (const start/step, a resolvable end). `staticBounds` is the
 	// stronger property that ALL THREE bounds are concrete integers, so the exact
 	// iteration count is known — required for the spread-residual model below,
-	// which asInt64Or-defaults an unknown bound to 0 and would otherwise starve a
+	// which AsInt64Or-defaults an unknown bound to 0 and would otherwise starve a
 	// computed loop's residual.
 	var startV, endV, stepV Value
 	lowerable, staticBounds := false, false
@@ -1127,7 +1127,7 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 		case IsConcrete(cv) && cv.Parent.ConformsTo(TList):
 			if lst, err := AsList(cv); err == nil && !lst.IsNil() {
 				elems := lst.Slice()
-				if st, en, sp, perr := parseRange(elems); perr == nil {
+				if st, en, sp, perr := ParseRange(elems); perr == nil {
 					startV, endV, stepV = NewInteger(st), NewInteger(en), NewInteger(sp)
 					lowerable, staticBounds = true, true
 				} else if s, e, sp, cok := computedRangeBounds(elems); cok {
@@ -1151,7 +1151,7 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	// the body zero times and would leak an admitted split's analysis-only
 	// binding — PR #280 review).
 	provenTrips := staticBounds &&
-		loopIterations(asInt64Or(startV, 0), asInt64Or(endV, 0), asInt64Or(stepV, 1)) >= 1
+		LoopIterations(AsInt64Or(startV, 0), AsInt64Or(endV, 0), AsInt64Or(stepV, 1)) >= 1
 	stk := AnalyseLoopBody(r, body, []string{iterName}, []Value{iter}, provenTrips)
 	out := NewCarrier(TList)
 	if len(stk) > 0 {
@@ -1168,7 +1168,7 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 		// three bounds are concrete and the loop runs at least once.
 		regionN := 0
 		if staticBounds && len(stk) > 0 {
-			if n := loopIterations(asInt64Or(startV, 0), asInt64Or(endV, 0), asInt64Or(stepV, 1)); n >= 1 {
+			if n := LoopIterations(AsInt64Or(startV, 0), AsInt64Or(endV, 0), AsInt64Or(stepV, 1)); n >= 1 {
 				regionN = int(n) * len(stk)
 			}
 		}
@@ -1206,11 +1206,11 @@ func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Valu
 	// FEWER iterations, and a shorter runtime stack is still covered by the
 	// longer checked one. Bounded to keep the residual small; past the cap the
 	// List approximation stands. CONCRETE count only: a carrier count decomposes
-	// to a carrier endV, which asInt64Or would default to 0 — spreading a
+	// to a carrier endV, which AsInt64Or would default to 0 — spreading a
 	// runtime-unknown iteration count to an EMPTY residual and starving every
 	// downstream consumer (`size (for n [n])` failed no_signature on nothing).
 	if !es.Active() && staticBounds && len(stk) > 0 {
-		if n := loopIterations(asInt64Or(startV, 0), asInt64Or(endV, 0), asInt64Or(stepV, 1)); n >= 0 && n*int64(len(stk)) <= loopSpreadResidualCap {
+		if n := LoopIterations(AsInt64Or(startV, 0), AsInt64Or(endV, 0), AsInt64Or(stepV, 1)); n >= 0 && n*int64(len(stk)) <= loopSpreadResidualCap {
 			spread := make([]Value, 0, int(n)*len(stk))
 			for i := int64(0); i < n; i++ {
 				spread = append(spread, stk...)
@@ -1230,7 +1230,7 @@ const loopSpreadResidualCap = 256
 
 // computedRangeBounds decomposes a `for` range list whose START and STEP are
 // concrete integers but whose END may be computed (a carrier / event value —
-// `for [0 total 65536]`, mini-s3's s3-send-resp). It mirrors parseRange's arity
+// `for [0 total 65536]`, mini-s3's s3-send-resp). It mirrors ParseRange's arity
 // defaults (1 elem → [0, end, 1]; 2 → [start, end, 1]; 3 → [start, end, step])
 // but requires only start/step to be statically known: RecordLoop const-bakes
 // those and resolves the end to its runtime operand. The end value is returned
@@ -1254,8 +1254,8 @@ func computedRangeBounds(elems []Value) (startV, endV, stepV Value, ok bool) {
 	return Value{}, Value{}, Value{}, false
 }
 
-// asInt64Or returns v's integer value, or def when v is not a concrete integer.
-func asInt64Or(v Value, def int64) int64 {
+// AsInt64Or returns v's integer value, or def when v is not a concrete integer.
+func AsInt64Or(v Value, def int64) int64 {
 	if IsConcrete(v) && v.Parent.ConformsTo(TInteger) {
 		if n, err := AsInteger(v); err == nil {
 			return n
@@ -1269,10 +1269,10 @@ func asInt64Or(v Value, def int64) int64 {
 // errorPassHandler is `error`'s success path: the guarded body
 // produced a normal value, so the handler list is discarded and the
 // value passes through unchanged.
-// errorReturnsFn narrows `error`'s result bound to the JOIN of its two
+// ErrorReturnsFn narrows `error`'s result bound to the JOIN of its two
 // runtime paths — the pass-through do-result (no raise) and the handler
 // body's netted residual over a caught Error (the check twin of
-// errorHandler's InvokeBody([err, body…]) stream). The bound stays DYNAMIC
+// ErrorHandler's InvokeBody([err, body…]) stream). The bound stays DYNAMIC
 // (which path runs is a runtime fact), so a downstream dispatch over it uses
 // not-disjoint matching against a REAL family instead of Any — the L-EACH
 // graduation (`5 do [7] error [drop 9] add 1`): with dynamic(Integer) the
@@ -1292,7 +1292,7 @@ func asInt64Or(v Value, def int64) int64 {
 // corpus-safe by construction: every corpus row already passes this
 // analysis in the compile pass (an error-severity handler diagnostic
 // would have tripped the refusal gate at 0).
-func errorReturnsFn(args []Value, r *Registry) []Value {
+func ErrorReturnsFn(args []Value, r *Registry) []Value {
 	wide := []Value{NewDynamicCarrier(TAny)}
 	if !IsConcrete(args[0]) || args[1].Parent == nil {
 		return wide
@@ -1305,7 +1305,7 @@ func errorReturnsFn(args []Value, r *Registry) []Value {
 	stk := RunCarrierBody(r, NewList(seeded))
 	// The handler nets ONE value (BodyOut 1): the seeded error still at the
 	// residual bottom is the strip-unconsumed shape (`["fallback"]`), so drop
-	// it before the count check — mirroring errorHandler's identity probe.
+	// it before the count check — mirroring ErrorHandler's identity probe.
 	if len(stk) >= 2 && stk[0].ID == seeded[0].ID {
 		stk = stk[1:]
 	}
@@ -1362,7 +1362,7 @@ func errorReturnsFn(args []Value, r *Registry) []Value {
 		return wide
 	}
 	// A PROVEN-Error do-result (a strict Error carrier — the body always
-	// raises, doListReturnsFn's raising-residual arm) makes the pass-through
+	// raises, DoListReturnsFn's raising-residual arm) makes the pass-through
 	// arm statically dead: the result is the handler's alone, no join. A
 	// dynamic(Error) bound keeps the join — the bound is best-effort, not
 	// proof, so the pass-through may still run.
@@ -1372,7 +1372,7 @@ func errorReturnsFn(args []Value, r *Registry) []Value {
 	return []Value{NewDynamicCarrier(CommonAncestorType(args[1].Parent, stk[0].Parent))}
 }
 
-func errorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func ErrorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, r.BoruError("error_error", "error: handler must be a concrete list, got type literal", "error")
 	}

@@ -340,8 +340,8 @@ Types with semantics the kernel can't infer (time formatting,
 matrix rendering, predicate-type matching, refinement-type
 matching, plugin types) supply a custom Behavior:
 
-- `lang/go/native/native_temporal.go` — Time family Behaviors.
-- `lang/go/native/native_misc.go` — Timeout/Interval Behaviors.
+- `basic/go/native_temporal.go` — Time family Behaviors.
+- `basic/go/types_timer.go` — Timeout/Interval Behaviors.
 - `lang/go/modules/matrix.go` — Tensor/Matrix/Vector Behavior.
 - `lang/go/native/fetch.go` — Fetch family (no custom Behavior; uses Default).
 
@@ -472,10 +472,10 @@ Documented per-module ranges (see
 ```
    1-99       eng kernel builtins
    100-999    reserved for future eng-internal builtins
-   1000-1999  lang/go/native — Scalar/Time family
+   1000-1999  basic/go — Scalar/Time family
    2000-2999  lang/go/modules/matrix
-   3000-3999  lang/go/native/fetch
-   4000-4999  lang/go/native — Timeout, Interval
+   3000-3999  Fetch family (retired to boru:net module mints)
+   4000-4999  Timeout, Interval (retired to boru:time-util module mints)
    5000-9999  reserved for future kernel/language allocations
    10000+     host / third-party plugin types
 ```

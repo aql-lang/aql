@@ -5,54 +5,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/lang/go/native/help"
 )
-
-// The Timeout / Interval timer types are owned by boru:time-util — the
-// timeout/interval handlers live in this file, and the types are
-// per-import module mints (former global FixedIDs 4000-4001, retired)
-// minted alongside the temporal leaves by MintTemporalModuleTypes
-// (native_temporal.go). The constructors are methods on
-// TemporalModuleTypes so every timer handle carries its import's own
-// type identity.
-
-// NewTimeout constructs a Timeout value carrying the given
-// TimeoutInfo payload.
-func (tt TemporalModuleTypes) NewTimeout(info *TimeoutInfo) Value {
-	return eng.NewValueRaw(tt.Timeout, info)
-}
-
-// NewInterval constructs an Interval value carrying the given
-// IntervalInfo payload. See NewTimeout.
-func (tt TemporalModuleTypes) NewInterval(info *IntervalInfo) Value {
-	return eng.NewValueRaw(tt.Interval, info)
-}
-
-// timeoutFormatBehavior renders a Timeout as "Timeout(id,Nms)".
-// Moved from eng/coretype_format_behaviors.go at Step 8.
-type timeoutFormatBehavior struct{}
-
-func (timeoutFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (timeoutFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
-func (timeoutFormatBehavior) Format(v Value) string {
-	if ti, ok := v.Data.(*TimeoutInfo); ok {
-		return fmt.Sprintf("Timeout(%s,%dms)", ti.ID, ti.Ms)
-	}
-	return "Timeout(nil)"
-}
-
-// intervalFormatBehavior renders an Interval as "Interval(id,Nms)".
-type intervalFormatBehavior struct{}
-
-func (intervalFormatBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (intervalFormatBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
-func (intervalFormatBehavior) Format(v Value) string {
-	if ii, ok := v.Data.(*IntervalInfo); ok {
-		return fmt.Sprintf("Interval(%s,%dms)", ii.ID, ii.Ms)
-	}
-	return "Interval(nil)"
-}
 
 // miscNatives covers the smaller engine word groupings: file I/O
 // (read, write, stdin, stdout, stderr), help, module/import,
@@ -729,15 +683,19 @@ func importInlineSingleRenameHandler(args []Value, _ map[string]Value, _ []Value
 
 // ---- temporal handlers ----
 
-func (tt TemporalModuleTypes) timeoutListHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return tt.doTimeout(r, args, true)
+func timeoutListHandler(tt TemporalModuleTypes) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doTimeout(tt, r, args, true)
+	}
 }
 
-func (tt TemporalModuleTypes) timeoutWordHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
-	return tt.doTimeout(r, args, false)
+func timeoutWordHandler(tt TemporalModuleTypes) Handler {
+	return func(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+		return doTimeout(tt, r, args, false)
+	}
 }
 
-func (tt TemporalModuleTypes) doTimeout(r *Registry, args []Value, isList bool) ([]Value, error) {
+func doTimeout(tt TemporalModuleTypes, r *Registry, args []Value, isList bool) ([]Value, error) {
 	ms, _ := args[0].AsConcreteInteger()
 	if ms < 0 {
 		return nil, r.BoruError("timeout_error", fmt.Sprintf("timeout: milliseconds must be non-negative, got %d", ms), "timeout")
@@ -810,35 +768,4 @@ func doAwait(r *Registry, mode string, parallels Value) ([]Value, error) {
 	default:
 		return nil, r.BoruError("await_error", fmt.Sprintf("await: unknown mode %q, expected all, full, first, or any", mode), "await")
 	}
-}
-
-// ToMap / ToList implement eng.IdealConverter for Timeout / Interval:
-// {id:… ms:…} and [id ms].
-func (timeoutFormatBehavior) ToMap(v Value) (Value, error) {
-	m := NewOrderedMap()
-	if ti, ok := v.Data.(*TimeoutInfo); ok {
-		m.Set("id", NewString(ti.ID))
-		m.Set("ms", NewInteger(ti.Ms))
-	}
-	return NewMap(m), nil
-}
-func (timeoutFormatBehavior) ToList(v Value) (Value, error) {
-	if ti, ok := v.Data.(*TimeoutInfo); ok {
-		return NewList([]Value{NewString(ti.ID), NewInteger(ti.Ms)}), nil
-	}
-	return NewList(nil), nil
-}
-func (intervalFormatBehavior) ToMap(v Value) (Value, error) {
-	m := NewOrderedMap()
-	if ii, ok := v.Data.(*IntervalInfo); ok {
-		m.Set("id", NewString(ii.ID))
-		m.Set("ms", NewInteger(ii.Ms))
-	}
-	return NewMap(m), nil
-}
-func (intervalFormatBehavior) ToList(v Value) (Value, error) {
-	if ii, ok := v.Data.(*IntervalInfo); ok {
-		return NewList([]Value{NewString(ii.ID), NewInteger(ii.Ms)}), nil
-	}
-	return NewList(nil), nil
 }

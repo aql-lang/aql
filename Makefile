@@ -1,7 +1,7 @@
 .PHONY: all build install test test-race test-ts vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
         spec-gen spec-test \
         verify-bytecode fuzz-bytecode status \
-        publish publish-eng publish-lang publish-cmd release tags \
+        publish publish-eng publish-basic publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
         viz-callvis viz-callgraph viz-goda viz-godepgraph \
         viz-gomod viz-golds viz-plantuml viz-list viz-modgraph
@@ -11,6 +11,8 @@
 # The repo is a collection of Go modules:
 #
 #   eng/go         — the kernel (parser, dispatch, types, signatures)
+#   basic/go       — the base language layer (fundamental words +
+#                    predefined content types; depends on eng only)
 #   lang/go        — the language layer (native_* words, engine shim)
 #   cmd/go         — the boru CLI command
 #   calc/go        — small calculator built directly on eng (learning example)
@@ -22,8 +24,9 @@
 # here fan out across the set so the whole codebase can be built,
 # tested, visualised, and coverage-tracked from one place.
 
-# Order matters for `make test`: eng must build before lang, etc.
-MODULES := eng/go lang/go cmd/go calc/go wpg test/go test/solardemo
+# Order matters for `make test`: eng must build before basic, basic
+# before lang, etc.
+MODULES := eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
 
 all: test
 
@@ -112,7 +115,7 @@ test:
 # exception: its 5941-row differential is single-threaded per row (race adds no
 # value) and times out under the detector, so only its concurrency rows run
 # here.
-RACE_MODULES := eng/go lang/go
+RACE_MODULES := eng/go basic/go lang/go
 test-race:
 	@set -e; for m in $(RACE_MODULES); do \
 	  echo "==> test-race $$m"; \
@@ -282,24 +285,28 @@ clean:
 # release uses one matched version:
 #
 #   make publish V=0.2.0
-#     -> tags eng/go/v0.2.0, lang/go/v0.2.0, cmd/go/v0.2.0
-#     -> bumps lang/go's eng require, cmd/go's eng+lang requires
+#     -> tags eng/go/v0.2.0, basic/go/v0.2.0, lang/go/v0.2.0, cmd/go/v0.2.0
+#     -> bumps basic/go's eng require, lang/go's eng+basic requires,
+#        cmd/go's eng+lang requires
 #
 # Per-module publish (independent versions):
-#   make publish-eng  V=0.2.0
-#   make publish-lang V=0.2.0 ENG=0.1.0
-#   make publish-cmd  V=0.2.0 ENG=0.1.0 LANG=0.2.0
+#   make publish-eng   V=0.2.0
+#   make publish-basic V=0.2.0 ENG=0.1.0
+#   make publish-lang  V=0.2.0 ENG=0.1.0 BASIC=0.2.0
+#   make publish-cmd   V=0.2.0 ENG=0.1.0 LANG=0.2.0
 #
 # After publishing, consumers install with:
 #   go install github.com/boru-lang/boru/cmd/go/boru@v0.2.0   # boru CLI
 #   go get     github.com/boru-lang/boru/lang/go@v0.2.0  # lang library
+#   go get     github.com/boru-lang/boru/basic/go@v0.2.0 # basic layer
 #   go get     github.com/boru-lang/boru/eng/go@v0.2.0   # eng kernel
 
 publish:
 	@test -n "$(V)" || (echo "Usage: make publish V=x.y.z" && exit 1)
-	$(MAKE) -C eng/go  publish V=$(V)
-	$(MAKE) -C lang/go publish V=$(V) ENG=$(V)
-	$(MAKE) -C cmd/go  publish V=$(V) ENG=$(V) LANG=$(V)
+	$(MAKE) -C eng/go   publish V=$(V)
+	$(MAKE) -C basic/go publish V=$(V) ENG=$(V)
+	$(MAKE) -C lang/go  publish V=$(V) ENG=$(V) BASIC=$(V)
+	$(MAKE) -C cmd/go   publish V=$(V) ENG=$(V) LANG=$(V)
 
 # release — the versioned release flow (see RELEASING.md and scripts/release.sh):
 # runs the full test suite, then auto-bumps the PATCH of eng/go, lang/go and
@@ -312,17 +319,21 @@ release:
 publish-eng:
 	$(MAKE) -C eng/go publish V=$(V)
 
+publish-basic:
+	$(MAKE) -C basic/go publish V=$(V) ENG=$(ENG)
+
 publish-lang:
-	$(MAKE) -C lang/go publish V=$(V) ENG=$(ENG)
+	$(MAKE) -C lang/go publish V=$(V) ENG=$(ENG) BASIC=$(BASIC)
 
 publish-cmd:
 	$(MAKE) -C cmd/go publish V=$(V) ENG=$(ENG) LANG=$(LANG)
 
 # Show recent tags for every published module (newest first).
 tags:
-	@echo "==> eng/go";  git tag -l 'eng/go/v*'  --sort=-version:refname | head
-	@echo "==> lang/go"; git tag -l 'lang/go/v*' --sort=-version:refname | head
-	@echo "==> cmd/go";  git tag -l 'cmd/go/v*'  --sort=-version:refname | head
+	@echo "==> eng/go";   git tag -l 'eng/go/v*'   --sort=-version:refname | head
+	@echo "==> basic/go"; git tag -l 'basic/go/v*' --sort=-version:refname | head
+	@echo "==> lang/go";  git tag -l 'lang/go/v*'  --sort=-version:refname | head
+	@echo "==> cmd/go";   git tag -l 'cmd/go/v*'   --sort=-version:refname | head
 
 # ---- coverage ----------------------------------------------------------
 #

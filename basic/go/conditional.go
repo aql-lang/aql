@@ -1,4 +1,4 @@
-package native
+package basic
 
 // spliceArg returns tokens for a branch value. If the value is a list,
 // its elements are returned wrapped in parens so the main engine evaluates
@@ -71,7 +71,7 @@ func ifClause(elems []Value) []Value {
 	return elseBranch
 }
 
-// isCaseOpenCallHead reports whether a match-position clause element is a
+// IsCaseOpenCallHead reports whether a match-position clause element is a
 // bare word bound to a FUNCTION VALUE (a def'd fn or a parked Function).
 // Such an element can never be a genuine match — a function value unifies
 // with nothing (NUR031) — so it must be the head of an OPEN-CALL default
@@ -80,7 +80,7 @@ func ifClause(elems []Value) []Value {
 // pair stops here and the rest of the list is the default body. Bare words
 // NOT bound to a function keep their atom-match reading (`case c/q [ red
 // "R" … ]`), so only provably-uncallable-as-match heads change meaning.
-func isCaseOpenCallHead(r *Registry, m Value) bool {
+func IsCaseOpenCallHead(r *Registry, m Value) bool {
 	if !IsWord(m) {
 		return false
 	}
@@ -95,13 +95,13 @@ func isCaseOpenCallHead(r *Registry, m Value) bool {
 // caseDefaultStart returns the index where the clause list's trailing
 // DEFAULT arm begins, and whether one exists. Pairs walk two at a time;
 // the default is normally the single trailing odd element, but an
-// open-call head in match position (isCaseOpenCallHead) starts the
+// open-call head in match position (IsCaseOpenCallHead) starts the
 // default early and it spans every remaining element. The pairs region
 // elems[:start] always has even length.
 func caseDefaultStart(r *Registry, elems []Value) (int, bool) {
 	i := 0
 	for ; i+1 < len(elems); i += 2 {
-		if isCaseOpenCallHead(r, elems[i]) {
+		if IsCaseOpenCallHead(r, elems[i]) {
 			return i, true
 		}
 	}
@@ -125,7 +125,7 @@ func caseNormalizeClauses(r *Registry, elems []Value) []Value {
 		return elems
 	}
 	rest := elems[start:]
-	if len(rest) == 1 && !isCaseOpenCallHead(r, rest[0]) {
+	if len(rest) == 1 && !IsCaseOpenCallHead(r, rest[0]) {
 		return elems
 	}
 	out := make([]Value, 0, start+1)
@@ -134,12 +134,12 @@ func caseNormalizeClauses(r *Registry, elems []Value) []Value {
 	return out
 }
 
-// caseClauses runs the `case` word's clause walk (see caseHandler):
+// CaseClauses runs the `case` word's clause walk (see CaseHandler):
 // v is the captured value; elems are the raw clause-list elements —
 // match/block pairs with an optional trailing default (a single
 // element; an open-call tail is first collapsed into a synthetic block
 // by caseNormalizeClauses). Returns the matched block's result stack.
-func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
+func CaseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
 	elems = caseNormalizeClauses(r, elems)
 	i := 0
 	for ; i+1 < len(elems); i += 2 {
@@ -214,7 +214,7 @@ func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
 	return nil, nil
 }
 
-// caseReturnsFn type-checks a `case` and, when bytecode emission is active,
+// CaseReturnsFn type-checks a `case` and, when bytecode emission is active,
 // desugars it to a nested-`if` chain so it compiles natively instead of
 // refusing as a code-body word (design doc "case clause compilation"). Each
 // clause becomes `if (v match __casematch) [block] [rest]`; a code-body
@@ -231,8 +231,8 @@ func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
 // conservative dynamic-Any WITHOUT marking the program uncompilable, so the
 // island / whole-program fallback keeps owning it and refusals never rise.
 // Faithfulness rides the differential gate (runtime stays
-// caseHandler/caseClauses; __casematch reuses its UnifyR).
-func caseReturnsFn(args []Value, r *Registry) []Value {
+// CaseHandler/CaseClauses; __casematch reuses its UnifyR).
+func CaseReturnsFn(args []Value, r *Registry) []Value {
 	dynAny := []Value{NewDynamicCarrier(TAny)}
 	v, clauses := args[0], args[1]
 	if isCodeBody(v) && !isCodeBody(clauses) {
@@ -246,7 +246,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		checkCaseCodeBodyScrutinee(r, v, clauses)
 		// A code-body scrutinee (`case [body] [clauses]`) runs the body and
 		// dispatches on its last result. In compile mode:
-		//   - 0-net body → the run-time case_error (caseHandler): record a TERMINAL
+		//   - 0-net body → the run-time case_error (CaseHandler): record a TERMINAL
 		//     OpTrap raising the byte-identical error. The residual count must come
 		//     from the RECORDING analyseCondFragment — a type-only RunCarrierBody
 		//     gives an empty-body 0-return fn (`[f 1]`) a bogus 1-value count that
@@ -286,7 +286,7 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 		return dynAny
 	}
 	if !isCodeBody(clauses) {
-		// The clause argument is not a list: caseHandler raises case_error. The
+		// The clause argument is not a list: CaseHandler raises case_error. The
 		// checker is lenient (returns a carrier), but compiled mode raises the
 		// byte-identical error via a TERMINAL OpTrap instead of islanding — the
 		// trap keeps the events before it, drops the case dispatch (which would
@@ -339,16 +339,16 @@ func caseReturnsFn(args []Value, r *Registry) []Value {
 	// compile-eligibility lets a plain `boru check` (which has no emit state)
 	// and a non-re-pushable case narrow instead of poisoning the result with
 	// Any.
-	return caseBranchJoin(r, v, elems)
+	return CaseBranchJoin(r, v, elems)
 }
 
-// caseBranchJoin computes a `case` result TYPE as the join of every clause
+// CaseBranchJoin computes a `case` result TYPE as the join of every clause
 // BLOCK's residual carrier (a block run with the case value pushed, per
 // caseBlockTokens) plus the trailing default — the abstract analogue of the
 // nested-`if` chain's branch join, without the emit desugar. A block that
 // produces no value contributes None. Type-only: RunCarrierBody pauses any
 // active recording, so this is safe whether or not emission is live.
-func caseBranchJoin(r *Registry, v Value, elems []Value) []Value {
+func CaseBranchJoin(r *Registry, v Value, elems []Value) []Value {
 	var out Value
 	have := false
 	join := func(block Value) {
@@ -378,7 +378,7 @@ func caseBranchJoin(r *Registry, v Value, elems []Value) []Value {
 
 // caseGuardTokens builds the guard body for one clause: a code-body
 // predicate `[pred]` runs as `v pred…` (matching runCaseBody), any other
-// match dispatches `v match __casematch` (the same UnifyR caseClauses uses).
+// match dispatches `v match __casematch` (the same UnifyR CaseClauses uses).
 func caseGuardTokens(v Value, m Value) []Value {
 	if isCodeBody(m) {
 		ml, _ := AsList(m)
@@ -421,9 +421,9 @@ func buildCaseChain(v Value, elems []Value, i int) []Value {
 	return out
 }
 
-// caseMatchHandler is the runtime of __casematch: UnifyR(match, value) → ok.
+// CaseMatchHandler is the runtime of __casematch: UnifyR(match, value) → ok.
 // args[0] is the match (stack top), args[1] the case value (BarrierPos 0).
-func caseMatchHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func CaseMatchHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	_, ok := UnifyR(args[0], args[1], r)
 	return []Value{NewBoolean(ok)}, nil
 }

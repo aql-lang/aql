@@ -14,9 +14,8 @@ func seam6c2PatternMap(k string, v Value) Value {
 }
 
 func TestSeam6C2RegisterPatrunTypeDuplicate(t *testing.T) {
-	saved := typeInitErrs
-	t.Cleanup(func() { typeInitErrs = saved })
-	typeInitErrs = nil
+	saved := SwapTypeInitErrs(nil)
+	t.Cleanup(func() { SwapTypeInitErrs(saved) })
 	if tt := registerPatrunType(); tt != nil {
 		t.Fatalf("duplicate registration must return nil, got %v", tt)
 	}

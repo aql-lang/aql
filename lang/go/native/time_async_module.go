@@ -45,8 +45,8 @@ func TimeAsyncModuleNatives(tt TemporalModuleTypes) []NativeFunc {
 			// THIS sig — would sub-Run the body eagerly instead of storing it.
 			CompileEffect: CompileQuoteInert,
 			Signatures: []Signature{
-				{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(tt.timeoutListHandler), Returns: []*Type{tt.Timeout}, BarrierPos: -1},
-				{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Impl: Go(tt.timeoutWordHandler), Returns: []*Type{tt.Timeout}, BarrierPos: -1},
+				{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(timeoutListHandler(tt)), Returns: []*Type{tt.Timeout}, BarrierPos: -1},
+				{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Impl: Go(timeoutWordHandler(tt)), Returns: []*Type{tt.Timeout}, BarrierPos: -1},
 			},
 		},
 		{
@@ -55,8 +55,8 @@ func TimeAsyncModuleNatives(tt TemporalModuleTypes) []NativeFunc {
 			// the list body is NoEvalArgs so the wrapper does not eagerly sub-Run it.
 			CompileEffect: CompileQuoteInert,
 			Signatures: []Signature{
-				{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(tt.intervalListHandler), Returns: []*Type{tt.Interval}, BarrierPos: -1},
-				{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Impl: Go(tt.intervalAtomHandler), Returns: []*Type{tt.Interval}, BarrierPos: -1},
+				{Args: []*Type{TInteger, TList}, QuoteArgs: map[int]bool{1: true}, NoEvalArgs: map[int]bool{1: true}, Impl: Go(intervalListHandler(tt)), Returns: []*Type{tt.Interval}, BarrierPos: -1},
+				{Args: []*Type{TInteger, TAtom}, QuoteArgs: map[int]bool{1: true}, Impl: Go(intervalAtomHandler(tt)), Returns: []*Type{tt.Interval}, BarrierPos: -1},
 			},
 		},
 		{

@@ -15,6 +15,7 @@ Module-specific deep guides — read the relevant one **before** changing
 that module:
 
 - Engine kernel (types, values, matching, parser): [eng/go/CLAUDE.md](eng/go/CLAUDE.md)
+- Base language layer (fundamental words, predefined content types): [basic/go/CLAUDE.md](basic/go/CLAUDE.md)
 - Language layer (native words, modules, registry): [lang/go/CLAUDE.md](lang/go/CLAUDE.md)
 - Knowledge-graph pipeline (schema, ids, resolution, validation): [kg/README.md](kg/README.md)
 

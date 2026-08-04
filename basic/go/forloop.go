@@ -1,14 +1,14 @@
-package native
+package basic
 
 import "fmt"
 
-// runForLoop builds the mark+body+move tokens for a for loop and returns
+// RunForLoop builds the mark+body+move tokens for a for loop and returns
 // them. The engine splices these onto the stack and processes them; the
 // move's ForCont drives subsequent iterations via stepMoveCont.
 //
 // Break and continue use sentinel errors caught by the engine's Run loop,
 // which delegates to handleLoopBreak/handleLoopContinue.
-func runForLoop(r *Registry, start, end, step int64, iterName string, body Value) ([]Value, error) {
+func RunForLoop(r *Registry, start, end, step int64, iterName string, body Value) ([]Value, error) {
 	if step == 0 {
 		return nil, r.BoruError("for_error", "for: step cannot be zero", "for")
 	}
@@ -53,13 +53,13 @@ func runForLoop(r *Registry, start, end, step int64, iterName string, body Value
 	return tokens, nil
 }
 
-// loopIterations reports how many times a `for` with the given decoded range
-// runs its body. It mirrors runForLoop's empty-span guards exactly (a
+// LoopIterations reports how many times a `for` with the given decoded range
+// runs its body. It mirrors RunForLoop's empty-span guards exactly (a
 // non-advancing or wrong-direction span runs zero times) so the static
 // zero-count pruning in forCarrierAnalyse agrees with the interpreter. A zero
-// step is treated as "non-static" (returns -1): runForLoop raises on it, so it
+// step is treated as "non-static" (returns -1): RunForLoop raises on it, so it
 // must NOT be pruned as empty.
-func loopIterations(start, end, step int64) int64 {
+func LoopIterations(start, end, step int64) int64 {
 	if step == 0 {
 		return -1
 	}
@@ -75,12 +75,12 @@ func loopIterations(start, end, step int64) int64 {
 	return (start - end + (-step) - 1) / (-step)
 }
 
-// parseRange parses a range specification list into start, end, step.
+// ParseRange parses a range specification list into start, end, step.
 //
 //	[end]              — 0 to end, step 1
 //	[start, end]       — start to end, step 1
 //	[start, end, step] — start to end, step
-func parseRange(elems []Value) (start, end, step int64, err error) {
+func ParseRange(elems []Value) (start, end, step int64, err error) {
 	// AsConcreteInteger rejects non-Integer values AND DepScalar/carrier
 	// payloads — matching the VM's OpForSetup (eng/go/vm.go), which reads each
 	// bound with the same concrete accessor. Using it (rather than a

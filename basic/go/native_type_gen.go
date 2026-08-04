@@ -1,4 +1,4 @@
-package native
+package basic
 
 import (
 	"fmt"
@@ -23,14 +23,14 @@ import (
 // TypeSchema that `def` installs (InstallType's TypeSchema branch).
 // `of` instantiates via eng.InstantiateSchema (constraint check +
 // per-(schema,args) memoised node mint).
-var genNatives = []NativeFunc{
+var GenNatives = []NativeFunc{
 	{
 		Name: "gen",
 
 		Signatures: []Signature{{
 			Args:       []*Type{TList},
 			NoEvalArgs: map[int]bool{0: true},
-			Impl:       Go(genHandler, RunInCheck()),
+			Impl:       Go(GenHandler, RunInCheck()),
 			Returns:    []*Type{},
 			BarrierPos: -1,
 		}},
@@ -52,7 +52,7 @@ var genNatives = []NativeFunc{
 			// TypeArgs slot — it is always a bare placeholder literal.
 			Args:       []*Type{TAny, TType},
 			TypeArgs:   map[int]bool{1: true},
-			Impl:       Go(extendsHandler, RunInCheck()),
+			Impl:       Go(ExtendsHandler, RunInCheck()),
 			Returns:    []*Type{TGenParam},
 			BarrierPos: 1,
 		}},
@@ -74,7 +74,7 @@ var genNatives = []NativeFunc{
 			{
 				Args:       []*Type{TAny, TType},
 				TypeArgs:   map[int]bool{1: true},
-				Impl:       Go(defaultBareHandler, RunInCheck()),
+				Impl:       Go(DefaultBareHandler, RunInCheck()),
 				Returns:    []*Type{TGenParam},
 				BarrierPos: 1,
 			},
@@ -88,7 +88,7 @@ var genNatives = []NativeFunc{
 		Signatures: []Signature{{
 			Args:     []*Type{TList, TAny},
 			TypeArgs: map[int]bool{1: true},
-			Impl:     Go(ofHandler, RunInCheck()),
+			Impl:     Go(OfHandler, RunInCheck()),
 			Returns:  []*Type{TType},
 			// BarrierPos 1: the arg LIST forward-collects, the schema
 			// head always comes from the stack (the tor/tand/is swap
@@ -100,13 +100,13 @@ var genNatives = []NativeFunc{
 	},
 }
 
-// genHandler walks the parameter list. Each entry is either a bare
+// GenHandler walks the parameter list. Each entry is either a bare
 // capitalized word (unconstrained parameter) or a paren expression
 // (`(T extends C)`, `(T default D)`, `(T extends C default D)`)
 // evaluated with THIS parameter's placeholder pre-bound, so F-bounded
 // constraints (`(T extends Container of [T])`) and later-parameter
 // references to earlier ones work without special casing.
-func genHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func GenHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, r.BoruError("gen_error", "gen: needs a concrete list of type parameters", "gen")
 	}
@@ -211,10 +211,10 @@ func validateGenParamName(r *Registry, name string, seen map[string]bool) error 
 	return nil
 }
 
-// extendsHandler builds a bounded GenParam. The left side must be a
+// ExtendsHandler builds a bounded GenParam. The left side must be a
 // placeholder literal — i.e. `extends` is only meaningful inside a
 // gen parameter entry, where gen has pre-bound the name.
-func extendsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func ExtendsHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	bound := ResolveWordValue(args[0])
 	ph := args[1]
 	name := TypeParamName(&ph)
@@ -240,9 +240,9 @@ func defaultChainHandler(args []Value, _ map[string]Value, _ []Value, r *Registr
 	return []Value{NewGenParamValue(p)}, nil
 }
 
-// defaultBareHandler builds an unconstrained-but-defaulted GenParam
+// DefaultBareHandler builds an unconstrained-but-defaulted GenParam
 // (`T default D`).
-func defaultBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func DefaultBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	d := ResolveWordValue(args[0])
 	ph := args[1]
 	name := TypeParamName(&ph)
@@ -254,10 +254,10 @@ func defaultBareHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 	return []Value{NewGenParamValue(GenParam{Name: name, Default: d, HasDefault: true})}, nil
 }
 
-// ofHandler instantiates a schema: `Box of [Integer]`. The head (from
+// OfHandler instantiates a schema: `Box of [Integer]`. The head (from
 // the stack) is the schema; the forward list holds the type arguments.
 // A Self head (inside a schema body, D5) defers via GenInstRef.
-func ofHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
+func OfHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value, error) {
 	if !IsConcrete(args[0]) {
 		return nil, r.BoruError("type_error", "of: needs a concrete list of type arguments", "of")
 	}
@@ -386,17 +386,17 @@ func resolveTypeArg(r *Registry, v Value) Value {
 // handler time), pop the bindings, and wrap the result as a
 // TypeSchema for InstallType.
 
-// genWrapSchema finishes a generic constructor: validates the body
+// GenWrapSchema finishes a generic constructor: validates the body
 // kind, pops the placeholder bindings, and wraps the TypeSchema.
-func genWrapSchema(r *Registry, spec *GenSpecInfo, body Value, kind SchemaKind) ([]Value, error) {
+func GenWrapSchema(r *Registry, spec *GenSpecInfo, body Value, kind SchemaKind) ([]Value, error) {
 	PopGenBindings(r, spec)
 	info := &TypeSchemaInfo{Params: spec.Params, Body: body, Kind: kind}
 	return []Value{NewTypeSchema(TType, info)}, nil
 }
 
-// genUnsupported reports a constructor that cannot host a gen spec in
+// GenUnsupported reports a constructor that cannot host a gen spec in
 // v1, popping the bindings so nothing leaks.
-func genUnsupported(r *Registry, spec *GenSpecInfo, word string, got string) error {
+func GenUnsupported(r *Registry, spec *GenSpecInfo, word string, got string) error {
 	PopGenBindings(r, spec)
 	return r.BoruErrorHint("gen_unsupported_constructor",
 		fmt.Sprintf("gen: %s cannot build a generic schema from %s in v1", word, got), word,
