@@ -524,6 +524,69 @@ Discoveries made landing the design, where the mechanism refined:
   substitutions restricted to the structural spellings
   (`)`, `end`, `?`, `!`, `|`, `.`).
 
+## 7B. Stage-5 second half — the TS parser twin (landed, 2026-08-04)
+
+The TS engine (`eng/ts`) gained a REAL parser (`src/parser/`) on
+`@tabnas/parser` + `@tabnas/jsonic` 0.4.1 — the TS originals of the Go
+port's jsonic engine — replacing the hand-rolled fixture tokenizer.
+The Go parser is the reference; parity is enforced by a STREAM ORACLE:
+`eng/go/parser` TestStreamDump and `eng/ts/src/parser/streamdump.ts`
+dump every eng/spec row's parsed value stream in the shared
+`Value.String` render, and the two dumps are byte-identical (1,744
+rows, 0 diffs). The crossdiff's `knownGoAheadDivergence` allowlist is
+EMPTY. `eng/spec/sugar.tsv` pins the ADR-012 refusal contract in both
+engines (every sugar surface → `sugar_unbound` on the bare kernel).
+
+### Comparative-analysis findings (fixed during the port)
+
+Building the twin surfaced defects in BOTH engines; the fixed set:
+
+- **Go:** `ValidateTypeNameParts` leaked a raw `fmt.Errorf` through
+  `InstallType` (the crossdiff reported `def Integer 42` as
+  UNEXPECTED instead of a code) — wrapped in `type_error`.
+- **Go:** `Value.String` had NO arm for InterpString or XmlInterp —
+  both fell to the `%v` fallback and dumped raw payload structs
+  (`word()({[{ [42]}]})`). Proper source-form renders added
+  (`interp('a ' ${word(x)})`, `interp-xml(<p>${word(x)}</p>)`).
+- **Go:** the typed list/map String render dropped inline
+  elements/entries (`[:Integer 1 2 3]` rendered `[:Integer]`) —
+  lossy where canon kept them.
+- **TS:** the engine resolved builtin type names BEFORE the def
+  table in stepWord (the inverse of the canonical cascade) and
+  lacked the none/null keyword arms; `src/resolve.ts` now mirrors
+  eng/go/resolve.go and every consumption site routes through it.
+- **TS:** the check-mode carrier strip destroyed sugar-marker
+  payloads (mirrored Go's carrier-strip exemption); `tor` over
+  stripped carriers baked the check shape (`Integer tor Float`)
+  where the runtime produces the concrete disjunct — a real
+  miscompile, now a dynamic-carrier fallback.
+- **TS:** canonXml did not re-escape entities (decoded at parse,
+  double-unescaped at render); ChildType had no `entries` slot so
+  typed-map inline entries were silently dropped; `Value.toString`
+  rendered every Word-branch internal as `word(undefined)`.
+- **TS:** preEvalParens lacked Go's keyword-viable pruning and
+  structural-/q-capture walk-past, so def's new keyword forms
+  widened the scan into later statements.
+
+### Recorded, not yet fixed (the remaining findings backlog)
+
+From the mapping pass, still open on the Go side: parenGroup is
+unhandled in `convertTopLevelValueInner` (angle items containing
+parens crash raw); an unterminated backtick template parses silently
+as a plain String; `${}` bypasses its dedicated empty-expression
+alternate; the arrow folds after a dot-chain against the grammar's
+own gate comment; `a => [1]` does not fold when the arrow is the
+first top-level item (position-dependent); angle use-site Items for
+`Box<T = Integer>` carry `Word("=")` (an unregistrable name) in the
+runtime stream; XML-literal errors are raw fmt.Errorf without
+position or code; `resolveTextValue` is dead; `convertDataList`
+duplicates `convertWordList`; the unmatched-open-paren error loses
+position on nested paths. On the TS side: BoruError carries no
+Hint/Row/Col channels (parser errors compare by first line only);
+Value has no position field (withPos is a stub); BigDecimal
+approximates with float64. Each is a bounded follow-up; the stream
+oracle keeps them honest.
+
 ## 8. Open questions
 
 1. Component name: `types/go` vs `scalar/go` vs folding into a future
