@@ -2364,6 +2364,86 @@ type InterpPart struct {
 	Expr []Value
 }
 
+// renderInterpParts renders an interpolated string's parts in source
+// form: literal segments single-quoted, expression parts as `${…}` with
+// their tokens' String renders space-joined. Shared by Value.String's
+// InterpString arm; the TS port's renderer mirrors it byte for byte.
+func renderInterpParts(parts []InterpPart) string {
+	var b strings.Builder
+	b.WriteString("interp(")
+	for i, p := range parts {
+		if i > 0 {
+			b.WriteByte(' ')
+		}
+		if len(p.Expr) > 0 {
+			b.WriteString("${")
+			for k, t := range p.Expr {
+				if k > 0 {
+					b.WriteByte(' ')
+				}
+				b.WriteString(t.String())
+			}
+			b.WriteString("}")
+		} else {
+			b.WriteString("'" + p.Lit + "'")
+		}
+	}
+	b.WriteString(")")
+	return b.String()
+}
+
+// renderXmlTmplSrc renders an XML template skeleton in source form —
+// `<tag attr="lit${expr}">text${hole}<child/></tag>` — for the
+// XmlInterp String arm. Mirrored by the TS port's renderer.
+func renderXmlTmplSrc(t XmlTmpl) string {
+	var b strings.Builder
+	b.WriteString("<" + t.Tag)
+	for _, a := range t.Attr {
+		b.WriteString(" " + a.Name + "=\"")
+		for _, p := range a.Parts {
+			if len(p.Expr) > 0 {
+				b.WriteString("${")
+				for k, tok := range p.Expr {
+					if k > 0 {
+						b.WriteByte(' ')
+					}
+					b.WriteString(tok.String())
+				}
+				b.WriteString("}")
+			} else {
+				b.WriteString(p.Lit)
+			}
+		}
+		b.WriteString("\"")
+	}
+	if len(t.Cren) == 0 {
+		b.WriteString("/>")
+		return b.String()
+	}
+	b.WriteString(">")
+	for _, c := range t.Cren {
+		switch c.Kind {
+		case XmlCrenLit:
+			b.WriteString(c.Lit)
+		case XmlCrenExpr:
+			b.WriteString("${")
+			for k, tok := range c.Expr {
+				if k > 0 {
+					b.WriteByte(' ')
+				}
+				b.WriteString(tok.String())
+			}
+			b.WriteString("}")
+		case XmlCrenChild:
+			if c.Child != nil {
+				b.WriteString(renderXmlTmplSrc(*c.Child))
+			}
+		}
+	}
+	b.WriteString("</" + t.Tag + ">")
+	return b.String()
+}
+
 // NewInterpString creates an interpolated string value from alternating
 // literal and expression parts. The engine evaluates expression parts in
 // a sub-engine, converts results to strings, and concatenates everything.
@@ -3449,6 +3529,18 @@ func kernelFormatDefault(v Value) string {
 	case IsParenExpr(v):
 		_pe, _ := AsParenExpr(v)
 		return fmt.Sprintf("paren(%v)", _pe)
+	case IsInterpString(v):
+		// A readable structural render (`interp('a ' ${word(x)})`) —
+		// previously this fell to the %v fallback and dumped the raw
+		// payload struct (`word()({[{ [42]}]})`), which leaked into
+		// debug output and the parser stream oracle.
+		parts, _ := AsInterpString(v)
+		return renderInterpParts(parts)
+	case IsXmlInterp(v):
+		// Same repair for the XML template skeleton: render the source
+		// form with ${…} holes instead of the payload struct dump.
+		tmpl, _ := AsXmlInterp(v)
+		return "interp-xml(" + renderXmlTmplSrc(tmpl) + ")"
 	case IsMark(v):
 		_as2, _ := AsMark(v)
 		return fmt.Sprintf("mark(%s)", _as2.ID)

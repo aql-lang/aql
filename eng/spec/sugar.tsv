@@ -1,0 +1,20 @@
+# tokens	expected	note
+# =====================================================================
+# ADR-012 sugar markers (2026-08-04 amendment): the parser emits
+# structural Word/__SG markers for every surface sugar — it never
+# invents a word name. Stepping a marker resolves its ROLE through the
+# registry's sugar-word table (bindSugarWord); the BARE KERNEL binds
+# nothing, so every sugar surface refuses loudly with sugar_unbound
+# instead of silently dispatching an invented name. These rows pin that
+# refusal contract in BOTH engines (the language layer, which binds the
+# roles, proves the positive path in lang/spec/generics-sugar.tsv and
+# friends). The parse-level stream shapes are pinned by the stream
+# oracle (eng/go/parser TestStreamDump ↔ eng/ts src/parser/streamdump).
+# =====================================================================
+x:Integer => [x]	ERROR:sugar_unbound	the => lambda marker steps with no bound lambda role
+( 1 addq 2 ) => [ 9 ]	ERROR:sugar_unbound	the arrow folds after a paren group and still refuses unbound
++re/ab+c/	ERROR:sugar_unbound	a minilang literal is ONE mini marker; no mini role bound
+Box<Integer>	ERROR:sugar_unbound	an angle use-site marker refuses without the gen-apply role
+foo/t	ERROR:sugar_unbound	the X/t bounded-type sugar refuses without gen-apply
+( 1 2 )/u	ERROR:sugar_unbound	the /u group modifier is a usurp marker; no usurp role bound
+( 1 2 )/3	ERROR:sugar_unbound	the /N group modifier is a force-arity marker; no role bound

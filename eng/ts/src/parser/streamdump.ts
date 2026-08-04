@@ -37,7 +37,14 @@ for (const name of names) {
       const vals = parse(input)
       console.log(`${name}:${lineNum}\tOK\t${vals.map((v) => v.toString()).join(' ')}`)
     } catch (e) {
-      const msg = e instanceof BoruError ? `[boru/${e.code}]: ${e.detail}` : String(e)
+      // Plain (non-BoruError) errors render their bare message — Go
+      // surfaces raw parser errors (the xml matcher's) unprefixed.
+      const msg =
+        e instanceof BoruError
+          ? `[boru/${e.code}]: ${e.detail}`
+          : e instanceof Error
+            ? e.message
+            : String(e)
       console.log(`${name}:${lineNum}\tERR\t${msg.split('\n')[0]}`)
     }
   }

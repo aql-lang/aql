@@ -13,6 +13,7 @@ import { BoruError } from './error.ts'
 import { valToString } from './make.ts'
 import { matchEntry } from './match.ts'
 import type { Registry } from './registry.ts'
+import { resolveWordsDeep } from './resolve.ts'
 import { sugarExpansion } from './sugar.ts'
 import {
   TAny,
@@ -23,6 +24,7 @@ import {
   TList,
   TMap,
   TNumber,
+  TParenExpr,
   TString,
   TXml,
   TWord,
@@ -37,7 +39,9 @@ import {
   isEnd,
   isOpenParen,
   isSugar,
+  newAtom,
   newBoolean,
+  newCloseParen,
   newFloat,
   newCarrier,
   newDynamicCarrier,
@@ -47,6 +51,7 @@ import {
   newList,
   newMap,
   newNone,
+  newOpenParen,
   newString,
   newTypeLiteral,
   newXml,
@@ -124,6 +129,16 @@ export class Engine {
       if (this.pointer >= this.stack.length) break
 
       const val = this.stack[this.pointer]!
+      // A paren-expression VALUE (the parser's nested `( … )` node)
+      // expands back to its OpenParen … CloseParen marker span in
+      // place, then re-processes — the IsOpenParen branch below
+      // collapses it. Mirrors Go stepLiteral's ParenExpr expansion
+      // (design/PAREN-REPRESENTATION.9.md Step 3). Quoted paren-exprs
+      // stay data.
+      if (val.vType.equal(TParenExpr) && !val.quoted && Array.isArray(val.data)) {
+        this.stack.splice(this.pointer, 1, newOpenParen(), ...(val.data as Value[]), newCloseParen())
+        continue
+      }
       if (isOpenParen(val)) {
         this.evalParenAt(this.pointer)
         continue
@@ -194,13 +209,23 @@ export class Engine {
     const w = val.asWord() as WordInfo
     const name = w.name
 
-    // Built-in keywords.
+    // Built-in keywords. The opaque parser leaves none/null as Words
+    // (the legacy fixture tokenizer resolved them at lex time) — the
+    // engine resolves them at consumption, mirroring Go stepWord.
     if (name === 'true') {
       this.stack[this.pointer] = newBoolean(true)
       return
     }
     if (name === 'false') {
       this.stack[this.pointer] = newBoolean(false)
+      return
+    }
+    if (name === 'none') {
+      this.stack[this.pointer] = newNone()
+      return
+    }
+    if (name === 'null') {
+      this.stack[this.pointer] = newAtom('null')
       return
     }
     const tn = typeNameTable().get(name)
@@ -571,6 +596,13 @@ export class Engine {
         const bound = windowOf(viable)
         if (resolved >= bound) break
         if (bound < maxFwd) maxFwd = bound
+      }
+      // A paren-expression VALUE in the window expands to its marker
+      // span in place and reprocesses — the '(' arm below evaluates
+      // it. Mirrors Go resolveForwardArgs' IsParenExpr branch.
+      if (tok.vType.equal(TParenExpr) && !tok.quoted && Array.isArray(tok.data)) {
+        this.stack.splice(scanIdx, 1, newOpenParen(), ...(tok.data as Value[]), newCloseParen())
+        continue
       }
       // Internal control markers stop the forward scan — they're
       // boundaries, not data.
@@ -1161,6 +1193,13 @@ export class Engine {
         a.data instanceof OrderedMap
       ) {
         args[i] = this.deepEvalData(a)
+        continue
+      }
+      // A map arg resolves its word VALUES at consumption (`{abs:true}`
+      // arrives with word(true) from the opaque parser) — the Go
+      // autoEvalMap mirror.
+      if (a.vType.matches(TMap) && a.data instanceof OrderedMap && !a.quoted) {
+        args[i] = resolveWordsDeep(a, this.registry)
         continue
       }
       if (!a.vType.matches(TList)) continue

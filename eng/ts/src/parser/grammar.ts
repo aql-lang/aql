@@ -36,6 +36,12 @@ import {
   type SrcPos,
 } from './nodes.ts'
 import { setupXmlMatcher, setupXmlGrammar } from './xml.ts'
+// The escape processor lives in convert.ts (the parse.go twin), exported
+// for this file — the Go original sits in parse.go beside the other
+// converters but is called from grammar.go's template-literal matcher.
+// The import cycle (convert → grammar → convert) is benign: the function
+// is hoisted and only called at parse time.
+import { processTemplateEscapes } from './convert.ts'
 
 export interface ParserTokens {
   OP: number // (
@@ -491,50 +497,6 @@ export function setupTemplateLiteralMatcher(j: any, _t: ParserTokens): void {
     }
     return tkn
   })
-}
-
-// processTemplateEscapes processes escape sequences in template literal text.
-// (Lives in parse.go on the Go side; defined here because the template
-// matcher is its only grammar-side consumer and convert.ts is a separately
-// owned file.)
-function processTemplateEscapes(s: string): string {
-  if (!s.includes('\\')) {
-    return s
-  }
-  let buf = ''
-  for (let i = 0; i < s.length; i++) {
-    if ('\\' === s[i] && i + 1 < s.length) {
-      const next = s[i + 1]
-      switch (next) {
-        case 'n':
-          buf += '\n'
-          break
-        case 't':
-          buf += '\t'
-          break
-        case 'r':
-          buf += '\r'
-          break
-        case '\\':
-          buf += '\\'
-          break
-        case '`':
-          buf += '`'
-          break
-        case '$':
-          buf += '$'
-          break
-        default:
-          // Unknown escape: keep as-is.
-          buf += '\\'
-          buf += next
-      }
-      i++ // skip the escaped char
-    } else {
-      buf += s[i]
-    }
-  }
-  return buf
 }
 
 // setupValRule extends the jsonic "val" rule with boru-specific alternates:

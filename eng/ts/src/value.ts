@@ -44,7 +44,7 @@ import {
   TXml,
   TXmlInterp,
 } from './type.ts'
-import { formatFloat } from './canon.ts'
+import { canonXml, formatFloat } from './canon.ts'
 
 /** A reified word reference — produced by NewWord, dispatched by the engine. */
 export interface WordInfo {
@@ -373,6 +373,29 @@ export class Value {
     }
     if (this.vType.equal(TMove)) {
       return `move(${(this.data as MoveInfo).to},)`
+    }
+    if (this.vType.equal(TInterpString) && Array.isArray(this.data)) {
+      // Source-form render — mirrors Go renderInterpParts byte for byte.
+      return renderInterpSegments(this.data as InterpSegment[])
+    }
+    if (this.vType.equal(TXmlInterp)) {
+      // Source-form skeleton render — mirrors Go renderXmlTmplSrc.
+      return `interp-xml(${renderXmlTmplSrc(this.data as XmlTmpl)})`
+    }
+    if (this.data instanceof ChildType) {
+      // Typed list/map (`[:T]` / `{:T}`), with any inline elements.
+      const ct = this.data
+      const open = this.vType.equal(TMap) ? '{' : '['
+      const close = this.vType.equal(TMap) ? '}' : ']'
+      const parts = [
+        `:${ct.child.toString()}`,
+        ...ct.elements.map((e) => e.toString()),
+        ...ct.entries.map((e) => `${e.key}:${e.value.toString()}`),
+      ]
+      return `${open}${parts.join(' ')}${close}`
+    }
+    if (this.vType.equal(TXml) && this.data !== null) {
+      return canonXml(this.data as XmlElement)
     }
     if (this.vType.matches(TWord)) {
       return `word(${(this.data as WordInfo).name})`
@@ -712,9 +735,12 @@ export function newInspect(m: OrderedMap): Value {
 export class ChildType {
   readonly child: Value
   readonly elements: Value[]
-  constructor(child: Value, elements: Value[] = []) {
+  /** Typed-MAP inline entries (`{:T a:1}`), in source order. */
+  readonly entries: { key: string; value: Value }[]
+  constructor(child: Value, elements: Value[] = [], entries: { key: string; value: Value }[] = []) {
     this.child = child
     this.elements = elements
+    this.entries = entries
   }
 }
 
@@ -724,8 +750,8 @@ export function newTypedList(child: Value, elements: Value[] = []): Value {
 }
 
 /** Construct a typed map value (VType Node/Map, ChildType payload). */
-export function newTypedMap(child: Value): Value {
-  return new Value(TMap, new ChildType(child))
+export function newTypedMap(child: Value, entries: { key: string; value: Value }[] = []): Value {
+  return new Value(TMap, new ChildType(child, [], entries))
 }
 
 /**
@@ -944,6 +970,50 @@ export function isSugar(v: Value): boolean {
 export function asSugar(v: Value): SugarInfo | undefined {
   if (!isSugar(v) || v.data === null || typeof v.data !== 'object') return undefined
   return v.data as SugarInfo
+}
+
+
+/**
+ * Render interpolated-string segments in source form — mirrors Go
+ * renderInterpParts byte for byte (`interp('a ' ${word(x)})`).
+ */
+export function renderInterpSegments(segments: InterpSegment[]): string {
+  const parts: string[] = []
+  for (const s of segments) {
+    if ('expr' in s) {
+      parts.push('${' + s.expr.map((t) => t.toString()).join(' ') + '}')
+    } else {
+      parts.push("'" + s.lit + "'")
+    }
+  }
+  return 'interp(' + parts.join(' ') + ')'
+}
+
+/**
+ * Render an XML template skeleton in source form — mirrors Go
+ * renderXmlTmplSrc (`<tag attr="lit${expr}">text${hole}</tag>`).
+ */
+export function renderXmlTmplSrc(t: XmlTmpl): string {
+  let b = '<' + t.tag
+  for (const a of t.attrs) {
+    b += ' ' + a.name + '="'
+    for (const p of a.segs) {
+      if ('expr' in p) {
+        b += '${' + p.expr.map((x) => x.toString()).join(' ') + '}'
+      } else {
+        b += p.lit
+      }
+    }
+    b += '"'
+  }
+  if (t.children.length === 0) return b + '/>'
+  b += '>'
+  for (const c of t.children) {
+    if ('lit' in c) b += c.lit
+    else if ('expr' in c) b += '${' + c.expr.map((x) => x.toString()).join(' ') + '}'
+    else b += renderXmlTmplSrc(c.elem)
+  }
+  return b + '</' + t.tag + '>'
 }
 
 /** Render a marker exactly as the Go kernel's String arm does. */

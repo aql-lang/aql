@@ -25,8 +25,8 @@
 
 import type { FunctionEntry, Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
-import { TNode, TScalar, TType, TWord } from './type.ts'
-import { isSugar, newAtom, type Value, type WordInfo } from './value.ts'
+import { TNode, TScalar, TType, TWord , typeNameTable } from './type.ts'
+import { isSugar, newAtom, newBoolean, newNone, newTypeLiteral, type Value, type WordInfo } from './value.ts'
 
 /**
  * isTypeArg reports whether v may fill a typeArgs slot: a bare type
@@ -166,8 +166,8 @@ function resolveForwardToken(
 ): Value {
   if (!tok.isWord()) return tok
   if (expected.equal(TWord)) return tok
+  const name = tok.asWord().name
   if (registry) {
-    const name = tok.asWord().name
     const top = registry.topOfDefStack(name)
     if (top !== undefined && !top.isFnDef()) {
       // Resolving a def in the forward window is a "use" for check-mode
@@ -176,6 +176,16 @@ function resolveForwardToken(
       return top
     }
   }
+  // The canonical cascade's builtin arm at consumption (ADR-012 rule
+  // 4): the parser is type-name-opaque, so `make Integer 42` collects
+  // Word(Integer) — resolve it to the type literal exactly where the
+  // slot consumes it. The defs arm ran above; keywords resolve too
+  // (`true`/`false`/`none`, mirroring Go resolveWordValue).
+  if (name === 'true') return newBoolean(true)
+  if (name === 'false') return newBoolean(false)
+  if (name === 'none') return newNone()
+  const t = typeNameTable().get(name)
+  if (t !== undefined) return newTypeLiteral(t)
   return tok
 }
 

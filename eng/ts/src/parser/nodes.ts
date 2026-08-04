@@ -29,12 +29,18 @@ export const UNKNOWN_POS: SrcPos = { row: 0, col: 0 }
  * `type parenGroup []any`.
  */
 export class ParenGroup {
-  constructor(public items: unknown[]) {}
+  items: unknown[]
+  constructor(items: unknown[]) {
+    this.items = items
+  }
 }
 
 /** A paren group auto-closed at EOF (no matching `)`). */
 export class UnclosedParen {
-  constructor(public items: unknown[]) {}
+  items: unknown[]
+  constructor(items: unknown[]) {
+    this.items = items
+  }
 }
 
 /**
@@ -43,15 +49,20 @@ export class UnclosedParen {
  * structural SugarAngle marker (ADR-012) in every position.
  */
 export class AngleGroup {
-  constructor(
-    public name: string,
-    public items: unknown[],
-  ) {}
+  name: string
+  items: unknown[]
+  constructor(name: string, items: unknown[]) {
+    this.name = name
+    this.items = items
+  }
 }
 
 /** An angle group auto-closed at EOF (no matching `>`). */
 export class UnclosedAngle {
-  constructor(public name: string) {}
+  name: string
+  constructor(name: string) {
+    this.name = name
+  }
 }
 
 /**
@@ -60,12 +71,18 @@ export class UnclosedAngle {
  * (literal segment) or an IexprGroup (interpolated expression).
  */
 export class InterpGroup {
-  constructor(public parts: unknown[]) {}
+  parts: unknown[]
+  constructor(parts: unknown[]) {
+    this.parts = parts
+  }
 }
 
 /** The expression values collected between `${` and `}`. */
 export class IexprGroup {
-  constructor(public items: unknown[]) {}
+  items: unknown[]
+  constructor(items: unknown[]) {
+    this.items = items
+  }
 }
 
 /**
@@ -74,10 +91,12 @@ export class IexprGroup {
  * SugarMini marker.
  */
 export class MiniLitVal {
-  constructor(
-    public name: string,
-    public src: string,
-  ) {}
+  name: string
+  src: string
+  constructor(name: string, src: string) {
+    this.name = name
+    this.src = src
+  }
 }
 
 /**
@@ -87,12 +106,16 @@ export class MiniLitVal {
  * an out-of-range literal. Injected by the number lex sub.
  */
 export class NumberVal {
-  constructor(
-    public val: number,
-    public src: string,
-    public row: number,
-    public col: number,
-  ) {}
+  val: number
+  src: string
+  row: number
+  col: number
+  constructor(val: number, src: string, row: number, col: number) {
+    this.val = val
+    this.src = src
+    this.row = row
+    this.col = col
+  }
 }
 
 /**
@@ -108,12 +131,15 @@ export class ArrowTag {}
  * surface a clean error rather than a generic jsonic parse failure.
  */
 export class XmlElemVal {
-  constructor(
-    public v: Value | undefined,
-    public err: string | undefined,
-    /** The unresolved template when the literal carries ${…} holes. */
-    public tmpl?: XmlTmpl,
-  ) {}
+  v: Value | undefined
+  err: string | undefined
+  /** The unresolved template when the literal carries ${…} holes. */
+  tmpl?: XmlTmpl
+  constructor(v: Value | undefined, err: string | undefined, tmpl?: XmlTmpl) {
+    this.v = v
+    this.err = err
+    this.tmpl = tmpl
+  }
 }
 
 /**
@@ -121,10 +147,12 @@ export class XmlElemVal {
  * `type sited struct { Node any; Pos eng.SrcPos }`. deSite unwraps.
  */
 export class Sited {
-  constructor(
-    public node: unknown,
-    public pos: SrcPos,
-  ) {}
+  node: unknown
+  pos: SrcPos
+  constructor(node: unknown, pos: SrcPos) {
+    this.node = node
+    this.pos = pos
+  }
 }
 
 /** Unwrap a Sited wrapper; a bare node returns with unknown pos. */
@@ -143,5 +171,8 @@ export const MAX_PARSE_NESTING_DEPTH = 10000
 
 export class ParseDepth {
   cur = 0
-  constructor(public src: string) {}
+  src: string
+  constructor(src: string) {
+    this.src = src
+  }
 }

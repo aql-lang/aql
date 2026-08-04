@@ -34,6 +34,10 @@ function valueResult(input: string): { ok: boolean; out: string } {
   try {
     values = tokenize(input)
   } catch (e) {
+    // A parse failure carries the same taxonomy code the Go side
+    // reports (the jsonic parser throws BoruError) — compare by code,
+    // exactly like run errors.
+    if (e instanceof BoruError) return { ok: false, out: e.code }
     return { ok: false, out: `TOKENIZE:${(e as Error).message}` }
   }
   try {

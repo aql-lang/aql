@@ -213,30 +213,14 @@ func tsResults(t *testing.T) (map[string]crossRec, bool) {
 
 // knownGoAheadDivergence reports value-mode rows where the Go engine
 // intentionally leads the TS port and a differing (both-succeed) output is
-// expected, not a defect. Currently only `inspect def`: the Go `def` fixture
-// carries the strict-barrier keyword forms (fn / word) so `def name fn […]`
-// and the Forth splice `def name word […]` do not strand under the strict
-// forward-barrier; the TS port has not adopted them yet, so its `inspect def`
-// lists fewer signatures. Remove the entry once the TS port matches.
+// expected, not a defect. EMPTY since the TS port adopted the jsonic-based
+// parser (type-name opacity + the canonical cascade + the def keyword
+// forms): the two engines agree on every shared-corpus row. Add entries
+// here ONLY while a documented Go-side change is landing ahead of its TS
+// twin, and remove them when the port catches up.
 func knownGoAheadDivergence(mode, input string) bool {
-	if mode != "value" {
-		return false
-	}
-	switch strings.TrimSpace(input) {
-	case "inspect def":
-		return true
-	case "quote Integer", "quote String", "def t (quote Integer) t":
-		// ADR-012 stage 6 (parser type-name opacity): the Go parser no
-		// longer resolves type names, so `quote <TypeName>` captures the
-		// word as an Atom (`Integer/q`), uniform with every bare name.
-		// The TS port still parses eagerly — flipping its fixture alone
-		// leaves ~190 divergences because the TS engine lacks the
-		// forward-scan/consumption resolution arms the Go kernel grew
-		// (eng/go/resolve.go). Remove these entries when the TS port
-		// adopts the canonical cascade and its fixture drops the
-		// typeTable lookup (spec-fixture.ts).
-		return true
-	}
+	_ = mode
+	_ = input
 	return false
 }
 

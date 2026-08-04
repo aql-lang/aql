@@ -37,7 +37,15 @@ func (listFormatBehavior) Format(v Value) string {
 		return formatTableDataAsList(td)
 	}
 	if ct, ok := v.Data.(ChildTypeInfo); ok {
-		return "[:" + ct.Child.String() + "]"
+		// Include any inline elements (`[:Integer 1 2 3]`) — dropping
+		// them made String lossy where canon keeps them (found by the
+		// TS parser stream-parity diff).
+		parts := make([]string, 0, len(ct.Elements)+1)
+		parts = append(parts, ":"+ct.Child.String())
+		for _, e := range ct.Elements {
+			parts = append(parts, e.String())
+		}
+		return "[" + strings.Join(parts, " ") + "]"
 	}
 	_lst, _ := AsList(v)
 	elems := _lst.Slice()
@@ -136,7 +144,14 @@ func (mapFormatBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.M
 func (mapFormatBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
 func (mapFormatBehavior) Format(v Value) string {
 	if ct, ok := v.Data.(ChildTypeInfo); ok {
-		return "{:" + ct.Child.String() + "}"
+		// Include any inline entries (`{:Integer a:1}`) — the map twin
+		// of the typed-list element render above.
+		parts := make([]string, 0, len(ct.Entries)+1)
+		parts = append(parts, ":"+ct.Child.String())
+		for _, e := range ct.Entries {
+			parts = append(parts, e.Key+":"+e.Value.String())
+		}
+		return "{" + strings.Join(parts, " ") + "}"
 	}
 	if rt, ok := v.Data.(RecordTypeInfo); ok {
 		return formatFieldBag("record", rt.Fields)
