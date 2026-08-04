@@ -13,6 +13,7 @@ import { BoruError } from './error.ts'
 import { valToString } from './make.ts'
 import { matchEntry } from './match.ts'
 import type { Registry } from './registry.ts'
+import { sugarExpansion } from './sugar.ts'
 import {
   TAny,
   TAtom,
@@ -31,6 +32,11 @@ import {
   type FnDefInfo,
   type ForwardMarker,
   type MoveInfo,
+  asSugar,
+  isCloseParen,
+  isEnd,
+  isOpenParen,
+  isSugar,
   newBoolean,
   newFloat,
   newCarrier,
@@ -118,19 +124,18 @@ export class Engine {
       if (this.pointer >= this.stack.length) break
 
       const val = this.stack[this.pointer]!
+      if (isOpenParen(val)) {
+        this.evalParenAt(this.pointer)
+        continue
+      }
+      if (isCloseParen(val)) {
+        throw new BoruError('syntax_error', `unmatched ')'`, ')')
+      }
+      if (isEnd(val)) {
+        this.stepEnd()
+        continue
+      }
       if (val.isWord()) {
-        const w = val.asWord() as WordInfo
-        if (w.name === '(') {
-          this.evalParenAt(this.pointer)
-          continue
-        }
-        if (w.name === ')') {
-          throw new BoruError('syntax_error', `unmatched ')'`, ')')
-        }
-        if (w.name === 'end') {
-          this.stepEnd()
-          continue
-        }
         // If a pending forward marker is waiting for a Word-typed
         // arg, capture this word as data instead of executing it.
         // Mirrors borueng/go/engine.go's hasPendingForwardExpectingWord
@@ -166,6 +171,13 @@ export class Engine {
         } else {
           this.stack[this.pointer] = newXml(this.resolveXmlTmpl(val.asXmlTmpl()))
         }
+      } else if (isSugar(val) && !val.quoted) {
+        // A sugar marker fires at the pointer: splice its role-resolved
+        // expansion in place and re-step, exactly like the __SP splice.
+        // The Angle marker picks its head form when a parked forward is
+        // waiting to capture a name (the binder's /q name slot).
+        // Mirrors Go stepSugar (eng/go/sugar.go).
+        this.stepSugar(val)
       } else {
         this.stepLiteral()
       }
@@ -499,10 +511,8 @@ export class Engine {
     let depth = 1
     for (let i = openIdx + 1; i < this.stack.length; i++) {
       const v = this.stack[i]!
-      if (!v.isWord()) continue
-      const name = (v.asWord() as WordInfo).name
-      if (name === '(') depth++
-      else if (name === ')') {
+      if (isOpenParen(v)) depth++
+      else if (isCloseParen(v)) {
         depth--
         if (depth === 0) return i
       }
@@ -559,13 +569,13 @@ export class Engine {
         scanIdx++
         continue
       }
-      if (!tok.isWord()) {
+      if (isCloseParen(tok) || isEnd(tok)) break
+      if (!tok.isWord() && !isOpenParen(tok)) {
         resolved++
         scanIdx++
         continue
       }
       const name = (tok.asWord() as WordInfo).name
-      if (name === ')' || name === 'end') break
       if (name === '(') {
         const before = this.stack.length
         this.evalParenAt(scanIdx)
@@ -888,7 +898,7 @@ export class Engine {
   private findPendingMarker(): number {
     for (let i = this.pointer - 1; i >= 0; i--) {
       const v = this.stack[i]!
-      if (v.isWord() && (v.asWord() as WordInfo).name === '(') return -1
+      if (isOpenParen(v)) return -1
       if (v.isForward()) {
         const m = v.asForward()
         if (m.collected.length < m.expectedForward) return i
@@ -953,6 +963,24 @@ export class Engine {
    * Otherwise just remove the `end` token. Mirrors stepEnd in
    * borueng/go/engine.go.
    */
+  /**
+   * Fire a sugar marker at the pointer: splice the marker's role-
+   * resolved expansion in place and re-step. The Angle marker lowers
+   * to its generic-def head form when a pending forward is waiting to
+   * capture a name (the binder's name slot), the use-site paren
+   * otherwise. Mirrors Go stepSugar / SugarExpansion.
+   */
+  private stepSugar(val: Value): void {
+    const info = asSugar(val)
+    if (info === undefined) {
+      this.pointer++
+      return
+    }
+    const headForm = info.kind === 'angle' && this.pendingExpectsWord()
+    const exp = sugarExpansion(this.registry, info, headForm)
+    this.stack.splice(this.pointer, 1, ...exp)
+  }
+
   private stepEnd(): void {
     const fwdIdx = this.findPendingMarker()
     if (fwdIdx < 0) {

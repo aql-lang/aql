@@ -26,7 +26,7 @@
 import type { FunctionEntry, Registry } from './registry.ts'
 import type { Signature } from './signature.ts'
 import { TNode, TScalar, TType, TWord } from './type.ts'
-import { newAtom, type Value, type WordInfo } from './value.ts'
+import { isSugar, newAtom, type Value, type WordInfo } from './value.ts'
 
 /**
  * isTypeArg reports whether v may fill a typeArgs slot: a bare type
@@ -262,11 +262,13 @@ export function sigTypeMatches(v: Value, expected: import('./type.ts').BoruType)
 }
 
 function isStructuralBoundary(v: Value): boolean {
-  // Internal control values (forward markers, marks, moves) all
-  // share the Word lattice (Word/__FW, Word/__MK, Word/__MV) but are
-  // not data — they must not be picked up as args by either phase
-  // of the matcher.
-  if (v.isForward() || v.isMark() || v.isMove()) return true
+  // Internal control values (forward markers, marks, moves, sugar
+  // markers) all share the Word lattice (Word/__FW, Word/__MK,
+  // Word/__MV, Word/__SG) but are not data — they must not be picked
+  // up as args by either phase of the matcher. A sugar marker fires
+  // at the pointer (stepSugar) and its expansion is what dispatch
+  // sees; collecting the raw marker as data would skip the lowering.
+  if (v.isForward() || v.isMark() || v.isMove() || isSugar(v)) return true
   if (!v.vType.matches(TWord)) return false
   const name = (v.data as { name?: string } | null)?.name
   return name === '(' || name === ')' || name === 'end'

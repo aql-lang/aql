@@ -21,9 +21,9 @@
     "crossdump": "node --experimental-strip-types --no-warnings src/crossdump.ts"
   },
   "dependencies": {
-    "@tabnas/jsonic": "^0.2.0",
-    "@tabnas/json": "^0.2.0",
-    "@tabnas/parser": "^0.2.0"
+    "@tabnas/jsonic": "^0.4.1",
+    "@tabnas/json": "^0.4.1",
+    "@tabnas/parser": "^0.4.1"
   },
   "devDependencies": {
     "typescript": "^6.0.3",

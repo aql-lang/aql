@@ -29,14 +29,22 @@ import {
   TMove,
   TNone,
   TParenExpr,
+  TCloseParen,
+  TDispatchMod,
+  TEnd,
+  TOpenParen,
+  TReach,
+  TSplice,
   TString,
   TStringEmpty,
   TStringProper,
+  TSugar,
   TType,
   TWord,
   TXml,
   TXmlInterp,
 } from './type.ts'
+import { formatFloat } from './canon.ts'
 
 /** A reified word reference — produced by NewWord, dispatched by the engine. */
 export interface WordInfo {
@@ -331,30 +339,58 @@ export class Value {
     return this.data as MoveInfo
   }
 
-  /** Stringify in a parser-style debug form: words as word(name), strings quoted, etc. */
+  /**
+   * Stringify in the kernel's debug form — the SAME renders as Go's
+   * Value.String (the stream-parity oracle compares these): words as
+   * word(name), strings single-quoted, atoms bare, markers by their
+   * structural spelling, paren-exprs as paren([...]).
+   */
   toString(): string {
     if (this.isNone()) return 'none'
     if (this.data === null) {
       if (this.vType.equal(TNone)) return 'none'
       return this.vType.toString()
     }
+    if (this.vType.equal(TSugar)) {
+      return renderSugar(this.data as SugarInfo)
+    }
+    // Word-branch internal markers render by their structural spelling —
+    // BEFORE the generic word arm, which would render `word(undefined)`
+    // for payloads with no name. Mirrors the explicit arms in Go's
+    // kernelFormatDefault.
+    if (this.vType.equal(TOpenParen)) return '('
+    if (this.vType.equal(TCloseParen)) return ')'
+    if (this.vType.equal(TEnd)) return 'end'
+    if (this.vType.equal(TParenExpr) && Array.isArray(this.data)) {
+      return `paren([${(this.data as Value[]).map((v) => v.toString()).join(' ')}])`
+    }
+    if (this.vType.equal(TForward)) {
+      const f = this.data as ForwardMarker
+      return `forward(${f.funcName},${f.collected.length}/${f.expectedForward})`
+    }
+    if (this.vType.equal(TMark)) {
+      return `mark(${(this.data as MarkInfo).id})`
+    }
+    if (this.vType.equal(TMove)) {
+      return `move(${(this.data as MoveInfo).to},)`
+    }
     if (this.vType.matches(TWord)) {
       return `word(${(this.data as WordInfo).name})`
     }
     if (this.vType.matches(TString)) {
-      return JSON.stringify(this.data)
+      return `'${this.data}'`
     }
     if (this.vType.matches(TInteger)) {
       return String(this.data)
     }
     if (this.vType.matches(TFloat)) {
-      return String(this.data)
+      return formatFloat(this.data as number)
     }
     if (this.vType.matches(TBoolean)) {
       return String(this.data)
     }
     if (this.vType.matches(TAtom)) {
-      return `atom(${this.data})`
+      return String(this.data)
     }
     if (this.vType.matches(TList) && Array.isArray(this.data)) {
       const elems = (this.data as Value[]).map((v) => v.toString())
@@ -762,4 +798,165 @@ export function newMark(id: string, body: Value[]): Value {
 
 export function newMove(to: string): Value {
   return new Value(TMove, { to } satisfies MoveInfo)
+}
+
+/**
+ * Reach — the `.` / `!.` access chain the parser folds into one value
+ * (`m.a.b`); the engine lowers it to a get/getr token chain. Mirrors
+ * Go ReachInfo / ReachSeg (eng/go/payload.go).
+ */
+export interface ReachSeg {
+  getr: boolean
+  computed: boolean
+  keyLit?: Value
+  keyExpr?: Value[]
+}
+
+export interface ReachInfo {
+  receiver: Value[]
+  segments: ReachSeg[]
+  /** Evaluate-by-default (like list eval); quote/codequote suppress. */
+  eval: boolean
+}
+
+export function newReach(info: ReachInfo): Value {
+  return new Value(TReach, info)
+}
+
+export function isReach(v: Value): boolean {
+  return v.vType.equal(TReach)
+}
+
+export function asReach(v: Value): ReachInfo | undefined {
+  if (!isReach(v) || v.data === null || typeof v.data !== 'object') return undefined
+  return v.data as ReachInfo
+}
+
+/**
+ * Splice marker (`Word/__SP`): fires when stepped at the pointer,
+ * replaced unevaluated by its payload. Mirrors Go NewSplice.
+ */
+export function newSplice(payload: Value): Value {
+  return new Value(TSplice, { payload })
+}
+
+/**
+ * Dispatch-mod marker (`Word/__DM`): `/r` (leave the function as
+ * data) / `/q` (treat the result as data) group modifiers, emitted
+ * AFTER the group. Mirrors Go DispatchModInfo.
+ */
+export interface DispatchModInfo {
+  ref: boolean
+  quote: boolean
+}
+
+export function newDispatchMod(info: DispatchModInfo): Value {
+  return new Value(TDispatchMod, info)
+}
+
+/**
+ * Typed tape-structure markers: the parser emits these for `(`, `)`
+ * and `end` / `;` so the engine recognises them by lattice identity
+ * (mirrors Go NewOpenParen/NewCloseParen/NewEnd). Each carries its
+ * source spelling as a WordInfo payload; the dual predicates below
+ * accept BOTH the typed marker and the legacy fixture spelling
+ * (a plain Word named '(' / ')' / 'end') so the engine handles either
+ * stream during the tokenizer→parser transition.
+ */
+export function newOpenParen(): Value {
+  return new Value(TOpenParen, { name: '(' } satisfies WordInfo)
+}
+
+export function newCloseParen(): Value {
+  return new Value(TCloseParen, { name: ')' } satisfies WordInfo)
+}
+
+export function newEnd(): Value {
+  return new Value(TEnd, { name: 'end' } satisfies WordInfo)
+}
+
+function wordNamed(v: Value, name: string): boolean {
+  return v.vType.equal(TWord) && (v.data as WordInfo | null)?.name === name
+}
+
+export function isOpenParen(v: Value): boolean {
+  return v.vType.equal(TOpenParen) || wordNamed(v, '(')
+}
+
+export function isCloseParen(v: Value): boolean {
+  return v.vType.equal(TCloseParen) || wordNamed(v, ')')
+}
+
+export function isEnd(v: Value): boolean {
+  return v.vType.equal(TEnd) || wordNamed(v, 'end')
+}
+
+/**
+ * Sugar markers — the parser-side half of ADR-012 rule 3 (2026-08-04
+ * amendment): the parser emits STRUCTURE, never names. Each piece of
+ * surface sugar that historically desugared to word tokens inside the
+ * parser (`/u /s /f /N`, `X/t`, `+kind<…>` minilang literals, `=>`,
+ * `Name<Args>`) parses to ONE kernel marker value (`Word/__SG`,
+ * SugarInfo payload). When the marker is stepped, the engine lowers it
+ * to word dispatches, resolving each word through the sugar-role table
+ * the language layer binds at registration (Registry.bindSugarWord). A
+ * registry with no binding for a stepped role fails loudly
+ * (`sugar_unbound`). Mirrors eng/go/sugar.go.
+ */
+export type SugarKind =
+  | 'usurp' // `/u` — take over the preceding group's dispatch
+  | 'stack-args' // `/s` — force stack collection
+  | 'forward-args' // `/f` — force forward collection
+  | 'force-arity' // `/N` — filter signatures by arity N
+  | 'mini' // `+kind<src>` minilang literal
+  | 'lambda' // `=>` — the anonymous-fn constructor
+  | 'angle' // `Name<Args>` — generic head or use-site
+  | 'type-bound' // `X/t` — bounded-Type sugar
+  | 'gen-head' // binding-only: the generic-def head word
+  | 'gen-apply' // binding-only: the generic-apply word
+  | 'gen-default' // `=` in a gen-param entry — the default-value word
+
+/** The Word/__SG marker payload. One shape covers every kind. */
+export interface SugarInfo {
+  kind: SugarKind
+  /** SugarForceArity: the arity. */
+  n?: bigint
+  /** mini: the minilang kind; angle: the receiver name. */
+  name?: string
+  /** mini: the raw literal source. */
+  src?: string
+  /** angle: the converted gen-params list (head form). */
+  head?: Value
+  /** angle: why the head form is unavailable (surfaced only if selected). */
+  headErr?: string
+  /** angle: the converted use-site type args; type-bound: the bound tokens. */
+  items?: Value[]
+}
+
+export function newSugar(info: SugarInfo): Value {
+  return new Value(TSugar, info)
+}
+
+export function isSugar(v: Value): boolean {
+  return v.vType.equal(TSugar)
+}
+
+export function asSugar(v: Value): SugarInfo | undefined {
+  if (!isSugar(v) || v.data === null || typeof v.data !== 'object') return undefined
+  return v.data as SugarInfo
+}
+
+/** Render a marker exactly as the Go kernel's String arm does. */
+export function renderSugar(info: SugarInfo): string {
+  switch (info.kind) {
+    case 'force-arity':
+      return `sugar(${info.kind} ${info.n})`
+    case 'mini':
+      return `sugar(${info.kind} ${info.name} '${info.src}')`
+    case 'angle':
+      return `sugar(${info.kind} ${info.name} [${(info.items ?? []).map(String).join(' ')}])`
+    case 'type-bound':
+      return `sugar(${info.kind} [${(info.items ?? []).map(String).join(' ')}])`
+  }
+  return `sugar(${info.kind})`
 }
