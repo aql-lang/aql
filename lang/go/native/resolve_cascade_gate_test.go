@@ -54,4 +54,9 @@ func TestGetResourceReturnsDeclineArms(t *testing.T) {
 	if len(out) != 1 || !out[0].Dynamic {
 		t.Fatalf("a Function-typed field must decline to dynamic, got %v", out)
 	}
+	// Absent field: reads as None (the schema is closed).
+	out = getResourceReturns([]Value{NewString("nope"), inst}, r)
+	if len(out) != 1 || !out[0].Carrier || !out[0].Parent.Equal(TNone) {
+		t.Fatalf("an absent field must read as a None carrier, got %v", out)
+	}
 }
