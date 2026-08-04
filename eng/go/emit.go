@@ -7007,6 +7007,28 @@ func isInertConstMember(v Value) bool {
 			}
 			return true
 		}
+		// A sugar marker (`Box<Integer>`, `=>`) riding inside a
+		// never-evaluated compound — what a macro capturing an angle
+		// operand re-splices as data (`macroexpand (m Box<Integer>)`).
+		// Pure descriptor payload (SugarInfo) over the canonical kernel
+		// TSugar Parent, so it bakes by value exactly like a Word member:
+		// the VM pushes the compound verbatim, and the engine lowers the
+		// marker only if the data is later evaluated — identically to
+		// the interpreter. The value streams it carries must themselves
+		// be inert members; the standalone isInertConst switch still
+		// rejects a bare marker, so a top-level marker never bakes as
+		// code.
+		if sinfo, ok := AsSugar(v); ok && IsSugar(v) {
+			if sinfo.Head.Parent != nil && !isInertConstMember(sinfo.Head) {
+				return false
+			}
+			for _, it := range sinfo.Items {
+				if !isInertConstMember(it) {
+					return false
+				}
+			}
+			return true
+		}
 	}
 	return isInertConst(v)
 }

@@ -212,4 +212,5 @@ func bindSugarWords(r *Registry) {
 	r.BindSugarWord(SugarLambda, "afn")
 	r.BindSugarWord(SugarGenHead, "gen")
 	r.BindSugarWord(SugarGenApply, "of")
+	r.BindSugarWord(SugarGenDefault, "default")
 }

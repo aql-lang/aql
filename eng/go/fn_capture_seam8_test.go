@@ -37,7 +37,7 @@ func TestW8WalkXmlTmplExprs(t *testing.T) {
 		},
 	}
 	seen := w8collectWords(func(cb func(WordInfo, Value)) {
-		walkXmlTmplExprs(tmpl, cb)
+		walkXmlTmplExprs(tmpl, cb, nil)
 	})
 	for _, w := range []string{"attrw", "exprw", "childw"} {
 		if !seen[w] {

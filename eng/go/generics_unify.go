@@ -75,10 +75,22 @@ func ResolveChildTypeExpr(r *Registry, v Value) (Value, error) {
 		return v, nil
 	}
 	ci, err := AsChildType(v)
-	if err != nil || !IsParenExpr(ci.Child) {
+	if err != nil { //covergate:allow IsTypedList/IsTypedMap above both require Data.(ChildTypeInfo), so AsChildType cannot fail here
 		return v, nil
 	}
-	toks, terr := AsParenExpr(ci.Child)
+	// An angle/type-bound child (`[:Box<Integer>]`) arrives as a sugar
+	// marker; lower it to its paren form so the evaluation below sees
+	// the spelt-out `[:(Box of [Integer])]`.
+	childExpr := ci.Child
+	if sinfo, sok := AsSugar(childExpr); sok {
+		if exp, serr := SugarExpansion(r, sinfo, childExpr, false); serr == nil && len(exp) == 1 {
+			childExpr = exp[0]
+		}
+	}
+	if !IsParenExpr(childExpr) {
+		return v, nil
+	}
+	toks, terr := AsParenExpr(childExpr)
 	if terr != nil {
 		return v, nil
 	}

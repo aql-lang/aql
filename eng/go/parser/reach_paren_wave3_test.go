@@ -283,8 +283,8 @@ func TestArrowWave3Folds(t *testing.T) {
 	if !eng.IsParenExpr(vals[1]) {
 		t.Fatalf("1 x => [x]: expected a folded ParenExpr, got %v", vals[1])
 	}
-	if s := vals[1].String(); !strings.Contains(s, "afn") {
-		t.Errorf("1 x => [x]: fold %q lacks afn", s)
+	if s := vals[1].String(); !strings.Contains(s, "sugar(lambda)") {
+		t.Errorf("1 x => [x]: fold %q lacks the lambda marker", s)
 	}
 
 	// Top-level bare-pair fold (elem-level): the documented def-lambda form.
@@ -295,8 +295,8 @@ func TestArrowWave3Folds(t *testing.T) {
 	if !eng.IsParenExpr(vals[2]) {
 		t.Fatalf("def-lambda: expected the pair to fold into a ParenExpr, got %v", vals[2])
 	}
-	if s := vals[2].String(); !strings.Contains(s, "x:word(Integer)") || !strings.Contains(s, "afn") {
-		t.Errorf("def-lambda: fold %q lacks the sig/afn shape", s)
+	if s := vals[2].String(); !strings.Contains(s, "x:word(Integer)") || !strings.Contains(s, "sugar(lambda)") {
+		t.Errorf("def-lambda: fold %q lacks the sig/lambda shape", s)
 	}
 
 	// Pair fold inside an explicit list, and paren-context pair dive.
@@ -305,8 +305,8 @@ func TestArrowWave3Folds(t *testing.T) {
 		if len(vals) != 1 {
 			t.Fatalf("%q: got %d values, want 1: %v", src, len(vals), vals)
 		}
-		if s := vals[0].String(); !strings.Contains(s, "afn") {
-			t.Errorf("%q: %q lacks the afn fold", src, s)
+		if s := vals[0].String(); !strings.Contains(s, "sugar(lambda)") {
+			t.Errorf("%q: %q lacks the lambda-marker fold", src, s)
 		}
 	}
 
@@ -320,15 +320,33 @@ func TestArrowWave3Folds(t *testing.T) {
 	}
 }
 
+// A bare `=>` in DATA context (a map value) converts to the same
+// lambda marker word context gets — the arrowTag arm of
+// convertDataValueInner.
+func TestArrowWave3DataContext(t *testing.T) {
+	vals := mustParseWave3(t, "{a: =>}")
+	if len(vals) != 1 {
+		t.Fatalf("{a: =>}: got %d values, want 1: %v", len(vals), vals)
+	}
+	m, merr := eng.AsMap(vals[0])
+	if merr != nil || m == nil {
+		t.Fatalf("{a: =>}: want a map, got %v (%v)", vals[0], merr)
+	}
+	av, _ := m.Get("a")
+	if info, ok := eng.AsSugar(av); !ok || info.Kind != eng.SugarLambda {
+		t.Errorf("{a: =>}: value %v, want the lambda marker", av)
+	}
+}
+
 func TestArrowWave3Degenerate(t *testing.T) {
 	// A trailing arrow with no body parses without panicking: the sig and
-	// the afn word remain as flat tokens (nothing is silently invented).
+	// the lambda marker remain as flat tokens (nothing is silently invented).
 	vals := mustParseWave3(t, "x =>")
 	if len(vals) != 2 {
 		t.Fatalf("x =>: got %d values, want 2: %v", len(vals), vals)
 	}
-	if w := wordNameWave3(t, vals[1], "x =>"); w.Name != "afn" {
-		t.Errorf("x =>: second value %q, want afn", w.Name)
+	if info, ok := eng.AsSugar(vals[1]); !ok || info.Kind != eng.SugarLambda {
+		t.Errorf("x =>: second value %v, want the lambda marker", vals[1])
 	}
 	// A pair arrow with no body inside a list also parses (empty fold),
 	// as does a plain-value arrow with no body.

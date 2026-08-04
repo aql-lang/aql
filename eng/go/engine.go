@@ -2008,15 +2008,25 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 	for pos < maxBarrier && scanIdx < e.tape.Len() {
 		tok := e.tape.At(scanIdx)
 
-		// Boundary conditions: stop scanning.
-		if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
-			tok.Parent.ConformsTo(TInternal) || tok.Parent.ConformsTo(TReturnCheck) {
+		// Boundary tokens (engine structurals, end / `)`): stop scanning.
+		if scanBoundaryToken(tok) {
 			break
 		}
 
-		// Boundary tokens: end / ) stop the scan.
-		if IsEnd(tok) || IsCloseParen(tok) {
-			break
+		// A sugar marker expands HERE — once per dispatch, before
+		// matchSignature's per-candidate scans (which must never mutate
+		// the tape per sig). A marker the expansion helper refuses is a
+		// boundary; a selected-head expansion failure is the user's
+		// syntax error, surfaced now.
+		if IsSugar(tok) {
+			expanded, serr := e.expandScanSugar(tok, pos, scanIdx, viable)
+			if serr != nil {
+				return serr
+			}
+			if !expanded {
+				break
+			}
+			continue
 		}
 
 		// Keyword slots are decided by the raw token at their position —
@@ -6606,6 +6616,66 @@ func viableConsumesAt(viable []viableSig, pos int) bool {
 	return false
 }
 
+// scanBoundaryToken reports whether a token unconditionally stops the
+// forward pre-scan: engine-internal structurals (parked forwards,
+// marks, moves, internals, return checks) and the statement bounds
+// (end / close paren). Free-function body of resolveForwardArgs' two
+// boundary tests, extracted for that function's complexity cap.
+func scanBoundaryToken(tok Value) bool {
+	if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
+		tok.Parent.ConformsTo(TInternal) || tok.Parent.ConformsTo(TReturnCheck) {
+		return true
+	}
+	return IsEnd(tok) || IsCloseParen(tok)
+}
+
+// expandScanSugar is resolveForwardArgs' sugar-marker arm (extracted for
+// that function's complexity cap): it lowers the marker at scanIdx in
+// place and reports whether the scan should reprocess the slot (false =
+// treat the marker as a boundary). The Angle marker's head/use-site
+// choice is made from the viable overload set: a /q (QuoteArgs) slot at
+// this position wants the generic-def HEAD (`Name gen [params]` — every
+// binder overload shares the /q name shape); anything else gets the
+// use-site apply. The expansion is gated on viableConsumesAt — a TAPE
+// MUTATION that outlives this dispatch, so a marker in the window of a
+// pruned overload must survive intact for the NEXT word's dispatch to
+// expand with ITS viable set (`import "m" def Box<T> …` scans past `def`
+// — a /q slot keeps it walkable — and must not commit the def-head
+// marker to import's use-site form).
+func (e *Engine) expandScanSugar(tok Value, pos, scanIdx int, viable []viableSig) (bool, error) {
+	if !viableConsumesAt(viable, pos) {
+		return false, nil
+	}
+	sinfo, sok := AsSugar(tok)
+	if !sok { //covergate:allow IsSugar guarantees a SugarInfo payload
+		return false, nil
+	}
+	headForm := false
+	if sinfo.Kind == SugarAngle {
+		for _, vs := range viable {
+			if vs.sig.QuoteArgs != nil && vs.sig.QuoteArgs[pos] {
+				headForm = true
+				break
+			}
+		}
+	}
+	exp, serr := SugarExpansion(e.registry, sinfo, tok, headForm)
+	if serr != nil {
+		if headForm {
+			// The viable set SELECTED the generic-def head — a /q binder
+			// slot wants this marker — so a failing head expansion is
+			// the USER'S error (`def Box<t>`: params must be
+			// capitalised; a dangling `extends`; an unbound gen-head
+			// role), surfaced now. A use-site failure stays a boundary:
+			// the marker survives for step time to surface it.
+			return false, serr
+		}
+		return false, nil
+	}
+	e.tape.Splice(scanIdx, 1, exp...)
+	return true, nil
+}
+
 // reachCallHeadBarrier is resolveForwardArgs' NUR038 stop test: a tagged
 // reach-collapsed named fn at scanIdx that WOULD CLAIM its next token is
 // a CALL head — the fn-word barrier's value twin — and stops the forward
@@ -8555,12 +8625,18 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				// a boundary; it errors at step time.
 				if IsSugar(tok) {
 					sinfo, sok := AsSugar(tok)
-					if !sok {
-						break //covergate:allow IsSugar guarantees a SugarInfo payload
+					if !sok { //covergate:allow IsSugar guarantees a SugarInfo payload
+						break
 					}
-					headForm := sinfo.Kind == SugarAngle &&
-						sig.QuoteArgs != nil && sig.QuoteArgs[fwd]
-					exp, serr := SugarExpansion(e.registry, sinfo, tok, headForm)
+					// The Angle marker's head/use-site choice belongs at
+					// ARRIVAL (stepSugar's pending-forward probe): this
+					// scan runs once per CANDIDATE sig, so committing a
+					// choice here would mutate the tape for the wrong
+					// overload. It is a plain boundary.
+					if sinfo.Kind == SugarAngle {
+						break
+					}
+					exp, serr := SugarExpansion(e.registry, sinfo, tok, false)
 					if serr != nil {
 						break
 					}

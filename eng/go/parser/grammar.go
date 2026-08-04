@@ -421,10 +421,12 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 			{S: [][]jsonic.Tin{{t.PI}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
 				r.Node = jsonic.Text{Str: "|", Quote: ""}
 			}},
-			// Arrow: "=>" token. Lambda sugar — aliases the word `afn` so
-			// `a => b` lexes as the same value sequence as `a afn b`.
+			// Arrow: "=>" token. Lambda sugar — a structural tag the
+			// converter turns into the lambda sugar marker (ADR-012
+			// rule 3 amendment); the engine lowers it to the role-bound
+			// constructor word.
 			{S: [][]jsonic.Tin{{t.AR}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				r.Node = jsonic.Text{Str: "afn", Quote: ""}
+				r.Node = arrowTag{}
 			}},
 			// Dot: "." token. Becomes get in convertTopLevelItems.
 			{S: [][]jsonic.Tin{{t.DT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
@@ -621,7 +623,7 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 				if s, ok := recv.(sited); ok {
 					recv = s.Node
 				}
-				r.Parent.Node = parenGroup{recv, jsonic.Text{Str: "afn", Quote: ""}}
+				r.Parent.Node = parenGroup{recv, arrowTag{}}
 			},
 		})
 		setBC(rs, []jsonic.StateAction{
@@ -732,7 +734,7 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 				if jsonic.IsUndefined(body) {
 					return
 				}
-				group := parenGroup{sig, jsonic.Text{Str: "afn", Quote: ""}, body}
+				group := parenGroup{sig, arrowTag{}, body}
 				switch n := r.Parent.Node.(type) {
 				case jsonic.ListRef:
 					n.Val = append(n.Val, group)
@@ -1571,3 +1573,8 @@ func setupNumberSub(j *jsonic.Jsonic) {
 		}
 	}, nil)
 }
+
+// arrowTag is the structural node the `=>` grammar rules inject in
+// place of a lambda-constructor word name; the converter maps it to
+// the lambda sugar marker (ADR-012 rule 3, 2026-08-04 amendment).
+type arrowTag struct{}

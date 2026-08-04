@@ -139,28 +139,33 @@ func TestDataContainerWave3Errors(t *testing.T) {
 // --- generics angle sugar ---
 
 func TestAngleWave3DefHead(t *testing.T) {
-	// `def Name<T>` desugars to `Name gen [params]`.
+	// `def Name<T>` parses to `def <angle marker> …` — the parser does
+	// NOT recognise `def` (ADR-012 rule 3 amendment); the engine picks
+	// the head form at the binder's /q slot from the precomputed Head.
 	vals := mustParseWave3(t, "def Box<T> 1")
-	if len(vals) != 5 {
-		t.Fatalf("def Box<T> 1: got %d values, want 5: %v", len(vals), vals)
+	if len(vals) != 3 {
+		t.Fatalf("def Box<T> 1: got %d values, want 3: %v", len(vals), vals)
 	}
-	for i, want := range []string{"def", "Box", "gen"} {
-		if w := wordNameWave3(t, vals[i], "def head"); w.Name != want {
-			t.Errorf("def Box<T> 1: value %d word %q, want %q", i, w.Name, want)
-		}
+	if w := wordNameWave3(t, vals[0], "def head"); w.Name != "def" {
+		t.Errorf("def Box<T> 1: value 0 word %q, want def", w.Name)
 	}
-	params, err := eng.AsList(vals[3])
+	info, ok := eng.AsSugar(vals[1])
+	if !ok || info.Kind != eng.SugarAngle || info.Name != "Box" {
+		t.Fatalf("def Box<T> 1: expected an angle marker for Box, got %v", vals[1])
+	}
+	params, err := eng.AsList(info.Head)
 	if err != nil || params.Len() != 1 {
-		t.Fatalf("def Box<T> 1: params %v (err %v), want a 1-element list", vals[3], err)
+		t.Fatalf("def Box<T> 1: head params %v (err %v), want a 1-element list", info.Head, err)
 	}
 	if w := wordNameWave3(t, params.Get(0), "param"); w.Name != "T" {
 		t.Errorf("def Box<T> 1: param %q, want T", w.Name)
 	}
 	// Multiple plain params.
 	vals = mustParseWave3(t, "def Box<T Q> 1")
-	params, err = eng.AsList(vals[3])
+	info, _ = eng.AsSugar(vals[1])
+	params, err = eng.AsList(info.Head)
 	if err != nil || params.Len() != 2 {
-		t.Fatalf("def Box<T Q> 1: params %v (err %v), want 2 entries", vals[3], err)
+		t.Fatalf("def Box<T Q> 1: head params %v (err %v), want 2 entries", info.Head, err)
 	}
 }
 
@@ -168,15 +173,19 @@ func TestAngleWave3DefHeadConstraints(t *testing.T) {
 	// `extends` and `=` entries become (T extends C) / (T default D) spans.
 	for src, kw := range map[string]string{
 		"def Box<T extends Integer> 1": "extends",
-		"def Box<T = Integer> 1":       "default",
+		"def Box<T = Integer> 1":       "sugar(gen-default)",
 	} {
 		vals := mustParseWave3(t, src)
-		if len(vals) != 5 {
-			t.Fatalf("%q: got %d values, want 5: %v", src, len(vals), vals)
+		if len(vals) != 3 {
+			t.Fatalf("%q: got %d values, want 3: %v", src, len(vals), vals)
 		}
-		params, err := eng.AsList(vals[3])
+		info, ok := eng.AsSugar(vals[1])
+		if !ok || info.Kind != eng.SugarAngle {
+			t.Fatalf("%q: expected an angle marker, got %v", src, vals[1])
+		}
+		params, err := eng.AsList(info.Head)
 		if err != nil || params.Len() != 1 {
-			t.Fatalf("%q: params %v (err %v), want 1 entry", src, vals[3], err)
+			t.Fatalf("%q: head params %v (err %v), want 1 entry", src, info.Head, err)
 		}
 		entry := params.Get(0)
 		if !eng.IsParenExpr(entry) {
@@ -189,9 +198,20 @@ func TestAngleWave3DefHeadConstraints(t *testing.T) {
 }
 
 func TestAngleWave3DefHeadErrors(t *testing.T) {
-	wantParseErrWave3(t, "def Box<t> 1", "capitalised")
-	wantParseErrWave3(t, "def Box<T extends> 1", "needs a value")
-	// A malformed constraint operand surfaces its own error.
+	// A head-only defect (a lowercase param, a dangling operator) no
+	// longer fails the PARSE — the marker parses with HeadErr, and the
+	// error surfaces if (and only if) a binder selects the head form.
+	for src, sub := range map[string]string{
+		"def Box<t> 1":         "capitalised",
+		"def Box<T extends> 1": "needs a value",
+	} {
+		vals := mustParseWave3(t, src)
+		info, ok := eng.AsSugar(vals[1])
+		if !ok || info.HeadErr == "" || !strings.Contains(info.HeadErr, sub) {
+			t.Errorf("%q: expected HeadErr containing %q, got %+v", src, sub, info)
+		}
+	}
+	// A malformed constraint OPERAND fails both forms — still a parse error.
 	wantParseErrWave3(t, "def Box<T extends 1__0> 1", "misplaced `_`")
 }
 
@@ -203,14 +223,14 @@ func TestAngleWave3UseSites(t *testing.T) {
 		if len(vals) != 1 {
 			t.Fatalf("%q: got %d values, want 1", src, len(vals))
 		}
-		if s := vals[0].String(); !strings.Contains(s, "Box") || !strings.Contains(s, "of") {
-			t.Errorf("%q: rendering %q lacks the Box-of desugar", src, s)
+		if s := vals[0].String(); !strings.Contains(s, "sugar(angle Box") {
+			t.Errorf("%q: rendering %q lacks the angle marker", src, s)
 		}
 	}
 	// Empty group.
 	vals := mustParseWave3(t, "Box<>")
-	if len(vals) != 1 || !eng.IsParenExpr(vals[0]) {
-		t.Fatalf("Box<>: expected one ParenExpr, got %v", vals)
+	if len(vals) != 1 || !eng.IsSugar(vals[0]) {
+		t.Fatalf("Box<>: expected one angle marker, got %v", vals)
 	}
 	// An error inside the argument list surfaces.
 	wantParseErrWave3(t, "Box<1__0>", "misplaced `_`")

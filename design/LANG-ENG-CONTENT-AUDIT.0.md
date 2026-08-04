@@ -477,6 +477,53 @@ user literally wrote that name. Enforced by a regression gate over
   the angle family (deleting the parser's only word-recognition
   site).
 
+### Implementation notes (landed, 2026-08-04)
+
+Discoveries made landing the design, where the mechanism refined:
+
+- **The marker is `Word/__SG`** (`eng.TSugar`, FixedID 80,
+  `SugarInfo` payload, built via `eng.NewSugar`) — one type for
+  every sugar, discriminated by `SugarInfo.Kind`. Roles live on the
+  Registry (`BindSugarWord`/`SugarWord`); lowering is
+  `SugarExpansion` (eng/go/sugar.go); the unbound-role error is
+  `sugar_unbound`.
+- **The role set grew one entry: GenDefault.** `=` inside a
+  gen-param entry (`Box<T = Integer>`) cannot ride as a word — `=`
+  is not a legal word name (`invalid_word_name`) — so it is its own
+  marker kind, bound to `default` by the language layer.
+- **Angle head vs use-site resolves at the pre-scan, not only at
+  arrival.** `resolveForwardArgs` expands markers once per dispatch,
+  before `matchSignature`'s per-candidate scans; the head form is
+  chosen when a still-viable overload has a QuoteArgs (name-capture)
+  slot at the marker's position. The expansion is gated on
+  `viableConsumes(pos)` — a marker in the window of a pruned
+  overload must survive intact for the NEXT dispatch to expand with
+  its own viable set (`import "m" def Box<T> …`: import's /q slots
+  keep its scan walking past `def`, and committing the def-head
+  marker to import's use-site form broke check mode).
+  `matchSignature`'s own scan treats an Angle marker as a plain
+  boundary (per-sig tape mutation is forbidden); `stepSugar`'s
+  pending-forward /q probe remains the arrival-time chooser.
+- **Check-mode carrier strip exempts markers** (the Splice/Reach
+  exemption list in carrier.go) — a stripped marker loses its
+  payload and can never lower.
+- **Frame-state and capture analysis judge markers by their bound
+  role word.** `bodyNeedsFrameState`/`bodyReferencesArgs` resolve
+  `SugarWord(kind)` against the same word sets a literal body word
+  hits (a `=>` marker IS an afn construction), and the body walker
+  descends into a marker's Head/Items so angle-arg words stay
+  visible to closure capture.
+- **Late consumers lower locally.** Sites that receive a marker as
+  DATA rather than stepping it — sig annotations
+  (`fn_params.go`), typed-def annotations (`native_definition.go`),
+  typed-list/map children (`ResolveChildTypeExpr`) — call
+  `SugarExpansion` themselves (use-site form) before evaluating.
+- **The gate landed** as
+  `eng/go/parser/nameless_gate_test.go::TestParserNeverInventsNames`:
+  no literal-string `NewWord`/`NewAtom`, and grammar text
+  substitutions restricted to the structural spellings
+  (`)`, `end`, `?`, `!`, `|`, `.`).
+
 ## 8. Open questions
 
 1. Component name: `types/go` vs `scalar/go` vs folding into a future

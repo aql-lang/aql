@@ -35,17 +35,19 @@ const (
 	SugarTypeBound   SugarKind = "type-bound"   // `X/t` — bounded-Type sugar
 	SugarGenHead     SugarKind = "gen-head"     // binding-only: the generic-def head word
 	SugarGenApply    SugarKind = "gen-apply"    // binding-only: the generic-apply word
+	SugarGenDefault  SugarKind = "gen-default"  // `=` in a gen-param entry — the default-value word
 )
 
 // SugarInfo is the Word/__SG marker payload. One struct covers every
 // kind; unused fields stay zero.
 type SugarInfo struct {
-	Kind  SugarKind
-	N     int64   // SugarForceArity: the arity
-	Name  string  // SugarMini: the minilang kind; SugarAngle: the receiver name
-	Src   string  // SugarMini: the raw literal source
-	Head  Value   // SugarAngle: the converted gen-params list (head form)
-	Items []Value // SugarAngle: the converted use-site type args; SugarTypeBound: the bound tokens
+	Kind    SugarKind
+	N       int64   // SugarForceArity: the arity
+	Name    string  // SugarMini: the minilang kind; SugarAngle: the receiver name
+	Src     string  // SugarMini: the raw literal source
+	Head    Value   // SugarAngle: the converted gen-params list (head form)
+	HeadErr string  // SugarAngle: why the head form is unavailable (surfaced only if selected)
+	Items   []Value // SugarAngle: the converted use-site type args; SugarTypeBound: the bound tokens
 }
 
 // NewSugar builds a Word/__SG sugar marker.
@@ -107,7 +109,7 @@ func sugarBoundWord(r *Registry, kind SugarKind, src Value) (Value, error) {
 // (`(Name of [args])`).
 func SugarExpansion(r *Registry, info SugarInfo, src Value, headForm bool) ([]Value, error) {
 	switch info.Kind {
-	case SugarUsurp, SugarStackArgs, SugarForwardArgs, SugarLambda:
+	case SugarUsurp, SugarStackArgs, SugarForwardArgs, SugarLambda, SugarGenDefault:
 		w, err := sugarBoundWord(r, info.Kind, src)
 		if err != nil {
 			return nil, err
@@ -135,6 +137,14 @@ func SugarExpansion(r *Registry, info SugarInfo, src Value, headForm bool) ([]Va
 	case SugarAngle:
 		recv := WithPos(NewWord(info.Name), src)
 		if headForm {
+			if info.HeadErr != "" {
+				source := ""
+				if r != nil {
+					source = r.Source
+				}
+				return nil, makeBoruErrorAt("syntax_error", info.HeadErr,
+					info.Name, source, "", src.Pos())
+			}
 			gen, err := sugarBoundWord(r, SugarGenHead, src)
 			if err != nil {
 				return nil, err

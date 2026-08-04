@@ -419,6 +419,7 @@ var (
 	NewSugar                  = eng.NewSugar
 	IsSugar                   = eng.IsSugar
 	AsSugar                   = eng.AsSugar
+	SugarExpansion            = eng.SugarExpansion
 	GenerateID                = eng.GenerateID
 	GenerateObjectTypeID      = eng.GenerateObjectTypeID
 	BeginIDMintScope          = eng.BeginIDMintScope
@@ -649,4 +650,5 @@ const (
 	SugarTypeBound   = eng.SugarTypeBound
 	SugarGenHead     = eng.SugarGenHead
 	SugarGenApply    = eng.SugarGenApply
+	SugarGenDefault  = eng.SugarGenDefault
 )

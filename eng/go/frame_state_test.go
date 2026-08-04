@@ -55,3 +55,81 @@ func TestBodyNeedsFrameState(t *testing.T) {
 		}
 	}
 }
+
+// TestBodyFrameStateSugarMarkers pins the marker arm of the frame-state
+// analyses: a sugar marker is judged by the word its role binds — a
+// `=>` marker IS an afn construction (frame state), a force-arity
+// marker is not, and an unbound role errors at step time before it
+// could construct anything (no frame state).
+func TestBodyFrameStateSugarMarkers(t *testing.T) {
+	r, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.BindSugarWord(SugarLambda, "afn")
+	r.BindSugarWord(SugarForceArity, "force-arity")
+	lambda := NewSugar(SugarInfo{Kind: SugarLambda})
+	arity := NewSugar(SugarInfo{Kind: SugarForceArity, N: 2})
+	unbound := NewSugar(SugarInfo{Kind: SugarUsurp}) // role not bound on r
+
+	cases := []struct {
+		name string
+		body []Value
+		want bool
+	}{
+		{"lambda-marker", []Value{lambda}, true},
+		// Second marker after needs=true: the sugar callback's short-circuit.
+		{"two-lambda-markers", []Value{lambda, lambda}, true},
+		// A marker nested in a code list is still seen.
+		{"nested-lambda", []Value{NewList([]Value{lambda})}, true},
+		// Role bound to a word outside frameStateWords: no frame state.
+		{"arity-marker", []Value{arity}, false},
+		// Unbound role: expansion errors before constructing anything.
+		{"unbound-role", []Value{unbound}, false},
+	}
+	for _, c := range cases {
+		if got := bodyNeedsFrameState(r, c.body); got != c.want {
+			t.Errorf("%s: bodyNeedsFrameState = %v, want %v", c.name, got, c.want)
+		}
+	}
+
+	// bodyReferencesArgs judges markers the same way: only a role bound
+	// to the word `args` counts (no real language does this — the
+	// binding decides, so the analysis stays name-blind).
+	argsR, err := NewRegistry()
+	if err != nil {
+		t.Fatal(err)
+	}
+	argsR.BindSugarWord(SugarLambda, "args")
+	if !bodyReferencesArgs(argsR, []Value{lambda}) {
+		t.Errorf("a marker whose role binds `args` must count as an args reference")
+	}
+	if bodyReferencesArgs(argsR, []Value{NewWord("args"), lambda}) != true {
+		t.Errorf("marker after refs=true must keep the result true")
+	}
+	if bodyReferencesArgs(r, []Value{lambda}) {
+		t.Errorf("a marker bound to a non-args word must not count as an args reference")
+	}
+}
+
+// TestWalkBodyWordsSugarDescent — the body walker descends into a
+// marker's Head and Items streams so angle-arg words stay visible to
+// closure capture, while the marker itself emits no word.
+func TestWalkBodyWordsSugarDescent(t *testing.T) {
+	marker := NewSugar(SugarInfo{
+		Kind:  SugarAngle,
+		Name:  "Box",
+		Head:  NewList([]Value{NewWord("headw")}),
+		Items: []Value{NewWord("itemw")},
+	})
+	seen := map[string]bool{}
+	WalkBodyWords([]Value{marker}, func(w WordInfo, _ Value) { seen[w.Name] = true })
+	for _, want := range []string{"headw", "itemw"} {
+		if !seen[want] {
+			t.Errorf("walker must descend into marker %s stream, saw %v", want, seen)
+		}
+	}
+	if seen[""] || seen["Box"] {
+		t.Errorf("the marker itself must not emit a word, saw %v", seen)
+	}
+}

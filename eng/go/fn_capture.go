@@ -47,7 +47,7 @@ func bodyNeedsFrameState(r *Registry, body []Value) bool {
 	seen := map[string]bool{} // guards mutually-recursive macros
 	var walk func([]Value)
 	walk = func(toks []Value) {
-		WalkBodyWords(toks, func(w WordInfo, _ Value) {
+		walkBodyTokens(toks, func(w WordInfo, _ Value) {
 			if needs {
 				return
 			}
@@ -68,6 +68,17 @@ func bodyNeedsFrameState(r *Registry, body []Value) bool {
 			}
 			seen[w.Name] = true
 			walk(spliceExpand(info.Data))
+		}, func(info SugarInfo, _ Value) {
+			// A sugar marker steps as its bound role word (a `=>` marker
+			// IS the afn construction) — judge it by the word the registry
+			// would lower it to. An unbound role errors before it could
+			// construct anything, so it needs no frame state.
+			if needs {
+				return
+			}
+			if name, bound := r.SugarWord(info.Kind); bound && frameStateWords[name] {
+				needs = true
+			}
 		})
 	}
 	walk(body)
@@ -94,7 +105,7 @@ func bodyReferencesArgs(r *Registry, body []Value) bool {
 	seen := map[string]bool{} // guards mutually-recursive macros
 	var walk func([]Value)
 	walk = func(toks []Value) {
-		WalkBodyWords(toks, func(w WordInfo, _ Value) {
+		walkBodyTokens(toks, func(w WordInfo, _ Value) {
 			if refs {
 				return
 			}
@@ -115,6 +126,16 @@ func bodyReferencesArgs(r *Registry, body []Value) bool {
 			}
 			seen[w.Name] = true
 			walk(spliceExpand(info.Data))
+		}, func(info SugarInfo, _ Value) {
+			// Same role-word judgement as bodyNeedsFrameState: a marker
+			// steps as its bound word, so it reads args iff that word is
+			// `args` (no current role is, but the binding decides).
+			if refs {
+				return
+			}
+			if name, bound := r.SugarWord(info.Kind); bound && name == "args" {
+				refs = true
+			}
 		})
 	}
 	walk(body)
@@ -133,12 +154,22 @@ func bodyReferencesArgs(r *Registry, body []Value) bool {
 // The walker is strictly read-only — it does not mutate body or
 // registry state.
 func WalkBodyWords(body []Value, callback func(WordInfo, Value)) {
+	walkBodyTokens(body, callback, nil)
+}
+
+// walkBodyTokens is WalkBodyWords plus an optional sugar-marker
+// callback: sugarCB (when non-nil) fires for every Word/__SG marker
+// the walk reaches, in addition to the word emissions. Frame-state
+// analysis uses it to see the constructions a marker will lower to
+// (a `=>` marker is an afn construction the word walk can no longer
+// observe).
+func walkBodyTokens(body []Value, callback func(WordInfo, Value), sugarCB func(SugarInfo, Value)) {
 	for _, v := range body {
-		walkBodyValue(v, callback)
+		walkBodyValue(v, callback, sugarCB)
 	}
 }
 
-func walkBodyValue(v Value, callback func(WordInfo, Value)) {
+func walkBodyValue(v Value, callback func(WordInfo, Value), sugarCB func(SugarInfo, Value)) {
 	// Quoted values are data — skip.
 	if v.Quoted {
 		return
@@ -147,6 +178,22 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 	if IsWord(v) {
 		w, _ := AsWord(v)
 		callback(w, v)
+		return
+	}
+	// Sugar marker: report it to the marker callback, then walk the
+	// value streams it carries (an Angle marker's gen-params head and
+	// use-site type args re-enter the body when the engine lowers the
+	// marker, so the words inside them are genuine body references).
+	if info, ok := AsSugar(v); ok && IsSugar(v) {
+		if sugarCB != nil {
+			sugarCB(info, v)
+		}
+		if info.Head.Parent != nil {
+			walkBodyValue(info.Head, callback, sugarCB)
+		}
+		for _, it := range info.Items {
+			walkBodyValue(it, callback, sugarCB)
+		}
 		return
 	}
 	// Nested FnDefInfo: opaque. Its captures were resolved at its
@@ -158,7 +205,7 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 	if v.Parent.Equal(TList) && v.Data != nil {
 		lst, _ := AsList(v)
 		for _, e := range lst.Slice() {
-			walkBodyValue(e, callback)
+			walkBodyValue(e, callback, sugarCB)
 		}
 		return
 	}
@@ -167,7 +214,7 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 	if IsParenExpr(v) {
 		toks, _ := AsParenExpr(v)
 		for _, t := range toks {
-			walkBodyValue(t, callback)
+			walkBodyValue(t, callback, sugarCB)
 		}
 		return
 	}
@@ -176,7 +223,7 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 		parts, _ := AsInterpString(v)
 		for _, p := range parts {
 			for _, t := range p.Expr {
-				walkBodyValue(t, callback)
+				walkBodyValue(t, callback, sugarCB)
 			}
 		}
 		return
@@ -186,7 +233,7 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 	// closure over `<p>${x}</p>` captures `x`.
 	if IsXmlInterp(v) {
 		tmpl, _ := AsXmlInterp(v)
-		walkXmlTmplExprs(tmpl, callback)
+		walkXmlTmplExprs(tmpl, callback, sugarCB)
 		return
 	}
 	// Map payload: walk each value (keys are strings, not Words).
@@ -197,7 +244,7 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 		}
 		for _, key := range m.Keys() {
 			mv, _ := m.Get(key)
-			walkBodyValue(mv, callback)
+			walkBodyValue(mv, callback, sugarCB)
 		}
 		return
 	}
@@ -211,11 +258,11 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 	if IsReach(v) {
 		if info, err := AsReach(v); err == nil {
 			for _, t := range info.Receiver {
-				walkBodyValue(t, callback)
+				walkBodyValue(t, callback, sugarCB)
 			}
 			for _, seg := range info.Segments {
 				for _, t := range seg.KeyExpr {
-					walkBodyValue(t, callback)
+					walkBodyValue(t, callback, sugarCB)
 				}
 			}
 		}
@@ -229,11 +276,11 @@ func walkBodyValue(v Value, callback func(WordInfo, Value)) {
 // interpolation skeleton — attribute values and child holes — recursing
 // into nested child templates, so closure-capture analysis sees the word
 // references inside a `<tag attr=${e}>${e2}</tag>` literal.
-func walkXmlTmplExprs(t XmlTmpl, callback func(WordInfo, Value)) {
+func walkXmlTmplExprs(t XmlTmpl, callback func(WordInfo, Value), sugarCB func(SugarInfo, Value)) {
 	for _, a := range t.Attr {
 		for _, p := range a.Parts {
 			for _, tok := range p.Expr {
-				walkBodyValue(tok, callback)
+				walkBodyValue(tok, callback, sugarCB)
 			}
 		}
 	}
@@ -241,11 +288,11 @@ func walkXmlTmplExprs(t XmlTmpl, callback func(WordInfo, Value)) {
 		switch c.Kind {
 		case XmlCrenExpr:
 			for _, tok := range c.Expr {
-				walkBodyValue(tok, callback)
+				walkBodyValue(tok, callback, sugarCB)
 			}
 		case XmlCrenChild:
 			if c.Child != nil {
-				walkXmlTmplExprs(*c.Child, callback)
+				walkXmlTmplExprs(*c.Child, callback, sugarCB)
 			}
 		}
 	}

@@ -26,10 +26,12 @@ type unclosedParen struct{ items []any }
 
 // angleGroup represents a generics angle-bracket sugar group
 // (design/GENERICS.10.md Phase 6): `Box<Integer>` folds the receiver
-// name and the collected items into one node. The conversion walks
-// desugar it to the canonical stream (D15): a def head emits
-// `Name gen [params]`, every other position the paren span
-// `( Name of [args] )` — so no angle marker ever reaches the engine.
+// name and the collected items into one node. The conversion emits ONE
+// structural sugar marker (ADR-012 amendment) carrying both
+// precomputed forms — the generic-def head params and the use-site
+// args — and the ENGINE picks which to lower at dispatch. The parser
+// recognises no binder word; the angle group converts identically in
+// every position.
 type angleGroup struct {
 	Name  string
 	Items []any
@@ -448,23 +450,6 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 			return nil, eng.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 		}
 
-		// Generic-def head sugar (D15): `def Name<params>` desugars to
-		// the canonical `Name gen [params]` token run, in place. Only
-		// the DIRECT `def` + angle adjacency is a def head; every other
-		// angle group is a use-site (handled by the angleGroup case in
-		// convertTopLevelValueInner via emitPrimary below).
-		if ag, ok := items[i].(angleGroup); ok && i > 0 && isToken(items[i-1], "def") {
-			params, err := angleGenList(ag.Items, poss[i], d)
-			if err != nil {
-				return nil, err
-			}
-			values = append(values,
-				withPos(eng.NewWord(ag.Name), poss[i]),
-				withPos(eng.NewWord("gen"), poss[i]),
-				params)
-			continue
-		}
-
 		// A standalone `/mod` token right after a primary (e.g. `(expr)/s`)
 		// applies the modifier to that primary's result. Word modifiers are
 		// emitted BEFORE the primary (so they forward-collect the result
@@ -621,6 +606,10 @@ func convertTopLevelValue(v any, d *parseDepth) (eng.Value, error) {
 
 func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 	switch val := v.(type) {
+	case arrowTag:
+		// `=>` — the lambda sugar marker; the engine lowers it to the
+		// role-bound constructor word (ADR-012 rule 3 amendment).
+		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarLambda}), nil
 	case jsonic.Text:
 		if val.Quote == "" {
 			return parseWord(val.Str)
@@ -946,6 +935,9 @@ func convertDataValue(v any, d *parseDepth) (eng.Value, error) {
 
 func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 	switch val := v.(type) {
+	case arrowTag:
+		// `=>` in data context — the same lambda sugar marker.
+		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarLambda}), nil
 	case jsonic.Text:
 		if val.Quote != "" {
 			// Quoted text (e.g. "hello") → string
@@ -1119,12 +1111,12 @@ func convertTypedMap(m map[string]any, d *parseDepth, meta ...map[string]any) (e
 	return eng.NewTypedMapWithEntries(childVal, entries), nil
 }
 
-// angleUseSite desugars a use-site angle group to the canonical paren
-// span: `Box<Integer>` → ParenExpr[ Word(Box) Word(of) [Word(Integer)] ]
-// — byte-for-byte what `(Box of [Integer])` converts to, so the engine,
-// macros, quote, and Vm.parse never see an angle form (D15). Each item
-// converts in word context; nested sugar (`Box<Pair<A, B>>`) recurses
-// through the angleGroup case.
+// angleUseSite converts an angle group to ONE structural sugar marker
+// (ADR-012 amendment) carrying both precomputed forms: the use-site
+// type args (Items) and the generic-def head params (Head, or HeadErr
+// when the items are not a valid param list). The engine picks the
+// form at dispatch. Each item converts in word context; nested sugar
+// (`Box<Pair<A, B>>`) recurses through the angleGroup case.
 func angleUseSite(ag angleGroup, d *parseDepth) (eng.Value, error) {
 	args := make([]eng.Value, 0, len(ag.Items))
 	for _, it := range ag.Items {
@@ -1134,20 +1126,31 @@ func angleUseSite(ag angleGroup, d *parseDepth) (eng.Value, error) {
 		}
 		args = append(args, v)
 	}
-	toks := []eng.Value{
-		eng.NewWord(ag.Name),
-		eng.NewWord("of"),
-		eng.NewEvalList(args),
+	// Both forms are precomputed; the ENGINE picks (ADR-012 rule 3
+	// amendment): a marker arriving at a binder's /q name slot lowers
+	// to the generic-def head (`Name gen [params]`), anywhere else to
+	// the use-site apply. A head form whose items are not a valid
+	// param list carries the error text instead — it surfaces only if
+	// the head form is actually selected.
+	info := eng.SugarInfo{Kind: eng.SugarAngle, Name: ag.Name, Items: args}
+	if head, herr := angleGenList(ag.Items, eng.SrcPos{}, d); herr == nil {
+		info.Head = head
+	} else {
+		info.HeadErr = herr.Error()
 	}
-	return eng.NewParenExpr(toks), nil
+	return eng.NewSugar(info), nil
 }
 
-// angleGenList desugars a def-head angle group's items to the
-// canonical `gen` parameter list:
+// angleGenList desugars an angle group's items to the canonical
+// generic-def head parameter list (the marker's precomputed Head,
+// used only if the engine selects the head form):
 //
 //	T                 → Word(T)
 //	T extends C       → ParenExpr[ Word(T) Word(extends) C ]
-//	T = D             → ParenExpr[ Word(T) Word(default) D ]
+//	T = D             → ParenExpr[ Word(T) sugar(gen-default) D ]
+//
+// `extends` rides as the user-written word itself; `=` is not a legal
+// word name, so it rides as the gen-default sugar marker.
 //
 // Items arrive as a flat val sequence (commas are optional separators,
 // like list elements), so entries are recognised by the grammar above:
@@ -1187,12 +1190,19 @@ func angleGenList(items []any, pos eng.SrcPos, d *parseDepth) (eng.Value, error)
 						}
 					}
 					operand, err := convertTopLevelValue(items[i+2], d)
-					if err != nil {
+					if err != nil { //covergate:allow angleUseSite's Items loop converts every raw item with the same converter before angleGenList runs, so a failing operand errors there first
 						return eng.Value{}, err
+					}
+					op := eng.NewWord(opTxt.Str)
+					if kw == "default" {
+						// `=` is not a legal word name — it rides as
+						// the gen-default sugar marker; `extends` is
+						// the user-written word itself.
+						op = eng.NewSugar(eng.SugarInfo{Kind: eng.SugarGenDefault})
 					}
 					entries = append(entries, withPos(eng.NewParenExpr([]eng.Value{
 						eng.NewWord(name),
-						eng.NewWord(kw),
+						op,
 						operand,
 					}), epos))
 					i += 3

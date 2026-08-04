@@ -927,6 +927,15 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return nil, r.BoruError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	constraint, _ := nameMap.Get(name)
+	// An angle/type-bound annotation — `def b:Box<Integer> {…}` —
+	// arrives as a sugar marker; lower it to its paren form so the
+	// ParenExpr arm below evaluates it like the spelt-out
+	// `def b:(Box of [Integer])`.
+	if sinfo, sok := eng.AsSugar(constraint); sok {
+		if exp, serr := eng.SugarExpansion(r, sinfo, constraint, false); serr == nil && len(exp) == 1 {
+			constraint = exp[0]
+		}
+	}
 	// A parenthesised annotation — `def b:(Box of [Integer]) {…}` —
 	// evaluates inline (def's NoEvalMapArgs keeps the typed-name map
 	// raw, so the ParenExpr arrives unevaluated). Generic
