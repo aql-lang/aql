@@ -4410,7 +4410,7 @@ func (e *Engine) resolveInertTypeShape(v Value) (Value, bool) {
 	switch {
 	case IsTypedList(v) || IsTypedMap(v):
 		ci, err := AsChildType(v)
-		if err != nil {
+		if err != nil { //covergate:allow IsTypedList/IsTypedMap require a ChildTypeInfo payload, so AsChildType cannot fail here
 			return v, false
 		}
 		rc := ResolveWordsDeepR(ci.Child, e.registry)
