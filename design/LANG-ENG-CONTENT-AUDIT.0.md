@@ -568,6 +568,39 @@ Building the twin surfaced defects in BOTH engines; the fixed set:
   structural-/q-capture walk-past, so def's new keyword forms
   widened the scan into later statements.
 
+### Review round (Codex on the parity PR, 2026-08-04)
+
+The parity PR's own review surfaced one more instance of the same
+lossy-rebuild shape, this time in the SHARED resolver:
+`resolveWordsDeep` rebuilt a typed container as
+`NewTypedList(child)` / `NewTypedMap(child)`, discarding inline
+`Elements` / `Entries`. `core_make.go` routes record/class schema
+fields through that resolver, so a populated typed-container default
+reached the instance EMPTY: `def R class {xs:[:Integer 1 2]}` then
+`make R {}` returned `[]` instead of `[1 2]` — silent data loss. The
+Go side now preserves and deep-resolves the payload, matching both
+the TS twin (which always did) and the in-place discipline
+`resolveInertTypeShape` (`engine.go`) already followed. Pinned by
+`lang/spec/user-types.tsv` (the reachable typed-LIST path) and
+`eng/go/resolve_typed_container_test.go` (the typed-MAP arm, which no
+source syntax reaches). The other six findings — TS disjunct
+simplification, map-subtype preservation through `autoEvalMapValues`,
+emit-time word resolution for compiled type constraints, sugar-marker
+expansion in the preEvalParens scan, the source-nesting limit, and
+BoruError identity through interpolation rethrow — were fixed in the
+same round.
+
+**Adjacent, NOT fixed:** `unifyListFamily`'s both-typed-lists arm
+(`unify_list.go`) has the identical shape —
+`return NewTypedList(unified)` drops both sides' elements — so an
+explicit typed-list field value is emptied at `make`
+(`make R {xs:[:Integer 9]}` → `[]`, where the plain-list spelling
+`{xs:[9]}` correctly yields `[9]`). Unlike the resolver case the fix
+is not mechanical: it needs a semantic ruling on what unifying two
+POPULATED typed lists means (concrete side wins, or element-wise zip
+with a length-mismatch failure). Left for a maintainer decision
+rather than bundled into a parser-parity change.
+
 ### Recorded, not yet fixed (the remaining findings backlog)
 
 From the mapping pass, still open on the Go side: parenGroup is
