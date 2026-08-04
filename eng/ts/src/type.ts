@@ -100,6 +100,7 @@ const builtinDecls: BuiltinDecl[] = [
   { path: 'Word/__IN/__DC', internal: true },
   { path: 'Word/__SP', alias: 'Splice', internal: true },
   { path: 'Word/__DM', alias: 'DispatchMod', internal: true },
+  { path: 'Word/__SG', alias: 'Sugar', internal: true },
 
   // Type (metatype) branch.
   { path: 'Type/Function' },
@@ -265,9 +266,13 @@ export const TEnum = newType('Type/Disjunct/Enum')
 export const TNegation = newType('Type/Negation')
 export const TForward = newType('Word/__FW')
 export const TOpenParen = newType('Word/__OP')
+export const TCloseParen = newType('Word/__CP')
+export const TEnd = newType('Word/__ED')
 export const TMark = newType('Word/__MK')
 export const TMove = newType('Word/__MV')
 export const TSplice = newType('Word/__SP')
+export const TDispatchMod = newType('Word/__DM')
+export const TSugar = newType('Word/__SG')
 export const TInterpString = newType('Word/__IS')
 export const TParenExpr = newType('Word/__PE')
 export const TXmlInterp = newType('Word/__XI')

@@ -518,6 +518,13 @@ func toCarrier(v Value) Value {
 	if IsSplice(v) {
 		return v
 	}
+	// Keep a sugar marker concrete: the parser's structural desugar
+	// output (ADR-012 rule 3, 2026-08-04 amendment), lowered at step
+	// time by stepSugar. A carrier-stripped marker loses its SugarInfo
+	// and could never lower — the sugar would be opaque in check mode.
+	if IsSugar(v) {
+		return v
+	}
 	// Type literals (Data already nil) are already in the right
 	// shape for sig matching — preserve their Carrier=false marker
 	// so sigTypeMatchesAsType can still recognise them as type
@@ -850,7 +857,7 @@ func declaredReturnCarriers(r *Registry, word string, sig *Signature, args []Val
 	switch {
 	case sig.ReturnsFn != nil:
 		r.Check.CurCallPos = pos // expose call site to ReturnsFn (e.g. make Array identity)
-		raw := sig.ReturnsFn(args, r)
+		raw := sig.ReturnsFn(resolveTypeNameArgs(args), r)
 		out = make([]Value, len(raw))
 		for i, v := range raw {
 			out[i] = toCarrier(v)
@@ -2341,7 +2348,7 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 		}
 		switch {
 		case comboSig.ReturnsFn != nil:
-			raw := comboSig.ReturnsFn(combo, r)
+			raw := comboSig.ReturnsFn(resolveTypeNameArgs(combo), r)
 			rets := make([]Value, len(raw))
 			for i, v := range raw {
 				rets[i] = toCarrier(v)
@@ -3939,6 +3946,10 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 			if e, ok := r.Defs.TopEntry(inner.Name); ok {
 				tv = e.Body
 				minted = e.TypeDef
+			} else if t, ok := ResolveBuiltinTypeName(inner.Name); ok {
+				// Builtin arm of the canonical cascade — post-opacity
+				// (ADR-012 rule 4) `x is Integer` carries a Word here.
+				tv = NewTypeLiteral(t)
 			}
 		}
 		if tv.Data != nil && !IsClassType(tv) && !(tv.IsDepScalar() && minted != nil) {
@@ -4862,4 +4873,40 @@ func carrierStacksEqual(a, b []Value) bool {
 		}
 	}
 	return true
+}
+
+// resolveTypeNameArgs is the check-side twin of stepWord's builtin
+// type-name fallback (ADR-012 rule 4): the forward plan claims a bare
+// type-name token as a raw Word, and at RUNTIME stepWord steps it to
+// the canonical literal before it arrives at the handler — so the
+// checker's ReturnsFn must see the same literal, or a statically-typed
+// dispatch (`convert String x`) degrades to a dynamic result. Only the
+// builtin arm applies here: a Defs-bound word was already substituted
+// by the claim walk, and /q-captured names arrive as Atoms, never
+// Words. Copies lazily — the common all-resolved case allocates nothing.
+func resolveTypeNameArgs(args []Value) []Value {
+	var out []Value
+	for i, a := range args {
+		if !IsWord(a) {
+			continue
+		}
+		w, err := AsWord(a)
+		if err != nil {
+			continue
+		}
+		t, ok := ResolveBuiltinTypeName(w.Name)
+		if !ok {
+			continue
+		}
+		if out == nil {
+			out = append([]Value{}, args...)
+		}
+		lit := NewTypeLiteral(t)
+		lit.pos = a.pos
+		out[i] = lit
+	}
+	if out == nil {
+		return args
+	}
+	return out
 }

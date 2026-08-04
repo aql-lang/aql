@@ -63,8 +63,11 @@ func UnifyR(a, b Value, r *Registry) (Value, bool) {
 // an explicit r parameter. The kernel is single-threaded per Engine,
 // so the package-level stack is safe.
 func UnifyExplainR(a, b Value, r *Registry) (Value, *UnifyError) {
-	a = ResolveWordsDeep(a)
-	b = ResolveWordsDeep(b)
+	// Registry-armed prepass (resolve.go): user-typed words inside
+	// patterns and typed-container children (`[:Foo]`) resolve to
+	// their bound bodies instead of degrading to Atoms (NUR060).
+	a = ResolveWordsDeepR(a, r)
+	b = ResolveWordsDeepR(b, r)
 	if r != nil {
 		pushUnifyRegistry(r)
 		defer popUnifyRegistry()

@@ -527,7 +527,7 @@ func (e *Engine) polyReachBound() (int, bool) {
 // every one of these carries a payload, so the bare concrete probe counts
 // them — screen them first (the reorderCandidates stop-set lesson).
 func polyReachUnboundable(v Value) bool {
-	return IsForward(v) || IsReach(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) ||
+	return IsForward(v) || IsReach(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) || IsSugar(v) ||
 		v.Parent.ConformsTo(TMark) || v.Parent.ConformsTo(TMove) || v.Parent.ConformsTo(TInternal)
 }
 
@@ -2008,15 +2008,25 @@ func (e *Engine) resolveForwardArgs(fn *FnDefInfo, w WordInfo) error {
 	for pos < maxBarrier && scanIdx < e.tape.Len() {
 		tok := e.tape.At(scanIdx)
 
-		// Boundary conditions: stop scanning.
-		if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
-			tok.Parent.ConformsTo(TInternal) || tok.Parent.ConformsTo(TReturnCheck) {
+		// Boundary tokens (engine structurals, end / `)`): stop scanning.
+		if scanBoundaryToken(tok) {
 			break
 		}
 
-		// Boundary tokens: end / ) stop the scan.
-		if IsEnd(tok) || IsCloseParen(tok) {
-			break
+		// A sugar marker expands HERE — once per dispatch, before
+		// matchSignature's per-candidate scans (which must never mutate
+		// the tape per sig). A marker the expansion helper refuses is a
+		// boundary; a selected-head expansion failure is the user's
+		// syntax error, surfaced now.
+		if IsSugar(tok) {
+			expanded, serr := e.expandScanSugar(tok, pos, scanIdx, viable)
+			if serr != nil {
+				return serr
+			}
+			if !expanded {
+				break
+			}
+			continue
 		}
 
 		// Keyword slots are decided by the raw token at their position —
@@ -2924,13 +2934,17 @@ func (e *Engine) stepWord(val Value) error {
 			e.tape.Set(e.pointer, NewAtom("null"))
 			return nil
 		}
-		if t, ok := typeNames[w.Name]; ok {
-			e.tape.Set(e.pointer, NewTypeLiteral(t))
-			return nil
-		}
-		if t, ok := ResolveTypePath(w.Name); ok {
-			e.tape.Set(e.pointer, NewTypeLiteral(t))
-			return nil
+		if t, ok := ResolveBuiltinTypeName(w.Name); ok {
+			// Route through stepLiteral, exactly like the TopTypeBody
+			// priority block: a parked forward must get its arrival
+			// event for the resolved literal (loud no-match commits
+			// included) — `tape.Set + return nil` would silently strand
+			// a pending collection that the pre-opacity parser literal
+			// used to satisfy or refuse loudly.
+			lit := NewTypeLiteral(t)
+			lit.pos = val.pos
+			e.tape.Set(e.pointer, lit)
+			return e.stepLiteral()
 		}
 		// (r.Types resolution lives in the priority block at the
 		// top of stepWord — before DefStacks substitution — so a
@@ -3565,6 +3579,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				}
 			}
 		}
+		e.resolveConsumedInertTypeShape(match, i)
 		match.Args[i].Eval = false
 		// A check-mode Undefined placeholder (a forward-referenced fn name, or
 		// an undefined word already diagnosed at its source) reaching a dispatch
@@ -4095,6 +4110,13 @@ func (e *Engine) stepLiteral() error {
 		e.tape.Splice(valIdx, 1, expandReach(info)...)
 		return nil
 	}
+	// A sugar marker lowers to its word expansion in place (ADR-012
+	// rule 3, 2026-08-04 amendment — sugar.go), exactly like the
+	// ParenExpr and Reach expansions above. Quoted markers (captured
+	// data) and raw-capture collection fall through.
+	if IsSugar(e.tape.At(valIdx)) && !e.tape.At(valIdx).Quoted && !e.pendingForwardWantsRawParen() {
+		return e.stepSugar(valIdx)
+	}
 
 	// Look backwards for the nearest forward entry, stopping at open-paren barriers.
 	fwdIdx := e.pendingForwardIdx()
@@ -4388,9 +4410,68 @@ func (e *Engine) stepLiteral() error {
 // that were created by the parser (Eval=true) and not explicitly quoted.
 // Runtime-created values (from word handlers, def bodies, etc.) are
 // not auto-evaluated. This is called at the end of Run().
+// resolveInertTypeShape resolves the type-name Words inside an inert
+// type-shaped value — a typed container's child (`[:String]`), a
+// disjunct's alternatives (the `{a?:T}` desugar) — through the
+// canonical cascade (ADR-012 rule 4). Auto-evaluation is consumption,
+// so these resolve exactly where plain word elements resolve; quoted
+// values never reach the auto-eval paths and stay opaque.
+// resolveConsumedInertTypeShape resolves an inert type-shaped consumed
+// arg — a typed container (`inspect [:Integer]`, `def Ints [:Integer]`)
+// or a desugared disjunct — at consumption (ADR-012 rule 4), unless
+// the slot asked for the raw body (NoEvalArgs / NoEvalMapArgs) or the
+// value is quoted.
+func (e *Engine) resolveConsumedInertTypeShape(match *MatchResult, i int) {
+	if match.Args[i].Quoted {
+		return
+	}
+	if (match.Sig.NoEvalArgs != nil && match.Sig.NoEvalArgs[i]) ||
+		(match.Sig.NoEvalMapArgs != nil && match.Sig.NoEvalMapArgs[i]) {
+		return
+	}
+	if rv, ok := e.resolveInertTypeShape(match.Args[i]); ok {
+		match.Args[i] = rv
+	}
+}
+
+func (e *Engine) resolveInertTypeShape(v Value) (Value, bool) {
+	switch {
+	case IsTypedList(v) || IsTypedMap(v):
+		ci, err := AsChildType(v)
+		if err != nil { //covergate:allow IsTypedList/IsTypedMap require a ChildTypeInfo payload, so AsChildType cannot fail here
+			return v, false
+		}
+		rc := ResolveWordsDeepR(ci.Child, e.registry)
+		if ExactEqual(rc, ci.Child) {
+			return v, false
+		}
+		// In-place Data replacement: Elements/Entries and every other
+		// field survive — only the child constraint resolves.
+		nd := ci
+		nd.Child = rc
+		out := v
+		out.Data = nd
+		return out, true
+	case IsDisjunct(v):
+		rv := ResolveWordsDeepR(v, e.registry)
+		if ExactEqual(rv, v) {
+			return v, false
+		}
+		return rv, true
+	}
+	return v, false
+}
+
 func (e *Engine) autoEvalStack() error {
 	for i := 0; i < e.tape.Len(); i++ {
 		val := e.tape.At(i)
+		if !val.Quoted {
+			// Typed containers carry no Eval flag — resolve by shape.
+			if rv, ok := e.resolveInertTypeShape(val); ok {
+				e.tape.Set(i, rv)
+				continue
+			}
+		}
 		if !val.Eval || val.Quoted {
 			continue
 		}
@@ -4446,9 +4527,14 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	}
 	// An evaluated element is STORED (the list is data): consume any
 	// dispatch ascription here (`[(m as T)]` must not smuggle a live
-	// ascription into a container — the match-time-only rule).
+	// ascription into a container — the match-time-only rule). Inert
+	// type-shaped elements resolve their names here, where every other
+	// element resolves.
 	for i := range result {
 		result[i] = StripAscribed(result[i])
+		if rv, ok := e.resolveInertTypeShape(result[i]); ok {
+			result[i] = rv
+		}
 	}
 	out := NewList(result)
 	// In RECORDING mode a list whose elements are COMPUTED (an event carrier, not
@@ -5008,6 +5094,13 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 			}
 		}
 
+		// An inert type-shaped value (`{a?:T}`'s desugared disjunct, a
+		// typed-container constraint) has no dispatches to run — it
+		// resolves its names directly.
+		if rv, ok := e.resolveInertTypeShape(v); ok {
+			out.Set(resolvedKey, rv)
+			continue
+		}
 		// Evaluate each value in a pooled sub-engine.
 		result, err := runPooledSub(e.registry, []Value{v},
 			e.isTop || consumed || e.elemEvalRecordable)
@@ -6532,6 +6625,66 @@ func viableConsumesAt(viable []viableSig, pos int) bool {
 		}
 	}
 	return false
+}
+
+// scanBoundaryToken reports whether a token unconditionally stops the
+// forward pre-scan: engine-internal structurals (parked forwards,
+// marks, moves, internals, return checks) and the statement bounds
+// (end / close paren). Free-function body of resolveForwardArgs' two
+// boundary tests, extracted for that function's complexity cap.
+func scanBoundaryToken(tok Value) bool {
+	if IsForward(tok) || tok.Parent.ConformsTo(TMark) || tok.Parent.ConformsTo(TMove) ||
+		tok.Parent.ConformsTo(TInternal) || tok.Parent.ConformsTo(TReturnCheck) {
+		return true
+	}
+	return IsEnd(tok) || IsCloseParen(tok)
+}
+
+// expandScanSugar is resolveForwardArgs' sugar-marker arm (extracted for
+// that function's complexity cap): it lowers the marker at scanIdx in
+// place and reports whether the scan should reprocess the slot (false =
+// treat the marker as a boundary). The Angle marker's head/use-site
+// choice is made from the viable overload set: a /q (QuoteArgs) slot at
+// this position wants the generic-def HEAD (`Name gen [params]` — every
+// binder overload shares the /q name shape); anything else gets the
+// use-site apply. The expansion is gated on viableConsumesAt — a TAPE
+// MUTATION that outlives this dispatch, so a marker in the window of a
+// pruned overload must survive intact for the NEXT word's dispatch to
+// expand with ITS viable set (`import "m" def Box<T> …` scans past `def`
+// — a /q slot keeps it walkable — and must not commit the def-head
+// marker to import's use-site form).
+func (e *Engine) expandScanSugar(tok Value, pos, scanIdx int, viable []viableSig) (bool, error) {
+	if !viableConsumesAt(viable, pos) {
+		return false, nil
+	}
+	sinfo, sok := AsSugar(tok)
+	if !sok { //covergate:allow IsSugar guarantees a SugarInfo payload
+		return false, nil
+	}
+	headForm := false
+	if sinfo.Kind == SugarAngle {
+		for _, vs := range viable {
+			if vs.sig.QuoteArgs != nil && vs.sig.QuoteArgs[pos] {
+				headForm = true
+				break
+			}
+		}
+	}
+	exp, serr := SugarExpansion(e.registry, sinfo, tok, headForm)
+	if serr != nil {
+		if headForm {
+			// The viable set SELECTED the generic-def head — a /q binder
+			// slot wants this marker — so a failing head expansion is
+			// the USER'S error (`def Box<t>`: params must be
+			// capitalised; a dangling `extends`; an unbound gen-head
+			// role), surfaced now. A use-site failure stays a boundary:
+			// the marker survives for step time to surface it.
+			return false, serr
+		}
+		return false, nil
+	}
+	e.tape.Splice(scanIdx, 1, exp...)
+	return true, nil
 }
 
 // reachCallHeadBarrier is resolveForwardArgs' NUR038 stop test: a tagged
@@ -8593,17 +8746,17 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						}
 						break
 					}
-					if tn, isType := typeNames[ww.Name]; isType {
-						if sigArgMatches(sig, fwd, NewTypeLiteral(tn)) {
-							positions[fwd] = scanIdx
-							fwd++
-							scanIdx++
-							continue
-						}
-						break
-					}
-					if tn, isType := ResolveTypePath(ww.Name); isType {
-						if sigArgMatches(sig, fwd, NewTypeLiteral(tn)) {
+					if tn, isType := ResolveBuiltinTypeName(ww.Name); isType {
+						lit := NewTypeLiteral(tn)
+						if sigArgMatches(sig, fwd, lit) {
+							// Same admission a future LITERAL token gets
+							// (the block below): a type literal is refused
+							// at a concrete-payload slot, so the plan never
+							// claims what the commit re-match would reject.
+							isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]
+							if !isTypeArg && rejectsTypeLiteral(lit, expectedType) {
+								break
+							}
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++
@@ -8657,6 +8810,33 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					break
 				}
 
+				// A sugar marker EXPANDS in place during the scan
+				// (sugar.go): the tokens it lowers to — a fn word, a
+				// ParenExpr — then get exactly the treatment the
+				// pre-marker parser output got. The current slot's
+				// QuoteArgs flag selects the Angle marker's head form
+				// (the binder's name slot). An unexpandable marker is
+				// a boundary; it errors at step time.
+				if IsSugar(tok) {
+					sinfo, sok := AsSugar(tok)
+					if !sok { //covergate:allow IsSugar guarantees a SugarInfo payload
+						break
+					}
+					// The Angle marker's head/use-site choice belongs at
+					// ARRIVAL (stepSugar's pending-forward probe): this
+					// scan runs once per CANDIDATE sig, so committing a
+					// choice here would mutate the tape for the wrong
+					// overload. It is a plain boundary.
+					if sinfo.Kind == SugarAngle {
+						break
+					}
+					exp, serr := SugarExpansion(e.registry, sinfo, tok, false)
+					if serr != nil {
+						break
+					}
+					e.tape.Splice(scanIdx, 1, exp...)
+					continue
+				}
 				// Literal value: direct type check.
 				if sigArgMatches(sig, fwd, tok) || expectedType.Equal(TAny) {
 					isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]

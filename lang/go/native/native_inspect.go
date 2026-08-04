@@ -83,6 +83,13 @@ func inspectAtomHandler(args []Value, _ map[string]Value, _ []Value, r *Registry
 			return []Value{buildTypeInspection(name, top)}, nil
 		}
 	}
+	// Builtin arm of the canonical cascade: any type registered after
+	// parser init reaches this handler as a captured Atom (`inspect
+	// Date`), exactly like a user type — without this arm it rendered
+	// kind:unknown (NUR059).
+	if t, ok := eng.ResolveBuiltinTypeName(name); ok {
+		return []Value{buildTypeInspection(name, NewTypeLiteral(t))}, nil
+	}
 	return []Value{buildInspection(r, name)}, nil
 }
 

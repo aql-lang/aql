@@ -119,10 +119,8 @@ func guardTripleType(r *Registry, param string, w0, w1, tv Value) (*Type, bool) 
 		case defsHasType(r, inner.Name):
 			e, _ := r.Defs.TopEntry(inner.Name)
 			tv = e.Body
-		case typeNames[inner.Name] != nil:
-			tv = NewTypeLiteral(typeNames[inner.Name])
 		default:
-			t, ok := ResolveTypePath(inner.Name)
+			t, ok := ResolveBuiltinTypeName(inner.Name)
 			if !ok {
 				return nil, false
 			}

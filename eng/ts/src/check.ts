@@ -14,7 +14,8 @@
 import type { EmitState } from './emit.ts'
 import { BoruType, TAny } from './type.ts'
 import type { Signature } from './signature.ts'
-import { newCarrier, newDynamicCarrier, Value } from './value.ts'
+import {
+  isSugar, newCarrier, newDynamicCarrier, Value } from './value.ts'
 import type { Registry } from './registry.ts'
 
 /** Severity classes for a diagnostic, mirroring eng CheckSeverity. */
@@ -212,9 +213,12 @@ export class CheckState {
 export function toCarrier(v: Value): Value {
   // Already a carrier — leave its modality intact.
   if (v.carrier) return v
-  // Control / structural tokens are not values to strip.
+  // Control / structural tokens are not values to strip. A sugar
+  // marker MUST keep its SugarInfo payload — a stripped marker can
+  // never lower and would bake as inert data in the compiled program
+  // (the Go carrier-strip has the same exemption, eng/go/carrier.go).
   if (v.isWord() || v.isForward() || v.isMark() || v.isMove() || v.isParenExpr()) return v
-  if (v.isInterpString() || v.isXmlInterp()) return v
+  if (v.isInterpString() || v.isXmlInterp() || isSugar(v)) return v
   // Lists and maps keep their concrete payload — matching needs it.
   if (Array.isArray(v.data)) return v
   if (v.isMap() || v.isTypedList() || v.isTypedMap()) return v

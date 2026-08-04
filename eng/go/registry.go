@@ -23,6 +23,13 @@ import (
 //
 // New stack-like concerns should follow the same pattern.
 type Registry struct {
+	// sugarWords maps sugar roles to the word names the engine lowers
+	// sugar markers to (ADR-012 rule 3, 2026-08-04 amendment). Bound by
+	// the language layer at registration via BindSugarWord; read by
+	// stepSugar's expansion. Nil on a bare kernel registry — every
+	// stepped marker then fails loudly with sugar_unbound.
+	sugarWords map[SugarKind]string
+
 	// Defs holds the stacked bodies for `def`-defined words. See deftable.go.
 	Defs *DefTable
 	// types holds named type definitions installed by the `type` word —
@@ -2041,8 +2048,22 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if top, ok := reg.Defs.Top(name); ok && (IsClassType(top) || IsResourceType(top)) {
 		return top
 	}
+	// Builtin Resource-family schemas live under the hidden key
+	// (ResourceDefKey): the bare name resolves to the literal via the
+	// canonical cascade (ADR-012 rule 4), and this bridge recovers the
+	// schema for construction.
+	if top, ok := reg.Defs.Top(ResourceDefKey(name)); ok && IsResourceType(top) {
+		return top
+	}
 	return v
 }
+
+// ResourceDefKey is the hidden def-store key carrying a builtin
+// Resource-family schema (the `__const:` hidden-key precedent). The
+// schema must not be bound under the word-visible name: the bare name
+// resolves through the canonical cascade to the TYPE LITERAL, and a
+// word-visible value binding would shadow it with the raw schema body.
+func ResourceDefKey(name string) string { return "__resource:" + name }
 
 // StoreKey converts a Value to a string key for the store.
 func StoreKey(v Value) string {
@@ -2398,10 +2419,17 @@ func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, 
 	}
 	w, _ := AsWord(v)
 	rv, hit := r.ResolveTypedName(w.Name)
-	if !hit {
-		return v, w.Name, false
+	if hit {
+		return rv, w.Name, true
 	}
-	return rv, w.Name, true
+	// Builtin arm of the canonical cascade (resolve.go): a name the
+	// registry does not bind may still be a live builtin — any type
+	// registered after parser init arrives here as a Word (`def
+	// x:Bytes …`, `x is Date`), exactly like a user type (NUR059).
+	if t, bOK := ResolveBuiltinTypeName(w.Name); bOK {
+		return NewTypeLiteral(t), w.Name, true
+	}
+	return v, w.Name, false
 }
 
 // RunPredicate invokes a predicate-type fn against a candidate

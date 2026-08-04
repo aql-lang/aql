@@ -67,6 +67,8 @@ commit.
 | [NUR053](#nur053) | The truthiness consumers do not share one domain | 2026-08-02 NUR register review |
 | [NUR054](#nur054) | Context write boundaries differ between the interpreter and the compiler | 2026-08-02 NUR register review |
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in | 2026-08-02 NUR register review |
+| [NUR057](#nur057) | The compiler exempts `set`/`del` by name on an unenforced no-shadow claim | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
+| [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -439,6 +441,11 @@ reviewed individually. A new ADR describing ownership of the kernel
 type hierarchy is required before the migration lands (recorded as ADR
 candidate 2 in the resolution plan). This record stays Pending until
 that remediation (or a narrower argued verdict) closes it.
+**ADR-012 (2026-08-03) retargets the remediation's destination:** the
+ownership rule is recorded, but the migrations consolidate in the new
+`types/go` component with capability opt-ins (the refinement-base
+capability closes this record), not in eng — the kernel stays
+content-free.
 
 ---
 
@@ -1990,3 +1997,91 @@ otherwise read as exhaustive. Note that this record does NOT block on
 the sentinel-values programme or on NUR018 (`Store`/`Error`
 deliberately not being `make` targets) — those decide WHICH types
 construct, this decides WHO gets to say how.
+
+---
+
+## NUR057 — The compiler exempts `set`/`del` by name on an unenforced no-shadow claim {#nur057}
+
+**Status:** Pending · **Recorded:** 2026-08-03 · **Surfaced by:**
+lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`)
+
+**Rule:** a kernel special case keyed on a word NAME is sound only
+when the name reliably denotes the kernel registration. The
+sealed-word tier exists to guarantee exactly this ("the words the
+engine special-cases BY NAME, where a shadow binding would break the
+identity the kernel relies on" — `eng/go/word_extend.go:27-42`), and
+the one other name-keyed compile bypass verifies binding identity
+instead of trusting the name (`flex`:
+`eng/go/callable_words.go:799-808` checks signature pointer identity
+against the live registry binding).
+
+**Divergence:** the quote-arg compile gate and the poly-admission gate
+both exempt `set` and `del` purely by name — `eng/go/emit.go:4499`
+(`… && word != "set" && word != "del" …`) and
+`eng/go/carrier.go:1538-1548` — on the stated ground that "`set`
+cannot be shadowed (it is a builtin)" (`emit.go:4509`). But
+`sealedWords` contains only `def`/`make`/`word`; `set` and `del` are
+extendable (`InstallWordExtension` refuses only sealed names), so an
+extension of `set`/`del` reaches the name-keyed exemptions the
+comment claims impossible.
+
+**Evidence:** `eng/go/emit.go:4499-4510`;
+`eng/go/carrier.go:1538-1548`; `eng/go/word_extend.go:38-42` (the
+sealed set); `lang/go/native/native_storage.go:26,224` (the `set` /
+`del` registrations).
+
+**Documentation status:** the no-shadow claim exists only in the
+`emit.go` comment; nothing documents `set`/`del` as sealed (they are
+not).
+
+**Proposed verdict:** resolve by fix — either add `set`/`del` to
+`sealedWords` (documenting them as kernel identities) or key both
+exemptions on binding identity like the `flex` gate.
+
+---
+
+## NUR058 — Language-layer guaranteed-error mirrors are emitted unstamped {#nur058}
+
+**Status:** Pending · **Recorded:** 2026-08-03 · **Surfaced by:**
+lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`)
+
+**Rule:** a check diagnostic that mirrors a GUARANTEED runtime error
+carries `CheckDiagnostic.RuntimeMirror` — stamped by
+`CheckAddUniqueDiagnostic` for all its callers, set explicitly by
+direct emitters — so the compile pipeline's error-diagnostic refusal
+skips it and the check and compile passes report the SAME diagnostics
+(eng/go/CLAUDE.md §"Check-mode guaranteed-error mirrors";
+`eng/go/micron.go:2314`).
+
+**Divergence:** lang-layer mirror emitters call raw
+`r.Check.AddDiagnostic` without the stamp.
+`lang/go/native/native_array.go:1712-1722` emits `fold_error` for the
+statically-empty no-init fold — its own comment calls it "fold's own
+GUARANTEED runtime error … with the byte-identical runtime message".
+`lang/go/native/native_definition.go:1150-1180` emits `type_error`
+for a failed typed-def unify whose non-check branch raises the
+identical `fmt.Errorf`. Unstamped, these error-severity diagnostics
+make the compile pass refuse where the finding's model is exact — the
+divergence the RuntimeMirror classification exists to prevent. (The
+deliberate, documented exception stays fine:
+`case_exhaustive.go:650-669` bypasses the dedupe helper knowingly;
+the warning-severity `unreachable_branch` emissions in
+`native_control.go` are not mirrors.)
+
+**Evidence:** `eng/go/check.go::AddDiagnostic` (no RuntimeMirror
+stamping); `eng/go/micron.go:2314::CheckAddUniqueDiagnostic` (the
+stamping helper); `lang/go/native/native_array.go:1712-1722`;
+`lang/go/native/native_definition.go:1150-1180`.
+
+**Documentation status:** the contract is documented
+(eng/go/CLAUDE.md) but only as guidance; no gate checks that lang
+emitters comply.
+
+**Proposed verdict:** resolve by fix — route the lang mirror sites
+through `CheckAddUniqueDiagnostic` (or stamp explicitly), then audit
+the remaining direct `AddDiagnostic` callers in lang
+(`native_array.go:1583`, `native_macro.go:277`,
+`native_type_gen.go:349`, `native_patrun.go:197`,
+`native_module_module.go:80`) for mirror-vs-model-undermining
+classification, and consider extending a gate over lang emitters.
+

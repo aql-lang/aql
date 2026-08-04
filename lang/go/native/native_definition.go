@@ -894,7 +894,7 @@ func lookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool)
 	if r == nil || name == "" {
 		return ResourceTypeInfo{}, false
 	}
-	v, ok := r.Defs.Top(name)
+	v, ok := r.Defs.Top(resourceDefKey(name))
 	if !ok {
 		return ResourceTypeInfo{}, false
 	}
@@ -927,6 +927,15 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 		return nil, r.BoruError("def_error", fmt.Sprintf("def %s: name clash — already a type", name), "def")
 	}
 	constraint, _ := nameMap.Get(name)
+	// An angle/type-bound annotation — `def b:Box<Integer> {…}` —
+	// arrives as a sugar marker; lower it to its paren form so the
+	// ParenExpr arm below evaluates it like the spelt-out
+	// `def b:(Box of [Integer])`.
+	if sinfo, sok := eng.AsSugar(constraint); sok {
+		if exp, serr := eng.SugarExpansion(r, sinfo, constraint, false); serr == nil && len(exp) == 1 {
+			constraint = exp[0]
+		}
+	}
 	// A parenthesised annotation — `def b:(Box of [Integer]) {…}` —
 	// evaluates inline (def's NoEvalMapArgs keeps the typed-name map
 	// raw, so the ParenExpr arrives unevaluated). Generic
@@ -1162,7 +1171,11 @@ func defTypedHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) (
 				name, body.String(), describeType())
 		}
 	}
-	unified, ok := Unify(body, constraint)
+	// Registry-armed: a container constraint may carry a bare
+	// type-name child (`def xs:[:Foo]`) that only the registry can
+	// resolve (NUR060) — the registry-free Unify degraded it to an
+	// Atom and refused every value.
+	unified, ok := UnifyR(body, constraint, r)
 	if !ok {
 		if r.Check.IsActive() {
 			r.Check.AddDiagnostic(CheckDiagnostic{

@@ -112,10 +112,12 @@ def t Integer t	Integer
 def t Number t	Number	
 def t List t	List	
 		
-# To get the Atom version of a type-name word, quote it.		
-quote Integer	Integer	type-name words parse as type literals before quote sees them; quote of a type literal returns it unchanged
-quote String	String	
-def t (quote Integer) t	Integer	
+# quote of a type NAME captures the word as an Atom, like any other		
+# bare name — the parser is type-name-opaque (ADR-012 rule 4), so		
+# quotation meaning is consumption-time and the quoted form is data.		
+quote Integer	Integer/q	a quoted type name is the Atom, uniform with every word
+quote String	String/q	
+def t (quote Integer) t	Integer/q	
 		
 # =====================================================================		
 # 2. None and null		
@@ -943,3 +945,12 @@ lengthq Map	ERROR:signature
 # Type literals at TAny continue to pass through.		
 typeof Integer	Number	[TAny] sig; type literal accepted, handler returns metatype
 typeof none	None	None at [TAny]
+
+# =====================================================================
+# A named-disjunct optional field: the deep resolver flattens the
+# resolved alternative's members (SimplifyDisjunctAlts / TS
+# simplifyDisjunctAlts) so membership admits them — a nested opaque
+# disjunct alternative rejected every valid member (TS-parity find).
+def M ( Integer tor String ) {x:5} is {x?:M}	true	a member of the named union satisfies the optional field
+def M ( Integer tor String ) {} is {x?:M}	false	an absent field stays absent under the eng fixture's record membership
+def M ( Integer tor String ) {x:false} is {x?:M}	false	a non-member is rejected

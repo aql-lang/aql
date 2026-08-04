@@ -87,6 +87,7 @@ func Register(r *Registry) {
 	r.RegisterNativeFunc(sortNative)
 	installResourceTypes(r)
 	installIdeals(r)
+	bindSugarWords(r)
 
 	// Control flow
 	for _, n := range controlNatives {
@@ -191,5 +192,25 @@ func Register(r *Registry) {
 			child.RegisterNativeFunc(n)
 		}
 		registerDefKeywordForms(child)
+		// Module sub-registries run preamble source with the same
+		// surface sugars — bind the roles there too.
+		bindSugarWords(child)
 	}
+}
+
+// bindSugarWords binds the kernel's sugar roles to boru's word names
+// (ADR-012 rule 3, 2026-08-04 amendment). The parser emits structural
+// sugar markers; the engine lowers each marker through these bindings
+// at step time (eng/go/sugar.go). This table is the ONLY place the
+// surface sugars' word names are decided.
+func bindSugarWords(r *Registry) {
+	r.BindSugarWord(SugarUsurp, "usurp")
+	r.BindSugarWord(SugarStackArgs, "stack-args")
+	r.BindSugarWord(SugarForwardArgs, "forward-args")
+	r.BindSugarWord(SugarForceArity, "force-arity")
+	r.BindSugarWord(SugarMini, "mini")
+	r.BindSugarWord(SugarLambda, "afn")
+	r.BindSugarWord(SugarGenHead, "gen")
+	r.BindSugarWord(SugarGenApply, "of")
+	r.BindSugarWord(SugarGenDefault, "default")
 }

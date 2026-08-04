@@ -345,9 +345,9 @@ func installResourceTypes(r *Registry) {
 		Name:   TResource.String(),
 	}
 
-	InstallDef(r, "Resource", NewResourceType(TResource, resourceInfo))
+	InstallDef(r, resourceDefKey("Resource"), NewResourceType(TResource, resourceInfo))
 
-	resourceVal, _ := r.Defs.Top("Resource")
+	resourceVal, _ := r.Defs.Top(resourceDefKey("Resource"))
 	installedResource, _ := AsResourceType(resourceVal)
 
 	entityFields := NewOrderedMap()
@@ -361,8 +361,12 @@ func installResourceTypes(r *Registry) {
 		Name:   TResourceEntity.String(),
 	}
 
-	InstallDef(r, "Entity", NewResourceType(TResourceEntity, entityInfo))
+	InstallDef(r, resourceDefKey("Entity"), NewResourceType(TResourceEntity, entityInfo))
 }
+
+// resourceDefKey re-exports the eng hidden-key convention
+// (eng.ResourceDefKey) — see that helper for the rationale.
+func resourceDefKey(name string) string { return eng.ResourceDefKey(name) }
 
 // ---- table ----
 

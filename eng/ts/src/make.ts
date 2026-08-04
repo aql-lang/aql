@@ -43,7 +43,12 @@ export function makeIdealHandler(args: Value[]): Value[] {
   if (target.data === null && target.vType.leaf() === 'Options' && src.data instanceof OrderedMap) {
     return [newOptions(src.data)]
   }
-  throw new BoruError('unsupported', `make: ${target.vType.leaf()} instances not yet ported`)
+  // NUR018 refusal form, matching Go's makeHandler: Stores are minted by
+  // the context machinery and Errors by `raise` — never by make. The
+  // detail wording must match the Go engine's (`unsupported target
+  // type <path>`) so the shared spec rows and the crossdiff error-code
+  // comparison agree.
+  throw new BoruError('unsupported', `make: unsupported target type ${target.vType.toString()}`)
 }
 
 /** Render a concrete value as its scalar text. Mirrors ValToString. */

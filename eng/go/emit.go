@@ -5016,12 +5016,9 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 		if IsWord(a) && es.reg != nil {
 			if w, wErr := AsWord(a); wErr == nil &&
 				w.ArgCount == -1 && !w.ForceStack && !w.ForceForward && !w.ForceRef && !w.ForceUsurp {
-				// Mirror stepWord's type-name cascade exactly: the kernel
-				// name table, then the external-builtin path resolver, then
-				// the registry's dynamic type bindings.
-				if t, tOK := typeNames[w.Name]; tOK {
-					a = NewTypeLiteral(t)
-				} else if t, tOK := ResolveTypePath(w.Name); tOK {
+				// Mirror stepWord's type-name cascade exactly — the
+				// builtin arm of the canonical resolver (resolve.go).
+				if t, tOK := ResolveBuiltinTypeName(w.Name); tOK {
 					a = NewTypeLiteral(t)
 				}
 			}
@@ -6668,26 +6665,11 @@ func allFieldsInert(m *OrderedMap, pred func(Value) bool) bool {
 // interpreter rebuilds `r:1.0` — so any carrier, or any payload this
 // walk doesn't know, refuses.
 func typeBodyConstOK(v Value) bool {
-	return typeBodyConstOKParam(v, nil)
-}
-
-// typeBodyConstOKParam is typeBodyConstOK with an optional type-parameter
-// predicate. When isParam != nil (the generic-schema path), a Word member
-// naming one of the schema's parameters is admitted — those Words are the
-// schema body's placeholder references (`[:T]`), resolved by name at
-// instantiation, never re-stepped at the engine pointer. With isParam == nil
-// (every other caller) the check is exactly the strict original.
-func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 	if v.Carrier || v.Dynamic {
 		return false
 	}
 	if IsBareTypeNode(v) {
 		return true
-	}
-	if isParam != nil {
-		if w, err := AsWord(v); err == nil && isParam(w.Name) {
-			return true
-		}
 	}
 	memberOK := func(m Value) bool {
 		// A concrete mutable instance default (`class {x:(make Foo 1)}`,
@@ -6702,7 +6684,7 @@ func typeBodyConstOKParam(v Value, isParam func(string) bool) bool {
 		if !m.Carrier && !m.Dynamic && isFreshenedInstance(m) {
 			return true
 		}
-		return typeBodyConstOKParam(m, isParam) || isInertConst(m)
+		return typeBodyConstOK(m) || isInertConst(m)
 	}
 	switch d := v.Data.(type) {
 	case RecordTypeInfo:
@@ -7025,21 +7007,13 @@ func schemaConstOK(s *TypeSchemaInfo) bool {
 	if s == nil || s.Type == nil {
 		return false
 	}
-	// The schema body embeds its type variables as unresolved Words (`[:T]`
-	// stores the Word `T`, which `of`/`make` later resolve by name). Those
-	// Words are inert schema data — the body is consumed by make/of/is/typeof,
-	// never re-stepped at the engine pointer — so the body check admits a Word
-	// naming one of this schema's own parameters.
-	isParam := func(name string) bool {
-		for _, p := range s.Params {
-			if p.Name == name {
-				return true
-			}
-		}
-		return false
-	}
+	// Post-opacity (ADR-012 rule 4) a schema body's type variables are
+	// RESOLVED gen-placeholder literals — a `[:T]` child resolves at
+	// consumption via the canonical cascade while the gen bindings are
+	// live — so bare type nodes cover them and no Word-member escape
+	// hatch is needed (the pre-opacity isParam plumbing is gone).
 	memberOK := func(m Value) bool {
-		return IsBareTypeNode(m) || typeBodyConstOKParam(m, isParam) || isInertConst(m)
+		return IsBareTypeNode(m) || typeBodyConstOK(m) || isInertConst(m)
 	}
 	for _, p := range s.Params {
 		if p.HasBound && !memberOK(p.Bound) {
@@ -7176,6 +7150,28 @@ func isInertConstMember(v Value) bool {
 			}
 			for _, tk := range toks {
 				if !isInertConstMember(tk) {
+					return false
+				}
+			}
+			return true
+		}
+		// A sugar marker (`Box<Integer>`, `=>`) riding inside a
+		// never-evaluated compound — what a macro capturing an angle
+		// operand re-splices as data (`macroexpand (m Box<Integer>)`).
+		// Pure descriptor payload (SugarInfo) over the canonical kernel
+		// TSugar Parent, so it bakes by value exactly like a Word member:
+		// the VM pushes the compound verbatim, and the engine lowers the
+		// marker only if the data is later evaluated — identically to
+		// the interpreter. The value streams it carries must themselves
+		// be inert members; the standalone isInertConst switch still
+		// rejects a bare marker, so a top-level marker never bakes as
+		// code.
+		if sinfo, ok := AsSugar(v); ok && IsSugar(v) {
+			if sinfo.Head.Parent != nil && !isInertConstMember(sinfo.Head) {
+				return false
+			}
+			for _, it := range sinfo.Items {
+				if !isInertConstMember(it) {
 					return false
 				}
 			}

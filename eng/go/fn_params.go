@@ -133,6 +133,15 @@ func ParseFnParams(r *Registry, inputSig Value) ([]FnParam, int, error) {
 					optional = true
 				}
 				typeVal, _ := m.Get(keys[0])
+				// A sugar-marker annotation (`t:Map/t` — the type-bound
+				// sugar) lowers to its ParenExpr expansion first
+				// (ADR-012 rule 3 amendment), then evaluates below
+				// exactly as the pre-marker parser output did.
+				if sinfo, sok := AsSugar(typeVal); sok && r != nil {
+					if exp, serr := SugarExpansion(r, sinfo, typeVal, false); serr == nil && len(exp) == 1 {
+						typeVal = exp[0]
+					}
+				}
 				if IsParenExpr(typeVal) && r != nil {
 					items, _ := AsParenExpr(typeVal)
 					sub := New(r)

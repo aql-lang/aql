@@ -14,10 +14,24 @@ import { ChildType, OptionsData, OrderedMap, Value } from './value.ts'
 
 // canonXml renders an XML element, normalising an empty element to the
 // self-closing form (<br></br> → <br/>).
-function canonXml(e: XmlElement): string {
-  const attrs = e.attrs.map((a) => ` ${a.name}="${a.value}"`).join('')
+// XML entity re-escaping for the canonical render — text and attribute
+// values are stored DECODED (the parser runs unescapeXml), so rendering
+// must re-escape. Mirrors eng/go/core_xml.go's xmlTextEscaper /
+// xmlAttrEscaper exactly.
+function escapeXmlText(s: string): string {
+  return s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;')
+}
+
+function escapeXmlAttr(s: string): string {
+  return escapeXmlText(s).replaceAll('"', '&quot;')
+}
+
+export function canonXml(e: XmlElement): string {
+  const attrs = e.attrs.map((a) => ` ${a.name}="${escapeXmlAttr(a.value)}"`).join('')
   if (e.children.length === 0) return `<${e.tag}${attrs}/>`
-  const body = e.children.map((c) => (typeof c === 'string' ? c : canonXml(c))).join('')
+  const body = e.children
+    .map((c) => (typeof c === 'string' ? escapeXmlText(c) : canonXml(c)))
+    .join('')
   return `<${e.tag}${attrs}>${body}</${e.tag}>`
 }
 

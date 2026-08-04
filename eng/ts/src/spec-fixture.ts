@@ -8,6 +8,8 @@ import * as path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { canon } from './canon.ts'
+import { parse } from './parser/index.ts'
+import { resolveWordsDeep } from './resolve.ts'
 import {
   coerceBoolean,
   isRecordShape,
@@ -37,6 +39,7 @@ import {
   TIdeal,
   TNode,
   TClass,
+  TDisjunct,
   TScalar,
   TType,
   TWord,
@@ -143,6 +146,10 @@ function enforceTypeConstraint(
   detail: string,
   word: string,
 ): boolean {
+  // Post-opacity, a constraint can carry bare type-name Words
+  // (`[:Integer]` arrives with child word(Integer)) — resolve them
+  // through the canonical cascade before validating.
+  constraint = resolveWordsDeep(constraint, registry)
   const emit = registry.check.emit
   if (registry.check.isActive()) {
     if (emit === undefined) return false // pure check mode: lenient
@@ -695,7 +702,19 @@ function registerSpecWords(r: Registry): void {
       { args: [TAny, TAny, TMap], handler: () => unsupportedMake('with-opts') },
       { args: [TIdeal, TMap], typeArgs: new Set([0]), handler: (a) => makeIdealHandler(a) },
       { args: [TScalar, TAny], typeArgs: new Set([0]), handler: (a) => makeScalarHandler(a) },
-      { args: [TAny, TAny], handler: () => unsupportedMake('generic') },
+      {
+        args: [TAny, TAny],
+        handler: (a) => {
+          // An UNRESOLVED word target (`make Path 'a/b'` — no such type
+          // name) is the undefined-word error, matching the Go engine
+          // where the bare word steps and fails before make dispatches.
+          const t0 = a[0]!
+          if (t0.isWord()) {
+            throw new BoruError('undefined_word', `undefined word: ${t0.asWord().name}`, t0.asWord().name)
+          }
+          return unsupportedMake('generic')
+        },
+      },
     ],
   })
   // get / set — kernel-container signatures (the handlers cover the
@@ -823,7 +842,11 @@ function registerSpecWords(r: Registry): void {
                 if (op !== null && op.kind === 'const') concrete = op.value
               }
               if (concrete !== null) {
-                emit.recordTokenIsland([buildDefinedInspection(name, concrete)], out, 'inspect')
+                emit.recordTokenIsland(
+                  [buildDefinedInspection(name, resolveWordsDeep(concrete, registry))],
+                  out,
+                  'inspect',
+                )
               } else {
                 emit.markUncompilable('inspect: def bound to a computed value')
               }
@@ -836,7 +859,12 @@ function registerSpecWords(r: Registry): void {
           const fn = registry.lookup(name)
           if (fn) return [buildWordInspection(name, fn)]
           const top = registry.topOfDefStack(name)
-          if (top !== undefined) return [buildDefinedInspection(name, top)]
+          if (top !== undefined) return [buildDefinedInspection(name, resolveWordsDeep(top, registry))]
+          // Post-opacity a captured type NAME arrives as this Atom —
+          // resolve through the builtin arm of the cascade so
+          // `inspect Any` reports the type literal, not "unknown".
+          const t = typeNameTable().get(name)
+          if (t !== undefined) return [buildTypeInspection(newTypeLiteral(t))]
           const unk = new OrderedMap()
           unk.set('name', newString(name))
           unk.set('kind', newWord('unknown'))
@@ -844,7 +872,10 @@ function registerSpecWords(r: Registry): void {
           return [newInspect(unk)]
         },
       },
-      { args: [TAny], handler: (args) => [buildTypeInspection(args[0]!)] },
+      {
+        args: [TAny],
+        handler: (args, _ctx, _stk, registry) => [buildTypeInspection(resolveWordsDeep(args[0]!, registry))],
+      },
     ],
   })
 
@@ -873,14 +904,109 @@ function registerSpecWords(r: Registry): void {
     name: 'def',
     forwardPrecedence: true,
     signatures: [
-      // Map-destructuring form `def {…} value` — its signature is part
-      // of def's canonical surface (so inspect reports it); the corpus
-      // doesn't exercise its runtime, so it falls through to a stub.
+      // `def name word BODY` — the Forth-style splice binder. `word` is
+      // a KEYWORD SLOT (quoted, pattern-matched), so def captures it
+      // structurally instead of stranding on it under the strict
+      // forward-barrier. Mirrors the Go engspec fixture's defWord; the
+      // TS def-substitution already splices an unquoted eval-list body
+      // at each reference, so binding the raw body IS the splice.
+      {
+        args: [TAtom, TAtom, TAny],
+        quoteArgs: new Set([0, 1]),
+        patterns: new Map([[1, newAtom('word')]]),
+        noEvalArgs: new Set([2]),
+        runInCheckMode: true,
+        returns: [],
+        handler: (args, _ctx, _stk, registry) => {
+          const nameArg = args[0]!
+          const name = nameArg.isWord() ? nameArg.asWord().name : nameArg.asAtom()
+          if (/^-?\d/.test(name)) {
+            throw new BoruError('syntax_error', `invalid numeric literal: ${name}`, name)
+          }
+          registry.check.recordDef(name)
+          registry.pushDef(name, args[2]!)
+          return []
+        },
+      },
+      // `def name fn [triples]` — the fn KEYWORD SLOT. Captures `fn`
+      // structurally and binds the FnDef by name, mirroring the Go
+      // fixture's defFn. Without it, `def name fn […]` strands on `fn`
+      // under the strict forward-barrier.
+      {
+        args: [TAtom, TAtom, TList],
+        quoteArgs: new Set([0, 1]),
+        patterns: new Map([[1, newAtom('fn')]]),
+        noEvalArgs: new Set([2]),
+        runInCheckMode: true,
+        returns: [],
+        handler: (args, _ctx, _stk, registry) => {
+          const nameArg = args[0]!
+          const name = nameArg.isWord() ? nameArg.asWord().name : nameArg.asAtom()
+          if (/^-?\d/.test(name)) {
+            throw new BoruError('syntax_error', `invalid numeric literal: ${name}`, name)
+          }
+          const elems = args[2]!.asList()
+          if (elems.length === 0 || elems.length % 3 !== 0) {
+            throw new BoruError('fn_invalid_spec', `fn: list length must be a non-zero multiple of 3`)
+          }
+          const sigs: FnSig[] = []
+          for (let i = 0; i < elems.length; i += 3) {
+            sigs.push(parseFnTriple(elems[i]!, elems[i + 1]!, elems[i + 2]!))
+          }
+          registry.check.recordDef(name)
+          registry.pushDef(name, newFnDef({ sigs }))
+          return []
+        },
+      },
+      // Typed-name form `def x:Type value` — the jsonic parser emits
+      // the annotation as a single-key implicit MAP {x: word(Type)}
+      // (pair syntax), which this sig consumes. Mirrors the Go engspec
+      // fixture's typedDef: exactly one key, the value must satisfy the
+      // resolved constraint, a capitalised name refuses (the builtin
+      // table owns type names — the L135 `def Integer 42` contract).
       {
         args: [TMap, TAny],
-        noEvalArgs: new Set([1]),
-        handler: () => {
-          throw new BoruError('unsupported', 'def: map-destructuring binding not ported')
+        noEvalArgs: new Set([0]),
+        runInCheckMode: true,
+        returns: [],
+        handler: (args, _ctx, _stk, registry) => {
+          const nameMap = args[0]!.asMap()
+          if (nameMap.size !== 1) {
+            throw new BoruError('type_error', 'def: typed-name map must have exactly one key', 'def')
+          }
+          const name = nameMap.keys()[0]!
+          if (typeNameTable().has(name)) {
+            throw new BoruError(
+              'type_error',
+              `type: name part ${JSON.stringify(name)} in ${JSON.stringify(name)} conflicts with an existing type name`,
+              'def',
+            )
+          }
+          let constraint = nameMap.get(name)!
+          // Resolve a bare type-name Word constraint through the
+          // cascade (defs, then the builtin table).
+          if (constraint.isWord()) {
+            const cn = constraint.asWord().name
+            const bound = registry.topOfDefStack(cn)
+            const bt = typeNameTable().get(cn)
+            if (bound !== undefined) constraint = bound
+            else if (bt !== undefined) constraint = newTypeLiteral(bt)
+          }
+          const value = args[1]!
+          if (
+            enforceTypeConstraint(
+              registry,
+              value,
+              constraint,
+              `def ${name}: value ${value.toString()} does not satisfy declared type ${constraint.toString()}`,
+              name,
+            )
+          ) {
+            return []
+          }
+          registry.check.recordDef(name)
+          registry.pushDef(name, value)
+          return []
         },
       },
       {
@@ -902,6 +1028,16 @@ function registerSpecWords(r: Registry): void {
           const nameWord = nameArg.isWord() ? nameArg.asWord() : { name: nameArg.asAtom(), constraint: undefined }
           const name = nameWord.name
           const value = args[1]!
+          // A builtin type name is not rebindable — post-opacity the
+          // Word reaches def, which refuses with the same taxonomy the
+          // Go InstallType path uses (resolution.tsv L135).
+          if (typeNameTable().has(name)) {
+            throw new BoruError(
+              'type_error',
+              `type: name part ${JSON.stringify(name)} in ${JSON.stringify(name)} conflicts with an existing type name`,
+              'def',
+            )
+          }
           // A digit-first name is a malformed number, never a name.
           if (/^-?\d/.test(name)) {
             throw new BoruError('syntax_error', `invalid numeric literal: ${name}`, name)
@@ -1016,12 +1152,14 @@ function registerSpecWords(r: Registry): void {
         // Build the signature value in check mode so typeof/is consume it and
         // it bakes as an inert constant (its spec list is type literals).
         runInCheckMode: true,
-        handler: (args) => {
+        handler: (args, _ctx, _stk, registry) => {
           const elems = args[0]!.asList()
           if (elems.length === 0 || elems.length % 2 !== 0) {
             throw new BoruError('fnsig_invalid_spec', `fnsig: list length must be a non-zero multiple of 2`)
           }
-          return [newFnUndef(elems)]
+          // Resolve bare type-name Words in the spec lists (post-
+          // opacity, `[ Integer ]` arrives as [word(Integer)]).
+          return [newFnUndef(elems.map((e) => resolveWordsDeep(e, registry)))]
         },
       },
     ],
@@ -1281,7 +1419,16 @@ function registerSpecWords(r: Registry): void {
         // `inspect` of a def bound to `A tor B` — sees the concrete type and
         // bakes it as an inert const rather than refusing a dynamic carrier.
         runInCheckMode: true,
-        handler: (args) => {
+        handler: (args, _ctx, _stk, registry) => {
+          // A stripped concrete operand (a check-mode carrier): the
+          // runtime disjunct (`2.0 tor 100`) differs from the carrier
+          // one (`Integer tor Float`), so baking the check-shape is a
+          // miscompile — return a dynamic carrier and let the program
+          // fall back to the interpreter. Type-literal operands (the
+          // `def T (A tor B)` inspect rows) stay concrete and bake.
+          if (registry.check.isActive() && (args[0]!.carrier || args[1]!.carrier)) {
+            return [newDynamicCarrier(TDisjunct)]
+          }
           const alts = [...flattenAlts(args[1]!), ...flattenAlts(args[0]!)]
           const seen = new Set<string>()
           const out: Value[] = []
@@ -1343,7 +1490,10 @@ function registerSpecWords(r: Registry): void {
           // element must satisfy; a plain list has none.
           const list = args[0]!
           const hasChild = list.isTypedList()
-          const child = hasChild ? list.asChildType().child : undefined
+          // Resolve a bare type-name Word child (`[:Integer …]` post-
+          // opacity) through the cascade so validation and the error
+          // message see the type, not the word.
+          const child = hasChild ? resolveWordsDeep(list.asChildType().child, registry) : undefined
           const elems = hasChild ? list.asChildType().elements : list.asList()
           const alts = elems.map((e) => {
             const v = e.isWord() ? newAtom(e.asWord().name) : e
@@ -1373,7 +1523,11 @@ function registerSpecWords(r: Registry): void {
       {
         args: [TAny, TAny],
         barrierPos: 1,
-        handler: (args) => [newBoolean(isValueOfType(args[1]!, args[0]!))],
+        // The constraint side resolves bare type-name Words through the
+        // cascade (post-opacity, `[:Integer]` carries word(Integer)).
+        handler: (args, _ctx, _stk, registry) => [
+          newBoolean(isValueOfType(resolveWordsDeep(args[1]!, registry), resolveWordsDeep(args[0]!, registry))),
+        ],
       },
     ],
   })
@@ -1394,6 +1548,16 @@ interface TokenStream {
 }
 
 function tokenize(s: string): Value[] {
+  // The jsonic-based parser (src/parser) is the single parsing path —
+  // stream-verified against the Go parser's oracle (0 divergences over
+  // the eng/spec corpus). The legacy hand-rolled tokenizer below
+  // (legacyTokenize/readTokens) is retained only as a comparison
+  // oracle during the transition and is no longer called by the
+  // fixtures.
+  return parse(s)
+}
+
+function legacyTokenize(s: string): Value[] {
   const stream: TokenStream = { s, i: 0 }
   const result = readTokens(stream, null)
   if (stream.i < stream.s.length) {
@@ -1401,6 +1565,7 @@ function tokenize(s: string): Value[] {
   }
   return result
 }
+void legacyTokenize
 
 /**
  * Read tokens from `stream` until end-of-string or the matching close
@@ -1980,6 +2145,20 @@ function parseFnTriple(p: Value, r: Value, b: Value): FnSig {
  * resolve the type name, build an FnParam.
  */
 function parseFnParam(v: Value): FnParam {
+  // The jsonic parser converts `n:Integer` inside a param list to an
+  // implicit single-entry MAP {n: word(Integer)} (pair syntax in data
+  // context) — the named-param form ParseFnParams keys on in Go. The
+  // legacy fixture tokenizer produced a Word 'n:Integer'; both shapes
+  // are accepted here.
+  if (v.isMap() && v.data instanceof OrderedMap && v.asMap().size === 1) {
+    const m = v.asMap()
+    const name = m.keys()[0]!
+    const tv = m.get(name)!
+    const typeName = tv.isWord() ? tv.asWord().name : tv.data === null ? tv.vType.leaf() : ''
+    const type = typeNameTable().get(typeName)
+    if (!type) throw new Error(`fn: unknown type ${JSON.stringify(typeName)}`)
+    return { name, type }
+  }
   if (!v.isWord()) {
     throw new Error(`fn: expected param Word, got ${v.toString()}`)
   }

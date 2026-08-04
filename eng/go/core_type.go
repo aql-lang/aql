@@ -290,7 +290,10 @@ func validateTypeName(r *Registry, name string) error {
 	}
 	if !r.Defs.IsType(name) {
 		if err := ValidateTypeNameParts(name, r.IsKnownPart); err != nil {
-			return err
+			// Wrap in the taxonomy like every sibling check — the raw
+			// error leaked to hosts as a non-BoruError (the crossdiff
+			// surfaced it as UNEXPECTED:…, not a code).
+			return &BoruError{Code: "type_error", Detail: err.Error()}
 		}
 	}
 	if r.Lookup(name) != nil {

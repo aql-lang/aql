@@ -13,9 +13,6 @@ import (
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
-// typeNames is derived from the engine's canonical registry to prevent drift.
-var typeNames = eng.TypeNameTable()
-
 func boolPtr(b bool) *bool { return &b }
 
 // parenGroup represents items collected between ( and ) by the jsonic grammar.
@@ -29,10 +26,12 @@ type unclosedParen struct{ items []any }
 
 // angleGroup represents a generics angle-bracket sugar group
 // (design/GENERICS.10.md Phase 6): `Box<Integer>` folds the receiver
-// name and the collected items into one node. The conversion walks
-// desugar it to the canonical stream (D15): a def head emits
-// `Name gen [params]`, every other position the paren span
-// `( Name of [args] )` — so no angle marker ever reaches the engine.
+// name and the collected items into one node. The conversion emits ONE
+// structural sugar marker (ADR-012 amendment) carrying both
+// precomputed forms — the generic-def head params and the use-site
+// args — and the ENGINE picks which to lower at dispatch. The parser
+// recognises no binder word; the angle group converts identically in
+// every position.
 type angleGroup struct {
 	Name  string
 	Items []any
@@ -332,9 +331,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 		// convertTopLevelValueInner.
 		if ml, ok := items[i].(miniLitVal); ok {
 			values = append(values,
-				withPos(eng.NewWord("mini"), poss[i]),
-				withPos(eng.NewWord(ml.Name), poss[i]),
-				withPos(eng.NewString(ml.Src), poss[i]))
+				withPos(eng.NewSugar(eng.SugarInfo{Kind: eng.SugarMini, Name: ml.Name, Src: ml.Src}), poss[i]))
 			continue
 		}
 		// Dotted-access chain: a receiver primary followed by one or more
@@ -453,23 +450,6 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 			return nil, eng.MakeBoruError("syntax_error", "unmatched opening parenthesis", "(", "", "")
 		}
 
-		// Generic-def head sugar (D15): `def Name<params>` desugars to
-		// the canonical `Name gen [params]` token run, in place. Only
-		// the DIRECT `def` + angle adjacency is a def head; every other
-		// angle group is a use-site (handled by the angleGroup case in
-		// convertTopLevelValueInner via emitPrimary below).
-		if ag, ok := items[i].(angleGroup); ok && i > 0 && isToken(items[i-1], "def") {
-			params, err := angleGenList(ag.Items, poss[i], d)
-			if err != nil {
-				return nil, err
-			}
-			values = append(values,
-				withPos(eng.NewWord(ag.Name), poss[i]),
-				withPos(eng.NewWord("gen"), poss[i]),
-				params)
-			continue
-		}
-
 		// A standalone `/mod` token right after a primary (e.g. `(expr)/s`)
 		// applies the modifier to that primary's result. Word modifiers are
 		// emitted BEFORE the primary (so they forward-collect the result
@@ -565,13 +545,13 @@ func groupModifier(item any) (base string, prefix, suffix []eng.Value, ok bool) 
 	}
 	switch {
 	case u:
-		return b, []eng.Value{eng.NewWord("usurp")}, nil, true
+		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarUsurp})}, nil, true
 	case fs:
-		return b, []eng.Value{eng.NewWord("stack-args")}, nil, true
+		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarStackArgs})}, nil, true
 	case ff:
-		return b, []eng.Value{eng.NewWord("forward-args")}, nil, true
+		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarForwardArgs})}, nil, true
 	case argCount >= 0:
-		return b, []eng.Value{eng.NewWord("force-arity"), eng.NewInteger(int64(argCount))}, nil, true
+		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarForceArity, N: int64(argCount)})}, nil, true
 	case r || q:
 		return b, nil, []eng.Value{eng.NewDispatchMod(eng.DispatchModInfo{Ref: r, Quote: q})}, true
 	}
@@ -626,6 +606,10 @@ func convertTopLevelValue(v any, d *parseDepth) (eng.Value, error) {
 
 func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 	switch val := v.(type) {
+	case arrowTag:
+		// `=>` — the lambda sugar marker; the engine lowers it to the
+		// role-bound constructor word (ADR-012 rule 3 amendment).
+		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarLambda}), nil
 	case jsonic.Text:
 		if val.Quote == "" {
 			return parseWord(val.Str)
@@ -641,9 +625,7 @@ func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 		// mini call, so a stack subject, a trailing opts Map, the
 		// unknown-kind error, and check mode all behave exactly as if the
 		// user had typed `mini name 'src'`.
-		return eng.NewSplice(eng.NewList([]eng.Value{
-			eng.NewWord("mini"), eng.NewWord(val.Name), eng.NewString(val.Src),
-		})), nil
+		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarMini, Name: val.Name, Src: val.Src}), nil
 
 	case xmlElemVal:
 		// Embedded XML literal `<tag>…</tag>`: the matcher already built
@@ -912,7 +894,12 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 				eng.NewTypeLiteral(eng.TNone),
 				eng.NewTypeLiteral(eng.TAbsent),
 			}
-			if !implicit {
+			// An unresolved type-name child (a Word, post-ADR-012) cannot
+			// be reasoned about here; the engine's resolve prepass
+			// re-simplifies the disjunct after resolving the name, which
+			// restores the `{a?:T}` ≡ `{a:(T tor None tor Absent)}`
+			// canonical equality at every consumption boundary.
+			if !implicit && !eng.IsWord(child) {
 				alts = eng.SimplifyDisjunctAlts(alts)
 			}
 			child = eng.NewDisjunct(alts)
@@ -948,6 +935,9 @@ func convertDataValue(v any, d *parseDepth) (eng.Value, error) {
 
 func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 	switch val := v.(type) {
+	case arrowTag:
+		// `=>` in data context — the same lambda sugar marker.
+		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarLambda}), nil
 	case jsonic.Text:
 		if val.Quote != "" {
 			// Quoted text (e.g. "hello") → string
@@ -966,9 +956,7 @@ func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 		// mini call, so a stack subject, a trailing opts Map, the
 		// unknown-kind error, and check mode all behave exactly as if the
 		// user had typed `mini name 'src'`.
-		return eng.NewSplice(eng.NewList([]eng.Value{
-			eng.NewWord("mini"), eng.NewWord(val.Name), eng.NewString(val.Src),
-		})), nil
+		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarMini, Name: val.Name, Src: val.Src}), nil
 
 	case xmlElemVal:
 		// Embedded XML literal in data context (a map value): same
@@ -1123,12 +1111,12 @@ func convertTypedMap(m map[string]any, d *parseDepth, meta ...map[string]any) (e
 	return eng.NewTypedMapWithEntries(childVal, entries), nil
 }
 
-// angleUseSite desugars a use-site angle group to the canonical paren
-// span: `Box<Integer>` → ParenExpr[ Word(Box) Word(of) [Word(Integer)] ]
-// — byte-for-byte what `(Box of [Integer])` converts to, so the engine,
-// macros, quote, and Vm.parse never see an angle form (D15). Each item
-// converts in word context; nested sugar (`Box<Pair<A, B>>`) recurses
-// through the angleGroup case.
+// angleUseSite converts an angle group to ONE structural sugar marker
+// (ADR-012 amendment) carrying both precomputed forms: the use-site
+// type args (Items) and the generic-def head params (Head, or HeadErr
+// when the items are not a valid param list). The engine picks the
+// form at dispatch. Each item converts in word context; nested sugar
+// (`Box<Pair<A, B>>`) recurses through the angleGroup case.
 func angleUseSite(ag angleGroup, d *parseDepth) (eng.Value, error) {
 	args := make([]eng.Value, 0, len(ag.Items))
 	for _, it := range ag.Items {
@@ -1138,20 +1126,31 @@ func angleUseSite(ag angleGroup, d *parseDepth) (eng.Value, error) {
 		}
 		args = append(args, v)
 	}
-	toks := []eng.Value{
-		eng.NewWord(ag.Name),
-		eng.NewWord("of"),
-		eng.NewEvalList(args),
+	// Both forms are precomputed; the ENGINE picks (ADR-012 rule 3
+	// amendment): a marker arriving at a binder's /q name slot lowers
+	// to the generic-def head (`Name gen [params]`), anywhere else to
+	// the use-site apply. A head form whose items are not a valid
+	// param list carries the error text instead — it surfaces only if
+	// the head form is actually selected.
+	info := eng.SugarInfo{Kind: eng.SugarAngle, Name: ag.Name, Items: args}
+	if head, herr := angleGenList(ag.Items, eng.SrcPos{}, d); herr == nil {
+		info.Head = head
+	} else {
+		info.HeadErr = herr.Error()
 	}
-	return eng.NewParenExpr(toks), nil
+	return eng.NewSugar(info), nil
 }
 
-// angleGenList desugars a def-head angle group's items to the
-// canonical `gen` parameter list:
+// angleGenList desugars an angle group's items to the canonical
+// generic-def head parameter list (the marker's precomputed Head,
+// used only if the engine selects the head form):
 //
 //	T                 → Word(T)
 //	T extends C       → ParenExpr[ Word(T) Word(extends) C ]
-//	T = D             → ParenExpr[ Word(T) Word(default) D ]
+//	T = D             → ParenExpr[ Word(T) sugar(gen-default) D ]
+//
+// `extends` rides as the user-written word itself; `=` is not a legal
+// word name, so it rides as the gen-default sugar marker.
 //
 // Items arrive as a flat val sequence (commas are optional separators,
 // like list elements), so entries are recognised by the grammar above:
@@ -1191,12 +1190,19 @@ func angleGenList(items []any, pos eng.SrcPos, d *parseDepth) (eng.Value, error)
 						}
 					}
 					operand, err := convertTopLevelValue(items[i+2], d)
-					if err != nil {
+					if err != nil { //covergate:allow angleUseSite's Items loop converts every raw item with the same converter before angleGenList runs, so a failing operand errors there first
 						return eng.Value{}, err
+					}
+					op := eng.NewWord(opTxt.Str)
+					if kw == "default" {
+						// `=` is not a legal word name — it rides as
+						// the gen-default sugar marker; `extends` is
+						// the user-written word itself.
+						op = eng.NewSugar(eng.SugarInfo{Kind: eng.SugarGenDefault})
 					}
 					entries = append(entries, withPos(eng.NewParenExpr([]eng.Value{
 						eng.NewWord(name),
-						eng.NewWord(kw),
+						op,
 						operand,
 					}), epos))
 					i += 3
@@ -1246,12 +1252,8 @@ func resolveTextValue(text string) eng.Value {
 	case "nan":
 		return eng.NewFloat(math.NaN())
 	}
-	if t, ok := typeNames[text]; ok {
-		return eng.NewTypeLiteral(t)
-	}
-	if t, ok := eng.ResolveTypePath(text); ok {
-		return eng.NewTypeLiteral(t)
-	}
+	// Type names are not resolved (ADR-012 rule 4 — parseWord has the
+	// same rule); a capitalised name is data here, an Atom.
 	return eng.NewAtom(text)
 }
 
@@ -1475,7 +1477,7 @@ func parseWord(text string) (eng.Value, error) {
 	// of's error — the parser owns no semantics.
 	if typeFlag {
 		bound := eng.NewList([]eng.Value{eng.NewAtom(name)})
-		return eng.NewParenExpr([]eng.Value{eng.NewWord("Type"), eng.NewWord("of"), bound}), nil
+		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarTypeBound, Items: []eng.Value{bound}}), nil
 	}
 
 	// `0d…` arbitrary-precision literals (BigInteger / BigDecimal). The
@@ -1550,14 +1552,11 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.NewCloseParen(), nil
 	}
 
-	// *Type names resolve to type literals even in word context, so that
-	// they retain their meaning inside quotations (e.g. [String,Float]).
-	if t, ok := typeNames[name]; ok {
-		return eng.NewTypeLiteral(t), nil
-	}
-	if t, ok := eng.ResolveTypePath(name); ok {
-		return eng.NewTypeLiteral(t), nil
-	}
+	// Type names are NOT resolved here — the parser is type-name-opaque
+	// (ADR-012 rule 4): a capitalised name is an ordinary Word in every
+	// context, and the engine's canonical cascade (eng/go/resolve.go)
+	// resolves it at consumption, exactly as user-defined type names
+	// have always resolved. Quotation meaning is consumption-time.
 
 	// A base-prefixed integer token whose magnitude jsonic could not lex
 	// as a number (>= 2^63) arrives here as bare text. Parse it exactly:

@@ -24,18 +24,34 @@ func ResolveSigChildParam(r *Registry, v Value) Value {
 		return v
 	}
 	ci, err := AsChildType(v)
-	if err != nil || !IsWord(ci.Child) {
+	if err != nil {
 		return v
 	}
-	w, werr := AsWord(ci.Child)
-	if werr != nil {
+	var child Value
+	if IsTypedList(ci.Child) || IsTypedMap(ci.Child) {
+		// A nested container child (`m:{:{:Integer}}`) resolves its
+		// own child recursively.
+		child = ResolveSigChildParam(r, ci.Child)
+		if ExactEqual(child, ci.Child) {
+			return v
+		}
+	} else if w, werr := AsWord(ci.Child); werr == nil {
+		if def := r.LookupTypeName(w.Name); def != nil && IsTypeParamNode(def) {
+			child = NewTypeLiteral(def)
+		} else if tv, ok := r.TopTypeBody(w.Name); ok && IsTypeBody(tv) {
+			// A user-type child (`xs:[:Foo]`) resolves at sig install,
+			// exactly when the named param types resolve (ResolveSigType).
+			child = tv
+		} else if t, ok := ResolveBuiltinTypeName(w.Name); ok {
+			// The builtin arm of the canonical cascade (ADR-012 rule 4):
+			// post-opacity, `xs:[:Integer]` arrives here as a Word.
+			child = NewTypeLiteral(t)
+		} else {
+			return v
+		}
+	} else {
 		return v
 	}
-	def := r.LookupTypeName(w.Name)
-	if def == nil || !IsTypeParamNode(def) {
-		return v
-	}
-	child := NewTypeLiteral(def)
 	if IsTypedMap(v) {
 		if len(ci.Entries) > 0 {
 			return NewTypedMapWithEntries(child, ci.Entries)
@@ -59,10 +75,22 @@ func ResolveChildTypeExpr(r *Registry, v Value) (Value, error) {
 		return v, nil
 	}
 	ci, err := AsChildType(v)
-	if err != nil || !IsParenExpr(ci.Child) {
+	if err != nil { //covergate:allow IsTypedList/IsTypedMap above both require Data.(ChildTypeInfo), so AsChildType cannot fail here
 		return v, nil
 	}
-	toks, terr := AsParenExpr(ci.Child)
+	// An angle/type-bound child (`[:Box<Integer>]`) arrives as a sugar
+	// marker; lower it to its paren form so the evaluation below sees
+	// the spelt-out `[:(Box of [Integer])]`.
+	childExpr := ci.Child
+	if sinfo, sok := AsSugar(childExpr); sok {
+		if exp, serr := SugarExpansion(r, sinfo, childExpr, false); serr == nil && len(exp) == 1 {
+			childExpr = exp[0]
+		}
+	}
+	if !IsParenExpr(childExpr) {
+		return v, nil
+	}
+	toks, terr := AsParenExpr(childExpr)
 	if terr != nil {
 		return v, nil
 	}

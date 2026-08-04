@@ -8,17 +8,20 @@ import (
 	"github.com/boru-lang/boru/lang/go/native"
 )
 
-// Lambda syntax `a => b` is sugar for `a afn b`. The `=>` token lexes
-// directly to the word `afn` at parse time (no rewrite pass). `afn` is
-// a normal native word with signature [Any Any |] that constructs an
-// anonymous Function value with one signature, Returns=[Any], and the
-// Anonymous flag set so check-mode can route through AnalyseFnBody.
+// Lambda syntax `a => b` is sugar for `a afn b`. The `=>` token parses
+// to a structural sugar marker (ADR-012: the parser emits no names);
+// the engine lowers the marker to the word the SugarLambda role binds
+// (`afn` in this language). `afn` is a normal native word with
+// signature [Any Any |] that constructs an anonymous Function value
+// with one signature, Returns=[Any], and the Anonymous flag set so
+// check-mode can route through AnalyseFnBody.
 
 // TestArrowTokenAliasesAfn — the `=>` token parses to the same value
-// stream as the literal `afn` word. Typed-param shorthand must be
-// list-wrapped (`[x:Integer]`); a bare `x:Integer` at top level
-// starts an implicit map and the rest of the expression collapses
-// into the map's value position.
+// stream as the literal `afn` word except at the arrow position,
+// which carries the SugarLambda marker instead of the word. Typed-
+// param shorthand must be list-wrapped (`[x:Integer]`); a bare
+// `x:Integer` at top level starts an implicit map and the rest of the
+// expression collapses into the map's value position.
 func TestArrowTokenAliasesAfn(t *testing.T) {
 	a, err := parser.Parse("[x:Integer] => [x add 1]")
 	if err != nil {
@@ -32,6 +35,17 @@ func TestArrowTokenAliasesAfn(t *testing.T) {
 		t.Fatalf("token count: => produced %d, afn produced %d", len(a), len(b))
 	}
 	for i := range a {
+		if info, ok := eng.AsSugar(a[i]); ok {
+			// The arrow position: a lambda marker where the literal
+			// spelling has word(afn).
+			if info.Kind != eng.SugarLambda {
+				t.Errorf("token[%d]: marker kind %q, want lambda", i, info.Kind)
+			}
+			if b[i].String() != "word(afn)" {
+				t.Errorf("token[%d]: afn spelling has %q at the arrow position", i, b[i].String())
+			}
+			continue
+		}
 		if a[i].Parent != b[i].Parent {
 			t.Errorf("token[%d] parent differs: => %s, afn %s", i, a[i].Parent.String(), b[i].Parent.String())
 		}

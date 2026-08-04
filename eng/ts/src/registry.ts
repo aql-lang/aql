@@ -43,8 +43,27 @@ export class Registry {
    */
   private argsStack: Value[][] = []
 
+  /**
+   * Sugar-role table (ADR-012 rule 3, 2026-08-04 amendment): maps a
+   * sugar marker's role to the word name the engine lowers it to. The
+   * language layer binds roles at registration; a stepped marker whose
+   * role is unbound raises `sugar_unbound`. Mirrors Go
+   * Registry.sugarWords / BindSugarWord / SugarWord.
+   */
+  private sugarWords = new Map<string, string>()
+
   /** Static type-checker state. Inactive until check.begin() is called. */
   readonly check = new CheckState()
+
+  /** Bind a sugar role to the word name the engine expands it to. */
+  bindSugarWord(kind: string, word: string): void {
+    this.sugarWords.set(kind, word)
+  }
+
+  /** The word name bound to a sugar role, or undefined when unbound. */
+  sugarWord(kind: string): string | undefined {
+    return this.sugarWords.get(kind)
+  }
 
   // ── Capabilities ──────────────────────────────────────────────────────
 

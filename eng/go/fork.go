@@ -52,6 +52,13 @@ func (r *Registry) ForkConcurrent() *Registry {
 		bw[name] = true
 	}
 	fork.builtinWords = bw
+	// sugarWords is read-only after registration, but snapshot it like
+	// builtinWords so a parent Register call can never race a fork read.
+	sw := make(map[SugarKind]string, len(r.sugarWords))
+	for k, v := range r.sugarWords {
+		sw[k] = v
+	}
+	fork.sugarWords = sw
 	fork.Contexts = NewContextStack()
 	// A private child layer over the inherited context chain: reads walk
 	// down into the (parked) parent's stores, writes land in the child.

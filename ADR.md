@@ -897,3 +897,106 @@ and check residuals.
   fn-local fn bindings remains a possible future widening).
 - Reinforces ADR-010: a function value is one more first-class value
   kind every layer treats identically.
+
+---
+
+## ADR-012 — The kernel is mechanism: eng owns language mechanics, never language content {#adr-012}
+
+**Status:** Accepted · **Date:** 2026-08-03 · Recorded on maintainer
+approval; source material: `design/LANG-ENG-CONTENT-AUDIT.0.md` (the
+2026-08-03 audit and its §6 parser-opacity direction). Implementation
+is staged (design doc §5, stages 2-6); stage 6 (parser type-name
+opacity) lands with this record.
+
+### Decision
+
+**`eng/` contains language-engine mechanics only — the machinery any
+language built on this engine needs — and no language content: no
+word registrations, no domain types, and no compiled-in knowledge of
+word or type names.** Concretely:
+
+1. **Type residence is three-way.**
+   - **eng** declares only *mechanism* types: values the parser
+     bridge or step loop construct or branch on structurally, the
+     dispatch/construction meta-types, and — migrating in under this
+     rule — `Ideal/Module` and `Node/Map/KeyVal`, whose machinery
+     (module gate, export growth, compiled-callback ABI) the kernel
+     already owns. FixedIDs are preserved on every move.
+   - **A `types/go` component** (imports eng; imported by lang) owns
+     every other *global* boru type — `Bytes`, the Time family,
+     Fetch, `Timeout`/`Interval`, `Patrun`/`Pid`/`Service` — together
+     with their type-local logic (Behaviors, Comparers, codecs,
+     bridges). Registration paths and FixedIDs are unchanged, so the
+     wire format is unaffected.
+   - **`boru:*` modules** keep module-scoped types, unchanged.
+2. **Algorithms are mechanism.** Analysis, compile, and dispatch
+   logic lives in eng even when it serves one word: the typed-def
+   binding semantics, the control-flow check/compile lowering, the
+   one true signature matcher, cross-registry lattice adoption. A
+   word's handler in lang is registration and glue, never a second
+   implementation of kernel machinery.
+3. **The kernel is name-blind.** eng obtains word facts through
+   three channels, never string literals: *structural markers* for
+   tokens it synthesizes itself (`__pa` becomes a marker like
+   `DefCleanup`); *declared properties* at registration for what the
+   checker/compiler must know (binds-names, escapes-flow, callback
+   ABI, effectful — the `QuoteArgs`/`BarrierPos`/`CallableSpec`
+   precedent, generalised); and *role bindings* on the Registry for
+   words whose semantics the kernel co-hosts (binder, accessors,
+   splice, apply, break/continue, …), with the parser taking its
+   emitted-name table as configuration.
+
+   > **Amendment (2026-08-04) — the parser emits no names at all.**
+   > The "emitted-name table as configuration" clause is superseded:
+   > desugaring moves OUT of the parser entirely. The parser emits
+   > kernel STRUCTURAL MARKERS (the `Reach`/`DispatchMod`/`__SP`
+   > precedent, extended to every sugar), and the engine lowers each
+   > marker to word dispatches through the sugar-role table the
+   > language layer binds at registration. The resulting invariant is
+   > gateable: the parser never invents a name — its output contains
+   > `Word(name)` only where the user wrote that name. Design:
+   > `design/LANG-ENG-CONTENT-AUDIT.0.md` §7A.
+4. **The parser is type-name-opaque.** Capitalised names parse as
+   plain Words in every context; ONE canonical engine resolver
+   (def table → live builtin table → type path) replaces today's
+   per-site cascades. Quotation meaning for type names becomes
+   consumption-time — uniform with user-defined types today.
+5. **Capability over enumeration.** A kernel facility granted to
+   some types (refinement bases, construction, ordering) is granted
+   by opt-in capability or registration property, never by a name
+   list in eng.
+
+### Context
+
+The 2026-08-03 audit found the boundary breached in both directions
+by mechanism/content mixing, not by the module split itself: ~24
+lang-registered word names hard-coded in kernel logic (several
+emitted as tokens by the kernel or parser), kernel machinery authored
+inside lang handlers and mirrored by comment-synchronised twins
+(`defTypedHandler` / `RunTypedBind`), and type-name resolution split
+across three timing regimes with divergent per-site cascades (NUR059,
+NUR060). `calc/go` proves the mechanism core is real — it builds a
+working language on eng alone. NUR009's verdict direction (migrate
+global Node/Scalar descendants *into* eng) identified a real
+ownership problem but pointed at the wrong home; this record
+retargets it: the ownership problem is solved by the `types/go`
+component plus capability opt-ins (rule 5), keeping the kernel
+content-free — confirming TYPE-DECOUPLING's direction while giving
+the moved types a single owned home instead of scatter across
+`lang/go/native`.
+
+### Consequences
+
+- Layering becomes `eng ← types ← lang ← cmd`; `calc` is unchanged;
+  a future language imports eng and, optionally, types.
+- NUR009 closes via the refinement-base capability; NUR059/NUR060
+  close via the canonical resolver; the `sealedWords` tier retires
+  into role bindings (resolving the NUR057 class structurally).
+- Landing order follows the design doc's stages 2-6; stages 0-1
+  (defect fixes, machinery consolidation) need no ADR and may land
+  first. Parser opacity requires an `eng/ts` lockstep change and a
+  spec re-pinning round (~60-70 behavioural rows, ~245 render pins).
+- Enforcement: `calc` remains the executable proof for words; the
+  FixedID stability gate guards every type move; a new regression
+  gate forbids word-name string literals in eng outside the role
+  table, so the boundary cannot silently re-erode.

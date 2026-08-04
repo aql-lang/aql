@@ -171,6 +171,14 @@ func caseClauses(r *Registry, v Value, elems []Value) ([]Value, error) {
 					m = ResolveWordValue(m)
 				}
 			}
+			// An angle/type-bound match — `case b [Box<Integer> […]]`
+			// — arrives as a sugar marker; lower it so the paren arm
+			// below evaluates the spelt-out `(Box of [Integer])`.
+			if sinfo, sok := AsSugar(m); sok {
+				if exp, serr := SugarExpansion(r, sinfo, m, false); serr == nil && len(exp) == 1 {
+					m = exp[0]
+				}
+			}
 			// A parenthesised match — `case b [(Box of [Integer]) […]]`
 			// — evaluates inline, the same contract paren annotations
 			// follow in typed defs. Generic instantiations are the main

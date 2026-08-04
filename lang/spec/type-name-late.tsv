@@ -1,0 +1,43 @@
+# tokens	expected	note
+# =====================================================================
+# Late type-name resolution — the canonical cascade (ADR-012 rule 4)
+# =====================================================================
+# A capitalised name resolves through ONE cascade: the registry's
+# binding store (user types), then the LIVE builtin table, then the
+# slash-path resolver (eng/go/resolve.go). These rows pin the two
+# families the pre-cascade code broke: names of types registered after
+# parser init (NUR059 — they arrive engine-side as plain Words, like
+# user types), and bare type-name children of typed containers
+# (NUR060 — nothing resolved them; user-typed children silently
+# failed while parser-eager builtin children worked).
+#
+# §1 — late-registered builtin names in typed defs and inspect.
+# Bytes/Date are registered from lang at package init, AFTER the
+# parser snapshot froze — so `Bytes` here exercises exactly the path
+# every type name takes once the parser is name-blind.
+def b:Bytes (convert Bytes 'hi') b	Bytes<68 69>	typed def names a late-registered builtin (was: def_error "type annotation must be a type value")
+def x:Bytes 'abc'	ERROR:does not unify	wrong value still refused — with the proper unify error, not the resolver miss
+def x:NoSuchType 42	ERROR:type annotation	an unknown annotation name is still a resolver miss
+inspect Bytes	{name:'Bytes' type:'Type' struct:'Bytes' kind:literal}	inspect reaches the builtin arm through the captured Atom (was kind:unknown)
+inspect Date	{name:'Date' type:'Type' struct:'Date' kind:literal}	same for the Time family
+#
+# §2 — typed-container children named by USER types (NUR060's pins:
+# every refinement kind, accept AND reject).
+def Foo (refine Integer) def x:Foo 42 [x x] is [:Foo]	true	bare-refine child admits Foo-tagged values
+def Foo (refine Integer) [1 2] is [:Foo]	false	nominal newtype: plain Integers are NOT Foo (symmetric-strict)
+def Big (Integer gt 10) [20 30] is [:Big]	true	DepScalar subset child admits by predicate
+def Big (Integer gt 10) [2 3] is [:Big]	false	…and rejects by predicate
+def Foo Integer [1 2] is [:Foo]	true	alias child: Foo IS Integer
+def MU (Integer tor String) [1 'a'] is [:MU]	true	disjunct child admits both alternatives
+def MU (Integer tor String) [1 true] is [:MU]	false	…and rejects a non-member
+def C (class {}) [(make C {})] is [:C]	true	class child admits instances
+def Foo (refine Integer) def x:Foo 7 {a:x} is {:Foo}	true	typed-MAP child resolves the same way
+def Foo (refine Integer) {a:7} is {:Foo}	false	…and stays nominal
+#
+# §3 — typed defs whose ANNOTATION is a user-typed container.
+def Foo (refine Integer) def x:Foo 4 def xs:[:Foo] [x x] xs	[4 4]	container annotation with a user-typed child binds (was: refused every value)
+def Foo (refine Integer) def xs:[:Foo] [1 2] xs	[1 2]	the typed def CONSTRUCTS: untagged members reparent per element, mirroring `def x:Foo 42` (the Unify-swap literal never binds)
+def Foo (refine Integer) def xs:[:Foo] [1 2] typeof (xs get 0)	Foo	…and the elements carry the minted tag
+def Foo (refine Integer) def m:{:Foo} {a:1} m	{a:1}	typed-map annotation constructs the same way
+def Foo (refine Integer) def xs:[:Foo] [1 'a']	ERROR:does not unify	a non-member element still refuses the whole binding
+def xs:[:Bogus] [1 2]	ERROR:does not unify	an unknown child name matches nothing

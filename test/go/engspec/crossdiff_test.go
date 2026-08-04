@@ -213,13 +213,15 @@ func tsResults(t *testing.T) (map[string]crossRec, bool) {
 
 // knownGoAheadDivergence reports value-mode rows where the Go engine
 // intentionally leads the TS port and a differing (both-succeed) output is
-// expected, not a defect. Currently only `inspect def`: the Go `def` fixture
-// carries the strict-barrier keyword forms (fn / word) so `def name fn […]`
-// and the Forth splice `def name word […]` do not strand under the strict
-// forward-barrier; the TS port has not adopted them yet, so its `inspect def`
-// lists fewer signatures. Remove the entry once the TS port matches.
+// expected, not a defect. EMPTY since the TS port adopted the jsonic-based
+// parser (type-name opacity + the canonical cascade + the def keyword
+// forms): the two engines agree on every shared-corpus row. Add entries
+// here ONLY while a documented Go-side change is landing ahead of its TS
+// twin, and remove them when the port catches up.
 func knownGoAheadDivergence(mode, input string) bool {
-	return mode == "value" && strings.TrimSpace(input) == "inspect def"
+	_ = mode
+	_ = input
+	return false
 }
 
 func TestCrossEngineDifferential(t *testing.T) {

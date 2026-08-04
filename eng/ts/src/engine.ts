@@ -13,6 +13,8 @@ import { BoruError } from './error.ts'
 import { valToString } from './make.ts'
 import { matchEntry } from './match.ts'
 import type { Registry } from './registry.ts'
+import { resolveWordsDeep } from './resolve.ts'
+import { sugarExpansion } from './sugar.ts'
 import {
   TAny,
   TAtom,
@@ -22,6 +24,7 @@ import {
   TList,
   TMap,
   TNumber,
+  TParenExpr,
   TString,
   TXml,
   TWord,
@@ -31,7 +34,14 @@ import {
   type FnDefInfo,
   type ForwardMarker,
   type MoveInfo,
+  asSugar,
+  isCloseParen,
+  isEnd,
+  isOpenParen,
+  isSugar,
+  newAtom,
   newBoolean,
+  newCloseParen,
   newFloat,
   newCarrier,
   newDynamicCarrier,
@@ -41,6 +51,7 @@ import {
   newList,
   newMap,
   newNone,
+  newOpenParen,
   newString,
   newTypeLiteral,
   newXml,
@@ -118,19 +129,28 @@ export class Engine {
       if (this.pointer >= this.stack.length) break
 
       const val = this.stack[this.pointer]!
+      // A paren-expression VALUE (the parser's nested `( … )` node)
+      // expands back to its OpenParen … CloseParen marker span in
+      // place, then re-processes — the IsOpenParen branch below
+      // collapses it. Mirrors Go stepLiteral's ParenExpr expansion
+      // (design/PAREN-REPRESENTATION.9.md Step 3). Quoted paren-exprs
+      // stay data.
+      if (val.vType.equal(TParenExpr) && !val.quoted && Array.isArray(val.data)) {
+        this.stack.splice(this.pointer, 1, newOpenParen(), ...(val.data as Value[]), newCloseParen())
+        continue
+      }
+      if (isOpenParen(val)) {
+        this.evalParenAt(this.pointer)
+        continue
+      }
+      if (isCloseParen(val)) {
+        throw new BoruError('syntax_error', `unmatched ')'`, ')')
+      }
+      if (isEnd(val)) {
+        this.stepEnd()
+        continue
+      }
       if (val.isWord()) {
-        const w = val.asWord() as WordInfo
-        if (w.name === '(') {
-          this.evalParenAt(this.pointer)
-          continue
-        }
-        if (w.name === ')') {
-          throw new BoruError('syntax_error', `unmatched ')'`, ')')
-        }
-        if (w.name === 'end') {
-          this.stepEnd()
-          continue
-        }
         // If a pending forward marker is waiting for a Word-typed
         // arg, capture this word as data instead of executing it.
         // Mirrors borueng/go/engine.go's hasPendingForwardExpectingWord
@@ -166,6 +186,13 @@ export class Engine {
         } else {
           this.stack[this.pointer] = newXml(this.resolveXmlTmpl(val.asXmlTmpl()))
         }
+      } else if (isSugar(val) && !val.quoted) {
+        // A sugar marker fires at the pointer: splice its role-resolved
+        // expansion in place and re-step, exactly like the __SP splice.
+        // The Angle marker picks its head form when a parked forward is
+        // waiting to capture a name (the binder's /q name slot).
+        // Mirrors Go stepSugar (eng/go/sugar.go).
+        this.stepSugar(val)
       } else {
         this.stepLiteral()
       }
@@ -182,13 +209,23 @@ export class Engine {
     const w = val.asWord() as WordInfo
     const name = w.name
 
-    // Built-in keywords.
+    // Built-in keywords. The opaque parser leaves none/null as Words
+    // (the legacy fixture tokenizer resolved them at lex time) — the
+    // engine resolves them at consumption, mirroring Go stepWord.
     if (name === 'true') {
       this.stack[this.pointer] = newBoolean(true)
       return
     }
     if (name === 'false') {
       this.stack[this.pointer] = newBoolean(false)
+      return
+    }
+    if (name === 'none') {
+      this.stack[this.pointer] = newNone()
+      return
+    }
+    if (name === 'null') {
+      this.stack[this.pointer] = newAtom('null')
       return
     }
     const tn = typeNameTable().get(name)
@@ -259,7 +296,7 @@ export class Engine {
     // Pre-evaluate any paren groups in the forward window so the
     // matcher sees concrete values. The window is bounded by the
     // function's largest forward-eligible arg count across all sigs.
-    this.preEvalParens(fn.maxForwardArgs)
+    this.preEvalParens(fn.maxForwardArgs, fn.signatures)
 
     const result = matchEntry(fn, this.stack, this.pointer, this.registry)
     if (!result) {
@@ -499,10 +536,8 @@ export class Engine {
     let depth = 1
     for (let i = openIdx + 1; i < this.stack.length; i++) {
       const v = this.stack[i]!
-      if (!v.isWord()) continue
-      const name = (v.asWord() as WordInfo).name
-      if (name === '(') depth++
-      else if (name === ')') {
+      if (isOpenParen(v)) depth++
+      else if (isCloseParen(v)) {
         depth--
         if (depth === 0) return i
       }
@@ -520,15 +555,83 @@ export class Engine {
    * `maxFwd` is the upper bound on how many forward values we might
    * need to resolve — taken from FunctionEntry.maxForwardArgs.
    */
-  private preEvalParens(maxFwd: number): void {
+  private preEvalParens(maxFwd: number, sigs?: readonly Signature[]): void {
     this.lastPreEvalHadVoid = false
     if (maxFwd <= 0) return
+    // Keyword slots are decided by the RAW token at their position —
+    // prune keyword overloads before any evaluation below, so a keyword
+    // overload's larger arity never widens the scan past the dispatch
+    // the non-keyword overloads will actually make: `def x 5 \`${x}\``
+    // must not pre-evaluate the template before def binds x, and
+    // `def g (fn […]) (g 3)` must not pre-evaluate `(g 3)` before the
+    // 2-arg def binds g. Mirrors Go's pruneKeywordViable.
+    let viable = sigs !== undefined ? [...sigs] : undefined
+    const windowOf = (ss: readonly Signature[]): number => {
+      let max = 0
+      for (const s of ss) {
+        const limit = s.barrierPos ?? 0
+        if (limit > max) max = limit
+      }
+      return max
+    }
     let resolved = 0
     let scanIdx = this.pointer + 1
     let guard = 0
     while (resolved < maxFwd && scanIdx < this.stack.length && guard < 2222) {
       guard++
       const tok = this.stack[scanIdx]!
+      if (viable !== undefined) {
+        const pos = resolved
+        viable = viable.filter((s) => {
+          const pat = s.patterns?.get(pos)
+          if (pat === undefined || !pat.vType.equal(TAtom) || pat.data === null) return true
+          if (pos >= (s.barrierPos ?? 0)) return true
+          const nm = tok.isWord()
+            ? (tok.asWord() as WordInfo).name
+            : tok.vType.equal(TAtom) && typeof tok.data === 'string'
+              ? tok.data
+              : undefined
+          return nm === (pat.data as string)
+        })
+        const bound = windowOf(viable)
+        if (resolved >= bound) break
+        if (bound < maxFwd) maxFwd = bound
+      }
+      // A paren-expression VALUE in the window expands to its marker
+      // span in place and reprocesses — the '(' arm below evaluates
+      // it. Mirrors Go resolveForwardArgs' IsParenExpr branch.
+      if (tok.vType.equal(TParenExpr) && !tok.quoted && Array.isArray(tok.data)) {
+        this.stack.splice(scanIdx, 1, newOpenParen(), ...(tok.data as Value[]), newCloseParen())
+        continue
+      }
+      // A sugar marker in the window expands once per dispatch, BEFORE
+      // signature matching (which treats markers as boundaries) —
+      // mirror of Go's expandScanSugar. The Angle marker's head form
+      // is selected when a still-viable overload /q-captures this
+      // position; a selected-head expansion failure is the user's
+      // error, surfaced now; any other failure leaves the marker as a
+      // boundary (it errors at step time).
+      if (isSugar(tok) && !tok.quoted) {
+        const consumes =
+          viable === undefined || viable.some((s) => resolved < (s.barrierPos ?? 0))
+        if (!consumes) break
+        const sinfo = asSugar(tok)
+        if (sinfo === undefined) break
+        let headForm = false
+        if (sinfo.kind === 'angle' && viable !== undefined) {
+          headForm = viable.some(
+            (s) => (s.quoteArgs?.has(resolved) ?? false) && resolved < (s.barrierPos ?? 0),
+          )
+        }
+        try {
+          const exp = sugarExpansion(this.registry, sinfo, headForm)
+          this.stack.splice(scanIdx, 1, ...exp)
+          continue
+        } catch (e) {
+          if (headForm) throw e
+          break
+        }
+      }
       // Internal control markers stop the forward scan — they're
       // boundaries, not data.
       if (tok.isForward() || tok.isMark() || tok.isMove()) break
@@ -559,13 +662,13 @@ export class Engine {
         scanIdx++
         continue
       }
-      if (!tok.isWord()) {
+      if (isCloseParen(tok) || isEnd(tok)) break
+      if (!tok.isWord() && !isOpenParen(tok)) {
         resolved++
         scanIdx++
         continue
       }
       const name = (tok.asWord() as WordInfo).name
-      if (name === ')' || name === 'end') break
       if (name === '(') {
         const before = this.stack.length
         this.evalParenAt(scanIdx)
@@ -590,9 +693,17 @@ export class Engine {
       }
       // A registered function word in the forward window is a
       // boundary — leave it for the outer matcher to either consume
-      // (e.g. if the sig accepts TWord) or reject. Simple-def words
-      // count as one resolved value.
-      if (this.registry.lookup(name)) break
+      // (e.g. if the sig accepts TWord) or reject — UNLESS a
+      // still-viable overload captures this position structurally
+      // (/q quoteArgs): there the word is the ARGUMENT (`def trip
+      // (fn …)` names trip even though trip is registered), and the
+      // scan must walk past it so the following group pre-evaluates.
+      // Mirrors Go capturesForwardToken. Simple-def words count as
+      // one resolved value.
+      const capturedByViable =
+        viable !== undefined &&
+        viable.some((s) => (s.quoteArgs?.has(resolved) ?? false) && resolved < (s.barrierPos ?? 0))
+      if (this.registry.lookup(name) && !capturedByViable) break
       resolved++
       scanIdx++
     }
@@ -888,7 +999,7 @@ export class Engine {
   private findPendingMarker(): number {
     for (let i = this.pointer - 1; i >= 0; i--) {
       const v = this.stack[i]!
-      if (v.isWord() && (v.asWord() as WordInfo).name === '(') return -1
+      if (isOpenParen(v)) return -1
       if (v.isForward()) {
         const m = v.asForward()
         if (m.collected.length < m.expectedForward) return i
@@ -953,6 +1064,24 @@ export class Engine {
    * Otherwise just remove the `end` token. Mirrors stepEnd in
    * borueng/go/engine.go.
    */
+  /**
+   * Fire a sugar marker at the pointer: splice the marker's role-
+   * resolved expansion in place and re-step. The Angle marker lowers
+   * to its generic-def head form when a pending forward is waiting to
+   * capture a name (the binder's name slot), the use-site paren
+   * otherwise. Mirrors Go stepSugar / SugarExpansion.
+   */
+  private stepSugar(val: Value): void {
+    const info = asSugar(val)
+    if (info === undefined) {
+      this.pointer++
+      return
+    }
+    const headForm = info.kind === 'angle' && this.pendingExpectsWord()
+    const exp = sugarExpansion(this.registry, info, headForm)
+    this.stack.splice(this.pointer, 1, ...exp)
+  }
+
   private stepEnd(): void {
     const fwdIdx = this.findPendingMarker()
     if (fwdIdx < 0) {
@@ -1091,7 +1220,21 @@ export class Engine {
         a.vType.matches(TMap) &&
         a.data instanceof OrderedMap
       ) {
-        args[i] = this.deepEvalData(a)
+        // Resolve def-bound / type-name WORDS while the registry is
+        // still live (record time): the VM promotes defs to frame
+        // locals, so a baked constraint carrying word(M) could never
+        // resolve at run time — the compiled `is` then rejected what
+        // the interpreter admitted ({x?:M} with a def'd union M).
+        args[i] = this.deepEvalData(resolveWordsDeep(a, this.registry))
+        continue
+      }
+      // A map arg evaluates its VALUES at consumption — the Go
+      // autoEvalMap mirror: words resolve through the cascade
+      // (`{abs:true}` arrives with word(true) from the opaque parser)
+      // and expression values (`{abs:( true )}`, eval-lists) run in a
+      // sub-engine so the handler sees the computed value.
+      if (a.vType.matches(TMap) && a.data instanceof OrderedMap && !a.quoted) {
+        args[i] = this.autoEvalMapValues(a)
         continue
       }
       if (!a.vType.matches(TList)) continue
@@ -1099,6 +1242,38 @@ export class Engine {
       if (!a.isConcrete()) continue
       args[i] = this.autoEvalList(a)
     }
+  }
+
+  /**
+   * Evaluate a consumed map argument's values — the Go autoEvalMap
+   * mirror: a ParenExpr value runs in a sub-engine to its single
+   * result, an unquoted eval-list auto-evaluates, words resolve
+   * through the canonical cascade, nested maps recurse.
+   */
+  private autoEvalMapValues(m: Value): Value {
+    const src = m.asMap()
+    const out = new OrderedMap()
+    for (const k of src.keys()) {
+      const v = src.get(k)!
+      if (v.vType.equal(TParenExpr) && !v.quoted && Array.isArray(v.data)) {
+        const sub = new Engine(this.registry)
+        const res = sub.run([...(v.data as Value[])])
+        out.set(k, res.length === 1 ? res[0]! : v)
+        continue
+      }
+      if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted && v.isConcrete()) {
+        out.set(k, this.autoEvalList(v))
+        continue
+      }
+      if (v.vType.matches(TMap) && v.data instanceof OrderedMap && !v.quoted) {
+        out.set(k, this.autoEvalMapValues(v))
+        continue
+      }
+      out.set(k, resolveWordsDeep(v, this.registry))
+    }
+    // Preserve the map's lattice subtype (an Inspect map must stay
+    // Inspect, not demote to plain Map) and flags.
+    return new Value(m.vType, out, { eval: m.eval, quoted: m.quoted })
   }
 
   /**

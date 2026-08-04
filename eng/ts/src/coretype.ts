@@ -185,10 +185,14 @@ export function isValueOfType(v: Value, t: Value): boolean {
     return elems.every((e) => isValueOfType(e, child))
   }
   // Typed map `{:T}`: v must be a concrete map whose every value
-  // satisfies T.
+  // satisfies T. A typed-map VALUE (`{:T a:1 b:2}` — ChildType data
+  // with inline entries) validates its entries the same way.
   if (t.isTypedMap()) {
     if (!v.isMap()) return false
     const child = t.asChildType().child
+    if (v.isTypedMap()) {
+      return v.asChildType().entries.every((e) => isValueOfType(e.value, child))
+    }
     return v.asMap().keys().every((k) => isValueOfType(v.asMap().get(k)!, child))
   }
   // Positional list type `[A B …]` (a concrete list of type/value
