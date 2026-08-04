@@ -1,5 +1,13 @@
 # Where the type checker is not accurate — a catalog
 
+> **STALE NUMBERS (2026-08-02).** Re-measured: type-soundness violations
+> **0** (was 7 — §1.1–1.7 all resolved or absorbed by the refined
+> oracle), unflagged ERROR rows **306/1121**, Any-frontier **400/6030 =
+> 6.63%**. The accuracy *ratchets* named below are the live truth
+> (`test/go/langspec/check_accuracy_test.go`); read this catalog for the
+> taxonomy, not the counts. Current open items:
+> `checker-compiler-completeness-review.0.md` §6/§8.4.
+
 Status: **design note — catalog of current checker inaccuracies, grounded
 in the live accuracy ratchets.** No code proposed here beyond pointers to
 the two open design notes (`checker-precision-fronts.0.md`) that would close

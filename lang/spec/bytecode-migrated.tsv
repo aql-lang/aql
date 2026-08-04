@@ -98,3 +98,4 @@ def f fn [[a:Integer] [Map] [ def m {x: a  r: None}  m ]] (f 1)	{x:1 r:None}
 def f fn [[a:Integer] [List] [ def l [a None]  l ]] (f 1)	[1 None]
 def f fn [[a:Integer] [Map] [ def m {x: a  k: Integer}  m ]] (f 2)	{x:2 k:Integer}
 def f fn [[a:Integer] [Map] [ {x: a  r: None} ]] (f 3)	{x:3 r:None}
+do [1 div 0] error [drop] end 2 add 3	5	§8.2(6) graduation: a PROVEN-raise do with a zero-netting handler records a 0-output call (review §9.13)

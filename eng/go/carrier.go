@@ -1000,6 +1000,14 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 		// other reachable returns. Widen the (single) result to the union
 		// of all reachable returns. No-op for the common case (one
 		// reachable return), so unobservable with return-uniform words.
+		// The widening MINTS a fresh identity (NewDynamicCarrierValue) — a
+		// user-poly ReturnsFn that already recorded the call under the old
+		// out[0].ID is re-linked by recordCallElided's poly-alias arm (the
+		// §8.2(3) return-join), which rebinds the rebuilt outs onto the
+		// recorded event; preserving the old ID here instead reclassified
+		// an unrelated compiling flex-set row's residual ("call result
+		// above a literal") — the fresh mint is load-bearing for the
+		// residual model.
 		if len(out) == 1 {
 			if len(reachable) >= 2 {
 				alts := make([]Value, len(reachable))
@@ -3551,9 +3559,16 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	raiseCond := !keep && !condFrag
 	if raiseCond {
 		r.Check.CondBodyDepth++
+		// A rolled-back CONDITIONAL body is a speculative region: an
+		// `undef` of an enclosing binding inside it must not leak the
+		// deletion into the model (SpecUndefBlocked — the wrapped-undef FP
+		// class). keep=true (`do`) leaks by design; a condition fragment
+		// runs unconditionally, so its undefs are real on both engines.
+		r.Check.PushSpecBaseline(snapshot)
 	}
 	result, err := sub.Run(tokens)
 	if raiseCond {
+		r.Check.PopSpecBaseline()
 		r.Check.CondBodyDepth--
 	}
 	r.Check.NestedBodyDepth--
@@ -4679,6 +4694,12 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// (RescueForwardRefDiagnostics).
 	r.Check.FnBodyDepth++
 	defer func() { r.Check.FnBodyDepth-- }()
+	// A fn body is a speculative region too (it runs only if called): an
+	// `undef` of an enclosing binding inside it must not leak the deletion
+	// into the pass model (SpecUndefBlocked — the wrapped-undef FP class;
+	// frame teardown pops in-region bindings and stays untouched).
+	r.Check.PushSpecBaseline(r.Defs.Snapshot())
+	defer r.Check.PopSpecBaseline()
 
 	// Push this fn onto the named-fn stack so its body-local defs and
 	// undefined_word diagnostics attribute to it, and record its parameters as

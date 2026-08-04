@@ -29,6 +29,16 @@ type userPolyPlan struct {
 	// CLOSURE.0 §6b — see UserPolyRef.Sigs): non-nil arms the VM's stored
 	// re-match mode, which never Lookups the (popped-before-run) name.
 	sigs []Signature
+	// outs/joined carry the RETURN-JOIN for arm sets whose declared returns
+	// DIFFER (completeness-review §8.2(3)): joined[i] marks a position where
+	// the arms disagree, and outs[i] is the branch-join carrier (JoinCarriers
+	// folded over each arm's declared type) the record site substitutes for
+	// the committed overload's carrier — the runtime value is whichever arm
+	// the VM's re-match selects, which is exactly a branch join. Positions
+	// where every arm agrees keep the committed carrier (joined[i] false),
+	// so previously-compiling identical-return sets are byte-identical.
+	outs   []Value
+	joined []bool
 }
 
 // tryCompileUserPolyArms attempts the poly compile for one ambiguous
@@ -149,13 +159,72 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 			plan.sigs = append(plan.sigs, agg.Signatures[si])
 		}
 	}
+	// DIFFERING arm returns record the position-wise JOIN (§8.2(3)): the
+	// VM's re-match selects one arm at run time, so the call's result is a
+	// branch join of the arms' declared types — fold the same JoinCarriers
+	// the if/loop merges use, yielding the distributing strict-Disjunct (or
+	// collapsed-parent) carrier downstream dispatch already partitions
+	// (TestDistributeOverDispatchInvariant). A joined Any goes DYNAMIC,
+	// mirroring the committed-out convention ("statically unknown", not the
+	// strict Any root). Positions where every arm agrees stay untouched.
+	plan.outs = make([]Value, len(committedReturns))
+	plan.joined = make([]bool, len(committedReturns))
+	for pos, ct := range committedReturns {
+		// A nil position agrees across every arm (userPolyArmShapeOK's
+		// nil-ness gate), so it always takes the allEqual path — the nil
+		// probe rides inside the comparison so the join below only ever
+		// sees non-nil types.
+		allEqual := true
+		for _, si := range sigIdx {
+			rt := agg.Signatures[si].Returns[pos]
+			if (rt == nil) != (ct == nil) || (rt != nil && !rt.Equal(ct)) {
+				allEqual = false
+				break
+			}
+		}
+		if allEqual {
+			continue
+		}
+		bound := agg.Signatures[sigIdx[0]].Returns[pos]
+		for _, si := range sigIdx[1:] {
+			bound = CommonAncestorType(bound, agg.Signatures[si].Returns[pos])
+		}
+		j := NewCarrier(bound)
+		// DYNAMIC at the join bound — "one of the arms' types, decided at run
+		// time" — the same gradual shape a mixed branch merge or a dynamic
+		// native poly result carries; downstream dispatch matches it
+		// optimistically and re-checks at run time. (A strict Disjunct
+		// carrier would distribute more precisely, but the partition
+		// machinery re-mints the result carrier and orphans the recorded
+		// event's identity — the elision then misses and the dispatch
+		// re-refuses generically.)
+		j.Dynamic = true
+		plan.outs[pos] = j
+		plan.joined[pos] = true
+	}
 	return plan
+}
+
+// substituteJoinedOuts replaces the committed overload's out carriers with
+// the plan's return-join carriers at every position where the arms' declared
+// returns differ. The record site calls it just before RecordUserPolyCall so
+// downstream typing rides the join, never one arm's unproven commitment.
+func (p *userPolyPlan) substituteJoinedOuts(out []Value) {
+	for i := range out {
+		if i < len(p.joined) && p.joined[i] {
+			out[i] = p.outs[i]
+		}
+	}
 }
 
 // userPolyArmShapeOK gates one arm's SIGNATURE shape: a boru body, plain
 // value params (no quote / raw-form / no-eval / type-literal slots — the
-// runtime window re-match binds plain values only), and Returns identical to
-// the committed overload's (both position-wise nil, or Equal types).
+// runtime window re-match binds plain values only), and Returns matching the
+// committed overload's in COUNT and position-wise declaredness (nil-ness).
+// The TYPES may differ (the §8.2(3) return-join graduation): the call site
+// bakes a fixed nout, so the count must agree, but a differing type joins —
+// tryCompileUserPolyArms records the branch join of the arms' returns and
+// the VM re-match keeps each arm's own return contract at its unit.
 func userPolyArmShapeOK(s *Signature, committedReturns []*Type) bool {
 	if len(s.body()) == 0 {
 		return false
@@ -174,11 +243,7 @@ func userPolyArmShapeOK(s *Signature, committedReturns []*Type) bool {
 		return false
 	}
 	for i, t := range s.Returns {
-		c := committedReturns[i]
-		if (t == nil) != (c == nil) {
-			return false
-		}
-		if t != nil && !t.Equal(c) {
+		if (t == nil) != (committedReturns[i] == nil) {
 			return false
 		}
 	}

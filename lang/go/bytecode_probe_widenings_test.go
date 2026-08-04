@@ -88,9 +88,18 @@ def h fn [[b:Boolean] [U] [if b [3] ['x']]]
 `
 	mustCompileWithParity(t, mod+`g (h true)`, "[4]")
 	mustCompileWithParity(t, mod+`g (h false)`, "[0]")
-	// DIVERGENT returns (Integer arm vs String arm) keep the refusal.
-	mustRefuseWithParity(t, `def U (Integer tor String)
+	// DIVERGENT returns (Integer arm vs String arm) GRADUATED 2026-08-03 —
+	// the §8.2(3) return-join: the poly plan records the join of the arms'
+	// returns (userPolyPlan.outs) and the recorded identity survives the
+	// first-match-partition widening (applyGradualContagion preserves
+	// out[0].ID), so the strict-disjunct operand rides OpCallUserPoly with
+	// the VM re-matching the concrete alternative at run time.
+	mustCompileWithParity(t, `def U (Integer tor String)
 def g fn [[a:Integer] [Integer] [a add 1] [a:String] [String] ['s']]
 def h fn [[b:Boolean] [U] [if b [3] ['x']]]
-g (h true)`, "unmatched dispatch recovered")
+g (h true)`, "[4]")
+	mustCompileWithParity(t, `def U (Integer tor String)
+def g fn [[a:Integer] [Integer] [a add 1] [a:String] [String] ['s']]
+def h fn [[b:Boolean] [U] [if b [3] ['x']]]
+g (h false)`, "[s]")
 }

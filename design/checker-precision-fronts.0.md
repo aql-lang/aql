@@ -1,5 +1,11 @@
 # Checker precision fronts: typed code values & store-identity contexts
 
+> **SHIPPED (annotated 2026-08-02).** Both fronts landed: typed code
+> values stage 1 in `eng/go/code_effect.go` (0-input bodies; nesting
+> declines past depth 1) and store-shape typing in
+> `eng/go/store_shape.go`. The staged plans below are the historical
+> design record; the stage-2/3 residuals they defer are still open.
+
 Status: **design note — analysis and staged plan, no code yet.** The two
 remaining Tier-3 items from `checker-comprehensive-review.0.md` §5 that need
 design before implementation. Grounded at the post-Tier-2 tree (strict mode,

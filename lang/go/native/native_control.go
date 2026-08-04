@@ -1280,13 +1280,21 @@ func asInt64Or(v Value, def int64) int64 {
 // same forward collection the interpreter takes, so refuseForwardStackDrift
 // has nothing to refuse. Anything inconclusive — a non-token handler, a
 // multi-value or empty handler residual, a nil parent — keeps the historical
-// dynamic(Any), so genuinely dynamic boundaries keep refusing. Gated to the
-// compile pass: plain check keeps its diagnostics surface unchanged (the
-// seeded body run could surface handler-body diagnostics plain check never
-// reported).
+// dynamic(Any), so genuinely dynamic boundaries keep refusing.
+//
+// The seeded body run covers the PLAIN pass too (NUR049, un-gated
+// 2026-08-03): `error` handler bodies were the one body the checker never
+// visited, so `do [raise bad_input "x"] error [zzz-undefined]` checked
+// clean and failed at runtime. Running the same seeded analysis on both
+// passes makes the handler-body diagnostic surface identical to the
+// compile pass's (one-diagnostic-surface,
+// checker-compiler-completeness-review.0.md §8.4.2) — and it is
+// corpus-safe by construction: every corpus row already passes this
+// analysis in the compile pass (an error-severity handler diagnostic
+// would have tripped the refusal gate at 0).
 func errorReturnsFn(args []Value, r *Registry) []Value {
 	wide := []Value{NewDynamicCarrier(TAny)}
-	if !r.Check.Compiling || !IsConcrete(args[0]) || args[1].Parent == nil {
+	if !IsConcrete(args[0]) || args[1].Parent == nil {
 		return wide
 	}
 	body, err := AsList(args[0])
@@ -1329,6 +1337,20 @@ func errorReturnsFn(args []Value, r *Registry) []Value {
 		// that compiles correctly today. A residual >1 that the strip cannot
 		// reduce is already declined further down the pipeline, so it needs
 		// nothing from here either.
+		//
+		// A PROVEN raise (a strict, non-dynamic Error do-result — the body
+		// always raises, so the pass-through arm is statically dead) makes
+		// the zero a FIXED arity, not a variable one: the handler runs on
+		// every execution and nets nothing, so the dispatch records a
+		// 0-output call — the same truth-telling the zero-return user-fn
+		// path performs — and the residual matches the runtime exactly
+		// (completeness-review §8.2(6), the zero-netting-handler
+		// graduation). A DYNAMIC Error bound keeps the refusal: there the
+		// runtime may not raise, the pass-through nets one where the caught
+		// path nets zero, and a fixed seat cannot carry both.
+		if !args[1].Dynamic && args[1].Parent != nil && args[1].Parent.ConformsTo(TError) {
+			return nil
+		}
 		if es := r.Check.Recorder(); es.Active() {
 			es.MarkUncompilable(
 				"error: handler nets no value — the single-output island model " +

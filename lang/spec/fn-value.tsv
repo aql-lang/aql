@@ -119,3 +119,32 @@ def i fn [[x:Integer] [Integer] [x add 1]] end def m {i: i/r} end m.i 5 m.i 7	6 
 def stp fn [[e:Integer] [Integer] [e add 1]] end each [stp] [1 2]	[2 3]	a module-scope fn named as an each body word keeps compiling
 def acc (flex {}) end def stp fn [[e:String] [Any] [acc set (e) true]] end for-each [stp] ['x' 'y'] end acc	(flex {x:true y:true})	a module-scope fn as a for-each body word keeps compiling
 def g fn [[xs:List] [Any] [def n 10 each [n add] xs]] end g [1 2]	[11 12]	a fn-local VALUE def read by the body is a lexical capture, not a refusal
+#
+# §8  chained forward application of Function params — the compose family.
+#     `f (g x)` inside a fn body applies the inner param fn at the paren
+#     and the outer param fn over its result — the canonical HOF chain.
+#     A live MISCOMPILE until 2026-08-02 (the whole-frame replay's flat
+#     window lost the paren structure and compiled the RET count error),
+#     then a sound refusal; GRADUATED 2026-08-03 by the Stage-G single-arg
+#     increment: the leading one-arg apply `(g x)` records the same
+#     RecordDynApply event as the trailing spelling `(x g)` (the two
+#     collections converge at one argument), so the inner group collapses
+#     to an event and the outer apply rides the single-applicable RetReplay
+#     body tail. These rows hold BOTH engines to the chain through the
+#     differential gate (native pins: lang/go/bytecode_chained_apply_test.go).
+def compose fn [[f:Function g:Function x:Integer] [Integer] [f (g x)]] compose ([a:Integer] => [a mul 2]) ([b:Integer] => [b add 3]) 4	14	the canonical compose: outer param fn applied to the inner param fn's result
+def twice fn [[f:Function x:Integer] [Integer] [f (f x)]] twice ([n:Integer] => [n add 1]) 5	7	self-composition — the same fn value read twice, applied at two depths
+def stage fn [[f:Function x:Integer] [Integer] [def r (f x) f r]] stage ([n:Integer] => [n add 1]) 5	7	the def-split idiom: the apply seats in a def, the tail applies over the bound name (replayIsBodyTail's windowReadsID arm)
+def tds fn [[g:Function x:Integer] [Integer] [def r (x g) g r]] tds ([n:Integer] => [n add 1]) 5	7	the trailing-spelling def-split twin — same seating through the trailing RecordDynApply event
+#
+# §9  gradual-Any into a multi-overload user fn with DIFFERING arm returns.
+#     The checker cannot statically commit an arm, and until 2026-08-03 one
+#     recorded output type would lie for the unselected arm, so the shape
+#     refused ("ambiguous dispatch, no poly re-match"). The §8.2(3)
+#     return-join graduation records the JOIN of the arms' returns (a
+#     dynamic carrier at the arms' common ancestor) and the VM's
+#     OpCallUserPoly re-match selects the concrete arm — whichever arm
+#     runs, downstream typing rides the join, never one arm's unproven
+#     commitment (pins: lang/go/bytecode_poly_join_test.go).
+def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 5)	1	differing arm returns: Integer arm selected at runtime
+def id fn [[x:Any] [Any] [x]] def g fn [[a:Integer] [Integer] [1] [a:String] [String] ['s']] g (id 'x')	's'	differing arm returns: String arm selected at runtime

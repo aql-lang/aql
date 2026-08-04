@@ -1,0 +1,14 @@
+# `do … error` whose handler nets NO value, followed by more program —
+# the P1.6 capability target (checker-compiler-completeness-review.0.md
+# §8.2(6); COMPILE-REFUSAL-SURVEY.0.md §3d) — GRADUATED 2026-08-03 (review
+# §9.13) for the PROVEN-raise shape: a strict Error do-result makes the
+# pass-through arm statically dead, so the zero is a FIXED arity —
+# errorReturnsFn returns it truthfully, the dispatch records a 0-output
+# call, and stripResidualShapeOK's want-0 arm admits the empty handler
+# residual (no island, no new opcode; the row moved to the main corpus and
+# is pinned native in lang/go/bytecode_do_error_arity_test.go). The
+# remaining sub-frontier below: a MAYBE-raising body (a dynamic Error
+# bound) has variable arity — the pass-through nets one where the caught
+# path nets zero — so it keeps the refusal; graduation = the variable-arity
+# island via the mark machinery (OpStackMark/OpDropToMark).
+def xs [0] do [1 div (xs 0 getr)] error [drop] end 2 add 3	5	a maybe-raising body with a zero-netting handler — variable arity keeps the sound refusal

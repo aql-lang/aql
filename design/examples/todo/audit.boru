@@ -23,15 +23,21 @@ def log fn [[svc:Service] [Service] [
         out
       ]
       # An application error from a handler propagates UNCHANGED (§8) — we only
-      # observe it, tag the audit row, and re-raise (bare `raise`) so the caller
-      # still sees the original error. Same shape as the §8.2 `[ raise ]` default.
+      # observe it, tag the audit row, and re-raise so the caller still sees
+      # the original error (code and payload ride the spec map:
+      # `raise (convert Map e)` — NUR049 repair; the old `(dot code)` group
+      # sealed off its stack receiver and a bare `raise` matches no signature,
+      # so this arm could never complete).
       error [
-        record {at: started  op: req.op  user: req.@user  ok: false  err: (dot code)}
-        raise
+        dup dot code def errc end
+        record {at: started  op: req.op  user: req.@user  ok: false  err: errc}
+        convert Map raise
       ]
   ] ] svc
 ]]
 
 # Illustrative sink — in a real app this would itself be a served service or a
 # stream (`boru:stream`). Kept trivial so the DX of `wrap` stays the focus.
-def record fn [[row:Map] [None] [ None ]]
+# 0-return by design (NUR049 repair): the old `[None] [ None ]` spelling left
+# a residual the arms never accounted for, so `record … out` netted two.
+def record fn [[row:Map] [] [ ]]

@@ -78,6 +78,9 @@ error) is the right level.
 
 ## Tests
 
-- `lang/go/forward_strand_advisory_test.go` — fires on the gotcha (incl. in a
-  function body), quiet on swap/stack/idiomatic forms and on the grouped fix,
-  and asserts it is non-gating (0 errors).
+- `lang/go/forward_strand_advisory_test.go` — fires on the gotcha at the
+  top level, quiet on swap/stack/idiomatic forms and on the grouped fix,
+  and asserts it is non-gating (0 errors). **In-body detection was
+  deliberately dropped** (`TestForwardStrandAdvisory_QuietInBody`):
+  bodies analyse against carriers, and running with concrete example
+  args reintroduced the dynamic-help FP class.

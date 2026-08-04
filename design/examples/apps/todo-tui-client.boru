@@ -46,7 +46,7 @@ def sync fn [[ep:Any ui:Any] [Any] [
             # do must yield a value for `error`
         ]
         error
-        [def why (dot message) send {tag:"sync-error" why:why} ui]
+        [dot message def why end send {tag:"sync-error" why:why} ui]
     ]
 ]]
 
@@ -65,7 +65,7 @@ def create-remote fn [[ep:Any ui:Any text:String] [Any] [
             # do must yield a value for `error`
         ]
         error
-        [def why (dot message) send {tag:"sync-error" why:why} ui]
+        [dot message def why end send {tag:"sync-error" why:why} ui]
     ]
 ]]
 
@@ -84,7 +84,7 @@ def toggle-remote fn [[ep:Any ui:Any t:Map] [Any] [
             # do must yield a value for `error`
         ]
         error
-        [def why (dot message) send {tag:"sync-error" why:why} ui]
+        [dot message def why end send {tag:"sync-error" why:why} ui]
     ]
 ]]
 
@@ -98,7 +98,7 @@ def delete-remote fn [[ep:Any ui:Any t:Map] [Any] [
             # do must yield a value for `error`
         ]
         error
-        [def why (dot message) send {tag:"sync-error" why:why} ui]
+        [dot message def why end send {tag:"sync-error" why:why} ui]
     ]
 ]]
 

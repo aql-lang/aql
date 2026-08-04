@@ -190,6 +190,65 @@ var frontierCompileLedger = map[string]frontierEntryLS{
 	// hazard as the fallible regions.
 	`7 def b true  do [1 2 (if b [] [9 9])]`: {why: "PR #280 review: branch-variant multi-out do region promoted under a dirty-stack prefix", failsWith: "variadic result promoted to frame slots"},
 
+	// Chained forward application of Function params (frontier-chained-apply
+	// .tsv) — the compose family, a live MISCOMPILE until 2026-08-02 (the
+	// whole-frame replay's flat window lost the paren structure: compiled
+	// RET count-error, interpreted 14), then a sound refusal
+	// (noteDynFrameReplay declines a window with >1 applicable value).
+	// GRADUATED 2026-08-03 in three coordinated steps: (1) the Stage-G
+	// single-arg increment — a leading one-arg fn-carrier apply `(g x)`
+	// records the trailing spelling's RecordDynApply event (compose/twice →
+	// fn-value.tsv §8); (2) checkModeParenFnCollapse — the plain-surface
+	// collapse twin — killed the def-split checker FP
+	// (check_fn_param_apply_def_fp_test.go is the positive pin); (3) the
+	// replayIsBodyTail windowReadsID widening — a dyn-bind of a value the
+	// window reads is not a reorderable event — armed the def-split body
+	// tail, so the stage row compiles natively too (fn-value.tsv §8). The
+	// family's remaining refusal is the CHAINED MULTI-ARG apply
+	// (`f (g x y)`), ledgered above in the emit-refusal families via
+	// lang/go/bytecode_chained_apply_test.go's TestMultiArgChainedApplyRefuses
+	// (no separate frontier entry: the two-applicable window refusal is the
+	// §9.1 class, "unapplied fn-value in body residual").
+
+	// Full-stack words GRADUATED 2026-08-03 (EmitState.FoldFullStack —
+	// static fold over a provably-exact stack; rows moved to
+	// corpus-core.tsv). The remaining sub-frontier
+	// (frontier-full-stack.tsv): a roll permuting two EVENT results asks
+	// the program residual to re-push call results in a non-production
+	// order — beyond the Stage-1 residual discipline. The fold models it
+	// correctly; the LOWERING declines. Graduation = program-residual
+	// ordering beyond Stage 1.
+	`(1 add 2) (3 add 4) 1 roll`: {why: "two event results permuted by roll: the residual re-push order exceeds Stage 1", failsWith: "residual shape beyond Stage 1"},
+	// A full-stack word inside a wrapped code body compiles WITH an island
+	// (the fold is gated to the top unit; the body's island machinery owns
+	// the occurrence — sound interpreter re-entry, parity held). Graduation
+	// = per-unit exactness for the fold. Same bucket pinned in
+	// varyRefusalLedger ("islanded").
+	`[10 20] each [drop 1 2 3 1 pick]`: {why: "full-stack word in a code body: the fold declines outside the top unit; the island seam owns it", failsWith: "islanded"},
+
+	// Gradual-Any to a multi-overload user fn with DIFFERING arm returns —
+	// the P1.3 target — GRADUATED 2026-08-03 (completeness-review §8.2(3)/
+	// §9.11): tryCompileUserPolyArms records the position-wise JOIN of the
+	// arms' returns (userPolyPlan.outs — a dynamic carrier at the arms'
+	// common ancestor), userPolyArmShapeOK relaxed to count + nil-ness
+	// agreement, and applyGradualContagion's first-match-partition widening
+	// preserves the recorded identity (out[0].ID) so the poly event
+	// survives to the elision. Both rows compile natively via
+	// OpCallUserPoly (moved to lang/spec/fn-value.tsv §9; pinned in
+	// lang/go/bytecode_poly_join_test.go with the count-mismatch negative).
+
+	// `do … error` with a zero-netting handler (frontier-do-error-arity
+	// .tsv) — the P1.6 target, GRADUATED 2026-08-03 for the PROVEN-raise
+	// shape (completeness-review §9.13): a strict Error do-result fixes the
+	// arity at zero, errorReturnsFn returns it truthfully, and the
+	// strip-input shape screen's want-0 arm admits the empty residual —
+	// the row compiles natively (moved to the main corpus; pinned in
+	// lang/go/bytecode_do_error_arity_test.go). The MAYBE-raising twin
+	// below keeps the refusal: a dynamic Error bound has variable arity
+	// (pass-through 1 vs caught 0), the true remaining §8.2(6) target
+	// (the variable-arity island via the mark machinery).
+	`def xs [0] do [1 div (xs 0 getr)] error [drop] end 2 add 3`: {why: "maybe-raising body with a zero-netting handler: the pass-through nets one where the caught path nets zero — no fixed seat", failsWith: "handler nets no value"},
+
 	// NUR038 statement-seal twin-call matrix (frontier-nur038-seal.tsv):
 	// semantically green under the seal + arrival barrier; compile-refused
 	// on the pre-existing residual-ordering limitation — two dynamic call

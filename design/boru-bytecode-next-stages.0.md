@@ -477,6 +477,20 @@ errors `undefined_word`, not a silent dynamic read.
 
 ## Stage G — closure-return / fn-value-call boundary
 
+**Update (2026-08-03): the SINGLE-ARG leading param apply LANDED — compose
+compiles.** `stepCloseParen`'s paren-collapse records `(g x)` (a leading
+Function-typed param/capture of an open NAMED-PARAM fn unit, exactly one
+argument) through the same `RecordDynApply` event as the trailing spelling
+`(x g)` — inside a sealed named frame the two spellings converge for every
+runtime arity (probe-pinned: mismatched callees no-match identically). The
+admission is `EmitState.DynApplyLeadEligible` (unnamed-param frames keep
+the whole-frame replay — their leading collection reaches beneath the
+window; event leads keep the curried machinery; closure units decline;
+multi-arg leads never collapse). `compose` / `twice` / depth-3 chains /
+mid-body `(g x) add 100` are native; rows in `lang/spec/fn-value.tsv` §8.
+See checker-compiler-completeness-review.0.md §9.6b. The REST of this
+stage (below) is unchanged.
+
 **Update (2026-06): `bytecode-combinations.tsv:74` LANDED (refusalCeiling 7 → 6).**
 The factory `def mk2 fn [[x:Integer] [Function] [([y:Integer] => [x add y])]] for
 3 [(mk2 i) 10]` → `10 11 12` now compiles FULLY NATIVE (no island). Two

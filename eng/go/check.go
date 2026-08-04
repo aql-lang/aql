@@ -93,6 +93,35 @@ func (c *CheckState) ModelsEffects() bool {
 	return c != nil && c.ModelEffects
 }
 
+// PushSpecBaseline / PopSpecBaseline bracket one SPECULATIVE check region
+// with its def-depth snapshot (see CheckState.SpecBaselines): pushed by the
+// rolled-back nested-body run and the fn-body analysis, consulted by the
+// `undef` handler via Registry.SpecUndefBlocked.
+func (c *CheckState) PushSpecBaseline(snap map[string]int) {
+	c.SpecBaselines = append(c.SpecBaselines, snap)
+}
+
+func (c *CheckState) PopSpecBaseline() {
+	c.SpecBaselines = c.SpecBaselines[:len(c.SpecBaselines)-1]
+}
+
+// SpecUndefBlocked reports whether an `undef` of name inside the CURRENT
+// speculative check region would pop a binding that PREDATES the region —
+// the deletion the model must not commit: the region may never execute at
+// run time, so leaking the pop flagged `undefined_word` on clean programs
+// (the wrapped-undef FP class — an `undef` in a skipped error handler, an
+// each body over an empty list, an uncalled fn body). False outside check
+// mode, outside any speculative region, and for bindings pushed INSIDE the
+// region (frame params, body defs — their depth exceeds the entry
+// snapshot), so teardown and body-local undef are untouched.
+func (r *Registry) SpecUndefBlocked(name string) bool {
+	if !r.Check.IsActive() || len(r.Check.SpecBaselines) == 0 {
+		return false
+	}
+	base := r.Check.SpecBaselines[len(r.Check.SpecBaselines)-1]
+	return r.Defs.Depth(name) <= base[name]
+}
+
 // Begin enables check mode and resets the per-pass state (diagnostics,
 // step count, budget flag, defs-installed/used, context-type tracking).
 // Returns a function that switches mode off when called — typically via
@@ -129,6 +158,7 @@ func (c *CheckState) Begin() func() {
 	c.NestedBodyDepth = 0
 	c.CondBodyDepth = 0
 	c.LoopBodyDepth = 0
+	c.SpecBaselines = nil
 	c.ArgsFrameUnnamed = false
 	// Compiling marks a REAL compile pass; the compile entry points set it
 	// true AFTER this Begin (via BeginCompilePass). Reset it here so it is

@@ -724,6 +724,16 @@ type EmitState struct {
 	// in lockstep (the Finalize-order constraint: markBefore is read during
 	// lowerEvents, the dynOp is decided after). seqs start at 1.
 	markWindowSeq int
+	// lastUserPoly notes the OpCallUserPoly event RecordUserPolyCall just
+	// recorded, so recordCallElided's poly-alias arm can re-link the SAME
+	// dispatch when the caller (carrierResults) rebuilds the out carriers
+	// after the ReturnsFn returned — the gradual first-match-partition
+	// widening mints FRESH result IDs, which would otherwise orphan the
+	// recorded event and re-refuse the dispatch generically ("user fn call …
+	// Stage 3") on a program whose poly plan compiled every arm (the
+	// §8.2(3) return-join). Cleared by every appendEvent: only the
+	// immediately following generic record of the same word may consume it.
+	lastUserPoly *lastUserPolyNote
 	// loopCarried is the stack of OPEN armed-loop carried-def scopes (one per
 	// nested AnalyseLoopBody running with loop capture). Each maps a rebound
 	// pre-loop def NAME to the unit frame slot carrying it across iterations;
@@ -1378,7 +1388,16 @@ func (es *EmitState) TakeFragment() *EmitFragment {
 }
 
 // appendEvent adds an event to the current frame and returns its seq.
+// lastUserPolyNote identifies the just-recorded OpCallUserPoly event for
+// recordCallElided's poly-alias arm (see the EmitState.lastUserPoly field).
+type lastUserPolyNote struct {
+	word string
+	seq  int
+	nout int
+}
+
 func (es *EmitState) appendEvent(ev emitEvent) int {
+	es.lastUserPoly = nil
 	n := len(es.frames) - 1
 	// Dead code after a divergent terminal, IN A FRAGMENT: a diverging call
 	// (raise, or a static-zero div/mod — CompileValueDiverges) never returns, so
@@ -3677,6 +3696,48 @@ func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx,
 	for i := range outs {
 		es.setProducedAt(outs[i], seq, i)
 	}
+	es.lastUserPoly = &lastUserPolyNote{word: word, seq: seq, nout: len(outs)}
+}
+
+// DynApplyLeadEligible reports whether the paren-collapse may record a
+// LEADING one-arg fn-carrier apply over v (the Stage-G increment,
+// stepCloseParen): true only inside an open NAMED-PARAM fn unit where v is
+// one of the unit's own slots (a param or capture read). The admission is
+// deliberately narrow, each exclusion probe-backed:
+//   - an UNNAMED-param frame re-pushes its args beneath the region, so the
+//     interpreter's leading collection can reach past the sealed window the
+//     trailing model records (`(args.0 args.1)` over a two-arg runtime fn
+//     nets 28 interpreted where the trailing model no-matches) — those
+//     frames keep the whole-frame replay;
+//   - a CLOSURE unit's analysis frame is the CallableSpec inputs, not a
+//     per-call named frame — outside the probe evidence, so it declines;
+//   - an EVENT-provenance lead (a direct call result, `((mk 1) 2)`) keeps
+//     the curried/auto-dispatch machinery — RecordDynApply hard-refuses an
+//     event fn (runtime quote state unknown), so admitting one here would
+//     turn a compiling shape into a refusal. A CAPTURE may carry a
+//     parent-unit event entry yet resolves to its own slot (capID
+//     precedence), so it stays eligible.
+//
+// Within an eligible unit, one-arg leading and trailing spellings CONVERGE
+// for every runtime arity: the paren seals the named frame off, so a
+// mismatched runtime fn (0-arg, 2-arg, multi-return) no-matches identically
+// in both spellings (probe-pinned across arities in
+// lang/go/bytecode_chained_apply_test.go).
+func (es *EmitState) DynApplyLeadEligible(v Value) bool {
+	if !es.active() || len(es.openUnitRecs) == 0 || es.inClosureUnit() {
+		return false
+	}
+	if es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]].nUnnamed > 0 {
+		return false
+	}
+	u := es.units[len(es.units)-1]
+	if _, isLocal := u.localByID[v.ID]; !isLocal {
+		return false
+	}
+	if _, produced := es.producedBy[v.ID]; produced && !u.capID[v.ID] {
+		return false
+	}
+	return true
 }
 
 // RecordDynApply records a paren-bounded TRAILING fn-value apply (`(a b comp)`):
@@ -4098,6 +4159,80 @@ func (es *EmitState) RememberOriginal(v Value) {
 	es.origByID[v.ID] = v
 }
 
+// FoldFullStack statically folds a full-stack word — depth / pick / roll —
+// when the recorder can prove the simulated stack is EXACT, so the dispatch
+// ELIDES: no event records, no opcode runs, and the fold's outputs carry
+// known provenance (the P1.2 capability, checker-compiler-completeness-
+// review §8.2(2); the class was previously a blanket provenance refusal).
+//
+//   - depth  → the count is the preserved stack's length, baked as a fresh
+//     CONCRETE Integer (resolveOperand materialises it as a const);
+//   - pick n → a COPY of the picked entry (same ID — the re-push resolves
+//     to the original's operand; an event-produced pick target is promoted
+//     to a value-def frame local so both references have a home);
+//   - roll n → the true permutation of the preserved entries (every ID kept;
+//     the residual reconciliation's ordering machinery lays it out).
+//
+// Exactness is the whole soundness argument: the fold bakes the CHECK
+// model's stack, so it is admitted only where that model provably mirrors
+// the interpreter — the top frame of the top unit, no open mark window, and
+// every preserved entry either a known operand home (event / local /
+// materialisable const / type node) with no variadic producer (a variadic
+// region's runtime count is not its model count). Anything else declines
+// and the historical refusal path stands (slow, not wrong). An
+// out-of-range n declines too: the interpreter raises there, and the
+// fallback keeps the raise byte-identical.
+func (es *EmitState) FoldFullStack(word string, args, preserved []Value) ([]Value, bool) {
+	if es == nil || !es.active() || es.suspended > 0 || !es.Compilable ||
+		len(es.frames) != 1 || len(es.units) != 1 || es.markWindowSeq != 0 {
+		return nil, false
+	}
+	for _, v := range preserved {
+		if v.ID == "" {
+			return nil, false
+		}
+		if pr, ok := es.producedBy[v.ID]; ok {
+			if es.eventInfo[pr.seq].variadicResult {
+				return nil, false
+			}
+			continue
+		}
+		if _, ok := es.units[0].localByID[v.ID]; ok {
+			continue
+		}
+		if IsConcrete(v) || IsBareTypeNode(v) {
+			continue
+		}
+		return nil, false
+	}
+	switch word {
+	case "depth":
+		n := NewInteger(int64(len(preserved)))
+		n.ID = GenerateID(IDPrefixForType(TInteger))
+		return append(append([]Value(nil), preserved...), n), true
+	case "pick", "roll":
+		if len(args) != 1 || !IsConcrete(args[0]) {
+			return nil, false
+		}
+		nn, err := AsInteger(args[0])
+		if err != nil || nn < 0 || int(nn) >= len(preserved) {
+			return nil, false
+		}
+		idx := len(preserved) - 1 - int(nn)
+		if word == "pick" {
+			picked := preserved[idx]
+			es.MarkValueDef(picked)
+			return append(append([]Value(nil), preserved...), picked), true
+		}
+		out := make([]Value, 0, len(preserved))
+		out = append(out, preserved[:idx]...)
+		out = append(out, preserved[idx+1:]...)
+		out = append(out, preserved[idx])
+		return out, true
+	}
+	return nil, false
+}
+
 // RecordTrap records a TERMINAL trap for a check-mode-suppressed runtime error
 // (an orphan gen, an unpack of a missing key): the checker is lenient at this
 // point but the interpreter errors, so the compiled program raises the
@@ -4353,6 +4488,19 @@ func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value,
 // structured hook, or a compile-time name resolution that produces nothing the
 // VM runs. The caller returns without recording when this is true.
 func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []Value) bool {
+	// §8.2(3) poly-alias: the ReturnsFn recorded THIS dispatch as
+	// OpCallUserPoly, and the caller then rebuilt the out carriers (the
+	// gradual first-match-partition widening mints fresh IDs) — alias the
+	// rebuilt IDs onto the recorded event and elide the generic record, so
+	// downstream operand resolution reaches the poly event under the
+	// widened carriers' identities.
+	if lp := es.lastUserPoly; lp != nil && lp.word == word && len(outs) == lp.nout {
+		for i := range outs {
+			es.setProducedAt(outs[i], lp.seq, i)
+		}
+		es.lastUserPoly = nil
+		return true
+	}
 	// A dispatch whose output is already registered was recorded by a
 	// structured hook (RecordBranch owns the `if` dispatch; a user-fn
 	// ReturnsFn owns its RecordUserCall — including multi-return calls) —
@@ -7919,6 +8067,15 @@ func (es *EmitState) noteApplyLoopReplay(rec *fnUnitRec, ops []emitOperand) []em
 // the previous compile-with-symmetric-RET-error assumption diverged the
 // moment the runtime value was callable. Returns true when no such value
 // exists or the replay window was seated; false keeps the refusal.
+//
+// The window must hold exactly ONE applicable value. The replay re-pushes
+// VALUES — the source's paren structure is gone — so a window carrying TWO
+// applicables is the chained forward apply `f (g x)` whose INNER group never
+// collapsed in the check run: the flat re-step hands the outer fn the RAW
+// inner fn where the interpreter hands it the inner APPLICATION's result
+// (`compose` → compiled count-error, interpreted 14). One applicable is
+// faithful by construction (the pinned stylesheet shapes: every other window
+// value is already the evaluated form its source group collapses to).
 func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Value, extra int) bool {
 	for i, v := range vals {
 		if i < extra && i < rec.nUnnamed {
@@ -7927,7 +8084,8 @@ func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Valu
 			}
 		}
 		if v.Dynamic || (v.Parent != nil && v.Parent.ConformsTo(TFunction)) {
-			if w, ok := dynFrameWindow(u, rec, vals); ok && es.replayIsBodyTail(rec.frag, vals[len(vals)-w:]) {
+			if w, ok := dynFrameWindow(u, rec, vals); ok && es.replayIsBodyTail(rec.frag, vals[len(vals)-w:]) &&
+				replayApplicables(vals[len(vals)-w:]) == 1 {
 				rec.dynFrameW = w
 				rec.retReplay = true
 				return true
@@ -7936,6 +8094,19 @@ func (es *EmitState) noteDynFrameReplay(u *emitUnit, rec *fnUnitRec, vals []Valu
 		}
 	}
 	return true
+}
+
+// replayApplicables counts the window values the whole-frame replay's
+// re-step could APPLY — a Function-typed value or a Dynamic (maybe-callable)
+// carrier. noteDynFrameReplay arms only when this is exactly 1.
+func replayApplicables(window []Value) int {
+	n := 0
+	for _, v := range window {
+		if v.Dynamic || (v.Parent != nil && v.Parent.ConformsTo(TFunction)) {
+			n++
+		}
+	}
+	return n
 }
 
 // replayIsBodyTail reports whether the replay window is the body's LAST
@@ -7968,9 +8139,23 @@ func (es *EmitState) replayIsBodyTail(frag *EmitFragment, window []Value) bool {
 	}
 	if anchorSeq >= 0 {
 		for i := range frag.events {
-			if frag.events[i].seq > anchorSeq {
-				return false
+			if frag.events[i].seq <= anchorSeq {
+				continue
 			}
+			// A dyn-BIND of a value the window itself READS is not a
+			// reorderable effect: the window can only read the def-bound
+			// value AFTER the bind (same value instance — ID equality, so a
+			// rebind of a different value never matches), which puts the
+			// interpreter's tail apply after the bind, and the VM keeps the
+			// same order (the bind op at its position, the replay at RET).
+			// This is what lets the def-split idiom `def r (f x) f r` arm:
+			// the def's evDynBind lands between r's producer and the tail
+			// (§9.4 graduation, checker-compiler-completeness-review).
+			if ev := &frag.events[i]; ev.kind == evDynBind && ev.dyn != nil &&
+				ev.dyn.val.ID != "" && windowReadsID(window, ev.dyn.val.ID) {
+				continue
+			}
+			return false
 		}
 		return true
 	}
@@ -7990,6 +8175,18 @@ func (es *EmitState) replayIsBodyTail(frag *EmitFragment, window []Value) bool {
 		}
 	}
 	return true
+}
+
+// windowReadsID reports whether the replay window holds the value with the
+// given ID — the read that makes a later dyn-bind of that same value a
+// non-reorderable event for replayIsBodyTail.
+func windowReadsID(window []Value, id string) bool {
+	for _, v := range window {
+		if v.ID == id {
+			return true
+		}
+	}
+	return false
 }
 
 // dynFrameWindow classifies a fn-body residual that carries an unapplied

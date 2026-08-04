@@ -883,6 +883,22 @@ type CheckState struct {
 	// firing there would flag working guard idioms.
 	NestedBodyDepth int
 
+	// SpecBaselines is the stack of def-depth snapshots taken at each open
+	// SPECULATIVE region entry — a rolled-back nested body (keep=false in
+	// runCarrierBodyDefsAdds: branch arms, loop/quotation bodies, handler
+	// probes) or a fn-body analysis (AnalyseFnBody). The `undef` handler
+	// consults the innermost: popping a binding whose depth does not exceed
+	// the region-entry snapshot would delete an ENCLOSING binding from the
+	// model for the rest of the pass — a region the runtime may never
+	// execute — which flagged `undefined_word` on clean programs (`def x 1
+	// do [7] error [undef x 9] x`; the same leak fired from each-bodies and
+	// uncalled fn bodies — the wrapped-undef FP class, completeness-review
+	// §9.12). In-region bindings (params, body defs — depth above the
+	// snapshot) still pop normally, so frame teardown is untouched. `do`
+	// bodies (keep=true) push nothing: their defs and undefs leak by
+	// design (leak fidelity), matching the runtime.
+	SpecBaselines []map[string]int
+
 	// LoopBodyDepth, when > 0, marks analysis running inside a PROVEN
 	// counted-for LOOP body (AnalyseLoopBody brackets each round's body run,
 	// gated on its provenTrips arg AND a sentinel-free body). Unlike the
