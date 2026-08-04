@@ -3421,9 +3421,22 @@ func kernelFormatDefault(v Value) string {
 			return "Type"
 		}
 		return n.Leaf() + "/t"
-	case IsWord(v):
+	case IsWord(v) && !IsSugar(v):
 		w, _ := AsWord(v)
 		return fmt.Sprintf("word(%s)", w.Name)
+	case IsSugar(v):
+		info, _ := AsSugar(v)
+		switch info.Kind {
+		case SugarForceArity:
+			return fmt.Sprintf("sugar(%s %d)", info.Kind, info.N)
+		case SugarMini:
+			return fmt.Sprintf("sugar(%s %s '%s')", info.Kind, info.Name, info.Src)
+		case SugarAngle:
+			return fmt.Sprintf("sugar(%s %s %v)", info.Kind, info.Name, info.Items)
+		case SugarTypeBound:
+			return fmt.Sprintf("sugar(%s %v)", info.Kind, info.Items)
+		}
+		return fmt.Sprintf("sugar(%s)", info.Kind)
 	case IsForward(v):
 		f, _ := AsForward(v)
 		return fmt.Sprintf("forward(%s,%d/%d)", f.FuncName, f.CollectedArgs, f.ExpectedArgs)

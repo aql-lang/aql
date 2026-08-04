@@ -122,13 +122,15 @@ func TestParseWave3MarkerTokens(t *testing.T) {
 // --- word modifiers ---
 
 func TestParseWave3TypeBoundSugar(t *testing.T) {
-	// `Map/t` desugars to the paren group `(Type of [Map])`.
+	// `Map/t` parses to one type-bound sugar marker; the engine lowers
+	// it to the bounded-Type application (ADR-012 rule 3 amendment).
 	vals := mustParseWave3(t, "Map/t")
-	if len(vals) != 1 || !eng.IsParenExpr(vals[0]) {
-		t.Fatalf("Map/t: expected one ParenExpr, got %v", vals)
+	if len(vals) != 1 {
+		t.Fatalf("Map/t: expected one value, got %v", vals)
 	}
-	if s := vals[0].String(); !strings.Contains(s, "Type") || !strings.Contains(s, "of") {
-		t.Errorf("Map/t: rendering %q lacks the Type-of shape", s)
+	info, ok := eng.AsSugar(vals[0])
+	if !ok || info.Kind != eng.SugarTypeBound {
+		t.Fatalf("Map/t: expected a type-bound sugar marker, got %v", vals[0])
 	}
 }
 

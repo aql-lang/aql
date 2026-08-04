@@ -527,7 +527,7 @@ func (e *Engine) polyReachBound() (int, bool) {
 // every one of these carries a payload, so the bare concrete probe counts
 // them — screen them first (the reorderCandidates stop-set lesson).
 func polyReachUnboundable(v Value) bool {
-	return IsForward(v) || IsReach(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) ||
+	return IsForward(v) || IsReach(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) || IsSugar(v) ||
 		v.Parent.ConformsTo(TMark) || v.Parent.ConformsTo(TMove) || v.Parent.ConformsTo(TInternal)
 }
 
@@ -4088,6 +4088,13 @@ func (e *Engine) stepLiteral() error {
 		info, _ := AsReach(e.tape.At(valIdx))
 		e.tape.Splice(valIdx, 1, expandReach(info)...)
 		return nil
+	}
+	// A sugar marker lowers to its word expansion in place (ADR-012
+	// rule 3, 2026-08-04 amendment — sugar.go), exactly like the
+	// ParenExpr and Reach expansions above. Quoted markers (captured
+	// data) and raw-capture collection fall through.
+	if IsSugar(e.tape.At(valIdx)) && !e.tape.At(valIdx).Quoted && !e.pendingForwardWantsRawParen() {
+		return e.stepSugar(valIdx)
 	}
 
 	// Look backwards for the nearest forward entry, stopping at open-paren barriers.
@@ -8539,6 +8546,27 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 					break
 				}
 
+				// A sugar marker EXPANDS in place during the scan
+				// (sugar.go): the tokens it lowers to — a fn word, a
+				// ParenExpr — then get exactly the treatment the
+				// pre-marker parser output got. The current slot's
+				// QuoteArgs flag selects the Angle marker's head form
+				// (the binder's name slot). An unexpandable marker is
+				// a boundary; it errors at step time.
+				if IsSugar(tok) {
+					sinfo, sok := AsSugar(tok)
+					if !sok {
+						break //covergate:allow IsSugar guarantees a SugarInfo payload
+					}
+					headForm := sinfo.Kind == SugarAngle &&
+						sig.QuoteArgs != nil && sig.QuoteArgs[fwd]
+					exp, serr := SugarExpansion(e.registry, sinfo, tok, headForm)
+					if serr != nil {
+						break
+					}
+					e.tape.Splice(scanIdx, 1, exp...)
+					continue
+				}
 				// Literal value: direct type check.
 				if sigArgMatches(sig, fwd, tok) || expectedType.Equal(TAny) {
 					isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]

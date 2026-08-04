@@ -329,9 +329,7 @@ func convertTopLevelItems(items []any, d *parseDepth) ([]eng.Value, error) {
 		// convertTopLevelValueInner.
 		if ml, ok := items[i].(miniLitVal); ok {
 			values = append(values,
-				withPos(eng.NewWord("mini"), poss[i]),
-				withPos(eng.NewWord(ml.Name), poss[i]),
-				withPos(eng.NewString(ml.Src), poss[i]))
+				withPos(eng.NewSugar(eng.SugarInfo{Kind: eng.SugarMini, Name: ml.Name, Src: ml.Src}), poss[i]))
 			continue
 		}
 		// Dotted-access chain: a receiver primary followed by one or more
@@ -562,13 +560,13 @@ func groupModifier(item any) (base string, prefix, suffix []eng.Value, ok bool) 
 	}
 	switch {
 	case u:
-		return b, []eng.Value{eng.NewWord("usurp")}, nil, true
+		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarUsurp})}, nil, true
 	case fs:
-		return b, []eng.Value{eng.NewWord("stack-args")}, nil, true
+		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarStackArgs})}, nil, true
 	case ff:
-		return b, []eng.Value{eng.NewWord("forward-args")}, nil, true
+		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarForwardArgs})}, nil, true
 	case argCount >= 0:
-		return b, []eng.Value{eng.NewWord("force-arity"), eng.NewInteger(int64(argCount))}, nil, true
+		return b, []eng.Value{eng.NewSugar(eng.SugarInfo{Kind: eng.SugarForceArity, N: int64(argCount)})}, nil, true
 	case r || q:
 		return b, nil, []eng.Value{eng.NewDispatchMod(eng.DispatchModInfo{Ref: r, Quote: q})}, true
 	}
@@ -638,9 +636,7 @@ func convertTopLevelValueInner(v any, d *parseDepth) (eng.Value, error) {
 		// mini call, so a stack subject, a trailing opts Map, the
 		// unknown-kind error, and check mode all behave exactly as if the
 		// user had typed `mini name 'src'`.
-		return eng.NewSplice(eng.NewList([]eng.Value{
-			eng.NewWord("mini"), eng.NewWord(val.Name), eng.NewString(val.Src),
-		})), nil
+		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarMini, Name: val.Name, Src: val.Src}), nil
 
 	case xmlElemVal:
 		// Embedded XML literal `<tag>…</tag>`: the matcher already built
@@ -968,9 +964,7 @@ func convertDataValueInner(v any, d *parseDepth) (eng.Value, error) {
 		// mini call, so a stack subject, a trailing opts Map, the
 		// unknown-kind error, and check mode all behave exactly as if the
 		// user had typed `mini name 'src'`.
-		return eng.NewSplice(eng.NewList([]eng.Value{
-			eng.NewWord("mini"), eng.NewWord(val.Name), eng.NewString(val.Src),
-		})), nil
+		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarMini, Name: val.Name, Src: val.Src}), nil
 
 	case xmlElemVal:
 		// Embedded XML literal in data context (a map value): same
@@ -1473,7 +1467,7 @@ func parseWord(text string) (eng.Value, error) {
 	// of's error — the parser owns no semantics.
 	if typeFlag {
 		bound := eng.NewList([]eng.Value{eng.NewAtom(name)})
-		return eng.NewParenExpr([]eng.Value{eng.NewWord("Type"), eng.NewWord("of"), bound}), nil
+		return eng.NewSugar(eng.SugarInfo{Kind: eng.SugarTypeBound, Items: []eng.Value{bound}}), nil
 	}
 
 	// `0d…` arbitrary-precision literals (BigInteger / BigDecimal). The

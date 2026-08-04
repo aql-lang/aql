@@ -518,6 +518,13 @@ func toCarrier(v Value) Value {
 	if IsSplice(v) {
 		return v
 	}
+	// Keep a sugar marker concrete: the parser's structural desugar
+	// output (ADR-012 rule 3, 2026-08-04 amendment), lowered at step
+	// time by stepSugar. A carrier-stripped marker loses its SugarInfo
+	// and could never lower — the sugar would be opaque in check mode.
+	if IsSugar(v) {
+		return v
+	}
 	// Type literals (Data already nil) are already in the right
 	// shape for sig matching — preserve their Carrier=false marker
 	// so sigTypeMatchesAsType can still recognise them as type

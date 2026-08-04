@@ -23,6 +23,13 @@ import (
 //
 // New stack-like concerns should follow the same pattern.
 type Registry struct {
+	// sugarWords maps sugar roles to the word names the engine lowers
+	// sugar markers to (ADR-012 rule 3, 2026-08-04 amendment). Bound by
+	// the language layer at registration via BindSugarWord; read by
+	// stepSugar's expansion. Nil on a bare kernel registry — every
+	// stepped marker then fails loudly with sugar_unbound.
+	sugarWords map[SugarKind]string
+
 	// Defs holds the stacked bodies for `def`-defined words. See deftable.go.
 	Defs *DefTable
 	// types holds named type definitions installed by the `type` word —

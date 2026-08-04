@@ -168,6 +168,7 @@ var kernelErrorCodes = []string{
 	"no_value_error", "partial_dispatch", "record_shape_mismatch", "redundant_guard",
 	"reserved_word", "signature_error", "speculative_forward_commit", "step_budget_exceeded",
 	"syntax_error", "tape_exhausted", "type_error", "unbound_param",
+	"sugar_unbound",
 	"uncalled_function", "undefined_word", "unsupported", "unused_def",
 	"weak_value_error",
 }

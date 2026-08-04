@@ -10,47 +10,43 @@ import (
 // --- `/` modifiers on dotted paths and paren groups ---
 
 // TestReachWave3WordModifiers pins the word-modifier placement rule: /u /s
-// /f /N desugar to higher-order words emitted BEFORE the reach group so
-// they forward-collect the result.
+// /f desugar to ONE sugar marker emitted BEFORE the reach group (ADR-012
+// rule 3 amendment) — the engine lowers it to the role-bound word, which
+// forward-collects the result.
 func TestReachWave3WordModifiers(t *testing.T) {
 	cases := []struct {
-		src   string
-		words []string // leading word tokens before the reach
+		src  string
+		kind eng.SugarKind
 	}{
-		{"a.b/u", []string{"usurp"}},
-		{"a.b/s", []string{"stack-args"}},
-		{"a.b/f", []string{"forward-args"}},
+		{"a.b/u", eng.SugarUsurp},
+		{"a.b/s", eng.SugarStackArgs},
+		{"a.b/f", eng.SugarForwardArgs},
 	}
 	for _, c := range cases {
 		vals := mustParseWave3(t, c.src)
-		if len(vals) != len(c.words)+1 {
-			t.Fatalf("%q: got %d values, want %d: %v", c.src, len(vals), len(c.words)+1, vals)
+		if len(vals) != 2 {
+			t.Fatalf("%q: got %d values, want 2: %v", c.src, len(vals), vals)
 		}
-		for i, name := range c.words {
-			if w := wordNameWave3(t, vals[i], c.src); w.Name != name {
-				t.Errorf("%q: value %d word %q, want %q", c.src, i, w.Name, name)
-			}
+		if info, ok := eng.AsSugar(vals[0]); !ok || info.Kind != c.kind {
+			t.Errorf("%q: value 0 = %v, want sugar(%s)", c.src, vals[0], c.kind)
 		}
-		if !eng.IsReach(vals[len(c.words)]) {
-			t.Errorf("%q: last value is not a Reach: %v", c.src, vals[len(c.words)])
+		if !eng.IsReach(vals[1]) {
+			t.Errorf("%q: last value is not a Reach: %v", c.src, vals[1])
 		}
 	}
 }
 
 func TestReachWave3ForceArityModifier(t *testing.T) {
-	// a.b/2 → force-arity 2 (a.b)
+	// a.b/2 → one force-arity sugar marker before the reach.
 	vals := mustParseWave3(t, "a.b/2")
-	if len(vals) != 3 {
-		t.Fatalf("a.b/2: got %d values, want 3: %v", len(vals), vals)
+	if len(vals) != 2 {
+		t.Fatalf("a.b/2: got %d values, want 2: %v", len(vals), vals)
 	}
-	if w := wordNameWave3(t, vals[0], "a.b/2"); w.Name != "force-arity" {
-		t.Errorf("a.b/2: first word %q, want force-arity", w.Name)
+	if info, ok := eng.AsSugar(vals[0]); !ok || info.Kind != eng.SugarForceArity || info.N != 2 {
+		t.Errorf("a.b/2: first value %v, want sugar(force-arity 2)", vals[0])
 	}
-	if n, err := eng.AsInteger(vals[1]); err != nil || n != 2 {
-		t.Errorf("a.b/2: second value %v, want Integer 2", vals[1])
-	}
-	if !eng.IsReach(vals[2]) {
-		t.Errorf("a.b/2: third value is not a Reach: %v", vals[2])
+	if !eng.IsReach(vals[1]) {
+		t.Errorf("a.b/2: second value is not a Reach: %v", vals[1])
 	}
 }
 
@@ -79,8 +75,8 @@ func TestReachWave3TypeBoundKey(t *testing.T) {
 	if len(vals) != 1 || !eng.IsReach(vals[0]) {
 		t.Fatalf("a.b/t: expected one Reach, got %v", vals)
 	}
-	if s := vals[0].String(); !strings.Contains(s, "Type of") {
-		t.Errorf("a.b/t: rendering %q lacks the Type-of key", s)
+	if s := vals[0].String(); !strings.Contains(s, "sugar(type-bound") {
+		t.Errorf("a.b/t: rendering %q lacks the type-bound sugar key", s)
 	}
 }
 
@@ -92,8 +88,8 @@ func TestParenWave3StandaloneModifier(t *testing.T) {
 	if len(vals) != 2 {
 		t.Fatalf("(1 add 2)/s: got %d values, want 2: %v", len(vals), vals)
 	}
-	if w := wordNameWave3(t, vals[0], "(1 add 2)/s"); w.Name != "stack-args" {
-		t.Errorf("(1 add 2)/s: first word %q, want stack-args", w.Name)
+	if info, ok := eng.AsSugar(vals[0]); !ok || info.Kind != eng.SugarStackArgs {
+		t.Errorf("(1 add 2)/s: first value %v, want sugar(stack-args)", vals[0])
 	}
 	if !eng.IsParenExpr(vals[1]) {
 		t.Errorf("(1 add 2)/s: second value is not a ParenExpr: %v", vals[1])
@@ -196,17 +192,15 @@ func TestMiniLitWave3Inline(t *testing.T) {
 	}
 	for _, c := range cases {
 		vals := mustParseWave3(t, c.src)
-		if len(vals) != 4 {
-			t.Fatalf("%q: got %d values, want 4: %v", c.src, len(vals), vals)
+		if len(vals) != 2 {
+			t.Fatalf("%q: got %d values, want 2: %v", c.src, len(vals), vals)
 		}
-		if w := wordNameWave3(t, vals[1], c.src); w.Name != "mini" {
-			t.Errorf("%q: expected the word `mini`, got %q", c.src, w.Name)
+		info, ok := eng.AsSugar(vals[1])
+		if !ok || info.Kind != eng.SugarMini {
+			t.Fatalf("%q: expected a mini sugar marker, got %v", c.src, vals[1])
 		}
-		if w := wordNameWave3(t, vals[2], c.src); w.Name != c.name {
-			t.Errorf("%q: kind word %q, want %q", c.src, w.Name, c.name)
-		}
-		if s, err := eng.AsString(vals[3]); err != nil || s != c.mini {
-			t.Errorf("%q: source %v, want string %q", c.src, vals[3], c.mini)
+		if info.Name != c.name || info.Src != c.mini {
+			t.Errorf("%q: marker (%s, %q), want (%s, %q)", c.src, info.Name, info.Src, c.name, c.mini)
 		}
 	}
 }
@@ -227,11 +221,12 @@ func TestMiniLitWave3SpliceForms(t *testing.T) {
 			}
 			v = got
 		}
-		if !eng.IsSplice(v) {
-			t.Fatalf("%q: expected a splice value, got %s", src, v.String())
+		info, ok := eng.AsSugar(v)
+		if !ok || info.Kind != eng.SugarMini {
+			t.Fatalf("%q: expected a mini sugar marker, got %s", src, v.String())
 		}
-		if s := v.String(); !strings.Contains(s, "mini") || !strings.Contains(s, "re") {
-			t.Errorf("%q: splice rendering %q lacks the mini call", src, s)
+		if info.Name != "re" || info.Src != "x" {
+			t.Errorf("%q: marker (%s, %q), want (re, \"x\")", src, info.Name, info.Src)
 		}
 	}
 }
@@ -266,14 +261,14 @@ func TestMiniLitWave3OpenFormStopsAtWhitespace(t *testing.T) {
 	// The open form ends at the first unescaped whitespace; following
 	// tokens are untouched.
 	vals := mustParseWave3(t, "1 +email:alice@x.com 2")
-	if len(vals) != 5 {
-		t.Fatalf("open-form mini: got %d values, want 5: %v", len(vals), vals)
+	if len(vals) != 3 {
+		t.Fatalf("open-form mini: got %d values, want 3: %v", len(vals), vals)
 	}
-	if s, err := eng.AsString(vals[3]); err != nil || s != "alice@x.com" {
-		t.Errorf("open-form mini: source %v, want alice@x.com", vals[3])
+	if info, ok := eng.AsSugar(vals[1]); !ok || info.Kind != eng.SugarMini || info.Src != "alice@x.com" {
+		t.Errorf("open-form mini: marker %v, want sugar(mini email 'alice@x.com')", vals[1])
 	}
-	if n, err := eng.AsInteger(vals[4]); err != nil || n != 2 {
-		t.Errorf("open-form mini: trailing token %v, want Integer 2", vals[4])
+	if n, err := eng.AsInteger(vals[2]); err != nil || n != 2 {
+		t.Errorf("open-form mini: trailing token %v, want Integer 2", vals[2])
 	}
 }
 

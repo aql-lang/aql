@@ -356,6 +356,7 @@ func (ForwardInfo) payloadMarker()          {}
 func (MarkInfo) payloadMarker()             {}
 func (MoveInfo) payloadMarker()             {}
 func (SpliceInfo) payloadMarker()           {}
+func (SugarInfo) payloadMarker()            {}
 func (ReturnCheckInfo) payloadMarker()      {}
 func (DefCleanupInfo) payloadMarker()       {}
 func (GuardFactInfo) payloadMarker()        {}

@@ -416,6 +416,9 @@ var (
 	FnUndefMatchesFnDef       = eng.FnUndefMatchesFnDef
 	BuiltinIDForPath          = eng.BuiltinIDForPath
 	MintTestType              = eng.MintTestType
+	NewSugar                  = eng.NewSugar
+	IsSugar                   = eng.IsSugar
+	AsSugar                   = eng.AsSugar
 	GenerateID                = eng.GenerateID
 	GenerateObjectTypeID      = eng.GenerateObjectTypeID
 	BeginIDMintScope          = eng.BeginIDMintScope
@@ -628,6 +631,22 @@ var (
 	makeConvert      = eng.MakeConvert
 	makeFieldValue   = eng.MakeFieldValue
 	ResolveFieldType = eng.ResolveFieldType
+
 	// `get`/`set` helper, ported with those words to eng/go/core_storage.go.
 	getKey = eng.GetKey
+)
+
+// Sugar roles (eng/go/sugar.go — ADR-012 rule 3, 2026-08-04
+// amendment): the keys bindSugarWords binds boru's word names to.
+const (
+	SugarUsurp       = eng.SugarUsurp
+	SugarStackArgs   = eng.SugarStackArgs
+	SugarForwardArgs = eng.SugarForwardArgs
+	SugarForceArity  = eng.SugarForceArity
+	SugarMini        = eng.SugarMini
+	SugarLambda      = eng.SugarLambda
+	SugarAngle       = eng.SugarAngle
+	SugarTypeBound   = eng.SugarTypeBound
+	SugarGenHead     = eng.SugarGenHead
+	SugarGenApply    = eng.SugarGenApply
 )
