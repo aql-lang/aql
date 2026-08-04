@@ -6,6 +6,7 @@
 // run arm 2 only. Do NOT re-implement either arm inline — that is how
 // the Go per-site cascades drifted apart (NUR059).
 
+import { canonValue } from './canon.ts'
 import type { Registry } from './registry.ts'
 import { TDisjunct, TList, TMap, typeNameTable } from './type.ts'
 import {
@@ -78,7 +79,37 @@ export function resolveWordsDeep(v: Value, registry?: Registry): Value {
   if (v.vType.matches(TDisjunct) && v.data !== null && typeof v.data === 'object' && 'alternatives' in (v.data as object)) {
     const d = v.data as { alternatives: Value[] }
     const alts = d.alternatives.map((a) => resolveWordsDeep(a, registry))
-    return new Value(v.vType, { alternatives: alts })
+    return new Value(v.vType, { alternatives: simplifyDisjunctAlts(alts) })
   }
   return v
+}
+
+/**
+ * Flatten nested disjuncts and deduplicate alternatives after
+ * resolution — the Go SimplifyDisjunctAlts mirror. An alternative that
+ * RESOLVED to a named disjunct (`{x?:Maybe}` where Maybe is
+ * `Integer tor String`) must contribute its members, not ride as one
+ * opaque value that membership then compares by equality (rejecting
+ * every valid member). Order is insertion order; canonical re-ordering
+ * stays with the `tor` builder, which is where rendered unions form.
+ */
+function simplifyDisjunctAlts(alts: Value[]): Value[] {
+  const flat: Value[] = []
+  const push = (a: Value): void => {
+    if (a.vType.matches(TDisjunct) && a.data !== null && typeof a.data === 'object' && 'alternatives' in (a.data as object)) {
+      for (const inner of (a.data as { alternatives: Value[] }).alternatives) push(inner)
+      return
+    }
+    flat.push(a)
+  }
+  for (const a of alts) push(a)
+  const seen = new Set<string>()
+  const out: Value[] = []
+  for (const a of flat) {
+    const k = canonValue(a)
+    if (seen.has(k)) continue
+    seen.add(k)
+    out.push(a)
+  }
+  return out
 }

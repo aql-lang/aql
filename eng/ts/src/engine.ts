@@ -604,6 +604,34 @@ export class Engine {
         this.stack.splice(scanIdx, 1, newOpenParen(), ...(tok.data as Value[]), newCloseParen())
         continue
       }
+      // A sugar marker in the window expands once per dispatch, BEFORE
+      // signature matching (which treats markers as boundaries) —
+      // mirror of Go's expandScanSugar. The Angle marker's head form
+      // is selected when a still-viable overload /q-captures this
+      // position; a selected-head expansion failure is the user's
+      // error, surfaced now; any other failure leaves the marker as a
+      // boundary (it errors at step time).
+      if (isSugar(tok) && !tok.quoted) {
+        const consumes =
+          viable === undefined || viable.some((s) => resolved < (s.barrierPos ?? 0))
+        if (!consumes) break
+        const sinfo = asSugar(tok)
+        if (sinfo === undefined) break
+        let headForm = false
+        if (sinfo.kind === 'angle' && viable !== undefined) {
+          headForm = viable.some(
+            (s) => (s.quoteArgs?.has(resolved) ?? false) && resolved < (s.barrierPos ?? 0),
+          )
+        }
+        try {
+          const exp = sugarExpansion(this.registry, sinfo, headForm)
+          this.stack.splice(scanIdx, 1, ...exp)
+          continue
+        } catch (e) {
+          if (headForm) throw e
+          break
+        }
+      }
       // Internal control markers stop the forward scan — they're
       // boundaries, not data.
       if (tok.isForward() || tok.isMark() || tok.isMove()) break
@@ -1192,14 +1220,21 @@ export class Engine {
         a.vType.matches(TMap) &&
         a.data instanceof OrderedMap
       ) {
-        args[i] = this.deepEvalData(a)
+        // Resolve def-bound / type-name WORDS while the registry is
+        // still live (record time): the VM promotes defs to frame
+        // locals, so a baked constraint carrying word(M) could never
+        // resolve at run time — the compiled `is` then rejected what
+        // the interpreter admitted ({x?:M} with a def'd union M).
+        args[i] = this.deepEvalData(resolveWordsDeep(a, this.registry))
         continue
       }
-      // A map arg resolves its word VALUES at consumption (`{abs:true}`
-      // arrives with word(true) from the opaque parser) — the Go
-      // autoEvalMap mirror.
+      // A map arg evaluates its VALUES at consumption — the Go
+      // autoEvalMap mirror: words resolve through the cascade
+      // (`{abs:true}` arrives with word(true) from the opaque parser)
+      // and expression values (`{abs:( true )}`, eval-lists) run in a
+      // sub-engine so the handler sees the computed value.
       if (a.vType.matches(TMap) && a.data instanceof OrderedMap && !a.quoted) {
-        args[i] = resolveWordsDeep(a, this.registry)
+        args[i] = this.autoEvalMapValues(a)
         continue
       }
       if (!a.vType.matches(TList)) continue
@@ -1207,6 +1242,38 @@ export class Engine {
       if (!a.isConcrete()) continue
       args[i] = this.autoEvalList(a)
     }
+  }
+
+  /**
+   * Evaluate a consumed map argument's values — the Go autoEvalMap
+   * mirror: a ParenExpr value runs in a sub-engine to its single
+   * result, an unquoted eval-list auto-evaluates, words resolve
+   * through the canonical cascade, nested maps recurse.
+   */
+  private autoEvalMapValues(m: Value): Value {
+    const src = m.asMap()
+    const out = new OrderedMap()
+    for (const k of src.keys()) {
+      const v = src.get(k)!
+      if (v.vType.equal(TParenExpr) && !v.quoted && Array.isArray(v.data)) {
+        const sub = new Engine(this.registry)
+        const res = sub.run([...(v.data as Value[])])
+        out.set(k, res.length === 1 ? res[0]! : v)
+        continue
+      }
+      if (v.vType.matches(TList) && Array.isArray(v.data) && v.eval && !v.quoted && v.isConcrete()) {
+        out.set(k, this.autoEvalList(v))
+        continue
+      }
+      if (v.vType.matches(TMap) && v.data instanceof OrderedMap && !v.quoted) {
+        out.set(k, this.autoEvalMapValues(v))
+        continue
+      }
+      out.set(k, resolveWordsDeep(v, this.registry))
+    }
+    // Preserve the map's lattice subtype (an Inspect map must stay
+    // Inspect, not demote to plain Map) and flags.
+    return new Value(m.vType, out, { eval: m.eval, quoted: m.quoted })
   }
 
   /**

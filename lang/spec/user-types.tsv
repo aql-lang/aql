@@ -295,3 +295,10 @@ def A (Integer gt 10) def B (Integer lt 20) A unify B	(Integer gt 10 lt 20) true
 (Integer gt 10) unify (Integer lt 20)	(Integer gt 10 lt 20) true	inline sibling DepScalars meet identically
 def A (Integer gt 10) def B (Integer lt 20) def x:(A tand B) 15 x	15	the explicit tand meet admits an in-range value
 def A (Integer gt 10) def B (Integer lt 20) def x:(A tand B) 25 x	ERROR:does not unify	the meet rejects a value outside the intersection
+
+# =====================================================================
+# Populated typed-container DEFAULTS survive schema resolution: the
+# deep resolver preserves inline elements/entries while resolving the
+# child (the child-only rebuild silently emptied them — TS-parity find).
+def R class {xs:[:Integer 1 2]} def r (make R {}) (r dot xs)	[:Integer 1 2]	a populated typed-list default keeps its elements
+def R class {xs:[:Integer 1 2]} def r (make R {xs:[:Integer 9]}) (r dot xs)	[:Integer 9]	an explicit field still overrides the default

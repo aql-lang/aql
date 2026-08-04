@@ -114,13 +114,33 @@ func resolveWordsDeep(v Value, r *Registry) Value {
 	// Typed list / typed map: resolve the child constraint so a Word
 	// referring to a predicate type (e.g. `[:Pos]`) reaches its FnDef
 	// body, which unifyInner can then detect as a predicate constraint.
+	// Inline elements/entries (`[:Integer 1 2]`, `{:Integer a:1}`) are
+	// PRESERVED and resolved deep — the child-only rebuild silently
+	// emptied populated typed-container defaults in record/class
+	// schemas (found by the TS-parity review; the TS twin preserves).
 	if IsTypedList(v) {
 		ct, _ := AsChildType(v)
-		return NewTypedList(resolveWordsDeep(ct.Child, r))
+		child := resolveWordsDeep(ct.Child, r)
+		if len(ct.Elements) == 0 {
+			return NewTypedList(child)
+		}
+		elems := make([]Value, len(ct.Elements))
+		for i, e := range ct.Elements {
+			elems[i] = resolveWordsDeep(e, r)
+		}
+		return NewTypedListWithElements(child, elems)
 	}
 	if IsTypedMap(v) {
 		ct, _ := AsChildType(v)
-		return NewTypedMap(resolveWordsDeep(ct.Child, r))
+		child := resolveWordsDeep(ct.Child, r)
+		if len(ct.Entries) == 0 {
+			return NewTypedMap(child)
+		}
+		entries := make([]ChildEntry, len(ct.Entries))
+		for i, e := range ct.Entries {
+			entries[i] = ChildEntry{Key: e.Key, Value: resolveWordsDeep(e.Value, r)}
+		}
+		return NewTypedMapWithEntries(child, entries)
 	}
 	if v.Parent.Equal(TMap) && v.Data != nil && !IsTypedMap(v) && !IsRecordType(v) && !IsOptionsType(v) {
 		m, _ := AsMap(v)

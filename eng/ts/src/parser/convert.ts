@@ -270,7 +270,64 @@ function withPos(v: Value, _pos: SrcPos): Value {
  * Mirrors Go Parse. (Go's BeginIDMintScope has no TS counterpart — the
  * TS value layer mints no IDs; recorded in deviations.)
  */
+/**
+ * TS-specific nesting bound, enforced by a LINEAR pre-parse scan.
+ * The Go parser's 10,000-level guard lives in the conversion walk,
+ * but in TS the tabnas rule engine itself recurses per nesting level
+ * and overflows the JS call stack near ~900 levels — before any
+ * converter-side counter could fire — surfacing an uncontrolled
+ * RangeError instead of the promised evaluation_limit. The scan
+ * refuses well under the measured overflow point; the converters'
+ * ParseDepth guard stays as the backstop.
+ */
+const TS_MAX_PARSE_NESTING = 500
+
+/**
+ * checkSourceNesting scans src once, tracking bracket/paren nesting
+ * outside string/template literals and comments, and raises the same
+ * evaluation_limit error the Go depth guard produces when the source
+ * nests past the TS-safe bound.
+ */
+function checkSourceNesting(src: string): void {
+  let depth = 0
+  let quote: string | null = null
+  for (let i = 0; i < src.length; i++) {
+    const c = src[i]!
+    if (quote !== null) {
+      if (c === '\\') {
+        i++
+      } else if (c === quote) {
+        quote = null
+      }
+      continue
+    }
+    if (c === "'" || c === '"' || c === '`') {
+      quote = c
+      continue
+    }
+    if (c === '#') {
+      while (i < src.length && src[i] !== '\n') i++
+      continue
+    }
+    if (c === '[' || c === '{' || c === '(') {
+      depth++
+      if (depth > TS_MAX_PARSE_NESTING) {
+        throw new BoruError(
+          'evaluation_limit',
+          `source nesting exceeds the depth limit of ${TS_MAX_PARSE_NESTING} — lists, maps, and parentheses are nested too deeply`,
+          '',
+        )
+      }
+    } else if (c === ']' || c === '}' || c === ')') {
+      if (depth > 0) depth--
+    }
+  }
+}
+
 export function parse(src: string): Value[] {
+  // A linear nesting pre-check guards the recursive rule engine (see
+  // checkSourceNesting) before any parsing work happens.
+  checkSourceNesting(src)
   // Stages 1-2 (lex + grammar setup) live in grammar.ts; the instance is
   // built per parse, exactly as Go Parse constructs a fresh jsonic.
   const { j } = makeBoruJsonic()
@@ -1742,6 +1799,13 @@ function convertInterpGroup(grp: InterpGroup, d: ParseDepth): Value {
       try {
         exprVals = convertTopLevelItems(item.items, d)
       } catch (err) {
+        // Preserve the BoruError taxonomy through the wrap — Go's
+        // `%w` keeps errors.As-unwrap to the inner code, so the TS
+        // twin re-raises the same code with the wrap prefix on the
+        // detail (the crossdiff compares by code).
+        if (err instanceof BoruError) {
+          throw new BoruError(err.code, `interpolation expression error: ${err.detail}`, err.word)
+        }
         throw new Error(`interpolation expression error: ${errMessage(err)}`)
       }
       parts.push({ expr: exprVals })

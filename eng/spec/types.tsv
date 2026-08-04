@@ -945,3 +945,12 @@ lengthq Map	ERROR:signature
 # Type literals at TAny continue to pass through.		
 typeof Integer	Number	[TAny] sig; type literal accepted, handler returns metatype
 typeof none	None	None at [TAny]
+
+# =====================================================================
+# A named-disjunct optional field: the deep resolver flattens the
+# resolved alternative's members (SimplifyDisjunctAlts / TS
+# simplifyDisjunctAlts) so membership admits them — a nested opaque
+# disjunct alternative rejected every valid member (TS-parity find).
+def M ( Integer tor String ) {x:5} is {x?:M}	true	a member of the named union satisfies the optional field
+def M ( Integer tor String ) {} is {x?:M}	false	an absent field stays absent under the eng fixture's record membership
+def M ( Integer tor String ) {x:false} is {x?:M}	false	a non-member is rejected

@@ -18,3 +18,5 @@ Box<Integer>	ERROR:sugar_unbound	an angle use-site marker refuses without the ge
 foo/t	ERROR:sugar_unbound	the X/t bounded-type sugar refuses without gen-apply
 ( 1 2 )/u	ERROR:sugar_unbound	the /u group modifier is a usurp marker; no usurp role bound
 ( 1 2 )/3	ERROR:sugar_unbound	the /N group modifier is a force-arity marker; no role bound
+make Box<Integer> {value:1}	ERROR:signature_error	an unexpandable marker in a forward window is a boundary; the collecting word refuses (roles unbound, both engines agree)
+make Pathon { abs:( true ) } [ 'x' 'y' ]	/x/y	an option map value that is a paren expression evaluates before the handler reads it
