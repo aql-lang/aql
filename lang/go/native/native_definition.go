@@ -894,7 +894,7 @@ func lookupResourceTypeByName(r *Registry, name string) (ResourceTypeInfo, bool)
 	if r == nil || name == "" {
 		return ResourceTypeInfo{}, false
 	}
-	v, ok := r.Defs.Top(name)
+	v, ok := r.Defs.Top(resourceDefKey(name))
 	if !ok {
 		return ResourceTypeInfo{}, false
 	}

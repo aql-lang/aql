@@ -2025,8 +2025,22 @@ func ResolveTypeLiteralDef(v Value, reg *Registry) Value {
 	if top, ok := reg.Defs.Top(name); ok && (IsClassType(top) || IsResourceType(top)) {
 		return top
 	}
+	// Builtin Resource-family schemas live under the hidden key
+	// (ResourceDefKey): the bare name resolves to the literal via the
+	// canonical cascade (ADR-012 rule 4), and this bridge recovers the
+	// schema for construction.
+	if top, ok := reg.Defs.Top(ResourceDefKey(name)); ok && IsResourceType(top) {
+		return top
+	}
 	return v
 }
+
+// ResourceDefKey is the hidden def-store key carrying a builtin
+// Resource-family schema (the `__const:` hidden-key precedent). The
+// schema must not be bound under the word-visible name: the bare name
+// resolves through the canonical cascade to the TYPE LITERAL, and a
+// word-visible value binding would shadow it with the raw schema body.
+func ResourceDefKey(name string) string { return "__resource:" + name }
 
 // StoreKey converts a Value to a string key for the store.
 func StoreKey(v Value) string {

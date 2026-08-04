@@ -1052,6 +1052,12 @@ func registerEngSpecInspect(r *eng.Registry) {
 				return []eng.Value{buildTypeInspection(name, top)}, nil
 			}
 		}
+		// Builtin arm of the canonical cascade (ADR-012 rule 4) —
+		// mirrors lang's inspectAtomHandler: post-opacity every type
+		// name reaches this handler as a captured Atom.
+		if t, ok := eng.ResolveBuiltinTypeName(name); ok {
+			return []eng.Value{buildTypeInspection("", eng.NewTypeLiteral(t))}, nil
+		}
 		return []eng.Value{buildInspection(r, name)}, nil
 	}
 	typeH := func(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *eng.Registry) ([]eng.Value, error) {

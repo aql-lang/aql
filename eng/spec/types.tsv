@@ -112,10 +112,12 @@ def t Integer t	Integer
 def t Number t	Number	
 def t List t	List	
 		
-# To get the Atom version of a type-name word, quote it.		
-quote Integer	Integer	type-name words parse as type literals before quote sees them; quote of a type literal returns it unchanged
-quote String	String	
-def t (quote Integer) t	Integer	
+# quote of a type NAME captures the word as an Atom, like any other		
+# bare name — the parser is type-name-opaque (ADR-012 rule 4), so		
+# quotation meaning is consumption-time and the quoted form is data.		
+quote Integer	Integer/q	a quoted type name is the Atom, uniform with every word
+quote String	String/q	
+def t (quote Integer) t	Integer/q	
 		
 # =====================================================================		
 # 2. None and null		

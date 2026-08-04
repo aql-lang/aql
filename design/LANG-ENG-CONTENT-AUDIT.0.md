@@ -8,8 +8,10 @@
 > approval — it discharges ADR candidate 2 of
 > `design/NUR-RESOLUTION-PLAN.0.md`.
 >
-> Surfaced NURs: [NUR057](../NUR.md#nur057), [NUR058](../NUR.md#nur058),
-> [NUR059](../NUR.md#nur059), [NUR060](../NUR.md#nur060).
+> Surfaced NURs: [NUR057](../NUR.md#nur057), [NUR058](../NUR.md#nur058);
+> NUR059 and NUR060 were surfaced by §6 and RESOLVED by the stage-6
+> implementation (records deleted per the register's resolved-record
+> rule; the numbers are retired).
 
 ## 0. The boundary principle (maintainer direction, 2026-08-03)
 

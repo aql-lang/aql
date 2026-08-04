@@ -119,9 +119,9 @@ func TestW9DefTypedResourceInstancePassThrough(t *testing.T) {
 
 func TestW9ResolveResourceTypeInfoDirect(t *testing.T) {
 	r := seam5Reg(t)
-	entity, ok := r.Defs.Top("Entity")
+	entity, ok := r.Defs.Top(resourceDefKey("Entity"))
 	if !ok {
-		t.Fatal("Entity not bound")
+		t.Fatal("Entity schema not bound under the hidden key")
 	}
 	// A ResourceType value resolves directly (the IsResourceType arm).
 	if _, isRes := resolveResourceTypeInfo(r, entity); !isRes {

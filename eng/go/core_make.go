@@ -633,7 +633,15 @@ func MakeHandler(args []Value, _ map[string]Value, _ []Value, reg *Registry) ([]
 		if err != nil {
 			return nil, fmt.Errorf("make: Options requires a concrete map")
 		}
-		return []Value{NewOptionsType(src)}, nil
+		// Resolve field constraints through the canonical cascade —
+		// bare type names and `?:`-desugared disjuncts arrive as
+		// Words post-opacity (ADR-012 rule 4).
+		resolved := NewOrderedMap()
+		for _, key := range src.Keys() {
+			fv, _ := src.Get(key)
+			resolved.Set(key, ResolveFieldType(reg, fv))
+		}
+		return []Value{NewOptionsType(resolved)}, nil
 	}
 
 	if targetVal.Data != nil {
@@ -1222,7 +1230,25 @@ func ResolveFieldType(r *Registry, v Value) Value {
 				return top
 			}
 		}
+		// Builtin arm of the canonical cascade — WORDS only: a bare
+		// `{a:Integer}` field arrives as a Word post-opacity (ADR-012
+		// rule 4), while a QUOTED capitalised string default
+		// (`{unit:"Integer"}`) must stay the string it always was.
+		if IsWord(v) {
+			if t, ok := ResolveBuiltinTypeName(name); ok {
+				return NewTypeLiteral(t)
+			}
+		}
 		return v
+	}
+
+	// A disjunct or typed-container constraint (`{y?:String}`'s
+	// `(String tor None tor Absent)`, `{items:[:Integer]}`) carries its
+	// type names one level down — resolve them through the registry-
+	// armed deep resolver, which also re-simplifies resolved disjuncts
+	// to `tor`'s canonical order.
+	if IsDisjunct(v) || IsTypedList(v) || IsTypedMap(v) {
+		return ResolveWordsDeepR(v, r)
 	}
 
 	if v.Parent.Equal(TList) && !IsTypedList(v) && !IsTableType(v) {

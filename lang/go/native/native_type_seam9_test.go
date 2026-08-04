@@ -14,9 +14,9 @@ func TestW9RefinePlainKindNotConstructable(t *testing.T) {
 	r := seam5Reg(t)
 	// The Resource Ideal has an Instantiate but no Construct, so `refine
 	// Resource {…}` reaches the "cannot be constructed with refine" arm.
-	res, ok := r.Defs.Top("Resource")
+	res, ok := r.Defs.Top(resourceDefKey("Resource"))
 	if !ok {
-		t.Fatal("Resource not bound in default registry")
+		t.Fatal("Resource schema not bound under the hidden key")
 	}
 	if _, err := refinePlain(res, NewMap(NewOrderedMap()), r); err == nil {
 		t.Fatal("refine Resource must reject (kind not constructable)")

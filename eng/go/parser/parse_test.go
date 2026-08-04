@@ -726,26 +726,26 @@ func TestParseMultilineScript(t *testing.T) {
 func TestParseTypedListString(t *testing.T) {
 	// [:String] → typed list with child type string
 	assertParse(t, "[:String]", []eng.Value{
-		eng.NewTypedList(eng.NewTypeLiteral(eng.TString)),
+		eng.NewTypedList(eng.NewWord("String")),
 	})
 }
 
 func TestParseTypedListNumber(t *testing.T) {
 	// [:Number] → typed list with child type number
 	assertParse(t, "[:Number]", []eng.Value{
-		eng.NewTypedList(eng.NewTypeLiteral(eng.TNumber)),
+		eng.NewTypedList(eng.NewWord("Number")),
 	})
 }
 
 func TestParseTypedListBoolean(t *testing.T) {
 	assertParse(t, "[:Boolean]", []eng.Value{
-		eng.NewTypedList(eng.NewTypeLiteral(eng.TBoolean)),
+		eng.NewTypedList(eng.NewWord("Boolean")),
 	})
 }
 
 func TestParseTypedListAny(t *testing.T) {
 	assertParse(t, "[:Any]", []eng.Value{
-		eng.NewTypedList(eng.NewTypeLiteral(eng.TAny)),
+		eng.NewTypedList(eng.NewWord("Any")),
 	})
 }
 
@@ -771,22 +771,22 @@ func TestParseTypedListMap(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
 	}
-	if !xVal.Equal(eng.TNumber) {
-		t.Errorf("expected x to be number type, got %s (TestParseTypedListMap)", xVal)
+	if w, err := eng.AsWord(xVal); err != nil || w.Name != "Number" {
+		t.Errorf("expected x to be word(Number), got %s (TestParseTypedListMap)", xVal)
 	}
 }
 
 func TestParseTypedListNested(t *testing.T) {
 	// [:[:String]] → typed list of typed lists of strings
 	assertParse(t, "[:[:String]]", []eng.Value{
-		eng.NewTypedList(eng.NewTypedList(eng.NewTypeLiteral(eng.TString))),
+		eng.NewTypedList(eng.NewTypedList(eng.NewWord("String"))),
 	})
 }
 
 func TestParseTypedListDeepNested(t *testing.T) {
 	// [:[:[:Number]]] → three levels deep
 	assertParse(t, "[:[:[:Number]]]", []eng.Value{
-		eng.NewTypedList(eng.NewTypedList(eng.NewTypedList(eng.NewTypeLiteral(eng.TNumber)))),
+		eng.NewTypedList(eng.NewTypedList(eng.NewTypedList(eng.NewWord("Number")))),
 	})
 }
 
@@ -794,7 +794,7 @@ func TestParseTypedListInExpression(t *testing.T) {
 	// 1 [:String] → integer then typed list
 	assertParse(t, "1 [:String]", []eng.Value{
 		eng.NewInteger(1),
-		eng.NewTypedList(eng.NewTypeLiteral(eng.TString)),
+		eng.NewTypedList(eng.NewWord("String")),
 	})
 }
 
@@ -820,47 +820,47 @@ func TestParseTypedListMapChild(t *testing.T) {
 func TestParseTypedMapString(t *testing.T) {
 	// {:String} → typed map with child type string
 	assertParse(t, "{:String}", []eng.Value{
-		eng.NewTypedMap(eng.NewTypeLiteral(eng.TString)),
+		eng.NewTypedMap(eng.NewWord("String")),
 	})
 }
 
 func TestParseTypedMapNumber(t *testing.T) {
 	// {:Number} → typed map with child type number
 	assertParse(t, "{:Number}", []eng.Value{
-		eng.NewTypedMap(eng.NewTypeLiteral(eng.TNumber)),
+		eng.NewTypedMap(eng.NewWord("Number")),
 	})
 }
 
 func TestParseTypedMapBoolean(t *testing.T) {
 	assertParse(t, "{:Boolean}", []eng.Value{
-		eng.NewTypedMap(eng.NewTypeLiteral(eng.TBoolean)),
+		eng.NewTypedMap(eng.NewWord("Boolean")),
 	})
 }
 
 func TestParseTypedMapAny(t *testing.T) {
 	assertParse(t, "{:Any}", []eng.Value{
-		eng.NewTypedMap(eng.NewTypeLiteral(eng.TAny)),
+		eng.NewTypedMap(eng.NewWord("Any")),
 	})
 }
 
 func TestParseTypedMapList(t *testing.T) {
 	// {:[:Number]} → typed map with child type [:Number]
 	assertParse(t, "{:[:Number]}", []eng.Value{
-		eng.NewTypedMap(eng.NewTypedList(eng.NewTypeLiteral(eng.TNumber))),
+		eng.NewTypedMap(eng.NewTypedList(eng.NewWord("Number"))),
 	})
 }
 
 func TestParseTypedMapNested(t *testing.T) {
 	// {:{:String}} → typed map of typed maps of strings
 	assertParse(t, "{:{:String}}", []eng.Value{
-		eng.NewTypedMap(eng.NewTypedMap(eng.NewTypeLiteral(eng.TString))),
+		eng.NewTypedMap(eng.NewTypedMap(eng.NewWord("String"))),
 	})
 }
 
 func TestParseTypedMapDeepNested(t *testing.T) {
 	// {:{:{:Number}}} → three levels deep
 	assertParse(t, "{:{:{:Number}}}", []eng.Value{
-		eng.NewTypedMap(eng.NewTypedMap(eng.NewTypedMap(eng.NewTypeLiteral(eng.TNumber)))),
+		eng.NewTypedMap(eng.NewTypedMap(eng.NewTypedMap(eng.NewWord("Number")))),
 	})
 }
 
@@ -868,7 +868,7 @@ func TestParseTypedMapInExpression(t *testing.T) {
 	// 1 {:String} → integer then typed map
 	assertParse(t, "1 {:String}", []eng.Value{
 		eng.NewInteger(1),
-		eng.NewTypedMap(eng.NewTypeLiteral(eng.TString)),
+		eng.NewTypedMap(eng.NewWord("String")),
 	})
 }
 
@@ -891,8 +891,8 @@ func TestParseTypedMapConcreteChild(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected key 'x' in child map")
 	}
-	if !xVal.Equal(eng.TNumber) {
-		t.Errorf("expected x to be number type, got %s (TestParseTypedMapConcreteChild)", xVal)
+	if w, err := eng.AsWord(xVal); err != nil || w.Name != "Number" {
+		t.Errorf("expected x to be word(Number), got %s (TestParseTypedMapConcreteChild)", xVal)
 	}
 }
 
@@ -1011,8 +1011,8 @@ func TestParseMapWithTypeName(t *testing.T) {
 	}
 	m, _ := eng.AsMap(got[0])
 	xVal, _ := m.Get("x")
-	if !xVal.Equal(eng.TNumber) {
-		t.Errorf("expected number type literal, got %s", xVal)
+	if w, err := eng.AsWord(xVal); err != nil || w.Name != "Number" {
+		t.Errorf("expected word(Number) — the parser is type-name-opaque, got %s", xVal)
 	}
 }
 
@@ -1936,14 +1936,14 @@ func TestParseDataMapNilValue(t *testing.T) {
 		t.Fatalf("expected 1 value, got %d", len(got))
 	}
 	m, _ := eng.AsMap(got[0])
-	// Check type literal resolution in data context
+	// Type names stay opaque Words in data context (ADR-012 rule 4).
 	eVal, _ := m.Get("e")
-	if !eVal.Equal(eng.TNumber) {
-		t.Errorf("expected Number type literal, got %s", eVal)
+	if w, err := eng.AsWord(eVal); err != nil || w.Name != "Number" {
+		t.Errorf("expected word(Number), got %s", eVal)
 	}
 	fVal, _ := m.Get("f")
-	if !fVal.Equal(eng.TAny) {
-		t.Errorf("expected Any type literal, got %s", fVal)
+	if w, err := eng.AsWord(fVal); err != nil || w.Name != "Any" {
+		t.Errorf("expected word(Any), got %s", fVal)
 	}
 }
 
@@ -2118,8 +2118,10 @@ func TestResolveTextValueTypes(t *testing.T) {
 	}{
 		{"true", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.ConformsTo(eng.TBoolean) && b }},
 		{"false", func(v eng.Value) bool { b, _ := eng.AsBoolean(v); return v.Parent.ConformsTo(eng.TBoolean) && !b }},
-		{"Number", func(v eng.Value) bool { return v.Equal(eng.TNumber) }},
-		{"String", func(v eng.Value) bool { return v.Equal(eng.TString) }},
+		// Type names are NOT resolved (ADR-012 rule 4) — they are data
+		// here, Atoms, like any other bare name.
+		{"Number", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.Parent.ConformsTo(eng.TAtom) && s == "Number" }},
+		{"String", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.Parent.ConformsTo(eng.TAtom) && s == "String" }},
 		{"hello", func(v eng.Value) bool { s, _ := eng.AsAtom(v); return v.Parent.ConformsTo(eng.TAtom) && s == "hello" }},
 	}
 	for _, tt := range tests {
@@ -2380,13 +2382,24 @@ func TestParseOptionalFieldDisjunct(t *testing.T) {
 	if len(alts) != 3 {
 		t.Fatalf("expected 3 alternatives, got %d", len(alts))
 	}
-	want := map[*eng.Type]bool{eng.TInteger: false, eng.TNone: false, eng.TAbsent: false}
+	// The type-name alternative stays an OPAQUE Word (ADR-012 rule 4);
+	// the None/Absent literals are synthesized by the `?` sugar itself.
+	// The engine's resolve prepass resolves the Word and re-simplifies
+	// at consumption.
+	seenWord := false
+	want := map[*eng.Type]bool{eng.TNone: false, eng.TAbsent: false}
 	for _, alt := range alts {
+		if w, err := eng.AsWord(alt); err == nil && w.Name == "Integer" {
+			seenWord = true
+		}
 		for ty := range want {
 			if alt.Equal(ty) {
 				want[ty] = true
 			}
 		}
+	}
+	if !seenWord {
+		t.Errorf("expected alternative word(Integer) among %v", alts)
 	}
 	for ty, seen := range want {
 		if !seen {

@@ -194,12 +194,16 @@ func TestParseWave3InvalidModifierCombos(t *testing.T) {
 }
 
 // TestParseWave3WordContextTypePath pins that a full builtin type path in
-// WORD context resolves to the type literal (the `/` suffix is not a valid
-// modifier, so the whole token stays intact and resolves as a path).
+// WORD context stays an opaque Word carrying the whole path (ADR-012
+// rule 4 — the `/` suffix is not a valid modifier, so the token stays
+// intact; the engine's cascade resolves the path at consumption).
 func TestParseWave3WordContextTypePath(t *testing.T) {
 	vals := mustParseWave3(t, "Scalar/Number/Integer")
-	if len(vals) != 1 || !eng.IsTypeLiteral(vals[0]) || vals[0].ID != eng.TInteger.ID {
-		t.Fatalf("Scalar/Number/Integer: expected the Integer type literal, got %v", vals)
+	if len(vals) != 1 {
+		t.Fatalf("Scalar/Number/Integer: expected one value, got %v", vals)
+	}
+	if w, err := eng.AsWord(vals[0]); err != nil || w.Name != "Scalar/Number/Integer" {
+		t.Fatalf("Scalar/Number/Integer: expected word(Scalar/Number/Integer), got %v", vals)
 	}
 }
 
@@ -329,11 +333,11 @@ func TestResolveTextValueWave3Specials(t *testing.T) {
 			t.Errorf("resolveTextValue(%q) = %v (err %v), wrong special float", src, v, err)
 		}
 	}
-	// A full builtin type PATH resolves to the type literal (the literal
-	// IS its lattice node, so compare by ID).
+	// A full builtin type PATH is data here, an Atom — the parser is
+	// type-name-opaque (ADR-012 rule 4).
 	v := resolveTextValue("Scalar/Number/Integer")
-	if !eng.IsTypeLiteral(v) || v.ID != eng.TInteger.ID {
-		t.Errorf("resolveTextValue(Scalar/Number/Integer) = %v, want the Integer type literal", v)
+	if s, err := eng.AsAtom(v); err != nil || s != "Scalar/Number/Integer" {
+		t.Errorf("resolveTextValue(Scalar/Number/Integer) = %v, want Atom(Scalar/Number/Integer)", v)
 	}
 }
 

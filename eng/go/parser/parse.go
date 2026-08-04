@@ -13,9 +13,6 @@ import (
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
-// typeNames is derived from the engine's canonical registry to prevent drift.
-var typeNames = eng.TypeNameTable()
-
 func boolPtr(b bool) *bool { return &b }
 
 // parenGroup represents items collected between ( and ) by the jsonic grammar.
@@ -912,7 +909,12 @@ func convertMapData(m map[string]any, implicit bool, d *parseDepth, meta ...map[
 				eng.NewTypeLiteral(eng.TNone),
 				eng.NewTypeLiteral(eng.TAbsent),
 			}
-			if !implicit {
+			// An unresolved type-name child (a Word, post-ADR-012) cannot
+			// be reasoned about here; the engine's resolve prepass
+			// re-simplifies the disjunct after resolving the name, which
+			// restores the `{a?:T}` ≡ `{a:(T tor None tor Absent)}`
+			// canonical equality at every consumption boundary.
+			if !implicit && !eng.IsWord(child) {
 				alts = eng.SimplifyDisjunctAlts(alts)
 			}
 			child = eng.NewDisjunct(alts)
@@ -1246,12 +1248,8 @@ func resolveTextValue(text string) eng.Value {
 	case "nan":
 		return eng.NewFloat(math.NaN())
 	}
-	if t, ok := typeNames[text]; ok {
-		return eng.NewTypeLiteral(t)
-	}
-	if t, ok := eng.ResolveTypePath(text); ok {
-		return eng.NewTypeLiteral(t)
-	}
+	// Type names are not resolved (ADR-012 rule 4 — parseWord has the
+	// same rule); a capitalised name is data here, an Atom.
 	return eng.NewAtom(text)
 }
 
@@ -1550,14 +1548,11 @@ func parseWord(text string) (eng.Value, error) {
 		return eng.NewCloseParen(), nil
 	}
 
-	// *Type names resolve to type literals even in word context, so that
-	// they retain their meaning inside quotations (e.g. [String,Float]).
-	if t, ok := typeNames[name]; ok {
-		return eng.NewTypeLiteral(t), nil
-	}
-	if t, ok := eng.ResolveTypePath(name); ok {
-		return eng.NewTypeLiteral(t), nil
-	}
+	// Type names are NOT resolved here — the parser is type-name-opaque
+	// (ADR-012 rule 4): a capitalised name is an ordinary Word in every
+	// context, and the engine's canonical cascade (eng/go/resolve.go)
+	// resolves it at consumption, exactly as user-defined type names
+	// have always resolved. Quotation meaning is consumption-time.
 
 	// A base-prefixed integer token whose magnitude jsonic could not lex
 	// as a number (>= 2^63) arrives here as bare text. Parse it exactly:

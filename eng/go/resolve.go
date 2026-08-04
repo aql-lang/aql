@@ -53,15 +53,6 @@ func resolveWordValue(v Value, r *Registry) Value {
 	return NewAtom(name)
 }
 
-// ResolveWordValueR is ResolveWordValue with the registry arm of the
-// canonical cascade enabled: a Word naming a user-defined type
-// resolves to that type's bound body (the minted literal for a
-// refine, the aliased literal for an alias, the predicate FnDef for a
-// predicate type) instead of degrading to an Atom.
-func ResolveWordValueR(v Value, r *Registry) Value {
-	return resolveWordValue(v, r)
-}
-
 // ResolveWordsDeep recursively resolves word values to their semantic form.
 // For lists, each element is resolved; for maps, each value is resolved.
 // Scalar words are resolved via ResolveWordValue.
@@ -93,6 +84,32 @@ func resolveWordsDeep(v Value, r *Registry) Value {
 			resolved[i] = resolveWordsDeep(e, r)
 		}
 		return NewList(resolved)
+	}
+	// Disjunct alternatives: a bare type-name alternative arrives as a
+	// Word (the `{a?:T}` optional-field desugar, a stored `tor` shape)
+	// and must resolve before unification can see the union. When an
+	// alternative changed, re-simplify so the resolved disjunct reduces
+	// to the same canonically-ordered value `tor` builds — preserving
+	// the pinned `{a?:T}` ≡ `{a:(T tor None tor Absent)}` equality.
+	// The Data replacement keeps the Parent (Enum subtypes) and every
+	// other field intact.
+	if d, ok := v.Data.(DisjunctInfo); ok && v.Parent.ConformsTo(TDisjunct) {
+		changed := false
+		alts := make([]Value, len(d.Alternatives))
+		for i, a := range d.Alternatives {
+			alts[i] = resolveWordsDeep(a, r)
+			if !changed && !ExactEqual(a, alts[i]) {
+				changed = true
+			}
+		}
+		if !changed {
+			return v
+		}
+		nd := d
+		nd.Alternatives = SimplifyDisjunctAlts(alts)
+		out := v
+		out.Data = nd
+		return out
 	}
 	// Typed list / typed map: resolve the child constraint so a Word
 	// referring to a predicate type (e.g. `[:Pos]`) reaches its FnDef

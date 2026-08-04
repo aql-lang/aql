@@ -41,8 +41,8 @@ def Box<T> class {value:T} def b (make Box<Integer> {value:7}) end case b [Box<I
 def Box<T> class {value:T} def b (make Box<String> {value:'s'}) end case b [Box<Integer> 'int-box' 'other']	'other'	…and not a sibling
 #
 # §3  canonical-stream visibility (D15) — macros and Vm.parse see parens
-def Box<T> class {value:T} def m (macro [[e] [ quote [ unquote e ] ]]) end macroexpand (m Box<Integer>)	[paren([word(Box) word(of) [Integer]])]	a raw-capturing macro receives the canonical paren span, never an angle form
-import "boru:vm" def Box<T> class {value:T} end Vm.parse "Box<Integer>"	(quote [paren([word(Box) word(of) [Integer]])])	Vm.parse of sugared source emits the canonical stream
+def Box<T> class {value:T} def m (macro [[e] [ quote [ unquote e ] ]]) end macroexpand (m Box<Integer>)	[paren([word(Box) word(of) [word(Integer)]])]	a raw-capturing macro receives the canonical paren span, never an angle form
+import "boru:vm" def Box<T> class {value:T} end Vm.parse "Box<Integer>"	(quote [paren([word(Box) word(of) [word(Integer)]])])	Vm.parse of sugared source emits the canonical stream
 #
 # §4  negatives — the gate and the entry grammar are loud
 5 < 3	ERROR:tag name	`<` in value position now opens an XML literal (design/XML-LITERAL.0.md); ` 3` is not a tag name. Comparisons are lt/gt, never `<`.

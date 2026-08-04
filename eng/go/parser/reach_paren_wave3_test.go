@@ -300,7 +300,7 @@ func TestArrowWave3Folds(t *testing.T) {
 	if !eng.IsParenExpr(vals[2]) {
 		t.Fatalf("def-lambda: expected the pair to fold into a ParenExpr, got %v", vals[2])
 	}
-	if s := vals[2].String(); !strings.Contains(s, "x:Integer") || !strings.Contains(s, "afn") {
+	if s := vals[2].String(); !strings.Contains(s, "x:word(Integer)") || !strings.Contains(s, "afn") {
 		t.Errorf("def-lambda: fold %q lacks the sig/afn shape", s)
 	}
 

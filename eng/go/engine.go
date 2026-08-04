@@ -2925,8 +2925,16 @@ func (e *Engine) stepWord(val Value) error {
 			return nil
 		}
 		if t, ok := ResolveBuiltinTypeName(w.Name); ok {
-			e.tape.Set(e.pointer, NewTypeLiteral(t))
-			return nil
+			// Route through stepLiteral, exactly like the TopTypeBody
+			// priority block: a parked forward must get its arrival
+			// event for the resolved literal (loud no-match commits
+			// included) — `tape.Set + return nil` would silently strand
+			// a pending collection that the pre-opacity parser literal
+			// used to satisfy or refuse loudly.
+			lit := NewTypeLiteral(t)
+			lit.pos = val.pos
+			e.tape.Set(e.pointer, lit)
+			return e.stepLiteral()
 		}
 		// (r.Types resolution lives in the priority block at the
 		// top of stepWord — before DefStacks substitution — so a
@@ -3561,6 +3569,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 				}
 			}
 		}
+		e.resolveConsumedInertTypeShape(match, i)
 		match.Args[i].Eval = false
 		// A check-mode Undefined placeholder (a forward-referenced fn name, or
 		// an undefined word already diagnosed at its source) reaching a dispatch
@@ -4373,9 +4382,68 @@ func (e *Engine) stepLiteral() error {
 // that were created by the parser (Eval=true) and not explicitly quoted.
 // Runtime-created values (from word handlers, def bodies, etc.) are
 // not auto-evaluated. This is called at the end of Run().
+// resolveInertTypeShape resolves the type-name Words inside an inert
+// type-shaped value — a typed container's child (`[:String]`), a
+// disjunct's alternatives (the `{a?:T}` desugar) — through the
+// canonical cascade (ADR-012 rule 4). Auto-evaluation is consumption,
+// so these resolve exactly where plain word elements resolve; quoted
+// values never reach the auto-eval paths and stay opaque.
+// resolveConsumedInertTypeShape resolves an inert type-shaped consumed
+// arg — a typed container (`inspect [:Integer]`, `def Ints [:Integer]`)
+// or a desugared disjunct — at consumption (ADR-012 rule 4), unless
+// the slot asked for the raw body (NoEvalArgs / NoEvalMapArgs) or the
+// value is quoted.
+func (e *Engine) resolveConsumedInertTypeShape(match *MatchResult, i int) {
+	if match.Args[i].Quoted {
+		return
+	}
+	if (match.Sig.NoEvalArgs != nil && match.Sig.NoEvalArgs[i]) ||
+		(match.Sig.NoEvalMapArgs != nil && match.Sig.NoEvalMapArgs[i]) {
+		return
+	}
+	if rv, ok := e.resolveInertTypeShape(match.Args[i]); ok {
+		match.Args[i] = rv
+	}
+}
+
+func (e *Engine) resolveInertTypeShape(v Value) (Value, bool) {
+	switch {
+	case IsTypedList(v) || IsTypedMap(v):
+		ci, err := AsChildType(v)
+		if err != nil {
+			return v, false
+		}
+		rc := ResolveWordsDeepR(ci.Child, e.registry)
+		if ExactEqual(rc, ci.Child) {
+			return v, false
+		}
+		// In-place Data replacement: Elements/Entries and every other
+		// field survive — only the child constraint resolves.
+		nd := ci
+		nd.Child = rc
+		out := v
+		out.Data = nd
+		return out, true
+	case IsDisjunct(v):
+		rv := ResolveWordsDeepR(v, e.registry)
+		if ExactEqual(rv, v) {
+			return v, false
+		}
+		return rv, true
+	}
+	return v, false
+}
+
 func (e *Engine) autoEvalStack() error {
 	for i := 0; i < e.tape.Len(); i++ {
 		val := e.tape.At(i)
+		if !val.Quoted {
+			// Typed containers carry no Eval flag — resolve by shape.
+			if rv, ok := e.resolveInertTypeShape(val); ok {
+				e.tape.Set(i, rv)
+				continue
+			}
+		}
 		if !val.Eval || val.Quoted {
 			continue
 		}
@@ -4431,9 +4499,14 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	}
 	// An evaluated element is STORED (the list is data): consume any
 	// dispatch ascription here (`[(m as T)]` must not smuggle a live
-	// ascription into a container — the match-time-only rule).
+	// ascription into a container — the match-time-only rule). Inert
+	// type-shaped elements resolve their names here, where every other
+	// element resolves.
 	for i := range result {
 		result[i] = StripAscribed(result[i])
+		if rv, ok := e.resolveInertTypeShape(result[i]); ok {
+			result[i] = rv
+		}
 	}
 	out := NewList(result)
 	// In RECORDING mode a list whose elements are COMPUTED (an event carrier, not
@@ -4993,6 +5066,13 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 			}
 		}
 
+		// An inert type-shaped value (`{a?:T}`'s desugared disjunct, a
+		// typed-container constraint) has no dispatches to run — it
+		// resolves its names directly.
+		if rv, ok := e.resolveInertTypeShape(v); ok {
+			out.Set(resolvedKey, rv)
+			continue
+		}
 		// Evaluate each value in a pooled sub-engine.
 		result, err := runPooledSub(e.registry, []Value{v},
 			e.isTop || consumed || e.elemEvalRecordable)
@@ -8396,7 +8476,16 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						break
 					}
 					if tn, isType := ResolveBuiltinTypeName(ww.Name); isType {
-						if sigArgMatches(sig, fwd, NewTypeLiteral(tn)) {
+						lit := NewTypeLiteral(tn)
+						if sigArgMatches(sig, fwd, lit) {
+							// Same admission a future LITERAL token gets
+							// (the block below): a type literal is refused
+							// at a concrete-payload slot, so the plan never
+							// claims what the commit re-match would reject.
+							isTypeArg := sig.TypeArgs != nil && sig.TypeArgs[fwd]
+							if !isTypeArg && rejectsTypeLiteral(lit, expectedType) {
+								break
+							}
 							positions[fwd] = scanIdx
 							fwd++
 							scanIdx++

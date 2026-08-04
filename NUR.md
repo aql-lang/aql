@@ -70,8 +70,6 @@ commit.
 | [NUR056](#nur056) | `make`-constructibility is the one capability with no opt-in | 2026-08-02 NUR register review |
 | [NUR057](#nur057) | The compiler exempts `set`/`del` by name on an unenforced no-shadow claim | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
 | [NUR058](#nur058) | Language-layer guaranteed-error mirrors are emitted unstamped | 2026-08-03 lang/eng content audit (`design/LANG-ENG-CONTENT-AUDIT.0.md`) |
-| [NUR059](#nur059) | Bare type-name resolution is split across three timing regimes and divergent per-site cascades | 2026-08-03 parser type-opacity design (`design/LANG-ENG-CONTENT-AUDIT.0.md` §6) |
-| [NUR060](#nur060) | Typed-container children enforce only parser-resolved builtin names; user-typed children silently fail | 2026-08-03 parser type-opacity design (`design/LANG-ENG-CONTENT-AUDIT.0.md` §6) |
 
 Pending records normally use a compact form (rule / divergence /
 evidence / documentation status, plus a proposed verdict where one is
@@ -2193,92 +2191,3 @@ the remaining direct `AddDiagnostic` callers in lang
 `native_module_module.go:80`) for mirror-vs-model-undermining
 classification, and consider extending a gate over lang emitters.
 
----
-
-## NUR059 — Bare type-name resolution is split across three timing regimes and divergent per-site cascades {#nur059}
-
-**Status:** Pending · **Recorded:** 2026-08-03 · **Surfaced by:**
-parser type-opacity design (`design/LANG-ENG-CONTENT-AUDIT.0.md` §6)
-
-**Rule:** one parser, one binding store, one resolution path — a
-capitalised name should mean the same thing regardless of when its
-type was registered and which site resolves it.
-
-**Divergence:** three regimes coexist. (1) Kernel builtins present at
-parser package init resolve AT PARSE TIME via the parser's
-`var typeNames = eng.TypeNameTable()` alias
-(`eng/go/parser/parse.go:17`, used at `:1555-1560`). (2) Every type
-registered after parser init — `Bytes`, the Time family,
-`Timeout`/`Interval`, Matrix, plugins — parses as a plain Word and
-resolves engine-late, because `refreshTypeNames`
-(`eng/go/types.go:128-130`) REBINDS eng's map var while the parser
-keeps the stale snapshot; the function's own comment ("so
-freshly-installed types are immediately resolvable … in the parser")
-is false in production. (3) User `def Foo` types parse as Words and
-resolve via the registry. Verified live:
-`quote [Date Integer Bytes]` → `[word(Date) Integer word(Bytes)]`,
-while `typeof Date` → `Time`. On top of the timing split, the
-engine-late resolvers implement DIVERGENT cascades: `stepWord` runs
-the full Defs → live-builtin-table → type-path cascade
-(`eng/go/engine.go:2771-2791`, `:2927-2934`), `ResolveWordValue` is
-builtin-table-only (`eng/go/core_helpers.go:2294-2311` — no registry
-arm, no path arm), `ResolveTypedNameValue` is registry-only
-(`eng/go/registry.go:2379-2389` — so `def x:Bytes …`-class typed
-annotations cannot name a late-registered builtin), and
-`inspectAtomHandler` is registry-only
-(`lang/go/native/native_inspect.go:73-87`).
-
-**Evidence:** the sites above; empirical probes via `cmd/go`.
-
-**Documentation status:** `parse.go:1553-1554` documents the
-parse-time guarantee ("retain their meaning inside quotations") that
-holds only for regime 1; `eng/spec/resolution.tsv` documents the
-engine-late model. Neither mentions the split.
-
-**Proposed verdict:** resolve by fix — the maintainer direction of
-2026-08-03 (`design/LANG-ENG-CONTENT-AUDIT.0.md` §6): the parser
-stops resolving type names entirely (all capitalised names emitted as
-opaque Words), and ONE canonical engine resolver (Defs →
-live builtin table → type path) replaces every per-site cascade.
-
----
-
-## NUR060 — Typed-container children enforce only parser-resolved builtin names; user-typed children silently fail {#nur060}
-
-**Status:** Pending · **Recorded:** 2026-08-03 · **Surfaced by:**
-parser type-opacity design (`design/LANG-ENG-CONTENT-AUDIT.0.md` §6)
-
-**Rule:** a type usable in one constraint position is usable in every
-constraint position — fn params, returns, case arms, `is`, and
-typed-container children (`[:T]` / `{:T}`) should accept the same
-type names.
-
-**Divergence:** `ChildTypeInfo.Child` has no general name resolver.
-The parser embeds a resolved literal for init-time builtin names
-(`eng/go/parser/parse.go:1050-1071`, `:1088-1124`), and late
-resolution exists only for gen placeholders
-(`eng/go/generics_unify.go:22-49`, gated on `IsTypeParamNode`),
-ParenExpr children (`ResolveChildTypeExpr`,
-`generics_unify.go:57-92`), and predicate-fn types
-(`eng/go/unify.go:148-201`). Every other user-typed child fails
-SILENTLY or noisily while the same type works in fn params and `is`:
-`[x] is [:Foo]` → false with x genuinely Foo-tagged (bare refine),
-`[20 30] is [:Big]` → false with the bound satisfied (DepScalar),
-class instances, disjuncts, and aliases likewise; `def xs:[:Foo] …` →
-"does not unify with declared type `[:word(Foo)]`"; a fn param
-`xs:[:Foo]` fails dispatch. Unify's prepass degrades the Word child
-to an Atom (`eng/go/resolve.go:28-35` →
-`core_helpers.go:2306`, builtin-only).
-
-**Evidence:** the sites above; empirical probes via `cmd/go`
-(contrast pinned builtin rows `eng/spec/types.tsv:433`, `:792`).
-
-**Documentation status:** undocumented. No spec row anywhere uses a
-user-named container child (`[:Foo]`-shaped rows absent from
-`lang/spec`) — the hole has zero regression coverage, violating the
-positive/negative pairing discipline.
-
-**Proposed verdict:** resolve by fix — resolve `ChildTypeInfo.Child`
-at consumption through the NUR059 canonical resolver, and add pinned
-spec rows for user-typed children (accept) and unknown names
-(reject). Falls out of the same remediation as NUR059.

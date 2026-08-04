@@ -19,10 +19,10 @@ func TestTypedListWave3Elements(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%q: AsChildType: %v", src, err)
 		}
-		// The child constraint is the Integer TYPE LITERAL (the literal IS
-		// its lattice node, so compare by ID, not Parent).
-		if !eng.IsTypeLiteral(ci.Child) || ci.Child.ID != eng.TInteger.ID {
-			t.Errorf("%q: child constraint %v, want the Integer type literal", src, ci.Child)
+		// The child constraint is the OPAQUE name Word (ADR-012 rule 4);
+		// the engine's canonical cascade resolves it at consumption.
+		if w, err := eng.AsWord(ci.Child); err != nil || w.Name != "Integer" {
+			t.Errorf("%q: child constraint %v, want word(Integer)", src, ci.Child)
 		}
 		if len(ci.Elements) != 2 {
 			t.Fatalf("%q: got %d elements, want 2", src, len(ci.Elements))
@@ -47,8 +47,8 @@ func TestTypedMapWave3Entries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("AsChildType: %v", err)
 	}
-	if !eng.IsTypeLiteral(ci.Child) || ci.Child.ID != eng.TInteger.ID {
-		t.Errorf("child constraint %v, want the Integer type literal", ci.Child)
+	if w, err := eng.AsWord(ci.Child); err != nil || w.Name != "Integer" {
+		t.Errorf("child constraint %v, want word(Integer)", ci.Child)
 	}
 	if len(ci.Entries) != 2 {
 		t.Fatalf("got %d entries, want 2", len(ci.Entries))

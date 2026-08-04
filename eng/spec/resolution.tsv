@@ -132,4 +132,4 @@ def addq 99 addq addq	99 99	two adds, both resolve to def value
 # type-name word), so def's [TWord, TAny] sig fails to match — the		
 # type literal isn't a Word. The end-result is still a hard reject		
 # of `def Integer …`, just routed through a different validation.		
-def Integer 42 Integer	ERROR:signature_error	type names parse as type literals; def's [TWord, …] sig rejects them
+def Integer 42 Integer	ERROR:conflicts with an existing type name	a builtin type name is not rebindable — post-opacity the Word reaches InstallType, which refuses properly (was an opaque signature_error)

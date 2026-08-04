@@ -219,7 +219,25 @@ func tsResults(t *testing.T) (map[string]crossRec, bool) {
 // forward-barrier; the TS port has not adopted them yet, so its `inspect def`
 // lists fewer signatures. Remove the entry once the TS port matches.
 func knownGoAheadDivergence(mode, input string) bool {
-	return mode == "value" && strings.TrimSpace(input) == "inspect def"
+	if mode != "value" {
+		return false
+	}
+	switch strings.TrimSpace(input) {
+	case "inspect def":
+		return true
+	case "quote Integer", "quote String", "def t (quote Integer) t":
+		// ADR-012 stage 6 (parser type-name opacity): the Go parser no
+		// longer resolves type names, so `quote <TypeName>` captures the
+		// word as an Atom (`Integer/q`), uniform with every bare name.
+		// The TS port still parses eagerly — flipping its fixture alone
+		// leaves ~190 divergences because the TS engine lacks the
+		// forward-scan/consumption resolution arms the Go kernel grew
+		// (eng/go/resolve.go). Remove these entries when the TS port
+		// adopts the canonical cascade and its fixture drops the
+		// typeTable lookup (spec-fixture.ts).
+		return true
+	}
+	return false
 }
 
 func TestCrossEngineDifferential(t *testing.T) {

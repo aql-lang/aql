@@ -287,8 +287,14 @@ The parser converts jsonic output to engine values through two semantic contexts
   quoted → strings. Lists created in word context are marked `Eval=true`
   for auto-evaluation at end of execution.
 - **Data context** (inside maps): unquoted text → words (executable),
-  quoted text → strings, `true`/`false` → booleans, type names → type literals,
-  paren groups → `ParenExpr` (inline evaluation).
+  quoted text → strings, `true`/`false` → booleans,
+  paren groups → `ParenExpr` (inline evaluation). Type names are NOT
+  resolved in either context — the parser is type-name-opaque
+  (ADR-012 rule 4): a capitalised name stays an ordinary Word and the
+  engine's canonical cascade (`eng/go/resolve.go` — def table → live
+  builtin table → type path) resolves it at consumption, exactly as
+  user-defined type names have always resolved. Quotation meaning is
+  consumption-time (`quote Integer` → `Integer/q`).
 
 Key conversion functions in `parse.go`:
 - `convertTopLevel()` / `convertTopLevelValue()` — word context
