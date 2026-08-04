@@ -711,22 +711,15 @@ func pairCarrier(elem *Type) Value {
 // keyValCarrier builds a representative KeyVal {k v i n} carrier — the shape the
 // map Function forms (filter/each/fold/scan over a map) hand their callback. The
 // value field carries the map's common value type; k/i/n carry String/Integer/
-// Integer. Tagged Node/Map/KeyVal when that type is registered (the language
-// layer), else a plain Map carrier — either way the body's `kv.v`/`kv.i` reads
-// resolve by ordinary dotted access.
-func keyValCarrier(r *Registry, elem *Type) Value {
+// Integer. Tagged Node/Map/KeyVal directly — the type is kernel-declared
+// (keyval.go), so the former registered-or-plain-Map fallback probe is gone.
+func keyValCarrier(_ *Registry, elem *Type) Value {
 	om := NewOrderedMap()
-	om.Set("k", NewCarrier(TString))
-	om.Set("v", NewCarrier(elem))
-	om.Set("i", NewCarrier(TInteger))
-	om.Set("n", NewCarrier(TInteger))
-	t := TMap
-	if r != nil {
-		if kv := r.Types.Lookup("Node/Map/KeyVal"); kv != nil {
-			t = kv
-		}
-	}
-	return NewValueRaw(t, MapPayload{M: om})
+	om.Set(KeyValK, NewCarrier(TString))
+	om.Set(KeyValV, NewCarrier(elem))
+	om.Set(KeyValI, NewCarrier(TInteger))
+	om.Set(KeyValN, NewCarrier(TInteger))
+	return NewValueRaw(TKeyVal, MapPayload{M: om})
 }
 
 // extraNoEvalHookSlots classifies every NON-body NoEvalArgs operand of a

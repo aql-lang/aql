@@ -36,6 +36,15 @@ wrong, not the go.mod.
   - `native_temporal.go` — the `Scalar/Time` family (FixedIDs
     1000-1003): registrations, Behaviors/Comparers, constructors,
     and the `boru:time-util` module mints.
+  - `types_bytes.go` — `Scalar/Bytes` (1009): registration,
+    Behavior (render/equality/ordering/size/const-bake), the Go
+    bridge wiring, and the constructor/unwrapper pair. The bytes
+    WORDS and the binary-frame machinery stay in lang.
+  - `types_handles.go` — `Ideal/Patrun` (5004), `Ideal/Pid`
+    (5007), `Ideal/Service` (5008): identity + Behavior shells.
+    The patrun matcher and service state stay in lang with their
+    words and implement the `PatrunFormatter`/`ServiceFormatter`
+    delegation interfaces — never an upward import.
   - `types_timer.go` — the Timeout/Interval handle constructors and
     Behaviors (module-minted types, former FixedIDs retired).
   - `types_resource.go` — the `Resource`/`Entity` definitions.

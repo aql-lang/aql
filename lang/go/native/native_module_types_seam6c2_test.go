@@ -11,7 +11,7 @@ import (
 // Seam-6 coverage for native_module_types.go, typeinit.go, and setup.go
 // (design/TEST-SEAMS.10.md).
 
-func TestSeam6C2RegisterModuleTypeDuplicateRecorded(t *testing.T) {
+func TestSeam6C2TypeInitErrRecordedAndSurfaced(t *testing.T) {
 	saved := SwapTypeInitErrs(nil)
 	t.Cleanup(func() { SwapTypeInitErrs(saved) })
 
@@ -21,17 +21,11 @@ func TestSeam6C2RegisterModuleTypeDuplicateRecorded(t *testing.T) {
 		t.Fatal("nil record must not create an init error")
 	}
 
-	// Re-registering an existing path records the failure instead of
-	// panicking (ADR-005).
-	if tt := registerModuleType("Ideal/Module", 5000); tt != nil {
-		t.Fatalf("duplicate registration must return nil, got %v", tt)
-	}
-	err := TypeInitError()
-	if err == nil || !strings.Contains(err.Error(), "already registered") {
-		t.Fatalf("expected already-registered init error, got %v", err)
-	}
-
-	// DefaultRegistry surfaces the recorded init error at construction.
+	// A recorded registration failure (the shape registerTemporalType-
+	// style init code records; the Module/KeyVal registrations moved to
+	// the kernel and record there — ADR-012 stage 2) surfaces from
+	// DefaultRegistry at construction.
+	recordTypeInitErr(errors.New("test: type already registered"))
 	if _, err := DefaultRegistry(); err == nil || !strings.Contains(err.Error(), "already registered") {
 		t.Fatalf("DefaultRegistry must surface the init error, got %v", err)
 	}
@@ -245,17 +239,6 @@ func TestSeam6C2ModuleInstGetReturnsArms(t *testing.T) {
 	}
 }
 
-func TestSeam6C2ModuleBehaviorFormatFallback(t *testing.T) {
-	b := moduleTypeBehavior{path: "Ideal/Module"}
-	if got := b.Format(NewInteger(3)); got != "Ideal/Module" {
-		t.Fatalf("expected path fallback, got %q", got)
-	}
-	// Positive pair: a Module value formats with its ref.
-	if got := b.Format(NewModuleInstance(ModuleDesc{Ref: "boru:x"})); got != "Module(boru:x)" {
-		t.Fatalf("expected Module(boru:x), got %q", got)
-	}
-}
-
 func TestSeam6C2ModuleNSSyntheticAndMiss(t *testing.T) {
 	r := seam5Reg(t)
 	fields := NewOrderedMap()
@@ -309,25 +292,5 @@ func TestSeam6C2ModuleInstHandlers(t *testing.T) {
 	_, err = getrModuleInstHandler([]Value{NewString("nope"), inst}, nil, nil, r)
 	if err == nil || !strings.Contains(err.Error(), "not found in Module") {
 		t.Fatalf("expected not_found, got %v", err)
-	}
-}
-
-func TestSeam6C2ModuleBehaviorConvertFallbacks(t *testing.T) {
-	b := moduleTypeBehavior{path: "Ideal/Module"}
-	m, err := b.ToMap(NewInteger(1))
-	if err != nil {
-		t.Fatal(err)
-	}
-	om, err2 := AsMap(m)
-	if err2 != nil || len(om.Keys()) != 0 {
-		t.Fatalf("expected empty map fallback, got %v", m)
-	}
-	l, err := b.ToList(NewInteger(1))
-	if err != nil {
-		t.Fatal(err)
-	}
-	elems, err3 := AsList(l)
-	if err3 != nil || elems.Len() != 0 {
-		t.Fatalf("expected empty list fallback, got %v", l)
 	}
 }

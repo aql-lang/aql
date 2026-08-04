@@ -1048,15 +1048,17 @@ layer, and the module dependencies around it are HARD RULES:**
   registrant against the kernel, never kernel machinery.
 - **The predefined global content types** with their type-local
   logic (Behaviors, Comparers, constructors, module mints) — the
-  ADR-012 rule 1 middle home. Landed with this record: the
-  `Scalar/Time` family (FixedIDs 1000-1003), the
+  ADR-012 rule 1 middle home: the `Scalar/Time` family (FixedIDs
+  1000-1003), `Scalar/Bytes` (1009), the opaque-handle types
+  `Patrun`/`Pid`/`Service` (5004/5007/5008 — their identity and
+  Behavior shells; the matcher/service machinery stays with the
+  words in lang behind delegation interfaces), the
   `Resource`/`Entity` definitions, and the init-time
-  registration-error machinery. Following as staged moves under
-  the same rule: `Scalar/Bytes` (1009) and
-  `Patrun`/`Pid`/`Service` (5004/5007/5008), whose registrations
-  are still interleaved with their word files. NOT moving:
-  `Ideal/Module` (5000) and `Node/Map/KeyVal` (5002), which are
-  kernel-bound (ADR-012 rule 1 migrates them INTO eng), and the
+  registration-error machinery. NOT moving: `Ideal/Module` (5000)
+  and `Node/Map/KeyVal` (5002), which are kernel-bound (ADR-012
+  rule 1 migrated them INTO eng — `builtinDecls` entries with
+  their FixedIDs and explicit external-band Ranks, retiring the
+  `carrier.go`/`callable_words.go` string probes), and the
   lattice roots `Scalar`/`Node`/`Ideal` themselves with the
   kernel-resident branches, which are mechanism and stay
   eng-declared ("Where a Type Lives", eng/go/CLAUDE.md).
@@ -1100,8 +1102,13 @@ spec rows.
   publish targets, and `scripts/release.sh` gain `basic/go`
   between `eng/go` and `lang/go`; a coordinated release tags all
   four in dependency order.
-- The staged follow-ups inherit their schedule from ADR-012:
-  Bytes and Patrun/Pid/Service move to `basic` when their word
-  files' registrations are disentangled; Module/KeyVal land in
-  eng per ADR-012; Matrix/Tensor residence stays the audit's open
-  question 2.
+- The §4 forward moves are complete: Time, Bytes, Patrun/Pid/
+  Service, Resource/Entity live in `basic`; Module/KeyVal live in
+  eng. Matrix/Tensor stay module-owned — they are types exported
+  by `boru:matrix`, and that is where they live (maintainer
+  decision, 2026-08-04, settling the audit's open question 2).
+  The reverse audit (Micron family, `iso4217.go`, `core_xml.go`)
+  remains its own separately-sequenced stage: those are pinned by
+  the kernel spec corpus and mirrored by `eng/ts`, so the move
+  needs capability prerequisites first — the scoping is recorded
+  in `design/LANG-ENG-CONTENT-AUDIT.0.md` §8A.

@@ -641,3 +641,67 @@ oracle keeps them honest.
    literal matcher builds finished eng Values inside the lexer
    (`xml_literal.go:16-19`), so extraction re-plumbs that pipeline
    too.
+
+## 8A. Open-question outcomes (maintainer direction, 2026-08-04)
+
+The §8 questions were settled — or scoped to a decision — when the
+middle component landed (ADR-013, the `basic/go` module):
+
+1. **Component name — settled: `basic`.** The §5 middle component is
+   `basic/go` (`github.com/boru-lang/boru/basic/go`), its charter
+   widened beyond types to the fundamental words (stack, definition,
+   control-flow, type-generics). ADR-013 records the layering
+   `eng ← basic ← lang ← cmd` as hard dependency rules.
+
+2. **Matrix/Tensor residence — settled by the maintainer: they stay
+   module-owned.** Tensor and Matrix are types exported by the
+   `boru:matrix` module — that is where they live. No move; the
+   global FixedID range 2000-2999 remains theirs, delivered by
+   `BuildMatrixModule` (the Time pattern: a module-owned family, no
+   component relocation).
+
+3. **The reverse audit (eng → basic) — scoped by inspection; stays a
+   separately-sequenced stage.** The §4 forward moves all landed
+   (Time family, Bytes, Patrun/Pid/Service → `basic`; Module and
+   KeyVal → eng as `builtinDecls` entries with their FixedIDs and
+   EXPLICIT external-band Ranks, so every pre-move ordering result
+   is preserved while the string probes in `carrier.go` /
+   `callable_words.go` are deleted). The reverse candidates are
+   harder than the forward ones, for reasons the mechanism test
+   alone does not surface:
+
+   - **The kernel spec corpus pins them.** `eng/spec/make.tsv`
+     carries a Pathon-construction section; `typeof.tsv` /
+     `types.tsv` pin the Micron lattice. The kernel spec runner runs
+     against eng ALONE, so Micron machinery leaving eng changes the
+     kernel's own tested contract, not just a file's address.
+   - **The TS engine mirrors them.** `eng/ts/src` implements the
+     Micron family in the kernel twin, and the cross-engine
+     differential replays the same corpus through both engines — a
+     Go-side move needs an `eng/ts` lockstep restructure (the same
+     constraint ADR-012 records for parser opacity).
+   - **Construction is kernel-armed.** `core_make.go` constructs
+     Pathons directly, `core_type.go`/`define_type.go` enforce the
+     `-on` rule and mint user Micron kinds with `micronBehavior` at
+     the typed-def bind sites, and the Micron Ideal registers in
+     `registerKernelIdeals`.
+   - **Rank is positional.** The family holds kernel Ranks
+     20.5-20.62e9, BELOW the external Scalar band (21e9); naive
+     re-registration reorders cross-family comparisons (e.g.
+     Pathon vs the Time family). A move needs explicit-Rank
+     external registration (the Module/KeyVal precedent, run in
+     reverse).
+
+   Prerequisites for the eventual stage, in order: (a) the `-on`
+   naming rule becomes a registration-time capability consulted
+   generically by `InstallType` (rule 5); (b) Micron leaf
+   validators/grammars register through the Ideal rather than
+   kernel arms; (c) explicit-Rank external registration; (d) the
+   Micron rows of the kernel corpus re-home (or the corpus gains a
+   layered-runner story); (e) `eng/ts` lockstep. `iso4217.go`
+   travels with Qion whenever (a)-(e) land. `core_xml.go` is the
+   same class with a smaller surface — the Xml TYPE is
+   parser-emitted (rule 1, kernel forever) and only the Behavior
+   could move, but kernel spec rows pin XML rendering and the
+   List/Map render behaviors it mirrors cannot leave, so it stays
+   with them.

@@ -741,6 +741,13 @@ var builtinDecls = []builtinDecl{
 	// Scalars store strongly, mutable handles weakly, immutable Nodes
 	// are refused (Python's weakref rule). design/FLEX-ATTRS.1.md §4.
 	{Path: "Node/Map/FlexMap/WeakFlexMap", FixedID: 123, Rank: 30_221_000_000},
+	// Node/Map/KeyVal — the map-iteration entry value (keyval.go).
+	// Kernel-declared since the ADR-012 stage-2 move from lang. The
+	// Rank is EXPLICITLY the Node external band (externalBandFor):
+	// the type registered externally before the move, so the band
+	// value — not a positional kernel rank — preserves every
+	// pre-move ordering result bit-for-bit.
+	{Path: "Node/Map/KeyVal", FixedID: 5002, Rank: 31_000_000_000},
 	// Node/Xml — the immutable element value embedded XML literals
 	// (`<tag>…</tag>`) and `parse xml` produce. A dedicated Node-branch
 	// type (not a Map subtype) with a custom Behavior that serialises
@@ -791,6 +798,11 @@ var builtinDecls = []builtinDecl{
 	// loudly at declaration; membership is a conformance-set probe via
 	// surfaceUnifier. See design/SURFACES.10.md.
 	{Path: "Ideal/Surface", FixedID: 103, Rank: 40_910_000_000},
+	// Ideal/Module — the module descriptor (moduletype.go). Kernel-
+	// declared since the ADR-012 stage-2 move from lang; the Rank is
+	// EXPLICITLY the Ideal external band, same reasoning as
+	// Node/Map/KeyVal above.
+	{Path: "Ideal/Module", FixedID: 5000, Rank: 41_000_000_000},
 
 	// Word branch — Word/__XX entries are internal runtime markers,
 	// packed at 1e3 Rank spacing. They expose friendly short-name

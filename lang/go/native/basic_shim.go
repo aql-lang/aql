@@ -117,6 +117,43 @@ type (
 	intervalFormatBehavior    = basic.IntervalFormatBehavior
 )
 
+// Scalar/Bytes lives in basic (type + Behavior + bridge); the bytes
+// words and the binary-frame machinery stay here.
+var (
+	TBytes        = basic.TBytes
+	NewBytesValue = basic.NewBytesValue
+	AsBytesValue  = basic.AsBytesValue
+	newBytes      = basic.NewBytes
+	asBytes       = basic.AsBytes
+)
+
+type bytesBehavior = basic.BytesBehavior
+
+// The opaque-handle content types (Patrun / Pid / Service) live in
+// basic; the matcher and service state stay here with the words and
+// implement basic's delegation interfaces.
+var (
+	TPatrun  = basic.TPatrun
+	TPid     = basic.TPid
+	TService = basic.TService
+
+	NewPid     = basic.NewPid
+	PidProcess = basic.PidProcess
+	asPid      = basic.AsPid
+
+	registerPatrunType  = basic.RegisterPatrunType
+	registerPidType     = basic.RegisterPidType
+	registerServiceType = basic.RegisterServiceType
+)
+
+// Behavior structs of the moved handle types — the coverage suites
+// construct them directly.
+type (
+	patrunBehavior  = basic.PatrunBehavior
+	pidBehavior     = basic.PidBehavior
+	serviceBehavior = basic.ServiceBehavior
+)
+
 // The Scalar/Time family — types, constructors, accessors and the
 // module-mint surface — lives in basic (its owning component).
 type TemporalModuleTypes = basic.TemporalModuleTypes

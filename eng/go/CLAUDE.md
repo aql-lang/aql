@@ -342,8 +342,11 @@ matching, plugin types) supply a custom Behavior:
 
 - `basic/go/native_temporal.go` — Time family Behaviors.
 - `basic/go/types_timer.go` — Timeout/Interval Behaviors.
+- `basic/go/types_bytes.go` — Bytes Behavior (render/order/size/bake).
+- `basic/go/types_handles.go` — Patrun/Pid/Service Behavior shells
+  (the matcher/service state stays in lang and implements the
+  delegation interfaces there).
 - `lang/go/modules/matrix.go` — Tensor/Matrix/Vector Behavior.
-- `lang/go/native/fetch.go` — Fetch family (no custom Behavior; uses Default).
 
 The dispatch in `Value.String` walks the Parent chain so
 descendants of a type with a custom Behavior inherit it — e.g.
@@ -472,11 +475,15 @@ Documented per-module ranges (see
 ```
    1-99       eng kernel builtins
    100-999    reserved for future eng-internal builtins
-   1000-1999  basic/go — Scalar/Time family
-   2000-2999  lang/go/modules/matrix
+   1000-1999  basic/go — Scalar/Time family (1000-1003), Scalar/Bytes (1009)
+   2000-2999  boru:matrix (module-owned; delivered by BuildMatrixModule)
    3000-3999  Fetch family (retired to boru:net module mints)
    4000-4999  Timeout, Interval (retired to boru:time-util module mints)
-   5000-9999  reserved for future kernel/language allocations
+   5000-9999  kernel/language band: Module 5000 + KeyVal 5002 (eng
+              builtinDecls, explicit external-band Ranks),
+              MiniLangCompiled 5003 (boru:minilang),
+              Patrun 5004 / Pid 5007 / Service 5008 (basic/go);
+              5001, 5005, 5006 retired — never recycled
    10000+     host / third-party plugin types
 ```
 

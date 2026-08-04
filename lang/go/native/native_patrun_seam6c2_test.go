@@ -170,6 +170,12 @@ func TestSeam6C2PatrunBehaviorEqualAndFormat(t *testing.T) {
 		t.Fatal("distinct integers must not compare equal")
 	}
 
+	// A non-Patrun payload falls back to the bare rendering (the
+	// basic-side Behavior shell's arm; the matcher's own formatter
+	// handles the empty case below).
+	if got := b.Format(NewInteger(1)); got != "Patrun()" {
+		t.Fatalf("non-patrun must format Patrun(), got %q", got)
+	}
 	pv := NewPatrun(TAny)
 	if got := b.Format(pv); got != "Patrun()" {
 		t.Fatalf("empty patrun must format Patrun(), got %q", got)

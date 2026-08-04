@@ -1177,17 +1177,17 @@ func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
 // isModuleFamilyValue reports whether v is a concrete module value — an
 // Ideal/Module descriptor, or a module NAMESPACE (a plain Map carrying the
 // module-namespace facet — the value `import` binds; NUR038 retired the
-// Ideal/ModuleExport wrapper type). The descriptor is identified by its
-// stable registered type PATH (FixedID 5000 in the lang layer), the
-// namespace by its kernel facet, so the eng-level fold needs no lang
-// import. These values are immutable and produced deterministically by
-// `import`, so a pure read of one is a compile-time constant (runtime
-// export growth is ledger-modelled — module_export_growth.go).
+// Ideal/ModuleExport wrapper type). The descriptor is identified by the
+// kernel-declared TModule (moduletype.go — the former string-path probe
+// is gone), the namespace by its kernel facet. These values are
+// immutable and produced deterministically by `import`, so a pure read
+// of one is a compile-time constant (runtime export growth is
+// ledger-modelled — module_export_growth.go).
 func isModuleFamilyValue(v Value) bool {
 	if !IsConcrete(v) || v.Parent == nil {
 		return false
 	}
-	return ModuleNSOf(v) != nil || v.Parent.Path() == "Ideal/Module"
+	return ModuleNSOf(v) != nil || v.Parent.Equal(TModule)
 }
 
 // constFoldAgrees reports whether two const-fold probe evaluations produced

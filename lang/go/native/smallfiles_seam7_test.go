@@ -86,18 +86,6 @@ func TestParseTextRejectsNonString(t *testing.T) {
 	// produce. Documented residual.
 }
 
-func TestRegisterKeyValTypeDuplicate(t *testing.T) {
-	saved := SwapTypeInitErrs(nil)
-	t.Cleanup(func() { SwapTypeInitErrs(saved) })
-
-	// Re-registering the already-installed Node/Map/KeyVal path records the
-	// failure via recordTypeInitErr (ADR-005) instead of panicking.
-	registerKeyValType()
-	if err := TypeInitError(); err == nil || !strings.Contains(err.Error(), "KeyVal") {
-		t.Fatalf("duplicate KeyVal registration should record an init error, got %v", err)
-	}
-}
-
 func TestMatchFnSigValuePatternUnifyFail(t *testing.T) {
 	r := b2Reg(t)
 	// A fn with a value-pattern param `3` (an Integer literal, not a Map)

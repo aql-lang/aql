@@ -1115,10 +1115,13 @@ Those helpers now record their error and surface it at the first registry
 construction instead of panicking:
 
 - `eng`: `BuiltinInitError()` is checked by `NewRegistry()` (covers
-  `mustType` / `builtinDecls`).
-- `native`: `TypeInitError()` is checked by `DefaultRegistryWithPolicy`
-  (covers `registerTimerType`, `registerTemporalType`,
-  `registerFetchType`, `registerKeyValType`, `registerModuleType`).
+  `mustType` / `builtinDecls`, now including `Ideal/Module` and
+  `Node/Map/KeyVal`).
+- `basic`: `TypeInitError()` is checked by `DefaultRegistryWithPolicy`
+  (covers `RegisterTemporalType`, `registerBytesType`, and the
+  `RegisterPatrunType`/`RegisterPidType`/`RegisterServiceType` handle
+  registrations — the accumulator lives in `basic/go/typeinit.go` and
+  `native` re-exports it).
 - `modules/matrix`: `tensorTypeInitErr` is checked by `BuildMatrixModule`.
 
 The only `panic`/`recover` left in the tree are Go standard-library

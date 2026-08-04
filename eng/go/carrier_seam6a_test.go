@@ -195,8 +195,10 @@ func TestS6aGradualContagionZeroOutSingleValueSibling(t *testing.T) {
 func TestS6aTryFoldModuleConstNondeterministicDeclines(t *testing.T) {
 	r := newTestRegistry(t)
 	armEmit(r)
-	modT := r.Types.MintType("Module", TIdeal)
-	modVal := NewValueRaw(modT, ModuleDesc{ID: "s6am"})
+	// A real Ideal/Module descriptor — isModuleFamilyValue now keys on
+	// the kernel-declared TModule (Equal, not the retired string-path
+	// probe), so a minted look-alike no longer reaches the fold.
+	modVal := NewModuleInstance(ModuleDesc{ID: "s6am"})
 	sig := statefulSig(CompileModuleFold, func(n int) []Value {
 		return []Value{NewInteger(int64(n))}
 	})

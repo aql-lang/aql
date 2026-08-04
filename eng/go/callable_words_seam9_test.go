@@ -151,15 +151,21 @@ func TestW9BodyToksHaveSentinel(t *testing.T) {
 }
 
 func TestW9KeyValCarrierRegistered(t *testing.T) {
-	r := newTestRegistry(t)
-	// Register a Node/Map/KeyVal type in this registry's (dynamic) table so
-	// keyValCarrier tags the carrier with it (the language-layer registration
-	// the function looks up).
-	kv := r.Types.MintType("KeyVal", TMap)
-	r.Types.bypath = map[string]*Type{"Node/Map/KeyVal": kv}
-	out := keyValCarrier(r, TInteger)
-	if !out.Parent.Equal(kv) {
-		t.Errorf("keyValCarrier should tag with the registered KeyVal type, got %v", out.Parent)
+	// The KeyVal type is kernel-declared (keyval.go), so keyValCarrier tags
+	// the carrier with TKeyVal directly — the former registered-or-plain-Map
+	// fallback probe is gone (ADR-012 stage 2). The v field carries the
+	// element type; a nil registry is fine (the parameter is unused).
+	out := keyValCarrier(nil, TInteger)
+	if !out.Parent.Equal(TKeyVal) {
+		t.Errorf("keyValCarrier should tag with TKeyVal, got %v", out.Parent)
+	}
+	m, err := AsMap(out)
+	if err != nil {
+		t.Fatalf("keyValCarrier payload should be a readable map, got err=%v", err)
+	}
+	v, ok := m.Get(KeyValV)
+	if !ok || !v.Parent.Equal(TInteger) {
+		t.Errorf("the v field should carry the element type, got ok=%v %v", ok, v.Parent)
 	}
 }
 

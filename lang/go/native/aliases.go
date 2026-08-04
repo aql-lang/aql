@@ -138,6 +138,10 @@ var (
 	TForward  = eng.TForward
 	TFunction = eng.TFunction
 	TInspect  = eng.TInspect
+	TKeyVal   = eng.TKeyVal
+	// TModuleInst keeps the lang spelling for Ideal/Module, kernel-declared
+	// as eng.TModule since the ADR-012 stage-2 move (moduletype.go).
+	TModuleInst = eng.TModule
 	// TInstant moved to lang/go/engine/native_temporal.go (Step 8).
 	TInteger      = eng.TInteger
 	TBigInteger   = eng.TBigInteger
@@ -525,12 +529,15 @@ var (
 	NewImplicitMap = eng.NewImplicitMap
 	ModuleNSOf     = eng.ModuleNSOf
 	// NewInstant moved to lang/go/engine/native_temporal.go (Step 8).
-	NewInteger       = eng.NewInteger
-	NewBigInteger    = eng.NewBigInteger
-	NewBigDecimal    = eng.NewBigDecimal
-	FormatBigInteger = eng.FormatBigInteger
-	FormatBigDecimal = eng.FormatBigDecimal
-	NewInterpString  = eng.NewInterpString
+	NewInteger        = eng.NewInteger
+	NewKeyVal         = eng.NewKeyVal
+	NewModuleInstance = eng.NewModuleInstance
+	AsModuleDesc      = eng.AsModuleDesc
+	NewBigInteger     = eng.NewBigInteger
+	NewBigDecimal     = eng.NewBigDecimal
+	FormatBigInteger  = eng.FormatBigInteger
+	FormatBigDecimal  = eng.FormatBigDecimal
+	NewInterpString   = eng.NewInterpString
 	// NewInterval moved to lang/go/engine/native_misc.go (Step 8).
 	NewList               = eng.NewList
 	NewFlexList           = eng.NewFlexList

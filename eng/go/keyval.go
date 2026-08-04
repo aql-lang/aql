@@ -1,10 +1,4 @@
-package native
-
-import (
-	"fmt"
-
-	eng "github.com/boru-lang/boru/eng/go"
-)
+package eng
 
 // TKeyVal is the Node/Map/KeyVal type — the entry value a map-iteration body
 // receives (the `e` in `m each ([e:KeyVal] => …)`). It is a child of Map, so
@@ -24,19 +18,14 @@ import (
 //
 // FixedID 5002 is the next free id in the 5000–9999 kernel/language band,
 // after Module (5000) and the retired ModuleExport wrapper (5001,
-// never recycled — NUR038). See eng/go/CLAUDE.md
-// "FixedID Allocation".
-var TKeyVal = registerKeyValType()
-
-func registerKeyValType() *eng.Type {
-	t, err := eng.Builtin.RegisterType("Node/Map/KeyVal", 5002, eng.OwnerKernel, nil)
-	if err != nil {
-		// Init-time registration error — recorded, not panicked.
-		// See ADR-005 and typeinit.go.
-		recordTypeInitErr(fmt.Errorf("native_keyval: register Node/Map/KeyVal: %w", err))
-	}
-	return t
-}
+// never recycled — NUR038). See CLAUDE.md "FixedID Allocation".
+//
+// KERNEL-RESIDENT (ADR-012 rule 1): the compiled-callback pair shape
+// is dispatch mechanics — keyValCarrier (callable_words.go) types the
+// compiled each/filter/fold/scan map callbacks with it, and NewKeyVal
+// is the one constructor the map-iteration words use. Moved in from
+// lang/go/native/native_keyval.go, FixedID preserved.
+var TKeyVal = mustType("Node/Map/KeyVal")
 
 // KeyVal field names. A KeyVal map carries exactly these keys, in this order.
 const (
