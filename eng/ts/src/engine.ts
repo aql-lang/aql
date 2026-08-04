@@ -271,7 +271,7 @@ export class Engine {
     // Pre-evaluate any paren groups in the forward window so the
     // matcher sees concrete values. The window is bounded by the
     // function's largest forward-eligible arg count across all sigs.
-    this.preEvalParens(fn.maxForwardArgs)
+    this.preEvalParens(fn.maxForwardArgs, fn.signatures)
 
     const result = matchEntry(fn, this.stack, this.pointer, this.registry)
     if (!result) {
@@ -530,15 +530,48 @@ export class Engine {
    * `maxFwd` is the upper bound on how many forward values we might
    * need to resolve — taken from FunctionEntry.maxForwardArgs.
    */
-  private preEvalParens(maxFwd: number): void {
+  private preEvalParens(maxFwd: number, sigs?: readonly Signature[]): void {
     this.lastPreEvalHadVoid = false
     if (maxFwd <= 0) return
+    // Keyword slots are decided by the RAW token at their position —
+    // prune keyword overloads before any evaluation below, so a keyword
+    // overload's larger arity never widens the scan past the dispatch
+    // the non-keyword overloads will actually make: `def x 5 \`${x}\``
+    // must not pre-evaluate the template before def binds x, and
+    // `def g (fn […]) (g 3)` must not pre-evaluate `(g 3)` before the
+    // 2-arg def binds g. Mirrors Go's pruneKeywordViable.
+    let viable = sigs !== undefined ? [...sigs] : undefined
+    const windowOf = (ss: readonly Signature[]): number => {
+      let max = 0
+      for (const s of ss) {
+        const limit = s.barrierPos ?? 0
+        if (limit > max) max = limit
+      }
+      return max
+    }
     let resolved = 0
     let scanIdx = this.pointer + 1
     let guard = 0
     while (resolved < maxFwd && scanIdx < this.stack.length && guard < 2222) {
       guard++
       const tok = this.stack[scanIdx]!
+      if (viable !== undefined) {
+        const pos = resolved
+        viable = viable.filter((s) => {
+          const pat = s.patterns?.get(pos)
+          if (pat === undefined || !pat.vType.equal(TAtom) || pat.data === null) return true
+          if (pos >= (s.barrierPos ?? 0)) return true
+          const nm = tok.isWord()
+            ? (tok.asWord() as WordInfo).name
+            : tok.vType.equal(TAtom) && typeof tok.data === 'string'
+              ? tok.data
+              : undefined
+          return nm === (pat.data as string)
+        })
+        const bound = windowOf(viable)
+        if (resolved >= bound) break
+        if (bound < maxFwd) maxFwd = bound
+      }
       // Internal control markers stop the forward scan — they're
       // boundaries, not data.
       if (tok.isForward() || tok.isMark() || tok.isMove()) break
@@ -600,9 +633,17 @@ export class Engine {
       }
       // A registered function word in the forward window is a
       // boundary — leave it for the outer matcher to either consume
-      // (e.g. if the sig accepts TWord) or reject. Simple-def words
-      // count as one resolved value.
-      if (this.registry.lookup(name)) break
+      // (e.g. if the sig accepts TWord) or reject — UNLESS a
+      // still-viable overload captures this position structurally
+      // (/q quoteArgs): there the word is the ARGUMENT (`def trip
+      // (fn …)` names trip even though trip is registered), and the
+      // scan must walk past it so the following group pre-evaluates.
+      // Mirrors Go capturesForwardToken. Simple-def words count as
+      // one resolved value.
+      const capturedByViable =
+        viable !== undefined &&
+        viable.some((s) => (s.quoteArgs?.has(resolved) ?? false) && resolved < (s.barrierPos ?? 0))
+      if (this.registry.lookup(name) && !capturedByViable) break
       resolved++
       scanIdx++
     }

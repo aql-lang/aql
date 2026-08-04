@@ -873,6 +873,60 @@ function registerSpecWords(r: Registry): void {
     name: 'def',
     forwardPrecedence: true,
     signatures: [
+      // `def name word BODY` — the Forth-style splice binder. `word` is
+      // a KEYWORD SLOT (quoted, pattern-matched), so def captures it
+      // structurally instead of stranding on it under the strict
+      // forward-barrier. Mirrors the Go engspec fixture's defWord; the
+      // TS def-substitution already splices an unquoted eval-list body
+      // at each reference, so binding the raw body IS the splice.
+      {
+        args: [TAtom, TAtom, TAny],
+        quoteArgs: new Set([0, 1]),
+        patterns: new Map([[1, newAtom('word')]]),
+        noEvalArgs: new Set([2]),
+        runInCheckMode: true,
+        returns: [],
+        handler: (args, _ctx, _stk, registry) => {
+          const nameArg = args[0]!
+          const name = nameArg.isWord() ? nameArg.asWord().name : nameArg.asAtom()
+          if (/^-?\d/.test(name)) {
+            throw new BoruError('syntax_error', `invalid numeric literal: ${name}`, name)
+          }
+          registry.check.recordDef(name)
+          registry.pushDef(name, args[2]!)
+          return []
+        },
+      },
+      // `def name fn [triples]` — the fn KEYWORD SLOT. Captures `fn`
+      // structurally and binds the FnDef by name, mirroring the Go
+      // fixture's defFn. Without it, `def name fn […]` strands on `fn`
+      // under the strict forward-barrier.
+      {
+        args: [TAtom, TAtom, TList],
+        quoteArgs: new Set([0, 1]),
+        patterns: new Map([[1, newAtom('fn')]]),
+        noEvalArgs: new Set([2]),
+        runInCheckMode: true,
+        returns: [],
+        handler: (args, _ctx, _stk, registry) => {
+          const nameArg = args[0]!
+          const name = nameArg.isWord() ? nameArg.asWord().name : nameArg.asAtom()
+          if (/^-?\d/.test(name)) {
+            throw new BoruError('syntax_error', `invalid numeric literal: ${name}`, name)
+          }
+          const elems = args[2]!.asList()
+          if (elems.length === 0 || elems.length % 3 !== 0) {
+            throw new BoruError('fn_invalid_spec', `fn: list length must be a non-zero multiple of 3`)
+          }
+          const sigs: FnSig[] = []
+          for (let i = 0; i < elems.length; i += 3) {
+            sigs.push(parseFnTriple(elems[i]!, elems[i + 1]!, elems[i + 2]!))
+          }
+          registry.check.recordDef(name)
+          registry.pushDef(name, newFnDef({ sigs }))
+          return []
+        },
+      },
       // Map-destructuring form `def {…} value` — its signature is part
       // of def's canonical surface (so inspect reports it); the corpus
       // doesn't exercise its runtime, so it falls through to a stub.
