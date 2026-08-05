@@ -1040,7 +1040,7 @@ func (e *Engine) validateReturnTypes(rc ReturnCheckInfo, results []Value, extra 
 		// Without this, a fn dispatched through a path that surfaces a dynamic
 		// body residual (module / mini-kind dispatch) wrongly fails its own
 		// declared-return check while the identical body called directly passes.
-		if got.Dynamic && e.registry != nil && e.registry.Check.IsActive() {
+		if got.Dynamic && e.registry != nil && e.registry.analysisActive() {
 			continue
 		}
 		if !got.Is(exp) {
@@ -1256,8 +1256,8 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// carriers before execution. The same dispatch/matching machinery
 	// then runs over carrier values; execMatch short-circuits handler
 	// calls to push carrier return values declared on the signature.
-	if e.registry.Check.IsActive() {
-		es := e.registry.Check.Recorder()
+	if e.registry.analysisActive() {
+		es := e.registry.analysisRecorder()
 		es.bindRegistry(e.registry) // back-pointer for returned-closure compilation
 		pre := input
 		input = StripToCarriers(input)
@@ -1274,7 +1274,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// copy of the input BEFORE the tape is built, so the caller's slice is
 	// never mutated and the tape constructor owns a fully-prepared program.
 	prog := input
-	if e.isTop && !e.registry.Check.IsActive() {
+	if e.isTop && !e.registry.analysisActive() {
 		prog = make([]Value, len(input))
 		copy(prog, input)
 		resolveAtomReferents(e.registry, prog)
@@ -1329,33 +1329,13 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			break
 		}
 
-		// Check-mode global step budget: abort the whole run
-		// gracefully once exceeded. Emits one diagnostic and
-		// then short-circuits every subsequent sub-engine too.
-		if e.registry.Check.IsActive() {
-			// -1 is the "unset" sentinel; resolve to the
-			// project default. A literal 0 is honored as
-			// "abort immediately" rather than treated as a
-			// magic "use default."
-			budget := e.registry.Check.StepBudget
-			if budget == -1 {
-				budget = DefaultCheckStepBudget
-			}
-			e.registry.Check.StepCount++
-			if e.registry.Check.StepCount > budget {
-				if !e.registry.Check.BudgetTripped {
-					e.registry.Check.BudgetTripped = true
-					e.registry.Check.AddDiagnostic(CheckDiagnostic{
-						Code:   "step_budget_exceeded",
-						Detail: fmt.Sprintf("check mode aborted: step budget of %d exceeded", budget),
-					})
-				}
-				// The check-mode budget is a deliberate, already-reported
-				// stop — not the runtime step-limit exhaustion below. Mark
-				// it complete so the drain proceeds normally.
-				completed = true
-				break
-			}
+		// Check-mode global step budget (analysis_hooks.go): a
+		// deliberate, already-reported stop — not the runtime
+		// step-limit exhaustion below — so the drain proceeds
+		// normally.
+		if e.registry.analysisStepMeter() {
+			completed = true
+			break
 		}
 
 		val := e.tape.At(e.pointer)
@@ -1550,7 +1530,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	if e.isTop {
 		if spec := e.registry.TakePendingGen(); spec != nil {
 			PopGenBindings(e.registry, spec)
-			if !e.registry.Check.IsActive() {
+			if !e.registry.analysisActive() {
 				return nil, makeBoruError("gen_without_constructor",
 					"gen: parameter spec was not consumed by a type constructor",
 					"gen", e.effectiveSource(),
@@ -1562,11 +1542,11 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 			// (orphan gen errors at end-of-run, exactly where this fires)
 			// instead of refusing; if the trap can't be recorded (nested), keep
 			// the blanket-refusal flag so the program falls back.
-			if !e.registry.Check.Recorder().RecordTrap("gen_without_constructor",
+			if !e.registry.analysisRecorder().RecordTrap("gen_without_constructor",
 				"gen: parameter spec was not consumed by a type constructor", "gen",
 				"hint: follow gen [...] with refine Record [...], class {...}, fnsig [...], or fn [...]",
 				e.currentPos()) {
-				e.registry.Check.SuppressedRuntimeError = true
+				e.registry.noteSuppressedRuntimeError()
 			}
 		}
 	}
@@ -1593,7 +1573,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 // produces 0 runtime values, so the residual must skip it. Recording-active
 // only; the uncompilable case nets 0 at the source (if2/if3ReturnsFn).
 func (e *Engine) reconcileTopResidual(out []Value) []Value {
-	if e.isTop && e.registry.Check.IsActive() {
+	if e.isTop && e.registry.analysisActive() {
 		return stripZeroOutResiduals(e.registry, out)
 	}
 	return out
@@ -2299,7 +2279,7 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 	// canonical paren condition form (checker-accuracy-review.10.md A3).
 	var guardToks []Value
 	var groupSpan, lenBefore int
-	if e.registry.Check.IsActive() {
+	if e.registry.analysisActive() {
 		gdepth := 0
 		for i := scanIdx; i < e.tape.Len(); i++ {
 			v := e.tape.At(i)
@@ -2478,8 +2458,8 @@ func (e *Engine) evalParenGroupAt(scanIdx int) error {
 func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	v, ok := ResolveUsurp(e.registry, w.Name)
 	if !ok {
-		if e.registry != nil && e.registry.Check.IsActive() {
-			e.registry.Check.AddDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
+		if e.registry != nil && e.registry.analysisActive() {
+			e.registry.noteAnalysisDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
 			placeholder.Undefined = true
@@ -2493,8 +2473,8 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	// that case so the IsFunctionRef check below raises illegal_ref.
 	if !IsFunctionRef(v) {
 		detail := "/u requires a function word: " + w.Name + " is bound to " + v.Parent.String()
-		if e.registry != nil && e.registry.Check.IsActive() {
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+		if e.registry != nil && e.registry.analysisActive() {
+			e.registry.noteAnalysisDiagnostic(CheckDiagnostic{
 				Code:   "illegal_ref",
 				Detail: detail,
 				Word:   w.Name,
@@ -2507,7 +2487,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 			// instead of refusing on the downstream Undefined placeholder. Only a
 			// top-level trap is recordable; a nested /u keeps the placeholder path
 			// and refuses (falls back) as before.
-			e.registry.Check.Recorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
+			e.registry.analysisRecorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
 			placeholder.Undefined = true
@@ -2565,8 +2545,8 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 	v, ok := ResolveRef(e.registry, w.Name)
 	if !ok {
-		if e.registry != nil && e.registry.Check.IsActive() {
-			e.registry.Check.AddDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
+		if e.registry != nil && e.registry.analysisActive() {
+			e.registry.noteAnalysisDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
 			placeholder.Undefined = true
@@ -2588,7 +2568,7 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 		// are reserved for bindings that PROVABLY cannot be functions
 		// (a concrete plain value, a carrier of a disjoint type), where
 		// the runtime error is guaranteed.
-		if e.registry != nil && e.registry.Check.IsActive() &&
+		if e.registry != nil && e.registry.analysisActive() &&
 			v.Carrier && TFunction.ConformsTo(v.Parent) {
 			fv := NewCarrier(TFunction)
 			fv.ID = v.ID
@@ -2597,8 +2577,8 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 			return e.stepLiteral()
 		}
 		detail := "/r requires a function word: " + w.Name + " is bound to " + v.Parent.String()
-		if e.registry != nil && e.registry.Check.IsActive() {
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+		if e.registry != nil && e.registry.analysisActive() {
+			e.registry.noteAnalysisDiagnostic(CheckDiagnostic{
 				Code:   "illegal_ref",
 				Detail: detail,
 				Word:   w.Name,
@@ -2611,7 +2591,7 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 			// instead of refusing on the downstream Undefined placeholder. Only a
 			// top-level trap is recordable; a nested /r keeps the placeholder path
 			// and refuses (falls back) as before.
-			e.registry.Check.Recorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
+			e.registry.analysisRecorder().RecordTrap("illegal_ref", detail, w.Name, "", e.currentPos())
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
 			placeholder.Undefined = true
@@ -2807,21 +2787,21 @@ func (e *Engine) stepWord(val Value) error {
 			}
 			// Record the substitution as a "use" for unused-def
 			// tracking in check mode.
-			e.registry.Check.recordUse(w.Name)
+			e.registry.noteAnalysisUse(w.Name)
 			// Remember which NAME produced this value (compile passes): if the
 			// value later has no compiled home in a fn unit, the read was a
 			// dynamic-scope reference and lowers to a runtime name lookup
 			// (resolveOperand's dynScopeRescue). Gated on an active check —
 			// NoteDefRead is a no-op outside a pass, but the bare call still
 			// evaluated top.ID unconditionally on the run-mode hot path.
-			if e.registry.Check.IsActive() {
-				e.registry.Check.Recorder().NoteDefRead(top.ID, w.Name)
+			if e.registry.analysisActive() {
+				e.registry.analysisRecorder().NoteDefRead(top.ID, w.Name)
 				// Freeze discipline: a CONCRETE module-scope binding read inside
 				// an open fn/closure unit bakes into the unit across calls, where
 				// the interpreter re-resolves the name per call — a later module
 				// rebind would diverge. Note it so NotifyNameRebound refuses.
 				if IsConcrete(top) && ModuleScopeBinding(e.registry, w.Name) {
-					e.registry.Check.Recorder().NoteFrozenRead(w.Name)
+					e.registry.analysisRecorder().NoteFrozenRead(w.Name)
 				}
 			}
 			// A def'd word binds a VALUE: push it as-is. Lists bind like
@@ -2830,7 +2810,7 @@ func (e *Engine) stepWord(val Value) error {
 			// onto the stack (the old implicit behaviour / Forth-style
 			// macros) use the explicit `def name word [list]` form, whose
 			// __SP marker is handled in stepLiteral.
-			if e.registry.Check.IsActive() {
+			if e.registry.analysisActive() {
 				e.tagCheckModeDefRead(&top, w.Name)
 			}
 			e.tape.Set(e.pointer, top)
@@ -2842,7 +2822,7 @@ func (e *Engine) stepWord(val Value) error {
 	if fn != nil {
 		// User-code dispatch — record the name as "used" for
 		// unused-def analysis in check mode.
-		e.registry.Check.recordUse(w.Name)
+		e.registry.noteAnalysisUse(w.Name)
 		if err := e.policyGateWord(w.Name); err != nil {
 			return err
 		}
@@ -2925,10 +2905,10 @@ func (e *Engine) stepWord(val Value) error {
 		// operation (e.g. a checkModeAssumeSig for `add`) and never
 		// reach the result stack — recording at the source guarantees
 		// every undefined word produces exactly one diagnostic.
-		if !e.registry.Check.IsActive() {
+		if !e.registry.analysisActive() {
 			return e.undefinedWordError(w.Name, val.Pos())
 		}
-		e.registry.Check.AddDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
+		e.registry.noteAnalysisDiagnostic(e.undefinedWordCheckDiag(w.Name, val.Pos()))
 		v := NewAtom(w.Name)
 		v.pos = val.pos
 		v.Undefined = true
@@ -2966,7 +2946,7 @@ func (e *Engine) stepWord(val Value) error {
 	// typed signatures exist), treat it as an unmatched call and go
 	// through the assume-sig recovery path so the user gets a
 	// diagnostic with the typed sig's Returns/ReturnsFn synthesis.
-	if sig != nil && sig.Fallback && e.registry.Check.IsActive() {
+	if sig != nil && sig.Fallback && e.registry.analysisActive() {
 		hasTyped := false
 		for i := range fn.Signatures {
 			if !fn.Signatures[i].Fallback {
@@ -2988,7 +2968,7 @@ func (e *Engine) stepWord(val Value) error {
 	// report uniform across every path, and byte-identical to the
 	// compiled OpTrap (which serialises this same sigError) and the
 	// compiled runtime param-contract guards.
-	if sig != nil && sig.Fallback && !e.registry.Check.IsActive() &&
+	if sig != nil && sig.Fallback && !e.registry.analysisActive() &&
 		!fnCourtesyDispatches(e.registry, w.Name, fn) {
 		return e.sigError(w.Name, fn, val.Pos())
 	}
@@ -3000,7 +2980,7 @@ func (e *Engine) stepWord(val Value) error {
 		// in place of the word + up to N adjacent arg slots.
 		// We bypass insertForward here because forward collection
 		// would re-trigger sigTypeMatches and loop indefinitely.
-		if e.registry.Check.IsActive() && len(fn.Signatures) > 0 {
+		if e.registry.analysisActive() && len(fn.Signatures) > 0 {
 			// S2 (design/SURFACES.10.md): a required operation called on
 			// a SURFACE-typed carrier types via the contract's shape
 			// (Self := the surface node) — the contract guarantees the
@@ -3271,10 +3251,10 @@ func (e *Engine) execMatch(match *MatchResult) error {
 					// runnable body references is a genuine use. Walk the
 					// ELEMENTS (the body list itself may be marked quoted,
 					// which WalkBodyWords would skip).
-					if e.registry.Check.IsActive() {
+					if e.registry.analysisActive() {
 						if lst, lerr := AsList(match.Args[i]); lerr == nil {
 							WalkBodyWords(lst.Slice(), func(w WordInfo, _ Value) {
-								e.registry.Check.recordUse(w.Name)
+								e.registry.noteAnalysisUse(w.Name)
 							})
 						}
 					}
@@ -3306,7 +3286,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		if match.Args[i].Undefined {
 			c := NewDynamicCarrier(TAny)
 			if a, aerr := AsAtom(match.Args[i]); aerr == nil && a != "" {
-				e.registry.Check.Recorder().NoteDefRead(c.ID, a)
+				e.registry.analysisRecorder().NoteDefRead(c.ID, a)
 			}
 			match.Args[i] = WithPos(c, match.Args[i])
 		}
@@ -3334,7 +3314,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 	// Signatures marked RunInCheckMode opt out of this intercept —
 	// used by words whose side effects (def, undef, fn, type, …)
 	// are prerequisites for subsequent analysis.
-	if e.registry.Check.IsActive() && !match.Sig.runInCheckMode() {
+	if e.registry.analysisActive() && !match.Sig.runInCheckMode() {
 		// The dispatch name: the word at the pointer, or — for a
 		// VALUE dispatch (a module wrapper's trivial-delegation
 		// short-circuit steps the Function literal, not a Word) — the
@@ -3378,7 +3358,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			// depth/pick/roll compile instead of dying at Finalize as
 			// residuals of unknown provenance. A declined fold keeps the
 			// twin's carrier results and the historical refusal path.
-			if folded, ok := e.registry.Check.Recorder().FoldFullStack(name, match.Args, preserved); ok {
+			if folded, ok := e.registry.analysisRecorder().FoldFullStack(name, match.Args, preserved); ok {
 				results = folded
 			}
 			e.tape.Splice(base, end+1-base, results...)
@@ -3859,7 +3839,7 @@ func (e *Engine) stepLiteral() error {
 			// interpreter's own runtime semantics. Suspended analyses (a
 			// ReturnsFn body run) stay silent — only a LIVE recording is
 			// poisoned.
-			if rec := e.registry.Check.Recorder(); rec.active() &&
+			if rec := e.registry.analysisRecorder(); rec.active() &&
 				!IsConcrete(info.Data) && !IsBareTypeNode(info.Data) &&
 				(info.Data.Dynamic || info.Data.Parent == nil ||
 					TList.ConformsTo(info.Data.Parent) || info.Data.Parent.ConformsTo(TList)) {
@@ -3892,7 +3872,7 @@ func (e *Engine) stepLiteral() error {
 		// compile pass and records a guarded mid-stream OpCallDynMethod.
 		// Declines (leaving today's paths untouched) outside a live compile
 		// pass and for any window/match shape it cannot prove.
-		if e.registry.Check.IsActive() && e.tryShapedMethodDispatch(valIdx) {
+		if e.registry.analysisActive() && e.tryShapedMethodDispatch(valIdx) {
 			return nil
 		}
 		// Container-member fn arrival-apply (REFUSAL-CLOSURE.0 §3): a
@@ -3901,7 +3881,7 @@ func (e *Engine) stepLiteral() error {
 		// mid-expression (`m.double 21 eq 42` applies BEFORE `eq`). Declines
 		// leave the carrier to today's paths (the statement-tail Finalize
 		// apply, refuseStrandedMemberFn's sound refusal).
-		if e.registry.Check.IsActive() && e.tryMemberFnArrivalDispatch(valIdx) {
+		if e.registry.analysisActive() && e.tryMemberFnArrivalDispatch(valIdx) {
 			return nil
 		}
 		// General dynamic-fn-value dispatch (method_shape.go): a DYNAMIC carrier
@@ -3910,7 +3890,7 @@ func (e *Engine) stepLiteral() error {
 		// plain-check surface, clearing the arg-stranding the compiled path lowers
 		// via resolveDynamicApply. Declines outside plain check and for any
 		// non-callable bound or non-inert window.
-		if e.registry.Check.IsActive() && e.tryDynamicFnValueDispatch(valIdx) {
+		if e.registry.analysisActive() && e.tryDynamicFnValueDispatch(valIdx) {
 			return nil
 		}
 		// If the value is a Function, execute it. Quoted function
@@ -4254,8 +4234,8 @@ func (e *Engine) autoEvalList(val Value, consumed bool) (Value, error) {
 	// so record it as an OpMakeList assembly of the evaluated elements; otherwise
 	// the list is an unresolvable residual and the program falls back. A
 	// fully-literal list (`[1 2 3]`) stays inert and bakes as a pooled const.
-	if e.registry.Check.IsActive() {
-		if es := e.registry.Check.Recorder(); es.Armed() && !isInertConst(out) {
+	if e.registry.analysisActive() {
+		if es := e.registry.analysisRecorder(); es.Armed() && !isInertConst(out) {
 			switch {
 			case e.isTop:
 				// Top-level (frames==1): the canonical case, evaluated once.
@@ -4303,7 +4283,7 @@ func (e *Engine) evalInterpString(val Value) (Value, error) {
 		// the rare unlowerable shape (a hole producing 0 or >1 values) refuse and
 		// fall back. Mirrors RecordMakeMap — re-assembled per run, no const bake.
 		out := NewCarrier(TString)
-		if es := e.registry.Check.Recorder(); es.active() {
+		if es := e.registry.analysisRecorder(); es.active() {
 			if !holesOK || !es.RecordInterp(parts, holes, out, val.Pos()) {
 				es.MarkUncompilable("interpolated string with a runtime-computed part")
 			}
@@ -4405,7 +4385,7 @@ func (e *Engine) evalXmlInterp(val Value) (Value, error) {
 		// run time (rebuildXmlFromTmpl — byte-identical to this build). The
 		// rare unlowerable shape (a 0-or-many-valued hole) keeps the refusal
 		// and falls back, exactly as the string sibling.
-		if es := e.registry.Check.Recorder(); es.active() {
+		if es := e.registry.analysisRecorder(); es.active() {
 			out := NewCarrier(TXml)
 			out.ID = GenerateID(IDPrefixForType(TXml))
 			if !holesOK || !es.RecordInterpXml(tmpl, holes, out, val.Pos()) {
@@ -4747,8 +4727,8 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 			// concrete fold coerces the carrier (e.g. to 0) and freezes a WRONG value
 			// (the determinism check sees the same coerced 0 twice). exprRefsCarrier
 			// catches that; a user TYPE binding (Carrier=false) still folds.
-			topFrame := e.registry.Check.Recorder().topFrameOnly()
-			if e.registry.Check.IsActive() && topFrame && !e.exprRefsCarrier(items) {
+			topFrame := e.registry.analysisRecorder().topFrameOnly()
+			if e.registry.analysisActive() && topFrame && !e.exprRefsCarrier(items) {
 				if folded, ok := e.constFoldContainerVal(items); ok {
 					// Bake the computed value as a const EXCEPT in a `make`
 					// construction body (dataMap) when the value is shared-mutable: a
@@ -4800,8 +4780,8 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		// binding, fold it to its concrete result (identical to the sub-engine
 		// eval the interpreter runs) so the map bakes as a const. Same gating and
 		// mutation-safety screen as the ParenExpr branch.
-		if e.registry.Check.IsActive() &&
-			e.registry.Check.Recorder().topFrameOnly() && !e.exprRefsCarrier([]Value{v}) {
+		if e.registry.analysisActive() &&
+			e.registry.analysisRecorder().topFrameOnly() && !e.exprRefsCarrier([]Value{v}) {
 			if folded, ok := e.constFoldContainerVal([]Value{v}); ok {
 				if (!dataMap && !e.elemEvalRecordable) || !containsSharedMutable(folded) {
 					out.Set(resolvedKey, folded)
@@ -4840,8 +4820,8 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		// re-assembles from its operands per run, so it never freezes a per-call
 		// binding. recordMakeListInner declines (leaving es untouched) for an
 		// unresolvable / stateful / type-pattern element, so the map then falls back.
-		if (consumed || e.elemEvalRecordable) && e.registry.Check.IsActive() {
-			if es := e.registry.Check.Recorder(); es.Armed() {
+		if (consumed || e.elemEvalRecordable) && e.registry.analysisActive() {
+			if es := e.registry.analysisRecorder(); es.Armed() {
 				if lv, _ := out.Get(resolvedKey); lv.Parent.Equal(TList) && !isInertConst(lv) {
 					if lp, isList := lv.Data.(ListPayload); isList {
 						es.recordMakeListInner(e.registry, lp.Elems, lv, lv.Pos())
@@ -4885,8 +4865,8 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 	// stays an unresolvable residual and the program falls back faithfully.
 	// Gated on `consumed`: a DEFERRED residual (end-of-run autoEvalStack) is
 	// evaluated after its frame pops, so recording it in-frame would diverge.
-	if (consumed || e.elemEvalRecordable) && e.registry.Check.IsActive() {
-		if es := e.registry.Check.Recorder(); es.Armed() && !isInertConst(res) {
+	if (consumed || e.elemEvalRecordable) && e.registry.analysisActive() {
+		if es := e.registry.analysisRecorder(); es.Armed() && !isInertConst(res) {
 			keys := out.Keys()
 			vals := make([]Value, len(keys))
 			for i, k := range keys {
@@ -5466,7 +5446,7 @@ func (e *Engine) upcomingArgs(valIdx int) []Value {
 // fallback when matchSignature's aggregate match returns nothing.
 func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []Value) error {
 	resolvedIdx := e.resolvedIndicesBefore(len(resolved))
-	checkMode := e.registry != nil && e.registry.Check.Mode && fnDef.Anonymous
+	checkMode := e.registry != nil && e.registry.analysisMode() && fnDef.Anonymous
 	// A NON-anonymous body-bearing fn VALUE reached as a CALL while the
 	// BYTECODE EMITTER is active (a `fn` literal resolved from a map / module
 	// export, e.g. `ParseLang.parse_json 'x' {}`) is dispatched like a named
@@ -5481,9 +5461,9 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 	// pins that pure-check behaviour. Excludes foreign-sub-registry fns (their
 	// body must run via CallBoru in that registry — the execFnDefLiteral
 	// sub-registry branch handles them) and macros.
-	checkFnValue := e.registry != nil && e.registry.Check.Mode && !fnDef.Anonymous && !fnDef.Macro &&
+	checkFnValue := e.registry != nil && e.registry.analysisMode() && !fnDef.Anonymous && !fnDef.Macro &&
 		(fnDef.Registry == nil || fnDef.Registry == e.registry) &&
-		e.registry.Check.Recorder().active()
+		e.registry.analysisRecorder().active()
 	ownSigs := fnDef.OwnSigs()
 	for i := range ownSigs {
 		sig := &ownSigs[i]
@@ -5632,7 +5612,7 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 			// described what the OLD contract did with the value, and saying it
 			// while raising would tell the reader the opposite of what happened.
 			detail := "call to '" + fnDef.Name + "' matched no signature"
-			if e.registry.Check.IsActive() {
+			if e.registry.analysisActive() {
 				// Analysis continues past the finding, so the value stays on the
 				// tape and downstream check-mode consumers must be able to tell
 				// that it is dispatch WRECKAGE rather than a deliberate value —
@@ -5834,7 +5814,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 		restoreCheck := e.shareCheckState(capturedReg)
 		var result []Value
 		var err error
-		if e.registry.Check.Mode {
+		if e.registry.analysisMode() {
 			// Check mode ANALYSES the body — always the interpreter path
 			// (running a stamped unit here would execute real side effects
 			// during static analysis).
@@ -6353,7 +6333,7 @@ func (e *Engine) implicitEnd(fwdIdx int) error {
 // markers (`__`-prefixed, used by internal lowering — never directly
 // addressable from user code).
 func (e *Engine) policyGateWord(name string) error {
-	if e.registry.Check.IsActive() || isInternalMarker(name) {
+	if e.registry.analysisActive() || isInternalMarker(name) {
 		return nil
 	}
 	if wc := LookupWordChecker(e.registry); wc != nil {
@@ -7455,7 +7435,7 @@ func (e *Engine) stepCloseParen() error {
 	// argument — `((m.g 3) add 1)` compiled m.g(3 add 1)=8 instead of
 	// (m.g 3) add 1=7. The interpreter dispatches the concrete fn AT the paren,
 	// so refuse here and let the faithful interpreter fallback run it.
-	if es := e.registry.Check.Recorder(); es.active() {
+	if es := e.registry.analysisRecorder(); es.active() {
 		first, count, lastIdx := -1, 0, -1
 		for i := openIdx + 1; i < closeIdx; i++ {
 			if isRecordableLiteral(e.tape.At(i)) {
@@ -7915,7 +7895,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 	// (a concrete value would have matched the more-specific overload and
 	// been grabbed). noteSplit flags it so the compiler refuses; dispatch
 	// itself is unchanged. See CheckState.AmbiguousGradualSplit.
-	checkActive := e.registry != nil && e.registry.Check.IsActive()
+	checkActive := e.registry != nil && e.registry.analysisActive()
 	mixedCarrierRejectIdx := -1
 	noteSplit := func(positions []int, fwd int) {
 		if !checkActive || mixedCarrierRejectIdx < 0 || fwd == 0 {
@@ -7926,7 +7906,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				return // the carrier was consumed after all — not skipped
 			}
 		}
-		e.registry.Check.AmbiguousGradualSplit = true
+		e.registry.noteAmbiguousGradualSplit()
 	}
 
 	// When the next forward token is a Word, prefer signatures with
@@ -8086,7 +8066,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 						// compile mode: there the dispatch must remain UNMATCHED so
 						// the emitter refuses (force-compile) instead of baking a
 						// wrong direct call — preserving compile==interpret.
-						gradualAny := checkActive && !e.registry.Check.Compiling &&
+						gradualAny := checkActive && !e.registry.analysisCompiling() &&
 							top.Parent != nil && top.Parent.Equal(TAny)
 						if sigArgMatches(sig, fwd, top) || expectedType.Equal(TAny) || gradualAny {
 							// A dispatching binding (FnDefInfo) planned as an
@@ -8602,8 +8582,8 @@ func concreteArgsMatch(sig *Signature, args []Value, nStack int) bool {
 // refusal. Returns true when the trap now owns the program's tail; false
 // leaves the caller's MarkUncompilable refusal to stand.
 func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos SrcPos) bool {
-	es := e.registry.Check.Recorder()
-	if !es.active() || !e.registry.Check.Compiling {
+	es := e.registry.analysisRecorder()
+	if !es.active() || !e.registry.analysisCompiling() {
 		return false
 	}
 	maxN := 0

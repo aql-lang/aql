@@ -55,7 +55,10 @@ var upwardRefs = []struct {
 		re:   regexp.MustCompile(`\.Check\.`),
 		allowed: map[string]bool{
 			// The recon-inventoried F1 sites, burned down by Stage 2.
-			"engine.go": true, "core_helpers.go": true, "method_shape.go": true,
+			// analysis_hooks.go is the DESIGNATED seam carrier: the one
+			// core file allowed to touch CheckState, whose bodies become
+			// interface calls at the package cut.
+			"analysis_hooks.go": true, "core_helpers.go": true, "method_shape.go": true,
 			"registry.go": true, "core_make.go": true, "core_ref.go": true,
 			"word_extend.go": true, "interp_entry.go": true,
 			"util.go": true, "fn_params.go": true,
@@ -68,9 +71,9 @@ var upwardRefs = []struct {
 	},
 	{
 		name: "emit recorder reach (F2)",
-		re:   regexp.MustCompile(`Recorder\(\)`),
+		re:   regexp.MustCompile(`Check\.Recorder\(\)`),
 		allowed: map[string]bool{
-			"engine.go": true, "core_helpers.go": true, "method_shape.go": true,
+			"analysis_hooks.go": true, "core_helpers.go": true, "method_shape.go": true,
 			"registry.go": true, "depscalar.go": true, "interp_entry.go": true,
 			"macro_expand.go": true, "fn_def.go": true,
 			"word_extend.go": true, "value.go": true, "engine_pool.go": true,
