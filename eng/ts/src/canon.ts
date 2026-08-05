@@ -131,14 +131,11 @@ function expandExponential(s: string): string {
   const exp = Number.parseInt(m[3]!, 10)
   const digits = intPart + fracPart
   const pointPos = intPart.length + exp
-  let out: string
-  if (pointPos <= 0) {
-    out = '0.' + '0'.repeat(-pointPos) + digits
-  } else if (pointPos >= digits.length) {
-    out = digits + '0'.repeat(pointPos - digits.length)
-  } else {
-    out = digits.slice(0, pointPos) + '.' + digits.slice(pointPos)
-  }
+  // The decimal point always lands at or left of the digits here:
+  // formatFloat routes |f| >= 1e21 through formatExponential, and below
+  // that JS's String only goes exponential for |f| < 1e-6 (negative
+  // exp). A positive pointPos would make the repeat throw — loudly.
+  let out = '0.' + '0'.repeat(-pointPos) + digits
   // Trim a trailing fractional zero run produced by the expansion.
   if (out.includes('.')) out = out.replace(/0+$/, '').replace(/\.$/, '')
   return (neg ? '-' : '') + out

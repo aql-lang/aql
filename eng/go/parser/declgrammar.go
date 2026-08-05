@@ -62,10 +62,10 @@ type declHooks struct {
 // loadDeclGrammar decodes the embedded artifact once per parse setup.
 func loadDeclGrammar() declGrammar {
 	var g declGrammar
-	if err := json.Unmarshal(declGrammarJSON, &g); err != nil {
+	if err := json.Unmarshal(declGrammarJSON, &g); err != nil { //covergate:allow the embedded artifact is compile-time-constant JSON that TestDeclGrammarLoads proves valid
 		panic(fmt.Sprintf("parser: grammar.json: %v", err))
 	}
-	if g.Schema != 1 {
+	if g.Schema != 1 { //covergate:allow the embedded artifact pins schema 1 and TestDeclGrammarLoads asserts it
 		panic(fmt.Sprintf("parser: grammar.json: unsupported schema %d", g.Schema))
 	}
 	return g

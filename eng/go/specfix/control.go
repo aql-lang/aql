@@ -181,7 +181,7 @@ func fixRunForLoop(r *eng.Registry, start, end, step int64, iterName string, bod
 	if step > 0 && start >= end {
 		return nil, nil
 	}
-	if !eng.IsConcrete(body) {
+	if !eng.IsConcrete(body) { //covergate:allow both callers pass a dispatch-matched List argument and handlers never run on carriers; a bare List literal cannot bind the sig slot
 		return nil, &eng.BoruError{Code: "for_error", Detail: "for: body must be a concrete list, got type literal"}
 	}
 	lst, _ := eng.AsList(body)
@@ -212,7 +212,7 @@ func fixRunForLoop(r *eng.Registry, start, end, step int64, iterName string, bod
 
 func fixForCountHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
 	n, err := args[0].AsConcreteInteger()
-	if err != nil {
+	if err != nil { //covergate:allow the count is a dispatch-matched Integer argument and handlers never run on carriers; a bare Integer literal cannot bind the sig slot
 		return nil, &eng.BoruError{Code: "for_error", Detail: "for: count must be a concrete Integer"}
 	}
 	return fixRunForLoop(r, 0, n, 1, "i", args[1])
@@ -311,7 +311,7 @@ func registerEngSpecControl(r *eng.Registry) {
 // inputs through the InvokeBody seam (so the VM can run it as a
 // compiled closure) and surface a body error as an Error VALUE.
 func fixDoHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
-	if !eng.IsConcrete(args[0]) {
+	if !eng.IsConcrete(args[0]) { //covergate:allow the body is a dispatch-matched List argument and handlers never run on carriers; a bare List literal cannot bind the sig slot
 		return nil, &eng.BoruError{Code: "do_error", Detail: "doq: argument must be a concrete list, got type literal"}
 	}
 	result, err := eng.InvokeBody(r, args[0], nil)
@@ -321,19 +321,15 @@ func fixDoHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *en
 	return result, nil
 }
 
-// fixDoReturnsFn is the closure model: a word body derefs through the
-// def table, a computed body takes the bounded dynamic hatch, and a
-// concrete body's residual is analysed under the caught-body bracket
-// with do's keep-defs leak fidelity. Raising bodies are outside the
-// fixture's model — battery rows keep bodies infallible.
+// fixDoReturnsFn is the closure model: a computed body takes the
+// bounded dynamic hatch, and a concrete body's residual is analysed
+// under the caught-body bracket with do's keep-defs leak fidelity.
+// Check dispatch resolves def'd words before the ReturnsFn runs (only
+// builtin TYPE names pass through raw — resolveTypeNameArgs), so the
+// body arrives as a value, never a Word. Raising bodies are outside
+// the fixture's model — battery rows keep bodies infallible.
 func fixDoReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 	body := args[0]
-	if eng.IsWord(body) {
-		w, _ := eng.AsWord(body)
-		if v, ok := r.Defs.Top(w.Name); ok {
-			body = v
-		}
-	}
 	if !(eng.IsConcrete(body) && body.Parent.ConformsTo(eng.TList)) {
 		return []eng.Value{eng.NewDynamicCarrier(eng.TAny)}
 	}
@@ -443,11 +439,11 @@ func fixLoopIterations(start, end, step int64) int64 {
 		}
 		return (start - end - step - 1) / -step
 	}
-	return -1
+	return -1 //covergate:allow fixParseRange rejects step==0, so both signed arms above are exhaustive
 }
 
 func fixForRangeHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
-	if !eng.IsConcrete(args[0]) {
+	if !eng.IsConcrete(args[0]) { //covergate:allow the range is a dispatch-matched List argument and handlers never run on carriers; a bare List literal cannot bind the sig slot
 		return nil, &eng.BoruError{Code: "for_error", Detail: "for: range must be a concrete list, got type literal"}
 	}
 	lst, _ := eng.AsList(args[0])

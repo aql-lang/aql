@@ -174,6 +174,47 @@ func TestControlBattery(t *testing.T) {
 	})
 }
 
+// TestControlEdgeBattery drives the fixture control words' edge arms:
+// branches that produce no value (both the literal-cond fragment and
+// the dynamic join), the spliced computed-list arm refusal, doq bodies
+// reached through a def'd word and a fn param, loop captures whose
+// element type is a disjunct, the range-parse error taxonomy, and the
+// empty negative-step loop.
+func TestControlEdgeBattery(t *testing.T) {
+	runBattery(t, []batteryRow{
+		// A literal-cond branch that nets no value.
+		{input: "1 if [true] [1 drop]", want: ""},
+		// A dynamic cond whose branches both net no value: the empty join.
+		{input: "5 if (0 addq 1) [1 drop] [1 drop]", want: "5"},
+		// A List param as an arm is the interpreter's spliced code body;
+		// the compile pass refuses it and the fallback island runs it.
+		{input: "def f fn [[x:List] [Integer] [if [true] x [9]]] f [7]", want: "7"},
+		// doq bodies: a def'd word resolves under the recorder; a fn
+		// param stays dynamic.
+		{input: "def b [1 2] doq b", want: "1 2"},
+		{input: "def f fn [[x:List] [Any] [doq x]] f [9]", want: "9"},
+		// Loop captures whose top-of-stack element is a Disjunct — both
+		// a body-constructed enum and a def'd one the model resolves.
+		{input: "for 2 [enum [a b]]", want: "a tor b a tor b"},
+		{input: "for [2] [enum [a b]]", want: "a tor b a tor b"},
+		{input: "def E (enum [a b]) for 2 [E]", want: "a tor b a tor b"},
+		{input: "def E (enum [a b]) for [2] [E]", want: "a tor b a tor b"},
+		// A List param as an arm under a DYNAMIC cond: the computed-list
+		// refusal (the literal-cond twin of the row above).
+		{input: "def f fn [[x:List] [Integer] [if (0 addq 1) x [9]]] f [7]", want: "7"},
+		// Range-parse taxonomy: non-integer elements in every position,
+		// and the arity gate on both sides.
+		{input: "for ['a' 2] [i]", wantErr: "expected a concrete integer"},
+		{input: "for ['a' 1 2] [i]", wantErr: "expected a concrete integer"},
+		{input: "for [1 'b' 2] [i]", wantErr: "expected a concrete integer"},
+		{input: "for [1 5 'c'] [i]", wantErr: "expected a concrete integer"},
+		{input: "for [] [i]", wantErr: "range must have 1-3 elements"},
+		{input: "for [1 2 3 4] [i]", wantErr: "range must have 1-3 elements"},
+		// A negative-step range that never enters the body.
+		{input: "for [1 5 -1] [i]", want: ""},
+	})
+}
+
 // TestFnBodyControlBattery drives branches and loops INSIDE fn bodies:
 // the stored-body compile path, carrier-typed params flowing through
 // the branch/loop analysis, and the fn-unit VM execution.
@@ -451,6 +492,12 @@ func TestCheckModeBattery(t *testing.T) {
 		input string
 		want  string
 	}{
+		// Both branches netting no value: the empty join under plain
+		// check (recorder inactive) and its doq/loop edge kin.
+		{input: "5 if (0 addq 1) [1 drop] [1 drop]", want: "Integer"},
+		{input: "def b [1 2] doq b", want: "Integer Integer"},
+		{input: "def f fn [[x:List] [Any] [doq x]] f [9]", want: "dynamic(Any)"},
+		{input: "for 2 [enum [a b]]", want: "Enum Enum"},
 		// Constant LIST conditions reduce with the unreachable diagnostic;
 		// a bare scalar condition keeps the live join.
 		{input: "if [true] [1] [2]", want: "Integer :: ~unreachable_branch"},

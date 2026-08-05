@@ -61,3 +61,22 @@ func TestDeclGrammarUnknownNames(t *testing.T) {
 		}}}, tins, empty)
 	})
 }
+
+// TestDeclGrammarAllOps routes every edit op through a real rule spec —
+// the Go twin of declgrammar.test.ts's helper spies (the committed
+// artifact uses only the prepend ops, so the append/set arms need
+// synthetic edits).
+func TestDeclGrammarAllOps(t *testing.T) {
+	j := SafeMake(jsonic.Options{})
+	tins := map[string]jsonic.Tin{}
+	empty := declHooks{}
+	text := "x"
+	edits := make([]declEdit, 0, 6)
+	for _, op := range []string{
+		"prependOpen", "appendOpen", "setOpen",
+		"prependClose", "appendClose", "setClose",
+	} {
+		edits = append(edits, declEdit{Rule: "val", Op: op, Alts: []declAlt{{Text: &text}}})
+	}
+	applyDeclEdits(j, declGrammar{Schema: 1, Edits: edits}, tins, empty)
+}

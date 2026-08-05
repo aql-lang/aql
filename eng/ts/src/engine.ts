@@ -61,7 +61,11 @@ import {
 } from './value.ts'
 import type { BoruType } from './type.ts'
 
-/** Base value for an omitted optional fn param, by its declared type. */
+/**
+ * Base value for an omitted optional fn param, by its declared type.
+ * Mirrors core_helpers.go::BaseValue (empty containers for List/Map,
+ * the empty atom for Atom).
+ */
 function baseValue(t: BoruType): Value {
   // Float is checked before the Integer/Number branch: a Float param
   // matches TNumber too, so the order matters for its base value.
@@ -69,6 +73,9 @@ function baseValue(t: BoruType): Value {
   if (t.matches(TInteger) || t.matches(TNumber)) return newInteger(0n)
   if (t.matches(TString)) return newString('')
   if (t.matches(TBoolean)) return newBoolean(false)
+  if (t.matches(TList)) return newList([])
+  if (t.matches(TMap)) return newMap(new OrderedMap())
+  if (t.matches(TAtom)) return newAtom('')
   return newNone()
 }
 import type { FunctionEntry } from './registry.ts'

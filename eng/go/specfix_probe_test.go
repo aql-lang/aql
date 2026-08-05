@@ -37,6 +37,7 @@ func specfixProbeRegistry(t *testing.T) *eng.Registry {
 		t.Fatal(err)
 	}
 	specfix.RegisterCheckExtras(r)
+	specfix.RegisterControlWords(r)
 
 	def := r.Types.MintType("Class/P", eng.TClass)
 	fields := eng.NewOrderedMap()
@@ -54,6 +55,11 @@ func specfixProbeRegistry(t *testing.T) *eng.Registry {
 
 	r.Defs.Push("dslo", eng.NewDepScalar(eng.DepGTE, eng.NewInteger(1)))
 	r.Defs.Push("dshi", eng.NewDepScalar(eng.DepLTE, eng.NewInteger(5)))
+
+	// dd: a CONCRETE disjunct binding — the loop-capture models see a
+	// def-resolved Disjunct on the body stack (source can only reach a
+	// computed enum there, which check mode models as a carrier).
+	r.Defs.Push("dd", eng.NewEnum([]eng.Value{eng.NewAtom("a"), eng.NewAtom("b")}))
 
 	tf := eng.NewOrderedMap()
 	tf.Set("c", eng.NewTypeLiteral(eng.TInteger))
@@ -146,6 +152,7 @@ func TestSpecfixGuardProbes(t *testing.T) {
 		{input: "def tt Integer inspect tt",
 			want: "{name:'tt' type:'Type' struct:'Integer' kind:literal}"},
 		{input: "inspect nosig", want: "{name:'nosig' kind:native signatures:[]}"},
+		{input: "bakefnq nosig", wantErr: "bakefnq: argument must be a fn"},
 
 		// fnsig / do — the remaining reachable guard arms.
 		{input: "fnsig [x y]", wantErr: `invalid type "x"`},
@@ -208,6 +215,31 @@ func TestSpecfixCheckModeGuards(t *testing.T) {
 	done()
 	if runErr == nil || !strings.Contains(runErr.Error(), "must be a concrete list, got type literal") {
 		t.Errorf("want the record concrete-list guard, got %v", runErr)
+	}
+}
+
+// TestSpecfixLoopDisjunctCapture drives the loop-capture models with a
+// def-resolved CONCRETE Disjunct on the body stack (the `dd` binding):
+// both loop forms type the residual as a typed list OF the disjunct.
+func TestSpecfixLoopDisjunctCapture(t *testing.T) {
+	for _, input := range []string{"for 2 [dd]", "for [2] [dd]"} {
+		values, err := parser.Parse(input)
+		if err != nil {
+			t.Fatalf("parse %q: %v", input, err)
+		}
+		r := specfixProbeRegistry(t)
+		r.Source = input
+		done := r.Check.Begin()
+		stack, runErr := eng.NewTop(r).Run(values)
+		done()
+		if runErr != nil {
+			t.Fatalf("%q: %v", input, runErr)
+		}
+		got := specfix.RenderCheck(stack, r.Check.Diagnostics)
+		t.Logf("%q => %q", input, got)
+		if !strings.Contains(got, "Enum") {
+			t.Errorf("%q: want an Enum-typed residual, got %q", input, got)
+		}
 	}
 }
 
