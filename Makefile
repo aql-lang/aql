@@ -419,14 +419,20 @@ cover-gate:
 # (node --test line-coverage threshold) — the two gates are the parity
 # pair (Go statements ≡ TS lines).
 ENG_GATE_FLOOR ?= 89
+# The standalone profile deliberately uses the .engout extension so the
+# merged gate's cover-check (which globs $(COVER_DIR)/*.xout) NEVER
+# merges it: the two gates run on different schedules, and a stale
+# standalone profile carrying old line addresses poisons the merged
+# view with phantom uncovered blocks after any source edit.
 cover-gate-eng:
 	@mkdir -p $(COVER_DIR)
+	@rm -f $(COVER_DIR)/eng_standalone.xout
 	@echo "==> cover-gate-eng (standalone, floor $(ENG_GATE_FLOOR)%)"
 	@( cd eng/go && go test -timeout 25m \
 	  -coverpkg=github.com/boru-lang/boru/eng/go/... \
-	  -coverprofile=$(abspath $(COVER_DIR))/eng_standalone.xout ./... > $(abspath $(COVER_DIR))/eng_standalone.log 2>&1 ) \
+	  -coverprofile=$(abspath $(COVER_DIR))/eng_standalone.engout ./... > $(abspath $(COVER_DIR))/eng_standalone.log 2>&1 ) \
 	  || { echo "==> cover-gate-eng test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/eng_standalone.log; exit 1; }
-	@cd test/go && go run ./covergate -threshold $(ENG_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/eng_standalone.xout
+	@cd test/go && go run ./covergate -threshold $(ENG_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/eng_standalone.engout
 
 cover:
 	@mkdir -p $(COVER_DIR)
