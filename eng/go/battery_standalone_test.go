@@ -367,6 +367,17 @@ func TestCheckModeBattery(t *testing.T) {
 		{input: "def b [1 addq 2] doq b", want: "Number"},
 		// A fn value applied in parens under check.
 		{input: "def f (fn [[x:Integer] [Integer] [x addq 1]]) (f 5)", want: "Integer"},
+		// Dynamic carriers flowing into dispatch: the assume-sig path.
+		{input: "noretq 1 addq 2", want: "dynamic(Number) :: ~missing_returns"},
+		{input: "noretq 1 dup", want: "dynamic(Any) dynamic(Any) :: ~missing_returns"},
+		{input: "noretq 1 typeof", want: "dynamic(Type) :: ~missing_returns"},
+		{input: "noretq 1 lengthq", want: "dynamic(Integer) :: ~missing_returns"},
+		// A dynamic value through a branch join.
+		{input: "if [true] [noretq 1] [2]", want: "dynamic(Any) :: ~unreachable_branch ~missing_returns"},
+		// A dynamic condition keeps both arms live.
+		{input: "if [noretq true] [1] [2]", want: "Integer"},
+		// A dynamic count on the loop.
+		{input: "for [noretq 2 drop 2] [i]", want: "Integer Integer :: ~missing_returns"},
 	}
 	for _, row := range rows {
 		t.Run(row.input, func(t *testing.T) {
