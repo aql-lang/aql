@@ -49,7 +49,14 @@ every batch:
 | Batch | Content | State |
 |---|---|---|
 | 1 | Token table; `val` prependOpen marker batch (ML/OP/LA/BT pushes, the 7 marker tokens, arrowTag); `val` prependClose dot-chain (inPairValue gate) | **landed** |
-| next | the remaining `val` edits, `pair` (8 edits), `elem`, `paren`/`pelem`, `interp`/`ielem`/`iexpr`/`ieval`, `angle`/`aelem`, `arrowfold`/`arrowfoldelem`, `dotchain`, `map`, number sub | pending |
+| next | the remaining `val` edits, `pair` (8 edits), `elem`, `paren`/`pelem`, `interp`/`ielem`/`iexpr`/`ieval`, `angle`/`aelem`, `arrowfold`/`arrowfoldelem`, `dotchain`, `map` | pending |
+
+Batch 2+ needs three schema additions the paren/interp rules use:
+named BO/BC/AC/AO action LISTS per edit, alternate `u` maps (pure
+data), and library-builtin token references (`$ZZ` end-of-source,
+`$CA` comma) resolved from a per-language builtin table. The number
+SUBSCRIBER (`setupNumberSub`) is lexer machinery like the custom
+matchers — it stays per-language, outside the artifact.
 
 The legacy TS hand-rolled tokenizer is already deleted (its value
 contract predated ADR-012 opacity); tabnas is the parser, everywhere.
