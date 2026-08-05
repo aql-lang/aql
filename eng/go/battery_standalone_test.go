@@ -458,6 +458,9 @@ func TestFnValueApplyBattery(t *testing.T) {
 		{input: "def f (fn [[x:Integer] [Integer] [x mulq 3]]) if [true] [(f 2)] [0]", want: "6"},
 		// Zero-arg fn value.
 		{input: "def f (fn [[] [Integer] [42]]) (f)", want: "42"},
+		// A list param through a fn-value apply stays quoted (inert) on
+		// return — the binding-inertness rule, canon-visible.
+		{input: "def g (fn [[l:List] [Any] [l]]) (g [1 2])", want: "(quote [1 2])"},
 	})
 }
 

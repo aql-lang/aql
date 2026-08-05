@@ -62,6 +62,23 @@ import {
 import type { BoruType } from './type.ts'
 
 /**
+ * Quote a list param at frame binding so the body treats it as a data
+ * value, not a code body to splice — core_helpers.go's binding rule
+ * ("Quote list params so they're treated as data values"). The flag
+ * survives the return, so `f [1 2]` returning its param yields
+ * `(quote [1 2])` on both engines.
+ */
+function quoteListArg(v: Value): Value {
+  if (!v.vType.equal(TList) || v.quoted || v.data === null) return v
+  return new Value(v.vType, v.data, {
+    eval: v.eval,
+    quoted: true,
+    carrier: v.carrier,
+    dynamic: v.dynamic,
+  })
+}
+
+/**
  * Base value for an omitted optional fn param, by its declared type.
  * Mirrors core_helpers.go::BaseValue (empty containers for List/Map,
  * the empty atom for Atom).
@@ -779,7 +796,7 @@ export class Engine {
     // their type's base value. Push the args list for the `args` word.
     const boundArgs: Value[] = []
     for (let i = 0; i < total; i++) {
-      const val = i < usedK ? result.args[i]! : baseValue(chosen.params[i]!.type)
+      const val = quoteListArg(i < usedK ? result.args[i]! : baseValue(chosen.params[i]!.type))
       this.registry.pushDef(chosen.params[i]!.name, val)
       boundArgs.push(val)
     }
@@ -941,7 +958,7 @@ export class Engine {
         // A missing optional param defaults to its type's base value (a
         // concrete, bakeable default — exactly what dispatchFnDef binds at
         // run time), so an inlined body using it still compiles.
-        const v = args[i] ?? (p.optional ? baseValue(p.type) : newDynamicCarrier(TAny))
+        const v = quoteListArg(args[i] ?? (p.optional ? baseValue(p.type) : newDynamicCarrier(TAny)))
         if (p.name !== '') {
           this.registry.pushDef(p.name, v)
           bound.push(p.name)

@@ -1047,9 +1047,12 @@ function registerSpecWords(r: Registry): void {
         // Name-binding form. The Atom quoteArgs slot captures the name
         // word (a constrained `NAME:[…]` word is kept intact so its
         // constraint survives — see the matcher's quoteArgs capture).
+        // The value slot auto-evaluates like every plain arg (Go's
+        // plainDef sig declares no NoEvalArgs): `def b [1 addq 2]`
+        // binds the collected [3], and `def b [notaword]` errors at
+        // def time, not at first reference.
         args: [TAtom, TAny],
         quoteArgs: new Set([0]),
-        noEvalArgs: new Set([1]),
         // Bind in check mode too, so later references resolve (otherwise
         // every `def x … x` cascades into undefined_word) — the binding is
         // a prerequisite for analysis, exactly as in Go. The bound carrier

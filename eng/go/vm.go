@@ -1817,9 +1817,14 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			nl := make([]Value, fn.NLocals)
 			copy(nl, sigArgs)
 			// StripAscribed at delivery (the poly re-match above already
-			// consumed the ascribed view).
+			// consumed the ascribed view). Quote list params so body
+			// references are data — the compiled mirror of the
+			// interpreter's binding rule (core_helpers.go).
 			for i := 0; i < fn.NParams && i < len(nl); i++ {
 				nl[i] = StripAscribed(nl[i])
+				if nl[i].Parent.Equal(TList) && !nl[i].Quoted {
+					nl[i].Quoted = true
+				}
 			}
 			if err := checkParamContract(r, fn, nl); err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
@@ -1852,8 +1857,13 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			for i := 0; i < fn.NParams; i++ {
 				// StripAscribed at delivery: params bind the REAL value
 				// (execFnDefSig parity); a stripped subtype still passes the
-				// param contract its widened view passed.
+				// param contract its widened view passed. Quote list params
+				// so body references are data — the compiled mirror of the
+				// interpreter's binding rule (core_helpers.go).
 				nl[i] = StripAscribed(stack[len(stack)-1-i])
+				if nl[i].Parent.Equal(TList) && !nl[i].Quoted {
+					nl[i].Quoted = true
+				}
 			}
 			stack = stack[:len(stack)-fn.NParams]
 			// Param-type guard — the compiled mirror of the interpreter's
