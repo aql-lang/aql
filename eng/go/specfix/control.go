@@ -566,3 +566,73 @@ func registerEngSpecBaking(r *eng.Registry) {
 		}},
 	})
 }
+
+// fixEachHandler is the battery's higher-order word: run the body (a
+// code list or a Function value) once per data element via the
+// InvokeBody seam — the minimal mirror of lang's each, registered so
+// the LAMBDA-HOOK compile machinery (tryRecordLambdaClosure,
+// lambdaHookCompatible, lambdaCallbackInputs) has a standalone driver.
+func fixEachHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+	lst, err := eng.AsList(args[1])
+	if err != nil || lst.IsNil() { //covergate:allow the data arg is a dispatch-matched concrete List; AsList cannot fail and a parsed list is never nil-backed
+		return []eng.Value{eng.NewList(nil)}, nil
+	}
+	out := make([]eng.Value, 0, lst.Len())
+	for i := 0; i < lst.Len(); i++ {
+		res, err := eng.InvokeBody(r, args[0], []eng.Value{lst.Get(i)})
+		if err != nil {
+			return nil, err
+		}
+		if len(res) == 0 {
+			return nil, &eng.BoruError{Code: "each_error", Detail: "eachq: body produced no result"}
+		}
+		out = append(out, res[len(res)-1])
+	}
+	return []eng.Value{eng.NewList(out)}, nil
+}
+
+// fixEachReturnsFn models the residual: a typed list of the body's
+// modeled result over one element carrier (the fixture twin of lang's
+// eachReturnsFn — recorder suspended for the nested model).
+func fixEachReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
+	defer r.Check.Recorder().Suspend()()
+	body := args[0]
+	if !(eng.IsConcrete(body) && body.Parent.ConformsTo(eng.TList)) {
+		return []eng.Value{eng.NewCarrier(eng.TList)}
+	}
+	bl, err := eng.AsList(body)
+	if err != nil || bl.IsNil() { //covergate:allow guarded by IsConcrete+ConformsTo(TList) above; AsList cannot fail and a concrete list is never nil-backed
+		return []eng.Value{eng.NewCarrier(eng.TList)}
+	}
+	toks := append([]eng.Value{eng.ElementCarrierFromValue(args[1])}, bl.Slice()...)
+	stk := eng.RunCarrierBody(r, eng.NewList(toks))
+	if len(stk) == 0 {
+		return []eng.Value{eng.NewCarrier(eng.TList)}
+	}
+	return []eng.Value{eng.NewCarrierTypedList(stk[len(stk)-1].Parent)}
+}
+
+// registerEngSpecHigherOrder installs eachq — the battery's
+// lambda-hook Callable (quotation and Function forms).
+func registerEngSpecHigherOrder(r *eng.Registry) {
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name:          "eachq",
+		CompileEffect: eng.CompileFallbackBody,
+		Callable: &eng.CallableSpec{BodyPos: 0, BodyOut: 1, EmptyBodyErrors: true, BodyResultTop: true, CrossCollectionTokenShape: true, Inputs: func(a []eng.Value) []eng.Value {
+			return []eng.Value{eng.NewElementCarrier(eng.DataListElemTypeFromValue(a[1]))}
+		}},
+		Signatures: []eng.Signature{
+			{
+				Args:       []*eng.Type{eng.TList, eng.TList},
+				NoEvalArgs: map[int]bool{0: true},
+				Impl:       eng.Go(fixEachHandler),
+				ReturnsFn:  fixEachReturnsFn, BarrierPos: -1,
+			},
+			{
+				Args:      []*eng.Type{eng.TFunction, eng.TList},
+				Impl:      eng.Go(fixEachHandler),
+				ReturnsFn: fixEachReturnsFn, BarrierPos: -1,
+			},
+		},
+	})
+}

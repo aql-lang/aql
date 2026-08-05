@@ -215,6 +215,26 @@ func TestControlEdgeBattery(t *testing.T) {
 	})
 }
 
+// TestHigherOrderBattery drives eachq — the lambda-hook Callable: the
+// quotation form, the Function-value form (tryRecordLambdaClosure /
+// lambdaHookCompatible / lambdaCallbackInputs under the recorder),
+// empty data, and the no-result taxonomy.
+func TestHigherOrderBattery(t *testing.T) {
+	runBattery(t, []batteryRow{
+		{input: "eachq [1 addq] [1 2 3]", want: "[2 3 4]"},
+		{input: "eachq [2 mulq] []", want: "[]"},
+		{input: "eachq [dup addq] [1 2]", want: "[2 4]"},
+		// An empty body passes each element through (the element IS the
+		// residual top of the invoked body).
+		{input: "eachq [] [1 2]", want: "[1 2]"},
+		{input: "def f (fn [[x:Integer] [Integer] [x mulq 2]]) eachq f [1 2 3]", want: "[2 4 6]"},
+		{input: "def f (fn [[s:String] [String] [s concatq '!']]) eachq f ['a' 'b']", want: "['a!' 'b!']"},
+		{input: "eachq [drop] [1]", wantErr: "body produced no result"},
+		// Nested: the outer body is itself a higher-order call.
+		{input: "eachq [[1 addq] swap eachq] [[1 2] [3]]", wantErr: "no signature matches"},
+	})
+}
+
 // TestFnBodyControlBattery drives branches and loops INSIDE fn bodies:
 // the stored-body compile path, carrier-typed params flowing through
 // the branch/loop analysis, and the fn-unit VM execution.
