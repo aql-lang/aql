@@ -47,13 +47,14 @@ export interface DeclHooks {
 
 let cached: DeclGrammar | undefined
 
-export function loadDeclGrammar(): DeclGrammar {
-  if (cached !== undefined) return cached
-  const g = JSON.parse(fs.readFileSync(GRAMMAR_PATH, 'utf8')) as DeclGrammar
+export function loadDeclGrammar(path: string = GRAMMAR_PATH): DeclGrammar {
+  const isDefault = path === GRAMMAR_PATH
+  if (isDefault && cached !== undefined) return cached
+  const g = JSON.parse(fs.readFileSync(path, 'utf8')) as DeclGrammar
   if (g.schema !== 1) {
     throw new Error(`parser: grammar.json: unsupported schema ${g.schema}`)
   }
-  cached = g
+  if (isDefault) cached = g
   return g
 }
 

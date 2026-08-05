@@ -5,6 +5,9 @@
 
 import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 
 import {
   type DeclGrammar,
@@ -93,5 +96,51 @@ describe('declarative grammar loader', () => {
       helpers,
     )
     assert.ok(opened !== null && closed !== null)
+  })
+
+  it('routes prepend and set ops through the helpers', () => {
+    const routed: string[] = []
+    const spies: DeclHelpers = {
+      ...helpers,
+      prependOpen: () => {
+        routed.push('prependOpen')
+      },
+      prependClose: () => {
+        routed.push('prependClose')
+      },
+      setOpen: () => {
+        routed.push('setOpen')
+      },
+      setClose: () => {
+        routed.push('setClose')
+      },
+    }
+    applyDeclEdits(
+      fakeJ(),
+      {
+        schema: 1,
+        tokens: [],
+        edits: [
+          { rule: 'val', op: 'prependOpen', alts: [{ text: 'x' }] },
+          { rule: 'val', op: 'prependClose', alts: [{ text: 'y' }] },
+          { rule: 'val', op: 'setOpen', alts: [{ text: 'z' }] },
+          { rule: 'val', op: 'setClose', alts: [{ text: 'w' }] },
+        ],
+      },
+      {},
+      noHooks,
+      spies,
+    )
+    assert.deepEqual(routed, ['prependOpen', 'prependClose', 'setOpen', 'setClose'])
+  })
+
+  it('rejects an unsupported artifact schema', () => {
+    const bad = path.join(os.tmpdir(), `declgrammar-badschema-${process.pid}.json`)
+    fs.writeFileSync(bad, JSON.stringify({ schema: 2, tokens: [], edits: [] }))
+    try {
+      assert.throws(() => loadDeclGrammar(bad), /unsupported schema 2/)
+    } finally {
+      fs.unlinkSync(bad)
+    }
   })
 })
