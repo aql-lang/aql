@@ -257,6 +257,32 @@ func TestClosureBattery(t *testing.T) {
 	})
 }
 
+// TestVmOpcodeBattery drives the opcode arms the earlier batteries
+// missed: interpolation, quote/splice flows, global rebinds through
+// undef, args frames inside fns, and stack shuffles.
+func TestVmOpcodeBattery(t *testing.T) {
+	runBattery(t, []batteryRow{
+		// Interpolation compiles to OpInterp.
+		{input: "`a${1 addq 2}b`", want: "'a3b'"},
+		{input: "`${'x'}${'y'}`", want: "'xy'"},
+		{input: "def n 7 `v=${n}`", want: "'v=7'"},
+		// Rebinds and undef inside programs.
+		{input: "def x 1 def x (x addq 1) x", want: "2"},
+		{input: "def x 1 undef x 5", want: "5"},
+		// args frames inside fn bodies.
+		{input: "def f fn [[x:Integer] [Any] [args lengthq]] f 9", want: "1"},
+		// Stack shuffles.
+		{input: "1 2 3 swap drop", want: "1 3"},
+		{input: "1 2 over", want: "1 2 1"},
+		// Splice through control.
+		{input: "def s word 42 for 2 [s]", want: "42 42"},
+		// Deep closure nesting.
+		{input: "doq [doq [doq [5]]]", want: "5"},
+		// Typed defs read back.
+		{input: "def {x:Integer} 5 x addq 1", want: "6"},
+	})
+}
+
 // TestRangeLoopBattery drives the range-form for: static ranges with
 // every arity, negative steps, and computed bounds (const start/step,
 // runtime end) that still lower to FOR_SETUP.
