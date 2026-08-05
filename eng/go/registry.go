@@ -806,7 +806,7 @@ func NewRegistry() (*Registry, error) {
 		// Emit starts as the inactive no-op recorder — never nil — so
 		// recorder calls are always safe (CheckState.Recorder() covers
 		// registries constructed without NewRegistry).
-		Check: &CheckState{StepBudget: -1, Emit: theInactiveEmit},
+		Check: NewCheckState(),
 		Procs: NewProcessRuntime(),
 		// The dispatch cache is allocated here and never reassigned, so
 		// a registry shared across goroutines (a module sub-registry

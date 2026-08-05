@@ -454,28 +454,6 @@ func (e *Engine) tryDynamicFnValueDispatch(valIdx int) bool {
 	return true
 }
 
-// methodShapeAnnotated reports whether a value ID carries a method-shape
-// annotation this pass. Consulted by resolveDynamicApply: an ANNOTATED
-// carrier reaching the program residual as a LEADING or INTERIOR apply
-// window means the statement-window model DECLINED it (a computed arg, a
-// word in the window, a stack-reaching match), so the residual window's
-// "tail = args" assumption is unverified for it — the leading/mixed
-// windows may absorb values from LATER statements into the apply (the
-// interpreter's forward collection stops at the statement End; the
-// flattened residual has no such boundary), a silent-divergence class
-// probe-confirmed pre-existing (`c.add (1 add 2) ; Log.measurements
-// size` compiled to the wrong value). Such carriers now refuse instead —
-// sound fallback. Trailing shapes are unaffected: they draw args from
-// the STACK below the value, exactly the interpreter's stack-form
-// dispatch, which crosses statements by design.
-func (es *EmitState) methodShapeAnnotated(id string) bool {
-	if es == nil || es.reg == nil {
-		return false
-	}
-	_, ok := es.reg.Check.methodShapeMember(id)
-	return ok
-}
-
 // tryRecordMethodApply is the FIRST specialist in recordDispatchOutcome's
 // chain: it consumes a pending shaped-method model (set by
 // tryShapedMethodDispatch around its carrierResults call) and records the

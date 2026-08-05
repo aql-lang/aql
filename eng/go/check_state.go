@@ -615,3 +615,12 @@ type CheckDiagnostic struct {
 	// Suggestions are actionable fixes (`= help: …`).
 	Suggestions []DiagSuggestion `json:"suggestions,omitempty"`
 }
+
+// NewCheckState builds the registry's initial analysis state: analysis
+// off, the step budget at its "unset" sentinel (resolved to the project
+// default at run time), and the inactive no-op recorder standing in for
+// the emit surface (design/CHECKER-COMPLETION.0.md). Registry
+// construction calls this so the check piece owns its own zero state.
+func NewCheckState() *CheckState {
+	return &CheckState{StepBudget: -1, Emit: theInactiveEmit}
+}

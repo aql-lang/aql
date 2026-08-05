@@ -145,3 +145,4 @@ check_ordering.go	check
 carrier_new.go	core
 vm_callback_unit.go	eng
 check_state.go	check
+value_classify.go	core

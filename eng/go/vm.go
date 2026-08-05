@@ -1168,15 +1168,6 @@ func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, b
 	return results, true, err
 }
 
-// isAppliableFn reports whether a runtime value is a callable the interpreter
-// would auto-apply: a Function-typed value or an FnDefInfo payload.
-func isAppliableFn(v Value) bool {
-	if _, ok := v.Data.(FnDefInfo); ok {
-		return true
-	}
-	return v.Parent != nil && v.Parent.ConformsTo(TFunction)
-}
-
 // runFallback executes one interpreter island (OpFallback): it preloads the
 // NIn threaded inputs (deepest-first) then the recorded span tokens onto a
 // reused sub-engine, runs it, and returns the operand stack with the island's
