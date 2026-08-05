@@ -190,6 +190,15 @@ describe('parse battery', () => {
     ['[0x10]', '[16]'],
     ['{a?:5}', '{a:(None tor Absent tor 5)}'],
     ['{a?:Integer}', '{a:(word(Integer) tor None tor Absent)}'],
+    // Reach chains render back to their dotted surface (canonReach,
+    // Go-pinned): plain/getr segments, the receiverless lens, quoted
+    // and computed keys, and a paren receiver.
+    ['a.b.c', 'a.b.c'],
+    ['a!.b', 'a!.b'],
+    ['$.name', '$.name'],
+    ["m.'k'", "m.'k'"],
+    ['a.(k)', 'a.(k)'],
+    ['(m n).k', '(m n).k'],
     ['<a href=>x</a>', 'ERR xml: attribute "href" in <a> must have a quoted value'],
     ["<a 'x'/>", 'ERR xml: invalid attribute name in <a>'],
     ['<a>${1}</a>', 'interp-xml(<a>${1}</a>)'],

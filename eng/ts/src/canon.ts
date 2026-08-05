@@ -10,7 +10,7 @@
 import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TPathon, TString, TEmailon, TUrlon } from './type.ts'
 import { urlonHref, type UrlonInfo } from './value.ts'
 import type { FnDefInfo, XmlElement } from './value.ts'
-import { ChildType, ErrorInfo, OptionsData, OrderedMap, Value } from './value.ts'
+import { ChildType, ErrorInfo, OptionsData, OrderedMap, Value, asReach, isReach } from './value.ts'
 
 // canonXml renders an XML element, normalising an empty element to the
 // self-closing form (<br></br> → <br/>).
@@ -222,6 +222,9 @@ export function canonValue(v: Value): string {
   if (v.isXml()) {
     return canonXml(v.data as XmlElement)
   }
+  if (isReach(v)) {
+    return canonReach(v)
+  }
   if (v.isFnDef()) {
     return canonFnDef(v.asFnDef())
   }
@@ -271,4 +274,35 @@ function canonFnDef(fd: FnDefInfo): string {
     })
     .join(' ')
   return `fn [${sigs}]`
+}
+
+// canonReach renders a Reach back to its dotted surface — m.a.b, m!.x,
+// m.'k', m.(expr), (expr).k — the read-print round-trip, mirroring
+// eng/go/canon.go::canonReach (words stay bare; a codequote-captured
+// reach wraps so it round-trips).
+function canonReachToken(v: Value): string {
+  if (v.isWord()) return v.asWord().name
+  if (v.isParenExpr() && Array.isArray(v.data)) return '(' + canonReachTokens(v.data as Value[]) + ')'
+  if (isReach(v)) return canonReach(v)
+  return canonValue(v)
+}
+
+function canonReachTokens(toks: Value[]): string {
+  return toks.map(canonReachToken).join(' ')
+}
+
+function canonReach(v: Value): string {
+  const info = asReach(v)
+  if (info === undefined) return String(v)
+  let b: string
+  if (info.receiver.length === 0) b = '$'
+  else if (info.receiver.length === 1) b = canonReachToken(info.receiver[0]!)
+  else b = '(' + canonReachTokens(info.receiver) + ')'
+  for (const seg of info.segments) {
+    b += seg.getr ? '!.' : '.'
+    if (seg.computed) b += '(' + canonReachTokens(seg.keyExpr ?? []) + ')'
+    else b += canonReachToken(seg.keyLit!)
+  }
+  if (v.quoted) return '(codequote ' + b + ')'
+  return b
 }
