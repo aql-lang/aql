@@ -305,3 +305,101 @@ func TestParseFnDefReturnSlots(t *testing.T) {
 		t.Errorf("empty returns: %v", perr)
 	}
 }
+
+// TestRunTraceBattery drives the trace renderer over representative
+// programs: scalar flows, containers, branch words, and an erroring
+// row — the colorize/wrap/step machinery renders every shape.
+func TestRunTraceBattery(t *testing.T) {
+	rows := []struct {
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{input: "1 addq 2", want: "3"},
+		{input: "[1 2] lengthq", want: "2"},
+		{input: "{a:1} get a", want: "1"},
+		{input: "'x' concatq 'y'", want: "'xy'"},
+		{input: "dup", wantErr: true},
+		{input: "1 2 dup", want: "1 2 2"},
+		{input: "quote zz typeof", want: "Atom"},
+	}
+	for _, row := range rows {
+		t.Run(row.input, func(t *testing.T) {
+			values, err := parser.Parse(row.input)
+			if err != nil {
+				t.Fatalf("parse: %v", err)
+			}
+			r := specfixProbeRegistry(t)
+			var buf strings.Builder
+			out, runErr := eng.RunTrace(r, values, &buf)
+			if row.wantErr {
+				if runErr == nil {
+					t.Fatalf("want error, got %s", eng.Canon(out))
+				}
+				return
+			}
+			if runErr != nil {
+				t.Fatalf("run: %v", runErr)
+			}
+			if got := eng.Canon(out); got != row.want {
+				t.Errorf("got %s, want %s", got, row.want)
+			}
+			if buf.Len() == 0 {
+				t.Error("trace output must not be empty")
+			}
+		})
+	}
+}
+
+// TestInstallTypeArms drives the type-installation policy across body
+// kinds: alias literals, record shapes, refine prefabs, options and
+// disjunct bodies, and the invalid-body / invalid-name errors.
+func TestInstallTypeArms(t *testing.T) {
+	r := specfixProbeRegistry(t)
+
+	if err := eng.InstallType(r, "Alias1", eng.NewTypeLiteral(eng.TInteger)); err != nil {
+		t.Errorf("alias body: %v", err)
+	}
+	rec := eng.NewOrderedMap()
+	rec.Set("a", eng.NewTypeLiteral(eng.TInteger))
+	if err := eng.InstallType(r, "Rec1", eng.NewMap(rec)); err != nil {
+		t.Errorf("record body: %v", err)
+	}
+	if err := eng.InstallType(r, "Opt1", eng.NewOptionsType(rec)); err != nil {
+		t.Errorf("options body: %v", err)
+	}
+	dis := eng.NewDisjunct([]eng.Value{eng.NewTypeLiteral(eng.TInteger), eng.NewTypeLiteral(eng.TString)})
+	if err := eng.InstallType(r, "Dis1", dis); err != nil {
+		t.Errorf("disjunct body: %v", err)
+	}
+	prefab := eng.NewTypeLiteral(r.Types.MintRefinePrefab(eng.TInteger))
+	if err := eng.InstallType(r, "Fresh1", prefab); err != nil {
+		t.Errorf("refine prefab: %v", err)
+	}
+	// A literal scalar IS a valid body (value-literal types, def Five 5).
+	if err := eng.InstallType(r, "Five1", eng.NewInteger(5)); err != nil {
+		t.Errorf("literal body: %v", err)
+	}
+	if err := eng.InstallType(r, "Bad1", eng.NewWord("w")); err == nil {
+		t.Error("word body must be rejected")
+	}
+	if err := eng.InstallType(r, "lower", eng.NewTypeLiteral(eng.TInteger)); err == nil {
+		t.Error("lowercase type name must be rejected")
+	}
+}
+
+// TestInstallDefArms drives the def-installation helper across value
+// kinds and the redefinition path.
+func TestInstallDefArms(t *testing.T) {
+	r := specfixProbeRegistry(t)
+	eng.InstallDef(r, "d1", eng.NewInteger(1))
+	eng.InstallDef(r, "d1", eng.NewInteger(2))
+	if v, ok := r.Defs.Top("d1"); !ok || eng.Canon([]eng.Value{v}) != "2" {
+		t.Errorf("redefinition must replace: %v %v", v, ok)
+	}
+	eng.InstallDef(r, "d2", eng.NewList([]eng.Value{eng.NewInteger(1)}))
+	eng.InstallDef(r, "d3", eng.NewTypeLiteral(eng.TString))
+	if _, ok := r.Defs.Top("d3"); !ok {
+		t.Error("type-literal def must bind")
+	}
+}
