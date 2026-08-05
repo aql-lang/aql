@@ -1442,4 +1442,5 @@ func registerEngSpecTypeOps(r *eng.Registry) {
 // twin does not exist), so only the eng-local battery lanes opt in.
 func RegisterControlWords(r *eng.Registry) {
 	registerEngSpecControl(r)
+	registerEngSpecCallable(r)
 }

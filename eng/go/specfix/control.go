@@ -298,3 +298,64 @@ func registerEngSpecControl(r *eng.Registry) {
 		}},
 	})
 }
+
+// fixDoHandler mirrors basic's DoListHandler: run the body with no
+// inputs through the InvokeBody seam (so the VM can run it as a
+// compiled closure) and surface a body error as an Error VALUE.
+func fixDoHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+	if !eng.IsConcrete(args[0]) {
+		return nil, &eng.BoruError{Code: "do_error", Detail: "doq: argument must be a concrete list, got type literal"}
+	}
+	result, err := eng.InvokeBody(r, args[0], nil)
+	if err != nil {
+		return []eng.Value{eng.NewError(err)}, nil
+	}
+	return result, nil
+}
+
+// fixDoReturnsFn is the closure model: a word body derefs through the
+// def table, a computed body takes the bounded dynamic hatch, and a
+// concrete body's residual is analysed under the caught-body bracket
+// with do's keep-defs leak fidelity. Raising bodies are outside the
+// fixture's model — battery rows keep bodies infallible.
+func fixDoReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
+	body := args[0]
+	if eng.IsWord(body) {
+		w, _ := eng.AsWord(body)
+		if v, ok := r.Defs.Top(w.Name); ok {
+			body = v
+		}
+	}
+	if !(eng.IsConcrete(body) && body.Parent.ConformsTo(eng.TList)) {
+		return []eng.Value{eng.NewDynamicCarrier(eng.TAny)}
+	}
+	r.Check.CaughtBodyDepth++
+	stk := eng.RunCarrierBodyKeepDefs(r, body)
+	r.Check.CaughtBodyDepth--
+	if len(stk) == 0 {
+		if bl, err := eng.AsList(body); err == nil && !bl.IsNil() && bl.Len() > 0 {
+			return []eng.Value{eng.NewCarrier(eng.TError)}
+		}
+		return nil
+	}
+	return stk
+}
+
+// registerEngSpecCallable installs `doq` — the battery's Callable
+// body-runner, carrying basic's do CallableSpec so the kernel's
+// closure dispatch/record/lower pipeline is driven standalone.
+func registerEngSpecCallable(r *eng.Registry) {
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name: "doq",
+		Callable: &eng.CallableSpec{BodyPos: 0, BodyOut: eng.BodyOutResidual, Inputs: func(_ []eng.Value) []eng.Value {
+			return []eng.Value{}
+		}},
+		Signatures: []eng.Signature{{
+			Args:       []*eng.Type{eng.TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Impl:       eng.Go(fixDoHandler),
+			ReturnsFn:  fixDoReturnsFn, BarrierPos: -1,
+			CompileEffect: eng.CompileFallbackBody | eng.CompileDynBody,
+		}},
+	})
+}

@@ -228,3 +228,31 @@ func TestTruthinessAndBindBattery(t *testing.T) {
 		{input: "def s word 42 if [true] [s] [0]", want: "42"},
 	})
 }
+
+// TestClosureBattery drives the Callable pipeline through doq — the
+// battery's body-runner carrying basic do's CallableSpec — so closure
+// dispatch, recording, lowering, and VM execution run standalone.
+func TestClosureBattery(t *testing.T) {
+	runBattery(t, []batteryRow{
+		// Single- and multi-value residual closures.
+		{input: "doq [1 addq 2]", want: "3"},
+		{input: "doq [10 20 30]", want: "10 20 30"},
+		{input: "doq []", want: ""},
+		// An enclosing binding read inside the body.
+		{input: "def n 4 doq [n addq 1]", want: "5"},
+		// A def-leaking body (do keeps body defs bound).
+		{input: "doq [def z 5 z] z", want: "5 5"},
+		// Nested closures.
+		{input: "doq [doq [1] addq 1]", want: "2"},
+		// A word-bound body (the deref arm; the computed body declines
+		// the closure and rides the fallback).
+		{input: "def b [1 addq 2] doq b", want: "3"},
+		// Inside a fn body.
+		{input: "def f fn [[x:Integer] [Any] [doq [x addq 1]]] f 3", want: "4"},
+		// Control flow inside the closure body.
+		{input: "doq [if [true] [7] [8]]", want: "7"},
+		{input: "doq [for 2 [i]]", want: "0 1"},
+		// A raising body surfaces as an Error VALUE.
+		{input: "doq [refine 5] typeof", want: "Error"},
+	})
+}
