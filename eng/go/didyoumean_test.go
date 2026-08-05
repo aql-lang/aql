@@ -183,7 +183,7 @@ func TestUndefinedWordErrorDescribeForBuiltin(t *testing.T) {
 func TestUndefinedWordCheckDiagSuggestions(t *testing.T) {
 	e := engWithTape(t, nil, 0)
 	e.registry.Defs.Push("counter", NewInteger(1))
-	d := e.undefinedWordCheckDiag("countr", SrcPos{Row: 2, Col: 3})
+	d := undefinedWordCheckDiag(e, "countr", SrcPos{Row: 2, Col: 3})
 	if d.Code != "undefined_word" || d.Row != 2 || d.Col != 3 {
 		t.Fatalf("diag = %+v", d)
 	}
@@ -191,7 +191,7 @@ func TestUndefinedWordCheckDiagSuggestions(t *testing.T) {
 		t.Errorf("check diag must carry the did-you-mean, got %+v", d.Suggestions)
 	}
 	// No plausible match → no suggestions at all.
-	d = e.undefinedWordCheckDiag("qqqqqqqq", SrcPos{})
+	d = undefinedWordCheckDiag(e, "qqqqqqqq", SrcPos{})
 	if len(d.Suggestions) != 0 {
 		t.Errorf("far name must carry no suggestions, got %+v", d.Suggestions)
 	}

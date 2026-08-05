@@ -23,10 +23,10 @@ package eng
 // binding nets other counts), so only the variadic-absorbing program
 // residual may consume it — the TERMINAL gate below enforces exactly that.
 func init() {
-	driftWindowRecorder = (*Engine).tryRecordDriftWindow
+	driftWindowRecorder = tryRecordDriftWindow
 }
 
-func (e *Engine) tryRecordDriftWindow(w WordInfo, sig *Signature, positions []int) bool {
+func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int) bool {
 	es, _ := e.registry.Check.Recorder().(*EmitState)
 	if es == nil || !es.active() || es.suspendedNow() {
 		return false

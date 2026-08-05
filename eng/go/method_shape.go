@@ -97,7 +97,7 @@ func evalFixedWindowToken(v Value) bool {
 // file comment). Returns true when it consumed the dispatch (tape spliced,
 // event recorded or the program marked uncompilable); false leaves the
 // carrier to today's paths (residual windows, refusals) untouched.
-func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
+func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 	r := e.registry
 	v := e.tape.At(valIdx)
 	if !v.Dynamic || v.Quoted || v.ID == "" {
@@ -119,7 +119,7 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 		// keeps the [dynamic, args] residual intact so resolveDynamicApply →
 		// OpCallDynMethod still fires, and a suspended pass stays byte-identical.
 		if !r.Check.Compiling {
-			if sig, positions, wok := e.shapedMethodApplyWindow(valIdx, member); wok {
+			if sig, positions, wok := shapedMethodApplyWindow(e, valIdx, member); wok {
 				// Collapse to the matched signature's ARITY, not always one value.
 				// Side-effect-only shaped methods (logger info, metric add/record)
 				// declare zero returns; splicing a lone dynamic(Any) would fabricate
@@ -133,7 +133,7 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 					args[i].Eval = false
 					args[i].Undefined = false
 				}
-				reps := make([]Value, e.shapedMethodReturnArity(sig, args, v.Pos()))
+				reps := make([]Value, shapedMethodReturnArity(e, sig, args, v.Pos()))
 				for i := range reps {
 					reps[i] = NewDynamicCarrier(TAny)
 				}
@@ -143,7 +143,7 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 		}
 		return false
 	}
-	sig, positions, ok := e.shapedMethodApplyWindow(valIdx, member)
+	sig, positions, ok := shapedMethodApplyWindow(e, valIdx, member)
 	if !ok {
 		// Guard-owned decline: the get-family read guard was SKIPPED for this
 		// annotated read (noteShapedRead), so a genuine-0-arg member whose
@@ -186,7 +186,7 @@ func (e *Engine) tryShapedMethodDispatch(valIdx int) bool {
 // plain-native statement-window apply. Pure (no tape mutation): shared by the
 // compile-pass model (which runs the real dispatch) and the plain-check
 // collapse (which folds the apply to dynamic(Any)).
-func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, []int, bool) {
+func shapedMethodApplyWindow(e *Engine, valIdx int, member Value) (*Signature, []int, bool) {
 	fnDef, ok := member.Data.(FnDefInfo)
 	if !ok || fnDef.Registry == nil {
 		return nil, nil, false
@@ -208,7 +208,7 @@ func (e *Engine) shapedMethodApplyWindow(valIdx int, member Value) (*Signature, 
 	winEnd := valIdx
 	if !allZeroArgSigs(fn) {
 		var winOK bool
-		if winEnd, winOK = e.inertStatementWindow(valIdx); !winOK {
+		if winEnd, winOK = inertStatementWindow(e, valIdx); !winOK {
 			return nil, nil, false
 		}
 	}
@@ -287,7 +287,7 @@ func statementWindowBoundary(v Value) bool {
 // behind both the shaped-method window and the dynamic fn-value window;
 // tryMemberFnArrivalDispatch applies the same per-token test over its
 // arity-bounded span.
-func (e *Engine) inertStatementWindow(valIdx int) (winEnd int, ok bool) {
+func inertStatementWindow(e *Engine, valIdx int) (winEnd int, ok bool) {
 	winEnd = valIdx
 	for i := valIdx + 1; i < e.tape.Len(); i++ {
 		tv := e.tape.At(i)
@@ -325,7 +325,7 @@ func fnDefName(v Value) string {
 // diagnostic, since the plain-check collapse is silent. This keeps the collapse
 // arity-faithful: a side-effect-only method (0 returns) collapses to 0 values,
 // not a fabricated one.
-func (e *Engine) shapedMethodReturnArity(sig *Signature, args []Value, pos SrcPos) int {
+func shapedMethodReturnArity(e *Engine, sig *Signature, args []Value, pos SrcPos) int {
 	if sig.ReturnsFn != nil {
 		e.registry.Check.CurCallPos = pos
 		return len(sig.ReturnsFn(args, e.registry))
@@ -374,7 +374,7 @@ func dynamicBoundConformsToFunction(v Value) bool {
 // (TestSpecCompiledDifferential). Optimism is sound for every clean corpus row
 // — a clean miss-then-call (a None reader immediately applied) does not occur;
 // it is the same gradual gap dynamic modality accepts elsewhere.
-func (e *Engine) tryDynamicFnValueDispatch(valIdx int) bool {
+func tryDynamicFnValueDispatch(e *Engine, valIdx int) bool {
 	r := e.registry
 	if r.Check.Compiling || r.Check.Recorder().Active() {
 		return false
@@ -385,7 +385,7 @@ func (e *Engine) tryDynamicFnValueDispatch(valIdx int) bool {
 	}
 	// The forward window: the same inert, evaluation-fixed statement-window
 	// admission the shaped-method model uses (one shared scanner).
-	winEnd, winOK := e.inertStatementWindow(valIdx)
+	winEnd, winOK := inertStatementWindow(e, valIdx)
 	if !winOK {
 		return false
 	}
@@ -447,7 +447,7 @@ func tryRecordMethodApply(r *Registry, word string, args, out []Value, pos SrcPo
 //     multi-sig first-match and captures are follow-on scope);
 //   - arity >= 1 (a 0-arg auto-fire is the read-guard's own class) and the
 //     full arity of evaluation-fixed tokens inside the statement.
-func (e *Engine) tryMemberFnArrivalDispatch(valIdx int) bool {
+func tryMemberFnArrivalDispatch(e *Engine, valIdx int) bool {
 	r := e.registry
 	es := r.Check.Recorder()
 	if !es.active() || es.suspendedNow() {

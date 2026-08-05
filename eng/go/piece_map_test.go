@@ -60,6 +60,11 @@ var upwardRefs = []struct {
 			// carrier: the one core file allowed to touch CheckState, whose
 			// bodies become interface calls at the package cut.
 			"analysis_hooks.go": true,
+			// Stage 4 re-homed the analysis STATE to core (the state-record
+			// principle): these files ARE the state's home — Registry methods
+			// manipulating their own Check field, not interpreter-loop
+			// consultation.
+			"check_state.go": true, "compile_sandbox.go": true,
 		},
 	},
 	{

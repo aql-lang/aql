@@ -86,7 +86,7 @@ func TestShapedMethodApplyWindowZeroArgGates(t *testing.T) {
 	}
 	m1 := z9Member("z9x", r1, memberSig)
 	e1 := z9Engine(t, r1, []Value{m1})
-	sg, positions, ok := e1.shapedMethodApplyWindow(0, m1)
+	sg, positions, ok := shapedMethodApplyWindow(e1, 0, m1)
 	if !ok || sg == nil || sg.TotalArgs() != 0 || positions != nil {
 		t.Errorf("mixed-sibling inner: want the 0-arg sig with no positions, got sig=%v pos=%v ok=%v", sg, positions, ok)
 	}
@@ -101,7 +101,7 @@ func TestShapedMethodApplyWindowZeroArgGates(t *testing.T) {
 	}
 	m2 := z9Member("z9x", r2, memberSig)
 	e2 := z9Engine(t, r2, []Value{m2})
-	if _, _, ok := e2.shapedMethodApplyWindow(0, m2); ok {
+	if _, _, ok := shapedMethodApplyWindow(e2, 0, m2); ok {
 		t.Error("NoEvalArgs 0-arg inner sig must not model")
 	}
 
@@ -116,7 +116,7 @@ func TestShapedMethodApplyWindowZeroArgGates(t *testing.T) {
 	}
 	m3 := z9Member("z9x", r3, memberSig)
 	e3 := z9Engine(t, r3, []Value{m3})
-	if _, _, ok := e3.shapedMethodApplyWindow(0, m3); ok {
+	if _, _, ok := shapedMethodApplyWindow(e3, 0, m3); ok {
 		t.Error("inner without a 0-arg sig must not model")
 	}
 
@@ -134,7 +134,7 @@ func TestShapedMethodApplyWindowZeroArgGates(t *testing.T) {
 	m4Sig.Impl = Boru([]Value{NewWord("z9y")})
 	m4 := z9Member("z9y", r4, m4Sig, m4Sig) // two 1-arg sigs: zeros < 2
 	e4 := z9Engine(t, r4, []Value{m4})
-	if _, _, ok := e4.shapedMethodApplyWindow(0, m4); ok {
+	if _, _, ok := shapedMethodApplyWindow(e4, 0, m4); ok {
 		t.Error("a member without a genuine 0-arg overload must not take the 0-arg path")
 	}
 }
@@ -257,7 +257,7 @@ func TestShapedMethodGuardOwnedDecline(t *testing.T) {
 	// carrier has NO compiled home, so RecordDynMethod declines and the
 	// guard-owned refusal moves to the operand-provenance arm — still sound,
 	// still interpreter-owned.
-	e.tryShapedMethodDispatch(0)
+	tryShapedMethodDispatch(e, 0)
 	es, ok := r.Check.Emit.(*EmitState)
 	if !ok {
 		t.Fatal("compile pass recorder missing")
@@ -289,7 +289,7 @@ func TestShapedMethodGuardOwnedDecline(t *testing.T) {
 	carrier2 := NewDynamicCarrier(TAny)
 	r2.Check.NoteMethodShape(carrier2, member2)
 	e2 := z9Engine(t, r2, []Value{carrier2, NewWord("z9unmodelable")})
-	e2.tryShapedMethodDispatch(0)
+	tryShapedMethodDispatch(e2, 0)
 	es2, ok2 := r2.Check.Emit.(*EmitState)
 	if !ok2 {
 		t.Fatal("compile pass recorder missing (z9h)")

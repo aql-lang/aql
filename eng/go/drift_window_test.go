@@ -18,7 +18,7 @@ func TestDriftWindowOutOfRangePosition(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
 	w, sig := zzDriftWord()
-	if e.tryRecordDriftWindow(w, sig, []int{0, 999}) {
+	if tryRecordDriftWindow(e, w, sig, []int{0, 999}) {
 		t.Error("an out-of-range matched position must decline the window")
 	}
 }
@@ -34,7 +34,7 @@ func TestDriftWindowNonContiguousDeclines(t *testing.T) {
 	e.tape = NewTape([]Value{NewInteger(5), dyn, NewInteger(9), NewWord("add"), NewInteger(1)}, stackHeadroom)
 	e.pointer = 3
 	w, sig := zzDriftWord()
-	if e.tryRecordDriftWindow(w, sig, []int{1, 0}) {
+	if tryRecordDriftWindow(e, w, sig, []int{1, 0}) {
 		t.Error("a non-contiguous matched span must decline the window")
 	}
 }
@@ -56,7 +56,7 @@ func TestDriftWindowVariadicOperandDeclines(t *testing.T) {
 	e.tape = NewTape([]Value{NewInteger(5), dyn, NewWord("add"), NewInteger(1)}, stackHeadroom)
 	e.pointer = 2
 	w, sig := zzDriftWord()
-	if e.tryRecordDriftWindow(w, sig, []int{1, 0}) {
+	if tryRecordDriftWindow(e, w, sig, []int{1, 0}) {
 		t.Error("a variadic-event operand must decline the window")
 	}
 }
@@ -76,7 +76,7 @@ func TestDriftWindowUnresolvableOperandDeclines(t *testing.T) {
 	e.tape = NewTape([]Value{orphan, dyn, NewWord("add"), NewInteger(1)}, stackHeadroom)
 	e.pointer = 2
 	w, sig := zzDriftWord()
-	if e.tryRecordDriftWindow(w, sig, []int{1, 0}) {
+	if tryRecordDriftWindow(e, w, sig, []int{1, 0}) {
 		t.Error("an unresolvable window operand must decline the window")
 	}
 }

@@ -35,69 +35,6 @@ func cloneMap[K comparable, V any](m map[K]V) map[K]V {
 	return cp
 }
 
-// SpecUndefBlocked reports whether an `undef` of name inside the CURRENT
-// speculative check region would pop a binding that PREDATES the region —
-// the deletion the model must not commit: the region may never execute at
-// run time, so leaking the pop flagged `undefined_word` on clean programs
-// (the wrapped-undef FP class — an `undef` in a skipped error handler, an
-// each body over an empty list, an uncalled fn body). False outside check
-// mode, outside any speculative region, and for bindings pushed INSIDE the
-// region (frame params, body defs — their depth exceeds the entry
-// snapshot), so teardown and body-local undef are untouched.
-func (r *Registry) SpecUndefBlocked(name string) bool {
-	if !r.Check.IsActive() || len(r.Check.SpecBaselines) == 0 {
-		return false
-	}
-	base := r.Check.SpecBaselines[len(r.Check.SpecBaselines)-1]
-	return r.Defs.Depth(name) <= base[name]
-}
-
-// RescueForwardRefDiagnostics drops undefined_word diagnostics that
-// were emitted INSIDE a fn-body analysis (FnBody tag) for names that
-// have a binding by the end of the pass. A fn body runs at CALL
-// time, when the whole program's defs exist — so a body reference to
-// a later definition is the documented forward-reference idiom
-// (recursion via forward ref, mutual recursion: lang/spec/
-// recursion.tsv §3), not a defect; the install-time body analysis
-// just runs too early to see it. Names still unbound at end of pass
-// keep their diagnostic (a genuine typo). Top-level (non-FnBody)
-// uses before a def keep theirs too — those genuinely error at run
-// time.
-//
-// Known limitation: a top-level CALL placed before the dependent
-// def (`def f fn […g…] f 1 def g …`) errors at run time but is
-// rescued here — the checker doesn't order call sites against defs.
-//
-// Call at end of a check pass, before reading Diagnostics.
-func (r *Registry) RescueForwardRefDiagnostics() {
-	if r == nil || r.Check.Diagnostics == nil {
-		return
-	}
-	kept := r.Check.Diagnostics[:0]
-	for _, d := range r.Check.Diagnostics {
-		if d.Code == "undefined_word" && d.FnBody && d.Word != "" {
-			// Module-scope forward reference: the name has a binding by end of
-			// pass (recursion, mutual recursion, a later top-level def).
-			if _, bound := r.Defs.Top(d.Word); bound || r.Lookup(d.Word) != nil {
-				continue
-			}
-			// Dynamic-scope reference: the name lives only in a per-call frame
-			// (a fn parameter or a body-local def), popped before end of pass,
-			// but boru's dynamic scoping makes it visible to a fn REACHED from
-			// the binder's frame. Rescue iff some fn that binds the name can
-			// actually reach the reading fn through the call graph — the SOUND
-			// condition. A name merely bound by an unrelated fn that never
-			// calls the reader (`def f fn [[] [x]] def g fn [[x:Integer] [1]] f`)
-			// stays flagged: it genuinely errors at run time.
-			if r.Check.dynamicScopeReachable(d.Word, d.FnName) {
-				continue
-			}
-		}
-		kept = append(kept, d)
-	}
-	r.Check.Diagnostics = kept
-}
-
 // (Moved from micron.go with the family split — these are generic
 // check-mode helpers, not Micron content.)
 //

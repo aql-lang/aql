@@ -801,7 +801,7 @@ func TestW8RefuseForwardStackDriftOutOfRange(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
 	sig := &Signature{Args: []*Type{TInteger, TInteger}, BarrierPos: 1}
-	e.refuseForwardStackDrift(sig, []int{0, 999})
+	refuseForwardStackDrift(e, sig, []int{0, 999})
 }
 
 func TestW8TryRecordUnmatchedTrapZeroArgSig(t *testing.T) {
@@ -866,7 +866,7 @@ func TestW8SpliceFnValueCheckResultEmptyDeclaredReturns(t *testing.T) {
 	e := NewTop(r)
 	e.tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
 	e.pointer = 1
-	e.spliceFnValueCheckResult(1, 1, fnDef, sig, []Value{NewInteger(3)})
+	spliceFnValueCheckResult(e, 1, 1, fnDef, sig, []Value{NewInteger(3)})
 }
 
 func TestW8ExecFnDefStackMatchUnnamedMapPatternFail(t *testing.T) {
@@ -898,14 +898,14 @@ func TestW8SpliceFnCheckTailCompaction(t *testing.T) {
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{{Params: []FnParam{{Type: TInteger}, {Type: TInteger}}}}})
 	e.tape = NewTape([]Value{NewInteger(1), NewForward(ForwardInfo{}), NewInteger(2), fnv}, stackHeadroom)
 	e.pointer = 3
-	e.spliceFnCheckTail(3, 2, []Value{NewCarrier(TAny)})
+	spliceFnCheckTail(e, 3, 2, []Value{NewCarrier(TAny)})
 }
 
 func TestW8SpliceFnCheckTailElseBranch(t *testing.T) {
 	// nArgs exceeds the resolved values before valIdx: the else branch
 	// clamps argStart and splices.
 	e := engWithTape(t, []Value{NewInteger(1), NewInteger(2)}, 1)
-	e.spliceFnCheckTail(1, 2, []Value{NewCarrier(TAny)})
+	spliceFnCheckTail(e, 1, 2, []Value{NewCarrier(TAny)})
 	if e.pointer != 0 {
 		t.Errorf("pointer = %d, want 0 (argStart clamped)", e.pointer)
 	}
@@ -1315,7 +1315,7 @@ func TestW8CheckModeSurfaceShapeNilParent(t *testing.T) {
 	// A nil-Parent value at a fallback position is skipped; no surface
 	// candidate is found → (false, nil).
 	e := engWithTape(t, []Value{NewInteger(0), {}}, 0)
-	ok, err := e.checkModeSurfaceShape(WordInfo{Name: "w8x", ArgCount: -1}, SrcPos{})
+	ok, err := checkModeSurfaceShape(e, WordInfo{Name: "w8x", ArgCount: -1}, SrcPos{})
 	if ok || err != nil {
 		t.Errorf("got (%v, %v), want (false, nil)", ok, err)
 	}
@@ -1336,7 +1336,7 @@ func TestW8ExprRefsCarrierReachComputedKey(t *testing.T) {
 	r.Defs.Push("w8carrier", NewCarrier(TInteger))
 	e := NewTop(r)
 	reach := w8ReachWithComputedKey([]Value{NewWord("w8carrier")})
-	if !e.exprRefsCarrier([]Value{reach}) {
+	if !exprRefsCarrier(e, []Value{reach}) {
 		t.Error("a Reach computed key referencing a carrier should be detected")
 	}
 }

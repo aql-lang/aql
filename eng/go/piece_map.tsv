@@ -117,7 +117,7 @@ emit_recorder.go	core	state contract: the recorder interface + inactive no-op + 
 lower.go	compiler	
 bytecode.go	compiler	
 code_effect.go	compiler	
-compile_sandbox.go	compiler	
+compile_sandbox.go	core	registry state snapshot/restore for the compile fork is core state management (Stage 4c)
 callable_words.go	compiler	
 stamp_runtime.go	compiler	
 drift_window.go	compiler	

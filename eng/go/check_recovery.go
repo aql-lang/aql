@@ -16,7 +16,7 @@ import (
 // undefinedWordCheckDiag is undefinedWordError's check-mode twin — the
 // same Detail and did-you-mean, carried on the CheckDiagnostic wire
 // type (the context hint is runtime-shaped and stays off it).
-func (e *Engine) undefinedWordCheckDiag(name string, pos SrcPos) CheckDiagnostic {
+func undefinedWordCheckDiag(e *Engine, name string, pos SrcPos) CheckDiagnostic {
 	return CheckDiagnostic{
 		Code:        "undefined_word",
 		Detail:      undefinedWordDetail(name),
@@ -35,7 +35,7 @@ func (e *Engine) undefinedWordCheckDiag(name string, pos SrcPos) CheckDiagnostic
 // base case reading the previous frame's body-local — recursion.tsv:71);
 // resolveOperand's dynScopeRescue lowers it to a runtime lookup iff a
 // binder fn reaches the reader.
-func (e *Engine) drainUndefinedAtoms() {
+func drainUndefinedAtoms(e *Engine) {
 	for i := 0; i < e.tape.Len(); i++ {
 		und := e.tape.At(i)
 		if !und.Undefined || !e.registry.Check.IsActive() {
@@ -69,7 +69,7 @@ func (e *Engine) drainUndefinedAtoms() {
 //
 // Extracted from stepWord so the hot dispatch path stays under the cyclomatic-
 // complexity gate.
-func (e *Engine) tagCheckModeDefRead(top *Value, name string) {
+func tagCheckModeDefRead(e *Engine, top *Value, name string) {
 	switch {
 	case top.Dynamic:
 		top.SetDynFrom(name)
@@ -93,11 +93,11 @@ func (e *Engine) tagCheckModeDefRead(top *Value, name string) {
 // advisory over-fired ~190 false info across the voxgig-boru libraries. Extracted
 // from stepWord so the hot dispatch path stays under the cyclomatic-complexity
 // gate. See design/FORWARD-STRAND-ADVISORY.10.md, ERRORS.8.md §6.2.
-func (e *Engine) checkMixedFormAdvisories(w WordInfo, sig *Signature, positions []int, pos SrcPos, fwdCount, stkCount int) {
+func checkMixedFormAdvisories(e *Engine, w WordInfo, sig *Signature, positions []int, pos SrcPos, fwdCount, stkCount int) {
 	if !(e.registry.Check.IsActive() && fwdCount > 0 && stkCount > 0) {
 		return
 	}
-	e.checkForwardStrandsOperand(w, sig, positions, pos)
+	checkForwardStrandsOperand(e, w, sig, positions, pos)
 	if sig.TotalArgs() >= 3 && mixedFormStackSlotAny(e, sig, positions) {
 		e.registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code: "mixed_form_call",
@@ -122,7 +122,7 @@ func (e *Engine) checkMixedFormAdvisories(w WordInfo, sig *Signature, positions 
 // separates the genuine `1 2 add 3` gotcha (a stranded Number under `add`)
 // from a deliberately-kept value of an unrelated type left by an earlier
 // statement.
-func (e *Engine) checkForwardStrandsOperand(w WordInfo, sig *Signature, positions []int, pos SrcPos) {
+func checkForwardStrandsOperand(e *Engine, w WordInfo, sig *Signature, positions []int, pos SrcPos) {
 	// Deepest stack position the word consumed, and its sig slot.
 	minStack := -1
 	minSigPos := -1
@@ -200,7 +200,7 @@ func (e *Engine) checkForwardStrandsOperand(w WordInfo, sig *Signature, position
 // Without the top-is-dynamic and trailing-token gates a genuine all-stack
 // dynamic dispatch (`get key dyn`, `dyn 5 add`) would be refused although it
 // compiles faithfully, so both gates are load-bearing.
-func (e *Engine) refuseForwardStackDrift(sig *Signature, positions []int) {
+func refuseForwardStackDrift(e *Engine, sig *Signature, positions []int) {
 	es := e.registry.Check.Recorder()
 	if !es.active() || sig == nil || sig.BarrierPos == 0 || sig.fullStack() || len(positions) < 2 {
 		return
@@ -254,7 +254,7 @@ func (e *Engine) refuseForwardStackDrift(sig *Signature, positions []int) {
 // stranded fn at the residual tail (to the wrong value). The bare statement-tail
 // apply `m.double 21` never reaches here — nothing dispatches above the fn — so
 // it keeps compiling. No-op outside a compile pass (recorder inactive).
-func (e *Engine) refuseStrandedMemberFn(positions []int) {
+func refuseStrandedMemberFn(e *Engine, positions []int) {
 	es := e.registry.Check.Recorder()
 	if !es.active() {
 		return
@@ -333,7 +333,7 @@ func valueCarriesCarrier(v Value) bool {
 // a wrong constant. A user TYPE binding (a type literal, Carrier=false) or a
 // concrete literal binding is NOT a carrier and still folds. Walks nested paren-
 // exprs, lists, and map values; builtins (not in Defs) are ignored.
-func (e *Engine) exprRefsCarrier(items []Value) bool {
+func exprRefsCarrier(e *Engine, items []Value) bool {
 	r := e.registry
 	found := false
 	var walk func(vs []Value)
@@ -390,7 +390,7 @@ func (e *Engine) exprRefsCarrier(items []Value) bool {
 // the result is a real value, not a carrier, and nothing is recorded into the
 // parent's emit state) and returns the single concrete residual. The def stack
 // is snapshotted and restored so a stray binding cannot leak into the compile.
-func (e *Engine) concreteEvalOnce(items []Value) (Value, bool) {
+func concreteEvalOnce(e *Engine, items []Value) (Value, bool) {
 	r := e.registry
 	snap := r.Defs.Snapshot()
 	prev := r.Check.Mode
@@ -415,7 +415,7 @@ func (e *Engine) concreteEvalOnce(items []Value) (Value, bool) {
 // fns use: an anonymous lambda's static Returns is the conservative
 // [Any], and AnalyseFnBody recovers the real return type for downstream
 // type propagation.
-func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Value, captures []CapturedBinding) error {
+func spliceAnonCheckResult(e *Engine, valIdx, nArgs int, sig *FnSig, args []Value, captures []CapturedBinding) error {
 	paramNames := make([]string, len(sig.Params))
 	for i, p := range sig.Params {
 		paramNames[i] = p.Name
@@ -424,7 +424,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 	if len(result) == 0 {
 		result = []Value{NewCarrier(TAny)}
 	}
-	e.spliceFnCheckTail(valIdx, nArgs, result)
+	spliceFnCheckTail(e, valIdx, nArgs, result)
 	return nil
 }
 
@@ -441,7 +441,7 @@ func (e *Engine) spliceAnonCheckResult(valIdx, nArgs int, sig *FnSig, args []Val
 // call site records a CALL_USER — identical to the named-fn path. See
 // design/boru-bytecode-stage3-inlining-plan.0.md "THE shared crux:
 // body-bearing fn-VALUE dispatch (__pa)".
-func (e *Engine) spliceFnValueCheckResult(valIdx, nArgs int, fnDef FnDefInfo, sig *FnSig, args []Value) error {
+func spliceFnValueCheckResult(e *Engine, valIdx, nArgs int, fnDef FnDefInfo, sig *FnSig, args []Value) error {
 	returns := buildFnBodyReturnsFn(e.registry, fnDef.Name, *sig, fnDef)
 	result := returns(args, e.registry)
 	if len(result) == 0 && len(sig.Returns) > 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
@@ -453,7 +453,7 @@ func (e *Engine) spliceFnValueCheckResult(valIdx, nArgs int, fnDef FnDefInfo, si
 			result[i] = NewCarrier(t)
 		}
 	}
-	e.spliceFnCheckTail(valIdx, nArgs, result)
+	spliceFnCheckTail(e, valIdx, nArgs, result)
 	return nil
 }
 
@@ -461,7 +461,7 @@ func (e *Engine) spliceFnValueCheckResult(valIdx, nArgs int, fnDef FnDefInfo, si
 // tape and splices the check-mode result carriers in their place. Shared by
 // spliceAnonCheckResult and spliceFnValueCheckResult so the two check-mode
 // fn-value paths cannot diverge in their stack discipline.
-func (e *Engine) spliceFnCheckTail(valIdx, nArgs int, result []Value) {
+func spliceFnCheckTail(e *Engine, valIdx, nArgs int, result []Value) {
 	indices := e.resolvedIndicesBefore(nArgs)
 	if len(indices) == nArgs && nArgs > 0 {
 		firstArgIdx := indices[0]
@@ -501,7 +501,7 @@ func (e *Engine) spliceFnCheckTail(valIdx, nArgs int, result []Value) {
 // keys stay disjoint across the boundary via the per-registry scopeID prefix
 // (§5a), so a module fn and a parent fn of the same name cannot alias. See
 // design/module-fn-checkstate-ownership.1.md §5b.
-func (e *Engine) shareCheckState(capturedReg *Registry) func() {
+func shareCheckState(e *Engine, capturedReg *Registry) func() {
 	return shareCheckStateFrom(capturedReg, e.registry)
 }
 
@@ -535,7 +535,7 @@ func shareCheckStateFrom(owner, caller *Registry) func() {
 // states the intent. Structurally silent on the `def name fn […]`
 // idiom: there the smaller-arity probe FAILS, no commit happens, and
 // this helper is never reached.
-func (e *Engine) noteSpeculativeBarrierCommit(fwd ForwardInfo) {
+func noteSpeculativeBarrierCommit(e *Engine, fwd ForwardInfo) {
 	if e.registry == nil || !e.registry.Check.IsActive() || !fwd.Speculative {
 		return
 	}
@@ -581,7 +581,7 @@ func (e *Engine) noteSpeculativeBarrierCommit(fwd ForwardInfo) {
 // un-collapsed (the spellings' collection orders diverge beyond one
 // argument — same edge as the compile side). Returns the possibly-shrunk
 // closeIdx.
-func (e *Engine) checkModeParenFnCollapse(openIdx, closeIdx int) int {
+func checkModeParenFnCollapse(e *Engine, openIdx, closeIdx int) int {
 	if !e.registry.Check.Mode {
 		return closeIdx
 	}
@@ -639,7 +639,7 @@ func (e *Engine) checkModeParenFnCollapse(openIdx, closeIdx int) int {
 // preferred (normal stack order); any shortfall is filled from
 // values after the pointer, skipping control tokens. Types are not
 // verified — this is the "assume" path.
-func (e *Engine) checkModeFallbackPositions(n int) []int {
+func checkModeFallbackPositions(e *Engine, n int) []int {
 	positions := e.resolvedIndicesBefore(n)
 	remaining := n - len(positions)
 	// depth tracks open forward-groups entered during this walk so the close that
@@ -692,14 +692,14 @@ func (e *Engine) checkModeFallbackPositions(n int) []int {
 // assume-sig path (which would emit a spurious no_signature and often
 // land on Any). Returns handled=false when no nearby candidate arg is
 // a surface carrier requiring w.
-func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
+func checkModeSurfaceShape(e *Engine, w WordInfo, pos SrcPos) (bool, error) {
 	// Locate a surface-typed candidate arg requiring w among the
 	// nearby positions (same neighbourhood the assume-sig path
 	// gathers; MaxArgs would over-collect, 4 covers surface op
 	// arities in practice).
 	var sinfo *SurfaceInfo
 	var shape Value
-	for _, p := range e.checkModeFallbackPositions(4) {
+	for _, p := range checkModeFallbackPositions(e, 4) {
 		v := e.tape.At(p)
 		// A position AFTER the pointer may still hold the raw Word
 		// token (forward args resolve during collection, which the
@@ -742,17 +742,17 @@ func (e *Engine) checkModeSurfaceShape(w WordInfo, pos SrcPos) (bool, error) {
 	normalizeSig(synth)
 
 	n := synth.TotalArgs()
-	positions := e.checkModeFallbackPositions(n)
+	positions := checkModeFallbackPositions(e, n)
 	args := make([]Value, len(positions))
 	for i, p := range positions {
 		args[i] = e.tape.At(p)
 	}
 	results := carrierResults(e.registry, w.Name, synth, args, pos, nil, false)
-	e.spliceCheckResults(positions, results)
+	spliceCheckResults(e, positions, results)
 	return true, nil
 }
 
-func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signature, pos SrcPos) error {
+func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signature, pos SrcPos) error {
 	// Gather candidate positions once and try to pick a signature
 	// whose arity matches and whose declared types are compatible
 	// with (or at least not contradicted by) the actual carrier
@@ -773,7 +773,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			continue
 		}
 		n := s.TotalArgs()
-		pos := e.checkModeFallbackPositions(n)
+		pos := checkModeFallbackPositions(e, n)
 		if len(pos) != n {
 			continue
 		}
@@ -817,7 +817,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	// ReturnsFn sees the short window — ReturnsFns are len-guarded).
 	if bestMatch < 0 {
 		fbn := best.TotalArgs()
-		bestSat := len(e.checkModeFallbackPositions(fbn)) == fbn
+		bestSat := len(checkModeFallbackPositions(e, fbn)) == fbn
 		if !bestHasFn || !bestSat {
 			for i := range fn.Signatures {
 				s := &fn.Signatures[i]
@@ -825,7 +825,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 					continue
 				}
 				n := s.TotalArgs()
-				if len(e.checkModeFallbackPositions(n)) != n {
+				if len(checkModeFallbackPositions(e, n)) != n {
 					continue
 				}
 				best = s
@@ -835,7 +835,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	}
 	sig := best
 	n := sig.TotalArgs()
-	positions := e.checkModeFallbackPositions(n)
+	positions := checkModeFallbackPositions(e, n)
 	// nStack is how many of the gathered positions are STACK args (before
 	// the pointer, ascending); the remainder are FORWARD args (after the
 	// pointer, source order). checkModeFallbackPositions lays them out in
@@ -900,7 +900,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// Feeding the raw tape order here was the prior `[1x]`-vs-`[x1]`
 		// operand-order divergence. Only refuse when poly isn't safe.
 		if sw := sigOrderArgs(args, nStack); dispatchTryRecordPoly(e.registry, w.Name, sig, sw, out, pos, true, nil, false, noMatchProbe.spec(fn, sw)) {
-			e.spliceCheckResults(positions, out)
+			spliceCheckResults(e, positions, out)
 			return nil
 		}
 		// A single-overload user fn over a disjunct-typed operand recovers here
@@ -926,12 +926,12 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 			if plan := dispatchCompileUserPolyArms(e.registry, es, w.Name, sw, sig.Returns); plan != nil {
 				plan.substituteJoinedOuts(out)
 				es.RecordUserPolyCall(w.Name, e.registry, plan.sigIdx, plan.units, plan.impls, plan.sigs, sw, out, pos)
-				e.spliceCheckResults(positions, out)
+				spliceCheckResults(e, positions, out)
 				return nil
 			}
 		}
 		e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
-		e.spliceCheckResults(positions, out)
+		spliceCheckResults(e, positions, out)
 		return nil
 	}
 	// No disjunct partition. When an operand is an Any-typed carrier — a value
@@ -959,7 +959,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// PolyRef.Reg then equals the VM's own registry — the no-op the
 		// get/add path already relied on.
 		if sw := sigOrderArgs(args, nStack); dispatchTryRecordPoly(e.registry, w.Name, sig, sw, results, pos, false, e.registry, true, noMatchProbe.spec(fn, sw)) {
-			e.spliceCheckResults(positions, results)
+			spliceCheckResults(e, positions, results)
 			return nil
 		}
 		// A SINGLE-overload user/module fn recovered over an Any-typed operand:
@@ -987,7 +987,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// defers to the interpreter; a no-match raises the shared rich
 		// diagnostic over the bounded slice).
 		if e.tryRecordUnmatchedDispatchTrap(w, fn, pos) {
-			e.spliceCheckResults(positions, results)
+			spliceCheckResults(e, positions, results)
 			return nil
 		}
 		// On a REAL compile pass (Compiling) the MarkUncompilable already refuses
@@ -1007,7 +1007,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 				Col:    pos.Col,
 			})
 		}
-		e.spliceCheckResults(positions, results)
+		spliceCheckResults(e, positions, results)
 		return nil
 	}
 	// A no-signature dispatch reached here UNDER A SUSPENDED outer recovery
@@ -1055,7 +1055,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 				results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 				resume()
 				if sw := sigOrderArgs(args, nStack); dispatchTryRecordPoly(e.registry, w.Name, sig, sw, results, pos, false, e.registry, true, noMatchProbe.spec(fn, sw)) {
-					e.spliceCheckResults(positions, results)
+					spliceCheckResults(e, positions, results)
 					recovered = true
 				}
 			}
@@ -1136,7 +1136,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 	e.registry.Check.SuppressBodyErrors++
 	results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 	e.registry.Check.SuppressBodyErrors--
-	e.spliceCheckResults(positions, results)
+	spliceCheckResults(e, positions, results)
 	return nil
 }
 
@@ -1144,7 +1144,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 // candidate positions and splices the synthesised carrier results in
 // at the word's slot — the shared tail of the check-mode recovery
 // paths (assume-sig and the S2 surface-shape typing).
-func (e *Engine) spliceCheckResults(positions []int, results []Value) {
+func spliceCheckResults(e *Engine, positions []int, results []Value) {
 	indices := append([]int{e.pointer}, positions...)
 	// Insertion sort (small n).
 	for i := 1; i < len(indices); i++ {

@@ -328,7 +328,7 @@ func TestS7CheckModeFallbackPositionsSkipsMarkers(t *testing.T) {
 	// A Mark token after the pointer is skipped; the Integer beyond it is
 	// gathered.
 	e := engWithTape(t, []Value{NewInteger(0), NewMark("m"), NewInteger(9)}, 0)
-	got := e.checkModeFallbackPositions(1)
+	got := checkModeFallbackPositions(e, 1)
 	if len(got) != 1 || got[0] != 2 {
 		t.Errorf("positions = %v, want [2] (skipped the Mark)", got)
 	}

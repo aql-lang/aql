@@ -68,12 +68,12 @@ func TestW9ShapedMethodApplyWindowRejects(t *testing.T) {
 	e := &Engine{registry: r}
 	e.tape = NewTape([]Value{NewCarrier(TAny), NewInteger(1)}, stackHeadroom)
 	// Member payload is not an FnDefInfo → decline.
-	if _, _, ok := e.shapedMethodApplyWindow(0, NewInteger(1)); ok {
+	if _, _, ok := shapedMethodApplyWindow(e, 0, NewInteger(1)); ok {
 		t.Error("a non-FnDef member must decline")
 	}
 	// FnDefInfo whose owning registry does not resolve the name → decline.
 	member := NewFunction(FnDefInfo{Registry: r, Name: "w9missing"})
-	if _, _, ok := e.shapedMethodApplyWindow(0, member); ok {
+	if _, _, ok := shapedMethodApplyWindow(e, 0, member); ok {
 		t.Error("an unresolvable member fn must decline")
 	}
 }
@@ -110,7 +110,7 @@ func TestW9TryDynamicFnValueDispatchNonInertWindow(t *testing.T) {
 	// A dynamic Function-bearing carrier followed by a WORD (non-inert): the
 	// window admission declines the model.
 	e.tape = NewTape([]Value{NewDynamicCarrier(TFunction), NewWord("w")}, stackHeadroom)
-	if e.tryDynamicFnValueDispatch(0) {
+	if tryDynamicFnValueDispatch(e, 0) {
 		t.Error("a word in the forward window must decline the dynamic-fn model")
 	}
 }
