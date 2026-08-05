@@ -163,6 +163,15 @@ describe('parse battery', () => {
     ['[,1]', 'ERR [boru/syntax_error]: empty list element: remove the leading/repeated comma (write `none` for an explicit empty value)'],
     ['{a:<b/>}', '{a:<b/>}'],
     ['{a:<b x=1/>}', 'ERR xml: attribute "x" in <b> must have a quoted value'],
+    // Empty and comment-only sources, dangling reach dots, list-pair
+    // maps, and the mini-literal sugar (Go-pinned).
+    ['', ''],
+    ['   ', ''],
+    ['# only a comment', ''],
+    ['. x', 'ERR [boru/syntax_error]: `.` member access has no receiver'],
+    ['! . x', 'ERR [boru/syntax_error]: `.` member access has no receiver'],
+    ['[x:Integer]', '[{x:word(Integer)}]'],
+    ["+m'src'", "sugar(mini m 'src')"],
     ['<a href=>x</a>', 'ERR xml: attribute "href" in <a> must have a quoted value'],
     ["<a 'x'/>", 'ERR xml: invalid attribute name in <a>'],
     ['<a>${1}</a>', 'interp-xml(<a>${1}</a>)'],
@@ -264,6 +273,13 @@ describe('parse battery', () => {
     ['Box<T extends Integer,U>', 'sugar(angle Box [word(T) word(extends) word(Integer) word(U)])'],
     ['def Box<T> (refine List)', 'word(def) sugar(angle Box [word(T)]) paren([word(refine) word(List)])'],
   ]
+  it('deep nesting refuses at the TS-safe bound; shallow nesting parses', () => {
+    const deep = '['.repeat(501) + '1' + ']'.repeat(501)
+    assert.match(render(deep), /evaluation_limit.*depth limit of 500/)
+    const ok = '['.repeat(200) + '1' + ']'.repeat(200)
+    assert.equal(render(ok), '['.repeat(200) + '1' + ']'.repeat(200))
+  })
+
   for (const [src, want] of rows) {
     it(JSON.stringify(src), () => {
       assert.equal(render(src), want)
