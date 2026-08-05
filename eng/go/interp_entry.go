@@ -148,31 +148,3 @@ func (r *Registry) noteBail(site, reason string) {
 	}
 	(*fp)(BailEvent{Site: site, Reason: reason})
 }
-
-// vmDefer builds a designed defer-to-interpreter error (the internal_error
-// class runtimeShouldFallback resolves by re-running) AND reports it to the
-// runtime-bail hook — the single choke point every reachable designed-defer
-// site in the VM routes through, so the executed bail census sees each defer
-// exactly once with a stable site tag.
-func vmDefer(r *Registry, curDebug []SrcPos, pc int, site, msg string) error {
-	r.noteBail(site, msg)
-	return vmErrAt(curDebug, pc, msg)
-}
-
-// vmDeferAlt is vmDefer carrying a best-effort user-facing raise for the
-// fence-blocked arm (BoruError.DeferAlt): when the interpreter re-run this
-// defer requests is blocked by the effect fence, the caller surfaces alt —
-// the rich diagnostic the defer site built over its live values — instead of
-// the internal error. A nil alt is plain vmDefer.
-func vmDeferAlt(r *Registry, curDebug []SrcPos, pc int, site, msg string, alt *BoruError) error {
-	err := vmDefer(r, curDebug, pc, site, msg)
-	if alt == nil {
-		return err
-	}
-	ae, ok := err.(*BoruError)
-	if !ok { //covergate:allow vmErrAt always builds a *BoruError (§compiler)
-		return err
-	}
-	ae.DeferAlt = alt
-	return ae
-}

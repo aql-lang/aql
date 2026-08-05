@@ -52,29 +52,6 @@ func RunResolved(r *Registry, inputs, tokens []Value) ([]Value, error) {
 	return runPooledAt(r, input, len(inputs), false)
 }
 
-// runIslandResolved is RunResolved with the island flow-escape contract
-// (Engine.flowUnwind): a break/continue escaping the run tears down the
-// island's live frames and returns no values, leaving the registry FlowCtrl
-// flag set for the VM to translate (escapedFlow).
-func runIslandResolved(r *Registry, inputs, tokens []Value) ([]Value, error) {
-	input := make([]Value, len(inputs)+len(tokens))
-	copy(input, inputs)
-	copy(input[len(inputs):], tokens)
-	e := r.takeSubEngine()
-	e.isTop = false
-	e.startAt = len(inputs)
-	e.flowUnwind = true
-	res, err := e.Run(input)
-	if len(res) > 0 {
-		res = append([]Value(nil), res...)
-	}
-	e.isTop = false
-	e.startAt = 0
-	e.flowUnwind = false
-	r.putSubEngine(e)
-	return res, err
-}
-
 func runPooledAt(r *Registry, tokens []Value, startAt int, top bool) ([]Value, error) {
 	e := r.takeSubEngine()
 	e.isTop = top
