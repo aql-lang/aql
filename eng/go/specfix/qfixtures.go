@@ -1,4 +1,4 @@
-package specrunner
+package specfix
 
 import (
 	"fmt"

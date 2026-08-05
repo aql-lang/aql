@@ -58,6 +58,16 @@
       authority: "primary"
       metadata: { repository: "boru-lang/boru" }
     }
+    {
+      id: "src:coverage-parity"
+      kind: "text"
+      locator: "design/ENG-COVERAGE-PARITY.0.md"
+      title: "eng standalone coverage-parity program"
+      retrieved_at: null
+      content_hash: "coverage-parity-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
   ]
   entities: [
     { key: "boru", type: "Concept", label: "boru language"
@@ -109,6 +119,8 @@
     { key: "lang-eng-audit", type: "Document", label: "design/LANG-ENG-CONTENT-AUDIT.0.md" }
     { key: "completeness-review", type: "Document", label: "design/checker-compiler-completeness-review.0.md"
       attributes: { role: "the 2026-08 checker/compiler completeness review and its §9 implementation record — the living index of the HOF-compilation graduations and the remaining frontier work" } }
+    { key: "coverage-parity", type: "Document", label: "design/ENG-COVERAGE-PARITY.0.md"
+      attributes: { role: "the standalone 100%/100% coverage program for eng/go and eng/ts: the ratcheting gate floors (make cover-gate-eng, make test-ts), the gap inventories, and the staged plans" } }
     { key: "org", type: "Organization", label: "boru-lang" }
   ]
   assertions: [
@@ -311,6 +323,16 @@
       object: { kind: "entity", entity: "design-notes" }
       evidence: [{ source: "src:completeness-review", locator: "title",
         quote: "Type checker + bytecode compiler — completeness review" }]
+      confidence: 0.95 }
+    { subject: "coverage-parity", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:coverage-parity", locator: "title",
+        quote: "ENG-COVERAGE-PARITY.0 — the standalone 100%/100% program for the kernel twins" }]
+      confidence: 0.95 }
+    { subject: "coverage-parity", predicate: "supports"
+      object: { kind: "entity", entity: "eng-go" }
+      evidence: [{ source: "src:coverage-parity", locator: "The contract",
+        quote: "eng proves itself with its OWN suite, on both implementations." }]
       confidence: 0.95 }
   ]
 }

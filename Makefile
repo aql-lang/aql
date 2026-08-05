@@ -1,5 +1,5 @@
 .PHONY: all build install test test-race test-ts vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
-        spec-gen spec-test \
+        spec-gen spec-test cover-gate-eng \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-basic publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
@@ -186,11 +186,18 @@ bench:
 # @voxgig/borueng mirrors the Go kernel and must stay row-for-row green on
 # the SAME eng/spec/*.tsv corpus as the Go engspec runner. Runs the
 # typechecker then the node:test suite (Node >= 24, type-stripping).
+# The line-coverage threshold is the TS half of the standalone-parity
+# ratchet (design/ENG-COVERAGE-PARITY.0.md; Go statements ≡ TS lines,
+# both measured by the engine's OWN suite): raise TS_GATE_LINES as
+# coverage grows towards the 100% target; never lower it.
+TS_GATE_LINES ?= 85
 test-ts:
 	@echo "==> typecheck eng/ts"
 	cd eng/ts && npx tsc
-	@echo "==> test eng/ts"
-	cd eng/ts && node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'
+	@echo "==> test eng/ts (line-coverage floor $(TS_GATE_LINES)%)"
+	cd eng/ts && node --test --experimental-strip-types --no-warnings \
+	  --experimental-test-coverage --test-coverage-lines=$(TS_GATE_LINES) \
+	  'src/**/*.test.ts'
 
 # ---- cross-engine differential -----------------------------------------
 #
@@ -402,6 +409,24 @@ cover-gate:
 	@$(MAKE) --no-print-directory cover-profile
 	@$(MAKE) --no-print-directory cover-check
 	@echo "==> cover-gate done"
+
+# cover-gate-eng — the STANDALONE kernel gate (design/ENG-COVERAGE-
+# PARITY.0.md): eng/go profiled by ITS OWN suite only (the standalone
+# corpus lanes in eng/go/corpus_standalone_test.go plus the unit/seam
+# tests), no other module's tests contributing. The floor is a RATCHET
+# towards the 100% target: raise it as standalone coverage grows;
+# never lower it. The TS twin's ratchet lives in `make test-ts`
+# (node --test line-coverage threshold) — the two gates are the parity
+# pair (Go statements ≡ TS lines).
+ENG_GATE_FLOOR ?= 87
+cover-gate-eng:
+	@mkdir -p $(COVER_DIR)
+	@echo "==> cover-gate-eng (standalone, floor $(ENG_GATE_FLOOR)%)"
+	@( cd eng/go && go test -timeout 25m \
+	  -coverpkg=github.com/boru-lang/boru/eng/go/... \
+	  -coverprofile=$(abspath $(COVER_DIR))/eng_standalone.xout ./... > $(abspath $(COVER_DIR))/eng_standalone.log 2>&1 ) \
+	  || { echo "==> cover-gate-eng test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/eng_standalone.log; exit 1; }
+	@cd test/go && go run ./covergate -threshold $(ENG_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/eng_standalone.xout
 
 cover:
 	@mkdir -p $(COVER_DIR)

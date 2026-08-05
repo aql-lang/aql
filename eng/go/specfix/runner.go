@@ -10,10 +10,11 @@
 // The caller supplies a Run function that does the parse-and-evaluate
 // step. Rendering lives in `eng.Canon`, which emits canonical boru source
 // — a form that re-parses to the same stack.
-package specrunner
+package specfix
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -22,6 +23,13 @@ import (
 
 	"github.com/boru-lang/boru/eng/go"
 )
+
+// ErrSkipRow is the sentinel a Run / RenderRun returns to SKIP a row
+// rather than evaluate it. eng's standalone corpus run uses it for the
+// handful of rows that need the content layer (basic) — the Emailon /
+// Urlon constructions — which the full harness in test/go/engspec
+// still executes with basic installed.
+var ErrSkipRow = errors.New("specfix: row skipped by the runner")
 
 // Run executes one spec row's input and returns the resulting stack.
 // Returning an error is the row's way of signalling that the input
@@ -85,6 +93,9 @@ func RunFile(t *testing.T, path string, run Run) {
 		name := fmt.Sprintf("L%d_%s", lineNum, sanitiseSpecName(input))
 		t.Run(name, func(t *testing.T) {
 			out, runErr := run(input)
+			if errors.Is(runErr, ErrSkipRow) {
+				t.Skip("row needs the content layer — covered by the full harness")
+			}
 
 			if strings.HasPrefix(expected, "ERROR:") {
 				want := expected[len("ERROR:"):]
@@ -171,6 +182,9 @@ func RunFileRendered(t *testing.T, path string, run RenderRun) {
 		name := fmt.Sprintf("L%d_%s", lineNum, sanitiseSpecName(input))
 		t.Run(name, func(t *testing.T) {
 			got, runErr := run(input)
+			if errors.Is(runErr, ErrSkipRow) {
+				t.Skip("row needs the content layer — covered by the full harness")
+			}
 
 			if strings.HasPrefix(expected, "ERROR:") {
 				want := expected[len("ERROR:"):]

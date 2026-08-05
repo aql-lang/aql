@@ -4638,13 +4638,17 @@ func (e *Engine) evalInterpParts(parts []InterpPart) (s string, dynamic bool, ho
 			// A CHECK-MODE CARRIER part means the value is only known at
 			// runtime — flag it so the caller does not bake the carrier's render
 			// as a constant string. ValToString of a carrier yields a type tag
-			// ("dynamic(Any)"), which the runtime never produces. Test for the
-			// carrier flag specifically, NOT !IsConcrete: at run time there are
-			// no carriers, but there ARE legitimate non-concrete values — None
-			// and bare type literals (e.g. `${typeof x}`) — which stringify to
-			// real text ("None", "Integer") and must not collapse the whole
-			// interpolation to a String carrier.
-			if r.Carrier {
+			// ("dynamic(Any)"), which the runtime never produces. The probe is
+			// RECURSIVE: a hole like `${[1 add 2]}` auto-evaluates to a real
+			// LIST whose element is the dispatch's carrier — the container's own
+			// Carrier flag is false, but its render still embeds the type tag.
+			// It stays a carrier probe specifically, NOT !IsConcrete: at run
+			// time there are no carriers, but there ARE legitimate
+			// non-concrete values — None and bare type literals (e.g.
+			// `${typeof x}`) — which stringify to real text ("None",
+			// "Integer") and must not collapse the whole interpolation to a
+			// String carrier.
+			if valueCarriesCarrier(r) {
 				dynamic = true
 			}
 			buf.WriteString(ValToString(r))
@@ -4660,6 +4664,34 @@ func (e *Engine) evalInterpParts(parts []InterpPart) (s string, dynamic bool, ho
 		}
 	}
 	return buf.String(), dynamic, holes, holesOK, nil
+}
+
+// valueCarriesCarrier reports whether v is a check-mode carrier or a
+// container holding one at any depth — the shape a hole's auto-eval
+// leaves when a list/map literal embeds a computed element. Used by the
+// interpolation bake probe above; at run time there are no carriers, so
+// the walk is check-mode-only work.
+func valueCarriesCarrier(v Value) bool {
+	if v.Carrier {
+		return true
+	}
+	switch d := v.Data.(type) {
+	case ListPayload:
+		for _, e := range d.Elems {
+			if valueCarriesCarrier(e) {
+				return true
+			}
+		}
+	case MapPayload:
+		if d.M != nil {
+			for _, k := range d.M.Keys() {
+				if mv, ok := d.M.Get(k); ok && valueCarriesCarrier(mv) {
+					return true
+				}
+			}
+		}
+	}
+	return false
 }
 
 // evalXmlInterp evaluates an interpolated XML literal skeleton (Word/__XI)

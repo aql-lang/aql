@@ -151,6 +151,16 @@ func TestEveryAttachedCodeLiteralIsWellFormed(t *testing.T) {
 				strings.HasSuffix(path, "_test.go") {
 				return nil
 			}
+			// eng/go/specfix is TEST SCAFFOLDING that happens to live as a
+			// real package (the standalone corpus lanes and the engspec
+			// harness share it): its fixture words mint harness-local codes
+			// (fn_invalid_spec — mirrored verbatim by the TS fixture,
+			// eng/ts/src/spec-fixture.ts) that are not language dispatch
+			// contracts, so they stay out of the enumeration the same way
+			// cmd/go's LSP protocol strings do (see codeSourceRoots).
+			if strings.Contains(filepath.ToSlash(path), "/specfix/") {
+				return nil
+			}
 			src, err := os.ReadFile(path)
 			if err != nil {
 				return err
@@ -201,6 +211,16 @@ func mintableCodes(t *testing.T) map[string]string {
 			}
 			if d.IsDir() || !strings.HasSuffix(path, ".go") ||
 				strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			// eng/go/specfix is TEST SCAFFOLDING that happens to live as a
+			// real package (the standalone corpus lanes and the engspec
+			// harness share it): its fixture words mint harness-local codes
+			// (fn_invalid_spec — mirrored verbatim by the TS fixture,
+			// eng/ts/src/spec-fixture.ts) that are not language dispatch
+			// contracts, so they stay out of the enumeration the same way
+			// cmd/go's LSP protocol strings do (see codeSourceRoots).
+			if strings.Contains(filepath.ToSlash(path), "/specfix/") {
 				return nil
 			}
 			src, err := os.ReadFile(path)

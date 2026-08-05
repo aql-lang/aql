@@ -5,7 +5,7 @@
 // installs them — every fixture word and dispatch branch is exercised by
 // a spec row whose expected value is pinned from the existing golden
 // corpus under eng/spec and lang/spec).
-package specrunner
+package specfix
 
 import (
 	"errors"

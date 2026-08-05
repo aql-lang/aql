@@ -9,7 +9,7 @@
 // The kernel-only spec suite (q-suffixed fixtures, eng.RegisterCoreWords,
 // specs at eng/spec/) lives next door at test/go/engspec — it tests the
 // engine kernel in isolation. The shared TSV scaffolding lives in
-// test/go/specrunner.
+// test/go/specfix.
 //
 // Both spec tests live in the test module so neither eng nor lang has a
 // dep on test — the dep arrows point one way: test → eng, test → lang.
@@ -22,10 +22,10 @@ import (
 
 	"github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/specfix"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/test/go/specrunner"
 )
 
 // specClock freezes time at a fixed instant so temporal words (`now`,
@@ -53,7 +53,7 @@ func TestSpecProdTCODisabled(t *testing.T) {
 
 func runSpecProd(t *testing.T, tcoDisabled bool) {
 	specDir := filepath.Join("..", "..", "..", "lang", "spec")
-	specrunner.RunDir(t, specDir, func(input string) ([]eng.Value, error) {
+	specfix.RunDir(t, specDir, func(input string) ([]eng.Value, error) {
 		values, err := parser.Parse(input)
 		if err != nil {
 			return nil, err
@@ -66,7 +66,7 @@ func runSpecProd(t *testing.T, tcoDisabled bool) {
 		// Install the shared q-suffixed spec fixtures so tsv files
 		// originally written for engspec (object, record, inspect, …)
 		// can run under the production setup too.
-		specrunner.RegisterQFixtures(reg)
+		specfix.RegisterQFixtures(reg)
 		// Wire the parser so the boru-implemented modules (report, test)
 		// can parse their source on import — exactly what lang.New() does
 		// in production. Without this `import "boru:report"` fails with

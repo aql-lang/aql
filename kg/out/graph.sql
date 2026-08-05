@@ -21,6 +21,9 @@ INSERT INTO sources VALUES ('src:cli-md', 'text', 'CLI.md', 'CLI.md subcommand r
 INSERT INTO sources VALUES ('src:completeness-review', 'text', 'design/checker-compiler-completeness-review.0.md', 'Type checker + bytecode compiler — completeness review', NULL, 'completeness-review-2026-08', 'primary', '{
   "repository": "boru-lang/boru"
 }');
+INSERT INTO sources VALUES ('src:coverage-parity', 'text', 'design/ENG-COVERAGE-PARITY.0.md', 'eng standalone coverage-parity program', NULL, 'coverage-parity-2026-08', 'primary', '{
+  "repository": "boru-lang/boru"
+}');
 INSERT INTO sources VALUES ('src:readme', 'text', 'README.md', 'boru README', NULL, 'readme-2026-07', 'primary', '{
   "repository": "boru-lang/boru"
 }');
@@ -44,6 +47,8 @@ INSERT INTO entities VALUES ('ent:Document:3955423872539901697', 'Document', 'HO
 INSERT INTO entities VALUES ('ent:Document:4163489813681141089', 'Document', 'README.md', 'readme.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:481508614007064969', 'Document', 'REFERENCE.md', 'reference.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:4990200910103175455', 'Document', 'CLI.md', 'cli.md', 'accepted');
+INSERT INTO entities VALUES ('ent:Document:5105101056062860425', 'Document', 'design/ENG-COVERAGE-PARITY.0.md', 'design/eng-coverage-parity.0.md', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Document:5105101056062860425', 'role', 'the standalone 100%/100% coverage program for eng/go and eng/ts: the ratcheting gate floors (make cover-gate-eng, make test-ts), the gap inventories, and the staged plans');
 INSERT INTO entities VALUES ('ent:Document:520435226487613788', 'Document', 'design/ notes', 'design/ notes', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:5292060467150439417', 'Document', 'NUR.md', 'nur.md', 'accepted');
 INSERT INTO entities VALUES ('ent:Document:6176355086953937469', 'Document', 'TUTORIAL.md', 'tutorial.md', 'accepted');
@@ -153,6 +158,10 @@ INSERT INTO assertions VALUES ('ast:897358123486782210', 'ent:Document:329441563
 INSERT INTO assertion_evidence VALUES ('ast:897358123486782210', 'src:completeness-review', 'title', 'Type checker + bytecode compiler — completeness review', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:914658451831503592', 'ent:Document:6176355086953937469', 'supports', 'entity', 'ent:Concept:3854395902791518463', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:914658451831503592', 'src:readme', 'Documentation', 'Tutorial | You are new to boru and want to learn it step by step.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:9216246464349064781', 'ent:Document:5105101056062860425', 'supports', 'entity', 'ent:Product:1578575807542004434', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:9216246464349064781', 'src:coverage-parity', 'The contract', 'eng proves itself with its OWN suite, on both implementations.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:999583482530779094', 'ent:Document:5105101056062860425', 'part_of', 'entity', 'ent:Document:520435226487613788', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:999583482530779094', 'src:coverage-parity', 'title', 'ENG-COVERAGE-PARITY.0 — the standalone 100%/100% program for the kernel twins', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:999962917132771020', 'ent:Document:3521225411209893772', 'supports', 'entity', 'ent:Product:1578575807542004434', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:999962917132771020', 'src:audit', '7A', 'the parser emits kernel STRUCTURAL MARKERS; the engine lowers each marker to word dispatches', 'direct_record', 'kg-ingest');
 INSERT INTO schema_proposals VALUES ('schema-proposal:7752279147991378124', 'entity_type', 'SoftwareModule', 'A buildable code module or package within a software repository.', 'Repository modules are currently typed Product, which blurs shipped artifacts and source-tree modules.', 'requires_approval', '[

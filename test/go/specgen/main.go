@@ -71,11 +71,11 @@ import (
 
 	eng "github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/specfix"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/capabilities"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/test/go/specrunner"
 	"github.com/boru-lang/boru/test/go/vary"
 )
 
@@ -151,7 +151,7 @@ func run(input string) ([]eng.Value, error) {
 	if err != nil {
 		return nil, err
 	}
-	specrunner.RegisterQFixtures(reg)
+	specfix.RegisterQFixtures(reg)
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
 	native.SetHostClock(reg, specClock)
@@ -1031,7 +1031,7 @@ func extendFive(passingPath, len123PassingPath, passOut, checkOut, compileOut, r
 				fmt.Fprintf(os.Stderr, "specgen -extend5: registry: %v\n", e2)
 				osExit(1)
 			}
-			specrunner.RegisterQFixtures(reg)
+			specfix.RegisterQFixtures(reg)
 			reg.SetParseFunc(parser.Parse)
 			modules.InstallResolver(reg)
 			native.SetHostClock(reg, specClock)

@@ -723,3 +723,19 @@ asymmetry that `design/REFINE-NEWTYPE-VS-SUBSET.10.md` removed.
 Builtins and objects keep `DefaultBehavior` / nominal object matching,
 where `v.Is(t)` coincides with `v.Parent.ConformsTo(t)` on concrete
 values — so routing returns through `v.Is` left them unchanged.
+
+## Standalone coverage parity with eng/ts
+
+The kernel proves itself with its OWN suite on both implementations —
+see `design/ENG-COVERAGE-PARITY.0.md` for the contract. Two ratchet
+gates enforce it (floors only rise, target 100% on both):
+
+- `make cover-gate-eng` — eng/go by eng/go's tests alone
+  (`ENG_GATE_FLOOR`), on top of the repo-wide merged ADR-008 gate.
+- `make test-ts` — the eng/ts suite with its line-coverage floor
+  (`TS_GATE_LINES`); Go statements ≡ TS lines is the parity metric.
+
+The standalone corpus lanes live in `corpus_standalone_test.go`
+(interpret / check / compile-or-fallback over `eng/spec` with the
+`specfix` fixtures); when you raise standalone coverage, raise the
+matching floor in the same PR.

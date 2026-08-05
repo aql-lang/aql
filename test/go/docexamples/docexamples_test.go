@@ -6,7 +6,7 @@
 // — canonical boru source, which is the value form the docs are written
 // in (quoted strings, lowercase `none`, comma-free lists/maps, `name/q`
 // atoms). This is the same renderer the .tsv spec suites use
-// (test/go/specrunner), so a passing example round-trips as written Boru.
+// (eng/go/specfix), so a passing example round-trips as written Boru.
 package docexamples
 
 import (
