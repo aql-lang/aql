@@ -134,12 +134,43 @@ describe('parse battery', () => {
     ["<a b='${2}'/>", 'interp-xml(<a b="${2}"/>)'],
     ['<a><b>${3}</b></a>', 'interp-xml(<a><b>${3}</b></a>)'],
     ['<a><!-- c --></a>', '<a/>'],
+
+    // Arrow-fold shapes: bare, in lists and parens, mid-stream folds;
+    // the map-value positions the fold rejects.
+    ['x => [1]', 'word(x) sugar(lambda) [1]'],
+    ['[a => [1]]', '[paren([word(a) sugar(lambda) [1]])]'],
+    ['(x => [x 1])', 'paren([paren([word(x) sugar(lambda) [word(x) 1]])])'],
+    ['a b => [1]', 'word(a) paren([word(b) sugar(lambda) [1]])'],
+    ['{f: x => [x]}', 'ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here'],
+
+    // Angle sugar composing with words and multi-arg pairs.
+    ['Box<Integer> of [1]', 'sugar(angle Box [word(Integer)]) word(of) [1]'],
+    ['{p: Pair<A B>}', '{p:sugar(angle Pair [word(A) word(B)])}'],
+
+    // Interpolation segment shapes.
+    ['` plain `', "' plain '"],
+    ['`${1}${2}`', 'interp(${1} ${2})'],
+    ["`a${'s'}b`", "interp('a' ${'s'} 'b')"],
+
+    // Unterminated containers: parens error, lists/maps auto-close.
+    ['(1', 'ERR [boru/syntax_error]: unmatched opening parenthesis'],
+    ['1 (2 3', 'ERR [boru/syntax_error]: unmatched opening parenthesis'],
+    ['[1', '[1]'],
+    ['{a:1', '{a:1}'],
+    ["'unterm", "ERR [boru/syntax_error]: this string is never closed: 'unterm"],
   ]
   for (const [src, want] of rows) {
     it(JSON.stringify(src), () => {
       assert.equal(render(src), want)
     })
   }
+
+  it('folds map-value dot-chains into paren groups', () => {
+    for (const src of ['{n: bf.n}', '{n: a.b.c}', '{n: bf!.n}']) {
+      const got = canon(parse(src))
+      assert.ok(got.startsWith('{n:paren('), `${src} -> ${got}`)
+    }
+  })
 
   it('builds reach nodes for dotted chains', () => {
     for (const src of ['x.y', 'x.y.z', 'm.a.b.c', '$.name', 'x.0', "x.'k'"]) {
