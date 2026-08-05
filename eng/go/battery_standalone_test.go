@@ -283,6 +283,29 @@ func TestVmOpcodeBattery(t *testing.T) {
 	})
 }
 
+// TestStoredFnBattery drives the stored-fn compile paths: repeated
+// calls, fn-calling-fn chains, fn values rebound and reused, and
+// overloaded fns dispatching by type.
+func TestStoredFnBattery(t *testing.T) {
+	runBattery(t, []batteryRow{
+		// Repeated calls to one stored fn.
+		{input: "def f fn [[x:Integer] [Integer] [x addq 1]] f 1 f 2 f 3", want: "2 3 4"},
+		// A chain of stored fns.
+		{input: "def g fn [[x:Integer] [Integer] [x mulq 2]] def f fn [[x:Integer] [Integer] [g (x addq 1)]] f 3", want: "8"},
+		// The same fn used in a loop body and at top level.
+		{input: "def f fn [[x:Integer] [Integer] [x addq 10]] for 2 [f i] f 5", want: "10 11 15"},
+		// An fn VALUE bound, rebound through a paren, and applied.
+		{input: "def f (fn [[x:Integer] [Integer] [x addq 1]]) def g (f) (g 4)",
+			wantErr: "no signature matches"},
+		// Overloads: two sigs on one name dispatch by type.
+		{input: "def f fn [[x:Integer] [Integer] [x addq 1] [s:String] [String] [s concatq '!']] f 1 f 'a'", want: "2 'a!'"},
+		// A zero-arg fn called twice.
+		{input: "def z fn [[] [Integer] [7]] (z) addq (z)", want: "14"},
+		// Fn results feeding fn args.
+		{input: "def f fn [[x:Integer] [Integer] [x addq 1]] f (f (f 0))", want: "3"},
+	})
+}
+
 // TestRangeLoopBattery drives the range-form for: static ranges with
 // every arity, negative steps, and computed bounds (const start/step,
 // runtime end) that still lower to FOR_SETUP.
