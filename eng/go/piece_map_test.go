@@ -101,6 +101,20 @@ var upwardRefs = []struct {
 		allowed: map[string]bool{},
 	},
 	{
+		// The check piece's dispatch-recovery braid — core's step loop
+		// reaches it only through the S9 checkBraid slot table
+		// (dispatch_slots.go), never by name.
+		name: "check braid call (S9)",
+		re: regexp.MustCompile(`(^|[^.\w])(checkMixedFormAdvisories|checkModeAssumeSig|` +
+			`checkModeFallbackPositions|checkModeParenFnCollapse|checkModeSurfaceShape|` +
+			`concreteEvalOnce|drainUndefinedAtoms|exprRefsCarrier|noteSpeculativeBarrierCommit|` +
+			`refuseForwardStackDrift|refuseStrandedMemberFn|shareCheckState|spliceAnonCheckResult|` +
+			`spliceCheckResults|spliceFnCheckTail|spliceFnValueCheckResult|tagCheckModeDefRead|` +
+			`tryDynamicFnValueDispatch|tryMemberFnArrivalDispatch|tryShapedMethodDispatch|` +
+			`undefinedWordCheckDiag)\(`),
+		allowed: map[string]bool{},
+	},
+	{
 		// Named compiler-piece record/fold/bake entry points — the check
 		// piece routes these through the S3 dispatch-hook carrier, and
 		// core does not touch them at all (the drift-window offer rides

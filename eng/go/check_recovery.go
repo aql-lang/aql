@@ -1172,3 +1172,31 @@ func spliceCheckResults(e *Engine, positions []int, results []Value) {
 	e.tape.Splice(insertAt, 0, results...)
 	e.pointer = insertAt
 }
+
+// installCheckBraid wires the braid into core's S9 slot table; one
+// registration point so the cut moves it wholesale into the check
+// package's init.
+func installCheckBraid() {
+	checkBraid.checkMixedFormAdvisories = checkMixedFormAdvisories
+	checkBraid.checkModeAssumeSig = checkModeAssumeSig
+	checkBraid.checkModeFallbackPositions = checkModeFallbackPositions
+	checkBraid.checkModeParenFnCollapse = checkModeParenFnCollapse
+	checkBraid.checkModeSurfaceShape = checkModeSurfaceShape
+	checkBraid.concreteEvalOnce = concreteEvalOnce
+	checkBraid.drainUndefinedAtoms = drainUndefinedAtoms
+	checkBraid.exprRefsCarrier = exprRefsCarrier
+	checkBraid.noteSpeculativeBarrierCommit = noteSpeculativeBarrierCommit
+	checkBraid.refuseForwardStackDrift = refuseForwardStackDrift
+	checkBraid.refuseStrandedMemberFn = refuseStrandedMemberFn
+	checkBraid.shareCheckState = shareCheckState
+	checkBraid.spliceAnonCheckResult = spliceAnonCheckResult
+	checkBraid.spliceCheckResults = spliceCheckResults
+	checkBraid.spliceFnValueCheckResult = spliceFnValueCheckResult
+	checkBraid.tagCheckModeDefRead = tagCheckModeDefRead
+	checkBraid.tryDynamicFnValueDispatch = tryDynamicFnValueDispatch
+	checkBraid.tryMemberFnArrivalDispatch = tryMemberFnArrivalDispatch
+	checkBraid.tryShapedMethodDispatch = tryShapedMethodDispatch
+	checkBraid.undefinedWordCheckDiag = undefinedWordCheckDiag
+}
+
+func init() { installCheckBraid() }

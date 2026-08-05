@@ -1561,7 +1561,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 	// at the source token; here we only need to replace any dangling
 	// Undefined atoms with `Any` carriers so the residual stack stays
 	// type-clean for downstream consumers of CheckResult.Stack.
-	drainUndefinedAtoms(e)
+	checkBraid.drainUndefinedAtoms(e)
 
 	return e.reconcileTopResidual(e.tape.TakeAll()), nil
 }
@@ -2459,7 +2459,7 @@ func (e *Engine) stepWordUsurp(val Value, w WordInfo) error {
 	v, ok := ResolveUsurp(e.registry, w.Name)
 	if !ok {
 		if e.registry != nil && e.registry.analysisActive() {
-			e.registry.noteAnalysisDiagnostic(undefinedWordCheckDiag(e, w.Name, val.Pos()))
+			e.registry.noteAnalysisDiagnostic(checkBraid.undefinedWordCheckDiag(e, w.Name, val.Pos()))
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
 			placeholder.Undefined = true
@@ -2546,7 +2546,7 @@ func (e *Engine) stepWordRef(val Value, w WordInfo) error {
 	v, ok := ResolveRef(e.registry, w.Name)
 	if !ok {
 		if e.registry != nil && e.registry.analysisActive() {
-			e.registry.noteAnalysisDiagnostic(undefinedWordCheckDiag(e, w.Name, val.Pos()))
+			e.registry.noteAnalysisDiagnostic(checkBraid.undefinedWordCheckDiag(e, w.Name, val.Pos()))
 			placeholder := NewAtom(w.Name)
 			placeholder.pos = val.pos
 			placeholder.Undefined = true
@@ -2811,7 +2811,7 @@ func (e *Engine) stepWord(val Value) error {
 			// macros) use the explicit `def name word [list]` form, whose
 			// __SP marker is handled in stepLiteral.
 			if e.registry.analysisActive() {
-				tagCheckModeDefRead(e, &top, w.Name)
+				checkBraid.tagCheckModeDefRead(e, &top, w.Name)
 			}
 			e.tape.Set(e.pointer, top)
 			return e.stepLiteral()
@@ -2908,7 +2908,7 @@ func (e *Engine) stepWord(val Value) error {
 		if !e.registry.analysisActive() {
 			return e.undefinedWordError(w.Name, val.Pos())
 		}
-		e.registry.noteAnalysisDiagnostic(undefinedWordCheckDiag(e, w.Name, val.Pos()))
+		e.registry.noteAnalysisDiagnostic(checkBraid.undefinedWordCheckDiag(e, w.Name, val.Pos()))
 		v := NewAtom(w.Name)
 		v.pos = val.pos
 		v.Undefined = true
@@ -2986,10 +2986,10 @@ func (e *Engine) stepWord(val Value) error {
 			// (Self := the surface node) — the contract guarantees the
 			// operation for every member, so this is a correct typing,
 			// not a degrade; no diagnostic.
-			if handled, herr := checkModeSurfaceShape(e, w, val.Pos()); handled {
+			if handled, herr := checkBraid.checkModeSurfaceShape(e, w, val.Pos()); handled {
 				return herr
 			}
-			return checkModeAssumeSig(e, w, fn, &fn.Signatures[0], val.Pos())
+			return checkBraid.checkModeAssumeSig(e, w, fn, &fn.Signatures[0], val.Pos())
 		}
 		return e.sigError(w.Name, fn, val.Pos())
 	}
@@ -3009,7 +3009,7 @@ func (e *Engine) stepWord(val Value) error {
 	// Extracted from stepWord to keep this hot dispatch path under the
 	// cyclomatic-complexity gate; diagnostics only — no effect on execution
 	// or dispatch. See design/FORWARD-STRAND-ADVISORY.10.md.
-	checkMixedFormAdvisories(e, w, sig, positions, val.Pos(), fwdCount, stkCount)
+	checkBraid.checkMixedFormAdvisories(e, w, sig, positions, val.Pos(), fwdCount, stkCount)
 
 	// Compile-mode stranded-member-fn guard (design/EDGE-SPEC-FINDINGS.0.md §2):
 	// a parked user-fn value surfaced from a container read (`m.double`) AUTO-
@@ -3019,7 +3019,7 @@ func (e *Engine) stepWord(val Value) error {
 	// the residual tail) diverges. Refuse so the body falls back. The
 	// statement-tail apply (`m.double 21`, nothing dispatches above the fn) is
 	// unaffected — its residual [fn, 21] lowers to the correct trailing apply.
-	refuseStrandedMemberFn(e, positions)
+	checkBraid.refuseStrandedMemberFn(e, positions)
 
 	// Forward collection needed: defer execution.
 	if fwdCount > 0 {
@@ -3053,7 +3053,7 @@ func (e *Engine) stepWord(val Value) error {
 	if driftWindowRecorder != nil && driftWindowRecorder(e, w, sig, positions) {
 		return nil
 	}
-	refuseForwardStackDrift(e, sig, positions)
+	checkBraid.refuseForwardStackDrift(e, sig, positions)
 
 	// Immediate execution: read args from recorded positions.
 	match := &MatchResult{Sig: sig, Positions: positions, Name: w.Name}
@@ -3872,7 +3872,7 @@ func (e *Engine) stepLiteral() error {
 		// compile pass and records a guarded mid-stream OpCallDynMethod.
 		// Declines (leaving today's paths untouched) outside a live compile
 		// pass and for any window/match shape it cannot prove.
-		if e.registry.analysisActive() && tryShapedMethodDispatch(e, valIdx) {
+		if e.registry.analysisActive() && checkBraid.tryShapedMethodDispatch(e, valIdx) {
 			return nil
 		}
 		// Container-member fn arrival-apply (REFUSAL-CLOSURE.0 §3): a
@@ -3881,7 +3881,7 @@ func (e *Engine) stepLiteral() error {
 		// mid-expression (`m.double 21 eq 42` applies BEFORE `eq`). Declines
 		// leave the carrier to today's paths (the statement-tail Finalize
 		// apply, refuseStrandedMemberFn's sound refusal).
-		if e.registry.analysisActive() && tryMemberFnArrivalDispatch(e, valIdx) {
+		if e.registry.analysisActive() && checkBraid.tryMemberFnArrivalDispatch(e, valIdx) {
 			return nil
 		}
 		// General dynamic-fn-value dispatch (method_shape.go): a DYNAMIC carrier
@@ -3890,7 +3890,7 @@ func (e *Engine) stepLiteral() error {
 		// plain-check surface, clearing the arg-stranding the compiled path lowers
 		// via resolveDynamicApply. Declines outside plain check and for any
 		// non-callable bound or non-inert window.
-		if e.registry.analysisActive() && tryDynamicFnValueDispatch(e, valIdx) {
+		if e.registry.analysisActive() && checkBraid.tryDynamicFnValueDispatch(e, valIdx) {
 			return nil
 		}
 		// If the value is a Function, execute it. Quoted function
@@ -4728,7 +4728,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 			// (the determinism check sees the same coerced 0 twice). exprRefsCarrier
 			// catches that; a user TYPE binding (Carrier=false) still folds.
 			topFrame := e.registry.analysisRecorder().topFrameOnly()
-			if e.registry.analysisActive() && topFrame && !exprRefsCarrier(e, items) {
+			if e.registry.analysisActive() && topFrame && !checkBraid.exprRefsCarrier(e, items) {
 				if folded, ok := e.constFoldContainerVal(items); ok {
 					// Bake the computed value as a const EXCEPT in a `make`
 					// construction body (dataMap) when the value is shared-mutable: a
@@ -4781,7 +4781,7 @@ func (e *Engine) autoEvalMap(val Value, dataMap, consumed bool) (Value, error) {
 		// eval the interpreter runs) so the map bakes as a const. Same gating and
 		// mutation-safety screen as the ParenExpr branch.
 		if e.registry.analysisActive() &&
-			e.registry.analysisRecorder().topFrameOnly() && !exprRefsCarrier(e, []Value{v}) {
+			e.registry.analysisRecorder().topFrameOnly() && !checkBraid.exprRefsCarrier(e, []Value{v}) {
 			if folded, ok := e.constFoldContainerVal([]Value{v}); ok {
 				if (!dataMap && !e.elemEvalRecordable) || !containsSharedMutable(folded) {
 					out.Set(resolvedKey, folded)
@@ -4958,11 +4958,11 @@ func (e *Engine) constFoldContainerVal(items []Value) (Value, bool) {
 	if e.exprHasEffect(items) {
 		return Value{}, false
 	}
-	one, ok := concreteEvalOnce(e, items)
+	one, ok := checkBraid.concreteEvalOnce(e, items)
 	if !ok {
 		return Value{}, false
 	}
-	two, ok := concreteEvalOnce(e, items)
+	two, ok := checkBraid.concreteEvalOnce(e, items)
 	if !ok || !constFoldAgrees(one, two) {
 		return Value{}, false
 	}
@@ -5310,7 +5310,7 @@ func (e *Engine) execFnDefLiteral(valIdx int) error {
 						match.Args[i] = e.tape.At(pos)
 					}
 				}
-				restoreCheck := shareCheckState(e, fnDef.Registry)
+				restoreCheck := checkBraid.shareCheckState(e, fnDef.Registry)
 				err := e.execMatch(match)
 				restoreCheck()
 				return err
@@ -5470,10 +5470,10 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 		nArgs := len(sig.Params)
 		if nArgs == 0 {
 			if checkMode {
-				return spliceAnonCheckResult(e, valIdx, 0, sig, nil, fnDef.Captured)
+				return checkBraid.spliceAnonCheckResult(e, valIdx, 0, sig, nil, fnDef.Captured)
 			}
 			if checkFnValue && len(sig.body()) > 0 {
-				return spliceFnValueCheckResult(e, valIdx, 0, fnDef, sig, nil)
+				return checkBraid.spliceFnValueCheckResult(e, valIdx, 0, fnDef, sig, nil)
 			}
 			return e.execFnDefSig(valIdx, sig, nil, fnDef.Registry, fnDef.Anonymous)
 		}
@@ -5521,10 +5521,10 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 					args[j] = e.tape.At(resolvedIdx[ri])
 				}
 				if checkMode {
-					return spliceAnonCheckResult(e, valIdx, nArgs, sig, args, fnDef.Captured)
+					return checkBraid.spliceAnonCheckResult(e, valIdx, nArgs, sig, args, fnDef.Captured)
 				}
 				if checkFnValue && len(sig.body()) > 0 {
-					return spliceFnValueCheckResult(e, valIdx, nArgs, fnDef, sig, args)
+					return checkBraid.spliceFnValueCheckResult(e, valIdx, nArgs, fnDef, sig, args)
 				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry, fnDef.Anonymous)
 			}
@@ -5559,10 +5559,10 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 					args[j] = e.tape.At(resolvedIdx[startIdx+j])
 				}
 				if checkMode {
-					return spliceAnonCheckResult(e, valIdx, nArgs, sig, args, fnDef.Captured)
+					return checkBraid.spliceAnonCheckResult(e, valIdx, nArgs, sig, args, fnDef.Captured)
 				}
 				if checkFnValue && len(sig.body()) > 0 {
-					return spliceFnValueCheckResult(e, valIdx, nArgs, fnDef, sig, args)
+					return checkBraid.spliceFnValueCheckResult(e, valIdx, nArgs, fnDef, sig, args)
 				}
 				return e.execFnDefSig(valIdx, sig, args, fnDef.Registry, fnDef.Anonymous)
 			}
@@ -5811,7 +5811,7 @@ func (e *Engine) execFnDefSig(valIdx int, sig *FnSig, args []Value, capturedReg 
 				fnLabel = fd.Name
 			}
 		}
-		restoreCheck := shareCheckState(e, capturedReg)
+		restoreCheck := checkBraid.shareCheckState(e, capturedReg)
 		var result []Value
 		var err error
 		if e.registry.analysisMode() {
@@ -6458,7 +6458,7 @@ func (e *Engine) commitBarrierForward() bool {
 	// slot from the very word now acting as the boundary. Emitted
 	// before the mechanics below so e.pointer still names the
 	// boundary word.
-	noteSpeculativeBarrierCommit(e, fwd)
+	checkBraid.noteSpeculativeBarrierCommit(e, fwd)
 
 	// Commit exactly like the collection-complete path (stepLiteral's
 	// CollectedArgs >= ExpectedArgs branch): drop the marker, force the
@@ -7509,7 +7509,7 @@ func (e *Engine) stepCloseParen() error {
 		// interpreter nets — checkModeParenFnCollapse (the §9.4 def-split
 		// FP fix; it guards on check mode itself and was extracted for the
 		// stepCloseParen complexity cap).
-		closeIdx = checkModeParenFnCollapse(e, openIdx, closeIdx)
+		closeIdx = checkBraid.checkModeParenFnCollapse(e, openIdx, closeIdx)
 	}
 
 	// Remove the close paren (higher index first) and open paren.
@@ -8498,7 +8498,7 @@ func (e *Engine) tryRecordRecoveredUserFn(sig *Signature, fn *FnDefInfo, args []
 		return false
 	}
 	recovered := sig.ReturnsFn(sigOrderArgs(args, nStack), e.registry)
-	spliceCheckResults(e, positions, recovered)
+	checkBraid.spliceCheckResults(e, positions, recovered)
 	return true
 }
 
@@ -8600,7 +8600,7 @@ func (e *Engine) tryRecordUnmatchedDispatchTrap(w WordInfo, fn *FnDefInfo, pos S
 			maxN = n
 		}
 	}
-	window := checkModeFallbackPositions(e, maxN)
+	window := checkBraid.checkModeFallbackPositions(e, maxN)
 	// The forward walk can collect positions INSIDE a not-yet-evaluated paren
 	// group (checkModeFallbackPositions depth-tracks rather than stopping at
 	// an open paren). The interpreter pre-evaluates the paren before its
