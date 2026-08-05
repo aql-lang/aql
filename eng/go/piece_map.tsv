@@ -111,9 +111,9 @@ deadsig.go	check
 guard_predicate.go	check	
 store_shape.go	check	
 diag_render.go	check	
-stamp_report.go	check	
+stamp_report.go	core	state record: the stamp-event log is core-owned registry state (Stage 4a)
 emit.go	compiler	
-emit_recorder.go	check	S2 re-home: the check-facing recorder interface + inactive no-op + opaque handles	
+emit_recorder.go	core	state contract: the recorder interface + inactive no-op + opaque handles are core-owned data/interface shapes (Stage 4a)
 lower.go	compiler	
 bytecode.go	compiler	
 code_effect.go	compiler	
@@ -144,9 +144,9 @@ user_poly_plan.go	compiler
 check_ordering.go	check
 carrier_new.go	core
 vm_callback_unit.go	eng
-check_state.go	check
+check_state.go	core	state record: CheckState + severity + diagnostics are core-owned passive state (Stage 4a); the analysis ALGORITHMS stay check
 value_classify.go	core
 dispatch_hooks.go	check
 compile_pass_arming.go	compiler
 dispatch_slots.go	core
-check_specs.go	check
+check_specs.go	core	state record: the proved-spec data shapes are core-owned (Stage 4a)

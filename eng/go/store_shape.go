@@ -42,6 +42,7 @@ package eng
 // join-only (JoinCarriers), so sandbox rollbacks that cannot un-mutate
 // a shared pointee only ever WIDEN a claim — monotone, never unsound.
 type StoreShapeInfo struct {
+	PayloadBase
 	// Scope is the context-stack depth at mint time for context-layer
 	// shapes (stage-2 layering substrate); 0 for non-context containers
 	// (flex maps, patrun instances).

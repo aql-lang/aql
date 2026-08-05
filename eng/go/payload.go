@@ -359,7 +359,6 @@ func (SpliceInfo) payloadMarker()           {}
 func (SugarInfo) payloadMarker()            {}
 func (ReturnCheckInfo) payloadMarker()      {}
 func (DefCleanupInfo) payloadMarker()       {}
-func (GuardFactInfo) payloadMarker()        {}
 func (FrameOpenInfo) payloadMarker()        {}
 func (ModuleDesc) payloadMarker()           {}
 func (FnDefInfo) payloadMarker()            {}
@@ -367,7 +366,6 @@ func (FnUndefInfo) payloadMarker()          {}
 func (DisjunctInfo) payloadMarker()         {}
 func (NegationInfo) payloadMarker()         {}
 func (ChildTypeInfo) payloadMarker()        {}
-func (CodeEffectInfo) payloadMarker()       {}
 func (RecordTypeInfo) payloadMarker()       {}
 func (OptionsTypeInfo) payloadMarker()      {}
 func (TableTypeInfo) payloadMarker()        {}
@@ -384,7 +382,6 @@ func (XmlElementPayload) payloadMarker()    {}
 func (XmlInterpPayload) payloadMarker()     {}
 func (*FlexXmlData) payloadMarker()         {}
 func (*StoreInstanceInfo) payloadMarker()   {}
-func (*StoreShapeInfo) payloadMarker()      {}
 func (ResourceTypeInfo) payloadMarker()     {}
 func (ResourceInstanceInfo) payloadMarker() {}
 func (*TimeoutInfo) payloadMarker()         {}
@@ -392,9 +389,16 @@ func (*IntervalInfo) payloadMarker()        {}
 func (ErrorInfo) payloadMarker()            {}
 func (CalDurationData) payloadMarker()      {}
 func (DepScalarInfo) payloadMarker()        {}
-func (ClosurePayload) payloadMarker()       {}
 func (PathonInfo) payloadMarker()           {} // legacy; replaced by PathonPayload at Step 5b but may still flow through some paths
 
 // noneSentinel is kept for backward compat with code that reads it
 // directly. NewNone() now produces NonePayload below.
 func (noneSentinel) payloadMarker() {}
+
+// PayloadBase is the S6 seal extension (design/ENG-FOUR-PIECE.0.md): a
+// payload variant declared OUTSIDE core embeds PayloadBase to satisfy the
+// sealed Payload interface, since payloadMarker itself is only definable
+// beside the seal. Kernel-declared variants keep their direct markers.
+type PayloadBase struct{}
+
+func (PayloadBase) payloadMarker() {}

@@ -8,7 +8,7 @@ package eng
 // the checker compiles and runs with NO knowledge of the concrete *EmitState
 // beyond it. The emit implementation cluster — emit.go, lower.go,
 // callable_words.go — owns the concrete type and may type-assert
-// (`rec.(*EmitState)`) to reach recording internals.
+// (a concrete-type assert on the recorder) to reach recording internals.
 //
 // Lifecycle: CheckState.Emit holds the recorder. A PLAIN check pass runs
 // against the inactive no-op recorder (Begin installs it); the compile entry
@@ -76,7 +76,7 @@ type EmitRecorder interface {
 	noteMemberFnRead(id string, member Value)
 	memberFnRead(id string) bool
 	// Stage-0b promotions (design/ENG-FOUR-PIECE.0.md): the probes that
-	// used to require a concrete `.(*EmitState)` assert outside the emit
+	// used to require a concrete recorder assert outside the emit
 	// cluster. Inactive: false / zero / no-op.
 	inClosureUnit() bool
 	storedGradualActive() bool

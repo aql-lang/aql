@@ -2930,6 +2930,7 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 // `if [x is T] …` narrowed fine). Check-mode only; the runtime never
 // produces carriers.
 type GuardFactInfo struct {
+	PayloadBase
 	Toks []Value
 	// Prev is the payload the group actually reduced to (a BoolPayload for a
 	// statically-decided cond), preserved so LiteralCondValue can still read

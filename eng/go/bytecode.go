@@ -608,6 +608,7 @@ const (
 // unit's input convention (copied from CompiledFn at OpPushClosure) so the
 // driving handler shapes each input correctly.
 type ClosurePayload struct {
+	PayloadBase
 	Unit     int
 	Captures []Value
 	InShape  ClosureInShape

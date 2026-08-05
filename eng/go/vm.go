@@ -1099,24 +1099,6 @@ func (vc *vmContext) escapedFlow(regs ...*Registry) Opcode {
 	return 0
 }
 
-// isDelegationFnDef reports whether a Function VALUE is a trivial-delegation
-// wrapper — EVERY own sig is a `[Word(inner)]` pass-through to an inner native
-// (a module method like rand-int / MathUtil.sqrt), safely dispatched VM-native
-// via tryNativeFnApply. A user fn carries a REAL body, so it is NOT a delegation
-// and must island instead. An anonymous lambda or a sig-less value is not one.
-func isDelegationFnDef(fd FnDefInfo) bool {
-	sigs := fd.OwnSigs()
-	if len(sigs) == 0 {
-		return false
-	}
-	for i := range sigs {
-		if _, ok := trivialDelegationTarget(&sigs[i]); !ok {
-			return false
-		}
-	}
-	return true
-}
-
 // tryNativeFnApply dispatches a Function VALUE VM-native when it resolves to a
 // handler-bearing signature (a trivial-delegation native — a method field like
 // rand-int): MatchSignature over the dispatchable signatures picks the

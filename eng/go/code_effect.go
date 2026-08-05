@@ -34,6 +34,7 @@ package eng
 // ChildTypeInfo (the non-nil payload also keeps satisfying
 // positionalMatch's concrete-list rule for TList slots).
 type CodeEffectInfo struct {
+	PayloadBase
 	// In is the input types the body consumes from the stack, top
 	// first. Stage-1 producers analyse bodies against NO inputs (the
 	// `do` invocation shape, which runs its body in a fresh sub-stack),
