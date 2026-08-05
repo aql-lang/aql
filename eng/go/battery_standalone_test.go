@@ -335,6 +335,56 @@ func TestBakingBattery(t *testing.T) {
 	})
 }
 
+// TestDispatchFormBattery drives the forward-collection splits and
+// dispatch-modifier forms over the fixture vocabulary.
+func TestDispatchFormBattery(t *testing.T) {
+	runBattery(t, []batteryRow{
+		// The one split rule: all-forward, all-stack, and mixed splits.
+		{input: "addq 1 2", want: "3"},
+		{input: "1 2 addq", want: "3"},
+		{input: "1 addq 2", want: "3"},
+		{input: "subq 10 3", want: "-7"},
+		{input: "10 3 subq", want: "7"},
+		{input: "10 subq 3", want: "7"},
+		// Explicit dispatch modifiers.
+		{input: "1 2 addq/s", want: "3"},
+		{input: "addq/f 1 2", want: "3"},
+		{input: "addq/2 1 2", want: "3"},
+		// A quoted word via /q is data.
+		{input: "addq/q typeof", want: "Atom"},
+		// Modifier on a fixture fn.
+		{input: "def f fn [[x:Integer] [Integer] [x addq 1]] f/1 5", want: "6"},
+	})
+}
+
+// TestParenFnCheckBattery pins the paren-fn collapse shapes in check
+// mode: zero-arg fn values applied through parens, fn values named
+// bare, and paren groups over dynamic names.
+func TestParenFnCheckBattery(t *testing.T) {
+	rows := []struct {
+		input string
+		want  string
+	}{
+		{input: "def f (fn [[] [Integer] [7]]) (f)", want: "Integer"},
+		{input: "def f (fn [[] [Integer] [7]]) (f) addq (f)", want: "Number"},
+		{input: "def f (fn [[x:Integer] [Integer] [x]]) (f 1)", want: "Integer"},
+		{input: "(1 addq 2)", want: "Number"},
+		{input: "((1 addq 2))", want: "Number"},
+		{input: "(noretq 1)", want: "dynamic(Any) :: ~missing_returns"},
+	}
+	for _, row := range rows {
+		t.Run(row.input, func(t *testing.T) {
+			got, err := runBatteryCheck(t, row.input)
+			if err != nil {
+				t.Fatalf("check run: %v", err)
+			}
+			if got != row.want {
+				t.Errorf("check render = %q, want %q", got, row.want)
+			}
+		})
+	}
+}
+
 // TestRangeLoopBattery drives the range-form for: static ranges with
 // every arity, negative steps, and computed bounds (const start/step,
 // runtime end) that still lower to FOR_SETUP.
