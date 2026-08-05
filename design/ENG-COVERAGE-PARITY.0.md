@@ -134,10 +134,14 @@ ALIGNED (2026-08-05, probe rows moved into the shared table):
 - `refine Record`: the at-least-one-field and per-element pair guards
   now match the Go messages.
 
-REMAINING: the 1-arg bare `refine` (and the object-with-parent
-constructor path) is unported in TS. Where expressible, corpus rows
-should follow so the differential guards the aligned behaviors
-permanently.
+- the 1-arg bare `refine`: the base type passes through unchanged (the
+  paired `def` mints the subtype); a non-type argument raises the Go
+  message.
+
+The probe-surfaced backlog is CLOSED (the object-with-parent
+constructor path remains a fixture gap on both engines' corpora, not
+a divergence). Where expressible, corpus rows should follow so the
+differential guards the aligned behaviors permanently.
 
 ## Ratchet log
 

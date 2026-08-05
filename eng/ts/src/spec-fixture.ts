@@ -808,7 +808,25 @@ function registerSpecWords(r: Registry): void {
           return unsupportedMake('refine')
         },
       },
-      { args: [TAny], handler: () => unsupportedMake('refine') },
+      {
+        args: [TAny],
+        runInCheckMode: true,
+        // The 1-arg bare form: return the base type unchanged (the
+        // paired def mints the fresh subtype) — the Go fixture's
+        // refineBareCtorH is the reference. A non-type argument is the
+        // same error, message-for-message.
+        handler: (args) => {
+          const base = args[0]!
+          const isTypeBody =
+            base.data === null ||
+            base.data instanceof ClassTypeInfo ||
+            (base.data instanceof OrderedMap && base.vType.leaf() === 'Map')
+          if (!isTypeBody) {
+            throw new BoruError('type_error', `refine: argument must be a type, got ${base.toString()}`, 'refine')
+          }
+          return [base]
+        },
+      },
     ],
   })
 

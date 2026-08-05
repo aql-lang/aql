@@ -52,9 +52,12 @@ describe('fixture guard probes', () => {
     // do's escape hatch: a body error surfaces as an Error VALUE.
     ['do [notaword_xyz]', 'error(undefined word: notaword_xyz)'],
 
-    // refine Record guards (the Go reference messages).
+    // refine Record guards (the Go reference messages) and the 1-arg
+    // bare form: the base passes through; a non-type errors.
     ['refine Record []', { err: 'at least one field' }],
     ['refine Record [5]', { err: 'must be a pair' }],
+    ['refine Integer', 'Integer'],
+    ['refine 5', { err: 'must be a type' }],
 
     // fnsig arms.
     ['fnsig [1]', { err: 'multiple of 2' }],
