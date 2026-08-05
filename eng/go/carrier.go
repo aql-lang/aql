@@ -2845,7 +2845,7 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 		// orphaned into the Program (bytecode artifact + metric bloat). The
 		// def-stack convergence (r.Defs) is independent of the recording, so it
 		// proceeds across rounds untouched.
-		var cp emitCheckpoint
+		var cp EmitCheckpoint
 		if loopCapture {
 			cp = es.Checkpoint()
 			es.ArmBranchCapture()

@@ -67,7 +67,7 @@ func runBatteryCompiled(t *testing.T, input string) ([]eng.Value, bool, error) {
 			}
 		}
 		if !refuse {
-			if p, _, ok := rA.Check.Recorder().Finalize(residual); ok {
+			if p, _, ok := rA.Check.Recorder().(*eng.EmitState).Finalize(residual); ok {
 				prog = p
 			}
 		}

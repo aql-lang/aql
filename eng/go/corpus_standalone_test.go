@@ -147,7 +147,7 @@ func TestSpecCompiledStandalone(t *testing.T) {
 				}
 			}
 			if !refuse {
-				if p, _, ok := rA.Check.Recorder().Finalize(residual); ok {
+				if p, _, ok := rA.Check.Recorder().(*eng.EmitState).Finalize(residual); ok {
 					prog = p
 				}
 			}
@@ -203,7 +203,7 @@ func TestInterpNestedCarrierNoBake(t *testing.T) {
 	residual, runErr := eng.NewTop(rA).Run(values)
 	var prog *eng.Program
 	if runErr == nil {
-		if p, _, ok := rA.Check.Recorder().Finalize(residual); ok {
+		if p, _, ok := rA.Check.Recorder().(*eng.EmitState).Finalize(residual); ok {
 			prog = p
 		}
 	}

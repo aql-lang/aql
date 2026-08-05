@@ -3148,7 +3148,9 @@ type emitCheckpoint struct {
 
 // Checkpoint captures the rollback point. Nil-safe (returns a zero checkpoint
 // that Rollback ignores via the nil-receiver guard at its call site).
-func (es *EmitState) Checkpoint() emitCheckpoint {
+func (emitCheckpoint) isEmitCheckpoint() {}
+
+func (es *EmitState) Checkpoint() EmitCheckpoint {
 	if es == nil {
 		return emitCheckpoint{}
 	}
@@ -3175,7 +3177,11 @@ func (es *EmitState) Checkpoint() emitCheckpoint {
 // fn body inside a loop that ALSO needs multiple fixed-point rounds) is rare;
 // for it we keep the round's recording (the prior behaviour: a little bloat,
 // always correct) rather than risk corrupting an emitted unit.
-func (es *EmitState) Rollback(cp emitCheckpoint) {
+func (es *EmitState) Rollback(h EmitCheckpoint) {
+	cp, ok := h.(emitCheckpoint)
+	if !ok {
+		return
+	}
 	if es == nil || len(es.fnRecs) != cp.fnRecs {
 		return
 	}

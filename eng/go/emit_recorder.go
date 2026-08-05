@@ -42,7 +42,6 @@ type EmitRecorder interface {
 	// --- refusal + site accounting --------------------------------------
 	MarkUncompilable(reason string)
 	Sites() map[string]int
-	Finalize(residual []Value) (*Program, string, bool)
 
 	// SetCatchVariadic latches the NEXT catch-word (CompileFallbackBody)
 	// dispatch's recorded result as VARIADIC: `do` catches a body raise into
@@ -87,7 +86,6 @@ type EmitRecorder interface {
 	memberFnReadValue(id string) (Value, bool)
 	dynInputsProven(sig *Signature, args []Value) bool
 	materialise(v Value) (Value, bool)
-	resolveOperand(v Value) (emitOperand, bool)
 	zeroOutProduced(id string) bool
 	alreadyProduced(id string) bool
 
@@ -108,17 +106,14 @@ type EmitRecorder interface {
 	peekCaptureArm() bool
 	ArmLoopCapture()
 	ConsumeLoopArm() bool
-	TakeFragment() *EmitFragment
-	RecordBranch(b BranchRecord)
-	RecordLoop(start, end, step Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, regionN int, pos SrcPos)
 	SplitLoopRegionBind(name string, v Value) (Value, bool)
 	SplitEventRegionBind(name string, v Value) (Value, bool)
 	RecordInterpXml(tmpl XmlTmpl, holeVals []Value, out Value, pos SrcPos) bool
 	BeginLoopCarried()
 	EndLoopCarried()
 	NoteLoopCarried(name string, joined, pre Value)
-	Checkpoint() emitCheckpoint
-	Rollback(cp emitCheckpoint)
+	Checkpoint() EmitCheckpoint
+	Rollback(cp EmitCheckpoint)
 	CanSeatAcrossFragment(v Value) bool
 
 	// --- fn-unit compilation ---------------------------------------------
@@ -173,9 +168,6 @@ func (inactiveEmit) SetCatchVariadic(bool)   {}
 func (inactiveEmit) RecordDynBind(string, Value, SrcPos) {}
 func (inactiveEmit) NoteDefRead(string, string)          {}
 func (inactiveEmit) Sites() map[string]int               { return nil }
-func (inactiveEmit) Finalize([]Value) (*Program, string, bool) {
-	return nil, "no emit state", false
-}
 
 func (inactiveEmit) RecordCall(string, *Signature, []Value, []Value, SrcPos, bool, bool) {}
 func (inactiveEmit) RecordPoly(string)                                                   {}
@@ -210,7 +202,6 @@ func (inactiveEmit) noteMemberFnRead(string, Value)                         {}
 func (inactiveEmit) memberFnRead(string) bool                               { return false }
 func (inactiveEmit) dynInputsProven(*Signature, []Value) bool               { return false }
 func (inactiveEmit) materialise(v Value) (Value, bool)                      { return v, false }
-func (inactiveEmit) resolveOperand(Value) (emitOperand, bool)               { return emitOperand{}, false }
 func (inactiveEmit) zeroOutProduced(string) bool                            { return false }
 func (inactiveEmit) alreadyProduced(string) bool                            { return false }
 
@@ -227,20 +218,16 @@ func (inactiveEmit) ArmBranchCapture()                                {}
 func (inactiveEmit) peekCaptureArm() bool                             { return false }
 func (inactiveEmit) ArmLoopCapture()                                  {}
 func (inactiveEmit) ConsumeLoopArm() bool                             { return false }
-func (inactiveEmit) TakeFragment() *EmitFragment                      { return nil }
-func (inactiveEmit) RecordBranch(BranchRecord)                        {}
 func (inactiveEmit) SplitLoopRegionBind(string, Value) (Value, bool)  { return Value{}, false }
 func (inactiveEmit) SplitEventRegionBind(string, Value) (Value, bool) { return Value{}, false }
 
 func (inactiveEmit) RecordInterpXml(XmlTmpl, []Value, Value, SrcPos) bool { return false }
 
-func (inactiveEmit) RecordLoop(Value, Value, Value, *EmitFragment, []Value, string, Value, int, SrcPos) {
-}
 func (inactiveEmit) BeginLoopCarried()                    {}
 func (inactiveEmit) EndLoopCarried()                      {}
 func (inactiveEmit) NoteLoopCarried(string, Value, Value) {}
-func (inactiveEmit) Checkpoint() emitCheckpoint           { return emitCheckpoint{} }
-func (inactiveEmit) Rollback(emitCheckpoint)              {}
+func (inactiveEmit) Checkpoint() EmitCheckpoint           { return nil }
+func (inactiveEmit) Rollback(EmitCheckpoint)              {}
 func (inactiveEmit) CanSeatAcrossFragment(Value) bool     { return false }
 
 func (inactiveEmit) StartFnCompile(string, string, *Registry, []Value, []*Type, []string, []CapturedBinding, bool, SrcPos) (int, func([]Value), bool) {
@@ -251,3 +238,10 @@ func (inactiveEmit) SetUnitReturnPatterns(int, []*Value)      {}
 func (inactiveEmit) SetUnitDecl(int, DeclSite)                {}
 func (inactiveEmit) unitVariadic(int) bool                    { return false }
 func (inactiveEmit) unitNetsZero(int) bool                    { return false }
+
+// EmitCheckpoint is the opaque handle for a recording-pool snapshot: the
+// checker holds and returns it without any knowledge of the compiler's
+// concrete checkpoint contents (the S2 opaque-handle rule). The inactive
+// recorder hands out nil; the concrete Rollback ignores anything that is
+// not its own snapshot type.
+type EmitCheckpoint interface{ isEmitCheckpoint() }

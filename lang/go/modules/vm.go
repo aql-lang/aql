@@ -454,7 +454,7 @@ func compileInSubEngine(parent *native.Registry, src string) (native.Value, erro
 		return compileResultValue(false,
 			"check-mode suppressed a runtime error (uncompilable)", sites), nil
 	}
-	_, reason, ok := subReg.Check.Recorder().Finalize(residual)
+	_, reason, ok := subReg.Check.Recorder().(*native.EmitState).Finalize(residual)
 	if !ok {
 		return compileResultValue(false, reason, sites), nil
 	}

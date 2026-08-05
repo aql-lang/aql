@@ -42,14 +42,14 @@ func cifReturns(args []Value, r *Registry) []Value {
 			restore()
 			InstallJoinedDefs(r, nil, defs)
 		}
-		frag := es.Recorder().TakeFragment()
+		frag := testRecorderState(es).TakeFragment()
 		if len(stk) == 0 {
 			es.Recorder().MarkUncompilable("cif: branch produces no value")
 			return nil
 		}
 		out := stk[len(stk)-1]
 		taken := lit
-		es.Recorder().RecordBranch(BranchRecord{
+		testRecorderState(es).RecordBranch(BranchRecord{
 			ConstCond: &taken, HasElse: true,
 			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos(),
 		})
@@ -66,7 +66,7 @@ func cifReturns(args []Value, r *Registry) []Value {
 			}
 			es.Recorder().ArmBranchCapture()
 			stk, defs := RunCarrierBodyWithDefs(r, arg)
-			frag := es.Recorder().TakeFragment()
+			frag := testRecorderState(es).TakeFragment()
 			restore()
 			return frag, stk, defs, nil
 		}
@@ -79,7 +79,7 @@ func cifReturns(args []Value, r *Registry) []Value {
 	joined := JoinCarrierStacks(thenStk, elseStk)
 	if len(joined) == 0 {
 		out := NewCarrier(TNone)
-		es.Recorder().RecordBranch(BranchRecord{
+		testRecorderState(es).RecordBranch(BranchRecord{
 			Cond: args[0], HasElse: true,
 			Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
@@ -95,7 +95,7 @@ func cifReturns(args []Value, r *Registry) []Value {
 		}
 	}
 	out := joined[len(joined)-1]
-	es.Recorder().RecordBranch(BranchRecord{
+	testRecorderState(es).RecordBranch(BranchRecord{
 		Cond: args[0], HasElse: true,
 		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
@@ -354,4 +354,13 @@ func TestCarrierJoinHelpers(t *testing.T) {
 	if _, ok := LiteralCondValue(NewList([]Value{NewBoolean(true), NewBoolean(false)})); ok {
 		t.Error("two-element condition list misread as literal")
 	}
+}
+
+// testRecorderState unwraps the concrete backend for the branch-pipeline
+// fixtures; under a plain-check pass (inactive recorder) it returns a nil
+// *EmitState whose methods no-op via the kernel's nil-receiver guards —
+// the same decline the pre-S2 interface no-ops provided.
+func testRecorderState(c *CheckState) *EmitState {
+	es, _ := c.Recorder().(*EmitState)
+	return es
 }

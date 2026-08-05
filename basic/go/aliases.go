@@ -15,6 +15,7 @@ import (
 // *Type aliases — every exported type from borueng is re-exported here.
 type (
 	BranchRecord       = eng.BranchRecord
+	EmitState          = eng.EmitState
 	DeqIndex           = eng.DeqIndex
 	EmitFragment       = eng.EmitFragment
 	BoruError          = eng.BoruError

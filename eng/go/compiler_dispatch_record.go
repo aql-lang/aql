@@ -120,8 +120,8 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 // declines and the normal poly/get path stands. outs[0] is rewritten to the
 // element carrier so the value flowing on has the element's identity.
 func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
-	es := r.Check.Recorder()
-	if !es.active() || (!isGetWord(word) && !isGetrWord(word)) || len(args) != 2 || len(outs) != 1 {
+	es, _ := r.Check.Recorder().(*EmitState)
+	if es == nil || !es.active() || (!isGetWord(word) && !isGetrWord(word)) || len(args) != 2 || len(outs) != 1 {
 		return false
 	}
 	key, recv := args[0], args[1]

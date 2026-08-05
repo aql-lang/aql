@@ -52,7 +52,7 @@ func cforRun(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value,
 // cforReturns is the check-mode analysis + loop recording (the
 // forCarrierAnalyse shape, counted form only).
 func cforReturns(args []Value, r *Registry) []Value {
-	es := r.Check.Recorder()
+	es, _ := r.Check.Recorder().(*EmitState)
 	body := args[len(args)-1]
 	iter := NewCarrier(TInteger)
 	cv := args[0]
@@ -396,7 +396,7 @@ func TestLoopSignatureErrorMentionsShape(t *testing.T) {
 
 func TestEmitCheckpointRollback(t *testing.T) {
 	es := NewEmitState()
-	cp := es.Checkpoint()
+	cp := es.Checkpoint().(emitCheckpoint)
 	// Grow the const/type/interned pools after the checkpoint...
 	es.intern(NewInteger(424242))
 	es.internType(NewTypeLiteral(TInteger))

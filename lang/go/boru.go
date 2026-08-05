@@ -484,7 +484,7 @@ func (a *Boru) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	if a.registry.Check.AmbiguousGradualSplit {
 		return nil, "forward/stack split depends on a gradual operand (uncompilable)", res, nil
 	}
-	prog, reason, ok := a.registry.Check.Recorder().Finalize(residual)
+	prog, reason, ok := a.registry.Check.Recorder().(*eng.EmitState).Finalize(residual)
 	if !ok {
 		return nil, reason, res, nil
 	}

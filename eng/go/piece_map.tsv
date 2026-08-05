@@ -113,7 +113,7 @@ store_shape.go	check
 diag_render.go	check	
 stamp_report.go	check	
 emit.go	compiler	
-emit_recorder.go	compiler	
+emit_recorder.go	check	S2 re-home: the check-facing recorder interface + inactive no-op + opaque handles	
 lower.go	compiler	
 bytecode.go	compiler	
 code_effect.go	compiler	
@@ -149,3 +149,4 @@ value_classify.go	core
 dispatch_hooks.go	check
 compile_pass_arming.go	compiler
 dispatch_slots.go	core
+check_specs.go	check

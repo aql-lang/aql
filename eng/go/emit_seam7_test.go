@@ -49,9 +49,6 @@ func TestInactiveEmitMethods(t *testing.T) {
 	if v, ok := e.memberFnReadValue("id"); ok || v.Data != nil {
 		t.Fatal("inactive memberFnReadValue should miss")
 	}
-	if p, why, ok := e.Finalize(nil); p != nil || ok || why == "" {
-		t.Fatalf("inactive Finalize = %v %q %v", p, why, ok)
-	}
 
 	e.RecordCall("w", nil, nil, nil, SrcPos{}, false, false)
 	e.RecordPoly("w")
@@ -99,9 +96,6 @@ func TestInactiveEmitMethods(t *testing.T) {
 	if v, ok := e.materialise(in); ok || v.ID != in.ID {
 		t.Fatalf("inactive materialise = %v %v", v, ok)
 	}
-	if op, ok := e.resolveOperand(in); ok || op.kind != opNone {
-		t.Fatalf("inactive resolveOperand = %v %v", op, ok)
-	}
 	if e.zeroOutProduced("id") || e.alreadyProduced("id") {
 		t.Fatal("inactive produced probes should be false")
 	}
@@ -120,11 +114,6 @@ func TestInactiveEmitMethods(t *testing.T) {
 	if e.ConsumeLoopArm() {
 		t.Fatal("inactive ConsumeLoopArm should be false")
 	}
-	if e.TakeFragment() != nil {
-		t.Fatal("inactive TakeFragment should be nil")
-	}
-	e.RecordBranch(BranchRecord{})
-	e.RecordLoop(Value{}, Value{}, Value{}, nil, nil, "it", Value{}, 0, SrcPos{})
 	e.BeginLoopCarried()
 	e.EndLoopCarried()
 	e.NoteLoopCarried("n", Value{}, Value{})
@@ -1674,5 +1663,22 @@ func TestFnValueInputsPatternParamDefaultsAny(t *testing.T) {
 	}
 	if !inputs[1].Parent.Equal(TInteger) {
 		t.Errorf("a typed param must keep its type, got %v", inputs[1].Parent)
+	}
+}
+
+// TestEmitCheckpointHandle pins the S2 opaque-handle contract: the
+// inactive recorder hands out a nil EmitCheckpoint, and the concrete
+// Rollback ignores any handle that is not its own snapshot type (the
+// no-op decline the dropped interface no-ops used to provide).
+func TestEmitCheckpointHandle(t *testing.T) {
+	var e inactiveEmit
+	if e.Checkpoint() != nil {
+		t.Fatal("inactive Checkpoint should be nil")
+	}
+	e.Rollback(nil)
+	es := NewEmitState()
+	es.Rollback(nil) // not an emitCheckpoint: ignored
+	if cp := es.Checkpoint(); cp == nil {
+		t.Fatal("concrete Checkpoint should hand out a (possibly zero) snapshot")
 	}
 }

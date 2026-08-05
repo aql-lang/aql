@@ -27,6 +27,7 @@ type (
 	CheckFullStackFunc = eng.CheckFullStackFunc
 	CheckSeverity      = eng.CheckSeverity
 	CheckState         = eng.CheckState
+	EmitState          = eng.EmitState
 	ChildTypeInfo      = eng.ChildTypeInfo
 	CodeEffectInfo     = eng.CodeEffectInfo
 	ReachInfo          = eng.ReachInfo

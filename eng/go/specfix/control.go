@@ -73,7 +73,7 @@ func fixIf3Handler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, _ *e
 // fixCondFragment captures the condition body as its own fragment when
 // emitting, so the lowering runs it inline before JMP_IF_FALSE.
 func fixCondFragment(r *eng.Registry, cond eng.Value) (*eng.EmitFragment, []eng.Value) {
-	es := r.Check.Recorder()
+	es, _ := r.Check.Recorder().(*eng.EmitState)
 	if !es.Armed() || !eng.IsConcrete(cond) || !cond.Parent.ConformsTo(eng.TList) {
 		return nil, nil
 	}
@@ -115,14 +115,14 @@ func fixIf3ReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 			restore()
 			eng.InstallJoinedDefs(r, nil, defs)
 		}
-		frag := es.Recorder().TakeFragment()
+		frag := recorderState(es).TakeFragment()
 		if len(stk) == 0 {
 			es.Recorder().MarkUncompilable("fixture if: constant-cond branch produces no value")
 			return nil
 		}
 		out := stk[len(stk)-1]
 		taken := lit
-		es.Recorder().RecordBranch(eng.BranchRecord{
+		recorderState(es).RecordBranch(eng.BranchRecord{
 			ConstCond: &taken, HasElse: true,
 			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos(),
 		})
@@ -136,7 +136,7 @@ func fixIf3ReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 			restore := narrow()
 			es.Recorder().ArmBranchCapture()
 			stk, defs = eng.RunCarrierBodyWithDefs(r, v)
-			frag = es.Recorder().TakeFragment()
+			frag = recorderState(es).TakeFragment()
 			restore()
 			return frag, stk, defs, nil
 		}
@@ -155,7 +155,7 @@ func fixIf3ReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 	joined := eng.JoinCarrierStacks(thenStk, elseStk)
 	if len(joined) == 0 {
 		out := eng.NewCarrier(eng.TNone)
-		es.Recorder().RecordBranch(eng.BranchRecord{
+		recorderState(es).RecordBranch(eng.BranchRecord{
 			Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 			Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
@@ -166,7 +166,7 @@ func fixIf3ReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 		return []eng.Value{out}
 	}
 	out := joined[len(joined)-1]
-	es.Recorder().RecordBranch(eng.BranchRecord{
+	recorderState(es).RecordBranch(eng.BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
@@ -224,7 +224,7 @@ func fixForCountHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value,
 func fixForReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 	body := args[1]
 	iter := eng.NewCarrier(eng.TInteger)
-	es := r.Check.Recorder()
+	es, _ := r.Check.Recorder().(*eng.EmitState)
 
 	cv := args[0]
 	staticCount := int64(-1)
@@ -464,7 +464,7 @@ func fixForRangeHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value,
 func fixForRangeReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 	body := args[1]
 	iter := eng.NewCarrier(eng.TInteger)
-	es := r.Check.Recorder()
+	es, _ := r.Check.Recorder().(*eng.EmitState)
 
 	var startV, endV, stepV eng.Value
 	lowerable, staticBounds := false, false
@@ -635,4 +635,15 @@ func registerEngSpecHigherOrder(r *eng.Registry) {
 			},
 		},
 	})
+}
+
+// recorderState unwraps the concrete recording backend behind the check
+// state's recorder. A plain-check pass runs the inactive no-op recorder;
+// the nil *EmitState this returns then no-ops every method (the kernel's
+// nil-receiver guards), exactly as the interface no-ops did before the
+// S2 surface reduction removed the fragment/branch methods from the
+// check-facing interface.
+func recorderState(c *eng.CheckState) *eng.EmitState {
+	es, _ := c.Recorder().(*eng.EmitState)
+	return es
 }

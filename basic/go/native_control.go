@@ -615,14 +615,14 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 			restoreElse()
 			InstallJoinedDefs(r, nil, defs)
 		}
-		frag := es.Recorder().TakeFragment()
+		frag := recorderState(es).TakeFragment()
 		if len(stk) == 0 { //covergate:allow native handler defensive error-propagation / same-assertion guard (§native)
 			es.Recorder().MarkUncompilable("if: branch produces no value (Stage 2 lowers single-result branches)")
 			return nil
 		}
 		out := stk[len(stk)-1]
 		taken := lit
-		es.Recorder().RecordBranch(BranchRecord{
+		recorderState(es).RecordBranch(BranchRecord{
 			ConstCond: &taken, HasElse: true,
 			Then: frag, ThenStk: stk, Out: out, Pos: args[0].Pos(),
 		})
@@ -647,7 +647,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		restoreThen := ApplyGuardNarrowing(r, args[0])
 		es.Recorder().ArmBranchCapture()
 		thenStk, thenDefs = RunCarrierBodyWithDefs(r, args[1])
-		thenFrag = es.Recorder().TakeFragment()
+		thenFrag = recorderState(es).TakeFragment()
 		restoreThen()
 	} else if body, ok := computedArmDoBody(r, args[1]); ok {
 		// REFUSAL-CLOSURE.0 §4: a COMPUTED List-conforming arm is the
@@ -660,7 +660,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		restoreThen := ApplyGuardNarrowing(r, args[0])
 		es.Recorder().ArmBranchCapture()
 		thenStk, thenDefs = RunCarrierBodyWithDefs(r, body)
-		thenFrag = es.Recorder().TakeFragment()
+		thenFrag = recorderState(es).TakeFragment()
 		restoreThen()
 	} else {
 		v := args[1]
@@ -681,14 +681,14 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		restoreElse := ApplyComplementNarrowing(r, args[0])
 		es.Recorder().ArmBranchCapture()
 		elseStk, elseDefs = RunCarrierBodyWithDefs(r, args[2])
-		elseFrag = es.Recorder().TakeFragment()
+		elseFrag = recorderState(es).TakeFragment()
 		restoreElse()
 	} else if body, ok := computedArmDoBody(r, args[2]); ok {
 		// §4 — the else-arm twin of the then-arm synthesis above.
 		restoreElse := ApplyComplementNarrowing(r, args[0])
 		es.Recorder().ArmBranchCapture()
 		elseStk, elseDefs = RunCarrierBodyWithDefs(r, body)
-		elseFrag = es.Recorder().TakeFragment()
+		elseFrag = recorderState(es).TakeFragment()
 		restoreElse()
 	} else {
 		v := args[2]
@@ -705,7 +705,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		// mirroring the 2-arg if2 guard. The registered result is a phantom None
 		// the residual reconciliation skips.
 		out := NewCarrier(TNone)
-		es.Recorder().RecordBranch(BranchRecord{
+		recorderState(es).RecordBranch(BranchRecord{
 			Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 			Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 			ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
@@ -731,7 +731,7 @@ func if3ReturnsFn(args []Value, r *Registry) []Value {
 		}
 	}
 	out := joined[len(joined)-1]
-	es.Recorder().RecordBranch(BranchRecord{
+	recorderState(es).RecordBranch(BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: true,
 		Then: thenFrag, Els: elseFrag, ThenStk: thenStk, ElsStk: elseStk,
 		ThenValue: thenValue, ElsValue: elseValue, Out: out, Pos: args[0].Pos(),
@@ -854,7 +854,7 @@ func reduceStaticArm(r *Registry, cond, arm Value, isThen bool) []Value {
 // in-place fn redefinition in a condition is not path-dependent and stays
 // compilable, exactly like its paren-`do` condition twin.
 func analyseCondFragment(r *Registry, cond Value) (*EmitFragment, []Value) {
-	es := r.Check.Recorder()
+	es, _ := r.Check.Recorder().(*EmitState)
 	if !es.Armed() || !IsConcrete(cond) || !cond.Parent.ConformsTo(TList) {
 		return nil, nil
 	}
@@ -887,7 +887,7 @@ func If2ReturnsFn(args []Value, r *Registry) []Value {
 	restore := ApplyGuardNarrowing(r, args[0])
 	es.Recorder().ArmBranchCapture()
 	thenStk, thenDefs := RunCarrierBodyWithDefs(r, args[1])
-	thenFrag := es.Recorder().TakeFragment()
+	thenFrag := recorderState(es).TakeFragment()
 	restore()
 	InstallJoinedDefs(r, thenDefs, nil)
 	var out Value
@@ -900,7 +900,7 @@ func If2ReturnsFn(args []Value, r *Registry) []Value {
 	// 2-arg if: a VARIADIC result (0 or 1 values at run time). An empty
 	// then-stack (a 0-value/diverging then) makes it a 0-value statement
 	// guard — RecordBranch lowers that with no merge slot.
-	es.Recorder().RecordBranch(BranchRecord{
+	recorderState(es).RecordBranch(BranchRecord{
 		Cond: args[0], CondFrag: condFrag, CondStk: condStk, HasElse: false,
 		Then: thenFrag, ThenStk: thenStk, Out: out, Pos: args[0].Pos(),
 	})
@@ -1071,7 +1071,7 @@ func forListListReturnsFn(args []Value, r *Registry) []Value {
 func forCarrierAnalyse(r *Registry, iterName string, iterType *Type, args []Value, countArg int) []Value {
 	body := args[len(args)-1]
 	iter := NewCarrier(iterType)
-	es := r.Check.Recorder()
+	es, _ := r.Check.Recorder().(*EmitState)
 
 	// Statically-zero loop pruning: a `for` whose count operand is a CONCRETE
 	// non-positive Integer never enters its body — at run time both engines
@@ -1407,4 +1407,15 @@ func ErrorHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 		out = out[1:]
 	}
 	return out, nil
+}
+
+// recorderState unwraps the concrete recording backend behind the check
+// state's recorder. Under a plain-check pass the recorder is the inactive
+// no-op, so this returns a nil *EmitState whose methods no-op through the
+// kernel's nil-receiver guards — the same decline the fragment/branch
+// methods' interface no-ops provided before the S2 surface reduction
+// homed the recorder interface check-side.
+func recorderState(c *CheckState) *EmitState {
+	es, _ := c.Recorder().(*EmitState)
+	return es
 }

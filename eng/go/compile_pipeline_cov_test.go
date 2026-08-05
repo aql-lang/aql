@@ -209,7 +209,7 @@ func compileTokens(t *testing.T, r *Registry, tokens []Value) (*Program, string)
 			prog, reason = nil, "ambiguous gradual split"
 			return
 		}
-		p, why, ok := r.Check.Recorder().Finalize(residual)
+		p, why, ok := r.Check.Recorder().(*EmitState).Finalize(residual)
 		if !ok {
 			prog, reason = nil, "finalize: "+why
 			return
