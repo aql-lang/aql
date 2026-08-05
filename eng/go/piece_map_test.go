@@ -72,6 +72,27 @@ var upwardRefs = []struct {
 		re:      regexp.MustCompile(`\.\(\*EmitState\)`),
 		allowed: map[string]bool{},
 	},
+	{
+		// Named check-piece entry points core used to call directly
+		// (install-time hooks, the Run-boundary carrier operations, the
+		// dispatch-model builders) — all routed through the seam carrier
+		// in Stage 2c.
+		name: "check entry-point call (F7)",
+		re: regexp.MustCompile(`\b(checkFnBodyAtConstruction|buildFnBodyReturnsFn|` +
+			`StripToCarriers|stripZeroOutResiduals|carrierResults|carrierMixedConform|` +
+			`valueCarriesCarrier|CheckAtUncaughtTopLevel|CheckAddUnique|` +
+			`CheckAddUniqueDiagnostic|OrderingReturnsFn|planUserPolyDispatch)\(`),
+		allowed: map[string]bool{
+			"analysis_hooks.go": true,
+		},
+	},
+	{
+		// VM-piece unit execution — core never runs compiled units
+		// directly (the CompiledRuntime seam owns that decision).
+		name:    "VM unit reach (F5)",
+		re:      regexp.MustCompile(`\bRunUnit\(`),
+		allowed: map[string]bool{},
+	},
 }
 
 func TestPieceMap(t *testing.T) {

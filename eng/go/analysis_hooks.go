@@ -91,3 +91,49 @@ func (r *Registry) analysisStepMeter() (exceeded bool) {
 	}
 	return true
 }
+
+// analysisFnConstructionPass runs the check piece's construction-time
+// static body pass for a newly installed fn (no-op outside check mode).
+func (r *Registry) analysisFnConstructionPass(name string, fnDef FnDefInfo) {
+	checkFnBodyAtConstruction(r, name, fnDef)
+}
+
+// analysisReturnsFn builds the check piece's per-signature analysis
+// model (the ReturnsFunc baked onto every boru-bodied signature).
+func (r *Registry) analysisReturnsFn(name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
+	return buildFnBodyReturnsFn(r, name, s, fnDef)
+}
+
+// analysisStripToCarriers replaces concrete run inputs with their
+// check-mode carriers at the Run boundary (active analysis only —
+// callers gate).
+func (r *Registry) analysisStripToCarriers(in []Value) []Value { return StripToCarriers(in) }
+
+// analysisZeroOutResiduals drops phantom 0-output statement residues
+// from the top-level residual (recording passes).
+func (r *Registry) analysisZeroOutResiduals(stk []Value) []Value {
+	return stripZeroOutResiduals(r, stk)
+}
+
+// analysisCarrierResults models a matched dispatch's results under
+// analysis — the carrier-propagation seam of execMatch.
+func (r *Registry) analysisCarrierResults(word string, sig *Signature, args []Value, pos SrcPos, ownerReg *Registry, tailConsumed bool) []Value {
+	return carrierResults(r, word, sig, args, pos, ownerReg, tailConsumed)
+}
+
+// analysisMixedConform reports whether v is a genuinely MIXED gradual
+// carrier conforming to t (matchSignature's gradual arm).
+func (r *Registry) analysisMixedConform(v Value, t *Type) bool { return carrierMixedConform(v, t) }
+
+// analysisValueCarriesCarrier reports whether v transitively contains
+// a carrier (the interp-string dynamic-collapse probe).
+func (r *Registry) analysisValueCarriesCarrier(v Value) bool { return valueCarriesCarrier(v) }
+
+// analysisAtUncaughtTopLevel reports unconditional top-level reach
+// outside any error-trapping region (the guaranteed-error mirrors'
+// reachability gate).
+func (r *Registry) analysisAtUncaughtTopLevel() bool { return CheckAtUncaughtTopLevel(r) }
+
+// noteAnalysisUniqueDiagnostic forwards a diagnostic deduped against
+// the accumulated list (code+detail+word+position).
+func (r *Registry) noteAnalysisUniqueDiagnostic(d CheckDiagnostic) { CheckAddUnique(r, d) }

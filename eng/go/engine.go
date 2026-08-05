@@ -1260,7 +1260,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 		es := e.registry.analysisRecorder()
 		es.bindRegistry(e.registry) // back-pointer for returned-closure compilation
 		pre := input
-		input = StripToCarriers(input)
+		input = e.registry.analysisStripToCarriers(input)
 		es.RememberStrippedOriginals(pre, input)
 	}
 
@@ -1574,7 +1574,7 @@ func (e *Engine) Run(input []Value) (result []Value, runErr error) {
 // only; the uncompilable case nets 0 at the source (if2/if3ReturnsFn).
 func (e *Engine) reconcileTopResidual(out []Value) []Value {
 	if e.isTop && e.registry.analysisActive() {
-		return stripZeroOutResiduals(e.registry, out)
+		return e.registry.analysisZeroOutResiduals(out)
 	}
 	return out
 }
@@ -3394,7 +3394,7 @@ func (e *Engine) execMatch(match *MatchResult) error {
 		}
 		tailConsumed := callEnd+1 < e.tape.Len() &&
 			(IsCloseParen(e.tape.At(callEnd+1)) || e.dynShuffleConsumerAt(callEnd+1))
-		results := carrierResults(e.registry, name, match.Sig, match.Args, pos, match.Reg, tailConsumed)
+		results := e.registry.analysisCarrierResults(name, match.Sig, match.Args, pos, match.Reg, tailConsumed)
 		return e.spliceMatchResults(match, sortedIndices, n, results)
 	}
 
@@ -4340,7 +4340,7 @@ func (e *Engine) evalInterpParts(parts []InterpPart) (s string, dynamic bool, ho
 			// `${typeof x}`) — which stringify to real text ("None",
 			// "Integer") and must not collapse the whole interpolation to a
 			// String carrier.
-			if valueCarriesCarrier(r) {
+			if e.registry.analysisValueCarriesCarrier(r) {
 				dynamic = true
 			}
 			buf.WriteString(ValToString(r))
@@ -5621,13 +5621,13 @@ func (e *Engine) execFnDefSigStackMatch(valIdx int, fnDef FnDefInfo, resolved []
 				fv := e.tape.At(valIdx)
 				fv.FailedDispatch = true
 				e.tape.Set(valIdx, fv)
-				if CheckAtUncaughtTopLevel(e.registry) {
+				if e.registry.analysisAtUncaughtTopLevel() {
 					// NOT a RuntimeMirror: a mirror promises the program still
 					// compiles and raises the identical error, and there is no
 					// call here to compile — dispatch did not resolve, exactly
 					// like no_signature. So the compile pipeline must refuse on
 					// it (eng/go/CLAUDE.md, the model-undermining class).
-					CheckAddUnique(e.registry, CheckDiagnostic{
+					e.registry.noteAnalysisUniqueDiagnostic(CheckDiagnostic{
 						Code:   "uncalled_function",
 						Detail: detail,
 						Word:   fnDef.Name,
@@ -5704,7 +5704,7 @@ func compileFnDef(r *Registry, fnDef FnDefInfo) *FnDefInfo {
 				FnFrame:  meta,
 				dispatch: buildFnBodyHandler(r, fnDef.Name, sig, fnDef, meta),
 			}
-			compiled.ReturnsFn = buildFnBodyReturnsFn(r, fnDef.Name, sig, fnDef)
+			compiled.ReturnsFn = r.analysisReturnsFn(fnDef.Name, sig, fnDef)
 		}
 		normalizeSig(&compiled)
 		out[i] = compiled
@@ -8361,7 +8361,7 @@ func (e *Engine) matchSignature(fn *FnDefInfo, w WordInfo, resolved []Value) (*S
 				// from it might have matched here (and been grabbed). Remember
 				// it; if a forward-collecting overload is then selected, the
 				// split is ambiguous (noteSplit at the return points).
-				if checkActive && j == 0 && carrierMixedConform(stackVal, sigArgType(sig, sigIdx)) {
+				if checkActive && j == 0 && e.registry.analysisMixedConform(stackVal, sigArgType(sig, sigIdx)) {
 					mixedCarrierRejectIdx = resolvedIdx[ri]
 				}
 				allMatch = false

@@ -369,7 +369,7 @@ func InstallWordExtension(r *Registry, name string, ext FnDefInfo) error {
 	added := ext
 	added.Name = name
 	added.Signatures = compiled
-	checkFnBodyAtConstruction(r, name, added)
+	r.analysisFnConstructionPass(name, added)
 	if r.ready && r.OnRegisterHook != nil {
 		r.OnRegisterHook(name)
 	}
