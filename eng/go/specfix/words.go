@@ -1435,3 +1435,11 @@ func registerEngSpecTypeOps(r *eng.Registry) {
 // minimal in-test copies of the dispatching words). The shared TSV
 // scaffolding (file walk, row parsing, ERROR handling, value
 // rendering) lives in test/go/specfix.
+
+// RegisterControlWords installs the fixture `if` / `for` control
+// words (control.go). Registered separately from RegisterSpecWords:
+// the shared eng/spec corpus has no control rows yet (the TS fixture
+// twin does not exist), so only the eng-local battery lanes opt in.
+func RegisterControlWords(r *eng.Registry) {
+	registerEngSpecControl(r)
+}
