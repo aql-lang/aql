@@ -47,10 +47,8 @@ import {
   builtinRank,
   type FnParam,
   type FnSig,
-  type WordInfo,
   newAtom,
   newBoolean,
-  newDecimal,
   newDynamicCarrier,
   newDisjunct,
   newEnum,
@@ -1026,7 +1024,10 @@ function registerSpecWords(r: Registry): void {
             if (bound !== undefined) constraint = bound
             else if (bt !== undefined) constraint = newTypeLiteral(bt)
           }
-          const value = args[1]!
+          // The value slot resolves like every dispatched arg (Go's
+          // typedDef receives the resolved value): `def x:null null`
+          // must bind the atom, not the raw word.
+          const value = resolveWordsDeep(args[1]!, registry)
           if (
             enforceTypeConstraint(
               registry,
@@ -1079,61 +1080,11 @@ function registerSpecWords(r: Registry): void {
           if (/^-?\d/.test(name)) {
             throw new BoruError('syntax_error', `invalid numeric literal: ${name}`, name)
           }
-          // Container-typed binding `def NAME:[…]` / `def NAME:{…}`: the
-          // tokenizer attached the constraint shape to the name word. The
-          // value must satisfy it, else def-time validation fails.
-          if (nameWord.constraint !== undefined) {
-            // Validate the constraint: interpret mode throws on violation,
-            // compile mode traps/refuses (see enforceTypeConstraint), pure
-            // check mode stays lenient.
-            if (
-              enforceTypeConstraint(
-                registry,
-                value,
-                nameWord.constraint,
-                `def ${name}: value ${value.toString()} does not satisfy ${nameWord.constraint.toString()}`,
-                name,
-              )
-            ) {
-              return []
-            }
-            // A typed-name binding stores the value as data — a plain
-            // list binds inert (non-splicing); `word` is needed to splice.
-            const bound =
-              value.vType.matches(TList) && Array.isArray(value.data) && !value.quoted
-                ? newList(value.asList(), { eval: false })
-                : value
-            registry.pushDef(name, bound)
-            return []
-          }
-          // Typed binding `def x:Type v`: the name carries a `:Constraint`
-          // suffix (a simple scalar type, a value pattern, or a bound
-          // type name). The value must satisfy the constraint.
-          const colon = name.indexOf(':')
-          if (colon > 0) {
-            const bindName = name.slice(0, colon)
-            const constraintStr = name.slice(colon + 1)
-            if (constraintStr !== '' && constraintStr[0] !== '{' && constraintStr[0] !== '[') {
-              const t = typeTable.get(constraintStr)
-              const constraint =
-                t !== undefined
-                  ? newTypeLiteral(t)
-                  : (registry.topOfDefStack(constraintStr) ?? atomicValue(constraintStr))
-              if (
-                enforceTypeConstraint(
-                  registry,
-                  value,
-                  constraint,
-                  `def ${bindName}: value ${value.toString()} does not satisfy ${constraintStr}`,
-                  bindName,
-                )
-              ) {
-                return []
-              }
-              registry.pushDef(bindName, value)
-              return []
-            }
-          }
+          // Colon-typed and container-typed names (`def x:5`,
+          // `def l:[:Integer]`) always arrive as MAP tokens (the
+          // tokenizer attaches the constraint as the map value), so
+          // they dispatch to the typed-name map sig above — this
+          // handler only ever sees plain names.
           // A capitalised name binding a class type stamps the struct
           // name onto it, so `inspect Name` reports struct:Name and a
           // child type can record `Class/Name` as its parent path.
@@ -1591,125 +1542,6 @@ function tokenize(s: string): Value[] {
 }
 
 
-
-// atomicValue converts one whitespace-delimited token (not a string,
-// list, or map) into a Value: booleans, none/null, numbers, bare
-// type-name → type literal, /q → atom, otherwise a word with modifiers.
-function atomicValue(tok: string): Value {
-  switch (tok) {
-    case 'true':
-      return newBoolean(true)
-    case 'false':
-      return newBoolean(false)
-    case 'none':
-      return newNone()
-    case 'null':
-      // `null` is the atom 'null' in boru source (the parser lexes the
-      // JSON null literal as an Atom), distinct from the `none` value.
-      return newAtom('null')
-  }
-  if (/^-?\d+$/.test(tok)) return newInteger(BigInt(tok))
-  if (/^-?\d+\.\d+$/.test(tok)) return newDecimal(Number.parseFloat(tok))
-  // /-suffix modifiers — /s, /f force stack/forward dispatch, /q makes
-  // an Atom, /N filters by arity. Mirrors parseWord in eng/parser.
-  const parsed = parseModifierSuffix(tok)
-  if (parsed.quote) return newAtom(parsed.name)
-  // A bare type-name word (Integer, List, None, Type, …) resolves to a
-  // type-literal value, mirroring the parser's TypeNameTable lookup.
-  if (parsed.name === tok) {
-    const t = typeTable.get(tok)
-    if (t !== undefined) return newTypeLiteral(t)
-  }
-  return newWordWithModifiers(parsed.name, parsed.forceStack, parsed.forceForward, parsed.argCount)
-}
-
-function newWordWithModifiers(
-  name: string,
-  forceStack: boolean,
-  forceForward: boolean,
-  argCount: number | undefined,
-): Value {
-  if (!forceStack && !forceForward && argCount === undefined) return newWord(name)
-  const wi: WordInfo = { name }
-  if (forceStack) wi.forceStack = true
-  if (forceForward) wi.forceForward = true
-  if (argCount !== undefined) wi.argCount = argCount
-  return new Value(TWord, wi)
-}
-
-type ModifierSuffix = {
-  name: string
-  forceStack: boolean
-  forceForward: boolean
-  quote: boolean
-  argCount: number | undefined
-}
-
-// parseModifierSuffix scans the trailing /-suffix on a word token.
-// Mirrors parseWord in eng/parser/parse.go: digits (argCount), 'f'
-// (forceForward), 's' (forceStack), 'q' (quote → Atom). Modifiers can
-// appear in any order; f/s are mutually exclusive; each letter at most
-// once; digits run contiguously. If the suffix is unrecognised or
-// malformed, the entire token is treated as a plain word.
-function parseModifierSuffix(tok: string): ModifierSuffix {
-  const idx = tok.lastIndexOf('/')
-  const noop: ModifierSuffix = {
-    name: tok,
-    forceStack: false,
-    forceForward: false,
-    quote: false,
-    argCount: undefined,
-  }
-  if (idx < 0 || idx >= tok.length - 1) return noop
-  const mod = tok.slice(idx + 1)
-  let forceStack = false
-  let forceForward = false
-  let quote = false
-  let seenDigits = false
-  let argCount: number | undefined
-  let valid = true
-  let i = 0
-  while (i < mod.length) {
-    const c = mod[i]!
-    if (c >= '0' && c <= '9') {
-      if (seenDigits) {
-        valid = false
-        break
-      }
-      let j = i
-      while (j < mod.length && mod[j]! >= '0' && mod[j]! <= '9') j++
-      argCount = Number.parseInt(mod.slice(i, j), 10)
-      seenDigits = true
-      i = j
-      continue
-    }
-    if (c === 'f') {
-      if (forceForward || forceStack) {
-        valid = false
-        break
-      }
-      forceForward = true
-    } else if (c === 's') {
-      if (forceForward || forceStack) {
-        valid = false
-        break
-      }
-      forceStack = true
-    } else if (c === 'q') {
-      if (quote) {
-        valid = false
-        break
-      }
-      quote = true
-    } else {
-      valid = false
-      break
-    }
-    i++
-  }
-  if (!valid) return noop
-  return { name: tok.slice(0, idx), forceStack, forceForward, quote, argCount }
-}
 
 // parseFnTriple parses one [params][returns][body] triple into an
 // FnSig. The named form has a params list (`[n:Integer ?]`); the flat

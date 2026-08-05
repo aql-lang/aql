@@ -84,6 +84,24 @@ describe('forward collection shapes (pinned to Go)', () => {
   })
 })
 
+describe('typed-def constraint fallbacks (pinned to Go)', () => {
+  it('literal constraints admit equal values and refuse others', () => {
+    assert.equal(run('def x:5 5 x'), '5')
+    assert.equal(run('def x:5.5 5.5 x'), '5.5')
+    assert.equal(run('def x:-3 -3 x'), '-3')
+    assert.equal(run('def x:true true x'), 'true')
+    assert.equal(run('def x:none none x'), 'none')
+    assert.match(runErr('def x:5 6 x'), /value 6 does not satisfy declared type 5/)
+    assert.match(runErr('def x:zz 5 x'), /does not satisfy declared type word\(zz\)/)
+  })
+  it('the null constraint and value resolve to the atom', () => {
+    assert.equal(run('def x:null null x'), 'null/q')
+  })
+  it('a def-resolved value satisfies its type constraint', () => {
+    assert.equal(run('def y 7 def x:Integer y x'), '7')
+  })
+})
+
 describe('data-eval shapes (pinned to Go)', () => {
   it('a multi-result paren map value collects into a list', () => {
     assert.equal(run('{a:(1 2)}'), '{a:[1 2]}')
