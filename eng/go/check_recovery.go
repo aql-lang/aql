@@ -899,7 +899,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// fill the rest top-down (the deepest-last ascending run reversed).
 		// Feeding the raw tape order here was the prior `[1x]`-vs-`[x1]`
 		// operand-order divergence. Only refuse when poly isn't safe.
-		if sw := sigOrderArgs(args, nStack); tryRecordPoly(e.registry, w.Name, sig, sw, out, pos, true, nil, false, noMatchProbe.spec(fn, sw)) {
+		if sw := sigOrderArgs(args, nStack); dispatchTryRecordPoly(e.registry, w.Name, sig, sw, out, pos, true, nil, false, noMatchProbe.spec(fn, sw)) {
 			e.spliceCheckResults(positions, out)
 			return nil
 		}
@@ -923,7 +923,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// non-plain-param arm sets.
 		if es := e.registry.Check.Recorder(); es.active() {
 			sw := sigOrderArgs(args, nStack)
-			if plan := tryCompileUserPolyArms(e.registry, es, w.Name, sw, sig.Returns); plan != nil {
+			if plan := dispatchCompileUserPolyArms(e.registry, es, w.Name, sw, sig.Returns); plan != nil {
 				plan.substituteJoinedOuts(out)
 				es.RecordUserPolyCall(w.Name, e.registry, plan.sigIdx, plan.units, plan.impls, plan.sigs, sw, out, pos)
 				e.spliceCheckResults(positions, out)
@@ -958,7 +958,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 		// export). For a core builtin e.registry is the main registry, so
 		// PolyRef.Reg then equals the VM's own registry — the no-op the
 		// get/add path already relied on.
-		if sw := sigOrderArgs(args, nStack); tryRecordPoly(e.registry, w.Name, sig, sw, results, pos, false, e.registry, true, noMatchProbe.spec(fn, sw)) {
+		if sw := sigOrderArgs(args, nStack); dispatchTryRecordPoly(e.registry, w.Name, sig, sw, results, pos, false, e.registry, true, noMatchProbe.spec(fn, sw)) {
 			e.spliceCheckResults(positions, results)
 			return nil
 		}
@@ -1054,7 +1054,7 @@ func (e *Engine) checkModeAssumeSig(w WordInfo, fn *FnDefInfo, fallback *Signatu
 				resume := es.Suspend()
 				results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
 				resume()
-				if sw := sigOrderArgs(args, nStack); tryRecordPoly(e.registry, w.Name, sig, sw, results, pos, false, e.registry, true, noMatchProbe.spec(fn, sw)) {
+				if sw := sigOrderArgs(args, nStack); dispatchTryRecordPoly(e.registry, w.Name, sig, sw, results, pos, false, e.registry, true, noMatchProbe.spec(fn, sw)) {
 					e.spliceCheckResults(positions, results)
 					recovered = true
 				}

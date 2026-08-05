@@ -49,6 +49,8 @@ var upwardRefs = []struct {
 	name    string
 	re      *regexp.Regexp
 	allowed map[string]bool
+	// pieces the probe applies to; empty means core only.
+	pieces map[string]bool
 }{
 	{
 		name: "check-state consultation (F1)",
@@ -93,6 +95,18 @@ var upwardRefs = []struct {
 		re:      regexp.MustCompile(`\bRunUnit\(`),
 		allowed: map[string]bool{},
 	},
+	{
+		// Named compiler-piece record/fold/bake entry points — the check
+		// piece routes these through the S3 dispatch-hook carrier, and
+		// core does not touch them at all (the drift-window offer rides
+		// the S9 slot).
+		name: "compiler record/fold call (F6)",
+		re: regexp.MustCompile(`\b(recordDispatchOutcome|tryFoldScalarConst|` +
+			`tryRecordPoly|tryCompileUserPolyArms|planUserPolyDispatch|` +
+			`NewEmitState|newIsolatedEmit|tryRecordDriftWindow)\(`),
+		allowed: map[string]bool{"dispatch_hooks.go": true},
+		pieces:  map[string]bool{"core": true, "check": true},
+	},
 }
 
 func TestPieceMap(t *testing.T) {
@@ -110,7 +124,7 @@ func TestPieceMap(t *testing.T) {
 			t.Errorf("%s: not assigned in piece_map.tsv — assign it to core/check/compiler/eng", f)
 			continue
 		}
-		if piece != "core" {
+		if piece != "core" && piece != "check" {
 			continue
 		}
 		src, err := os.ReadFile(f)
@@ -118,7 +132,8 @@ func TestPieceMap(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, probe := range upwardRefs {
-			if probe.re.Match(src) && !probe.allowed[f] {
+			applies := probe.pieces[piece] || (probe.pieces == nil && piece == "core")
+			if applies && probe.re.Match(src) && !probe.allowed[f] {
 				t.Errorf("%s (core): new wrong-direction reference [%s] — route it through a seam (design/ENG-FOUR-PIECE.0.md)", f, probe.name)
 			}
 		}

@@ -633,14 +633,14 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 			disjunctCombosTakeSig(r, word, args, sig) {
 			partOut = out
 		} else {
-			if !tryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false, nil) {
+			if !dispatchTryRecordPoly(r, word, sig, args, out, pos, true, ownerReg, false, nil) {
 				r.Check.Recorder().RecordPoly(word)
 			}
 			return out
 		}
 	}
 	out := declaredReturnCarriers(r, word, sig, args, pos)
-	if folded, ok := tryFoldScalarConst(r, sig, args); ok && len(out) == 1 {
+	if folded, ok := dispatchTryFoldScalarConst(r, sig, args); ok && len(out) == 1 {
 		// Concrete-condition folding (CompileScalarFold): the comparison ran
 		// for real over compile-time-known scalars, so the concrete result
 		// replaces the declared-type carrier — `(n eq 0)` with a const n
@@ -654,7 +654,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		out[0] = folded
 	}
 	out = applyGradualContagion(r, word, args, out, pos, tailConsumed)
-	recordDispatchOutcome(r, word, sig, args, out, pos, ownerReg)
+	dispatchRecordOutcome(r, word, sig, args, out, pos, ownerReg)
 	// The partitioned user-fn dispatch (above): hand back the partition-
 	// joined carriers under the RECORDED results' identities, so downstream
 	// operand resolution reaches the recorded call while the checker keeps

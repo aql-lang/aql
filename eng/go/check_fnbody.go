@@ -367,7 +367,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		es := r.Check.Recorder()
 		fnUnit := -1
 		var finishFn func([]Value)
-		polyPlan, polyBarred := planUserPolyDispatch(r, es, nameCopy, args, declaredReturns)
+		polyPlan, polyBarred := dispatchPlanUserPoly(r, es, nameCopy, args, declaredReturns)
 		// A /q (quote-capture) param binds only a bare Word collected forward
 		// at the runtime pointer — a plain stack value never matches it
 		// (`def f fn [[k:Atom] [Atom] [k]] f 'meta'` raises no_signature on
