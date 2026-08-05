@@ -68,6 +68,7 @@ import {
   ClassTypeInfo,
   newString,
   OrderedMap,
+  newErrorValue,
   newTypeLiteral,
   newWord,
   withQuoted,
@@ -673,7 +674,16 @@ function registerSpecWords(r: Registry): void {
         // `do [1 addq 2]` compiles inline with no do-event, exactly like a
         // fn body. In value mode the same handler just runs the body.
         runInCheckMode: true,
-        handler: (args) => new Engine(r).run([...args[0]!.asList()]),
+        // The escape hatch: a body error surfaces as an Error VALUE
+        // rather than propagating — the Go fixture (and basic's
+        // production do) is the reference.
+        handler: (args) => {
+          try {
+            return new Engine(r).run([...args[0]!.asList()])
+          } catch (e) {
+            return [newErrorValue(e instanceof Error ? stripCodePrefix(e.message) : String(e))]
+          }
+        },
       },
     ],
   })
@@ -709,20 +719,26 @@ function registerSpecWords(r: Registry): void {
   // get / set — kernel-container signatures (the handlers cover the
   // Node map/list case; their full sig list is what inspect renders).
   // Mirrors registerEngSpecStorage.
+  // stripCodePrefix drops the `[boru/<code>]: ` render prefix so a
+  // caught Error VALUE carries the bare detail, matching Go's
+  // ErrorInfo.Message.
+  const stripCodePrefix = (msg: string): string => msg.replace(/^\[[^\]]*\]:\s*/, '')
+  // Misses return the None TYPE LITERAL, not the none value — the Go
+  // fixture (registerEngSpecStorage) is the reference.
   const getNodeH: Handler = (args) => {
     const key = args[0]!
     const c = args[1]!
     if (key.vType.matches(TInteger) && Array.isArray(c.data)) {
       const i = Number(key.asInteger())
       const lst = c.asList()
-      return [i >= 0 && i < lst.length ? lst[i]! : newNone()]
+      return [i >= 0 && i < lst.length ? lst[i]! : newTypeLiteral(TNone)]
     }
     if (c.data instanceof OrderedMap) {
       const k = key.vType.equal(TAtom) ? key.asAtom() : key.asString()
       const v = c.asMap().get(k)
-      return [v ?? newNone()]
+      return [v ?? newTypeLiteral(TNone)]
     }
-    return [newNone()]
+    return [newTypeLiteral(TNone)]
   }
   reg({
     name: 'get',
@@ -731,9 +747,9 @@ function registerSpecWords(r: Registry): void {
       { args: [TString, TNode], barrierPos: 1, handler: getNodeH },
       { args: [TInteger, TClass], barrierPos: 1, handler: getNodeH },
       { args: [TInteger, TNode], barrierPos: 1, handler: getNodeH },
-      { args: [TAtom, TClass], barrierPos: 1, handler: getNodeH },
-      { args: [TAtom, TNode], barrierPos: 1, handler: getNodeH },
-      { args: [TAny, TNone], barrierPos: 1, handler: () => [newNone()] },
+      { args: [TAtom, TClass], barrierPos: 1, quoteArgs: new Set([0]), handler: getNodeH },
+      { args: [TAtom, TNode], barrierPos: 1, quoteArgs: new Set([0]), handler: getNodeH },
+      { args: [TAny, TNone], barrierPos: 1, handler: () => [newTypeLiteral(TNone)] },
     ],
   })
   reg({
@@ -761,8 +777,19 @@ function registerSpecWords(r: Registry): void {
           // refine Record [ {k:T} … ] merges the pair-maps into a
           // record-shape map.
           if (base.data === null && base.vType.leaf() === 'Record' && Array.isArray(args[1]!.data)) {
+            const elems = args[1]!.asList()
+            if (0 === elems.length) {
+              throw new BoruError('type_error', 'record: list must have at least one field', 'refine')
+            }
             const om = new OrderedMap()
-            for (const pair of args[1]!.asList()) {
+            for (const pair of elems) {
+              if (!(pair.data instanceof OrderedMap)) {
+                throw new BoruError(
+                  'type_error',
+                  `record: each element must be a pair (map), got ${pair.toString()}`,
+                  'refine',
+                )
+              }
               const m = pair.asMap()
               for (const k of m.keys()) om.set(k, m.get(k)!)
             }

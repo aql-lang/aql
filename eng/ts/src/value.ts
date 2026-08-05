@@ -27,6 +27,7 @@ import {
   TPathon,
   TUrlon,
   TMove,
+  TError,
   TNone,
   TParenExpr,
   TCloseParen,
@@ -490,6 +491,26 @@ const NONE_SENTINEL: unique symbol = Symbol('none')
 /** Construct the unique `none` value. */
 export function newNone(): Value {
   return new Value(TNone, NONE_SENTINEL)
+}
+
+/**
+ * Error VALUE payload — the caught-error data the `do` escape hatch
+ * surfaces (the Go twin is ErrorInfo in eng/go). Renders as
+ * `error(<message>)` and types as Ideal/Error.
+ */
+export class ErrorInfo {
+  readonly message: string
+  constructor(message: string) {
+    this.message = message
+  }
+}
+
+export function newErrorValue(message: string): Value {
+  return new Value(TError, new ErrorInfo(message))
+}
+
+export function isErrorValue(v: Value): boolean {
+  return v.data instanceof ErrorInfo
 }
 
 /** XML element payload (static, post-interpolation). */

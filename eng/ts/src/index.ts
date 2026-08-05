@@ -151,6 +151,7 @@ export {
   newMark,
   newMove,
   newClassType,
+  newErrorValue,
   newNone,
   newOpenParen,
   newSugar,

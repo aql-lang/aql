@@ -121,19 +121,22 @@ Gate the branches/functions metrics once lines reach 100.
 
 The TS fixture guard probes (`src/fixture-probe.test.ts` — the twin of
 `eng/go/specfix_probe_test.go`) surfaced fixture behaviors that
-DIVERGE from the Go reference on paths no corpus row reaches:
+diverged from the Go reference on paths no corpus row reaches.
+ALIGNED (2026-08-05, probe rows moved into the shared table):
 
-- `get` on maps / class shapes does not dispatch in TS (the Go
-  fixture's map/None sigs are missing); the out-of-range list miss
-  renders `none` (value) where Go renders `None` (type literal).
-- `do [raising-body]` propagates the error in TS; the Go fixture (and
-  basic's production `do`) catches it into an Error VALUE.
-- `refine Record []` succeeds in TS (`{}`); Go requires at least one
-  field. `refine Record [5]` fails with a raw AsMap error rather than
-  the per-element pair guard. The 1-arg bare `refine` is unported.
+- `get`: the atom-key sigs now quote their key; every miss returns the
+  None TYPE literal (was the `none` value on list misses and a
+  dispatch failure on map keys).
+- `do`: a raising list body surfaces as an Error VALUE carrying the
+  bare detail — TS gained the error-value kind (`ErrorInfo` /
+  `newErrorValue` in value.ts, the `error(<message>)` canon arm) the
+  hatch needs.
+- `refine Record`: the at-least-one-field and per-element pair guards
+  now match the Go messages.
 
-Each alignment lands with its probe row moved into the shared table —
-and, where expressible, a corpus row so the differential guards it
+REMAINING: the 1-arg bare `refine` (and the object-with-parent
+constructor path) is unported in TS. Where expressible, corpus rows
+should follow so the differential guards the aligned behaviors
 permanently.
 
 ## Ratchet log

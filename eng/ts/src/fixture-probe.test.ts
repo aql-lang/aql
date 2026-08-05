@@ -39,13 +39,22 @@ describe('fixture guard probes', () => {
     // word / splice.
     ['word 5', '5'],
 
-    // get on lists: hits and the out-of-range miss. (The map/object
-    // sigs, do's error-value hatch, the record guards, and the 1-arg
-    // refine DIVERGE from the Go fixtures today — recorded in
-    // design/ENG-COVERAGE-PARITY.0.md as the fixture-parity backlog;
-    // rows land here as each is aligned.)
+    // get on containers: hits, misses (the None TYPE literal, the Go
+    // reference), string keys on lists, and get-on-None. (The 1-arg
+    // refine remains on the fixture-parity backlog.)
     ['[10 20 30] get 1', '20'],
-    ['[10 20 30] get 5', 'none'],
+    ['[10 20 30] get 5', 'None'],
+    ['{a:1} get a', '1'],
+    ['{a:1} get b', 'None'],
+    ['[1 2] get a', 'None'],
+    ['{a:1} get b get 1', 'None'],
+
+    // do's escape hatch: a body error surfaces as an Error VALUE.
+    ['do [notaword_xyz]', 'error(undefined word: notaword_xyz)'],
+
+    // refine Record guards (the Go reference messages).
+    ['refine Record []', { err: 'at least one field' }],
+    ['refine Record [5]', { err: 'must be a pair' }],
 
     // fnsig arms.
     ['fnsig [1]', { err: 'multiple of 2' }],

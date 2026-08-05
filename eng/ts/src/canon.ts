@@ -10,7 +10,7 @@
 import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TPathon, TString, TEmailon, TUrlon } from './type.ts'
 import { urlonHref, type UrlonInfo } from './value.ts'
 import type { FnDefInfo, XmlElement } from './value.ts'
-import { ChildType, OptionsData, OrderedMap, Value } from './value.ts'
+import { ChildType, ErrorInfo, OptionsData, OrderedMap, Value } from './value.ts'
 
 // canonXml renders an XML element, normalising an empty element to the
 // self-closing form (<br></br> → <br/>).
@@ -156,6 +156,10 @@ export function canonValue(v: Value): string {
   if (v.isNone()) return 'none'
   if (v.data === null) {
     return v.vType.leaf()
+  }
+  // A caught-error VALUE (the do escape hatch) — mirrors Go's render.
+  if (v.data instanceof ErrorInfo) {
+    return `error(${v.data.message})`
   }
   if (v.vType.matches(TInteger)) {
     return v.asInteger().toString()
