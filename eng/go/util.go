@@ -286,7 +286,7 @@ func snapshotPredicateState(r *Registry) predicateSandbox {
 	return predicateSandbox{
 		types:    r.Types.Clone(),
 		ctxStack: r.Contexts.Snapshot(),
-		check:    r.Check.Clone(),
+		check:    r.analysisSnapshot(),
 	}
 }
 
@@ -296,14 +296,7 @@ func restorePredicateState(r *Registry, s predicateSandbox) {
 	}
 	r.Types = s.types
 	r.Contexts.Restore(s.ctxStack)
-	// Restore the analysis state IN PLACE (not by swapping the pointer) so a
-	// module sub-registry transiently sharing this *CheckState observes the
-	// rollback too (design/module-fn-checkstate-ownership.1.md §3.2).
-	if s.check != nil && r.Check != nil {
-		*r.Check = *s.check
-	} else {
-		r.Check = s.check
-	}
+	r.restoreAnalysisSnapshot(s.check)
 }
 
 // AsConcreteString unwraps a String-typed Value into its Go string,

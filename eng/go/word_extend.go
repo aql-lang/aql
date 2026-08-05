@@ -361,7 +361,7 @@ func InstallWordExtension(r *Registry, name string, ext FnDefInfo) error {
 	// the module registry at export exactly because this is nil.
 	SortSignatures(clone.Signatures)
 	clone.MaxForwardArgs = calcMaxForwardArgs(clone.Signatures)
-	r.Check.RecordFnBinder(name)
+	r.noteAnalysisFnBinder(name)
 	r.Defs.Push(name, NewFunction(clone))
 	// Construction-time body check on the ADDED overloads only — the
 	// base's signatures were checked at their own construction, and

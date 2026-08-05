@@ -1676,7 +1676,7 @@ func (r *Registry) Lookup(name string) *FnDefInfo {
 	// they must not, flipping a refusal into a (wrong) compile. Runtime
 	// dispatch does no such identity test, so caching there is sound and
 	// is where the hot-loop win lives.
-	if r.Check.IsActive() {
+	if r.analysisActive() {
 		return r.lookupUncached(name)
 	}
 	gen := r.Defs.Gen(name)
@@ -2443,7 +2443,7 @@ func (r *Registry) ResolveTypedNameValue(v Value) (resolved Value, name string, 
 // from `type Foo fn [x:Any Any [body]]` always satisfy this; other
 // shapes return an error.
 //
-// CheckMode short-circuit: when r.Check.Mode is true the predicate
+// CheckMode short-circuit: when check mode is on the predicate
 // body would run against carrier-typed input, which the body's
 // `(x is String)`/`(x gte 10)`/etc. checks can't usefully evaluate
 // (carriers fail those checks → every typed binding errors). Under
@@ -2473,7 +2473,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	// CheckMode: accept the binding without running the body. Real
 	// predicate behaviour is asserted at runtime; here we only need
 	// the analyser to keep flowing past the typed slot.
-	if r != nil && r.Check.Mode {
+	if r != nil && r.analysisMode() {
 		return candidate, true, nil
 	}
 	// Input-type gate: a predicate's declared input type acts as a

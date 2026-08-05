@@ -32,14 +32,14 @@ func ResolveRef(r *Registry, name string) (Value, bool) {
 		// export-map value) IS a use of that def — record it so unused-def
 		// analysis in check mode does not falsely flag reference-exported
 		// public words (the canonical `export "X" { f: impl/r }` form).
-		r.Check.recordUse(name)
+		r.noteAnalysisUse(name)
 		return tv, true
 	}
 	top, ok := r.Defs.Top(name)
 	if !ok {
 		return Value{}, false
 	}
-	r.Check.recordUse(name)
+	r.noteAnalysisUse(name)
 	if _, ok := top.Data.(FnDefInfo); ok {
 		// Wrap the aggregate dispatch view so the reference carries every
 		// overload of the name, not just the topmost entry's own sigs.

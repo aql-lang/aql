@@ -148,7 +148,7 @@ func (r *Registry) noteCoverage(pos SrcPos) {
 	if fp == nil {
 		return
 	}
-	if r.coverID == "" || pos.Row == 0 || (r.Check != nil && r.Check.Mode) {
+	if r.coverID == "" || pos.Row == 0 || r.analysisActive() {
 		return
 	}
 	(*fp)(r.coverID, pos.Row)

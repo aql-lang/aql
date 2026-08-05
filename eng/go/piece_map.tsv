@@ -96,7 +96,7 @@ core_boolean.go	core
 core_boundedtype.go	core	
 interp_entry.go	core	
 invoke.go	core	
-method_shape.go	core	
+method_shape.go	check	shape-method dispatch models: every function runs the check/compile analysis of `.word` application
 eng_rest_seam9.go	core	
 coretype_format_behaviors.go	core	
 module_export_growth.go	core	
@@ -136,4 +136,6 @@ check_recovery.go	check
 compiled_runtime.go	core	
 compiled_runtime_vm.go	eng	
 vm_defer.go	eng	
-analysis_hooks.go	core	
+analysis_hooks.go	core
+check_fnbody.go	check
+check_make.go	check

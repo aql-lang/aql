@@ -119,7 +119,7 @@ func (r *Registry) noteInterp(seam string) {
 		return
 	}
 	att := r.interpAttribution
-	check := r.Check != nil && r.Check.Mode
+	check := r.analysisActive()
 	if check {
 		att = "check-mode"
 	}

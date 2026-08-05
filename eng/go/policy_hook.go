@@ -84,7 +84,7 @@ type ModuleCallID struct {
 // and its error is returned verbatim so both engines raise the
 // identical denial.
 func policyGateModuleCallReg(r *Registry, gate *ModuleCallID) error {
-	if gate == nil || r == nil || r.Check.IsActive() {
+	if gate == nil || r == nil || r.analysisActive() {
 		return nil
 	}
 	if mc := LookupModuleCallChecker(r); mc != nil {

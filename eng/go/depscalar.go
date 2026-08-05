@@ -452,7 +452,7 @@ func MakeDepScalarSig(opName string, kind DepKind) Signature {
 			// DepScalarInfo to a bare base carrier, preserving the ID — can
 			// recover the bound via origByID and bake it as a const.
 			if r != nil {
-				r.Check.Recorder().RememberOriginal(dep)
+				r.analysisRecorder().RememberOriginal(dep)
 			}
 			return []Value{dep}, nil
 		}, RunInCheck()),

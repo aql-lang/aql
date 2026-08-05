@@ -32,6 +32,31 @@ func (r *Registry) noteAnalysisDiagnostic(d CheckDiagnostic) { r.Check.AddDiagno
 // noteAnalysisUse marks a name as read (unused-def accounting).
 func (r *Registry) noteAnalysisUse(name string) { r.Check.recordUse(name) }
 
+// noteAnalysisFnBinder attributes a body-local def to its enclosing fn
+// for the dynamic-scope undefined-word rescue (check mode only; no-op
+// at the top level or outside check).
+func (r *Registry) noteAnalysisFnBinder(name string) { r.Check.RecordFnBinder(name) }
+
+// analysisInCondBody reports whether the analysed position sits inside
+// a conditional body (branch/loop) — the compile-soundness probe for
+// overload redefinition.
+func (r *Registry) analysisInCondBody() bool { return r.Check.CondBodyDepth > 0 }
+
+// analysisSnapshot captures the checker's per-call state for the
+// predicate sandbox; restoreAnalysisSnapshot rolls it back IN PLACE
+// (not by swapping the pointer) so a module sub-registry transiently
+// sharing the state observes the rollback too
+// (design/module-fn-checkstate-ownership.1.md §3.2).
+func (r *Registry) analysisSnapshot() *CheckState { return r.Check.Clone() }
+
+func (r *Registry) restoreAnalysisSnapshot(s *CheckState) {
+	if s != nil && r.Check != nil {
+		*r.Check = *s
+	} else {
+		r.Check = s
+	}
+}
+
 // noteSuppressedRuntimeError latches the checker's runtime-suppression
 // flag (a would-be runtime error absorbed by the model).
 func (r *Registry) noteSuppressedRuntimeError() { r.Check.SuppressedRuntimeError = true }

@@ -54,29 +54,17 @@ var upwardRefs = []struct {
 		name: "check-state consultation (F1)",
 		re:   regexp.MustCompile(`\.Check\.`),
 		allowed: map[string]bool{
-			// The recon-inventoried F1 sites, burned down by Stage 2.
-			// analysis_hooks.go is the DESIGNATED seam carrier: the one
-			// core file allowed to touch CheckState, whose bodies become
-			// interface calls at the package cut.
-			"analysis_hooks.go": true, "core_helpers.go": true, "method_shape.go": true,
-			"registry.go": true, "core_make.go": true, "core_ref.go": true,
-			"word_extend.go": true, "interp_entry.go": true,
-			"util.go": true, "fn_params.go": true,
-			"depscalar.go": true, "effects.go": true, "policy_hook.go": true,
-			"module_export_growth.go": true, "engine_pool.go": true,
-			"core_boolean.go": true, "typed_bind.go": true, "value.go": true,
-			"macro_expand.go": true, "define_type.go": true, "fn_def.go": true,
-			"coverage.go": true, "equal.go": true, "compare.go": true,
+			// Stage 2b burned the F1 inventory down to the DESIGNATED seam
+			// carrier: the one core file allowed to touch CheckState, whose
+			// bodies become interface calls at the package cut.
+			"analysis_hooks.go": true,
 		},
 	},
 	{
 		name: "emit recorder reach (F2)",
 		re:   regexp.MustCompile(`Check\.Recorder\(\)`),
 		allowed: map[string]bool{
-			"analysis_hooks.go": true, "core_helpers.go": true, "method_shape.go": true,
-			"registry.go": true, "depscalar.go": true, "interp_entry.go": true,
-			"macro_expand.go": true, "fn_def.go": true,
-			"word_extend.go": true, "value.go": true, "engine_pool.go": true,
+			"analysis_hooks.go": true,
 		},
 	},
 	{
