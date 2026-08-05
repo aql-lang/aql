@@ -128,6 +128,22 @@ describe('parse battery', () => {
     ['<a>&quot;</a>', '<a>"</a>'],
     ['<a', 'ERR xml: unterminated opening tag <a>'],
     ['<a></b>', 'ERR xml: mismatched closing tag </b> for <a>'],
+    // Attribute and closing-tag edge taxonomy (each row's engine-level
+    // outcome is pinned identical on Go).
+    ['<', 'ERR [boru/syntax_error]: unexpected `` — nothing valid can appear here'],
+    ['<a>\nx</a>', '<a>\nx</a>'],
+    ["<a x='1' x='2'/>", 'ERR xml: duplicate attribute "x" in <a>'],
+    ["<a x='1/>", 'ERR xml: unterminated value for attribute "x" in <a>'],
+    ["<a x=''/>", '<a x=""/>'],
+    ['<a>x</ a >', '<a>x</a>'],
+    ['<a>x</', 'ERR xml: malformed closing tag for <a>'],
+    ['<a>x</a!', 'ERR xml: malformed closing tag for <a>'],
+    ["<a><b y='1></b></a>", 'ERR xml: unterminated value for attribute "y" in <b>'],
+    // Interpolation-hole scanning: quoted strings, nested braces, and
+    // a hole whose inner program fails to parse.
+    ["<a>${'s'}</a>", "interp-xml(<a>${'s'}</a>)"],
+    ['<a>${{k:1}}</a>', 'interp-xml(<a>${{k:1}}</a>)'],
+    ['<a>${(}</a>', 'ERR xml: in ${...}: [boru/syntax_error]: unmatched opening parenthesis'],
     ['<a href=>x</a>', 'ERR xml: attribute "href" in <a> must have a quoted value'],
     ["<a 'x'/>", 'ERR xml: invalid attribute name in <a>'],
     ['<a>${1}</a>', 'interp-xml(<a>${1}</a>)'],
