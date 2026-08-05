@@ -199,6 +199,20 @@ describe('parse battery', () => {
     ["m.'k'", "m.'k'"],
     ['a.(k)', 'a.(k)'],
     ['(m n).k', '(m n).k'],
+    // Arrow folds in list/reach contexts, computed and quoted map
+    // keys, and the optional-key sibling leak (a SHARED quirk both
+    // engines exhibit identically — the qm flag rides tabnas's K map
+    // across sibling pairs).
+    ['[[x] => [x]]', '[paren([[word(x)] sugar(lambda) [word(x)]])]'],
+    ['[1 => [2]]', '[paren([1 sugar(lambda) [2]])]'],
+    ['{f:[x] => [x]}', 'ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here'],
+    ['a.b => [1]', 'a.(b sugar(lambda) [1])'],
+    ['{[k]:1}', '{k:1}'],
+    ['{[k]:1 aa:2}', '{k:1 aa:2}'],
+    ['{[k]:1 [j]:2}', '{k:1 j:2}'],
+    ['{1.5:2}', '{1.5:2}'],
+    ["{'sk':1}", '{sk:1}'],
+    ['{a?:1 b:2}', '{a:(None tor Absent tor 1) b:(None tor Absent tor 2)}'],
     ['<a href=>x</a>', 'ERR xml: attribute "href" in <a> must have a quoted value'],
     ["<a 'x'/>", 'ERR xml: invalid attribute name in <a>'],
     ['<a>${1}</a>', 'interp-xml(<a>${1}</a>)'],

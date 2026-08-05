@@ -190,7 +190,7 @@ bench:
 # ratchet (design/ENG-COVERAGE-PARITY.0.md; Go statements ≡ TS lines,
 # both measured by the engine's OWN suite): raise TS_GATE_LINES as
 # coverage grows towards the 100% target; never lower it.
-TS_GATE_LINES ?= 96
+TS_GATE_LINES ?= 97
 test-ts:
 	@echo "==> typecheck eng/ts"
 	cd eng/ts && npx tsc
