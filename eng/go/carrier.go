@@ -2921,25 +2921,6 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 	return stk
 }
 
-// GuardFactInfo is the payload a check-mode paren evaluation attaches
-// to a single Boolean carrier result: the group's ORIGINAL tokens,
-// preserved so guard narrowing can see the `x is T` structure that
-// evaluation reduced to a bare Boolean
-// (design/checker-accuracy-review.10.md A3 — without it, the canonical
-// `if (x is T) …` paren form narrowed nothing while the list form
-// `if [x is T] …` narrowed fine). Check-mode only; the runtime never
-// produces carriers.
-type GuardFactInfo struct {
-	PayloadBase
-	Toks []Value
-	// Prev is the payload the group actually reduced to (a BoolPayload for a
-	// statically-decided cond), preserved so LiteralCondValue can still read
-	// the literal truth value through the wrapper. Without it, wrapping a
-	// decided cond in a GuardFactInfo carrier hid its value from the
-	// unreachable-branch analysis.
-	Prev Payload
-}
-
 // GuardClause describes one `x is T` clause detected in a condition.
 type GuardClause struct {
 	Name string
@@ -3953,7 +3934,7 @@ func resolveTypeNameArgs(args []Value) []Value {
 			out = append([]Value{}, args...)
 		}
 		lit := NewTypeLiteral(t)
-		lit.pos = a.pos
+		lit = WithPos(lit, a)
 		out[i] = lit
 	}
 	if out == nil {
@@ -3961,3 +3942,5 @@ func resolveTypeNameArgs(args []Value) []Value {
 	}
 	return out
 }
+
+func init() { joinCarriersHook = JoinCarriers }

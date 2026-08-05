@@ -73,9 +73,9 @@ func TestS7DispatchUnifierNilBehaviorInChain(t *testing.T) {
 // --- member_behavior.go ---------------------------------------------------
 
 func TestS7MemberBehaviorFormatAndDelegate(t *testing.T) {
-	b := memberBehavior{member: func(Value) bool { return true }}
+	b := MemberUnifier{member: func(Value) bool { return true }}
 	if got := b.Format(NewInteger(3)); got != "3" {
-		t.Errorf("memberBehavior.Format(3) = %q, want 3", got)
+		t.Errorf("MemberUnifier.Format(3) = %q, want 3", got)
 	}
 	b.FormatDelegate() // marker method, must not panic
 }

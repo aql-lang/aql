@@ -33,53 +33,7 @@ package eng
 // must stay byte-identical — the shape machinery is checker precision,
 // not compile coverage (the CodeEffectInfo discipline).
 
-// StoreShapeInfo is the abstract check-mode shape of ONE store-class
-// container (a context Store layer, a FlexMap): the per-key JOIN of the
-// value carriers written through it. A pointer payload deliberately —
-// every Value copy of the carrier (a def binding, a stack duplicate, a
-// nested-field read) aliases the SAME shape, mirroring the runtime
-// aliasing of the mutable container it stands for. All mutation is
-// join-only (JoinCarriers), so sandbox rollbacks that cannot un-mutate
-// a shared pointee only ever WIDEN a claim — monotone, never unsound.
-type StoreShapeInfo struct {
-	PayloadBase
-	// Scope is the context-stack depth at mint time for context-layer
-	// shapes (stage-2 layering substrate); 0 for non-context containers
-	// (flex maps, patrun instances).
-	Scope int
-	// KeyTypes records key → joined written-value carrier, with the
-	// same JoinCarriers-on-rewrite semantics as the flat ContextTypes
-	// map (so a single-store program reads back exactly what the flat
-	// path recorded). nil until the first write.
-	KeyTypes map[string]Value
-	// Vals is the join of the UNKEYED value writes for containers whose
-	// write key is not a string (a patrun's pattern-keyed `add`). The
-	// zero Value (Parent == nil) means "nothing recorded".
-	Vals Value
-	// ValsPoisoned marks the unkeyed join unusable: a write the shape
-	// cannot describe honestly (a dispatch-bearing value — a stored
-	// lambda re-dispatched by the reader) poisons it, and readers keep
-	// the pre-existing dynamic(Any) hatch.
-	ValsPoisoned bool
-	// DeclaredVal is the DECLARED element type of a typed container (a
-	// `patrun T` table): nil for an inferred/untyped shape. When set, a
-	// reader (`find`) surfaces `dynamic(DeclaredVal ∪ None)` directly,
-	// bypassing the Vals join and its poisoning entirely — the type is a
-	// declaration, not an inference.
-	DeclaredVal *Type
-}
-
 // payloadMarker — see payload.go's catalogue; registered there.
-
-// NewStoreShapeCarrier mints an abstract store-shaped carrier: a
-// carrier of t (TStore, TFlexMap, …) whose Data is a FRESH
-// *StoreShapeInfo. One mint per creation site / live layer — sharing
-// the returned Value shares the shape (that is the aliasing model).
-func NewStoreShapeCarrier(t *Type, scope int) Value {
-	v := NewCarrier(t)
-	v.Data = &StoreShapeInfo{Scope: scope}
-	return v
-}
 
 // StoreShapeOf returns the shape payload of a store-shaped CARRIER, or
 // ok=false for anything else (a real store value, a bare carrier, a

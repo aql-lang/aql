@@ -3,7 +3,7 @@ package eng
 // Membership-defined types — the convergence point for the two ways the
 // kernel installs a "type whose inhabitants are the values satisfying a
 // rule": the boru path (predicateUnifier, rule = a boru fn body run via
-// RunPredicate) and the host-Go path (memberBehavior, rule = a Go func).
+// RunPredicate) and the host-Go path (MemberUnifier, rule = a Go func).
 // Both answer the same question — "does v inhabit this type?" — at the
 // same kernel touch-points (Match for dispatch, Unify for `is`/`case`/
 // return checks, Format/canon, Compare). Only the evaluator differs, so

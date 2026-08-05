@@ -580,16 +580,6 @@ type UserPolyRef struct {
 	Sigs []Signature
 }
 
-// ClosureInShape tags HOW a higher-order word must present each per-invocation
-// input to a compiled closure — the divergence the per-word callback
-// conventions create. A map-iteration handler (each/fold/scan over a map) runs
-// BOTH a token-quotation body (sees the bare value) and a lambda body (sees a
-// KeyVal {k v i n}); the closure value alone cannot say which, so the compile
-// records the shape on the unit and the handler reads it back here. The
-// unambiguous handlers (filter list/map) build their own fixed shape and ignore
-// it.
-type ClosureInShape uint8
-
 const (
 	// ClosureInValue passes the per-invocation inputs through unchanged — the
 	// token-quotation form (list element / map value, plus fold's accumulator).
@@ -598,26 +588,6 @@ const (
 	// input — the map-iteration LAMBDA convention (`each (kv => …) {m}`).
 	ClosureInKeyVal
 )
-
-// ClosurePayload is a runtime fn VALUE backed by a compiled body unit:
-// OpPushClosure pushes one, and a higher-order word's native handler invokes
-// it through the VM's re-entrant runner (via the InvokeBody seam) — never the
-// interpreter (plan P2). Unit indexes Program.Fns; Captures are the
-// construction-time lexical captures bound into the body's trailing local
-// slots at invocation (empty for a capture-free body). InShape carries the
-// unit's input convention (copied from CompiledFn at OpPushClosure) so the
-// driving handler shapes each input correctly.
-type ClosurePayload struct {
-	PayloadBase
-	Unit     int
-	Captures []Value
-	InShape  ClosureInShape
-	// Render is the interpreter's formatFnDef string for the source fn this
-	// closure compiled from (CompiledFn.Render, copied at OpPushClosure): a
-	// closure VALUE then renders byte-identically to the interpreter's fn
-	// value. Empty keeps the default rendering.
-	Render string
-}
 
 // NewClosure builds a closure Value over a compiled body unit (default value
 // input shape). The VM stamps the unit's real InShape at OpPushClosure.

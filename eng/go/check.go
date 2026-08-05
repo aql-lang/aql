@@ -10,31 +10,6 @@ package eng
 // because most mutate state (Diagnostics, DefsUsed, …); r.Check is
 // addressable so Go auto-takes &r.Check at the call site.
 
-// cloneNestedSet deep-copies a name→set map so a sandbox's mutation of an
-// inner set cannot bleed into the snapshot (cloneMap only copies the outer
-// header, leaving the inner maps shared).
-func cloneNestedSet(m map[string]map[string]bool) map[string]map[string]bool {
-	if m == nil {
-		return nil
-	}
-	cp := make(map[string]map[string]bool, len(m))
-	for k, inner := range m {
-		cp[k] = cloneMap(inner)
-	}
-	return cp
-}
-
-func cloneMap[K comparable, V any](m map[K]V) map[K]V {
-	if m == nil {
-		return nil
-	}
-	cp := make(map[K]V, len(m))
-	for k, v := range m {
-		cp[k] = v
-	}
-	return cp
-}
-
 // (Moved from micron.go with the family split — these are generic
 // check-mode helpers, not Micron content.)
 //

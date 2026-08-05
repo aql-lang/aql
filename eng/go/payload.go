@@ -402,3 +402,102 @@ func (noneSentinel) payloadMarker() {}
 type PayloadBase struct{}
 
 func (PayloadBase) payloadMarker() {}
+
+// Cross-piece payload DATA shapes re-homed to core (Stage 4f, the
+// state-record principle): the sealed-payload catalogue is core-owned;
+// the machinery that fills these stays in its piece.
+
+// GuardFactInfo is the payload a check-mode paren evaluation attaches
+// to a single Boolean carrier result: the group's ORIGINAL tokens,
+// preserved so guard narrowing can see the `x is T` structure that
+// evaluation reduced to a bare Boolean
+// (design/checker-accuracy-review.10.md A3 — without it, the canonical
+// `if (x is T) …` paren form narrowed nothing while the list form
+// `if [x is T] …` narrowed fine). Check-mode only; the runtime never
+// produces carriers.
+type GuardFactInfo struct {
+	PayloadBase
+	Toks []Value
+	// Prev is the payload the group actually reduced to (a BoolPayload for a
+	// statically-decided cond), preserved so LiteralCondValue can still read
+	// the literal truth value through the wrapper. Without it, wrapping a
+	// decided cond in a GuardFactInfo carrier hid its value from the
+	// unreachable-branch analysis.
+	Prev Payload
+}
+
+// StoreShapeInfo is the abstract check-mode shape of ONE store-class
+// container (a context Store layer, a FlexMap): the per-key JOIN of the
+// value carriers written through it. A pointer payload deliberately —
+// every Value copy of the carrier (a def binding, a stack duplicate, a
+// nested-field read) aliases the SAME shape, mirroring the runtime
+// aliasing of the mutable container it stands for. All mutation is
+// join-only (JoinCarriers), so sandbox rollbacks that cannot un-mutate
+// a shared pointee only ever WIDEN a claim — monotone, never unsound.
+type StoreShapeInfo struct {
+	PayloadBase
+	// Scope is the context-stack depth at mint time for context-layer
+	// shapes (stage-2 layering substrate); 0 for non-context containers
+	// (flex maps, patrun instances).
+	Scope int
+	// KeyTypes records key → joined written-value carrier, with the
+	// same JoinCarriers-on-rewrite semantics as the flat ContextTypes
+	// map (so a single-store program reads back exactly what the flat
+	// path recorded). nil until the first write.
+	KeyTypes map[string]Value
+	// Vals is the join of the UNKEYED value writes for containers whose
+	// write key is not a string (a patrun's pattern-keyed `add`). The
+	// zero Value (Parent == nil) means "nothing recorded".
+	Vals Value
+	// ValsPoisoned marks the unkeyed join unusable: a write the shape
+	// cannot describe honestly (a dispatch-bearing value — a stored
+	// lambda re-dispatched by the reader) poisons it, and readers keep
+	// the pre-existing dynamic(Any) hatch.
+	ValsPoisoned bool
+	// DeclaredVal is the DECLARED element type of a typed container (a
+	// `patrun T` table): nil for an inferred/untyped shape. When set, a
+	// reader (`find`) surfaces `dynamic(DeclaredVal ∪ None)` directly,
+	// bypassing the Vals join and its poisoning entirely — the type is a
+	// declaration, not an inference.
+	DeclaredVal *Type
+}
+
+// ClosurePayload is a runtime fn VALUE backed by a compiled body unit:
+// OpPushClosure pushes one, and a higher-order word's native handler invokes
+// it through the VM's re-entrant runner (via the InvokeBody seam) — never the
+// interpreter (plan P2). Unit indexes Program.Fns; Captures are the
+// construction-time lexical captures bound into the body's trailing local
+// slots at invocation (empty for a capture-free body). InShape carries the
+// unit's input convention (copied from CompiledFn at OpPushClosure) so the
+// driving handler shapes each input correctly.
+type ClosurePayload struct {
+	PayloadBase
+	Unit     int
+	Captures []Value
+	InShape  ClosureInShape
+	// Render is the interpreter's formatFnDef string for the source fn this
+	// closure compiled from (CompiledFn.Render, copied at OpPushClosure): a
+	// closure VALUE then renders byte-identically to the interpreter's fn
+	// value. Empty keeps the default rendering.
+	Render string
+}
+
+// NewStoreShapeCarrier mints an abstract store-shaped carrier: a
+// carrier of t (TStore, TFlexMap, …) whose Data is a FRESH
+// *StoreShapeInfo. One mint per creation site / live layer — sharing
+// the returned Value shares the shape (that is the aliasing model).
+func NewStoreShapeCarrier(t *Type, scope int) Value {
+	v := NewCarrier(t)
+	v.Data = &StoreShapeInfo{Scope: scope}
+	return v
+}
+
+// ClosureInShape tags HOW a higher-order word must present each per-invocation
+// input to a compiled closure — the divergence the per-word callback
+// conventions create. A map-iteration handler (each/fold/scan over a map) runs
+// BOTH a token-quotation body (sees the bare value) and a lambda body (sees a
+// KeyVal {k v i n}); the closure value alone cannot say which, so the compile
+// records the shape on the unit and the handler reads it back here. The
+// unambiguous handlers (filter list/map) build their own fixed shape and ignore
+// it.
+type ClosureInShape uint8

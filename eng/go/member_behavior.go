@@ -1,6 +1,6 @@
 package eng
 
-// memberBehavior is a TypeBehavior built from a single Go membership
+// MemberUnifier is a TypeBehavior built from a single Go membership
 // predicate. It is the host-Go counterpart of the wiring the boru
 // `def`/`refine`/`tor` path installs automatically: a host that can say
 // "does value v belong to this type?" gets every kernel touch-point for
@@ -18,7 +18,7 @@ package eng
 //     lattice family), so a member renders as itself and canon keeps its
 //     family form (e.g. an Atom subtype's `name/q`).
 //   - Equal — kernel default.
-type memberBehavior struct {
+type MemberUnifier struct {
 	member func(v Value) bool
 }
 
@@ -30,14 +30,14 @@ type memberBehavior struct {
 // predicate. Pair it with TypeTable.MintMemberType (or pass it to
 // MintTypeWithBehavior / RegisterType) to attach it to a node.
 func MemberBehavior(member func(v Value) bool) TypeBehavior {
-	return memberBehavior{member: member}
+	return MemberUnifier{member: member}
 }
 
 // Match reports membership via the shared contract: a non-inhabitant
 // defers to the lattice walk; a concrete value is put to the predicate.
-func (memberBehavior) ContentMembership() {}
+func (MemberUnifier) ContentMembership() {}
 
-func (b memberBehavior) Match(v Value, t *Type) bool {
+func (b MemberUnifier) Match(v Value, t *Type) bool {
 	return matchMembership(v, t, nil, b.member)
 }
 
@@ -46,21 +46,21 @@ func (b memberBehavior) Match(v Value, t *Type) bool {
 // definitively (no structural re-admission), a type-level pair defers to
 // the structural rule. The Go predicate yields the candidate unchanged on
 // a match.
-func (b memberBehavior) Unify(a, c Value) (Value, *UnifyError) {
+func (b MemberUnifier) Unify(a, c Value) (Value, *UnifyError) {
 	return unifyMembership(a, c, "the member type", func(v Value) (Value, bool, error) {
 		return v, b.member(v), nil
 	})
 }
 
-func (b memberBehavior) Equal(a, c Value) bool           { return baseBehavior(nil).Equal(a, c) }
-func (b memberBehavior) Format(v Value) string           { return baseBehavior(nil).Format(v) }
-func (b memberBehavior) Compare(a, c Value) (int, error) { return baseCompare(nil, a, c) }
+func (b MemberUnifier) Equal(a, c Value) bool           { return baseBehavior(nil).Equal(a, c) }
+func (b MemberUnifier) Format(v Value) string           { return baseBehavior(nil).Format(v) }
+func (b MemberUnifier) Compare(a, c Value) (int, error) { return baseCompare(nil, a, c) }
 
 // FormatDelegate marks the behavior as delegating Format to the kernel
 // default, so canon / Value.String render a member by its lattice family
 // rather than routing through Format (which would drop family-specific
 // source forms such as an Atom subtype's `/q` suffix).
-func (b memberBehavior) FormatDelegate() {}
+func (b MemberUnifier) FormatDelegate() {}
 
 // MintMemberType mints `name` as a subtype of parent whose inhabitants
 // are exactly the concrete values that conform to parent AND satisfy

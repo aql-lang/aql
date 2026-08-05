@@ -6520,17 +6520,6 @@ func (es *EmitState) intern(v Value) int {
 	return len(es.consts) - 1
 }
 
-// isFreshenedInstance reports whether v is a concrete MUTABLE instance that
-// make's FreshenDefault (core_make.go) copies per instance when v is a
-// class-schema field default — an Object/Store/flex value. Admitting one
-// as a SCHEMA member (ONLY through typeBodyConstOK's memberOK, never standalone)
-// is mutation-safe precisely because every `make` freshens it into its own copy;
-// outside a type body nothing freshens it, so isInertConst keeps it out of the
-// const pool. Pairs with the const-bake regression gate.
-func isFreshenedInstance(v Value) bool {
-	return IsClassInstance(v) || IsStore(v) || IsFlexList(v)
-}
-
 // isTypeBodyPayload reports a structural type-body payload — pooled
 // without dedup, like compounds (identity must not merge).
 func isTypeBodyPayload(v Value) bool {
@@ -6539,33 +6528,6 @@ func isTypeBodyPayload(v Value) bool {
 		return true
 	}
 	return false
-}
-
-// allInert reports whether pred holds for every value in ms — the shared
-// "every member must be const-safe" loop of the type-body const-bake checks.
-func allInert(ms []Value, pred func(Value) bool) bool {
-	for _, m := range ms {
-		if !pred(m) {
-			return false
-		}
-	}
-	return true
-}
-
-// allFieldsInert reports whether pred holds for every value in an ordered map
-// (a nil map is not const-bakeable). Shared by the structural-type-body and
-// surface-type const-bake checks.
-func allFieldsInert(m *OrderedMap, pred func(Value) bool) bool {
-	if m == nil {
-		return false
-	}
-	for _, k := range m.Keys() {
-		fv, _ := m.Get(k)
-		if !pred(fv) {
-			return false
-		}
-	}
-	return true
 }
 
 // isInertConst reports whether v can live in a Program's constant
@@ -6618,33 +6580,6 @@ func freshenableConst(v Value) bool {
 		return true
 	}
 	return false
-}
-
-// inertReachMember reports whether a Reach may ride as a MEMBER of an inert
-// const compound (see isInertConstMember's reach clause). It is deliberately
-// more permissive than isInertReach: a member reach is never expanded at the
-// engine pointer (the containing compound is inert), so a receiver and Eval=true
-// are fine — only a computed segment (a ParenExpr to run) or a non-inert
-// receiver/key token disqualifies it.
-func inertReachMember(v Value) bool {
-	if !IsReach(v) || v.Carrier || v.Dynamic {
-		return false
-	}
-	info, err := AsReach(v)
-	if err != nil {
-		return false
-	}
-	for _, rt := range info.Receiver {
-		if !IsInertConstMember(rt) {
-			return false
-		}
-	}
-	for _, seg := range info.Segments {
-		if seg.Computed || !IsInertConstMember(seg.KeyLit) {
-			return false
-		}
-	}
-	return true
 }
 
 // planMarkWindow arms the mark-window island (L-DO part 2b) when the

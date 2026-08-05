@@ -95,45 +95,94 @@ func (r *Registry) analysisStepMeter() (exceeded bool) {
 // analysisFnConstructionPass runs the check piece's construction-time
 // static body pass for a newly installed fn (no-op outside check mode).
 func (r *Registry) analysisFnConstructionPass(name string, fnDef FnDefInfo) {
-	checkFnBodyAtConstruction(r, name, fnDef)
+	analysisImpl.fnConstructionPass(r, name, fnDef)
 }
 
 // analysisReturnsFn builds the check piece's per-signature analysis
 // model (the ReturnsFunc baked onto every boru-bodied signature).
 func (r *Registry) analysisReturnsFn(name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
-	return buildFnBodyReturnsFn(r, name, s, fnDef)
+	return analysisImpl.returnsFn(r, name, s, fnDef)
 }
 
 // analysisStripToCarriers replaces concrete run inputs with their
 // check-mode carriers at the Run boundary (active analysis only —
 // callers gate).
-func (r *Registry) analysisStripToCarriers(in []Value) []Value { return StripToCarriers(in) }
+func (r *Registry) analysisStripToCarriers(in []Value) []Value {
+	return analysisImpl.stripToCarriers(in)
+}
 
 // analysisZeroOutResiduals drops phantom 0-output statement residues
 // from the top-level residual (recording passes).
 func (r *Registry) analysisZeroOutResiduals(stk []Value) []Value {
-	return stripZeroOutResiduals(r, stk)
+	return analysisImpl.zeroOutResiduals(r, stk)
 }
 
 // analysisCarrierResults models a matched dispatch's results under
 // analysis — the carrier-propagation seam of execMatch.
 func (r *Registry) analysisCarrierResults(word string, sig *Signature, args []Value, pos SrcPos, ownerReg *Registry, tailConsumed bool) []Value {
-	return carrierResults(r, word, sig, args, pos, ownerReg, tailConsumed)
+	return analysisImpl.carrierResults(r, word, sig, args, pos, ownerReg, tailConsumed)
 }
 
 // analysisMixedConform reports whether v is a genuinely MIXED gradual
 // carrier conforming to t (matchSignature's gradual arm).
-func (r *Registry) analysisMixedConform(v Value, t *Type) bool { return carrierMixedConform(v, t) }
+func (r *Registry) analysisMixedConform(v Value, t *Type) bool {
+	return analysisImpl.mixedConform(v, t)
+}
 
 // analysisValueCarriesCarrier reports whether v transitively contains
 // a carrier (the interp-string dynamic-collapse probe).
-func (r *Registry) analysisValueCarriesCarrier(v Value) bool { return valueCarriesCarrier(v) }
+func (r *Registry) analysisValueCarriesCarrier(v Value) bool {
+	return analysisImpl.valueCarriesCarrier(v)
+}
 
 // analysisAtUncaughtTopLevel reports unconditional top-level reach
 // outside any error-trapping region (the guaranteed-error mirrors'
 // reachability gate).
-func (r *Registry) analysisAtUncaughtTopLevel() bool { return CheckAtUncaughtTopLevel(r) }
+func (r *Registry) analysisAtUncaughtTopLevel() bool { return analysisImpl.atUncaughtTopLevel(r) }
 
 // noteAnalysisUniqueDiagnostic forwards a diagnostic deduped against
 // the accumulated list (code+detail+word+position).
-func (r *Registry) noteAnalysisUniqueDiagnostic(d CheckDiagnostic) { CheckAddUnique(r, d) }
+func (r *Registry) noteAnalysisUniqueDiagnostic(d CheckDiagnostic) { analysisImpl.addUnique(r, d) }
+
+// analysisImpl is the S1 implementation table: the check piece installs
+// the real analysis operations at init (installAnalysisImpl,
+// check_recovery.go), and the accessor bodies above dispatch through
+// it. The inactive defaults keep a check-less core linkable and are the
+// exact no-ops an inactive pass produces; TestInactiveAnalysisImpl pins
+// them.
+var analysisImpl = struct {
+	fnConstructionPass  func(r *Registry, name string, fnDef FnDefInfo)
+	returnsFn           func(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc
+	stripToCarriers     func(in []Value) []Value
+	zeroOutResiduals    func(r *Registry, stk []Value) []Value
+	carrierResults      func(r *Registry, word string, sig *Signature, args []Value, pos SrcPos, ownerReg *Registry, tailConsumed bool) []Value
+	mixedConform        func(v Value, t *Type) bool
+	valueCarriesCarrier func(v Value) bool
+	atUncaughtTopLevel  func(r *Registry) bool
+	addUnique           func(r *Registry, d CheckDiagnostic)
+}{
+	fnConstructionPass:  inactiveFnConstructionPass,
+	returnsFn:           inactiveReturnsFn,
+	stripToCarriers:     inactiveStripToCarriers,
+	zeroOutResiduals:    inactiveZeroOutResiduals,
+	carrierResults:      inactiveCarrierResults,
+	mixedConform:        inactiveMixedConform,
+	valueCarriesCarrier: inactiveValueCarriesCarrier,
+	atUncaughtTopLevel:  inactiveAtUncaughtTopLevel,
+	addUnique:           inactiveAddUnique,
+}
+
+// The inactive defaults are NAMED so the seam test pins them directly;
+// the check piece's init replaces the table while it is linked, leaving
+// these reachable only on a check-less core build.
+func inactiveFnConstructionPass(*Registry, string, FnDefInfo)           {}
+func inactiveReturnsFn(*Registry, string, FnSig, FnDefInfo) ReturnsFunc { return nil }
+func inactiveStripToCarriers(in []Value) []Value                        { return in }
+func inactiveZeroOutResiduals(_ *Registry, stk []Value) []Value         { return stk }
+func inactiveCarrierResults(*Registry, string, *Signature, []Value, SrcPos, *Registry, bool) []Value {
+	return nil
+}
+func inactiveMixedConform(Value, *Type) bool       { return false }
+func inactiveValueCarriesCarrier(Value) bool       { return false }
+func inactiveAtUncaughtTopLevel(*Registry) bool    { return false }
+func inactiveAddUnique(*Registry, CheckDiagnostic) {}

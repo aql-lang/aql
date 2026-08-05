@@ -613,7 +613,7 @@ func checkModeParenFnCollapse(e *Engine, openIdx, closeIdx int) int {
 	out := NewCarrier(TAny)
 	out.Dynamic = true
 	out.ID = GenerateID(IDPrefixForType(TAny))
-	out.pos = e.Tape.At(anchor).pos
+	out = WithPos(out, e.Tape.At(anchor))
 	// Seat the collapsed carrier at the window's first recordable literal
 	// and splice every later one out.
 	seat := -1
@@ -861,7 +861,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 			if wi, werr := AsWord(av); werr == nil {
 				if top, ok := e.Registry.Defs.Top(wi.Name); ok {
 					av = top
-					e.Registry.Check.recordUse(wi.Name)
+					e.Registry.Check.RecordUse(wi.Name)
 				}
 			}
 		}
@@ -1200,3 +1200,20 @@ func installCheckBraid() {
 }
 
 func init() { installCheckBraid() }
+
+// installAnalysisImpl wires the check piece's analysis operations into
+// core's S1 implementation table; one registration point so the cut
+// moves it wholesale into the check package's init.
+func installAnalysisImpl() {
+	analysisImpl.fnConstructionPass = checkFnBodyAtConstruction
+	analysisImpl.returnsFn = buildFnBodyReturnsFn
+	analysisImpl.stripToCarriers = StripToCarriers
+	analysisImpl.zeroOutResiduals = stripZeroOutResiduals
+	analysisImpl.carrierResults = carrierResults
+	analysisImpl.mixedConform = carrierMixedConform
+	analysisImpl.valueCarriesCarrier = valueCarriesCarrier
+	analysisImpl.atUncaughtTopLevel = CheckAtUncaughtTopLevel
+	analysisImpl.addUnique = CheckAddUnique
+}
+
+func init() { installAnalysisImpl() }

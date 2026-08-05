@@ -328,7 +328,7 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 	// on exit before the next run begins, which is the normal RunCompiled path.
 	if r != nil {
 		if !atomic.CompareAndSwapInt32(&r.VmRunning, 0, 1) {
-			return nil, makeBoruError("concurrency_error",
+			return nil, MakeBoruError("concurrency_error",
 				"bytecode: a compiled program is already running on this registry; concurrent runs need their own registry (ForkConcurrent)",
 				"", "", "")
 		}
@@ -340,7 +340,7 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 		// own islands increment the depth only later).
 		if r.InterpRunActive() {
 			// The deferred StoreInt32 above releases vmRunning on this return.
-			return nil, makeBoruError("concurrency_error",
+			return nil, MakeBoruError("concurrency_error",
 				"bytecode: an interpreter run is already active on this registry; concurrent runs need their own registry (ForkConcurrent)",
 				"", "", "")
 		}
@@ -357,7 +357,7 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 				src = r.Source
 			}
 			result = nil
-			runErr = makeBoruError("internal_error",
+			runErr = MakeBoruError("internal_error",
 				fmt.Sprintf("internal bytecode VM error: %v", rec), "", src, "")
 		}
 	}()
@@ -1545,7 +1545,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			if r != nil {
 				src = r.Source
 			}
-			ae := makeBoruError(tr.Code, tr.Detail, tr.Word, src, tr.Hint)
+			ae := MakeBoruError(tr.Code, tr.Detail, tr.Word, src, tr.Hint)
 			ae.Spans = tr.Spans
 			ae.Notes = tr.Notes
 			ae.Suggestions = tr.Suggestions
@@ -2466,7 +2466,7 @@ func vmErrAt(debug []SrcPos, pc int, msg string) error {
 	if pc >= 0 && pc < len(debug) {
 		pos = debug[pc]
 	}
-	return makeBoruErrorAt("internal_error",
+	return MakeBoruErrorAt("internal_error",
 		fmt.Sprintf("bytecode: internal: %s (pc=%d, src %d:%d)", msg, pc, pos.Row, pos.Col),
 		"", "", "", pos)
 }

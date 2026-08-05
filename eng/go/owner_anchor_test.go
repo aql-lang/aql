@@ -86,7 +86,7 @@ func TestIsNominalAnchor(t *testing.T) {
 // theorem, so the inventory is explicit.
 func TestContentMembershipInventory(t *testing.T) {
 	content := []TypeBehavior{
-		memberBehavior{},
+		MemberUnifier{},
 		&DepScalarUnifier{},
 		&DisjunctUnifier{},
 		&NegationUnifier{},

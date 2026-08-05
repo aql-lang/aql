@@ -1033,7 +1033,7 @@ func (c *CheckState) RecordContextSet(key string, carrier Value) {
 		c.ContextTypes = map[string]Value{}
 	}
 	if existing, ok := c.ContextTypes[key]; ok {
-		c.ContextTypes[key] = JoinCarriers(existing, carrier)
+		c.ContextTypes[key] = joinCarriersHook(existing, carrier)
 		return
 	}
 	c.ContextTypes[key] = carrier
@@ -1227,3 +1227,35 @@ func (r *Registry) RescueForwardRefDiagnostics() {
 	}
 	r.Check.Diagnostics = kept
 }
+
+// cloneNestedSet deep-copies a name→set map so a sandbox's mutation of an
+// inner set cannot bleed into the snapshot (cloneMap only copies the outer
+// header, leaving the inner maps shared).
+func cloneNestedSet(m map[string]map[string]bool) map[string]map[string]bool {
+	if m == nil {
+		return nil
+	}
+	cp := make(map[string]map[string]bool, len(m))
+	for k, inner := range m {
+		cp[k] = cloneMap(inner)
+	}
+	return cp
+}
+
+func cloneMap[K comparable, V any](m map[K]V) map[K]V {
+	if m == nil {
+		return nil
+	}
+	cp := make(map[K]V, len(m))
+	for k, v := range m {
+		cp[k] = v
+	}
+	return cp
+}
+
+// joinCarriersHook is the S1-style slot for the carrier join the
+// context-type recording needs: the fold's normalisations live with the
+// check piece's carrier machinery, which installs the real fold at
+// init. The fallback (last write wins) keeps a check-less core
+// linkable; RecordContextSet only runs under an active analysis.
+var joinCarriersHook = func(existing, carrier Value) Value { return carrier }
