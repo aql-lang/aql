@@ -24,8 +24,8 @@ Go and ts need total parity.")
      Makefile). Current: **89** (measured 89.7%,
      22,252/24,796 statements).
    - TS: `make test-ts`, floor `TS_GATE_LINES` (root Makefile).
-     Current: **85** (measured 85.68% lines; branches 84.5%,
-     functions 84.1% recorded but not yet gated).
+     Current: **88** (measured 88.53% lines; branches 86.2%,
+     functions 87.2% recorded but not yet gated).
    Raise the floor in the same PR that raises coverage; lowering
    either floor is a build break by intent.
 4. **Parity of corpus.** The shared `eng/spec` corpus remains the
@@ -125,3 +125,4 @@ Gate the branches/functions metrics once lines reach 100.
 | 2026-08-05 | 87 | 85 | specfix guard probes + pragmas (fixtures at 100%); merged repo gate restored to 100%. |
 | 2026-08-05 | 88 | 85 | Stage-4 wave 1: unit probes for the pure-function tail (SizeOf, table/JSON render, Disassemble, the unify families, fn-spec params/returns, RunPredicate, CallBoru, registry arms) — 316 statements. |
 | 2026-08-05 | 89 | 85 | Stage-4 waves 2–4: fixture if/for (count + range) + doq closures (specfix/control.go), the eng-local battery (value, compiled, and check lanes; 78 rows, most VM-executed) — 542 statements total closed. |
+| 2026-08-05 | 89 | 88 | TS wave 1: the parse-error translation campaign (errors.ts 48→100), the canon tails (71.8→98.5), and the parser breadth battery (convert.ts 72.7→82.2) — 85.68→88.53 lines. |
