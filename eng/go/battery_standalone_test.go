@@ -256,3 +256,101 @@ func TestClosureBattery(t *testing.T) {
 		{input: "doq [refine 5] typeof", want: "Error"},
 	})
 }
+
+// TestRangeLoopBattery drives the range-form for: static ranges with
+// every arity, negative steps, and computed bounds (const start/step,
+// runtime end) that still lower to FOR_SETUP.
+func TestRangeLoopBattery(t *testing.T) {
+	runBattery(t, []batteryRow{
+		{input: "for [3] [i]", want: "0 1 2"},
+		{input: "for [1 4] [i]", want: "1 2 3"},
+		{input: "for [1 7 2] [i]", want: "1 3 5"},
+		{input: "for [3 0 -1] [i]", want: "3 2 1"},
+		{input: "for [2 2] [i]", want: ""},
+		{input: "for [1 4 0] [i]", wantErr: "step cannot be zero"},
+		// Computed bounds inside a fn body (carrier end).
+		{input: "def f fn [[n:Integer] [Any] [for [n] [5 drop] 0]] f 3", want: "0"},
+		{input: "def f fn [[n:Integer] [Any] [for [1 n] [5 drop] 0]] f 3", want: "0"},
+		{input: "def f fn [[n:Integer] [Any] [for [0 n 1] [5 drop] 0]] f 2", want: "0"},
+		// A computed range at top level via a computed def.
+		{input: "def n (1 addq 2) for [n] [i]", want: "0 1 2"},
+	})
+}
+
+// TestFnValueApplyBattery drives fn VALUES applied through parens —
+// the dynamic-apply record/lower path.
+func TestFnValueApplyBattery(t *testing.T) {
+	runBattery(t, []batteryRow{
+		// A def-bound fn applied in a paren group.
+		{input: "def f (fn [[x:Integer] [Integer] [x addq 1]]) (f 5)", want: "6"},
+		// Applied twice; nested applications.
+		{input: "def f (fn [[x:Integer] [Integer] [x addq 1]]) (f (f 5))", want: "7"},
+		// A fn value passed through a def and applied in a branch body.
+		{input: "def f (fn [[x:Integer] [Integer] [x mulq 3]]) if [true] [(f 2)] [0]", want: "6"},
+		// Zero-arg fn value.
+		{input: "def f (fn [[] [Integer] [42]]) (f)", want: "42"},
+	})
+}
+
+// runBatteryCheck runs one row in plain check mode and renders the
+// carrier stack + diagnostics, exactly like the corpus check lane.
+func runBatteryCheck(t *testing.T, input string) (string, error) {
+	t.Helper()
+	values, err := parser.Parse(input)
+	if err != nil {
+		t.Fatalf("parse %q: %v", input, err)
+	}
+	r := batteryRegistry(t)
+	specfix.RegisterCheckExtras(r)
+	r.Source = input
+	done := r.Check.Begin()
+	out, runErr := eng.NewTop(r).Run(values)
+	r.RescueForwardRefDiagnostics()
+	r.Check.EmitUnusedDefDiagnostics()
+	diags := r.Check.Diagnostics
+	done()
+	if runErr != nil {
+		return "", runErr
+	}
+	return specfix.RenderCheck(out, diags), nil
+}
+
+// TestCheckModeBattery pins the check renders of control/closure rows:
+// the branch join shapes, the loop spread model, the unreachable-branch
+// diagnostic, and dynamic dispatch over carriers.
+func TestCheckModeBattery(t *testing.T) {
+	rows := []struct {
+		input string
+		want  string
+	}{
+		// Constant LIST conditions reduce with the unreachable diagnostic;
+		// a bare scalar condition keeps the live join.
+		{input: "if [true] [1] [2]", want: "Integer :: ~unreachable_branch"},
+		{input: "if [false] [1] ['s']", want: "ProperString :: ~unreachable_branch"},
+		{input: "if false [1] ['s']", want: "Disjunct"},
+		// A live condition joins the arms.
+		{input: "if [1 is Integer] [1] [2]", want: "Integer"},
+		{input: "if [1 is Integer] [1] ['s']", want: "Disjunct"},
+		// Loop spread: three per-iteration values.
+		{input: "for 3 [i]", want: "Integer Integer Integer"},
+		{input: "for [1 3] ['x']", want: "ProperString ProperString"},
+		// Closure body residuals.
+		{input: "doq [1 addq 2]", want: "Number"},
+		{input: "doq [10 20 30]", want: "Integer Integer Integer"},
+		// A word body derefs through the def table under check too.
+		{input: "def b [1 addq 2] doq b", want: "Number"},
+		// A fn value applied in parens under check.
+		{input: "def f (fn [[x:Integer] [Integer] [x addq 1]]) (f 5)", want: "Integer"},
+	}
+	for _, row := range rows {
+		t.Run(row.input, func(t *testing.T) {
+			got, err := runBatteryCheck(t, row.input)
+			if err != nil {
+				t.Fatalf("check run: %v", err)
+			}
+			if got != row.want {
+				t.Errorf("check render = %q, want %q", got, row.want)
+			}
+		})
+	}
+}

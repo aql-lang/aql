@@ -290,12 +290,20 @@ func registerEngSpecControl(r *eng.Registry) {
 	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "for",
-		Signatures: []eng.Signature{{
-			Args:       []*eng.Type{eng.TInteger, eng.TList},
-			NoEvalArgs: map[int]bool{1: true},
-			Impl:       eng.Go(fixForCountHandler),
-			ReturnsFn:  fixForReturnsFn, BarrierPos: -1,
-		}},
+		Signatures: []eng.Signature{
+			{
+				Args:       []*eng.Type{eng.TInteger, eng.TList},
+				NoEvalArgs: map[int]bool{1: true},
+				Impl:       eng.Go(fixForCountHandler),
+				ReturnsFn:  fixForReturnsFn, BarrierPos: -1,
+			},
+			{
+				Args:       []*eng.Type{eng.TList, eng.TList},
+				NoEvalArgs: map[int]bool{1: true},
+				Impl:       eng.Go(fixForRangeHandler),
+				ReturnsFn:  fixForRangeReturnsFn, BarrierPos: -1,
+			},
+		},
 	})
 }
 
@@ -358,4 +366,153 @@ func registerEngSpecCallable(r *eng.Registry) {
 			CompileEffect: eng.CompileFallbackBody | eng.CompileDynBody,
 		}},
 	})
+}
+
+// fixParseRange decodes a for-range list mirroring basic's ParseRange:
+// [end] / [start end] / [start end step], every bound a concrete
+// Integer (the VM's OpForSetup taxonomy).
+func fixParseRange(elems []eng.Value) (start, end, step int64, err error) {
+	intAt := func(v eng.Value) (int64, error) {
+		n, e := v.AsConcreteInteger()
+		if e != nil {
+			return 0, &eng.BoruError{Code: "for_error", Detail: "for: range: expected a concrete integer"}
+		}
+		return n, nil
+	}
+	switch len(elems) {
+	case 1:
+		if end, err = intAt(elems[0]); err != nil {
+			return 0, 0, 0, err
+		}
+		return 0, end, 1, nil
+	case 2:
+		if start, err = intAt(elems[0]); err != nil {
+			return 0, 0, 0, err
+		}
+		if end, err = intAt(elems[1]); err != nil {
+			return 0, 0, 0, err
+		}
+		return start, end, 1, nil
+	case 3:
+		if start, err = intAt(elems[0]); err != nil {
+			return 0, 0, 0, err
+		}
+		if end, err = intAt(elems[1]); err != nil {
+			return 0, 0, 0, err
+		}
+		if step, err = intAt(elems[2]); err != nil {
+			return 0, 0, 0, err
+		}
+		if step == 0 {
+			return 0, 0, 0, &eng.BoruError{Code: "for_error", Detail: "for: step cannot be zero"}
+		}
+		return start, end, step, nil
+	}
+	return 0, 0, 0, &eng.BoruError{Code: "for_error", Detail: "for: range must have 1-3 elements"}
+}
+
+// fixLoopIterations mirrors basic's LoopIterations for the static
+// zero-prune and region sizing.
+func fixLoopIterations(start, end, step int64) int64 {
+	if step > 0 {
+		if start >= end {
+			return 0
+		}
+		return (end - start + step - 1) / step
+	}
+	if step < 0 {
+		if start <= end {
+			return 0
+		}
+		return (start - end - step - 1) / -step
+	}
+	return -1
+}
+
+func fixForRangeHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+	if !eng.IsConcrete(args[0]) {
+		return nil, &eng.BoruError{Code: "for_error", Detail: "for: range must be a concrete list, got type literal"}
+	}
+	lst, _ := eng.AsList(args[0])
+	start, end, step, err := fixParseRange(lst.Slice())
+	if err != nil {
+		return nil, err
+	}
+	if step < 0 && start <= end {
+		return nil, nil
+	}
+	return fixRunForLoop(r, start, end, step, "i", args[1])
+}
+
+// fixForRangeReturnsFn is the range-form model: a fully-static range
+// decomposes for RecordLoop; a range whose bounds are computed keeps
+// const start/step and resolves the end operand (basic's
+// computedRangeBounds shape) so the lowering still emits FOR_SETUP.
+func fixForRangeReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
+	body := args[1]
+	iter := eng.NewCarrier(eng.TInteger)
+	es := r.Check.Recorder()
+
+	var startV, endV, stepV eng.Value
+	lowerable, staticBounds := false, false
+	staticCount := int64(-1)
+	if cv := args[0]; eng.IsConcrete(cv) && cv.Parent.ConformsTo(eng.TList) {
+		if lst, err := eng.AsList(cv); err == nil && !lst.IsNil() {
+			elems := lst.Slice()
+			if st, en, sp, perr := fixParseRange(elems); perr == nil {
+				startV, endV, stepV = eng.NewInteger(st), eng.NewInteger(en), eng.NewInteger(sp)
+				lowerable, staticBounds = true, true
+				staticCount = fixLoopIterations(st, en, sp)
+				if staticCount == 0 {
+					return []eng.Value{}
+				}
+			} else {
+				switch len(elems) {
+				case 1:
+					startV, endV, stepV = eng.NewInteger(0), elems[0], eng.NewInteger(1)
+					lowerable = true
+				case 2:
+					startV, endV, stepV = elems[0], elems[1], eng.NewInteger(1)
+					lowerable = true
+				case 3:
+					startV, endV, stepV = elems[0], elems[1], elems[2]
+					lowerable = true
+				}
+			}
+		}
+	}
+	if lowerable {
+		es.ArmLoopCapture()
+	}
+	provenTrips := staticBounds && staticCount >= 1
+	stk := eng.AnalyseLoopBody(r, body, []string{"i"}, []eng.Value{iter}, provenTrips)
+	out := eng.NewCarrier(eng.TList)
+	if len(stk) > 0 {
+		top := stk[len(stk)-1]
+		if eng.IsDisjunct(top) {
+			out = eng.NewCarrierTypedListValue(top)
+		} else {
+			out = eng.NewCarrierTypedList(top.Parent)
+		}
+	}
+	if lowerable {
+		regionN := 0
+		if staticBounds && staticCount >= 1 && len(stk) > 0 {
+			regionN = int(staticCount) * len(stk)
+		}
+		frag := es.TakeFragment()
+		es.RecordLoop(startV, endV, stepV, frag, stk, iter.ID, out, regionN, args[0].Pos())
+	}
+	if len(stk) == 0 && (!es.Active() || !lowerable) {
+		return []eng.Value{}
+	}
+	const spreadCap = 256
+	if !es.Active() && staticBounds && staticCount >= 0 && len(stk) > 0 && staticCount*int64(len(stk)) <= spreadCap {
+		spread := make([]eng.Value, 0, int(staticCount)*len(stk))
+		for i := int64(0); i < staticCount; i++ {
+			spread = append(spread, stk...)
+		}
+		return spread
+	}
+	return []eng.Value{out}
 }

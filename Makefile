@@ -418,7 +418,7 @@ cover-gate:
 # never lower it. The TS twin's ratchet lives in `make test-ts`
 # (node --test line-coverage threshold) — the two gates are the parity
 # pair (Go statements ≡ TS lines).
-ENG_GATE_FLOOR ?= 88
+ENG_GATE_FLOOR ?= 89
 cover-gate-eng:
 	@mkdir -p $(COVER_DIR)
 	@echo "==> cover-gate-eng (standalone, floor $(ENG_GATE_FLOOR)%)"
