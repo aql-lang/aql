@@ -34,6 +34,21 @@ func TestInactiveEmitMethods(t *testing.T) {
 	if e.Sites() != nil {
 		t.Fatal("inactive Sites should be nil")
 	}
+	// Stage-0b promotions: the probes that replaced the concrete
+	// *EmitState asserts all decline on the inactive recorder.
+	if e.inClosureUnit() || e.storedGradualActive() {
+		t.Fatal("inactive closure/stored probes should decline")
+	}
+	if folded, ok := e.FoldFullStack("w", nil, nil); folded != nil || ok {
+		t.Fatal("inactive FoldFullStack should decline")
+	}
+	if e.RecordSpliceDyn(Value{}, SrcPos{}) {
+		t.Fatal("inactive RecordSpliceDyn should decline")
+	}
+	e.noteShapedRead("id")
+	if v, ok := e.memberFnReadValue("id"); ok || v.Data != nil {
+		t.Fatal("inactive memberFnReadValue should miss")
+	}
 	if p, why, ok := e.Finalize(nil); p != nil || ok || why == "" {
 		t.Fatalf("inactive Finalize = %v %q %v", p, why, ok)
 	}
