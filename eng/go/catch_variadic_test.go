@@ -40,8 +40,8 @@ func TestCatchVariadicLatch(t *testing.T) {
 		t.Fatal("nil receiver must be inert")
 	}
 	// The inactive recorder accepts the call as a no-op.
-	theInactiveEmit.SetCatchVariadic(true)
-	if theInactiveEmit.RecordInterpXml(XmlTmpl{}, nil, Value{}, SrcPos{}) {
+	TheInactiveEmit.SetCatchVariadic(true)
+	if TheInactiveEmit.RecordInterpXml(XmlTmpl{}, nil, Value{}, SrcPos{}) {
 		t.Fatal("the inactive recorder must decline RecordInterpXml")
 	}
 }

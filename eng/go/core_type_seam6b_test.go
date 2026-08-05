@@ -142,7 +142,7 @@ func TestS6b0TypeMembershipBehaviorDelegates(t *testing.T) {
 // --- core_boolean.go -----------------------------------------------------------------
 
 func TestS6b0UnionTypeEmptyIsNever(t *testing.T) {
-	got := unionType(NewDisjunct(nil), NewDisjunct(nil))
+	got := UnionType(NewDisjunct(nil), NewDisjunct(nil))
 	if !IsBareTypeNode(got) || !(&got).Equal(TNever) {
 		t.Errorf("empty union = %v, want Never", got)
 	}
@@ -150,13 +150,13 @@ func TestS6b0UnionTypeEmptyIsNever(t *testing.T) {
 
 func TestS6b0IsNeverShapeSentinel(t *testing.T) {
 	sentinel := Value{Parent: TNever, Data: NonePayload{}}
-	if !isNeverShape(sentinel) {
+	if !IsNeverShape(sentinel) {
 		t.Error("a Parent=Never sentinel is a Never shape")
 	}
-	if !isNeverShape(NewTypeLiteral(TNever)) {
+	if !IsNeverShape(NewTypeLiteral(TNever)) {
 		t.Error("the bare Never literal is a Never shape")
 	}
-	if isNeverShape(NewInteger(1)) {
+	if IsNeverShape(NewInteger(1)) {
 		t.Error("an integer is not a Never shape")
 	}
 }

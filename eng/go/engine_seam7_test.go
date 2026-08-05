@@ -18,15 +18,15 @@ func engWithTape(t *testing.T, vals []Value, pointer int) *Engine {
 	t.Helper()
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape(vals, stackHeadroom)
-	e.pointer = pointer
+	e.Tape = NewTape(vals, stackHeadroom)
+	e.Pointer = pointer
 	return e
 }
 
 // --- reorderHintFor -------------------------------------------------------
 
 func TestS7ReorderHintForNilFn(t *testing.T) {
-	if got := reorderHintFor("x", nil, nil); got != "" {
+	if got := ReorderHintFor("x", nil, nil); got != "" {
 		t.Errorf("reorderHintFor(nil fn) = %q, want empty", got)
 	}
 }
@@ -42,7 +42,7 @@ func TestS7ReorderHintForUnnamedParams(t *testing.T) {
 		BarrierPos: -1,
 	}}}
 	written := []Value{NewInteger(1), NewString("x")}
-	got := reorderHintFor("swap", fn, written)
+	got := ReorderHintFor("swap", fn, written)
 	if got == "" {
 		t.Fatal("expected a reorder hint")
 	}
@@ -62,7 +62,7 @@ func TestS7ReorderHintForNamedParams(t *testing.T) {
 		BarrierPos: -1,
 	}}}
 	written := []Value{NewInteger(1), NewString("x")}
-	got := reorderHintFor("wp", fn, written)
+	got := ReorderHintFor("wp", fn, written)
 	if !strings.Contains(got, "policy:String") || !strings.Contains(got, "n:Integer") {
 		t.Errorf("hint = %q, want named params", got)
 	}
@@ -257,8 +257,8 @@ func TestS7IsFnShapeTypedBindingContextWordConstraintFnShape(t *testing.T) {
 	m.Set("f", NewWord("MyShape"))
 	fwd := NewForward(ForwardInfo{FuncName: "def", Sig: sig, CollectedArgs: 1, FuncIndex: 1})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewMap(m), fwd, NewInteger(0)}, stackHeadroom)
-	e.pointer = 3
+	e.Tape = NewTape([]Value{NewMap(m), fwd, NewInteger(0)}, stackHeadroom)
+	e.Pointer = 3
 	if !e.isFnShapeTypedBindingContext() {
 		t.Error("a fn-shape typed-name constraint via a word → true")
 	}

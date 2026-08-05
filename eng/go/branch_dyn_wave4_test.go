@@ -429,17 +429,17 @@ func (c *w4CountRecorder) OnCall(string, int, int) { c.calls++ }
 func TestSigOrderArgsShapes(t *testing.T) {
 	a, b, c := NewInteger(1), NewInteger(2), NewInteger(3)
 	// All-forward (nStack 0): unchanged.
-	out := sigOrderArgs([]Value{a, b, c}, 0)
+	out := SigOrderArgs([]Value{a, b, c}, 0)
 	if renderAll(out) != "1 | 2 | 3" {
 		t.Errorf("all-forward = %s", renderAll(out))
 	}
 	// Two stack args below one forward: forward first, stack reversed.
-	out = sigOrderArgs([]Value{a, b, c}, 2)
+	out = SigOrderArgs([]Value{a, b, c}, 2)
 	if renderAll(out) != "3 | 2 | 1" {
 		t.Errorf("mixed = %s", renderAll(out))
 	}
 	// Out-of-range nStack clamps to all-stack.
-	out = sigOrderArgs([]Value{a, b}, 5)
+	out = SigOrderArgs([]Value{a, b}, 5)
 	if renderAll(out) != "2 | 1" {
 		t.Errorf("clamped = %s", renderAll(out))
 	}
@@ -492,7 +492,7 @@ func TestValueTreeHasCarriers(t *testing.T) {
 }
 
 func TestCarrierOfLiteralHelper(t *testing.T) {
-	c := carrierOfLiteral(NewInteger(42))
+	c := CarrierOfLiteral(NewInteger(42))
 	if !c.Carrier {
 		t.Error("carrierOfLiteral not a carrier")
 	}

@@ -21,7 +21,7 @@ package eng
 // cascade. Returns (nil, false) for names that are not builtin types —
 // user-defined type names resolve through the registry arm, not here.
 func ResolveBuiltinTypeName(name string) (*Type, bool) {
-	if t, ok := typeNames[name]; ok {
+	if t, ok := TypeNames[name]; ok {
 		return t, true
 	}
 	return ResolveTypePath(name)

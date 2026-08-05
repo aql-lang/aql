@@ -2117,7 +2117,7 @@ func NewTypeLiteral(t *Type) Value {
 // A type literal IS its node. A carrier's node is its Parent — a
 // carrier keeps Parent pointing at the type it carries. Used by the
 // renderers to recover the type name from either shape.
-func typeNodeOf(v Value) *Type {
+func TypeNodeOf(v Value) *Type {
 	if v.Carrier {
 		return v.Parent
 	}
@@ -3008,7 +3008,7 @@ func IsFlatInstance(v Value) bool {
 // map (class or Resource/Entity) and true; (nil, false) otherwise.
 // Field order follows the instance's own order.
 func FlatInstanceFields(v Value) (*OrderedMap, bool) {
-	fields, _, ok := flatInstanceParts(v)
+	fields, _, ok := FlatInstanceParts(v)
 	if !ok {
 		return nil, false
 	}
@@ -3026,7 +3026,7 @@ func FlatInstanceFields(v Value) (*OrderedMap, bool) {
 // declared schema key order (own + inherited) for a class or resource
 // instance. The Fields map is not copied — callers that mutate must
 // copy first (see FlatInstanceFields).
-func flatInstanceParts(v Value) (fields *OrderedMap, schemaKeys []string, ok bool) {
+func FlatInstanceParts(v Value) (fields *OrderedMap, schemaKeys []string, ok bool) {
 	switch d := v.Data.(type) {
 	case ClassInstanceInfo:
 		if d.TypeRef != nil {
@@ -3564,7 +3564,7 @@ func kernelFormatDefault(v Value) string {
 		// Type literal (or carrier) with no specific value — render as
 		// the type's leaf name; type names are globally unique so the
 		// leaf alone is unambiguous.
-		return typeNodeOf(v).Leaf()
+		return TypeNodeOf(v).Leaf()
 	case v.IsDepScalar():
 		// Must come before TString / TInteger / TFloat matches: the
 		// lattice override makes DepString.ConformsTo(TString) (and the
@@ -3679,7 +3679,7 @@ func kernelFormatDefault(v Value) string {
 	// map (a 600-line spill into error messages). See formatFnDef.
 	case isFnDefValue(v):
 		fd, _ := v.Data.(FnDefInfo)
-		return formatFnDef(fd)
+		return FormatFnDef(fd)
 	case func() bool { cl, ok := v.Data.(ClosurePayload); return ok && cl.Render != "" }():
 		// A compiled closure carrying its source fn's interpreter rendering
 		// (CompiledFn.Render via OpPushClosure) — byte-identical to the
@@ -3710,7 +3710,7 @@ func isFnDefValue(v Value) bool {
 // or a printed list without spilling its closure environment (the
 // module exports map in particular). Anonymous lambdas have no Name and
 // render as `fn(args…)`.
-func formatFnDef(fd FnDefInfo) string {
+func FormatFnDef(fd FnDefInfo) string {
 	name := fd.Name
 	// Summarise the argument shapes. Prefer non-empty signatures; a
 	// synthesized 0-arg fallback alongside real overloads is noise here

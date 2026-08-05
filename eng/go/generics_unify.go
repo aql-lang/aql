@@ -175,7 +175,7 @@ func (b *genBinder) merge(name string, t Value) {
 		return
 	}
 	if prev, ok := b.bindings[name]; ok {
-		b.bindings[name] = unionType(prev, t)
+		b.bindings[name] = UnionType(prev, t)
 		return
 	}
 	b.bindings[name] = t

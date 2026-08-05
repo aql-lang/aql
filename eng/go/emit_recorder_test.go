@@ -53,18 +53,18 @@ func recorderTestRegistry(t *testing.T) *Registry {
 // still installed when the pass ends.
 func TestPlainCheckUsesInactiveRecorder(t *testing.T) {
 	r := recorderTestRegistry(t)
-	if r.Check.Recorder() != theInactiveEmit {
+	if r.Check.Recorder() != TheInactiveEmit {
 		t.Fatalf("fresh registry recorder = %T, want the inactive no-op", r.Check.Recorder())
 	}
 	done := r.Check.Begin()
-	if r.Check.Recorder() != theInactiveEmit {
+	if r.Check.Recorder() != TheInactiveEmit {
 		t.Fatalf("post-Begin recorder = %T, want the inactive no-op", r.Check.Recorder())
 	}
 	eng := NewTop(r)
 	if _, err := eng.Run([]Value{NewInteger(1), NewWord("padd"), NewInteger(2)}); err != nil {
 		t.Fatalf("check run: %v", err)
 	}
-	if r.Check.Recorder() != theInactiveEmit {
+	if r.Check.Recorder() != TheInactiveEmit {
 		t.Fatalf("post-run recorder = %T, want the inactive no-op (a plain check must not arm an EmitState)", r.Check.Recorder())
 	}
 	done()

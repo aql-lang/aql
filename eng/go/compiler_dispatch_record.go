@@ -16,7 +16,7 @@ package eng
 // (value.go) for the motivation (concrete-condition folding).
 func tryFoldScalarConst(r *Registry, sig *Signature, args []Value) (Value, bool) {
 	if sig == nil || !sig.CompileEffect.Has(CompileScalarFold) ||
-		sig.dispatchHandler() == nil || len(sig.NoEvalArgs) > 0 || len(args) == 0 {
+		sig.DispatchHandler() == nil || len(sig.NoEvalArgs) > 0 || len(args) == 0 {
 		return Value{}, false
 	}
 	for _, a := range args {
@@ -29,10 +29,10 @@ func tryFoldScalarConst(r *Registry, sig *Signature, args []Value) (Value, bool)
 		return Value{}, false
 	}
 	two, ok := concreteHandlerEval(r, sig, args)
-	if !ok || !constFoldAgrees(one, two) {
+	if !ok || !ConstFoldAgrees(one, two) {
 		return Value{}, false
 	}
-	if !isInertConst(one) {
+	if !IsInertConst(one) {
 		return Value{}, false
 	}
 	return one, true
@@ -50,15 +50,15 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 	// stranded-member-fn guard can recognise its dynamic(Any) result downstream
 	// (design/EDGE-SPEC-FINDINGS.0.md §2). Independent of how the read itself
 	// records — the tag rides the result ID onto the tape.
-	if len(out) == 1 && (isGetWord(word) || isGetrWord(word)) {
-		if es := r.Check.Recorder(); es.active() {
+	if len(out) == 1 && (IsGetWord(word) || IsGetrWord(word)) {
+		if es := r.Check.Recorder(); es.Active() {
 			if readsFnMember(args) {
 				// The member VALUE rides the tag when the read pinpoints it (a
 				// concrete container + key) so the §3 arrival-apply model can
 				// claim its signature's window; a computed-key read tags alone
 				// and the model declines (the stranded-fn refusal stands).
 				member, _ := readFnMemberValue(args)
-				es.noteMemberFnRead(out[0].ID, member)
+				es.NoteMemberFnRead(out[0].ID, member)
 			} else if rec, isEmit := es.(*EmitState); isEmit {
 				// A CONSTRUCTED-instance receiver is a carrier here (the make
 				// result — payload inspection sees only the schema), so the
@@ -68,7 +68,7 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 				// the fix for the pre-existing `o.f 21 eq 42` stranded-apply
 				// miscompile.
 				if member, ok := rec.instanceFnMember(args); ok {
-					rec.noteMemberFnRead(out[0].ID, member)
+					rec.NoteMemberFnRead(out[0].ID, member)
 				}
 			}
 		}
@@ -83,7 +83,7 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 	// lowered its clause bodies as inline events with no name bake, so it is
 	// not a leak path and keeps compiling; see bodyRefsFnLocalFn for the
 	// scope rule.
-	if es := r.Check.Recorder(); es.active() && !(len(out) == 1 && es.alreadyProduced(out[0].ID)) {
+	if es := r.Check.Recorder(); es.Active() && !(len(out) == 1 && es.AlreadyProduced(out[0].ID)) {
 		if name, hit := bodyRefsFnLocalFn(r, sig, args); hit {
 			es.MarkUncompilable("code-body names fn-local fn `" + name + "` at `" + word +
 				"` (a compiled unit cannot resolve an enclosing fn's local fn binding)")
@@ -105,7 +105,7 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 		// exactly as dynOutNativeOK admits for concrete-arg builtins — the handler
 		// produces the real result value in both modes.
 		forceDynOut := dynOutNativeOK(r, word, sig, args, out) || quoteInertOK ||
-			r.Check.Recorder().dynInputsProven(sig, args)
+			r.Check.Recorder().DynInputsProven(sig, args)
 		r.Check.Recorder().RecordCall(word, sig, args, out, pos, forceDynOut, quoteInertOK)
 	}
 }
@@ -121,7 +121,7 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 // element carrier so the value flowing on has the element's identity.
 func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
 	es, _ := r.Check.Recorder().(*EmitState)
-	if es == nil || !es.active() || (!isGetWord(word) && !isGetrWord(word)) || len(args) != 2 || len(outs) != 1 {
+	if es == nil || !es.Active() || (!IsGetWord(word) && !IsGetrWord(word)) || len(args) != 2 || len(outs) != 1 {
 		return false
 	}
 	key, recv := args[0], args[1]
@@ -172,18 +172,18 @@ func tryFoldStaticIndex(r *Registry, word string, args, outs []Value) bool {
 // never folds.
 func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []Value) bool {
 	es := r.Check.Recorder()
-	if !es.active() || sig == nil || !sig.CompileEffect.Has(CompileModuleFold) || len(outs) != 1 ||
-		sig.dispatchHandler() == nil || len(sig.NoEvalArgs) > 0 {
+	if !es.Active() || sig == nil || !sig.CompileEffect.Has(CompileModuleFold) || len(outs) != 1 ||
+		sig.DispatchHandler() == nil || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
 	sawModule := false
 	for _, a := range args {
 		switch {
-		case isModuleFamilyValue(a):
+		case IsModuleFamilyValue(a):
 			sawModule = true
 		case IsBareTypeNode(a):
 			// a type operand (the target of `convert Map …` / `… is Module`)
-		case isInertConst(a):
+		case IsInertConst(a):
 			// an inert const operand (a quoted key atom, a scalar)
 		default:
 			return false // a runtime / non-const operand — not a compile-time fold
@@ -197,7 +197,7 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 		return false
 	}
 	two, ok := concreteHandlerEval(r, sig, args)
-	if !ok || !constFoldAgrees(one, two) {
+	if !ok || !ConstFoldAgrees(one, two) {
 		return false
 	}
 	// A `get` that resolves to None is a MISSING key — but a module's keyspace
@@ -217,11 +217,11 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 	// non-filter kind `gen` is None on every run, because a non-filter kind
 	// mints no member type). An unregistered map, a poisoned ledger, or a key
 	// a grower may add keeps the decline. See module_export_growth.go.
-	if isGetWord(word) && IsNoneShape(one) && !moduleExportAbsenceStable(r, args) {
+	if IsGetWord(word) && IsNoneShape(one) && !ModuleExportAbsenceStable(r, args) {
 		return false
 	}
 	switch {
-	case isInertConst(one):
+	case IsInertConst(one):
 		outs[0] = one // ride as an inert const
 	case IsBareTypeNode(one) && one.ID != "":
 		outs[0] = one // ride as a type operand (OpPushType)
@@ -231,7 +231,7 @@ func tryFoldModuleConst(r *Registry, word string, sig *Signature, args, outs []V
 	return true
 }
 
-// concreteHandlerEval runs sig.dispatchHandler() on the already-resolved args with check
+// concreteHandlerEval runs sig.DispatchHandler() on the already-resolved args with check
 // mode OFF, so a pure reader produces its REAL value rather than the declared-
 // type carrier the check-mode ReturnsFn emits. Nothing is recorded (the handler
 // is called directly, off the emit path) and the def stack is snapshotted /
@@ -243,7 +243,7 @@ func concreteHandlerEval(r *Registry, sig *Signature, args []Value) (Value, bool
 	snap := r.Defs.Snapshot()
 	prev := r.Check.Mode
 	r.Check.Mode = false
-	res, err := sig.dispatchHandler()(args, nil, nil, r)
+	res, err := sig.DispatchHandler()(args, nil, nil, r)
 	r.Check.Mode = prev
 	r.Defs.Restore(snap)
 	if err != nil || len(res) != 1 {
@@ -266,7 +266,7 @@ func concreteHandlerEval(r *Registry, sig *Signature, args []Value) (Value, bool
 // RecordCall's anyDynamicCarrier(outs) refusal consults via forceDynOut.
 func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value) bool {
 	es := r.Check.Recorder()
-	if !es.active() || sig == nil || len(outs) == 0 {
+	if !es.Active() || sig == nil || len(outs) == 0 {
 		return false
 	}
 	// Concrete args + dynamic output only — a dynamic INPUT means the sig was
@@ -279,7 +279,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 	}
 	// Meta / re-stepping shapes never bake (RecordCall refuses them regardless;
 	// screen here so they don't slip through forceDynOut).
-	if sig.fnFrame() != nil || sig.fullStack() || sig.runInCheckMode() || len(sig.QuoteArgs) > 0 {
+	if sig.FnFrame() != nil || sig.FullStack() || sig.RunInCheckMode() || len(sig.QuoteArgs) > 0 {
 		return false
 	}
 	// A code-body (NoEvalArgs) native bakes only when its bodies are INERT consts
@@ -302,7 +302,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 			return false
 		}
 	}
-	// The VM bakes this exact sig and calls sig.dispatchHandler() DIRECTLY, so it must be
+	// The VM bakes this exact sig and calls sig.DispatchHandler() DIRECTLY, so it must be
 	// a REAL native binding: the word's own main-registry BUILTIN sig, OR a
 	// trivial-delegation module inner-native sig reached via dot-access
 	// (`StructUtil.clone …`). Both are sound to bake with the main registry —
@@ -346,7 +346,7 @@ func quoteOperandInertOK(r *Registry, word string, sig *Signature, args []Value)
 	}
 	// Meta / re-stepping / code-body shapes never bake (RecordCall refuses them
 	// regardless; screen here so they cannot slip through this exemption).
-	if sig.fnFrame() != nil || sig.fullStack() || sig.runInCheckMode() || len(sig.NoEvalArgs) > 0 {
+	if sig.FnFrame() != nil || sig.FullStack() || sig.RunInCheckMode() || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
 	// A word that DECLARES CompileQuoteInert (quote / codequote / raise / timeout
@@ -359,7 +359,7 @@ func quoteOperandInertOK(r *Registry, word string, sig *Signature, args []Value)
 	// declines so the program falls back.
 	if sig.CompileEffect.Has(CompileQuoteInert) {
 		for i := range args {
-			if sig.QuoteArgs[i] && !isInertConst(args[i]) {
+			if sig.QuoteArgs[i] && !IsInertConst(args[i]) {
 				return false
 			}
 		}
@@ -369,7 +369,7 @@ func quoteOperandInertOK(r *Registry, word string, sig *Signature, args []Value)
 		if !sig.QuoteArgs[i] {
 			continue
 		}
-		if _, ok := args[i].Data.(AtomPayload); !ok || !isInertConst(args[i]) {
+		if _, ok := args[i].Data.(AtomPayload); !ok || !IsInertConst(args[i]) {
 			return false
 		}
 	}
@@ -387,7 +387,7 @@ func isModuleInnerSig(r *Registry, word string, sig *Signature) bool {
 	if r == nil || r.Modules == nil {
 		return false
 	}
-	for _, md := range r.Modules.loaded {
+	for _, md := range r.Modules.Loaded {
 		for _, em := range md.Exports {
 			if em == nil {
 				continue
@@ -437,7 +437,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// registration RecordCall's generic path uses (setProducedAt), and the VM
 	// enforces the recorded result-count claim (PolyRef.NOut) — so `pop`'s
 	// [remaining, popped] pair lands as faithfully as a 1-output get.
-	if !es.active() || sig == nil {
+	if !es.Active() || sig == nil {
 		return false
 	}
 	// A pure stack-shuffle word (dup/swap/over/…) is owned by the shuffle-
@@ -490,7 +490,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// quoted/meta operands, user-fn frames, full-stack words, compile-time
 	// words. (a CompileIslandPure get passes these — get's key is its only
 	// QuoteArg and is handled below.)
-	if sig.fnFrame() != nil || sig.fullStack() || sig.runInCheckMode() || len(sig.NoEvalArgs) > 0 {
+	if sig.FnFrame() != nil || sig.FullStack() || sig.RunInCheckMode() || len(sig.NoEvalArgs) > 0 {
 		return false
 	}
 	// get/getr/set/del carry exactly ONE QuoteArg — the inert Atom key — which
@@ -499,7 +499,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// (Map/List) are faithful under runtime re-match: callPoly runs the same
 	// handler over the same concrete receiver the interpreter would. Other
 	// quoted-operand words (usurp / ref-family meta) re-step tokens and stay out.
-	if len(sig.QuoteArgs) > 0 && !isGetWord(word) && !isGetrWord(word) && word != "set" && word != "del" {
+	if len(sig.QuoteArgs) > 0 && !IsGetWord(word) && !IsGetrWord(word) && word != "set" && word != "del" {
 		return false
 	}
 	// A fn-valued operand or result means a fn-invoking / fn-returning word
@@ -567,7 +567,7 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 // cannot propagate break/continue across the handler boundary.
 func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
 	es, _ := r.Check.Recorder().(*EmitState)
-	if es == nil || !es.active() || sig == nil || sig.Callable == nil ||
+	if es == nil || !es.Active() || sig == nil || sig.Callable == nil ||
 		!sig.CompileEffect.Has(CompileDynBody) || len(outs) == 0 {
 		return false
 	}
@@ -719,7 +719,7 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 // TYPED dispatch via anyDynamicCarrier.
 func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
 	es := r.Check.Recorder()
-	if !es.active() || sig == nil || !sig.CompileEffect.Has(CompileFallbackBody|CompileIslandPure) || len(outs) != 1 {
+	if !es.Active() || sig == nil || !sig.CompileEffect.Has(CompileFallbackBody|CompileIslandPure) || len(outs) != 1 {
 		return false
 	}
 	// A higher-order callable word dispatched on its LENS (Reach) form, not a
@@ -738,7 +738,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	// would DOUBLE-record (the island fallback PLUS the structured event),
 	// leaving the extra event unconsumed on the simulated stack. Skip it; the
 	// generic RecordCall path that follows likewise early-returns.
-	if es.alreadyProduced(outs[0].ID) {
+	if es.AlreadyProduced(outs[0].ID) {
 		return false
 	}
 	// A pure typed word (get/make/is/typeof/size/type-algebra) is
@@ -790,7 +790,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 			span = append(span, a)
 			continue
 		}
-		cv, ok := es.materialise(a)
+		cv, ok := es.Materialise(a)
 		baked := ok && IsConcrete(cv)
 		if baked && sig.NoEvalArgs[i] {
 			// A code body: legitimately contains words, but every one
@@ -798,7 +798,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 			if !bodyFreeForFallback(r, cv) {
 				return false
 			}
-		} else if baked && !isInertConst(cv) {
+		} else if baked && !IsInertConst(cv) {
 			// A baked data arg must be DEEPLY concrete plain data — a
 			// carrier element anywhere (e.g. a def-bound list whose
 			// interior the check pass stripped) would bake a type-only
@@ -877,7 +877,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 // this the user-fn dispatch would hit recordCallRefusal ("user fn call … Stage 3")
 // since no fn unit was compiled. Returns true when it claimed the dispatch.
 func tryRecordDeferredList(r *Registry, sig *Signature, outs []Value) bool {
-	if !r.Check.Recorder().active() || sig == nil || sig.fnFrame() == nil || len(outs) != 1 {
+	if !r.Check.Recorder().Active() || sig == nil || sig.FnFrame() == nil || len(outs) != 1 {
 		return false
 	}
 	return isDeferredWordList(outs[0])

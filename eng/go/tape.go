@@ -84,7 +84,7 @@ type TapeConfig struct {
 }
 
 // resolve fills zero fields with defaults given the program length.
-func (c TapeConfig) resolve(progLen int) (initial, maxGrows int, factor float64) {
+func (c TapeConfig) Resolve(progLen int) (initial, maxGrows int, factor float64) {
 	maxGrows = c.MaxGrows
 	if maxGrows <= 0 {
 		maxGrows = DefaultTapeMaxGrows
@@ -122,7 +122,7 @@ func NewTape(vals []Value, headroom int) *Tape {
 // of the growth-ceiling arithmetic, shared by NewTapeWith (the tape's own cap)
 // and vmStackCeiling (the VM value-stack / frame cap) so both engines fail with
 // the same resource taxonomy at the same bound.
-func growthCeiling(initial, maxGrows int, factor float64) int {
+func GrowthCeiling(initial, maxGrows int, factor float64) int {
 	ceil := float64(initial)
 	for i := 0; i < maxGrows; i++ {
 		ceil *= factor
@@ -143,14 +143,14 @@ func growthCeiling(initial, maxGrows int, factor float64) int {
 func NewTapeWith(vals []Value, cfg TapeConfig, warn func(string)) *Tape {
 	// resolve guarantees initial >= len(vals) (its final clamp raises
 	// initial to progLen), so no re-check is needed here.
-	initial, maxGrows, factor := cfg.resolve(len(vals))
+	initial, maxGrows, factor := cfg.Resolve(len(vals))
 	buf := make([]Value, initial)
 	copy(buf, vals)
 	return &Tape{
 		buf:      buf,
 		gapStart: len(vals),
 		gapEnd:   initial,
-		maxCap:   growthCeiling(initial, maxGrows, factor),
+		maxCap:   GrowthCeiling(initial, maxGrows, factor),
 		maxGrows: maxGrows,
 		grows0:   maxGrows,
 		factor:   factor,

@@ -128,7 +128,7 @@ func (r *Registry) CoverID() string {
 // compare short-circuits an untagged unit BEFORE noteCoverage's atomic load, so
 // an ordinary compiled run pays one branch per instruction. Kept tiny (the Go
 // inliner folds it into the VM run loop) so vm.go's hot loop is unchanged.
-func (r *Registry) noteVMCoverage(debug []SrcPos, pc int) {
+func (r *Registry) NoteVMCoverage(debug []SrcPos, pc int) {
 	if r == nil || r.coverID == "" {
 		return
 	}

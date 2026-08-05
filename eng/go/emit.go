@@ -978,7 +978,7 @@ func NewEmitState() *EmitState {
 // boundary's territory: its stack layout is the apply's contract).
 func residualForceOrder(ops []emitOperand, vals []Value) map[int]bool {
 	for _, v := range vals {
-		if v.Dynamic || isFnValueResidual(v) {
+		if v.Dynamic || IsFnValueResidual(v) {
 			return nil
 		}
 	}
@@ -1112,11 +1112,11 @@ func (es *EmitState) forkForProbe() *EmitState {
 // storedGradualActive reports a DETACHED stamp compile in progress
 // (storedGradualDepth > 0) — the interface probe for the stored-context
 // gradual-generalisation rule (core_helpers.go), Stage-0b promotion.
-func (es *EmitState) storedGradualActive() bool {
+func (es *EmitState) StoredGradualActive() bool {
 	return es != nil && es.storedGradualDepth > 0
 }
 
-func (es *EmitState) inClosureUnit() bool {
+func (es *EmitState) InClosureUnit() bool {
 	if es == nil || len(es.openUnitRecs) == 0 {
 		return false
 	}
@@ -1127,7 +1127,7 @@ func (es *EmitState) inClosureUnit() bool {
 	return es.fnRecs[rec].closure
 }
 
-func (es *EmitState) active() bool {
+func (es *EmitState) Active() bool {
 	return es != nil && es.Compilable && es.suspended == 0
 }
 
@@ -1136,7 +1136,6 @@ func (es *EmitState) active() bool {
 // statement guard only puts its phantom None on the carrier stack
 // while recording is live (the lowering tracks it); a plain or
 // uncompilable check must net 0, like the runtime.
-func (es *EmitState) Active() bool { return es.active() }
 
 // armed reports that a REAL recording state exists (a compile pass installed
 // one), whether or not it is currently live — the EmitRecorder twin of the
@@ -1171,7 +1170,7 @@ func (es *EmitState) topFrameOnly() bool {
 // suspendedNow reports whether an ARMED recorder is currently suspended —
 // the "analysis probe is reading an enclosing dispatch's result" state the
 // unmatched-dispatch recovery consults before latching a refusal.
-func (es *EmitState) suspendedNow() bool {
+func (es *EmitState) SuspendedNow() bool {
 	return es != nil && es.suspended > 0
 }
 
@@ -1187,7 +1186,7 @@ func (es *EmitState) Sites() map[string]int {
 // zeroOutProduced reports whether the value id was produced by an event
 // whose outputs were zeroed (the 0-output `if` phantom None) — the residual
 // strip probe (stripZeroOutResiduals).
-func (es *EmitState) zeroOutProduced(id string) bool {
+func (es *EmitState) ZeroOutProduced(id string) bool {
 	if es == nil {
 		return false
 	}
@@ -1198,7 +1197,7 @@ func (es *EmitState) zeroOutProduced(id string) bool {
 // alreadyProduced reports whether the value id already has a recorded
 // producer event — the double-record guard (a structured ReturnsFn hook may
 // have recorded the dispatch before the generic path sees it).
-func (es *EmitState) alreadyProduced(id string) bool {
+func (es *EmitState) AlreadyProduced(id string) bool {
 	if es == nil {
 		return false
 	}
@@ -1209,7 +1208,7 @@ func (es *EmitState) alreadyProduced(id string) bool {
 // unitVariadic reports whether the fn unit's recorded body is
 // variadic-returning — the user-poly gate (a poly call site bakes a fixed
 // nout, so no arm may be variadic).
-func (es *EmitState) unitVariadic(unit int) bool {
+func (es *EmitState) UnitVariadic(unit int) bool {
 	if es == nil || unit < 0 || unit >= len(es.fnRecs) {
 		return false
 	}
@@ -1225,7 +1224,7 @@ func (es *EmitState) unitVariadic(unit int) bool {
 // carry it, so the set keeps its refusal. A diverging trailing event never
 // returns at all, so its empty outOps qualify (the 0-out accounting is
 // never consulted on a raise/tail-out path).
-func (es *EmitState) unitNetsZero(unit int) bool {
+func (es *EmitState) UnitNetsZero(unit int) bool {
 	if es == nil || unit < 0 || unit >= len(es.fnRecs) {
 		return false
 	}
@@ -1329,7 +1328,7 @@ func (es *EmitState) Suspend() func() {
 // body into a fragment instead of suspending — the branch-lowering
 // hook (`if`). One-shot; consumed by the body run.
 func (es *EmitState) ArmBranchCapture() {
-	if !es.active() {
+	if !es.Active() {
 		return
 	}
 	es.captureArm = true
@@ -1341,7 +1340,7 @@ func (es *EmitState) consumeCaptureArm() bool {
 		return false
 	}
 	es.captureArm = false
-	return es.active()
+	return es.Active()
 }
 
 // peekCaptureArm reports whether the next RunCarrierBodyWithDefs will
@@ -1353,8 +1352,8 @@ func (es *EmitState) consumeCaptureArm() bool {
 // its OpMakeMap / OpMakeList assembly recorded rather than left an
 // unresolvable residual — the body runs in the LIVE frame here (unlike
 // the end-of-run residual eval), so recording is sound.
-func (es *EmitState) peekCaptureArm() bool {
-	return es != nil && es.captureArm && es.active()
+func (es *EmitState) PeekCaptureArm() bool {
+	return es != nil && es.captureArm && es.Active()
 }
 
 // beginFragment opens a recording frame; the returned func closes it
@@ -1376,7 +1375,7 @@ func (es *EmitState) beginFragment() func() {
 // bodyAnalysisGuard is called by RunCarrierBodyWithDefs: capture a
 // fragment when armed, otherwise suspend recording for the nested
 // body. Nil-safe.
-func (es *EmitState) bodyAnalysisGuard() func() {
+func (es *EmitState) BodyAnalysisGuard() func() {
 	if es.consumeCaptureArm() {
 		return es.beginFragment()
 	}
@@ -1508,7 +1507,7 @@ type pendingLoopBind struct {
 // (ok=false) outside a recording pass, outside the root scope, or for a
 // region without a static count — those shapes keep today's refusal.
 func (es *EmitState) SplitLoopRegionBind(name string, v Value) (Value, bool) {
-	if !es.active() || es.suspendedNow() {
+	if !es.Active() || es.SuspendedNow() {
 		return Value{}, false
 	}
 	if len(es.units) != 1 || es.reg == nil || es.reg.Check.FnBodyDepth != 0 ||
@@ -1563,7 +1562,7 @@ func (es *EmitState) SplitLoopRegionBind(name string, v Value) (Value, bool) {
 // the only count the lowering needs. TOP LEVEL only (the loop-body
 // composition is S9.2a's separate machinery).
 func (es *EmitState) SplitEventRegionBind(name string, v Value) (Value, bool) {
-	if !es.active() || es.suspendedNow() {
+	if !es.Active() || es.SuspendedNow() {
 		return Value{}, false
 	}
 	if len(es.units) != 1 || es.reg == nil || es.reg.Check.FnBodyDepth != 0 ||
@@ -1702,7 +1701,7 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 			return op, true
 		}
 	}
-	lit, ok := es.materialise(v)
+	lit, ok := es.Materialise(v)
 	if !ok {
 		return es.dynScopeRescue(v)
 	}
@@ -1712,7 +1711,7 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// noEvalBodiesInertScoped). isInertConst stays strict so this admission never
 	// reaches a compiled fn frame: there the body refuses at the Stage-2 gate
 	// before resolveOperand, so the operand never gets here.
-	if !isInertConst(lit) && !(len(es.units) == 1 && interpBodyInert(lit)) {
+	if !IsInertConst(lit) && !(len(es.units) == 1 && interpBodyInert(lit)) {
 		return es.dynScopeRescue(v)
 	}
 	// An ACTIVE-token MAP (`{line: src}` — a word / paren / interpolation
@@ -1726,7 +1725,7 @@ func (es *EmitState) resolveOperand(v Value) (emitOperand, bool) {
 	// noEvalBodiesInertScoped). Module scope keeps the map bake too —
 	// resolution there is registry-identical.
 	if len(es.units) > 1 {
-		if _, isMap := lit.Data.(MapPayload); isMap && bearsActiveTokens(lit) {
+		if _, isMap := lit.Data.(MapPayload); isMap && BearsActiveTokens(lit) {
 			return es.dynScopeRescue(v)
 		}
 		// A compound with NO identity (a runtime mint under the mode-gated
@@ -2031,7 +2030,7 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 		}
 	}
 	lam, hasOwn := fd.FirstOwnSig()
-	if own != 1 || !hasOwn || len(lam.body()) == 0 || bodyToksHaveSentinel(lam.body()) {
+	if own != 1 || !hasOwn || len(lam.Body()) == 0 || bodyToksHaveSentinel(lam.Body()) {
 		return emitOperand{}, false
 	}
 	inputs, paramNames := fnValueInputs(lam.Params)
@@ -2052,7 +2051,7 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 	r.Check.Emit = probe
 	// bodyOut 1: a fn VALUE body keeps the single declared return (it is not a
 	// 0-output side-effect body like a test case).
-	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		return emitOperand{}, false
@@ -2071,11 +2070,11 @@ func (es *EmitState) tryReturnedClosure(v Value, pos SrcPos) (emitOperand, bool)
 		es.dynEnv = true
 	}
 	// REAL: compile into this program (deterministic success after a clean probe).
-	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return emitOperand{}, false
 	}
-	es.fnRecs[unit].render = formatFnDef(fd)
+	es.fnRecs[unit].render = FormatFnDef(fd)
 	return emitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}, true
 }
 
@@ -2109,7 +2108,7 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, sigIdx int, pos SrcPos) (
 	probe.storedGradualDepth = es.storedGradualDepth
 	probe.dynEnv = es.dynEnv
 	r.Check.Emit = probe
-	_, probeOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	_, probeOK := compileClosureBody(r, "storedfn", 0, true, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
 		// Surface the probe's refusal for the -compile-report attribution
@@ -2124,7 +2123,7 @@ func (es *EmitState) compileStoredFnUnit(fd FnDefInfo, sigIdx int, pos SrcPos) (
 	if probe.dynEnv {
 		es.dynEnv = true
 	}
-	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
+	unit, realOK := compileClosureBody(r, "storedfn", 0, true, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	if !realOK || unit < 0 {
 		// Reachable: a body the probe pass accepted can still refuse in the
 		// real pass (the variation sweep produces such shapes — a splice-
@@ -2151,7 +2150,7 @@ func storedSigEligible(sig *Signature) bool {
 	if _, isBoru := sig.Impl.(*BoruImpl); !isBoru {
 		return false
 	}
-	return len(sig.body()) > 0 && !bodyToksHaveSentinel(sig.body())
+	return len(sig.Body()) > 0 && !bodyToksHaveSentinel(sig.Body())
 }
 
 // firstStampableSig returns fd's first stampable own boru sig — the
@@ -2363,7 +2362,7 @@ func (es *EmitState) storedHandlerDeps(body []Value) map[string]bool {
 // over stable module helpers (todo-api's live-todos, mini-redis's arg-at/kv-read,
 // never redefined) still compiles.
 func (es *EmitState) NotifyNameRebound(name string) {
-	if es == nil || !es.active() {
+	if es == nil || !es.Active() {
 		return
 	}
 	for _, ref := range es.storedFnRefs {
@@ -2410,8 +2409,8 @@ func (es *EmitState) OperandRepushable(v Value) bool {
 	if IsBareTypeNode(v) && v.ID != "" {
 		return true
 	}
-	lit, ok := es.materialise(v)
-	return ok && isInertConst(lit)
+	lit, ok := es.Materialise(v)
+	return ok && IsInertConst(lit)
 }
 
 // CanSeatAcrossFragment reports whether v can be read INSIDE a branch / loop
@@ -2445,7 +2444,7 @@ func (es *EmitState) CanSeatAcrossFragment(v Value) bool {
 // rebuilt copy with each carrier member replaced by its recorded
 // original, recursively. ok=false when any member's original is
 // unknown.
-func (es *EmitState) materialise(v Value) (Value, bool) {
+func (es *EmitState) Materialise(v Value) (Value, bool) {
 	if v.Carrier || v.Dynamic {
 		orig, ok := es.origByID[v.ID]
 		if !ok {
@@ -2518,7 +2517,7 @@ func (es *EmitState) materialise(v Value) (Value, bool) {
 }
 
 func (es *EmitState) materialiseMember(e Value) (m Value, changed, ok bool) {
-	m, ok = es.materialise(e)
+	m, ok = es.Materialise(e)
 	if !ok {
 		return e, false, false
 	}
@@ -2640,7 +2639,7 @@ func (es *EmitState) stripZeroOutPhantoms(stk []Value) []Value {
 }
 
 func (es *EmitState) RecordBranch(b BranchRecord) {
-	if !es.active() {
+	if !es.Active() {
 		return
 	}
 	// Strip 0-output statement guards' phantom (None) results from the arm
@@ -2742,7 +2741,7 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 				es.MarkUncompilable("if: then value of unknown provenance")
 				return
 			}
-			if isFnValueResidual(*b.ThenValue) {
+			if IsFnValueResidual(*b.ThenValue) {
 				mayBeFn = true
 			}
 			if op.kind == opEvent {
@@ -2780,7 +2779,7 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 					es.MarkUncompilable("if: else value of unknown provenance")
 					return
 				}
-				if isFnValueResidual(*b.ElsValue) {
+				if IsFnValueResidual(*b.ElsValue) {
 					mayBeFn = true
 				}
 				if op.kind == opEvent {
@@ -2937,7 +2936,7 @@ func computedArmCondOK(b BranchRecord, cond emitOperand) bool {
 // fixed-point round as a fragment with the loop bindings registered
 // as locals — the loop-lowering hook (`for`). One-shot.
 func (es *EmitState) ArmLoopCapture() {
-	if !es.active() {
+	if !es.Active() {
 		return
 	}
 	es.loopArm = true
@@ -2949,7 +2948,7 @@ func (es *EmitState) ConsumeLoopArm() bool {
 		return false
 	}
 	es.loopArm = false
-	return es.active()
+	return es.Active()
 }
 
 // RegisterLocal assigns (or returns) the local slot backing a loop
@@ -3014,7 +3013,7 @@ func (es *EmitState) EndLoopCarried() {
 // cross-iteration reads then refuse at resolveOperand exactly as before
 // (sound interpreter fallback).
 func (es *EmitState) NoteLoopCarried(name string, joined, pre Value) {
-	if !es.active() || len(es.loopCarried) == 0 {
+	if !es.Active() || len(es.loopCarried) == 0 {
 		return
 	}
 	scope := es.loopCarried[len(es.loopCarried)-1]
@@ -3040,7 +3039,7 @@ func (es *EmitState) NoteLoopCarried(name string, joined, pre Value) {
 			}
 		}
 		if !reused {
-			if isFnValueResidual(pre) || isFnValueResidual(joined) {
+			if IsFnValueResidual(pre) || IsFnValueResidual(joined) {
 				return
 			}
 			init, ok := es.resolveOperand(pre)
@@ -3083,7 +3082,7 @@ func (es *EmitState) NoteLoopCarried(name string, joined, pre Value) {
 // unresolvable or function-shaped rebind value refuses the program (sound
 // interpreter fallback, never a stale read).
 func (es *EmitState) RecordDefRebind(name string, v Value, pos SrcPos) {
-	if !es.active() || len(es.loopCarried) == 0 {
+	if !es.Active() || len(es.loopCarried) == 0 {
 		return
 	}
 	slot, found := -1, false
@@ -3100,7 +3099,7 @@ func (es *EmitState) RecordDefRebind(name string, v Value, pos SrcPos) {
 	if !found {
 		return
 	}
-	if isFnValueResidual(v) {
+	if IsFnValueResidual(v) {
 		es.MarkUncompilable("loop-carried def `" + name + "` rebound to a function value (Stage 3)")
 		return
 	}
@@ -3118,7 +3117,7 @@ func (es *EmitState) RecordDefRebind(name string, v Value, pos SrcPos) {
 // would diverge from the interpreter. An undef of any other name is
 // untouched.
 func (es *EmitState) RefuseCarriedUndef(name string) {
-	if !es.active() {
+	if !es.Active() {
 		return
 	}
 	for i := len(es.loopCarried) - 1; i >= 0; i-- {
@@ -3224,7 +3223,7 @@ func (es *EmitState) Rollback(h EmitCheckpoint) {
 // fnArm bypasses AnalyseFnBody's suspension exactly once — set by
 // StartFnCompile so the armed body analysis records into the open
 // fn fragment.
-func (es *EmitState) fnBodyGuard() func() {
+func (es *EmitState) FnBodyGuard() func() {
 	if es != nil && es.fnArm {
 		es.fnArm = false
 		return func() {}
@@ -3245,7 +3244,7 @@ func (es *EmitState) fnBodyGuard() func() {
 // fn is beyond Stage 4 (unchecked or multi-value returns) — the
 // program is then marked uncompilable.
 func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Value, declared []*Type, paramNames []string, captures []CapturedBinding, generic bool, pos SrcPos) (unit int, finish func([]Value), ok bool) {
-	if !es.active() {
+	if !es.Active() {
 		return -1, nil, false
 	}
 	if u, hit := es.fnUnits[key]; hit {
@@ -3351,7 +3350,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 				if a := es.TrailingApplyArity(top.ID); a > 0 && a == len(bodyStk)-1 {
 					argsOK := true
 					for _, v := range bodyStk[:len(bodyStk)-1] {
-						if isFnValueResidual(v) { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+						if IsFnValueResidual(v) { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 							argsOK = false
 							break
 						}
@@ -3375,7 +3374,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *Registry, args []Va
 					bodyStk[len(bodyStk)-1].ID == pend[0] {
 					argsOK := true
 					for _, v := range bodyStk[:len(bodyStk)-1] {
-						if isFnValueResidual(v) {
+						if IsFnValueResidual(v) {
 							argsOK = false
 							break
 						}
@@ -3606,7 +3605,7 @@ func (es *EmitState) SetUnitDecl(unit int, decl DeclSite) {
 }
 
 func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos SrcPos) {
-	if !es.active() || unit < 0 {
+	if !es.Active() || unit < 0 {
 		return
 	}
 	rec := es.fnRecs[unit]
@@ -3656,7 +3655,7 @@ func (es *EmitState) RecordUserCall(unit int, args []Value, outs []Value, pos Sr
 // operands ride here. An operand of unknown provenance marks the program
 // uncompilable, exactly as RecordUserCall does.
 func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx, units []int, impls []SigImpl, sigs []Signature, args, outs []Value, pos SrcPos) {
-	if !es.active() {
+	if !es.Active() {
 		return
 	}
 	ops := make([]emitOperand, len(args))
@@ -3704,7 +3703,7 @@ func (es *EmitState) RecordUserPolyCall(word string, ownerReg *Registry, sigIdx,
 // in both spellings (probe-pinned across arities in
 // lang/go/bytecode_chained_apply_test.go).
 func (es *EmitState) DynApplyLeadEligible(v Value) bool {
-	if !es.active() || len(es.openUnitRecs) == 0 || es.inClosureUnit() {
+	if !es.Active() || len(es.openUnitRecs) == 0 || es.InClosureUnit() {
 		return false
 	}
 	if es.fnRecs[es.openUnitRecs[len(es.openUnitRecs)-1]].nUnnamed > 0 {
@@ -3733,10 +3732,10 @@ func (es *EmitState) DynApplyLeadEligible(v Value) bool {
 // reverses the arg window into forward order to match the interpreter's paren
 // auto-dispatch, where the fn's first param is the arg just below it).
 func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) bool {
-	if !es.active() {
+	if !es.Active() {
 		return false
 	}
-	if !isFnValueResidual(fn) { // fn must be a genuine fn-value residual
+	if !IsFnValueResidual(fn) { // fn must be a genuine fn-value residual
 		return false
 	}
 	// A QUOTED fn value at the trailing position stays INERT in the
@@ -3767,7 +3766,7 @@ func (es *EmitState) RecordDynApply(args []Value, fn, out Value, pos SrcPos) boo
 	ops := make([]emitOperand, 0, len(args)+1)
 	ops = append(ops, fnOp)
 	for i := len(args) - 1; i >= 0; i-- {
-		if isFnValueResidual(args[i]) {
+		if IsFnValueResidual(args[i]) {
 			return false
 		}
 		op, ok := es.resolveOperand(args[i])
@@ -3839,7 +3838,7 @@ func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []Value) {
 	}
 	ops := make([]emitOperand, 0, len(stk))
 	for i := range stk {
-		if sigTypeMatches(stk[i], TFunction) {
+		if SigTypeMatches(stk[i], TFunction) {
 			return
 		}
 		op, ok := es.resolveOperand(stk[i])
@@ -3860,7 +3859,7 @@ func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []Value) {
 // re-recorded, and marked VARIADIC at lowering, so only the program
 // residual may absorb the accumulation.
 func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, bodyStk []Value, iterID string, out Value, regionN int, pos SrcPos) {
-	if !es.active() {
+	if !es.Active() {
 		return
 	}
 	// Claim the just-closed analysis's carried-def slot inits (EndLoopCarried)
@@ -3916,7 +3915,7 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 			// ACROSS iterations (iteration k's top sits below k+1's first) —
 			// so a verbatim accumulation would diverge. Keep those refused.
 			for i := range bodyStk {
-				if sigTypeMatches(bodyStk[i], TFunction) {
+				if SigTypeMatches(bodyStk[i], TFunction) {
 					es.MarkUncompilable("for: body nets multiple values per iteration")
 					return
 				}
@@ -3953,7 +3952,7 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 			lp.bodyOut, lp.hasBodyOut = bodyOut, true
 			if pr, okP := es.producedBy[bodyStk[0].ID]; okP && bodyOut.kind == opEvent &&
 				es.eventInfo[pr.seq].splitBound &&
-				!sigTypeMatches(bodyStk[0], TFunction) {
+				!SigTypeMatches(bodyStk[0], TFunction) {
 				// The body's sole residual is a SPLIT-BOUND region (S9.2a: `for 3
 				// [ def acc (for 2 [1]) ]` — the def consumed the first value,
 				// the statically-counted rest is the iteration's contribution).
@@ -4015,7 +4014,7 @@ func (es *EmitState) RecordLoop(start, end, step Value, body *EmitFragment, body
 // on the sim, so it is excluded here and the residual instead fails lowerFragment's
 // sole-fn check and refuses — never a double-push.
 func (es *EmitState) setLoopBodyApply(body *EmitFragment, bodyStk []Value) bool {
-	if es == nil || body == nil || len(bodyStk) < 2 || !isFnTypedCarrier(bodyStk[0]) {
+	if es == nil || body == nil || len(bodyStk) < 2 || !IsFnTypedCarrier(bodyStk[0]) {
 		return false
 	}
 	fnOp, ok := es.resolveOperand(bodyStk[0])
@@ -4068,7 +4067,7 @@ func (es *EmitState) setLoopBodyApply(body *EmitFragment, bodyStk []Value) bool 
 	}
 	applyArgs := make([]emitOperand, 0, len(bodyStk)-1)
 	for _, a := range bodyStk[1:] {
-		if a.Dynamic || isFnValueResidual(a) {
+		if a.Dynamic || IsFnValueResidual(a) {
 			return false
 		}
 		op, okArg := es.resolveOperand(a)
@@ -4091,7 +4090,7 @@ func (es *EmitState) setLoopBodyApply(body *EmitFragment, bodyStk []Value) bool 
 // when an input's provenance is unknown — the caller then lets the
 // normal refusal stand.
 func (es *EmitState) RecordFallback(span FallbackSpan, ins []Value, out Value, pos SrcPos) bool {
-	if !es.active() {
+	if !es.Active() {
 		return false
 	}
 	ops := make([]emitOperand, len(ins))
@@ -4130,7 +4129,7 @@ func (es *EmitState) RecordFallback(span FallbackSpan, ins []Value, out Value, p
 // is uncompilable (an uncompilable program is never lowered, so its
 // origByID entries are never read).
 func (es *EmitState) RememberOriginal(v Value) {
-	if es == nil || es.suspended > 0 || !es.active() {
+	if es == nil || es.suspended > 0 || !es.Active() {
 		return
 	}
 	if v.Carrier || v.Dynamic || v.ID == "" {
@@ -4163,7 +4162,7 @@ func (es *EmitState) RememberOriginal(v Value) {
 // out-of-range n declines too: the interpreter raises there, and the
 // fallback keeps the raise byte-identical.
 func (es *EmitState) FoldFullStack(word string, args, preserved []Value) ([]Value, bool) {
-	if es == nil || !es.active() || es.suspended > 0 || !es.Compilable ||
+	if es == nil || !es.Active() || es.suspended > 0 || !es.Compilable ||
 		len(es.frames) != 1 || len(es.units) != 1 || es.markWindowSeq != 0 {
 		return nil, false
 	}
@@ -4223,7 +4222,7 @@ func (es *EmitState) FoldFullStack(word string, args, preserved []Value) ([]Valu
 // The first trap wins (execution can reach only one). Returns true when the trap
 // is owned here (recorded now, or already trapping).
 func (es *EmitState) RecordTrap(code, detail, word, hint string, pos SrcPos) bool {
-	if !es.active() || len(es.frames) != 1 || len(es.units) != 1 {
+	if !es.Active() || len(es.frames) != 1 || len(es.units) != 1 {
 		return false
 	}
 	if es.trapAt != 0 {
@@ -4248,7 +4247,7 @@ func (es *EmitState) RecordTrapErr(ae *BoruError, pos SrcPos) bool {
 	if ae == nil {
 		return false
 	}
-	if !es.active() || len(es.frames) != 1 || len(es.units) != 1 {
+	if !es.Active() || len(es.frames) != 1 || len(es.units) != 1 {
 		return false
 	}
 	if es.trapAt != 0 {
@@ -4272,7 +4271,7 @@ func (es *EmitState) RecordTrapErr(ae *BoruError, pos SrcPos) bool {
 // are the render bound (DispatchSpec.{WrittenOff,NWritten}): the contiguous
 // vals slice forming the written tuple the interpreter's error renders.
 func (es *EmitState) RecordDispatchRematchValues(word string, vals []Value, writtenOff, nWritten int, pos SrcPos) bool {
-	if !es.active() || len(vals) == 0 {
+	if !es.Active() || len(vals) == 0 {
 		return false
 	}
 	ops := make([]emitOperand, len(vals))
@@ -4305,7 +4304,7 @@ func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, writt
 	if nWritten < 1 || writtenOff < 0 || writtenOff+nWritten > len(ops) {
 		return false
 	}
-	if !es.active() || len(es.frames) != 1 || len(es.units) != 1 {
+	if !es.Active() || len(es.frames) != 1 || len(es.units) != 1 {
 		return false
 	}
 	if es.trapAt != 0 {
@@ -4341,7 +4340,7 @@ func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, writt
 // no resolvable provenance; the caller then falls back to the refusal mark,
 // which itself no-ops for the concrete/inactive cases.
 func (es *EmitState) RecordTypedBind(spec TypedBindSpec, in, out Value, pos SrcPos) (Value, bool) {
-	if !es.active() {
+	if !es.Active() {
 		return out, false
 	}
 	// A CONCRETE operand declines for the refine/DepScalar kinds (their
@@ -4381,7 +4380,7 @@ func (es *EmitState) RememberStrippedOriginals(pre, stripped []Value) {
 // RecordPoly classifies a partitioned (per-alternative) dispatch.
 // Stage 1 cannot lower it; later stages emit CALL_NATIVE_POLY.
 func (es *EmitState) RecordPoly(word string) {
-	if !es.active() {
+	if !es.Active() {
 		return
 	}
 	es.SiteCounts[SitePoly]++
@@ -4397,7 +4396,7 @@ func (es *EmitState) RecordPoly(word string) {
 // the dispatch is a module inner native whose quoted operands are inert Atom
 // consts (the query DSL's table names).
 func (es *EmitState) RecordCall(word string, sig *Signature, args, outs []Value, pos SrcPos, forceDynOut, quoteInertOK bool) {
-	if !es.active() {
+	if !es.Active() {
 		return
 	}
 	es.noteFnRiskFields(word, args, outs)
@@ -4504,7 +4503,7 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 	// returns a single Any approximation instead (len(outs)==1), so it falls
 	// through to recordCallRefusal and the program falls back. Only the compiled
 	// case reaches here with an empty residual.
-	if sig != nil && sig.fnFrame() != nil && len(outs) == 0 {
+	if sig != nil && sig.FnFrame() != nil && len(outs) == 0 {
 		return true
 	}
 	// `apply` of a fn VALUE (`…args fn apply`): apply's ReturnsFn returns the
@@ -4528,7 +4527,7 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 		// apply can never be silently dropped. Top-level applies (len(units)
 		// == 1) keep today's refusal: the program residual has no equivalent
 		// single-consumer window.
-		if len(es.units) > 1 && sig != nil && sig.fnFrame() == nil && isFnTypedCarrier(args[0]) {
+		if len(es.units) > 1 && sig != nil && sig.FnFrame() == nil && IsFnTypedCarrier(args[0]) {
 			u := es.units[len(es.units)-1]
 			u.pendingApply = append(u.pendingApply, args[0].ID)
 			return true
@@ -4543,7 +4542,7 @@ func (es *EmitState) recordCallElided(word string, sig *Signature, args, outs []
 	// NATIVE parity holds). Elide the resolution event; if the value
 	// instead flows somewhere data-like, downstream provenance refuses
 	// and the program falls back.
-	if (isGetWord(word) || isGetrWord(word)) && len(outs) == 1 && IsConcrete(outs[0]) {
+	if (IsGetWord(word) || IsGetrWord(word)) && len(outs) == 1 && IsConcrete(outs[0]) {
 		switch outs[0].Data.(type) {
 		case FnDefInfo, ExtensionPayload:
 			return true
@@ -4567,13 +4566,13 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// calls): the callee is a runtime value, Stage 3 territory.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("anonymous function dispatch (Stage 3)")
-	case sig.runInCheckMode():
+	case sig.RunInCheckMode():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("compile-time word " + word)
-	case sig.fnFrame() != nil:
+	case sig.FnFrame() != nil:
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("user fn call " + word + " (Stage 3)")
-	case sig.fullStack():
+	case sig.FullStack():
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("full-stack word " + word)
 	case isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)):
@@ -4624,7 +4623,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		//     clause always bakes a plain CALL_NATIVE.)
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("code-body word " + word + " (Stage 2)")
-	case hasUncoveredQuoteArg(sig) && !isGetWord(word) && !isGetrWord(word) && word != "set" && word != "del" && !quoteInertOK:
+	case hasUncoveredQuoteArg(sig) && !IsGetWord(word) && !IsGetrWord(word) && word != "set" && word != "del" && !quoteInertOK:
 		// Implicit-quote operands (usurp, force-arity, ref-family):
 		// dispatch-manipulating meta words whose results the engine
 		// re-steps. get/getr/set/del are exempt — plain accessors/mutators whose
@@ -4662,7 +4661,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// pre-empt them at runtime.)
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("core-default dispatch over a carrier operand at " + word)
-	case anyDynamicCarrier(args) && !shuffleOK && !es.dynInputsProven(sig, args):
+	case anyDynamicCarrier(args) && !shuffleOK && !es.DynInputsProven(sig, args):
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("dynamic input at " + word)
 	case anyDynamicCarrier(outs) && !forceDynOut && !shuffleOK:
@@ -4743,7 +4742,7 @@ func (es *EmitState) recordShuffleElided(word string, sig *Signature, args, outs
 // rides the exemption. depth/pick/roll are full-stack words and refused earlier.
 
 func (es *EmitState) dynamicStackShuffleOK(word string, sig *Signature) bool {
-	if !dynStackShuffleWords[word] {
+	if !DynStackShuffleWords[word] {
 		return false
 	}
 	if es == nil || es.reg == nil || sig == nil {
@@ -4840,7 +4839,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 						continue // first stamp wins
 					}
 					if unit, cOK := es.compileStoredFnUnit(fd, si, a.Pos()); cOK {
-						ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(fd.Signatures[si].body())}
+						ref := &CompiledFnRef{Unit: unit, depNames: es.storedHandlerDeps(fd.Signatures[si].Body())}
 						aImpl.Compiled = ref
 						es.storedFnRefs = append(es.storedFnRefs, ref)
 					}
@@ -4955,7 +4954,7 @@ func (es *EmitState) recordCallOperands(word string, sig *Signature, args []Valu
 // for the runtime no-match arm (plan 3c) — the caller derived and gated it at
 // the failed-dispatch tape state; nil keeps the sound defer.
 func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos, ownerReg *Registry, noMatch *PolyNoMatchSpec) bool {
-	if !es.active() {
+	if !es.Active() {
 		return false
 	}
 	if isGetFamilyWord(word) && !es.shapedReadOut(outs) && (containerFnAutoDispatchRisk(args) || zeroArgFnOut(outs) || es.instanceFnFieldRisk(args)) {
@@ -5043,7 +5042,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []Value, pos SrcPos,
 // failure → internal_error → interpreter re-run). Returns false, leaving es
 // untouched, when an operand has no compiled home — the caller then refuses.
 func (es *EmitState) RecordDynMethod(fn Value, args, outs []Value, word string, pos SrcPos) bool {
-	if !es.active() {
+	if !es.Active() {
 		return false
 	}
 	fnOp, ok := es.resolveOperand(fn)
@@ -5109,7 +5108,7 @@ func (es *EmitState) noteFnRiskFields(word string, args, outs []Value) {
 		}
 		for _, k := range mp.M.Keys() {
 			mv, _ := mp.M.Get(k)
-			if fnValueZeroArg(mv) {
+			if FnValueZeroArg(mv) {
 				if risky == nil {
 					risky = map[string]bool{}
 				}
@@ -5206,7 +5205,7 @@ func (es *EmitState) instanceFnMember(args []Value) (Value, bool) {
 // is the very value whose landing diverges.
 func zeroArgFnOut(outs []Value) bool {
 	for _, o := range outs {
-		if !o.Carrier && fnValueZeroArg(o) {
+		if !o.Carrier && FnValueZeroArg(o) {
 			return true
 		}
 	}
@@ -5227,7 +5226,7 @@ func zeroArgFnOut(outs []Value) bool {
 // top level, where analysis order equals program order and the bake is the
 // read the interpreter makes.
 func (es *EmitState) NoteFrozenRead(name string) {
-	if !es.active() || name == "" || len(es.openUnitRecs) == 0 {
+	if !es.Active() || name == "" || len(es.openUnitRecs) == 0 {
 		return
 	}
 	// A read attributed to a STORED-REF unit (a service/minilang handler, a
@@ -5245,7 +5244,7 @@ func (es *EmitState) NoteFrozenRead(name string) {
 }
 
 func (es *EmitState) NoteDefRead(id, name string) {
-	if !es.active() || id == "" || name == "" {
+	if !es.Active() || id == "" || name == "" {
 		return
 	}
 	if es.defReads == nil {
@@ -5283,7 +5282,7 @@ func (es *EmitState) residualReadStable(v Value) bool {
 // OpLookupDynScope reads them) and skips the event otherwise. Engine-internal
 // and capitalised (type) names never bind dynamically.
 func (es *EmitState) RecordDynBind(name string, v Value, pos SrcPos) {
-	if !es.active() || name == "" || name[0] == '_' || name[0] == '$' || IsCapitalisedName(name) {
+	if !es.Active() || name == "" || name[0] == '_' || name[0] == '$' || IsCapitalisedName(name) {
 		return
 	}
 	src, srcSeq := emitOperand{}, -1
@@ -5437,7 +5436,7 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 			}
 		}
 	}
-	if !enclosing && !c.dynamicScopeReachable(name, reader) {
+	if !enclosing && !c.DynamicScopeReachable(name, reader) {
 		return emitOperand{}, false
 	}
 	if es.dynScopeNames == nil {
@@ -5448,7 +5447,7 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 }
 
 func (es *EmitState) noteShapedRead(id string) {
-	if !es.active() || id == "" {
+	if !es.Active() || id == "" {
 		return
 	}
 	if es.shapedReads == nil {
@@ -5478,8 +5477,8 @@ func (es *EmitState) shapedReadOut(outs []Value) bool {
 // knows a fn member exists somewhere but not which). Lazily-inits the side
 // table; nil-safe and active-gated (a suspended / uncompilable pass records
 // nothing).
-func (es *EmitState) noteMemberFnRead(id string, member Value) {
-	if !es.active() || id == "" {
+func (es *EmitState) NoteMemberFnRead(id string, member Value) {
+	if !es.Active() || id == "" {
 		return
 	}
 	if es.memberFnReads == nil {
@@ -5489,7 +5488,7 @@ func (es *EmitState) noteMemberFnRead(id string, member Value) {
 }
 
 // memberFnRead reports whether id was tagged by noteMemberFnRead.
-func (es *EmitState) memberFnRead(id string) bool {
+func (es *EmitState) MemberFnRead(id string) bool {
 	if es == nil || es.memberFnReads == nil {
 		return false
 	}
@@ -5501,7 +5500,7 @@ func (es *EmitState) memberFnRead(id string) bool {
 // id (REFUSAL-CLOSURE.0 §3 — the arrival-apply model needs the member's
 // signature to claim its window). ok=false for an untagged id or a tag whose
 // read could not pinpoint the member.
-func (es *EmitState) memberFnReadValue(id string) (Value, bool) {
+func (es *EmitState) MemberFnReadValue(id string) (Value, bool) {
 	if es == nil || es.memberFnReads == nil {
 		return Value{}, false
 	}
@@ -5559,7 +5558,7 @@ func readsFnMember(args []Value) bool {
 				}
 			}
 		default:
-			fields, _, isInst := flatInstanceParts(a)
+			fields, _, isInst := FlatInstanceParts(a)
 			if !isInst || fields == nil {
 				continue
 			}
@@ -5627,13 +5626,13 @@ func containerFnAutoDispatchRisk(args []Value) bool {
 		switch d := a.Data.(type) {
 		case ListPayload:
 			if idx, ok := concreteIntKey(args); ok {
-				if idx >= 0 && idx < int64(len(d.Elems)) && fnValueZeroArg(d.Elems[idx]) {
+				if idx >= 0 && idx < int64(len(d.Elems)) && FnValueZeroArg(d.Elems[idx]) {
 					return true
 				}
 				continue
 			}
 			for _, e := range d.Elems {
-				if fnValueZeroArg(e) {
+				if FnValueZeroArg(e) {
 					return true
 				}
 			}
@@ -5642,14 +5641,14 @@ func containerFnAutoDispatchRisk(args []Value) bool {
 				continue
 			}
 			if key, ok := concreteMapKey(args); ok {
-				if mv, hit := d.M.Get(key); hit && fnValueZeroArg(mv) {
+				if mv, hit := d.M.Get(key); hit && FnValueZeroArg(mv) {
 					return true
 				}
 				continue
 			}
 			for _, k := range d.M.Keys() {
 				mv, _ := d.M.Get(k)
-				if fnValueZeroArg(mv) {
+				if FnValueZeroArg(mv) {
 					return true
 				}
 			}
@@ -5660,19 +5659,19 @@ func containerFnAutoDispatchRisk(args []Value) bool {
 			// `def C class {f:Function} def o (make C {f:make42/r}) o.f`
 			// -> 42 interpreted, `fn make42` compiled — PR #225 P1).
 			// Same key-precision rule as MapPayload.
-			fields, _, isInst := flatInstanceParts(a)
+			fields, _, isInst := FlatInstanceParts(a)
 			if !isInst || fields == nil {
 				continue
 			}
 			if key, ok := concreteMapKey(args); ok {
-				if mv, hit := fields.Get(key); hit && fnValueZeroArg(mv) {
+				if mv, hit := fields.Get(key); hit && FnValueZeroArg(mv) {
 					return true
 				}
 				continue
 			}
 			for _, k := range fields.Keys() {
 				mv, _ := fields.Get(k)
-				if fnValueZeroArg(mv) {
+				if FnValueZeroArg(mv) {
 					return true
 				}
 			}
@@ -5797,7 +5796,7 @@ func makeListRange(es *EmitState, args []Value) bool {
 // the list stays an unresolvable residual and the program falls back — when an
 // element has no compiled home (e.g. a fn value, a nested dynamic carrier).
 func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos SrcPos) bool {
-	if !es.active() {
+	if !es.Active() {
 		return false
 	}
 	// Only the TOP-LEVEL frame. A list inside a fn body / higher-order closure /
@@ -5830,7 +5829,7 @@ func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, po
 	// the recording boundary so every caller (RecordMakeList already pre-checks;
 	// the two autoEval paths do not) is covered. RecordMakeList's own active()
 	// check stays reachable — its isTop caller still reaches it under suspend.
-	if !es.active() {
+	if !es.Active() {
 		return false
 	}
 	// ops are in SIG order (ops[0] = top of stack), but a list assembles with
@@ -5899,7 +5898,7 @@ func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, po
 // re-assembles from its operands per call, never frozen, and is never a deferred
 // residual. No top-frame restriction here.
 func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, implicit bool, out Value, pos SrcPos) bool {
-	if !es.active() || len(keys) != len(vals) || len(keys) == 0 {
+	if !es.Active() || len(keys) != len(vals) || len(keys) == 0 {
 		return false
 	}
 	// ops are in value order (vals[0] pairs with keys[0]); OpMakeMap reads the
@@ -5956,7 +5955,7 @@ func (es *EmitState) RecordMakeMap(r *Registry, keys []string, vals []Value, imp
 // caller then marks the program uncompilable and it falls back), when a hole has
 // no compiled home or did not produce exactly one value.
 func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Value, pos SrcPos) bool {
-	if !es.active() || len(holeVals) == 0 {
+	if !es.Active() || len(holeVals) == 0 {
 		return false
 	}
 	// ops in stack order (ops[0] = top): OpInterp pops the run and reads it
@@ -5994,7 +5993,7 @@ func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Valu
 // events). Returns false, leaving es untouched, when a hole has no
 // compiled home — the caller then refuses and the program falls back.
 func (es *EmitState) RecordInterpXml(tmpl XmlTmpl, holeVals []Value, out Value, pos SrcPos) bool {
-	if !es.active() || len(holeVals) == 0 {
+	if !es.Active() || len(holeVals) == 0 {
 		return false
 	}
 	// ops in stack order (ops[0] = top): OpInterpXml pops the run and reads
@@ -6023,7 +6022,7 @@ func (es *EmitState) RecordInterpXml(tmpl XmlTmpl, holeVals []Value, out Value, 
 // The spread result gets a FRESH carrier (distinct provenance) so it never
 // clobbers the payload def's own producer.
 func (es *EmitState) RecordSpliceDyn(payload Value, pos SrcPos) bool {
-	if !es.active() {
+	if !es.Active() {
 		return false
 	}
 	if len(es.units) != 1 || (es.reg != nil && es.reg.Check.NestedBodyDepth != 0) {
@@ -6064,7 +6063,7 @@ func (es *EmitState) RecordClosureCall(word string, sig *Signature, args []Value
 	// N > 1 results: recordClosureDispatch has already asserted the unit's
 	// compiled residual count equals len(outs), and the multi-result seating
 	// below mirrors the generic RecordCall tail. Other callers stay 0/1-out.
-	if !es.active() || sig == nil ||
+	if !es.Active() || sig == nil ||
 		(len(outs) > 1 && (sig.Callable == nil || sig.Callable.BodyOut != BodyOutResidual)) {
 		return false
 	}
@@ -6155,7 +6154,7 @@ func noEvalBodiesInert(sig *Signature, args []Value) bool {
 		if !sig.NoEvalArgs[i] {
 			continue
 		}
-		if !isInertConst(args[i]) {
+		if !IsInertConst(args[i]) {
 			return false
 		}
 		// A flow-control sentinel (break/continue/return) inside the body
@@ -6253,7 +6252,7 @@ func (es *EmitState) noEvalBodiesInertScoped(sig *Signature, args []Value) bool 
 		if !sig.NoEvalArgs[i] {
 			continue
 		}
-		inert := isInertConst(args[i])
+		inert := IsInertConst(args[i])
 		if !inert && moduleScope {
 			inert = interpBodyInert(args[i])
 		}
@@ -6287,7 +6286,7 @@ func (es *EmitState) noEvalBodiesInertScoped(sig *Signature, args []Value) bool 
 // bodies run through the same captured-parent handler in both modes. The gate is
 // deliberately strict: EVERY operand must conform by a non-Any concrete type, so
 // a single genuinely-widened (Any) operand keeps the whole call refused.
-func (es *EmitState) dynInputsProven(sig *Signature, args []Value) bool {
+func (es *EmitState) DynInputsProven(sig *Signature, args []Value) bool {
 	if sig == nil || !sig.CompileEffect.Has(CompileRunsBodyIsolated) {
 		return false
 	}
@@ -6328,7 +6327,7 @@ func interpBodyInert(v Value) bool {
 	case ListPayload, MapPayload:
 		return interpMemberInert(v)
 	default:
-		return isInertConst(v)
+		return IsInertConst(v)
 	}
 }
 
@@ -6384,7 +6383,7 @@ func interpMemberInert(v Value) bool {
 		}
 		return true
 	default:
-		return isInertConstMember(v)
+		return IsInertConstMember(v)
 	}
 }
 
@@ -6636,12 +6635,12 @@ func inertReachMember(v Value) bool {
 		return false
 	}
 	for _, rt := range info.Receiver {
-		if !isInertConstMember(rt) {
+		if !IsInertConstMember(rt) {
 			return false
 		}
 	}
 	for _, seg := range info.Segments {
-		if seg.Computed || !isInertConstMember(seg.KeyLit) {
+		if seg.Computed || !IsInertConstMember(seg.KeyLit) {
 			return false
 		}
 	}
@@ -6751,7 +6750,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	// on the stack) with no dynamic / fn value after it. A carrier always applies
 	// — the one non-applied shape (an inert `f/r`) is a CONCRETE const, not a
 	// carrier — so the carrier bit resolves the apply-vs-inert ambiguity.
-	if !applyDynamic && len(residual) >= 2 && isFnTypedCarrier(residual[0]) {
+	if !applyDynamic && len(residual) >= 2 && IsFnTypedCarrier(residual[0]) {
 		applyDynamic = !anyFnOrDynamicTail(residual)
 		// When the carrier's closure arity is statically recoverable (its
 		// producer is a compiled factory fn returning one anonymous closure),
@@ -6823,13 +6822,13 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 	// edge-containers-2.tsv:76).
 	for i := 0; i+1 < len(residual); i++ {
 		if residual[i].Dynamic &&
-			sigTypeMatches(residual[i], TFunction) {
+			SigTypeMatches(residual[i], TFunction) {
 			if es.markWindowSeq != 0 {
 				return residual, OpCallDynMixedFromMark, ""
 			}
 			return residual, 0, "dynamic value precedes residual args (fn-value-call boundary)"
 		}
-		if isFnValueResidual(residual[i]) {
+		if IsFnValueResidual(residual[i]) {
 			if es.markWindowSeq != 0 {
 				return residual, OpCallDynMixedFromMark, ""
 			}
@@ -6837,7 +6836,7 @@ func (es *EmitState) resolveDynamicApply(lw *lowerer, residual []Value) ([]Value
 		}
 	}
 	for i := range residual {
-		if isFnTypedCarrier(residual[i]) {
+		if IsFnTypedCarrier(residual[i]) {
 			return residual, 0, "unconsumed fn-value carrier in residual (closure render)"
 		}
 	}
@@ -6858,7 +6857,7 @@ func anyDynamicTail(residual []Value) bool {
 // dynamic or fn value (so a leading carrier's args are not all static).
 func anyFnOrDynamicTail(residual []Value) bool {
 	for i := 1; i < len(residual); i++ {
-		if residual[i].Dynamic || isFnValueResidual(residual[i]) {
+		if residual[i].Dynamic || IsFnValueResidual(residual[i]) {
 			return true
 		}
 	}
@@ -6879,14 +6878,14 @@ func (es *EmitState) trailingApply(lw *lowerer, residual []Value) ([]Value, bool
 	}
 	fnv := residual[1]
 	pr, isEvent := es.producedBy[fnv.ID]
-	if !isEvent || pr.idx != 0 || !(fnv.Dynamic || isFnValueResidual(fnv)) {
+	if !isEvent || pr.idx != 0 || !(fnv.Dynamic || IsFnValueResidual(fnv)) {
 		return residual, false
 	}
 	if len(lw.vm) < 1 || lw.vm[len(lw.vm)-1].seq != pr.seq || lw.vm[len(lw.vm)-1].idx != 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return residual, false
 	}
 	arg := residual[0]
-	if _, argIsEvent := es.producedBy[arg.ID]; argIsEvent || arg.Dynamic || isFnValueResidual(arg) {
+	if _, argIsEvent := es.producedBy[arg.ID]; argIsEvent || arg.Dynamic || IsFnValueResidual(arg) {
 		return residual, false
 	}
 	return []Value{fnv, arg}, true
@@ -6904,7 +6903,7 @@ func (es *EmitState) trailingWindowApplyShape(residual []Value) bool {
 	}
 	last := len(residual) - 1
 	for i, rv := range residual {
-		if (rv.Dynamic || isFnValueResidual(rv)) != (i == last) {
+		if (rv.Dynamic || IsFnValueResidual(rv)) != (i == last) {
 			return false
 		}
 	}
@@ -6925,7 +6924,7 @@ func (es *EmitState) mixedDynamicApplyShape(residual []Value) (int, bool) {
 	}
 	dynIdx := -1
 	for i, rv := range residual {
-		if rv.Dynamic || isFnValueResidual(rv) {
+		if rv.Dynamic || IsFnValueResidual(rv) {
 			if dynIdx != -1 {
 				return 0, false // more than one dynamic / fn value
 			}
@@ -6997,7 +6996,7 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []Value) ([]e
 			ops = append(ops, typeOperand(es.internType(rv)))
 			continue
 		}
-		lit, okLit := es.materialise(rv)
+		lit, okLit := es.Materialise(rv)
 		if !okLit {
 			// An S5 first-value loop bind's READ has no event/local home by
 			// construction — it re-resolves the live registry binding the
@@ -7008,7 +7007,7 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []Value) ([]e
 			}
 			return nil, "residual value of unknown provenance"
 		}
-		if !isInertConst(lit) {
+		if !IsInertConst(lit) {
 			return nil, "residual value not statically materialisable"
 		}
 		ops = append(ops, constOperand(es.intern(lit)))
@@ -7160,7 +7159,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 	var forceOrder map[int]bool
 	residualHasFnOrDynamic := false
 	for _, rv := range residual {
-		if rv.Dynamic || isFnValueResidual(rv) {
+		if rv.Dynamic || IsFnValueResidual(rv) {
 			residualHasFnOrDynamic = true
 			break
 		}
@@ -7673,8 +7672,8 @@ func dynFrameWindow(u *emitUnit, rec *fnUnitRec, vals []Value) (int, bool) {
 // carrier, not preceded by args — so it still compiles.
 func closureResidualHasUnappliedFn(bodyStk []Value) bool {
 	for i, v := range bodyStk {
-		dynMaybeFn := v.Dynamic && sigTypeMatches(v, TFunction) && i+1 < len(bodyStk)
-		if isFnTypedCarrier(v) || dynMaybeFn || (isFnValueResidual(v) && (i > 0 || i+1 < len(bodyStk))) {
+		dynMaybeFn := v.Dynamic && SigTypeMatches(v, TFunction) && i+1 < len(bodyStk)
+		if IsFnTypedCarrier(v) || dynMaybeFn || (IsFnValueResidual(v) && (i > 0 || i+1 < len(bodyStk))) {
 			return true
 		}
 	}
@@ -7767,11 +7766,11 @@ func (es *EmitState) methodShapeAnnotated(id string) bool {
 	if es == nil || es.reg == nil {
 		return false
 	}
-	_, ok := es.reg.Check.methodShapeMember(id)
+	_, ok := es.reg.Check.MethodShapeMember(id)
 	return ok
 }
 
 func init() {
-	newEmitStateHook = func() EmitRecorder { return NewEmitState() }
-	newIsolatedEmitHook = newIsolatedEmit
+	NewEmitStateHook = func() EmitRecorder { return NewEmitState() }
+	NewIsolatedEmitHook = newIsolatedEmit
 }

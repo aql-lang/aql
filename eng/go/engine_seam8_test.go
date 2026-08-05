@@ -23,8 +23,8 @@ func TestW8StepEndPendingForwardBeforeFunc(t *testing.T) {
 	sig := &Signature{Args: []*Type{TInteger, TInteger}, BarrierPos: -1}
 	fwd := NewForward(ForwardInfo{FuncName: "cadd", Sig: sig, FuncIndex: 2, CollectedArgs: 1, StackArgs: 0})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{fwd, NewInteger(1), NewWord("cadd"), NewEnd()}, stackHeadroom)
-	e.pointer = 3 // the End
+	e.Tape = NewTape([]Value{fwd, NewInteger(1), NewWord("cadd"), NewEnd()}, stackHeadroom)
+	e.Pointer = 3 // the End
 	if err := e.stepEnd(); err != nil {
 		t.Fatalf("stepEnd: %v", err)
 	}
@@ -37,8 +37,8 @@ func TestW8StepEndPendingForwardAfterFunc(t *testing.T) {
 	sig := &Signature{Args: []*Type{TInteger, TInteger}, BarrierPos: -1}
 	fwd := NewForward(ForwardInfo{FuncName: "cadd", Sig: sig, FuncIndex: 0, CollectedArgs: 1, StackArgs: 0})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewWord("cadd"), NewInteger(1), fwd, NewEnd()}, stackHeadroom)
-	e.pointer = 3
+	e.Tape = NewTape([]Value{NewWord("cadd"), NewInteger(1), fwd, NewEnd()}, stackHeadroom)
+	e.Pointer = 3
 	if err := e.stepEnd(); err != nil {
 		t.Fatalf("stepEnd: %v", err)
 	}
@@ -51,8 +51,8 @@ func TestW8StepEndNoPendingForward(t *testing.T) {
 	if err := e.stepEnd(); err != nil {
 		t.Fatalf("stepEnd: %v", err)
 	}
-	if e.tape.Len() != 2 {
-		t.Errorf("End not removed: len=%d", e.tape.Len())
+	if e.Tape.Len() != 2 {
+		t.Errorf("End not removed: len=%d", e.Tape.Len())
 	}
 }
 
@@ -62,8 +62,8 @@ func TestW8CurryOrStackNonWordFunc(t *testing.T) {
 	// funcIdx points at a non-word → early return, pointer set to funcIdx.
 	e := engWithTape(t, []Value{NewInteger(1)}, 0)
 	e.curryOrStack(0, 0, 0)
-	if e.pointer != 0 {
-		t.Errorf("pointer = %d, want 0", e.pointer)
+	if e.Pointer != 0 {
+		t.Errorf("pointer = %d, want 0", e.Pointer)
 	}
 }
 
@@ -75,12 +75,12 @@ func TestW8CurryOrStackExcludeIndices(t *testing.T) {
 	r := covRegistry(t, nil)
 	inner := NewForward(ForwardInfo{FuncName: "cadd", FuncIndex: 2, CollectedArgs: 1, StackArgs: 1})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{
+	e.Tape = NewTape([]Value{
 		NewInteger(100), NewInteger(200), NewWord("cadd"), inner, NewWord("cmul"),
 	}, stackHeadroom)
 	e.curryOrStack(4, 0, 0)
 	// cmul left on the stack; no panic is the key assertion.
-	if e.tape.Len() == 0 {
+	if e.Tape.Len() == 0 {
 		t.Fatal("tape emptied unexpectedly")
 	}
 }
@@ -91,12 +91,12 @@ func TestW8CurryOrStackCurryList(t *testing.T) {
 	r := covRegistry(t, nil)
 	outer := NewForward(ForwardInfo{FuncName: "cmul", FuncIndex: 2, CollectedArgs: 0, StackArgs: 0})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{outer, NewInteger(7), NewWord("cadd")}, stackHeadroom)
+	e.Tape = NewTape([]Value{outer, NewInteger(7), NewWord("cadd")}, stackHeadroom)
 	e.curryOrStack(2, 1, 0)
 	// A curry list should now sit where cadd+7 were.
 	found := false
-	for i := 0; i < e.tape.Len(); i++ {
-		if e.tape.At(i).Parent.Equal(TList) {
+	for i := 0; i < e.Tape.Len(); i++ {
+		if e.Tape.At(i).Parent.Equal(TList) {
 			found = true
 		}
 	}
@@ -110,10 +110,10 @@ func TestW8CurryOrStackCheckStartClamp(t *testing.T) {
 	// outer forward reachable (loop starts at -1) this force-stacks.
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(1), NewWord("cadd")}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewInteger(1), NewWord("cadd")}, stackHeadroom)
 	e.curryOrStack(1, 5, 0)
-	if e.pointer != 1 {
-		t.Errorf("pointer = %d, want 1 (force-stacked at funcIdx)", e.pointer)
+	if e.Pointer != 1 {
+		t.Errorf("pointer = %d, want 1 (force-stacked at funcIdx)", e.Pointer)
 	}
 }
 
@@ -127,10 +127,10 @@ func TestW8MatchSignatureForwardOpenParenBoundary(t *testing.T) {
 	// (left raw) treats it as a boundary and stops the forward scan.
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(0), NewOpenParen()}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewInteger(0), NewOpenParen()}, stackHeadroom)
+	e.Pointer = 0
 	fn := mkFn(Signature{Args: []*Type{TInteger}, BarrierPos: 1})
-	sig, _, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, nil)
+	sig, _, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, nil)
 	if sig != nil {
 		t.Errorf("open-paren boundary should leave the 1-arg sig unmatched, got %v", sig)
 	}
@@ -141,10 +141,10 @@ func TestW8MatchSignatureForwardQuoteSlotNonAtom(t *testing.T) {
 	// Word cannot fill it → the forward scan breaks.
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(0), NewWord("x")}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewInteger(0), NewWord("x")}, stackHeadroom)
+	e.Pointer = 0
 	fn := mkFn(Signature{Args: []*Type{TString}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 1})
-	sig, _, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, nil)
+	sig, _, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, nil)
 	if sig != nil {
 		t.Errorf("a /q slot expecting String cannot capture a Word, got %v", sig)
 	}
@@ -155,10 +155,10 @@ func TestW8MatchSignatureForwardTypePathMatch(t *testing.T) {
 	// literal and matches.
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(0), NewWord("Scalar/Number/Integer")}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewInteger(0), NewWord("Scalar/Number/Integer")}, stackHeadroom)
+	e.Pointer = 0
 	fn := mkFn(Signature{Args: []*Type{TAny}, BarrierPos: 1})
-	sig, positions, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, nil)
+	sig, positions, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, nil)
 	if sig == nil || positions[0] != 1 {
 		t.Errorf("type-path word should match the Any forward slot; sig=%v pos=%v", sig, positions)
 	}
@@ -169,10 +169,10 @@ func TestW8MatchSignatureForwardTypePathMismatch(t *testing.T) {
 	// match → the forward scan breaks.
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(0), NewWord("Scalar/Number/Integer")}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewInteger(0), NewWord("Scalar/Number/Integer")}, stackHeadroom)
+	e.Pointer = 0
 	fn := mkFn(Signature{Args: []*Type{TString}, BarrierPos: 1})
-	sig, _, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, nil)
+	sig, _, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, nil)
 	if sig != nil {
 		t.Errorf("a type literal cannot fill a String slot, got %v", sig)
 	}
@@ -194,20 +194,20 @@ func TestW8MatchSignatureForwardRefWordTypeGate(t *testing.T) {
 		t.Fatalf("register: %v", err)
 	}
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(0), NewWordRef("w8refnat")}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewInteger(0), NewWordRef("w8refnat")}, stackHeadroom)
+	e.Pointer = 0
 	fn := mkFn(Signature{Args: []*Type{TFunction}, BarrierPos: 1})
-	sig, positions, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, nil)
+	sig, positions, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, nil)
 	if sig == nil || positions[0] != 1 {
 		t.Errorf("a /r word should claim the forward Function slot; sig=%v pos=%v", sig, positions)
 	}
 	// Negative pair: a String slot refuses the reference datum — the /r
 	// word stays a barrier and the sig goes unmatched.
 	e2 := NewTop(r)
-	e2.tape = NewTape([]Value{NewInteger(0), NewWordRef("w8refnat")}, stackHeadroom)
-	e2.pointer = 0
+	e2.Tape = NewTape([]Value{NewInteger(0), NewWordRef("w8refnat")}, stackHeadroom)
+	e2.Pointer = 0
 	strFn := mkFn(Signature{Args: []*Type{TString}, BarrierPos: 1})
-	if sig, _, _ := e2.matchSignature(strFn, WordInfo{ArgCount: -1}, nil); sig != nil {
+	if sig, _, _ := e2.MatchSignature(strFn, WordInfo{ArgCount: -1}, nil); sig != nil {
 		t.Errorf("a /r word must not claim a String slot, got %v", sig)
 	}
 }
@@ -217,10 +217,10 @@ func TestW8MatchSignatureDefensiveQuoteStackWordMatch(t *testing.T) {
 	// expected type IS atom-family is admitted (positions filled).
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewWord("x")}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{NewWord("x")}, stackHeadroom)
+	e.Pointer = 1
 	fn := mkFn(Signature{Args: []*Type{TAtom}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 0})
-	sig, positions, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewWord("x")})
+	sig, positions, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewWord("x")})
 	if sig == nil || positions[0] != 0 {
 		t.Errorf("stack Word at an Atom /q slot should match; sig=%v pos=%v", sig, positions)
 	}
@@ -231,10 +231,10 @@ func TestW8MatchSignatureDefensiveQuoteStackWordReject(t *testing.T) {
 	// type is NOT atom-family → the stack match fails.
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewWord("x")}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{NewWord("x")}, stackHeadroom)
+	e.Pointer = 1
 	fn := mkFn(Signature{Args: []*Type{TString}, QuoteArgs: map[int]bool{0: true}, BarrierPos: 0})
-	sig, _, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewWord("x")})
+	sig, _, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewWord("x")})
 	if sig != nil {
 		t.Errorf("a Word cannot fill a String /q stack slot, got %v", sig)
 	}
@@ -247,11 +247,11 @@ func TestW8MatchSignatureInsideForwardMixedFill(t *testing.T) {
 	e := NewTop(r)
 	marker := NewForward(ForwardInfo{FuncName: "outer"})
 	// [marker, stackArg(10), funcWord(pointer), forwardArg(20)]
-	e.tape = NewTape([]Value{marker, NewInteger(10), NewWord("fn"), NewInteger(20)}, stackHeadroom)
-	e.pointer = 2
+	e.Tape = NewTape([]Value{marker, NewInteger(10), NewWord("fn"), NewInteger(20)}, stackHeadroom)
+	e.Pointer = 2
 	fn := mkFn(Signature{Args: []*Type{TInteger, TInteger}, BarrierPos: 1})
 	// resolved = the one stack value below the pointer that is not the marker.
-	sig, positions, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewInteger(10)})
+	sig, positions, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewInteger(10)})
 	if sig == nil {
 		t.Fatal("expected a forward+stack mixed match inside a pending forward")
 	}
@@ -270,10 +270,10 @@ func TestW8MatchSignatureInsideForwardPreferWordDeferred(t *testing.T) {
 	marker := NewForward(ForwardInfo{FuncName: "outer"})
 	// [marker, stackArg(10), funcWord(pointer), Word(w8fwd)] — the forward
 	// token is a Word, so preferWordSig is set.
-	e.tape = NewTape([]Value{marker, NewInteger(10), NewWord("fn"), NewWord("w8fwd")}, stackHeadroom)
-	e.pointer = 2
+	e.Tape = NewTape([]Value{marker, NewInteger(10), NewWord("fn"), NewWord("w8fwd")}, stackHeadroom)
+	e.Pointer = 2
 	fn := mkFn(Signature{Args: []*Type{TInteger, TInteger}, BarrierPos: 1})
-	sig, positions, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewInteger(10)})
+	sig, positions, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewInteger(10)})
 	if sig == nil {
 		t.Fatal("expected a deferred mixed match")
 	}
@@ -290,8 +290,8 @@ func TestW8ExecFnDefLiteralNonFnValue(t *testing.T) {
 	if err := e.execFnDefLiteral(0); err != nil {
 		t.Fatalf("execFnDefLiteral: %v", err)
 	}
-	if e.pointer != 1 {
-		t.Errorf("pointer = %d, want 1", e.pointer)
+	if e.Pointer != 1 {
+		t.Errorf("pointer = %d, want 1", e.Pointer)
 	}
 }
 
@@ -390,8 +390,8 @@ func TestW8ExecFnDefStackMatchCheckZeroArg(t *testing.T) {
 	defer done()
 	fnDef := w8AnonDef(nil, []*Type{TInteger}, parenBody(NewInteger(7)))
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewFunction(fnDef)}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewFunction(fnDef)}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.execFnDefSigStackMatch(0, fnDef, nil); err != nil {
 		t.Fatalf("execFnDefSigStackMatch: %v", err)
 	}
@@ -405,8 +405,8 @@ func TestW8ExecFnDefStackMatchCheckZeroArgEmptyBody(t *testing.T) {
 	defer done()
 	fnDef := w8AnonDef(nil, nil, parenBody())
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewFunction(fnDef)}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewFunction(fnDef)}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.execFnDefSigStackMatch(0, fnDef, nil); err != nil {
 		t.Fatalf("execFnDefSigStackMatch: %v", err)
 	}
@@ -422,8 +422,8 @@ func TestW8ExecFnDefStackMatchCheckNamed(t *testing.T) {
 		parenBody(NewWord("cadd"), NewWord("a"), NewWord("b")),
 	)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(2), NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
-	e.pointer = 2
+	e.Tape = NewTape([]Value{NewInteger(2), NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
+	e.Pointer = 2
 	if err := e.execFnDefSigStackMatch(2, fnDef, []Value{NewInteger(2), NewInteger(3)}); err != nil {
 		t.Fatalf("execFnDefSigStackMatch: %v", err)
 	}
@@ -439,8 +439,8 @@ func TestW8ExecFnDefStackMatchCheckUnnamed(t *testing.T) {
 		parenBody(NewWord("cadd")),
 	)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(2), NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
-	e.pointer = 2
+	e.Tape = NewTape([]Value{NewInteger(2), NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
+	e.Pointer = 2
 	if err := e.execFnDefSigStackMatch(2, fnDef, []Value{NewInteger(2), NewInteger(3)}); err != nil {
 		t.Fatalf("execFnDefSigStackMatch: %v", err)
 	}
@@ -459,8 +459,8 @@ func TestW8ExecFnDefStackMatchNamedPatternUnifyFail(t *testing.T) {
 		parenBody(NewWord("a")),
 	)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSigStackMatch(1, fnDef, []Value{NewInteger(3)}); err != nil {
 		t.Fatalf("execFnDefSigStackMatch: %v", err)
 	}
@@ -478,8 +478,8 @@ func TestW8ExecFnDefStackMatchUnnamedTypeMismatch(t *testing.T) {
 		parenBody(NewInteger(0)),
 	)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSigStackMatch(1, fnDef, []Value{NewInteger(3)}); err != nil {
 		t.Fatalf("execFnDefSigStackMatch: %v", err)
 	}
@@ -497,8 +497,8 @@ func TestW8ExecFnDefStackMatchUnnamedPatternUnifyFail(t *testing.T) {
 		parenBody(NewInteger(1)),
 	)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSigStackMatch(1, fnDef, []Value{NewInteger(3)}); err != nil {
 		t.Fatalf("execFnDefSigStackMatch: %v", err)
 	}
@@ -520,8 +520,8 @@ func TestW8ExecFnDefSigRuntimeCompaction(t *testing.T) {
 	sig := w8UnnamedSig(2)
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(2), NewForward(ForwardInfo{}), NewInteger(3), fnv}, stackHeadroom)
-	e.pointer = 3
+	e.Tape = NewTape([]Value{NewInteger(2), NewForward(ForwardInfo{}), NewInteger(3), fnv}, stackHeadroom)
+	e.Pointer = 3
 	if err := e.execFnDefSig(3, sig, []Value{NewInteger(2), NewInteger(3)}, nil, false); err != nil {
 		t.Fatalf("execFnDefSig: %v", err)
 	}
@@ -533,13 +533,13 @@ func TestW8ExecFnDefSigRuntimeElseBranch(t *testing.T) {
 	sig := w8UnnamedSig(2)
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(2), fnv}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{NewInteger(2), fnv}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSig(1, sig, []Value{NewInteger(2), NewInteger(3)}, nil, false); err != nil {
 		t.Fatalf("execFnDefSig: %v", err)
 	}
-	if e.pointer != 0 {
-		t.Errorf("pointer = %d, want 0", e.pointer)
+	if e.Pointer != 0 {
+		t.Errorf("pointer = %d, want 0", e.Pointer)
 	}
 }
 
@@ -549,8 +549,8 @@ func TestW8ExecFnDefSigCapturedRegCompaction(t *testing.T) {
 	sig := w8UnnamedSig(2)
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(2), NewForward(ForwardInfo{}), NewInteger(3), fnv}, stackHeadroom)
-	e.pointer = 3
+	e.Tape = NewTape([]Value{NewInteger(2), NewForward(ForwardInfo{}), NewInteger(3), fnv}, stackHeadroom)
+	e.Pointer = 3
 	if err := e.execFnDefSig(3, sig, []Value{NewInteger(2), NewInteger(3)}, r, false); err != nil {
 		t.Fatalf("execFnDefSig captured: %v", err)
 	}
@@ -562,8 +562,8 @@ func TestW8ExecFnDefSigCapturedRegZeroArg(t *testing.T) {
 	sig := &Signature{Returns: []*Type{TInteger}, Impl: Boru([]Value{NewInteger(42)}), BarrierPos: 0}
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{fnv}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{fnv}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.execFnDefSig(0, sig, nil, r, false); err != nil {
 		t.Fatalf("execFnDefSig captured 0-arg: %v", err)
 	}
@@ -575,8 +575,8 @@ func TestW8ExecFnDefSigCapturedRegElseBranch(t *testing.T) {
 	sig := w8UnnamedSig(2)
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(2), fnv}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{NewInteger(2), fnv}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSig(1, sig, []Value{NewInteger(2), NewInteger(3)}, r, false); err != nil {
 		t.Fatalf("execFnDefSig captured else: %v", err)
 	}
@@ -590,8 +590,8 @@ func TestW8ExecFnDefSigListAutoEval(t *testing.T) {
 	listArg := NewList([]Value{NewInteger(1), NewInteger(2)})
 	listArg.Eval = true
 	e := NewTop(r)
-	e.tape = NewTape([]Value{listArg, fnv}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{listArg, fnv}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSig(1, sig, []Value{listArg}, nil, false); err != nil {
 		t.Fatalf("execFnDefSig list autoeval: %v", err)
 	}
@@ -605,8 +605,8 @@ func TestW8ExecFnDefSigListAutoEvalError(t *testing.T) {
 	listArg := NewList([]Value{NewWord("w8_undefined_word")})
 	listArg.Eval = true
 	e := NewTop(r)
-	e.tape = NewTape([]Value{listArg, fnv}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{listArg, fnv}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSig(1, sig, []Value{listArg}, nil, false); err == nil {
 		t.Fatal("expected an error from an undefined word in a list arg")
 	}
@@ -623,8 +623,8 @@ func TestW8ExecFnDefSigMapAutoEval(t *testing.T) {
 	mapArg := NewMap(m)
 	mapArg.Eval = true
 	e := NewTop(r)
-	e.tape = NewTape([]Value{mapArg, fnv}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{mapArg, fnv}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSig(1, sig, []Value{mapArg}, nil, false); err != nil {
 		t.Fatalf("execFnDefSig map autoeval: %v", err)
 	}
@@ -640,8 +640,8 @@ func TestW8ExecFnDefSigMapAutoEvalError(t *testing.T) {
 	mapArg := NewMap(m)
 	mapArg.Eval = true
 	e := NewTop(r)
-	e.tape = NewTape([]Value{mapArg, fnv}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{mapArg, fnv}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSig(1, sig, []Value{mapArg}, nil, false); err == nil {
 		t.Fatal("expected an error from an undefined word in a map arg value")
 	}
@@ -654,8 +654,8 @@ func TestW8ExecFnDefSigArgsPushError(t *testing.T) {
 	sig := w8UnnamedSig(1)
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{*sig}})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(2), fnv}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{NewInteger(2), fnv}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSig(1, sig, []Value{NewInteger(2)}, nil, false); err == nil {
 		t.Fatal("expected an Args.Push error with a nil Args stack")
 	}
@@ -745,8 +745,8 @@ func TestW8ExecMatchEmptyPositions(t *testing.T) {
 	// stack.
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(2), NewInteger(3)}, stackHeadroom)
-	e.pointer = 2
+	e.Tape = NewTape([]Value{NewInteger(2), NewInteger(3)}, stackHeadroom)
+	e.Pointer = 2
 	fn := r.Lookup("cadd")
 	sig := &fn.Signatures[0]
 	match := &MatchResult{Sig: sig, Name: "cadd", Positions: nil, Args: []Value{NewInteger(2), NewInteger(3)}}
@@ -763,8 +763,8 @@ func TestW8StepWordRefRecorder(t *testing.T) {
 	r := covRegistry(t, nil)
 	e := NewTop(r)
 	e.SetRecorder(&w4CountRecorder{})
-	e.tape = NewTape([]Value{NewWord("cadd")}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewWord("cadd")}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.stepWordRef(NewWord("cadd"), WordInfo{Name: "cadd", ArgCount: -1, ForceRef: true}); err != nil {
 		t.Fatalf("stepWordRef: %v", err)
 	}
@@ -776,8 +776,8 @@ func TestW8StepWordUsurpRefRecorder(t *testing.T) {
 	r := covRegistry(t, nil)
 	e := NewTop(r)
 	e.SetRecorder(&w4CountRecorder{})
-	e.tape = NewTape([]Value{NewWord("cadd")}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewWord("cadd")}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.stepWordUsurp(NewWord("cadd"), WordInfo{Name: "cadd", ArgCount: -1, ForceUsurp: true, ForceRef: true}); err != nil {
 		t.Fatalf("stepWordUsurp: %v", err)
 	}
@@ -799,7 +799,7 @@ func TestW8RefuseForwardStackDriftOutOfRange(t *testing.T) {
 	done := w8ArmCompile(t, r)
 	defer done()
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
 	sig := &Signature{Args: []*Type{TInteger, TInteger}, BarrierPos: 1}
 	refuseForwardStackDrift(e, sig, []int{0, 999})
 }
@@ -810,10 +810,10 @@ func TestW8TryRecordUnmatchedTrapZeroArgSig(t *testing.T) {
 	done := w8ArmCompile(t, r)
 	defer done()
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
+	e.Pointer = 0
 	fn := &FnDefInfo{Signatures: []Signature{{BarrierPos: -1}}}
-	if e.tryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8z", ArgCount: -1}, fn, SrcPos{}) {
+	if e.TryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8z", ArgCount: -1}, fn, SrcPos{}) {
 		t.Error("a 0-arg sig should make the trap decline (false)")
 	}
 }
@@ -821,13 +821,13 @@ func TestW8TryRecordUnmatchedTrapZeroArgSig(t *testing.T) {
 // --- isRecordableLiteral: control-marker arm ------------------------------
 
 func TestW8IsRecordableLiteralMarkers(t *testing.T) {
-	if isRecordableLiteral(NewMark("m")) {
+	if IsRecordableLiteral(NewMark("m")) {
 		t.Error("a Mark is not a recordable literal")
 	}
-	if isRecordableLiteral(NewMove("m", "for loop")) {
+	if IsRecordableLiteral(NewMove("m", "for loop")) {
 		t.Error("a Move is not a recordable literal")
 	}
-	if isRecordableLiteral(NewReturnCheck(ReturnCheckInfo{})) {
+	if IsRecordableLiteral(NewReturnCheck(ReturnCheckInfo{})) {
 		t.Error("a ReturnCheck is not a recordable literal")
 	}
 }
@@ -845,8 +845,8 @@ func TestW8ExecFnDefStackMatchCheckFnValueUnnamed(t *testing.T) {
 		Impl: Boru(parenBody(NewInteger(42))), BarrierPos: 0,
 	}}}
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSigStackMatch(1, fnDef, []Value{NewInteger(3)}); err != nil {
 		t.Fatalf("execFnDefSigStackMatch: %v", err)
 	}
@@ -864,8 +864,8 @@ func TestW8SpliceFnValueCheckResultEmptyDeclaredReturns(t *testing.T) {
 	}}}
 	sig := &fnDef.Signatures[0]
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{NewInteger(3), NewFunction(fnDef)}, stackHeadroom)
+	e.Pointer = 1
 	spliceFnValueCheckResult(e, 1, 1, fnDef, sig, []Value{NewInteger(3)})
 }
 
@@ -882,8 +882,8 @@ func TestW8ExecFnDefStackMatchUnnamedMapPatternFail(t *testing.T) {
 	am.Set("y", NewInteger(2))
 	arg := NewMap(am)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{arg, NewFunction(fnDef)}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{arg, NewFunction(fnDef)}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.execFnDefSigStackMatch(1, fnDef, []Value{arg}); err != nil {
 		t.Fatalf("execFnDefSigStackMatch: %v", err)
 	}
@@ -896,8 +896,8 @@ func TestW8SpliceFnCheckTailCompaction(t *testing.T) {
 	r := covRegistry(t, nil)
 	e := NewTop(r)
 	fnv := NewFunction(FnDefInfo{Signatures: []Signature{{Params: []FnParam{{Type: TInteger}, {Type: TInteger}}}}})
-	e.tape = NewTape([]Value{NewInteger(1), NewForward(ForwardInfo{}), NewInteger(2), fnv}, stackHeadroom)
-	e.pointer = 3
+	e.Tape = NewTape([]Value{NewInteger(1), NewForward(ForwardInfo{}), NewInteger(2), fnv}, stackHeadroom)
+	e.Pointer = 3
 	spliceFnCheckTail(e, 3, 2, []Value{NewCarrier(TAny)})
 }
 
@@ -906,8 +906,8 @@ func TestW8SpliceFnCheckTailElseBranch(t *testing.T) {
 	// clamps argStart and splices.
 	e := engWithTape(t, []Value{NewInteger(1), NewInteger(2)}, 1)
 	spliceFnCheckTail(e, 1, 2, []Value{NewCarrier(TAny)})
-	if e.pointer != 0 {
-		t.Errorf("pointer = %d, want 0 (argStart clamped)", e.pointer)
+	if e.Pointer != 0 {
+		t.Errorf("pointer = %d, want 0 (argStart clamped)", e.Pointer)
 	}
 }
 
@@ -922,8 +922,8 @@ func w8scpEng(t *testing.T, vals []Value, ptr int) *Engine {
 	t.Helper()
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape(vals, stackHeadroom)
-	e.pointer = ptr
+	e.Tape = NewTape(vals, stackHeadroom)
+	e.Pointer = ptr
 	return e
 }
 
@@ -958,8 +958,8 @@ func TestW8StepCloseParenReEvalDefCleanup(t *testing.T) {
 	r := covRegistry(t, nil)
 	e := NewTop(r)
 	dc := NewDefCleanup(DefCleanupInfo{Registry: r, Snapshot: map[string]int{}})
-	e.tape = NewTape([]Value{NewOpenParen(), w8scpFwd("cadd", 2), dc, NewCloseParen()}, stackHeadroom)
-	e.pointer = 3
+	e.Tape = NewTape([]Value{NewOpenParen(), w8scpFwd("cadd", 2), dc, NewCloseParen()}, stackHeadroom)
+	e.Pointer = 3
 	if err := e.stepCloseParen(); err != nil {
 		t.Fatalf("stepCloseParen: %v", err)
 	}
@@ -1007,8 +1007,8 @@ func TestW8StepCloseParenReEvalWordError(t *testing.T) {
 	})
 	e := NewTop(r)
 	fwd := NewForward(ForwardInfo{FuncName: "cfail8", Sig: &Signature{Args: []*Type{TInteger}, BarrierPos: -1}, FuncIndex: 2})
-	e.tape = NewTape([]Value{NewOpenParen(), NewInteger(1), NewWord("cfail8"), fwd, NewCloseParen()}, stackHeadroom)
-	e.pointer = 4
+	e.Tape = NewTape([]Value{NewOpenParen(), NewInteger(1), NewWord("cfail8"), fwd, NewCloseParen()}, stackHeadroom)
+	e.Pointer = 4
 	if err := e.stepCloseParen(); err == nil {
 		t.Fatal("expected the re-eval word dispatch error to propagate")
 	}
@@ -1040,8 +1040,8 @@ func TestW8ResolveOrphanedReEvalLiteral(t *testing.T) {
 	r := covRegistry(t, nil)
 	e := NewTop(r)
 	fwd := NewForward(ForwardInfo{FuncName: "cadd", FuncIndex: 0})
-	e.tape = NewTape([]Value{NewInteger(9), fwd}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewInteger(9), fwd}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.resolveOrphanedForwards(); err != nil {
 		t.Fatalf("resolveOrphanedForwards: %v", err)
 	}
@@ -1052,8 +1052,8 @@ func TestW8ResolveOrphanedReEvalEnd(t *testing.T) {
 	r := covRegistry(t, nil)
 	e := NewTop(r)
 	fwd := NewForward(ForwardInfo{FuncName: "cadd", FuncIndex: 0})
-	e.tape = NewTape([]Value{NewEnd(), fwd}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewEnd(), fwd}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.resolveOrphanedForwards(); err != nil {
 		t.Fatalf("resolveOrphanedForwards: %v", err)
 	}
@@ -1066,8 +1066,8 @@ func TestW8ResolveOrphanedReEvalForward(t *testing.T) {
 	e := NewTop(r)
 	f1 := NewForward(ForwardInfo{FuncName: "cadd", FuncIndex: 0})
 	f2 := NewForward(ForwardInfo{FuncName: "cadd", FuncIndex: 0})
-	e.tape = NewTape([]Value{f1, f2}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{f1, f2}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.resolveOrphanedForwards(); err != nil {
 		t.Fatalf("resolveOrphanedForwards: %v", err)
 	}
@@ -1079,8 +1079,8 @@ func TestW8ResolveOrphanedReEvalWordError(t *testing.T) {
 	r := covRegistry(t, nil)
 	e := NewTop(r)
 	fwd := NewForward(ForwardInfo{FuncName: "cadd", FuncIndex: 0})
-	e.tape = NewTape([]Value{NewWord("w8-no-such-word"), fwd}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewWord("w8-no-such-word"), fwd}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.resolveOrphanedForwards(); err == nil {
 		t.Fatal("expected the retry loop to surface the stepWord error")
 	}
@@ -1117,8 +1117,8 @@ func TestW8EvalParenGroupForward(t *testing.T) {
 	// A Forward token inside the paren group is advanced past (pointer++).
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewOpenParen(), NewForward(ForwardInfo{FuncName: "cadd", FuncIndex: 0}), NewInteger(1), NewCloseParen()}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewOpenParen(), NewForward(ForwardInfo{FuncName: "cadd", FuncIndex: 0}), NewInteger(1), NewCloseParen()}, stackHeadroom)
+	e.Pointer = 0
 	// The group evaluates; the point is exercising the IsForward arm.
 	_ = e.evalParenGroupAt(0)
 }
@@ -1127,8 +1127,8 @@ func TestW8EvalParenGroupMoveError(t *testing.T) {
 	// A Move to an unregistered mark inside the paren errors.
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewOpenParen(), NewMove("w8_nomark", "for loop"), NewCloseParen()}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewOpenParen(), NewMove("w8_nomark", "for loop"), NewCloseParen()}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.evalParenGroupAt(0); err == nil {
 		t.Fatal("expected a move error for an unregistered mark")
 	}
@@ -1170,12 +1170,12 @@ func TestW8ResolveOrphanedFlowCtrl(t *testing.T) {
 	r := w8BreakReg(t)
 	e := NewTop(r)
 	fwd := NewForward(ForwardInfo{FuncName: "w8break", FuncIndex: 1})
-	e.tape = NewTape([]Value{fwd, NewWord("w8break")}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{fwd, NewWord("w8break")}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.resolveOrphanedForwards(); err != nil {
 		t.Fatalf("resolveOrphanedForwards: %v", err)
 	}
-	if e.registry.FlowCtrl != FlowBreak {
+	if e.Registry.FlowCtrl != FlowBreak {
 		t.Error("break signal should remain set for the outer frame")
 	}
 }
@@ -1186,8 +1186,8 @@ func TestW8StepCloseParenReEvalFlowCtrl(t *testing.T) {
 	r := w8BreakReg(t)
 	e := NewTop(r)
 	fwd := NewForward(ForwardInfo{FuncName: "w8break", FuncIndex: 1})
-	e.tape = NewTape([]Value{NewOpenParen(), NewWord("w8break"), fwd, NewCloseParen()}, stackHeadroom)
-	e.pointer = 3
+	e.Tape = NewTape([]Value{NewOpenParen(), NewWord("w8break"), fwd, NewCloseParen()}, stackHeadroom)
+	e.Pointer = 3
 	if err := e.stepCloseParen(); err != nil {
 		t.Fatalf("stepCloseParen: %v", err)
 	}
@@ -1202,8 +1202,8 @@ func TestW8StepLiteralCollectBeforeFunc(t *testing.T) {
 	e := NewTop(r)
 	sig := &Signature{Args: []*Type{TInteger}, BarrierPos: -1}
 	fwd := NewForward(ForwardInfo{FuncName: "cneg", Sig: sig, FuncIndex: 3, CollectedArgs: 0, ExpectedArgs: 1})
-	e.tape = NewTape([]Value{fwd, NewInteger(5), NewInteger(0), NewWord("cneg")}, stackHeadroom)
-	e.pointer = 1
+	e.Tape = NewTape([]Value{fwd, NewInteger(5), NewInteger(0), NewWord("cneg")}, stackHeadroom)
+	e.Pointer = 1
 	if err := e.stepLiteral(); err != nil {
 		t.Fatalf("stepLiteral: %v", err)
 	}
@@ -1250,7 +1250,7 @@ func TestW8AutoEvalMapXmlInterpError(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("k", w8BadXml())
 	mapVal := NewMap(m)
-	if _, err := e.autoEvalMap(mapVal, false, true); err == nil {
+	if _, err := e.AutoEvalMap(mapVal, false, true); err == nil {
 		t.Fatal("expected an XML-interp error from a map value")
 	}
 }
@@ -1285,7 +1285,7 @@ func TestW8AutoEvalMapInterpStringError(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("k", NewInterpString([]InterpPart{{Expr: []Value{NewWord("w8_undefined_word")}}}))
 	mapVal := NewMap(m)
-	if _, err := e.autoEvalMap(mapVal, false, true); err == nil {
+	if _, err := e.AutoEvalMap(mapVal, false, true); err == nil {
 		t.Fatal("expected an interp-string error from a map value")
 	}
 }
@@ -1304,7 +1304,7 @@ func TestW8AutoEvalMapReachError(t *testing.T) {
 	m := NewOrderedMap()
 	m.Set("k", reach)
 	mapVal := NewMap(m)
-	if _, err := e.autoEvalMap(mapVal, false, true); err == nil {
+	if _, err := e.AutoEvalMap(mapVal, false, true); err == nil {
 		t.Fatal("expected a strict-reach missing-key error from a map value")
 	}
 }
@@ -1375,8 +1375,8 @@ func TestW8ResolveOrphanedUnmatchedClose(t *testing.T) {
 	r := covRegistry(t, nil)
 	e := NewTop(r)
 	fwd := NewForward(ForwardInfo{FuncName: "cadd", FuncIndex: 0, CollectedArgs: 0, StackArgs: 0})
-	e.tape = NewTape([]Value{NewInteger(1), fwd, NewCloseParen()}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewInteger(1), fwd, NewCloseParen()}, stackHeadroom)
+	e.Pointer = 0
 	if err := e.resolveOrphanedForwards(); err == nil {
 		t.Fatal("expected an unmatched close paren error")
 	} else if !strings.Contains(err.Error(), "closing") {
@@ -1397,7 +1397,7 @@ func TestW8DispatchRematchDeclines(t *testing.T) {
 	if nilES.RecordDispatchRematchValues("w", []Value{NewInteger(1)}, 0, 1, SrcPos{}) {
 		t.Error("inactive EmitState must decline")
 	}
-	if theInactiveEmit.RecordDispatchRematchValues("w", []Value{NewInteger(1)}, 0, 1, SrcPos{}) {
+	if TheInactiveEmit.RecordDispatchRematchValues("w", []Value{NewInteger(1)}, 0, 1, SrcPos{}) {
 		t.Error("the inactive recorder must decline")
 	}
 
@@ -1480,13 +1480,13 @@ func TestW8DispatchRematchNoneLiteralWindow(t *testing.T) {
 	done := w8ArmCompile(t, r)
 	defer done()
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewWord("w8rn"), NewWord("none"), NewCarrier(TInteger)}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewWord("w8rn"), NewWord("none"), NewCarrier(TInteger)}, stackHeadroom)
+	e.Pointer = 0
 	fn := r.Lookup("w8rn")
 	if fn == nil {
 		t.Fatal("w8rn not registered")
 	}
-	if e.tryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rn", ArgCount: -1}, fn, SrcPos{}) {
+	if e.TryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rn", ArgCount: -1}, fn, SrcPos{}) {
 		t.Error("the word-narrowed written tuple must decline the rematch record")
 	}
 }
@@ -1507,17 +1507,17 @@ func TestW8DispatchRematchPermutedStackTakesDefiniteTrap(t *testing.T) {
 	done := w8ArmCompile(t, r)
 	defer done()
 	e := NewTop(r)
-	e.tape = NewTape([]Value{
+	e.Tape = NewTape([]Value{
 		NewInteger(1), NewString("s"), // prefix: permutes (Integer, String)
 		NewWord("w8rh"),
 		NewCarrier(TInteger), NewInteger(2),
 	}, stackHeadroom)
-	e.pointer = 2
+	e.Pointer = 2
 	fn := r.Lookup("w8rh")
 	if fn == nil {
 		t.Fatal("w8rh not registered")
 	}
-	if !e.tryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rh", ArgCount: -1}, fn, SrcPos{}) {
+	if !e.TryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rh", ArgCount: -1}, fn, SrcPos{}) {
 		t.Error("a concrete permuted stack window must serialise the definite trap")
 	}
 }
@@ -1545,18 +1545,18 @@ func TestW8DispatchRematchFnShapeDeclines(t *testing.T) {
 	// its typed-name map rides at FuncIndex-CollectedArgs — above the
 	// pointer, so the stack window stays empty and the carrier forms the
 	// forward window; the trailing word bounds the written walk.
-	e.tape = NewTape([]Value{
+	e.Tape = NewTape([]Value{
 		NewForward(ForwardInfo{FuncName: "def", Sig: sig, CollectedArgs: 1, FuncIndex: 5}),
 		NewWord("w8rf"),
 		NewCarrier(TInteger),
 		NewWord("zz-stop"),
 		NewMap(m),
 	}, stackHeadroom)
-	e.pointer = 1
+	e.Pointer = 1
 	if !e.isFnShapeTypedBindingContext() {
 		t.Fatal("setup: expected the fn-shape typed-binding context")
 	}
-	if e.tryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rf", ArgCount: -1}, r.Lookup("w8rf"), SrcPos{}) {
+	if e.TryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8rf", ArgCount: -1}, r.Lookup("w8rf"), SrcPos{}) {
 		t.Error("the fn-shape context must decline the rematch record")
 	}
 }
@@ -1580,13 +1580,13 @@ func TestW8DispatchTrapDeferredTokenDeclines(t *testing.T) {
 	defer done()
 	e := NewTop(r)
 	reach := NewReachFromKeys(NewWord("m"), []Value{NewString("a")})
-	e.tape = NewTape([]Value{NewWord("w8dt"), reach}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewWord("w8dt"), reach}, stackHeadroom)
+	e.Pointer = 0
 	fn := r.Lookup("w8dt")
 	if fn == nil {
 		t.Fatal("w8dt not registered")
 	}
-	if e.tryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8dt", ArgCount: -1}, fn, SrcPos{}) {
+	if e.TryRecordUnmatchedDispatchTrap(WordInfo{Name: "w8dt", ArgCount: -1}, fn, SrcPos{}) {
 		t.Error("a raw Reach window token must decline the trap/rematch record")
 	}
 }

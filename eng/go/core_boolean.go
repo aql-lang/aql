@@ -65,7 +65,7 @@ func TorReturnsFn(args []Value, _ *Registry) []Value {
 		a1, _ := AsNegation(args[1])
 		return []Value{NegateType(TandValues(a1.Inner, a0.Inner))}
 	}
-	return []Value{unionType(args[1], args[0])}
+	return []Value{UnionType(args[1], args[0])}
 }
 
 // unionType builds the simplified disjunction of two type values
@@ -73,7 +73,7 @@ func TorReturnsFn(args []Value, _ *Registry) []Value {
 // alternative for a singleton, else a fresh disjunct. The same
 // reduction TorHandler applies, factored out for the De Morgan folds
 // and the DepScalar complement.
-func unionType(a, b Value) Value {
+func UnionType(a, b Value) Value {
 	s := SimplifyDisjunctAlts(append(FlattenDisjunctAlts(a), FlattenDisjunctAlts(b)...))
 	switch len(s) {
 	case 0:
@@ -124,7 +124,7 @@ func TandHandler(args []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Va
 func TandValues(a, b Value) Value {
 	// Either operand is Never (sentinel or bare type literal) →
 	// intersection is Never.
-	if isNeverShape(a) || isNeverShape(b) {
+	if IsNeverShape(a) || IsNeverShape(b) {
 		return NewTypeLiteral(TNever)
 	}
 
@@ -135,7 +135,7 @@ func TandValues(a, b Value) Value {
 	if IsNegation(a) && IsNegation(b) {
 		ai, _ := AsNegation(a)
 		bi, _ := AsNegation(b)
-		return NegateType(unionType(ai.Inner, bi.Inner))
+		return NegateType(UnionType(ai.Inner, bi.Inner))
 	}
 
 	if IsDisjunct(a) || IsDisjunct(b) {
@@ -178,7 +178,7 @@ func TandValues(a, b Value) Value {
 // isNeverShape reports whether v is any form of Never: the sentinel
 // (Parent=TNever) or the bare type literal (NewTypeLiteral(TNever),
 // Data=nil, lattice node == TNever).
-func isNeverShape(v Value) bool {
+func IsNeverShape(v Value) bool {
 	if v.Parent.Equal(TNever) {
 		return true
 	}
@@ -208,7 +208,7 @@ func isAnyShape(v Value) bool {
 // `tnot (A tor B)` already admits exactly the values matching neither A
 // nor B.
 func NegateType(inner Value) Value {
-	if isNeverShape(inner) {
+	if IsNeverShape(inner) {
 		return NewTypeLiteral(TAny)
 	}
 	if isAnyShape(inner) {
@@ -230,7 +230,7 @@ func NegateType(inner Value) Value {
 			// to `Integer lte 0` through the disjunct distribution in
 			// TandValues.
 			base := inner.Parent
-			return unionType(complementWithinBase(base, di), NewNegation(NewTypeLiteral(base)))
+			return UnionType(complementWithinBase(base, di), NewNegation(NewTypeLiteral(base)))
 		}
 	}
 	return NewNegation(inner)

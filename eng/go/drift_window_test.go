@@ -16,7 +16,7 @@ func TestDriftWindowOutOfRangePosition(t *testing.T) {
 	done := w8ArmCompile(t, r)
 	defer done()
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
 	w, sig := zzDriftWord()
 	if tryRecordDriftWindow(e, w, sig, []int{0, 999}) {
 		t.Error("an out-of-range matched position must decline the window")
@@ -31,8 +31,8 @@ func TestDriftWindowNonContiguousDeclines(t *testing.T) {
 	defer done()
 	e := NewTop(r)
 	dyn := NewDynamicCarrier(TAny)
-	e.tape = NewTape([]Value{NewInteger(5), dyn, NewInteger(9), NewWord("add"), NewInteger(1)}, stackHeadroom)
-	e.pointer = 3
+	e.Tape = NewTape([]Value{NewInteger(5), dyn, NewInteger(9), NewWord("add"), NewInteger(1)}, stackHeadroom)
+	e.Pointer = 3
 	w, sig := zzDriftWord()
 	if tryRecordDriftWindow(e, w, sig, []int{1, 0}) {
 		t.Error("a non-contiguous matched span must decline the window")
@@ -53,8 +53,8 @@ func TestDriftWindowVariadicOperandDeclines(t *testing.T) {
 	f.variadicResult = true
 	es.eventInfo[seq] = f
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewInteger(5), dyn, NewWord("add"), NewInteger(1)}, stackHeadroom)
-	e.pointer = 2
+	e.Tape = NewTape([]Value{NewInteger(5), dyn, NewWord("add"), NewInteger(1)}, stackHeadroom)
+	e.Pointer = 2
 	w, sig := zzDriftWord()
 	if tryRecordDriftWindow(e, w, sig, []int{1, 0}) {
 		t.Error("a variadic-event operand must decline the window")
@@ -73,8 +73,8 @@ func TestDriftWindowUnresolvableOperandDeclines(t *testing.T) {
 	es.setProducedAt(dyn, seq, 0)
 	orphan := NewCarrier(TInteger) // non-dynamic carrier, no event, no orig
 	e := NewTop(r)
-	e.tape = NewTape([]Value{orphan, dyn, NewWord("add"), NewInteger(1)}, stackHeadroom)
-	e.pointer = 2
+	e.Tape = NewTape([]Value{orphan, dyn, NewWord("add"), NewInteger(1)}, stackHeadroom)
+	e.Pointer = 2
 	w, sig := zzDriftWord()
 	if tryRecordDriftWindow(e, w, sig, []int{1, 0}) {
 		t.Error("an unresolvable window operand must decline the window")

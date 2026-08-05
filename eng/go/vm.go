@@ -48,7 +48,7 @@ import (
 // words honour this by forking an isolated registry per branch
 // (ForkConcurrent); host callers run each instance on its own registry.
 func RunProgram(p *Program, r *Registry) ([]Value, error) {
-	return runProgram(p, r, stepLimitFor(r, DefaultStepLimit))
+	return runProgram(p, r, StepLimitFor(r, DefaultStepLimit))
 }
 
 // vmLoop is one open counted loop's iteration state. exitPC / nextPC / unit /
@@ -185,7 +185,7 @@ func (vc *vmContext) island() *Engine {
 	if vc.islandEng == nil {
 		vc.islandEng = New(vc.r)
 		vc.islandEng.SetSource(vc.r.Source)
-		vc.islandEng.reuseTape = true
+		vc.islandEng.ReuseTape = true
 	}
 	return vc.islandEng
 }
@@ -203,9 +203,9 @@ func (vc *vmContext) island() *Engine {
 func (vc *vmContext) islandRun(reg *Registry, tokens []Value) ([]Value, error) {
 	if reg == nil || reg == vc.r {
 		eng := vc.island()
-		eng.flowUnwind = true
+		eng.FlowUnwind = true
 		res, err := eng.Run(tokens)
-		eng.flowUnwind = false
+		eng.FlowUnwind = false
 		return res, err
 	}
 	return runIslandResolved(reg, nil, tokens)
@@ -251,7 +251,7 @@ func RunUnit(ref *CompiledFnRef, r *Registry, args []Value) ([]Value, error) {
 	if ref.Unit < 0 || ref.Unit >= len(ref.Prog.Fns) {
 		return nil, fmt.Errorf("bytecode: unit index %d out of range", ref.Unit)
 	}
-	return runVMEntry(ref.Prog, r, stepLimitFor(r, DefaultStepLimit), func(vc *vmContext) ([]Value, error) {
+	return runVMEntry(ref.Prog, r, StepLimitFor(r, DefaultStepLimit), func(vc *vmContext) ([]Value, error) {
 		return vc.enterBodyUnit(r, ref.Unit, bindUnitLocals(&ref.Prog.Fns[ref.Unit], args, ref.Captures))
 	})
 }
@@ -327,18 +327,18 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 	// (ForkConcurrent). Nested SEQUENTIAL reuse is unaffected: the flag resets
 	// on exit before the next run begins, which is the normal RunCompiled path.
 	if r != nil {
-		if !atomic.CompareAndSwapInt32(&r.vmRunning, 0, 1) {
+		if !atomic.CompareAndSwapInt32(&r.VmRunning, 0, 1) {
 			return nil, makeBoruError("concurrency_error",
 				"bytecode: a compiled program is already running on this registry; concurrent runs need their own registry (ForkConcurrent)",
 				"", "", "")
 		}
-		defer atomic.StoreInt32(&r.vmRunning, 0)
+		defer atomic.StoreInt32(&r.VmRunning, 0)
 		// Also reject starting a compiled run while an INTERPRETER run is in
 		// flight on this same registry — the cross-engine race the CAS above
 		// cannot catch. Safe to check here: no island sub-engine has spawned
 		// yet, so a non-zero depth means a DISTINCT interpreter run (this run's
 		// own islands increment the depth only later).
-		if r.interpRunActive() {
+		if r.InterpRunActive() {
 			// The deferred StoreInt32 above releases vmRunning on this return.
 			return nil, makeBoruError("concurrency_error",
 				"bytecode: an interpreter run is already active on this registry; concurrent runs need their own registry (ForkConcurrent)",
@@ -378,12 +378,12 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 	// branch. Restored on exit so nested runs nest cleanly. nestedRunner rides
 	// alongside it for the live-run callback path (InvokeCallback).
 	prevInvoker := r.Invoker
-	prevNested := r.nestedRunner
+	prevNested := r.NestedRunner
 	r.Invoker = vc.invokeClosureOn
-	r.nestedRunner = vc.runUnitNested
+	r.NestedRunner = vc.runUnitNested
 	defer func() {
 		r.Invoker = prevInvoker
-		r.nestedRunner = prevNested
+		r.NestedRunner = prevNested
 		for _, fr := range vc.foreignInvokers {
 			fr.Invoker = nil
 		}
@@ -435,7 +435,7 @@ func (vc *vmContext) invokeClosureOn(reg *Registry, body Value, inputs []Value) 
 		// Pooled + resolved inputs, mirroring InvokeBody's no-Invoker branch
 		// (never the island engine — see vmContext.islandEng's
 		// non-reentrancy contract).
-		return RunResolved(reg, inputs, bodyTokens(body))
+		return RunResolved(reg, inputs, BodyTokens(body))
 	}
 	// Inputs fill the leading param slots, captures the trailing ones
 	// (StartFnCompile registers params before captures) — the same split
@@ -523,7 +523,7 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 		window[i] = stack[len(stack)-1-i]
 	}
 	mr := MatchSignature(sigs, window, WordInfo{ArgCount: n})
-	if mr == nil || mr.Sig == nil || mr.Sig.dispatchHandler() == nil {
+	if mr == nil || mr.Sig == nil || mr.Sig.DispatchHandler() == nil {
 		// No runtime match. The interpreter's signature_error is built from its
 		// live tape / forward-collection state (engine.go sigError) — the
 		// written tuple, a reorder hint, two tape-only layers — which the VM
@@ -556,7 +556,7 @@ func (vc *vmContext) callPolyIn(dispReg *Registry, pr *PolyRef, stack []Value, c
 	for i := range mr.Args {
 		mr.Args[i] = StripAscribed(mr.Args[i])
 	}
-	results, err := mr.Sig.dispatchHandler()(mr.Args, r.Contexts.TopData(), nil, r)
+	results, err := mr.Sig.DispatchHandler()(mr.Args, r.Contexts.TopData(), nil, r)
 	if err != nil {
 		return nil, stampAt(err, curDebug, pc, r)
 	}
@@ -736,7 +736,7 @@ func (vc *vmContext) callDynamic(reg *Registry, n int, trailing bool, stack []Va
 		}
 		return append(stack[:base], results...), nil
 	}
-	if !isAppliableFn(fnVal) {
+	if !IsAppliableFn(fnVal) {
 		// Not callable: leave the value as the residual, matching the interpreter
 		// (it does not apply a non-Function). A trailing fn sits ON TOP of its
 		// args there, so rotate it up from the base; a leading fn stays below.
@@ -754,7 +754,7 @@ func (vc *vmContext) callDynamic(reg *Registry, n int, trailing bool, stack []Va
 	// InstallFnDef-registered Handler and call it outside the dispatch frame it
 	// expects — diverging. Those fall through to the island, which runs the body
 	// faithfully as a nested Run.
-	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && isDelegationFnDef(fnDef) {
+	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && IsDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
@@ -854,10 +854,10 @@ func (vc *vmContext) callDynTrailTop(reg *Registry, n int, stack []Value, curDeb
 		}
 		return append(stack[:base], results...), nil
 	}
-	if !isAppliableFn(fnVal) {
+	if !IsAppliableFn(fnVal) {
 		return stack, nil // not callable: [args, fn] is already the interpreter's trailing residual
 	}
-	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && isDelegationFnDef(fnDef) {
+	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && IsDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
@@ -912,7 +912,7 @@ func (vc *vmContext) callDynApplyTop(reg *Registry, n int, stack []Value, curDeb
 		return nil, stampAt(fmt.Errorf("apply: function value carries no FnDefInfo (got %T)", fnVal.Data), curDebug, pc, r)
 	}
 	fnVal.Quoted = false // applyHandler: the parked value becomes a live call site
-	if isDelegationFnDef(fnDef) {
+	if IsDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
@@ -992,7 +992,7 @@ func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []V
 		}
 		return guard(results)
 	}
-	if !isAppliableFn(fnVal) || fnVal.Quoted {
+	if !IsAppliableFn(fnVal) || fnVal.Quoted {
 		// The shape claim failed outright: the read did not surface a live
 		// method value. The interpreter would leave it as data and continue
 		// with a DIFFERENT stack shape, which this program cannot express —
@@ -1000,7 +1000,7 @@ func (vc *vmContext) callDynMethod(reg *Registry, spec *DynMethodSpec, stack []V
 		return nil, vmDefer(vc.r, curDebug, pc, "vm:shaped-method-not-appliable", "shaped method apply "+spec.Word+
 			": value is not an appliable function at run time; deferring to the interpreter")
 	}
-	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && isDelegationFnDef(fnDef) {
+	if fnDef, ok := fnVal.Data.(FnDefInfo); ok && IsDelegationFnDef(fnDef) {
 		if results, done, err := vc.tryNativeFnApply(fnDef, args); done {
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
@@ -1122,7 +1122,7 @@ func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, b
 		return nil, false, nil
 	}
 	mr := MatchSignature(sigs, args, WordInfo{ArgCount: len(args)})
-	if mr == nil || mr.Sig == nil || mr.Sig.dispatchHandler() == nil {
+	if mr == nil || mr.Sig == nil || mr.Sig.DispatchHandler() == nil {
 		return nil, false, nil
 	}
 	// A BORU-BODIED overload resolved in a FOREIGN sub-registry (a module-
@@ -1147,7 +1147,7 @@ func (vc *vmContext) tryNativeFnApply(fnDef FnDefInfo, args []Value) ([]Value, b
 	// prior form passed the sub-registry, which silently dropped
 	// host-installed state — a frozen clock stamped wall time on the
 	// compiled fast path only; caught by TestShapedMethodEffectOrdering.)
-	results, err := mr.Sig.dispatchHandler()(mr.Args, vc.r.Contexts.TopData(), nil, vc.r)
+	results, err := mr.Sig.DispatchHandler()(mr.Args, vc.r.Contexts.TopData(), nil, vc.r)
 	return results, true, err
 }
 
@@ -1192,7 +1192,7 @@ func (vc *vmContext) runFallback(reg *Registry, fb *FallbackSpan, stack []Value,
 // never runs on the VM, so that skip has no twin here.
 func (vc *vmContext) gateWord(curReg *Registry, name string) error {
 	vc.refreshGates(curReg)
-	if vc.gateWC == nil || isInternalMarker(name) {
+	if vc.gateWC == nil || IsInternalMarker(name) {
 		return nil
 	}
 	if err := vc.gateWC.CheckWord(name); err != nil {
@@ -1441,7 +1441,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 		// step-site emit. noteVMCoverage short-circuits on the coverID field
 		// (untagged units — the ordinary case — cost one branch, no atomic load)
 		// and is small enough to inline, so the hot loop keeps its complexity.
-		curReg.noteVMCoverage(curDebug, pc)
+		curReg.NoteVMCoverage(curDebug, pc)
 		switch in.Op {
 		case OpPushConst:
 			stack = append(stack, p.Consts[in.Arg])
@@ -1519,10 +1519,10 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 			}
 			payload := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
-			elems := spliceExpand(payload)
+			elems := SpliceExpand(payload)
 			for _, el := range elems {
 				if IsWord(el) || IsParenExpr(el) || IsReach(el) || IsInterpString(el) || IsSplice(el) ||
-					IsForward(el) || IsOpenParen(el) || IsCloseParen(el) || isAppliableFn(el) {
+					IsForward(el) || IsOpenParen(el) || IsCloseParen(el) || IsAppliableFn(el) {
 					return nil, vmDefer(vc.r, curDebug, pc, "vm:splice-active-payload",
 						"splice of a code-bearing payload; deferring to the interpreter")
 				}
@@ -1676,7 +1676,7 @@ func (vc *vmContext) run(startUnit int, locals []Value, stack []Value) (runOut [
 				}
 			}
 			vc.ensureInvoker(curReg)
-			results, err := s.Sig.dispatchHandler()(args, curReg.Contexts.TopData(), nil, curReg)
+			results, err := s.Sig.DispatchHandler()(args, curReg.Contexts.TopData(), nil, curReg)
 			if err != nil {
 				return nil, stampAt(err, curDebug, pc, r)
 			}
@@ -2102,8 +2102,8 @@ func stampAt(err error, debug []SrcPos, pc int, r *Registry) error {
 		ae.Row = debug[pc].Row
 		ae.Col = debug[pc].Col
 	}
-	if r != nil && ae.fullSource == "" {
-		ae.fullSource = r.Source
+	if r != nil && ae.FullSource == "" {
+		ae.FullSource = r.Source
 	}
 	return ae
 }
@@ -2122,7 +2122,7 @@ func vmReturnTypeErr(r *Registry, fn *CompiledFn, index int, expected *Type, got
 	if r != nil {
 		src = r.Source
 	}
-	return buildReturnTypeError(src, fn.Name, index, expected, got, SrcPos{}, fn.Decl)
+	return BuildReturnTypeError(src, fn.Name, index, expected, got, SrcPos{}, fn.Decl)
 }
 
 func vmReturnCountErr(r *Registry, fn *CompiledFn, expected, got int) error {
@@ -2130,7 +2130,7 @@ func vmReturnCountErr(r *Registry, fn *CompiledFn, expected, got int) error {
 	if r != nil {
 		src = r.Source
 	}
-	return buildReturnCountError(src, fn.Name, expected, got, SrcPos{}, fn.Decl)
+	return BuildReturnCountError(src, fn.Name, expected, got, SrcPos{}, fn.Decl)
 }
 
 // vmShuffle reverses the top n operand-stack values in place: OpSwap is the n=2
@@ -2218,8 +2218,8 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 		// bounded / structural) is NOT threaded into Params and so is not enforced
 		// here — see design/PARAM-GUARD-SKIP-MISCOMPILE.0.md; this guard catches the
 		// plain-type laundering (the reported bug) without over-raising.
-		if !sigTypeMatches(locals[i], pt) {
-			return runtimeNoMatch(r, fn.Name, guardArgs(locals, fn.NArgs))
+		if !SigTypeMatches(locals[i], pt) {
+			return RuntimeNoMatch(r, fn.Name, guardArgs(locals, fn.NArgs))
 		}
 	}
 	// An inline disjunct / predicate / bounded / structural param carries its
@@ -2239,7 +2239,7 @@ func checkParamContract(r *Registry, fn *CompiledFn, locals []Value) error {
 			_, ok = Unify(v, pat)
 		}
 		if !ok {
-			return runtimeNoMatch(r, fn.Name, guardArgs(locals, fn.NArgs))
+			return RuntimeNoMatch(r, fn.Name, guardArgs(locals, fn.NArgs))
 		}
 		// Retag a {:T}/[:T] param's concrete runtime arg with its element type so
 		// compiled body writes enforce it — the compiled mirror of the
@@ -2280,7 +2280,7 @@ func checkNativeParamContract(r *Registry, s *SigRef, args []Value) error {
 		if i >= s.Sig.TotalArgs() {
 			break
 		}
-		at := sigArgType(s.Sig, i)
+		at := SigArgType(s.Sig, i)
 		if at == nil || at.Equal(TAny) {
 			continue // an Any slot is a guaranteed pass
 		}
@@ -2289,8 +2289,8 @@ func checkNativeParamContract(r *Registry, s *SigRef, args []Value) error {
 		if s.Sig.QuoteArgs != nil && s.Sig.QuoteArgs[i] {
 			continue
 		}
-		if !sigTypeMatches(args[i], at) {
-			return runtimeNoMatch(r, s.Word, args)
+		if !SigTypeMatches(args[i], at) {
+			return RuntimeNoMatch(r, s.Word, args)
 		}
 	}
 	return nil
@@ -2448,7 +2448,7 @@ func vmInterpXml(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) (
 		return nil, vmErrAt(debug, pc, "INTERP_XML stack underflow")
 	}
 	holes := stack[len(stack)-n:]
-	out, used := rebuildXmlFromTmpl(spec.Tmpl, holes)
+	out, used := RebuildXmlFromTmpl(spec.Tmpl, holes)
 	if used != n { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, vmErrAt(debug, pc, "INTERP_XML hole count mismatch")
 	}
@@ -2500,6 +2500,6 @@ func vmStackCeiling(r *Registry) int {
 	if r != nil {
 		cfg = r.TapeConfig
 	}
-	initial, maxGrows, factor := cfg.resolve(0)
-	return growthCeiling(initial, maxGrows, factor)
+	initial, maxGrows, factor := cfg.Resolve(0)
+	return GrowthCeiling(initial, maxGrows, factor)
 }

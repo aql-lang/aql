@@ -101,7 +101,7 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 	if extra > unnamedCount &&
 		!stackHasVariadic(stk) && !stackHasFnValue(stk) && !stackHasDynamic(stk) &&
 		!stackHasApproxAny(stk) {
-		detail := returnCountErrorText(name, len(declared), len(stk)-unnamedCount)
+		detail := ReturnCountErrorText(name, len(declared), len(stk)-unnamedCount)
 		if !hasCheckDiagnostic(r, "type_error", detail) {
 			r.Check.AddDiagnostic(CheckDiagnostic{
 				Code:          "type_error",
@@ -123,7 +123,7 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 		if k < len(patterns) && patterns[k] != nil &&
 			!got.Dynamic && got.Parent != nil && !IsBareTypeNode(got) && !got.Parent.Equal(TNone) {
 			if _, ok := Unify(*patterns[k], got); !ok {
-				detail, _ := returnTypeErrorText(name, k+1, patterns[k], got)
+				detail, _ := ReturnTypeErrorText(name, k+1, patterns[k], got)
 				if !hasCheckDiagnostic(r, "type_error", detail) {
 					r.Check.AddDiagnostic(CheckDiagnostic{
 						Code:          "type_error",
@@ -163,7 +163,7 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 				continue
 			}
 		}
-		detail, _ := returnTypeErrorText(name, k+1, exp, got)
+		detail, _ := ReturnTypeErrorText(name, k+1, exp, got)
 		if !hasCheckDiagnostic(r, "type_error", detail) {
 			// A RuntimeMirror like the count path: the VM RET re-checks the
 			// runtime value and raises the byte-identical type_error, so the
@@ -283,7 +283,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		declaredReturnPatterns = nil
 	}
 	declSite := s.Decl
-	bodyCopy := append([]Value(nil), s.body()...)
+	bodyCopy := append([]Value(nil), s.Body()...)
 	nameCopy := name
 	capturesCopy := fnDef.Captured
 	genSpec := fnDef.Gen
@@ -381,7 +381,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// owns the program. Outside closure units every probed /q arrival
 		// already models faithfully (top-level no-match parity, the dynamic-
 		// carrier recovery refusal), so the guard stays scoped.
-		if es.inClosureUnit() && quoteParamCarrierBind(sigParams, args) {
+		if es.InClosureUnit() && quoteParamCarrierBind(sigParams, args) {
 			es.MarkUncompilable("fn " + nameCopy + ": Atom-typed param bound to a computed value in a closure body (quote capture is forward-only)")
 		}
 		// A FOREIGN-registry fn whose body constructs a fn value USED to
@@ -463,7 +463,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					// unstamped handler); applied globally it flipped whole-
 					// program main-pass rows (module-repl). Args with CONCRETE
 					// parents keep the precise strict generalisation below.
-					if pt := sigParams[i].Type; es.storedGradualActive() &&
+					if pt := sigParams[i].Type; es.StoredGradualActive() &&
 						(pt == nil || pt.Equal(TAny)) &&
 						a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a) {
 						genArgs[i] = ParamInputCarrier(TAny)
@@ -773,7 +773,7 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 	}
 	for i := range fnDef.Signatures {
 		s := &fnDef.Signatures[i]
-		if s.Fallback || len(s.body()) == 0 {
+		if s.Fallback || len(s.Body()) == 0 {
 			continue
 		}
 		paramNames := make([]string, len(s.Params))
@@ -799,7 +799,7 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 		// advisory) live on r.Check.Diagnostics and are unaffected — exactly the
 		// diagnostics-only contract this pass needs.
 		restore := r.Check.IsolateEmit()
-		AnalyseFnBody(r, name, paramNames, s.body(), genArgs, fnDef.Captured, declared, fnDef.Anonymous)
+		AnalyseFnBody(r, name, paramNames, s.Body(), genArgs, fnDef.Captured, declared, fnDef.Anonymous)
 		restore()
 	}
 }

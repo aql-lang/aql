@@ -253,7 +253,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 	// (design/INTERPRETER-SPEED-PLAN.10.md #5). Stack balance is preserved:
 	// the fn baseline still pushes/pops (a nil entry) and the DefCleanup
 	// marker still rides the tape (carrying SkipCleanup).
-	needsFrameState := fnDefCopy.Gen != nil || bodyNeedsFrameState(r, s.body())
+	needsFrameState := fnDefCopy.Gen != nil || bodyNeedsFrameState(r, s.Body())
 	// For a leaf body (!needsFrameState) the ENTIRE token expansion is
 	// constant per signature except the unnamed-arg cells: frame open,
 	// body, and the cleanup tail (nil-snapshot DefCleanup, __pa, undef
@@ -284,7 +284,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			skeleton = append(skeleton, NewFrameOpen(meta))
 		}
 		skeleton = append(skeleton, make([]Value, u)...) // arg placeholder cells
-		skeleton = append(skeleton, s.body()...)
+		skeleton = append(skeleton, s.Body()...)
 		skeleton = AppendFrameTail(skeleton, FrameTailSpec{
 			Registry:       r,
 			SkipCleanup:    true,
@@ -294,7 +294,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			Decl:           s.Decl,
 			UnnamedCount:   u,
 			FuncName:       name,
-			EvalResidual:   !fnDefCopy.Anonymous || BodyEvalsResidual(s.body()),
+			EvalResidual:   !fnDefCopy.Anonymous || BodyEvalsResidual(s.Body()),
 		})
 		skeleton = append(skeleton, NewCloseParen())
 		// When the body provably never reads `args` (sound under the
@@ -302,7 +302,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		// empty list per call instead of copying the args into a fresh
 		// one; __pa only needs an entry to pop, and nothing else reads
 		// the list contents.
-		refsArgs = bodyReferencesArgs(r, s.body())
+		refsArgs = bodyReferencesArgs(r, s.Body())
 		emptyArgs = NewList(nil)
 	}
 	return func(args []Value, _ map[string]Value, _ []Value, callReg *Registry) ([]Value, error) {
@@ -451,10 +451,10 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 		}
 
 		// Append the body tokens directly: append COPIES them into result's
-		// backing array and s.body() (the shared BoruImpl.Body) is never
+		// backing array and s.Body() (the shared BoruImpl.Body) is never
 		// mutated here, so the previous intermediate make+copy was a
 		// redundant per-call allocation (design/INTERPRETER-SPEED-PLAN.10.md #5).
-		result = append(result, s.body()...)
+		result = append(result, s.Body()...)
 		// The canonical cleanup tail: DefCleanup (undoes body-local
 		// defs), __pa (pops Args + FnBaseline), the undef pairs for
 		// captures+params, and the ReturnCheck when returns are
@@ -468,7 +468,7 @@ func buildFnBodyHandler(r *Registry, name string, s FnSig, fnDefCopy FnDefInfo, 
 			Decl:           s.Decl,
 			UnnamedCount:   unnamedCount,
 			FuncName:       name,
-			EvalResidual:   !fnDefCopy.Anonymous || BodyEvalsResidual(s.body()),
+			EvalResidual:   !fnDefCopy.Anonymous || BodyEvalsResidual(s.Body()),
 		})
 		result = append(result, NewCloseParen())
 		return result, nil
@@ -666,21 +666,21 @@ func compileFnSigs(r *Registry, name string, fnDef FnDefInfo, isStackOnly bool) 
 		// arg-binding and return validation. (An already-compiled boru fn
 		// re-bound by name still has Body>0, so it correctly gets a fresh
 		// body-runner — only Body-less handler sigs are preserved.)
-		if s.dispatchHandler() == nil || len(s.body()) > 0 {
+		if s.DispatchHandler() == nil || len(s.Body()) > 0 {
 			meta := &FnFrameMeta{
 				Name:         name,
 				HasGen:       fnDefCopy.Gen != nil,
 				InstallNames: fnInstallNames(s, fnDefCopy.Captured),
 			}
 			cs.Impl = &BoruImpl{
-				Body:     s.body(),
+				Body:     s.Body(),
 				FnFrame:  meta,
 				dispatch: buildFnBodyHandler(r, name, s, fnDefCopy, meta),
 			}
 			cs.ReturnsFn = r.analysisReturnsFn(name, s, fnDefCopy)
 		}
 		cs.BarrierPos = barrier
-		normalizeSig(&cs)
+		NormalizeSig(&cs)
 		compiled = append(compiled, cs)
 	}
 	return compiled

@@ -30,14 +30,13 @@ type EmitRecorder interface {
 	// of the historical `Check.Emit != nil` probe. Suspend pauses
 	// recording, returning the resume func.
 	Active() bool
-	active() bool
 	Armed() bool
 	Suspend() func()
 	bindRegistry(r *Registry)
 	topFrameOnly() bool
-	suspendedNow() bool
-	bodyAnalysisGuard() func()
-	fnBodyGuard() func()
+	SuspendedNow() bool
+	BodyAnalysisGuard() func()
+	FnBodyGuard() func()
 
 	// --- refusal + site accounting --------------------------------------
 	MarkUncompilable(reason string)
@@ -73,21 +72,21 @@ type EmitRecorder interface {
 	RecordMakeMap(r *Registry, keys []string, vals []Value, implicit bool, out Value, pos SrcPos) bool
 	RecordInterp(parts []InterpPart, holeVals []Value, out Value, pos SrcPos) bool
 	RegisterTrailingApply(fnID string, arity int)
-	noteMemberFnRead(id string, member Value)
-	memberFnRead(id string) bool
+	NoteMemberFnRead(id string, member Value)
+	MemberFnRead(id string) bool
 	// Stage-0b promotions (design/ENG-FOUR-PIECE.0.md): the probes that
 	// used to require a concrete recorder assert outside the emit
 	// cluster. Inactive: false / zero / no-op.
-	inClosureUnit() bool
-	storedGradualActive() bool
+	InClosureUnit() bool
+	StoredGradualActive() bool
 	FoldFullStack(word string, args, preserved []Value) ([]Value, bool)
 	RecordSpliceDyn(payload Value, pos SrcPos) bool
 	noteShapedRead(id string)
-	memberFnReadValue(id string) (Value, bool)
-	dynInputsProven(sig *Signature, args []Value) bool
-	materialise(v Value) (Value, bool)
-	zeroOutProduced(id string) bool
-	alreadyProduced(id string) bool
+	MemberFnReadValue(id string) (Value, bool)
+	DynInputsProven(sig *Signature, args []Value) bool
+	Materialise(v Value) (Value, bool)
+	ZeroOutProduced(id string) bool
+	AlreadyProduced(id string) bool
 
 	// --- defs / locals ---------------------------------------------------
 	MarkValueDef(v Value)
@@ -103,7 +102,7 @@ type EmitRecorder interface {
 
 	// --- branches / loops ------------------------------------------------
 	ArmBranchCapture()
-	peekCaptureArm() bool
+	PeekCaptureArm() bool
 	ArmLoopCapture()
 	ConsumeLoopArm() bool
 	SplitLoopRegionBind(name string, v Value) (Value, bool)
@@ -121,8 +120,8 @@ type EmitRecorder interface {
 	SetUnitParamTypes(unit int, paramTypes []*Type, paramPatterns []*Value)
 	SetUnitReturnPatterns(unit int, returnPatterns []*Value)
 	SetUnitDecl(unit int, decl DeclSite)
-	unitVariadic(unit int) bool
-	unitNetsZero(unit int) bool
+	UnitVariadic(unit int) bool
+	UnitNetsZero(unit int) bool
 }
 
 // inactiveEmit is the no-op EmitRecorder a NON-compiling pass runs against:
@@ -133,7 +132,7 @@ type EmitRecorder interface {
 type inactiveEmit struct{}
 
 // theInactiveEmit is the shared no-op recorder instance (it is stateless).
-var theInactiveEmit EmitRecorder = inactiveEmit{}
+var TheInactiveEmit EmitRecorder = inactiveEmit{}
 
 // Recorder returns the CheckState's emit recorder, never nil: the inactive
 // no-op stands in when no recorder is installed (a zero-value CheckState, or
@@ -141,26 +140,25 @@ var theInactiveEmit EmitRecorder = inactiveEmit{}
 // itself is written only by the pass entry points and the probe forks.
 func (c *CheckState) Recorder() EmitRecorder {
 	if c == nil || c.Emit == nil {
-		return theInactiveEmit
+		return TheInactiveEmit
 	}
 	return c.Emit
 }
 
-func (inactiveEmit) Active() bool                                           { return false }
-func (inactiveEmit) inClosureUnit() bool                                    { return false }
-func (inactiveEmit) storedGradualActive() bool                              { return false }
+func (inactiveEmit) InClosureUnit() bool                                    { return false }
+func (inactiveEmit) StoredGradualActive() bool                              { return false }
 func (inactiveEmit) FoldFullStack(string, []Value, []Value) ([]Value, bool) { return nil, false }
 func (inactiveEmit) RecordSpliceDyn(Value, SrcPos) bool                     { return false }
 func (inactiveEmit) noteShapedRead(string)                                  {}
-func (inactiveEmit) memberFnReadValue(string) (Value, bool)                 { return Value{}, false }
-func (inactiveEmit) active() bool                                           { return false }
+func (inactiveEmit) MemberFnReadValue(string) (Value, bool)                 { return Value{}, false }
+func (inactiveEmit) Active() bool                                           { return false }
 func (inactiveEmit) Armed() bool                                            { return false }
 func (inactiveEmit) Suspend() func()                                        { return func() {} }
 func (inactiveEmit) bindRegistry(*Registry)                                 {}
 func (inactiveEmit) topFrameOnly() bool                                     { return true }
-func (inactiveEmit) suspendedNow() bool                                     { return false }
-func (inactiveEmit) bodyAnalysisGuard() func()                              { return func() {} }
-func (inactiveEmit) fnBodyGuard() func()                                    { return func() {} }
+func (inactiveEmit) SuspendedNow() bool                                     { return false }
+func (inactiveEmit) BodyAnalysisGuard() func()                              { return func() {} }
+func (inactiveEmit) FnBodyGuard() func()                                    { return func() {} }
 
 func (inactiveEmit) MarkUncompilable(string) {}
 func (inactiveEmit) SetCatchVariadic(bool)   {}
@@ -198,12 +196,12 @@ func (inactiveEmit) RecordMakeMap(*Registry, []string, []Value, bool, Value, Src
 }
 func (inactiveEmit) RecordInterp([]InterpPart, []Value, Value, SrcPos) bool { return false }
 func (inactiveEmit) RegisterTrailingApply(string, int)                      {}
-func (inactiveEmit) noteMemberFnRead(string, Value)                         {}
-func (inactiveEmit) memberFnRead(string) bool                               { return false }
-func (inactiveEmit) dynInputsProven(*Signature, []Value) bool               { return false }
-func (inactiveEmit) materialise(v Value) (Value, bool)                      { return v, false }
-func (inactiveEmit) zeroOutProduced(string) bool                            { return false }
-func (inactiveEmit) alreadyProduced(string) bool                            { return false }
+func (inactiveEmit) NoteMemberFnRead(string, Value)                         {}
+func (inactiveEmit) MemberFnRead(string) bool                               { return false }
+func (inactiveEmit) DynInputsProven(*Signature, []Value) bool               { return false }
+func (inactiveEmit) Materialise(v Value) (Value, bool)                      { return v, false }
+func (inactiveEmit) ZeroOutProduced(string) bool                            { return false }
+func (inactiveEmit) AlreadyProduced(string) bool                            { return false }
 
 func (inactiveEmit) MarkValueDef(Value)                         {}
 func (inactiveEmit) RecordDefRebind(string, Value, SrcPos)      {}
@@ -215,7 +213,7 @@ func (inactiveEmit) RememberOriginal(Value)                     {}
 func (inactiveEmit) RememberStrippedOriginals([]Value, []Value) {}
 
 func (inactiveEmit) ArmBranchCapture()                                {}
-func (inactiveEmit) peekCaptureArm() bool                             { return false }
+func (inactiveEmit) PeekCaptureArm() bool                             { return false }
 func (inactiveEmit) ArmLoopCapture()                                  {}
 func (inactiveEmit) ConsumeLoopArm() bool                             { return false }
 func (inactiveEmit) SplitLoopRegionBind(string, Value) (Value, bool)  { return Value{}, false }
@@ -236,8 +234,8 @@ func (inactiveEmit) StartFnCompile(string, string, *Registry, []Value, []*Type, 
 func (inactiveEmit) SetUnitParamTypes(int, []*Type, []*Value) {}
 func (inactiveEmit) SetUnitReturnPatterns(int, []*Value)      {}
 func (inactiveEmit) SetUnitDecl(int, DeclSite)                {}
-func (inactiveEmit) unitVariadic(int) bool                    { return false }
-func (inactiveEmit) unitNetsZero(int) bool                    { return false }
+func (inactiveEmit) UnitVariadic(int) bool                    { return false }
+func (inactiveEmit) UnitNetsZero(int) bool                    { return false }
 
 // EmitCheckpoint is the opaque handle for a recording-pool snapshot: the
 // checker holds and returns it without any knowledge of the compiler's
@@ -255,10 +253,10 @@ type EmitCheckpoint interface{ isEmitCheckpoint() }
 // compiler piece's init replaces the slots while it is linked, leaving
 // the fallback bodies reachable only on a compiler-less core build
 // (the post-cut configuration Stage 5 gates).
-func inactiveEmitStateHook() EmitRecorder                { return theInactiveEmit }
-func inactiveIsolatedEmitHook(EmitRecorder) EmitRecorder { return theInactiveEmit }
+func inactiveEmitStateHook() EmitRecorder                { return TheInactiveEmit }
+func inactiveIsolatedEmitHook(EmitRecorder) EmitRecorder { return TheInactiveEmit }
 
 var (
-	newEmitStateHook    = inactiveEmitStateHook
-	newIsolatedEmitHook = inactiveIsolatedEmitHook
+	NewEmitStateHook    = inactiveEmitStateHook
+	NewIsolatedEmitHook = inactiveIsolatedEmitHook
 )

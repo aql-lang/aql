@@ -182,7 +182,7 @@ func TestS7UnifyFnUndefShapeUndefOnRight(t *testing.T) {
 // --- unify_negation.go / unify_refine.go ----------------------------------
 
 func TestS7NegationUnifierMatchBareLiteral(t *testing.T) {
-	n := &negationUnifier{
+	n := &NegationUnifier{
 		behaviorWrapper: behaviorWrapper{prev: DefaultBehavior},
 		inner:           NewTypeLiteral(TString),
 		typeName:        "NotStr",
@@ -205,7 +205,7 @@ func TestS7BareRefineUnifierMatchBareLiteral(t *testing.T) {
 // --- unify_predicate.go ---------------------------------------------------
 
 func TestS7PredicateUnifierNilRegistry(t *testing.T) {
-	p := &predicateUnifier{
+	p := &PredicateUnifier{
 		behaviorWrapper: behaviorWrapper{prev: DefaultBehavior},
 		registry:        nil,
 		constraint:      Value{},

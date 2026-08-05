@@ -25,7 +25,7 @@ package eng
 // package-local variants satisfy it (the unexported `sigImpl()` seals the set,
 // so the compiler enforces exhaustiveness at every type switch below).
 type SigImpl interface {
-	dispatchHandler() Handler
+	DispatchHandler() Handler
 	sigImpl()
 }
 
@@ -40,7 +40,7 @@ type GoImpl struct {
 	RunInCheckMode   bool
 }
 
-func (g *GoImpl) dispatchHandler() Handler { return g.Handler }
+func (g *GoImpl) DispatchHandler() Handler { return g.Handler }
 func (g *GoImpl) sigImpl()                 {}
 
 // BoruImpl is the implementation of an installed boru fn body, an anonymous
@@ -61,7 +61,7 @@ type BoruImpl struct {
 	Compiled any // opaque *CompiledFnRef, owned by the compiler piece (S4 opaque handle)
 }
 
-func (a *BoruImpl) dispatchHandler() Handler { return a.dispatch }
+func (a *BoruImpl) DispatchHandler() Handler { return a.dispatch }
 func (a *BoruImpl) sigImpl()                 {}
 
 // --- Authoring constructors. Native words and internal Go-handler sites write
@@ -109,18 +109,6 @@ func Boru(body []Value) *BoruImpl { return &BoruImpl{Body: body} }
 // Signature has no implementation (a check-mode shape synth, a match-only test
 // fixture) — dispatchHandler() is nil and the rest return their zero. ---
 
-// DispatchHandler returns the Go function execMatch invokes for this sig, or
-// nil when the sig is dispatched by splicing its boru Body (module ref /
-// un-installed lambda) or has no implementation. It is also the native-vs-Boru
-// discriminator, and the exported read surface for external inspectors that
-// previously read the Handler field. dispatchHandler is the internal spelling.
-func (s *Signature) DispatchHandler() Handler { return s.dispatchHandler() }
-
-// Body is the exported read surface for a signature's boru token body (the
-// lang-layer introspection/behaviour words that previously read the Body
-// field). nil for a Go sig / no impl. body is the internal spelling.
-func (s *Signature) Body() []Value { return s.body() }
-
 // DeclaresCheckReturns reports whether this signature tells the checker
 // what it produces: a declared Returns slice (an empty non-nil slice is a
 // valid "produces nothing"), a check-mode ReturnsFn, a full-stack
@@ -133,14 +121,14 @@ func (s *Signature) Body() []Value { return s.body() }
 // allowlisted with a justification.
 func (s *Signature) DeclaresCheckReturns() bool {
 	return s.Returns != nil || s.ReturnsFn != nil ||
-		s.checkFullStackFn() != nil || len(s.body()) > 0
+		s.checkFullStackFn() != nil || len(s.Body()) > 0
 }
 
-func (s *Signature) dispatchHandler() Handler {
+func (s *Signature) DispatchHandler() Handler {
 	if s.Impl == nil {
 		return nil
 	}
-	return s.Impl.dispatchHandler()
+	return s.Impl.DispatchHandler()
 }
 
 // DispatchSig invokes sig's run implementation directly over
@@ -151,7 +139,7 @@ func (s *Signature) dispatchHandler() Handler {
 // single implementation. Errors when the signature carries no
 // runnable implementation (a match-only shape).
 func DispatchSig(sig *Signature, args []Value, r *Registry) ([]Value, error) {
-	h := sig.dispatchHandler()
+	h := sig.DispatchHandler()
 	if h == nil {
 		return nil, r.BoruError("signature_error",
 			"signature has no run implementation", "")
@@ -160,7 +148,7 @@ func DispatchSig(sig *Signature, args []Value, r *Registry) ([]Value, error) {
 }
 
 // body returns the sig's boru token body (nil for a Go sig / no impl).
-func (s *Signature) body() []Value {
+func (s *Signature) Body() []Value {
 	if a, ok := s.Impl.(*BoruImpl); ok {
 		return a.Body
 	}
@@ -169,7 +157,7 @@ func (s *Signature) body() []Value {
 
 // fnFrame returns the boru fn-frame metadata stamped on an installed body /
 // anonymous lambda (nil for Go sigs and module refs).
-func (s *Signature) fnFrame() *FnFrameMeta {
+func (s *Signature) FnFrame() *FnFrameMeta {
 	if a, ok := s.Impl.(*BoruImpl); ok {
 		return a.FnFrame
 	}
@@ -177,7 +165,7 @@ func (s *Signature) fnFrame() *FnFrameMeta {
 }
 
 // fullStack reports whether the handler receives the full resolved stack.
-func (s *Signature) fullStack() bool {
+func (s *Signature) FullStack() bool {
 	g, ok := s.Impl.(*GoImpl)
 	return ok && g.FullStack
 }
@@ -192,13 +180,13 @@ func (s *Signature) checkFullStackFn() CheckFullStackFunc {
 
 // parkResult reports whether the pointer advances past the spliced result
 // instead of re-stepping it.
-func (s *Signature) parkResult() bool {
+func (s *Signature) ParkResult() bool {
 	g, ok := s.Impl.(*GoImpl)
 	return ok && g.ParkResult
 }
 
 // runInCheckMode reports whether the handler runs even under check mode.
-func (s *Signature) runInCheckMode() bool {
+func (s *Signature) RunInCheckMode() bool {
 	g, ok := s.Impl.(*GoImpl)
 	return ok && g.RunInCheckMode
 }

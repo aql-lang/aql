@@ -31,7 +31,7 @@ func (vmCompiledRuntime) InvokeCompiled(r *Registry, sig *Signature, args []Valu
 	if !ran {
 		return nil, nil, false
 	}
-	if !isInternalErr(err) {
+	if !IsInternalErr(err) {
 		return res, err, true
 	}
 	// C1 effect fence (effects.go): the interpreter retry re-runs the

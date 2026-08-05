@@ -12,14 +12,14 @@ import (
 func TestW9PutSubEngineGuards(t *testing.T) {
 	r := newTestRegistry(t)
 	// nil engine → dropped.
-	r.putSubEngine(nil)
+	r.PutSubEngine(nil)
 	if len(r.enginePool) != 0 {
 		t.Error("a nil engine must not be pooled")
 	}
 	// An oversized tape → dropped (not pooled).
 	e := &Engine{}
-	e.tape = NewTape(make([]Value, pooledTapeMaxEntries+1), stackHeadroom)
-	r.putSubEngine(e)
+	e.Tape = NewTape(make([]Value, pooledTapeMaxEntries+1), stackHeadroom)
+	r.PutSubEngine(e)
 	if len(r.enginePool) != 0 {
 		t.Error("an oversized-tape engine must not be pooled")
 	}
@@ -40,8 +40,8 @@ func TestW9CurrentStackGuards(t *testing.T) {
 
 	// Negative pointer clamps to 0.
 	eNeg := &Engine{}
-	eNeg.tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
-	eNeg.pointer = -1
+	eNeg.Tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
+	eNeg.Pointer = -1
 	r.pushEngine(eNeg)
 	if stk, ok := r.CurrentStack(); !ok || len(stk) != 0 {
 		t.Errorf("negative pointer should clamp to an empty stack, got %v %v", stk, ok)
@@ -50,8 +50,8 @@ func TestW9CurrentStackGuards(t *testing.T) {
 
 	// Pointer past the snapshot clamps to the snapshot length.
 	eBig := &Engine{}
-	eBig.tape = NewTape([]Value{NewInteger(1), NewInteger(2)}, stackHeadroom)
-	eBig.pointer = 999
+	eBig.Tape = NewTape([]Value{NewInteger(1), NewInteger(2)}, stackHeadroom)
+	eBig.Pointer = 999
 	r.pushEngine(eBig)
 	if _, ok := r.CurrentStack(); !ok {
 		t.Error("an over-large pointer should still report a stack")
@@ -81,14 +81,14 @@ func TestW9FnFallbackSigHandler(t *testing.T) {
 
 	// Undefined name → error (top not found).
 	undef := r.fnFallbackSig("w9undef")
-	if _, err := undef.dispatchHandler()(nil, nil, nil, r); err == nil {
+	if _, err := undef.DispatchHandler()(nil, nil, nil, r); err == nil {
 		t.Error("fallback for an undefined name should error")
 	}
 
 	// A plain value binding (not a fn) → the signature_error return.
 	r.Defs.Push("w9val", NewInteger(3))
 	valFb := r.fnFallbackSig("w9val")
-	if _, err := valFb.dispatchHandler()(nil, nil, nil, r); err == nil {
+	if _, err := valFb.DispatchHandler()(nil, nil, nil, r); err == nil {
 		t.Error("fallback for a non-fn binding should error")
 	}
 
@@ -103,7 +103,7 @@ func TestW9FnFallbackSigHandler(t *testing.T) {
 		}},
 	})
 	zeroFb := r.fnFallbackSig("w9zero")
-	out, err := zeroFb.dispatchHandler()(nil, nil, nil, r)
+	out, err := zeroFb.DispatchHandler()(nil, nil, nil, r)
 	if err != nil || len(out) != 1 {
 		t.Fatalf("0-arg courtesy dispatch = %v (%v)", out, err)
 	}
@@ -157,7 +157,7 @@ func TestW9BinaryNumOpNativeError(t *testing.T) {
 	nf := BinaryNumOpNative("w9boom", func(_, _ float64) (float64, error) {
 		return 0, errors.New("boom")
 	})
-	h := nf.Signatures[0].dispatchHandler()
+	h := nf.Signatures[0].DispatchHandler()
 	if _, err := h([]Value{NewFloat(1), NewFloat(2)}, nil, nil, nil); err == nil {
 		t.Error("an erroring op should propagate the error")
 	}

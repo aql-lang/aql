@@ -112,6 +112,6 @@ func (p PolicyDenied) Unwrap() error { return p.Err }
 // marker that should bypass policy checks (the `__`-prefixed names
 // used for forward-collection cleanup, def-snapshot pop, etc.).
 // These names are not directly addressable from user code.
-func isInternalMarker(name string) bool {
+func IsInternalMarker(name string) bool {
 	return len(name) >= 2 && name[0] == '_' && name[1] == '_'
 }

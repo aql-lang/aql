@@ -20,8 +20,8 @@ func z9Member(name string, r *Registry, sigs ...Signature) Value {
 func z9Engine(t *testing.T, r *Registry, tape []Value) *Engine {
 	t.Helper()
 	e := NewTop(r)
-	e.tape = NewTape(tape, 8)
-	e.pointer = 0
+	e.Tape = NewTape(tape, 8)
+	e.Pointer = 0
 	return e
 }
 
@@ -150,7 +150,7 @@ func TestNoteMethodShapeDeclinesNonDelegation(t *testing.T) {
 	}}})
 	out := NewDynamicCarrier(TAny)
 	r.Check.NoteMethodShape(out, realBody)
-	if _, ok := r.Check.methodShapeMember(out.ID); ok {
+	if _, ok := r.Check.MethodShapeMember(out.ID); ok {
 		t.Error("a non-delegation member must not be annotated")
 	}
 }
@@ -246,7 +246,7 @@ func TestShapedMethodGuardOwnedDecline(t *testing.T) {
 	defer done()
 	carrier := NewDynamicCarrier(TAny)
 	r.Check.NoteMethodShape(carrier, member)
-	if _, ok := r.Check.methodShapeMember(carrier.ID); !ok {
+	if _, ok := r.Check.MethodShapeMember(carrier.ID); !ok {
 		t.Fatal("genuine-0-arg delegation member must be annotated")
 	}
 	e := z9Engine(t, r, []Value{carrier, NewWord("z9unmodelable")})

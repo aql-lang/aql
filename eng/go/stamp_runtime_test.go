@@ -417,10 +417,10 @@ func TestStampReportCollector(t *testing.T) {
 	if nilR.StampEvents() != nil {
 		t.Fatalf("nil registry must report nil events")
 	}
-	nilR.recordStampEvent(StampEvent{})
+	nilR.RecordStampEvent(StampEvent{})
 	// An UNARMED (nil-log) registry's record is inert too — the nil-receiver
 	// guard on stampLog.record.
-	plain.recordStampEvent(StampEvent{})
+	plain.RecordStampEvent(StampEvent{})
 	if plain.StampEvents() != nil {
 		t.Fatalf("unarmed record must stay inert")
 	}
@@ -434,8 +434,8 @@ func TestStampReportCollector(t *testing.T) {
 func TestDisableAndResetStampLog(t *testing.T) {
 	r := stampReg(t)
 	r.EnableRuntimeStamping()
-	r.recordStampEvent(StampEvent{Name: "a", Stamped: true})
-	r.recordStampEvent(StampEvent{Name: "b", Stamped: true})
+	r.RecordStampEvent(StampEvent{Name: "a", Stamped: true})
+	r.RecordStampEvent(StampEvent{Name: "b", Stamped: true})
 	if got := len(r.StampEvents()); got != 2 {
 		t.Fatalf("armed log must hold 2 events, got %d", got)
 	}
@@ -448,7 +448,7 @@ func TestDisableAndResetStampLog(t *testing.T) {
 		t.Fatalf("reset must not disarm stamping")
 	}
 	// DisableRuntimeStamping disarms WITHOUT wiping the log.
-	r.recordStampEvent(StampEvent{Name: "c", Stamped: true})
+	r.RecordStampEvent(StampEvent{Name: "c", Stamped: true})
 	r.DisableRuntimeStamping()
 	if r.RuntimeStampingEnabled() {
 		t.Fatalf("DisableRuntimeStamping must disarm")

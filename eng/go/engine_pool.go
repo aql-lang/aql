@@ -53,9 +53,9 @@ func RunResolved(r *Registry, inputs, tokens []Value) ([]Value, error) {
 }
 
 func runPooledAt(r *Registry, tokens []Value, startAt int, top bool) ([]Value, error) {
-	e := r.takeSubEngine()
-	e.isTop = top
-	e.startAt = startAt
+	e := r.TakeSubEngine()
+	e.IsTop = top
+	e.StartAt = startAt
 	res, err := e.Run(tokens)
 	if len(res) > 0 {
 		res = append([]Value(nil), res...)
@@ -65,8 +65,8 @@ func runPooledAt(r *Registry, tokens []Value, startAt int, top bool) ([]Value, e
 	// the auto-eval seams' next use of the same engine. startAt is
 	// already consumed by Run (consumeStartAt), cleared here only for
 	// the defensive symmetry.
-	e.isTop = false
-	e.startAt = 0
-	r.putSubEngine(e)
+	e.IsTop = false
+	e.StartAt = 0
+	r.PutSubEngine(e)
 	return res, err
 }

@@ -343,8 +343,8 @@ func ExactEqual(a, b Value) bool {
 	// to one instance are eq, two structurally-equal instances are not
 	// (that's deq). A shared Fields pointer is the identity key; a
 	// class/resource cross-pair can never share one, so it stays unequal.
-	if af, _, aok := flatInstanceParts(a); aok {
-		bf, _, bok := flatInstanceParts(b)
+	if af, _, aok := FlatInstanceParts(a); aok {
+		bf, _, bok := FlatInstanceParts(b)
 		return bok && af != nil && af == bf
 	}
 
@@ -578,8 +578,8 @@ func DeepEqual(a, b Value) bool {
 		if !a.Parent.Equal(b.Parent) {
 			return false
 		}
-		aFields, aSchema, aok := flatInstanceParts(a)
-		bFields, bSchema, bok := flatInstanceParts(b)
+		aFields, aSchema, aok := FlatInstanceParts(a)
+		bFields, bSchema, bok := FlatInstanceParts(b)
 		if !aok || !bok || aFields == nil || bFields == nil {
 			return false
 		}

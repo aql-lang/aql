@@ -22,7 +22,7 @@ func TestW8ProbeTailCallArgCountMismatch(t *testing.T) {
 
 func TestW8ProbeTailCallNegativeStart(t *testing.T) {
 	e := New(w8reg(t))
-	e.pointer = -1
+	e.Pointer = -1
 	if _, ok := e.probeTailCall(nil, 0); ok {
 		t.Fatal("a negative start index must decline")
 	}
@@ -42,8 +42,8 @@ func TestW8ProbeTailCallForwardArms(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			e := New(r)
-			e.tape = NewTape(c.tape, 4)
-			e.pointer = 0
+			e.Tape = NewTape(c.tape, 4)
+			e.Pointer = 0
 			if _, ok := e.probeTailCall(nil, 0); ok {
 				t.Fatalf("%s: expected the probe to decline", c.name)
 			}
@@ -63,7 +63,7 @@ func TestW8TcoEligibleNilMeta(t *testing.T) {
 func TestW8TcoEligibleNonDefCleanupTail(t *testing.T) {
 	r := w8reg(t)
 	e := New(r)
-	e.tape = NewTape([]Value{NewInteger(1)}, 4)
+	e.Tape = NewTape([]Value{NewInteger(1)}, 4)
 	sig := &Signature{Impl: &BoruImpl{FnFrame: &FnFrameMeta{}}}
 	scan := frameTailScan{Meta: &FnFrameMeta{}, TailStart: 0, RCIdx: -1}
 	if e.tcoEligible(scan, sig, r.Defs.Mutations()) {
@@ -74,7 +74,7 @@ func TestW8TcoEligibleNonDefCleanupTail(t *testing.T) {
 func TestW8ReturnsConformBadReturnCheck(t *testing.T) {
 	r := w8reg(t)
 	e := New(r)
-	e.tape = NewTape([]Value{NewInteger(1)}, 4)
+	e.Tape = NewTape([]Value{NewInteger(1)}, 4)
 	scan := frameTailScan{RCIdx: 0}
 	if e.returnsConform(scan, &Signature{Returns: []*Type{TInteger}}) {
 		t.Fatal("a non-ReturnCheck at RCIdx must decline")
@@ -85,7 +85,7 @@ func TestW8ElideTailFramePopError(t *testing.T) {
 	r := w8reg(t)
 	r.Args = nil // make PopFrameArgs (in teardownFrameState) error
 	e := New(r)
-	e.tape = NewTape([]Value{w8dc(r)}, 4)
+	e.Tape = NewTape([]Value{w8dc(r)}, 4)
 	scan := frameTailScan{TailStart: 0, RCIdx: -1, CloseIdx: 0}
 	if err := e.elideTailFrame(scan); err == nil {
 		t.Fatal("a frame teardown that fails to pop args must surface the error")

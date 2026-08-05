@@ -56,7 +56,7 @@ func TestDynamicCarrierMatch(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := sigTypeMatches(tc.v, tc.slot); got != tc.want {
+			if got := SigTypeMatches(tc.v, tc.slot); got != tc.want {
 				t.Errorf("sigTypeMatches = %v, want %v", got, tc.want)
 			}
 		})

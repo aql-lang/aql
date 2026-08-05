@@ -626,7 +626,7 @@ type CheckDiagnostic struct {
 // the emit surface (design/CHECKER-COMPLETION.0.md). Registry
 // construction calls this so the check piece owns its own zero state.
 func NewCheckState() *CheckState {
-	return &CheckState{StepBudget: -1, Emit: theInactiveEmit}
+	return &CheckState{StepBudget: -1, Emit: TheInactiveEmit}
 }
 
 // PendingMethodApply threads ONE modelled shaped-method dispatch from
@@ -736,7 +736,7 @@ func (c *CheckState) Begin() func() {
 	c.FnNameInflight = nil
 	c.SuppressBodyErrors = 0
 	c.FnAnalysisCounts = nil
-	c.Emit = theInactiveEmit
+	c.Emit = TheInactiveEmit
 	c.CodeEffectDepth = 0
 	c.FnBodyDepth = 0
 	c.CaughtBodyDepth = 0
@@ -929,7 +929,7 @@ func (c *CheckState) EmitUnusedDefDiagnostics() {
 // The self-edge of a recursive fn is recorded too — it is what makes a
 // body-local binding visible to a same-fn read on a sibling branch across a
 // recursive frame. No-op for the top-level caller (empty name).
-func (c *CheckState) recordCallEdge(caller, callee string) {
+func (c *CheckState) RecordCallEdge(caller, callee string) {
 	if caller == "" || callee == "" {
 		return
 	}
@@ -977,7 +977,7 @@ func (c *CheckState) RecordFnBinder(name string) {
 // answer is sound for them; a body-local binder is sound for the recursion
 // idiom (the def precedes the reaching call) with a documented narrow residual
 // when a local is bound only AFTER the call that reaches the reader.
-func (c *CheckState) dynamicScopeReachable(name, reader string) bool {
+func (c *CheckState) DynamicScopeReachable(name, reader string) bool {
 	if reader == "" {
 		return false
 	}
@@ -1078,7 +1078,7 @@ func (c *CheckState) NoteMethodShape(out, member Value) {
 	if !ok || fd.Registry == nil || fd.Name == "" || fd.Macro {
 		return
 	}
-	if !isDelegationFnDef(fd) {
+	if !IsDelegationFnDef(fd) {
 		return
 	}
 	if c.MethodShapes == nil {
@@ -1092,7 +1092,7 @@ func (c *CheckState) NoteMethodShape(out, member Value) {
 }
 
 // methodShapeMember returns the annotated member for a carrier ID.
-func (c *CheckState) methodShapeMember(id string) (Value, bool) {
+func (c *CheckState) MethodShapeMember(id string) (Value, bool) {
 	if c == nil || id == "" || c.MethodShapes == nil {
 		return Value{}, false
 	}
@@ -1139,7 +1139,7 @@ func (c *CheckState) BeginCompilePass() func() {
 	if c == nil {
 		return done
 	}
-	c.Emit = newEmitStateHook()
+	c.Emit = NewEmitStateHook()
 	c.Compiling = true
 	c.FnSummaries = nil
 	c.FnInflight = nil
@@ -1161,7 +1161,7 @@ func (c *CheckState) IsolateEmit() func() {
 		return func() {}
 	}
 	saved := c.Emit
-	c.Emit = newIsolatedEmitHook(c.Recorder())
+	c.Emit = NewIsolatedEmitHook(c.Recorder())
 	return func() { c.Emit = saved }
 }
 
@@ -1219,7 +1219,7 @@ func (r *Registry) RescueForwardRefDiagnostics() {
 			// condition. A name merely bound by an unrelated fn that never
 			// calls the reader (`def f fn [[] [x]] def g fn [[x:Integer] [1]] f`)
 			// stays flagged: it genuinely errors at run time.
-			if r.Check.dynamicScopeReachable(d.Word, d.FnName) {
+			if r.Check.DynamicScopeReachable(d.Word, d.FnName) {
 				continue
 			}
 		}

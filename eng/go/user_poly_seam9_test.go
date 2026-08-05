@@ -142,11 +142,11 @@ func TestW9TryCompileUserPolyArmCompileFails(t *testing.T) {
 func TestW9UnitNetsZero(t *testing.T) {
 	// Bounds guards: nil recorder / out-of-range unit → false.
 	var nilES *EmitState
-	if nilES.unitNetsZero(0) {
+	if nilES.UnitNetsZero(0) {
 		t.Error("nil EmitState must report false")
 	}
 	es := NewEmitState()
-	if es.unitNetsZero(-1) || es.unitNetsZero(0) {
+	if es.UnitNetsZero(-1) || es.UnitNetsZero(0) {
 		t.Error("out-of-range unit must report false")
 	}
 	// A 0-residual unit qualifies; a residual-carrying or variadic one does not.
@@ -155,17 +155,17 @@ func TestW9UnitNetsZero(t *testing.T) {
 		&fnUnitRec{outOps: []emitOperand{constOperand(0)}},
 		&fnUnitRec{variadic: true},
 	)
-	if !es.unitNetsZero(0) {
+	if !es.UnitNetsZero(0) {
 		t.Error("an empty-residual unit must net zero")
 	}
-	if es.unitNetsZero(1) {
+	if es.UnitNetsZero(1) {
 		t.Error("a residual-carrying unit must not net zero")
 	}
-	if es.unitNetsZero(2) {
+	if es.UnitNetsZero(2) {
 		t.Error("a variadic unit must not net zero")
 	}
 	// The inactive recorder's stub answer.
-	if (inactiveEmit{}).unitNetsZero(0) {
+	if (inactiveEmit{}).UnitNetsZero(0) {
 		t.Error("inactive recorder must report false")
 	}
 }

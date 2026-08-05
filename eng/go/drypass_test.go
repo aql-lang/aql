@@ -82,7 +82,7 @@ func TestBeginCompilePassArmsTheRitual(t *testing.T) {
 	if !c.Mode || !c.Compiling {
 		t.Fatalf("Mode/Compiling not armed: mode=%v compiling=%v", c.Mode, c.Compiling)
 	}
-	if c.Emit == theInactiveEmit || c.Emit == nil {
+	if c.Emit == TheInactiveEmit || c.Emit == nil {
 		t.Fatal("a real EmitState must be installed")
 	}
 	if c.FnSummaries != nil || c.FnInflight != nil {

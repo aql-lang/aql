@@ -35,9 +35,9 @@ func planUserPolyDispatch(r *Registry, es EmitRecorder, word string, args []Valu
 	// dispatch runtime-dynamic: the committed Any-slot arm is not a proof, the
 	// interpreter re-matches on the true value, and dynamicReachableOverloadCount
 	// counts the strict-Any arg as reaching every arm.
-	clusterC := es.active() && (anyDynamicCarrier(args) || anyAnyCarrier(args)) &&
+	clusterC := es.Active() && (anyDynamicCarrier(args) || anyAnyCarrier(args)) &&
 		dynamicReachableOverloadCount(r, word, args) >= 2
-	predHazard := !clusterC && es.active() && fnPredicateOverloadHazard(r, word, args)
+	predHazard := !clusterC && es.Active() && fnPredicateOverloadHazard(r, word, args)
 	if !clusterC && !predHazard {
 		return nil, false
 	}

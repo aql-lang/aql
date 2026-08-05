@@ -95,11 +95,11 @@ func probeSlots(sig *Signature, written []Value) (CandidateFailure, bool) {
 			// skips these the same way).
 			continue
 		}
-		if !sigArgMatches(sig, i, written[i]) {
+		if !SigArgMatches(sig, i, written[i]) {
 			return CandidateFailure{Sig: sig, Kind: candSlotType, SlotIdx: i,
-				Expected: sigArgType(sig, i), Got: written[i], Score: i}, true
+				Expected: SigArgType(sig, i), Got: written[i], Score: i}, true
 		}
-		if pat, ok := sigPattern(sig, i); ok && patternRejects(pat, written[i]) {
+		if pat, ok := SigPattern(sig, i); ok && patternRejects(pat, written[i]) {
 			return CandidateFailure{Sig: sig, Kind: candPattern, SlotIdx: i,
 				Got: written[i], Pattern: pat, Score: i}, true
 		}
@@ -113,7 +113,7 @@ func slotAdmits(sig *Signature, i int, v Value) bool {
 	if sig.QuoteArgs != nil && sig.QuoteArgs[i] {
 		return true
 	}
-	return sigArgMatches(sig, i, v)
+	return SigArgMatches(sig, i, v)
 }
 
 // patternRejects reports whether a declared slot pattern DEFINITELY

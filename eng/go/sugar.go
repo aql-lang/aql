@@ -173,17 +173,17 @@ func SugarExpansion(r *Registry, info SugarInfo, src Value, headForm bool) ([]Va
 // is waiting to /q-capture a name (`def Box<T> …` — the binder's name
 // slot), the use-site paren otherwise.
 func (e *Engine) stepSugar(valIdx int) error {
-	info, ok := AsSugar(e.tape.At(valIdx))
+	info, ok := AsSugar(e.Tape.At(valIdx))
 	if !ok { //covergate:allow stepSugar is gated by IsSugar at both call sites, so the payload is always a SugarInfo
-		e.pointer++
+		e.Pointer++
 		return nil
 	}
-	src := e.tape.At(valIdx)
+	src := e.Tape.At(valIdx)
 	headForm := info.Kind == SugarAngle && e.hasPendingForwardQuoteArg()
-	exp, err := SugarExpansion(e.registry, info, src, headForm)
+	exp, err := SugarExpansion(e.Registry, info, src, headForm)
 	if err != nil {
 		return err
 	}
-	e.tape.Splice(valIdx, 1, exp...)
+	e.Tape.Splice(valIdx, 1, exp...)
 	return nil
 }

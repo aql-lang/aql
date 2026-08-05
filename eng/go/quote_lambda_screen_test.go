@@ -26,7 +26,7 @@ func TestLambdaHookQuoteScreen(t *testing.T) {
 	quoteFd := &FnDefInfo{Signatures: []Signature{{
 		Params: []FnParam{{Name: "k", Type: TInteger, Quote: true}}, Impl: body,
 	}}}
-	normalizeSig(&quoteFd.Signatures[0])
+	NormalizeSig(&quoteFd.Signatures[0])
 	if _, ok := lambdaHookCompatible(quoteFd, []Value{NewCarrier(TInteger)}, ClosureInValue, true); ok {
 		t.Error("a /q lambda param must decline the callback admission")
 	}

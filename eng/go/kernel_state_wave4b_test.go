@@ -306,7 +306,7 @@ func TestDynamicScopeRescue(t *testing.T) {
 	r.Check.FnNameStack = []string{"f"}
 	r.Check.RecordFnBinder("x")
 	r.Check.FnNameStack = nil
-	r.Check.recordCallEdge("f", "g")
+	r.Check.RecordCallEdge("f", "g")
 	r.Check.FnBodyDepth = 1
 	r.Check.FnNameStack = []string{"g"}
 	r.Check.AddDiagnostic(CheckDiagnostic{Code: "undefined_word", Detail: "x undefined", Word: "x"})
@@ -327,8 +327,8 @@ func TestDynamicScopeRescue(t *testing.T) {
 
 	// callReaches follows transitive edges and detects recursion only
 	// via a real cycle.
-	r.Check.recordCallEdge("a", "b")
-	r.Check.recordCallEdge("b", "c")
+	r.Check.RecordCallEdge("a", "b")
+	r.Check.RecordCallEdge("b", "c")
 	if !r.Check.callReaches("a", "c") {
 		t.Error("transitive reach missed")
 	}
@@ -338,15 +338,15 @@ func TestDynamicScopeRescue(t *testing.T) {
 	if r.Check.callReaches("a", "a") {
 		t.Error("non-recursive fn reaches itself")
 	}
-	r.Check.recordCallEdge("c", "a")
+	r.Check.RecordCallEdge("c", "a")
 	if !r.Check.callReaches("a", "a") {
 		t.Error("recursion cycle missed")
 	}
 	// dynamicScopeReachable guards.
-	if r.Check.dynamicScopeReachable("x", "") {
+	if r.Check.DynamicScopeReachable("x", "") {
 		t.Error("empty reader rescued")
 	}
-	if r.Check.dynamicScopeReachable("neverbound", "g") {
+	if r.Check.DynamicScopeReachable("neverbound", "g") {
 		t.Error("unbound name rescued")
 	}
 	// Engine-internal names and top-level binds are ignored.

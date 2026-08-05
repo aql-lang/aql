@@ -89,7 +89,7 @@ func TestInvokeCallbackInternalErrorFallsBack(t *testing.T) {
 	}}}
 	ref := &CompiledFnRef{Prog: p, Unit: 0}
 	// Confirm the unit really does raise internal_error on its own.
-	if _, err := RunUnit(ref, runUnitReg(t), nil); !isInternalErr(err) {
+	if _, err := RunUnit(ref, runUnitReg(t), nil); !IsInternalErr(err) {
 		t.Fatalf("RunUnit err = %v, want an internal_error to drive the fallback", err)
 	}
 	// The sig carries the stamped ref AND a boru body CallBoru can run to 42.
@@ -113,7 +113,7 @@ func TestInvokeCallbackInternalErrorFallsBack(t *testing.T) {
 // CallBoru body `[7]` proves the interpreter ran.
 func TestInvokeCallbackBusyRegistryFallsBack(t *testing.T) {
 	r := runUnitReg(t)
-	r.vmRunning = 1 // canHostVM() false; nestedRunner stays nil
+	r.VmRunning = 1 // canHostVM() false; nestedRunner stays nil
 	p := &Program{Fns: []CompiledFn{{
 		Name: "x", NParams: 0, NLocals: 0,
 		Code: []Instr{{Op: OpRet, Arg: 0}}, Debug: []SrcPos{{Row: 1, Col: 1}},
@@ -139,16 +139,16 @@ func TestInvokeCallbackBusyRegistryFallsBack(t *testing.T) {
 // InvokeCallback returns them straight through rather than masking with a
 // fallback.
 func TestIsInternalErr(t *testing.T) {
-	if !isInternalErr(makeBoruError("internal_error", "boom", "", "", "")) {
+	if !IsInternalErr(makeBoruError("internal_error", "boom", "", "", "")) {
 		t.Error("internal_error BoruError must classify true")
 	}
-	if isInternalErr(makeBoruError("signature_error", "no match", "", "", "")) {
+	if IsInternalErr(makeBoruError("signature_error", "no match", "", "", "")) {
 		t.Error("a genuine boru runtime error must classify false")
 	}
-	if isInternalErr(errors.New("foreign")) {
+	if IsInternalErr(errors.New("foreign")) {
 		t.Error("a non-BoruError must classify false")
 	}
-	if isInternalErr(nil) {
+	if IsInternalErr(nil) {
 		t.Error("nil must classify false")
 	}
 }
@@ -172,7 +172,7 @@ func TestRunUnitRejectsConcurrentRun(t *testing.T) {
 	r := runUnitReg(t)
 	p := &Program{Fns: []CompiledFn{{Name: "x", NParams: 0, NLocals: 0,
 		Code: []Instr{{Op: OpRet, Arg: 0}}, Debug: []SrcPos{{}}}}}
-	r.vmRunning = 1 // simulate an in-flight compiled run on this registry
+	r.VmRunning = 1 // simulate an in-flight compiled run on this registry
 	_, err := RunUnit(&CompiledFnRef{Prog: p, Unit: 0}, r, nil)
 	var ae *BoruError
 	if err == nil || !errors.As(err, &ae) || ae.Code != "concurrency_error" {

@@ -240,15 +240,15 @@ func TestS7StepWordForwardExpectingFunction(t *testing.T) {
 	sig := &Signature{Params: []FnParam{{Type: TInteger}, {Type: TFunction}}, BarrierPos: -1}
 	fwd := NewForward(ForwardInfo{FuncName: "capply", Sig: sig, CollectedArgs: 1, FuncIndex: 0})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{fwd, NewWord("cadd")}, stackHeadroom)
-	e.pointer = 1
-	if err := e.stepWord(e.tape.At(1)); err != nil {
+	e.Tape = NewTape([]Value{fwd, NewWord("cadd")}, stackHeadroom)
+	e.Pointer = 1
+	if err := e.stepWord(e.Tape.At(1)); err != nil {
 		t.Fatalf("stepWord: %v", err)
 	}
 	// The raw `cadd` word must no longer sit unresolved on the tape — it
 	// was resolved to a Function reference and collected by the forward.
-	for i := 0; i < e.tape.Len(); i++ {
-		if IsWord(e.tape.At(i)) {
+	for i := 0; i < e.Tape.Len(); i++ {
+		if IsWord(e.Tape.At(i)) {
 			t.Errorf("cadd left unresolved as a Word at %d", i)
 		}
 	}

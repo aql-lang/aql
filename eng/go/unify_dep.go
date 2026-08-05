@@ -19,16 +19,16 @@ package eng
 //
 // Bare type literals (Data==nil, !Carrier) pass through to the
 // prev/DefaultBehavior walk — the type itself isn't an inhabitant.
-type depScalarUnifier struct {
+type DepScalarUnifier struct {
 	behaviorWrapper
 	baseType *Type
 	depInfo  DepScalarInfo
 	typeName string
 }
 
-func (*depScalarUnifier) ContentMembership() {}
+func (*DepScalarUnifier) ContentMembership() {}
 
-func (d *depScalarUnifier) Match(v Value, t *Type) bool {
+func (d *DepScalarUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
 		return baseBehavior(d.prev).Match(v, t)
 	}
@@ -54,7 +54,7 @@ func (d *depScalarUnifier) Match(v Value, t *Type) bool {
 // constraint runs at every Is/Match call site (sig dispatch, the `is`
 // word, options/record/Make slot checks).
 func installDepScalarUnifier(def *Type, base *Type, info DepScalarInfo, name string) {
-	def.ensureTMeta().Behavior = &depScalarUnifier{
+	def.ensureTMeta().Behavior = &DepScalarUnifier{
 		behaviorWrapper: behaviorWrapper{prev: def.Behavior()},
 		baseType:        base,
 		depInfo:         info,

@@ -29,8 +29,8 @@ func TestElideTailFrameRunsTeardownAndKeepsShell(t *testing.T) {
 		dc, NewWord("__pa"), f.und, NewWord("n"), f.rc, NewCloseParen(),
 	}
 	e := NewTop(f.r)
-	e.tape = NewTape(tokens, 8)
-	e.pointer = 2
+	e.Tape = NewTape(tokens, 8)
+	e.Pointer = 2
 
 	scan, ok := e.probeTailCall([]int{1}, 1)
 	if !ok {
@@ -57,16 +57,16 @@ func TestElideTailFrameRunsTeardownAndKeepsShell(t *testing.T) {
 	// Tape: markers gone, shell intact — (ₘ 1 f __RC )
 	isInt := func(v Value) bool { return v.Parent.Equal(TInteger) && IsConcrete(v) }
 	want := []func(Value) bool{IsFrameOpen, isInt, IsWord, IsReturnCheck, IsCloseParen}
-	if e.tape.Len() != len(want) {
-		t.Fatalf("tape has %d tokens after elision, want %d", e.tape.Len(), len(want))
+	if e.Tape.Len() != len(want) {
+		t.Fatalf("tape has %d tokens after elision, want %d", e.Tape.Len(), len(want))
 	}
 	for i, pred := range want {
-		if !pred(e.tape.At(i)) {
-			t.Errorf("tape[%d] = %v, wrong token class", i, e.tape.At(i))
+		if !pred(e.Tape.At(i)) {
+			t.Errorf("tape[%d] = %v, wrong token class", i, e.Tape.At(i))
 		}
 	}
-	if e.pointer != 2 {
-		t.Errorf("pointer moved to %d; ahead-of-pointer edits must not move it", e.pointer)
+	if e.Pointer != 2 {
+		t.Errorf("pointer moved to %d; ahead-of-pointer edits must not move it", e.Pointer)
 	}
 }
 
@@ -83,8 +83,8 @@ func TestElideTailFrameNoReturnCheck(t *testing.T) {
 		NewFrameOpen(f.meta), NewWord("f"), dc, NewWord("__pa"), NewCloseParen(),
 	}
 	e := NewTop(f.r)
-	e.tape = NewTape(tokens, 8)
-	e.pointer = 1
+	e.Tape = NewTape(tokens, 8)
+	e.Pointer = 1
 
 	scan, ok := e.probeTailCall(nil, 0)
 	if !ok {
@@ -94,8 +94,8 @@ func TestElideTailFrameNoReturnCheck(t *testing.T) {
 		t.Fatal(err)
 	}
 	// Shell without RC: (ₘ f )
-	if e.tape.Len() != 3 || !IsFrameOpen(e.tape.At(0)) || !IsWord(e.tape.At(1)) || !IsCloseParen(e.tape.At(2)) {
-		t.Fatalf("tape after elision = %d tokens, want (ₘ f )", e.tape.Len())
+	if e.Tape.Len() != 3 || !IsFrameOpen(e.Tape.At(0)) || !IsWord(e.Tape.At(1)) || !IsCloseParen(e.Tape.At(2)) {
+		t.Fatalf("tape after elision = %d tokens, want (ₘ f )", e.Tape.Len())
 	}
 }
 
@@ -106,7 +106,7 @@ func TestTCOEligibleGates(t *testing.T) {
 	// the snapshot is taken with no bindings installed, so truncation
 	// is empty unless a case installs one.
 	snap := f.r.Defs.Snapshot()
-	e.tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: snap, Registry: f.r})}, 4)
+	e.Tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: snap, Registry: f.r})}, 4)
 	base := frameTailScan{Meta: f.meta, TailStart: 0}
 	sig := &Signature{Impl: &BoruImpl{FnFrame: f.meta}}
 	muts := f.r.Defs.Mutations()
@@ -153,7 +153,7 @@ func TestTCOEligibleNameCoverage(t *testing.T) {
 	f := newProbeFixture(t)
 	e := NewTop(f.r)
 	snap := f.r.Defs.Snapshot()
-	e.tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: snap, Registry: f.r})}, 4)
+	e.Tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: snap, Registry: f.r})}, 4)
 	muts := f.r.Defs.Mutations()
 
 	// A torn-down param the callee rebinds is covered…
@@ -196,7 +196,7 @@ func TestTCOEligibleDeclinesForeignRegistryFrames(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	e.tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: foreign.Defs.Snapshot(), Registry: foreign})}, 4)
+	e.Tape = NewTape([]Value{NewDefCleanup(DefCleanupInfo{Snapshot: foreign.Defs.Snapshot(), Registry: foreign})}, 4)
 	scan := frameTailScan{Meta: f.meta, TailStart: 0}
 	if e.tcoEligible(scan, &Signature{Impl: &BoruImpl{FnFrame: f.meta}}, f.r.Defs.Mutations()) {
 		t.Error("a foreign-registry frame must decline")
@@ -211,7 +211,7 @@ func TestReturnsConform(t *testing.T) {
 	// given caller returns; scan.RCIdx points at it.
 	scanWithCallerRC := func(returns []*Type) frameTailScan {
 		rc := NewReturnCheck(ReturnCheckInfo{FuncName: "caller", Returns: returns})
-		e.tape = NewTape([]Value{rc}, 4)
+		e.Tape = NewTape([]Value{rc}, 4)
 		return frameTailScan{RCIdx: 0}
 	}
 

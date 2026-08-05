@@ -53,14 +53,14 @@ func TestNur038ReachFnWouldClaim(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			e.tape = NewTape([]Value{c.tok}, stackHeadroom)
+			e.Tape = NewTape([]Value{c.tok}, stackHeadroom)
 			if got := e.reachFnWouldClaim(c.fn, 0); got != c.want {
 				t.Errorf("claim = %v, want %v", got, c.want)
 			}
 		})
 	}
 	// Past the end of the tape: nothing to claim.
-	e.tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
 	if e.reachFnWouldClaim(anyFn, 5) {
 		t.Error("out-of-range index must not claim")
 	}
@@ -105,14 +105,14 @@ func TestNur038FnValueWouldWiden(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			e.tape = NewTape([]Value{c.tok}, stackHeadroom)
+			e.Tape = NewTape([]Value{c.tok}, stackHeadroom)
 			if got := e.fnValueWouldWiden(c.fn, c.completed, 0); got != c.want {
 				t.Errorf("widen = %v, want %v", got, c.want)
 			}
 		})
 	}
 	// Past the end of the tape: nothing to widen into.
-	e.tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewInteger(1)}, stackHeadroom)
 	if e.fnValueWouldWiden(concatLike, 1, 5) {
 		t.Error("out-of-range index must not widen")
 	}
@@ -151,7 +151,7 @@ func arrivalGateEngine(t *testing.T, callee string, sigs []Signature) *Engine {
 	}}}
 	tagged.ReachGroup = true
 	sig2 := &Signature{Args: []*Type{TAny, TAny}, BarrierPos: -1}
-	e.tape = NewTape([]Value{
+	e.Tape = NewTape([]Value{
 		NewInteger(1),
 		NewWord(callee),
 		NewForward(ForwardInfo{FuncName: callee, FuncIndex: 1,
@@ -159,7 +159,7 @@ func arrivalGateEngine(t *testing.T, callee string, sigs []Signature) *Engine {
 		tagged,
 		NewInteger(7),
 	}, stackHeadroom)
-	e.pointer = 3
+	e.Pointer = 3
 	return e
 }
 
@@ -177,8 +177,8 @@ func TestNur038ArrivalGateCommitsAtCallHead(t *testing.T) {
 	if err := e.stepLiteral(); err != nil {
 		t.Fatalf("stepLiteral: %v", err)
 	}
-	for i := 0; i < e.tape.Len(); i++ {
-		if IsForward(e.tape.At(i)) {
+	for i := 0; i < e.Tape.Len(); i++ {
+		if IsForward(e.Tape.At(i)) {
 			t.Fatal("the pending forward must be COMMITTED by the arriving call head")
 		}
 	}
@@ -199,13 +199,13 @@ func TestNur038ArrivalGateFallsBackToImplicitEnd(t *testing.T) {
 	// The window is resolved (forward removed), and the call head
 	// survives at its own position AFTER the word — the next dispatch,
 	// never collected data beneath it.
-	for i := 0; i < e.tape.Len(); i++ {
-		if IsForward(e.tape.At(i)) {
+	for i := 0; i < e.Tape.Len(); i++ {
+		if IsForward(e.Tape.At(i)) {
 			t.Fatal("implicitEnd must resolve the pending forward")
 		}
 	}
-	if !isFnDefValue(e.tape.At(2)) {
-		t.Fatalf("tape[2] = %v, want the surviving call head", e.tape.At(2))
+	if !isFnDefValue(e.Tape.At(2)) {
+		t.Fatalf("tape[2] = %v, want the surviving call head", e.Tape.At(2))
 	}
 }
 
@@ -238,14 +238,14 @@ func TestNur038PolyReachBoundStopsAtCallHead(t *testing.T) {
 
 	// A tagged fn with a claim is the NEXT call — the scan stops before
 	// it, exactly as a bare fn word would stop it.
-	e.tape = NewTape([]Value{NewInteger(0), tagged, NewInteger(7)}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewInteger(0), tagged, NewInteger(7)}, stackHeadroom)
+	e.Pointer = 0
 	if n, ok := e.polyReachBound(); !ok || n != 0 {
 		t.Errorf("bound = (%d,%v), want (0,true): the call head is a barrier", n, ok)
 	}
 
 	// The SAME value with nothing to claim is an operand and counts.
-	e.tape = NewTape([]Value{NewInteger(0), tagged, NewEnd()}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewInteger(0), tagged, NewEnd()}, stackHeadroom)
 	if n, ok := e.polyReachBound(); !ok || n != 1 {
 		t.Errorf("bound = (%d,%v), want (1,true): a claim-less fn is data", n, ok)
 	}
@@ -270,19 +270,19 @@ func TestNur038FnValueSigShapes(t *testing.T) {
 
 	// fnValueOnlyZeroArgSigs: all-0-arg is a property fn; any arg-taking
 	// sig, a sig-less value, or a fallback-only value is not.
-	if !fnValueOnlyZeroArgSigs(FnDefInfo{Name: "p", Signatures: []Signature{zero}}) {
+	if !FnValueOnlyZeroArgSigs(FnDefInfo{Name: "p", Signatures: []Signature{zero}}) {
 		t.Error("an all-0-arg fn is a property read")
 	}
-	if !fnValueOnlyZeroArgSigs(FnDefInfo{Name: "pf", Signatures: []Signature{zero, fb}}) {
+	if !FnValueOnlyZeroArgSigs(FnDefInfo{Name: "pf", Signatures: []Signature{zero, fb}}) {
 		t.Error("a synthetic Fallback does not disqualify a property fn")
 	}
-	if fnValueOnlyZeroArgSigs(FnDefInfo{Name: "m", Signatures: []Signature{zero, one}}) {
+	if FnValueOnlyZeroArgSigs(FnDefInfo{Name: "m", Signatures: []Signature{zero, one}}) {
 		t.Error("a mixed fn keeps the NUR035 deferral")
 	}
-	if fnValueOnlyZeroArgSigs(FnDefInfo{Name: "s"}) {
+	if FnValueOnlyZeroArgSigs(FnDefInfo{Name: "s"}) {
 		t.Error("a sig-less value proves nothing")
 	}
-	if fnValueOnlyZeroArgSigs(FnDefInfo{Name: "fo", Signatures: []Signature{fb}}) {
+	if FnValueOnlyZeroArgSigs(FnDefInfo{Name: "fo", Signatures: []Signature{fb}}) {
 		t.Error("a fallback-only value proves nothing")
 	}
 }

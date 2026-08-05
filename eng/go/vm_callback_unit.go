@@ -12,12 +12,12 @@ package eng
 // concurrency guard. A nestedRunner that reports handled=false (a cross-program
 // ref) leaves ran=false so the interpreter owns it.
 func invokeCompiledUnit(r *Registry, ref *CompiledFnRef, args []Value) (res []Value, err error, ran bool) {
-	if r.canHostVM() {
+	if r.CanHostVM() {
 		res, err = RunUnit(ref, r, args)
 		return res, err, true
 	}
-	if r.nestedRunner != nil {
-		if res, handled, err := r.nestedRunner(ref, args); handled {
+	if r.NestedRunner != nil {
+		if res, handled, err := r.NestedRunner(ref, args); handled {
 			return res, err, true
 		}
 	}

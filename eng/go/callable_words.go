@@ -70,7 +70,7 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 	es.fnRecs[unit].storedRefUnit = word == "storedfn" || word == "spawnbody"
 	if finish == nil {
 		// Memo hit: the unit is already compiled in this state.
-		return unit, es.active()
+		return unit, es.Active()
 	}
 	// Drop any summary a suspended (non-recording) analysis cached so the
 	// body re-runs under the armed unit and records.
@@ -136,7 +136,7 @@ func moduleScopeMutableCaptures(r *Registry, bodyToks []Value, existing []Captur
 		have[cb.Name] = true
 	}
 	bodyLocals := map[string]bool{}
-	collectBodyLocalDefs(bodyToks, bodyLocals)
+	CollectBodyLocalDefs(bodyToks, bodyLocals)
 	out := existing
 	seen := map[string]bool{}
 	WalkBodyWords(bodyToks, func(w WordInfo, _ Value) {
@@ -203,7 +203,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// the closure compiles count-agnostic, the VM's frameless RET returns the full
 	// residual, and the dispatch seats all N results. Other multi-output words
 	// stay beyond this path.
-	if !es.active() || (len(outs) > 1 && spec.BodyOut != BodyOutResidual) || spec.BodyPos >= len(args) {
+	if !es.Active() || (len(outs) > 1 && spec.BodyOut != BodyOutResidual) || spec.BodyPos >= len(args) {
 		return false
 	}
 	body := args[spec.BodyPos]
@@ -339,8 +339,8 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 	// (already name-sorted per the CapturedBinding contract); the module-scope
 	// additions append after, and the unit binds trailing slots in this same
 	// merged order.
-	captures := moduleScopeMutableCaptures(r, lam.body(), fd.Captured)
-	return recordClosureDispatch(r, word, spec, sig, args, lam.body(), inputs, names, captures, shape, extraLamSlots, outs, pos)
+	captures := moduleScopeMutableCaptures(r, lam.Body(), fd.Captured)
+	return recordClosureDispatch(r, word, spec, sig, args, lam.Body(), inputs, names, captures, shape, extraLamSlots, outs, pos)
 }
 
 // lambdaHookCompatible reports whether a LAMBDA hook value can compile to a
@@ -370,7 +370,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 //     provably-incompatible param (a scalar, a sibling container) refuses.
 func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape, allowCaptures bool) (*Signature, bool) {
 	lam, ok := fd.FirstOwnSig()
-	if !ok || len(lam.body()) == 0 {
+	if !ok || len(lam.Body()) == 0 {
 		return nil, false
 	}
 	own := 0
@@ -385,7 +385,7 @@ func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape, a
 	if !allowCaptures && len(fd.Captured) > 0 {
 		return nil, false
 	}
-	if bodyToksHaveSentinel(lam.body()) {
+	if bodyToksHaveSentinel(lam.Body()) {
 		return nil, false
 	}
 	if len(lam.Params) != len(inputs) {
@@ -414,7 +414,7 @@ func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape, a
 			}
 			continue
 		}
-		if !sigTypeMatches(inputs[i], pt) {
+		if !SigTypeMatches(inputs[i], pt) {
 			return nil, false
 		}
 	}
@@ -478,7 +478,7 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 		for i := range lam.Params {
 			names[i] = lam.Params[i].Name
 		}
-		hookCaps := moduleScopeMutableCaptures(r, lam.body(), nil)
+		hookCaps := moduleScopeMutableCaptures(r, lam.Body(), nil)
 		hookCapOps := make([]emitOperand, len(hookCaps))
 		for i, cb := range hookCaps {
 			op, ok := real.resolveOperand(cb.Value)
@@ -487,7 +487,7 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 			}
 			hookCapOps[i] = op
 		}
-		extras = append(extras, extraHook{slot: slot, toks: lam.body(), names: names, caps: hookCaps, ops: hookCapOps})
+		extras = append(extras, extraHook{slot: slot, toks: lam.Body(), names: names, caps: hookCaps, ops: hookCapOps})
 	}
 
 	// The body compile re-runs the body (the ReturnsFn pass already emitted

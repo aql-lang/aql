@@ -51,7 +51,7 @@ func TestTorHandlerSimplifies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("TorHandler never/never: %v", err)
 	}
-	if !isNeverShape(out[0]) {
+	if !IsNeverShape(out[0]) {
 		t.Errorf("Never tor Never = %v, want Never", out[0])
 	}
 }
@@ -102,11 +102,11 @@ func TestTandHandlerAndValues(t *testing.T) {
 	}
 	// Disjoint scalars collapse to Never.
 	nv := TandValues(NewTypeLiteral(TInteger), NewTypeLiteral(TString))
-	if !isNeverShape(nv) {
+	if !IsNeverShape(nv) {
 		t.Errorf("Integer tand String = %v, want Never", nv)
 	}
 	// Never annihilates.
-	if !isNeverShape(TandValues(NewTypeLiteral(TNever), NewTypeLiteral(TInteger))) {
+	if !IsNeverShape(TandValues(NewTypeLiteral(TNever), NewTypeLiteral(TInteger))) {
 		t.Error("Never tand Integer != Never")
 	}
 }
@@ -119,7 +119,7 @@ func TestTandValuesDistributesOverDisjuncts(t *testing.T) {
 		t.Errorf("distribution = %v, want Integer", got)
 	}
 	// (Integer tor String) tand Boolean = Never.
-	if !isNeverShape(TandValues(union, NewTypeLiteral(TBoolean))) {
+	if !IsNeverShape(TandValues(union, NewTypeLiteral(TBoolean))) {
 		t.Error("disjoint distribution not Never")
 	}
 	// Disjunct-vs-disjunct cross product keeps both compatible arms.
@@ -154,7 +154,7 @@ func TestTandValuesMergesConcreteMaps(t *testing.T) {
 	}
 	// Overlapping keys intersect; incompatible values collapse to Never.
 	bad := TandValues(mapOf("a", NewTypeLiteral(TInteger)), mapOf("a", NewTypeLiteral(TString)))
-	if !isNeverShape(bad) {
+	if !IsNeverShape(bad) {
 		t.Errorf("incompatible field intersection = %v, want Never", bad)
 	}
 	// Compatible overlap keeps the narrower type.
@@ -191,7 +191,7 @@ func TestNegateTypeIdentities(t *testing.T) {
 	if !isAnyShape(NegateType(NewTypeLiteral(TNever))) {
 		t.Error("tnot Never != Any")
 	}
-	if !isNeverShape(NegateType(NewTypeLiteral(TAny))) {
+	if !IsNeverShape(NegateType(NewTypeLiteral(TAny))) {
 		t.Error("tnot Any != Never")
 	}
 	// Double negation elimination.
@@ -251,7 +251,7 @@ func TestTnotHandlerAndReturnsFn(t *testing.T) {
 }
 
 func TestShapePredicates(t *testing.T) {
-	if !isNeverShape(NewTypeLiteral(TNever)) || isNeverShape(NewTypeLiteral(TInteger)) {
+	if !IsNeverShape(NewTypeLiteral(TNever)) || IsNeverShape(NewTypeLiteral(TInteger)) {
 		t.Error("isNeverShape broken")
 	}
 	if !isAnyShape(NewTypeLiteral(TAny)) || isAnyShape(NewTypeLiteral(TInteger)) {
@@ -450,7 +450,7 @@ func TestTandValuesDepScalars(t *testing.T) {
 		t.Fatalf("tand of DepScalars = %v", got)
 	}
 	// Empty intersection collapses to Never.
-	if !isNeverShape(TandValues(NewDepScalar(DepGT, NewInteger(10)), NewDepScalar(DepLT, NewInteger(5)))) {
+	if !IsNeverShape(TandValues(NewDepScalar(DepGT, NewInteger(10)), NewDepScalar(DepLT, NewInteger(5)))) {
 		t.Error("empty DepScalar intersection not Never")
 	}
 }
@@ -506,7 +506,7 @@ func TestBetweenHandler(t *testing.T) {
 	if err != nil {
 		t.Fatalf("inverted between: %v", err)
 	}
-	if !isNeverShape(out[0]) {
+	if !IsNeverShape(out[0]) {
 		t.Errorf("inverted between = %v, want Never", out[0])
 	}
 	// Concrete type arg rejected.

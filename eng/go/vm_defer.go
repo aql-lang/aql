@@ -12,7 +12,7 @@ package eng
 // site in the VM routes through, so the executed bail census sees each defer
 // exactly once with a stable site tag.
 func vmDefer(r *Registry, curDebug []SrcPos, pc int, site, msg string) error {
-	r.noteBail(site, msg)
+	r.NoteBail(site, msg)
 	return vmErrAt(curDebug, pc, msg)
 }
 
@@ -42,17 +42,17 @@ func runIslandResolved(r *Registry, inputs, tokens []Value) ([]Value, error) {
 	input := make([]Value, len(inputs)+len(tokens))
 	copy(input, inputs)
 	copy(input[len(inputs):], tokens)
-	e := r.takeSubEngine()
-	e.isTop = false
-	e.startAt = len(inputs)
-	e.flowUnwind = true
+	e := r.TakeSubEngine()
+	e.IsTop = false
+	e.StartAt = len(inputs)
+	e.FlowUnwind = true
 	res, err := e.Run(input)
 	if len(res) > 0 {
 		res = append([]Value(nil), res...)
 	}
-	e.isTop = false
-	e.startAt = 0
-	e.flowUnwind = false
-	r.putSubEngine(e)
+	e.IsTop = false
+	e.StartAt = 0
+	e.FlowUnwind = false
+	r.PutSubEngine(e)
 	return res, err
 }

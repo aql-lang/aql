@@ -80,8 +80,8 @@ func TestS7CommitBarrierSuccessfulCommit(t *testing.T) {
 		t.Fatal("a fully-claimed 2-arg forward should commit")
 	}
 	// The forward marker was removed and the word force-stacked.
-	for i := 0; i < e.tape.Len(); i++ {
-		if IsForward(e.tape.At(i)) {
+	for i := 0; i < e.Tape.Len(); i++ {
+		if IsForward(e.Tape.At(i)) {
 			t.Error("forward marker should have been removed on commit")
 		}
 	}

@@ -35,7 +35,7 @@ func InvokeBody(r *Registry, body Value, inputs []Value) ([]Value, error) {
 	// where `as` folds at compile time and the ascription rides the static
 	// value flow to that same dispatch. (Only a fn/lambda/module return, an
 	// abstraction boundary with a declared signature, strips.)
-	return RunResolved(r, inputs, bodyTokens(body))
+	return RunResolved(r, inputs, BodyTokens(body))
 }
 
 // InvokeCallback runs a runtime fn VALUE (given its matched signature and the
@@ -92,7 +92,7 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 // and the exact class RunCompiled resolves by re-running on the interpreter. The
 // callback seam mirrors that decision so a post-program bailout degrades to the
 // interpreter rather than surfacing a raw compiler bug to a network peer.
-func isInternalErr(err error) bool {
+func IsInternalErr(err error) bool {
 	var ae *BoruError
 	return errors.As(err, &ae) && ae.Code == "internal_error"
 }
@@ -100,7 +100,7 @@ func isInternalErr(err error) bool {
 // IsInternalError is the exported face of isInternalErr, for run-side seams
 // outside eng that take the same degrade-to-interpreter decision on a stamped
 // unit's result (await's per-branch fork runs — native_temporal_await.go).
-func IsInternalError(err error) bool { return isInternalErr(err) }
+func IsInternalError(err error) bool { return IsInternalErr(err) }
 
 // runPooledSub runs input on a pooled reusable sub-engine and returns a
 // caller-owned COPY of the results. It is the shared seam behind every
@@ -115,19 +115,19 @@ func IsInternalError(err error) bool { return isInternalErr(err) }
 // elemEvalRecordable configures the sub-engine's container-element
 // recording flag (see Engine.elemEvalRecordable); pass false when the
 // caller does not evaluate recordable container elements.
-func runPooledSub(r *Registry, input []Value, elemEvalRecordable bool) ([]Value, error) {
+func RunPooledSub(r *Registry, input []Value, elemEvalRecordable bool) ([]Value, error) {
 	// Observability seam (interp_entry.go): the per-element sub-evaluation path.
 	r.noteInterp("runPooledSub")
-	sub := r.takeSubEngine()
-	sub.elemEvalRecordable = elemEvalRecordable
+	sub := r.TakeSubEngine()
+	sub.ElemEvalRecordable = elemEvalRecordable
 	res, err := sub.Run(input)
 	if err != nil {
-		r.putSubEngine(sub)
+		r.PutSubEngine(sub)
 		return nil, err
 	}
 	out := make([]Value, len(res))
 	copy(out, res)
-	r.putSubEngine(sub)
+	r.PutSubEngine(sub)
 	return out, nil
 }
 
@@ -135,7 +135,7 @@ func runPooledSub(r *Registry, input []Value, elemEvalRecordable bool) ([]Value,
 // list's elements (the common case — `[mul 2]`), or the value itself wrapped
 // as a singleton for a non-list body. Mirrors what the handlers extracted via
 // `AsList(body).Slice()` before splicing.
-func bodyTokens(body Value) []Value {
+func BodyTokens(body Value) []Value {
 	if lst, err := AsList(body); err == nil && !lst.IsNil() {
 		return lst.Slice()
 	}

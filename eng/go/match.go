@@ -21,7 +21,7 @@ package eng
 //     non-api maps when the handler then routed by stack contents.
 func patternsOk(sig *Signature, positions []int, tape *Tape, fwd int, r *Registry) bool {
 	for idx := 0; idx < sig.TotalArgs(); idx++ {
-		pattern, ok := sigPattern(sig, idx)
+		pattern, ok := SigPattern(sig, idx)
 		if !ok {
 			continue
 		}
@@ -134,7 +134,7 @@ func patternsOk(sig *Signature, positions []int, tape *Tape, fwd int, r *Registr
 // map patterns and non-concrete patterns are NOT enforced on forward
 // positions.
 func forwardPatternRejects(sig *Signature, pos int, val Value) bool {
-	pattern, ok := sigPattern(sig, pos)
+	pattern, ok := SigPattern(sig, pos)
 	if !ok {
 		return false
 	}

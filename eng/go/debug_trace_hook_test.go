@@ -16,7 +16,7 @@ func TestRegistryDebugTraceHook(t *testing.T) {
 	r.SetDebugTrace(func(int, int, []Value, string) { fires++ })
 
 	// The pooled sub-evaluation seam fires the hook.
-	if _, err := runPooledSub(r, []Value{NewInteger(1)}, false); err != nil {
+	if _, err := RunPooledSub(r, []Value{NewInteger(1)}, false); err != nil {
 		t.Fatal(err)
 	}
 	if fires == 0 {
@@ -48,7 +48,7 @@ func TestRegistryDebugTraceHook(t *testing.T) {
 	// engines as they are re-taken — a stale callback must never replay.
 	r.SetDebugTrace(nil)
 	fires = 0
-	if _, err := runPooledSub(r, []Value{NewInteger(4)}, false); err != nil {
+	if _, err := RunPooledSub(r, []Value{NewInteger(4)}, false); err != nil {
 		t.Fatal(err)
 	}
 	if fires != 0 {
@@ -71,7 +71,7 @@ func TestDebugParentChain(t *testing.T) {
 
 	fires := 0
 	parent.SetDebugTrace(func(int, int, []Value, string) { fires++ })
-	if _, err := runPooledSub(child, []Value{NewInteger(1)}, false); err != nil {
+	if _, err := RunPooledSub(child, []Value{NewInteger(1)}, false); err != nil {
 		t.Fatal(err)
 	}
 	if fires == 0 {
@@ -82,7 +82,7 @@ func TestDebugParentChain(t *testing.T) {
 	// child immediately (a copied callback would keep firing).
 	parent.SetDebugTrace(nil)
 	fires = 0
-	if _, err := runPooledSub(child, []Value{NewInteger(2)}, false); err != nil {
+	if _, err := RunPooledSub(child, []Value{NewInteger(2)}, false); err != nil {
 		t.Fatal(err)
 	}
 	if fires != 0 {
@@ -92,7 +92,7 @@ func TestDebugParentChain(t *testing.T) {
 	// The child's OWN hook wins over the chain.
 	parent.SetDebugTrace(func(int, int, []Value, string) { t.Error("parent hook must not fire") })
 	child.SetDebugTrace(func(int, int, []Value, string) { fires++ })
-	if _, err := runPooledSub(child, []Value{NewInteger(3)}, false); err != nil {
+	if _, err := RunPooledSub(child, []Value{NewInteger(3)}, false); err != nil {
 		t.Fatal(err)
 	}
 	if fires == 0 {
@@ -189,7 +189,7 @@ func TestDebugTraceFrom(t *testing.T) {
 	if _, err := NewTop(parent).Run([]Value{NewInteger(1)}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := runPooledSub(child, []Value{NewInteger(2)}, false); err != nil {
+	if _, err := RunPooledSub(child, []Value{NewInteger(2)}, false); err != nil {
 		t.Fatal(err)
 	}
 	sawParent, sawChild := false, false

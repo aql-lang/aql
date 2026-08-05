@@ -85,7 +85,7 @@ func strictTape() []Value {
 func TestStrictBarrierStepWordOff(t *testing.T) {
 	setStrict(t, false)
 	e := engWithTape(t, strictTape(), 3)
-	if err := e.stepWord(e.tape.At(3)); err != nil {
+	if err := e.stepWord(e.Tape.At(3)); err != nil {
 		t.Errorf("gate off keeps shipped behaviour, got %v", err)
 	}
 }
@@ -93,7 +93,7 @@ func TestStrictBarrierStepWordOff(t *testing.T) {
 func TestStrictBarrierStepWordOn(t *testing.T) {
 	setStrict(t, true)
 	e := engWithTape(t, strictTape(), 3)
-	err := e.stepWord(e.tape.At(3))
+	err := e.stepWord(e.Tape.At(3))
 	if err == nil {
 		t.Fatal("gate on: expected stranded-forward error from stepWord")
 	}
@@ -111,8 +111,8 @@ func TestStrictBarrierStepWordUsurpOn(t *testing.T) {
 		NewWordUsurp("cadd", false), NewInteger(2), NewInteger(3),
 	}
 	e := engWithTape(t, vals, 3)
-	w, _ := AsWord(e.tape.At(3))
-	err := e.stepWordUsurp(e.tape.At(3), w)
+	w, _ := AsWord(e.Tape.At(3))
+	err := e.stepWordUsurp(e.Tape.At(3), w)
 	if err == nil {
 		t.Fatal("gate on: expected stranded-forward error from stepWordUsurp")
 	}
@@ -161,13 +161,13 @@ func TestStrictForwardScanReachExpands(t *testing.T) {
 			Segments: []ReachSeg{{KeyLit: NewAtom("k")}},
 			Eval:     true,
 		})
-		e.tape = NewTape([]Value{NewWord("collector"), reach}, stackHeadroom)
-		e.pointer = 0
+		e.Tape = NewTape([]Value{NewWord("collector"), reach}, stackHeadroom)
+		e.Pointer = 0
 		fn := r.Lookup("collector")
 		if err := e.resolveForwardArgs(fn, WordInfo{Name: "collector", ArgCount: -1}); err != nil {
 			t.Fatalf("strict=%v resolveForwardArgs: %v", on, err)
 		}
-		if IsReach(e.tape.At(1)) {
+		if IsReach(e.Tape.At(1)) {
 			t.Errorf("strict=%v: the Reach must expand during forward collection (dot-access is exempt)", on)
 		}
 	}

@@ -120,7 +120,7 @@ func UsurpFunction(v Value) (Value, bool) {
 		// wrapper dispatch. Soundness rides the differential (the compiled
 		// re-dispatch is byte-identical to the runtime one).
 		rev.Impl = Go(usurpDispatchHandler(orig, origBarrier), RunInCheck())
-		normalizeSig(&rev)
+		NormalizeSig(&rev)
 		wrapped = append(wrapped, rev)
 	}
 	SortSignatures(wrapped)
@@ -185,7 +185,7 @@ func rebarrierFunction(v Value, stack bool) (Value, bool) {
 		// the plain `f` call — instead of refusing the opaque wrapper. Soundness
 		// rides the differential.
 		ws.Impl = Go(rebarrierDispatchHandler(orig, origBarrier), RunInCheck())
-		normalizeSig(&ws)
+		NormalizeSig(&ws)
 		wrapped = append(wrapped, ws)
 	}
 	SortSignatures(wrapped)
@@ -226,7 +226,7 @@ func ForceArityFunction(v Value, n int) (Value, bool) {
 		// mirroring usurp / rebarrier. Soundness rides the differential.
 		Impl: Go(rebarrierDispatchHandler(orig, funcSigBarrier(orig, n)), RunInCheck()),
 	}
-	normalizeSig(&sig)
+	NormalizeSig(&sig)
 	return NewFunction(FnDefInfo{
 		Name:           fnDef.Name,
 		Signatures:     []Signature{sig},

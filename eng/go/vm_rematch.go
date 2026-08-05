@@ -33,7 +33,7 @@ func (vc *vmContext) dispatchRematch(ds *DispatchSpec, stack []Value, curDebug [
 	if ds.NWritten < 1 || ds.WrittenOff < 0 || ds.WrittenOff+ds.NWritten > len(window) {
 		return vmErrAt(curDebug, pc, "DISPATCH_REMATCH written bound out of range at "+ds.Word)
 	}
-	ae := runtimeNoMatch(r, ds.Word, window[ds.WrittenOff:ds.WrittenOff+ds.NWritten])
+	ae := RuntimeNoMatch(r, ds.Word, window[ds.WrittenOff:ds.WrittenOff+ds.NWritten])
 	ae.Row, ae.Col = ds.Pos.Row, ds.Pos.Col
 	return stampAt(ae, curDebug, pc, r)
 }

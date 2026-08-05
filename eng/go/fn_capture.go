@@ -67,7 +67,7 @@ func bodyNeedsFrameState(r *Registry, body []Value) bool {
 				return
 			}
 			seen[w.Name] = true
-			walk(spliceExpand(info.Data))
+			walk(SpliceExpand(info.Data))
 		}, func(info SugarInfo, _ Value) {
 			// A sugar marker steps as its bound role word (a `=>` marker
 			// IS the afn construction) — judge it by the word the registry
@@ -125,7 +125,7 @@ func bodyReferencesArgs(r *Registry, body []Value) bool {
 				return
 			}
 			seen[w.Name] = true
-			walk(spliceExpand(info.Data))
+			walk(SpliceExpand(info.Data))
 		}, func(info SugarInfo, _ Value) {
 			// Same role-word judgement as bodyNeedsFrameState: a marker
 			// steps as its bound word, so it reads args iff that word is
@@ -331,9 +331,9 @@ func ComputeCaptures(r *Registry, sig *FnSig) []CapturedBinding {
 	// body-local-value-def leaf: an each body `[def j (cur get 0) j]` must capture
 	// only `cur` (the genuine enclosing binding), not its own `j`.
 	bodyLocals := map[string]bool{}
-	collectBodyLocalDefs(sig.body(), bodyLocals)
+	CollectBodyLocalDefs(sig.Body(), bodyLocals)
 	seen := map[string]Value{}
-	WalkBodyWords(sig.body(), func(w WordInfo, _ Value) {
+	WalkBodyWords(sig.Body(), func(w WordInfo, _ Value) {
 		if w.Name == "" || paramNames[w.Name] || bodyLocals[w.Name] {
 			return
 		}
@@ -370,7 +370,7 @@ func ComputeCaptures(r *Registry, sig *FnSig) []CapturedBinding {
 // ComputeCaptures). It recurses into list / paren tokens but NOT into a nested
 // FnDefInfo (an inner closure owns its own locals + capture analysis), mirroring
 // walkBodyValue's descent rules.
-func collectBodyLocalDefs(body []Value, locals map[string]bool) {
+func CollectBodyLocalDefs(body []Value, locals map[string]bool) {
 	for i := 0; i < len(body); i++ {
 		v := body[i]
 		if v.Quoted {
@@ -409,11 +409,11 @@ func collectBodyLocalDefs(body []Value, locals map[string]bool) {
 		}
 		if v.Parent.Equal(TList) && v.Data != nil {
 			if lst, lerr := AsList(v); lerr == nil {
-				collectBodyLocalDefs(lst.Slice(), locals)
+				CollectBodyLocalDefs(lst.Slice(), locals)
 			}
 		} else if IsParenExpr(v) {
 			if toks, perr := AsParenExpr(v); perr == nil {
-				collectBodyLocalDefs(toks, locals)
+				CollectBodyLocalDefs(toks, locals)
 			}
 		}
 	}

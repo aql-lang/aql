@@ -87,10 +87,10 @@ func TestIsNominalAnchor(t *testing.T) {
 func TestContentMembershipInventory(t *testing.T) {
 	content := []TypeBehavior{
 		memberBehavior{},
-		&depScalarUnifier{},
-		&disjunctUnifier{},
-		&negationUnifier{},
-		&predicateUnifier{},
+		&DepScalarUnifier{},
+		&DisjunctUnifier{},
+		&NegationUnifier{},
+		&PredicateUnifier{},
 		&genParamUnifier{},
 		&schemaUnifier{},
 		typeMembershipBehavior{},
@@ -123,7 +123,7 @@ func (d delegatingBehavior) DelegatesMatchTo() TypeBehavior { return d.inner }
 // unifiers) keeps its own nominal verdict.
 func TestBehaviorIsContentWalksDelegation(t *testing.T) {
 	// Direct content marker → content.
-	if !behaviorIsContent(&predicateUnifier{}) {
+	if !behaviorIsContent(&PredicateUnifier{}) {
 		t.Error("a marked content behavior must read as content")
 	}
 	// Plain nominal → not content.
@@ -131,7 +131,7 @@ func TestBehaviorIsContentWalksDelegation(t *testing.T) {
 		t.Error("DefaultBehavior is nominal, not content")
 	}
 	// Delegating wrapper over a content behavior → content (the hole fix).
-	if !behaviorIsContent(delegatingBehavior{inner: &depScalarUnifier{}}) {
+	if !behaviorIsContent(delegatingBehavior{inner: &DepScalarUnifier{}}) {
 		t.Error("a delegating wrapper over a predicate must read as content")
 	}
 	// Delegating wrapper over a nominal behavior → not content (no

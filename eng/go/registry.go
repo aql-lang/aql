@@ -240,7 +240,7 @@ type Registry struct {
 	// Nil outside a run; a fork inherits it but never reaches it (a fresh fork is
 	// idle, so InvokeCallback takes the RunUnit path there, not this one).
 	// ref is an opaque *CompiledFnRef (S4 opaque handle) — the VM asserts.
-	nestedRunner func(ref any, args []Value) (result []Value, handled bool, err error)
+	NestedRunner func(ref any, args []Value) (result []Value, handled bool, err error)
 
 	// vmRunning latches non-zero (via sync/atomic) for the duration of a
 	// RunProgram on this registry. Because RunProgram installs/restores the
@@ -252,7 +252,7 @@ type Registry struct {
 	// fully finishes, resetting the flag, before the next begins) — the normal
 	// RunCompiled path. It is a plain int32 (not atomic.Bool) so the Registry
 	// stays copyable for ForkConcurrent's shallow clone.
-	vmRunning int32
+	VmRunning int32
 
 	// runtimeStamping arms detached fn-unit compilation (StampDetachedFn):
 	// see EnableRuntimeStamping. Set only by the compiled execution entry
@@ -443,7 +443,7 @@ const (
 // after the engine's Run returns; results must be copied out first —
 // Run's result slice aliases the engine's tape, which the next Reload
 // overwrites.
-func (r *Registry) takeSubEngine() *Engine {
+func (r *Registry) TakeSubEngine() *Engine {
 	if n := len(r.enginePool); n > 0 {
 		e := r.enginePool[n-1]
 		r.enginePool[n-1] = nil
@@ -455,7 +455,7 @@ func (r *Registry) takeSubEngine() *Engine {
 		return e
 	}
 	e := New(r)
-	e.reuseTape = true
+	e.ReuseTape = true
 	return e
 }
 
@@ -535,8 +535,8 @@ type EngineState struct {
 func (r *Registry) RunningEngineStates() []EngineState {
 	out := make([]EngineState, 0, len(r.debugEngines))
 	for _, e := range r.debugEngines {
-		if e != nil && e.tape != nil {
-			out = append(out, EngineState{Stack: e.tape.Snapshot(), Pointer: e.pointer, Label: e.debugLabel})
+		if e != nil && e.Tape != nil {
+			out = append(out, EngineState{Stack: e.Tape.Snapshot(), Pointer: e.Pointer, Label: e.debugLabel})
 		}
 	}
 	return out
@@ -570,14 +570,14 @@ func (r *Registry) RunningEngineChain(from *Registry) []EngineState {
 // putSubEngine returns an idle sub-engine to the pool. Engines whose tape
 // grew beyond the pooling bound are dropped (GC'd) instead, and per-call
 // configuration is cleared so nothing leaks into the next use.
-func (r *Registry) putSubEngine(e *Engine) {
+func (r *Registry) PutSubEngine(e *Engine) {
 	if e == nil || len(r.enginePool) >= maxPooledEngines {
 		return
 	}
-	if e.tape != nil && e.tape.capEntries() > pooledTapeMaxEntries {
+	if e.Tape != nil && e.Tape.capEntries() > pooledTapeMaxEntries {
 		return
 	}
-	e.elemEvalRecordable = false
+	e.ElemEvalRecordable = false
 	// Release any Values still held in the forward-collection scratch
 	// buffers before the engine idles in the pool. rearrangeForForward
 	// leaves the last call's collected args (which can be large list/map
@@ -632,11 +632,11 @@ func (r *Registry) CurrentStack() ([]Value, bool) {
 		return nil, false
 	}
 	e := r.debugEngines[len(r.debugEngines)-1]
-	if e == nil || e.tape == nil {
+	if e == nil || e.Tape == nil {
 		return nil, false
 	}
-	snap := e.tape.Snapshot()
-	end := e.pointer
+	snap := e.Tape.Snapshot()
+	end := e.Pointer
 	if end < 0 {
 		end = 0
 	}
@@ -661,7 +661,7 @@ func (r *Registry) CurrentStack() ([]Value, bool) {
 // flight on this registry. Read by RunProgram at its entry (before it spawns any
 // island sub-engine), so a true result there means a DISTINCT interpreter run —
 // a concurrent misuse — not the compiled run's own islands.
-func (r *Registry) interpRunActive() bool {
+func (r *Registry) InterpRunActive() bool {
 	return r != nil && atomic.LoadInt32(&r.interpRunDepth) > 0
 }
 
@@ -671,8 +671,8 @@ func (r *Registry) interpRunActive() bool {
 // VM run cleanly; the main registry mid-run is busy, so InvokeCallback routes
 // the callback to the interpreter (CallBoru) instead — never racing the shared
 // invoker/scopes a live run owns.
-func (r *Registry) canHostVM() bool {
-	return r != nil && atomic.LoadInt32(&r.vmRunning) == 0 && !r.interpRunActive()
+func (r *Registry) CanHostVM() bool {
+	return r != nil && atomic.LoadInt32(&r.VmRunning) == 0 && !r.InterpRunActive()
 }
 
 // EnableRuntimeStamping arms detached fn-unit compilation (StampDetachedFn /
@@ -1004,7 +1004,7 @@ func (r *Registry) upsertFnDef(name string, sigs ...Signature) {
 		// Normalize the positional Args/Patterns constructor-convenience
 		// fields into Params so every stored sig is Params-authoritative
 		// for the kernel's matchers.
-		normalizeSig(&sigs[i])
+		NormalizeSig(&sigs[i])
 		if sigs[i].BarrierPos == BarrierAllForward {
 			sigs[i].BarrierPos = sigs[i].TotalArgs()
 		}
@@ -1129,7 +1129,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 	if len(entries) == 1 {
 		hasBody := false
 		for i := range top.Signatures {
-			if len(top.Signatures[i].body()) > 0 {
+			if len(top.Signatures[i].Body()) > 0 {
 				hasBody = true
 				break
 			}
@@ -1147,7 +1147,7 @@ func (r *Registry) aggregateDispatch(name string, entries []FnDefInfo) *FnDefInf
 				continue
 			}
 			sigs = append(sigs, s)
-			if len(s.body()) > 0 {
+			if len(s.Body()) > 0 {
 				hasBoru = true
 			}
 		}
@@ -1200,13 +1200,13 @@ func (r *Registry) fnFallbackSig(name string) Signature {
 				if fn := r.Lookup(name); fn != nil {
 					for i := range fn.Signatures {
 						sig := &fn.Signatures[i]
-						if sig.TotalArgs() == 0 && sig.dispatchHandler() != nil && !sig.Fallback {
-							return sig.dispatchHandler()(nil, nil, nil, r)
+						if sig.TotalArgs() == 0 && sig.DispatchHandler() != nil && !sig.Fallback {
+							return sig.DispatchHandler()(nil, nil, nil, r)
 						}
 					}
 				}
 			}
-			return nil, r.BoruError("signature_error", noMatchDetail(name), name)
+			return nil, r.BoruError("signature_error", NoMatchDetail(name), name)
 		}),
 	}
 }
@@ -1609,8 +1609,8 @@ func (r *Registry) CallBoruNamed(sig *FnSig, args []Value, captures []CapturedBi
 	// stepping starts after it (arguments are inert — the sub-engine twin
 	// of FrameOpenInfo.ArgSpan; design/ARG-SEMANTICS-UNIFICATION.0.md).
 	unnamedCount := len(tokens)
-	body := make([]Value, len(sig.body()))
-	copy(body, sig.body())
+	body := make([]Value, len(sig.Body()))
+	copy(body, sig.Body())
 	tokens = append(tokens, body...)
 
 	// Snapshot DefStacks lengths before body execution so we can
@@ -1620,7 +1620,7 @@ func (r *Registry) CallBoruNamed(sig *FnSig, args []Value, captures []CapturedBi
 
 	// Evaluate in a sub-engine with higher step limit for complex bodies.
 	sub := NewTop(r)
-	sub.startAt = unnamedCount
+	sub.StartAt = unnamedCount
 	sub.debugLabel = label
 	result, err := sub.Run(tokens)
 

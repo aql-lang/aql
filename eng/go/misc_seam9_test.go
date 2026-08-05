@@ -13,7 +13,7 @@ func TestW9CheckStateGuards(t *testing.T) {
 
 	c := &CheckState{}
 	// recordCallEdge with an empty endpoint is a no-op.
-	c.recordCallEdge("", "callee")
+	c.RecordCallEdge("", "callee")
 
 	// RecordFnBinder with an empty top-of-stack fn name returns early.
 	c.Mode = true
@@ -66,7 +66,7 @@ func TestW9CollectBodyLocalDefs(t *testing.T) {
 	quoted := NewInteger(1)
 	quoted.Quoted = true
 	// Body: a quoted token (skipped) and a nested fn value (skipped).
-	collectBodyLocalDefs([]Value{quoted, NewFunction(FnDefInfo{})}, locals)
+	CollectBodyLocalDefs([]Value{quoted, NewFunction(FnDefInfo{})}, locals)
 	if len(locals) != 0 {
 		t.Errorf("quoted / nested-fn tokens should contribute no locals, got %v", locals)
 	}

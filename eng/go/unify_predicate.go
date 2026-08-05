@@ -21,7 +21,7 @@ import "fmt"
 // through CallBoru — a registry-rooted operation. One Unifier per
 // (predicate type, registry); fresh registries get fresh Unifiers
 // installed by InstallType at type-declaration time.
-type predicateUnifier struct {
+type PredicateUnifier struct {
 	behaviorWrapper // prev Behavior + Format/Equal/Compare delegation
 	registry        *Registry
 	constraint      Value // the predicate fn body
@@ -46,9 +46,9 @@ type predicateUnifier struct {
 // values) pass through: a type literal is "the type itself", not an
 // inhabitant, and carriers are placeholder values whose concreteness
 // is asserted at runtime by some other path.
-func (*predicateUnifier) ContentMembership() {}
+func (*PredicateUnifier) ContentMembership() {}
 
-func (p *predicateUnifier) Match(v Value, t *Type) bool {
+func (p *PredicateUnifier) Match(v Value, t *Type) bool {
 	return matchMembership(v, t, p.prev, func(v Value) bool {
 		if p.registry == nil {
 			// No registry attached — fall back to the lattice walk so
@@ -75,7 +75,7 @@ func (p *predicateUnifier) Match(v Value, t *Type) bool {
 // unifySameOrSubtype-first candidate step whose "narrower literal →
 // admit" branch could admit a non-member without ever running the body
 // — the same hole the Go path avoids; the two now share one rule.)
-func (p *predicateUnifier) Unify(a, b Value) (Value, *UnifyError) {
+func (p *PredicateUnifier) Unify(a, b Value) (Value, *UnifyError) {
 	return unifyMembership(a, b, "predicate "+p.typeName, func(v Value) (Value, bool, error) {
 		if p.registry == nil {
 			return Value{}, false, fmt.Errorf("predicate type %s has no registry attached", p.typeName)
@@ -88,7 +88,7 @@ func (p *predicateUnifier) Unify(a, b Value) (Value, *UnifyError) {
 // any existing Behavior. Called by InstallType when minting a predicate
 // type so the constraint runs at every Unify call site.
 func installPredicateUnifier(def *Type, constraint Value, r *Registry, name string) {
-	def.ensureTMeta().Behavior = &predicateUnifier{
+	def.ensureTMeta().Behavior = &PredicateUnifier{
 		behaviorWrapper: behaviorWrapper{prev: def.Behavior()},
 		registry:        r,
 		constraint:      constraint,

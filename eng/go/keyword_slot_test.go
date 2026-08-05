@@ -181,15 +181,15 @@ func TestMatchSignatureInsideForwardStackMismatch(t *testing.T) {
 	// tape[0] = a parked Forward (an outer word still collecting), so
 	// isInsidePendingForward() is true at pointer 1. tape[2] is the
 	// forward arg that fills sig[0].
-	e.tape = NewTape([]Value{
+	e.Tape = NewTape([]Value{
 		fwdMarker("outer", 0, 1, 0),
 		NewWord("inner"),
 		NewInteger(1),
 	}, stackHeadroom)
-	e.pointer = 1
+	e.Pointer = 1
 	fn := mkFn(Signature{Args: []*Type{TInteger, TInteger}, BarrierPos: 2})
 	// resolved carries one stack value of the WRONG type for sig[1].
-	sig, _, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewBoolean(true)})
+	sig, _, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewBoolean(true)})
 	if sig != nil {
 		t.Errorf("a mismatched stack operand must reject the swap split, got %v", sig)
 	}
@@ -212,13 +212,13 @@ func TestMatchSignatureInsideForwardPatternReject(t *testing.T) {
 	// resolvedIdx); tape[1] is the parked outer Forward so
 	// isInsidePendingForward() is true at pointer 2; tape[3] is the
 	// forward token that fills sig[0] and violates its literal-0 pattern.
-	e.tape = NewTape([]Value{
+	e.Tape = NewTape([]Value{
 		NewInteger(5),
 		fwdMarker("outer", 0, 1, 0),
 		NewWord("inner"),
 		NewInteger(3),
 	}, stackHeadroom)
-	e.pointer = 2
+	e.Pointer = 2
 	fn := mkFn(Signature{
 		Args:       []*Type{TInteger, TInteger},
 		Patterns:   map[int]Value{0: NewInteger(0)},
@@ -226,7 +226,7 @@ func TestMatchSignatureInsideForwardPatternReject(t *testing.T) {
 	})
 	// resolved carries one stack value of the RIGHT type for sig[1], so
 	// canStack holds and the split is filled — only the pattern rejects.
-	sig, _, _ := e.matchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewInteger(5)})
+	sig, _, _ := e.MatchSignature(fn, WordInfo{ArgCount: -1}, []Value{NewInteger(5)})
 	if sig != nil {
 		t.Errorf("a pattern-violating forward operand must reject the swap split, got %v", sig)
 	}

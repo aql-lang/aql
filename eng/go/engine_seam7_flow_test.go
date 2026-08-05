@@ -19,18 +19,18 @@ func TestS7StepMoveOrphanMarkGone(t *testing.T) {
 	// quietly.
 	e := engWithTape(t, []Value{NewMove("m1", "for loop")}, 0)
 	e.marks = map[string]bool{"m1": true}
-	if err := e.stepMove(e.tape.At(0)); err != nil {
+	if err := e.stepMove(e.Tape.At(0)); err != nil {
 		t.Fatalf("orphan move should be removed quietly, got %v", err)
 	}
-	if e.tape.Len() != 0 {
-		t.Errorf("orphan move not removed: len=%d", e.tape.Len())
+	if e.Tape.Len() != 0 {
+		t.Errorf("orphan move not removed: len=%d", e.Tape.Len())
 	}
 }
 
 func TestS7StepMoveMarkNotFoundErrors(t *testing.T) {
 	// The mark id is NOT registered → move_error.
 	e := engWithTape(t, []Value{NewMove("nope", "for loop")}, 0)
-	if err := e.stepMove(e.tape.At(0)); err == nil {
+	if err := e.stepMove(e.Tape.At(0)); err == nil {
 		t.Fatal("move to an unknown mark must error")
 	}
 }
@@ -49,7 +49,7 @@ func TestS7StepMoveContMoreIterationsNilMarks(t *testing.T) {
 	}
 	move := NewMoveCont("m1", "for loop", cont)
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewMark("m1"), move}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewMark("m1"), move}, stackHeadroom)
 	e.marks = nil // force the lazy-init arm
 	if err := e.stepMoveCont(0, 1, MoveInfo{To: "m1", Cont: cont}); err != nil {
 		t.Fatalf("stepMoveCont: %v", err)
@@ -74,8 +74,8 @@ func TestS7TraceNotesGated(t *testing.T) {
 	{
 		e := NewTop(covRegistry(t, nil))
 		e.SetTrace(noop)
-		e.tape = NewTape([]Value{NewMark("m1")}, stackHeadroom)
-		e.stepMark(e.tape.At(0))
+		e.Tape = NewTape([]Value{NewMark("m1")}, stackHeadroom)
+		e.stepMark(e.Tape.At(0))
 		if e.traceNote != "mark m1" {
 			t.Errorf("stepMark note = %q, want %q", e.traceNote, "mark m1")
 		}
@@ -84,8 +84,8 @@ func TestS7TraceNotesGated(t *testing.T) {
 	// negative: stepMark with NO trace hook leaves the note empty.
 	{
 		e := NewTop(covRegistry(t, nil))
-		e.tape = NewTape([]Value{NewMark("m1")}, stackHeadroom)
-		e.stepMark(e.tape.At(0))
+		e.Tape = NewTape([]Value{NewMark("m1")}, stackHeadroom)
+		e.stepMark(e.Tape.At(0))
 		if e.traceNote != "" {
 			t.Errorf("stepMark built a note with tracing off: %q", e.traceNote)
 		}
@@ -96,7 +96,7 @@ func TestS7TraceNotesGated(t *testing.T) {
 		e := engWithTape(t, []Value{NewMove("m1", "for loop")}, 0)
 		e.SetTrace(noop)
 		e.marks = map[string]bool{"m1": true}
-		if err := e.stepMove(e.tape.At(0)); err != nil {
+		if err := e.stepMove(e.Tape.At(0)); err != nil {
 			t.Fatalf("orphan move: %v", err)
 		}
 		if e.traceNote != "move orphan m1" {
@@ -108,10 +108,10 @@ func TestS7TraceNotesGated(t *testing.T) {
 	{
 		e := NewTop(covRegistry(t, nil))
 		e.SetTrace(noop)
-		e.tape = NewTape([]Value{NewMark("m2", NewInteger(7)), NewMove("m2", "r")}, stackHeadroom)
+		e.Tape = NewTape([]Value{NewMark("m2", NewInteger(7)), NewMove("m2", "r")}, stackHeadroom)
 		e.marks = map[string]bool{"m2": true}
-		e.pointer = 1
-		if err := e.stepMove(e.tape.At(1)); err != nil {
+		e.Pointer = 1
+		if err := e.stepMove(e.Tape.At(1)); err != nil {
 			t.Fatalf("move→mark: %v", err)
 		}
 		if e.traceNote != "move→mark m2" {
@@ -125,7 +125,7 @@ func TestS7TraceNotesGated(t *testing.T) {
 		cont := &ForCont{Registry: r, IterName: "i", Current: 0, End: 3, Step: 1, Body: []Value{NewInteger(1)}}
 		e := NewTop(r)
 		e.SetTrace(noop)
-		e.tape = NewTape([]Value{NewMark("m1"), NewMoveCont("m1", "for loop", cont)}, stackHeadroom)
+		e.Tape = NewTape([]Value{NewMark("m1"), NewMoveCont("m1", "for loop", cont)}, stackHeadroom)
 		e.marks = map[string]bool{"m1": true}
 		if err := e.stepMoveCont(0, 1, MoveInfo{To: "m1", Cont: cont}); err != nil {
 			t.Fatalf("for next: %v", err)
@@ -141,7 +141,7 @@ func TestS7TraceNotesGated(t *testing.T) {
 		cont := &ForCont{Registry: r, IterName: "i", Current: 3, End: 3, Step: 1, Body: []Value{NewInteger(1)}}
 		e := NewTop(r)
 		e.SetTrace(noop)
-		e.tape = NewTape([]Value{NewMark("m1"), NewMoveCont("m1", "for loop", cont)}, stackHeadroom)
+		e.Tape = NewTape([]Value{NewMark("m1"), NewMoveCont("m1", "for loop", cont)}, stackHeadroom)
 		e.marks = map[string]bool{"m1": true}
 		if err := e.stepMoveCont(0, 1, MoveInfo{To: "m1", Cont: cont}); err != nil {
 			t.Fatalf("for done: %v", err)
@@ -156,10 +156,10 @@ func TestS7TraceNotesGated(t *testing.T) {
 		ifc := &IfCont{Then: []Value{NewInteger(1)}, Else: []Value{NewInteger(2)}}
 		e := NewTop(covRegistry(t, nil))
 		e.SetTrace(noop)
-		e.tape = NewTape([]Value{NewMark("m1"), NewBoolean(true), NewMoveIf("m1", "if", ifc)}, stackHeadroom)
+		e.Tape = NewTape([]Value{NewMark("m1"), NewBoolean(true), NewMoveIf("m1", "if", ifc)}, stackHeadroom)
 		e.marks = map[string]bool{"m1": true}
-		e.pointer = 2
-		if err := e.stepMove(e.tape.At(2)); err != nil {
+		e.Pointer = 2
+		if err := e.stepMove(e.Tape.At(2)); err != nil {
 			t.Fatalf("if: %v", err)
 		}
 		if e.traceNote != "if true" {
@@ -180,15 +180,15 @@ func TestEffectiveResolvedScratchReuse(t *testing.T) {
 	e := engWithTape(t, []Value{NewInteger(1), NewInteger(2), NewInteger(3)}, 0)
 
 	// Full window: all three are resolved.
-	e.pointer = 3
-	if got := e.effectiveResolved(); len(got) != 3 {
+	e.Pointer = 3
+	if got := e.EffectiveResolved(); len(got) != 3 {
 		t.Fatalf("want 3 resolved, got %d: %s", len(got), renderAll(got))
 	}
 
 	// Reuse must not leak the longer previous result: a shorter window
 	// returns exactly its own entries (buffer reset to [:0]).
-	e.pointer = 1
-	got := e.effectiveResolved()
+	e.Pointer = 1
+	got := e.EffectiveResolved()
 	iv, _ := AsInteger(got[0])
 	if len(got) != 1 || iv != 1 {
 		t.Fatalf("reuse leaked stale data: %s", renderAll(got))
@@ -196,8 +196,8 @@ func TestEffectiveResolvedScratchReuse(t *testing.T) {
 
 	// An OpenParen bounds the scan: entries below the paren are excluded.
 	e2 := engWithTape(t, []Value{NewInteger(9), NewOpenParen(), NewInteger(1), NewInteger(2)}, 0)
-	e2.pointer = 4
-	if got := e2.effectiveResolved(); len(got) != 2 {
+	e2.Pointer = 4
+	if got := e2.EffectiveResolved(); len(got) != 2 {
 		t.Fatalf("paren-bounded window: want 2, got %d", len(got))
 	}
 
@@ -208,8 +208,8 @@ func TestEffectiveResolvedScratchReuse(t *testing.T) {
 		NewForward(ForwardInfo{FuncName: "cadd", Sig: sig, FuncIndex: 2, CollectedArgs: 0}),
 		NewWord("cadd"),
 	}, 0)
-	e3.pointer = 3
-	got = e3.effectiveResolved()
+	e3.Pointer = 3
+	got = e3.EffectiveResolved()
 	iv, _ = AsInteger(got[0])
 	if len(got) != 1 || iv != 5 {
 		t.Fatalf("forward-exclude: want [5], got %s", renderAll(got))
@@ -218,9 +218,9 @@ func TestEffectiveResolvedScratchReuse(t *testing.T) {
 	// A later forward-FREE call on the same engine must NOT apply the stale
 	// exclusion set from the call above (the reused map is only consulted
 	// when this call itself saw a forward).
-	e3.tape = NewTape([]Value{NewInteger(7), NewInteger(8)}, stackHeadroom)
-	e3.pointer = 2
-	if got := e3.effectiveResolved(); len(got) != 2 {
+	e3.Tape = NewTape([]Value{NewInteger(7), NewInteger(8)}, stackHeadroom)
+	e3.Pointer = 2
+	if got := e3.EffectiveResolved(); len(got) != 2 {
 		t.Fatalf("stale-exclusion leak: want 2, got %d", len(got))
 	}
 }
@@ -232,7 +232,7 @@ func TestS7HandleLoopBreakMissingMark(t *testing.T) {
 	cont := &ForCont{Registry: r, IterName: "i"}
 	// A MoveCont with no matching Mark on the tape → markIdx<0 → skip.
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewMoveCont("gone", "for loop", cont)}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewMoveCont("gone", "for loop", cont)}, stackHeadroom)
 	e.marks = map[string]bool{"gone": true}
 	if e.handleLoopBreak() {
 		t.Error("break with no mark on tape should not resolve")
@@ -243,7 +243,7 @@ func TestS7HandleLoopContinueMissingMark(t *testing.T) {
 	r := covRegistry(t, nil)
 	cont := &ForCont{Registry: r, IterName: "i"}
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewMoveCont("gone", "for loop", cont)}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewMoveCont("gone", "for loop", cont)}, stackHeadroom)
 	e.marks = map[string]bool{"gone": true}
 	if e.handleLoopContinue() {
 		t.Error("continue with no mark on tape should not resolve")
@@ -255,8 +255,8 @@ func TestS7HandleLoopContinueMissingMark(t *testing.T) {
 func TestS7CleanMarks(t *testing.T) {
 	e := engWithTape(t, []Value{NewMark("a"), NewInteger(1), NewMove("a", "r")}, 0)
 	e.cleanMarks()
-	if e.tape.Len() != 1 {
-		t.Errorf("cleanMarks left %d values, want 1 (the Integer)", e.tape.Len())
+	if e.Tape.Len() != 1 {
+		t.Errorf("cleanMarks left %d values, want 1 (the Integer)", e.Tape.Len())
 	}
 	if e.marks != nil {
 		t.Error("marks map should be cleared")

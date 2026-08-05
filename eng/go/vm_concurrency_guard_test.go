@@ -48,20 +48,20 @@ func TestInterpRunDepthBalances(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewRegistry: %v", err)
 	}
-	if r.interpRunActive() {
+	if r.InterpRunActive() {
 		t.Fatal("fresh registry reports an active interpreter run")
 	}
 	r.enterInterpRun()
 	r.enterInterpRun()
-	if !r.interpRunActive() {
+	if !r.InterpRunActive() {
 		t.Fatal("nested interpreter runs not reported active")
 	}
 	r.exitInterpRun()
-	if !r.interpRunActive() {
+	if !r.InterpRunActive() {
 		t.Fatal("still one run open, but reported idle")
 	}
 	r.exitInterpRun()
-	if r.interpRunActive() {
+	if r.InterpRunActive() {
 		t.Fatal("balanced enter/exit left the registry reporting active")
 	}
 }

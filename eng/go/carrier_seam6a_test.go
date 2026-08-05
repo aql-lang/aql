@@ -12,7 +12,7 @@ import (
 	"testing"
 )
 
-// armEmit arms a live bytecode recorder on r so es.active() is true.
+// armEmit arms a live bytecode recorder on r so es.Active() is true.
 func armEmit(r *Registry) *EmitState {
 	es := NewEmitState()
 	r.Check.Emit = es

@@ -37,7 +37,7 @@ func TestStepDefCleanupResidualArms(t *testing.T) {
 		toks := append([]Value{NewOpenParen()}, residual...)
 		marker := NewDefCleanup(DefCleanupInfo{Registry: r, SkipCleanup: true, EvalResidual: evalResidual})
 		toks = append(toks, marker)
-		e.tape = NewTape(toks, stackHeadroom)
+		e.Tape = NewTape(toks, stackHeadroom)
 		return e, marker, len(toks) - 1
 	}
 
@@ -46,7 +46,7 @@ func TestStepDefCleanupResidualArms(t *testing.T) {
 	if err := e.stepDefCleanup(marker, idx); err != nil {
 		t.Fatalf("off-state cleanup: %v", err)
 	}
-	if !e.tape.At(1).Eval {
+	if !e.Tape.At(1).Eval {
 		t.Fatal("EvalResidual=false must leave the residual pending")
 	}
 
@@ -55,7 +55,7 @@ func TestStepDefCleanupResidualArms(t *testing.T) {
 	if err := e.stepDefCleanup(marker, idx); err != nil {
 		t.Fatalf("on-state cleanup: %v", err)
 	}
-	if e.tape.At(1).Eval {
+	if e.Tape.At(1).Eval {
 		t.Fatal("EvalResidual=true must evaluate the residual")
 	}
 
@@ -86,20 +86,20 @@ func TestResidualEvalSweepAndTeardownArms(t *testing.T) {
 	// Sweep arm: a never-stepped EvalResidual marker inside a closing
 	// group with a pending failing container below it.
 	e := New(r)
-	e.tape = NewTape([]Value{
+	e.Tape = NewTape([]Value{
 		NewOpenParen(),
 		failMap,
 		NewDefCleanup(DefCleanupInfo{Registry: r, SkipCleanup: true, EvalResidual: true}),
 		NewCloseParen(),
 	}, stackHeadroom)
-	e.pointer = 3
+	e.Pointer = 3
 	if err := e.stepCloseParen(); err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("sweep arm = %v, want boom", err)
 	}
 
 	// TCO teardown arm: the eager replay of the same marker.
 	e2 := New(r)
-	e2.tape = NewTape([]Value{
+	e2.Tape = NewTape([]Value{
 		NewOpenParen(),
 		pendingMap("a", NewValueRaw(TParenExpr, ParenExprPayload{Toks: []Value{NewWord("cfail"), NewInteger(1)}})),
 		NewDefCleanup(DefCleanupInfo{Registry: r, SkipCleanup: true, EvalResidual: true}),
@@ -185,11 +185,11 @@ func TestResidualBottomUpAndBoundaryArms(t *testing.T) {
 
 	e := New(r)
 	marker := NewDefCleanup(DefCleanupInfo{Registry: r, SkipCleanup: true, EvalResidual: true})
-	e.tape = NewTape([]Value{NewOpenParen(), mkA, mkB, marker}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewOpenParen(), mkA, mkB, marker}, stackHeadroom)
 	if err := e.stepDefCleanup(marker, 3); err != nil {
 		t.Fatalf("two-residual cleanup: %v", err)
 	}
-	if e.tape.At(1).Eval || e.tape.At(2).Eval {
+	if e.Tape.At(1).Eval || e.Tape.At(2).Eval {
 		t.Fatal("both pending residuals must evaluate")
 	}
 
@@ -197,11 +197,11 @@ func TestResidualBottomUpAndBoundaryArms(t *testing.T) {
 	// start and still evaluates the residual.
 	e2 := New(r)
 	marker2 := NewDefCleanup(DefCleanupInfo{Registry: r, SkipCleanup: true, EvalResidual: true})
-	e2.tape = NewTape([]Value{pendingMap("a", NewInteger(3)), marker2}, stackHeadroom)
+	e2.Tape = NewTape([]Value{pendingMap("a", NewInteger(3)), marker2}, stackHeadroom)
 	if err := e2.stepDefCleanup(marker2, 1); err != nil {
 		t.Fatalf("boundary cleanup: %v", err)
 	}
-	if e2.tape.At(0).Eval {
+	if e2.Tape.At(0).Eval {
 		t.Fatal("the tape-start residual must evaluate")
 	}
 }
@@ -228,7 +228,7 @@ func TestUnwindFrameTailOnErrorArms(t *testing.T) {
 
 	e := New(r)
 	marker := NewDefCleanup(DefCleanupInfo{Registry: r, Snapshot: snap, EvalResidual: true})
-	e.tape = NewTape([]Value{
+	e.Tape = NewTape([]Value{
 		NewOpenParen(),
 		failMap,
 		marker,
@@ -258,7 +258,7 @@ func TestUnwindFrameTailOnErrorArms(t *testing.T) {
 	e2 := New(r2)
 	failMap2 := pendingMap("a", NewValueRaw(TParenExpr, ParenExprPayload{Toks: []Value{NewWord("cfail"), NewInteger(1)}}))
 	marker2 := NewDefCleanup(DefCleanupInfo{Registry: r2, Snapshot: snap2, EvalResidual: true})
-	e2.tape = NewTape([]Value{NewOpenParen(), failMap2, marker2, NewInteger(9)}, stackHeadroom)
+	e2.Tape = NewTape([]Value{NewOpenParen(), failMap2, marker2, NewInteger(9)}, stackHeadroom)
 	if err := e2.stepDefCleanup(marker2, 2); err == nil || !strings.Contains(err.Error(), "boom") {
 		t.Fatalf("non-canonical unwind = %v, want boom", err)
 	}
@@ -278,7 +278,7 @@ func TestUnwindFrameTailOnErrorArms(t *testing.T) {
 	e3 := New(r3)
 	failMap3 := pendingMap("a", NewValueRaw(TParenExpr, ParenExprPayload{Toks: []Value{NewWord("cfail"), NewInteger(1)}}))
 	marker3 := NewDefCleanup(DefCleanupInfo{Registry: r3, Snapshot: snap3, EvalResidual: true})
-	e3.tape = NewTape([]Value{
+	e3.Tape = NewTape([]Value{
 		NewOpenParen(),
 		failMap3,
 		marker3,
@@ -302,7 +302,7 @@ func TestUnwindFrameTailOnErrorArms(t *testing.T) {
 	e4 := New(r4)
 	failMap4 := pendingMap("a", NewValueRaw(TParenExpr, ParenExprPayload{Toks: []Value{NewWord("cfail"), NewInteger(1)}}))
 	marker4 := NewDefCleanup(DefCleanupInfo{Registry: r4, Snapshot: snap4, EvalResidual: true})
-	e4.tape = NewTape([]Value{
+	e4.Tape = NewTape([]Value{
 		NewOpenParen(),
 		failMap4,
 		marker4,

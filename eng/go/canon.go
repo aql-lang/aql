@@ -102,7 +102,7 @@ func CanonValue(v Value) string {
 	case IsNone(v):
 		return "none"
 	case v.Data == nil:
-		if t := typeNodeOf(v); t != nil {
+		if t := TypeNodeOf(v); t != nil {
 			if name := TypeNameByID(t.ID); name != "" {
 				return name
 			}
@@ -330,7 +330,7 @@ func canonFnDef(fd FnDefInfo) string {
 			}
 		}
 		b.WriteString("][")
-		for j, t := range sig.body() {
+		for j, t := range sig.Body() {
 			if j > 0 {
 				b.WriteByte(' ')
 			}

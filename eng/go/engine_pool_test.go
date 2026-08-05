@@ -58,7 +58,7 @@ func TestRunPooledReusesEngine(t *testing.T) {
 	if len(r.enginePool) != 1 || r.enginePool[0] != parked {
 		t.Error("second RunPooled did not reuse the parked engine")
 	}
-	if !parked.reuseTape {
+	if !parked.ReuseTape {
 		t.Error("pooled engine must have reuseTape set")
 	}
 }
@@ -148,7 +148,7 @@ func TestRunPooledTopResetsOnRelease(t *testing.T) {
 	if len(r.enginePool) != 1 {
 		t.Fatalf("pool size = %d, want 1", len(r.enginePool))
 	}
-	if r.enginePool[0].isTop {
+	if r.enginePool[0].IsTop {
 		t.Error("released engine kept isTop set — top-ness must not leak into later pooled runs")
 	}
 }
@@ -198,14 +198,14 @@ func TestRunPooledDropsGrownTape(t *testing.T) {
 // arrays are retained for reuse.
 func TestPutSubEngineClearsScratch(t *testing.T) {
 	r := poolTestRegistry(t)
-	e := r.takeSubEngine()
+	e := r.TakeSubEngine()
 	e.rrValues = append(e.rrValues, NewInteger(1), NewInteger(2))
 	e.rrReordered = append(e.rrReordered, NewInteger(3))
-	r.putSubEngine(e)
+	r.PutSubEngine(e)
 	if len(r.enginePool) != 1 {
 		t.Fatalf("engine not pooled: pool size %d", len(r.enginePool))
 	}
-	pooled := r.takeSubEngine() // LIFO: the same engine back
+	pooled := r.TakeSubEngine() // LIFO: the same engine back
 	if len(pooled.rrValues) != 0 || len(pooled.rrReordered) != 0 {
 		t.Fatalf("scratch not reset to empty: rrValues len %d rrReordered len %d",
 			len(pooled.rrValues), len(pooled.rrReordered))

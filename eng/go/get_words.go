@@ -14,5 +14,5 @@ package eng
 // folding is identical; only the surface key-capture differs. Route those
 // by-name checks through these helpers so the dot pair stays a first-class
 // member of the family.
-func isGetWord(name string) bool  { return name == "get" || name == "dot" }
-func isGetrWord(name string) bool { return name == "getr" || name == "dotr" }
+func IsGetWord(name string) bool  { return name == "get" || name == "dot" }
+func IsGetrWord(name string) bool { return name == "getr" || name == "dotr" }

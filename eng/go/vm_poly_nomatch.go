@@ -36,11 +36,11 @@ func (vc *vmContext) polyNoMatchRaise(r *Registry, pr *PolyRef, fn *FnDefInfo, w
 	}
 	// sigError's two-probe cascade: the value-based reorder probe over the
 	// written tuple first, the stack-prefix tuple second (engine.go:sigError).
-	reorder := reorderHintFor(pr.Word, fn, written)
+	reorder := ReorderHintFor(pr.Word, fn, written)
 	if reorder == "" {
-		reorder = reorderHintFor(pr.Word, fn, stackTuple)
+		reorder = ReorderHintFor(pr.Word, fn, stackTuple)
 	}
-	ae := noMatchDiag(r.Source, pr.Word, fn, written, spec.Pos, reorder)
+	ae := NoMatchDiag(r.Source, pr.Word, fn, written, spec.Pos, reorder)
 	return stampAt(ae, curDebug, pc, r)
 }
 
@@ -76,7 +76,7 @@ func bestEffortNoMatch(r *Registry, fn *FnDefInfo, word string, window []Value, 
 			return nil
 		}
 	}
-	ae := noMatchDiag(r.Source, word, fn, window, SrcPos{}, reorderHintFor(word, fn, window))
+	ae := NoMatchDiag(r.Source, word, fn, window, SrcPos{}, ReorderHintFor(word, fn, window))
 	if stamped, ok := stampAt(ae, curDebug, pc, r).(*BoruError); ok {
 		return stamped
 	}

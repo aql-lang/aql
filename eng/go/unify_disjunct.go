@@ -16,9 +16,9 @@ package eng
 //
 // Like predicateUnifier, this lives on the lattice node so every
 // "is v a Maybe?" path consults it.
-type disjunctUnifier struct {
+type DisjunctUnifier struct {
 	behaviorWrapper         // prev Behavior + Format/Equal/Compare delegation
-	alternatives    []Value // copy of the disjunct's alternatives
+	Alternatives    []Value // copy of the disjunct's alternatives
 	typeName        string
 }
 
@@ -26,13 +26,13 @@ type disjunctUnifier struct {
 // The disjunct accepts v iff some alternative unifies with it. Type
 // literals (Data==nil, !Carrier) pass through to the prev/DefaultBehavior
 // walk — a bare Maybe-literal is "the type itself", not an inhabitant.
-func (*disjunctUnifier) ContentMembership() {}
+func (*DisjunctUnifier) ContentMembership() {}
 
-func (d *disjunctUnifier) Match(v Value, t *Type) bool {
+func (d *DisjunctUnifier) Match(v Value, t *Type) bool {
 	if IsBareTypeNode(v) {
 		return baseBehavior(d.prev).Match(v, t)
 	}
-	_, err := unifyDisjunct(DisjunctInfo{Alternatives: d.alternatives}, v)
+	_, err := unifyDisjunct(DisjunctInfo{Alternatives: d.Alternatives}, v)
 	return err == nil
 }
 
@@ -40,9 +40,9 @@ func (d *disjunctUnifier) Match(v Value, t *Type) bool {
 // any existing Behavior. Called by InstallType when minting a disjunct
 // type so the alternatives drive every Is/Match call site.
 func installDisjunctUnifier(def *Type, alternatives []Value, name string) {
-	def.ensureTMeta().Behavior = &disjunctUnifier{
+	def.ensureTMeta().Behavior = &DisjunctUnifier{
 		behaviorWrapper: behaviorWrapper{prev: def.Behavior()},
-		alternatives:    alternatives,
+		Alternatives:    alternatives,
 		typeName:        name,
 	}
 }

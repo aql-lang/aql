@@ -9,7 +9,7 @@ import "testing"
 
 func TestW9NormalizeSigQuoteParam(t *testing.T) {
 	s := &Signature{Params: []FnParam{{Name: "a", Type: TInteger, Quote: true}}}
-	normalizeSig(s)
+	NormalizeSig(s)
 	if s.QuoteArgs == nil || !s.QuoteArgs[0] {
 		t.Error("a /q param should populate QuoteArgs[0]")
 	}
@@ -18,7 +18,7 @@ func TestW9NormalizeSigQuoteParam(t *testing.T) {
 func TestW9MatchSignaturePatternDecline(t *testing.T) {
 	pat := NewInteger(5)
 	sig := Signature{Params: []FnParam{{Name: "a", Type: TInteger, Pattern: &pat}}}
-	normalizeSig(&sig)
+	NormalizeSig(&sig)
 	// Stack value 3 does not unify with the pattern 5 → no match.
 	if res := MatchSignature([]Signature{sig}, []Value{NewInteger(3)}, WordInfo{ArgCount: -1}); res != nil {
 		t.Error("a value that fails the pattern must not match")

@@ -23,7 +23,7 @@ type ModuleRegistry struct {
 	// property-body import installs the namespace via InstallDef, which
 	// CallBoru's def-cleanup then strips, leaving the module marked loaded
 	// but its `pkg` name unbound. See resolveNativeMod (§11b.1).
-	loaded map[string]ModuleDesc
+	Loaded map[string]ModuleDesc
 	seq    int
 
 	// InitFunc is called when a fresh sub-Registry is minted for a
@@ -39,7 +39,7 @@ type ModuleRegistry struct {
 
 // NewModuleRegistry returns an empty module registry.
 func NewModuleRegistry() *ModuleRegistry {
-	return &ModuleRegistry{loaded: make(map[string]ModuleDesc)}
+	return &ModuleRegistry{Loaded: make(map[string]ModuleDesc)}
 }
 
 // InheritConfig copies the module CONFIG — the host-installed callbacks
@@ -63,20 +63,20 @@ func (m *ModuleRegistry) InheritConfig(parent *ModuleRegistry) {
 // loaded (so a second import re-binds from the cached desc rather than
 // re-resolving).
 func (m *ModuleRegistry) IsLoaded(name string) bool {
-	if m == nil || m.loaded == nil {
+	if m == nil || m.Loaded == nil {
 		return false
 	}
-	_, ok := m.loaded[name]
+	_, ok := m.Loaded[name]
 	return ok
 }
 
 // LoadedDesc returns the cached ModuleDesc for an already-loaded native
 // module. The bool is false when the module has not been loaded.
 func (m *ModuleRegistry) LoadedDesc(name string) (ModuleDesc, bool) {
-	if m == nil || m.loaded == nil {
+	if m == nil || m.Loaded == nil {
 		return ModuleDesc{}, false
 	}
-	d, ok := m.loaded[name]
+	d, ok := m.Loaded[name]
 	return d, ok
 }
 
@@ -87,10 +87,10 @@ func (m *ModuleRegistry) MarkLoaded(name string, desc ModuleDesc) {
 	if m == nil {
 		return
 	}
-	if m.loaded == nil {
-		m.loaded = make(map[string]ModuleDesc)
+	if m.Loaded == nil {
+		m.Loaded = make(map[string]ModuleDesc)
 	}
-	m.loaded[name] = desc
+	m.Loaded[name] = desc
 }
 
 // NextID generates a fresh unique module identifier of the form

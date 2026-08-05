@@ -31,7 +31,7 @@ func TestS6aGrowthCeilingNeverBelowInitial(t *testing.T) {
 	// vmStackCeiling with a registry TapeConfig.InitialSize > maxIntCap
 	// (no allocation on that path).
 	initial := maxIntCap * 2
-	if got := growthCeiling(initial, DefaultTapeMaxGrows, DefaultTapeGrowthFactor); got != initial {
+	if got := GrowthCeiling(initial, DefaultTapeMaxGrows, DefaultTapeGrowthFactor); got != initial {
 		t.Errorf("growthCeiling(%d, ...) = %d, want %d", initial, got, initial)
 	}
 }
@@ -84,7 +84,7 @@ func TestS6aCopyRangeClampsNegativeStart(t *testing.T) {
 
 func TestS6aBodyTokensNonListBody(t *testing.T) {
 	body := NewInteger(42)
-	toks := bodyTokens(body)
+	toks := BodyTokens(body)
 	if len(toks) != 1 {
 		t.Fatalf("bodyTokens(non-list) len = %d, want 1", len(toks))
 	}
@@ -93,7 +93,7 @@ func TestS6aBodyTokensNonListBody(t *testing.T) {
 	}
 	// Positive twin: a concrete list body returns its elements.
 	lst := NewList([]Value{NewInteger(1), NewInteger(2)})
-	if got := bodyTokens(lst); len(got) != 2 {
+	if got := BodyTokens(lst); len(got) != 2 {
 		t.Errorf("bodyTokens(list) len = %d, want 2", len(got))
 	}
 }

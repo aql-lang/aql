@@ -110,7 +110,7 @@ var (
 // RegisterType. The parser and engine consult this map
 // to resolve bare type-name words (e.g. `Integer`, `Date`, plugin-
 // supplied names) to their *Type.
-var typeNames = buildTypeNames()
+var TypeNames = buildTypeNames()
 
 func buildTypeNames() map[string]*Type {
 	m := make(map[string]*Type, len(Builtin.byName))
@@ -127,13 +127,13 @@ func buildTypeNames() map[string]*Type {
 // RegisterType so freshly-installed types are immediately
 // resolvable by bare-name lookup in the parser.
 func refreshTypeNames() {
-	typeNames = buildTypeNames()
+	TypeNames = buildTypeNames()
 }
 
 // TypeNameTable returns the canonical mapping of all well-known type
 // names to their Type. Used by both the parser and engine.
 func TypeNameTable() map[string]*Type {
-	return typeNames
+	return TypeNames
 }
 
 // TypeNameByID returns the canonical user-facing name for a Type ID

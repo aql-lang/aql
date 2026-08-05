@@ -138,7 +138,7 @@ func (r *Registry) SetInterpAttribution(tag string) func() {
 }
 
 // noteBail emits one runtime-bail observation when the hook is armed.
-func (r *Registry) noteBail(site, reason string) {
+func (r *Registry) NoteBail(site, reason string) {
 	if r == nil || r.bailHook == nil {
 		return
 	}

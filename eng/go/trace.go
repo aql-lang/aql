@@ -49,7 +49,7 @@ func TraceColorize(v Value) string {
 	case v.Data == nil:
 		// Type literal — render the value's OWN type name (it IS its
 		// lattice node), not its parent (which is the supertype).
-		return cCyan + typeNodeOf(v).String() + cReset
+		return cCyan + TypeNodeOf(v).String() + cReset
 	case v.Parent.ConformsTo(TString):
 		// Unwrap via the accessor: v.Data is the sealed StrPayload
 		// struct, and %q on the struct renders `{"x"}` not `"x"`.

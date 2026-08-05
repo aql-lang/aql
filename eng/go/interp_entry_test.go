@@ -42,7 +42,7 @@ func TestInterpEntryHookSeamsAndDisarm(t *testing.T) {
 	var c entryCollector
 	disarm := r.ArmInterpEntryHook(c.add)
 
-	if _, err := runPooledSub(r, []Value{NewInteger(7)}, false); err != nil {
+	if _, err := RunPooledSub(r, []Value{NewInteger(7)}, false); err != nil {
 		t.Fatalf("runPooledSub: %v", err)
 	}
 	seams := strings.Join(c.seams(), " ")
@@ -57,7 +57,7 @@ func TestInterpEntryHookSeamsAndDisarm(t *testing.T) {
 
 	before := len(c.seams())
 	disarm()
-	if _, err := runPooledSub(r, []Value{NewInteger(8)}, false); err != nil {
+	if _, err := RunPooledSub(r, []Value{NewInteger(8)}, false); err != nil {
 		t.Fatalf("post-disarm runPooledSub: %v", err)
 	}
 	if got := len(c.seams()); got != before {
@@ -73,7 +73,7 @@ func TestInterpEntryHookCheckModeAttribution(t *testing.T) {
 	defer r.ArmInterpEntryHook(c.add)()
 
 	r.Check.Mode = true
-	if _, err := runPooledSub(r, []Value{NewInteger(1)}, false); err != nil {
+	if _, err := RunPooledSub(r, []Value{NewInteger(1)}, false); err != nil {
 		t.Fatalf("check-mode runPooledSub: %v", err)
 	}
 	r.Check.Mode = false
@@ -122,7 +122,7 @@ func TestInterpEntryHookForkPropagation(t *testing.T) {
 	defer r.ArmInterpEntryHook(c.add)()
 
 	fork := r.ForkConcurrent()
-	if _, err := runPooledSub(fork, []Value{NewInteger(5)}, false); err != nil {
+	if _, err := RunPooledSub(fork, []Value{NewInteger(5)}, false); err != nil {
 		t.Fatalf("fork runPooledSub: %v", err)
 	}
 	if len(c.entries) == 0 {
@@ -138,13 +138,13 @@ func TestObserveHooksNilSafe(t *testing.T) {
 	disarmI := bare.ArmInterpEntryHook(func(InterpEntry) { t.Fatal("armed on nil holder") })
 	disarmB := bare.ArmRuntimeBailHook(func(BailEvent) { t.Fatal("armed on nil holder") })
 	bare.noteInterp("Engine.Run")
-	bare.noteBail("vm:test", "x")
+	bare.NoteBail("vm:test", "x")
 	disarmI()
 	disarmB()
 
 	var nilReg *Registry
 	nilReg.noteInterp("Engine.Run") // must not panic
-	nilReg.noteBail("vm:test", "x") // must not panic
+	nilReg.NoteBail("vm:test", "x") // must not panic
 }
 
 // vmDefer is the designed-defer choke point: it reports the BailEvent to an
@@ -163,7 +163,7 @@ func TestRuntimeBailHookVmDefer(t *testing.T) {
 	})
 
 	err := vmDefer(r, nil, 0, "vm:test-site", "test defer message")
-	if !isInternalErr(err) {
+	if !IsInternalErr(err) {
 		t.Fatalf("vmDefer error class = %v, want internal_error", err)
 	}
 	if len(events) != 1 || events[0].Site != "vm:test-site" || events[0].Reason != "test defer message" {
@@ -171,7 +171,7 @@ func TestRuntimeBailHookVmDefer(t *testing.T) {
 	}
 
 	disarm()
-	if err := vmDefer(r, nil, 0, "vm:test-site", "again"); !isInternalErr(err) {
+	if err := vmDefer(r, nil, 0, "vm:test-site", "again"); !IsInternalErr(err) {
 		t.Fatalf("disarmed vmDefer error class = %v, want internal_error", err)
 	}
 	if len(events) != 1 {
@@ -190,7 +190,7 @@ func TestInheritObserveHooks(t *testing.T) {
 	defer parent.ArmRuntimeBailHook(func(e BailEvent) { bails = append(bails, e) })()
 
 	child.InheritObserveHooks(parent)
-	if _, err := runPooledSub(child, []Value{NewInteger(2)}, false); err != nil {
+	if _, err := RunPooledSub(child, []Value{NewInteger(2)}, false); err != nil {
 		t.Fatalf("child runPooledSub: %v", err)
 	}
 	if len(c.entries) == 0 {

@@ -409,26 +409,26 @@ func TestInvokeClosureRawTokens(t *testing.T) {
 
 func TestIsAppliableFnShapes(t *testing.T) {
 	fn := NewFunction(FnDefInfo{Name: "f"})
-	if !isAppliableFn(fn) {
+	if !IsAppliableFn(fn) {
 		t.Error("Function value not appliable")
 	}
-	if isAppliableFn(NewInteger(1)) {
+	if IsAppliableFn(NewInteger(1)) {
 		t.Error("integer appliable")
 	}
 	carrier := NewCarrier(TFunction)
-	if !isAppliableFn(carrier) {
+	if !IsAppliableFn(carrier) {
 		t.Error("Function-typed carrier not appliable")
 	}
-	if !isFnTypedCarrier(carrier) {
+	if !IsFnTypedCarrier(carrier) {
 		t.Error("Function carrier not fn-typed")
 	}
-	if isFnTypedCarrier(NewCarrier(TInteger)) {
+	if IsFnTypedCarrier(NewCarrier(TInteger)) {
 		t.Error("Integer carrier fn-typed")
 	}
-	if !isFnValueResidual(NewFunction(FnDefInfo{Name: "g"})) {
+	if !IsFnValueResidual(NewFunction(FnDefInfo{Name: "g"})) {
 		t.Error("FnDef value not a fn residual")
 	}
-	if isFnValueResidual(NewString("s")) {
+	if IsFnValueResidual(NewString("s")) {
 		t.Error("string a fn residual")
 	}
 }

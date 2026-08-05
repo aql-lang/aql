@@ -238,12 +238,12 @@ func PopFrameArgs(r *Registry) error {
 // Frames unwind innermost-first so the per-call stacks pop in the same
 // LIFO order normal tail execution produces.
 func (e *Engine) unwindLiveFrames(from, to int) {
-	if to > e.tape.Len() {
-		to = e.tape.Len()
+	if to > e.Tape.Len() {
+		to = e.Tape.Len()
 	}
 	var opens []int
-	for i := from; i < to && i < e.pointer; i++ {
-		if !IsFrameOpen(e.tape.At(i)) {
+	for i := from; i < to && i < e.Pointer; i++ {
+		if !IsFrameOpen(e.Tape.At(i)) {
 			continue
 		}
 		// Live iff the frame's matching close paren is at/after the
@@ -251,7 +251,7 @@ func (e *Engine) unwindLiveFrames(from, to int) {
 		depth := 0
 		closed := -1
 		for j := i; j < to; j++ {
-			v := e.tape.At(j)
+			v := e.Tape.At(j)
 			if IsOpenParen(v) {
 				depth++
 			} else if IsCloseParen(v) {
@@ -262,7 +262,7 @@ func (e *Engine) unwindLiveFrames(from, to int) {
 				}
 			}
 		}
-		if closed < 0 || closed >= e.pointer {
+		if closed < 0 || closed >= e.Pointer {
 			opens = append(opens, i)
 		}
 	}
@@ -285,7 +285,7 @@ func (e *Engine) unwindLiveFrames(from, to int) {
 func (e *Engine) unwindFrameTail(openIdx, to int) {
 	depth := 0
 	for j := openIdx; j < to; j++ {
-		v := e.tape.At(j)
+		v := e.Tape.At(j)
 		switch {
 		case IsOpenParen(v):
 			depth++
@@ -304,10 +304,10 @@ func (e *Engine) unwindFrameTail(openIdx, to int) {
 			w, _ := AsWord(v)
 			switch {
 			case w.Name == "__pa":
-				_ = PopFrameArgs(e.registry)
-			case w.Name == "undef" && w.ForceForward && j+1 < to && IsWord(e.tape.At(j+1)):
-				nw, _ := AsWord(e.tape.At(j + 1))
-				UninstallDef(e.registry, nw.Name)
+				_ = PopFrameArgs(e.Registry)
+			case w.Name == "undef" && w.ForceForward && j+1 < to && IsWord(e.Tape.At(j+1)):
+				nw, _ := AsWord(e.Tape.At(j + 1))
+				UninstallDef(e.Registry, nw.Name)
 				j++
 			}
 		}

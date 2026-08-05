@@ -244,7 +244,7 @@ func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 			// resolveOperand recovers it as a const/local — the same slot the
 			// binding's reads resolve to, so the written-back value IS the
 			// instance the program uses). Anything else refuses.
-			if isInertConst(d.val) {
+			if IsInertConst(d.val) {
 				src = constOperand(lw.es.internUnpooled(d.val))
 			} else if op, ok := lw.es.resolveOperand(d.val); ok && (op.kind == opConst || op.kind == opLocal) {
 				src = op

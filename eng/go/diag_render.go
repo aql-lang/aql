@@ -55,8 +55,8 @@ func (e *BoruError) Render(o RenderOpts) string {
 
 	// Primary source site extract: ^^^ underline captioned with the
 	// detail, 2 context lines each side.
-	if e.fullSource != "" && e.Row > 0 {
-		site := renderSite(e.fullSource, e.Src, e.Detail, e.Row, e.Col, o, primarySiteStyle)
+	if e.FullSource != "" && e.Row > 0 {
+		site := renderSite(e.FullSource, e.Src, e.Detail, e.Row, e.Col, o, primarySiteStyle)
 		if site != "" {
 			b.WriteString("\n")
 			b.WriteString(site)
@@ -79,7 +79,7 @@ func (e *BoruError) Render(o RenderOpts) string {
 		}
 		source := sp.Source
 		if source == "" {
-			source = e.fullSource
+			source = e.FullSource
 		}
 		b.WriteString("\n")
 		b.WriteString(o.paint(cBlue, "  --> "+posLabel(file, sp.Pos.Row, sp.Pos.Col)))

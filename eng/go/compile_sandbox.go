@@ -61,8 +61,8 @@ func (r *Registry) SnapshotForCompile() CompileSandbox {
 	}
 	if r.Modules != nil {
 		s.modSeq = r.Modules.seq
-		s.modLoaded = make(map[string]ModuleDesc, len(r.Modules.loaded))
-		for k, v := range r.Modules.loaded {
+		s.modLoaded = make(map[string]ModuleDesc, len(r.Modules.Loaded))
+		for k, v := range r.Modules.Loaded {
 			s.modLoaded[k] = v
 		}
 	}
@@ -117,7 +117,7 @@ func (r *Registry) RestoreForCompile(s CompileSandbox) {
 	r.pendingGen = s.pendGen
 	if r.Modules != nil {
 		r.Modules.seq = s.modSeq
-		r.Modules.loaded = s.modLoaded
+		r.Modules.Loaded = s.modLoaded
 	}
 	// builtins/caps restore only when the snapshot captured a (non-nil) copy.
 	// Both maps are constructed in NewRegistry and never reset to nil, so the

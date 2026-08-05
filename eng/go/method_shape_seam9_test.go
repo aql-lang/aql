@@ -65,8 +65,8 @@ func TestW9NoteMethodShapeInactive(t *testing.T) {
 
 func TestW9ShapedMethodApplyWindowRejects(t *testing.T) {
 	r := newTestRegistry(t)
-	e := &Engine{registry: r}
-	e.tape = NewTape([]Value{NewCarrier(TAny), NewInteger(1)}, stackHeadroom)
+	e := &Engine{Registry: r}
+	e.Tape = NewTape([]Value{NewCarrier(TAny), NewInteger(1)}, stackHeadroom)
 	// Member payload is not an FnDefInfo → decline.
 	if _, _, ok := shapedMethodApplyWindow(e, 0, NewInteger(1)); ok {
 		t.Error("a non-FnDef member must decline")
@@ -106,10 +106,10 @@ func TestW9TryRecordMethodApplyRecordFails(t *testing.T) {
 
 func TestW9TryDynamicFnValueDispatchNonInertWindow(t *testing.T) {
 	r := newTestRegistry(t)
-	e := &Engine{registry: r}
+	e := &Engine{Registry: r}
 	// A dynamic Function-bearing carrier followed by a WORD (non-inert): the
 	// window admission declines the model.
-	e.tape = NewTape([]Value{NewDynamicCarrier(TFunction), NewWord("w")}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewDynamicCarrier(TFunction), NewWord("w")}, stackHeadroom)
 	if tryDynamicFnValueDispatch(e, 0) {
 		t.Error("a word in the forward window must decline the dynamic-fn model")
 	}

@@ -46,14 +46,14 @@ func unwindFixture(t *testing.T) (*Engine, *Registry) {
 		FuncName: "uw",
 	})
 	tokens = append(tokens, NewCloseParen())
-	e.tape = NewTape(tokens, 4)
-	e.pointer = 2 // parked at the body word: frame open stepped, tail not reached
+	e.Tape = NewTape(tokens, 4)
+	e.Pointer = 2 // parked at the body word: frame open stepped, tail not reached
 	return e, r
 }
 
 func TestUnwindLiveFrameReplaysCleanupTail(t *testing.T) {
 	e, r := unwindFixture(t)
-	e.unwindLiveFrames(0, e.tape.Len())
+	e.unwindLiveFrames(0, e.Tape.Len())
 
 	if _, ok, _ := r.Args.Top(); ok {
 		t.Error("per-call args list not popped by the unwind")
@@ -84,9 +84,9 @@ func TestUnwindSkipsCompletedFrame(t *testing.T) {
 		NewCloseParen(),
 		NewInteger(9), // residual past the completed frame
 	}
-	e.tape = NewTape(tokens, 4)
-	e.pointer = 3 // past the close: the frame is NOT live
-	e.unwindLiveFrames(0, e.tape.Len())
+	e.Tape = NewTape(tokens, 4)
+	e.Pointer = 3 // past the close: the frame is NOT live
+	e.unwindLiveFrames(0, e.Tape.Len())
 	if _, ok, _ := r.Args.Top(); !ok {
 		t.Error("unwind popped state belonging to a COMPLETED frame")
 	}
@@ -129,10 +129,10 @@ func TestUnwindNestedFramesPopLIFO(t *testing.T) {
 		Registry: r, Snapshot: outerSnap, Names: []string{"uwout"}, FuncName: "uwo",
 	})
 	tokens = append(tokens, NewCloseParen())
-	e.tape = NewTape(tokens, 4)
-	e.pointer = 2 // inside the INNER frame's body: both frames live
+	e.Tape = NewTape(tokens, 4)
+	e.Pointer = 2 // inside the INNER frame's body: both frames live
 
-	e.unwindLiveFrames(0, e.tape.Len())
+	e.unwindLiveFrames(0, e.Tape.Len())
 	if _, ok, _ := r.Args.Top(); ok {
 		t.Error("nested unwind left a per-call args entry")
 	}
@@ -165,10 +165,10 @@ func TestUnwindIgnoresUserUndefTokens(t *testing.T) {
 		Registry: r, Snapshot: snap, Names: nil, FuncName: "uwu",
 	})
 	tokens = append(tokens, NewCloseParen())
-	e.tape = NewTape(tokens, 4)
-	e.pointer = 1
+	e.Tape = NewTape(tokens, 4)
+	e.Pointer = 1
 
-	e.unwindLiveFrames(0, e.tape.Len())
+	e.unwindLiveFrames(0, e.Tape.Len())
 	if !r.Defs.Has("uwkeep") {
 		t.Error("unwind executed a USER undef token from the skipped body")
 	}
@@ -198,10 +198,10 @@ func TestUnwindClampsRegionAndHandlesOpenEndedFrame(t *testing.T) {
 		Registry: r, Snapshot: r.Defs.Snapshot(), Names: nil, FuncName: "uwc",
 	})
 	// Deliberately NO close paren: the frame extends past the region.
-	e.tape = NewTape(tokens, 4)
-	e.pointer = 1
+	e.Tape = NewTape(tokens, 4)
+	e.Pointer = 1
 
-	e.unwindLiveFrames(0, e.tape.Len()+10) // over-long region clamps
+	e.unwindLiveFrames(0, e.Tape.Len()+10) // over-long region clamps
 	if _, ok, _ := r.Args.Top(); ok {
 		t.Error("open-ended live frame's __pa not replayed")
 	}

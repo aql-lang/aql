@@ -66,7 +66,7 @@ type userPolyPlan struct {
 //     interpreter's module-scope late binding — see buildFnBodyReturnsFn);
 //   - no arm's unit is variadic-returning (the call site bakes a fixed nout).
 func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Value, committedReturns []*Type) *userPolyPlan {
-	if !es.active() || len(args) == 0 {
+	if !es.Active() || len(args) == 0 {
 		return nil
 	}
 	// An EMPTY committedReturns admits the all-zero-return overload set
@@ -143,7 +143,7 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 		// arm whose body leaves a residual is the interpreter's "residual IS
 		// the result" shape — a fixed nout of 0 cannot carry it, so the whole
 		// set keeps its refusal (all-or-nothing).
-		if len(committedReturns) == 0 && !es.unitNetsZero(unit) {
+		if len(committedReturns) == 0 && !es.UnitNetsZero(unit) {
 			return nil
 		}
 		plan.units = append(plan.units, unit)
@@ -226,7 +226,7 @@ func (p *userPolyPlan) substituteJoinedOuts(out []Value) {
 // tryCompileUserPolyArms records the branch join of the arms' returns and
 // the VM re-match keeps each arm's own return contract at its unit.
 func userPolyArmShapeOK(s *Signature, committedReturns []*Type) bool {
-	if len(s.body()) == 0 {
+	if len(s.Body()) == 0 {
 		return false
 	}
 	if len(s.QuoteArgs) != 0 || len(s.TypeArgs) != 0 ||
@@ -288,7 +288,7 @@ func findOwningFnDef(r *Registry, word string, impl SigImpl) (FnDefInfo, bool) {
 // runtime value against the same placeholder membership). Returns ok=false on
 // any refusal, leaving the caller to keep the original MarkUncompilable.
 func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature, owner FnDefInfo) (int, bool) {
-	body := append([]Value(nil), s.body()...)
+	body := append([]Value(nil), s.Body()...)
 	if len(body) == 0 {
 		return -1, false
 	}
@@ -339,10 +339,10 @@ func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature,
 		stk := AnalyseFnBody(r, word, paramNames, body, genArgs, owner.Captured, declared, owner.Anonymous)
 		finishFn(stk)
 	}
-	if !es.active() { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+	if !es.Active() { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return -1, false
 	}
-	if es.unitVariadic(unit) { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+	if es.UnitVariadic(unit) { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return -1, false
 	}
 	return unit, true

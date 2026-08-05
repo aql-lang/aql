@@ -69,7 +69,7 @@ type BoruError struct {
 	DeferAlt *BoruError
 
 	// fullSource is the complete source text for generating context extracts.
-	fullSource string
+	FullSource string
 }
 
 // DiagSpan is one secondary labeled source location attached to a
@@ -168,7 +168,7 @@ func makeBoruErrorAt(code, detail, word, fullSource, hint string, pos SrcPos) *B
 		Col:        pos.Col,
 		Src:        src,
 		Hint:       hint,
-		fullSource: fullSource,
+		FullSource: fullSource,
 	}
 }
 

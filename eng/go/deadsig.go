@@ -56,14 +56,14 @@ func sigSubsumes(s1, s2 *Signature) bool {
 		if sigIsQuoteArg(s1, i) != sigIsQuoteArg(s2, i) {
 			return false
 		}
-		if _, ok := sigPattern(s1, i); ok {
+		if _, ok := SigPattern(s1, i); ok {
 			return false
 		}
-		if _, ok := sigPattern(s2, i); ok {
+		if _, ok := SigPattern(s2, i); ok {
 			return false
 		}
-		t1 := sigArgType(s1, i)
-		t2 := sigArgType(s2, i)
+		t1 := SigArgType(s1, i)
+		t2 := SigArgType(s2, i)
 		if t1 == nil || t2 == nil {
 			return false
 		}

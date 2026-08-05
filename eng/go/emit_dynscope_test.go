@@ -152,15 +152,15 @@ func TestActiveTokenMapConstGate(t *testing.T) {
 }
 
 func TestBearsActiveTokensArms(t *testing.T) {
-	if !bearsActiveTokens(NewList([]Value{NewInteger(1), NewWord("w")})) {
+	if !BearsActiveTokens(NewList([]Value{NewInteger(1), NewWord("w")})) {
 		t.Error("a list member word must count as an active token")
 	}
-	if bearsActiveTokens(NewMap(nil)) {
+	if BearsActiveTokens(NewMap(nil)) {
 		t.Error("a nil-backed map bears nothing")
 	}
 	om := NewOrderedMap()
 	om.Set("k", NewInteger(2))
-	if bearsActiveTokens(NewMap(om)) {
+	if BearsActiveTokens(NewMap(om)) {
 		t.Error("an all-data map bears no active tokens")
 	}
 }

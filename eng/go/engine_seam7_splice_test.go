@@ -19,8 +19,8 @@ func fnShapeCtxEngine(t *testing.T) *Engine {
 	m.Set("f", NewWord("MyShape"))
 	fwd := NewForward(ForwardInfo{FuncName: "def", Sig: sig, CollectedArgs: 1, FuncIndex: 1})
 	e := NewTop(r)
-	e.tape = NewTape([]Value{NewMap(m), fwd, NewInteger(0)}, stackHeadroom)
-	e.pointer = 3
+	e.Tape = NewTape([]Value{NewMap(m), fwd, NewInteger(0)}, stackHeadroom)
+	e.Pointer = 3
 	if !e.isFnShapeTypedBindingContext() {
 		t.Fatal("setup: expected fn-shape typed-binding context")
 	}
@@ -82,8 +82,8 @@ func TestS7SpliceMatchResultsFallback(t *testing.T) {
 		t.Fatalf("spliceMatchResults: %v", err)
 	}
 	// argStart = pointer(3)-n(2) = 1; [1..3] replaced by [99].
-	if e.pointer != 1 {
-		t.Errorf("pointer = %d, want 1", e.pointer)
+	if e.Pointer != 1 {
+		t.Errorf("pointer = %d, want 1", e.Pointer)
 	}
 }
 
@@ -93,7 +93,7 @@ func TestS7SpliceMatchResultsFallbackClampsArgStart(t *testing.T) {
 	if err := e.spliceMatchResults(&MatchResult{}, nil, 5, []Value{NewInteger(7)}); err != nil {
 		t.Fatalf("spliceMatchResults: %v", err)
 	}
-	if e.pointer != 0 {
-		t.Errorf("pointer = %d, want 0 (clamped)", e.pointer)
+	if e.Pointer != 0 {
+		t.Errorf("pointer = %d, want 0 (clamped)", e.Pointer)
 	}
 }

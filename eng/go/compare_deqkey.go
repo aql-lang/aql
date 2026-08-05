@@ -209,7 +209,7 @@ func deqKeyAtDepth(v Value, depth int) (string, DeqKeyClass) {
 	// field-wise deep equality over identical present-field sets, and
 	// there is no render fallback for instances, so a never-equal
 	// field makes the instance itself never-equal.
-	if fields, _, ok := flatInstanceParts(v); ok {
+	if fields, _, ok := FlatInstanceParts(v); ok {
 		if fields == nil {
 			return "", DeqNeverEqual
 		}
@@ -282,7 +282,7 @@ func deqFam(v Value) string {
 	if nodeFamily(v.Parent).Equal(TMap) {
 		return "M"
 	}
-	if _, _, ok := flatInstanceParts(v); ok {
+	if _, _, ok := FlatInstanceParts(v); ok {
 		return "I:" + v.Parent.ID
 	}
 	// NUR031 handles scan within one family per PAYLOAD KIND, NOT per

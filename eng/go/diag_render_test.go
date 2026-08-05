@@ -21,7 +21,7 @@ func drBaseError() *BoruError {
 		Row:        2,
 		Col:        1,
 		Src:        "badword",
-		fullSource: drSource,
+		FullSource: drSource,
 	}
 }
 
@@ -145,7 +145,7 @@ func TestRenderColorGolden(t *testing.T) {
 	repl := "(f 1)"
 	e := &BoruError{
 		Code: "type_error", Detail: "boom", Row: 1, Col: 1, Src: "f",
-		fullSource:  "f 1",
+		FullSource:  "f 1",
 		Hint:        "h",
 		Spans:       []DiagSpan{{Pos: SrcPos{Row: 1, Col: 3, Src: "1"}, Label: "the operand"}},
 		Notes:       []string{"n"},

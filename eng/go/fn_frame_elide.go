@@ -51,7 +51,7 @@ package eng
 // here is deny-by-default on top of the probe's own default-deny; a
 // declined call simply nests, so correctness never depends on firing.
 func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore int64) bool {
-	if e.registry.TCO.Disable {
+	if e.Registry.TCO.Disable {
 		return false
 	}
 	// A tail call dispatched while a forward paren group is being
@@ -87,14 +87,14 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	// teardown/Retire interaction is not yet proven under elision —
 	// decline when either the enclosing frame or the callee is
 	// generic.
-	if scan.Meta.HasGen || sig.fnFrame().HasGen {
+	if scan.Meta.HasGen || sig.FnFrame().HasGen {
 		return false
 	}
 	// Arg auto-evaluation ran code (evaluated list/map args) between
 	// collection and this dispatch. If it touched any binding, the
 	// parked teardown would have sequenced around that change
 	// differently than an eager one — decline.
-	if e.registry.Defs.Mutations() != defMutsBefore {
+	if e.Registry.Defs.Mutations() != defMutsBefore {
 		return false
 	}
 	// The synthesized undef tail must be replicable by UninstallDef
@@ -104,7 +104,7 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	// exactly. Each name must ALSO be one the callee immediately
 	// reinstalls (see coverage below).
 	covered := func(name string) bool {
-		for _, n := range sig.fnFrame().InstallNames {
+		for _, n := range sig.FnFrame().InstallNames {
 			if n == name {
 				return true
 			}
@@ -112,7 +112,7 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 		return false
 	}
 	for _, name := range scan.UndefNames {
-		if IsCapitalisedName(name) || e.registry.IsBuiltinWord(name) || !covered(name) {
+		if IsCapitalisedName(name) || e.Registry.IsBuiltinWord(name) || !covered(name) {
 			return false
 		}
 	}
@@ -124,7 +124,7 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	// base-branch reads depend on it. Eager teardown may therefore
 	// remove ONLY names the callee rebinds before its body runs;
 	// anything else declines and nests.
-	dcInfo, err := AsDefCleanup(e.tape.At(scan.TailStart))
+	dcInfo, err := AsDefCleanup(e.Tape.At(scan.TailStart))
 	if err != nil {
 		return false
 	}
@@ -135,7 +135,7 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	// see compileFnDef's foreign-value path) keeps its state there;
 	// decline rather than pop the wrong stacks. The DefCleanup marker
 	// carries the frame's registry, so the check is one comparison.
-	if dcInfo.Registry != e.registry {
+	if dcInfo.Registry != e.Registry {
 		return false
 	}
 	// An EvalResidual frame with a pending Eval container parked below
@@ -152,7 +152,7 @@ func (e *Engine) tcoEligible(scan frameTailScan, sig *Signature, defMutsBefore i
 	// def table. Without this shortcut the nil Snapshot would read every
 	// depth as 0 and spuriously decline eager teardown, regressing tail
 	// recursion (design/INTERPRETER-SPEED-PLAN.10.md #5).
-	if !dcInfo.SkipCleanup && !e.registry.Defs.TruncationCoveredBy(dcInfo.Snapshot, covered) {
+	if !dcInfo.SkipCleanup && !e.Registry.Defs.TruncationCoveredBy(dcInfo.Snapshot, covered) {
 		return false
 	}
 	return true
@@ -173,7 +173,7 @@ func (e *Engine) returnsConform(scan frameTailScan, sig *Signature) bool {
 	if scan.RCIdx < 0 {
 		return true
 	}
-	rc, err := AsReturnCheck(e.tape.At(scan.RCIdx))
+	rc, err := AsReturnCheck(e.Tape.At(scan.RCIdx))
 	if err != nil {
 		return false
 	}
@@ -200,18 +200,18 @@ func (e *Engine) teardownFrameState(scan frameTailScan) error {
 	// (running the multi-token in-frame residual eval first, exactly as
 	// the parked marker would — the eager teardown must not change WHERE
 	// a residual container's names resolve).
-	if err := e.stepDefCleanup(e.tape.At(scan.TailStart), scan.TailStart); err != nil {
+	if err := e.stepDefCleanup(e.Tape.At(scan.TailStart), scan.TailStart); err != nil {
 		return err
 	}
 	// __pa: pop the per-call Args list and FnBaseline, paired.
-	if err := PopFrameArgs(e.registry); err != nil {
+	if err := PopFrameArgs(e.Registry); err != nil {
 		return err
 	}
 	// The undef tail: captures+params, already in reverse install
 	// order in the scan. The gate proved every name takes undef's
 	// plain UninstallDef path.
 	for _, name := range scan.UndefNames {
-		UninstallDef(e.registry, name)
+		UninstallDef(e.Registry, name)
 	}
 	return nil
 }
@@ -236,6 +236,6 @@ func (e *Engine) elideTailFrame(scan frameTailScan) error {
 	if end < 0 {
 		end = scan.CloseIdx
 	}
-	e.tape.Splice(scan.TailStart, end-scan.TailStart)
+	e.Tape.Splice(scan.TailStart, end-scan.TailStart)
 	return nil
 }

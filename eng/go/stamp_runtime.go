@@ -67,7 +67,7 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 	// *CheckState); arming a compile pass on the alias would trash the
 	// parent's live diagnostics/emit state. Mirror NewRegistry's init
 	// (StepBudget sentinel -1, inactive recorder).
-	fork.Check = &CheckState{StepBudget: -1, Emit: theInactiveEmit}
+	fork.Check = &CheckState{StepBudget: -1, Emit: TheInactiveEmit}
 	defer fork.Check.BeginCompilePass()()
 	// BeginCompilePass installs a concrete *EmitState; the two-value cast
 	// (never-failing here) keeps this panic-free without an unreachable
@@ -111,13 +111,13 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 	// here), so the snapshot below describes exactly what the body resolved
 	// against — the analysis inside compileStoredFnUnit installs and restores
 	// its own body-local bindings.
-	deps := es.storedHandlerDeps(fd.Signatures[sigIdx].body())
+	deps := es.storedHandlerDeps(fd.Signatures[sigIdx].Body())
 	unit, ok := es.compileStoredFnUnit(fd, sigIdx, pos)
 	if !ok {
 		// The probe's latched reason when it gave one; the report printer
 		// substitutes a generic text for an empty reason (a refusal path
 		// that never reached MarkUncompilable).
-		r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: es.storedFnProbeReason})
+		r.RecordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: es.storedFnProbeReason})
 		return nil, false
 	}
 	ref := &CompiledFnRef{Unit: unit, depNames: deps}
@@ -147,7 +147,7 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 		// interprets, byte-identically. (Graduated from //covergate:allow: the
 		// variation sweep's module-body transform over a sift row reaches it —
 		// design/COVERAGE-ALLOWLIST.10.md graduation.)
-		r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: "finalize left the unit unstamped"})
+		r.RecordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: "finalize left the unit unstamped"})
 		return nil, false
 	}
 	if len(deps) > 0 {
@@ -167,7 +167,7 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 	// fd here carries the §7a identity-minted capture clone, so a re-stamp
 	// needs no re-clone.
 	ref.restamp = &restampBox{fd: fd, sigIdx: sigIdx, pos: pos}
-	r.recordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Stamped: true})
+	r.RecordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Stamped: true})
 	return ref, true
 }
 

@@ -33,7 +33,7 @@ func skelHandler(t *testing.T, r *Registry, name string) Handler {
 	if sig == nil {
 		t.Fatalf("%s has no non-fallback sig", name)
 	}
-	h := sig.dispatchHandler()
+	h := sig.DispatchHandler()
 	if h == nil {
 		t.Fatalf("%s sig has no dispatch handler", name)
 	}

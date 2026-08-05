@@ -109,7 +109,7 @@ func FoldVariadicArms(then, els []Value) (Value, bool) {
 	if len(elems) > 0 {
 		elem = elems[0]
 		for _, e := range elems[1:] {
-			elem = unionType(elem, e) // drops Never, dedups, keeps a disjunct for genuine unions
+			elem = UnionType(elem, e) // drops Never, dedups, keeps a disjunct for genuine unions
 		}
 	}
 	return NewVariadicCarrier(elem), true
@@ -309,11 +309,11 @@ func UnionCarrierForType(t *Type) (Value, bool) {
 	if t == nil {
 		return Value{}, false
 	}
-	du, ok := t.Behavior().(*disjunctUnifier)
-	if !ok || len(du.alternatives) == 0 {
+	du, ok := t.Behavior().(*DisjunctUnifier)
+	if !ok || len(du.Alternatives) == 0 {
 		return Value{}, false
 	}
-	dv := NewDisjunct(SimplifyDisjunctAlts(du.alternatives))
+	dv := NewDisjunct(SimplifyDisjunctAlts(du.Alternatives))
 	dv.Carrier = true
 	return dv, true
 }
@@ -469,7 +469,7 @@ func toCarrier(v Value) Value {
 	// const-folds (tryFoldModuleConst). A module NAMESPACE needs no arm of
 	// its own — it is a plain facet-carrying Map, already preserved by the
 	// TMap guard above (facets ride every Value copy).
-	if isModuleFamilyValue(v) {
+	if IsModuleFamilyValue(v) {
 		return v
 	}
 	// Keep Reach values (dot-access `m.a`, `Pkg.fn`) concrete. A parsed
@@ -629,7 +629,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 		// are re-IDed onto the recorded results at the tail, keeping the
 		// per-alternative type precision without orphaning the residual
 		// (the L-JOIN recursive-union refusal). Everything else refuses.
-		if r.Check.Recorder().active() && sig != nil && sig.fnFrame() != nil &&
+		if r.Check.Recorder().Active() && sig != nil && sig.FnFrame() != nil &&
 			disjunctCombosTakeSig(r, word, args, sig) {
 			partOut = out
 		} else {
@@ -681,7 +681,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 // value-scalar payloads: a compound carrier's payload is structural
 // (ChildTypeInfo) and a dynamic carrier's value is unknown — both decline.
 func scalarFoldOperand(v Value) bool {
-	if isInertConst(v) {
+	if IsInertConst(v) {
 		return true
 	}
 	if v.Dynamic || v.Data == nil {
@@ -718,7 +718,7 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 		// refusal, the closure probe declines, and the program takes the
 		// interpreter fallback with the correct value. A plain (non-
 		// recording) check keeps the projection so diagnostics are unchanged.
-		if es := r.Check.Recorder(); es.active() && es.inClosureUnit() {
+		if es := r.Check.Recorder(); es.Active() && es.InClosureUnit() {
 			return nil, false
 		}
 		if top, ok, err := r.Args.Top(); err == nil && ok && IsConcrete(top) {
@@ -749,7 +749,7 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 	if word == "macroexpand" && len(args) == 1 {
 		toks, err := ExpandMacroForm(r, args[0])
 		if err == nil {
-			if lst := NewList(toks); isInertConst(lst) {
+			if lst := NewList(toks); IsInertConst(lst) {
 				// Determinism guard (mirrors tryFoldModuleConst /
 				// constFoldContainerVal): ExpandMacroForm runs the macro template
 				// through a sub-engine, which is NOT guaranteed pure — a template
@@ -763,7 +763,7 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 				snap := r.Defs.Snapshot()
 				toks2, err2 := ExpandMacroForm(r, args[0])
 				r.Defs.Restore(snap)
-				if err2 == nil && constFoldAgrees(NewList(toks2), lst) {
+				if err2 == nil && ConstFoldAgrees(NewList(toks2), lst) {
 					return []Value{lst}, true
 				}
 			}
@@ -1043,7 +1043,7 @@ func bodyFreeForFallback(r *Registry, body Value) bool {
 		if r.Lookup(w.Name) != nil {
 			return
 		}
-		if _, ok := typeNames[w.Name]; ok {
+		if _, ok := TypeNames[w.Name]; ok {
 			return
 		}
 		free = false
@@ -1479,7 +1479,7 @@ func alternativeCarriers(a Value) []Value {
 		lits := flattenAlternatives(a)
 		out := make([]Value, 0, len(lits))
 		for _, lit := range lits {
-			out = append(out, carrierOfLiteral(lit))
+			out = append(out, CarrierOfLiteral(lit))
 		}
 		return out
 	}
@@ -1546,7 +1546,7 @@ func firstMatchingSig(fn *FnDefInfo, args []Value) *Signature {
 		}
 		ok := true
 		for j := range args {
-			if !sigTypeMatches(args[j], sigArgType(s, j)) {
+			if !SigTypeMatches(args[j], SigArgType(s, j)) {
 				ok = false
 				break
 			}
@@ -1609,13 +1609,13 @@ func fnPredicateOverloadHazard(r *Registry, word string, args []Value) bool {
 		}
 		reach := true
 		for j := range args {
-			t := sigArgType(s, j)
+			t := SigArgType(s, j)
 			if t != nil {
-				if _, ok := t.Behavior().(*predicateUnifier); ok {
+				if _, ok := t.Behavior().(*PredicateUnifier); ok {
 					hasPred = true
 				}
 			}
-			if !sigTypeMatches(args[j], t) {
+			if !SigTypeMatches(args[j], t) {
 				reach = false
 				break
 			}
@@ -1657,10 +1657,10 @@ func dynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
 			// is Never even though a runtime Integer instantiates T) — count
 			// the arm reachable so the ambiguous dispatch stays a runtime
 			// re-matched user poly instead of a wrong static commit.
-			if args[j].Dynamic && IsTypeParamNode(sigArgType(s, j)) {
+			if args[j].Dynamic && IsTypeParamNode(SigArgType(s, j)) {
 				continue
 			}
-			if !sigTypeMatches(args[j], sigArgType(s, j)) {
+			if !SigTypeMatches(args[j], SigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1686,7 +1686,7 @@ func dynamicReachableValueReturns(r *Registry, word string, args []Value) []*Typ
 		}
 		reach := true
 		for j := range args {
-			if !sigTypeMatches(args[j], sigArgType(s, j)) {
+			if !SigTypeMatches(args[j], SigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1740,7 +1740,7 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 		}
 		reach := true
 		for j := range args {
-			if !sigTypeMatches(args[j], sigArgType(s, j)) {
+			if !SigTypeMatches(args[j], SigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1806,7 +1806,7 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 		if !ok || !cur.Dynamic {
 			continue
 		}
-		slot := sigArgType(sig, i)
+		slot := SigArgType(sig, i)
 		if slot == nil {
 			continue
 		}
@@ -1830,7 +1830,7 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 		// A successful match guarantees a non-disjoint intersection; skip
 		// when the bound did not actually tighten (no-op / avoids
 		// unbounded layer growth on repeated same-type uses).
-		if isNeverShape(narrowed) || ValuesEqual(bound, narrowed) {
+		if IsNeverShape(narrowed) || ValuesEqual(bound, narrowed) {
 			continue
 		}
 		// A narrowed intersection that collapses to a bare ROOT node (nil
@@ -1882,7 +1882,7 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 		if s.Fallback || s.TotalArgs() != len(args) || i >= s.TotalArgs() {
 			continue
 		}
-		st := sigArgType(s, i)
+		st := SigArgType(s, i)
 		if st == nil || st.Equal(matchedSlot) {
 			continue
 		}
@@ -1891,13 +1891,13 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 			if j == i {
 				// The dynamic value at i: reachable unless provably disjoint
 				// from this overload's type there.
-				if isNeverShape(TandValues(NewCarrier(args[j].Parent), NewCarrier(st))) {
+				if IsNeverShape(TandValues(NewCarrier(args[j].Parent), NewCarrier(st))) {
 					reach = false
 					break
 				}
 				continue
 			}
-			if !sigTypeMatches(args[j], sigArgType(s, j)) {
+			if !SigTypeMatches(args[j], SigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -2222,7 +2222,7 @@ func RecordTypedDefMake(r *Registry, typeArg, body Value, pos SrcPos) (Value, bo
 		return Value{}, false
 	}
 	es := r.Check.Recorder()
-	if !es.active() {
+	if !es.Active() {
 		return Value{}, false
 	}
 	sig := objectMakeSig(r)
@@ -2246,8 +2246,8 @@ func objectMakeSig(r *Registry) *Signature {
 	}
 	for i := range fd.Signatures {
 		s := &fd.Signatures[i]
-		if s.TotalArgs() == 2 && sigArgType(s, 0) != nil && sigArgType(s, 1) != nil &&
-			sigArgType(s, 0).Equal(TIdeal) && sigArgType(s, 1).Equal(TMap) {
+		if s.TotalArgs() == 2 && SigArgType(s, 0) != nil && SigArgType(s, 1) != nil &&
+			SigArgType(s, 0).Equal(TIdeal) && SigArgType(s, 1).Equal(TMap) {
 			return s
 		}
 	}
@@ -2389,7 +2389,7 @@ func carrierMixedConform(v Value, t *Type) bool {
 		// typeNodeOf(alt), NOT alt.Parent (a literal's Parent is the
 		// denoted node's lattice parent — the `Boolean` literal's Parent
 		// is `Scalar`).
-		if node := typeNodeOf(alt); node != nil && node.ConformsTo(t) {
+		if node := TypeNodeOf(alt); node != nil && node.ConformsTo(t) {
 			someConform = true
 		} else {
 			someReject = true
@@ -2505,12 +2505,12 @@ func joinCarriersInner(a, b Value) Value {
 	combined = append(combined, flattenAlternatives(b)...)
 	alts := SimplifyDisjunctAlts(combined)
 	if len(alts) == 1 {
-		return carrierOfLiteral(alts[0])
+		return CarrierOfLiteral(alts[0])
 	}
 	if len(alts) > CarrierDisjunctCap {
-		t := typeNodeOf(alts[0])
+		t := TypeNodeOf(alts[0])
 		for i := 1; i < len(alts); i++ {
-			t = CommonAncestorType(t, typeNodeOf(alts[i]))
+			t = CommonAncestorType(t, TypeNodeOf(alts[i]))
 		}
 		return NewCarrier(t)
 	}
@@ -2599,8 +2599,8 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	// re-assembled-per-run operand semantics are sound — the same
 	// property that already makes CONSUMED-arg container recording safe
 	// in a fn body.
-	recordable := r.Check.Recorder().peekCaptureArm()
-	defer r.Check.Recorder().bodyAnalysisGuard()()
+	recordable := r.Check.Recorder().PeekCaptureArm()
+	defer r.Check.Recorder().BodyAnalysisGuard()()
 
 	// Snapshot def-stack depths (all known names).
 	snapshot := r.Defs.Snapshot()
@@ -2608,7 +2608,7 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	tokens := make([]Value, elems.Len())
 	copy(tokens, elems.Slice())
 	sub := New(r)
-	sub.elemEvalRecordable = recordable
+	sub.ElemEvalRecordable = recordable
 	// Every body through here is a NESTED region (branch / loop /
 	// quotation) — reached-conditionally by construction. Mark the depth
 	// so unconditional-only diagnostics (unconditional_raise) stay silent.
@@ -3155,7 +3155,7 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 			// modality checks.
 			if cur.Carrier && !IsConcrete(cur) && c.Type != nil {
 				meet := TandValues(cur, NewTypeLiteral(c.Type))
-				if isNeverShape(meet) {
+				if IsNeverShape(meet) {
 					deadArm = true
 				} else if IsBareTypeNode(meet) {
 					narrowed = NewCarrier(ValueType(meet))
@@ -3280,7 +3280,7 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		//   - a type wholly inside T collapses to Never (unreachable else).
 		complement := NegateType(NewTypeLiteral(c.Type))
 		narrowed := TandValues(cur, complement)
-		if isNeverShape(narrowed) {
+		if IsNeverShape(narrowed) {
 			// Else branch is unreachable for x — the guard held for every value
 			// of x's type. Mark the arm dead (so its unreachable dispatch errors
 			// are suppressed) and leave the binding as-is rather than push a
@@ -3551,8 +3551,8 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// like any in-frame computation. Only an anonymous lambda keeps the
 	// single-bare-literal transparency (BodyEvalsResidual), where in-frame
 	// assembly would bake the param and diverge — that shape keeps refusing.
-	if r.Check.Recorder().active() && (isCallbackBodyName(name) || !anonymous || BodyEvalsResidual(body)) {
-		sub.elemEvalRecordable = true
+	if r.Check.Recorder().Active() && (isCallbackBodyName(name) || !anonymous || BodyEvalsResidual(body)) {
+		sub.ElemEvalRecordable = true
 	}
 	result, err := sub.Run(input)
 	if err != nil {
@@ -3571,7 +3571,7 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 		// where the interpreter succeeds). Refuse so the program falls back to
 		// the interpreter instead. Only when active: a SUSPENDED (plain) nested
 		// analysis records nothing anyway and must not latch the program.
-		if es := r.Check.Recorder(); es.active() {
+		if es := r.Check.Recorder(); es.Active() {
 			es.MarkUncompilable("fn body analysis error in " + name + ": " + err.Error())
 		}
 		result = nil
@@ -3625,7 +3625,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// mis-consume it and leak that body's events into the live fn
 	// fragment). Mirrors how captureArm/loopArm are consumed at the top
 	// of their analysis functions.
-	defer r.Check.Recorder().fnBodyGuard()()
+	defer r.Check.Recorder().FnBodyGuard()()
 	if len(body) == 0 {
 		return nil
 	}
@@ -3637,7 +3637,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// recursive fn in particular.
 	if name != "" {
 		if n := len(r.Check.FnNameStack); n > 0 {
-			r.Check.recordCallEdge(r.Check.FnNameStack[n-1], name)
+			r.Check.RecordCallEdge(r.Check.FnNameStack[n-1], name)
 		}
 	}
 	// A FORWARD-referenced fn name that isn't defined yet leaks into this
@@ -3726,7 +3726,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		// per-frame leaked lead (`n mul 2` → Integer) into it, yielding a sound
 		// 0-or-more residual that covers the runtime's depth-many values. The
 		// armed/compiled path keeps its own STAGE A variadic model (Any bail).
-		if !r.Check.Recorder().active() {
+		if !r.Check.Recorder().Active() {
 			return []Value{NewVariadicCarrier(NewTypeLiteral(TNever))}
 		}
 		return []Value{NewCarrier(TAny)}
@@ -3811,7 +3811,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// the in-flight bail, and its return is unconstrained. So a single clean
 	// recording is both sound and sufficient. (A non-armed nested analysis is
 	// suspended by fnBodyGuard, so active() is true only for the armed compile.)
-	armed := r.Check.Recorder().active()
+	armed := r.Check.Recorder().Active()
 	// A variadic-spread result already reached its fixpoint in this run (the
 	// element came from the else-arm's fixed lead, invariant across rounds), so
 	// skip the Kleene refinement — re-running would join variadic-vs-variadic.
@@ -3899,12 +3899,12 @@ func deferredParamListResidual(body []Value, paramNames []string) (Value, bool) 
 // zeroOut flag is set during the compile pass.
 func stripZeroOutResiduals(r *Registry, stk []Value) []Value {
 	es := r.Check.Recorder()
-	if !es.active() || len(stk) == 0 {
+	if !es.Active() || len(stk) == 0 {
 		return stk
 	}
 	filtered := make([]Value, 0, len(stk))
 	for _, v := range stk {
-		if es.zeroOutProduced(v.ID) {
+		if es.ZeroOutProduced(v.ID) {
 			continue
 		}
 		filtered = append(filtered, v)

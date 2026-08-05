@@ -28,16 +28,16 @@ func TestCurryOrStackRearrangesClaimedStack(t *testing.T) {
 	// cannot match the single resolved value, so after the rearrange the
 	// force-stack match declines and the rescue falls through — the arm's
 	// contract is the rearrange call itself, not a successful dispatch.
-	e.tape = NewTape([]Value{NewInteger(5), NewWord("czadd")}, stackHeadroom)
-	e.pointer = 0
+	e.Tape = NewTape([]Value{NewInteger(5), NewWord("czadd")}, stackHeadroom)
+	e.Pointer = 0
 	e.curryOrStack(1, 0, 1)
 
 	// The word survives on the tape (no dispatch fired) and the pointer
 	// parked at the rescue's word index.
 	found := false
-	for i := 0; i < e.tape.Len(); i++ {
-		if IsWord(e.tape.At(i)) {
-			if w, err := AsWord(e.tape.At(i)); err == nil && w.Name == "czadd" {
+	for i := 0; i < e.Tape.Len(); i++ {
+		if IsWord(e.Tape.At(i)) {
+			if w, err := AsWord(e.Tape.At(i)); err == nil && w.Name == "czadd" {
 				found = true
 			}
 		}
@@ -49,10 +49,10 @@ func TestCurryOrStackRearrangesClaimedStack(t *testing.T) {
 	// And with BOTH args present the same rescue path force-stack matches
 	// and dispatches: the positive twin.
 	e2 := NewTop(r)
-	e2.tape = NewTape([]Value{NewInteger(5), NewInteger(2), NewWord("czadd")}, stackHeadroom)
-	e2.pointer = 0
+	e2.Tape = NewTape([]Value{NewInteger(5), NewInteger(2), NewWord("czadd")}, stackHeadroom)
+	e2.Pointer = 0
 	e2.curryOrStack(2, 0, 2)
-	if e2.pointer != 2 {
-		t.Errorf("pointer = %d, want parked at the matched word for re-step", e2.pointer)
+	if e2.Pointer != 2 {
+		t.Errorf("pointer = %d, want parked at the matched word for re-step", e2.Pointer)
 	}
 }

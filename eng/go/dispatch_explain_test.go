@@ -167,7 +167,7 @@ func TestPatternRejectsEdges(t *testing.T) {
 // --- diag_msg.go builders ---------------------------------------------------
 
 func TestNoMatchDetailAndSuggestionTexts(t *testing.T) {
-	if got := noMatchDetail("pad"); got != "cannot call `pad` — no signature matches the arguments" {
+	if got := NoMatchDetail("pad"); got != "cannot call `pad` — no signature matches the arguments" {
 		t.Errorf("noMatchDetail = %q", got)
 	}
 	if got := insufficientArgsDetail("f", 1); !strings.Contains(got, "1 forward argument but") {
@@ -265,7 +265,7 @@ func TestNoMatchErrorExpectedFallback(t *testing.T) {
 	fn := &FnDefInfo{Signatures: []Signature{sigOf(TInteger, TInteger)}}
 	e := engWithTape(t, []Value{NewInteger(1), NewInteger(2)}, 2)
 	ae := e.noMatchError("f", fn, []Value{NewInteger(1), NewInteger(2)}, SrcPos{}, "")
-	if ae.Detail != noMatchDetail("f") {
+	if ae.Detail != NoMatchDetail("f") {
 		t.Errorf("Detail = %q", ae.Detail)
 	}
 	found := false

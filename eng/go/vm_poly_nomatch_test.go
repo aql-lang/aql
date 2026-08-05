@@ -148,53 +148,53 @@ func TestPolyNoMatchSpecGates(t *testing.T) {
 	window := []Value{w0, w1}
 	good := polyNoMatchProbe{ok: true, written: []Value{w0, w1}, stackVals: []Value{w0, w1}, reachOK: true, reach: 2, pos: SrcPos{Row: 2, Col: 4}}
 
-	if s := (polyNoMatchProbe{}).spec(fnOne, window); s != nil {
+	if s := (polyNoMatchProbe{}).Spec(fnOne, window); s != nil {
 		t.Error("a probe whose tape-only gates failed must decline")
 	}
-	if s := good.spec(nil, window); s != nil {
+	if s := good.Spec(nil, window); s != nil {
 		t.Error("a nil fn must decline")
 	}
-	if s := good.spec(fnOne, nil); s != nil {
+	if s := good.Spec(fnOne, nil); s != nil {
 		t.Error("an empty window must decline")
 	}
-	if s := good.spec(fnOne, window); s == nil || s.NSigs != 1 || s.Pos.Row != 2 ||
+	if s := good.Spec(fnOne, window); s == nil || s.NSigs != 1 || s.Pos.Row != 2 ||
 		len(s.Written) != 2 || s.Written[0] != 0 || s.Written[1] != 1 {
 		t.Errorf("the clean probe must produce the spec, got %+v", s)
 	}
 	// A NARROWER-arity overload declines outright.
 	fnNarrow := &FnDefInfo{Signatures: []Signature{pnmSig(-1, TInteger, TString), pnmSig(-1, TInteger)}}
-	if s := good.spec(fnNarrow, window); s != nil {
+	if s := good.Spec(fnNarrow, window); s != nil {
 		t.Error("a narrower-arity overload must decline")
 	}
 	// A WIDER-arity overload needs the trustworthy reach bound below it.
 	fnWide := &FnDefInfo{Signatures: []Signature{pnmSig(-1, TInteger, TString), pnmSig(-1, TInteger, TString, TBoolean)}}
-	if s := good.spec(fnWide, window); s == nil {
+	if s := good.Spec(fnWide, window); s == nil {
 		t.Error("a structurally-excluded wider overload must not decline (reach 2 < 3)")
 	}
 	unbounded := good
 	unbounded.reachOK = false
-	if s := unbounded.spec(fnWide, window); s != nil {
+	if s := unbounded.Spec(fnWide, window); s != nil {
 		t.Error("an untrustworthy reach bound must decline the wider-arity exclusion")
 	}
 	reachable := good
 	reachable.reach = 3
-	if s := reachable.spec(fnWide, window); s != nil {
+	if s := reachable.Spec(fnWide, window); s != nil {
 		t.Error("a runtime-reachable wider overload must decline")
 	}
 	// A FALLBACK sig is exempt from the arity screen.
 	fnFb := &FnDefInfo{Signatures: []Signature{pnmSig(-1, TInteger, TString), {Fallback: true}}}
-	if s := good.spec(fnFb, window); s == nil {
+	if s := good.Spec(fnFb, window); s == nil {
 		t.Error("a fallback sig must not trip the arity screen")
 	}
 	// Tuple-mapping declines: written first, then the stack tuple.
 	badWritten := good
 	badWritten.written = []Value{pnmVal("idz", NewInteger(9))}
-	if s := badWritten.spec(fnOne, window); s != nil {
+	if s := badWritten.Spec(fnOne, window); s != nil {
 		t.Error("an unmappable written tuple must decline")
 	}
 	badStack := good
 	badStack.stackVals = []Value{pnmVal("idz", NewInteger(9))}
-	if s := badStack.spec(fnOne, window); s != nil {
+	if s := badStack.Spec(fnOne, window); s != nil {
 		t.Error("an unmappable stack tuple must decline")
 	}
 }
@@ -206,8 +206,8 @@ func TestPolyNoMatchSpecGates(t *testing.T) {
 func pnmEngine(t *testing.T, r *Registry, tape []Value, pointer int) *Engine {
 	t.Helper()
 	e := NewTop(r)
-	e.tape = NewTape(tape, stackHeadroom)
-	e.pointer = pointer
+	e.Tape = NewTape(tape, stackHeadroom)
+	e.Pointer = pointer
 	return e
 }
 
@@ -224,7 +224,7 @@ func TestPolyNoMatchProbeFnShapeDeclines(t *testing.T) {
 		NewWord("zz-stop"),
 		NewMap(m),
 	}, 1)
-	if p := e.polyNoMatchProbe("pnmfs", SrcPos{}); p.ok {
+	if p := e.PolyNoMatchProbe("pnmfs", SrcPos{}); p.ok {
 		t.Error("the fn-shape typed-binding context must decline the probe")
 	}
 }
@@ -236,7 +236,7 @@ func TestPolyNoMatchProbeSnapshotsTuples(t *testing.T) {
 		NewWord("pnmp"),
 		NewInteger(1),
 	}, 1)
-	p := e.polyNoMatchProbe("pnmp", SrcPos{Row: 5, Col: 2})
+	p := e.PolyNoMatchProbe("pnmp", SrcPos{Row: 5, Col: 2})
 	if !p.ok || p.pos.Row != 5 {
 		t.Fatalf("the clean state must probe ok at the given pos, got %+v", p)
 	}

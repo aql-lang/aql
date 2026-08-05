@@ -163,7 +163,7 @@ func TestW8CallDynMethodDelegationResultScreened(t *testing.T) {
 	deleg := w8Deleg1(t, r, "w8mleak", func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewWord("leak")}, nil
 	})
-	if !isDelegationFnDef(deleg.Data.(FnDefInfo)) {
+	if !IsDelegationFnDef(deleg.Data.(FnDefInfo)) {
 		t.Fatal("w8mleak wrapper is not a delegation fn")
 	}
 	vc := seam7VC(r)
@@ -185,7 +185,7 @@ func TestW8CallDynMethodIslandSuccess(t *testing.T) {
 			Impl: Boru([]Value{NewWord("n")}),
 		}},
 	})
-	if isDelegationFnDef(fn.Data.(FnDefInfo)) {
+	if IsDelegationFnDef(fn.Data.(FnDefInfo)) {
 		t.Fatal("named-param fn should NOT be a delegation")
 	}
 	vc := seam7VC(r)

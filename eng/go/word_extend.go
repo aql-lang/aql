@@ -85,7 +85,7 @@ func sigTupleEqual(a, b *Signature) bool {
 		return false
 	}
 	for i := 0; i < a.TotalArgs(); i++ {
-		at, bt := sigArgType(a, i), sigArgType(b, i)
+		at, bt := SigArgType(a, i), SigArgType(b, i)
 		if at == nil {
 			at = TAny
 		}
@@ -95,8 +95,8 @@ func sigTupleEqual(a, b *Signature) bool {
 		if !at.Equal(bt) {
 			return false
 		}
-		ap, aok := sigPattern(a, i)
-		bp, bok := sigPattern(b, i)
+		ap, aok := SigPattern(a, i)
+		bp, bok := SigPattern(b, i)
 		if aok != bok {
 			return false
 		}
@@ -197,7 +197,7 @@ func sigHasOwnedAnchor(s *Signature, owner string) bool {
 		return false
 	}
 	for i := 0; i < s.TotalArgs(); i++ {
-		if t := sigArgType(s, i); t != nil && t.OwnerID() == owner && IsNominalAnchor(t) {
+		if t := SigArgType(s, i); t != nil && t.OwnerID() == owner && IsNominalAnchor(t) {
 			return true
 		}
 	}
@@ -213,7 +213,7 @@ func sigHasOwnedAnchor(s *Signature, owner string) bool {
 // cannot predate the import chain that delivered it.
 func sigHasModuleAnchor(s *Signature) bool {
 	for i := 0; i < s.TotalArgs(); i++ {
-		t := sigArgType(s, i)
+		t := SigArgType(s, i)
 		if t == nil || !IsNominalAnchor(t) {
 			continue
 		}
@@ -264,7 +264,7 @@ func sigTupleString(s *Signature) string {
 		if i > 0 {
 			out += " "
 		}
-		t := sigArgType(s, i)
+		t := SigArgType(s, i)
 		if t == nil {
 			t = TAny
 		}
@@ -285,7 +285,7 @@ func NewWordExtension(owner, name string, sigs []Signature) FnDefInfo {
 	compiled := make([]Signature, len(sigs))
 	for i := range sigs {
 		s := sigs[i]
-		normalizeSig(&s)
+		NormalizeSig(&s)
 		if s.BarrierPos == BarrierAllForward {
 			s.BarrierPos = s.TotalArgs()
 		}
@@ -419,7 +419,7 @@ func TransplantExtension(r *Registry, ext FnDefInfo, origin, owner string) error
 		// arithmetic extensions), while a def-merge clone arrives already
 		// compiled. normalizeSig is idempotent, and the sentinel resolution
 		// mirrors upsertFnDef's so the sig dispatches like any registered one.
-		normalizeSig(&s)
+		NormalizeSig(&s)
 		if s.BarrierPos == BarrierAllForward {
 			s.BarrierPos = s.TotalArgs()
 		}

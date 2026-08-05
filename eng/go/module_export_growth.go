@@ -137,12 +137,12 @@ func ResetModuleExportGrowth(r *Registry) {
 // among the pass's noted adds. args are the dispatch operands (any order —
 // the receiver is the facet-carrying namespace Map, the key the concrete
 // Atom/String operand); an unrecognisable shape declines.
-func moduleExportAbsenceStable(r *Registry, args []Value) bool {
+func ModuleExportAbsenceStable(r *Registry, args []Value) bool {
 	var fields *OrderedMap
 	key := ""
 	haveKey := false
 	for _, a := range args {
-		if isModuleFamilyValue(a) {
+		if IsModuleFamilyValue(a) {
 			if ModuleNSOf(a) != nil && fields == nil {
 				if mp, ok := a.Data.(MapPayload); ok && mp.M != nil {
 					fields = mp.M

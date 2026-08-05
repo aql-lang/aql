@@ -9,11 +9,11 @@ import "testing"
 func TestInClosureUnit(t *testing.T) {
 	// nil receiver and empty open-unit stack: not inside any fn unit.
 	var nilES *EmitState
-	if nilES.inClosureUnit() {
+	if nilES.InClosureUnit() {
 		t.Errorf("nil EmitState: want false")
 	}
 	es := NewEmitState()
-	if es.inClosureUnit() {
+	if es.InClosureUnit() {
 		t.Errorf("empty openUnitRecs: want false")
 	}
 
@@ -21,11 +21,11 @@ func TestInClosureUnit(t *testing.T) {
 	// StartFnCompile's paired push, but the guard keeps a future
 	// misalignment from panicking) reports false rather than indexing.
 	es.openUnitRecs = []int{5}
-	if es.inClosureUnit() {
+	if es.InClosureUnit() {
 		t.Errorf("out-of-range rec index: want false")
 	}
 	es.openUnitRecs = []int{-1}
-	if es.inClosureUnit() {
+	if es.InClosureUnit() {
 		t.Errorf("negative rec index: want false")
 	}
 
@@ -33,11 +33,11 @@ func TestInClosureUnit(t *testing.T) {
 	es = NewEmitState()
 	es.fnRecs = append(es.fnRecs, &fnUnitRec{name: "f"})
 	es.openUnitRecs = []int{0}
-	if es.inClosureUnit() {
+	if es.InClosureUnit() {
 		t.Errorf("plain fn unit: want false")
 	}
 	es.fnRecs[0].closure = true
-	if !es.inClosureUnit() {
+	if !es.InClosureUnit() {
 		t.Errorf("closure unit: want true")
 	}
 
@@ -45,7 +45,7 @@ func TestInClosureUnit(t *testing.T) {
 	// closure context (its args frame is its own), and vice versa.
 	es.fnRecs = append(es.fnRecs, &fnUnitRec{name: "inner"})
 	es.openUnitRecs = []int{0, 1}
-	if es.inClosureUnit() {
+	if es.InClosureUnit() {
 		t.Errorf("fn unit nested in closure: want false (innermost wins)")
 	}
 }

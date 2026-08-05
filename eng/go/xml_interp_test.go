@@ -19,7 +19,7 @@ func TestRebuildXmlFromTmplArms(t *testing.T) {
 			{Kind: XmlCrenExpr, Expr: []Value{NewWord("x")}},
 		},
 	}
-	out, used := rebuildXmlFromTmpl(tmpl, []Value{NewString("7"), NewString("")})
+	out, used := RebuildXmlFromTmpl(tmpl, []Value{NewString("7"), NewString("")})
 	if used != 2 {
 		t.Fatalf("used = %d, want 2", used)
 	}

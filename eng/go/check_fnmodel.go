@@ -338,7 +338,7 @@ func residualProvablyDisjoint(got Value, exp *Type) bool {
 		for _, alt := range di.Alternatives {
 			probe := alt
 			if IsBareTypeNode(alt) {
-				probe = carrierOfLiteral(alt)
+				probe = CarrierOfLiteral(alt)
 			}
 			if !residualProvablyDisjoint(probe, exp) {
 				return false
@@ -372,7 +372,7 @@ func residualProvablyDisjoint(got Value, exp *Type) bool {
 	if membershipBeyondNominal(exp) || NewCarrier(p).Is(exp) {
 		return false
 	}
-	return isNeverShape(TandValues(NewCarrier(p), NewCarrier(exp)))
+	return IsNeverShape(TandValues(NewCarrier(p), NewCarrier(exp)))
 }
 
 // membershipBeyondNominal reports whether t's installed Behavior admits
@@ -386,7 +386,7 @@ func membershipBeyondNominal(t *Type) bool {
 		return false
 	}
 	switch t.Behavior().(type) {
-	case *disjunctUnifier, *negationUnifier, *predicateUnifier, memberBehavior, *depScalarUnifier:
+	case *DisjunctUnifier, *NegationUnifier, *PredicateUnifier, memberBehavior, *DepScalarUnifier:
 		return true
 	}
 	return false

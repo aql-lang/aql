@@ -98,12 +98,12 @@ func evalFixedWindowToken(v Value) bool {
 // event recorded or the program marked uncompilable); false leaves the
 // carrier to today's paths (residual windows, refusals) untouched.
 func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
-	r := e.registry
-	v := e.tape.At(valIdx)
+	r := e.Registry
+	v := e.Tape.At(valIdx)
 	if !v.Dynamic || v.Quoted || v.ID == "" {
 		return false
 	}
-	member, ok := r.Check.methodShapeMember(v.ID)
+	member, ok := r.Check.MethodShapeMember(v.ID)
 	if !ok {
 		return false
 	}
@@ -129,7 +129,7 @@ func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 				// carriers — 0 for a side-effect method, 1 for a value method.
 				args := make([]Value, len(positions))
 				for i, p := range positions {
-					args[i] = e.tape.At(p)
+					args[i] = e.Tape.At(p)
 					args[i].Eval = false
 					args[i].Undefined = false
 				}
@@ -137,7 +137,7 @@ func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 				for i := range reps {
 					reps[i] = NewDynamicCarrier(TAny)
 				}
-				e.tape.Splice(valIdx, 1+len(positions), reps...)
+				e.Tape.Splice(valIdx, 1+len(positions), reps...)
 				return true
 			}
 		}
@@ -149,7 +149,7 @@ func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 		// annotated read (noteShapedRead), so a genuine-0-arg member whose
 		// landing the model cannot claim must refuse HERE — the auto-dispatch
 		// guard is re-homed onto the landing, never weakened.
-		if fnValueZeroArg(member) {
+		if FnValueZeroArg(member) {
 			r.Check.Recorder().MarkUncompilable(
 				"shaped 0-arg method landing not modelable at " + fnDefName(member))
 		}
@@ -158,7 +158,7 @@ func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 	fnDef, _ := member.Data.(FnDefInfo) // validated by shapedMethodApplyWindow
 	args := make([]Value, len(positions))
 	for i, p := range positions {
-		args[i] = e.tape.At(p)
+		args[i] = e.Tape.At(p)
 		args[i].Eval = false
 		args[i].Undefined = false
 	}
@@ -176,7 +176,7 @@ func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 	// Consume the carrier + the matched window, splice in the modelled
 	// results; the pointer re-steps them (spliceMatchResults' convention).
 	k := len(positions)
-	e.tape.Splice(valIdx, 1+k, outs...)
+	e.Tape.Splice(valIdx, 1+k, outs...)
 	return true
 }
 
@@ -219,7 +219,7 @@ func shapedMethodApplyWindow(e *Engine, valIdx int, member Value) (*Signature, [
 		// (Span.finish, Rand.bool). Model it as an arity-0 apply through
 		// the member's 0-arg signature; a member without a genuine 0-arg
 		// overload stays data in both engines.
-		if !fnValueZeroArg(member) {
+		if !FnValueZeroArg(member) {
 			return nil, nil, false
 		}
 		for i := range fn.Signatures {
@@ -227,9 +227,9 @@ func shapedMethodApplyWindow(e *Engine, valIdx int, member Value) (*Signature, [
 			if sg.Fallback || sg.TotalArgs() != 0 {
 				continue
 			}
-			if sg.dispatchHandler() == nil || sg.fnFrame() != nil || sg.fullStack() ||
-				sg.runInCheckMode() || sg.Callable != nil || len(sg.NoEvalArgs) > 0 ||
-				sg.parkResult() {
+			if sg.DispatchHandler() == nil || sg.FnFrame() != nil || sg.FullStack() ||
+				sg.RunInCheckMode() || sg.Callable != nil || len(sg.NoEvalArgs) > 0 ||
+				sg.ParkResult() {
 				return nil, nil, false // not a plain Go-handler apply
 			}
 			return sg, nil, true
@@ -241,7 +241,7 @@ func shapedMethodApplyWindow(e *Engine, valIdx int, member Value) (*Signature, [
 	// (resolveForwardArgs would be a no-op), so the plan-time match here IS
 	// the match the interpreter performs on the concrete member.
 	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
-	sig, positions, _ := e.matchSignature(fn, w, e.effectiveResolved())
+	sig, positions, _ := e.MatchSignature(fn, w, e.EffectiveResolved())
 	if sig == nil || sig.Fallback || len(positions) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, nil, false
 	}
@@ -260,9 +260,9 @@ func shapedMethodApplyWindow(e *Engine, valIdx int, member Value) (*Signature, [
 	// Only a plain Go-handler native models: no code bodies, no quotation
 	// beyond atom capture, no check-mode side effects, no user-fn frames —
 	// the shaped-method class is exactly the delegation-wrapper methods.
-	if sig.dispatchHandler() == nil || sig.fnFrame() != nil || sig.fullStack() ||
-		sig.runInCheckMode() || sig.Callable != nil || len(sig.NoEvalArgs) > 0 ||
-		sig.parkResult() { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
+	if sig.DispatchHandler() == nil || sig.FnFrame() != nil || sig.FullStack() ||
+		sig.RunInCheckMode() || sig.Callable != nil || len(sig.NoEvalArgs) > 0 ||
+		sig.ParkResult() { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, nil, false
 	}
 	return sig, positions, true
@@ -289,8 +289,8 @@ func statementWindowBoundary(v Value) bool {
 // arity-bounded span.
 func inertStatementWindow(e *Engine, valIdx int) (winEnd int, ok bool) {
 	winEnd = valIdx
-	for i := valIdx + 1; i < e.tape.Len(); i++ {
-		tv := e.tape.At(i)
+	for i := valIdx + 1; i < e.Tape.Len(); i++ {
+		tv := e.Tape.At(i)
 		if statementWindowBoundary(tv) {
 			break
 		}
@@ -308,7 +308,7 @@ func inertStatementWindow(e *Engine, valIdx int) (winEnd int, ok bool) {
 // must answer this question identically, so there is exactly one
 // implementation.
 func allZeroArgSigs(fn *FnDefInfo) bool {
-	return fnValueOnlyZeroArgSigs(*fn)
+	return FnValueOnlyZeroArgSigs(*fn)
 }
 
 // fnDefName names a function value for a refusal message.
@@ -327,8 +327,8 @@ func fnDefName(v Value) string {
 // not a fabricated one.
 func shapedMethodReturnArity(e *Engine, sig *Signature, args []Value, pos SrcPos) int {
 	if sig.ReturnsFn != nil {
-		e.registry.Check.CurCallPos = pos
-		return len(sig.ReturnsFn(args, e.registry))
+		e.Registry.Check.CurCallPos = pos
+		return len(sig.ReturnsFn(args, e.Registry))
 	}
 	return len(sig.Returns)
 }
@@ -348,7 +348,7 @@ func dynamicBoundConformsToFunction(v Value) bool {
 			// A disjunct alternative is a bare type-literal Value whose own
 			// lattice identity (typeNodeOf) is the represented type — its
 			// .Parent is TType, not the type itself.
-			at := typeNodeOf(alt)
+			at := TypeNodeOf(alt)
 			if at.ConformsTo(TFunction) {
 				return true
 			}
@@ -375,11 +375,11 @@ func dynamicBoundConformsToFunction(v Value) bool {
 // — a clean miss-then-call (a None reader immediately applied) does not occur;
 // it is the same gradual gap dynamic modality accepts elsewhere.
 func tryDynamicFnValueDispatch(e *Engine, valIdx int) bool {
-	r := e.registry
+	r := e.Registry
 	if r.Check.Compiling || r.Check.Recorder().Active() {
 		return false
 	}
-	v := e.tape.At(valIdx)
+	v := e.Tape.At(valIdx)
 	if !v.Dynamic || v.Quoted || !dynamicBoundConformsToFunction(v) {
 		return false
 	}
@@ -392,7 +392,7 @@ func tryDynamicFnValueDispatch(e *Engine, valIdx int) bool {
 	if winEnd == valIdx {
 		return false // no args — a bare dynamic fn value stays data (both engines)
 	}
-	e.tape.Splice(valIdx, 1+(winEnd-valIdx), NewDynamicCarrier(TAny))
+	e.Tape.Splice(valIdx, 1+(winEnd-valIdx), NewDynamicCarrier(TAny))
 	return true
 }
 
@@ -448,16 +448,16 @@ func tryRecordMethodApply(r *Registry, word string, args, out []Value, pos SrcPo
 //   - arity >= 1 (a 0-arg auto-fire is the read-guard's own class) and the
 //     full arity of evaluation-fixed tokens inside the statement.
 func tryMemberFnArrivalDispatch(e *Engine, valIdx int) bool {
-	r := e.registry
+	r := e.Registry
 	es := r.Check.Recorder()
-	if !es.active() || es.suspendedNow() {
+	if !es.Active() || es.SuspendedNow() {
 		return false
 	}
-	v := e.tape.At(valIdx)
+	v := e.Tape.At(valIdx)
 	if !v.Dynamic || v.Quoted || v.ID == "" {
 		return false
 	}
-	member, ok := es.memberFnReadValue(v.ID)
+	member, ok := es.MemberFnReadValue(v.ID)
 	if !ok {
 		return false
 	}
@@ -476,7 +476,7 @@ func tryMemberFnArrivalDispatch(e *Engine, valIdx int) bool {
 		}
 		sig = s
 	}
-	if sig == nil || sig.TotalArgs() < 1 || len(sig.body()) == 0 {
+	if sig == nil || sig.TotalArgs() < 1 || len(sig.Body()) == 0 {
 		return false
 	}
 	// Plain value params only (the model and the arity claim assume them).
@@ -491,12 +491,12 @@ func tryMemberFnArrivalDispatch(e *Engine, valIdx int) bool {
 		return false // the arity/result claim assumes one downstream value
 	}
 	n := sig.TotalArgs()
-	if valIdx+n >= e.tape.Len() {
+	if valIdx+n >= e.Tape.Len() {
 		return false
 	}
 	args := make([]Value, n)
 	for i := 1; i <= n; i++ {
-		tv := e.tape.At(valIdx + i)
+		tv := e.Tape.At(valIdx + i)
 		if statementWindowBoundary(tv) || !evalFixedWindowToken(tv) {
 			return false
 		}
@@ -521,6 +521,6 @@ func tryMemberFnArrivalDispatch(e *Engine, valIdx int) bool {
 	if !es.RecordDynMethod(v, args, outs, fnDef.Name, v.Pos()) { //covergate:allow the fn carrier is event-produced (memberFnRead tags recorded reads only) and the window args are inert consts, so operand resolution cannot fail — unreachable without a recorder fault (§compiler)
 		return false
 	}
-	e.tape.Splice(valIdx, 1+n, outs...)
+	e.Tape.Splice(valIdx, 1+n, outs...)
 	return true
 }

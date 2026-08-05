@@ -19,11 +19,11 @@ import (
 func undefinedWordCheckDiag(e *Engine, name string, pos SrcPos) CheckDiagnostic {
 	return CheckDiagnostic{
 		Code:        "undefined_word",
-		Detail:      undefinedWordDetail(name),
+		Detail:      UndefinedWordDetail(name),
 		Word:        name,
 		Row:         pos.Row,
 		Col:         pos.Col,
-		Suggestions: e.didYouMeanSuggestions(name),
+		Suggestions: e.DidYouMeanSuggestions(name),
 	}
 }
 
@@ -36,16 +36,16 @@ func undefinedWordCheckDiag(e *Engine, name string, pos SrcPos) CheckDiagnostic 
 // resolveOperand's dynScopeRescue lowers it to a runtime lookup iff a
 // binder fn reaches the reader.
 func drainUndefinedAtoms(e *Engine) {
-	for i := 0; i < e.tape.Len(); i++ {
-		und := e.tape.At(i)
-		if !und.Undefined || !e.registry.Check.IsActive() {
+	for i := 0; i < e.Tape.Len(); i++ {
+		und := e.Tape.At(i)
+		if !und.Undefined || !e.Registry.Check.IsActive() {
 			continue
 		}
 		c := NewCarrier(TAny)
 		if a, aerr := AsAtom(und); aerr == nil && a != "" {
-			e.registry.Check.Recorder().NoteDefRead(c.ID, a)
+			e.Registry.Check.Recorder().NoteDefRead(c.ID, a)
 		}
-		e.tape.Set(i, c)
+		e.Tape.Set(i, c)
 	}
 }
 
@@ -74,7 +74,7 @@ func tagCheckModeDefRead(e *Engine, top *Value, name string) {
 	case top.Dynamic:
 		top.SetDynFrom(name)
 	case (IsFlexMap(*top) || IsFlexList(*top) || IsFlexXml(*top) || IsStore(*top)) &&
-		ModuleScopeBinding(e.registry, name):
+		ModuleScopeBinding(e.Registry, name):
 		top.SetDynFrom(name)
 	}
 }
@@ -94,12 +94,12 @@ func tagCheckModeDefRead(e *Engine, top *Value, name string) {
 // from stepWord so the hot dispatch path stays under the cyclomatic-complexity
 // gate. See design/FORWARD-STRAND-ADVISORY.10.md, ERRORS.8.md §6.2.
 func checkMixedFormAdvisories(e *Engine, w WordInfo, sig *Signature, positions []int, pos SrcPos, fwdCount, stkCount int) {
-	if !(e.registry.Check.IsActive() && fwdCount > 0 && stkCount > 0) {
+	if !(e.Registry.Check.IsActive() && fwdCount > 0 && stkCount > 0) {
 		return
 	}
 	checkForwardStrandsOperand(e, w, sig, positions, pos)
-	if sig.TotalArgs() >= 3 && mixedFormStackSlotAny(e, sig, positions) {
-		e.registry.Check.AddDiagnostic(CheckDiagnostic{
+	if sig.TotalArgs() >= 3 && MixedFormStackSlotAny(e, sig, positions) {
+		e.Registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code: "mixed_form_call",
 			Detail: w.Name + " takes " + strconv.Itoa(stkCount) + " argument(s) from the stack while forward-collecting " +
 				strconv.Itoa(fwdCount) + " — the mixed form binds differently from the all-forward form; " +
@@ -127,7 +127,7 @@ func checkForwardStrandsOperand(e *Engine, w WordInfo, sig *Signature, positions
 	minStack := -1
 	minSigPos := -1
 	for sp, p := range positions {
-		if p < e.pointer && (minStack == -1 || p < minStack) {
+		if p < e.Pointer && (minStack == -1 || p < minStack) {
 			minStack = p
 			minSigPos = sp
 		}
@@ -135,7 +135,7 @@ func checkForwardStrandsOperand(e *Engine, w WordInfo, sig *Signature, positions
 	if minStack <= 0 || minSigPos < 0 {
 		return
 	}
-	slotType := sigArgType(sig, minSigPos)
+	slotType := SigArgType(sig, minSigPos)
 	// An Any-typed slot matches everything, so it cannot tell a sibling
 	// operand from unrelated residue — too weak to be a reliable signal.
 	if slotType == nil || slotType.Equal(TAny) {
@@ -145,7 +145,7 @@ func checkForwardStrandsOperand(e *Engine, w WordInfo, sig *Signature, positions
 	// Scan downward from just below the consumed stack args, stopping at the
 	// nearest scope boundary. The first data value found is "stranded".
 	for i := minStack - 1; i >= 0; i-- {
-		v := e.tape.At(i)
+		v := e.Tape.At(i)
 		if IsOpenParen(v) || IsCloseParen(v) || IsForward(v) || IsDefCleanup(v) ||
 			v.Parent.ConformsTo(TMark) || v.Parent.ConformsTo(TMove) ||
 			v.Parent.ConformsTo(TInternal) || v.Parent.ConformsTo(TReturnCheck) {
@@ -157,7 +157,7 @@ func checkForwardStrandsOperand(e *Engine, w WordInfo, sig *Signature, positions
 		// Sibling-operand heuristic: only flag a stranded value the word
 		// could itself have consumed (same type as the slot it just took).
 		if v.Is(slotType) {
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+			e.Registry.Check.AddDiagnostic(CheckDiagnostic{
 				Code: "forward_strands_operand",
 				Detail: w.Name + " collected a forward argument while a " +
 					slotType.String() + " operand was left unconsumed on the stack — " +
@@ -201,8 +201,8 @@ func checkForwardStrandsOperand(e *Engine, w WordInfo, sig *Signature, positions
 // dynamic dispatch (`get key dyn`, `dyn 5 add`) would be refused although it
 // compiles faithfully, so both gates are load-bearing.
 func refuseForwardStackDrift(e *Engine, sig *Signature, positions []int) {
-	es := e.registry.Check.Recorder()
-	if !es.active() || sig == nil || sig.BarrierPos == 0 || sig.fullStack() || len(positions) < 2 {
+	es := e.Registry.Check.Recorder()
+	if !es.Active() || sig == nil || sig.BarrierPos == 0 || sig.FullStack() || len(positions) < 2 {
 		return
 	}
 	// A word with NoEvalArgs (code-body / quoted) positions — `if`, `for`, the
@@ -221,7 +221,7 @@ func refuseForwardStackDrift(e *Engine, sig *Signature, positions []int) {
 	// deeper matched arg is non-dynamic.
 	topPos, deeperConcrete := -1, false
 	for _, p := range positions {
-		if p < 0 || p >= e.tape.Len() {
+		if p < 0 || p >= e.Tape.Len() {
 			return
 		}
 		if p > topPos {
@@ -229,18 +229,18 @@ func refuseForwardStackDrift(e *Engine, sig *Signature, positions []int) {
 		}
 	}
 	for _, p := range positions {
-		if p != topPos && !e.tape.At(p).Dynamic {
+		if p != topPos && !e.Tape.At(p).Dynamic {
 			deeperConcrete = true
 		}
 	}
-	if !e.tape.At(topPos).Dynamic || !deeperConcrete {
+	if !e.Tape.At(topPos).Dynamic || !deeperConcrete {
 		return
 	}
-	nxt := e.pointer + 1
-	if nxt >= e.tape.Len() {
+	nxt := e.Pointer + 1
+	if nxt >= e.Tape.Len() {
 		return
 	}
-	if forwardLiteralOperand(e.tape.At(nxt)) {
+	if ForwardLiteralOperand(e.Tape.At(nxt)) {
 		es.MarkUncompilable("forward operand accounting across a dynamic/island residual (Stage 3)")
 	}
 }
@@ -255,14 +255,14 @@ func refuseForwardStackDrift(e *Engine, sig *Signature, positions []int) {
 // apply `m.double 21` never reaches here — nothing dispatches above the fn — so
 // it keeps compiling. No-op outside a compile pass (recorder inactive).
 func refuseStrandedMemberFn(e *Engine, positions []int) {
-	es := e.registry.Check.Recorder()
-	if !es.active() {
+	es := e.Registry.Check.Recorder()
+	if !es.Active() {
 		return
 	}
 	// Deepest stack operand this dispatch consumes.
 	minStack := -1
 	for _, p := range positions {
-		if p >= 0 && p < e.pointer && (minStack == -1 || p < minStack) {
+		if p >= 0 && p < e.Pointer && (minStack == -1 || p < minStack) {
 			minStack = p
 		}
 	}
@@ -276,7 +276,7 @@ func refuseStrandedMemberFn(e *Engine, positions []int) {
 	// against THIS dispatch's operand, so the scan stops at the first value
 	// regardless of what it is.
 	for i := minStack - 1; i >= 0; i-- {
-		v := e.tape.At(i)
+		v := e.Tape.At(i)
 		if IsOpenParen(v) || IsCloseParen(v) || IsForward(v) || IsEnd(v) || IsDefCleanup(v) {
 			return // scope / statement boundary
 		}
@@ -291,7 +291,7 @@ func refuseStrandedMemberFn(e *Engine, positions []int) {
 		// Function value here (a `c/r` param ref, a factory closure) is a
 		// DIFFERENT boundary (M2a `apply`, the residual leading/trailing apply) with
 		// its own handling — do NOT claim it, or those refuse with the wrong reason.
-		if es.memberFnRead(v.ID) {
+		if es.MemberFnRead(v.ID) {
 			es.MarkUncompilable("member fn value auto-applies mid-expression (fn-value-call boundary, Stage 3)")
 		}
 		return
@@ -334,7 +334,7 @@ func valueCarriesCarrier(v Value) bool {
 // concrete literal binding is NOT a carrier and still folds. Walks nested paren-
 // exprs, lists, and map values; builtins (not in Defs) are ignored.
 func exprRefsCarrier(e *Engine, items []Value) bool {
-	r := e.registry
+	r := e.Registry
 	found := false
 	var walk func(vs []Value)
 	walk = func(vs []Value) {
@@ -391,7 +391,7 @@ func exprRefsCarrier(e *Engine, items []Value) bool {
 // parent's emit state) and returns the single concrete residual. The def stack
 // is snapshotted and restored so a stray binding cannot leak into the compile.
 func concreteEvalOnce(e *Engine, items []Value) (Value, bool) {
-	r := e.registry
+	r := e.Registry
 	snap := r.Defs.Snapshot()
 	prev := r.Check.Mode
 	r.Check.Mode = false
@@ -399,7 +399,7 @@ func concreteEvalOnce(e *Engine, items []Value) (Value, bool) {
 	// fold needs a real value, so Mode is off for its duration) — without
 	// the explicit tag its interpreter entries would report unattributed.
 	restoreAtt := r.SetInterpAttribution("check:const-fold")
-	res, err := runPooledSub(r, append([]Value(nil), items...), false)
+	res, err := RunPooledSub(r, append([]Value(nil), items...), false)
 	restoreAtt()
 	r.Check.Mode = prev
 	r.Defs.Restore(snap)
@@ -420,7 +420,7 @@ func spliceAnonCheckResult(e *Engine, valIdx, nArgs int, sig *FnSig, args []Valu
 	for i, p := range sig.Params {
 		paramNames[i] = p.Name
 	}
-	result := AnalyseFnBody(e.registry, "", paramNames, sig.body(), args, captures, sig.Returns, true)
+	result := AnalyseFnBody(e.Registry, "", paramNames, sig.Body(), args, captures, sig.Returns, true)
 	if len(result) == 0 {
 		result = []Value{NewCarrier(TAny)}
 	}
@@ -442,8 +442,8 @@ func spliceAnonCheckResult(e *Engine, valIdx, nArgs int, sig *FnSig, args []Valu
 // design/boru-bytecode-stage3-inlining-plan.0.md "THE shared crux:
 // body-bearing fn-VALUE dispatch (__pa)".
 func spliceFnValueCheckResult(e *Engine, valIdx, nArgs int, fnDef FnDefInfo, sig *FnSig, args []Value) error {
-	returns := buildFnBodyReturnsFn(e.registry, fnDef.Name, *sig, fnDef)
-	result := returns(args, e.registry)
+	returns := buildFnBodyReturnsFn(e.Registry, fnDef.Name, *sig, fnDef)
+	result := returns(args, e.Registry)
 	if len(result) == 0 && len(sig.Returns) > 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		// A declared-return fn that produced no carrier (the body unit
 		// declined to compile) degrades to one carrier per declared return so
@@ -462,7 +462,7 @@ func spliceFnValueCheckResult(e *Engine, valIdx, nArgs int, fnDef FnDefInfo, sig
 // spliceAnonCheckResult and spliceFnValueCheckResult so the two check-mode
 // fn-value paths cannot diverge in their stack discipline.
 func spliceFnCheckTail(e *Engine, valIdx, nArgs int, result []Value) {
-	indices := e.resolvedIndicesBefore(nArgs)
+	indices := e.ResolvedIndicesBefore(nArgs)
 	if len(indices) == nArgs && nArgs > 0 {
 		firstArgIdx := indices[0]
 		skipSet := make(map[int]bool, nArgs+1)
@@ -473,21 +473,21 @@ func spliceFnCheckTail(e *Engine, valIdx, nArgs int, result []Value) {
 		dst := firstArgIdx
 		for i := firstArgIdx; i <= valIdx; i++ {
 			if !skipSet[i] {
-				e.tape.Set(dst, e.tape.At(i))
+				e.Tape.Set(dst, e.Tape.At(i))
 				dst++
 			}
 		}
-		e.tape.Splice(dst, valIdx+1-dst, result...)
-		e.pointer = firstArgIdx
+		e.Tape.Splice(dst, valIdx+1-dst, result...)
+		e.Pointer = firstArgIdx
 	} else if nArgs == 0 {
-		e.tape.Splice(valIdx, 1, result...)
+		e.Tape.Splice(valIdx, 1, result...)
 	} else {
 		argStart := valIdx - nArgs
 		if argStart < 0 {
 			argStart = 0
 		}
-		e.tape.Splice(argStart, valIdx+1-argStart, result...)
-		e.pointer = argStart
+		e.Tape.Splice(argStart, valIdx+1-argStart, result...)
+		e.Pointer = argStart
 	}
 }
 
@@ -502,7 +502,7 @@ func spliceFnCheckTail(e *Engine, valIdx, nArgs int, result []Value) {
 // (§5a), so a module fn and a parent fn of the same name cannot alias. See
 // design/module-fn-checkstate-ownership.1.md §5b.
 func shareCheckState(e *Engine, capturedReg *Registry) func() {
-	return shareCheckStateFrom(capturedReg, e.registry)
+	return shareCheckStateFrom(capturedReg, e.Registry)
 }
 
 // shareCheckStateFrom is the registry-level mechanism behind shareCheckState:
@@ -536,19 +536,19 @@ func shareCheckStateFrom(owner, caller *Registry) func() {
 // idiom: there the smaller-arity probe FAILS, no commit happens, and
 // this helper is never reached.
 func noteSpeculativeBarrierCommit(e *Engine, fwd ForwardInfo) {
-	if e.registry == nil || !e.registry.Check.IsActive() || !fwd.Speculative {
+	if e.Registry == nil || !e.Registry.Check.IsActive() || !fwd.Speculative {
 		return
 	}
 	detail := fwd.FuncName + " committed with " +
 		strconv.Itoa(fwd.CollectedArgs+fwd.StackArgs) + " argument(s) at a statement boundary"
-	if e.pointer >= 0 && e.pointer < e.tape.Len() {
-		if bw, err := AsWord(e.tape.At(e.pointer)); err == nil {
+	if e.Pointer >= 0 && e.Pointer < e.Tape.Len() {
+		if bw, err := AsWord(e.Tape.At(e.Pointer)); err == nil {
 			detail += " (`" + bw.Name + "`)"
 		}
 	}
 	detail += " — its trailing slot " + strconv.Itoa(fwd.SpeculativeAt) +
 		" was planned from the following word; an explicit `[]` else or `end` makes the intent loud"
-	e.registry.Check.AddDiagnostic(CheckDiagnostic{
+	e.Registry.Check.AddDiagnostic(CheckDiagnostic{
 		Code:   "speculative_forward_commit",
 		Detail: detail,
 		Word:   fwd.FuncName,
@@ -582,16 +582,16 @@ func noteSpeculativeBarrierCommit(e *Engine, fwd ForwardInfo) {
 // argument — same edge as the compile side). Returns the possibly-shrunk
 // closeIdx.
 func checkModeParenFnCollapse(e *Engine, openIdx, closeIdx int) int {
-	if !e.registry.Check.Mode {
+	if !e.Registry.Check.Mode {
 		return closeIdx
 	}
 	count, lastIdx, leadIdx := 0, -1, -1
 	for i := openIdx + 1; i < closeIdx; i++ {
-		v := e.tape.At(i)
-		if !isRecordableLiteral(v) {
+		v := e.Tape.At(i)
+		if !IsRecordableLiteral(v) {
 			continue
 		}
-		if count == 0 && !v.Dynamic && !v.Quoted && isFnTypedCarrier(v) {
+		if count == 0 && !v.Dynamic && !v.Quoted && IsFnTypedCarrier(v) {
 			leadIdx = i
 		}
 		count++
@@ -600,9 +600,9 @@ func checkModeParenFnCollapse(e *Engine, openIdx, closeIdx int) int {
 	if count < 2 {
 		return closeIdx
 	}
-	last := e.tape.At(lastIdx)
-	trailing := !last.Dynamic && !last.Quoted && isFnTypedCarrier(last)
-	leading := leadIdx >= 0 && count == 2 && !last.Dynamic && !isFnValueResidual(last)
+	last := e.Tape.At(lastIdx)
+	trailing := !last.Dynamic && !last.Quoted && IsFnTypedCarrier(last)
+	leading := leadIdx >= 0 && count == 2 && !last.Dynamic && !IsFnValueResidual(last)
 	if !trailing && !leading {
 		return closeIdx
 	}
@@ -613,20 +613,20 @@ func checkModeParenFnCollapse(e *Engine, openIdx, closeIdx int) int {
 	out := NewCarrier(TAny)
 	out.Dynamic = true
 	out.ID = GenerateID(IDPrefixForType(TAny))
-	out.pos = e.tape.At(anchor).pos
+	out.pos = e.Tape.At(anchor).pos
 	// Seat the collapsed carrier at the window's first recordable literal
 	// and splice every later one out.
 	seat := -1
 	for i := openIdx + 1; i < closeIdx; i++ {
-		if isRecordableLiteral(e.tape.At(i)) {
+		if IsRecordableLiteral(e.Tape.At(i)) {
 			seat = i
 			break
 		}
 	}
-	e.tape.Set(seat, out)
+	e.Tape.Set(seat, out)
 	for i := closeIdx - 1; i > seat; i-- {
-		if isRecordableLiteral(e.tape.At(i)) {
-			e.tape.Remove(i)
+		if IsRecordableLiteral(e.Tape.At(i)) {
+			e.Tape.Remove(i)
 			closeIdx--
 		}
 	}
@@ -640,7 +640,7 @@ func checkModeParenFnCollapse(e *Engine, openIdx, closeIdx int) int {
 // values after the pointer, skipping control tokens. Types are not
 // verified — this is the "assume" path.
 func checkModeFallbackPositions(e *Engine, n int) []int {
-	positions := e.resolvedIndicesBefore(n)
+	positions := e.ResolvedIndicesBefore(n)
 	remaining := n - len(positions)
 	// depth tracks open forward-groups entered during this walk so the close that
 	// returns to depth 0 is the ENCLOSING group's `)` — a forward arg never crosses
@@ -650,8 +650,8 @@ func checkModeFallbackPositions(e *Engine, n int) []int {
 	// opening parenthesis" in a later (balanced) fn body — the emergent whole-module
 	// paren bleed (template.boru's first-word / after-word / parts errors).
 	depth := 0
-	for i := e.pointer + 1; remaining > 0 && i < e.tape.Len(); i++ {
-		v := e.tape.At(i)
+	for i := e.Pointer + 1; remaining > 0 && i < e.Tape.Len(); i++ {
+		v := e.Tape.At(i)
 		if IsCloseParen(v) {
 			if depth == 0 {
 				break
@@ -700,7 +700,7 @@ func checkModeSurfaceShape(e *Engine, w WordInfo, pos SrcPos) (bool, error) {
 	var sinfo *SurfaceInfo
 	var shape Value
 	for _, p := range checkModeFallbackPositions(e, 4) {
-		v := e.tape.At(p)
+		v := e.Tape.At(p)
 		// A position AFTER the pointer may still hold the raw Word
 		// token (forward args resolve during collection, which the
 		// fallback path bypasses). Resolve it the way the forward scan
@@ -710,7 +710,7 @@ func checkModeSurfaceShape(e *Engine, w WordInfo, pos SrcPos) (bool, error) {
 		// the S2 scan.
 		if IsWord(v) {
 			if wv, werr := AsWord(v); werr == nil {
-				if top, ok := e.registry.Defs.Top(wv.Name); ok {
+				if top, ok := e.Registry.Defs.Top(wv.Name); ok {
 					v = top
 				}
 			}
@@ -737,17 +737,17 @@ func checkModeSurfaceShape(e *Engine, w WordInfo, pos SrcPos) (bool, error) {
 		return false, nil
 	}
 	spec := SubstituteSelf(undef.Sigs[0], sinfo.Type)
-	e.registry.Check.Recorder().MarkUncompilable("surface-shape typed dispatch at " + w.Name)
+	e.Registry.Check.Recorder().MarkUncompilable("surface-shape typed dispatch at " + w.Name)
 	synth := &Signature{Params: spec.Params, Returns: spec.Returns}
-	normalizeSig(synth)
+	NormalizeSig(synth)
 
 	n := synth.TotalArgs()
 	positions := checkModeFallbackPositions(e, n)
 	args := make([]Value, len(positions))
 	for i, p := range positions {
-		args[i] = e.tape.At(p)
+		args[i] = e.Tape.At(p)
 	}
-	results := carrierResults(e.registry, w.Name, synth, args, pos, nil, false)
+	results := carrierResults(e.Registry, w.Name, synth, args, pos, nil, false)
 	spliceCheckResults(e, positions, results)
 	return true, nil
 }
@@ -780,11 +780,11 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		score := 0
 		compatible := true
 		for j, p := range pos {
-			av := e.tape.At(p)
+			av := e.Tape.At(p)
 			if av.Parent.Equal(TAny) {
 				continue
 			}
-			if sigArgMatches(s, j, av) {
+			if SigArgMatches(s, j, av) {
 				score++
 				continue
 			}
@@ -841,7 +841,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 	// pointer, source order). checkModeFallbackPositions lays them out in
 	// that tape order — stack-before then forward-after — which is NOT
 	// signature order. Recorded below for the poly-recovery operand rebuild.
-	nStack := len(e.resolvedIndicesBefore(n))
+	nStack := len(e.ResolvedIndicesBefore(n))
 	if nStack > len(positions) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		nStack = len(positions)
 	}
@@ -849,19 +849,19 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 	// BEFORE the operand-resolution loop below mutates it in place (the
 	// eval-map tape.Set) — the runtime interpreter's sigError reads exactly
 	// this state (plan 3c).
-	noMatchProbe := e.polyNoMatchProbe(w.Name, pos)
+	noMatchProbe := e.PolyNoMatchProbe(w.Name, pos)
 	args := make([]Value, len(positions))
 	for i, p := range positions {
-		av := e.tape.At(p)
+		av := e.Tape.At(p)
 		// Resolve simple word references to their def bindings — the
 		// tape still holds raw Words for forward operands at this
 		// recovery point, and both the partition probe below and the
 		// assumed sig's ReturnsFn want values, not names.
 		if IsWord(av) {
 			if wi, werr := AsWord(av); werr == nil {
-				if top, ok := e.registry.Defs.Top(wi.Name); ok {
+				if top, ok := e.Registry.Defs.Top(wi.Name); ok {
 					av = top
-					e.registry.Check.recordUse(wi.Name)
+					e.Registry.Check.recordUse(wi.Name)
 				}
 			}
 		}
@@ -872,9 +872,9 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		// live word member as a frozen const (the repl-eval `{line: src}`
 		// request map) or refuses. Errors leave the raw operand — the
 		// assumed-sig model stays as before.
-		if IsConcrete(av) && av.Parent != nil && av.Parent.ConformsTo(TMap) && bearsActiveTokens(av) {
-			if ev, everr := e.autoEvalMap(av, false, true); everr == nil {
-				e.tape.Set(p, ev)
+		if IsConcrete(av) && av.Parent != nil && av.Parent.ConformsTo(TMap) && BearsActiveTokens(av) {
+			if ev, everr := e.AutoEvalMap(av, false, true); everr == nil {
+				e.Tape.Set(p, ev)
 				av = ev
 			}
 		}
@@ -887,7 +887,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 	// been flagged with partial_dispatch warnings, which name the
 	// exact path that would fail; the blanket no_signature error
 	// would be wrong for the paths that DO dispatch.
-	if out, ok := disjunctPartitionReturns(e.registry, w.Name, args, pos); ok {
+	if out, ok := disjunctPartitionReturns(e.Registry, w.Name, args, pos); ok {
 		// A strict-disjunct straddle is a runtime-dispatch case, not an
 		// inherent refusal: when the word is a safe poly candidate (core
 		// builtin, single result, no meta/fn-value/code-body sig), record
@@ -899,7 +899,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		// fill the rest top-down (the deepest-last ascending run reversed).
 		// Feeding the raw tape order here was the prior `[1x]`-vs-`[x1]`
 		// operand-order divergence. Only refuse when poly isn't safe.
-		if sw := sigOrderArgs(args, nStack); dispatchTryRecordPoly(e.registry, w.Name, sig, sw, out, pos, true, nil, false, noMatchProbe.spec(fn, sw)) {
+		if sw := SigOrderArgs(args, nStack); dispatchTryRecordPoly(e.Registry, w.Name, sig, sw, out, pos, true, nil, false, noMatchProbe.Spec(fn, sw)) {
 			spliceCheckResults(e, positions, out)
 			return nil
 		}
@@ -908,7 +908,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		// record a guarded CALL_USER instead of refusing (it splices its own
 		// returns). Reached from the eng harness since the partitioned-dispatch
 		// recording landed (carrier_ljoin_test.go drives the recovery arm).
-		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
+		if e.TryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
 			return nil
 		}
 		// A MULTI-overload user fn over a strict-disjunct operand (`g (h true)`
@@ -921,16 +921,16 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		// (REFUSAL-CLOSURE §9.4 union-return poly). tryCompileUserPolyArms
 		// declines (keeping the refusal) for divergent-return or
 		// non-plain-param arm sets.
-		if es := e.registry.Check.Recorder(); es.active() {
-			sw := sigOrderArgs(args, nStack)
-			if plan := dispatchCompileUserPolyArms(e.registry, es, w.Name, sw, sig.Returns); plan != nil {
+		if es := e.Registry.Check.Recorder(); es.Active() {
+			sw := SigOrderArgs(args, nStack)
+			if plan := dispatchCompileUserPolyArms(e.Registry, es, w.Name, sw, sig.Returns); plan != nil {
 				plan.substituteJoinedOuts(out)
-				es.RecordUserPolyCall(w.Name, e.registry, plan.sigIdx, plan.units, plan.impls, plan.sigs, sw, out, pos)
+				es.RecordUserPolyCall(w.Name, e.Registry, plan.sigIdx, plan.units, plan.impls, plan.sigs, sw, out, pos)
 				spliceCheckResults(e, positions, out)
 				return nil
 			}
 		}
-		e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+		e.Registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		spliceCheckResults(e, positions, out)
 		return nil
 	}
@@ -945,10 +945,10 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 	// are computed with recording suspended so the program records ONLY the poly
 	// call, never a duplicate CALL_NATIVE for the same dispatch. Concrete (non-
 	// Any) operands that reach here are a genuine type error and still refuse.
-	es := e.registry.Check.Recorder()
-	if es.active() && (anyAnyCarrier(args) || anyDisjunctCarrier(args)) {
+	es := e.Registry.Check.Recorder()
+	if es.Active() && (anyAnyCarrier(args) || anyDisjunctCarrier(args)) {
 		resume := es.Suspend()
-		results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
+		results := carrierResults(e.Registry, w.Name, sig, args, pos, nil, false)
 		resume()
 		// Re-match over the dispatching registry: a module sub-registry word
 		// (the test framework's `test-record`, run via CallBoru in the module's
@@ -958,7 +958,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		// export). For a core builtin e.registry is the main registry, so
 		// PolyRef.Reg then equals the VM's own registry — the no-op the
 		// get/add path already relied on.
-		if sw := sigOrderArgs(args, nStack); dispatchTryRecordPoly(e.registry, w.Name, sig, sw, results, pos, false, e.registry, true, noMatchProbe.spec(fn, sw)) {
+		if sw := SigOrderArgs(args, nStack); dispatchTryRecordPoly(e.Registry, w.Name, sig, sw, results, pos, false, e.Registry, true, noMatchProbe.Spec(fn, sw)) {
 			spliceCheckResults(e, positions, results)
 			return nil
 		}
@@ -976,7 +976,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		// decision walkers (find-kid / mk-tnode / lex-mustache). A MULTI-overload fn
 		// stays refused below (Cluster C): one baked overload would raise where the
 		// interpreter runtime-dispatches a sibling.
-		if e.tryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
+		if e.TryRecordRecoveredUserFn(sig, fn, args, nStack, positions) {
 			return nil
 		}
 		// A statically-failed dispatch that no recovery owns can still
@@ -986,7 +986,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		// bound and match-defers arm keep it sound (a runtime match
 		// defers to the interpreter; a no-match raises the shared rich
 		// diagnostic over the bounded slice).
-		if e.tryRecordUnmatchedDispatchTrap(w, fn, pos) {
+		if e.TryRecordUnmatchedDispatchTrap(w, fn, pos) {
 			spliceCheckResults(e, positions, results)
 			return nil
 		}
@@ -998,10 +998,10 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		// there the diagnostic IS the genuine static report, so gate it on
 		// !Compiling, matching the fall-through path below.
 		es.MarkUncompilable("unmatched dispatch recovered at " + w.Name)
-		if !e.registry.Check.Compiling && bestMatch < 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
-			e.registry.Check.AddDiagnostic(CheckDiagnostic{
+		if !e.Registry.Check.Compiling && bestMatch < 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+			e.Registry.Check.AddDiagnostic(CheckDiagnostic{
 				Code:   "no_signature",
-				Detail: noMatchDetail(w.Name) + "; assuming best-fit candidate for analysis",
+				Detail: NoMatchDetail(w.Name) + "; assuming best-fit candidate for analysis",
 				Word:   w.Name,
 				Row:    pos.Row,
 				Col:    pos.Col,
@@ -1021,7 +1021,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 	// transient String-carrier alternative. Skip the latch (and its diagnostic)
 	// under suspend; still splice the analysis result so the enclosing probe
 	// reads a residual.
-	if !es.suspendedNow() {
+	if !es.SuspendedNow() {
 		// A STATICALLY-DEFINITE unmatched dispatch — every value the failed
 		// match examined is identical at run time — compiles to a terminal
 		// OpTrap raising the interpreter's byte-identical error instead of
@@ -1029,7 +1029,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		// yields a Program that raises the same taxonomy at the same point).
 		// Ineligible shapes (a carrier operand whose runtime tag could match, a
 		// nested frame/unit, a plain check pass) keep the blanket refusal.
-		if !e.tryRecordUnmatchedDispatchTrap(w, fn, pos) {
+		if !e.TryRecordUnmatchedDispatchTrap(w, fn, pos) {
 			// The trap DECLINED: the mismatch is not statically definite — a
 			// carrier operand's runtime tag could still match. An IMPRECISE
 			// carrier (a scalar tag a multi-branch narrowing settled on, the
@@ -1050,11 +1050,11 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 			// redis `join` re-match), which is faithful; a user fn stays refused
 			// and falls back.
 			recovered := false
-			if es.active() && anyImpreciseCarrier(args) {
+			if es.Active() && anyImpreciseCarrier(args) {
 				resume := es.Suspend()
-				results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
+				results := carrierResults(e.Registry, w.Name, sig, args, pos, nil, false)
 				resume()
-				if sw := sigOrderArgs(args, nStack); dispatchTryRecordPoly(e.registry, w.Name, sig, sw, results, pos, false, e.registry, true, noMatchProbe.spec(fn, sw)) {
+				if sw := SigOrderArgs(args, nStack); dispatchTryRecordPoly(e.Registry, w.Name, sig, sw, results, pos, false, e.Registry, true, noMatchProbe.Spec(fn, sw)) {
 					spliceCheckResults(e, positions, results)
 					recovered = true
 				}
@@ -1062,7 +1062,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 			if recovered {
 				return nil
 			}
-			e.registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
+			e.Registry.Check.Recorder().MarkUncompilable("unmatched dispatch recovered at " + w.Name)
 		}
 	}
 	// Emit the error-severity no_signature diagnostic ONLY off a REAL compile pass
@@ -1105,20 +1105,20 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 	// interpreter always raises on and must stay flagged (TestJoinCarriersDynamicArm
 	// / TestSliceDynamicReceiverRefines). Only the fully-unknown Any carrier is
 	// deferrable to the runtime CALL_USER contract.
-	recoverableUnknownType := anyAnyCarrier(args) && singleOverloadRecoverable(sig, fn) && concreteArgsMatch(sig, args, nStack)
-	if !e.registry.Check.Compiling && !recoverableUnknownType {
+	recoverableUnknownType := anyAnyCarrier(args) && SingleOverloadRecoverable(sig, fn) && ConcreteArgsMatch(sig, args, nStack)
+	if !e.Registry.Check.Compiling && !recoverableUnknownType {
 		// Expected-vs-actual: name the operand types the dispatch saw and
 		// the nearest candidate's declared types, so the user can see the
 		// mismatch without reconstructing the stack ("got (Map, Integer);
 		// nearest [Number Number]").
-		detail := noMatchDetail(w.Name)
-		if got := argTypeSummary(args); got != "" {
+		detail := NoMatchDetail(w.Name)
+		if got := ArgTypeSummary(args); got != "" {
 			detail += "; got (" + got + ")"
-			if near := sigTypeSummary(sig); near != "" {
+			if near := SigTypeSummary(sig); near != "" {
 				detail += "; nearest [" + near + "]"
 			}
 		}
-		e.registry.Check.AddDiagnostic(CheckDiagnostic{
+		e.Registry.Check.AddDiagnostic(CheckDiagnostic{
 			Code:   "no_signature",
 			Detail: detail + "; assuming best-fit candidate for analysis",
 			Word:   w.Name,
@@ -1133,9 +1133,9 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 	// a body word). The one honest diagnostic is the no_signature above;
 	// suppress the error-level body diagnostics of the consequent analysis
 	// (the SuppressBodyErrors discipline recursive re-entry already uses).
-	e.registry.Check.SuppressBodyErrors++
-	results := carrierResults(e.registry, w.Name, sig, args, pos, nil, false)
-	e.registry.Check.SuppressBodyErrors--
+	e.Registry.Check.SuppressBodyErrors++
+	results := carrierResults(e.Registry, w.Name, sig, args, pos, nil, false)
+	e.Registry.Check.SuppressBodyErrors--
 	spliceCheckResults(e, positions, results)
 	return nil
 }
@@ -1145,7 +1145,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 // at the word's slot — the shared tail of the check-mode recovery
 // paths (assume-sig and the S2 surface-shape typing).
 func spliceCheckResults(e *Engine, positions []int, results []Value) {
-	indices := append([]int{e.pointer}, positions...)
+	indices := append([]int{e.Pointer}, positions...)
 	// Insertion sort (small n).
 	for i := 1; i < len(indices); i++ {
 		for j := i; j > 0 && indices[j] < indices[j-1]; j-- {
@@ -1162,41 +1162,41 @@ func spliceCheckResults(e *Engine, positions []int, results []Value) {
 		}
 	}
 	// Remove from highest to lowest to avoid shifting.
-	insertAt := e.pointer
+	insertAt := e.Pointer
 	for i := len(uniq) - 1; i >= 0; i-- {
 		if uniq[i] < insertAt {
 			insertAt--
 		}
-		e.tape.Remove(uniq[i])
+		e.Tape.Remove(uniq[i])
 	}
-	e.tape.Splice(insertAt, 0, results...)
-	e.pointer = insertAt
+	e.Tape.Splice(insertAt, 0, results...)
+	e.Pointer = insertAt
 }
 
 // installCheckBraid wires the braid into core's S9 slot table; one
 // registration point so the cut moves it wholesale into the check
 // package's init.
 func installCheckBraid() {
-	checkBraid.checkMixedFormAdvisories = checkMixedFormAdvisories
-	checkBraid.checkModeAssumeSig = checkModeAssumeSig
-	checkBraid.checkModeFallbackPositions = checkModeFallbackPositions
-	checkBraid.checkModeParenFnCollapse = checkModeParenFnCollapse
-	checkBraid.checkModeSurfaceShape = checkModeSurfaceShape
-	checkBraid.concreteEvalOnce = concreteEvalOnce
-	checkBraid.drainUndefinedAtoms = drainUndefinedAtoms
-	checkBraid.exprRefsCarrier = exprRefsCarrier
-	checkBraid.noteSpeculativeBarrierCommit = noteSpeculativeBarrierCommit
-	checkBraid.refuseForwardStackDrift = refuseForwardStackDrift
-	checkBraid.refuseStrandedMemberFn = refuseStrandedMemberFn
-	checkBraid.shareCheckState = shareCheckState
-	checkBraid.spliceAnonCheckResult = spliceAnonCheckResult
-	checkBraid.spliceCheckResults = spliceCheckResults
-	checkBraid.spliceFnValueCheckResult = spliceFnValueCheckResult
-	checkBraid.tagCheckModeDefRead = tagCheckModeDefRead
-	checkBraid.tryDynamicFnValueDispatch = tryDynamicFnValueDispatch
-	checkBraid.tryMemberFnArrivalDispatch = tryMemberFnArrivalDispatch
-	checkBraid.tryShapedMethodDispatch = tryShapedMethodDispatch
-	checkBraid.undefinedWordCheckDiag = undefinedWordCheckDiag
+	CheckBraid.CheckMixedFormAdvisories = checkMixedFormAdvisories
+	CheckBraid.CheckModeAssumeSig = checkModeAssumeSig
+	CheckBraid.CheckModeFallbackPositions = checkModeFallbackPositions
+	CheckBraid.CheckModeParenFnCollapse = checkModeParenFnCollapse
+	CheckBraid.CheckModeSurfaceShape = checkModeSurfaceShape
+	CheckBraid.ConcreteEvalOnce = concreteEvalOnce
+	CheckBraid.DrainUndefinedAtoms = drainUndefinedAtoms
+	CheckBraid.ExprRefsCarrier = exprRefsCarrier
+	CheckBraid.NoteSpeculativeBarrierCommit = noteSpeculativeBarrierCommit
+	CheckBraid.RefuseForwardStackDrift = refuseForwardStackDrift
+	CheckBraid.RefuseStrandedMemberFn = refuseStrandedMemberFn
+	CheckBraid.ShareCheckState = shareCheckState
+	CheckBraid.SpliceAnonCheckResult = spliceAnonCheckResult
+	CheckBraid.SpliceCheckResults = spliceCheckResults
+	CheckBraid.SpliceFnValueCheckResult = spliceFnValueCheckResult
+	CheckBraid.TagCheckModeDefRead = tagCheckModeDefRead
+	CheckBraid.TryDynamicFnValueDispatch = tryDynamicFnValueDispatch
+	CheckBraid.TryMemberFnArrivalDispatch = tryMemberFnArrivalDispatch
+	CheckBraid.TryShapedMethodDispatch = tryShapedMethodDispatch
+	CheckBraid.UndefinedWordCheckDiag = undefinedWordCheckDiag
 }
 
 func init() { installCheckBraid() }

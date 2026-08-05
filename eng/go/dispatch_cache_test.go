@@ -188,7 +188,7 @@ func TestDispatchCacheStateNilReceiver(t *testing.T) {
 
 	// A zero-value Registry (no NewRegistry) therefore Lookups uncached:
 	// nil result for an unbound name, no panic, nothing cached.
-	zero := &Registry{Check: &CheckState{StepBudget: -1, Emit: theInactiveEmit}}
+	zero := &Registry{Check: &CheckState{StepBudget: -1, Emit: TheInactiveEmit}}
 	if zero.Lookup("anything") != nil {
 		t.Fatal("zero-registry Lookup = non-nil")
 	}

@@ -167,15 +167,15 @@ func TestInertConstMemberSugar(t *testing.T) {
 		Head:  NewList([]Value{NewWord("T")}),
 		Items: []Value{NewWord("Integer")},
 	})
-	if !isInertConstMember(inert) {
+	if !IsInertConstMember(inert) {
 		t.Errorf("an inert angle marker must bake as a const member")
 	}
 	carrierHead := NewSugar(SugarInfo{Kind: SugarAngle, Name: "Box", Head: NewCarrier(TList)})
-	if isInertConstMember(carrierHead) {
+	if IsInertConstMember(carrierHead) {
 		t.Errorf("a carrier Head must keep the marker off the const pool")
 	}
 	carrierItem := NewSugar(SugarInfo{Kind: SugarAngle, Name: "Box", Items: []Value{NewCarrier(TList)}})
-	if isInertConstMember(carrierItem) {
+	if IsInertConstMember(carrierItem) {
 		t.Errorf("a carrier Item must keep the marker off the const pool")
 	}
 }

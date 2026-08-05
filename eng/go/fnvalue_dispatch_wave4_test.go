@@ -530,7 +530,7 @@ func TestCompileFnDefIdempotent(t *testing.T) {
 	if c1 == nil || len(c1.Signatures) != 1 {
 		t.Fatalf("compileFnDef: %+v", c1)
 	}
-	if c1.Signatures[0].dispatchHandler() == nil {
+	if c1.Signatures[0].DispatchHandler() == nil {
 		t.Error("anonymous compiled sig has no handler")
 	}
 	if c1.Signatures[0].BarrierPos != 1 {
@@ -544,7 +544,7 @@ func TestCompileFnDefIdempotent(t *testing.T) {
 	// Non-anonymous: no handler attached.
 	info.Anonymous = false
 	c3 := compileFnDef(r, info)
-	if c3.Signatures[0].dispatchHandler() != nil {
+	if c3.Signatures[0].DispatchHandler() != nil {
 		t.Error("non-anonymous compiled sig grew a handler")
 	}
 }

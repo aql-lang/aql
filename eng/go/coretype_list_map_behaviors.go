@@ -84,14 +84,14 @@ func resugarDotChain(elems []Value, i int) (string, int, bool) {
 	j := i + 2
 	for j+1 < len(elems) && IsWord(elems[j]) {
 		verb, _ := AsWord(elems[j])
-		if !isGetWord(verb.Name) && !isGetrWord(verb.Name) {
+		if !IsGetWord(verb.Name) && !IsGetrWord(verb.Name) {
 			break
 		}
 		if !IsWord(elems[j+1]) {
 			return "", 0, false // computed / non-word key — leave verbatim
 		}
 		key, _ := AsWord(elems[j+1])
-		if isGetrWord(verb.Name) {
+		if IsGetrWord(verb.Name) {
 			b.WriteString("!.")
 		} else {
 			b.WriteString(".")

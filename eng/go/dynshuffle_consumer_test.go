@@ -19,12 +19,12 @@ func TestDynShuffleConsumerAtEdges(t *testing.T) {
 		t.Fatal(err)
 	}
 	e := New(r)
-	e.tape = NewTape([]Value{NewWord("drop"), NewInteger(5)}, stackHeadroom)
+	e.Tape = NewTape([]Value{NewWord("drop"), NewInteger(5)}, stackHeadroom)
 
 	if e.dynShuffleConsumerAt(-1) {
 		t.Fatal("negative index qualified as a shuffle consumer")
 	}
-	if e.dynShuffleConsumerAt(e.tape.Len()) {
+	if e.dynShuffleConsumerAt(e.Tape.Len()) {
 		t.Fatal("out-of-range index qualified as a shuffle consumer")
 	}
 	if e.dynShuffleConsumerAt(1) {
@@ -51,12 +51,12 @@ func TestDynShuffleConsumerAtEdges(t *testing.T) {
 	}
 	r2.upsertFnDef("drop", Signature{Args: []*Type{TAny}, Impl: Go(func(a []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) { return nil, nil })})
 	e2 := New(r2)
-	e2.tape = NewTape([]Value{NewWord("drop")}, stackHeadroom)
+	e2.Tape = NewTape([]Value{NewWord("drop")}, stackHeadroom)
 	if !e2.dynShuffleConsumerAt(0) {
 		t.Fatal("a plain single all-Any drop did not qualify")
 	}
 	// A MODIFIED word never qualifies (the /s form changes collection).
-	e2.tape = NewTape([]Value{NewWordModified("drop", -1, true, false)}, stackHeadroom)
+	e2.Tape = NewTape([]Value{NewWordModified("drop", -1, true, false)}, stackHeadroom)
 	if e2.dynShuffleConsumerAt(0) {
 		t.Fatal("a modified shuffle word qualified as a consumer")
 	}

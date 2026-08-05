@@ -135,7 +135,7 @@ func TestDidYouMeanMessageForms(t *testing.T) {
 
 func TestUndefinedWordErrorSuggestions(t *testing.T) {
 	e := engWithTape(t, nil, 0)
-	e.registry.Defs.Push("zephyr", NewInteger(1))
+	e.Registry.Defs.Push("zephyr", NewInteger(1))
 	ae := e.undefinedWordError("zpehyr", SrcPos{Row: 1, Col: 1})
 	if ae.Code != "undefined_word" || ae.Detail != "undefined word: zpehyr" {
 		t.Fatalf("head = %q %q", ae.Code, ae.Detail)
@@ -153,7 +153,7 @@ func TestUndefinedWordErrorSuggestions(t *testing.T) {
 func TestUndefinedWordErrorDescribeForBuiltin(t *testing.T) {
 	r := covRegistry(t, nil)
 	e := NewTop(r)
-	e.tape = NewTape(nil, stackHeadroom)
+	e.Tape = NewTape(nil, stackHeadroom)
 	// covRegistry registers natives; pick one and typo it.
 	names := r.RegisteredWordNames()
 	if len(names) == 0 {
@@ -182,7 +182,7 @@ func TestUndefinedWordErrorDescribeForBuiltin(t *testing.T) {
 
 func TestUndefinedWordCheckDiagSuggestions(t *testing.T) {
 	e := engWithTape(t, nil, 0)
-	e.registry.Defs.Push("counter", NewInteger(1))
+	e.Registry.Defs.Push("counter", NewInteger(1))
 	d := undefinedWordCheckDiag(e, "countr", SrcPos{Row: 2, Col: 3})
 	if d.Code != "undefined_word" || d.Row != 2 || d.Col != 3 {
 		t.Fatalf("diag = %+v", d)
@@ -211,7 +211,7 @@ func TestForkSuggestionsSafeAgainstParentRegister(t *testing.T) {
 		defer close(done)
 		e := NewTop(fork)
 		for i := 0; i < 300; i++ {
-			_ = e.didYouMeanSuggestions("xyzzy-nope")
+			_ = e.DidYouMeanSuggestions("xyzzy-nope")
 		}
 	}()
 	for i := 0; i < 300; i++ {

@@ -89,13 +89,13 @@ func (e *Engine) probeTailCall(sortedIndices []int, n int) (frameTailScan, bool)
 	// forwards preserved by the splice compaction) mean tokens between
 	// the args would outlive the call — decline rather than reason
 	// about them.
-	start := e.pointer
+	start := e.Pointer
 	if n > 0 {
 		if len(sortedIndices) != n {
 			return scan, false
 		}
 		for k, idx := range sortedIndices {
-			if idx != e.pointer-n+k {
+			if idx != e.Pointer-n+k {
 				return scan, false
 			}
 		}
@@ -107,41 +107,41 @@ func (e *Engine) probeTailCall(sortedIndices []int, n int) (frameTailScan, bool)
 
 	// Forward half: )* __DC __pa (undef name)* [__RC] ) — anything
 	// else, at any point, is not a tail.
-	i := e.pointer + 1
+	i := e.Pointer + 1
 	closersAhead := 0
-	for i < e.tape.Len() && IsCloseParen(e.tape.At(i)) {
+	for i < e.Tape.Len() && IsCloseParen(e.Tape.At(i)) {
 		closersAhead++
 		i++
 	}
-	if i >= e.tape.Len() || !IsDefCleanup(e.tape.At(i)) {
+	if i >= e.Tape.Len() || !IsDefCleanup(e.Tape.At(i)) {
 		return scan, false
 	}
 	scan.TailStart = i
 	i++
-	if i >= e.tape.Len() {
+	if i >= e.Tape.Len() {
 		return scan, false
 	}
-	if w, err := AsWord(e.tape.At(i)); err != nil || w.Name != "__pa" {
+	if w, err := AsWord(e.Tape.At(i)); err != nil || w.Name != "__pa" {
 		return scan, false
 	}
 	i++
-	for i+1 < e.tape.Len() {
-		u, err := AsWord(e.tape.At(i))
+	for i+1 < e.Tape.Len() {
+		u, err := AsWord(e.Tape.At(i))
 		if err != nil || u.Name != "undef" || !u.ForceForward {
 			break
 		}
-		nm, err := AsWord(e.tape.At(i + 1))
+		nm, err := AsWord(e.Tape.At(i + 1))
 		if err != nil {
 			return scan, false
 		}
 		scan.UndefNames = append(scan.UndefNames, nm.Name)
 		i += 2
 	}
-	if i < e.tape.Len() && IsReturnCheck(e.tape.At(i)) {
+	if i < e.Tape.Len() && IsReturnCheck(e.Tape.At(i)) {
 		scan.RCIdx = i
 		i++
 	}
-	if i >= e.tape.Len() || !IsCloseParen(e.tape.At(i)) {
+	if i >= e.Tape.Len() || !IsCloseParen(e.Tape.At(i)) {
 		return scan, false
 	}
 	scan.CloseIdx = i
@@ -152,7 +152,7 @@ func (e *Engine) probeTailCall(sortedIndices []int, n int) (frameTailScan, bool)
 	// Marks, Moves, words, markers, carriers — declines.
 	opensBelow := 0
 	for j := start - 1; j >= 0; j-- {
-		v := e.tape.At(j)
+		v := e.Tape.At(j)
 		switch {
 		case IsFrameOpen(v):
 			if opensBelow != closersAhead {

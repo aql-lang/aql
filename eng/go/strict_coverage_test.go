@@ -14,7 +14,7 @@ func TestEffectiveResolvedExcludesStackArgs(t *testing.T) {
 		NewInteger(1), NewInteger(2), NewWord("gg"),
 		fwdMarker("gg", 2, 1, 1), NewInteger(9),
 	}, 4)
-	_ = e.effectiveResolved() // must not panic; exercises the stack-exclude loop
+	_ = e.EffectiveResolved() // must not panic; exercises the stack-exclude loop
 }
 
 // resolveOrphanedForwards skips a bare OpenParen encountered while re-stepping

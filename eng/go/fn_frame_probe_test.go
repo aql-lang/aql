@@ -33,8 +33,8 @@ func newProbeFixture(t *testing.T) probeFixture {
 func (f probeFixture) probe(t *testing.T, tokens []Value, pointer int, indices []int, n int) (frameTailScan, bool) {
 	t.Helper()
 	e := NewTop(f.r)
-	e.tape = NewTape(tokens, 8)
-	e.pointer = pointer
+	e.Tape = NewTape(tokens, 8)
+	e.Pointer = pointer
 	return e.probeTailCall(indices, n)
 }
 

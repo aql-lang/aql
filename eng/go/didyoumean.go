@@ -151,7 +151,7 @@ func (r *Registry) SuggestionCandidates() []string {
 		return nil
 	}
 	names := r.RegisteredWordNames()
-	for name := range typeNames {
+	for name := range TypeNames {
 		names = append(names, name)
 	}
 	// The literal keywords stepWord resolves inline (they are not

@@ -16,9 +16,9 @@ import "testing"
 // the method bodies, plus a sanity check that the answers match the "recording
 // is not live" contract.
 func TestInactiveEmitMethods(t *testing.T) {
-	e := theInactiveEmit
+	e := TheInactiveEmit
 
-	if e.Active() || e.active() || e.Armed() || e.suspendedNow() {
+	if e.Active() || e.Active() || e.Armed() || e.SuspendedNow() {
 		t.Fatal("inactive recorder reports live/armed")
 	}
 	if !e.topFrameOnly() {
@@ -26,8 +26,8 @@ func TestInactiveEmitMethods(t *testing.T) {
 	}
 	// Suspend / guards return callable no-op funcs.
 	e.Suspend()()
-	e.bodyAnalysisGuard()()
-	e.fnBodyGuard()()
+	e.BodyAnalysisGuard()()
+	e.FnBodyGuard()()
 	e.bindRegistry(nil)
 
 	e.MarkUncompilable("x")
@@ -36,7 +36,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 	}
 	// Stage-0b promotions: the probes that replaced the concrete
 	// *EmitState asserts all decline on the inactive recorder.
-	if e.inClosureUnit() || e.storedGradualActive() {
+	if e.InClosureUnit() || e.StoredGradualActive() {
 		t.Fatal("inactive closure/stored probes should decline")
 	}
 	if folded, ok := e.FoldFullStack("w", nil, nil); folded != nil || ok {
@@ -46,7 +46,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 		t.Fatal("inactive RecordSpliceDyn should decline")
 	}
 	e.noteShapedRead("id")
-	if v, ok := e.memberFnReadValue("id"); ok || v.Data != nil {
+	if v, ok := e.MemberFnReadValue("id"); ok || v.Data != nil {
 		t.Fatal("inactive memberFnReadValue should miss")
 	}
 
@@ -86,17 +86,17 @@ func TestInactiveEmitMethods(t *testing.T) {
 		t.Fatal("inactive RecordInterp should refuse")
 	}
 	e.RegisterTrailingApply("id", 1)
-	e.noteMemberFnRead("id", Value{})
-	if e.memberFnRead("id") {
+	e.NoteMemberFnRead("id", Value{})
+	if e.MemberFnRead("id") {
 		t.Fatal("inactive memberFnRead should be false")
 	}
-	if e.dynInputsProven(nil, nil) {
+	if e.DynInputsProven(nil, nil) {
 		t.Fatal("inactive dynInputsProven should be false")
 	}
-	if v, ok := e.materialise(in); ok || v.ID != in.ID {
+	if v, ok := e.Materialise(in); ok || v.ID != in.ID {
 		t.Fatalf("inactive materialise = %v %v", v, ok)
 	}
-	if e.zeroOutProduced("id") || e.alreadyProduced("id") {
+	if e.ZeroOutProduced("id") || e.AlreadyProduced("id") {
 		t.Fatal("inactive produced probes should be false")
 	}
 
@@ -129,7 +129,7 @@ func TestInactiveEmitMethods(t *testing.T) {
 	e.SetUnitParamTypes(0, nil, nil)
 	e.SetUnitReturnPatterns(0, nil)
 	e.SetUnitDecl(0, DeclSite{})
-	if e.unitVariadic(0) {
+	if e.UnitVariadic(0) {
 		t.Fatal("inactive unitVariadic should be false")
 	}
 }
@@ -139,11 +139,11 @@ func TestInactiveEmitMethods(t *testing.T) {
 // return the shared no-op recorder.
 func TestRecorderAccessorFallback(t *testing.T) {
 	var c *CheckState
-	if c.Recorder() != theInactiveEmit {
+	if c.Recorder() != TheInactiveEmit {
 		t.Fatal("nil CheckState should yield the inactive recorder")
 	}
 	c2 := &CheckState{}
-	if c2.Recorder() != theInactiveEmit {
+	if c2.Recorder() != TheInactiveEmit {
 		t.Fatal("empty CheckState should yield the inactive recorder")
 	}
 }
@@ -158,7 +158,7 @@ func TestEmitStateNilReceiver(t *testing.T) {
 	if es.Armed() {
 		t.Fatal("nil EmitState is not armed")
 	}
-	if es.active() || es.suspendedNow() {
+	if es.Active() || es.SuspendedNow() {
 		t.Fatal("nil EmitState is not active")
 	}
 	if !es.topFrameOnly() {
@@ -168,10 +168,10 @@ func TestEmitStateNilReceiver(t *testing.T) {
 	if es.Sites() != nil {
 		t.Fatal("nil Sites should be nil")
 	}
-	if es.zeroOutProduced("x") || es.alreadyProduced("x") {
+	if es.ZeroOutProduced("x") || es.AlreadyProduced("x") {
 		t.Fatal("nil produced probes should be false")
 	}
-	if es.unitVariadic(0) {
+	if es.UnitVariadic(0) {
 		t.Fatal("nil unitVariadic should be false")
 	}
 	es.RegisterTrailingApply("id", 1)
@@ -316,7 +316,7 @@ func TestMaterialiseRebuild(t *testing.T) {
 	orig := NewInteger(7)
 	es.origByID[member.ID] = orig
 	lst := NewList([]Value{member})
-	got, ok := es.materialise(lst)
+	got, ok := es.Materialise(lst)
 	if !ok {
 		t.Fatal("list with a recoverable member should materialise")
 	}
@@ -327,7 +327,7 @@ func TestMaterialiseRebuild(t *testing.T) {
 
 	// Map with nil backing → not materialisable.
 	nilMap := Value{Parent: TMap, Data: MapPayload{M: nil}}
-	if _, ok := es.materialise(nilMap); ok {
+	if _, ok := es.Materialise(nilMap); ok {
 		t.Fatal("nil-map should not materialise")
 	}
 
@@ -337,7 +337,7 @@ func TestMaterialiseRebuild(t *testing.T) {
 	om := NewOrderedMap()
 	om.Set("k", m2)
 	mp := NewMap(om)
-	got2, ok2 := es.materialise(mp)
+	got2, ok2 := es.Materialise(mp)
 	if !ok2 {
 		t.Fatal("map with a recoverable member should materialise")
 	}
@@ -587,31 +587,31 @@ func s7MapOf(key string, v Value) Value {
 }
 
 func TestFnValueZeroArg(t *testing.T) {
-	if !fnValueZeroArg(zeroArgFn()) {
+	if !FnValueZeroArg(zeroArgFn()) {
 		t.Fatal("two 0-arg sigs should be a genuine 0-param fn")
 	}
-	if !fnValueZeroArg(fnVal(Signature{})) {
+	if !FnValueZeroArg(fnVal(Signature{})) {
 		t.Fatal("single 0-arg sig should be a genuine 0-param fn")
 	}
 	// A DIRECT-literal mixed overload set (a real 0-arg among arg-taking
 	// sigs, no synthetic Fallback): the recorded events model the fire,
 	// so the read-guard does not refuse it.
-	if fnValueZeroArg(fnVal(Signature{Args: []*Type{TInteger}}, Signature{})) {
+	if FnValueZeroArg(fnVal(Signature{Args: []*Type{TInteger}}, Signature{})) {
 		t.Fatal("a direct-literal mixed overload set compiles — no refusal")
 	}
 	// The PARKED spelling of the same mixed set (the aggregate view,
 	// recognisable by its synthetic Fallback sig): the landing is
 	// unmodelled, so the guard must refuse — the representation gap the
 	// predicate's doc records.
-	if !fnValueZeroArg(fnVal(Signature{Args: []*Type{TInteger}}, Signature{}, Signature{Fallback: true})) {
+	if !FnValueZeroArg(fnVal(Signature{Args: []*Type{TInteger}}, Signature{}, Signature{Fallback: true})) {
 		t.Fatal("a parked mixed overload set must refuse until the landing model covers it")
 	}
 	// A parked ARG-taking fn (no real 0-arg overload, just the synthetic
 	// Fallback): lands as data in both engines — no refusal.
-	if fnValueZeroArg(fnVal(Signature{Args: []*Type{TInteger}}, Signature{Fallback: true})) {
+	if FnValueZeroArg(fnVal(Signature{Args: []*Type{TInteger}}, Signature{Fallback: true})) {
 		t.Fatal("a parked args-only fn lands as data — no refusal")
 	}
-	if fnValueZeroArg(NewInteger(1)) {
+	if FnValueZeroArg(NewInteger(1)) {
 		t.Fatal("non-fn value is not a 0-param fn")
 	}
 }
@@ -650,11 +650,11 @@ func mapOfFields() *OrderedMap {
 }
 
 func TestNoteMemberFnReadGuards(t *testing.T) {
-	NewEmitState().noteMemberFnRead("", Value{}) // empty id → no-op
-	inactiveEmitState().noteMemberFnRead("id", Value{})
+	NewEmitState().NoteMemberFnRead("", Value{}) // empty id → no-op
+	inactiveEmitState().NoteMemberFnRead("id", Value{})
 	es := NewEmitState()
-	es.noteMemberFnRead("id", Value{})
-	if !es.memberFnRead("id") {
+	es.NoteMemberFnRead("id", Value{})
+	if !es.MemberFnRead("id") {
 		t.Fatal("a noted member-fn read should be readable")
 	}
 }
@@ -992,23 +992,23 @@ func TestDynInputsProven(t *testing.T) {
 	// arity mismatch → false.
 	es := NewEmitState()
 	sig := &Signature{CompileEffect: CompileRunsBodyIsolated, Args: []*Type{TInteger}}
-	if es.dynInputsProven(sig, nil) {
+	if es.DynInputsProven(sig, nil) {
 		t.Fatal("arity mismatch should not be proven")
 	}
 	// dynamic operand with a concrete parent but a nil sig position → false.
 	sigNil := &Signature{CompileEffect: CompileRunsBodyIsolated, Args: []*Type{nil}}
-	if es.dynInputsProven(sigNil, []Value{NewDynamicCarrier(TInteger)}) {
+	if es.DynInputsProven(sigNil, []Value{NewDynamicCarrier(TInteger)}) {
 		t.Fatal("nil sig position should not be proven")
 	}
 	// dynamic operand whose parent does not conform to the sig position → false.
 	sigStr := &Signature{CompileEffect: CompileRunsBodyIsolated, Args: []*Type{TString}}
-	if es.dynInputsProven(sigStr, []Value{NewDynamicCarrier(TInteger)}) {
+	if es.DynInputsProven(sigStr, []Value{NewDynamicCarrier(TInteger)}) {
 		t.Fatal("non-conforming dynamic operand should not be proven")
 	}
 	// a genuinely-WIDENED gradual operand (dynamic Any) is exactly the
 	// unproven case the guard defends — refused even on a conforming sig.
 	sigAny := &Signature{CompileEffect: CompileRunsBodyIsolated, Args: []*Type{TAny}}
-	if es.dynInputsProven(sigAny, []Value{NewDynamicCarrier(TAny)}) {
+	if es.DynInputsProven(sigAny, []Value{NewDynamicCarrier(TAny)}) {
 		t.Fatal("a widened dynamic(Any) operand must refuse the proof")
 	}
 }
@@ -1089,18 +1089,18 @@ func TestTypeBodyConstOKChildType(t *testing.T) {
 func TestIsInertConstPayloadArms(t *testing.T) {
 	// Micron instance → inert.
 	micron := Value{Parent: TAny, Data: MicronPayload{Fields: NewOrderedMap()}}
-	if !isInertConst(micron) {
+	if !IsInertConst(micron) {
 		t.Fatal("a Micron instance should be inert")
 	}
 	// nil-backed map → not inert.
-	if isInertConst(Value{Parent: TMap, Data: MapPayload{M: nil}}) {
+	if IsInertConst(Value{Parent: TMap, Data: MapPayload{M: nil}}) {
 		t.Fatal("nil map should not be inert")
 	}
 	// XML element whose attribute value is a carrier → not inert.
 	attr := NewOrderedMap()
 	attr.Set("x", NewCarrier(TInteger))
 	xml := Value{Parent: TAny, Data: XmlElementPayload{Tag: "a", Attr: attr}}
-	if isInertConst(xml) {
+	if IsInertConst(xml) {
 		t.Fatal("carrier attribute should refuse")
 	}
 }
@@ -1194,7 +1194,7 @@ func TestIsInertConstMemberParenErr(t *testing.T) {
 	// A value that IsParenExpr by parent but whose payload is not a
 	// ParenExprPayload → AsParenExpr errors → not an inert member.
 	bad := Value{Parent: TParenExpr, Data: IntPayload{N: 1}}
-	if isInertConstMember(bad) {
+	if IsInertConstMember(bad) {
 		t.Fatal("a non-paren paren-typed value should not be an inert member")
 	}
 }
@@ -1237,7 +1237,7 @@ func TestMaterialiseMapPrefixCopy(t *testing.T) {
 	om := NewOrderedMap()
 	om.Set("a", NewInteger(1)) // unchanged prefix
 	om.Set("b", c)             // changed → triggers prefix copy
-	got, ok := es.materialise(NewMap(om))
+	got, ok := es.Materialise(NewMap(om))
 	if !ok {
 		t.Fatal("map with a recoverable member should materialise")
 	}
@@ -1635,15 +1635,15 @@ func TestReadFnMemberValueArms(t *testing.T) {
 	// memberFnReadValue: a bool-only tag (zero member — the computed-key
 	// scan) reports no pinpointed value; an untagged id likewise.
 	es := NewEmitState()
-	es.noteMemberFnRead("tagged-only", Value{})
-	if _, ok := es.memberFnReadValue("tagged-only"); ok {
+	es.NoteMemberFnRead("tagged-only", Value{})
+	if _, ok := es.MemberFnReadValue("tagged-only"); ok {
 		t.Errorf("a zero-member tag must not report a pinpointed value")
 	}
-	if _, ok := es.memberFnReadValue("never-tagged"); ok {
+	if _, ok := es.MemberFnReadValue("never-tagged"); ok {
 		t.Errorf("an untagged id must not report a pinpointed value")
 	}
-	es.noteMemberFnRead("rich", fn)
-	if got, ok := es.memberFnReadValue("rich"); !ok || !IsConcrete(got) {
+	es.NoteMemberFnRead("rich", fn)
+	if got, ok := es.MemberFnReadValue("rich"); !ok || !IsConcrete(got) {
 		t.Errorf("a rich tag must report the member")
 	}
 }
@@ -1688,10 +1688,10 @@ func TestEmitCheckpointHandle(t *testing.T) {
 // recorder. The live slots are compiler-installed at init; the fallback
 // bodies are the post-cut core-only configuration.
 func TestInactiveConstructorSlots(t *testing.T) {
-	if inactiveEmitStateHook() != EmitRecorder(theInactiveEmit) {
+	if inactiveEmitStateHook() != EmitRecorder(TheInactiveEmit) {
 		t.Fatal("inactiveEmitStateHook must hand out the inactive recorder")
 	}
-	if inactiveIsolatedEmitHook(theInactiveEmit) != EmitRecorder(theInactiveEmit) {
+	if inactiveIsolatedEmitHook(TheInactiveEmit) != EmitRecorder(TheInactiveEmit) {
 		t.Fatal("inactiveIsolatedEmitHook must hand out the inactive recorder")
 	}
 }

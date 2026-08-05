@@ -23,23 +23,23 @@ package eng
 // binding nets other counts), so only the variadic-absorbing program
 // residual may consume it — the TERMINAL gate below enforces exactly that.
 func init() {
-	driftWindowRecorder = tryRecordDriftWindow
+	DriftWindowRecorder = tryRecordDriftWindow
 }
 
 func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int) bool {
-	es, _ := e.registry.Check.Recorder().(*EmitState)
-	if es == nil || !es.active() || es.suspendedNow() {
+	es, _ := e.Registry.Check.Recorder().(*EmitState)
+	if es == nil || !es.Active() || es.SuspendedNow() {
 		return false
 	}
 	// The refusal-site preconditions (mirrors refuseForwardStackDrift): a
 	// forward-eligible non-full-stack sig, no code-body positions, at least
 	// a dynamic top + one deeper operand.
-	if sig == nil || sig.BarrierPos == 0 || sig.fullStack() || len(sig.NoEvalArgs) > 0 || len(positions) < 2 {
+	if sig == nil || sig.BarrierPos == 0 || sig.FullStack() || len(sig.NoEvalArgs) > 0 || len(positions) < 2 {
 		return false
 	}
-	topPos, minPos := -1, e.tape.Len()
+	topPos, minPos := -1, e.Tape.Len()
 	for _, p := range positions {
-		if p < 0 || p >= e.tape.Len() {
+		if p < 0 || p >= e.Tape.Len() {
 			return false
 		}
 		if p > topPos {
@@ -51,29 +51,29 @@ func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int
 	}
 	deeperConcrete := false
 	for _, p := range positions {
-		if p != topPos && !e.tape.At(p).Dynamic {
+		if p != topPos && !e.Tape.At(p).Dynamic {
 			deeperConcrete = true
 		}
 	}
-	if !e.tape.At(topPos).Dynamic || !deeperConcrete {
+	if !e.Tape.At(topPos).Dynamic || !deeperConcrete {
 		return false
 	}
-	fwdIdx := e.pointer + 1
-	if fwdIdx >= e.tape.Len() || !forwardLiteralOperand(e.tape.At(fwdIdx)) {
+	fwdIdx := e.Pointer + 1
+	if fwdIdx >= e.Tape.Len() || !ForwardLiteralOperand(e.Tape.At(fwdIdx)) {
 		return false
 	}
 	// CONTIGUITY: the matched operands must be exactly the tape span directly
 	// under the word (no interleaved bystanders) so the window splice is the
 	// same region the island re-steps.
-	if topPos != e.pointer-1 || topPos-minPos+1 != len(positions) {
+	if topPos != e.Pointer-1 || topPos-minPos+1 != len(positions) {
 		return false
 	}
 	// TERMINAL: the window's variadic result must land in the program
 	// residual — nothing may follow the forward literal except statement
 	// furniture. A downstream consumer would need a static count the island
 	// cannot promise; those shapes keep the sound refusal.
-	for i := fwdIdx + 1; i < e.tape.Len(); i++ {
-		t := e.tape.At(i)
+	for i := fwdIdx + 1; i < e.Tape.Len(); i++ {
+		t := e.Tape.At(i)
 		if !IsEnd(t) && !IsDefCleanup(t) {
 			return false
 		}
@@ -83,7 +83,7 @@ func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int
 	// reconciliation once the window re-pushes its const operands above
 	// where the bystanders land; those shapes keep the sound refusal.
 	for i := 0; i < minPos; i++ {
-		t := e.tape.At(i)
+		t := e.Tape.At(i)
 		if !IsEnd(t) && !IsDefCleanup(t) {
 			return false
 		}
@@ -95,7 +95,7 @@ func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int
 	// island's tape in source order. A value produced by a VARIADIC event
 	// cannot ride a fixed-width window.
 	ops := make([]emitOperand, 0, len(positions)+2)
-	fwdOp, ok := es.resolveOperand(e.tape.At(fwdIdx))
+	fwdOp, ok := es.resolveOperand(e.Tape.At(fwdIdx))
 	if !ok { //covergate:allow forwardLiteralOperand admits only concrete scalars/atoms and bare type nodes, all of which resolveOperand materialises as const/type operands (§compiler)
 		return false
 	}
@@ -103,10 +103,10 @@ func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int
 	// The word itself rides as an inert const: the island steps it as a live
 	// token, so the RUNTIME dispatch (registry-resolved, forward-collecting)
 	// is the interpreter's own.
-	wordTok := WithPos(NewWord(w.Name), e.tape.At(e.pointer))
+	wordTok := WithPos(NewWord(w.Name), e.Tape.At(e.Pointer))
 	ops = append(ops, constOperand(es.intern(wordTok)))
 	for p := topPos; p >= minPos; p-- {
-		v := e.tape.At(p)
+		v := e.Tape.At(p)
 		if pr, ok := es.producedBy[v.ID]; ok && es.eventInfo[pr.seq].variadicResult {
 			return false
 		}
@@ -130,7 +130,7 @@ func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int
 	// Consume the window from the tape — operands, word, forward literal —
 	// and continue the check pass from the modeled result (the execMatch
 	// splice-and-repoint discipline).
-	e.tape.Splice(minPos, fwdIdx-minPos+1, out)
-	e.pointer = minPos
+	e.Tape.Splice(minPos, fwdIdx-minPos+1, out)
+	e.Pointer = minPos
 	return true
 }

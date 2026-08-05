@@ -446,7 +446,7 @@ func TestS5bEExpandOptionalSigsUnnamedAndBarrierClamp(t *testing.T) {
 	}
 	// The unnamed present param is spliced via (args N dot).
 	sawArgs := false
-	for _, tok := range exp.body() {
+	for _, tok := range exp.Body() {
 		if IsWord(tok) {
 			if w, _ := AsWord(tok); w.Name == "args" {
 				sawArgs = true

@@ -49,19 +49,19 @@ func TestS7StaticForwardTypeGroup(t *testing.T) {
 // --- forwardLiteralOperand ------------------------------------------------
 
 func TestS7ForwardLiteralOperand(t *testing.T) {
-	if !forwardLiteralOperand(NewTypeLiteral(TInteger)) {
+	if !ForwardLiteralOperand(NewTypeLiteral(TInteger)) {
 		t.Error("a bare type node is a forward literal operand")
 	}
 	// A carrier is non-concrete and not a bare type node → false.
-	if forwardLiteralOperand(NewCarrier(TInteger)) {
+	if ForwardLiteralOperand(NewCarrier(TInteger)) {
 		t.Error("a carrier is not a forward literal operand")
 	}
 	// A scalar concrete is an operand.
-	if !forwardLiteralOperand(NewInteger(1)) {
+	if !ForwardLiteralOperand(NewInteger(1)) {
 		t.Error("an integer is a forward literal operand")
 	}
 	// A marker is not.
-	if forwardLiteralOperand(NewOpenParen()) {
+	if ForwardLiteralOperand(NewOpenParen()) {
 		t.Error("open paren is not a forward literal operand")
 	}
 }
@@ -69,20 +69,20 @@ func TestS7ForwardLiteralOperand(t *testing.T) {
 // --- isRecordableLiteral --------------------------------------------------
 
 func TestS7IsRecordableLiteral(t *testing.T) {
-	if isRecordableLiteral(NewForward(ForwardInfo{})) {
+	if IsRecordableLiteral(NewForward(ForwardInfo{})) {
 		t.Error("Forward is not a recordable literal")
 	}
-	if isRecordableLiteral(NewOpenParen()) {
+	if IsRecordableLiteral(NewOpenParen()) {
 		t.Error("OpenParen is not a recordable literal")
 	}
-	if isRecordableLiteral(NewEnd()) {
+	if IsRecordableLiteral(NewEnd()) {
 		t.Error("End is not a recordable literal")
 	}
-	if !isRecordableLiteral(NewInteger(1)) {
+	if !IsRecordableLiteral(NewInteger(1)) {
 		t.Error("Integer IS a recordable literal")
 	}
 	// nil parent → false.
-	if isRecordableLiteral(Value{}) {
+	if IsRecordableLiteral(Value{}) {
 		t.Error("nil-parent value is not a recordable literal")
 	}
 }
@@ -117,7 +117,7 @@ func TestS7TrivialDelegationTarget(t *testing.T) {
 
 func TestS7SingleOverloadRecoverableGuards(t *testing.T) {
 	// nil / no ReturnsFn → false.
-	if singleOverloadRecoverable(nil, nil) {
+	if SingleOverloadRecoverable(nil, nil) {
 		t.Error("nil sig → false")
 	}
 	rf := func(args []Value, r *Registry) []Value { return nil }
@@ -127,7 +127,7 @@ func TestS7SingleOverloadRecoverableGuards(t *testing.T) {
 	argSig := Signature{Params: []FnParam{{Name: "n", Type: TInteger}}, ReturnsFn: rf, BarrierPos: -1}
 	zeroSig := Signature{ReturnsFn: rf, BarrierPos: -1}
 	fn := &FnDefInfo{Signatures: []Signature{argSig, zeroSig}}
-	if singleOverloadRecoverable(&fn.Signatures[0], fn) {
+	if SingleOverloadRecoverable(&fn.Signatures[0], fn) {
 		t.Error("a real 0-arg sibling makes it non-recoverable")
 	}
 
@@ -139,7 +139,7 @@ func TestS7SingleOverloadRecoverableGuards(t *testing.T) {
 	}
 	delSig.BarrierPos = -1
 	fn2 := &FnDefInfo{Signatures: []Signature{delSig}}
-	if singleOverloadRecoverable(&fn2.Signatures[0], fn2) {
+	if SingleOverloadRecoverable(&fn2.Signatures[0], fn2) {
 		t.Error("a trivial-delegation sole sig is not recoverable")
 	}
 }
@@ -148,7 +148,7 @@ func TestS7SingleOverloadRecoverableGuards(t *testing.T) {
 
 func TestS7ConcreteArgsMatchArityShortfall(t *testing.T) {
 	sig := &Signature{Params: []FnParam{{Type: TInteger}, {Type: TString}}, BarrierPos: -1}
-	if concreteArgsMatch(sig, []Value{NewInteger(1)}, 0) {
+	if ConcreteArgsMatch(sig, []Value{NewInteger(1)}, 0) {
 		t.Error("arity shortfall must not report a match")
 	}
 }
@@ -157,14 +157,14 @@ func TestS7ConcreteArgsMatchAnyCarrierContinues(t *testing.T) {
 	sig := &Signature{Params: []FnParam{{Type: TAny}, {Type: TString}}, BarrierPos: -1}
 	// window[0] = Any carrier (deferrable), window[1] = String (matches).
 	args := []Value{NewCarrier(TAny), NewString("x")}
-	if !concreteArgsMatch(sig, args, 0) {
+	if !ConcreteArgsMatch(sig, args, 0) {
 		t.Error("Any-carrier operand should be skipped, remaining args match")
 	}
 }
 
 func TestS7ConcreteArgsMatchConcreteMismatch(t *testing.T) {
 	sig := &Signature{Params: []FnParam{{Type: TInteger}}, BarrierPos: -1}
-	if concreteArgsMatch(sig, []Value{NewString("x")}, 0) {
+	if ConcreteArgsMatch(sig, []Value{NewString("x")}, 0) {
 		t.Error("a wrong concrete operand must fail the match")
 	}
 }
@@ -172,30 +172,30 @@ func TestS7ConcreteArgsMatchConcreteMismatch(t *testing.T) {
 // --- argTypeSummary / sigTypeSummary --------------------------------------
 
 func TestS7ArgTypeSummaryNilParent(t *testing.T) {
-	got := argTypeSummary([]Value{{}}) // nil Parent → "?"
+	got := ArgTypeSummary([]Value{{}}) // nil Parent → "?"
 	if got != "?" {
 		t.Errorf("argTypeSummary(nil parent) = %q, want ?", got)
 	}
 	// dynamic carrier rendering.
-	got = argTypeSummary([]Value{NewDynamicCarrier(TInteger)})
+	got = ArgTypeSummary([]Value{NewDynamicCarrier(TInteger)})
 	if !strings.HasPrefix(got, "dynamic(") {
 		t.Errorf("dynamic carrier summary = %q", got)
 	}
-	if argTypeSummary(nil) != "" {
+	if ArgTypeSummary(nil) != "" {
 		t.Error("empty args → empty summary")
 	}
 }
 
 func TestS7SigTypeSummary(t *testing.T) {
-	if sigTypeSummary(nil) != "" {
+	if SigTypeSummary(nil) != "" {
 		t.Error("nil sig → empty")
 	}
-	if sigTypeSummary(&Signature{}) != "" {
+	if SigTypeSummary(&Signature{}) != "" {
 		t.Error("0-arg sig → empty")
 	}
 	// A nil arg type renders "?".
 	sig := &Signature{Args: []*Type{nil, TInteger}}
-	got := sigTypeSummary(sig)
+	got := SigTypeSummary(sig)
 	if !strings.Contains(got, "?") || !strings.Contains(got, "Integer") {
 		t.Errorf("sigTypeSummary = %q, want ? and Integer", got)
 	}
@@ -207,11 +207,11 @@ func TestS7MixedFormStackSlotAny(t *testing.T) {
 	e := engWithTape(t, nil, 3)
 	sig := &Signature{Params: []FnParam{{Type: TAny}, {Type: TInteger}}, BarrierPos: -1}
 	// positions before the pointer → the min is an Any slot → true.
-	if !mixedFormStackSlotAny(e, sig, []int{0, 1}) {
+	if !MixedFormStackSlotAny(e, sig, []int{0, 1}) {
 		t.Error("min stack slot is Any → true")
 	}
 	// No positions before the pointer → false.
-	if mixedFormStackSlotAny(e, sig, []int{5, 6}) {
+	if MixedFormStackSlotAny(e, sig, []int{5, 6}) {
 		t.Error("no stack slot before pointer → false")
 	}
 }

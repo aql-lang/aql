@@ -65,7 +65,7 @@ func (s *Signature) usesLegacyArgs() bool {
 func (s *Signature) ArgTypes() []*Type {
 	out := make([]*Type, s.TotalArgs())
 	for i := range out {
-		out[i] = sigArgType(s, i)
+		out[i] = SigArgType(s, i)
 	}
 	return out
 }
@@ -75,7 +75,7 @@ func (s *Signature) ArgTypes() []*Type {
 // fields. If Params is empty but Args is set, it derives Params from
 // Args+Patterns. It then refreshes the Args/Patterns mirrors from Params
 // so introspection that reads either view stays consistent. Idempotent.
-func normalizeSig(s *Signature) {
+func NormalizeSig(s *Signature) {
 	if s.usesLegacyArgs() {
 		s.Params = make([]FnParam, len(s.Args))
 		for i, t := range s.Args {
@@ -127,7 +127,7 @@ func normalizeSig(s *Signature) {
 // legacy Args slice is still populated at construction sites and used as
 // a fallback for legacy/external callers that built a Signature with only
 // Args set. Callers must ensure 0 <= i < TotalArgs().
-func sigArgType(s *Signature, i int) *Type {
+func SigArgType(s *Signature, i int) *Type {
 	if s.usesLegacyArgs() {
 		return s.Args[i]
 	}
@@ -139,7 +139,7 @@ func sigArgType(s *Signature, i int) *Type {
 // with a fallback to the legacy Patterns map for callers that built a
 // Signature with only Args+Patterns set. ok is false when no pattern is
 // declared at i.
-func sigPattern(s *Signature, i int) (Value, bool) {
+func SigPattern(s *Signature, i int) (Value, bool) {
 	if i < len(s.Params) && s.Params[i].Pattern != nil {
 		return *s.Params[i].Pattern, true
 	}
@@ -200,7 +200,7 @@ func MatchSignature(sigs []Signature, stack []Value, modifiers WordInfo) *MatchR
 		// must be present in the argument, but extra keys are allowed.
 		patternOk := true
 		for idx := 0; idx < sig.TotalArgs(); idx++ {
-			pattern, pok := sigPattern(sig, idx)
+			pattern, pok := SigPattern(sig, idx)
 			if !pok {
 				continue
 			}
@@ -266,7 +266,7 @@ func FlexibleMatch(values []Value, sig *Signature) ([]Value, bool) {
 // level — but semantically they are abstract VALUES, not types. They
 // satisfy ordinary value slots (Carrier{Integer} matches TInteger)
 // and are rejected at TypeArgs slots by sigTypeMatchesAsType.
-func sigTypeMatches(v Value, t *Type) bool {
+func SigTypeMatches(v Value, t *Type) bool {
 	// Dispatch ascription (`v as T` — design/OPEN-WORDS.1.md §9): match as
 	// if the value were tagged with the ascribed ancestor type. The VIEW is
 	// a reparented copy used for this test only — the delivered arg is the
@@ -283,7 +283,7 @@ func sigTypeMatches(v Value, t *Type) bool {
 		view := ReparentValue(v, a)
 		view.SetAscribed(nil)
 		view.Dynamic = false
-		return sigTypeMatches(view, t)
+		return SigTypeMatches(view, t)
 	}
 	// Gradual (dynamic) carrier: matches the slot unless its bound is
 	// PROVABLY disjoint from t — the not-disjoint rule, the optimistic
@@ -312,7 +312,7 @@ func sigTypeMatches(v Value, t *Type) bool {
 		}
 		bound := v
 		bound.Dynamic = false
-		return !isNeverShape(TandValues(bound, NewCarrier(t)))
+		return !IsNeverShape(TandValues(bound, NewCarrier(t)))
 	}
 	if v.Is(t) {
 		return true
@@ -329,9 +329,9 @@ func sigTypeMatches(v Value, t *Type) bool {
 			for _, alt := range di.Alternatives {
 				probe := alt
 				if IsBareTypeNode(alt) {
-					probe = carrierOfLiteral(alt)
+					probe = CarrierOfLiteral(alt)
 				}
-				if !sigTypeMatches(probe, t) {
+				if !SigTypeMatches(probe, t) {
 					all = false
 					break
 				}
@@ -427,11 +427,11 @@ func sigTypeMatchesAsType(v Value, t *Type) bool {
 // based on sig.TypeArgs[idx]. Use this at every call site that has
 // a *Signature in hand; bare sigTypeMatches stays for the
 // no-sig-context paths (carrier promotion, predicate sandbox).
-func sigArgMatches(sig *Signature, idx int, v Value) bool {
+func SigArgMatches(sig *Signature, idx int, v Value) bool {
 	if sig.TypeArgs != nil && sig.TypeArgs[idx] {
-		return sigTypeMatchesAsType(v, sigArgType(sig, idx))
+		return sigTypeMatchesAsType(v, SigArgType(sig, idx))
 	}
-	return sigTypeMatches(v, sigArgType(sig, idx))
+	return SigTypeMatches(v, SigArgType(sig, idx))
 }
 
 // rejectsTypeLiteral reports whether a value with Data==nil should be
@@ -500,7 +500,7 @@ func rejectsTypeLiteral(v Value, expectedType *Type) bool {
 // so the branch falls through to the regular sigTypeMatches check.
 func positionalMatch(values []Value, sig *Signature) bool {
 	for i := 0; i < sig.TotalArgs(); i++ {
-		t := sigArgType(sig, i)
+		t := SigArgType(sig, i)
 		v := values[i]
 		// /q modifier (forward-only): treat Word as Atom for matching.
 		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.Parent.Equal(TWord) {
@@ -521,7 +521,7 @@ func positionalMatch(values []Value, sig *Signature) bool {
 		if sig.QuoteArgs != nil && sig.QuoteArgs[i] && v.Carrier && !IsConcrete(v) && !v.Parent.ConformsTo(TAtom) {
 			return false
 		}
-		if !sigArgMatches(sig, i, v) {
+		if !SigArgMatches(sig, i, v) {
 			return false
 		}
 		// Reject type literals (Data==nil) for concrete Map/List
@@ -544,10 +544,10 @@ func positionalMatch(values []Value, sig *Signature) bool {
 // bare type literals fall through to compareTypes (Rank → depth →
 // name → ID).
 func sigSlotValue(sig *Signature, i int) Value {
-	if p, ok := sigPattern(sig, i); ok {
+	if p, ok := SigPattern(sig, i); ok {
 		return p
 	}
-	return NewTypeLiteral(sigArgType(sig, i))
+	return NewTypeLiteral(SigArgType(sig, i))
 }
 
 // CompareSignatures imposes a total order on Signatures using the

@@ -35,18 +35,18 @@ func (e *Engine) execMacro(valIdx int, fnDef *FnDefInfo) error {
 	// macro re-applied to the same operand forms (e.g. in a loop) expands once
 	// and re-splices the cached tokens. See design/MACROS-PHASE1.10.md §8.
 	key := macroOperandsKey(fnDef.Name, operands)
-	expanded, ok := e.registry.macroCacheGet(key)
+	expanded, ok := e.Registry.macroCacheGet(key)
 	if !ok {
-		expanded, err = expandMacroWith(e.registry, fnDef, operands)
+		expanded, err = expandMacroWith(e.Registry, fnDef, operands)
 		if err != nil {
 			return err
 		}
-		e.registry.macroCachePut(key, expanded)
+		e.Registry.macroCachePut(key, expanded)
 	}
 	// Replace the whole `mac operand…` span (valIdx..endIdx) with one __SP
 	// marker; e.pointer == valIdx is left unchanged so the Run loop steps the
 	// marker next, splicing the expansion onto the live tape and re-stepping.
-	e.tape.Splice(valIdx, endIdx-valIdx+1, NewSplice(NewList(expanded)))
+	e.Tape.Splice(valIdx, endIdx-valIdx+1, NewSplice(NewList(expanded)))
 	return nil
 }
 
@@ -72,8 +72,8 @@ func (e *Engine) scanMacroOperands(fnDef *FnDefInfo, arity, valIdx int) ([]Value
 	operands := make([]Value, 0, arity)
 	idx := valIdx + 1
 	last := valIdx
-	for len(operands) < arity && idx < e.tape.Len() {
-		t := e.tape.At(idx)
+	for len(operands) < arity && idx < e.Tape.Len() {
+		t := e.Tape.At(idx)
 		// A RAW paren group is one operand FORM: fold the balanced span
 		// into a ParenExpr — the same shape a group reaches a macro in
 		// when the PRECEDING statement's parked forward folded it during
@@ -85,8 +85,8 @@ func (e *Engine) scanMacroOperands(fnDef *FnDefInfo, arity, valIdx int) ([]Value
 			depth := 1
 			j := idx + 1
 			var inner []Value
-			for ; j < e.tape.Len(); j++ {
-				v := e.tape.At(j)
+			for ; j < e.Tape.Len(); j++ {
+				v := e.Tape.At(j)
 				if IsOpenParen(v) {
 					depth++
 				} else if IsCloseParen(v) {
@@ -162,8 +162,8 @@ func expandMacroWith(r *Registry, fnDef *FnDefInfo, operands []Value) ([]Value, 
 	}
 
 	// Run the template body → the template token list (its last result).
-	body := make([]Value, len(sig.body()))
-	copy(body, sig.body())
+	body := make([]Value, len(sig.Body()))
+	copy(body, sig.Body())
 	res, runErr := New(r).Run(body)
 	if runErr != nil {
 		r.Defs.Restore(snap)

@@ -90,7 +90,7 @@ func (r *Registry) ForkConcurrent() *Registry {
 	fork.macroCache = nil
 	fork.errs = nil
 	fork.SDKCache = make(map[string]any)
-	fork.vmRunning = 0 // the fork starts idle, independent of the parent's run
+	fork.VmRunning = 0 // the fork starts idle, independent of the parent's run
 	return &fork
 }
 

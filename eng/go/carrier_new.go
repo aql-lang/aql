@@ -37,7 +37,7 @@ func NewDynamicCarrier(t *Type) Value {
 // itself, as stored in DisjunctInfo.Alternatives) into a carrier OF
 // that node — i.e. Parent points at the literal's type, not at the
 // literal's lattice parent.
-func carrierOfLiteral(lit Value) Value {
+func CarrierOfLiteral(lit Value) Value {
 	lt := lit
 	return NewCarrier(&lt)
 }

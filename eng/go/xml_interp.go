@@ -9,7 +9,7 @@ package eng
 // the attribute text; a child hole applies the List one-level splice rule;
 // adjacent text coalesces. Returns the element and the number of holes
 // consumed (the VM verifies it equals the spec's count).
-func rebuildXmlFromTmpl(t XmlTmpl, holes []Value) (Value, int) {
+func RebuildXmlFromTmpl(t XmlTmpl, holes []Value) (Value, int) {
 	used := 0
 	attr := NewOrderedMap()
 	for _, a := range t.Attr {
@@ -67,7 +67,7 @@ func rebuildXmlFromTmpl(t XmlTmpl, holes []Value) (Value, int) {
 			if c.Child == nil {
 				continue
 			}
-			child, cUsed := rebuildXmlFromTmpl(*c.Child, holes[used:])
+			child, cUsed := RebuildXmlFromTmpl(*c.Child, holes[used:])
 			used += cUsed
 			cren = append(cren, child)
 		case XmlCrenExpr:

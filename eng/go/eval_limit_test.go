@@ -89,7 +89,7 @@ func TestStepLimitFor(t *testing.T) {
 			if c.reg != nil {
 				c.reg.StepLimit = c.set
 			}
-			if got := stepLimitFor(c.reg, 777); got != c.want {
+			if got := StepLimitFor(c.reg, 777); got != c.want {
 				t.Errorf("stepLimitFor(%d) = %d, want %d", c.set, got, c.want)
 			}
 		})

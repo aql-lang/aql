@@ -66,7 +66,7 @@ func (r *Registry) StampEvents() []StampEvent {
 }
 
 // recordStampEvent appends to the shared log; inert when unarmed.
-func (r *Registry) recordStampEvent(ev StampEvent) {
+func (r *Registry) RecordStampEvent(ev StampEvent) {
 	if r == nil {
 		return
 	}

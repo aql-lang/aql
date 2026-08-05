@@ -56,10 +56,10 @@ func TestInterpBodyInertBoundary(t *testing.T) {
 	// fn scope noEvalBodiesInertScoped uses isInertConst, which keeps the body
 	// refused so it falls back to the interpreter instead of baking a
 	// frame-local ${name} that would resolve against the registry.
-	if isInertConst(interp) {
+	if IsInertConst(interp) {
 		t.Error("isInertConst(`v${k}`) = true; the strict whitelist must NOT admit an InterpString")
 	}
-	if isInertConst(NewList([]Value{interp})) {
+	if IsInertConst(NewList([]Value{interp})) {
 		t.Error("isInertConst([`v${k}`]) = true; the strict whitelist must keep an InterpString body refused")
 	}
 }

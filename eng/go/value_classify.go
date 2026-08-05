@@ -13,14 +13,14 @@ package eng
 // bearsActiveTokens reports whether a value (recursively through lists and
 // maps) contains a token the interpreter evaluates or re-steps — a word, a
 // paren expression, an interpolation, a splice or reach marker.
-func bearsActiveTokens(v Value) bool {
+func BearsActiveTokens(v Value) bool {
 	if IsWord(v) || IsParenExpr(v) || IsInterpString(v) || IsSplice(v) || IsReach(v) {
 		return true
 	}
 	switch d := v.Data.(type) {
 	case ListPayload:
 		for _, e := range d.Elems {
-			if bearsActiveTokens(e) {
+			if BearsActiveTokens(e) {
 				return true
 			}
 		}
@@ -30,7 +30,7 @@ func bearsActiveTokens(v Value) bool {
 		}
 		for _, k := range d.M.Keys() {
 			mv, _ := d.M.Get(k)
-			if bearsActiveTokens(mv) {
+			if BearsActiveTokens(mv) {
 				return true
 			}
 		}
@@ -73,7 +73,7 @@ func ModuleScopeBinding(r *Registry, name string) bool {
 // A pure property fn (every real overload 0-arg) refuses in BOTH
 // representations. Merging the two arms = extending the compiled
 // landing model, not editing this predicate.
-func fnValueZeroArg(v Value) bool {
+func FnValueZeroArg(v Value) bool {
 	d, ok := v.Data.(FnDefInfo)
 	if !ok {
 		return false
@@ -81,7 +81,7 @@ func fnValueZeroArg(v Value) bool {
 	if !fnValueHasZeroArgSig(v) {
 		return false // no genuine 0-arg overload: needs args, lands as data
 	}
-	if fnValueOnlyZeroArgSigs(d) {
+	if FnValueOnlyZeroArgSigs(d) {
 		return true // pure property fn: auto-fires in both representations
 	}
 	for i := range d.Signatures {
@@ -92,7 +92,7 @@ func fnValueZeroArg(v Value) bool {
 	return false // direct literal: the recorded events model the fire
 }
 
-func isInertConst(v Value) bool {
+func IsInertConst(v Value) bool {
 	if v.Carrier || v.Dynamic || IsBareTypeNode(v) {
 		return false
 	}
@@ -204,7 +204,7 @@ func isInertConst(v Value) bool {
 		return surfaceConstOK(d)
 	case ListPayload:
 		for _, e := range d.Elems {
-			if !isInertConstMember(e) {
+			if !IsInertConstMember(e) {
 				return false
 			}
 		}
@@ -215,7 +215,7 @@ func isInertConst(v Value) bool {
 		}
 		for _, k := range d.M.Keys() {
 			mv, _ := d.M.Get(k)
-			if !isInertConstMember(mv) {
+			if !IsInertConstMember(mv) {
 				return false
 			}
 		}
@@ -233,14 +233,14 @@ func isInertConst(v Value) bool {
 		// scalars + nested immutable elements, recursed via isInertConstMember →
 		// isInertConst).
 		for _, c := range d.Cren {
-			if !isInertConstMember(c) {
+			if !IsInertConstMember(c) {
 				return false
 			}
 		}
 		if d.Attr != nil {
 			for _, k := range d.Attr.Keys() {
 				av, _ := d.Attr.Get(k)
-				if !isInertConstMember(av) {
+				if !IsInertConstMember(av) {
 					return false
 				}
 			}
@@ -282,7 +282,7 @@ func isInertConst(v Value) bool {
 // distinct from a CONCRETE baked fn value (Carrier false, the introspection /
 // inert-`/r` case). The carrier bit is what resolves the apply-vs-inert
 // ambiguity in Finalize: a carrier lead auto-applies, a concrete fn does not.
-func isFnTypedCarrier(v Value) bool {
+func IsFnTypedCarrier(v Value) bool {
 	return v.Carrier && v.Parent != nil &&
 		v.Parent.ConformsTo(TFunction)
 }
@@ -290,12 +290,12 @@ func isFnTypedCarrier(v Value) bool {
 // isFnValueResidual reports whether v is ANY fn value — a concrete FnDefInfo (a
 // baked /r reference) or a Function-typed value (carrier or not). Used to
 // keep a fn value out of the trailing-arg positions of a leading-fn apply.
-func isFnValueResidual(v Value) bool {
+func IsFnValueResidual(v Value) bool {
 	// One body with the VM's runtime test (isAppliableFn, vm.go): the
 	// recorder's residual question and the VM's apply question are the
 	// SAME question, and post-ADR-011 both reduce to Function
 	// conformance (the payload arm covers values mid-construction).
-	return isAppliableFn(v)
+	return IsAppliableFn(v)
 }
 
 // isModuleFamilyValue reports whether v is a concrete module value — an
@@ -307,7 +307,7 @@ func isFnValueResidual(v Value) bool {
 // immutable and produced deterministically by `import`, so a pure read
 // of one is a compile-time constant (runtime export growth is
 // ledger-modelled — module_export_growth.go).
-func isModuleFamilyValue(v Value) bool {
+func IsModuleFamilyValue(v Value) bool {
 	if !IsConcrete(v) || v.Parent == nil {
 		return false
 	}
@@ -333,11 +333,11 @@ func isModuleFamilyValue(v Value) bool {
 // coarser than String() on any bakeable shape, so a legitimately
 // deterministic fold still agrees (no coverage change) while the
 // conflations String() hid can no longer slip a frozen value through.
-func constFoldAgrees(a, b Value) bool { return CanonValue(a) == CanonValue(b) }
+func ConstFoldAgrees(a, b Value) bool { return CanonValue(a) == CanonValue(b) }
 
 // isAppliableFn reports whether a runtime value is a callable the interpreter
 // would auto-apply: a Function-typed value or an FnDefInfo payload.
-func isAppliableFn(v Value) bool {
+func IsAppliableFn(v Value) bool {
 	if _, ok := v.Data.(FnDefInfo); ok {
 		return true
 	}
@@ -352,7 +352,7 @@ func isAppliableFn(v Value) bool {
 // dynamicStackShuffleOK (the refusal bypass for a MATCHED dispatch over a
 // dynamic operand) and dynShuffleConsumerAt (the gradual-arity modeling
 // gate for a mixed-arity mutator's statement-position result).
-var dynStackShuffleWords = map[string]bool{
+var DynStackShuffleWords = map[string]bool{
 	"dup": true, "swap": true, "drop": true, "over": true, "rot": true,
 	"nip": true, "tuck": true, "dup2": true, "swap2": true, "drop2": true,
 	"over2": true,
@@ -386,7 +386,7 @@ func typeBodyConstOK(v Value) bool {
 		if !m.Carrier && !m.Dynamic && isFreshenedInstance(m) {
 			return true
 		}
-		return typeBodyConstOK(m) || isInertConst(m)
+		return typeBodyConstOK(m) || IsInertConst(m)
 	}
 	switch d := v.Data.(type) {
 	case RecordTypeInfo:
@@ -440,7 +440,7 @@ func typeBodyConstOK(v Value) bool {
 func fnSigConstOK(info FnUndefInfo) bool {
 	for _, sig := range info.Sigs {
 		for _, p := range sig.Params {
-			if p.Pattern != nil && !(isInertConst(*p.Pattern) || typeBodyConstOK(*p.Pattern)) {
+			if p.Pattern != nil && !(IsInertConst(*p.Pattern) || typeBodyConstOK(*p.Pattern)) {
 				return false
 			}
 		}
@@ -459,7 +459,7 @@ func surfaceConstOK(s *SurfaceInfo) bool {
 		return true
 	}
 	return allFieldsInert(s.Required, func(v Value) bool {
-		return isInertConst(v) || typeBodyConstOK(v)
+		return IsInertConst(v) || typeBodyConstOK(v)
 	})
 }
 
@@ -478,7 +478,7 @@ func schemaConstOK(s *TypeSchemaInfo) bool {
 	// live — so bare type nodes cover them and no Word-member escape
 	// hatch is needed (the pre-opacity isParam plumbing is gone).
 	memberOK := func(m Value) bool {
-		return IsBareTypeNode(m) || typeBodyConstOK(m) || isInertConst(m)
+		return IsBareTypeNode(m) || typeBodyConstOK(m) || IsInertConst(m)
 	}
 	for _, p := range s.Params {
 		if p.HasBound && !memberOK(p.Bound) {
@@ -508,7 +508,7 @@ func isInertQuotedParen(v Value) bool {
 		return false
 	}
 	for _, tk := range toks {
-		if !isInertConstMember(tk) {
+		if !IsInertConstMember(tk) {
 			return false
 		}
 	}
@@ -537,7 +537,7 @@ func isInertReach(v Value) bool {
 		return false
 	}
 	for _, seg := range info.Segments {
-		if seg.Computed || !isInertConstMember(seg.KeyLit) {
+		if seg.Computed || !IsInertConstMember(seg.KeyLit) {
 			return false
 		}
 	}
@@ -552,7 +552,7 @@ func isInertReach(v Value) bool {
 // switch still rejects a bare FnDefInfo (a top-level fn value is the apply /
 // closure case, not bakeable data). At run time a poly `get` of the field
 // returns the fn, which the fn-value-call boundary (OpCallDynamic) applies.
-func isInertConstMember(v Value) bool {
+func IsInertConstMember(v Value) bool {
 	if !v.Carrier && !v.Dynamic {
 		// A Word token riding inside a quoted (non-eval) compound — what
 		// `macroexpand` returns as data (`[5 word(add) 5]`). Safe as a const
@@ -614,7 +614,7 @@ func isInertConstMember(v Value) bool {
 				return false
 			}
 			for _, tk := range toks {
-				if !isInertConstMember(tk) {
+				if !IsInertConstMember(tk) {
 					return false
 				}
 			}
@@ -632,18 +632,18 @@ func isInertConstMember(v Value) bool {
 		// rejects a bare marker, so a top-level marker never bakes as
 		// code.
 		if sinfo, ok := AsSugar(v); ok && IsSugar(v) {
-			if sinfo.Head.Parent != nil && !isInertConstMember(sinfo.Head) {
+			if sinfo.Head.Parent != nil && !IsInertConstMember(sinfo.Head) {
 				return false
 			}
 			for _, it := range sinfo.Items {
-				if !isInertConstMember(it) {
+				if !IsInertConstMember(it) {
 					return false
 				}
 			}
 			return true
 		}
 	}
-	return isInertConst(v)
+	return IsInertConst(v)
 }
 
 // isDelegationFnDef reports whether a Function VALUE is a trivial-delegation
@@ -651,7 +651,7 @@ func isInertConstMember(v Value) bool {
 // (a module method like rand-int / MathUtil.sqrt), safely dispatched VM-native
 // via tryNativeFnApply. A user fn carries a REAL body, so it is NOT a delegation
 // and must island instead. An anonymous lambda or a sig-less value is not one.
-func isDelegationFnDef(fd FnDefInfo) bool {
+func IsDelegationFnDef(fd FnDefInfo) bool {
 	sigs := fd.OwnSigs()
 	if len(sigs) == 0 {
 		return false

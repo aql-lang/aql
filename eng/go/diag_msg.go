@@ -22,7 +22,7 @@ import (
 // runtime param-contract guards, the check pass's OpTrap, and the
 // checker all raise this same head, so the compiled_fullcorpus
 // Detail-equality gate holds by construction.
-func noMatchDetail(name string) string {
+func NoMatchDetail(name string) string {
 	return "cannot call `" + name + "` — no signature matches the arguments"
 }
 
@@ -40,8 +40,8 @@ func noMatchDetail(name string) string {
 // that the compiled VM has no equivalent for, so it could never match
 // across engines; the received-arguments note conveys the same "what
 // values were here" information in plain language instead.
-func noMatchDiag(source, name string, fn *FnDefInfo, written []Value, pos SrcPos, reorder string) *BoruError {
-	ae := makeBoruErrorAt("signature_error", noMatchDetail(name), name, source, "", pos)
+func NoMatchDiag(source, name string, fn *FnDefInfo, written []Value, pos SrcPos, reorder string) *BoruError {
+	ae := makeBoruErrorAt("signature_error", NoMatchDetail(name), name, source, "", pos)
 
 	if n := callArgsNote(written); n != "" {
 		ae.Notes = append(ae.Notes, n)
@@ -85,14 +85,14 @@ func noMatchDiag(source, name string, fn *FnDefInfo, written []Value, pos SrcPos
 // argument values, sig order) rebuilds the SAME rich diagnostic the
 // interpreter would raise over those values. It runs on the failure
 // path only; the VM stamps the source position afterward (stampAt).
-func runtimeNoMatch(r *Registry, name string, written []Value) *BoruError {
+func RuntimeNoMatch(r *Registry, name string, written []Value) *BoruError {
 	var fn *FnDefInfo
 	src := ""
 	if r != nil {
 		fn = r.Lookup(name)
 		src = r.Source
 	}
-	return noMatchDiag(src, name, fn, written, SrcPos{}, reorderHintFor(name, fn, written))
+	return NoMatchDiag(src, name, fn, written, SrcPos{}, ReorderHintFor(name, fn, written))
 }
 
 // insufficientArgsDetail is the Detail line for a forward collection
@@ -221,7 +221,7 @@ func candidateNotes(name string, fails []CandidateFailure, totalSigs, nWritten i
 // undefinedWordDetail is the Detail line for an unbound word — the
 // grep-friendly head every undefined_word surface shares (86 spec rows
 // pin it); the Elm voice lives in the did-you-mean suggestion.
-func undefinedWordDetail(name string) string {
+func UndefinedWordDetail(name string) string {
 	return "undefined word: " + name
 }
 
