@@ -183,6 +183,19 @@ describe('parse battery', () => {
     // Disjunct spellings stay word streams in parens.
     ['(A tor None)', 'paren([word(A) word(tor) word(None)])'],
     ['(None tor A)', 'paren([word(None) word(tor) word(A)])'],
+
+    // Curried and pair-sig arrow folds; folds embedded mid-list.
+    ['x => y => [x]', 'word(x) sugar(lambda) paren([word(y) sugar(lambda) [word(x)]])'],
+    ['[x y => [x]]', '[word(x) paren([word(y) sugar(lambda) [word(x)]])]'],
+    ['[{k:1} => [1]]', '[paren([{k:1} sugar(lambda) [1]])]'],
+    ['[a:1 => [2]]', '[paren([{a:1} sugar(lambda) [2]])]'],
+    ['[1 2 => [3] 4]', '[1 paren([2 sugar(lambda) [3]]) 4]'],
+    ['(=> [1])', 'paren([sugar(lambda) [1]])'],
+    ['n => [n] 5', 'word(n) sugar(lambda) [word(n)] 5'],
+    ['1 x => [x 2] 3', '1 paren([word(x) sugar(lambda) [word(x) 2]]) 3'],
+    ['{m: [x] => [x]}', 'ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here'],
+    ['{x.y:1}', 'ERR [boru/syntax_error]: unexpected `.` — nothing valid can appear here'],
+    ['{n: bf.n addq 1}', 'ERR [boru/syntax_error]: unexpected `1` — nothing valid can appear here'],
   ]
   for (const [src, want] of rows) {
     it(JSON.stringify(src), () => {
@@ -191,7 +204,7 @@ describe('parse battery', () => {
   }
 
   it('folds map-value dot-chains into paren groups', () => {
-    for (const src of ['{n: bf.n}', '{n: a.b.c}', '{n: bf!.n}']) {
+    for (const src of ['{n: bf.n}', '{n: a.b.c}', '{n: bf!.n}', '{n: bf.n.m}', "{n: bf.'k'}"]) {
       const got = canon(parse(src))
       assert.ok(got.startsWith('{n:paren('), `${src} -> ${got}`)
     }
