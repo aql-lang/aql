@@ -79,6 +79,36 @@ describe('parse battery', () => {
     // Slash words vs dispatch modifiers.
     ['a/b/c', 'word(a/b/c)'],
     ['f/q', 'f/q'],
+
+    // Generics angle sugar: value, data-context, child-constraint,
+    // and annotation use-sites; multi-arg and empty argument lists.
+    ['Box<Integer>', 'sugar(angle Box [word(Integer)])'],
+    ['{x: Box<Integer>}', '{x:sugar(angle Box [word(Integer)])}'],
+    ['[:Box<Integer>]', '[:sugar(angle Box [word(Integer)])]'],
+    ['Box<Integer String>', 'sugar(angle Box [word(Integer) word(String)])'],
+    ['Box<>', 'sugar(angle Box [])'],
+    ['(Box of [Integer])', 'paren([word(Box) word(of) [word(Integer)]])'],
+
+    // Underscore numeric literals and the 0d forms.
+    ['1_000', '1000'],
+    ['1_0.5', '10.5'],
+    ['0d1_2.3', '12.3'],
+    ['0d1e2', '100'],
+    ['0d1.5e2', '150'],
+    ['0d1_2e1_0', '120000000000'],
+    ['1__0', 'ERR [boru/syntax_error]: misplaced `_` in numeric literal: 1__0'],
+    ['1_', 'ERR [boru/syntax_error]: invalid numeric literal: 1_'],
+
+    // String escape tails: unicode/hex pass through decoded, unknown
+    // escapes drop the backslash.
+    ["'u\\u0041'", "'uA'"],
+    ["'x\\x41'", "'xA'"],
+    ["'q\\z'", "'qz'"],
+
+    // Bare word values in data context stay opaque words.
+    ['{a: true}', '{a:word(true)}'],
+    ['[true false]', '[word(true) word(false)]'],
+    ['{b: none}', '{b:none}'],
   ]
   for (const [src, want] of rows) {
     it(JSON.stringify(src), () => {
