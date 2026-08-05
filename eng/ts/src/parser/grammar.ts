@@ -21,6 +21,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { Jsonic } from '@tabnas/jsonic'
+import { BoruError } from '../error.ts'
 
 import {
   type DeclGrammar,
@@ -1284,6 +1285,11 @@ export function setupParenGrammar(j: any, t: ParserTokens): void {
     setBC(rs, [
       (r: any) => {
         if (Array.isArray(r.node)) {
+          if (r.node.length > 0 && r.node[r.node.length - 1] === null) {
+            // A trailing comma hole (`(1,)`, `(,)`): Go's grammar
+            // derails the paren close here — same taxonomy and text.
+            throw new BoruError('syntax_error', 'unmatched opening parenthesis', '(')
+          }
           r.node = new ParenGroup(r.node)
         }
       },
@@ -1320,12 +1326,15 @@ export function setupParenGrammar(j: any, t: ParserTokens): void {
   j.rule('pelem', (rs: any) => {
     setBC(rs, [
       (r: any, ctx: any) => {
-        if (undefined !== r.child.node) {
-          if (Array.isArray(r.node)) {
-            r.node.push(r.child.node)
-            if (r.parent && r.parent !== ctx.NORULE) {
-              r.parent.node = r.node
-            }
+        if (Array.isArray(r.node)) {
+          // A comma with no value between (`(1,,2)`, `(,1)`, `(1,)`)
+          // leaves the child empty: record a NULL HOLE so the paren
+          // close and the converter raise the same taxonomy Go does —
+          // interior/leading holes are empty list elements; a trailing
+          // hole derails the paren close (Go parity).
+          r.node.push(undefined !== r.child.node ? r.child.node : null)
+          if (r.parent && r.parent !== ctx.NORULE) {
+            r.parent.node = r.node
           }
         }
       },
