@@ -306,6 +306,21 @@ func TestStoredFnBattery(t *testing.T) {
 	})
 }
 
+// TestFallbackIslandBattery drives the interpreter-island path: dofbq
+// declares CompileFallbackBody WITHOUT the DynEnv escape, so a body
+// the closure path declines lowers to a fallback span the VM re-runs
+// through a sub-engine.
+func TestFallbackIslandBattery(t *testing.T) {
+	runBattery(t, []batteryRow{
+		{input: "dofbq [1 addq 2]", want: "3"},
+		{input: "dofbq [def z 5 z]", want: "5"},
+		{input: "dofbq [10 20]", want: "10 20"},
+		{input: "def n 3 dofbq [n addq 1]", want: "4"},
+		{input: "dofbq [dofbq [2]]", want: "2"},
+		{input: "1 dofbq [2] addq", want: "3"},
+	})
+}
+
 // TestRangeLoopBattery drives the range-form for: static ranges with
 // every arity, negative steps, and computed bounds (const start/step,
 // runtime end) that still lower to FOR_SETUP.

@@ -351,8 +351,25 @@ func fixDoReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 
 // registerEngSpecCallable installs `doq` — the battery's Callable
 // body-runner, carrying basic's do CallableSpec so the kernel's
-// closure dispatch/record/lower pipeline is driven standalone.
+// closure dispatch/record/lower pipeline is driven standalone — and
+// `dofbq`, the fallback-only variant (CompileFallbackBody without
+// CompileDynBody, the each/fold shape): a body the closure path
+// declines lowers to an interpreter ISLAND instead of a DynEnv call,
+// driving the fallback-span record/lower/VM path.
 func registerEngSpecCallable(r *eng.Registry) {
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name: "dofbq",
+		Callable: &eng.CallableSpec{BodyPos: 0, BodyOut: eng.BodyOutResidual, Inputs: func(_ []eng.Value) []eng.Value {
+			return []eng.Value{}
+		}},
+		Signatures: []eng.Signature{{
+			Args:       []*eng.Type{eng.TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Impl:       eng.Go(fixDoHandler),
+			ReturnsFn:  fixDoReturnsFn, BarrierPos: -1,
+			CompileEffect: eng.CompileFallbackBody,
+		}},
+	})
 	r.RegisterNativeFunc(eng.NativeFunc{
 		Name: "doq",
 		Callable: &eng.CallableSpec{BodyPos: 0, BodyOut: eng.BodyOutResidual, Inputs: func(_ []eng.Value) []eng.Value {
