@@ -31,4 +31,8 @@ func TestInactiveAnalysisImpl(t *testing.T) {
 		t.Fatal("inactive atUncaughtTopLevel must be false")
 	}
 	inactiveAddUnique(nil, CheckDiagnostic{})
+	c := NewCarrier(TInteger)
+	if got := inactiveJoinCarriers(Value{}, c); !ValuesEqual(got, c) {
+		t.Fatal("inactive join must keep the last write")
+	}
 }

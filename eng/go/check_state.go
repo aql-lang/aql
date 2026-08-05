@@ -1258,4 +1258,9 @@ func cloneMap[K comparable, V any](m map[K]V) map[K]V {
 // check piece's carrier machinery, which installs the real fold at
 // init. The fallback (last write wins) keeps a check-less core
 // linkable; RecordContextSet only runs under an active analysis.
-var joinCarriersHook = func(existing, carrier Value) Value { return carrier }
+var joinCarriersHook = inactiveJoinCarriers
+
+// inactiveJoinCarriers is the named check-less fallback (last write
+// wins); the seam test pins it, and carrier.go's init installs the real
+// fold while the check piece is linked.
+func inactiveJoinCarriers(existing, carrier Value) Value { return carrier }
