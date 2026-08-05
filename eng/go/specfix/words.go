@@ -1443,4 +1443,5 @@ func registerEngSpecTypeOps(r *eng.Registry) {
 func RegisterControlWords(r *eng.Registry) {
 	registerEngSpecControl(r)
 	registerEngSpecCallable(r)
+	registerEngSpecBaking(r)
 }

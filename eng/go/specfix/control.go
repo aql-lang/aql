@@ -533,3 +533,40 @@ func fixForRangeReturnsFn(args []eng.Value, r *eng.Registry) []eng.Value {
 	}
 	return []eng.Value{out}
 }
+
+// fixBakeFnHandler applies its fn argument to 7 — the runtime side of
+// the battery's stored-fn word.
+func fixBakeFnHandler(args []eng.Value, _ map[string]eng.Value, _ []eng.Value, r *eng.Registry) ([]eng.Value, error) {
+	info, ok := args[0].Data.(eng.FnDefInfo)
+	if !ok || len(info.Signatures) == 0 {
+		return nil, &eng.BoruError{Code: "type_error", Detail: "bakefnq: argument must be a fn"}
+	}
+	return r.CallBoru(&info.Signatures[0], []eng.Value{eng.NewInteger(7)}, nil)
+}
+
+// registerEngSpecBaking installs `bakefnq` and `bakebodyq` — battery
+// fixtures declaring the stored-fn / stored-body compile capabilities
+// (the spawn / service / codec-handler shapes), so recordCallOperands'
+// baking arms and compileStoredBody run standalone.
+func registerEngSpecBaking(r *eng.Registry) {
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name: "bakefnq",
+		Signatures: []eng.Signature{{
+			Args:          []*eng.Type{eng.TFunction},
+			Impl:          eng.Go(fixBakeFnHandler),
+			Returns:       []*eng.Type{eng.TAny},
+			BarrierPos:    -1,
+			CompileEffect: eng.CompileStoresFn,
+		}},
+	})
+	r.RegisterNativeFunc(eng.NativeFunc{
+		Name: "bakebodyq",
+		Signatures: []eng.Signature{{
+			Args:       []*eng.Type{eng.TList},
+			NoEvalArgs: map[int]bool{0: true},
+			Impl:       eng.Go(fixDoHandler),
+			ReturnsFn:  fixDoReturnsFn, BarrierPos: -1,
+			CompileEffect: eng.CompileStoresBody,
+		}},
+	})
+}

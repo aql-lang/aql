@@ -321,6 +321,20 @@ func TestFallbackIslandBattery(t *testing.T) {
 	})
 }
 
+// TestBakingBattery drives the stored-fn / stored-body capability
+// arms: fn consts baked through bakefnq (with and without captures),
+// and NoEval bodies compiled as stored units through bakebodyq.
+func TestBakingBattery(t *testing.T) {
+	runBattery(t, []batteryRow{
+		{input: "bakefnq (fn [[x:Integer] [Integer] [x addq 1]])", want: "8"},
+		{input: "def f (fn [[x:Integer] [Integer] [x mulq 2]]) bakefnq f", want: "14"},
+		{input: "bakebodyq [1 addq 2]", want: "3"},
+		{input: "bakebodyq [10 20]", want: "10 20"},
+		{input: "def n 4 bakebodyq [n addq 1]", want: "5"},
+		{input: "bakefnq 5", wantErr: "no signature matches"},
+	})
+}
+
 // TestRangeLoopBattery drives the range-form for: static ranges with
 // every arity, negative steps, and computed bounds (const start/step,
 // runtime end) that still lower to FOR_SETUP.
