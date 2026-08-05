@@ -134,6 +134,8 @@ describe('parse battery', () => {
     ["<a b='${2}'/>", 'interp-xml(<a b="${2}"/>)'],
     ['<a><b>${3}</b></a>', 'interp-xml(<a><b>${3}</b></a>)'],
     ['<a><!-- c --></a>', '<a/>'],
+    ['<a><!-- unclosed', 'ERR xml: unterminated comment in <a>'],
+    ["<a  b = '1' />", '<a b="1"/>'],
 
     // Arrow-fold shapes: bare, in lists and parens, mid-stream folds;
     // the map-value positions the fold rejects.

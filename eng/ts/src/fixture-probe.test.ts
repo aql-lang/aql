@@ -66,8 +66,17 @@ describe('fixture guard probes', () => {
     ['enum [a b]', 'a tor b'],
 
     // typed-def constraint fallback: an unknown constraint name goes
-    // through the atomic-value converter.
+    // through the atomic-value converter; literal-value constraints
+    // accept exactly their value.
     ['def x:zzz 1', { err: 'does not satisfy' }],
+    ['def x:5 5', ''],
+    ['def x:5 6', { err: 'does not satisfy declared type 5' }],
+    ['def x:true true', ''],
+    ["def x:'s' 's'", ''],
+    ['def x:2.5 2.5', ''],
+    ['def x:none 1', { err: 'does not satisfy declared type none' }],
+    ['def tt Integer def y:tt 3 y', '3'],
+    ['def y:[:Integer] [1 2] y', '[1 2]'],
   ]
   for (const [input, want] of rows) {
     it(JSON.stringify(input), () => {
