@@ -136,26 +136,33 @@ export function isTypeBody(v: Value): boolean {
  *     (v.VType conforms to t.VType);
  *   - otherwise: structural identity on the carried types (best effort).
  */
-/** Structural value equality (scalars, atoms, type literals, lists, maps). */
-function valuesEqual(a: Value, b: Value): boolean {
-  // Bare type literals compare by their lattice node.
+/**
+ * unifiesValue mirrors Go's symmetric Unify over the fixture's value
+ * subset — the path IsValueOfType falls to for a concrete RHS and for
+ * disjunct alternatives (unify.go::unifyInner). A bare type literal on
+ * either side admits a conforming partner (`Integer is 5`, `[3] is
+ * [Integer]`); lists unify element-wise; concrete maps unify with
+ * EXACT key sets (the open subset pattern applies only at
+ * IsValueOfType's record-shape arm and unifyDisjunct's immediate map
+ * alternative, never to nested maps); scalar leaves need compatible
+ * types and equal payloads.
+ */
+function unifiesValue(a: Value, b: Value): boolean {
   if (a.data === null || b.data === null) {
-    return a.data === null && b.data === null && a.vType.equal(b.vType)
+    return a.vType.matches(b.vType) || b.vType.matches(a.vType)
   }
-  // Lists (plain or typed) compare element-wise.
   const ae = listElements(a)
   const be = listElements(b)
   if (ae !== null && be !== null) {
-    return ae.length === be.length && ae.every((x, i) => valuesEqual(x, be[i]!))
+    return ae.length === be.length && ae.every((x, i) => unifiesValue(x, be[i]!))
   }
   if (ae !== null || be !== null) return false
-  // Maps compare by sorted keys then values.
   if (a.isMap() && b.isMap()) {
     const am = a.asMap()
     const bm = b.asMap()
     const ak = am.sortedKeys()
     const bk = bm.sortedKeys()
-    return ak.length === bk.length && ak.every((k, i) => k === bk[i] && valuesEqual(am.get(k)!, bm.get(k)!))
+    return ak.length === bk.length && ak.every((k, i) => k === bk[i] && unifiesValue(am.get(k)!, bm.get(k)!))
   }
   // Scalars / atoms: compatible leaves and equal payload.
   if (!(a.vType.matches(b.vType) || b.vType.matches(a.vType))) return false
@@ -195,15 +202,6 @@ export function isValueOfType(v: Value, t: Value): boolean {
     }
     return v.asMap().keys().every((k) => isValueOfType(v.asMap().get(k)!, child))
   }
-  // Positional list type `[A B …]` (a concrete list of type/value
-  // elements): v must be a same-length list whose elements satisfy the
-  // corresponding template element.
-  if (Array.isArray(t.data)) {
-    const ve = listElements(v)
-    if (ve === null) return false
-    const te = t.data as Value[]
-    return ve.length === te.length && te.every((tt, i) => isValueOfType(ve[i]!, tt))
-  }
   // Record-shape / structural map type: every key declared in t must
   // be present in v with a conforming value (extra v keys are allowed).
   if (t.data instanceof OrderedMap) {
@@ -212,16 +210,27 @@ export function isValueOfType(v: Value, t: Value): boolean {
     const vm = v.asMap()
     return tm.keys().every((k) => vm.has(k) && isValueOfType(vm.get(k)!, tm.get(k)!))
   }
-  // Disjunct / Enum membership: v satisfies the union if it satisfies
-  // any alternative (a type-literal alternative is a subtype check; a
-  // concrete alternative — an enum member — is value equality).
+  // Disjunct / Enum membership, mirroring unify_disjunct.go: v
+  // satisfies the union if some alternative unifies with it — a
+  // type-literal alternative is a subtype check; a concrete map
+  // alternative is an OPEN pattern (subset matching); any other
+  // concrete alternative admits an equal value OR a bare-literal
+  // candidate the alternative's type conforms to (`Integer is E`
+  // holds for `enum [1 2]` because 1 unifies with Integer).
   if (t.isDisjunct()) {
+    if (v.data === null && !v.carrier && v.vType.equal(TAny)) return true
     for (const alt of t.asDisjunct().alternatives) {
       if (alt.data === null) {
         if (isValueOfType(v, alt)) return true
-      } else if (valuesEqual(v, alt)) {
-        return true
+        continue
       }
+      if (alt.data instanceof OrderedMap && v.data instanceof OrderedMap) {
+        const am = alt.asMap()
+        const vm = v.asMap()
+        if (am.keys().every((k) => vm.has(k) && unifiesValue(vm.get(k)!, am.get(k)!))) return true
+        continue
+      }
+      if (unifiesValue(v, alt)) return true
     }
     return false
   }
@@ -232,8 +241,9 @@ export function isValueOfType(v: Value, t: Value): boolean {
     }
     return v.vType.matches(t.vType)
   }
-  // Concrete RHS that is not a type: `is` is value equality
-  // (`5 is 6` → false, `5 is 5` → true). Structural type-body RHS
-  // (record-shape maps) is handled by a later increment.
-  return valuesEqual(v, t)
+  // Concrete RHS that is not a type — including a concrete list
+  // template `[A B …]` — routes through the symmetric unify walk, like
+  // Go's terminal `Unify(v, t)`: `5 is 5` → true, `Integer is 5` →
+  // true, `[3 2] is [Integer 2]` → true.
+  return unifiesValue(v, t)
 }
