@@ -2811,7 +2811,14 @@ func (e *Engine) stepWord(val Value) error {
 			// macros) use the explicit `def name word [list]` form, whose
 			// __SP marker is handled in stepLiteral.
 			if e.registry.analysisActive() {
-				checkBraid.tagCheckModeDefRead(e, &top, w.Name)
+				// Tag a COPY and write it back: taking &top toward the
+				// opaque S9 slot would make every interpreter def read
+				// heap-allocate top (the braid call is invisible to
+				// escape analysis) — the one measured regression of the
+				// slot conversion (TestInterpAllocCeilings).
+				tagged := top
+				checkBraid.tagCheckModeDefRead(e, &tagged, w.Name)
+				top = tagged
 			}
 			e.tape.Set(e.pointer, top)
 			return e.stepLiteral()
