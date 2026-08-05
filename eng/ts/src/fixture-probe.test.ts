@@ -77,6 +77,22 @@ describe('fixture guard probes', () => {
     ['def x:none 1', { err: 'does not satisfy declared type none' }],
     ['def tt Integer def y:tt 3 y', '3'],
     ['def y:[:Integer] [1 2] y', '[1 2]'],
+    // Modifier-suffixed constraint names walk the full modifier scan:
+    // valid suffixes strip to the base word, /q quotes, doubled or
+    // unknown letters raise, /t builds the type-bound sugar, and the
+    // float specials bind by value.
+    ['def x:f/r 1', { err: 'declared type word(f)' }],
+    ['def x:f/2 1', { err: 'declared type word(f)' }],
+    ['def x:f/q 1', { err: 'declared type f' }],
+    ['def x:go/rq 1', { err: 'invalid word modifier /rq on "go"' }],
+    ['def x:a/3f 1', { err: 'declared type word(a)' }],
+    ['def x:w/u 1', { err: 'declared type word(w)' }],
+    ['def x:w/t 1', { err: 'declared type sugar(type-bound [[w]])' }],
+    ['def x:w/ff 1', { err: 'invalid word modifier /ff on "w"' }],
+    ['def x:w/99 1', { err: 'declared type word(w)' }],
+    ['def x:-inf -inf', ''],
+    ['def x:inf inf', ''],
+    ['def x:nan nan', { err: 'does not satisfy declared type nan' }],
   ]
   for (const [input, want] of rows) {
     it(JSON.stringify(input), () => {
