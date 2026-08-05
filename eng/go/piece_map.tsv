@@ -132,3 +132,4 @@ deepequal_capability.go	core
 generics_unify.go	core	
 signature.go	core	
 compiler_dispatch_record.go	compiler	
+check_recovery.go	check	
