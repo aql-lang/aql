@@ -80,6 +80,10 @@ describe('fixture compiled lane', () => {
     'def x (1 addq 2) x typeof',
     // Typed-list constraints over computed lists.
     'def l:[:Integer] [1 2] l lengthq',
+    // Forward-form dispatch: the parked marker fires under the
+    // recorder, driving the check-mode carrier/record path.
+    'addq 1 2',
+    '5 addq 3 ;',
   ]
   let vmCount = 0
   for (const input of rows) {

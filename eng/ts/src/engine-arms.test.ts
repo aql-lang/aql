@@ -6,7 +6,7 @@
 import { describe, it } from 'node:test'
 import { strict as assert } from 'node:assert'
 
-import { BoruError, Engine, Registry, newInteger, newWord } from './index.ts'
+import { BoruError, Engine, Registry, TSugar, Value, compile, newInteger, newMark, newMove, newWord } from './index.ts'
 import { newOpenParen } from './value.ts'
 import { registerSpecWords, renderStack, tokenize } from './spec-fixture.ts'
 
@@ -63,6 +63,34 @@ describe('omitted optional params take base values (pinned to Go)', () => {
     assert.equal(run('def f fn [[x:Float ?] [Float] [x]] f'), '0.0')
     assert.equal(run('def f fn [[n:Integer ?] [Integer] [n]] f'), '0')
   })
+  it('container and atom bases mirror BaseValue', () => {
+    // The base list rides the binding quote like any list arg.
+    assert.equal(run('def f fn [[l:List ?] [Any] [l]] f'), '(quote [])')
+    assert.equal(run('def f fn [[m:Map ?] [Any] [m]] f'), '{}')
+    assert.equal(run('def f fn [[a:Atom ?] [Any] [a]] f'), '/q')
+  })
+})
+
+describe('forward collection shapes (pinned to Go)', () => {
+  it('a parked marker fires at the statement end', () => {
+    assert.equal(run('5 addq 3 ;'), '8')
+    assert.equal(run('addq 1 2'), '3')
+  })
+  it('an interp-string forward arg resolves during the scan', () => {
+    assert.equal(run("concatq `v=${1}` 'y'"), "'yv=1'")
+  })
+  it("'end' with missing args fails the dispatch", () => {
+    assert.match(runErr('addq 1 ;'), /no signature matches/)
+  })
+})
+
+describe('data-eval shapes (pinned to Go)', () => {
+  it('a multi-result paren map value collects into a list', () => {
+    assert.equal(run('{a:(1 2)}'), '{a:[1 2]}')
+  })
+  it('non-xml list elements stringify inside xml interpolation', () => {
+    assert.equal(run('<a>${[1 2]}</a>'), '<a>12</a>')
+  })
 })
 
 describe('forward collection edges', () => {
@@ -77,6 +105,34 @@ describe('forward collection edges', () => {
 describe('paren scan resolution', () => {
   it('interp strings resolve inside parens', () => {
     assert.equal(run("def x 5 (`v=${x}` concatq '!')"), "'v=5!'")
+  })
+})
+
+describe('marker and token edge arms', () => {
+  it('a sugar token with no payload steps over', () => {
+    const r = new Registry()
+    registerSpecWords(r)
+    const out = new Engine(r).run([new Value(TSugar, null), newInteger(1n)])
+    assert.equal(out.length, 2)
+  })
+  it('an orphan move with no mark drops silently', () => {
+    const r = new Registry()
+    registerSpecWords(r)
+    const out = new Engine(r).run([newMove('m9'), newInteger(4n)])
+    assert.equal(out.length, 1)
+    assert.equal(out[0]!.data, 4n)
+  })
+  it('a second move to a consumed mark drops and forgets the id', () => {
+    const r = new Registry()
+    registerSpecWords(r)
+    const out = new Engine(r).run([newMark('m1', []), newMove('m1'), newMove('m1'), newInteger(7n)])
+    assert.equal(out[out.length - 1]!.data, 7n)
+  })
+  it('a recursive fn under the check pass takes the induction hatch', () => {
+    const r = new Registry()
+    registerSpecWords(r)
+    const result = compile(r, tokenize('def f fn [[n:Integer] [Integer] [f n]] f 1'))
+    assert.notEqual(result, undefined)
   })
 })
 
