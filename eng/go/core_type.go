@@ -440,9 +440,7 @@ func InstallType(r *Registry, name string, body Value) error {
 				// binding's payload Name stays empty (the canon note above).
 				named := fd
 				named.Name = name
-				if ref, stampOK := StampDetachedFn(r, named, body.Pos()); stampOK {
-					stampCompiledRef(fd, ref)
-				}
+				compiledRuntime.StampDetached(r, named, body.Pos())
 			}
 		}
 		installPredicateUnifier(def, body, r, name)

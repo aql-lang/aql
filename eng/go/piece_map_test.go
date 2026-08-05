@@ -57,8 +57,8 @@ var upwardRefs = []struct {
 			// The recon-inventoried F1 sites, burned down by Stage 2.
 			"engine.go": true, "core_helpers.go": true, "method_shape.go": true,
 			"registry.go": true, "core_make.go": true, "core_ref.go": true,
-			"word_extend.go": true, "interp_entry.go": true, "core_type.go": true,
-			"util.go": true, "fn_params.go": true, "invoke.go": true,
+			"word_extend.go": true, "interp_entry.go": true,
+			"util.go": true, "fn_params.go": true,
 			"depscalar.go": true, "effects.go": true, "policy_hook.go": true,
 			"module_export_growth.go": true, "engine_pool.go": true,
 			"core_boolean.go": true, "typed_bind.go": true, "value.go": true,
@@ -72,7 +72,7 @@ var upwardRefs = []struct {
 		allowed: map[string]bool{
 			"engine.go": true, "core_helpers.go": true, "method_shape.go": true,
 			"registry.go": true, "depscalar.go": true, "interp_entry.go": true,
-			"macro_expand.go": true, "fn_def.go": true, "invoke.go": true,
+			"macro_expand.go": true, "fn_def.go": true,
 			"word_extend.go": true, "value.go": true, "engine_pool.go": true,
 		},
 	},

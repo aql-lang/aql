@@ -1,0 +1,39 @@
+package eng
+
+// CompiledRuntime is the core→eng inversion seam (Stage 1 of the
+// four-piece split, design/ENG-FOUR-PIECE.0.md seam S4): everything the
+// pure interpreter needs FROM the bytecode runtime goes through this
+// interface, generalizing the Registry.Invoker precedent. The core
+// default declines every operation, so a core-only build simply takes
+// the interpreter path; the VM piece installs the real runtime at init.
+type CompiledRuntime interface {
+	// InvokeCompiled attempts the stamped-unit fast path for a matched
+	// signature (ref freshness, JIT re-stamp, the effect fence, and the
+	// internal-error fallback classification are the runtime's own
+	// business). ran=false → the caller owns the interpreter path.
+	InvokeCompiled(r *Registry, sig *Signature, args []Value) (res []Value, err error, ran bool)
+	// StampDetached compiles and stamps a detached fn at install time
+	// (InstallType's runtime-stamping route). A decline is silent: the
+	// binding stays interpreter-dispatched.
+	StampDetached(r *Registry, fd FnDefInfo, pos SrcPos)
+}
+
+// noCompiledRuntime is the interpreter-only default: every operation
+// declines, mirroring a build with no VM linked.
+type noCompiledRuntime struct{}
+
+func (noCompiledRuntime) InvokeCompiled(*Registry, *Signature, []Value) ([]Value, error, bool) {
+	return nil, nil, false
+}
+func (noCompiledRuntime) StampDetached(*Registry, FnDefInfo, SrcPos) {}
+
+var compiledRuntime CompiledRuntime = noCompiledRuntime{}
+
+// InstallCompiledRuntime replaces the process-wide compiled runtime —
+// called once from the VM piece's init. Exposed for the piece cut; a
+// second install (tests) must restore the previous value.
+func InstallCompiledRuntime(rt CompiledRuntime) (prev CompiledRuntime) {
+	prev = compiledRuntime
+	compiledRuntime = rt
+	return prev
+}

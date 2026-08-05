@@ -71,42 +71,14 @@ func InvokeCallback(r *Registry, sig *Signature, args []Value, captures []Captur
 	// (REFUSAL-CLOSURE.0 §7c) — recompile against the live bindings, bounded
 	// by the ref's try budget — and only a declined re-stamp takes the
 	// interpreter, where the seam previously degraded permanently.
-	ref := sig.CompiledRef()
-	if ref != nil && ref.Prog != nil && !ref.depsFresh(r) {
-		ref = ref.jitRestamp(r)
-	}
-	if ref != nil && ref.Prog != nil {
-		// A stamped unit runs on the VM (fresh run on an idle registry, or nested
-		// in the enclosing compiled run). Its result is used ONLY when the unit did
-		// not raise an internal_error: that class means a VM/lowering soundness
-		// bailout or a recovered handler panic, so — with no outer RunCompiled to
-		// catch it out here past the enclosing run — the seam itself falls back to
-		// CallBoru, exactly as RunCompiled does. Genuine boru runtime errors are the
-		// interpreter's answer too and pass straight through.
-		//
-		// The writer fence is armed around the attempt because a DETACHED
-		// callback fires after the enclosing compiled run disarmed its own
-		// fence: without the wrap, a callback that PRINTS and then bails would
-		// leave the ledger untouched and the CallBoru retry below would emit
-		// the output a second time. Nested invocations (mid-compiled-run) are
-		// already armed; the second wrap only double-counts, and the fence
-		// reads deltas, not magnitudes.
-		disarm := r.ArmEffectFence()
-		effectsAt := r.Effects.Count()
-		res, err, ran := invokeCompiledUnit(r, ref, args)
-		disarm()
-		if ran {
-			if !isInternalErr(err) {
-				return res, err
-			}
-			// C1 effect fence (effects.go): the retry re-runs the whole body,
-			// so it is sound only while the failed unit emitted NO observable
-			// effect — a callback that wrote to the peer and THEN bailed must
-			// surface the internal_error rather than double its output.
-			if r.Effects.Count() != effectsAt {
-				return nil, err
-			}
-		}
+	// The compiled fast path lives behind the CompiledRuntime seam
+	// (compiled_runtime.go, Stage 1 of the four-piece split): the VM
+	// piece owns ref freshness, the JIT re-stamp, the C1 effect fence,
+	// and the internal-error degrade decision. ran=false — including a
+	// bailed unit with no observable effect — leaves the interpreter
+	// path to the code below.
+	if res, err, ran := compiledRuntime.InvokeCompiled(r, sig, args); ran {
+		return res, err
 	}
 	// Observability seam (interp_entry.go): the callback seam's interpreter
 	// fallback — its own name so the C4 decline tag can attach later without
