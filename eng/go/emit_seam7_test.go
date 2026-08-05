@@ -1682,3 +1682,16 @@ func TestEmitCheckpointHandle(t *testing.T) {
 		t.Fatal("concrete Checkpoint should hand out a (possibly zero) snapshot")
 	}
 }
+
+// TestInactiveConstructorSlots pins the compiler-less fallbacks behind
+// the pass-arming constructor slots: both hand out the inactive no-op
+// recorder. The live slots are compiler-installed at init; the fallback
+// bodies are the post-cut core-only configuration.
+func TestInactiveConstructorSlots(t *testing.T) {
+	if inactiveEmitStateHook() != EmitRecorder(theInactiveEmit) {
+		t.Fatal("inactiveEmitStateHook must hand out the inactive recorder")
+	}
+	if inactiveIsolatedEmitHook(theInactiveEmit) != EmitRecorder(theInactiveEmit) {
+		t.Fatal("inactiveIsolatedEmitHook must hand out the inactive recorder")
+	}
+}

@@ -251,7 +251,14 @@ type EmitCheckpoint interface{ isEmitCheckpoint() }
 // concrete recorder, which core cannot name — the compiler piece
 // installs its constructors here at init (the S9 slot pattern), and the
 // inactive fallbacks keep a compiler-less core linkable.
+// The fallbacks are NAMED so the seam test can pin them directly: the
+// compiler piece's init replaces the slots while it is linked, leaving
+// the fallback bodies reachable only on a compiler-less core build
+// (the post-cut configuration Stage 5 gates).
+func inactiveEmitStateHook() EmitRecorder                { return theInactiveEmit }
+func inactiveIsolatedEmitHook(EmitRecorder) EmitRecorder { return theInactiveEmit }
+
 var (
-	newEmitStateHook    = func() EmitRecorder { return theInactiveEmit }
-	newIsolatedEmitHook = func(saved EmitRecorder) EmitRecorder { return theInactiveEmit }
+	newEmitStateHook    = inactiveEmitStateHook
+	newIsolatedEmitHook = inactiveIsolatedEmitHook
 )
