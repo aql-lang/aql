@@ -403,3 +403,54 @@ func TestInstallDefArms(t *testing.T) {
 		t.Error("type-literal def must bind")
 	}
 }
+
+// TestInstallDefFnArms drives installDef's Function-body arms: sig
+// installation via a fn value, the shadow (frame-binding) variant, the
+// overlap-removal on redefinition, the conditional-body refusal, and
+// the non-FnDefInfo carrier no-op.
+func TestInstallDefFnArms(t *testing.T) {
+	r := specfixProbeRegistry(t)
+	build := func(src string) eng.Value {
+		t.Helper()
+		vals, err := parser.Parse(src)
+		if err != nil {
+			t.Fatal(err)
+		}
+		out, err := eng.NewTop(r).Run(vals)
+		if err != nil || len(out) != 1 {
+			t.Fatalf("build %q: %v %v", src, out, err)
+		}
+		return out[0]
+	}
+	fn1 := build("fn [[x:Integer] [Integer] [x addq 1]]")
+	fn2 := build("fn [[x:Integer] [Integer] [x addq 2]]")
+
+	eng.InstallDef(r, "ff", fn1)
+	if r.Lookup("ff") == nil {
+		t.Fatal("fn def must install signatures")
+	}
+	// Overlapping redefinition drops the colliding overload.
+	eng.InstallDef(r, "ff", fn2)
+	vals, _ := parser.Parse("ff 1")
+	out, err := eng.NewTop(r).Run(vals)
+	if err != nil || eng.Canon(out) != "3" {
+		t.Errorf("redefined ff 1 = %s / %v, want 3", eng.Canon(out), err)
+	}
+	// The frame-binding variant SHADOWS instead.
+	eng.InstallFrameBinding(r, "ff", fn1)
+	vals, _ = parser.Parse("ff 1")
+	out, err = eng.NewTop(r).Run(vals)
+	if err != nil || eng.Canon(out) != "2" {
+		t.Errorf("shadowed ff 1 = %s / %v, want 2", eng.Canon(out), err)
+	}
+	// A conditional-body redefinition marks the program uncompilable
+	// (a no-op off the compile pass — the binding still replaces).
+	r.Check.CondBodyDepth++
+	eng.InstallDef(r, "ff", fn2)
+	r.Check.CondBodyDepth--
+	// A Function-parented value with no FnDefInfo installs nothing.
+	eng.InstallDef(r, "gg", eng.NewValueRaw(eng.TFunction, eng.IntPayload{N: 1}))
+	if r.Lookup("gg") != nil {
+		t.Error("non-FnDefInfo function body must not install signatures")
+	}
+}
