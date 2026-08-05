@@ -68,6 +68,18 @@ describe('fixture compiled lane', () => {
     'def f fn [[x:Integer] [Integer] [x addq 1]] f 4',
     'inspect addq',
     'def m {k:2} m get k',
+    // Typed defs over COMPUTED values: the enforce-constraint compile
+    // arms re-validate at run time.
+    'def x:Integer (1 addq 2) x',
+    'def x:5 (2 addq 3) x',
+    'def x:Integer (1 addq 2) def y:Integer (x addq 1) y',
+    "def s:'ab' ('a' concatq 'b') s",
+    // Dynamic names inspected and re-dispatched under the recorder.
+    'noretq 5 dup drop',
+    'def x (1 addq 2) inspect x',
+    'def x (1 addq 2) x typeof',
+    // Typed-list constraints over computed lists.
+    'def l:[:Integer] [1 2] l lengthq',
   ]
   let vmCount = 0
   for (const input of rows) {
