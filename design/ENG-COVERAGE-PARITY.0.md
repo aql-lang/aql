@@ -24,8 +24,8 @@ Go and ts need total parity.")
      Makefile). Current: **89** (measured 89.7%,
      22,252/24,796 statements).
    - TS: `make test-ts`, floor `TS_GATE_LINES` (root Makefile).
-     Current: **91** (measured 91.38% lines; branches 86.4%,
-     functions 89.3% recorded but not yet gated).
+     Current: **92** (measured 92.37% lines; branches 86.8%,
+     functions 89.4% recorded but not yet gated).
    Raise the floor in the same PR that raises coverage; lowering
    either floor is a build break by intent.
 4. **Parity of corpus.** The shared `eng/spec` corpus remains the
@@ -154,3 +154,4 @@ differential guards the aligned behaviors permanently.
 | 2026-08-05 | 89 | 88 | TS wave 1: the parse-error translation campaign (errors.ts 48→100), the canon tails (71.8→98.5), and the parser breadth battery (convert.ts 72.7→82.2) — 85.68→88.53 lines. |
 | 2026-08-05 | 89 | 90 | TS wave 2: the legacy hand-rolled tokenizer (dead since the jsonic parser became the single path; its value contract predates ADR-012 opacity) removed after an oracle experiment proved it diverges by design; fixture guard probes landed and the fixture-parity backlog recorded — 88.53→90.90 lines. |
 | 2026-08-05 | 89 | 91 | TS wave 3: three fixture-parity alignments (get quoting + None-literal misses, do's error-value hatch with the new ErrorInfo value kind, refine Record guards) and 20 parse-battery rows (generics angle sugar, underscore/0d numerics, escape tails) — 90.90→91.38 lines. |
+| 2026-08-05 | 89 | 92 | TS wave 4: the 1-arg bare refine port closes the fixture-parity backlog; 19 battery rows for map-shorthand modifier keys and the XML family (entities, error taxonomy, interpolation holes, comments) — 91.38→92.37 lines. |

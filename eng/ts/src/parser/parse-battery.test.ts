@@ -109,6 +109,31 @@ describe('parse battery', () => {
     ['{a: true}', '{a:word(true)}'],
     ['[true false]', '[word(true) word(false)]'],
     ['{b: none}', '{b:none}'],
+
+    // Map-shorthand keys strip a VALID modifier suffix; an invalid
+    // one keeps the full token; /q quotes to an atom value.
+    ['{x}', '{x:word(x)}'],
+    ['{x/r}', '{x:word(x)}'],
+    ['{x/2}', '{x:word(x)}'],
+    ['{x/s}', '{x:word(x)}'],
+    ['{x/q}', '{x:x/q}'],
+    ['{x/zz}', '{x/zz:word(x/zz)}'],
+    ['{a x/r}', '{a:word(a) x:word(x)}'],
+
+    // XML: entity re-escaping, error taxonomy, interpolation holes,
+    // and comment handling.
+    ['<a>&amp;&lt;&gt;</a>', '<a>&amp;&lt;&gt;</a>'],
+    ["<a b='&amp;'/>", '<a b="&amp;"/>'],
+    ['<a>&#65;</a>', '<a>&amp;#65;</a>'],
+    ['<a>&quot;</a>', '<a>"</a>'],
+    ['<a', 'ERR xml: unterminated opening tag <a>'],
+    ['<a></b>', 'ERR xml: mismatched closing tag </b> for <a>'],
+    ['<a href=>x</a>', 'ERR xml: attribute "href" in <a> must have a quoted value'],
+    ["<a 'x'/>", 'ERR xml: invalid attribute name in <a>'],
+    ['<a>${1}</a>', 'interp-xml(<a>${1}</a>)'],
+    ["<a b='${2}'/>", 'interp-xml(<a b="${2}"/>)'],
+    ['<a><b>${3}</b></a>', 'interp-xml(<a><b>${3}</b></a>)'],
+    ['<a><!-- c --></a>', '<a/>'],
   ]
   for (const [src, want] of rows) {
     it(JSON.stringify(src), () => {
