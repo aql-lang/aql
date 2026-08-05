@@ -765,7 +765,7 @@ func runSkipProp(parent *native.Registry, args []native.Value) ([]native.Value, 
 // yields tokens only, and the caller builds today's throwaway CallBoru sig.
 func storedBodyArg(arg native.Value, what string) (*native.FnSig, []native.Value, error) {
 	if fd, ok := arg.Data.(native.FnDefInfo); ok && len(fd.Signatures) == 1 {
-		if impl, isBoru := fd.Signatures[0].Impl.(*eng.BoruImpl); isBoru && fd.Signatures[0].CompiledRef() != nil {
+		if impl, isBoru := fd.Signatures[0].Impl.(*eng.BoruImpl); isBoru && eng.CompiledRef(&fd.Signatures[0]) != nil {
 			return &fd.Signatures[0], impl.Body, nil
 		}
 	}

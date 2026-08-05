@@ -404,8 +404,9 @@ func runVMEntry(p *Program, r *Registry, stepLimit int, enter func(*vmContext) (
 // whose unit indices mean nothing against vc.p, so a mid-run invoke of one
 // takes the interpreter seam. Hosting a foreign program's unit nested is the
 // Phase 6 JIT detached-unit cache's territory.
-func (vc *vmContext) runUnitNested(ref *CompiledFnRef, args []Value) ([]Value, bool, error) {
-	if ref.Prog != vc.p {
+func (vc *vmContext) runUnitNested(h any, args []Value) ([]Value, bool, error) {
+	ref, ok := h.(*CompiledFnRef)
+	if !ok || ref.Prog != vc.p {
 		return nil, false, nil
 	}
 	res, err := vc.enterBodyUnit(vc.r, ref.Unit, bindUnitLocals(&vc.p.Fns[ref.Unit], args, ref.Captures))
@@ -2388,17 +2389,6 @@ func checkReturnContract(r *Registry, fn *CompiledFn, stack []Value, stackBase i
 		}
 	}
 	return stack, nil
-}
-
-// ReturnPattern returns the declared pattern for return position k, or nil
-// when that position has none (or the unit carries no patterns at all).
-// Mirrors ReturnCheckInfo.ReturnPattern so the compiled and interpreted RET
-// contracts read the same.
-func (f *CompiledFn) ReturnPattern(k int) *Value {
-	if k < 0 || k >= len(f.ReturnPatterns) {
-		return nil
-	}
-	return f.ReturnPatterns[k]
 }
 
 // vmMakeMap pops the values of an OpMakeMap assembly off the top of stack and

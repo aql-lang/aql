@@ -58,7 +58,7 @@ type BoruImpl struct {
 	// the compiled unit via RunUnit when the registry can host a VM run and
 	// falls back to splicing Body on the interpreter otherwise. Nil for a body
 	// the compiler never armed (a plain interpreter run, or a refused body).
-	Compiled *CompiledFnRef
+	Compiled any // opaque *CompiledFnRef, owned by the compiler piece (S4 opaque handle)
 }
 
 func (a *BoruImpl) dispatchHandler() Handler { return a.dispatch }
@@ -163,17 +163,6 @@ func DispatchSig(sig *Signature, args []Value, r *Registry) ([]Value, error) {
 func (s *Signature) body() []Value {
 	if a, ok := s.Impl.(*BoruImpl); ok {
 		return a.Body
-	}
-	return nil
-}
-
-// CompiledRef returns the sig's durable compiled-unit reference, or nil when
-// the body was never compiled (a Go sig, an un-armed boru body, a refused body).
-// It is the read surface the callback-invocation seam consults to choose the VM
-// path over CallBoru.
-func (s *Signature) CompiledRef() *CompiledFnRef {
-	if a, ok := s.Impl.(*BoruImpl); ok {
-		return a.Compiled
 	}
 	return nil
 }

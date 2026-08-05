@@ -108,7 +108,7 @@ func firstStampedHandler(prog *eng.Program) *eng.Signature {
 			continue
 		}
 		for i := range fd.Signatures {
-			if fd.Signatures[i].CompiledRef() != nil {
+			if eng.CompiledRef(&fd.Signatures[i]) != nil {
 				return &fd.Signatures[i]
 			}
 		}
@@ -129,7 +129,7 @@ func TestStoredFnCompilesAndRunsOnVM(t *testing.T) {
 	if sig == nil {
 		t.Fatal("handler was not compiled + stamped with a CompiledFnRef")
 	}
-	ref := sig.CompiledRef()
+	ref := eng.CompiledRef(sig)
 	if ref.Prog != prog {
 		t.Fatalf("Finalize did not back-stamp ref.Prog (got %p, want %p)", ref.Prog, prog)
 	}
@@ -275,7 +275,7 @@ func TestStoredFnMultiOverloadStampsPerSig(t *testing.T) {
 			continue
 		}
 		for i := range fd.Signatures {
-			if fd.Signatures[i].CompiledRef() != nil {
+			if eng.CompiledRef(&fd.Signatures[i]) != nil {
 				stamped++
 			}
 		}
@@ -298,7 +298,7 @@ func TestStoredFnMultiOverloadStampsPerSig(t *testing.T) {
 			continue
 		}
 		for i := range fd.Signatures {
-			if fd.Signatures[i].CompiledRef() != nil {
+			if eng.CompiledRef(&fd.Signatures[i]) != nil {
 				stamped2++
 			}
 		}
@@ -322,7 +322,7 @@ func TestStoredFnMultiOverloadStampsPerSig(t *testing.T) {
 			continue
 		}
 		for i := range fd.Signatures {
-			if ref := fd.Signatures[i].CompiledRef(); ref != nil {
+			if ref := eng.CompiledRef(&fd.Signatures[i]); ref != nil {
 				refs[ref] = true
 			}
 		}

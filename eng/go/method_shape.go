@@ -49,64 +49,6 @@ package eng
 // (containerFnAutoDispatchRisk / zeroArgFnOut) still refuse those reads
 // outright before any model could run.
 
-// PendingMethodApply threads ONE modelled shaped-method dispatch from
-// tryShapedMethodDispatch into recordDispatchOutcome. Set immediately
-// before the model's carrierResults call and consumed by
-// tryRecordMethodApply; the model declines (no tape splice) if the
-// pending was not consumed (an unexpected special-word short-circuit).
-type PendingMethodApply struct {
-	Origin Value  // the dynamic method-read carrier; its producing event supplies the runtime fn
-	Word   string // the member word name (defensive re-key at the outcome seam)
-}
-
-// NoteMethodShape registers a method-shape annotation: the get-family read
-// that produced the dynamic carrier `out` resolved the concrete member
-// `member` on a check-mode shape instance. Vetting is centralised here so
-// every caller inherits the guards:
-//
-//   - only a NAMED trivial-delegation wrapper carrying a foreign
-//     sub-registry qualifies (the shaped-instance-method class — a plain
-//     user fn stored in a map keeps today's refusal paths, so a capturing
-//     method fn still refuses);
-//   - a member with a GENUINE 0-arg overload — the miscompile-E
-//     auto-dispatch family (Span.finish, Rand.bool) — is now ANNOTATED
-//     rather than excluded: its landing is modelled as an arity-0
-//     OpCallDynMethod (shapedMethodApplyWindow's all-0-arg path), the
-//     read-guard refusal is skipped for the annotated read
-//     (EmitState.noteShapedRead), and a landing the model cannot claim
-//     REFUSES outright (tryShapedMethodDispatch's guard-owned decline)
-//     so the guard is re-homed, never weakened;
-//   - macros stay data (applied only by name).
-func (c *CheckState) NoteMethodShape(out, member Value) {
-	if !c.IsActive() || out.ID == "" {
-		return
-	}
-	fd, ok := member.Data.(FnDefInfo)
-	if !ok || fd.Registry == nil || fd.Name == "" || fd.Macro {
-		return
-	}
-	if !isDelegationFnDef(fd) {
-		return
-	}
-	if c.MethodShapes == nil {
-		c.MethodShapes = map[string]Value{}
-	}
-	c.MethodShapes[out.ID] = member
-	// Mirror the annotation into the recorder so the get-family read
-	// guards (recordCallRefusal / RecordPolyCall) can skip their
-	// auto-dispatch refusal for a read the landing model owns.
-	c.Emit.noteShapedRead(out.ID)
-}
-
-// methodShapeMember returns the annotated member for a carrier ID.
-func (c *CheckState) methodShapeMember(id string) (Value, bool) {
-	if c == nil || id == "" || c.MethodShapes == nil {
-		return Value{}, false
-	}
-	m, ok := c.MethodShapes[id]
-	return m, ok
-}
-
 // evalFixedWindowToken reports whether a raw tape token is an INERT,
 // evaluation-fixed VALUE the shaped-method model may bake as a const
 // operand: a concrete scalar/atom, or a list/map whose members are

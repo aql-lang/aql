@@ -239,7 +239,8 @@ type Registry struct {
 	// normally-unreachable case), so InvokeCallback falls back to the interpreter.
 	// Nil outside a run; a fork inherits it but never reaches it (a fresh fork is
 	// idle, so InvokeCallback takes the RunUnit path there, not this one).
-	nestedRunner func(ref *CompiledFnRef, args []Value) (result []Value, handled bool, err error)
+	// ref is an opaque *CompiledFnRef (S4 opaque handle) — the VM asserts.
+	nestedRunner func(ref any, args []Value) (result []Value, handled bool, err error)
 
 	// vmRunning latches non-zero (via sync/atomic) for the duration of a
 	// RunProgram on this registry. Because RunProgram installs/restores the

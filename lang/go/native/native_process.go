@@ -161,7 +161,7 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	var compiledRef *eng.CompiledFnRef
 	if fd, ok := args[0].Data.(eng.FnDefInfo); ok {
 		for i := range fd.Signatures {
-			if ref := fd.Signatures[i].CompiledRef(); ref != nil && ref.Prog != nil {
+			if ref := eng.CompiledRef(&fd.Signatures[i]); ref != nil && ref.Prog != nil {
 				compiledRef = ref
 				break
 			}

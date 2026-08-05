@@ -228,7 +228,7 @@ func StampFnValue(r *Registry, v Value) (Value, bool) {
 	// compile-time stamp or an earlier detached one already carries the VM
 	// edge for the sigs it accepted; re-stamping is the §7c box's job).
 	for i := range fd.Signatures {
-		if fd.Signatures[i].CompiledRef() != nil {
+		if CompiledRef(&fd.Signatures[i]) != nil {
 			return v, false
 		}
 	}
@@ -279,7 +279,7 @@ func StampFnValueInPlace(r *Registry, v Value) bool {
 		return false
 	}
 	for i := range fd.Signatures {
-		if fd.Signatures[i].CompiledRef() != nil {
+		if CompiledRef(&fd.Signatures[i]) != nil {
 			return false
 		}
 	}

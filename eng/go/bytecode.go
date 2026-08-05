@@ -1193,3 +1193,28 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 		sb.WriteByte('\n')
 	}
 }
+
+// ReturnPattern returns the declared pattern for return position k, or nil
+// when that position has none (or the unit carries no patterns at all).
+// Mirrors ReturnCheckInfo.ReturnPattern so the compiled and interpreted RET
+// contracts read the same.
+func (f *CompiledFn) ReturnPattern(k int) *Value {
+	if k < 0 || k >= len(f.ReturnPatterns) {
+		return nil
+	}
+	return f.ReturnPatterns[k]
+}
+
+// CompiledRef returns the sig's durable compiled-unit reference, or nil
+// when the body was never compiled (a Go sig, an un-armed boru body, a
+// refused body). It is the read surface the callback-invocation seam and
+// the lang layer consult to choose the VM path over CallBoru. A free
+// function in the compiler piece (not a Signature method): the core
+// Signature holds the ref as an OPAQUE handle it cannot name.
+func CompiledRef(s *Signature) *CompiledFnRef {
+	if a, ok := s.Impl.(*BoruImpl); ok {
+		ref, _ := a.Compiled.(*CompiledFnRef)
+		return ref
+	}
+	return nil
+}

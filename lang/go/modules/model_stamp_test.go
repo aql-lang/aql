@@ -69,7 +69,7 @@ func TestModelActionStampsAtBuild(t *testing.T) {
 			t.Fatalf("spec action %q is not a fn value: %v", key, fnV)
 		}
 		for i := range fd.Signatures {
-			if fd.Signatures[i].CompiledRef() != nil {
+			if eng.CompiledRef(&fd.Signatures[i]) != nil {
 				t.Errorf("spec action %q carries a compiled ref — the stamp must live on the model's private clone only", key)
 			}
 		}

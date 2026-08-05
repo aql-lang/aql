@@ -47,7 +47,7 @@ func storedHandlerRefs(t *testing.T, r *Registry, name string) []*eng.CompiledFn
 			}
 			var ref *eng.CompiledFnRef
 			for i := range fd.Signatures {
-				if r := fd.Signatures[i].CompiledRef(); r != nil {
+				if r := eng.CompiledRef(&fd.Signatures[i]); r != nil {
 					ref = r
 				}
 			}

@@ -245,3 +245,13 @@ func (inactiveEmit) unitNetsZero(int) bool                    { return false }
 // recorder hands out nil; the concrete Rollback ignores anything that is
 // not its own snapshot type.
 type EmitCheckpoint interface{ isEmitCheckpoint() }
+
+// Compile-pass constructor slots (Stage 4b): the pass-arming methods on
+// CheckState (BeginCompilePass / IsolateEmit) construct the compiler's
+// concrete recorder, which core cannot name — the compiler piece
+// installs its constructors here at init (the S9 slot pattern), and the
+// inactive fallbacks keep a compiler-less core linkable.
+var (
+	newEmitStateHook    = func() EmitRecorder { return theInactiveEmit }
+	newIsolatedEmitHook = func(saved EmitRecorder) EmitRecorder { return theInactiveEmit }
+)

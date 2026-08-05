@@ -321,7 +321,7 @@ func makeBranchForks(r *Registry, elems []Value) ([]*Registry, error) {
 func runParallelBranch(reg *Registry, elem Value) parallelResult {
 	if fd, ok := elem.Data.(eng.FnDefInfo); ok {
 		for i := range fd.Signatures {
-			ref := fd.Signatures[i].CompiledRef()
+			ref := eng.CompiledRef(&fd.Signatures[i])
 			if ref == nil || ref.Prog == nil {
 				continue
 			}

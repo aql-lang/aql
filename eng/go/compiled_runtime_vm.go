@@ -10,7 +10,7 @@ type vmCompiledRuntime struct{}
 func init() { InstallCompiledRuntime(vmCompiledRuntime{}) }
 
 func (vmCompiledRuntime) InvokeCompiled(r *Registry, sig *Signature, args []Value) ([]Value, error, bool) {
-	ref := sig.CompiledRef()
+	ref := CompiledRef(sig)
 	if ref != nil && ref.Prog != nil && !ref.depsFresh(r) {
 		ref = ref.jitRestamp(r)
 	}

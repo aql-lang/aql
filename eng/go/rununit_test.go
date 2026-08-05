@@ -229,7 +229,7 @@ func TestStampCompiledRef(t *testing.T) {
 	if !stampCompiledRef(boruFd, ref) {
 		t.Fatal("a boru body sig must accept the stamp")
 	}
-	if boruFd.Signatures[0].CompiledRef() != ref {
+	if CompiledRef(&boruFd.Signatures[0]) != ref {
 		t.Fatal("stamp did not land on the sig")
 	}
 	// A fallback-only sig is skipped; a Go sig has no *BoruImpl → no stamp.
@@ -247,19 +247,19 @@ func TestStampCompiledRef(t *testing.T) {
 func TestSignatureCompiledRef(t *testing.T) {
 	ref := &CompiledFnRef{Prog: &Program{}, Unit: 3}
 	boruSig := &Signature{Impl: &BoruImpl{Body: []Value{NewInteger(1)}, Compiled: ref}}
-	if got := boruSig.CompiledRef(); got != ref {
+	if got := CompiledRef(boruSig); got != ref {
 		t.Fatalf("boru-body CompiledRef = %v, want the stamped ref", got)
 	}
 	// An un-armed boru body reports no unit.
 	bareSig := &Signature{Impl: &BoruImpl{Body: []Value{NewInteger(1)}}}
-	if got := bareSig.CompiledRef(); got != nil {
+	if got := CompiledRef(bareSig); got != nil {
 		t.Fatalf("un-armed CompiledRef = %v, want nil", got)
 	}
 	// A Go sig has no boru body at all.
 	goSig := &Signature{Impl: Go(func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) {
 		return nil, nil
 	})}
-	if got := goSig.CompiledRef(); got != nil {
+	if got := CompiledRef(goSig); got != nil {
 		t.Fatalf("Go-sig CompiledRef = %v, want nil", got)
 	}
 }

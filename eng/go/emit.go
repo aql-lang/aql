@@ -7770,3 +7770,8 @@ func (es *EmitState) methodShapeAnnotated(id string) bool {
 	_, ok := es.reg.Check.methodShapeMember(id)
 	return ok
 }
+
+func init() {
+	newEmitStateHook = func() EmitRecorder { return NewEmitState() }
+	newIsolatedEmitHook = newIsolatedEmit
+}

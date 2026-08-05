@@ -172,32 +172,6 @@ func (s *StoreShapeInfo) CloneShape() *StoreShapeInfo {
 	return cp
 }
 
-// ContextShape returns the abstract shape carrier for a LIVE context
-// layer, minting it on first sight. Keyed by the layer's identity (the
-// *StoreInstanceInfo pointer): in check mode the runtime COW replace
-// never runs (set's Impl is intercepted), so the top-of-stack pointer
-// is stable for the lifetime of its scope — every `context` call in one
-// scope shares one shape, and each engine Run's pushed layer (a `do`
-// body, a module load) gets its own. Holding the pointer as a map key
-// also keeps the layer reachable, so a recycled allocation can never
-// alias two scopes' shapes. The returned Value is a fresh-ID copy
-// sharing the shape pointer.
-func (c *CheckState) ContextShape(store *StoreInstanceInfo, scope int) Value {
-	if c == nil || store == nil {
-		return NewCarrier(TStore)
-	}
-	if c.CtxShapes == nil {
-		c.CtxShapes = map[*StoreInstanceInfo]Value{}
-	}
-	v, ok := c.CtxShapes[store]
-	if !ok {
-		v = NewStoreShapeCarrier(TStore, scope)
-		c.CtxShapes[store] = v
-	}
-	v.ID = GenerateID(IDPrefixForType(v.Parent))
-	return v
-}
-
 // flexShapeMaxDepth caps MintFlexShapeCarrier's recursion over nested
 // concrete maps. A concrete map graph is finite but may be deep or (via
 // shared flex handles adopted into a literal) cyclic; past the cap a

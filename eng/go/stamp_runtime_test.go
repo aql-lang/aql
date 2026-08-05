@@ -294,7 +294,7 @@ func TestInvokeCallbackStaleDepFallsBack(t *testing.T) {
 	}
 
 	// The positive twin: a FRESH snapshot takes the VM unit (42).
-	sig.Impl.(*BoruImpl).Compiled.depSnap = map[string]depSnapEntry{
+	sig.Impl.(*BoruImpl).Compiled.(*CompiledFnRef).depSnap = map[string]depSnapEntry{
 		"dep": {Depth: r.Defs.Depth("dep"), Gen: r.Defs.Gen("dep")},
 	}
 	out, err = InvokeCallback(r, sig, nil, nil)
@@ -317,7 +317,7 @@ func TestStampFnValueInPlace(t *testing.T) {
 		t.Fatalf("first in-place stamp must succeed")
 	}
 	fd := v.Data.(FnDefInfo)
-	if ref := fd.Signatures[0].CompiledRef(); ref == nil || ref.Prog == nil {
+	if ref := CompiledRef(&fd.Signatures[0]); ref == nil || ref.Prog == nil {
 		t.Fatalf("in-place stamp must mutate the shared impl")
 	}
 	if StampFnValueInPlace(r, v) {

@@ -89,7 +89,7 @@ func moduleFnRef(t *testing.T, modReg *native.Registry, name string) *eng.Compil
 		t.Fatalf("module binding %q is not a fn", name)
 	}
 	for i := range fd.Signatures {
-		if r := fd.Signatures[i].CompiledRef(); r != nil {
+		if r := eng.CompiledRef(&fd.Signatures[i]); r != nil {
 			return r
 		}
 	}
