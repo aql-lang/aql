@@ -136,6 +136,27 @@ describe('parse battery', () => {
     ['<a><!-- c --></a>', '<a/>'],
     ['<a><!-- unclosed', 'ERR xml: unterminated comment in <a>'],
     ["<a  b = '1' />", '<a b="1"/>'],
+    ["<a b='x&lt;y'/>", '<a b="x&lt;y"/>'],
+    ["<a b='x&gt;y&amp;z'/>", '<a b="x&gt;y&amp;z"/>'],
+    ['<a>t1<b/>t2</a>', '<a>t1<b/>t2</a>'],
+    ['<a><b/><c/></a>', '<a><b/><c/></a>'],
+    ['<a>pre${1}mid${2}post</a>', 'interp-xml(<a>pre${1}mid${2}post</a>)'],
+    ["<a b='p${1}q'/>", 'interp-xml(<a b="p${1}q"/>)'],
+    ["<a-b c-d='1'/>", '<a-b c-d="1"/>'],
+    ['<a_b/>', '<a_b/>'],
+    ['<A/>', '<A/>'],
+    ['</a>', "ERR xml: expected a tag name after '<'"],
+    ['<a/ >', "ERR xml: expected '/>' to close <a>"],
+    ['< a/>', "ERR xml: expected a tag name after '<'"],
+
+    // Word modifier surface forms: /t type-bound sugar, /u usurp,
+    // stack/forward/arity modifiers, and the doubled-letter errors.
+    ['w/t', 'sugar(type-bound [[w]])'],
+    ['w/u', 'word(w)'],
+    ['f/s', 'word(f)'],
+    ['f/12', 'word(f)'],
+    ['x/tt', 'ERR [boru/syntax_error]: invalid word modifier /tt on "x"'],
+    ['x/uu', 'ERR [boru/syntax_error]: invalid word modifier /uu on "x"'],
 
     // Arrow-fold shapes: bare, in lists and parens, mid-stream folds;
     // the map-value positions the fold rejects.
