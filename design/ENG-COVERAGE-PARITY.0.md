@@ -21,8 +21,8 @@ Go and ts need total parity.")
 3. **Target 100% on both; floors are ratchets.** Until the target is
    reached, each gate enforces a floor that ONLY RISES:
    - Go: `make cover-gate-eng`, floor `ENG_GATE_FLOOR` (root
-     Makefile). Current: **87** (measured 87.5%,
-     21,471/24,532 statements).
+     Makefile). Current: **88** (measured 88.8%,
+     21,787/24,532 statements).
    - TS: `make test-ts`, floor `TS_GATE_LINES` (root Makefile).
      Current: **85** (measured 85.68% lines; branches 84.5%,
      functions 84.1% recorded but not yet gated).
@@ -123,3 +123,4 @@ Gate the branches/functions metrics once lines reach 100.
 |---|---|---|---|
 | 2026-08-04 | 86 | 85 | Gates introduced; standalone lanes + specfix landed. |
 | 2026-08-05 | 87 | 85 | specfix guard probes + pragmas (fixtures at 100%); merged repo gate restored to 100%. |
+| 2026-08-05 | 88 | 85 | Stage-4 wave 1: unit probes for the pure-function tail (SizeOf, table/JSON render, Disassemble, the unify families, fn-spec params/returns, RunPredicate, CallBoru, registry arms) — 316 statements. |
