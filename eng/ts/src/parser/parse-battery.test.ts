@@ -196,6 +196,17 @@ describe('parse battery', () => {
     ['{m: [x] => [x]}', 'ERR [boru/syntax_error]: unexpected `=>` — nothing valid can appear here'],
     ['{x.y:1}', 'ERR [boru/syntax_error]: unexpected `.` — nothing valid can appear here'],
     ['{n: bf.n addq 1}', 'ERR [boru/syntax_error]: unexpected `1` — nothing valid can appear here'],
+
+    // Generic parameter lists: extends bounds, = defaults, mixed,
+    // lowercase names, comma separators, and the def head form.
+    ['Box<T extends Integer>', 'sugar(angle Box [word(T) word(extends) word(Integer)])'],
+    ['Box<T = Integer>', 'sugar(angle Box [word(T) word(=) word(Integer)])'],
+    ['Box<T extends Integer U = String>',
+      'sugar(angle Box [word(T) word(extends) word(Integer) word(U) word(=) word(String)])'],
+    ['Box<T extends>', 'sugar(angle Box [word(T) word(extends)])'],
+    ['Box<lower>', 'sugar(angle Box [word(lower)])'],
+    ['Box<T extends Integer,U>', 'sugar(angle Box [word(T) word(extends) word(Integer) word(U)])'],
+    ['def Box<T> (refine List)', 'word(def) sugar(angle Box [word(T)]) paren([word(refine) word(List)])'],
   ]
   for (const [src, want] of rows) {
     it(JSON.stringify(src), () => {
