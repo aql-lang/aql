@@ -77,11 +77,9 @@ var upwardRefs = []struct {
 		},
 	},
 	{
-		name: "concrete EmitState assert (F2-hard)",
-		re:   regexp.MustCompile(`\.\(\*EmitState\)`),
-		allowed: map[string]bool{
-			"engine.go": true, "core_helpers.go": true, "method_shape.go": true,
-		},
+		name:    "concrete EmitState assert (F2-hard)",
+		re:      regexp.MustCompile(`\.\(\*EmitState\)`),
+		allowed: map[string]bool{},
 	},
 }
 

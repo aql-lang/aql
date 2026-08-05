@@ -76,6 +76,15 @@ type EmitRecorder interface {
 	RegisterTrailingApply(fnID string, arity int)
 	noteMemberFnRead(id string, member Value)
 	memberFnRead(id string) bool
+	// Stage-0b promotions (design/ENG-FOUR-PIECE.0.md): the probes that
+	// used to require a concrete `.(*EmitState)` assert outside the emit
+	// cluster. Inactive: false / zero / no-op.
+	inClosureUnit() bool
+	storedGradualActive() bool
+	FoldFullStack(word string, args, preserved []Value) ([]Value, bool)
+	RecordSpliceDyn(payload Value, pos SrcPos) bool
+	noteShapedRead(id string)
+	memberFnReadValue(id string) (Value, bool)
 	dynInputsProven(sig *Signature, args []Value) bool
 	materialise(v Value) (Value, bool)
 	resolveOperand(v Value) (emitOperand, bool)
@@ -142,15 +151,21 @@ func (c *CheckState) Recorder() EmitRecorder {
 	return c.Emit
 }
 
-func (inactiveEmit) Active() bool              { return false }
-func (inactiveEmit) active() bool              { return false }
-func (inactiveEmit) Armed() bool               { return false }
-func (inactiveEmit) Suspend() func()           { return func() {} }
-func (inactiveEmit) bindRegistry(*Registry)    {}
-func (inactiveEmit) topFrameOnly() bool        { return true }
-func (inactiveEmit) suspendedNow() bool        { return false }
-func (inactiveEmit) bodyAnalysisGuard() func() { return func() {} }
-func (inactiveEmit) fnBodyGuard() func()       { return func() {} }
+func (inactiveEmit) Active() bool                                           { return false }
+func (inactiveEmit) inClosureUnit() bool                                    { return false }
+func (inactiveEmit) storedGradualActive() bool                              { return false }
+func (inactiveEmit) FoldFullStack(string, []Value, []Value) ([]Value, bool) { return nil, false }
+func (inactiveEmit) RecordSpliceDyn(Value, SrcPos) bool                     { return false }
+func (inactiveEmit) noteShapedRead(string)                                  {}
+func (inactiveEmit) memberFnReadValue(string) (Value, bool)                 { return Value{}, false }
+func (inactiveEmit) active() bool                                           { return false }
+func (inactiveEmit) Armed() bool                                            { return false }
+func (inactiveEmit) Suspend() func()                                        { return func() {} }
+func (inactiveEmit) bindRegistry(*Registry)                                 {}
+func (inactiveEmit) topFrameOnly() bool                                     { return true }
+func (inactiveEmit) suspendedNow() bool                                     { return false }
+func (inactiveEmit) bodyAnalysisGuard() func()                              { return func() {} }
+func (inactiveEmit) fnBodyGuard() func()                                    { return func() {} }
 
 func (inactiveEmit) MarkUncompilable(string) {}
 func (inactiveEmit) SetCatchVariadic(bool)   {}

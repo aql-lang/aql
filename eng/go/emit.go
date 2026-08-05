@@ -1109,6 +1109,13 @@ func (es *EmitState) forkForProbe() *EmitState {
 // — NOT the enclosing fn's per-call args the interpreter reads when the body
 // runs through InvokeBody — so the projection must decline and let the
 // dispatch fall to RecordCall's context-dependent-word refusal.
+// storedGradualActive reports a DETACHED stamp compile in progress
+// (storedGradualDepth > 0) — the interface probe for the stored-context
+// gradual-generalisation rule (core_helpers.go), Stage-0b promotion.
+func (es *EmitState) storedGradualActive() bool {
+	return es != nil && es.storedGradualDepth > 0
+}
+
 func (es *EmitState) inClosureUnit() bool {
 	if es == nil || len(es.openUnitRecs) == 0 {
 		return false

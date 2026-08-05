@@ -95,9 +95,7 @@ func (c *CheckState) NoteMethodShape(out, member Value) {
 	// Mirror the annotation into the recorder so the get-family read
 	// guards (recordCallRefusal / RecordPolyCall) can skip their
 	// auto-dispatch refusal for a read the landing model owns.
-	if es, ok := c.Emit.(*EmitState); ok {
-		es.noteShapedRead(out.ID)
-	}
+	c.Emit.noteShapedRead(out.ID)
 }
 
 // methodShapeMember returns the annotated member for a carrier ID.
@@ -531,8 +529,8 @@ func tryRecordMethodApply(r *Registry, word string, args, out []Value, pos SrcPo
 //     full arity of evaluation-fixed tokens inside the statement.
 func (e *Engine) tryMemberFnArrivalDispatch(valIdx int) bool {
 	r := e.registry
-	es, isEmit := r.Check.Recorder().(*EmitState)
-	if !isEmit || !es.active() || es.suspendedNow() {
+	es := r.Check.Recorder()
+	if !es.active() || es.suspendedNow() {
 		return false
 	}
 	v := e.tape.At(valIdx)

@@ -3664,10 +3664,8 @@ func (e *Engine) execMatch(match *MatchResult) error {
 			// depth/pick/roll compile instead of dying at Finalize as
 			// residuals of unknown provenance. A declined fold keeps the
 			// twin's carrier results and the historical refusal path.
-			if es, isES := e.registry.Check.Recorder().(*EmitState); isES {
-				if folded, ok := es.FoldFullStack(name, match.Args, preserved); ok {
-					results = folded
-				}
+			if folded, ok := e.registry.Check.Recorder().FoldFullStack(name, match.Args, preserved); ok {
+				results = folded
 			}
 			e.tape.Splice(base, end+1-base, results...)
 			e.pointer = base
@@ -4147,7 +4145,7 @@ func (e *Engine) stepLiteral() error {
 			// interpreter's own runtime semantics. Suspended analyses (a
 			// ReturnsFn body run) stay silent — only a LIVE recording is
 			// poisoned.
-			if rec, isEmit := e.registry.Check.Recorder().(*EmitState); isEmit && rec.active() &&
+			if rec := e.registry.Check.Recorder(); rec.active() &&
 				!IsConcrete(info.Data) && !IsBareTypeNode(info.Data) &&
 				(info.Data.Dynamic || info.Data.Parent == nil ||
 					TList.ConformsTo(info.Data.Parent) || info.Data.Parent.ConformsTo(TList)) {

@@ -1422,9 +1422,8 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// owns the program. Outside closure units every probed /q arrival
 		// already models faithfully (top-level no-match parity, the dynamic-
 		// carrier recovery refusal), so the guard stays scoped.
-		if emitES, isES := es.(*EmitState); isES && emitES.inClosureUnit() &&
-			quoteParamCarrierBind(sigParams, args) {
-			emitES.MarkUncompilable("fn " + nameCopy + ": Atom-typed param bound to a computed value in a closure body (quote capture is forward-only)")
+		if es.inClosureUnit() && quoteParamCarrierBind(sigParams, args) {
+			es.MarkUncompilable("fn " + nameCopy + ": Atom-typed param bound to a computed value in a closure body (quote capture is forward-only)")
 		}
 		// A FOREIGN-registry fn whose body constructs a fn value USED to
 		// refuse wholesale (the compiled unit executed against the
@@ -1505,8 +1504,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					// unstamped handler); applied globally it flipped whole-
 					// program main-pass rows (module-repl). Args with CONCRETE
 					// parents keep the precise strict generalisation below.
-					realES, inStored := es.(*EmitState)
-					if pt := sigParams[i].Type; inStored && realES.storedGradualDepth > 0 &&
+					if pt := sigParams[i].Type; es.storedGradualActive() &&
 						(pt == nil || pt.Equal(TAny)) &&
 						a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a) {
 						genArgs[i] = ParamInputCarrier(TAny)
