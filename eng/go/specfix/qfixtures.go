@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // RegisterQFixtures installs the shared `…q` spec-runner fixtures

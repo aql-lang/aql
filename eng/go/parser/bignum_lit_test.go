@@ -4,7 +4,7 @@ import (
 	"math/big"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // TestParseBigIntegerLiteral pins that `0d…` (no dot/exponent) parses to a

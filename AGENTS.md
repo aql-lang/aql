@@ -154,6 +154,7 @@ A few rules from those guides that bite hardest when missed:
 | `lang/go/` | The language layer: public `lang` API + the `native` word library + loadable `modules`. |
 | `basic/go/` | The base language layer: fundamental words (stack, definition, control, type-generics) + predefined content types. Depends on eng only (ADR-013). |
 | `eng/go/` | Engine kernel, jsonic parser, kernel spec runner. |
+| `core/go/` | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it. |
 | `lang/spec/` | The executable language spec (TSV files). |
 | `calc/go/` | A small calculator built on `eng` (learning example). |
 | `wpg/` | The wasm web playground. |

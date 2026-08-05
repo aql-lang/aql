@@ -1,5 +1,7 @@
 package eng
 
+import core "github.com/boru-lang/boru/core/go"
+
 // The bytecode recording pass — Stage 1 of design/boru-bytecode-plan.0.md.
 //
 // For the POSITIVE statement of what compiles and why — the rule each refusal
@@ -552,7 +554,7 @@ type EmitState struct {
 	// closure that has only es. Nil outside a compile pass.
 	reg *Registry
 	// progReg is the TOP-LEVEL program registry — captured at the FIRST
-	// bindRegistry (the outermost check Run, before any module body / island
+	// BindRegistry (the outermost check Run, before any module body / island
 	// sub-engine re-binds reg). Unlike reg it never re-binds, so Finalize can
 	// tell an ordinary top-level fn (rec.reg == progReg) from a foreign
 	// sub-registry fn (a module preamble body, rec.reg != progReg) and stamp
@@ -625,7 +627,7 @@ type EmitState struct {
 
 	// shapedReads mirrors CheckState.MethodShapes annotations (by read-out
 	// value ID) so the get-family read guards can exempt a read whose
-	// landing the shaped-method model owns. See noteShapedRead.
+	// landing the shaped-method model owns. See NoteShapedRead.
 	shapedReads map[string]bool
 	// defReads maps a value ID to the BINDING NAME the check pass read it
 	// from (stepWord's simple-value substitution). When such a value later
@@ -1144,9 +1146,9 @@ func (es *EmitState) Active() bool {
 // armed).
 func (es *EmitState) Armed() bool { return es != nil }
 
-// bindRegistry installs the registry back-pointer used by returned-closure
+// BindRegistry installs the registry back-pointer used by returned-closure
 // compilation (tryReturnedClosure) and the flex-hook sig-identity proof.
-func (es *EmitState) bindRegistry(r *Registry) {
+func (es *EmitState) BindRegistry(r *Registry) {
 	if es == nil {
 		return
 	}
@@ -1159,11 +1161,11 @@ func (es *EmitState) bindRegistry(r *Registry) {
 	es.reg = r
 }
 
-// topFrameOnly reports whether recording sits at the top event frame (no
+// TopFrameOnly reports whether recording sits at the top event frame (no
 // open branch/loop/fn capture) — the const-fold gate for computed container
 // elements. A missing recorder counts as top-frame (nothing is being
 // captured), matching the historical `es == nil || len(es.frames) == 1`.
-func (es *EmitState) topFrameOnly() bool {
+func (es *EmitState) TopFrameOnly() bool {
 	return es == nil || len(es.frames) == 1
 }
 
@@ -3137,6 +3139,7 @@ func (es *EmitState) RefuseCarriedUndef(name string) {
 // by LENGTH for the slice pools (intern/internType/RecordFallback only append)
 // and by VALUE for the small SiteCounts map.
 type emitCheckpoint struct {
+	EmitCheckpointBase
 	seq        int
 	consts     int
 	types      int
@@ -3147,7 +3150,6 @@ type emitCheckpoint struct {
 
 // Checkpoint captures the rollback point. Nil-safe (returns a zero checkpoint
 // that Rollback ignores via the nil-receiver guard at its call site).
-func (emitCheckpoint) isEmitCheckpoint() {}
 
 func (es *EmitState) Checkpoint() EmitCheckpoint {
 	if es == nil {
@@ -5212,7 +5214,7 @@ func zeroArgFnOut(outs []Value) bool {
 	return false
 }
 
-// noteShapedRead mirrors a CheckState.NoteMethodShape annotation into the
+// NoteShapedRead mirrors a CheckState.NoteMethodShape annotation into the
 // recorder: the get-family read that produced `id` resolved a shaped-
 // instance member whose LANDING the shaped-method model owns, so the
 // read-guard auto-dispatch refusals skip it (shapedReadOut).
@@ -5446,7 +5448,7 @@ func (es *EmitState) dynScopeRescue(v Value) (emitOperand, bool) {
 	return dynScopeOperand(es.intern(NewString(name))), true
 }
 
-func (es *EmitState) noteShapedRead(id string) {
+func (es *EmitState) NoteShapedRead(id string) {
 	if !es.Active() || id == "" {
 		return
 	}
@@ -5807,17 +5809,17 @@ func (es *EmitState) RecordMakeList(r *Registry, ins []Value, out Value, pos Src
 	if len(es.frames) != 1 {
 		return false
 	}
-	return es.recordMakeListInner(r, ins, out, pos)
+	return es.RecordMakeListInner(r, ins, out, pos)
 }
 
-// recordMakeListInner is the guard-free core of RecordMakeList: it resolves the
+// RecordMakeListInner is the guard-free core of RecordMakeList: it resolves the
 // element operands and appends the OpMakeList event. RecordMakeList wraps it with
 // the top-frame restriction (a fn-body residual list must fall back). The other
 // caller is RecordMakeMap, for a LIST-valued map entry (`{n:[expr]}`) whose list
 // is itself a CONSUMED-in-frame operand of the enclosing OpMakeMap — there the
 // top-frame guard does NOT apply (OpMakeList re-assembles from its operands per
 // run, exactly like OpMakeMap, so it is sound in a fn body / branch / loop).
-func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, pos SrcPos) bool {
+func (es *EmitState) RecordMakeListInner(r *Registry, ins []Value, out Value, pos SrcPos) bool {
 	// A SUSPENDED recorder (a higher-order body run for type inference —
 	// analyseHigherOrderBodyVals suspends recording) records no events. The
 	// autoEvalList / autoEvalMap CONSUMED-list callers gate on Armed() (a
@@ -5865,7 +5867,7 @@ func (es *EmitState) recordMakeListInner(r *Registry, ins []Value, out Value, po
 		// [(Test.test …) …]`, the voxgig spec-list pattern) assembles faithfully,
 		// exactly as `make` instances and builtin results already do. A genuinely
 		// stateful generator (`list-of [Rand.int] N`) is a NoEval CODE BODY run per
-		// iteration, not a list-literal element, so it never reaches recordMakeListInner.
+		// iteration, not a list-literal element, so it never reaches RecordMakeListInner.
 		// resolveOperand only ever yields a re-running event or an inert const here
 		// (never a frozen module result), so the assembly stays sound; gated by the
 		// bytecode differential + the voxgig --compile==interpret sweep.
@@ -5988,7 +5990,7 @@ func (es *EmitState) RecordInterp(parts []InterpPart, holeVals []Value, out Valu
 
 // RecordInterpXml is RecordInterp's XML twin (REFUSAL-CLOSURE §9.2c): the
 // template skeleton rides in Program.XmlInterps and OpInterpXml pops the
-// hole VALUES in traversal order (buildXmlFromTmpl's attrs-then-children
+// hole VALUES in traversal order (BuildXmlFromTmpl's attrs-then-children
 // depth-first walk — the same order the hole dispatches recorded their
 // events). Returns false, leaving es untouched, when a hole has no
 // compiled home — the caller then refuses and the program falls back.
@@ -7280,7 +7282,7 @@ func (es *EmitState) Finalize(residual []Value) (*Program, string, bool) {
 			// isolation and (b) race — every fork's CALL_NATIVE would call
 			// ensureInvoker on the one shared registry, mutating its Invoker
 			// field concurrently (the -race gate TestCompiledConcurrencyRaceFree).
-			// progReg is the FIRST-bound registry (bindRegistry), stable across
+			// progReg is the FIRST-bound registry (BindRegistry), stable across
 			// the pass unlike es.reg which re-binds on every module-body / island
 			// sub-engine run. A foreign sub-registry stays the correct shared
 			// pointer (module bodies are not fork-parallelised in the corpus);
@@ -7706,6 +7708,6 @@ func (es *EmitState) methodShapeAnnotated(id string) bool {
 }
 
 func init() {
-	NewEmitStateHook = func() EmitRecorder { return NewEmitState() }
-	NewIsolatedEmitHook = newIsolatedEmit
+	core.NewEmitStateHook = func() EmitRecorder { return NewEmitState() }
+	core.NewIsolatedEmitHook = newIsolatedEmit
 }

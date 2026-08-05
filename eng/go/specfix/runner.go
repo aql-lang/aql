@@ -21,7 +21,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // ErrSkipRow is the sentinel a Run / RenderRun returns to SKIP a row

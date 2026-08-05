@@ -64,3 +64,48 @@ S1–S10, risks): [ENG-FOUR-PIECE-RECON.0.md](ENG-FOUR-PIECE-RECON.0.md).
      move with their code; external tests untouched via the facade.
    - **Stage 5** — gates: cover-gate-core at 100; per-piece profiles;
      the TS mirror follows in a later program ("go first").
+7. **Amendment (2026-08-05, maintainer): the pieces are TOP-LEVEL
+   modules, not sub-packages.** "Core, basic, eng and lang are all to
+   be at the same level, not under internal in eng." Decision 1's
+   sub-package layout is superseded: the cut core lives at `core/go`
+   (module `github.com/boru-lang/boru/core/go`, package `core`), a
+   sibling of `eng/go`, and the module chain becomes
+   `core ← eng ← basic ← lang ← cmd`. check and compiler remain
+   VIRTUAL pieces inside eng/go (tracked by `eng/go/piece_map.tsv`)
+   until their own cuts; the parser likewise stays an eng/go
+   sub-package on the facade until the Stage-5 re-point.
+
+## Stage 4 record (2026-08-05)
+
+- `core/go` cut: the interpreter-core production files (package
+  `core`) moved with their white-box tests; the module requires only
+  cockroachdb/apd.
+- `eng/go` keeps check + compiler + vm + parser and gains the
+  GENERATED facade `aliases_core.go` (`piecetool -facade`: type
+  aliases, const re-exports, set-once var mirrors, thin inlinable
+  wrapper funcs) plus the hand-written `aliases_core_generic.go`
+  (the generic `Cap[T]`, which a facade wrapper cannot express).
+  Mutable slot tables are NOT mirrored — installers write `core.X`
+  qualified. Regenerate the facade after any core surface change.
+  Wrapper funcs must stay direct calls (never var-of-func) so they
+  inline; the alloc ceilings (`TestInterpAllocCeilings`) gate this
+  across the module boundary.
+- Every seam slot carries a NAMED, test-pinned inactive default
+  (`TestInactiveAnalysisImpl`, `TestInactiveCheckBraid`,
+  `TestInactiveEmitMethods`): an anonymous default replaced at init
+  is unreachable and fails the merged ADR-008 gate.
+- `make cover-gate-core` established: core/go by its own suite,
+  floor 80 (measured 80.5%); Stage 5 ratchets it to 100 by moving
+  the remaining check/compile-only arms out of core files or
+  covering them from the core suite.
+- `make cover-gate-eng` RE-BASED: the cut moved the interpreter
+  core's statements and ~120 kernel test files to core/go, so the
+  pre-cut floor (89, measured over the undivided kernel) is not
+  comparable. The gate now spans eng/go only, restarting at the
+  post-cut measured 84.6% (floor 84); the (cover-gate-eng,
+  cover-gate-core) pair supersedes the old single gate and both
+  ratchet independently to 100.
+- Facade funcs no suite calls (66 at the cut) are emitted as
+  `var Name = core.Name` func-value re-exports — same call syntax
+  at every reference site, no wrapper body to leave permanently
+  uncovered (`coldFuncs` in the generator).

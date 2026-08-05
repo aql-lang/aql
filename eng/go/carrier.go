@@ -1,6 +1,8 @@
 package eng
 
 import (
+	core "github.com/boru-lang/boru/core/go"
+
 	"errors"
 	"sort"
 	"strconv"
@@ -38,9 +40,10 @@ func NewDynamicCarrierValue(bound Value) Value {
 // soundness oracle. Elem is a Value (a type literal or a disjunct of the
 // per-frame leaked types), never Any/Dynamic — a variadic-Any marker would let
 // the oracle admit a wrong-typed leak.
-type SpreadPayload struct{ Elem Value }
-
-func (SpreadPayload) payloadMarker() {}
+type SpreadPayload struct {
+	PayloadBase
+	Elem Value
+}
 
 // NewVariadicCarrier builds a variadic-spread carrier over element `elem`.
 // Parent is TAny so no TList/TMap carrier machinery touches it; it is
@@ -3943,4 +3946,4 @@ func resolveTypeNameArgs(args []Value) []Value {
 	return out
 }
 
-func init() { joinCarriersHook = JoinCarriers }
+func init() { core.JoinCarriersHook = JoinCarriers }

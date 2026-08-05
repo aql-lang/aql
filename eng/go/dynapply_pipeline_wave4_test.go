@@ -283,7 +283,7 @@ func TestCompiledMapResidual(t *testing.T) {
 	}, "{k:9}")
 }
 
-// --- loop-body list assembly (recordMakeListInner) --------------------------------------
+// --- loop-body list assembly (RecordMakeListInner) --------------------------------------
 
 func TestCompiledLoopBodyListArg(t *testing.T) {
 	// A computed list consumed by clen INSIDE a loop body re-assembles

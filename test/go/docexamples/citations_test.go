@@ -226,7 +226,7 @@ func TestCitationResolutionNegatives(t *testing.T) {
 		t.Errorf("a basename shared by several files must be ambiguous, got %v", st)
 	}
 	// A rooted path that does exist resolves.
-	if _, st := resolveCited(root, "eng/go/compare.go", index); st != resolveOK {
+	if _, st := resolveCited(root, "core/go/compare.go", index); st != resolveOK {
 		t.Errorf("a rooted real path must resolve, got %v", st)
 	}
 

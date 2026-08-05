@@ -155,12 +155,12 @@ func TestNoteMethodShapeDeclinesNonDelegation(t *testing.T) {
 	}
 }
 
-// noteShapedRead self-gates on an inactive recorder.
+// NoteShapedRead self-gates on an inactive recorder.
 func TestNoteShapedReadInactive(t *testing.T) {
 	es := &EmitState{}
-	es.noteShapedRead("some-id")
+	es.NoteShapedRead("some-id")
 	if es.shapedReads != nil {
-		t.Error("inactive noteShapedRead must record nothing")
+		t.Error("inactive NoteShapedRead must record nothing")
 	}
 	if es.shapedReadOut([]Value{NewDynamicCarrier(TAny)}) {
 		t.Error("shapedReadOut over an empty table must be false")

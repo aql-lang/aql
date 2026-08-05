@@ -21,8 +21,13 @@ Go and ts need total parity.")
 3. **Target 100% on both; floors are ratchets.** Until the target is
    reached, each gate enforces a floor that ONLY RISES:
    - Go: `make cover-gate-eng`, floor `ENG_GATE_FLOOR` (root
-     Makefile). Current: **89** (measured 89.7%,
-     22,252/24,796 statements).
+     Makefile). Current: **84** (measured 84.6%, 9,776/11,552
+     statements — RE-BASED at the four-piece Stage 4 cut, which
+     moved the interpreter core's statements and their kernel test
+     files to `core/go`; the pair with `make cover-gate-core`
+     (floor `CORE_GATE_FLOOR`, currently 80) supersedes the
+     pre-cut single-gate floor of 89, and both ratchet
+     independently to 100 — design/ENG-FOUR-PIECE.0.md).
    - TS: `make test-ts`, floor `TS_GATE_LINES` (root Makefile).
      Current: **93** (measured 93.09% lines; branches 87.2%,
      functions 90.9% recorded but not yet gated).
@@ -168,3 +173,4 @@ differential guards the aligned behaviors permanently.
 | 2026-08-05 | 89 | 96 | TS wave 25: the Reach canon arm ported (canonReach — dotted surface with plain/getr segments, the `$` lens, quoted/computed keys, paren receivers), closing a render gap where TS canon printed `[object Object]` for every reach value; six Go-pinned chain rows. canon.ts 91.56→99.68 — total lines steady at 96.92 (the new arm's lines offset the rows' gains). |
 | 2026-08-05 | 89 | 97 | TS wave 26: arrow folds in list/reach contexts (incl. the reach-interior fold `a.b => [1]` and the map-value refusal), computed/quoted/numeric map keys, and the optional-key sibling leak pinned as a SHARED quirk (both engines wrap the sibling identically — tabnas's K map rides across pairs). grammar.ts 92.15→93.33 — 96.92→97.06 total lines. |
 | 2026-08-05 | 89 | 97 | Go wave: `eachq` — the battery's lambda-hook Callable (quotation AND Function-value forms over the InvokeBody seam, with the element-carrier model in its ReturnsFn), the standalone driver for tryRecordLambdaClosure / lambdaHookCompatible / lambdaCallbackInputs; 8 battery rows all VM-executed. eng/go standalone 90.1→90.3 (callable_words 65→69). |
+| 2026-08-05 | 84 (re-base) + core 80 | 97 | Four-piece Stage 4 cut: the interpreter core and ~120 kernel test files moved to core/go. The Go gate re-bases over eng/go alone (measured 84.6%) and gains a twin, `cover-gate-core` (floor 80, measured 80.5%); the pair covers the same statements the old single gate did, both ratcheting to 100 (design/ENG-FOUR-PIECE.0.md). |

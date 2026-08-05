@@ -74,7 +74,7 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 	// guard branch — every EmitState method below is nil-receiver-safe and
 	// compileStoredFnUnit declines on a nil state.
 	es, _ := fork.Check.Recorder().(*EmitState)
-	es.bindRegistry(fork)
+	es.BindRegistry(fork)
 	if es != nil {
 		// Detached compiles run in GRADUAL-Any nesting mode: an Any arg
 		// flowing into a nested callee's Any param binds a gradual carrier

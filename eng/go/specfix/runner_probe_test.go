@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/eng/go/parser"
 )
 

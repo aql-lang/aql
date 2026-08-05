@@ -46,7 +46,7 @@ func TestDynScopeRescueReaderFallback(t *testing.T) {
 	r.Check.FnBinders = map[string]map[string]bool{"dsv": {"binder": true}}
 	r.Check.FnCallGraph = map[string]map[string]bool{"binder": {"reader": true}}
 	es := NewEmitState()
-	es.bindRegistry(r)
+	es.BindRegistry(r)
 	es.units = append(es.units, &emitUnit{localByID: map[string]int{}},
 		&emitUnit{localByID: map[string]int{}})
 	// unitNames stays EMPTY (the fallback under test); the check's
@@ -133,7 +133,7 @@ func TestActiveTokenMapConstGate(t *testing.T) {
 		return NewMap(om)
 	}
 	es := NewEmitState()
-	es.bindRegistry(r)
+	es.BindRegistry(r)
 	// NewEmitState seeds the module unit; one more puts us inside a fn unit.
 	es.units = append(es.units, &emitUnit{localByID: map[string]int{}})
 	if _, ok := es.resolveOperand(mkMap()); ok {
@@ -145,7 +145,7 @@ func TestActiveTokenMapConstGate(t *testing.T) {
 	}
 	// Module scope (the seeded single unit) keeps the map bake.
 	es2 := NewEmitState()
-	es2.bindRegistry(r)
+	es2.BindRegistry(r)
 	if _, ok := es2.resolveOperand(mkMap()); !ok {
 		t.Error("module scope must keep the active-token map bake")
 	}

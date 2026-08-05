@@ -146,7 +146,7 @@ func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 	sig, positions, ok := shapedMethodApplyWindow(e, valIdx, member)
 	if !ok {
 		// Guard-owned decline: the get-family read guard was SKIPPED for this
-		// annotated read (noteShapedRead), so a genuine-0-arg member whose
+		// annotated read (NoteShapedRead), so a genuine-0-arg member whose
 		// landing the model cannot claim must refuse HERE — the auto-dispatch
 		// guard is re-homed onto the landing, never weakened.
 		if FnValueZeroArg(member) {

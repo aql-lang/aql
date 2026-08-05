@@ -75,8 +75,9 @@ import (
 // codes — the enumeration is per-build by design (see eng/go/errorcodes.go),
 // so the gate has to link the layers it means to check. `basic/go` carries
 // the fundamental words' minting sites (def / if / case / fn / var / gen …)
-// since the ADR-013 layering split.
-var codeSourceRoots = []string{"eng/go", "basic/go", "lang/go"}
+// since the ADR-013 layering split; `core/go` carries the kernel sites that
+// moved with the interpreter-core cut (design/ENG-FOUR-PIECE.0.md Stage 4).
+var codeSourceRoots = []string{"core/go", "eng/go", "basic/go", "lang/go"}
 
 // codeMintPatterns match every shape that ATTACHES an error code to an
 // error or a diagnostic. Capture group 1 is the code.

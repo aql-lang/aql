@@ -1,108 +1,8 @@
 # file	piece	note
-argsstack.go	core	
-boru_error.go	core	
-canon.go	core	
-capability.go	core	
-clone.go	core	
-compare_deqkey.go	core	
-compare_scalar_behaviors.go	core	
-compare_types.go	core	
-contextstack.go	core	
-convert_ideal.go	core	
-core_flex.go	core	
-core_ref.go	core	
-core_xml.go	core	
-coretype_list_map_behaviors.go	core	
-deftable.go	core	
-define_type.go	core	
-depscalar.go	core	
-didyoumean.go	core	
-dispatch_explain.go	core	
-errorcodes.go	core	
-exit_error.go	core	
-flowctrl.go	core	
-fn_capture.go	core	
-fn_def.go	core	
-fn_frame.go	core	
-fn_frame_elide.go	core	
-fn_frame_probe.go	core	
-fn_params.go	core	
-fnsig.go	core	
-fork.go	core	
-generics.go	core	
-generics_instantiate.go	core	
-get_words.go	core	
-gobridge.go	core	
-ideal.go	core	
-keyval.go	core	
-macro_expand.go	core	
-match.go	core	
-member_behavior.go	core	
-membership.go	core	
-micron_kernel.go	core	
-module_gate.go	core	
-modules.go	core	
-moduletype.go	core	
-nativefunc.go	core	
-nodify.go	core	
-payload.go	core	
-print.go	core	
-process.go	core	
-resolve.go	core	
-return_check_msg.go	core	
-shape.go	core	
-sigimpl.go	core	
-size.go	core	
-storage_helpers.go	core	
-sugar.go	core	
-surface.go	core	
-table.go	core	
-tape.go	core	
-trace.go	core	
-truthy.go	core	
-typebehavior.go	core	
-typed_bind.go	core	
-types.go	core	
-typetable.go	core	
-unify.go	core	
-unify_dep.go	core	
-unify_disjunct.go	core	
-unify_error.go	core	
-unify_fnsig.go	core	
-unify_fold.go	core	
-unify_lca.go	core	
-unify_list.go	core	
-unify_map.go	core	
-unify_negation.go	core	
-unify_options.go	core	
-unify_predicate.go	core	
-unify_refine.go	core	
-util.go	core	
-weak_flex.go	core	
-word_name.go	core	
-xml_interp.go	core	
-diag_msg.go	core	
-word_extend.go	core	
-compare.go	core	
-equal.go	core	
-value.go	core	
-engine.go	core	
-registry.go	core	
-policy_hook.go	core	
-core_helpers.go	core	
-core_make.go	core	
-core_type.go	core	
-core_boolean.go	core	
-core_boundedtype.go	core	
-interp_entry.go	core	
-invoke.go	core	
+# The core piece now lives in the top-level core/go module; this map
+# tracks the remaining eng-side pieces (check / compiler / eng) until
+# their own cuts (design/ENG-FOUR-PIECE.0.md).
 method_shape.go	check	shape-method dispatch models: every function runs the check/compile analysis of `.word` application
-eng_rest_seam9.go	core	
-coretype_format_behaviors.go	core	
-module_export_growth.go	core	
-effects.go	core	
-coverage.go	core	
-engine_pool.go	core	
 carrier.go	check	
 check.go	check	
 drypass.go	check	
@@ -110,14 +10,10 @@ indexcheck.go	check
 deadsig.go	check	
 guard_predicate.go	check	
 store_shape.go	check	
-diag_render.go	core	diagnostic/error rendering is presentation of core state (Stage 4b)
-stamp_report.go	core	state record: the stamp-event log is core-owned registry state (Stage 4a)
 emit.go	compiler	
-emit_recorder.go	core	state contract: the recorder interface + inactive no-op + opaque handles are core-owned data/interface shapes (Stage 4a)
 lower.go	compiler	
 bytecode.go	compiler	
 code_effect.go	compiler	
-compile_sandbox.go	core	registry state snapshot/restore for the compile fork is core state management (Stage 4c)
 callable_words.go	compiler	
 stamp_runtime.go	compiler	
 drift_window.go	compiler	
@@ -128,24 +24,16 @@ vm_args_release.go	eng
 vm_markwindow.go	eng	
 vm_poly_nomatch.go	eng	
 vm_rematch.go	eng	
-deepequal_capability.go	core	
-generics_unify.go	core	
-signature.go	core	
 compiler_dispatch_record.go	compiler	
 check_recovery.go	check	
-compiled_runtime.go	core	
 compiled_runtime_vm.go	eng	
 vm_defer.go	eng	
-analysis_hooks.go	core
 check_fnbody.go	check
 check_make.go	check
 check_fnmodel.go	check
 user_poly_plan.go	compiler
 check_ordering.go	check
-carrier_new.go	core
 vm_callback_unit.go	eng
-check_state.go	core	state record: CheckState + severity + diagnostics are core-owned passive state (Stage 4a); the analysis ALGORITHMS stay check
-value_classify.go	core
 dispatch_hooks.go	check
-dispatch_slots.go	core
-check_specs.go	core	state record: the proved-spec data shapes are core-owned (Stage 4a)
+aliases_core.go	eng	assigned at the core cut
+aliases_core_generic.go	eng	hand-written generic wrappers beside the generated facade

@@ -3,7 +3,7 @@ package parser
 import (
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // TestTemplateWave3Escapes pins every escape sequence in template literal

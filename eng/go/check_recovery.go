@@ -10,6 +10,8 @@ package eng
 // (AnalysisHooks) when the packages cut.
 
 import (
+	core "github.com/boru-lang/boru/core/go"
+
 	"strconv"
 )
 
@@ -1177,26 +1179,26 @@ func spliceCheckResults(e *Engine, positions []int, results []Value) {
 // registration point so the cut moves it wholesale into the check
 // package's init.
 func installCheckBraid() {
-	CheckBraid.CheckMixedFormAdvisories = checkMixedFormAdvisories
-	CheckBraid.CheckModeAssumeSig = checkModeAssumeSig
-	CheckBraid.CheckModeFallbackPositions = checkModeFallbackPositions
-	CheckBraid.CheckModeParenFnCollapse = checkModeParenFnCollapse
-	CheckBraid.CheckModeSurfaceShape = checkModeSurfaceShape
-	CheckBraid.ConcreteEvalOnce = concreteEvalOnce
-	CheckBraid.DrainUndefinedAtoms = drainUndefinedAtoms
-	CheckBraid.ExprRefsCarrier = exprRefsCarrier
-	CheckBraid.NoteSpeculativeBarrierCommit = noteSpeculativeBarrierCommit
-	CheckBraid.RefuseForwardStackDrift = refuseForwardStackDrift
-	CheckBraid.RefuseStrandedMemberFn = refuseStrandedMemberFn
-	CheckBraid.ShareCheckState = shareCheckState
-	CheckBraid.SpliceAnonCheckResult = spliceAnonCheckResult
-	CheckBraid.SpliceCheckResults = spliceCheckResults
-	CheckBraid.SpliceFnValueCheckResult = spliceFnValueCheckResult
-	CheckBraid.TagCheckModeDefRead = tagCheckModeDefRead
-	CheckBraid.TryDynamicFnValueDispatch = tryDynamicFnValueDispatch
-	CheckBraid.TryMemberFnArrivalDispatch = tryMemberFnArrivalDispatch
-	CheckBraid.TryShapedMethodDispatch = tryShapedMethodDispatch
-	CheckBraid.UndefinedWordCheckDiag = undefinedWordCheckDiag
+	core.CheckBraid.CheckMixedFormAdvisories = checkMixedFormAdvisories
+	core.CheckBraid.CheckModeAssumeSig = checkModeAssumeSig
+	core.CheckBraid.CheckModeFallbackPositions = checkModeFallbackPositions
+	core.CheckBraid.CheckModeParenFnCollapse = checkModeParenFnCollapse
+	core.CheckBraid.CheckModeSurfaceShape = checkModeSurfaceShape
+	core.CheckBraid.ConcreteEvalOnce = concreteEvalOnce
+	core.CheckBraid.DrainUndefinedAtoms = drainUndefinedAtoms
+	core.CheckBraid.ExprRefsCarrier = exprRefsCarrier
+	core.CheckBraid.NoteSpeculativeBarrierCommit = noteSpeculativeBarrierCommit
+	core.CheckBraid.RefuseForwardStackDrift = refuseForwardStackDrift
+	core.CheckBraid.RefuseStrandedMemberFn = refuseStrandedMemberFn
+	core.CheckBraid.ShareCheckState = shareCheckState
+	core.CheckBraid.SpliceAnonCheckResult = spliceAnonCheckResult
+	core.CheckBraid.SpliceCheckResults = spliceCheckResults
+	core.CheckBraid.SpliceFnValueCheckResult = spliceFnValueCheckResult
+	core.CheckBraid.TagCheckModeDefRead = tagCheckModeDefRead
+	core.CheckBraid.TryDynamicFnValueDispatch = tryDynamicFnValueDispatch
+	core.CheckBraid.TryMemberFnArrivalDispatch = tryMemberFnArrivalDispatch
+	core.CheckBraid.TryShapedMethodDispatch = tryShapedMethodDispatch
+	core.CheckBraid.UndefinedWordCheckDiag = undefinedWordCheckDiag
 }
 
 func init() { installCheckBraid() }
@@ -1205,15 +1207,15 @@ func init() { installCheckBraid() }
 // core's S1 implementation table; one registration point so the cut
 // moves it wholesale into the check package's init.
 func installAnalysisImpl() {
-	analysisImpl.fnConstructionPass = checkFnBodyAtConstruction
-	analysisImpl.returnsFn = buildFnBodyReturnsFn
-	analysisImpl.stripToCarriers = StripToCarriers
-	analysisImpl.zeroOutResiduals = stripZeroOutResiduals
-	analysisImpl.carrierResults = carrierResults
-	analysisImpl.mixedConform = carrierMixedConform
-	analysisImpl.valueCarriesCarrier = valueCarriesCarrier
-	analysisImpl.atUncaughtTopLevel = CheckAtUncaughtTopLevel
-	analysisImpl.addUnique = CheckAddUnique
+	core.AnalysisImpl.FnConstructionPass = checkFnBodyAtConstruction
+	core.AnalysisImpl.ReturnsFn = buildFnBodyReturnsFn
+	core.AnalysisImpl.StripToCarriers = StripToCarriers
+	core.AnalysisImpl.ZeroOutResiduals = stripZeroOutResiduals
+	core.AnalysisImpl.CarrierResults = carrierResults
+	core.AnalysisImpl.MixedConform = carrierMixedConform
+	core.AnalysisImpl.ValueCarriesCarrier = valueCarriesCarrier
+	core.AnalysisImpl.AtUncaughtTopLevel = CheckAtUncaughtTopLevel
+	core.AnalysisImpl.AddUnique = CheckAddUnique
 }
 
 func init() { installAnalysisImpl() }

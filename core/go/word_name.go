@@ -1,0 +1,137 @@
+package core
+
+import "fmt"
+
+// ValidateWordName enforces the language-fundamental rule for word
+// identifiers:
+//
+//   - Every character must be in [a-z0-9_-$]: lowercase letter,
+//     digit, hyphen, underscore, or `$`. (Digits are not allowed
+//     in the first position.)
+//   - The first character must be in [a-z_-$] (lowercase letter,
+//     underscore, hyphen, or `$`). A leading hyphen lets the engine
+//     host CLI-style flag names like `-h` and `--help` as ordinary
+//     words — the parser already tokenises them as Words, so this
+//     validation just needs to accept the names at registration
+//     time. A leading `$` lets the engine host shell-style names
+//     like `$path` or `$home`.
+//   - A name consisting only of hyphens (e.g. "-", "--") is rejected
+//     so registrations can't shadow the implicit "no name" case.
+//
+// This is the rule the language design fixes for ALL user-facing
+// words: native registrations, `def` bindings, `fn` parameter names,
+// and any other path that introduces a name into the def stack.
+//
+// Why these characters and not others
+// -----------------------------------
+//
+//	`[a-z_-$]` first — uppercase is reserved for type names
+//	                  (Integer, String, …) so that the engine can
+//	                  disambiguate type-literal words from value-
+//	                  word resolution at lookup time. Lowercase and
+//	                  underscore as starting characters keep user
+//	                  words disjoint from type-name fallback words.
+//	                  Underscore as a leading character covers the
+//	                  discard-placeholder convention (`_`) and the
+//	                  engine-internal-marker convention (`__pa`,
+//	                  `__mark`, …) under one rule.
+//	                  Hyphen as a leading character covers CLI flag
+//	                  conventions (`-h`, `--help`, `--limit`).
+//	                  `$` as a leading character covers shell-style
+//	                  names (`$path`, `$home`); `${...}` template
+//	                  interpolation is parsed as a separate token
+//	                  pair (`${`, `}`) and is lex-disjoint from
+//	                  `$`-prefixed identifiers outside templates.
+//	`0-9` rest      — common idiom (dup2, swap2, add-two).
+//	`-`             — kebab-case is the language's chosen separator
+//	                  convention (anti-rot, add-two, dup2-alt).
+//	`_`             — also accepted mid-name for snake-case
+//	                  interoperability (fact_acc, double_then_inc).
+//	`$`             — accepted anywhere after the first character
+//	                  for symmetry with the leading position. Note:
+//	                  the Lisp/Scheme/Ruby `?` predicate suffix is
+//	                  NOT allowed; predicates use the `is-` prefix
+//	                  convention instead (`is-leap-year`,
+//	                  `is-before`, `is-equal`, …).
+//
+// Returns nil for valid names; a *BoruError with code
+// "invalid_word_name" otherwise. Callers are expected to surface the
+// error in whatever way fits their entry point — Registry methods
+// accumulate into r.errs; def/fn handlers return it as a Run-time
+// error.
+func ValidateWordName(name string) error {
+	if name == "" {
+		return &BoruError{
+			Code:   "invalid_word_name",
+			Detail: "word name cannot be empty",
+		}
+	}
+	// An all-`$` name ("$", "$$", "$$$", …) is a reserved syntactic
+	// sentinel — `$` is the receiverless-Reach marker (`$.name` parses to a
+	// lens, not a `$ get name` chain). Keeping the whole all-dollar family
+	// un-definable leaves them free for special syntactic roles. A `$` mixed
+	// with other characters ($path, $home, foo$, $1) stays a valid
+	// shell-style identifier (mirrors the all-hyphens rule below).
+	allDollars := true
+	for i := 0; i < len(name); i++ {
+		if name[i] != '$' {
+			allDollars = false
+			break
+		}
+	}
+	if allDollars {
+		return &BoruError{
+			Code: "invalid_word_name",
+			Detail: fmt.Sprintf(
+				"word %q is reserved (an all-$ name is the receiverless-reach sentinel; e.g. $.name)",
+				name,
+			),
+		}
+	}
+	first := name[0]
+	if !(first >= 'a' && first <= 'z') && first != '_' && first != '-' && first != '$' {
+		return &BoruError{
+			Code: "invalid_word_name",
+			Detail: fmt.Sprintf(
+				"word %q must begin with [a-z_-$]; got %q",
+				name, string(first),
+			),
+		}
+	}
+	// All-hyphen names like "-" or "---" carry no identifier; reject.
+	allDashes := true
+	for i := 0; i < len(name); i++ {
+		if name[i] != '-' {
+			allDashes = false
+			break
+		}
+	}
+	if allDashes {
+		return &BoruError{
+			Code: "invalid_word_name",
+			Detail: fmt.Sprintf(
+				"word %q contains only hyphens; need at least one [a-z0-9_$] character",
+				name,
+			),
+		}
+	}
+	for i := 1; i < len(name); i++ {
+		c := name[i]
+		switch {
+		case c >= 'a' && c <= 'z':
+		case c >= '0' && c <= '9':
+		case c == '-':
+		case c == '_':
+		case c == '$':
+		default:
+			return &BoruError{
+				Code: "invalid_word_name",
+				Detail: fmt.Sprintf(
+					"word %q contains illegal character %q at position %d (allowed: [a-z0-9_-$] after the first letter)",
+					name, string(c), i,
+				),
+			}
+		}
+	}
+	return nil
+}

@@ -238,7 +238,7 @@ const (
 	// holes (REFUSAL-CLOSURE §9.2c — the tree twin of OpInterp).
 	// Program.XmlInterps[Arg] holds the template skeleton; the VM pops one
 	// operand-stack value per hole (deepest popped = hole 0 — the
-	// depth-first attr-then-children traversal order buildXmlFromTmpl
+	// depth-first attr-then-children traversal order BuildXmlFromTmpl
 	// evaluates in) and rebuilds the element via rebuildXmlFromTmpl —
 	// byte-identical to the interpreter's build over the same hole values.
 	OpInterpXml

@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 	"github.com/cockroachdb/apd/v3"
 	jsonic "github.com/tabnas/jsonic/go"
 )

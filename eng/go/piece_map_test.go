@@ -102,7 +102,7 @@ var upwardRefs = []struct {
 	},
 	{
 		// The check piece's dispatch-recovery braid — core's step loop
-		// reaches it only through the S9 checkBraid slot table
+		// reaches it only through the S9 CheckBraid slot table
 		// (dispatch_slots.go), never by name.
 		name: "check braid call (S9)",
 		re: regexp.MustCompile(`(^|[^.\w])(checkMixedFormAdvisories|checkModeAssumeSig|` +

@@ -1,5 +1,7 @@
 package eng
 
+import core "github.com/boru-lang/boru/core/go"
+
 // Forward-drift window (REFUSAL-CLOSURE.0 §1) — the COMPILING model for the
 // dispatch refuseForwardStackDrift otherwise refuses.
 //
@@ -23,7 +25,7 @@ package eng
 // binding nets other counts), so only the variadic-absorbing program
 // residual may consume it — the TERMINAL gate below enforces exactly that.
 func init() {
-	DriftWindowRecorder = tryRecordDriftWindow
+	core.DriftWindowRecorder = tryRecordDriftWindow
 }
 
 func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int) bool {

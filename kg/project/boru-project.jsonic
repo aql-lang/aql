@@ -98,6 +98,8 @@
       attributes: { path: "basic/go" } }
     { key: "eng-go", type: "Product", label: "eng/go module"
       attributes: { path: "eng/go" } }
+    { key: "core-go", type: "Product", label: "core/go module"
+      attributes: { path: "core/go" } }
     { key: "calc-go", type: "Product", label: "calc/go module"
       attributes: { path: "calc/go" } }
     { key: "wpg", type: "Product", label: "wpg playground module"
@@ -161,6 +163,16 @@
       evidence: [{ source: "src:readme", locator: "Repository layout",
         quote: "eng/go/ | Engine kernel, parser, and kernel spec runner." }]
       confidence: 0.98 }
+    { subject: "core-go", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "core/go/ | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it." }]
+      confidence: 0.98 }
+    { subject: "eng-go", predicate: "related_to"
+      object: { kind: "entity", entity: "core-go" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "core/go/ | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it." }]
+      confidence: 0.95 }
     { subject: "basic-go", predicate: "part_of"
       object: { kind: "entity", entity: "repo" }
       evidence: [{ source: "src:readme", locator: "Repository layout",

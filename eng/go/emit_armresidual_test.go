@@ -13,7 +13,7 @@ import (
 func TestCaptureInertArmResidualArms(t *testing.T) {
 	r := seam7Reg(t)
 	es := NewEmitState()
-	es.bindRegistry(r)
+	es.BindRegistry(r)
 
 	frag := &EmitFragment{}
 	es.captureInertArmResidual(frag, []Value{NewInteger(1), NewInteger(2)})

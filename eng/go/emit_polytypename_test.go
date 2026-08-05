@@ -19,7 +19,7 @@ func TestRecordPolyCallTypeNameOperand(t *testing.T) {
 			t.Fatal(err)
 		}
 		es := NewEmitState()
-		es.bindRegistry(r)
+		es.BindRegistry(r)
 		return es
 	}
 	lastOps := func(es *EmitState) []emitOperand {

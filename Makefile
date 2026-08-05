@@ -10,7 +10,8 @@
 #
 # The repo is a collection of Go modules:
 #
-#   eng/go         — the kernel (parser, dispatch, types, signatures)
+#   core/go        — the pure-interpreter kernel (values, types, dispatch, step loop)
+#   eng/go         — check + compiler + VM over core, plus the parser bridge
 #   basic/go       — the base language layer (fundamental words +
 #                    predefined content types; depends on eng only)
 #   lang/go        — the language layer (native_* words, engine shim)
@@ -26,7 +27,7 @@
 
 # Order matters for `make test`: eng must build before basic, basic
 # before lang, etc.
-MODULES := eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
+MODULES := core/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
 
 all: test
 
@@ -115,7 +116,7 @@ test:
 # exception: its 5941-row differential is single-threaded per row (race adds no
 # value) and times out under the detector, so only its concurrency rows run
 # here.
-RACE_MODULES := eng/go basic/go lang/go
+RACE_MODULES := core/go eng/go basic/go lang/go
 test-race:
 	@set -e; for m in $(RACE_MODULES); do \
 	  echo "==> test-race $$m"; \
@@ -418,7 +419,15 @@ cover-gate:
 # never lower it. The TS twin's ratchet lives in `make test-ts`
 # (node --test line-coverage threshold) — the two gates are the parity
 # pair (Go statements ≡ TS lines).
-ENG_GATE_FLOOR ?= 89
+#
+# RE-BASED at the four-piece Stage 4 cut (design/ENG-FOUR-PIECE.0.md):
+# the interpreter core's statements and ~120 kernel test files moved to
+# core/go, taking their incidental eng-side coverage with them. The
+# measurement universe changed — the pre-cut floor of 89 is not
+# comparable — so the floor restarts at the post-cut measured value
+# (84.6%) and the pair (cover-gate-eng, cover-gate-core) together
+# supersedes the old single gate. Both ratchet independently to 100.
+ENG_GATE_FLOOR ?= 84
 # The standalone profile deliberately uses the .engout extension so the
 # merged gate's cover-check (which globs $(COVER_DIR)/*.xout) NEVER
 # merges it: the two gates run on different schedules, and a stale
@@ -433,6 +442,23 @@ cover-gate-eng:
 	  -coverprofile=$(abspath $(COVER_DIR))/eng_standalone.engout ./... > $(abspath $(COVER_DIR))/eng_standalone.log 2>&1 ) \
 	  || { echo "==> cover-gate-eng test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/eng_standalone.log; exit 1; }
 	@cd test/go && go run ./covergate -threshold $(ENG_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/eng_standalone.engout
+
+
+# cover-gate-core — the CORE kernel's own gate (design/ENG-FOUR-PIECE.0.md
+# Stage 5): core/go profiled by ITS OWN suite alone. The floor is a
+# RATCHET towards 100%: raise it as core-standalone coverage grows;
+# never lower it. Same .engout-family isolation as the eng gate so the
+# merged cover-check never merges a stale standalone profile.
+CORE_GATE_FLOOR ?= 80
+cover-gate-core:
+	@mkdir -p $(COVER_DIR)
+	@rm -f $(COVER_DIR)/core_standalone.engout
+	@echo "==> cover-gate-core (standalone, floor $(CORE_GATE_FLOOR)%)"
+	@( cd core/go && go test -timeout 25m \
+	  -coverpkg=github.com/boru-lang/boru/core/go/... \
+	  -coverprofile=$(abspath $(COVER_DIR))/core_standalone.engout ./... > $(abspath $(COVER_DIR))/core_standalone.log 2>&1 ) \
+	  || { echo "==> cover-gate-core test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/core_standalone.log; exit 1; }
+	@cd test/go && go run ./covergate -threshold $(CORE_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/core_standalone.engout
 
 cover:
 	@mkdir -p $(COVER_DIR)

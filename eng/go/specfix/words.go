@@ -5,7 +5,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // The spec-fixture word set: minimal, single-overload registrations

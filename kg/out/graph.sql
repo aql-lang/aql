@@ -73,6 +73,8 @@ INSERT INTO entity_attributes VALUES ('ent:Product:4938585304473715098', 'path',
 INSERT INTO entities VALUES ('ent:Product:4976123614970806523', 'Product', 'boru:cli module', 'boru:cli module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:4976123614970806523', 'language', 'boru');
 INSERT INTO entity_attributes VALUES ('ent:Product:4976123614970806523', 'path', 'lang/go/modules/cli.boru');
+INSERT INTO entities VALUES ('ent:Product:5136370952190450338', 'Product', 'core/go module', 'core/go module', 'accepted');
+INSERT INTO entity_attributes VALUES ('ent:Product:5136370952190450338', 'path', 'core/go');
 INSERT INTO entities VALUES ('ent:Product:5397757900009317848', 'Product', 'lang/go module', 'lang/go module', 'accepted');
 INSERT INTO entity_attributes VALUES ('ent:Product:5397757900009317848', 'path', 'lang/go');
 INSERT INTO entities VALUES ('ent:Product:5770789618934008141', 'Product', 'lang/spec directory', 'lang/spec directory', 'accepted');
@@ -87,6 +89,8 @@ INSERT INTO entities VALUES ('ent:Product:9152211458201666591', 'Product', 'wpg 
 INSERT INTO entity_attributes VALUES ('ent:Product:9152211458201666591', 'path', 'wpg');
 INSERT INTO assertions VALUES ('ast:1270339351209541981', 'ent:Product:1578575807542004434', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1270339351209541981', 'src:readme', 'Repository layout', 'eng/go/ | Engine kernel, parser, and kernel spec runner.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:1356352958644953400', 'ent:Product:5136370952190450338', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:1356352958644953400', 'src:readme', 'Repository layout', 'core/go/ | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:1374144917814367558', 'ent:Concept:3854395902791518463', 'has_attribute', 'literal', NULL, '"concatenative"', 'String', NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:1374144917814367558', 'src:readme', 'intro', 'Underneath, boru is concatenative: words can equally take their arguments from a value stack', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:1638267057731290625', 'ent:Document:203047846460430642', 'supports', 'entity', 'ent:Product:1578575807542004434', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
@@ -129,6 +133,8 @@ INSERT INTO assertions VALUES ('ast:459410346719323347', 'ent:Document:520435226
 INSERT INTO assertion_evidence VALUES ('ast:459410346719323347', 'src:readme', 'Repository layout', 'Internal design notes and proposals.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5028088745462111124', 'ent:Product:5397757900009317848', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5028088745462111124', 'src:readme', 'Repository layout', 'lang/go/ | The language layer: public lang API and the consolidated native word library.', 'direct_record', 'kg-ingest');
+INSERT INTO assertions VALUES ('ast:5158349308628574819', 'ent:Product:1578575807542004434', 'related_to', 'entity', 'ent:Product:5136370952190450338', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
+INSERT INTO assertion_evidence VALUES ('ast:5158349308628574819', 'src:readme', 'Repository layout', 'core/go/ | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it.', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5247468906425855718', 'ent:Product:1628071779061296422', 'part_of', 'entity', 'ent:Product:4032424380612892464', NULL, NULL, NULL, NULL, 0.98, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);
 INSERT INTO assertion_evidence VALUES ('ast:5247468906425855718', 'src:readme', 'Repository layout', 'calc/go/ | A small calculator built directly on eng (learning example).', 'direct_record', 'kg-ingest');
 INSERT INTO assertions VALUES ('ast:5406505729946615323', 'ent:Document:6369673620858945660', 'supports', 'entity', 'ent:Product:1578575807542004434', NULL, NULL, NULL, NULL, 0.95, 'asserted', NULL, NULL, '2026-07-22T00:00:00Z', NULL);

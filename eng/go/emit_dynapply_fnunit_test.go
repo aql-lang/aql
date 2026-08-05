@@ -153,7 +153,7 @@ func TestSetLoopBodyApplySourceOrderGate(t *testing.T) {
 	}
 	arg := func(row, col int) Value {
 		v := NewInteger(1)
-		v.pos = &SrcPos{Row: row, Col: col}
+		v.SetPos(SrcPos{Row: row, Col: col})
 		return v
 	}
 	evAt := func(row, col int) emitEvent {
@@ -228,7 +228,7 @@ func TestReplayIsBodyTailArms(t *testing.T) {
 	at := func(row, col int) SrcPos { return SrcPos{Row: row, Col: col} }
 	win := func(pos SrcPos) []Value {
 		v := NewInteger(1)
-		v.pos = &pos
+		v.SetPos(pos)
 		return []Value{daFnCarrier("f"), v}
 	}
 	evAt := func(p SrcPos) emitEvent { return emitEvent{kind: evCall, call: emitCall{pos: p}} }

@@ -3,7 +3,7 @@ package specfix
 import (
 	"strings"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // Check-corpus support, shared by the engspec check harness and eng's

@@ -2438,7 +2438,7 @@ func vmInterp(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]V
 }
 
 // vmInterpXml executes OpInterpXml: pop the template's holes (deepest = hole
-// 0, the traversal order buildXmlFromTmpl evaluates in) and rebuild the
+// 0, the traversal order BuildXmlFromTmpl evaluates in) and rebuild the
 // element via rebuildXmlFromTmpl — byte-identical to the interpreter's build
 // over the same hole values.
 func vmInterpXml(p *Program, stack []Value, arg int32, debug []SrcPos, pc int) ([]Value, error) {
