@@ -168,14 +168,19 @@ func Parse(src string) ([]eng.Value, error) {
 		Color:  &jsonic.ColorOptions{Active: &parseColorOff},
 	})
 
-	// Stage 1: Lex setup — register tokens and custom matchers.
-	t := setupBaseTokens(j)
+	// Stage 1: Lex setup — register tokens and custom matchers, the
+	// token table coming from the declarative grammar artifact.
+	g := loadDeclGrammar()
+	t, tins := setupBaseTokens(j, g)
 	setupTemplateLiteralMatcher(j, t)
 	setupBigNumberMatcher(j, t)
 	setupMiniLitMatcher(j, t)
 	setupXmlMatcher(j, t)
 
-	// Stage 2: Grammar setup — extend rules for boru syntax.
+	// Stage 2: Grammar setup — the declarative edits first (they were
+	// the head of the val amendments), then the remaining imperative
+	// rule extensions, batch-migrating into grammar.json.
+	applyDeclEdits(j, g, tins, valDeclHooks())
 	setupValRule(j, t)
 	setupPairGrammar(j, t)
 	setupParenGrammar(j, t)

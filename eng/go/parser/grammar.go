@@ -94,41 +94,48 @@ type parserTokens struct {
 	XML jsonic.Tin // embedded XML literal <tag>…</tag> (matcher-produced)
 }
 
-// setupBaseTokens registers the fixed boru tokens and removes backtick from
-// jsonic's string/multi chars so template strings are handled by custom rules.
-func setupBaseTokens(j *jsonic.Jsonic) parserTokens {
+// setupBaseTokens registers the boru token table from the declarative
+// grammar artifact (grammar.json — fixed tokens with their source
+// text, matcher-produced tokens by name; `<` / `>` are general-purpose
+// tokens per design/GENERICS.10.md D14, and #XML carries a whole
+// embedded literal filled by the xml_literal matcher) and removes
+// backtick from jsonic's string/multi chars so template strings are
+// handled by custom rules. Returns the struct view alongside the
+// name → Tin map the declarative edits resolve against.
+func setupBaseTokens(j *jsonic.Jsonic, g declGrammar) (parserTokens, map[string]jsonic.Tin) {
 	// Remove backtick from string chars so jsonic doesn't consume backtick
 	// strings with the built-in string matcher. Template strings are handled
 	// by custom tokens and rules below.
 	delete(j.Config().StringChars, '`')
 	delete(j.Config().MultiChars, '`')
 
+	tins := registerDeclTokens(j, g)
 	return parserTokens{
-		OP: j.Token("#OP", "("),
-		CP: j.Token("#CP", ")"),
-		DT: j.Token("#DT", "."),
-		SC: j.Token("#SC", ";"),
-		QM: j.Token("#QM", "?"),
-		BG: j.Token("#BG", "!"),
-		PI: j.Token("#PI", "|"),
-		AR: j.Token("#AR", "=>"),
-		BT: j.Token("#BT", "`"),
-		IS: j.Token("#IS", "${"),
-		TL: j.Token("#TL"),
-		// `<` / `>` are GENERAL-PURPOSE tokens (design/GENERICS.10.md
-		// D14): independent fixed tokens with contextual consumers.
-		// The generics angle rule (setupAngleGrammar) is the only v1
-		// consumer; future rules (e.g. embedded XML) can register
-		// additional consumers without re-lexing. Comparisons stay on
-		// lt/gt. (`=>` still lexes as one token — longest match wins.)
-		LA: j.Token("#LA", "<"),
-		RA: j.Token("#RA", ">"),
-		ML: j.Token("#ML"),
-		// #XML carries a whole embedded XML literal (`<tag>…</tag>`),
-		// produced by the xml_literal matcher when it is armed inside the
-		// xml rule (which the val.Open `<` alternate pushes). See
-		// setupXmlGrammar / setupXmlMatcher and design/XML-LITERAL.0.md.
-		XML: j.Token("#XML"),
+		OP: tins["OP"], CP: tins["CP"], DT: tins["DT"], SC: tins["SC"],
+		QM: tins["QM"], BG: tins["BG"], PI: tins["PI"], AR: tins["AR"],
+		BT: tins["BT"], IS: tins["IS"], TL: tins["TL"], LA: tins["LA"],
+		RA: tins["RA"], ML: tins["ML"], XML: tins["XML"],
+	}, tins
+}
+
+// valDeclHooks binds the named behavior the declarative val edits
+// reference: the minilang node carry, the lambda-arrow tag, and the
+// map-pair-value gate for the dot-chain fold.
+func valDeclHooks() declHooks {
+	return declHooks{
+		Actions: map[string]func(*jsonic.Rule, *jsonic.Context){
+			"minilangNode": func(r *jsonic.Rule, _ *jsonic.Context) {
+				r.Node = r.O0.Val
+			},
+			"arrowTag": func(r *jsonic.Rule, _ *jsonic.Context) {
+				r.Node = arrowTag{}
+			},
+		},
+		Conds: map[string]func(*jsonic.Rule, *jsonic.Context) bool{
+			"inPairValue": func(r *jsonic.Rule, _ *jsonic.Context) bool {
+				return r.Parent != nil && r.Parent != jsonic.NoRule && r.Parent.Name == "pair"
+			},
+		},
 	}
 }
 
@@ -383,57 +390,10 @@ func setupTemplateLiteralMatcher(j *jsonic.Jsonic, t parserTokens) {
 // setupValRule extends the jsonic "val" rule with boru-specific alternates:
 // parens, template strings, close-paren markers, semicolons, ?, !, |, and dots.
 func setupValRule(j *jsonic.Jsonic, t parserTokens) {
-	j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
-		prependOpen(rs, []*jsonic.AltSpec{
-			// Minilang literal `+name<delim>src<delim>`: the matcher stashed a
-			// miniLitVal on the token; carry it to the converter as the node.
-			{S: [][]jsonic.Tin{{t.ML}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				r.Node = r.O0.Val
-			}},
-			{S: [][]jsonic.Tin{{t.OP}}, P: "paren"},
-			// `<` in VALUE-OPEN position opens an embedded XML literal →
-			// push the xml rule (which arms the xml_literal matcher). This
-			// is disjoint from the generics angle sugar, which consumes `<`
-			// only as a val.Close suffix after a capitalised name
-			// (setupAngleGrammar) — so `Box<Int>` stays generics and a
-			// fresh-position `<div>` is XML. See design/XML-LITERAL.0.md §3.
-			{S: [][]jsonic.Tin{{t.LA}}, P: "xml"},
-			// Backtick opens a template string → push to interp rule.
-			{S: [][]jsonic.Tin{{t.BT}}, P: "interp"},
-			// Bare ) outside a paren group: produce a marker so the engine
-			// can report "unmatched closing parenthesis" at runtime.
-			{S: [][]jsonic.Tin{{t.CP}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				r.Node = jsonic.Text{Str: ")", Quote: ""}
-			}},
-			{S: [][]jsonic.Tin{{t.SC}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				// Semicolon is an alias for the "end" keyword.
-				r.Node = jsonic.Text{Str: "end", Quote: ""}
-			}},
-			// Question mark produces a "?" marker for optional param syntax.
-			{S: [][]jsonic.Tin{{t.QM}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				r.Node = jsonic.Text{Str: "?", Quote: ""}
-			}},
-			// Bang: "!" token. The "!" "." sequence becomes getr in convertTopLevelItems.
-			{S: [][]jsonic.Tin{{t.BG}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				r.Node = jsonic.Text{Str: "!", Quote: ""}
-			}},
-			// Pipe: "|" token. Used in fn signatures as forward barrier marker.
-			{S: [][]jsonic.Tin{{t.PI}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				r.Node = jsonic.Text{Str: "|", Quote: ""}
-			}},
-			// Arrow: "=>" token. Lambda sugar — a structural tag the
-			// converter turns into the lambda sugar marker (ADR-012
-			// rule 3 amendment); the engine lowers it to the role-bound
-			// constructor word.
-			{S: [][]jsonic.Tin{{t.AR}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				r.Node = arrowTag{}
-			}},
-			// Dot: "." token. Becomes get in convertTopLevelItems.
-			{S: [][]jsonic.Tin{{t.DT}}, A: func(r *jsonic.Rule, ctx *jsonic.Context) {
-				r.Node = jsonic.Text{Str: ".", Quote: ""}
-			}},
-		})
-	})
+	// The value-open marker batch and the map-pair-value dot-chain
+	// closes now live in the declarative grammar artifact
+	// (grammar.json, applied by applyDeclEdits before this function
+	// runs); their named hooks are valDeclHooks.
 
 	// Dot-chain continuation. After a value closes, a following `.` (or
 	// `!.`) means member access — `bf.n`, `a.b.c`, `a!.b`. In WORD
@@ -458,15 +418,6 @@ func setupValRule(j *jsonic.Jsonic, t parserTokens) {
 	// by convertTopLevelItems; firing the dotchain there would
 	// double-wrap, e.g. `1 foo.bar` → `1 ((foo get bar))`). Only the
 	// map-value position lacks that flat-item path and needs this fold.
-	inPairValue := func(r *jsonic.Rule, ctx *jsonic.Context) bool {
-		return r.Parent != nil && r.Parent != jsonic.NoRule && r.Parent.Name == "pair"
-	}
-	j.Rule("val", func(rs *jsonic.RuleSpec, _ *jsonic.Parser) {
-		prependClose(rs, []*jsonic.AltSpec{
-			{S: [][]jsonic.Tin{{t.DT}}, C: inPairValue, P: "dotchain", B: 1},
-			{S: [][]jsonic.Tin{{t.BG}, {t.DT}}, C: inPairValue, P: "dotchain", B: 2},
-		})
-	})
 
 	// dotchain rule: collects the `.key` / `!.key` segments that follow a
 	// value, folding the receiver (the parent val's already-parsed Node)

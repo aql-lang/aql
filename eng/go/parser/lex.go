@@ -30,7 +30,7 @@ type LexToken struct {
 // best-effort path rather than emit a mangled (or empty) result.
 func LexTokens(src string) ([]LexToken, bool) {
 	j := SafeMake(jsonic.Options{})
-	t := setupBaseTokens(j)
+	t, _ := setupBaseTokens(j, loadDeclGrammar())
 	setupTemplateLiteralMatcher(j, t)
 	setupBigNumberMatcher(j, t)
 	setupMiniLitMatcher(j, t)

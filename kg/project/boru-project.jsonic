@@ -59,6 +59,16 @@
       metadata: { repository: "boru-lang/boru" }
     }
     {
+      id: "src:decl-grammar"
+      kind: "text"
+      locator: "design/DECLARATIVE-GRAMMAR.0.md"
+      title: "declarative grammar artifact for both parser twins"
+      retrieved_at: null
+      content_hash: "decl-grammar-2026-08"
+      authority: "primary"
+      metadata: { repository: "boru-lang/boru" }
+    }
+    {
       id: "src:coverage-parity"
       kind: "text"
       locator: "design/ENG-COVERAGE-PARITY.0.md"
@@ -119,6 +129,8 @@
     { key: "lang-eng-audit", type: "Document", label: "design/LANG-ENG-CONTENT-AUDIT.0.md" }
     { key: "completeness-review", type: "Document", label: "design/checker-compiler-completeness-review.0.md"
       attributes: { role: "the 2026-08 checker/compiler completeness review and its §9 implementation record — the living index of the HOF-compilation graduations and the remaining frontier work" } }
+    { key: "decl-grammar", type: "Document", label: "design/DECLARATIVE-GRAMMAR.0.md"
+      attributes: { role: "the shared declarative tabnas grammar artifact (eng/go/parser/grammar.json): contract, loader pair, and the batch-migration state" } }
     { key: "coverage-parity", type: "Document", label: "design/ENG-COVERAGE-PARITY.0.md"
       attributes: { role: "the standalone 100%/100% coverage program for eng/go and eng/ts: the ratcheting gate floors (make cover-gate-eng, make test-ts), the gap inventories, and the staged plans" } }
     { key: "org", type: "Organization", label: "boru-lang" }
@@ -323,6 +335,16 @@
       object: { kind: "entity", entity: "design-notes" }
       evidence: [{ source: "src:completeness-review", locator: "title",
         quote: "Type checker + bytecode compiler — completeness review" }]
+      confidence: 0.95 }
+    { subject: "decl-grammar", predicate: "part_of"
+      object: { kind: "entity", entity: "design-notes" }
+      evidence: [{ source: "src:decl-grammar", locator: "title",
+        quote: "DECLARATIVE-GRAMMAR.0 — one grammar artifact for both parser twins" }]
+      confidence: 0.95 }
+    { subject: "decl-grammar", predicate: "supports"
+      object: { kind: "entity", entity: "eng-go" }
+      evidence: [{ source: "src:decl-grammar", locator: "The contract",
+        quote: "eng/go/parser/grammar.json is the single source of the boru grammar's STRUCTURE, loaded by both parsers" }]
       confidence: 0.95 }
     { subject: "coverage-parity", predicate: "part_of"
       object: { kind: "entity", entity: "design-notes" }
