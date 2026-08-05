@@ -158,6 +158,29 @@ describe('parse battery', () => {
     ['[1', '[1]'],
     ['{a:1', '{a:1}'],
     ["'unterm", "ERR [boru/syntax_error]: this string is never closed: 'unterm"],
+
+    // Integer-range enforcement, big-number reach beyond it, float
+    // overflow to infinity, and the unclosed angle error.
+    ['9223372036854775808',
+      'ERR [boru/integer_overflow]: integer literal out of range: 9223372036854775808 exceeds the Integer range (-9223372036854775808..9223372036854775807)'],
+    ['-9223372036854775809',
+      'ERR [boru/integer_overflow]: integer literal out of range: -9223372036854775809 exceeds the Integer range (-9223372036854775808..9223372036854775807)'],
+    ['0d99999999999999999999', '99999999999999999999'],
+    ['1e400', 'inf'],
+    ['-1e400', '-inf'],
+    ['0.1_2', '0.12'],
+    ['Box<Integer', 'ERR [boru/syntax_error]: unclosed angle bracket: Box<… has no matching `>`'],
+
+    // Unusual pair keys: spaced strings, numbers, keyword-ish words.
+    ["'a' : 1", '{a:1}'],
+    ["{'q k':2}", '{q k:2}'],
+    ['{5:1}', '{5:1}'],
+    ['true:1', '{true:1}'],
+    ['{none:1}', '{none:1}'],
+
+    // Disjunct spellings stay word streams in parens.
+    ['(A tor None)', 'paren([word(A) word(tor) word(None)])'],
+    ['(None tor A)', 'paren([word(None) word(tor) word(A)])'],
   ]
   for (const [src, want] of rows) {
     it(JSON.stringify(src), () => {
