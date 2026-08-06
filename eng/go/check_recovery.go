@@ -926,8 +926,8 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 		if es := e.Registry.Check.Recorder(); es.Active() {
 			sw := SigOrderArgs(args, nStack)
 			if plan := dispatchCompileUserPolyArms(e.Registry, es, w.Name, sw, sig.Returns); plan != nil {
-				plan.substituteJoinedOuts(out)
-				es.RecordUserPolyCall(w.Name, e.Registry, plan.sigIdx, plan.units, plan.impls, plan.sigs, sw, out, pos)
+				plan.SubstituteJoinedOuts(out)
+				es.RecordUserPolyCall(w.Name, e.Registry, plan.SigIdx(), plan.Units(), plan.Impls(), plan.Sigs(), sw, out, pos)
 				spliceCheckResults(e, positions, out)
 				return nil
 			}
@@ -948,7 +948,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 	// call, never a duplicate CALL_NATIVE for the same dispatch. Concrete (non-
 	// Any) operands that reach here are a genuine type error and still refuse.
 	es := e.Registry.Check.Recorder()
-	if es.Active() && (anyAnyCarrier(args) || anyDisjunctCarrier(args)) {
+	if es.Active() && (AnyAnyCarrier(args) || anyDisjunctCarrier(args)) {
 		resume := es.Suspend()
 		results := carrierResults(e.Registry, w.Name, sig, args, pos, nil, false)
 		resume()
@@ -1107,7 +1107,7 @@ func checkModeAssumeSig(e *Engine, w WordInfo, fn *FnDefInfo, fallback *Signatur
 	// interpreter always raises on and must stay flagged (TestJoinCarriersDynamicArm
 	// / TestSliceDynamicReceiverRefines). Only the fully-unknown Any carrier is
 	// deferrable to the runtime CALL_USER contract.
-	recoverableUnknownType := anyAnyCarrier(args) && SingleOverloadRecoverable(sig, fn) && ConcreteArgsMatch(sig, args, nStack)
+	recoverableUnknownType := AnyAnyCarrier(args) && SingleOverloadRecoverable(sig, fn) && ConcreteArgsMatch(sig, args, nStack)
 	if !e.Registry.Check.Compiling && !recoverableUnknownType {
 		// Expected-vs-actual: name the operand types the dispatch saw and
 		// the nearest candidate's declared types, so the user can see the

@@ -11,8 +11,8 @@ func init() { InstallCompiledRuntime(vmCompiledRuntime{}) }
 
 func (vmCompiledRuntime) InvokeCompiled(r *Registry, sig *Signature, args []Value) ([]Value, error, bool) {
 	ref := CompiledRef(sig)
-	if ref != nil && ref.Prog != nil && !ref.depsFresh(r) {
-		ref = ref.jitRestamp(r)
+	if ref != nil && ref.Prog != nil && !ref.DepsFresh(r) {
+		ref = ref.JitRestamp(r)
 	}
 	if ref == nil || ref.Prog == nil {
 		return nil, nil, false
@@ -50,6 +50,6 @@ func (vmCompiledRuntime) StampDetached(r *Registry, fd FnDefInfo, pos SrcPos) {
 	// ref lands on the shared *BoruImpl pointer (stampCompiledRef), so
 	// the same copy serves both calls.
 	if ref, stampOK := StampDetachedFn(r, fd, pos); stampOK {
-		stampCompiledRef(fd, ref)
+		StampCompiledRef(fd, ref)
 	}
 }

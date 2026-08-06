@@ -20,7 +20,7 @@ func tryFoldScalarConst(r *Registry, sig *Signature, args []Value) (Value, bool)
 		return Value{}, false
 	}
 	for _, a := range args {
-		if !scalarFoldOperand(a) {
+		if !ScalarFoldOperand(a) {
 			return Value{}, false
 		}
 	}
@@ -84,13 +84,13 @@ func recordDispatchOutcome(r *Registry, word string, sig *Signature, args, out [
 	// not a leak path and keeps compiling; see bodyRefsFnLocalFn for the
 	// scope rule.
 	if es := r.Check.Recorder(); es.Active() && !(len(out) == 1 && es.AlreadyProduced(out[0].ID)) {
-		if name, hit := bodyRefsFnLocalFn(r, sig, args); hit {
+		if name, hit := BodyRefsFnLocalFn(r, sig, args); hit {
 			es.MarkUncompilable("code-body names fn-local fn `" + name + "` at `" + word +
 				"` (a compiled unit cannot resolve an enclosing fn's local fn binding)")
 			return
 		}
 	}
-	if !tryRecordMethodApply(r, word, args, out, pos) &&
+	if !TryRecordMethodApply(r, word, args, out, pos) &&
 		!tryFoldStaticIndex(r, word, args, out) &&
 		!tryFoldModuleConst(r, word, sig, args, out) &&
 		!tryRecordDeferredList(r, sig, out) &&
@@ -271,7 +271,7 @@ func dynOutNativeOK(r *Registry, word string, sig *Signature, args, outs []Value
 	}
 	// Concrete args + dynamic output only — a dynamic INPUT means the sig was
 	// widened (a guess), which stays refused.
-	if anyDynamicCarrier(args) || !anyDynamicCarrier(outs) {
+	if AnyDynamicCarrier(args) || !AnyDynamicCarrier(outs) {
 		return false
 	}
 	if sig.CompileEffect.Has(CompileFallbackBody) {
@@ -481,8 +481,8 @@ func tryRecordPoly(r *Registry, word string, sig *Signature, args, outs []Value,
 	// baked CALL_NATIVE would freeze the wrong overload.
 	// A fully concrete, single-overload call lowers to a faithful baked
 	// CALL_NATIVE, not poly.
-	coreDefaultCarrier := sig.CoreDefault && anyNonConcreteOperand(args)
-	if !disjunctStraddle && !dynamicRecovery && !anyDynamicCarrier(args) && !anyDynamicCarrier(outs) &&
+	coreDefaultCarrier := sig.CoreDefault && AnyNonConcreteOperand(args)
+	if !disjunctStraddle && !dynamicRecovery && !AnyDynamicCarrier(args) && !AnyDynamicCarrier(outs) &&
 		!coreDefaultCarrier {
 		return false
 	}
@@ -587,7 +587,7 @@ func tryRecordDynBody(r *Registry, word string, sig *Signature, args, outs []Val
 	// capitalised def / import inside the baked body re-runs a registry
 	// mutation the check pass already applied and half-rolled-back (the
 	// do-unit registry-replay miscompile — see bodyHasReplayHazard).
-	if IsConcrete(body) && (bodyHasSentinelDeep(r, body) || bodyHasReplayHazard(body)) {
+	if IsConcrete(body) && (BodyHasSentinelDeep(r, body) || bodyHasReplayHazard(body)) {
 		return false
 	}
 	// Every operand must have a compiled home: the body rides as a threaded
@@ -750,7 +750,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 	// coverage LOSS). The code-body words always island (they never lower
 	// to CALL_NATIVE).
 	if sig.CompileEffect.Has(CompileIslandPure) && !sig.CompileEffect.Has(CompileFallbackBody) &&
-		!anyDynamicCarrier(args) && !anyDynamicCarrier(outs) {
+		!AnyDynamicCarrier(args) && !AnyDynamicCarrier(outs) {
 		return false
 	}
 	// CORE-dispatch guard: the matched sig must belong to the word's
@@ -795,7 +795,7 @@ func tryRecordFallback(r *Registry, word string, sig *Signature, args, outs []Va
 		if baked && sig.NoEvalArgs[i] {
 			// A code body: legitimately contains words, but every one
 			// must be VM-resolvable (no check-time def carriers).
-			if !bodyFreeForFallback(r, cv) {
+			if !BodyFreeForFallback(r, cv) {
 				return false
 			}
 		} else if baked && !IsInertConst(cv) {
@@ -880,5 +880,5 @@ func tryRecordDeferredList(r *Registry, sig *Signature, outs []Value) bool {
 	if !r.Check.Recorder().Active() || sig == nil || sig.FnFrame() == nil || len(outs) != 1 {
 		return false
 	}
-	return isDeferredWordList(outs[0])
+	return IsDeferredWordList(outs[0])
 }

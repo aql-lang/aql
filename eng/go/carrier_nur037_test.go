@@ -45,7 +45,7 @@ func bodyArgs(bodyWords ...string) []Value {
 func TestBodyRefsFnLocalFnPositive(t *testing.T) {
 	r := newTestRegistry(t)
 	fnLocalBind(r, "step", NewFunction(FnDefInfo{Name: "step"}))
-	name, hit := bodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("step"))
+	name, hit := BodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("step"))
 	if !hit || name != "step" {
 		t.Errorf("fn-local fn body word: got (%q, %v), want (step, true)", name, hit)
 	}
@@ -57,7 +57,7 @@ func TestBodyRefsFnLocalFnCallableGate(t *testing.T) {
 	r := newTestRegistry(t)
 	fnLocalBind(r, "step", NewFunction(FnDefInfo{Name: "step"}))
 	sig := bodySig(0, &CallableSpec{BodyPos: 0, BodyOut: 1})
-	if name, hit := bodyRefsFnLocalFn(r, sig, bodyArgs("step")); !hit || name != "step" {
+	if name, hit := BodyRefsFnLocalFn(r, sig, bodyArgs("step")); !hit || name != "step" {
 		t.Errorf("Callable-gated sig: got (%q, %v), want (step, true)", name, hit)
 	}
 }
@@ -67,7 +67,7 @@ func TestBodyRefsFnLocalFnRepeatedNameEarlyOut(t *testing.T) {
 	// early-out; the result is the same single name.
 	r := newTestRegistry(t)
 	fnLocalBind(r, "step", NewFunction(FnDefInfo{Name: "step"}))
-	name, hit := bodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("step", "step"))
+	name, hit := BodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("step", "step"))
 	if !hit || name != "step" {
 		t.Errorf("repeated body word: got (%q, %v), want (step, true)", name, hit)
 	}
@@ -78,7 +78,7 @@ func TestBodyRefsFnLocalFnModuleScopeBaselineNil(t *testing.T) {
 	// keep compiling.
 	r := newTestRegistry(t)
 	r.Defs.Push("step", NewFunction(FnDefInfo{Name: "step"}))
-	if name, hit := bodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("step")); hit {
+	if name, hit := BodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("step")); hit {
 		t.Errorf("module-scope binding with nil baseline matched %q; must not", name)
 	}
 }
@@ -89,7 +89,7 @@ func TestBodyRefsFnLocalFnModuleScopeBindingUnderBaseline(t *testing.T) {
 	r := newTestRegistry(t)
 	r.Defs.Push("step", NewFunction(FnDefInfo{Name: "step"}))
 	r.PushFnBaseline(r.Defs.Snapshot())
-	if name, hit := bodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("step")); hit {
+	if name, hit := BodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("step")); hit {
 		t.Errorf("module-scope binding under the baseline matched %q; must not", name)
 	}
 }
@@ -99,7 +99,7 @@ func TestBodyRefsFnLocalFnValueDefNotMatched(t *testing.T) {
 	// the closure path's lexical-capture territory — must NOT match.
 	r := newTestRegistry(t)
 	fnLocalBind(r, "acc", NewInteger(7))
-	if name, hit := bodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("acc")); hit {
+	if name, hit := BodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("acc")); hit {
 		t.Errorf("fn-local VALUE def matched %q; only Function bindings may match", name)
 	}
 }
@@ -108,7 +108,7 @@ func TestBodyRefsFnLocalFnUnboundWordSkipped(t *testing.T) {
 	// A forward ref / registered-native name has no Defs binding: skipped.
 	r := newTestRegistry(t)
 	r.PushFnBaseline(r.Defs.Snapshot())
-	if name, hit := bodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("nosuch")); hit {
+	if name, hit := BodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), bodyArgs("nosuch")); hit {
 		t.Errorf("unbound body word matched %q; must not", name)
 	}
 }
@@ -116,11 +116,11 @@ func TestBodyRefsFnLocalFnUnboundWordSkipped(t *testing.T) {
 func TestBodyRefsFnLocalFnNilSigAndNoBodies(t *testing.T) {
 	r := newTestRegistry(t)
 	fnLocalBind(r, "step", NewFunction(FnDefInfo{Name: "step"}))
-	if _, hit := bodyRefsFnLocalFn(r, nil, bodyArgs("step")); hit {
+	if _, hit := BodyRefsFnLocalFn(r, nil, bodyArgs("step")); hit {
 		t.Error("nil sig must decline")
 	}
 	plain := &Signature{Args: []*Type{TList}, CompileEffect: CompileFallbackBody}
-	if _, hit := bodyRefsFnLocalFn(r, plain, bodyArgs("step")); hit {
+	if _, hit := BodyRefsFnLocalFn(r, plain, bodyArgs("step")); hit {
 		t.Error("a sig with no NoEvalArgs positions must decline")
 	}
 }
@@ -133,7 +133,7 @@ func TestBodyRefsFnLocalFnStructuredWordExcluded(t *testing.T) {
 	r := newTestRegistry(t)
 	fnLocalBind(r, "g", NewFunction(FnDefInfo{Name: "g"}))
 	sig := bodySig(0, nil)
-	if name, hit := bodyRefsFnLocalFn(r, sig, bodyArgs("g")); hit {
+	if name, hit := BodyRefsFnLocalFn(r, sig, bodyArgs("g")); hit {
 		t.Errorf("structured-lowering sig matched %q; the family gate must exclude it", name)
 	}
 }
@@ -147,7 +147,7 @@ func TestBodyRefsFnLocalFnNonBodyArgNotWalked(t *testing.T) {
 		NewList([]Value{NewWord("add")}),  // body: registered-word only
 		NewList([]Value{NewWord("step")}), // data arg mentions the fn
 	}
-	if name, hit := bodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), args); hit {
+	if name, hit := BodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), args); hit {
 		t.Errorf("non-NoEvalArgs data arg was walked (matched %q); must not", name)
 	}
 }
@@ -162,7 +162,7 @@ func TestBodyRefsFnLocalFnLambdaBodyOpaque(t *testing.T) {
 		NewFunction(FnDefInfo{Name: ""}),
 		NewList([]Value{NewInteger(1)}),
 	}
-	if name, hit := bodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), args); hit {
+	if name, hit := BodyRefsFnLocalFn(r, bodySig(CompileFallbackBody, nil), args); hit {
 		t.Errorf("lambda body operand matched %q; FnDefInfo payloads are opaque", name)
 	}
 }

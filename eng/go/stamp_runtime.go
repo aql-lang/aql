@@ -187,14 +187,14 @@ const restampMaxTries = 3
 // refusing). The box mutex serialises concurrent invokers of one shared sig
 // — the winner compiles, the rest reuse its twin; StampDetachedFn itself
 // runs on the CALLER's registry per its ForkConcurrent contract.
-func (ref *CompiledFnRef) jitRestamp(r *Registry) *CompiledFnRef {
+func (ref *CompiledFnRef) JitRestamp(r *Registry) *CompiledFnRef {
 	box := ref.restamp
 	if box == nil {
 		return nil
 	}
 	box.mu.Lock()
 	defer box.mu.Unlock()
-	if box.cur != nil && box.cur.depsFresh(r) {
+	if box.cur != nil && box.cur.DepsFresh(r) {
 		return box.cur
 	}
 	if box.tries >= restampMaxTries {

@@ -699,7 +699,7 @@ type depSnapEntry struct {
 // (live shadow) — reports false and the caller falls back to the
 // interpreter, so validation only ever degrades toward CallBoru, never away
 // from it.
-func (ref *CompiledFnRef) depsFresh(r *Registry) bool {
+func (ref *CompiledFnRef) DepsFresh(r *Registry) bool {
 	if ref == nil || ref.depSnap == nil {
 		return true
 	}

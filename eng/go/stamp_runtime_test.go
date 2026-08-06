@@ -190,34 +190,34 @@ func TestDepsFresh(t *testing.T) {
 	r.Defs.Push("helper", bound)
 
 	var nilRef *CompiledFnRef
-	if !nilRef.depsFresh(r) {
+	if !nilRef.DepsFresh(r) {
 		t.Fatalf("nil ref is vacuously fresh")
 	}
 	compileTime := &CompiledFnRef{}
-	if !compileTime.depsFresh(r) {
+	if !compileTime.DepsFresh(r) {
 		t.Fatalf("nil depSnap (compile-time ref) is vacuously fresh")
 	}
 
 	fresh := &CompiledFnRef{depSnap: map[string]depSnapEntry{
 		"helper": {Depth: r.Defs.Depth("helper"), Gen: r.Defs.Gen("helper")},
 	}}
-	if !fresh.depsFresh(r) {
+	if !fresh.DepsFresh(r) {
 		t.Fatalf("matching depth+gen must be fresh")
 	}
-	if fresh.depsFresh(nil) {
+	if fresh.DepsFresh(nil) {
 		t.Fatalf("nil registry cannot validate — must report stale")
 	}
 
 	// A rebind pushes a shadowing level: generation (and depth) change → stale.
 	r.Defs.Push("helper", NewInteger(8))
-	if fresh.depsFresh(r) {
+	if fresh.DepsFresh(r) {
 		t.Fatalf("rebound dep must be stale")
 	}
 	// Popping back does NOT restore freshness: the generation is monotone, so
 	// any window in which the binding differed marks the ref stale for good.
 	// Conservative direction only — the fallback is the interpreter.
 	r.Defs.Pop("helper")
-	if fresh.depsFresh(r) {
+	if fresh.DepsFresh(r) {
 		t.Fatalf("push+pop bumps the generation — must stay stale")
 	}
 	// The load-bearing case a depth+ID probe would MISS: undef then redef of
@@ -231,7 +231,7 @@ func TestDepsFresh(t *testing.T) {
 	}}
 	r2.Defs.Pop("helper")
 	r2.Defs.Push("helper", NewInteger(9)) // same depth, different value
-	if snap2.depsFresh(r2) {
+	if snap2.DepsFresh(r2) {
 		t.Fatalf("same-depth undef+redef must be stale (generation check)")
 	}
 	// Fork continuity: an untouched dep stays fresh on a ForkConcurrent clone
@@ -243,19 +243,19 @@ func TestDepsFresh(t *testing.T) {
 		"helper": {Depth: r3.Defs.Depth("helper"), Gen: r3.Defs.Gen("helper")},
 	}}
 	fork := r3.ForkConcurrent()
-	if !snap3.depsFresh(fork) {
+	if !snap3.DepsFresh(fork) {
 		t.Fatalf("untouched dep must stay fresh across a fork")
 	}
 	fork.Defs.Push("helper", NewInteger(8))
-	if snap3.depsFresh(fork) {
+	if snap3.DepsFresh(fork) {
 		t.Fatalf("fork-local shadow must be stale on the fork")
 	}
-	if !snap3.depsFresh(r3) {
+	if !snap3.DepsFresh(r3) {
 		t.Fatalf("fork-local shadow must not affect the parent")
 	}
 	// An empty (non-nil) snapshot — a dep-free runtime stamp — is always fresh.
 	depFree := &CompiledFnRef{depSnap: map[string]depSnapEntry{}}
-	if !depFree.depsFresh(r) {
+	if !depFree.DepsFresh(r) {
 		t.Fatalf("dep-free runtime ref must be fresh")
 	}
 }

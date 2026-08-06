@@ -243,7 +243,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// refuses → sound interpreter fallback.
 	_, bodyIsLambda := body.Data.(FnDefInfo)
 	tokenShapeGeneric := spec.CrossCollectionTokenShape && IsConcrete(body) && !bodyIsLambda
-	if anyDynamicCarrier(args) && dynamicReachableOverloadCount(r, word, args) >= 2 && !tokenShapeGeneric {
+	if AnyDynamicCarrier(args) && DynamicReachableOverloadCount(r, word, args) >= 2 && !tokenShapeGeneric {
 		// A CompileDynBody word DECLINES instead: tryRecordDynBody records a
 		// POLY re-match over the word's own sigs — the runtime value picks
 		// the overload exactly as the interpreter's dispatch does.
@@ -283,7 +283,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// decline is conservative-but-parity: callback words that do NOT thread
 	// the signal (each/filter — the interpreter raises `break outside loop`)
 	// fall back to the interpreter, which raises identically.
-	if bodyHasSentinelDeep(r, body) {
+	if BodyHasSentinelDeep(r, body) {
 		return false
 	}
 	inputs := spec.Inputs(args)

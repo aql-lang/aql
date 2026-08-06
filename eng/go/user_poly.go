@@ -205,17 +205,25 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 	return plan
 }
 
-// substituteJoinedOuts replaces the committed overload's out carriers with
+// SubstituteJoinedOuts replaces the committed overload's out carriers with
 // the plan's return-join carriers at every position where the arms' declared
 // returns differ. The record site calls it just before RecordUserPolyCall so
 // downstream typing rides the join, never one arm's unproven commitment.
-func (p *userPolyPlan) substituteJoinedOuts(out []Value) {
+func (p *userPolyPlan) SubstituteJoinedOuts(out []Value) {
 	for i := range out {
 		if i < len(p.joined) && p.joined[i] {
 			out[i] = p.outs[i]
 		}
 	}
 }
+
+// The UserPolyPlan handle accessors (dispatch_hooks.go): the check
+// piece's record sites unpack the plan through these instead of naming
+// the concrete type.
+func (p *userPolyPlan) SigIdx() []int     { return p.sigIdx }
+func (p *userPolyPlan) Units() []int      { return p.units }
+func (p *userPolyPlan) Impls() []SigImpl  { return p.impls }
+func (p *userPolyPlan) Sigs() []Signature { return p.sigs }
 
 // userPolyArmShapeOK gates one arm's SIGNATURE shape: a boru body, plain
 // value params (no quote / raw-form / no-eval / type-literal slots — the
@@ -299,14 +307,14 @@ func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature,
 	pats := make([]*Value, len(sigParams))
 	for i, p := range sigParams {
 		paramNames[i] = p.Name
-		genArgs[i] = paramBodyCarrier(p)
+		genArgs[i] = ParamBodyCarrier(p)
 		pts[i] = p.Type
 		pats[i] = p.Pattern
 	}
 	// A deferred-param-list body returns its raw list for MODULE-scope late
 	// evaluation (see buildFnBodyReturnsFn) — a unit's call-time result cannot
 	// model that, so the arm (and with it the whole poly set) refuses.
-	if _, deferred := deferredParamListResidual(body, paramNames); deferred {
+	if _, deferred := DeferredParamListResidual(body, paramNames); deferred {
 		return -1, false
 	}
 	declared := append([]*Type(nil), s.Returns...)

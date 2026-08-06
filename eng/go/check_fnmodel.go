@@ -109,7 +109,7 @@ func typedContainerCarrier(p FnParam, a Value) (Value, bool) {
 // with the actual arg; the poly-arm (user_poly.go) and construction-check
 // (buildFnBodyReturnsFn) body builders have only the param, so they route
 // here — otherwise `m:{:Integer}`'s `p.Type` is bare Map and reads stay Any.
-func paramBodyCarrier(p FnParam) Value {
+func ParamBodyCarrier(p FnParam) Value {
 	if p.Pattern != nil {
 		pat := *p.Pattern
 		if ci, err := AsChildType(pat); err == nil && ci.Child.Parent != nil && !ci.Child.Parent.Equal(TAny) {

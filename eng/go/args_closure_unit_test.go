@@ -62,13 +62,13 @@ func TestBodyFreeForFallbackContextWords(t *testing.T) {
 	}
 	for _, name := range []string{"args", "__pa"} {
 		body := NewList([]Value{NewWord(name)})
-		if bodyFreeForFallback(r, body) {
+		if BodyFreeForFallback(r, body) {
 			t.Errorf("body [%s]: want island-decline (context-dependent word)", name)
 		}
 	}
 	// Positive pair: a body of known literals stays island-free.
 	free := NewList([]Value{NewWord("true")})
-	if !bodyFreeForFallback(r, free) {
+	if !BodyFreeForFallback(r, free) {
 		t.Errorf("body [true]: want island-free")
 	}
 }

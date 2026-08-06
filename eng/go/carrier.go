@@ -683,7 +683,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 // carrier guard alone would reject it. The carrier-tolerant arm admits only
 // value-scalar payloads: a compound carrier's payload is structural
 // (ChildTypeInfo) and a dynamic carrier's value is unknown — both decline.
-func scalarFoldOperand(v Value) bool {
+func ScalarFoldOperand(v Value) bool {
 	if IsInertConst(v) {
 		return true
 	}
@@ -878,7 +878,7 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 	// only loosens matching, never tightens — and a guard discharges it
 	// back to strict. ReturnsFn results that are already dynamic (e.g.
 	// ReturnsIdentity of a dynamic input) stay so via toCarrier.
-	if anyDynamicCarrier(args) {
+	if AnyDynamicCarrier(args) {
 		// STRICT mode (`boru check --strict`): make the gradual frontier
 		// loud — every committed dispatch over a dynamic operand is a
 		// point the checker matched optimistically and the runtime will
@@ -1010,7 +1010,7 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 // bound by a value `def` resolves via Defs substitution, NOT Lookup, so
 // it fails here — correctly, since at VM run time that binding is the
 // check pass's CARRIER, not a concrete value.
-func bodyFreeForFallback(r *Registry, body Value) bool {
+func BodyFreeForFallback(r *Registry, body Value) bool {
 	free := true
 	WalkBodyWords([]Value{body}, func(w WordInfo, _ Value) {
 		if !free {
@@ -1082,7 +1082,7 @@ func bodyFreeForFallback(r *Registry, body Value) bool {
 //     CompileFallbackBody nor Callable) record their bodies as inline
 //     events (a fn-local dispatch lowers to CALL_USER by unit ref, no
 //     name bake), so the family gate excludes them.
-func bodyRefsFnLocalFn(r *Registry, sig *Signature, args []Value) (string, bool) {
+func BodyRefsFnLocalFn(r *Registry, sig *Signature, args []Value) (string, bool) {
 	if sig == nil || len(sig.NoEvalArgs) == 0 ||
 		(!sig.CompileEffect.Has(CompileFallbackBody) && sig.Callable == nil) {
 		return "", false
@@ -1123,7 +1123,7 @@ func bodyRefsFnLocalFn(r *Registry, sig *Signature, args []Value) (string, bool)
 // def references — the closure compile bakes a concrete def as a const or
 // threads an enclosing-fn binding as a capture, and the probe compile refuses
 // anything it cannot resolve.
-func bodyHasSentinel(body Value) bool {
+func BodyHasSentinel(body Value) bool {
 	return valueHasSentinel(body)
 }
 
@@ -1266,8 +1266,8 @@ func xmlTmplScan(t XmlTmpl, scan func(Value) bool) bool {
 // parity-safe: the fallback interpreter run raises identically. The
 // const-bake gates (the noEvalBodiesInert twins) and the lambda gates keep
 // the syntactic scan — no divergence reproduced there.
-func bodyHasSentinelDeep(r *Registry, body Value) bool {
-	if bodyHasSentinel(body) {
+func BodyHasSentinelDeep(r *Registry, body Value) bool {
+	if BodyHasSentinel(body) {
 		return true
 	}
 	if r == nil {
@@ -1599,7 +1599,7 @@ func comboTypeNames(combo []Value) string {
 // commit can diverge from the interpreter's runtime predicate fall-through.
 // DepScalar and Go-member types match self-contained in check mode (no
 // leniency), so they carry no hazard.
-func fnPredicateOverloadHazard(r *Registry, word string, args []Value) bool {
+func FnPredicateOverloadHazard(r *Registry, word string, args []Value) bool {
 	fn := r.Lookup(word)
 	if fn == nil || len(fn.Signatures) < 2 {
 		return false
@@ -1630,7 +1630,7 @@ func fnPredicateOverloadHazard(r *Registry, word string, args []Value) bool {
 	return hasPred && reachable >= 2
 }
 
-func dynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
+func DynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
 	fn := r.Lookup(word)
 	if fn == nil || len(fn.Signatures) < 2 {
 		return 0
@@ -1914,7 +1914,7 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 
 // anyDynamicCarrier reports whether any value is a dynamic carrier — the
 // trigger for gradual contagion in carrierResults.
-func anyDynamicCarrier(vs []Value) bool {
+func AnyDynamicCarrier(vs []Value) bool {
 	for _, v := range vs {
 		if v.Dynamic {
 			return true
@@ -1928,7 +1928,7 @@ func anyDynamicCarrier(vs []Value) bool {
 // operand shape under which a static CoreDefault match is not a dispatch
 // proof (recordCallRefusal): the runtime tag may be a strict subtype a
 // more-specific unlocked overload claims.
-func anyNonConcreteOperand(vs []Value) bool {
+func AnyNonConcreteOperand(vs []Value) bool {
 	for _, v := range vs {
 		if !IsConcrete(v) {
 			return true
@@ -1944,7 +1944,7 @@ func anyNonConcreteOperand(vs []Value) bool {
 // fails matchSignature and reaches the no-signature recovery, where it is the
 // signal that the dispatch is genuinely runtime-dynamic (poly), not a concrete
 // type error.
-func anyAnyCarrier(vs []Value) bool {
+func AnyAnyCarrier(vs []Value) bool {
 	for _, v := range vs {
 		if isAnyCarrier(v) {
 			return true
@@ -2812,7 +2812,7 @@ const FnAnalysisQuota = 64
 // value) breaks. A non-proven loop body still analyses identically — it
 // just declines the split (NestedBodyDepth != LoopBodyDepth).
 func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Value, provenTrips bool) []Value {
-	proven := provenTrips && !bodyHasSentinel(body)
+	proven := provenTrips && !BodyHasSentinel(body)
 	// Loop-lowering hook (`for`): when armed, register the loop
 	// bindings as VM locals and capture each round's events as a
 	// fragment — the final round's capture (the stable one) is what
@@ -3811,7 +3811,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 // isDeferredWordList reports whether v is a parser-evaluated (`Eval`, unquoted)
 // plain list that still carries a raw Word element — the unfolded def-node-binding
 // deferred residual a transparent fn body like `[[c1]]` returns.
-func isDeferredWordList(v Value) bool {
+func IsDeferredWordList(v Value) bool {
 	if !v.Eval || v.Quoted || !v.Parent.Equal(TList) || v.Data == nil ||
 		IsTypedList(v) || IsTableType(v) {
 		return false
@@ -3824,7 +3824,7 @@ func isDeferredWordList(v Value) bool {
 		if IsWord(e) {
 			return true
 		}
-		if e.Parent.Equal(TList) && isDeferredWordList(e) {
+		if e.Parent.Equal(TList) && IsDeferredWordList(e) {
 			return true
 		}
 	}
@@ -3843,7 +3843,7 @@ func isDeferredWordList(v Value) bool {
 // names a parameter qualifies. A body that DOESN'T reference a param already
 // folds correctly under the normal path; a multi-statement or computed body
 // keeps its existing analysis (and its faithful fallback when it can't lower).
-func deferredParamListResidual(body []Value, paramNames []string) (Value, bool) {
+func DeferredParamListResidual(body []Value, paramNames []string) (Value, bool) {
 	if len(body) != 1 {
 		return Value{}, false
 	}

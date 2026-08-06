@@ -2316,7 +2316,7 @@ func (es *EmitState) compileStoredParamBody(bodyList Value, params []FnParam) (V
 // edge alongside its raw Body. Mutates the shared *BoruImpl pointer, so the
 // interned const reflects it. Returns false when no own boru body sig exists (a
 // Go-backed or fallback-only fn value — never a stored boru handler).
-func stampCompiledRef(fd FnDefInfo, ref *CompiledFnRef) bool {
+func StampCompiledRef(fd FnDefInfo, ref *CompiledFnRef) bool {
 	for i := range fd.Signatures {
 		if fd.Signatures[i].Fallback {
 			continue
@@ -4646,7 +4646,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// interpreter runs the SAME handler with the same baked atom.
 		es.SiteCounts[SiteMeta]++
 		es.MarkUncompilable("quoted-operand word " + word)
-	case sig.CoreDefault && anyNonConcreteOperand(args):
+	case sig.CoreDefault && AnyNonConcreteOperand(args):
 		// A CoreDefault overload (the within-type scalar/Micron arithmetic
 		// defaults) is UNLOCKED: a runtime value whose tag is a strict
 		// SUBTYPE of the static carrier's type (the refinement escape —
@@ -4663,10 +4663,10 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 		// pre-empt them at runtime.)
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("core-default dispatch over a carrier operand at " + word)
-	case anyDynamicCarrier(args) && !shuffleOK && !es.DynInputsProven(sig, args):
+	case AnyDynamicCarrier(args) && !shuffleOK && !es.DynInputsProven(sig, args):
 		es.SiteCounts[SiteDynamic]++
 		es.MarkUncompilable("dynamic input at " + word)
-	case anyDynamicCarrier(outs) && !forceDynOut && !shuffleOK:
+	case AnyDynamicCarrier(outs) && !forceDynOut && !shuffleOK:
 		// Dynamic outputs mean the checker could not type the word
 		// (missing annotations, opaque wrappers like a def-bound
 		// usurp value): the recorded signature is a best guess, not a
@@ -4710,7 +4710,7 @@ func (es *EmitState) recordCallRefusal(word string, sig *Signature, args, outs [
 // A duplicating shuffle (dup/over/…) mints fresh output IDs (ReturnsIdentity),
 // fails the multiset check, and falls through to the normal bake.
 func (es *EmitState) recordShuffleElided(word string, sig *Signature, args, outs []Value) bool {
-	if !anyDynamicCarrier(args) || !es.dynamicStackShuffleOK(word, sig) {
+	if !AnyDynamicCarrier(args) || !es.dynamicStackShuffleOK(word, sig) {
 		return false
 	}
 	if len(outs) != len(args) {
@@ -6163,7 +6163,7 @@ func noEvalBodiesInert(sig *Signature, args []Value) bool {
 		// targets an ENCLOSING loop/frame; running the body inside the handler
 		// (the CALL_NATIVE this enables) cannot propagate that across the call
 		// boundary, so it would diverge (`each [break]`). Keep those refused.
-		if bodyHasSentinel(args[i]) {
+		if BodyHasSentinel(args[i]) {
 			return false
 		}
 		if bodyHasReplayHazard(args[i]) {
@@ -6261,7 +6261,7 @@ func (es *EmitState) noEvalBodiesInertScoped(sig *Signature, args []Value) bool 
 		if !inert {
 			return false
 		}
-		if bodyHasSentinel(args[i]) {
+		if BodyHasSentinel(args[i]) {
 			return false
 		}
 		if bodyHasReplayHazard(args[i]) {

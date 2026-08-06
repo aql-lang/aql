@@ -159,7 +159,7 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 			// payloads — literals and folded comparisons), where the checked
 			// value provably equals the runtime value; abstract carriers keep
 			// the runtime check (value-dependent returns bail by design).
-			if !scalarFoldOperand(got) || got.Is(exp) {
+			if !ScalarFoldOperand(got) || got.Is(exp) {
 				continue
 			}
 		}
@@ -344,7 +344,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// through to the normal analysis + unit compile, where the list is
 		// assembled in-frame against the param (fixed at call time, which the
 		// unit models exactly).
-		if raw, ok := deferredParamListResidual(bodyCopy, paramNames); ok && fnDef.Anonymous {
+		if raw, ok := DeferredParamListResidual(bodyCopy, paramNames); ok && fnDef.Anonymous {
 			// An afn is never generic (afnHandler declares no type params, so
 			// fnDef.Gen is nil whenever fnDef.Anonymous), hence genNames is empty
 			// here — no gen-binding cleanup is needed before the early return. A
@@ -692,12 +692,12 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// return-join carrier (§8.2(3) — the runtime value is whichever
 				// arm the VM selects, a branch join), so downstream typing never
 				// rides one arm's unproven commitment.
-				polyPlan.substituteJoinedOuts(out)
+				polyPlan.SubstituteJoinedOuts(out)
 				pos := SrcPos{}
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
-				es.RecordUserPolyCall(nameCopy, r, polyPlan.sigIdx, polyPlan.units, polyPlan.impls, polyPlan.sigs, args, out, pos)
+				es.RecordUserPolyCall(nameCopy, r, polyPlan.SigIdx(), polyPlan.Units(), polyPlan.Impls(), polyPlan.Sigs(), args, out, pos)
 			}
 			return out
 		}
@@ -729,7 +729,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
-				es.RecordUserPolyCall(nameCopy, r, polyPlan.sigIdx, polyPlan.units, polyPlan.impls, polyPlan.sigs, args, nil, pos)
+				es.RecordUserPolyCall(nameCopy, r, polyPlan.SigIdx(), polyPlan.Units(), polyPlan.Impls(), polyPlan.Sigs(), args, nil, pos)
 				return nil
 			}
 			// The 0-net / undeclared call whose body unit declined leaves a
@@ -780,7 +780,7 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 		genArgs := make([]Value, len(s.Params))
 		for j, p := range s.Params {
 			paramNames[j] = p.Name
-			genArgs[j] = paramBodyCarrier(p)
+			genArgs[j] = ParamBodyCarrier(p)
 		}
 		var declared []*Type
 		if !fnDef.Anonymous {

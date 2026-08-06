@@ -35,5 +35,6 @@ user_poly_plan.go	compiler
 check_ordering.go	check
 vm_callback_unit.go	eng
 dispatch_hooks.go	check
-aliases_core.go	eng	assigned at the core cut
-aliases_core_generic.go	eng	hand-written generic wrappers beside the generated facade
+aliases_core.go	core	the generated core facade — core surface, so cross-piece direction analysis ranks it BELOW check
+aliases_core_generic.go	core	hand-written generic wrappers beside the generated facade (core surface)
+dispatch_hooks_install.go	compiler	the DispatchBraid active half — compiler installs onto the check seam

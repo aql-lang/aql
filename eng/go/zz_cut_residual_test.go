@@ -2099,7 +2099,7 @@ func TestW9ShapedMethodApplyWindowRejects(t *testing.T) {
 func TestW9TryRecordMethodApplyWordMismatch(t *testing.T) {
 	r := newTestRegistry(t)
 	r.Check.PendingMethodApply = &PendingMethodApply{Origin: NewCarrier(TAny), Word: "owner"}
-	if tryRecordMethodApply(r, "other", nil, nil, SrcPos{}) {
+	if TryRecordMethodApply(r, "other", nil, nil, SrcPos{}) {
 		t.Error("a word mismatch must leave the pending for its owner")
 	}
 	if r.Check.PendingMethodApply == nil {
@@ -2114,7 +2114,7 @@ func TestW9TryRecordMethodApplyRecordFails(t *testing.T) {
 	// Origin carrier with no producing event → RecordDynMethod fails and the
 	// program is marked uncompilable.
 	r.Check.PendingMethodApply = &PendingMethodApply{Origin: NewCarrier(TAny), Word: "m"}
-	if !tryRecordMethodApply(r, "m", nil, nil, SrcPos{}) {
+	if !TryRecordMethodApply(r, "m", nil, nil, SrcPos{}) {
 		t.Error("a matching pending must be consumed")
 	}
 	if es.Compilable {
@@ -2135,17 +2135,17 @@ func TestW9TryDynamicFnValueDispatchNonInertWindow(t *testing.T) {
 
 func TestW9ScalarFoldOperand(t *testing.T) {
 	// A plain concrete integer is inert-const → the fast path.
-	if !scalarFoldOperand(NewInteger(1)) {
+	if !ScalarFoldOperand(NewInteger(1)) {
 		t.Error("a concrete integer is a scalar fold operand")
 	}
 	// A carrier whose payload is a value-scalar reaches the carrier-tolerant
 	// switch arm (not inert-const, not dynamic, scalar payload).
 	scalarCarrier := Value{Parent: TInteger, Data: IntPayload{N: 1}, Carrier: true}
-	if !scalarFoldOperand(scalarCarrier) {
+	if !ScalarFoldOperand(scalarCarrier) {
 		t.Error("a scalar-payload carrier is a fold operand")
 	}
 	// A compound (ChildTypeInfo) carrier declines.
-	if scalarFoldOperand(NewCarrier(TInteger)) {
+	if ScalarFoldOperand(NewCarrier(TInteger)) {
 		t.Error("a compound carrier is not a scalar fold operand")
 	}
 }
@@ -2360,7 +2360,7 @@ func TestInvokeCallbackBusyRegistryFallsBack(t *testing.T) {
 func TestStampCompiledRef(t *testing.T) {
 	ref := &CompiledFnRef{Prog: &Program{}, Unit: 0}
 	boruFd := FnDefInfo{Signatures: []Signature{{Impl: &BoruImpl{Body: []Value{NewInteger(1)}}}}}
-	if !stampCompiledRef(boruFd, ref) {
+	if !StampCompiledRef(boruFd, ref) {
 		t.Fatal("a boru body sig must accept the stamp")
 	}
 	if CompiledRef(&boruFd.Signatures[0]) != ref {
@@ -2371,7 +2371,7 @@ func TestStampCompiledRef(t *testing.T) {
 		{Fallback: true, Impl: &BoruImpl{}},
 		{Impl: Go(func([]Value, map[string]Value, []Value, *Registry) ([]Value, error) { return nil, nil })},
 	}}
-	if stampCompiledRef(goFd, ref) {
+	if StampCompiledRef(goFd, ref) {
 		t.Fatal("a fn value with no own boru body sig must not be stamped")
 	}
 }
@@ -3450,20 +3450,20 @@ func TestParamBodyCarrier(t *testing.T) {
 	// A {:T} param carrier must be DYNAMIC — the arg may be flex, so an in-place
 	// mutation in the body must runtime-rematch rather than preselect the
 	// immutable handler (the compile-vs-interpret divergence fix).
-	if v := paramBodyCarrier(FnParam{Pattern: &mapPat, Type: TMap}); !IsTypedMap(v) || !v.Dynamic {
+	if v := ParamBodyCarrier(FnParam{Pattern: &mapPat, Type: TMap}); !IsTypedMap(v) || !v.Dynamic {
 		t.Errorf("{:Integer} param → %s (dynamic=%v), want a dynamic typed-map carrier", v.Parent.String(), v.Dynamic)
 	}
 	listPat := NewCarrierTypedListValue(NewTypeLiteral(TInteger))
-	if v := paramBodyCarrier(FnParam{Pattern: &listPat, Type: TList}); !IsTypedList(v) || !v.Dynamic {
+	if v := ParamBodyCarrier(FnParam{Pattern: &listPat, Type: TList}); !IsTypedList(v) || !v.Dynamic {
 		t.Errorf("[:Integer] param → %s (dynamic=%v), want a dynamic typed-list carrier", v.Parent.String(), v.Dynamic)
 	}
 	// A non-typed-container param falls back to ParamInputCarrier (no pattern).
-	if v := paramBodyCarrier(FnParam{Type: TInteger}); v.Parent == nil || !v.Parent.ConformsTo(TInteger) {
+	if v := ParamBodyCarrier(FnParam{Type: TInteger}); v.Parent == nil || !v.Parent.ConformsTo(TInteger) {
 		t.Errorf("scalar param → %s, want an Integer carrier", v.Parent.String())
 	}
 	// A {:Any} pattern (child Any) falls through to ParamInputCarrier(TMap).
 	anyPat := NewTypedMap(NewTypeLiteral(TAny))
-	if v := paramBodyCarrier(FnParam{Pattern: &anyPat, Type: TMap}); v.Parent == nil || !v.Parent.ConformsTo(TMap) {
+	if v := ParamBodyCarrier(FnParam{Pattern: &anyPat, Type: TMap}); v.Parent == nil || !v.Parent.ConformsTo(TMap) {
 		t.Errorf("{:Any} param → %s, want a Map carrier", v.Parent.String())
 	}
 }

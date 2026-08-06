@@ -403,7 +403,7 @@ func tryDynamicFnValueDispatch(e *Engine, valIdx int) bool {
 // falling through would record the member's inner native as a check-time
 // CALL_NATIVE against the shape instance's sub-registry, baking shape
 // state (the freeze-gate violation this model exists to avoid).
-func tryRecordMethodApply(r *Registry, word string, args, out []Value, pos SrcPos) bool {
+func TryRecordMethodApply(r *Registry, word string, args, out []Value, pos SrcPos) bool {
 	pm := r.Check.PendingMethodApply
 	if pm == nil {
 		return false

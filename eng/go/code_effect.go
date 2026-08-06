@@ -100,7 +100,7 @@ func AnalyseCodeEffectCarrier(r *Registry, body Value) (Value, bool) {
 			break
 		}
 	}
-	if !hasWord || bodyHasSentinel(body) {
+	if !hasWord || BodyHasSentinel(body) {
 		return Value{}, false
 	}
 

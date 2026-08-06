@@ -122,10 +122,10 @@ func TestS6aConcreteHandlerEvalNonConcreteResult(t *testing.T) {
 }
 
 func TestS6aScalarFoldOperandBigNumPayloads(t *testing.T) {
-	if !scalarFoldOperand(NewBigInteger(big.NewInt(5))) {
+	if !ScalarFoldOperand(NewBigInteger(big.NewInt(5))) {
 		t.Error("a BigInt payload is a scalar fold operand")
 	}
-	if scalarFoldOperand(NewList([]Value{NewCarrier(TInteger)})) {
+	if ScalarFoldOperand(NewList([]Value{NewCarrier(TInteger)})) {
 		t.Error("a carrier-bearing list is not a scalar fold operand")
 	}
 }
@@ -455,13 +455,13 @@ func TestS6aTryRecordFallbackBakedNonInertDeclines(t *testing.T) {
 
 func TestS6aBodyFreeForFallbackLiteralAndTypeWords(t *testing.T) {
 	r := newTestRegistry(t)
-	if !bodyFreeForFallback(r, NewList([]Value{NewWord("true"), NewWord("false")})) {
+	if !BodyFreeForFallback(r, NewList([]Value{NewWord("true"), NewWord("false")})) {
 		t.Error("bare literal words are VM-resolvable")
 	}
-	if !bodyFreeForFallback(r, NewList([]Value{NewWord("Integer")})) {
+	if !BodyFreeForFallback(r, NewList([]Value{NewWord("Integer")})) {
 		t.Error("type-name words are VM-resolvable")
 	}
-	if bodyFreeForFallback(r, NewList([]Value{NewWord("s6a_no_such")})) {
+	if BodyFreeForFallback(r, NewList([]Value{NewWord("s6a_no_such")})) {
 		t.Error("an unresolvable word must fail the body scan")
 	}
 }
@@ -872,7 +872,7 @@ func TestS6aIsDeferredWordListShapes(t *testing.T) {
 	// Parent=TList with a non-list payload: AsList fails.
 	bad := NewValueRaw(TList, IntPayload{N: 1})
 	bad.Eval = true
-	if isDeferredWordList(bad) {
+	if IsDeferredWordList(bad) {
 		t.Error("a non-list payload must decline")
 	}
 
@@ -881,14 +881,14 @@ func TestS6aIsDeferredWordListShapes(t *testing.T) {
 	inner.Eval = true
 	outer := NewList([]Value{inner})
 	outer.Eval = true
-	if !isDeferredWordList(outer) {
+	if !IsDeferredWordList(outer) {
 		t.Error("a nested word-bearing list is deferred")
 	}
 
 	// No words anywhere: not deferred.
 	plain := NewList([]Value{NewInteger(1), NewList([]Value{NewInteger(2)})})
 	plain.Eval = true
-	if isDeferredWordList(plain) {
+	if IsDeferredWordList(plain) {
 		t.Error("a word-free list is not deferred")
 	}
 }
