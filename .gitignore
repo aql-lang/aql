@@ -188,3 +188,8 @@ __pycache__/
 # piecetool builds to coverage/ via `make facades`; never commit the binary
 piecetool
 tools/piecetool/piecetool
+
+# solardemo is a test HTTP fixture built from its own source next to it
+# (test/solardemo/{main.go,Makefile,go.mod}); the 8.6MB binary was tracked
+# for a long time before this. Build it, don't commit it.
+test/solardemo/solardemo
