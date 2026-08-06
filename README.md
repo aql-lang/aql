@@ -166,6 +166,8 @@ Suggested reading orders:
 | `lang/go/` | The language layer: public `lang` API and the consolidated `native` word library. |
 | `basic/go/` | The base language layer: fundamental words and predefined content types, on eng only (ADR-013). |
 | `eng/go/` | Engine kernel, parser, and kernel spec runner. |
+| `compiler/go/` | The compiler module: the emit recorder, lowering, and the bytecode emitter. Builds on check and core; eng runs its bytecode. |
+| `check/go/` | The type-checker module: the analysis pass, carriers, and check-mode diagnostics. Builds on core alone. |
 | `core/go/` | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it. |
 | `calc/go/` | A small calculator built directly on `eng` (learning example). |
 | `wpg/` | The wasm web playground (`wpg/wasm` + `wpg/serve`). |

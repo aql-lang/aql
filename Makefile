@@ -1,5 +1,5 @@
 .PHONY: all build install test test-race test-ts vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
-        spec-gen spec-test cover-gate-eng \
+        spec-gen spec-test cover-gate-eng cover-gate-check cover-gate-compiler facades \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-basic publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
@@ -27,7 +27,7 @@
 
 # Order matters for `make test`: eng must build before basic, basic
 # before lang, etc.
-MODULES := core/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
+MODULES := core/go check/go compiler/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
 
 all: test
 
@@ -95,6 +95,28 @@ spec-gen:
 spec-test:
 	cd test/go && go test -tags specgen -timeout 40m ./specgen/
 
+# ---- generated module facades ------------------------------------------
+#
+# eng/go/aliases_{core,check,compiler}.go re-export the lower modules'
+# surface under package eng so downstream code (basic, lang, cmd, calc,
+# wpg, the harnesses) compiles unchanged across the four-piece split
+# (design/ENG-FOUR-PIECE.0.md). They are GENERATED — regenerate after any
+# change to an exported symbol in core/check/compiler, then re-run the
+# checklist. The generator also derives the "cold" set (funcs no consumer
+# calls through the facade) and emits those as func-value re-exports, so
+# no wrapper body sits permanently uncovered under the ADR-008 gate.
+#
+# piecetool lives in its own module (tools/piecetool) that is NOT in
+# MODULES: it is a developer tool, so its statements stay out of the
+# repo-wide 100% coverage universe the shipped modules must satisfy.
+facades:
+	@cd tools/piecetool && go build -o "$(abspath $(COVER_DIR))/piecetool" .
+	@"$(abspath $(COVER_DIR))/piecetool" -facade core/go eng/go/aliases_core.go core
+	@"$(abspath $(COVER_DIR))/piecetool" -facade check/go eng/go/aliases_check.go check
+	@"$(abspath $(COVER_DIR))/piecetool" -facade compiler/go eng/go/aliases_compiler.go compiler
+	@cd eng/go && gofmt -w aliases_core.go aliases_check.go aliases_compiler.go
+	@echo "==> facades regenerated (run make fmt && make test)"
+
 # ---- per-module fan-out -------------------------------------------------
 
 test:
@@ -116,7 +138,7 @@ test:
 # exception: its 5941-row differential is single-threaded per row (race adds no
 # value) and times out under the detector, so only its concurrency rows run
 # here.
-RACE_MODULES := core/go eng/go basic/go lang/go
+RACE_MODULES := core/go check/go compiler/go eng/go basic/go lang/go
 test-race:
 	@set -e; for m in $(RACE_MODULES); do \
 	  echo "==> test-race $$m"; \
@@ -459,6 +481,36 @@ cover-gate-core:
 	  -coverprofile=$(abspath $(COVER_DIR))/core_standalone.engout ./... > $(abspath $(COVER_DIR))/core_standalone.log 2>&1 ) \
 	  || { echo "==> cover-gate-core test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/core_standalone.log; exit 1; }
 	@cd test/go && go run ./covergate -threshold $(CORE_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/core_standalone.engout
+
+# cover-gate-check / cover-gate-compiler — the standalone gates for the
+# two middle pieces (design/ENG-FOUR-PIECE.0.md Stage 6), the twins of
+# cover-gate-core and cover-gate-eng: each module profiled by ITS OWN
+# suite alone. Both floors are RATCHETS toward 100 — raise them in the
+# same change that raises coverage, never lower them. The merged
+# repo-wide ADR-008 gate (make cover-gate) stays the 100% contract; these
+# measure how much each piece proves on its own.
+CHECK_GATE_FLOOR ?= 56
+COMPILER_GATE_FLOOR ?= 62
+
+cover-gate-check:
+	@mkdir -p $(COVER_DIR)
+	@rm -f $(COVER_DIR)/check_standalone.engout
+	@echo "==> cover-gate-check (standalone, floor $(CHECK_GATE_FLOOR)%)"
+	@( cd check/go && go test -timeout 25m \
+	  -coverpkg=github.com/boru-lang/boru/check/go/... \
+	  -coverprofile=$(abspath $(COVER_DIR))/check_standalone.engout ./... > $(abspath $(COVER_DIR))/check_standalone.log 2>&1 ) \
+	  || { echo "==> cover-gate-check test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/check_standalone.log; exit 1; }
+	@cd test/go && go run ./covergate -threshold $(CHECK_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/check_standalone.engout
+
+cover-gate-compiler:
+	@mkdir -p $(COVER_DIR)
+	@rm -f $(COVER_DIR)/compiler_standalone.engout
+	@echo "==> cover-gate-compiler (standalone, floor $(COMPILER_GATE_FLOOR)%)"
+	@( cd compiler/go && go test -timeout 25m \
+	  -coverpkg=github.com/boru-lang/boru/compiler/go/... \
+	  -coverprofile=$(abspath $(COVER_DIR))/compiler_standalone.engout ./... > $(abspath $(COVER_DIR))/compiler_standalone.log 2>&1 ) \
+	  || { echo "==> cover-gate-compiler test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/compiler_standalone.log; exit 1; }
+	@cd test/go && go run ./covergate -threshold $(COMPILER_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/compiler_standalone.engout
 
 cover:
 	@mkdir -p $(COVER_DIR)

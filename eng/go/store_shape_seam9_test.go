@@ -89,23 +89,6 @@ func TestW9ContextShapeNilGuards(t *testing.T) {
 	}
 }
 
-func TestW9MintFlexShapeCarrierDeclines(t *testing.T) {
-	// Depth over the cap declines.
-	if _, ok := MintFlexShapeCarrier(NewMap(NewOrderedMap()), flexShapeMaxDepth+1); ok {
-		t.Error("depth over the cap must decline")
-	}
-	// A TMap-tagged value whose payload is NOT a map payload passes the
-	// concrete/conforms guards but declines at AsMap (err arm).
-	badMap := Value{Parent: TMap, Data: ListPayload{}}
-	if _, ok := MintFlexShapeCarrier(badMap, 0); ok {
-		t.Error("a non-map payload must decline at AsMap")
-	}
-	// A non-map input declines.
-	if _, ok := MintFlexShapeCarrier(NewInteger(1), 0); ok {
-		t.Error("a non-map input must decline")
-	}
-}
-
 func TestW9AdoptShapeValueXml(t *testing.T) {
 	// A concrete Xml value adopts as a bare FlexXml carrier.
 	got := AdoptShapeValue(NewXmlElement("a", nil, nil), 0)

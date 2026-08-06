@@ -2,39 +2,16 @@
 # The core piece now lives in the top-level core/go module; this map
 # tracks the remaining eng-side pieces (check / compiler / eng) until
 # their own cuts (design/ENG-FOUR-PIECE.0.md).
-method_shape.go	check	shape-method dispatch models: every function runs the check/compile analysis of `.word` application
-carrier.go	check	
-check.go	check	
-drypass.go	check	
-indexcheck.go	check	
-deadsig.go	check	
-guard_predicate.go	check	
-store_shape.go	check	
-emit.go	compiler	
-lower.go	compiler	
-bytecode.go	compiler	
-code_effect.go	compiler	
-callable_words.go	compiler	
-stamp_runtime.go	compiler	
-drift_window.go	compiler	
-user_poly.go	compiler	
 vm.go	eng	
 vm_args_debug.go	eng	
 vm_args_release.go	eng	
 vm_markwindow.go	eng	
 vm_poly_nomatch.go	eng	
 vm_rematch.go	eng	
-compiler_dispatch_record.go	compiler	
-check_recovery.go	check	
 compiled_runtime_vm.go	eng	
 vm_defer.go	eng	
-check_fnbody.go	check
-check_make.go	check
-check_fnmodel.go	check
-user_poly_plan.go	compiler
-check_ordering.go	check
 vm_callback_unit.go	eng
-dispatch_hooks.go	check
 aliases_core.go	core	the generated core facade — core surface, so cross-piece direction analysis ranks it BELOW check
 aliases_core_generic.go	core	hand-written generic wrappers beside the generated facade (core surface)
-dispatch_hooks_install.go	compiler	the DispatchBraid active half — compiler installs onto the check seam
+aliases_check.go	check	the generated check facade — check surface, ranked below compiler
+aliases_compiler.go	compiler	the generated compiler facade — compiler surface, ranked below eng

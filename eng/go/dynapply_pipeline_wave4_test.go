@@ -432,21 +432,3 @@ func TestIsAppliableFnShapes(t *testing.T) {
 		t.Error("string a fn residual")
 	}
 }
-
-func TestAnyDynamicTailHelpers(t *testing.T) {
-	dyn := NewDynamicCarrier(TAny)
-	static := NewInteger(1)
-	if anyDynamicTail([]Value{dyn, static}) {
-		t.Error("static tail read as dynamic")
-	}
-	if !anyDynamicTail([]Value{static, dyn}) {
-		t.Error("dynamic tail missed")
-	}
-	fnv := NewFunction(FnDefInfo{Name: "f"})
-	if !anyFnOrDynamicTail([]Value{static, fnv}) {
-		t.Error("fn tail missed")
-	}
-	if anyFnOrDynamicTail([]Value{fnv, static}) {
-		t.Error("leading fn read as tail")
-	}
-}

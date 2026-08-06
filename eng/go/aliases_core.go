@@ -14,6 +14,8 @@ import (
 	"regexp"
 	"time"
 
+	check "github.com/boru-lang/boru/check/go"
+	compiler "github.com/boru-lang/boru/compiler/go"
 	core "github.com/boru-lang/boru/core/go"
 	apd "github.com/cockroachdb/apd/v3"
 )
@@ -24,6 +26,9 @@ var _ big.Int
 var _ regexp.Regexp
 var _ time.Time
 var _ apd.Decimal
+var _ = core.TheInactiveEmit
+var _ = check.DispatchBraid
+var _ compiler.EmitState
 
 type (
 	ArgsStack            = core.ArgsStack
@@ -426,77 +431,198 @@ var (
 // to leave uncovered; a name moves back up to a wrapper func when a
 // hot path starts calling it.
 var (
+	AdoptIntoFlex              = core.AdoptIntoFlex
+	AdoptIntoNode              = core.AdoptIntoNode
+	ArgTypeSummary             = core.ArgTypeSummary
 	AsBoundedType              = core.AsBoundedType
-	AsGenInstRef               = core.AsGenInstRef
-	AsGenSpec                  = core.AsGenSpec
+	AsXmlElement               = core.AsXmlElement
+	AsXmlInterp                = core.AsXmlInterp
+	AutoEvalConsumedList       = core.AutoEvalConsumedList
+	AutoEvalConsumedMap        = core.AutoEvalConsumedMap
+	BearsActiveTokens          = core.BearsActiveTokens
+	BetweenHandler             = core.BetweenHandler
+	BodyEvalsResidual          = core.BodyEvalsResidual
+	BodyTokens                 = core.BodyTokens
+	BuildReturnCountError      = core.BuildReturnCountError
+	BuildReturnTypeError       = core.BuildReturnTypeError
+	CarrierOfLiteral           = core.CarrierOfLiteral
 	CheckPassActive            = core.CheckPassActive
+	ClassifyWeakRefusal        = core.ClassifyWeakRefusal
 	CloneWeakFlexListData      = core.CloneWeakFlexListData
 	CloneWeakFlexMapData       = core.CloneWeakFlexMapData
 	CloneWeakFlexXmlData       = core.CloneWeakFlexXmlData
+	CmpHandler                 = core.CmpHandler
+	CollectBodyLocalDefs       = core.CollectBodyLocalDefs
+	ComparePathons             = core.ComparePathons
+	ComputeCaptures            = core.ComputeCaptures
 	ConcreteArgsMatch          = core.ConcreteArgsMatch
+	ConstFoldAgrees            = core.ConstFoldAgrees
 	DeepEqualerOwner           = core.DeepEqualerOwner
 	DenotedTypeNode            = core.DenotedTypeNode
+	DeqHandler                 = core.DeqHandler
 	DeqKey                     = core.DeqKey
+	DidYouMean                 = core.DidYouMean
+	DispatchSig                = core.DispatchSig
+	EqHandler                  = core.EqHandler
 	ErrorCodeInitError         = core.ErrorCodeInitError
+	ErrorCodes                 = core.ErrorCodes
+	ExpandMacroForm            = core.ExpandMacroForm
 	ExpandMacroWith            = core.ExpandMacroWith
 	FillConcreteOptionDefaults = core.FillConcreteOptionDefaults
-	FnDefsOverlap              = core.FnDefsOverlap
+	FlatInstanceParts          = core.FlatInstanceParts
+	FnValueOnlyZeroArgSigs     = core.FnValueOnlyZeroArgSigs
+	FnValueZeroArg             = core.FnValueZeroArg
+	ForceArityFunction         = core.ForceArityFunction
+	ForceForwardFunction       = core.ForceForwardFunction
+	ForceStackFunction         = core.ForceStackFunction
+	FormatFnDef                = core.FormatFnDef
+	ForwardLiteralOperand      = core.ForwardLiteralOperand
 	FreshenDefault             = core.FreshenDefault
+	GenBindingCarrier          = core.GenBindingCarrier
+	GetKey                     = core.GetKey
+	GrowthCeiling              = core.GrowthCeiling
+	InferAndInstantiateSchema  = core.InferAndInstantiateSchema
+	InferGenBindings           = core.InferGenBindings
 	InferSchemaBindings        = core.InferSchemaBindings
+	InstallCompiledRuntime     = core.InstallCompiledRuntime
+	InstallFrameBinding        = core.InstallFrameBinding
+	InstallGenBindingMap       = core.InstallGenBindingMap
 	InstallGenCallBindings     = core.InstallGenCallBindings
 	InstallSchemaUnifier       = core.InstallSchemaUnifier
 	IsBoundedType              = core.IsBoundedType
-	IsGenInstRef               = core.IsGenInstRef
-	IsGenSpec                  = core.IsGenSpec
+	IsDispatchMod              = core.IsDispatchMod
+	IsFunctionRef              = core.IsFunctionRef
+	IsGetWord                  = core.IsGetWord
+	IsGetrWord                 = core.IsGetrWord
+	IsInertConst               = core.IsInertConst
+	IsInertConstMember         = core.IsInertConstMember
+	IsInternalError            = core.IsInternalError
+	IsInternalMarker           = core.IsInternalMarker
 	IsListShape                = core.IsListShape
 	IsLiteralTypeBody          = core.IsLiteralTypeBody
 	IsMapShape                 = core.IsMapShape
+	IsModuleFamilyValue        = core.IsModuleFamilyValue
+	IsNeverShape               = core.IsNeverShape
 	IsNominalAnchor            = core.IsNominalAnchor
+	IsRecordableLiteral        = core.IsRecordableLiteral
 	IsRefinePrefab             = core.IsRefinePrefab
-	IsSealedWord               = core.IsSealedWord
 	IsSigTypeValue             = core.IsSigTypeValue
+	IsUnconstrainedTypeParam   = core.IsUnconstrainedTypeParam
+	IsValidXmlName             = core.IsValidXmlName
+	IsWeakFlexList             = core.IsWeakFlexList
+	IsWeakFlexMap              = core.IsWeakFlexMap
+	IsWeakFlexXml              = core.IsWeakFlexXml
+	IsXmlInterp                = core.IsXmlInterp
+	LitVsConcreteOrder         = core.LitVsConcreteOrder
+	LitVsLitOrder              = core.LitVsLitOrder
 	LookupDefType              = core.LookupDefType
 	LookupErrorCode            = core.LookupErrorCode
+	LookupWordChecker          = core.LookupWordChecker
+	MakeBoruErrorAt            = core.MakeBoruErrorAt
+	MakeConvert                = core.MakeConvert
+	MakeDepScalarSig           = core.MakeDepScalarSig
+	MakeFieldValue             = core.MakeFieldValue
 	MakeFieldValueR            = core.MakeFieldValueR
+	MakeHandler                = core.MakeHandler
+	MakeNodeHandler            = core.MakeNodeHandler
+	MakeObjHandler             = core.MakeObjHandler
+	MakeObject                 = core.MakeObject
 	MakeRecord                 = core.MakeRecord
+	MakeRecordR                = core.MakeRecordR
+	MakeScalarHandler          = core.MakeScalarHandler
+	MakeScalarOptsHandler      = core.MakeScalarOptsHandler
 	MakeTable                  = core.MakeTable
 	MakeTableR                 = core.MakeTableR
+	MakeWithOpts               = core.MakeWithOpts
 	MemberBehavior             = core.MemberBehavior
+	MergeCaptures              = core.MergeCaptures
+	MicronFieldsEqual          = core.MicronFieldsEqual
+	MixedFormStackSlotAny      = core.MixedFormStackSlotAny
+	ModuleExportAbsenceStable  = core.ModuleExportAbsenceStable
+	ModuleExportNames          = core.ModuleExportNames
+	ModuleKind                 = core.ModuleKind
+	ModuleScopeBinding         = core.ModuleScopeBinding
+	NegateType                 = core.NegateType
+	NeqHandler                 = core.NeqHandler
+	NewArgsStack               = core.NewArgsStack
 	NewCapabilityRegistry      = core.NewCapabilityRegistry
 	NewCheckState              = core.NewCheckState
 	NewContextStack            = core.NewContextStack
-	NewDefCleanup              = core.NewDefCleanup
 	NewFlexXml                 = core.NewFlexXml
 	NewFrameOpenSpan           = core.NewFrameOpenSpan
-	NewGenSpec                 = core.NewGenSpec
-	NewReturnCheck             = core.NewReturnCheck
+	NewStoreShapeCarrier       = core.NewStoreShapeCarrier
+	NewWeakFlexList            = core.NewWeakFlexList
+	NewWeakFlexMap             = core.NewWeakFlexMap
+	NewWeakFlexXml             = core.NewWeakFlexXml
+	NewWordRef                 = core.NewWordRef
+	NoMatchDetail              = core.NoMatchDetail
+	NoMatchDiag                = core.NoMatchDiag
+	NodifyValue                = core.NodifyValue
+	NormalizeSig               = core.NormalizeSig
 	NoteModuleExportAdd        = core.NoteModuleExportAdd
 	OutputSigIsConcreteReturns = core.OutputSigIsConcreteReturns
 	OutputSigValues            = core.OutputSigValues
+	ParseFnDef                 = core.ParseFnDef
+	ParseFnParams              = core.ParseFnParams
+	ParseFnReturns             = core.ParseFnReturns
+	ParseFnUndefSpec           = core.ParseFnUndefSpec
+	PathOf                     = core.PathOf
+	PatternsFromParams         = core.PatternsFromParams
 	PoisonModuleExportGrowth   = core.PoisonModuleExportGrowth
 	PopulateWeakFlexList       = core.PopulateWeakFlexList
 	PopulateWeakFlexMap        = core.PopulateWeakFlexMap
 	PopulateWeakFlexXml        = core.PopulateWeakFlexXml
+	PredicateInputType         = core.PredicateInputType
 	PrevBehavior               = core.PrevBehavior
+	QuoteArgsFromParams        = core.QuoteArgsFromParams
+	RegisterBytesBridge        = core.RegisterBytesBridge
+	RegisterErrorCodes         = core.RegisterErrorCodes
+	RegisterMicronRenderBridge = core.RegisterMicronRenderBridge
+	RegisterModuleExportGrowth = core.RegisterModuleExportGrowth
+	ReorderHintFor             = core.ReorderHintFor
+	ResolveBuiltinTypeName     = core.ResolveBuiltinTypeName
 	ResolveDefType             = core.ResolveDefType
-	ResolveTypePath            = core.ResolveTypePath
+	ResolveRef                 = core.ResolveRef
+	ResolveSigType             = core.ResolveSigType
+	ResolveTypeName            = core.ResolveTypeName
 	ResolveUsurp               = core.ResolveUsurp
+	RetagFlexElem              = core.RetagFlexElem
 	RetagTypedContainerArgs    = core.RetagTypedContainerArgs
 	RetagTypedContainerParam   = core.RetagTypedContainerParam
-	SeverityFor                = core.SeverityFor
-	Shape                      = core.Shape
-	SubstituteTypeParams       = core.SubstituteTypeParams
+	RetagTypedContainerValue   = core.RetagTypedContainerValue
+	ReturnCountErrorText       = core.ReturnCountErrorText
+	ReturnTypeErrorText        = core.ReturnTypeErrorText
+	RunTypedBind               = core.RunTypedBind
+	RuntimeNoMatch             = core.RuntimeNoMatch
+	SigArgMatches              = core.SigArgMatches
+	SigArgType                 = core.SigArgType
+	SigOrderArgs               = core.SigOrderArgs
+	SigPattern                 = core.SigPattern
+	SigTypeSummary             = core.SigTypeSummary
+	SingleOverloadRecoverable  = core.SingleOverloadRecoverable
+	SizeOfAbove                = core.SizeOfAbove
+	SizeOwner                  = core.SizeOwner
+	SpliceExpand               = core.SpliceExpand
+	StampedModuleCall          = core.StampedModuleCall
+	StepLimitFor               = core.StepLimitFor
+	StripAscribed              = core.StripAscribed
 	SuggestNames               = core.SuggestNames
+	SurfaceInfoOf              = core.SurfaceInfoOf
+	TandHandler                = core.TandHandler
+	TandReturnsFn              = core.TandReturnsFn
+	TcmpHandler                = core.TcmpHandler
+	TnotHandler                = core.TnotHandler
+	TnotReturnsFn              = core.TnotReturnsFn
+	TorHandler                 = core.TorHandler
+	TorReturnsFn               = core.TorReturnsFn
 	TypeMembership             = core.TypeMembership
 	TypeNameByID               = core.TypeNameByID
-	UnaryNumOpNative           = core.UnaryNumOpNative
-	UnifyExplainR              = core.UnifyExplainR
-	ValidateTypeNameParts      = core.ValidateTypeNameParts
+	TypeNodeOf                 = core.TypeNodeOf
+	UndefinedWordDetail        = core.UndefinedWordDetail
+	UnionType                  = core.UnionType
+	UsurpFunction              = core.UsurpFunction
+	WithModuleNS               = core.WithModuleNS
 )
-
-func AdoptIntoFlex(a0 core.Value) (core.Value, error) { return core.AdoptIntoFlex(a0) }
-
-func AdoptIntoNode(a0 core.Value) (core.Value, error) { return core.AdoptIntoNode(a0) }
 
 func AppendFrameTail(a0 []core.Value, a1 core.FrameTailSpec) []core.Value {
 	return core.AppendFrameTail(a0, a1)
@@ -505,8 +631,6 @@ func AppendFrameTail(a0 []core.Value, a1 core.FrameTailSpec) []core.Value {
 func ApplyReach(a0 *core.Registry, a1 core.ReachInfo, a2 core.Value) (core.Value, error) {
 	return core.ApplyReach(a0, a1, a2)
 }
-
-func ArgTypeSummary(a0 []core.Value) string { return core.ArgTypeSummary(a0) }
 
 func AsAtom(a0 core.Value) (string, error) { return core.AsAtom(a0) }
 
@@ -542,7 +666,11 @@ func AsForward(a0 core.Value) (core.ForwardInfo, error) { return core.AsForward(
 
 func AsFrameOpen(a0 core.Value) (core.FrameOpenInfo, error) { return core.AsFrameOpen(a0) }
 
+func AsGenInstRef(a0 core.Value) (core.GenInstRef, error) { return core.AsGenInstRef(a0) }
+
 func AsGenParamValue(a0 core.Value) (core.GenParam, error) { return core.AsGenParamValue(a0) }
+
+func AsGenSpec(a0 core.Value) (*core.GenSpecInfo, error) { return core.AsGenSpec(a0) }
 
 func AsInteger(a0 core.Value) (int64, error) { return core.AsInteger(a0) }
 
@@ -610,22 +738,10 @@ func AsWeakFlexXml(a0 core.Value) (*core.WeakFlexXmlData, error) { return core.A
 
 func AsWord(a0 core.Value) (core.WordInfo, error) { return core.AsWord(a0) }
 
-func AsXmlElement(a0 core.Value) (core.XmlElementPayload, error) { return core.AsXmlElement(a0) }
-
-func AsXmlInterp(a0 core.Value) (core.XmlTmpl, error) { return core.AsXmlInterp(a0) }
-
 func AtomReferent(a0 core.Value) (core.Value, bool) { return core.AtomReferent(a0) }
 
 func AttachGenBound(a0 *core.Registry, a1 *core.Type, a2 core.GenParam) {
 	core.AttachGenBound(a0, a1, a2)
-}
-
-func AutoEvalConsumedList(a0 *core.Registry, a1 core.Value) (core.Value, error) {
-	return core.AutoEvalConsumedList(a0, a1)
-}
-
-func AutoEvalConsumedMap(a0 *core.Registry, a1 core.Value, a2 bool) (core.Value, error) {
-	return core.AutoEvalConsumedMap(a0, a1, a2)
 }
 
 func BaseValue(a0 *core.Type) (core.Value, error) { return core.BaseValue(a0) }
@@ -634,13 +750,7 @@ func BaseValueForConstraint(a0 core.Value) (core.Value, error) {
 	return core.BaseValueForConstraint(a0)
 }
 
-func BearsActiveTokens(a0 core.Value) bool { return core.BearsActiveTokens(a0) }
-
 func BeginIDMintScope() func() { return core.BeginIDMintScope() }
-
-func BetweenHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.BetweenHandler(a0, a1, a2, a3)
-}
 
 func BinaryIntOpNative(a0 string, a1 func(a int64, b int64) (int64, error)) core.NativeFunc {
 	return core.BinaryIntOpNative(a0, a1)
@@ -650,21 +760,9 @@ func BinaryNumOpNative(a0 string, a1 func(a float64, b float64) (float64, error)
 	return core.BinaryNumOpNative(a0, a1)
 }
 
-func BodyEvalsResidual(a0 []core.Value) bool { return core.BodyEvalsResidual(a0) }
-
-func BodyTokens(a0 core.Value) []core.Value { return core.BodyTokens(a0) }
-
 func Boru(a0 []core.Value) *core.BoruImpl { return core.Boru(a0) }
 
 func BoundToKind(a0 *core.DepBound, a1 bool) core.DepKind { return core.BoundToKind(a0, a1) }
-
-func BuildReturnCountError(a0 string, a1 string, a2 int, a3 int, a4 core.SrcPos, a5 core.DeclSite) *core.BoruError {
-	return core.BuildReturnCountError(a0, a1, a2, a3, a4, a5)
-}
-
-func BuildReturnTypeError(a0 string, a1 string, a2 int, a3 *core.Type, a4 core.Value, a5 core.SrcPos, a6 core.DeclSite) *core.BoruError {
-	return core.BuildReturnTypeError(a0, a1, a2, a3, a4, a5, a6)
-}
 
 func BuiltinIDForPath(a0 string) string { return core.BuiltinIDForPath(a0) }
 
@@ -676,37 +774,19 @@ func CanonValue(a0 core.Value) string { return core.CanonValue(a0) }
 
 func CanonicalType(a0 *core.Registry, a1 *core.Type) *core.Type { return core.CanonicalType(a0, a1) }
 
-func CarrierOfLiteral(a0 core.Value) core.Value { return core.CarrierOfLiteral(a0) }
-
 func CheckFullStack(a0 core.CheckFullStackFunc) core.GoOpt { return core.CheckFullStack(a0) }
 
 func ClassFields(a0 *core.ClassInstanceInfo) *core.OrderedMap { return core.ClassFields(a0) }
 
-func ClassifyWeakRefusal(a0 core.Value) *core.WeakRefusal { return core.ClassifyWeakRefusal(a0) }
-
 func CloneValue(a0 core.Value) core.Value { return core.CloneValue(a0) }
 
-func CmpHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.CmpHandler(a0, a1, a2, a3)
-}
-
 func CoerceBoolean(a0 core.Value) bool { return core.CoerceBoolean(a0) }
-
-func CollectBodyLocalDefs(a0 []core.Value, a1 map[string]bool) { core.CollectBodyLocalDefs(a0, a1) }
-
-func ComparePathons(a0 core.Value, a1 core.Value) int { return core.ComparePathons(a0, a1) }
 
 func CompareSignatures(a0 *core.Signature, a1 *core.Signature) int {
 	return core.CompareSignatures(a0, a1)
 }
 
 func CompareValues(a0 core.Value, a1 core.Value) (int, error) { return core.CompareValues(a0, a1) }
-
-func ComputeCaptures(a0 *core.Registry, a1 *core.FnSig) []core.CapturedBinding {
-	return core.ComputeCaptures(a0, a1)
-}
-
-func ConstFoldAgrees(a0 core.Value, a1 core.Value) bool { return core.ConstFoldAgrees(a0, a1) }
 
 func ContextStoreLookup(a0 *core.Registry, a1 string) (core.Value, bool) {
 	return core.ContextStoreLookup(a0, a1)
@@ -724,39 +804,15 @@ func CowSet(a0 *core.StoreInstanceInfo, a1 string, a2 core.Value, a3 *core.Regis
 
 func DeepEqual(a0 core.Value, a1 core.Value) bool { return core.DeepEqual(a0, a1) }
 
-func DeqHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.DeqHandler(a0, a1, a2, a3)
-}
-
-func DidYouMean(a0 string, a1 []string) string { return core.DidYouMean(a0, a1) }
-
-func DispatchSig(a0 *core.Signature, a1 []core.Value, a2 *core.Registry) ([]core.Value, error) {
-	return core.DispatchSig(a0, a1, a2)
-}
-
-func EqHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.EqHandler(a0, a1, a2, a3)
-}
-
-func ErrorCodes() []core.ErrorCode { return core.ErrorCodes() }
-
 func ExactEqual(a0 core.Value, a1 core.Value) bool { return core.ExactEqual(a0, a1) }
 
 func ExitCode(a0 error) (int, bool) { return core.ExitCode(a0) }
-
-func ExpandMacroForm(a0 *core.Registry, a1 core.Value) ([]core.Value, error) {
-	return core.ExpandMacroForm(a0, a1)
-}
 
 func ExpandOptionalSigs(a0 string, a1 []core.FnSig) []core.FnSig {
 	return core.ExpandOptionalSigs(a0, a1)
 }
 
 func FlatInstanceFields(a0 core.Value) (*core.OrderedMap, bool) { return core.FlatInstanceFields(a0) }
-
-func FlatInstanceParts(a0 core.Value) (*core.OrderedMap, []string, bool) {
-	return core.FlatInstanceParts(a0)
-}
 
 func FlattenDisjunctAlts(a0 core.Value) []core.Value { return core.FlattenDisjunctAlts(a0) }
 
@@ -768,6 +824,8 @@ func FlexibleMatch(a0 []core.Value, a1 *core.Signature) ([]core.Value, bool) {
 
 func FnDefHasSig(a0 core.FnDefInfo, a1 core.FnSigSpec) bool { return core.FnDefHasSig(a0, a1) }
 
+func FnDefsOverlap(a0 core.FnDefInfo, a1 core.FnDefInfo) bool { return core.FnDefsOverlap(a0, a1) }
+
 func FnSigMatchesSpec(a0 core.FnSig, a1 core.FnSigSpec) bool { return core.FnSigMatchesSpec(a0, a1) }
 
 func FnSigSatisfiesSpec(a0 core.FnSig, a1 core.FnSigSpec) bool {
@@ -776,65 +834,29 @@ func FnSigSatisfiesSpec(a0 core.FnSig, a1 core.FnSigSpec) bool {
 
 func FnUndefMatchesFnDef(a0 core.Value, a1 core.Value) bool { return core.FnUndefMatchesFnDef(a0, a1) }
 
-func FnValueOnlyZeroArgSigs(a0 core.FnDefInfo) bool { return core.FnValueOnlyZeroArgSigs(a0) }
-
-func FnValueZeroArg(a0 core.Value) bool { return core.FnValueZeroArg(a0) }
-
-func ForceArityFunction(a0 core.Value, a1 int) (core.Value, bool) {
-	return core.ForceArityFunction(a0, a1)
-}
-
-func ForceForwardFunction(a0 core.Value) (core.Value, bool) { return core.ForceForwardFunction(a0) }
-
-func ForceStackFunction(a0 core.Value) (core.Value, bool) { return core.ForceStackFunction(a0) }
-
 func FormatBigDecimal(a0 *apd.Decimal) string { return core.FormatBigDecimal(a0) }
 
 func FormatBigInteger(a0 *big.Int) string { return core.FormatBigInteger(a0) }
 
 func FormatFloat(a0 float64) string { return core.FormatFloat(a0) }
 
-func FormatFnDef(a0 core.FnDefInfo) string { return core.FormatFnDef(a0) }
-
 func FormatForPrint(a0 core.Value) string { return core.FormatForPrint(a0) }
 
 func FormatValueJSON(a0 core.Value) string { return core.FormatValueJSON(a0) }
-
-func ForwardLiteralOperand(a0 core.Value) bool { return core.ForwardLiteralOperand(a0) }
 
 func FromNative(a0 any) core.Value { return core.FromNative(a0) }
 
 func FullStack() core.GoOpt { return core.FullStack() }
 
-func GenBindingCarrier(a0 *core.Registry, a1 core.Value) core.Value {
-	return core.GenBindingCarrier(a0, a1)
-}
-
 func GenerateID(a0 string) string { return core.GenerateID(a0) }
 
 func GenerateObjectTypeID() string { return core.GenerateObjectTypeID() }
 
-func GetKey(a0 core.Value) string { return core.GetKey(a0) }
-
 func Go(a0 core.Handler, a1 ...core.GoOpt) *core.GoImpl { return core.Go(a0, a1...) }
-
-func GrowthCeiling(a0 int, a1 int, a2 float64) int { return core.GrowthCeiling(a0, a1, a2) }
 
 func HasLockedSigs(a0 *core.FnDefInfo) bool { return core.HasLockedSigs(a0) }
 
 func IDPrefixForType(a0 *core.Type) string { return core.IDPrefixForType(a0) }
-
-func InferAndInstantiateSchema(a0 *core.Registry, a1 core.Value, a2 core.Value) (core.Value, error) {
-	return core.InferAndInstantiateSchema(a0, a1, a2)
-}
-
-func InferGenBindings(a0 *core.GenSpecInfo, a1 []core.FnParam, a2 []core.Value) map[string]core.Value {
-	return core.InferGenBindings(a0, a1, a2)
-}
-
-func InstallCompiledRuntime(a0 core.CompiledRuntime) core.CompiledRuntime {
-	return core.InstallCompiledRuntime(a0)
-}
 
 func InstallDef(a0 *core.Registry, a1 string, a2 core.Value, a3 ...bool) {
 	core.InstallDef(a0, a1, a2, a3...)
@@ -842,14 +864,6 @@ func InstallDef(a0 *core.Registry, a1 string, a2 core.Value, a3 ...bool) {
 
 func InstallFnDef(a0 *core.Registry, a1 string, a2 core.FnDefInfo, a3 ...bool) {
 	core.InstallFnDef(a0, a1, a2, a3...)
-}
-
-func InstallFrameBinding(a0 *core.Registry, a1 string, a2 core.Value) {
-	core.InstallFrameBinding(a0, a1, a2)
-}
-
-func InstallGenBindingMap(a0 *core.Registry, a1 *core.GenSpecInfo, a2 map[string]core.Value) []string {
-	return core.InstallGenBindingMap(a0, a1, a2)
 }
 
 func InstallType(a0 *core.Registry, a1 string, a2 core.Value) error {
@@ -896,8 +910,6 @@ func IsDelegationFnDef(a0 core.FnDefInfo) bool { return core.IsDelegationFnDef(a
 
 func IsDisjunct(a0 core.Value) bool { return core.IsDisjunct(a0) }
 
-func IsDispatchMod(a0 core.Value) bool { return core.IsDispatchMod(a0) }
-
 func IsEnd(a0 core.Value) bool { return core.IsEnd(a0) }
 
 func IsError(a0 core.Value) bool { return core.IsError(a0) }
@@ -920,27 +932,17 @@ func IsForward(a0 core.Value) bool { return core.IsForward(a0) }
 
 func IsFrameOpen(a0 core.Value) bool { return core.IsFrameOpen(a0) }
 
-func IsFunctionRef(a0 core.Value) bool { return core.IsFunctionRef(a0) }
+func IsGenInstRef(a0 core.Value) bool { return core.IsGenInstRef(a0) }
 
 func IsGenParamValue(a0 core.Value) bool { return core.IsGenParamValue(a0) }
 
-func IsGetWord(a0 string) bool { return core.IsGetWord(a0) }
-
-func IsGetrWord(a0 string) bool { return core.IsGetrWord(a0) }
+func IsGenSpec(a0 core.Value) bool { return core.IsGenSpec(a0) }
 
 func IsHostTypeBody(a0 core.Value) bool { return core.IsHostTypeBody(a0) }
 
 func IsImplicitMap(a0 core.Value) bool { return core.IsImplicitMap(a0) }
 
-func IsInertConst(a0 core.Value) bool { return core.IsInertConst(a0) }
-
-func IsInertConstMember(a0 core.Value) bool { return core.IsInertConstMember(a0) }
-
 func IsInternalErr(a0 error) bool { return core.IsInternalErr(a0) }
-
-func IsInternalError(a0 error) bool { return core.IsInternalError(a0) }
-
-func IsInternalMarker(a0 string) bool { return core.IsInternalMarker(a0) }
 
 func IsInterpString(a0 core.Value) bool { return core.IsInterpString(a0) }
 
@@ -950,13 +952,9 @@ func IsMicronType(a0 core.Value) bool { return core.IsMicronType(a0) }
 
 func IsMicronValue(a0 core.Value) bool { return core.IsMicronValue(a0) }
 
-func IsModuleFamilyValue(a0 core.Value) bool { return core.IsModuleFamilyValue(a0) }
-
 func IsMove(a0 core.Value) bool { return core.IsMove(a0) }
 
 func IsNegation(a0 core.Value) bool { return core.IsNegation(a0) }
-
-func IsNeverShape(a0 core.Value) bool { return core.IsNeverShape(a0) }
 
 func IsNone(a0 core.Value) bool { return core.IsNone(a0) }
 
@@ -976,13 +974,13 @@ func IsRecordShape(a0 core.Value) bool { return core.IsRecordShape(a0) }
 
 func IsRecordType(a0 core.Value) bool { return core.IsRecordType(a0) }
 
-func IsRecordableLiteral(a0 core.Value) bool { return core.IsRecordableLiteral(a0) }
-
 func IsResourceInstance(a0 core.Value) bool { return core.IsResourceInstance(a0) }
 
 func IsResourceType(a0 core.Value) bool { return core.IsResourceType(a0) }
 
 func IsReturnCheck(a0 core.Value) bool { return core.IsReturnCheck(a0) }
+
+func IsSealedWord(a0 string) bool { return core.IsSealedWord(a0) }
 
 func IsSplice(a0 core.Value) bool { return core.IsSplice(a0) }
 
@@ -1008,46 +1006,22 @@ func IsTypedList(a0 core.Value) bool { return core.IsTypedList(a0) }
 
 func IsTypedMap(a0 core.Value) bool { return core.IsTypedMap(a0) }
 
-func IsUnconstrainedTypeParam(a0 *core.Type) bool { return core.IsUnconstrainedTypeParam(a0) }
-
-func IsValidXmlName(a0 string) bool { return core.IsValidXmlName(a0) }
-
 func IsValueOfType(a0 core.Value, a1 core.Value) bool { return core.IsValueOfType(a0, a1) }
 
-func IsWeakFlexList(a0 core.Value) bool { return core.IsWeakFlexList(a0) }
-
-func IsWeakFlexMap(a0 core.Value) bool { return core.IsWeakFlexMap(a0) }
-
 func IsWeakFlexNode(a0 core.Value) bool { return core.IsWeakFlexNode(a0) }
-
-func IsWeakFlexXml(a0 core.Value) bool { return core.IsWeakFlexXml(a0) }
 
 func IsWord(a0 core.Value) bool { return core.IsWord(a0) }
 
 func IsWordExtension(a0 core.Value) (core.FnDefInfo, bool) { return core.IsWordExtension(a0) }
 
-func IsXmlInterp(a0 core.Value) bool { return core.IsXmlInterp(a0) }
-
 func IsXmlValue(a0 core.Value) bool { return core.IsXmlValue(a0) }
-
-func LitVsConcreteOrder(a0 core.Value, a1 core.Value) (int, bool) {
-	return core.LitVsConcreteOrder(a0, a1)
-}
-
-func LitVsLitOrder(a0 core.Value, a1 core.Value) int { return core.LitVsLitOrder(a0, a1) }
 
 func LookupModuleCallChecker(a0 *core.Registry) core.ModuleCallChecker {
 	return core.LookupModuleCallChecker(a0)
 }
 
-func LookupWordChecker(a0 *core.Registry) core.WordChecker { return core.LookupWordChecker(a0) }
-
 func MakeBoruError(a0 string, a1 string, a2 string, a3 string, a4 string) *core.BoruError {
 	return core.MakeBoruError(a0, a1, a2, a3, a4)
-}
-
-func MakeBoruErrorAt(a0 string, a1 string, a2 string, a3 string, a4 string, a5 core.SrcPos) *core.BoruError {
-	return core.MakeBoruErrorAt(a0, a1, a2, a3, a4, a5)
 }
 
 func MakeClassFieldValue(a0 core.Value, a1 core.Value, a2 *core.Registry) (core.Value, error) {
@@ -1058,52 +1032,10 @@ func MakeClassInstance(a0 core.ClassTypeInfo, a1 *core.OrderedMap, a2 *core.Regi
 	return core.MakeClassInstance(a0, a1, a2)
 }
 
-func MakeConvert(a0 core.Value, a1 *core.Type) (core.Value, error) { return core.MakeConvert(a0, a1) }
-
-func MakeDepScalarSig(a0 string, a1 core.DepKind) core.Signature {
-	return core.MakeDepScalarSig(a0, a1)
-}
-
-func MakeFieldValue(a0 core.Value, a1 core.Value) (core.Value, error) {
-	return core.MakeFieldValue(a0, a1)
-}
-
-func MakeHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.MakeHandler(a0, a1, a2, a3)
-}
-
-func MakeNodeHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.MakeNodeHandler(a0, a1, a2, a3)
-}
-
-func MakeObjHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.MakeObjHandler(a0, a1, a2, a3)
-}
-
-func MakeObject(a0 core.ClassTypeInfo, a1 core.Value, a2 *core.Registry) ([]core.Value, error) {
-	return core.MakeObject(a0, a1, a2)
-}
-
 func MakePathon(a0 core.Value, a1 bool) ([]core.Value, error) { return core.MakePathon(a0, a1) }
-
-func MakeRecordR(a0 core.RecordTypeInfo, a1 core.Value, a2 bool, a3 *core.Registry) ([]core.Value, error) {
-	return core.MakeRecordR(a0, a1, a2, a3)
-}
 
 func MakeResource(a0 core.ResourceTypeInfo, a1 *core.OrderedMap, a2 *core.Registry) ([]core.Value, error) {
 	return core.MakeResource(a0, a1, a2)
-}
-
-func MakeScalarHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.MakeScalarHandler(a0, a1, a2, a3)
-}
-
-func MakeScalarOptsHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.MakeScalarOptsHandler(a0, a1, a2, a3)
-}
-
-func MakeWithOpts(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.MakeWithOpts(a0, a1, a2, a3)
 }
 
 func MapFieldBoolean(a0 core.ReadMap, a1 string) (bool, bool) { return core.MapFieldBoolean(a0, a1) }
@@ -1118,41 +1050,13 @@ func MatchSignature(a0 []core.Signature, a1 []core.Value, a2 core.WordInfo) *cor
 	return core.MatchSignature(a0, a1, a2)
 }
 
-func MergeCaptures(a0 [][]core.CapturedBinding) []core.CapturedBinding { return core.MergeCaptures(a0) }
-
-func MicronFieldsEqual(a0 *core.OrderedMap, a1 *core.OrderedMap) bool {
-	return core.MicronFieldsEqual(a0, a1)
-}
-
 func MintTestType(a0 string) *core.Type { return core.MintTestType(a0) }
 
 func MintTypeParam(a0 *core.Registry, a1 core.GenParam) *core.Type { return core.MintTypeParam(a0, a1) }
 
-func MixedFormStackSlotAny(a0 *core.Engine, a1 *core.Signature, a2 []int) bool {
-	return core.MixedFormStackSlotAny(a0, a1, a2)
-}
-
-func ModuleExportAbsenceStable(a0 *core.Registry, a1 []core.Value) bool {
-	return core.ModuleExportAbsenceStable(a0, a1)
-}
-
-func ModuleExportNames(a0 core.ModuleDesc) []string { return core.ModuleExportNames(a0) }
-
-func ModuleKind(a0 core.ModuleDesc) string { return core.ModuleKind(a0) }
-
 func ModuleNSOf(a0 core.Value) *core.ModuleNSInfo { return core.ModuleNSOf(a0) }
 
-func ModuleScopeBinding(a0 *core.Registry, a1 string) bool { return core.ModuleScopeBinding(a0, a1) }
-
-func NegateType(a0 core.Value) core.Value { return core.NegateType(a0) }
-
-func NeqHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.NeqHandler(a0, a1, a2, a3)
-}
-
 func New(a0 *core.Registry) *core.Engine { return core.New(a0) }
-
-func NewArgsStack() *core.ArgsStack { return core.NewArgsStack() }
 
 func NewAtom(a0 string) core.Value { return core.NewAtom(a0) }
 
@@ -1177,6 +1081,8 @@ func NewClassInstance(a0 *core.Type, a1 core.ClassInstanceInfo) core.Value {
 func NewClassType(a0 *core.Type, a1 core.ClassTypeInfo) core.Value { return core.NewClassType(a0, a1) }
 
 func NewCloseParen() core.Value { return core.NewCloseParen() }
+
+func NewDefCleanup(a0 core.DefCleanupInfo) core.Value { return core.NewDefCleanup(a0) }
 
 func NewDefTable() *core.DefTable { return core.NewDefTable() }
 
@@ -1223,6 +1129,8 @@ func NewFunction(a0 core.FnDefInfo) core.Value { return core.NewFunction(a0) }
 func NewGenInstRef(a0 core.GenInstRef) core.Value { return core.NewGenInstRef(a0) }
 
 func NewGenParamValue(a0 core.GenParam) core.Value { return core.NewGenParamValue(a0) }
+
+func NewGenSpec(a0 *core.GenSpecInfo) core.Value { return core.NewGenSpec(a0) }
 
 func NewIdealRegistry() *core.IdealRegistry { return core.NewIdealRegistry() }
 
@@ -1298,11 +1206,11 @@ func NewResourceType(a0 *core.Type, a1 core.ResourceTypeInfo) core.Value {
 	return core.NewResourceType(a0, a1)
 }
 
+func NewReturnCheck(a0 core.ReturnCheckInfo) core.Value { return core.NewReturnCheck(a0) }
+
 func NewSplice(a0 core.Value) core.Value { return core.NewSplice(a0) }
 
 func NewStore(a0 *core.Type) core.Value { return core.NewStore(a0) }
-
-func NewStoreShapeCarrier(a0 *core.Type, a1 int) core.Value { return core.NewStoreShapeCarrier(a0, a1) }
 
 func NewStoreValue(a0 *core.Type, a1 *core.StoreInstanceInfo) core.Value {
 	return core.NewStoreValue(a0, a1)
@@ -1354,12 +1262,6 @@ func NewTypedMapWithEntries(a0 core.Value, a1 []core.ChildEntry) core.Value {
 
 func NewValueRaw(a0 *core.Type, a1 core.Payload) core.Value { return core.NewValueRaw(a0, a1) }
 
-func NewWeakFlexList() core.Value { return core.NewWeakFlexList() }
-
-func NewWeakFlexMap() core.Value { return core.NewWeakFlexMap() }
-
-func NewWeakFlexXml(a0 string) core.Value { return core.NewWeakFlexXml(a0) }
-
 func NewWord(a0 string) core.Value { return core.NewWord(a0) }
 
 func NewWordExtension(a0 string, a1 string, a2 []core.Signature) core.FnDefInfo {
@@ -1369,8 +1271,6 @@ func NewWordExtension(a0 string, a1 string, a2 []core.Signature) core.FnDefInfo 
 func NewWordModified(a0 string, a1 int, a2 bool, a3 bool) core.Value {
 	return core.NewWordModified(a0, a1, a2, a3)
 }
-
-func NewWordRef(a0 string) core.Value { return core.NewWordRef(a0) }
 
 func NewWordUsurp(a0 string, a1 bool) core.Value { return core.NewWordUsurp(a0, a1) }
 
@@ -1382,17 +1282,7 @@ func NewXmlInterp(a0 core.XmlTmpl) core.Value { return core.NewXmlInterp(a0) }
 
 func NextMarkID() string { return core.NextMarkID() }
 
-func NoMatchDetail(a0 string) string { return core.NoMatchDetail(a0) }
-
-func NoMatchDiag(a0 string, a1 string, a2 *core.FnDefInfo, a3 []core.Value, a4 core.SrcPos, a5 string) *core.BoruError {
-	return core.NoMatchDiag(a0, a1, a2, a3, a4, a5)
-}
-
 func NodeDeepCopy(a0 core.Value) (core.Value, error) { return core.NodeDeepCopy(a0) }
-
-func NodifyValue(a0 core.Value) (core.Value, error) { return core.NodifyValue(a0) }
-
-func NormalizeSig(a0 *core.Signature) { core.NormalizeSig(a0) }
 
 func OpenUnifyMap(a0 core.Value, a1 core.Value) bool { return core.OpenUnifyMap(a0, a1) }
 
@@ -1400,35 +1290,13 @@ func PadRight(a0 string, a1 int) string { return core.PadRight(a0, a1) }
 
 func Park() core.GoOpt { return core.Park() }
 
-func ParseFnDef(a0 *core.Registry, a1 []core.Value) (core.FnDefInfo, error) {
-	return core.ParseFnDef(a0, a1)
-}
-
-func ParseFnParams(a0 *core.Registry, a1 core.Value) ([]core.FnParam, int, error) {
-	return core.ParseFnParams(a0, a1)
-}
-
-func ParseFnReturns(a0 *core.Registry, a1 core.Value) ([]*core.Type, []*core.Value, error) {
-	return core.ParseFnReturns(a0, a1)
-}
-
-func ParseFnUndefSpec(a0 *core.Registry, a1 []core.Value) (core.FnUndefInfo, error) {
-	return core.ParseFnUndefSpec(a0, a1)
-}
-
-func PathOf(a0 core.Value) core.Value { return core.PathOf(a0) }
-
 func PathonContentEqual(a0 core.PathonInfo, a1 core.PathonInfo) bool {
 	return core.PathonContentEqual(a0, a1)
 }
 
-func PatternsFromParams(a0 []core.FnParam) map[int]core.Value { return core.PatternsFromParams(a0) }
-
 func PopFrameArgs(a0 *core.Registry) error { return core.PopFrameArgs(a0) }
 
 func PopGenBindings(a0 *core.Registry, a1 *core.GenSpecInfo) { core.PopGenBindings(a0, a1) }
-
-func PredicateInputType(a0 core.Value) *core.Type { return core.PredicateInputType(a0) }
 
 func PrintHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
 	return core.PrintHandler(a0, a1, a2, a3)
@@ -1440,32 +1308,14 @@ func PrintstrHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value,
 
 func PushGenBindings(a0 *core.Registry, a1 *core.GenSpecInfo) { core.PushGenBindings(a0, a1) }
 
-func QuoteArgsFromParams(a0 []core.FnParam) map[int]bool { return core.QuoteArgsFromParams(a0) }
-
 func RankSignatures(a0 []core.Signature) []int { return core.RankSignatures(a0) }
 
 func RebuildXmlFromTmpl(a0 core.XmlTmpl, a1 []core.Value) (core.Value, int) {
 	return core.RebuildXmlFromTmpl(a0, a1)
 }
 
-func RegisterBytesBridge(a0 func([]byte) core.Value, a1 func(core.Value) ([]byte, bool)) {
-	core.RegisterBytesBridge(a0, a1)
-}
-
-func RegisterErrorCodes(a0 string, a1 ...string) { core.RegisterErrorCodes(a0, a1...) }
-
-func RegisterMicronRenderBridge(a0 func(core.Value) string) { core.RegisterMicronRenderBridge(a0) }
-
-func RegisterModuleExportGrowth(a0 *core.Registry, a1 *core.OrderedMap) {
-	core.RegisterModuleExportGrowth(a0, a1)
-}
-
 func RenderCheckDiagnostic(a0 core.CheckDiagnostic, a1 string, a2 string, a3 core.RenderOpts) string {
 	return core.RenderCheckDiagnostic(a0, a1, a2, a3)
-}
-
-func ReorderHintFor(a0 string, a1 *core.FnDefInfo, a2 []core.Value) string {
-	return core.ReorderHintFor(a0, a1, a2)
 }
 
 func ReparentValue(a0 core.Value, a1 *core.Type) core.Value { return core.ReparentValue(a0, a1) }
@@ -1480,8 +1330,6 @@ func RequireConcreteMap(a0 core.Value, a1 string) (core.ReadMap, error) {
 
 func ResetModuleExportGrowth(a0 *core.Registry) { core.ResetModuleExportGrowth(a0) }
 
-func ResolveBuiltinTypeName(a0 string) (*core.Type, bool) { return core.ResolveBuiltinTypeName(a0) }
-
 func ResolveChildTypeExpr(a0 *core.Registry, a1 core.Value) (core.Value, error) {
 	return core.ResolveChildTypeExpr(a0, a1)
 }
@@ -1490,21 +1338,15 @@ func ResolveFieldType(a0 *core.Registry, a1 core.Value) core.Value {
 	return core.ResolveFieldType(a0, a1)
 }
 
-func ResolveRef(a0 *core.Registry, a1 string) (core.Value, bool) { return core.ResolveRef(a0, a1) }
-
 func ResolveSigChildParam(a0 *core.Registry, a1 core.Value) core.Value {
 	return core.ResolveSigChildParam(a0, a1)
-}
-
-func ResolveSigType(a0 *core.Registry, a1 core.Value) (*core.Type, *core.Value, error) {
-	return core.ResolveSigType(a0, a1)
 }
 
 func ResolveTypeLiteralDef(a0 core.Value, a1 *core.Registry) core.Value {
 	return core.ResolveTypeLiteralDef(a0, a1)
 }
 
-func ResolveTypeName(a0 string) (*core.Type, error) { return core.ResolveTypeName(a0) }
+func ResolveTypePath(a0 string) (*core.Type, bool) { return core.ResolveTypePath(a0) }
 
 func ResolveWordValue(a0 core.Value) core.Value { return core.ResolveWordValue(a0) }
 
@@ -1515,20 +1357,6 @@ func ResolveWordsDeepR(a0 core.Value, a1 *core.Registry) core.Value {
 }
 
 func ResourceDefKey(a0 string) string { return core.ResourceDefKey(a0) }
-
-func RetagFlexElem(a0 core.Value, a1 core.Value) core.Value { return core.RetagFlexElem(a0, a1) }
-
-func RetagTypedContainerValue(a0 core.Value, a1 core.Value) core.Value {
-	return core.RetagTypedContainerValue(a0, a1)
-}
-
-func ReturnCountErrorText(a0 string, a1 int, a2 int) string {
-	return core.ReturnCountErrorText(a0, a1, a2)
-}
-
-func ReturnTypeErrorText(a0 string, a1 int, a2 *core.Type, a3 core.Value) (string, string) {
-	return core.ReturnTypeErrorText(a0, a1, a2, a3)
-}
 
 func RunInCheck() core.GoOpt { return core.RunInCheck() }
 
@@ -1552,103 +1380,45 @@ func RunTrace(a0 *core.Registry, a1 []core.Value, a2 io.Writer) ([]core.Value, e
 	return core.RunTrace(a0, a1, a2)
 }
 
-func RunTypedBind(a0 *core.Registry, a1 *core.TypedBindSpec, a2 core.Value) (core.Value, error) {
-	return core.RunTypedBind(a0, a1, a2)
-}
-
-func RuntimeNoMatch(a0 *core.Registry, a1 string, a2 []core.Value) *core.BoruError {
-	return core.RuntimeNoMatch(a0, a1, a2)
-}
-
 func SchemaInfoOf(a0 *core.Type) (*core.TypeSchemaInfo, bool) { return core.SchemaInfoOf(a0) }
 
 func SetAtomReferent(a0 core.Value, a1 core.Value) core.Value { return core.SetAtomReferent(a0, a1) }
 
 func SetIDSeed(a0 int64) { core.SetIDSeed(a0) }
 
-func SigArgMatches(a0 *core.Signature, a1 int, a2 core.Value) bool {
-	return core.SigArgMatches(a0, a1, a2)
-}
+func SeverityFor(a0 string) core.CheckSeverity { return core.SeverityFor(a0) }
 
-func SigArgType(a0 *core.Signature, a1 int) *core.Type { return core.SigArgType(a0, a1) }
-
-func SigOrderArgs(a0 []core.Value, a1 int) []core.Value { return core.SigOrderArgs(a0, a1) }
-
-func SigPattern(a0 *core.Signature, a1 int) (core.Value, bool) { return core.SigPattern(a0, a1) }
+func Shape(a0 core.Value) core.ValueShape { return core.Shape(a0) }
 
 func SigTypeMatches(a0 core.Value, a1 *core.Type) bool { return core.SigTypeMatches(a0, a1) }
 
-func SigTypeSummary(a0 *core.Signature) string { return core.SigTypeSummary(a0) }
-
 func SimplifyDisjunctAlts(a0 []core.Value) []core.Value { return core.SimplifyDisjunctAlts(a0) }
-
-func SingleOverloadRecoverable(a0 *core.Signature, a1 *core.FnDefInfo) bool {
-	return core.SingleOverloadRecoverable(a0, a1)
-}
 
 func SizeOf(a0 core.Value) int { return core.SizeOf(a0) }
 
-func SizeOfAbove(a0 *core.Type, a1 core.Value) int { return core.SizeOfAbove(a0, a1) }
-
-func SizeOwner(a0 *core.Type) *core.Type { return core.SizeOwner(a0) }
-
 func SortSignatures(a0 []core.Signature) { core.SortSignatures(a0) }
-
-func SpliceExpand(a0 core.Value) []core.Value { return core.SpliceExpand(a0) }
 
 func StampModuleCallGates(a0 map[string]*core.OrderedMap, a1 string) {
 	core.StampModuleCallGates(a0, a1)
 }
 
-func StampedModuleCall(a0 *core.Registry, a1 string) *core.ModuleCallID {
-	return core.StampedModuleCall(a0, a1)
-}
-
-func StepLimitFor(a0 *core.Registry, a1 int) int { return core.StepLimitFor(a0, a1) }
-
 func StoreKey(a0 core.Value) string { return core.StoreKey(a0) }
-
-func StripAscribed(a0 core.Value) core.Value { return core.StripAscribed(a0) }
 
 func SubstituteSelf(a0 core.FnSigSpec, a1 *core.Type) core.FnSigSpec {
 	return core.SubstituteSelf(a0, a1)
+}
+
+func SubstituteTypeParams(a0 *core.Registry, a1 core.Value, a2 map[string]core.Value, a3 *core.Type) (core.Value, error) {
+	return core.SubstituteTypeParams(a0, a1, a2, a3)
 }
 
 func SugarExpansion(a0 *core.Registry, a1 core.SugarInfo, a2 core.Value, a3 bool) ([]core.Value, error) {
 	return core.SugarExpansion(a0, a1, a2, a3)
 }
 
-func SurfaceInfoOf(a0 *core.Type) (*core.SurfaceInfo, bool) { return core.SurfaceInfoOf(a0) }
-
-func TandHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.TandHandler(a0, a1, a2, a3)
-}
-
-func TandReturnsFn(a0 []core.Value, a1 *core.Registry) []core.Value {
-	return core.TandReturnsFn(a0, a1)
-}
-
 func TandValues(a0 core.Value, a1 core.Value) core.Value { return core.TandValues(a0, a1) }
 
-func TcmpHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.TcmpHandler(a0, a1, a2, a3)
-}
-
-func TnotHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.TnotHandler(a0, a1, a2, a3)
-}
-
-func TnotReturnsFn(a0 []core.Value, a1 *core.Registry) []core.Value {
-	return core.TnotReturnsFn(a0, a1)
-}
-
 func ToNative(a0 core.Value) any { return core.ToNative(a0) }
-
-func TorHandler(a0 []core.Value, a1 map[string]core.Value, a2 []core.Value, a3 *core.Registry) ([]core.Value, error) {
-	return core.TorHandler(a0, a1, a2, a3)
-}
-
-func TorReturnsFn(a0 []core.Value, a1 *core.Registry) []core.Value { return core.TorReturnsFn(a0, a1) }
 
 func TraceColorize(a0 core.Value) string { return core.TraceColorize(a0) }
 
@@ -1668,20 +1438,24 @@ func TypeNameOf(a0 core.Value) string { return core.TypeNameOf(a0) }
 
 func TypeNameTable() map[string]*core.Type { return core.TypeNameTable() }
 
-func TypeNodeOf(a0 core.Value) *core.Type { return core.TypeNodeOf(a0) }
-
 func TypeOf(a0 core.Value) core.Value { return core.TypeOf(a0) }
 
 func TypeParamName(a0 *core.Type) string { return core.TypeParamName(a0) }
 
 func TypePathOf(a0 core.Value) string { return core.TypePathOf(a0) }
 
-func UndefinedWordDetail(a0 string) string { return core.UndefinedWordDetail(a0) }
+func UnaryNumOpNative(a0 string, a1 func(float64) float64) core.NativeFunc {
+	return core.UnaryNumOpNative(a0, a1)
+}
 
 func Unify(a0 core.Value, a1 core.Value) (core.Value, bool) { return core.Unify(a0, a1) }
 
 func UnifyExplain(a0 core.Value, a1 core.Value) (core.Value, *core.UnifyError) {
 	return core.UnifyExplain(a0, a1)
+}
+
+func UnifyExplainR(a0 core.Value, a1 core.Value, a2 *core.Registry) (core.Value, *core.UnifyError) {
+	return core.UnifyExplainR(a0, a1, a2)
 }
 
 func UnifyR(a0 core.Value, a1 core.Value, a2 *core.Registry) (core.Value, bool) {
@@ -1694,11 +1468,11 @@ func UninstallFnSigs(a0 *core.Registry, a1 string, a2 core.FnUndefInfo) {
 	core.UninstallFnSigs(a0, a1, a2)
 }
 
-func UnionType(a0 core.Value, a1 core.Value) core.Value { return core.UnionType(a0, a1) }
-
-func UsurpFunction(a0 core.Value) (core.Value, bool) { return core.UsurpFunction(a0) }
-
 func ValToString(a0 core.Value) string { return core.ValToString(a0) }
+
+func ValidateTypeNameParts(a0 string, a1 func(string) bool) error {
+	return core.ValidateTypeNameParts(a0, a1)
+}
 
 func ValidateWordName(a0 string) error { return core.ValidateWordName(a0) }
 
@@ -1710,10 +1484,6 @@ func WalkBodyWords(a0 []core.Value, a1 func(core.WordInfo, core.Value)) { core.W
 
 func WeakRefusalError(a0 *core.Registry, a1 string, a2 string, a3 *core.WeakRefusal) error {
 	return core.WeakRefusalError(a0, a1, a2, a3)
-}
-
-func WithModuleNS(a0 core.Value, a1 string, a2 core.Value) core.Value {
-	return core.WithModuleNS(a0, a1, a2)
 }
 
 func WithPos(a0 core.Value, a1 core.Value) core.Value { return core.WithPos(a0, a1) }

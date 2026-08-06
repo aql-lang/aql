@@ -85,8 +85,8 @@ var upwardRefs = []struct {
 		// dispatch-model builders) — all routed through the seam carrier
 		// in Stage 2c.
 		name: "check entry-point call (F7)",
-		re: regexp.MustCompile(`\b(checkFnBodyAtConstruction|buildFnBodyReturnsFn|` +
-			`StripToCarriers|stripZeroOutResiduals|carrierResults|carrierMixedConform|` +
+		re: regexp.MustCompile(`\b(checkFnBodyAtConstruction|check.BuildFnBodyReturnsFn|` +
+			`StripToCarriers|stripZeroOutResiduals|check.CarrierResults|carrierMixedConform|` +
 			`valueCarriesCarrier|CheckAtUncaughtTopLevel|CheckAddUnique|` +
 			`CheckAddUniqueDiagnostic|OrderingReturnsFn|planUserPolyDispatch)\(`),
 		allowed: map[string]bool{
@@ -108,9 +108,9 @@ var upwardRefs = []struct {
 		re: regexp.MustCompile(`(^|[^.\w])(checkMixedFormAdvisories|checkModeAssumeSig|` +
 			`checkModeFallbackPositions|checkModeParenFnCollapse|checkModeSurfaceShape|` +
 			`concreteEvalOnce|drainUndefinedAtoms|exprRefsCarrier|noteSpeculativeBarrierCommit|` +
-			`refuseForwardStackDrift|refuseStrandedMemberFn|shareCheckState|spliceAnonCheckResult|` +
-			`spliceCheckResults|spliceFnCheckTail|spliceFnValueCheckResult|tagCheckModeDefRead|` +
-			`tryDynamicFnValueDispatch|tryMemberFnArrivalDispatch|tryShapedMethodDispatch|` +
+			`check.RefuseForwardStackDrift|refuseStrandedMemberFn|shareCheckState|spliceAnonCheckResult|` +
+			`spliceCheckResults|spliceFnCheckTail|check.SpliceFnValueCheckResult|tagCheckModeDefRead|` +
+			`tryDynamicFnValueDispatch|tryMemberFnArrivalDispatch|check.TryShapedMethodDispatch|` +
 			`undefinedWordCheckDiag)\(`),
 		allowed: map[string]bool{},
 	},

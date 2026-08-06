@@ -96,7 +96,7 @@ func tryRecordDriftWindow(e *core.Engine, w core.WordInfo, sig *core.Signature, 
 	// [deepest … dynamic-value word-const forward-literal] bottom-up — the
 	// island's tape in source order. A value produced by a VARIADIC event
 	// cannot ride a fixed-width window.
-	ops := make([]emitOperand, 0, len(positions)+2)
+	ops := make([]EmitOperand, 0, len(positions)+2)
 	fwdOp, ok := es.resolveOperand(e.Tape.At(fwdIdx))
 	if !ok { //covergate:allow forwardLiteralOperand admits only concrete scalars/atoms and bare type nodes, all of which resolveOperand materialises as const/type operands (§compiler)
 		return false
@@ -106,7 +106,7 @@ func tryRecordDriftWindow(e *core.Engine, w core.WordInfo, sig *core.Signature, 
 	// token, so the RUNTIME dispatch (registry-resolved, forward-collecting)
 	// is the interpreter's own.
 	wordTok := core.WithPos(core.NewWord(w.Name), e.Tape.At(e.Pointer))
-	ops = append(ops, constOperand(es.intern(wordTok)))
+	ops = append(ops, ConstOperand(es.intern(wordTok)))
 	for p := topPos; p >= minPos; p-- {
 		v := e.Tape.At(p)
 		if pr, ok := es.producedBy[v.ID]; ok && es.eventInfo[pr.seq].variadicResult {
@@ -121,7 +121,7 @@ func tryRecordDriftWindow(e *core.Engine, w core.WordInfo, sig *core.Signature, 
 
 	out := core.NewDynamicCarrier(core.TAny)
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{
 		word: w.Name, ops: ops, nout: 1, pos: wordTok.Pos(), dynMixed: true,
 	}})
 	es.setProducedAt(out, seq, 0)

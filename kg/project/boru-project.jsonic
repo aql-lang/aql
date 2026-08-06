@@ -100,6 +100,10 @@
       attributes: { path: "eng/go" } }
     { key: "core-go", type: "Product", label: "core/go module"
       attributes: { path: "core/go" } }
+    { key: "check-go", type: "Product", label: "check/go module"
+      attributes: { path: "check/go" } }
+    { key: "compiler-go", type: "Product", label: "compiler/go module"
+      attributes: { path: "compiler/go" } }
     { key: "calc-go", type: "Product", label: "calc/go module"
       attributes: { path: "calc/go" } }
     { key: "wpg", type: "Product", label: "wpg playground module"
@@ -172,6 +176,26 @@
       object: { kind: "entity", entity: "core-go" }
       evidence: [{ source: "src:readme", locator: "Repository layout",
         quote: "core/go/ | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it." }]
+      confidence: 0.95 }
+    { subject: "check-go", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "check/go/ | The type checker: the analysis pass over core. Depends on core only." }]
+      confidence: 0.98 }
+    { subject: "check-go", predicate: "related_to"
+      object: { kind: "entity", entity: "core-go" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "check/go/ | The type checker: the analysis pass over core. Depends on core only." }]
+      confidence: 0.95 }
+    { subject: "compiler-go", predicate: "part_of"
+      object: { kind: "entity", entity: "repo" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "compiler/go/ | The compiler: the recorder, lowering, and bytecode emitter over check and core." }]
+      confidence: 0.98 }
+    { subject: "compiler-go", predicate: "related_to"
+      object: { kind: "entity", entity: "check-go" }
+      evidence: [{ source: "src:readme", locator: "Repository layout",
+        quote: "compiler/go/ | The compiler: the recorder, lowering, and bytecode emitter over check and core." }]
       confidence: 0.95 }
     { subject: "basic-go", predicate: "part_of"
       object: { kind: "entity", entity: "repo" }

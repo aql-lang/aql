@@ -173,7 +173,7 @@ func checkForwardStrandsOperand(e *core.Engine, w core.WordInfo, sig *core.Signa
 	}
 }
 
-// refuseForwardStackDrift refuses (compile mode only) a dispatch whose
+// RefuseForwardStackDrift refuses (compile mode only) a dispatch whose
 // check-mode operand match would DIVERGE from the interpreter's runtime
 // forward collection — the reified-error / island residual accounting of
 // design/EDGE-SPEC-FINDINGS.0.md §1. Preconditions (checked by the caller):
@@ -202,7 +202,7 @@ func checkForwardStrandsOperand(e *core.Engine, w core.WordInfo, sig *core.Signa
 // Without the top-is-dynamic and trailing-token gates a genuine all-stack
 // dynamic dispatch (`get key dyn`, `dyn 5 add`) would be refused although it
 // compiles faithfully, so both gates are load-bearing.
-func refuseForwardStackDrift(e *core.Engine, sig *core.Signature, positions []int) {
+func RefuseForwardStackDrift(e *core.Engine, sig *core.Signature, positions []int) {
 	es := e.Registry.Check.Recorder()
 	if !es.Active() || sig == nil || sig.BarrierPos == 0 || sig.FullStack() || len(positions) < 2 {
 		return
@@ -430,7 +430,7 @@ func spliceAnonCheckResult(e *core.Engine, valIdx, nArgs int, sig *core.FnSig, a
 	return nil
 }
 
-// spliceFnValueCheckResult is the check-mode dispatch for a NON-anonymous
+// SpliceFnValueCheckResult is the check-mode dispatch for a NON-anonymous
 // body-bearing fn VALUE (a `fn` literal resolved from a map/module export and
 // then CALLED, e.g. `ParseLang.parse_json 'x' {}`). Unlike a NAMED user fn
 // (which dispatches through stepWord → its registered ReturnsFn) and unlike an
@@ -438,13 +438,13 @@ func spliceAnonCheckResult(e *core.Engine, valIdx, nArgs int, sig *core.FnSig, a
 // previously fell through to execFnDefSig, whose inline body splice leaks the
 // per-call `__pa` (Args/FnBaseline pop) token into the TOP-LEVEL residual —
 // refused by the emitter as "context-dependent word __pa". Routing through
-// buildFnBodyReturnsFn ARMS the body analysis via StartFnCompile, so the body
+// BuildFnBodyReturnsFn ARMS the body analysis via StartFnCompile, so the body
 // (with its `__pa` tail) is captured INSIDE its own CALL_USER unit and the
 // call site records a CALL_USER — identical to the named-fn path. See
 // design/boru-bytecode-stage3-inlining-plan.0.md "THE shared crux:
 // body-bearing fn-VALUE dispatch (__pa)".
-func spliceFnValueCheckResult(e *core.Engine, valIdx, nArgs int, fnDef core.FnDefInfo, sig *core.FnSig, args []core.Value) error {
-	returns := buildFnBodyReturnsFn(e.Registry, fnDef.Name, *sig, fnDef)
+func SpliceFnValueCheckResult(e *core.Engine, valIdx, nArgs int, fnDef core.FnDefInfo, sig *core.FnSig, args []core.Value) error {
+	returns := BuildFnBodyReturnsFn(e.Registry, fnDef.Name, *sig, fnDef)
 	result := returns(args, e.Registry)
 	if len(result) == 0 && len(sig.Returns) > 0 { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
 		// A declared-return fn that produced no carrier (the body unit
@@ -461,7 +461,7 @@ func spliceFnValueCheckResult(e *core.Engine, valIdx, nArgs int, fnDef core.FnDe
 
 // spliceFnCheckTail removes the consumed args + the fn-value literal from the
 // tape and splices the check-mode result carriers in their place. Shared by
-// spliceAnonCheckResult and spliceFnValueCheckResult so the two check-mode
+// spliceAnonCheckResult and SpliceFnValueCheckResult so the two check-mode
 // fn-value paths cannot diverge in their stack discipline.
 func spliceFnCheckTail(e *core.Engine, valIdx, nArgs int, result []core.Value) {
 	indices := e.ResolvedIndicesBefore(nArgs)
@@ -511,7 +511,7 @@ func shareCheckState(e *core.Engine, capturedReg *core.Registry) func() {
 // it points owner's Check at caller's for the duration (restore via the
 // returned func), no-op when the registries coincide, either is nil, or the
 // caller is not in check mode. Split out so the MERGED-WORD seam can share at
-// the ReturnsFn boundary itself (buildFnBodyReturnsFn — Stage M1,
+// the ReturnsFn boundary itself (BuildFnBodyReturnsFn — Stage M1,
 // design/STAGE3-INLINING-DESIGN-ROUND.0.md §5): a transplanted word-extension
 // sig dispatches as a BARE word on the importer's engine, where no
 // execFnDefLiteral wrapper exists to share around the call, and the sig's
@@ -749,7 +749,7 @@ func checkModeSurfaceShape(e *core.Engine, w core.WordInfo, pos core.SrcPos) (bo
 	for i, p := range positions {
 		args[i] = e.Tape.At(p)
 	}
-	results := carrierResults(e.Registry, w.Name, synth, args, pos, nil, false)
+	results := CarrierResults(e.Registry, w.Name, synth, args, pos, nil, false)
 	spliceCheckResults(e, positions, results)
 	return true, nil
 }
@@ -895,7 +895,7 @@ func checkModeAssumeSig(e *core.Engine, w core.WordInfo, fn *core.FnDefInfo, fal
 		// builtin, single result, no meta/fn-value/code-body sig), record
 		// OpCallNativePoly so the VM re-matches the one concrete alternative
 		// at run time — e.g. `(3 and "x") add 1` → `'x1'`, mirroring the
-		// normal-path handling in carrierResults. The poly call needs its
+		// normal-path handling in CarrierResults. The poly call needs its
 		// operands in SIGNATURE order (sig[0] = top of stack): forward args
 		// fill the leading positions in source order, then the stack args
 		// fill the rest top-down (the deepest-last ascending run reversed).
@@ -950,7 +950,7 @@ func checkModeAssumeSig(e *core.Engine, w core.WordInfo, fn *core.FnDefInfo, fal
 	es := e.Registry.Check.Recorder()
 	if es.Active() && (AnyAnyCarrier(args) || anyDisjunctCarrier(args)) {
 		resume := es.Suspend()
-		results := carrierResults(e.Registry, w.Name, sig, args, pos, nil, false)
+		results := CarrierResults(e.Registry, w.Name, sig, args, pos, nil, false)
 		resume()
 		// Re-match over the dispatching registry: a module sub-registry word
 		// (the test framework's `test-record`, run via CallBoru in the module's
@@ -971,7 +971,7 @@ func checkModeAssumeSig(e *core.Engine, w core.WordInfo, fn *core.FnDefInfo, fal
 		// fails the VM's CALL_USER param contract (raise == the interpreter's
 		// no_signature). tryRecordPoly can't take it (user fns have an FnFrame; only
 		// sub-registry builtins pass), so drive its ReturnsFn NON-suspended to compile
-		// the body unit and record a GUARDED CALL_USER — buildFnBodyReturnsFn's
+		// the body unit and record a GUARDED CALL_USER — BuildFnBodyReturnsFn's
 		// SetUnitParamTypes installs the param contract the VM enforces at entry, so a
 		// runtime arg that misses the sole sig raises exactly as the interpreter does.
 		// This is what unblocks the boru:test framework (run-cases) and the trie/
@@ -1014,7 +1014,7 @@ func checkModeAssumeSig(e *core.Engine, w core.WordInfo, fn *core.FnDefInfo, fal
 	}
 	// A no-signature dispatch reached here UNDER A SUSPENDED outer recovery
 	// (es.suspended > 0) is being ANALYSED to read an enclosing dispatch's result
-	// type — carrierResults suspends recording and re-runs the body purely to
+	// type — CarrierResults suspends recording and re-runs the body purely to
 	// inspect its residual — NOT compiled. Its real compile decision happens on
 	// the non-suspended recording pass (or it is subsumed by the enclosing poly's
 	// runtime re-match). MarkUncompilable here PREMATURELY latches the whole
@@ -1054,7 +1054,7 @@ func checkModeAssumeSig(e *core.Engine, w core.WordInfo, fn *core.FnDefInfo, fal
 			recovered := false
 			if es.Active() && anyImpreciseCarrier(args) {
 				resume := es.Suspend()
-				results := carrierResults(e.Registry, w.Name, sig, args, pos, nil, false)
+				results := CarrierResults(e.Registry, w.Name, sig, args, pos, nil, false)
 				resume()
 				if sw := core.SigOrderArgs(args, nStack); dispatchTryRecordPoly(e.Registry, w.Name, sig, sw, results, pos, false, e.Registry, true, noMatchProbe.Spec(fn, sw)) {
 					spliceCheckResults(e, positions, results)
@@ -1136,7 +1136,7 @@ func checkModeAssumeSig(e *core.Engine, w core.WordInfo, fn *core.FnDefInfo, fal
 	// suppress the error-level body diagnostics of the consequent analysis
 	// (the SuppressBodyErrors discipline recursive re-entry already uses).
 	e.Registry.Check.SuppressBodyErrors++
-	results := carrierResults(e.Registry, w.Name, sig, args, pos, nil, false)
+	results := CarrierResults(e.Registry, w.Name, sig, args, pos, nil, false)
 	e.Registry.Check.SuppressBodyErrors--
 	spliceCheckResults(e, positions, results)
 	return nil
@@ -1188,16 +1188,16 @@ func installCheckBraid() {
 	core.CheckBraid.DrainUndefinedAtoms = drainUndefinedAtoms
 	core.CheckBraid.ExprRefsCarrier = exprRefsCarrier
 	core.CheckBraid.NoteSpeculativeBarrierCommit = noteSpeculativeBarrierCommit
-	core.CheckBraid.RefuseForwardStackDrift = refuseForwardStackDrift
+	core.CheckBraid.RefuseForwardStackDrift = RefuseForwardStackDrift
 	core.CheckBraid.RefuseStrandedMemberFn = refuseStrandedMemberFn
 	core.CheckBraid.ShareCheckState = shareCheckState
 	core.CheckBraid.SpliceAnonCheckResult = spliceAnonCheckResult
 	core.CheckBraid.SpliceCheckResults = spliceCheckResults
-	core.CheckBraid.SpliceFnValueCheckResult = spliceFnValueCheckResult
+	core.CheckBraid.SpliceFnValueCheckResult = SpliceFnValueCheckResult
 	core.CheckBraid.TagCheckModeDefRead = tagCheckModeDefRead
 	core.CheckBraid.TryDynamicFnValueDispatch = tryDynamicFnValueDispatch
 	core.CheckBraid.TryMemberFnArrivalDispatch = tryMemberFnArrivalDispatch
-	core.CheckBraid.TryShapedMethodDispatch = tryShapedMethodDispatch
+	core.CheckBraid.TryShapedMethodDispatch = TryShapedMethodDispatch
 	core.CheckBraid.UndefinedWordCheckDiag = undefinedWordCheckDiag
 }
 
@@ -1208,10 +1208,10 @@ func init() { installCheckBraid() }
 // moves it wholesale into the check package's init.
 func installAnalysisImpl() {
 	core.AnalysisImpl.FnConstructionPass = checkFnBodyAtConstruction
-	core.AnalysisImpl.ReturnsFn = buildFnBodyReturnsFn
+	core.AnalysisImpl.ReturnsFn = BuildFnBodyReturnsFn
 	core.AnalysisImpl.StripToCarriers = StripToCarriers
 	core.AnalysisImpl.ZeroOutResiduals = stripZeroOutResiduals
-	core.AnalysisImpl.CarrierResults = carrierResults
+	core.AnalysisImpl.CarrierResults = CarrierResults
 	core.AnalysisImpl.MixedConform = carrierMixedConform
 	core.AnalysisImpl.ValueCarriesCarrier = valueCarriesCarrier
 	core.AnalysisImpl.AtUncaughtTopLevel = CheckAtUncaughtTopLevel

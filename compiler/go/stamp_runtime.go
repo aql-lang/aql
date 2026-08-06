@@ -4,7 +4,7 @@ import core "github.com/boru-lang/boru/core/go"
 
 // Runtime (detached) fn-unit stamping — design/RUNTIME-STAMPING.0.md.
 //
-// The compile-time store-fn bake (recordCallOperands → compileStoredFnUnit →
+// The compile-time store-fn bake (RecordCallOperands → compileStoredFnUnit →
 // stampCompiledRef) stamps a CompiledFnRef only onto a fn value that is a
 // concrete const in a CompileStoresFn slot of the program CURRENTLY being
 // compiled. A fn value constructed at runtime — a service handler lambda
@@ -21,7 +21,7 @@ import core "github.com/boru-lang/boru/core/go"
 //
 // Freshness: a detached ref outlives the compile fork, so the compile-time
 // NotifyNameRebound poisoning cannot observe later rebinds of the module
-// names its body reads. Instead the ref carries a depSnap — per dep name,
+// names its body reads. Instead the ref carries a DepSnap — per dep name,
 // the DefTable shadow depth and mutation generation at stamp time — which
 // InvokeCallback validates on every invoke (CompiledFnRef.depsFresh); any
 // mismatch degrades to CallBoru, which resolves the live binding exactly as
@@ -153,34 +153,34 @@ func StampDetachedSig(r *core.Registry, fd core.FnDefInfo, sigIdx int, pos core.
 		return nil, false
 	}
 	if len(deps) > 0 {
-		ref.depSnap = make(map[string]depSnapEntry, len(deps))
+		ref.DepSnap = make(map[string]DepSnapEntry, len(deps))
 		for name := range deps {
-			ref.depSnap[name] = depSnapEntry{Depth: r.Defs.Depth(name), Gen: r.Defs.Gen(name)}
+			ref.DepSnap[name] = DepSnapEntry{Depth: r.Defs.Depth(name), Gen: r.Defs.Gen(name)}
 		}
 	} else {
 		// A body with no module deps still marks itself runtime-stamped with
 		// an empty (non-nil) snapshot: vacuously fresh forever, but the field
 		// keeps "detached ref" distinguishable from "compile-time ref".
-		ref.depSnap = map[string]depSnapEntry{}
+		ref.DepSnap = map[string]DepSnapEntry{}
 	}
 	// Arm the JIT re-stamp box (REFUSAL-CLOSURE.0 §7c): the stamp inputs ride
 	// the ref so a later dep rebind re-compiles against the live bindings at
 	// invoke time (jitRestamp) instead of degrading permanently to CallBoru.
 	// fd here carries the §7a identity-minted capture clone, so a re-stamp
 	// needs no re-clone.
-	ref.restamp = &restampBox{fd: fd, sigIdx: sigIdx, pos: pos}
+	ref.Restamp = &RestampBox{fd: fd, sigIdx: sigIdx, pos: pos}
 	r.RecordStampEvent(core.StampEvent{Name: fd.Name, Pos: pos, Stamped: true})
 	return ref, true
 }
 
-// restampMaxTries bounds the TOTAL re-compiles one detached ref may pay
+// RestampMaxTries bounds the TOTAL re-compiles one detached ref may pay
 // across its lifetime: a dep that keeps rebinding between invokes would
 // otherwise cost a compile per invoke — after the budget the seam stays on
 // CallBoru, which resolves the live binding exactly as the interpreter.
-const restampMaxTries = 3
+const RestampMaxTries = 3
 
 // jitRestamp is InvokeCallback's stale-ref recovery (REFUSAL-CLOSURE.0 §7c):
-// when a detached ref's depSnap no longer matches the live def table, re-run
+// when a detached ref's DepSnap no longer matches the live def table, re-run
 // StampDetachedFn against the CURRENT bindings and return the fresh twin —
 // each re-stamp snapshots the new generations, so a stable rebind pays one
 // compile and then runs on the VM again. Returns nil when the seam should
@@ -190,24 +190,24 @@ const restampMaxTries = 3
 // — the winner compiles, the rest reuse its twin; StampDetachedFn itself
 // runs on the CALLER's registry per its ForkConcurrent contract.
 func (ref *CompiledFnRef) JitRestamp(r *core.Registry) *CompiledFnRef {
-	box := ref.restamp
+	box := ref.Restamp
 	if box == nil {
 		return nil
 	}
 	box.mu.Lock()
 	defer box.mu.Unlock()
-	if box.cur != nil && box.cur.DepsFresh(r) {
-		return box.cur
+	if box.Cur != nil && box.Cur.DepsFresh(r) {
+		return box.Cur
 	}
-	if box.tries >= restampMaxTries {
+	if box.Tries >= RestampMaxTries {
 		return nil
 	}
-	box.tries++
+	box.Tries++
 	nr, ok := StampDetachedSig(r, box.fd, box.sigIdx, box.pos)
 	if !ok {
 		return nil
 	}
-	box.cur = nr
+	box.Cur = nr
 	return nr
 }
 

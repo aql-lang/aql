@@ -56,3 +56,9 @@ replace github.com/boru-lang/boru/eng/go => ../eng/go
 replace github.com/boru-lang/boru/basic/go => ../basic/go
 
 replace github.com/boru-lang/boru/lang/go => ../lang/go
+
+replace github.com/boru-lang/boru/core/go => ../core/go
+
+replace github.com/boru-lang/boru/check/go => ../check/go
+
+replace github.com/boru-lang/boru/compiler/go => ../compiler/go

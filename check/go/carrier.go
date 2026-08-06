@@ -197,7 +197,7 @@ func ReturnsListElemAt(i int) core.ReturnsFunc {
 // ChildTypeInfo to read the element from) — the carrier is DYNAMIC, so a
 // downstream access in the body (`get`, a field read) matches OPTIMISTICALLY
 // instead of failing `no_signature` against the bare Any root, exactly as a
-// declared-Any return does (carrierResults). A KNOWN element type stays a strict
+// declared-Any return does (CarrierResults). A KNOWN element type stays a strict
 // carrier — its real shape is checked normally. Sound under the dynamic-modality
 // framework: it only loosens matching, and a guard discharges it back to strict.
 func NewElementCarrier(t *core.Type) core.Value {
@@ -583,7 +583,7 @@ func isLiteralWord(v core.Value) bool {
 	return checkModeLiteralWords[w.Name]
 }
 
-// carrierResults returns the carrier Values that a matched signature
+// CarrierResults returns the carrier Values that a matched signature
 // produces in check mode. Resolution order:
 //
 //  1. If sig.ReturnsFn is set, it is invoked with the carrier-typed
@@ -606,7 +606,7 @@ func isLiteralWord(v core.Value) bool {
 // consumed result may optimistically model one dynamic value, because a
 // free statement-position residual would be collected by the NEXT word
 // and corrupt its arity. The dynamic-recovery callers pass false.
-func carrierResults(r *core.Registry, word string, sig *core.Signature, args []core.Value, pos core.SrcPos, ownerReg *core.Registry, tailConsumed bool) []core.Value {
+func CarrierResults(r *core.Registry, word string, sig *core.Signature, args []core.Value, pos core.SrcPos, ownerReg *core.Registry, tailConsumed bool) []core.Value {
 	if out, ok := specialWordResults(r, word, args, pos); ok {
 		return out
 	}
@@ -698,7 +698,7 @@ func ScalarFoldOperand(v core.Value) bool {
 	return false
 }
 
-// specialWordResults handles the words carrierResults special-cases before
+// specialWordResults handles the words CarrierResults special-cases before
 // ordinary return resolution: the `args` frame projection, the `word` splice
 // marker, and compile-time `macroexpand` folding. ok=false falls through to
 // the normal path (including macroexpand's error/trap fall-through, which
@@ -791,7 +791,7 @@ func specialWordResults(r *core.Registry, word string, args []core.Value, pos co
 	return nil, false
 }
 
-// declaredReturnCarriers is carrierResults' three-way return resolution:
+// declaredReturnCarriers is CarrierResults' three-way return resolution:
 // ReturnsFn (invoked with the carrier args), declared Returns (one fresh
 // carrier per type, declared Any riding dynamic), or the missing_returns
 // fallback (a dynamic Any so one unannotated word does not cascade false
@@ -868,7 +868,7 @@ func isConcreteContainerReturn(v core.Value) bool {
 // to the union of all reachable overload returns (first-match partition),
 // and a 0-return mutator over a dynamic receiver optimistically models one
 // value where a value-returning sibling overload is reachable (gated to
-// consumed results under a real compile — see carrierResults' doc).
+// consumed results under a real compile — see CarrierResults' doc).
 func applyGradualContagion(r *core.Registry, word string, args []core.Value, out []core.Value, pos core.SrcPos, tailConsumed bool) []core.Value {
 	// Gradual contagion (design/dynamic-modality-report.10.md): a result
 	// derived from a dynamic carrier is itself dynamic, so the modality
@@ -1392,7 +1392,7 @@ func disjunctPartitionReturns(r *core.Registry, word string, args []core.Value, 
 	// fresh-ID copies ("fn call operand of unknown provenance" — the
 	// L-JOIN recursive-union refusal) and compile one unit per combo.
 	// Suspend for the loop (a no-op on a plain check); the caller records
-	// the dispatch ONCE with the original args (carrierResults' partition
+	// the dispatch ONCE with the original args (CarrierResults' partition
 	// arm). Diagnostics (partial_dispatch) are not gated by suspension.
 	rows := make([][]core.Value, 0, len(combos))
 	resume := r.Check.Recorder().Suspend()
@@ -1447,7 +1447,7 @@ func disjunctPartitionReturns(r *core.Registry, word string, args []core.Value, 
 // disjunctCombosTakeSig reports whether EVERY per-alternative combination of
 // the disjunct args first-matches exactly the caller's committed sig — the
 // condition under which ONE recorded CALL_USER of that sig's unit is faithful
-// for every runtime alternative (carrierResults' partitioned user-fn arm). A
+// for every runtime alternative (CarrierResults' partitioned user-fn arm). A
 // combo that would first-match a SIBLING overload (a narrow arm ahead of the
 // committed wide one) makes the single baked call a miscompile — the
 // interpreter dispatches the sibling for that alternative — so the caller
@@ -1755,7 +1755,7 @@ func dynamicReachableReturns(r *core.Registry, word string, args []core.Value) [
 		// (ReturnsFn / multi- or zero-return): its result is statically
 		// unknown, so it contributes the Any alternative to the union rather
 		// than disabling refinement. The old code bailed (`return nil`) here,
-		// which left carrierResults committed to the single matched overload's
+		// which left CarrierResults committed to the single matched overload's
 		// return — for a word whose overloads return DISJOINT types over
 		// dynamic operands (`add` of two dynamic-Any operands matches the
 		// temporal `Instant`/`Date` overloads alongside the numeric ReturnsFn
@@ -1913,7 +1913,7 @@ func slotIsPolymorphic(r *core.Registry, word string, args []core.Value, i int, 
 }
 
 // anyDynamicCarrier reports whether any value is a dynamic carrier — the
-// trigger for gradual contagion in carrierResults.
+// trigger for gradual contagion in CarrierResults.
 func AnyDynamicCarrier(vs []core.Value) bool {
 	for _, v := range vs {
 		if v.Dynamic {
@@ -2085,7 +2085,7 @@ func valueTreeHasCarriers(v core.Value) bool {
 //     discipline underflow"). A fresh carrier ID keeps each construction a
 //     distinct operand.
 //   - Faithfulness. The runtime result is a VALUE of type P, not the type
-//     literal P; a carrier of P is the same shape carrierResults gives every
+//     literal P; a carrier of P is the same shape CarrierResults gives every
 //     other declared return, and conformance sees the instance's type.
 //
 // (Minting a fresh ID on the type literal itself is NOT viable: it severs
@@ -2427,7 +2427,7 @@ func carrierMixedConform(v core.Value, t *core.Type) bool {
 // failing no_signature (the tst/radix node-rebuild walkers). Looser, never
 // tighter — a guard discharges the modality back to strict downstream.
 func JoinCarriers(a, b core.Value) core.Value {
-	out := joinCarriersInner(a, b)
+	out := JoinCarriersInner(a, b)
 	if a.Dynamic || b.Dynamic {
 		out.Carrier = true
 		out.Dynamic = true
@@ -2444,7 +2444,7 @@ func isNoneArm(v core.Value) bool {
 	return core.IsNoneShape(v)
 }
 
-func joinCarriersInner(a, b core.Value) core.Value {
+func JoinCarriersInner(a, b core.Value) core.Value {
 	// A None arm is a lattice-root literal — NewTypeLiteral(TNone) has BOTH
 	// Data==nil AND Parent==nil (None has no lattice parent). The parent-math
 	// collapse blocks below are unsafe against such a nil Parent: ConformsTo(nil)
@@ -3443,13 +3443,13 @@ func refineRecursiveSummary(r *core.Registry, key string, diagBase int, result [
 	return result
 }
 
-// runFnBodyOnce performs one full body analysis for AnalyseFnBody: snapshot
+// RunFnBodyOnce performs one full body analysis for AnalyseFnBody: snapshot
 // def-stack depths so any defs the body, captures, or parameter bindings
 // created unwind afterwards. The same snapshot is pushed as the fn-entry
 // baseline so any inner fn/afn construction inside the body sees this scope
 // as its enclosing-fn baseline — without it, ComputeCaptures would treat
 // outer params as if they lived at module/global scope and miss the capture.
-func runFnBodyOnce(r *core.Registry, name string, paramNames []string, body, args []core.Value, captures []core.CapturedBinding, anonymous bool) []core.Value {
+func RunFnBodyOnce(r *core.Registry, name string, paramNames []string, body, args []core.Value, captures []core.CapturedBinding, anonymous bool) []core.Value {
 	snapshot := r.Defs.Snapshot()
 	r.PushFnBaseline(snapshot)
 	defer r.PopFnBaseline()
@@ -3458,7 +3458,7 @@ func runFnBodyOnce(r *core.Registry, name string, paramNames []string, body, arg
 	// `args` / `args.N` resolves them in check mode. The params ARE the
 	// frame's leading locals (0..n-1), so `args.N` folds to that local — at
 	// lowering it becomes PUSH_LOCAL N, no runtime args stack needed
-	// (carrierResults' `args` projection + tryFoldStaticIndex). Pushed
+	// (CarrierResults' `args` projection + tryFoldStaticIndex). Pushed
 	// alongside the FnBaseline; popped together.
 	_ = r.Args.Push(core.NewList(append([]core.Value(nil), args...)))
 	defer func() { _, _ = r.Args.Pop() }()
@@ -3572,7 +3572,7 @@ func runFnBodyOnce(r *core.Registry, name string, paramNames []string, body, arg
 // engines, so recording its OpMakeMap / OpMakeList assembly is safe (it
 // re-assembles per run, matching the interpreter). A normal user fn applied
 // directly at top level leaves a DEFERRED residual the interpreter evaluates
-// after the frame pops — recording there would diverge, so runFnBodyOnce gates
+// after the frame pops — recording there would diverge, so RunFnBodyOnce gates
 // elemEvalRecordable on this predicate.
 func isCallbackBodyName(name string) bool {
 	return name == "storedfn$body" || name == "spawnbody$body"
@@ -3774,7 +3774,7 @@ func AnalyseFnBody(r *core.Registry, name string, paramNames []string, body []co
 	// body sees this scope as its enclosing-fn baseline — without it,
 	// ComputeCaptures would treat outer params as if they lived at
 	// module/global scope and miss the capture.
-	runOnce := func() []core.Value { return runFnBodyOnce(r, name, paramNames, body, args, captures, anonymous) }
+	runOnce := func() []core.Value { return RunFnBodyOnce(r, name, paramNames, body, args, captures, anonymous) }
 
 	bailsBefore := r.Check.InflightBails
 	diagBase := len(r.Check.Diagnostics)
