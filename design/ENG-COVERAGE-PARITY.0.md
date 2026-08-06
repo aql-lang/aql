@@ -25,9 +25,10 @@ Go and ts need total parity.")
      statements — RE-BASED at the four-piece Stage 4 cut, which
      moved the interpreter core's statements and their kernel test
      files to `core/go`; the pair with `make cover-gate-core`
-     (floor `CORE_GATE_FLOOR`, currently 80) supersedes the
-     pre-cut single-gate floor of 89, and both ratchet
-     independently to 100 — design/ENG-FOUR-PIECE.0.md).
+     supersedes the pre-cut single-gate floor of 89 —
+     design/ENG-FOUR-PIECE.0.md). The core twin is DONE: `make
+     cover-gate-core` holds **100** (13,978/13,978 statements,
+     104 proof-carrying allowlist exclusions).
    - TS: `make test-ts`, floor `TS_GATE_LINES` (root Makefile).
      Current: **93** (measured 93.09% lines; branches 87.2%,
      functions 90.9% recorded but not yet gated).
@@ -174,3 +175,4 @@ differential guards the aligned behaviors permanently.
 | 2026-08-05 | 89 | 97 | TS wave 26: arrow folds in list/reach contexts (incl. the reach-interior fold `a.b => [1]` and the map-value refusal), computed/quoted/numeric map keys, and the optional-key sibling leak pinned as a SHARED quirk (both engines wrap the sibling identically — tabnas's K map rides across pairs). grammar.ts 92.15→93.33 — 96.92→97.06 total lines. |
 | 2026-08-05 | 89 | 97 | Go wave: `eachq` — the battery's lambda-hook Callable (quotation AND Function-value forms over the InvokeBody seam, with the element-carrier model in its ReturnsFn), the standalone driver for tryRecordLambdaClosure / lambdaHookCompatible / lambdaCallbackInputs; 8 battery rows all VM-executed. eng/go standalone 90.1→90.3 (callable_words 65→69). |
 | 2026-08-05 | 84 (re-base) + core 80 | 97 | Four-piece Stage 4 cut: the interpreter core and ~120 kernel test files moved to core/go. The Go gate re-bases over eng/go alone (measured 84.6%) and gains a twin, `cover-gate-core` (floor 80, measured 80.5%); the pair covers the same statements the old single gate did, both ratcheting to 100 (design/ENG-FOUR-PIECE.0.md). |
+| 2026-08-06 | 84 + core 100 | 97 | Stage-5 core campaign: three test waves (eleven parallel agent batteries + a final sweep) close all 2,833 post-cut uncovered statements in core/go's own suite — the process registry, trace layout, value render/classify families, the store clone graph, compile-pass arming, ParseFnParams/ResolveSigType, the dispatch-trap and step-loop arms via stub recorders and slot stubs, the unify/canon tail, and 181 scattered edge arms. Four pragmas whose guards became covered were stripped; zero new pragmas. cover-gate-core: 80.5 → 100.0 (13,978/13,978), CORE_GATE_FLOOR ratchets to 100. |

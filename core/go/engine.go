@@ -2776,7 +2776,7 @@ func (e *Engine) stepWord(val Value) error {
 			if IsSplice(top) {
 				if info, serr := AsSplice(top); serr == nil && spliceIsData(info) {
 					if fwdIdx := e.pendingForwardIdx(); fwdIdx >= 0 {
-						if fwd, ferr := AsForward(e.Tape.At(fwdIdx)); ferr == nil && !bindsReferent(fwd.FuncName) { //covergate:allow interpreter step/dispatch defensive index+error arm; unreachable via eng harness (design/COVERAGE-ALLOWLIST.10.md §engine)
+						if fwd, ferr := AsForward(e.Tape.At(fwdIdx)); ferr == nil && !bindsReferent(fwd.FuncName) {
 							pe := NewParenExpr([]Value{val})
 							pe.pos = val.pos
 							e.Tape.Set(e.Pointer, pe)
