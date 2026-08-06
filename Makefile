@@ -449,7 +449,7 @@ cover-gate-eng:
 # RATCHET towards 100%: raise it as core-standalone coverage grows;
 # never lower it. Same .engout-family isolation as the eng gate so the
 # merged cover-check never merges a stale standalone profile.
-CORE_GATE_FLOOR ?= 80
+CORE_GATE_FLOOR ?= 89
 cover-gate-core:
 	@mkdir -p $(COVER_DIR)
 	@rm -f $(COVER_DIR)/core_standalone.engout

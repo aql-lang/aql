@@ -930,7 +930,7 @@ func (r *Registry) Register(name string, sigs ...Signature) {
 // CoreDefault flag so the export transplant skips them. The word stays in
 // builtinWords — this does NOT introduce a new dispatchable name.
 func (r *Registry) RegisterCoreDefault(name string, sigs ...Signature) {
-	if r == nil || !r.builtinWords[name] { //covergate:allow only ever invoked for a name Register already installed as a builtin word
+	if r == nil || !r.builtinWords[name] {
 		return
 	}
 	stamped := make([]Signature, len(sigs))
@@ -1629,7 +1629,7 @@ func (r *Registry) CallBoruNamed(sig *FnSig, args []Value, captures []CapturedBi
 	// Pop error here means the args stack is nil — a misconfigured
 	// registry; surface it only if sub.Run didn't already fail (the
 	// run error is more informative).
-	if _, popErr := r.Args.Pop(); popErr != nil && err == nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
+	if _, popErr := r.Args.Pop(); popErr != nil && err == nil {
 		err = popErr
 	}
 	r.PopFnBaseline()
@@ -1875,7 +1875,7 @@ func (r *Registry) RunPredicate(constraint, candidate Value) (out Value, matched
 	// Skip the gate for the empty case (input declared as Any or
 	// unset) — those predicates explicitly accept any input.
 	if inputT := predSig.Params[0].Type; inputT != nil && !inputT.Equal(TAny) {
-		if IsBareTypeNode(candidate) { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
+		if IsBareTypeNode(candidate) {
 			// Bare type literal: skip the gate (the literal IS a type,
 			// not an inhabitant — predicate has no value to test).
 		} else if !candidate.Parent.ConformsTo(inputT) {
