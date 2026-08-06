@@ -271,7 +271,7 @@ func checkRecordShapeArgs(r *core.Registry, name string, paramPatterns []*core.V
 	}
 }
 
-func buildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef core.FnDefInfo) core.ReturnsFunc {
+func BuildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef core.FnDefInfo) core.ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
 	paramPatterns := make([]*core.Value, len(s.Params))
 	for i, p := range s.Params {
@@ -674,7 +674,7 @@ func buildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 				// false no_signature errors (a `[Any]`-returning node lookup fed
 				// into another fn's `nd:Map` param — the trie/decision walkers).
 				// Mark it dynamic for optimistic matching, mirroring the native
-				// `[Any]`-return handling in carrierResults.
+				// `[Any]`-return handling in CarrierResults.
 				if t.Equal(core.TAny) {
 					c.Dynamic = true
 				}
@@ -765,7 +765,7 @@ func buildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef cor
 // checkFnBodyAtConstruction runs a static body pass for each boru-bodied overload
 // of a freshly-installed fn, against generalised (carrier) args, so an UNCALLED
 // fn's body is still checked (a called fn is additionally checked per call site
-// via buildFnBodyReturnsFn). Check-mode only; bytecode recording suspended; the
+// via BuildFnBodyReturnsFn). Check-mode only; bytecode recording suspended; the
 // fn name must already be bound (recursion). Generic and Body-less (native /
 // handler) overloads are skipped — a generic body needs per-call type bindings,
 // and a native handler has no boru body to analyse.

@@ -8,7 +8,7 @@ import core "github.com/boru-lang/boru/core/go"
 // the return-conformance mirror, and the quote-param dispatch screen. All
 // of it runs only under an active analysis pass.
 
-// buildFnBodyReturnsFn produces the check-mode ReturnsFn for one boru fn
+// BuildFnBodyReturnsFn produces the check-mode ReturnsFn for one boru fn
 // signature. In static-check mode the engine skips the runtime handler
 // and calls this with carrier-typed args; it analyses the body via
 // AnalyseFnBody (so body diagnostics propagate) and returns the carrier
@@ -109,7 +109,7 @@ func typedContainerCarrier(p core.FnParam, a core.Value) (core.Value, bool) {
 // param (so body reads narrow and disjoint uses are diagnosed), else the plain
 // ParamInputCarrier(p.Type). The main genArgs path uses typedContainerCarrier
 // with the actual arg; the poly-arm (user_poly.go) and construction-check
-// (buildFnBodyReturnsFn) body builders have only the param, so they route
+// (BuildFnBodyReturnsFn) body builders have only the param, so they route
 // here — otherwise `m:{:Integer}`'s `p.Type` is bare Map and reads stay Any.
 func ParamBodyCarrier(p core.FnParam) core.Value {
 	if p.Pattern != nil {
@@ -255,7 +255,7 @@ func stackHasDynamic(stk []core.Value) bool {
 }
 
 // stackHasApproxAny reports whether any residual value is a bare STRICT Any
-// carrier — the lenient approximation buildFnBodyReturnsFn leaves for a
+// carrier — the lenient approximation BuildFnBodyReturnsFn leaves for a
 // 0-net / undeclared call whose body unit declined (and the in-flight
 // recursion bail). Such a value is a PHANTOM: the call nets zero (or an
 // unknown count) at runtime, so a residual carrying one has a count the

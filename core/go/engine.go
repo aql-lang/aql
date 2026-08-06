@@ -3057,7 +3057,7 @@ func (e *Engine) stepWord(val Value) error {
 	// forward collection. Shapes the window declines (non-terminal, variadic
 	// operands, non-contiguous) keep the refusal and fall back. The
 	// interpreter and plain check mode are untouched (recorder inactive).
-	if DriftWindowRecorder != nil && DriftWindowRecorder(e, w, sig, positions) {
+	if DriftWindowRecorder(e, w, sig, positions) {
 		return nil
 	}
 	CheckBraid.RefuseForwardStackDrift(e, sig, positions)

@@ -9,6 +9,16 @@ For language-layer conventions (jsonic integration, registry
 stacks, helper API discipline, panic prevention) see
 `lang/go/CLAUDE.md`.
 
+The kernel is now FOUR modules on a hard chain: `core/go` (the
+interpreter core) → `check/go` (the type checker / analysis pass)
+→ `compiler/go` (the recorder, lowering, the bytecode emitter) →
+`eng/go` (the bytecode VM, the parser bridge, and the generated
+facades over the other three). The check-mode and compile/emit
+machinery documented below therefore LIVES in `check/go` and
+`compiler/go` (design/ENG-FOUR-PIECE.0.md), and each has its own
+module guide; this file stays the single home of the shared kernel
+conventions, which apply to all four modules verbatim.
+
 ## Single-Pass Parsing (CRITICAL)
 
 boru source is converted from jsonic items to engine values in

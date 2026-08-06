@@ -646,7 +646,7 @@ type CompiledFnRef struct {
 	// stamped ref always has poisoned=false).
 	depNames map[string]bool
 	poisoned bool
-	// depSnap is the RUNTIME-stamped twin of the compile-time poisoning above
+	// DepSnap is the RUNTIME-stamped twin of the compile-time poisoning above
 	// (StampDetachedFn): a ref created OUTSIDE a whole-program pass has no
 	// recording EmitState alive to observe later rebinds, so freshness moves
 	// to invoke time. Each dep name maps to the binding state captured when
@@ -662,53 +662,53 @@ type CompiledFnRef struct {
 	// falls to CallBoru, which resolves the live binding exactly as the
 	// interpreter. nil = compile-time ref, no validation (nil is the
 	// unambiguous unset for a map).
-	depSnap map[string]depSnapEntry
-	// restamp is the JIT re-stamp box (REFUSAL-CLOSURE.0 §7c): a DETACHED
-	// ref whose depSnap went stale re-compiles against the LIVE bindings at
+	DepSnap map[string]DepSnapEntry
+	// Restamp is the JIT re-stamp box (REFUSAL-CLOSURE.0 §7c): a DETACHED
+	// ref whose DepSnap went stale re-compiles against the LIVE bindings at
 	// invoke time (CompiledFnRef.jitRestamp) instead of degrading
 	// permanently to CallBoru. Allocated by StampDetachedFn only — a
 	// compile-time ref re-poisons via NotifyNameRebound and never re-stamps
 	// (nil box → the interpreter, as before). A POINTER field keeps the
 	// struct copyable while the box's mutex serialises concurrent invokers
 	// of the same shared sig.
-	restamp *restampBox
+	Restamp *RestampBox
 }
 
-// restampBox carries a detached ref's stamp inputs and its current
-// re-stamped twin (see CompiledFnRef.restamp). tries caps the TOTAL
+// RestampBox carries a detached ref's stamp inputs and its current
+// re-stamped twin (see CompiledFnRef.Restamp). Tries caps the TOTAL
 // re-compiles per ref so a hot rebinding loop cannot pay a compile per
 // invoke — once exhausted, the seam stays on CallBoru (slow, not wrong).
-type restampBox struct {
+type RestampBox struct {
 	mu     sync.Mutex
 	fd     core.FnDefInfo
 	sigIdx int // which own sig this ref compiled (REFUSAL-CLOSURE §7b: per-sig refs)
 	pos    core.SrcPos
-	tries  int
-	cur    *CompiledFnRef
+	Tries  int
+	Cur    *CompiledFnRef
 }
 
-// depSnapEntry is one dep's binding state at stamp time (see depSnap).
-type depSnapEntry struct {
+// DepSnapEntry is one dep's binding state at stamp time (see DepSnap).
+type DepSnapEntry struct {
 	Depth int
 	Gen   int64
 }
 
 // depsFresh reports whether every module-level dep a runtime-stamped unit's
 // body reads still resolves to the binding captured at stamp time on r's def
-// table. A compile-time ref (nil depSnap) is vacuously fresh — its staleness
+// table. A compile-time ref (nil DepSnap) is vacuously fresh — its staleness
 // is handled by NotifyNameRebound poisoning before Finalize. Any mismatch —
 // a changed generation (rebind, undef, in-place replace) or a changed depth
 // (live shadow) — reports false and the caller falls back to the
 // interpreter, so validation only ever degrades toward CallBoru, never away
 // from it.
 func (ref *CompiledFnRef) DepsFresh(r *core.Registry) bool {
-	if ref == nil || ref.depSnap == nil {
+	if ref == nil || ref.DepSnap == nil {
 		return true
 	}
 	if r == nil {
 		return false
 	}
-	for name, snap := range ref.depSnap {
+	for name, snap := range ref.DepSnap {
 		if r.Defs.Gen(name) != snap.Gen || r.Defs.Depth(name) != snap.Depth {
 			return false
 		}

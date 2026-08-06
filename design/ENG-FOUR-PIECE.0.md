@@ -1,6 +1,8 @@
 # ENG-FOUR-PIECE.0 — splitting the kernel into eng → compiler → check → core
 
-**Status:** In progress · **Started:** 2026-08-05 (maintainer instruction:
+**Status:** Go cut COMPLETE (Stage 6, 2026-08-06 — four top-level modules
+on the hard chain; the TS mirror is a later program) · **Started:**
+2026-08-05 (maintainer instruction:
 "refactor eng into the following pieces: core - pure interpreter, check -
 type checker, compiler - compiler, eng - bytecode runner. Dependency tree
 should be: eng -> compiler -> check -> core, and core is standalone.
@@ -109,3 +111,168 @@ S1–S10, risks): [ENG-FOUR-PIECE-RECON.0.md](ENG-FOUR-PIECE-RECON.0.md).
   `var Name = core.Name` func-value re-exports — same call syntax
   at every reference site, no wrapper body to leave permanently
   uncovered (`coldFuncs` in the generator).
+
+## Stage 6 record (2026-08-06) — the check + compiler cut
+
+The final cut. `check/go` and `compiler/go` are now real top-level
+modules, which discharges Amendment 7's "check and compiler remain
+VIRTUAL pieces inside eng/go … until their own cuts".
+
+- **Four modules, one hard chain.** `core/go` (package `core`, the pure
+  interpreter: values, types, matching, registry, step loop) →
+  `check/go` (package `check`, the type checker / analysis pass) →
+  `compiler/go` (package `compiler`, the recorder + lowering + bytecode
+  emitter) → `eng/go` (package `eng`, the bytecode VM + parser bridge +
+  the generated facades), then `basic/go` → `lang/go` → `cmd/go` on eng.
+  Direction is enforced by what each go.mod may require and verified by
+  import grep: core requires no boru sibling (only cockroachdb/apd),
+  check requires core only, compiler requires check+core, eng requires
+  all three. Top-level file split at the cut — core 118 production /
+  166 test, check 14 / 22, compiler 11 / 34, eng 13 / 117; core, check
+  and compiler are flat single-package modules with no sub-packages.
+- **Zero entanglements going in.** The type-checked entanglement
+  inventory run immediately before the cut reported **ZERO** remaining
+  wrong-direction entanglements: Stages 0–3 had already inverted every
+  one behind a seam, so this stage was a file move plus go.mod and
+  facade work, not a redesign. That is decision 4 ("seams before
+  moves") paying out — the physical boundary was the cheap part.
+- **S3 sealed as a slot table.** `check.DispatchBraid`
+  (`check/go/dispatch_hooks.go`) carries five slots — `RecordOutcome`,
+  `TryFoldScalarConst`, `TryRecordPoly`, `CompileUserPolyArms`,
+  `PlanUserPoly` — each backed by a NAMED inactive default
+  (`inactiveDispatch*`) and reached through a private forwarder, so
+  check's call sites read exactly as they did in-package. The compiler
+  installs the live implementations at init
+  (`compiler/go/dispatch_hooks_install.go`); `TestInactiveDispatchBraid`
+  pins the defaults, per the Stage-4 rule that an anonymous default
+  replaced at init is unreachable and fails the merged ADR-008 gate.
+- **The user-poly plan crosses as an OPAQUE handle.** `check.UserPolyPlan`
+  is an interface (`SubstituteJoinedOuts`, `SigIdx`, `Units`, `Impls`,
+  `Sigs`) so the compiler's concrete plan type never enters check's type
+  graph. Contract, documented at the declaration: an installer must
+  return a **nil interface, not a typed nil**, when the plan declines —
+  the install closures normalize this, because a typed-nil plan would
+  read as "planned" at every check-side call site.
+- **The other cross-module registrations** stayed single vars rather
+  than tables, one function each: `core.JoinCarriersHook`
+  (check/go/carrier.go), `core.DriftWindowRecorder` and
+  `core.NewEmitStateHook`/`core.NewIsolatedEmitHook` (compiler), and
+  `core.InstallCompiledRuntime` (eng, S4). Note one honest divergence
+  from decision 4/S2, which put `EmitRecorder`'s home in check: the
+  interface ended up in **core** (`core/go/emit_recorder.go`), because
+  core's step loop is what consults the recorder. Interface at the
+  bottom, implementation at the top — the S2 sketch had it upside down.
+- **Two more generated facades.** eng gains `aliases_check.go` (233
+  lines: 4 type aliases, 2 const re-exports, 65 wrapper funcs) and
+  `aliases_compiler.go` (145 lines: 22 aliases, 52 consts, 11 wrappers)
+  beside `aliases_core.go`, under the same `piecetool -facade` rules
+  (mutable slot tables are NOT mirrored; installers write the qualified
+  name). Two stale artefacts to clean up: both new files carry
+  aliases_core.go's header sentence ("The eng facade over the **core**
+  module"), and `eng/go/piece_map.tsv`'s header still says check and
+  compiler are tracked "until their own cuts". Also worth stating
+  plainly: **`piecetool` is not in the tree** — the facades are
+  committed generated output with no committed generator, so the
+  "regenerate after any surface change" instruction currently has no
+  runnable subject.
+- **Test triage was compiler-driven.** Rather than argue about which
+  suite owns a given test file, every file was moved DOWN to the lowest
+  module that plausibly owned it and the type checker adjudicated: an
+  unresolved identifier meant the file belonged upstack. Cheap, total,
+  and it explains the residue — check/go carries 17 and compiler/go 23
+  `zz_*_test.go` files whose names record the triage order, not a
+  taxonomy. A follow-up pass should rename them by subject.
+
+### The cost: an export pass driven by test placement
+
+A test that arms recording or check state **and then runs the VM** is
+genuinely cross-layer: it cannot live in check or compiler, because
+those modules cannot import eng. To keep such tests, the cut EXPORTED
+check/compiler internals that have no other reason to be public:
+
+- compiler: `EmitEvent`, `EmitOperand`, `ConstOperand`, `EventOperand`,
+  `EmitTrap`, `InterpBodyInert`, `InterpMemberInert`, `DepSnap`,
+  `DepSnapEntry`, `RestampBox`, `Restamp`, `RestampMaxTries`, `Tries`,
+  `Cur` (the last four being `RestampBox`/`CompiledFnRef` fields), plus
+  `TryRecordFallback` and `RewritePromotedRefs` in the same pass.
+- check: `JoinCarriersInner`, `BuildFnBodyReturnsFn`, `CarrierResults`,
+  `RefuseForwardStackDrift`, `RunFnBodyOnce`, `SpliceFnValueCheckResult`,
+  `TryShapedMethodDispatch`.
+- `BoruBodyFd` is the same cost in a different currency: not an export
+  but a test FIXTURE now defined twice, in
+  `compiler/go/stamp_runtime_test.go` and `eng/go/zz_vm_callback_test.go`,
+  because the helper had to exist on both sides of the boundary.
+
+**This is API-surface growth driven by test placement, not by any
+consumer need, and it should be revisited.** Measured at this record,
+only a minority of the exports has a cross-module consumer:
+`check.BuildFnBodyReturnsFn`, `check.CarrierResults`,
+`check.RefuseForwardStackDrift`, `check.SpliceFnValueCheckResult`,
+`check.TryShapedMethodDispatch`, `compiler.DepSnapEntry`,
+`compiler.RestampMaxTries`, `compiler.TryRecordFallback` and the
+`Restamp`/`Tries`/`Cur`/`DepSnap` fields. The emit-side exports
+(`EmitEvent`, `EmitOperand`, `ConstOperand`, `EventOperand`,
+`EmitTrap`, `InterpBodyInert`, `InterpMemberInert`) and
+`JoinCarriersInner`, `RunFnBodyOnce`, `RestampBox` currently have **no
+consumer outside their own module at all**. Each is a public promise
+made by accident. The follow-up is to re-unexport what no longer needs
+to be public, and for the genuinely cross-layer cases to choose
+deliberately between an exported surface and a narrow testing seam —
+not to let test placement keep deciding the API.
+
+### Gate and follow-up state at the cut
+
+- check/go and compiler/go ride the merged ADR-008 gate (both are in
+  `MODULES`) and the race lane (`RACE_MODULES`). There is **no**
+  `cover-gate-check` / `cover-gate-compiler` standalone gate yet; the
+  `(cover-gate-eng, cover-gate-core)` pair is unchanged, with
+  `CORE_GATE_FLOOR` now at **100** after Stage 5.
+- Dependency skew to reconcile: check/go and compiler/go pin
+  `cockroachdb/apd/v3 v3.2.1 // indirect` while core/go and eng/go
+  require `v3.2.3`. The workspace resolves upward so nothing breaks
+  today, but the four go.mod files should agree.
+- Neither new module has a `CLAUDE.md` or a `Makefile`, and no publish
+  or release step covers core/check/compiler (`Makefile` publish
+  targets and `scripts/release.sh` still cover eng, basic, lang, cmd
+  only).
+
+## Post-cut hardening (2026-08-06)
+
+An adversarial review of the cut found five things worth fixing, all
+landed here:
+
+- **The generator is now in the repo.** `piecetool` moved from a
+  scratch directory into `test/go/piecetool`, and `make facades`
+  regenerates all three `eng/go/aliases_*.go` files. Committed
+  generated output with no committed generator is a trap; it is closed.
+  The generator also DERIVES the cold set (facade funcs no consumer
+  calls, emitted as func-value re-exports so no wrapper body sits
+  permanently uncovered) instead of carrying a hand-kept list that
+  rots at every cut. Its "is it called?" probe ignores QUALIFIED calls
+  (`core.Foo(`), which reach the real symbol rather than the wrapper.
+- **`DriftWindowRecorder` joined the seam discipline.** It was the one
+  slot still defaulting to nil with a `!= nil` guard at the call site;
+  it now carries a named `inactiveDriftWindowRecorder` default pinned
+  by `TestInactiveDriftWindowRecorder`, like every other slot.
+- **Downstream `replace` directives.** `basic`, `lang`, `cmd`, `calc`,
+  `wpg`, and `test/go` required the new modules only through
+  `go.work`; any non-workspace build (the release path) would have
+  failed. All six now carry explicit `replace` lines.
+- **Standalone gates for the middle pieces.** `make cover-gate-check`
+  (floor 56) and `make cover-gate-compiler` (floor 62) join
+  cover-gate-core (100) and cover-gate-eng (84). All four are
+  ratchets toward 100; the merged repo-wide gate remains the ADR-008
+  100% contract.
+- **Triage residue swept.** 27 empty `zz_*` stub files removed, and the
+  tests the mechanical triage dropped were restored to the module that
+  can host them.
+
+Two costs of the cut are recorded honestly rather than hidden. First,
+the exported-for-tests set (listed in the Stage 6 record) is API
+surface grown for test placement, not for design — revisit it when the
+straddling tests can be split. Second, the bulk regex renames that
+produced it cost one silent behavioral bug: two `CheckBraid` slot
+assignments ended up CROSSED (each slot holding the other's
+implementation — identical signatures, so nothing failed to compile),
+which silently broke shaped-method compilation until lang's suite
+caught it. Prefer a type-aware rename next time.

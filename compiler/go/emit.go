@@ -56,7 +56,7 @@ const (
 	wordTypedBind = "def:…"
 )
 
-// operandKind discriminates how an emitOperand sources its value. The kind
+// operandKind discriminates how an EmitOperand sources its value. The kind
 // is an explicit enum rather than a set of "-1 means unset" int fields so the
 // struct's ZERO VALUE is the unambiguous opNone (an invalid operand, only ever
 // returned paired with an ok=false flag) — never a valid-looking "const index
@@ -76,7 +76,7 @@ const (
 	opDataScope                    // like opDynScope but a READ-AS-DATA lookup (OpLookupDynScopeData): a fn/parser binding pushes as data, no FnDefInfo defer
 )
 
-// emitOperand names where one dispatch argument comes from. For every kind but
+// EmitOperand names where one dispatch argument comes from. For every kind but
 // opClosure the single idx field carries the kind-specific index/seq; the
 // constructors below are the only construction sites for the indexed kinds, so
 // the kind↔idx pairing can never drift.
@@ -86,7 +86,7 @@ const (
 // event uses resIdx 0; a multi-result call (e.g. `swap`, a multi-return fn)
 // distinguishes its N outputs by 0..N-1, matching the order the VM pushes the
 // handler's results (results[0] deepest, results[N-1] on top).
-type emitOperand struct {
+type EmitOperand struct {
 	kind   operandKind
 	idx    int
 	resIdx int
@@ -96,24 +96,24 @@ type emitOperand struct {
 	// which pops them into the closure value. Both are meaningful only when
 	// kind == opClosure.
 	closureUnit int
-	closureCaps []emitOperand
+	closureCaps []EmitOperand
 }
 
-// constOperand / eventOperand / localOperand / typeOperand build the indexed
-// operand kinds — the only places that pair a kind with its idx. eventOperand
+// ConstOperand / EventOperand / localOperand / typeOperand build the indexed
+// operand kinds — the only places that pair a kind with its idx. EventOperand
 // additionally carries the result index within the producing event (P5).
-func constOperand(idx int) emitOperand { return emitOperand{kind: opConst, idx: idx} }
-func dynScopeOperand(idx int) emitOperand {
-	return emitOperand{kind: opDynScope, idx: idx}
+func ConstOperand(idx int) EmitOperand { return EmitOperand{kind: opConst, idx: idx} }
+func dynScopeOperand(idx int) EmitOperand {
+	return EmitOperand{kind: opDynScope, idx: idx}
 }
-func dataScopeOperand(idx int) emitOperand {
-	return emitOperand{kind: opDataScope, idx: idx}
+func dataScopeOperand(idx int) EmitOperand {
+	return EmitOperand{kind: opDataScope, idx: idx}
 }
-func eventOperand(seq, resIdx int) emitOperand {
-	return emitOperand{kind: opEvent, idx: seq, resIdx: resIdx}
+func EventOperand(seq, resIdx int) EmitOperand {
+	return EmitOperand{kind: opEvent, idx: seq, resIdx: resIdx}
 }
-func localOperand(slot int) emitOperand { return emitOperand{kind: opLocal, idx: slot} }
-func typeOperand(idx int) emitOperand   { return emitOperand{kind: opType, idx: idx} }
+func localOperand(slot int) EmitOperand { return EmitOperand{kind: opLocal, idx: slot} }
+func typeOperand(idx int) EmitOperand   { return EmitOperand{kind: opType, idx: idx} }
 
 // producer locates a recorded value: the producing event's seq and which of
 // that event's results it is (idx 0 for the common single-result case). P5
@@ -188,7 +188,7 @@ type eventFlags struct {
 type emitCall struct {
 	word            string
 	sig             *core.Signature
-	ops             []emitOperand
+	ops             []EmitOperand
 	nout            int // number of results the call pushes (0 for a side-effect word, N for multi-result)
 	pos             core.SrcPos
 	poly            bool                  // dispatch via OpCallNativePoly (runtime MatchSignature)
@@ -227,19 +227,19 @@ type emitCall struct {
 // operand. constCond non-nil means the condition was statically
 // known and only the taken fragment was captured.
 type emitBranch struct {
-	cond                  emitOperand
+	cond                  EmitOperand
 	condFrag              *EmitFragment // list-form condition: lower inline, ends with one Boolean
-	condOut               emitOperand
+	condOut               EmitOperand
 	constCond             *bool
 	hasElse               bool // false = 2-arg if; its result is VARIADIC (0 or 1 values)
 	then, els             *EmitFragment
-	thenOut, elsOut       emitOperand
+	thenOut, elsOut       EmitOperand
 	hasThenOut, hasElsOut bool        // false when the arm DIVERGES (ends in break/continue)
 	thenIsVal             bool        // then arm is a plain VALUE operand (`if cond 99 88`), not a body fragment
-	thenVal               emitOperand // the value-then operand (const/local/type, OR a COMPUTED event when thenComputed) when thenIsVal
+	thenVal               EmitOperand // the value-then operand (const/local/type, OR a COMPUTED event when thenComputed) when thenIsVal
 	thenComputed          bool        // then value is a COMPUTED event eagerly on the stack below the cond (`if c (expr) e`): SWAP cond up, DROP it on the FALSE path
 	elsIsVal              bool        // else arm is a plain VALUE operand (not a body fragment)
-	elsVal                emitOperand // the value-else operand (const/local/type, OR a COMPUTED event when elsComputed) when elsIsVal
+	elsVal                EmitOperand // the value-else operand (const/local/type, OR a COMPUTED event when elsComputed) when elsIsVal
 	elsComputed           bool        // else value is a COMPUTED event eagerly on the stack below the cond (`if c [t] (expr)`): SWAP cond up, DROP it on the taken path
 	pos                   core.SrcPos
 }
@@ -300,9 +300,9 @@ func (br *emitBranch) elseArm() armKind {
 // on the stack — so downstream consumption refuses; only the
 // residual may absorb it.
 type emitLoop struct {
-	start, end, step emitOperand // start/step are always consts in Stage 2
+	start, end, step EmitOperand // start/step are always consts in Stage 2
 	body             *EmitFragment
-	bodyOut          emitOperand
+	bodyOut          EmitOperand
 	hasBodyOut       bool // false: the body nets no value per iteration (or diverges)
 	multiOut         bool // the body nets >1 value per iteration (net drivers): residualN reconciliation
 	iterSlot         int
@@ -319,7 +319,7 @@ type emitLoop struct {
 // operand holding the pre-loop value stored into it before the loop runs.
 type carriedInit struct {
 	slot int
-	init emitOperand
+	init EmitOperand
 }
 
 // emitStore is a recorded frame-local store — the loop-carried def REBIND
@@ -329,7 +329,7 @@ type carriedInit struct {
 // locals[slot] via OpStoreLocal. A store produces no values, so a rebind
 // nets 0 exactly like the interpreter's def.
 type emitStore struct {
-	src  emitOperand
+	src  EmitOperand
 	slot int
 	pos  core.SrcPos
 }
@@ -354,7 +354,7 @@ const (
 // replaces the frame and control never returns to the site).
 type emitUserCall struct {
 	unit int
-	ops  []emitOperand
+	ops  []EmitOperand
 	nout int
 	tail bool
 	pos  core.SrcPos
@@ -388,14 +388,14 @@ type emitUserPolySpec struct {
 // re-runnable token span plus its threaded stack inputs.
 type emitFallback struct {
 	spanIdx int
-	ins     []emitOperand
+	ins     []EmitOperand
 	pos     core.SrcPos
 }
 
-// emitTrap is a recorded terminal trap: a check-mode-suppressed runtime error
+// EmitTrap is a recorded terminal trap: a check-mode-suppressed runtime error
 // (an orphan gen, an unpack of a missing key) compiled as an OpTrap. The
 // program ends at the trap — the recorder drops everything after it.
-type emitTrap struct {
+type EmitTrap struct {
 	spec TrapSpec
 	pos  core.SrcPos
 	// rematchWord, when non-empty, makes this a RUNTIME-REMATCH trap
@@ -407,18 +407,18 @@ type emitTrap struct {
 	// the runtime diagnostic renders as the written tuple. NWritten is
 	// always 1..len(rematchOps); the slice fits inside the window.
 	rematchWord       string
-	rematchOps        []emitOperand
+	rematchOps        []EmitOperand
 	rematchWrittenOff int
 	rematchNWritten   int
 }
 
-// emitEvent is one node of the recorded trace, tagged by kind. The two largest
+// EmitEvent is one node of the recorded trace, tagged by kind. The two largest
 // payloads — emitBranch and emitLoop, each carrying several inline emitOperands
 // — ride behind pointers (set only for their kind, nil otherwise) so the common
 // evCall event does not pay their size on every copy through frames / fragments;
 // the small payloads stay inline. Every consumer is kind-guarded, so a nil
 // br/loop on a non-matching event is never dereferenced.
-type emitEvent struct {
+type EmitEvent struct {
 	seq   int
 	kind  int
 	call  emitCall
@@ -426,7 +426,7 @@ type emitEvent struct {
 	loop  *emitLoop
 	uc    emitUserCall
 	fb    emitFallback
-	trap  emitTrap
+	trap  EmitTrap
 	store *emitStore
 	dyn   *emitDynBind
 }
@@ -453,7 +453,7 @@ type emitDynBind struct {
 	// and is interned UNPOOLED at lowering, only if the bind actually lowers
 	// — record-time interning polluted the canonical const pool (a
 	// reparented `def y:Pos 2` merging with the plain literal 2).
-	src    emitOperand
+	src    EmitOperand
 	srcSeq int // producing event seq for an event-sourced value; -1 otherwise
 	val    core.Value
 	pos    core.SrcPos
@@ -472,7 +472,7 @@ type emitDynBind struct {
 // referencing events BELOW the floor read enclosing computation,
 // which Stage 2's closed-branch lowering refuses.
 type EmitFragment struct {
-	events   []emitEvent
+	events   []EmitEvent
 	startSeq int
 	// residualN is the RECORDED carrier-residual count for a branch ARM (the
 	// number of runtime values the interpreter leaves) — set by RecordBranch. The
@@ -487,7 +487,7 @@ type EmitFragment struct {
 	// when every entry is INERT (const/local/type — no events): the
 	// reconciliation re-pushes them in order per iteration (`for 3 [1 2]`).
 	// Function-typed entries were screened at RecordLoop (parked-fn hazard).
-	residualOps []emitOperand
+	residualOps []EmitOperand
 	// applyArgs, when non-empty, marks a loop body that left a LEADING fn VALUE
 	// (a returned closure / Function carrier on the sim top after the body events)
 	// with these trailing STATIC arg operands above it — the per-iteration dynamic
@@ -497,7 +497,7 @@ type EmitFragment struct {
 	// Resolved at RecordLoop time in the enclosing scope; restricted to re-pushable
 	// operands (const / local / type) so a computed arg — already on the sim — never
 	// double-pushes (such a residual fails the sole-fn check and refuses instead).
-	applyArgs []emitOperand
+	applyArgs []EmitOperand
 	// applyFn, when set, is the leading fn value of the per-iteration apply as a
 	// RE-PUSHABLE operand (a frame-local read — an `args.N` fold of a Function
 	// param inside a fn unit) instead of an event on the sim: the body events
@@ -506,7 +506,7 @@ type EmitFragment struct {
 	// registry FlowCtrl flag set; the VM translates it to the cross-frame
 	// break/continue unwind (escapedFlow), exactly the interpreter's shared-tape
 	// flow resolution.
-	applyFn *emitOperand
+	applyFn *EmitOperand
 	// applyFirst places the per-iteration apply BEFORE the body's other
 	// statements — the source order of `for n [(args.0 1) def acc …]`, where a
 	// continue raised inside the applied body must skip the statements after
@@ -570,7 +570,7 @@ type EmitState struct {
 
 	suspended  int
 	seq        int            // monotonic event sequence
-	frames     [][]emitEvent  // frames[0] = top level; fragments push
+	frames     [][]EmitEvent  // frames[0] = top level; fragments push
 	fragFloors []int          // startSeq per open fragment frame
 	captureArm bool           // next RunCarrierBodyWithDefs records a fragment
 	loopArm    bool           // next AnalyseLoopBody records its final round
@@ -700,7 +700,7 @@ type EmitState struct {
 	// consolidates the former parallel zeroOutSeq/typeOut/valueDefs/genericSeq
 	// maps: each is a "property of event N", read via a producer's seq
 	// (producedBy[id].seq), so they stay seq-keyed rather than moving onto the
-	// value-copied emitEvent struct (a flag set after append wouldn't reach the
+	// value-copied EmitEvent struct (a flag set after append wouldn't reach the
 	// frame/fragment copies).
 	eventInfo map[int]eventFlags
 	consts    []core.Value
@@ -891,7 +891,7 @@ type fnUnitRec struct {
 	// OR a diverging body (every path tail-calls) — fragDiverges(frag)
 	// distinguishes them (a diverging body emits no RET; a 0-result body
 	// emits a bare RET).
-	outOps []emitOperand
+	outOps []EmitOperand
 	// dynTrailArity > 0 marks a body whose ENTIRE residual is a paren-bounded
 	// TRAILING fn-value apply (`(prev key comp)`): outOps are [args…, fn] (fn on
 	// top) and the unit lowering emits OpCallDynTrailTop(dynTrailArity) after seating
@@ -919,7 +919,7 @@ type fnUnitRec struct {
 	// apply-loop value region under an inert tail — the values must sit BELOW
 	// the loop's runtime region, which only exists once the loop has run, so
 	// they cannot be re-pushed by the RET seating. Paired with retReplay.
-	retPrefix []emitOperand
+	retPrefix []EmitOperand
 	// retReplay marks a body whose RET takes the replay trim discipline
 	// (CompiledFn.RetReplay): a whole-frame dynamic apply (dynFrameW) or a
 	// variadic apply-loop residual (retPrefix) leaves a runtime-variable
@@ -963,7 +963,7 @@ func NewEmitState() *EmitState {
 	return &EmitState{
 		Compilable: true,
 		SiteCounts: map[string]int{},
-		frames:     [][]emitEvent{nil},
+		frames:     [][]EmitEvent{nil},
 		units:      []*emitUnit{{localByID: map[string]int{}}},
 		fnUnits:    map[string]int{},
 		producedBy: map[string]producer{},
@@ -981,7 +981,7 @@ func NewEmitState() *EmitState {
 // the whole residual in exact order. Returns nil for an in-order residual and
 // for any residual carrying a fn value or dynamic value (the auto-apply
 // boundary's territory: its stack layout is the apply's contract).
-func residualForceOrder(ops []emitOperand, vals []core.Value) map[int]bool {
+func residualForceOrder(ops []EmitOperand, vals []core.Value) map[int]bool {
 	for _, v := range vals {
 		if v.Dynamic || core.IsFnValueResidual(v) {
 			return nil
@@ -1018,7 +1018,7 @@ func residualForceOrder(ops []emitOperand, vals []core.Value) map[int]bool {
 // residual uses residualForceOrder (the `do [x 1 add 2]` → [const-x, event]
 // event-above-inert case). Extracted from the finish closure to keep
 // StartFnCompile under the cyclomatic-complexity gate.
-func (es *EmitState) residualForceOrderFor(dynTrail int, rec *fnUnitRec, ops []emitOperand, vals []core.Value) map[int]bool {
+func (es *EmitState) residualForceOrderFor(dynTrail int, rec *fnUnitRec, ops []EmitOperand, vals []core.Value) map[int]bool {
 	if dynTrail != 0 || len(ops) != len(vals) {
 		return nil
 	}
@@ -1043,7 +1043,7 @@ func (es *EmitState) residualForceOrderFor(dynTrail int, rec *fnUnitRec, ops []e
 // the sound interpreter fallback) when an event result is VARIADIC (a
 // runtime-variable count cannot store to one slot) or a multi-result event
 // participates (promotion re-pushes single results only).
-func (es *EmitState) replayForceOrder(ops []emitOperand) map[int]bool {
+func (es *EmitState) replayForceOrder(ops []EmitOperand) map[int]bool {
 	seenNonEvent, outOfOrder := false, false
 	for _, op := range ops {
 		if op.kind == opEvent {
@@ -1407,7 +1407,7 @@ type lastUserPolyNote struct {
 	nout int
 }
 
-func (es *EmitState) appendEvent(ev emitEvent) int {
+func (es *EmitState) appendEvent(ev EmitEvent) int {
 	es.lastUserPoly = nil
 	n := len(es.frames) - 1
 	// Dead code after a divergent terminal, IN A FRAGMENT: a diverging call
@@ -1611,7 +1611,7 @@ func (es *EmitState) SplitEventRegionBind(name string, v core.Value) (core.Value
 
 // eventBySeq finds the event with the given seq in the CURRENT frame (nil
 // when absent — a fragment-frame seq after the frame closed).
-func (es *EmitState) eventBySeq(seq int) *emitEvent {
+func (es *EmitState) eventBySeq(seq int) *EmitEvent {
 	frame := es.frames[len(es.frames)-1]
 	for i := range frame {
 		if frame[i].seq == seq {
@@ -1624,7 +1624,7 @@ func (es *EmitState) eventBySeq(seq int) *emitEvent {
 // resolveOperand maps a dispatch value to its provenance: a prior
 // event's output, or an inert constant (concrete at the dispatch, or
 // a stripped literal whose original RememberOriginal saved).
-func (es *EmitState) resolveOperand(v core.Value) (emitOperand, bool) {
+func (es *EmitState) resolveOperand(v core.Value) (EmitOperand, bool) {
 	// A CAPTURE of the CURRENT unit overrides events-first: the captured value
 	// may carry a producedBy entry from the ENCLOSING unit (a computed
 	// `def a (h add 1)` snapshotted into a closure), but that event lives in the
@@ -1672,7 +1672,7 @@ func (es *EmitState) resolveOperand(v core.Value) (emitOperand, bool) {
 					return op, true
 				}
 			}
-			return eventOperand(pr.seq, pr.idx), true
+			return EventOperand(pr.seq, pr.idx), true
 		}
 	}
 	if slot, ok := es.units[len(es.units)-1].localByID[v.ID]; ok {
@@ -1711,12 +1711,12 @@ func (es *EmitState) resolveOperand(v core.Value) (emitOperand, bool) {
 		return es.dynScopeRescue(v)
 	}
 	// At MODULE scope a NoEvalArgs body that is inert except for InterpStrings
-	// (interpBodyInert) bakes as code-as-data and is re-interpreted against the
+	// (InterpBodyInert) bakes as code-as-data and is re-interpreted against the
 	// registry — sound where there is no enclosing VM frame to shadow (see
 	// noEvalBodiesInertScoped). isInertConst stays strict so this admission never
 	// reaches a compiled fn frame: there the body refuses at the Stage-2 gate
 	// before resolveOperand, so the operand never gets here.
-	if !core.IsInertConst(lit) && !(len(es.units) == 1 && interpBodyInert(lit)) {
+	if !core.IsInertConst(lit) && !(len(es.units) == 1 && InterpBodyInert(lit)) {
 		return es.dynScopeRescue(v)
 	}
 	// An ACTIVE-token MAP (`{line: src}` — a word / paren / interpolation
@@ -1763,14 +1763,14 @@ func (es *EmitState) resolveOperand(v core.Value) (emitOperand, bool) {
 		// exists, refuse — the sound fallback (PR #225 P1).
 		if embedsEnclosingCompound(lit, es.units[len(es.units)-1].enclosingIDs) {
 			es.MarkUncompilable("fn body literal embeds an enclosing binding's container (per-call spine identity over a shared member)")
-			return emitOperand{}, false
+			return EmitOperand{}, false
 		}
 		if es.freshenConst == nil {
 			es.freshenConst = map[int]bool{}
 		}
 		es.freshenConst[idx] = true
 	}
-	return constOperand(idx), true
+	return ConstOperand(idx), true
 }
 
 // embedsEnclosingCompound reports whether a compound literal (recursively)
@@ -1986,13 +1986,13 @@ func fnValueInputs(params []core.FnParam) (inputs []core.Value, names []string) 
 	return inputs, names
 }
 
-func (es *EmitState) tryReturnedClosure(v core.Value, pos core.SrcPos) (emitOperand, bool) {
+func (es *EmitState) tryReturnedClosure(v core.Value, pos core.SrcPos) (EmitOperand, bool) {
 	if es == nil || es.reg == nil || v.Carrier || v.Dynamic || v.Quoted {
 		// A QUOTED fn value is DATA the interpreter keeps unapplied; lowering
 		// it to an opClosure drops the Quoted flag, so the VM would
 		// auto-apply it (`[quote (fn …)]` returned then applied — PR #279
 		// review: compiled [3] vs interp [fn (Integer) 2]). Keep it inert.
-		return emitOperand{}, false
+		return EmitOperand{}, false
 	}
 	fd, ok := v.Data.(core.FnDefInfo)
 	// An ANONYMOUS lambda (=>/afn) or a NAMELESS verbose `fn` construction
@@ -2000,7 +2000,7 @@ func (es *EmitState) tryReturnedClosure(v core.Value, pos core.SrcPos) (emitOper
 	// returned closures; a NAMED fn value carries registry dispatch and
 	// recursion semantics this model does not own, so it declines.
 	if !ok || (!fd.Anonymous && fd.Name != "") {
-		return emitOperand{}, false
+		return EmitOperand{}, false
 	}
 	// CAPTURELESS values decline too — the const bake (the caller's
 	// materialise path) carries the REAL FnDefInfo, which a native that
@@ -2013,16 +2013,16 @@ func (es *EmitState) tryReturnedClosure(v core.Value, pos core.SrcPos) (emitOper
 	// a CAPTURING fn — which cannot bake (its captures are runtime values)
 	// — takes the closure unit; that is §9.2d's genuine coverage.
 	if len(fd.Captured) == 0 {
-		return emitOperand{}, false
+		return EmitOperand{}, false
 	}
 	// Resolve the lambda's captures in the ENCLOSING (factory body) scope, the
 	// same operand resolution recordClosureDispatch uses for an in-place closure.
 	// A capture that does not resolve (unreachable enclosing binding) declines.
-	capOps := make([]emitOperand, len(fd.Captured))
+	capOps := make([]EmitOperand, len(fd.Captured))
 	for i, cb := range fd.Captured {
 		op, okCap := es.resolveOperand(cb.Value)
 		if !okCap {
-			return emitOperand{}, false
+			return EmitOperand{}, false
 		}
 		capOps[i] = op
 	}
@@ -2036,7 +2036,7 @@ func (es *EmitState) tryReturnedClosure(v core.Value, pos core.SrcPos) (emitOper
 	}
 	lam, hasOwn := fd.FirstOwnSig()
 	if own != 1 || !hasOwn || len(lam.Body()) == 0 || bodyToksHaveSentinel(lam.Body()) {
-		return emitOperand{}, false
+		return EmitOperand{}, false
 	}
 	inputs, paramNames := fnValueInputs(lam.Params)
 	r := es.reg
@@ -2059,7 +2059,7 @@ func (es *EmitState) tryReturnedClosure(v core.Value, pos core.SrcPos) (emitOper
 	_, probeOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	r.Check.Emit = es
 	if !probeOK {
-		return emitOperand{}, false
+		return EmitOperand{}, false
 	}
 	// The probe ran the body END TO END, so it knows the pass's terminal
 	// environment mode: a dyn-body dispatch (tryRecordDynBody) anywhere
@@ -2077,10 +2077,10 @@ func (es *EmitState) tryReturnedClosure(v core.Value, pos core.SrcPos) (emitOper
 	// REAL: compile into this program (deterministic success after a clean probe).
 	unit, realOK := compileClosureBody(r, "fnval", 1, false, false, lam.Body(), inputs, paramNames, fd.Captured, ClosureInValue, pos)
 	if !realOK || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
-		return emitOperand{}, false
+		return EmitOperand{}, false
 	}
 	es.fnRecs[unit].render = core.FormatFnDef(fd)
-	return emitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}, true
+	return EmitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}, true
 }
 
 // compileStoredFnUnit compiles a CAPTURE-FREE store-fn handler body (the fn a
@@ -2146,7 +2146,7 @@ func (es *EmitState) compileStoredFnUnit(fd core.FnDefInfo, sigIdx int, pos core
 // unstamped sibling simply interprets via CallBoru, per-sig and fail-safe.
 // Shared by the compile-time store-fn bake and the runtime detached stamp
 // so the two gates cannot drift. Capture-freedom is the CALLER's gate
-// (recordCallOperands / StampFnValue): it is a property of the storing
+// (RecordCallOperands / StampFnValue): it is a property of the storing
 // context, not of the unit shape.
 func storedSigEligible(sig *core.Signature) bool {
 	if sig.Fallback {
@@ -2565,7 +2565,7 @@ func fragDivergesDeep(frag *EmitFragment) bool {
 	return eventDivergesDeep(&frag.events[len(frag.events)-1])
 }
 
-func eventDivergesDeep(ev *emitEvent) bool {
+func eventDivergesDeep(ev *EmitEvent) bool {
 	switch ev.kind {
 	case evBreak, evContinue:
 		return true
@@ -2658,16 +2658,16 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 	// both-arms-net-zero → zeroOut marking cascade through nested guards.
 	b.ThenStk = es.stripZeroOutPhantoms(b.ThenStk)
 	b.ElsStk = es.stripZeroOutPhantoms(b.ElsStk)
-	ev := emitEvent{kind: evBranch, br: &emitBranch{
+	ev := EmitEvent{kind: evBranch, br: &emitBranch{
 		constCond: b.ConstCond, hasElse: b.HasElse, pos: b.Pos,
 	}}
-	resolveArm := func(frag *EmitFragment, stk []core.Value, name string) (emitOperand, bool, bool) {
+	resolveArm := func(frag *EmitFragment, stk []core.Value, name string) (EmitOperand, bool, bool) {
 		if frag == nil {
 			es.MarkUncompilable("if: " + name + "-branch not captured")
-			return emitOperand{}, false, false
+			return EmitOperand{}, false, false
 		}
 		if fragDiverges(frag) {
-			return emitOperand{}, false, true
+			return EmitOperand{}, false, true
 		}
 		if len(stk) == 0 {
 			// A 0-value arm (an empty `[]`, a 0-value word, or a raise that
@@ -2675,12 +2675,12 @@ func (es *EmitState) RecordBranch(b BranchRecord) {
 			// arm. When the SIBLING arm nets a value the branch is VARIADIC
 			// (0-or-1) — lowerArms marks it and only the program residual
 			// absorbs it; when BOTH arms net 0 the caller refuses below.
-			return emitOperand{}, false, true
+			return EmitOperand{}, false, true
 		}
 		op, ok := es.resolveOperand(stk[len(stk)-1])
 		if !ok {
 			es.MarkUncompilable("if: " + name + "-branch result of unknown provenance")
-			return emitOperand{}, false, false
+			return EmitOperand{}, false, false
 		}
 		return op, true, true
 	}
@@ -2922,7 +2922,7 @@ func (es *EmitState) armOutVariadic(stk []core.Value) bool {
 // condition body (lowered inline), or a const / local / type cond (pushed). A
 // statically-known (const-folded) condition is handled by the disjoint
 // const-cond path, never here.
-func computedArmCondOK(b BranchRecord, cond emitOperand) bool {
+func computedArmCondOK(b BranchRecord, cond EmitOperand) bool {
 	if b.ConstCond != nil {
 		return false
 	}
@@ -3113,7 +3113,7 @@ func (es *EmitState) RecordDefRebind(name string, v core.Value, pos core.SrcPos)
 		es.MarkUncompilable("loop-carried def `" + name + "` rebind of unknown provenance")
 		return
 	}
-	es.appendEvent(emitEvent{kind: evStore, store: &emitStore{src: src, slot: slot, pos: pos}})
+	es.appendEvent(EmitEvent{kind: evStore, store: &emitStore{src: src, slot: slot, pos: pos}})
 }
 
 // RefuseCarriedUndef marks the program uncompilable when `undef` targets a
@@ -3316,7 +3316,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 			// phantom None in the residual but produces 0 runtime values, so it
 			// leaves NO operand — skip it, exactly as the top-level residual
 			// reconciliation does. A 0-result body leaves outOps empty (a bare RET).
-			ops := make([]emitOperand, 0, len(bodyStk))
+			ops := make([]EmitOperand, 0, len(bodyStk))
 			vals := make([]core.Value, 0, len(bodyStk))
 			for _, v := range bodyStk {
 				if pr, ok := es.producedBy[v.ID]; ok && es.eventInfo[pr.seq].zeroOut {
@@ -3548,7 +3548,7 @@ func (es *EmitState) StartFnCompile(key, name string, fnReg *core.Registry, args
 // leading inerts; a residual with NO event is pure data whose only result is the
 // TOP operand. Only called for len(ops) > 1; never drops an event (the top is at
 // or after the first event) or a trailing inert.
-func trimToTopResult(ops []emitOperand) []emitOperand {
+func trimToTopResult(ops []EmitOperand) []EmitOperand {
 	for i := range ops {
 		if ops[i].kind == opEvent {
 			return ops[i:]
@@ -3614,7 +3614,7 @@ func (es *EmitState) RecordUserCall(unit int, args []core.Value, outs []core.Val
 		return
 	}
 	rec := es.fnRecs[unit]
-	ops := make([]emitOperand, len(args), len(args)+len(rec.caps))
+	ops := make([]EmitOperand, len(args), len(args)+len(rec.caps))
 	for i, a := range args {
 		op, ok := es.resolveOperand(a)
 		if !ok {
@@ -3631,7 +3631,7 @@ func (es *EmitState) RecordUserCall(unit int, args []core.Value, outs []core.Val
 		}
 		ops = append(ops, op)
 	}
-	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{unit: unit, ops: ops, nout: len(outs), pos: pos}})
+	seq := es.appendEvent(EmitEvent{kind: evCallUser, uc: emitUserCall{unit: unit, ops: ops, nout: len(outs), pos: pos}})
 	es.SiteCounts[SiteMono]++
 	// A call to an ALREADY-variadic fn yields a runtime-variable count itself, so
 	// the result propagates variadic (a branch arm / body residual carrying it is
@@ -3663,7 +3663,7 @@ func (es *EmitState) RecordUserPolyCall(word string, ownerReg *core.Registry, si
 	if !es.Active() {
 		return
 	}
-	ops := make([]emitOperand, len(args))
+	ops := make([]EmitOperand, len(args))
 	for i, a := range args {
 		op, ok := es.resolveOperand(a)
 		if !ok {
@@ -3672,7 +3672,7 @@ func (es *EmitState) RecordUserPolyCall(word string, ownerReg *core.Registry, si
 		}
 		ops[i] = op
 	}
-	seq := es.appendEvent(emitEvent{kind: evCallUser, uc: emitUserCall{
+	seq := es.appendEvent(EmitEvent{kind: evCallUser, uc: emitUserCall{
 		unit: -1, ops: ops, nout: len(outs), pos: pos,
 		poly: &emitUserPolySpec{word: word, reg: ownerReg, sigIdx: sigIdx, units: units, impls: impls, sigs: sigs},
 	}})
@@ -3768,7 +3768,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 	if !ok {
 		return false
 	}
-	ops := make([]emitOperand, 0, len(args)+1)
+	ops := make([]EmitOperand, 0, len(args)+1)
 	ops = append(ops, fnOp)
 	for i := len(args) - 1; i >= 0; i-- {
 		if core.IsFnValueResidual(args[i]) {
@@ -3822,7 +3822,7 @@ func (es *EmitState) RecordDynApply(args []core.Value, fn, out core.Value, pos c
 		unquote = true
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote}})
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordDynApply, ops: ops, nout: 1, pos: pos, dynApply: len(args), dynApplyUnquote: unquote}})
 	es.setProduced(out, seq)
 	return true
 }
@@ -3841,7 +3841,7 @@ func (es *EmitState) captureInertArmResidual(frag *EmitFragment, stk []core.Valu
 	if frag == nil || len(stk) < 2 {
 		return
 	}
-	ops := make([]emitOperand, 0, len(stk))
+	ops := make([]EmitOperand, 0, len(stk))
 	for i := range stk {
 		if core.SigTypeMatches(stk[i], core.TFunction) {
 			return
@@ -3882,7 +3882,7 @@ func (es *EmitState) RecordLoop(start, end, step core.Value, body *EmitFragment,
 		es.MarkUncompilable("for: range of unknown provenance")
 		return
 	}
-	rangeOpOK := func(op emitOperand) bool { return op.kind == opConst || op.kind == opLocal }
+	rangeOpOK := func(op EmitOperand) bool { return op.kind == opConst || op.kind == opLocal }
 	if !rangeOpOK(startOp) || !rangeOpOK(stepOp) {
 		// A const or a re-pushable frame LOCAL (a param read — `for [n 5]
 		// [...]`) lowers via the same pushOperand path the computed-END case
@@ -3934,7 +3934,7 @@ func (es *EmitState) RecordLoop(start, end, step core.Value, body *EmitFragment,
 			// so the residualN reconciliation cannot seat them from the sim —
 			// capture the full operand list for a per-iteration re-push instead.
 			allInert := true
-			var inertOps []emitOperand
+			var inertOps []EmitOperand
 			for i := range bodyStk {
 				op, okOp := es.resolveOperand(bodyStk[i])
 				if !okOp || op.kind == opEvent {
@@ -3974,7 +3974,7 @@ func (es *EmitState) RecordLoop(start, end, step core.Value, body *EmitFragment,
 		return
 	}
 	lp.body, lp.iterSlot = body, slot
-	seq := es.appendEvent(emitEvent{kind: evLoop, loop: lp})
+	seq := es.appendEvent(EmitEvent{kind: evLoop, loop: lp})
 	es.SiteCounts[SiteMono]++
 	es.setProduced(out, seq)
 	f := es.eventInfo[seq]
@@ -4070,7 +4070,7 @@ func (es *EmitState) setLoopBodyApply(body *EmitFragment, bodyStk []core.Value) 
 	} else if fnOp.kind != opEvent {
 		return false
 	}
-	applyArgs := make([]emitOperand, 0, len(bodyStk)-1)
+	applyArgs := make([]EmitOperand, 0, len(bodyStk)-1)
 	for _, a := range bodyStk[1:] {
 		if a.Dynamic || core.IsFnValueResidual(a) {
 			return false
@@ -4098,7 +4098,7 @@ func (es *EmitState) RecordFallback(span core.FallbackSpan, ins []core.Value, ou
 	if !es.Active() {
 		return false
 	}
-	ops := make([]emitOperand, len(ins))
+	ops := make([]EmitOperand, len(ins))
 	for i, in := range ins {
 		op, ok := es.resolveOperand(in)
 		if !ok {
@@ -4109,7 +4109,7 @@ func (es *EmitState) RecordFallback(span core.FallbackSpan, ins []core.Value, ou
 	span.NIn = len(ins)
 	idx := len(es.fallbacks)
 	es.fallbacks = append(es.fallbacks, span)
-	seq := es.appendEvent(emitEvent{kind: evFallback, fb: emitFallback{spanIdx: idx, ins: ops, pos: pos}})
+	seq := es.appendEvent(EmitEvent{kind: evFallback, fb: emitFallback{spanIdx: idx, ins: ops, pos: pos}})
 	es.SiteCounts[SiteDynamic]++
 	es.setProduced(out, seq)
 	return true
@@ -4233,7 +4233,7 @@ func (es *EmitState) RecordTrap(code, detail, word, hint string, pos core.SrcPos
 	if es.trapAt != 0 {
 		return true
 	}
-	es.trapAt = es.appendEvent(emitEvent{kind: evTrap, trap: emitTrap{
+	es.trapAt = es.appendEvent(EmitEvent{kind: evTrap, trap: EmitTrap{
 		spec: TrapSpec{Code: code, Detail: detail, Word: word, Hint: hint},
 		pos:  pos,
 	}})
@@ -4258,7 +4258,7 @@ func (es *EmitState) RecordTrapErr(ae *core.BoruError, pos core.SrcPos) bool {
 	if es.trapAt != 0 {
 		return true
 	}
-	es.trapAt = es.appendEvent(emitEvent{kind: evTrap, trap: emitTrap{
+	es.trapAt = es.appendEvent(EmitEvent{kind: evTrap, trap: EmitTrap{
 		spec: TrapSpec{
 			Code: ae.Code, Detail: ae.Detail, Word: ae.Src, Hint: ae.Hint,
 			Spans: ae.Spans, Notes: ae.Notes, Suggestions: ae.Suggestions,
@@ -4279,7 +4279,7 @@ func (es *EmitState) RecordDispatchRematchValues(word string, vals []core.Value,
 	if !es.Active() || len(vals) == 0 {
 		return false
 	}
-	ops := make([]emitOperand, len(vals))
+	ops := make([]EmitOperand, len(vals))
 	for i, v := range vals {
 		op, ok := es.resolveOperand(v)
 		if !ok {
@@ -4302,7 +4302,7 @@ func (es *EmitState) RecordDispatchRematchValues(word string, vals []core.Value,
 // (nWritten 1.., the slice inside the window — anything else declines, the
 // producer's proof did not hold). Same top-level-only guard and
 // first-trap-wins latch as RecordTrap.
-func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, writtenOff, nWritten int, pos core.SrcPos) bool {
+func (es *EmitState) RecordDispatchRematch(word string, ops []EmitOperand, writtenOff, nWritten int, pos core.SrcPos) bool {
 	if word == "" || len(ops) == 0 {
 		return false
 	}
@@ -4315,9 +4315,9 @@ func (es *EmitState) RecordDispatchRematch(word string, ops []emitOperand, writt
 	if es.trapAt != 0 {
 		return true
 	}
-	es.trapAt = es.appendEvent(emitEvent{kind: evTrap, trap: emitTrap{
+	es.trapAt = es.appendEvent(EmitEvent{kind: evTrap, trap: EmitTrap{
 		rematchWord:       word,
-		rematchOps:        append([]emitOperand(nil), ops...),
+		rematchOps:        append([]EmitOperand(nil), ops...),
 		rematchWrittenOff: writtenOff,
 		rematchNWritten:   nWritten,
 		pos:               pos,
@@ -4362,8 +4362,8 @@ func (es *EmitState) RecordTypedBind(spec core.TypedBindSpec, in, out core.Value
 		return out, false
 	}
 	sp := spec
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
-		word: wordTypedBind, ops: []emitOperand{op}, nout: 1, pos: pos, typedBind: &sp,
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{
+		word: wordTypedBind, ops: []EmitOperand{op}, nout: 1, pos: pos, typedBind: &sp,
 	}})
 	out.ID = core.GenerateID(core.IDPrefixForType(out.Parent))
 	es.setProduced(out, seq)
@@ -4414,7 +4414,7 @@ func (es *EmitState) RecordCall(word string, sig *core.Signature, args, outs []c
 	if es.recordCallRefusal(word, sig, args, outs, pos, forceDynOut, quoteInertOK) {
 		return
 	}
-	ops, ok := es.recordCallOperands(word, sig, args)
+	ops, ok := es.RecordCallOperands(word, sig, args)
 	if !ok {
 		return
 	}
@@ -4426,7 +4426,7 @@ func (es *EmitState) RecordCall(word string, sig *core.Signature, args, outs []c
 	// and the catching word wraps the raised error, instead of islanding.
 	diverges := sig.CompileEffect.Has(core.CompileDiverges) ||
 		(sig.CompileEffect.Has(core.CompileValueDiverges) && len(outs) == 0)
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos, diverges: diverges}})
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos, diverges: diverges}})
 	// A fallible multi-value catch body reaching the generic path (the
 	// closure probe declined): same variadic mark as RecordClosureCall —
 	// the caught path nets 1 where the static seat expects N (L-DO).
@@ -4681,9 +4681,9 @@ func (es *EmitState) recordCallRefusal(word string, sig *core.Signature, args, o
 	case word == "break" && len(outs) == 0:
 		// A flow-control terminator, not a call: the enclosing loop's
 		// lowering turns it into a JMP to the loop end.
-		es.appendEvent(emitEvent{kind: evBreak, call: emitCall{word: word, pos: pos}})
+		es.appendEvent(EmitEvent{kind: evBreak, call: emitCall{word: word, pos: pos}})
 	case word == "continue" && len(outs) == 0:
-		es.appendEvent(emitEvent{kind: evContinue, call: emitCall{word: word, pos: pos}})
+		es.appendEvent(EmitEvent{kind: evContinue, call: emitCall{word: word, pos: pos}})
 	case word == "for" && makeListRange(es, args):
 		// `for` over a COMPUTED range list (`for [1, (1 add 2)] [i]`) — the range
 		// assembled via OpMakeList. A literal-const or local range lowers fine
@@ -4765,7 +4765,7 @@ func (es *EmitState) dynamicStackShuffleOK(word string, sig *core.Signature) boo
 	return true
 }
 
-// recordCallOperands resolves a lowerable native dispatch's operands. It refuses
+// RecordCallOperands resolves a lowerable native dispatch's operands. It refuses
 // (marking the program uncompilable, returning ok=false) when a fn-valued operand
 // would reach a fn-INVOKING word — that handler re-steps the fn on the tape,
 // which the VM cannot honour (Stage 3). A word declaring CompileReadsFn
@@ -4779,7 +4779,7 @@ func (es *EmitState) dynamicStackShuffleOK(word string, sig *core.Signature) boo
 // types are NOT const-bakeable (absent from isInertConst's whitelist), so a
 // pooled compound const can never reach one — the receiver is always a computed
 // event or a frame local.
-func (es *EmitState) recordCallOperands(word string, sig *core.Signature, args []core.Value) ([]emitOperand, bool) {
+func (es *EmitState) RecordCallOperands(word string, sig *core.Signature, args []core.Value) ([]EmitOperand, bool) {
 	introspect := sig.CompileEffect.Has(core.CompileReadsFn)
 	inertFn := introspect || sig.CompileEffect.Has(core.CompileStoresFn)
 	for i, t := range sig.ArgTypes() {
@@ -4802,7 +4802,7 @@ func (es *EmitState) recordCallOperands(word string, sig *core.Signature, args [
 			return nil, false
 		}
 	}
-	ops := make([]emitOperand, len(args))
+	ops := make([]EmitOperand, len(args))
 	for i, a := range args {
 		// STORE-FN edge: a word that stashes a fn to invoke LATER (serve-raw)
 		// gets its capture-free handler body compiled to its own unit, and a
@@ -4859,7 +4859,7 @@ func (es *EmitState) recordCallOperands(word string, sig *core.Signature, args [
 		// the word runs it on the interpreter, unchanged.
 		if sig.CompileEffect.Has(core.CompileStoresBody) && sig.NoEvalArgs != nil && sig.NoEvalArgs[i] {
 			if carrier, cok := es.compileStoredBody(a); cok {
-				ops[i] = constOperand(es.intern(carrier))
+				ops[i] = ConstOperand(es.intern(carrier))
 				continue
 			}
 		}
@@ -4881,7 +4881,7 @@ func (es *EmitState) recordCallOperands(word string, sig *core.Signature, args [
 					rebuilt[j] = elems[j]
 				}
 				if any {
-					ops[i] = constOperand(es.intern(core.WithPos(core.NewList(rebuilt), a)))
+					ops[i] = ConstOperand(es.intern(core.WithPos(core.NewList(rebuilt), a)))
 					continue
 				}
 			}
@@ -4899,7 +4899,7 @@ func (es *EmitState) recordCallOperands(word string, sig *core.Signature, args [
 		if len(es.units) == 1 && len(sig.StoredBodies) > 0 && sig.NoEvalArgs != nil && sig.NoEvalArgs[i] {
 			if spec := storedBodySpecFor(sig, i); spec != nil {
 				if carrier, cok := es.compileStoredParamBody(a, spec.Params); cok {
-					ops[i] = constOperand(es.intern(carrier))
+					ops[i] = ConstOperand(es.intern(carrier))
 					continue
 				}
 			}
@@ -4915,7 +4915,7 @@ func (es *EmitState) recordCallOperands(word string, sig *core.Signature, args [
 					// body leaves the captured names as bare Words with no binding
 					// (`word(bse)`), so a later invocation reads them unbound — the
 					// capturing-sink miscompile. It falls to the closure path below.
-					op, ok = constOperand(es.intern(a)), true
+					op, ok = ConstOperand(es.intern(a)), true
 				default:
 					// A CAPTURING anonymous lambda in a store-fn / fn-inert slot
 					// (`Net.serve-raw {…} ([conn] => [ handle conn store ])`,
@@ -4971,7 +4971,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []core.Value, pos co
 		es.MarkUncompilable("fn value read from a container auto-dispatches (Stage 3)")
 		return true
 	}
-	ops := make([]emitOperand, len(args))
+	ops := make([]EmitOperand, len(args))
 	for i := range args {
 		a := args[i]
 		// A TYPE-NAME word in the claimed window — the un-stepped `Bytes` in
@@ -5001,7 +5001,7 @@ func (es *EmitState) RecordPolyCall(word string, args, outs []core.Value, pos co
 		ops[i] = op
 	}
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: len(outs), pos: pos, poly: true, polyReg: ownerReg, polyNoMatch: noMatch}})
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: word, ops: ops, nout: len(outs), pos: pos, poly: true, polyReg: ownerReg, polyNoMatch: noMatch}})
 	switch len(outs) {
 	case 0:
 		// A 0-output poly (a side-effect word like the test framework's
@@ -5054,7 +5054,7 @@ func (es *EmitState) RecordDynMethod(fn core.Value, args, outs []core.Value, wor
 	if !ok {
 		return false
 	}
-	ops := make([]emitOperand, 0, len(args)+1)
+	ops := make([]EmitOperand, 0, len(args)+1)
 	ops = append(ops, fnOp)
 	for i := range args {
 		op, ok := es.resolveOperand(args[i])
@@ -5064,7 +5064,7 @@ func (es *EmitState) RecordDynMethod(fn core.Value, args, outs []core.Value, wor
 		ops = append(ops, op)
 	}
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{
 		word: word, ops: ops, nout: len(outs), pos: pos,
 		dynMethod: &DynMethodSpec{Word: word, NArgs: len(args), NOut: len(outs)},
 	}})
@@ -5290,7 +5290,7 @@ func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
 	if !es.Active() || name == "" || name[0] == '_' || name[0] == '$' || core.IsCapitalisedName(name) {
 		return
 	}
-	src, srcSeq := emitOperand{}, -1
+	src, srcSeq := EmitOperand{}, -1
 	cur := es.units[len(es.units)-1]
 	if slot, ok := cur.localByID[v.ID]; ok && cur.capID[v.ID] {
 		// A CAPTURE of the CURRENT unit overrides events-first, mirroring
@@ -5362,7 +5362,7 @@ func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
 			depth--
 		}
 	}
-	es.appendEvent(emitEvent{kind: evDynBind, dyn: &emitDynBind{
+	es.appendEvent(EmitEvent{kind: evDynBind, dyn: &emitDynBind{
 		name: name, src: src, srcSeq: srcSeq, val: v, pos: pos,
 		root: root, depth: depth, spliceDepth: spliceDepth,
 	}})
@@ -5377,16 +5377,16 @@ func (es *EmitState) RecordDynBind(name string, v core.Value, pos core.SrcPos) {
 // (dynamicScopeReachable): some fn that BINDS the name must reach the
 // reading fn, so a plain typo still refuses. The name joins dynScopeNames so
 // Finalize installs the OpBindDynScope twin in every binding unit.
-func (es *EmitState) dynScopeRescue(v core.Value) (emitOperand, bool) {
+func (es *EmitState) dynScopeRescue(v core.Value) (EmitOperand, bool) {
 	if es.reg == nil {
-		return emitOperand{}, false
+		return EmitOperand{}, false
 	}
 	name := v.DynFrom()
 	if name == "" {
 		name = es.defReads[v.ID]
 	}
 	if name == "" {
-		return emitOperand{}, false
+		return EmitOperand{}, false
 	}
 	if len(es.units) <= 1 {
 		// Top level: only an S5 first-value loop bind reads through the
@@ -5402,7 +5402,7 @@ func (es *EmitState) dynScopeRescue(v core.Value) (emitOperand, bool) {
 			es.dynScopeNames[name] = true
 			return dynScopeOperand(es.intern(core.NewString(name))), true
 		}
-		return emitOperand{}, false
+		return EmitOperand{}, false
 	}
 	c := es.reg.Check
 	reader := ""
@@ -5442,7 +5442,7 @@ func (es *EmitState) dynScopeRescue(v core.Value) (emitOperand, bool) {
 		}
 	}
 	if !enclosing && !c.DynamicScopeReachable(name, reader) {
-		return emitOperand{}, false
+		return EmitOperand{}, false
 	}
 	if es.dynScopeNames == nil {
 		es.dynScopeNames = map[string]bool{}
@@ -5846,7 +5846,7 @@ func (es *EmitState) RecordMakeListInner(r *core.Registry, ins []core.Value, out
 	// word may be stateful — `list-of [Rand.int 0 10] 3` leaks its NoEval
 	// generator to the residual, and freezing one `rand-int` (which advances the
 	// seed) would replicate it instead of re-running per iteration. Those refuse.
-	ops := make([]emitOperand, len(ins))
+	ops := make([]EmitOperand, len(ins))
 	for i := range ins {
 		// A bare type node element is a first-class SINGLETON VALUE (ADR-010 /
 		// NUR051), not declaration-only syntax: it assembles through the same
@@ -5881,7 +5881,7 @@ func (es *EmitState) RecordMakeListInner(r *core.Registry, ins []core.Value, out
 		ops[len(ins)-1-i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: wordMakeList, ops: ops, nout: 1, pos: pos, makeList: true}})
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: wordMakeList, ops: ops, nout: 1, pos: pos, makeList: true}})
 	es.setProduced(out, seq)
 	return true
 }
@@ -5909,7 +5909,7 @@ func (es *EmitState) RecordMakeMap(r *core.Registry, keys []string, vals []core.
 	// ops are in value order (vals[0] pairs with keys[0]); OpMakeMap reads the
 	// popped run deepest-first as value 0, so reverse like RecordMakeList:
 	// ops[0] is the LAST value (laid out on top), ops[N-1] the first (deepest).
-	ops := make([]emitOperand, len(vals))
+	ops := make([]EmitOperand, len(vals))
 	for i := range vals {
 		// A bare type node member is a first-class SINGLETON VALUE (ADR-010 /
 		// NUR051), not declaration-only syntax: it assembles through the same
@@ -5937,7 +5937,7 @@ func (es *EmitState) RecordMakeMap(r *core.Registry, keys []string, vals []core.
 		ops[len(vals)-1-i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{
 		word: wordMakeMap, ops: ops, nout: 1, pos: pos,
 		makeMap: true, mapKeys: append([]string(nil), keys...), mapImpl: implicit,
 	}})
@@ -5966,7 +5966,7 @@ func (es *EmitState) RecordInterp(parts []core.InterpPart, holeVals []core.Value
 	// ops in stack order (ops[0] = top): OpInterp pops the run and reads it
 	// deepest-first as hole 0, so reverse like RecordMakeMap — ops[0] is the LAST
 	// hole (on top), ops[N-1] the first (deepest).
-	ops := make([]emitOperand, len(holeVals))
+	ops := make([]EmitOperand, len(holeVals))
 	for k := range holeVals {
 		op, ok := es.resolveOperand(holeVals[k])
 		if !ok {
@@ -5983,7 +5983,7 @@ func (es *EmitState) RecordInterp(parts []core.InterpPart, holeVals []core.Value
 		}
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{
 		word: wordInterp, ops: ops, nout: 1, pos: pos,
 		interp: true, interpSegs: segs,
 	}})
@@ -6003,7 +6003,7 @@ func (es *EmitState) RecordInterpXml(tmpl core.XmlTmpl, holeVals []core.Value, o
 	}
 	// ops in stack order (ops[0] = top): OpInterpXml pops the run and reads
 	// it deepest-first as hole 0, so reverse exactly like RecordInterp.
-	ops := make([]emitOperand, len(holeVals))
+	ops := make([]EmitOperand, len(holeVals))
 	for k := range holeVals {
 		op, ok := es.resolveOperand(holeVals[k])
 		if !ok {
@@ -6012,7 +6012,7 @@ func (es *EmitState) RecordInterpXml(tmpl core.XmlTmpl, holeVals []core.Value, o
 		ops[len(holeVals)-1-k] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{
 		word: "__interpxml", ops: ops, nout: 1, pos: pos,
 		xmlTmpl: &tmpl,
 	}})
@@ -6043,8 +6043,8 @@ func (es *EmitState) RecordSpliceDyn(payload core.Value, pos core.SrcPos) bool {
 		return false
 	}
 	es.SiteCounts[SiteDynamic]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
-		word: "__splicedyn", ops: []emitOperand{op}, nout: 1, pos: pos,
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{
+		word: "__splicedyn", ops: []EmitOperand{op}, nout: 1, pos: pos,
 		spliceDyn: true,
 	}})
 	f := es.eventInfo[seq]
@@ -6063,7 +6063,7 @@ func (es *EmitState) RecordSpliceDyn(payload core.Value, pos core.SrcPos) bool {
 // to its own closure unit by recordClosureDispatch), which rides its prepared
 // opClosure operand. Returns false, leaving es UNTOUCHED, when an operand is
 // dynamic or of unknown provenance — the caller then keeps the island path.
-func (es *EmitState) RecordClosureCall(word string, sig *core.Signature, args []core.Value, bodyPos, unit int, capOps []emitOperand, extraOps map[int]emitOperand, outs []core.Value, pos core.SrcPos) bool {
+func (es *EmitState) RecordClosureCall(word string, sig *core.Signature, args []core.Value, bodyPos, unit int, capOps []EmitOperand, extraOps map[int]EmitOperand, outs []core.Value, pos core.SrcPos) bool {
 	// A whole-residual word (CallableSpec.BodyOutResidual — `do`) may seat
 	// N > 1 results: recordClosureDispatch has already asserted the unit's
 	// compiled residual count equals len(outs), and the multi-result seating
@@ -6080,10 +6080,10 @@ func (es *EmitState) RecordClosureCall(word string, sig *core.Signature, args []
 	// handler runs faithfully over whatever the value turns out to be) it rides
 	// as a stack operand; when it cannot resolve, resolveOperand declines and the
 	// island path stands. Faithfulness rides the differential gate.
-	ops := make([]emitOperand, len(args))
+	ops := make([]EmitOperand, len(args))
 	for i := range args {
 		if i == bodyPos {
-			ops[i] = emitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}
+			ops[i] = EmitOperand{kind: opClosure, closureUnit: unit, closureCaps: capOps}
 			continue
 		}
 		if exOp, isExtra := extraOps[i]; isExtra {
@@ -6097,7 +6097,7 @@ func (es *EmitState) RecordClosureCall(word string, sig *core.Signature, args []
 		ops[i] = op
 	}
 	es.SiteCounts[SiteMono]++
-	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: emitCall{word: word, sig: sig, ops: ops, nout: len(outs), pos: pos}})
 	// A fallible multi-value catch body (the ReturnsFn latched it): the
 	// runtime count is N on no-raise but 1 on the caught path, so the
 	// result region is VARIADIC — the residual absorbs it; a fixed-arity
@@ -6259,7 +6259,7 @@ func (es *EmitState) noEvalBodiesInertScoped(sig *core.Signature, args []core.Va
 		}
 		inert := core.IsInertConst(args[i])
 		if !inert && moduleScope {
-			inert = interpBodyInert(args[i])
+			inert = InterpBodyInert(args[i])
 		}
 		if !inert {
 			return false
@@ -6319,7 +6319,7 @@ func (es *EmitState) DynInputsProven(sig *core.Signature, args []core.Value) boo
 	return true
 }
 
-// interpBodyInert is isInertConst widened so a NESTED InterpString counts as
+// InterpBodyInert is isInertConst widened so a NESTED InterpString counts as
 // inert. Its TOP-LEVEL semantics match isInertConst EXACTLY — a standalone
 // ParenExpr / Word / InterpString is NOT bakeable data (a standalone ParenExpr
 // is deferred code; baking `(loopy 1)` would wrongly let a nested too-deep
@@ -6327,23 +6327,23 @@ func (es *EmitState) DynInputsProven(sig *core.Signature, args []core.Value) boo
 // InterpString-admitting member check; everything else defers to isInertConst.
 // Only noEvalBodiesInertScoped (and resolveOperand) call this, and only at
 // MODULE scope — an InterpString must NEVER bake inside a compiled fn frame.
-func interpBodyInert(v core.Value) bool {
+func InterpBodyInert(v core.Value) bool {
 	switch v.Data.(type) {
 	case core.ListPayload, core.MapPayload:
-		return interpMemberInert(v)
+		return InterpMemberInert(v)
 	default:
 		return core.IsInertConst(v)
 	}
 }
 
-// interpMemberInert is isInertConstMember widened to admit an InterpString whose
+// InterpMemberInert is isInertConstMember widened to admit an InterpString whose
 // hole expressions are themselves inert members — immutable code-as-data the VM
 // pushes verbatim and a re-interpreting handler runs against the registry.
 // Container members (List/Map/ParenExpr) recurse HERE so a nested InterpString
 // at any depth is reached; every other leaf defers to the strict
 // isInertConstMember so leaf soundness (mutable-instance exclusion, canonical
 // type pointers) stays single-sourced.
-func interpMemberInert(v core.Value) bool {
+func InterpMemberInert(v core.Value) bool {
 	if v.Carrier || v.Dynamic {
 		return false
 	}
@@ -6354,7 +6354,7 @@ func interpMemberInert(v core.Value) bool {
 		}
 		for _, p := range parts {
 			for _, tk := range p.Expr {
-				if !interpMemberInert(tk) {
+				if !InterpMemberInert(tk) {
 					return false
 				}
 			}
@@ -6364,7 +6364,7 @@ func interpMemberInert(v core.Value) bool {
 	switch d := v.Data.(type) {
 	case core.ListPayload:
 		for _, e := range d.Elems {
-			if !interpMemberInert(e) {
+			if !InterpMemberInert(e) {
 				return false
 			}
 		}
@@ -6375,14 +6375,14 @@ func interpMemberInert(v core.Value) bool {
 		}
 		for _, k := range d.M.Keys() {
 			mv, _ := d.M.Get(k)
-			if !interpMemberInert(mv) {
+			if !InterpMemberInert(mv) {
 				return false
 			}
 		}
 		return true
 	case core.ParenExprPayload:
 		for _, tk := range d.Toks {
-			if !interpMemberInert(tk) {
+			if !InterpMemberInert(tk) {
 				return false
 			}
 		}
@@ -6655,7 +6655,7 @@ func (es *EmitState) markWindowShape(residual []core.Value, promoted map[int]int
 
 // topLevelEventBySeq finds the top-level frame's event with the given seq
 // (nil when the seq belongs to a nested fragment or unit).
-func (es *EmitState) topLevelEventBySeq(seq int) *emitEvent {
+func (es *EmitState) topLevelEventBySeq(seq int) *EmitEvent {
 	for i := range es.frames[0] {
 		if es.frames[0][i].seq == seq {
 			return &es.frames[0][i]
@@ -6894,7 +6894,7 @@ func (es *EmitState) mixedDynamicApplyShape(residual []core.Value) (int, bool) {
 // inert const — for Finalize to hand to the shared seat primitive. A variadic
 // loop result is allowed here (the program residual may absorb it), unlike a
 // fn body. A non-empty reason refuses the program.
-func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []core.Value) ([]emitOperand, string) {
+func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []core.Value) ([]EmitOperand, string) {
 	// A dynamic splice (§9.2b) reassigns its payload's provenance to the
 	// spread event, so a re-read of the payload def AFTER the splice
 	// (`def xs (range 1 3) def d word xs d xs`) surfaces the SAME payload
@@ -6910,7 +6910,7 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []core.Value)
 			seenSplice[rv.ID] = true
 		}
 	}
-	ops := make([]emitOperand, 0, len(residual))
+	ops := make([]EmitOperand, 0, len(residual))
 	for _, rv := range residual {
 		if pr, ok := es.producedBy[rv.ID]; ok {
 			if es.eventInfo[pr.seq].zeroOut {
@@ -6922,7 +6922,7 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []core.Value)
 				ops = append(ops, localOperand(slot+pr.idx))
 				continue
 			}
-			ops = append(ops, eventOperand(pr.seq, pr.idx))
+			ops = append(ops, EventOperand(pr.seq, pr.idx))
 			continue
 		}
 		// A frame-0 local (a loop-carried def's slot — the post-loop read of a
@@ -6950,7 +6950,7 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []core.Value)
 		if !core.IsInertConst(lit) {
 			return nil, "residual value not statically materialisable"
 		}
-		ops = append(ops, constOperand(es.intern(lit)))
+		ops = append(ops, ConstOperand(es.intern(lit)))
 	}
 	return ops, ""
 }
@@ -6967,12 +6967,12 @@ func (es *EmitState) resolveResidualOperands(lw *lowerer, residual []core.Value)
 // in `names` — the unit then installs registry-visible bindings and must not
 // TAIL-call (the interpreter keeps a frame's bindings live across the calls
 // in its body tail; a tail replacement would tear them down early).
-func eventsBindDynScope(events []emitEvent, names map[string]bool) bool {
+func eventsBindDynScope(events []EmitEvent, names map[string]bool) bool {
 	if len(names) == 0 {
 		return false
 	}
 	var frag func(f *EmitFragment) bool
-	walk := func(evs []emitEvent) bool {
+	walk := func(evs []EmitEvent) bool {
 		for i := range evs {
 			ev := &evs[i]
 			switch ev.kind {
@@ -7402,7 +7402,7 @@ func (es *EmitState) Finalize(residual []core.Value) (*Program, string, bool) {
 // event stays the seated residual, and the inert tail pushes above it as
 // usual. Returns ops with the prefix split off (or unchanged when the shape
 // does not fit — the normal reconciliation then refuses as before).
-func (es *EmitState) noteApplyLoopReplay(rec *fnUnitRec, ops []emitOperand) []emitOperand {
+func (es *EmitState) noteApplyLoopReplay(rec *fnUnitRec, ops []EmitOperand) []EmitOperand {
 	j := -1
 	for i, op := range ops {
 		if op.kind == opEvent && es.eventInfo[op.idx].variadicResult && es.eventInfo[op.idx].applyLoop {
@@ -7655,7 +7655,7 @@ func fnConcreteSingleValuedOrCarrier(v core.Value) bool {
 	return true
 }
 
-func eventPos(ev emitEvent) core.SrcPos {
+func eventPos(ev EmitEvent) core.SrcPos {
 	switch ev.kind {
 	case evCall:
 		return ev.call.pos
@@ -7679,7 +7679,7 @@ func eventPos(ev emitEvent) core.SrcPos {
 // the given seq (top-level events are appended in seq order). Used to truncate
 // the trace at a terminal trap, dropping the unreachable tail the lenient check
 // pass recorded after it.
-func eventsThroughSeq(events []emitEvent, seq int) []emitEvent {
+func eventsThroughSeq(events []EmitEvent, seq int) []EmitEvent {
 	for i := range events {
 		if events[i].seq == seq {
 			return events[:i+1]

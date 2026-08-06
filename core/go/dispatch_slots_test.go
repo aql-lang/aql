@@ -53,3 +53,12 @@ func TestInactiveCheckBraid(t *testing.T) {
 		t.Fatal("inactive undefinedWordDiag must be zero")
 	}
 }
+
+// TestInactiveDriftWindowRecorder pins the compiler-less default behind
+// the drift-island hook: with no compiler linked there is nothing to
+// record, so the offer declines and the caller keeps its refusal.
+func TestInactiveDriftWindowRecorder(t *testing.T) {
+	if inactiveDriftWindowRecorder(nil, WordInfo{}, nil, nil) {
+		t.Fatal("inactive drift-window recorder must decline")
+	}
+}

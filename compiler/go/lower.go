@@ -9,7 +9,7 @@ import core "github.com/boru-lang/boru/core/go"
 // the pushes, SWAPs, calls, branches and loops the VM executes. Finalize
 // (emit.go) is the bridge that drives it. Split out of emit.go purely for
 // navigability; both halves are package eng and share no state beyond the
-// emitEvent trace and the *EmitState pools the lowerer reads.
+// EmitEvent trace and the *EmitState pools the lowerer reads.
 
 // maxLowerDepth bounds the lowerFragment recursion over nested branch / loop
 // bodies. It sits above the parser's maxParseNestingDepth so a program the
@@ -30,7 +30,7 @@ const maxLowerDepth = 12000
 // carries one marker entry flagged in lw.variadic so only the
 // program residual may absorb it. break/continue inside the body
 // jump to end_pc / head via the lowerer's loop-context stack.
-func (lw *lowerer) lowerLoop(ev *emitEvent) string {
+func (lw *lowerer) lowerLoop(ev *EmitEvent) string {
 	lp := ev.loop
 	// Operand layout for FOR_SETUP: start on top, then end, then
 	// step. start/step are consts (RecordLoop enforced); the end may
@@ -79,7 +79,7 @@ func (lw *lowerer) lowerLoop(ev *emitEvent) string {
 	fn := lw.emit(OpForNext, 0, lp.pos)
 	endHoles := []int{}
 	lw.loops = append(lw.loops, loopCtx{nextPC: head, endHoles: &endHoles})
-	var out *emitOperand
+	var out *EmitOperand
 	if lp.hasBodyOut {
 		out = &lp.bodyOut
 	}
@@ -149,7 +149,7 @@ func orderedCarried(carried []carriedInit) []carriedInit {
 // records the prior depth; the frame's RET truncates back — the
 // interpreter's def-cleanup discipline). A def of any other name lowers to
 // nothing here — its value flows by provenance exactly as before.
-func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
+func (lw *lowerer) lowerDynBind(ev *EmitEvent) string {
 	d := ev.dyn
 	needDyn := lw.es != nil && (lw.es.dynEnv || (lw.es.dynScopeNames != nil && lw.es.dynScopeNames[d.name]))
 	// A ROOT-unit def of a NON-concrete value additionally needs the
@@ -247,7 +247,7 @@ func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 			// binding's reads resolve to, so the written-back value IS the
 			// instance the program uses). Anything else refuses.
 			if core.IsInertConst(d.val) {
-				src = constOperand(lw.es.internUnpooled(d.val))
+				src = ConstOperand(lw.es.internUnpooled(d.val))
 			} else if op, ok := lw.es.resolveOperand(d.val); ok && (op.kind == opConst || op.kind == opLocal) {
 				src = op
 			} else {
@@ -280,7 +280,7 @@ func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 	return ""
 }
 
-func (lw *lowerer) lowerStore(ev *emitEvent) string {
+func (lw *lowerer) lowerStore(ev *EmitEvent) string {
 	st := ev.store
 	if st.src.kind == opEvent {
 		if lw.variadic[st.src.idx] {
@@ -383,7 +383,7 @@ func (lw *lowerer) allocLocal() int {
 // call's event operands — a non-operand value is interleaved, which a local
 // spill cannot reach (STORE_LOCAL pops the top). Promotion is sound: a local
 // re-pushes the exact value in any order.
-func (lw *lowerer) spillSeat(ops []emitOperand, results []int, n int, pos core.SrcPos, failMsg string) string {
+func (lw *lowerer) spillSeat(ops []EmitOperand, results []int, n int, pos core.SrcPos, failMsg string) string {
 	ne := len(results)
 	if len(lw.vm) < ne {
 		return failMsg
@@ -431,12 +431,12 @@ var nonEventSlot = vmSlot{seq: -1}
 
 // slotIs reports whether a simulated-stack slot is the value an event operand
 // names: same producing event seq AND same result index.
-func slotIs(slot vmSlot, op emitOperand) bool {
+func slotIs(slot vmSlot, op EmitOperand) bool {
 	return slot.seq == op.idx && slot.idx == op.resIdx
 }
 
 // pushOperand emits the push for a const, local, or type operand.
-func (lw *lowerer) pushOperand(op emitOperand, pos core.SrcPos) {
+func (lw *lowerer) pushOperand(op EmitOperand, pos core.SrcPos) {
 	if op.kind == opClosure {
 		// Push the captures (enclosing-scope operands), then OpPushClosure
 		// pops them into the closure value. Net stack effect: +1.
@@ -489,8 +489,8 @@ func (lw *lowerer) emit(op Opcode, arg int, pos core.SrcPos) int {
 // Returns markBefore (the seq before which to open the region — the producer's
 // cond event if it is an event, else the producer itself) and variadicElse (the
 // claiming branch seqs). nil maps when no claim is present (the common case).
-func planVariadicClaims(events []emitEvent) (markBefore, variadicElse map[int]bool) {
-	byseq := func(seq int) *emitEvent {
+func planVariadicClaims(events []EmitEvent) (markBefore, variadicElse map[int]bool) {
+	byseq := func(seq int) *EmitEvent {
 		for i := range events {
 			if events[i].seq == seq {
 				return &events[i]
@@ -527,7 +527,7 @@ func planVariadicClaims(events []emitEvent) (markBefore, variadicElse map[int]bo
 // verifyMarkWindow checks the post-lowering sim stack IS the mark-window
 // residual — nothing seats, nothing re-pushes: slot i (deepest-first) must be
 // exactly the event result the residual lists (plan Phase 5, L-DO part 2b).
-func (lw *lowerer) verifyMarkWindow(ops []emitOperand) string {
+func (lw *lowerer) verifyMarkWindow(ops []EmitOperand) string {
 	if len(lw.vm) != len(ops) {
 		return "mark-window residual does not match the lowered stack"
 	}
@@ -539,7 +539,7 @@ func (lw *lowerer) verifyMarkWindow(ops []emitOperand) string {
 	return ""
 }
 
-func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
+func (lw *lowerer) lowerEvents(events []EmitEvent, scopeFloor int) string {
 	for i := range events {
 		ev := &events[i]
 		if lw.markBefore[ev.seq] {
@@ -547,16 +547,16 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 		}
 		if scopeFloor > 0 {
 			var crossed bool
-			forEachOperand(ev, func(op emitOperand) {
+			forEachOperand(ev, func(op EmitOperand) {
 				if op.kind != opEvent || op.idx > scopeFloor {
 					return
 				}
 				// A PROMOTED enclosing value is delivered via a FRAME LOCAL, not the
 				// enclosing simulated stack the Stage-2 floor guards. Its CONSUMING
 				// references (cond / thenVal / elsVal / call operands) were already
-				// rewritten to local pushes by rewritePromotedRefs, so an opEvent
+				// rewritten to local pushes by RewritePromotedRefs, so an opEvent
 				// reference to a promoted producer that still reaches here is an arm-OUT
-				// designation (thenOut / elsOut / condOut) — the shapes rewritePromotedRefs
+				// designation (thenOut / elsOut / condOut) — the shapes RewritePromotedRefs
 				// deliberately leaves for lowerFragment to re-resolve to the local. Either
 				// way the value crosses via the frame, not the sim, so it does not trip
 				// the floor. Without this a handler with nested `if` arms reading an
@@ -605,7 +605,7 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 		}
 		// A PROMOTED branch value-def (planValueDefLocals marked it, a multiply-read
 		// `def bi (if …)`): store the merge to its frame slot so later references
-		// re-push from the slot (rewritePromotedRefs rewrote them to local operands).
+		// re-push from the slot (RewritePromotedRefs rewrote them to local operands).
 		// lowerBranch left exactly one merge slot on top; STORE+pop it. If the merge is
 		// not a clean single value on top (a variadic / diverged branch the plan-time
 		// branchSingleValue gate could not foresee), REFUSE — sound interpreter
@@ -635,14 +635,14 @@ func (lw *lowerer) lowerEvents(events []emitEvent, scopeFloor int) string {
 // — call / user-call / fallback args, a branch condition and arm outs, a loop's
 // range and body out. A callback (rather than a returned slice) keeps the hot
 // planning loops — the scopeFloor guard and planValueDefLocals — allocation-free.
-func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
+func forEachOperand(ev *EmitEvent, fn func(EmitOperand)) {
 	// visit surfaces an operand AND, for a closure operand, its lexical
 	// captures — enclosing-scope operands carried in closureCaps. Surfacing them
 	// makes a def used ONLY as a closure capture REFERENCE-COUNTED (so
 	// planValueDefLocals promotes a captured computed def to a frame local rather
 	// than leaving it an un-re-pushable event), and lets the scopeFloor guard see
 	// a cross-floor capture. Captures are flat operands (no nested closures).
-	visit := func(op emitOperand) {
+	visit := func(op EmitOperand) {
 		fn(op)
 		if op.kind == opClosure {
 			for _, c := range op.closureCaps {
@@ -706,7 +706,7 @@ func forEachOperand(ev *emitEvent, fn func(emitOperand)) {
 // event reference whose producer was promoted to a value-def local becomes
 // a local push. Inner-fragment result operands (a branch arm's / loop body's
 // out) are never enclosing references and are left untouched.
-func promoteOperand(op *emitOperand, promoted map[int]int) {
+func promoteOperand(op *EmitOperand, promoted map[int]int) {
 	if op.kind == opEvent {
 		if slot, ok := promoted[op.idx]; ok {
 			// slot is the producer's BASE slot; output idx op.resIdx is at
@@ -733,8 +733,8 @@ func promoteOperand(op *emitOperand, promoted map[int]int) {
 // capture can only reference a frame local or an enclosing operand at run time,
 // never a transient simulated-stack slot, so a producer captured here MUST be
 // promoted to a frame local. Mirrors forEachOperand's operand-slice coverage.
-func eachClosureCap(ev *emitEvent, fn func(emitOperand)) {
-	scan := func(ops []emitOperand) {
+func eachClosureCap(ev *EmitEvent, fn func(EmitOperand)) {
+	scan := func(ops []EmitOperand) {
 		for _, op := range ops {
 			if op.kind == opClosure {
 				for _, c := range op.closureCaps {
@@ -751,9 +751,9 @@ func eachClosureCap(ev *emitEvent, fn func(emitOperand)) {
 	case evFallback:
 		scan(ev.fb.ins)
 	case evLoop:
-		scan([]emitOperand{ev.loop.start, ev.loop.end, ev.loop.step, ev.loop.bodyOut})
+		scan([]EmitOperand{ev.loop.start, ev.loop.end, ev.loop.step, ev.loop.bodyOut})
 	case evBranch:
-		scan([]emitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut, ev.br.thenVal, ev.br.elsVal})
+		scan([]EmitOperand{ev.br.cond, ev.br.condOut, ev.br.thenOut, ev.br.elsOut, ev.br.thenVal, ev.br.elsVal})
 	}
 }
 
@@ -779,7 +779,7 @@ func branchSingleValue(br *emitBranch) bool {
 // list-form condition, both `if` arms, and a loop body. Nil entries are kept so
 // callers iterate a fixed shape and skip them; a non-branch/loop event owns
 // none.
-func childFragments(ev *emitEvent) []*EmitFragment {
+func childFragments(ev *EmitEvent) []*EmitFragment {
 	switch ev.kind {
 	case evBranch:
 		return []*EmitFragment{ev.br.condFrag, ev.br.then, ev.br.els}
@@ -795,7 +795,7 @@ func childFragments(ev *emitEvent) []*EmitFragment {
 // fragment's scope floor; the only way the fragment can read it is as a frame
 // local, so planValueDefLocals uses this walk to force such a producer's
 // promotion.
-func forEachFragmentOperand(ev *emitEvent, fn func(emitOperand)) {
+func forEachFragmentOperand(ev *EmitEvent, fn func(EmitOperand)) {
 	// A fragment's OUT operand (an arm result / loop body result) is a
 	// cross-floor reference too when it names an ENCLOSING-scope producer —
 	// the `def kid (user-call …); if c [other] [kid]` arm, whose fragment has
@@ -831,14 +831,14 @@ func forEachFragmentOperand(ev *emitEvent, fn func(emitOperand)) {
 	}
 }
 
-// rewritePromotedRefs redirects an event's enclosing-scope operands (call /
+// RewritePromotedRefs redirects an event's enclosing-scope operands (call /
 // user-call / fallback args, a branch condition, a loop count) to value-def
 // locals, then recurses into any body fragments so a cross-floor reference
 // inside a branch arm / loop body is rewritten the same way. Only producers in
 // the `promoted` map are touched — an intra-fragment result reference (a branch
 // arm's own out, a fragment-local temp) is never promoted, so it is left as the
 // event operand the closed-fragment lowering expects.
-func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
+func RewritePromotedRefs(ev *EmitEvent, promoted map[int]int) {
 	switch ev.kind {
 	case evTrap:
 		for i := range ev.trap.rematchOps {
@@ -878,7 +878,7 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 			continue
 		}
 		for i := range frag.events {
-			rewritePromotedRefs(&frag.events[i], promoted)
+			RewritePromotedRefs(&frag.events[i], promoted)
 		}
 	}
 }
@@ -889,10 +889,10 @@ func rewritePromotedRefs(ev *emitEvent, promoted map[int]int) {
 // `for` body, not just the top level. Without this such a chain's computed
 // producers sit interleaved on the closed fragment's simulated stack and a later
 // binary op refuses "operands of <op> not adjacent on top". (Ref-counting via
-// forEachFragmentOperand and rewriting via rewritePromotedRefs already recurse
+// forEachFragmentOperand and rewriting via RewritePromotedRefs already recurse
 // into fragments; only the promotion decision did not.)
-func collectPromotableEvents(events []emitEvent) ([]*emitEvent, map[int]bool, map[int]bool) {
-	var out []*emitEvent
+func collectPromotableEvents(events []EmitEvent) ([]*EmitEvent, map[int]bool, map[int]bool) {
+	var out []*EmitEvent
 	fragInternal := map[int]bool{}
 	// fragID assigns each event the serial id of the fragment it lives in
 	// (0 = the unit's top level; each recursed fragment gets a fresh id).
@@ -907,8 +907,8 @@ func collectPromotableEvents(events []emitEvent) ([]*emitEvent, map[int]bool, ma
 	fragID := map[int]int{}
 	crossFragRefSet := map[int]bool{}
 	nextID := 0
-	var walk func(evs []emitEvent, id int)
-	walk = func(evs []emitEvent, id int) {
+	var walk func(evs []EmitEvent, id int)
+	walk = func(evs []EmitEvent, id int) {
 		for i := range evs {
 			out = append(out, &evs[i])
 			if id != 0 {
@@ -936,16 +936,16 @@ func collectPromotableEvents(events []emitEvent) ([]*emitEvent, map[int]bool, ma
 	// consumer is the child fragment. Fragment ids are assigned identically to
 	// the first pass (same traversal order).
 	nextID = 0
-	ref := func(op emitOperand, consumerFrag int) {
+	ref := func(op EmitOperand, consumerFrag int) {
 		if op.kind == opEvent && fragID[op.idx] != consumerFrag {
 			crossFragRefSet[op.idx] = true
 		}
 	}
-	var walk2 func(evs []emitEvent, id int)
-	walk2 = func(evs []emitEvent, id int) {
+	var walk2 func(evs []EmitEvent, id int)
+	walk2 = func(evs []EmitEvent, id int) {
 		for i := range evs {
 			ev := &evs[i]
-			// Enclosing-scope operands ONLY (mirroring rewritePromotedRefs's
+			// Enclosing-scope operands ONLY (mirroring RewritePromotedRefs's
 			// field set). forEachOperand would ALSO visit a branch's
 			// thenOut/elsOut — but those are the CHILD fragments' outs, refed
 			// below at the child's id; visiting them here at the parent's id
@@ -1005,13 +1005,13 @@ func collectPromotableEvents(events []emitEvent) ([]*emitEvent, map[int]bool, ma
 // present on that fragment's sim at its close (nil for a fragment with no
 // out). Order matches childFragments: [condFrag, then, els] for a branch,
 // [body] for a loop.
-func fragmentOuts(ev *emitEvent) []*emitOperand {
+func fragmentOuts(ev *EmitEvent) []*EmitOperand {
 	switch ev.kind {
 	case evBranch:
 		if ev.br == nil {
 			return nil
 		}
-		outs := make([]*emitOperand, 3)
+		outs := make([]*EmitOperand, 3)
 		outs[0] = &ev.br.condOut
 		if ev.br.hasThenOut {
 			outs[1] = &ev.br.thenOut
@@ -1028,7 +1028,7 @@ func fragmentOuts(ev *emitEvent) []*emitOperand {
 		if ev.loop == nil || !ev.loop.hasBodyOut {
 			return nil
 		}
-		return []*emitOperand{&ev.loop.bodyOut}
+		return []*EmitOperand{&ev.loop.bodyOut}
 	}
 	return nil
 }
@@ -1040,9 +1040,9 @@ func fragmentOuts(ev *emitEvent) []*emitOperand {
 // (lowerFragment) requires the residual on the sim stack, and a tail call in an
 // arm must stay terminal for OpTailCallUser detection. Only fragment-INTERNAL
 // intermediates (the def-chain feeding the result) are promotable.
-func fragmentResultSeqs(allEvents []*emitEvent) map[int]bool {
+func fragmentResultSeqs(allEvents []*EmitEvent) map[int]bool {
 	res := map[int]bool{}
-	mark := func(op emitOperand) {
+	mark := func(op EmitOperand) {
 		if op.kind == opEvent {
 			res[op.idx] = true
 		}
@@ -1101,7 +1101,7 @@ func (es *EmitState) fragResultStaysOnSim(seq int, refs map[int]int, fragResult,
 // — one that leaves a value the next op sees on top). buried marking reads
 // leaverPrefix[j]-leaverPrefix[i+1] to test whether a leaver fired strictly
 // between a producer at i and a reference at j.
-func computeLeaverPrefix(events []emitEvent) (map[int]int, []int) {
+func computeLeaverPrefix(events []EmitEvent) (map[int]int, []int) {
 	producerIndex := make(map[int]int, len(events))
 	leaverPrefix := make([]int, len(events)+1)
 	for i := range events {
@@ -1119,7 +1119,7 @@ func computeLeaverPrefix(events []emitEvent) (map[int]int, []int) {
 // collectStoreSourceSeqs returns the set of event seqs whose result is the
 // on-top SOURCE of a loop-carried store (evStore). Those are re-pushed natively
 // by lowerStore, so buried promotion must skip them (see the call site).
-func collectStoreSourceSeqs(events []emitEvent) map[int]bool {
+func collectStoreSourceSeqs(events []EmitEvent) map[int]bool {
 	storeSrc := map[int]bool{}
 	all, _, _ := collectPromotableEvents(events)
 	for _, ae := range all {
@@ -1142,9 +1142,9 @@ func collectStoreSourceSeqs(events []emitEvent) map[int]bool {
 // the lint complexity ceiling — one scan, no behavior change (PR #295
 // merge: main's burial triggers plus this branch's promotion triggers
 // crossed gocyclo's 70 in one function).
-func (es *EmitState) countRefsAndBurials(events []emitEvent, producerIndex map[int]int, leaverPrefix []int, storeSrc map[int]bool, refs map[int]int, fragRef, buried map[int]bool) {
+func (es *EmitState) countRefsAndBurials(events []EmitEvent, producerIndex map[int]int, leaverPrefix []int, storeSrc map[int]bool, refs map[int]int, fragRef, buried map[int]bool) {
 	for i := range events {
-		forEachOperand(&events[i], func(op emitOperand) {
+		forEachOperand(&events[i], func(op EmitOperand) {
 			if op.kind == opEvent && op.resIdx == 0 {
 				refs[op.idx]++
 				if es.eventInfo[op.idx].variadicResult {
@@ -1155,7 +1155,7 @@ func (es *EmitState) countRefsAndBurials(events []emitEvent, producerIndex map[i
 				}
 			}
 		})
-		forEachFragmentOperand(&events[i], func(op emitOperand) {
+		forEachFragmentOperand(&events[i], func(op EmitOperand) {
 			if op.kind == opEvent && op.resIdx == 0 {
 				refs[op.idx]++
 				fragRef[op.idx] = true
@@ -1167,7 +1167,7 @@ func (es *EmitState) countRefsAndBurials(events []emitEvent, producerIndex map[i
 	}
 }
 
-func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extra []int, forceOrder map[int]bool) (map[int]int, map[int]bool) {
+func (es *EmitState) planValueDefLocals(unit *emitUnit, events []EmitEvent, extra []int, forceOrder map[int]bool) (map[int]int, map[int]bool) {
 	refs := map[int]int{}
 	fragRef := map[int]bool{} // referenced from INSIDE a branch/loop fragment
 	// DynEnv: every dyn-bound def's COMPUTED source event must be promoted —
@@ -1280,7 +1280,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	// user-call promotion fires and the capture re-pushes from the slot.
 	captured := map[int]bool{}
 	for _, ev := range allEvents {
-		eachClosureCap(ev, func(op emitOperand) {
+		eachClosureCap(ev, func(op EmitOperand) {
 			if op.kind == opEvent && op.resIdx == 0 {
 				captured[op.idx] = true
 			}
@@ -1475,7 +1475,7 @@ func (es *EmitState) planValueDefLocals(unit *emitUnit, events []emitEvent, extr
 	}
 	if promoted != nil {
 		for i := range events {
-			rewritePromotedRefs(&events[i], promoted)
+			RewritePromotedRefs(&events[i], promoted)
 		}
 	}
 	return promoted, dead
@@ -1509,7 +1509,7 @@ func (lw *lowerer) swapTop2(pos core.SrcPos) {
 // wording (msg) and the terminal call instruction each emits afterward.
 // On success the len(ops) operands occupy the top slots in sig order and
 // the caller pops them with its CALL_*; a non-empty return is the refusal.
-func (lw *lowerer) layoutOperands(ops []emitOperand, pos core.SrcPos, msg layoutMsgs) string {
+func (lw *lowerer) layoutOperands(ops []EmitOperand, pos core.SrcPos, msg layoutMsgs) string {
 	n := len(ops)
 	results := []int{}
 	for i, op := range ops {
@@ -1646,9 +1646,9 @@ type seatMsgs struct {
 // reconciliation (reconcileResults). rejectVariadic refuses a variadic (loop)
 // event result: a fn body may not return one (Stage 3), though the program
 // residual may absorb it. msgs supplies the caller's refusal wording.
-func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic, allowVariadicTail bool, msgs seatMsgs, pos core.SrcPos) string {
+func (lw *lowerer) seatResults(ops []EmitOperand, rejectVariadic, allowVariadicTail bool, msgs seatMsgs, pos core.SrcPos) string {
 	vi := 0
-	var tail []emitOperand
+	var tail []EmitOperand
 	for i, op := range ops {
 		if op.kind == opEvent {
 			if rejectVariadic && lw.variadic[op.idx] {
@@ -1695,7 +1695,7 @@ func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic, allowVariadicT
 // is consumed by the first use (bucket's `bcount set bi ((bcount get bi) add
 // 1)`). Gated to a SINGLE-value merge so the store seats exactly one value —
 // a multi-value / variadic merge is refused at the store hook.
-func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map[int]int, buried, fragRef, fragInternal, forceOrder map[int]bool, promoted map[int]int, dead map[int]bool) (map[int]int, map[int]bool) {
+func (es *EmitState) planBranchPromotion(ev *EmitEvent, unit *emitUnit, refs map[int]int, buried, fragRef, fragInternal, forceOrder map[int]bool, promoted map[int]int, dead map[int]bool) (map[int]int, map[int]bool) {
 	if ev.br != nil && ev.br.hasElse && es.eventInfo[ev.seq].valueDef && refs[ev.seq] == 0 && !es.dynEnv {
 		if dead == nil {
 			dead = map[int]bool{}
@@ -1722,7 +1722,7 @@ func (es *EmitState) planBranchPromotion(ev *emitEvent, unit *emitUnit, refs map
 // dead-branch arm) so the value stays on the stack for the immediately-
 // following evDynBind to pop into the kept binding slot. The gate mirrors
 // lowerDynBind's needGlobal exactly.
-func collectRootBindConsumes(events []emitEvent, dead map[int]bool) map[int]bool {
+func collectRootBindConsumes(events []EmitEvent, dead map[int]bool) map[int]bool {
 	all, _, _ := collectPromotableEvents(events)
 	out := map[int]bool{}
 	for _, ev := range all {
@@ -1744,7 +1744,7 @@ func collectRootBindConsumes(events []emitEvent, dead map[int]bool) map[int]bool
 // (OpBindGlobal) — the promotion set planValueDefLocals feeds into its
 // triggers so lowerDynBind can re-push each value from a frame slot for its
 // install.
-func (es *EmitState) collectDynBindSources(events []emitEvent) map[int]bool {
+func (es *EmitState) collectDynBindSources(events []EmitEvent) map[int]bool {
 	dynBindSrc := map[int]bool{}
 	for i := range events {
 		if events[i].kind != evDynBind || events[i].dyn == nil || events[i].dyn.srcSeq < 0 {
@@ -1771,7 +1771,7 @@ func (es *EmitState) collectDynBindSources(events []emitEvent) map[int]bool {
 // the one producer shape promoteLateDynBind can seat as a lone frame local. A
 // nil event (a source in a multi-value arm collectPromotableEvents does not
 // recurse into) is not one.
-func singleOutputCall(ev *emitEvent) bool {
+func singleOutputCall(ev *EmitEvent) bool {
 	if ev == nil {
 		return false
 	}
@@ -1808,7 +1808,7 @@ func (es *EmitState) promoteLateDynBind(rec *fnUnitRec) {
 	}
 	allEvents, _, _ := collectPromotableEvents(rec.frag.events)
 	fragResult := fragmentResultSeqs(allEvents)
-	bySeq := make(map[int]*emitEvent, len(allEvents))
+	bySeq := make(map[int]*EmitEvent, len(allEvents))
 	for _, ev := range allEvents {
 		bySeq[ev.seq] = ev
 	}
@@ -1838,7 +1838,7 @@ func (es *EmitState) promoteLateDynBind(rec *fnUnitRec) {
 	}
 	if changed {
 		for i := range rec.frag.events {
-			rewritePromotedRefs(&rec.frag.events[i], rec.promoted)
+			RewritePromotedRefs(&rec.frag.events[i], rec.promoted)
 		}
 		for i := range rec.outOps {
 			promoteOperand(&rec.outOps[i], rec.promoted)
@@ -1850,7 +1850,7 @@ func (es *EmitState) promoteLateDynBind(rec *fnUnitRec) {
 // in ascending result order — the contiguous multi-out variadic run the
 // seatResults relaxation admits (all of a dyn-body do's outputs land together
 // at run time, whatever their count).
-func sameEventRunToEnd(ops []emitOperand, idx int) bool {
+func sameEventRunToEnd(ops []EmitOperand, idx int) bool {
 	for i, op := range ops {
 		if op.kind != opEvent || op.idx != idx || op.resIdx != i {
 			return false
@@ -1864,7 +1864,7 @@ func sameEventRunToEnd(ops []emitOperand, idx int) bool {
 // This is the fn-unit caller of the shared seatResults primitive — it rejects a
 // variadic loop result (a fn body may not return one in Stage 3), the one way it
 // differs from Finalize's program-residual reconciliation.
-func (lw *lowerer) reconcileResults(ops []emitOperand, who string, noContract, variadicMid bool, pos core.SrcPos) string {
+func (lw *lowerer) reconcileResults(ops []EmitOperand, who string, noContract, variadicMid bool, pos core.SrcPos) string {
 	extra := who + ": body leaves extra values (Stage 3 lowers in-order results)"
 	return lw.seatResults(ops, !variadicMid, noContract, seatMsgs{
 		variadic:     who + ": result is a variadic loop value (Stage 3)",
@@ -1874,7 +1874,7 @@ func (lw *lowerer) reconcileResults(ops []emitOperand, who string, noContract, v
 	}, pos)
 }
 
-func (lw *lowerer) lowerCall(ev *emitEvent) string {
+func (lw *lowerer) lowerCall(ev *EmitEvent) string {
 	c := &ev.call
 	n := len(c.ops)
 	if reason := lw.layoutOperands(c.ops, c.pos, layoutMsgs{
@@ -2029,7 +2029,7 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 // diverging fragment; a diverging fragment's terminator already
 // emitted its jump, so whatever its scope holds is unreachable and
 // ignored). Restores the parent scope afterwards.
-func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVariadic bool, pos core.SrcPos) string {
+func (lw *lowerer) lowerFragment(frag *EmitFragment, out *EmitOperand, allowVariadic bool, pos core.SrcPos) string {
 	lw.depth++
 	defer func() { lw.depth-- }()
 	if lw.depth > maxLowerDepth {
@@ -2200,7 +2200,7 @@ func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVari
 // body fragment. break jumps to the loop end (hole patched by
 // lowerLoop); continue jumps back to FOR_NEXT — a back-edge the VM
 // accepts because it targets the loop header.
-func (lw *lowerer) lowerBreak(ev *emitEvent) string {
+func (lw *lowerer) lowerBreak(ev *EmitEvent) string {
 	if len(lw.loops) == 0 {
 		if lw.isFnUnit {
 			// Cross-frame break: targets the caller's loop at run time.
@@ -2215,7 +2215,7 @@ func (lw *lowerer) lowerBreak(ev *emitEvent) string {
 	return ""
 }
 
-func (lw *lowerer) lowerContinue(ev *emitEvent) string {
+func (lw *lowerer) lowerContinue(ev *EmitEvent) string {
 	if len(lw.loops) == 0 {
 		if lw.isFnUnit {
 			// Cross-frame continue: targets the caller's loop at run time.
@@ -2230,7 +2230,7 @@ func (lw *lowerer) lowerContinue(ev *emitEvent) string {
 
 // lowerTrap emits the terminal OpTrap for a check-mode-suppressed runtime error,
 // pooling its TrapSpec. Execution never continues past it.
-func (lw *lowerer) lowerTrap(ev *emitEvent) string {
+func (lw *lowerer) lowerTrap(ev *EmitEvent) string {
 	if ev.trap.rematchWord != "" {
 		// A VARIADIC leading operand — a multi-count branch merge (`if c [99]
 		// [1 2] each …`) — cannot be seated by layout: the region is already
@@ -2298,7 +2298,7 @@ func (lw *lowerer) lowerTrap(ev *emitEvent) string {
 // call replaces the frame: control never returns here, so nothing is
 // pushed to the simulated stack (the marking pass already cleared
 // the consumer's out expectation).
-func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
+func (lw *lowerer) lowerUserCall(ev *EmitEvent) string {
 	uc := &ev.uc
 	n := len(uc.ops)
 	// Stage 3 operand shape: all args const/local (results-on-stack
@@ -2369,7 +2369,7 @@ func (lw *lowerer) lowerUserCall(ev *emitEvent) string {
 // MatchSignature over the recorded arm subset at run time to pick the body
 // unit. Never a tail call (markTailCalls skips poly calls); never variadic
 // (the recorder gates every arm to a fixed, identical return count).
-func (lw *lowerer) lowerUserPolyCall(ev *emitEvent) string {
+func (lw *lowerer) lowerUserPolyCall(ev *EmitEvent) string {
 	uc := &ev.uc
 	n := len(uc.ops)
 	if reason := lw.layoutOperands(uc.ops, uc.pos, layoutMsgs{
@@ -2427,7 +2427,7 @@ func (lw *lowerer) lowerUserPolyCall(ev *emitEvent) string {
 // lands on the simulated stack as this event's product, read by a
 // downstream consumer (or the program residual) like any computed
 // value. Multiple threaded inputs are a documented follow-on.
-func (lw *lowerer) lowerFallback(ev *emitEvent) string {
+func (lw *lowerer) lowerFallback(ev *EmitEvent) string {
 	fb := &ev.fb
 	switch len(fb.ins) {
 	case 0:
@@ -2482,7 +2482,7 @@ func fragSingleResidual(frag *EmitFragment) bool {
 	depth := 0
 	for i := range frag.events {
 		ev := &frag.events[i]
-		var ops []emitOperand
+		var ops []EmitOperand
 		var nout int
 		switch ev.kind {
 		case evCall:
@@ -2536,7 +2536,7 @@ func (es *EmitState) tailCompatibleReturns(calleeUnit int, callerReturns []*core
 	return true
 }
 
-func (es *EmitState) markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool, callerReturns []*core.Type) (stillHasOut bool) {
+func (es *EmitState) markTailCalls(frag *EmitFragment, out *EmitOperand, hasOut bool, callerReturns []*core.Type) (stillHasOut bool) {
 	if frag == nil || len(frag.events) == 0 || !hasOut || out.kind != opEvent {
 		return hasOut
 	}
@@ -2593,7 +2593,7 @@ func (es *EmitState) markTailCalls(frag *EmitFragment, out *emitOperand, hasOut 
 	return hasOut
 }
 
-func (lw *lowerer) lowerBranch(ev *emitEvent) string {
+func (lw *lowerer) lowerBranch(ev *EmitEvent) string {
 	br := ev.br
 	if br.constCond != nil {
 		// Statically-taken branch: inline the taken fragment (always a body in
@@ -2706,7 +2706,7 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 // lowerFragment (the merge of two body arms may be variadic; a computed-branch
 // arm may not). Shared by lowerArms, lowerBranch's const-cond inline, and the
 // non-eager arm of lowerComputedBranch.
-func (lw *lowerer) lowerArm(kind armKind, val emitOperand, frag *EmitFragment, out *emitOperand, allowVariadic bool, pos core.SrcPos) string {
+func (lw *lowerer) lowerArm(kind armKind, val EmitOperand, frag *EmitFragment, out *EmitOperand, allowVariadic bool, pos core.SrcPos) string {
 	lw.fragMulti = false
 	switch kind {
 	case armValue:
@@ -2727,7 +2727,7 @@ func (lw *lowerer) lowerArm(kind armKind, val emitOperand, frag *EmitFragment, o
 // so it needs no jump-to-end and contributes no value; the merge
 // point then carries only the surviving arm's value. The 2-arg form
 // (no else) merges with 0-or-1 values — a VARIADIC result.
-func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
+func (lw *lowerer) lowerArms(ev *EmitEvent, jf int) string {
 	br := ev.br
 	if reason := lw.lowerArm(br.thenArm(), br.thenVal, br.then, &br.thenOut, true, br.pos); reason != "" {
 		return reason
@@ -2807,7 +2807,7 @@ func (lw *lowerer) lowerArms(ev *emitEvent, jf int) string {
 // the cond to the top (OpReverse 3 → [elsVal, thenVal, cond]), branches, and
 // DROPs the unselected value on each path. The merge is a single (non-variadic)
 // slot.
-func (lw *lowerer) lowerBothComputed(ev *emitEvent) string {
+func (lw *lowerer) lowerBothComputed(ev *EmitEvent) string {
 	br := ev.br
 	if br.cond.kind != opEvent {
 		return lw.lowerBothComputedMatCond(ev)
@@ -2852,7 +2852,7 @@ func (lw *lowerer) lowerBothComputed(ev *emitEvent) string {
 // elsVal. Both eagers evaluated in BOTH engines (paren eagerness), so the
 // selection-only lowering is the identical semantics the event-cond arm
 // already compiles.
-func (lw *lowerer) lowerBothComputedMatCond(ev *emitEvent) string {
+func (lw *lowerer) lowerBothComputedMatCond(ev *EmitEvent) string {
 	br := ev.br
 	if len(lw.vm) < 2 ||
 		!slotIs(lw.vm[len(lw.vm)-1], br.elsVal) ||
@@ -2930,7 +2930,7 @@ func (lw *lowerer) lowerComputedCond(br *emitBranch) (int, string) {
 //     result; the TRUE (fall-through) path drops it and runs the then arm.
 //   - computed THEN (`if c (expr) e`): the eager value is the TRUE-path result;
 //     the FALSE (jump-target) path drops it and runs the else arm.
-func (lw *lowerer) lowerComputedBranch(ev *emitEvent, jf int) string {
+func (lw *lowerer) lowerComputedBranch(ev *EmitEvent, jf int) string {
 	br := ev.br
 	if br.thenComputed {
 		// TRUE/fall-through keeps the eager then value; jump over the else arm.

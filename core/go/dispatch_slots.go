@@ -10,8 +10,13 @@ package core
 // DriftWindowRecorder is the compiler's stack-drift island hook: offered
 // a matched dispatch whose forward window drifted, it may record the
 // window as a runtime island (drift_window.go) and report true to skip
-// the refusal path. Installed by the compiler piece's init; nil declines.
-var DriftWindowRecorder func(e *Engine, w WordInfo, sig *Signature, positions []int) bool
+// the refusal path. The compiler piece installs the real recorder at
+// init; the NAMED default below is what a compiler-less build runs, so
+// the decline path is reachable and pinned like every other seam slot
+// (TestInactiveDriftWindowRecorder).
+var DriftWindowRecorder = inactiveDriftWindowRecorder
+
+func inactiveDriftWindowRecorder(*Engine, WordInfo, *Signature, []int) bool { return false }
 
 // CheckBraid is the S9 dispatch-hook table for the check piece's
 // dispatch-recovery braid: the step loop OFFERS each recovery/model

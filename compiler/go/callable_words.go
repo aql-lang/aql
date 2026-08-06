@@ -444,7 +444,7 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 	if !isReal || real == nil {
 		return false
 	}
-	capOps := make([]emitOperand, len(captures))
+	capOps := make([]EmitOperand, len(captures))
 	for i, cb := range captures {
 		op, ok := real.resolveOperand(cb.Value)
 		if !ok { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
@@ -463,7 +463,7 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 		toks  []core.Value
 		names []string
 		caps  []core.CapturedBinding
-		ops   []emitOperand
+		ops   []EmitOperand
 	}
 	extras := make([]extraHook, 0, len(extraLamSlots))
 	for _, slot := range extraLamSlots {
@@ -484,7 +484,7 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 			names[i] = lam.Params[i].Name
 		}
 		hookCaps := moduleScopeMutableCaptures(r, lam.Body(), nil)
-		hookCapOps := make([]emitOperand, len(hookCaps))
+		hookCapOps := make([]EmitOperand, len(hookCaps))
 		for i, cb := range hookCaps {
 			op, ok := real.resolveOperand(cb.Value)
 			if !ok { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
@@ -556,16 +556,16 @@ func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec
 	if !realOk || unit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return false
 	}
-	var extraOps map[int]emitOperand
+	var extraOps map[int]EmitOperand
 	for _, ex := range extras {
 		exUnit, exOk := compileClosureBody(r, word, spec.BodyOut, countAgnostic, spec.BodyResultTop, ex.toks, inputs, ex.names, ex.caps, shape, pos)
 		if !exOk || exUnit < 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return false
 		}
 		if extraOps == nil {
-			extraOps = map[int]emitOperand{}
+			extraOps = map[int]EmitOperand{}
 		}
-		extraOps[ex.slot] = emitOperand{kind: opClosure, closureUnit: exUnit, closureCaps: ex.ops}
+		extraOps[ex.slot] = EmitOperand{kind: opClosure, closureUnit: exUnit, closureCaps: ex.ops}
 	}
 	return real.RecordClosureCall(word, sig, args, spec.BodyPos, unit, capOps, extraOps, outs, pos)
 }

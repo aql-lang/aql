@@ -26,13 +26,13 @@ import core "github.com/boru-lang/boru/core/go"
 //     unannotated read, so plain-check behaviour is unchanged.
 //  2. MODEL — when the compile pass steps the annotated carrier at the
 //     pointer (exactly where the interpreter auto-dispatches the concrete
-//     member), tryShapedMethodDispatch mirrors execFnDefLiteral: the
+//     member), TryShapedMethodDispatch mirrors execFnDefLiteral: the
 //     ENGINE'S OWN matcher picks the member overload over the same tape,
 //     and the model commits only when the match is PURE-FORWARD over an
 //     inert, evaluation-fixed statement window — so the compiled window
 //     is the very token sequence the interpreter's forward collection
 //     consumes, bounded by the same statement boundary. The dispatch is
-//     then modelled through carrierResults over the member's inner
+//     then modelled through CarrierResults over the member's inner
 //     signature (declared returns, gradual contagion — identical to a
 //     real dispatch of that native).
 //  3. RECORD — the outcome seam routes the modelled dispatch to
@@ -94,12 +94,12 @@ func evalFixedWindowToken(v core.Value) bool {
 	return false
 }
 
-// tryShapedMethodDispatch models the interpreter's auto-dispatch of an
+// TryShapedMethodDispatch models the interpreter's auto-dispatch of an
 // annotated dynamic method-read carrier sitting at the pointer (see the
 // file comment). Returns true when it consumed the dispatch (tape spliced,
 // event recorded or the program marked uncompilable); false leaves the
 // carrier to today's paths (residual windows, refusals) untouched.
-func tryShapedMethodDispatch(e *core.Engine, valIdx int) bool {
+func TryShapedMethodDispatch(e *core.Engine, valIdx int) bool {
 	r := e.Registry
 	v := e.Tape.At(valIdx)
 	if !v.Dynamic || v.Quoted || v.ID == "" {
@@ -168,7 +168,7 @@ func tryShapedMethodDispatch(e *core.Engine, valIdx int) bool {
 	// returns, folds, contagion — identical to a real dispatch of the inner
 	// native) with the outcome seam routed to RecordDynMethod.
 	r.Check.PendingMethodApply = &core.PendingMethodApply{Origin: v, Word: fnDef.Name}
-	outs := carrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
+	outs := CarrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
 	if r.Check.PendingMethodApply != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		// Not consumed — an unexpected short-circuit upstream of the outcome
 		// seam. Decline wholesale; the carrier keeps today's paths.
@@ -360,7 +360,7 @@ func dynamicBoundConformsToFunction(v core.Value) bool {
 }
 
 // tryDynamicFnValueDispatch is the general-value analogue of
-// tryShapedMethodDispatch: a DYNAMIC carrier whose bound is Function-bearing
+// TryShapedMethodDispatch: a DYNAMIC carrier whose bound is Function-bearing
 // (a typed-patrun `find` result — dynamic(Function ∪ None) — or any dynamic
 // fn value) sitting at the pointer with a contiguous inert forward-arg window
 // after it is the interpreter's auto-dispatch site. WHICH concrete fn the
@@ -400,7 +400,7 @@ func tryDynamicFnValueDispatch(e *core.Engine, valIdx int) bool {
 
 // tryRecordMethodApply is the FIRST specialist in recordDispatchOutcome's
 // chain: it consumes a pending shaped-method model (set by
-// tryShapedMethodDispatch around its carrierResults call) and records the
+// TryShapedMethodDispatch around its CarrierResults call) and records the
 // guarded OpCallDynMethod event. It must run before every other recorder —
 // falling through would record the member's inner native as a check-time
 // CALL_NATIVE against the shape instance's sub-registry, baking shape
@@ -445,7 +445,7 @@ func TryRecordMethodApply(r *core.Registry, word string, args, out []core.Value,
 //     stay byte-identical);
 //   - a uniquely-resolved, NAMED, non-anonymous, non-macro, capture-free
 //     member with exactly ONE non-fallback signature of plain params (the
-//     model's carrierResults and the arity claim assume plain value args —
+//     model's CarrierResults and the arity claim assume plain value args —
 //     multi-sig first-match and captures are follow-on scope);
 //   - arity >= 1 (a 0-arg auto-fire is the read-guard's own class) and the
 //     full arity of evaluation-fixed tokens inside the statement.
@@ -515,9 +515,9 @@ func tryMemberFnArrivalDispatch(e *core.Engine, valIdx int) bool {
 	// and the member's declared return contract is engine-enforced at run
 	// time, so the modelled out carrier is sound.
 	resume := es.Suspend()
-	outs := carrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
+	outs := CarrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
 	resume()
-	if len(outs) != 1 { //covergate:allow the declared-single-return gate above fixes carrierResults' count for a boru-bodied sig (buildFnBodyReturnsFn returns one carrier per declared return) — unreachable without a model fault (§compiler)
+	if len(outs) != 1 { //covergate:allow the declared-single-return gate above fixes CarrierResults' count for a boru-bodied sig (BuildFnBodyReturnsFn returns one carrier per declared return) — unreachable without a model fault (§compiler)
 		return false
 	}
 	if !es.RecordDynMethod(v, args, outs, fnDef.Name, v.Pos()) { //covergate:allow the fn carrier is event-produced (memberFnRead tags recorded reads only) and the window args are inert consts, so operand resolution cannot fail — unreachable without a recorder fault (§compiler)

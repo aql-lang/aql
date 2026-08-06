@@ -36,10 +36,14 @@ type (
 	CompiledFn     = compiler.CompiledFn
 	CompiledFnRef  = compiler.CompiledFnRef
 	ConstLocalRef  = compiler.ConstLocalRef
+	DepSnapEntry   = compiler.DepSnapEntry
 	DispatchSpec   = compiler.DispatchSpec
 	DynMethodSpec  = compiler.DynMethodSpec
+	EmitEvent      = compiler.EmitEvent
 	EmitFragment   = compiler.EmitFragment
+	EmitOperand    = compiler.EmitOperand
 	EmitState      = compiler.EmitState
+	EmitTrap       = compiler.EmitTrap
 	GlobalBindSpec = compiler.GlobalBindSpec
 	Instr          = compiler.Instr
 	InterpSeg      = compiler.InterpSeg
@@ -48,6 +52,7 @@ type (
 	Opcode         = compiler.Opcode
 	PolyRef        = compiler.PolyRef
 	Program        = compiler.Program
+	RestampBox     = compiler.RestampBox
 	SigRef         = compiler.SigRef
 	TrapSpec       = compiler.TrapSpec
 	TypeRef        = compiler.TypeRef
@@ -104,19 +109,34 @@ const (
 	OpSwap                 = compiler.OpSwap
 	OpTailCallUser         = compiler.OpTailCallUser
 	OpTrap                 = compiler.OpTrap
+	RestampMaxTries        = compiler.RestampMaxTries
 	SiteDynamic            = compiler.SiteDynamic
 	SiteMeta               = compiler.SiteMeta
 	SiteMono               = compiler.SiteMono
 	SitePoly               = compiler.SitePoly
 )
 
-func AnalyseCodeEffectCarrier(a0 *core.Registry, a1 core.Value) (core.Value, bool) {
-	return compiler.AnalyseCodeEffectCarrier(a0, a1)
-}
+// Cold func-value re-exports: exported core funcs no suite calls
+// through the facade (API surface only — lang re-export vars,
+// short-circuited operands, external embedders). A var of func type
+// keeps every reference site compiling verbatim with no wrapper body
+// to leave uncovered; a name moves back up to a wrapper func when a
+// hot path starts calling it.
+var (
+	AnalyseCodeEffectCarrier = compiler.AnalyseCodeEffectCarrier
+	CompiledRef              = compiler.CompiledRef
+	ConstOperand             = compiler.ConstOperand
+	EventOperand             = compiler.EventOperand
+	InterpBodyInert          = compiler.InterpBodyInert
+	InterpMemberInert        = compiler.InterpMemberInert
+	RewritePromotedRefs      = compiler.RewritePromotedRefs
+	StampCompiledRef         = compiler.StampCompiledRef
+	StampDetachedSig         = compiler.StampDetachedSig
+	StampFnValue             = compiler.StampFnValue
+	TryRecordFallback        = compiler.TryRecordFallback
+)
 
 func ClosureWantsKeyVal(a0 core.Value) bool { return compiler.ClosureWantsKeyVal(a0) }
-
-func CompiledRef(a0 *core.Signature) *compiler.CompiledFnRef { return compiler.CompiledRef(a0) }
 
 func IsCompiledClosure(a0 core.Value) bool { return compiler.IsCompiledClosure(a0) }
 
@@ -124,20 +144,8 @@ func NewClosure(a0 int, a1 []core.Value) core.Value { return compiler.NewClosure
 
 func NewEmitState() *compiler.EmitState { return compiler.NewEmitState() }
 
-func StampCompiledRef(a0 core.FnDefInfo, a1 *compiler.CompiledFnRef) bool {
-	return compiler.StampCompiledRef(a0, a1)
-}
-
 func StampDetachedFn(a0 *core.Registry, a1 core.FnDefInfo, a2 core.SrcPos) (*compiler.CompiledFnRef, bool) {
 	return compiler.StampDetachedFn(a0, a1, a2)
-}
-
-func StampDetachedSig(a0 *core.Registry, a1 core.FnDefInfo, a2 int, a3 core.SrcPos) (*compiler.CompiledFnRef, bool) {
-	return compiler.StampDetachedSig(a0, a1, a2, a3)
-}
-
-func StampFnValue(a0 *core.Registry, a1 core.Value) (core.Value, bool) {
-	return compiler.StampFnValue(a0, a1)
 }
 
 func StampFnValueInPlace(a0 *core.Registry, a1 core.Value) bool {

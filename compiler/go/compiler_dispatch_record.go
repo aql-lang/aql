@@ -102,7 +102,7 @@ func recordDispatchOutcome(r *core.Registry, word string, sig *core.Signature, a
 		!tryRecordClosure(r, word, sig, args, out, pos) &&
 		!tryRecordDynBody(r, word, sig, args, out, pos) &&
 		!tryRecordPoly(r, word, sig, args, out, pos, false, ownerReg, false, nil) &&
-		!tryRecordFallback(r, word, sig, args, out, pos) {
+		!TryRecordFallback(r, word, sig, args, out, pos) {
 		quoteInertOK := quoteOperandInertOK(r, word, sig, args)
 		// A CompileRunsBodyIsolated word (Test.check-prop) whose dynamic operands
 		// all conform to its single sig (dynInputsProven) bakes a faithful CALL_
@@ -598,7 +598,7 @@ func tryRecordDynBody(r *core.Registry, word string, sig *core.Signature, args, 
 	// Every operand must have a compiled home: the body rides as a threaded
 	// runtime value (a param local / event result) or an inert const; other
 	// operands resolve normally. An unresolvable operand leaves the refusal.
-	ops := make([]emitOperand, len(args))
+	ops := make([]EmitOperand, len(args))
 	for i := range args {
 		op, ok := es.resolveOperand(args[i])
 		if !ok {
@@ -616,7 +616,7 @@ func tryRecordDynBody(r *core.Registry, word string, sig *core.Signature, args, 
 		call.sig = nil
 		call.poly = true
 	}
-	seq := es.appendEvent(emitEvent{kind: evCall, call: call})
+	seq := es.appendEvent(EmitEvent{kind: evCall, call: call})
 	f := es.eventInfo[seq]
 	f.dynBodyResult = true
 	// A VALUE-EVAL body (`do {map}`) — a CONCRETE, non-dynamic Map arg on the
@@ -700,7 +700,7 @@ func tryRecordDynBody(r *core.Registry, word string, sig *core.Signature, args, 
 // and a downstream TYPED dispatch still refuses via anyDynamicCarrier. (Report
 // §9.1's TYPE_CHECK boundary, realised as an interpreter island.)
 
-// tryRecordFallback attempts to compile a refused code-body higher-order
+// TryRecordFallback attempts to compile a refused code-body higher-order
 // word as an interpreter island: the construct re-runs through a
 // sub-engine over `word arg0 arg1 …` in forward form. The baked args
 // ride inside the island token span; a COMPUTED data arg (a prior
@@ -722,7 +722,7 @@ func tryRecordDynBody(r *core.Registry, word string, sig *core.Signature, args, 
 // the differential gate: a threaded value is the program's real runtime
 // value, and the island's dynamic result still refuses any downstream
 // TYPED dispatch via anyDynamicCarrier.
-func tryRecordFallback(r *core.Registry, word string, sig *core.Signature, args, outs []core.Value, pos core.SrcPos) bool {
+func TryRecordFallback(r *core.Registry, word string, sig *core.Signature, args, outs []core.Value, pos core.SrcPos) bool {
 	es := r.Check.Recorder()
 	if !es.Active() || sig == nil || !sig.CompileEffect.Has(core.CompileFallbackBody|core.CompileIslandPure) || len(outs) != 1 {
 		return false
