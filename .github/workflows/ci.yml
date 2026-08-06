@@ -7,6 +7,20 @@ on:
     branches: [main]
 
 jobs:
+  # Refuse newly-added compiled binaries and oversized blobs. Cheap and
+  # independent of the Go build, so it fails fast. Deleting a committed
+  # binary later does NOT reclaim it — the blob stays in history and every
+  # clone keeps paying — so the only real fix is never merging one.
+  no-binaries:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # need history for the merge-base diff
+
+      - name: No committed binaries or oversized files
+        run: scripts/check-no-binaries.sh "${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || '' }}"
+
   build-and-test:
     runs-on: ubuntu-latest
 
