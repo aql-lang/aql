@@ -184,3 +184,7 @@ cmd/go/borubin
 # Python bytecode caches (editors/pygments)
 __pycache__/
 *.pyc
+
+# piecetool builds to coverage/ via `make facades`; never commit the binary
+piecetool
+tools/piecetool/piecetool

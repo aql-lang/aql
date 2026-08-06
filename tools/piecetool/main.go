@@ -18,6 +18,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"go/ast"
 	"go/token"
@@ -32,37 +33,84 @@ import (
 
 var rank = map[string]int{"core": 0, "check": 1, "compiler": 2, "eng": 3}
 
+const usage = `usage:
+  piecetool <dir>                              report the cross-piece inventory
+  piecetool -demethod <dir> Recv.Name...       methods -> free functions
+  piecetool -export <dir>                      export the cross-piece surface
+  piecetool -facade <dir> <out> [qualifier]    generate a facade over <dir>
+  piecetool -exports <dir>                     list the exported symbols
+  piecetool -qualify <dir> <piece>             qualify cross-piece uses
+  piecetool -qualify-tests <dir> <piece> <files>`
+
 func main() {
-	if os.Args[1] == "-demethod" {
-		demethod(os.Args[2], os.Args[3:])
-		return
+	if err := run(os.Args[1:]); err != nil {
+		fmt.Fprintln(os.Stderr, "piecetool:", err)
+		os.Exit(1)
 	}
-	if os.Args[1] == "-export" {
-		exportPass(os.Args[2])
-		return
+}
+
+// run dispatches a mode and returns its failure rather than panicking:
+// every arity is checked here so a short command line is a diagnostic,
+// not an index-out-of-range (AGENTS.md — panics are forbidden).
+func run(args []string) error {
+	if len(args) == 0 {
+		return errors.New(usage)
 	}
-	if os.Args[1] == "-facade" {
-		qual := "core"
-		if len(os.Args) > 4 {
-			qual = os.Args[4]
+	// need reports whether args carries n operands after the mode flag.
+	need := func(n int) error {
+		if len(args) < n+1 {
+			return fmt.Errorf("%s needs %d argument(s)\n%s", args[0], n, usage)
 		}
-		facadeFor(os.Args[2], os.Args[3], qual)
-		return
+		return nil
 	}
-	if os.Args[1] == "-exports" {
-		exportsMode(os.Args[2])
-		return
+	switch args[0] {
+	case "-demethod":
+		if err := need(2); err != nil {
+			return err
+		}
+		return demethod(args[1], args[2:])
+	case "-export":
+		if err := need(1); err != nil {
+			return err
+		}
+		return exportPass(args[1])
+	case "-facade":
+		if err := need(2); err != nil {
+			return err
+		}
+		qual := "core"
+		if len(args) > 3 {
+			qual = args[3]
+		}
+		return facadeFor(args[1], args[2], qual)
+	case "-exports":
+		if err := need(1); err != nil {
+			return err
+		}
+		return exportsMode(args[1])
+	case "-qualify":
+		if err := need(2); err != nil {
+			return err
+		}
+		return qualify(args[1], args[2])
+	case "-qualify-tests":
+		if err := need(3); err != nil {
+			return err
+		}
+		return qualifyTests(args[1], args[2], args[3])
 	}
-	if os.Args[1] == "-qualify" {
-		qualify(os.Args[2], os.Args[3])
-		return
+	if strings.HasPrefix(args[0], "-") {
+		return fmt.Errorf("unknown mode %q\n%s", args[0], usage)
 	}
-	if os.Args[1] == "-qualify-tests" {
-		qualifyTests(os.Args[2], os.Args[3], os.Args[4])
-		return
+	return report(args[0])
+}
+
+// report is the default mode: the type-checked cross-piece inventory.
+func report(dir string) error {
+	pieces, err := readPieceMap(filepath.Join(dir, "piece_map.tsv"))
+	if err != nil {
+		return err
 	}
-	dir := os.Args[1] // eng/go directory
-	pieces := readPieceMap(filepath.Join(dir, "piece_map.tsv"))
 
 	cfg := &packages.Config{
 		Mode: packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo |
@@ -72,10 +120,10 @@ func main() {
 	}
 	pkgs, err := packages.Load(cfg, ".")
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("load %s: %w", dir, err)
 	}
 	if packages.PrintErrors(pkgs) > 0 {
-		os.Exit(1)
+		return fmt.Errorf("load %s: package has type errors", dir)
 	}
 	pkg := pkgs[0]
 	fset := pkg.Fset
@@ -257,6 +305,7 @@ func main() {
 	for _, e := range f4 {
 		fmt.Printf("F4 %s[%s].%s : %s[%s]\n", e.owner, e.ownerPiece, e.field, e.ftype, e.ftypePiece)
 	}
+	return nil
 }
 
 func objKind(obj types.Object) string {
@@ -285,10 +334,10 @@ func objKind(obj types.Object) string {
 	return ""
 }
 
-func readPieceMap(path string) map[string]string {
+func readPieceMap(path string) (map[string]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("read piece map: %w", err)
 	}
 	m := map[string]string{}
 	for _, line := range strings.Split(string(data), "\n") {
@@ -301,5 +350,5 @@ func readPieceMap(path string) map[string]string {
 			m[parts[0]] = parts[1]
 		}
 	}
-	return m
+	return m, nil
 }

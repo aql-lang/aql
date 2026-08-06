@@ -484,7 +484,17 @@ func (a *Boru) CompileCheck(src string) (*Program, string, CheckResult, error) {
 	if a.registry.Check.AmbiguousGradualSplit {
 		return nil, "forward/stack split depends on a gradual operand (uncompilable)", res, nil
 	}
-	prog, reason, ok := a.registry.Check.Recorder().(*eng.EmitState).Finalize(residual)
+	// Finalizing the recorded stream needs the CONCRETE EmitState: only it
+	// holds the emitted program. compiler/go's init unconditionally installs
+	// NewEmitStateHook to mint one, and lang links compiler transitively
+	// through eng, so a non-EmitState recorder here means a host reassigned
+	// the exported core hook. Refuse to compile rather than assert — a
+	// failed assertion would panic, which ADR-005 forbids.
+	es, isReal := a.registry.Check.Recorder().(*eng.EmitState)
+	if !isReal { //covergate:allow compiler's init always installs the *EmitState hook that eng links in, so only a host-swapped core.NewEmitStateHook reaches this belt (§compiler)
+		return nil, "no bytecode recorder installed (uncompilable)", res, nil
+	}
+	prog, reason, ok := es.Finalize(residual)
 	if !ok {
 		return nil, reason, res, nil
 	}

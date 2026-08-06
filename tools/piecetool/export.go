@@ -26,8 +26,11 @@ type target struct {
 	newName string
 }
 
-func exportPass(dir string) {
-	pieces := readPieceMap(filepath.Join(dir, "piece_map.tsv"))
+func exportPass(dir string) error {
+	pieces, err := readPieceMap(filepath.Join(dir, "piece_map.tsv"))
+	if err != nil {
+		return err
+	}
 
 	cfg := &packages.Config{
 		Mode: packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo |
@@ -37,10 +40,10 @@ func exportPass(dir string) {
 	}
 	pkgs, err := packages.Load(cfg, ".")
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("load %s: %w", dir, err)
 	}
 	if packages.PrintErrors(pkgs) > 0 {
-		os.Exit(1)
+		return fmt.Errorf("load %s: package has type errors", dir)
 	}
 
 	// pick the production package variant for the piece analysis, but keep
@@ -144,14 +147,14 @@ func exportPass(dir string) {
 	for fn, es := range edits {
 		b, err := os.ReadFile(fn)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("read %s: %w", fn, err)
 		}
 		sort.Slice(es, func(i, j int) bool { return es[i].start > es[j].start })
 		for _, e := range es {
 			b = append(b[:e.start], append([]byte(e.repl), b[e.end:]...)...)
 		}
 		if err := os.WriteFile(fn, b, 0o644); err != nil {
-			panic(err)
+			return fmt.Errorf("write %s: %w", fn, err)
 		}
 	}
 	fmt.Printf("exported %d symbols across %d files\n", len(targets), len(edits))
@@ -161,6 +164,7 @@ func exportPass(dir string) {
 	for _, s := range skipped {
 		fmt.Printf("SKIPPED %s\n", s)
 	}
+	return nil
 }
 
 func fieldCollides(p *packages.Package, f *types.Var, newName string) bool {
