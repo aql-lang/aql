@@ -1,4 +1,4 @@
-.PHONY: all build install test test-race test-ts vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
+.PHONY: all build install test test-race test-ts test-ts-core vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
         spec-gen spec-test cover-gate-eng cover-gate-check cover-gate-compiler facades \
         verify-bytecode fuzz-bytecode status \
         publish publish-eng publish-basic publish-lang publish-cmd release tags \
@@ -233,6 +233,44 @@ test-ts:
 	@echo "==> test eng/ts (source line-coverage floor $(TS_GATE_LINES)%)"
 	cd eng/ts && node --test --experimental-strip-types --no-warnings \
 	  --experimental-test-coverage --test-coverage-lines=$(TS_GATE_LINES) \
+	  --test-coverage-exclude='**/*.test.ts' \
+	  'src/**/*.test.ts'
+
+# ---- TypeScript interpreter core (core/ts) -----------------------------
+#
+# @voxgig/borucore is the TS twin of the core/go module — values, types,
+# signatures, matching, the registry, and the step loop, with NO check pass,
+# NO compiler, NO parser and no dependencies at all (core/go at least needs
+# apd; the TS core needs nothing). It is the fourth gate in the standalone
+# set, the direct counterpart of `make cover-gate-core`:
+#
+#   cover-gate-core    core/go by its own suite   floor 100
+#   test-ts-core       core/ts by its own suite   floor $(TS_CORE_GATE_LINES)
+#
+# Same source-only denominator as test-ts, and the same ratchet discipline:
+# raise the floor in the change that raises coverage, never lower it.
+#
+# The no-upward-imports rule (core/go/CLAUDE.md) is what makes this gate
+# meaningful, and it is STRUCTURALLY enforced here rather than by convention:
+# core/ts has no dependency on @voxgig/borueng, so a core file that reached
+# for the check pass or the compiler would fail to resolve. The check piece
+# reaches core only through the seam tables core owns — AnalysisImpl
+# (analysis-hooks.ts) and EmitRecorder (emit-recorder.ts) — each with NAMED
+# inactive defaults pinned by a core-side test, exactly as core/go requires.
+# STAGE 1 floor: 71 (measured 71.76% over the files the current suite loads —
+# the seam tables at 100%, canon/type/signature partially, and the rest not yet
+# reached because core/ts has no corpus of its own yet). This is deliberately
+# the honest measured number rather than an aspirational one: the ratchet's
+# rule is that it only rises, so it has to start where the suite actually is.
+# It jumps once the core-scoped spec corpus lands and every core file is
+# loaded by a test.
+TS_CORE_GATE_LINES ?= 71
+test-ts-core:
+	@echo "==> typecheck core/ts"
+	cd core/ts && npx tsc
+	@echo "==> test core/ts (source line-coverage floor $(TS_CORE_GATE_LINES)%)"
+	cd core/ts && node --test --experimental-strip-types --no-warnings \
+	  --experimental-test-coverage --test-coverage-lines=$(TS_CORE_GATE_LINES) \
 	  --test-coverage-exclude='**/*.test.ts' \
 	  'src/**/*.test.ts'
 
