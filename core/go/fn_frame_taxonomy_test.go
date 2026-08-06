@@ -18,6 +18,7 @@ import (
 // terminates and never unwinds.
 
 func TestInfiniteTailLoopTripsEvaluationLimitNotTape(t *testing.T) {
+	t.Parallel()
 	r, err := NewRegistry()
 	if err != nil {
 		t.Fatal(err)

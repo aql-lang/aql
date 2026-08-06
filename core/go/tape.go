@@ -45,6 +45,23 @@ type Tape struct {
 	gapStart int // physical index of the first gap slot == logical gap position
 	gapEnd   int // physical index one past the last gap slot
 
+	// forwards counts the Forward cells currently in the logical tape.
+	// It exists so pendingForwardIdx can answer its dominant case — "is
+	// anything collecting this value?" — WITHOUT walking the stack: a tape
+	// holding zero Forwards cannot yield an index, so the answer is -1 by
+	// construction. Without it that walk is O(stack depth) per literal push
+	// and per word dispatch, which is O(n^2) over a program that accumulates
+	// a residual with no paren or forward barrier in it — `for 8000 [add 1
+	// 2]` spent 32M scan steps (avg walk 668 cells) before this counter.
+	//
+	// It is maintained HERE, from the writes themselves, rather than by the
+	// engine: every content mutation goes through Set/Insert/Remove/Splice
+	// (plus construction and Reload), so the count cannot drift from what is
+	// actually on the tape. MoveGap and grow relocate cells without changing
+	// the multiset, so they leave it alone. TestTapeForwardCountInvariant
+	// pins it against a recount.
+	forwards int
+
 	maxCap    int          // hard ceiling on len(buf) (entries)
 	maxGrows  int          // remaining reallocations allowed
 	grows0    int          // original maxGrows, restored by Reload
@@ -148,6 +165,7 @@ func NewTapeWith(vals []Value, cfg TapeConfig, warn func(string)) *Tape {
 	copy(buf, vals)
 	return &Tape{
 		buf:      buf,
+		forwards: countForwards(vals),
 		gapStart: len(vals),
 		gapEnd:   initial,
 		maxCap:   GrowthCeiling(initial, maxGrows, factor),
@@ -177,6 +195,7 @@ func (t *Tape) Reload(vals []Value) bool {
 	}
 	t.gapStart = len(vals)
 	t.gapEnd = n
+	t.forwards = countForwards(vals)
 	t.maxGrows = t.grows0
 	t.exhausted = false
 	t.warned = [3]bool{}
@@ -202,6 +221,24 @@ func (t *Tape) Len() int { return len(t.buf) - (t.gapEnd - t.gapStart) }
 // keep around.
 func (t *Tape) capEntries() int { return len(t.buf) }
 
+// countForwards tallies the Forward cells in vals — the seed for the
+// tape's running count at construction and Reload.
+func countForwards(vals []Value) int {
+	n := 0
+	for i := range vals {
+		if IsForward(vals[i]) {
+			n++
+		}
+	}
+	return n
+}
+
+// hasForward reports whether any Forward cell is on the tape. A false
+// answer lets pendingForwardIdx skip its backward walk: with no Forward
+// anywhere, no index can be returned. Nil-safe so a tape-less engine
+// (pointer still at 0) answers without a panic.
+func (t *Tape) hasForward() bool { return t != nil && t.forwards > 0 }
+
 // phys translates a logical index to a physical one.
 func (t *Tape) phys(i int) int {
 	if i < t.gapStart {
@@ -226,7 +263,14 @@ func (t *Tape) Set(i int, v Value) {
 	if i < 0 || i >= t.Len() {
 		return
 	}
-	t.buf[t.phys(i)] = v
+	p := t.phys(i)
+	if IsForward(t.buf[p]) {
+		t.forwards--
+	}
+	if IsForward(v) {
+		t.forwards++
+	}
+	t.buf[p] = v
 }
 
 // MoveGap relocates the gap so it sits at logical index i — O(|i - gap|)
@@ -321,6 +365,9 @@ func (t *Tape) Insert(i int, v Value) {
 	}
 	t.buf[t.gapStart] = v
 	t.gapStart++
+	if IsForward(v) {
+		t.forwards++
+	}
 }
 
 // Remove deletes the element at logical index i. O(gap distance).
@@ -330,6 +377,9 @@ func (t *Tape) Remove(i int) {
 	}
 	t.MoveGap(i)
 	// The element at logical i sits just after the gap; widen over it.
+	if IsForward(t.buf[t.gapEnd]) {
+		t.forwards--
+	}
 	t.buf[t.gapEnd] = Value{} // release references
 	t.gapEnd++
 }
@@ -352,6 +402,9 @@ func (t *Tape) Splice(i, count int, repl ...Value) {
 	t.MoveGap(i)
 	// Consume count elements after the gap.
 	for k := 0; k < count; k++ {
+		if IsForward(t.buf[t.gapEnd+k]) {
+			t.forwards--
+		}
 		t.buf[t.gapEnd+k] = Value{}
 	}
 	t.gapEnd += count
@@ -360,6 +413,7 @@ func (t *Tape) Splice(i, count int, repl ...Value) {
 	}
 	copy(t.buf[t.gapStart:], repl)
 	t.gapStart += len(repl)
+	t.forwards += countForwards(repl)
 }
 
 // Prefix returns the contiguous region below logical index end, when end
