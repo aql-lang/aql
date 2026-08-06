@@ -1,4 +1,4 @@
-package eng
+package check
 
 // Check-piece ordering mirror extracted from compare.go (Stage 2c of the
 // four-piece split): the check-mode ReturnsFn for the family-restricted
@@ -6,6 +6,8 @@ package eng
 
 import (
 	"errors"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // OrderingReturnsFn builds the check-mode ReturnsFn for the family-
@@ -18,11 +20,11 @@ import (
 // family is unknown, so nothing is flagged. The result carrier (Boolean
 // for the predicates, Integer for cmp) is returned either way so analysis
 // continues.
-func OrderingReturnsFn(handler Handler, result *Type) ReturnsFunc {
-	return func(args []Value, r *Registry) []Value {
+func OrderingReturnsFn(handler core.Handler, result *core.Type) core.ReturnsFunc {
+	return func(args []core.Value, r *core.Registry) []core.Value {
 		if r != nil && len(args) == 2 && orderingDeterminate(args[0]) && orderingDeterminate(args[1]) {
 			if _, err := handler(args, nil, nil, r); err != nil {
-				var ae *BoruError
+				var ae *core.BoruError
 				if errors.As(err, &ae) && ae.Code == "incomparable" {
 					// Routed through the unique-diagnostic helper for the
 					// caught-body gate: inside `do [...]` the runtime error
@@ -31,7 +33,7 @@ func OrderingReturnsFn(handler Handler, result *Type) ReturnsFunc {
 				}
 			}
 		}
-		return []Value{NewCarrier(result)}
+		return []core.Value{core.NewCarrier(result)}
 	}
 }
 
@@ -47,9 +49,9 @@ func OrderingReturnsFn(handler Handler, result *Type) ReturnsFunc {
 // (litVsLit Rank order within a family, incomparable across) is exactly
 // the runtime's. A dynamic / gradual carrier never qualifies: its
 // family is genuinely unknown.
-func orderingDeterminate(v Value) bool {
+func orderingDeterminate(v core.Value) bool {
 	if v.Dynamic {
 		return false
 	}
-	return IsConcrete(v) || IsNoneShape(v) || IsBareTypeNode(v)
+	return core.IsConcrete(v) || core.IsNoneShape(v) || core.IsBareTypeNode(v)
 }

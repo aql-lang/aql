@@ -1,5 +1,10 @@
 package eng
 
+import (
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
+)
+
 // vmCompiledRuntime is the bytecode runner's CompiledRuntime — the real
 // implementation of core's S4 seam (design/ENG-FOUR-PIECE.0.md). It
 // owns the stamped-ref freshness/JIT-re-stamp dance, the C1 effect
@@ -7,10 +12,10 @@ package eng
 // core's InvokeCallback sees only ran/declined.
 type vmCompiledRuntime struct{}
 
-func init() { InstallCompiledRuntime(vmCompiledRuntime{}) }
+func init() { core.InstallCompiledRuntime(vmCompiledRuntime{}) }
 
-func (vmCompiledRuntime) InvokeCompiled(r *Registry, sig *Signature, args []Value) ([]Value, error, bool) {
-	ref := CompiledRef(sig)
+func (vmCompiledRuntime) InvokeCompiled(r *core.Registry, sig *core.Signature, args []core.Value) ([]core.Value, error, bool) {
+	ref := compiler.CompiledRef(sig)
 	if ref != nil && ref.Prog != nil && !ref.DepsFresh(r) {
 		ref = ref.JitRestamp(r)
 	}
@@ -31,7 +36,7 @@ func (vmCompiledRuntime) InvokeCompiled(r *Registry, sig *Signature, args []Valu
 	if !ran {
 		return nil, nil, false
 	}
-	if !IsInternalErr(err) {
+	if !core.IsInternalErr(err) {
 		return res, err, true
 	}
 	// C1 effect fence (effects.go): the interpreter retry re-runs the
@@ -45,11 +50,11 @@ func (vmCompiledRuntime) InvokeCompiled(r *Registry, sig *Signature, args []Valu
 	return nil, nil, false
 }
 
-func (vmCompiledRuntime) StampDetached(r *Registry, fd FnDefInfo, pos SrcPos) {
+func (vmCompiledRuntime) StampDetached(r *core.Registry, fd core.FnDefInfo, pos core.SrcPos) {
 	// fd arrives with the stamp-event name applied by the caller; the
 	// ref lands on the shared *BoruImpl pointer (stampCompiledRef), so
 	// the same copy serves both calls.
-	if ref, stampOK := StampDetachedFn(r, fd, pos); stampOK {
-		StampCompiledRef(fd, ref)
+	if ref, stampOK := compiler.StampDetachedFn(r, fd, pos); stampOK {
+		compiler.StampCompiledRef(fd, ref)
 	}
 }

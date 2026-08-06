@@ -1,4 +1,4 @@
-package eng
+package check
 
 // Check-piece fn-body machinery: the construction-time static body pass, the
 // return-conformance mirror, and the analysis ReturnsFunc builder. Extracted
@@ -7,6 +7,8 @@ package eng
 
 import (
 	"fmt"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // checkBodyReturnConformance is the check-mode mirror of the runtime RET
@@ -42,7 +44,7 @@ import (
 // guaranteed program error. argsConcrete gates it to real concrete-arg
 // calls — the install-time synthetic example eval and generalised analyses
 // use carriers and never fire it.
-func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patterns []*Value, unnamedCount int, argsConcrete bool, stk []Value, pos, bodyEnd SrcPos) {
+func checkBodyReturnConformance(r *core.Registry, name string, declared []*core.Type, patterns []*core.Value, unnamedCount int, argsConcrete bool, stk []core.Value, pos, bodyEnd core.SrcPos) {
 	if len(declared) == 0 || !r.Check.IsActive() {
 		return
 	}
@@ -53,7 +55,7 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 				"%s: the body produces no return value for this call (declared %d) — the call always errors",
 				name, len(declared))
 			if !hasCheckDiagnostic(r, "type_error", detail) {
-				r.Check.AddDiagnostic(CheckDiagnostic{
+				r.Check.AddDiagnostic(core.CheckDiagnostic{
 					Code:          "type_error",
 					Detail:        detail,
 					Word:          name,
@@ -101,9 +103,9 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 	if extra > unnamedCount &&
 		!stackHasVariadic(stk) && !stackHasFnValue(stk) && !stackHasDynamic(stk) &&
 		!stackHasApproxAny(stk) {
-		detail := ReturnCountErrorText(name, len(declared), len(stk)-unnamedCount)
+		detail := core.ReturnCountErrorText(name, len(declared), len(stk)-unnamedCount)
 		if !hasCheckDiagnostic(r, "type_error", detail) {
-			r.Check.AddDiagnostic(CheckDiagnostic{
+			r.Check.AddDiagnostic(core.CheckDiagnostic{
 				Code:          "type_error",
 				Detail:        detail,
 				Word:          name,
@@ -121,11 +123,11 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 		// would drop the only contract there is. `Type` aliases `Value`, so
 		// the pattern doubles as the "expected" rendering.
 		if k < len(patterns) && patterns[k] != nil &&
-			!got.Dynamic && got.Parent != nil && !IsBareTypeNode(got) && !got.Parent.Equal(TNone) {
-			if _, ok := Unify(*patterns[k], got); !ok {
-				detail, _ := ReturnTypeErrorText(name, k+1, patterns[k], got)
+			!got.Dynamic && got.Parent != nil && !core.IsBareTypeNode(got) && !got.Parent.Equal(core.TNone) {
+			if _, ok := core.Unify(*patterns[k], got); !ok {
+				detail, _ := core.ReturnTypeErrorText(name, k+1, patterns[k], got)
 				if !hasCheckDiagnostic(r, "type_error", detail) {
-					r.Check.AddDiagnostic(CheckDiagnostic{
+					r.Check.AddDiagnostic(core.CheckDiagnostic{
 						Code:          "type_error",
 						Detail:        detail,
 						Word:          name,
@@ -137,10 +139,10 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 				continue
 			}
 		}
-		if exp == nil || exp.Equal(TAny) {
+		if exp == nil || exp.Equal(core.TAny) {
 			continue
 		}
-		if got.Dynamic || got.Parent == nil || IsBareTypeNode(got) || got.Parent.Equal(TNone) {
+		if got.Dynamic || got.Parent == nil || core.IsBareTypeNode(got) || got.Parent.Equal(core.TNone) {
 			continue
 		}
 		if !residualProvablyDisjoint(got, exp) {
@@ -163,12 +165,12 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 				continue
 			}
 		}
-		detail, _ := ReturnTypeErrorText(name, k+1, exp, got)
+		detail, _ := core.ReturnTypeErrorText(name, k+1, exp, got)
 		if !hasCheckDiagnostic(r, "type_error", detail) {
 			// A RuntimeMirror like the count path: the VM RET re-checks the
 			// runtime value and raises the byte-identical type_error, so the
 			// compiled error path is exact.
-			r.Check.AddDiagnostic(CheckDiagnostic{
+			r.Check.AddDiagnostic(core.CheckDiagnostic{
 				Code:          "type_error",
 				Detail:        detail,
 				Word:          name,
@@ -189,13 +191,13 @@ func checkBodyReturnConformance(r *Registry, name string, declared []*Type, patt
 // not shield this body's conformance check. An unattributed diagnostic
 // (Row 0) or an unpositioned body keeps the name-wide shield —
 // conservative, never a new false positive.
-func fnBodyUndefinedWordShield(r *Registry, name string, pos, bodyEnd SrcPos) bool {
+func fnBodyUndefinedWordShield(r *core.Registry, name string, pos, bodyEnd core.SrcPos) bool {
 	for _, d := range r.Check.Diagnostics {
 		if d.Code != "undefined_word" || d.FnName != name {
 			continue
 		}
 		if d.Row != 0 && (bodyEnd.Row != 0 || bodyEnd.Col != 0) &&
-			(posBefore(d.Row, d.Col, pos) || posBefore(bodyEnd.Row, bodyEnd.Col, SrcPos{Row: d.Row, Col: d.Col})) {
+			(posBefore(d.Row, d.Col, pos) || posBefore(bodyEnd.Row, bodyEnd.Col, core.SrcPos{Row: d.Row, Col: d.Col})) {
 			continue // attributed outside this body — not this body's signal
 		}
 		return true
@@ -208,7 +210,7 @@ func fnBodyUndefinedWordShield(r *Registry, name string, pos, bodyEnd SrcPos) bo
 // paths use (one analysed shape can repeat across call sites). A caught
 // (downgraded) entry does not count: it must never mask a later REAL
 // emission of the same finding outside the trapping region.
-func hasCheckDiagnostic(r *Registry, code, detail string) bool {
+func hasCheckDiagnostic(r *core.Registry, code, detail string) bool {
 	for _, d := range r.Check.Diagnostics {
 		if d.Code == code && d.Detail == detail && !d.CaughtAtRuntime {
 			return true
@@ -223,18 +225,18 @@ func hasCheckDiagnostic(r *Registry, code, detail string) bool {
 // or whose key set doesn't overlap the pattern at all (that shape is
 // typically the synthetic/default arg map used during fn body analysis, not
 // a real user call).
-func checkRecordShapeArgs(r *Registry, name string, paramPatterns []*Value, args []Value) {
+func checkRecordShapeArgs(r *core.Registry, name string, paramPatterns []*core.Value, args []core.Value) {
 	for i, pat := range paramPatterns {
 		if pat == nil || i >= len(args) {
 			continue
 		}
 		val := args[i]
-		if !pat.Parent.Equal(TMap) || !val.Parent.Equal(TMap) ||
-			!IsConcrete(*pat) || !IsConcrete(val) {
+		if !pat.Parent.Equal(core.TMap) || !val.Parent.Equal(core.TMap) ||
+			!core.IsConcrete(*pat) || !core.IsConcrete(val) {
 			continue
 		}
-		pMap, _ := AsMap(*pat)
-		vMap, _ := AsMap(val)
+		pMap, _ := core.AsMap(*pat)
+		vMap, _ := core.AsMap(val)
 		if pMap == nil || vMap == nil || vMap.Len() == 0 {
 			continue
 		}
@@ -251,15 +253,15 @@ func checkRecordShapeArgs(r *Registry, name string, paramPatterns []*Value, args
 			pv, _ := pMap.Get(key)
 			av, hasKey := vMap.Get(key)
 			if !hasKey {
-				r.Check.AddDiagnostic(CheckDiagnostic{
+				r.Check.AddDiagnostic(core.CheckDiagnostic{
 					Code:   "record_shape_mismatch",
 					Detail: "argument to " + name + " missing field: " + key,
 					Word:   name,
 				})
 				continue
 			}
-			if IsBareTypeNode(pv) && !av.Parent.ConformsTo(pv.Parent) && !av.Parent.Equal(TAny) {
-				r.Check.AddDiagnostic(CheckDiagnostic{
+			if core.IsBareTypeNode(pv) && !av.Parent.ConformsTo(pv.Parent) && !av.Parent.Equal(core.TAny) {
+				r.Check.AddDiagnostic(core.CheckDiagnostic{
 					Code:   "record_shape_mismatch",
 					Detail: "argument to " + name + ": field " + key + " expected " + pv.Parent.String() + ", got " + av.Parent.String(),
 					Word:   name,
@@ -269,26 +271,26 @@ func checkRecordShapeArgs(r *Registry, name string, paramPatterns []*Value, args
 	}
 }
 
-func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) ReturnsFunc {
+func buildFnBodyReturnsFn(r *core.Registry, name string, s core.FnSig, fnDef core.FnDefInfo) core.ReturnsFunc {
 	paramNames := make([]string, len(s.Params))
-	paramPatterns := make([]*Value, len(s.Params))
+	paramPatterns := make([]*core.Value, len(s.Params))
 	for i, p := range s.Params {
 		paramNames[i] = p.Name
 		paramPatterns[i] = p.Pattern
 	}
-	declaredReturns := append([]*Type(nil), s.Returns...)
-	declaredReturnPatterns := append([]*Value(nil), s.ReturnPatterns...)
+	declaredReturns := append([]*core.Type(nil), s.Returns...)
+	declaredReturnPatterns := append([]*core.Value(nil), s.ReturnPatterns...)
 	if fnDef.Anonymous {
 		declaredReturns = nil
 		declaredReturnPatterns = nil
 	}
 	declSite := s.Decl
-	bodyCopy := append([]Value(nil), s.Body()...)
+	bodyCopy := append([]core.Value(nil), s.Body()...)
 	nameCopy := name
 	capturesCopy := fnDef.Captured
 	genSpec := fnDef.Gen
-	sigParams := append([]FnParam(nil), s.Params...)
-	return func(args []Value, caller *Registry) []Value {
+	sigParams := append([]core.FnParam(nil), s.Params...)
+	return func(args []core.Value, caller *core.Registry) []core.Value {
 		// The MERGED-WORD seam (Stage M1, design/STAGE3-INLINING-DESIGN-ROUND.0.md
 		// §2.4a/§5): a transplanted word-extension sig (open words — a module-
 		// defined `add` merged into the importer's dispatch table) dispatches as a
@@ -318,11 +320,11 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// analysed once (monomorphization for free). The bindings are
 		// popped explicitly (Defs.Pop is non-retiring); there is no
 		// DefCleanup frame on this path.
-		var genBindings map[string]Value
+		var genBindings map[string]core.Value
 		var genNames []string
 		if genSpec != nil {
-			genBindings = InferGenBindings(genSpec, sigParams, args)
-			genNames = InstallGenBindingMap(r, genSpec, genBindings)
+			genBindings = core.InferGenBindings(genSpec, sigParams, args)
+			genNames = core.InstallGenBindingMap(r, genSpec, genBindings)
 		}
 		// Deferred-list body (def-node-binding.tsv:54) — `def mk fn
 		// [[c1:Integer] [List] [[c1]]]`. The body is a single list literal that
@@ -351,7 +353,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// generic NAMED fn with a deferred-list body is not anonymous, so it
 			// falls through to the normal path, which pops genNames below.
 			AnalyseFnBody(r, nameCopy, paramNames, bodyCopy, args, capturesCopy, declaredReturns, fnDef.Anonymous)
-			return []Value{raw}
+			return []core.Value{raw}
 		}
 		// Always analyse the body so diagnostics emitted by stepWord
 		// (undefined_word, no_signature, …) inside the body propagate
@@ -366,7 +368,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 		// exactly when the body is analysed.
 		es := r.Check.Recorder()
 		fnUnit := -1
-		var finishFn func([]Value)
+		var finishFn func([]core.Value)
 		polyPlan, polyBarred := dispatchPlanUserPoly(r, es, nameCopy, args, declaredReturns)
 		// A /q (quote-capture) param binds only a bare Word collected forward
 		// at the runtime pointer — a plain stack value never matches it
@@ -402,7 +404,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// (`n sub 1` with n=10 folds to 9), baking one call's
 			// constants into the shared unit. Same Parents → same memo
 			// key, so the generalised analysis is the one that caches.
-			genArgs := make([]Value, len(args))
+			genArgs := make([]core.Value, len(args))
 			for i, a := range args {
 				if i < len(sigParams) {
 					if rc, ok := recordSchemaCarrier(sigParams[i], a); ok {
@@ -424,9 +426,9 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					// that raises == the interpreter when a runtime arg misses the
 					// declared type, so assuming it here can only narrow, never admit a
 					// value the interpreter would reject.
-					if pt := sigParams[i].Type; pt != nil && !pt.Equal(TAny) &&
-						a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a) {
-						genArgs[i] = NewCarrier(pt)
+					if pt := sigParams[i].Type; pt != nil && !pt.Equal(core.TAny) &&
+						a.Parent != nil && a.Parent.Equal(core.TAny) && !core.IsBareTypeNode(a) {
+						genArgs[i] = core.NewCarrier(pt)
 						continue
 					}
 					// A DISJUNCT carrier — the checker's abstraction of an
@@ -440,9 +442,9 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					// then dispatched `slice` over a Disjunct and refused
 					// "for: body nets multiple values"). The dynamic flag is
 					// preserved: a gradual disjunct keeps matching optimistically.
-					if pt := sigParams[i].Type; pt != nil && !pt.Equal(TAny) &&
-						a.Carrier && IsDisjunct(a) {
-						nc := NewCarrier(pt)
+					if pt := sigParams[i].Type; pt != nil && !pt.Equal(core.TAny) &&
+						a.Carrier && core.IsDisjunct(a) {
+						nc := core.NewCarrier(pt)
 						nc.Dynamic = a.Dynamic
 						genArgs[i] = nc
 						continue
@@ -464,9 +466,9 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					// program main-pass rows (module-repl). Args with CONCRETE
 					// parents keep the precise strict generalisation below.
 					if pt := sigParams[i].Type; es.StoredGradualActive() &&
-						(pt == nil || pt.Equal(TAny)) &&
-						a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a) {
-						genArgs[i] = ParamInputCarrier(TAny)
+						(pt == nil || pt.Equal(core.TAny)) &&
+						a.Parent != nil && a.Parent.Equal(core.TAny) && !core.IsBareTypeNode(a) {
+						genArgs[i] = ParamInputCarrier(core.TAny)
 						continue
 					}
 				}
@@ -482,7 +484,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 					genArgs[i] = g
 					continue
 				}
-				genArgs[i] = NewCarrier(a.Parent)
+				genArgs[i] = core.NewCarrier(a.Parent)
 			}
 			// Key the compiled unit on the GENERALISED args, matching the body
 			// analysis (AnalyseFnBody runs on genArgs) and the FnSummaries memo. A
@@ -504,7 +506,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// the interpreter's call-site column (one unit serves every call
 			// site), but it keeps the compiled error from reporting an
 			// unknown position. Empty body falls back to a zero pos.
-			var fnPos SrcPos
+			var fnPos core.SrcPos
 			if len(bodyCopy) > 0 {
 				fnPos = bodyCopy[0].Pos()
 			}
@@ -518,8 +520,8 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// return-check). A gradual (Dynamic) arg optimistically matched a
 				// concrete param at check time; the compiled call must re-check the
 				// runtime value, or a laundered mismatch silently runs the body.
-				pts := make([]*Type, len(sigParams))
-				pats := make([]*Value, len(sigParams))
+				pts := make([]*core.Type, len(sigParams))
+				pats := make([]*core.Value, len(sigParams))
 				for i := range sigParams {
 					pts[i] = sigParams[i].Type
 					pats[i] = sigParams[i].Pattern
@@ -556,7 +558,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			r.Defs.Pop(genNames[i])
 		}
 		if genSpec == nil {
-			var retPos SrcPos
+			var retPos core.SrcPos
 			if len(bodyCopy) > 0 {
 				retPos = bodyCopy[0].Pos()
 			}
@@ -570,16 +572,16 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				unnamedCount, allConcreteArgs(args), stk, retPos, bodySpanEnd(bodyCopy))
 		}
 		if len(declaredReturns) > 0 {
-			out := make([]Value, len(declaredReturns))
+			out := make([]core.Value, len(declaredReturns))
 			for i, t := range declaredReturns {
 				// A return slot naming a type parameter refines to the
 				// call's inferred binding. An uninferable parameter is
 				// reported (unbound_param) and degrades to dynamic(Any)
 				// — never a silent strict Any.
 				if genSpec != nil {
-					if pname := TypeParamName(t); pname != "" {
+					if pname := core.TypeParamName(t); pname != "" {
 						if b, ok := genBindings[pname]; ok {
-							out[i] = GenBindingCarrier(r, b)
+							out[i] = core.GenBindingCarrier(r, b)
 							continue
 						}
 						// Dedupe identical emissions: the ReturnsFn runs
@@ -599,7 +601,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 							}
 						}
 						if !dup {
-							r.Check.AddDiagnostic(CheckDiagnostic{
+							r.Check.AddDiagnostic(core.CheckDiagnostic{
 								Code:   "unbound_param",
 								Detail: detail,
 								Word:   nameCopy,
@@ -613,10 +615,10 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 								// (spec: generics-fn.tsv §8 `loose` "the checker
 								// reports the precision loss"). Warning severity
 								// overrides the code map's default Error.
-								Severity: SeverityWarning,
+								Severity: core.SeverityWarning,
 							})
 						}
-						c := NewCarrier(TAny)
+						c := core.NewCarrier(core.TAny)
 						c.Dynamic = true
 						out[i] = c
 						continue
@@ -644,10 +646,10 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// check pass; the compile pass keeps the carrier and compiles the
 				// closure as before.
 				if !r.Check.Compiling &&
-					t.ConformsTo(TFunction) && len(stk) >= len(declaredReturns) {
-					if bv := stk[len(stk)-len(declaredReturns)+i]; IsConcrete(bv) &&
-						bv.Parent.ConformsTo(TFunction) {
-						out[i] = CloneValue(bv)
+					t.ConformsTo(core.TFunction) && len(stk) >= len(declaredReturns) {
+					if bv := stk[len(stk)-len(declaredReturns)+i]; core.IsConcrete(bv) &&
+						bv.Parent.ConformsTo(core.TFunction) {
+						out[i] = core.CloneValue(bv)
 						continue
 					}
 				}
@@ -661,11 +663,11 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// over-dispatch invariant, checker-accuracy-review.10.md §3).
 				// Surface the alternatives so disjunctPartitionReturns joins
 				// the per-alternative dispatches, like an inline `tor` result.
-				if dv, ok := UnionCarrierForType(CanonicalType(r, t)); ok {
+				if dv, ok := UnionCarrierForType(core.CanonicalType(r, t)); ok {
 					out[i] = dv
 					continue
 				}
-				c := NewCarrier(t)
+				c := core.NewCarrier(t)
 				// A declared `Any` return is "statically unknown", not "the Any
 				// root": a STRICT Any conforms to no typed slot, so a user fn
 				// declaring `[Any]` poisoned every typed consumer downstream with
@@ -673,13 +675,13 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// into another fn's `nd:Map` param — the trie/decision walkers).
 				// Mark it dynamic for optimistic matching, mirroring the native
 				// `[Any]`-return handling in carrierResults.
-				if t.Equal(TAny) {
+				if t.Equal(core.TAny) {
 					c.Dynamic = true
 				}
 				out[i] = c
 			}
 			if fnUnit >= 0 {
-				pos := SrcPos{}
+				pos := core.SrcPos{}
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
@@ -693,7 +695,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 				// arm the VM selects, a branch join), so downstream typing never
 				// rides one arm's unproven commitment.
 				polyPlan.SubstituteJoinedOuts(out)
-				pos := SrcPos{}
+				pos := core.SrcPos{}
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
@@ -711,7 +713,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// (fnUnit < 0, plain check mode), keep the lenient Any approximation
 			// so downstream provenance refuses and the program falls back.
 			if fnUnit >= 0 {
-				pos := SrcPos{}
+				pos := core.SrcPos{}
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
@@ -725,7 +727,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// the VM's MatchSignature selects, and there is no downstream
 			// value to type.
 			if polyPlan != nil {
-				pos := SrcPos{}
+				pos := core.SrcPos{}
 				if len(args) > 0 {
 					pos = args[0].Pos()
 				}
@@ -744,13 +746,13 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 			// which cleared the false "expected N return value(s), got N+1" on a
 			// fn calling a private 0-return helper before its own return
 			// (sort.boru's counting-sort → ensure-ints, reached cross-module).
-			return []Value{NewCarrier(TAny)}
+			return []core.Value{core.NewCarrier(core.TAny)}
 		}
 		// Undeclared fn (anonymous lambda, 0-return fn) with a non-empty body
 		// residual: the body's residual IS the result. Record the call with
 		// those N carriers so downstream resolves them to this dispatch.
 		if fnUnit >= 0 {
-			pos := SrcPos{}
+			pos := core.SrcPos{}
 			if len(args) > 0 {
 				pos = args[0].Pos()
 			}
@@ -767,7 +769,7 @@ func buildFnBodyReturnsFn(r *Registry, name string, s FnSig, fnDef FnDefInfo) Re
 // fn name must already be bound (recursion). Generic and Body-less (native /
 // handler) overloads are skipped — a generic body needs per-call type bindings,
 // and a native handler has no boru body to analyse.
-func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
+func checkFnBodyAtConstruction(r *core.Registry, name string, fnDef core.FnDefInfo) {
 	if r == nil || !r.Check.IsActive() || fnDef.Gen != nil {
 		return
 	}
@@ -777,14 +779,14 @@ func checkFnBodyAtConstruction(r *Registry, name string, fnDef FnDefInfo) {
 			continue
 		}
 		paramNames := make([]string, len(s.Params))
-		genArgs := make([]Value, len(s.Params))
+		genArgs := make([]core.Value, len(s.Params))
 		for j, p := range s.Params {
 			paramNames[j] = p.Name
 			genArgs[j] = ParamBodyCarrier(p)
 		}
-		var declared []*Type
+		var declared []*core.Type
 		if !fnDef.Anonymous {
-			declared = append([]*Type(nil), s.Returns...)
+			declared = append([]*core.Type(nil), s.Returns...)
 		}
 		// ISOLATE the analysis in a throwaway EmitState (not just Suspend): the
 		// body is analysed against the DECLARED param types, which for an abstract

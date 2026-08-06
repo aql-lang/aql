@@ -1,4 +1,9 @@
-package eng
+package compiler
+
+import (
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // User-fn poly dispatch (OpCallUserPoly) — the recorder side.
 //
@@ -24,11 +29,11 @@ package eng
 type userPolyPlan struct {
 	sigIdx []int
 	units  []int
-	impls  []SigImpl
+	impls  []core.SigImpl
 	// sigs is the FROZEN dispatch table for a BODY-LOCAL word (REFUSAL-
 	// CLOSURE.0 §6b — see UserPolyRef.Sigs): non-nil arms the VM's stored
 	// re-match mode, which never Lookups the (popped-before-run) name.
-	sigs []Signature
+	sigs []core.Signature
 	// outs/joined carry the RETURN-JOIN for arm sets whose declared returns
 	// DIFFER (completeness-review §8.2(3)): joined[i] marks a position where
 	// the arms disagree, and outs[i] is the branch-join carrier (JoinCarriers
@@ -37,7 +42,7 @@ type userPolyPlan struct {
 	// the VM's re-match selects, which is exactly a branch join. Positions
 	// where every arm agrees keep the committed carrier (joined[i] false),
 	// so previously-compiling identical-return sets are byte-identical.
-	outs   []Value
+	outs   []core.Value
 	joined []bool
 }
 
@@ -65,7 +70,7 @@ type userPolyPlan struct {
 //   - no arm is a deferred-param-list body (compiled units cannot model the
 //     interpreter's module-scope late binding — see buildFnBodyReturnsFn);
 //   - no arm's unit is variadic-returning (the call site bakes a fixed nout).
-func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Value, committedReturns []*Type) *userPolyPlan {
+func tryCompileUserPolyArms(r *core.Registry, es core.EmitRecorder, word string, args []core.Value, committedReturns []*core.Type) *userPolyPlan {
 	if !es.Active() || len(args) == 0 {
 		return nil
 	}
@@ -123,7 +128,7 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 	plan := &userPolyPlan{
 		sigIdx: sigIdx,
 		units:  make([]int, 0, len(sigIdx)),
-		impls:  make([]SigImpl, 0, len(sigIdx)),
+		impls:  make([]core.SigImpl, 0, len(sigIdx)),
 	}
 	for _, si := range sigIdx {
 		s := &agg.Signatures[si]
@@ -154,7 +159,7 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 	// aggregate is built fresh per check-mode Lookup, so the value copies
 	// alias nothing that mutates).
 	if bodyLocal {
-		plan.sigs = make([]Signature, 0, len(sigIdx))
+		plan.sigs = make([]core.Signature, 0, len(sigIdx))
 		for _, si := range sigIdx {
 			plan.sigs = append(plan.sigs, agg.Signatures[si])
 		}
@@ -167,7 +172,7 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 	// (TestDistributeOverDispatchInvariant). A joined Any goes DYNAMIC,
 	// mirroring the committed-out convention ("statically unknown", not the
 	// strict Any root). Positions where every arm agrees stay untouched.
-	plan.outs = make([]Value, len(committedReturns))
+	plan.outs = make([]core.Value, len(committedReturns))
 	plan.joined = make([]bool, len(committedReturns))
 	for pos, ct := range committedReturns {
 		// A nil position agrees across every arm (userPolyArmShapeOK's
@@ -187,9 +192,9 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 		}
 		bound := agg.Signatures[sigIdx[0]].Returns[pos]
 		for _, si := range sigIdx[1:] {
-			bound = CommonAncestorType(bound, agg.Signatures[si].Returns[pos])
+			bound = check.CommonAncestorType(bound, agg.Signatures[si].Returns[pos])
 		}
-		j := NewCarrier(bound)
+		j := core.NewCarrier(bound)
 		// DYNAMIC at the join bound — "one of the arms' types, decided at run
 		// time" — the same gradual shape a mixed branch merge or a dynamic
 		// native poly result carries; downstream dispatch matches it
@@ -209,7 +214,7 @@ func tryCompileUserPolyArms(r *Registry, es EmitRecorder, word string, args []Va
 // the plan's return-join carriers at every position where the arms' declared
 // returns differ. The record site calls it just before RecordUserPolyCall so
 // downstream typing rides the join, never one arm's unproven commitment.
-func (p *userPolyPlan) SubstituteJoinedOuts(out []Value) {
+func (p *userPolyPlan) SubstituteJoinedOuts(out []core.Value) {
 	for i := range out {
 		if i < len(p.joined) && p.joined[i] {
 			out[i] = p.outs[i]
@@ -220,10 +225,10 @@ func (p *userPolyPlan) SubstituteJoinedOuts(out []Value) {
 // The UserPolyPlan handle accessors (dispatch_hooks.go): the check
 // piece's record sites unpack the plan through these instead of naming
 // the concrete type.
-func (p *userPolyPlan) SigIdx() []int     { return p.sigIdx }
-func (p *userPolyPlan) Units() []int      { return p.units }
-func (p *userPolyPlan) Impls() []SigImpl  { return p.impls }
-func (p *userPolyPlan) Sigs() []Signature { return p.sigs }
+func (p *userPolyPlan) SigIdx() []int          { return p.sigIdx }
+func (p *userPolyPlan) Units() []int           { return p.units }
+func (p *userPolyPlan) Impls() []core.SigImpl  { return p.impls }
+func (p *userPolyPlan) Sigs() []core.Signature { return p.sigs }
 
 // userPolyArmShapeOK gates one arm's SIGNATURE shape: a boru body, plain
 // value params (no quote / raw-form / no-eval / type-literal slots — the
@@ -233,7 +238,7 @@ func (p *userPolyPlan) Sigs() []Signature { return p.sigs }
 // bakes a fixed nout, so the count must agree, but a differing type joins —
 // tryCompileUserPolyArms records the branch join of the arms' returns and
 // the VM re-match keeps each arm's own return contract at its unit.
-func userPolyArmShapeOK(s *Signature, committedReturns []*Type) bool {
+func userPolyArmShapeOK(s *core.Signature, committedReturns []*core.Type) bool {
 	if len(s.Body()) == 0 {
 		return false
 	}
@@ -264,13 +269,13 @@ func userPolyArmShapeOK(s *Signature, committedReturns []*Type) bool {
 // copies). The entry carries the per-def metadata the arm compile needs (Gen,
 // Captured, Anonymous, Macro) that the aggregate view drops or takes from the
 // newest entry only. ok=false when no entry owns it (a synthetic sig).
-func findOwningFnDef(r *Registry, word string, impl SigImpl) (FnDefInfo, bool) {
+func findOwningFnDef(r *core.Registry, word string, impl core.SigImpl) (core.FnDefInfo, bool) {
 	if impl == nil {
-		return FnDefInfo{}, false
+		return core.FnDefInfo{}, false
 	}
 	stack := r.Defs.Stack(word)
 	for i := len(stack) - 1; i >= 0; i-- {
-		fnDef, ok := stack[i].Data.(FnDefInfo)
+		fnDef, ok := stack[i].Data.(core.FnDefInfo)
 		if !ok {
 			continue
 		}
@@ -280,7 +285,7 @@ func findOwningFnDef(r *Registry, word string, impl SigImpl) (FnDefInfo, bool) {
 			}
 		}
 	}
-	return FnDefInfo{}, false
+	return core.FnDefInfo{}, false
 }
 
 // compileUserPolyArm compiles ONE overload's body as its own code unit,
@@ -295,39 +300,39 @@ func findOwningFnDef(r *Registry, word string, impl SigImpl) (FnDefInfo, bool) {
 // dispatches against the constraint — sound: the entry guard re-checks the
 // runtime value against the same placeholder membership). Returns ok=false on
 // any refusal, leaving the caller to keep the original MarkUncompilable.
-func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature, owner FnDefInfo) (int, bool) {
-	body := append([]Value(nil), s.Body()...)
+func compileUserPolyArm(r *core.Registry, es core.EmitRecorder, word string, s *core.Signature, owner core.FnDefInfo) (int, bool) {
+	body := append([]core.Value(nil), s.Body()...)
 	if len(body) == 0 {
 		return -1, false
 	}
-	sigParams := append([]FnParam(nil), s.Params...)
+	sigParams := append([]core.FnParam(nil), s.Params...)
 	paramNames := make([]string, len(sigParams))
-	genArgs := make([]Value, len(sigParams))
-	pts := make([]*Type, len(sigParams))
-	pats := make([]*Value, len(sigParams))
+	genArgs := make([]core.Value, len(sigParams))
+	pts := make([]*core.Type, len(sigParams))
+	pats := make([]*core.Value, len(sigParams))
 	for i, p := range sigParams {
 		paramNames[i] = p.Name
-		genArgs[i] = ParamBodyCarrier(p)
+		genArgs[i] = check.ParamBodyCarrier(p)
 		pts[i] = p.Type
 		pats[i] = p.Pattern
 	}
 	// A deferred-param-list body returns its raw list for MODULE-scope late
 	// evaluation (see buildFnBodyReturnsFn) — a unit's call-time result cannot
 	// model that, so the arm (and with it the whole poly set) refuses.
-	if _, deferred := DeferredParamListResidual(body, paramNames); deferred {
+	if _, deferred := check.DeferredParamListResidual(body, paramNames); deferred {
 		return -1, false
 	}
-	declared := append([]*Type(nil), s.Returns...)
+	declared := append([]*core.Type(nil), s.Returns...)
 	var genNames []string
 	if owner.Gen != nil {
-		genNames = InstallGenBindingMap(r, owner.Gen, InferGenBindings(owner.Gen, sigParams, genArgs))
+		genNames = core.InstallGenBindingMap(r, owner.Gen, core.InferGenBindings(owner.Gen, sigParams, genArgs))
 	}
 	defer func() {
 		for i := len(genNames) - 1; i >= 0; i-- {
 			r.Defs.Pop(genNames[i])
 		}
 	}()
-	key := FnAnalysisKey(r.AnalysisScopeID(), word, genArgs, owner.Captured, body)
+	key := check.FnAnalysisKey(r.AnalysisScopeID(), word, genArgs, owner.Captured, body)
 	fnPos := body[0].Pos()
 	unit, finishFn, ok := es.StartFnCompile(key, word, r, genArgs, declared, paramNames, owner.Captured, owner.Gen != nil, fnPos)
 	if !ok || unit < 0 {
@@ -344,7 +349,7 @@ func compileUserPolyArm(r *Registry, es EmitRecorder, word string, s *Signature,
 		// re-runs and records the body into THIS unit (the same memo-key
 		// discipline as the single-overload path).
 		delete(r.Check.FnSummaries, key)
-		stk := AnalyseFnBody(r, word, paramNames, body, genArgs, owner.Captured, declared, owner.Anonymous)
+		stk := check.AnalyseFnBody(r, word, paramNames, body, genArgs, owner.Captured, declared, owner.Anonymous)
 		finishFn(stk)
 	}
 	if !es.Active() { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)

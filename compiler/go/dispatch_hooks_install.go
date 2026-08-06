@@ -1,4 +1,9 @@
-package eng
+package compiler
+
+import (
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // The compiler piece's DispatchBraid installation (the S3 seam's
 // active half — see dispatch_hooks.go). Runs at init while the
@@ -10,16 +15,16 @@ package eng
 func init() { installDispatchBraid() }
 
 func installDispatchBraid() {
-	DispatchBraid.RecordOutcome = recordDispatchOutcome
-	DispatchBraid.TryFoldScalarConst = tryFoldScalarConst
-	DispatchBraid.TryRecordPoly = tryRecordPoly
-	DispatchBraid.CompileUserPolyArms = func(r *Registry, es EmitRecorder, word string, args []Value, committedReturns []*Type) UserPolyPlan {
+	check.DispatchBraid.RecordOutcome = recordDispatchOutcome
+	check.DispatchBraid.TryFoldScalarConst = tryFoldScalarConst
+	check.DispatchBraid.TryRecordPoly = tryRecordPoly
+	check.DispatchBraid.CompileUserPolyArms = func(r *core.Registry, es core.EmitRecorder, word string, args []core.Value, committedReturns []*core.Type) check.UserPolyPlan {
 		if p := tryCompileUserPolyArms(r, es, word, args, committedReturns); p != nil {
 			return p
 		}
 		return nil
 	}
-	DispatchBraid.PlanUserPoly = func(r *Registry, es EmitRecorder, word string, args []Value, declaredReturns []*Type) (UserPolyPlan, bool) {
+	check.DispatchBraid.PlanUserPoly = func(r *core.Registry, es core.EmitRecorder, word string, args []core.Value, declaredReturns []*core.Type) (check.UserPolyPlan, bool) {
 		p, barred := planUserPolyDispatch(r, es, word, args, declaredReturns)
 		if p != nil {
 			return p, barred

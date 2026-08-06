@@ -1,4 +1,6 @@
-package eng
+package check
+
+import core "github.com/boru-lang/boru/core/go"
 
 // Store-identity context typing — stage 1 of
 // design/checker-precision-fronts.0.md §2. CheckState.ContextTypes is ONE
@@ -38,11 +40,11 @@ package eng
 // StoreShapeOf returns the shape payload of a store-shaped CARRIER, or
 // ok=false for anything else (a real store value, a bare carrier, a
 // concrete container).
-func StoreShapeOf(v Value) (*StoreShapeInfo, bool) {
+func StoreShapeOf(v core.Value) (*core.StoreShapeInfo, bool) {
 	if !v.Carrier {
 		return nil, false
 	}
-	ss, ok := v.Data.(*StoreShapeInfo)
+	ss, ok := v.Data.(*core.StoreShapeInfo)
 	return ss, ok
 }
 
@@ -71,24 +73,24 @@ const flexShapeMaxDepth = 8
 // ok=false declines (non-concrete / non-plain-map / structural-type
 // input) and the caller keeps its legacy conversion, so precision only
 // increases.
-func MintFlexShapeCarrier(src Value, depth int) (Value, bool) {
+func MintFlexShapeCarrier(src core.Value, depth int) (core.Value, bool) {
 	if depth > flexShapeMaxDepth {
-		return Value{}, false
+		return core.Value{}, false
 	}
-	if !IsConcrete(src) || src.Parent == nil || !src.Parent.ConformsTo(TMap) ||
-		IsRecordType(src) || IsOptionsType(src) || IsTypedMap(src) {
-		return Value{}, false
+	if !core.IsConcrete(src) || src.Parent == nil || !src.Parent.ConformsTo(core.TMap) ||
+		core.IsRecordType(src) || core.IsOptionsType(src) || core.IsTypedMap(src) {
+		return core.Value{}, false
 	}
-	m, err := AsMap(src)
+	m, err := core.AsMap(src)
 	if err != nil || m == nil {
-		return Value{}, false
+		return core.Value{}, false
 	}
-	out := NewStoreShapeCarrier(TFlexMap, 0)
+	out := core.NewStoreShapeCarrier(core.TFlexMap, 0)
 	ss, _ := StoreShapeOf(out)
 	for _, k := range m.Keys() {
 		fv, _ := m.Get(k)
-		if fv.Parent == nil || fv.Parent.ConformsTo(TFunction) ||
-			IsReach(fv) || IsSplice(fv) {
+		if fv.Parent == nil || fv.Parent.ConformsTo(core.TFunction) ||
+			core.IsReach(fv) || core.IsSplice(fv) {
 			continue // dispatch-bearing: absent key reads dynamic(Any)
 		}
 		ss.RecordKey(k, AdoptShapeValue(fv, depth+1))
@@ -102,19 +104,19 @@ func MintFlexShapeCarrier(src Value, depth int) (Value, bool) {
 // list/xml becomes the corresponding bare flex carrier, an
 // already-shaped carrier shares its pointer, anything else records
 // as-is.
-func AdoptShapeValue(v Value, depth int) Value {
+func AdoptShapeValue(v core.Value, depth int) core.Value {
 	if _, ok := StoreShapeOf(v); ok {
 		return v // flex handles share
 	}
 	if nested, ok := MintFlexShapeCarrier(v, depth); ok {
 		return nested
 	}
-	if IsConcrete(v) && v.Parent != nil {
+	if core.IsConcrete(v) && v.Parent != nil {
 		switch {
-		case v.Parent.ConformsTo(TXml):
-			return NewCarrier(TFlexXml)
-		case v.Parent.ConformsTo(TList):
-			return NewCarrier(TFlexList)
+		case v.Parent.ConformsTo(core.TXml):
+			return core.NewCarrier(core.TFlexXml)
+		case v.Parent.ConformsTo(core.TList):
+			return core.NewCarrier(core.TFlexList)
 		}
 	}
 	return v
@@ -128,16 +130,16 @@ func AdoptShapeValue(v Value, depth int) Value {
 // (recordSchemaFieldReturns). A nested shape / disjunct join keeps its
 // payload so chained reads narrow too; a dispatch-bearing or
 // unrepresentable value keeps dynamic(Any).
-func ShapeFieldRead(v Value) Value {
+func ShapeFieldRead(v core.Value) core.Value {
 	if _, ok := StoreShapeOf(v); ok {
 		return NewDynamicCarrierValue(v)
 	}
-	if IsDisjunct(v) {
+	if core.IsDisjunct(v) {
 		return NewDynamicCarrierValue(v)
 	}
-	ft := ValueType(v)
-	if ft == nil || ft.ConformsTo(TFunction) {
-		return NewDynamicCarrier(TAny)
+	ft := core.ValueType(v)
+	if ft == nil || ft.ConformsTo(core.TFunction) {
+		return core.NewDynamicCarrier(core.TAny)
 	}
-	return NewDynamicCarrier(ft)
+	return core.NewDynamicCarrier(ft)
 }

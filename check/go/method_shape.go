@@ -1,4 +1,6 @@
-package eng
+package check
+
+import core "github.com/boru-lang/boru/core/go"
 
 // method_shape.go — the shaped-instance-method dispatch model (Phase 6
 // Stage M2c, design/STAGE3-INLINING-DESIGN-ROUND.0.md §6 M2c).
@@ -57,22 +59,22 @@ package eng
 // identity on it — no words, parens, interpolations, reaches, splices,
 // fn values, computed map keys, carriers, or undefined placeholders —
 // so the baked const IS the value the interpreter's handler receives.
-func evalFixedWindowToken(v Value) bool {
+func evalFixedWindowToken(v core.Value) bool {
 	if v.Carrier || v.Dynamic || v.Undefined {
 		return false
 	}
 	switch d := v.Data.(type) {
-	case IntPayload, StrPayload, BoolPayload, FloatPayload, AtomPayload,
-		BigIntPayload, DecimalPayload:
+	case core.IntPayload, core.StrPayload, core.BoolPayload, core.FloatPayload, core.AtomPayload,
+		core.BigIntPayload, core.DecimalPayload:
 		return true
-	case ListPayload:
+	case core.ListPayload:
 		for _, ev := range d.Elems {
 			if !evalFixedWindowToken(ev) {
 				return false
 			}
 		}
 		return true
-	case MapPayload:
+	case core.MapPayload:
 		if d.M == nil {
 			return false
 		}
@@ -97,7 +99,7 @@ func evalFixedWindowToken(v Value) bool {
 // file comment). Returns true when it consumed the dispatch (tape spliced,
 // event recorded or the program marked uncompilable); false leaves the
 // carrier to today's paths (residual windows, refusals) untouched.
-func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
+func tryShapedMethodDispatch(e *core.Engine, valIdx int) bool {
 	r := e.Registry
 	v := e.Tape.At(valIdx)
 	if !v.Dynamic || v.Quoted || v.ID == "" {
@@ -127,15 +129,15 @@ func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 				// wrongly check clean. Resolve the arity exactly as a real dispatch
 				// would (ReturnsFn / declared Returns), then splice that many gradual
 				// carriers — 0 for a side-effect method, 1 for a value method.
-				args := make([]Value, len(positions))
+				args := make([]core.Value, len(positions))
 				for i, p := range positions {
 					args[i] = e.Tape.At(p)
 					args[i].Eval = false
 					args[i].Undefined = false
 				}
-				reps := make([]Value, shapedMethodReturnArity(e, sig, args, v.Pos()))
+				reps := make([]core.Value, shapedMethodReturnArity(e, sig, args, v.Pos()))
 				for i := range reps {
-					reps[i] = NewDynamicCarrier(TAny)
+					reps[i] = core.NewDynamicCarrier(core.TAny)
 				}
 				e.Tape.Splice(valIdx, 1+len(positions), reps...)
 				return true
@@ -149,14 +151,14 @@ func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 		// annotated read (NoteShapedRead), so a genuine-0-arg member whose
 		// landing the model cannot claim must refuse HERE — the auto-dispatch
 		// guard is re-homed onto the landing, never weakened.
-		if FnValueZeroArg(member) {
+		if core.FnValueZeroArg(member) {
 			r.Check.Recorder().MarkUncompilable(
 				"shaped 0-arg method landing not modelable at " + fnDefName(member))
 		}
 		return false
 	}
-	fnDef, _ := member.Data.(FnDefInfo) // validated by shapedMethodApplyWindow
-	args := make([]Value, len(positions))
+	fnDef, _ := member.Data.(core.FnDefInfo) // validated by shapedMethodApplyWindow
+	args := make([]core.Value, len(positions))
 	for i, p := range positions {
 		args[i] = e.Tape.At(p)
 		args[i].Eval = false
@@ -165,7 +167,7 @@ func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 	// Model the dispatch through the shared check-mode machinery (declared
 	// returns, folds, contagion — identical to a real dispatch of the inner
 	// native) with the outcome seam routed to RecordDynMethod.
-	r.Check.PendingMethodApply = &PendingMethodApply{Origin: v, Word: fnDef.Name}
+	r.Check.PendingMethodApply = &core.PendingMethodApply{Origin: v, Word: fnDef.Name}
 	outs := carrierResults(r, fnDef.Name, sig, args, v.Pos(), nil, false)
 	if r.Check.PendingMethodApply != nil { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		// Not consumed — an unexpected short-circuit upstream of the outcome
@@ -186,8 +188,8 @@ func tryShapedMethodDispatch(e *Engine, valIdx int) bool {
 // plain-native statement-window apply. Pure (no tape mutation): shared by the
 // compile-pass model (which runs the real dispatch) and the plain-check
 // collapse (which folds the apply to dynamic(Any)).
-func shapedMethodApplyWindow(e *Engine, valIdx int, member Value) (*Signature, []int, bool) {
-	fnDef, ok := member.Data.(FnDefInfo)
+func shapedMethodApplyWindow(e *core.Engine, valIdx int, member core.Value) (*core.Signature, []int, bool) {
+	fnDef, ok := member.Data.(core.FnDefInfo)
 	if !ok || fnDef.Registry == nil {
 		return nil, nil, false
 	}
@@ -219,7 +221,7 @@ func shapedMethodApplyWindow(e *Engine, valIdx int, member Value) (*Signature, [
 		// (Span.finish, Rand.bool). Model it as an arity-0 apply through
 		// the member's 0-arg signature; a member without a genuine 0-arg
 		// overload stays data in both engines.
-		if !FnValueZeroArg(member) {
+		if !core.FnValueZeroArg(member) {
 			return nil, nil, false
 		}
 		for i := range fn.Signatures {
@@ -240,7 +242,7 @@ func shapedMethodApplyWindow(e *Engine, valIdx int, member Value) (*Signature, [
 	// admission above guarantees no paren pre-evaluation is needed
 	// (resolveForwardArgs would be a no-op), so the plan-time match here IS
 	// the match the interpreter performs on the concrete member.
-	w := WordInfo{Name: fnDef.Name, ArgCount: -1}
+	w := core.WordInfo{Name: fnDef.Name, ArgCount: -1}
 	sig, positions, _ := e.MatchSignature(fn, w, e.EffectiveResolved())
 	if sig == nil || sig.Fallback || len(positions) == 0 { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 		return nil, nil, false
@@ -273,8 +275,8 @@ func shapedMethodApplyWindow(e *Engine, valIdx int, member Value) (*Signature, [
 // statement/paren boundary. The single boundary set shared by every
 // scanner below — it must stay aligned with what the interpreter's own
 // forward collection treats as a hard stop.
-func statementWindowBoundary(v Value) bool {
-	return IsMark(v) || IsMove(v) || IsCloseParen(v) || IsEnd(v)
+func statementWindowBoundary(v core.Value) bool {
+	return core.IsMark(v) || core.IsMove(v) || core.IsCloseParen(v) || core.IsEnd(v)
 }
 
 // inertStatementWindow scans the statement window after valIdx: every
@@ -287,7 +289,7 @@ func statementWindowBoundary(v Value) bool {
 // behind both the shaped-method window and the dynamic fn-value window;
 // tryMemberFnArrivalDispatch applies the same per-token test over its
 // arity-bounded span.
-func inertStatementWindow(e *Engine, valIdx int) (winEnd int, ok bool) {
+func inertStatementWindow(e *core.Engine, valIdx int) (winEnd int, ok bool) {
 	winEnd = valIdx
 	for i := valIdx + 1; i < e.Tape.Len(); i++ {
 		tv := e.Tape.At(i)
@@ -307,13 +309,13 @@ func inertStatementWindow(e *Engine, valIdx int) (winEnd int, ok bool) {
 // 0-arg landing model and the interpreter's NUR035 deferral exemption
 // must answer this question identically, so there is exactly one
 // implementation.
-func allZeroArgSigs(fn *FnDefInfo) bool {
-	return FnValueOnlyZeroArgSigs(*fn)
+func allZeroArgSigs(fn *core.FnDefInfo) bool {
+	return core.FnValueOnlyZeroArgSigs(*fn)
 }
 
 // fnDefName names a function value for a refusal message.
-func fnDefName(v Value) string {
-	if fd, ok := v.Data.(FnDefInfo); ok && fd.Name != "" {
+func fnDefName(v core.Value) string {
+	if fd, ok := v.Data.(core.FnDefInfo); ok && fd.Name != "" {
 		return fd.Name
 	}
 	return "fn value"
@@ -325,7 +327,7 @@ func fnDefName(v Value) string {
 // diagnostic, since the plain-check collapse is silent. This keeps the collapse
 // arity-faithful: a side-effect-only method (0 returns) collapses to 0 values,
 // not a fabricated one.
-func shapedMethodReturnArity(e *Engine, sig *Signature, args []Value, pos SrcPos) int {
+func shapedMethodReturnArity(e *core.Engine, sig *core.Signature, args []core.Value, pos core.SrcPos) int {
 	if sig.ReturnsFn != nil {
 		e.Registry.Check.CurCallPos = pos
 		return len(sig.ReturnsFn(args, e.Registry))
@@ -339,17 +341,17 @@ func shapedMethodReturnArity(e *Engine, sig *Signature, args []Value, pos SrcPos
 // a Function-bearing bound may auto-dispatch a forward window; a
 // dynamic(String|None) etc. must strand its trailing values as data (the
 // runtime never calls them), keeping the residual stack depth honest.
-func dynamicBoundConformsToFunction(v Value) bool {
-	if v.Parent.ConformsTo(TFunction) {
+func dynamicBoundConformsToFunction(v core.Value) bool {
+	if v.Parent.ConformsTo(core.TFunction) {
 		return true
 	}
-	if disj, err := AsDisjunct(v); err == nil {
+	if disj, err := core.AsDisjunct(v); err == nil {
 		for _, alt := range disj.Alternatives {
 			// A disjunct alternative is a bare type-literal Value whose own
 			// lattice identity (typeNodeOf) is the represented type — its
 			// .Parent is TType, not the type itself.
-			at := TypeNodeOf(alt)
-			if at.ConformsTo(TFunction) {
+			at := core.TypeNodeOf(alt)
+			if at.ConformsTo(core.TFunction) {
 				return true
 			}
 		}
@@ -374,7 +376,7 @@ func dynamicBoundConformsToFunction(v Value) bool {
 // (TestSpecCompiledDifferential). Optimism is sound for every clean corpus row
 // — a clean miss-then-call (a None reader immediately applied) does not occur;
 // it is the same gradual gap dynamic modality accepts elsewhere.
-func tryDynamicFnValueDispatch(e *Engine, valIdx int) bool {
+func tryDynamicFnValueDispatch(e *core.Engine, valIdx int) bool {
 	r := e.Registry
 	if r.Check.Compiling || r.Check.Recorder().Active() {
 		return false
@@ -392,7 +394,7 @@ func tryDynamicFnValueDispatch(e *Engine, valIdx int) bool {
 	if winEnd == valIdx {
 		return false // no args — a bare dynamic fn value stays data (both engines)
 	}
-	e.Tape.Splice(valIdx, 1+(winEnd-valIdx), NewDynamicCarrier(TAny))
+	e.Tape.Splice(valIdx, 1+(winEnd-valIdx), core.NewDynamicCarrier(core.TAny))
 	return true
 }
 
@@ -403,7 +405,7 @@ func tryDynamicFnValueDispatch(e *Engine, valIdx int) bool {
 // falling through would record the member's inner native as a check-time
 // CALL_NATIVE against the shape instance's sub-registry, baking shape
 // state (the freeze-gate violation this model exists to avoid).
-func TryRecordMethodApply(r *Registry, word string, args, out []Value, pos SrcPos) bool {
+func TryRecordMethodApply(r *core.Registry, word string, args, out []core.Value, pos core.SrcPos) bool {
 	pm := r.Check.PendingMethodApply
 	if pm == nil {
 		return false
@@ -447,7 +449,7 @@ func TryRecordMethodApply(r *Registry, word string, args, out []Value, pos SrcPo
 //     multi-sig first-match and captures are follow-on scope);
 //   - arity >= 1 (a 0-arg auto-fire is the read-guard's own class) and the
 //     full arity of evaluation-fixed tokens inside the statement.
-func tryMemberFnArrivalDispatch(e *Engine, valIdx int) bool {
+func tryMemberFnArrivalDispatch(e *core.Engine, valIdx int) bool {
 	r := e.Registry
 	es := r.Check.Recorder()
 	if !es.Active() || es.SuspendedNow() {
@@ -461,11 +463,11 @@ func tryMemberFnArrivalDispatch(e *Engine, valIdx int) bool {
 	if !ok {
 		return false
 	}
-	fnDef, _ := member.Data.(FnDefInfo) // validated by memberFnReadValue
+	fnDef, _ := member.Data.(core.FnDefInfo) // validated by memberFnReadValue
 	if fnDef.Name == "" || fnDef.Anonymous || fnDef.Macro || len(fnDef.Captured) != 0 {
 		return false
 	}
-	var sig *Signature
+	var sig *core.Signature
 	for i := range fnDef.Signatures {
 		s := &fnDef.Signatures[i]
 		if s.Fallback {
@@ -494,7 +496,7 @@ func tryMemberFnArrivalDispatch(e *Engine, valIdx int) bool {
 	if valIdx+n >= e.Tape.Len() {
 		return false
 	}
-	args := make([]Value, n)
+	args := make([]core.Value, n)
 	for i := 1; i <= n; i++ {
 		tv := e.Tape.At(valIdx + i)
 		if statementWindowBoundary(tv) || !evalFixedWindowToken(tv) {

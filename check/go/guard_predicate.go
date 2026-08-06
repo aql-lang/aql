@@ -1,4 +1,6 @@
-package eng
+package check
+
+import core "github.com/boru-lang/boru/core/go"
 
 // Predicate-implied guard typing. A user predicate whose whole job is an
 // `x is T` test lets a 2-token guard `if (is-T x) [then] [else]` narrow x to T
@@ -17,7 +19,7 @@ package eng
 // predicateImpliedType returns the type a single-argument Boolean predicate
 // named `name` implies about its argument in the true case, or (nil, false)
 // when `name` is not a recognisable is-T predicate.
-func predicateImpliedType(r *Registry, name string) (*Type, bool) {
+func predicateImpliedType(r *core.Registry, name string) (*core.Type, bool) {
 	if r == nil || name == "" {
 		return nil, false
 	}
@@ -28,7 +30,7 @@ func predicateImpliedType(r *Registry, name string) (*Type, bool) {
 	// Exactly one REAL overload. An aggregate Lookup carries a synthetic
 	// Fallback catch-all sig alongside the real one; skip it. A genuinely
 	// multi-overload word is not a simple is-test.
-	var sig *Signature
+	var sig *core.Signature
 	for i := range fn.Signatures {
 		if fn.Signatures[i].Fallback {
 			continue
@@ -41,7 +43,7 @@ func predicateImpliedType(r *Registry, name string) (*Type, bool) {
 	if sig == nil {
 		return nil, false
 	}
-	boru, ok := sig.Impl.(*BoruImpl)
+	boru, ok := sig.Impl.(*core.BoruImpl)
 	if !ok {
 		return nil, false
 	}
@@ -49,7 +51,7 @@ func predicateImpliedType(r *Registry, name string) (*Type, bool) {
 	if len(sig.Params) != 1 || sig.Params[0].Name == "" {
 		return nil, false
 	}
-	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(TBoolean) {
+	if len(sig.Returns) != 1 || !sig.Returns[0].Equal(core.TBoolean) {
 		return nil, false
 	}
 	return predicateBodyImpliedType(r, sig.Params[0].Name, boru.Body)
@@ -57,7 +59,7 @@ func predicateImpliedType(r *Registry, name string) (*Type, bool) {
 
 // predicateBodyImpliedType matches the qualifying body shapes over the
 // marker-stripped body tokens.
-func predicateBodyImpliedType(r *Registry, param string, body []Value) (*Type, bool) {
+func predicateBodyImpliedType(r *core.Registry, param string, body []core.Value) (*core.Type, bool) {
 	toks := stripGuardMarkers(body)
 	// Shape A: the body IS `param is T`.
 	if len(toks) == 3 {
@@ -67,10 +69,10 @@ func predicateBodyImpliedType(r *Registry, param string, body []Value) (*Type, b
 	// (unexpanded) ParenExpr token — normalise it to the 6-token marker form
 	// `[if param is T [then] [else]]`.
 	if len(toks) == 4 && isWordNamed(toks[0], "if") {
-		if pe, ok := toks[1].Data.(ParenExprPayload); ok {
+		if pe, ok := toks[1].Data.(core.ParenExprPayload); ok {
 			inner := stripGuardMarkers(pe.Toks)
 			if len(inner) == 3 {
-				toks = []Value{toks[0], inner[0], inner[1], inner[2], toks[2], toks[3]}
+				toks = []core.Value{toks[0], inner[0], inner[1], inner[2], toks[2], toks[3]}
 			}
 		}
 	}
@@ -81,16 +83,16 @@ func predicateBodyImpliedType(r *Registry, param string, body []Value) (*Type, b
 		}
 		// Both arms are single-token bodies; the ELSE arm must be `false` — the
 		// structure that makes `pred x` true imply `x is T`.
-		if !toks[4].Parent.Equal(TList) || !toks[5].Parent.Equal(TList) {
+		if !toks[4].Parent.Equal(core.TList) || !toks[5].Parent.Equal(core.TList) {
 			return nil, false
 		}
-		elseArm, err := AsList(toks[5])
+		elseArm, err := core.AsList(toks[5])
 		if err != nil || elseArm.IsNil() || elseArm.Len() != 1 {
 			return nil, false
 		}
 		ev := elseArm.Get(0)
-		if IsConcrete(ev) && ev.Parent.ConformsTo(TBoolean) {
-			if b, berr := AsBoolean(ev); berr == nil && !b {
+		if core.IsConcrete(ev) && ev.Parent.ConformsTo(core.TBoolean) {
+			if b, berr := core.AsBoolean(ev); berr == nil && !b {
 				return t, true
 			}
 		}
@@ -106,12 +108,12 @@ func predicateBodyImpliedType(r *Registry, param string, body []Value) (*Type, b
 // names appear as bare Words in a fn body, so tv is resolved through the def
 // table, then the kernel name table, then the external-builtin path resolver —
 // the same cascade stepWord uses.
-func guardTripleType(r *Registry, param string, w0, w1, tv Value) (*Type, bool) {
+func guardTripleType(r *core.Registry, param string, w0, w1, tv core.Value) (*core.Type, bool) {
 	if !isWordNamed(w0, param) || !isWordNamed(w1, "is") {
 		return nil, false
 	}
-	if IsWord(tv) {
-		inner, err := AsWord(tv)
+	if core.IsWord(tv) {
+		inner, err := core.AsWord(tv)
 		if err != nil {
 			return nil, false
 		}
@@ -120,21 +122,21 @@ func guardTripleType(r *Registry, param string, w0, w1, tv Value) (*Type, bool) 
 			e, _ := r.Defs.TopEntry(inner.Name)
 			tv = e.Body
 		default:
-			t, ok := ResolveBuiltinTypeName(inner.Name)
+			t, ok := core.ResolveBuiltinTypeName(inner.Name)
 			if !ok {
 				return nil, false
 			}
-			tv = NewTypeLiteral(t)
+			tv = core.NewTypeLiteral(t)
 		}
 	}
-	if !IsBareTypeNode(tv) || tv.Is(TNone) {
+	if !core.IsBareTypeNode(tv) || tv.Is(core.TNone) {
 		return nil, false
 	}
-	return CanonicalType(r, ValueType(tv)), true
+	return core.CanonicalType(r, core.ValueType(tv)), true
 }
 
 // defsHasType reports whether name has a live def-table binding.
-func defsHasType(r *Registry, name string) bool {
+func defsHasType(r *core.Registry, name string) bool {
 	_, ok := r.Defs.TopEntry(name)
 	return ok
 }
@@ -142,20 +144,20 @@ func defsHasType(r *Registry, name string) bool {
 // isWordNamed reports whether v is a concrete Word whose name is `name`. The
 // concreteness probe uses IsConcrete rather than a raw `Data == nil` (the
 // data_nil_gate discipline) — a Word carrier is not a literal word token.
-func isWordNamed(v Value, name string) bool {
-	if !v.Parent.Equal(TWord) || !IsConcrete(v) {
+func isWordNamed(v core.Value, name string) bool {
+	if !v.Parent.Equal(core.TWord) || !core.IsConcrete(v) {
 		return false
 	}
-	w, err := AsWord(v)
+	w, err := core.AsWord(v)
 	return err == nil && w.Name == name
 }
 
 // stripGuardMarkers drops the structural paren / statement-end markers that
 // wrap a group's tokens, leaving only the semantic operands.
-func stripGuardMarkers(toks []Value) []Value {
-	out := make([]Value, 0, len(toks))
+func stripGuardMarkers(toks []core.Value) []core.Value {
+	out := make([]core.Value, 0, len(toks))
 	for _, t := range toks {
-		if IsOpenParen(t) || IsCloseParen(t) || IsEnd(t) {
+		if core.IsOpenParen(t) || core.IsCloseParen(t) || core.IsEnd(t) {
 			continue
 		}
 		out = append(out, t)

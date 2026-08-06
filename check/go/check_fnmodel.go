@@ -1,4 +1,6 @@
-package eng
+package check
+
+import core "github.com/boru-lang/boru/core/go"
 
 // Check-piece fn-analysis models extracted from core_helpers.go (Stage 2c
 // of the four-piece split): the param->carrier builders the ReturnsFunc
@@ -45,14 +47,14 @@ package eng
 // patternless params, and non-map args. Applied at BOTH body-analysis paths —
 // narrowArgsToParams (result/summary) and the armed-compile genArgs — so the
 // schema survives into the closure CAPTURE that the armed compile records.
-func recordSchemaCarrier(p FnParam, a Value) (Value, bool) {
+func recordSchemaCarrier(p core.FnParam, a core.Value) (core.Value, bool) {
 	if p.Pattern == nil || a.Parent == nil {
-		return Value{}, false
+		return core.Value{}, false
 	}
-	if !(a.Parent.ConformsTo(TMap) || a.Parent.Equal(TAny)) {
-		return Value{}, false
+	if !(a.Parent.ConformsTo(core.TMap) || a.Parent.Equal(core.TAny)) {
+		return core.Value{}, false
 	}
-	if pm, ok := p.Pattern.Data.(MapPayload); ok && pm.M != nil {
+	if pm, ok := p.Pattern.Data.(core.MapPayload); ok && pm.M != nil {
 		// A fresh, distinct ID per carrier: the bytecode compiler keys a
 		// param's frame-local slot by Value.ID (StartFnCompile →
 		// RegisterLocal). A struct-literal carrier left with the zero ID would
@@ -60,9 +62,9 @@ func recordSchemaCarrier(p FnParam, a Value) (Value, bool) {
 		// so a fn reading >1 record param (`fn [[c:C d:D] …]`) miscompiles to a
 		// single local → RunCompiledStrict VM error / wrong local. Mint a
 		// unique node ID exactly as NewValueRaw does for ordinary values.
-		return Value{ID: GenerateID(IDPrefixForType(TMap)), Parent: TMap, Carrier: true, Dynamic: true, Data: RecordTypeInfo{Fields: pm.M}}, true
+		return core.Value{ID: core.GenerateID(core.IDPrefixForType(core.TMap)), Parent: core.TMap, Carrier: true, Dynamic: true, Data: core.RecordTypeInfo{Fields: pm.M}}, true
 	}
-	return Value{}, false
+	return core.Value{}, false
 }
 
 // typedContainerCarrier generalises a TYPED-container param ({:T} map / [:T] list)
@@ -77,29 +79,29 @@ func recordSchemaCarrier(p FnParam, a Value) (Value, bool) {
 // falls through so its reads stay dynamic(Any), unchanged. The CONTAINER carrier
 // stays a plain (non-dynamic) typed carrier — the accessor makes the READ dynamic
 // (Part B), keeping the container's own dispatch (`m size`) unchanged.
-func typedContainerCarrier(p FnParam, a Value) (Value, bool) {
+func typedContainerCarrier(p core.FnParam, a core.Value) (core.Value, bool) {
 	if p.Pattern == nil || a.Parent == nil {
-		return Value{}, false
+		return core.Value{}, false
 	}
 	pat := *p.Pattern
-	ci, err := AsChildType(pat)
-	if err != nil || ci.Child.Parent == nil || ci.Child.Parent.Equal(TAny) {
-		return Value{}, false
+	ci, err := core.AsChildType(pat)
+	if err != nil || ci.Child.Parent == nil || ci.Child.Parent.Equal(core.TAny) {
+		return core.Value{}, false
 	}
-	if IsTypedMap(pat) && (a.Parent.ConformsTo(TMap) || a.Parent.Equal(TAny)) {
-		v := NewTypedMap(ci.Child)
-		v.ID = GenerateID(IDPrefixForType(TMap))
+	if core.IsTypedMap(pat) && (a.Parent.ConformsTo(core.TMap) || a.Parent.Equal(core.TAny)) {
+		v := core.NewTypedMap(ci.Child)
+		v.ID = core.GenerateID(core.IDPrefixForType(core.TMap))
 		v.Carrier = true
 		v.Dynamic = true // a {:T} param admits a flex arg — in-place mutation must runtime-rematch, not preselect the immutable handler
 		return v, true
 	}
-	if IsTypedList(pat) && (a.Parent.ConformsTo(TList) || a.Parent.Equal(TAny)) {
+	if core.IsTypedList(pat) && (a.Parent.ConformsTo(core.TList) || a.Parent.Equal(core.TAny)) {
 		v := NewCarrierTypedListValue(ci.Child)
-		v.ID = GenerateID(IDPrefixForType(TList))
+		v.ID = core.GenerateID(core.IDPrefixForType(core.TList))
 		v.Dynamic = true
 		return v, true
 	}
-	return Value{}, false
+	return core.Value{}, false
 }
 
 // paramBodyCarrier builds a fn-body INPUT carrier for a param when no call-site
@@ -109,20 +111,20 @@ func typedContainerCarrier(p FnParam, a Value) (Value, bool) {
 // with the actual arg; the poly-arm (user_poly.go) and construction-check
 // (buildFnBodyReturnsFn) body builders have only the param, so they route
 // here — otherwise `m:{:Integer}`'s `p.Type` is bare Map and reads stay Any.
-func ParamBodyCarrier(p FnParam) Value {
+func ParamBodyCarrier(p core.FnParam) core.Value {
 	if p.Pattern != nil {
 		pat := *p.Pattern
-		if ci, err := AsChildType(pat); err == nil && ci.Child.Parent != nil && !ci.Child.Parent.Equal(TAny) {
-			if IsTypedMap(pat) {
-				v := NewTypedMap(ci.Child)
-				v.ID = GenerateID(IDPrefixForType(TMap))
+		if ci, err := core.AsChildType(pat); err == nil && ci.Child.Parent != nil && !ci.Child.Parent.Equal(core.TAny) {
+			if core.IsTypedMap(pat) {
+				v := core.NewTypedMap(ci.Child)
+				v.ID = core.GenerateID(core.IDPrefixForType(core.TMap))
 				v.Carrier = true
 				v.Dynamic = true
 				return v
 			}
-			if IsTypedList(pat) {
+			if core.IsTypedList(pat) {
 				v := NewCarrierTypedListValue(ci.Child)
-				v.ID = GenerateID(IDPrefixForType(TList))
+				v.ID = core.GenerateID(core.IDPrefixForType(core.TList))
 				v.Dynamic = true
 				return v
 			}
@@ -141,11 +143,11 @@ func ParamBodyCarrier(p FnParam) Value {
 		// Declared is set for the same reason it is there — the annotation
 		// claims every alternative is a valid input, so a body dispatch that
 		// fails for one is an error rather than an analysis-join warning.
-		if IsDisjunct(pat) && (p.Type == nil || p.Type.Equal(TAny)) {
-			if di, err := AsDisjunct(pat); err == nil && len(di.Alternatives) > 0 {
-				dv := NewDisjunct(SimplifyDisjunctAlts(di.Alternatives))
+		if core.IsDisjunct(pat) && (p.Type == nil || p.Type.Equal(core.TAny)) {
+			if di, err := core.AsDisjunct(pat); err == nil && len(di.Alternatives) > 0 {
+				dv := core.NewDisjunct(core.SimplifyDisjunctAlts(di.Alternatives))
 				dv.Carrier = true
-				if ndi, ok := dv.Data.(DisjunctInfo); ok {
+				if ndi, ok := dv.Data.(core.DisjunctInfo); ok {
 					ndi.Declared = true
 					dv.Data = ndi
 				}
@@ -156,8 +158,8 @@ func ParamBodyCarrier(p FnParam) Value {
 	return ParamInputCarrier(p.Type)
 }
 
-func narrowArgsToParams(args []Value, params []FnParam) []Value {
-	var out []Value
+func narrowArgsToParams(args []core.Value, params []core.FnParam) []core.Value {
+	var out []core.Value
 	for i := range args {
 		if i >= len(params) {
 			break
@@ -166,13 +168,13 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 		pt := params[i].Type
 		if rc, ok := recordSchemaCarrier(params[i], a); ok {
 			if out == nil {
-				out = append([]Value(nil), args...)
+				out = append([]core.Value(nil), args...)
 			}
 			out[i] = rc
 			continue
 		}
 		switch {
-		case a.Dynamic && pt != nil && !pt.Equal(TAny) && a.Parent != nil &&
+		case a.Dynamic && pt != nil && !pt.Equal(core.TAny) && a.Parent != nil &&
 			!a.Parent.ConformsTo(pt):
 			// A gradual arg whose bound is NOT already within the declared
 			// (concrete) param type: re-bind the body's view of the param to a
@@ -187,12 +189,12 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 			// `newlabel:String`; without this the body's `newlabel slice 0 1`
 			// stayed `List` and failed `set`'s String-key Map overload).
 			if out == nil {
-				out = append([]Value(nil), args...)
+				out = append([]core.Value(nil), args...)
 			}
-			nc := NewCarrier(pt)
+			nc := core.NewCarrier(pt)
 			nc.Dynamic = true
 			out[i] = nc
-		case !a.Dynamic && a.Carrier && IsDisjunct(a) && pt != nil && !pt.Equal(TAny):
+		case !a.Dynamic && a.Carrier && core.IsDisjunct(a) && pt != nil && !pt.Equal(core.TAny):
 			// A strict DISJUNCT carrier — the checker's ∀-abstraction of an
 			// unresolved overload's returns — narrows to the declared param
 			// type by the same contract as the armed-compile genArgs twin:
@@ -202,10 +204,10 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 			// s3-send-resp's body:Bytes — the chunk loop's `slice` then
 			// matches mono instead of cascading no_signature).
 			if out == nil {
-				out = append([]Value(nil), args...)
+				out = append([]core.Value(nil), args...)
 			}
-			out[i] = NewCarrier(pt)
-		case !a.Dynamic && pt != nil && pt.Equal(TAny) && a.Parent != nil && a.Parent.Equal(TAny) && !IsBareTypeNode(a):
+			out[i] = core.NewCarrier(pt)
+		case !a.Dynamic && pt != nil && pt.Equal(core.TAny) && a.Parent != nil && a.Parent.Equal(core.TAny) && !core.IsBareTypeNode(a):
 			// A STRICT Any arg bound to a declared-`Any` param. The param is
 			// gradual by declaration (ParamInputCarrier gives dynamic Any), so a
 			// body word over it must match optimistically — a strict Any conforms
@@ -215,9 +217,9 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 			// `none entries [(acc … tst-insert)] fold`). Only a bare strict-Any
 			// VALUE is lifted (not a typed/structural carrier).
 			if out == nil {
-				out = append([]Value(nil), args...)
+				out = append([]core.Value(nil), args...)
 			}
-			nc := NewCarrier(TAny)
+			nc := core.NewCarrier(core.TAny)
 			nc.Dynamic = true
 			out[i] = nc
 		}
@@ -231,9 +233,9 @@ func narrowArgsToParams(args []Value, params []FnParam) []Value {
 // stackHasFnValue reports whether any residual value is a Function —
 // the shape whose static count can over-report (an unapplied fn-value call
 // the interpreter applies at runtime; see emit.go's cluster-E refusal).
-func stackHasFnValue(stk []Value) bool {
+func stackHasFnValue(stk []core.Value) bool {
 	for _, v := range stk {
-		if v.Parent != nil && v.Parent.ConformsTo(TFunction) {
+		if v.Parent != nil && v.Parent.ConformsTo(core.TFunction) {
 			return true
 		}
 	}
@@ -243,7 +245,7 @@ func stackHasFnValue(stk []Value) bool {
 // stackHasDynamic reports whether any residual value is gradual (Dynamic)
 // — the marker of a modelling seam where the analysis count may not equal
 // the runtime count.
-func stackHasDynamic(stk []Value) bool {
+func stackHasDynamic(stk []core.Value) bool {
 	for _, v := range stk {
 		if v.Dynamic {
 			return true
@@ -261,9 +263,9 @@ func stackHasDynamic(stk []Value) bool {
 // situation as a variadic / fn-value / dynamic residual. A declared `[Any]`
 // return and the unbound-param degrade are marked Dynamic (caught by
 // stackHasDynamic), so only the approximation phantom lands here.
-func stackHasApproxAny(stk []Value) bool {
+func stackHasApproxAny(stk []core.Value) bool {
 	for _, v := range stk {
-		if v.Carrier && !v.Dynamic && v.Parent != nil && v.Parent.Equal(TAny) {
+		if v.Carrier && !v.Dynamic && v.Parent != nil && v.Parent.Equal(core.TAny) {
 			return true
 		}
 	}
@@ -273,7 +275,7 @@ func stackHasApproxAny(stk []Value) bool {
 // posBefore reports whether source position (row, col) strictly precedes p
 // in reading order. Used to test a diagnostic's attribution against a fn
 // body's source span.
-func posBefore(row, col int, p SrcPos) bool {
+func posBefore(row, col int, p core.SrcPos) bool {
 	return row < p.Row || (row == p.Row && col < p.Col)
 }
 
@@ -282,22 +284,22 @@ func posBefore(row, col int, p SrcPos) bool {
 // position seen, i.e. the start of the body's LAST token at any depth.
 // Together with the first token's position it bounds the body's source span
 // for diagnostic attribution. Zero when no token carries a position.
-func bodySpanEnd(body []Value) SrcPos {
-	var end SrcPos
-	var walk func(vs []Value)
-	walk = func(vs []Value) {
+func bodySpanEnd(body []core.Value) core.SrcPos {
+	var end core.SrcPos
+	var walk func(vs []core.Value)
+	walk = func(vs []core.Value) {
 		for _, v := range vs {
 			if posBefore(end.Row, end.Col, v.Pos()) {
 				end = v.Pos()
 			}
-			if IsParenExpr(v) {
-				if toks, err := AsParenExpr(v); err == nil {
+			if core.IsParenExpr(v) {
+				if toks, err := core.AsParenExpr(v); err == nil {
 					walk(toks)
 				}
 				continue
 			}
-			if IsReach(v) {
-				if ri, err := AsReach(v); err == nil {
+			if core.IsReach(v) {
+				if ri, err := core.AsReach(v); err == nil {
 					walk(ri.Receiver)
 					for i := range ri.Segments {
 						if ri.Segments[i].Computed {
@@ -307,14 +309,14 @@ func bodySpanEnd(body []Value) SrcPos {
 				}
 				continue
 			}
-			if lst, err := AsList(v); err == nil && !lst.IsNil() {
+			if lst, err := core.AsList(v); err == nil && !lst.IsNil() {
 				walk(lst.Slice())
 				continue
 			}
-			if mp, err := AsMap(v); err == nil && mp != nil {
+			if mp, err := core.AsMap(v); err == nil && mp != nil {
 				for _, k := range mp.Keys() {
 					mv, _ := mp.Get(k)
-					walk([]Value{mv})
+					walk([]core.Value{mv})
 				}
 			}
 		}
@@ -329,16 +331,16 @@ func bodySpanEnd(body []Value) SrcPos {
 // sigTypeMatches' gradual rule (tand wrongly reports two container-family
 // types as disjoint when one conforms to the other). A disjunct residual is
 // disjoint only if every alternative is.
-func residualProvablyDisjoint(got Value, exp *Type) bool {
-	if IsDisjunct(got) {
-		di, err := AsDisjunct(got)
+func residualProvablyDisjoint(got core.Value, exp *core.Type) bool {
+	if core.IsDisjunct(got) {
+		di, err := core.AsDisjunct(got)
 		if err != nil || len(di.Alternatives) == 0 {
 			return false
 		}
 		for _, alt := range di.Alternatives {
 			probe := alt
-			if IsBareTypeNode(alt) {
-				probe = CarrierOfLiteral(alt)
+			if core.IsBareTypeNode(alt) {
+				probe = core.CarrierOfLiteral(alt)
 			}
 			if !residualProvablyDisjoint(probe, exp) {
 				return false
@@ -358,7 +360,7 @@ func residualProvablyDisjoint(got Value, exp *Type) bool {
 	// it (the "fn-value-call boundary" imprecision class), so a Function
 	// residual routinely means "not modeled", not "returns a function".
 	// Both stay with the runtime RET check.
-	if p.ConformsTo(TDisjunct) || p.ConformsTo(TFunction) {
+	if p.ConformsTo(core.TDisjunct) || p.ConformsTo(core.TFunction) {
 		return false
 	}
 	// A declared type that admits values by VALUE-level membership — a
@@ -369,10 +371,10 @@ func residualProvablyDisjoint(got Value, exp *Type) bool {
 	// disjointness proof says nothing there — skip. The carrier-Is probe is
 	// the backstop for wrapped behaviors (a behave-augmented union still
 	// answers membership through its Match chain).
-	if membershipBeyondNominal(exp) || NewCarrier(p).Is(exp) {
+	if membershipBeyondNominal(exp) || core.NewCarrier(p).Is(exp) {
 		return false
 	}
-	return IsNeverShape(TandValues(NewCarrier(p), NewCarrier(exp)))
+	return core.IsNeverShape(core.TandValues(core.NewCarrier(p), core.NewCarrier(exp)))
 }
 
 // membershipBeyondNominal reports whether t's installed Behavior admits
@@ -381,12 +383,12 @@ func residualProvablyDisjoint(got Value, exp *Type) bool {
 // lattice family. Bare refines stay nominal (provable); DepScalar nodes
 // are parented at their base scalar, so the conformance shortcut above
 // already skips them — listed here as a belt.
-func membershipBeyondNominal(t *Type) bool {
+func membershipBeyondNominal(t *core.Type) bool {
 	if t == nil {
 		return false
 	}
 	switch t.Behavior().(type) {
-	case *DisjunctUnifier, *NegationUnifier, *PredicateUnifier, MemberUnifier, *DepScalarUnifier:
+	case *core.DisjunctUnifier, *core.NegationUnifier, *core.PredicateUnifier, core.MemberUnifier, *core.DepScalarUnifier:
 		return true
 	}
 	return false
@@ -401,9 +403,9 @@ func membershipBeyondNominal(t *Type) bool {
 // so a closure-unit compile that admits the bind records an application the
 // runtime rejects. Consulted only inside closure-unit compilation — the one
 // scope where the mismatch produced a compile≠interpret divergence.
-func quoteParamCarrierBind(sigParams []FnParam, args []Value) bool {
+func quoteParamCarrierBind(sigParams []core.FnParam, args []core.Value) bool {
 	for i, p := range sigParams {
-		if (p.Quote || (p.Type != nil && p.Type.ConformsTo(TAtom))) &&
+		if (p.Quote || (p.Type != nil && p.Type.ConformsTo(core.TAtom))) &&
 			i < len(args) && args[i].Carrier {
 			return true
 		}

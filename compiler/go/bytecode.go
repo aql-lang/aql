@@ -1,9 +1,11 @@
-package eng
+package compiler
 
 import (
 	"fmt"
 	"strings"
 	"sync"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // Bytecode Program model — Stage 1 of design/boru-bytecode-plan.0.md.
@@ -533,7 +535,7 @@ type PolyRef struct {
 	// registry (the common case: a core builtin like get/size/is). The pointer
 	// is the same sub-registry the check pass created on the shared registry, so
 	// it stays valid for the compiled run (RunProgram runs on that registry).
-	Reg *Registry
+	Reg *core.Registry
 	// NoMatch, when non-nil, is the FAITHFUL-RAISE plan for the runtime
 	// no-match arm (plan 3c): the check pass proved, at the failed-dispatch
 	// tape state it recovered from, that the interpreter's sigError diagnostic
@@ -541,7 +543,7 @@ type PolyRef struct {
 	// the byte-identical signature_error directly instead of deferring the
 	// whole run to the interpreter. Nil (the record-time gates declined, or an
 	// older/foreign record site) keeps the sound defer.
-	NoMatch *PolyNoMatchSpec
+	NoMatch *core.PolyNoMatchSpec
 }
 
 // UserPolyRef names one runtime-dispatched multi-overload USER-FN call: the
@@ -561,10 +563,10 @@ type UserPolyRef struct {
 	// fn re-matches over its own sub-registry). Nil means the VM's registry.
 	// Like PolyRef.Reg, the pointer is the same registry the check pass ran on,
 	// so it stays valid for the compiled run.
-	Reg    *Registry
+	Reg    *core.Registry
 	SigIdx []int
 	Units  []int
-	Impls  []SigImpl
+	Impls  []core.SigImpl
 	// Sigs, when non-empty, is the STORED dispatch table (REFUSAL-CLOSURE.0
 	// §6b): the arm signatures frozen at record time, for a BODY-LOCAL
 	// multi-overload fn whose binding is popped before the VM runs — a live
@@ -577,13 +579,13 @@ type UserPolyRef struct {
 	// frozen table IS the table the interpreter's dispatch sees at the same
 	// program point. Empty = the live-Lookup mode with its index/Impl drift
 	// guard (module-scope words, where a later rebind must defer).
-	Sigs []Signature
+	Sigs []core.Signature
 }
 
 const (
 	// ClosureInValue passes the per-invocation inputs through unchanged — the
 	// token-quotation form (list element / map value, plus fold's accumulator).
-	ClosureInValue ClosureInShape = iota
+	ClosureInValue core.ClosureInShape = iota
 	// ClosureInKeyVal wraps a map entry as a KeyVal {k v i n} before the (last)
 	// input — the map-iteration LAMBDA convention (`each (kv => …) {m}`).
 	ClosureInKeyVal
@@ -591,15 +593,15 @@ const (
 
 // NewClosure builds a closure Value over a compiled body unit (default value
 // input shape). The VM stamps the unit's real InShape at OpPushClosure.
-func NewClosure(unit int, captures []Value) Value {
-	return Value{Parent: TFunction, Data: ClosurePayload{Unit: unit, Captures: captures}}
+func NewClosure(unit int, captures []core.Value) core.Value {
+	return core.Value{Parent: core.TFunction, Data: core.ClosurePayload{Unit: unit, Captures: captures}}
 }
 
 // ClosureWantsKeyVal reports whether v is a compiled closure whose body expects
 // a map entry presented as a KeyVal (the map-iteration lambda convention), so a
 // map-iteration handler wraps the entry rather than passing the bare value.
-func ClosureWantsKeyVal(v Value) bool {
-	cl, ok := v.Data.(ClosurePayload)
+func ClosureWantsKeyVal(v core.Value) bool {
+	cl, ok := v.Data.(core.ClosurePayload)
 	return ok && cl.InShape == ClosureInKeyVal
 }
 
@@ -608,8 +610,8 @@ func ClosureWantsKeyVal(v Value) bool {
 // Both are Parent=TFunction, so a higher-order handler that treats a lambda
 // differently from a plain code body (e.g. map iteration hands a lambda a
 // KeyVal but a body the value) must discriminate on this.
-func IsCompiledClosure(v Value) bool {
-	_, ok := v.Data.(ClosurePayload)
+func IsCompiledClosure(v core.Value) bool {
+	_, ok := v.Data.(core.ClosurePayload)
 	return ok
 }
 
@@ -632,7 +634,7 @@ func IsCompiledClosure(v Value) bool {
 type CompiledFnRef struct {
 	Prog     *Program
 	Unit     int
-	Captures []Value
+	Captures []core.Value
 	// depNames are the MODULE-LEVEL names the stored handler / spawn body reads
 	// (every body word bound as a user `def` when the ref was created at its
 	// store site). A stored unit is FROZEN at the definitions live when it was
@@ -678,9 +680,9 @@ type CompiledFnRef struct {
 // invoke — once exhausted, the seam stays on CallBoru (slow, not wrong).
 type restampBox struct {
 	mu     sync.Mutex
-	fd     FnDefInfo
+	fd     core.FnDefInfo
 	sigIdx int // which own sig this ref compiled (REFUSAL-CLOSURE §7b: per-sig refs)
-	pos    SrcPos
+	pos    core.SrcPos
 	tries  int
 	cur    *CompiledFnRef
 }
@@ -699,7 +701,7 @@ type depSnapEntry struct {
 // (live shadow) — reports false and the caller falls back to the
 // interpreter, so validation only ever degrades toward CallBoru, never away
 // from it.
-func (ref *CompiledFnRef) DepsFresh(r *Registry) bool {
+func (ref *CompiledFnRef) DepsFresh(r *core.Registry) bool {
 	if ref == nil || ref.depSnap == nil {
 		return true
 	}
@@ -724,7 +726,7 @@ type Instr struct {
 // *Signature the checker selected at the call sites that reference it.
 type SigRef struct {
 	Word string
-	Sig  *Signature
+	Sig  *core.Signature
 	// Guard marks a CALL_NATIVE recorded for a dispatch the checker could NOT
 	// statically commit (a concrete-mismatch / Any-carrier recovery over a
 	// SINGLE-overload native) — the compiled mirror of the interpreter's runtime
@@ -782,7 +784,7 @@ type InterpSpec struct {
 // (tags, attribute names, literal segments — the ${...} holes consume the
 // popped operands in traversal order) and the hole count to pop.
 type XmlInterpSpec struct {
-	Tmpl   XmlTmpl
+	Tmpl   core.XmlTmpl
 	NHoles int
 }
 
@@ -833,9 +835,9 @@ type TrapSpec struct {
 	Detail      string
 	Word        string
 	Hint        string
-	Spans       []DiagSpan
+	Spans       []core.DiagSpan
 	Notes       []string
-	Suggestions []DiagSuggestion
+	Suggestions []core.DiagSuggestion
 }
 
 // DispatchSpec describes one OpDispatchRematch (see the opcode doc): the
@@ -862,7 +864,7 @@ type DispatchSpec struct {
 	// the region carrier). Valid domain 0..NArgs-NWritten; NWritten >= 1 is
 	// what makes the pair explicit — a spec with NWritten 0 is malformed.
 	WrittenOff int
-	Pos        SrcPos
+	Pos        core.SrcPos
 }
 
 // DynMethodSpec is one OpCallDynMethod's shape claim (Stage M2c): the member
@@ -880,18 +882,18 @@ type DynMethodSpec struct {
 // table, a pc → source-position map, and the precomputed stack bound.
 type Program struct {
 	Code       []Instr
-	Consts     []Value
+	Consts     []core.Value
 	Types      []TypeRef
 	Sigs       []SigRef
 	PolyRefs   []PolyRef
 	UserPolys  []UserPolyRef
-	Fallbacks  []FallbackSpan
+	Fallbacks  []core.FallbackSpan
 	MakeMaps   []MakeMapSpec
 	Interps    []InterpSpec
 	XmlInterps []XmlInterpSpec
 	Traps      []TrapSpec
 	Dispatches []DispatchSpec
-	TypedBinds []TypedBindSpec
+	TypedBinds []core.TypedBindSpec
 	// GlobalBinds backs OpBindGlobal: one entry per top-level computed `def`,
 	// naming the binding and the DEPTH its check-pass install recorded, so the
 	// runtime value replaces the kept carrier binding in place (never a push).
@@ -904,8 +906,8 @@ type Program struct {
 	// the op (each op appears in exactly one unit). Nil for programs with none.
 	ConstLocals []ConstLocalRef
 	Fns         []CompiledFn
-	Debug       []SrcPos // 1:1 with Code
-	MaxStack    int      // a floor when the program loops (results accumulate)
+	Debug       []core.SrcPos // 1:1 with Code
+	MaxStack    int           // a floor when the program loops (results accumulate)
 	NumLocals   int
 	// DynEnv marks a program containing a dynamic code-body dispatch
 	// (CompileDynBody — tryRecordDynBody): the VM brackets every CALL_USER
@@ -965,21 +967,21 @@ type CompiledFn struct {
 	// the unit runs on the program's registry. The pointer is the same
 	// sub-registry object the check pass created on the shared registry
 	// (like PolyRef.Reg), so it stays valid for the compiled run.
-	Reg *Registry
+	Reg *core.Registry
 	// InShape is the input convention a closure over this unit presents to its
 	// driving handler (ClosureInValue for an ordinary fn / token body, or
 	// ClosureInKeyVal for a map-iteration lambda body). Copied onto the
 	// ClosurePayload at OpPushClosure. The VM never branches on it; the native
 	// map-iteration handler reads it via ClosureWantsKeyVal.
-	InShape ClosureInShape
+	InShape core.ClosureInShape
 	Code    []Instr
-	Debug   []SrcPos
+	Debug   []core.SrcPos
 	// Returns are the declared return types, enforced at RET against the
 	// body's result the same way the interpreter's ReturnCheck (__RC)
 	// does — via v.Is(exp), so a predicate refine runs its predicate, a
 	// bare refine stays nominal, and builtins are unchanged. Empty for a
 	// fn with no declared return (no check runs).
-	Returns []*Type
+	Returns []*core.Type
 	// ReturnPatterns are the per-return structural/value patterns
 	// (FnSig.ReturnPatterns), positional against Returns — the RET-side twin
 	// of ParamPatterns. A declared UNION return (`def IS (Integer tor
@@ -988,7 +990,7 @@ type CompiledFn struct {
 	// then the whole contract. Enforced at RET via the same Unify the
 	// interpreter's ReturnCheck runs, so the compiled and interpreted
 	// engines agree. Nil where the return has no pattern.
-	ReturnPatterns []*Value
+	ReturnPatterns []*core.Value
 	// Params are the declared PARAM types (param slots 0..len(Params)-1, which
 	// align with the leading param locals; captures, if any, follow and are NOT
 	// listed). Enforced at CALL_USER entry against the incoming arg the same way
@@ -998,7 +1000,7 @@ type CompiledFn struct {
 	// interpreter runtime-matches it, so the compiled OpCallUser must too, else a
 	// laundered List bound to an `m:Map` param silently runs the body. A nil
 	// entry (a closure's [Any] input) is a guaranteed-pass, like Returns=[Any].
-	Params []*Type
+	Params []*core.Type
 	// ParamPatterns are the per-param structural/value patterns (FnParam.Pattern):
 	// an inline disjunct (`x:(Integer tor String)`), inline predicate
 	// (`b:(Integer gt 10)`), bounded (`x:Map/t`), or map/list shape — the
@@ -1007,14 +1009,14 @@ type CompiledFn struct {
 	// Unify the interpreter's dispatch runs, so a value laundered past such a
 	// param raises the same signature_error rather than running the body. Nil
 	// where the param has no pattern.
-	ParamPatterns []*Value
+	ParamPatterns []*core.Value
 	// Decl is the return-contract declaration site (FnSig.Decl): the
 	// output-signature token's position plus the declaring program's
 	// source/file. A compiled RET return error labels it as a secondary
 	// span exactly as the interpreter's ReturnCheck does — so the two
 	// engines' return diagnostics carry the same declaration span. Zero
 	// for anonymous closures (no meaningful declaration site).
-	Decl DeclSite
+	Decl core.DeclSite
 	// LocalNames maps a frame local slot to its source name (params in
 	// slots 0..NParams-1, then captures), for a debugger / disassembler.
 	// Body-local iterator slots have no name (empty string). Purely
@@ -1102,7 +1104,7 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 		switch in.Op {
 		case OpPushConst, OpLookupDynScope, OpLookupDynScopeData, OpBindDynScope:
 			c := p.Consts[in.Arg]
-			fmt.Fprintf(sb, " k%-3d ; %s (%s)", in.Arg, CanonValue(c), c.Parent.Leaf())
+			fmt.Fprintf(sb, " k%-3d ; %s (%s)", in.Arg, core.CanonValue(c), c.Parent.Leaf())
 		case OpCallNative:
 			s := p.Sigs[in.Arg]
 			names := make([]string, s.Sig.TotalArgs())
@@ -1168,7 +1170,7 @@ func (p *Program) disasmUnit(sb *strings.Builder, code []Instr) {
 // when that position has none (or the unit carries no patterns at all).
 // Mirrors ReturnCheckInfo.ReturnPattern so the compiled and interpreted RET
 // contracts read the same.
-func (f *CompiledFn) ReturnPattern(k int) *Value {
+func (f *CompiledFn) ReturnPattern(k int) *core.Value {
 	if k < 0 || k >= len(f.ReturnPatterns) {
 		return nil
 	}
@@ -1181,8 +1183,8 @@ func (f *CompiledFn) ReturnPattern(k int) *Value {
 // the lang layer consult to choose the VM path over CallBoru. A free
 // function in the compiler piece (not a Signature method): the core
 // Signature holds the ref as an OPAQUE handle it cannot name.
-func CompiledRef(s *Signature) *CompiledFnRef {
-	if a, ok := s.Impl.(*BoruImpl); ok {
+func CompiledRef(s *core.Signature) *CompiledFnRef {
+	if a, ok := s.Impl.(*core.BoruImpl); ok {
 		ref, _ := a.Compiled.(*CompiledFnRef)
 		return ref
 	}

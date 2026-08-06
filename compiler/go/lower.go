@@ -1,4 +1,6 @@
-package eng
+package compiler
+
+import core "github.com/boru-lang/boru/core/go"
 
 // The bytecode lowerer — the second half of the compile pass. EmitState
 // (emit.go) RECORDS a classified event trace during the check run; the
@@ -159,7 +161,7 @@ func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 	// concrete bound value IS the runtime value (const-fold parity), and a
 	// bare type node (`def x None`) is self-representing in both engines —
 	// each keeps today's faithful binding with no op emitted.
-	needGlobal := lw.es != nil && d.root && !IsConcrete(d.val) && !IsBareTypeNode(d.val)
+	needGlobal := lw.es != nil && d.root && !core.IsConcrete(d.val) && !core.IsBareTypeNode(d.val)
 	if !needDyn && !needGlobal {
 		// DynEnv mode (a dynamic code body compiled — tryRecordDynBody)
 		// widens to EVERY def: the body's runtime sub-run may read any name,
@@ -244,7 +246,7 @@ func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 			// resolveOperand recovers it as a const/local — the same slot the
 			// binding's reads resolve to, so the written-back value IS the
 			// instance the program uses). Anything else refuses.
-			if IsInertConst(d.val) {
+			if core.IsInertConst(d.val) {
 				src = constOperand(lw.es.internUnpooled(d.val))
 			} else if op, ok := lw.es.resolveOperand(d.val); ok && (op.kind == opConst || op.kind == opLocal) {
 				src = op
@@ -255,7 +257,7 @@ func (lw *lowerer) lowerDynBind(ev *emitEvent) string {
 	}
 	if needDyn {
 		lw.pushOperand(src, d.pos)
-		lw.emit(OpBindDynScope, lw.es.internUnpooled(NewString(d.name)), d.pos)
+		lw.emit(OpBindDynScope, lw.es.internUnpooled(core.NewString(d.name)), d.pos)
 		lw.vm = lw.vm[:len(lw.vm)-1]
 	}
 	if needGlobal {
@@ -312,9 +314,9 @@ type loopCtx struct {
 type lowerer struct {
 	es       *EmitState
 	p        *Program
-	code     *[]Instr  // current emission target (main or one fn unit)
-	debug    *[]SrcPos // 1:1 with code
-	sigIdx   map[*Signature]int
+	code     *[]Instr       // current emission target (main or one fn unit)
+	debug    *[]core.SrcPos // 1:1 with code
+	sigIdx   map[*core.Signature]int
 	vm       []vmSlot
 	variadic map[int]bool // loop seqs: N runtime values, not one
 	promoted map[int]int  // value-def locals: producing event seq → frame local slot
@@ -381,7 +383,7 @@ func (lw *lowerer) allocLocal() int {
 // call's event operands — a non-operand value is interleaved, which a local
 // spill cannot reach (STORE_LOCAL pops the top). Promotion is sound: a local
 // re-pushes the exact value in any order.
-func (lw *lowerer) spillSeat(ops []emitOperand, results []int, n int, pos SrcPos, failMsg string) string {
+func (lw *lowerer) spillSeat(ops []emitOperand, results []int, n int, pos core.SrcPos, failMsg string) string {
 	ne := len(results)
 	if len(lw.vm) < ne {
 		return failMsg
@@ -434,7 +436,7 @@ func slotIs(slot vmSlot, op emitOperand) bool {
 }
 
 // pushOperand emits the push for a const, local, or type operand.
-func (lw *lowerer) pushOperand(op emitOperand, pos SrcPos) {
+func (lw *lowerer) pushOperand(op emitOperand, pos core.SrcPos) {
 	if op.kind == opClosure {
 		// Push the captures (enclosing-scope operands), then OpPushClosure
 		// pops them into the closure value. Net stack effect: +1.
@@ -471,7 +473,7 @@ func (lw *lowerer) note() {
 	}
 }
 
-func (lw *lowerer) emit(op Opcode, arg int, pos SrcPos) int {
+func (lw *lowerer) emit(op Opcode, arg int, pos core.SrcPos) int {
 	*lw.code = append(*lw.code, Instr{Op: op, Arg: int32(arg)})
 	*lw.debug = append(*lw.debug, pos)
 	return len(*lw.code) - 1
@@ -1494,7 +1496,7 @@ type layoutMsgs struct {
 }
 
 // swapTop2 emits OpSwap and mirrors it on the simulated stack.
-func (lw *lowerer) swapTop2(pos SrcPos) {
+func (lw *lowerer) swapTop2(pos core.SrcPos) {
 	lw.emit(OpSwap, 0, pos)
 	lw.vm[len(lw.vm)-1], lw.vm[len(lw.vm)-2] = lw.vm[len(lw.vm)-2], lw.vm[len(lw.vm)-1]
 }
@@ -1507,7 +1509,7 @@ func (lw *lowerer) swapTop2(pos SrcPos) {
 // wording (msg) and the terminal call instruction each emits afterward.
 // On success the len(ops) operands occupy the top slots in sig order and
 // the caller pops them with its CALL_*; a non-empty return is the refusal.
-func (lw *lowerer) layoutOperands(ops []emitOperand, pos SrcPos, msg layoutMsgs) string {
+func (lw *lowerer) layoutOperands(ops []emitOperand, pos core.SrcPos, msg layoutMsgs) string {
 	n := len(ops)
 	results := []int{}
 	for i, op := range ops {
@@ -1644,7 +1646,7 @@ type seatMsgs struct {
 // reconciliation (reconcileResults). rejectVariadic refuses a variadic (loop)
 // event result: a fn body may not return one (Stage 3), though the program
 // residual may absorb it. msgs supplies the caller's refusal wording.
-func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic, allowVariadicTail bool, msgs seatMsgs, pos SrcPos) string {
+func (lw *lowerer) seatResults(ops []emitOperand, rejectVariadic, allowVariadicTail bool, msgs seatMsgs, pos core.SrcPos) string {
 	vi := 0
 	var tail []emitOperand
 	for i, op := range ops {
@@ -1729,7 +1731,7 @@ func collectRootBindConsumes(events []emitEvent, dead map[int]bool) map[int]bool
 		}
 		d := ev.dyn
 		if d.root && d.srcSeq >= 0 && dead[d.srcSeq] &&
-			!IsConcrete(d.val) && !IsBareTypeNode(d.val) {
+			!core.IsConcrete(d.val) && !core.IsBareTypeNode(d.val) {
 			out[d.srcSeq] = true
 		}
 	}
@@ -1862,7 +1864,7 @@ func sameEventRunToEnd(ops []emitOperand, idx int) bool {
 // This is the fn-unit caller of the shared seatResults primitive — it rejects a
 // variadic loop result (a fn body may not return one in Stage 3), the one way it
 // differs from Finalize's program-residual reconciliation.
-func (lw *lowerer) reconcileResults(ops []emitOperand, who string, noContract, variadicMid bool, pos SrcPos) string {
+func (lw *lowerer) reconcileResults(ops []emitOperand, who string, noContract, variadicMid bool, pos core.SrcPos) string {
 	extra := who + ": body leaves extra values (Stage 3 lowers in-order results)"
 	return lw.seatResults(ops, !variadicMid, noContract, seatMsgs{
 		variadic:     who + ": result is a variadic loop value (Stage 3)",
@@ -2027,7 +2029,7 @@ func (lw *lowerer) lowerCall(ev *emitEvent) string {
 // diverging fragment; a diverging fragment's terminator already
 // emitted its jump, so whatever its scope holds is unreachable and
 // ignored). Restores the parent scope afterwards.
-func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVariadic bool, pos SrcPos) string {
+func (lw *lowerer) lowerFragment(frag *EmitFragment, out *emitOperand, allowVariadic bool, pos core.SrcPos) string {
 	lw.depth++
 	defer func() { lw.depth-- }()
 	if lw.depth > maxLowerDepth {
@@ -2512,7 +2514,7 @@ func fragSingleResidual(frag *EmitFragment) bool {
 // Integer UNCAUGHT — a compile==interpret violation (the interpreter raises
 // type_error). A caller declaring `[Any]` (or self/compatible recursion) stays a
 // tail call: the check it bypasses is vacuous / already implied by the callee.
-func (es *EmitState) tailCompatibleReturns(calleeUnit int, callerReturns []*Type) bool {
+func (es *EmitState) tailCompatibleReturns(calleeUnit int, callerReturns []*core.Type) bool {
 	if len(callerReturns) == 0 {
 		return true
 	}
@@ -2524,7 +2526,7 @@ func (es *EmitState) tailCompatibleReturns(calleeUnit int, callerReturns []*Type
 		return false
 	}
 	for i, exp := range callerReturns {
-		if exp == nil || exp.Equal(TAny) {
+		if exp == nil || exp.Equal(core.TAny) {
 			continue
 		}
 		if callee[i] == nil || !callee[i].ConformsTo(exp) {
@@ -2534,7 +2536,7 @@ func (es *EmitState) tailCompatibleReturns(calleeUnit int, callerReturns []*Type
 	return true
 }
 
-func (es *EmitState) markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool, callerReturns []*Type) (stillHasOut bool) {
+func (es *EmitState) markTailCalls(frag *EmitFragment, out *emitOperand, hasOut bool, callerReturns []*core.Type) (stillHasOut bool) {
 	if frag == nil || len(frag.events) == 0 || !hasOut || out.kind != opEvent {
 		return hasOut
 	}
@@ -2704,7 +2706,7 @@ func (lw *lowerer) lowerBranch(ev *emitEvent) string {
 // lowerFragment (the merge of two body arms may be variadic; a computed-branch
 // arm may not). Shared by lowerArms, lowerBranch's const-cond inline, and the
 // non-eager arm of lowerComputedBranch.
-func (lw *lowerer) lowerArm(kind armKind, val emitOperand, frag *EmitFragment, out *emitOperand, allowVariadic bool, pos SrcPos) string {
+func (lw *lowerer) lowerArm(kind armKind, val emitOperand, frag *EmitFragment, out *emitOperand, allowVariadic bool, pos core.SrcPos) string {
 	lw.fragMulti = false
 	switch kind {
 	case armValue:

@@ -1,4 +1,6 @@
-package eng
+package check
+
+import core "github.com/boru-lang/boru/core/go"
 
 // Methods on CheckState — the static-analysis state bundle defined in
 // registry.go. Grouped here so the static-checker surface is one file
@@ -23,8 +25,8 @@ package eng
 // re-attributes it to a caught info finding. A caught (downgraded)
 // entry never blocks a later REAL emission of the same finding at
 // another site, so the dedupe skips it.
-func CheckAddUniqueDiagnostic(r *Registry, code, detail, word string, pos SrcPos) {
-	CheckAddUnique(r, CheckDiagnostic{
+func CheckAddUniqueDiagnostic(r *core.Registry, code, detail, word string, pos core.SrcPos) {
+	CheckAddUnique(r, core.CheckDiagnostic{
 		Code:          code,
 		Detail:        detail,
 		Word:          word,
@@ -41,7 +43,7 @@ func CheckAddUniqueDiagnostic(r *Registry, code, detail, word string, pos SrcPos
 // program compiles and then raises the identical error, which is false when
 // dispatch itself did not resolve (`no_signature`, `undefined_word`,
 // `uncalled_function` — there is no call to compile).
-func CheckAddUnique(r *Registry, d CheckDiagnostic) {
+func CheckAddUnique(r *core.Registry, d core.CheckDiagnostic) {
 	for _, prev := range r.Check.Diagnostics {
 		if prev.Code == d.Code && prev.Detail == d.Detail &&
 			prev.Row == d.Row && prev.Col == d.Col && !prev.CaughtAtRuntime {

@@ -1,6 +1,10 @@
-package eng
+package check
 
-import "errors"
+import (
+	"errors"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // Check-mode dry pass for PURE words over concrete arguments.
 //
@@ -25,7 +29,7 @@ import "errors"
 // AddDiagnostic re-attributes error findings to caught info centrally,
 // and the compile pass no longer needs excluding — mirror diagnostics
 // (RuntimeMirror) do not trip the compile pipeline's refusal.
-func CheckAtUncaughtTopLevel(r *Registry) bool {
+func CheckAtUncaughtTopLevel(r *core.Registry) bool {
 	return r != nil && r.Check.IsActive() &&
 		r.Check.FnBodyDepth == 0 && r.Check.NestedBodyDepth == 0
 }
@@ -36,7 +40,7 @@ func CheckAtUncaughtTopLevel(r *Registry) bool {
 // check diagnostic. h MUST be pure: no I/O, no registry mutation, no body
 // execution — the dry pass runs it during analysis. An uncoded handler
 // error is reported as type_error (the CheckMicronConstruction fallback).
-func DryPassReturns(h func(args []Value, named map[string]Value, body []Value, r *Registry) ([]Value, error), results ...*Type) ReturnsFunc {
+func DryPassReturns(h func(args []core.Value, named map[string]core.Value, body []core.Value, r *core.Registry) ([]core.Value, error), results ...*core.Type) core.ReturnsFunc {
 	return DryPassWrap(h, ReturnsStatic(results...))
 }
 
@@ -44,16 +48,16 @@ func DryPassReturns(h func(args []Value, named map[string]Value, body []Value, r
 // ReturnsFunc keeps full ownership of the residual (a precise per-arg
 // narrowing like ReturnsPreserveListAt), and the dry pass only contributes
 // the guaranteed-error diagnostic.
-func DryPassWrap(h func(args []Value, named map[string]Value, body []Value, r *Registry) ([]Value, error), base ReturnsFunc) ReturnsFunc {
-	return func(args []Value, r *Registry) []Value {
+func DryPassWrap(h func(args []core.Value, named map[string]core.Value, body []core.Value, r *core.Registry) ([]core.Value, error), base core.ReturnsFunc) core.ReturnsFunc {
+	return func(args []core.Value, r *core.Registry) []core.Value {
 		if CheckAtUncaughtTopLevel(r) && allConcreteArgs(args) {
-			var pos SrcPos
+			var pos core.SrcPos
 			if len(args) > 0 {
 				pos = args[0].Pos()
 			}
 			if _, err := h(dryPassOperands(args), nil, nil, r); err != nil {
 				code, detail := "type_error", err.Error()
-				var ae *BoruError
+				var ae *core.BoruError
 				if errors.As(err, &ae) {
 					code, detail = ae.Code, ae.Detail
 				}
@@ -68,9 +72,9 @@ func DryPassWrap(h func(args []Value, named map[string]Value, body []Value, r *R
 // analysis provably holds: concrete payloads, plus a strict (non-dynamic)
 // none — None is a singleton, so the checked literal IS the runtime value
 // (the orderingDeterminate rule).
-func allConcreteArgs(args []Value) bool {
+func allConcreteArgs(args []core.Value) bool {
 	for _, a := range args {
-		if !IsConcrete(a) && !(IsNoneShape(a) && !a.Dynamic) {
+		if !core.IsConcrete(a) && !(core.IsNoneShape(a) && !a.Dynamic) {
 			return false
 		}
 	}
@@ -81,14 +85,14 @@ func allConcreteArgs(args []Value) bool {
 // strict none-SHAPE (a None carrier or literal) becomes the canonical
 // `none` sentinel, so the handler's payload probes (IsNone, truthiness)
 // see exactly the value the runtime would hand it.
-func dryPassOperands(args []Value) []Value {
-	var out []Value
+func dryPassOperands(args []core.Value) []core.Value {
+	var out []core.Value
 	for i, a := range args {
-		if !IsConcrete(a) && IsNoneShape(a) {
+		if !core.IsConcrete(a) && core.IsNoneShape(a) {
 			if out == nil {
-				out = append([]Value(nil), args...)
+				out = append([]core.Value(nil), args...)
 			}
-			out[i] = WithPos(NewNone(), a)
+			out[i] = core.WithPos(core.NewNone(), a)
 		}
 	}
 	if out == nil {

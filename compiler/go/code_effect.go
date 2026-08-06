@@ -1,4 +1,9 @@
-package eng
+package compiler
+
+import (
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // Typed code values — stage 1 of design/checker-precision-fronts.0.md §1
 // (the `do` escape hatch). A QUOTED code list stored in data (a dispatch
@@ -34,18 +39,18 @@ package eng
 // ChildTypeInfo (the non-nil payload also keeps satisfying
 // positionalMatch's concrete-list rule for TList slots).
 type CodeEffectInfo struct {
-	PayloadBase
+	core.PayloadBase
 	// In is the input types the body consumes from the stack, top
 	// first. Stage-1 producers analyse bodies against NO inputs (the
 	// `do` invocation shape, which runs its body in a fresh sub-stack),
 	// so In is always empty today; the field exists for the staged
 	// higher-order consumers (each/fold/filter bodies), which analyse
 	// against synthetic inputs.
-	In []*Type
+	In []*core.Type
 	// Out is the body's net residual types in bottom-to-top stack
 	// order — the FULL residual `do` leaves (mirroring doListHandler's
 	// whole-stack return, so a multi-value body nets every value).
-	Out []*Type
+	Out []*core.Type
 	// Analysed is true when the body analysis completed cleanly (no
 	// diagnostics, no divergence, every residual representable). A
 	// carrier without the payload — or with Analysed=false — has an
@@ -82,31 +87,31 @@ type CodeEffectInfo struct {
 // not run it, so any diagnostics it raises are truncated — at runtime
 // `do` (the error-catching word) surfaces a failing body as a caught
 // Error VALUE, not a program error.
-func AnalyseCodeEffectCarrier(r *Registry, body Value) (Value, bool) {
+func AnalyseCodeEffectCarrier(r *core.Registry, body core.Value) (core.Value, bool) {
 	if r == nil || !r.Check.IsActive() || r.Check.Compiling || r.Check.CodeEffectDepth > 0 {
-		return Value{}, false
+		return core.Value{}, false
 	}
-	if !IsConcrete(body) || !body.Parent.ConformsTo(TList) {
-		return Value{}, false
+	if !core.IsConcrete(body) || !body.Parent.ConformsTo(core.TList) {
+		return core.Value{}, false
 	}
-	lp, ok := body.Data.(ListPayload)
+	lp, ok := body.Data.(core.ListPayload)
 	if !ok || len(lp.Elems) == 0 {
-		return Value{}, false
+		return core.Value{}, false
 	}
 	hasWord := false
 	for _, e := range lp.Elems {
-		if IsWord(e) {
+		if core.IsWord(e) {
 			hasWord = true
 			break
 		}
 	}
-	if !hasWord || BodyHasSentinel(body) {
-		return Value{}, false
+	if !hasWord || check.BodyHasSentinel(body) {
+		return core.Value{}, false
 	}
 
 	r.Check.CodeEffectDepth++
 	diagBase := len(r.Check.Diagnostics)
-	stk := RunCarrierBody(r, body)
+	stk := check.RunCarrierBody(r, body)
 	// Error- or warning-severity findings mean the analysis did not
 	// describe the body cleanly (a failing dispatch, a partial one) —
 	// decline. INFO advisories (a forward-strand note, an analysis-
@@ -115,7 +120,7 @@ func AnalyseCodeEffectCarrier(r *Registry, body Value) (Value, bool) {
 	// body, it does not run it.
 	clean := true
 	for _, d := range r.Check.Diagnostics[diagBase:] {
-		if d.Severity != SeverityInfo {
+		if d.Severity != core.SeverityInfo {
 			clean = false
 			break
 		}
@@ -124,16 +129,16 @@ func AnalyseCodeEffectCarrier(r *Registry, body Value) (Value, bool) {
 	r.Check.CodeEffectDepth--
 
 	if !clean || len(stk) == 0 {
-		return Value{}, false
+		return core.Value{}, false
 	}
-	out := make([]*Type, len(stk))
+	out := make([]*core.Type, len(stk))
 	for i, v := range stk {
-		if v.Parent == nil || IsBareTypeNode(v) || IsDisjunct(v) {
-			return Value{}, false
+		if v.Parent == nil || core.IsBareTypeNode(v) || core.IsDisjunct(v) {
+			return core.Value{}, false
 		}
 		out[i] = v.Parent
 	}
-	c := NewCarrier(TList)
+	c := core.NewCarrier(core.TList)
 	c.Data = CodeEffectInfo{Out: out, Analysed: true}
 	return c, true
 }

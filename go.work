@@ -6,6 +6,8 @@ go 1.24.7
 // those and pins real versions, after which this workspace is what lets the
 // clean, replace-free go.mods still build locally.
 use (
+	./check/go
+	./compiler/go
 	./core/go
 	./basic/go
 	./calc/go

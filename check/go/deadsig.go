@@ -1,4 +1,6 @@
-package eng
+package check
+
+import core "github.com/boru-lang/boru/core/go"
 
 // Dead-overload (unreachable-signature) detection. boru dispatch is
 // first-match-wins over SortSignatures' most-specific-first order, so a
@@ -9,21 +11,21 @@ package eng
 // DeadSig records an unreachable signature and the earlier one that
 // shadows it.
 type DeadSig struct {
-	Index      int       // position of the dead sig in dispatch (sorted) order
-	Sig        Signature // the unreachable signature
-	ShadowedBy Signature // the earlier signature that subsumes it
+	Index      int            // position of the dead sig in dispatch (sorted) order
+	Sig        core.Signature // the unreachable signature
+	ShadowedBy core.Signature // the earlier signature that subsumes it
 }
 
 // sigIsTypeArg reports whether position i of s expects a type literal
 // (TypeArgs slot) rather than an ordinary value.
-func sigIsTypeArg(s *Signature, i int) bool {
+func sigIsTypeArg(s *core.Signature, i int) bool {
 	return s.TypeArgs != nil && s.TypeArgs[i]
 }
 
 // sigIsQuoteArg reports whether position i of s captures the upcoming
 // word as an atom (a /q slot) rather than matching an existing value.
 // A /q slot and a plain slot of the same type admit different inputs.
-func sigIsQuoteArg(s *Signature, i int) bool {
+func sigIsQuoteArg(s *core.Signature, i int) bool {
 	return s.QuoteArgs != nil && s.QuoteArgs[i]
 }
 
@@ -41,7 +43,7 @@ func sigIsQuoteArg(s *Signature, i int) bool {
 //     (t2 ⊆ t1), so any value satisfying s2 also satisfies s1.
 //
 // When this holds and s1 sorts before s2, s2 can never win dispatch.
-func sigSubsumes(s1, s2 *Signature) bool {
+func sigSubsumes(s1, s2 *core.Signature) bool {
 	if s1.TotalArgs() != s2.TotalArgs() {
 		return false
 	}
@@ -56,14 +58,14 @@ func sigSubsumes(s1, s2 *Signature) bool {
 		if sigIsQuoteArg(s1, i) != sigIsQuoteArg(s2, i) {
 			return false
 		}
-		if _, ok := SigPattern(s1, i); ok {
+		if _, ok := core.SigPattern(s1, i); ok {
 			return false
 		}
-		if _, ok := SigPattern(s2, i); ok {
+		if _, ok := core.SigPattern(s2, i); ok {
 			return false
 		}
-		t1 := SigArgType(s1, i)
-		t2 := SigArgType(s2, i)
+		t1 := core.SigArgType(s1, i)
+		t2 := core.SigArgType(s2, i)
 		if t1 == nil || t2 == nil {
 			return false
 		}
@@ -80,13 +82,13 @@ func sigSubsumes(s1, s2 *Signature) bool {
 // on already-sorted input) so the result reflects the order the matcher
 // actually uses. Fallback signatures are never reported — they are
 // intentional 0-arg catch-alls that sort last.
-func DeadSignatures(sigs []Signature) []DeadSig {
+func DeadSignatures(sigs []core.Signature) []DeadSig {
 	if len(sigs) < 2 {
 		return nil
 	}
-	sorted := make([]Signature, len(sigs))
+	sorted := make([]core.Signature, len(sigs))
 	copy(sorted, sigs)
-	SortSignatures(sorted)
+	core.SortSignatures(sorted)
 
 	var dead []DeadSig
 	for j := 1; j < len(sorted); j++ {

@@ -1,4 +1,6 @@
-package eng
+package compiler
+
+import core "github.com/boru-lang/boru/core/go"
 
 // Runtime (detached) fn-unit stamping — design/RUNTIME-STAMPING.0.md.
 //
@@ -32,7 +34,7 @@ package eng
 // construction). Multi-overload values stamp EVERY own sig through the
 // value-level loops (StampFnValue / StampFnValueInPlace →
 // StampDetachedSig, REFUSAL-CLOSURE §7b).
-func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, bool) {
+func StampDetachedFn(r *core.Registry, fd core.FnDefInfo, pos core.SrcPos) (*CompiledFnRef, bool) {
 	si, ok := firstStampableSig(fd)
 	if !ok {
 		// Not recorded: native-word bindings swept by the module-load loop
@@ -55,7 +57,7 @@ func StampDetachedFn(r *Registry, fd FnDefInfo, pos SrcPos) (*CompiledFnRef, boo
 // The caller contract is ForkConcurrent's: invoke from the goroutine that
 // owns r (store words and codec resolution run on the registry executing
 // them, so this holds at every trigger site).
-func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*CompiledFnRef, bool) {
+func StampDetachedSig(r *core.Registry, fd core.FnDefInfo, sigIdx int, pos core.SrcPos) (*CompiledFnRef, bool) {
 	if r == nil || !r.RuntimeStampingEnabled() {
 		return nil, false
 	}
@@ -67,7 +69,7 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 	// *CheckState); arming a compile pass on the alias would trash the
 	// parent's live diagnostics/emit state. Mirror NewRegistry's init
 	// (StepBudget sentinel -1, inactive recorder).
-	fork.Check = &CheckState{StepBudget: -1, Emit: TheInactiveEmit}
+	fork.Check = &core.CheckState{StepBudget: -1, Emit: core.TheInactiveEmit}
 	defer fork.Check.BeginCompilePass()()
 	// BeginCompilePass installs a concrete *EmitState; the two-value cast
 	// (never-failing here) keeps this panic-free without an unreachable
@@ -97,10 +99,10 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 	// compile pass armed above keeps GenerateID live.
 	for i := range fd.Captured {
 		if fd.Captured[i].Value.ID == "" {
-			cloned := append([]CapturedBinding(nil), fd.Captured...)
+			cloned := append([]core.CapturedBinding(nil), fd.Captured...)
 			for j := range cloned {
 				if cloned[j].Value.ID == "" {
-					cloned[j].Value.ID = GenerateID(IDPrefixForType(cloned[j].Value.Parent))
+					cloned[j].Value.ID = core.GenerateID(core.IDPrefixForType(cloned[j].Value.Parent))
 				}
 			}
 			fd.Captured = cloned
@@ -117,7 +119,7 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 		// The probe's latched reason when it gave one; the report printer
 		// substitutes a generic text for an empty reason (a refusal path
 		// that never reached MarkUncompilable).
-		r.RecordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: es.storedFnProbeReason})
+		r.RecordStampEvent(core.StampEvent{Name: fd.Name, Pos: pos, Reason: es.storedFnProbeReason})
 		return nil, false
 	}
 	ref := &CompiledFnRef{Unit: unit, depNames: deps}
@@ -147,7 +149,7 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 		// interprets, byte-identically. (Graduated from //covergate:allow: the
 		// variation sweep's module-body transform over a sift row reaches it —
 		// design/COVERAGE-ALLOWLIST.10.md graduation.)
-		r.RecordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Reason: "finalize left the unit unstamped"})
+		r.RecordStampEvent(core.StampEvent{Name: fd.Name, Pos: pos, Reason: "finalize left the unit unstamped"})
 		return nil, false
 	}
 	if len(deps) > 0 {
@@ -167,7 +169,7 @@ func StampDetachedSig(r *Registry, fd FnDefInfo, sigIdx int, pos SrcPos) (*Compi
 	// fd here carries the §7a identity-minted capture clone, so a re-stamp
 	// needs no re-clone.
 	ref.restamp = &restampBox{fd: fd, sigIdx: sigIdx, pos: pos}
-	r.RecordStampEvent(StampEvent{Name: fd.Name, Pos: pos, Stamped: true})
+	r.RecordStampEvent(core.StampEvent{Name: fd.Name, Pos: pos, Stamped: true})
 	return ref, true
 }
 
@@ -187,7 +189,7 @@ const restampMaxTries = 3
 // refusing). The box mutex serialises concurrent invokers of one shared sig
 // — the winner compiles, the rest reuse its twin; StampDetachedFn itself
 // runs on the CALLER's registry per its ForkConcurrent contract.
-func (ref *CompiledFnRef) JitRestamp(r *Registry) *CompiledFnRef {
+func (ref *CompiledFnRef) JitRestamp(r *core.Registry) *CompiledFnRef {
 	box := ref.restamp
 	if box == nil {
 		return nil
@@ -219,8 +221,8 @@ func (ref *CompiledFnRef) JitRestamp(r *Registry) *CompiledFnRef {
 // stamped, capturing, ineligible shape, refusing body, policy off) it
 // returns the input unchanged with ok=false, so callers may use the returned
 // value unconditionally.
-func StampFnValue(r *Registry, v Value) (Value, bool) {
-	fd, ok := v.Data.(FnDefInfo)
+func StampFnValue(r *core.Registry, v core.Value) (core.Value, bool) {
+	fd, ok := v.Data.(core.FnDefInfo)
 	if !ok {
 		return v, false
 	}
@@ -238,7 +240,7 @@ func StampFnValue(r *Registry, v Value) (Value, bool) {
 	// whose body declines stays plain and interprets — per-sig, fail-safe.
 	// The sig slice clones once (and each stamped impl clones) so the stamp
 	// never writes through a shared pointer of a published value.
-	var sigs []Signature
+	var sigs []core.Signature
 	for i := range fd.Signatures {
 		if !storedSigEligible(&fd.Signatures[i]) {
 			continue
@@ -248,10 +250,10 @@ func StampFnValue(r *Registry, v Value) (Value, bool) {
 			continue
 		}
 		if sigs == nil {
-			sigs = make([]Signature, len(fd.Signatures))
+			sigs = make([]core.Signature, len(fd.Signatures))
 			copy(sigs, fd.Signatures)
 		}
-		na := *(sigs[i].Impl.(*BoruImpl))
+		na := *(sigs[i].Impl.(*core.BoruImpl))
 		na.Compiled = ref
 		sigs[i].Impl = &na
 	}
@@ -273,8 +275,8 @@ func StampFnValue(r *Registry, v Value) (Value, bool) {
 // module's def bindings and its export map share impl pointers and both must
 // see the stamp, and nothing outside the loading goroutine holds the value
 // yet. Returns false on any decline, leaving the value untouched.
-func StampFnValueInPlace(r *Registry, v Value) bool {
-	fd, ok := v.Data.(FnDefInfo)
+func StampFnValueInPlace(r *core.Registry, v core.Value) bool {
+	fd, ok := v.Data.(core.FnDefInfo)
 	if !ok {
 		return false
 	}
@@ -295,7 +297,7 @@ func StampFnValueInPlace(r *Registry, v Value) bool {
 		if !ok {
 			continue
 		}
-		fd.Signatures[i].Impl.(*BoruImpl).Compiled = ref
+		fd.Signatures[i].Impl.(*core.BoruImpl).Compiled = ref
 		any = true
 	}
 	return any

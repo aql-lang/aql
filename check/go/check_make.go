@@ -1,4 +1,4 @@
-package eng
+package check
 
 // Check-piece make mirror: the check-mode model of class / Resource
 // construction. Extracted from core_make.go (Stage 2b of the four-piece
@@ -6,6 +6,8 @@ package eng
 
 import (
 	"fmt"
+
+	core "github.com/boru-lang/boru/core/go"
 )
 
 // CheckMakeConstruction is the CHECK-MODE mirror of the class / Resource
@@ -19,29 +21,29 @@ import (
 // carrier field value is skipped. Deduped by detail+position — the ReturnsFn
 // runs once per analysed call shape, but a body can be analysed under
 // several shapes. No-op outside check mode.
-func CheckMakeConstruction(r *Registry, target, src Value, pos SrcPos) {
+func CheckMakeConstruction(r *core.Registry, target, src core.Value, pos core.SrcPos) {
 	if r == nil || !r.Check.IsActive() {
 		return
 	}
-	target = ResolveTypeLiteralDef(target, r)
-	if !IsConcrete(src) || src.Parent == nil || !src.Parent.ConformsTo(TMap) {
+	target = core.ResolveTypeLiteralDef(target, r)
+	if !core.IsConcrete(src) || src.Parent == nil || !src.Parent.ConformsTo(core.TMap) {
 		return
 	}
-	provided, _ := AsMap(src)
+	provided, _ := core.AsMap(src)
 	if provided == nil {
 		return
 	}
-	var allFields *OrderedMap
+	var allFields *core.OrderedMap
 	var label string
 	switch {
-	case IsClassType(target):
-		ot, err := AsClassType(target)
+	case core.IsClassType(target):
+		ot, err := core.AsClassType(target)
 		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return
 		}
 		allFields, label = ot.AllFields(), "class "+ot.Name
-	case IsResourceType(target):
-		rt, err := AsResourceType(target)
+	case core.IsResourceType(target):
+		rt, err := core.AsResourceType(target)
 		if err != nil { //covergate:allow shared-assertion / gate-guaranteed kernel guard (§kernel)
 			return
 		}
@@ -55,7 +57,7 @@ func CheckMakeConstruction(r *Registry, target, src Value, pos SrcPos) {
 				return
 			}
 		}
-		r.Check.AddDiagnostic(CheckDiagnostic{
+		r.Check.AddDiagnostic(core.CheckDiagnostic{
 			Code:   "type_error",
 			Detail: detail,
 			Word:   "make",
@@ -80,10 +82,10 @@ func CheckMakeConstruction(r *Registry, target, src Value, pos SrcPos) {
 			diag(fmt.Sprintf("make: missing field %q for %s", key, label))
 			continue
 		}
-		if !IsConcrete(val) {
+		if !core.IsConcrete(val) {
 			continue
 		}
-		if _, err := MakeClassFieldValue(val, constraint, r); err != nil {
+		if _, err := core.MakeClassFieldValue(val, constraint, r); err != nil {
 			diag(fmt.Sprintf("make: field %q: %v", key, err))
 		}
 	}

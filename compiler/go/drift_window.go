@@ -1,4 +1,4 @@
-package eng
+package compiler
 
 import core "github.com/boru-lang/boru/core/go"
 
@@ -28,7 +28,7 @@ func init() {
 	core.DriftWindowRecorder = tryRecordDriftWindow
 }
 
-func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int) bool {
+func tryRecordDriftWindow(e *core.Engine, w core.WordInfo, sig *core.Signature, positions []int) bool {
 	es, _ := e.Registry.Check.Recorder().(*EmitState)
 	if es == nil || !es.Active() || es.SuspendedNow() {
 		return false
@@ -61,7 +61,7 @@ func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int
 		return false
 	}
 	fwdIdx := e.Pointer + 1
-	if fwdIdx >= e.Tape.Len() || !ForwardLiteralOperand(e.Tape.At(fwdIdx)) {
+	if fwdIdx >= e.Tape.Len() || !core.ForwardLiteralOperand(e.Tape.At(fwdIdx)) {
 		return false
 	}
 	// CONTIGUITY: the matched operands must be exactly the tape span directly
@@ -76,7 +76,7 @@ func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int
 	// cannot promise; those shapes keep the sound refusal.
 	for i := fwdIdx + 1; i < e.Tape.Len(); i++ {
 		t := e.Tape.At(i)
-		if !IsEnd(t) && !IsDefCleanup(t) {
+		if !core.IsEnd(t) && !core.IsDefCleanup(t) {
 			return false
 		}
 	}
@@ -86,7 +86,7 @@ func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int
 	// where the bystanders land; those shapes keep the sound refusal.
 	for i := 0; i < minPos; i++ {
 		t := e.Tape.At(i)
-		if !IsEnd(t) && !IsDefCleanup(t) {
+		if !core.IsEnd(t) && !core.IsDefCleanup(t) {
 			return false
 		}
 	}
@@ -105,7 +105,7 @@ func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int
 	// The word itself rides as an inert const: the island steps it as a live
 	// token, so the RUNTIME dispatch (registry-resolved, forward-collecting)
 	// is the interpreter's own.
-	wordTok := WithPos(NewWord(w.Name), e.Tape.At(e.Pointer))
+	wordTok := core.WithPos(core.NewWord(w.Name), e.Tape.At(e.Pointer))
 	ops = append(ops, constOperand(es.intern(wordTok)))
 	for p := topPos; p >= minPos; p-- {
 		v := e.Tape.At(p)
@@ -119,7 +119,7 @@ func tryRecordDriftWindow(e *Engine, w WordInfo, sig *Signature, positions []int
 		ops = append(ops, op)
 	}
 
-	out := NewDynamicCarrier(TAny)
+	out := core.NewDynamicCarrier(core.TAny)
 	es.SiteCounts[SiteDynamic]++
 	seq := es.appendEvent(emitEvent{kind: evCall, call: emitCall{
 		word: w.Name, ops: ops, nout: 1, pos: wordTok.Pos(), dynMixed: true,

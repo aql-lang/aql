@@ -1,6 +1,10 @@
-package eng
+package check
 
-import "fmt"
+import (
+	"fmt"
+
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // Static index / size checking for check mode.
 //
@@ -31,17 +35,17 @@ import "fmt"
 // list literal reports its exact element count; a typed-list carrier
 // reports its ChildTypeInfo.Len refinement when present. A plain
 // (unrefined) carrier, a non-list, or a type literal reports false.
-func StaticListLen(v Value) (int, bool) {
-	if !v.Parent.ConformsTo(TList) {
+func StaticListLen(v core.Value) (int, bool) {
+	if !v.Parent.ConformsTo(core.TList) {
 		return 0, false
 	}
-	if IsConcrete(v) {
-		if list, err := AsList(v); err == nil && !list.IsNil() {
+	if core.IsConcrete(v) {
+		if list, err := core.AsList(v); err == nil && !list.IsNil() {
 			return list.Len(), true
 		}
 		return 0, false
 	}
-	if ct, ok := v.Data.(ChildTypeInfo); ok && ct.Len != nil {
+	if ct, ok := v.Data.(core.ChildTypeInfo); ok && ct.Len != nil {
 		return *ct.Len, true
 	}
 	return 0, false
@@ -51,7 +55,7 @@ func StaticListLen(v Value) (int, bool) {
 // true, or false when there is no lower bound the checker can use. A
 // concrete integer is its own minimum; a DepScalar contributes its
 // lower bound (rounded up for a strict `gt`).
-func minIndex(idx Value) (int64, bool) {
+func minIndex(idx core.Value) (int64, bool) {
 	if idx.IsDepScalar() {
 		info, err := idx.AsDepScalar()
 		if err != nil || info.Lo == nil {
@@ -66,7 +70,7 @@ func minIndex(idx Value) (int64, bool) {
 		}
 		return n, true
 	}
-	if IsConcrete(idx) && idx.Parent.Equal(TInteger) {
+	if core.IsConcrete(idx) && idx.Parent.Equal(core.TInteger) {
 		n, err := idx.AsConcreteInteger()
 		if err != nil {
 			return 0, false
@@ -79,7 +83,7 @@ func minIndex(idx Value) (int64, bool) {
 // maxIndex returns the largest integer an index value can take and
 // true, or false when there is no upper bound. Used for the negative-
 // index case: an index whose maximum is below zero is always invalid.
-func maxIndex(idx Value) (int64, bool) {
+func maxIndex(idx core.Value) (int64, bool) {
 	if idx.IsDepScalar() {
 		info, err := idx.AsDepScalar()
 		if err != nil || info.Hi == nil {
@@ -94,7 +98,7 @@ func maxIndex(idx Value) (int64, bool) {
 		}
 		return n, true
 	}
-	if IsConcrete(idx) && idx.Parent.Equal(TInteger) {
+	if core.IsConcrete(idx) && idx.Parent.Equal(core.TInteger) {
 		n, err := idx.AsConcreteInteger()
 		if err != nil {
 			return 0, false
@@ -107,7 +111,7 @@ func maxIndex(idx Value) (int64, bool) {
 // indexProvablyOOB reports whether idx is provably out of bounds for a
 // list of length n, with a human-readable reason. It returns false
 // unless every value idx could take lies outside [0, n).
-func indexProvablyOOB(idx Value, n int) (string, bool) {
+func indexProvablyOOB(idx core.Value, n int) (string, bool) {
 	// Too high: the smallest value the index can take is already past
 	// the last valid position.
 	if lo, ok := minIndex(idx); ok && lo >= int64(n) {
@@ -132,8 +136,8 @@ func indexProvablyOOB(idx Value, n int) (string, bool) {
 // RuntimeMirror: the consuming word errors at runtime on exactly this
 // index, and the recording model is unaffected — inside an error-catching
 // `do` body AddDiagnostic re-attributes it to a caught info finding.
-func emitIndexOOB(r *Registry, word, detail string, pos SrcPos) {
-	r.Check.AddDiagnostic(CheckDiagnostic{
+func emitIndexOOB(r *core.Registry, word, detail string, pos core.SrcPos) {
+	r.Check.AddDiagnostic(core.CheckDiagnostic{
 		Code:          "index_out_of_range",
 		Detail:        word + ": " + detail,
 		Word:          word,
@@ -148,7 +152,7 @@ func emitIndexOOB(r *Registry, word, detail string, pos SrcPos) {
 // length is statically known and idx is provably out of range — so it
 // silently ignores map/object containers, unknown-length carriers, and
 // unknown indices.
-func CheckListIndex(r *Registry, idx, container Value, word string) {
+func CheckListIndex(r *core.Registry, idx, container core.Value, word string) {
 	n, ok := StaticListLen(container)
 	if !ok {
 		return
@@ -163,15 +167,15 @@ func CheckListIndex(r *Registry, idx, container Value, word string) {
 // Each statically-known index is checked against the data length; a
 // provably out-of-range one is flagged. No-op unless the data length is
 // known and the indices are a concrete list.
-func CheckAtIndices(r *Registry, indices, data Value, word string) {
+func CheckAtIndices(r *core.Registry, indices, data core.Value, word string) {
 	n, ok := StaticListLen(data)
 	if !ok {
 		return
 	}
-	if !IsConcrete(indices) || !indices.Parent.ConformsTo(TList) {
+	if !core.IsConcrete(indices) || !indices.Parent.ConformsTo(core.TList) {
 		return
 	}
-	list, err := AsList(indices)
+	list, err := core.AsList(indices)
 	if err != nil || list.IsNil() {
 		return
 	}

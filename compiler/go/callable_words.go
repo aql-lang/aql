@@ -1,4 +1,9 @@
-package eng
+package compiler
+
+import (
+	check "github.com/boru-lang/boru/check/go"
+	core "github.com/boru-lang/boru/core/go"
+)
 
 // Code-body closure compilation (plan P2): a higher-order word whose body is a
 // quoted code list compiles that body to its own fn unit, and the dispatch
@@ -28,7 +33,7 @@ package eng
 // `([p] => …)`) binds the body's `p` to that input carrier in AnalyseFnBody;
 // an empty name (the token-quotation form, `[body]`) leaves the input on the
 // stack for the body to consume positionally. nil means all-unnamed.
-func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, takesTop bool, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, pos SrcPos) (int, bool) {
+func compileClosureBody(r *core.Registry, word string, bodyOut int, emptyBodyOK, takesTop bool, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, pos core.SrcPos) (int, bool) {
 	// Closure compilation is emit-cluster machinery: it writes recording
 	// internals (fnRecs), so it needs the CONCRETE EmitState. A pass without
 	// one (the inactive recorder) declines exactly as the nil field did —
@@ -42,8 +47,8 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 	// the handler's OWN runtime error, raised faithfully at invoke time, so the
 	// closure is left count-agnostic rather than count-refused (which would
 	// island).
-	declared := []*Type{TAny}
-	if bodyOut == 0 || bodyOut == BodyOutResidual || emptyBodyOK {
+	declared := []*core.Type{core.TAny}
+	if bodyOut == 0 || bodyOut == core.BodyOutResidual || emptyBodyOK {
 		// A side-effect body (0), a whole-residual body (do — the handler
 		// returns everything the body nets, so the count is per-body), and an
 		// EmptyBodyErrors body are all count-AGNOSTIC: declared nil skips the
@@ -54,7 +59,7 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 		paramNames = make([]string, len(inputs)) // all unnamed: body reads inputs off the stack
 	}
 	name := word + "$body"
-	key := FnAnalysisKey(r.AnalysisScopeID(), name, inputs, captures, bodyToks)
+	key := check.FnAnalysisKey(r.AnalysisScopeID(), name, inputs, captures, bodyToks)
 	unit, finish, ok := es.StartFnCompile(key, name, r, inputs, declared, paramNames, captures, false, pos)
 	if !ok {
 		return -1, false
@@ -78,7 +83,7 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 	// true preserves this callback-body path's original recording gate
 	// (!anonymous is neutralised): the fn-context change flows through the
 	// def/dispatch paths, not this closure-body compile.
-	stk := AnalyseFnBody(r, name, paramNames, bodyToks, inputs, captures, declared, true)
+	stk := check.AnalyseFnBody(r, name, paramNames, bodyToks, inputs, captures, declared, true)
 	if len(bodyToks) == 0 && len(stk) == 0 {
 		// An EMPTY body's residual is its pushed inputs, verbatim: the runtime
 		// InvokeBody pushes the per-call inputs and runs no tokens, so the frame
@@ -99,21 +104,21 @@ func compileClosureBody(r *Registry, word string, bodyOut int, emptyBodyOK, take
 // typed at one (the binding a `def acc (flex […])` holds during analysis is a
 // TFlexList carrier, not the concrete store). Bare type nodes are excluded:
 // a class/flex TYPE literal is not an instance.
-func mutableInstanceRef(v Value) bool {
-	if IsBareTypeNode(v) {
+func mutableInstanceRef(v core.Value) bool {
+	if core.IsBareTypeNode(v) {
 		return false
 	}
-	if IsFlexNode(v) || IsClassInstance(v) {
+	if core.IsFlexNode(v) || core.IsClassInstance(v) {
 		return true
 	}
 	p := v.Parent
 	if p == nil {
 		return false
 	}
-	if p.ConformsTo(TFlexMap) || p.ConformsTo(TFlexList) || p.ConformsTo(TFlexXml) {
+	if p.ConformsTo(core.TFlexMap) || p.ConformsTo(core.TFlexList) || p.ConformsTo(core.TFlexXml) {
 		return true
 	}
-	return v.Carrier && p.ConformsTo(TClass)
+	return v.Carrier && p.ConformsTo(core.TClass)
 }
 
 // moduleScopeMutableCaptures extends a closure body's lexical captures with
@@ -130,16 +135,16 @@ func mutableInstanceRef(v Value) bool {
 // shape: `def acc (flex [0])  … each [ var [[x] (acc set 0 …)] ]`.
 // Scoped to mutable instances ONLY — fn values, module exports, and bakeable
 // consts keep their existing paths.
-func moduleScopeMutableCaptures(r *Registry, bodyToks []Value, existing []CapturedBinding) []CapturedBinding {
+func moduleScopeMutableCaptures(r *core.Registry, bodyToks []core.Value, existing []core.CapturedBinding) []core.CapturedBinding {
 	have := map[string]bool{}
 	for _, cb := range existing {
 		have[cb.Name] = true
 	}
 	bodyLocals := map[string]bool{}
-	CollectBodyLocalDefs(bodyToks, bodyLocals)
+	core.CollectBodyLocalDefs(bodyToks, bodyLocals)
 	out := existing
 	seen := map[string]bool{}
-	WalkBodyWords(bodyToks, func(w WordInfo, _ Value) {
+	core.WalkBodyWords(bodyToks, func(w core.WordInfo, _ core.Value) {
 		name := w.Name
 		if name == "" || have[name] || bodyLocals[name] || seen[name] {
 			return
@@ -152,7 +157,7 @@ func moduleScopeMutableCaptures(r *Registry, bodyToks []Value, existing []Captur
 		if !mutableInstanceRef(v) && !moduleScopeInstanceCarrier(v) {
 			return
 		}
-		out = append(out, CapturedBinding{Name: name, Value: v})
+		out = append(out, core.CapturedBinding{Name: name, Value: v})
 	})
 	return out
 }
@@ -180,8 +185,8 @@ func moduleScopeMutableCaptures(r *Registry, bodyToks []Value, existing []Captur
 // dispatch on it (an `each` over a gradual collection) still refuses at its own
 // ambiguity gate, so admitting the capture never introduces an unsound dispatch
 // — it just resolves the operand.
-func moduleScopeInstanceCarrier(v Value) bool {
-	return !IsBareTypeNode(v) && !IsConcrete(v) && v.Carrier
+func moduleScopeInstanceCarrier(v core.Value) bool {
+	return !core.IsBareTypeNode(v) && !core.IsConcrete(v) && v.Carrier
 }
 
 // tryRecordClosure attempts to compile a code-body higher-order word's body to
@@ -189,7 +194,7 @@ func moduleScopeInstanceCarrier(v Value) bool {
 // OpPushClosure). Returns true on success. A body that does not compile leaves
 // the REAL emit state untouched — the probe runs in a throwaway state — so the
 // caller falls through to the island path.
-func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Value, pos SrcPos) bool {
+func tryRecordClosure(r *core.Registry, word string, sig *core.Signature, args, outs []core.Value, pos core.SrcPos) bool {
 	if sig == nil || sig.Callable == nil {
 		return false
 	}
@@ -203,7 +208,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// the closure compiles count-agnostic, the VM's frameless RET returns the full
 	// residual, and the dispatch seats all N results. Other multi-output words
 	// stay beyond this path.
-	if !es.Active() || (len(outs) > 1 && spec.BodyOut != BodyOutResidual) || spec.BodyPos >= len(args) {
+	if !es.Active() || (len(outs) > 1 && spec.BodyOut != core.BodyOutResidual) || spec.BodyPos >= len(args) {
 		return false
 	}
 	body := args[spec.BodyPos]
@@ -241,13 +246,13 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// the map/list iteration by the value's concrete type), so the same closure
 	// drives either shape == the interpreter. A non-robust word (no flag) still
 	// refuses → sound interpreter fallback.
-	_, bodyIsLambda := body.Data.(FnDefInfo)
-	tokenShapeGeneric := spec.CrossCollectionTokenShape && IsConcrete(body) && !bodyIsLambda
-	if AnyDynamicCarrier(args) && DynamicReachableOverloadCount(r, word, args) >= 2 && !tokenShapeGeneric {
+	_, bodyIsLambda := body.Data.(core.FnDefInfo)
+	tokenShapeGeneric := spec.CrossCollectionTokenShape && core.IsConcrete(body) && !bodyIsLambda
+	if check.AnyDynamicCarrier(args) && check.DynamicReachableOverloadCount(r, word, args) >= 2 && !tokenShapeGeneric {
 		// A CompileDynBody word DECLINES instead: tryRecordDynBody records a
 		// POLY re-match over the word's own sigs — the runtime value picks
 		// the overload exactly as the interpreter's dispatch does.
-		if sig.CompileEffect.Has(CompileDynBody) {
+		if sig.CompileEffect.Has(core.CompileDynBody) {
 			return false
 		}
 		es.MarkUncompilable("higher-order `" + word + "` over a gradual-Any collection: ambiguous overload (List vs Map), no static commit and no poly re-match")
@@ -260,16 +265,16 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// the lambda body against that representative shape so `p.value`/`kv.v`
 	// typechecks, then record the dispatch with the body as a closure the
 	// handler drives through InvokeBody.
-	if fd, isFn := body.Data.(FnDefInfo); isFn {
+	if fd, isFn := body.Data.(core.FnDefInfo); isFn {
 		return tryRecordLambdaClosure(r, word, spec, sig, args, &fd, extraLamSlots, outs, pos)
 	}
 
 	// A token-list body (`filter [body] data`): the body consumes its inputs
 	// positionally off the stack.
-	if !IsConcrete(body) {
+	if !core.IsConcrete(body) {
 		return false
 	}
-	bodyList, err := AsList(body)
+	bodyList, err := core.AsList(body)
 	if err != nil || bodyList.IsNil() {
 		return false
 	}
@@ -283,7 +288,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// decline is conservative-but-parity: callback words that do NOT thread
 	// the signal (each/filter — the interpreter raises `break outside loop`)
 	// fall back to the interpreter, which raises identically.
-	if BodyHasSentinelDeep(r, body) {
+	if check.BodyHasSentinelDeep(r, body) {
 		return false
 	}
 	inputs := spec.Inputs(args)
@@ -297,7 +302,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 	// closure's captures — resolved here in the enclosing scope, bound into
 	// the body unit's trailing slots at invocation. A module/global ref is
 	// not a capture (it bakes as a const in the body, or refuses the probe).
-	captures := moduleScopeMutableCaptures(r, bodyToks, ComputeCaptures(r, &FnSig{Impl: Boru(bodyToks)}))
+	captures := moduleScopeMutableCaptures(r, bodyToks, core.ComputeCaptures(r, &core.FnSig{Impl: core.Boru(bodyToks)}))
 	return recordClosureDispatch(r, word, spec, sig, args, bodyToks, inputs, nil, captures, ClosureInValue, extraLamSlots, outs, pos)
 }
 
@@ -308,7 +313,7 @@ func tryRecordClosure(r *Registry, word string, sig *Signature, args, outs []Val
 // (`p.value`, `kv.v`, `acc`+`kv.v`) typechecks. Returns false — leaving the
 // refusal to stand — for a shape the word has no lambda convention for, an
 // arity mismatch, or a body that does not compile.
-func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Signature, args []Value, fd *FnDefInfo, extraLamSlots []int, outs []Value, pos SrcPos) bool {
+func tryRecordLambdaClosure(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args []core.Value, fd *core.FnDefInfo, extraLamSlots []int, outs []core.Value, pos core.SrcPos) bool {
 	inputs, shape, ok := lambdaCallbackInputs(r, word, spec, args)
 	if !ok {
 		return false
@@ -368,7 +373,7 @@ func tryRecordLambdaClosure(r *Registry, word string, spec CallableSpec, sig *Si
 //     a KeyVal (a Map subtype) the carrier conservatively under-types as a
 //     plain Map, so any Map-family param is accepted there and only a
 //     provably-incompatible param (a scalar, a sibling container) refuses.
-func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape, allowCaptures bool) (*Signature, bool) {
+func lambdaHookCompatible(fd *core.FnDefInfo, inputs []core.Value, shape core.ClosureInShape, allowCaptures bool) (*core.Signature, bool) {
 	lam, ok := fd.FirstOwnSig()
 	if !ok || len(lam.Body()) == 0 {
 		return nil, false
@@ -405,16 +410,16 @@ func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape, a
 		// an APPLYING callback — a live compile≠interpret divergence
 		// (checker-compiler-completeness-review.0.md §2.2). Declining keeps
 		// the refusal → interpreter fallback → parity.
-		if lam.QuoteArgs[i] || pt.ConformsTo(TAtom) {
+		if lam.QuoteArgs[i] || pt.ConformsTo(core.TAtom) {
 			return nil, false
 		}
-		if shape == ClosureInKeyVal && inputs[i].Parent.ConformsTo(TMap) {
-			if !pt.ConformsTo(TMap) && !TMap.ConformsTo(pt) {
+		if shape == ClosureInKeyVal && inputs[i].Parent.ConformsTo(core.TMap) {
+			if !pt.ConformsTo(core.TMap) && !core.TMap.ConformsTo(pt) {
 				return nil, false
 			}
 			continue
 		}
-		if !SigTypeMatches(inputs[i], pt) {
+		if !core.SigTypeMatches(inputs[i], pt) {
 			return nil, false
 		}
 	}
@@ -431,7 +436,7 @@ func lambdaHookCompatible(fd *FnDefInfo, inputs []Value, shape ClosureInShape, a
 // M2d): each compiles to its OWN closure unit under the SAME shared token
 // shape (extraNoEvalHookSlots only nominates them on a LambdaSharesTokenShape
 // word) and rides as a second opClosure operand.
-func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Signature, args, bodyToks, inputs []Value, paramNames []string, captures []CapturedBinding, shape ClosureInShape, extraLamSlots []int, outs []Value, pos SrcPos) bool {
+func recordClosureDispatch(r *core.Registry, word string, spec core.CallableSpec, sig *core.Signature, args, bodyToks, inputs []core.Value, paramNames []string, captures []core.CapturedBinding, shape core.ClosureInShape, extraLamSlots []int, outs []core.Value, pos core.SrcPos) bool {
 	// The probe fork below needs the CONCRETE EmitState; both callers only
 	// reach here through an active recording state, so a non-EmitState
 	// recorder (the inactive no-op) declining is the unreachable belt.
@@ -455,14 +460,14 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	// incompatibility declines the whole closure path — the refusal stands.
 	type extraHook struct {
 		slot  int
-		toks  []Value
+		toks  []core.Value
 		names []string
-		caps  []CapturedBinding
+		caps  []core.CapturedBinding
 		ops   []emitOperand
 	}
 	extras := make([]extraHook, 0, len(extraLamSlots))
 	for _, slot := range extraLamSlots {
-		fd, isFn := args[slot].Data.(FnDefInfo)
+		fd, isFn := args[slot].Data.(core.FnDefInfo)
 		if !isFn { //covergate:allow compiler/VM defensive arm; unreachable without a bytecode-level fault (§compiler)
 			return false
 		}
@@ -533,7 +538,7 @@ func recordClosureDispatch(r *Registry, word string, spec CallableSpec, sig *Sig
 	// tail, or any count mismatch declines to the refusal path. 0/1-out bodies
 	// keep today's shapes untouched (a diverging body's single Error out, a
 	// dynTrail apply netting one value).
-	if spec.BodyOut == BodyOutResidual && len(outs) > 1 && !closureResidualExact(probe, probeUnit, len(outs)) {
+	if spec.BodyOut == core.BodyOutResidual && len(outs) > 1 && !closureResidualExact(probe, probeUnit, len(outs)) {
 		return false
 	}
 	// Strip-input shape screen (`error`): admit the two residual shapes the
@@ -633,7 +638,7 @@ func stripResidualShapeOK(es *EmitState, unit, want int) bool {
 // convention (the caller then leaves the refusal to stand): a list each/fold,
 // a no-init map fold, and for-each (whose check-mode output count does not match
 // its 0-result runtime) all stay on the refusal path.
-func lambdaCallbackInputs(r *Registry, word string, spec CallableSpec, args []Value) ([]Value, ClosureInShape, bool) {
+func lambdaCallbackInputs(r *core.Registry, word string, spec core.CallableSpec, args []core.Value) ([]core.Value, core.ClosureInShape, bool) {
 	// A word whose lambda callback sees the SAME inputs as its token form
 	// (walk's payload map) declares LambdaSharesTokenShape: Inputs(args) IS the
 	// lambda convention, no per-word shape below — and no data-follows-body
@@ -651,7 +656,7 @@ func lambdaCallbackInputs(r *Registry, word string, spec CallableSpec, args []Va
 		return nil, ClosureInValue, false
 	}
 	data := args[spec.BodyPos+1] // the data operand follows the body operand
-	if !IsConcrete(data) {
+	if !core.IsConcrete(data) {
 		// A COMPUTED collection (`filter (…lambda) (keys kv)`) arrives as a
 		// typed CARRIER. A typed, NON-dynamic List/Map carrier is admitted:
 		// its element type reads off the carrier exactly as off a concrete
@@ -661,37 +666,37 @@ func lambdaCallbackInputs(r *Registry, word string, spec CallableSpec, args []Va
 		// and with it the runtime callback convention, is ambiguous. Bare
 		// type literals and non-container carriers refuse as before.
 		if data.Dynamic || !data.Carrier || data.Parent == nil ||
-			!(data.Parent.ConformsTo(TList) || data.Parent.ConformsTo(TMap)) {
+			!(data.Parent.ConformsTo(core.TList) || data.Parent.ConformsTo(core.TMap)) {
 			return nil, ClosureInValue, false
 		}
 	}
-	elem := DataListElemTypeFromValue(data)
-	isMap := data.Parent.ConformsTo(TMap)
-	isList := data.Parent.ConformsTo(TList)
+	elem := check.DataListElemTypeFromValue(data)
+	isMap := data.Parent.ConformsTo(core.TMap)
+	isList := data.Parent.ConformsTo(core.TList)
 	switch word {
 	case "filter":
 		switch {
 		case isMap:
-			return []Value{keyValCarrier(r, elem)}, ClosureInKeyVal, true
+			return []core.Value{keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		case isList:
-			return []Value{pairCarrier(elem)}, ClosureInValue, true
+			return []core.Value{pairCarrier(elem)}, ClosureInValue, true
 		}
 	case "each":
 		if isMap {
-			return []Value{keyValCarrier(r, elem)}, ClosureInKeyVal, true
+			return []core.Value{keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		}
 	case "fold":
 		// Init form only (`init fold (lambda) {m}` → args [lambda, map, init]):
 		// the accumulator carries the seed's type, the entry rides as a KeyVal.
 		if isMap && len(args) > spec.BodyPos+2 {
 			acc := args[spec.BodyPos+2]
-			return []Value{NewCarrier(acc.Parent), keyValCarrier(r, elem)}, ClosureInKeyVal, true
+			return []core.Value{core.NewCarrier(acc.Parent), keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		}
 	case "scan":
 		// scan seeds the accumulator from the first value (no init operand): the
 		// accumulator carries the value type, the entry rides as a KeyVal.
 		if isMap {
-			return []Value{NewCarrier(elem), keyValCarrier(r, elem)}, ClosureInKeyVal, true
+			return []core.Value{core.NewCarrier(elem), keyValCarrier(r, elem)}, ClosureInKeyVal, true
 		}
 	}
 	return nil, ClosureInValue, false
@@ -701,11 +706,11 @@ func lambdaCallbackInputs(r *Registry, word string, spec CallableSpec, args []Va
 // filter's list Function form hands its callback (key = the index, value = the
 // element). Field VALUES are carriers (Integer key, elem value) so the compiled
 // body reads field TYPES, never one call's concrete values.
-func pairCarrier(elem *Type) Value {
-	om := NewOrderedMap()
-	om.Set("key", NewCarrier(TInteger))
-	om.Set("value", NewCarrier(elem))
-	return NewValueRaw(TMap, MapPayload{M: om})
+func pairCarrier(elem *core.Type) core.Value {
+	om := core.NewOrderedMap()
+	om.Set("key", core.NewCarrier(core.TInteger))
+	om.Set("value", core.NewCarrier(elem))
+	return core.NewValueRaw(core.TMap, core.MapPayload{M: om})
 }
 
 // keyValCarrier builds a representative KeyVal {k v i n} carrier — the shape the
@@ -713,13 +718,13 @@ func pairCarrier(elem *Type) Value {
 // value field carries the map's common value type; k/i/n carry String/Integer/
 // Integer. Tagged Node/Map/KeyVal directly — the type is kernel-declared
 // (keyval.go), so the former registered-or-plain-Map fallback probe is gone.
-func keyValCarrier(_ *Registry, elem *Type) Value {
-	om := NewOrderedMap()
-	om.Set(KeyValK, NewCarrier(TString))
-	om.Set(KeyValV, NewCarrier(elem))
-	om.Set(KeyValI, NewCarrier(TInteger))
-	om.Set(KeyValN, NewCarrier(TInteger))
-	return NewValueRaw(TKeyVal, MapPayload{M: om})
+func keyValCarrier(_ *core.Registry, elem *core.Type) core.Value {
+	om := core.NewOrderedMap()
+	om.Set(core.KeyValK, core.NewCarrier(core.TString))
+	om.Set(core.KeyValV, core.NewCarrier(elem))
+	om.Set(core.KeyValI, core.NewCarrier(core.TInteger))
+	om.Set(core.KeyValN, core.NewCarrier(core.TInteger))
+	return core.NewValueRaw(core.TKeyVal, core.MapPayload{M: om})
 }
 
 // extraNoEvalHookSlots classifies every NON-body NoEvalArgs operand of a
@@ -746,7 +751,7 @@ func keyValCarrier(_ *Registry, elem *Type) Value {
 // standing (an INERT token hook needs no admission here: when the closure
 // path declines, the existing noEvalBodiesInertScoped const bake still
 // applies).
-func (es *EmitState) extraNoEvalHookSlots(sig *Signature, spec CallableSpec, args []Value) (lamSlots []int, ok bool) {
+func (es *EmitState) extraNoEvalHookSlots(sig *core.Signature, spec core.CallableSpec, args []core.Value) (lamSlots []int, ok bool) {
 	for i := range args {
 		if i == spec.BodyPos || !sig.NoEvalArgs[i] {
 			continue
@@ -754,7 +759,7 @@ func (es *EmitState) extraNoEvalHookSlots(sig *Signature, spec CallableSpec, arg
 		if es.emptyFlexHookOperand(args[i]) {
 			continue
 		}
-		if _, isFn := args[i].Data.(FnDefInfo); isFn && spec.LambdaSharesTokenShape {
+		if _, isFn := args[i].Data.(core.FnDefInfo); isFn && spec.LambdaSharesTokenShape {
 			lamSlots = append(lamSlots, i)
 			continue
 		}
@@ -786,12 +791,12 @@ func (es *EmitState) extraNoEvalHookSlots(sig *Signature, spec CallableSpec, arg
 //     runtime effect between the two — a mutator call, a user call, a branch,
 //     an island — records an event or refuses, so the flex still holds its
 //     constructed (empty) contents when the word dispatches.
-func (es *EmitState) emptyFlexHookOperand(v Value) bool {
+func (es *EmitState) emptyFlexHookOperand(v core.Value) bool {
 	if len(es.units) != 1 || len(es.frames) != 1 {
 		return false
 	}
 	p := v.Parent
-	if p == nil || (!p.ConformsTo(TFlexList) && !p.ConformsTo(TFlexMap)) {
+	if p == nil || (!p.ConformsTo(core.TFlexList) && !p.ConformsTo(core.TFlexMap)) {
 		return false
 	}
 	pr, ok := es.producedBy[v.ID]
@@ -849,14 +854,14 @@ func (es *EmitState) emptyFlexHookOperand(v Value) bool {
 // emptyContainerConst reports whether v is a concrete container literal with
 // ZERO members ([] or {}) — the only construction input emptyFlexHookOperand
 // accepts, so the flex provably starts with no elements.
-func emptyContainerConst(v Value) bool {
-	if !IsConcrete(v) {
+func emptyContainerConst(v core.Value) bool {
+	if !core.IsConcrete(v) {
 		return false
 	}
-	if lst, err := AsList(v); err == nil && !lst.IsNil() {
+	if lst, err := core.AsList(v); err == nil && !lst.IsNil() {
 		return lst.Len() == 0
 	}
-	if m, err := AsMap(v); err == nil && m != nil {
+	if m, err := core.AsMap(v); err == nil && m != nil {
 		return m.Len() == 0
 	}
 	return false
@@ -865,9 +870,9 @@ func emptyContainerConst(v Value) bool {
 // bodyToksHaveSentinel reports whether a lambda body's token slice contains a
 // flow-control sentinel (break/continue/return) — the token-slice form of
 // bodyHasSentinel, for a lambda whose Body is already []Value.
-func bodyToksHaveSentinel(toks []Value) bool {
+func bodyToksHaveSentinel(toks []core.Value) bool {
 	found := false
-	WalkBodyWords(toks, func(w WordInfo, _ Value) {
+	core.WalkBodyWords(toks, func(w core.WordInfo, _ core.Value) {
 		switch w.Name {
 		case "break", "continue", "return":
 			found = true

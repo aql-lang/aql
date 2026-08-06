@@ -1,4 +1,4 @@
-package eng
+package check
 
 import (
 	core "github.com/boru-lang/boru/core/go"
@@ -26,7 +26,7 @@ import (
 // NewDynamicCarrierValue promotes an existing carrier value (e.g. a
 // disjunct carrier for dynamic(A tor B), or a narrowed bound) to the
 // dynamic modality, preserving its Parent/Data bound.
-func NewDynamicCarrierValue(bound Value) Value {
+func NewDynamicCarrierValue(bound core.Value) core.Value {
 	bound.Carrier = true
 	bound.Dynamic = true
 	return bound
@@ -41,8 +41,8 @@ func NewDynamicCarrierValue(bound Value) Value {
 // per-frame leaked types), never Any/Dynamic — a variadic-Any marker would let
 // the oracle admit a wrong-typed leak.
 type SpreadPayload struct {
-	PayloadBase
-	Elem Value
+	core.PayloadBase
+	Elem core.Value
 }
 
 // NewVariadicCarrier builds a variadic-spread carrier over element `elem`.
@@ -52,8 +52,8 @@ type SpreadPayload struct {
 // optimistically like dynamic(Any) instead of failing dispatch — the soundness
 // oracle intercepts it via IsVariadicSpread BEFORE any Dynamic check, so the
 // dynamic flag never weakens the element-type coverage.
-func NewVariadicCarrier(elem Value) Value {
-	v := NewValueRaw(TAny, SpreadPayload{Elem: elem})
+func NewVariadicCarrier(elem core.Value) core.Value {
+	v := core.NewValueRaw(core.TAny, SpreadPayload{Elem: elem})
 	v.Carrier = true
 	v.Dynamic = true
 	return v
@@ -61,16 +61,16 @@ func NewVariadicCarrier(elem Value) Value {
 
 // IsVariadicSpread reports whether v is a NewVariadicCarrier, returning its
 // element value.
-func IsVariadicSpread(v Value) (Value, bool) {
+func IsVariadicSpread(v core.Value) (core.Value, bool) {
 	if sp, ok := v.Data.(SpreadPayload); ok {
 		return sp.Elem, true
 	}
-	return Value{}, false
+	return core.Value{}, false
 }
 
 // stackHasVariadic reports whether any entry of a residual stack is a
 // variadic-spread carrier.
-func stackHasVariadic(stk []Value) bool {
+func stackHasVariadic(stk []core.Value) bool {
 	for _, v := range stk {
 		if _, ok := IsVariadicSpread(v); ok {
 			return true
@@ -87,32 +87,32 @@ func stackHasVariadic(stk []Value) bool {
 // (the fixed lead below the recursive tail, e.g. `n mul 2` → Integer) plus the
 // variadic arms' own elements, dropping Never (the seed). Returns ok=false when
 // neither arm carries a variadic, so the ordinary if-join then applies.
-func FoldVariadicArms(then, els []Value) (Value, bool) {
+func FoldVariadicArms(then, els []core.Value) (core.Value, bool) {
 	hasVar := false
-	var elems []Value
-	for _, stk := range [][]Value{then, els} {
+	var elems []core.Value
+	for _, stk := range [][]core.Value{then, els} {
 		for _, v := range stk {
 			if e, ok := IsVariadicSpread(v); ok {
 				hasVar = true
-				if e.Parent != nil && !ValueType(e).Equal(TNever) {
+				if e.Parent != nil && !core.ValueType(e).Equal(core.TNever) {
 					elems = append(elems, e)
 				}
 				continue
 			}
-			if v.Parent == nil || v.Parent.Equal(TNone) {
+			if v.Parent == nil || v.Parent.Equal(core.TNone) {
 				continue // None padding / base-case emptiness
 			}
-			elems = append(elems, NewTypeLiteral(v.Parent))
+			elems = append(elems, core.NewTypeLiteral(v.Parent))
 		}
 	}
 	if !hasVar {
-		return Value{}, false
+		return core.Value{}, false
 	}
-	elem := NewTypeLiteral(TNever)
+	elem := core.NewTypeLiteral(core.TNever)
 	if len(elems) > 0 {
 		elem = elems[0]
 		for _, e := range elems[1:] {
-			elem = UnionType(elem, e) // drops Never, dedups, keeps a disjunct for genuine unions
+			elem = core.UnionType(elem, e) // drops Never, dedups, keeps a disjunct for genuine unions
 		}
 	}
 	return NewVariadicCarrier(elem), true
@@ -124,8 +124,8 @@ func FoldVariadicArms(then, els []Value) (Value, bool) {
 // The Carrier flag is still set so the rest of the engine treats it
 // as abstract. Downstream list-consuming words can recover the
 // element carrier via dataListElemType.
-func NewCarrierTypedList(elem *Type) Value {
-	v := NewTypedList(NewCarrier(elem))
+func NewCarrierTypedList(elem *core.Type) core.Value {
+	v := core.NewTypedList(core.NewCarrier(elem))
 	v.Carrier = true
 	return v
 }
@@ -134,8 +134,8 @@ func NewCarrierTypedList(elem *Type) Value {
 // element is an arbitrary carrier Value. Use this when the element
 // itself is a typed list (nested lists), a disjunct, or otherwise
 // needs more structure than a bare Parent.
-func NewCarrierTypedListValue(child Value) Value {
-	v := NewTypedList(child)
+func NewCarrierTypedListValue(child core.Value) core.Value {
+	v := core.NewTypedList(child)
 	v.Carrier = true
 	return v
 }
@@ -144,9 +144,9 @@ func NewCarrierTypedListValue(child Value) Value {
 // statically-known length, so a downstream index check can reason
 // about a computed list (e.g. `iota n`). n MUST be the exact length
 // or an upper bound — never an underestimate (see ChildTypeInfo.Len).
-func NewCarrierTypedListLen(elem *Type, n int) Value {
+func NewCarrierTypedListLen(elem *core.Type, n int) core.Value {
 	v := NewCarrierTypedList(elem)
-	if ct, ok := v.Data.(ChildTypeInfo); ok {
+	if ct, ok := v.Data.(core.ChildTypeInfo); ok {
 		ln := n
 		ct.Len = &ln
 		v.Data = ct
@@ -159,10 +159,10 @@ func NewCarrierTypedListLen(elem *Type, n int) Value {
 // index i. Used by list-preserving words like reverse, take, shed,
 // unique, at, sortby — they return a list of the same element type
 // as their input.
-func ReturnsPreserveListAt(i int) ReturnsFunc {
-	return func(args []Value, _ *Registry) []Value {
+func ReturnsPreserveListAt(i int) core.ReturnsFunc {
+	return func(args []core.Value, _ *core.Registry) []core.Value {
 		if i < 0 || i >= len(args) {
-			return []Value{NewCarrier(TList)}
+			return []core.Value{core.NewCarrier(core.TList)}
 		}
 		elem := DataListElemTypeFromValue(args[i])
 		out := NewCarrierTypedList(elem)
@@ -174,20 +174,20 @@ func ReturnsPreserveListAt(i int) ReturnsFunc {
 		if ec, ok := args[i].ElemConstraint(); ok {
 			out.SetElemConstraint(ec)
 		}
-		return []Value{out}
+		return []core.Value{out}
 	}
 }
 
 // ReturnsListElemAt builds a ReturnsFunc that returns the element
 // type carrier of the data-list arg at index i. Used by words like
 // head/first (if added) that pick a single element out of a list.
-func ReturnsListElemAt(i int) ReturnsFunc {
-	return func(args []Value, _ *Registry) []Value {
+func ReturnsListElemAt(i int) core.ReturnsFunc {
+	return func(args []core.Value, _ *core.Registry) []core.Value {
 		if i < 0 || i >= len(args) {
-			return []Value{NewCarrier(TAny)}
+			return []core.Value{core.NewCarrier(core.TAny)}
 		}
 		elem := DataListElemTypeFromValue(args[i])
-		return []Value{NewCarrier(elem)}
+		return []core.Value{core.NewCarrier(elem)}
 	}
 }
 
@@ -200,9 +200,9 @@ func ReturnsListElemAt(i int) ReturnsFunc {
 // declared-Any return does (carrierResults). A KNOWN element type stays a strict
 // carrier — its real shape is checked normally. Sound under the dynamic-modality
 // framework: it only loosens matching, and a guard discharges it back to strict.
-func NewElementCarrier(t *Type) Value {
-	c := NewCarrier(t)
-	if t == nil || t.Equal(TAny) {
+func NewElementCarrier(t *core.Type) core.Value {
+	c := core.NewCarrier(t)
+	if t == nil || t.Equal(core.TAny) {
 		c.Dynamic = true
 	}
 	return c
@@ -220,8 +220,8 @@ func NewElementCarrier(t *Type) Value {
 // (typed lists, empty/single-typed collections, carriers) keeps
 // NewElementCarrier(DataListElemTypeFromValue(data)) — an untyped element
 // stays a dynamic Any.
-func ElementCarrierFromValue(data Value) Value {
-	if IsConcrete(data) {
+func ElementCarrierFromValue(data core.Value) core.Value {
+	if core.IsConcrete(data) {
 		if joined, ok := joinedElementCarrier(data); ok {
 			return joined
 		}
@@ -233,40 +233,40 @@ func ElementCarrierFromValue(data Value) Value {
 // the value types of a concrete map) via JoinCarriers. ok=false when the
 // collection is empty, single-typed (the plain-type path is already precise),
 // or not a plain list/map payload.
-func joinedElementCarrier(data Value) (Value, bool) {
-	var elems []Value
+func joinedElementCarrier(data core.Value) (core.Value, bool) {
+	var elems []core.Value
 	switch p := data.Data.(type) {
-	case ListPayload:
+	case core.ListPayload:
 		elems = p.Elems
-	case MapPayload:
+	case core.MapPayload:
 		if p.M == nil {
-			return Value{}, false
+			return core.Value{}, false
 		}
 		for _, k := range p.M.Keys() {
 			v, _ := p.M.Get(k)
 			elems = append(elems, v)
 		}
 	default:
-		return Value{}, false
+		return core.Value{}, false
 	}
 	if len(elems) < 2 || elems[0].Parent == nil {
-		return Value{}, false
+		return core.Value{}, false
 	}
 	mixed := false
 	for i := 1; i < len(elems); i++ {
 		if elems[i].Parent == nil {
-			return Value{}, false
+			return core.Value{}, false
 		}
 		if !elems[i].Parent.Equal(elems[0].Parent) {
 			mixed = true
 		}
 	}
 	if !mixed {
-		return Value{}, false
+		return core.Value{}, false
 	}
-	out := NewCarrier(elems[0].Parent)
+	out := core.NewCarrier(elems[0].Parent)
 	for i := 1; i < len(elems); i++ {
-		out = JoinCarriers(out, NewCarrier(elems[i].Parent))
+		out = JoinCarriers(out, core.NewCarrier(elems[i].Parent))
 	}
 	return out, true
 }
@@ -279,9 +279,9 @@ func joinedElementCarrier(data Value) (Value, bool) {
 // stays a strict carrier so its real shape is checked normally. This is the
 // same treatment NewElementCarrier gives an untyped list element, lifted to the
 // parameter boundary (the trie/decision "unify Any with concrete params" gap).
-func ParamInputCarrier(t *Type) Value {
-	if t == nil || t.Equal(TAny) {
-		return NewDynamicCarrier(TAny)
+func ParamInputCarrier(t *core.Type) core.Value {
+	if t == nil || t.Equal(core.TAny) {
+		return core.NewDynamicCarrier(core.TAny)
 	}
 	// A named-union param (`x:T` with `def T (Integer tor String)`) binds
 	// the DISTRIBUTING disjunct carrier, not a bare T-tagged one — the same
@@ -291,13 +291,13 @@ func ParamInputCarrier(t *Type) Value {
 	// valid input, so a body dispatch that fails for one is an ERROR
 	// (disjunctPartitionReturns), not the analysis-join partial warning.
 	if dv, ok := UnionCarrierForType(t); ok {
-		if di, isDi := dv.Data.(DisjunctInfo); isDi {
+		if di, isDi := dv.Data.(core.DisjunctInfo); isDi {
 			di.Declared = true
 			dv.Data = di
 		}
 		return dv
 	}
-	return NewCarrier(t)
+	return core.NewCarrier(t)
 }
 
 // UnionCarrierForType returns the DISTRIBUTING carrier for a user-defined
@@ -308,15 +308,15 @@ func ParamInputCarrier(t *Type) Value {
 // This is the third multi-denotation carrier shape (after dynamic carriers
 // and payload-bearing joins); the distribute-over-dispatch invariant
 // (TestDistributeOverDispatchInvariant) pins all of them.
-func UnionCarrierForType(t *Type) (Value, bool) {
+func UnionCarrierForType(t *core.Type) (core.Value, bool) {
 	if t == nil {
-		return Value{}, false
+		return core.Value{}, false
 	}
-	du, ok := t.Behavior().(*DisjunctUnifier)
+	du, ok := t.Behavior().(*core.DisjunctUnifier)
 	if !ok || len(du.Alternatives) == 0 {
-		return Value{}, false
+		return core.Value{}, false
 	}
-	dv := NewDisjunct(SimplifyDisjunctAlts(du.Alternatives))
+	dv := core.NewDisjunct(core.SimplifyDisjunctAlts(du.Alternatives))
 	dv.Carrier = true
 	return dv, true
 }
@@ -325,11 +325,11 @@ func UnionCarrierForType(t *Type) (Value, bool) {
 // dataListElemType that lives in carrier.go so ReturnsFunc helpers
 // don't depend on the native_array_higher.go symbol. It reads the
 // ChildTypeInfo first, then joins concrete element VTypes.
-func DataListElemTypeFromValue(data Value) *Type {
+func DataListElemTypeFromValue(data core.Value) *core.Type {
 	if data.Data == nil {
-		return TAny
+		return core.TAny
 	}
-	if ct, ok := data.Data.(ChildTypeInfo); ok {
+	if ct, ok := data.Data.(core.ChildTypeInfo); ok {
 		if ct.Child.Data == nil && !ct.Child.Carrier {
 			c := ct.Child // bare type-literal child IS the element type
 			return &c
@@ -339,11 +339,11 @@ func DataListElemTypeFromValue(data Value) *Type {
 	// A concrete MAP: the higher-order words (each/filter/fold over a map)
 	// transform the VALUES (keys are kept), so the element type a value-body
 	// closure sees is the common value type, not the list-element type below.
-	if mp, ok := data.Data.(MapPayload); ok {
+	if mp, ok := data.Data.(core.MapPayload); ok {
 		if mp.M == nil || mp.M.Len() == 0 {
-			return TAny
+			return core.TAny
 		}
-		var t *Type
+		var t *core.Type
 		for _, k := range mp.M.Keys() {
 			v, _ := mp.M.Get(k)
 			if t == nil {
@@ -351,23 +351,23 @@ func DataListElemTypeFromValue(data Value) *Type {
 			} else {
 				t = CommonAncestorType(t, v.Parent)
 			}
-			if t.Equal(TAny) {
+			if t.Equal(core.TAny) {
 				break
 			}
 		}
 		if t == nil {
-			return TAny
+			return core.TAny
 		}
 		return t
 	}
-	list, err := AsList(data)
+	list, err := core.AsList(data)
 	if err != nil || list.IsNil() || list.Len() == 0 {
-		return TAny
+		return core.TAny
 	}
 	t := list.Get(0).Parent
 	for i := 1; i < list.Len(); i++ {
 		t = CommonAncestorType(t, list.Get(i).Parent)
-		if t.Equal(TAny) {
+		if t.Equal(core.TAny) {
 			break
 		}
 	}
@@ -381,10 +381,10 @@ func DataListElemTypeFromValue(data Value) *Type {
 // Lists and maps are returned unchanged for now so that list/map
 // signature matching keeps working; carrier-aware list/map handling
 // is future work.
-func toCarrier(v Value) Value {
-	if IsWord(v) || IsForward(v) || IsMark(v) || IsMove(v) ||
-		IsOpenParen(v) || IsParenExpr(v) || IsInterpString(v) || IsXmlInterp(v) ||
-		IsReturnCheck(v) || IsDefCleanup(v) || IsDispatchMod(v) {
+func toCarrier(v core.Value) core.Value {
+	if core.IsWord(v) || core.IsForward(v) || core.IsMark(v) || core.IsMove(v) ||
+		core.IsOpenParen(v) || core.IsParenExpr(v) || core.IsInterpString(v) || core.IsXmlInterp(v) ||
+		core.IsReturnCheck(v) || core.IsDefCleanup(v) || core.IsDispatchMod(v) {
 		// A `/r`/`/q` dispatch-modifier marker (Word/__DM, parser-emitted right
 		// after a paren / dotted-path group) is a control token too: stripping
 		// it to a payload-less carrier made check mode UNABLE to consume it
@@ -404,7 +404,7 @@ func toCarrier(v Value) Value {
 	}
 	// Keep lists and maps concrete for now — matchSignature relies
 	// on Data presence for a few compound cases.
-	if v.Parent.Equal(TList) || v.Parent.Equal(TMap) {
+	if v.Parent.Equal(core.TList) || v.Parent.Equal(core.TMap) {
 		return v
 	}
 	// Keep concrete inert SCALAR literals concrete so the recorder can recover
@@ -420,9 +420,9 @@ func toCarrier(v Value) Value {
 	// literal stays concrete until a word consumes it and produces a computed
 	// carrier, exactly as lists/maps already behave.
 	switch v.Data.(type) {
-	case IntPayload, StrPayload, BoolPayload, FloatPayload, AtomPayload,
-		BigIntPayload, DecimalPayload, TimePayload, DurationPayload, TimezonePayload:
-		if IsConcrete(v) {
+	case core.IntPayload, core.StrPayload, core.BoolPayload, core.FloatPayload, core.AtomPayload,
+		core.BigIntPayload, core.DecimalPayload, core.TimePayload, core.DurationPayload, core.TimezonePayload:
+		if core.IsConcrete(v) {
 			return v
 		}
 	}
@@ -432,7 +432,7 @@ func toCarrier(v Value) Value {
 	// check mode would otherwise bind add5 to an empty carrier rather
 	// than to the inner FnDefInfo, breaking subsequent invocation +
 	// inference of `add5 3`.
-	if _, ok := v.Data.(FnDefInfo); ok {
+	if _, ok := v.Data.(core.FnDefInfo); ok {
 		return v
 	}
 	// Keep Disjunct / Enum values concrete: their DisjunctInfo (the
@@ -442,7 +442,7 @@ func toCarrier(v Value) Value {
 	// rejected in check mode ("body must be a type value or literal"), and
 	// `tcmp` / `is` / `typeof` over the type lose their members (compare.tsv).
 	// Same rationale as the FnDef / Module / Reach payload preservations above.
-	if _, ok := v.Data.(DisjunctInfo); ok {
+	if _, ok := v.Data.(core.DisjunctInfo); ok {
 		return v
 	}
 	// Keep DEPSCALAR constraints concrete: their DepScalarInfo (the bounds)
@@ -451,7 +451,7 @@ func toCarrier(v Value) Value {
 	// (`A tand B`) degraded to a plain Integer and a typed-def annotation
 	// built from a tand/tor expression lost its bounds in check mode. Same
 	// rationale as the Disjunct / Enum preservation above.
-	if _, ok := v.Data.(DepScalarInfo); ok {
+	if _, ok := v.Data.(core.DepScalarInfo); ok {
 		return v
 	}
 	// Keep generic SCHEMA values concrete: their *TypeSchemaInfo IS the type
@@ -461,7 +461,7 @@ func toCarrier(v Value) Value {
 	// `Pkg.Box` (whose namespace-map get returns the stored value, carrier-
 	// stripped) could no longer be instantiated `Pkg.Box of [Integer]`. Same
 	// rationale as the FnDef / Disjunct / Module payload preservations above.
-	if _, ok := v.Data.(*TypeSchemaInfo); ok {
+	if _, ok := v.Data.(*core.TypeSchemaInfo); ok {
 		return v
 	}
 	// Keep MODULE values concrete, same rationale as FnDefInfo: stripping
@@ -472,7 +472,7 @@ func toCarrier(v Value) Value {
 	// const-folds (tryFoldModuleConst). A module NAMESPACE needs no arm of
 	// its own — it is a plain facet-carrying Map, already preserved by the
 	// TMap guard above (facets ride every Value copy).
-	if IsModuleFamilyValue(v) {
+	if core.IsModuleFamilyValue(v) {
 		return v
 	}
 	// Keep Reach values (dot-access `m.a`, `Pkg.fn`) concrete. A parsed
@@ -483,21 +483,21 @@ func toCarrier(v Value) Value {
 	// would be opaque in check mode, silently dropping module-export type
 	// propagation, index checks, and dispatch diagnostics. Same rationale
 	// as the FnDefInfo case above.
-	if IsReach(v) {
+	if core.IsReach(v) {
 		return v
 	}
 	// Keep an __SP splice marker concrete: it is a compile-time macro binding
 	// (`def x word [body]`), expanded inline at each use site by stepLiteral. A
 	// carrier-stripped marker would lose its payload and never splice, so the
 	// reference would be an opaque carrier in check mode.
-	if IsSplice(v) {
+	if core.IsSplice(v) {
 		return v
 	}
 	// Keep a sugar marker concrete: the parser's structural desugar
 	// output (ADR-012 rule 3, 2026-08-04 amendment), lowered at step
 	// time by stepSugar. A carrier-stripped marker loses its SugarInfo
 	// and could never lower — the sugar would be opaque in check mode.
-	if IsSugar(v) {
+	if core.IsSugar(v) {
 		return v
 	}
 	// Type literals (Data already nil) are already in the right
@@ -544,10 +544,10 @@ var checkModeLiteralWords = map[string]bool{
 // word (either order — forward `import "x"` or stack `"x" import`) is kept
 // concrete so the import handler can resolve and analyse the target. See
 // checkModeLiteralWords and §4.3.
-func StripToCarriers(in []Value) []Value {
-	out := make([]Value, len(in))
+func StripToCarriers(in []core.Value) []core.Value {
+	out := make([]core.Value, len(in))
 	for i, v := range in {
-		if v.Parent.ConformsTo(TString) && IsConcrete(v) && adjacentToLiteralWord(in, i) {
+		if v.Parent.ConformsTo(core.TString) && core.IsConcrete(v) && adjacentToLiteralWord(in, i) {
 			out[i] = v
 			continue
 		}
@@ -558,7 +558,7 @@ func StripToCarriers(in []Value) []Value {
 
 // adjacentToLiteralWord reports whether the token at index i has an
 // immediate neighbour that is a checkModeLiteralWords word.
-func adjacentToLiteralWord(in []Value, i int) bool {
+func adjacentToLiteralWord(in []core.Value, i int) bool {
 	// A window of two each way: `import "x"` / `"x" import` are immediate, but
 	// `unpack ExportName 'boru:mod'` places the module-name string two tokens
 	// after the literal word. Keeping a string concrete is sound regardless
@@ -575,11 +575,11 @@ func adjacentToLiteralWord(in []Value, i int) bool {
 	return false
 }
 
-func isLiteralWord(v Value) bool {
-	if !IsWord(v) {
+func isLiteralWord(v core.Value) bool {
+	if !core.IsWord(v) {
 		return false
 	}
-	w, _ := AsWord(v)
+	w, _ := core.AsWord(v)
 	return checkModeLiteralWords[w.Name]
 }
 
@@ -606,7 +606,7 @@ func isLiteralWord(v Value) bool {
 // consumed result may optimistically model one dynamic value, because a
 // free statement-position residual would be collected by the NEXT word
 // and corrupt its arity. The dynamic-recovery callers pass false.
-func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos SrcPos, ownerReg *Registry, tailConsumed bool) []Value {
+func carrierResults(r *core.Registry, word string, sig *core.Signature, args []core.Value, pos core.SrcPos, ownerReg *core.Registry, tailConsumed bool) []core.Value {
 	if out, ok := specialWordResults(r, word, args, pos); ok {
 		return out
 	}
@@ -618,7 +618,7 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 	// Integer|String reaches add's [Scalar Scalar]→String catch-all
 	// although the Integer path takes [Number Number]. Resolve each
 	// alternative independently and join the per-alternative returns.
-	var partOut []Value
+	var partOut []core.Value
 	if out, ok := disjunctPartitionReturns(r, word, args, pos); ok {
 		// A strict-disjunct straddle is a runtime-dispatch case, not an
 		// inherent refusal: if the word is a safe poly candidate (core builtin,
@@ -683,16 +683,16 @@ func carrierResults(r *Registry, word string, sig *Signature, args []Value, pos 
 // carrier guard alone would reject it. The carrier-tolerant arm admits only
 // value-scalar payloads: a compound carrier's payload is structural
 // (ChildTypeInfo) and a dynamic carrier's value is unknown — both decline.
-func ScalarFoldOperand(v Value) bool {
-	if IsInertConst(v) {
+func ScalarFoldOperand(v core.Value) bool {
+	if core.IsInertConst(v) {
 		return true
 	}
 	if v.Dynamic || v.Data == nil {
 		return false
 	}
 	switch v.Data.(type) {
-	case IntPayload, FloatPayload, StrPayload, BoolPayload, AtomPayload,
-		BigIntPayload, DecimalPayload:
+	case core.IntPayload, core.FloatPayload, core.StrPayload, core.BoolPayload, core.AtomPayload,
+		core.BigIntPayload, core.DecimalPayload:
 		return true
 	}
 	return false
@@ -703,7 +703,7 @@ func ScalarFoldOperand(v Value) bool {
 // marker, and compile-time `macroexpand` folding. ok=false falls through to
 // the normal path (including macroexpand's error/trap fall-through, which
 // must still resolve returns and refuse).
-func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]Value, bool) {
+func specialWordResults(r *core.Registry, word string, args []core.Value, pos core.SrcPos) ([]core.Value, bool) {
 	// `args` inside a compiled fn body projects the frame's params (pushed by
 	// AnalyseFnBody) as a list value with NO recorded event. An `args.N` access
 	// then folds to param N — a frame local — via tryFoldStaticIndex; bare
@@ -724,7 +724,7 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 		if es := r.Check.Recorder(); es.Active() && es.InClosureUnit() {
 			return nil, false
 		}
-		if top, ok, err := r.Args.Top(); err == nil && ok && IsConcrete(top) {
+		if top, ok, err := r.Args.Top(); err == nil && ok && core.IsConcrete(top) {
 			// In compile mode `args.N` folds to a frame local (PUSH_LOCAL N)
 			// for named AND unnamed params alike: an unnamed param is a
 			// local re-pushed onto the operand stack at unit entry, and the
@@ -732,7 +732,7 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 			// NUnnamed trim — the exact __RC frame discipline — so the fold
 			// no longer strands a divergent count (the former "args over a
 			// frame with unnamed params" refusal).
-			return []Value{top}, true
+			return []core.Value{top}, true
 		}
 	}
 	// `word [body]` is a compile-time macro splice: produce the __SP marker as a
@@ -741,7 +741,7 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 	// compiles in place — late binding and all. (The `def NAME word …` that binds
 	// the marker emits nothing either; the marker has no runtime existence.)
 	if word == "word" && len(args) == 1 {
-		return []Value{NewSplice(args[0])}, true
+		return []core.Value{core.NewSplice(args[0])}, true
 	}
 	// `macroexpand (mac args…)` is Lisp-style compile-time expansion: the macro
 	// and its operands are static, so run the expansion NOW and bake the
@@ -750,9 +750,9 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 	// succeeds; a too-deep / erroring expansion falls through to refuse, and the
 	// interpreter surfaces the same error.
 	if word == "macroexpand" && len(args) == 1 {
-		toks, err := ExpandMacroForm(r, args[0])
+		toks, err := core.ExpandMacroForm(r, args[0])
 		if err == nil {
-			if lst := NewList(toks); IsInertConst(lst) {
+			if lst := core.NewList(toks); core.IsInertConst(lst) {
 				// Determinism guard (mirrors tryFoldModuleConst /
 				// constFoldContainerVal): ExpandMacroForm runs the macro template
 				// through a sub-engine, which is NOT guaranteed pure — a template
@@ -764,10 +764,10 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 				// under a def-stack snapshot so it leaves no new side effect beyond
 				// the first expansion's (which is preserved, as before).
 				snap := r.Defs.Snapshot()
-				toks2, err2 := ExpandMacroForm(r, args[0])
+				toks2, err2 := core.ExpandMacroForm(r, args[0])
 				r.Defs.Restore(snap)
-				if err2 == nil && ConstFoldAgrees(NewList(toks2), lst) {
-					return []Value{lst}, true
+				if err2 == nil && core.ConstFoldAgrees(core.NewList(toks2), lst) {
+					return []core.Value{lst}, true
 				}
 			}
 		} else {
@@ -781,7 +781,7 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 			// expansion error (a malformed form, a non-macro head) is not a
 			// runtime error to reproduce — it falls through to refuse, and the
 			// interpreter surfaces it.
-			var ae *BoruError
+			var ae *core.BoruError
 			if errors.As(err, &ae) && ae.Code == "macroexpand_error" {
 				r.Check.Recorder().RecordTrap("macroexpand_error", ae.Detail,
 					"macroexpand", ae.Hint, pos)
@@ -796,20 +796,20 @@ func specialWordResults(r *Registry, word string, args []Value, pos SrcPos) ([]V
 // carrier per type, declared Any riding dynamic), or the missing_returns
 // fallback (a dynamic Any so one unannotated word does not cascade false
 // no_signature errors downstream).
-func declaredReturnCarriers(r *Registry, word string, sig *Signature, args []Value, pos SrcPos) []Value {
-	var out []Value
+func declaredReturnCarriers(r *core.Registry, word string, sig *core.Signature, args []core.Value, pos core.SrcPos) []core.Value {
+	var out []core.Value
 	switch {
 	case sig.ReturnsFn != nil:
 		r.Check.CurCallPos = pos // expose call site to ReturnsFn (e.g. make Array identity)
 		raw := sig.ReturnsFn(resolveTypeNameArgs(args), r)
-		out = make([]Value, len(raw))
+		out = make([]core.Value, len(raw))
 		for i, v := range raw {
 			out[i] = toCarrier(v)
 		}
 	case sig.Returns == nil:
 		// Explicit nil (no annotation) triggers the fallback. An empty but
 		// non-nil slice is a valid "returns nothing" declaration.
-		r.Check.AddDiagnostic(CheckDiagnostic{
+		r.Check.AddDiagnostic(core.CheckDiagnostic{
 			Code:   "missing_returns",
 			Detail: "word " + word + " has no declared Returns for matched signature; assuming Any",
 			Word:   word,
@@ -824,13 +824,13 @@ func declaredReturnCarriers(r *Registry, word string, sig *Signature, args []Val
 		// dynamic bound matches optimistically, the one real diagnostic
 		// (this missing_returns) remains, and a guard discharges the
 		// modality back to strict.
-		c := NewCarrier(TAny)
+		c := core.NewCarrier(core.TAny)
 		c.Dynamic = true
-		out = []Value{c}
+		out = []core.Value{c}
 	default:
-		out = make([]Value, len(sig.Returns))
+		out = make([]core.Value, len(sig.Returns))
 		for i, t := range sig.Returns {
-			c := NewCarrier(t)
+			c := core.NewCarrier(t)
 			// A declared `Any` return means "statically unknown", not
 			// "inhabits only the Any root": a STRICT Any carrier
 			// conforms to no typed slot, so accessor words declared
@@ -839,7 +839,7 @@ func declaredReturnCarriers(r *Registry, word string, sig *Signature, args []Val
 			// errors (`set 0 1 f.bits` errored because `f.bits` typed
 			// as strict Any). Mark it dynamic: optimistic matching,
 			// discharged back to strict by a guard.
-			if t.Equal(TAny) {
+			if t.Equal(core.TAny) {
 				c.Dynamic = true
 			}
 			out[i] = c
@@ -856,11 +856,11 @@ func declaredReturnCarriers(r *Registry, word string, sig *Signature, args []Val
 // and derive an element carrier. Scoped to containers because that is the only
 // consumer that needs the concrete type; scalar returns gain nothing and their
 // strict form can spuriously trip the forward/stack split detector.
-func isConcreteContainerReturn(v Value) bool {
+func isConcreteContainerReturn(v core.Value) bool {
 	if v.Dynamic || v.Parent == nil {
 		return false
 	}
-	return v.Parent.ConformsTo(TList) || v.Parent.ConformsTo(TMap)
+	return v.Parent.ConformsTo(core.TList) || v.Parent.ConformsTo(core.TMap)
 }
 
 // applyGradualContagion widens results derived from dynamic args: the
@@ -869,7 +869,7 @@ func isConcreteContainerReturn(v Value) bool {
 // and a 0-return mutator over a dynamic receiver optimistically models one
 // value where a value-returning sibling overload is reachable (gated to
 // consumed results under a real compile — see carrierResults' doc).
-func applyGradualContagion(r *Registry, word string, args []Value, out []Value, pos SrcPos, tailConsumed bool) []Value {
+func applyGradualContagion(r *core.Registry, word string, args []core.Value, out []core.Value, pos core.SrcPos, tailConsumed bool) []core.Value {
 	// Gradual contagion (design/dynamic-modality-report.10.md): a result
 	// derived from a dynamic carrier is itself dynamic, so the modality
 	// flows downstream instead of dying after one dispatch. The bound is
@@ -893,7 +893,7 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 				}
 			}
 			if !dup {
-				r.Check.AddDiagnostic(CheckDiagnostic{
+				r.Check.AddDiagnostic(core.CheckDiagnostic{
 					Code:   "dynamic_dispatch",
 					Detail: "strict: " + word + " dispatched over a dynamic operand — matched optimistically, re-checked at runtime",
 					Word:   word,
@@ -925,7 +925,7 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 		// sibling overload's return), and a genuinely input-dependent return
 		// (declared Any / a ReturnsFn that produced a dynamic carrier) stays
 		// dynamic — those arrive here already flagged Dynamic and are untouched.
-		var reachable []*Type
+		var reachable []*core.Type
 		if len(out) == 1 {
 			reachable = dynamicReachableReturns(r, word, args)
 		}
@@ -954,11 +954,11 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 		// residual model.
 		if len(out) == 1 {
 			if len(reachable) >= 2 {
-				alts := make([]Value, len(reachable))
+				alts := make([]core.Value, len(reachable))
 				for i, t := range reachable {
-					alts[i] = NewTypeLiteral(t)
+					alts[i] = core.NewTypeLiteral(t)
 				}
-				out[0] = NewDynamicCarrierValue(NewDisjunct(alts))
+				out[0] = NewDynamicCarrierValue(core.NewDisjunct(alts))
 			}
 		} else if len(out) == 0 && (!r.Check.Compiling || tailConsumed) {
 			// The matched overload returns NOTHING (an in-place mutator) but the
@@ -987,16 +987,16 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 			// the true 0-arity stands either way.
 			if vrets := dynamicReachableValueReturns(r, word, args); len(vrets) > 0 {
 				if len(vrets) == 1 {
-					c := NewCarrier(vrets[0])
+					c := core.NewCarrier(vrets[0])
 					c.Carrier = true
 					c.Dynamic = true
-					out = []Value{c}
+					out = []core.Value{c}
 				} else {
-					alts := make([]Value, len(vrets))
+					alts := make([]core.Value, len(vrets))
 					for i, t := range vrets {
-						alts[i] = NewTypeLiteral(t)
+						alts[i] = core.NewTypeLiteral(t)
 					}
-					out = []Value{NewDynamicCarrierValue(NewDisjunct(alts))}
+					out = []core.Value{NewDynamicCarrierValue(core.NewDisjunct(alts))}
 				}
 			}
 		}
@@ -1010,9 +1010,9 @@ func applyGradualContagion(r *Registry, word string, args []Value, out []Value, 
 // bound by a value `def` resolves via Defs substitution, NOT Lookup, so
 // it fails here — correctly, since at VM run time that binding is the
 // check pass's CARRIER, not a concrete value.
-func BodyFreeForFallback(r *Registry, body Value) bool {
+func BodyFreeForFallback(r *core.Registry, body core.Value) bool {
 	free := true
-	WalkBodyWords([]Value{body}, func(w WordInfo, _ Value) {
+	core.WalkBodyWords([]core.Value{body}, func(w core.WordInfo, _ core.Value) {
 		if !free {
 			return
 		}
@@ -1046,7 +1046,7 @@ func BodyFreeForFallback(r *Registry, body Value) bool {
 		if r.Lookup(w.Name) != nil {
 			return
 		}
-		if _, ok := TypeNames[w.Name]; ok {
+		if _, ok := core.TypeNames[w.Name]; ok {
 			return
 		}
 		free = false
@@ -1082,9 +1082,9 @@ func BodyFreeForFallback(r *Registry, body Value) bool {
 //     CompileFallbackBody nor Callable) record their bodies as inline
 //     events (a fn-local dispatch lowers to CALL_USER by unit ref, no
 //     name bake), so the family gate excludes them.
-func BodyRefsFnLocalFn(r *Registry, sig *Signature, args []Value) (string, bool) {
+func BodyRefsFnLocalFn(r *core.Registry, sig *core.Signature, args []core.Value) (string, bool) {
 	if sig == nil || len(sig.NoEvalArgs) == 0 ||
-		(!sig.CompileEffect.Has(CompileFallbackBody) && sig.Callable == nil) {
+		(!sig.CompileEffect.Has(core.CompileFallbackBody) && sig.Callable == nil) {
 		return "", false
 	}
 	baseline := r.TopFnBaseline()
@@ -1096,7 +1096,7 @@ func BodyRefsFnLocalFn(r *Registry, sig *Signature, args []Value) (string, bool)
 			continue
 		}
 		name := ""
-		WalkBodyWords([]Value{args[i]}, func(w WordInfo, _ Value) {
+		core.WalkBodyWords([]core.Value{args[i]}, func(w core.WordInfo, _ core.Value) {
 			if name != "" {
 				return
 			}
@@ -1104,7 +1104,7 @@ func BodyRefsFnLocalFn(r *Registry, sig *Signature, args []Value) (string, bool)
 			if !bound || r.Defs.Depth(w.Name) <= baseline[w.Name] {
 				return
 			}
-			if _, isFn := v.Data.(FnDefInfo); isFn {
+			if _, isFn := v.Data.(core.FnDefInfo); isFn {
 				name = w.Name
 			}
 		})
@@ -1123,7 +1123,7 @@ func BodyRefsFnLocalFn(r *Registry, sig *Signature, args []Value) (string, bool)
 // def references — the closure compile bakes a concrete def as a const or
 // threads an enclosing-fn binding as a capture, and the probe compile refuses
 // anything it cannot resolve.
-func BodyHasSentinel(body Value) bool {
+func BodyHasSentinel(body core.Value) bool {
 	return valueHasSentinel(body)
 }
 
@@ -1138,16 +1138,16 @@ func BodyHasSentinel(body Value) bool {
 // sentinel gate; the escaped break then reached the loop epilogue as "flow
 // signal with no enclosing loop" and was caught as a value — a miscompile.
 // Nested fn bodies are still skipped: their sentinel targets their own scope.
-func valueHasSentinel(v Value) bool {
-	if _, ok := v.Data.(FnDefInfo); ok {
+func valueHasSentinel(v core.Value) bool {
+	if _, ok := v.Data.(core.FnDefInfo); ok {
 		return false
 	}
-	if IsWord(v) {
-		w, _ := AsWord(v)
+	if core.IsWord(v) {
+		w, _ := core.AsWord(v)
 		return w.Name == "break" || w.Name == "continue" || w.Name == "return"
 	}
-	if v.Parent != nil && v.Parent.Equal(TList) && v.Data != nil {
-		lst, _ := AsList(v)
+	if v.Parent != nil && v.Parent.Equal(core.TList) && v.Data != nil {
+		lst, _ := core.AsList(v)
 		for i := 0; i < lst.Len(); i++ {
 			if valueHasSentinel(lst.Get(i)) {
 				return true
@@ -1167,9 +1167,9 @@ func valueHasSentinel(v Value) bool {
 // `${break}` / a `{k: break}` map value in a quoted do-body breaks the
 // loop in the interpreter. A non-container value returns false — leaf
 // classification (words, fn payloads) belongs to the caller's scan.
-func scanBodyContainers(v Value, scan func(Value) bool) bool {
-	if v.Parent != nil && v.Parent.Equal(TList) && v.Data != nil {
-		lst, _ := AsList(v)
+func scanBodyContainers(v core.Value, scan func(core.Value) bool) bool {
+	if v.Parent != nil && v.Parent.Equal(core.TList) && v.Data != nil {
+		lst, _ := core.AsList(v)
 		for i := 0; i < lst.Len(); i++ {
 			if scan(lst.Get(i)) {
 				return true
@@ -1177,8 +1177,8 @@ func scanBodyContainers(v Value, scan func(Value) bool) bool {
 		}
 		return false
 	}
-	if IsParenExpr(v) {
-		toks, _ := AsParenExpr(v)
+	if core.IsParenExpr(v) {
+		toks, _ := core.AsParenExpr(v)
 		for _, t := range toks {
 			if scan(t) {
 				return true
@@ -1186,8 +1186,8 @@ func scanBodyContainers(v Value, scan func(Value) bool) bool {
 		}
 		return false
 	}
-	if IsInterpString(v) {
-		parts, _ := AsInterpString(v)
+	if core.IsInterpString(v) {
+		parts, _ := core.AsInterpString(v)
 		for _, p := range parts {
 			for _, t := range p.Expr {
 				if scan(t) {
@@ -1197,12 +1197,12 @@ func scanBodyContainers(v Value, scan func(Value) bool) bool {
 		}
 		return false
 	}
-	if IsXmlInterp(v) {
-		tmpl, _ := AsXmlInterp(v)
+	if core.IsXmlInterp(v) {
+		tmpl, _ := core.AsXmlInterp(v)
 		return xmlTmplScan(tmpl, scan)
 	}
-	if v.Parent != nil && v.Parent.Equal(TMap) && v.Data != nil {
-		m, _ := AsMap(v)
+	if v.Parent != nil && v.Parent.Equal(core.TMap) && v.Data != nil {
+		m, _ := core.AsMap(v)
 		if m == nil {
 			return false
 		}
@@ -1219,7 +1219,7 @@ func scanBodyContainers(v Value, scan func(Value) bool) bool {
 // xmlTmplScan applies scan to every ${...} expression token in an XML
 // interpolation skeleton — attribute values and child holes, recursing
 // into nested child templates (mirrors walkXmlTmplExprs).
-func xmlTmplScan(t XmlTmpl, scan func(Value) bool) bool {
+func xmlTmplScan(t core.XmlTmpl, scan func(core.Value) bool) bool {
 	for _, a := range t.Attr {
 		for _, p := range a.Parts {
 			for _, tok := range p.Expr {
@@ -1231,13 +1231,13 @@ func xmlTmplScan(t XmlTmpl, scan func(Value) bool) bool {
 	}
 	for _, c := range t.Cren {
 		switch c.Kind {
-		case XmlCrenExpr:
+		case core.XmlCrenExpr:
 			for _, tok := range c.Expr {
 				if scan(tok) {
 					return true
 				}
 			}
-		case XmlCrenChild:
+		case core.XmlCrenChild:
 			if c.Child != nil && xmlTmplScan(*c.Child, scan) {
 				return true
 			}
@@ -1266,7 +1266,7 @@ func xmlTmplScan(t XmlTmpl, scan func(Value) bool) bool {
 // parity-safe: the fallback interpreter run raises identically. The
 // const-bake gates (the noEvalBodiesInert twins) and the lambda gates keep
 // the syntactic scan — no divergence reproduced there.
-func BodyHasSentinelDeep(r *Registry, body Value) bool {
+func BodyHasSentinelDeep(r *core.Registry, body core.Value) bool {
 	if BodyHasSentinel(body) {
 		return true
 	}
@@ -1282,18 +1282,18 @@ func BodyHasSentinelDeep(r *Registry, body Value) bool {
 // scan too — an APPLIED fn value's break escapes to the caller (only raw
 // tokens reach the direct scanner; a constructed FnDefInfo in a body is
 // treated as potentially applied).
-func calleeValueLeaksFlow(r *Registry, v Value, seen map[string]bool) bool {
-	if fd, ok := v.Data.(FnDefInfo); ok {
+func calleeValueLeaksFlow(r *core.Registry, v core.Value, seen map[string]bool) bool {
+	if fd, ok := v.Data.(core.FnDefInfo); ok {
 		return fnDefLeaksFlow(r, &fd, seen)
 	}
-	if IsWord(v) {
-		w, _ := AsWord(v)
+	if core.IsWord(v) {
+		w, _ := core.AsWord(v)
 		if w.Name == "break" || w.Name == "continue" {
 			return true
 		}
 		return calleeLeaksFlow(r, w.Name, seen)
 	}
-	return scanBodyContainers(v, func(e Value) bool {
+	return scanBodyContainers(v, func(e core.Value) bool {
 		return calleeValueLeaksFlow(r, e, seen)
 	})
 }
@@ -1302,7 +1302,7 @@ func calleeValueLeaksFlow(r *Registry, v Value, seen map[string]bool) bool {
 // unions every FnDefInfo binding on the name's def stack — exactly what a
 // call would dispatch over) and scans the overload bodies. Native (Go-impl)
 // sigs have no boru body and contribute nothing.
-func calleeLeaksFlow(r *Registry, name string, seen map[string]bool) bool {
+func calleeLeaksFlow(r *core.Registry, name string, seen map[string]bool) bool {
 	if name == "" || seen[name] {
 		return false
 	}
@@ -1313,7 +1313,7 @@ func calleeLeaksFlow(r *Registry, name string, seen map[string]bool) bool {
 
 // fnDefLeaksFlow scans every overload body of fd for a leaking
 // break/continue. A module fn's body words resolve in its OWN registry.
-func fnDefLeaksFlow(r *Registry, fd *FnDefInfo, seen map[string]bool) bool {
+func fnDefLeaksFlow(r *core.Registry, fd *core.FnDefInfo, seen map[string]bool) bool {
 	if fd.Registry != nil {
 		r = fd.Registry
 	}
@@ -1346,23 +1346,23 @@ const disjunctPartitionCap = 16
 // warning (that path would fail dispatch at runtime) and do not
 // contribute to the join; if no alternative matches anything the
 // partition declines and the engine's no_signature handling stands.
-func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos) ([]Value, bool) {
+func disjunctPartitionReturns(r *core.Registry, word string, args []core.Value, pos core.SrcPos) ([]core.Value, bool) {
 	if r == nil || !r.Check.IsActive() {
 		return nil, false
 	}
 	hasStrictDisjunct := false
 	declaredDomain := true // every strict disjunct arg is a declared-union param binding
 	for _, a := range args {
-		if IsDisjunct(a) && a.Carrier && !a.Dynamic {
+		if core.IsDisjunct(a) && a.Carrier && !a.Dynamic {
 			hasStrictDisjunct = true
-			if di, err := AsDisjunct(a); err != nil || !di.Declared {
+			if di, err := core.AsDisjunct(a); err != nil || !di.Declared {
 				declaredDomain = false
 			}
 		}
 		// Body-running ReturnsFns (if, each, fold, do, …) take
 		// concrete list/map operands; re-running them per alternative
 		// would duplicate branch analysis and its diagnostics.
-		if IsConcrete(a) && (a.Parent.ConformsTo(TList) || a.Parent.ConformsTo(TMap)) {
+		if core.IsConcrete(a) && (a.Parent.ConformsTo(core.TList) || a.Parent.ConformsTo(core.TMap)) {
 			return nil, false
 		}
 	}
@@ -1394,7 +1394,7 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 	// Suspend for the loop (a no-op on a plain check); the caller records
 	// the dispatch ONCE with the original args (carrierResults' partition
 	// arm). Diagnostics (partial_dispatch) are not gated by suspension.
-	rows := make([][]Value, 0, len(combos))
+	rows := make([][]core.Value, 0, len(combos))
 	resume := r.Check.Recorder().Suspend()
 	defer resume()
 	for _, combo := range combos {
@@ -1407,7 +1407,7 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 			// analysis-join disjunct (branch join, element join) stays a
 			// warning: the runtime materialises one alternative, so the
 			// failing path may be dead (the fuzz corpus' dead-branch class).
-			d := CheckDiagnostic{
+			d := core.CheckDiagnostic{
 				Code: "partial_dispatch",
 				Detail: word + " has no overload for alternative (" +
 					comboTypeNames(combo) + ") of a disjunct input — that path would fail dispatch at runtime",
@@ -1416,7 +1416,7 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 				Col:  pos.Col,
 			}
 			if declaredDomain {
-				d.Severity = SeverityError
+				d.Severity = core.SeverityError
 				d.Detail = word + " has no overload for alternative (" +
 					comboTypeNames(combo) + ") of a declared union parameter — a valid argument of the declared type would fail dispatch at runtime"
 			}
@@ -1426,15 +1426,15 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 		switch {
 		case comboSig.ReturnsFn != nil:
 			raw := comboSig.ReturnsFn(resolveTypeNameArgs(combo), r)
-			rets := make([]Value, len(raw))
+			rets := make([]core.Value, len(raw))
 			for i, v := range raw {
 				rets[i] = toCarrier(v)
 			}
 			rows = append(rows, rets)
 		case comboSig.Returns != nil:
-			rets := make([]Value, len(comboSig.Returns))
+			rets := make([]core.Value, len(comboSig.Returns))
 			for i, t := range comboSig.Returns {
-				rets[i] = NewCarrier(t)
+				rets[i] = core.NewCarrier(t)
 			}
 			rows = append(rows, rets)
 		default:
@@ -1452,7 +1452,7 @@ func disjunctPartitionReturns(r *Registry, word string, args []Value, pos SrcPos
 // committed wide one) makes the single baked call a miscompile — the
 // interpreter dispatches the sibling for that alternative — so the caller
 // keeps the refusal. Combo enumeration failure (over the cap) declines.
-func disjunctCombosTakeSig(r *Registry, word string, args []Value, sig *Signature) bool {
+func disjunctCombosTakeSig(r *core.Registry, word string, args []core.Value, sig *core.Signature) bool {
 	fn := r.Lookup(word)
 	if fn == nil {
 		return false
@@ -1477,16 +1477,16 @@ func disjunctCombosTakeSig(r *Registry, word string, args []Value, sig *Signatur
 // alternativeCarriers expands a strict disjunct carrier into one carrier
 // per flattened alternative; any other value yields itself. It is the
 // per-argument expansion the disjunct cross product enumerates.
-func alternativeCarriers(a Value) []Value {
-	if IsDisjunct(a) && a.Carrier && !a.Dynamic {
+func alternativeCarriers(a core.Value) []core.Value {
+	if core.IsDisjunct(a) && a.Carrier && !a.Dynamic {
 		lits := flattenAlternatives(a)
-		out := make([]Value, 0, len(lits))
+		out := make([]core.Value, 0, len(lits))
 		for _, lit := range lits {
-			out = append(out, CarrierOfLiteral(lit))
+			out = append(out, core.CarrierOfLiteral(lit))
 		}
 		return out
 	}
-	return []Value{a}
+	return []core.Value{a}
 }
 
 // disjunctCombos enumerates the bounded cross product of the per-argument
@@ -1494,17 +1494,17 @@ func alternativeCarriers(a Value) []Value {
 // union-typed argument list distributes over. Returns ok=false when the
 // product would exceed limit, so the caller widens to the whole-disjunct
 // path (wide but terminating).
-func disjunctCombos(args []Value, limit int) ([][]Value, bool) {
-	combos := [][]Value{nil}
+func disjunctCombos(args []core.Value, limit int) ([][]core.Value, bool) {
+	combos := [][]core.Value{nil}
 	for i, a := range args {
 		alts := alternativeCarriers(a)
 		if len(combos)*len(alts) > limit {
 			return nil, false
 		}
-		next := make([][]Value, 0, len(combos)*len(alts))
+		next := make([][]core.Value, 0, len(combos)*len(alts))
 		for _, c := range combos {
 			for _, alt := range alts {
-				row := make([]Value, i+1)
+				row := make([]core.Value, i+1)
 				copy(row, c)
 				row[i] = alt
 				next = append(next, row)
@@ -1520,7 +1520,7 @@ func disjunctCombos(args []Value, limit int) ([][]Value, bool) {
 // dispatch merge. ok=false when no row survived or the rows disagree on
 // return arity (the partition declines; the caller widens). A row set
 // whose members are all zero-arity yields an empty slice with ok=true.
-func joinReturnRows(rows [][]Value) ([]Value, bool) {
+func joinReturnRows(rows [][]core.Value) ([]core.Value, bool) {
 	if len(rows) == 0 {
 		return nil, false
 	}
@@ -1541,7 +1541,7 @@ func joinReturnRows(rows [][]Value) ([]Value, bool) {
 // len(args) and whose every positional type admits the corresponding
 // arg, or nil. Mirrors matchSignature's per-arg type test for the
 // already-collected case.
-func firstMatchingSig(fn *FnDefInfo, args []Value) *Signature {
+func firstMatchingSig(fn *core.FnDefInfo, args []core.Value) *core.Signature {
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
 		if s.TotalArgs() != len(args) {
@@ -1549,7 +1549,7 @@ func firstMatchingSig(fn *FnDefInfo, args []Value) *Signature {
 		}
 		ok := true
 		for j := range args {
-			if !SigTypeMatches(args[j], SigArgType(s, j)) {
+			if !core.SigTypeMatches(args[j], core.SigArgType(s, j)) {
 				ok = false
 				break
 			}
@@ -1562,7 +1562,7 @@ func firstMatchingSig(fn *FnDefInfo, args []Value) *Signature {
 }
 
 // comboTypeNames renders a combo's types for diagnostics: "Integer, String".
-func comboTypeNames(combo []Value) string {
+func comboTypeNames(combo []core.Value) string {
 	parts := make([]string, len(combo))
 	for i, v := range combo {
 		parts[i] = v.Parent.Leaf()
@@ -1599,7 +1599,7 @@ func comboTypeNames(combo []Value) string {
 // commit can diverge from the interpreter's runtime predicate fall-through.
 // DepScalar and Go-member types match self-contained in check mode (no
 // leniency), so they carry no hazard.
-func FnPredicateOverloadHazard(r *Registry, word string, args []Value) bool {
+func FnPredicateOverloadHazard(r *core.Registry, word string, args []core.Value) bool {
 	fn := r.Lookup(word)
 	if fn == nil || len(fn.Signatures) < 2 {
 		return false
@@ -1612,13 +1612,13 @@ func FnPredicateOverloadHazard(r *Registry, word string, args []Value) bool {
 		}
 		reach := true
 		for j := range args {
-			t := SigArgType(s, j)
+			t := core.SigArgType(s, j)
 			if t != nil {
-				if _, ok := t.Behavior().(*PredicateUnifier); ok {
+				if _, ok := t.Behavior().(*core.PredicateUnifier); ok {
 					hasPred = true
 				}
 			}
-			if !SigTypeMatches(args[j], t) {
+			if !core.SigTypeMatches(args[j], t) {
 				reach = false
 				break
 			}
@@ -1630,7 +1630,7 @@ func FnPredicateOverloadHazard(r *Registry, word string, args []Value) bool {
 	return hasPred && reachable >= 2
 }
 
-func DynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
+func DynamicReachableOverloadCount(r *core.Registry, word string, args []core.Value) int {
 	fn := r.Lookup(word)
 	if fn == nil || len(fn.Signatures) < 2 {
 		return 0
@@ -1660,10 +1660,10 @@ func DynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
 			// is Never even though a runtime Integer instantiates T) — count
 			// the arm reachable so the ambiguous dispatch stays a runtime
 			// re-matched user poly instead of a wrong static commit.
-			if args[j].Dynamic && IsTypeParamNode(SigArgType(s, j)) {
+			if args[j].Dynamic && core.IsTypeParamNode(core.SigArgType(s, j)) {
 				continue
 			}
-			if !SigTypeMatches(args[j], SigArgType(s, j)) {
+			if !core.SigTypeMatches(args[j], core.SigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1675,12 +1675,12 @@ func DynamicReachableOverloadCount(r *Registry, word string, args []Value) int {
 	return n
 }
 
-func dynamicReachableValueReturns(r *Registry, word string, args []Value) []*Type {
+func dynamicReachableValueReturns(r *core.Registry, word string, args []core.Value) []*core.Type {
 	fn := r.Lookup(word)
 	if fn == nil {
 		return nil
 	}
-	var rets []*Type
+	var rets []*core.Type
 	seen := map[string]bool{}
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
@@ -1689,7 +1689,7 @@ func dynamicReachableValueReturns(r *Registry, word string, args []Value) []*Typ
 		}
 		reach := true
 		for j := range args {
-			if !SigTypeMatches(args[j], SigArgType(s, j)) {
+			if !core.SigTypeMatches(args[j], core.SigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1705,7 +1705,7 @@ func dynamicReachableValueReturns(r *Registry, word string, args []Value) []*Typ
 	return rets
 }
 
-func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
+func dynamicReachableReturns(r *core.Registry, word string, args []core.Value) []*core.Type {
 	fn := r.Lookup(word)
 	if fn == nil || len(fn.Signatures) < 2 {
 		return nil
@@ -1721,12 +1721,12 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 	// then looked reachable).
 	allUnknown := len(args) > 0
 	for _, a := range args {
-		if !a.Dynamic || a.Parent == nil || !a.Parent.Equal(TAny) {
+		if !a.Dynamic || a.Parent == nil || !a.Parent.Equal(core.TAny) {
 			allUnknown = false
 			break
 		}
 	}
-	var rets []*Type
+	var rets []*core.Type
 	seen := map[string]bool{}
 	for i := range fn.Signatures {
 		s := &fn.Signatures[i]
@@ -1743,7 +1743,7 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 		}
 		reach := true
 		for j := range args {
-			if !SigTypeMatches(args[j], SigArgType(s, j)) {
+			if !core.SigTypeMatches(args[j], core.SigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1769,9 +1769,9 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 			if !allUnknown {
 				return nil
 			}
-			if !seen[TAny.ID] {
-				seen[TAny.ID] = true
-				rets = append(rets, TAny)
+			if !seen[core.TAny.ID] {
+				seen[core.TAny.ID] = true
+				rets = append(rets, core.TAny)
 			}
 			continue
 		}
@@ -1795,7 +1795,7 @@ func dynamicReachableReturns(r *Registry, word string, args []Value) []*Type {
 // (RunCarrierBodyWithDefs) truncates these pushes, so a then-branch
 // narrowing never leaks to the else-branch. Sound — the bound only
 // tightens, never widens.
-func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
+func narrowDynamicUses(r *core.Registry, word string, sig *core.Signature, args []core.Value) {
 	if r == nil || sig == nil || !r.Check.IsActive() {
 		return
 	}
@@ -1809,7 +1809,7 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 		if !ok || !cur.Dynamic {
 			continue
 		}
-		slot := SigArgType(sig, i)
+		slot := core.SigArgType(sig, i)
 		if slot == nil {
 			continue
 		}
@@ -1829,11 +1829,11 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 		bound := cur
 		bound.Dynamic = false
 		bound.SetDynFrom("")
-		narrowed := TandValues(bound, NewCarrier(slot))
+		narrowed := core.TandValues(bound, core.NewCarrier(slot))
 		// A successful match guarantees a non-disjoint intersection; skip
 		// when the bound did not actually tighten (no-op / avoids
 		// unbounded layer growth on repeated same-type uses).
-		if IsNeverShape(narrowed) || ValuesEqual(bound, narrowed) {
+		if core.IsNeverShape(narrowed) || core.ValuesEqual(bound, narrowed) {
 			continue
 		}
 		// A narrowed intersection that collapses to a bare ROOT node (nil
@@ -1872,7 +1872,7 @@ func narrowDynamicUses(r *Registry, word string, sig *Signature, args []Value) {
 // from that overload's type at i. When true, position i is polymorphic for
 // this call (e.g. slice's data arg: String vs List), so narrowing the dynamic
 // carrier to matchedSlot alone would be unsound.
-func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlot *Type) bool {
+func slotIsPolymorphic(r *core.Registry, word string, args []core.Value, i int, matchedSlot *core.Type) bool {
 	if word == "" {
 		return false
 	}
@@ -1885,7 +1885,7 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 		if s.Fallback || s.TotalArgs() != len(args) || i >= s.TotalArgs() {
 			continue
 		}
-		st := SigArgType(s, i)
+		st := core.SigArgType(s, i)
 		if st == nil || st.Equal(matchedSlot) {
 			continue
 		}
@@ -1894,13 +1894,13 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 			if j == i {
 				// The dynamic value at i: reachable unless provably disjoint
 				// from this overload's type there.
-				if IsNeverShape(TandValues(NewCarrier(args[j].Parent), NewCarrier(st))) {
+				if core.IsNeverShape(core.TandValues(core.NewCarrier(args[j].Parent), core.NewCarrier(st))) {
 					reach = false
 					break
 				}
 				continue
 			}
-			if !SigTypeMatches(args[j], SigArgType(s, j)) {
+			if !core.SigTypeMatches(args[j], core.SigArgType(s, j)) {
 				reach = false
 				break
 			}
@@ -1914,7 +1914,7 @@ func slotIsPolymorphic(r *Registry, word string, args []Value, i int, matchedSlo
 
 // anyDynamicCarrier reports whether any value is a dynamic carrier — the
 // trigger for gradual contagion in carrierResults.
-func AnyDynamicCarrier(vs []Value) bool {
+func AnyDynamicCarrier(vs []core.Value) bool {
 	for _, v := range vs {
 		if v.Dynamic {
 			return true
@@ -1928,9 +1928,9 @@ func AnyDynamicCarrier(vs []Value) bool {
 // operand shape under which a static CoreDefault match is not a dispatch
 // proof (recordCallRefusal): the runtime tag may be a strict subtype a
 // more-specific unlocked overload claims.
-func AnyNonConcreteOperand(vs []Value) bool {
+func AnyNonConcreteOperand(vs []core.Value) bool {
 	for _, v := range vs {
-		if !IsConcrete(v) {
+		if !core.IsConcrete(v) {
 			return true
 		}
 	}
@@ -1944,7 +1944,7 @@ func AnyNonConcreteOperand(vs []Value) bool {
 // fails matchSignature and reaches the no-signature recovery, where it is the
 // signal that the dispatch is genuinely runtime-dynamic (poly), not a concrete
 // type error.
-func AnyAnyCarrier(vs []Value) bool {
+func AnyAnyCarrier(vs []core.Value) bool {
 	for _, v := range vs {
 		if isAnyCarrier(v) {
 			return true
@@ -1958,8 +1958,8 @@ func AnyAnyCarrier(vs []Value) bool {
 // of any type. Such an arg to a multi-overload user fn makes the dispatch
 // genuinely runtime-dynamic — the committed Any-slot arm is not a proof, since
 // the runtime value may match a more-specific sibling overload.
-func isAnyCarrier(v Value) bool {
-	return v.Carrier && v.Parent != nil && v.Parent.Equal(TAny)
+func isAnyCarrier(v core.Value) bool {
+	return v.Carrier && v.Parent != nil && v.Parent.Equal(core.TAny)
 }
 
 // anyDisjunctCarrier reports whether any value is a UNION (Disjunct) carrier — a
@@ -1973,9 +1973,9 @@ func isAnyCarrier(v Value) bool {
 // that matches no overload routes to the sound OpFallback island. (A bare
 // disjunct carrier carries no DisjunctInfo payload, so IsDisjunct is false here —
 // the carrier's Parent IS the union type, which is what we test.)
-func anyDisjunctCarrier(vs []Value) bool {
+func anyDisjunctCarrier(vs []core.Value) bool {
 	for _, v := range vs {
-		if v.Carrier && v.Parent != nil && v.Parent.ConformsTo(TDisjunct) {
+		if v.Carrier && v.Parent != nil && v.Parent.ConformsTo(core.TDisjunct) {
 			return true
 		}
 	}
@@ -1996,9 +1996,9 @@ func anyDisjunctCarrier(vs []Value) bool {
 // value that matches no overload routes to the sound OpFallback island / raises
 // the interpreter's byte-identical error. Bare type nodes (a type-literal
 // operand of is/typeof) are excluded — they are not runtime values to re-match.
-func anyImpreciseCarrier(vs []Value) bool {
+func anyImpreciseCarrier(vs []core.Value) bool {
 	for _, v := range vs {
-		if v.Carrier && v.Parent != nil && !IsBareTypeNode(v) {
+		if v.Carrier && v.Parent != nil && !core.IsBareTypeNode(v) {
 			return true
 		}
 	}
@@ -2022,21 +2022,21 @@ func anyImpreciseCarrier(vs []Value) bool {
 // identity (the carrier-identity DUP path) so the N copies stay distinct;
 // the source's own provenance is left untouched (no output keeps its ID).
 // Identity-only — runtime dispatch is unaffected (ReturnsFn is check-mode).
-func ReturnsIdentity(mapping ...int) ReturnsFunc {
-	return func(args []Value, _ *Registry) []Value {
+func ReturnsIdentity(mapping ...int) core.ReturnsFunc {
+	return func(args []core.Value, _ *core.Registry) []core.Value {
 		counts := make(map[int]int, len(mapping))
 		for _, m := range mapping {
 			counts[m]++
 		}
-		out := make([]Value, len(mapping))
+		out := make([]core.Value, len(mapping))
 		for i, m := range mapping {
 			if m < 0 || m >= len(args) {
-				out[i] = NewCarrier(TAny)
+				out[i] = core.NewCarrier(core.TAny)
 				continue
 			}
 			v := args[m] // struct copy: the ID write below is local to v.
 			if counts[m] > 1 {
-				v.ID = GenerateID(IDPrefixForType(v.Parent))
+				v.ID = core.GenerateID(core.IDPrefixForType(v.Parent))
 			}
 			out[i] = v
 		}
@@ -2048,18 +2048,18 @@ func ReturnsIdentity(mapping ...int) ReturnsFunc {
 // element is a carrier or dynamic — i.e. statically unknown. Used to scope
 // the static generic-record construction validation to fully-literal data;
 // carrier-bearing data defers to the runtime constructor.
-func valueTreeHasCarriers(v Value) bool {
+func valueTreeHasCarriers(v core.Value) bool {
 	if v.Carrier || v.Dynamic {
 		return true
 	}
-	if m, err := AsMap(v); err == nil && m.Len() > 0 {
+	if m, err := core.AsMap(v); err == nil && m.Len() > 0 {
 		for _, k := range m.Keys() {
 			if mv, ok := m.Get(k); ok && valueTreeHasCarriers(mv) {
 				return true
 			}
 		}
 	}
-	if l, err := AsList(v); err == nil && l.Len() > 0 {
+	if l, err := core.AsList(v); err == nil && l.Len() > 0 {
 		for _, e := range l.Slice() {
 			if valueTreeHasCarriers(e) {
 				return true
@@ -2094,13 +2094,13 @@ func valueTreeHasCarriers(v Value) bool {
 //
 // Only a concrete bare-type-node target is converted; a dynamic/computed
 // target (a carrier already) keeps the prior identity behaviour.
-func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
-	return func(args []Value, r *Registry) []Value {
-		out := make([]Value, len(mapping))
+func ReturnsFreshInstance(mapping ...int) core.ReturnsFunc {
+	return func(args []core.Value, r *core.Registry) []core.Value {
+		out := make([]core.Value, len(mapping))
 		for i, m := range mapping {
 			switch {
 			case m < 0 || m >= len(args):
-				out[i] = NewCarrier(TAny)
+				out[i] = core.NewCarrier(core.TAny)
 			case !args[m].Carrier && !args[m].Dynamic:
 				// A concrete constructor target — a bare type node
 				// (`make Pathon …`, `make Foo …`) or a structural type body
@@ -2120,8 +2120,8 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 				// concrete (the instantiated record body's ValueType sits in
 				// the Map branch and keeps the field schema reachable), else
 				// fall back to a plain TMap carrier.
-				if info, serr := AsTypeSchema(args[m]); serr == nil && info.Kind == SchemaRecord {
-					if r != nil && len(args) == 2 && IsConcrete(args[1-m]) && !valueTreeHasCarriers(args[1-m]) {
+				if info, serr := core.AsTypeSchema(args[m]); serr == nil && info.Kind == core.SchemaRecord {
+					if r != nil && len(args) == 2 && core.IsConcrete(args[1-m]) && !valueTreeHasCarriers(args[1-m]) {
 						// CONCRETE construction data: validate statically, exactly as the
 						// runtime will — infer + instantiate, then run the record
 						// constructor. On SUCCESS the carrier takes the instantiated
@@ -2133,10 +2133,10 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 						// silent TMap carrier here read clean where the runtime raises;
 						// pinned by lang/spec/generics.tsv:81 and the stage0 pins).
 						validated := false
-						if inst, ierr := InferAndInstantiateSchema(r, args[m], args[1-m]); ierr == nil {
-							if rt, rerr := AsRecordType(inst); rerr == nil {
-								if _, mkErr := MakeRecordR(rt, args[1-m], false, r); mkErr == nil {
-									c := NewCarrier(CanonicalType(r, ValueType(inst)))
+						if inst, ierr := core.InferAndInstantiateSchema(r, args[m], args[1-m]); ierr == nil {
+							if rt, rerr := core.AsRecordType(inst); rerr == nil {
+								if _, mkErr := core.MakeRecordR(rt, args[1-m], false, r); mkErr == nil {
+									c := core.NewCarrier(core.CanonicalType(r, core.ValueType(inst)))
 									// Ride the instantiated FIELD SCHEMA on the
 									// instance carrier (the recordSchemaCarrier
 									// shape: dynamic + RecordTypeInfo payload) so a
@@ -2164,7 +2164,7 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 						// Map carrier is the gradual posture — matching the runtime tag
 						// on success. The pre-fix schema-node carrier flagged EVERY such
 						// make (the voxgig decision make-rule / with-policy FPs).
-						c := NewCarrier(TMap)
+						c := core.NewCarrier(core.TMap)
 						// A PARAMETERLESS record schema's field TYPES are static
 						// regardless of the construction data — ride them so a
 						// module constructor's `make TestCase {name:name …}`
@@ -2172,7 +2172,7 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 						// reads. Generic schemas with unresolved params keep the
 						// plain Map carrier.
 						if len(info.Params) == 0 {
-							if rt, rerr := AsRecordType(info.Body); rerr == nil && rt.Fields != nil {
+							if rt, rerr := core.AsRecordType(info.Body); rerr == nil && rt.Fields != nil {
 								c.Data = rt
 								c.Dynamic = true
 							}
@@ -2181,17 +2181,17 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 						continue
 					}
 				}
-				t := ValueType(args[m])
+				t := core.ValueType(args[m])
 				if r != nil {
-					t = CanonicalType(r, t)
+					t = core.CanonicalType(r, t)
 				}
-				c := NewCarrier(t)
+				c := core.NewCarrier(t)
 				// A plain RECORD BODY target (`def TC refine Record […]` —
 				// the binding is the body value, Parent TMap, RecordTypeInfo
 				// payload): ride the declared field schema on the instance
 				// carrier so downstream field reads narrow (same shape and
 				// rationale as the schema-record branches above).
-				if rt, ok := args[m].Data.(RecordTypeInfo); ok && rt.Fields != nil {
+				if rt, ok := args[m].Data.(core.RecordTypeInfo); ok && rt.Fields != nil {
 					c.Data = rt
 					c.Dynamic = true
 				}
@@ -2220,21 +2220,21 @@ func ReturnsFreshInstance(mapping ...int) ReturnsFunc {
 // binding carries make-equivalent provenance; the VM re-runs make's
 // MakeObjHandler at run time, producing the identical instance. Outside emit
 // mode it returns (Value{}, false) and the caller binds the concrete value.
-func RecordTypedDefMake(r *Registry, typeArg, body Value, pos SrcPos) (Value, bool) {
+func RecordTypedDefMake(r *core.Registry, typeArg, body core.Value, pos core.SrcPos) (core.Value, bool) {
 	if r == nil {
-		return Value{}, false
+		return core.Value{}, false
 	}
 	es := r.Check.Recorder()
 	if !es.Active() {
-		return Value{}, false
+		return core.Value{}, false
 	}
 	sig := objectMakeSig(r)
 	if sig == nil {
-		return Value{}, false
+		return core.Value{}, false
 	}
-	t := CanonicalType(r, ValueType(typeArg))
-	carrier := toCarrier(NewCarrier(t))
-	es.RecordCall("make", sig, []Value{typeArg, body}, []Value{carrier}, pos, false, false)
+	t := core.CanonicalType(r, core.ValueType(typeArg))
+	carrier := toCarrier(core.NewCarrier(t))
+	es.RecordCall("make", sig, []core.Value{typeArg, body}, []core.Value{carrier}, pos, false, false)
 	return carrier, true
 }
 
@@ -2242,15 +2242,15 @@ func RecordTypedDefMake(r *Registry, typeArg, body Value, pos SrcPos) (Value, bo
 // one a typed-def object construction would have dispatched. Looked up by
 // arg shape so it tracks the registered native rather than a fabricated sig
 // (the VM calls Sig.Handler directly at OpCallNative).
-func objectMakeSig(r *Registry) *Signature {
+func objectMakeSig(r *core.Registry) *core.Signature {
 	fd := r.Lookup("make")
 	if fd == nil {
 		return nil
 	}
 	for i := range fd.Signatures {
 		s := &fd.Signatures[i]
-		if s.TotalArgs() == 2 && SigArgType(s, 0) != nil && SigArgType(s, 1) != nil &&
-			SigArgType(s, 0).Equal(TIdeal) && SigArgType(s, 1).Equal(TMap) {
+		if s.TotalArgs() == 2 && core.SigArgType(s, 0) != nil && core.SigArgType(s, 1) != nil &&
+			core.SigArgType(s, 0).Equal(core.TIdeal) && core.SigArgType(s, 1).Equal(core.TMap) {
 			return s
 		}
 	}
@@ -2260,11 +2260,11 @@ func objectMakeSig(r *Registry) *Signature {
 // ReturnsStatic builds a ReturnsFunc that always produces a fixed list
 // of carrier types, independent of args. Equivalent to setting Returns
 // directly; provided so ReturnsFn call sites can be uniform.
-func ReturnsStatic(types ...*Type) ReturnsFunc {
-	return func(_ []Value, _ *Registry) []Value {
-		out := make([]Value, len(types))
+func ReturnsStatic(types ...*core.Type) core.ReturnsFunc {
+	return func(_ []core.Value, _ *core.Registry) []core.Value {
+		out := make([]core.Value, len(types))
 		for i, t := range types {
-			out[i] = NewCarrier(t)
+			out[i] = core.NewCarrier(t)
 		}
 		return out
 	}
@@ -2276,21 +2276,21 @@ func ReturnsStatic(types ...*Type) ReturnsFunc {
 // Integer⊕Float mix is Float. A Big⊕Float mix errors at runtime (the
 // exact types never silently become Float); statically it is modelled as
 // the Big leaf so analysis can continue past it.
-func ReturnsNumericBinary() ReturnsFunc {
-	return func(args []Value, _ *Registry) []Value {
+func ReturnsNumericBinary() core.ReturnsFunc {
+	return func(args []core.Value, _ *core.Registry) []core.Value {
 		if len(args) != 2 {
-			return []Value{NewCarrier(TFloat)}
+			return []core.Value{core.NewCarrier(core.TFloat)}
 		}
 		a, b := args[0].Parent, args[1].Parent
 		switch {
-		case a.ConformsTo(TBigDecimal) || b.ConformsTo(TBigDecimal):
-			return []Value{NewCarrier(TBigDecimal)}
-		case a.ConformsTo(TBigInteger) || b.ConformsTo(TBigInteger):
-			return []Value{NewCarrier(TBigInteger)}
-		case a.ConformsTo(TFloat) || b.ConformsTo(TFloat):
-			return []Value{NewCarrier(TFloat)}
+		case a.ConformsTo(core.TBigDecimal) || b.ConformsTo(core.TBigDecimal):
+			return []core.Value{core.NewCarrier(core.TBigDecimal)}
+		case a.ConformsTo(core.TBigInteger) || b.ConformsTo(core.TBigInteger):
+			return []core.Value{core.NewCarrier(core.TBigInteger)}
+		case a.ConformsTo(core.TFloat) || b.ConformsTo(core.TFloat):
+			return []core.Value{core.NewCarrier(core.TFloat)}
 		default:
-			return []Value{NewCarrier(TInteger)}
+			return []core.Value{core.NewCarrier(core.TInteger)}
 		}
 	}
 }
@@ -2308,14 +2308,14 @@ func ReturnsNumericBinary() ReturnsFunc {
 // i.e. a gradual Scalar, which matches a later numeric OR string use and a guard
 // discharges back to strict. Runtime concat (addConcatHandler) is unchanged —
 // this governs check-mode result typing only.
-func ReturnsAddConcat() ReturnsFunc {
-	return func(args []Value, _ *Registry) []Value {
+func ReturnsAddConcat() core.ReturnsFunc {
+	return func(args []core.Value, _ *core.Registry) []core.Value {
 		for _, a := range args {
-			if !a.Dynamic && a.Parent != nil && a.Parent.ConformsTo(TString) {
-				return []Value{NewCarrier(TString)}
+			if !a.Dynamic && a.Parent != nil && a.Parent.ConformsTo(core.TString) {
+				return []core.Value{core.NewCarrier(core.TString)}
 			}
 		}
-		return []Value{NewDynamicCarrier(TScalar)}
+		return []core.Value{core.NewDynamicCarrier(core.TScalar)}
 	}
 }
 
@@ -2323,11 +2323,11 @@ func ReturnsAddConcat() ReturnsFunc {
 // paths, as a new Type. For example, given Number/Integer/42 and
 // Number/Integer/99, returns Number/Integer. Returns TAny if there is
 // no shared prefix.
-func CommonAncestorType(a, b *Type) *Type {
+func CommonAncestorType(a, b *core.Type) *core.Type {
 	if a == nil || b == nil {
-		return TAny
+		return core.TAny
 	}
-	seen := make(map[*Type]bool)
+	seen := make(map[*core.Type]bool)
 	for d := a; d != nil; d = d.Parent {
 		seen[d] = true
 	}
@@ -2336,7 +2336,7 @@ func CommonAncestorType(a, b *Type) *Type {
 			return d
 		}
 	}
-	return TAny
+	return core.TAny
 }
 
 // CarrierDisjunctCap is the maximum number of alternatives a carrier
@@ -2348,10 +2348,10 @@ const CarrierDisjunctCap = 8
 // type literals it represents. For a disjunct carrier, flattens its
 // alternatives recursively; for any other carrier, returns a single
 // type literal of its Parent.
-func flattenAlternatives(v Value) []Value {
-	if IsDisjunct(v) {
-		di, _ := AsDisjunct(v)
-		var out []Value
+func flattenAlternatives(v core.Value) []core.Value {
+	if core.IsDisjunct(v) {
+		di, _ := core.AsDisjunct(v)
+		var out []core.Value
 		for _, alt := range di.Alternatives {
 			out = append(out, flattenAlternatives(alt)...)
 		}
@@ -2361,10 +2361,10 @@ func flattenAlternatives(v Value) []Value {
 	// v.Parent of a literal would shift one lattice level up (the
 	// node's parent), silently widening every stored alternative on
 	// re-join. Carriers and concrete values stand for their Parent.
-	if IsBareTypeNode(v) {
-		return []Value{v}
+	if core.IsBareTypeNode(v) {
+		return []core.Value{v}
 	}
-	return []Value{NewTypeLiteral(v.Parent)}
+	return []core.Value{core.NewTypeLiteral(v.Parent)}
 }
 
 // carrierMixedConform reports whether v is a genuinely MIXED gradual
@@ -2378,8 +2378,8 @@ func flattenAlternatives(v Value) []Value {
 // the runtime one. A pure carrier (all alternatives conform, or none do)
 // and a bare dynamic carrier are NOT mixed and return false: the split is
 // consistent, or is the dynamic path handled elsewhere.
-func carrierMixedConform(v Value, t *Type) bool {
-	if t == nil || !v.Carrier || IsConcrete(v) || v.Dynamic {
+func carrierMixedConform(v core.Value, t *core.Type) bool {
+	if t == nil || !v.Carrier || core.IsConcrete(v) || v.Dynamic {
 		return false
 	}
 	alts := flattenAlternatives(v)
@@ -2392,7 +2392,7 @@ func carrierMixedConform(v Value, t *Type) bool {
 		// typeNodeOf(alt), NOT alt.Parent (a literal's Parent is the
 		// denoted node's lattice parent — the `Boolean` literal's Parent
 		// is `Scalar`).
-		if node := TypeNodeOf(alt); node != nil && node.ConformsTo(t) {
+		if node := core.TypeNodeOf(alt); node != nil && node.ConformsTo(t) {
 			someConform = true
 		} else {
 			someReject = true
@@ -2426,7 +2426,7 @@ func carrierMixedConform(v Value, t *Type) bool {
 // later `nd:Map` consumer matches, instead of a strict Disjunct(None|Map|…)
 // failing no_signature (the tst/radix node-rebuild walkers). Looser, never
 // tighter — a guard discharges the modality back to strict downstream.
-func JoinCarriers(a, b Value) Value {
+func JoinCarriers(a, b core.Value) core.Value {
 	out := joinCarriersInner(a, b)
 	if a.Dynamic || b.Dynamic {
 		out.Carrier = true
@@ -2437,14 +2437,14 @@ func JoinCarriers(a, b Value) Value {
 
 // isNoneArm reports whether a branch carrier is the None sentinel — the bare
 // None type node, a `none` value, or a carrier bound to None.
-func isNoneArm(v Value) bool {
+func isNoneArm(v core.Value) bool {
 	if v.Parent != nil {
-		return v.Parent.Equal(TNone)
+		return v.Parent.Equal(core.TNone)
 	}
-	return IsNoneShape(v)
+	return core.IsNoneShape(v)
 }
 
-func joinCarriersInner(a, b Value) Value {
+func joinCarriersInner(a, b core.Value) core.Value {
 	// A None arm is a lattice-root literal — NewTypeLiteral(TNone) has BOTH
 	// Data==nil AND Parent==nil (None has no lattice parent). The parent-math
 	// collapse blocks below are unsafe against such a nil Parent: ConformsTo(nil)
@@ -2459,10 +2459,10 @@ func joinCarriersInner(a, b Value) Value {
 	aNone := a.Parent == nil
 	bNone := b.Parent == nil
 	if aNone && bNone {
-		return NewCarrier(TNone)
+		return core.NewCarrier(core.TNone)
 	}
 	collapse := !aNone && !bNone
-	if collapse && a.Parent.Equal(b.Parent) && !IsDisjunct(a) && !IsDisjunct(b) {
+	if collapse && a.Parent.Equal(b.Parent) && !core.IsDisjunct(a) && !core.IsDisjunct(b) {
 		out := a
 		out.Carrier = true
 		out.Data = nil
@@ -2471,16 +2471,16 @@ func joinCarriersInner(a, b Value) Value {
 		// returns a live local — `def v0 3 def v1 (if c [v0] [4])` makes the if-
 		// result reuse v0's id, so a later `v0` reference resolves to the if-event
 		// (the compiler bakes the wrong value). Mint a distinct identity.
-		out.ID = GenerateID(IDPrefixForType(out.Parent))
+		out.ID = core.GenerateID(core.IDPrefixForType(out.Parent))
 		return out
 	}
-	if collapse && !IsDisjunct(a) && !IsDisjunct(b) {
+	if collapse && !core.IsDisjunct(a) && !core.IsDisjunct(b) {
 		if a.Parent.ConformsTo(b.Parent) {
 			// a is subtype of b → widen to b
-			return NewCarrier(b.Parent)
+			return core.NewCarrier(b.Parent)
 		}
 		if b.Parent.ConformsTo(a.Parent) {
-			return NewCarrier(a.Parent)
+			return core.NewCarrier(a.Parent)
 		}
 		// Collapse DIRECT siblings to their shared parent — the case
 		// this was built for is value-tagged literals (Number/Integer/42
@@ -2494,30 +2494,30 @@ func joinCarriersInner(a, b Value) Value {
 		// disjunct so per-alternative dispatch
 		// (disjunctPartitionReturns) sees the real alternatives.
 		anc := CommonAncestorType(a.Parent, b.Parent)
-		if anc != nil && !anc.Equal(TAny) &&
+		if anc != nil && !anc.Equal(core.TAny) &&
 			a.Parent.Parent != nil && anc.Equal(a.Parent.Parent) &&
 			b.Parent.Parent != nil && anc.Equal(b.Parent.Parent) {
-			return NewCarrier(anc)
+			return core.NewCarrier(anc)
 		}
 	}
 	// Gather unique alternatives across a and b, subsume subtypes,
 	// then apply the width cap. SimplifyDisjunctAlts is the runtime
 	// path's helper but produces identical output for the
 	// type-literal-only inputs the carrier path supplies.
-	combined := append([]Value(nil), flattenAlternatives(a)...)
+	combined := append([]core.Value(nil), flattenAlternatives(a)...)
 	combined = append(combined, flattenAlternatives(b)...)
-	alts := SimplifyDisjunctAlts(combined)
+	alts := core.SimplifyDisjunctAlts(combined)
 	if len(alts) == 1 {
-		return CarrierOfLiteral(alts[0])
+		return core.CarrierOfLiteral(alts[0])
 	}
 	if len(alts) > CarrierDisjunctCap {
-		t := TypeNodeOf(alts[0])
+		t := core.TypeNodeOf(alts[0])
 		for i := 1; i < len(alts); i++ {
-			t = CommonAncestorType(t, TypeNodeOf(alts[i]))
+			t = CommonAncestorType(t, core.TypeNodeOf(alts[i]))
 		}
-		return NewCarrier(t)
+		return core.NewCarrier(t)
 	}
-	v := NewDisjunct(alts)
+	v := core.NewDisjunct(alts)
 	v.Carrier = true
 	return v
 }
@@ -2529,7 +2529,7 @@ func joinCarriersInner(a, b Value) Value {
 //
 // Used by branch-aware words (e.g. `if`) to analyse each branch
 // symbolically.
-func RunCarrierBody(r *Registry, body Value) []Value {
+func RunCarrierBody(r *core.Registry, body core.Value) []core.Value {
 	stk, _ := RunCarrierBodyWithDefs(r, body)
 	return stk
 }
@@ -2544,7 +2544,7 @@ func RunCarrierBody(r *Registry, body Value) []Value {
 // the parts conflict instead of the type-shadow path (validateTypeName's
 // Defs.IsType skip). Branch / loop / quotation bodies keep the rollback —
 // their execution is conditional and their defs are join-managed.
-func RunCarrierBodyKeepDefs(r *Registry, body Value) []Value {
+func RunCarrierBodyKeepDefs(r *core.Registry, body core.Value) []core.Value {
 	return runCarrierBodyDefs(r, body, true)
 }
 
@@ -2558,7 +2558,7 @@ func RunCarrierBodyKeepDefs(r *Registry, body Value) []Value {
 // Only per-name "net additions" are reported. If a branch both
 // pushes and pops for the same name, the net change is zero and
 // the name is not in the returned map.
-func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value) {
+func RunCarrierBodyWithDefs(r *core.Registry, body core.Value) ([]core.Value, map[string]core.Value) {
 	stk, adds := runCarrierBodyDefsAdds(r, body, false, false)
 	return stk, adds
 }
@@ -2569,22 +2569,22 @@ func RunCarrierBodyWithDefs(r *Registry, body Value) ([]Value, map[string]Value)
 // an in-place fn redefinition there is not path-dependent and stays
 // compilable (the paren-`do` condition twin compiles it with parity).
 // Defs still roll back keep=false-style, exactly as before.
-func RunCarrierCondBody(r *Registry, body Value) ([]Value, map[string]Value) {
+func RunCarrierCondBody(r *core.Registry, body core.Value) ([]core.Value, map[string]core.Value) {
 	stk, adds := runCarrierBodyDefsAdds(r, body, false, true)
 	return stk, adds
 }
 
 // runCarrierBodyDefs is the keep-defs entry over the shared body run.
-func runCarrierBodyDefs(r *Registry, body Value, keep bool) []Value {
+func runCarrierBodyDefs(r *core.Registry, body core.Value, keep bool) []core.Value {
 	stk, _ := runCarrierBodyDefsAdds(r, body, keep, false)
 	return stk
 }
 
-func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Value, map[string]Value) {
+func runCarrierBodyDefsAdds(r *core.Registry, body core.Value, keep, condFrag bool) ([]core.Value, map[string]core.Value) {
 	if body.Data == nil {
 		return nil, nil
 	}
-	elems, err := AsList(body)
+	elems, err := core.AsList(body)
 	if err != nil || elems.IsNil() {
 		return nil, nil
 	}
@@ -2608,9 +2608,9 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	// Snapshot def-stack depths (all known names).
 	snapshot := r.Defs.Snapshot()
 
-	tokens := make([]Value, elems.Len())
+	tokens := make([]core.Value, elems.Len())
 	copy(tokens, elems.Slice())
-	sub := New(r)
+	sub := core.New(r)
 	sub.ElemEvalRecordable = recordable
 	// Every body through here is a NESTED region (branch / loop /
 	// quotation) — reached-conditionally by construction. Mark the depth
@@ -2641,7 +2641,7 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	}
 	r.Check.NestedBodyDepth--
 	if err != nil {
-		r.Check.AddDiagnostic(CheckDiagnostic{
+		r.Check.AddDiagnostic(core.CheckDiagnostic{
 			Code:   "branch_error",
 			Detail: "branch analysis error: " + err.Error(),
 		})
@@ -2655,7 +2655,7 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 	}
 	// Collect the top of each def stack whose depth grew, then
 	// restore depths back to snapshot.
-	adds := map[string]Value{}
+	adds := map[string]core.Value{}
 	for _, k := range r.Defs.Names() {
 		before := snapshot[k] // zero for names not present before
 		depth := r.Defs.Depth(k)
@@ -2682,7 +2682,7 @@ func runCarrierBodyDefsAdds(r *Registry, body Value, keep, condFrag bool) ([]Val
 // reference as an unseated dynamic carrier ("fn call operand of unknown
 // provenance"; the aless viewer's render fn hit exactly this). A GENUINE
 // reassignment gives the arms DIFFERING IDs and keeps the fresh-ID join.
-func joinBranchDef(a, b Value) Value {
+func joinBranchDef(a, b core.Value) core.Value {
 	out := JoinCarriers(a, b)
 	if a.ID != "" && a.ID == b.ID {
 		out.ID = a.ID
@@ -2696,7 +2696,7 @@ func joinBranchDef(a, b Value) Value {
 // pushed. If only one branch defined it, that def is pushed back —
 // but joined with the pre-branch carrier (if any) since the other
 // branch's path kept the original binding.
-func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
+func InstallJoinedDefs(r *core.Registry, then, else_ map[string]core.Value) {
 	seen := make(map[string]bool)
 	for k, tv := range then {
 		seen[k] = true
@@ -2727,25 +2727,25 @@ func InstallJoinedDefs(r *Registry, then, else_ map[string]Value) {
 // JoinCarrierStacks folds two carrier result stacks (e.g. produced by
 // two branches of an `if`) into a single stack. The shorter stack is
 // padded out with TNone carriers; per-position join uses JoinCarriers.
-func JoinCarrierStacks(a, b []Value) []Value {
+func JoinCarrierStacks(a, b []core.Value) []core.Value {
 	n := len(a)
 	if len(b) > n {
 		n = len(b)
 	}
-	out := make([]Value, n)
+	out := make([]core.Value, n)
 	for i := 0; i < n; i++ {
-		var ai, bi Value
+		var ai, bi core.Value
 		aReal := i < len(a)
 		bReal := i < len(b)
 		if aReal {
 			ai = a[i]
 		} else {
-			ai = NewCarrier(TNone)
+			ai = core.NewCarrier(core.TNone)
 		}
 		if bReal {
 			bi = b[i]
 		} else {
-			bi = NewCarrier(TNone)
+			bi = core.NewCarrier(core.TNone)
 		}
 		joined := JoinCarriers(ai, bi)
 		// Both arms produce a REAL value at this position and exactly one is
@@ -2811,7 +2811,7 @@ const FnAnalysisQuota = 64
 // `continue` bypassed the bind, `break` kept a discarded iteration's
 // value) breaks. A non-proven loop body still analyses identically — it
 // just declines the split (NestedBodyDepth != LoopBodyDepth).
-func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Value, provenTrips bool) []Value {
+func AnalyseLoopBody(r *core.Registry, body core.Value, bindNames []string, bindVals []core.Value, provenTrips bool) []core.Value {
 	proven := provenTrips && !BodyHasSentinel(body)
 	// Loop-lowering hook (`for`): when armed, register the loop
 	// bindings as VM locals and capture each round's events as a
@@ -2833,10 +2833,10 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 		es.BeginLoopCarried()
 		defer es.EndLoopCarried()
 	}
-	var stk []Value
+	var stk []core.Value
 	var installed []string
 	diagBase := len(r.Check.Diagnostics)
-	prev := map[string]Value{}
+	prev := map[string]core.Value{}
 	for round := 0; round < loopAnalysisRounds; round++ {
 		r.Check.TruncateDiagnostics(diagBase)
 		for i, n := range bindNames {
@@ -2848,12 +2848,12 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 		// orphaned into the Program (bytecode artifact + metric bloat). The
 		// def-stack convergence (r.Defs) is independent of the recording, so it
 		// proceeds across rounds untouched.
-		var cp EmitCheckpoint
+		var cp core.EmitCheckpoint
 		if loopCapture {
 			cp = es.Checkpoint()
 			es.ArmBranchCapture()
 		}
-		var adds map[string]Value
+		var adds map[string]core.Value
 		if proven {
 			r.Check.LoopBodyDepth++
 		}
@@ -2869,7 +2869,7 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 			r.Defs.Pop(installed[i])
 		}
 		installed = installed[:0]
-		joined := map[string]Value{}
+		joined := map[string]core.Value{}
 		// Deterministic name order: carried-slot allocation and the joined
 		// installs must not depend on Go map iteration (slot numbering and
 		// the emit goldens would jitter run to run).
@@ -2906,7 +2906,7 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 			if stable {
 				for k, v := range joined {
 					pv, ok := prev[k]
-					if !ok || !ValuesEqual(pv, v) {
+					if !ok || !core.ValuesEqual(pv, v) {
 						stable = false
 						break
 					}
@@ -2927,7 +2927,7 @@ func AnalyseLoopBody(r *Registry, body Value, bindNames []string, bindVals []Val
 // GuardClause describes one `x is T` clause detected in a condition.
 type GuardClause struct {
 	Name string
-	Type *Type
+	Type *core.Type
 	// ThenOnly marks a clause whose fact is sound only in the THEN branch —
 	// a predicate-derived fact (`if (param is T) …` in the predicate's own
 	// body, surfaced via a 2-token `pred x` guard). The complement (else)
@@ -2942,18 +2942,18 @@ type GuardClause struct {
 // GuardClause entries. Skips anything that doesn't resolve to a
 // bare type literal or an ObjectType. Accepts type-word references
 // by looking them up on DefStacks.
-func extractGuardClauses(r *Registry, condList Value) []GuardClause {
+func extractGuardClauses(r *core.Registry, condList core.Value) []GuardClause {
 	if r == nil || condList.Data == nil {
 		return nil
 	}
 	// A pre-evaluated paren condition arrives as a Boolean carrier
 	// whose GuardFactInfo payload preserves the group's original
 	// tokens (A3) — extract from those exactly as from a list body.
-	var elems []Value
-	if gf, ok := condList.Data.(GuardFactInfo); ok {
+	var elems []core.Value
+	if gf, ok := condList.Data.(core.GuardFactInfo); ok {
 		elems = gf.Toks
 	} else {
-		list, err := AsList(condList)
+		list, err := core.AsList(condList)
 		if err != nil || list.IsNil() || list.Len() < 3 {
 			return nil
 		}
@@ -2967,8 +2967,8 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 	// could be the true one, and a negation inverts the arm each fact holds in.
 	// Bail entirely — no component clause is sound — rather than narrow one.
 	for _, e := range elems {
-		if e.Parent.Equal(TWord) {
-			if w, werr := AsWord(e); werr == nil {
+		if e.Parent.Equal(core.TWord) {
+			if w, werr := core.AsWord(e); werr == nil {
 				switch w.Name {
 				case "or", "nor", "xor", "xnor", "not":
 					return nil
@@ -2978,31 +2978,31 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 	}
 	var out []GuardClause
 	for i := 0; i+2 < len(elems); i++ {
-		if !elems[i].Parent.Equal(TWord) || !elems[i+1].Parent.Equal(TWord) {
+		if !elems[i].Parent.Equal(core.TWord) || !elems[i+1].Parent.Equal(core.TWord) {
 			continue
 		}
-		wx, err := AsWord(elems[i])
+		wx, err := core.AsWord(elems[i])
 		if err != nil {
 			continue
 		}
-		wis, err := AsWord(elems[i+1])
+		wis, err := core.AsWord(elems[i+1])
 		if err != nil || wis.Name != "is" {
 			continue
 		}
 		tv := elems[i+2]
-		var minted *Type
-		if tv.Data != nil && tv.Parent.Equal(TWord) {
-			inner, _ := AsWord(tv)
+		var minted *core.Type
+		if tv.Data != nil && tv.Parent.Equal(core.TWord) {
+			inner, _ := core.AsWord(tv)
 			if e, ok := r.Defs.TopEntry(inner.Name); ok {
 				tv = e.Body
 				minted = e.TypeDef
-			} else if t, ok := ResolveBuiltinTypeName(inner.Name); ok {
+			} else if t, ok := core.ResolveBuiltinTypeName(inner.Name); ok {
 				// Builtin arm of the canonical cascade — post-opacity
 				// (ADR-012 rule 4) `x is Integer` carries a Word here.
-				tv = NewTypeLiteral(t)
+				tv = core.NewTypeLiteral(t)
 			}
 		}
-		if tv.Data != nil && !IsClassType(tv) && !(tv.IsDepScalar() && minted != nil) {
+		if tv.Data != nil && !core.IsClassType(tv) && !(tv.IsDepScalar() && minted != nil) {
 			continue
 		}
 		// A bare type-literal clause IS its type; an ObjectType keeps
@@ -3020,7 +3020,7 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 		guardType := tv.Parent
 		switch {
 		case tv.IsDepScalar() && minted != nil:
-			guardType = CanonicalType(r, minted)
+			guardType = core.CanonicalType(r, minted)
 		case tv.Data == nil:
 			gt := tv
 			guardType = &gt
@@ -3033,9 +3033,9 @@ func extractGuardClauses(r *Registry, condList Value) []GuardClause {
 	// return says nothing about which non-T shape x has. The variable must be a
 	// live binding; the predicate must reduce to a single `param is T` fact.
 	if len(out) == 0 && len(elems) == 2 &&
-		elems[0].Parent.Equal(TWord) && elems[1].Parent.Equal(TWord) {
-		wp, perr := AsWord(elems[0])
-		wx, xerr := AsWord(elems[1])
+		elems[0].Parent.Equal(core.TWord) && elems[1].Parent.Equal(core.TWord) {
+		wp, perr := core.AsWord(elems[0])
+		wx, xerr := core.AsWord(elems[1])
 		if perr == nil && xerr == nil {
 			if _, bound := r.Defs.Top(wx.Name); bound {
 				if t, tok := predicateImpliedType(r, wp.Name); tok {
@@ -3061,11 +3061,11 @@ func BoolWord(b bool) string {
 // true) when the condition is statically determinable, or (false,
 // false) otherwise. Used by `if` analysis to warn about
 // unreachable branches.
-func LiteralCondValue(condList Value) (bool, bool) {
+func LiteralCondValue(condList core.Value) (bool, bool) {
 	if condList.Data == nil {
 		return false, false
 	}
-	list, err := AsList(condList)
+	list, err := core.AsList(condList)
 	if err != nil || list.IsNil() || list.Len() != 1 {
 		return false, false
 	}
@@ -3074,16 +3074,16 @@ func LiteralCondValue(condList Value) (bool, bool) {
 	// (the A3 guard-fact attach); its Prev payload holds the value the group
 	// actually reduced to. Read a decided Boolean straight through the wrapper
 	// so the unreachable-branch analysis still fires.
-	if gf, gok := only.Data.(GuardFactInfo); gok {
-		if bp, bok := gf.Prev.(BoolPayload); bok {
+	if gf, gok := only.Data.(core.GuardFactInfo); gok {
+		if bp, bok := gf.Prev.(core.BoolPayload); bok {
 			return bp.B, true
 		}
 	}
 	// Bare true/false word (parser emits these as Word values that
 	// resolve to booleans in engine.stepWord; in check mode the
 	// words stay as Words until the branch runs).
-	if only.Parent.Equal(TWord) {
-		w, err := AsWord(only)
+	if only.Parent.Equal(core.TWord) {
+		w, err := core.AsWord(only)
 		if err == nil {
 			if w.Name == "true" {
 				return true, true
@@ -3094,8 +3094,8 @@ func LiteralCondValue(condList Value) (bool, bool) {
 		}
 	}
 	// Concrete Boolean value with Data set (post-runtime path).
-	if only.Parent.ConformsTo(TBoolean) && only.Data != nil {
-		b, err := AsBoolean(only)
+	if only.Parent.ConformsTo(core.TBoolean) && only.Data != nil {
+		b, err := core.AsBoolean(only)
 		if err == nil {
 			return b, true
 		}
@@ -3106,7 +3106,7 @@ func LiteralCondValue(condList Value) (bool, bool) {
 // ApplyGuardNarrowing installs then-branch narrowings for each
 // `x is T` clause in the condition. Returns a restore func to pop
 // the narrowings after the then-branch runs.
-func ApplyGuardNarrowing(r *Registry, condList Value) func() {
+func ApplyGuardNarrowing(r *core.Registry, condList core.Value) func() {
 	noop := func() {}
 	if !r.Check.IsActive() {
 		return noop
@@ -3117,7 +3117,7 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 	}
 	deadArm := false
 	for _, c := range clauses {
-		narrowed := NewCarrier(c.Type)
+		narrowed := core.NewCarrier(c.Type)
 		// is-narrowing is a static-only refinement: at runtime the binding is
 		// UNCHANGED, so the narrowed carrier must keep the source's value ID — its
 		// provenance (param slot / producing event). NewCarrier mints a FRESH ID
@@ -3137,12 +3137,12 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 			// it keeps the plain NewCarrier form. A dynamic binding stays dynamic
 			// through the meet so the narrowed value still discharges downstream
 			// modality checks.
-			if cur.Carrier && !IsConcrete(cur) && c.Type != nil {
-				meet := TandValues(cur, NewTypeLiteral(c.Type))
-				if IsNeverShape(meet) {
+			if cur.Carrier && !core.IsConcrete(cur) && c.Type != nil {
+				meet := core.TandValues(cur, core.NewTypeLiteral(c.Type))
+				if core.IsNeverShape(meet) {
 					deadArm = true
-				} else if IsBareTypeNode(meet) {
-					narrowed = NewCarrier(ValueType(meet))
+				} else if core.IsBareTypeNode(meet) {
+					narrowed = core.NewCarrier(core.ValueType(meet))
 					narrowed.ID = cur.ID
 				} else {
 					meet.Carrier = true
@@ -3167,7 +3167,7 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 			// work). A non-concrete strict carrier IS the declared-type
 			// record, so tag conformance is shape-independent. Dedup: fn
 			// bodies re-analyse per shape and fixpoint round.
-			if cur.Carrier && !IsConcrete(cur) && !cur.Dynamic &&
+			if cur.Carrier && !core.IsConcrete(cur) && !cur.Dynamic &&
 				cur.Parent != nil && c.Type != nil &&
 				cur.Parent.ConformsTo(c.Type) {
 				detail := "guard is always true: " + c.Name + " is already " +
@@ -3180,7 +3180,7 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 					}
 				}
 				if !dup {
-					r.Check.AddDiagnostic(CheckDiagnostic{
+					r.Check.AddDiagnostic(core.CheckDiagnostic{
 						Code:   "redundant_guard",
 						Detail: detail,
 						Word:   "is",
@@ -3213,7 +3213,7 @@ func ApplyGuardNarrowing(r *Registry, condList Value) func() {
 // complement carrier onto x's DefStack. Currently only refines
 // when x's existing binding is a disjunction: the matching
 // alternative is subtracted. Returns a restore func.
-func ApplyComplementNarrowing(r *Registry, condList Value) func() {
+func ApplyComplementNarrowing(r *core.Registry, condList core.Value) func() {
 	noop := func() {}
 	if !r.Check.IsActive() {
 		return noop
@@ -3262,9 +3262,9 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		//     String) tand tnot Number → String);
 		//   - a plain type disjoint from T is unchanged (no-op);
 		//   - a type wholly inside T collapses to Never (unreachable else).
-		complement := NegateType(NewTypeLiteral(c.Type))
-		narrowed := TandValues(cur, complement)
-		if IsNeverShape(narrowed) {
+		complement := core.NegateType(core.NewTypeLiteral(c.Type))
+		narrowed := core.TandValues(cur, complement)
+		if core.IsNeverShape(narrowed) {
 			// Else branch is unreachable for x — the guard held for every value
 			// of x's type. Mark the arm dead (so its unreachable dispatch errors
 			// are suppressed) and leave the binding as-is rather than push a
@@ -3277,12 +3277,12 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 		// carrier of that type (Parent = the type, like NewCarrier); a
 		// disjunct or other compound keeps its payload and is marked
 		// abstract.
-		if IsBareTypeNode(narrowed) {
-			narrowed = NewCarrier(ValueType(narrowed))
+		if core.IsBareTypeNode(narrowed) {
+			narrowed = core.NewCarrier(core.ValueType(narrowed))
 		} else {
 			narrowed.Carrier = true
 		}
-		if ValuesEqual(narrowed, cur) {
+		if core.ValuesEqual(narrowed, cur) {
 			// Complement did not refine cur (T disjoint from cur, or boru
 			// has no positive representation for the exact difference).
 			continue
@@ -3342,14 +3342,14 @@ func ApplyComplementNarrowing(r *Registry, condList Value) func() {
 // its name comes from the value itself. Never deref Parent unguarded here — a
 // `none` fold-seed promoted to a dynamic carrier reaches this path with a nil
 // Parent and would otherwise panic (tst's `map-from-entries` accumulator).
-func carrierTypeName(v Value) string {
+func carrierTypeName(v core.Value) string {
 	if v.Parent != nil {
 		return v.Parent.String()
 	}
 	return v.String()
 }
 
-func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []CapturedBinding, body []Value) string {
+func FnAnalysisKey(scopeID uint64, name string, args []core.Value, captures []core.CapturedBinding, body []core.Value) string {
 	var sb strings.Builder
 	sb.WriteString(strconv.FormatUint(scopeID, 10))
 	sb.WriteByte('#')
@@ -3394,7 +3394,7 @@ func FnAnalysisKey(scopeID uint64, name string, args []Value, captures []Capture
 // verbatim, since the body position that follows already distinguishes
 // distinct anonymous sites. The human-facing diagnostic uses a separate
 // displayName, so the key need not spell "<anon>".
-func fnQuotaKey(scopeID uint64, name string, body []Value) string {
+func fnQuotaKey(scopeID uint64, name string, body []core.Value) string {
 	var sb strings.Builder
 	sb.WriteString(strconv.FormatUint(scopeID, 10))
 	sb.WriteByte('#')
@@ -3412,15 +3412,15 @@ func fnQuotaKey(scopeID uint64, name string, body []Value) string {
 // cannot (or need not) run the body: one fresh carrier per declared return
 // type, or a single dynamic Any when nothing is declared. Shared by the
 // quota and in-flight-recursion short circuits.
-func declaredReturnBail(declared []*Type) []Value {
+func declaredReturnBail(declared []*core.Type) []core.Value {
 	if len(declared) > 0 {
-		out := make([]Value, len(declared))
+		out := make([]core.Value, len(declared))
 		for i, t := range declared {
-			out[i] = NewCarrier(t)
+			out[i] = core.NewCarrier(t)
 		}
 		return out
 	}
-	return []Value{NewDynamicCarrier(TAny)}
+	return []core.Value{core.NewDynamicCarrier(core.TAny)}
 }
 
 // refineRecursiveSummary is AnalyseFnBody's bounded Kleene refinement (A2):
@@ -3429,7 +3429,7 @@ func declaredReturnBail(declared []*Type) []Value {
 // recursive call now reads the seeded hypothesis from the cache — joining
 // each round's result into the hypothesis until stable, up to two extra
 // rounds. Only the final round's diagnostics are kept.
-func refineRecursiveSummary(r *Registry, key string, diagBase int, result []Value, runOnce func() []Value) []Value {
+func refineRecursiveSummary(r *core.Registry, key string, diagBase int, result []core.Value, runOnce func() []core.Value) []core.Value {
 	for round := 0; round < 2; round++ {
 		r.Check.FnSummaries[key] = result
 		r.Check.TruncateDiagnostics(diagBase)
@@ -3449,7 +3449,7 @@ func refineRecursiveSummary(r *Registry, key string, diagBase int, result []Valu
 // baseline so any inner fn/afn construction inside the body sees this scope
 // as its enclosing-fn baseline — without it, ComputeCaptures would treat
 // outer params as if they lived at module/global scope and miss the capture.
-func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []Value, captures []CapturedBinding, anonymous bool) []Value {
+func runFnBodyOnce(r *core.Registry, name string, paramNames []string, body, args []core.Value, captures []core.CapturedBinding, anonymous bool) []core.Value {
 	snapshot := r.Defs.Snapshot()
 	r.PushFnBaseline(snapshot)
 	defer r.PopFnBaseline()
@@ -3460,7 +3460,7 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// lowering it becomes PUSH_LOCAL N, no runtime args stack needed
 	// (carrierResults' `args` projection + tryFoldStaticIndex). Pushed
 	// alongside the FnBaseline; popped together.
-	_ = r.Args.Push(NewList(append([]Value(nil), args...)))
+	_ = r.Args.Push(core.NewList(append([]core.Value(nil), args...)))
 	defer func() { _, _ = r.Args.Pop() }()
 
 	// Install lexical captures first so params (installed below)
@@ -3473,7 +3473,7 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// Bind named parameters as simple defs (carrier-typed).
 	// Unnamed parameters flow through the stack — push them
 	// before the body.
-	var input []Value
+	var input []core.Value
 	hasUnnamed := false
 	for i, arg := range args {
 		if i < len(paramNames) && paramNames[i] != "" {
@@ -3501,7 +3501,7 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	r.Check.ArgsFrameUnnamed = hasUnnamed
 	defer func() { r.Check.ArgsFrameUnnamed = prevUnnamed }()
 
-	sub := New(r)
+	sub := core.New(r)
 	// When this body is being RECORDED into a compiled CALLBACK unit (a
 	// stored-fn / spawn body — see compileStoredFnUnit / compileStoredBody,
 	// name "storedfn$body" / "spawnbody$body"), mark the body sub-engine
@@ -3535,12 +3535,12 @@ func runFnBodyOnce(r *Registry, name string, paramNames []string, body, args []V
 	// like any in-frame computation. Only an anonymous lambda keeps the
 	// single-bare-literal transparency (BodyEvalsResidual), where in-frame
 	// assembly would bake the param and diverge — that shape keeps refusing.
-	if r.Check.Recorder().Active() && (isCallbackBodyName(name) || !anonymous || BodyEvalsResidual(body)) {
+	if r.Check.Recorder().Active() && (isCallbackBodyName(name) || !anonymous || core.BodyEvalsResidual(body)) {
 		sub.ElemEvalRecordable = true
 	}
 	result, err := sub.Run(input)
 	if err != nil {
-		r.Check.AddDiagnostic(CheckDiagnostic{
+		r.Check.AddDiagnostic(core.CheckDiagnostic{
 			Code:   "fn_body_error",
 			Detail: "fn body analysis error for " + name + ": " + err.Error(),
 			Word:   name,
@@ -3597,7 +3597,7 @@ func isCallbackBodyName(name string) bool {
 // Returns the residual carrier stack. An empty or nil return means
 // the analyser aborted (recursion detected or body not available) —
 // callers should treat that as an Any carrier.
-func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, args []Value, captures []CapturedBinding, declared []*Type, anonymous bool) []Value {
+func AnalyseFnBody(r *core.Registry, name string, paramNames []string, body []core.Value, args []core.Value, captures []core.CapturedBinding, declared []*core.Type, anonymous bool) []core.Value {
 	// Fn-body analysis runs nested sub-engines — not part of the
 	// caller's straight line; pause bytecode recording, UNLESS a fn
 	// compilation armed capture (StartFnCompile): the body's events then
@@ -3638,19 +3638,19 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 			continue
 		}
 		if !sanitized {
-			args = append([]Value(nil), args...)
+			args = append([]core.Value(nil), args...)
 			sanitized = true
 		}
-		c := NewDynamicCarrier(TAny)
-		if a, aerr := AsAtom(args[i]); aerr == nil && a != "" {
+		c := core.NewDynamicCarrier(core.TAny)
+		if a, aerr := core.AsAtom(args[i]); aerr == nil && a != "" {
 			r.Check.Recorder().NoteDefRead(c.ID, a)
 		}
-		args[i] = WithPos(c, args[i])
+		args[i] = core.WithPos(c, args[i])
 	}
 	key := FnAnalysisKey(r.AnalysisScopeID(), name, args, captures, body)
 
 	if r.Check.FnSummaries == nil {
-		r.Check.FnSummaries = map[string][]Value{}
+		r.Check.FnSummaries = map[string][]core.Value{}
 	}
 	if r.Check.FnInflight == nil {
 		r.Check.FnInflight = map[string]bool{}
@@ -3686,7 +3686,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// non-recursive shape growth is bounded by the step budget.
 	if n := r.Check.FnAnalysisCounts[quotaKey]; n > FnAnalysisQuota && !r.Check.Compiling {
 		if n == FnAnalysisQuota+1 {
-			r.Check.AddDiagnostic(CheckDiagnostic{
+			r.Check.AddDiagnostic(core.CheckDiagnostic{
 				Code: "analysis_truncated",
 				Detail: "fn " + displayName + " was analysed for more than " +
 					strconv.Itoa(FnAnalysisQuota) + " distinct call shapes; later shapes are typed from the declaration (or dynamic Any) without body re-analysis",
@@ -3711,9 +3711,9 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 		// 0-or-more residual that covers the runtime's depth-many values. The
 		// armed/compiled path keeps its own STAGE A variadic model (Any bail).
 		if !r.Check.Recorder().Active() {
-			return []Value{NewVariadicCarrier(NewTypeLiteral(TNever))}
+			return []core.Value{NewVariadicCarrier(core.NewTypeLiteral(core.TNever))}
 		}
-		return []Value{NewCarrier(TAny)}
+		return []core.Value{core.NewCarrier(core.TAny)}
 	}
 	r.Check.FnInflight[key] = true
 	defer delete(r.Check.FnInflight, key)
@@ -3774,7 +3774,7 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 	// body sees this scope as its enclosing-fn baseline — without it,
 	// ComputeCaptures would treat outer params as if they lived at
 	// module/global scope and miss the capture.
-	runOnce := func() []Value { return runFnBodyOnce(r, name, paramNames, body, args, captures, anonymous) }
+	runOnce := func() []core.Value { return runFnBodyOnce(r, name, paramNames, body, args, captures, anonymous) }
 
 	bailsBefore := r.Check.InflightBails
 	diagBase := len(r.Check.Diagnostics)
@@ -3811,20 +3811,20 @@ func AnalyseFnBody(r *Registry, name string, paramNames []string, body []Value, 
 // isDeferredWordList reports whether v is a parser-evaluated (`Eval`, unquoted)
 // plain list that still carries a raw Word element — the unfolded def-node-binding
 // deferred residual a transparent fn body like `[[c1]]` returns.
-func IsDeferredWordList(v Value) bool {
-	if !v.Eval || v.Quoted || !v.Parent.Equal(TList) || v.Data == nil ||
-		IsTypedList(v) || IsTableType(v) {
+func IsDeferredWordList(v core.Value) bool {
+	if !v.Eval || v.Quoted || !v.Parent.Equal(core.TList) || v.Data == nil ||
+		core.IsTypedList(v) || core.IsTableType(v) {
 		return false
 	}
-	lst, err := AsList(v)
+	lst, err := core.AsList(v)
 	if err != nil {
 		return false
 	}
 	for _, e := range lst.Slice() {
-		if IsWord(e) {
+		if core.IsWord(e) {
 			return true
 		}
-		if e.Parent.Equal(TList) && IsDeferredWordList(e) {
+		if e.Parent.Equal(core.TList) && IsDeferredWordList(e) {
 			return true
 		}
 	}
@@ -3843,14 +3843,14 @@ func IsDeferredWordList(v Value) bool {
 // names a parameter qualifies. A body that DOESN'T reference a param already
 // folds correctly under the normal path; a multi-statement or computed body
 // keeps its existing analysis (and its faithful fallback when it can't lower).
-func DeferredParamListResidual(body []Value, paramNames []string) (Value, bool) {
+func DeferredParamListResidual(body []core.Value, paramNames []string) (core.Value, bool) {
 	if len(body) != 1 {
-		return Value{}, false
+		return core.Value{}, false
 	}
 	v := body[0]
-	if v.Quoted || !v.Eval || !v.Parent.Equal(TList) || v.Data == nil ||
-		IsTypedList(v) || IsTableType(v) {
-		return Value{}, false
+	if v.Quoted || !v.Eval || !v.Parent.Equal(core.TList) || v.Data == nil ||
+		core.IsTypedList(v) || core.IsTableType(v) {
+		return core.Value{}, false
 	}
 	params := make(map[string]bool, len(paramNames))
 	for _, p := range paramNames {
@@ -3859,16 +3859,16 @@ func DeferredParamListResidual(body []Value, paramNames []string) (Value, bool) 
 		}
 	}
 	if len(params) == 0 {
-		return Value{}, false
+		return core.Value{}, false
 	}
 	referencesParam := false
-	WalkBodyWords([]Value{v}, func(w WordInfo, _ Value) {
+	core.WalkBodyWords([]core.Value{v}, func(w core.WordInfo, _ core.Value) {
 		if params[w.Name] {
 			referencesParam = true
 		}
 	})
 	if !referencesParam {
-		return Value{}, false
+		return core.Value{}, false
 	}
 	return v, true
 }
@@ -3881,12 +3881,12 @@ func DeferredParamListResidual(body []Value, paramNames []string) (Value, bool) 
 // Mirrors the fn-UNIT residual reconciliation (StartFnCompile.finish, which
 // skips the same zeroOut events) on the CALL side. Recording-active only: the
 // zeroOut flag is set during the compile pass.
-func stripZeroOutResiduals(r *Registry, stk []Value) []Value {
+func stripZeroOutResiduals(r *core.Registry, stk []core.Value) []core.Value {
 	es := r.Check.Recorder()
 	if !es.Active() || len(stk) == 0 {
 		return stk
 	}
-	filtered := make([]Value, 0, len(stk))
+	filtered := make([]core.Value, 0, len(stk))
 	for _, v := range stk {
 		if es.ZeroOutProduced(v.ID) {
 			continue
@@ -3898,12 +3898,12 @@ func stripZeroOutResiduals(r *Registry, stk []Value) []Value {
 
 // carrierStacksEqual reports whether two carrier stacks agree
 // position-for-position — the fixed-point stability test.
-func carrierStacksEqual(a, b []Value) bool {
+func carrierStacksEqual(a, b []core.Value) bool {
 	if len(a) != len(b) {
 		return false
 	}
 	for i := range a {
-		if !ValuesEqual(a[i], b[i]) {
+		if !core.ValuesEqual(a[i], b[i]) {
 			return false
 		}
 	}
@@ -3919,25 +3919,25 @@ func carrierStacksEqual(a, b []Value) bool {
 // builtin arm applies here: a Defs-bound word was already substituted
 // by the claim walk, and /q-captured names arrive as Atoms, never
 // Words. Copies lazily — the common all-resolved case allocates nothing.
-func resolveTypeNameArgs(args []Value) []Value {
-	var out []Value
+func resolveTypeNameArgs(args []core.Value) []core.Value {
+	var out []core.Value
 	for i, a := range args {
-		if !IsWord(a) {
+		if !core.IsWord(a) {
 			continue
 		}
-		w, err := AsWord(a)
+		w, err := core.AsWord(a)
 		if err != nil {
 			continue
 		}
-		t, ok := ResolveBuiltinTypeName(w.Name)
+		t, ok := core.ResolveBuiltinTypeName(w.Name)
 		if !ok {
 			continue
 		}
 		if out == nil {
-			out = append([]Value{}, args...)
+			out = append([]core.Value{}, args...)
 		}
-		lit := NewTypeLiteral(t)
-		lit = WithPos(lit, a)
+		lit := core.NewTypeLiteral(t)
+		lit = core.WithPos(lit, a)
 		out[i] = lit
 	}
 	if out == nil {
