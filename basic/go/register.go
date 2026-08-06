@@ -13,7 +13,20 @@ package basic
 // (overload appends are order-sensitive there). Register exists for
 // eng-only embedders that want the fundamental words without the full
 // language layer — the calc/go pattern, one layer up.
-func Register(r *Registry) {
+//
+// It returns the first registration failure, or nil. Both channels a
+// failure can arrive on are folded in, because an eng-only embedder has
+// no DefaultRegistryWithPolicy above it to check them: the init-time
+// type-registration accumulator (typeinit.go) and the registry's own
+// error list, which RegisterNativeFunc appends to rather than raising.
+func Register(r *Registry) error {
+	// An init-time external-type failure means the type table these words
+	// close over is already wrong, so refuse before installing anything —
+	// the early return lang's DefaultRegistryWithPolicy makes for its
+	// own layer.
+	if err := TypeInitError(); err != nil {
+		return err
+	}
 	for _, n := range StackNatives {
 		r.RegisterNativeFunc(n)
 	}
@@ -32,4 +45,5 @@ func Register(r *Registry) {
 	// After every constructor slice above: the def keyword forms are
 	// synthesized from the constructors' live signature tables.
 	RegisterDefKeywordForms(r)
+	return r.Err()
 }

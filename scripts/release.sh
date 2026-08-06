@@ -2,7 +2,9 @@
 #
 # release.sh — publish the boru modules so `go install …@latest` works.
 #
-# Releases eng/go, basic/go, lang/go and cmd/go in DEPENDENCY ORDER. For each
+# Releases core/go, check/go, compiler/go, eng/go, basic/go, lang/go and
+# cmd/go in DEPENDENCY ORDER (the four-piece kernel split —
+# design/ENG-FOUR-PIECE.0.md). For each
 # module it:
 #   1. auto-bumps the PATCH from the module's latest `<module>/vX.Y.Z` tag
 #      (or v0.0.1 if the module has never been tagged);
@@ -52,8 +54,10 @@ edit_module() { # $1 = description, $2 = function name
 # otherwise a fresh or shallow checkout recomputes a stale (or duplicate) patch.
 git fetch --tags --quiet origin || true
 
+COREV=$(next_patch core/go); CHECKV=$(next_patch check/go); COMPILERV=$(next_patch compiler/go)
 ENGV=$(next_patch eng/go); BASICV=$(next_patch basic/go); LANGV=$(next_patch lang/go); CMDV=$(next_patch cmd/go)
-echo "==> Releasing  eng/go v$ENGV  ·  basic/go v$BASICV  ·  lang/go v$LANGV  ·  cmd/go v$CMDV"
+echo "==> Releasing  core/go v$COREV  ·  check/go v$CHECKV  ·  compiler/go v$COMPILERV"
+echo "==>            eng/go v$ENGV  ·  basic/go v$BASICV  ·  lang/go v$LANGV  ·  cmd/go v$CMDV"
 
 if [ "$DRY_RUN" = 1 ]; then
   echo "==> [dry-run] skipping the full test gate"
@@ -63,25 +67,68 @@ else
 fi
 
 # The actual go.mod surgery, run only for a real release (see edit_module).
+# NOTE: `go mod tidy` runs with GOWORK=off, where a DEPENDENCY module's own
+# replace directives are ignored — so every sibling a module requires must
+# already be pinned to a published version, which is why the kernel pieces
+# release before eng.
+check_pin() { ( cd check/go
+  go mod edit -dropreplace=github.com/boru-lang/boru/core/go
+  go mod edit -require="github.com/boru-lang/boru/core/go@v$COREV"
+  GOFLAGS=-mod=mod GOWORK=off go mod tidy ); }
+compiler_pin() { ( cd compiler/go
+  go mod edit -dropreplace=github.com/boru-lang/boru/core/go -dropreplace=github.com/boru-lang/boru/check/go
+  go mod edit -require="github.com/boru-lang/boru/core/go@v$COREV" -require="github.com/boru-lang/boru/check/go@v$CHECKV"
+  GOFLAGS=-mod=mod GOWORK=off go mod tidy ); }
+eng_pin() { ( cd eng/go
+  go mod edit -dropreplace=github.com/boru-lang/boru/core/go -dropreplace=github.com/boru-lang/boru/check/go -dropreplace=github.com/boru-lang/boru/compiler/go
+  go mod edit -require="github.com/boru-lang/boru/core/go@v$COREV" -require="github.com/boru-lang/boru/check/go@v$CHECKV" -require="github.com/boru-lang/boru/compiler/go@v$COMPILERV"
+  GOFLAGS=-mod=mod GOWORK=off go mod tidy ); }
 basic_pin() { ( cd basic/go
+  go mod edit -dropreplace=github.com/boru-lang/boru/core/go -dropreplace=github.com/boru-lang/boru/check/go -dropreplace=github.com/boru-lang/boru/compiler/go
   go mod edit -dropreplace=github.com/boru-lang/boru/eng/go
   go mod edit -require="github.com/boru-lang/boru/eng/go@v$ENGV"
   GOFLAGS=-mod=mod GOWORK=off go mod tidy ); }
 lang_pin() { ( cd lang/go
+  go mod edit -dropreplace=github.com/boru-lang/boru/core/go -dropreplace=github.com/boru-lang/boru/check/go -dropreplace=github.com/boru-lang/boru/compiler/go
   go mod edit -dropreplace=github.com/boru-lang/boru/eng/go -dropreplace=github.com/boru-lang/boru/basic/go
   go mod edit -require="github.com/boru-lang/boru/eng/go@v$ENGV" -require="github.com/boru-lang/boru/basic/go@v$BASICV"
   GOFLAGS=-mod=mod GOWORK=off go mod tidy ); }
 cmd_pin() { ( cd cmd/go
+  go mod edit -dropreplace=github.com/boru-lang/boru/core/go -dropreplace=github.com/boru-lang/boru/check/go -dropreplace=github.com/boru-lang/boru/compiler/go
   go mod edit -dropreplace=github.com/boru-lang/boru/eng/go -dropreplace=github.com/boru-lang/boru/basic/go -dropreplace=github.com/boru-lang/boru/lang/go
   go mod edit -require="github.com/boru-lang/boru/eng/go@v$ENGV" -require="github.com/boru-lang/boru/lang/go@v$LANGV"
   # Version lives in cmd/go/main.go (boru/main.go is a thin entrypoint).
   perl -i -pe 's{(^var Version = )"[^"]*"}{$1"'"$CMDV"'"}' main.go
   GOFLAGS=-mod=mod GOWORK=off go mod tidy ); }
 
-# ---- eng/go (leaf: no sibling deps, no go.mod change) ----
+# ---- core/go (leaf: no sibling deps, no go.mod change) ----
+echo "==> core/go v$COREV"
+run "git tag core/go/v$COREV"
+run "git push origin core/go/v$COREV"
+
+# ---- check/go (requires core/go) ----
+echo "==> check/go v$CHECKV"
+edit_module "cd check/go: drop core replace, pin core@v$COREV, go mod tidy" check_pin
+run "git add check/go/go.mod check/go/go.sum"
+run "git commit -m 'check/go: v$CHECKV (core/go v$COREV)'"
+run "git tag check/go/v$CHECKV"
+run "git push origin main check/go/v$CHECKV"
+
+# ---- compiler/go (requires core/go + check/go) ----
+echo "==> compiler/go v$COMPILERV"
+edit_module "cd compiler/go: drop core+check replaces, pin versions, go mod tidy" compiler_pin
+run "git add compiler/go/go.mod compiler/go/go.sum"
+run "git commit -m 'compiler/go: v$COMPILERV (core/go v$COREV, check/go v$CHECKV)'"
+run "git tag compiler/go/v$COMPILERV"
+run "git push origin main compiler/go/v$COMPILERV"
+
+# ---- eng/go (requires core/go + check/go + compiler/go) ----
 echo "==> eng/go v$ENGV"
+edit_module "cd eng/go: drop kernel replaces, pin core/check/compiler, go mod tidy" eng_pin
+run "git add eng/go/go.mod eng/go/go.sum"
+run "git commit -m 'eng/go: v$ENGV (core/go v$COREV, check/go v$CHECKV, compiler/go v$COMPILERV)'"
 run "git tag eng/go/v$ENGV"
-run "git push origin eng/go/v$ENGV"
+run "git push origin main eng/go/v$ENGV"
 
 # ---- basic/go (requires eng/go) ----
 echo "==> basic/go v$BASICV"

@@ -31,8 +31,8 @@ var pieceQualifier = map[string]string{
 	"core": "core", "check": "check", "compiler": "compiler", "eng": "eng",
 }
 
-func qualify(dir, piece string) {
-	qualifyImpl(dir, piece, nil)
+func qualify(dir, piece string) error {
+	return qualifyImpl(dir, piece, nil)
 }
 
 // qualifyTests: qualify cross-piece PRODUCTION-symbol uses inside the
@@ -41,16 +41,19 @@ func qualify(dir, piece string) {
 // internals that only resolve after the move).
 //
 //	piecetool -qualify-tests <dir> <targetPiece> <file,file,...>
-func qualifyTests(dir, target, list string) {
+func qualifyTests(dir, target, list string) error {
 	only := map[string]bool{}
 	for _, f := range strings.Split(list, ",") {
 		only[strings.TrimSpace(f)] = true
 	}
-	qualifyImpl(dir, target, only)
+	return qualifyImpl(dir, target, only)
 }
 
-func qualifyImpl(dir, piece string, onlyFiles map[string]bool) {
-	pieces := readPieceMap(filepath.Join(dir, "piece_map.tsv"))
+func qualifyImpl(dir, piece string, onlyFiles map[string]bool) error {
+	pieces, err := readPieceMap(filepath.Join(dir, "piece_map.tsv"))
+	if err != nil {
+		return err
+	}
 
 	cfg := &packages.Config{
 		Mode: packages.NeedSyntax | packages.NeedTypes | packages.NeedTypesInfo |
@@ -60,10 +63,10 @@ func qualifyImpl(dir, piece string, onlyFiles map[string]bool) {
 	}
 	pkgs, err := packages.Load(cfg, ".")
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("load %s: %w", dir, err)
 	}
 	if onlyFiles == nil && packages.PrintErrors(pkgs) > 0 {
-		os.Exit(1)
+		return fmt.Errorf("load %s: package has type errors", dir)
 	}
 	pkg := pkgs[0]
 	if onlyFiles != nil {
@@ -143,7 +146,7 @@ func qualifyImpl(dir, piece string, onlyFiles map[string]bool) {
 	for fn, es := range edits {
 		data, err := os.ReadFile(fn)
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("read %s: %w", fn, err)
 		}
 		sort.Slice(es, func(i, j int) bool { return es[i].off > es[j].off })
 		// de-dup identical offsets (the same ident indexed twice can't
@@ -157,7 +160,7 @@ func qualifyImpl(dir, piece string, onlyFiles map[string]bool) {
 			data = append(data[:e.off], append([]byte(e.ins), data[e.off:]...)...)
 		}
 		if err := os.WriteFile(fn, data, 0o644); err != nil {
-			panic(err)
+			return fmt.Errorf("write %s: %w", fn, err)
 		}
 		fmt.Println("qualified", filepath.Base(fn), len(es), "uses")
 	}
@@ -169,5 +172,5 @@ func qualifyImpl(dir, piece string, onlyFiles map[string]bool) {
 	for _, k := range keys {
 		fmt.Println("EDGE", k, counts[k])
 	}
-	_ = strings.TrimSpace
+	return nil
 }

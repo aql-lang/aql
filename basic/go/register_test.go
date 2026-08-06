@@ -1,6 +1,7 @@
 package basic
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -19,8 +20,7 @@ func TestRegisterStandalone(t *testing.T) {
 	if err != nil {
 		t.Fatalf("eng.NewRegistry: %v", err)
 	}
-	Register(r)
-	if err := r.Err(); err != nil {
+	if err := Register(r); err != nil {
 		t.Fatalf("basic.Register: %v", err)
 	}
 	r.SetParseFunc(parser.Parse)
@@ -74,5 +74,29 @@ func TestRegisterStandalone(t *testing.T) {
 	}
 	if _, err := eng.NewTop(r).Run(values); err == nil || !strings.Contains(err.Error(), "undefined_word") {
 		t.Fatalf("expected undefined_word for a lang-layer word, got %v", err)
+	}
+}
+
+// TestRegisterRefusesOnTypeInitError is the negative half of the entry
+// point's contract: an eng-only embedder has nothing above it to check
+// the init-time accumulator, so Register must hand the failure back
+// rather than install words over a type table already known bad.
+func TestRegisterRefusesOnTypeInitError(t *testing.T) {
+	boom := errors.New("types_handles: register Ideal/Patrun: duplicate FixedID")
+	prev := SwapTypeInitErrs([]error{boom})
+	defer SwapTypeInitErrs(prev)
+
+	r, err := eng.NewRegistry()
+	if err != nil {
+		t.Fatalf("eng.NewRegistry: %v", err)
+	}
+	if got := Register(r); !errors.Is(got, boom) {
+		t.Fatalf("Register must surface the init-time error, got %v", got)
+	}
+	// Refused BEFORE installing: the layer's first group is absent, so a
+	// caller that ignored the error cannot mistake a half-built registry
+	// for a working one.
+	if r.Lookup("dup") != nil {
+		t.Fatal("Register must not install words after refusing")
 	}
 }

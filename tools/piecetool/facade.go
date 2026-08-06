@@ -31,7 +31,7 @@ var mutableVars = map[string]bool{
 // facadeFor parameterizes the generation per source module: the
 // package qualifier, the mutable slot vars never mirrored, and the
 // cold set emitted as func-value re-exports.
-func facadeFor(dir, out, qual string) {
+func facadeFor(dir, out, qual string) error {
 	mutable := map[string]bool{}
 	switch qual {
 	case "core":
@@ -40,9 +40,13 @@ func facadeFor(dir, out, qual string) {
 		mutable = map[string]bool{"DispatchBraid": true}
 	case "compiler":
 	default:
-		panic("unknown facade qualifier " + qual)
+		return fmt.Errorf("unknown facade qualifier %q: want core, check or compiler", qual)
 	}
-	facadeGen(dir, out, qual, mutable, coldSet(dir, out, qual))
+	cold, err := coldSet(dir, out, qual)
+	if err != nil {
+		return err
+	}
+	return facadeGen(dir, out, qual, mutable, cold)
 }
 
 // coldSet derives the facade funcs NO caller in the repository reaches.
@@ -50,7 +54,7 @@ func facadeFor(dir, out, qual string) {
 // wrapper funcs: same call syntax at every reference site, but no wrapper
 // BODY to sit permanently uncovered under the ADR-008 gate. Deriving it
 // beats a hand-kept list — every cut shifts which wrappers go cold.
-func coldSet(dir, out, qual string) map[string]bool {
+func coldSet(dir, out, qual string) (map[string]bool, error) {
 	repo := filepath.Dir(filepath.Dir(filepath.Clean(dir)))
 	facade := filepath.Base(out)
 	used := map[string]bool{}
@@ -84,37 +88,72 @@ func coldSet(dir, out, qual string) map[string]bool {
 			if perr != nil {
 				return nil
 			}
-			ast.Inspect(f, func(n ast.Node) bool {
+			var visit func(ast.Node) bool
+			visit = func(n ast.Node) bool {
 				// A qualified reference (pkg.Name) resolves to the real
 				// symbol; only the bare identifier reaches the wrapper.
 				if sel, ok := n.(*ast.SelectorExpr); ok {
-					ast.Inspect(sel.X, func(inner ast.Node) bool {
-						if id, ok := inner.(*ast.Ident); ok {
-							used[id.Name] = true
-						}
-						return true
-					})
+					ast.Inspect(sel.X, visit)
+					return false
+				}
+				// A DECLARED name is not a reference. Consumers re-export
+				// the facade wholesale (`Foo = eng.Foo` in basic's and
+				// lang's aliases.go), and the left side of that spec is an
+				// unqualified Ident spelled exactly like the wrapper — so
+				// counting it marks every re-exported func "used" and leaves
+				// the genuinely-uncalled wrappers as uncovered bodies. Walk
+				// the parts that can REFERENCE, never the naming parts.
+				switch d := n.(type) {
+				case *ast.ValueSpec:
+					if d.Type != nil {
+						ast.Inspect(d.Type, visit)
+					}
+					for _, v := range d.Values {
+						ast.Inspect(v, visit)
+					}
+					return false
+				case *ast.TypeSpec:
+					ast.Inspect(d.Type, visit)
+					return false
+				case *ast.FuncDecl:
+					if d.Recv != nil {
+						ast.Inspect(d.Recv, visit)
+					}
+					ast.Inspect(d.Type, visit)
+					if d.Body != nil {
+						ast.Inspect(d.Body, visit)
+					}
+					return false
+				case *ast.Field:
+					if d.Type != nil {
+						ast.Inspect(d.Type, visit)
+					}
 					return false
 				}
 				if id, ok := n.(*ast.Ident); ok {
 					used[id.Name] = true
 				}
 				return true
-			})
+			}
+			ast.Inspect(f, visit)
 			return nil
 		})
 		if walkErr != nil {
 			// An unreadable consumer tree means the "is it called?" answer
 			// is unknown; treat every func as USED so nothing is demoted to
-			// a re-export on incomplete evidence.
-			return map[string]bool{}
+			// a re-export on incomplete evidence. Not an ignored failure —
+			// the empty set IS the conservative answer.
+			return map[string]bool{}, nil
 		}
 	}
 	cold := map[string]bool{}
 	cfg := &packages.Config{Mode: packages.NeedTypes | packages.NeedName, Dir: dir}
 	pkgs, err := packages.Load(cfg, ".")
-	if err != nil || len(pkgs) == 0 {
-		return cold
+	if err != nil {
+		return nil, fmt.Errorf("load %s: %w", dir, err)
+	}
+	if len(pkgs) == 0 {
+		return nil, fmt.Errorf("load %s: no packages", dir)
 	}
 	scope := pkgs[0].Types.Scope()
 	for _, name := range scope.Names() {
@@ -129,20 +168,20 @@ func coldSet(dir, out, qual string) map[string]bool {
 			cold[name] = true
 		}
 	}
-	return cold
+	return cold, nil
 }
 
-func facadeGen(coreDir, out, qual string, mutable, cold map[string]bool) {
+func facadeGen(coreDir, out, qual string, mutable, cold map[string]bool) error {
 	cfg := &packages.Config{
 		Mode: packages.NeedTypes | packages.NeedName,
 		Dir:  coreDir,
 	}
 	pkgs, err := packages.Load(cfg, ".")
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("load %s: %w", coreDir, err)
 	}
 	if packages.PrintErrors(pkgs) > 0 {
-		os.Exit(1)
+		return fmt.Errorf("load %s: package has type errors", coreDir)
 	}
 	pkg := pkgs[0].Types
 	scope := pkg.Scope()
@@ -215,6 +254,7 @@ import (
 	"context"
 	"io"
 	"math/big"
+	"regexp"
 	"time"
 
 	check "github.com/boru-lang/boru/check/go"
@@ -253,12 +293,13 @@ var (
 	}
 	b.WriteString(strings.Join(funcs, "\n\n") + "\n")
 	if err := os.WriteFile(out, []byte(b.String()), 0o644); err != nil {
-		panic(err)
+		return fmt.Errorf("write %s: %w", out, err)
 	}
 	fmt.Printf("facade: %d types, %d consts, %d vars, %d funcs\n", len(types_), len(consts), len(vars), len(funcs))
 	for _, s := range skipped {
 		fmt.Println("FACADE-SKIP", s)
 	}
+	return nil
 }
 
 func usesUnexported(sig *types.Signature) bool {

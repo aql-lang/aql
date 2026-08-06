@@ -23,12 +23,12 @@ type edit struct {
 	repl       string
 }
 
-func demethod(dir string, specs []string) {
+func demethod(dir string, specs []string) error {
 	want := map[string]map[string]bool{} // recv type name -> method name
 	for _, s := range specs {
 		parts := strings.SplitN(s, ".", 2)
 		if len(parts) != 2 {
-			panic("bad spec " + s)
+			return fmt.Errorf("bad spec %q: want Recv.Method", s)
 		}
 		if want[parts[0]] == nil {
 			want[parts[0]] = map[string]bool{}
@@ -44,10 +44,10 @@ func demethod(dir string, specs []string) {
 	}
 	pkgs, err := packages.Load(cfg, ".")
 	if err != nil {
-		panic(err)
+		return fmt.Errorf("load %s: %w", dir, err)
 	}
 	if packages.PrintErrors(pkgs) > 0 {
-		os.Exit(1)
+		return fmt.Errorf("load %s: package has type errors", dir)
 	}
 
 	// collect target *types.Func objects (from any of the package variants)
@@ -76,8 +76,7 @@ func demethod(dir string, specs []string) {
 	}
 	for _, s := range specs {
 		if !byName[s] {
-			fmt.Fprintf(os.Stderr, "NOT FOUND: %s\n", s)
-			os.Exit(1)
+			return fmt.Errorf("no such method: %s", s)
 		}
 	}
 	isTarget := func(o types.Object) bool {
@@ -99,16 +98,16 @@ func demethod(dir string, specs []string) {
 		edits[p1.Filename] = append(edits[p1.Filename], edit{p1.Offset, p2.Offset, repl})
 	}
 	src := map[string][]byte{}
-	readSrc := func(fn string) []byte {
+	readSrc := func(fn string) ([]byte, error) {
 		if b, ok := src[fn]; ok {
-			return b
+			return b, nil
 		}
 		b, err := os.ReadFile(fn)
 		if err != nil {
-			panic(err)
+			return nil, fmt.Errorf("read %s: %w", fn, err)
 		}
 		src[fn] = b
-		return b
+		return b, nil
 	}
 
 	seenFile := map[string]bool{}
@@ -120,6 +119,13 @@ func demethod(dir string, specs []string) {
 				continue
 			}
 			seenFile[fn] = true
+			// Read once per file: every offset-slicing site below needs the
+			// bytes, and the ast.Inspect callback has no way to report a
+			// failure of its own.
+			b, err := readSrc(fn)
+			if err != nil {
+				return err
+			}
 			// 1. rewrite decls
 			for _, d := range f.Decls {
 				fd, ok := d.(*ast.FuncDecl)
@@ -130,7 +136,6 @@ func demethod(dir string, specs []string) {
 				if obj == nil || !isTarget(obj) {
 					continue
 				}
-				b := readSrc(fn)
 				recvField := fd.Recv.List[0]
 				p1 := fset.Position(fd.Recv.Opening).Offset
 				p2 := fset.Position(fd.Recv.Closing).Offset
@@ -161,7 +166,6 @@ func demethod(dir string, specs []string) {
 				if obj == nil || !isTarget(obj) {
 					return true
 				}
-				b := readSrc(fn)
 				recvText := string(b[fset.Position(sel.X.Pos()).Offset:fset.Position(sel.X.End()).Offset])
 				sep := ""
 				if len(call.Args) > 0 {
@@ -177,14 +181,18 @@ func demethod(dir string, specs []string) {
 	}
 
 	for fn, es := range edits {
-		b := readSrc(fn)
+		b, err := readSrc(fn)
+		if err != nil {
+			return err
+		}
 		sort.Slice(es, func(i, j int) bool { return es[i].start > es[j].start })
 		for _, e := range es {
 			b = append(b[:e.start], append([]byte(e.repl), b[e.end:]...)...)
 		}
 		if err := os.WriteFile(fn, b, 0o644); err != nil {
-			panic(err)
+			return fmt.Errorf("write %s: %w", fn, err)
 		}
 		fmt.Printf("rewrote %s (%d edits)\n", fn, len(es))
 	}
+	return nil
 }
