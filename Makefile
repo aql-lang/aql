@@ -213,13 +213,27 @@ bench:
 # ratchet (design/ENG-COVERAGE-PARITY.0.md; Go statements ≡ TS lines,
 # both measured by the engine's OWN suite): raise TS_GATE_LINES as
 # coverage grows towards the 100% target; never lower it.
-TS_GATE_LINES ?= 97
+#
+# The denominator is SOURCE ONLY. node:test instruments every file it loads,
+# which includes the *.test.ts files themselves; counting those made the gate
+# measure its own test code. That is not the Go metric — `go test -coverpkg`
+# never counts _test.go statements — so the parity equivalence (Go statements
+# ≡ TS lines) only holds with the exclusion below.
+#
+# RE-BASED 97 -> 96 when the exclusion landed, for the same reason
+# ENG_GATE_FLOOR re-based at the four-piece cut: the measurement UNIVERSE
+# changed, so the old number is not comparable. Measured both ways on the same
+# commit: 97.06% with test files counted (which is what let the 97 floor pass),
+# 96.80% source-only. The floor tracks the source-only figure from here and
+# ratchets up as before — never down.
+TS_GATE_LINES ?= 96
 test-ts:
 	@echo "==> typecheck eng/ts"
 	cd eng/ts && npx tsc
-	@echo "==> test eng/ts (line-coverage floor $(TS_GATE_LINES)%)"
+	@echo "==> test eng/ts (source line-coverage floor $(TS_GATE_LINES)%)"
 	cd eng/ts && node --test --experimental-strip-types --no-warnings \
 	  --experimental-test-coverage --test-coverage-lines=$(TS_GATE_LINES) \
+	  --test-coverage-exclude='**/*.test.ts' \
 	  'src/**/*.test.ts'
 
 # ---- cross-engine differential -----------------------------------------
