@@ -96,3 +96,18 @@ firstq ( quote [ 1 addq 2 ] )	1	first element of the quoted list is the integer 
 # 6. Nested lists at end-of-Run.		
 [ [ 1 addq 2 ] ]	[[3]]	outer list residual evaluates; inner list also evaluates (via sub-engine running over outer's elements)
 [ [ 1 ] [ 2 ] ]	[[1] [2]]	pure-literal inner lists pass through
+#
+# --- def binding and fn-param inertness (the binding-inertness contract) ---
+# `def NAME [list]` evaluates the list VALUE at binding (like every plain
+# arg slot); the reference then pushes inert data. A LIST passed to an fn
+# param is quoted at frame binding ("treated as data values, not expanded
+# as code bodies" — core_helpers.go), and the flag survives the return.
+def b [ 1 2 ] b	[1 2]	plain def binds the evaluated list; the reference is inert data
+def b [ 1 2 ] b lengthq	2	the bound list is a data value the next word consumes
+def b [ 1 addq 2 ] b	[3]	the eval-list runs at def time and binds the collected [3]
+def b [ 1 2 ] b get 0	1	indexing the def-resolved list
+def b [ 1 2 ] do b	1 2	do splices the bound data list as a code body on request
+def f (fn [ [ x:List ] [ List ] [ x ] ]) f [ 1 2 ]	(quote [1 2])	a list param is quoted at binding; the flag survives the return
+def f (fn [ [ x:List ] [ List ] [ x ] ]) (f [ 1 2 ]) lengthq	2	the quoted return is still a list value for the next word
+def f (fn [ [ x:Any ] [ Any ] [ x ] ]) f [ 1 2 ]	(quote [1 2])	Any-typed params quote list args the same way
+def f (fn [ [ x:List ] [ Integer ] [ x lengthq ] ]) f [ 1 2 ]	2	the quoted param stays operable inside the body

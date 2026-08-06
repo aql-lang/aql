@@ -641,3 +641,71 @@ oracle keeps them honest.
    literal matcher builds finished eng Values inside the lexer
    (`xml_literal.go:16-19`), so extraction re-plumbs that pipeline
    too.
+
+## 8A. Open-question outcomes (maintainer direction, 2026-08-04)
+
+The §8 questions were settled — or scoped to a decision — when the
+middle component landed (ADR-013, the `basic/go` module):
+
+1. **Component name — settled: `basic`.** The §5 middle component is
+   `basic/go` (`github.com/boru-lang/boru/basic/go`), its charter
+   widened beyond types to the fundamental words (stack, definition,
+   control-flow, type-generics). ADR-013 records the layering
+   `eng ← basic ← lang ← cmd` as hard dependency rules.
+
+2. **Matrix/Tensor residence — settled by the maintainer: they stay
+   module-owned.** Tensor and Matrix are types exported by the
+   `boru:matrix` module — that is where they live. No move; the
+   global FixedID range 2000-2999 remains theirs, delivered by
+   `BuildMatrixModule` (the Time pattern: a module-owned family, no
+   component relocation).
+
+3. **The reverse audit (eng → basic) — landed for the Micron family
+   (2026-08-04, follow-up maintainer instruction); `core_xml.go`
+   stays.** The §4 forward moves all landed first (Time family,
+   Bytes, Patrun/Pid/Service → `basic`; Module and KeyVal → eng as
+   `builtinDecls` entries with their FixedIDs and EXPLICIT
+   external-band Ranks, so every pre-move ordering result is
+   preserved while the string probes in `carrier.go` /
+   `callable_words.go` are deleted). The Micron move then ran the
+   prerequisites it needed as capability seams, all inside eng:
+
+   - **Identity stays kernel-declared** (the Resource/Entity
+     precedent): builtinDecls keeps the family's paths, FixedIDs,
+     and positional Ranks, so ordering and the wire format are
+     untouched and no explicit-Rank registration API was needed.
+     The sealed payloads (`MicronTypeInfo` / `MicronPayload` /
+     `PathonPayload`), their accessors, Pathon's construction
+     plumbing (`MakePathon`, `NewPathonFromString` — a host API),
+     and the generic check-dedupe helpers stay in eng
+     (`micron_kernel.go`, `core_make.go`, `check.go`).
+   - **The `-on` naming rule became the `SubtypeNamer` Behavior
+     capability** (rule 5): the four bind sites in `core_type.go` /
+     `define_type.go` consult `validateSubtypeNameFor` generically;
+     the rule's implementation rides the family Behavior in basic.
+   - **Typed-def minting asks `MicronSubtypeMinter`**: InstallType's
+     MicronTypeInfo arm mints under the body's parent and takes the
+     subtype Behavior from the root Behavior's hook instead of
+     naming `micronBehavior`.
+   - **The family Ideal moved out of `registerKernelIdeals`**:
+     `basic.InstallMicronIdeals` registers the full descriptor per
+     registry — lang's `Register`, module sub-registries
+     (`Modules.InitFunc`), and the engspec fixture set install it
+     the way they install the other fixture providers.
+     `MakeScalarHandler` reaches the family through the generic
+     Ideal dispatch (and the 3-arg opts form now threads its
+     registry instead of passing nil).
+   - **The display backstop renders through a bridge**
+     (`RegisterMicronRenderBridge`, the `RegisterBytesBridge`
+     shape); with no content layer linked the arm falls through to
+     the generic rendering.
+   - **The corpus did not move**: the kernel spec runner registers
+     `basic.InstallMicronIdeals` alongside its hand-rolled fixture
+     words, so `eng/spec`'s micron rows run unchanged, and the
+     cross-engine differential (and `eng/ts`, untouched) keeps the
+     same row stream.
+
+   `iso4217.go` travelled with Qion. `core_xml.go` remains kernel:
+   the Xml TYPE is parser-emitted (rule 1) and kernel spec rows pin
+   XML rendering alongside the List/Map render behaviors it
+   mirrors, so the Behavior stays with them.

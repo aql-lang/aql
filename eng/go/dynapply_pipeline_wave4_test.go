@@ -283,7 +283,7 @@ func TestCompiledMapResidual(t *testing.T) {
 	}, "{k:9}")
 }
 
-// --- loop-body list assembly (recordMakeListInner) --------------------------------------
+// --- loop-body list assembly (RecordMakeListInner) --------------------------------------
 
 func TestCompiledLoopBodyListArg(t *testing.T) {
 	// A computed list consumed by clen INSIDE a loop body re-assembles
@@ -409,44 +409,26 @@ func TestInvokeClosureRawTokens(t *testing.T) {
 
 func TestIsAppliableFnShapes(t *testing.T) {
 	fn := NewFunction(FnDefInfo{Name: "f"})
-	if !isAppliableFn(fn) {
+	if !IsAppliableFn(fn) {
 		t.Error("Function value not appliable")
 	}
-	if isAppliableFn(NewInteger(1)) {
+	if IsAppliableFn(NewInteger(1)) {
 		t.Error("integer appliable")
 	}
 	carrier := NewCarrier(TFunction)
-	if !isAppliableFn(carrier) {
+	if !IsAppliableFn(carrier) {
 		t.Error("Function-typed carrier not appliable")
 	}
-	if !isFnTypedCarrier(carrier) {
+	if !IsFnTypedCarrier(carrier) {
 		t.Error("Function carrier not fn-typed")
 	}
-	if isFnTypedCarrier(NewCarrier(TInteger)) {
+	if IsFnTypedCarrier(NewCarrier(TInteger)) {
 		t.Error("Integer carrier fn-typed")
 	}
-	if !isFnValueResidual(NewFunction(FnDefInfo{Name: "g"})) {
+	if !IsFnValueResidual(NewFunction(FnDefInfo{Name: "g"})) {
 		t.Error("FnDef value not a fn residual")
 	}
-	if isFnValueResidual(NewString("s")) {
+	if IsFnValueResidual(NewString("s")) {
 		t.Error("string a fn residual")
-	}
-}
-
-func TestAnyDynamicTailHelpers(t *testing.T) {
-	dyn := NewDynamicCarrier(TAny)
-	static := NewInteger(1)
-	if anyDynamicTail([]Value{dyn, static}) {
-		t.Error("static tail read as dynamic")
-	}
-	if !anyDynamicTail([]Value{static, dyn}) {
-		t.Error("dynamic tail missed")
-	}
-	fnv := NewFunction(FnDefInfo{Name: "f"})
-	if !anyFnOrDynamicTail([]Value{static, fnv}) {
-		t.Error("fn tail missed")
-	}
-	if anyFnOrDynamicTail([]Value{fnv, static}) {
-		t.Error("leading fn read as tail")
 	}
 }

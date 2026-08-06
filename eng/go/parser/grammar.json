@@ -1,0 +1,50 @@
+{
+  "schema": 1,
+  "comment": "The declarative boru grammar — the single source both parser twins load (Go embeds this file; eng/ts reads it relatively). Tokens: fixed tokens carry their source text; matcher-produced tokens (no text) are minted by name and filled by the custom lex matchers. Edits: rule-spec amendments applied in order; each alternate is the tabnas AltSpec data (s: token-name sequences, p: push rule, r: replace rule, b: backtrack count) plus either a `text` shorthand (the action emits that unquoted Text marker as the node) or named `a`/`c` hooks bound from the host language's table. Registration order is load-bearing on both sides — do not reorder.",
+  "tokens": [
+    { "name": "OP", "text": "(" },
+    { "name": "CP", "text": ")" },
+    { "name": "DT", "text": "." },
+    { "name": "SC", "text": ";" },
+    { "name": "QM", "text": "?" },
+    { "name": "BG", "text": "!" },
+    { "name": "PI", "text": "|" },
+    { "name": "AR", "text": "=>" },
+    { "name": "BT", "text": "`" },
+    { "name": "IS", "text": "${" },
+    { "name": "TL" },
+    { "name": "LA", "text": "<" },
+    { "name": "RA", "text": ">" },
+    { "name": "ML" },
+    { "name": "XML" }
+  ],
+  "edits": [
+    {
+      "rule": "val",
+      "op": "prependOpen",
+      "comment": "Value-open extensions: minilang literals, paren groups, XML literals, template strings, and the structural marker tokens the converter folds (design/XML-LITERAL.0.md par.3; ADR-012 rule 3).",
+      "alts": [
+        { "s": [["ML"]], "a": "minilangNode" },
+        { "s": [["OP"]], "p": "paren" },
+        { "s": [["LA"]], "p": "xml" },
+        { "s": [["BT"]], "p": "interp" },
+        { "s": [["CP"]], "text": ")" },
+        { "s": [["SC"]], "text": "end" },
+        { "s": [["QM"]], "text": "?" },
+        { "s": [["BG"]], "text": "!" },
+        { "s": [["PI"]], "text": "|" },
+        { "s": [["AR"]], "a": "arrowTag" },
+        { "s": [["DT"]], "text": "." }
+      ]
+    },
+    {
+      "rule": "val",
+      "op": "prependClose",
+      "comment": "Dot-chain continuation in map-pair-value position: fold the receiver plus the trailing `.`/`!.` chain into a paren group (see the dotchain rule).",
+      "alts": [
+        { "s": [["DT"]], "c": "inPairValue", "p": "dotchain", "b": 1 },
+        { "s": [["BG"], ["DT"]], "c": "inPairValue", "p": "dotchain", "b": 2 }
+      ]
+    }
+  ]
+}

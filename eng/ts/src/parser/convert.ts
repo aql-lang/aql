@@ -228,6 +228,10 @@ function goQuote(s: string): string {
 // per-parse tracker live in nodes.ts).
 function enterDepth(d: ParseDepth): void {
   d.cur++
+  // Provably unreachable backstop: checkSourceNesting refuses at the
+  // TS-safe 500 bound before any converter can recurse this deep (the
+  // Go twin's 10,000 guard is live because Go has no prescan).
+  /* node:coverage ignore next 6 */
   if (d.cur > MAX_PARSE_NESTING_DEPTH) {
     throw new BoruError(
       'evaluation_limit',

@@ -26,7 +26,7 @@ func TestValueHasSentinelCoverage(t *testing.T) {
 		{"list containing a fn value", NewList([]Value{NewFunction(FnDefInfo{Signatures: []Signature{{Impl: Boru([]Value{brk})}}})}), false},
 	}
 	for _, c := range cases {
-		if got := bodyHasSentinel(c.v); got != c.want {
+		if got := BodyHasSentinel(c.v); got != c.want {
 			t.Errorf("%s: bodyHasSentinel = %v, want %v", c.name, got, c.want)
 		}
 	}

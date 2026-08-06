@@ -73,8 +73,11 @@ import (
 // gate tolerated them because extra entries only made it more permissive.
 // The blank import of lang/go/native is what registers the language layer's
 // codes — the enumeration is per-build by design (see eng/go/errorcodes.go),
-// so the gate has to link the layers it means to check.
-var codeSourceRoots = []string{"eng/go", "lang/go"}
+// so the gate has to link the layers it means to check. `basic/go` carries
+// the fundamental words' minting sites (def / if / case / fn / var / gen …)
+// since the ADR-013 layering split; `core/go` carries the kernel sites that
+// moved with the interpreter-core cut (design/ENG-FOUR-PIECE.0.md Stage 4).
+var codeSourceRoots = []string{"core/go", "check/go", "compiler/go", "eng/go", "basic/go", "lang/go"}
 
 // codeMintPatterns match every shape that ATTACHES an error code to an
 // error or a diagnostic. Capture group 1 is the code.
@@ -149,6 +152,16 @@ func TestEveryAttachedCodeLiteralIsWellFormed(t *testing.T) {
 				strings.HasSuffix(path, "_test.go") {
 				return nil
 			}
+			// eng/go/specfix is TEST SCAFFOLDING that happens to live as a
+			// real package (the standalone corpus lanes and the engspec
+			// harness share it): its fixture words mint harness-local codes
+			// (fn_invalid_spec — mirrored verbatim by the TS fixture,
+			// eng/ts/src/spec-fixture.ts) that are not language dispatch
+			// contracts, so they stay out of the enumeration the same way
+			// cmd/go's LSP protocol strings do (see codeSourceRoots).
+			if strings.Contains(filepath.ToSlash(path), "/specfix/") {
+				return nil
+			}
 			src, err := os.ReadFile(path)
 			if err != nil {
 				return err
@@ -199,6 +212,16 @@ func mintableCodes(t *testing.T) map[string]string {
 			}
 			if d.IsDir() || !strings.HasSuffix(path, ".go") ||
 				strings.HasSuffix(path, "_test.go") {
+				return nil
+			}
+			// eng/go/specfix is TEST SCAFFOLDING that happens to live as a
+			// real package (the standalone corpus lanes and the engspec
+			// harness share it): its fixture words mint harness-local codes
+			// (fn_invalid_spec — mirrored verbatim by the TS fixture,
+			// eng/ts/src/spec-fixture.ts) that are not language dispatch
+			// contracts, so they stay out of the enumeration the same way
+			// cmd/go's LSP protocol strings do (see codeSourceRoots).
+			if strings.Contains(filepath.ToSlash(path), "/specfix/") {
 				return nil
 			}
 			src, err := os.ReadFile(path)

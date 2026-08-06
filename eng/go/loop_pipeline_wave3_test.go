@@ -52,7 +52,7 @@ func cforRun(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]Value,
 // cforReturns is the check-mode analysis + loop recording (the
 // forCarrierAnalyse shape, counted form only).
 func cforReturns(args []Value, r *Registry) []Value {
-	es := r.Check.Recorder()
+	es, _ := r.Check.Recorder().(*EmitState)
 	body := args[len(args)-1]
 	iter := NewCarrier(TInteger)
 	cv := args[0]
@@ -393,23 +393,3 @@ func TestLoopSignatureErrorMentionsShape(t *testing.T) {
 }
 
 // --- emit checkpoint/rollback ------------------------------------------------
-
-func TestEmitCheckpointRollback(t *testing.T) {
-	es := NewEmitState()
-	cp := es.Checkpoint()
-	// Grow the const/type/interned pools after the checkpoint...
-	es.intern(NewInteger(424242))
-	es.internType(NewTypeLiteral(TInteger))
-	if len(es.consts) != cp.consts+1 || len(es.types) != cp.types+1 {
-		t.Fatalf("pools did not grow: consts=%d types=%d", len(es.consts), len(es.types))
-	}
-	// ...then roll back: the pools trim to the checkpoint.
-	es.Rollback(cp)
-	if len(es.consts) != cp.consts || len(es.types) != cp.types || es.seq != cp.seq {
-		t.Errorf("rollback did not restore: consts=%d types=%d seq=%d", len(es.consts), len(es.types), es.seq)
-	}
-	// Nil-safety on both.
-	var nilES *EmitState
-	_ = nilES.Checkpoint()
-	nilES.Rollback(cp)
-}

@@ -31,60 +31,6 @@ import (
 //     "drop" overflow policy per spawn (SERVICES.0.md §8.1).
 //   - `receive` is consume-front + patrun dispatch (no selective receive).
 
-// TPid is Ideal/Pid — the opaque process handle. FixedID 5007 — the next
-// UNUSED value in the 5000–9999 kernel/language band (5000–5002 live,
-// 5003/5005/5006 retired and not reusable, 5004 Patrun). See
-// eng/go/CLAUDE.md "FixedID Allocation".
-var TPid = registerPidType()
-
-func registerPidType() *eng.Type {
-	t, err := eng.Builtin.RegisterType("Ideal/Pid", 5007, eng.OwnerKernel, pidBehavior{})
-	if err != nil {
-		recordTypeInitErr(fmt.Errorf("native_process: register Ideal/Pid: %w", err))
-	}
-	return t
-}
-
-// NewPid wraps a process handle as a boru Pid value.
-func NewPid(p *eng.Process) Value {
-	return eng.NewExtension(TPid, p)
-}
-
-// PidProcess unwraps a Pid value to its process — the hook a Go
-// driver uses to deliver messages to a boru-held pid (boru:tui's
-// deliver-events). The bool is false for non-Pid values.
-func PidProcess(v Value) (*eng.Process, bool) {
-	return asPid(v)
-}
-
-func asPid(v Value) (*eng.Process, bool) {
-	ep, ok := v.Data.(eng.ExtensionPayload)
-	if !ok {
-		return nil, false
-	}
-	p, ok := ep.Body.(*eng.Process)
-	return p, ok
-}
-
-// pidBehavior renders a Pid as "Pid<P_…>"; identity is the process handle.
-type pidBehavior struct{}
-
-func (pidBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
-func (pidBehavior) Format(v Value) string {
-	if p, ok := asPid(v); ok {
-		return "Pid<" + p.ID + ">"
-	}
-	return "Pid"
-}
-func (pidBehavior) Equal(a, b Value) bool {
-	pa, oka := asPid(a)
-	pb, okb := asPid(b)
-	if !oka || !okb {
-		return DefaultBehavior.Equal(a, b)
-	}
-	return pa == pb
-}
-
 // processNatives installs the process words.
 var processNatives = []NativeFunc{
 	{
@@ -215,7 +161,7 @@ func spawnHandler(args []Value, _ map[string]Value, _ []Value, r *Registry) ([]V
 	var compiledRef *eng.CompiledFnRef
 	if fd, ok := args[0].Data.(eng.FnDefInfo); ok {
 		for i := range fd.Signatures {
-			if ref := fd.Signatures[i].CompiledRef(); ref != nil && ref.Prog != nil {
+			if ref := eng.CompiledRef(&fd.Signatures[i]); ref != nil && ref.Prog != nil {
 				compiledRef = ref
 				break
 			}

@@ -384,7 +384,7 @@ func TestSeam7CallDynamicMixedUnderflow(t *testing.T) {
 // --- isDelegationFnDef / tryNativeFnApply (direct) -----------------------
 
 func TestSeam7IsDelegationFnDefEmpty(t *testing.T) {
-	if isDelegationFnDef(FnDefInfo{}) {
+	if IsDelegationFnDef(FnDefInfo{}) {
 		t.Error("sig-less FnDefInfo reported as delegation")
 	}
 }
@@ -528,7 +528,7 @@ func seam7DelegReg(t *testing.T) (r *Registry, inc, fail Value) {
 
 func TestSeam7DelegationApplySuccess(t *testing.T) {
 	r, inc, _ := seam7DelegReg(t)
-	if !isDelegationFnDef(inc.Data.(FnDefInfo)) {
+	if !IsDelegationFnDef(inc.Data.(FnDefInfo)) {
 		t.Fatal("cinc wrapper is not recognised as a delegation fn")
 	}
 	vc := seam7VC(r)
@@ -648,7 +648,7 @@ func seam7UserFail(r *Registry) Value {
 func TestSeam7IslandApplyErrorArms(t *testing.T) {
 	r, _, _ := seam7DelegReg(t)
 	fn := seam7UserFail(r)
-	if isDelegationFnDef(fn.Data.(FnDefInfo)) {
+	if IsDelegationFnDef(fn.Data.(FnDefInfo)) {
 		t.Fatal("user fail fn should NOT be a trivial delegation")
 	}
 	vc := seam7VC(r)

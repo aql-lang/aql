@@ -1,7 +1,7 @@
 .PHONY: all build install test test-race test-ts vet fmt fmt-docs lint vuln bench clean cover cover-gate cover-profile cover-check cover-html cover-html-open \
-        spec-gen spec-test \
+        spec-gen spec-test cover-gate-eng cover-gate-check cover-gate-compiler facades \
         verify-bytecode fuzz-bytecode status \
-        publish publish-eng publish-lang publish-cmd release tags \
+        publish publish-eng publish-basic publish-lang publish-cmd release tags \
         viz viz-tools viz-clean viz-index \
         viz-callvis viz-callgraph viz-goda viz-godepgraph \
         viz-gomod viz-golds viz-plantuml viz-list viz-modgraph
@@ -10,7 +10,10 @@
 #
 # The repo is a collection of Go modules:
 #
-#   eng/go         — the kernel (parser, dispatch, types, signatures)
+#   core/go        — the pure-interpreter kernel (values, types, dispatch, step loop)
+#   eng/go         — check + compiler + VM over core, plus the parser bridge
+#   basic/go       — the base language layer (fundamental words +
+#                    predefined content types; depends on eng only)
 #   lang/go        — the language layer (native_* words, engine shim)
 #   cmd/go         — the boru CLI command
 #   calc/go        — small calculator built directly on eng (learning example)
@@ -22,8 +25,9 @@
 # here fan out across the set so the whole codebase can be built,
 # tested, visualised, and coverage-tracked from one place.
 
-# Order matters for `make test`: eng must build before lang, etc.
-MODULES := eng/go lang/go cmd/go calc/go wpg test/go test/solardemo
+# Order matters for `make test`: eng must build before basic, basic
+# before lang, etc.
+MODULES := core/go check/go compiler/go eng/go basic/go lang/go cmd/go calc/go wpg test/go test/solardemo
 
 all: test
 
@@ -91,6 +95,28 @@ spec-gen:
 spec-test:
 	cd test/go && go test -tags specgen -timeout 40m ./specgen/
 
+# ---- generated module facades ------------------------------------------
+#
+# eng/go/aliases_{core,check,compiler}.go re-export the lower modules'
+# surface under package eng so downstream code (basic, lang, cmd, calc,
+# wpg, the harnesses) compiles unchanged across the four-piece split
+# (design/ENG-FOUR-PIECE.0.md). They are GENERATED — regenerate after any
+# change to an exported symbol in core/check/compiler, then re-run the
+# checklist. The generator also derives the "cold" set (funcs no consumer
+# calls through the facade) and emits those as func-value re-exports, so
+# no wrapper body sits permanently uncovered under the ADR-008 gate.
+#
+# piecetool lives in its own module (tools/piecetool) that is NOT in
+# MODULES: it is a developer tool, so its statements stay out of the
+# repo-wide 100% coverage universe the shipped modules must satisfy.
+facades:
+	@cd tools/piecetool && go build -o "$(abspath $(COVER_DIR))/piecetool" .
+	@"$(abspath $(COVER_DIR))/piecetool" -facade core/go eng/go/aliases_core.go core
+	@"$(abspath $(COVER_DIR))/piecetool" -facade check/go eng/go/aliases_check.go check
+	@"$(abspath $(COVER_DIR))/piecetool" -facade compiler/go eng/go/aliases_compiler.go compiler
+	@cd eng/go && gofmt -w aliases_core.go aliases_check.go aliases_compiler.go
+	@echo "==> facades regenerated (run make fmt && make test)"
+
 # ---- per-module fan-out -------------------------------------------------
 
 test:
@@ -112,7 +138,7 @@ test:
 # exception: its 5941-row differential is single-threaded per row (race adds no
 # value) and times out under the detector, so only its concurrency rows run
 # here.
-RACE_MODULES := eng/go lang/go
+RACE_MODULES := core/go check/go compiler/go eng/go basic/go lang/go
 test-race:
 	@set -e; for m in $(RACE_MODULES); do \
 	  echo "==> test-race $$m"; \
@@ -183,11 +209,18 @@ bench:
 # @voxgig/borueng mirrors the Go kernel and must stay row-for-row green on
 # the SAME eng/spec/*.tsv corpus as the Go engspec runner. Runs the
 # typechecker then the node:test suite (Node >= 24, type-stripping).
+# The line-coverage threshold is the TS half of the standalone-parity
+# ratchet (design/ENG-COVERAGE-PARITY.0.md; Go statements ≡ TS lines,
+# both measured by the engine's OWN suite): raise TS_GATE_LINES as
+# coverage grows towards the 100% target; never lower it.
+TS_GATE_LINES ?= 97
 test-ts:
 	@echo "==> typecheck eng/ts"
 	cd eng/ts && npx tsc
-	@echo "==> test eng/ts"
-	cd eng/ts && node --test --experimental-strip-types --no-warnings 'src/**/*.test.ts'
+	@echo "==> test eng/ts (line-coverage floor $(TS_GATE_LINES)%)"
+	cd eng/ts && node --test --experimental-strip-types --no-warnings \
+	  --experimental-test-coverage --test-coverage-lines=$(TS_GATE_LINES) \
+	  'src/**/*.test.ts'
 
 # ---- cross-engine differential -----------------------------------------
 #
@@ -282,24 +315,28 @@ clean:
 # release uses one matched version:
 #
 #   make publish V=0.2.0
-#     -> tags eng/go/v0.2.0, lang/go/v0.2.0, cmd/go/v0.2.0
-#     -> bumps lang/go's eng require, cmd/go's eng+lang requires
+#     -> tags eng/go/v0.2.0, basic/go/v0.2.0, lang/go/v0.2.0, cmd/go/v0.2.0
+#     -> bumps basic/go's eng require, lang/go's eng+basic requires,
+#        cmd/go's eng+lang requires
 #
 # Per-module publish (independent versions):
-#   make publish-eng  V=0.2.0
-#   make publish-lang V=0.2.0 ENG=0.1.0
-#   make publish-cmd  V=0.2.0 ENG=0.1.0 LANG=0.2.0
+#   make publish-eng   V=0.2.0
+#   make publish-basic V=0.2.0 ENG=0.1.0
+#   make publish-lang  V=0.2.0 ENG=0.1.0 BASIC=0.2.0
+#   make publish-cmd   V=0.2.0 ENG=0.1.0 LANG=0.2.0
 #
 # After publishing, consumers install with:
 #   go install github.com/boru-lang/boru/cmd/go/boru@v0.2.0   # boru CLI
 #   go get     github.com/boru-lang/boru/lang/go@v0.2.0  # lang library
+#   go get     github.com/boru-lang/boru/basic/go@v0.2.0 # basic layer
 #   go get     github.com/boru-lang/boru/eng/go@v0.2.0   # eng kernel
 
 publish:
 	@test -n "$(V)" || (echo "Usage: make publish V=x.y.z" && exit 1)
-	$(MAKE) -C eng/go  publish V=$(V)
-	$(MAKE) -C lang/go publish V=$(V) ENG=$(V)
-	$(MAKE) -C cmd/go  publish V=$(V) ENG=$(V) LANG=$(V)
+	$(MAKE) -C eng/go   publish V=$(V)
+	$(MAKE) -C basic/go publish V=$(V) ENG=$(V)
+	$(MAKE) -C lang/go  publish V=$(V) ENG=$(V) BASIC=$(V)
+	$(MAKE) -C cmd/go   publish V=$(V) ENG=$(V) LANG=$(V)
 
 # release — the versioned release flow (see RELEASING.md and scripts/release.sh):
 # runs the full test suite, then auto-bumps the PATCH of eng/go, lang/go and
@@ -312,17 +349,21 @@ release:
 publish-eng:
 	$(MAKE) -C eng/go publish V=$(V)
 
+publish-basic:
+	$(MAKE) -C basic/go publish V=$(V) ENG=$(ENG)
+
 publish-lang:
-	$(MAKE) -C lang/go publish V=$(V) ENG=$(ENG)
+	$(MAKE) -C lang/go publish V=$(V) ENG=$(ENG) BASIC=$(BASIC)
 
 publish-cmd:
 	$(MAKE) -C cmd/go publish V=$(V) ENG=$(ENG) LANG=$(LANG)
 
 # Show recent tags for every published module (newest first).
 tags:
-	@echo "==> eng/go";  git tag -l 'eng/go/v*'  --sort=-version:refname | head
-	@echo "==> lang/go"; git tag -l 'lang/go/v*' --sort=-version:refname | head
-	@echo "==> cmd/go";  git tag -l 'cmd/go/v*'  --sort=-version:refname | head
+	@echo "==> eng/go";   git tag -l 'eng/go/v*'   --sort=-version:refname | head
+	@echo "==> basic/go"; git tag -l 'basic/go/v*' --sort=-version:refname | head
+	@echo "==> lang/go";  git tag -l 'lang/go/v*'  --sort=-version:refname | head
+	@echo "==> cmd/go";   git tag -l 'cmd/go/v*'   --sort=-version:refname | head
 
 # ---- coverage ----------------------------------------------------------
 #
@@ -391,6 +432,85 @@ cover-gate:
 	@$(MAKE) --no-print-directory cover-profile
 	@$(MAKE) --no-print-directory cover-check
 	@echo "==> cover-gate done"
+
+# cover-gate-eng — the STANDALONE kernel gate (design/ENG-COVERAGE-
+# PARITY.0.md): eng/go profiled by ITS OWN suite only (the standalone
+# corpus lanes in eng/go/corpus_standalone_test.go plus the unit/seam
+# tests), no other module's tests contributing. The floor is a RATCHET
+# towards the 100% target: raise it as standalone coverage grows;
+# never lower it. The TS twin's ratchet lives in `make test-ts`
+# (node --test line-coverage threshold) — the two gates are the parity
+# pair (Go statements ≡ TS lines).
+#
+# RE-BASED at the four-piece Stage 4 cut (design/ENG-FOUR-PIECE.0.md):
+# the interpreter core's statements and ~120 kernel test files moved to
+# core/go, taking their incidental eng-side coverage with them. The
+# measurement universe changed — the pre-cut floor of 89 is not
+# comparable — so the floor restarts at the post-cut measured value
+# (84.6%) and the pair (cover-gate-eng, cover-gate-core) together
+# supersedes the old single gate. Both ratchet independently to 100.
+ENG_GATE_FLOOR ?= 84
+# The standalone profile deliberately uses the .engout extension so the
+# merged gate's cover-check (which globs $(COVER_DIR)/*.xout) NEVER
+# merges it: the two gates run on different schedules, and a stale
+# standalone profile carrying old line addresses poisons the merged
+# view with phantom uncovered blocks after any source edit.
+cover-gate-eng:
+	@mkdir -p $(COVER_DIR)
+	@rm -f $(COVER_DIR)/eng_standalone.xout
+	@echo "==> cover-gate-eng (standalone, floor $(ENG_GATE_FLOOR)%)"
+	@( cd eng/go && go test -timeout 25m \
+	  -coverpkg=github.com/boru-lang/boru/eng/go/... \
+	  -coverprofile=$(abspath $(COVER_DIR))/eng_standalone.engout ./... > $(abspath $(COVER_DIR))/eng_standalone.log 2>&1 ) \
+	  || { echo "==> cover-gate-eng test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/eng_standalone.log; exit 1; }
+	@cd test/go && go run ./covergate -threshold $(ENG_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/eng_standalone.engout
+
+
+# cover-gate-core — the CORE kernel's own gate (design/ENG-FOUR-PIECE.0.md
+# Stage 5): core/go profiled by ITS OWN suite alone. The floor is a
+# RATCHET towards 100%: raise it as core-standalone coverage grows;
+# never lower it. Same .engout-family isolation as the eng gate so the
+# merged cover-check never merges a stale standalone profile.
+CORE_GATE_FLOOR ?= 100
+cover-gate-core:
+	@mkdir -p $(COVER_DIR)
+	@rm -f $(COVER_DIR)/core_standalone.engout
+	@echo "==> cover-gate-core (standalone, floor $(CORE_GATE_FLOOR)%)"
+	@( cd core/go && go test -timeout 25m \
+	  -coverpkg=github.com/boru-lang/boru/core/go/... \
+	  -coverprofile=$(abspath $(COVER_DIR))/core_standalone.engout ./... > $(abspath $(COVER_DIR))/core_standalone.log 2>&1 ) \
+	  || { echo "==> cover-gate-core test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/core_standalone.log; exit 1; }
+	@cd test/go && go run ./covergate -threshold $(CORE_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/core_standalone.engout
+
+# cover-gate-check / cover-gate-compiler — the standalone gates for the
+# two middle pieces (design/ENG-FOUR-PIECE.0.md Stage 6), the twins of
+# cover-gate-core and cover-gate-eng: each module profiled by ITS OWN
+# suite alone. Both floors are RATCHETS toward 100 — raise them in the
+# same change that raises coverage, never lower them. The merged
+# repo-wide ADR-008 gate (make cover-gate) stays the 100% contract; these
+# measure how much each piece proves on its own.
+CHECK_GATE_FLOOR ?= 56
+COMPILER_GATE_FLOOR ?= 62
+
+cover-gate-check:
+	@mkdir -p $(COVER_DIR)
+	@rm -f $(COVER_DIR)/check_standalone.engout
+	@echo "==> cover-gate-check (standalone, floor $(CHECK_GATE_FLOOR)%)"
+	@( cd check/go && go test -timeout 25m \
+	  -coverpkg=github.com/boru-lang/boru/check/go/... \
+	  -coverprofile=$(abspath $(COVER_DIR))/check_standalone.engout ./... > $(abspath $(COVER_DIR))/check_standalone.log 2>&1 ) \
+	  || { echo "==> cover-gate-check test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/check_standalone.log; exit 1; }
+	@cd test/go && go run ./covergate -threshold $(CHECK_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/check_standalone.engout
+
+cover-gate-compiler:
+	@mkdir -p $(COVER_DIR)
+	@rm -f $(COVER_DIR)/compiler_standalone.engout
+	@echo "==> cover-gate-compiler (standalone, floor $(COMPILER_GATE_FLOOR)%)"
+	@( cd compiler/go && go test -timeout 25m \
+	  -coverpkg=github.com/boru-lang/boru/compiler/go/... \
+	  -coverprofile=$(abspath $(COVER_DIR))/compiler_standalone.engout ./... > $(abspath $(COVER_DIR))/compiler_standalone.log 2>&1 ) \
+	  || { echo "==> cover-gate-compiler test run FAILED:"; tail -30 $(abspath $(COVER_DIR))/compiler_standalone.log; exit 1; }
+	@cd test/go && go run ./covergate -threshold $(COMPILER_GATE_FLOOR) -root $(CURDIR) $(abspath $(COVER_DIR))/compiler_standalone.engout
 
 cover:
 	@mkdir -p $(COVER_DIR)

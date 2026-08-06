@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // TestXmlWave3AcceptedForms pins well-formed variants of the embedded XML

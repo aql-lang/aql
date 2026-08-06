@@ -1,6 +1,6 @@
 package stackform
 
-import "github.com/boru-lang/boru/eng/go"
+import eng "github.com/boru-lang/boru/eng/go"
 
 // Walk visits every Op in the StackForm, descending into Quote
 // bodies. `visit` returns false to stop the walk early.

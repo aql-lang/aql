@@ -15,10 +15,13 @@ require (
 	github.com/voxgig/model/go v0.1.3-0.20260622172642-ee04212555c1
 	golang.org/x/crypto v0.32.0
 	golang.org/x/sys v0.38.0
-	golang.org/x/term v0.28.0
+	golang.org/x/term v0.36.0
 )
 
-require github.com/fsnotify/fsnotify v1.10.1 // indirect
+require (
+	github.com/boru-lang/boru/basic/go v0.0.0 // indirect
+	github.com/fsnotify/fsnotify v1.10.1 // indirect
+)
 
 require (
 	github.com/antchfx/xpath v1.3.6 // indirect
@@ -83,4 +86,12 @@ require (
 
 replace github.com/boru-lang/boru/eng/go => ../../eng/go
 
+replace github.com/boru-lang/boru/basic/go => ../../basic/go
+
 replace github.com/boru-lang/boru/lang/go => ../../lang/go
+
+replace github.com/boru-lang/boru/core/go => ../../core/go
+
+replace github.com/boru-lang/boru/check/go => ../../check/go
+
+replace github.com/boru-lang/boru/compiler/go => ../../compiler/go

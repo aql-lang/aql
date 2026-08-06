@@ -1,5 +1,10 @@
 package eng
 
+import (
+	compiler "github.com/boru-lang/boru/compiler/go"
+	core "github.com/boru-lang/boru/core/go"
+)
+
 // callDynMixedFromMark executes OpCallDynMixedFromMark — the variadic-region
 // verbatim window (plan Phase 5, L-DO part 2b): island stack[mark:] through
 // the SAME re-step machinery as CALL_DYNAMIC_MIXED, with the window width
@@ -12,14 +17,14 @@ package eng
 // vmMark; the mark-window island needs the vmContext (its island runner), so
 // it dispatches here — keeping the run loop's mark case a single line under
 // the cognitive-complexity cap.
-func (vc *vmContext) vmMarkOp(reg *Registry, op Opcode, marks []int, stack []Value, curDebug []SrcPos, pc int) ([]int, []Value, error) {
-	if op == OpCallDynMixedFromMark {
+func (vc *vmContext) vmMarkOp(reg *core.Registry, op compiler.Opcode, marks []int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]int, []core.Value, error) {
+	if op == compiler.OpCallDynMixedFromMark {
 		return vc.callDynMixedFromMark(reg, marks, stack, curDebug, pc)
 	}
 	return vmMark(op, marks, stack, curDebug, pc)
 }
 
-func (vc *vmContext) callDynMixedFromMark(reg *Registry, marks []int, stack []Value, curDebug []SrcPos, pc int) ([]int, []Value, error) {
+func (vc *vmContext) callDynMixedFromMark(reg *core.Registry, marks []int, stack []core.Value, curDebug []core.SrcPos, pc int) ([]int, []core.Value, error) {
 	if len(marks) == 0 {
 		return nil, nil, vmErrAt(curDebug, pc, "CALL_DYN_MIXED_FROM_MARK with no open mark")
 	}

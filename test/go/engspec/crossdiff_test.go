@@ -31,6 +31,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	basic "github.com/boru-lang/boru/basic/go"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -41,6 +42,7 @@ import (
 
 	eng "github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/specfix"
 )
 
 // crossRec is one engine's result for one corpus row.
@@ -74,7 +76,8 @@ func goValueResult(input string) (bool, string) {
 	if err != nil {
 		return false, "UNEXPECTED:newRegistry"
 	}
-	registerSpecWords(r)
+	specfix.RegisterSpecWords(r)
+	basic.InstallMicronIdeals(r)
 	r.InitRootContext()
 	out, runErr := eng.NewTop(r).Run(values)
 	if runErr != nil {

@@ -10,10 +10,10 @@ import (
 
 	"github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/specfix"
 	lang "github.com/boru-lang/boru/lang/go"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/test/go/specrunner"
 )
 
 // The shared frontier TSV corpus (lang/spec/frontier/*.tsv — the flat corpus
@@ -97,7 +97,7 @@ func runFrontierInterp(input string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	specrunner.RegisterQFixtures(reg)
+	specfix.RegisterQFixtures(reg)
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
 	native.SetHostClock(reg, specClock)

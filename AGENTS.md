@@ -152,7 +152,11 @@ A few rules from those guides that bite hardest when missed:
 |------|------------|
 | `cmd/go/` | The `boru` CLI / REPL (and the `help`/`describe` plumbing). |
 | `lang/go/` | The language layer: public `lang` API + the `native` word library + loadable `modules`. |
+| `basic/go/` | The base language layer: fundamental words (stack, definition, control, type-generics) + predefined content types. Depends on eng only (ADR-013). |
 | `eng/go/` | Engine kernel, jsonic parser, kernel spec runner. |
+| `compiler/go/` | The compiler module: the emit recorder, lowering, and the bytecode emitter. Builds on check and core; eng runs its bytecode. |
+| `check/go/` | The type-checker module: the analysis pass, carriers, and check-mode diagnostics. Builds on core alone. |
+| `core/go/` | The interpreter core module: values, types, matching, the step loop. Standalone (apd only); eng builds on it. |
 | `lang/spec/` | The executable language spec (TSV files). |
 | `calc/go/` | A small calculator built on `eng` (learning example). |
 | `wpg/` | The wasm web playground. |

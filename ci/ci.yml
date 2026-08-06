@@ -39,7 +39,9 @@ jobs:
         run: make vet
 
       - name: Lint assertions
-        run: make -C lang/go lint-assertions
+        run: |
+          make -C basic/go lint-assertions
+          make -C lang/go lint-assertions
 
       - name: Lint (golangci-lint, all modules)
         run: make lint
@@ -56,6 +58,36 @@ jobs:
       # step ran the gate (design/COVERAGE-ALLOWLIST.10.md).
       - name: Cover gate (ADR-008)
         run: make cover-gate
+
+      # The STANDALONE kernel gates: each of the four pieces covered by
+      # its OWN suite alone (no cross-suite merge). core is already at
+      # the 100% contract; check, compiler and eng carry ratchet floors
+      # that only ever rise. See design/ENG-FOUR-PIECE.0.md and
+      # design/ENG-COVERAGE-PARITY.0.md.
+      - name: Cover gate — core standalone (100%)
+        run: make cover-gate-core
+
+      - name: Cover gate — check standalone (ratchet)
+        run: make cover-gate-check
+
+      - name: Cover gate — compiler standalone (ratchet)
+        run: make cover-gate-compiler
+
+      - name: Cover gate — eng standalone (ratchet)
+        run: make cover-gate-eng
+
+      # The TS half of the standalone-parity pair: typecheck + the full
+      # eng/ts suite with its line-coverage ratchet (Go statements ≡ TS
+      # lines). Node >= 24 per eng/ts engines; npm ci restores the
+      # pinned toolchain.
+      - name: Test eng/ts (typecheck + coverage ratchet)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Run eng/ts gate
+        run: |
+          ( cd eng/ts && npm ci )
+          make test-ts
 
       # The project knowledge graph (kg/) must stay in sync with the
       # sources that generate it: type-check the boru pipeline, run its

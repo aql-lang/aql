@@ -64,7 +64,7 @@ func codecRef(t *testing.T, v native.Value) *eng.CompiledFnRef {
 		t.Fatalf("codec slot is not a fn value: %v", v)
 	}
 	for i := range fd.Signatures {
-		if ref := fd.Signatures[i].CompiledRef(); ref != nil {
+		if ref := eng.CompiledRef(&fd.Signatures[i]); ref != nil {
 			return ref
 		}
 	}

@@ -9,6 +9,16 @@ For language-layer conventions (jsonic integration, registry
 stacks, helper API discipline, panic prevention) see
 `lang/go/CLAUDE.md`.
 
+The kernel is now FOUR modules on a hard chain: `core/go` (the
+interpreter core) → `check/go` (the type checker / analysis pass)
+→ `compiler/go` (the recorder, lowering, the bytecode emitter) →
+`eng/go` (the bytecode VM, the parser bridge, and the generated
+facades over the other three). The check-mode and compile/emit
+machinery documented below therefore LIVES in `check/go` and
+`compiler/go` (design/ENG-FOUR-PIECE.0.md), and each has its own
+module guide; this file stays the single home of the shared kernel
+conventions, which apply to all four modules verbatim.
+
 ## Single-Pass Parsing (CRITICAL)
 
 boru source is converted from jsonic items to engine values in
@@ -340,10 +350,13 @@ Types with semantics the kernel can't infer (time formatting,
 matrix rendering, predicate-type matching, refinement-type
 matching, plugin types) supply a custom Behavior:
 
-- `lang/go/native/native_temporal.go` — Time family Behaviors.
-- `lang/go/native/native_misc.go` — Timeout/Interval Behaviors.
+- `basic/go/native_temporal.go` — Time family Behaviors.
+- `basic/go/types_timer.go` — Timeout/Interval Behaviors.
+- `basic/go/types_bytes.go` — Bytes Behavior (render/order/size/bake).
+- `basic/go/types_handles.go` — Patrun/Pid/Service Behavior shells
+  (the matcher/service state stays in lang and implements the
+  delegation interfaces there).
 - `lang/go/modules/matrix.go` — Tensor/Matrix/Vector Behavior.
-- `lang/go/native/fetch.go` — Fetch family (no custom Behavior; uses Default).
 
 The dispatch in `Value.String` walks the Parent chain so
 descendants of a type with a custom Behavior inherit it — e.g.
@@ -387,14 +400,26 @@ constants) **iff** one of these holds:
    — was collapsed into `Function`; ADR-011.)
 4. It is a structural type used by `make`/`record`/`class`:
    `Record`, `Options`, `Table`, `ChildType`, `Class`,
-   `Resource`, `Store`, `Error`, and the `Scalar/Micron`
-   structured-scalar family (`Micron`, `Pathon`, `Emailon`,
-   `Urlon` — micron.go owns their Ideal, Behavior, and the
-   `-on` naming rule). This grouping is about **kernel
+   `Resource`, `Store`, `Error`. This grouping is about **kernel
    residence**, not `make`-constructibility: `Store` and
    `Error` are deliberately not `make` targets (NUR018) —
    Stores are minted by the context machinery and Errors by
    `raise`.
+
+   The `Scalar/Micron` structured-scalar family splits across the
+   boundary (the Resource/Entity precedent): the IDENTITIES —
+   paths, FixedIDs, positional Ranks, interval labels — stay in
+   `builtinDecls`, together with the sealed payloads, their
+   accessors, and Pathon's construction plumbing
+   (`micron_kernel.go`, `core_make.go`), while the CONTENT — the
+   twelve leaf validators, the literal grammars, the family
+   Behavior/Comparer, `iso4217.go`, and the `-on` naming rule —
+   lives in `basic/go/micron.go` and plugs back in through
+   capabilities (rule 5): the family Ideal is registered per
+   registry by `basic.InstallMicronIdeals`, the `-on` rule rides
+   the `SubtypeNamer` Behavior capability, typed-def minting asks
+   `MicronSubtypeMinter`, and the display backstop renders through
+   `RegisterMicronRenderBridge`. The kernel names no Micron leaf.
 
 Everything else — domain types like `Date`, `DateTime`,
 `CalDuration`, `Matrix`, `Timeout`, `Interval`,
@@ -472,11 +497,15 @@ Documented per-module ranges (see
 ```
    1-99       eng kernel builtins
    100-999    reserved for future eng-internal builtins
-   1000-1999  lang/go/native — Scalar/Time family
-   2000-2999  lang/go/modules/matrix
-   3000-3999  lang/go/native/fetch
-   4000-4999  lang/go/native — Timeout, Interval
-   5000-9999  reserved for future kernel/language allocations
+   1000-1999  basic/go — Scalar/Time family (1000-1003), Scalar/Bytes (1009)
+   2000-2999  boru:matrix (module-owned; delivered by BuildMatrixModule)
+   3000-3999  Fetch family (retired to boru:net module mints)
+   4000-4999  Timeout, Interval (retired to boru:time-util module mints)
+   5000-9999  kernel/language band: Module 5000 + KeyVal 5002 (eng
+              builtinDecls, explicit external-band Ranks),
+              MiniLangCompiled 5003 (boru:minilang),
+              Patrun 5004 / Pid 5007 / Service 5008 (basic/go);
+              5001, 5005, 5006 retired — never recycled
    10000+     host / third-party plugin types
 ```
 
@@ -704,3 +733,19 @@ asymmetry that `design/REFINE-NEWTYPE-VS-SUBSET.10.md` removed.
 Builtins and objects keep `DefaultBehavior` / nominal object matching,
 where `v.Is(t)` coincides with `v.Parent.ConformsTo(t)` on concrete
 values — so routing returns through `v.Is` left them unchanged.
+
+## Standalone coverage parity with eng/ts
+
+The kernel proves itself with its OWN suite on both implementations —
+see `design/ENG-COVERAGE-PARITY.0.md` for the contract. Two ratchet
+gates enforce it (floors only rise, target 100% on both):
+
+- `make cover-gate-eng` — eng/go by eng/go's tests alone
+  (`ENG_GATE_FLOOR`), on top of the repo-wide merged ADR-008 gate.
+- `make test-ts` — the eng/ts suite with its line-coverage floor
+  (`TS_GATE_LINES`); Go statements ≡ TS lines is the parity metric.
+
+The standalone corpus lanes live in `corpus_standalone_test.go`
+(interpret / check / compile-or-fallback over `eng/spec` with the
+`specfix` fixtures); when you raise standalone coverage, raise the
+matching floor in the same PR.

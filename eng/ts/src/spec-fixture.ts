@@ -47,15 +47,8 @@ import {
   builtinRank,
   type FnParam,
   type FnSig,
-  type InterpSegment,
-  type WordInfo,
-  type XmlChildTmpl,
-  type XmlElement,
-  type XmlTmpl,
   newAtom,
   newBoolean,
-  newConstrainedWord,
-  newDecimal,
   newDynamicCarrier,
   newDisjunct,
   newEnum,
@@ -63,7 +56,6 @@ import {
   newFnUndef,
   newFloat,
   newInspect,
-  newInterpString,
   newInteger,
   newList,
   newMap,
@@ -72,13 +64,9 @@ import {
   newNone,
   newClassType,
   ClassTypeInfo,
-  newParenExpr,
   newString,
-  newTypedList,
-  newTypedMap,
-  newXml,
-  newXmlInterp,
   OrderedMap,
+  newErrorValue,
   newTypeLiteral,
   newWord,
   withQuoted,
@@ -684,7 +672,16 @@ function registerSpecWords(r: Registry): void {
         // `do [1 addq 2]` compiles inline with no do-event, exactly like a
         // fn body. In value mode the same handler just runs the body.
         runInCheckMode: true,
-        handler: (args) => new Engine(r).run([...args[0]!.asList()]),
+        // The escape hatch: a body error surfaces as an Error VALUE
+        // rather than propagating — the Go fixture (and basic's
+        // production do) is the reference.
+        handler: (args) => {
+          try {
+            return new Engine(r).run([...args[0]!.asList()])
+          } catch (e) {
+            return [newErrorValue(e instanceof Error ? stripCodePrefix(e.message) : String(e))]
+          }
+        },
       },
     ],
   })
@@ -720,20 +717,26 @@ function registerSpecWords(r: Registry): void {
   // get / set — kernel-container signatures (the handlers cover the
   // Node map/list case; their full sig list is what inspect renders).
   // Mirrors registerEngSpecStorage.
+  // stripCodePrefix drops the `[boru/<code>]: ` render prefix so a
+  // caught Error VALUE carries the bare detail, matching Go's
+  // ErrorInfo.Message.
+  const stripCodePrefix = (msg: string): string => msg.replace(/^\[[^\]]*\]:\s*/, '')
+  // Misses return the None TYPE LITERAL, not the none value — the Go
+  // fixture (registerEngSpecStorage) is the reference.
   const getNodeH: Handler = (args) => {
     const key = args[0]!
     const c = args[1]!
     if (key.vType.matches(TInteger) && Array.isArray(c.data)) {
       const i = Number(key.asInteger())
       const lst = c.asList()
-      return [i >= 0 && i < lst.length ? lst[i]! : newNone()]
+      return [i >= 0 && i < lst.length ? lst[i]! : newTypeLiteral(TNone)]
     }
     if (c.data instanceof OrderedMap) {
       const k = key.vType.equal(TAtom) ? key.asAtom() : key.asString()
       const v = c.asMap().get(k)
-      return [v ?? newNone()]
+      return [v ?? newTypeLiteral(TNone)]
     }
-    return [newNone()]
+    return [newTypeLiteral(TNone)]
   }
   reg({
     name: 'get',
@@ -742,9 +745,9 @@ function registerSpecWords(r: Registry): void {
       { args: [TString, TNode], barrierPos: 1, handler: getNodeH },
       { args: [TInteger, TClass], barrierPos: 1, handler: getNodeH },
       { args: [TInteger, TNode], barrierPos: 1, handler: getNodeH },
-      { args: [TAtom, TClass], barrierPos: 1, handler: getNodeH },
-      { args: [TAtom, TNode], barrierPos: 1, handler: getNodeH },
-      { args: [TAny, TNone], barrierPos: 1, handler: () => [newNone()] },
+      { args: [TAtom, TClass], barrierPos: 1, quoteArgs: new Set([0]), handler: getNodeH },
+      { args: [TAtom, TNode], barrierPos: 1, quoteArgs: new Set([0]), handler: getNodeH },
+      { args: [TAny, TNone], barrierPos: 1, handler: () => [newTypeLiteral(TNone)] },
     ],
   })
   reg({
@@ -772,8 +775,19 @@ function registerSpecWords(r: Registry): void {
           // refine Record [ {k:T} … ] merges the pair-maps into a
           // record-shape map.
           if (base.data === null && base.vType.leaf() === 'Record' && Array.isArray(args[1]!.data)) {
+            const elems = args[1]!.asList()
+            if (0 === elems.length) {
+              throw new BoruError('type_error', 'record: list must have at least one field', 'refine')
+            }
             const om = new OrderedMap()
-            for (const pair of args[1]!.asList()) {
+            for (const pair of elems) {
+              if (!(pair.data instanceof OrderedMap)) {
+                throw new BoruError(
+                  'type_error',
+                  `record: each element must be a pair (map), got ${pair.toString()}`,
+                  'refine',
+                )
+              }
               const m = pair.asMap()
               for (const k of m.keys()) om.set(k, m.get(k)!)
             }
@@ -792,7 +806,25 @@ function registerSpecWords(r: Registry): void {
           return unsupportedMake('refine')
         },
       },
-      { args: [TAny], handler: () => unsupportedMake('refine') },
+      {
+        args: [TAny],
+        runInCheckMode: true,
+        // The 1-arg bare form: return the base type unchanged (the
+        // paired def mints the fresh subtype) — the Go fixture's
+        // refineBareCtorH is the reference. A non-type argument is the
+        // same error, message-for-message.
+        handler: (args) => {
+          const base = args[0]!
+          const isTypeBody =
+            base.data === null ||
+            base.data instanceof ClassTypeInfo ||
+            (base.data instanceof OrderedMap && base.vType.leaf() === 'Map')
+          if (!isTypeBody) {
+            throw new BoruError('type_error', `refine: argument must be a type, got ${base.toString()}`, 'refine')
+          }
+          return [base]
+        },
+      },
     ],
   })
 
@@ -992,7 +1024,10 @@ function registerSpecWords(r: Registry): void {
             if (bound !== undefined) constraint = bound
             else if (bt !== undefined) constraint = newTypeLiteral(bt)
           }
-          const value = args[1]!
+          // The value slot resolves like every dispatched arg (Go's
+          // typedDef receives the resolved value): `def x:null null`
+          // must bind the atom, not the raw word.
+          const value = resolveWordsDeep(args[1]!, registry)
           if (
             enforceTypeConstraint(
               registry,
@@ -1013,9 +1048,12 @@ function registerSpecWords(r: Registry): void {
         // Name-binding form. The Atom quoteArgs slot captures the name
         // word (a constrained `NAME:[…]` word is kept intact so its
         // constraint survives — see the matcher's quoteArgs capture).
+        // The value slot auto-evaluates like every plain arg (Go's
+        // plainDef sig declares no NoEvalArgs): `def b [1 addq 2]`
+        // binds the collected [3], and `def b [notaword]` errors at
+        // def time, not at first reference.
         args: [TAtom, TAny],
         quoteArgs: new Set([0]),
-        noEvalArgs: new Set([1]),
         // Bind in check mode too, so later references resolve (otherwise
         // every `def x … x` cascades into undefined_word) — the binding is
         // a prerequisite for analysis, exactly as in Go. The bound carrier
@@ -1042,61 +1080,11 @@ function registerSpecWords(r: Registry): void {
           if (/^-?\d/.test(name)) {
             throw new BoruError('syntax_error', `invalid numeric literal: ${name}`, name)
           }
-          // Container-typed binding `def NAME:[…]` / `def NAME:{…}`: the
-          // tokenizer attached the constraint shape to the name word. The
-          // value must satisfy it, else def-time validation fails.
-          if (nameWord.constraint !== undefined) {
-            // Validate the constraint: interpret mode throws on violation,
-            // compile mode traps/refuses (see enforceTypeConstraint), pure
-            // check mode stays lenient.
-            if (
-              enforceTypeConstraint(
-                registry,
-                value,
-                nameWord.constraint,
-                `def ${name}: value ${value.toString()} does not satisfy ${nameWord.constraint.toString()}`,
-                name,
-              )
-            ) {
-              return []
-            }
-            // A typed-name binding stores the value as data — a plain
-            // list binds inert (non-splicing); `word` is needed to splice.
-            const bound =
-              value.vType.matches(TList) && Array.isArray(value.data) && !value.quoted
-                ? newList(value.asList(), { eval: false })
-                : value
-            registry.pushDef(name, bound)
-            return []
-          }
-          // Typed binding `def x:Type v`: the name carries a `:Constraint`
-          // suffix (a simple scalar type, a value pattern, or a bound
-          // type name). The value must satisfy the constraint.
-          const colon = name.indexOf(':')
-          if (colon > 0) {
-            const bindName = name.slice(0, colon)
-            const constraintStr = name.slice(colon + 1)
-            if (constraintStr !== '' && constraintStr[0] !== '{' && constraintStr[0] !== '[') {
-              const t = typeTable.get(constraintStr)
-              const constraint =
-                t !== undefined
-                  ? newTypeLiteral(t)
-                  : (registry.topOfDefStack(constraintStr) ?? atomicValue(constraintStr))
-              if (
-                enforceTypeConstraint(
-                  registry,
-                  value,
-                  constraint,
-                  `def ${bindName}: value ${value.toString()} does not satisfy ${constraintStr}`,
-                  bindName,
-                )
-              ) {
-                return []
-              }
-              registry.pushDef(bindName, value)
-              return []
-            }
-          }
+          // Colon-typed and container-typed names (`def x:5`,
+          // `def l:[:Integer]`) always arrive as MAP tokens (the
+          // tokenizer attaches the constraint as the map value), so
+          // they dispatch to the typed-name map sig above — this
+          // handler only ever sees plain names.
           // A capitalised name binding a class type stamps the struct
           // name onto it, so `inspect Name` reports struct:Name and a
           // child type can record `Class/Name` as its parent path.
@@ -1542,10 +1530,6 @@ function registerSpecWords(r: Registry): void {
 
 // ── Tokenizer ─────────────────────────────────────────────────────────────
 
-interface TokenStream {
-  s: string
-  i: number
-}
 
 function tokenize(s: string): Value[] {
   // The jsonic-based parser (src/parser) is the single parsing path —
@@ -1557,561 +1541,7 @@ function tokenize(s: string): Value[] {
   return parse(s)
 }
 
-function legacyTokenize(s: string): Value[] {
-  const stream: TokenStream = { s, i: 0 }
-  const result = readTokens(stream, null)
-  if (stream.i < stream.s.length) {
-    throw new Error(`tokenize: unexpected ']' at ${stream.i}`)
-  }
-  return result
-}
-void legacyTokenize
 
-/**
- * Read tokens from `stream` until end-of-string or the matching close
- * bracket `until` (the character `]` for list bodies). Returns the
- * collected Values. Lists nest recursively — `[ [ 1 ] 2 ]` becomes
- * a TList containing a TList of Integer(1) plus an Integer(2).
- */
-function readTokens(stream: TokenStream, until: ']' | null): Value[] {
-  const out: Value[] = []
-  while (stream.i < stream.s.length) {
-    while (stream.i < stream.s.length && (stream.s[stream.i] === ' ' || stream.s[stream.i] === '\t')) {
-      stream.i++
-    }
-    if (stream.i >= stream.s.length) break
-
-    // String literals. The eng/spec corpus uses single quotes (the
-    // canonical boru form); double quotes are also accepted. The closing
-    // quote must match the opener.
-    const quote = stream.s[stream.i]
-    if (quote === '"' || quote === "'") {
-      let j = stream.i + 1
-      while (j < stream.s.length && stream.s[j] !== quote) j++
-      if (j >= stream.s.length) throw new Error(`unterminated string at ${stream.i}`)
-      out.push(newString(stream.s.slice(stream.i + 1, j)))
-      stream.i = j + 1
-      continue
-    }
-
-    if (stream.s[stream.i] === '{') {
-      stream.i++
-      out.push(readMap(stream))
-      continue
-    }
-
-    // XML literal: `<tag …>…</tag>` or `<tag …/>`.
-    if (stream.s[stream.i] === '<' && /[A-Za-z]/.test(stream.s[stream.i + 1] ?? '')) {
-      out.push(parseXml(stream))
-      continue
-    }
-
-    // Backtick template string: `lit${expr}lit…` (holes and nested
-    // backticks balance).
-    if (stream.s[stream.i] === '`') {
-      const end = endOfBacktick(stream.s, stream.i)
-      out.push(parseBacktick(stream.s.slice(stream.i + 1, end - 1)))
-      stream.i = end
-      continue
-    }
-
-    // Structural delimiters are always their own token, even when not
-    // whitespace-separated (`[1 2 3]`, `${{a:1}}`).
-    const ch = stream.s[stream.i]!
-    if (ch === '[') {
-      stream.i++
-      out.push(makeListFromElems(readTokens(stream, ']')))
-      continue
-    }
-    if (ch === ']') {
-      if (until !== ']') {
-        throw new Error(`tokenize: unmatched ']' at ${stream.i}`)
-      }
-      stream.i++
-      return out
-    }
-    if (ch === '(' || ch === ')') {
-      out.push(newWord(ch))
-      stream.i++
-      continue
-    }
-    if (ch === '}') {
-      throw new Error(`tokenize: unmatched '}' at ${stream.i}`)
-    }
-
-    let j = stream.i
-    while (j < stream.s.length && !isTokenBoundary(stream.s[j]!)) j++
-    const tok = stream.s.slice(stream.i, j)
-    stream.i = j
-    // A binding name with a container constraint — `NAME:[…]` / `NAME:{…}`
-    // — tokenises as `NAME:` immediately abutting an opening bracket. The
-    // constraint shape rides along on the name word so `def` can validate.
-    if (tok.length > 1 && tok.endsWith(':') && (stream.s[stream.i] === '[' || stream.s[stream.i] === '{')) {
-      const open = stream.s[stream.i]!
-      stream.i++
-      const constraint = open === '[' ? makeListFromElems(readTokens(stream, ']')) : readMap(stream)
-      out.push(newConstrainedWord(tok.slice(0, -1), constraint))
-      continue
-    }
-    // `quote`/`inspect` capture the upcoming WORD lexically — the real
-    // parser hands them the source token before it becomes a boolean
-    // literal. So `true`/`false` immediately after one arrive as Words
-    // (`quote true` → true/q; `inspect true` → an unknown-word report),
-    // not the boolean value.
-    const prev = out[out.length - 1]
-    if (
-      (tok === 'true' || tok === 'false') &&
-      prev !== undefined &&
-      prev.isWord() &&
-      (prev.asWord().name === 'quote' || prev.asWord().name === 'inspect')
-    ) {
-      out.push(newWord(tok))
-      continue
-    }
-    out.push(atomicValue(tok))
-  }
-  if (until === ']') {
-    throw new Error(`tokenize: unterminated list literal '['`)
-  }
-  return out
-}
-
-// readMap parses a `{ key:value … }` map body. The opening `{` has
-// already been consumed. Keys run up to the `:`; the value immediately
-// following may itself be a string, list, map, or atomic token.
-function readMap(stream: TokenStream): Value {
-  const m = new OrderedMap()
-  const s = stream.s
-  let child: Value | undefined
-  for (;;) {
-    while (stream.i < s.length && (s[stream.i] === ' ' || s[stream.i] === '\t')) stream.i++
-    if (stream.i >= s.length) throw new Error(`tokenize: unterminated map literal '{'`)
-    if (s[stream.i] === '}') {
-      stream.i++
-      break
-    }
-    let k = stream.i
-    while (k < s.length && s[k] !== ':' && s[k] !== ' ' && s[k] !== '\t' && s[k] !== '}') k++
-    if (s[k] !== ':') throw new Error(`tokenize: map entry missing ':' at ${stream.i}`)
-    const key = s.slice(stream.i, k)
-    stream.i = k + 1 // consume ':'
-    const val = readMapValue(stream)
-    // An empty key (`{ :T }`) is the typed-map child annotation.
-    if (key === '') child = val
-    else m.set(key, val)
-  }
-  if (child !== undefined && m.size === 0) return newTypedMap(child)
-  return newMap(m)
-}
-
-// readXmlName reads an XML tag / attribute name.
-function readXmlName(stream: TokenStream): string {
-  const s = stream.s
-  let n = ''
-  while (stream.i < s.length && /[A-Za-z0-9_-]/.test(s[stream.i]!)) {
-    n += s[stream.i]
-    stream.i++
-  }
-  return n
-}
-
-// parseXml parses an XML literal starting at `<`, producing a static
-// Xml value, or an XmlInterp template when it contains ${} holes.
-function parseXml(stream: TokenStream): Value {
-  const holes = { has: false }
-  const tmpl = parseXmlTmpl(stream, holes)
-  return holes.has ? newXmlInterp(tmpl) : newXml(tmplToStatic(tmpl))
-}
-
-function tmplToStatic(t: XmlTmpl): XmlElement {
-  return {
-    tag: t.tag,
-    attrs: t.attrs.map((a) => ({
-      name: a.name,
-      value: a.segs.map((seg) => ('lit' in seg ? seg.lit : '')).join(''),
-    })),
-    children: t.children.map((c) => ('lit' in c ? c.lit : tmplToStatic((c as { elem: XmlTmpl }).elem))),
-  }
-}
-
-// readXmlHole consumes a `${ … }` hole and returns its tokens.
-function readXmlHole(stream: TokenStream): Value[] {
-  const s = stream.s
-  stream.i += 2 // consume '${'
-  let depth = 1
-  const start = stream.i
-  while (stream.i < s.length && depth > 0) {
-    const c = s[stream.i]
-    if (c === '{') depth++
-    else if (c === '}') {
-      depth--
-      if (depth === 0) break
-    }
-    stream.i++
-  }
-  if (stream.i >= s.length) throw new Error('xml: unterminated ${...} interpolation')
-  const inner = s.slice(start, stream.i)
-  stream.i++ // consume '}'
-  return tokenize(inner)
-}
-
-// parseXmlTmpl parses one element into a template, recording whether any
-// ${} hole appears. Attribute values must be quoted (or a bare ${});
-// closing tags must match.
-function parseXmlTmpl(stream: TokenStream, holes: { has: boolean }): XmlTmpl {
-  const s = stream.s
-  const skip = (): void => {
-    while (stream.i < s.length && (s[stream.i] === ' ' || s[stream.i] === '\t')) stream.i++
-  }
-  stream.i++ // consume '<'
-  const tag = readXmlName(stream)
-  if (tag === '') throw new Error('xml: expected tag name')
-  const attrs: { name: string; segs: InterpSegment[] }[] = []
-  for (;;) {
-    skip()
-    const c = s[stream.i]
-    if (c === '/' || c === '>') break
-    const name = readXmlName(stream)
-    if (name === '') throw new Error('xml: malformed element')
-    if (s[stream.i] !== '=') throw new Error(`xml: attribute "${name}" in <${tag}> must have a quoted value`)
-    stream.i++ // consume '='
-    const segs: InterpSegment[] = []
-    if (s[stream.i] === '"') {
-      stream.i++ // open quote
-      let lit = ''
-      while (stream.i < s.length && s[stream.i] !== '"') {
-        if (s[stream.i] === '$' && s[stream.i + 1] === '{') {
-          if (lit !== '') {
-            segs.push({ lit })
-            lit = ''
-          }
-          segs.push({ expr: readXmlHole(stream) })
-          holes.has = true
-        } else {
-          lit += s[stream.i]
-          stream.i++
-        }
-      }
-      if (stream.i >= s.length) throw new Error('xml: unterminated attribute')
-      stream.i++ // close quote
-      if (lit !== '' || segs.length === 0) segs.push({ lit })
-    } else if (s[stream.i] === '$' && s[stream.i + 1] === '{') {
-      segs.push({ expr: readXmlHole(stream) })
-      holes.has = true
-    } else {
-      throw new Error(`xml: attribute "${name}" in <${tag}> must have a quoted value`)
-    }
-    attrs.push({ name, segs })
-  }
-  if (s[stream.i] === '/') {
-    stream.i++
-    if (s[stream.i] !== '>') throw new Error('xml: expected >')
-    stream.i++
-    return { tag, attrs, children: [] }
-  }
-  stream.i++ // consume '>'
-  const children: XmlChildTmpl[] = []
-  for (;;) {
-    if (stream.i >= s.length) throw new Error(`xml: unterminated element <${tag}>`)
-    if (s[stream.i] === '<' && s[stream.i + 1] === '/') {
-      stream.i += 2
-      const close = readXmlName(stream)
-      if (s[stream.i] !== '>') throw new Error('xml: expected >')
-      stream.i++
-      if (close !== tag) throw new Error(`xml: mismatched closing tag </${close}> for <${tag}>`)
-      return { tag, attrs, children }
-    }
-    if (s[stream.i] === '<') {
-      children.push({ elem: parseXmlTmpl(stream, holes) })
-      continue
-    }
-    if (s[stream.i] === '$' && s[stream.i + 1] === '{') {
-      children.push({ expr: readXmlHole(stream) })
-      holes.has = true
-      continue
-    }
-    let t = ''
-    while (stream.i < s.length && s[stream.i] !== '<' && !(s[stream.i] === '$' && s[stream.i + 1] === '{')) {
-      t += s[stream.i]
-      stream.i++
-    }
-    children.push({ lit: t })
-  }
-}
-
-// A token ends at whitespace or any structural delimiter, so tight
-// forms like `[1 2 3]` and `${{a:1}}` tokenise correctly.
-function isTokenBoundary(c: string): boolean {
-  return (
-    c === ' ' ||
-    c === '\t' ||
-    c === '[' ||
-    c === ']' ||
-    c === '(' ||
-    c === ')' ||
-    c === '{' ||
-    c === '}' ||
-    c === '`'
-  )
-}
-
-// endOfBacktick returns the index just past the backtick that closes
-// the one opening at `start`, skipping over balanced ${…} holes (which
-// may themselves contain nested backticks).
-function endOfBacktick(s: string, start: number): number {
-  let i = start + 1
-  while (i < s.length) {
-    const c = s[i]
-    if (c === '`') return i + 1
-    if (c === '$' && s[i + 1] === '{') {
-      i = endOfBrace(s, i + 1)
-      continue
-    }
-    i++
-  }
-  throw new Error(`unterminated backtick at ${start}`)
-}
-
-// endOfBrace returns the index just past the `}` matching the `{` at i,
-// balancing nested braces and skipping nested backticks.
-function endOfBrace(s: string, i: number): number {
-  i++ // past '{'
-  let depth = 1
-  while (i < s.length && depth > 0) {
-    const c = s[i]
-    if (c === '{') depth++
-    else if (c === '}') depth--
-    else if (c === '`') {
-      i = endOfBacktick(s, i)
-      continue
-    }
-    i++
-  }
-  return i
-}
-
-// parseBacktick splits a backtick template into literal and ${expr}
-// segments (holes balance braces/backticks). With no interpolation it
-// is a plain string; otherwise an InterpString the engine evaluates.
-function parseBacktick(content: string): Value {
-  const segs: InterpSegment[] = []
-  let hasExpr = false
-  let i = 0
-  while (i < content.length) {
-    const dollar = content.indexOf('${', i)
-    if (dollar < 0) {
-      if (i < content.length) segs.push({ lit: content.slice(i) })
-      break
-    }
-    if (dollar > i) segs.push({ lit: content.slice(i, dollar) })
-    const close = endOfBrace(content, dollar + 1) // index past matching }
-    if (close > content.length) throw new Error(`unterminated \${ in backtick`)
-    segs.push({ expr: tokenize(content.slice(dollar + 2, close - 1)) })
-    hasExpr = true
-    i = close
-  }
-  if (!hasExpr) {
-    return newString(segs.map((s) => ('lit' in s ? s.lit : '')).join(''))
-  }
-  return newInterpString(segs)
-}
-
-// makeListFromElems builds a list value, detecting a leading `:T`
-// element as a typed-list child annotation (`[:Integer 1 2 3]`).
-function makeListFromElems(elems: Value[]): Value {
-  // A `:T` child annotation may appear anywhere in the list. `:Name` is
-  // one token; a container child (`:[…]` / `:{…}`) tokenises as a bare
-  // `:` followed by the container element.
-  for (let i = 0; i < elems.length; i++) {
-    const e = elems[i]!
-    if (!e.isWord()) continue
-    const nm = e.asWord().name
-    if (nm === ':' && i + 1 < elems.length) {
-      const child = elems[i + 1]!
-      const rest = elems.filter((_, j) => j !== i && j !== i + 1)
-      return newTypedList(child, rest)
-    }
-    if (nm.length > 1 && nm.startsWith(':')) {
-      const t = typeTable.get(nm.slice(1))
-      if (t !== undefined) {
-        const rest = elems.filter((_, j) => j !== i)
-        // A bare scalar child only RETAINS sibling values when it is the
-        // first element (`[:T v0 v1]` → a concrete typed list). A child
-        // annotation that appears after a value (`[v0 :T v1]`) gives
-        // plain typed-list semantics: the values are not retained, so
-        // the result is a bare (non-concrete) typed-list carrier.
-        // Parser quirk pinned by types.tsv L758 vs nodes.tsv L93.
-        return i === 0 ? newTypedList(newTypeLiteral(t), rest) : newTypedList(newTypeLiteral(t))
-      }
-    }
-  }
-  return newList(elems, { eval: true })
-}
-
-// readMapValue reads the value immediately after a map key's `:`.
-function readMapValue(stream: TokenStream): Value {
-  const s = stream.s
-  const c = s[stream.i]
-  if (c === '"' || c === "'") {
-    let j = stream.i + 1
-    while (j < s.length && s[j] !== c) j++
-    if (j >= s.length) throw new Error(`unterminated string at ${stream.i}`)
-    const str = newString(s.slice(stream.i + 1, j))
-    stream.i = j + 1
-    return str
-  }
-  if (c === '[') {
-    stream.i++
-    return makeListFromElems(readTokens(stream, ']'))
-  }
-  if (c === '{') {
-    stream.i++
-    return readMap(stream)
-  }
-  if (c === '(') {
-    // A parenthesised expression as a map value collapses to a single
-    // residual when the map is deep-evaluated (unlike a list value).
-    stream.i++
-    let depth = 1
-    const start = stream.i
-    while (stream.i < s.length && depth > 0) {
-      const ch = s[stream.i]
-      if (ch === '(') depth++
-      else if (ch === ')') {
-        depth--
-        if (depth === 0) break
-      }
-      stream.i++
-    }
-    const inner = s.slice(start, stream.i)
-    stream.i++ // consume ')'
-    return newParenExpr(tokenize(inner))
-  }
-  let j = stream.i
-  while (j < s.length && s[j] !== ' ' && s[j] !== '\t' && s[j] !== '}') j++
-  const tok = s.slice(stream.i, j)
-  stream.i = j
-  return atomicValue(tok)
-}
-
-// atomicValue converts one whitespace-delimited token (not a string,
-// list, or map) into a Value: booleans, none/null, numbers, bare
-// type-name → type literal, /q → atom, otherwise a word with modifiers.
-function atomicValue(tok: string): Value {
-  switch (tok) {
-    case 'true':
-      return newBoolean(true)
-    case 'false':
-      return newBoolean(false)
-    case 'none':
-      return newNone()
-    case 'null':
-      // `null` is the atom 'null' in boru source (the parser lexes the
-      // JSON null literal as an Atom), distinct from the `none` value.
-      return newAtom('null')
-  }
-  if (/^-?\d+$/.test(tok)) return newInteger(BigInt(tok))
-  if (/^-?\d+\.\d+$/.test(tok)) return newDecimal(Number.parseFloat(tok))
-  // /-suffix modifiers — /s, /f force stack/forward dispatch, /q makes
-  // an Atom, /N filters by arity. Mirrors parseWord in eng/parser.
-  const parsed = parseModifierSuffix(tok)
-  if (parsed.quote) return newAtom(parsed.name)
-  // A bare type-name word (Integer, List, None, Type, …) resolves to a
-  // type-literal value, mirroring the parser's TypeNameTable lookup.
-  if (parsed.name === tok) {
-    const t = typeTable.get(tok)
-    if (t !== undefined) return newTypeLiteral(t)
-  }
-  return newWordWithModifiers(parsed.name, parsed.forceStack, parsed.forceForward, parsed.argCount)
-}
-
-function newWordWithModifiers(
-  name: string,
-  forceStack: boolean,
-  forceForward: boolean,
-  argCount: number | undefined,
-): Value {
-  if (!forceStack && !forceForward && argCount === undefined) return newWord(name)
-  const wi: WordInfo = { name }
-  if (forceStack) wi.forceStack = true
-  if (forceForward) wi.forceForward = true
-  if (argCount !== undefined) wi.argCount = argCount
-  return new Value(TWord, wi)
-}
-
-type ModifierSuffix = {
-  name: string
-  forceStack: boolean
-  forceForward: boolean
-  quote: boolean
-  argCount: number | undefined
-}
-
-// parseModifierSuffix scans the trailing /-suffix on a word token.
-// Mirrors parseWord in eng/parser/parse.go: digits (argCount), 'f'
-// (forceForward), 's' (forceStack), 'q' (quote → Atom). Modifiers can
-// appear in any order; f/s are mutually exclusive; each letter at most
-// once; digits run contiguously. If the suffix is unrecognised or
-// malformed, the entire token is treated as a plain word.
-function parseModifierSuffix(tok: string): ModifierSuffix {
-  const idx = tok.lastIndexOf('/')
-  const noop: ModifierSuffix = {
-    name: tok,
-    forceStack: false,
-    forceForward: false,
-    quote: false,
-    argCount: undefined,
-  }
-  if (idx < 0 || idx >= tok.length - 1) return noop
-  const mod = tok.slice(idx + 1)
-  let forceStack = false
-  let forceForward = false
-  let quote = false
-  let seenDigits = false
-  let argCount: number | undefined
-  let valid = true
-  let i = 0
-  while (i < mod.length) {
-    const c = mod[i]!
-    if (c >= '0' && c <= '9') {
-      if (seenDigits) {
-        valid = false
-        break
-      }
-      let j = i
-      while (j < mod.length && mod[j]! >= '0' && mod[j]! <= '9') j++
-      argCount = Number.parseInt(mod.slice(i, j), 10)
-      seenDigits = true
-      i = j
-      continue
-    }
-    if (c === 'f') {
-      if (forceForward || forceStack) {
-        valid = false
-        break
-      }
-      forceForward = true
-    } else if (c === 's') {
-      if (forceForward || forceStack) {
-        valid = false
-        break
-      }
-      forceStack = true
-    } else if (c === 'q') {
-      if (quote) {
-        valid = false
-        break
-      }
-      quote = true
-    } else {
-      valid = false
-      break
-    }
-    i++
-  }
-  if (!valid) return noop
-  return { name: tok.slice(0, idx), forceStack, forceForward, quote, argCount }
-}
 
 // parseFnTriple parses one [params][returns][body] triple into an
 // FnSig. The named form has a params list (`[n:Integer ?]`); the flat

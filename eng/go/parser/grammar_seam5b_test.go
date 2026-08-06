@@ -12,7 +12,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 	jsonic "github.com/tabnas/jsonic/go"
 )
 
@@ -24,7 +24,7 @@ func s5beGrammar() (*jsonic.Jsonic, parserTokens) {
 		Map:   &jsonic.MapOptions{Child: boolPtr(true)},
 		Value: &jsonic.ValueOptions{Lex: boolPtr(false)},
 	})
-	t := setupBaseTokens(j)
+	t, _ := setupBaseTokens(j, loadDeclGrammar())
 	setupTemplateLiteralMatcher(j, t)
 	setupBigNumberMatcher(j, t)
 	setupMiniLitMatcher(j, t)

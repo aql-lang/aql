@@ -19,10 +19,10 @@ func TestBodyHasSentinelDeepArms(t *testing.T) {
 	}}})
 
 	// nil registry: no resolution possible — only the direct scan applies.
-	if bodyHasSentinelDeep(nil, NewList([]Value{NewWord("zzleak")})) {
+	if BodyHasSentinelDeep(nil, NewList([]Value{NewWord("zzleak")})) {
 		t.Error("nil registry: word must not resolve")
 	}
-	if !bodyHasSentinelDeep(nil, NewList([]Value{NewWord("break")})) {
+	if !BodyHasSentinelDeep(nil, NewList([]Value{NewWord("break")})) {
 		t.Error("nil registry: the direct scan must still see a bare break")
 	}
 
@@ -32,20 +32,20 @@ func TestBodyHasSentinelDeepArms(t *testing.T) {
 	}
 
 	// A constructed FnDefInfo payload IN the body scans its sig bodies.
-	if !bodyHasSentinelDeep(r, NewList([]Value{breakFn, NewInteger(1)})) {
+	if !BodyHasSentinelDeep(r, NewList([]Value{breakFn, NewInteger(1)})) {
 		t.Error("constructed breaking-fn payload in the body must leak")
 	}
-	if bodyHasSentinelDeep(r, NewList([]Value{cleanFn, NewInteger(1)})) {
+	if BodyHasSentinelDeep(r, NewList([]Value{cleanFn, NewInteger(1)})) {
 		t.Error("constructed sentinel-free fn payload must not leak")
 	}
 
 	// A def-BOUND fn value resolves through r.Defs.Top (not r.Lookup).
 	r.Defs.Push("zzleak", breakFn)
 	r.Defs.Push("zzclean", cleanFn)
-	if !bodyHasSentinelDeep(r, NewList([]Value{NewWord("zzleak"), NewInteger(1)})) {
+	if !BodyHasSentinelDeep(r, NewList([]Value{NewWord("zzleak"), NewInteger(1)})) {
 		t.Error("def-bound breaking fn must leak through the Defs.Top arm")
 	}
-	if bodyHasSentinelDeep(r, NewList([]Value{NewWord("zzclean"), NewInteger(1)})) {
+	if BodyHasSentinelDeep(r, NewList([]Value{NewWord("zzclean"), NewInteger(1)})) {
 		t.Error("def-bound sentinel-free fn must not leak")
 	}
 }

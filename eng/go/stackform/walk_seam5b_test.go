@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // s5beFakeOp is an in-package Op variant unknown to the switches, driving

@@ -64,14 +64,14 @@ func TestW9InstallIdealsDuplicateMemberTypes(t *testing.T) {
 
 	// Snapshot the package-global init-error accumulator; installIdeals
 	// records init errors we must not leak into other tests.
-	saved := append([]error(nil), typeInitErrs...)
-	t.Cleanup(func() { typeInitErrs = saved })
+	saved := SwapTypeInitErrs(nil)
+	t.Cleanup(func() { SwapTypeInitErrs(saved) })
 
-	before := len(typeInitErrs)
+	before := len(TypeInitErrs())
 	installIdeals(r)
-	if len(typeInitErrs) < before+2 {
+	if len(TypeInitErrs()) < before+2 {
 		t.Fatalf("re-installIdeals should record both Binary and BinarySpec clash errors; before=%d after=%d",
-			before, len(typeInitErrs))
+			before, len(TypeInitErrs()))
 	}
 }
 

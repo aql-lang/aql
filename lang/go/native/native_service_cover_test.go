@@ -34,9 +34,8 @@ func svcCoverFn(t *testing.T, r *Registry, src string) Value {
 // ---- registration ----
 
 func TestServiceCoverRegisterServiceTypeDuplicate(t *testing.T) {
-	saved := typeInitErrs
-	t.Cleanup(func() { typeInitErrs = saved })
-	typeInitErrs = nil
+	saved := SwapTypeInitErrs(nil)
+	t.Cleanup(func() { SwapTypeInitErrs(saved) })
 	if tt := registerServiceType(); tt != nil {
 		t.Fatalf("duplicate registration must return nil, got %v", tt)
 	}

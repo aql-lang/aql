@@ -21,7 +21,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { Jsonic } from '@tabnas/jsonic'
+import { BoruError } from '../error.ts'
 
+import {
+  type DeclGrammar,
+  type DeclHooks,
+  applyDeclEdits,
+  fixedTokenOptions,
+  loadDeclGrammar,
+  resolveDeclTokens,
+} from './declgrammar.ts'
 import {
   AngleGroup,
   ArrowTag,
@@ -185,14 +194,25 @@ export function makeBoruJsonic(): { j: any; t: ParserTokens } {
     color: { active: false },
   })
 
-  // Stage 1: Lex setup — register tokens and custom matchers.
-  const t = setupBaseTokens(j)
+  // Stage 1: Lex setup — register tokens and custom matchers, the
+  // token table coming from the declarative grammar artifact.
+  const g = loadDeclGrammar()
+  const { t, tins } = setupBaseTokens(j, g)
   setupTemplateLiteralMatcher(j, t)
   setupBigNumberMatcher(j, t)
   setupMiniLitMatcher(j, t)
   setupXmlMatcher(j, t)
 
-  // Stage 2: Grammar setup — extend rules for boru syntax.
+  // Stage 2: Grammar setup — the declarative edits first (they were
+  // the head of the val amendments), then the remaining imperative
+  // rule extensions, batch-migrating into grammar.json.
+  applyDeclEdits(j, g, tins, valDeclHooks(), {
+    prependOpen,
+    prependClose,
+    setOpen,
+    setClose,
+    newText: (str: string) => newText(str),
+  })
   setupValRule(j, t)
   setupPairGrammar(j, t)
   setupParenGrammar(j, t)
@@ -206,57 +226,46 @@ export function makeBoruJsonic(): { j: any; t: ParserTokens } {
 
 // setupBaseTokens registers the fixed boru tokens and removes backtick from
 // jsonic's string/multi chars so template strings are handled by custom rules.
-export function setupBaseTokens(j: any): ParserTokens {
+export function setupBaseTokens(j: any, g: DeclGrammar): { t: ParserTokens; tins: Record<string, number> } {
   // Remove backtick from string chars so jsonic doesn't consume backtick
   // strings with the built-in string matcher. Template strings are handled
   // by custom tokens and rules below. (options() rather than config
-  // mutation: the TS config is rebuilt on every options() call.)
+  // mutation: the TS config is rebuilt on every options() call.) The
+  // token table itself — fixed tokens with their source text, matcher-
+  // produced tokens (#TL/#ML/#XML) by name — comes from the declarative
+  // grammar artifact, the shared source with the Go twin.
   j.options({
     string: { chars: '\'"', multiChars: '' },
-    fixed: {
-      token: {
-        '#OP': '(',
-        '#CP': ')',
-        '#DT': '.',
-        '#SC': ';',
-        '#QM': '?',
-        '#BG': '!',
-        '#PI': '|',
-        '#AR': '=>',
-        '#BT': '`',
-        '#IS': '${',
-        // `<` / `>` are GENERAL-PURPOSE tokens (design/GENERICS.10.md
-        // D14): independent fixed tokens with contextual consumers.
-        // The generics angle rule (setupAngleGrammar) is the only v1
-        // consumer; future rules (e.g. embedded XML) can register
-        // additional consumers without re-lexing. Comparisons stay on
-        // lt/gt. (`=>` still lexes as one token — longest match wins.)
-        '#LA': '<',
-        '#RA': '>',
-      },
-    },
+    fixed: { token: fixedTokenOptions(g) },
   })
 
+  const tins = resolveDeclTokens(j, g)
+  const t: ParserTokens = {
+    OP: tins['OP']!, CP: tins['CP']!, DT: tins['DT']!, SC: tins['SC']!,
+    QM: tins['QM']!, BG: tins['BG']!, PI: tins['PI']!, AR: tins['AR']!,
+    BT: tins['BT']!, IS: tins['IS']!, TL: tins['TL']!, LA: tins['LA']!,
+    RA: tins['RA']!, ML: tins['ML']!, XML: tins['XML']!,
+  }
+  return { t, tins }
+}
+
+// valDeclHooks binds the named behavior the declarative val edits
+// reference — the twin of Go's valDeclHooks.
+function valDeclHooks(): DeclHooks {
   return {
-    OP: j.token('#OP'),
-    CP: j.token('#CP'),
-    DT: j.token('#DT'),
-    SC: j.token('#SC'),
-    QM: j.token('#QM'),
-    BG: j.token('#BG'),
-    PI: j.token('#PI'),
-    AR: j.token('#AR'),
-    BT: j.token('#BT'),
-    IS: j.token('#IS'),
-    TL: j.token('#TL'),
-    LA: j.token('#LA'),
-    RA: j.token('#RA'),
-    ML: j.token('#ML'),
-    // #XML carries a whole embedded XML literal (`<tag>…</tag>`),
-    // produced by the xml_literal matcher when it is armed inside the
-    // xml rule (which the val.Open `<` alternate pushes). See
-    // setupXmlGrammar / setupXmlMatcher and design/XML-LITERAL.0.md.
-    XML: j.token('#XML'),
+    actions: {
+      minilangNode: (r: any) => {
+        r.node = r.o0.val
+      },
+      arrowTag: (r: any) => {
+        r.node = new ArrowTag()
+      },
+    },
+    conds: {
+      inPairValue: (r: any, ctx: any): boolean => {
+        return r.parent && r.parent !== ctx.NORULE && 'pair' === r.parent.name
+      },
+    },
   }
 }
 
@@ -502,81 +511,10 @@ export function setupTemplateLiteralMatcher(j: any, _t: ParserTokens): void {
 // setupValRule extends the jsonic "val" rule with boru-specific alternates:
 // parens, template strings, close-paren markers, semicolons, ?, !, |, and dots.
 export function setupValRule(j: any, t: ParserTokens): void {
-  j.rule('val', (rs: any) => {
-    prependOpen(rs, [
-      // Minilang literal `+name<delim>src<delim>`: the matcher stashed a
-      // MiniLitVal on the token; carry it to the converter as the node.
-      {
-        s: [t.ML],
-        a: (r: any) => {
-          r.node = r.o0.val
-        },
-      },
-      { s: [t.OP], p: 'paren' },
-      // `<` in VALUE-OPEN position opens an embedded XML literal →
-      // push the xml rule (which arms the xml_literal matcher). This
-      // is disjoint from the generics angle sugar, which consumes `<`
-      // only as a val.Close suffix after a capitalised name
-      // (setupAngleGrammar) — so `Box<Int>` stays generics and a
-      // fresh-position `<div>` is XML. See design/XML-LITERAL.0.md §3.
-      { s: [t.LA], p: 'xml' },
-      // Backtick opens a template string → push to interp rule.
-      { s: [t.BT], p: 'interp' },
-      // Bare ) outside a paren group: produce a marker so the engine
-      // can report "unmatched closing parenthesis" at runtime.
-      {
-        s: [t.CP],
-        a: (r: any) => {
-          r.node = newText(')')
-        },
-      },
-      {
-        s: [t.SC],
-        a: (r: any) => {
-          // Semicolon is an alias for the "end" keyword.
-          r.node = newText('end')
-        },
-      },
-      // Question mark produces a "?" marker for optional param syntax.
-      {
-        s: [t.QM],
-        a: (r: any) => {
-          r.node = newText('?')
-        },
-      },
-      // Bang: "!" token. The "!" "." sequence becomes getr in convertTopLevelItems.
-      {
-        s: [t.BG],
-        a: (r: any) => {
-          r.node = newText('!')
-        },
-      },
-      // Pipe: "|" token. Used in fn signatures as forward barrier marker.
-      {
-        s: [t.PI],
-        a: (r: any) => {
-          r.node = newText('|')
-        },
-      },
-      // Arrow: "=>" token. Lambda sugar — a structural tag the
-      // converter turns into the lambda sugar marker (ADR-012
-      // rule 3 amendment); the engine lowers it to the role-bound
-      // constructor word.
-      {
-        s: [t.AR],
-        a: (r: any) => {
-          r.node = new ArrowTag()
-        },
-      },
-      // Dot: "." token. Becomes get in convertTopLevelItems.
-      {
-        s: [t.DT],
-        a: (r: any) => {
-          r.node = newText('.')
-        },
-      },
-    ])
-  })
+  // The value-open marker batch and the map-pair-value dot-chain
+  // closes now live in the declarative grammar artifact
+  // (grammar.json, applied by applyDeclEdits before this function
+  // runs); their named hooks are valDeclHooks.
 
   // Dot-chain continuation. After a value closes, a following `.` (or
   // `!.`) means member access — `bf.n`, `a.b.c`, `a!.b`. In WORD
@@ -601,15 +539,6 @@ export function setupValRule(j: any, t: ParserTokens): void {
   // by convertTopLevelItems; firing the dotchain there would
   // double-wrap, e.g. `1 foo.bar` → `1 ((foo get bar))`). Only the
   // map-value position lacks that flat-item path and needs this fold.
-  const inPairValue = (r: any, ctx: any): boolean => {
-    return r.parent && r.parent !== ctx.NORULE && 'pair' === r.parent.name
-  }
-  j.rule('val', (rs: any) => {
-    prependClose(rs, [
-      { s: [t.DT], c: inPairValue, p: 'dotchain', b: 1 },
-      { s: [t.BG, t.DT], c: inPairValue, p: 'dotchain', b: 2 },
-    ])
-  })
 
   // dotchain rule: collects the `.key` / `!.key` segments that follow a
   // value, folding the receiver (the parent val's already-parsed node)
@@ -1356,6 +1285,11 @@ export function setupParenGrammar(j: any, t: ParserTokens): void {
     setBC(rs, [
       (r: any) => {
         if (Array.isArray(r.node)) {
+          if (r.node.length > 0 && r.node[r.node.length - 1] === null) {
+            // A trailing comma hole (`(1,)`, `(,)`): Go's grammar
+            // derails the paren close here — same taxonomy and text.
+            throw new BoruError('syntax_error', 'unmatched opening parenthesis', '(')
+          }
           r.node = new ParenGroup(r.node)
         }
       },
@@ -1392,12 +1326,15 @@ export function setupParenGrammar(j: any, t: ParserTokens): void {
   j.rule('pelem', (rs: any) => {
     setBC(rs, [
       (r: any, ctx: any) => {
-        if (undefined !== r.child.node) {
-          if (Array.isArray(r.node)) {
-            r.node.push(r.child.node)
-            if (r.parent && r.parent !== ctx.NORULE) {
-              r.parent.node = r.node
-            }
+        if (Array.isArray(r.node)) {
+          // A comma with no value between (`(1,,2)`, `(,1)`, `(1,)`)
+          // leaves the child empty: record a NULL HOLE so the paren
+          // close and the converter raise the same taxonomy Go does —
+          // interior/leading holes are empty list elements; a trailing
+          // hole derails the paren close (Go parity).
+          r.node.push(undefined !== r.child.node ? r.child.node : null)
+          if (r.parent && r.parent !== ctx.NORULE) {
+            r.parent.node = r.node
           }
         }
       },

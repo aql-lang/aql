@@ -10,9 +10,8 @@ import (
 // registry construction. Pin both directions: a real error is recorded
 // (and restored so later constructions stay clean), a nil is ignored.
 func TestRecordTypeInitError(t *testing.T) {
-	saved := typeInitErrs
-	defer func() { typeInitErrs = saved }()
-	typeInitErrs = nil
+	saved := SwapTypeInitErrs(nil)
+	defer func() { SwapTypeInitErrs(saved) }()
 
 	RecordTypeInitError(nil)
 	if TypeInitError() != nil {

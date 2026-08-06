@@ -87,6 +87,7 @@ func Register(r *Registry) {
 	r.RegisterNativeFunc(sortNative)
 	installResourceTypes(r)
 	installIdeals(r)
+	installMicronIdeals(r)
 	bindSugarWords(r)
 
 	// Control flow
@@ -192,6 +193,11 @@ func Register(r *Registry) {
 			child.RegisterNativeFunc(n)
 		}
 		registerDefKeywordForms(child)
+		// Module sub-registries construct microns in preambles the
+		// same way top-level source does — the family Ideal moved to
+		// basic with the content (the kernel no longer registers it),
+		// so install it here too.
+		installMicronIdeals(child)
 		// Module sub-registries run preamble source with the same
 		// surface sugars — bind the roles there too.
 		bindSugarWords(child)

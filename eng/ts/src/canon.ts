@@ -10,7 +10,7 @@
 import { TAtom, TBoolean, TFloat, TInspect, TInteger, TList, TMap, TPathon, TString, TEmailon, TUrlon } from './type.ts'
 import { urlonHref, type UrlonInfo } from './value.ts'
 import type { FnDefInfo, XmlElement } from './value.ts'
-import { ChildType, OptionsData, OrderedMap, Value } from './value.ts'
+import { ChildType, ErrorInfo, OptionsData, OrderedMap, Value, asReach, isReach } from './value.ts'
 
 // canonXml renders an XML element, normalising an empty element to the
 // self-closing form (<br></br> → <br/>).
@@ -131,14 +131,11 @@ function expandExponential(s: string): string {
   const exp = Number.parseInt(m[3]!, 10)
   const digits = intPart + fracPart
   const pointPos = intPart.length + exp
-  let out: string
-  if (pointPos <= 0) {
-    out = '0.' + '0'.repeat(-pointPos) + digits
-  } else if (pointPos >= digits.length) {
-    out = digits + '0'.repeat(pointPos - digits.length)
-  } else {
-    out = digits.slice(0, pointPos) + '.' + digits.slice(pointPos)
-  }
+  // The decimal point always lands at or left of the digits here:
+  // formatFloat routes |f| >= 1e21 through formatExponential, and below
+  // that JS's String only goes exponential for |f| < 1e-6 (negative
+  // exp). A positive pointPos would make the repeat throw — loudly.
+  let out = '0.' + '0'.repeat(-pointPos) + digits
   // Trim a trailing fractional zero run produced by the expansion.
   if (out.includes('.')) out = out.replace(/0+$/, '').replace(/\.$/, '')
   return (neg ? '-' : '') + out
@@ -156,6 +153,10 @@ export function canonValue(v: Value): string {
   if (v.isNone()) return 'none'
   if (v.data === null) {
     return v.vType.leaf()
+  }
+  // A caught-error VALUE (the do escape hatch) — mirrors Go's render.
+  if (v.data instanceof ErrorInfo) {
+    return `error(${v.data.message})`
   }
   if (v.vType.matches(TInteger)) {
     return v.asInteger().toString()
@@ -221,6 +222,9 @@ export function canonValue(v: Value): string {
   if (v.isXml()) {
     return canonXml(v.data as XmlElement)
   }
+  if (isReach(v)) {
+    return canonReach(v)
+  }
   if (v.isFnDef()) {
     return canonFnDef(v.asFnDef())
   }
@@ -270,4 +274,35 @@ function canonFnDef(fd: FnDefInfo): string {
     })
     .join(' ')
   return `fn [${sigs}]`
+}
+
+// canonReach renders a Reach back to its dotted surface — m.a.b, m!.x,
+// m.'k', m.(expr), (expr).k — the read-print round-trip, mirroring
+// eng/go/canon.go::canonReach (words stay bare; a codequote-captured
+// reach wraps so it round-trips).
+function canonReachToken(v: Value): string {
+  if (v.isWord()) return v.asWord().name
+  if (v.isParenExpr() && Array.isArray(v.data)) return '(' + canonReachTokens(v.data as Value[]) + ')'
+  if (isReach(v)) return canonReach(v)
+  return canonValue(v)
+}
+
+function canonReachTokens(toks: Value[]): string {
+  return toks.map(canonReachToken).join(' ')
+}
+
+function canonReach(v: Value): string {
+  const info = asReach(v)
+  if (info === undefined) return String(v)
+  let b: string
+  if (info.receiver.length === 0) b = '$'
+  else if (info.receiver.length === 1) b = canonReachToken(info.receiver[0]!)
+  else b = '(' + canonReachTokens(info.receiver) + ')'
+  for (const seg of info.segments) {
+    b += seg.getr ? '!.' : '.'
+    if (seg.computed) b += '(' + canonReachTokens(seg.keyExpr ?? []) + ')'
+    else b += canonReachToken(seg.keyLit!)
+  }
+  if (v.quoted) return '(codequote ' + b + ')'
+  return b
 }

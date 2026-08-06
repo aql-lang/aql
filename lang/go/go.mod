@@ -4,6 +4,7 @@ go 1.24.7
 
 require (
 	github.com/antchfx/xpath v1.3.6
+	github.com/boru-lang/boru/basic/go v0.0.0
 	github.com/boru-lang/boru/eng/go v0.0.0
 	github.com/cockroachdb/apd/v3 v3.2.3
 	github.com/fsnotify/fsnotify v1.10.1
@@ -27,6 +28,7 @@ require (
 	github.com/tabnas/yaml/go v0.4.0
 	github.com/tabnas/zon/go v0.4.0
 	github.com/voxgig/model/go v0.1.3-0.20260622172642-ee04212555c1
+	golang.org/x/term v0.36.0
 	golang.org/x/text v0.21.0
 	modernc.org/sqlite v1.46.1
 )
@@ -36,7 +38,6 @@ require (
 	github.com/tabnas/directive/go v0.4.0 // indirect
 	github.com/tabnas/hoover/go v0.2.1 // indirect
 	github.com/tabnas/path/go v0.2.1 // indirect
-	golang.org/x/term v0.36.0 // indirect
 )
 
 require (
@@ -55,3 +56,11 @@ require (
 )
 
 replace github.com/boru-lang/boru/eng/go => ../../eng/go
+
+replace github.com/boru-lang/boru/basic/go => ../../basic/go
+
+replace github.com/boru-lang/boru/core/go => ../../core/go
+
+replace github.com/boru-lang/boru/check/go => ../../check/go
+
+replace github.com/boru-lang/boru/compiler/go => ../../compiler/go

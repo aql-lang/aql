@@ -1,7 +1,7 @@
 package stackform
 
 import (
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // Compile runs `tokens` through an Engine with a StackForm-recording

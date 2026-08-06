@@ -9,13 +9,24 @@ alongside as `<component>/ts/`. The Go modules are:
 
 - `eng/go/` — the engine kernel + jsonic parser + kernel spec runner
   (`github.com/boru-lang/boru/eng/go`).
+- `basic/go/` — the base language layer
+  (`github.com/boru-lang/boru/basic/go`): the fundamental words
+  (stack, definition, control-flow, type-generics) and the predefined
+  global content types (the Scalar/Time family, Resource/Entity),
+  registered against eng. Depends on eng ONLY — the layering
+  `eng ← basic ← lang ← cmd` is a hard rule (ADR-013).
 - `lang/go/` — the language layer: `lang.New()` API and the consolidated
   `native` package (the eng-shim + every built-in word) plus the
   production spec suite (this module,
   `github.com/boru-lang/boru/lang/go`). The pre-May-2026 split between
   `lang/go/engine/` (language-layer primitives + alias shim) and
   `lang/go/native/` (data-manipulation words) was merged into a single
-  `lang/go/native/` package — see `Package layout` below.
+  `lang/go/native/` package — see `Package layout` below. The
+  fundamental-word slices and predefined content types moved DOWN to
+  `basic/go` (ADR-013); `native/basic_shim.go` re-exports them so the
+  files here keep their historical spellings, and `Register` still
+  applies the moved groups at the historical registration points
+  (overload appends are order-sensitive).
 - `cmd/go/` — the `boru` CLI / REPL
   (`github.com/boru-lang/boru/cmd/go`).
 - `calc/go/` — a small calculator built directly on `eng` (learning example,
@@ -43,18 +54,25 @@ Language-agnostic content stays at the top of each component:
   - `aliases.go` — re-exports the eng kernel's exported types/funcs
     as `native.Foo` so the rest of the lang code can stay
     eng-agnostic.
+  - `basic_shim.go` — the same pattern one layer up: re-exports the
+    fundamental-word registration groups, handler internals, and
+    Scalar/Time surface that moved to `basic/go` (ADR-013), under
+    their historical package-local spellings.
   - `register.go`, `setup.go` — `Register`/`DefaultRegistry` entry
     points.
   - `native_*.go` — language-layer primitives (math, boolean,
-    string, stack, control, def, type, accessor, …). Each file
-    exposes a `xxxNatives []NativeFunc` slice that `Register`
-    iterates.
+    string, accessor, …). Each file exposes a
+    `xxxNatives []NativeFunc` slice that `Register` iterates. The
+    fundamental slices (stack, definition, control, type-generics,
+    const) live in `basic/go` and arrive through the shim.
   - `natives.go` and the per-feature files (`clone.go`, `fetch.go`,
     `filter.go`, …) — data-manipulation words historically owned
     by the `native` sub-package and merged into this consolidated
     package in May 2026.
-  - `format.go`, `query.go`, `sqlite.go`, `fileio.go`,
-    `conditional.go`, `forloop.go` — feature-specific helpers.
+  - `format.go`, `query.go`, `sqlite.go`, `fileio.go` —
+    feature-specific helpers (`conditional.go` / `forloop.go` /
+    `case_exhaustive.go` moved to `basic/go` with the control
+    words).
   - `help/` — dynamic help-system implementation (sub-package).
 - `formatter/` — code pretty-printer (no engine deps).
 - `capabilities/` — file I/O abstraction (`FileOps` interface
@@ -1097,10 +1115,13 @@ Those helpers now record their error and surface it at the first registry
 construction instead of panicking:
 
 - `eng`: `BuiltinInitError()` is checked by `NewRegistry()` (covers
-  `mustType` / `builtinDecls`).
-- `native`: `TypeInitError()` is checked by `DefaultRegistryWithPolicy`
-  (covers `registerTimerType`, `registerTemporalType`,
-  `registerFetchType`, `registerKeyValType`, `registerModuleType`).
+  `mustType` / `builtinDecls`, now including `Ideal/Module` and
+  `Node/Map/KeyVal`).
+- `basic`: `TypeInitError()` is checked by `DefaultRegistryWithPolicy`
+  (covers `RegisterTemporalType`, `registerBytesType`, and the
+  `RegisterPatrunType`/`RegisterPidType`/`RegisterServiceType` handle
+  registrations — the accumulator lives in `basic/go/typeinit.go` and
+  `native` re-exports it).
 - `modules/matrix`: `tensorTypeInitErr` is checked by `BuildMatrixModule`.
 
 The only `panic`/`recover` left in the tree are Go standard-library

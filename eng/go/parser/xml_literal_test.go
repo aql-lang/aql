@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/boru-lang/boru/eng/go"
+	eng "github.com/boru-lang/boru/eng/go"
 )
 
 // parseOne parses src and requires exactly one resulting value.

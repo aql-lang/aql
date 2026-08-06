@@ -5,7 +5,6 @@ import (
 	"strings"
 	"testing"
 
-	eng "github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/eng/go/parser"
 )
 
@@ -411,7 +410,7 @@ func TestMicronFieldwiseAndErrors(t *testing.T) {
 	if err != nil {
 		t.Fatalf("urlon field-wise add: %v", err)
 	}
-	if p, ok := eng.MicronProperty(uj, "port"); !ok || opsInt(t, p) != 8080 {
+	if p, ok := basicMicronProperty(uj, "port"); !ok || opsInt(t, p) != 8080 {
 		t.Fatalf("urlon right-only port not passed through: %v (%v)", p, ok)
 	}
 	// left-only optional field passes through (left Urlon has the port).
@@ -419,7 +418,7 @@ func TestMicronFieldwiseAndErrors(t *testing.T) {
 	if lerr != nil {
 		t.Fatalf("urlon left-port add: %v", lerr)
 	}
-	if p, ok := eng.MicronProperty(lj, "port"); !ok || opsInt(t, p) != 8080 {
+	if p, ok := basicMicronProperty(lj, "port"); !ok || opsInt(t, p) != 8080 {
 		t.Fatalf("urlon left-only port not passed through: %v (%v)", p, ok)
 	}
 	// applyScalarBinaryOp routes a Micron pair through micronBinaryOp.

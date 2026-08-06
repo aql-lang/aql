@@ -29,7 +29,7 @@ func TestRecordTypedBindOrRefuseConcreteDecline(t *testing.T) {
 	if !out.Dynamic {
 		t.Fatal("the declined record must return the bound value unchanged")
 	}
-	_, reason, _ := r.Check.Recorder().Finalize(nil)
+	_, reason, _ := r.Check.Recorder().(*eng.EmitState).Finalize(nil)
 	if !strings.Contains(reason, "fn-predicate bind is runtime-evaluated") {
 		t.Fatalf("declined record must refuse; Finalize reason = %q", reason)
 	}

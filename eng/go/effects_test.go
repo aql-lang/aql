@@ -189,7 +189,7 @@ func TestInvokeCallbackBailAfterWriterEffectPropagates(t *testing.T) {
 	r.Output = &out
 	sig := &Signature{Impl: &BoruImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
 	res, err := InvokeCallback(r, sig, nil, nil)
-	if !isInternalErr(err) {
+	if !IsInternalErr(err) {
 		t.Fatalf("fenced writer bail: err = %v (res=%v), want the propagated internal_error", err, res)
 	}
 	if out.String() != "x" {
@@ -219,7 +219,7 @@ func TestInvokeCallbackBailAfterEffectPropagates(t *testing.T) {
 	// is that the fence refuses to, because the effect already escaped.
 	sig := &Signature{Impl: &BoruImpl{Body: []Value{NewInteger(42)}, Compiled: ref}}
 	out, err := InvokeCallback(r, sig, nil, nil)
-	if !isInternalErr(err) {
+	if !IsInternalErr(err) {
 		t.Fatalf("fenced callback bail: err = %v (out=%v), want the propagated internal_error", err, out)
 	}
 	if got := r.Effects.Count(); got != 1 {

@@ -70,7 +70,7 @@ func w8registerReturningPoly(t *testing.T, r *Registry, word string, result Valu
 // The runtime auto-apply this arm used to pin was removed with the shaped
 // 0-arg landing model: the recorder now models the interpreter's instant
 // auto-fire as an explicit arity-0 OpCallDynMethod after the poly (or the
-// program refuses via tryShapedMethodDispatch's guard-owned decline), so
+// program refuses via check.TryShapedMethodDispatch's guard-owned decline), so
 // the poly must return the member VALUE for that opcode to consume.
 
 func TestW8CallPolyGetMethodValueStaysData(t *testing.T) {
@@ -163,7 +163,7 @@ func TestW8CallDynMethodDelegationResultScreened(t *testing.T) {
 	deleg := w8Deleg1(t, r, "w8mleak", func(_ []Value, _ map[string]Value, _ []Value, _ *Registry) ([]Value, error) {
 		return []Value{NewWord("leak")}, nil
 	})
-	if !isDelegationFnDef(deleg.Data.(FnDefInfo)) {
+	if !IsDelegationFnDef(deleg.Data.(FnDefInfo)) {
 		t.Fatal("w8mleak wrapper is not a delegation fn")
 	}
 	vc := seam7VC(r)
@@ -185,7 +185,7 @@ func TestW8CallDynMethodIslandSuccess(t *testing.T) {
 			Impl: Boru([]Value{NewWord("n")}),
 		}},
 	})
-	if isDelegationFnDef(fn.Data.(FnDefInfo)) {
+	if IsDelegationFnDef(fn.Data.(FnDefInfo)) {
 		t.Fatal("named-param fn should NOT be a delegation")
 	}
 	vc := seam7VC(r)

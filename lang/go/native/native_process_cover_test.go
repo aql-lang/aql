@@ -35,9 +35,8 @@ func procCoverClauses() Value {
 // ---- Pid type registration + behavior ----
 
 func TestProcessCoverRegisterPidTypeDuplicate(t *testing.T) {
-	saved := typeInitErrs
-	t.Cleanup(func() { typeInitErrs = saved })
-	typeInitErrs = nil
+	saved := SwapTypeInitErrs(nil)
+	t.Cleanup(func() { SwapTypeInitErrs(saved) })
 	if tt := registerPidType(); tt != nil {
 		t.Fatalf("duplicate Ideal/Pid registration must return nil, got %v", tt)
 	}

@@ -31,21 +31,6 @@ import (
 // Patrun a dispatch/router table — so it rides a side table keyed by the
 // pattern's canonical signature (patrun's *string data is that signature).
 
-// TPatrun is Ideal/Patrun. FixedID 5004 — next free in the 5000–9999
-// kernel/language band (Module 5000, the retired ModuleExport wrapper 5001,
-// KeyVal 5002,
-// MiniLangCompiled 5003). See eng/go/CLAUDE.md "FixedID Allocation".
-var TPatrun = registerPatrunType()
-
-func registerPatrunType() *eng.Type {
-	t, err := eng.Builtin.RegisterType("Ideal/Patrun", 5004, eng.OwnerKernel, patrunBehavior{})
-	if err != nil {
-		// Init-time registration error — recorded, not panicked (ADR-005).
-		recordTypeInitErr(fmt.Errorf("native_patrun: register Ideal/Patrun: %w", err))
-	}
-	return t
-}
-
 // patrunRule is the boru side of one registered rule: the original pattern Map
 // (for `patterns`), the stored value, and a pre-rendered "k=v,…" for Format.
 type patrunRule struct {
@@ -406,15 +391,12 @@ func patrunOptBool(opts Value, key string) (bool, error) {
 
 // ---- behavior ----
 
-// patrunBehavior renders a Patrun as "Patrun(k=v,… -> value; …)" in insertion
-// order; Match and Equal defer to the kernel default (nominal identity).
-type patrunBehavior struct{}
-
-func (patrunBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
-func (patrunBehavior) Equal(a, b Value) bool       { return DefaultBehavior.Equal(a, b) }
-func (patrunBehavior) Format(v Value) string {
-	m, ok := asPatrun(v)
-	if !ok || len(m.order) == 0 {
+// FormatPatrun renders the matcher as "Patrun(k=v,… -> value; …)" in
+// insertion order — the delegation seam basic.PatrunBehavior formats
+// through (the type identity and Behavior shell moved to basic/go with
+// the Ideal/Patrun registration; the matcher stays here with the words).
+func (m *patrunMatcher) FormatPatrun() string {
+	if len(m.order) == 0 {
 		return "Patrun()"
 	}
 	var b strings.Builder

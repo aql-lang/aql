@@ -40,17 +40,6 @@ import (
 //     service is safe under many connection actors. A handler that
 //     `call`s its OWN service deadlocks (as in OTP).
 
-// TService is Ideal/Service. FixedID 5008 (5000-band; see native_process.go).
-var TService = registerServiceType()
-
-func registerServiceType() *eng.Type {
-	t, err := eng.Builtin.RegisterType("Ideal/Service", 5008, eng.OwnerKernel, serviceBehavior{})
-	if err != nil {
-		recordTypeInitErr(fmt.Errorf("native_service: register Ideal/Service: %w", err))
-	}
-	return t
-}
-
 // RemoteDispatch is the transport hook a `connect`ed Endpoint carries: it
 // forwards an encoded request to the remote peer and returns the reply.
 // Installed by boru:net (design/NETWORK-CLIENTS.0.md §6); nil for ordinary
@@ -140,23 +129,12 @@ func asService(v Value) (*serviceState, bool) {
 	return s, ok
 }
 
-// serviceBehavior renders a Service with its handler count.
-type serviceBehavior struct{}
-
-func (serviceBehavior) Match(v Value, t *Type) bool { return DefaultBehavior.Match(v, t) }
-func (serviceBehavior) Equal(a, b Value) bool {
-	sa, oka := asService(a)
-	sb, okb := asService(b)
-	if !oka || !okb {
-		return DefaultBehavior.Equal(a, b)
-	}
-	return sa == sb
-}
-func (serviceBehavior) Format(v Value) string {
-	s, ok := asService(v)
-	if !ok {
-		return "Service"
-	}
+// FormatService renders the state with its handler count — the
+// delegation seam basic.ServiceBehavior formats through (the type
+// identity and Behavior shell moved to basic/go with the Ideal/Service
+// registration; the handler state stays here with the words). A
+// connected remote renders as an Endpoint.
+func (s *serviceState) FormatService() string {
 	s.mu.Lock()
 	n := 0
 	for _, st := range s.stacks {

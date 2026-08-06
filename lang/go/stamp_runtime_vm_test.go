@@ -70,7 +70,7 @@ func TestStampFnValueRealBodyVMMatchesInterpreter(t *testing.T) {
 		t.Fatalf("armed registry must stamp the compilable body")
 	}
 	fd := stamped.Data.(eng.FnDefInfo)
-	ref := fd.Signatures[0].CompiledRef()
+	ref := eng.CompiledRef(&fd.Signatures[0])
 	if ref == nil || ref.Prog == nil {
 		t.Fatalf("stamped value must carry a finalized CompiledFnRef")
 	}
@@ -87,7 +87,7 @@ func TestStampFnValueRealBodyVMMatchesInterpreter(t *testing.T) {
 
 	// The ORIGINAL value is untouched by the clone-and-stamp.
 	origFd := v2.Data.(eng.FnDefInfo)
-	if origFd.Signatures[0].CompiledRef() != nil {
+	if eng.CompiledRef(&origFd.Signatures[0]) != nil {
 		t.Fatalf("StampFnValue must not mutate the input value's shared impl")
 	}
 
@@ -129,7 +129,7 @@ func TestStampFnValueComputedMapBodyVMMatchesInterpreter(t *testing.T) {
 	if !ok {
 		t.Fatalf("armed registry must stamp the computed-map callback body")
 	}
-	ref := stamped.Data.(eng.FnDefInfo).Signatures[0].CompiledRef()
+	ref := eng.CompiledRef(&stamped.Data.(eng.FnDefInfo).Signatures[0])
 	if ref == nil || ref.Prog == nil {
 		t.Fatalf("stamped value must carry a finalized CompiledFnRef")
 	}
@@ -503,7 +503,7 @@ func TestModuleFnStampedAtLoadAndRerouted(t *testing.T) {
 			t.Fatalf("not a fn value")
 		}
 		for i := range fd.Signatures {
-			if r := fd.Signatures[i].CompiledRef(); r != nil {
+			if r := eng.CompiledRef(&fd.Signatures[i]); r != nil {
 				return r
 			}
 		}

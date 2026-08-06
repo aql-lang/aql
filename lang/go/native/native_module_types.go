@@ -2,7 +2,6 @@ package native
 
 import (
 	"fmt"
-	"sort"
 
 	"github.com/boru-lang/boru/eng/go"
 )
@@ -32,46 +31,22 @@ import (
 // RETIRED: the FixedID is never recycled. See the fixedid stability
 // test's retired table.)
 
+// The Ideal/Module type identity, constructor, Behavior, and descriptor
+// unwrappers are kernel-declared (eng/go/moduletype.go — ADR-012 stage 2);
+// the aliases below keep this package's historical spellings for the
+// namespace glue that stays here.
+var (
+	asModuleDesc      = eng.AsModuleDesc
+	moduleKind        = eng.ModuleKind
+	moduleExportNames = eng.ModuleExportNames
+)
+
 // moduleExportFieldModule and …Name are the synthetic keys a module
 // namespace answers in addition to its exported fields.
 const (
 	moduleExportFieldModule = "$module"
 	moduleExportFieldName   = "$name"
 )
-
-// TModuleInst is Ideal/Module — the module descriptor instance type. It is
-// also the value `module […]` produces and that `import` consumes (it
-// carries the full ModuleDesc), so there is no separate internal carrier
-// type.
-var TModuleInst = registerModuleType("Ideal/Module", 5000)
-
-func registerModuleType(path string, fixedID int) *Type {
-	t, err := eng.Builtin.RegisterType(path, fixedID, eng.OwnerKernel, moduleTypeBehavior{path: path})
-	if err != nil {
-		// Init-time registration error — recorded, not panicked.
-		// See ADR-005 and typeinit.go.
-		recordTypeInitErr(fmt.Errorf("native: register %s: %w", path, err))
-	}
-	return t
-}
-
-// NewModuleInstance builds an Ideal/Module value wrapping a ModuleDesc. The
-// descriptor metadata (Ref/Kind/File/Folder) and the export names are
-// surfaced as the name/kind/file/folder/exports fields; the carried Exports
-// map is what `import` installs.
-//
-// The payload BOXES the descriptor (ExtensionPayload{Body: *ModuleDesc}):
-// the pointer is the descriptor's IDENTITY under eq/deq (NUR031 — the
-// kernel's opaqueIdealExactEqual/DeepEqual arms compare it, exactly like
-// the *TimeoutInfo/*IntervalInfo handles), so every Value copy of one
-// instance stays eq to itself while each NewModuleInstance call mints a
-// distinct instance (per-import-instance identity). The ExtensionPayload
-// wrapper itself is load-bearing — several kernel arms key on it (const
-// interning, resolution elision, ConstBakeable refusal, ID minting) — so
-// the payload must stay an ExtensionPayload, never a bare *ModuleDesc.
-func NewModuleInstance(desc ModuleDesc) Value {
-	return Value{Parent: TModuleInst, Data: ExtensionPayload{Body: &desc}}
-}
 
 // NewModuleNamespace builds the value `import` binds for one export: a
 // PLAIN Map over the export fields, carrying the module-namespace facet
@@ -85,17 +60,6 @@ func NewModuleNamespace(name string, fields *OrderedMap, module Value) Value {
 		fields = NewOrderedMap()
 	}
 	return eng.WithModuleNS(NewMap(fields), name, module)
-}
-
-// asModuleDesc unwraps the ExtensionPayload behind an Ideal/Module value
-// (a boxed *ModuleDesc — see NewModuleInstance).
-func asModuleDesc(v Value) (ModuleDesc, bool) {
-	if ep, ok := v.Data.(ExtensionPayload); ok {
-		if d, ok := ep.Body.(*ModuleDesc); ok && d != nil {
-			return *d, true
-		}
-	}
-	return ModuleDesc{}, false
 }
 
 // moduleNSFields returns the export-fields map behind a bound module
@@ -155,24 +119,6 @@ func moduleExportGet(v Value, key string) (Value, bool) {
 	return fields.Get(key)
 }
 
-// moduleKind returns a Module's kind, defaulting "" to "inline".
-func moduleKind(desc ModuleDesc) string {
-	if desc.Kind == "" {
-		return "inline"
-	}
-	return desc.Kind
-}
-
-// moduleExportNames returns a Module's export names, sorted for determinism.
-func moduleExportNames(desc ModuleDesc) []string {
-	names := make([]string, 0, len(desc.Exports))
-	for name := range desc.Exports {
-		names = append(names, name)
-	}
-	sort.Strings(names)
-	return names
-}
-
 // moduleGet resolves a key against a Module descriptor's normal fields.
 func moduleGet(v Value, key string) (Value, bool) {
 	desc, ok := asModuleDesc(v)
@@ -216,26 +162,6 @@ func moduleInstGetReturns(args []Value, _ *Registry) []Value {
 		return []Value{NewCarrier(TList)}
 	}
 	return dyn
-}
-
-// moduleTypeBehavior renders Module descriptor values and matches
-// nominally (DefaultBehavior semantics for Match/Equal).
-type moduleTypeBehavior struct {
-	path string
-}
-
-func (moduleTypeBehavior) Match(v Value, t *Type) bool { return eng.DefaultBehavior.Match(v, t) }
-func (moduleTypeBehavior) Equal(a, b Value) bool       { return eng.DefaultBehavior.Equal(a, b) }
-
-func (b moduleTypeBehavior) Format(v Value) string {
-	if desc, ok := asModuleDesc(v); ok {
-		ref := desc.Ref
-		if ref == "" {
-			ref = moduleKind(desc)
-		}
-		return fmt.Sprintf("Module(%s)", ref)
-	}
-	return b.path
 }
 
 // ---- module-namespace hooks for the shared map accessor family ----
@@ -363,42 +289,4 @@ func getrModuleInstHandler(args []Value, _ map[string]Value, _ []Value, r *Regis
 		return []Value{val}, nil
 	}
 	return nil, r.BoruError("not_found", fmt.Sprintf("getr: field %q not found in Module", k), "getr")
-}
-
-// AsModuleDesc unwraps the ModuleDesc carried by an Ideal/Module value
-// (what `module […]` produces and `import` consumes). Exported for hosts
-// and integration tests; ok=false for non-Module values.
-func AsModuleDesc(v Value) (ModuleDesc, bool) { return asModuleDesc(v) }
-
-// ToMap / ToList implement eng.IdealConverter for the Module descriptor:
-// it projects to its descriptor fields (name/kind/file/folder/exports).
-// (A module NAMESPACE needs no converter — it already IS a Map.)
-func (moduleTypeBehavior) ToMap(v Value) (Value, error) {
-	if desc, ok := asModuleDesc(v); ok {
-		out := NewOrderedMap()
-		out.Set("name", NewString(desc.Ref))
-		out.Set("kind", NewString(moduleKind(desc)))
-		out.Set("file", NewString(desc.File))
-		out.Set("folder", NewString(desc.Folder))
-		names := moduleExportNames(desc)
-		elems := make([]Value, len(names))
-		for i, n := range names {
-			elems[i] = NewString(n)
-		}
-		out.Set("exports", NewList(elems))
-		return NewMap(out), nil
-	}
-	return NewMap(NewOrderedMap()), nil
-}
-
-func (moduleTypeBehavior) ToList(v Value) (Value, error) {
-	if desc, ok := asModuleDesc(v); ok {
-		names := moduleExportNames(desc)
-		elems := make([]Value, len(names))
-		for i, n := range names {
-			elems[i] = NewString(n)
-		}
-		return NewList(elems), nil
-	}
-	return NewList(nil), nil
 }

@@ -454,7 +454,15 @@ func compileInSubEngine(parent *native.Registry, src string) (native.Value, erro
 		return compileResultValue(false,
 			"check-mode suppressed a runtime error (uncompilable)", sites), nil
 	}
-	_, reason, ok := subReg.Check.Recorder().Finalize(residual)
+	// The concrete EmitState owns the recorded stream — see CompileCheck's
+	// twin of this belt. A non-EmitState recorder means a host reassigned
+	// the exported core hook; report an uncompilable result rather than
+	// assert, since a failed assertion would panic (ADR-005).
+	es, isReal := subReg.Check.Recorder().(*native.EmitState)
+	if !isReal { //covergate:allow compiler's init always installs the *EmitState hook that native links in, so only a host-swapped core.NewEmitStateHook reaches this belt (§modules)
+		return compileResultValue(false, "no bytecode recorder installed (uncompilable)", sites), nil
+	}
+	_, reason, ok := es.Finalize(residual)
 	if !ok {
 		return compileResultValue(false, reason, sites), nil
 	}

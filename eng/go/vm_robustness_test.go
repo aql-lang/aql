@@ -96,9 +96,9 @@ func TestVMConcurrencyGuard(t *testing.T) {
 
 	// Overlap: simulate an in-flight run by latching the flag, then a second
 	// run must refuse rather than race.
-	atomic.StoreInt32(&r.vmRunning, 1)
+	atomic.StoreInt32(&r.VmRunning, 1)
 	_, runErr := RunProgram(p, r)
-	atomic.StoreInt32(&r.vmRunning, 0)
+	atomic.StoreInt32(&r.VmRunning, 0)
 	if runErr == nil {
 		t.Fatal("overlapping run on one registry returned nil error")
 	}

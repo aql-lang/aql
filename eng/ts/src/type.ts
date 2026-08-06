@@ -125,7 +125,15 @@ const LEAF_INDEX = new Map<string, string>()
 // types only). Mirrors TypeTable.byName / TypeNameTable.
 const BY_NAME = new Map<string, string>()
 
-for (const d of builtinDecls) {
+/**
+ * indexDecl registers one declaration's derived lookups — the path and
+ * root sets, the user-facing name, and the leaf/alias short-name index,
+ * where a leaf name declared by more than one path collapses to ''
+ * (ambiguous: newType's expansion refuses it). The one mutation path
+ * for the lookup tables, mirroring TypeTable.RegisterType's index
+ * maintenance in Go.
+ */
+export function indexDecl(d: { path: string; alias?: string; internal?: boolean }): void {
   const parts = d.path.split('/')
   const name = parts[parts.length - 1]!
   BY_PATH.add(d.path)
@@ -139,6 +147,8 @@ for (const d of builtinDecls) {
   }
   if (d.alias) LEAF_INDEX.set(d.alias, d.path)
 }
+
+for (const d of builtinDecls) indexDecl(d)
 
 export class BoruType {
   readonly parts: readonly string[]

@@ -32,9 +32,9 @@ import (
 
 	"github.com/boru-lang/boru/eng/go"
 	"github.com/boru-lang/boru/eng/go/parser"
+	"github.com/boru-lang/boru/eng/go/specfix"
 	"github.com/boru-lang/boru/lang/go/modules"
 	"github.com/boru-lang/boru/lang/go/native"
-	"github.com/boru-lang/boru/test/go/specrunner"
 )
 
 // pinnedFalsePositives is the whole-corpus count of VALUE rows the checker
@@ -304,7 +304,7 @@ func checkFlagsError(t *testing.T, input string) bool {
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
-	specrunner.RegisterQFixtures(reg)
+	specfix.RegisterQFixtures(reg)
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
 	native.SetHostClock(reg, specClock)
@@ -430,7 +430,7 @@ func checkRow(t *testing.T, input string) ([]eng.Value, bool) {
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
-	specrunner.RegisterQFixtures(reg)
+	specfix.RegisterQFixtures(reg)
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
 	native.SetHostClock(reg, specClock)
@@ -463,7 +463,7 @@ func runRow(t *testing.T, input string) ([]eng.Value, bool) {
 	if err != nil {
 		t.Fatalf("registry: %v", err)
 	}
-	specrunner.RegisterQFixtures(reg)
+	specfix.RegisterQFixtures(reg)
 	reg.SetParseFunc(parser.Parse)
 	modules.InstallResolver(reg)
 	native.SetHostClock(reg, specClock)

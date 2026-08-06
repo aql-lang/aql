@@ -96,7 +96,7 @@ func TestCheckStateLifecycleComplete(t *testing.T) {
 	}
 	// The canonical-reset field: Begin must swap any armed recorder back to
 	// the inactive no-op (never nil, never a leftover *EmitState).
-	if c.Emit != theInactiveEmit {
+	if c.Emit != TheInactiveEmit {
 		t.Errorf("Begin() must reset CheckState.Emit to the inactive no-op recorder, got %T", c.Emit)
 	}
 
