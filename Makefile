@@ -257,14 +257,25 @@ test-ts:
 # reaches core only through the seam tables core owns — AnalysisImpl
 # (analysis-hooks.ts) and EmitRecorder (emit-recorder.ts) — each with NAMED
 # inactive defaults pinned by a core-side test, exactly as core/go requires.
-# STAGE 1 floor: 71 (measured 71.76% over the files the current suite loads —
-# the seam tables at 100%, canon/type/signature partially, and the rest not yet
-# reached because core/ts has no corpus of its own yet). This is deliberately
-# the honest measured number rather than an aspirational one: the ratchet's
-# rule is that it only rises, so it has to start where the suite actually is.
-# It jumps once the core-scoped spec corpus lands and every core file is
-# loaded by a test.
-TS_CORE_GATE_LINES ?= 71
+# Floor 62, RE-BASED DOWN from the stage-1 71 — read the reason before
+# treating this as a regression, because it is the opposite of one.
+#
+# node:test only instruments files a test actually loads. At stage 1 the suite
+# loaded seven of core/ts's seventeen files (the seam tables, canon, type,
+# signature and their dependencies), so 71.76% was 71.76% *of those seven*.
+# The core/spec corpus loads the whole package — engine, match, resolve, make,
+# sugar, coretype, check-state — and those arrive largely uncovered, so the
+# honest figure over the FULL core surface is 62.06%.
+#
+# Same re-base as ENG_GATE_FLOOR at the four-piece cut and TS_GATE_LINES at
+# the source-only correction: the measurement universe changed, so the old
+# number is not comparable to the new one. Nothing became less tested — the
+# denominator got honest. From here the ratchet only rises, and the corpus is
+# the instrument: rows added to core/spec lift both engines at once.
+#
+# Current per-file, worst first: make 38, coretype 39, resolve 42, engine 42,
+# sugar 47, check-state 66, canon 70, value 72, registry 74, match 77.
+TS_CORE_GATE_LINES ?= 62
 test-ts-core:
 	@echo "==> typecheck core/ts"
 	cd core/ts && npx tsc
